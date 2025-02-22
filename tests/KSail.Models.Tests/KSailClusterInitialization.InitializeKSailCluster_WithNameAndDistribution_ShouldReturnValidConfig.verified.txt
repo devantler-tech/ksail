@@ -12,7 +12,7 @@
     },
     Project: {
       WorkingDirectory: .,
-      KSailConfigPath: ksail-config.yaml,
+      ConfigPath: ksail-config.yaml,
       DistributionConfigPath: k3d-config.yaml,
       Template: Kustomize,
       Engine: Docker,

@@ -11,17 +11,14 @@ sealed class KSailSecretsRemoveCommand : Command
 {
   readonly ExceptionHandler _exceptionHandler = new();
   readonly PublicKeyArgument _publicKeyArgument = new("Public key matching existing encryption key") { Arity = ArgumentArity.ExactlyOne };
-  readonly ProjectSecretManagerOption _projectSecretManagerOption = new() { Arity = ArgumentArity.ZeroOrOne };
-  internal KSailSecretsRemoveCommand() : base("rm", "Remove an existing encryption key")
+  internal KSailSecretsRemoveCommand(GlobalOptions globalOptions) : base("rm", "Remove an existing encryption key")
   {
     AddArgument(_publicKeyArgument);
-    AddOption(_projectSecretManagerOption);
     this.SetHandler(async (context) =>
     {
       try
       {
-        var config = await KSailClusterConfigLoader.LoadAsync().ConfigureAwait(false);
-        config.UpdateConfig("Spec.Project.SecretManager", context.ParseResult.GetValueForOption(_projectSecretManagerOption));
+        var config = await KSailClusterConfigLoader.LoadWithGlobalOptionsAsync(globalOptions, context);
         string publicKey = context.ParseResult.GetValueForArgument(_publicKeyArgument);
         var cancellationToken = context.GetCancellationToken();
         KSailSecretsRemoveCommandHandler handler;

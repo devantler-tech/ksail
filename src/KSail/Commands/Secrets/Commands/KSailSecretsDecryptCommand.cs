@@ -14,9 +14,8 @@ sealed class KSailSecretsDecryptCommand : Command
   readonly PathArgument _pathArgument = new("The path to the file to decrypt.") { Arity = ArgumentArity.ExactlyOne };
   readonly InPlaceOption _inPlaceOption = new("Decrypt the file in place.") { Arity = ArgumentArity.ZeroOrOne };
   readonly OutputOption _outputOption = new(string.Empty, "The path to output the decrypted file.") { Arity = ArgumentArity.ZeroOrOne };
-  readonly ProjectSecretManagerOption _projectSecretManagerOption = new() { Arity = ArgumentArity.ZeroOrOne };
 
-  internal KSailSecretsDecryptCommand() : base("decrypt", "Decrypt a file")
+  internal KSailSecretsDecryptCommand(GlobalOptions globalOptions) : base("decrypt", "Decrypt a file")
   {
     AddArgument(_pathArgument);
     AddOptions();
@@ -24,8 +23,7 @@ sealed class KSailSecretsDecryptCommand : Command
     {
       try
       {
-        var config = await KSailClusterConfigLoader.LoadAsync().ConfigureAwait(false);
-        config.UpdateConfig("Spec.Project.SecretManager", context.ParseResult.GetValueForOption(_projectSecretManagerOption));
+        var config = await KSailClusterConfigLoader.LoadWithGlobalOptionsAsync(globalOptions, context);
         string path = context.ParseResult.GetValueForArgument(_pathArgument);
         bool inPlace = context.ParseResult.GetValueForOption(_inPlaceOption);
         string? output = context.ParseResult.GetValueForOption(_outputOption);
@@ -55,7 +53,6 @@ sealed class KSailSecretsDecryptCommand : Command
 
   void AddOptions()
   {
-    AddOption(_projectSecretManagerOption);
     AddOption(_inPlaceOption);
     AddOption(_outputOption);
   }

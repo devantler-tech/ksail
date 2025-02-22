@@ -50,12 +50,12 @@ class SOPSConfigFileGenerator
         [
             new()
             {
-              PathRegex = @$"^k8s\/clusters\/{clusterName}\/.+\.sops\.yaml$",
+              PathRegex = @$"^k8s\/clusters\/{clusterName}\/.+\.enc\.ya?ml$",
               Age = ageKey.PublicKey
             },
           new()
           {
-            PathRegex = ".sops.yaml",
+            PathRegex = @"^.+\.enc\.ya?ml$",
             Age = ageKey.PublicKey
           }
         ]
@@ -69,12 +69,12 @@ class SOPSConfigFileGenerator
     var sopsConfig = await SOPSConfigHelper.GetSOPSConfigAsync(path, cancellationToken: cancellationToken).ConfigureAwait(false);
 
     // Check if the creation rule already exists
-    if (!sopsConfig.CreationRules.Any(cr => cr.PathRegex == @$"^k8s\/clusters\/{clusterName}\/.+\.sops\.yaml$"))
+    if (!sopsConfig.CreationRules.Any(cr => cr.PathRegex == @$"^k8s\/clusters\/{clusterName}\/.+\.enc\.ya?ml$"))
     {
       // Add new creation rule to the start of the list
       sopsConfig.CreationRules.Insert(0, new SOPSConfigCreationRule
       {
-        PathRegex = @$"^k8s\/clusters\/{clusterName}\/.+\.sops\.yaml$",
+        PathRegex = @$"^k8s\/clusters\/{clusterName}\/.+\.enc\.ya?ml$",
         Age = ageKey.PublicKey
       });
       var lastCreationRule = sopsConfig.CreationRules.Last();

@@ -1,0 +1,24 @@
+﻿Description:
+  Generate a 'core/v1/Namespace' resource.
+
+Usage:
+  testhost gen native namespace [options]
+
+Options:
+  -o, --output <output>                             The output file to write the resource to. [default: ./namespace.yaml]
+  -n, --name <name>                                 The name of the cluster. Default: 'ksail-default' (G)
+  -d, --distribution <K3s|Native>                   The distribution to use for the cluster. Default: 'Native' (G)
+  -e, --engine <Docker>                             The engine to use for provisioning the cluster. Default: 'Docker' (G)
+  -mr, --mirror-registries                          Enable mirror registries. Default: 'True' (G)
+  -sm, --secret-manager <None|SOPS>                 Configure which secret manager to use. Default: 'None' (G)
+  -dc, --distribution-config <distribution-config>  Path to the distribution configuration file. Default: 'kind-config.yaml' (G)
+  -wd, --working-directory <working-directory>      The root directory of the project. Default: '.' (G)
+  -c, --config <config>                             The path to the ksail configuration file. Default: 'ksail-config.yaml' (G)
+  -t, --template <Kustomize>                        The template to use for the initialized cluster. Default: 'Kustomize' (G)
+  -e, --editor <Nano|Vim>                           Editor to use. Default: 'Nano' (G)
+  -k, --kubeconfig <kubeconfig>                     Path to kubeconfig file. Default: '~/.kube/config' (G)
+  -c, --context <context>                           The kubernetes context to use. Default: 'kind-ksail-default' (G)
+  -t, --timeout <timeout>                           The time to wait for each kustomization to become ready. Default: '5m' (G)
+  -?, -h, --help                                    Show help and usage information
+
+

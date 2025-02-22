@@ -33,7 +33,7 @@ public class Startup
       string kindBinary = Path.Combine(AppContext.BaseDirectory, "kind-" + runtime);
       string kubeconformBinary = Path.Combine(AppContext.BaseDirectory, "kubeconform-" + runtime);
       string kustomizeBinary = Path.Combine(AppContext.BaseDirectory, "kustomize-" + runtime);
-      //string sopsBinary = Path.Combine(AppContext.BaseDirectory, "sops-" + runtime);
+      string sopsBinary = Path.Combine(AppContext.BaseDirectory, "sops-" + runtime);
 
       File.SetUnixFileMode(ageKeygenBinary, UnixFileMode.UserExecute | UnixFileMode.GroupExecute | UnixFileMode.OtherExecute);
       File.SetUnixFileMode(fluxBinary, UnixFileMode.UserExecute | UnixFileMode.GroupExecute | UnixFileMode.OtherExecute);
@@ -42,7 +42,8 @@ public class Startup
       File.SetUnixFileMode(kindBinary, UnixFileMode.UserExecute | UnixFileMode.GroupExecute | UnixFileMode.OtherExecute);
       File.SetUnixFileMode(kubeconformBinary, UnixFileMode.UserExecute | UnixFileMode.GroupExecute | UnixFileMode.OtherExecute);
       File.SetUnixFileMode(kustomizeBinary, UnixFileMode.UserExecute | UnixFileMode.GroupExecute | UnixFileMode.OtherExecute);
-      //File.SetUnixFileMode(sopsBinary, UnixFileMode.UserExecute | UnixFileMode.GroupExecute | UnixFileMode.OtherExecute);
+      File.SetUnixFileMode(sopsBinary, UnixFileMode.UserExecute | UnixFileMode.GroupExecute | UnixFileMode.OtherExecute);
+
       int exitCode = await _ksailCommand.InvokeAsync(args);
       return exitCode;
     }

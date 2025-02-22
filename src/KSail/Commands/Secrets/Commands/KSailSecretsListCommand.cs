@@ -10,10 +10,9 @@ namespace KSail.Commands.Secrets.Commands;
 sealed class KSailSecretsListCommand : Command
 {
   readonly ExceptionHandler _exceptionHandler = new();
-  readonly ProjectSecretManagerOption _projectSecretManagerOption = new() { Arity = ArgumentArity.ZeroOrOne };
   readonly ShowPrivateKeysOption _showPrivateKeysOption = new() { Arity = ArgumentArity.ZeroOrOne };
   readonly ShowProjectKeysOption _showProjectKeysOption = new() { Arity = ArgumentArity.ZeroOrOne };
-  internal KSailSecretsListCommand() : base("list", "List keys")
+  internal KSailSecretsListCommand(GlobalOptions globalOptions) : base("list", "List keys")
   {
     AddOptions();
 
@@ -21,8 +20,7 @@ sealed class KSailSecretsListCommand : Command
     {
       try
       {
-        var config = await KSailClusterConfigLoader.LoadAsync().ConfigureAwait(false);
-        config.UpdateConfig("Spec.Project.SecretManager", context.ParseResult.GetValueForOption(_projectSecretManagerOption));
+        var config = await KSailClusterConfigLoader.LoadWithGlobalOptionsAsync(globalOptions, context);
         config.UpdateConfig("Spec.CLI.Secrets.List.ShowPrivateKeys", context.ParseResult.GetValueForOption(_showPrivateKeysOption));
         config.UpdateConfig("Spec.CLI.Secrets.List.ShowProjectKeys", context.ParseResult.GetValueForOption(_showProjectKeysOption));
 
@@ -51,7 +49,6 @@ sealed class KSailSecretsListCommand : Command
 
   void AddOptions()
   {
-    AddOption(_projectSecretManagerOption);
     AddOption(_showPrivateKeysOption);
     AddOption(_showProjectKeysOption);
   }

@@ -1,5 +1,4 @@
 using System.ComponentModel;
-using System.Text.Json.Serialization;
 using Devantler.K9sCLI;
 using YamlDotNet.Serialization;
 
@@ -20,9 +19,7 @@ public class KSailProject
   /// The path to the ksail configuration file.
   /// </summary>
   [Description("The path to the ksail configuration file.")]
-  [YamlMember(Alias = "ksailConfigPath")]
-  [JsonPropertyName("ksailConfigPath")]
-  public string KSailConfigPath { get; set; } = "ksail-config.yaml";
+  public string ConfigPath { get; set; } = "ksail-config.yaml";
 
   /// <summary>
   /// The path to the distribution configuration file.

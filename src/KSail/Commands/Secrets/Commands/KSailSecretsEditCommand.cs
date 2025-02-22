@@ -11,18 +11,15 @@ sealed class KSailSecretsEditCommand : Command
 {
   readonly ExceptionHandler _exceptionHandler = new();
   readonly PathArgument _pathArgument = new("The path to the file to edit.") { Arity = ArgumentArity.ExactlyOne };
-  readonly ProjectSecretManagerOption _projectSecretManagerOption = new() { Arity = ArgumentArity.ZeroOrOne };
 
-  internal KSailSecretsEditCommand() : base("edit", "Edit an encrypted file")
+  internal KSailSecretsEditCommand(GlobalOptions globalOptions) : base("edit", "Edit an encrypted file")
   {
     AddArgument(_pathArgument);
-    AddOptions();
     this.SetHandler(async (context) =>
     {
       try
       {
-        var config = await KSailClusterConfigLoader.LoadAsync().ConfigureAwait(false);
-        config.UpdateConfig("Spec.Project.SecretManager", context.ParseResult.GetValueForOption(_projectSecretManagerOption));
+        var config = await KSailClusterConfigLoader.LoadWithGlobalOptionsAsync(globalOptions, context).ConfigureAwait(false);
         string path = context.ParseResult.GetValueForArgument(_pathArgument);
         var cancellationToken = context.GetCancellationToken();
         KSailSecretsEditCommandHandler handler;
@@ -47,6 +44,4 @@ sealed class KSailSecretsEditCommand : Command
       }
     });
   }
-
-  void AddOptions() => AddOption(_projectSecretManagerOption);
 }

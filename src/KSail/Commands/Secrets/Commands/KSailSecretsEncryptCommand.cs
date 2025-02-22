@@ -15,9 +15,8 @@ sealed class KSailSecretsEncryptCommand : Command
   readonly PublicKeyOption _publicKeyOption = new("The public key to encrypt the file with.") { Arity = ArgumentArity.ZeroOrOne };
   readonly InPlaceOption _inPlaceOption = new("Encrypt the file in place.") { Arity = ArgumentArity.ZeroOrOne };
   readonly OutputOption _outputOption = new(string.Empty, "The path to output the encrypted file.") { Arity = ArgumentArity.ZeroOrOne };
-  readonly ProjectSecretManagerOption _projectSecretManagerOption = new() { Arity = ArgumentArity.ZeroOrOne };
 
-  internal KSailSecretsEncryptCommand() : base("encrypt", "Encrypt a file")
+  internal KSailSecretsEncryptCommand(GlobalOptions globalOptions) : base("encrypt", "Encrypt a file")
   {
     AddArgument(_pathArgument);
     AddOptions();
@@ -25,8 +24,7 @@ sealed class KSailSecretsEncryptCommand : Command
     {
       try
       {
-        var config = await KSailClusterConfigLoader.LoadAsync().ConfigureAwait(false);
-        config.UpdateConfig("Spec.Project.SecretManager", context.ParseResult.GetValueForOption(_projectSecretManagerOption));
+        var config = await KSailClusterConfigLoader.LoadWithGlobalOptionsAsync(globalOptions, context);
         string path = context.ParseResult.GetValueForArgument(_pathArgument);
         string? publicKey = context.ParseResult.GetValueForOption(_publicKeyOption);
         bool inPlace = context.ParseResult.GetValueForOption(_inPlaceOption);
@@ -57,7 +55,6 @@ sealed class KSailSecretsEncryptCommand : Command
 
   void AddOptions()
   {
-    AddOption(_projectSecretManagerOption);
     AddOption(_publicKeyOption);
     AddOption(_inPlaceOption);
     AddOption(_outputOption);

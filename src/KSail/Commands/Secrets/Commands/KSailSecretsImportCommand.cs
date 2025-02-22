@@ -10,17 +10,14 @@ sealed class KSailSecretsImportCommand : Command
 {
   readonly ExceptionHandler _exceptionHandler = new();
   readonly KeyArgument _keyArgument = new("The encryption key to import") { Arity = ArgumentArity.ExactlyOne };
-  readonly ProjectSecretManagerOption _projectSecretManagerOption = new() { Arity = ArgumentArity.ZeroOrOne };
-  internal KSailSecretsImportCommand() : base("import", "Import a key from stdin or a file")
+  internal KSailSecretsImportCommand(GlobalOptions globalOptions) : base("import", "Import a key from stdin or a file")
   {
     AddArguments();
-    AddOptions();
     this.SetHandler(async (context) =>
     {
       try
       {
-        var config = await KSailClusterConfigLoader.LoadAsync().ConfigureAwait(false);
-        config.UpdateConfig("Spec.Project.SecretManager", context.ParseResult.GetValueForOption(_projectSecretManagerOption));
+        var config = await KSailClusterConfigLoader.LoadWithGlobalOptionsAsync(globalOptions, context);
         string key = context.ParseResult.GetValueForArgument(_keyArgument);
 
         var cancellationToken = context.GetCancellationToken();
@@ -47,5 +44,4 @@ sealed class KSailSecretsImportCommand : Command
   }
 
   void AddArguments() => AddArgument(_keyArgument);
-  void AddOptions() => AddOption(_projectSecretManagerOption);
 }

@@ -1,6 +1,7 @@
 using System.CommandLine;
 using System.CommandLine.IO;
 using KSail.Commands.Debug;
+using KSail.Commands.Root;
 
 namespace KSail.Tests.Commands.Debug;
 
@@ -22,10 +23,10 @@ public class KSailDebugCommandTests : IAsyncLifetime
   {
     //Arrange
     var console = new TestConsole();
-    var ksailCommand = new KSailDebugCommand();
+    var ksailCommand = new KSailRootCommand(console);
 
     //Act
-    int exitCode = await ksailCommand.InvokeAsync("--help", console);
+    int exitCode = await ksailCommand.InvokeAsync(["debug", "--help"], console);
 
     //Assert
     Assert.Equal(0, exitCode);

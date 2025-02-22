@@ -12,13 +12,13 @@ class KSailGenCertManagerCertificateCommand : Command
   readonly OutputOption _outputOption = new("./certificate.yaml");
   public KSailGenCertManagerCertificateCommand() : base("certificate", "Generate a 'cert-manager.io/v1/Certificate' resource.")
   {
-    AddOption(_outputOption);
+    this.AddOption(_outputOption);
 
     this.SetHandler(async (context) =>
       {
         try
         {
-          string outputFile = context.ParseResult.RootCommandResult.GetValueForOption(_outputOption)!;
+          string outputFile = context.ParseResult.CommandResult.GetValueForOption(_outputOption) ?? "./certificate.yaml";
           var handler = new KSailGenCertManagerCertificateCommandHandler();
           Console.WriteLine($"✚ generating {outputFile}");
           context.ExitCode = await handler.HandleAsync(outputFile, context.GetCancellationToken()).ConfigureAwait(false);

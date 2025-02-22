@@ -10,7 +10,7 @@ spec:
     timeout: 5m
   project:
     workingDirectory: .
-    ksailConfigPath: ksail-config.yaml
+    configPath: ksail-config.yaml
     distributionConfigPath: kind-config.yaml
     template: Kustomize
     engine: Docker

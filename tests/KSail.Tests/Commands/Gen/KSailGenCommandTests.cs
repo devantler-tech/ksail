@@ -3,6 +3,7 @@ using System.CommandLine.IO;
 using System.Diagnostics.CodeAnalysis;
 using System.Text.RegularExpressions;
 using KSail.Commands.Gen;
+using KSail.Commands.Root;
 
 namespace KSail.Tests.Commands.Gen;
 
@@ -22,18 +23,18 @@ public partial class KSailGenCommandTests : IAsyncLifetime
   /// </summary>
   [Theory]
   [MemberData(nameof(KSailGenCommandTestsTheoryData.HelpTheoryData), MemberType = typeof(KSailGenCommandTestsTheoryData))]
-  public async Task KSailGen_SucceedsAndPrintsHelp(string command)
+  public async Task KSailGen_SucceedsAndPrintsHelp(string[] command)
   {
     //Arrange
     var console = new TestConsole();
-    var ksailCommand = new KSailGenCommand(console);
+    var ksailCommand = new KSailRootCommand(console);
 
     //Act
     int exitCode = await ksailCommand.InvokeAsync(command, console);
 
     //Assert
     Assert.Equal(0, exitCode);
-    _ = await Verify(console.Error.ToString() + console.Out).UseFileName($"ksail gen {command}");
+    _ = await Verify(console.Error.ToString() + console.Out).UseFileName($"ksail {string.Join(" ", command)}");
   }
 
   /// <summary>
@@ -46,10 +47,11 @@ public partial class KSailGenCommandTests : IAsyncLifetime
   [MemberData(nameof(KSailGenCommandTestsTheoryData.GenerateFluxResourceTheoryData), MemberType = typeof(KSailGenCommandTestsTheoryData))]
   [MemberData(nameof(KSailGenCommandTestsTheoryData.GenerateKustomizeResourceTheoryData), MemberType = typeof(KSailGenCommandTestsTheoryData))]
   [MemberData(nameof(KSailGenCommandTestsTheoryData.GenerateNativeResourceTheoryData), MemberType = typeof(KSailGenCommandTestsTheoryData))]
-  public async Task KSailGen_SucceedsAndGeneratesAResource(string command, string fileName)
+  public async Task KSailGen_SucceedsAndGeneratesAResource(string[] args, string fileName)
   {
     //Arrange
-    var ksailCommand = new KSailGenCommand();
+    var console = new TestConsole();
+    var ksailCommand = new KSailRootCommand(console);
 
     //Act
     string outputPath = Path.Combine(Path.GetTempPath(), fileName);
@@ -57,7 +59,7 @@ public partial class KSailGenCommandTests : IAsyncLifetime
     {
       File.Delete(outputPath);
     }
-    int exitCode = await ksailCommand.InvokeAsync(command + $" --output {outputPath}");
+    int exitCode = await ksailCommand.InvokeAsync([.. args, "--output", outputPath], console);
     string fileContents = await File.ReadAllTextAsync(outputPath);
 
     //Assert

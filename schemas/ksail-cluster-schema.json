@@ -55,7 +55,7 @@
               "description": "The working directory for the project.",
               "type": "string"
             },
-            "ksailConfigPath": {
+            "configPath": {
               "description": "The path to the ksail configuration file.",
               "type": "string"
             },

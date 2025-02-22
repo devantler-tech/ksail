@@ -1,13 +1,8 @@
 using System.CommandLine;
+using System.CommandLine.IO;
 using System.Runtime.InteropServices;
 using Devantler.SecretManager.SOPS.LocalAge;
-using KSail.Commands.Down;
-using KSail.Commands.Init;
-using KSail.Commands.List;
-using KSail.Commands.Start;
-using KSail.Commands.Stop;
-using KSail.Commands.Up;
-using KSail.Commands.Update;
+using KSail.Commands.Root;
 using KSail.Utils;
 
 namespace KSail.Tests.E2E;
@@ -25,11 +20,11 @@ public class E2ETests : IAsyncLifetime
   /// Tests that the 'ksail up' command is executed successfully with various configurations.
   /// </summary>
   [Theory]
-  [InlineData("-d native")]
-  [InlineData("--name ksail-advanced-native --distribution native --secret-manager sops --flux-post-build-variables")]
-  [InlineData("-d k3s")]
-  [InlineData("--name ksail-advanced-k3s --distribution k3s --secret-manager sops --flux-post-build-variables")]
-  public async Task KSailUp_WithVariousConfigurations_Succeeds(string initArgs)
+  [InlineData(["init", "-d", "native"])]
+  [InlineData(["init", "--name", "ksail-advanced-native", "--distribution", "native", "--secret-manager", "sops", "--flux-post-build-variables"])]
+  [InlineData(["init", "-d", "k3s"])]
+  [InlineData(["init", "--name", "ksail-advanced-k3s", "--distribution", "k3s", "--secret-manager", "sops", "--flux-post-build-variables"])]
+  public async Task KSailUp_WithVariousConfigurations_Succeeds(params string[] initArgs)
   {
     // TODO: Add support for Windows and macOS in GitHub Runners when GitHub Actions runners support dind on Windows and macOS runners.
     if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows) || (RuntimeInformation.IsOSPlatform(OSPlatform.OSX) && Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true"))
@@ -38,28 +33,23 @@ public class E2ETests : IAsyncLifetime
     }
 
     //Arrange
-    var ksailInitCommand = new KSailInitCommand();
-    var ksailUpCommand = new KSailUpCommand();
-    var ksailListCommand = new KSailListCommand();
-    var ksailStopCommand = new KSailStopCommand();
-    var ksailStartCommand = new KSailStartCommand();
-    var ksailUpdateCommand = new KSailUpdateCommand();
-    var ksailDownCommand = new KSailDownCommand();
+    var console = new TestConsole();
+    var ksailCommand = new KSailRootCommand(console);
 
     //Act & Assert
-    int initExitCode = await ksailInitCommand.InvokeAsync(initArgs);
+    int initExitCode = await ksailCommand.InvokeAsync(initArgs);
     Assert.Equal(0, initExitCode);
-    int upExitCode = await ksailUpCommand.InvokeAsync("");
+    int upExitCode = await ksailCommand.InvokeAsync(["up"], console);
     Assert.Equal(0, upExitCode);
-    int listExitCode = await ksailListCommand.InvokeAsync("");
+    int listExitCode = await ksailCommand.InvokeAsync(["list"], console);
     Assert.Equal(0, listExitCode);
-    int stopExitCode = await ksailStopCommand.InvokeAsync("");
+    int stopExitCode = await ksailCommand.InvokeAsync(["stop"], console);
     Assert.Equal(0, stopExitCode);
-    int startExitCode = await ksailStartCommand.InvokeAsync("");
+    int startExitCode = await ksailCommand.InvokeAsync(["start"], console);
     Assert.Equal(0, startExitCode);
-    int updateExitCode = await ksailUpdateCommand.InvokeAsync("");
+    int updateExitCode = await ksailCommand.InvokeAsync(["update"], console);
     Assert.Equal(0, updateExitCode);
-    int downExitCode = await ksailDownCommand.InvokeAsync("");
+    int downExitCode = await ksailCommand.InvokeAsync(["down"], console);
     Assert.Equal(0, downExitCode);
   }
 

@@ -1,6 +1,7 @@
 using System.CommandLine;
 using System.CommandLine.IO;
 using KSail.Commands.Down;
+using KSail.Commands.Root;
 
 namespace KSail.Tests.Commands.Down;
 
@@ -22,10 +23,10 @@ public class KSailDownCommandTests : IAsyncLifetime
   {
     //Arrange
     var console = new TestConsole();
-    var ksailCommand = new KSailDownCommand();
+    var ksailCommand = new KSailRootCommand(console);
 
     //Act
-    int exitCode = await ksailCommand.InvokeAsync("--help", console);
+    int exitCode = await ksailCommand.InvokeAsync(["down", "--help"], console);
 
     //Assert
     Assert.Equal(0, exitCode);

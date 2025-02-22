@@ -11,9 +11,8 @@ sealed class KSailSecretsExportCommand : Command
 {
   readonly ExceptionHandler _exceptionHandler = new();
   readonly PublicKeyArgument _publicKeyArgument = new("The public key for the encryption key to export") { Arity = ArgumentArity.ExactlyOne };
-  readonly ProjectSecretManagerOption _projectSecretManagerOption = new() { Arity = ArgumentArity.ZeroOrOne };
   readonly PathOption _outputFilePathOption = new("Path to the output file", ["--output", "-o"]) { Arity = ArgumentArity.ExactlyOne };
-  internal KSailSecretsExportCommand() : base("export", "Export a key to a file")
+  internal KSailSecretsExportCommand(GlobalOptions globalOptions) : base("export", "Export a key to a file")
   {
     AddArguments();
     AddOptions();
@@ -34,8 +33,7 @@ sealed class KSailSecretsExportCommand : Command
     {
       try
       {
-        var config = await KSailClusterConfigLoader.LoadAsync().ConfigureAwait(false);
-        config.UpdateConfig("Spec.Project.SecretManager", context.ParseResult.GetValueForOption(_projectSecretManagerOption));
+        var config = await KSailClusterConfigLoader.LoadWithGlobalOptionsAsync(globalOptions, context);
         string publicKey = context.ParseResult.GetValueForArgument(_publicKeyArgument);
         string outputPath = context.ParseResult.GetValueForOption(_outputFilePathOption) ?? throw new KSailException("output path is required");
 
@@ -64,9 +62,5 @@ sealed class KSailSecretsExportCommand : Command
 
   void AddArguments() => AddArgument(_publicKeyArgument);
 
-  void AddOptions()
-  {
-    AddOption(_projectSecretManagerOption);
-    AddOption(_outputFilePathOption);
-  }
+  void AddOptions() => AddOption(_outputFilePathOption);
 }

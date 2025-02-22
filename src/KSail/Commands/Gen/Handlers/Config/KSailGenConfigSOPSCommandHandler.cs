@@ -13,8 +13,8 @@ class KSailGenConfigSOPSCommandHandler
       CreationRules =
       [
         new() {
-          PathRegex = @"^k8s\/.+\.sops\.yaml$",
-          EncryptedRegex = "^(data | stringData)$",
+          PathRegex = @"^.+\.enc\.ya?ml$",
+          EncryptedRegex = "^(data|stringData)$",
           Age = """
           <age-public-key-1>
           """,

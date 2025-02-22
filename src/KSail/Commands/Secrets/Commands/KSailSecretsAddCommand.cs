@@ -9,17 +9,14 @@ namespace KSail.Commands.Secrets.Commands;
 sealed class KSailSecretsAddCommand : Command
 {
   readonly ExceptionHandler _exceptionHandler = new();
-  readonly ProjectSecretManagerOption _projectSecretManagerOption = new() { Arity = ArgumentArity.ZeroOrOne };
 
-  internal KSailSecretsAddCommand() : base("add", "Add a new encryption key")
+  internal KSailSecretsAddCommand(GlobalOptions globalOptions) : base("add", "Add a new encryption key")
   {
-    AddOption(_projectSecretManagerOption);
     this.SetHandler(async (context) =>
     {
       try
       {
-        var config = await KSailClusterConfigLoader.LoadAsync().ConfigureAwait(false);
-        config.UpdateConfig("Spec.Project.SecretManager", context.ParseResult.GetValueForOption(_projectSecretManagerOption));
+        var config = await KSailClusterConfigLoader.LoadWithGlobalOptionsAsync(globalOptions, context);
         var cancellationToken = context.GetCancellationToken();
         KSailSecretsAddCommandHandler handler;
         switch (config.Spec.Project.SecretManager)

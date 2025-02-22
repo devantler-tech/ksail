@@ -24,11 +24,11 @@ public class KSailRootCommandTests : IAsyncLifetime
     var ksailCommand = new KSailRootCommand(console);
 
     //Act
-    int exitCode = await ksailCommand.InvokeAsync("", console);
+    int exitCode = await ksailCommand.InvokeAsync([]);
 
     //Assert
-    Assert.Equal(0, exitCode);
     _ = await Verify(console.Error.ToString() + console.Out);
+    Assert.Equal(0, exitCode);
   }
 
   /// <summary>
@@ -42,7 +42,7 @@ public class KSailRootCommandTests : IAsyncLifetime
     var ksailCommand = new KSailRootCommand(console);
 
     //Act
-    int exitCode = await ksailCommand.InvokeAsync("--help", console);
+    int exitCode = await ksailCommand.InvokeAsync(["--help"], console);
 
     //Assert
     Assert.Equal(0, exitCode);

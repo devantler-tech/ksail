@@ -1,5 +1,4 @@
 using System.ComponentModel;
-using System.Runtime.InteropServices;
 using KSail.Models.CLI;
 using KSail.Models.CNI;
 using KSail.Models.Connection;
@@ -71,12 +70,12 @@ public class KSailClusterSpec
   /// </summary>
   [Description("The mirror registries to create for the KSail cluster.")]
   public IEnumerable<KSailMirrorRegistry> MirrorRegistries { get; set; } = [
-    new KSailMirrorRegistry { Name = "registry.k8s.io", HostPort = 5556, Proxy = new KSailMirrorRegistryProxy { Url = new Uri("https://registry.k8s.io") } },
-    new KSailMirrorRegistry { Name = "docker.io", HostPort = 5557,  Proxy = new KSailMirrorRegistryProxy { Url = new Uri("https://registry-1.docker.io") } },
-    new KSailMirrorRegistry { Name = "ghcr.io", HostPort = 5558, Proxy = new KSailMirrorRegistryProxy { Url = new Uri("https://ghcr.io") } },
-    new KSailMirrorRegistry { Name = "gcr.io", HostPort = 5559, Proxy = new KSailMirrorRegistryProxy { Url = new Uri("https://gcr.io") } },
-    new KSailMirrorRegistry { Name = "mcr.microsoft.com", HostPort = 5560, Proxy = new KSailMirrorRegistryProxy { Url = new Uri("https://mcr.microsoft.com") } },
-    new KSailMirrorRegistry { Name = "quay.io", HostPort = 5561, Proxy = new KSailMirrorRegistryProxy { Url = new Uri("https://quay.io") } },
+    new KSailMirrorRegistry { Name = "registry.k8s.io-proxy", HostPort = 5556, Proxy = new KSailMirrorRegistryProxy { Url = new Uri("https://registry.k8s.io") } },
+    new KSailMirrorRegistry { Name = "docker.io-proxy", HostPort = 5557,  Proxy = new KSailMirrorRegistryProxy { Url = new Uri("https://registry-1.docker.io") } },
+    new KSailMirrorRegistry { Name = "ghcr.io-proxy", HostPort = 5558, Proxy = new KSailMirrorRegistryProxy { Url = new Uri("https://ghcr.io") } },
+    new KSailMirrorRegistry { Name = "gcr.io-proxy", HostPort = 5559, Proxy = new KSailMirrorRegistryProxy { Url = new Uri("https://gcr.io") } },
+    new KSailMirrorRegistry { Name = "mcr.microsoft.com-proxy", HostPort = 5560, Proxy = new KSailMirrorRegistryProxy { Url = new Uri("https://mcr.microsoft.com") } },
+    new KSailMirrorRegistry { Name = "quay.io-proxy", HostPort = 5561, Proxy = new KSailMirrorRegistryProxy { Url = new Uri("https://quay.io") } },
   ];
 
   /// <summary>
@@ -146,14 +145,7 @@ public class KSailClusterSpec
     switch (distribution)
     {
       case KSailKubernetesDistribution.Native:
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
-        {
-          FluxDeploymentTool = new KSailFluxDeploymentTool(new Uri("oci://172.17.0.1:5555/ksail-registry"));
-        }
-        else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-        {
-          FluxDeploymentTool = new KSailFluxDeploymentTool(new Uri("oci://host.docker.internal:5555/ksail-registry"));
-        }
+        FluxDeploymentTool = new KSailFluxDeploymentTool(new Uri("oci://ksail-registry:5555/ksail-registry"));
         break;
       case KSailKubernetesDistribution.K3s:
         FluxDeploymentTool = new KSailFluxDeploymentTool(new Uri("oci://host.k3d.internal:5555/ksail-registry"));

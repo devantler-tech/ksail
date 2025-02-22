@@ -8,12 +8,9 @@ namespace KSail.Commands.Update;
 sealed class KSailUpdateCommand : Command
 {
   readonly ExceptionHandler _exceptionHandler = new();
-  readonly MetadataNameOption _nameOption = new() { Arity = ArgumentArity.ZeroOrOne };
-  readonly PathOption _workingDirectory = new("Path to the working directory for your project") { Arity = ArgumentArity.ZeroOrOne };
   readonly LintOption _lintOption = new() { Arity = ArgumentArity.ZeroOrOne };
   readonly ReconcileOption _reconcileOption = new() { Arity = ArgumentArity.ZeroOrOne };
-  readonly ConnectionTimeoutOption _timeoutOption = new() { Arity = ArgumentArity.ZeroOrOne };
-  internal KSailUpdateCommand() : base(
+  internal KSailUpdateCommand(GlobalOptions globalOptions) : base(
     "update",
     "Update a cluster"
   )
@@ -24,10 +21,7 @@ sealed class KSailUpdateCommand : Command
     {
       try
       {
-        var config = await KSailClusterConfigLoader.LoadAsync(name: context.ParseResult.GetValueForOption(_nameOption)).ConfigureAwait(false);
-        config.UpdateConfig("Metadata.Name", context.ParseResult.GetValueForOption(_nameOption));
-        config.UpdateConfig("Spec.Connection.Timeout", context.ParseResult.GetValueForOption(_timeoutOption));
-        config.UpdateConfig("Spec.Project.WorkingDirectory", context.ParseResult.GetValueForOption(_workingDirectory));
+        var config = await KSailClusterConfigLoader.LoadWithGlobalOptionsAsync(globalOptions, context);
         config.UpdateConfig("Spec.CLI.Update.Lint", context.ParseResult.GetValueForOption(_lintOption));
         config.UpdateConfig("Spec.CLI.Update.Reconcile", context.ParseResult.GetValueForOption(_reconcileOption));
 
@@ -44,10 +38,7 @@ sealed class KSailUpdateCommand : Command
 
   void AddOptions()
   {
-    AddOption(_nameOption);
-    AddOption(_workingDirectory);
     AddOption(_lintOption);
     AddOption(_reconcileOption);
-    AddOption(_timeoutOption);
   }
 }

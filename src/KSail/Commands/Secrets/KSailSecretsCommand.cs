@@ -1,13 +1,14 @@
 using System.CommandLine;
 using KSail.Commands.Secrets.Commands;
+using KSail.Options;
 
 namespace KSail.Commands.Secrets;
 
 sealed class KSailSecretsCommand : Command
 {
-  internal KSailSecretsCommand(IConsole? console = default) : base("secrets", "Manage secrets")
+  internal KSailSecretsCommand(GlobalOptions globalOptions, IConsole? console = default) : base("secrets", "Manage secrets")
   {
-    AddCommands();
+    AddCommands(globalOptions);
     this.SetHandler(async (context) =>
       {
         context.ExitCode = await this.InvokeAsync("--help", console).ConfigureAwait(false);
@@ -15,16 +16,16 @@ sealed class KSailSecretsCommand : Command
     );
   }
 
-  void AddCommands()
+  void AddCommands(GlobalOptions globalOptions)
   {
-    AddCommand(new KSailSecretsEncryptCommand());
-    AddCommand(new KSailSecretsDecryptCommand());
+    AddCommand(new KSailSecretsEncryptCommand(globalOptions));
+    AddCommand(new KSailSecretsDecryptCommand(globalOptions));
     // TODO: Include `ksail secrets edit` command when pseudo-terminal support is added to CLIWrap. See https://github.com/Tyrrrz/CliWrap/issues/225.
     //AddCommand(new KSailSecretsEditCommand());
-    AddCommand(new KSailSecretsAddCommand());
-    AddCommand(new KSailSecretsRemoveCommand());
-    AddCommand(new KSailSecretsListCommand());
-    AddCommand(new KSailSecretsImportCommand());
-    AddCommand(new KSailSecretsExportCommand());
+    AddCommand(new KSailSecretsAddCommand(globalOptions));
+    AddCommand(new KSailSecretsRemoveCommand(globalOptions));
+    AddCommand(new KSailSecretsListCommand(globalOptions));
+    AddCommand(new KSailSecretsImportCommand(globalOptions));
+    AddCommand(new KSailSecretsExportCommand(globalOptions));
   }
 }
