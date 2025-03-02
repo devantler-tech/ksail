@@ -12,7 +12,7 @@ sealed class KSailLintCommand : Command
    "lint", "Lint manifests for a cluster"
   )
   {
-    AddOption(CLIOptions.Project.KubernetesDirectoryPathOption);
+    AddOption(CLIOptions.Project.KustomizationPathOption);
     this.SetHandler(async (context) =>
     {
       try

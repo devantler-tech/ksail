@@ -5,7 +5,7 @@ namespace KSail.Options.Validation;
 
 
 
-internal class ValidationLintOnUpOption(KSailCluster config) : Option<bool?>(
+class ValidationLintOnUpOption(KSailCluster config) : Option<bool?>(
   ["--lint", "-l"],
   $"Lit manifests. [default: {config.Spec.Validation.LintOnUp}'"
 )

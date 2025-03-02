@@ -14,10 +14,6 @@ public class KSailProject
   [Description("The path to the distribution configuration file.")]
   public string DistributionConfigPath { get; set; } = "kind-config.yaml";
 
-  [Description("The template used for the project.")]
-  public KSailTemplateType Template { get; set; } = KSailTemplateType.Kustomize;
-
-
   [Description("The Kubernetes distribution to use.")]
   public KSailKubernetesDistributionType Distribution { get; set; } = KSailKubernetesDistributionType.Native;
 
@@ -37,8 +33,8 @@ public class KSailProject
   [Description("The engine to use for running the KSail cluster.")]
   public KSailEngineType Engine { get; set; } = KSailEngineType.Docker;
 
-  [Description("The directory where the Kubernetes manifests are stored.")]
-  public string KubernetesDirectoryPath { get; set; } = "k8s";
+  [Description("The path to the root kustomization directory.")]
+  public string KustomizationPath { get; set; } = "k8s";
 
   [Description("Whether to set up mirror registries for the project.")]
   public bool MirrorRegistries { get; set; } = true;

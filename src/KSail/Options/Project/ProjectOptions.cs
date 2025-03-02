@@ -5,7 +5,7 @@ namespace KSail.Options.Project;
 
 
 
-internal class ProjectOptions(KSailCluster config)
+class ProjectOptions(KSailCluster config)
 {
   public readonly ProjectConfigPathOption ConfigPathOption = new(config) { Arity = ArgumentArity.ZeroOrOne };
   public readonly ProjectDeploymentToolOption DeploymentToolOption = new(config) { Arity = ArgumentArity.ZeroOrOne };
@@ -13,8 +13,7 @@ internal class ProjectOptions(KSailCluster config)
   public readonly ProjectDistributionOption DistributionOption = new(config) { Arity = ArgumentArity.ZeroOrOne };
   public readonly ProjectEditorOption EditorOption = new(config) { Arity = ArgumentArity.ZeroOrOne };
   public readonly ProjectEngineOption EngineOption = new(config) { Arity = ArgumentArity.ZeroOrOne };
-  public readonly ProjectKubernetesDirectoryPathOption KubernetesDirectoryPathOption = new(config) { Arity = ArgumentArity.ZeroOrOne };
+  public readonly ProjectKustomizationPathOption KustomizationPathOption = new(config) { Arity = ArgumentArity.ZeroOrOne };
   public readonly ProjectMirrorRegistriesOption MirrorRegistriesOption = new(config) { Arity = ArgumentArity.ZeroOrOne };
   public readonly ProjectSecretManagerOption SecretManagerOption = new(config) { Arity = ArgumentArity.ZeroOrOne };
-  public readonly ProjectTemplateOption TemplateOption = new(config) { Arity = ArgumentArity.ZeroOrOne };
 }

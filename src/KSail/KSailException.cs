@@ -2,7 +2,7 @@ namespace KSail;
 
 
 [Serializable]
-internal class KSailException : Exception
+class KSailException : Exception
 {
 
   public KSailException()

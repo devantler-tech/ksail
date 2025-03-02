@@ -264,10 +264,14 @@ class KSailUpCommandHandler
     string host = "localhost";
     string absolutePath = config.Spec.DeploymentTool.Flux.Source.Url.AbsolutePath;
     var sourceUrlFromHost = new Uri($"{scheme}://{host}:{config.Spec.LocalRegistry.HostPort}{absolutePath}");
-    await _deploymentTool.PushManifestsAsync(sourceUrlFromHost, config.Spec.Project.KubernetesDirectoryPath, cancellationToken: cancellationToken).ConfigureAwait(false);
+    string kubernetesDirectory = config.Spec.Project.KustomizationPath
+      .Replace("./", string.Empty, StringComparison.OrdinalIgnoreCase)
+      .Split('/', StringSplitOptions.RemoveEmptyEntries).First();
+    await _deploymentTool.PushManifestsAsync(sourceUrlFromHost, kubernetesDirectory, cancellationToken: cancellationToken).ConfigureAwait(false);
+    string ociKustomizationPath = config.Spec.Project.KustomizationPath.Replace($"{kubernetesDirectory}/", string.Empty, StringComparison.OrdinalIgnoreCase);
     await _deploymentTool.BootstrapAsync(
       config.Spec.DeploymentTool.Flux.Source.Url,
-      config.Spec.Template.Kustomize.Root.Replace($"{config.Spec.Project.KubernetesDirectoryPath}/", "", StringComparison.OrdinalIgnoreCase),
+      ociKustomizationPath,
       true,
       cancellationToken
     ).ConfigureAwait(false);

@@ -5,7 +5,7 @@ namespace KSail.Options.SecretManager;
 
 
 
-internal class SecretManagerSOPSInPlaceOption(KSailCluster config) : Option<bool>(
+class SecretManagerSOPSInPlaceOption(KSailCluster config) : Option<bool>(
   ["--in-place", "-ip"],
   $"In-place decryption/encryption. [default: {config.Spec.SecretManager.SOPS.InPlace}]"
 )

@@ -40,10 +40,9 @@ sealed class KSailUpCommand : Command
     AddOption(CLIOptions.Project.DistributionConfigPathOption);
     AddOption(CLIOptions.Project.DistributionOption);
     AddOption(CLIOptions.Project.EngineOption);
-    AddOption(CLIOptions.Project.KubernetesDirectoryPathOption);
+    AddOption(CLIOptions.Project.KustomizationPathOption);
     AddOption(CLIOptions.Project.MirrorRegistriesOption);
     AddOption(CLIOptions.Project.SecretManagerOption);
-    AddOption(CLIOptions.Template.Kustomize.RootOption);
     AddOption(CLIOptions.Validation.LintOnUpOption);
     AddOption(CLIOptions.Validation.ReconcileOnUpOption);
   }

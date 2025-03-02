@@ -1,6 +1,5 @@
 using System.CommandLine;
 using System.CommandLine.IO;
-using KSail.Commands.Down;
 using KSail.Commands.Root;
 
 namespace KSail.Tests.Commands.Down;

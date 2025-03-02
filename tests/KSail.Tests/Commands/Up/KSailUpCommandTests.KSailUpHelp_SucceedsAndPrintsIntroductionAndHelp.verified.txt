@@ -5,20 +5,19 @@ Usage:
   testhost up [options]
 
 Options:
-  -c, --context <context>                             The kubernetes context to use. [default: kind-ksail-default]
-  -t, --timeout <timeout>                             The time to wait for each kustomization to become ready. [default: 5m]
-  -fsu, --flux-source-url <flux-source-url>           Flux source URL for reconciling GitOps resources. [default: oci://ksail-registry:5000/ksail-registry]
-  -n, --name <name>                                   The name of the cluster. [default: ksail-default]
-  -dt, --deployment-tool <Flux>                       The Deployment tool to use for updating the state of the cluster. [default: Flux]
-  -dc, --distribution-config <distribution-config>    Path to the distribution configuration file. [default: kind-config.yaml]
-  -d, --distribution <K3s|Native>                     The distribution to use for the cluster. [default: Native]
-  -e, --engine <Docker>                               The engine to use for provisioning the cluster. [default: Docker]
-  -kd, --kubernetes-directory <kubernetes-directory>  The path to the kubernetes directory. [default: k8s]
-  -mr, --mirror-registries                            Enable mirror registries. [default: True]
-  -sm, --secret-manager <None|SOPS>                   Configure which secret manager to use. [default: None]
-  -kr, --kustomize-root <kustomize-root>              The kustomize root file. [default: k8s/clusters/ksail-default/flux-system]
-  -l, --lint                                          Lit manifests. [default: True'
-  -r, --reconcile                                     Reconcile manifests. [default: True]
-  -?, -h, --help                                      Show help and usage information
+  -c, --context <context>                           The kubernetes context to use. [default: kind-ksail-default]
+  -t, --timeout <timeout>                           The time to wait for each kustomization to become ready. [default: 5m]
+  -fsu, --flux-source-url <flux-source-url>         Flux source URL for reconciling GitOps resources. [default: oci://ksail-registry:5000/ksail-registry]
+  -n, --name <name>                                 The name of the cluster. [default: ksail-default]
+  -dt, --deployment-tool <Flux>                     The Deployment tool to use for updating the state of the cluster. [default: Flux]
+  -dc, --distribution-config <distribution-config>  Path to the distribution configuration file. [default: kind-config.yaml]
+  -d, --distribution <K3s|Native>                   The distribution to use for the cluster. [default: Native]
+  -e, --engine <Docker>                             The engine to use for provisioning the cluster. [default: Docker]
+  -k, --kustomization <kustomization>               The path to the root kustomization directory. [default: k8s]
+  -mr, --mirror-registries                          Enable mirror registries. [default: True]
+  -sm, --secret-manager <None|SOPS>                 Configure which secret manager to use. [default: None]
+  -l, --lint                                        Lit manifests. [default: True'
+  -r, --reconcile                                   Reconcile manifests. [default: True]
+  -?, -h, --help                                    Show help and usage information
 
 

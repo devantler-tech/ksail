@@ -4,7 +4,7 @@ using KSail.Models;
 namespace KSail.Options.Connection;
 
 
-internal class ConnectionOptions(KSailCluster config)
+class ConnectionOptions(KSailCluster config)
 {
 
   public readonly ConnectionContextOption ContextOption = new(config) { Arity = ArgumentArity.ZeroOrOne };

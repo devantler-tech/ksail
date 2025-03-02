@@ -11,14 +11,13 @@ spec:
   project:
     configPath: ksail-config.yaml
     distributionConfigPath: kind-config.yaml
-    template: Kustomize
     distribution: Native
     deploymentTool: Flux
     secretManager: None
     cni: Default
     editor: Nano
     engine: Docker
-    kubernetesDirectoryPath: k8s
+    kustomizationPath: k8s/cluster1
     mirrorRegistries: true
   deploymentTool:
     flux:
@@ -26,9 +25,6 @@ spec:
         url: <url>
   distribution:
     showAllClustersInListings: false
-  template:
-    kustomize:
-      root: k8s/clusters/cluster1/flux-system
   secretManager:
     sops:
       inPlace: false

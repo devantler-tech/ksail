@@ -59,12 +59,6 @@
               "description": "The path to the distribution configuration file.",
               "type": "string"
             },
-            "template": {
-              "description": "The template used for the project.",
-              "enum": [
-                "Kustomize"
-              ]
-            },
             "distribution": {
               "description": "The Kubernetes distribution to use.",
               "enum": [
@@ -104,8 +98,8 @@
                 "Docker"
               ]
             },
-            "kubernetesDirectoryPath": {
-              "description": "The directory where the Kubernetes manifests are stored.",
+            "kustomizationPath": {
+              "description": "The path to the root kustomization directory.",
               "type": "string"
             },
             "mirrorRegistries": {
@@ -143,21 +137,6 @@
             "showAllClustersInListings": {
               "description": "Show clusters from all supported distributions.",
               "type": "boolean"
-            }
-          }
-        },
-        "template": {
-          "description": "The options for the template.",
-          "type": "object",
-          "properties": {
-            "kustomize": {
-              "type": "object",
-              "properties": {
-                "root": {
-                  "description": "The root directory.",
-                  "type": "string"
-                }
-              }
             }
           }
         },

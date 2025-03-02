@@ -19,7 +19,7 @@ sealed class KSailInitCommand : Command
       {
         var config = await KSailClusterConfigLoader.LoadWithoptionsAsync(context).ConfigureAwait(false);
         var handler = new KSailInitCommandHandler(config);
-        Console.WriteLine($"📁 Initializing new cluster '{config.Metadata.Name}' in './' with the '{config.Spec.Project.Template}' template.");
+        Console.WriteLine($"📁 Initializing new cluster '{config.Metadata.Name}'");
         context.ExitCode = await handler.HandleAsync(context.GetCancellationToken()).ConfigureAwait(false);
         Console.WriteLine();
       }
@@ -37,9 +37,8 @@ sealed class KSailInitCommand : Command
     AddOption(CLIOptions.Project.DistributionConfigPathOption);
     AddOption(CLIOptions.Project.DistributionOption);
     AddOption(CLIOptions.Project.EngineOption);
-    AddOption(CLIOptions.Project.KubernetesDirectoryPathOption);
+    AddOption(CLIOptions.Project.KustomizationPathOption);
     AddOption(CLIOptions.Project.MirrorRegistriesOption);
     AddOption(CLIOptions.Project.SecretManagerOption);
-    AddOption(CLIOptions.Template.Kustomize.RootOption);
   }
 }

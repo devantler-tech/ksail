@@ -58,19 +58,15 @@ static class KSailClusterConfigLoader
     config.UpdateConfig("Spec.Project.DistributionConfigPath", context.ParseResult.GetValueForOption(CLIOptions.Project.DistributionConfigPathOption));
     config.UpdateConfig("Spec.Project.Editor", context.ParseResult.GetValueForOption(CLIOptions.Project.EditorOption));
     config.UpdateConfig("Spec.Project.Engine", context.ParseResult.GetValueForOption(CLIOptions.Project.EngineOption));
-    config.UpdateConfig("Spec.Project.KubernetesDirectoryPath", context.ParseResult.GetValueForOption(CLIOptions.Project.KubernetesDirectoryPathOption));
+    config.UpdateConfig("Spec.Project.KustomizationPath", context.ParseResult.GetValueForOption(CLIOptions.Project.KustomizationPathOption));
     config.UpdateConfig("Spec.Project.MirrorRegistries", context.ParseResult.GetValueForOption(CLIOptions.Project.MirrorRegistriesOption));
     config.UpdateConfig("Spec.Project.SecretManager", context.ParseResult.GetValueForOption(CLIOptions.Project.SecretManagerOption));
-    config.UpdateConfig("Spec.Project.Template", context.ParseResult.GetValueForOption(CLIOptions.Project.TemplateOption));
 
     // SecretManager
     config.UpdateConfig("Spec.SecretManager.SOPS.InPlace", context.ParseResult.GetValueForOption(CLIOptions.SecretManager.SOPS.InPlaceOption));
     config.UpdateConfig("Spec.SecretManager.SOPS.PublicKey", context.ParseResult.GetValueForOption(CLIOptions.SecretManager.SOPS.PublicKeyOption));
     config.UpdateConfig("Spec.SecretManager.SOPS.ShowAllKeysInListings", context.ParseResult.GetValueForOption(CLIOptions.SecretManager.SOPS.ShowAllKeysInListingsOption));
     config.UpdateConfig("Spec.SecretManager.SOPS.ShowPrivateKeysInListings", context.ParseResult.GetValueForOption(CLIOptions.SecretManager.SOPS.ShowPrivateKeysInListingsOption));
-
-    // Template
-    config.UpdateConfig("Spec.Template.Kustomize.Root", context.ParseResult.GetValueForOption(CLIOptions.Template.Kustomize.RootOption));
 
     // Validation
     config.UpdateConfig("Spec.Validation.LintOnUp", context.ParseResult.GetValueForOption(CLIOptions.Validation.LintOnUpOption));

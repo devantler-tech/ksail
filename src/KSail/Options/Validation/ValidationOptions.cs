@@ -5,7 +5,7 @@ namespace KSail.Options.Validation;
 
 
 
-internal class ValidationOptions(KSailCluster config)
+class ValidationOptions(KSailCluster config)
 {
 
 

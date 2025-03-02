@@ -4,7 +4,7 @@ using KSail.Models;
 namespace KSail.Options.Project;
 
 
-internal class ProjectConfigPathOption(KSailCluster config) : Option<string?>(
+class ProjectConfigPathOption(KSailCluster config) : Option<string?>(
   ["--config", "-c"],
   $"The path to the ksail configuration file. [default: {config.Spec.Project.ConfigPath}]"
 )

@@ -4,7 +4,7 @@ using System.Text;
 namespace KSail.Utils;
 
 
-internal class ExceptionHandler
+class ExceptionHandler
 {
 
   public bool DebugMode { get; set; }

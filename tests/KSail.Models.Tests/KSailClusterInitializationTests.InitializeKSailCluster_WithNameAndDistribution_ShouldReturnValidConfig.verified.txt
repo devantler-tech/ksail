@@ -13,14 +13,13 @@
     Project: {
       ConfigPath: ksail-config.yaml,
       DistributionConfigPath: k3d-config.yaml,
-      Template: Kustomize,
       Distribution: K3s,
       DeploymentTool: Flux,
       SecretManager: None,
       CNI: Default,
       Editor: Nano,
       Engine: Docker,
-      KubernetesDirectoryPath: k8s,
+      KustomizationPath: k8s,
       MirrorRegistries: true
     },
     DeploymentTool: {
@@ -32,11 +31,6 @@
     },
     Distribution: {
       ShowAllClustersInListings: false
-    },
-    Template: {
-      Kustomize: {
-        Root: k8s/clusters/my-cluster/flux-system
-      }
     },
     SecretManager: {
       SOPS: {

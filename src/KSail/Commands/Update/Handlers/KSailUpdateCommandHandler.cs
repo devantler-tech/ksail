@@ -27,7 +27,9 @@ class KSailUpdateCommandHandler
     {
       return false;
     }
-    string manifestDirectory = _config.Spec.Project.KubernetesDirectoryPath;
+    string manifestDirectory = _config.Spec.Project.KustomizationPath
+      .Replace("./", string.Empty, StringComparison.OrdinalIgnoreCase)
+      .Split('/', StringSplitOptions.RemoveEmptyEntries).First();
     if (!Directory.Exists(manifestDirectory) || Directory.GetFiles(manifestDirectory, "*.yaml", SearchOption.AllDirectories).Length == 0)
     {
       throw new KSailException($"a '{manifestDirectory}' directory does not exist or is empty.");
@@ -42,7 +44,7 @@ class KSailUpdateCommandHandler
         var ociRegistryFromHost = new Uri($"{scheme}://{host}:{port}{absolutePath}");
         Console.WriteLine($"📥 Pushing manifests to '{ociRegistryFromHost}'");
         // TODO: Make some form of abstraction around GitOps tools, so it is easier to support apply-based tools like kubectl
-        await _deploymentTool.PushManifestsAsync(ociRegistryFromHost, _config.Spec.Project.KubernetesDirectoryPath, cancellationToken: cancellationToken).ConfigureAwait(false);
+        await _deploymentTool.PushManifestsAsync(ociRegistryFromHost, manifestDirectory, cancellationToken: cancellationToken).ConfigureAwait(false);
         Console.WriteLine();
         if (_config.Spec.Validation.ReconcileOnUpdate)
         {

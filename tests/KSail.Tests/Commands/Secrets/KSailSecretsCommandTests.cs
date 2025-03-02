@@ -1,7 +1,6 @@
 using System.CommandLine;
 using System.CommandLine.IO;
 using KSail.Commands.Root;
-using KSail.Commands.Secrets;
 
 namespace KSail.Tests.Commands.Secrets;
 

@@ -13,7 +13,7 @@ class SOPSConfigFileGenerator
 
   internal async Task GenerateAsync(KSailCluster config, CancellationToken cancellationToken = default)
   {
-    string sopsConfigPath = ".sops.yaml";
+    string sopsConfigPath = Path.Combine(".sops.yaml");
     if (!File.Exists(sopsConfigPath) || string.IsNullOrEmpty(await File.ReadAllTextAsync(sopsConfigPath, cancellationToken).ConfigureAwait(false)))
     {
       await GenerateNewSOPSConfigFile(

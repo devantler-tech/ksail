@@ -2,7 +2,6 @@ using System.CommandLine;
 using System.CommandLine.IO;
 using System.Diagnostics.CodeAnalysis;
 using System.Text.RegularExpressions;
-using KSail.Commands.Gen;
 using KSail.Commands.Root;
 
 namespace KSail.Tests.Commands.Gen;

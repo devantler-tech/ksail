@@ -8,7 +8,6 @@ using KSail.Models.MirrorRegistry;
 using KSail.Models.Project;
 using KSail.Models.Project.Enums;
 using KSail.Models.SecretManager;
-using KSail.Models.Template;
 using KSail.Models.Validation;
 using KSail.Models.WaypointController;
 using YamlDotNet.Serialization;
@@ -30,9 +29,6 @@ public class KSailClusterSpec
 
   [Description("The options for the distribution.")]
   public KSailDistribution Distribution { get; set; } = new();
-
-  [Description("The options for the template.")]
-  public KSailTemplate Template { get; set; } = new();
 
   [Description("The options for the Secret Manager.")]
   public KSailSecretManager SecretManager { get; set; } = new();
@@ -76,10 +72,6 @@ public class KSailClusterSpec
     {
       Context = $"kind-{name}"
     };
-    Template.Kustomize = new KSailTemplateKustomize
-    {
-      Root = $"k8s/clusters/{name}/flux-system"
-    };
   }
 
   public KSailClusterSpec(string name, KSailKubernetesDistributionType distribution) : this(name)
@@ -103,10 +95,6 @@ public class KSailClusterSpec
         KSailKubernetesDistributionType.K3s => "k3d-config.yaml",
         _ => "kind-config.yaml"
       }
-    };
-    Template.Kustomize = new KSailTemplateKustomize
-    {
-      Root = $"k8s/clusters/{name}/flux-system"
     };
   }
 

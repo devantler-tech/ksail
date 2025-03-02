@@ -5,7 +5,7 @@ namespace KSail.Options.SecretManager;
 
 
 
-internal class SecretManagerSOPSOptions(KSailCluster config)
+class SecretManagerSOPSOptions(KSailCluster config)
 {
 
   public readonly SecretManagerSOPSPublicKeyOption PublicKeyOption = new() { Arity = ArgumentArity.ZeroOrOne };

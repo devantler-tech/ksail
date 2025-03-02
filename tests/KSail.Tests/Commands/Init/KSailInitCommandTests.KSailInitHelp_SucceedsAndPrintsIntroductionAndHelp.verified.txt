@@ -5,14 +5,13 @@ Usage:
   testhost init [options]
 
 Options:
-  -n, --name <name>                                   The name of the cluster. [default: ksail-default]
-  -dc, --distribution-config <distribution-config>    Path to the distribution configuration file. [default: kind-config.yaml]
-  -d, --distribution <K3s|Native>                     The distribution to use for the cluster. [default: Native]
-  -e, --engine <Docker>                               The engine to use for provisioning the cluster. [default: Docker]
-  -kd, --kubernetes-directory <kubernetes-directory>  The path to the kubernetes directory. [default: k8s]
-  -mr, --mirror-registries                            Enable mirror registries. [default: True]
-  -sm, --secret-manager <None|SOPS>                   Configure which secret manager to use. [default: None]
-  -kr, --kustomize-root <kustomize-root>              The kustomize root file. [default: k8s/clusters/ksail-default/flux-system]
-  -?, -h, --help                                      Show help and usage information
+  -n, --name <name>                                 The name of the cluster. [default: ksail-default]
+  -dc, --distribution-config <distribution-config>  Path to the distribution configuration file. [default: kind-config.yaml]
+  -d, --distribution <K3s|Native>                   The distribution to use for the cluster. [default: Native]
+  -e, --engine <Docker>                             The engine to use for provisioning the cluster. [default: Docker]
+  -k, --kustomization <kustomization>               The path to the root kustomization directory. [default: k8s]
+  -mr, --mirror-registries                          Enable mirror registries. [default: True]
+  -sm, --secret-manager <None|SOPS>                 Configure which secret manager to use. [default: None]
+  -?, -h, --help                                    Show help and usage information
 
 

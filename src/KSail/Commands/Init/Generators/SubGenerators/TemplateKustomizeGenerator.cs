@@ -9,25 +9,28 @@ class TemplateKustomizeGenerator
   readonly KustomizeKustomizationGenerator _kustomizeKustomizationGenerator = new();
   internal async Task GenerateAsync(KSailCluster config, CancellationToken cancellationToken = default)
   {
-    string outputDirectory = Path.Combine(config.Spec.Project.KubernetesDirectoryPath, "clusters", config.Metadata.Name, "flux-system");
+    string outputDirectory = Path.IsPathRooted(config.Spec.Project.KustomizationPath)
+      ? config.Spec.Project.KustomizationPath
+      : Path.Combine(config.Spec.Project.KustomizationPath);
+
     if (!Directory.Exists(outputDirectory))
       _ = Directory.CreateDirectory(outputDirectory);
-    await GenerateFluxSystemKustomization(outputDirectory, cancellationToken).ConfigureAwait(false);
+    await GenerateKustomization(outputDirectory, cancellationToken).ConfigureAwait(false);
   }
 
-  async Task GenerateFluxSystemKustomization(string outputDirectory, CancellationToken cancellationToken = default)
+  async Task GenerateKustomization(string path, CancellationToken cancellationToken = default)
   {
-    outputDirectory = Path.Combine(outputDirectory, "kustomization.yaml");
-    if (File.Exists(outputDirectory))
+    path = Path.Combine(path, "kustomization.yaml");
+    if (File.Exists(path))
     {
-      Console.WriteLine($"✔ skipping '{outputDirectory}', as it already exists.");
+      Console.WriteLine($"✔ skipping '{path}', as it already exists.");
       return;
     }
-    Console.WriteLine($"✚ generating '{outputDirectory}'");
+    Console.WriteLine($"✚ generating '{path}'");
     var kustomization = new KustomizeKustomization()
     {
       Resources = []
     };
-    await _kustomizeKustomizationGenerator.GenerateAsync(kustomization, outputDirectory, cancellationToken: cancellationToken).ConfigureAwait(false);
+    await _kustomizeKustomizationGenerator.GenerateAsync(kustomization, path, cancellationToken: cancellationToken).ConfigureAwait(false);
   }
 }

@@ -22,12 +22,12 @@
   <ItemGroup>
     <PackageReference Include="Devantler.ContainerEngineProvisioner.Docker" Version="1.1.4" />
     <PackageReference Include="Devantler.KubernetesGenerator.CertManager" Version="1.5.3" />
-    <PackageReference Include="Devantler.KubernetesGenerator.Flux" Version="1.5.1" />
+    <PackageReference Include="Devantler.KubernetesGenerator.Flux" Version="1.5.3" />
     <PackageReference Include="Devantler.KubernetesGenerator.K3d" Version="1.5.3" />
     <PackageReference Include="Devantler.KubernetesGenerator.Kind" Version="1.5.3" />
     <PackageReference Include="Devantler.KubernetesProvisioner.Cluster.K3d" Version="1.2.14" />
     <PackageReference Include="Devantler.KubernetesProvisioner.Cluster.Kind" Version="1.2.14" />
-    <PackageReference Include="Devantler.KubernetesProvisioner.GitOps.Flux" Version="1.2.12" />
+    <PackageReference Include="Devantler.KubernetesProvisioner.GitOps.Flux" Version="1.2.14" />
     <PackageReference Include="Devantler.KubernetesValidator.ClientSide.Schemas" Version="1.0.34" />
     <PackageReference Include="Devantler.KubernetesValidator.ClientSide.YamlSyntax" Version="1.0.34" />
     <PackageReference Include="Devantler.SecretManager.SOPS.LocalAge" Version="1.3.5" />

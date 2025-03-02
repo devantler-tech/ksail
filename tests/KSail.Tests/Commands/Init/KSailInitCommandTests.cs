@@ -2,7 +2,6 @@ using System.CommandLine;
 using System.CommandLine.IO;
 using System.Text.RegularExpressions;
 using Devantler.SecretManager.SOPS.LocalAge;
-using KSail.Commands.Init;
 using KSail.Commands.Root;
 using KSail.Utils;
 
@@ -125,10 +124,12 @@ public partial class KSailInitCommandTests : IAsyncLifetime
     Directory.SetCurrentDirectory(outputDir);
     int exitCodeRun1 = await ksailCommand.InvokeAsync(["init",
       "--name", "cluster1",
+      "--kustomization", "k8s/cluster1",
       "--distribution", "native"
     ]);
     int exitCodeRun2 = await ksailCommand.InvokeAsync(["init",
       "--name", "cluster2",
+      "--kustomization", "k8s/cluster2",
       "--distribution", "k3s"
     ]);
 
@@ -261,11 +262,13 @@ public partial class KSailInitCommandTests : IAsyncLifetime
     Directory.SetCurrentDirectory(outputDir);
     int exitCodeRun1 = await ksailCommand.InvokeAsync(["init",
       "--name", "cluster1",
+      "--kustomization", "k8s/cluster1",
       "--secret-manager", "sops",
       "--distribution", "native"
     ]);
     int exitCodeRun2 = await ksailCommand.InvokeAsync(["init",
       "--name", "cluster2",
+      "--kustomization", "k8s/cluster2",
       "--secret-manager", "sops",
       "--distribution", "k3s"
     ]);

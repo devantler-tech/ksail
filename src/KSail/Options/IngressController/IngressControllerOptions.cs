@@ -1,6 +1,6 @@
 namespace KSail.Options.IngressController;
 
 
-internal class IngressControllerOptions()
+class IngressControllerOptions()
 {
 }

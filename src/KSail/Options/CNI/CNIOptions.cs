@@ -2,7 +2,7 @@ namespace KSail.Options.CNI;
 
 
 
-internal class CNIOptions()
+class CNIOptions()
 {
 
 }

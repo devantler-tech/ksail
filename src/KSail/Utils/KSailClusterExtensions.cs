@@ -3,7 +3,7 @@ using KSail.Models;
 namespace KSail.Utils;
 
 
-internal static class KSailClusterExtensions
+static class KSailClusterExtensions
 {
   public static void UpdateConfig<T>(this KSailCluster config, string propertyPath, T value)
   {

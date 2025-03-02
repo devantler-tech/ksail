@@ -1,7 +1,6 @@
 using System.CommandLine;
 using System.CommandLine.IO;
 using KSail.Commands.Root;
-using KSail.Commands.Update;
 
 namespace KSail.Tests.Commands.Update;
 
