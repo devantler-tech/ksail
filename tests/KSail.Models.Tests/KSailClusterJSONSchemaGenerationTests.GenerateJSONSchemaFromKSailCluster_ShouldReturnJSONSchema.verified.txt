@@ -82,7 +82,8 @@
             "cni": {
               "description": "The CNI to use.",
               "enum": [
-                "Default"
+                "Default",
+                "Cilium"
               ]
             },
             "editor": {
@@ -174,7 +175,8 @@
         "cni": {
           "description": "The options for the CNI.",
           "enum": [
-            "Default"
+            "Default",
+            "Cilium"
           ]
         },
         "ingressController": {

@@ -24,6 +24,7 @@ class KSailUpCommandHandler
   readonly DockerProvisioner _engineProvisioner;
   readonly FluxProvisioner _deploymentTool;
   readonly IKubernetesClusterProvisioner _clusterProvisioner;
+  readonly IKubernetesCNIProvisioner _cniProvisioner;
   readonly KSailCluster _config;
   readonly KSailLintCommandHandler _ksailLintCommandHandler;
 
@@ -68,6 +69,7 @@ class KSailUpCommandHandler
 
     await BootstrapOCISourceRegistry(_config, cancellationToken).ConfigureAwait(false);
     await BootstrapMirrorRegistries(_config, cancellationToken).ConfigureAwait(false);
+    await BootstrapCNI(_config, cancellationToken).ConfigureAwait(false);
     await BootstrapSecretManager(_config, cancellationToken).ConfigureAwait(false);
     await BootstrapDeploymentTool(_config, cancellationToken).ConfigureAwait(false);
 
@@ -283,6 +285,21 @@ class KSailUpCommandHandler
     Console.WriteLine();
   }
 
+  async Task BootstrapCNI(KSailCluster config, CancellationToken cancellationToken)
+  {
+    switch (config.Spec.Project.CNI)
+    {
+      case KSailCNIType.Cilium:
+        Console.WriteLine("🐝 Installing Cilium CNI");
+        await _cniProvisioner.InstallAsync(config.Spec.Connection.Context, cancellationToken).ConfigureAwait(false);
+        Console.WriteLine("✔ Cilium CNI installed");
+        Console.WriteLine();
+        break;
+      case KSailCNIType.Default:
+      default:
+        break;
+    }
+  }
   async Task BootstrapSecretManager(KSailCluster config, CancellationToken cancellationToken)
   {
     using var resourceProvisioner = new KubernetesResourceProvisioner(config.Spec.Connection.Context);
