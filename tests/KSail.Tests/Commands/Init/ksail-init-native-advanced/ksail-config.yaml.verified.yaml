@@ -5,79 +5,53 @@ metadata:
   name: ksail-advanced-native
 spec:
   connection:
-    kubeconfig: ~/.kube/config
     context: kind-ksail-advanced-native
-    timeout: 5m
   project:
-    configPath: ksail-config.yaml
-    distributionConfigPath: kind-config.yaml
-    distribution: Native
-    deploymentTool: Flux
     secretManager: SOPS
     cni: Cilium
-    editor: Nano
-    engine: Docker
-    kustomizationPath: k8s
-    mirrorRegistries: true
   deploymentTool:
     flux:
       source:
         url: <url>
-  distribution:
-    showAllClustersInListings: false
+  distribution: {}
   secretManager:
-    sops:
-      inPlace: false
-      showAllKeysInListings: false
-      showPrivateKeysInListings: false
+    sops: {}
   cni: {}
   ingressController: {}
   waypointController: {}
   localRegistry:
     name: ksail-registry
     hostPort: 5555
-    provider: Docker
-  generator:
-    overwrite: false
+  generator: {}
   mirrorRegistries:
   - proxy:
       url: <url>
       insecure: false
     name: registry.k8s.io-proxy
     hostPort: 5556
-    provider: Docker
   - proxy:
       url: <url>
       insecure: false
     name: docker.io-proxy
     hostPort: 5557
-    provider: Docker
   - proxy:
       url: <url>
       insecure: false
     name: ghcr.io-proxy
     hostPort: 5558
-    provider: Docker
   - proxy:
       url: <url>
       insecure: false
     name: gcr.io-proxy
     hostPort: 5559
-    provider: Docker
   - proxy:
       url: <url>
       insecure: false
     name: mcr.microsoft.com-proxy
     hostPort: 5560
-    provider: Docker
   - proxy:
       url: <url>
       insecure: false
     name: quay.io-proxy
     hostPort: 5561
-    provider: Docker
-  validation:
-    lintOnUp: true
-    reconcileOnUp: true
-    lintOnUpdate: true
-    reconcileOnUpdate: true
+  validation: {}

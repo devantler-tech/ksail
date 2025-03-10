@@ -14,7 +14,7 @@ public class KSailCluster
   public string Kind { get; set; } = "Cluster";
 
   [Description("The metadata of the KSail Cluster object.")]
-  public KSailMetadata Metadata { get; set; } = new();
+  public KSailMetadata Metadata { get; set; } = new() { Name = "ksail-default" };
 
   [Description("The spec of the KSail Cluster object.")]
   public KSailClusterSpec Spec { get; set; } = new();
