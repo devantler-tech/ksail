@@ -23,7 +23,7 @@ class KSailGenFluxKustomizationCommandHandler(string outputFile, bool overwrite)
         SourceRef = new FluxKustomizationSpecSourceRef
         {
           Kind = FluxKustomizationSpecSourceRefKind.OCIRepository,
-          Name = "flux-system",
+          Name = "flux-system"
         },
         Path = "path/to/kustomize-kustomization-dir",
         Prune = true,

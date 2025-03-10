@@ -1,13 +1,9 @@
 using System.Text;
 using Devantler.KubernetesGenerator.K3d;
 using Devantler.KubernetesGenerator.K3d.Models;
-using Devantler.KubernetesGenerator.K3d.Models.Options;
-using Devantler.KubernetesGenerator.K3d.Models.Options.K3s;
-using Devantler.KubernetesGenerator.K3d.Models.Registries;
 using Devantler.KubernetesGenerator.Kind;
 using Devantler.KubernetesGenerator.Kind.Models;
 using Devantler.KubernetesGenerator.Kind.Models.Networking;
-using k8s.Models;
 using KSail.Models;
 using KSail.Models.Project.Enums;
 
@@ -92,11 +88,11 @@ class DistributionConfigFileGenerator
     }
     var k3dConfig = new K3dConfig
     {
-      Metadata = new V1ObjectMeta
+      Metadata = new()
       {
         Name = config.Metadata.Name
       },
-      Registries = new K3dRegistries
+      Registries = new()
       {
         Config = $"""
           {mirrors}
@@ -106,16 +102,23 @@ class DistributionConfigFileGenerator
 
     if (config.Spec.Project.CNI != KSailCNIType.Default)
     {
-      k3dConfig.Options = new K3dOptions
+      k3dConfig.Options = new()
       {
-        K3s = new K3dOptionsK3s
+        K3s = new()
         {
           ExtraArgs =
           [
-            new K3dOptionsK3sExtraArg
-            {
+            new() {
               Arg = "--flannel-backend=none",
-              NodeFilters = [
+              NodeFilters =
+              [
+                "server:*"
+              ]
+            },
+            new() {
+              Arg = "--disable-network-policy",
+              NodeFilters =
+              [
                 "server:*"
               ]
             }

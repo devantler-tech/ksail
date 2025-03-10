@@ -23,7 +23,10 @@
         "name": {
           "type": "string"
         }
-      }
+      },
+      "required": [
+        "name"
+      ]
     },
     "spec": {
       "description": "The spec of the KSail Cluster object.",
