@@ -118,8 +118,7 @@ class KSailUpCommandHandler
     {
       Console.WriteLine("📥 Create OCI source registry");
       Console.WriteLine($"► creating '{config.Spec.DeploymentTool.Flux.Source.Url}' as OCI source registry");
-      await _engineProvisioner
-       .CreateRegistryAsync(
+      await _engineProvisioner.CreateRegistryAsync(
         config.Spec.LocalRegistry.Name,
         config.Spec.LocalRegistry.HostPort,
         cancellationToken: cancellationToken
@@ -137,8 +136,11 @@ class KSailUpCommandHandler
       var tasks = config.Spec.MirrorRegistries.Select(async mirrorRegistry =>
       {
         Console.WriteLine($"► creating mirror registry '{mirrorRegistry.Name}' for '{mirrorRegistry.Proxy?.Url}'");
-        await _engineProvisioner
-         .CreateRegistryAsync(mirrorRegistry.Name, mirrorRegistry.HostPort, mirrorRegistry.Proxy?.Url, cancellationToken).ConfigureAwait(false);
+        await _engineProvisioner.CreateRegistryAsync(
+          mirrorRegistry.Name,
+          mirrorRegistry.HostPort,
+          mirrorRegistry.Proxy?.Url,
+          cancellationToken).ConfigureAwait(false);
       });
 
       await Task.WhenAll(tasks).ConfigureAwait(false);
@@ -254,7 +256,7 @@ class KSailUpCommandHandler
     async Task AddMirrorRegistryToContainerd(string containerName, KSailMirrorRegistry mirrorRegistry, CancellationToken cancellationToken)
     {
       // https://github.com/containerd/containerd/blob/main/docs/hosts.md
-      string registryDir = $"/etc/containerd/certs.d/{mirrorRegistry.Name}";
+      string registryDir = $"/etc/containerd/certs.d/{mirrorRegistry.Proxy.Url.Host}";
       await _engineProvisioner.CreateDirectoryInContainerAsync(containerName, registryDir, true, cancellationToken).ConfigureAwait(false);
       string host = $"{mirrorRegistry.Name}:5000";
       string hostsToml = $"""
