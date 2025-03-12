@@ -58,18 +58,29 @@ class KSailUpCommandHandler
 
   internal async Task<int> HandleAsync(CancellationToken cancellationToken = default)
   {
-    if (!await Lint(_config, cancellationToken).ConfigureAwait(false))
+    if (!await CheckEngineIsRunning(cancellationToken).ConfigureAwait(false))
     {
       return 1;
     }
 
-    if (!await CheckEngineIsRunning(cancellationToken).ConfigureAwait(false))
+    if (await _clusterProvisioner.ExistsAsync(_config.Metadata.Name, cancellationToken).ConfigureAwait(false))
+    {
+      throw new KSailException(
+        $"cluster '{_config.Metadata.Name}' is already running."
+        + Environment.NewLine
+        + "Please delete it with `ksail down` before running 'ksail up' again."
+        + Environment.NewLine
+        + "If you want to update the cluster, use 'ksail update' instead.");
+    }
+
+    if (!await Lint(_config, cancellationToken).ConfigureAwait(false))
     {
       return 1;
     }
 
     await CreateOCISourceRegistry(_config, cancellationToken).ConfigureAwait(false);
     await CreateMirrorRegistries(_config, cancellationToken).ConfigureAwait(false);
+    // skip if cluster already exists
 
     await ProvisionCluster(cancellationToken).ConfigureAwait(false);
 
