@@ -68,9 +68,9 @@ class KSailUpCommandHandler
       throw new KSailException(
         $"cluster '{_config.Metadata.Name}' is already running."
         + Environment.NewLine
-        + "Please delete it with `ksail down` before running 'ksail up' again."
+        + "  - if you want to recreate the cluster, use 'ksail down' before running 'ksail up' again."
         + Environment.NewLine
-        + "If you want to update the cluster, use 'ksail update' instead.");
+        + "  - if you want to update the cluster, use 'ksail update' instead.");
     }
 
     if (!await Lint(_config, cancellationToken).ConfigureAwait(false))
