@@ -256,11 +256,16 @@ class KSailUpCommandHandler
     async Task AddMirrorRegistryToContainerd(string containerName, KSailMirrorRegistry mirrorRegistry, CancellationToken cancellationToken)
     {
       // https://github.com/containerd/containerd/blob/main/docs/hosts.md
-      string registryDir = $"/etc/containerd/certs.d/{mirrorRegistry.Proxy.Url.Host}";
+      var mirrorRegistryHost = mirrorRegistry.Proxy?.Url.Host;
+      if (string.Equals(mirrorRegistryHost, "registry-1.docker.io", StringComparison.OrdinalIgnoreCase))
+      {
+        mirrorRegistryHost = "docker.io";
+      }
+      string registryDir = $"/etc/containerd/certs.d/{mirrorRegistryHost}";
       await _engineProvisioner.CreateDirectoryInContainerAsync(containerName, registryDir, true, cancellationToken).ConfigureAwait(false);
       string host = $"{mirrorRegistry.Name}:5000";
       string hostsToml = $"""
-      server = "{mirrorRegistry.Proxy.Url}"
+      server = "{mirrorRegistry.Proxy?.Url}"
 
       [host."http://{host}"]
         capabilities = ["pull", "resolve"]
