@@ -4,15 +4,15 @@ Everything that KSail does and can do is configurable in a declarative manner. T
 
 ## KSail Configuration
 
-KSail provides a fully declarative configuration for managing everything it does. This configuration is stored in a `ksail-config.yaml` file in the root of your project.
+KSail provides a fully declarative configuration for managing everything it does. This configuration is stored in a `ksail.yaml` file in the root of your project.
 
 KSail uses the following priority when loading in the configuration:
 
 1. The default configuration
-2. The configuration in the `ksail-config.yaml` file in the root of your project
+2. The configuration in the `ksail.yaml` file in the root of your project
 3. Command-line flags
 
-So, you can always override the configuration in the `ksail-config.yaml` file with command-line flags, if you need to.
+So, you can always override the configuration in the `ksail.yaml` file with command-line flags, if you need to.
 
 ```yaml
 apiVersion: ksail.io/v1alpha1
@@ -33,7 +33,7 @@ spec:
   # The directory where the root Kustomization is stored
   KustomizationDirectory: ./k8s/clusters/ksail-default/flux-system
   # The path to the kubernetes distribution's config file
-  configPath: kind-config.yaml
+  configPath: kind.yaml
   # The kubernetes distribution to use
   distribution: kind
   # The GitOps tool to use
@@ -173,11 +173,11 @@ spec:
 
 ### Kind
 
-To configure Kind, you use a `kind-config.yaml` file in the root of your project. To learn more about the configuration options for Kind, you can check out the [official Kind documentation](https://kind.sigs.k8s.io/docs/user/configuration/).
+To configure Kind, you use a `kind.yaml` file in the root of your project. To learn more about the configuration options for Kind, you can check out the [official Kind documentation](https://kind.sigs.k8s.io/docs/user/configuration/).
 
 ### K3d
 
-To configure K3d, you use a `k3d-config.yaml` file in the root of your project. To learn more about the configuration options for K3d, you can check out the [official K3d documentation](https://k3d.io/v5.7.4/usage/configfile/#all-options-example).
+To configure K3d, you use a `k3d.yaml` file in the root of your project. To learn more about the configuration options for K3d, you can check out the [official K3d documentation](https://k3d.io/v5.7.4/usage/configfile/#all-options-example).
 
 ## SOPS Configuration
 
