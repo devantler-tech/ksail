@@ -6,4 +6,4 @@ on:
 
 jobs:
   sync-labels:
-    uses: devantler-tech/.github/.github/workflows/sync-labels.yaml@main
+    uses: devantler-tech/workflows/.github/workflows/sync-labels.yaml@main

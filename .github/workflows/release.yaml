@@ -13,5 +13,5 @@ permissions:
 
 jobs:
   release:
-    uses: devantler-tech/.github/.github/workflows/release.yaml@main
+    uses: devantler-tech/workflows/.github/workflows/release.yaml@main
     secrets: inherit
