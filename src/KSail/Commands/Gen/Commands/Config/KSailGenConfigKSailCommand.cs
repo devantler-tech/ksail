@@ -9,7 +9,7 @@ namespace KSail.Commands.Gen.Commands.Config;
 class KSailGenConfigKSailCommand : Command
 {
   readonly ExceptionHandler _exceptionHandler = new();
-  readonly GenericPathOption _outputOption = new("./ksail-config.yaml");
+  readonly GenericPathOption _outputOption = new("./ksail.yaml");
   public KSailGenConfigKSailCommand() : base("ksail", "Generate a 'ksail.io/v1alpha1/Cluster' resource.")
   {
     AddOption(_outputOption);
@@ -17,7 +17,7 @@ class KSailGenConfigKSailCommand : Command
       {
         try
         {
-          string outputFile = context.ParseResult.GetValueForOption(_outputOption) ?? "./ksail-config.yaml";
+          string outputFile = context.ParseResult.GetValueForOption(_outputOption) ?? "./ksail.yaml";
           bool overwrite = context.ParseResult.CommandResult.GetValueForOption(CLIOptions.Generator.OverwriteOption) ?? false;
           Console.WriteLine(File.Exists(outputFile) ? (overwrite ?
             $"✚ overwriting '{outputFile}'" :

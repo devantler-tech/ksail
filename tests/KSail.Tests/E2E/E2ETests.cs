@@ -70,12 +70,12 @@ public class E2ETests : IAsyncLifetime
     }
     if (Directory.Exists("k8s"))
       Directory.Delete("k8s", true);
-    if (File.Exists("kind-config.yaml"))
-      File.Delete("kind-config.yaml");
-    if (File.Exists("k3d-config.yaml"))
-      File.Delete("k3d-config.yaml");
-    if (File.Exists("ksail-config.yaml"))
-      File.Delete("ksail-config.yaml");
+    if (File.Exists("kind.yaml"))
+      File.Delete("kind.yaml");
+    if (File.Exists("k3d.yaml"))
+      File.Delete("k3d.yaml");
+    if (File.Exists("ksail.yaml"))
+      File.Delete("ksail.yaml");
     if (File.Exists(".sops.yaml"))
       File.Delete(".sops.yaml");
   }

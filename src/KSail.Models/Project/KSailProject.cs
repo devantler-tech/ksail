@@ -9,10 +9,10 @@ public class KSailProject
 {
 
   [Description("The path to the ksail configuration file.")]
-  public string ConfigPath { get; set; } = "ksail-config.yaml";
+  public string ConfigPath { get; set; } = "ksail.yaml";
 
   [Description("The path to the distribution configuration file.")]
-  public string DistributionConfigPath { get; set; } = "kind-config.yaml";
+  public string DistributionConfigPath { get; set; } = "kind.yaml";
 
   [Description("The Kubernetes distribution to use.")]
   public KSailKubernetesDistributionType Distribution { get; set; } = KSailKubernetesDistributionType.Native;

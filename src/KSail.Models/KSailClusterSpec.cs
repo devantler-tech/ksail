@@ -96,9 +96,9 @@ public class KSailClusterSpec
       Distribution = distribution,
       DistributionConfigPath = distribution switch
       {
-        KSailKubernetesDistributionType.Native => "kind-config.yaml",
-        KSailKubernetesDistributionType.K3s => "k3d-config.yaml",
-        _ => "kind-config.yaml"
+        KSailKubernetesDistributionType.Native => "kind.yaml",
+        KSailKubernetesDistributionType.K3s => "k3d.yaml",
+        _ => "kind.yaml"
       }
     };
   }
