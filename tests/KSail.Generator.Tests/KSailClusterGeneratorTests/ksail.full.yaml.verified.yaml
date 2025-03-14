@@ -7,7 +7,7 @@ spec:
   connection:
     context: k3d-my-cluster
   project:
-    distributionConfigPath: k3d-config.yaml
+    distributionConfigPath: k3d.yaml
     distribution: K3s
   deploymentTool:
     flux:

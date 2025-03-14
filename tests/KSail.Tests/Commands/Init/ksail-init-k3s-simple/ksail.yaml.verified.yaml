@@ -7,7 +7,7 @@ spec:
   connection:
     context: k3d-ksail-default
   project:
-    distributionConfigPath: k3d-config.yaml
+    distributionConfigPath: k3d.yaml
     distribution: K3s
   deploymentTool:
     flux:

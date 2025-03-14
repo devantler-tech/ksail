@@ -7,7 +7,7 @@ spec:
   connection:
     context: k3d-ksail-advanced-k3s
   project:
-    distributionConfigPath: k3d-config.yaml
+    distributionConfigPath: k3d.yaml
     distribution: K3s
     secretManager: SOPS
     cni: Cilium
