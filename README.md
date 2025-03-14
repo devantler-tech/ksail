@@ -51,8 +51,8 @@ Now you can make changes to the configuration file to your liking, and when you 
 
 From there, you probably want to ensure that your distribution and ksail is configured to your liking.
 
-- `kind-config.yaml` - The configuration file for Kind.
-- `k3d-config.yaml` - The configuration file for K3d.
+- `kind.yaml` - The configuration file for Kind.
+- `k3d.yaml` - The configuration file for K3d.
 
 When you are ready to create your cluster, you can run:
 

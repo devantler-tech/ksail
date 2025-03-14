@@ -50,7 +50,7 @@ Generates a small cluster configuration with my recommended structure and a few 
 
 - `k8s/clusters/*` - This folder contains cluster configurations. This is the entrypoint for flux. I recommend having one cluster configuration per env (local, dev, test, prod).
 - `k8s/manifests/*` - This folder contains all the manifests to deploy. It is organized according to its Kustomization, and it is assumed that all clusters can deploy these files (use flux-post-build variables for variables).
-- `*.k3d-config.yaml` file to configure your K3d cluster. You can check out [the official k3d docs](https://k3d.io/v5.1.0/usage/configfile/) on how to use this configuration file.
+- `*.k3d.yaml` file to configure your K3d cluster. You can check out [the official k3d docs](https://k3d.io/v5.1.0/usage/configfile/) on how to use this configuration file.
 - `.sops.yaml` file to configure SOPS. You can check out [the official SOPS docs](https://getsops.io/docs/#using-sopsyaml-conf-to-select-kms-pgp-and-age-for-new-files) on how to use this configuration file to configure which files should be encrypted/decrypted by which keys.
 
 > [!NOTE]
