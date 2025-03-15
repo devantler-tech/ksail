@@ -46,16 +46,12 @@ public class KSailClusterSpec
   public KSailWaypointController WaypointController { get; set; } = new();
 
   [Description("The local registry for storing deployment artifacts.")]
-  public KSailLocalRegistry LocalRegistry { get; set; } = new KSailLocalRegistry
-  {
-    Name = "ksail-registry",
-    HostPort = 5555
-  };
+  public KSailLocalRegistry LocalRegistry { get; set; } = new();
 
   [Description("The options for the generator.")]
   public KSailGenerator Generator { get; set; } = new();
 
-  [Description("The mirror registries to create for the KSail cluster.")]
+  [Description("The mirror registries to create for the KSail cluster. [default: registry.k8s.io-proxy, docker.io-proxy, ghcr.io-proxy, gcr.io-proxy, mcr.microsoft.com-proxy, quay.io-proxy]")]
   public IEnumerable<KSailMirrorRegistry> MirrorRegistries { get; set; } = [
     new KSailMirrorRegistry { Name = "registry.k8s.io-proxy", HostPort = 5556, Proxy = new KSailMirrorRegistryProxy { Url = new Uri("https://registry.k8s.io") } },
     new KSailMirrorRegistry { Name = "docker.io-proxy", HostPort = 5557,  Proxy = new KSailMirrorRegistryProxy { Url = new Uri("https://registry-1.docker.io") } },
@@ -96,20 +92,20 @@ public class KSailClusterSpec
       Distribution = distribution,
       DistributionConfigPath = distribution switch
       {
-        KSailKubernetesDistributionType.Native => "kind-config.yaml",
-        KSailKubernetesDistributionType.K3s => "k3d-config.yaml",
-        _ => "kind-config.yaml"
+        KSailKubernetesDistributionType.Native => "kind.yaml",
+        KSailKubernetesDistributionType.K3s => "k3d.yaml",
+        _ => "kind.yaml"
       }
     };
   }
 
   void SetOCISourceUri(KSailKubernetesDistributionType distribution = KSailKubernetesDistributionType.Native)
   {
-    DeploymentTool.Flux = distribution switch
+    DeploymentTool.Flux.Source = distribution switch
     {
-      KSailKubernetesDistributionType.Native => new KSailFluxDeploymentTool(new Uri("oci://ksail-registry:5000/ksail-registry")),
-      KSailKubernetesDistributionType.K3s => new KSailFluxDeploymentTool(new Uri("oci://host.k3d.internal:5555/ksail-registry")),
-      _ => new KSailFluxDeploymentTool(new Uri("oci://ksail-registry:5000/ksail-registry")),
+      KSailKubernetesDistributionType.Native => new KSailFluxDeploymentToolRepository { Url = new Uri("oci://ksail-registry:5000/ksail-registry") },
+      KSailKubernetesDistributionType.K3s => new KSailFluxDeploymentToolRepository { Url = new Uri("oci://host.k3d.internal:5555/ksail-registry") },
+      _ => new KSailFluxDeploymentToolRepository { Url = new Uri("oci://ksail-registry:5000/ksail-registry") },
     };
   }
 }

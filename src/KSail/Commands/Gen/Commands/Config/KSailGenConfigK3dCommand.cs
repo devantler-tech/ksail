@@ -9,7 +9,7 @@ namespace KSail.Commands.Gen.Commands.Config;
 class KSailGenConfigK3dCommand : Command
 {
   readonly ExceptionHandler _exceptionHandler = new();
-  readonly GenericPathOption _outputOption = new("./k3d-config.yaml");
+  readonly GenericPathOption _outputOption = new("./k3d.yaml");
 
   public KSailGenConfigK3dCommand() : base("k3d", "Generate a 'k3d.io/v1alpha5/Simple' resource.")
   {
@@ -18,7 +18,7 @@ class KSailGenConfigK3dCommand : Command
     {
       try
       {
-        string outputFile = context.ParseResult.CommandResult.GetValueForOption(_outputOption) ?? "./k3d-config.yaml";
+        string outputFile = context.ParseResult.CommandResult.GetValueForOption(_outputOption) ?? "./k3d.yaml";
         bool overwrite = context.ParseResult.CommandResult.GetValueForOption(CLIOptions.Generator.OverwriteOption) ?? false;
         Console.WriteLine(File.Exists(outputFile) ? (overwrite ?
           $"✚ overwriting '{outputFile}'" :

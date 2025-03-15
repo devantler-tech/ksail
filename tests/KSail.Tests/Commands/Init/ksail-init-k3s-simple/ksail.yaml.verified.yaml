@@ -2,15 +2,13 @@
 apiVersion: ksail.io/v1alpha1
 kind: Cluster
 metadata:
-  name: ksail-advanced-k3s
+  name: ksail-default
 spec:
   connection:
-    context: k3d-ksail-advanced-k3s
+    context: k3d-ksail-default
   project:
-    distributionConfigPath: k3d-config.yaml
+    distributionConfigPath: k3d.yaml
     distribution: K3s
-    secretManager: SOPS
-    cni: Cilium
   deploymentTool:
     flux:
       source:
@@ -21,9 +19,7 @@ spec:
   cni: {}
   ingressController: {}
   waypointController: {}
-  localRegistry:
-    name: ksail-registry
-    hostPort: 5555
+  localRegistry: {}
   generator: {}
   mirrorRegistries:
   - proxy:

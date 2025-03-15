@@ -16,14 +16,14 @@ public partial class GenerateAsyncTests
     var cluster = new KSailCluster("my-cluster", KSailKubernetesDistributionType.K3s);
 
     // Act
-    string outputPath = Path.Combine(Path.GetTempPath(), "ksail-config.yaml");
+    string outputPath = Path.Combine(Path.GetTempPath(), "ksail.yaml");
     File.Delete(outputPath);
     await _generator.GenerateAsync(cluster, outputPath, true);
     string ksailClusterConfigFromFile = await File.ReadAllTextAsync(outputPath);
 
     // Assert
     _ = await Verify(ksailClusterConfigFromFile, extension: "yaml")
-      .UseFileName("ksail-config.full.yaml")
+      .UseFileName("ksail.full.yaml")
       .ScrubLinesWithReplace(line => UrlRegex().Replace(line, "url: <url>"));
 
     // Cleanup
@@ -39,14 +39,14 @@ public partial class GenerateAsyncTests
     var cluster = new KSailCluster();
 
     // Act
-    string outputPath = Path.Combine(Path.GetTempPath(), "ksail-config.yaml");
+    string outputPath = Path.Combine(Path.GetTempPath(), "ksail.yaml");
     File.Delete(outputPath);
     await _generator.GenerateAsync(cluster, outputPath, true);
     string ksailClusterConfigFromFile = await File.ReadAllTextAsync(outputPath);
 
     // Assert
     _ = await Verify(ksailClusterConfigFromFile, extension: "yaml")
-      .UseFileName("ksail-config.minimal.yaml")
+      .UseFileName("ksail.minimal.yaml")
       .ScrubLinesWithReplace(line => UrlRegex().Replace(line, "url: <url>"));
 
     // Cleanup

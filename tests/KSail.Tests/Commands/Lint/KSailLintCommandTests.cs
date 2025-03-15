@@ -100,9 +100,9 @@ public class KSailLintCommandTests : IDisposable
 
       string[] filePaths =
       [
-        "ksail-config.yaml",
-        "kind-config.yaml",
-        "k3d-config.yaml",
+        "ksail.yaml",
+        "kind.yaml",
+        "k3d.yaml",
         ".sops.yaml"
       ];
       foreach (string filePath in filePaths)

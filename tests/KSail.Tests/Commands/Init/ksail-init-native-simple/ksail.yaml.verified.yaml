@@ -4,11 +4,8 @@ kind: Cluster
 metadata:
   name: ksail-default
 spec:
-  connection:
-    context: k3d-ksail-default
-  project:
-    distributionConfigPath: k3d-config.yaml
-    distribution: K3s
+  connection: {}
+  project: {}
   deploymentTool:
     flux:
       source:
@@ -19,9 +16,7 @@ spec:
   cni: {}
   ingressController: {}
   waypointController: {}
-  localRegistry:
-    name: ksail-registry
-    hostPort: 5555
+  localRegistry: {}
   generator: {}
   mirrorRegistries:
   - proxy:

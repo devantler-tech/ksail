@@ -9,11 +9,11 @@
   ],
   "properties": {
     "apiVersion": {
-      "description": "The API version where the KSail Cluster object is defined.",
+      "description": "The API version where the KSail Cluster object is defined. [default: ksail.io/v1alpha1]",
       "type": "string"
     },
     "kind": {
-      "description": "The KSail Cluster object kind.",
+      "description": "The KSail Cluster object kind. [default: Cluster]",
       "type": "string"
     },
     "metadata": {
@@ -21,6 +21,7 @@
       "type": "object",
       "properties": {
         "name": {
+          "description": "The name of the KSail object. [default: ksail-default]",
           "type": "string"
         }
       },
@@ -37,15 +38,15 @@
           "type": "object",
           "properties": {
             "kubeconfig": {
-              "description": "The path to the kubeconfig file.",
+              "description": "The path to the kubeconfig file. [default: ~/.kube/config]",
               "type": "string"
             },
             "context": {
-              "description": "The kube context.",
+              "description": "The kube context. [default: kind-ksail-default]",
               "type": "string"
             },
             "timeout": {
-              "description": "The timeout for operations (10s, 5m, 1h).",
+              "description": "The timeout for operations (10s, 5m, 1h). [default: 5m]",
               "type": "string"
             }
           }
@@ -55,59 +56,59 @@
           "type": "object",
           "properties": {
             "configPath": {
-              "description": "The path to the ksail configuration file.",
+              "description": "The path to the ksail configuration file. [default: ksail.yaml]",
               "type": "string"
             },
             "distributionConfigPath": {
-              "description": "The path to the distribution configuration file.",
+              "description": "The path to the distribution configuration file. [default: kind.yaml]",
               "type": "string"
             },
             "distribution": {
-              "description": "The Kubernetes distribution to use.",
+              "description": "The Kubernetes distribution to use. [default: Native]",
               "enum": [
                 "Native",
                 "K3s"
               ]
             },
             "deploymentTool": {
-              "description": "The Deployment tool to use.",
+              "description": "The Deployment tool to use. [default: Flux]",
               "enum": [
                 "Flux"
               ]
             },
             "secretManager": {
-              "description": "The secret manager to use.",
+              "description": "The secret manager to use. [default: None]",
               "enum": [
                 "None",
                 "SOPS"
               ]
             },
             "cni": {
-              "description": "The CNI to use.",
+              "description": "The CNI to use. [default: Default]",
               "enum": [
                 "Default",
                 "Cilium"
               ]
             },
             "editor": {
-              "description": "The editor to use for viewing files while debugging.",
+              "description": "The editor to use for viewing files while debugging. [default: Nano]",
               "enum": [
                 "Nano",
                 "Vim"
               ]
             },
             "engine": {
-              "description": "The engine to use for running the KSail cluster.",
+              "description": "The engine to use for running the KSail cluster. [default: Docker]",
               "enum": [
                 "Docker"
               ]
             },
             "kustomizationPath": {
-              "description": "The path to the root kustomization directory.",
+              "description": "The path to the root kustomization directory. [default: k8s]",
               "type": "string"
             },
             "mirrorRegistries": {
-              "description": "Whether to set up mirror registries for the project.",
+              "description": "Whether to set up mirror registries for the project. [default: true]",
               "type": "boolean"
             }
           }
@@ -117,6 +118,7 @@
           "type": "object",
           "properties": {
             "flux": {
+              "description": "The options for the Flux deployment tool.",
               "type": "object",
               "properties": {
                 "source": {
@@ -124,7 +126,7 @@
                   "type": "object",
                   "properties": {
                     "url": {
-                      "description": "The URL of the repository.",
+                      "description": "The URL of the repository. [default: oci://host.docker.internal:5555/ksail-registry]",
                       "type": "string",
                       "format": "uri"
                     }
@@ -139,7 +141,7 @@
           "type": "object",
           "properties": {
             "showAllClustersInListings": {
-              "description": "Show clusters from all supported distributions.",
+              "description": "Show clusters from all supported distributions. [default: false]",
               "type": "boolean"
             }
           }
@@ -153,22 +155,22 @@
               "type": "object",
               "properties": {
                 "publicKey": {
-                  "description": "Public key used for encryption.",
+                  "description": "Public key used for encryption. [default: null]",
                   "type": [
                     "string",
                     "null"
                   ]
                 },
                 "inPlace": {
-                  "description": "Use in-place decryption/encryption.",
+                  "description": "Use in-place decryption/encryption. [default: false]",
                   "type": "boolean"
                 },
                 "showAllKeysInListings": {
-                  "description": "Show all keys in the listed keys.",
+                  "description": "Show all keys in the listed keys. [default: false]",
                   "type": "boolean"
                 },
                 "showPrivateKeysInListings": {
-                  "description": "Show private keys in the listed keys.",
+                  "description": "Show private keys in the listed keys. [default: false]",
                   "type": "boolean"
                 }
               }
@@ -192,49 +194,47 @@
           "type": "object",
           "properties": {
             "name": {
-              "description": "The name of the registry.",
+              "description": "The name of the registry. [default: ksail-registry]",
               "type": "string"
             },
             "hostPort": {
-              "description": "The host port of the registry (if applicable).",
+              "description": "The host port of the registry (if applicable). [default: 5555]",
               "type": "integer"
             },
             "username": {
-              "description": "The username to authenticate with the registry.",
+              "description": "The username to authenticate with the registry. [default: null]",
               "type": [
                 "string",
                 "null"
               ]
             },
             "password": {
-              "description": "The password to authenticate with the registry.",
+              "description": "The password to authenticate with the registry. [default: null]",
               "type": [
                 "string",
                 "null"
               ]
             },
             "provider": {
-              "description": "The registry provider.",
+              "description": "The registry provider. [default: Docker]",
               "enum": [
                 "Docker"
               ]
             }
-          },
-          "required": [
-            "name"
-          ]
+          }
         },
         "generator": {
           "description": "The options for the generator.",
           "type": "object",
           "properties": {
             "overwrite": {
+              "description": "Overwrite existing files. [default: false]",
               "type": "boolean"
             }
           }
         },
         "mirrorRegistries": {
-          "description": "The mirror registries to create for the KSail cluster.",
+          "description": "The mirror registries to create for the KSail cluster. [default: registry.k8s.io-proxy, docker.io-proxy, ghcr.io-proxy, gcr.io-proxy, mcr.microsoft.com-proxy, quay.io-proxy]",
           "type": "array",
           "items": {
             "type": [
@@ -247,66 +247,59 @@
                 "type": "object",
                 "properties": {
                   "url": {
-                    "description": "The URL of the upstream registry to proxy and cache images from.",
+                    "description": "The URL of the upstream registry to proxy and cache images from. [default: https://registry-1.docker.io]",
                     "type": "string",
                     "format": "uri"
                   },
                   "username": {
-                    "description": "The username to authenticate with the upstream registry.",
+                    "description": "The username to authenticate with the upstream registry. [default: null]",
                     "type": [
                       "string",
                       "null"
                     ]
                   },
                   "password": {
-                    "description": "The password to authenticate with the upstream registry.",
+                    "description": "The password to authenticate with the upstream registry. [default: null]",
                     "type": [
                       "string",
                       "null"
                     ]
                   },
                   "insecure": {
-                    "description": "Connect to the upstream registry over HTTPS.",
+                    "description": "Connect to the upstream registry over HTTPS. [default: false]",
                     "type": "boolean"
                   }
-                },
-                "required": [
-                  "url"
-                ]
+                }
               },
               "name": {
-                "description": "The name of the registry.",
+                "description": "The name of the registry. [default: ksail-registry]",
                 "type": "string"
               },
               "hostPort": {
-                "description": "The host port of the registry (if applicable).",
+                "description": "The host port of the registry (if applicable). [default: 5555]",
                 "type": "integer"
               },
               "username": {
-                "description": "The username to authenticate with the registry.",
+                "description": "The username to authenticate with the registry. [default: null]",
                 "type": [
                   "string",
                   "null"
                 ]
               },
               "password": {
-                "description": "The password to authenticate with the registry.",
+                "description": "The password to authenticate with the registry. [default: null]",
                 "type": [
                   "string",
                   "null"
                 ]
               },
               "provider": {
-                "description": "The registry provider.",
+                "description": "The registry provider. [default: Docker]",
                 "enum": [
                   "Docker"
                 ]
               }
-            },
-            "required": [
-              "proxy",
-              "name"
-            ]
+            }
           }
         },
         "validation": {
@@ -314,19 +307,19 @@
           "type": "object",
           "properties": {
             "lintOnUp": {
-              "description": "Lint the manifests before applying them to a new cluster.",
+              "description": "Lint the manifests before applying them to a new cluster. [default: true]",
               "type": "boolean"
             },
             "reconcileOnUp": {
-              "description": "Wait for reconciliation to succeed on a new cluster.",
+              "description": "Wait for reconciliation to succeed on a new cluster. [default: true]",
               "type": "boolean"
             },
             "lintOnUpdate": {
-              "description": "Lint the manifests before applying them to an existing cluster.",
+              "description": "Lint the manifests before applying them to an existing cluster. [default: true]",
               "type": "boolean"
             },
             "reconcileOnUpdate": {
-              "description": "Wait for reconciliation to succeed on an existing cluster.",
+              "description": "Wait for reconciliation to succeed on an existing cluster. [default: true]",
               "type": "boolean"
             }
           }
