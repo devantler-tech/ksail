@@ -101,7 +101,8 @@ internal class ConfigurationValidator(KSailCluster config)
   {
     if (!string.Equals(ksailClusterName, distributionClusterName, StringComparison.Ordinal))
     {
-      return (false, $"'metadata.name' in '{config.Spec.Project.ConfigPath}' does not match the expected value '{distributionClusterName}'.");
+      return (false, $"'metadata.name' in '{config.Spec.Project.ConfigPath}' does not match cluster name in '{config.Spec.Project.DistributionConfigPath}'." + Environment.NewLine +
+        $"  - please set cluster name to '{ksailClusterName}' in '{config.Spec.Project.DistributionConfigPath}'.");
     }
     else
     {
@@ -111,7 +112,7 @@ internal class ConfigurationValidator(KSailCluster config)
 
   private (bool, string) CheckK3dCNI(K3dConfig distributionConfig)
   {
-    var expectedCNIOptions = new List<K3dOptionsK3sExtraArg>
+    var expectedK3sExtraArgs = new List<K3dOptionsK3sExtraArg>
       {
         new() {
           Arg = "--flannel-backend=none",
@@ -128,7 +129,10 @@ internal class ConfigurationValidator(KSailCluster config)
         ]
         }
       };
-    if (distributionConfig.Options?.K3s?.ExtraArgs?.All(expectedCNIOptions.Contains) == false)
+    var actualArgs = distributionConfig.Options?.K3s?.ExtraArgs ?? [];
+    string expected = string.Join(", ", expectedK3sExtraArgs.Select(x => x.Arg + ":" + x.NodeFilters?.First()));
+    string actual = string.Join(", ", actualArgs.Select(x => x.Arg + ":" + x.NodeFilters?.First()));
+    if (!string.Equals(expected, actual, StringComparison.Ordinal))
     {
       return (false, $"'spec.project.cni={config.Spec.Project.CNI}' in '{config.Spec.Project.ConfigPath}' does not match expected values in '{config.Spec.Project.DistributionConfigPath}'." + Environment.NewLine +
         $"  - please set 'options.k3s.extraArgs' to '--flannel-backend=none' and '--disable-network-policy' for 'server:*' in '{config.Spec.Project.DistributionConfigPath}'.");
