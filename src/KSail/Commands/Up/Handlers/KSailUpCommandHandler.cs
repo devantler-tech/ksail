@@ -58,20 +58,7 @@ class KSailUpCommandHandler
 
   internal async Task<int> HandleAsync(CancellationToken cancellationToken = default)
   {
-    if (!await CheckEngineIsRunning(cancellationToken).ConfigureAwait(false))
-    {
-      return 1;
-    }
-
-    if (await _clusterProvisioner.ExistsAsync(_config.Metadata.Name, cancellationToken).ConfigureAwait(false))
-    {
-      throw new KSailException(
-        $"cluster '{_config.Metadata.Name}' is already running."
-        + Environment.NewLine
-        + "  - if you want to recreate the cluster, use 'ksail down' before running 'ksail up' again."
-        + Environment.NewLine
-        + "  - if you want to update the cluster, use 'ksail update' instead.");
-    }
+    await CheckPrerequisites(cancellationToken).ConfigureAwait(false);
 
     if (!await Lint(_config, cancellationToken).ConfigureAwait(false))
     {
@@ -92,34 +79,45 @@ class KSailUpCommandHandler
 
     if (_config.Spec.Validation.ReconcileOnUp)
     {
-      Console.WriteLine("🔄 Reconciling kustomizations");
+      Console.WriteLine("🔄 Reconciling new changes");
       await _deploymentTool.ReconcileAsync(_config.Spec.Connection.Timeout, cancellationToken).ConfigureAwait(false);
+      Console.WriteLine("✔ reconciliation completed");
       Console.WriteLine();
     }
     return 0;
   }
 
-  async Task<bool> CheckEngineIsRunning(CancellationToken cancellationToken = default)
+  private async Task CheckPrerequisites(CancellationToken cancellationToken)
   {
-    string engineEmoji = _config.Spec.Project.Engine switch
+    Console.WriteLine($"📋 Checking prerequisites");
+    await CheckEngineIsRunning(cancellationToken).ConfigureAwait(false);
+    Console.WriteLine("► checking if cluster exists");
+    if (await _clusterProvisioner.ExistsAsync(_config.Metadata.Name, cancellationToken).ConfigureAwait(false))
     {
-      KSailEngineType.Docker => "🐳",
-      _ => throw new KSailException($"The container engine '{_config.Spec.Project.Engine}' is not supported.")
-    };
-    Console.WriteLine($"{engineEmoji} Checking {_config.Spec.Project.Engine} is running");
+      throw new KSailException(
+        $"cluster '{_config.Metadata.Name}' is already running."
+        + Environment.NewLine
+        + "  - if you want to recreate the cluster, use 'ksail down' before running 'ksail up' again."
+        + Environment.NewLine
+        + "  - if you want to update the cluster, use 'ksail update' instead.");
+    }
+    Console.WriteLine("✔ cluster does not exist");
+    Console.WriteLine();
+  }
 
+  async Task CheckEngineIsRunning(CancellationToken cancellationToken = default)
+  {
+    Console.WriteLine($"► checking '{_config.Spec.Project.Engine}' is running");
     for (int i = 0; i < 5; i++)
     {
-      Console.WriteLine($"► pinging {_config.Spec.Project.Engine} engine (try {i + 1})");
+      Console.WriteLine($"► pinging '{_config.Spec.Project.Engine}' (try {i + 1})");
       if (await _engineProvisioner.CheckReadyAsync(cancellationToken).ConfigureAwait(false))
       {
         Console.WriteLine($"✔ {_config.Spec.Project.Engine} is running");
-        Console.WriteLine();
-        return true;
+        return;
       }
       await Task.Delay(1000, cancellationToken).ConfigureAwait(false);
     }
-    Console.WriteLine();
     throw new KSailException($"{_config.Spec.Project.Engine} is not running after multiple attempts.");
   }
 
