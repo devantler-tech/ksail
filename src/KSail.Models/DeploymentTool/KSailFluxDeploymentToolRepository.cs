@@ -9,6 +9,6 @@ namespace KSail.Models.DeploymentTool;
 public class KSailFluxDeploymentToolRepository
 {
 
-  [Description("The URL of the repository. [default: oci://host.docker.internal:5555/ksail-registry]")]
-  public Uri Url { get; set; } = new Uri("oci://host.docker.internal:5555/ksail-registry");
+  [Description("The URL of the repository. [default: oci://ksail-registry:5000/ksail-registry]")]
+  public Uri Url { get; set; } = new Uri("oci://ksail-registry:5000/ksail-registry");
 }
