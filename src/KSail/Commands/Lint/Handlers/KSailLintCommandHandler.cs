@@ -21,11 +21,19 @@ class KSailLintCommandHandler(KSailCluster config)
     }
 
     Console.WriteLine("► validating yaml syntax");
-    bool yamlIsValid = await _yamlSyntaxValidator.ValidateAsync(kubernetesDirectory, cancellationToken).ConfigureAwait(false);
+    var (yamlIsValid, yamlMessage) = await _yamlSyntaxValidator.ValidateAsync(kubernetesDirectory, cancellationToken: cancellationToken).ConfigureAwait(false);
+    if (!yamlIsValid)
+    {
+      throw new KSailException(yamlMessage);
+    }
     Console.WriteLine("✔ yaml syntax is valid");
 
     Console.WriteLine("► validating schemas");
-    bool schemasAreValid = await _schemaValidator.ValidateAsync(kubernetesDirectory, cancellationToken).ConfigureAwait(false);
+    var (schemasAreValid, schemasMessage) = await _schemaValidator.ValidateAsync(kubernetesDirectory, cancellationToken: cancellationToken).ConfigureAwait(false);
+    if (!schemasAreValid)
+    {
+      throw new KSailException(schemasMessage);
+    }
     Console.WriteLine("✔ schemas are valid");
     return yamlIsValid && schemasAreValid;
   }
