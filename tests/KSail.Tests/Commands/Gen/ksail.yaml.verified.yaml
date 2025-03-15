@@ -8,8 +8,7 @@ spec:
   project: {}
   deploymentTool:
     flux:
-      source:
-        url: <url>
+      source: {}
   distribution: {}
   secretManager:
     sops: {}
