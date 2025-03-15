@@ -83,7 +83,7 @@ static class KSailClusterConfigLoader
     return config;
   }
 
-  internal static async Task<KSailCluster> LoadAsync(string? configFilePath = "ksail-config.yaml", string? name = default, KSailKubernetesDistributionType distribution = default)
+  internal static async Task<KSailCluster> LoadAsync(string? configFilePath = "ksail.yaml", string? name = default, KSailKubernetesDistributionType distribution = default)
   {
     // Create default KSailClusterConfig
     var ksailClusterConfig = string.IsNullOrEmpty(name) ?
@@ -93,7 +93,7 @@ static class KSailClusterConfigLoader
     // Locate KSail YAML file
     string startDirectory = Directory.GetCurrentDirectory();
     string? ksailYaml = string.IsNullOrEmpty(configFilePath) ?
-      FindConfigFile(startDirectory, "ksail-config.yaml") :
+      FindConfigFile(startDirectory, "ksail.yaml") :
       FindConfigFile(startDirectory, configFilePath);
 
 

@@ -83,8 +83,8 @@ static class KSailGenCommandTestsTheoryData
   public static TheoryData<string[], string> GenerateConfigResourceTheoryData =>
     new()
     {
-      { ["gen", "config", "k3d"], "k3d-config.yaml" },
-      { ["gen", "config", "ksail"], "ksail-config.yaml" },
+      { ["gen", "config", "k3d"], "k3d.yaml" },
+      { ["gen", "config", "ksail"], "ksail.yaml" },
       { ["gen", "config", "sops"], ".sops.yaml" }
     };
   public static TheoryData<string[], string> GenerateFluxResourceTheoryData =>

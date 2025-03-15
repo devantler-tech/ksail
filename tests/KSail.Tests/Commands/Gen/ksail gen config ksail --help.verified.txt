@@ -5,7 +5,7 @@ Usage:
   testhost gen config ksail [options]
 
 Options:
-  -o, --output <output>  A file or directory path. [default: ./ksail-config.yaml]
+  -o, --output <output>  A file or directory path. [default: ./ksail.yaml]
   -o, --overwrite        Overwrite existing files. [default: False]
   -?, -h, --help         Show help and usage information
 

@@ -16,7 +16,7 @@ public partial class GenerateAsyncTests
     var cluster = new KSailCluster("my-cluster", KSailKubernetesDistributionType.K3s);
 
     // Act
-    string outputPath = Path.Combine(Path.GetTempPath(), "ksail-config.yaml");
+    string outputPath = Path.Combine(Path.GetTempPath(), "ksail.yaml");
     File.Delete(outputPath);
     await _generator.GenerateAsync(cluster, outputPath, true);
     string ksailClusterConfigFromFile = await File.ReadAllTextAsync(outputPath);
@@ -39,7 +39,7 @@ public partial class GenerateAsyncTests
     var cluster = new KSailCluster();
 
     // Act
-    string outputPath = Path.Combine(Path.GetTempPath(), "ksail-config.yaml");
+    string outputPath = Path.Combine(Path.GetTempPath(), "ksail.yaml");
     File.Delete(outputPath);
     await _generator.GenerateAsync(cluster, outputPath, true);
     string ksailClusterConfigFromFile = await File.ReadAllTextAsync(outputPath);

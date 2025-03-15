@@ -11,8 +11,8 @@
       Timeout: 5m
     },
     Project: {
-      ConfigPath: ksail-config.yaml,
-      DistributionConfigPath: k3d-config.yaml,
+      ConfigPath: ksail.yaml,
+      DistributionConfigPath: k3d.yaml,
       Distribution: K3s,
       DeploymentTool: Flux,
       SecretManager: None,

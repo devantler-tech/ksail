@@ -1,6 +1,6 @@
 # KSail
 k8s
-kind-config.yaml
-k3d-config.yaml
-ksail-config.yaml
+kind.yaml
+k3d.yaml
+ksail.yaml
 .sops.yaml

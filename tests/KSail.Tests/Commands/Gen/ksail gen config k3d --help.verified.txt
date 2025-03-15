@@ -5,7 +5,7 @@ Usage:
   testhost gen config k3d [options]
 
 Options:
-  -o, --output <output>  A file or directory path. [default: ./k3d-config.yaml]
+  -o, --output <output>  A file or directory path. [default: ./k3d.yaml]
   -o, --overwrite        Overwrite existing files. [default: False]
   -?, -h, --help         Show help and usage information
 

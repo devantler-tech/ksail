@@ -11,8 +11,8 @@
       Timeout: 5m
     },
     Project: {
-      ConfigPath: ksail-config.yaml,
-      DistributionConfigPath: kind-config.yaml,
+      ConfigPath: ksail.yaml,
+      DistributionConfigPath: kind.yaml,
       Distribution: Native,
       DeploymentTool: Flux,
       SecretManager: None,
