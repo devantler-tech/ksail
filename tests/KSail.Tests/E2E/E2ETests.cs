@@ -2,7 +2,14 @@ using System.CommandLine;
 using System.CommandLine.IO;
 using System.Runtime.InteropServices;
 using Devantler.SecretManager.SOPS.LocalAge;
+using KSail.Commands.Down;
+using KSail.Commands.Init;
+using KSail.Commands.List;
 using KSail.Commands.Root;
+using KSail.Commands.Start;
+using KSail.Commands.Stop;
+using KSail.Commands.Up;
+using KSail.Commands.Update;
 using KSail.Utils;
 
 namespace KSail.Tests.E2E;
@@ -30,22 +37,28 @@ public class E2ETests : IAsyncLifetime
 
     //Arrange
     var console = new TestConsole();
-    var ksailCommand = new KSailRootCommand(console);
+    var initCommand = new KSailInitCommand();
+    var upCommand = new KSailUpCommand();
+    var listCommand = new KSailListCommand();
+    var stopCommand = new KSailStopCommand();
+    var startCommand = new KSailStartCommand();
+    var updateCommand = new KSailUpdateCommand();
+    var downCommand = new KSailDownCommand();
 
     //Act & Assert
-    int initExitCode = await ksailCommand.InvokeAsync(initArgs);
+    int initExitCode = await initCommand.InvokeAsync(initArgs);
     Assert.Equal(0, initExitCode);
-    int upExitCode = await ksailCommand.InvokeAsync(["up"], console);
+    int upExitCode = await upCommand.InvokeAsync(["up"], console);
     Assert.Equal(0, upExitCode);
-    int listExitCode = await ksailCommand.InvokeAsync(["list"], console);
+    int listExitCode = await listCommand.InvokeAsync(["list"], console);
     Assert.Equal(0, listExitCode);
-    int stopExitCode = await ksailCommand.InvokeAsync(["stop"], console);
+    int stopExitCode = await stopCommand.InvokeAsync(["stop"], console);
     Assert.Equal(0, stopExitCode);
-    int startExitCode = await ksailCommand.InvokeAsync(["start"], console);
+    int startExitCode = await startCommand.InvokeAsync(["start"], console);
     Assert.Equal(0, startExitCode);
-    int updateExitCode = await ksailCommand.InvokeAsync(["update"], console);
+    int updateExitCode = await updateCommand.InvokeAsync(["update"], console);
     Assert.Equal(0, updateExitCode);
-    int downExitCode = await ksailCommand.InvokeAsync(["down"], console);
+    int downExitCode = await downCommand.InvokeAsync(["down"], console);
     Assert.Equal(0, downExitCode);
   }
 
