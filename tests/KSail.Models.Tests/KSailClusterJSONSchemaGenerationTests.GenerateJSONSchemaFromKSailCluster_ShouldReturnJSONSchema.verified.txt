@@ -126,7 +126,7 @@
                   "type": "object",
                   "properties": {
                     "url": {
-                      "description": "The URL of the repository. [default: oci://host.docker.internal:5555/ksail-registry]",
+                      "description": "The URL of the repository. [default: oci://ksail-registry:5000/ksail-registry]",
                       "type": "string",
                       "format": "uri"
                     }

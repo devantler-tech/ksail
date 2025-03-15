@@ -1,0 +1,8 @@
+<Solution>
+  <Project Path="src/KSail.Generator/KSail.Generator.csproj" />
+  <Project Path="src/KSail.Models/KSail.Models.csproj" />
+  <Project Path="src/KSail/KSail.csproj" />
+  <Project Path="tests/KSail.Generator.Tests/KSail.Generator.Tests.csproj" />
+  <Project Path="tests/KSail.Models.Tests/KSail.Models.Tests.csproj" />
+  <Project Path="tests/KSail.Tests/KSail.Tests.csproj" />
+</Solution>

@@ -6,6 +6,7 @@ namespace KSail.Commands.Lint.Handlers;
 
 class KSailLintCommandHandler(KSailCluster config)
 {
+  readonly ConfigurationValidator _configValidator = new(config);
   readonly YamlSyntaxValidator _yamlSyntaxValidator = new();
   readonly SchemaValidator _schemaValidator = new();
   readonly KSailCluster _config = config;
@@ -19,6 +20,14 @@ class KSailLintCommandHandler(KSailCluster config)
     {
       throw new KSailException($"no manifest files found in '{kubernetesDirectory}'.");
     }
+
+    Console.WriteLine("► validating configuration");
+    var (configIsValid, configMessage) = await _configValidator.ValidateAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
+    if (!configIsValid)
+    {
+      throw new KSailException(configMessage);
+    }
+    Console.WriteLine("✔ configuration is valid");
 
     Console.WriteLine("► validating yaml syntax");
     var (yamlIsValid, yamlMessage) = await _yamlSyntaxValidator.ValidateAsync(kubernetesDirectory, cancellationToken: cancellationToken).ConfigureAwait(false);
