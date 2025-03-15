@@ -132,7 +132,7 @@ internal class ConfigurationValidator(KSailCluster config)
     var actualArgs = distributionConfig.Options?.K3s?.ExtraArgs ?? [];
     string expected = string.Join(", ", expectedK3sExtraArgs.Select(x => x.Arg + ":" + x.NodeFilters?.First()));
     string actual = string.Join(", ", actualArgs.Select(x => x.Arg + ":" + x.NodeFilters?.First()));
-    if (!string.Equals(expected, actual, StringComparison.Ordinal))
+    if (config.Spec.Project.CNI != KSailCNIType.Default && !string.Equals(expected, actual, StringComparison.Ordinal))
     {
       return (false, $"'spec.project.cni={config.Spec.Project.CNI}' in '{config.Spec.Project.ConfigPath}' does not match expected values in '{config.Spec.Project.DistributionConfigPath}'." + Environment.NewLine +
         $"  - please set 'options.k3s.extraArgs' to '--flannel-backend=none' and '--disable-network-policy' for 'server:*' in '{config.Spec.Project.DistributionConfigPath}'.");
