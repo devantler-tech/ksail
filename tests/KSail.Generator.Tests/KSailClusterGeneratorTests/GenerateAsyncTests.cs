@@ -23,7 +23,7 @@ public partial class GenerateAsyncTests
 
     // Assert
     _ = await Verify(ksailClusterConfigFromFile, extension: "yaml")
-      .UseFileName("ksail-config.full.yaml")
+      .UseFileName("ksail.full.yaml")
       .ScrubLinesWithReplace(line => UrlRegex().Replace(line, "url: <url>"));
 
     // Cleanup
@@ -46,7 +46,7 @@ public partial class GenerateAsyncTests
 
     // Assert
     _ = await Verify(ksailClusterConfigFromFile, extension: "yaml")
-      .UseFileName("ksail-config.minimal.yaml")
+      .UseFileName("ksail.minimal.yaml")
       .ScrubLinesWithReplace(line => UrlRegex().Replace(line, "url: <url>"));
 
     // Cleanup

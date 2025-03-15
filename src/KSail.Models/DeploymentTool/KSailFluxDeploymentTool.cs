@@ -7,11 +7,5 @@ public class KSailFluxDeploymentTool
 {
 
   [Description("The source for reconciling GitOps resources.")]
-  public KSailRepository Source { get; set; } = new KSailRepository();
-
-  public KSailFluxDeploymentTool()
-  {
-  }
-
-  public KSailFluxDeploymentTool(Uri gitOpsSourceUrl) => Source = new KSailRepository(gitOpsSourceUrl);
+  public KSailFluxDeploymentToolRepository Source { get; set; } = new KSailFluxDeploymentToolRepository();
 }

@@ -21,9 +21,7 @@ spec:
   cni: {}
   ingressController: {}
   waypointController: {}
-  localRegistry:
-    name: ksail-registry
-    hostPort: 5555
+  localRegistry: {}
   generator: {}
   mirrorRegistries:
   - proxy:

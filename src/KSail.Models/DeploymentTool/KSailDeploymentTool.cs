@@ -1,8 +1,10 @@
+using System.ComponentModel;
+
 namespace KSail.Models.DeploymentTool;
 
 
 public class KSailDeploymentTool
 {
-
-  public KSailFluxDeploymentTool Flux { get; set; } = new KSailFluxDeploymentTool();
+  [Description("The options for the Flux deployment tool.")]
+  public KSailFluxDeploymentTool Flux { get; set; } = new();
 }
