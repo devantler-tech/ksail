@@ -112,38 +112,46 @@ internal class ConfigurationValidator(KSailCluster config)
 
   private (bool, string) CheckK3dCNI(K3dConfig distributionConfig)
   {
-    var expectedK3sExtraArgs = new List<K3dOptionsK3sExtraArg>
+    var expectedWithCustomCNIK3sExtraArgs = new List<K3dOptionsK3sExtraArg>
       {
         new() {
           Arg = "--flannel-backend=none",
           NodeFilters =
-        [
-          "server:*"
-        ]
+          [
+            "server:*"
+          ]
         },
         new() {
           Arg = "--disable-network-policy",
           NodeFilters =
-        [
-          "server:*"
-        ]
+          [
+            "server:*"
+          ]
         }
       };
-    var actualArgs = distributionConfig.Options?.K3s?.ExtraArgs ?? [];
-    string expected = string.Join(", ", expectedK3sExtraArgs.Select(x => x.Arg + ":" + x.NodeFilters?.First()));
-    string actual = string.Join(", ", actualArgs.Select(x => x.Arg + ":" + x.NodeFilters?.First()));
-    if (config.Spec.Project.CNI != KSailCNIType.Default && !string.Equals(expected, actual, StringComparison.Ordinal))
+    var expectedWithCustomCNI = expectedWithCustomCNIK3sExtraArgs.Select(x => x.Arg + ":" + x.NodeFilters?.First()) ?? [];
+    var actual = distributionConfig.Options?.K3s?.ExtraArgs?.Select(x => x.Arg + ":" + (x.NodeFilters?.First() ?? "server:*")) ?? [];
+    if (config.Spec.Project.CNI == KSailCNIType.Default && actual.Intersect(expectedWithCustomCNI).Any())
+    {
+      return (false, $"'spec.project.cni={config.Spec.Project.CNI}' in '{config.Spec.Project.ConfigPath}' does not match expected values in '{config.Spec.Project.DistributionConfigPath}'." + Environment.NewLine +
+        $"  - please remove '--flannel-backend=none' and '--disable-network-policy' from 'options.k3s.extraArgs' in '{config.Spec.Project.DistributionConfigPath}'.");
+    }
+    else if (config.Spec.Project.CNI != KSailCNIType.Default && !actual.All(expectedWithCustomCNI.Contains))
     {
       return (false, $"'spec.project.cni={config.Spec.Project.CNI}' in '{config.Spec.Project.ConfigPath}' does not match expected values in '{config.Spec.Project.DistributionConfigPath}'." + Environment.NewLine +
         $"  - please set 'options.k3s.extraArgs' to '--flannel-backend=none' and '--disable-network-policy' for 'server:*' in '{config.Spec.Project.DistributionConfigPath}'.");
     }
-
     return (true, string.Empty);
   }
 
   private (bool isValid, string message) CheckKindCNI(KindConfig distributionConfig)
   {
-    if (config.Spec.Project.CNI != KSailCNIType.Default && distributionConfig.Networking?.DisableDefaultCNI != true)
+    if (config.Spec.Project.CNI == KSailCNIType.Default && distributionConfig.Networking?.DisableDefaultCNI == true)
+    {
+      return (false, $"'spec.project.cni={config.Spec.Project.CNI}' in '{config.Spec.Project.ConfigPath}' does not match expected values in '{config.Spec.Project.DistributionConfigPath}'." + Environment.NewLine +
+        $"  - please set 'networking.disableDefaultCNI: false' in '{config.Spec.Project.DistributionConfigPath}'.");
+    }
+    else if (config.Spec.Project.CNI != KSailCNIType.Default && distributionConfig.Networking?.DisableDefaultCNI != true)
     {
       return (false, $"'spec.project.cni={config.Spec.Project.CNI}' in '{config.Spec.Project.ConfigPath}' does not match expected values in '{config.Spec.Project.DistributionConfigPath}'." + Environment.NewLine +
         $"  - please set 'networking.disableDefaultCNI: true' in '{config.Spec.Project.DistributionConfigPath}'.");
