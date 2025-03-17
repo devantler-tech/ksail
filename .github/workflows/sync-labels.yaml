@@ -4,6 +4,9 @@ on:
   schedule:
     - cron: "0 7 * * 1"
 
+permissions:
+  issues: write
+
 jobs:
   sync-labels:
     uses: devantler-tech/workflows/.github/workflows/sync-labels.yaml@main
