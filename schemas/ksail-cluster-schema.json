@@ -242,32 +242,38 @@
               "null"
             ],
             "properties": {
-              "proxy": {
+              "proxies": {
                 "description": "A proxy for the registry to use to proxy and cache images.",
-                "type": "object",
-                "properties": {
-                  "url": {
-                    "description": "The URL of the upstream registry to proxy and cache images from. [default: https://registry-1.docker.io]",
-                    "type": "string",
-                    "format": "uri"
-                  },
-                  "username": {
-                    "description": "The username to authenticate with the upstream registry. [default: null]",
-                    "type": [
-                      "string",
-                      "null"
-                    ]
-                  },
-                  "password": {
-                    "description": "The password to authenticate with the upstream registry. [default: null]",
-                    "type": [
-                      "string",
-                      "null"
-                    ]
-                  },
-                  "insecure": {
-                    "description": "Connect to the upstream registry over HTTPS. [default: false]",
-                    "type": "boolean"
+                "type": "array",
+                "items": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "url": {
+                      "description": "The URL of the upstream registry to proxy and cache images from. [default: https://registry-1.docker.io]",
+                      "type": "string",
+                      "format": "uri"
+                    },
+                    "username": {
+                      "description": "The username to authenticate with the upstream registry. [default: null]",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "password": {
+                      "description": "The password to authenticate with the upstream registry. [default: null]",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "insecure": {
+                      "description": "Connect to the upstream registry over HTTPS. [default: false]",
+                      "type": "boolean"
+                    }
                   }
                 }
               },

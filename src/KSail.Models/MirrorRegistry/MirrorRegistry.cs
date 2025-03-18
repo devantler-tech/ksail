@@ -8,5 +8,5 @@ public class KSailMirrorRegistry : KSailLocalRegistry
 {
 
   [Description("A proxy for the registry to use to proxy and cache images.")]
-  public KSailMirrorRegistryProxy Proxy { get; set; } = new();
+  public IEnumerable<KSailMirrorRegistryProxy> Proxies { get; set; } = [];
 }

@@ -55,12 +55,14 @@
     },
     MirrorRegistries: [
       {
-        Proxy: {
-          Url: https://registry.k8s.io,
-          Username: null,
-          Password: null,
-          Insecure: false
-        },
+        Proxies: [
+          {
+            Url: https://registry.k8s.io,
+            Username: null,
+            Password: null,
+            Insecure: false
+          }
+        ],
         Name: registry.k8s.io-proxy,
         HostPort: 5556,
         Username: null,
@@ -68,12 +70,14 @@
         Provider: Docker
       },
       {
-        Proxy: {
-          Url: https://registry-1.docker.io,
-          Username: null,
-          Password: null,
-          Insecure: false
-        },
+        Proxies: [
+          {
+            Url: https://registry-1.docker.io,
+            Username: null,
+            Password: null,
+            Insecure: false
+          }
+        ],
         Name: docker.io-proxy,
         HostPort: 5557,
         Username: null,
@@ -81,12 +85,14 @@
         Provider: Docker
       },
       {
-        Proxy: {
-          Url: https://ghcr.io,
-          Username: null,
-          Password: null,
-          Insecure: false
-        },
+        Proxies: [
+          {
+            Url: https://ghcr.io,
+            Username: null,
+            Password: null,
+            Insecure: false
+          }
+        ],
         Name: ghcr.io-proxy,
         HostPort: 5558,
         Username: null,
@@ -94,12 +100,14 @@
         Provider: Docker
       },
       {
-        Proxy: {
-          Url: https://gcr.io,
-          Username: null,
-          Password: null,
-          Insecure: false
-        },
+        Proxies: [
+          {
+            Url: https://gcr.io,
+            Username: null,
+            Password: null,
+            Insecure: false
+          }
+        ],
         Name: gcr.io-proxy,
         HostPort: 5559,
         Username: null,
@@ -107,12 +115,14 @@
         Provider: Docker
       },
       {
-        Proxy: {
-          Url: https://mcr.microsoft.com,
-          Username: null,
-          Password: null,
-          Insecure: false
-        },
+        Proxies: [
+          {
+            Url: https://mcr.microsoft.com,
+            Username: null,
+            Password: null,
+            Insecure: false
+          }
+        ],
         Name: mcr.microsoft.com-proxy,
         HostPort: 5560,
         Username: null,
@@ -120,12 +130,14 @@
         Provider: Docker
       },
       {
-        Proxy: {
-          Url: https://quay.io,
-          Username: null,
-          Password: null,
-          Insecure: false
-        },
+        Proxies: [
+          {
+            Url: https://quay.io,
+            Username: null,
+            Password: null,
+            Insecure: false
+          }
+        ],
         Name: quay.io-proxy,
         HostPort: 5561,
         Username: null,
