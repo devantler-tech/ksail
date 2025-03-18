@@ -36,6 +36,7 @@ sealed class KSailInitCommand : Command
     AddOption(CLIOptions.Generator.OverwriteOption);
     AddOption(CLIOptions.Metadata.NameOption);
     AddOption(CLIOptions.Project.CNIOption);
+    AddOption(CLIOptions.Project.ConfigPathOption);
     AddOption(CLIOptions.Project.DistributionConfigPathOption);
     AddOption(CLIOptions.Project.DistributionOption);
     AddOption(CLIOptions.Project.EngineOption);
