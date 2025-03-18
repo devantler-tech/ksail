@@ -31,6 +31,7 @@ sealed class KSailUpCommand : Command
   void AddOptions()
   {
     AddOption(CLIOptions.Connection.ContextOption);
+    AddOption(CLIOptions.Connection.KubeconfigOption);
     AddOption(CLIOptions.Connection.TimeoutOption);
     AddOption(CLIOptions.DeploymentTool.Flux.SourceOption);
     //AddOption(CLIOptions.LocalRegistry.LocalRegistryOption);
