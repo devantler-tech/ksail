@@ -12,7 +12,7 @@ Options:
   -dc, --distribution-config <distribution-config>  Path to the distribution configuration file. [default: kind.yaml]
   -d, --distribution <K3s|Native>                   The distribution to use for the cluster. [default: Native]
   -e, --engine <Docker>                             The engine to use for provisioning the cluster. [default: Docker]
-  -k, --kustomization <kustomization>               The path to the root kustomization directory. [default: k8s]
+  -kp, --kustomization-path <kustomization-path>    The path to the root kustomization directory. [default: k8s]
   -mr, --mirror-registries                          Enable mirror registries. [default: True]
   -sm, --secret-manager <None|SOPS>                 Configure which secret manager to use. [default: None]
   -?, -h, --help                                    Show help and usage information

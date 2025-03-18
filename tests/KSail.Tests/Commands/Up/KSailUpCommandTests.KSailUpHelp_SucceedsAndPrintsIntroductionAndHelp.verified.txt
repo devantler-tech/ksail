@@ -6,6 +6,7 @@ Usage:
 
 Options:
   -c, --context <context>                           The kubernetes context to use. [default: kind-ksail-default]
+  -k, --kubeconfig <kubeconfig>                     Path to kubeconfig file. [default: ~/.kube/config]
   -t, --timeout <timeout>                           The time to wait for each kustomization to become ready. [default: 5m]
   -fsu, --flux-source-url <flux-source-url>         Flux source URL for reconciling GitOps resources. [default: oci://ksail-registry:5000/ksail-registry]
   -n, --name <name>                                 The name of the cluster. [default: ksail-default]
@@ -14,7 +15,7 @@ Options:
   -dc, --distribution-config <distribution-config>  Path to the distribution configuration file. [default: kind.yaml]
   -d, --distribution <K3s|Native>                   The distribution to use for the cluster. [default: Native]
   -e, --engine <Docker>                             The engine to use for provisioning the cluster. [default: Docker]
-  -k, --kustomization <kustomization>               The path to the root kustomization directory. [default: k8s]
+  -kp, --kustomization-path <kustomization-path>    The path to the root kustomization directory. [default: k8s]
   -mr, --mirror-registries                          Enable mirror registries. [default: True]
   -sm, --secret-manager <None|SOPS>                 Configure which secret manager to use. [default: None]
   -l, --lint                                        Lit manifests. [default: True'
