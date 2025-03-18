@@ -315,7 +315,7 @@ class KSailUpCommandHandler
     }
 
     Console.WriteLine($"⬡ Installing {config.Spec.Project.CNI} CNI");
-    await _cniProvisioner.InstallAsync(config.Spec.Connection.Context, cancellationToken).ConfigureAwait(false);
+    await _cniProvisioner.InstallAsync(cancellationToken).ConfigureAwait(false);
     Console.WriteLine("✔ Cilium CNI installed");
     Console.WriteLine();
   }
