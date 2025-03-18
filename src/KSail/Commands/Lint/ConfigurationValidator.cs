@@ -28,7 +28,7 @@ internal class ConfigurationValidator(KSailCluster config)
     var deserializer = new DeserializerBuilder().WithNamingConvention(CamelCaseNamingConvention.Instance).Build();
     if (config.Spec.Project.Distribution == KSailKubernetesDistributionType.K3s)
     {
-      var distributionConfig = deserializer.Deserialize<K3dConfig>(await File.ReadAllTextAsync("k3d.yaml", cancellationToken).ConfigureAwait(false));
+      var distributionConfig = deserializer.Deserialize<K3dConfig>(await File.ReadAllTextAsync(config.Spec.Project.DistributionConfigPath, cancellationToken).ConfigureAwait(false));
 
       (isValid, message) = CheckClusterName(config.Metadata.Name, distributionConfig.Metadata.Name);
       if (!isValid)
@@ -44,7 +44,7 @@ internal class ConfigurationValidator(KSailCluster config)
     }
     else if (config.Spec.Project.Distribution == KSailKubernetesDistributionType.Native)
     {
-      var distributionConfig = deserializer.Deserialize<KindConfig>(await File.ReadAllTextAsync("kind.yaml", cancellationToken).ConfigureAwait(false));
+      var distributionConfig = deserializer.Deserialize<KindConfig>(await File.ReadAllTextAsync(config.Spec.Project.DistributionConfigPath, cancellationToken).ConfigureAwait(false));
       (isValid, message) = CheckClusterName(config.Metadata.Name, distributionConfig.Name);
       if (!isValid)
       {

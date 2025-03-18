@@ -8,6 +8,7 @@ Options:
   -o, --overwrite                                   Overwrite existing files. [default: False]
   -n, --name <name>                                 The name of the cluster. [default: ksail-default]
   --cni <Cilium|Default>                            The CNI to use. [default: Default]
+  -c, --config <config>                             The path to the ksail configuration file. [default: ksail.yaml]
   -dc, --distribution-config <distribution-config>  Path to the distribution configuration file. [default: kind.yaml]
   -d, --distribution <K3s|Native>                   The distribution to use for the cluster. [default: Native]
   -e, --engine <Docker>                             The engine to use for provisioning the cluster. [default: Docker]
