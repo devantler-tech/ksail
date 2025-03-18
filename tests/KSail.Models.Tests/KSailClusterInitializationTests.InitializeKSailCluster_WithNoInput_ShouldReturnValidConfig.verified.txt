@@ -6,7 +6,7 @@
   },
   Spec: {
     Connection: {
-      Kubeconfig: ~/.kube/config,
+      Kubeconfig: {UserProfile}/.kube/config,
       Context: kind-ksail-default,
       Timeout: 5m
     },

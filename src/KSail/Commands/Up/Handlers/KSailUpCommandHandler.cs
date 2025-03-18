@@ -44,13 +44,13 @@ class KSailUpCommandHandler
     };
     _cniProvisioner = config.Spec.Project.CNI switch
     {
-      KSailCNIType.Cilium => new CiliumProvisioner(),
+      KSailCNIType.Cilium => new CiliumProvisioner(config.Spec.Connection.Kubeconfig, config.Spec.Connection.Context),
       KSailCNIType.Default => null,
       _ => throw new NotSupportedException($"The CNI '{config.Spec.Project.CNI}' is not supported.")
     };
     _deploymentTool = config.Spec.Project.DeploymentTool switch
     {
-      KSailDeploymentToolType.Flux => new FluxProvisioner(config.Spec.Connection.Context),
+      KSailDeploymentToolType.Flux => new FluxProvisioner(config.Spec.Connection.Kubeconfig, config.Spec.Connection.Context),
       _ => throw new NotSupportedException($"The Deployment tool '{config.Spec.Project.DeploymentTool}' is not supported.")
     };
     _config = config;
@@ -287,8 +287,8 @@ class KSailUpCommandHandler
   async Task BootstrapDeploymentTool(KSailCluster config, CancellationToken cancellationToken = default)
   {
     Console.WriteLine($"🔼 Bootstrapping {config.Spec.Project.DeploymentTool}");
-    using var resourceProvisioner = new KubernetesResourceProvisioner(config.Spec.Connection.Context);
-    Console.WriteLine($"► creating 'flux-system' namespace (--context={config.Spec.Connection.Context})");
+    using var resourceProvisioner = new KubernetesResourceProvisioner(config.Spec.Connection.Kubeconfig, config.Spec.Connection.Context);
+    Console.WriteLine($"► creating 'flux-system' namespace");
     await CreateFluxSystemNamespace(resourceProvisioner, cancellationToken).ConfigureAwait(false);
 
     string scheme = config.Spec.DeploymentTool.Flux.Source.Url.Scheme;
@@ -315,18 +315,18 @@ class KSailUpCommandHandler
     }
 
     Console.WriteLine($"⬡ Installing {config.Spec.Project.CNI} CNI");
-    await _cniProvisioner.InstallAsync(config.Spec.Connection.Context, cancellationToken).ConfigureAwait(false);
+    await _cniProvisioner.InstallAsync(cancellationToken).ConfigureAwait(false);
     Console.WriteLine("✔ Cilium CNI installed");
     Console.WriteLine();
   }
 
   async Task BootstrapSecretManager(KSailCluster config, CancellationToken cancellationToken)
   {
-    using var resourceProvisioner = new KubernetesResourceProvisioner(config.Spec.Connection.Context);
+    using var resourceProvisioner = new KubernetesResourceProvisioner(config.Spec.Connection.Kubeconfig, config.Spec.Connection.Context);
     if (config.Spec.Project.SecretManager == KSailSecretManagerType.SOPS)
     {
       Console.WriteLine("🔼 Bootstrapping SOPS secret manager");
-      Console.WriteLine($"► creating 'flux-system' namespace (--context={config.Spec.Connection.Context})");
+      Console.WriteLine($"► creating 'flux-system' namespace");
       await CreateFluxSystemNamespace(resourceProvisioner, cancellationToken).ConfigureAwait(false);
 
       var sopsConfig = await SopsConfigLoader.LoadAsync(cancellationToken: cancellationToken).ConfigureAwait(false);

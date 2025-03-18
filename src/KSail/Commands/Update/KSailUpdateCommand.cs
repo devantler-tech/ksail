@@ -32,6 +32,8 @@ sealed class KSailUpdateCommand : Command
 
   void AddOptions()
   {
+    AddOption(CLIOptions.Connection.ContextOption);
+    AddOption(CLIOptions.Connection.KubeconfigOption);
     AddOption(CLIOptions.Project.KustomizationPathOption);
     AddOption(CLIOptions.Validation.LintOnUpdateOption);
     AddOption(CLIOptions.Validation.ReconcileOnUpdateOption);

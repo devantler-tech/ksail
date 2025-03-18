@@ -5,7 +5,7 @@ Usage:
   testhost lint [options]
 
 Options:
-  -k, --kustomization <kustomization>  The path to the root kustomization directory. [default: k8s]
-  -?, -h, --help                       Show help and usage information
+  -kp, --kustomization-path <kustomization-path>  The path to the root kustomization directory. [default: k8s]
+  -?, -h, --help                                  Show help and usage information
 
 
