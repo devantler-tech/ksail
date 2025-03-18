@@ -7,7 +7,7 @@ public class KSailConnection
 {
 
   [Description("The path to the kubeconfig file. [default: ~/.kube/config]")]
-  public string Kubeconfig { get; set; } = "~/.kube/config";
+  public string Kubeconfig { get; set; } = $"{Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)}/.kube/config";
 
 
   [Description("The kube context. [default: kind-ksail-default]")]

@@ -6,7 +6,7 @@ Usage:
 
 Options:
   -c, --context <context>                         The kubernetes context to use. [default: kind-ksail-default]
-  -k, --kubeconfig <kubeconfig>                   Path to kubeconfig file. [default: ~/.kube/config]
+  -k, --kubeconfig <kubeconfig>                   Path to kubeconfig file. [default: {UserProfile}/.kube/config]
   -kp, --kustomization-path <kustomization-path>  The path to the root kustomization directory. [default: k8s]
   -l, --lint                                      Lit manifests. [default: True]
   -r, --reconcile                                 Reconcile manifests. [default: True]
