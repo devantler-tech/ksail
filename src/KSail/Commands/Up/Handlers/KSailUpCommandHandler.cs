@@ -288,7 +288,7 @@ class KSailUpCommandHandler
   {
     Console.WriteLine($"🔼 Bootstrapping {config.Spec.Project.DeploymentTool}");
     using var resourceProvisioner = new KubernetesResourceProvisioner(config.Spec.Connection.Kubeconfig, config.Spec.Connection.Context);
-    Console.WriteLine($"► creating 'flux-system' namespace (--context={config.Spec.Connection.Context})");
+    Console.WriteLine($"► creating 'flux-system' namespace");
     await CreateFluxSystemNamespace(resourceProvisioner, cancellationToken).ConfigureAwait(false);
 
     string scheme = config.Spec.DeploymentTool.Flux.Source.Url.Scheme;
@@ -326,7 +326,7 @@ class KSailUpCommandHandler
     if (config.Spec.Project.SecretManager == KSailSecretManagerType.SOPS)
     {
       Console.WriteLine("🔼 Bootstrapping SOPS secret manager");
-      Console.WriteLine($"► creating 'flux-system' namespace (--context={config.Spec.Connection.Context})");
+      Console.WriteLine($"► creating 'flux-system' namespace");
       await CreateFluxSystemNamespace(resourceProvisioner, cancellationToken).ConfigureAwait(false);
 
       var sopsConfig = await SopsConfigLoader.LoadAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
