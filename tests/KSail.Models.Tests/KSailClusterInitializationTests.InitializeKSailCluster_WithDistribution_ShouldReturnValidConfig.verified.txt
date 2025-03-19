@@ -20,7 +20,7 @@
       Editor: Nano,
       Engine: Docker,
       KustomizationPath: k8s,
-      MirrorRegistries: true
+      MirrorRegistries: DockerRegistry
     },
     DeploymentTool: {
       Flux: {

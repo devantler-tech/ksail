@@ -5,12 +5,12 @@ Usage:
   testhost down [options]
 
 Options:
-  -fsu, --flux-source-url <flux-source-url>  Flux source URL for reconciling GitOps resources. [default: oci://ksail-registry:5000/ksail-registry]
-  -n, --name <name>                          The name of the cluster. [default: ksail-default]
-  -dt, --deployment-tool <Flux>              The Deployment tool to use for updating the state of the cluster. [default: Flux]
-  -d, --distribution <K3s|Native>            The distribution to use for the cluster. [default: Native]
-  -e, --engine <Docker>                      The engine to use for provisioning the cluster. [default: Docker]
-  -mr, --mirror-registries                   Enable mirror registries. [default: True]
-  -?, -h, --help                             Show help and usage information
+  -fsu, --flux-source-url <flux-source-url>       Flux source URL for reconciling GitOps resources. [default: oci://ksail-registry:5000/ksail-registry]
+  -n, --name <name>                               The name of the cluster. [default: ksail-default]
+  -dt, --deployment-tool <Flux>                   The Deployment tool to use for updating the state of the cluster. [default: Flux]
+  -d, --distribution <K3s|Native>                 The distribution to use for the cluster. [default: Native]
+  -e, --engine <Docker>                           The engine to use for provisioning the cluster. [default: Docker]
+  -mr, --mirror-registries <DockerRegistry|None>  Configure how to handle mirror registries. [default: DockerRegistry]
+  -?, -h, --help                                  Show help and usage information
 
 

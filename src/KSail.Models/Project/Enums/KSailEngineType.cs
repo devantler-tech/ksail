@@ -1,10 +1,12 @@
+using System.ComponentModel;
+
 namespace KSail.Models.Project.Enums;
 
 
 public enum KSailEngineType
 {
-
-  Docker
+  [Description("Use Docker as the engine.")]
+  Docker,
 
   //
   //Podman
