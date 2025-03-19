@@ -40,9 +40,6 @@
         ShowPrivateKeysInListings: false
       }
     },
-    CNI: {},
-    IngressController: {},
-    WaypointController: {},
     LocalRegistry: {
       Name: ksail-registry,
       HostPort: 5555,
