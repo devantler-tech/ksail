@@ -1,6 +1,5 @@
 using Devantler.KubernetesGenerator.Kustomize;
 using Devantler.KubernetesGenerator.Kustomize.Models;
-using Docker.DotNet.Models;
 using KSail.Models;
 
 namespace KSail.Commands.Init.Generators.SubGenerators;
@@ -21,6 +20,11 @@ class TemplateKustomizeGenerator
 
   async Task GenerateKustomization(KSailCluster config, string outputPath, CancellationToken cancellationToken = default)
   {
+    FileAttributes attr = File.GetAttributes(outputPath);
+    if (!attr.HasFlag(FileAttributes.Directory))
+    {
+      throw new KSailException($"'{nameof(config.Spec.Project.KustomizationPath)}' must be a directory. It was '{outputPath}'.");
+    }
     outputPath = Path.Combine(outputPath, "kustomization.yaml");
     bool overwrite = config.Spec.Generator.Overwrite;
     Console.WriteLine(File.Exists(outputPath) ? (overwrite ?

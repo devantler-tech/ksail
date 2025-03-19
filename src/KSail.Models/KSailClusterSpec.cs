@@ -35,15 +35,15 @@ public class KSailClusterSpec
   [Description("The options for the Secret Manager.")]
   public KSailSecretManager SecretManager { get; set; } = new();
 
-  [Description("The options for the CNI.")]
-  [YamlMember(Alias = "cni")]
-  public KSailCNI CNI { get; set; } = new();
+  // [Description("The options for the CNI.")]
+  // [YamlMember(Alias = "cni")]
+  // public KSailCNI CNI { get; set; } = new();
 
-  [Description("The options for the Ingress Controller.")]
-  public KSailIngressController IngressController { get; set; } = new();
+  // [Description("The options for the Ingress Controller.")]
+  // public KSailIngressController IngressController { get; set; } = new();
 
-  [Description("The options for the Waypoint Controller.")]
-  public KSailWaypointController WaypointController { get; set; } = new();
+  // [Description("The options for the Waypoint Controller.")]
+  // public KSailWaypointController WaypointController { get; set; } = new();
 
   [Description("The local registry for storing deployment artifacts.")]
   public KSailLocalRegistry LocalRegistry { get; set; } = new();

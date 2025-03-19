@@ -6,7 +6,7 @@
   },
   Spec: {
     Connection: {
-      Kubeconfig: ~/.kube/config,
+      Kubeconfig: {UserProfile}/.kube/config,
       Context: k3d-ksail-default,
       Timeout: 5m
     },
@@ -40,9 +40,6 @@
         ShowPrivateKeysInListings: false
       }
     },
-    CNI: {},
-    IngressController: {},
-    WaypointController: {},
     LocalRegistry: {
       Name: ksail-registry,
       HostPort: 5555,
@@ -60,7 +57,7 @@
             Url: https://registry.k8s.io,
             Username: null,
             Password: null,
-            Insecure: false
+            Insecure: null
           }
         ],
         Name: registry.k8s.io-proxy,
@@ -75,7 +72,7 @@
             Url: https://registry-1.docker.io,
             Username: null,
             Password: null,
-            Insecure: false
+            Insecure: null
           }
         ],
         Name: docker.io-proxy,
@@ -90,7 +87,7 @@
             Url: https://ghcr.io,
             Username: null,
             Password: null,
-            Insecure: false
+            Insecure: null
           }
         ],
         Name: ghcr.io-proxy,
@@ -105,7 +102,7 @@
             Url: https://gcr.io,
             Username: null,
             Password: null,
-            Insecure: false
+            Insecure: null
           }
         ],
         Name: gcr.io-proxy,
@@ -120,7 +117,7 @@
             Url: https://mcr.microsoft.com,
             Username: null,
             Password: null,
-            Insecure: false
+            Insecure: null
           }
         ],
         Name: mcr.microsoft.com-proxy,
@@ -135,7 +132,7 @@
             Url: https://quay.io,
             Username: null,
             Password: null,
-            Insecure: false
+            Insecure: null
           }
         ],
         Name: quay.io-proxy,

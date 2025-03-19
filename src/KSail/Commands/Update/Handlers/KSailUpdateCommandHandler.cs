@@ -15,7 +15,7 @@ class KSailUpdateCommandHandler
     _ksailLintCommandHandler = new KSailLintCommandHandler(config);
     _deploymentTool = config.Spec.Project.DeploymentTool switch
     {
-      KSailDeploymentToolType.Flux => new FluxProvisioner(config.Spec.Connection.Context),
+      KSailDeploymentToolType.Flux => new FluxProvisioner(config.Spec.Connection.Kubeconfig, config.Spec.Connection.Context),
       _ => throw new NotSupportedException($"The deployment tool '{config.Spec.Project.DeploymentTool}' is not supported.")
     };
     _config = config;
