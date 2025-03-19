@@ -177,18 +177,6 @@
             }
           }
         },
-        "cni": {
-          "description": "The options for the CNI.",
-          "type": "object"
-        },
-        "ingressController": {
-          "description": "The options for the Ingress Controller.",
-          "type": "object"
-        },
-        "waypointController": {
-          "description": "The options for the Waypoint Controller.",
-          "type": "object"
-        },
         "localRegistry": {
           "description": "The local registry for storing deployment artifacts.",
           "type": "object",

@@ -18,9 +18,6 @@ spec:
   distribution: {}
   secretManager:
     sops: {}
-  cni: {}
-  ingressController: {}
-  waypointController: {}
   localRegistry: {}
   generator: {}
   mirrorRegistries:
