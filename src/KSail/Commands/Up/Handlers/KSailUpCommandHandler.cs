@@ -144,11 +144,11 @@ class KSailUpCommandHandler
       Console.WriteLine("🧮 Creating mirror registries");
       var tasks = config.Spec.MirrorRegistries.Select(async mirrorRegistry =>
       {
-        Console.WriteLine($"► creating mirror registry '{mirrorRegistry.Name}' for '{mirrorRegistry.Proxy?.Url}'");
+        Console.WriteLine($"► creating mirror registry '{mirrorRegistry.Name}' for '{mirrorRegistry.Proxies?.FirstOrDefault()?.Url}'");
         await _engineProvisioner.CreateRegistryAsync(
           mirrorRegistry.Name,
           mirrorRegistry.HostPort,
-          mirrorRegistry.Proxy?.Url,
+          mirrorRegistry.Proxies?.FirstOrDefault()?.Url,
           cancellationToken).ConfigureAwait(false);
       });
 
@@ -265,22 +265,25 @@ class KSailUpCommandHandler
     async Task AddMirrorRegistryToContainerd(string containerName, KSailMirrorRegistry mirrorRegistry, CancellationToken cancellationToken)
     {
       // https://github.com/containerd/containerd/blob/main/docs/hosts.md
-      var mirrorRegistryHost = mirrorRegistry.Proxy?.Url.Host;
-      if (string.Equals(mirrorRegistryHost, "registry-1.docker.io", StringComparison.OrdinalIgnoreCase))
+      foreach (var proxy in mirrorRegistry.Proxies)
       {
-        mirrorRegistryHost = "docker.io";
-      }
-      string registryDir = $"/etc/containerd/certs.d/{mirrorRegistryHost}";
-      await _engineProvisioner.CreateDirectoryInContainerAsync(containerName, registryDir, true, cancellationToken).ConfigureAwait(false);
-      string host = $"{mirrorRegistry.Name}:5000";
-      string hostsToml = $"""
-      server = "{mirrorRegistry.Proxy?.Url}"
+        var mirrorRegistryHost = proxy.Url.Host;
+        if (string.Equals(mirrorRegistryHost, "registry-1.docker.io", StringComparison.OrdinalIgnoreCase))
+        {
+          mirrorRegistryHost = "docker.io";
+        }
+        string registryDir = $"/etc/containerd/certs.d/{mirrorRegistryHost}";
+        await _engineProvisioner.CreateDirectoryInContainerAsync(containerName, registryDir, true, cancellationToken).ConfigureAwait(false);
+        string host = $"{mirrorRegistry.Name}:5000";
+        string hostsToml = $"""
+        server = "{proxy.Url}"
 
-      [host."http://{host}"]
-        capabilities = ["pull", "resolve"]
-        skip_verify = true
-      """;
-      await _engineProvisioner.CreateFileInContainerAsync(containerName, $"{registryDir}/hosts.toml", hostsToml, cancellationToken).ConfigureAwait(false);
+        [host."http://{host}"]
+          capabilities = ["pull", "resolve"]
+          skip_verify = true
+        """;
+        await _engineProvisioner.CreateFileInContainerAsync(containerName, $"{registryDir}/hosts.toml", hostsToml, cancellationToken).ConfigureAwait(false);
+      }
     }
   }
 
