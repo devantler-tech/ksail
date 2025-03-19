@@ -17,5 +17,5 @@ public class KSailMirrorRegistryProxy
 
 
   [Description("Connect to the upstream registry over HTTPS. [default: false]")]
-  public bool Insecure { get; set; }
+  public bool? Insecure { get; set; }
 }

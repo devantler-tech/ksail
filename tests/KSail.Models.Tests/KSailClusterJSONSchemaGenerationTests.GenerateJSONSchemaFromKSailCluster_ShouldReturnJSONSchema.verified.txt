@@ -267,7 +267,10 @@
                   },
                   "insecure": {
                     "description": "Connect to the upstream registry over HTTPS. [default: false]",
-                    "type": "boolean"
+                    "type": [
+                      "boolean",
+                      "null"
+                    ]
                   }
                 }
               },
