@@ -59,7 +59,7 @@
           Url: https://registry.k8s.io,
           Username: null,
           Password: null,
-          Insecure: false
+          Insecure: null
         },
         Name: registry.k8s.io-proxy,
         HostPort: 5556,
@@ -72,7 +72,7 @@
           Url: https://registry-1.docker.io,
           Username: null,
           Password: null,
-          Insecure: false
+          Insecure: null
         },
         Name: docker.io-proxy,
         HostPort: 5557,
@@ -85,7 +85,7 @@
           Url: https://ghcr.io,
           Username: null,
           Password: null,
-          Insecure: false
+          Insecure: null
         },
         Name: ghcr.io-proxy,
         HostPort: 5558,
@@ -98,7 +98,7 @@
           Url: https://gcr.io,
           Username: null,
           Password: null,
-          Insecure: false
+          Insecure: null
         },
         Name: gcr.io-proxy,
         HostPort: 5559,
@@ -111,7 +111,7 @@
           Url: https://mcr.microsoft.com,
           Username: null,
           Password: null,
-          Insecure: false
+          Insecure: null
         },
         Name: mcr.microsoft.com-proxy,
         HostPort: 5560,
@@ -124,7 +124,7 @@
           Url: https://quay.io,
           Username: null,
           Password: null,
-          Insecure: false
+          Insecure: null
         },
         Name: quay.io-proxy,
         HostPort: 5561,
