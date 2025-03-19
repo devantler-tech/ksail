@@ -139,7 +139,7 @@ class KSailUpCommandHandler
 
   async Task CreateMirrorRegistries(KSailCluster config, CancellationToken cancellationToken)
   {
-    if (config.Spec.Project.MirrorRegistries)
+    if (config.Spec.Project.MirrorRegistries == KSailMirrorRegistriesType.DockerRegistry)
     {
       Console.WriteLine("🧮 Creating mirror registries");
       var tasks = config.Spec.MirrorRegistries.Select(async mirrorRegistry =>
@@ -210,7 +210,7 @@ class KSailUpCommandHandler
 
   async Task BootstrapMirrorRegistries(KSailCluster config, CancellationToken cancellationToken)
   {
-    if (config.Spec.Project.MirrorRegistries)
+    if (config.Spec.Project.MirrorRegistries == KSailMirrorRegistriesType.DockerRegistry)
     {
       switch ((config.Spec.Project.Engine, config.Spec.Project.Distribution))
       {

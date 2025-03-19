@@ -53,7 +53,7 @@ class KSailDownCommandHandler
       default:
         throw new KSailException($"deployment tool '{_config.Spec.Project.DeploymentTool}' is not supported.");
     }
-    if (_config.Spec.Project.MirrorRegistries)
+    if (_config.Spec.Project.MirrorRegistries == KSailMirrorRegistriesType.DockerRegistry)
     {
       Console.WriteLine("► Deleting mirror registries");
       var deleteTasks = _config.Spec.MirrorRegistries.Select(async mirrorRegistry =>

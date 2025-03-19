@@ -13,7 +13,7 @@ Options:
   -d, --distribution <K3s|Native>                   The distribution to use for the cluster. [default: Native]
   -e, --engine <Docker>                             The engine to use for provisioning the cluster. [default: Docker]
   -kp, --kustomization-path <kustomization-path>    The path to the root kustomization directory. [default: k8s]
-  -mr, --mirror-registries                          Enable mirror registries. [default: True]
+  -mr, --mirror-registries <DockerRegistry|None>    Configure how to handle mirror registries. [default: DockerRegistry]
   -sm, --secret-manager <None|SOPS>                 Configure which secret manager to use. [default: None]
   -?, -h, --help                                    Show help and usage information
 
