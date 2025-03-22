@@ -50,28 +50,51 @@
     },
     MirrorRegistries: [
       {
-        Proxies: [
-          {
-            Url: https://registry.k8s.io
-          },
-          {
-            Url: https://registry-1.docker.io
-          },
-          {
-            Url: https://ghcr.io
-          },
-          {
-            Url: https://gcr.io
-          },
-          {
-            Url: https://mcr.microsoft.com
-          },
-          {
-            Url: https://quay.io
-          }
-        ],
+        Proxy: {
+          Url: https://registry.k8s.io
+        },
         Name: docker-registry-proxy,
         HostPort: 5556,
+        Provider: Docker
+      },
+      {
+        Proxy: {
+          Url: https://registry-1.docker.io
+        },
+        Name: docker-io-proxy,
+        HostPort: 5557,
+        Provider: Docker
+      },
+      {
+        Proxy: {
+          Url: https://ghcr.io
+        },
+        Name: ghcr-io-proxy,
+        HostPort: 5558,
+        Provider: Docker
+      },
+      {
+        Proxy: {
+          Url: https://gcr.io
+        },
+        Name: gcr-io-proxy,
+        HostPort: 5559,
+        Provider: Docker
+      },
+      {
+        Proxy: {
+          Url: https://mcr.microsoft.com
+        },
+        Name: mcr-microsoft-com-proxy,
+        HostPort: 5560,
+        Provider: Docker
+      },
+      {
+        Proxy: {
+          Url: https://quay.io
+        },
+        Name: quay-io-proxy,
+        HostPort: 5561,
         Provider: Docker
       }
     ],

@@ -59,7 +59,7 @@ internal class ConfigurationValidator(KSailCluster config)
   private (bool isValid, string message) CheckK3dMirrorRegistries(K3dConfig distributionConfig)
   {
     // check that k3d config includes all mirrors from the ksail config
-    var expectedMirrors = config.Spec.MirrorRegistries.Select(x => x.Proxies).SelectMany(y => y.Select(z => z.Url.Host.Contains("docker.io", StringComparison.Ordinal) ? "docker.io" : z.Url.Host));
+    var expectedMirrors = config.Spec.MirrorRegistries.Select(x => x.Proxy.Url.Host.Contains("docker.io", StringComparison.Ordinal) ? "docker.io" : x.Proxy.Url.Host);
     foreach (var expectedMirror in expectedMirrors)
     {
       if (!(distributionConfig.Registries?.Config?.Contains(expectedMirror, StringComparison.Ordinal) ?? false))

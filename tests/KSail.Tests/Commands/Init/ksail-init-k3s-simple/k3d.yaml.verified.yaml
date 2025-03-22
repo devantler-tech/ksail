@@ -11,16 +11,16 @@ registries:
             - http://host.k3d.internal:5556
         "docker.io":
           endpoint:
-            - http://host.k3d.internal:5556
+            - http://host.k3d.internal:5557
         "ghcr.io":
           endpoint:
-            - http://host.k3d.internal:5556
+            - http://host.k3d.internal:5558
         "gcr.io":
           endpoint:
-            - http://host.k3d.internal:5556
+            - http://host.k3d.internal:5559
         "mcr.microsoft.com":
           endpoint:
-            - http://host.k3d.internal:5556
+            - http://host.k3d.internal:5560
         "quay.io":
           endpoint:
-            - http://host.k3d.internal:5556
+            - http://host.k3d.internal:5561
