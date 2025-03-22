@@ -20,7 +20,7 @@
       Editor: Nano,
       Engine: Docker,
       KustomizationPath: k8s,
-      MirrorRegistries: DockerRegistry
+      MirrorRegistries: true
     },
     DeploymentTool: {
       Flux: {
@@ -58,76 +58,31 @@
             Username: null,
             Password: null,
             Insecure: null
-          }
-        ],
-        Name: registry.k8s.io-proxy,
-        HostPort: 5556,
-        Username: null,
-        Password: null,
-        Provider: Docker
-      },
-      {
-        Proxies: [
+          },
           {
             Url: https://registry-1.docker.io,
             Username: null,
             Password: null,
             Insecure: null
-          }
-        ],
-        Name: docker.io-proxy,
-        HostPort: 5557,
-        Username: null,
-        Password: null,
-        Provider: Docker
-      },
-      {
-        Proxies: [
+          },
           {
             Url: https://ghcr.io,
             Username: null,
             Password: null,
             Insecure: null
-          }
-        ],
-        Name: ghcr.io-proxy,
-        HostPort: 5558,
-        Username: null,
-        Password: null,
-        Provider: Docker
-      },
-      {
-        Proxies: [
+          },
           {
             Url: https://gcr.io,
             Username: null,
             Password: null,
             Insecure: null
-          }
-        ],
-        Name: gcr.io-proxy,
-        HostPort: 5559,
-        Username: null,
-        Password: null,
-        Provider: Docker
-      },
-      {
-        Proxies: [
+          },
           {
             Url: https://mcr.microsoft.com,
             Username: null,
             Password: null,
             Insecure: null
-          }
-        ],
-        Name: mcr.microsoft.com-proxy,
-        HostPort: 5560,
-        Username: null,
-        Password: null,
-        Provider: Docker
-      },
-      {
-        Proxies: [
+          },
           {
             Url: https://quay.io,
             Username: null,
@@ -135,8 +90,8 @@
             Insecure: null
           }
         ],
-        Name: quay.io-proxy,
-        HostPort: 5561,
+        Name: docker-registry-proxy,
+        HostPort: 5556,
         Username: null,
         Password: null,
         Provider: Docker

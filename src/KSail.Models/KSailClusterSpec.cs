@@ -53,12 +53,15 @@ public class KSailClusterSpec
 
   [Description("The mirror registries to create for the KSail cluster. [default: registry.k8s.io-proxy, docker.io-proxy, ghcr.io-proxy, gcr.io-proxy, mcr.microsoft.com-proxy, quay.io-proxy]")]
   public IEnumerable<KSailMirrorRegistry> MirrorRegistries { get; set; } = [
-    new KSailMirrorRegistry { Name = "registry.k8s.io-proxy", HostPort = 5556, Proxies = [new KSailMirrorRegistryProxy { Url = new Uri("https://registry.k8s.io") }] },
-    new KSailMirrorRegistry { Name = "docker.io-proxy", HostPort = 5557,  Proxies = [new KSailMirrorRegistryProxy { Url = new Uri("https://registry-1.docker.io") }] },
-    new KSailMirrorRegistry { Name = "ghcr.io-proxy", HostPort = 5558, Proxies = [new KSailMirrorRegistryProxy { Url = new Uri("https://ghcr.io") }] },
-    new KSailMirrorRegistry { Name = "gcr.io-proxy", HostPort = 5559, Proxies = [new KSailMirrorRegistryProxy { Url = new Uri("https://gcr.io") }] },
-    new KSailMirrorRegistry { Name = "mcr.microsoft.com-proxy", HostPort = 5560, Proxies = [new KSailMirrorRegistryProxy { Url = new Uri("https://mcr.microsoft.com") }] },
-    new KSailMirrorRegistry { Name = "quay.io-proxy", HostPort = 5561, Proxies = [new KSailMirrorRegistryProxy { Url = new Uri("https://quay.io") }] },
+    new KSailMirrorRegistry { Name = "docker-registry-proxy", HostPort = 5556, Proxies =
+    [
+      new KSailMirrorRegistryProxy { Url = new("https://registry.k8s.io") },
+      new KSailMirrorRegistryProxy { Url = new("https://registry-1.docker.io") },
+      new KSailMirrorRegistryProxy { Url = new("https://ghcr.io") },
+      new KSailMirrorRegistryProxy { Url = new("https://gcr.io") },
+      new KSailMirrorRegistryProxy { Url = new("https://mcr.microsoft.com") },
+      new KSailMirrorRegistryProxy { Url = new("https://quay.io") }
+    ] },
   ];
 
   [Description("Options for validating the KSail cluster.")]
