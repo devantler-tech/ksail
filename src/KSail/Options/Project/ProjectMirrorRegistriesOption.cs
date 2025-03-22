@@ -5,10 +5,10 @@ using KSail.Models.Project.Enums;
 namespace KSail.Options.Project;
 
 
-class ProjectMirrorRegistriesOption(KSailCluster config) : Option<KSailMirrorRegistriesType?>
+class ProjectMirrorRegistriesOption(KSailCluster config) : Option<bool?>
 (
   ["-mr", "--mirror-registries"],
-  $"Configure how to handle mirror registries. [default: {config.Spec.Project.MirrorRegistries}]"
+  $"Enable mirror registries for the project. [default: {config.Spec.Project.MirrorRegistries}]"
 )
 {
 }

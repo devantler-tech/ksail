@@ -6,22 +6,22 @@ metadata:
 registries:
   config: >2
       mirrors:
-        "registry.k8s.io-proxy":
+        "registry.k8s.io":
           endpoint:
             - http://host.k3d.internal:5556
-        "docker.io-proxy":
+        "docker.io":
           endpoint:
             - http://host.k3d.internal:5557
-        "ghcr.io-proxy":
+        "ghcr.io":
           endpoint:
             - http://host.k3d.internal:5558
-        "gcr.io-proxy":
+        "gcr.io":
           endpoint:
             - http://host.k3d.internal:5559
-        "mcr.microsoft.com-proxy":
+        "mcr.microsoft.com":
           endpoint:
             - http://host.k3d.internal:5560
-        "quay.io-proxy":
+        "quay.io":
           endpoint:
             - http://host.k3d.internal:5561
 options:

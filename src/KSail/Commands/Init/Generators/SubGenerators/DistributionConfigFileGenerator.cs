@@ -44,7 +44,8 @@ class DistributionConfigFileGenerator
     var kindConfig = new KindConfig
     {
       Name = config.Metadata.Name,
-      ContainerdConfigPatches = config.Spec.Project.MirrorRegistries == KSailMirrorRegistriesType.DockerRegistry ? [
+      ContainerdConfigPatches = config.Spec.Project.MirrorRegistries ?
+      [
         """
         [plugins."io.containerd.grpc.v1.cri".registry]
           config_path = "/etc/containerd/certs.d"
@@ -78,11 +79,12 @@ class DistributionConfigFileGenerator
     mirrors = mirrors.AppendLine("mirrors:");
     foreach (var registry in config.Spec.MirrorRegistries)
     {
+      var host = registry.Proxy.Url.Host.Contains("docker.io", StringComparison.OrdinalIgnoreCase) ? "docker.io" : registry.Proxy.Url.Host;
       string mirror = $"""
-      "{registry.Name}":
-        endpoint:
-          - http://host.k3d.internal:{registry.HostPort}
-      """;
+        "{host}":
+          endpoint:
+            - http://host.k3d.internal:{registry.HostPort}
+        """;
       mirror = string.Join(Environment.NewLine, mirror.Split(Environment.NewLine).Select(line => "    " + line));
       mirrors = mirrors.AppendLine(mirror);
     }

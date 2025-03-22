@@ -6,7 +6,7 @@ using KSail.Models.Project.Enums;
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
 
-namespace KSail.Commands.Lint.Handlers;
+namespace KSail.Commands.Lint;
 
 internal class ConfigurationValidator(KSailCluster config)
 {
@@ -14,16 +14,12 @@ internal class ConfigurationValidator(KSailCluster config)
   {
     var (isValid, message) = CheckContextName(config.Spec.Project.Distribution, config.Metadata.Name, config.Spec.Connection.Context);
     if (!isValid)
-    {
       return (false, message);
-    }
 
 
     (isValid, message) = CheckOCISourceUri(config.Spec.Project.Distribution);
     if (!isValid)
-    {
       return (false, message);
-    }
 
     var deserializer = new DeserializerBuilder().WithNamingConvention(CamelCaseNamingConvention.Instance).Build();
     if (config.Spec.Project.Distribution == KSailKubernetesDistributionType.K3s)
@@ -32,34 +28,45 @@ internal class ConfigurationValidator(KSailCluster config)
 
       (isValid, message) = CheckClusterName(config.Metadata.Name, distributionConfig.Metadata.Name);
       if (!isValid)
-      {
         return (false, message);
-      }
 
       (isValid, message) = CheckK3dCNI(distributionConfig);
       if (!isValid)
-      {
         return (false, message);
-      }
+
+      (isValid, message) = CheckK3dMirrorRegistries(distributionConfig);
+      if (!isValid)
+        return (false, message);
     }
     else if (config.Spec.Project.Distribution == KSailKubernetesDistributionType.Native)
     {
       var distributionConfig = deserializer.Deserialize<KindConfig>(await File.ReadAllTextAsync(config.Spec.Project.DistributionConfigPath, cancellationToken).ConfigureAwait(false));
       (isValid, message) = CheckClusterName(config.Metadata.Name, distributionConfig.Name);
       if (!isValid)
-      {
         return (false, message);
-      }
 
       (isValid, message) = CheckKindCNI(distributionConfig);
       if (!isValid)
-      {
         return (false, message);
-      }
     }
     else
     {
       throw new KSailException($"unsupported distribution '{config.Spec.Project.Distribution}'.");
+    }
+    return (true, string.Empty);
+  }
+
+  private (bool isValid, string message) CheckK3dMirrorRegistries(K3dConfig distributionConfig)
+  {
+    // check that k3d config includes all mirrors from the ksail config
+    var expectedMirrors = config.Spec.MirrorRegistries.Select(x => x.Proxy.Url.Host.Contains("docker.io", StringComparison.Ordinal) ? "docker.io" : x.Proxy.Url.Host);
+    foreach (var expectedMirror in expectedMirrors)
+    {
+      if (!(distributionConfig.Registries?.Config?.Contains(expectedMirror, StringComparison.Ordinal) ?? false))
+      {
+        return (false, $"'registries.config' in '{config.Spec.Project.DistributionConfigPath}' does not contain the expected mirror '{expectedMirror}'." + Environment.NewLine +
+          $"  - please add the mirror to 'registries.config' in '{config.Spec.Project.DistributionConfigPath}'.");
+      }
     }
     return (true, string.Empty);
   }
@@ -73,9 +80,7 @@ internal class ConfigurationValidator(KSailCluster config)
       _ => throw new KSailException($"unsupported distribution '{distribution}'.")
     };
     if (!string.Equals(expectedContextName, context, StringComparison.Ordinal))
-    {
       return (false, $"'config.spec.connection.context' in '{config.Spec.Project.ConfigPath}' does not match the expected value '{expectedContextName}'.");
-    }
     else
     {
       return (true, string.Empty);
@@ -91,9 +96,7 @@ internal class ConfigurationValidator(KSailCluster config)
       _ => throw new KSailException($"unsupported distribution '{distribution}'.")
     };
     if (!Equals(expectedOCISourceUri, config.Spec.DeploymentTool.Flux.Source.Url))
-    {
       return (false, $"'config.spec.deploymentTool.flux.source.url' in '{config.Spec.Project.ConfigPath}' does not match the expected value '{expectedOCISourceUri}'.");
-    }
     return (true, string.Empty);
   }
 

@@ -2,6 +2,7 @@ using System.CommandLine;
 using System.CommandLine.IO;
 using System.Runtime.InteropServices;
 using Devantler.SecretManager.SOPS.LocalAge;
+using KSail.Commands.Debug;
 using KSail.Commands.Down;
 using KSail.Commands.Init;
 using KSail.Commands.List;
@@ -43,6 +44,7 @@ public class E2ETests : IAsyncLifetime
     var stopCommand = new KSailStopCommand();
     var startCommand = new KSailStartCommand();
     var updateCommand = new KSailUpdateCommand();
+    var debugCommand = new KSailDebugCommand();
     var downCommand = new KSailDownCommand();
 
     //Act & Assert
@@ -58,6 +60,13 @@ public class E2ETests : IAsyncLifetime
     Assert.Equal(0, startExitCode);
     int updateExitCode = await updateCommand.InvokeAsync(["update"], console);
     Assert.Equal(0, updateExitCode);
+    Task debugTask = Task.Run(async () =>
+    {
+      await debugCommand.InvokeAsync(["debug"], console).ConfigureAwait(false);
+    });
+    await debugTask.WaitAsync(TimeSpan.FromSeconds(4));
+    Assert.False(debugTask.IsFaulted);
+    debugTask.Dispose();
     int downExitCode = await downCommand.InvokeAsync(["down"], console);
     Assert.Equal(0, downExitCode);
   }

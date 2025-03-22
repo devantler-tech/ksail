@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using System.Text;
 using Devantler.ContainerEngineProvisioner.Docker;
 using Devantler.KubernetesProvisioner.Cluster.Core;
@@ -139,23 +140,23 @@ class KSailUpCommandHandler
 
   async Task CreateMirrorRegistries(KSailCluster config, CancellationToken cancellationToken)
   {
-    if (config.Spec.Project.MirrorRegistries == KSailMirrorRegistriesType.DockerRegistry)
+    Console.WriteLine("🧮 Creating mirror registries");
+    if (config.Spec.Project.MirrorRegistries)
     {
-      Console.WriteLine("🧮 Creating mirror registries");
       var tasks = config.Spec.MirrorRegistries.Select(async mirrorRegistry =>
       {
-        Console.WriteLine($"► creating mirror registry '{mirrorRegistry.Name}' for '{mirrorRegistry.Proxies?.FirstOrDefault()?.Url}'");
+        Console.WriteLine($"► creating mirror registry '{mirrorRegistry.Name}' for '{mirrorRegistry.Proxy.Url}'");
+
         await _engineProvisioner.CreateRegistryAsync(
           mirrorRegistry.Name,
           mirrorRegistry.HostPort,
-          mirrorRegistry.Proxies?.FirstOrDefault()?.Url,
+          mirrorRegistry.Proxy.Url,
           cancellationToken).ConfigureAwait(false);
       });
-
       await Task.WhenAll(tasks).ConfigureAwait(false);
-      Console.WriteLine("✔ mirror registries created");
-      Console.WriteLine();
     }
+    Console.WriteLine("✔ mirror registries created");
+    Console.WriteLine();
   }
 
   async Task<bool> Lint(KSailCluster config, CancellationToken cancellationToken = default)
@@ -210,7 +211,7 @@ class KSailUpCommandHandler
 
   async Task BootstrapMirrorRegistries(KSailCluster config, CancellationToken cancellationToken)
   {
-    if (config.Spec.Project.MirrorRegistries == KSailMirrorRegistriesType.DockerRegistry)
+    if (config.Spec.Project.MirrorRegistries)
     {
       switch ((config.Spec.Project.Engine, config.Spec.Project.Distribution))
       {
@@ -265,25 +266,24 @@ class KSailUpCommandHandler
     async Task AddMirrorRegistryToContainerd(string containerName, KSailMirrorRegistry mirrorRegistry, CancellationToken cancellationToken)
     {
       // https://github.com/containerd/containerd/blob/main/docs/hosts.md
-      foreach (var proxy in mirrorRegistry.Proxies)
+      var proxy = mirrorRegistry.Proxy;
+      var mirrorRegistryHost = proxy.Url.Host;
+      if (mirrorRegistryHost.Contains("docker.io", StringComparison.OrdinalIgnoreCase))
       {
-        var mirrorRegistryHost = proxy.Url.Host;
-        if (string.Equals(mirrorRegistryHost, "registry-1.docker.io", StringComparison.OrdinalIgnoreCase))
-        {
-          mirrorRegistryHost = "docker.io";
-        }
-        string registryDir = $"/etc/containerd/certs.d/{mirrorRegistryHost}";
-        await _engineProvisioner.CreateDirectoryInContainerAsync(containerName, registryDir, true, cancellationToken).ConfigureAwait(false);
-        string host = $"{mirrorRegistry.Name}:5000";
-        string hostsToml = $"""
-        server = "{proxy.Url}"
-
-        [host."http://{host}"]
-          capabilities = ["pull", "resolve"]
-          skip_verify = true
-        """;
-        await _engineProvisioner.CreateFileInContainerAsync(containerName, $"{registryDir}/hosts.toml", hostsToml, cancellationToken).ConfigureAwait(false);
+        mirrorRegistryHost = "docker.io";
       }
+      string registryDir = $"/etc/containerd/certs.d/{mirrorRegistryHost}";
+      await _engineProvisioner.CreateDirectoryInContainerAsync(containerName, registryDir, true, cancellationToken).ConfigureAwait(false);
+      string host = $"{mirrorRegistry.Name}:5000";
+      string hostsToml = $"""
+      server = "{proxy.Url}"
+
+      [host."http://{host}"]
+        capabilities = ["pull", "resolve"]
+        skip_verify = true
+      """;
+      await _engineProvisioner.CreateFileInContainerAsync(containerName, $"{registryDir}/hosts.toml", hostsToml, cancellationToken).ConfigureAwait(false);
+
     }
   }
 
