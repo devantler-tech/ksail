@@ -44,7 +44,8 @@ class DistributionConfigFileGenerator
     var kindConfig = new KindConfig
     {
       Name = config.Metadata.Name,
-      ContainerdConfigPatches = config.Spec.Project.MirrorRegistries == KSailMirrorRegistriesType.DockerRegistry ? [
+      ContainerdConfigPatches = config.Spec.Project.MirrorRegistries ?
+      [
         """
         [plugins."io.containerd.grpc.v1.cri".registry]
           config_path = "/etc/containerd/certs.d"

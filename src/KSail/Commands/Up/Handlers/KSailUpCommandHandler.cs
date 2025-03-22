@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using System.Text;
 using Devantler.ContainerEngineProvisioner.Docker;
 using Devantler.KubernetesProvisioner.Cluster.Core;
@@ -139,23 +140,33 @@ class KSailUpCommandHandler
 
   async Task CreateMirrorRegistries(KSailCluster config, CancellationToken cancellationToken)
   {
-    if (config.Spec.Project.MirrorRegistries == KSailMirrorRegistriesType.DockerRegistry)
+    Console.WriteLine("🧮 Creating mirror registries");
+    if (config.Spec.Project.MirrorRegistries)
     {
-      Console.WriteLine("🧮 Creating mirror registries");
       var tasks = config.Spec.MirrorRegistries.Select(async mirrorRegistry =>
       {
-        Console.WriteLine($"► creating mirror registry '{mirrorRegistry.Name}' for '{mirrorRegistry.Proxies?.FirstOrDefault()?.Url}'");
-        await _engineProvisioner.CreateRegistryAsync(
-          mirrorRegistry.Name,
-          mirrorRegistry.HostPort,
-          mirrorRegistry.Proxies?.FirstOrDefault()?.Url,
-          cancellationToken).ConfigureAwait(false);
+        Console.WriteLine($"► creating mirror registry '{mirrorRegistry.Name}' for {string.Join(", ", $"'{mirrorRegistry.Proxies.Select(x => x.Url)}'")}");
+        if (mirrorRegistry.Proxies.Count() == 1)
+        {
+          await _engineProvisioner.CreateRegistryAsync(
+            mirrorRegistry.Name,
+            mirrorRegistry.HostPort,
+            mirrorRegistry.Proxies?.FirstOrDefault()?.Url,
+            cancellationToken).ConfigureAwait(false);
+        }
+        else if (mirrorRegistry.Proxies.Count() > 1)
+        {
+          await _engineProvisioner.CreateRegistryProxyAsync(
+            mirrorRegistry.Name,
+            mirrorRegistry.HostPort,
+            new ReadOnlyCollection<Uri>([.. mirrorRegistry.Proxies.Select(x => x.Url)]),
+            cancellationToken).ConfigureAwait(false);
+        }
       });
-
       await Task.WhenAll(tasks).ConfigureAwait(false);
-      Console.WriteLine("✔ mirror registries created");
-      Console.WriteLine();
     }
+    Console.WriteLine("✔ mirror registries created");
+    Console.WriteLine();
   }
 
   async Task<bool> Lint(KSailCluster config, CancellationToken cancellationToken = default)
@@ -210,7 +221,7 @@ class KSailUpCommandHandler
 
   async Task BootstrapMirrorRegistries(KSailCluster config, CancellationToken cancellationToken)
   {
-    if (config.Spec.Project.MirrorRegistries == KSailMirrorRegistriesType.DockerRegistry)
+    if (config.Spec.Project.MirrorRegistries)
     {
       switch ((config.Spec.Project.Engine, config.Spec.Project.Distribution))
       {
@@ -268,7 +279,7 @@ class KSailUpCommandHandler
       foreach (var proxy in mirrorRegistry.Proxies)
       {
         var mirrorRegistryHost = proxy.Url.Host;
-        if (string.Equals(mirrorRegistryHost, "registry-1.docker.io", StringComparison.OrdinalIgnoreCase))
+        if (mirrorRegistryHost.Contains("docker.io", StringComparison.OrdinalIgnoreCase))
         {
           mirrorRegistryHost = "docker.io";
         }

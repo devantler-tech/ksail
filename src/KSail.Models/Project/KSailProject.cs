@@ -37,5 +37,5 @@ public class KSailProject
   public string KustomizationPath { get; set; } = "k8s";
 
   [Description("Whether to set up mirror registries for the project. [default: true]")]
-  public KSailMirrorRegistriesType MirrorRegistries { get; set; } = KSailMirrorRegistriesType.DockerRegistry;
+  public bool MirrorRegistries { get; set; } = true;
 }
