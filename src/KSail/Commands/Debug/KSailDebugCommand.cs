@@ -29,6 +29,10 @@ sealed class KSailDebugCommand : Command
     });
   }
 
-  internal void AddOptions() => AddGlobalOption(CLIOptions.Project.EditorOption);
-
+  internal void AddOptions()
+  {
+    AddOption(CLIOptions.Connection.KubeconfigOption);
+    AddOption(CLIOptions.Connection.ContextOption);
+    AddOption(CLIOptions.Project.EditorOption);
+  }
 }
