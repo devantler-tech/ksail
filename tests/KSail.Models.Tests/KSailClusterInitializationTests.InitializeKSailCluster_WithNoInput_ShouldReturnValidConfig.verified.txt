@@ -53,7 +53,7 @@
         Proxy: {
           Url: https://registry.k8s.io
         },
-        Name: docker-registry-proxy,
+        Name: registry-k8s-io-proxy,
         HostPort: 5556,
         Provider: Docker
       },

@@ -20,7 +20,7 @@ spec:
   mirrorRegistries:
   - proxy:
       url: <url>
-    name: docker-registry-proxy
+    name: registry-k8s-io-proxy
     hostPort: 5556
   - proxy:
       url: <url>
