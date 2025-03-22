@@ -189,20 +189,6 @@
               "description": "The host port of the registry (if applicable). [default: 5555]",
               "type": "integer"
             },
-            "username": {
-              "description": "The username to authenticate with the registry. [default: null]",
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "password": {
-              "description": "The password to authenticate with the registry. [default: null]",
-              "type": [
-                "string",
-                "null"
-              ]
-            },
             "provider": {
               "description": "The registry provider. [default: Docker]",
               "enum": [
@@ -243,27 +229,6 @@
                       "description": "The URL of the upstream registry to proxy and cache images from. [default: https://registry-1.docker.io]",
                       "type": "string",
                       "format": "uri"
-                    },
-                    "username": {
-                      "description": "The username to authenticate with the upstream registry. [default: null]",
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    },
-                    "password": {
-                      "description": "The password to authenticate with the upstream registry. [default: null]",
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    },
-                    "insecure": {
-                      "description": "Connect to the upstream registry over HTTPS. [default: false]",
-                      "type": [
-                        "boolean",
-                        "null"
-                      ]
                     }
                   }
                 }
@@ -275,20 +240,6 @@
               "hostPort": {
                 "description": "The host port of the registry (if applicable). [default: 5555]",
                 "type": "integer"
-              },
-              "username": {
-                "description": "The username to authenticate with the registry. [default: null]",
-                "type": [
-                  "string",
-                  "null"
-                ]
-              },
-              "password": {
-                "description": "The password to authenticate with the registry. [default: null]",
-                "type": [
-                  "string",
-                  "null"
-                ]
               },
               "provider": {
                 "description": "The registry provider. [default: Docker]",

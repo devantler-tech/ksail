@@ -43,8 +43,6 @@
     LocalRegistry: {
       Name: ksail-registry,
       HostPort: 5555,
-      Username: null,
-      Password: null,
       Provider: Docker
     },
     Generator: {
@@ -54,46 +52,26 @@
       {
         Proxies: [
           {
-            Url: https://registry.k8s.io,
-            Username: null,
-            Password: null,
-            Insecure: null
+            Url: https://registry.k8s.io
           },
           {
-            Url: https://registry-1.docker.io,
-            Username: null,
-            Password: null,
-            Insecure: null
+            Url: https://registry-1.docker.io
           },
           {
-            Url: https://ghcr.io,
-            Username: null,
-            Password: null,
-            Insecure: null
+            Url: https://ghcr.io
           },
           {
-            Url: https://gcr.io,
-            Username: null,
-            Password: null,
-            Insecure: null
+            Url: https://gcr.io
           },
           {
-            Url: https://mcr.microsoft.com,
-            Username: null,
-            Password: null,
-            Insecure: null
+            Url: https://mcr.microsoft.com
           },
           {
-            Url: https://quay.io,
-            Username: null,
-            Password: null,
-            Insecure: null
+            Url: https://quay.io
           }
         ],
         Name: docker-registry-proxy,
         HostPort: 5556,
-        Username: null,
-        Password: null,
         Provider: Docker
       }
     ],
