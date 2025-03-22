@@ -21,26 +21,26 @@ spec:
   mirrorRegistries:
   - proxy:
       url: <url>
-    name: registry-k8s-io-proxy
+    name: registry.k8s.io-proxy
     hostPort: 5556
   - proxy:
       url: <url>
-    name: docker-io-proxy
+    name: docker.io-proxy
     hostPort: 5557
   - proxy:
       url: <url>
-    name: ghcr-io-proxy
+    name: ghcr.io-proxy
     hostPort: 5558
   - proxy:
       url: <url>
-    name: gcr-io-proxy
+    name: gcr.io-proxy
     hostPort: 5559
   - proxy:
       url: <url>
-    name: mcr-microsoft-com-proxy
+    name: mcr.microsoft.com-proxy
     hostPort: 5560
   - proxy:
       url: <url>
-    name: quay-io-proxy
+    name: quay.io-proxy
     hostPort: 5561
   validation: {}

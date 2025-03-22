@@ -53,7 +53,7 @@
         Proxy: {
           Url: https://registry.k8s.io
         },
-        Name: registry-k8s-io-proxy,
+        Name: registry.k8s.io-proxy,
         HostPort: 5556,
         Provider: Docker
       },
@@ -61,7 +61,7 @@
         Proxy: {
           Url: https://registry-1.docker.io
         },
-        Name: docker-io-proxy,
+        Name: docker.io-proxy,
         HostPort: 5557,
         Provider: Docker
       },
@@ -69,7 +69,7 @@
         Proxy: {
           Url: https://ghcr.io
         },
-        Name: ghcr-io-proxy,
+        Name: ghcr.io-proxy,
         HostPort: 5558,
         Provider: Docker
       },
@@ -77,7 +77,7 @@
         Proxy: {
           Url: https://gcr.io
         },
-        Name: gcr-io-proxy,
+        Name: gcr.io-proxy,
         HostPort: 5559,
         Provider: Docker
       },
@@ -85,7 +85,7 @@
         Proxy: {
           Url: https://mcr.microsoft.com
         },
-        Name: mcr-microsoft-com-proxy,
+        Name: mcr.microsoft.com-proxy,
         HostPort: 5560,
         Provider: Docker
       },
@@ -93,7 +93,7 @@
         Proxy: {
           Url: https://quay.io
         },
-        Name: quay-io-proxy,
+        Name: quay.io-proxy,
         HostPort: 5561,
         Provider: Docker
       }
