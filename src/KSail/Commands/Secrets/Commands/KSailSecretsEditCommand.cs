@@ -3,6 +3,7 @@ using Devantler.SecretManager.SOPS.LocalAge;
 using KSail.Commands.Secrets.Arguments;
 using KSail.Commands.Secrets.Handlers;
 using KSail.Models.Project.Enums;
+using KSail.Options;
 using KSail.Utils;
 
 namespace KSail.Commands.Secrets.Commands;
@@ -15,6 +16,7 @@ sealed class KSailSecretsEditCommand : Command
   internal KSailSecretsEditCommand() : base("edit", "Edit an encrypted file")
   {
     AddArgument(_pathArgument);
+    AddOption(CLIOptions.Project.EditorOption);
     this.SetHandler(async (context) =>
     {
       try
