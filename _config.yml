@@ -1,3 +1,5 @@
+theme: just-the-docs
+url: https://devantler-tech.github.io/ksail
 title: KSail
 description: >-
   SDK for Kubernetes ☸️
@@ -8,6 +10,21 @@ timezone: Europe/Copenhagen
 github_username:  devantler
 linkedin_username: nikolai-emil-damm-14a786150
 
-theme: just-the-docs
+plugins:
+  - flexible_include
 
-url: https://devantler-tech.github.io/ksail
+exclude:
+  - .github/
+  - .vscode/
+  - src/
+  - tests/
+  - .editorconfig
+  - .gitignore
+  - .releaserc
+  - Dockerfile
+  - LICENSE
+  - SECURITY.md
+  - KSail.slnx
+  - entitlements.xml
+
+
