@@ -136,7 +136,6 @@ DEPENDENCIES
   jekyll (~> 4.4.1)
   jekyll_flexible_include (~> 2.0.15)
   just-the-docs (= 0.10.1)
-  webrick (~> 1.9)
 
 BUNDLED WITH
    2.6.3
