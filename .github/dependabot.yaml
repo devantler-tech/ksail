@@ -4,3 +4,9 @@ updates:
     directory: "/"
     schedule:
       interval: "daily"
+  - package-ecosystem: bundler
+    directory: /
+    schedule:
+      interval: daily
+    allow:
+      - dependency-type: direct
