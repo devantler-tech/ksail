@@ -3,12 +3,6 @@ url: https://devantler-tech.github.io/ksail
 title: KSail
 description: >-
   SDK for Kubernetes ☸️
-author:
-  name: Nikolai Emil Damm
-  email: ned@devantler.com
-timezone: Europe/Copenhagen
-github_username:  devantler
-linkedin_username: nikolai-emil-damm-14a786150
 
 plugins:
   - flexible_include
