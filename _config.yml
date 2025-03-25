@@ -1,14 +1,14 @@
 title: KSail
+description: >-
+  SDK for Kubernetes ☸️
 author:
   name: Nikolai Emil Damm
   email: ned@devantler.com
-description: >-
-  CLI tool for provisioning GitOps enabled K8s clusters in Docker.
 timezone: Europe/Copenhagen
 github_username:  devantler
 linkedin_username: nikolai-emil-damm-14a786150
 
-remote_theme: jekyll/minima
+remote_theme: pages-themes/minimal@v0.2.0
 minima:
   skin: auto
   social_links:
