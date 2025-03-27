@@ -37,6 +37,41 @@ brew install ksail
 2. Make the binary executable: `chmod +x ksail`.
 3. Move the binary to a directory in your `$PATH`: `mv ksail /usr/local/bin/ksail`.
 
+### Usage
+
+Getting started with KSail is easy. First, you need to configure what cluster you want KSail to manage.
+
+`> ksail gen config ksail` - To generate a new KSail configuration file.
+
+Now you can make changes to the configuration file to your liking, and when you are ready to initialize a new cluster, you can run:
+
+`> ksail init` - To initialize a new cluster configuration based on your KSail configuration.
+
+From there, you probably want to ensure that your distribution and ksail is configured to your liking.
+
+- `kind.yaml` - The configuration file for Kind.
+- `k3d.yaml` - The configuration file for K3d.
+
+When you are ready to create your cluster, you can run:
+
+`> ksail up` - To create your new cluster.
+
+From there, you can make some changes to your manifest files, and when you are ready to apply them, you can run:
+
+`> ksail update` - To update your cluster.
+
+And for more advanced debugging, you can run:
+
+`> ksail debug` - To debug your cluster with the K9s tool.
+
+Finally, when you are done working with your cluster, you can run:
+
+`> ksail stop` - To stop your cluster, so you can continue working on it later.
+
+Or if you really want to get rid of it for now, you can run:
+
+`> ksail down` - To dismantle your cluster and remove its resources.
+
 ## Documentation
 
 - [Overview](https://devantler-tech.github.io/ksail/docs/overview)
