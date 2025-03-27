@@ -39,11 +39,11 @@ brew install ksail
 
 ## Documentation
 
-- [Overview](https://devantler-tech.github.io/ksail/overview)
-- [Use Cases](https://devantler-tech.github.io/ksail/use-cases)
-- [Configuration](https://devantler-tech.github.io/ksail/configuration)
-- [FAQ](https://devantler-tech.github.io/ksail/faq)
-- [Roadmap](https://devantler-tech.github.io/ksail/roadmap)
+- [Overview](https://devantler-tech.github.io/ksail/docs/overview)
+- [Use Cases](https://devantler-tech.github.io/ksail/docs/use-cases)
+- [Configuration](https://devantler-tech.github.io/ksail/docs/configuration)
+- [FAQ](https://devantler-tech.github.io/ksail/docs/faq)
+- [Roadmap](https://devantler-tech.github.io/ksail/docs/roadmap)
 
 ## Sub-projects
 
