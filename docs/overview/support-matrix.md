@@ -66,6 +66,15 @@ KSail aims to support a wide range of use cases by providing the flexibility to 
 If you would like to see additional tools supported, please open an issue or pull request on [GitHub](https://github.com/devantler-tech/ksail).
 
 > [!NOTE]
+> The  `Docker` option in the `Engine` category requires access to the default Docker socket. You might need to "Allow the default Docker socket to be used (requires password)" in the Docker Desktop settings.
+>
+> <details><summary>Show me how</summary>
+>
+> ![Enable Docker Socket in Docker Desktop](../images/enable-docker-socket-in-docker-desktop.png)
+>
+> </details>
+
+> [!NOTE]
 > The actual distribution used is determined by the `Engine` and `Kubernetes Distributions` options you select.
 >
 > - Docker + Native = [kind](https://kind.sigs.k8s.io)
