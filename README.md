@@ -88,8 +88,6 @@ KSail is a powerful tool that can be used in many different ways. Here are some 
 
 ## Star History
 
-## Star History
-
 <a href="https://www.star-history.com/#devantler-tech/ksail&Date">
  <picture>
    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=devantler-tech/ksail&type=Date&theme=dark" />
