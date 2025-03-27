@@ -19,8 +19,8 @@ redirect_from:
 
 ### Prerequisites
 
-- MacOS (x64 and arm64)
-- Linux (x64 and arm64)
+- MacOS (amd64 and arm64)
+- Linux (amd64 and arm64)
 
 ### Installation
 
