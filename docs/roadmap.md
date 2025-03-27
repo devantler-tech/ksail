@@ -1,3 +1,9 @@
+---
+title: Roadmap
+layout: default
+nav_order: 5
+---
+
 # Roadmap
 
 The roadmap for KSail details the planned features and improvements for the project. The roadmap is not a exhaustive list of all the changes that will be made to KSail, but rather a high-level overview of the more prominent features and improvements that are planned for the project.
@@ -12,11 +18,10 @@ The roadmap for KSail details the planned features and improvements for the proj
 
 ## 2025
 
-- [x] Submit project to CNCF to enable the project to grow and mature in a vendor-neutral environment. This will also enable the project to be used by more users, as it will be more widely recognized.
-- [ ] The `ksail sops` command to manage secrets in GitOps-enabled Kubernetes clusters. This will enable users to manage secrets in their clusters in a secure way, without having to worry about secrets being exposed in their Git repositories.
-- [ ] Mirror registry support for kind.
+- [x] The `ksail sops` command to manage secrets in GitOps-enabled Kubernetes clusters. This will enable users to manage secrets in their clusters in a secure way, without having to worry about secrets being exposed in their Git repositories.
+- [x] Mirror registry support for kind.
+- [x] Cilium support to enable users to create clusters with Cilium as the default CNI.
 - [ ] The `ksail diff` command to show the the differences between the current state of the cluster and the desired state before applying the changes. This can be useful to see all the hidden changes that are applied by e.g. HelmRelease resources.
-- [ ] Cilium support to enable users to create clusters with Cilium as the default CNI.
 - [ ] Nip.io support to enable users to make services accessible through ingresses without having to set up a DNS server locally.
 - [ ] Talos in Docker support to enable users to create and manage GitOps-enabled Kubernetes clusters provisioned with Talos Linux in Docker. This is important for users that prefer to use Talos over K3d.
 - [ ] Cluster API support to enable users to create and manage GitOps-enabled Kubernetes clusters provisioned with Cluster API. This is important for users that operate large Kubernetes clusters.

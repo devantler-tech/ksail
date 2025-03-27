@@ -1,11 +1,20 @@
 theme: just-the-docs
+color_scheme: dark
 url: https://devantler-tech.github.io/ksail
 title: KSail
+favicon_ico: "docs/images/ksail-logo.png"
 description: >-
   SDK for Kubernetes ☸️
 
 plugins:
-  - flexible_include
+  - jekyll-redirect-from
+  - jekyll-gfm-admonitions
+
+gh_edit_link: true
+gh_edit_link_text: Edit this page on GitHub.
+gh_edit_repository: https://github.com/devantler-tech/ksail
+gh_edit_branch: main
+gh_edit_view_mode: tree
 
 exclude:
   - .github/
