@@ -9,7 +9,7 @@ Options:
   -n, --name <name>                          The name of the cluster. [default: ksail-default]
   -dt, --deployment-tool <Flux>              The Deployment tool to use for updating the state of the cluster. [default: Flux]
   -d, --distribution <K3s|Native>            The distribution to use for the cluster. [default: Native]
-  -e, --engine <Docker>                      The engine to use for provisioning the cluster. [default: Docker]
+  -p, --provider <Docker>                    The provider to use for provisioning the cluster. [default: Docker]
   -mr, --mirror-registries                   Enable mirror registries for the project. [default: True]
   -?, -h, --help                             Show help and usage information
 

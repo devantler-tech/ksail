@@ -5,7 +5,7 @@ Usage:
   testhost list [options]
 
 Options:
-  -e, --engine <Docker>            The engine to use for provisioning the cluster. [default: Docker]
+  -p, --provider <Docker>          The provider to use for provisioning the cluster. [default: Docker]
   -d, --distribution <K3s|Native>  The distribution to use for the cluster. [default: Native]
   -a, --all                        List clusters from all distributions. [default: False]
   -?, -h, --help                   Show help and usage information

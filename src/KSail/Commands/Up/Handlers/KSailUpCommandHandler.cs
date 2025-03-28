@@ -22,7 +22,7 @@ namespace KSail.Commands.Up.Handlers;
 class KSailUpCommandHandler
 {
   readonly SOPSLocalAgeSecretManager _secretManager = new();
-  readonly DockerProvisioner _engineProvisioner;
+  readonly DockerProvisioner _containerEngineProvisioner;
   readonly FluxProvisioner _deploymentTool;
   readonly IKubernetesClusterProvisioner _clusterProvisioner;
   readonly CiliumProvisioner? _cniProvisioner;
@@ -32,15 +32,15 @@ class KSailUpCommandHandler
   internal KSailUpCommandHandler(KSailCluster config)
   {
     _ksailLintCommandHandler = new KSailLintCommandHandler(config);
-    _engineProvisioner = config.Spec.Project.Engine switch
+    _containerEngineProvisioner = config.Spec.Project.Provider switch
     {
-      KSailEngineType.Docker => new DockerProvisioner(),
-      _ => throw new NotSupportedException($"The container engine '{config.Spec.Project.Engine}' is not supported.")
+      KSailProviderType.Docker => new DockerProvisioner(),
+      _ => throw new NotSupportedException($"The container engine '{config.Spec.Project.Provider}' is not supported.")
     };
-    _clusterProvisioner = (config.Spec.Project.Engine, config.Spec.Project.Distribution) switch
+    _clusterProvisioner = (config.Spec.Project.Provider, config.Spec.Project.Distribution) switch
     {
-      (KSailEngineType.Docker, KSailKubernetesDistributionType.Native) => new KindProvisioner(),
-      (KSailEngineType.Docker, KSailKubernetesDistributionType.K3s) => new K3dProvisioner(),
+      (KSailProviderType.Docker, KSailDistributionType.Native) => new KindProvisioner(),
+      (KSailProviderType.Docker, KSailDistributionType.K3s) => new K3dProvisioner(),
       _ => throw new NotSupportedException($"The distribution '{config.Spec.Project.Distribution}' is not supported.")
     };
     _cniProvisioner = config.Spec.Project.CNI switch
@@ -91,7 +91,7 @@ class KSailUpCommandHandler
   private async Task CheckPrerequisites(CancellationToken cancellationToken)
   {
     Console.WriteLine($"📋 Checking prerequisites");
-    await CheckEngineIsRunning(cancellationToken).ConfigureAwait(false);
+    await CheckProviderIsRunning(cancellationToken).ConfigureAwait(false);
     Console.WriteLine("► checking if cluster exists");
     if (await _clusterProvisioner.ExistsAsync(_config.Metadata.Name, cancellationToken).ConfigureAwait(false))
     {
@@ -106,29 +106,29 @@ class KSailUpCommandHandler
     Console.WriteLine();
   }
 
-  async Task CheckEngineIsRunning(CancellationToken cancellationToken = default)
+  async Task CheckProviderIsRunning(CancellationToken cancellationToken = default)
   {
-    Console.WriteLine($"► checking '{_config.Spec.Project.Engine}' is running");
+    Console.WriteLine($"► checking '{_config.Spec.Project.Provider}' is running");
     for (int i = 0; i < 5; i++)
     {
-      Console.WriteLine($"► pinging '{_config.Spec.Project.Engine}' (try {i + 1})");
-      if (await _engineProvisioner.CheckReadyAsync(cancellationToken).ConfigureAwait(false))
+      Console.WriteLine($"► pinging '{_config.Spec.Project.Provider}' (try {i + 1})");
+      if (await _containerEngineProvisioner.CheckReadyAsync(cancellationToken).ConfigureAwait(false))
       {
-        Console.WriteLine($"✔ {_config.Spec.Project.Engine} is running");
+        Console.WriteLine($"✔ {_config.Spec.Project.Provider} is running");
         return;
       }
       await Task.Delay(1000, cancellationToken).ConfigureAwait(false);
     }
-    throw new KSailException($"{_config.Spec.Project.Engine} is not running after multiple attempts.");
+    throw new KSailException($"{_config.Spec.Project.Provider} is not running after multiple attempts.");
   }
 
   async Task CreateOCISourceRegistry(KSailCluster config, CancellationToken cancellationToken = default)
   {
-    if (config.Spec.Project.Engine == KSailEngineType.Docker && config.Spec.Project.DeploymentTool == KSailDeploymentToolType.Flux)
+    if (config.Spec.Project.Provider == KSailProviderType.Docker && config.Spec.Project.DeploymentTool == KSailDeploymentToolType.Flux)
     {
       Console.WriteLine("📥 Create OCI source registry");
       Console.WriteLine($"► creating '{config.Spec.DeploymentTool.Flux.Source.Url}' as OCI source registry");
-      await _engineProvisioner.CreateRegistryAsync(
+      await _containerEngineProvisioner.CreateRegistryAsync(
         config.Spec.LocalRegistry.Name,
         config.Spec.LocalRegistry.HostPort,
         cancellationToken: cancellationToken
@@ -147,7 +147,7 @@ class KSailUpCommandHandler
       {
         Console.WriteLine($"► creating mirror registry '{mirrorRegistry.Name}' for '{mirrorRegistry.Proxy.Url}'");
 
-        await _engineProvisioner.CreateRegistryAsync(
+        await _containerEngineProvisioner.CreateRegistryAsync(
           mirrorRegistry.Name,
           mirrorRegistry.HostPort,
           mirrorRegistry.Proxy.Url,
@@ -180,12 +180,12 @@ class KSailUpCommandHandler
 
   async Task BootstrapOCISourceRegistry(KSailCluster config, CancellationToken cancellationToken)
   {
-    switch ((config.Spec.Project.Engine, config.Spec.Project.Distribution))
+    switch ((config.Spec.Project.Provider, config.Spec.Project.Distribution))
     {
-      case (KSailEngineType.Docker, KSailKubernetesDistributionType.Native):
+      case (KSailProviderType.Docker, KSailDistributionType.Native):
         Console.WriteLine("🔼 Botstrapping OCI source registry");
         Console.WriteLine($"► connect OCI source registry to 'kind-{config.Metadata.Name}' network");
-        var dockerClient = _engineProvisioner.Client;
+        var dockerClient = _containerEngineProvisioner.Client;
         var dockerNetworks = await dockerClient.Networks.ListNetworksAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
         var kindNetworks = dockerNetworks.Where(x => x.Name.Contains("kind", StringComparison.OrdinalIgnoreCase));
         foreach (var kindNetwork in kindNetworks)
@@ -195,7 +195,7 @@ class KSailUpCommandHandler
           {
             continue;
           }
-          string containerId = await _engineProvisioner.GetContainerIdAsync(containerName, cancellationToken).ConfigureAwait(false);
+          string containerId = await _containerEngineProvisioner.GetContainerIdAsync(containerName, cancellationToken).ConfigureAwait(false);
           await dockerClient.Networks.ConnectNetworkAsync(kindNetwork.ID, new NetworkConnectParameters
           {
             Container = containerId
@@ -213,9 +213,9 @@ class KSailUpCommandHandler
   {
     if (config.Spec.Project.MirrorRegistries)
     {
-      switch ((config.Spec.Project.Engine, config.Spec.Project.Distribution))
+      switch ((config.Spec.Project.Provider, config.Spec.Project.Distribution))
       {
-        case (KSailEngineType.Docker, KSailKubernetesDistributionType.Native):
+        case (KSailProviderType.Docker, KSailDistributionType.Native):
           Console.WriteLine("🔼 Bootstrapping mirror registries");
           string[] args = [
           "get",
@@ -241,12 +241,12 @@ class KSailUpCommandHandler
           foreach (var mirrorRegistry in config.Spec.MirrorRegistries)
           {
             Console.WriteLine($"► connect '{mirrorRegistry.Name}' to 'kind-{config.Metadata.Name}' network");
-            var dockerClient = _engineProvisioner.Client;
+            var dockerClient = _containerEngineProvisioner.Client;
             var dockerNetworks = await dockerClient.Networks.ListNetworksAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
             var kindNetworks = dockerNetworks.Where(x => x.Name.Contains("kind", StringComparison.OrdinalIgnoreCase));
             foreach (var kindNetwork in kindNetworks)
             {
-              string containerId = await _engineProvisioner.GetContainerIdAsync(mirrorRegistry.Name, cancellationToken).ConfigureAwait(false);
+              string containerId = await _containerEngineProvisioner.GetContainerIdAsync(mirrorRegistry.Name, cancellationToken).ConfigureAwait(false);
               await dockerClient.Networks.ConnectNetworkAsync(kindNetwork.ID, new NetworkConnectParameters
               {
                 Container = containerId
@@ -256,7 +256,7 @@ class KSailUpCommandHandler
           Console.WriteLine($"✔ mirror registries connected to 'kind' networks");
           Console.WriteLine();
           break;
-        case (KSailEngineType.Docker, KSailKubernetesDistributionType.K3s):
+        case (KSailProviderType.Docker, KSailDistributionType.K3s):
           break;
         default:
           break;
@@ -273,7 +273,7 @@ class KSailUpCommandHandler
         mirrorRegistryHost = "docker.io";
       }
       string registryDir = $"/etc/containerd/certs.d/{mirrorRegistryHost}";
-      await _engineProvisioner.CreateDirectoryInContainerAsync(containerName, registryDir, true, cancellationToken).ConfigureAwait(false);
+      await _containerEngineProvisioner.CreateDirectoryInContainerAsync(containerName, registryDir, true, cancellationToken).ConfigureAwait(false);
       string host = $"{mirrorRegistry.Name}:5000";
       string hostsToml = $"""
       server = "{proxy.Url}"
@@ -282,7 +282,7 @@ class KSailUpCommandHandler
         capabilities = ["pull", "resolve"]
         skip_verify = true
       """;
-      await _engineProvisioner.CreateFileInContainerAsync(containerName, $"{registryDir}/hosts.toml", hostsToml, cancellationToken).ConfigureAwait(false);
+      await _containerEngineProvisioner.CreateFileInContainerAsync(containerName, $"{registryDir}/hosts.toml", hostsToml, cancellationToken).ConfigureAwait(false);
 
     }
   }

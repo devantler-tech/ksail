@@ -10,22 +10,22 @@ namespace KSail.Commands.Down.Handlers;
 class KSailDownCommandHandler
 {
   readonly KSailCluster _config;
-  readonly DockerProvisioner _engineProvisioner;
+  readonly DockerProvisioner _containerEngineProvisioner;
   readonly IKubernetesClusterProvisioner _kubernetesDistributionProvisioner;
 
   internal KSailDownCommandHandler(KSailCluster config)
   {
     _config = config;
-    _engineProvisioner = _config.Spec.Project.Engine switch
+    _containerEngineProvisioner = _config.Spec.Project.Provider switch
     {
-      KSailEngineType.Docker => new DockerProvisioner(),
-      _ => throw new KSailException($"Engine '{_config.Spec.Project.Engine}' is not supported.")
+      KSailProviderType.Docker => new DockerProvisioner(),
+      _ => throw new KSailException($"Provider '{_config.Spec.Project.Provider}' is not supported.")
     };
     _kubernetesDistributionProvisioner = _config.Spec.Project.Distribution switch
     {
-      KSailKubernetesDistributionType.K3s => new K3dProvisioner(),
-      KSailKubernetesDistributionType.Native => new KindProvisioner(),
-      _ => throw new KSailException($"Kubernetes distribution '{_config.Spec.Project.Engine}' is not supported.")
+      KSailDistributionType.K3s => new K3dProvisioner(),
+      KSailDistributionType.Native => new KindProvisioner(),
+      _ => throw new KSailException($"Kubernetes distribution '{_config.Spec.Project.Provider}' is not supported.")
     };
   }
 
@@ -43,10 +43,10 @@ class KSailDownCommandHandler
       case KSailDeploymentToolType.Flux:
         Console.WriteLine("► Deleting OCI source registry");
         string containerName = _config.Spec.LocalRegistry.Name;
-        bool ksailRegistryExists = await _engineProvisioner.CheckContainerExistsAsync(containerName, cancellationToken).ConfigureAwait(false);
+        bool ksailRegistryExists = await _containerEngineProvisioner.CheckContainerExistsAsync(containerName, cancellationToken).ConfigureAwait(false);
         if (ksailRegistryExists)
         {
-          await _engineProvisioner.DeleteRegistryAsync(containerName, cancellationToken).ConfigureAwait(false);
+          await _containerEngineProvisioner.DeleteRegistryAsync(containerName, cancellationToken).ConfigureAwait(false);
           Console.WriteLine($"✓ '{containerName}' deleted.");
         }
         break;
@@ -59,10 +59,10 @@ class KSailDownCommandHandler
     {
       var deleteTasks = _config.Spec.MirrorRegistries.Select(async mirrorRegistry =>
       {
-        bool mirrorRegistryExists = await _engineProvisioner.CheckContainerExistsAsync(mirrorRegistry.Name, cancellationToken).ConfigureAwait(false);
+        bool mirrorRegistryExists = await _containerEngineProvisioner.CheckContainerExistsAsync(mirrorRegistry.Name, cancellationToken).ConfigureAwait(false);
         if (mirrorRegistryExists)
         {
-          await _engineProvisioner.DeleteRegistryAsync(mirrorRegistry.Name, cancellationToken).ConfigureAwait(false);
+          await _containerEngineProvisioner.DeleteRegistryAsync(mirrorRegistry.Name, cancellationToken).ConfigureAwait(false);
           Console.WriteLine($"✓ '{mirrorRegistry.Name}' deleted.");
         }
       });

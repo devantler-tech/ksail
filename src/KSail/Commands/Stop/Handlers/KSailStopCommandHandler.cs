@@ -14,10 +14,10 @@ class KSailStopCommandHandler
   internal KSailStopCommandHandler(KSailCluster config)
   {
     _config = config;
-    _clusterProvisioner = (_config.Spec.Project.Engine, _config.Spec.Project.Distribution) switch
+    _clusterProvisioner = (_config.Spec.Project.Provider, _config.Spec.Project.Distribution) switch
     {
-      (KSailEngineType.Docker, KSailKubernetesDistributionType.Native) => new KindProvisioner(),
-      (KSailEngineType.Docker, KSailKubernetesDistributionType.K3s) => new K3dProvisioner(),
+      (KSailProviderType.Docker, KSailDistributionType.Native) => new KindProvisioner(),
+      (KSailProviderType.Docker, KSailDistributionType.K3s) => new K3dProvisioner(),
       _ => throw new NotSupportedException($"The distribution '{_config.Spec.Project.Distribution}' is not supported.")
     };
   }

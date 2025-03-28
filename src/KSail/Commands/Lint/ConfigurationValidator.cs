@@ -22,7 +22,7 @@ internal class ConfigurationValidator(KSailCluster config)
       return (false, message);
 
     var deserializer = new DeserializerBuilder().WithNamingConvention(CamelCaseNamingConvention.Instance).Build();
-    if (config.Spec.Project.Distribution == KSailKubernetesDistributionType.K3s)
+    if (config.Spec.Project.Distribution == KSailDistributionType.K3s)
     {
       var distributionConfig = deserializer.Deserialize<K3dConfig>(await File.ReadAllTextAsync(config.Spec.Project.DistributionConfigPath, cancellationToken).ConfigureAwait(false));
 
@@ -38,7 +38,7 @@ internal class ConfigurationValidator(KSailCluster config)
       if (!isValid)
         return (false, message);
     }
-    else if (config.Spec.Project.Distribution == KSailKubernetesDistributionType.Native)
+    else if (config.Spec.Project.Distribution == KSailDistributionType.Native)
     {
       var distributionConfig = deserializer.Deserialize<KindConfig>(await File.ReadAllTextAsync(config.Spec.Project.DistributionConfigPath, cancellationToken).ConfigureAwait(false));
       (isValid, message) = CheckClusterName(config.Metadata.Name, distributionConfig.Name);
@@ -71,12 +71,12 @@ internal class ConfigurationValidator(KSailCluster config)
     return (true, string.Empty);
   }
 
-  private (bool isValid, string message) CheckContextName(KSailKubernetesDistributionType distribution, string name, string context)
+  private (bool isValid, string message) CheckContextName(KSailDistributionType distribution, string name, string context)
   {
     var expectedContextName = distribution switch
     {
-      KSailKubernetesDistributionType.K3s => $"k3d-{name}",
-      KSailKubernetesDistributionType.Native => $"kind-{name}",
+      KSailDistributionType.K3s => $"k3d-{name}",
+      KSailDistributionType.Native => $"kind-{name}",
       _ => throw new KSailException($"unsupported distribution '{distribution}'.")
     };
     if (!string.Equals(expectedContextName, context, StringComparison.Ordinal))
@@ -87,12 +87,12 @@ internal class ConfigurationValidator(KSailCluster config)
     }
   }
 
-  private (bool isValid, string message) CheckOCISourceUri(KSailKubernetesDistributionType distribution)
+  private (bool isValid, string message) CheckOCISourceUri(KSailDistributionType distribution)
   {
     var expectedOCISourceUri = distribution switch
     {
-      KSailKubernetesDistributionType.Native => new Uri("oci://ksail-registry:5000/ksail-registry"),
-      KSailKubernetesDistributionType.K3s => new Uri("oci://host.k3d.internal:5555/ksail-registry"),
+      KSailDistributionType.Native => new Uri("oci://ksail-registry:5000/ksail-registry"),
+      KSailDistributionType.K3s => new Uri("oci://host.k3d.internal:5555/ksail-registry"),
       _ => throw new KSailException($"unsupported distribution '{distribution}'.")
     };
     if (!Equals(expectedOCISourceUri, config.Spec.DeploymentTool.Flux.Source.Url))

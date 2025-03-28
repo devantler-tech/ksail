@@ -61,7 +61,7 @@ static class KSailClusterConfigLoader
     config.UpdateConfig(c => c.Spec.Project.Distribution, context.ParseResult.GetValueForOption(CLIOptions.Project.DistributionOption));
     config.UpdateConfig(c => c.Spec.Project.DistributionConfigPath, context.ParseResult.GetValueForOption(CLIOptions.Project.DistributionConfigPathOption));
     config.UpdateConfig(c => c.Spec.Project.Editor, context.ParseResult.GetValueForOption(CLIOptions.Project.EditorOption));
-    config.UpdateConfig(c => c.Spec.Project.Engine, context.ParseResult.GetValueForOption(CLIOptions.Project.EngineOption));
+    config.UpdateConfig(c => c.Spec.Project.Provider, context.ParseResult.GetValueForOption(CLIOptions.Project.ProviderOption));
     config.UpdateConfig(c => c.Spec.Project.KustomizationPath, context.ParseResult.GetValueForOption(CLIOptions.Project.KustomizationPathOption));
     config.UpdateConfig(c => c.Spec.Project.MirrorRegistries, context.ParseResult.GetValueForOption(CLIOptions.Project.MirrorRegistriesOption));
     config.UpdateConfig(c => c.Spec.Project.SecretManager, context.ParseResult.GetValueForOption(CLIOptions.Project.SecretManagerOption));
@@ -83,7 +83,7 @@ static class KSailClusterConfigLoader
     return config;
   }
 
-  internal static async Task<KSailCluster> LoadAsync(string? configFilePath = "ksail.yaml", string? name = default, KSailKubernetesDistributionType distribution = default)
+  internal static async Task<KSailCluster> LoadAsync(string? configFilePath = "ksail.yaml", string? name = default, KSailDistributionType distribution = default)
   {
     // Create default KSailClusterConfig
     var ksailClusterConfig = string.IsNullOrEmpty(name) ?

@@ -29,10 +29,10 @@ public class KSailCluster
     Spec = new KSailClusterSpec(name);
   }
 
-  public KSailCluster(KSailKubernetesDistributionType distribution) =>
+  public KSailCluster(KSailDistributionType distribution) =>
     Spec = new KSailClusterSpec(Metadata.Name, distribution);
 
-  public KSailCluster(string name, KSailKubernetesDistributionType distribution)
+  public KSailCluster(string name, KSailDistributionType distribution)
   {
     Metadata.Name = name;
     Spec = new KSailClusterSpec(name, distribution);

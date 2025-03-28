@@ -75,15 +75,15 @@ public class KSailClusterSpec
     };
   }
 
-  public KSailClusterSpec(string name, KSailKubernetesDistributionType distribution) : this(name)
+  public KSailClusterSpec(string name, KSailDistributionType distribution) : this(name)
   {
     SetOCISourceUri(distribution);
     Connection = new KSailConnection
     {
       Context = distribution switch
       {
-        KSailKubernetesDistributionType.Native => $"kind-{name}",
-        KSailKubernetesDistributionType.K3s => $"k3d-{name}",
+        KSailDistributionType.Native => $"kind-{name}",
+        KSailDistributionType.K3s => $"k3d-{name}",
         _ => $"kind-{name}"
       }
     };
@@ -92,19 +92,19 @@ public class KSailClusterSpec
       Distribution = distribution,
       DistributionConfigPath = distribution switch
       {
-        KSailKubernetesDistributionType.Native => "kind.yaml",
-        KSailKubernetesDistributionType.K3s => "k3d.yaml",
+        KSailDistributionType.Native => "kind.yaml",
+        KSailDistributionType.K3s => "k3d.yaml",
         _ => "kind.yaml"
       }
     };
   }
 
-  void SetOCISourceUri(KSailKubernetesDistributionType distribution = KSailKubernetesDistributionType.Native)
+  void SetOCISourceUri(KSailDistributionType distribution = KSailDistributionType.Native)
   {
     DeploymentTool.Flux.Source = distribution switch
     {
-      KSailKubernetesDistributionType.Native => new KSailFluxDeploymentToolRepository { Url = new Uri("oci://ksail-registry:5000/ksail-registry") },
-      KSailKubernetesDistributionType.K3s => new KSailFluxDeploymentToolRepository { Url = new Uri("oci://host.k3d.internal:5555/ksail-registry") },
+      KSailDistributionType.Native => new KSailFluxDeploymentToolRepository { Url = new Uri("oci://ksail-registry:5000/ksail-registry") },
+      KSailDistributionType.K3s => new KSailFluxDeploymentToolRepository { Url = new Uri("oci://host.k3d.internal:5555/ksail-registry") },
       _ => new KSailFluxDeploymentToolRepository { Url = new Uri("oci://ksail-registry:5000/ksail-registry") },
     };
   }

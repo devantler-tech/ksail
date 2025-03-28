@@ -35,7 +35,7 @@ sealed class KSailDownCommand : Command
     AddOption(CLIOptions.Metadata.NameOption);
     AddOption(CLIOptions.Project.DeploymentToolOption);
     AddOption(CLIOptions.Project.DistributionOption);
-    AddOption(CLIOptions.Project.EngineOption);
+    AddOption(CLIOptions.Project.ProviderOption);
     AddOption(CLIOptions.Project.MirrorRegistriesOption);
   }
 }

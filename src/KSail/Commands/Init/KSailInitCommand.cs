@@ -39,7 +39,7 @@ sealed class KSailInitCommand : Command
     AddOption(CLIOptions.Project.ConfigPathOption);
     AddOption(CLIOptions.Project.DistributionConfigPathOption);
     AddOption(CLIOptions.Project.DistributionOption);
-    AddOption(CLIOptions.Project.EngineOption);
+    AddOption(CLIOptions.Project.ProviderOption);
     AddOption(CLIOptions.Project.KustomizationPathOption);
     AddOption(CLIOptions.Project.MirrorRegistriesOption);
     AddOption(CLIOptions.Project.SecretManagerOption);
