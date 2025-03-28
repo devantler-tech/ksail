@@ -42,6 +42,6 @@ sealed class KSailStopCommand : Command
   {
     AddOption(CLIOptions.Metadata.NameOption);
     AddOption(CLIOptions.Project.DistributionOption);
-    AddOption(CLIOptions.Project.EngineOption);
+    AddOption(CLIOptions.Project.ProviderOption);
   }
 }

@@ -1,6 +1,12 @@
 using System.Text.RegularExpressions;
+using Devantler.KubernetesGenerator.Core;
+using Devantler.KubernetesGenerator.Core.Converters;
+using Devantler.KubernetesGenerator.Core.Inspectors;
 using KSail.Models;
 using KSail.Models.Project.Enums;
+using YamlDotNet.Serialization;
+using YamlDotNet.Serialization.NamingConventions;
+using YamlDotNet.System.Text.Json;
 
 namespace KSail.Generator.Tests.KSailClusterGeneratorTests;
 
@@ -13,7 +19,7 @@ public partial class GenerateAsyncTests
   public async Task GenerateAsync_WithPropertiesSet_ShouldGenerateAValidKSailClusterFile()
   {
     // Arrange
-    var cluster = new KSailCluster("my-cluster", KSailKubernetesDistributionType.K3s);
+    var cluster = new KSailCluster("my-cluster", KSailDistributionType.K3s);
 
     // Act
     string outputPath = Path.Combine(Path.GetTempPath(), "ksail.yaml");
@@ -51,6 +57,34 @@ public partial class GenerateAsyncTests
 
     // Cleanup
     File.Delete(outputPath);
+
+    // Write ksail config to docs
+    var serializer = new SerializerBuilder()
+      .DisableAliases()
+      .WithTypeInspector(inner => new KubernetesTypeInspector(new CommentGatheringTypeInspector(new SystemTextJsonTypeInspector(inner))))
+      .WithTypeConverter(new IntstrIntOrStringTypeConverter())
+      .WithTypeConverter(new ResourceQuantityTypeConverter())
+      .WithEmissionPhaseObjectGraphVisitor(inner => new CommentsObjectGraphVisitor(inner.InnerVisitor))
+      .WithNamingConvention(CamelCaseNamingConvention.Instance).Build();
+    string docsPath = Path.Combine();
+
+    string declarativeConfigMarkdown = $"""
+    ---
+    title: Declarative Config
+    parent: Configuration
+    layout: default
+    nav_order: 1
+    ---
+
+    # Declarative Config
+
+    ```yaml
+    {serializer.Serialize(cluster).TrimEnd()}
+    ```
+
+    """;
+
+    await File.WriteAllTextAsync("../../../../../../docs/configuration/declarative-config.md", declarativeConfigMarkdown);
   }
 
   [GeneratedRegex("url:.*")]

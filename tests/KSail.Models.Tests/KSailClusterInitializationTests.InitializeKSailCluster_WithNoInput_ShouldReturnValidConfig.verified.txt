@@ -18,7 +18,7 @@
       SecretManager: None,
       CNI: Default,
       Editor: Nano,
-      Engine: Docker,
+      Provider: Docker,
       KustomizationPath: k8s,
       MirrorRegistries: true
     },

@@ -76,6 +76,8 @@ public class KSailClusterJSONSchemaGenerationTests
 
     // Assert
     _ = await Verify(schema.ToString());
+
+    // Write the schema to a file for reference.
     await File.WriteAllTextAsync("../../../../../../schemas/ksail-cluster-schema.json", schema.ToString());
   }
 }

@@ -25,7 +25,7 @@ KSail aims to support a wide range of use cases by providing the flexibility to 
       </td>
     </tr>
     <tr>
-      <td><strong>Engines</strong></td>
+      <td><strong>Providers</strong></td>
       <td><a href="https://www.docker.com">Docker</a></td>
     </tr>
     <tr>
@@ -66,16 +66,16 @@ KSail aims to support a wide range of use cases by providing the flexibility to 
 If you would like to see additional tools supported, please open an issue or pull request on [GitHub](https://github.com/devantler-tech/ksail).
 
 > [!NOTE]
-> The  `Docker` option in the `Engine` category requires access to the default Docker socket. You might need to "Allow the default Docker socket to be used (requires password)" in the Docker Desktop settings.
+> The  `Docker` option in the `Provider` category requires access to the default Docker socket. You might need to "Allow the default Docker socket to be used (requires password)" in the Docker Desktop settings.
 >
 > <details><summary>Show me how</summary>
 >
-> ![Enable Docker Socket in Docker Desktop](../images/enable-docker-socket-in-docker-desktop.png)
+> <img src="../images/enable-docker-socket-in-docker-desktop.png" alt="Enable Docker Socket in Docker Desktop" width="600px">
 >
 > </details>
 
 > [!NOTE]
-> The actual distribution used is determined by the `Engine` and `Kubernetes Distributions` options you select.
+> The actual distribution used is determined by the `Provider` and `Kubernetes Distributions` options you select.
 >
 > - Docker + Native = [kind](https://kind.sigs.k8s.io)
 > - Docker + K3s = [k3d](https://k3d.io)

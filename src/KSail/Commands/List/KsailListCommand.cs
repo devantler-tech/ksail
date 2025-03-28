@@ -30,7 +30,7 @@ sealed class KSailListCommand : Command
 
   internal void AddOptions()
   {
-    AddOption(CLIOptions.Project.EngineOption);
+    AddOption(CLIOptions.Project.ProviderOption);
     AddOption(CLIOptions.Project.DistributionOption);
     AddOption(CLIOptions.Distribution.ShowAllClustersInListings);
   }

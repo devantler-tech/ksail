@@ -15,7 +15,7 @@ public class KSailProject
   public string DistributionConfigPath { get; set; } = "kind.yaml";
 
   [Description("The Kubernetes distribution to use. [default: Native]")]
-  public KSailKubernetesDistributionType Distribution { get; set; } = KSailKubernetesDistributionType.Native;
+  public KSailDistributionType Distribution { get; set; } = KSailDistributionType.Native;
 
   [Description("The Deployment tool to use. [default: Flux]")]
   public KSailDeploymentToolType DeploymentTool { get; set; } = KSailDeploymentToolType.Flux;
@@ -30,8 +30,8 @@ public class KSailProject
   [Description("The editor to use for viewing files while debugging. [default: Nano]")]
   public KSailEditorType Editor { get; set; } = KSailEditorType.Nano;
 
-  [Description("The engine to use for running the KSail cluster. [default: Docker]")]
-  public KSailEngineType Engine { get; set; } = KSailEngineType.Docker;
+  [Description("The provider to use for running the KSail cluster. [default: Docker]")]
+  public KSailProviderType Provider { get; set; } = KSailProviderType.Docker;
 
   [Description("The path to the root kustomization directory. [default: k8s]")]
   public string KustomizationPath { get; set; } = "k8s";

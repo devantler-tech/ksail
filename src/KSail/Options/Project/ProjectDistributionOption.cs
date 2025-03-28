@@ -6,7 +6,7 @@ namespace KSail.Options.Project;
 
 
 class ProjectDistributionOption(KSailCluster config)
- : Option<KSailKubernetesDistributionType>(
+ : Option<KSailDistributionType>(
     ["-d", "--distribution"],
     $"The distribution to use for the cluster. [default: {config.Spec.Project.Distribution}]"
   )
