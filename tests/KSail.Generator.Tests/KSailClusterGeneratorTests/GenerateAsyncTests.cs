@@ -78,6 +78,9 @@ public partial class GenerateAsyncTests
 
     # Declarative Config
 
+    > [!IMPORTANT]
+    > This document is auto-generated.
+
     ```yaml
     {serializer.Serialize(cluster).TrimEnd()}
     ```

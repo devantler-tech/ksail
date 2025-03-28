@@ -7,6 +7,9 @@ nav_order: 1
 
 # Declarative Config
 
+> [!IMPORTANT]
+> This document is auto-generated.
+
 ```yaml
 # The API version where the KSail Cluster object is defined. [default: ksail.io/v1alpha1]
 apiVersion: ksail.io/v1alpha1
