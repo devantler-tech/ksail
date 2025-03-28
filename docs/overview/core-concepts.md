@@ -7,6 +7,37 @@ nav_order: 0
 
 # Core Concepts
 
+Even though KSail is designed to provide a simple and easy to use interface, it is important to understand the core concepts of KSail and related technologies and tooling. This document will take you through the core concepts of KSail, as well as the underlying technologies and tooling that KSail is built on top of.
+
+- [Glossary](#glossary)
+- [Providers](#providers)
+  - [Docker](#docker)
+- [Distributions](#distributions)
+  - [Native](#native)
+  - [K3s](#k3s)
+- [Container Network Interfaces (CNIs)](#container-network-interfaces-cnis)
+  - [None](#none)
+  - [Default](#default)
+  - [Cilium](#cilium)
+- [Ingress Controllers](#ingress-controllers)
+  - [None](#none-1)
+  - [Default](#default-1)
+- [Waypoint Controllers](#waypoint-controllers)
+  - [None](#none-2)
+  - [Default](#default-2)
+- [Deployment Tools](#deployment-tools)
+  - [None](#none-3)
+  - [Kubectl](#kubectl)
+  - [Flux](#flux)
+  - [ArgoCD](#argocd)
+- [Secret Managers](#secret-managers)
+  - [None](#none-4)
+  - [SOPS](#sops)
+- [Local Registry](#local-registry)
+- [Mirror Registries](#mirror-registries)
+
+## Glossary
+
 <table>
   <thead>
     <tr>
