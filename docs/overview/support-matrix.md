@@ -5,7 +5,7 @@ layout: default
 nav_order: 3
 ---
 
-## Support Matrix
+# Support Matrix
 
 KSail aims to support a wide range of use cases by providing the flexibility to run popular Kubernetes distributions on various local, on-prem, and cloud engines. Below is a detailed support matrix.
 

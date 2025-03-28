@@ -16,6 +16,9 @@ gh_edit_repository: https://github.com/devantler-tech/ksail
 gh_edit_branch: main
 gh_edit_view_mode: tree
 
+back_to_top: true
+back_to_top_text: "Back to top"
+
 exclude:
   - .github/
   - .vscode/
