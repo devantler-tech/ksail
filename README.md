@@ -1,12 +1,3 @@
----
-title: Home
-layout: home
-nav_order: 0
-permalink: /
-redirect_from:
-  - /README.md
----
-
 # KSail
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
@@ -110,12 +101,11 @@ These projects are CLI wrappers that provide a C# API for the respective CLI too
 
 ## Related Projects
 
-> [!NOTE]
-> If you use KSail in your project, feel free to open a PR to add it to the list, so others can see how you use KSail.
-
 KSail is a powerful tool that can be used in many different ways. Here are some projects that use KSail in their setup:
 
 - **[devantler/homelab](https://github.com/devantler/homelab)** - My personal homelab setup.
+
+If you use KSail in your project, feel free to open a PR to add it to the list, so others can see how you use KSail.
 
 ## Presentations
 
