@@ -33,7 +33,6 @@ sealed class KSailDownCommand : Command
     //AddOptions(CLIOptions.MirrorRegistries.MirrorRegistryOption);
     AddOption(CLIOptions.DeploymentTool.Flux.SourceOption);
     AddOption(CLIOptions.Metadata.NameOption);
-    AddOption(CLIOptions.Project.DeploymentToolOption);
     AddOption(CLIOptions.Project.DistributionOption);
     AddOption(CLIOptions.Project.ProviderOption);
     AddOption(CLIOptions.Project.MirrorRegistriesOption);

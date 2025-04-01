@@ -38,20 +38,13 @@ class KSailDownCommandHandler
 
   async Task DeleteRegistriesAsync(CancellationToken cancellationToken = default)
   {
-    switch (_config.Spec.Project.DeploymentTool)
+    string containerName = _config.Spec.LocalRegistry.Name;
+    bool ksailRegistryExists = await _containerEngineProvisioner.CheckContainerExistsAsync(containerName, cancellationToken).ConfigureAwait(false);
+    if (ksailRegistryExists)
     {
-      case KSailDeploymentToolType.Flux:
-        Console.WriteLine("► Deleting OCI source registry");
-        string containerName = _config.Spec.LocalRegistry.Name;
-        bool ksailRegistryExists = await _containerEngineProvisioner.CheckContainerExistsAsync(containerName, cancellationToken).ConfigureAwait(false);
-        if (ksailRegistryExists)
-        {
-          await _containerEngineProvisioner.DeleteRegistryAsync(containerName, cancellationToken).ConfigureAwait(false);
-          Console.WriteLine($"✓ '{containerName}' deleted.");
-        }
-        break;
-      default:
-        throw new KSailException($"deployment tool '{_config.Spec.Project.DeploymentTool}' is not supported.");
+      Console.WriteLine("► Deleting OCI source registry");
+      await _containerEngineProvisioner.DeleteRegistryAsync(containerName, cancellationToken).ConfigureAwait(false);
+      Console.WriteLine($"✓ '{containerName}' deleted.");
     }
 
     Console.WriteLine("► Deleting mirror registries");
