@@ -30,38 +30,46 @@ brew install ksail
 
 ### Usage
 
-Getting started with KSail is easy. First, you need to configure what cluster you want KSail to manage.
+Getting started with KSail is straightforward. Begin by initializing a new KSail project:
 
-`> ksail gen config ksail` - To generate a new KSail configuration file.
+```sh
+> ksail init
+```
 
-Now you can make changes to the configuration file to your liking, and when you are ready to initialize a new cluster, you can run:
+This creates the necessary configuration files, such as:
 
-`> ksail init` - To initialize a new cluster configuration based on your KSail configuration.
+- `kind.yaml` - Configuration for Kind.
+- `k3d.yaml` - Configuration for K3d.
 
-From there, you probably want to ensure that your distribution and ksail is configured to your liking.
+Customize these files to suit your setup. Once ready, create your cluster with:
 
-- `kind.yaml` - The configuration file for Kind.
-- `k3d.yaml` - The configuration file for K3d.
+```sh
+> ksail up
+```
 
-When you are ready to create your cluster, you can run:
+You can then modify your manifest files as needed. To apply changes to your cluster, use:
 
-`> ksail up` - To create your new cluster.
+```sh
+> ksail update
+```
 
-From there, you can make some changes to your manifest files, and when you are ready to apply them, you can run:
+For advanced debugging, leverage the K9s tool with:
 
-`> ksail update` - To update your cluster.
+```sh
+> ksail debug
+```
 
-And for more advanced debugging, you can run:
+When you're done, you can stop the cluster to resume later:
 
-`> ksail debug` - To debug your cluster with the K9s tool.
+```sh
+> ksail stop
+```
 
-Finally, when you are done working with your cluster, you can run:
+Or completely remove it and its resources with:
 
-`> ksail stop` - To stop your cluster, so you can continue working on it later.
-
-Or if you really want to get rid of it for now, you can run:
-
-`> ksail down` - To dismantle your cluster and remove its resources.
+```sh
+> ksail down
+```
 
 ## Documentation
 
