@@ -88,7 +88,7 @@ class KSailUpCommandHandler
     return 0;
   }
 
-  private async Task CheckPrerequisites(CancellationToken cancellationToken)
+  async Task CheckPrerequisites(CancellationToken cancellationToken)
   {
     Console.WriteLine($"📋 Checking prerequisites");
     await CheckProviderIsRunning(cancellationToken).ConfigureAwait(false);
@@ -267,7 +267,7 @@ class KSailUpCommandHandler
     {
       // https://github.com/containerd/containerd/blob/main/docs/hosts.md
       var proxy = mirrorRegistry.Proxy;
-      var mirrorRegistryHost = proxy.Url.Host;
+      string mirrorRegistryHost = proxy.Url.Host;
       if (mirrorRegistryHost.Contains("docker.io", StringComparison.OrdinalIgnoreCase))
       {
         mirrorRegistryHost = "docker.io";

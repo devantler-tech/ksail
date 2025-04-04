@@ -60,9 +60,9 @@ public class E2ETests : IAsyncLifetime
     Assert.Equal(0, startExitCode);
     int updateExitCode = await updateCommand.InvokeAsync(["update"], console);
     Assert.Equal(0, updateExitCode);
-    Task debugTask = Task.Run(async () =>
+    var debugTask = Task.Run(async () =>
     {
-      await debugCommand.InvokeAsync(["debug"], console).ConfigureAwait(false);
+      _ = await debugCommand.InvokeAsync(["debug"], console).ConfigureAwait(false);
     });
     await debugTask.WaitAsync(TimeSpan.FromSeconds(4));
     Assert.False(debugTask.IsFaulted);

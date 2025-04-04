@@ -11,7 +11,7 @@ using KSail.Models.Project;
 using KSail.Models.Project.Enums;
 using KSail.Models.SecretManager;
 using KSail.Models.Validation;
-using KSail.Models.WaypointController;
+using KSail.Models.GatewayController;
 using YamlDotNet.Serialization;
 
 namespace KSail.Models;
@@ -42,8 +42,8 @@ public class KSailClusterSpec
   // [Description("The options for the Ingress Controller.")]
   // public KSailIngressController IngressController { get; set; } = new();
 
-  // [Description("The options for the Waypoint Controller.")]
-  // public KSailWaypointController WaypointController { get; set; } = new();
+  // [Description("The options for the Gateway Controller.")]
+  // public KSailGatewayController GatewayController { get; set; } = new();
 
   [Description("The local registry for storing deployment artifacts.")]
   public KSailLocalRegistry LocalRegistry { get; set; } = new();
