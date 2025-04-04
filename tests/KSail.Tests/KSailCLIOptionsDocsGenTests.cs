@@ -118,7 +118,7 @@ public class KSailCLIOptionsDocsGenTests
 
       ## `{command}`
 
-      ```txt
+      ```cmd
       {helpText}
       ```
 
