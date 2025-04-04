@@ -2,7 +2,7 @@
 title: Project Structure
 parent: Overview
 layout: default
-nav_order: 2
+nav_order: 1
 ---
 
 # Project Structure
