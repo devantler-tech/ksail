@@ -17,7 +17,7 @@ KSail is an SDK for Kubernetes allowing you to easily create, manage, and disman
 
 - **Initialize projects:** Initialize new kubernetes projects with a single command.
 - **Provision and Manage Clusters:**  Easily create, manage, and dismantle Kubernetes clusters across supported providers.
-- **Customizable Cluster Components:** Configure essential components like CNI, Ingress, Waypoint, and other add-ons to suit your needs.
+- **Customizable Cluster Components:** Configure essential components like CNI, Ingress, Gateway, and other add-ons to suit your needs.
 - **Deployment of manifests:** Deploy manifests to clusters seamlessly using popular deployment tools.
 - **Debugging and Troubleshooting:** Debug and troubleshoot clusters with built-in tools and commands for quick issue resolution.
 - **Generate manifests:** Generate Kubernetes manifests for various components and configurations.
