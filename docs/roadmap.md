@@ -21,12 +21,16 @@ The roadmap for KSail details the planned features and improvements for the proj
 - [x] The `ksail sops` command to manage secrets in GitOps-enabled Kubernetes clusters. This will enable users to manage secrets in their clusters in a secure way, without having to worry about secrets being exposed in their Git repositories.
 - [x] Mirror registry support for kind.
 - [x] Cilium support to enable users to create clusters with Cilium as the default CNI.
+- [x] Traefik.me support to enable users to make services accessible through ingresses without having to set up a DNS server locally.
 - [ ] The `ksail diff` command to show the the differences between the current state of the cluster and the desired state before applying the changes. This can be useful to see all the hidden changes that are applied by e.g. HelmRelease resources.
-- [ ] Nip.io support to enable users to make services accessible through ingresses without having to set up a DNS server locally.
 - [ ] Talos in Docker support to enable users to create and manage GitOps-enabled Kubernetes clusters provisioned with Talos Linux in Docker. This is important for users that prefer to use Talos over K3d.
-- [ ] Cluster API support to enable users to create and manage GitOps-enabled Kubernetes clusters provisioned with Cluster API. This is important for users that operate large Kubernetes clusters.
 - [ ] ArgoCD support to enable users to manage their clusters through ArgoCDs GitOps engine. This is important to support a wide range of use cases.
 
 ## Features I'm considering
 
+- [ ] Azure support to enable users to create and manage Kubernetes clusters on Azure. This would be useful for large organizations, and clusters that cannot be developed on locally due to resource constraints.
+- [ ] GCP support to enable users to create and manage Kubernetes clusters on GCP. This would be useful for large organizations, and clusters that cannot be developed on locally due to resource constraints.
+- [ ] AWS support to enable users to create and manage Kubernetes clusters on AWS. This would be useful for large organizations, and clusters that cannot be developed on locally due to resource constraints.
+- [ ] Omni support to enable users to create and manage Kubernetes clusters on Omni. This would be useful for large organizations, and clusters that cannot be developed on locally due to resource constraints.
+- [ ] Cluster API support to enable users to create and manage GitOps-enabled Kubernetes clusters provisioned with Cluster API. This is important for users that operate large Kubernetes clusters.
 - [ ] VCluster support so users can create and manage KSail clusters in a virtual cluster environment on existing Kubernetes clusters. This would be useful for scaling KSail clusters horizontally, as KSail clusters are currently limited to the resources available on the host machine, or the resources allocated to the Docker daemon. Furthermore this would make sure that KSail in CI scales well, whereas today it quickly reaches the limits of for example GitHub's hosted runners.
