@@ -1,7 +1,7 @@
 ---
 title: Use Cases
 layout: default
-nav_order: 0
+nav_order: 2
 ---
 
 # Use Cases
