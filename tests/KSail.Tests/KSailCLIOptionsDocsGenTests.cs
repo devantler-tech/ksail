@@ -114,10 +114,9 @@ public class KSailCLIOptionsDocsGenTests
 
     foreach (var (command, helpText) in helpTexts)
     {
-      int headerLevel = command.Count(c => c == ' ') + 2;
       markdown += $"""
-      
-      {new string('#', headerLevel)} `{command}`
+
+      ## `{command}`
 
       ```sh
       {helpText}
