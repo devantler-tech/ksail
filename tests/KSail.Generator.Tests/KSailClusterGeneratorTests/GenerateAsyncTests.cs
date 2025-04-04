@@ -76,7 +76,7 @@ public partial class GenerateAsyncTests
     {serializer.Serialize(cluster).TrimEnd()}
     ```
     """;
-    var filePath = "../../../../../../docs/configuration/declarative-config.md";
+    string filePath = "../../../../../../docs/configuration/declarative-config.md";
     string fileContents = await File.ReadAllTextAsync(filePath);
     string newFileContents = YamlCodeBlockRegex().Replace(fileContents, declarativeConfigMarkdown);
     await File.WriteAllTextAsync("../../../../../../docs/configuration/declarative-config.md", newFileContents);

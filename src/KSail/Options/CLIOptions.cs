@@ -44,5 +44,5 @@ static class CLIOptions
 
   public static readonly ValidationOptions Validation = new(_config);
 
-  public static readonly WaypointControllerOptions WaypointController = new();
+  public static readonly GatewayControllerOptions GatewayController = new();
 }

@@ -20,7 +20,7 @@ class TemplateKustomizeGenerator
 
   async Task GenerateKustomization(KSailCluster config, string outputPath, CancellationToken cancellationToken = default)
   {
-    FileAttributes attr = File.GetAttributes(outputPath);
+    var attr = File.GetAttributes(outputPath);
     if (!attr.HasFlag(FileAttributes.Directory))
     {
       throw new KSailException($"'{nameof(config.Spec.Project.KustomizationPath)}' must be a directory. It was '{outputPath}'.");

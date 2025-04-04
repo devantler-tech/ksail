@@ -78,8 +78,8 @@ static class KSailClusterConfigLoader
     config.UpdateConfig(c => c.Spec.Validation.ReconcileOnUp, context.ParseResult.GetValueForOption(CLIOptions.Validation.ReconcileOnUpOption));
     config.UpdateConfig(c => c.Spec.Validation.ReconcileOnUpdate, context.ParseResult.GetValueForOption(CLIOptions.Validation.ReconcileOnUpdateOption));
 
-    // WaypointController
-    // TODO: Implement WaypointController CLIOptions
+    // GatewayController
+    // TODO: Implement GatewayController CLIOptions
     return config;
   }
 

@@ -11,6 +11,9 @@ insert_final_newline = true
 max_line_length = 120
 
 [*.cs]
+# Set default severity for all rules to warning
+dotnet_analyzer_diagnostic.severity = warning
+
 # Rule: Set personal preferences for analyzer diagnostics
 csharp_style_expression_bodied_accessors = when_on_single_line
 csharp_style_expression_bodied_constructors = when_on_single_line
@@ -41,7 +44,7 @@ dotnet_naming_rule.private_fields_must_begin_with_underscore_and_be_in_camel_cas
 dotnet_naming_symbols.constants.applicable_kinds = field, local
 dotnet_naming_symbols.constants.required_modifiers = const
 # Define rule that constants should be in Pascal case.
-dotnet_naming_rule.constants_should_be_pascal_case.severity = suggestion
+dotnet_naming_rule.constants_should_be_pascal_case.severity = warning
 dotnet_naming_rule.constants_should_be_pascal_case.symbols = constants
 dotnet_naming_rule.constants_should_be_pascal_case.style = constant_style
 # Apply our rule to constants.
@@ -52,6 +55,7 @@ dotnet_diagnostic.CA1014.severity = none
 dotnet_diagnostic.CA1031.severity = none
 dotnet_diagnostic.CA1303.severity = none
 dotnet_diagnostic.CA1716.severity = none
+dotnet_diagnostic.IDE0005.severity = none
 
 [*.{received,verified}.*]
 generated_code = true

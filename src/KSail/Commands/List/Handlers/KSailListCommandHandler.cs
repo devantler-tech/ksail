@@ -41,12 +41,12 @@ sealed class KSailListCommandHandler(KSailCluster config)
     }
   }
 
-  private static void PrintClusters(IEnumerable<string> clusters)
+  static void PrintClusters(IEnumerable<string> clusters)
   {
     var clusterList = clusters.ToList();
     if (clusterList.Count != 0)
     {
-      foreach (var cluster in clusterList)
+      foreach (string? cluster in clusterList)
       {
         Console.WriteLine(cluster);
       }

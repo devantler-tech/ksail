@@ -79,7 +79,7 @@ class DistributionConfigFileGenerator
     mirrors = mirrors.AppendLine("mirrors:");
     foreach (var registry in config.Spec.MirrorRegistries)
     {
-      var host = registry.Proxy.Url.Host.Contains("docker.io", StringComparison.OrdinalIgnoreCase) ? "docker.io" : registry.Proxy.Url.Host;
+      string host = registry.Proxy.Url.Host.Contains("docker.io", StringComparison.OrdinalIgnoreCase) ? "docker.io" : registry.Proxy.Url.Host;
       string mirror = $"""
         "{host}":
           endpoint:

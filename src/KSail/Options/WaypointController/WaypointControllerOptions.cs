@@ -1,6 +1,6 @@
 namespace KSail.Options.WaypointController;
 
 
-class WaypointControllerOptions()
+class GatewayControllerOptions()
 {
 }
