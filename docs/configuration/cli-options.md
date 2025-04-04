@@ -39,7 +39,7 @@ Commands:
   secrets  Manage secrets
 ```
 
-### `ksail up`
+## `ksail up`
 
 ```sh
 Description:
@@ -67,7 +67,7 @@ Options:
   -?, -h, --help                                    Show help and usage information
 ```
 
-### `ksail down`
+## `ksail down`
 
 ```sh
 Description:
@@ -85,7 +85,7 @@ Options:
   -?, -h, --help                             Show help and usage information
 ```
 
-### `ksail update`
+## `ksail update`
 
 ```sh
 Description:
@@ -103,7 +103,7 @@ Options:
   -?, -h, --help                                  Show help and usage information
 ```
 
-### `ksail start`
+## `ksail start`
 
 ```sh
 Description:
@@ -120,7 +120,7 @@ Options:
   -?, -h, --help                   Show help and usage information
 ```
 
-### `ksail stop`
+## `ksail stop`
 
 ```sh
 Description:
@@ -136,7 +136,7 @@ Options:
   -?, -h, --help                   Show help and usage information
 ```
 
-### `ksail init`
+## `ksail init`
 
 ```sh
 Description:
@@ -159,7 +159,7 @@ Options:
   -?, -h, --help                                    Show help and usage information
 ```
 
-### `ksail lint`
+## `ksail lint`
 
 ```sh
 Description:
@@ -173,7 +173,7 @@ Options:
   -?, -h, --help                                  Show help and usage information
 ```
 
-### `ksail list`
+## `ksail list`
 
 ```sh
 Description:
@@ -189,7 +189,7 @@ Options:
   -?, -h, --help                   Show help and usage information
 ```
 
-### `ksail debug`
+## `ksail debug`
 
 ```sh
 Description:
@@ -205,7 +205,7 @@ Options:
   -?, -h, --help                 Show help and usage information
 ```
 
-### `ksail gen`
+## `ksail gen`
 
 ```sh
 Description:
@@ -226,7 +226,7 @@ Commands:
   native        Generate a native Kubernetes resource.
 ```
 
-#### `ksail gen cert-manager`
+## `ksail gen cert-manager`
 
 ```sh
 Description:
@@ -244,7 +244,7 @@ Commands:
   cluster-issuer  Generate a 'cert-manager.io/v1/ClusterIssuer' resource.
 ```
 
-##### `ksail gen cert-manager certificate`
+## `ksail gen cert-manager certificate`
 
 ```sh
 Description:
@@ -259,7 +259,7 @@ Options:
   -?, -h, --help         Show help and usage information
 ```
 
-##### `ksail gen cert-manager cluster-issuer`
+## `ksail gen cert-manager cluster-issuer`
 
 ```sh
 Description:
@@ -274,7 +274,7 @@ Options:
   -?, -h, --help         Show help and usage information
 ```
 
-#### `ksail gen config`
+## `ksail gen config`
 
 ```sh
 Description:
@@ -293,7 +293,7 @@ Commands:
   sops   Generate a SOPS configuration file.
 ```
 
-##### `ksail gen config k3d`
+## `ksail gen config k3d`
 
 ```sh
 Description:
@@ -308,7 +308,7 @@ Options:
   -?, -h, --help         Show help and usage information
 ```
 
-##### `ksail gen config ksail`
+## `ksail gen config ksail`
 
 ```sh
 Description:
@@ -323,7 +323,7 @@ Options:
   -?, -h, --help         Show help and usage information
 ```
 
-##### `ksail gen config sops`
+## `ksail gen config sops`
 
 ```sh
 Description:
@@ -338,7 +338,7 @@ Options:
   -?, -h, --help         Show help and usage information
 ```
 
-#### `ksail gen flux`
+## `ksail gen flux`
 
 ```sh
 Description:
@@ -357,7 +357,7 @@ Commands:
   kustomization    Generate a 'kustomize.toolkit.fluxcd.io/v1/Kustomization' resource.
 ```
 
-##### `ksail gen flux helm-release`
+## `ksail gen flux helm-release`
 
 ```sh
 Description:
@@ -372,7 +372,7 @@ Options:
   -?, -h, --help         Show help and usage information
 ```
 
-##### `ksail gen flux helm-repository`
+## `ksail gen flux helm-repository`
 
 ```sh
 Description:
@@ -387,7 +387,7 @@ Options:
   -?, -h, --help         Show help and usage information
 ```
 
-##### `ksail gen flux kustomization`
+## `ksail gen flux kustomization`
 
 ```sh
 Description:
@@ -402,7 +402,7 @@ Options:
   -?, -h, --help         Show help and usage information
 ```
 
-#### `ksail gen kustomize`
+## `ksail gen kustomize`
 
 ```sh
 Description:
@@ -420,7 +420,7 @@ Commands:
   kustomization  Generate a 'kustomize.config.k8s.io/v1beta1/Kustomization' resource.
 ```
 
-##### `ksail gen kustomize component`
+## `ksail gen kustomize component`
 
 ```sh
 Description:
@@ -435,7 +435,7 @@ Options:
   -?, -h, --help         Show help and usage information
 ```
 
-##### `ksail gen kustomize kustomization`
+## `ksail gen kustomize kustomization`
 
 ```sh
 Description:
@@ -450,7 +450,7 @@ Options:
   -?, -h, --help         Show help and usage information
 ```
 
-#### `ksail gen native`
+## `ksail gen native`
 
 ```sh
 Description:
@@ -488,7 +488,7 @@ Commands:
   stateful-set               Generate a 'apps/v1/StatefulSet' resource.
 ```
 
-##### `ksail gen native cluster-role-binding`
+## `ksail gen native cluster-role-binding`
 
 ```sh
 Description:
@@ -503,7 +503,7 @@ Options:
   -?, -h, --help         Show help and usage information
 ```
 
-##### `ksail gen native cluster-role`
+## `ksail gen native cluster-role`
 
 ```sh
 Description:
@@ -518,7 +518,7 @@ Options:
   -?, -h, --help         Show help and usage information
 ```
 
-##### `ksail gen native namespace`
+## `ksail gen native namespace`
 
 ```sh
 Description:
@@ -533,7 +533,7 @@ Options:
   -?, -h, --help         Show help and usage information
 ```
 
-##### `ksail gen native network-policy`
+## `ksail gen native network-policy`
 
 ```sh
 Description:
@@ -548,7 +548,7 @@ Options:
   -?, -h, --help         Show help and usage information
 ```
 
-##### `ksail gen native persistent-volume`
+## `ksail gen native persistent-volume`
 
 ```sh
 Description:
@@ -563,7 +563,7 @@ Options:
   -?, -h, --help         Show help and usage information
 ```
 
-##### `ksail gen native resource-quota`
+## `ksail gen native resource-quota`
 
 ```sh
 Description:
@@ -578,7 +578,7 @@ Options:
   -?, -h, --help         Show help and usage information
 ```
 
-##### `ksail gen native role-binding`
+## `ksail gen native role-binding`
 
 ```sh
 Description:
@@ -593,7 +593,7 @@ Options:
   -?, -h, --help         Show help and usage information
 ```
 
-##### `ksail gen native role`
+## `ksail gen native role`
 
 ```sh
 Description:
@@ -608,7 +608,7 @@ Options:
   -?, -h, --help         Show help and usage information
 ```
 
-##### `ksail gen native service-account`
+## `ksail gen native service-account`
 
 ```sh
 Description:
@@ -623,7 +623,7 @@ Options:
   -?, -h, --help         Show help and usage information
 ```
 
-##### `ksail gen native config-map`
+## `ksail gen native config-map`
 
 ```sh
 Description:
@@ -638,7 +638,7 @@ Options:
   -?, -h, --help         Show help and usage information
 ```
 
-##### `ksail gen native persistent-volume-claim`
+## `ksail gen native persistent-volume-claim`
 
 ```sh
 Description:
@@ -653,7 +653,7 @@ Options:
   -?, -h, --help         Show help and usage information
 ```
 
-##### `ksail gen native secret`
+## `ksail gen native secret`
 
 ```sh
 Description:
@@ -668,7 +668,7 @@ Options:
   -?, -h, --help         Show help and usage information
 ```
 
-##### `ksail gen native horizontal-pod-autoscaler`
+## `ksail gen native horizontal-pod-autoscaler`
 
 ```sh
 Description:
@@ -683,7 +683,7 @@ Options:
   -?, -h, --help         Show help and usage information
 ```
 
-##### `ksail gen native pod-disruption-budget`
+## `ksail gen native pod-disruption-budget`
 
 ```sh
 Description:
@@ -698,7 +698,7 @@ Options:
   -?, -h, --help         Show help and usage information
 ```
 
-##### `ksail gen native priority-class`
+## `ksail gen native priority-class`
 
 ```sh
 Description:
@@ -713,7 +713,7 @@ Options:
   -?, -h, --help         Show help and usage information
 ```
 
-##### `ksail gen native ingress`
+## `ksail gen native ingress`
 
 ```sh
 Description:
@@ -728,7 +728,7 @@ Options:
   -?, -h, --help         Show help and usage information
 ```
 
-##### `ksail gen native service`
+## `ksail gen native service`
 
 ```sh
 Description:
@@ -743,7 +743,7 @@ Options:
   -?, -h, --help         Show help and usage information
 ```
 
-##### `ksail gen native cron-job`
+## `ksail gen native cron-job`
 
 ```sh
 Description:
@@ -758,7 +758,7 @@ Options:
   -?, -h, --help         Show help and usage information
 ```
 
-##### `ksail gen native daemon-set`
+## `ksail gen native daemon-set`
 
 ```sh
 Description:
@@ -773,7 +773,7 @@ Options:
   -?, -h, --help         Show help and usage information
 ```
 
-##### `ksail gen native deployment`
+## `ksail gen native deployment`
 
 ```sh
 Description:
@@ -788,7 +788,7 @@ Options:
   -?, -h, --help         Show help and usage information
 ```
 
-##### `ksail gen native job`
+## `ksail gen native job`
 
 ```sh
 Description:
@@ -803,7 +803,7 @@ Options:
   -?, -h, --help         Show help and usage information
 ```
 
-##### `ksail gen native stateful-set`
+## `ksail gen native stateful-set`
 
 ```sh
 Description:
@@ -818,7 +818,7 @@ Options:
   -?, -h, --help         Show help and usage information
 ```
 
-### `ksail secrets`
+## `ksail secrets`
 
 ```sh
 Description:
@@ -842,7 +842,7 @@ Commands:
   export <public-key>  Export a key to a file
 ```
 
-#### `ksail secrets encrypt`
+## `ksail secrets encrypt`
 
 ```sh
 Description:
@@ -862,7 +862,7 @@ Options:
   -?, -h, --help                     Show help and usage information
 ```
 
-#### `ksail secrets decrypt`
+## `ksail secrets decrypt`
 
 ```sh
 Description:
@@ -881,7 +881,7 @@ Options:
   -?, -h, --help                     Show help and usage information
 ```
 
-#### `ksail secrets edit`
+## `ksail secrets edit`
 
 ```sh
 Description:
@@ -899,7 +899,7 @@ Options:
   -?, -h, --help                     Show help and usage information
 ```
 
-#### `ksail secrets add`
+## `ksail secrets add`
 
 ```sh
 Description:
@@ -913,7 +913,7 @@ Options:
   -?, -h, --help                     Show help and usage information
 ```
 
-#### `ksail secrets rm`
+## `ksail secrets rm`
 
 ```sh
 Description:
@@ -930,7 +930,7 @@ Options:
   -?, -h, --help                     Show help and usage information
 ```
 
-#### `ksail secrets list`
+## `ksail secrets list`
 
 ```sh
 Description:
@@ -946,7 +946,7 @@ Options:
   -?, -h, --help                     Show help and usage information
 ```
 
-#### `ksail secrets import`
+## `ksail secrets import`
 
 ```sh
 Description:
@@ -963,7 +963,7 @@ Options:
   -?, -h, --help                     Show help and usage information
 ```
 
-#### `ksail secrets export`
+## `ksail secrets export`
 
 ```sh
 Description:
