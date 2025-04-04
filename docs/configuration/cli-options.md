@@ -14,7 +14,7 @@ KSail supports CLI options for configuring the behavior of KSail. These options 
 
 ## `ksail`
 
-```cmd
+```text
 Description:
   KSail is an SDK for Kubernetes. Ship k8s with ease!
 
@@ -41,7 +41,7 @@ Commands:
 
 ## `ksail up`
 
-```cmd
+```text
 Description:
   Create a cluster
 
@@ -69,7 +69,7 @@ Options:
 
 ## `ksail down`
 
-```cmd
+```text
 Description:
   Destroy a cluster
 
@@ -87,7 +87,7 @@ Options:
 
 ## `ksail update`
 
-```cmd
+```text
 Description:
   Update a cluster
 
@@ -105,7 +105,7 @@ Options:
 
 ## `ksail start`
 
-```cmd
+```text
 Description:
   Start a cluster
 
@@ -122,7 +122,7 @@ Options:
 
 ## `ksail stop`
 
-```cmd
+```text
 Description:
   Stop a cluster
 
@@ -138,7 +138,7 @@ Options:
 
 ## `ksail init`
 
-```cmd
+```text
 Description:
   Initialize a cluster
 
@@ -161,7 +161,7 @@ Options:
 
 ## `ksail lint`
 
-```cmd
+```text
 Description:
   Lint manifests for a cluster
 
@@ -175,7 +175,7 @@ Options:
 
 ## `ksail list`
 
-```cmd
+```text
 Description:
   List active clusters
 
@@ -191,7 +191,7 @@ Options:
 
 ## `ksail debug`
 
-```cmd
+```text
 Description:
   Debug a cluster (❤️ K9s)
 
@@ -207,7 +207,7 @@ Options:
 
 ## `ksail gen`
 
-```cmd
+```text
 Description:
   Generate a resource.
 
@@ -228,7 +228,7 @@ Commands:
 
 ## `ksail gen cert-manager`
 
-```cmd
+```text
 Description:
   Generate a CertManager resource.
 
@@ -246,7 +246,7 @@ Commands:
 
 ## `ksail gen cert-manager certificate`
 
-```cmd
+```text
 Description:
   Generate a 'cert-manager.io/v1/Certificate' resource.
 
@@ -261,7 +261,7 @@ Options:
 
 ## `ksail gen cert-manager cluster-issuer`
 
-```cmd
+```text
 Description:
   Generate a 'cert-manager.io/v1/ClusterIssuer' resource.
 
@@ -276,7 +276,7 @@ Options:
 
 ## `ksail gen config`
 
-```cmd
+```text
 Description:
   Generate a configuration file.
 
@@ -295,7 +295,7 @@ Commands:
 
 ## `ksail gen config k3d`
 
-```cmd
+```text
 Description:
   Generate a 'k3d.io/v1alpha5/Simple' resource.
 
@@ -310,7 +310,7 @@ Options:
 
 ## `ksail gen config ksail`
 
-```cmd
+```text
 Description:
   Generate a 'ksail.io/v1alpha1/Cluster' resource.
 
@@ -325,7 +325,7 @@ Options:
 
 ## `ksail gen config sops`
 
-```cmd
+```text
 Description:
   Generate a SOPS configuration file.
 
@@ -340,7 +340,7 @@ Options:
 
 ## `ksail gen flux`
 
-```cmd
+```text
 Description:
   Generate a Flux resource.
 
@@ -359,7 +359,7 @@ Commands:
 
 ## `ksail gen flux helm-release`
 
-```cmd
+```text
 Description:
   Generate a 'helm.toolkit.fluxcd.io/v2/HelmRelease' resource.
 
@@ -374,7 +374,7 @@ Options:
 
 ## `ksail gen flux helm-repository`
 
-```cmd
+```text
 Description:
   Generate a 'source.toolkit.fluxcd.io/v1/HelmRepository' resource.
 
@@ -389,7 +389,7 @@ Options:
 
 ## `ksail gen flux kustomization`
 
-```cmd
+```text
 Description:
   Generate a 'kustomize.toolkit.fluxcd.io/v1/Kustomization' resource.
 
@@ -404,7 +404,7 @@ Options:
 
 ## `ksail gen kustomize`
 
-```cmd
+```text
 Description:
   Generate a Kustomize resource.
 
@@ -422,7 +422,7 @@ Commands:
 
 ## `ksail gen kustomize component`
 
-```cmd
+```text
 Description:
   Generate a 'kustomize.config.k8s.io/v1alpha1/Component' resource.
 
@@ -437,7 +437,7 @@ Options:
 
 ## `ksail gen kustomize kustomization`
 
-```cmd
+```text
 Description:
   Generate a 'kustomize.config.k8s.io/v1beta1/Kustomization' resource.
 
@@ -452,7 +452,7 @@ Options:
 
 ## `ksail gen native`
 
-```cmd
+```text
 Description:
   Generate a native Kubernetes resource.
 
@@ -490,7 +490,7 @@ Commands:
 
 ## `ksail gen native cluster-role-binding`
 
-```cmd
+```text
 Description:
   Generate a 'rbac.authorization.k8s.io/v1/ClusterRoleBinding' resource.
 
@@ -505,7 +505,7 @@ Options:
 
 ## `ksail gen native cluster-role`
 
-```cmd
+```text
 Description:
   Generate a 'rbac.authorization.k8s.io/v1/ClusterRole' resource.
 
@@ -520,7 +520,7 @@ Options:
 
 ## `ksail gen native namespace`
 
-```cmd
+```text
 Description:
   Generate a 'core/v1/Namespace' resource.
 
@@ -535,7 +535,7 @@ Options:
 
 ## `ksail gen native network-policy`
 
-```cmd
+```text
 Description:
   Generate a 'networking.k8s.io/v1/NetworkPolicy' resource.
 
@@ -550,7 +550,7 @@ Options:
 
 ## `ksail gen native persistent-volume`
 
-```cmd
+```text
 Description:
   Generate a 'core/v1/PersistentVolume' resource.
 
@@ -565,7 +565,7 @@ Options:
 
 ## `ksail gen native resource-quota`
 
-```cmd
+```text
 Description:
   Generate a 'core/v1/ResourceQuota' resource.
 
@@ -580,7 +580,7 @@ Options:
 
 ## `ksail gen native role-binding`
 
-```cmd
+```text
 Description:
   Generate a 'rbac.authorization.k8s.io/v1/RoleBinding' resource.
 
@@ -595,7 +595,7 @@ Options:
 
 ## `ksail gen native role`
 
-```cmd
+```text
 Description:
   Generate a 'rbac.authorization.k8s.io/v1/Role' resource.
 
@@ -610,7 +610,7 @@ Options:
 
 ## `ksail gen native service-account`
 
-```cmd
+```text
 Description:
   Generate a 'core/v1/ServiceAccount' resource.
 
@@ -625,7 +625,7 @@ Options:
 
 ## `ksail gen native config-map`
 
-```cmd
+```text
 Description:
   Generate a 'core/v1/ConfigMap' resource.
 
@@ -640,7 +640,7 @@ Options:
 
 ## `ksail gen native persistent-volume-claim`
 
-```cmd
+```text
 Description:
   Generate a 'core/v1/PersistentVolumeClaim' resource.
 
@@ -655,7 +655,7 @@ Options:
 
 ## `ksail gen native secret`
 
-```cmd
+```text
 Description:
   Generate a 'core/v1/Secret' resource.
 
@@ -670,7 +670,7 @@ Options:
 
 ## `ksail gen native horizontal-pod-autoscaler`
 
-```cmd
+```text
 Description:
   Generate a 'autoscaling/v2/HorizontalPodAutoscaler' resource.
 
@@ -685,7 +685,7 @@ Options:
 
 ## `ksail gen native pod-disruption-budget`
 
-```cmd
+```text
 Description:
   Generate a 'policy/v1/PodDisruptionBudget' resource.
 
@@ -700,7 +700,7 @@ Options:
 
 ## `ksail gen native priority-class`
 
-```cmd
+```text
 Description:
   Generate a 'scheduling.k8s.io/v1/PriorityClass' resource.
 
@@ -715,7 +715,7 @@ Options:
 
 ## `ksail gen native ingress`
 
-```cmd
+```text
 Description:
   Generate a 'networking.k8s.io/v1/Ingress' resource.
 
@@ -730,7 +730,7 @@ Options:
 
 ## `ksail gen native service`
 
-```cmd
+```text
 Description:
   Generate a 'core/v1/Service' resource.
 
@@ -745,7 +745,7 @@ Options:
 
 ## `ksail gen native cron-job`
 
-```cmd
+```text
 Description:
   Generate a 'batch/v1/CronJob' resource.
 
@@ -760,7 +760,7 @@ Options:
 
 ## `ksail gen native daemon-set`
 
-```cmd
+```text
 Description:
   Generate a 'apps/v1/DaemonSet' resource.
 
@@ -775,7 +775,7 @@ Options:
 
 ## `ksail gen native deployment`
 
-```cmd
+```text
 Description:
   Generate a 'apps/v1/Deployment' resource.
 
@@ -790,7 +790,7 @@ Options:
 
 ## `ksail gen native job`
 
-```cmd
+```text
 Description:
   Generate a 'batch/v1/Job' resource.
 
@@ -805,7 +805,7 @@ Options:
 
 ## `ksail gen native stateful-set`
 
-```cmd
+```text
 Description:
   Generate a 'apps/v1/StatefulSet' resource.
 
@@ -820,7 +820,7 @@ Options:
 
 ## `ksail secrets`
 
-```cmd
+```text
 Description:
   Manage secrets
 
@@ -844,7 +844,7 @@ Commands:
 
 ## `ksail secrets encrypt`
 
-```cmd
+```text
 Description:
   Encrypt a file
 
@@ -864,7 +864,7 @@ Options:
 
 ## `ksail secrets decrypt`
 
-```cmd
+```text
 Description:
   Decrypt a file
 
@@ -883,7 +883,7 @@ Options:
 
 ## `ksail secrets edit`
 
-```cmd
+```text
 Description:
   Edit an encrypted file
 
@@ -901,7 +901,7 @@ Options:
 
 ## `ksail secrets add`
 
-```cmd
+```text
 Description:
   Add a new encryption key
 
@@ -915,7 +915,7 @@ Options:
 
 ## `ksail secrets rm`
 
-```cmd
+```text
 Description:
   Remove an existing encryption key
 
@@ -932,7 +932,7 @@ Options:
 
 ## `ksail secrets list`
 
-```cmd
+```text
 Description:
   List keys
 
@@ -948,7 +948,7 @@ Options:
 
 ## `ksail secrets import`
 
-```cmd
+```text
 Description:
   Import a key from stdin or a file
 
@@ -965,7 +965,7 @@ Options:
 
 ## `ksail secrets export`
 
-```cmd
+```text
 Description:
   Export a key to a file
 
