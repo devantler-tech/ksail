@@ -25,9 +25,9 @@ public class E2ETests : IAsyncLifetime
 
   [Theory]
   [InlineData(["init", "-d", "native"])]
-  [InlineData(["init", "--name", "ksail-advanced-native", "--distribution", "native", "--secret-manager", "sops", "--cni", "cilium"])]
+  [InlineData(["init", "--name", "ksail-advanced-native", "--distribution", "native", "--secret-manager", "--cni", "cilium"])]
   [InlineData(["init", "-d", "k3s"])]
-  [InlineData(["init", "--name", "ksail-advanced-k3s", "--distribution", "k3s", "--secret-manager", "sops", "--cni", "cilium"])]
+  [InlineData(["init", "--name", "ksail-advanced-k3s", "--distribution", "k3s", "--secret-manager", "--cni", "cilium"])]
   public async Task KSailUp_WithVariousConfigurations_Succeeds(params string[] initArgs)
   {
     // TODO: Add support for Windows and macOS in GitHub Runners when GitHub Actions runners support dind on Windows and macOS runners.
