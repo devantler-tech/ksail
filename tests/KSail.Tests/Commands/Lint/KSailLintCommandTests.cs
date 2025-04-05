@@ -9,38 +9,36 @@ namespace KSail.Tests.Commands.Lint;
 public class KSailLintCommandTests : IDisposable
 {
 
+  readonly TestConsole _console;
+  readonly KSailRootCommand _ksailCommand;
+
+  public KSailLintCommandTests()
+  {
+    _console = new TestConsole();
+    _ksailCommand = new KSailRootCommand(_console);
+  }
+
   [Fact]
   public async Task KSailLintHelp_SucceedsAndPrintsIntroductionAndHelp()
   {
-    //Arrange
-    var console = new TestConsole();
-    var ksailCommand = new KSailRootCommand(console);
-
     //Act
-    int exitCode = await ksailCommand.InvokeAsync(["lint", "--help"], console);
+    int exitCode = await _ksailCommand.InvokeAsync(["lint", "--help"], _console);
 
     //Assert
     Assert.Equal(0, exitCode);
-    _ = await Verify(console.Error.ToString() + console.Out);
+    _ = await Verify(_console.Error.ToString() + _console.Out);
   }
 
 
-  [Fact]
+  [SkippableFact]
   public async Task KSailLint_GivenValidPath_Succeeds()
   {
     // TODO: Add support for Windows at a later time.
-    if (OperatingSystem.IsWindows())
-    {
-      return;
-    }
-
-    //Arrange
-    var console = new TestConsole();
-    var ksailCommand = new KSailRootCommand(console);
+    Skip.If(OperatingSystem.IsWindows(), "Skipping test on Windows OS.");
 
     //Act
-    int initExitCode = await ksailCommand.InvokeAsync(["init", "--name", "test-cluster"], console);
-    int lintExitCode = await ksailCommand.InvokeAsync(["lint"], console);
+    int initExitCode = await _ksailCommand.InvokeAsync(["init", "--name", "test-cluster"], _console).ConfigureAwait(false);
+    int lintExitCode = await _ksailCommand.InvokeAsync(["lint"], _console).ConfigureAwait(false);
 
     //Assert
     Assert.Equal(0, initExitCode);
@@ -51,12 +49,8 @@ public class KSailLintCommandTests : IDisposable
   [Fact]
   public async Task KSailLint_GivenInvalidPathOrNoYaml_ThrowsKSailException()
   {
-    //Arrange
-    var console = new TestConsole();
-    var ksailCommand = new KSailRootCommand(console);
-
     //Act
-    int lintExitCode = await ksailCommand.InvokeAsync(["lint"], console);
+    int lintExitCode = await _ksailCommand.InvokeAsync(["lint"], _console);
 
     //Assert
     Assert.Equal(1, lintExitCode);
@@ -98,14 +92,12 @@ public class KSailLintCommandTests : IDisposable
         Directory.Delete("k8s", true);
       }
 
-      string[] filePaths =
-      [
+      foreach (string filePath in (string[])[
         "ksail.yaml",
         "kind.yaml",
         "k3d.yaml",
         ".sops.yaml"
-      ];
-      foreach (string filePath in filePaths)
+      ])
       {
         if (File.Exists(filePath))
         {

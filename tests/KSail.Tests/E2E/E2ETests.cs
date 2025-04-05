@@ -23,7 +23,7 @@ public class E2ETests : IAsyncLifetime
   public Task InitializeAsync() => Task.CompletedTask;
 
 
-  [Theory]
+  [SkippableTheory]
   [InlineData(["init", "-d", "native"])]
   [InlineData(["init", "--name", "ksail-advanced-native", "--distribution", "native", "--secret-manager", "--cni", "cilium"])]
   [InlineData(["init", "-d", "k3s"])]
@@ -31,10 +31,10 @@ public class E2ETests : IAsyncLifetime
   public async Task KSailUp_WithVariousConfigurations_Succeeds(params string[] initArgs)
   {
     // TODO: Add support for Windows and macOS in GitHub Runners when GitHub Actions runners support dind on Windows and macOS runners.
-    if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows) || (RuntimeInformation.IsOSPlatform(OSPlatform.OSX) && Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true"))
-    {
-      return;
-    }
+    Skip.If(
+      RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ||
+      (RuntimeInformation.IsOSPlatform(OSPlatform.OSX) && Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true"),
+      "Skipping test on Windows OS or macOS in GitHub Actions.");
 
     //Arrange
     var console = new TestConsole();
@@ -48,26 +48,26 @@ public class E2ETests : IAsyncLifetime
     var downCommand = new KSailDownCommand();
 
     //Act & Assert
-    int initExitCode = await initCommand.InvokeAsync(initArgs);
+    int initExitCode = await initCommand.InvokeAsync(initArgs).ConfigureAwait(false);
     Assert.Equal(0, initExitCode);
-    int upExitCode = await upCommand.InvokeAsync(["up"], console);
+    int upExitCode = await upCommand.InvokeAsync(["up"], console).ConfigureAwait(false);
     Assert.Equal(0, upExitCode);
-    int listExitCode = await listCommand.InvokeAsync(["list"], console);
+    int listExitCode = await listCommand.InvokeAsync(["list"], console).ConfigureAwait(false);
     Assert.Equal(0, listExitCode);
-    int stopExitCode = await stopCommand.InvokeAsync(["stop"], console);
+    int stopExitCode = await stopCommand.InvokeAsync(["stop"], console).ConfigureAwait(false);
     Assert.Equal(0, stopExitCode);
-    int startExitCode = await startCommand.InvokeAsync(["start"], console);
+    int startExitCode = await startCommand.InvokeAsync(["start"], console).ConfigureAwait(false);
     Assert.Equal(0, startExitCode);
-    int updateExitCode = await updateCommand.InvokeAsync(["update"], console);
+    int updateExitCode = await updateCommand.InvokeAsync(["update"], console).ConfigureAwait(false);
     Assert.Equal(0, updateExitCode);
     var debugTask = Task.Run(async () =>
     {
       _ = await debugCommand.InvokeAsync(["debug"], console).ConfigureAwait(false);
     });
-    await debugTask.WaitAsync(TimeSpan.FromSeconds(4));
+    await debugTask.WaitAsync(TimeSpan.FromSeconds(4)).ConfigureAwait(false);
     Assert.False(debugTask.IsFaulted);
     debugTask.Dispose();
-    int downExitCode = await downCommand.InvokeAsync(["down"], console);
+    int downExitCode = await downCommand.InvokeAsync(["down"], console).ConfigureAwait(false);
     Assert.Equal(0, downExitCode);
   }
 

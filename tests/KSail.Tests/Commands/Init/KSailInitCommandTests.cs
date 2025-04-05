@@ -31,18 +31,15 @@ public partial class KSailInitCommandTests : IAsyncLifetime
   }
 
 
-  [Theory]
+  [SkippableTheory]
   [InlineData("ksail-init-native-simple", new string[] { "init" })]
   [InlineData("ksail-init-native-advanced", new string[] { "init", "--name", "ksail-advanced-native", "--secret-manager", "--cni", "cilium" })]
   [InlineData("ksail-init-k3s-simple", new string[] { "init", "--distribution", "k3s" })]
   [InlineData("ksail-init-k3s-advanced", new string[] { "init", "--name", "ksail-advanced-k3s", "--distribution", "k3s", "--secret-manager", "--cni", "cilium" })]
   public async Task KSailInit_WithVariousOptions_SucceedsAndGeneratesKSailProject(string outputDirName, string[] args)
   {
-    // TODO: Add support for Windows at a later time.
-    if (OperatingSystem.IsWindows())
-    {
-      return;
-    }
+    //TODO: Add support for Windows at a later time.
+    Skip.If(OperatingSystem.IsWindows(), "Skipping test on Windows OS.");
 
     //Arrange
     string outputDir = Path.Combine(Path.GetTempPath(), outputDirName);
@@ -52,7 +49,7 @@ public partial class KSailInitCommandTests : IAsyncLifetime
 
     //Act
     Directory.SetCurrentDirectory(outputDir);
-    int exitCode = await ksailCommand.InvokeAsync(args);
+    int exitCode = await ksailCommand.InvokeAsync(args).ConfigureAwait(false);
 
     //Assert
     Assert.Equal(0, exitCode);
@@ -67,7 +64,7 @@ public partial class KSailInitCommandTests : IAsyncLifetime
       string relativefilePath = file.Replace(outputDir, "", StringComparison.OrdinalIgnoreCase).TrimStart(Path.DirectorySeparatorChar);
       relativefilePath = relativefilePath.Replace(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
       string? directoryPath = Path.GetDirectoryName(relativefilePath);
-      _ = await Verify(await File.ReadAllTextAsync(file), extension: "yaml")
+      _ = await Verify(await File.ReadAllTextAsync(file).ConfigureAwait(false), extension: "yaml")
           .UseDirectory(Path.Combine(outputDirName, directoryPath!))
           .UseFileName(fileName)
           .ScrubLinesWithReplace(line => UrlRegex().Replace(line, "url: <url>"));
