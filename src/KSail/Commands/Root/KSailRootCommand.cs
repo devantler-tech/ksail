@@ -40,14 +40,14 @@ sealed class KSailRootCommand : RootCommand
 
   void AddCommands(IConsole console)
   {
+    AddCommand(new KSailInitCommand());
     AddCommand(new KSailUpCommand());
-    AddCommand(new KSailDownCommand());
     AddCommand(new KSailUpdateCommand());
     AddCommand(new KSailStartCommand());
     AddCommand(new KSailStopCommand());
-    AddCommand(new KSailInitCommand());
-    AddCommand(new KSailValidateCommand());
+    AddCommand(new KSailDownCommand());
     AddCommand(new KSailListCommand());
+    AddCommand(new KSailValidateCommand());
     AddCommand(new KSailDebugCommand());
     AddCommand(new KSailGenCommand(console));
     AddCommand(new KSailSecretsCommand(console));

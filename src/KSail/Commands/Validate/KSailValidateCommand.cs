@@ -9,7 +9,7 @@ sealed class KSailValidateCommand : Command
 {
   readonly ExceptionHandler _exceptionHandler = new();
   internal KSailValidateCommand() : base(
-   "validate", "Validate project files and configuration"
+   "validate", "Validate project files"
   )
   {
     AddOption(CLIOptions.Project.KustomizationPathOption);
