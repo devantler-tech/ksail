@@ -82,7 +82,7 @@ spec:
     # The options for the SOPS secret manager.
     sops:
       # Public key used for encryption. [default: null]
-      publicKey:
+      publicKey: 
       # Use in-place decryption/encryption. [default: false]
       inPlace: false
       # Show all keys in the listed keys. [default: false]
@@ -103,66 +103,66 @@ spec:
     overwrite: false
   # The mirror registries to create for the KSail cluster. [default: registry.k8s.io-proxy, docker.io-proxy, ghcr.io-proxy, gcr.io-proxy, mcr.microsoft.com-proxy, quay.io-proxy]
   mirrorRegistries:
-    - # A proxy for the registry to use to proxy and cache images.
-      proxy:
-        # The URL of the upstream registry to proxy and cache images from. [default: https://registry-1.docker.io]
-        url: https://registry.k8s.io/
-      # The name of the registry. [default: ksail-registry]
-      name: registry.k8s.io-proxy
-      # The host port of the registry (if applicable). [default: 5555]
-      hostPort: 5556
-      # The registry provider. [default: Docker]
-      provider: Docker
-    - # A proxy for the registry to use to proxy and cache images.
-      proxy:
-        # The URL of the upstream registry to proxy and cache images from. [default: https://registry-1.docker.io]
-        url: https://registry-1.docker.io/
-      # The name of the registry. [default: ksail-registry]
-      name: docker.io-proxy
-      # The host port of the registry (if applicable). [default: 5555]
-      hostPort: 5557
-      # The registry provider. [default: Docker]
-      provider: Docker
-    - # A proxy for the registry to use to proxy and cache images.
-      proxy:
-        # The URL of the upstream registry to proxy and cache images from. [default: https://registry-1.docker.io]
-        url: https://ghcr.io/
-      # The name of the registry. [default: ksail-registry]
-      name: ghcr.io-proxy
-      # The host port of the registry (if applicable). [default: 5555]
-      hostPort: 5558
-      # The registry provider. [default: Docker]
-      provider: Docker
-    - # A proxy for the registry to use to proxy and cache images.
-      proxy:
-        # The URL of the upstream registry to proxy and cache images from. [default: https://registry-1.docker.io]
-        url: https://gcr.io/
-      # The name of the registry. [default: ksail-registry]
-      name: gcr.io-proxy
-      # The host port of the registry (if applicable). [default: 5555]
-      hostPort: 5559
-      # The registry provider. [default: Docker]
-      provider: Docker
-    - # A proxy for the registry to use to proxy and cache images.
-      proxy:
-        # The URL of the upstream registry to proxy and cache images from. [default: https://registry-1.docker.io]
-        url: https://mcr.microsoft.com/
-      # The name of the registry. [default: ksail-registry]
-      name: mcr.microsoft.com-proxy
-      # The host port of the registry (if applicable). [default: 5555]
-      hostPort: 5560
-      # The registry provider. [default: Docker]
-      provider: Docker
-    - # A proxy for the registry to use to proxy and cache images.
-      proxy:
-        # The URL of the upstream registry to proxy and cache images from. [default: https://registry-1.docker.io]
-        url: https://quay.io/
-      # The name of the registry. [default: ksail-registry]
-      name: quay.io-proxy
-      # The host port of the registry (if applicable). [default: 5555]
-      hostPort: 5561
-      # The registry provider. [default: Docker]
-      provider: Docker
+  - # A proxy for the registry to use to proxy and cache images.
+    proxy:
+      # The URL of the upstream registry to proxy and cache images from. [default: https://registry-1.docker.io]
+      url: https://registry.k8s.io/
+    # The name of the registry. [default: ksail-registry]
+    name: registry.k8s.io-proxy
+    # The host port of the registry (if applicable). [default: 5555]
+    hostPort: 5556
+    # The registry provider. [default: Docker]
+    provider: Docker
+  - # A proxy for the registry to use to proxy and cache images.
+    proxy:
+      # The URL of the upstream registry to proxy and cache images from. [default: https://registry-1.docker.io]
+      url: https://registry-1.docker.io/
+    # The name of the registry. [default: ksail-registry]
+    name: docker.io-proxy
+    # The host port of the registry (if applicable). [default: 5555]
+    hostPort: 5557
+    # The registry provider. [default: Docker]
+    provider: Docker
+  - # A proxy for the registry to use to proxy and cache images.
+    proxy:
+      # The URL of the upstream registry to proxy and cache images from. [default: https://registry-1.docker.io]
+      url: https://ghcr.io/
+    # The name of the registry. [default: ksail-registry]
+    name: ghcr.io-proxy
+    # The host port of the registry (if applicable). [default: 5555]
+    hostPort: 5558
+    # The registry provider. [default: Docker]
+    provider: Docker
+  - # A proxy for the registry to use to proxy and cache images.
+    proxy:
+      # The URL of the upstream registry to proxy and cache images from. [default: https://registry-1.docker.io]
+      url: https://gcr.io/
+    # The name of the registry. [default: ksail-registry]
+    name: gcr.io-proxy
+    # The host port of the registry (if applicable). [default: 5555]
+    hostPort: 5559
+    # The registry provider. [default: Docker]
+    provider: Docker
+  - # A proxy for the registry to use to proxy and cache images.
+    proxy:
+      # The URL of the upstream registry to proxy and cache images from. [default: https://registry-1.docker.io]
+      url: https://mcr.microsoft.com/
+    # The name of the registry. [default: ksail-registry]
+    name: mcr.microsoft.com-proxy
+    # The host port of the registry (if applicable). [default: 5555]
+    hostPort: 5560
+    # The registry provider. [default: Docker]
+    provider: Docker
+  - # A proxy for the registry to use to proxy and cache images.
+    proxy:
+      # The URL of the upstream registry to proxy and cache images from. [default: https://registry-1.docker.io]
+      url: https://quay.io/
+    # The name of the registry. [default: ksail-registry]
+    name: quay.io-proxy
+    # The host port of the registry (if applicable). [default: 5555]
+    hostPort: 5561
+    # The registry provider. [default: Docker]
+    provider: Docker
   # Options for validating the KSail cluster.
   validation:
     # Lint the manifests before applying them to a new cluster. [default: true]
