@@ -13,6 +13,10 @@ KSail is an SDK for Kubernetes allowing you to easily create, manage, and disman
 
 ![KSail Architecture](../images/architecture.drawio.png)
 
+## Target Audience
+
+KSail is designed for Platform Engineers, DevOps Engineers, and Developers who work with Kubernetes, but it is also suitable for anyone interested in learning about Kubernetes and prefers a hands-on approach to learning. It is particularly useful for those who want to simplify the process of creating and managing Kubernetes clusters, as well as those who want to improve their development experience when working with Kubernetes.
+
 ## Key Features
 
 - **Initialize projects:** Initialize new kubernetes projects with a single command.
