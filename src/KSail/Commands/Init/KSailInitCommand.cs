@@ -9,7 +9,7 @@ sealed class KSailInitCommand : Command
 {
   readonly ExceptionHandler _exceptionHandler = new();
 
-  public KSailInitCommand() : base("init", "Initialize a cluster")
+  public KSailInitCommand() : base("init", "Initialize a new project")
   {
     AddOptions();
 
@@ -19,7 +19,7 @@ sealed class KSailInitCommand : Command
       {
         var config = await KSailClusterConfigLoader.LoadWithoptionsAsync(context).ConfigureAwait(false);
         var handler = new KSailInitCommandHandler(config);
-        Console.WriteLine($"📁 Initializing new cluster '{config.Metadata.Name}'");
+        Console.WriteLine($"📁 Initializing new project '{config.Metadata.Name}'");
         context.ExitCode = await handler.HandleAsync(context.GetCancellationToken()).ConfigureAwait(false);
         Console.WriteLine();
       }
