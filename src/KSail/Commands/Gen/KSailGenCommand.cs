@@ -13,7 +13,7 @@ namespace KSail.Commands.Gen;
 sealed class KSailGenCommand : Command
 {
   readonly GeneratorOverwriteOption _generatorOverwriteOption = new(new KSailCluster());
-  internal KSailGenCommand(IConsole? console = default) : base("gen", "Generate a resource.")
+  internal KSailGenCommand(IConsole? console = default) : base("gen", "Generate a resource")
   {
     AddGlobalOption(_generatorOverwriteOption);
     AddCommands(console);

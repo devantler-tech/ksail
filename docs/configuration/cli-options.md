@@ -35,7 +35,7 @@ Commands:
   list      List active clusters
   validate  Validate project files
   debug     Debug a cluster (❤️ K9s)
-  gen       Generate a resource.
+  gen       Generate a resource
   secrets   Manage secrets
 ```
 
@@ -184,7 +184,7 @@ Commands:
   list      List active clusters
   validate  Validate project files
   debug     Debug a cluster (❤️ K9s)
-  gen       Generate a resource.
+  gen       Generate a resource
   secrets   Manage secrets
 ```
 
@@ -224,7 +224,7 @@ Options:
 
 ```text
 Description:
-  Generate a resource.
+  Generate a resource
 
 Usage:
   ksail gen [command] [options]
