@@ -26,17 +26,17 @@ Options:
   -?, -h, --help  Show help and usage information
 
 Commands:
-  up       Create a cluster
-  down     Destroy a cluster
-  update   Update a cluster
-  start    Start a cluster
-  stop     Stop a cluster
-  init     Initialize a cluster
-  lint     Lint manifests for a cluster
-  list     List active clusters
-  debug    Debug a cluster (❤️ K9s)
-  gen      Generate a resource.
-  secrets  Manage secrets
+  init      Initialize a new project
+  up        Create a cluster
+  update    Update a cluster
+  start     Start a cluster
+  stop      Stop a cluster
+  down      Destroy a cluster
+  list      List active clusters
+  validate  Validate project files
+  debug     Debug a cluster (❤️ K9s)
+  gen       Generate a resource
+  secrets   Manage secrets
 ```
 
 ## `ksail up`
@@ -62,7 +62,7 @@ Options:
   -kp, --kustomization-path <kustomization-path>    The path to the root kustomization directory. [default: k8s]
   -mr, --mirror-registries                          Enable mirror registries for the project. [default: True]
   -sm, --secret-manager                             Whether to use a secret manager. [default: False]
-  -l, --lint                                        Lit manifests. [default: True'
+  -v, --validate                                    Validate project files before creating a new cluster. [default: True]
   -r, --reconcile                                   Reconcile manifests. [default: True]
   -?, -h, --help                                    Show help and usage information
 ```
@@ -98,7 +98,7 @@ Options:
   -c, --context <context>                         The kubernetes context to use. [default: kind-ksail-default]
   -k, --kubeconfig <kubeconfig>                   Path to kubeconfig file. [default: /Users/nikolaiemildamm/.kube/config]
   -kp, --kustomization-path <kustomization-path>  The path to the root kustomization directory. [default: k8s]
-  -l, --lint                                      Lit manifests. [default: True]
+  -v, --validate                                  Validate project files before applying changes to an existing cluster. [default: True]
   -r, --reconcile                                 Reconcile manifests. [default: True]
   -?, -h, --help                                  Show help and usage information
 ```
@@ -140,7 +140,7 @@ Options:
 
 ```text
 Description:
-  Initialize a cluster
+  Initialize a new project
 
 Usage:
   ksail init [options]
@@ -162,15 +162,30 @@ Options:
 ## `ksail lint`
 
 ```text
+'lint' was not matched. Did you mean one of the following?
+list
 Description:
-  Lint manifests for a cluster
+  KSail is an SDK for Kubernetes. Ship k8s with ease!
 
 Usage:
-  ksail lint [options]
+  ksail [command] [options]
 
 Options:
-  -kp, --kustomization-path <kustomization-path>  The path to the root kustomization directory. [default: k8s]
-  -?, -h, --help                                  Show help and usage information
+  --version       Show version information
+  -?, -h, --help  Show help and usage information
+
+Commands:
+  init      Initialize a new project
+  up        Create a cluster
+  update    Update a cluster
+  start     Start a cluster
+  stop      Stop a cluster
+  down      Destroy a cluster
+  list      List active clusters
+  validate  Validate project files
+  debug     Debug a cluster (❤️ K9s)
+  gen       Generate a resource
+  secrets   Manage secrets
 ```
 
 ## `ksail list`
@@ -209,7 +224,7 @@ Options:
 
 ```text
 Description:
-  Generate a resource.
+  Generate a resource
 
 Usage:
   ksail gen [command] [options]

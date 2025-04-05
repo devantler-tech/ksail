@@ -99,9 +99,9 @@
       }
     ],
     Validation: {
-      LintOnUp: true,
+      ValidateOnUp: true,
       ReconcileOnUp: true,
-      LintOnUpdate: true,
+      ValidateOnUpdate: true,
       ReconcileOnUpdate: true
     }
   }

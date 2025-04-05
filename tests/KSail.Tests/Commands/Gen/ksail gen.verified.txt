@@ -1,5 +1,5 @@
 ﻿Description:
-  Generate a resource.
+  Generate a resource
 
 Usage:
   testhost gen [command] [options]

@@ -6,7 +6,7 @@ using KSail.Models.Project.Enums;
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
 
-namespace KSail.Commands.Lint;
+namespace KSail.Commands.Validate;
 
 class ConfigurationValidator(KSailCluster config)
 {

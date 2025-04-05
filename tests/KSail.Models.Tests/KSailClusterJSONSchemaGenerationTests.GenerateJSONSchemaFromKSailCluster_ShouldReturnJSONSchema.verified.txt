@@ -245,16 +245,16 @@
           "description": "Options for validating the KSail cluster.",
           "type": "object",
           "properties": {
-            "lintOnUp": {
-              "description": "Lint the manifests before applying them to a new cluster. [default: true]",
+            "validateOnUp": {
+              "description": "Validate the project files and configuration before creating a new cluster. [default: true]",
               "type": "boolean"
             },
             "reconcileOnUp": {
               "description": "Wait for reconciliation to succeed on a new cluster. [default: true]",
               "type": "boolean"
             },
-            "lintOnUpdate": {
-              "description": "Lint the manifests before applying them to an existing cluster. [default: true]",
+            "validateOnUpdate": {
+              "description": "Validate the project files and configuration before applying changes to an existing cluster. [default: true]",
               "type": "boolean"
             },
             "reconcileOnUpdate": {

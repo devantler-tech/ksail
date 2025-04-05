@@ -73,8 +73,8 @@ static class KSailClusterConfigLoader
     config.UpdateConfig(c => c.Spec.SecretManager.SOPS.ShowPrivateKeysInListings, context.ParseResult.GetValueForOption(CLIOptions.SecretManager.SOPS.ShowPrivateKeysInListingsOption));
 
     // Validation
-    config.UpdateConfig(c => c.Spec.Validation.LintOnUp, context.ParseResult.GetValueForOption(CLIOptions.Validation.LintOnUpOption));
-    config.UpdateConfig(c => c.Spec.Validation.LintOnUpdate, context.ParseResult.GetValueForOption(CLIOptions.Validation.LintOnUpdateOption));
+    config.UpdateConfig(c => c.Spec.Validation.ValidateOnUp, context.ParseResult.GetValueForOption(CLIOptions.Validation.ValidateOnUpOption));
+    config.UpdateConfig(c => c.Spec.Validation.ValidateOnUpdate, context.ParseResult.GetValueForOption(CLIOptions.Validation.ValidateOnUpdateOption));
     config.UpdateConfig(c => c.Spec.Validation.ReconcileOnUp, context.ParseResult.GetValueForOption(CLIOptions.Validation.ReconcileOnUpOption));
     config.UpdateConfig(c => c.Spec.Validation.ReconcileOnUpdate, context.ParseResult.GetValueForOption(CLIOptions.Validation.ReconcileOnUpdateOption));
 

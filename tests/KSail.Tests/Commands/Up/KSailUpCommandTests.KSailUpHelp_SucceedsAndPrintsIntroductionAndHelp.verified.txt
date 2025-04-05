@@ -18,7 +18,7 @@ Options:
   -kp, --kustomization-path <kustomization-path>    The path to the root kustomization directory. [default: k8s]
   -mr, --mirror-registries                          Enable mirror registries for the project. [default: True]
   -sm, --secret-manager                             Whether to use a secret manager. [default: False]
-  -l, --lint                                        Lit manifests. [default: True'
+  -v, --validate                                    Validate project files before creating a new cluster. [default: True]
   -r, --reconcile                                   Reconcile manifests. [default: True]
   -?, -h, --help                                    Show help and usage information
 

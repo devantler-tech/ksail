@@ -1,8 +1,8 @@
 ﻿Description:
-  Lint manifests for a cluster
+  Validate project files
 
 Usage:
-  testhost lint [options]
+  testhost validate [options]
 
 Options:
   -kp, --kustomization-path <kustomization-path>  The path to the root kustomization directory. [default: k8s]

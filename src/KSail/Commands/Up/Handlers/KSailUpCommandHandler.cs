@@ -11,7 +11,7 @@ using Devantler.SecretManager.SOPS.LocalAge;
 using Docker.DotNet.Models;
 using k8s;
 using k8s.Models;
-using KSail.Commands.Lint.Handlers;
+using KSail.Commands.Validate.Handlers;
 using KSail.Models;
 using KSail.Models.MirrorRegistry;
 using KSail.Models.Project.Enums;
@@ -27,11 +27,11 @@ class KSailUpCommandHandler
   readonly IKubernetesClusterProvisioner _clusterProvisioner;
   readonly CiliumProvisioner? _cniProvisioner;
   readonly KSailCluster _config;
-  readonly KSailLintCommandHandler _ksailLintCommandHandler;
+  readonly KSailValidateCommandHandler _ksailValidateCommandHandler;
 
   internal KSailUpCommandHandler(KSailCluster config)
   {
-    _ksailLintCommandHandler = new KSailLintCommandHandler(config);
+    _ksailValidateCommandHandler = new KSailValidateCommandHandler(config);
     _containerEngineProvisioner = config.Spec.Project.Provider switch
     {
       KSailProviderType.Docker => new DockerProvisioner(),
@@ -61,7 +61,7 @@ class KSailUpCommandHandler
   {
     await CheckPrerequisites(cancellationToken).ConfigureAwait(false);
 
-    if (!await Lint(_config, cancellationToken).ConfigureAwait(false))
+    if (!await Validate(_config, cancellationToken).ConfigureAwait(false))
     {
       return 1;
     }
@@ -159,12 +159,12 @@ class KSailUpCommandHandler
     Console.WriteLine();
   }
 
-  async Task<bool> Lint(KSailCluster config, CancellationToken cancellationToken = default)
+  async Task<bool> Validate(KSailCluster config, CancellationToken cancellationToken = default)
   {
-    if (config.Spec.Validation.LintOnUp)
+    if (config.Spec.Validation.ValidateOnUp)
     {
-      Console.WriteLine("🔍 Linting manifests");
-      bool success = await _ksailLintCommandHandler.HandleAsync(cancellationToken).ConfigureAwait(false);
+      Console.WriteLine("🔍 Validating project files and configuration");
+      bool success = await _ksailValidateCommandHandler.HandleAsync(cancellationToken).ConfigureAwait(false);
       Console.WriteLine();
       return success;
     }
