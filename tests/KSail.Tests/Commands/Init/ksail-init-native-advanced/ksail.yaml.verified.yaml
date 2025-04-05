@@ -12,8 +12,8 @@ spec:
     context: kind-ksail-advanced-native
   # The options for the KSail project.
   project:
-    # The secret manager to use. [default: None]
-    secretManager: SOPS
+    # Whether to use a secret manager. [default: false]
+    secretManager: true
     # The CNI to use. [default: Default]
     cni: Cilium
   # The options for the deployment tool.

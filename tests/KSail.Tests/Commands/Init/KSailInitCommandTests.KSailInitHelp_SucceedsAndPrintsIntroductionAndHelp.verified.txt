@@ -14,7 +14,7 @@ Options:
   -p, --provider <Docker>                           The provider to use for provisioning the cluster. [default: Docker]
   -kp, --kustomization-path <kustomization-path>    The path to the root kustomization directory. [default: k8s]
   -mr, --mirror-registries                          Enable mirror registries for the project. [default: True]
-  -sm, --secret-manager <None|SOPS>                 Configure which secret manager to use. [default: None]
+  -sm, --secret-manager                             Whether to use a secret manager. [default: False]
   -?, -h, --help                                    Show help and usage information
 
 

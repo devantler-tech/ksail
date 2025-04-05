@@ -39,19 +39,8 @@ sealed class KSailSecretsExportCommand : Command
         string outputPath = context.ParseResult.GetValueForOption(_outputFilePathOption) ?? throw new KSailException("output path is required");
 
         var cancellationToken = context.GetCancellationToken();
-        KSailSecretsExportCommandHandler handler;
-        switch (config.Spec.Project.SecretManager)
-        {
-          default:
-          case KSailSecretManagerType.None:
-            _ = _exceptionHandler.HandleException(new KSailException("no secret manager configured"));
-            context.ExitCode = 1;
-            return;
-          case KSailSecretManagerType.SOPS:
-            handler = new KSailSecretsExportCommandHandler(config, publicKey, outputPath, new SOPSLocalAgeSecretManager());
-            break;
-        }
-        context.ExitCode = await handler.HandleAsync(context.GetCancellationToken()).ConfigureAwait(false);
+        var handler = new KSailSecretsExportCommandHandler(config, publicKey, outputPath, new SOPSLocalAgeSecretManager());
+        context.ExitCode = await handler.HandleAsync(cancellationToken).ConfigureAwait(false);
       }
       catch (Exception ex)
       {

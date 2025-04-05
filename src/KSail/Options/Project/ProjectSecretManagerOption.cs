@@ -5,9 +5,9 @@ using KSail.Models.Project.Enums;
 namespace KSail.Options.Project;
 
 
-class ProjectSecretManagerOption(KSailCluster config) : Option<KSailSecretManagerType>(
+class ProjectSecretManagerOption(KSailCluster config) : Option<bool>(
   ["-sm", "--secret-manager"],
-  $"Configure which secret manager to use. [default: {config.Spec.Project.SecretManager}]"
+  $"Whether to use a secret manager. [default: {config.Spec.Project.SecretManager}]"
 )
 {
 }

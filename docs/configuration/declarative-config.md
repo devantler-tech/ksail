@@ -53,8 +53,8 @@ spec:
     distribution: Native
     # The Deployment tool to use. [default: Flux]
     deploymentTool: Flux
-    # The secret manager to use. [default: None]
-    secretManager: None
+    # Whether to use a secret manager. [default: false]
+    secretManager: false
     # The CNI to use. [default: Default]
     cni: Default
     # The editor to use for viewing files while debugging. [default: Nano]

@@ -326,7 +326,7 @@ class KSailUpCommandHandler
   async Task BootstrapSecretManager(KSailCluster config, CancellationToken cancellationToken)
   {
     using var resourceProvisioner = new KubernetesResourceProvisioner(config.Spec.Connection.Kubeconfig, config.Spec.Connection.Context);
-    if (config.Spec.Project.SecretManager == KSailSecretManagerType.SOPS)
+    if (config.Spec.Project.SecretManager)
     {
       Console.WriteLine("🔼 Bootstrapping SOPS secret manager");
       Console.WriteLine($"► creating 'flux-system' namespace");

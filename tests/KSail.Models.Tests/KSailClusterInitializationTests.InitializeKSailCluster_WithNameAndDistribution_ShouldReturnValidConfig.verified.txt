@@ -15,7 +15,7 @@
       DistributionConfigPath: k3d.yaml,
       Distribution: K3s,
       DeploymentTool: Flux,
-      SecretManager: None,
+      SecretManager: false,
       CNI: Default,
       Editor: Nano,
       Provider: Docker,
