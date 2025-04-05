@@ -37,7 +37,11 @@ Getting started with KSail is straightforward. Begin by initializing a new KSail
 > ksail init
 
 # for custom setup
-> ksail init --distribution <Native|K3s> --deployment-tool <Flux> --secret-manager <true|false> --cni <Default|Cilium>
+> ksail init --provider <Docker> \
+    --distribution <Native|K3s> \
+    --deployment-tool <Flux> \
+    --cni <Default|Cilium> \
+    --secret-manager <true|false>
 ```
 
 This creates the necessary configuration files, depending on your choices:
