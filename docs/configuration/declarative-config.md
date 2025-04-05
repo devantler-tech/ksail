@@ -165,12 +165,12 @@ spec:
     provider: Docker
   # Options for validating the KSail cluster.
   validation:
-    # Lint the manifests before applying them to a new cluster. [default: true]
-    lintOnUp: true
+    # Validate the project files and configuration before creating a new cluster. [default: true]
+    validateOnUp: true
     # Wait for reconciliation to succeed on a new cluster. [default: true]
     reconcileOnUp: true
-    # Lint the manifests before applying them to an existing cluster. [default: true]
-    lintOnUpdate: true
+    # Validate the project files and configuration before applying changes to an existing cluster. [default: true]
+    validateOnUpdate: true
     # Wait for reconciliation to succeed on an existing cluster. [default: true]
     reconcileOnUpdate: true
 ```

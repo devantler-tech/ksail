@@ -1,5 +1,5 @@
 using Devantler.KubernetesProvisioner.GitOps.Flux;
-using KSail.Commands.Lint.Handlers;
+using KSail.Commands.Validate.Handlers;
 using KSail.Models;
 using KSail.Models.Project.Enums;
 
@@ -9,10 +9,10 @@ class KSailUpdateCommandHandler
 {
   readonly FluxProvisioner _deploymentTool;
   readonly KSailCluster _config;
-  readonly KSailLintCommandHandler _ksailLintCommandHandler;
+  readonly KSailValidateCommandHandler _ksailValidateCommandHandler;
   internal KSailUpdateCommandHandler(KSailCluster config)
   {
-    _ksailLintCommandHandler = new KSailLintCommandHandler(config);
+    _ksailValidateCommandHandler = new KSailValidateCommandHandler(config);
     _deploymentTool = config.Spec.Project.DeploymentTool switch
     {
       KSailDeploymentToolType.Flux => new FluxProvisioner(config.Spec.Connection.Kubeconfig, config.Spec.Connection.Context),
@@ -23,7 +23,7 @@ class KSailUpdateCommandHandler
 
   internal async Task<bool> HandleAsync(CancellationToken cancellationToken = default)
   {
-    if (!await Lint(_config, cancellationToken).ConfigureAwait(false))
+    if (!await Validate(_config, cancellationToken).ConfigureAwait(false))
     {
       return false;
     }
@@ -61,12 +61,12 @@ class KSailUpdateCommandHandler
     return true;
   }
 
-  async Task<bool> Lint(KSailCluster config, CancellationToken cancellationToken = default)
+  async Task<bool> Validate(KSailCluster config, CancellationToken cancellationToken = default)
   {
-    if (config.Spec.Validation.LintOnUpdate)
+    if (config.Spec.Validation.ValidateOnUpdate)
     {
-      Console.WriteLine("🔍 Linting manifests");
-      bool success = await _ksailLintCommandHandler.HandleAsync(cancellationToken).ConfigureAwait(false);
+      Console.WriteLine("🔍 Validating project files and configuration");
+      bool success = await _ksailValidateCommandHandler.HandleAsync(cancellationToken).ConfigureAwait(false);
       Console.WriteLine();
       return success;
     }

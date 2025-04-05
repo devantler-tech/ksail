@@ -45,7 +45,7 @@ sealed class KSailUpCommand : Command
     AddOption(CLIOptions.Project.KustomizationPathOption);
     AddOption(CLIOptions.Project.MirrorRegistriesOption);
     AddOption(CLIOptions.Project.SecretManagerOption);
-    AddOption(CLIOptions.Validation.LintOnUpOption);
+    AddOption(CLIOptions.Validation.ValidateOnUpOption);
     AddOption(CLIOptions.Validation.ReconcileOnUpOption);
   }
 }

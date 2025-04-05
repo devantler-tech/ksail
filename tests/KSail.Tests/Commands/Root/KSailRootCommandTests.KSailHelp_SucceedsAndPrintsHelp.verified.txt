@@ -9,15 +9,15 @@ Options:
   -?, -h, --help  Show help and usage information
 
 Commands:
-  up       Create a cluster
-  down     Destroy a cluster
-  update   Update a cluster
-  start    Start a cluster
-  stop     Stop a cluster
-  init     Initialize a cluster
-  lint     Lint manifests for a cluster
-  list     List active clusters
-  debug    Debug a cluster (❤️ K9s)
-  gen      Generate a resource.
-  secrets  Manage secrets
+  up        Create a cluster
+  down      Destroy a cluster
+  update    Update a cluster
+  start     Start a cluster
+  stop      Stop a cluster
+  init      Initialize a new project
+  validate  Validate project files and configuration
+  list      List active clusters
+  debug     Debug a cluster (❤️ K9s)
+  gen       Generate a resource.
+  secrets   Manage secrets
 

@@ -1,5 +1,5 @@
 ﻿Description:
-  Initialize a cluster
+  Initialize a new project
 
 Usage:
   testhost init [options]
