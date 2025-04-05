@@ -21,20 +21,8 @@ sealed class KSailSecretsRemoveCommand : Command
         var config = await KSailClusterConfigLoader.LoadWithoptionsAsync(context).ConfigureAwait(false);
         string publicKey = context.ParseResult.GetValueForArgument(_publicKeyArgument);
         var cancellationToken = context.GetCancellationToken();
-        KSailSecretsRemoveCommandHandler handler;
-        switch (config.Spec.Project.SecretManager)
-        {
-          default:
-          case KSailSecretManagerType.None:
-            _ = _exceptionHandler.HandleException(new KSailException("no secret manager configured"));
-            context.ExitCode = 1;
-            return;
-          case KSailSecretManagerType.SOPS:
-            handler = new KSailSecretsRemoveCommandHandler(config, publicKey, new SOPSLocalAgeSecretManager());
-            break;
-        }
-
-        context.ExitCode = await handler.HandleAsync(context.GetCancellationToken()).ConfigureAwait(false);
+        var handler = new KSailSecretsRemoveCommandHandler(config, publicKey, new SOPSLocalAgeSecretManager());
+        context.ExitCode = await handler.HandleAsync(cancellationToken).ConfigureAwait(false);
       }
       catch (Exception ex)
       {

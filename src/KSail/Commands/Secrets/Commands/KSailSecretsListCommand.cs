@@ -21,19 +21,8 @@ sealed class KSailSecretsListCommand : Command
         var config = await KSailClusterConfigLoader.LoadWithoptionsAsync(context).ConfigureAwait(false);
 
         var cancellationToken = context.GetCancellationToken();
-        KSailSecretsListCommandHandler handler;
-        switch (config.Spec.Project.SecretManager)
-        {
-          default:
-          case KSailSecretManagerType.None:
-            _ = _exceptionHandler.HandleException(new KSailException("no secret manager configured"));
-            context.ExitCode = 1;
-            return;
-          case KSailSecretManagerType.SOPS:
-            handler = new KSailSecretsListCommandHandler(config, new SOPSLocalAgeSecretManager());
-            break;
-        }
-        context.ExitCode = await handler.HandleAsync(context.GetCancellationToken()).ConfigureAwait(false) ? 0 : 1;
+        var handler = new KSailSecretsListCommandHandler(config, new SOPSLocalAgeSecretManager());
+        context.ExitCode = await handler.HandleAsync(cancellationToken).ConfigureAwait(false) ? 0 : 1;
       }
       catch (Exception ex)
       {

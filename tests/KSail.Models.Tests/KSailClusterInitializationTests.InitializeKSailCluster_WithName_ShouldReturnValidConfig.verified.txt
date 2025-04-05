@@ -15,7 +15,7 @@
       DistributionConfigPath: kind.yaml,
       Distribution: Native,
       DeploymentTool: Flux,
-      SecretManager: None,
+      SecretManager: false,
       CNI: Default,
       Editor: Nano,
       Provider: Docker,

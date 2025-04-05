@@ -21,19 +21,8 @@ sealed class KSailSecretsImportCommand : Command
         string key = context.ParseResult.GetValueForArgument(_keyArgument);
 
         var cancellationToken = context.GetCancellationToken();
-        KSailSecretsImportCommandHandler handler;
-        switch (config.Spec.Project.SecretManager)
-        {
-          default:
-          case KSailSecretManagerType.None:
-            _ = _exceptionHandler.HandleException(new KSailException("no secret manager configured"));
-            context.ExitCode = 1;
-            return;
-          case KSailSecretManagerType.SOPS:
-            handler = new KSailSecretsImportCommandHandler(config, key, new SOPSLocalAgeSecretManager());
-            break;
-        }
-        context.ExitCode = await handler.HandleAsync(context.GetCancellationToken()).ConfigureAwait(false);
+        var handler = new KSailSecretsImportCommandHandler(config, key, new SOPSLocalAgeSecretManager());
+        context.ExitCode = await handler.HandleAsync(cancellationToken).ConfigureAwait(false);
       }
       catch (Exception ex)
       {

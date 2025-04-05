@@ -25,7 +25,7 @@ class KSailInitCommandHandler(KSailCluster config)
       cancellationToken
     ).ConfigureAwait(false);
 
-    if (_config.Spec.Project.SecretManager == KSailSecretManagerType.SOPS)
+    if (_config.Spec.Project.SecretManager)
     {
       await _sopsConfigFileGenerator.GenerateAsync(
         _config,

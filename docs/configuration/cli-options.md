@@ -61,7 +61,7 @@ Options:
   -p, --provider <Docker>                           The provider to use for provisioning the cluster. [default: Docker]
   -kp, --kustomization-path <kustomization-path>    The path to the root kustomization directory. [default: k8s]
   -mr, --mirror-registries                          Enable mirror registries for the project. [default: True]
-  -sm, --secret-manager <None|SOPS>                 Configure which secret manager to use. [default: None]
+  -sm, --secret-manager                             Whether to use a secret manager. [default: False]
   -l, --lint                                        Lit manifests. [default: True'
   -r, --reconcile                                   Reconcile manifests. [default: True]
   -?, -h, --help                                    Show help and usage information
@@ -155,7 +155,7 @@ Options:
   -p, --provider <Docker>                           The provider to use for provisioning the cluster. [default: Docker]
   -kp, --kustomization-path <kustomization-path>    The path to the root kustomization directory. [default: k8s]
   -mr, --mirror-registries                          Enable mirror registries for the project. [default: True]
-  -sm, --secret-manager <None|SOPS>                 Configure which secret manager to use. [default: None]
+  -sm, --secret-manager                             Whether to use a secret manager. [default: False]
   -?, -h, --help                                    Show help and usage information
 ```
 
@@ -828,8 +828,8 @@ Usage:
   ksail secrets [command] [options]
 
 Options:
-  -sm, --secret-manager <None|SOPS>  Configure which secret manager to use. [default: None]
-  -?, -h, --help                     Show help and usage information
+  -sm, --secret-manager  Whether to use a secret manager. [default: False]
+  -?, -h, --help         Show help and usage information
 
 Commands:
   encrypt <path>       Encrypt a file
@@ -855,11 +855,11 @@ Arguments:
   <path>  The path to the file to encrypt.
 
 Options:
-  -pk, --public-key <public-key>     The public key.
-  -ip, --in-place                    In-place decryption/encryption. [default: False]
-  -o, --output <output>              A file or directory path. []
-  -sm, --secret-manager <None|SOPS>  Configure which secret manager to use. [default: None]
-  -?, -h, --help                     Show help and usage information
+  -pk, --public-key <public-key>  The public key.
+  -ip, --in-place                 In-place decryption/encryption. [default: False]
+  -o, --output <output>           A file or directory path. []
+  -sm, --secret-manager           Whether to use a secret manager. [default: False]
+  -?, -h, --help                  Show help and usage information
 ```
 
 ## `ksail secrets decrypt`
@@ -875,10 +875,10 @@ Arguments:
   <path>  The path to the file to decrypt.
 
 Options:
-  -ip, --in-place                    In-place decryption/encryption. [default: False]
-  -o, --output <output>              A file or directory path. []
-  -sm, --secret-manager <None|SOPS>  Configure which secret manager to use. [default: None]
-  -?, -h, --help                     Show help and usage information
+  -ip, --in-place        In-place decryption/encryption. [default: False]
+  -o, --output <output>  A file or directory path. []
+  -sm, --secret-manager  Whether to use a secret manager. [default: False]
+  -?, -h, --help         Show help and usage information
 ```
 
 ## `ksail secrets edit`
@@ -894,9 +894,9 @@ Arguments:
   <path>  The path to the file to edit.
 
 Options:
-  -e, --editor <Nano|Vim>            Editor to use. [default: Nano]
-  -sm, --secret-manager <None|SOPS>  Configure which secret manager to use. [default: None]
-  -?, -h, --help                     Show help and usage information
+  -e, --editor <Nano|Vim>  Editor to use. [default: Nano]
+  -sm, --secret-manager    Whether to use a secret manager. [default: False]
+  -?, -h, --help           Show help and usage information
 ```
 
 ## `ksail secrets add`
@@ -909,8 +909,8 @@ Usage:
   ksail secrets add [options]
 
 Options:
-  -sm, --secret-manager <None|SOPS>  Configure which secret manager to use. [default: None]
-  -?, -h, --help                     Show help and usage information
+  -sm, --secret-manager  Whether to use a secret manager. [default: False]
+  -?, -h, --help         Show help and usage information
 ```
 
 ## `ksail secrets rm`
@@ -926,8 +926,8 @@ Arguments:
   <public-key>  Public key matching existing encryption key
 
 Options:
-  -sm, --secret-manager <None|SOPS>  Configure which secret manager to use. [default: None]
-  -?, -h, --help                     Show help and usage information
+  -sm, --secret-manager  Whether to use a secret manager. [default: False]
+  -?, -h, --help         Show help and usage information
 ```
 
 ## `ksail secrets list`
@@ -940,10 +940,10 @@ Usage:
   ksail secrets list [options]
 
 Options:
-  -spk, --show-private-keys          Show private keys. [default: False]
-  -a, --all                          Show all keys. [default: False]
-  -sm, --secret-manager <None|SOPS>  Configure which secret manager to use. [default: None]
-  -?, -h, --help                     Show help and usage information
+  -spk, --show-private-keys  Show private keys. [default: False]
+  -a, --all                  Show all keys. [default: False]
+  -sm, --secret-manager      Whether to use a secret manager. [default: False]
+  -?, -h, --help             Show help and usage information
 ```
 
 ## `ksail secrets import`
@@ -959,8 +959,8 @@ Arguments:
   <key>  The encryption key to import
 
 Options:
-  -sm, --secret-manager <None|SOPS>  Configure which secret manager to use. [default: None]
-  -?, -h, --help                     Show help and usage information
+  -sm, --secret-manager  Whether to use a secret manager. [default: False]
+  -?, -h, --help         Show help and usage information
 ```
 
 ## `ksail secrets export`
@@ -976,7 +976,7 @@ Arguments:
   <public-key>  The public key for the encryption key to export
 
 Options:
-  -o, --output <output>              A file or directory path. []
-  -sm, --secret-manager <None|SOPS>  Configure which secret manager to use. [default: None]
-  -?, -h, --help                     Show help and usage information
+  -o, --output <output>  A file or directory path. []
+  -sm, --secret-manager  Whether to use a secret manager. [default: False]
+  -?, -h, --help         Show help and usage information
 ```

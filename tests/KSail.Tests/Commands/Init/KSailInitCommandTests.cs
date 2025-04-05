@@ -33,9 +33,9 @@ public partial class KSailInitCommandTests : IAsyncLifetime
 
   [Theory]
   [InlineData("ksail-init-native-simple", new string[] { "init" })]
-  [InlineData("ksail-init-native-advanced", new string[] { "init", "--name", "ksail-advanced-native", "--secret-manager", "sops", "--cni", "cilium" })]
+  [InlineData("ksail-init-native-advanced", new string[] { "init", "--name", "ksail-advanced-native", "--secret-manager", "--cni", "cilium" })]
   [InlineData("ksail-init-k3s-simple", new string[] { "init", "--distribution", "k3s" })]
-  [InlineData("ksail-init-k3s-advanced", new string[] { "init", "--name", "ksail-advanced-k3s", "--distribution", "k3s", "--secret-manager", "sops", "--cni", "cilium" })]
+  [InlineData("ksail-init-k3s-advanced", new string[] { "init", "--name", "ksail-advanced-k3s", "--distribution", "k3s", "--secret-manager", "--cni", "cilium" })]
   public async Task KSailInit_WithVariousOptions_SucceedsAndGeneratesKSailProject(string outputDirName, string[] args)
   {
     // TODO: Add support for Windows at a later time.

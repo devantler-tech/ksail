@@ -26,19 +26,8 @@ sealed class KSailSecretsEncryptCommand : Command
         string path = context.ParseResult.GetValueForArgument(_pathArgument);
         string? output = context.ParseResult.GetValueForOption(_outputOption);
         var cancellationToken = context.GetCancellationToken();
-        KSailSecretsEncryptCommandHandler handler;
-        switch (config.Spec.Project.SecretManager)
-        {
-          default:
-          case KSailSecretManagerType.None:
-            _ = _exceptionHandler.HandleException(new KSailException("no secret manager configured"));
-            context.ExitCode = 1;
-            return;
-          case KSailSecretManagerType.SOPS:
-            handler = new KSailSecretsEncryptCommandHandler(config, path, output, new SOPSLocalAgeSecretManager());
-            break;
-        }
-        context.ExitCode = await handler.HandleAsync(context.GetCancellationToken()).ConfigureAwait(false);
+        var handler = new KSailSecretsEncryptCommandHandler(config, path, output, new SOPSLocalAgeSecretManager());
+        context.ExitCode = await handler.HandleAsync(cancellationToken).ConfigureAwait(false);
         Console.WriteLine();
       }
       catch (Exception ex)

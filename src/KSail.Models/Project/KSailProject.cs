@@ -20,8 +20,8 @@ public class KSailProject
   [Description("The Deployment tool to use. [default: Flux]")]
   public KSailDeploymentToolType DeploymentTool { get; set; } = KSailDeploymentToolType.Flux;
 
-  [Description("The secret manager to use. [default: None]")]
-  public KSailSecretManagerType SecretManager { get; set; } = KSailSecretManagerType.None;
+  [Description("Whether to use a secret manager. [default: false]")]
+  public bool SecretManager { get; set; } = false;
 
   [Description("The CNI to use. [default: Default]")]
   [YamlMember(Alias = "cni")]

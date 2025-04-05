@@ -77,11 +77,8 @@
               ]
             },
             "secretManager": {
-              "description": "The secret manager to use. [default: None]",
-              "enum": [
-                "None",
-                "SOPS"
-              ]
+              "description": "Whether to use a secret manager. [default: false]",
+              "type": "boolean"
             },
             "cni": {
               "description": "The CNI to use. [default: Default]",
