@@ -42,7 +42,7 @@ class KSailDownCommandHandler
     bool ksailRegistryExists = await _containerEngineProvisioner.CheckContainerExistsAsync(containerName, cancellationToken).ConfigureAwait(false);
     if (ksailRegistryExists)
     {
-      Console.WriteLine("► Deleting OCI source registry");
+      Console.WriteLine("► Deleting local registry");
       await _containerEngineProvisioner.DeleteRegistryAsync(containerName, cancellationToken).ConfigureAwait(false);
       Console.WriteLine($"✓ '{containerName}' deleted.");
     }
