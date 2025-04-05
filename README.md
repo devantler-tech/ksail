@@ -33,60 +33,60 @@ brew install ksail
 Getting started with KSail is straightforward. Begin by initializing a new KSail project:
 
 ```sh
-# for default setup
-> ksail init
+> ksail init # to create a new default project
 
-# for custom setup
-> ksail init --provider <Docker> \
+> ksail init \ # to create a new custom project
+    --provider <Docker> \
     --distribution <Native|K3s> \
     --deployment-tool <Flux> \
     --cni <Default|Cilium> \
     --secret-manager <true|false>
 ```
 
-This creates the necessary configuration files, depending on your choices:
+This creates the following project files, depending on your choices:
 
 - `kind.yaml` - Configuration for Kind.
 - `k3d.yaml` - Configuration for K3d.
-- `.sops.yaml` - Configuration for SOPS - the secret manager.
+- `.sops.yaml` - Configuration for SOPS - the secret manager. (if Secret Manager is enabled)
+- `k8s/kustomization.yaml` - A kustomize kustomization file acting as an entry point for your Kubernetes resources.
 
 Customize these files to suit your setup. Once ready, create your cluster with:
 
 ```sh
-> ksail up
+> ksail up # to create the cluster
 ```
 
-You can then modify your manifest files as needed. To apply changes to your cluster, use:
+You can then modify your manifest files in the `k8s` folder as needed. To apply changes to your cluster, use:
 
 ```sh
-> ksail update
+> ksail update # to apply changes to the cluster
 ```
 
-For advanced debugging, leverage the K9s tool with:
+For advanced debugging, connect to the cluster via the [K9s](https://k9scli.io) tool with:
 
 ```sh
-> ksail debug
+> ksail debug # to connect to the cluster
 ```
 
 When you're done, you can stop the cluster to resume later:
 
 ```sh
-> ksail stop
+> ksail stop # to shut down the cluster
+
+> ksail start # to start the cluster again
 ```
 
 Or completely remove it and its resources with:
 
 ```sh
-> ksail down
+> ksail down # to dismantle the cluster and all of its resources
 ```
+
+For more details on the available commands, checkout the [KSail CLI Options](https://ksail.devantler.tech/docs/configuration/cli-options.html) page.
 
 ## Documentation
 
-- [Overview](https://devantler-tech.github.io/ksail/docs/overview)
-- [Use Cases](https://devantler-tech.github.io/ksail/docs/use-cases)
-- [Configuration](https://devantler-tech.github.io/ksail/docs/configuration)
-- [FAQ](https://devantler-tech.github.io/ksail/docs/faq)
-- [Roadmap](https://devantler-tech.github.io/ksail/docs/roadmap)
+The documentation for KSail is available at [ksail.devantler.tech](https://ksail.devantler.tech).
 
 ## Sub-projects
 
