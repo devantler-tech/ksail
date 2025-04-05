@@ -80,7 +80,19 @@ public class KSailCLIOptionsDocsGenTests
     // Assert
     Assert.NotNull(markdown);
     Assert.NotEmpty(markdown);
-    Assert.Contains("KSail CLI Options", markdown, StringComparison.Ordinal);
+    Assert.Contains("# KSail CLI Options", markdown, StringComparison.Ordinal);
+    foreach (var (command, helpText) in helpTexts)
+    {
+      Assert.Contains($"## `{command}`", markdown, StringComparison.Ordinal);
+      Assert.NotNull(helpText);
+      Assert.NotEmpty(helpText);
+      string fixedHelpText = helpText.Replace("testhost", "ksail", StringComparison.Ordinal);
+      Assert.Contains($"""
+      ```text
+      {fixedHelpText}
+      ```
+      """, markdown, StringComparison.Ordinal);
+    }
 
     // Write to file
     await File.WriteAllTextAsync("../../../../../../docs/configuration/cli-options.md", markdown);
@@ -89,7 +101,8 @@ public class KSailCLIOptionsDocsGenTests
   static async Task<string?> GetHelpTextAsync(KSailRootCommand command, params string[] args)
   {
     var console = new TestConsole();
-    _ = await command.InvokeAsync(args, console).ConfigureAwait(false);
+    int exitCode = await command.InvokeAsync(args, console).ConfigureAwait(false);
+    Assert.Equal(0, exitCode);
     return console.Out.ToString()?.Trim();
   }
 
