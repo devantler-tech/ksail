@@ -5,7 +5,7 @@
 [![codecov](https://codecov.io/gh/devantler-tech/ksail/graph/badge.svg?token=DNEO90PfNR)](https://codecov.io/gh/devantler-tech/ksail)
 
 <p align="center">
-  <img src="docs/images/ksail-cli.png" alt="KSail CLI" style="max-width: 450px; width: 100%;">
+  <img src="docs/images/ksail-cli.png" alt="KSail CLI" style="max-width: 500px !important; width: 100%;">
 </p>
 
 ## Getting Started
