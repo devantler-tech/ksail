@@ -47,10 +47,13 @@ Getting started with KSail is straightforward. Begin by initializing a new KSail
 
 This creates the following project files, depending on your choices:
 
-- `kind.yaml` - Configuration for Kind.
-- `k3d.yaml` - Configuration for K3d.
-- `.sops.yaml` - Configuration for SOPS - the secret manager. (if Secret Manager is enabled)
-- `k8s/kustomization.yaml` - A kustomize kustomization file acting as an entry point for your Kubernetes resources.
+```sh
+├── ksail.yaml # Configuration for KSail
+├── <distribution>.yaml # Configuration for a distribution (e.g., kind.yaml, k3d.yaml)
+├── .sops.yaml # Configuration for SOPS - the secret manager (if enabled)
+└── k8s # Kubernetes manifests
+    └── kustomization.yaml # The entry point for your workloads
+```
 
 Customize these files to suit your setup. Once ready, create your cluster with:
 
