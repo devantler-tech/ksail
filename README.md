@@ -33,13 +33,18 @@ brew install ksail
 Getting started with KSail is straightforward. Begin by initializing a new KSail project:
 
 ```sh
+# for default setup
 > ksail init
+
+# for custom setup
+> ksail init --distribution <Native|K3s> --deployment-tool <Flux> --secret-manager <true|false> --cni <Default|Cilium>
 ```
 
-This creates the necessary configuration files, such as:
+This creates the necessary configuration files, depending on your choices:
 
 - `kind.yaml` - Configuration for Kind.
 - `k3d.yaml` - Configuration for K3d.
+- `.sops.yaml` - Configuration for SOPS - the secret manager.
 
 Customize these files to suit your setup. Once ready, create your cluster with:
 
