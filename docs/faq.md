@@ -12,6 +12,7 @@ nav_order: 4
 - [How do I configure local DNS?](#how-do-i-configure-local-dns)
   - [Option 1: Use `traefik.me` to resolve `*.traefik.me` to 127.0.0.1](#option-1-use-traefikme-to-resolve-traefikme-to-127001)
   - [Options 2: Configure your `/etc/hosts` file](#options-2-configure-your-etchosts-file)
+- [Can I use KSail to manage my existing Kubernetes cluster?](#can-i-use-ksail-to-manage-my-existing-kubernetes-cluster)
 
 ## How do I configure local DNS?
 
@@ -49,3 +50,18 @@ If you don't want to use a public DNS service, or you are using a different TLD,
 4. Save the file and exit the text editor.
 
 That's it! You can now access your services via `http://<your-service-name>.<your-domain>`.
+
+## Can I use KSail to manage my existing Kubernetes cluster?
+
+Yes, KSail can be used to interact with an existing Kubernetes cluster, provided it aligns with KSail's supported configurations. KSail is designed to integrate seamlessly with Kubernetes by leveraging standard kubeconfig files and contexts. This means you can use KSail to manage workloads and resources on an existing cluster without requiring a fresh setup. However, commands related to cluster provisioning and lifecycle management—such as `ksail init`, `ksail up`, `ksail down`, `ksail stop`, and `ksail start`—are intended for clusters created through supported providers and may not apply to pre-existing clusters.
+
+To use KSail with an existing cluster, ensure the correct kubeconfig and context are set. You can specify these via the CLI options `--kubeconfig` and `--context`, or by generating a `ksail.yaml` configuration file for your cluster using the `ksail gen config` command.
+
+KSail supports various operations on existing clusters, such as:
+
+- `ksail status` - Check cluster status.
+- `ksail update` - Update manifest files.
+- `ksail validate` - Validate configurations.
+- `ksail debug` - Connect to a cluster to debug issues.
+- `ksail gen` - Generate manifests.
+- `ksail secrets` - Manage SOPS-encrypted secrets.
