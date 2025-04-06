@@ -12,10 +12,21 @@ sealed class KSailStatusCommandHandler(KSailCluster config)
 
   internal async Task<bool> HandleAsync(CancellationToken cancellationToken = default)
   {
-    var (ExitCode, _) = await Devantler.KubectlCLI.Kubectl.RunAsync(
+    var (ExitCode0, _) = await Devantler.KubectlCLI.Kubectl.RunAsync(
+      ["version", "--kubeconfig", _config.Spec.Connection.Kubeconfig, "--context", _config.Spec.Connection.Context],
+      cancellationToken: cancellationToken
+    ).ConfigureAwait(false);
+    Console.WriteLine("---");
+    var (ExitCode1, _) = await Devantler.KubectlCLI.Kubectl.RunAsync(
+      ["get", "nodes", "-o", "wide", "--kubeconfig", _config.Spec.Connection.Kubeconfig, "--context", _config.Spec.Connection.Context],
+      cancellationToken: cancellationToken
+    ).ConfigureAwait(false);
+    Console.WriteLine("---");
+    var (ExitCode2, _) = await Devantler.KubectlCLI.Kubectl.RunAsync(
       ["cluster-info", "--kubeconfig", _config.Spec.Connection.Kubeconfig, "--context", _config.Spec.Connection.Context],
       cancellationToken: cancellationToken
     ).ConfigureAwait(false);
-    return ExitCode == 0;
+    //TODO: Check status of etcd
+    return ExitCode0 == 0 && ExitCode1 == 0 && ExitCode2 == 0;
   }
 }
