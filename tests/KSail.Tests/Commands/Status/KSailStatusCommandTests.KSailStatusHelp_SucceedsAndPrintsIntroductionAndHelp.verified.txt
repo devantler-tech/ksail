@@ -1,0 +1,12 @@
+﻿Description:
+  Show the status of a cluster
+
+Usage:
+  testhost status [options]
+
+Options:
+  -k, --kubeconfig <kubeconfig>  Path to kubeconfig file. [default: {UserProfile}/.kube/config]
+  -c, --context <context>        The kubernetes context to use. [default: kind-ksail-default]
+  -?, -h, --help                 Show help and usage information
+
+

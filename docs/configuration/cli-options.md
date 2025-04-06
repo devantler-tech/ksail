@@ -32,6 +32,7 @@ Commands:
   start     Start a cluster
   stop      Stop a cluster
   down      Destroy a cluster
+  status    Show the status of a cluster
   list      List active clusters
   validate  Validate project files
   debug     Debug a cluster (❤️ K9s)
@@ -181,11 +182,27 @@ Commands:
   start     Start a cluster
   stop      Stop a cluster
   down      Destroy a cluster
+  status    Show the status of a cluster
   list      List active clusters
   validate  Validate project files
   debug     Debug a cluster (❤️ K9s)
   gen       Generate a resource
   secrets   Manage secrets
+```
+
+## `ksail status`
+
+```text
+Description:
+  Show the status of a cluster
+
+Usage:
+  ksail status [options]
+
+Options:
+  -k, --kubeconfig <kubeconfig>  Path to kubeconfig file. [default: /Users/nikolaiemildamm/.kube/config]
+  -c, --context <context>        The kubernetes context to use. [default: kind-ksail-default]
+  -?, -h, --help                 Show help and usage information
 ```
 
 ## `ksail list`

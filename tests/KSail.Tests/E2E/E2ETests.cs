@@ -8,6 +8,7 @@ using KSail.Commands.Init;
 using KSail.Commands.List;
 using KSail.Commands.Root;
 using KSail.Commands.Start;
+using KSail.Commands.Status;
 using KSail.Commands.Stop;
 using KSail.Commands.Up;
 using KSail.Commands.Update;
@@ -40,6 +41,7 @@ public class E2ETests : IAsyncLifetime
     var console = new TestConsole();
     var initCommand = new KSailInitCommand();
     var upCommand = new KSailUpCommand();
+    var statusCommand = new KSailStatusCommand();
     var listCommand = new KSailListCommand();
     var stopCommand = new KSailStopCommand();
     var startCommand = new KSailStartCommand();
@@ -52,6 +54,8 @@ public class E2ETests : IAsyncLifetime
     Assert.Equal(0, initExitCode);
     int upExitCode = await upCommand.InvokeAsync(["up"], console).ConfigureAwait(false);
     Assert.Equal(0, upExitCode);
+    int statusExitCode = await statusCommand.InvokeAsync(["status"], console).ConfigureAwait(false);
+    Assert.Equal(0, statusExitCode);
     int listExitCode = await listCommand.InvokeAsync(["list"], console).ConfigureAwait(false);
     Assert.Equal(0, listExitCode);
     int stopExitCode = await stopCommand.InvokeAsync(["stop"], console).ConfigureAwait(false);
