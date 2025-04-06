@@ -52,6 +52,8 @@ public class E2ETests : IAsyncLifetime
     Assert.Equal(0, initExitCode);
     int upExitCode = await upCommand.InvokeAsync(["up"], console).ConfigureAwait(false);
     Assert.Equal(0, upExitCode);
+    int statusExitCode = await upCommand.InvokeAsync(["status"], console).ConfigureAwait(false);
+    Assert.Equal(0, statusExitCode);
     int listExitCode = await listCommand.InvokeAsync(["list"], console).ConfigureAwait(false);
     Assert.Equal(0, listExitCode);
     int stopExitCode = await stopCommand.InvokeAsync(["stop"], console).ConfigureAwait(false);

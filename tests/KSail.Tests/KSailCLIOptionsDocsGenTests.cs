@@ -23,6 +23,7 @@ public class KSailCLIOptionsDocsGenTests
       { "ksail stop", await GetHelpTextAsync(ksailCommand, "stop", "--help") },
       { "ksail init", await GetHelpTextAsync(ksailCommand, "init", "--help") },
       { "ksail lint", await GetHelpTextAsync(ksailCommand, "lint", "--help") },
+      { "ksail status", await GetHelpTextAsync(ksailCommand, "status", "--help") },
       { "ksail list", await GetHelpTextAsync(ksailCommand, "list", "--help") },
       { "ksail debug", await GetHelpTextAsync(ksailCommand, "debug", "--help") },
       { "ksail gen", await GetHelpTextAsync(ksailCommand, "gen", "--help") },

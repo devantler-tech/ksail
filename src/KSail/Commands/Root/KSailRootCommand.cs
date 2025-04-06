@@ -8,6 +8,7 @@ using KSail.Commands.List;
 using KSail.Commands.Root.Handlers;
 using KSail.Commands.Secrets;
 using KSail.Commands.Start;
+using KSail.Commands.Status;
 using KSail.Commands.Stop;
 using KSail.Commands.Up;
 using KSail.Commands.Update;
@@ -46,6 +47,7 @@ sealed class KSailRootCommand : RootCommand
     AddCommand(new KSailStartCommand());
     AddCommand(new KSailStopCommand());
     AddCommand(new KSailDownCommand());
+    AddCommand(new KSailStatusCommand());
     AddCommand(new KSailListCommand());
     AddCommand(new KSailValidateCommand());
     AddCommand(new KSailDebugCommand());

@@ -15,6 +15,7 @@ Commands:
   start     Start a cluster
   stop      Stop a cluster
   down      Destroy a cluster
+  status    Show the status of a cluster
   list      List active clusters
   validate  Validate project files
   debug     Debug a cluster (❤️ K9s)
