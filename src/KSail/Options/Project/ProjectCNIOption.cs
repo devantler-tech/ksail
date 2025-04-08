@@ -7,5 +7,4 @@ namespace KSail.Options.Project;
 class ProjectCNIOption(KSailCluster config) : Option<KSailCNIType>(
   ["--cni"],
   $"The CNI to use. [default: {config.Spec.Project.CNI}]"
-)
-{ }
+);
