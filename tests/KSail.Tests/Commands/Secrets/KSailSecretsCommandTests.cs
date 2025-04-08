@@ -1,5 +1,6 @@
 using System.CommandLine;
 using System.CommandLine.IO;
+using Devantler.Keys.Age;
 using KSail.Commands.Root;
 
 namespace KSail.Tests.Commands.Secrets;
@@ -35,5 +36,27 @@ public class KSailSecretsCommandTests : IAsyncLifetime
     Assert.Equal(0, exitCode);
     _ = await Verify(console.Error.ToString() + console.Out)
       .UseFileName($"ksail {string.Join(" ", args)}");
+  }
+
+  [Fact]
+  public async Task KSailSecretsAdd_AddsANewEncryptionKeyToSOPSAgeKeyFile()
+  {
+    //Arrange
+    var console = new TestConsole();
+    var ksailCommand = new KSailRootCommand(console);
+
+    //Act
+    int addExitCode = await ksailCommand.InvokeAsync(["secrets", "add"], console);
+    string? key = console.Out?.ToString()?.Trim();
+
+    //Assert
+    Assert.Equal(0, addExitCode);
+    Assert.NotNull(key);
+    Assert.NotEmpty(key);
+
+    // Cleanup
+    var ageKey = new AgeKey(key);
+    int rmExitCode = await ksailCommand.InvokeAsync(["secrets", "rm", ageKey.PublicKey], console);
+    Assert.Equal(0, rmExitCode);
   }
 }

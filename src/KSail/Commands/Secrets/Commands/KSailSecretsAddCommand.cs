@@ -10,7 +10,7 @@ sealed class KSailSecretsAddCommand : Command
 {
   readonly ExceptionHandler _exceptionHandler = new();
 
-  internal KSailSecretsAddCommand() : base("add", "Add a new encryption key")
+  internal KSailSecretsAddCommand(IConsole console) : base("add", "Add a new encryption key")
   {
     this.SetHandler(async (context) =>
     {
@@ -18,7 +18,7 @@ sealed class KSailSecretsAddCommand : Command
       {
         var config = await KSailClusterConfigLoader.LoadWithoptionsAsync(context).ConfigureAwait(false);
         var cancellationToken = context.GetCancellationToken();
-        var handler = new KSailSecretsAddCommandHandler(new SOPSLocalAgeSecretManager());
+        var handler = new KSailSecretsAddCommandHandler(new SOPSLocalAgeSecretManager(), console);
         context.ExitCode = await handler.HandleAsync(cancellationToken).ConfigureAwait(false);
       }
       catch (Exception ex)

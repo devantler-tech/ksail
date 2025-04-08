@@ -21,7 +21,7 @@ sealed class KSailSecretsRemoveCommand : Command
         var config = await KSailClusterConfigLoader.LoadWithoptionsAsync(context).ConfigureAwait(false);
         string publicKey = context.ParseResult.GetValueForArgument(_publicKeyArgument);
         var cancellationToken = context.GetCancellationToken();
-        var handler = new KSailSecretsRemoveCommandHandler(config, publicKey, new SOPSLocalAgeSecretManager());
+        var handler = new KSailSecretsRemoveCommandHandler(publicKey, new SOPSLocalAgeSecretManager());
         context.ExitCode = await handler.HandleAsync(cancellationToken).ConfigureAwait(false);
       }
       catch (Exception ex)
