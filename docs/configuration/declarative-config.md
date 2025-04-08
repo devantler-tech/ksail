@@ -173,6 +173,8 @@ spec:
     validateOnUpdate: true
     # Wait for reconciliation to succeed on an existing cluster. [default: true]
     reconcileOnUpdate: true
+    # Verbose output for validation or status checks. [default: false]
+    verbose: false
 ```
 
 ## Kind Declarative Config

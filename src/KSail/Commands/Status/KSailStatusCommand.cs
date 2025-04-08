@@ -33,5 +33,6 @@ sealed class KSailStatusCommand : Command
   {
     AddOption(CLIOptions.Connection.KubeconfigOption);
     AddOption(CLIOptions.Connection.ContextOption);
+    AddOption(CLIOptions.Validation.VerboseOption);
   }
 }

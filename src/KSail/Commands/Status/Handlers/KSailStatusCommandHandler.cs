@@ -12,10 +12,27 @@ sealed class KSailStatusCommandHandler(KSailCluster config)
 
   internal async Task<bool> HandleAsync(CancellationToken cancellationToken = default)
   {
-    var (ExitCode, _) = await Devantler.KubectlCLI.Kubectl.RunAsync(
-      ["get", "--raw", "/livez?verbose", "--kubeconfig", _config.Spec.Connection.Kubeconfig, "--context", _config.Spec.Connection.Context],
+    if (!_config.Spec.Validation.Verbose)
+    {
+      Console.Write("Live: ");
+    }
+    var (LiveCheckExitCode, _) = await Devantler.KubectlCLI.Kubectl.RunAsync(
+      ["get", "--raw", $"/livez{(_config.Spec.Validation.Verbose ? "?verbose" : "")}", "--kubeconfig", _config.Spec.Connection.Kubeconfig, "--context", _config.Spec.Connection.Context],
       cancellationToken: cancellationToken
     ).ConfigureAwait(false);
-    return ExitCode == 0;
+    if (!_config.Spec.Validation.Verbose)
+    {
+      Console.WriteLine();
+      Console.Write("Ready: ");
+    }
+    var (ReadyCheckExitCode, _) = await Devantler.KubectlCLI.Kubectl.RunAsync(
+      ["get", "--raw", $"/readyz{(_config.Spec.Validation.Verbose ? "?verbose" : "")}", "--kubeconfig", _config.Spec.Connection.Kubeconfig, "--context", _config.Spec.Connection.Context],
+      cancellationToken: cancellationToken
+    ).ConfigureAwait(false);
+    if (!_config.Spec.Validation.Verbose)
+    {
+      Console.WriteLine();
+    }
+    return LiveCheckExitCode == 0 && ReadyCheckExitCode == 0;
   }
 }
