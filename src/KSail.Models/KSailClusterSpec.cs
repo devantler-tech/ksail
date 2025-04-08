@@ -75,20 +75,6 @@ public class KSailClusterSpec
     };
   }
 
-  public KSailClusterSpec(KSailDistributionType distribution)
-  {
-    SetOCISourceUri(distribution);
-    Connection = new KSailConnection
-    {
-      Context = distribution switch
-      {
-        KSailDistributionType.Native => $"kind-{distribution}",
-        KSailDistributionType.K3s => $"k3d-{distribution}",
-        _ => $"kind-{distribution}"
-      }
-    };
-  }
-
   public KSailClusterSpec(string name, KSailDistributionType distribution) : this(name)
   {
     SetOCISourceUri(distribution);
