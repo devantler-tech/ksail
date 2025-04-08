@@ -3,6 +3,7 @@ using KSail.Models.CNI;
 using KSail.Models.Connection;
 using KSail.Models.DeploymentTool;
 using KSail.Models.Distribution;
+using KSail.Models.GatewayController;
 using KSail.Models.Generator;
 using KSail.Models.IngressController;
 using KSail.Models.LocalRegistry;
@@ -11,7 +12,6 @@ using KSail.Models.Project;
 using KSail.Models.Project.Enums;
 using KSail.Models.SecretManager;
 using KSail.Models.Validation;
-using KSail.Models.GatewayController;
 using YamlDotNet.Serialization;
 
 namespace KSail.Models;
@@ -72,6 +72,20 @@ public class KSailClusterSpec
     Connection = new KSailConnection
     {
       Context = $"kind-{name}"
+    };
+  }
+
+  public KSailClusterSpec(KSailDistributionType distribution)
+  {
+    SetOCISourceUri(distribution);
+    Connection = new KSailConnection
+    {
+      Context = distribution switch
+      {
+        KSailDistributionType.Native => $"kind-{distribution}",
+        KSailDistributionType.K3s => $"k3d-{distribution}",
+        _ => $"kind-{distribution}"
+      }
     };
   }
 
