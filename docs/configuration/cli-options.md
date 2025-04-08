@@ -887,7 +887,7 @@ Arguments:
   <path>  The path to the file to encrypt.
 
 Options:
-  -pk, --public-key <public-key>  The public key.
+  -pk, --public-key <public-key>  The public key. [default: ]
   -ip, --in-place                 In-place decryption/encryption. [default: False]
   -o, --output <output>           A file or directory path. []
   -?, -h, --help                  Show help and usage information

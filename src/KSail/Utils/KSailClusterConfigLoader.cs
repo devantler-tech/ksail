@@ -21,7 +21,7 @@ static class KSailClusterConfigLoader
   internal static async Task<KSailCluster> LoadWithoptionsAsync(InvocationContext context)
   {
     var config = await LoadAsync(
-      context.ParseResult.GetValueForOption(CLIOptions.Project.ConfigPathOption),
+      context.ParseResult.GetValueForOption(CLIOptions.Project.ConfigPathOption) ?? "ksail.yaml",
       context.ParseResult.GetValueForOption(CLIOptions.Metadata.NameOption),
       context.ParseResult.GetValueForOption(CLIOptions.Project.DistributionOption)
     ).ConfigureAwait(false);
@@ -84,7 +84,7 @@ static class KSailClusterConfigLoader
     return config;
   }
 
-  internal static async Task<KSailCluster> LoadAsync(string? configFilePath = "ksail.yaml", string? name = default, KSailDistributionType distribution = default)
+  internal static async Task<KSailCluster> LoadAsync(string configFilePath, string? name = default, KSailDistributionType distribution = default)
   {
     // Create default KSailClusterConfig
     var ksailClusterConfig = string.IsNullOrEmpty(name) ?
@@ -93,9 +93,7 @@ static class KSailClusterConfigLoader
 
     // Locate KSail YAML file
     string startDirectory = Directory.GetCurrentDirectory();
-    string? ksailYaml = string.IsNullOrEmpty(configFilePath) ?
-      FindConfigFile(startDirectory, "ksail.yaml") :
-      FindConfigFile(startDirectory, configFilePath);
+    string? ksailYaml = FindConfigFile(startDirectory, configFilePath);
 
 
     // If no KSail YAML file is found, return the default KSailClusterConfig
