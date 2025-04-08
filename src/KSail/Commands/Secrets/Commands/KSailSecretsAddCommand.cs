@@ -10,7 +10,7 @@ sealed class KSailSecretsAddCommand : Command
 {
   readonly ExceptionHandler _exceptionHandler = new();
 
-  internal KSailSecretsAddCommand(IConsole? console = default) : base("add", "Add a new encryption key")
+  internal KSailSecretsAddCommand(IConsole console) : base("add", "Add a new encryption key")
   {
     this.SetHandler(async (context) =>
     {

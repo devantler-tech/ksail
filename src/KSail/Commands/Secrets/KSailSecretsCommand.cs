@@ -1,4 +1,5 @@
 using System.CommandLine;
+using System.CommandLine.IO;
 using KSail.Commands.Secrets.Commands;
 using KSail.Options;
 
@@ -8,6 +9,7 @@ sealed class KSailSecretsCommand : Command
 {
   internal KSailSecretsCommand(IConsole? console = default) : base("secrets", "Manage secrets")
   {
+    console ??= new SystemConsole();
     AddCommands(console);
     this.SetHandler(async (context) =>
       {
@@ -16,7 +18,7 @@ sealed class KSailSecretsCommand : Command
     );
   }
 
-  void AddCommands(IConsole? console = default)
+  void AddCommands(IConsole console)
   {
     AddCommand(new KSailSecretsEncryptCommand());
     AddCommand(new KSailSecretsDecryptCommand());
