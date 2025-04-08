@@ -20,4 +20,7 @@ public class KSailValidation
 
   [Description("Wait for reconciliation to succeed on an existing cluster. [default: true]")]
   public bool ReconcileOnUpdate { get; set; } = true;
+
+  [Description("Verbose output for validation or status checks. [default: false]")]
+  public bool Verbose { get; set; } = false;
 }

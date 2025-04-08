@@ -260,6 +260,10 @@
             "reconcileOnUpdate": {
               "description": "Wait for reconciliation to succeed on an existing cluster. [default: true]",
               "type": "boolean"
+            },
+            "verbose": {
+              "description": "Verbose output for validation or status checks. [default: false]",
+              "type": "boolean"
             }
           }
         }

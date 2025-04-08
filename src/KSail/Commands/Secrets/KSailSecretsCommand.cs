@@ -9,7 +9,6 @@ sealed class KSailSecretsCommand : Command
   internal KSailSecretsCommand(IConsole? console = default) : base("secrets", "Manage secrets")
   {
     AddCommands();
-    AddOptions();
     this.SetHandler(async (context) =>
       {
         context.ExitCode = await this.InvokeAsync("--help", console).ConfigureAwait(false);
@@ -28,6 +27,4 @@ sealed class KSailSecretsCommand : Command
     AddCommand(new KSailSecretsImportCommand());
     AddCommand(new KSailSecretsExportCommand());
   }
-
-  internal void AddOptions() => AddGlobalOption(CLIOptions.Project.SecretManagerOption);
 }

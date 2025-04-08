@@ -202,6 +202,7 @@ Usage:
 Options:
   -k, --kubeconfig <kubeconfig>  Path to kubeconfig file. [default: /Users/nikolaiemildamm/.kube/config]
   -c, --context <context>        The kubernetes context to use. [default: kind-ksail-default]
+  --verbose                      Verbose output for validation or status checks. [default: False]
   -?, -h, --help                 Show help and usage information
 ```
 
@@ -860,8 +861,7 @@ Usage:
   ksail secrets [command] [options]
 
 Options:
-  -sm, --secret-manager  Whether to use a secret manager. [default: False]
-  -?, -h, --help         Show help and usage information
+  -?, -h, --help  Show help and usage information
 
 Commands:
   encrypt <path>       Encrypt a file
@@ -890,7 +890,6 @@ Options:
   -pk, --public-key <public-key>  The public key.
   -ip, --in-place                 In-place decryption/encryption. [default: False]
   -o, --output <output>           A file or directory path. []
-  -sm, --secret-manager           Whether to use a secret manager. [default: False]
   -?, -h, --help                  Show help and usage information
 ```
 
@@ -909,7 +908,6 @@ Arguments:
 Options:
   -ip, --in-place        In-place decryption/encryption. [default: False]
   -o, --output <output>  A file or directory path. []
-  -sm, --secret-manager  Whether to use a secret manager. [default: False]
   -?, -h, --help         Show help and usage information
 ```
 
@@ -927,7 +925,6 @@ Arguments:
 
 Options:
   -e, --editor <Nano|Vim>  Editor to use. [default: Nano]
-  -sm, --secret-manager    Whether to use a secret manager. [default: False]
   -?, -h, --help           Show help and usage information
 ```
 
@@ -941,8 +938,7 @@ Usage:
   ksail secrets add [options]
 
 Options:
-  -sm, --secret-manager  Whether to use a secret manager. [default: False]
-  -?, -h, --help         Show help and usage information
+  -?, -h, --help  Show help and usage information
 ```
 
 ## `ksail secrets rm`
@@ -958,8 +954,7 @@ Arguments:
   <public-key>  Public key matching existing encryption key
 
 Options:
-  -sm, --secret-manager  Whether to use a secret manager. [default: False]
-  -?, -h, --help         Show help and usage information
+  -?, -h, --help  Show help and usage information
 ```
 
 ## `ksail secrets list`
@@ -974,7 +969,6 @@ Usage:
 Options:
   -spk, --show-private-keys  Show private keys. [default: False]
   -a, --all                  Show all keys. [default: False]
-  -sm, --secret-manager      Whether to use a secret manager. [default: False]
   -?, -h, --help             Show help and usage information
 ```
 
@@ -991,8 +985,7 @@ Arguments:
   <key>  The encryption key to import
 
 Options:
-  -sm, --secret-manager  Whether to use a secret manager. [default: False]
-  -?, -h, --help         Show help and usage information
+  -?, -h, --help  Show help and usage information
 ```
 
 ## `ksail secrets export`
@@ -1009,6 +1002,5 @@ Arguments:
 
 Options:
   -o, --output <output>  A file or directory path. []
-  -sm, --secret-manager  Whether to use a secret manager. [default: False]
   -?, -h, --help         Show help and usage information
 ```
