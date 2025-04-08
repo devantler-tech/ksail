@@ -12,5 +12,4 @@ class ValidationOptions(KSailCluster config)
   public ValidationValidateOnUpdateOption ValidateOnUpdateOption { get; } = new(config) { Arity = ArgumentArity.ZeroOrOne };
   public ValidationReconcileOnUpdateOption ReconcileOnUpdateOption { get; } = new(config) { Arity = ArgumentArity.ZeroOrOne };
   public ValidationVerboseOption VerboseOption { get; } = new(config) { Arity = ArgumentArity.ZeroOrOne };
-
 }
