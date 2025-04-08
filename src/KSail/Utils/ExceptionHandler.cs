@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using CliWrap.Exceptions;
 
 namespace KSail.Utils;
 
@@ -23,10 +24,13 @@ class ExceptionHandler
       message = message.AppendLine(CultureInfo.InvariantCulture, $"✗ {ex.Message}");
       Console.ForegroundColor = ConsoleColor.Red;
       Console.WriteLine($"✗ {ex.Message}");
-      for (var inner = ex.InnerException; inner is not null; inner = inner.InnerException)
+      if (ex is not CommandExecutionException)
       {
-        Console.WriteLine($"  {inner.Message}");
-        message = message.AppendLine(CultureInfo.InvariantCulture, $"  {inner.Message}");
+        for (var inner = ex.InnerException; inner is not null; inner = inner.InnerException)
+        {
+          Console.WriteLine($"  {inner.Message}");
+          message = message.AppendLine(CultureInfo.InvariantCulture, $"  {inner.Message}");
+        }
       }
       Console.ResetColor();
       return message.ToString();
