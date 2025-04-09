@@ -6,20 +6,20 @@ namespace KSail.Utils;
 static class SopsConfigLoader
 {
   static readonly SOPSConfigHelper _sopsConfigHelper = new();
-  internal static async Task<SOPSConfig> LoadAsync(CancellationToken cancellationToken = default)
+  internal static async Task<SOPSConfig> LoadAsync(string? searchPath = default, CancellationToken cancellationToken = default)
   {
-    Console.WriteLine("► searching for a '.sops.yaml' file");
-    string directory = Directory.GetCurrentDirectory();
+    searchPath ??= Directory.GetCurrentDirectory();
+    Console.WriteLine($"► searching for a '.sops.yaml' file in '{searchPath}' and its parent directories");
     string sopsConfigPath = string.Empty;
-    while (!string.IsNullOrEmpty(directory))
+    while (!string.IsNullOrEmpty(searchPath))
     {
-      if (File.Exists(Path.Combine(directory, ".sops.yaml")))
+      if (File.Exists(Path.Combine(searchPath, ".sops.yaml")))
       {
-        sopsConfigPath = Path.Combine(directory, ".sops.yaml");
+        sopsConfigPath = Path.Combine(searchPath, ".sops.yaml");
         Console.WriteLine($"✔ found '{sopsConfigPath}'");
         break;
       }
-      directory = Directory.GetParent(directory)?.FullName ?? string.Empty;
+      searchPath = Directory.GetParent(searchPath)?.FullName ?? string.Empty;
     }
     if (string.IsNullOrEmpty(sopsConfigPath))
     {

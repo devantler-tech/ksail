@@ -7,21 +7,27 @@ namespace KSail.Commands.Validate;
 
 sealed class KSailValidateCommand : Command
 {
+  readonly GenericPathOption _pathOption = new("./", ["-p", "--path"])
+  {
+    Description = "Path to the project files. [default: ./]"
+  };
+
   readonly ExceptionHandler _exceptionHandler = new();
   internal KSailValidateCommand() : base(
    "validate", "Validate project files"
   )
   {
-    AddOption(CLIOptions.Project.KustomizationPathOption);
+    AddOption(_pathOption);
     this.SetHandler(async (context) =>
     {
       try
       {
-        var config = await KSailClusterConfigLoader.LoadWithoptionsAsync(context).ConfigureAwait(false);
+        string path = context.ParseResult.GetValueForOption(_pathOption) ?? "./";
+        var config = await KSailClusterConfigLoader.LoadWithoptionsAsync(context, path).ConfigureAwait(false);
 
         Console.WriteLine("🔍 Validating project files and configuration");
         var handler = new KSailValidateCommandHandler(config);
-        context.ExitCode = await handler.HandleAsync(context.GetCancellationToken()).ConfigureAwait(false) ? 0 : 1;
+        context.ExitCode = await handler.HandleAsync(path, context.GetCancellationToken()).ConfigureAwait(false) ? 0 : 1;
         Console.WriteLine();
       }
       catch (Exception ex)

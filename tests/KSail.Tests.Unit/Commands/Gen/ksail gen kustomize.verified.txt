@@ -1,0 +1,15 @@
+﻿Description:
+  Generate a Kustomize resource.
+
+Usage:
+  testhost gen kustomize [command] [options]
+
+Options:
+  --version       Show version information
+  -?, -h, --help  Show help and usage information
+  --overwrite     Overwrite existing files. [default: False]
+
+Commands:
+  component      Generate a 'kustomize.config.k8s.io/v1alpha1/Component' resource.
+  kustomization  Generate a 'kustomize.config.k8s.io/v1beta1/Kustomization' resource.
+

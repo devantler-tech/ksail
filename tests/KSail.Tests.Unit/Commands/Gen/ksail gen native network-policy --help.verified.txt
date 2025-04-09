@@ -1,0 +1,12 @@
+﻿Description:
+  Generate a 'networking.k8s.io/v1/NetworkPolicy' resource.
+
+Usage:
+  testhost gen native network-policy [options]
+
+Options:
+  -o, --output <output>  A file or directory path. [default: ./network-policy.yaml]
+  --overwrite            Overwrite existing files. [default: False]
+  -?, -h, --help         Show help and usage information
+
+

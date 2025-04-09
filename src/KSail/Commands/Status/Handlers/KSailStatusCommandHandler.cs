@@ -24,13 +24,13 @@ sealed class KSailStatusCommandHandler(KSailCluster config)
     ).ConfigureAwait(false);
     if (_config.Spec.Validation.Verbose)
     {
-      Console.WriteLine($"${LiveCheckMessage}");
-      Console.WriteLine($"${ReadyCheckMessage}");
+      Console.WriteLine($"{LiveCheckMessage}");
+      Console.WriteLine($"{ReadyCheckMessage}");
     }
     else
     {
-      Console.WriteLine($"Live: ${LiveCheckMessage}");
-      Console.WriteLine($"Ready: ${ReadyCheckMessage}");
+      Console.WriteLine($"Live: {LiveCheckMessage}");
+      Console.WriteLine($"Ready: {ReadyCheckMessage}");
     }
     return LiveCheckExitCode == 0 && ReadyCheckExitCode == 0;
   }

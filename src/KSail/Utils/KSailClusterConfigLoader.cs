@@ -18,10 +18,10 @@ static class KSailClusterConfigLoader
       .WithTypeConverter(new ResourceQuantityTypeConverter())
       .WithNamingConvention(CamelCaseNamingConvention.Instance).Build();
 
-  internal static async Task<KSailCluster> LoadWithoptionsAsync(InvocationContext context)
+  internal static async Task<KSailCluster> LoadWithoptionsAsync(InvocationContext context, string path = "./")
   {
     var config = await LoadAsync(
-      context.ParseResult.GetValueForOption(CLIOptions.Project.ConfigPathOption) ?? "ksail.yaml",
+      Path.Combine(path, context.ParseResult.GetValueForOption(CLIOptions.Project.ConfigPathOption) ?? "ksail.yaml"),
       context.ParseResult.GetValueForOption(CLIOptions.Metadata.NameOption),
       context.ParseResult.GetValueForOption(CLIOptions.Project.DistributionOption)
     ).ConfigureAwait(false);
