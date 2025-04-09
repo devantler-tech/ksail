@@ -6,7 +6,7 @@ namespace KSail.Docs;
 
 static class CLIOptionsGenerator
 {
-  public static async Task<string> Generate()
+  public static async Task<string> GenerateAsync()
   {
     // Arrange
     var console = new SystemConsole();

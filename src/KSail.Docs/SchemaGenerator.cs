@@ -5,16 +5,23 @@ using System.Text.Json.Nodes;
 using System.Text.Json.Schema;
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
+using System.Text.RegularExpressions;
+using Devantler.KubernetesGenerator.Core;
+using Devantler.KubernetesGenerator.Core.Converters;
+using Devantler.KubernetesGenerator.Core.Inspectors;
+using KSail.Models;
+using KSail.Models.Project.Enums;
+using YamlDotNet.Serialization;
+using YamlDotNet.Serialization.NamingConventions;
+using YamlDotNet.System.Text.Json;
 
-namespace KSail.Models.Tests.Unit;
+namespace KSail.Docs;
 
 
-public class KSailClusterJSONSchemaGenerationTests
+static class SchemaGenerator
 {
-  [Fact]
-  public async Task GenerateJSONSchemaFromKSailCluster_ShouldReturnJSONSchema()
+  public static string Generate()
   {
-    // Arrange & Act
     var options = new JsonSerializerOptions()
     {
       PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -51,7 +58,6 @@ public class KSailClusterJSONSchemaGenerationTests
           {
             // Handle the case where the schema is a Boolean.
             var valueKind = schema.GetValueKind();
-            Debug.Assert(valueKind is JsonValueKind.True or JsonValueKind.False);
             schema = jObj = [];
             if (valueKind is JsonValueKind.False)
               jObj.Add("not", true);
@@ -70,11 +76,6 @@ public class KSailClusterJSONSchemaGenerationTests
         schema[property.Key] = property.Value?.DeepClone();
     }
 
-    // Assert
-    _ = await Verify(schema.ToString());
-
-    // Write the schema to a file for reference.
-    await File.WriteAllTextAsync("../../../../../../schemas/ksail-cluster-schema.json", schema.ToString());
+    return schema.ToString();
   }
 }
-

@@ -18,4 +18,8 @@
     <ProjectReference Include="../KSail/KSail.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="$(AssemblyName).Tests.Unit" />
+  </ItemGroup>
+
 </Project>
