@@ -83,7 +83,7 @@ static class CLIOptionsGenerator
     _ = await command.InvokeAsync(args, console).ConfigureAwait(false);
     return console.Out.ToString()?.Trim()
       .Replace("KSail.Docs", "ksail", StringComparison.Ordinal)
-      .Replace(Environment.UserName, "<user>", StringComparison.Ordinal);
+      .Replace(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) + "/", "~/", StringComparison.Ordinal);
   }
 
   static string GenerateMarkdown(Dictionary<string, string?> helpTexts)

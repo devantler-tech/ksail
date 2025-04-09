@@ -38,7 +38,7 @@ spec:
   # The options for connecting to the KSail cluster.
   connection:
     # The path to the kubeconfig file. [default: ~/.kube/config]
-    kubeconfig: /Users/<user>/.kube/config
+    kubeconfig: ~/.kube/config
     # The kube context. [default: kind-ksail-default]
     context: kind-ksail-default
     # The timeout for operations (10s, 5m, 1h). [default: 5m]

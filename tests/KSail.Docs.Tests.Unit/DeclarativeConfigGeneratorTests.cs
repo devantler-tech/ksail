@@ -17,8 +17,7 @@ public class DeclarativeConfigGeneratorTests
     // Arrange & Act
     string expectedCodeSnippet = DeclarativeConfigGenerator.Generate();
     expectedCodeSnippet = expectedCodeSnippet
-      .Replace("\\", "/", StringComparison.Ordinal)
-      .Replace(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) + "/", "~/", StringComparison.Ordinal);
+      .Replace("\\", "/", StringComparison.Ordinal);
     string declarativeConfigMarkdownFilePath = "../../../../../../docs/configuration/declarative-config.md";
     string declarativeConfigMarkdownFileContents = await File.ReadAllTextAsync(declarativeConfigMarkdownFilePath);
     string actualCodeSnippet = RegexHelpers.YamlCodeBlockRegex().Match(declarativeConfigMarkdownFileContents).Value;
