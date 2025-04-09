@@ -1,6 +1,6 @@
 <Solution>
   <Folder Name="/src/">
-    <Project Path="src/KSail.Generator.Docs/KSail.Generator.Docs.csproj" />
+    <Project Path="src/KSail.Docs/KSail.Docs.csproj" />
     <Project Path="src/KSail.Generator/KSail.Generator.csproj" />
     <Project Path="src/KSail.Models/KSail.Models.csproj" />
     <Project Path="src/KSail/KSail.csproj" />

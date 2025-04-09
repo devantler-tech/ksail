@@ -1,5 +1,5 @@
 ﻿using System.Text.RegularExpressions;
-using KSail.Generator.Docs;
+using KSail.Docs;
 
 string cliOptionsMarkdown = await CLIOptionsGenerator.Generate().ConfigureAwait(false);
 await File.WriteAllTextAsync("../../docs/configuration/cli-options.md", cliOptionsMarkdown).ConfigureAwait(false);
