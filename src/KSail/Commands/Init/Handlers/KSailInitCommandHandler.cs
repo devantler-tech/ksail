@@ -1,13 +1,13 @@
 using KSail.Commands.Init.Generators;
-using KSail.Commands.Init.Generators.SubGenerators;
 using KSail.Models;
 using KSail.Models.Project.Enums;
 
 namespace KSail.Commands.Init.Handlers;
 
-class KSailInitCommandHandler(KSailCluster config)
+class KSailInitCommandHandler(string outputPath, KSailCluster config)
 {
   readonly KSailCluster _config = config;
+  readonly string _outputPath = outputPath;
   readonly SOPSConfigFileGenerator _sopsConfigFileGenerator = new();
   readonly KSailClusterConfigGenerator _ksailClusterConfigGenerator = new();
   readonly DistributionConfigFileGenerator _distributionConfigFileGenerator = new();
@@ -16,11 +16,13 @@ class KSailInitCommandHandler(KSailCluster config)
   public async Task<int> HandleAsync(CancellationToken cancellationToken = default)
   {
     await _ksailClusterConfigGenerator.GenerateAsync(
+      _outputPath,
       _config,
       cancellationToken
     ).ConfigureAwait(false);
 
     await _distributionConfigFileGenerator.GenerateAsync(
+      _outputPath,
       _config,
       cancellationToken
     ).ConfigureAwait(false);
@@ -28,12 +30,17 @@ class KSailInitCommandHandler(KSailCluster config)
     if (_config.Spec.Project.SecretManager)
     {
       await _sopsConfigFileGenerator.GenerateAsync(
+        _outputPath,
         _config,
         cancellationToken
       ).ConfigureAwait(false);
     }
 
-    await _projectGenerator.GenerateAsync(_config, cancellationToken).ConfigureAwait(false);
+    await _projectGenerator.GenerateAsync(
+      _outputPath,
+      _config,
+      cancellationToken
+    ).ConfigureAwait(false);
 
     return 0;
   }

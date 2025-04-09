@@ -1,8 +1,14 @@
 <Solution>
-  <Project Path="src/KSail.Generator/KSail.Generator.csproj" />
-  <Project Path="src/KSail.Models/KSail.Models.csproj" />
-  <Project Path="src/KSail/KSail.csproj" />
-  <Project Path="tests/KSail.Generator.Tests/KSail.Generator.Tests.csproj" />
-  <Project Path="tests/KSail.Models.Tests/KSail.Models.Tests.csproj" />
-  <Project Path="tests/KSail.Tests/KSail.Tests.csproj" />
+  <Folder Name="/src/">
+    <Project Path="src/KSail.Generator.Docs/KSail.Generator.Docs.csproj" />
+    <Project Path="src/KSail.Generator/KSail.Generator.csproj" />
+    <Project Path="src/KSail.Models/KSail.Models.csproj" />
+    <Project Path="src/KSail/KSail.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/KSail.Generator.Tests.Unit/KSail.Generator.Tests.Unit.csproj" />
+    <Project Path="tests/KSail.Models.Tests.Unit/KSail.Models.Tests.Unit.csproj" />
+    <Project Path="tests/KSail.Tests.System/KSail.Tests.System.csproj" />
+    <Project Path="tests/KSail.Tests.Unit/KSail.Tests.Unit.csproj" />
+  </Folder>
 </Solution>

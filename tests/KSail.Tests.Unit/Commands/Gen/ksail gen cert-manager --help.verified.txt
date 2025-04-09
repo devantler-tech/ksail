@@ -1,0 +1,14 @@
+﻿Description:
+  Generate a CertManager resource.
+
+Usage:
+  testhost gen cert-manager [command] [options]
+
+Options:
+  --overwrite     Overwrite existing files. [default: False]
+  -?, -h, --help  Show help and usage information
+
+Commands:
+  certificate     Generate a 'cert-manager.io/v1/Certificate' resource.
+  cluster-issuer  Generate a 'cert-manager.io/v1/ClusterIssuer' resource.
+

@@ -1,0 +1,12 @@
+﻿Description:
+  Generate a 'k3d.io/v1alpha5/Simple' resource.
+
+Usage:
+  testhost gen config k3d [options]
+
+Options:
+  -o, --output <output>  A file or directory path. [default: ./k3d.yaml]
+  --overwrite            Overwrite existing files. [default: False]
+  -?, -h, --help         Show help and usage information
+
+

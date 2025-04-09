@@ -66,7 +66,10 @@ class KSailUpdateCommandHandler
     if (config.Spec.Validation.ValidateOnUpdate)
     {
       Console.WriteLine("🔍 Validating project files and configuration");
-      bool success = await _ksailValidateCommandHandler.HandleAsync(cancellationToken).ConfigureAwait(false);
+      string kubernetesDirectory = config.Spec.Project.KustomizationPath
+        .Replace("./", string.Empty, StringComparison.OrdinalIgnoreCase)
+        .Split('/', StringSplitOptions.RemoveEmptyEntries).First();
+      bool success = await _ksailValidateCommandHandler.HandleAsync(kubernetesDirectory, cancellationToken).ConfigureAwait(false);
       Console.WriteLine();
       return success;
     }

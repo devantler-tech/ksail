@@ -7,6 +7,10 @@ namespace KSail.Commands.Init;
 
 sealed class KSailInitCommand : Command
 {
+  readonly GenericPathOption _outputPathOption = new("./", ["-o", "--output"])
+  {
+    Description = "Output directory for the project files. [default: ./]"
+  };
   readonly ExceptionHandler _exceptionHandler = new();
 
   public KSailInitCommand() : base("init", "Initialize a new project")
@@ -17,8 +21,9 @@ sealed class KSailInitCommand : Command
     {
       try
       {
+        string outputPath = context.ParseResult.CommandResult.GetValueForOption(_outputPathOption) ?? "./";
         var config = await KSailClusterConfigLoader.LoadWithoptionsAsync(context).ConfigureAwait(false);
-        var handler = new KSailInitCommandHandler(config);
+        var handler = new KSailInitCommandHandler(outputPath, config);
         Console.WriteLine($"📁 Initializing new project '{config.Metadata.Name}'");
         context.ExitCode = await handler.HandleAsync(context.GetCancellationToken()).ConfigureAwait(false);
         Console.WriteLine();
@@ -33,6 +38,7 @@ sealed class KSailInitCommand : Command
 
   void AddOptions()
   {
+    AddOption(_outputPathOption);
     AddOption(CLIOptions.Generator.OverwriteOption);
     AddOption(CLIOptions.Metadata.NameOption);
     AddOption(CLIOptions.Project.CNIOption);

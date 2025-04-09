@@ -14,12 +14,15 @@ KSail supports CLI options for configuring the behavior of KSail. These options 
 
 ## `ksail`
 
+<details>
+<summary>Click to expand</summary>
+
 ```text
 Description:
   KSail is an SDK for Kubernetes. Ship k8s with ease!
 
 Usage:
-  ksail [command] [options]
+  KSail.Generator.Docs [command] [options]
 
 Options:
   --version       Show version information
@@ -40,14 +43,19 @@ Commands:
   secrets   Manage secrets
 ```
 
+</details>
+
 ## `ksail up`
+
+<details>
+<summary>Click to expand</summary>
 
 ```text
 Description:
   Create a cluster
 
 Usage:
-  ksail up [options]
+  KSail.Generator.Docs up [options]
 
 Options:
   -c, --context <context>                           The kubernetes context to use. [default: kind-ksail-default]
@@ -68,14 +76,19 @@ Options:
   -?, -h, --help                                    Show help and usage information
 ```
 
+</details>
+
 ## `ksail down`
+
+<details>
+<summary>Click to expand</summary>
 
 ```text
 Description:
   Destroy a cluster
 
 Usage:
-  ksail down [options]
+  KSail.Generator.Docs down [options]
 
 Options:
   -fsu, --flux-source-url <flux-source-url>  Flux source URL for reconciling GitOps resources. [default: oci://ksail-registry:5000/ksail-registry]
@@ -86,14 +99,19 @@ Options:
   -?, -h, --help                             Show help and usage information
 ```
 
+</details>
+
 ## `ksail update`
+
+<details>
+<summary>Click to expand</summary>
 
 ```text
 Description:
   Update a cluster
 
 Usage:
-  ksail update [options]
+  KSail.Generator.Docs update [options]
 
 Options:
   -c, --context <context>                         The kubernetes context to use. [default: kind-ksail-default]
@@ -104,14 +122,19 @@ Options:
   -?, -h, --help                                  Show help and usage information
 ```
 
+</details>
+
 ## `ksail start`
+
+<details>
+<summary>Click to expand</summary>
 
 ```text
 Description:
   Start a cluster
 
 Usage:
-  ksail start [options]
+  KSail.Generator.Docs start [options]
 
 Options:
   -c, --context <context>          The kubernetes context to use. [default: kind-ksail-default]
@@ -121,14 +144,19 @@ Options:
   -?, -h, --help                   Show help and usage information
 ```
 
+</details>
+
 ## `ksail stop`
+
+<details>
+<summary>Click to expand</summary>
 
 ```text
 Description:
   Stop a cluster
 
 Usage:
-  ksail stop [options]
+  KSail.Generator.Docs stop [options]
 
 Options:
   -n, --name <name>                The name of the cluster. [default: ksail-default]
@@ -137,17 +165,23 @@ Options:
   -?, -h, --help                   Show help and usage information
 ```
 
+</details>
+
 ## `ksail init`
+
+<details>
+<summary>Click to expand</summary>
 
 ```text
 Description:
   Initialize a new project
 
 Usage:
-  ksail init [options]
+  KSail.Generator.Docs init [options]
 
 Options:
-  -o, --overwrite                                   Overwrite existing files. [default: False]
+  -o, --output <output>                             Output directory for the project files. [default: ./] [default: ./]
+  --overwrite                                       Overwrite existing files. [default: False]
   -n, --name <name>                                 The name of the cluster. [default: ksail-default]
   --cni <Cilium|Default>                            The CNI to use. [default: Default]
   -c, --config <config>                             The path to the ksail configuration file. [default: ksail.yaml]
@@ -160,7 +194,12 @@ Options:
   -?, -h, --help                                    Show help and usage information
 ```
 
+</details>
+
 ## `ksail lint`
+
+<details>
+<summary>Click to expand</summary>
 
 ```text
 'lint' was not matched. Did you mean one of the following?
@@ -169,7 +208,7 @@ Description:
   KSail is an SDK for Kubernetes. Ship k8s with ease!
 
 Usage:
-  ksail [command] [options]
+  KSail.Generator.Docs [command] [options]
 
 Options:
   --version       Show version information
@@ -190,14 +229,19 @@ Commands:
   secrets   Manage secrets
 ```
 
+</details>
+
 ## `ksail status`
+
+<details>
+<summary>Click to expand</summary>
 
 ```text
 Description:
   Show the status of a cluster
 
 Usage:
-  ksail status [options]
+  KSail.Generator.Docs status [options]
 
 Options:
   -k, --kubeconfig <kubeconfig>  Path to kubeconfig file. [default: /Users/nikolaiemildamm/.kube/config]
@@ -206,14 +250,19 @@ Options:
   -?, -h, --help                 Show help and usage information
 ```
 
+</details>
+
 ## `ksail list`
+
+<details>
+<summary>Click to expand</summary>
 
 ```text
 Description:
   List active clusters
 
 Usage:
-  ksail list [options]
+  KSail.Generator.Docs list [options]
 
 Options:
   -p, --provider <Docker>          The provider to use for provisioning the cluster. [default: Docker]
@@ -222,14 +271,19 @@ Options:
   -?, -h, --help                   Show help and usage information
 ```
 
+</details>
+
 ## `ksail debug`
+
+<details>
+<summary>Click to expand</summary>
 
 ```text
 Description:
   Debug a cluster (❤️ K9s)
 
 Usage:
-  ksail debug [options]
+  KSail.Generator.Docs debug [options]
 
 Options:
   -k, --kubeconfig <kubeconfig>  Path to kubeconfig file. [default: /Users/nikolaiemildamm/.kube/config]
@@ -238,18 +292,23 @@ Options:
   -?, -h, --help                 Show help and usage information
 ```
 
+</details>
+
 ## `ksail gen`
+
+<details>
+<summary>Click to expand</summary>
 
 ```text
 Description:
   Generate a resource
 
 Usage:
-  ksail gen [command] [options]
+  KSail.Generator.Docs gen [command] [options]
 
 Options:
-  -o, --overwrite  Overwrite existing files. [default: False]
-  -?, -h, --help   Show help and usage information
+  --overwrite     Overwrite existing files. [default: False]
+  -?, -h, --help  Show help and usage information
 
 Commands:
   cert-manager  Generate a CertManager resource.
@@ -259,66 +318,86 @@ Commands:
   native        Generate a native Kubernetes resource.
 ```
 
+</details>
+
 ## `ksail gen cert-manager`
+
+<details>
+<summary>Click to expand</summary>
 
 ```text
 Description:
   Generate a CertManager resource.
 
 Usage:
-  ksail gen cert-manager [command] [options]
+  KSail.Generator.Docs gen cert-manager [command] [options]
 
 Options:
-  -o, --overwrite  Overwrite existing files. [default: False]
-  -?, -h, --help   Show help and usage information
+  --overwrite     Overwrite existing files. [default: False]
+  -?, -h, --help  Show help and usage information
 
 Commands:
   certificate     Generate a 'cert-manager.io/v1/Certificate' resource.
   cluster-issuer  Generate a 'cert-manager.io/v1/ClusterIssuer' resource.
 ```
 
+</details>
+
 ## `ksail gen cert-manager certificate`
+
+<details>
+<summary>Click to expand</summary>
 
 ```text
 Description:
   Generate a 'cert-manager.io/v1/Certificate' resource.
 
 Usage:
-  ksail gen cert-manager certificate [options]
+  KSail.Generator.Docs gen cert-manager certificate [options]
 
 Options:
   -o, --output <output>  A file or directory path. [default: ./certificate.yaml]
-  -o, --overwrite        Overwrite existing files. [default: False]
+  --overwrite            Overwrite existing files. [default: False]
   -?, -h, --help         Show help and usage information
 ```
 
+</details>
+
 ## `ksail gen cert-manager cluster-issuer`
+
+<details>
+<summary>Click to expand</summary>
 
 ```text
 Description:
   Generate a 'cert-manager.io/v1/ClusterIssuer' resource.
 
 Usage:
-  ksail gen cert-manager cluster-issuer [options]
+  KSail.Generator.Docs gen cert-manager cluster-issuer [options]
 
 Options:
   -o, --output <output>  A file or directory path. [default: ./cluster-issuer.yaml]
-  -o, --overwrite        Overwrite existing files. [default: False]
+  --overwrite            Overwrite existing files. [default: False]
   -?, -h, --help         Show help and usage information
 ```
 
+</details>
+
 ## `ksail gen config`
+
+<details>
+<summary>Click to expand</summary>
 
 ```text
 Description:
   Generate a configuration file.
 
 Usage:
-  ksail gen config [command] [options]
+  KSail.Generator.Docs gen config [command] [options]
 
 Options:
-  -o, --overwrite  Overwrite existing files. [default: False]
-  -?, -h, --help   Show help and usage information
+  --overwrite     Overwrite existing files. [default: False]
+  -?, -h, --help  Show help and usage information
 
 Commands:
   k3d    Generate a 'k3d.io/v1alpha5/Simple' resource.
@@ -326,63 +405,83 @@ Commands:
   sops   Generate a SOPS configuration file.
 ```
 
+</details>
+
 ## `ksail gen config k3d`
+
+<details>
+<summary>Click to expand</summary>
 
 ```text
 Description:
   Generate a 'k3d.io/v1alpha5/Simple' resource.
 
 Usage:
-  ksail gen config k3d [options]
+  KSail.Generator.Docs gen config k3d [options]
 
 Options:
   -o, --output <output>  A file or directory path. [default: ./k3d.yaml]
-  -o, --overwrite        Overwrite existing files. [default: False]
+  --overwrite            Overwrite existing files. [default: False]
   -?, -h, --help         Show help and usage information
 ```
 
+</details>
+
 ## `ksail gen config ksail`
+
+<details>
+<summary>Click to expand</summary>
 
 ```text
 Description:
   Generate a 'ksail.io/v1alpha1/Cluster' resource.
 
 Usage:
-  ksail gen config ksail [options]
+  KSail.Generator.Docs gen config ksail [options]
 
 Options:
   -o, --output <output>  A file or directory path. [default: ./ksail.yaml]
-  -o, --overwrite        Overwrite existing files. [default: False]
+  --overwrite            Overwrite existing files. [default: False]
   -?, -h, --help         Show help and usage information
 ```
 
+</details>
+
 ## `ksail gen config sops`
+
+<details>
+<summary>Click to expand</summary>
 
 ```text
 Description:
   Generate a SOPS configuration file.
 
 Usage:
-  ksail gen config sops [options]
+  KSail.Generator.Docs gen config sops [options]
 
 Options:
   -o, --output <output>  A file or directory path. [default: ./.sops.yaml]
-  -o, --overwrite        Overwrite existing files. [default: False]
+  --overwrite            Overwrite existing files. [default: False]
   -?, -h, --help         Show help and usage information
 ```
 
+</details>
+
 ## `ksail gen flux`
+
+<details>
+<summary>Click to expand</summary>
 
 ```text
 Description:
   Generate a Flux resource.
 
 Usage:
-  ksail gen flux [command] [options]
+  KSail.Generator.Docs gen flux [command] [options]
 
 Options:
-  -o, --overwrite  Overwrite existing files. [default: False]
-  -?, -h, --help   Show help and usage information
+  --overwrite     Overwrite existing files. [default: False]
+  -?, -h, --help  Show help and usage information
 
 Commands:
   helm-release     Generate a 'helm.toolkit.fluxcd.io/v2/HelmRelease' resource.
@@ -390,111 +489,146 @@ Commands:
   kustomization    Generate a 'kustomize.toolkit.fluxcd.io/v1/Kustomization' resource.
 ```
 
+</details>
+
 ## `ksail gen flux helm-release`
+
+<details>
+<summary>Click to expand</summary>
 
 ```text
 Description:
   Generate a 'helm.toolkit.fluxcd.io/v2/HelmRelease' resource.
 
 Usage:
-  ksail gen flux helm-release [options]
+  KSail.Generator.Docs gen flux helm-release [options]
 
 Options:
   -o, --output <output>  A file or directory path. [default: ./helm-release.yaml]
-  -o, --overwrite        Overwrite existing files. [default: False]
+  --overwrite            Overwrite existing files. [default: False]
   -?, -h, --help         Show help and usage information
 ```
 
+</details>
+
 ## `ksail gen flux helm-repository`
+
+<details>
+<summary>Click to expand</summary>
 
 ```text
 Description:
   Generate a 'source.toolkit.fluxcd.io/v1/HelmRepository' resource.
 
 Usage:
-  ksail gen flux helm-repository [options]
+  KSail.Generator.Docs gen flux helm-repository [options]
 
 Options:
   -o, --output <output>  A file or directory path. [default: ./helm-repository.yaml]
-  -o, --overwrite        Overwrite existing files. [default: False]
+  --overwrite            Overwrite existing files. [default: False]
   -?, -h, --help         Show help and usage information
 ```
 
+</details>
+
 ## `ksail gen flux kustomization`
+
+<details>
+<summary>Click to expand</summary>
 
 ```text
 Description:
   Generate a 'kustomize.toolkit.fluxcd.io/v1/Kustomization' resource.
 
 Usage:
-  ksail gen flux kustomization [options]
+  KSail.Generator.Docs gen flux kustomization [options]
 
 Options:
   -o, --output <output>  A file or directory path. [default: ./flux-kustomization.yaml]
-  -o, --overwrite        Overwrite existing files. [default: False]
+  --overwrite            Overwrite existing files. [default: False]
   -?, -h, --help         Show help and usage information
 ```
 
+</details>
+
 ## `ksail gen kustomize`
+
+<details>
+<summary>Click to expand</summary>
 
 ```text
 Description:
   Generate a Kustomize resource.
 
 Usage:
-  ksail gen kustomize [command] [options]
+  KSail.Generator.Docs gen kustomize [command] [options]
 
 Options:
-  -o, --overwrite  Overwrite existing files. [default: False]
-  -?, -h, --help   Show help and usage information
+  --overwrite     Overwrite existing files. [default: False]
+  -?, -h, --help  Show help and usage information
 
 Commands:
   component      Generate a 'kustomize.config.k8s.io/v1alpha1/Component' resource.
   kustomization  Generate a 'kustomize.config.k8s.io/v1beta1/Kustomization' resource.
 ```
 
+</details>
+
 ## `ksail gen kustomize component`
+
+<details>
+<summary>Click to expand</summary>
 
 ```text
 Description:
   Generate a 'kustomize.config.k8s.io/v1alpha1/Component' resource.
 
 Usage:
-  ksail gen kustomize component [options]
+  KSail.Generator.Docs gen kustomize component [options]
 
 Options:
   -o, --output <output>  A file or directory path. [default: ./kustomization.yaml]
-  -o, --overwrite        Overwrite existing files. [default: False]
+  --overwrite            Overwrite existing files. [default: False]
   -?, -h, --help         Show help and usage information
 ```
 
+</details>
+
 ## `ksail gen kustomize kustomization`
+
+<details>
+<summary>Click to expand</summary>
 
 ```text
 Description:
   Generate a 'kustomize.config.k8s.io/v1beta1/Kustomization' resource.
 
 Usage:
-  ksail gen kustomize kustomization [options]
+  KSail.Generator.Docs gen kustomize kustomization [options]
 
 Options:
   -o, --output <output>  A file or directory path. [default: ./kustomization.yaml]
-  -o, --overwrite        Overwrite existing files. [default: False]
+  --overwrite            Overwrite existing files. [default: False]
   -?, -h, --help         Show help and usage information
 ```
 
+</details>
+
 ## `ksail gen native`
+
+<details>
+<summary>Click to expand</summary>
 
 ```text
 Description:
   Generate a native Kubernetes resource.
 
 Usage:
-  ksail gen native [command] [options]
+  KSail.Generator.Docs gen native [command] [options]
 
 Options:
-  -o, --overwrite  Overwrite existing files. [default: False]
-  -?, -h, --help   Show help and usage information
+  --overwrite     Overwrite existing files. [default: False]
+  -?, -h, --help  Show help and usage information
 
 Commands:
   cluster-role-binding       Generate a 'rbac.authorization.k8s.io/v1/ClusterRoleBinding' resource.
@@ -521,344 +655,459 @@ Commands:
   stateful-set               Generate a 'apps/v1/StatefulSet' resource.
 ```
 
+</details>
+
 ## `ksail gen native cluster-role-binding`
+
+<details>
+<summary>Click to expand</summary>
 
 ```text
 Description:
   Generate a 'rbac.authorization.k8s.io/v1/ClusterRoleBinding' resource.
 
 Usage:
-  ksail gen native cluster-role-binding [options]
+  KSail.Generator.Docs gen native cluster-role-binding [options]
 
 Options:
   -o, --output <output>  A file or directory path. [default: ./cluster-role-binding.yaml]
-  -o, --overwrite        Overwrite existing files. [default: False]
+  --overwrite            Overwrite existing files. [default: False]
   -?, -h, --help         Show help and usage information
 ```
 
+</details>
+
 ## `ksail gen native cluster-role`
+
+<details>
+<summary>Click to expand</summary>
 
 ```text
 Description:
   Generate a 'rbac.authorization.k8s.io/v1/ClusterRole' resource.
 
 Usage:
-  ksail gen native cluster-role [options]
+  KSail.Generator.Docs gen native cluster-role [options]
 
 Options:
   -o, --output <output>  A file or directory path. [default: ./cluster-role.yaml]
-  -o, --overwrite        Overwrite existing files. [default: False]
+  --overwrite            Overwrite existing files. [default: False]
   -?, -h, --help         Show help and usage information
 ```
 
+</details>
+
 ## `ksail gen native namespace`
+
+<details>
+<summary>Click to expand</summary>
 
 ```text
 Description:
   Generate a 'core/v1/Namespace' resource.
 
 Usage:
-  ksail gen native namespace [options]
+  KSail.Generator.Docs gen native namespace [options]
 
 Options:
   -o, --output <output>  A file or directory path. [default: ./namespace.yaml]
-  -o, --overwrite        Overwrite existing files. [default: False]
+  --overwrite            Overwrite existing files. [default: False]
   -?, -h, --help         Show help and usage information
 ```
 
+</details>
+
 ## `ksail gen native network-policy`
+
+<details>
+<summary>Click to expand</summary>
 
 ```text
 Description:
   Generate a 'networking.k8s.io/v1/NetworkPolicy' resource.
 
 Usage:
-  ksail gen native network-policy [options]
+  KSail.Generator.Docs gen native network-policy [options]
 
 Options:
   -o, --output <output>  A file or directory path. [default: ./network-policy.yaml]
-  -o, --overwrite        Overwrite existing files. [default: False]
+  --overwrite            Overwrite existing files. [default: False]
   -?, -h, --help         Show help and usage information
 ```
 
+</details>
+
 ## `ksail gen native persistent-volume`
+
+<details>
+<summary>Click to expand</summary>
 
 ```text
 Description:
   Generate a 'core/v1/PersistentVolume' resource.
 
 Usage:
-  ksail gen native persistent-volume [options]
+  KSail.Generator.Docs gen native persistent-volume [options]
 
 Options:
   -o, --output <output>  A file or directory path. [default: ./persistent-volume.yaml]
-  -o, --overwrite        Overwrite existing files. [default: False]
+  --overwrite            Overwrite existing files. [default: False]
   -?, -h, --help         Show help and usage information
 ```
 
+</details>
+
 ## `ksail gen native resource-quota`
+
+<details>
+<summary>Click to expand</summary>
 
 ```text
 Description:
   Generate a 'core/v1/ResourceQuota' resource.
 
 Usage:
-  ksail gen native resource-quota [options]
+  KSail.Generator.Docs gen native resource-quota [options]
 
 Options:
   -o, --output <output>  A file or directory path. [default: ./resource-quota.yaml]
-  -o, --overwrite        Overwrite existing files. [default: False]
+  --overwrite            Overwrite existing files. [default: False]
   -?, -h, --help         Show help and usage information
 ```
 
+</details>
+
 ## `ksail gen native role-binding`
+
+<details>
+<summary>Click to expand</summary>
 
 ```text
 Description:
   Generate a 'rbac.authorization.k8s.io/v1/RoleBinding' resource.
 
 Usage:
-  ksail gen native role-binding [options]
+  KSail.Generator.Docs gen native role-binding [options]
 
 Options:
   -o, --output <output>  A file or directory path. [default: ./role-binding.yaml]
-  -o, --overwrite        Overwrite existing files. [default: False]
+  --overwrite            Overwrite existing files. [default: False]
   -?, -h, --help         Show help and usage information
 ```
 
+</details>
+
 ## `ksail gen native role`
+
+<details>
+<summary>Click to expand</summary>
 
 ```text
 Description:
   Generate a 'rbac.authorization.k8s.io/v1/Role' resource.
 
 Usage:
-  ksail gen native role [options]
+  KSail.Generator.Docs gen native role [options]
 
 Options:
   -o, --output <output>  A file or directory path. [default: ./role.yaml]
-  -o, --overwrite        Overwrite existing files. [default: False]
+  --overwrite            Overwrite existing files. [default: False]
   -?, -h, --help         Show help and usage information
 ```
 
+</details>
+
 ## `ksail gen native service-account`
+
+<details>
+<summary>Click to expand</summary>
 
 ```text
 Description:
   Generate a 'core/v1/ServiceAccount' resource.
 
 Usage:
-  ksail gen native service-account [options]
+  KSail.Generator.Docs gen native service-account [options]
 
 Options:
   -o, --output <output>  A file or directory path. [default: ./service-account.yaml]
-  -o, --overwrite        Overwrite existing files. [default: False]
+  --overwrite            Overwrite existing files. [default: False]
   -?, -h, --help         Show help and usage information
 ```
 
+</details>
+
 ## `ksail gen native config-map`
+
+<details>
+<summary>Click to expand</summary>
 
 ```text
 Description:
   Generate a 'core/v1/ConfigMap' resource.
 
 Usage:
-  ksail gen native config-map [options]
+  KSail.Generator.Docs gen native config-map [options]
 
 Options:
   -o, --output <output>  A file or directory path. [default: ./config-map.yaml]
-  -o, --overwrite        Overwrite existing files. [default: False]
+  --overwrite            Overwrite existing files. [default: False]
   -?, -h, --help         Show help and usage information
 ```
 
+</details>
+
 ## `ksail gen native persistent-volume-claim`
+
+<details>
+<summary>Click to expand</summary>
 
 ```text
 Description:
   Generate a 'core/v1/PersistentVolumeClaim' resource.
 
 Usage:
-  ksail gen native persistent-volume-claim [options]
+  KSail.Generator.Docs gen native persistent-volume-claim [options]
 
 Options:
   -o, --output <output>  A file or directory path. [default: ./persistent-volume-claim.yaml]
-  -o, --overwrite        Overwrite existing files. [default: False]
+  --overwrite            Overwrite existing files. [default: False]
   -?, -h, --help         Show help and usage information
 ```
 
+</details>
+
 ## `ksail gen native secret`
+
+<details>
+<summary>Click to expand</summary>
 
 ```text
 Description:
   Generate a 'core/v1/Secret' resource.
 
 Usage:
-  ksail gen native secret [options]
+  KSail.Generator.Docs gen native secret [options]
 
 Options:
   -o, --output <output>  A file or directory path. [default: ./secret.yaml]
-  -o, --overwrite        Overwrite existing files. [default: False]
+  --overwrite            Overwrite existing files. [default: False]
   -?, -h, --help         Show help and usage information
 ```
 
+</details>
+
 ## `ksail gen native horizontal-pod-autoscaler`
+
+<details>
+<summary>Click to expand</summary>
 
 ```text
 Description:
   Generate a 'autoscaling/v2/HorizontalPodAutoscaler' resource.
 
 Usage:
-  ksail gen native horizontal-pod-autoscaler [options]
+  KSail.Generator.Docs gen native horizontal-pod-autoscaler [options]
 
 Options:
   -o, --output <output>  A file or directory path. [default: ./horizontal-pod-autoscaler.yaml]
-  -o, --overwrite        Overwrite existing files. [default: False]
+  --overwrite            Overwrite existing files. [default: False]
   -?, -h, --help         Show help and usage information
 ```
 
+</details>
+
 ## `ksail gen native pod-disruption-budget`
+
+<details>
+<summary>Click to expand</summary>
 
 ```text
 Description:
   Generate a 'policy/v1/PodDisruptionBudget' resource.
 
 Usage:
-  ksail gen native pod-disruption-budget [options]
+  KSail.Generator.Docs gen native pod-disruption-budget [options]
 
 Options:
   -o, --output <output>  A file or directory path. [default: ./pod-disruption-budget.yaml]
-  -o, --overwrite        Overwrite existing files. [default: False]
+  --overwrite            Overwrite existing files. [default: False]
   -?, -h, --help         Show help and usage information
 ```
 
+</details>
+
 ## `ksail gen native priority-class`
+
+<details>
+<summary>Click to expand</summary>
 
 ```text
 Description:
   Generate a 'scheduling.k8s.io/v1/PriorityClass' resource.
 
 Usage:
-  ksail gen native priority-class [options]
+  KSail.Generator.Docs gen native priority-class [options]
 
 Options:
   -o, --output <output>  A file or directory path. [default: ./priority-class.yaml]
-  -o, --overwrite        Overwrite existing files. [default: False]
+  --overwrite            Overwrite existing files. [default: False]
   -?, -h, --help         Show help and usage information
 ```
 
+</details>
+
 ## `ksail gen native ingress`
+
+<details>
+<summary>Click to expand</summary>
 
 ```text
 Description:
   Generate a 'networking.k8s.io/v1/Ingress' resource.
 
 Usage:
-  ksail gen native ingress [options]
+  KSail.Generator.Docs gen native ingress [options]
 
 Options:
   -o, --output <output>  A file or directory path. [default: ./ingress.yaml]
-  -o, --overwrite        Overwrite existing files. [default: False]
+  --overwrite            Overwrite existing files. [default: False]
   -?, -h, --help         Show help and usage information
 ```
 
+</details>
+
 ## `ksail gen native service`
+
+<details>
+<summary>Click to expand</summary>
 
 ```text
 Description:
   Generate a 'core/v1/Service' resource.
 
 Usage:
-  ksail gen native service [options]
+  KSail.Generator.Docs gen native service [options]
 
 Options:
   -o, --output <output>  A file or directory path. [default: ./service.yaml]
-  -o, --overwrite        Overwrite existing files. [default: False]
+  --overwrite            Overwrite existing files. [default: False]
   -?, -h, --help         Show help and usage information
 ```
 
+</details>
+
 ## `ksail gen native cron-job`
+
+<details>
+<summary>Click to expand</summary>
 
 ```text
 Description:
   Generate a 'batch/v1/CronJob' resource.
 
 Usage:
-  ksail gen native cron-job [options]
+  KSail.Generator.Docs gen native cron-job [options]
 
 Options:
   -o, --output <output>  A file or directory path. [default: ./cron-job.yaml]
-  -o, --overwrite        Overwrite existing files. [default: False]
+  --overwrite            Overwrite existing files. [default: False]
   -?, -h, --help         Show help and usage information
 ```
 
+</details>
+
 ## `ksail gen native daemon-set`
+
+<details>
+<summary>Click to expand</summary>
 
 ```text
 Description:
   Generate a 'apps/v1/DaemonSet' resource.
 
 Usage:
-  ksail gen native daemon-set [options]
+  KSail.Generator.Docs gen native daemon-set [options]
 
 Options:
   -o, --output <output>  A file or directory path. [default: ./daemon-set.yaml]
-  -o, --overwrite        Overwrite existing files. [default: False]
+  --overwrite            Overwrite existing files. [default: False]
   -?, -h, --help         Show help and usage information
 ```
 
+</details>
+
 ## `ksail gen native deployment`
+
+<details>
+<summary>Click to expand</summary>
 
 ```text
 Description:
   Generate a 'apps/v1/Deployment' resource.
 
 Usage:
-  ksail gen native deployment [options]
+  KSail.Generator.Docs gen native deployment [options]
 
 Options:
   -o, --output <output>  A file or directory path. [default: ./deployment.yaml]
-  -o, --overwrite        Overwrite existing files. [default: False]
+  --overwrite            Overwrite existing files. [default: False]
   -?, -h, --help         Show help and usage information
 ```
 
+</details>
+
 ## `ksail gen native job`
+
+<details>
+<summary>Click to expand</summary>
 
 ```text
 Description:
   Generate a 'batch/v1/Job' resource.
 
 Usage:
-  ksail gen native job [options]
+  KSail.Generator.Docs gen native job [options]
 
 Options:
   -o, --output <output>  A file or directory path. [default: ./job.yaml]
-  -o, --overwrite        Overwrite existing files. [default: False]
+  --overwrite            Overwrite existing files. [default: False]
   -?, -h, --help         Show help and usage information
 ```
 
+</details>
+
 ## `ksail gen native stateful-set`
+
+<details>
+<summary>Click to expand</summary>
 
 ```text
 Description:
   Generate a 'apps/v1/StatefulSet' resource.
 
 Usage:
-  ksail gen native stateful-set [options]
+  KSail.Generator.Docs gen native stateful-set [options]
 
 Options:
   -o, --output <output>  A file or directory path. [default: ./stateful-set.yaml]
-  -o, --overwrite        Overwrite existing files. [default: False]
+  --overwrite            Overwrite existing files. [default: False]
   -?, -h, --help         Show help and usage information
 ```
 
+</details>
+
 ## `ksail secrets`
+
+<details>
+<summary>Click to expand</summary>
 
 ```text
 Description:
   Manage secrets
 
 Usage:
-  ksail secrets [command] [options]
+  KSail.Generator.Docs secrets [command] [options]
 
 Options:
   -?, -h, --help  Show help and usage information
@@ -874,14 +1123,19 @@ Commands:
   export <public-key>  Export a key to a file
 ```
 
+</details>
+
 ## `ksail secrets encrypt`
+
+<details>
+<summary>Click to expand</summary>
 
 ```text
 Description:
   Encrypt a file
 
 Usage:
-  ksail secrets encrypt <path> [options]
+  KSail.Generator.Docs secrets encrypt <path> [options]
 
 Arguments:
   <path>  The path to the file to encrypt.
@@ -893,14 +1147,19 @@ Options:
   -?, -h, --help                  Show help and usage information
 ```
 
+</details>
+
 ## `ksail secrets decrypt`
+
+<details>
+<summary>Click to expand</summary>
 
 ```text
 Description:
   Decrypt a file
 
 Usage:
-  ksail secrets decrypt <path> [options]
+  KSail.Generator.Docs secrets decrypt <path> [options]
 
 Arguments:
   <path>  The path to the file to decrypt.
@@ -911,14 +1170,19 @@ Options:
   -?, -h, --help         Show help and usage information
 ```
 
+</details>
+
 ## `ksail secrets edit`
+
+<details>
+<summary>Click to expand</summary>
 
 ```text
 Description:
   Edit an encrypted file
 
 Usage:
-  ksail secrets edit <path> [options]
+  KSail.Generator.Docs secrets edit <path> [options]
 
 Arguments:
   <path>  The path to the file to edit.
@@ -928,27 +1192,37 @@ Options:
   -?, -h, --help           Show help and usage information
 ```
 
+</details>
+
 ## `ksail secrets add`
+
+<details>
+<summary>Click to expand</summary>
 
 ```text
 Description:
   Add a new encryption key
 
 Usage:
-  ksail secrets add [options]
+  KSail.Generator.Docs secrets add [options]
 
 Options:
   -?, -h, --help  Show help and usage information
 ```
 
+</details>
+
 ## `ksail secrets rm`
+
+<details>
+<summary>Click to expand</summary>
 
 ```text
 Description:
   Remove an existing encryption key
 
 Usage:
-  ksail secrets rm <public-key> [options]
+  KSail.Generator.Docs secrets rm <public-key> [options]
 
 Arguments:
   <public-key>  Public key matching existing encryption key
@@ -957,14 +1231,19 @@ Options:
   -?, -h, --help  Show help and usage information
 ```
 
+</details>
+
 ## `ksail secrets list`
+
+<details>
+<summary>Click to expand</summary>
 
 ```text
 Description:
   List keys
 
 Usage:
-  ksail secrets list [options]
+  KSail.Generator.Docs secrets list [options]
 
 Options:
   -spk, --show-private-keys  Show private keys. [default: False]
@@ -972,14 +1251,19 @@ Options:
   -?, -h, --help             Show help and usage information
 ```
 
+</details>
+
 ## `ksail secrets import`
+
+<details>
+<summary>Click to expand</summary>
 
 ```text
 Description:
   Import a key from stdin or a file
 
 Usage:
-  ksail secrets import <key> [options]
+  KSail.Generator.Docs secrets import <key> [options]
 
 Arguments:
   <key>  The encryption key to import
@@ -988,14 +1272,19 @@ Options:
   -?, -h, --help  Show help and usage information
 ```
 
+</details>
+
 ## `ksail secrets export`
+
+<details>
+<summary>Click to expand</summary>
 
 ```text
 Description:
   Export a key to a file
 
 Usage:
-  ksail secrets export <public-key> [options]
+  KSail.Generator.Docs secrets export <public-key> [options]
 
 Arguments:
   <public-key>  The public key for the encryption key to export
@@ -1004,3 +1293,5 @@ Options:
   -o, --output <output>  A file or directory path. []
   -?, -h, --help         Show help and usage information
 ```
+
+</details>

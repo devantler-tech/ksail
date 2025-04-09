@@ -1,0 +1,12 @@
+﻿Description:
+  Generate a 'ksail.io/v1alpha1/Cluster' resource.
+
+Usage:
+  testhost gen config ksail [options]
+
+Options:
+  -o, --output <output>  A file or directory path. [default: ./ksail.yaml]
+  --overwrite            Overwrite existing files. [default: False]
+  -?, -h, --help         Show help and usage information
+
+

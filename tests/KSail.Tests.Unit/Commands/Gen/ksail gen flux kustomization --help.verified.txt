@@ -1,0 +1,12 @@
+﻿Description:
+  Generate a 'kustomize.toolkit.fluxcd.io/v1/Kustomization' resource.
+
+Usage:
+  testhost gen flux kustomization [options]
+
+Options:
+  -o, --output <output>  A file or directory path. [default: ./flux-kustomization.yaml]
+  --overwrite            Overwrite existing files. [default: False]
+  -?, -h, --help         Show help and usage information
+
+

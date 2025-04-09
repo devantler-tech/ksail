@@ -43,6 +43,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <InternalsVisibleTo Include="$(AssemblyName).Tests" />
+    <InternalsVisibleTo Include="$(AssemblyName).Generator.Docs" />
+    <InternalsVisibleTo Include="$(AssemblyName).Tests.System" />
+    <InternalsVisibleTo Include="$(AssemblyName).Tests.Unit" />
   </ItemGroup>
 </Project>
