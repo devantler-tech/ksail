@@ -16,7 +16,8 @@ public class CLIOptionsGeneratorTests
   {
     // Arrange & Act
     string expectedMarkdown = await CLIOptionsGenerator.GenerateAsync();
-    expectedMarkdown = expectedMarkdown.Replace("testhost", "ksail", StringComparison.Ordinal);
+    expectedMarkdown = expectedMarkdown
+      .Replace("testhost", "ksail", StringComparison.Ordinal);
     string actualMarkdown = await File.ReadAllTextAsync("../../../../../../docs/configuration/cli-options.md");
 
     // Assert

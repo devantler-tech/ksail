@@ -81,7 +81,9 @@ static class CLIOptionsGenerator
   {
     var console = new TestConsole();
     _ = await command.InvokeAsync(args, console).ConfigureAwait(false);
-    return console.Out.ToString()?.Trim().Replace("KSail.Docs", "ksail", StringComparison.Ordinal);
+    return console.Out.ToString()?.Trim()
+      .Replace("KSail.Docs", "ksail", StringComparison.Ordinal)
+      .Replace(Environment.UserName, "<user>", StringComparison.Ordinal);
   }
 
   static string GenerateMarkdown(Dictionary<string, string?> helpTexts)

@@ -59,7 +59,7 @@ Usage:
 
 Options:
   -c, --context <context>                           The kubernetes context to use. [default: kind-ksail-default]
-  -k, --kubeconfig <kubeconfig>                     Path to kubeconfig file. [default: /Users/nikolaiemildamm/.kube/config]
+  -k, --kubeconfig <kubeconfig>                     Path to kubeconfig file. [default: /Users/<user>/.kube/config]
   -t, --timeout <timeout>                           The time to wait for each kustomization to become ready. [default: 5m]
   -fsu, --flux-source-url <flux-source-url>         Flux source URL for reconciling GitOps resources. [default: oci://ksail-registry:5000/ksail-registry]
   -n, --name <name>                                 The name of the cluster. [default: ksail-default]
@@ -115,7 +115,7 @@ Usage:
 
 Options:
   -c, --context <context>                         The kubernetes context to use. [default: kind-ksail-default]
-  -k, --kubeconfig <kubeconfig>                   Path to kubeconfig file. [default: /Users/nikolaiemildamm/.kube/config]
+  -k, --kubeconfig <kubeconfig>                   Path to kubeconfig file. [default: /Users/<user>/.kube/config]
   -kp, --kustomization-path <kustomization-path>  The path to the root kustomization directory. [default: k8s]
   -v, --validate                                  Validate project files before applying changes to an existing cluster. [default: True]
   -r, --reconcile                                 Reconcile manifests. [default: True]
@@ -244,7 +244,7 @@ Usage:
   ksail status [options]
 
 Options:
-  -k, --kubeconfig <kubeconfig>  Path to kubeconfig file. [default: /Users/nikolaiemildamm/.kube/config]
+  -k, --kubeconfig <kubeconfig>  Path to kubeconfig file. [default: /Users/<user>/.kube/config]
   -c, --context <context>        The kubernetes context to use. [default: kind-ksail-default]
   --verbose                      Verbose output for validation or status checks. [default: False]
   -?, -h, --help                 Show help and usage information
@@ -286,7 +286,7 @@ Usage:
   ksail debug [options]
 
 Options:
-  -k, --kubeconfig <kubeconfig>  Path to kubeconfig file. [default: /Users/nikolaiemildamm/.kube/config]
+  -k, --kubeconfig <kubeconfig>  Path to kubeconfig file. [default: /Users/<user>/.kube/config]
   -c, --context <context>        The kubernetes context to use. [default: kind-ksail-default]
   -e, --editor <Nano|Vim>        Editor to use. [default: Nano]
   -?, -h, --help                 Show help and usage information
