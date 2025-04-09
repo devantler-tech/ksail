@@ -1,13 +1,12 @@
-﻿#pragma warning disable CA1515 // Consider making public types internal
-#pragma warning disable IDE0060 // Remove unused parameter
-using System.Diagnostics.CodeAnalysis;
+﻿
 
-namespace KSail.Docs;
+using System.Diagnostics.CodeAnalysis;
+using KSail.Docs;
 
 [ExcludeFromCodeCoverage]
-public static class Program
+class Program
 {
-  public static async Task Main(string[] args)
+  static async Task Main()
   {
     // Generate CLIOptions documentation
     string cliOptionsMarkdown = await CLIOptionsGenerator.GenerateAsync().ConfigureAwait(false);
@@ -25,5 +24,3 @@ public static class Program
     await File.WriteAllTextAsync("../../schemas/ksail-cluster-schema.json", jsonSchema).ConfigureAwait(false);
   }
 }
-#pragma warning restore CA1515 // Consider making public types internal
-#pragma warning restore IDE0060 // Remove unused parameter
