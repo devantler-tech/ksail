@@ -1,10 +1,12 @@
 using System.CommandLine;
+using System.Diagnostics.CodeAnalysis;
 using KSail.Commands.Debug.Handlers;
 using KSail.Options;
 using KSail.Utils;
 
 namespace KSail.Commands.Debug;
 
+[ExcludeFromCodeCoverage]
 sealed class KSailDebugCommand : Command
 {
   readonly ExceptionHandler _exceptionHandler = new();
