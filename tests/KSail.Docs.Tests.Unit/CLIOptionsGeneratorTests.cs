@@ -18,7 +18,8 @@ public class CLIOptionsGeneratorTests
     string expectedMarkdown = await CLIOptionsGenerator.GenerateAsync();
     expectedMarkdown = expectedMarkdown
       .Replace("testhost", "ksail", StringComparison.Ordinal)
-      .Replace("\\", "/", StringComparison.Ordinal);
+      .Replace("\\", "/", StringComparison.Ordinal)
+      .Replace("C:/", "", StringComparison.Ordinal);
     string actualMarkdown = await File.ReadAllTextAsync("../../../../../../docs/configuration/cli-options.md");
 
     // Assert
