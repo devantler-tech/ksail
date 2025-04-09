@@ -58,12 +58,14 @@ public class E2ETests
     Assert.Equal(0, startExitCode);
     int updateExitCode = await updateCommand.InvokeAsync(["update"], console).ConfigureAwait(false);
     Assert.Equal(0, updateExitCode);
+    Console.WriteLine("► [DEBUG] starting debug task");
     var debugTask = Task.Run(async () =>
     {
       _ = await debugCommand.InvokeAsync(["debug"], console).ConfigureAwait(false);
     });
     await debugTask.WaitAsync(TimeSpan.FromSeconds(4)).ConfigureAwait(false);
     Assert.False(debugTask.IsFaulted);
+    Console.WriteLine("► [DEBUG] killing debug task");
     debugTask.Dispose();
     int downExitCode = await downCommand.InvokeAsync(["down"], console).ConfigureAwait(false);
     Assert.Equal(0, downExitCode);
