@@ -54,12 +54,7 @@ static class SchemaGenerator
         // Apply description attribute to the generated schema.
         if (descriptionAttr != null)
         {
-          if (schema is not JsonObject jObj)
-          {
-            var valueKind = schema.GetValueKind();
-            schema = jObj = [];
-          }
-
+          var jObj = schema.AsObject();
           jObj.Insert(0, "description", descriptionAttr.Description);
         }
 
