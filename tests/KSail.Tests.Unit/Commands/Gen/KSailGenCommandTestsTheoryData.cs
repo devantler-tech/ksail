@@ -52,6 +52,7 @@ static class KSailGenCommandTestsTheoryData
   public static TheoryData<string[], string> GenerateNativeResourceTheoryData =>
     new()
     {
+      { ["gen", "native", "cluster-role"], "cluster-role.yaml" },
       { ["gen", "native", "cluster-role-binding"], "cluster-role-binding.yaml" },
       { ["gen", "native", "namespace"], "namespace.yaml" },
       { ["gen", "native", "network-policy"], "network-policy.yaml" },
@@ -65,6 +66,7 @@ static class KSailGenCommandTestsTheoryData
       { ["gen", "native", "secret"], "secret.yaml" },
       { ["gen", "native", "horizontal-pod-autoscaler"], "horizontal-pod-autoscaler.yaml" },
       { ["gen", "native", "pod-disruption-budget"], "pod-disruption-budget.yaml" },
+      { ["gen", "native", "priority-class"], "priority-class.yaml" },
       { ["gen", "native", "ingress"], "ingress.yaml" },
       { ["gen", "native", "service"], "service.yaml" },
       { ["gen", "native", "cron-job"], "cron-job.yaml" },
