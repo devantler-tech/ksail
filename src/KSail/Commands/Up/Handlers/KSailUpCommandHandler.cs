@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Text;
 using Devantler.ContainerEngineProvisioner.Docker;
+using Devantler.KubectlCLI;
 using Devantler.KubernetesProvisioner.Cluster.Core;
 using Devantler.KubernetesProvisioner.Cluster.K3d;
 using Devantler.KubernetesProvisioner.Cluster.Kind;
@@ -23,7 +24,7 @@ class KSailUpCommandHandler
 {
   readonly SOPSLocalAgeSecretManager _secretManager = new();
   readonly DockerProvisioner _containerEngineProvisioner;
-  readonly FluxProvisioner _deploymentTool;
+  readonly IDeploymentToolProvisioner _deploymentTool;
   readonly IKubernetesClusterProvisioner _clusterProvisioner;
   readonly CiliumProvisioner? _cniProvisioner;
   readonly KSailCluster _config;
@@ -51,7 +52,8 @@ class KSailUpCommandHandler
     };
     _deploymentTool = config.Spec.Project.DeploymentTool switch
     {
-      KSailDeploymentToolType.Flux => new FluxProvisioner(config.Spec.Connection.Kubeconfig, config.Spec.Connection.Context),
+      KSailDeploymentToolType.Kubectl => new KubectlProvisioner(config.Spec.Connection.Kubeconfig, config.Spec.Connection.Context),
+      KSailDeploymentToolType.Flux => new FluxProvisioner(config.Spec.DeploymentTool.Flux.Source.Url, config.Spec.Connection.Kubeconfig, config.Spec.Connection.Context),
       _ => throw new NotSupportedException($"The Deployment tool '{config.Spec.Project.DeploymentTool}' is not supported.")
     };
     _config = config;
@@ -301,8 +303,7 @@ class KSailUpCommandHandler
     string kubernetesDirectory = config.Spec.Project.KustomizationPath.TrimStart('.', '/').Split('/').First();
     await _deploymentTool.PushManifestsAsync(sourceUrlFromHost, kubernetesDirectory, cancellationToken: cancellationToken).ConfigureAwait(false);
     string ociKustomizationPath = config.Spec.Project.KustomizationPath[kubernetesDirectory.Length..].TrimStart('/');
-    await _deploymentTool.BootstrapAsync(
-      config.Spec.DeploymentTool.Flux.Source.Url,
+    await _deploymentTool.InstallAsync(
       ociKustomizationPath,
       true,
       cancellationToken
