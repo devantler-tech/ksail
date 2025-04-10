@@ -17,9 +17,7 @@ class KSailValidateCommandHandler(KSailCluster config)
       throw new KSailException($"no manifest files found in '{path}'.");
 
     Console.WriteLine("► validating configuration");
-    var (configIsValid, configMessage) = await _configValidator.ValidateAsync(path, cancellationToken: cancellationToken).ConfigureAwait(false);
-    if (!configIsValid)
-      throw new KSailException(configMessage);
+    await _configValidator.ValidateAsync(path, cancellationToken: cancellationToken).ConfigureAwait(false);
     Console.WriteLine("✔ configuration is valid");
 
     Console.WriteLine("► validating yaml syntax");
@@ -33,6 +31,6 @@ class KSailValidateCommandHandler(KSailCluster config)
     if (!schemasAreValid)
       throw new KSailException(schemasMessage);
     Console.WriteLine("✔ schemas are valid");
-    return configIsValid && yamlIsValid && schemasAreValid;
+    return yamlIsValid && schemasAreValid;
   }
 }
