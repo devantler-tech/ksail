@@ -68,10 +68,7 @@ class KSailUpCommandHandler
 
     await CreateOCISourceRegistry(_config, cancellationToken).ConfigureAwait(false);
     await CreateMirrorRegistries(_config, cancellationToken).ConfigureAwait(false);
-    // skip if cluster already exists
-
     await ProvisionCluster(cancellationToken).ConfigureAwait(false);
-
     await BootstrapOCISourceRegistry(_config, cancellationToken).ConfigureAwait(false);
     await BootstrapMirrorRegistries(_config, cancellationToken).ConfigureAwait(false);
     await BootstrapCNI(_config, cancellationToken).ConfigureAwait(false);
