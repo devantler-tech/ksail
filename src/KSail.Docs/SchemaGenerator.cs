@@ -56,11 +56,8 @@ static class SchemaGenerator
         {
           if (schema is not JsonObject jObj)
           {
-            // Handle the case where the schema is a Boolean.
             var valueKind = schema.GetValueKind();
             schema = jObj = [];
-            if (valueKind is JsonValueKind.False)
-              jObj.Add("not", true);
           }
 
           jObj.Insert(0, "description", descriptionAttr.Description);
