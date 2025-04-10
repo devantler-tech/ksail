@@ -4,15 +4,14 @@ using KSail.Models;
 
 namespace KSail.Commands.Secrets.Handlers;
 
-class KSailSecretsImportCommandHandler(KSailCluster config, string key, ISecretManager<AgeKey> secretManager)
+class KSailSecretsImportCommandHandler(string key, ISecretManager<AgeKey> secretManager)
 {
-  readonly KSailCluster _config = config;
   readonly string _key = key;
   readonly ISecretManager<AgeKey> _secretManager = secretManager;
 
   internal async Task<int> HandleAsync(CancellationToken cancellationToken)
   {
-    Console.WriteLine($"► importing '{_key}' to '{_config.Spec.Project.SecretManager}'");
+    Console.WriteLine($"► importing '{_key}' to SOPS");
     string key = _key;
     if (File.Exists(key))
     {

@@ -1,4 +1,5 @@
 using System.CommandLine;
+using System.Diagnostics.CodeAnalysis;
 using Devantler.SecretManager.SOPS.LocalAge;
 using KSail.Commands.Secrets.Arguments;
 using KSail.Commands.Secrets.Handlers;
@@ -8,6 +9,7 @@ using KSail.Utils;
 
 namespace KSail.Commands.Secrets.Commands;
 
+[ExcludeFromCodeCoverage]
 sealed class KSailSecretsEditCommand : Command
 {
   readonly ExceptionHandler _exceptionHandler = new();

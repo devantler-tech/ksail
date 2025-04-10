@@ -21,7 +21,7 @@ sealed class KSailSecretsImportCommand : Command
         string key = context.ParseResult.GetValueForArgument(_keyArgument);
 
         var cancellationToken = context.GetCancellationToken();
-        var handler = new KSailSecretsImportCommandHandler(config, key, new SOPSLocalAgeSecretManager());
+        var handler = new KSailSecretsImportCommandHandler(key, new SOPSLocalAgeSecretManager());
         context.ExitCode = await handler.HandleAsync(cancellationToken).ConfigureAwait(false);
       }
       catch (Exception ex)

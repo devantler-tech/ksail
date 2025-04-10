@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using Devantler.Keys.Age;
 using Devantler.SecretManager.Core;
@@ -5,6 +6,7 @@ using KSail.Models;
 
 namespace KSail.Commands.Secrets.Handlers;
 
+[ExcludeFromCodeCoverage]
 class KSailSecretsEditCommandHandler(KSailCluster config, string path, ISecretManager<AgeKey> secretManager)
 {
   readonly KSailCluster _config = config;
