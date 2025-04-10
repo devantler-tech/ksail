@@ -39,7 +39,7 @@ sealed class KSailSecretsExportCommand : Command
         string outputPath = context.ParseResult.GetValueForOption(_outputFilePathOption) ?? throw new KSailException("output path is required");
 
         var cancellationToken = context.GetCancellationToken();
-        var handler = new KSailSecretsExportCommandHandler(config, publicKey, outputPath, new SOPSLocalAgeSecretManager());
+        var handler = new KSailSecretsExportCommandHandler(publicKey, outputPath, new SOPSLocalAgeSecretManager());
         context.ExitCode = await handler.HandleAsync(cancellationToken).ConfigureAwait(false);
       }
       catch (Exception ex)
