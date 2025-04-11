@@ -28,8 +28,8 @@ spec:
     distributionConfigPath: kind.yaml
     # The Kubernetes distribution to use. [default: Native]
     distribution: Native
-    # The Deployment tool to use. [default: Flux]
-    deploymentTool: Flux
+    # The Deployment tool to use. [default: Kubectl]
+    deploymentTool: Kubectl
     # Whether to use a secret manager. [default: false]
     secretManager: false
     # The CNI to use. [default: Default]
@@ -59,7 +59,7 @@ spec:
     # The options for the SOPS secret manager.
     sops:
       # Public key used for encryption. [default: null]
-      publicKey: 
+      publicKey: ''
       # Use in-place decryption/encryption. [default: false]
       inPlace: false
       # Show all keys in the listed keys. [default: false]

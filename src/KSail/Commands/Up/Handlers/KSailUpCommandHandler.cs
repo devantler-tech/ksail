@@ -1,10 +1,14 @@
 using System.Collections.ObjectModel;
 using System.Text;
 using Devantler.ContainerEngineProvisioner.Docker;
+using Devantler.KubectlCLI;
 using Devantler.KubernetesProvisioner.Cluster.Core;
 using Devantler.KubernetesProvisioner.Cluster.K3d;
 using Devantler.KubernetesProvisioner.Cluster.Kind;
 using Devantler.KubernetesProvisioner.CNI.Cilium;
+using Devantler.KubernetesProvisioner.Deployment.Core;
+using Devantler.KubernetesProvisioner.Deployment.Kubectl;
+using Devantler.KubernetesProvisioner.GitOps.Core;
 using Devantler.KubernetesProvisioner.GitOps.Flux;
 using Devantler.KubernetesProvisioner.Resources.Native;
 using Devantler.SecretManager.SOPS.LocalAge;
@@ -23,11 +27,12 @@ class KSailUpCommandHandler
 {
   readonly SOPSLocalAgeSecretManager _secretManager = new();
   readonly DockerProvisioner _containerEngineProvisioner;
-  readonly FluxProvisioner _deploymentTool;
+  readonly IDeploymentToolProvisioner _deploymentTool;
   readonly IKubernetesClusterProvisioner _clusterProvisioner;
   readonly CiliumProvisioner? _cniProvisioner;
   readonly KSailCluster _config;
   readonly KSailValidateCommandHandler _ksailValidateCommandHandler;
+  readonly Uri _ociRegistryFromHost;
 
   internal KSailUpCommandHandler(KSailCluster config)
   {
@@ -49,9 +54,15 @@ class KSailUpCommandHandler
       KSailCNIType.Default => null,
       _ => throw new NotSupportedException($"The CNI '{config.Spec.Project.CNI}' is not supported.")
     };
+    string scheme = config.Spec.DeploymentTool.Flux.Source.Url.Scheme;
+    string host = "localhost";
+    int port = config.Spec.LocalRegistry.HostPort;
+    string absolutePath = config.Spec.DeploymentTool.Flux.Source.Url.AbsolutePath;
+    _ociRegistryFromHost = new Uri($"{scheme}://{host}:{port}{absolutePath}");
     _deploymentTool = config.Spec.Project.DeploymentTool switch
     {
-      KSailDeploymentToolType.Flux => new FluxProvisioner(config.Spec.Connection.Kubeconfig, config.Spec.Connection.Context),
+      KSailDeploymentToolType.Kubectl => new KubectlProvisioner(config.Spec.Connection.Kubeconfig, config.Spec.Connection.Context),
+      KSailDeploymentToolType.Flux => new FluxProvisioner(_ociRegistryFromHost, config.Spec.Connection.Kubeconfig, config.Spec.Connection.Context),
       _ => throw new NotSupportedException($"The Deployment tool '{config.Spec.Project.DeploymentTool}' is not supported.")
     };
     _config = config;
@@ -75,10 +86,10 @@ class KSailUpCommandHandler
     await BootstrapSecretManager(_config, cancellationToken).ConfigureAwait(false);
     await BootstrapDeploymentTool(_config, cancellationToken).ConfigureAwait(false);
 
-    if (_config.Spec.Validation.ReconcileOnUp)
+    if (_config.Spec.Validation.ReconcileOnUp && _deploymentTool is IGitOpsProvisioner gitOpsProvisioner)
     {
       Console.WriteLine("🔄 Reconciling new changes");
-      await _deploymentTool.ReconcileAsync(_config.Spec.Connection.Timeout, cancellationToken).ConfigureAwait(false);
+      await gitOpsProvisioner.ReconcileAsync(_config.Spec.Connection.Timeout, cancellationToken).ConfigureAwait(false);
       Console.WriteLine("✔ reconciliation completed");
       Console.WriteLine();
     }
@@ -180,9 +191,9 @@ class KSailUpCommandHandler
 
   async Task BootstrapOCISourceRegistry(KSailCluster config, CancellationToken cancellationToken)
   {
-    switch ((config.Spec.Project.Provider, config.Spec.Project.Distribution))
+    switch ((config.Spec.Project.Provider, config.Spec.Project.Distribution, config.Spec.Project.DeploymentTool))
     {
-      case (KSailProviderType.Docker, KSailDistributionType.Native):
+      case (KSailProviderType.Docker, KSailDistributionType.Native, KSailDeploymentToolType.Flux):
         Console.WriteLine("🔼 Botstrapping OCI source registry");
         Console.WriteLine($"► connect OCI source registry to 'kind-{config.Metadata.Name}' network");
         var dockerClient = _containerEngineProvisioner.Client;
@@ -290,24 +301,22 @@ class KSailUpCommandHandler
   async Task BootstrapDeploymentTool(KSailCluster config, CancellationToken cancellationToken = default)
   {
     Console.WriteLine($"🔼 Bootstrapping {config.Spec.Project.DeploymentTool}");
-    using var resourceProvisioner = new KubernetesResourceProvisioner(config.Spec.Connection.Kubeconfig, config.Spec.Connection.Context);
-    Console.WriteLine($"► creating 'flux-system' namespace");
-    await CreateFluxSystemNamespace(resourceProvisioner, cancellationToken).ConfigureAwait(false);
-
-    string scheme = config.Spec.DeploymentTool.Flux.Source.Url.Scheme;
-    string host = "localhost";
-    string absolutePath = config.Spec.DeploymentTool.Flux.Source.Url.AbsolutePath;
-    var sourceUrlFromHost = new Uri($"{scheme}://{host}:{config.Spec.LocalRegistry.HostPort}{absolutePath}");
     string kubernetesDirectory = config.Spec.Project.KustomizationPath.TrimStart('.', '/').Split('/').First();
-    await _deploymentTool.PushManifestsAsync(sourceUrlFromHost, kubernetesDirectory, cancellationToken: cancellationToken).ConfigureAwait(false);
-    string ociKustomizationPath = config.Spec.Project.KustomizationPath[kubernetesDirectory.Length..].TrimStart('/');
-    await _deploymentTool.BootstrapAsync(
-      config.Spec.DeploymentTool.Flux.Source.Url,
-      ociKustomizationPath,
-      true,
-      cancellationToken
-    ).ConfigureAwait(false);
-    Console.WriteLine();
+    await _deploymentTool.PushAsync(kubernetesDirectory, cancellationToken: cancellationToken).ConfigureAwait(false);
+    if (_deploymentTool is IGitOpsProvisioner gitOpsProvisioner)
+    {
+      using var resourceProvisioner = new KubernetesResourceProvisioner(config.Spec.Connection.Kubeconfig, config.Spec.Connection.Context);
+      Console.WriteLine($"► creating 'flux-system' namespace");
+      await CreateFluxSystemNamespace(resourceProvisioner, cancellationToken).ConfigureAwait(false);
+      string ociKustomizationPath = config.Spec.Project.KustomizationPath[kubernetesDirectory.Length..].TrimStart('/');
+      await gitOpsProvisioner.InstallAsync(
+        config.Spec.DeploymentTool.Flux.Source.Url,
+        ociKustomizationPath,
+        true,
+        cancellationToken
+      ).ConfigureAwait(false);
+      Console.WriteLine();
+    }
   }
 
   async Task BootstrapCNI(KSailCluster config, CancellationToken cancellationToken)

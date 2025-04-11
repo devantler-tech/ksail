@@ -154,8 +154,9 @@ Using the `Cilium` CNI will create a Kubernetes cluster with the Cilium CNI plug
 
 ### [Kubectl](https://kubernetes.io/docs/reference/kubectl/overview/)
 
-> [!WARNING]
-> This option is not supported yet.
+Using `Kubectl` as the deployment tool will allow you to apply kustomizations and waiting for their completion. Behind the scenes, it will use `kubectl apply -k` to apply a kustomization, and `kubectl rollout status -k` to wait for their completion.
+
+This is the default deployment tool that is used when you create a new project. It is the simplest and most straightforward deployment tool to use, but it does not provide any GitOps based deployment features, so it works best for small projects or for testing out new features.
 
 ### [Flux](https://fluxcd.io/)
 

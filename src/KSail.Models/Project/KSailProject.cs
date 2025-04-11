@@ -17,8 +17,8 @@ public class KSailProject
   [Description("The Kubernetes distribution to use. [default: Native]")]
   public KSailDistributionType Distribution { get; set; } = KSailDistributionType.Native;
 
-  [Description("The Deployment tool to use. [default: Flux]")]
-  public KSailDeploymentToolType DeploymentTool { get; set; } = KSailDeploymentToolType.Flux;
+  [Description("The Deployment tool to use. [default: Kubectl]")]
+  public KSailDeploymentToolType DeploymentTool { get; set; } = KSailDeploymentToolType.Kubectl;
 
   [Description("Whether to use a secret manager. [default: false]")]
   public bool SecretManager { get; set; } = false;

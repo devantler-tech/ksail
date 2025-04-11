@@ -14,7 +14,7 @@
       ConfigPath: ksail.yaml,
       DistributionConfigPath: kind.yaml,
       Distribution: 8,
-      DeploymentTool: Flux,
+      DeploymentTool: Kubectl,
       SecretManager: false,
       CNI: Default,
       Editor: Nano,
@@ -34,7 +34,7 @@
     },
     SecretManager: {
       SOPS: {
-        PublicKey: null,
+        PublicKey: ,
         InPlace: false,
         ShowAllKeysInListings: false,
         ShowPrivateKeysInListings: false

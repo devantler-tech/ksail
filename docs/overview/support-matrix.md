@@ -37,7 +37,10 @@ KSail aims to support a wide range of use cases by providing the flexibility to 
     </tr>
     <tr>
       <td><strong>Deployment Tools</strong></td>
-      <td><a href="https://fluxcd.io">Flux</a></td>
+      <td>
+        <a href="https://kubernetes.io/docs/reference/kubectl/">Kubectl</a>,
+        <a href="https://fluxcd.io">Flux</a>
+      </td>
     </tr>
     <tr>
       <td><strong>Secret Manager</strong></td>
