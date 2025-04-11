@@ -191,9 +191,9 @@ class KSailUpCommandHandler
 
   async Task BootstrapOCISourceRegistry(KSailCluster config, CancellationToken cancellationToken)
   {
-    switch ((config.Spec.Project.Provider, config.Spec.Project.Distribution))
+    switch ((config.Spec.Project.Provider, config.Spec.Project.Distribution, config.Spec.Project.DeploymentTool))
     {
-      case (KSailProviderType.Docker, KSailDistributionType.Native):
+      case (KSailProviderType.Docker, KSailDistributionType.Native, KSailDeploymentToolType.Flux):
         Console.WriteLine("🔼 Botstrapping OCI source registry");
         Console.WriteLine($"► connect OCI source registry to 'kind-{config.Metadata.Name}' network");
         var dockerClient = _containerEngineProvisioner.Client;
@@ -301,13 +301,13 @@ class KSailUpCommandHandler
   async Task BootstrapDeploymentTool(KSailCluster config, CancellationToken cancellationToken = default)
   {
     Console.WriteLine($"🔼 Bootstrapping {config.Spec.Project.DeploymentTool}");
-    using var resourceProvisioner = new KubernetesResourceProvisioner(config.Spec.Connection.Kubeconfig, config.Spec.Connection.Context);
-    Console.WriteLine($"► creating 'flux-system' namespace");
-    await CreateFluxSystemNamespace(resourceProvisioner, cancellationToken).ConfigureAwait(false);
     string kubernetesDirectory = config.Spec.Project.KustomizationPath.TrimStart('.', '/').Split('/').First();
     await _deploymentTool.PushAsync(kubernetesDirectory, cancellationToken: cancellationToken).ConfigureAwait(false);
     if (_deploymentTool is IGitOpsProvisioner gitOpsProvisioner)
     {
+      using var resourceProvisioner = new KubernetesResourceProvisioner(config.Spec.Connection.Kubeconfig, config.Spec.Connection.Context);
+      Console.WriteLine($"► creating 'flux-system' namespace");
+      await CreateFluxSystemNamespace(resourceProvisioner, cancellationToken).ConfigureAwait(false);
       string ociKustomizationPath = config.Spec.Project.KustomizationPath[kubernetesDirectory.Length..].TrimStart('/');
       await gitOpsProvisioner.InstallAsync(
         config.Spec.DeploymentTool.Flux.Source.Url,
