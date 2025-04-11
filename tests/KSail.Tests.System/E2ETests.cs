@@ -22,7 +22,7 @@ public class E2ETests
   [InlineData(
   [
     "init",
-    "-distribution", "native"
+    "--distribution", "native"
   ])]
   [InlineData(
   [
