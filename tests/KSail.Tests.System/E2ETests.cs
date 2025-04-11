@@ -19,10 +19,34 @@ namespace KSail.Tests.System;
 public class E2ETests
 {
   [SkippableTheory]
-  [InlineData(["init", "-d", "native"])]
-  [InlineData(["init", "--name", "ksail-native-advanced", "--distribution", "native", "--secret-manager", "--cni", "cilium"])]
-  [InlineData(["init", "-d", "k3s"])]
-  [InlineData(["init", "--name", "ksail-k3s-advanced", "--distribution", "k3s", "--secret-manager", "--cni", "cilium"])]
+  [InlineData(
+  [
+    "init",
+    "-distribution", "native"
+  ])]
+  [InlineData(
+  [
+    "init",
+    "--name", "ksail-native-advanced",
+    "--distribution", "native",
+    "--deployment-tool", "flux",
+    "--cni", "cilium",
+    "--secret-manager",
+  ])]
+  [InlineData(
+  [
+    "init",
+    "--distribution", "k3s"
+  ])]
+  [InlineData(
+  [
+    "init",
+    "--name", "ksail-k3s-advanced",
+    "--distribution", "k3s",
+    "--deployment-tool", "flux",
+    "--secret-manager",
+    "--cni", "cilium"
+  ])]
   public async Task KSailUp_WithVariousConfigurations_Succeeds(params string[] initArgs)
   {
     // TODO: Add support for Windows and macOS in GitHub Runners when GitHub Actions runners support dind on Windows and macOS runners.
