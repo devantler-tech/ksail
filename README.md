@@ -40,8 +40,9 @@ Getting started with KSail is straightforward. Begin by initializing a new KSail
 > ksail init \ # to create a new custom project
     --provider <Docker> \
     --distribution <Native|K3s> \
-    --deployment-tool <Flux> \
+    --deployment-tool <Kubectl|Flux> \
     --cni <Default|Cilium> \
+    --mirror-registries <true|false> \
     --secret-manager <true|false>
 ```
 

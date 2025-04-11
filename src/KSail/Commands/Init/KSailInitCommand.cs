@@ -41,12 +41,13 @@ sealed class KSailInitCommand : Command
     AddOption(_outputPathOption);
     AddOption(CLIOptions.Generator.OverwriteOption);
     AddOption(CLIOptions.Metadata.NameOption);
-    AddOption(CLIOptions.Project.CNIOption);
     AddOption(CLIOptions.Project.ConfigPathOption);
-    AddOption(CLIOptions.Project.DistributionConfigPathOption);
-    AddOption(CLIOptions.Project.DistributionOption);
-    AddOption(CLIOptions.Project.ProviderOption);
     AddOption(CLIOptions.Project.KustomizationPathOption);
+    AddOption(CLIOptions.Project.ProviderOption);
+    AddOption(CLIOptions.Project.DistributionOption);
+    AddOption(CLIOptions.Project.DistributionConfigPathOption);
+    AddOption(CLIOptions.Project.DeploymentToolOption);
+    AddOption(CLIOptions.Project.CNIOption);
     AddOption(CLIOptions.Project.MirrorRegistriesOption);
     AddOption(CLIOptions.Project.SecretManagerOption);
   }

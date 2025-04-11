@@ -7,7 +7,7 @@ public class KSailSecretManagerSOPS
 {
 
   [Description("Public key used for encryption. [default: null]")]
-  public string? PublicKey { get; set; }
+  public string PublicKey { get; set; } = string.Empty;
 
 
   [Description("Use in-place decryption/encryption. [default: false]")]
