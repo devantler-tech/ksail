@@ -71,8 +71,9 @@
               ]
             },
             "deploymentTool": {
-              "description": "The Deployment tool to use. [default: Flux]",
+              "description": "The Deployment tool to use. [default: Kubectl]",
               "enum": [
+                "Kubectl",
                 "Flux"
               ]
             },
@@ -153,10 +154,7 @@
               "properties": {
                 "publicKey": {
                   "description": "Public key used for encryption. [default: null]",
-                  "type": [
-                    "string",
-                    "null"
-                  ]
+                  "type": "string"
                 },
                 "inPlace": {
                   "description": "Use in-place decryption/encryption. [default: false]",
