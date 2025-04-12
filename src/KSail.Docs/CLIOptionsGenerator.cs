@@ -111,14 +111,9 @@ static class CLIOptionsGenerator
 
       ## `{command}`
 
-      <details>
-      <summary>Show more</summary>
-
       ```text
       {helpText}
       ```
-
-      </details>
 
       """;
     }

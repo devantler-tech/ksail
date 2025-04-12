@@ -14,9 +14,6 @@ KSail supports CLI options for configuring the behavior of KSail. These options 
 
 ## `ksail`
 
-<details>
-<summary>Show more</summary>
-
 ```text
 Description:
   KSail is an SDK for Kubernetes. Ship k8s with ease!
@@ -43,12 +40,7 @@ Commands:
   secrets   Manage secrets
 ```
 
-</details>
-
 ## `ksail up`
-
-<details>
-<summary>Show more</summary>
 
 ```text
 Description:
@@ -76,12 +68,7 @@ Options:
   -?, -h, --help                                    Show help and usage information
 ```
 
-</details>
-
 ## `ksail down`
-
-<details>
-<summary>Show more</summary>
 
 ```text
 Description:
@@ -99,12 +86,7 @@ Options:
   -?, -h, --help                             Show help and usage information
 ```
 
-</details>
-
 ## `ksail update`
-
-<details>
-<summary>Show more</summary>
 
 ```text
 Description:
@@ -122,12 +104,7 @@ Options:
   -?, -h, --help                                  Show help and usage information
 ```
 
-</details>
-
 ## `ksail start`
-
-<details>
-<summary>Show more</summary>
 
 ```text
 Description:
@@ -144,12 +121,7 @@ Options:
   -?, -h, --help                   Show help and usage information
 ```
 
-</details>
-
 ## `ksail stop`
-
-<details>
-<summary>Show more</summary>
 
 ```text
 Description:
@@ -165,12 +137,7 @@ Options:
   -?, -h, --help                   Show help and usage information
 ```
 
-</details>
-
 ## `ksail init`
-
-<details>
-<summary>Show more</summary>
 
 ```text
 Description:
@@ -195,12 +162,7 @@ Options:
   -?, -h, --help                                    Show help and usage information
 ```
 
-</details>
-
 ## `ksail lint`
-
-<details>
-<summary>Show more</summary>
 
 ```text
 'lint' was not matched. Did you mean one of the following?
@@ -230,12 +192,7 @@ Commands:
   secrets   Manage secrets
 ```
 
-</details>
-
 ## `ksail status`
-
-<details>
-<summary>Show more</summary>
 
 ```text
 Description:
@@ -251,12 +208,7 @@ Options:
   -?, -h, --help                 Show help and usage information
 ```
 
-</details>
-
 ## `ksail list`
-
-<details>
-<summary>Show more</summary>
 
 ```text
 Description:
@@ -272,12 +224,7 @@ Options:
   -?, -h, --help                   Show help and usage information
 ```
 
-</details>
-
 ## `ksail debug`
-
-<details>
-<summary>Show more</summary>
 
 ```text
 Description:
@@ -293,12 +240,7 @@ Options:
   -?, -h, --help                 Show help and usage information
 ```
 
-</details>
-
 ## `ksail gen`
-
-<details>
-<summary>Show more</summary>
 
 ```text
 Description:
@@ -319,12 +261,7 @@ Commands:
   native        Generate a native Kubernetes resource.
 ```
 
-</details>
-
 ## `ksail gen cert-manager`
-
-<details>
-<summary>Show more</summary>
 
 ```text
 Description:
@@ -342,12 +279,7 @@ Commands:
   cluster-issuer  Generate a 'cert-manager.io/v1/ClusterIssuer' resource.
 ```
 
-</details>
-
 ## `ksail gen cert-manager certificate`
-
-<details>
-<summary>Show more</summary>
 
 ```text
 Description:
@@ -362,12 +294,7 @@ Options:
   -?, -h, --help         Show help and usage information
 ```
 
-</details>
-
 ## `ksail gen cert-manager cluster-issuer`
-
-<details>
-<summary>Show more</summary>
 
 ```text
 Description:
@@ -382,12 +309,7 @@ Options:
   -?, -h, --help         Show help and usage information
 ```
 
-</details>
-
 ## `ksail gen config`
-
-<details>
-<summary>Show more</summary>
 
 ```text
 Description:
@@ -406,12 +328,7 @@ Commands:
   sops   Generate a SOPS configuration file.
 ```
 
-</details>
-
 ## `ksail gen config k3d`
-
-<details>
-<summary>Show more</summary>
 
 ```text
 Description:
@@ -426,12 +343,7 @@ Options:
   -?, -h, --help         Show help and usage information
 ```
 
-</details>
-
 ## `ksail gen config ksail`
-
-<details>
-<summary>Show more</summary>
 
 ```text
 Description:
@@ -446,12 +358,7 @@ Options:
   -?, -h, --help         Show help and usage information
 ```
 
-</details>
-
 ## `ksail gen config sops`
-
-<details>
-<summary>Show more</summary>
 
 ```text
 Description:
@@ -466,12 +373,7 @@ Options:
   -?, -h, --help         Show help and usage information
 ```
 
-</details>
-
 ## `ksail gen flux`
-
-<details>
-<summary>Show more</summary>
 
 ```text
 Description:
@@ -490,12 +392,7 @@ Commands:
   kustomization    Generate a 'kustomize.toolkit.fluxcd.io/v1/Kustomization' resource.
 ```
 
-</details>
-
 ## `ksail gen flux helm-release`
-
-<details>
-<summary>Show more</summary>
 
 ```text
 Description:
@@ -510,12 +407,7 @@ Options:
   -?, -h, --help         Show help and usage information
 ```
 
-</details>
-
 ## `ksail gen flux helm-repository`
-
-<details>
-<summary>Show more</summary>
 
 ```text
 Description:
@@ -530,12 +422,7 @@ Options:
   -?, -h, --help         Show help and usage information
 ```
 
-</details>
-
 ## `ksail gen flux kustomization`
-
-<details>
-<summary>Show more</summary>
 
 ```text
 Description:
@@ -550,12 +437,7 @@ Options:
   -?, -h, --help         Show help and usage information
 ```
 
-</details>
-
 ## `ksail gen kustomize`
-
-<details>
-<summary>Show more</summary>
 
 ```text
 Description:
@@ -573,12 +455,7 @@ Commands:
   kustomization  Generate a 'kustomize.config.k8s.io/v1beta1/Kustomization' resource.
 ```
 
-</details>
-
 ## `ksail gen kustomize component`
-
-<details>
-<summary>Show more</summary>
 
 ```text
 Description:
@@ -593,12 +470,7 @@ Options:
   -?, -h, --help         Show help and usage information
 ```
 
-</details>
-
 ## `ksail gen kustomize kustomization`
-
-<details>
-<summary>Show more</summary>
 
 ```text
 Description:
@@ -613,12 +485,7 @@ Options:
   -?, -h, --help         Show help and usage information
 ```
 
-</details>
-
 ## `ksail gen native`
-
-<details>
-<summary>Show more</summary>
 
 ```text
 Description:
@@ -656,12 +523,7 @@ Commands:
   stateful-set               Generate a 'apps/v1/StatefulSet' resource.
 ```
 
-</details>
-
 ## `ksail gen native cluster-role-binding`
-
-<details>
-<summary>Show more</summary>
 
 ```text
 Description:
@@ -676,12 +538,7 @@ Options:
   -?, -h, --help         Show help and usage information
 ```
 
-</details>
-
 ## `ksail gen native cluster-role`
-
-<details>
-<summary>Show more</summary>
 
 ```text
 Description:
@@ -696,12 +553,7 @@ Options:
   -?, -h, --help         Show help and usage information
 ```
 
-</details>
-
 ## `ksail gen native namespace`
-
-<details>
-<summary>Show more</summary>
 
 ```text
 Description:
@@ -716,12 +568,7 @@ Options:
   -?, -h, --help         Show help and usage information
 ```
 
-</details>
-
 ## `ksail gen native network-policy`
-
-<details>
-<summary>Show more</summary>
 
 ```text
 Description:
@@ -736,12 +583,7 @@ Options:
   -?, -h, --help         Show help and usage information
 ```
 
-</details>
-
 ## `ksail gen native persistent-volume`
-
-<details>
-<summary>Show more</summary>
 
 ```text
 Description:
@@ -756,12 +598,7 @@ Options:
   -?, -h, --help         Show help and usage information
 ```
 
-</details>
-
 ## `ksail gen native resource-quota`
-
-<details>
-<summary>Show more</summary>
 
 ```text
 Description:
@@ -776,12 +613,7 @@ Options:
   -?, -h, --help         Show help and usage information
 ```
 
-</details>
-
 ## `ksail gen native role-binding`
-
-<details>
-<summary>Show more</summary>
 
 ```text
 Description:
@@ -796,12 +628,7 @@ Options:
   -?, -h, --help         Show help and usage information
 ```
 
-</details>
-
 ## `ksail gen native role`
-
-<details>
-<summary>Show more</summary>
 
 ```text
 Description:
@@ -816,12 +643,7 @@ Options:
   -?, -h, --help         Show help and usage information
 ```
 
-</details>
-
 ## `ksail gen native service-account`
-
-<details>
-<summary>Show more</summary>
 
 ```text
 Description:
@@ -836,12 +658,7 @@ Options:
   -?, -h, --help         Show help and usage information
 ```
 
-</details>
-
 ## `ksail gen native config-map`
-
-<details>
-<summary>Show more</summary>
 
 ```text
 Description:
@@ -856,12 +673,7 @@ Options:
   -?, -h, --help         Show help and usage information
 ```
 
-</details>
-
 ## `ksail gen native persistent-volume-claim`
-
-<details>
-<summary>Show more</summary>
 
 ```text
 Description:
@@ -876,12 +688,7 @@ Options:
   -?, -h, --help         Show help and usage information
 ```
 
-</details>
-
 ## `ksail gen native secret`
-
-<details>
-<summary>Show more</summary>
 
 ```text
 Description:
@@ -896,12 +703,7 @@ Options:
   -?, -h, --help         Show help and usage information
 ```
 
-</details>
-
 ## `ksail gen native horizontal-pod-autoscaler`
-
-<details>
-<summary>Show more</summary>
 
 ```text
 Description:
@@ -916,12 +718,7 @@ Options:
   -?, -h, --help         Show help and usage information
 ```
 
-</details>
-
 ## `ksail gen native pod-disruption-budget`
-
-<details>
-<summary>Show more</summary>
 
 ```text
 Description:
@@ -936,12 +733,7 @@ Options:
   -?, -h, --help         Show help and usage information
 ```
 
-</details>
-
 ## `ksail gen native priority-class`
-
-<details>
-<summary>Show more</summary>
 
 ```text
 Description:
@@ -956,12 +748,7 @@ Options:
   -?, -h, --help         Show help and usage information
 ```
 
-</details>
-
 ## `ksail gen native ingress`
-
-<details>
-<summary>Show more</summary>
 
 ```text
 Description:
@@ -976,12 +763,7 @@ Options:
   -?, -h, --help         Show help and usage information
 ```
 
-</details>
-
 ## `ksail gen native service`
-
-<details>
-<summary>Show more</summary>
 
 ```text
 Description:
@@ -996,12 +778,7 @@ Options:
   -?, -h, --help         Show help and usage information
 ```
 
-</details>
-
 ## `ksail gen native cron-job`
-
-<details>
-<summary>Show more</summary>
 
 ```text
 Description:
@@ -1016,12 +793,7 @@ Options:
   -?, -h, --help         Show help and usage information
 ```
 
-</details>
-
 ## `ksail gen native daemon-set`
-
-<details>
-<summary>Show more</summary>
 
 ```text
 Description:
@@ -1036,12 +808,7 @@ Options:
   -?, -h, --help         Show help and usage information
 ```
 
-</details>
-
 ## `ksail gen native deployment`
-
-<details>
-<summary>Show more</summary>
 
 ```text
 Description:
@@ -1056,12 +823,7 @@ Options:
   -?, -h, --help         Show help and usage information
 ```
 
-</details>
-
 ## `ksail gen native job`
-
-<details>
-<summary>Show more</summary>
 
 ```text
 Description:
@@ -1076,12 +838,7 @@ Options:
   -?, -h, --help         Show help and usage information
 ```
 
-</details>
-
 ## `ksail gen native stateful-set`
-
-<details>
-<summary>Show more</summary>
 
 ```text
 Description:
@@ -1096,12 +853,7 @@ Options:
   -?, -h, --help         Show help and usage information
 ```
 
-</details>
-
 ## `ksail secrets`
-
-<details>
-<summary>Show more</summary>
 
 ```text
 Description:
@@ -1124,12 +876,7 @@ Commands:
   export <public-key>  Export a key to a file
 ```
 
-</details>
-
 ## `ksail secrets encrypt`
-
-<details>
-<summary>Show more</summary>
 
 ```text
 Description:
@@ -1148,12 +895,7 @@ Options:
   -?, -h, --help                  Show help and usage information
 ```
 
-</details>
-
 ## `ksail secrets decrypt`
-
-<details>
-<summary>Show more</summary>
 
 ```text
 Description:
@@ -1171,12 +913,7 @@ Options:
   -?, -h, --help         Show help and usage information
 ```
 
-</details>
-
 ## `ksail secrets edit`
-
-<details>
-<summary>Show more</summary>
 
 ```text
 Description:
@@ -1193,12 +930,7 @@ Options:
   -?, -h, --help           Show help and usage information
 ```
 
-</details>
-
 ## `ksail secrets add`
-
-<details>
-<summary>Show more</summary>
 
 ```text
 Description:
@@ -1211,12 +943,7 @@ Options:
   -?, -h, --help  Show help and usage information
 ```
 
-</details>
-
 ## `ksail secrets rm`
-
-<details>
-<summary>Show more</summary>
 
 ```text
 Description:
@@ -1232,12 +959,7 @@ Options:
   -?, -h, --help  Show help and usage information
 ```
 
-</details>
-
 ## `ksail secrets list`
-
-<details>
-<summary>Show more</summary>
 
 ```text
 Description:
@@ -1252,12 +974,7 @@ Options:
   -?, -h, --help             Show help and usage information
 ```
 
-</details>
-
 ## `ksail secrets import`
-
-<details>
-<summary>Show more</summary>
 
 ```text
 Description:
@@ -1273,12 +990,7 @@ Options:
   -?, -h, --help  Show help and usage information
 ```
 
-</details>
-
 ## `ksail secrets export`
-
-<details>
-<summary>Show more</summary>
 
 ```text
 Description:
@@ -1294,5 +1006,3 @@ Options:
   -o, --output <output>  A file or directory path. []
   -?, -h, --help         Show help and usage information
 ```
-
-</details>
