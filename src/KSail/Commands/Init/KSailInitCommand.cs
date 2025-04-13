@@ -21,10 +21,10 @@ sealed class KSailInitCommand : Command
     {
       try
       {
+        Console.WriteLine($"📁 Initializing new project '{config.Metadata.Name}'");
         string outputPath = context.ParseResult.CommandResult.GetValueForOption(_outputPathOption) ?? "./";
         var config = await KSailClusterConfigLoader.LoadWithoptionsAsync(context).ConfigureAwait(false);
         var handler = new KSailInitCommandHandler(outputPath, config);
-        Console.WriteLine($"📁 Initializing new project '{config.Metadata.Name}'");
         context.ExitCode = await handler.HandleAsync(context.GetCancellationToken()).ConfigureAwait(false);
         Console.WriteLine();
       }
