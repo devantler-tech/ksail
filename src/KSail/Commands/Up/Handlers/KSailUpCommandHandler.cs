@@ -86,10 +86,11 @@ class KSailUpCommandHandler
     await BootstrapSecretManager(_config, cancellationToken).ConfigureAwait(false);
     await BootstrapDeploymentTool(_config, cancellationToken).ConfigureAwait(false);
 
-    if (_config.Spec.Validation.ReconcileOnUp && _deploymentTool is IGitOpsProvisioner gitOpsProvisioner)
+    if (_config.Spec.Validation.ReconcileOnUp)
     {
       Console.WriteLine("🔄 Reconciling new changes");
-      await gitOpsProvisioner.ReconcileAsync(_config.Spec.Connection.Timeout, cancellationToken).ConfigureAwait(false);
+      string kubernetesDirectory = _config.Spec.Project.KustomizationPath.TrimStart('.', '/').Split('/').First();
+      await _deploymentTool.ReconcileAsync(kubernetesDirectory, _config.Spec.Connection.Timeout, cancellationToken).ConfigureAwait(false);
       Console.WriteLine("✔ reconciliation completed");
       Console.WriteLine();
     }

@@ -60,7 +60,7 @@ class KSailUpdateCommandHandler
         if (_config.Spec.Validation.ReconcileOnUpdate)
         {
           Console.WriteLine("🔄 Reconciling changes");
-          await ((IGitOpsProvisioner)_deploymentTool).ReconcileAsync(_config.Spec.Connection.Timeout, cancellationToken).ConfigureAwait(false);
+          await ((IGitOpsProvisioner)_deploymentTool).ReconcileAsync(manifestDirectory, _config.Spec.Connection.Timeout, cancellationToken).ConfigureAwait(false);
         }
         Console.WriteLine();
         break;
