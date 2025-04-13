@@ -316,8 +316,8 @@ class KSailUpCommandHandler
         true,
         cancellationToken
       ).ConfigureAwait(false);
-      Console.WriteLine();
     }
+    Console.WriteLine();
   }
 
   async Task BootstrapCNI(KSailCluster config, CancellationToken cancellationToken)

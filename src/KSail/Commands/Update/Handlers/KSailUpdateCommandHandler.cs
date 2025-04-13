@@ -44,30 +44,20 @@ class KSailUpdateCommandHandler
     {
       throw new KSailException($"a '{manifestDirectory}' directory does not exist or is empty.");
     }
-    switch (_config.Spec.Project.DeploymentTool)
+    Console.WriteLine(_config.Spec.Project.DeploymentTool switch
     {
-      case KSailDeploymentToolType.Kubectl:
-        Console.WriteLine($"🔄 Applying manifests from '{_config.Spec.Project.KustomizationPath}'");
-        await _deploymentTool.PushAsync(manifestDirectory, _config.Spec.Connection.Timeout, cancellationToken: cancellationToken).ConfigureAwait(false);
-        Console.WriteLine();
-        break;
-      case KSailDeploymentToolType.Flux:
+      KSailDeploymentToolType.Kubectl => $"⤴️ Applying manifests from '{_config.Spec.Project.KustomizationPath}'",
+      KSailDeploymentToolType.Flux => $"📥 Pushing manifests to '{_ociRegistryFromHost}'",
+      _ => throw new NotSupportedException($"The deployment tool '{_config.Spec.Project.DeploymentTool}' is not supported.")
+    });
+    await _deploymentTool.PushAsync(manifestDirectory, _config.Spec.Connection.Timeout, cancellationToken: cancellationToken).ConfigureAwait(false);
+    Console.WriteLine();
 
-        Console.WriteLine($"📥 Pushing manifests to '{_ociRegistryFromHost}'");
-        // TODO: Make some form of abstraction around GitOps tools, so it is easier to support apply-based tools like kubectl
-        await _deploymentTool.PushAsync(manifestDirectory, cancellationToken: cancellationToken).ConfigureAwait(false);
-        Console.WriteLine();
-        if (_config.Spec.Validation.ReconcileOnUpdate)
-        {
-          Console.WriteLine("🔄 Reconciling changes");
-          await ((IGitOpsProvisioner)_deploymentTool).ReconcileAsync(manifestDirectory, _config.Spec.Connection.Timeout, cancellationToken).ConfigureAwait(false);
-        }
-        Console.WriteLine();
-        break;
-      default:
-        throw new NotSupportedException($"The deployment tool '{_config.Spec.Project.DeploymentTool}' is not supported.");
+    Console.WriteLine("🔄 Reconciling changes");
+    if (_config.Spec.Validation.ReconcileOnUpdate)
+    {
+      await _deploymentTool.ReconcileAsync(manifestDirectory, _config.Spec.Connection.Timeout, cancellationToken).ConfigureAwait(false);
     }
-
 
     return true;
   }
