@@ -86,6 +86,7 @@ static class KSailClusterConfigLoader
 
   internal static async Task<KSailCluster> LoadAsync(string configFilePath, string? name = default, KSailDistributionType distribution = default)
   {
+    Console.WriteLine("🎨 Loading configuration..."
     // Create default KSailClusterConfig
     var ksailClusterConfig = string.IsNullOrEmpty(name) ?
       new KSailCluster(distribution: distribution) :
@@ -99,13 +100,15 @@ static class KSailClusterConfigLoader
     // If no KSail YAML file is found, return the default KSailClusterConfig
     if (ksailYaml == null)
     {
-      Console.WriteLine($"'{configFilePath}' not found. Using default ksail configuration.");
+      Console.WriteLine($"► '{configFilePath}' not found. Using default configuration.");
+      Console.WriteLine();
       return ksailClusterConfig;
     }
 
     // Deserialize KSail YAML file
     ksailClusterConfig = _deserializer.Deserialize<KSailCluster>(await File.ReadAllTextAsync(ksailYaml).ConfigureAwait(false));
-    Console.WriteLine($"'{configFilePath}' configuration loaded.");
+    Console.WriteLine($"► '{configFilePath}' configuration loaded.");
+    Console.WriteLine();
     return ksailClusterConfig;
   }
 
