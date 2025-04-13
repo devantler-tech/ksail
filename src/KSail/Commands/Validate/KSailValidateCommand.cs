@@ -23,7 +23,7 @@ sealed class KSailValidateCommand : Command
       try
       {
         string path = context.ParseResult.GetValueForOption(_pathOption) ?? "./";
-        var config = await KSailClusterConfigLoader.LoadWithoptionsAsync(context).ConfigureAwait(false);
+        var config = await KSailClusterConfigLoader.LoadWithoptionsAsync(path, context).ConfigureAwait(false);
 
         Console.WriteLine("🔍 Validating project files and configuration");
         var handler = new KSailValidateCommandHandler(config);
