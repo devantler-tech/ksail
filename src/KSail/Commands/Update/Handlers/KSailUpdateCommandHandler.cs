@@ -51,11 +51,11 @@ class KSailUpdateCommandHandler
       _ => throw new NotSupportedException($"The deployment tool '{_config.Spec.Project.DeploymentTool}' is not supported.")
     });
     await _deploymentTool.PushAsync(manifestDirectory, _config.Spec.Connection.Timeout, cancellationToken: cancellationToken).ConfigureAwait(false);
-    Console.WriteLine();
 
-    Console.WriteLine("🔄 Reconciling changes");
     if (_config.Spec.Validation.ReconcileOnUpdate)
     {
+      Console.WriteLine();
+      Console.WriteLine("🔄 Reconciling changes");
       await _deploymentTool.ReconcileAsync(manifestDirectory, _config.Spec.Connection.Timeout, cancellationToken).ConfigureAwait(false);
     }
 

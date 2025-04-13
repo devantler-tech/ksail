@@ -86,15 +86,21 @@ class KSailUpCommandHandler
     await BootstrapSecretManager(_config, cancellationToken).ConfigureAwait(false);
     await BootstrapDeploymentTool(_config, cancellationToken).ConfigureAwait(false);
 
+    await ReconcileAsync(cancellationToken).ConfigureAwait(false);
+    return 0;
+  }
+
+  async Task ReconcileAsync(CancellationToken cancellationToken)
+  {
     if (_config.Spec.Validation.ReconcileOnUp)
     {
-      Console.WriteLine("🔄 Reconciling new changes");
+      Console.WriteLine();
+      Console.WriteLine("🔄 Reconciling changes");
       string kubernetesDirectory = _config.Spec.Project.KustomizationPath.TrimStart('.', '/').Split('/').First();
       await _deploymentTool.ReconcileAsync(kubernetesDirectory, _config.Spec.Connection.Timeout, cancellationToken).ConfigureAwait(false);
       Console.WriteLine("✔ reconciliation completed");
       Console.WriteLine();
     }
-    return 0;
   }
 
   async Task CheckPrerequisites(CancellationToken cancellationToken)
@@ -317,7 +323,6 @@ class KSailUpCommandHandler
         cancellationToken
       ).ConfigureAwait(false);
     }
-    Console.WriteLine();
   }
 
   async Task BootstrapCNI(KSailCluster config, CancellationToken cancellationToken)
