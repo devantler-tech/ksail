@@ -86,7 +86,6 @@ static class KSailClusterConfigLoader
 
   internal static async Task<KSailCluster> LoadAsync(string configFilePath, string? name = default, KSailDistributionType distribution = default)
   {
-    Console.WriteLine("🎨 Loading configuration...");
     // Create default KSailClusterConfig
     var ksailClusterConfig = string.IsNullOrEmpty(name) ?
       new KSailCluster(distribution: distribution) :
