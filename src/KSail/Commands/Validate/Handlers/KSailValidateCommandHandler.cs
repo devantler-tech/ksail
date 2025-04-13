@@ -20,14 +20,15 @@ class KSailValidateCommandHandler(KSailCluster config)
     await _configValidator.ValidateAsync(path, cancellationToken: cancellationToken).ConfigureAwait(false);
     Console.WriteLine("✔ configuration is valid");
 
+    string kubernetesDirectory = Path.Combine(path, config.Spec.Project.KustomizationPath.TrimStart('.', '/').Split('/').First());
     Console.WriteLine("► validating yaml syntax");
-    var (yamlIsValid, yamlMessage) = await _yamlSyntaxValidator.ValidateAsync(path, cancellationToken: cancellationToken).ConfigureAwait(false);
+    var (yamlIsValid, yamlMessage) = await _yamlSyntaxValidator.ValidateAsync(kubernetesDirectory, cancellationToken: cancellationToken).ConfigureAwait(false);
     if (!yamlIsValid)
       throw new KSailException(yamlMessage);
     Console.WriteLine("✔ yaml syntax is valid");
 
     Console.WriteLine("► validating schemas");
-    var (schemasAreValid, schemasMessage) = await _schemaValidator.ValidateAsync(path, cancellationToken: cancellationToken).ConfigureAwait(false);
+    var (schemasAreValid, schemasMessage) = await _schemaValidator.ValidateAsync(kubernetesDirectory, cancellationToken: cancellationToken).ConfigureAwait(false);
     if (!schemasAreValid)
       throw new KSailException(schemasMessage);
     Console.WriteLine("✔ schemas are valid");
