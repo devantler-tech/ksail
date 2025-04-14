@@ -18,7 +18,9 @@ sealed class KSailUpdateCommand : Command
     {
       try
       {
+        Console.WriteLine("🆕 Update cluster");
         var config = await KSailClusterConfigLoader.LoadWithoptionsAsync(context).ConfigureAwait(false);
+        Console.WriteLine();
         var handler = new KSailUpdateCommandHandler(config);
         context.ExitCode = await handler.HandleAsync(context.GetCancellationToken()).ConfigureAwait(false) ? 0 : 1;
       }
