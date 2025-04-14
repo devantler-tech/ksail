@@ -18,8 +18,10 @@ The `Default` CNI is the default Container Network Interface plugin that is bund
 
 Because the `Native` distribution varies depending on the `Provider`, the CNI is determined by the `Provider` and `Distribution` you are using.
 
-- **Docker + Native = Kind**: The `Default` CNI for `kind` is [kindnetd](https://github.com/kubernetes-sigs/kind/tree/main/images/kindnetd)
-- **Docker + K3s = K3d**: The `Default` CNI for `k3d` is [flannel](https://github.com/flannel-io/flannel)
+| Provider | Distribution  | Default CNI                                                                   |
+| -------- | ------------- | ----------------------------------------------------------------------------- |
+| Docker   | Native (Kind) | [kindnetd](https://github.com/kubernetes-sigs/kind/tree/main/images/kindnetd) |
+| Docker   | K3s (K3d)     | [flannel](https://github.com/flannel-io/flannel)                              |
 
 ## [Cilium](https://cilium.io/)
 

@@ -16,7 +16,7 @@ nav_order: 3
 
 ## Default
 
-| Provider | Distribution | Ingress Controller |
-| -------- | ------------ | ------------------ |
-| Docker   | Native       | None               |
-| Docker   | K3s          | Traefik            |
+| Provider | Distribution  | Ingress Controller |
+| -------- | ------------- | ------------------ |
+| Docker   | Native (kind) | None               |
+| Docker   | K3s (k3d)     | Traefik            |

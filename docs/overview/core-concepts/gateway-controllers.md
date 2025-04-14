@@ -19,7 +19,7 @@ nav_order: 4
 
 ## Default
 
-| Provider | Distribution | Gateway Controller |
-| -------- | ------------ | ------------------ |
-| Docker   | Native       | None               |
-| Docker   | K3s          | None               |
+| Provider | Distribution  | Gateway Controller |
+| -------- | ------------- | ------------------ |
+| Docker   | Native (kind) | None               |
+| Docker   | K3s (k3d)     | None               |
