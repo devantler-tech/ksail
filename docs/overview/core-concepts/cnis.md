@@ -23,6 +23,6 @@ Because the `Native` distribution varies depending on the `Provider`, the CNI is
 | Docker   | Native (Kind) | [kindnetd](https://github.com/kubernetes-sigs/kind/tree/main/images/kindnetd) |
 | Docker   | K3s (K3d)     | [flannel](https://github.com/flannel-io/flannel)                              |
 
-## [Cilium](https://cilium.io/)
+## Cilium
 
-Using the `Cilium` CNI will create a Kubernetes cluster with the Cilium CNI plugin installed. It works with all combinations of `Provider` and `Distribution` that are supported by KSail.
+Using the [Cilium](https://cilium.io/) CNI will create a Kubernetes cluster with the Cilium CNI plugin installed. It works with all combinations of `Provider` and `Distribution` that are supported by KSail.
