@@ -16,5 +16,7 @@ nav_order: 3
 
 ## Default
 
-> [!WARNING]
-> This option is not supported yet.
+| Provider | Distribution | Ingress Controller |
+| -------- | ------------ | ------------------ |
+| Docker   | Native       | None               |
+| Docker   | K3s          | Traefik            |

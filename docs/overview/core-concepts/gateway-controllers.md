@@ -19,5 +19,7 @@ nav_order: 4
 
 ## Default
 
-> [!WARNING]
-> This option is not supported yet.
+| Provider | Distribution | Gateway Controller |
+| -------- | ------------ | ------------------ |
+| Docker   | Native       | None               |
+| Docker   | K3s          | None               |
