@@ -21,7 +21,7 @@ sealed class KSailInitCommand : Command
     {
       try
       {
-        Console.WriteLine($"📁 Initializing new project '{config.Metadata.Name}'");
+        Console.WriteLine($"📁 Initializing new project");
         string outputPath = context.ParseResult.CommandResult.GetValueForOption(_outputPathOption) ?? "./";
         var config = await KSailClusterConfigLoader.LoadWithoptionsAsync(context).ConfigureAwait(false);
         var handler = new KSailInitCommandHandler(outputPath, config);
