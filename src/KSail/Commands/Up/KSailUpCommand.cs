@@ -35,11 +35,10 @@ sealed class KSailUpCommand : Command
     AddOption(CLIOptions.Connection.ContextOption);
     AddOption(CLIOptions.Connection.KubeconfigOption);
     AddOption(CLIOptions.Connection.TimeoutOption);
-    AddOption(CLIOptions.DeploymentTool.Flux.SourceOption);
-    //AddOption(CLIOptions.LocalRegistry.LocalRegistryOption);
     AddOption(CLIOptions.Metadata.NameOption);
-    //AddOption(CLIOptions.MirrorRegistries.MirrorRegistryOption);
     AddOption(CLIOptions.Project.CNIOption);
+    AddOption(CLIOptions.Project.IngressControllerOption);
+    AddOption(CLIOptions.Project.GatewayControllerOption);
     AddOption(CLIOptions.Project.DeploymentToolOption);
     AddOption(CLIOptions.Project.DistributionConfigPathOption);
     AddOption(CLIOptions.Project.DistributionOption);
@@ -47,6 +46,9 @@ sealed class KSailUpCommand : Command
     AddOption(CLIOptions.Project.KustomizationPathOption);
     AddOption(CLIOptions.Project.MirrorRegistriesOption);
     AddOption(CLIOptions.Project.SecretManagerOption);
+    AddOption(CLIOptions.DeploymentTool.Flux.SourceOption);
+    //AddOption(CLIOptions.MirrorRegistries.MirrorRegistryOption);
+    //AddOption(CLIOptions.LocalRegistry.LocalRegistryOption);
     AddOption(CLIOptions.Validation.ValidateOnUpOption);
     AddOption(CLIOptions.Validation.ReconcileOnUpOption);
   }
