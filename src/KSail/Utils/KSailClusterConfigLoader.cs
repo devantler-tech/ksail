@@ -55,16 +55,18 @@ static class KSailClusterConfigLoader
     // TODO: Implement MirrorRegistries CLIOptions
 
     // Project
-    config.UpdateConfig(c => c.Spec.Project.CNI, context.ParseResult.GetValueForOption(CLIOptions.Project.CNIOption));
     config.UpdateConfig(c => c.Spec.Project.ConfigPath, context.ParseResult.GetValueForOption(CLIOptions.Project.ConfigPathOption));
-    config.UpdateConfig(c => c.Spec.Project.DeploymentTool, context.ParseResult.GetValueForOption(CLIOptions.Project.DeploymentToolOption));
-    config.UpdateConfig(c => c.Spec.Project.Distribution, context.ParseResult.GetValueForOption(CLIOptions.Project.DistributionOption));
     config.UpdateConfig(c => c.Spec.Project.DistributionConfigPath, context.ParseResult.GetValueForOption(CLIOptions.Project.DistributionConfigPathOption));
-    config.UpdateConfig(c => c.Spec.Project.Editor, context.ParseResult.GetValueForOption(CLIOptions.Project.EditorOption));
-    config.UpdateConfig(c => c.Spec.Project.Provider, context.ParseResult.GetValueForOption(CLIOptions.Project.ProviderOption));
     config.UpdateConfig(c => c.Spec.Project.KustomizationPath, context.ParseResult.GetValueForOption(CLIOptions.Project.KustomizationPathOption));
-    config.UpdateConfig(c => c.Spec.Project.MirrorRegistries, context.ParseResult.GetValueForOption(CLIOptions.Project.MirrorRegistriesOption));
+    config.UpdateConfig(c => c.Spec.Project.Provider, context.ParseResult.GetValueForOption(CLIOptions.Project.ProviderOption));
+    config.UpdateConfig(c => c.Spec.Project.Distribution, context.ParseResult.GetValueForOption(CLIOptions.Project.DistributionOption));
+    config.UpdateConfig(c => c.Spec.Project.DeploymentTool, context.ParseResult.GetValueForOption(CLIOptions.Project.DeploymentToolOption));
+    config.UpdateConfig(c => c.Spec.Project.CNI, context.ParseResult.GetValueForOption(CLIOptions.Project.CNIOption));
+    config.UpdateConfig(c => c.Spec.Project.IngressController, context.ParseResult.GetValueForOption(CLIOptions.Project.IngressControllerOption));
+    config.UpdateConfig(c => c.Spec.Project.GatewayController, context.ParseResult.GetValueForOption(CLIOptions.Project.GatewayControllerOption));
     config.UpdateConfig(c => c.Spec.Project.SecretManager, context.ParseResult.GetValueForOption(CLIOptions.Project.SecretManagerOption));
+    config.UpdateConfig(c => c.Spec.Project.MirrorRegistries, context.ParseResult.GetValueForOption(CLIOptions.Project.MirrorRegistriesOption));
+    config.UpdateConfig(c => c.Spec.Project.Editor, context.ParseResult.GetValueForOption(CLIOptions.Project.EditorOption));
 
     // SecretManager
     config.UpdateConfig(c => c.Spec.SecretManager.SOPS.InPlace, context.ParseResult.GetValueForOption(CLIOptions.SecretManager.SOPS.InPlaceOption));
