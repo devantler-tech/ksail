@@ -83,6 +83,8 @@ class KSailUpCommandHandler
     await BootstrapOCISourceRegistry(_config, cancellationToken).ConfigureAwait(false);
     await BootstrapMirrorRegistries(_config, cancellationToken).ConfigureAwait(false);
     await BootstrapCNI(_config, cancellationToken).ConfigureAwait(false);
+    BootstrapIngressController(_config);
+    BootstrapGatewayController(_config);
     await BootstrapSecretManager(_config, cancellationToken).ConfigureAwait(false);
     await BootstrapDeploymentTool(_config, cancellationToken).ConfigureAwait(false);
 
@@ -324,14 +326,71 @@ class KSailUpCommandHandler
 
   async Task BootstrapCNI(KSailCluster config, CancellationToken cancellationToken)
   {
-    if (config.Spec.Project.CNI == KSailCNIType.Default || _cniProvisioner == null)
+    Console.WriteLine("🔼 Bootstrapping CNI");
+    if (config.Spec.Project.CNI == KSailCNIType.Default)
     {
-      return;
+      switch (config.Spec.Project.Provider, config.Spec.Project.Distribution)
+      {
+        case (KSailProviderType.Docker, KSailDistributionType.Native):
+          Console.WriteLine("► Kind deploys the kindnetd CNI by default");
+          break;
+        case (KSailProviderType.Docker, KSailDistributionType.K3s):
+          Console.WriteLine("► K3d deploys the Flannel CNI by default");
+          break;
+        default:
+          break;
+      }
     }
 
-    Console.WriteLine($"⬡ Installing {config.Spec.Project.CNI} CNI");
-    await _cniProvisioner.InstallAsync(cancellationToken).ConfigureAwait(false);
-    Console.WriteLine("✔ Cilium CNI installed");
+    if (_cniProvisioner != null)
+    {
+      Console.WriteLine($"► installing '{config.Spec.Project.CNI}' CNI");
+      await _cniProvisioner.InstallAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    Console.WriteLine($"✔ '{config.Spec.Project.CNI}' CNI installed");
+    Console.WriteLine();
+  }
+
+  static void BootstrapIngressController(KSailCluster config)
+  {
+    Console.WriteLine("🔼 Bootstrapping Ingress Controller");
+    if (config.Spec.Project.IngressController == KSailIngressControllerType.Default)
+    {
+      switch (config.Spec.Project.Provider, config.Spec.Project.Distribution)
+      {
+        case (KSailProviderType.Docker, KSailDistributionType.Native):
+          Console.WriteLine("► Kind does not deploy an Ingress Controller by default");
+          break;
+        case (KSailProviderType.Docker, KSailDistributionType.K3s):
+          Console.WriteLine("► K3d deploys the Traefik Ingress Controller by default");
+          break;
+        default:
+          break;
+      }
+    }
+    Console.WriteLine("✔ Ingress Controller bootstrapped");
+    Console.WriteLine();
+  }
+
+  static void BootstrapGatewayController(KSailCluster config)
+  {
+    Console.WriteLine("🔼 Bootstrapping Gateway Controller");
+    if (config.Spec.Project.GatewayController == KSailGatewayControllerType.Default)
+    {
+      switch (config.Spec.Project.Provider, config.Spec.Project.Distribution)
+      {
+        case (KSailProviderType.Docker, KSailDistributionType.Native):
+          Console.WriteLine("► Kind does not deploy a Gateway Controller by default");
+          break;
+        case (KSailProviderType.Docker, KSailDistributionType.K3s):
+          Console.WriteLine("► K3d does not deploy a Gateway Controller by default");
+          break;
+        default:
+          break;
+      }
+    }
+    Console.WriteLine("✔ Gateway Controller bootstrapped");
     Console.WriteLine();
   }
 

@@ -26,20 +26,24 @@ spec:
     configPath: ksail.yaml
     # The path to the distribution configuration file. [default: kind.yaml]
     distributionConfigPath: kind.yaml
+    # The path to the root kustomization directory. [default: k8s]
+    kustomizationPath: k8s
+    # The provider to use for running the KSail cluster. [default: Docker]
+    provider: Docker
     # The Kubernetes distribution to use. [default: Native]
     distribution: Native
     # The Deployment tool to use. [default: Kubectl]
     deploymentTool: Kubectl
-    # Whether to use a secret manager. [default: false]
-    secretManager: false
     # The CNI to use. [default: Default]
     cni: Default
+    # The Ingress Controller to use. [default: Default]
+    ingressController: Default
+    # The Gateway Controller to use. [default: Default]
+    gatewayController: Default
+    # Whether to use a secret manager. [default: false]
+    secretManager: false
     # The editor to use for viewing files while debugging. [default: Nano]
     editor: Nano
-    # The provider to use for running the KSail cluster. [default: Docker]
-    provider: Docker
-    # The path to the root kustomization directory. [default: k8s]
-    kustomizationPath: k8s
     # Whether to set up mirror registries for the project. [default: true]
     mirrorRegistries: true
   # The options for the deployment tool.

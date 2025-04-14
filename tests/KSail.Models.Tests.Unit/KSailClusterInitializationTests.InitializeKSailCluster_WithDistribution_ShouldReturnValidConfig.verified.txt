@@ -13,13 +13,15 @@
     Project: {
       ConfigPath: ksail.yaml,
       DistributionConfigPath: k3d.yaml,
+      KustomizationPath: k8s,
+      Provider: Docker,
       Distribution: K3s,
       DeploymentTool: Kubectl,
-      SecretManager: false,
       CNI: Default,
+      IngressController: Default,
+      GatewayController: Default,
+      SecretManager: false,
       Editor: Nano,
-      Provider: Docker,
-      KustomizationPath: k8s,
       MirrorRegistries: true
     },
     DeploymentTool: {
