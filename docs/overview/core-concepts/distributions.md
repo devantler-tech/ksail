@@ -15,10 +15,14 @@ The `Native` distribution is the default Kubernetes distribution provided by a s
 
 Below is the actual distribution used when using the `Native` distribution with the various engines.
 
-- **Docker**: The `Native` distribution is [`kind`](https://kind.sigs.k8s.io/). This is a wrapper around the official Kubernetes distribution that is designed to run in Docker containers. This was decided as the native distribution because it has official support from a [Kubernetes Special Interest Group (SIG)](https://github.com/kubernetes/community/blob/master/sig-list.md).
+| Provider | Distribution | Actual Distribution                 |
+| -------- | ------------ | ----------------------------------- |
+| Docker   | Native       | [`kind`](https://kind.sigs.k8s.io/) |
 
 ## [K3s](https://k3s.io/)
 
 The `K3s` distribution is a lightweight Kubernetes distribution that is designed for resource-constrained environments. Its implementation depends on the `Provider` used.
 
-- **Docker**: The `K3s` distribution is `k3d`. This is a wrapper around `k3s` that runs in Docker containers.
+| Provider | Distribution | Actual Distribution      |
+| -------- | ------------ | ------------------------ |
+| Docker   | K3s          | [`k3d`](https://k3d.io/) |
