@@ -342,13 +342,12 @@ class KSailUpCommandHandler
       }
     }
 
-    if (_cniProvisioner == null)
+    if (_cniProvisioner != null)
     {
-      throw new KSailException($"CNI '{config.Spec.Project.CNI}' is not supported.");
+      Console.WriteLine($"► installing '{config.Spec.Project.CNI}' CNI");
+      await _cniProvisioner.InstallAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    Console.WriteLine($"► installing '{config.Spec.Project.CNI}' CNI");
-    await _cniProvisioner.InstallAsync(cancellationToken).ConfigureAwait(false);
     Console.WriteLine($"✔ '{config.Spec.Project.CNI}' CNI installed");
     Console.WriteLine();
   }
