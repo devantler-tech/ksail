@@ -100,14 +100,12 @@ static class KSailClusterConfigLoader
     if (ksailYaml == null)
     {
       Console.WriteLine($"► '{configFilePath}' not found. Using default configuration.");
-      Console.WriteLine();
       return ksailClusterConfig;
     }
 
     // Deserialize KSail YAML file
     ksailClusterConfig = _deserializer.Deserialize<KSailCluster>(await File.ReadAllTextAsync(ksailYaml).ConfigureAwait(false));
     Console.WriteLine($"► '{configFilePath}' configuration loaded.");
-    Console.WriteLine();
     return ksailClusterConfig;
   }
 
