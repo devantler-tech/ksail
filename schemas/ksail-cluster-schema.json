@@ -63,6 +63,16 @@
               "description": "The path to the distribution configuration file. [default: kind.yaml]",
               "type": "string"
             },
+            "kustomizationPath": {
+              "description": "The path to the root kustomization directory. [default: k8s]",
+              "type": "string"
+            },
+            "provider": {
+              "description": "The provider to use for running the KSail cluster. [default: Docker]",
+              "enum": [
+                "Docker"
+              ]
+            },
             "distribution": {
               "description": "The Kubernetes distribution to use. [default: Native]",
               "enum": [
@@ -77,10 +87,6 @@
                 "Flux"
               ]
             },
-            "secretManager": {
-              "description": "Whether to use a secret manager. [default: false]",
-              "type": "boolean"
-            },
             "cni": {
               "description": "The CNI to use. [default: Default]",
               "enum": [
@@ -88,22 +94,28 @@
                 "Cilium"
               ]
             },
+            "ingressController": {
+              "description": "The Ingress Controller to use. [default: Default]",
+              "enum": [
+                "Default"
+              ]
+            },
+            "gatewayController": {
+              "description": "The Gateway Controller to use. [default: Default]",
+              "enum": [
+                "Default"
+              ]
+            },
+            "secretManager": {
+              "description": "Whether to use a secret manager. [default: false]",
+              "type": "boolean"
+            },
             "editor": {
               "description": "The editor to use for viewing files while debugging. [default: Nano]",
               "enum": [
                 "Nano",
                 "Vim"
               ]
-            },
-            "provider": {
-              "description": "The provider to use for running the KSail cluster. [default: Docker]",
-              "enum": [
-                "Docker"
-              ]
-            },
-            "kustomizationPath": {
-              "description": "The path to the root kustomization directory. [default: k8s]",
-              "type": "string"
             },
             "mirrorRegistries": {
               "description": "Whether to set up mirror registries for the project. [default: true]",

@@ -12,10 +12,10 @@ spec:
     context: kind-ksail-advanced-native
   # The options for the KSail project.
   project:
-    # Whether to use a secret manager. [default: false]
-    secretManager: true
     # The CNI to use. [default: Default]
     cni: Cilium
+    # Whether to use a secret manager. [default: false]
+    secretManager: true
   # The options for the deployment tool.
   deploymentTool:
     # The options for the Flux deployment tool.
