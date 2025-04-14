@@ -15,12 +15,12 @@ class KSailValidateCommandHandler(KSailCluster config)
   {
     if (!Directory.Exists(path) || Directory.GetFiles(path, "*.yaml", SearchOption.AllDirectories).Length == 0)
       throw new KSailException($"no manifest files found in '{path}'.");
-
-    Console.WriteLine("► validating configuration");
     await _configValidator.ValidateAsync(path, cancellationToken: cancellationToken).ConfigureAwait(false);
-    Console.WriteLine("✔ configuration is valid");
-
-    string kubernetesDirectory = Path.Combine(path, config.Spec.Project.KustomizationPath.TrimStart('.', '/').Split('/').First());
+    string kubernetesDirectory = Path.Combine(path, string.Join("/", config.Spec.Project.KustomizationPath.TrimStart('.', '/').Split('/').First()));
+    if (!Directory.Exists(kubernetesDirectory))
+    {
+      kubernetesDirectory = path;
+    }
     Console.WriteLine("► validating yaml syntax");
     var (yamlIsValid, yamlMessage) = await _yamlSyntaxValidator.ValidateAsync(kubernetesDirectory, cancellationToken: cancellationToken).ConfigureAwait(false);
     if (!yamlIsValid)

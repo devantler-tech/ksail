@@ -12,6 +12,7 @@ class ConfigurationValidator(KSailCluster config)
 {
   public async Task ValidateAsync(string path, CancellationToken cancellationToken = default)
   {
+    Console.WriteLine("► locating configuration files");
     string projectRootPath = path;
     try
     {
@@ -19,9 +20,12 @@ class ConfigurationValidator(KSailCluster config)
     }
     catch (Exception)
     {
+      Console.WriteLine("✔ skipping configuration validation");
+      Console.WriteLine("  - no configuration files found in the current directory or any parent directories.");
       return;
     }
-
+    Console.WriteLine($"✔ configuration files located");
+    Console.WriteLine("► validating configuration");
     CheckContextName(projectRootPath, config.Spec.Project.Distribution, config.Metadata.Name, config.Spec.Connection.Context);
     CheckOCISourceUri(projectRootPath, config.Spec.Project.Distribution);
 
@@ -48,6 +52,7 @@ class ConfigurationValidator(KSailCluster config)
       default:
         throw new KSailException($"unsupported distribution '{config.Spec.Project.Distribution}'.");
     }
+    Console.WriteLine("✔ configuration is valid");
   }
 
   string GetProjectRootPath(string path, string projectRootPath)
