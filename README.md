@@ -42,8 +42,10 @@ Getting started with KSail is straightforward. Begin by initializing a new KSail
     --distribution <Native|K3s> \
     --deployment-tool <Kubectl|Flux> \
     --cni <Default|Cilium> \
-    --mirror-registries <true|false> \
-    --secret-manager <true|false>
+    --ingress-controller <Default> \
+    --gateway-controller <Default> \
+    --secret-manager <true|false> \
+    --mirror-registries <true|false>
 ```
 
 This creates the following project files, depending on your choices:
