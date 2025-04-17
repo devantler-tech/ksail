@@ -36,12 +36,19 @@ class KSailUpCommandHandler(KSailCluster config)
     }
 
     await ProvisionCluster(cancellationToken).ConfigureAwait(false);
+    // TODO: Move to SourceBootstrapper
     await BootstrapSource(config, cancellationToken).ConfigureAwait(false);
+    // TODO: Move to MirrorRegistryBootstrapper
     await BootstrapMirrorRegistries(config, cancellationToken).ConfigureAwait(false);
+    // TODO: Move to CNIBootstrapper
     await BootstrapCNI(config, cancellationToken).ConfigureAwait(false);
+    // TODO: Move to IngressControllerBootstrapper
     BootstrapIngressController(config);
+    // TODO: Move to GatewayControllerBootstrapper
     BootstrapGatewayController(config);
+    // TODO: Move to SecretManagerBootstrapper
     await BootstrapSecretManager(config, cancellationToken).ConfigureAwait(false);
+    // TODO: Move to DeploymentToolBootstrapper
     await BootstrapDeploymentTool(config, cancellationToken).ConfigureAwait(false);
 
     await ReconcileAsync(cancellationToken).ConfigureAwait(false);
