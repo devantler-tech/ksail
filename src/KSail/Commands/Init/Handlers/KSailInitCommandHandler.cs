@@ -15,6 +15,7 @@ class KSailInitCommandHandler(string outputPath, KSailCluster config)
 
   public async Task<int> HandleAsync(CancellationToken cancellationToken = default)
   {
+    Console.WriteLine($"📁 Initializing project...");
     await _ksailClusterConfigGenerator.GenerateAsync(
       _outputPath,
       _config,

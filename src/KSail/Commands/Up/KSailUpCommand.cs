@@ -16,9 +16,7 @@ sealed class KSailUpCommand : Command
     {
       try
       {
-        Console.WriteLine("🚀 Creating cluster");
         var config = await KSailClusterConfigLoader.LoadWithoptionsAsync(context).ConfigureAwait(false);
-        Console.WriteLine();
         var handler = new KSailUpCommandHandler(config);
         context.ExitCode = await handler.HandleAsync(context.GetCancellationToken()).ConfigureAwait(false);
       }

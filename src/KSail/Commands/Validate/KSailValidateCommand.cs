@@ -22,12 +22,10 @@ sealed class KSailValidateCommand : Command
     {
       try
       {
-        Console.WriteLine("🔍 Validating project files and configuration");
         string path = context.ParseResult.GetValueForOption(_pathOption) ?? "./";
         var config = await KSailClusterConfigLoader.LoadWithoptionsAsync(context, path).ConfigureAwait(false);
         var handler = new KSailValidateCommandHandler(config);
         context.ExitCode = await handler.HandleAsync(path, context.GetCancellationToken()).ConfigureAwait(false) ? 0 : 1;
-        Console.WriteLine();
       }
       catch (Exception ex)
       {

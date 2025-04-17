@@ -13,6 +13,7 @@ class KSailValidateCommandHandler(KSailCluster config)
 
   internal async Task<bool> HandleAsync(string path, CancellationToken cancellationToken = default)
   {
+    Console.WriteLine("🔍 Validating project files and configuration...");
     if (!Directory.Exists(path) || Directory.GetFiles(path, "*.yaml", SearchOption.AllDirectories).Length == 0)
       throw new KSailException($"no manifest files found in '{path}'.");
     await _configValidator.ValidateAsync(path, cancellationToken: cancellationToken).ConfigureAwait(false);
