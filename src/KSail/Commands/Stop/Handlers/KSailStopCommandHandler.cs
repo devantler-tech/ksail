@@ -24,7 +24,10 @@ class KSailStopCommandHandler
 
   internal async Task<int> HandleAsync(CancellationToken cancellationToken = default)
   {
+    Console.WriteLine($"⏹️ Stopping cluster...");
+    Console.WriteLine($"► stopping cluster '{_config.Spec.Connection.Context}'");
     await _clusterProvisioner.StopAsync(_config.Metadata.Name, cancellationToken).ConfigureAwait(false);
+    Console.WriteLine("✔ cluster stopped");
     return 0;
   }
 }

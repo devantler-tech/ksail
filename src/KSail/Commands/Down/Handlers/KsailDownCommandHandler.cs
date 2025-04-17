@@ -31,6 +31,7 @@ class KSailDownCommandHandler
 
   internal async Task<bool> HandleAsync(CancellationToken cancellationToken = default)
   {
+    Console.WriteLine($"🔥 Destroying cluster...");
     await _kubernetesDistributionProvisioner.DeleteAsync(_config.Metadata.Name, cancellationToken).ConfigureAwait(false);
     await DeleteRegistriesAsync(cancellationToken).ConfigureAwait(false);
     return true;

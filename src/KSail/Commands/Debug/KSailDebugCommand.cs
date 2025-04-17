@@ -21,7 +21,6 @@ sealed class KSailDebugCommand : Command
         var config = await KSailClusterConfigLoader.LoadWithoptionsAsync(context).ConfigureAwait(false);
         var handler = new KSailDebugCommandHandler(config);
         context.ExitCode = await handler.HandleAsync(context.GetCancellationToken()).ConfigureAwait(false) ? 0 : 1;
-        Console.WriteLine();
       }
       catch (Exception ex)
       {

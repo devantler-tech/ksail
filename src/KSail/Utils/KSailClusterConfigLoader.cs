@@ -20,8 +20,10 @@ static class KSailClusterConfigLoader
 
   internal static async Task<KSailCluster> LoadWithoptionsAsync(InvocationContext context, string path = "./")
   {
+    Console.WriteLine("⏳ Loading configuration...");
+    string configFilePath = Path.Combine(path, context.ParseResult.GetValueForOption(CLIOptions.Project.ConfigPathOption) ?? "ksail.yaml");
     var config = await LoadAsync(
-      Path.Combine(path, context.ParseResult.GetValueForOption(CLIOptions.Project.ConfigPathOption) ?? "ksail.yaml"),
+      configFilePath,
       context.ParseResult.GetValueForOption(CLIOptions.Metadata.NameOption),
       context.ParseResult.GetValueForOption(CLIOptions.Project.DistributionOption)
     ).ConfigureAwait(false);
@@ -83,6 +85,8 @@ static class KSailClusterConfigLoader
 
     // GatewayController
     // TODO: Implement GatewayController CLIOptions
+    Console.WriteLine($"✔ '{configFilePath}' configuration loaded.");
+    Console.WriteLine();
     return config;
   }
 
@@ -107,7 +111,6 @@ static class KSailClusterConfigLoader
 
     // Deserialize KSail YAML file
     ksailClusterConfig = _deserializer.Deserialize<KSailCluster>(await File.ReadAllTextAsync(ksailYaml).ConfigureAwait(false));
-    Console.WriteLine($"► '{configFilePath}' configuration loaded.");
     return ksailClusterConfig;
   }
 
