@@ -31,6 +31,10 @@ public class KSailProject
   [YamlMember(Alias = "cni")]
   public KSailCNIType CNI { get; set; } = KSailCNIType.Default;
 
+  [Description("The CSI to use. [default: Default]")]
+  [YamlMember(Alias = "csi")]
+  public KSailCSIType CSI { get; set; } = KSailCSIType.Default;
+
   [Description("The Ingress Controller to use. [default: Default]")]
   public KSailIngressControllerType IngressController { get; set; } = KSailIngressControllerType.Default;
 

@@ -8,6 +8,7 @@ namespace KSail.Options.Project;
 class ProjectOptions(KSailCluster config)
 {
   public readonly ProjectCNIOption CNIOption = new(config) { Arity = ArgumentArity.ZeroOrOne };
+  public readonly ProjectCSIOption CSIOption = new(config) { Arity = ArgumentArity.ZeroOrOne };
   public readonly ProjectConfigPathOption ConfigPathOption = new(config) { Arity = ArgumentArity.ZeroOrOne };
   public readonly ProjectDistributionConfigPathOption DistributionConfigPathOption = new(config) { Arity = ArgumentArity.ZeroOrOne };
   public readonly ProjectKustomizationPathOption KustomizationPathOption = new(config) { Arity = ArgumentArity.ZeroOrOne };
