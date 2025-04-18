@@ -48,39 +48,4 @@ class KSailUpCommandHandler(KSailCluster config) : IDisposable
     _deploymentToolBootstrapper.Dispose();
     GC.SuppressFinalize(this);
   }
-
-  async Task ReconcileAsync(CancellationToken cancellationToken)
-  {
-    if (config.Spec.Validation.ReconcileOnUp)
-    {
-      Console.WriteLine();
-      Console.WriteLine("🔄 Reconciling changes");
-      string kubernetesDirectory = config.Spec.Project.KustomizationPath.TrimStart('.', '/').Split('/').First();
-      await _deploymentTool.ReconcileAsync(kubernetesDirectory, config.Spec.Connection.Timeout, cancellationToken).ConfigureAwait(false);
-      Console.WriteLine("✔ reconciliation completed");
-      Console.WriteLine();
-    }
-  }
-
-  async Task AddMirrorRegistryToContainerd(string containerName, KSailMirrorRegistry mirrorRegistry, CancellationToken cancellationToken)
-  {
-    // https://github.com/containerd/containerd/blob/main/docs/hosts.md
-    var proxy = mirrorRegistry.Proxy;
-    string mirrorRegistryHost = proxy.Url.Host;
-    if (mirrorRegistryHost.Contains("docker.io", StringComparison.OrdinalIgnoreCase))
-    {
-      mirrorRegistryHost = "docker.io";
-    }
-    string registryDir = $"/etc/containerd/certs.d/{mirrorRegistryHost}";
-    await _containerEngineProvisioner.CreateDirectoryInContainerAsync(containerName, registryDir, true, cancellationToken).ConfigureAwait(false);
-    string host = $"{mirrorRegistry.Name}:5000";
-    string hostsToml = $"""
-      server = "{proxy.Url}"
-
-      [host."http://{host}"]
-        capabilities = ["pull", "resolve"]
-        skip_verify = true
-      """;
-    await _containerEngineProvisioner.CreateFileInContainerAsync(containerName, $"{registryDir}/hosts.toml", hostsToml, cancellationToken).ConfigureAwait(false);
-  }
 }
