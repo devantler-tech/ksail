@@ -94,6 +94,12 @@
                 "Cilium"
               ]
             },
+            "csi": {
+              "description": "The CSI to use. [default: Default]",
+              "enum": [
+                "Default"
+              ]
+            },
             "ingressController": {
               "description": "The Ingress Controller to use. [default: Default]",
               "enum": [

@@ -18,6 +18,7 @@
       Distribution: K3s,
       DeploymentTool: Kubectl,
       CNI: Default,
+      CSI: Default,
       IngressController: Default,
       GatewayController: Default,
       SecretManager: false,

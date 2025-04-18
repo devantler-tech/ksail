@@ -59,6 +59,8 @@ spec:
     deploymentTool: Kubectl
     # The CNI to use. [default: Default]
     cni: Default
+    # The CSI to use. [default: Default]
+    csi: Default
     # The Ingress Controller to use. [default: Default]
     ingressController: Default
     # The Gateway Controller to use. [default: Default]
