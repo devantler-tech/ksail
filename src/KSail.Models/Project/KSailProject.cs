@@ -41,8 +41,8 @@ public class KSailProject
   [Description("The Gateway Controller to use. [default: Default]")]
   public KSailGatewayControllerType GatewayController { get; set; } = KSailGatewayControllerType.Default;
 
-  [Description("Whether to use a secret manager. [default: false]")]
-  public bool SecretManager { get; set; } = false;
+  [Description("Whether to use a secret manager. [default: None]")]
+  public KSailSecretManagerType SecretManager { get; set; } = KSailSecretManagerType.None;
 
   [Description("The editor to use for viewing files while debugging. [default: Nano]")]
   public KSailEditorType Editor { get; set; } = KSailEditorType.Nano;

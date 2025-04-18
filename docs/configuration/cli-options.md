@@ -64,7 +64,7 @@ Options:
   -ic, --ingress-controller <Default>               The Ingress Controller to use. [default: Default]
   -gc, --gateway-controller <Default>               The Gateway Controller to use. [default: Default]
   -mr, --mirror-registries                          Enable mirror registries for the project. [default: True]
-  -sm, --secret-manager                             Whether to use a secret manager. [default: False]
+  -sm, --secret-manager <None|SOPS>                 Whether to use a secret manager. [default: None]
   -fsu, --flux-source-url <flux-source-url>         Flux source URL for reconciling GitOps resources. [default: oci://ksail-registry:5000/ksail-registry]
   -v, --validate                                    Validate project files before creating a new cluster. [default: True]
   -r, --reconcile                                   Reconcile manifests. [default: True]
@@ -151,17 +151,21 @@ Usage:
 
 Options:
   -o, --output <output>                             Output directory for the project files. [default: ./] [default: ./]
-  --overwrite                                       Overwrite existing files. [default: False]
   -n, --name <name>                                 The name of the cluster. [default: ksail-default]
   -c, --config <config>                             The path to the ksail configuration file. [default: ksail.yaml]
+  -dc, --distribution-config <distribution-config>  Path to the distribution configuration file. [default: kind.yaml]
   -kp, --kustomization-path <kustomization-path>    The path to the root kustomization directory. [default: k8s]
   -p, --provider <Docker>                           The provider to use for provisioning the cluster. [default: Docker]
   -d, --distribution <K3s|Native>                   The distribution to use for the cluster. [default: Native]
-  -dc, --distribution-config <distribution-config>  Path to the distribution configuration file. [default: kind.yaml]
   -dt, --deployment-tool <Flux|Kubectl>             The Deployment tool to use for applying a kustomization. [default: Kubectl]
   --cni <Cilium|Default>                            The CNI to use. [default: Default]
+  --csi <Default>                                   The CSI to use. [default: Default]
+  -ic, --ingress-controller <Default>               The Ingress Controller to use. [default: Default]
+  -gc, --gateway-controller <Default>               The Gateway Controller to use. [default: Default]
   -mr, --mirror-registries                          Enable mirror registries for the project. [default: True]
-  -sm, --secret-manager                             Whether to use a secret manager. [default: False]
+  -sm, --secret-manager <None|SOPS>                 Whether to use a secret manager. [default: None]
+  -e, --editor <Nano|Vim>                           Editor to use. [default: Nano]
+  --overwrite                                       Overwrite existing files. [default: False]
   -?, -h, --help                                    Show help and usage information
 ```
 

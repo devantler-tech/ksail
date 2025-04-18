@@ -42,8 +42,8 @@ spec:
     ingressController: Default
     # The Gateway Controller to use. [default: Default]
     gatewayController: Default
-    # Whether to use a secret manager. [default: false]
-    secretManager: false
+    # Whether to use a secret manager. [default: None]
+    secretManager: None
     # The editor to use for viewing files while debugging. [default: Nano]
     editor: Nano
     # Whether to set up mirror registries for the project. [default: true]

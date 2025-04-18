@@ -19,34 +19,37 @@ namespace KSail.Tests.System;
 public class E2ETests
 {
   [SkippableTheory]
-  [InlineData(
-  [
-    "init",
-    "--distribution", "native"
-  ])]
-  [InlineData(
-  [
-    "init",
-    "--name", "ksail-native-advanced",
-    "--distribution", "native",
-    "--deployment-tool", "flux",
-    "--cni", "cilium",
-    "--secret-manager",
-  ])]
-  [InlineData(
-  [
-    "init",
-    "--distribution", "k3s"
-  ])]
-  [InlineData(
-  [
-    "init",
-    "--name", "ksail-k3s-advanced",
-    "--distribution", "k3s",
-    "--deployment-tool", "flux",
-    "--secret-manager",
-    "--cni", "cilium"
-  ])]
+  [InlineData(["init"])]
+  // Docker
+  [InlineData(["init", "--provider", "Docker"])]
+  // Docker + Native
+  [InlineData(["init", "--provider", "Docker", "--distribution", "Native"])]
+  // Docker + Native + Kubectl
+  [InlineData(["init", "--provider", "Docker", "--distribution", "Native", "--deployment-tool", "Kubectl"])]
+  // Docker + Native + Kubectl + Cilium
+  [InlineData(["init", "--provider", "Docker", "--distribution", "Native", "--deployment-tool", "Kubectl", "--cni", "Cilium"])]
+  // Docker + Native + Kubectl + Cilium + SOPS
+  [InlineData(["init", "--provider", "Docker", "--distribution", "Native", "--deployment-tool", "Kubectl", "--cni", "Cilium", "--secret-manager", "SOPS"])]
+  // Docker + Native + Flux
+  [InlineData(["init", "--provider", "Docker", "--distribution", "Native", "--deployment-tool", "Flux"])]
+  // Docker + Native + Flux + Cilium
+  [InlineData(["init", "--provider", "Docker", "--distribution", "Native", "--deployment-tool", "Flux", "--cni", "Cilium"])]
+  // Docker + Native + Flux + Cilium + SOPS
+  [InlineData(["init", "--provider", "Docker", "--distribution", "Native", "--deployment-tool", "Flux", "--cni", "Cilium", "--secret-manager", "SOPS"])]
+  // Docker + K3s
+  [InlineData(["init", "--provider", "Docker", "--distribution", "K3s"])]
+  // Docker + K3s + Kubectl
+  [InlineData(["init", "--provider", "Docker", "--distribution", "K3s", "--deployment-tool", "Kubectl"])]
+  // Docker + K3s + Kubectl + Cilium
+  [InlineData(["init", "--provider", "Docker", "--distribution", "K3s", "--deployment-tool", "Kubectl", "--cni", "Cilium"])]
+  // Docker + K3s + Kubectl + Cilium + SOPS
+  [InlineData(["init", "--provider", "Docker", "--distribution", "K3s", "--deployment-tool", "Kubectl", "--cni", "Cilium", "--secret-manager", "SOPS"])]
+  // Docker + K3s + Flux
+  [InlineData(["init", "--provider", "Docker", "--distribution", "K3s", "--deployment-tool", "Flux"])]
+  // Docker + K3s + Flux + Cilium
+  [InlineData(["init", "--provider", "Docker", "--distribution", "K3s", "--deployment-tool", "Flux", "--cni", "Cilium"])]
+  // Docker + K3s + Flux + Cilium + SOPS
+  [InlineData(["init", "--provider", "Docker", "--distribution", "K3s", "--deployment-tool", "Flux", "--cni", "Cilium", "--secret-manager", "SOPS"])]
   public async Task KSailUp_WithVariousConfigurations_Succeeds(params string[] initArgs)
   {
     // TODO: Add support for Windows and macOS in GitHub Runners when GitHub Actions runners support dind on Windows and macOS runners.

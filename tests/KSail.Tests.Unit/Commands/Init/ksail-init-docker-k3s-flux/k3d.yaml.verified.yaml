@@ -2,7 +2,7 @@
 apiVersion: k3d.io/v1alpha5
 kind: Simple
 metadata:
-  name: ksail-advanced-k3s
+  name: ksail-default
 registries:
   config: >2
       mirrors:
@@ -24,12 +24,3 @@ registries:
         "quay.io":
           endpoint:
             - http://host.k3d.internal:5561
-options:
-  k3s:
-    extraArgs:
-    - arg: --flannel-backend=none
-      nodeFilters:
-      - server:*
-    - arg: --disable-network-policy
-      nodeFilters:
-      - server:*

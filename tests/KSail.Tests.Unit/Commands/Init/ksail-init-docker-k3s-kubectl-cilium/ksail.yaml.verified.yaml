@@ -3,25 +3,29 @@ apiVersion: ksail.io/v1alpha1
 kind: Cluster
 metadata:
   # The name of the KSail object. [default: ksail-default]
-  name: ksail-advanced-native
+  name: ksail-default
 # The spec of the KSail Cluster object.
 spec:
   # The options for connecting to the KSail cluster.
   connection:
     # The kube context. [default: kind-ksail-default]
-    context: kind-ksail-advanced-native
+    context: k3d-ksail-default
   # The options for the KSail project.
   project:
+    # The path to the distribution configuration file. [default: kind.yaml]
+    distributionConfigPath: k3d.yaml
+    # The Kubernetes distribution to use. [default: Native]
+    distribution: K3s
     # The CNI to use. [default: Default]
     cni: Cilium
-    # Whether to use a secret manager. [default: false]
-    secretManager: true
   # The options for the deployment tool.
   deploymentTool:
     # The options for the Flux deployment tool.
     flux:
       # The source for reconciling GitOps resources.
-      source: {}
+      source:
+        # The URL of the repository. [default: oci://ksail-registry:5000/ksail-registry]
+        url: <url>
   # The options for the distribution.
   distribution: {}
   # The options for the Secret Manager.

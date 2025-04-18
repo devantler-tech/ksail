@@ -113,8 +113,11 @@
               ]
             },
             "secretManager": {
-              "description": "Whether to use a secret manager. [default: false]",
-              "type": "boolean"
+              "description": "Whether to use a secret manager. [default: None]",
+              "enum": [
+                "None",
+                "SOPS"
+              ]
             },
             "editor": {
               "description": "The editor to use for viewing files while debugging. [default: Nano]",

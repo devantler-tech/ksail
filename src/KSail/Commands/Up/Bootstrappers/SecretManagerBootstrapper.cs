@@ -17,20 +17,31 @@ class SecretManagerBootstrapper(KSailCluster config) : IBootstrapper, IDisposabl
   readonly SOPSLocalAgeSecretManager _secretManager = new();
   public async Task BootstrapAsync(CancellationToken cancellationToken = default)
   {
-    if (config.Spec.Project.SecretManager)
+    switch (config.Spec.Project.SecretManager)
     {
-      Console.WriteLine("🔐 Bootstrapping SOPS secret manager");
-      switch (config.Spec.Project.DeploymentTool)
-      {
-        case KSailDeploymentToolType.Kubectl:
-          BootstrapSOPSForKubectl();
-          break;
-        case KSailDeploymentToolType.Flux:
-          await BootstrapSOPSForFluxAsync(cancellationToken).ConfigureAwait(false);
-          break;
-        default:
-          throw new KSailException($"the '{config.Spec.Project.DeploymentTool}' Deployment Tool is not supported.");
-      }
+      case KSailSecretManagerType.SOPS:
+        await BootstrapSOPSAsync(cancellationToken).ConfigureAwait(false);
+        break;
+      case KSailSecretManagerType.None:
+        return;
+      default:
+        throw new KSailException($"the '{config.Spec.Project.SecretManager}' Secret Manager is not supported.");
+    }
+  }
+
+  async Task BootstrapSOPSAsync(CancellationToken cancellationToken)
+  {
+    Console.WriteLine("🔐 Bootstrapping SOPS secret manager");
+    switch (config.Spec.Project.DeploymentTool)
+    {
+      case KSailDeploymentToolType.Kubectl:
+        BootstrapSOPSForKubectl();
+        break;
+      case KSailDeploymentToolType.Flux:
+        await BootstrapSOPSForFluxAsync(cancellationToken).ConfigureAwait(false);
+        break;
+      default:
+        throw new KSailException($"the '{config.Spec.Project.DeploymentTool}' Deployment Tool is not supported.");
     }
     Console.WriteLine();
   }
