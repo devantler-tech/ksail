@@ -17,7 +17,7 @@ using KSail.Utils;
 
 namespace KSail.Commands.Up.Handlers;
 
-class KSailUpCommandHandler(KSailCluster config) : IDisposable
+class KSailUpCommandHandler(KSailCluster config)
 {
   readonly ClusterBootstrapper _clusterBootstrapper = new(config);
   readonly GitOpsSourceBootstrapper _gitOpsSourceBootstrapper = new(config);
@@ -40,12 +40,5 @@ class KSailUpCommandHandler(KSailCluster config) : IDisposable
     await _secretManagerBootstrapper.BootstrapAsync(cancellationToken).ConfigureAwait(false);
     await _deploymentToolBootstrapper.BootstrapAsync(cancellationToken).ConfigureAwait(false);
     return 0;
-  }
-
-  public void Dispose()
-  {
-    _secretManagerBootstrapper.Dispose();
-    _deploymentToolBootstrapper.Dispose();
-    GC.SuppressFinalize(this);
   }
 }

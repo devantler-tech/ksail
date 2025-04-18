@@ -6,10 +6,9 @@ using KSail.Commands.Up.Extensions;
 using KSail.Factories;
 using KSail.Models;
 
-class DeploymentToolBootstrapper(KSailCluster config) : IBootstrapper, IDisposable
+class DeploymentToolBootstrapper(KSailCluster config) : IBootstrapper
 {
   readonly IDeploymentToolProvisioner _deploymentToolProvisioner = DeploymentToolProvisionerFactory.Create(config);
-  readonly KubernetesResourceProvisioner _kubernetesResourceProvisioner = new(config.Spec.Connection.Kubeconfig, config.Spec.Connection.Context);
   public async Task BootstrapAsync(CancellationToken cancellationToken = default)
   {
     Console.WriteLine($"🚀 Bootstrapping {config.Spec.Project.DeploymentTool}");
@@ -18,7 +17,8 @@ class DeploymentToolBootstrapper(KSailCluster config) : IBootstrapper, IDisposab
     if (_deploymentToolProvisioner is IGitOpsProvisioner gitOpsProvisioner)
     {
       Console.WriteLine($"► creating 'flux-system' namespace");
-      await _kubernetesResourceProvisioner.CreateNamespaceAsync("flux-system", cancellationToken).ConfigureAwait(false);
+      using var kubernetesResourceProvisioner = new KubernetesResourceProvisioner(config.Spec.Connection.Kubeconfig, config.Spec.Connection.Context);
+      await kubernetesResourceProvisioner.CreateNamespaceAsync("flux-system", cancellationToken).ConfigureAwait(false);
       string ociKustomizationPath = config.Spec.Project.KustomizationPath[kubernetesDirectory.Length..].TrimStart('/');
       await gitOpsProvisioner.InstallAsync(
         config.Spec.DeploymentTool.Flux.Source.Url,
@@ -40,11 +40,5 @@ class DeploymentToolBootstrapper(KSailCluster config) : IBootstrapper, IDisposab
     await _deploymentToolProvisioner.ReconcileAsync(kubernetesDirectory, config.Spec.Connection.Timeout, cancellationToken).ConfigureAwait(false);
     Console.WriteLine("✔ reconciliation completed");
     Console.WriteLine();
-  }
-
-  public void Dispose()
-  {
-    _kubernetesResourceProvisioner.Dispose();
-    GC.SuppressFinalize(this);
   }
 }

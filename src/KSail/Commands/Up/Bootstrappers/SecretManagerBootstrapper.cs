@@ -11,9 +11,8 @@ using KSail.Models;
 using KSail.Models.Project.Enums;
 using KSail.Utils;
 
-class SecretManagerBootstrapper(KSailCluster config) : IBootstrapper, IDisposable
+class SecretManagerBootstrapper(KSailCluster config) : IBootstrapper
 {
-  readonly KubernetesResourceProvisioner _kubernetesResourceProvisioner = new(config.Spec.Connection.Kubeconfig, config.Spec.Connection.Context);
   readonly SOPSLocalAgeSecretManager _secretManager = new();
   public async Task BootstrapAsync(CancellationToken cancellationToken = default)
   {
@@ -55,7 +54,8 @@ class SecretManagerBootstrapper(KSailCluster config) : IBootstrapper, IDisposabl
   async Task BootstrapSOPSForFluxAsync(CancellationToken cancellationToken = default)
   {
     Console.WriteLine($"► creating 'flux-system' namespace");
-    await _kubernetesResourceProvisioner.CreateNamespaceAsync("flux-system", cancellationToken).ConfigureAwait(false);
+    using var kubernetesResourceProvisioner = new KubernetesResourceProvisioner(config.Spec.Connection.Kubeconfig, config.Spec.Connection.Context);
+    await kubernetesResourceProvisioner.CreateNamespaceAsync("flux-system", cancellationToken).ConfigureAwait(false);
     var sopsConfig = await SopsConfigLoader.LoadAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
     string publicKey = sopsConfig.CreationRules.First(x => x.PathRegex.Contains(config.Metadata.Name, StringComparison.OrdinalIgnoreCase)).Age.Split(',')[0].Trim();
 
@@ -77,13 +77,7 @@ class SecretManagerBootstrapper(KSailCluster config) : IBootstrapper, IDisposabl
         }
     };
 
-    _ = await _kubernetesResourceProvisioner.CreateNamespacedSecretAsync(secret, secret.Metadata.NamespaceProperty, cancellationToken: cancellationToken).ConfigureAwait(false);
+    _ = await kubernetesResourceProvisioner.CreateNamespacedSecretAsync(secret, secret.Metadata.NamespaceProperty, cancellationToken: cancellationToken).ConfigureAwait(false);
     Console.WriteLine("✔ 'sops-age' secret created");
-  }
-
-  public void Dispose()
-  {
-    _kubernetesResourceProvisioner?.Dispose();
-    GC.SuppressFinalize(this);
   }
 }
