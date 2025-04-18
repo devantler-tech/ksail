@@ -35,10 +35,9 @@ class DeploymentToolBootstrapper(KSailCluster config) : IBootstrapper
   async Task ReconcileAsync(CancellationToken cancellationToken)
   {
     Console.WriteLine();
-    Console.WriteLine("🔄 Reconciling changes");
+    Console.WriteLine("🔄 Reconciling changes...");
     string kubernetesDirectory = config.Spec.Project.KustomizationPath.TrimStart('.', '/').Split('/').First();
     await _deploymentToolProvisioner.ReconcileAsync(kubernetesDirectory, config.Spec.Connection.Timeout, cancellationToken).ConfigureAwait(false);
     Console.WriteLine("✔ reconciliation completed");
-    Console.WriteLine();
   }
 }
