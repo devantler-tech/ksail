@@ -32,10 +32,22 @@ public partial class KSailInitCommandTests
 
 
   [SkippableTheory]
-  [InlineData("init", "--output", "ksail-init-native-simple")]
-  [InlineData("init", "--output", "ksail-init-native-advanced", "--name", "ksail-advanced-native", "--secret-manager", "--cni", "cilium")]
-  [InlineData("init", "--output", "ksail-init-k3s-simple", "--distribution", "k3s")]
-  [InlineData("init", "--output", "ksail-init-k3s-advanced", "--name", "ksail-advanced-k3s", "--distribution", "k3s", "--secret-manager", "--cni", "cilium")]
+  [InlineData(["init", "--output", "ksail-init-default"])]
+  [InlineData(["init", "--output", "ksail-init-docker", "--provider", "Docker"])]
+  [InlineData(["init", "--output", "ksail-init-docker-native", "--provider", "Docker", "--distribution", "Native"])]
+  [InlineData(["init", "--output", "ksail-init-docker-native-kubectl", "--provider", "Docker", "--distribution", "Native", "--deployment-tool", "Kubectl"])]
+  [InlineData(["init", "--output", "ksail-init-docker-native-kubectl-cilium", "--provider", "Docker", "--distribution", "Native", "--deployment-tool", "Kubectl", "--cni", "Cilium"])]
+  [InlineData(["init", "--output", "ksail-init-docker-native-kubectl-cilium-sops", "--provider", "Docker", "--distribution", "Native", "--deployment-tool", "Kubectl", "--cni", "Cilium", "--secret-manager", "SOPS"])]
+  [InlineData(["init", "--output", "ksail-init-docker-native-flux", "--provider", "Docker", "--distribution", "Native", "--deployment-tool", "Flux"])]
+  [InlineData(["init", "--output", "ksail-init-docker-native-flux-cilium", "--provider", "Docker", "--distribution", "Native", "--deployment-tool", "Flux", "--cni", "Cilium"])]
+  [InlineData(["init", "--output", "ksail-init-docker-native-flux-cilium-sops", "--provider", "Docker", "--distribution", "Native", "--deployment-tool", "Flux", "--cni", "Cilium", "--secret-manager", "SOPS"])]
+  [InlineData(["init", "--output", "ksail-init-docker-k3s", "--provider", "Docker", "--distribution", "K3s"])]
+  [InlineData(["init", "--output", "ksail-init-docker-k3s-kubectl", "--provider", "Docker", "--distribution", "K3s", "--deployment-tool", "Kubectl"])]
+  [InlineData(["init", "--output", "ksail-init-docker-k3s-kubectl-cilium", "--provider", "Docker", "--distribution", "K3s", "--deployment-tool", "Kubectl", "--cni", "Cilium"])]
+  [InlineData(["init", "--output", "ksail-init-docker-k3s-kubectl-cilium-sops", "--provider", "Docker", "--distribution", "K3s", "--deployment-tool", "Kubectl", "--cni", "Cilium", "--secret-manager", "SOPS"])]
+  [InlineData(["init", "--output", "ksail-init-docker-k3s-flux", "--provider", "Docker", "--distribution", "K3s", "--deployment-tool", "Flux"])]
+  [InlineData(["init", "--output", "ksail-init-docker-k3s-flux-cilium", "--provider", "Docker", "--distribution", "K3s", "--deployment-tool", "Flux", "--cni", "Cilium"])]
+  [InlineData(["init", "--output", "ksail-init-docker-k3s-flux-cilium-sops", "--provider", "Docker", "--distribution", "K3s", "--deployment-tool", "Flux", "--cni", "Cilium", "--secret-manager", "SOPS"])]
   public async Task KSailInit_WithVariousOptions_SucceedsAndGeneratesKSailProject(params string[] args)
   {
     //TODO: Add support for Windows at a later time.

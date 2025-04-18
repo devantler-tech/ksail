@@ -18,9 +18,10 @@
       Distribution: Native,
       DeploymentTool: Kubectl,
       CNI: Default,
+      CSI: Default,
       IngressController: Default,
       GatewayController: Default,
-      SecretManager: false,
+      SecretManager: None,
       Editor: Nano,
       MirrorRegistries: true
     },

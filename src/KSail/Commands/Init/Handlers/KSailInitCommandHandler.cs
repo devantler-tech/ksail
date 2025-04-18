@@ -28,19 +28,26 @@ class KSailInitCommandHandler(string outputPath, KSailCluster config)
       cancellationToken
     ).ConfigureAwait(false);
 
-    if (_config.Spec.Project.SecretManager)
+    switch (_config.Spec.Project.SecretManager)
     {
-      await _sopsConfigFileGenerator.GenerateAsync(
-        _outputPath,
-        _config,
-        cancellationToken
-      ).ConfigureAwait(false);
+      case KSailSecretManagerType.SOPS:
+        await _sopsConfigFileGenerator.GenerateAsync(
+            _outputPath,
+            _config,
+            cancellationToken
+        ).ConfigureAwait(false);
+        break;
+      case KSailSecretManagerType.None:
+        break;
+      default:
+        throw new KSailException($"Secret manager '{_config.Spec.Project.SecretManager}' is not supported.");
     }
 
     await _projectGenerator.GenerateAsync(
       _outputPath,
       _config,
       cancellationToken
+
     ).ConfigureAwait(false);
 
     return 0;

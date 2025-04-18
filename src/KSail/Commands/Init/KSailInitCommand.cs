@@ -37,16 +37,20 @@ sealed class KSailInitCommand : Command
   void AddOptions()
   {
     AddOption(_outputPathOption);
-    AddOption(CLIOptions.Generator.OverwriteOption);
     AddOption(CLIOptions.Metadata.NameOption);
     AddOption(CLIOptions.Project.ConfigPathOption);
+    AddOption(CLIOptions.Project.DistributionConfigPathOption);
     AddOption(CLIOptions.Project.KustomizationPathOption);
     AddOption(CLIOptions.Project.ProviderOption);
     AddOption(CLIOptions.Project.DistributionOption);
-    AddOption(CLIOptions.Project.DistributionConfigPathOption);
     AddOption(CLIOptions.Project.DeploymentToolOption);
     AddOption(CLIOptions.Project.CNIOption);
+    AddOption(CLIOptions.Project.CSIOption);
+    AddOption(CLIOptions.Project.IngressControllerOption);
+    AddOption(CLIOptions.Project.GatewayControllerOption);
     AddOption(CLIOptions.Project.MirrorRegistriesOption);
     AddOption(CLIOptions.Project.SecretManagerOption);
+    AddOption(CLIOptions.Project.EditorOption);
+    AddOption(CLIOptions.Generator.OverwriteOption);
   }
 }

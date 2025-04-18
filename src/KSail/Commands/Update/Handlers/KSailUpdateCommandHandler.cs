@@ -55,8 +55,9 @@ class KSailUpdateCommandHandler
     if (_config.Spec.Validation.ReconcileOnUpdate)
     {
       Console.WriteLine();
-      Console.WriteLine("🔄 Reconciling changes");
+      Console.WriteLine("🔄 Reconciling changes...");
       await _deploymentTool.ReconcileAsync(manifestDirectory, _config.Spec.Connection.Timeout, cancellationToken).ConfigureAwait(false);
+      Console.WriteLine("✔ reconciliation completed");
     }
 
     return true;
