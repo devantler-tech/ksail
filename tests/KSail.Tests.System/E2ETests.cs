@@ -57,16 +57,6 @@ public class E2ETests
       RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ||
       (RuntimeInformation.IsOSPlatform(OSPlatform.OSX) && Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true"),
       "Skipping test on Windows OS or macOS in GitHub Actions.");
-    if (Directory.Exists("k8s"))
-      Directory.Delete("k8s", true);
-    if (File.Exists("kind.yaml"))
-      File.Delete("kind.yaml");
-    if (File.Exists("k3d.yaml"))
-      File.Delete("k3d.yaml");
-    if (File.Exists("ksail.yaml"))
-      File.Delete("ksail.yaml");
-    if (File.Exists(".sops.yaml"))
-      File.Delete(".sops.yaml");
 
     //Arrange
     var console = new TestConsole();
