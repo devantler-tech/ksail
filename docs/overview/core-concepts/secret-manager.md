@@ -14,7 +14,8 @@ KSail uses [`SOPS`](https://getsops.io) as the secret manager. This is a tool th
 
 KSail ensures that a private key is securely stored in the cluster, allowing for seamless decryption of secrets when they are applied to the cluster.
 
-> [!NOTE] > `SOPS` supports both `PGP` and `Age` key pairs, but for now, KSail only supports `Age` key pairs. This is because `Age` is a newer and simpler encryption format that is designed to be easy to use and understand. It is also more secure than `PGP` because it solely uses modern cryptography and does not rely on any legacy algorithms or protocols.
+> [!NOTE]
+> The secret manager `SOPS` supports both `PGP` and `Age` key pairs, but for now, KSail only supports `Age` key pairs. This is because `Age` is a newer and simpler encryption format that is designed to be easy to use and understand. It is also more secure than `PGP` because it solely uses modern cryptography and does not rely on any legacy algorithms or protocols.
 
 ## None
 
