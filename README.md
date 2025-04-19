@@ -42,6 +42,7 @@ Getting started with KSail is straightforward. Begin by initializing a new KSail
   --distribution <★Native★|K3s> \
   --deployment-tool <★Kubectl★|Flux> \
   --cni <★Default★|Cilium> \
+  --csi <★Default★> \
   --ingress-controller <★Default★> \
   --gateway-controller <★Default★> \
   --secret-manager <★None★|SOPS> \

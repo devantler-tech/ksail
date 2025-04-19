@@ -2,7 +2,7 @@
 title: Secret Manager
 parent: Core Concepts
 layout: default
-nav_order: 6
+nav_order: 7
 ---
 
 # Secret Manager

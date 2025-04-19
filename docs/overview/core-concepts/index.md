@@ -78,6 +78,10 @@ By understanding the foundational concepts of cloud-native technologies and how 
       <td><code>CNIs</code> refers to Container Network Interface plugins that facilitate networking for containers in a Kubernetes cluster.</td>
     </tr>
     <tr>
+      <td><strong>Container Storage Interfaces (CSIs)</strong></td>
+      <td><code>CSIs</code> refers to Container Storage Interface plugins that facilitate storage for containers in a Kubernetes cluster.</td>
+    </tr>
+    <tr>
       <td><strong>Ingress Controllers</strong></td>
       <td><code>Ingress Controllers</code> refers to the controllers that manage ingress resources in a Kubernetes cluster. They are responsible for routing external traffic to the appropriate services within the cluster.</td>
     </tr>
