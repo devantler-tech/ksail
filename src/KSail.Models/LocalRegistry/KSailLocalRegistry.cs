@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using KSail.Models.Project.Enums;
 
 namespace KSail.Models.LocalRegistry;
 
@@ -19,5 +20,5 @@ public class KSailLocalRegistry
   // public string? Password { get; set; }
 
   [Description("The registry provider. [default: Docker]")]
-  public KSailLocalRegistryProvider Provider { get; set; } = KSailLocalRegistryProvider.Docker;
+  public KSailProviderType Provider { get; set; } = KSailProviderType.Docker;
 }

@@ -22,16 +22,21 @@ class MirrorRegistryBootstrapper(KSailCluster config) : IBootstrapper
   async Task CreateMirrorRegistries(KSailCluster config, CancellationToken cancellationToken)
   {
     Console.WriteLine("🧮 Creating mirror registries");
-
     var tasks = config.Spec.MirrorRegistries.Select(async mirrorRegistry =>
     {
-      Console.WriteLine($"► creating mirror registry '{mirrorRegistry.Name}' for '{mirrorRegistry.Proxy.Url}'");
-
-      await _containerEngineProvisioner.CreateRegistryAsync(
-        mirrorRegistry.Name,
-        mirrorRegistry.HostPort,
-        mirrorRegistry.Proxy.Url,
-        cancellationToken).ConfigureAwait(false);
+      switch (mirrorRegistry.Provider)
+      {
+        case KSailProviderType.Docker or KSailProviderType.Podman:
+          Console.WriteLine($"► creating mirror registry '{mirrorRegistry.Name}' for '{mirrorRegistry.Proxy.Url}'");
+          await _containerEngineProvisioner.CreateRegistryAsync(
+            mirrorRegistry.Name,
+            mirrorRegistry.HostPort,
+            mirrorRegistry.Proxy.Url,
+            cancellationToken).ConfigureAwait(false);
+          break;
+        default:
+          throw new KSailException($"Provider '{mirrorRegistry.Provider}' is not supported.");
+      }
     });
     await Task.WhenAll(tasks).ConfigureAwait(false);
     Console.WriteLine("✔ mirror registries created");
