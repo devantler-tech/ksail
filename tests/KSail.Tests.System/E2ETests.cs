@@ -43,7 +43,7 @@ public class E2ETests
   // Docker + K3s + Flux + Cilium
   [InlineData(["init", "--name", "d-k-f-cilium", "--provider", "Docker", "--distribution", "K3s", "--deployment-tool", "Flux", "--cni", "Cilium"])]
   // Docker + K3s + Flux  + SOPS
-  [InlineData(["init", "--name", "d-k-f-sops", "--provider", "Docker", "--distribution", "K3s", "--deployment-tool", "Flux", "--cni", "Cilium", "SOPS"])]
+  [InlineData(["init", "--name", "d-k-f-sops", "--provider", "Docker", "--distribution", "K3s", "--deployment-tool", "Flux", "--secret-manager", "SOPS"])]
   // Podman + Native + Kubectl + Defaults
   [InlineData(["init", "--name", "p-n-k-defaults", "--provider", "Podman", "--distribution", "Native", "--deployment-tool", "Kubectl"])]
   // Podman + Native + Kubectl + Cilium
