@@ -13,7 +13,7 @@ class IngressControllerBootstrapper(KSailCluster config) : IBootstrapper
         HandleDefaultIngressController();
         break;
       default:
-        throw new KSailException($"the '{config.Spec.Project.IngressController}' Ingress Controller is not supported.");
+        throw new NotSupportedException($"the '{config.Spec.Project.IngressController}' Ingress Controller is not supported.");
     }
     Console.WriteLine();
     return Task.CompletedTask;

@@ -21,7 +21,7 @@ class CNIBootstrapper(KSailCluster config) : IBootstrapper
         HandleDefaultCNI();
         break;
       default:
-        throw new KSailException($"the '{config.Spec.Project.CNI}' CNI is not supported.");
+        throw new NotSupportedException($"the '{config.Spec.Project.CNI}' CNI is not supported.");
     }
     Console.WriteLine();
   }

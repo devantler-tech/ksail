@@ -14,7 +14,7 @@ class CSIBootstrapper(KSailCluster config) : IBootstrapper
         HandleDefaultCSI();
         break;
       default:
-        throw new KSailException($"the '{config.Spec.Project.CSI}' CSI is not supported.");
+        throw new NotSupportedException($"the '{config.Spec.Project.CSI}' CSI is not supported.");
     }
     Console.WriteLine();
     return Task.CompletedTask;
@@ -31,7 +31,7 @@ class CSIBootstrapper(KSailCluster config) : IBootstrapper
         Console.WriteLine("► K3d deploys the local-path-provisioner CSI by default");
         break;
       default:
-        throw new KSailException($"the '{config.Spec.Project.CSI}' CSI is not supported.");
+        throw new NotSupportedException($"the '{config.Spec.Project.CSI}' CSI is not supported.");
     }
   }
 }

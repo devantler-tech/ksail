@@ -35,7 +35,7 @@ class MirrorRegistryBootstrapper(KSailCluster config) : IBootstrapper
             cancellationToken).ConfigureAwait(false);
           break;
         default:
-          throw new KSailException($"Provider '{mirrorRegistry.Provider}' is not supported.");
+          throw new NotSupportedException($"Provider '{mirrorRegistry.Provider}' is not supported.");
       }
     });
     await Task.WhenAll(tasks).ConfigureAwait(false);

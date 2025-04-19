@@ -23,7 +23,7 @@ class GitOpsSourceBootstrapper(KSailCluster config) : IBootstrapper
           Console.WriteLine();
           break;
         default:
-          throw new KSailException($"unsupported provider '{config.Spec.Project.Provider}'.");
+          throw new NotSupportedException($"unsupported provider '{config.Spec.Project.Provider}'.");
       }
     }
   }

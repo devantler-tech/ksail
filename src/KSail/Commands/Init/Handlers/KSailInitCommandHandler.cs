@@ -40,7 +40,7 @@ class KSailInitCommandHandler(string outputPath, KSailCluster config)
       case KSailSecretManagerType.None:
         break;
       default:
-        throw new KSailException($"Secret manager '{_config.Spec.Project.SecretManager}' is not supported.");
+        throw new NotSupportedException($"Secret manager '{_config.Spec.Project.SecretManager}' is not supported.");
     }
 
     await _projectGenerator.GenerateAsync(

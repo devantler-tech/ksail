@@ -13,7 +13,7 @@ class GatewayControllerBootstrapper(KSailCluster config) : IBootstrapper
         HandleDefaultGatewayController();
         break;
       default:
-        throw new KSailException($"the '{config.Spec.Project.GatewayController}' Gateway Controller is not supported.");
+        throw new NotSupportedException($"the '{config.Spec.Project.GatewayController}' Gateway Controller is not supported.");
     }
     Console.WriteLine();
     return Task.CompletedTask;

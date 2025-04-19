@@ -24,7 +24,7 @@ class SecretManagerBootstrapper(KSailCluster config) : IBootstrapper
       case KSailSecretManagerType.None:
         return;
       default:
-        throw new KSailException($"the '{config.Spec.Project.SecretManager}' Secret Manager is not supported.");
+        throw new NotSupportedException($"the '{config.Spec.Project.SecretManager}' Secret Manager is not supported.");
     }
   }
 
@@ -40,7 +40,7 @@ class SecretManagerBootstrapper(KSailCluster config) : IBootstrapper
         await BootstrapSOPSForFluxAsync(cancellationToken).ConfigureAwait(false);
         break;
       default:
-        throw new KSailException($"the '{config.Spec.Project.DeploymentTool}' Deployment Tool is not supported.");
+        throw new NotSupportedException($"the '{config.Spec.Project.DeploymentTool}' Deployment Tool is not supported.");
     }
     Console.WriteLine();
   }
