@@ -19,67 +19,54 @@ namespace KSail.Tests.System;
 public class E2ETests
 {
   [SkippableTheory]
-  [InlineData(["init", "--name", "default"])]
-  // Docker
-  [InlineData(["init", "--name", "d", "--provider", "Docker"])]
-  // Docker + Native
-  [InlineData(["init", "--name", "d-n", "--provider", "Docker", "--distribution", "Native"])]
-  // Docker + Native + Kubectl
-  [InlineData(["init", "--name", "d-n-k", "--provider", "Docker", "--distribution", "Native", "--deployment-tool", "Kubectl"])]
+  // Docker + Native + Kubectl + Defaults
+  [InlineData(["init", "--name", "d-n-k-defaults", "--provider", "Docker", "--distribution", "Native", "--deployment-tool", "Kubectl"])]
   // Docker + Native + Kubectl + Cilium
-  [InlineData(["init", "--name", "d-n-k-c", "--provider", "Docker", "--distribution", "Native", "--deployment-tool", "Kubectl", "--cni", "Cilium"])]
-  // Docker + Native + Kubectl + Cilium + SOPS
-  [InlineData(["init", "--name", "d-n-k-c-s", "--provider", "Docker", "--distribution", "Native", "--deployment-tool", "Kubectl", "--cni", "Cilium", "--secret-manager", "SOPS"])]
-  // Docker + Native + Flux
-  [InlineData(["init", "--name", "d-n-f", "--provider", "Docker", "--distribution", "Native", "--deployment-tool", "Flux"])]
+  [InlineData(["init", "--name", "d-n-k-cilium", "--provider", "Docker", "--distribution", "Native", "--deployment-tool", "Kubectl", "--cni", "Cilium"])]
+  // Docker + Native + Kubectl + SOPS
+  [InlineData(["init", "--name", "d-n-k-sops", "--provider", "Docker", "--distribution", "Native", "--deployment-tool", "Kubectl", "--secret-manager", "SOPS"])]
+  // Docker + Native + Flux + Defaults
+  [InlineData(["init", "--name", "d-n-f-defaults", "--provider", "Docker", "--distribution", "Native", "--deployment-tool", "Flux"])]
   // Docker + Native + Flux + Cilium
-  [InlineData(["init", "--name", "d-n-f-c", "--provider", "Docker", "--distribution", "Native", "--deployment-tool", "Flux", "--cni", "Cilium"])]
-  // Docker + Native + Flux + Cilium + SOPS
-  [InlineData(["init", "--name", "d-n-f-c-s", "--provider", "Docker", "--distribution", "Native", "--deployment-tool", "Flux", "--cni", "Cilium", "--secret-manager", "SOPS"])]
-  // Docker + K3s
-  [InlineData(["init", "--name", "d-k", "--provider", "Docker", "--distribution", "K3s"])]
-  // Docker + K3s + Kubectl
-  [InlineData(["init", "--name", "d-k-k", "--provider", "Docker", "--distribution", "K3s", "--deployment-tool", "Kubectl"])]
+  [InlineData(["init", "--name", "d-n-f-cilium", "--provider", "Docker", "--distribution", "Native", "--deployment-tool", "Flux", "--cni", "Cilium"])]
+  // Docker + Native + Flux + SOPS
+  [InlineData(["init", "--name", "d-n-f-sops", "--provider", "Docker", "--distribution", "Native", "--deployment-tool", "Flux", "--secret-manager", "SOPS"])]
+  // Docker + K3s + Kubectl + Defaults
+  [InlineData(["init", "--name", "d-k-k-defaults", "--provider", "Docker", "--distribution", "K3s", "--deployment-tool", "Kubectl"])]
   // Docker + K3s + Kubectl + Cilium
-  [InlineData(["init", "--name", "d-k-k-c", "--provider", "Docker", "--distribution", "K3s", "--deployment-tool", "Kubectl", "--cni", "Cilium"])]
-  // Docker + K3s + Kubectl + Cilium + SOPS
-  [InlineData(["init", "--name", "d-k-k-c-s", "--provider", "Docker", "--distribution", "K3s", "--deployment-tool", "Kubectl", "--cni", "Cilium", "--secret-manager", "SOPS"])]
-  // Docker + K3s + Flux
-  [InlineData(["init", "--name", "d-k-f", "--provider", "Docker", "--distribution", "K3s", "--deployment-tool", "Flux"])]
+  [InlineData(["init", "--name", "d-k-k-cilium", "--provider", "Docker", "--distribution", "K3s", "--deployment-tool", "Kubectl", "--cni", "Cilium"])]
+  // Docker + K3s + Kubectl + SOPS
+  [InlineData(["init", "--name", "d-k-k-sops", "--provider", "Docker", "--distribution", "K3s", "--deployment-tool", "Kubectl", "--secret-manager", "SOPS"])]
+  // Docker + K3s + Flux + Defaults
+  [InlineData(["init", "--name", "d-k-f-defaults", "--provider", "Docker", "--distribution", "K3s", "--deployment-tool", "Flux"])]
   // Docker + K3s + Flux + Cilium
-  [InlineData(["init", "--name", "d-k-f-c", "--provider", "Docker", "--distribution", "K3s", "--deployment-tool", "Flux", "--cni", "Cilium"])]
-  // Docker + K3s + Flux + Cilium + SOPS
-  [InlineData(["init", "--name", "d-k-f-c-s", "--provider", "Docker", "--distribution", "K3s", "--deployment-tool", "Flux", "--cni", "Cilium", "--secret-manager", "SOPS"])]
-  // Podman
-  [InlineData(["init", "--name", "p", "--provider", "Podman"])]
-  // Podman + Native
-  [InlineData(["init", "--name", "p-n", "--provider", "Podman", "--distribution", "Native"])]
-  // Podman + Native + Kubectl
-  [InlineData(["init", "--name", "p-n-k", "--provider", "Podman", "--distribution", "Native", "--deployment-tool", "Kubectl"])]
+  [InlineData(["init", "--name", "d-k-f-cilium", "--provider", "Docker", "--distribution", "K3s", "--deployment-tool", "Flux", "--cni", "Cilium"])]
+  // Docker + K3s + Flux  + SOPS
+  [InlineData(["init", "--name", "d-k-f-sops", "--provider", "Docker", "--distribution", "K3s", "--deployment-tool", "Flux", "--cni", "Cilium", "SOPS"])]
+  // Podman + Native + Kubectl + Defaults
+  [InlineData(["init", "--name", "p-n-k-defaults", "--provider", "Podman", "--distribution", "Native", "--deployment-tool", "Kubectl"])]
   // Podman + Native + Kubectl + Cilium
-  [InlineData(["init", "--name", "p-n-k-c", "--provider", "Podman", "--distribution", "Native", "--deployment-tool", "Kubectl", "--cni", "Cilium"])]
-  // Podman + Native + Kubectl + Cilium + SOPS
-  [InlineData(["init", "--name", "p-n-k-c-s", "--provider", "Podman", "--distribution", "Native", "--deployment-tool", "Kubectl", "--cni", "Cilium", "--secret-manager", "SOPS"])]
-  // Podman + Native + Flux
-  [InlineData(["init", "--name", "p-n-f", "--provider", "Podman", "--distribution", "Native", "--deployment-tool", "Flux"])]
+  [InlineData(["init", "--name", "p-n-k-cilium", "--provider", "Podman", "--distribution", "Native", "--deployment-tool", "Kubectl", "--cni", "Cilium"])]
+  // Podman + Native + Kubectl + SOPS
+  [InlineData(["init", "--name", "p-n-k-sops", "--provider", "Podman", "--distribution", "Native", "--deployment-tool", "Kubectl", "--secret-manager", "SOPS"])]
+  // Podman + Native + Flux + Defaults
+  [InlineData(["init", "--name", "p-n-f-defaults", "--provider", "Podman", "--distribution", "Native", "--deployment-tool", "Flux"])]
   // Podman + Native + Flux + Cilium
-  [InlineData(["init", "--name", "p-n-f-c", "--provider", "Podman", "--distribution", "Native", "--deployment-tool", "Flux", "--cni", "Cilium"])]
-  // Podman + Native + Flux + Cilium + SOPS
-  [InlineData(["init", "--name", "p-n-f-c-s", "--provider", "Podman", "--distribution", "Native", "--deployment-tool", "Flux", "--cni", "Cilium", "--secret-manager", "SOPS"])]
-  // Podman + K3s
-  [InlineData(["init", "--name", "p-k", "--provider", "Podman", "--distribution", "K3s"])]
-  // Podman + K3s + Kubectl
-  [InlineData(["init", "--name", "p-k-k", "--provider", "Podman", "--distribution", "K3s", "--deployment-tool", "Kubectl"])]
+  [InlineData(["init", "--name", "p-n-f-cilium", "--provider", "Podman", "--distribution", "Native", "--deployment-tool", "Flux", "--cni", "Cilium"])]
+  // Podman + Native + Flux + SOPS
+  [InlineData(["init", "--name", "p-n-f-sops", "--provider", "Podman", "--distribution", "Native", "--deployment-tool", "Flux", "--secret-manager", "SOPS"])]
+  // Podman + K3s + Kubectl + Defaults
+  [InlineData(["init", "--name", "p-k-k-defaults", "--provider", "Podman", "--distribution", "K3s", "--deployment-tool", "Kubectl"])]
   // Podman + K3s + Kubectl + Cilium
-  [InlineData(["init", "--name", "p-k-k-c", "--provider", "Podman", "--distribution", "K3s", "--deployment-tool", "Kubectl", "--cni", "Cilium"])]
-  // Podman + K3s + Kubectl + Cilium + SOPS
-  [InlineData(["init", "--name", "p-k-k-c-s", "--provider", "Podman", "--distribution", "K3s", "--deployment-tool", "Kubectl", "--cni", "Cilium", "--secret-manager", "SOPS"])]
-  // Podman + K3s + Flux
-  [InlineData(["init", "--name", "p-k-f", "--provider", "Podman", "--distribution", "K3s", "--deployment-tool", "Flux"])]
+  [InlineData(["init", "--name", "p-k-k-cilium", "--provider", "Podman", "--distribution", "K3s", "--deployment-tool", "Kubectl", "--cni", "Cilium"])]
+  // Podman + K3s + Kubectl + SOPS
+  [InlineData(["init", "--name", "p-k-k-sops", "--provider", "Podman", "--distribution", "K3s", "--deployment-tool", "Kubectl", "--secret-manager", "SOPS"])]
+  // Podman + K3s + Flux + Defaults
+  [InlineData(["init", "--name", "p-k-f-defaults", "--provider", "Podman", "--distribution", "K3s", "--deployment-tool", "Flux"])]
   // Podman + K3s + Flux + Cilium
-  [InlineData(["init", "--name", "p-k-f-c", "--provider", "Podman", "--distribution", "K3s", "--deployment-tool", "Flux", "--cni", "Cilium"])]
-  // Podman + K3s + Flux + Cilium + SOPS
-  [InlineData(["init", "--name", "p-k-f-c-s", "--provider", "Podman", "--distribution", "K3s", "--deployment-tool", "Flux", "--cni", "Cilium", "--secret-manager", "SOPS"])]
+  [InlineData(["init", "--name", "p-k-f-cilium", "--provider", "Podman", "--distribution", "K3s", "--deployment-tool", "Flux", "--cni", "Cilium"])]
+  // Podman + K3s + Flux + SOPS
+  [InlineData(["init", "--name", "p-k-f-sops", "--provider", "Podman", "--distribution", "K3s", "--deployment-tool", "Flux", "--secret-manager", "SOPS"])]
   public async Task KSailUp_WithVariousConfigurations_Succeeds(params string[] initArgs)
   {
     // TODO: Add support for Windows and macOS in GitHub Runners when GitHub Actions runners support dind on Windows and macOS runners.
