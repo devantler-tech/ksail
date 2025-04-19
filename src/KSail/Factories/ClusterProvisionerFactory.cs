@@ -12,8 +12,8 @@ class ClusterProvisionerFactory
   {
     return (config.Spec.Project.Provider, config.Spec.Project.Distribution) switch
     {
-      (KSailProviderType.Docker, KSailDistributionType.Native) => new KindProvisioner(),
-      (KSailProviderType.Docker, KSailDistributionType.K3s) => new K3dProvisioner(),
+      (KSailProviderType.Docker or KSailProviderType.Podman, KSailDistributionType.Native) => new KindProvisioner(),
+      (KSailProviderType.Docker or KSailProviderType.Podman, KSailDistributionType.K3s) => new K3dProvisioner(),
       _ => throw new NotSupportedException($"The distribution '{config.Spec.Project.Distribution}' is not supported.")
     };
   }
