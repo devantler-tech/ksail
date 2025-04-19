@@ -1,6 +1,7 @@
 
 using Devantler.ContainerEngineProvisioner.Core;
 using Devantler.ContainerEngineProvisioner.Docker;
+using KSail;
 using KSail.Factories;
 using KSail.Models;
 using KSail.Models.Project.Enums;
@@ -13,12 +14,16 @@ class GitOpsSourceBootstrapper(KSailCluster config) : IBootstrapper
   {
     if (config.Spec.Project.DeploymentTool == KSailDeploymentToolType.Flux)
     {
-      if (config.Spec.Project.Provider == KSailProviderType.Docker)
+      switch (config.Spec.Project.Provider)
       {
-        Console.WriteLine("📦 Bootstrapping GitOps source...");
-        await CreateOCISourceRegistry(config, cancellationToken).ConfigureAwait(false);
-        await BootstrapOCISource(cancellationToken).ConfigureAwait(false);
-        Console.WriteLine();
+        case KSailProviderType.Docker or KSailProviderType.Podman:
+          Console.WriteLine("📦 Bootstrapping GitOps source...");
+          await CreateOCISourceRegistry(config, cancellationToken).ConfigureAwait(false);
+          await BootstrapOCISource(cancellationToken).ConfigureAwait(false);
+          Console.WriteLine();
+          break;
+        default:
+          throw new KSailException($"unsupported provider '{config.Spec.Project.Provider}'.");
       }
     }
   }
