@@ -1,3 +1,4 @@
+using System;
 using System.CommandLine;
 using System.CommandLine.IO;
 using System.Runtime.InteropServices;
@@ -69,11 +70,20 @@ public class E2ETests
   [InlineData(["init", "--name", "p-k-f-sops", "--provider", "Podman", "--distribution", "K3s", "--deployment-tool", "Flux", "--secret-manager", "SOPS"])]
   public async Task KSailUp_WithVariousConfigurations_Succeeds(params string[] initArgs)
   {
+    // Validate that initArgs is not null
+    ArgumentNullException.ThrowIfNull(initArgs);
+
     // TODO: Add support for Windows and macOS in GitHub Runners when GitHub Actions runners support dind on Windows and macOS runners.
     Skip.If(
       RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ||
       (RuntimeInformation.IsOSPlatform(OSPlatform.OSX) && Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true"),
       "Skipping test on Windows OS or macOS in GitHub Actions.");
+
+    string provider = initArgs.Contains("--provider") ? initArgs[Array.IndexOf(initArgs, "--provider") + 1] : string.Empty;
+    string distribution = initArgs.Contains("--distribution") ? initArgs[Array.IndexOf(initArgs, "--distribution") + 1] : string.Empty;
+    Skip.If(
+      RuntimeInformation.IsOSPlatform(OSPlatform.OSX) && provider.Equals("Podman", StringComparison.Ordinal) && distribution.Equals("K3s", StringComparison.Ordinal),
+      "Skipping test on macOS with Podman and K3s.");
 
     //Arrange
     var console = new TestConsole();
