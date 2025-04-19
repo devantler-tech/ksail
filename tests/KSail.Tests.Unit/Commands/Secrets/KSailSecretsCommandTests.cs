@@ -189,6 +189,7 @@ public class KSailSecretsCommandTests
     string? key = _console.Out?.ToString()?.Trim();
     Assert.NotNull(key);
     Assert.NotEmpty(key);
+    var ageKey = new AgeKey(key);
 
     // Act
     int listExitCode = await _ksailCommand.InvokeAsync(["secrets", "list", "--all"], _console);
@@ -196,5 +197,9 @@ public class KSailSecretsCommandTests
     // Assert
     Assert.Equal(0, addExitCode);
     Assert.Equal(0, listExitCode);
+
+    // Cleanup
+    int rmExitCode = await _ksailCommand.InvokeAsync(["secrets", "rm", ageKey.PublicKey], _console);
+    Assert.Equal(0, rmExitCode);
   }
 }
