@@ -71,9 +71,6 @@ class ClusterBootstrapper(KSailCluster config) : IBootstrapper
   {
     Console.WriteLine($"☸️ Provisioning cluster '{config.Spec.Project.Distribution.ToString().ToLower(System.Globalization.CultureInfo.CurrentCulture)}-{config.Metadata.Name}'");
     await _clusterProvisioner.CreateAsync(config.Metadata.Name, config.Spec.Project.DistributionConfigPath, cancellationToken).ConfigureAwait(false);
-    if (config.Spec.Project.Distribution == KSailDistributionType.K3s)
-    {
-      Console.WriteLine();
-    }
+    Console.WriteLine();
   }
 }

@@ -11,7 +11,7 @@ Options:
   -n, --name <name>                                 The name of the cluster. [default: ksail-default]
   -dc, --distribution-config <distribution-config>  Path to the distribution configuration file. [default: kind.yaml]
   -kp, --kustomization-path <kustomization-path>    The path to the root kustomization directory. [default: k8s]
-  -p, --provider <Docker>                           The provider to use for provisioning the cluster. [default: Docker]
+  -p, --provider <Docker|Podman>                    The provider to use for provisioning the cluster. [default: Docker]
   -d, --distribution <K3s|Native>                   The distribution to use for the cluster. [default: Native]
   -dt, --deployment-tool <Flux|Kubectl>             The Deployment tool to use for applying a kustomization. [default: Kubectl]
   --cni <Cilium|Default>                            The CNI to use. [default: Default]

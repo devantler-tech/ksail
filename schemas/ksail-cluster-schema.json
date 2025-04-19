@@ -70,7 +70,8 @@
             "provider": {
               "description": "The provider to use for running the KSail cluster. [default: Docker]",
               "enum": [
-                "Docker"
+                "Docker",
+                "Podman"
               ]
             },
             "distribution": {

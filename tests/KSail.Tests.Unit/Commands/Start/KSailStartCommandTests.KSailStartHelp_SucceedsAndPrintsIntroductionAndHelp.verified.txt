@@ -8,7 +8,7 @@ Options:
   -c, --context <context>          The kubernetes context to use. [default: kind-ksail-default]
   -n, --name <name>                The name of the cluster. [default: ksail-default]
   -d, --distribution <K3s|Native>  The distribution to use for the cluster. [default: Native]
-  -p, --provider <Docker>          The provider to use for provisioning the cluster. [default: Docker]
+  -p, --provider <Docker|Podman>   The provider to use for provisioning the cluster. [default: Docker]
   -?, -h, --help                   Show help and usage information
 
 

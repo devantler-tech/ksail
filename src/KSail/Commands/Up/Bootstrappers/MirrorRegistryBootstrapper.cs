@@ -55,6 +55,8 @@ class MirrorRegistryBootstrapper(KSailCluster config) : IBootstrapper
           throw new KSailException(output);
         }
         string[] nodes = output.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
+        // TODO: Remove this workaround when Kind CLI no longer outputs the experimental podman provider message
+        nodes = [.. nodes.Where(line => !line.Contains("enabling experimental podman provider", StringComparison.OrdinalIgnoreCase))];
         foreach (string node in nodes)
         {
           foreach (var mirrorRegistry in config.Spec.MirrorRegistries)
