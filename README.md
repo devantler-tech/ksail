@@ -37,15 +37,15 @@ Getting started with KSail is straightforward. Begin by initializing a new KSail
 ```sh
 > ksail init # to create a new default project
 
-> ksail init \ # to create a new custom project
-    --provider <Docker> \
-    --distribution <Native|K3s> \
-    --deployment-tool <Kubectl|Flux> \
-    --cni <Default|Cilium> \
-    --ingress-controller <Default> \
-    --gateway-controller <Default> \
-    --secret-manager <true|false> \
-    --mirror-registries <true|false>
+> ksail init \ # to create a new custom project (★ is default)
+  --provider <★Docker★> \
+  --distribution <★Native★|K3s> \
+  --deployment-tool <★Kubectl★|Flux> \
+  --cni <★Default★|Cilium> \
+  --ingress-controller <★Default★> \
+  --gateway-controller <★Default★> \
+  --secret-manager <★false★|true> \
+  --mirror-registries <★true★|false>
 ```
 
 This creates the following project files, depending on your choices:
