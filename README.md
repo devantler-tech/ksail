@@ -38,7 +38,7 @@ Getting started with KSail is straightforward. Begin by initializing a new KSail
 > ksail init # to create a new default project
 
 > ksail init \ # to create a new custom project (★ is default)
-  --provider <★Docker★> \
+  --provider <★Docker★|Podman> \
   --distribution <★Native★|K3s> \
   --deployment-tool <★Kubectl★|Flux> \
   --cni <★Default★|Cilium> \

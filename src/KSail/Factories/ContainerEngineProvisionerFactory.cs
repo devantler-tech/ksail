@@ -13,7 +13,7 @@ class ContainerEngineProvisionerFactory
   {
     return config.Spec.Project.Provider switch
     {
-      KSailProviderType.Docker => new DockerProvisioner(),
+      KSailProviderType.Docker or KSailProviderType.Podman => new DockerProvisioner(),
       _ => throw new NotSupportedException($"The container engine '{config.Spec.Project.Provider}' is not supported.")
     };
   }

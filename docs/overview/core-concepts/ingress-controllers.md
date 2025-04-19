@@ -20,3 +20,5 @@ nav_order: 3
 | -------- | ------------- | ------------------ |
 | Docker   | Native (kind) | None               |
 | Docker   | K3s (k3d)     | Traefik            |
+| Podman   | Native (kind) | None               |
+| Podman   | K3s (k3d)     | Traefik            |

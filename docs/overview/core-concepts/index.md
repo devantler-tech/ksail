@@ -30,7 +30,11 @@ By understanding the foundational concepts of cloud-native technologies and how 
   <tbody>
     <tr>
       <td><a href="https://docs.docker.com/">Docker</a></td>
-      <td>A platform for developing, shipping, and running containerized applications.</td>
+      <td>A platform and container engine for developing, shipping, and running containerized applications.</td>
+    </tr>
+    <tr>
+      <td><a href="https://podman.io/">Podman</a></td>
+      <td>A daemonless container engine for developing, managing, and running containers on your system.</td>
     </tr>
     <tr>
       <td><a href="https://kubernetes.io/docs/home/">Kubernetes</a></td>

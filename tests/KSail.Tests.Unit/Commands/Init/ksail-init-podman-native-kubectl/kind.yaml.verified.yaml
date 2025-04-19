@@ -1,0 +1,8 @@
+﻿---
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: ksail-default
+containerdConfigPatches:
+- >-
+  [plugins."io.containerd.grpc.v1.cri".registry]
+    config_path = "/etc/containerd/certs.d"

@@ -2,6 +2,7 @@ using System.CommandLine.Invocation;
 using Devantler.KubernetesGenerator.Core.Converters;
 using Devantler.KubernetesGenerator.Core.Inspectors;
 using KSail.Models;
+using KSail.Models.LocalRegistry;
 using KSail.Models.Project.Enums;
 using KSail.Options;
 using YamlDotNet.Serialization;
@@ -79,6 +80,14 @@ static class KSailClusterConfigLoader
 
     // MirrorRegistries
     // TODO: Implement MirrorRegistries CLIOptions
+    for (int i = 0; i < config.Spec.MirrorRegistries.Count(); i++)
+    {
+      var mirrorRegistry = config.Spec.MirrorRegistries.ElementAt(i);
+      if (mirrorRegistry.Provider == KSailProviderType.Docker)
+      {
+        config.Spec.MirrorRegistries.ElementAt(i).Provider = context.ParseResult.GetValueForOption(CLIOptions.Project.ProviderOption);
+      }
+    }
 
     // Generator
     config.UpdateConfig(c => c.Spec.Generator.Overwrite, context.ParseResult.GetValueForOption(CLIOptions.Generator.OverwriteOption));

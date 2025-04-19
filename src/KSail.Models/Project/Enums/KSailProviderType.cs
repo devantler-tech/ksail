@@ -8,8 +8,8 @@ public enum KSailProviderType
   [Description("Use Docker as the engine.")]
   Docker,
 
-  //
-  //Podman
+  [Description("Use Podman as the engine.")]
+  Podman
 
   //
   // ClusterAPI

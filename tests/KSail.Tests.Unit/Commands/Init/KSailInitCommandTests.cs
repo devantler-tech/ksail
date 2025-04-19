@@ -48,6 +48,21 @@ public partial class KSailInitCommandTests
   [InlineData(["init", "--output", "ksail-init-docker-k3s-flux", "--provider", "Docker", "--distribution", "K3s", "--deployment-tool", "Flux"])]
   [InlineData(["init", "--output", "ksail-init-docker-k3s-flux-cilium", "--provider", "Docker", "--distribution", "K3s", "--deployment-tool", "Flux", "--cni", "Cilium"])]
   [InlineData(["init", "--output", "ksail-init-docker-k3s-flux-cilium-sops", "--provider", "Docker", "--distribution", "K3s", "--deployment-tool", "Flux", "--cni", "Cilium", "--secret-manager", "SOPS"])]
+  [InlineData(["init", "--output", "ksail-init-podman", "--provider", "Podman"])]
+  [InlineData(["init", "--output", "ksail-init-podman-native", "--provider", "Podman", "--distribution", "Native"])]
+  [InlineData(["init", "--output", "ksail-init-podman-native-kubectl", "--provider", "Podman", "--distribution", "Native", "--deployment-tool", "Kubectl"])]
+  [InlineData(["init", "--output", "ksail-init-podman-native-kubectl-cilium", "--provider", "Podman", "--distribution", "Native", "--deployment-tool", "Kubectl", "--cni", "Cilium"])]
+  [InlineData(["init", "--output", "ksail-init-podman-native-kubectl-cilium-sops", "--provider", "Podman", "--distribution", "Native", "--deployment-tool", "Kubectl", "--cni", "Cilium", "--secret-manager", "SOPS"])]
+  [InlineData(["init", "--output", "ksail-init-podman-native-flux", "--provider", "Podman", "--distribution", "Native", "--deployment-tool", "Flux"])]
+  [InlineData(["init", "--output", "ksail-init-podman-native-flux-cilium", "--provider", "Podman", "--distribution", "Native", "--deployment-tool", "Flux", "--cni", "Cilium"])]
+  [InlineData(["init", "--output", "ksail-init-podman-native-flux-cilium-sops", "--provider", "Podman", "--distribution", "Native", "--deployment-tool", "Flux", "--cni", "Cilium", "--secret-manager", "SOPS"])]
+  [InlineData(["init", "--output", "ksail-init-podman-k3s", "--provider", "Podman", "--distribution", "K3s"])]
+  [InlineData(["init", "--output", "ksail-init-podman-k3s-kubectl", "--provider", "Podman", "--distribution", "K3s", "--deployment-tool", "Kubectl"])]
+  [InlineData(["init", "--output", "ksail-init-podman-k3s-kubectl-cilium", "--provider", "Podman", "--distribution", "K3s", "--deployment-tool", "Kubectl", "--cni", "Cilium"])]
+  [InlineData(["init", "--output", "ksail-init-podman-k3s-kubectl-cilium-sops", "--provider", "Podman", "--distribution", "K3s", "--deployment-tool", "Kubectl", "--cni", "Cilium", "--secret-manager", "SOPS"])]
+  [InlineData(["init", "--output", "ksail-init-podman-k3s-flux", "--provider", "Podman", "--distribution", "K3s", "--deployment-tool", "Flux"])]
+  [InlineData(["init", "--output", "ksail-init-podman-k3s-flux-cilium", "--provider", "Podman", "--distribution", "K3s", "--deployment-tool", "Flux", "--cni", "Cilium"])]
+  [InlineData(["init", "--output", "ksail-init-podman-k3s-flux-cilium-sops", "--provider", "Podman", "--distribution", "K3s", "--deployment-tool", "Flux", "--cni", "Cilium", "--secret-manager", "SOPS"])]
   public async Task KSailInit_WithVariousOptions_SucceedsAndGeneratesKSailProject(params string[] args)
   {
     //TODO: Add support for Windows at a later time.

@@ -56,7 +56,7 @@ Options:
   -n, --name <name>                                 The name of the cluster. [default: ksail-default]
   -dc, --distribution-config <distribution-config>  Path to the distribution configuration file. [default: kind.yaml]
   -kp, --kustomization-path <kustomization-path>    The path to the root kustomization directory. [default: k8s]
-  -p, --provider <Docker>                           The provider to use for provisioning the cluster. [default: Docker]
+  -p, --provider <Docker|Podman>                    The provider to use for provisioning the cluster. [default: Docker]
   -d, --distribution <K3s|Native>                   The distribution to use for the cluster. [default: Native]
   -dt, --deployment-tool <Flux|Kubectl>             The Deployment tool to use for applying a kustomization. [default: Kubectl]
   --cni <Cilium|Default>                            The CNI to use. [default: Default]
@@ -84,7 +84,7 @@ Options:
   -fsu, --flux-source-url <flux-source-url>  Flux source URL for reconciling GitOps resources. [default: oci://ksail-registry:5000/ksail-registry]
   -n, --name <name>                          The name of the cluster. [default: ksail-default]
   -d, --distribution <K3s|Native>            The distribution to use for the cluster. [default: Native]
-  -p, --provider <Docker>                    The provider to use for provisioning the cluster. [default: Docker]
+  -p, --provider <Docker|Podman>             The provider to use for provisioning the cluster. [default: Docker]
   -mr, --mirror-registries                   Enable mirror registries for the project. [default: True]
   -?, -h, --help                             Show help and usage information
 ```
@@ -120,7 +120,7 @@ Options:
   -c, --context <context>          The kubernetes context to use. [default: kind-ksail-default]
   -n, --name <name>                The name of the cluster. [default: ksail-default]
   -d, --distribution <K3s|Native>  The distribution to use for the cluster. [default: Native]
-  -p, --provider <Docker>          The provider to use for provisioning the cluster. [default: Docker]
+  -p, --provider <Docker|Podman>   The provider to use for provisioning the cluster. [default: Docker]
   -?, -h, --help                   Show help and usage information
 ```
 
@@ -136,7 +136,7 @@ Usage:
 Options:
   -n, --name <name>                The name of the cluster. [default: ksail-default]
   -d, --distribution <K3s|Native>  The distribution to use for the cluster. [default: Native]
-  -p, --provider <Docker>          The provider to use for provisioning the cluster. [default: Docker]
+  -p, --provider <Docker|Podman>   The provider to use for provisioning the cluster. [default: Docker]
   -?, -h, --help                   Show help and usage information
 ```
 
@@ -155,7 +155,7 @@ Options:
   -c, --config <config>                             The path to the ksail configuration file. [default: ksail.yaml]
   -dc, --distribution-config <distribution-config>  Path to the distribution configuration file. [default: kind.yaml]
   -kp, --kustomization-path <kustomization-path>    The path to the root kustomization directory. [default: k8s]
-  -p, --provider <Docker>                           The provider to use for provisioning the cluster. [default: Docker]
+  -p, --provider <Docker|Podman>                    The provider to use for provisioning the cluster. [default: Docker]
   -d, --distribution <K3s|Native>                   The distribution to use for the cluster. [default: Native]
   -dt, --deployment-tool <Flux|Kubectl>             The Deployment tool to use for applying a kustomization. [default: Kubectl]
   --cni <Cilium|Default>                            The CNI to use. [default: Default]
@@ -225,7 +225,7 @@ Usage:
   ksail list [options]
 
 Options:
-  -p, --provider <Docker>          The provider to use for provisioning the cluster. [default: Docker]
+  -p, --provider <Docker|Podman>   The provider to use for provisioning the cluster. [default: Docker]
   -d, --distribution <K3s|Native>  The distribution to use for the cluster. [default: Native]
   -a, --all                        List clusters from all distributions. [default: False]
   -?, -h, --help                   Show help and usage information

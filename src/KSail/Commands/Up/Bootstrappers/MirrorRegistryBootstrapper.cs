@@ -22,16 +22,21 @@ class MirrorRegistryBootstrapper(KSailCluster config) : IBootstrapper
   async Task CreateMirrorRegistries(KSailCluster config, CancellationToken cancellationToken)
   {
     Console.WriteLine("🧮 Creating mirror registries");
-
     var tasks = config.Spec.MirrorRegistries.Select(async mirrorRegistry =>
     {
-      Console.WriteLine($"► creating mirror registry '{mirrorRegistry.Name}' for '{mirrorRegistry.Proxy.Url}'");
-
-      await _containerEngineProvisioner.CreateRegistryAsync(
-        mirrorRegistry.Name,
-        mirrorRegistry.HostPort,
-        mirrorRegistry.Proxy.Url,
-        cancellationToken).ConfigureAwait(false);
+      switch (mirrorRegistry.Provider)
+      {
+        case KSailProviderType.Docker or KSailProviderType.Podman:
+          Console.WriteLine($"► creating mirror registry '{mirrorRegistry.Name}' for '{mirrorRegistry.Proxy.Url}'");
+          await _containerEngineProvisioner.CreateRegistryAsync(
+            mirrorRegistry.Name,
+            mirrorRegistry.HostPort,
+            mirrorRegistry.Proxy.Url,
+            cancellationToken).ConfigureAwait(false);
+          break;
+        default:
+          throw new KSailException($"Provider '{mirrorRegistry.Provider}' is not supported.");
+      }
     });
     await Task.WhenAll(tasks).ConfigureAwait(false);
     Console.WriteLine("✔ mirror registries created");
@@ -42,7 +47,7 @@ class MirrorRegistryBootstrapper(KSailCluster config) : IBootstrapper
   {
     switch ((config.Spec.Project.Provider, config.Spec.Project.Distribution))
     {
-      case (KSailProviderType.Docker, KSailDistributionType.Native):
+      case (KSailProviderType.Docker or KSailProviderType.Podman, KSailDistributionType.Native):
         Console.WriteLine("🔼 Bootstrapping mirror registries");
         string[] args = [
         "get",
@@ -55,6 +60,8 @@ class MirrorRegistryBootstrapper(KSailCluster config) : IBootstrapper
           throw new KSailException(output);
         }
         string[] nodes = output.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
+        // TODO: Remove this workaround when Kind CLI no longer outputs the experimental podman provider message
+        nodes = [.. nodes.Where(line => !line.Contains("enabling experimental podman provider", StringComparison.OrdinalIgnoreCase))];
         foreach (string node in nodes)
         {
           foreach (var mirrorRegistry in config.Spec.MirrorRegistries)
@@ -80,7 +87,7 @@ class MirrorRegistryBootstrapper(KSailCluster config) : IBootstrapper
         Console.WriteLine($"✔ mirror registries connected to 'kind' networks");
         Console.WriteLine();
         break;
-      case (KSailProviderType.Docker, KSailDistributionType.K3s):
+      case (KSailProviderType.Docker or KSailProviderType.Podman, KSailDistributionType.K3s):
         break;
       default:
         break;

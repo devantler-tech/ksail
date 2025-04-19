@@ -23,10 +23,10 @@ class IngressControllerBootstrapper(KSailCluster config) : IBootstrapper
   {
     switch (config.Spec.Project.Provider, config.Spec.Project.Distribution)
     {
-      case (KSailProviderType.Docker, KSailDistributionType.Native):
+      case (KSailProviderType.Docker or KSailProviderType.Podman, KSailDistributionType.Native):
         Console.WriteLine("► Kind does not deploy an Ingress Controller by default");
         break;
-      case (KSailProviderType.Docker, KSailDistributionType.K3s):
+      case (KSailProviderType.Docker or KSailProviderType.Podman, KSailDistributionType.K3s):
         Console.WriteLine("► K3d deploys the Traefik Ingress Controller by default");
         break;
       default:

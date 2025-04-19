@@ -8,7 +8,7 @@ Options:
   -fsu, --flux-source-url <flux-source-url>  Flux source URL for reconciling GitOps resources. [default: oci://ksail-registry:5000/ksail-registry]
   -n, --name <name>                          The name of the cluster. [default: ksail-default]
   -d, --distribution <K3s|Native>            The distribution to use for the cluster. [default: Native]
-  -p, --provider <Docker>                    The provider to use for provisioning the cluster. [default: Docker]
+  -p, --provider <Docker|Podman>             The provider to use for provisioning the cluster. [default: Docker]
   -mr, --mirror-registries                   Enable mirror registries for the project. [default: True]
   -?, -h, --help                             Show help and usage information
 

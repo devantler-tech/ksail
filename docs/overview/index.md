@@ -6,9 +6,6 @@ nav_order: 1
 
 # Overview
 
-> [!NOTE]
-> Currently, KSail supports `Docker` as a provider for local development. Support for other providers is planned for the future.
-
 KSail is an SDK for Kubernetes allowing you to easily create, manage, and dismantle Kubernetes clusters in various providers. It is built on top of popular Kubernetes tools with the goal of improving the developer experience (DX) when working with Kubernetes.
 
 ![KSail Architecture](../images/architecture.drawio.png)

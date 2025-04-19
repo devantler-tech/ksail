@@ -50,6 +50,36 @@ public class E2ETests
   [InlineData(["init", "--name", "d-k-f-c", "--provider", "Docker", "--distribution", "K3s", "--deployment-tool", "Flux", "--cni", "Cilium"])]
   // Docker + K3s + Flux + Cilium + SOPS
   [InlineData(["init", "--name", "d-k-f-c-s", "--provider", "Docker", "--distribution", "K3s", "--deployment-tool", "Flux", "--cni", "Cilium", "--secret-manager", "SOPS"])]
+  // Podman
+  [InlineData(["init", "--name", "p", "--provider", "Podman"])]
+  // Podman + Native
+  [InlineData(["init", "--name", "p-n", "--provider", "Podman", "--distribution", "Native"])]
+  // Podman + Native + Kubectl
+  [InlineData(["init", "--name", "p-n-k", "--provider", "Podman", "--distribution", "Native", "--deployment-tool", "Kubectl"])]
+  // Podman + Native + Kubectl + Cilium
+  [InlineData(["init", "--name", "p-n-k-c", "--provider", "Podman", "--distribution", "Native", "--deployment-tool", "Kubectl", "--cni", "Cilium"])]
+  // Podman + Native + Kubectl + Cilium + SOPS
+  [InlineData(["init", "--name", "p-n-k-c-s", "--provider", "Podman", "--distribution", "Native", "--deployment-tool", "Kubectl", "--cni", "Cilium", "--secret-manager", "SOPS"])]
+  // Podman + Native + Flux
+  [InlineData(["init", "--name", "p-n-f", "--provider", "Podman", "--distribution", "Native", "--deployment-tool", "Flux"])]
+  // Podman + Native + Flux + Cilium
+  [InlineData(["init", "--name", "p-n-f-c", "--provider", "Podman", "--distribution", "Native", "--deployment-tool", "Flux", "--cni", "Cilium"])]
+  // Podman + Native + Flux + Cilium + SOPS
+  [InlineData(["init", "--name", "p-n-f-c-s", "--provider", "Podman", "--distribution", "Native", "--deployment-tool", "Flux", "--cni", "Cilium", "--secret-manager", "SOPS"])]
+  // Podman + K3s
+  [InlineData(["init", "--name", "p-k", "--provider", "Podman", "--distribution", "K3s"])]
+  // Podman + K3s + Kubectl
+  [InlineData(["init", "--name", "p-k-k", "--provider", "Podman", "--distribution", "K3s", "--deployment-tool", "Kubectl"])]
+  // Podman + K3s + Kubectl + Cilium
+  [InlineData(["init", "--name", "p-k-k-c", "--provider", "Podman", "--distribution", "K3s", "--deployment-tool", "Kubectl", "--cni", "Cilium"])]
+  // Podman + K3s + Kubectl + Cilium + SOPS
+  [InlineData(["init", "--name", "p-k-k-c-s", "--provider", "Podman", "--distribution", "K3s", "--deployment-tool", "Kubectl", "--cni", "Cilium", "--secret-manager", "SOPS"])]
+  // Podman + K3s + Flux
+  [InlineData(["init", "--name", "p-k-f", "--provider", "Podman", "--distribution", "K3s", "--deployment-tool", "Flux"])]
+  // Podman + K3s + Flux + Cilium
+  [InlineData(["init", "--name", "p-k-f-c", "--provider", "Podman", "--distribution", "K3s", "--deployment-tool", "Flux", "--cni", "Cilium"])]
+  // Podman + K3s + Flux + Cilium + SOPS
+  [InlineData(["init", "--name", "p-k-f-c-s", "--provider", "Podman", "--distribution", "K3s", "--deployment-tool", "Flux", "--cni", "Cilium", "--secret-manager", "SOPS"])]
   public async Task KSailUp_WithVariousConfigurations_Succeeds(params string[] initArgs)
   {
     // TODO: Add support for Windows and macOS in GitHub Runners when GitHub Actions runners support dind on Windows and macOS runners.

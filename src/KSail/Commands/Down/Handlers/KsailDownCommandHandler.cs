@@ -18,7 +18,7 @@ class KSailDownCommandHandler
     _config = config;
     _containerEngineProvisioner = _config.Spec.Project.Provider switch
     {
-      KSailProviderType.Docker => new DockerProvisioner(),
+      KSailProviderType.Docker or KSailProviderType.Podman => new DockerProvisioner(),
       _ => throw new KSailException($"Provider '{_config.Spec.Project.Provider}' is not supported.")
     };
     _kubernetesDistributionProvisioner = _config.Spec.Project.Distribution switch

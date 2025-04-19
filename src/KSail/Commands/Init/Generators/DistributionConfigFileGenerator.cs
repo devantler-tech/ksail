@@ -19,10 +19,10 @@ class DistributionConfigFileGenerator
     string configPath = Path.Combine(outputPath, config.Spec.Project.DistributionConfigPath);
     switch (config.Spec.Project.Provider, config.Spec.Project.Distribution)
     {
-      case (KSailProviderType.Docker, KSailDistributionType.Native):
+      case (KSailProviderType.Docker or KSailProviderType.Podman, KSailDistributionType.Native):
         await GenerateKindConfigFile(config, configPath, cancellationToken).ConfigureAwait(false);
         break;
-      case (KSailProviderType.Docker, KSailDistributionType.K3s):
+      case (KSailProviderType.Docker or KSailProviderType.Podman, KSailDistributionType.K3s):
         await GenerateK3DConfigFile(config, configPath, cancellationToken).ConfigureAwait(false);
         break;
       default:
