@@ -18,7 +18,7 @@ KSail aims to support a wide range of use cases by providing the flexibility to 
   </thead>
   <tbody>
     <tr>
-      <td><strong>Binary OS Support</strong></td>
+      <td><strong>CLI</strong></td>
       <td>
         Linux (amd64 and arm64),<br>
         macOS (amd64 and arm64)
