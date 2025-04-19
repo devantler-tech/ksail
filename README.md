@@ -44,7 +44,7 @@ Getting started with KSail is straightforward. Begin by initializing a new KSail
   --cni <★Default★|Cilium> \
   --ingress-controller <★Default★> \
   --gateway-controller <★Default★> \
-  --secret-manager <★false★|true> \
+  --secret-manager <★None★|SOPS> \
   --mirror-registries <★true★|false>
 ```
 
