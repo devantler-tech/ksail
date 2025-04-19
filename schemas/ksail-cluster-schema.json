@@ -209,7 +209,8 @@
             "provider": {
               "description": "The registry provider. [default: Docker]",
               "enum": [
-                "Docker"
+                "Docker",
+                "Podman"
               ]
             }
           }
@@ -255,7 +256,8 @@
               "provider": {
                 "description": "The registry provider. [default: Docker]",
                 "enum": [
-                  "Docker"
+                  "Docker",
+                  "Podman"
                 ]
               }
             }

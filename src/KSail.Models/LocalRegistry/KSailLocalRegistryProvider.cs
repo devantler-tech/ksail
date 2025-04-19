@@ -3,6 +3,6 @@ namespace KSail.Models.LocalRegistry;
 
 public enum KSailLocalRegistryProvider
 {
-
-  Docker
+  Docker,
+  Podman
 }
