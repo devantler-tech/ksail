@@ -31,7 +31,7 @@ public class ConfigurationValidatorTest
   }
 
   [Fact]
-  public async Task ValidateAsync_UnsupportedDistribution_ThrowsKSailException()
+  public async Task ValidateAsync_UnsupportedDistribution_ThrowsNotSupportedException()
   {
     // Arrange
     string tempDir = Path.Combine(Path.GetTempPath(), "ksail-validate-unsupported-distribution");
@@ -49,7 +49,7 @@ public class ConfigurationValidatorTest
     var validator = new ConfigurationValidator(config);
 
     // Act & Assert
-    var exception = await Assert.ThrowsAsync<KSailException>(async () => await validator.ValidateAsync(tempDir, CancellationToken.None).ConfigureAwait(false));
+    var exception = await Assert.ThrowsAsync<NotSupportedException>(async () => await validator.ValidateAsync(tempDir, CancellationToken.None).ConfigureAwait(false));
     Assert.Contains("unsupported distribution", exception.Message, StringComparison.Ordinal);
 
     //Cleanup
