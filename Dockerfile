@@ -1,3 +1,4 @@
+# Disclaimer! This Dockerfile is badly maintained. Contributions are welcome to make running ksail as a container easier.
 FROM ubuntu:24.04
 
 ARG ARCH=arm64
