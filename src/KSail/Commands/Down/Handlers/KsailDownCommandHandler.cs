@@ -18,14 +18,14 @@ class KSailDownCommandHandler
     _config = config;
     _containerEngineProvisioner = _config.Spec.Project.Provider switch
     {
-      KSailProviderType.Docker => new DockerProvisioner(),
-      _ => throw new KSailException($"Provider '{_config.Spec.Project.Provider}' is not supported.")
+      KSailProviderType.Docker or KSailProviderType.Podman => new DockerProvisioner(),
+      _ => throw new NotSupportedException($"Provider '{_config.Spec.Project.Provider}' is not supported.")
     };
     _kubernetesDistributionProvisioner = _config.Spec.Project.Distribution switch
     {
       KSailDistributionType.K3s => new K3dProvisioner(),
       KSailDistributionType.Native => new KindProvisioner(),
-      _ => throw new KSailException($"Kubernetes distribution '{_config.Spec.Project.Provider}' is not supported.")
+      _ => throw new NotSupportedException($"Kubernetes distribution '{_config.Spec.Project.Provider}' is not supported.")
     };
   }
 

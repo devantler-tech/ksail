@@ -37,7 +37,19 @@ class ClusterBootstrapper(KSailCluster config) : IBootstrapper
         + "  - if you want to update the cluster, use 'ksail update' instead.");
     }
     Console.WriteLine("✔ cluster does not exist");
+    // TODO: Remove 'TemporaryMacOSPodmanK3sCompatabilityErrorHandling()' when the issue is resolved.
+    TemporaryMacOSPodmanK3sCompatabilityErrorHandling();
     Console.WriteLine();
+  }
+
+  void TemporaryMacOSPodmanK3sCompatabilityErrorHandling()
+  {
+    if (OperatingSystem.IsMacOS() && config.Spec.Project.Provider == KSailProviderType.Podman && config.Spec.Project.Distribution == KSailDistributionType.K3s)
+    {
+      throw new KSailException("Podman + K3s is not supported on MacOS yet." + Environment.NewLine
+        + "  - 'host-gateway' is not working with 'podman machine' VMs." + Environment.NewLine
+        + "    see https://github.com/containers/podman/issues/21681 for more details.");
+    }
   }
 
   async Task CheckProviderIsRunning(CancellationToken cancellationToken = default)
@@ -71,9 +83,6 @@ class ClusterBootstrapper(KSailCluster config) : IBootstrapper
   {
     Console.WriteLine($"☸️ Provisioning cluster '{config.Spec.Project.Distribution.ToString().ToLower(System.Globalization.CultureInfo.CurrentCulture)}-{config.Metadata.Name}'");
     await _clusterProvisioner.CreateAsync(config.Metadata.Name, config.Spec.Project.DistributionConfigPath, cancellationToken).ConfigureAwait(false);
-    if (config.Spec.Project.Distribution == KSailDistributionType.K3s)
-    {
-      Console.WriteLine();
-    }
+    Console.WriteLine();
   }
 }

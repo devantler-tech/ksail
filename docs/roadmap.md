@@ -22,6 +22,7 @@ The roadmap for KSail details the planned features and improvements for the proj
 - [x] Mirror registry support for kind.
 - [x] Cilium support to enable users to create clusters with Cilium as the default CNI.
 - [x] Traefik.me support to enable users to make services accessible through ingresses without having to set up a DNS server locally.
+- [x] Podman support to enable users to create and manage GitOps-enabled Kubernetes clusters provisioned with Podman. This is important for users that prefer to use Podman over Docker.
 - [ ] The `ksail diff` command to show the the differences between the current state of the cluster and the desired state before applying the changes. This can be useful to see all the hidden changes that are applied by e.g. HelmRelease resources.
 - [ ] Talos in Docker support to enable users to create and manage GitOps-enabled Kubernetes clusters provisioned with Talos Linux in Docker. This is important for users that prefer to use Talos over K3d.
 - [ ] ArgoCD support to enable users to manage their clusters through ArgoCDs GitOps engine. This is important to support a wide range of use cases.

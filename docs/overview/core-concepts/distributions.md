@@ -18,6 +18,7 @@ Below is the actual distribution used when using the `Native` distribution with 
 | Provider | Distribution | Actual Distribution                 |
 | -------- | ------------ | ----------------------------------- |
 | Docker   | Native       | [`kind`](https://kind.sigs.k8s.io/) |
+| Podman   | Native       | [`kind`](https://kind.sigs.k8s.io/) |
 
 ## [K3s](https://k3s.io/)
 
@@ -26,3 +27,4 @@ The `K3s` distribution is a lightweight Kubernetes distribution that is designed
 | Provider | Distribution | Actual Distribution      |
 | -------- | ------------ | ------------------------ |
 | Docker   | K3s          | [`k3d`](https://k3d.io/) |
+| Podman   | K3s          | [`k3d`](https://k3d.io/) |

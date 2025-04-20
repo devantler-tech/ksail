@@ -2,7 +2,7 @@
 title: Gateway Controllers
 parent: Core Concepts
 layout: default
-nav_order: 4
+nav_order: 5
 ---
 
 # Gateway Controllers
@@ -23,3 +23,5 @@ nav_order: 4
 | -------- | ------------- | ------------------ |
 | Docker   | Native (kind) | None               |
 | Docker   | K3s (k3d)     | None               |
+| Podman   | Native (kind) | None               |
+| Podman   | K3s (k3d)     | None               |

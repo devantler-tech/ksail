@@ -2,7 +2,7 @@
 title: Ingress Controllers
 parent: Core Concepts
 layout: default
-nav_order: 3
+nav_order: 4
 ---
 
 # Ingress Controllers
@@ -20,3 +20,5 @@ nav_order: 3
 | -------- | ------------- | ------------------ |
 | Docker   | Native (kind) | None               |
 | Docker   | K3s (k3d)     | Traefik            |
+| Podman   | Native (kind) | None               |
+| Podman   | K3s (k3d)     | Traefik            |

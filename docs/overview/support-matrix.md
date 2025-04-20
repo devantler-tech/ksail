@@ -18,7 +18,7 @@ KSail aims to support a wide range of use cases by providing the flexibility to 
   </thead>
   <tbody>
     <tr>
-      <td><strong>Operating Systems</strong></td>
+      <td><strong>CLI</strong></td>
       <td>
         Linux (amd64 and arm64),<br>
         macOS (amd64 and arm64)
@@ -26,13 +26,32 @@ KSail aims to support a wide range of use cases by providing the flexibility to 
     </tr>
     <tr>
       <td><strong>Providers</strong></td>
-      <td><a href="https://www.docker.com">Docker</a></td>
+      <td><a href="https://www.docker.com">Docker</a>, <a href="https://podman.io">Podman</a></td>
     </tr>
     <tr>
       <td><strong>Distributions</strong></td>
       <td>
         Native,
         <a href="https://k3d.io">K3s</a>
+      </td>
+    </tr>
+    <tr>
+      <td><strong>Container Network Interfaces (CNI)</strong></td>
+      <td>
+        Default,
+        <a href="https://cilium.io">Cilium</a>
+      </td>
+    </tr>
+    <tr>
+      <td><strong>Ingress Controllers</strong></td>
+      <td>
+        Default
+      </td>
+    </tr>
+    <tr>
+      <td><strong>Gateway Controllers</strong></td>
+      <td>
+        Default
       </td>
     </tr>
     <tr>
@@ -46,13 +65,6 @@ KSail aims to support a wide range of use cases by providing the flexibility to 
       <td><strong>Secret Manager</strong></td>
       <td>
         <a href="https://github.com/getsops/sops">SOPS</a>
-      </td>
-    </tr>
-    <tr>
-      <td><strong>Container Network Interfaces (CNI)</strong></td>
-      <td>
-        Default,
-        <a href="https://cilium.io">Cilium</a>
       </td>
     </tr>
     <tr>

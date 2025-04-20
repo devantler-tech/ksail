@@ -22,6 +22,8 @@ Because the `Native` distribution varies depending on the `Provider`, the CNI is
 | -------- | ------------- | ----------------------------------------------------------------------------- |
 | Docker   | Native (Kind) | [kindnetd](https://github.com/kubernetes-sigs/kind/tree/main/images/kindnetd) |
 | Docker   | K3s (K3d)     | [flannel](https://github.com/flannel-io/flannel)                              |
+| Podman   | Native (Kind) | [kindnetd](https://github.com/kubernetes-sigs/kind/tree/main/images/kindnetd) |
+| Podman   | K3s (K3d)     | [flannel](https://github.com/flannel-io/flannel)                              |
 
 ## Cilium
 

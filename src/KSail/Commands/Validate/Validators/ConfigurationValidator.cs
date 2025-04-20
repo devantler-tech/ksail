@@ -50,7 +50,7 @@ class ConfigurationValidator(KSailCluster config)
         }
 
       default:
-        throw new KSailException($"unsupported distribution '{config.Spec.Project.Distribution}'.");
+        throw new NotSupportedException($"unsupported distribution '{config.Spec.Project.Distribution}'.");
     }
     Console.WriteLine("✔ configuration is valid");
   }
@@ -84,7 +84,7 @@ class ConfigurationValidator(KSailCluster config)
     {
       KSailDistributionType.K3s => $"k3d-{name}",
       KSailDistributionType.Native => $"kind-{name}",
-      _ => throw new KSailException($"unsupported distribution '{distribution}'.")
+      _ => throw new NotSupportedException($"unsupported distribution '{distribution}'.")
     };
     if (!string.Equals(expectedContextName, context, StringComparison.Ordinal))
     {
@@ -98,7 +98,7 @@ class ConfigurationValidator(KSailCluster config)
     {
       KSailDistributionType.Native => new Uri("oci://ksail-registry:5000/ksail-registry"),
       KSailDistributionType.K3s => new Uri("oci://host.k3d.internal:5555/ksail-registry"),
-      _ => throw new KSailException($"unsupported distribution '{distribution}'.")
+      _ => throw new NotSupportedException($"unsupported distribution '{distribution}'.")
     };
     if (!Equals(expectedOCISourceUri, config.Spec.DeploymentTool.Flux.Source.Url))
     {

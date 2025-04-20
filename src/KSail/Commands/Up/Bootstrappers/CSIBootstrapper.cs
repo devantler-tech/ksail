@@ -14,7 +14,7 @@ class CSIBootstrapper(KSailCluster config) : IBootstrapper
         HandleDefaultCSI();
         break;
       default:
-        throw new KSailException($"the '{config.Spec.Project.CSI}' CSI is not supported.");
+        throw new NotSupportedException($"the '{config.Spec.Project.CSI}' CSI is not supported.");
     }
     Console.WriteLine();
     return Task.CompletedTask;
@@ -24,14 +24,14 @@ class CSIBootstrapper(KSailCluster config) : IBootstrapper
   {
     switch (config.Spec.Project.Provider, config.Spec.Project.Distribution)
     {
-      case (KSailProviderType.Docker, KSailDistributionType.Native):
+      case (KSailProviderType.Docker or KSailProviderType.Podman, KSailDistributionType.Native):
         Console.WriteLine("► Kind deploys the local-path-provisioner CSI by default");
         break;
-      case (KSailProviderType.Docker, KSailDistributionType.K3s):
+      case (KSailProviderType.Docker or KSailProviderType.Podman, KSailDistributionType.K3s):
         Console.WriteLine("► K3d deploys the local-path-provisioner CSI by default");
         break;
       default:
-        throw new KSailException($"the '{config.Spec.Project.CSI}' CSI is not supported.");
+        throw new NotSupportedException($"the '{config.Spec.Project.CSI}' CSI is not supported.");
     }
   }
 }
