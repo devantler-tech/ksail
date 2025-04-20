@@ -90,7 +90,7 @@ class MirrorRegistryBootstrapper(KSailCluster config) : IBootstrapper
       case (KSailProviderType.Docker or KSailProviderType.Podman, KSailDistributionType.K3s):
         break;
       default:
-        break;
+        throw new NotSupportedException($"Provider '{config.Spec.Project.Provider}' with distribution '{config.Spec.Project.Distribution}' is not supported.");
     }
   }
 
