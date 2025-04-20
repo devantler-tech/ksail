@@ -26,6 +26,7 @@ class ConfigurationValidator(KSailCluster config)
     }
     Console.WriteLine($"✔ configuration files located");
     Console.WriteLine("► validating configuration");
+    CheckCompatibility(config);
     CheckContextName(projectRootPath, config.Spec.Project.Distribution, config.Metadata.Name, config.Spec.Connection.Context);
     CheckOCISourceUri(projectRootPath, config.Spec.Project.Distribution);
 
@@ -53,6 +54,17 @@ class ConfigurationValidator(KSailCluster config)
         throw new NotSupportedException($"unsupported distribution '{config.Spec.Project.Distribution}'.");
     }
     Console.WriteLine("✔ configuration is valid");
+  }
+
+  static void CheckCompatibility(KSailCluster config)
+  {
+    // TODO: Remove temporary MacOS + Podman + K3s compatability check when the issue is resolved.
+    if (OperatingSystem.IsMacOS() && config.Spec.Project.Provider == KSailProviderType.Podman && config.Spec.Project.Distribution == KSailDistributionType.K3s)
+    {
+      throw new KSailException("Podman + K3s is not supported on MacOS yet." + Environment.NewLine
+        + "  - 'host-gateway' is not working with 'podman machine' VMs." + Environment.NewLine
+        + "    see https://github.com/containers/podman/issues/21681 for more details.");
+    }
   }
 
   string GetProjectRootPath(string path, string projectRootPath)
