@@ -1,4 +1,6 @@
+using Devantler.ContainerEngineProvisioner.Core;
 using Devantler.ContainerEngineProvisioner.Docker;
+using Devantler.ContainerEngineProvisioner.Podman;
 using Devantler.KubernetesProvisioner.Cluster.Core;
 using Devantler.KubernetesProvisioner.Cluster.K3d;
 using Devantler.KubernetesProvisioner.Cluster.Kind;
@@ -9,17 +11,13 @@ namespace KSail.Factories;
 
 class ContainerEngineProvisionerFactory
 {
-  internal static DockerProvisioner Create(KSailCluster config)
+  internal static IContainerEngineProvisioner Create(KSailCluster config)
   {
-    switch (config.Spec.Project.Provider)
+    return config.Spec.Project.Provider switch
     {
-      case KSailProviderType.Docker:
-        return new DockerProvisioner();
-      case KSailProviderType.Podman:
-        string socketPath = PodmanHelper.GetPodmanSocket();
-        return new DockerProvisioner(socketPath);
-      default:
-        throw new NotSupportedException($"The provider '{config.Spec.Project.Provider}' is not supported.");
-    }
+      KSailProviderType.Docker => new DockerProvisioner(),
+      KSailProviderType.Podman => new PodmanProvisioner(),
+      _ => throw new NotSupportedException($"The provider '{config.Spec.Project.Provider}' is not supported."),
+    };
   }
 }
