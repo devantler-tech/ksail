@@ -26,8 +26,6 @@ class ClusterProvisionerFactory
 
   }
 
-
-
   static IKubernetesClusterProvisioner GetKubernetesClusterProvisioner(KSailCluster config)
   {
     return config.Spec.Project.Distribution switch

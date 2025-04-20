@@ -1,4 +1,4 @@
-using Devantler.ContainerEngineProvisioner.Docker;
+using Devantler.ContainerEngineProvisioner.Core;
 using Devantler.KubernetesProvisioner.Cluster.Core;
 using KSail;
 using KSail.Commands.Validate.Handlers;
@@ -9,7 +9,7 @@ using KSail.Models.Project.Enums;
 class ClusterBootstrapper(KSailCluster config) : IBootstrapper
 {
   readonly IKubernetesClusterProvisioner _clusterProvisioner = ClusterProvisionerFactory.Create(config);
-  readonly DockerProvisioner _containerEngineProvisioner = ContainerEngineProvisionerFactory.Create(config);
+  readonly IContainerEngineProvisioner _containerEngineProvisioner = ContainerEngineProvisionerFactory.Create(config);
   readonly KSailValidateCommandHandler _ksailValidateCommandHandler = new(config);
   public async Task BootstrapAsync(CancellationToken cancellationToken = default)
   {

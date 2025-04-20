@@ -1,33 +1,20 @@
+using System.ComponentModel;
+using Devantler.ContainerEngineProvisioner.Core;
 using Devantler.ContainerEngineProvisioner.Docker;
 using Devantler.KubernetesProvisioner.Cluster.Core;
 using Devantler.KubernetesProvisioner.Cluster.K3d;
 using Devantler.KubernetesProvisioner.Cluster.Kind;
+using KSail.Factories;
 using KSail.Models;
 using KSail.Models.Project.Enums;
 
 namespace KSail.Commands.Down.Handlers;
 
-class KSailDownCommandHandler
+class KSailDownCommandHandler(KSailCluster config)
 {
-  readonly KSailCluster _config;
-  readonly DockerProvisioner _containerEngineProvisioner;
-  readonly IKubernetesClusterProvisioner _kubernetesDistributionProvisioner;
-
-  internal KSailDownCommandHandler(KSailCluster config)
-  {
-    _config = config;
-    _containerEngineProvisioner = _config.Spec.Project.Provider switch
-    {
-      KSailProviderType.Docker or KSailProviderType.Podman => new DockerProvisioner(),
-      _ => throw new NotSupportedException($"Provider '{_config.Spec.Project.Provider}' is not supported.")
-    };
-    _kubernetesDistributionProvisioner = _config.Spec.Project.Distribution switch
-    {
-      KSailDistributionType.K3s => new K3dProvisioner(),
-      KSailDistributionType.Native => new KindProvisioner(),
-      _ => throw new NotSupportedException($"Kubernetes distribution '{_config.Spec.Project.Provider}' is not supported.")
-    };
-  }
+  readonly KSailCluster _config = config;
+  readonly IContainerEngineProvisioner _containerEngineProvisioner = ContainerEngineProvisionerFactory.Create(config);
+  readonly IKubernetesClusterProvisioner _kubernetesDistributionProvisioner = ClusterProvisionerFactory.Create(config);
 
   internal async Task<bool> HandleAsync(CancellationToken cancellationToken = default)
   {

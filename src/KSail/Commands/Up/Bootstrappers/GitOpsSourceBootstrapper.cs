@@ -1,6 +1,8 @@
 
 using Devantler.ContainerEngineProvisioner.Core;
 using Devantler.ContainerEngineProvisioner.Docker;
+using Devantler.ContainerEngineProvisioner.Podman;
+using Docker.DotNet;
 using KSail;
 using KSail.Factories;
 using KSail.Models;
@@ -8,7 +10,7 @@ using KSail.Models.Project.Enums;
 
 class GitOpsSourceBootstrapper(KSailCluster config) : IBootstrapper
 {
-  readonly DockerProvisioner _containerEngineProvisioner = ContainerEngineProvisionerFactory.Create(config);
+  readonly IContainerEngineProvisioner _containerEngineProvisioner = ContainerEngineProvisionerFactory.Create(config);
 
   public async Task BootstrapAsync(CancellationToken cancellationToken = default)
   {
@@ -45,7 +47,12 @@ class GitOpsSourceBootstrapper(KSailCluster config) : IBootstrapper
     {
       case (KSailDistributionType.Native, KSailDeploymentToolType.Flux):
         Console.WriteLine($"► connect OCI source registry to 'kind-{config.Metadata.Name}' network");
-        var dockerClient = _containerEngineProvisioner.Client;
+        var dockerClient = _containerEngineProvisioner switch
+        {
+          DockerProvisioner dockerProvisioner => dockerProvisioner.Client,
+          PodmanProvisioner podmanProvisioner => podmanProvisioner.Client,
+          _ => throw new NotSupportedException($"Unsupported container engine provisioner")
+        };
         var dockerNetworks = await dockerClient.Networks.ListNetworksAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
         var kindNetworks = dockerNetworks.Where(x => x.Name.Contains("kind", StringComparison.OrdinalIgnoreCase));
         foreach (var kindNetwork in kindNetworks)

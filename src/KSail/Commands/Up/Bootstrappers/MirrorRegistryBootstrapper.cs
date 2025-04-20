@@ -1,6 +1,7 @@
 
 using Devantler.ContainerEngineProvisioner.Core;
 using Devantler.ContainerEngineProvisioner.Docker;
+using Devantler.ContainerEngineProvisioner.Podman;
 using KSail;
 using KSail.Factories;
 using KSail.Models;
@@ -9,7 +10,7 @@ using KSail.Models.Project.Enums;
 
 class MirrorRegistryBootstrapper(KSailCluster config) : IBootstrapper
 {
-  readonly DockerProvisioner _containerEngineProvisioner = ContainerEngineProvisionerFactory.Create(config);
+  readonly IContainerEngineProvisioner _containerEngineProvisioner = ContainerEngineProvisionerFactory.Create(config);
   public async Task BootstrapAsync(CancellationToken cancellationToken = default)
   {
     if (config.Spec.Project.MirrorRegistries)
@@ -75,7 +76,12 @@ class MirrorRegistryBootstrapper(KSailCluster config) : IBootstrapper
         foreach (var mirrorRegistry in config.Spec.MirrorRegistries)
         {
           Console.WriteLine($"► connect '{mirrorRegistry.Name}' to 'kind-{config.Metadata.Name}' network");
-          var dockerClient = _containerEngineProvisioner.Client;
+          var dockerClient = _containerEngineProvisioner switch
+          {
+            DockerProvisioner dockerProvisioner => dockerProvisioner.Client,
+            PodmanProvisioner podmanProvisioner => podmanProvisioner.Client,
+            _ => throw new NotSupportedException("Unsupported container engine provisioner")
+          };
           var dockerNetworks = await dockerClient.Networks.ListNetworksAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
           var kindNetworks = dockerNetworks.Where(x => x.Name.Contains("kind", StringComparison.OrdinalIgnoreCase));
           foreach (var kindNetwork in kindNetworks)
