@@ -1,5 +1,4 @@
 theme: just-the-docs
-color_scheme: dark
 url: https://ksail.devantler.tech
 title: "🛥️🐳 KSail"
 favicon_ico: "docs/images/ksail-logo.png"
@@ -22,6 +21,8 @@ gh_edit_repository: https://github.com/devantler-tech/ksail
 gh_edit_branch: main
 gh_edit_view_mode: tree
 
+color_scheme: light
+enable_color_scheme_toggle: true
 back_to_top: true
 back_to_top_text: "Back to top"
 
@@ -40,5 +41,3 @@ exclude:
   - SECURITY.md
   - KSail.slnx
   - entitlements.xml
-
-
