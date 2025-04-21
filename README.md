@@ -4,9 +4,11 @@
 [![Test](https://github.com/devantler-tech/ksail/actions/workflows/test.yaml/badge.svg?branch=main)](https://github.com/devantler-tech/ksail/actions/workflows/test.yaml)
 [![codecov](https://codecov.io/gh/devantler-tech/ksail/graph/badge.svg?token=DNEO90PfNR)](https://codecov.io/gh/devantler-tech/ksail)
 
-<p align="center">
-  <img src="docs/images/ksail-cli.png" alt="KSail CLI" style="width: 550px">
-</p>
+<picture align="center">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/ksail-cli-dark.png" style="width: 550px">
+  <source media="(prefers-color-scheme: light)" srcset="docs/images/ksail-cli-light.png" style="width: 550px">
+  <img alt="KSail CLI" src="docs/images/ksail-cli-dark.png" style="width: 550px">
+</picture>
 
 ## Getting Started
 
