@@ -97,39 +97,15 @@ For more details on the available commands, checkout the [KSail CLI Options](htt
 
 The documentation for KSail is available at [ksail.devantler.tech](https://ksail.devantler.tech).
 
-## Sub-projects
-
-KSail is part of a larger ecosystem of projects that I maintain. These projects are designed to provide important functionality to KSail with high confidence, and without bloating the main repository. Most the projects provide extensible frameworks, so you can build your own tools on top of them, or make contributions to make KSail even more powerful.
-
-- **[devantler-tech/dotnet-container-engine-provisioner](https://github.com/devantler-tech/dotnet-container-engine-provisioner)** - Provisioners to provision resources in container engines like Docker or Podman.
-- **[devantler-tech/dotnet-keys](https://github.com/devantler-tech/dotnet-keys)** - A library with key models, like the Age key model.
-- **[devantler-tech/dotnet-kubernetes-generator](https://github.com/devantler-tech/dotnet-kubernetes-generator)** - Generators to create Kubernetes resources with `ksail init` and `ksail gen`.
-- **[devantler-tech/dotnet-kubernetes-provisioner](https://github.com/devantler-tech/dotnet-kubernetes-provisioner)** - Provisioners to provision Kubernetes clusters and resources.
-- **[devantler-tech/dotnet-kubernetes-validator](https://github.com/devantler-tech/dotnet-kubernetes-validator)** - A library that validates Kubernetes resources client-side or at runtime.
-- **[devantler-tech/dotnet-secret-manager](https://github.com/devantler-tech/dotnet-secret-manager)** - A secret manager to manage secrets in Git in a secure way.
-- **[devantler-tech/dotnet-template-engine](https://github.com/devantler-tech/dotnet-template-engine)** - A template engine to support code generation of non-serializable content.
-
-### CLI Wrappers
-
-These projects are CLI wrappers that provide a C# API for the respective CLI tools. They are used in KSail to embed and interact with CLI tools in a type-safe manner.
-
-- **[devantler-tech/dotnet-age-cli](https://github.com/devantler-tech/dotnet-age-cli)** - A library that embeds and provides an API for the Age CLI.
-- **[devantler-tech/dotnet-cilium-cli](https://github.com/devantler-tech/dotnet-cilium-cli)** - A library that embeds and provides an API for the Cilium CLI.
-- **[devantler-tech/dotnet-flux-cli](https://github.com/devantler-tech/dotnet-flux-cli)** - A library that embeds and provides an API for the Flux CLI.
-- **[devantler-tech/dotnet-helm-cli](https://github.com/devantler-tech/dotnet-helm-cli)** - A library that embeds and provides an API for the Helm CLI.
-- **[devantler-tech/dotnet-k3d-cli](https://github.com/devantler-tech/dotnet-k3d-cli)** - A library that embeds and provides an API for the K3d CLI.
-- **[devantler-tech/dotnet-k9s-cli](https://github.com/devantler-tech/dotnet-k9s-cli)** - A library that embeds and provides an API for the K9s CLI.
-- **[devantler-tech/dotnet-kind-cli](https://github.com/devantler-tech/dotnet-kind-cli)** - A library that embeds and provides an API for the Kind CLI.
-- **[devantler-tech/dotnet-kubeconform-cli](https://github.com/devantler-tech/dotnet-kubeconform-cli)** - A library that embeds and provides an API for the Kubeconform CLI.
-- **[devantler-tech/dotnet-kubectl-cli](https://github.com/devantler-tech/dotnet-kubectl-cli)** - A library that embeds and provides an API for the Kubectl CLI.
-- **[devantler-tech/dotnet-kustomize-cli](https://github.com/devantler-tech/dotnet-kustomize-cli)** - A library that embeds and provides an API for the Kustomize CLI.
-- **[devantler-tech/dotnet-sops-cli](https://github.com/devantler-tech/dotnet-sops-cli)** - A library that embeds and provides an API for the SOPS CLI.
-
 ## Related Projects
 
 KSail is a powerful tool that can be used in many different ways. Here are some projects that use KSail in their setup:
 
-- **[devantler/homelab](https://github.com/devantler/homelab)** - My personal homelab setup.
+| Project                                                                       | Description                                                                | Type             |
+| ----------------------------------------------------------------------------- | -------------------------------------------------------------------------- | ---------------- |
+| [devantler-tech/platform](https://github.com/devantler-tech/platform)         | A platform I use for personal projects.                                    | Platform         |
+| [devantler-tech/testkube-poc](https://github.com/devantler-tech/testkube-poc) | A proof of concept for using TestKube as a test framework in your cluster. | Proof of Concept |
+| [devantler-tech/pinniped-poc](https://github.com/devantler-tech/pinniped-poc) | A proof of concept for using Pinniped for authenticating to your cluster.  | Proof of Concept |
 
 If you use KSail in your project, feel free to open a PR to add it to the list, so others can see how you use KSail.
 
