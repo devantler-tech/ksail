@@ -5,10 +5,10 @@ namespace KSail.Models.Project.Enums;
 
 public enum KSailDeploymentToolType
 {
-  [Description("Use Kubectl to apply a kustomization.")]
+  [Description("Use Kubectl as the deployment tool.")]
   Kubectl,
-  [Description("Use Flux GitOps to apply a kustomization.")]
-  Flux
-
-  // ArgoCD
+  [Description("Use Flux GitOps as the deployment tool.")]
+  Flux,
+  [Description("Use ArgoCD as the deployment tool.")]
+  ArgoCD
 }
