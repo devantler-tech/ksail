@@ -14,8 +14,7 @@ nav_order: 5
 
 ## None
 
-> [!WARNING]
-> This option is not supported yet.
+The `None` option is used when you do not want to use a `Gateway Controller`. In cases where a distribution installs a `Gateway Controller` by default, this option can be used to disable it.
 
 ## Default
 

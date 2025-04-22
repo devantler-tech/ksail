@@ -110,6 +110,7 @@
             "gatewayController": {
               "description": "The Gateway Controller to use. [default: Default]",
               "enum": [
+                "None",
                 "Default"
               ]
             },
