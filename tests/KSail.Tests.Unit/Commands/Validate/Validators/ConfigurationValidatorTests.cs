@@ -258,6 +258,64 @@ public class ConfigurationValidatorTest
   }
 
   [Theory]
+  [InlineData(KSailDistributionType.K3s, KSailIngressControllerType.Default, KSailIngressControllerType.None)]
+  [InlineData(KSailDistributionType.K3s, KSailIngressControllerType.None, KSailIngressControllerType.Default)]
+  public async Task ValidateAsync_InvalidIngressController_ThrowsKSailException(KSailDistributionType distribution, KSailIngressControllerType actualIngressController, KSailIngressControllerType expectedIngressController)
+  {
+    string tempDir = Path.Combine(Path.GetTempPath(), "ksail-validate-invalid-ingress-controller");
+    _ = await _rootCommand.InvokeAsync(["init", "--output", tempDir, "--distribution", distribution.ToString(), "--ingress-controller", expectedIngressController.ToString()], _console);
+    var config = new KSailCluster
+    {
+      Spec = new KSailClusterSpec
+      {
+        Project = new KSailProject
+        {
+          Distribution = distribution,
+          IngressController = actualIngressController,
+          DistributionConfigPath = distribution switch
+          {
+            KSailDistributionType.K3s => "k3d.yaml",
+            KSailDistributionType.Native => "kind.yaml",
+            _ => throw new KSailException($"unsupported distribution '{distribution}'.")
+          }
+        },
+        Connection = new KSailConnection
+        {
+          Context = distribution switch
+          {
+            KSailDistributionType.K3s => "k3d-ksail-default",
+            KSailDistributionType.Native => "kind-ksail-default",
+            _ => throw new KSailException($"unsupported distribution '{distribution}'.")
+          }
+        },
+        DeploymentTool = new KSailDeploymentTool
+        {
+          Flux = new KSailFluxDeploymentTool
+          {
+            Source = new KSailFluxDeploymentToolRepository
+            {
+              Url = distribution switch
+              {
+                KSailDistributionType.Native => new Uri("oci://ksail-registry:5000/ksail-registry"),
+                KSailDistributionType.K3s => new Uri("oci://host.k3d.internal:5555/ksail-registry"),
+                _ => throw new KSailException($"unsupported distribution '{distribution}'.")
+              }
+            }
+          }
+        },
+      }
+    };
+    var validator = new ConfigurationValidator(config);
+
+    // Act & Assert
+    var exception = await Assert.ThrowsAsync<KSailException>(async () => await validator.ValidateAsync(tempDir, CancellationToken.None).ConfigureAwait(false));
+    Assert.Contains($"'spec.project.ingressController={actualIngressController}' in '", exception.Message, StringComparison.Ordinal);
+
+    //Cleanup
+    Directory.Delete(tempDir, true);
+  }
+
+  [Theory]
   [InlineData(KSailDistributionType.K3s)]
   public async Task ValidateAsync_InvalidMirrorRegistries_ThrowsKSailException(KSailDistributionType distribution)
   {

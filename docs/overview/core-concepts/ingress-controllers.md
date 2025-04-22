@@ -11,8 +11,7 @@ nav_order: 4
 
 ## None
 
-> [!WARNING]
-> This option is not supported yet.
+If you choose `None`, no Ingress Controller will be installed.
 
 ## Default
 
