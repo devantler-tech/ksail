@@ -26,7 +26,8 @@ KSail aims to support a wide range of use cases by providing the flexibility to 
     </tr>
     <tr>
       <td><strong>Providers</strong></td>
-      <td><a href="https://www.docker.com">Docker</a>, <a href="https://podman.io">Podman</a></td>
+      <td><a href="https://www.docker.com">Docker</a>,
+      <a href="https://podman.io">Podman</a></td>
     </tr>
     <tr>
       <td><strong>Distributions</strong></td>
@@ -45,7 +46,8 @@ KSail aims to support a wide range of use cases by providing the flexibility to 
     <tr>
       <td><strong>Ingress Controllers</strong></td>
       <td>
-        Default
+        Default,
+        None
       </td>
     </tr>
     <tr>

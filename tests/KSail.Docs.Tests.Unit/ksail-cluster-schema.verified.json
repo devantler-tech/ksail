@@ -104,6 +104,7 @@
             "ingressController": {
               "description": "The Ingress Controller to use. [default: Default]",
               "enum": [
+                "None",
                 "Default"
               ]
             },

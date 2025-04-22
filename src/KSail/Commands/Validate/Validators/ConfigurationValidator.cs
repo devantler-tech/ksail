@@ -38,6 +38,7 @@ class ConfigurationValidator(KSailCluster config)
           var distributionConfig = deserializer.Deserialize<K3dConfig>(await File.ReadAllTextAsync(Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath), cancellationToken).ConfigureAwait(false));
           CheckClusterName(projectRootPath, config.Metadata.Name, distributionConfig.Metadata.Name);
           CheckK3dCNI(projectRootPath, distributionConfig);
+          CheckK3dIngressController(projectRootPath, distributionConfig);
           CheckK3dMirrorRegistries(projectRootPath, distributionConfig);
           break;
         }
@@ -157,6 +158,32 @@ class ConfigurationValidator(KSailCluster config)
     {
       throw new KSailException($"'spec.project.cni={config.Spec.Project.CNI}' in '{Path.Combine(projectRootPath, config.Spec.Project.ConfigPath)}' does not match expected values in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'." + Environment.NewLine +
         $"  - please set 'options.k3s.extraArgs' to '--flannel-backend=none' and '--disable-network-policy' for 'server:*' in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'.");
+    }
+  }
+
+  void CheckK3dIngressController(string projectRootPath, K3dConfig distributionConfig)
+  {
+    var expectedWithCustomIngressControllerK3sExtraArgs = new List<K3dOptionsK3sExtraArg>
+    {
+      new() {
+        Arg = "--disable=traefik",
+        NodeFilters =
+        [
+          "server:*"
+        ]
+      }
+    };
+    var expectedWithCustomIngressController = expectedWithCustomIngressControllerK3sExtraArgs.Select(x => x.Arg + ":" + x.NodeFilters?.First()) ?? [];
+    var actual = distributionConfig.Options?.K3s?.ExtraArgs?.Select(x => x.Arg + ":" + (x.NodeFilters?.First() ?? "server:*")) ?? [];
+    if (config.Spec.Project.IngressController == KSailIngressControllerType.Default && actual.Intersect(expectedWithCustomIngressController).Any())
+    {
+      throw new KSailException($"'spec.project.ingressController={config.Spec.Project.IngressController}' in '{Path.Combine(projectRootPath, config.Spec.Project.ConfigPath)}' does not match expected values in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'." + Environment.NewLine +
+        $"  - please remove '--disable=traefik' from 'options.k3s.extraArgs' in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'.");
+    }
+    else if (config.Spec.Project.IngressController != KSailIngressControllerType.Default && (!actual.Any() || !actual.All(expectedWithCustomIngressController.Contains)))
+    {
+      throw new KSailException($"'spec.project.ingressController={config.Spec.Project.IngressController}' in '{Path.Combine(projectRootPath, config.Spec.Project.ConfigPath)}' does not match expected values in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'." + Environment.NewLine +
+        $"  - please set 'options.k3s.extraArgs' to '--disable=traefik' for 'server:*' in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'.");
     }
   }
 

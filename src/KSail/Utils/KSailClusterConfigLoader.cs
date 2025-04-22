@@ -26,7 +26,7 @@ static class KSailClusterConfigLoader
     var config = await LoadAsync(
       configFilePath,
       context.ParseResult.GetValueForOption(CLIOptions.Metadata.NameOption),
-      context.ParseResult.GetValueForOption(CLIOptions.Project.DistributionOption)
+      context.ParseResult.GetValueForOption(CLIOptions.Project.DistributionOption) ?? KSailDistributionType.Native
     ).ConfigureAwait(false);
     // Metadata
     config.UpdateConfig(c => c.Metadata.Name, context.ParseResult.GetValueForOption(CLIOptions.Metadata.NameOption));
@@ -85,7 +85,7 @@ static class KSailClusterConfigLoader
       var mirrorRegistry = config.Spec.MirrorRegistries.ElementAt(i);
       if (mirrorRegistry.Provider == KSailProviderType.Docker)
       {
-        config.Spec.MirrorRegistries.ElementAt(i).Provider = context.ParseResult.GetValueForOption(CLIOptions.Project.ProviderOption);
+        config.Spec.MirrorRegistries.ElementAt(i).Provider = context.ParseResult.GetValueForOption(CLIOptions.Project.ProviderOption) ?? KSailProviderType.Docker;
       }
     }
 

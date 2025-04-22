@@ -1,6 +1,8 @@
 using System.Text;
 using Devantler.KubernetesGenerator.K3d;
 using Devantler.KubernetesGenerator.K3d.Models;
+using Devantler.KubernetesGenerator.K3d.Models.Options;
+using Devantler.KubernetesGenerator.K3d.Models.Options.K3s;
 using Devantler.KubernetesGenerator.Kind;
 using Devantler.KubernetesGenerator.Kind.Models;
 using Devantler.KubernetesGenerator.Kind.Models.Networking;
@@ -98,29 +100,44 @@ class DistributionConfigFileGenerator
       }
     };
 
+    var extraArgs = new List<K3dOptionsK3sExtraArg>();
     if (config.Spec.Project.CNI != KSailCNIType.Default)
+    {
+      extraArgs.Add(new K3dOptionsK3sExtraArg
+      {
+        Arg = "--flannel-backend=none",
+        NodeFilters =
+        [
+          "server:*"
+        ]
+      });
+      extraArgs.Add(new K3dOptionsK3sExtraArg
+      {
+        Arg = "--disable-network-policy",
+        NodeFilters =
+        [
+          "server:*"
+        ]
+      });
+    }
+    if (config.Spec.Project.IngressController != KSailIngressControllerType.Default)
+    {
+      extraArgs.Add(new K3dOptionsK3sExtraArg
+      {
+        Arg = "--disable=traefik",
+        NodeFilters =
+        [
+          "server:*"
+        ]
+      });
+    }
+    if (extraArgs.Count > 0)
     {
       k3dConfig.Options = new()
       {
         K3s = new()
         {
-          ExtraArgs =
-          [
-            new() {
-              Arg = "--flannel-backend=none",
-              NodeFilters =
-              [
-                "server:*"
-              ]
-            },
-            new() {
-              Arg = "--disable-network-policy",
-              NodeFilters =
-              [
-                "server:*"
-              ]
-            }
-          ]
+          ExtraArgs = [.. extraArgs]
         }
       };
     }
