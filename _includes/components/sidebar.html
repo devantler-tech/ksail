@@ -8,7 +8,25 @@ Overwrites:
 nav_footer_custom.
 Should not be cached, because nav_footer_custom.html might depend on page.
 {%- endcomment -%}
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    console.log('DOMContentLoaded');
+    if (!jtd) { return; }
 
+    function applyPreferredColorScheme() {
+      if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+        jtd.setTheme('dark');
+      } else {
+        jtd.setTheme('light');
+      }
+    }
+
+    applyPreferredColorScheme();
+
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyPreferredColorScheme);
+    window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', applyPreferredColorScheme);
+  });
+</script>
 <div class="side-bar">
   <div class="site-header" role="banner">
     <a href="{{ '/' | relative_url }}" class="site-title lh-tight">{% include title.html %}</a>
@@ -27,5 +45,4 @@ Should not be cached, because nav_footer_custom.html might depend on page.
   {% if nav_footer_custom != "" %}
   {{ nav_footer_custom }}
   {% endif %}
-  {% include toggle-color-scheme.html %}
 </div>
