@@ -1,5 +1,4 @@
 theme: just-the-docs
-color_scheme: dark
 url: https://ksail.devantler.tech
 title: "🛥️🐳 KSail"
 favicon_ico: "docs/images/ksail-logo.png"
@@ -40,5 +39,3 @@ exclude:
   - SECURITY.md
   - KSail.slnx
   - entitlements.xml
-
-

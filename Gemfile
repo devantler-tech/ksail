@@ -9,6 +9,3 @@ group :jekyll_plugins do
 end
 
 gem "just-the-docs", "0.10.1"
-
-
-
