@@ -21,7 +21,6 @@ gh_edit_repository: https://github.com/devantler-tech/ksail
 gh_edit_branch: main
 gh_edit_view_mode: tree
 
-enable_color_scheme_toggle: "true"
 back_to_top: true
 back_to_top_text: "Back to top"
 
