@@ -9,7 +9,7 @@ class GatewayControllerBootstrapper(KSailCluster config) : IBootstrapper
     Console.WriteLine("🚦🆕 Bootstrapping Gateway Controller");
     switch (config.Spec.Project.GatewayController)
     {
-      case KSailGatewayControllerType.Default:
+      case KSailGatewayControllerType.None or KSailGatewayControllerType.Default:
         HandleDefaultGatewayController();
         break;
       default:

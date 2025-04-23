@@ -53,7 +53,8 @@ KSail aims to support a wide range of use cases by providing the flexibility to 
     <tr>
       <td><strong>Gateway Controllers</strong></td>
       <td>
-        Default
+        Default,
+        None
       </td>
     </tr>
     <tr>
