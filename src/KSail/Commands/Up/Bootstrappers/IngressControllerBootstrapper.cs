@@ -9,6 +9,9 @@ class IngressControllerBootstrapper(KSailCluster config) : IBootstrapper
     Console.WriteLine("🚦 Bootstrapping Ingress Controller");
     switch (config.Spec.Project.IngressController)
     {
+      case KSailIngressControllerType.None:
+        HandleDisabledIngressController();
+        break;
       case KSailIngressControllerType.Default:
         HandleDefaultIngressController();
         break;
@@ -17,6 +20,21 @@ class IngressControllerBootstrapper(KSailCluster config) : IBootstrapper
     }
     Console.WriteLine();
     return Task.CompletedTask;
+  }
+
+  void HandleDisabledIngressController()
+  {
+    switch (config.Spec.Project.Provider, config.Spec.Project.Distribution)
+    {
+      case (KSailProviderType.Docker or KSailProviderType.Podman, KSailDistributionType.Native):
+        Console.WriteLine("► Kind does not deploy an Ingress Controller by default");
+        break;
+      case (KSailProviderType.Docker or KSailProviderType.Podman, KSailDistributionType.K3s):
+        Console.WriteLine("✔ K3d Traefik Ingress Controller is disabled");
+        break;
+      default:
+        break;
+    }
   }
 
   void HandleDefaultIngressController()
