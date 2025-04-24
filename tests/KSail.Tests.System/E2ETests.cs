@@ -73,8 +73,10 @@ public class E2ETests
     Assert.Equal(0, upExitCode);
     int statusExitCode = await statusCommand.InvokeAsync(["status"], console).ConfigureAwait(false);
     Assert.Equal(0, statusExitCode);
-    int listExitCode = await listCommand.InvokeAsync(["list"], console).ConfigureAwait(false);
-    Assert.Equal(0, listExitCode);
+    int listExitCode1 = await listCommand.InvokeAsync(["list"], console).ConfigureAwait(false);
+    Assert.Equal(0, listExitCode1);
+    int listExitCode2 = await listCommand.InvokeAsync(["list", "--all"], console).ConfigureAwait(false);
+    Assert.Equal(0, listExitCode2);
     int stopExitCode = await stopCommand.InvokeAsync(["stop"], console).ConfigureAwait(false);
     Assert.Equal(0, stopExitCode);
     int startExitCode = await startCommand.InvokeAsync(["start"], console).ConfigureAwait(false);
