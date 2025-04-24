@@ -1,4 +1,3 @@
-
 using Devantler.ContainerEngineProvisioner.Core;
 using Devantler.ContainerEngineProvisioner.Docker;
 using Devantler.ContainerEngineProvisioner.Podman;
@@ -8,7 +7,9 @@ using KSail.Factories;
 using KSail.Models;
 using KSail.Models.Project.Enums;
 
-class GitOpsSourceBootstrapper(KSailCluster config) : IBootstrapper
+namespace KSail.Managers;
+
+class GitOpsSourceManager(KSailCluster config) : IBootstrapper
 {
   readonly IContainerEngineProvisioner _containerEngineProvisioner = ContainerEngineProvisionerFactory.Create(config);
 
@@ -59,9 +60,7 @@ class GitOpsSourceBootstrapper(KSailCluster config) : IBootstrapper
         {
           string containerName = config.Spec.DeploymentTool.Flux.Source.Url.Segments.Last();
           if (kindNetwork.Containers.Values.Any(x => x.Name == containerName))
-          {
             continue;
-          }
           string containerId = await _containerEngineProvisioner.GetContainerIdAsync(containerName, cancellationToken).ConfigureAwait(false);
           await _containerEngineProvisioner.ConnectContainerToNetworkByNameAsync(containerName, kindNetwork.Name, cancellationToken).ConfigureAwait(false);
         }

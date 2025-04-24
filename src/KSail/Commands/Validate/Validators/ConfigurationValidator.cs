@@ -175,12 +175,12 @@ class ConfigurationValidator(KSailCluster config)
     };
     var expectedWithCustomIngressController = expectedWithCustomIngressControllerK3sExtraArgs.Select(x => x.Arg + ":" + x.NodeFilters?.First()) ?? [];
     var actual = distributionConfig.Options?.K3s?.ExtraArgs?.Select(x => x.Arg + ":" + (x.NodeFilters?.First() ?? "server:*")) ?? [];
-    if (config.Spec.Project.IngressController == KSailIngressControllerType.Default && actual.Intersect(expectedWithCustomIngressController).Any())
+    if (config.Spec.Project.IngressController is KSailIngressControllerType.Default or KSailIngressControllerType.Traefik && actual.Intersect(expectedWithCustomIngressController).Any())
     {
       throw new KSailException($"'spec.project.ingressController={config.Spec.Project.IngressController}' in '{Path.Combine(projectRootPath, config.Spec.Project.ConfigPath)}' does not match expected values in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'." + Environment.NewLine +
         $"  - please remove '--disable=traefik' from 'options.k3s.extraArgs' in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'.");
     }
-    else if (config.Spec.Project.IngressController != KSailIngressControllerType.Default && (!actual.Any() || !actual.All(expectedWithCustomIngressController.Contains)))
+    else if (config.Spec.Project.IngressController is not KSailIngressControllerType.Default and not KSailIngressControllerType.Traefik && (!actual.Any() || !actual.All(expectedWithCustomIngressController.Contains)))
     {
       throw new KSailException($"'spec.project.ingressController={config.Spec.Project.IngressController}' in '{Path.Combine(projectRootPath, config.Spec.Project.ConfigPath)}' does not match expected values in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'." + Environment.NewLine +
         $"  - please set 'options.k3s.extraArgs' to '--disable=traefik' for 'server:*' in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'.");

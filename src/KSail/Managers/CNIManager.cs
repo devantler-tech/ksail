@@ -1,4 +1,3 @@
-
 using Devantler.KubernetesProvisioner.CNI.Cilium;
 using Devantler.KubernetesProvisioner.CNI.Core;
 using KSail;
@@ -6,7 +5,9 @@ using KSail.Factories;
 using KSail.Models;
 using KSail.Models.Project.Enums;
 
-class CNIBootstrapper(KSailCluster config) : IBootstrapper
+namespace KSail.Managers;
+
+class CNIManager(KSailCluster config) : IBootstrapper
 {
   readonly CiliumProvisioner? _cniProvisioner = CNIProvisionerFactory.Create(config);
   public async Task BootstrapAsync(CancellationToken cancellationToken = default)

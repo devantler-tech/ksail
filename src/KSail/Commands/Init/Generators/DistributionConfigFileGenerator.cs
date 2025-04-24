@@ -120,7 +120,7 @@ class DistributionConfigFileGenerator
         ]
       });
     }
-    if (config.Spec.Project.IngressController != KSailIngressControllerType.Default)
+    if (config.Spec.Project.IngressController is not KSailIngressControllerType.Default and not KSailIngressControllerType.Traefik)
     {
       extraArgs.Add(new K3dOptionsK3sExtraArg
       {

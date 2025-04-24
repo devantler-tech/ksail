@@ -1,4 +1,3 @@
-
 using Devantler.ContainerEngineProvisioner.Core;
 using Devantler.ContainerEngineProvisioner.Docker;
 using Devantler.ContainerEngineProvisioner.Podman;
@@ -8,7 +7,9 @@ using KSail.Models;
 using KSail.Models.MirrorRegistry;
 using KSail.Models.Project.Enums;
 
-class MirrorRegistryBootstrapper(KSailCluster config) : IBootstrapper
+namespace KSail.Managers;
+
+class MirrorRegistryManager(KSailCluster config) : IBootstrapper
 {
   readonly IContainerEngineProvisioner _containerEngineProvisioner = ContainerEngineProvisionerFactory.Create(config);
   public async Task BootstrapAsync(CancellationToken cancellationToken = default)
@@ -52,14 +53,12 @@ class MirrorRegistryBootstrapper(KSailCluster config) : IBootstrapper
         Console.WriteLine("🔼 Bootstrapping mirror registries");
         string[] args = [
         "get",
-            "nodes",
-            "--name", $"{config.Metadata.Name}"
+          "nodes",
+          "--name", $"{config.Metadata.Name}"
         ];
         var (_, output) = await Devantler.KindCLI.Kind.RunAsync(args, silent: true, cancellationToken: cancellationToken).ConfigureAwait(false);
         if (output.Contains("No kind nodes found for cluster", StringComparison.OrdinalIgnoreCase))
-        {
           throw new KSailException(output);
-        }
         string[] nodes = output.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
         // TODO: Remove this workaround when Kind CLI no longer outputs the experimental podman provider message
         nodes = [.. nodes.Where(line => !line.Contains("enabling experimental podman provider", StringComparison.OrdinalIgnoreCase))];
@@ -106,19 +105,17 @@ class MirrorRegistryBootstrapper(KSailCluster config) : IBootstrapper
     var proxy = mirrorRegistry.Proxy;
     string mirrorRegistryHost = proxy.Url.Host;
     if (mirrorRegistryHost.Contains("docker.io", StringComparison.OrdinalIgnoreCase))
-    {
       mirrorRegistryHost = "docker.io";
-    }
     string registryDir = $"/etc/containerd/certs.d/{mirrorRegistryHost}";
     await _containerEngineProvisioner.CreateDirectoryInContainerAsync(containerName, registryDir, true, cancellationToken).ConfigureAwait(false);
     string host = $"{mirrorRegistry.Name}:5000";
     string hostsToml = $"""
-      server = "{proxy.Url}"
+    server = "{proxy.Url}"
 
-      [host."http://{host}"]
-        capabilities = ["pull", "resolve"]
-        skip_verify = true
-      """;
+    [host."http://{host}"]
+      capabilities = ["pull", "resolve"]
+      skip_verify = true
+    """;
     await _containerEngineProvisioner.CreateFileInContainerAsync(containerName, $"{registryDir}/hosts.toml", hostsToml, cancellationToken).ConfigureAwait(false);
   }
 }
