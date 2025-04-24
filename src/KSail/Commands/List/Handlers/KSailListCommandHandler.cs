@@ -17,12 +17,12 @@ sealed class KSailListCommandHandler(KSailCluster config)
     if (_config.Spec.Distribution.ShowAllClustersInListings)
     {
       Console.WriteLine("---- K3d ----");
-      clusters = [.. clusters, .. await _k3dProvisioner.ListAsync(cancellationToken).ConfigureAwait(false)];
+      clusters = [.. await _k3dProvisioner.ListAsync(cancellationToken).ConfigureAwait(false)];
       PrintClusters(clusters);
       Console.WriteLine();
 
       Console.WriteLine("---- Kind ----");
-      clusters = [.. clusters, .. await _kindProvisioner.ListAsync(cancellationToken).ConfigureAwait(false)];
+      clusters = [.. await _kindProvisioner.ListAsync(cancellationToken).ConfigureAwait(false)];
       clusters = clusters.Where(cluster => !cluster.Contains("No kind clusters found.", StringComparison.Ordinal));
       PrintClusters(clusters);
       return true;
