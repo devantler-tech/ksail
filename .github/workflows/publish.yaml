@@ -75,6 +75,8 @@ jobs:
           echo "$id"
           xcrun notarytool log $id --keychain-profile "notarytool-profile" developer_log.json
           cat developer_log.json
+      - name: 📦 Tar binaries
+        run: tar -czf ksail.tar.gz ksail-darwin-amd64 ksail-darwin-arm64 ksail-linux-amd64 ksail-linux-arm64
       - name: 🎉 Release
         uses: softprops/action-gh-release@v2
         with:
@@ -83,6 +85,7 @@ jobs:
             ksail-darwin-arm64
             ksail-linux-amd64
             ksail-linux-arm64
+            ksail.tar.gz
           token: ${{ steps.app-token.outputs.token }}
       - name: 🍺 Brew tap formulas
         run: brew tap devantler-tech/formulas
