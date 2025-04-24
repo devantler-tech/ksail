@@ -26,21 +26,10 @@ class TraefikInstaller(KSailCluster config) : IHelmInstaller
       "traefik/traefik",
       "--namespace", "traefik",
       "--create-namespace",
+      "--wait",
       "--kubeconfig", _config.Spec.Connection.Kubeconfig,
       "--kube-context", _config.Spec.Connection.Context
     ];
     _ = await Helm.RunAsync(helmInstallArguments, cancellationToken: cancellationToken).ConfigureAwait(false);
-  }
-
-  public async Task StatusAsync(CancellationToken cancellationToken = default)
-  {
-    string[] helmStatusArguments = [
-  "status",
-      "traefik",
-      "--namespace", "traefik",
-      "--kubeconfig", _config.Spec.Connection.Kubeconfig,
-      "--kube-context", _config.Spec.Connection.Context
-];
-    _ = await Helm.RunAsync(helmStatusArguments, cancellationToken: cancellationToken).ConfigureAwait(false);
   }
 }

@@ -70,8 +70,7 @@ class IngressControllerManager(KSailCluster config) : IBootstrapper
         Console.WriteLine("► Deploying Traefik Ingress Controller with Helm");
         await _traefikInstaller.AddRepositoryAsync(cancellationToken).ConfigureAwait(false);
         await _traefikInstaller.InstallAsync(cancellationToken).ConfigureAwait(false);
-        await _traefikInstaller.StatusAsync(cancellationToken).ConfigureAwait(false);
-        Console.WriteLine("✔ Traefik Ingress Controller installed");
+        Console.WriteLine("✔ Traefik Ingress Controller deployed");
         break;
       case (KSailProviderType.Docker or KSailProviderType.Podman, KSailDistributionType.K3s):
         Console.WriteLine("✔ K3d Traefik Ingress Controller is enabled");
