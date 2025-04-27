@@ -262,6 +262,8 @@ public class ConfigurationValidatorTest
   }
 
   [Theory]
+  [InlineData(KSailDistributionType.K3d, KSailCSIType.None, KSailCSIType.Default)]
+  [InlineData(KSailDistributionType.K3d, KSailCSIType.Default, KSailCSIType.None)]
   [InlineData(KSailDistributionType.K3d, KSailCSIType.None, KSailCSIType.LocalPathProvisioner)]
   [InlineData(KSailDistributionType.K3d, KSailCSIType.LocalPathProvisioner, KSailCSIType.None)]
   public async Task ValidateAsync_InvalidCSI_ThrowsKSailException(KSailDistributionType distribution, KSailCSIType actualCSI, KSailCSIType expectedCSI)

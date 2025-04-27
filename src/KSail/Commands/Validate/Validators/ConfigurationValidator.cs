@@ -176,12 +176,12 @@ class ConfigurationValidator(KSailCluster config)
       };
     var expectedWithCustomCSI = expectedWithCustomCSIK3sExtraArgs.Select(x => x.Arg + ":" + x.NodeFilters?.First()) ?? [];
     var actual = distributionConfig.Options?.K3s?.ExtraArgs?.Select(x => x.Arg + ":" + (x.NodeFilters?.First() ?? "server:*")) ?? [];
-    if (config.Spec.Project.CSI is KSailCSIType.Default && actual.Intersect(expectedWithCustomCSI).Any())
+    if (config.Spec.Project.CSI is KSailCSIType.Default or KSailCSIType.LocalPathProvisioner && actual.Intersect(expectedWithCustomCSI).Any())
     {
       throw new KSailException($"'spec.project.csi={config.Spec.Project.CSI}' in '{Path.Combine(projectRootPath, config.Spec.Project.ConfigPath)}' does not match expected values in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'." + Environment.NewLine +
         $"  - please remove '--disable=local-storage' from 'options.k3s.extraArgs' in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'.");
     }
-    else if (config.Spec.Project.CSI is not KSailCSIType.Default && (!actual.Any() || !actual.All(expectedWithCustomCSI.Contains)))
+    else if ((config.Spec.Project.CSI is not KSailCSIType.Default and not KSailCSIType.LocalPathProvisioner) && (!actual.Any() || !actual.All(expectedWithCustomCSI.Contains)))
     {
       throw new KSailException($"'spec.project.csi={config.Spec.Project.CSI}' in '{Path.Combine(projectRootPath, config.Spec.Project.ConfigPath)}' does not match expected values in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'." + Environment.NewLine +
         $"  - please set 'options.k3s.extraArgs' to '--disable=local-storage' for 'server:*' in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'.");
