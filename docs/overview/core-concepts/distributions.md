@@ -11,6 +11,8 @@ nav_order: 1
 
 ## Native
 
+> [!NOTE] > `kind` uses `cloud-provider-kind` to support LoadBalancer services. To access these services, you can use the ExternalIP on Linux, and on MacOS, you use localhost followed by the port number that is mapped to the host by the Envoy container `kindccm-*`. See [cloud-provider-kind](https://github.com/kubernetes-sigs/cloud-provider-kind) for more information.
+
 The `Native` distribution is the default Kubernetes distribution provided by a specific `Provider`. In most cases this is a distribution that is optimized for the provider and is designed to work seamlessly with the provider's infrastructure.
 
 Below is the actual distribution used when using the `Native` distribution with the various engines.
