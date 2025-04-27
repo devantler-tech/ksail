@@ -36,13 +36,15 @@ class CSIManager(KSailCluster config) : IBootstrapManager
     switch (config.Spec.Project.Distribution)
     {
       case KSailDistributionType.Kind:
-      case KSailDistributionType.K3d:
-        Console.WriteLine("► Removing the local-path-provisioner CSI");
-        _ = await kubernetesResourceProvisioner.DeleteStorageClassAsync("local-path", cancellationToken: cancellationToken).ConfigureAwait(false);
+        Console.WriteLine("► Removing local-path-provisioner CSI");
+        _ = await kubernetesResourceProvisioner.DeleteStorageClassAsync("standard", cancellationToken: cancellationToken).ConfigureAwait(false);
         _ = await kubernetesResourceProvisioner.DeleteClusterRoleBindingAsync("local-path-provisioner-bind", cancellationToken: cancellationToken).ConfigureAwait(false);
         _ = await kubernetesResourceProvisioner.DeleteClusterRoleAsync("local-path-provisioner-role", cancellationToken: cancellationToken).ConfigureAwait(false);
         _ = await kubernetesResourceProvisioner.DeleteNamespaceAsync("local-path-storage", cancellationToken: cancellationToken).ConfigureAwait(false);
         Console.WriteLine("✔ local-path-provisioner CSI removed.");
+        break;
+      case KSailDistributionType.K3d:
+        Console.WriteLine("✔ local-path-provisioner CSI disabled.");
         break;
       default:
         throw new NotSupportedException($"the '{config.Spec.Project.CSI}' CSI is not supported.");

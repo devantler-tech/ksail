@@ -120,6 +120,17 @@ class DistributionConfigFileGenerator
         ]
       });
     }
+    if (config.Spec.Project.CSI is KSailCSIType.None)
+    {
+      extraArgs.Add(new K3dOptionsK3sExtraArg
+      {
+        Arg = "--disable=local-storage",
+        NodeFilters =
+        [
+          "server:*"
+        ]
+      });
+    }
     if (config.Spec.Project.IngressController is not KSailIngressControllerType.Default and not KSailIngressControllerType.Traefik)
     {
       extraArgs.Add(new K3dOptionsK3sExtraArg
