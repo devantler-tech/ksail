@@ -20,7 +20,11 @@ class KSailDownCommandHandler(KSailCluster config)
   {
     Console.WriteLine($"🔥 Destroying cluster...");
     await _kubernetesDistributionProvisioner.DeleteAsync(_config.Metadata.Name, cancellationToken).ConfigureAwait(false);
-    await DeleteRegistriesAsync(cancellationToken).ConfigureAwait(false);
+    var clusters = await _kubernetesDistributionProvisioner.ListAsync(cancellationToken).ConfigureAwait(false);
+    if (!clusters.Any())
+    {
+      await DeleteRegistriesAsync(cancellationToken).ConfigureAwait(false);
+    }
     return true;
   }
 
