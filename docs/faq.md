@@ -16,8 +16,7 @@ nav_order: 4
 
 ## How do I configure local DNS?
 
-> [!NOTE]
-> `KSail` will add support for managing local certificates in the future, but for now this is not supported. You can still solve this yourself via for example [mkcert](https://github.com/FiloSottile/mkcert) to generate and install local certificates for your domain, and then add the `CA` certificate to the Ingress or Gateway resources.
+> [!NOTE] > `KSail` will add support for managing local certificates in the future, but for now this is not supported. You can still solve this yourself via for example [mkcert](https://github.com/FiloSottile/mkcert) to generate and install local certificates for your domain, and then add the `CA` certificate to the Ingress or Gateway resources.
 
 Are you struggling to access your local services hosted in Kubernetes? Do you want to access services via Ingress routes or Gateways, instead of port-forwarding? This is a common issue when using Kubernetes on a local machine, as the services are not accessible without an open host port, and a correctly configured `/etc/hosts` file.
 
@@ -62,6 +61,6 @@ KSail supports various operations on existing clusters, such as:
 - `ksail status` - Check cluster status.
 - `ksail update` - Update manifest files.
 - `ksail validate` - Validate configurations.
-- `ksail debug` - Connect to a cluster to debug issues.
+- `ksail connect` - Connect to a cluster to debug issues.
 - `ksail gen` - Generate manifests.
 - `ksail secrets` - Manage SOPS-encrypted secrets.

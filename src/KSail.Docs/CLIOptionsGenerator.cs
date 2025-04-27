@@ -24,7 +24,7 @@ static class CLIOptionsGenerator
       { "ksail lint", await GetHelpTextAsync(ksailCommand, "lint", "--help").ConfigureAwait(false) },
       { "ksail status", await GetHelpTextAsync(ksailCommand, "status", "--help").ConfigureAwait(false) },
       { "ksail list", await GetHelpTextAsync(ksailCommand, "list", "--help").ConfigureAwait(false) },
-      { "ksail debug", await GetHelpTextAsync(ksailCommand, "debug", "--help").ConfigureAwait(false) },
+      { "ksail connect", await GetHelpTextAsync(ksailCommand, "connect", "--help").ConfigureAwait(false) },
       { "ksail gen", await GetHelpTextAsync(ksailCommand, "gen", "--help").ConfigureAwait(false) },
       { "ksail gen cert-manager", await GetHelpTextAsync(ksailCommand, "gen", "cert-manager", "--help").ConfigureAwait(false) },
       { "ksail gen cert-manager certificate", await GetHelpTextAsync(ksailCommand, "gen", "cert-manager", "certificate", "--help").ConfigureAwait(false) },

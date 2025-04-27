@@ -35,7 +35,7 @@ Commands:
   status    Show the status of a cluster
   list      List active clusters
   validate  Validate project files
-  debug     Debug a cluster (❤️ K9s)
+  connect   Connect to a cluster with K9s
   gen       Generate a resource
   secrets   Manage secrets
 ```
@@ -194,7 +194,7 @@ Commands:
   status    Show the status of a cluster
   list      List active clusters
   validate  Validate project files
-  debug     Debug a cluster (❤️ K9s)
+  connect   Connect to a cluster with K9s
   gen       Generate a resource
   secrets   Manage secrets
 ```
@@ -231,14 +231,14 @@ Options:
   -?, -h, --help                   Show help and usage information
 ```
 
-## `ksail debug`
+## `ksail connect`
 
 ```text
 Description:
-  Debug a cluster (❤️ K9s)
+  Connect to a cluster with K9s
 
 Usage:
-  ksail debug [options]
+  ksail connect [options]
 
 Options:
   -k, --kubeconfig <kubeconfig>  Path to kubeconfig file. [default: ~/.kube/config]

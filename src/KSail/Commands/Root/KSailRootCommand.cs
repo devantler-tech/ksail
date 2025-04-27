@@ -1,6 +1,6 @@
 using System.CommandLine;
 using System.CommandLine.Parsing;
-using KSail.Commands.Debug;
+using KSail.Commands.Connect;
 using KSail.Commands.Down;
 using KSail.Commands.Gen;
 using KSail.Commands.Init;
@@ -50,7 +50,7 @@ sealed class KSailRootCommand : RootCommand
     AddCommand(new KSailStatusCommand());
     AddCommand(new KSailListCommand());
     AddCommand(new KSailValidateCommand());
-    AddCommand(new KSailDebugCommand());
+    AddCommand(new KSailConnectCommand());
     AddCommand(new KSailGenCommand(console));
     AddCommand(new KSailSecretsCommand(console));
   }

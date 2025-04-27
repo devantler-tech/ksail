@@ -3,7 +3,7 @@ using System.CommandLine;
 using System.CommandLine.IO;
 using System.Runtime.InteropServices;
 using Devantler.SecretManager.SOPS.LocalAge;
-using KSail.Commands.Debug;
+using KSail.Commands.Connect;
 using KSail.Commands.Down;
 using KSail.Commands.Init;
 using KSail.Commands.List;
