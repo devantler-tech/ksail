@@ -35,7 +35,7 @@ Commands:
   status    Show the status of a cluster
   list      List active clusters
   validate  Validate project files
-  debug     Debug a cluster (❤️ K9s)
+  connect   Connect to a cluster with K9s
   gen       Generate a resource
   secrets   Manage secrets
 ```
@@ -61,7 +61,7 @@ Options:
   -dt, --deployment-tool <Flux|Kubectl>             The Deployment tool to use for applying a kustomization. [default: Kubectl]
   --cni <Cilium|Default>                            The CNI to use. [default: Default]
   --csi <Default>                                   The CSI to use. [default: Default]
-  -ic, --ingress-controller <Default|None>          The Ingress Controller to use. [default: Default]
+  -ic, --ingress-controller <Default|None|Traefik>  The Ingress Controller to use. [default: Default]
   -gc, --gateway-controller <Default|None>          The Gateway Controller to use. [default: Default]
   -mr, --mirror-registries                          Enable mirror registries for the project. [default: True]
   -sm, --secret-manager <None|SOPS>                 Whether to use a secret manager. [default: None]
@@ -160,7 +160,7 @@ Options:
   -dt, --deployment-tool <Flux|Kubectl>             The Deployment tool to use for applying a kustomization. [default: Kubectl]
   --cni <Cilium|Default>                            The CNI to use. [default: Default]
   --csi <Default>                                   The CSI to use. [default: Default]
-  -ic, --ingress-controller <Default|None>          The Ingress Controller to use. [default: Default]
+  -ic, --ingress-controller <Default|None|Traefik>  The Ingress Controller to use. [default: Default]
   -gc, --gateway-controller <Default|None>          The Gateway Controller to use. [default: Default]
   -mr, --mirror-registries                          Enable mirror registries for the project. [default: True]
   -sm, --secret-manager <None|SOPS>                 Whether to use a secret manager. [default: None]
@@ -194,7 +194,7 @@ Commands:
   status    Show the status of a cluster
   list      List active clusters
   validate  Validate project files
-  debug     Debug a cluster (❤️ K9s)
+  connect   Connect to a cluster with K9s
   gen       Generate a resource
   secrets   Manage secrets
 ```
@@ -231,14 +231,14 @@ Options:
   -?, -h, --help                   Show help and usage information
 ```
 
-## `ksail debug`
+## `ksail connect`
 
 ```text
 Description:
-  Debug a cluster (❤️ K9s)
+  Connect to a cluster with K9s
 
 Usage:
-  ksail debug [options]
+  ksail connect [options]
 
 Options:
   -k, --kubeconfig <kubeconfig>  Path to kubeconfig file. [default: ~/.kube/config]

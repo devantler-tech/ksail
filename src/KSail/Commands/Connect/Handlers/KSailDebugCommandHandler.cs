@@ -3,14 +3,14 @@ using System.Globalization;
 using Devantler.K9sCLI;
 using KSail.Models;
 
-namespace KSail.Commands.Debug.Handlers;
+namespace KSail.Commands.Connect.Handlers;
 
 [ExcludeFromCodeCoverage]
-class KSailDebugCommandHandler
+class KSailConnectCommandHandler
 {
   readonly KSailCluster _config;
 
-  internal KSailDebugCommandHandler(KSailCluster config) => _config = config;
+  internal KSailConnectCommandHandler(KSailCluster config) => _config = config;
 
   internal async Task<bool> HandleAsync(CancellationToken cancellationToken = default)
   {

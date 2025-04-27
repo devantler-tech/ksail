@@ -2,10 +2,10 @@ using System.CommandLine;
 using System.CommandLine.IO;
 using KSail.Commands.Root;
 
-namespace KSail.Tests.Unit.Commands.Debug;
+namespace KSail.Tests.Unit.Commands.Connect;
 
 
-public class KSailDebugCommandTests
+public class KSailConnectCommandTests
 {
   [Fact]
   public async Task KSailDebugHelp_SucceedsAndPrintsIntroductionAndHelp()
@@ -15,7 +15,7 @@ public class KSailDebugCommandTests
     var ksailCommand = new KSailRootCommand(console);
 
     //Act
-    int exitCode = await ksailCommand.InvokeAsync(["debug", "--help"], console);
+    int exitCode = await ksailCommand.InvokeAsync(["connect", "--help"], console);
 
     //Assert
     Assert.Equal(0, exitCode);

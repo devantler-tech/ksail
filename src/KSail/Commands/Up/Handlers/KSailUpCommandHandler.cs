@@ -10,6 +10,7 @@ using k8s;
 using k8s.Models;
 using KSail.Commands.Validate.Handlers;
 using KSail.Factories;
+using KSail.Managers;
 using KSail.Models;
 using KSail.Models.MirrorRegistry;
 using KSail.Models.Project.Enums;
@@ -19,15 +20,15 @@ namespace KSail.Commands.Up.Handlers;
 
 class KSailUpCommandHandler(KSailCluster config)
 {
-  readonly ClusterBootstrapper _clusterBootstrapper = new(config);
-  readonly GitOpsSourceBootstrapper _gitOpsSourceBootstrapper = new(config);
-  readonly MirrorRegistryBootstrapper _mirrorRegistryBootstrapper = new(config);
-  readonly CNIBootstrapper _cniBootstrapper = new(config);
-  readonly CSIBootstrapper _csiBootstrapper = new(config);
-  readonly IngressControllerBootstrapper _ingressControllerBootstrapper = new(config);
-  readonly GatewayControllerBootstrapper _gatewayControllerBootstrapper = new(config);
-  readonly SecretManagerBootstrapper _secretManagerBootstrapper = new(config);
-  readonly DeploymentToolBootstrapper _deploymentToolBootstrapper = new(config);
+  readonly ClusterManager _clusterBootstrapper = new(config);
+  readonly GitOpsSourceManager _gitOpsSourceBootstrapper = new(config);
+  readonly MirrorRegistryManager _mirrorRegistryBootstrapper = new(config);
+  readonly CNIManager _cniBootstrapper = new(config);
+  readonly CSIManager _csiBootstrapper = new(config);
+  readonly IngressControllerManager _ingressControllerBootstrapper = new(config);
+  readonly GatewayControllerManager _gatewayControllerBootstrapper = new(config);
+  readonly SecretManager _secretManagerBootstrapper = new(config);
+  readonly DeploymentToolManager _deploymentToolBootstrapper = new(config);
   internal async Task<int> HandleAsync(CancellationToken cancellationToken = default)
   {
     await _clusterBootstrapper.BootstrapAsync(cancellationToken).ConfigureAwait(false);

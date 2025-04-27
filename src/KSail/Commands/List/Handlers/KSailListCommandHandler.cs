@@ -13,7 +13,7 @@ sealed class KSailListCommandHandler(KSailCluster config)
 
   internal async Task<bool> HandleAsync(CancellationToken cancellationToken = default)
   {
-    IEnumerable<string> clusters = [];
+    IEnumerable<string> clusters;
     if (_config.Spec.Distribution.ShowAllClustersInListings)
     {
       Console.WriteLine("---- K3d ----");
@@ -23,7 +23,6 @@ sealed class KSailListCommandHandler(KSailCluster config)
 
       Console.WriteLine("---- Kind ----");
       clusters = [.. await _kindProvisioner.ListAsync(cancellationToken).ConfigureAwait(false)];
-      clusters = clusters.Where(cluster => !cluster.Contains("No kind clusters found.", StringComparison.Ordinal));
       PrintClusters(clusters);
       return true;
     }
@@ -35,7 +34,6 @@ sealed class KSailListCommandHandler(KSailCluster config)
         (KSailProviderType.Docker or KSailProviderType.Podman, KSailDistributionType.Native) => await _kindProvisioner.ListAsync(cancellationToken).ConfigureAwait(false),
         _ => throw new NotSupportedException($"The container engine '{_config.Spec.Project.Provider}' and distribution '{_config.Spec.Project.Distribution}' combination is not supported.")
       };
-      clusters = clusters.Where(cluster => !cluster.Contains("No kind clusters found.", StringComparison.Ordinal));
       PrintClusters(clusters);
       return true;
     }

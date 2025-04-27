@@ -47,6 +47,7 @@ KSail aims to support a wide range of use cases by providing the flexibility to 
       <td><strong>Ingress Controllers</strong></td>
       <td>
         Default,
+        Traefik
         None
       </td>
     </tr>

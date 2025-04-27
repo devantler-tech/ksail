@@ -3,7 +3,7 @@ using System.CommandLine;
 using System.CommandLine.IO;
 using System.Runtime.InteropServices;
 using Devantler.SecretManager.SOPS.LocalAge;
-using KSail.Commands.Debug;
+using KSail.Commands.Connect;
 using KSail.Commands.Down;
 using KSail.Commands.Init;
 using KSail.Commands.List;
@@ -22,8 +22,10 @@ public class E2ETests
   [SkippableTheory]
   // Docker + Native + Defaults
   [InlineData(["init", "--name", "d-n-defaults", "--provider", "Docker", "--distribution", "Native"])]
-  // Docker + Native + Cilium
+  // Docker + Native + Cilium CNI
   [InlineData(["init", "--name", "d-n-cilium", "--provider", "Docker", "--distribution", "Native", "--cni", "Cilium"])]
+  // Docker + Native + Traefik Ingress Controller
+  [InlineData(["init", "--name", "d-n-traefik", "--provider", "Docker", "--distribution", "Native", "--ingress-controller", "Traefik"])]
   // Docker + Native + Kubectl + SOPS
   [InlineData(["init", "--name", "d-n-k-sops", "--provider", "Docker", "--distribution", "Native", "--deployment-tool", "Kubectl", "--secret-manager", "SOPS"])]
   // Docker + Native + Flux + Defaults
@@ -32,8 +34,10 @@ public class E2ETests
   [InlineData(["init", "--name", "d-n-f-sops", "--provider", "Docker", "--distribution", "Native", "--deployment-tool", "Flux", "--secret-manager", "SOPS"])]
   // Docker + K3s + Defaults
   [InlineData(["init", "--name", "d-k-defaults", "--provider", "Docker", "--distribution", "K3s", "--deployment-tool", "Kubectl"])]
-  // Docker + K3s + Cilium
+  // Docker + K3s + Cilium CNI
   [InlineData(["init", "--name", "d-k-cilium", "--provider", "Docker", "--distribution", "K3s", "--cni", "Cilium"])]
+  // Docker + K3s + No Ingress Controller
+  [InlineData(["init", "--name", "d-k-traefik", "--provider", "Docker", "--distribution", "K3s", "--ingress-controller", "None"])]
   // Podman + Native + Defaults
   [InlineData(["init", "--name", "p-n-defaults", "--provider", "Podman", "--distribution", "Native"])]
   // Podman + K3s + Defaults

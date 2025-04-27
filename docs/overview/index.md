@@ -17,10 +17,10 @@ KSail is designed for Platform Engineers, DevOps Engineers, and Developers who w
 ## Key Features
 
 - **Initialize projects:** Initialize new kubernetes projects with a single command.
-- **Provision and Manage Clusters:**  Easily create, manage, and dismantle Kubernetes clusters across supported providers.
+- **Provision and Manage Clusters:** Easily create, manage, and dismantle Kubernetes clusters across supported providers.
 - **Customizable Cluster Components:** Configure essential components like CNI, Ingress, Gateway, and other add-ons to suit your needs.
 - **Deployment of manifests:** Deploy manifests to clusters seamlessly using popular deployment tools.
-- **Debugging and Troubleshooting:** Debug and troubleshoot clusters with built-in tools and commands for quick issue resolution.
+- **Debugging and Troubleshooting:** Connect to and troubleshoot clusters with built-in tools and commands for quick issue resolution.
 - **Generate manifests:** Generate Kubernetes manifests for various components and configurations.
 - **Secure Secret Management:** Manage secrets securely in Git.
 - **Mirror Registry Management:** Set up and manage mirror registries to optimize image pulling and reduce external dependencies.

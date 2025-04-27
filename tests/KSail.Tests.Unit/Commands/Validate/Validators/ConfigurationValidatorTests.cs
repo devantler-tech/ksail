@@ -258,6 +258,8 @@ public class ConfigurationValidatorTest
   }
 
   [Theory]
+  [InlineData(KSailDistributionType.K3s, KSailIngressControllerType.Traefik, KSailIngressControllerType.None)]
+  [InlineData(KSailDistributionType.K3s, KSailIngressControllerType.None, KSailIngressControllerType.Traefik)]
   [InlineData(KSailDistributionType.K3s, KSailIngressControllerType.Default, KSailIngressControllerType.None)]
   [InlineData(KSailDistributionType.K3s, KSailIngressControllerType.None, KSailIngressControllerType.Default)]
   public async Task ValidateAsync_InvalidIngressController_ThrowsKSailException(KSailDistributionType distribution, KSailIngressControllerType actualIngressController, KSailIngressControllerType expectedIngressController)

@@ -6,7 +6,9 @@ using KSail.Factories;
 using KSail.Models;
 using KSail.Models.Project.Enums;
 
-class ClusterBootstrapper(KSailCluster config) : IBootstrapper
+namespace KSail.Managers;
+
+class ClusterManager(KSailCluster config) : IBootstrapManager, ICleanupManager
 {
   readonly IKubernetesClusterProvisioner _clusterProvisioner = ClusterProvisionerFactory.Create(config);
   readonly IContainerEngineProvisioner _containerEngineProvisioner = ContainerEngineProvisionerFactory.Create(config);
@@ -16,11 +18,11 @@ class ClusterBootstrapper(KSailCluster config) : IBootstrapper
     await CheckPrerequisites(cancellationToken).ConfigureAwait(false);
 
     if (!await Validate(config, cancellationToken).ConfigureAwait(false))
-    {
       throw new KSailException("validation failed");
-    }
     await ProvisionCluster(cancellationToken).ConfigureAwait(false);
   }
+
+  public async Task CleanupAsync(CancellationToken cancellationToken = default) => await _clusterProvisioner.DeleteAsync(config.Metadata.Name, cancellationToken).ConfigureAwait(false);
 
   async Task CheckPrerequisites(CancellationToken cancellationToken)
   {

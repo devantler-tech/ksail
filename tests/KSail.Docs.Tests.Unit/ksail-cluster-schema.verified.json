@@ -104,8 +104,9 @@
             "ingressController": {
               "description": "The Ingress Controller to use. [default: Default]",
               "enum": [
-                "None",
-                "Default"
+                "Default",
+                "Traefik",
+                "None"
               ]
             },
             "gatewayController": {

@@ -11,7 +11,9 @@ using KSail.Models;
 using KSail.Models.Project.Enums;
 using KSail.Utils;
 
-class SecretManagerBootstrapper(KSailCluster config) : IBootstrapper
+namespace KSail.Managers;
+
+class SecretManager(KSailCluster config) : IBootstrapManager
 {
   readonly SOPSLocalAgeSecretManager _secretManager = new();
   public async Task BootstrapAsync(CancellationToken cancellationToken = default)
@@ -72,9 +74,9 @@ class SecretManagerBootstrapper(KSailCluster config) : IBootstrapper
       },
       Type = "Generic",
       Data = new Dictionary<string, byte[]>
-        {
-          { "age.agekey", Encoding.UTF8.GetBytes(ageKey.PrivateKey) }
-        }
+      {
+        { "age.agekey", Encoding.UTF8.GetBytes(ageKey.PrivateKey) }
+      }
     };
 
     _ = await kubernetesResourceProvisioner.CreateNamespacedSecretAsync(secret, secret.Metadata.NamespaceProperty, cancellationToken: cancellationToken).ConfigureAwait(false);

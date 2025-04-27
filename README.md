@@ -45,7 +45,7 @@ Getting started with KSail is straightforward. Begin by initializing a new KSail
   --deployment-tool <★Kubectl★|Flux> \
   --cni <★Default★|Cilium> \
   --csi <★Default★> \
-  --ingress-controller <★Default★|None> \
+  --ingress-controller <★Default★|Traefik|None> \
   --gateway-controller <★Default★|None> \
   --secret-manager <★None★|SOPS> \
   --mirror-registries <★true★|false>
@@ -76,7 +76,7 @@ You can then modify your manifest files in the `k8s` folder as needed. To apply 
 For advanced debugging, connect to the cluster via the [K9s](https://k9scli.io) tool with:
 
 ```sh
-> ksail debug # to connect to the cluster
+> ksail connect # to connect to the cluster
 ```
 
 When you're done, you can stop the cluster to resume later:

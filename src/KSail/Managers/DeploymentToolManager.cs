@@ -1,4 +1,3 @@
-
 using Devantler.KubernetesProvisioner.Deployment.Core;
 using Devantler.KubernetesProvisioner.GitOps.Core;
 using Devantler.KubernetesProvisioner.Resources.Native;
@@ -6,7 +5,9 @@ using KSail.Commands.Up.Extensions;
 using KSail.Factories;
 using KSail.Models;
 
-class DeploymentToolBootstrapper(KSailCluster config) : IBootstrapper
+namespace KSail.Managers;
+
+class DeploymentToolManager(KSailCluster config) : IBootstrapManager
 {
   readonly IDeploymentToolProvisioner _deploymentToolProvisioner = DeploymentToolProvisionerFactory.Create(config);
   public async Task BootstrapAsync(CancellationToken cancellationToken = default)
@@ -28,9 +29,7 @@ class DeploymentToolBootstrapper(KSailCluster config) : IBootstrapper
       ).ConfigureAwait(false);
     }
     if (config.Spec.Validation.ReconcileOnUp)
-    {
       await ReconcileAsync(cancellationToken).ConfigureAwait(false);
-    }
   }
   async Task ReconcileAsync(CancellationToken cancellationToken)
   {

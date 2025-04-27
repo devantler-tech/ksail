@@ -1,17 +1,17 @@
 using System.CommandLine;
 using System.Diagnostics.CodeAnalysis;
-using KSail.Commands.Debug.Handlers;
+using KSail.Commands.Connect.Handlers;
 using KSail.Options;
 using KSail.Utils;
 
-namespace KSail.Commands.Debug;
+namespace KSail.Commands.Connect;
 
 [ExcludeFromCodeCoverage]
-sealed class KSailDebugCommand : Command
+sealed class KSailConnectCommand : Command
 {
   readonly ExceptionHandler _exceptionHandler = new();
 
-  internal KSailDebugCommand() : base("debug", "Debug a cluster (❤️ K9s)")
+  internal KSailConnectCommand() : base("connect", "Connect to a cluster with K9s")
   {
     AddOptions();
     this.SetHandler(async (context) =>
@@ -19,7 +19,7 @@ sealed class KSailDebugCommand : Command
       try
       {
         var config = await KSailClusterConfigLoader.LoadWithoptionsAsync(context).ConfigureAwait(false);
-        var handler = new KSailDebugCommandHandler(config);
+        var handler = new KSailConnectCommandHandler(config);
         context.ExitCode = await handler.HandleAsync(context.GetCancellationToken()).ConfigureAwait(false) ? 0 : 1;
       }
       catch (Exception ex)
