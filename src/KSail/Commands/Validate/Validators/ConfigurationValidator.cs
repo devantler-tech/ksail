@@ -59,10 +59,10 @@ class ConfigurationValidator(KSailCluster config)
 
   static void CheckCompatibility(KSailCluster config)
   {
-    // TODO: Remove temporary MacOS + Podman + K3s compatability check when the issue is resolved.
+    // TODO: Remove temporary MacOS + Podman + K3d compatability check when the issue is resolved.
     if (OperatingSystem.IsMacOS() && config.Spec.Project.ContainerEngine == KSailContainerEngineType.Podman && config.Spec.Project.Distribution == KSailDistributionType.K3d)
     {
-      throw new KSailException("Podman + K3s is not supported on MacOS yet." + Environment.NewLine
+      throw new KSailException("Podman + K3d is not supported on MacOS yet." + Environment.NewLine
         + "  - 'host-gateway' is not working with 'podman machine' VMs." + Environment.NewLine
         + "    see https://github.com/containers/podman/issues/21681 for more details.");
     }
