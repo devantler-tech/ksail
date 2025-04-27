@@ -8,7 +8,7 @@ using KSail.Models.Project.Enums;
 
 namespace KSail.Managers;
 
-class IngressControllerManager(KSailCluster config) : IBootstrapper
+class IngressControllerManager(KSailCluster config) : IBootstrapManager
 {
   readonly TraefikInstaller _traefikInstaller = new(config);
 

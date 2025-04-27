@@ -7,7 +7,7 @@ using KSail.Models.Project.Enums;
 
 namespace KSail.Managers;
 
-class CNIManager(KSailCluster config) : IBootstrapper
+class CNIManager(KSailCluster config) : IBootstrapManager
 {
   readonly CiliumProvisioner? _cniProvisioner = CNIProvisionerFactory.Create(config);
   public async Task BootstrapAsync(CancellationToken cancellationToken = default)

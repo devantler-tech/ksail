@@ -4,7 +4,7 @@ using KSail.Models.Project.Enums;
 
 namespace KSail.Managers;
 
-class GatewayControllerManager(KSailCluster config) : IBootstrapper
+class GatewayControllerManager(KSailCluster config) : IBootstrapManager
 {
   public Task BootstrapAsync(CancellationToken cancellationToken = default)
   {

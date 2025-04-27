@@ -7,7 +7,7 @@ using KSail.Models;
 
 namespace KSail.Managers;
 
-class DeploymentToolManager(KSailCluster config) : IBootstrapper
+class DeploymentToolManager(KSailCluster config) : IBootstrapManager
 {
   readonly IDeploymentToolProvisioner _deploymentToolProvisioner = DeploymentToolProvisionerFactory.Create(config);
   public async Task BootstrapAsync(CancellationToken cancellationToken = default)

@@ -4,7 +4,7 @@ using KSail.Models.Project.Enums;
 
 namespace KSail.Managers;
 
-class CSIManager(KSailCluster config) : IBootstrapper
+class CSIManager(KSailCluster config) : IBootstrapManager
 {
   public Task BootstrapAsync(CancellationToken cancellationToken = default)
   {

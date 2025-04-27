@@ -9,7 +9,7 @@ using KSail.Models.Project.Enums;
 
 namespace KSail.Managers;
 
-class GitOpsSourceManager(KSailCluster config) : IBootstrapper
+class GitOpsSourceManager(KSailCluster config) : IBootstrapManager
 {
   readonly IContainerEngineProvisioner _containerEngineProvisioner = ContainerEngineProvisionerFactory.Create(config);
 

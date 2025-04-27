@@ -13,7 +13,7 @@ using KSail.Utils;
 
 namespace KSail.Managers;
 
-class SecretManager(KSailCluster config) : IBootstrapper
+class SecretManager(KSailCluster config) : IBootstrapManager
 {
   readonly SOPSLocalAgeSecretManager _secretManager = new();
   public async Task BootstrapAsync(CancellationToken cancellationToken = default)

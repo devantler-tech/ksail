@@ -1,6 +1,7 @@
 using Devantler.ContainerEngineProvisioner.Core;
 using Devantler.ContainerEngineProvisioner.Docker;
 using Devantler.ContainerEngineProvisioner.Podman;
+using Devantler.KubernetesProvisioner.Cluster.Core;
 using KSail;
 using KSail.Factories;
 using KSail.Models;
@@ -9,15 +10,25 @@ using KSail.Models.Project.Enums;
 
 namespace KSail.Managers;
 
-class MirrorRegistryManager(KSailCluster config) : IBootstrapper
+class MirrorRegistryManager(KSailCluster config) : IBootstrapManager, ICleanupManager
 {
   readonly IContainerEngineProvisioner _containerEngineProvisioner = ContainerEngineProvisionerFactory.Create(config);
+  readonly IKubernetesClusterProvisioner _kubernetesDistributionProvisioner = ClusterProvisionerFactory.Create(config);
   public async Task BootstrapAsync(CancellationToken cancellationToken = default)
   {
     if (config.Spec.Project.MirrorRegistries)
     {
       await CreateMirrorRegistries(config, cancellationToken).ConfigureAwait(false);
       await BootstrapMirrorRegistries(config, cancellationToken).ConfigureAwait(false);
+    }
+  }
+
+  public async Task CleanupAsync(CancellationToken cancellationToken = default)
+  {
+    var clusters = await _kubernetesDistributionProvisioner.ListAsync(cancellationToken).ConfigureAwait(false);
+    if (!clusters.Any())
+    {
+      await DeleteRegistriesAsync(cancellationToken).ConfigureAwait(false);
     }
   }
 
@@ -45,6 +56,33 @@ class MirrorRegistryManager(KSailCluster config) : IBootstrapper
     Console.WriteLine();
   }
 
+  async Task DeleteRegistriesAsync(CancellationToken cancellationToken = default)
+  {
+    string containerName = config.Spec.LocalRegistry.Name;
+    bool ksailRegistryExists = await _containerEngineProvisioner.CheckContainerExistsAsync(containerName, cancellationToken).ConfigureAwait(false);
+    if (ksailRegistryExists)
+    {
+      Console.WriteLine("► Deleting local registry");
+      await _containerEngineProvisioner.DeleteRegistryAsync(containerName, cancellationToken).ConfigureAwait(false);
+      Console.WriteLine($"✓ '{containerName}' deleted.");
+    }
+
+    Console.WriteLine("► Deleting mirror registries");
+    if (config.Spec.Project.MirrorRegistries)
+    {
+      var deleteTasks = config.Spec.MirrorRegistries.Select(async mirrorRegistry =>
+      {
+        bool mirrorRegistryExists = await _containerEngineProvisioner.CheckContainerExistsAsync(mirrorRegistry.Name, cancellationToken).ConfigureAwait(false);
+        if (mirrorRegistryExists)
+        {
+          await _containerEngineProvisioner.DeleteRegistryAsync(mirrorRegistry.Name, cancellationToken).ConfigureAwait(false);
+          Console.WriteLine($"✓ '{mirrorRegistry.Name}' deleted.");
+        }
+      });
+      await Task.WhenAll(deleteTasks).ConfigureAwait(false);
+    }
+  }
+
   async Task BootstrapMirrorRegistries(KSailCluster config, CancellationToken cancellationToken)
   {
     switch ((config.Spec.Project.Provider, config.Spec.Project.Distribution))
@@ -55,7 +93,7 @@ class MirrorRegistryManager(KSailCluster config) : IBootstrapper
         "get",
           "nodes",
           "--name", $"{config.Metadata.Name}"
-        ];
+          ];
         var (_, output) = await Devantler.KindCLI.Kind.RunAsync(args, silent: true, cancellationToken: cancellationToken).ConfigureAwait(false);
         if (output.Contains("No kind nodes found for cluster", StringComparison.OrdinalIgnoreCase))
           throw new KSailException(output);
