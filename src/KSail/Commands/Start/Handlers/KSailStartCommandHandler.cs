@@ -14,11 +14,11 @@ class KSailStartCommandHandler
   internal KSailStartCommandHandler(KSailCluster config)
   {
     _config = config;
-    _clusterProvisioner = (_config.Spec.Project.Provider, _config.Spec.Project.Distribution) switch
+    _clusterProvisioner = _config.Spec.Project.Distribution switch
     {
-      (KSailProviderType.Docker or KSailProviderType.Podman, KSailDistributionType.Native) => new KindProvisioner(),
-      (KSailProviderType.Docker or KSailProviderType.Podman, KSailDistributionType.K3s) => new K3dProvisioner(),
-      _ => throw new NotSupportedException($"The engine '{_config.Spec.Project.Provider}' and distribution '{_config.Spec.Project.Distribution}' combination is not supported")
+      KSailDistributionType.Kind => new KindProvisioner(),
+      KSailDistributionType.K3d => new K3dProvisioner(),
+      _ => throw new NotSupportedException($"The distribution '{_config.Spec.Project.Distribution}' combination is not supported")
     };
   }
 

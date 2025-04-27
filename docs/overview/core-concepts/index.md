@@ -14,7 +14,7 @@ This guide explores two key areas to help you get the most out of KSail:
 
 1. **Topics of Interest**: These are foundational technologies and methodologies, such as Docker, Kubernetes, and GitOps, that provide the context and knowledge necessary to understand KSail's ecosystem.
 
-2. **Concepts in KSail**: These are the specific abstractions and implementations within KSail itself, like Providers, Distributions, and Deployment Tools, which make managing Kubernetes clusters more streamlined and efficient.
+2. **Concepts in KSail**: These are the specific abstractions and implementations within KSail itself, like Container Engines, Distributions, and Deployment Tools, which make managing Kubernetes clusters more streamlined and efficient.
 
 By understanding the foundational concepts of cloud-native technologies and how KSail integrates and builds upon them, you'll gain the conceptual knowledge needed to effectively utilize the tool. Let's dive in!
 
@@ -66,8 +66,8 @@ By understanding the foundational concepts of cloud-native technologies and how 
   </thead>
   <tbody>
     <tr>
-      <td><strong>Providers</strong></td>
-      <td>In KSail <code>Providers</code> is an abstraction over local, on-prem or cloud providers in which a Kubernetes cluster can be spun up.</td>
+      <td><strong>Container Engines</strong></td>
+      <td>In KSail <code>Container Engines</code> is an abstraction over the different Container Engines that KSail can spin Kubernetes clusters up on.</td>
     </tr>
     <tr>
       <td><strong>Distributions</strong></td>

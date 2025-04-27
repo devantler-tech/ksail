@@ -19,12 +19,12 @@ class DistributionConfigFileGenerator
   internal async Task GenerateAsync(string outputPath, KSailCluster config, CancellationToken cancellationToken = default)
   {
     string configPath = Path.Combine(outputPath, config.Spec.Project.DistributionConfigPath);
-    switch (config.Spec.Project.Provider, config.Spec.Project.Distribution)
+    switch (config.Spec.Project.Distribution)
     {
-      case (KSailProviderType.Docker or KSailProviderType.Podman, KSailDistributionType.Native):
+      case KSailDistributionType.Kind:
         await GenerateKindConfigFile(config, configPath, cancellationToken).ConfigureAwait(false);
         break;
-      case (KSailProviderType.Docker or KSailProviderType.Podman, KSailDistributionType.K3s):
+      case KSailDistributionType.K3d:
         await GenerateK3DConfigFile(config, configPath, cancellationToken).ConfigureAwait(false);
         break;
       default:

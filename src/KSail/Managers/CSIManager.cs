@@ -23,12 +23,12 @@ class CSIManager(KSailCluster config) : IBootstrapManager
 
   void HandleDefaultCSI()
   {
-    switch (config.Spec.Project.Provider, config.Spec.Project.Distribution)
+    switch (config.Spec.Project.Distribution)
     {
-      case (KSailProviderType.Docker or KSailProviderType.Podman, KSailDistributionType.Native):
+      case KSailDistributionType.Kind:
         Console.WriteLine("► Kind deploys the local-path-provisioner CSI by default");
         break;
-      case (KSailProviderType.Docker or KSailProviderType.Podman, KSailDistributionType.K3s):
+      case KSailDistributionType.K3d:
         Console.WriteLine("► K3d deploys the local-path-provisioner CSI by default");
         break;
       default:

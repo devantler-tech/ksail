@@ -39,12 +39,12 @@ class CNIManager(KSailCluster config) : IBootstrapManager
 
   void HandleDefaultCNI()
   {
-    switch (config.Spec.Project.Provider, config.Spec.Project.Distribution)
+    switch (config.Spec.Project.Distribution)
     {
-      case (KSailProviderType.Docker or KSailProviderType.Podman, KSailDistributionType.Native):
+      case KSailDistributionType.Kind:
         Console.WriteLine("► Kind deploys the kindnetd CNI by default");
         break;
-      case (KSailProviderType.Docker or KSailProviderType.Podman, KSailDistributionType.K3s):
+      case KSailDistributionType.K3d:
         Console.WriteLine("► K3d deploys the Flannel CNI by default");
         break;
       default:

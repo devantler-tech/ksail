@@ -5,9 +5,9 @@ Usage:
   testhost list [options]
 
 Options:
-  -p, --provider <Docker|Podman>   The provider to use for provisioning the cluster. [default: Docker]
-  -d, --distribution <K3s|Native>  The distribution to use for the cluster. [default: Native]
-  -a, --all                        List clusters from all distributions. [default: False]
-  -?, -h, --help                   Show help and usage information
+  -ce, --container-engine <Docker|Podman>  The container engine in which to provision the cluster. [default: Docker]
+  -d, --distribution <K3d|Kind>            The distribution to use for the cluster. [default: Kind]
+  -a, --all                                List clusters from all distributions. [default: False]
+  -?, -h, --help                           Show help and usage information
 
 

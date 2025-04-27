@@ -32,7 +32,7 @@ sealed class KSailStartCommand : Command
   {
     AddOption(CLIOptions.Connection.ContextOption);
     AddOption(CLIOptions.Metadata.NameOption);
+    AddOption(CLIOptions.Project.ContainerEngineOption);
     AddOption(CLIOptions.Project.DistributionOption);
-    AddOption(CLIOptions.Project.ProviderOption);
   }
 }

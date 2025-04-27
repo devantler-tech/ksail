@@ -17,17 +17,10 @@ class GitOpsSourceManager(KSailCluster config) : IBootstrapManager
   {
     if (config.Spec.Project.DeploymentTool == KSailDeploymentToolType.Flux)
     {
-      switch (config.Spec.Project.Provider)
-      {
-        case KSailProviderType.Docker or KSailProviderType.Podman:
-          Console.WriteLine("📦 Bootstrapping GitOps source...");
-          await CreateOCISourceRegistry(config, cancellationToken).ConfigureAwait(false);
-          await BootstrapOCISource(cancellationToken).ConfigureAwait(false);
-          Console.WriteLine();
-          break;
-        default:
-          throw new NotSupportedException($"unsupported provider '{config.Spec.Project.Provider}'.");
-      }
+      Console.WriteLine("📦 Bootstrapping GitOps source...");
+      await CreateOCISourceRegistry(config, cancellationToken).ConfigureAwait(false);
+      await BootstrapOCISource(cancellationToken).ConfigureAwait(false);
+      Console.WriteLine();
     }
   }
 
@@ -46,7 +39,7 @@ class GitOpsSourceManager(KSailCluster config) : IBootstrapManager
   {
     switch ((config.Spec.Project.Distribution, config.Spec.Project.DeploymentTool))
     {
-      case (KSailDistributionType.Native, KSailDeploymentToolType.Flux):
+      case (KSailDistributionType.Kind, KSailDeploymentToolType.Flux):
         Console.WriteLine($"► connect OCI source registry to 'kind-{config.Metadata.Name}' network");
         var dockerClient = _containerEngineProvisioner switch
         {

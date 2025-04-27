@@ -26,7 +26,7 @@ static class KSailClusterConfigLoader
     var config = await LoadAsync(
       configFilePath,
       context.ParseResult.GetValueForOption(CLIOptions.Metadata.NameOption),
-      context.ParseResult.GetValueForOption(CLIOptions.Project.DistributionOption) ?? KSailDistributionType.Native
+      context.ParseResult.GetValueForOption(CLIOptions.Project.DistributionOption) ?? KSailDistributionType.Kind
     ).ConfigureAwait(false);
     // Metadata
     config.UpdateConfig(c => c.Metadata.Name, context.ParseResult.GetValueForOption(CLIOptions.Metadata.NameOption));
@@ -40,7 +40,7 @@ static class KSailClusterConfigLoader
     config.UpdateConfig(c => c.Spec.Project.ConfigPath, context.ParseResult.GetValueForOption(CLIOptions.Project.ConfigPathOption));
     config.UpdateConfig(c => c.Spec.Project.DistributionConfigPath, context.ParseResult.GetValueForOption(CLIOptions.Project.DistributionConfigPathOption));
     config.UpdateConfig(c => c.Spec.Project.KustomizationPath, context.ParseResult.GetValueForOption(CLIOptions.Project.KustomizationPathOption));
-    config.UpdateConfig(c => c.Spec.Project.Provider, context.ParseResult.GetValueForOption(CLIOptions.Project.ProviderOption));
+    config.UpdateConfig(c => c.Spec.Project.ContainerEngine, context.ParseResult.GetValueForOption(CLIOptions.Project.ContainerEngineOption));
     config.UpdateConfig(c => c.Spec.Project.Distribution, context.ParseResult.GetValueForOption(CLIOptions.Project.DistributionOption));
     config.UpdateConfig(c => c.Spec.Project.DeploymentTool, context.ParseResult.GetValueForOption(CLIOptions.Project.DeploymentToolOption));
     config.UpdateConfig(c => c.Spec.Project.CNI, context.ParseResult.GetValueForOption(CLIOptions.Project.CNIOption));
@@ -83,9 +83,9 @@ static class KSailClusterConfigLoader
     for (int i = 0; i < config.Spec.MirrorRegistries.Count(); i++)
     {
       var mirrorRegistry = config.Spec.MirrorRegistries.ElementAt(i);
-      if (mirrorRegistry.Provider == KSailProviderType.Docker)
+      if (mirrorRegistry.Provider == KSailContainerEngineType.Docker)
       {
-        config.Spec.MirrorRegistries.ElementAt(i).Provider = context.ParseResult.GetValueForOption(CLIOptions.Project.ProviderOption) ?? KSailProviderType.Docker;
+        config.Spec.MirrorRegistries.ElementAt(i).Provider = context.ParseResult.GetValueForOption(CLIOptions.Project.ContainerEngineOption) ?? KSailContainerEngineType.Docker;
       }
     }
 

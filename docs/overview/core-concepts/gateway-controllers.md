@@ -18,9 +18,9 @@ The `None` option is used when you do not want to use a `Gateway Controller`. In
 
 ## Default
 
-| Provider | Distribution  | Gateway Controller |
-| -------- | ------------- | ------------------ |
-| Docker   | Native (kind) | None               |
-| Docker   | K3s (k3d)     | None               |
-| Podman   | Native (kind) | None               |
-| Podman   | K3s (k3d)     | None               |
+The `Default` option is used when you want to use the default `Gateway Controller` that is bundled with the Kubernetes distribution you are using. Below is a table of the default `Gateway Controllers` for each Kubernetes distribution supported by KSail:
+
+| Distribution | Gateway Controller |
+| ------------ | ------------------ |
+| kind         | None               |
+| k3d          | None               |

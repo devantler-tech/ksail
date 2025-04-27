@@ -56,8 +56,8 @@ Options:
   -n, --name <name>                                 The name of the cluster. [default: ksail-default]
   -dc, --distribution-config <distribution-config>  Path to the distribution configuration file. [default: kind.yaml]
   -kp, --kustomization-path <kustomization-path>    The path to the root kustomization directory. [default: k8s]
-  -p, --provider <Docker|Podman>                    The provider to use for provisioning the cluster. [default: Docker]
-  -d, --distribution <K3s|Native>                   The distribution to use for the cluster. [default: Native]
+  -ce, --container-engine <Docker|Podman>           The container engine in which to provision the cluster. [default: Docker]
+  -d, --distribution <K3d|Kind>                     The distribution to use for the cluster. [default: Kind]
   -dt, --deployment-tool <Flux|Kubectl>             The Deployment tool to use for applying a kustomization. [default: Kubectl]
   --cni <Cilium|Default>                            The CNI to use. [default: Default]
   --csi <Default>                                   The CSI to use. [default: Default]
@@ -83,8 +83,8 @@ Usage:
 Options:
   -fsu, --flux-source-url <flux-source-url>  Flux source URL for reconciling GitOps resources. [default: oci://ksail-registry:5000/ksail-registry]
   -n, --name <name>                          The name of the cluster. [default: ksail-default]
-  -d, --distribution <K3s|Native>            The distribution to use for the cluster. [default: Native]
-  -p, --provider <Docker|Podman>             The provider to use for provisioning the cluster. [default: Docker]
+  -d, --distribution <K3d|Kind>              The distribution to use for the cluster. [default: Kind]
+  -ce, --container-engine <Docker|Podman>    The container engine in which to provision the cluster. [default: Docker]
   -mr, --mirror-registries                   Enable mirror registries for the project. [default: True]
   -?, -h, --help                             Show help and usage information
 ```
@@ -117,11 +117,11 @@ Usage:
   ksail start [options]
 
 Options:
-  -c, --context <context>          The kubernetes context to use. [default: kind-ksail-default]
-  -n, --name <name>                The name of the cluster. [default: ksail-default]
-  -d, --distribution <K3s|Native>  The distribution to use for the cluster. [default: Native]
-  -p, --provider <Docker|Podman>   The provider to use for provisioning the cluster. [default: Docker]
-  -?, -h, --help                   Show help and usage information
+  -c, --context <context>                  The kubernetes context to use. [default: kind-ksail-default]
+  -n, --name <name>                        The name of the cluster. [default: ksail-default]
+  -ce, --container-engine <Docker|Podman>  The container engine in which to provision the cluster. [default: Docker]
+  -d, --distribution <K3d|Kind>            The distribution to use for the cluster. [default: Kind]
+  -?, -h, --help                           Show help and usage information
 ```
 
 ## `ksail stop`
@@ -134,10 +134,10 @@ Usage:
   ksail stop [options]
 
 Options:
-  -n, --name <name>                The name of the cluster. [default: ksail-default]
-  -d, --distribution <K3s|Native>  The distribution to use for the cluster. [default: Native]
-  -p, --provider <Docker|Podman>   The provider to use for provisioning the cluster. [default: Docker]
-  -?, -h, --help                   Show help and usage information
+  -n, --name <name>                        The name of the cluster. [default: ksail-default]
+  -ce, --container-engine <Docker|Podman>  The container engine in which to provision the cluster. [default: Docker]
+  -d, --distribution <K3d|Kind>            The distribution to use for the cluster. [default: Kind]
+  -?, -h, --help                           Show help and usage information
 ```
 
 ## `ksail init`
@@ -155,8 +155,8 @@ Options:
   -c, --config <config>                             The path to the ksail configuration file. [default: ksail.yaml]
   -dc, --distribution-config <distribution-config>  Path to the distribution configuration file. [default: kind.yaml]
   -kp, --kustomization-path <kustomization-path>    The path to the root kustomization directory. [default: k8s]
-  -p, --provider <Docker|Podman>                    The provider to use for provisioning the cluster. [default: Docker]
-  -d, --distribution <K3s|Native>                   The distribution to use for the cluster. [default: Native]
+  -ce, --container-engine <Docker|Podman>           The container engine in which to provision the cluster. [default: Docker]
+  -d, --distribution <K3d|Kind>                     The distribution to use for the cluster. [default: Kind]
   -dt, --deployment-tool <Flux|Kubectl>             The Deployment tool to use for applying a kustomization. [default: Kubectl]
   --cni <Cilium|Default>                            The CNI to use. [default: Default]
   --csi <Default>                                   The CSI to use. [default: Default]
@@ -225,10 +225,10 @@ Usage:
   ksail list [options]
 
 Options:
-  -p, --provider <Docker|Podman>   The provider to use for provisioning the cluster. [default: Docker]
-  -d, --distribution <K3s|Native>  The distribution to use for the cluster. [default: Native]
-  -a, --all                        List clusters from all distributions. [default: False]
-  -?, -h, --help                   Show help and usage information
+  -ce, --container-engine <Docker|Podman>  The container engine in which to provision the cluster. [default: Docker]
+  -d, --distribution <K3d|Kind>            The distribution to use for the cluster. [default: Kind]
+  -a, --all                                List clusters from all distributions. [default: False]
+  -?, -h, --help                           Show help and usage information
 ```
 
 ## `ksail connect`

@@ -57,8 +57,8 @@ public class ConfigurationValidatorTest
   }
 
   [Theory]
-  [InlineData(KSailDistributionType.Native)]
-  [InlineData(KSailDistributionType.K3s)]
+  [InlineData(KSailDistributionType.Kind)]
+  [InlineData(KSailDistributionType.K3d)]
   public async Task ValidateAsync_InvalidContextName_ThrowsKSailException(KSailDistributionType distribution)
   {
     // Arrange
@@ -89,8 +89,8 @@ public class ConfigurationValidatorTest
   }
 
   [Theory]
-  [InlineData(KSailDistributionType.Native)]
-  [InlineData(KSailDistributionType.K3s)]
+  [InlineData(KSailDistributionType.Kind)]
+  [InlineData(KSailDistributionType.K3d)]
   public async Task ValidateAsync_InvalidOCISourceUri_ThrowsKSailException(KSailDistributionType distribution)
   {
 
@@ -108,8 +108,8 @@ public class ConfigurationValidatorTest
         {
           Context = distribution switch
           {
-            KSailDistributionType.K3s => "k3d-ksail-default",
-            KSailDistributionType.Native => "kind-ksail-default",
+            KSailDistributionType.K3d => "k3d-ksail-default",
+            KSailDistributionType.Kind => "kind-ksail-default",
             _ => throw new KSailException($"unsupported distribution '{distribution}'.")
           }
         },
@@ -136,8 +136,8 @@ public class ConfigurationValidatorTest
   }
 
   [Theory]
-  [InlineData(KSailDistributionType.Native)]
-  [InlineData(KSailDistributionType.K3s)]
+  [InlineData(KSailDistributionType.Kind)]
+  [InlineData(KSailDistributionType.K3d)]
   public async Task ValidateAsync_InvalidClusterName_ThrowsKSailException(KSailDistributionType distribution)
   {
 
@@ -156,8 +156,8 @@ public class ConfigurationValidatorTest
           Distribution = distribution,
           DistributionConfigPath = distribution switch
           {
-            KSailDistributionType.K3s => "k3d.yaml",
-            KSailDistributionType.Native => "kind.yaml",
+            KSailDistributionType.K3d => "k3d.yaml",
+            KSailDistributionType.Kind => "kind.yaml",
             _ => throw new KSailException($"unsupported distribution '{distribution}'.")
           }
         },
@@ -165,8 +165,8 @@ public class ConfigurationValidatorTest
         {
           Context = distribution switch
           {
-            KSailDistributionType.K3s => "k3d-invalid",
-            KSailDistributionType.Native => "kind-invalid",
+            KSailDistributionType.K3d => "k3d-invalid",
+            KSailDistributionType.Kind => "kind-invalid",
             _ => throw new KSailException($"unsupported distribution '{distribution}'.")
           }
         },
@@ -178,8 +178,8 @@ public class ConfigurationValidatorTest
             {
               Url = distribution switch
               {
-                KSailDistributionType.Native => new Uri("oci://ksail-registry:5000/ksail-registry"),
-                KSailDistributionType.K3s => new Uri("oci://host.k3d.internal:5555/ksail-registry"),
+                KSailDistributionType.Kind => new Uri("oci://ksail-registry:5000/ksail-registry"),
+                KSailDistributionType.K3d => new Uri("oci://host.k3d.internal:5555/ksail-registry"),
                 _ => throw new KSailException($"unsupported distribution '{distribution}'.")
               }
             }
@@ -198,10 +198,10 @@ public class ConfigurationValidatorTest
   }
 
   [Theory]
-  [InlineData(KSailDistributionType.Native, KSailCNIType.Default, KSailCNIType.Cilium)]
-  [InlineData(KSailDistributionType.Native, KSailCNIType.Cilium, KSailCNIType.Default)]
-  [InlineData(KSailDistributionType.K3s, KSailCNIType.Default, KSailCNIType.Cilium)]
-  [InlineData(KSailDistributionType.K3s, KSailCNIType.Cilium, KSailCNIType.Default)]
+  [InlineData(KSailDistributionType.Kind, KSailCNIType.Default, KSailCNIType.Cilium)]
+  [InlineData(KSailDistributionType.Kind, KSailCNIType.Cilium, KSailCNIType.Default)]
+  [InlineData(KSailDistributionType.K3d, KSailCNIType.Default, KSailCNIType.Cilium)]
+  [InlineData(KSailDistributionType.K3d, KSailCNIType.Cilium, KSailCNIType.Default)]
   public async Task ValidateAsync_InvalidCNI_ThrowsKSailException(KSailDistributionType distribution, KSailCNIType actualCNI, KSailCNIType expectedCNI)
   {
     string tempDir = Path.Combine(Path.GetTempPath(), "ksail-validate-invalid-cni");
@@ -216,8 +216,8 @@ public class ConfigurationValidatorTest
           CNI = actualCNI,
           DistributionConfigPath = distribution switch
           {
-            KSailDistributionType.K3s => "k3d.yaml",
-            KSailDistributionType.Native => "kind.yaml",
+            KSailDistributionType.K3d => "k3d.yaml",
+            KSailDistributionType.Kind => "kind.yaml",
             _ => throw new KSailException($"unsupported distribution '{distribution}'.")
           }
         },
@@ -225,8 +225,8 @@ public class ConfigurationValidatorTest
         {
           Context = distribution switch
           {
-            KSailDistributionType.K3s => "k3d-ksail-default",
-            KSailDistributionType.Native => "kind-ksail-default",
+            KSailDistributionType.K3d => "k3d-ksail-default",
+            KSailDistributionType.Kind => "kind-ksail-default",
             _ => throw new KSailException($"unsupported distribution '{distribution}'.")
           }
         },
@@ -238,8 +238,8 @@ public class ConfigurationValidatorTest
             {
               Url = distribution switch
               {
-                KSailDistributionType.Native => new Uri("oci://ksail-registry:5000/ksail-registry"),
-                KSailDistributionType.K3s => new Uri("oci://host.k3d.internal:5555/ksail-registry"),
+                KSailDistributionType.Kind => new Uri("oci://ksail-registry:5000/ksail-registry"),
+                KSailDistributionType.K3d => new Uri("oci://host.k3d.internal:5555/ksail-registry"),
                 _ => throw new KSailException($"unsupported distribution '{distribution}'.")
               }
             }
@@ -258,10 +258,10 @@ public class ConfigurationValidatorTest
   }
 
   [Theory]
-  [InlineData(KSailDistributionType.K3s, KSailIngressControllerType.Traefik, KSailIngressControllerType.None)]
-  [InlineData(KSailDistributionType.K3s, KSailIngressControllerType.None, KSailIngressControllerType.Traefik)]
-  [InlineData(KSailDistributionType.K3s, KSailIngressControllerType.Default, KSailIngressControllerType.None)]
-  [InlineData(KSailDistributionType.K3s, KSailIngressControllerType.None, KSailIngressControllerType.Default)]
+  [InlineData(KSailDistributionType.K3d, KSailIngressControllerType.Traefik, KSailIngressControllerType.None)]
+  [InlineData(KSailDistributionType.K3d, KSailIngressControllerType.None, KSailIngressControllerType.Traefik)]
+  [InlineData(KSailDistributionType.K3d, KSailIngressControllerType.Default, KSailIngressControllerType.None)]
+  [InlineData(KSailDistributionType.K3d, KSailIngressControllerType.None, KSailIngressControllerType.Default)]
   public async Task ValidateAsync_InvalidIngressController_ThrowsKSailException(KSailDistributionType distribution, KSailIngressControllerType actualIngressController, KSailIngressControllerType expectedIngressController)
   {
     string tempDir = Path.Combine(Path.GetTempPath(), "ksail-validate-invalid-ingress-controller");
@@ -276,8 +276,8 @@ public class ConfigurationValidatorTest
           IngressController = actualIngressController,
           DistributionConfigPath = distribution switch
           {
-            KSailDistributionType.K3s => "k3d.yaml",
-            KSailDistributionType.Native => "kind.yaml",
+            KSailDistributionType.K3d => "k3d.yaml",
+            KSailDistributionType.Kind => "kind.yaml",
             _ => throw new KSailException($"unsupported distribution '{distribution}'.")
           }
         },
@@ -285,8 +285,8 @@ public class ConfigurationValidatorTest
         {
           Context = distribution switch
           {
-            KSailDistributionType.K3s => "k3d-ksail-default",
-            KSailDistributionType.Native => "kind-ksail-default",
+            KSailDistributionType.K3d => "k3d-ksail-default",
+            KSailDistributionType.Kind => "kind-ksail-default",
             _ => throw new KSailException($"unsupported distribution '{distribution}'.")
           }
         },
@@ -298,8 +298,8 @@ public class ConfigurationValidatorTest
             {
               Url = distribution switch
               {
-                KSailDistributionType.Native => new Uri("oci://ksail-registry:5000/ksail-registry"),
-                KSailDistributionType.K3s => new Uri("oci://host.k3d.internal:5555/ksail-registry"),
+                KSailDistributionType.Kind => new Uri("oci://ksail-registry:5000/ksail-registry"),
+                KSailDistributionType.K3d => new Uri("oci://host.k3d.internal:5555/ksail-registry"),
                 _ => throw new KSailException($"unsupported distribution '{distribution}'.")
               }
             }
@@ -318,7 +318,7 @@ public class ConfigurationValidatorTest
   }
 
   [Theory]
-  [InlineData(KSailDistributionType.K3s)]
+  [InlineData(KSailDistributionType.K3d)]
   public async Task ValidateAsync_InvalidMirrorRegistries_ThrowsKSailException(KSailDistributionType distribution)
   {
     string tempDir = Path.Combine(Path.GetTempPath(), "ksail-validate-invalid-mirror-registries");

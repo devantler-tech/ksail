@@ -67,7 +67,7 @@
               "description": "The path to the root kustomization directory. [default: k8s]",
               "type": "string"
             },
-            "provider": {
+            "containerEngine": {
               "description": "The provider to use for running the KSail cluster. [default: Docker]",
               "enum": [
                 "Docker",
@@ -75,10 +75,10 @@
               ]
             },
             "distribution": {
-              "description": "The Kubernetes distribution to use. [default: Native]",
+              "description": "The Kubernetes distribution to use. [default: Kind]",
               "enum": [
-                "Native",
-                "K3s"
+                "Kind",
+                "K3d"
               ]
             },
             "deploymentTool": {

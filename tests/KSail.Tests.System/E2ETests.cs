@@ -20,28 +20,28 @@ namespace KSail.Tests.System;
 public class E2ETests
 {
   [SkippableTheory]
-  // Docker + Native + Defaults
-  [InlineData(["init", "--name", "d-n-defaults", "--provider", "Docker", "--distribution", "Native"])]
-  // Docker + Native + Cilium CNI
-  [InlineData(["init", "--name", "d-n-cilium", "--provider", "Docker", "--distribution", "Native", "--cni", "Cilium"])]
-  // Docker + Native + Traefik Ingress Controller
-  [InlineData(["init", "--name", "d-n-traefik", "--provider", "Docker", "--distribution", "Native", "--ingress-controller", "Traefik"])]
-  // Docker + Native + Kubectl + SOPS
-  [InlineData(["init", "--name", "d-n-k-sops", "--provider", "Docker", "--distribution", "Native", "--deployment-tool", "Kubectl", "--secret-manager", "SOPS"])]
-  // Docker + Native + Flux + Defaults
-  [InlineData(["init", "--name", "d-n-f-defaults", "--provider", "Docker", "--distribution", "Native", "--deployment-tool", "Flux"])]
-  // Docker + Native + Flux + SOPS
-  [InlineData(["init", "--name", "d-n-f-sops", "--provider", "Docker", "--distribution", "Native", "--deployment-tool", "Flux", "--secret-manager", "SOPS"])]
-  // Docker + K3s + Defaults
-  [InlineData(["init", "--name", "d-k-defaults", "--provider", "Docker", "--distribution", "K3s", "--deployment-tool", "Kubectl"])]
-  // Docker + K3s + Cilium CNI
-  [InlineData(["init", "--name", "d-k-cilium", "--provider", "Docker", "--distribution", "K3s", "--cni", "Cilium"])]
-  // Docker + K3s + No Ingress Controller
-  [InlineData(["init", "--name", "d-k-traefik", "--provider", "Docker", "--distribution", "K3s", "--ingress-controller", "None"])]
-  // Podman + Native + Defaults
-  [InlineData(["init", "--name", "p-n-defaults", "--provider", "Podman", "--distribution", "Native"])]
-  // Podman + K3s + Defaults
-  [InlineData(["init", "--name", "p-k-defaults", "--provider", "Podman", "--distribution", "K3s"])]
+  // Docker + Kind + Defaults
+  [InlineData(["init", "--name", "d-n-defaults", "--container-engine", "Docker", "--distribution", "Kind"])]
+  // Docker + Kind + Cilium CNI
+  [InlineData(["init", "--name", "d-n-cilium", "--container-engine", "Docker", "--distribution", "Kind", "--cni", "Cilium"])]
+  // Docker + Kind + Traefik Ingress Controller
+  [InlineData(["init", "--name", "d-n-traefik", "--container-engine", "Docker", "--distribution", "Kind", "--ingress-controller", "Traefik"])]
+  // Docker + Kind + Kubectl + SOPS
+  [InlineData(["init", "--name", "d-n-k-sops", "--container-engine", "Docker", "--distribution", "Kind", "--deployment-tool", "Kubectl", "--secret-manager", "SOPS"])]
+  // Docker + Kind + Flux + Defaults
+  [InlineData(["init", "--name", "d-n-f-defaults", "--container-engine", "Docker", "--distribution", "Kind", "--deployment-tool", "Flux"])]
+  // Docker + Kind + Flux + SOPS
+  [InlineData(["init", "--name", "d-n-f-sops", "--container-engine", "Docker", "--distribution", "Kind", "--deployment-tool", "Flux", "--secret-manager", "SOPS"])]
+  // Docker + K3d + Defaults
+  [InlineData(["init", "--name", "d-k-defaults", "--container-engine", "Docker", "--distribution", "K3d", "--deployment-tool", "Kubectl"])]
+  // Docker + K3d + Cilium CNI
+  [InlineData(["init", "--name", "d-k-cilium", "--container-engine", "Docker", "--distribution", "K3d", "--cni", "Cilium"])]
+  // Docker + K3d + No Ingress Controller
+  [InlineData(["init", "--name", "d-k-traefik", "--container-engine", "Docker", "--distribution", "K3d", "--ingress-controller", "None"])]
+  // Podman + Kind + Defaults
+  [InlineData(["init", "--name", "p-n-defaults", "--container-engine", "Podman", "--distribution", "Kind"])]
+  // Podman + K3d + Defaults
+  [InlineData(["init", "--name", "p-k-defaults", "--container-engine", "Podman", "--distribution", "K3d"])]
   public async Task KSailUp_WithVariousConfigurations_Succeeds(params string[] initArgs)
   {
     // Validate that initArgs is not null
@@ -53,11 +53,11 @@ public class E2ETests
       (RuntimeInformation.IsOSPlatform(OSPlatform.OSX) && Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true"),
       "Skipping test on Windows OS or macOS in GitHub Actions.");
 
-    string provider = initArgs.Contains("--provider") ? initArgs[Array.IndexOf(initArgs, "--provider") + 1] : string.Empty;
+    string provider = initArgs.Contains("--container-engine") ? initArgs[Array.IndexOf(initArgs, "--container-engine") + 1] : string.Empty;
     string distribution = initArgs.Contains("--distribution") ? initArgs[Array.IndexOf(initArgs, "--distribution") + 1] : string.Empty;
     Skip.If(
-      RuntimeInformation.IsOSPlatform(OSPlatform.OSX) && provider.Equals("Podman", StringComparison.Ordinal) && distribution.Equals("K3s", StringComparison.Ordinal),
-      "Skipping test on macOS with Podman and K3s.");
+      RuntimeInformation.IsOSPlatform(OSPlatform.OSX) && provider.Equals("Podman", StringComparison.Ordinal) && distribution.Equals("K3d", StringComparison.Ordinal),
+      "Skipping test on macOS with Podman and K3d.");
 
     //Arrange
     var console = new TestConsole();

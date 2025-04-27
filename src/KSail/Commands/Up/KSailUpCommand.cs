@@ -36,7 +36,7 @@ sealed class KSailUpCommand : Command
     AddOption(CLIOptions.Metadata.NameOption);
     AddOption(CLIOptions.Project.DistributionConfigPathOption);
     AddOption(CLIOptions.Project.KustomizationPathOption);
-    AddOption(CLIOptions.Project.ProviderOption);
+    AddOption(CLIOptions.Project.ContainerEngineOption);
     AddOption(CLIOptions.Project.DistributionOption);
     AddOption(CLIOptions.Project.DeploymentToolOption);
     AddOption(CLIOptions.Project.CNIOption);
