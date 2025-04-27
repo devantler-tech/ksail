@@ -34,12 +34,12 @@ class IngressControllerManager(KSailCluster config) : IBootstrapManager
 
   void HandleNoneIngressController()
   {
-    switch (config.Spec.Project.Provider, config.Spec.Project.Distribution)
+    switch (config.Spec.Project.Distribution)
     {
-      case (KSailProviderType.Docker or KSailProviderType.Podman, KSailDistributionType.Native):
+      case KSailDistributionType.Kind:
         Console.WriteLine("► Kind does not deploy an Ingress Controller by default");
         break;
-      case (KSailProviderType.Docker or KSailProviderType.Podman, KSailDistributionType.K3s):
+      case KSailDistributionType.K3d:
         Console.WriteLine("✔ K3d Traefik Ingress Controller is disabled");
         break;
       default:
@@ -49,12 +49,12 @@ class IngressControllerManager(KSailCluster config) : IBootstrapManager
 
   void HandleDefaultIngressController()
   {
-    switch (config.Spec.Project.Provider, config.Spec.Project.Distribution)
+    switch (config.Spec.Project.Distribution)
     {
-      case (KSailProviderType.Docker or KSailProviderType.Podman, KSailDistributionType.Native):
+      case KSailDistributionType.Kind:
         Console.WriteLine("► Kind does not deploy an Ingress Controller by default");
         break;
-      case (KSailProviderType.Docker or KSailProviderType.Podman, KSailDistributionType.K3s):
+      case KSailDistributionType.K3d:
         Console.WriteLine("✔ K3d Traefik Ingress Controller is enabled");
         break;
       default:
@@ -64,15 +64,15 @@ class IngressControllerManager(KSailCluster config) : IBootstrapManager
 
   async Task HandleTraefikIngressController(CancellationToken cancellationToken = default)
   {
-    switch (config.Spec.Project.Provider, config.Spec.Project.Distribution)
+    switch (config.Spec.Project.Distribution)
     {
-      case (KSailProviderType.Docker or KSailProviderType.Podman, KSailDistributionType.Native):
+      case KSailDistributionType.Kind:
         Console.WriteLine("► Deploying Traefik Ingress Controller with Helm");
         await _traefikInstaller.AddRepositoryAsync(cancellationToken).ConfigureAwait(false);
         await _traefikInstaller.InstallAsync(cancellationToken).ConfigureAwait(false);
         Console.WriteLine("✔ Traefik Ingress Controller deployed");
         break;
-      case (KSailProviderType.Docker or KSailProviderType.Podman, KSailDistributionType.K3s):
+      case KSailDistributionType.K3d:
         Console.WriteLine("✔ K3d Traefik Ingress Controller is enabled");
         break;
       default:

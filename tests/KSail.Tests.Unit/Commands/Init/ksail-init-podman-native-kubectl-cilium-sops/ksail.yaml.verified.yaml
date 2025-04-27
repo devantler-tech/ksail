@@ -11,7 +11,7 @@ spec:
   # The options for the KSail project.
   project:
     # The provider to use for running the KSail cluster. [default: Docker]
-    provider: Podman
+    containerEngine: Podman
     # The CNI to use. [default: Default]
     cni: Cilium
     # Whether to use a secret manager. [default: None]

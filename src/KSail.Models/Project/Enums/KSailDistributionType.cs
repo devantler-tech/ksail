@@ -5,11 +5,11 @@ namespace KSail.Models.Project.Enums;
 
 public enum KSailDistributionType
 {
-  [Description("Use the native Kubernetes distribution.")]
-  Native,
+  [Description("Use the Kind Kubernetes distribution.")]
+  Kind,
 
-  [Description("Use K3s as the Kubernetes distribution.")]
-  K3s
+  [Description("Use the K3d Kubernetes distribution.")]
+  K3d
   //
   // Talos
 }

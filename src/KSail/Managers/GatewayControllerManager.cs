@@ -23,12 +23,12 @@ class GatewayControllerManager(KSailCluster config) : IBootstrapManager
 
   void HandleDefaultGatewayController()
   {
-    switch (config.Spec.Project.Provider, config.Spec.Project.Distribution)
+    switch (config.Spec.Project.Distribution)
     {
-      case (KSailProviderType.Docker or KSailProviderType.Podman, KSailDistributionType.Native):
+      case KSailDistributionType.Kind:
         Console.WriteLine("► Kind does not deploy a Gateway Controller by default");
         break;
-      case (KSailProviderType.Docker or KSailProviderType.Podman, KSailDistributionType.K3s):
+      case KSailDistributionType.K3d:
         Console.WriteLine("► K3d does not deploy a Gateway Controller by default");
         break;
       default:

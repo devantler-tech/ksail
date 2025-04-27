@@ -7,7 +7,7 @@ nav_order: 2
 
 # Support Matrix
 
-KSail aims to support a wide range of use cases by providing the flexibility to run popular Kubernetes distributions on various local, on-prem, and cloud providers. Below is a detailed support matrix.
+KSail aims to support a wide range of use cases by providing the flexibility to run popular Kubernetes distributions in various container engines. Below is a detailed support matrix.
 
 <table>
   <thead>
@@ -25,15 +25,15 @@ KSail aims to support a wide range of use cases by providing the flexibility to 
       </td>
     </tr>
     <tr>
-      <td><strong>Providers</strong></td>
+      <td><strong>Container Engines</strong></td>
       <td><a href="https://www.docker.com">Docker</a>,
       <a href="https://podman.io">Podman</a></td>
     </tr>
     <tr>
       <td><strong>Distributions</strong></td>
       <td>
-        Native,
-        <a href="https://k3d.io">K3s</a>
+        <a href="https://kind.sigs.k8s.io">Kind</a>,
+        <a href="https://k3d.io">K3d</a>
       </td>
     </tr>
     <tr>

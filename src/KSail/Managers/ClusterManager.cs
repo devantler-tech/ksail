@@ -27,7 +27,7 @@ class ClusterManager(KSailCluster config) : IBootstrapManager, ICleanupManager
   async Task CheckPrerequisites(CancellationToken cancellationToken)
   {
     Console.WriteLine($"📋 Checking prerequisites");
-    await CheckProviderIsRunning(cancellationToken).ConfigureAwait(false);
+    await CheckContainerEngineIsRunning(cancellationToken).ConfigureAwait(false);
     Console.WriteLine("► checking if cluster exists");
     if (await _clusterProvisioner.ExistsAsync(config.Metadata.Name, cancellationToken).ConfigureAwait(false))
     {
@@ -42,20 +42,20 @@ class ClusterManager(KSailCluster config) : IBootstrapManager, ICleanupManager
     Console.WriteLine();
   }
 
-  async Task CheckProviderIsRunning(CancellationToken cancellationToken = default)
+  async Task CheckContainerEngineIsRunning(CancellationToken cancellationToken = default)
   {
-    Console.WriteLine($"► checking '{config.Spec.Project.Provider}' is running");
+    Console.WriteLine($"► checking '{config.Spec.Project.ContainerEngine}' is running");
     for (int i = 0; i < 5; i++)
     {
-      Console.WriteLine($"► pinging '{config.Spec.Project.Provider}' (try {i + 1})");
+      Console.WriteLine($"► pinging '{config.Spec.Project.ContainerEngine}' (try {i + 1})");
       if (await _containerEngineProvisioner.CheckReadyAsync(cancellationToken).ConfigureAwait(false))
       {
-        Console.WriteLine($"✔ {config.Spec.Project.Provider} is running");
+        Console.WriteLine($"✔ {config.Spec.Project.ContainerEngine} is running");
         return;
       }
       await Task.Delay(1000, cancellationToken).ConfigureAwait(false);
     }
-    throw new KSailException($"{config.Spec.Project.Provider} is not running after multiple attempts.");
+    throw new KSailException($"{config.Spec.Project.ContainerEngine} is not running after multiple attempts.");
   }
 
   async Task<bool> Validate(KSailCluster config, CancellationToken cancellationToken = default)

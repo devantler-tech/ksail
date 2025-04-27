@@ -14,8 +14,8 @@ spec:
   project:
     # The path to the distribution configuration file. [default: kind.yaml]
     distributionConfigPath: k3d.yaml
-    # The Kubernetes distribution to use. [default: Native]
-    distribution: K3s
+    # The Kubernetes distribution to use. [default: Kind]
+    distribution: K3d
   # The options for the deployment tool.
   deploymentTool:
     # The options for the Flux deployment tool.

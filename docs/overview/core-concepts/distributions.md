@@ -7,26 +7,16 @@ nav_order: 1
 
 # Distributions
 
-`Distributions` refer to the underlying Kubernetes distribution that is used to create the cluster. This can be the providers native distribution, or some other distribution that is compatible with the provider. The `Distribution` is responsible for providing the Kubernetes API and the underlying components that are used to run the cluster.
+`Distributions` refer to the Kubernetes distribution that is running a cluster. The `Distribution` is responsible for providing the Kubernetes API and the underlying components that are used to run the Kubernetes cluster.
 
-## Native
+## Kind
 
-> [!NOTE] > `kind` uses `cloud-provider-kind` to support LoadBalancer services. To access these services, you can use the ExternalIP on Linux, and on MacOS, you use localhost followed by the port number that is mapped to the host by the Envoy container `kindccm-*`. See [cloud-provider-kind](https://github.com/kubernetes-sigs/cloud-provider-kind) for more information.
+The [`Kind`](https://kind.sigs.k8s.io/) distribution is a close-to-native Kubernetes distribution that runs on Docker containers. It is built by the official Kubernetes SIG Testing group. `Kind` is the default distribution used by KSail.
 
-The `Native` distribution is the default Kubernetes distribution provided by a specific `Provider`. In most cases this is a distribution that is optimized for the provider and is designed to work seamlessly with the provider's infrastructure.
+`Kind` does not support LoadBalancer service by default, but the [`cloud-provider-kind`](https://github.com/kubernetes-sigs/cloud-provider-kind) project aims to solve this. KSail spins up a container that runs the `cloud-provider-kind` service, which ensures any Kubernetes service of type LoadBalancer is accessible from the host machine. On Windows and MacOS, you can access the services of type LoadBalancer using localhost and the port number that is mapped to the host by the Envoy container `kindccm-*`. It will map a port per service to the host machine.
 
-Below is the actual distribution used when using the `Native` distribution with the various engines.
+## K3d
 
-| Provider | Distribution | Actual Distribution                 |
-| -------- | ------------ | ----------------------------------- |
-| Docker   | Native       | [`kind`](https://kind.sigs.k8s.io/) |
-| Podman   | Native       | [`kind`](https://kind.sigs.k8s.io/) |
+The [`K3d`](https://k3d.io/) distribution is a lightweight Kubernetes distribution that is designed for resource-constrained environments. It is built on top of the [`K3s`](https://k3s.io/) distribution.
 
-## [K3s](https://k3s.io/)
-
-The `K3s` distribution is a lightweight Kubernetes distribution that is designed for resource-constrained environments. Its implementation depends on the `Provider` used.
-
-| Provider | Distribution | Actual Distribution      |
-| -------- | ------------ | ------------------------ |
-| Docker   | K3s          | [`k3d`](https://k3d.io/) |
-| Podman   | K3s          | [`k3d`](https://k3d.io/) |
+`K3d` supports services of type LoadBalancer by default. You need to map the ports for the services of type LoadBalancer to the host machine via the `k3d.yaml` configuration file. This is done by specifying the `ports` field in the `k3d.yaml` file. The ports will be mapped to the host machine when the cluster is created.

@@ -20,5 +20,5 @@ public class KSailLocalRegistry
   // public string? Password { get; set; }
 
   [Description("The registry provider. [default: Docker]")]
-  public KSailProviderType Provider { get; set; } = KSailProviderType.Docker;
+  public KSailContainerEngineType Provider { get; set; } = KSailContainerEngineType.Docker;
 }

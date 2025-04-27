@@ -82,8 +82,8 @@ public class KSailClusterSpec
     {
       Context = distribution switch
       {
-        KSailDistributionType.Native => $"kind-{name}",
-        KSailDistributionType.K3s => $"k3d-{name}",
+        KSailDistributionType.Kind => $"kind-{name}",
+        KSailDistributionType.K3d => $"k3d-{name}",
         _ => $"kind-{name}"
       }
     };
@@ -92,19 +92,19 @@ public class KSailClusterSpec
       Distribution = distribution,
       DistributionConfigPath = distribution switch
       {
-        KSailDistributionType.Native => "kind.yaml",
-        KSailDistributionType.K3s => "k3d.yaml",
+        KSailDistributionType.Kind => "kind.yaml",
+        KSailDistributionType.K3d => "k3d.yaml",
         _ => "kind.yaml"
       }
     };
   }
 
-  void SetOCISourceUri(KSailDistributionType distribution = KSailDistributionType.Native)
+  void SetOCISourceUri(KSailDistributionType distribution = KSailDistributionType.Kind)
   {
     DeploymentTool.Flux.Source = distribution switch
     {
-      KSailDistributionType.Native => new KSailFluxDeploymentToolRepository { Url = new Uri("oci://ksail-registry:5000/ksail-registry") },
-      KSailDistributionType.K3s => new KSailFluxDeploymentToolRepository { Url = new Uri("oci://host.k3d.internal:5555/ksail-registry") },
+      KSailDistributionType.Kind => new KSailFluxDeploymentToolRepository { Url = new Uri("oci://ksail-registry:5000/ksail-registry") },
+      KSailDistributionType.K3d => new KSailFluxDeploymentToolRepository { Url = new Uri("oci://host.k3d.internal:5555/ksail-registry") },
       _ => new KSailFluxDeploymentToolRepository { Url = new Uri("oci://ksail-registry:5000/ksail-registry") },
     };
   }

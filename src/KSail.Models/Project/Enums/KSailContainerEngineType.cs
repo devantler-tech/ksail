@@ -3,7 +3,7 @@ using System.ComponentModel;
 namespace KSail.Models.Project.Enums;
 
 
-public enum KSailProviderType
+public enum KSailContainerEngineType
 {
   [Description("Use Docker as the engine.")]
   Docker,

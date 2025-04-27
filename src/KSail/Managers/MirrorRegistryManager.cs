@@ -37,19 +37,12 @@ class MirrorRegistryManager(KSailCluster config) : IBootstrapManager, ICleanupMa
     Console.WriteLine("🧮 Creating mirror registries");
     var tasks = config.Spec.MirrorRegistries.Select(async mirrorRegistry =>
     {
-      switch (mirrorRegistry.Provider)
-      {
-        case KSailProviderType.Docker or KSailProviderType.Podman:
-          Console.WriteLine($"► creating mirror registry '{mirrorRegistry.Name}' for '{mirrorRegistry.Proxy.Url}'");
-          await _containerEngineProvisioner.CreateRegistryAsync(
-            mirrorRegistry.Name,
-            mirrorRegistry.HostPort,
-            mirrorRegistry.Proxy.Url,
-            cancellationToken).ConfigureAwait(false);
-          break;
-        default:
-          throw new NotSupportedException($"Provider '{mirrorRegistry.Provider}' is not supported.");
-      }
+      Console.WriteLine($"► creating mirror registry '{mirrorRegistry.Name}' for '{mirrorRegistry.Proxy.Url}'");
+      await _containerEngineProvisioner.CreateRegistryAsync(
+        mirrorRegistry.Name,
+        mirrorRegistry.HostPort,
+        mirrorRegistry.Proxy.Url,
+        cancellationToken).ConfigureAwait(false);
     });
     await Task.WhenAll(tasks).ConfigureAwait(false);
     Console.WriteLine("✔ mirror registries created");
@@ -85,9 +78,9 @@ class MirrorRegistryManager(KSailCluster config) : IBootstrapManager, ICleanupMa
 
   async Task BootstrapMirrorRegistries(KSailCluster config, CancellationToken cancellationToken)
   {
-    switch ((config.Spec.Project.Provider, config.Spec.Project.Distribution))
+    switch (config.Spec.Project.Distribution)
     {
-      case (KSailProviderType.Docker or KSailProviderType.Podman, KSailDistributionType.Native):
+      case KSailDistributionType.Kind:
         Console.WriteLine("🔼 Bootstrapping mirror registries");
         string[] args = [
         "get",
@@ -130,10 +123,10 @@ class MirrorRegistryManager(KSailCluster config) : IBootstrapManager, ICleanupMa
         Console.WriteLine($"✔ mirror registries connected to 'kind' networks");
         Console.WriteLine();
         break;
-      case (KSailProviderType.Docker or KSailProviderType.Podman, KSailDistributionType.K3s):
+      case KSailDistributionType.K3d:
         break;
       default:
-        throw new NotSupportedException($"Provider '{config.Spec.Project.Provider}' with distribution '{config.Spec.Project.Distribution}' is not supported.");
+        throw new NotSupportedException($"Container Engine '{config.Spec.Project.ContainerEngine}' with distribution '{config.Spec.Project.Distribution}' is not supported.");
     }
   }
 

@@ -28,11 +28,11 @@ sealed class KSailListCommandHandler(KSailCluster config)
     }
     else
     {
-      clusters = (_config.Spec.Project.Provider, _config.Spec.Project.Distribution) switch
+      clusters = _config.Spec.Project.Distribution switch
       {
-        (KSailProviderType.Docker or KSailProviderType.Podman, KSailDistributionType.K3s) => await _k3dProvisioner.ListAsync(cancellationToken).ConfigureAwait(false),
-        (KSailProviderType.Docker or KSailProviderType.Podman, KSailDistributionType.Native) => await _kindProvisioner.ListAsync(cancellationToken).ConfigureAwait(false),
-        _ => throw new NotSupportedException($"The container engine '{_config.Spec.Project.Provider}' and distribution '{_config.Spec.Project.Distribution}' combination is not supported.")
+        KSailDistributionType.K3d => await _k3dProvisioner.ListAsync(cancellationToken).ConfigureAwait(false),
+        KSailDistributionType.Kind => await _kindProvisioner.ListAsync(cancellationToken).ConfigureAwait(false),
+        _ => throw new NotSupportedException($"The container engine '{_config.Spec.Project.ContainerEngine}' and distribution '{_config.Spec.Project.Distribution}' combination is not supported.")
       };
       PrintClusters(clusters);
       return true;

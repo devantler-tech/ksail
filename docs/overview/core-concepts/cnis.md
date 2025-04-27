@@ -16,15 +16,15 @@ nav_order: 2
 
 The `Default` CNI is the default Container Network Interface plugin that is bundled with the Kubernetes distribution you are using. It is often a basic CNI plugin with limited features.
 
-Because the `Native` distribution varies depending on the `Provider`, the CNI is determined by the `Provider` and `Distribution` you are using.
+Below is a table of the default CNI plugins for each Kubernetes distribution supported by KSail:
 
-| Provider | Distribution  | Default CNI                                                                   |
-| -------- | ------------- | ----------------------------------------------------------------------------- |
-| Docker   | Native (Kind) | [kindnetd](https://github.com/kubernetes-sigs/kind/tree/main/images/kindnetd) |
-| Docker   | K3s (K3d)     | [flannel](https://github.com/flannel-io/flannel)                              |
-| Podman   | Native (Kind) | [kindnetd](https://github.com/kubernetes-sigs/kind/tree/main/images/kindnetd) |
-| Podman   | K3s (K3d)     | [flannel](https://github.com/flannel-io/flannel)                              |
+| Distribution | CNI                                                                           |
+| ------------ | ----------------------------------------------------------------------------- |
+| Kind         | [kindnetd](https://github.com/kubernetes-sigs/kind/tree/main/images/kindnetd) |
+| K3d          | [flannel](https://github.com/flannel-io/flannel)                              |
 
 ## Cilium
 
-Using the [Cilium](https://cilium.io/) CNI will create a Kubernetes cluster with the Cilium CNI plugin installed. It works with all combinations of `Provider` and `Distribution` that are supported by KSail.
+[Cilium](https://cilium.io/) is a powerful CNI plugin that provides advanced networking and security features for Kubernetes clusters. It uses eBPF (Extended Berkeley Packet Filter) technology to provide high-performance networking, load balancing, and security policies.
+
+Using the [Cilium](https://cilium.io/) CNI will create a Kubernetes cluster with the Cilium CNI plugin pre-installed.

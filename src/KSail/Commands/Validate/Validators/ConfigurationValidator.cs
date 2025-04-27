@@ -33,7 +33,7 @@ class ConfigurationValidator(KSailCluster config)
     var deserializer = new DeserializerBuilder().WithNamingConvention(CamelCaseNamingConvention.Instance).Build();
     switch (config.Spec.Project.Distribution)
     {
-      case KSailDistributionType.K3s:
+      case KSailDistributionType.K3d:
         {
           var distributionConfig = deserializer.Deserialize<K3dConfig>(await File.ReadAllTextAsync(Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath), cancellationToken).ConfigureAwait(false));
           CheckClusterName(projectRootPath, config.Metadata.Name, distributionConfig.Metadata.Name);
@@ -43,7 +43,7 @@ class ConfigurationValidator(KSailCluster config)
           break;
         }
 
-      case KSailDistributionType.Native:
+      case KSailDistributionType.Kind:
         {
           var distributionConfig = deserializer.Deserialize<KindConfig>(await File.ReadAllTextAsync(Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath), cancellationToken).ConfigureAwait(false));
           CheckClusterName(projectRootPath, config.Metadata.Name, distributionConfig.Name);
@@ -60,7 +60,7 @@ class ConfigurationValidator(KSailCluster config)
   static void CheckCompatibility(KSailCluster config)
   {
     // TODO: Remove temporary MacOS + Podman + K3s compatability check when the issue is resolved.
-    if (OperatingSystem.IsMacOS() && config.Spec.Project.Provider == KSailProviderType.Podman && config.Spec.Project.Distribution == KSailDistributionType.K3s)
+    if (OperatingSystem.IsMacOS() && config.Spec.Project.ContainerEngine == KSailContainerEngineType.Podman && config.Spec.Project.Distribution == KSailDistributionType.K3d)
     {
       throw new KSailException("Podman + K3s is not supported on MacOS yet." + Environment.NewLine
         + "  - 'host-gateway' is not working with 'podman machine' VMs." + Environment.NewLine
@@ -95,8 +95,8 @@ class ConfigurationValidator(KSailCluster config)
   {
     string expectedContextName = distribution switch
     {
-      KSailDistributionType.K3s => $"k3d-{name}",
-      KSailDistributionType.Native => $"kind-{name}",
+      KSailDistributionType.K3d => $"k3d-{name}",
+      KSailDistributionType.Kind => $"kind-{name}",
       _ => throw new NotSupportedException($"unsupported distribution '{distribution}'.")
     };
     if (!string.Equals(expectedContextName, context, StringComparison.Ordinal))
@@ -109,8 +109,8 @@ class ConfigurationValidator(KSailCluster config)
   {
     var expectedOCISourceUri = distribution switch
     {
-      KSailDistributionType.Native => new Uri("oci://ksail-registry:5000/ksail-registry"),
-      KSailDistributionType.K3s => new Uri("oci://host.k3d.internal:5555/ksail-registry"),
+      KSailDistributionType.Kind => new Uri("oci://ksail-registry:5000/ksail-registry"),
+      KSailDistributionType.K3d => new Uri("oci://host.k3d.internal:5555/ksail-registry"),
       _ => throw new NotSupportedException($"unsupported distribution '{distribution}'.")
     };
     if (!Equals(expectedOCISourceUri, config.Spec.DeploymentTool.Flux.Source.Url))

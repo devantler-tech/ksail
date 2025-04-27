@@ -52,9 +52,9 @@ spec:
     # The path to the root kustomization directory. [default: k8s]
     kustomizationPath: k8s
     # The provider to use for running the KSail cluster. [default: Docker]
-    provider: Docker
-    # The Kubernetes distribution to use. [default: Native]
-    distribution: Native
+    containerEngine: Docker
+    # The Kubernetes distribution to use. [default: Kind]
+    distribution: Kind
     # The Deployment tool to use. [default: Kubectl]
     deploymentTool: Kubectl
     # The CNI to use. [default: Default]

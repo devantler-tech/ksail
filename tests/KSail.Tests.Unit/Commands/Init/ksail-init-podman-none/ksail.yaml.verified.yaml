@@ -11,7 +11,7 @@ spec:
   # The options for the KSail project.
   project:
     # The provider to use for running the KSail cluster. [default: Docker]
-    provider: Podman
+    containerEngine: Podman
     # The Ingress Controller to use. [default: Default]
     ingressController: None
   # The options for the deployment tool.

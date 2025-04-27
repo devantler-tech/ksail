@@ -14,7 +14,7 @@
       ConfigPath: ksail.yaml,
       DistributionConfigPath: kind.yaml,
       KustomizationPath: k8s,
-      Provider: Docker,
+      ContainerEngine: Docker,
       Distribution: 8,
       DeploymentTool: Kubectl,
       CNI: Default,

@@ -13,11 +13,11 @@ class ContainerEngineProvisionerFactory
 {
   internal static IContainerEngineProvisioner Create(KSailCluster config)
   {
-    return config.Spec.Project.Provider switch
+    return config.Spec.Project.ContainerEngine switch
     {
-      KSailProviderType.Docker => new DockerProvisioner(),
-      KSailProviderType.Podman => new PodmanProvisioner(),
-      _ => throw new NotSupportedException($"The provider '{config.Spec.Project.Provider}' is not supported."),
+      KSailContainerEngineType.Docker => new DockerProvisioner(),
+      KSailContainerEngineType.Podman => new PodmanProvisioner(),
+      _ => throw new NotSupportedException($"The provider '{config.Spec.Project.ContainerEngine}' is not supported."),
     };
   }
 }

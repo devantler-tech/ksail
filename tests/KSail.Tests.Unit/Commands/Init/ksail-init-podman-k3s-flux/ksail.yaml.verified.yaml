@@ -15,9 +15,9 @@ spec:
     # The path to the distribution configuration file. [default: kind.yaml]
     distributionConfigPath: k3d.yaml
     # The provider to use for running the KSail cluster. [default: Docker]
-    provider: Podman
-    # The Kubernetes distribution to use. [default: Native]
-    distribution: K3s
+    containerEngine: Podman
+    # The Kubernetes distribution to use. [default: Kind]
+    distribution: K3d
     # The Deployment tool to use. [default: Kubectl]
     deploymentTool: Flux
   # The options for the deployment tool.
