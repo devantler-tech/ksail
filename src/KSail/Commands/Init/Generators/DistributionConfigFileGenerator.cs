@@ -53,7 +53,7 @@ class DistributionConfigFileGenerator
       ] : null
     };
 
-    if (config.Spec.Project.CNI != KSailCNIType.Default)
+    if (config.Spec.Project.CNI is not KSailCNIType.Default)
     {
       kindConfig.Networking = new KindNetworking
       {
@@ -101,7 +101,7 @@ class DistributionConfigFileGenerator
     };
 
     var extraArgs = new List<K3dOptionsK3sExtraArg>();
-    if (config.Spec.Project.CNI != KSailCNIType.Default)
+    if (config.Spec.Project.CNI is not KSailCNIType.Default)
     {
       extraArgs.Add(new K3dOptionsK3sExtraArg
       {
@@ -114,6 +114,17 @@ class DistributionConfigFileGenerator
       extraArgs.Add(new K3dOptionsK3sExtraArg
       {
         Arg = "--disable-network-policy",
+        NodeFilters =
+        [
+          "server:*"
+        ]
+      });
+    }
+    if (config.Spec.Project.CSI is KSailCSIType.None)
+    {
+      extraArgs.Add(new K3dOptionsK3sExtraArg
+      {
+        Arg = "--disable=local-storage",
         NodeFilters =
         [
           "server:*"

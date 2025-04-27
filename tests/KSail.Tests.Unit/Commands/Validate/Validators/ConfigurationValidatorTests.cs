@@ -200,8 +200,12 @@ public class ConfigurationValidatorTest
   [Theory]
   [InlineData(KSailDistributionType.Kind, KSailCNIType.Default, KSailCNIType.Cilium)]
   [InlineData(KSailDistributionType.Kind, KSailCNIType.Cilium, KSailCNIType.Default)]
+  [InlineData(KSailDistributionType.Kind, KSailCNIType.None, KSailCNIType.Default)]
+  [InlineData(KSailDistributionType.Kind, KSailCNIType.Default, KSailCNIType.None)]
   [InlineData(KSailDistributionType.K3d, KSailCNIType.Default, KSailCNIType.Cilium)]
   [InlineData(KSailDistributionType.K3d, KSailCNIType.Cilium, KSailCNIType.Default)]
+  [InlineData(KSailDistributionType.K3d, KSailCNIType.None, KSailCNIType.Default)]
+  [InlineData(KSailDistributionType.K3d, KSailCNIType.Default, KSailCNIType.None)]
   public async Task ValidateAsync_InvalidCNI_ThrowsKSailException(KSailDistributionType distribution, KSailCNIType actualCNI, KSailCNIType expectedCNI)
   {
     string tempDir = Path.Combine(Path.GetTempPath(), "ksail-validate-invalid-cni");
@@ -252,6 +256,66 @@ public class ConfigurationValidatorTest
     // Act & Assert
     var exception = await Assert.ThrowsAsync<KSailException>(async () => await validator.ValidateAsync(tempDir, CancellationToken.None).ConfigureAwait(false));
     Assert.Contains($"'spec.project.cni={actualCNI}' in '", exception.Message, StringComparison.Ordinal);
+
+    //Cleanup
+    Directory.Delete(tempDir, true);
+  }
+
+  [Theory]
+  [InlineData(KSailDistributionType.K3d, KSailCSIType.None, KSailCSIType.Default)]
+  [InlineData(KSailDistributionType.K3d, KSailCSIType.Default, KSailCSIType.None)]
+  [InlineData(KSailDistributionType.K3d, KSailCSIType.None, KSailCSIType.LocalPathProvisioner)]
+  [InlineData(KSailDistributionType.K3d, KSailCSIType.LocalPathProvisioner, KSailCSIType.None)]
+  public async Task ValidateAsync_InvalidCSI_ThrowsKSailException(KSailDistributionType distribution, KSailCSIType actualCSI, KSailCSIType expectedCSI)
+  {
+    string tempDir = Path.Combine(Path.GetTempPath(), "ksail-validate-invalid-csi");
+    _ = await _rootCommand.InvokeAsync(["init", "--output", tempDir, "--distribution", distribution.ToString(), "--csi", expectedCSI.ToString()], _console);
+    var config = new KSailCluster
+    {
+      Spec = new KSailClusterSpec
+      {
+        Project = new KSailProject
+        {
+          Distribution = distribution,
+          CSI = actualCSI,
+          DistributionConfigPath = distribution switch
+          {
+            KSailDistributionType.K3d => "k3d.yaml",
+            KSailDistributionType.Kind => "kind.yaml",
+            _ => throw new KSailException($"unsupported distribution '{distribution}'.")
+          }
+        },
+        Connection = new KSailConnection
+        {
+          Context = distribution switch
+          {
+            KSailDistributionType.K3d => "k3d-ksail-default",
+            KSailDistributionType.Kind => "kind-ksail-default",
+            _ => throw new KSailException($"unsupported distribution '{distribution}'.")
+          }
+        },
+        DeploymentTool = new KSailDeploymentTool
+        {
+          Flux = new KSailFluxDeploymentTool
+          {
+            Source = new KSailFluxDeploymentToolRepository
+            {
+              Url = distribution switch
+              {
+                KSailDistributionType.Kind => new Uri("oci://ksail-registry:5000/ksail-registry"),
+                KSailDistributionType.K3d => new Uri("oci://host.k3d.internal:5555/ksail-registry"),
+                _ => throw new KSailException($"unsupported distribution '{distribution}'.")
+              }
+            }
+          }
+        },
+      }
+    };
+    var validator = new ConfigurationValidator(config);
+
+    // Act & Assert
+    var exception = await Assert.ThrowsAsync<KSailException>(async () => await validator.ValidateAsync(tempDir, CancellationToken.None).ConfigureAwait(false));
+    Assert.Contains($"'spec.project.csi={actualCSI}' in '", exception.Message, StringComparison.Ordinal);
 
     //Cleanup
     Directory.Delete(tempDir, true);

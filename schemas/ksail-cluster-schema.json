@@ -92,13 +92,16 @@
               "description": "The CNI to use. [default: Default]",
               "enum": [
                 "Default",
-                "Cilium"
+                "Cilium",
+                "None"
               ]
             },
             "csi": {
               "description": "The CSI to use. [default: Default]",
               "enum": [
-                "Default"
+                "Default",
+                "LocalPathProvisioner",
+                "None"
               ]
             },
             "ingressController": {
@@ -112,8 +115,8 @@
             "gatewayController": {
               "description": "The Gateway Controller to use. [default: Default]",
               "enum": [
-                "None",
-                "Default"
+                "Default",
+                "None"
               ]
             },
             "secretManager": {

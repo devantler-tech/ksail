@@ -22,4 +22,4 @@ If you choose [`Traefik`](https://github.com/traefik/traefik-helm-chart), the Tr
 
 ## None
 
-If you choose `None`, no Ingress Controller will be installed.
+The `None` Ingress Controller option means that no Ingress Controller will be installed in your Kubernetes cluster. This is useful if you do not need an ingress controller or if you plan to use an unsupported ingress controller.

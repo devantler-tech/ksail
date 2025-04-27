@@ -21,10 +21,28 @@ class CNIManager(KSailCluster config) : IBootstrapManager
       case KSailCNIType.Default:
         HandleDefaultCNI();
         break;
+      case KSailCNIType.None:
+        HandleNoCNI();
+        break;
       default:
         throw new NotSupportedException($"the '{config.Spec.Project.CNI}' CNI is not supported.");
     }
     Console.WriteLine();
+  }
+
+  void HandleNoCNI()
+  {
+    switch (config.Spec.Project.Distribution)
+    {
+      case KSailDistributionType.Kind:
+        Console.WriteLine("✔ kindnetd CNI disabled");
+        break;
+      case KSailDistributionType.K3d:
+        Console.WriteLine("✔ Flannel CNI disabled");
+        break;
+      default:
+        break;
+    }
   }
 
   async Task InstallCNI(CancellationToken cancellationToken)

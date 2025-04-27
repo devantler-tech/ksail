@@ -9,4 +9,7 @@ public enum KSailCNIType
 
   [Description("Use Cilium as the CNI.")]
   Cilium,
+
+  [Description("Do not use a CNI.")]
+  None
 }

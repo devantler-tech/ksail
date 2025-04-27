@@ -24,6 +24,10 @@ public class E2ETests
   [InlineData(["init", "--name", "d-n-defaults", "--container-engine", "Docker", "--distribution", "Kind"])]
   // Docker + Kind + Cilium CNI
   [InlineData(["init", "--name", "d-n-cilium", "--container-engine", "Docker", "--distribution", "Kind", "--cni", "Cilium"])]
+  // Docker + Kind + No CNI
+  [InlineData(["init", "--name", "d-n-no-cni", "--container-engine", "Docker", "--distribution", "Kind", "--cni", "None"])]
+  // Docker + Kind + No CSI
+  [InlineData(["init", "--name", "d-n-no-csi", "--container-engine", "Docker", "--distribution", "Kind", "--csi", "None"])]
   // Docker + Kind + Traefik Ingress Controller
   [InlineData(["init", "--name", "d-n-traefik", "--container-engine", "Docker", "--distribution", "Kind", "--ingress-controller", "Traefik"])]
   // Docker + Kind + Kubectl + SOPS
@@ -36,8 +40,12 @@ public class E2ETests
   [InlineData(["init", "--name", "d-k-defaults", "--container-engine", "Docker", "--distribution", "K3d", "--deployment-tool", "Kubectl"])]
   // Docker + K3d + Cilium CNI
   [InlineData(["init", "--name", "d-k-cilium", "--container-engine", "Docker", "--distribution", "K3d", "--cni", "Cilium"])]
+  // Docker + K3d + No CNI
+  [InlineData(["init", "--name", "d-k-no-cni", "--container-engine", "Docker", "--distribution", "K3d", "--cni", "None"])]
+  // Docker + K3d + No CSI
+  [InlineData(["init", "--name", "d-k-no-csi", "--container-engine", "Docker", "--distribution", "K3d", "--csi", "None"])]
   // Docker + K3d + No Ingress Controller
-  [InlineData(["init", "--name", "d-k-traefik", "--container-engine", "Docker", "--distribution", "K3d", "--ingress-controller", "None"])]
+  [InlineData(["init", "--name", "d-k-no-ingress", "--container-engine", "Docker", "--distribution", "K3d", "--ingress-controller", "None"])]
   // Podman + Kind + Defaults
   [InlineData(["init", "--name", "p-n-defaults", "--container-engine", "Podman", "--distribution", "Kind"])]
   // Podman + K3d + Defaults

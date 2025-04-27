@@ -38,6 +38,7 @@ class ConfigurationValidator(KSailCluster config)
           var distributionConfig = deserializer.Deserialize<K3dConfig>(await File.ReadAllTextAsync(Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath), cancellationToken).ConfigureAwait(false));
           CheckClusterName(projectRootPath, config.Metadata.Name, distributionConfig.Metadata.Name);
           CheckK3dCNI(projectRootPath, distributionConfig);
+          CheckK3dCSI(projectRootPath, distributionConfig);
           CheckK3dIngressController(projectRootPath, distributionConfig);
           CheckK3dMirrorRegistries(projectRootPath, distributionConfig);
           break;
@@ -149,15 +150,41 @@ class ConfigurationValidator(KSailCluster config)
       };
     var expectedWithCustomCNI = expectedWithCustomCNIK3sExtraArgs.Select(x => x.Arg + ":" + x.NodeFilters?.First()) ?? [];
     var actual = distributionConfig.Options?.K3s?.ExtraArgs?.Select(x => x.Arg + ":" + (x.NodeFilters?.First() ?? "server:*")) ?? [];
-    if (config.Spec.Project.CNI == KSailCNIType.Default && actual.Intersect(expectedWithCustomCNI).Any())
+    if (config.Spec.Project.CNI is KSailCNIType.Default && actual.Intersect(expectedWithCustomCNI).Any())
     {
       throw new KSailException($"'spec.project.cni={config.Spec.Project.CNI}' in '{Path.Combine(projectRootPath, config.Spec.Project.ConfigPath)}' does not match expected values in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'." + Environment.NewLine +
         $"  - please remove '--flannel-backend=none' and '--disable-network-policy' from 'options.k3s.extraArgs' in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'.");
     }
-    else if (config.Spec.Project.CNI != KSailCNIType.Default && (!actual.Any() || !actual.All(expectedWithCustomCNI.Contains)))
+    else if (config.Spec.Project.CNI is not KSailCNIType.Default && (!actual.Any() || !actual.All(expectedWithCustomCNI.Contains)))
     {
       throw new KSailException($"'spec.project.cni={config.Spec.Project.CNI}' in '{Path.Combine(projectRootPath, config.Spec.Project.ConfigPath)}' does not match expected values in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'." + Environment.NewLine +
         $"  - please set 'options.k3s.extraArgs' to '--flannel-backend=none' and '--disable-network-policy' for 'server:*' in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'.");
+    }
+  }
+
+  void CheckK3dCSI(string projectRootPath, K3dConfig distributionConfig)
+  {
+    var expectedWithCustomCSIK3sExtraArgs = new List<K3dOptionsK3sExtraArg>
+      {
+        new() {
+          Arg = "--disable=local-storage",
+          NodeFilters =
+          [
+            "server:*"
+          ]
+        }
+      };
+    var expectedWithCustomCSI = expectedWithCustomCSIK3sExtraArgs.Select(x => x.Arg + ":" + x.NodeFilters?.First()) ?? [];
+    var actual = distributionConfig.Options?.K3s?.ExtraArgs?.Select(x => x.Arg + ":" + (x.NodeFilters?.First() ?? "server:*")) ?? [];
+    if (config.Spec.Project.CSI is KSailCSIType.Default or KSailCSIType.LocalPathProvisioner && actual.Intersect(expectedWithCustomCSI).Any())
+    {
+      throw new KSailException($"'spec.project.csi={config.Spec.Project.CSI}' in '{Path.Combine(projectRootPath, config.Spec.Project.ConfigPath)}' does not match expected values in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'." + Environment.NewLine +
+        $"  - please remove '--disable=local-storage' from 'options.k3s.extraArgs' in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'.");
+    }
+    else if ((config.Spec.Project.CSI is not KSailCSIType.Default and not KSailCSIType.LocalPathProvisioner) && (!actual.Any() || !actual.All(expectedWithCustomCSI.Contains)))
+    {
+      throw new KSailException($"'spec.project.csi={config.Spec.Project.CSI}' in '{Path.Combine(projectRootPath, config.Spec.Project.ConfigPath)}' does not match expected values in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'." + Environment.NewLine +
+        $"  - please set 'options.k3s.extraArgs' to '--disable=local-storage' for 'server:*' in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'.");
     }
   }
 
@@ -189,12 +216,12 @@ class ConfigurationValidator(KSailCluster config)
 
   void CheckKindCNI(string projectRootPath, KindConfig distributionConfig)
   {
-    if (config.Spec.Project.CNI == KSailCNIType.Default && distributionConfig.Networking?.DisableDefaultCNI == true)
+    if (config.Spec.Project.CNI is KSailCNIType.Default && distributionConfig.Networking?.DisableDefaultCNI == true)
     {
       throw new KSailException($"'spec.project.cni={config.Spec.Project.CNI}' in '{Path.Combine(projectRootPath, config.Spec.Project.ConfigPath)}' does not match expected values in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'." + Environment.NewLine +
         $"  - please set 'networking.disableDefaultCNI: false' in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'.");
     }
-    else if (config.Spec.Project.CNI != KSailCNIType.Default && distributionConfig.Networking?.DisableDefaultCNI != true)
+    else if (config.Spec.Project.CNI is not KSailCNIType.Default && distributionConfig.Networking?.DisableDefaultCNI != true)
     {
       throw new KSailException($"'spec.project.cni={config.Spec.Project.CNI}' in '{Path.Combine(projectRootPath, config.Spec.Project.ConfigPath)}' does not match expected values in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'." + Environment.NewLine +
         $"  - please set 'networking.disableDefaultCNI: true' in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'.");
