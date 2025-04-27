@@ -40,14 +40,23 @@ KSail aims to support a wide range of use cases by providing the flexibility to 
       <td><strong>Container Network Interfaces (CNI)</strong></td>
       <td>
         Default,
-        <a href="https://cilium.io">Cilium</a>
+        <a href="https://cilium.io">Cilium</a>,
+        None
+      </td>
+    </tr>
+    <tr>
+      <td><strong>Container Storage Interfaces (CSI)</strong></td>
+      <td>
+        Default,
+        <a href="https://github.com/rancher/local-path-provisioner">Local Path Provisioner</a>,
+        None
       </td>
     </tr>
     <tr>
       <td><strong>Ingress Controllers</strong></td>
       <td>
         Default,
-        Traefik
+        <a href="https://github.com/traefik/traefik-helm-chart">Traefik</a>,
         None
       </td>
     </tr>

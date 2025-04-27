@@ -12,6 +12,7 @@ class CNIProvisionerFactory
     {
       KSailCNIType.Cilium => new CiliumProvisioner(config.Spec.Connection.Kubeconfig, config.Spec.Connection.Context),
       KSailCNIType.Default => null,
+      KSailCNIType.None => null,
       _ => throw new NotSupportedException($"The CNI '{config.Spec.Project.CNI}' is not supported.")
     };
   }

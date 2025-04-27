@@ -149,12 +149,12 @@ class ConfigurationValidator(KSailCluster config)
       };
     var expectedWithCustomCNI = expectedWithCustomCNIK3sExtraArgs.Select(x => x.Arg + ":" + x.NodeFilters?.First()) ?? [];
     var actual = distributionConfig.Options?.K3s?.ExtraArgs?.Select(x => x.Arg + ":" + (x.NodeFilters?.First() ?? "server:*")) ?? [];
-    if (config.Spec.Project.CNI == KSailCNIType.Default && actual.Intersect(expectedWithCustomCNI).Any())
+    if (config.Spec.Project.CNI is KSailCNIType.Default && actual.Intersect(expectedWithCustomCNI).Any())
     {
       throw new KSailException($"'spec.project.cni={config.Spec.Project.CNI}' in '{Path.Combine(projectRootPath, config.Spec.Project.ConfigPath)}' does not match expected values in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'." + Environment.NewLine +
         $"  - please remove '--flannel-backend=none' and '--disable-network-policy' from 'options.k3s.extraArgs' in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'.");
     }
-    else if (config.Spec.Project.CNI != KSailCNIType.Default && (!actual.Any() || !actual.All(expectedWithCustomCNI.Contains)))
+    else if (config.Spec.Project.CNI is not KSailCNIType.Default && (!actual.Any() || !actual.All(expectedWithCustomCNI.Contains)))
     {
       throw new KSailException($"'spec.project.cni={config.Spec.Project.CNI}' in '{Path.Combine(projectRootPath, config.Spec.Project.ConfigPath)}' does not match expected values in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'." + Environment.NewLine +
         $"  - please set 'options.k3s.extraArgs' to '--flannel-backend=none' and '--disable-network-policy' for 'server:*' in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'.");
@@ -189,12 +189,12 @@ class ConfigurationValidator(KSailCluster config)
 
   void CheckKindCNI(string projectRootPath, KindConfig distributionConfig)
   {
-    if (config.Spec.Project.CNI == KSailCNIType.Default && distributionConfig.Networking?.DisableDefaultCNI == true)
+    if (config.Spec.Project.CNI is KSailCNIType.Default && distributionConfig.Networking?.DisableDefaultCNI == true)
     {
       throw new KSailException($"'spec.project.cni={config.Spec.Project.CNI}' in '{Path.Combine(projectRootPath, config.Spec.Project.ConfigPath)}' does not match expected values in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'." + Environment.NewLine +
         $"  - please set 'networking.disableDefaultCNI: false' in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'.");
     }
-    else if (config.Spec.Project.CNI != KSailCNIType.Default && distributionConfig.Networking?.DisableDefaultCNI != true)
+    else if (config.Spec.Project.CNI is not KSailCNIType.Default && distributionConfig.Networking?.DisableDefaultCNI != true)
     {
       throw new KSailException($"'spec.project.cni={config.Spec.Project.CNI}' in '{Path.Combine(projectRootPath, config.Spec.Project.ConfigPath)}' does not match expected values in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'." + Environment.NewLine +
         $"  - please set 'networking.disableDefaultCNI: true' in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'.");

@@ -43,8 +43,8 @@ Getting started with KSail is straightforward. Begin by initializing a new KSail
   --container-engine <★Docker★|Podman> \
   --distribution <★Kind★|K3d> \
   --deployment-tool <★Kubectl★|Flux> \
-  --cni <★Default★|Cilium> \
-  --csi <★Default★> \
+  --cni <★Default★|Cilium|None> \
+  --csi <★Default★|None> \
   --ingress-controller <★Default★|Traefik|None> \
   --gateway-controller <★Default★|None> \
   --secret-manager <★None★|SOPS> \

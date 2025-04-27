@@ -7,11 +7,6 @@ nav_order: 2
 
 # Container Network Interfaces (CNIs)
 
-## None
-
-> [!WARNING]
-> This option is not supported yet.
-
 ## Default
 
 The `Default` CNI is the default Container Network Interface plugin that is bundled with the Kubernetes distribution you are using. It is often a basic CNI plugin with limited features.
@@ -28,3 +23,7 @@ Below is a table of the default CNI plugins for each Kubernetes distribution sup
 [Cilium](https://cilium.io/) is a powerful CNI plugin that provides advanced networking and security features for Kubernetes clusters. It uses eBPF (Extended Berkeley Packet Filter) technology to provide high-performance networking, load balancing, and security policies.
 
 Using the [Cilium](https://cilium.io/) CNI will create a Kubernetes cluster with the Cilium CNI plugin pre-installed.
+
+## None
+
+The `None` CNI option means that no Container Network Interface plugin will be installed in your Kubernetes cluster. This is useful if you want to install an unsupported CNI plugin.

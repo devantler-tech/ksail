@@ -200,8 +200,12 @@ public class ConfigurationValidatorTest
   [Theory]
   [InlineData(KSailDistributionType.Kind, KSailCNIType.Default, KSailCNIType.Cilium)]
   [InlineData(KSailDistributionType.Kind, KSailCNIType.Cilium, KSailCNIType.Default)]
+  [InlineData(KSailDistributionType.Kind, KSailCNIType.None, KSailCNIType.Default)]
+  [InlineData(KSailDistributionType.Kind, KSailCNIType.Default, KSailCNIType.None)]
   [InlineData(KSailDistributionType.K3d, KSailCNIType.Default, KSailCNIType.Cilium)]
   [InlineData(KSailDistributionType.K3d, KSailCNIType.Cilium, KSailCNIType.Default)]
+  [InlineData(KSailDistributionType.K3d, KSailCNIType.None, KSailCNIType.Default)]
+  [InlineData(KSailDistributionType.K3d, KSailCNIType.Default, KSailCNIType.None)]
   public async Task ValidateAsync_InvalidCNI_ThrowsKSailException(KSailDistributionType distribution, KSailCNIType actualCNI, KSailCNIType expectedCNI)
   {
     string tempDir = Path.Combine(Path.GetTempPath(), "ksail-validate-invalid-cni");
