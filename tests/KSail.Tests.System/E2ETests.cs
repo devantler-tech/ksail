@@ -36,6 +36,8 @@ public class E2ETests
   [InlineData(["init", "--name", "d-n-f-defaults", "--container-engine", "Docker", "--distribution", "Kind", "--deployment-tool", "Flux"])]
   // Docker + Kind + Flux + SOPS
   [InlineData(["init", "--name", "d-n-f-sops", "--container-engine", "Docker", "--distribution", "Kind", "--deployment-tool", "Flux", "--secret-manager", "SOPS"])]
+  // Docker + Kind + Metrics Server
+  [InlineData(["init", "--name", "d-n-metrics-server", "--container-engine", "Docker", "--distribution", "Kind", "--metrics-server"])]
   // Docker + K3d + Defaults
   [InlineData(["init", "--name", "d-k-defaults", "--container-engine", "Docker", "--distribution", "K3d", "--deployment-tool", "Kubectl"])]
   // Docker + K3d + Cilium CNI
@@ -46,6 +48,8 @@ public class E2ETests
   [InlineData(["init", "--name", "d-k-no-csi", "--container-engine", "Docker", "--distribution", "K3d", "--csi", "None"])]
   // Docker + K3d + No Ingress Controller
   [InlineData(["init", "--name", "d-k-no-ingress", "--container-engine", "Docker", "--distribution", "K3d", "--ingress-controller", "None"])]
+  // Docker + K3d + No Metrics Server
+  [InlineData(["init", "--name", "d-k-no-metrics-server", "--container-engine", "Docker", "--distribution", "K3d", "--metrics-server", "false"])]
   // Podman + Kind + Defaults
   [InlineData(["init", "--name", "p-n-defaults", "--container-engine", "Podman", "--distribution", "Kind"])]
   // Podman + K3d + Defaults

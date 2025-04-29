@@ -119,6 +119,10 @@
                 "None"
               ]
             },
+            "metricsServer": {
+              "description": "Whether to install Metrics Server. [default: true]",
+              "type": "boolean"
+            },
             "secretManager": {
               "description": "Whether to use a secret manager. [default: None]",
               "enum": [

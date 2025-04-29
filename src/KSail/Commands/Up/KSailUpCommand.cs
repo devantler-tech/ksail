@@ -43,6 +43,7 @@ sealed class KSailUpCommand : Command
     AddOption(CLIOptions.Project.CSIOption);
     AddOption(CLIOptions.Project.IngressControllerOption);
     AddOption(CLIOptions.Project.GatewayControllerOption);
+    AddOption(CLIOptions.Project.MetricsServerOption);
     AddOption(CLIOptions.Project.MirrorRegistriesOption);
     AddOption(CLIOptions.Project.SecretManagerOption);
     AddOption(CLIOptions.DeploymentTool.Flux.SourceOption);

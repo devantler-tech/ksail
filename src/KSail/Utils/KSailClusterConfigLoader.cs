@@ -47,6 +47,7 @@ static class KSailClusterConfigLoader
     config.UpdateConfig(c => c.Spec.Project.CSI, context.ParseResult.GetValueForOption(CLIOptions.Project.CSIOption));
     config.UpdateConfig(c => c.Spec.Project.IngressController, context.ParseResult.GetValueForOption(CLIOptions.Project.IngressControllerOption));
     config.UpdateConfig(c => c.Spec.Project.GatewayController, context.ParseResult.GetValueForOption(CLIOptions.Project.GatewayControllerOption));
+    config.UpdateConfig(c => c.Spec.Project.MetricsServer, context.ParseResult.GetValueForOption(CLIOptions.Project.MetricsServerOption));
     config.UpdateConfig(c => c.Spec.Project.SecretManager, context.ParseResult.GetValueForOption(CLIOptions.Project.SecretManagerOption));
     config.UpdateConfig(c => c.Spec.Project.MirrorRegistries, context.ParseResult.GetValueForOption(CLIOptions.Project.MirrorRegistriesOption));
     config.UpdateConfig(c => c.Spec.Project.Editor, context.ParseResult.GetValueForOption(CLIOptions.Project.EditorOption));
