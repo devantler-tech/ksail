@@ -48,7 +48,8 @@ Getting started with KSail is straightforward. Begin by initializing a new KSail
   --ingress-controller <★Default★|Traefik|None> \
   --gateway-controller <★Default★|None> \
   --secret-manager <★None★|SOPS> \
-  --mirror-registries <★true★|false>
+  --mirror-registries <★true★|false> \
+  --editor <★Nano★|Vim>
 ```
 
 This creates the following project files, depending on your choices:
