@@ -40,16 +40,16 @@ Getting started with KSail is straightforward. Begin by initializing a new KSail
 > ksail init # to create a new default project
 
 > ksail init \ # to create a new custom project (★ is default)
-  --container-engine <★Docker★|Podman> \
-  --distribution <★Kind★|K3d> \
-  --deployment-tool <★Kubectl★|Flux> \
-  --cni <★Default★|Cilium|None> \
-  --csi <★Default★|None> \
-  --ingress-controller <★Default★|Traefik|None> \
-  --gateway-controller <★Default★|None> \
-  --secret-manager <★None★|SOPS> \
-  --mirror-registries <★true★|false> \
-  --editor <★Nano★|Vim>
+  --container-engine <★Docker★|Podman> \ # the container engine to provision your cluster in
+  --distribution <★Kind★|K3d> \ # the kubernetes distribution for your cluster
+  --deployment-tool <★Kubectl★|Flux> \ # the tool you want to use for declarative deployments
+  --cni <★Default★|Cilium|None> \ # the Container Network Interface (CNI) you want pre-installed
+  --csi <★Default★|None> \ # the Container Storage Interface (CSI) you want pre-installed
+  --ingress-controller <★Default★|Traefik|None> \ # the Ingress Controller you want pre-installed
+  --gateway-controller <★Default★|None> \ # the Gateway Controller you want pre-installed
+  --secret-manager <★None★|SOPS> \ # the secret manager you want to use to manage secrets in Git
+  --mirror-registries <★true★|false> \ # whether mirror registries should be set up or not
+  --editor <★Nano★|Vim> # the editor you want to use for commands that require it
 ```
 
 This creates the following project files, depending on your choices:
