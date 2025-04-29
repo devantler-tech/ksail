@@ -2,7 +2,8 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
     "config:recommended",
-    ":disableDependencyDashboard"
+    ":disableDependencyDashboard",
+    ":semanticCommitTypeAll(fix)"
   ],
   "github-actions": {
     "enabled": false
@@ -12,6 +13,5 @@
   },
   "patch": {
     "automerge": true
-  },
-  "semanticCommitType": "fix"
+  }
 }
