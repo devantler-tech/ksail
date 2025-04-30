@@ -17,6 +17,7 @@ class ProjectOptions(KSailCluster config)
   public readonly ProjectDeploymentToolOption DeploymentToolOption = new(config) { Arity = ArgumentArity.ZeroOrOne };
   public readonly ProjectIngressControllerOption IngressControllerOption = new(config) { Arity = ArgumentArity.ZeroOrOne };
   public readonly ProjectGatewayControllerOption GatewayControllerOption = new(config) { Arity = ArgumentArity.ZeroOrOne };
+  public readonly ProjectMetricsServerOption MetricsServerOption = new(config) { Arity = ArgumentArity.ZeroOrOne };
   public readonly ProjectSecretManagerOption SecretManagerOption = new(config) { Arity = ArgumentArity.ZeroOrOne };
   public readonly ProjectMirrorRegistriesOption MirrorRegistriesOption = new(config) { Arity = ArgumentArity.ZeroOrOne };
   public readonly ProjectEditorOption EditorOption = new(config) { Arity = ArgumentArity.ZeroOrOne };

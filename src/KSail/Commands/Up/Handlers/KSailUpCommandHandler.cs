@@ -27,6 +27,7 @@ class KSailUpCommandHandler(KSailCluster config)
   readonly CSIManager _csiBootstrapper = new(config);
   readonly IngressControllerManager _ingressControllerBootstrapper = new(config);
   readonly GatewayControllerManager _gatewayControllerBootstrapper = new(config);
+  readonly MetricsServerManager _metricsServerBootstrapper = new(config);
   readonly SecretManager _secretManagerBootstrapper = new(config);
   readonly DeploymentToolManager _deploymentToolBootstrapper = new(config);
   internal async Task<int> HandleAsync(CancellationToken cancellationToken = default)
@@ -36,8 +37,12 @@ class KSailUpCommandHandler(KSailCluster config)
     await _mirrorRegistryBootstrapper.BootstrapAsync(cancellationToken).ConfigureAwait(false);
     await _cniBootstrapper.BootstrapAsync(cancellationToken).ConfigureAwait(false);
     await _csiBootstrapper.BootstrapAsync(cancellationToken).ConfigureAwait(false);
-    await _ingressControllerBootstrapper.BootstrapAsync(cancellationToken).ConfigureAwait(false);
-    await _gatewayControllerBootstrapper.BootstrapAsync(cancellationToken).ConfigureAwait(false);
+    if (config.Spec.Project.CNI != KSailCNIType.None)
+    {
+      await _ingressControllerBootstrapper.BootstrapAsync(cancellationToken).ConfigureAwait(false);
+      await _gatewayControllerBootstrapper.BootstrapAsync(cancellationToken).ConfigureAwait(false);
+      await _metricsServerBootstrapper.BootstrapAsync(cancellationToken).ConfigureAwait(false);
+    }
     await _secretManagerBootstrapper.BootstrapAsync(cancellationToken).ConfigureAwait(false);
     await _deploymentToolBootstrapper.BootstrapAsync(cancellationToken).ConfigureAwait(false);
     return 0;

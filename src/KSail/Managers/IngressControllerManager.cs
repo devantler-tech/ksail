@@ -67,10 +67,10 @@ class IngressControllerManager(KSailCluster config) : IBootstrapManager
     switch (config.Spec.Project.Distribution)
     {
       case KSailDistributionType.Kind:
-        Console.WriteLine("► Deploying Traefik Ingress Controller with Helm");
+        Console.WriteLine("► Installing Traefik Ingress Controller with Helm");
         await _traefikInstaller.AddRepositoryAsync(cancellationToken).ConfigureAwait(false);
         await _traefikInstaller.InstallAsync(cancellationToken).ConfigureAwait(false);
-        Console.WriteLine("✔ Traefik Ingress Controller deployed");
+        Console.WriteLine("✔ Installed Traefik Ingress Controller with Helm");
         break;
       case KSailDistributionType.K3d:
         Console.WriteLine("✔ K3d Traefik Ingress Controller is enabled");

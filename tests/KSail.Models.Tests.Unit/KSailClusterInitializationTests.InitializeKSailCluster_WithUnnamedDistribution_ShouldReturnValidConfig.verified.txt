@@ -21,6 +21,7 @@
       CSI: Default,
       IngressController: Default,
       GatewayController: Default,
+      MetricsServer: true,
       SecretManager: None,
       Editor: Nano,
       MirrorRegistries: true

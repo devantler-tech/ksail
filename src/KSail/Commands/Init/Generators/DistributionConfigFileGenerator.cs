@@ -142,6 +142,17 @@ class DistributionConfigFileGenerator
         ]
       });
     }
+    if (!config.Spec.Project.MetricsServer)
+    {
+      extraArgs.Add(new K3dOptionsK3sExtraArg
+      {
+        Arg = "--disable=metrics-server",
+        NodeFilters =
+        [
+          "server:*"
+        ]
+      });
+    }
     if (extraArgs.Count > 0)
     {
       k3dConfig.Options = new()

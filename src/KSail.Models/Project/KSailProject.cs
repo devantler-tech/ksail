@@ -41,6 +41,9 @@ public class KSailProject
   [Description("The Gateway Controller to use. [default: Default]")]
   public KSailGatewayControllerType GatewayController { get; set; } = KSailGatewayControllerType.Default;
 
+  [Description("Whether to install Metrics Server. [default: true]")]
+  public bool MetricsServer { get; set; } = true;
+
   [Description("Whether to use a secret manager. [default: None]")]
   public KSailSecretManagerType SecretManager { get; set; } = KSailSecretManagerType.None;
 

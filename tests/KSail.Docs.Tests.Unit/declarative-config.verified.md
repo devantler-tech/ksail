@@ -42,6 +42,8 @@ spec:
     ingressController: Default
     # The Gateway Controller to use. [default: Default]
     gatewayController: Default
+    # Whether to install Metrics Server. [default: true]
+    metricsServer: true
     # Whether to use a secret manager. [default: None]
     secretManager: None
     # The editor to use for viewing files while debugging. [default: Nano]

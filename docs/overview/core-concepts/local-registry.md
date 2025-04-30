@@ -2,7 +2,7 @@
 title: Local Registry
 parent: Core Concepts
 layout: default
-nav_order: 8
+nav_order: 9
 ---
 
 # Local Registry

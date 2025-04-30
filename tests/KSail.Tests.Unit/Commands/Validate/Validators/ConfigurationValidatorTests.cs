@@ -382,6 +382,64 @@ public class ConfigurationValidatorTest
   }
 
   [Theory]
+  [InlineData(KSailDistributionType.K3d, true, false)]
+  [InlineData(KSailDistributionType.K3d, false, true)]
+  public async Task ValidateAsync_InvalidMetricsServer_ThrowsKSailException(KSailDistributionType distribution, bool actualMetricsServer, bool expectedMetricsServer)
+  {
+    string tempDir = Path.Combine(Path.GetTempPath(), "ksail-validate-invalid-metrics-server");
+    _ = await _rootCommand.InvokeAsync(["init", "--output", tempDir, "--distribution", distribution.ToString(), "--metrics-server", expectedMetricsServer.ToString()], _console);
+    var config = new KSailCluster
+    {
+      Spec = new KSailClusterSpec
+      {
+        Project = new KSailProject
+        {
+          Distribution = distribution,
+          MetricsServer = actualMetricsServer,
+          DistributionConfigPath = distribution switch
+          {
+            KSailDistributionType.K3d => "k3d.yaml",
+            KSailDistributionType.Kind => "kind.yaml",
+            _ => throw new KSailException($"unsupported distribution '{distribution}'.")
+          }
+        },
+        Connection = new KSailConnection
+        {
+          Context = distribution switch
+          {
+            KSailDistributionType.K3d => "k3d-ksail-default",
+            KSailDistributionType.Kind => "kind-ksail-default",
+            _ => throw new KSailException($"unsupported distribution '{distribution}'.")
+          }
+        },
+        DeploymentTool = new KSailDeploymentTool
+        {
+          Flux = new KSailFluxDeploymentTool
+          {
+            Source = new KSailFluxDeploymentToolRepository
+            {
+              Url = distribution switch
+              {
+                KSailDistributionType.Kind => new Uri("oci://ksail-registry:5000/ksail-registry"),
+                KSailDistributionType.K3d => new Uri("oci://host.k3d.internal:5555/ksail-registry"),
+                _ => throw new KSailException($"unsupported distribution '{distribution}'.")
+              }
+            }
+          }
+        },
+      }
+    };
+    var validator = new ConfigurationValidator(config);
+
+    // Act & Assert
+    var exception = await Assert.ThrowsAsync<KSailException>(async () => await validator.ValidateAsync(tempDir, CancellationToken.None).ConfigureAwait(false));
+    Assert.Contains($"'spec.project.metricsServer={actualMetricsServer}' in '", exception.Message, StringComparison.Ordinal);
+
+    //Cleanup
+    Directory.Delete(tempDir, true);
+  }
+
+  [Theory]
   [InlineData(KSailDistributionType.K3d)]
   public async Task ValidateAsync_InvalidMirrorRegistries_ThrowsKSailException(KSailDistributionType distribution)
   {

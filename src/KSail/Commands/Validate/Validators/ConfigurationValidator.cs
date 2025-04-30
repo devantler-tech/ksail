@@ -40,6 +40,7 @@ class ConfigurationValidator(KSailCluster config)
           CheckK3dCNI(projectRootPath, distributionConfig);
           CheckK3dCSI(projectRootPath, distributionConfig);
           CheckK3dIngressController(projectRootPath, distributionConfig);
+          CheckK3dMetricsServer(projectRootPath, distributionConfig);
           CheckK3dMirrorRegistries(projectRootPath, distributionConfig);
           break;
         }
@@ -211,6 +212,32 @@ class ConfigurationValidator(KSailCluster config)
     {
       throw new KSailException($"'spec.project.ingressController={config.Spec.Project.IngressController}' in '{Path.Combine(projectRootPath, config.Spec.Project.ConfigPath)}' does not match expected values in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'." + Environment.NewLine +
         $"  - please set 'options.k3s.extraArgs' to '--disable=traefik' for 'server:*' in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'.");
+    }
+  }
+
+  void CheckK3dMetricsServer(string projectRootPath, K3dConfig distributionConfig)
+  {
+    var expectedWithNoMetricsServerK3sExtraArgs = new List<K3dOptionsK3sExtraArg>
+    {
+      new() {
+        Arg = "--disable=metrics-server",
+        NodeFilters =
+        [
+          "server:*"
+        ]
+      }
+    };
+    var expectedWithNoMetricsServer = expectedWithNoMetricsServerK3sExtraArgs.Select(x => x.Arg + ":" + x.NodeFilters?.First()) ?? [];
+    var actual = distributionConfig.Options?.K3s?.ExtraArgs?.Select(x => x.Arg + ":" + (x.NodeFilters?.First() ?? "server:*")) ?? [];
+    if (config.Spec.Project.MetricsServer && actual.Intersect(expectedWithNoMetricsServer).Any())
+    {
+      throw new KSailException($"'spec.project.metricsServer={config.Spec.Project.MetricsServer}' in '{Path.Combine(projectRootPath, config.Spec.Project.ConfigPath)}' does not match expected values in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'." + Environment.NewLine +
+        $"  - please remove '--disable=metrics-server' from 'options.k3s.extraArgs' in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'.");
+    }
+    else if (!config.Spec.Project.MetricsServer && (!actual.Any() || !actual.All(expectedWithNoMetricsServer.Contains)))
+    {
+      throw new KSailException($"'spec.project.metricsServer={config.Spec.Project.MetricsServer}' in '{Path.Combine(projectRootPath, config.Spec.Project.ConfigPath)}' does not match expected values in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'." + Environment.NewLine +
+        $"  - please set 'options.k3s.extraArgs' to '--disable=metrics-server' for 'server:*' in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'.");
     }
   }
 
