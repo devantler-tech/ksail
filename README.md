@@ -44,7 +44,7 @@ Getting started with KSail is straightforward. Begin by initializing a new KSail
   --distribution <★Kind★|K3d> \ # the kubernetes distribution for your cluster
   --deployment-tool <★Kubectl★|Flux> \ # the tool you want to use for declarative deployments
   --cni <★Default★|Cilium|None> \ # the Container Network Interface (CNI) you want pre-installed
-  --csi <★Default★|None> \ # the Container Storage Interface (CSI) you want pre-installed
+  --csi <★Default★|LocalPathProvisioner|None> \ # the Container Storage Interface (CSI) you want pre-installed
   --ingress-controller <★Default★|Traefik|None> \ # the Ingress Controller you want pre-installed
   --gateway-controller <★Default★|None> \ # the Gateway Controller you want pre-installed
   --metrics-server <★True★|False> \ # whether metrics server should be pre-installed
