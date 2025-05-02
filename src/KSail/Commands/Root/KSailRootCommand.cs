@@ -1,4 +1,6 @@
 using System.CommandLine;
+using System.CommandLine.Builder;
+using System.CommandLine.Help;
 using System.CommandLine.Parsing;
 using KSail.Commands.Connect;
 using KSail.Commands.Down;
@@ -31,6 +33,15 @@ sealed class KSailRootCommand : RootCommand
         {
           var ksailRootCommandHandler = new KSailRootCommandHandler(console);
           context.ExitCode = await ksailRootCommandHandler.HandleAsync().ConfigureAwait(false);
+          if (context.ParseResult.CommandResult.Children.Count == 0)
+          {
+            var command = new CommandLineBuilder(this)
+              .UseHelp("--helpz")
+              .Build();
+
+            _ = await command.InvokeAsync("--helpz", console).ConfigureAwait(false);
+
+          }
         }
         catch (Exception ex)
         {
