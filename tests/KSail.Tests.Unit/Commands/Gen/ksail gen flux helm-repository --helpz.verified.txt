@@ -1,0 +1,12 @@
+﻿Description:
+  Generate a 'source.toolkit.fluxcd.io/v1/HelmRepository' resource.
+
+Usage:
+  testhost gen flux helm-repository [options]
+
+Options:
+  -o, --output <output>  A file or directory path. [default: ./helm-repository.yaml]
+  --overwrite            Overwrite existing files. [default: False]
+  --helpz                Show help and usage information
+
+

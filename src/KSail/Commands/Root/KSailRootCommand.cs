@@ -30,17 +30,11 @@ sealed class KSailRootCommand : RootCommand
         try
         {
           var ksailRootCommandHandler = new KSailRootCommandHandler(console);
-          int exitCode = await ksailRootCommandHandler.HandleAsync().ConfigureAwait(false);
-          if (exitCode == 0)
-          {
-            exitCode = await this.InvokeAsync("--help", console).ConfigureAwait(false);
-          }
-          context.ExitCode = exitCode;
+          context.ExitCode = await ksailRootCommandHandler.HandleAsync().ConfigureAwait(false);
         }
         catch (Exception ex)
         {
           _ = _exceptionHandler.HandleException(ex);
-          context.ExitCode = 1;
         }
       }
     );
@@ -58,8 +52,8 @@ sealed class KSailRootCommand : RootCommand
     AddCommand(new KSailListCommand());
     AddCommand(new KSailValidateCommand());
     AddCommand(new KSailConnectCommand());
-    AddCommand(new KSailGenCommand(console));
+    AddCommand(new KSailGenCommand());
     AddCommand(new KSailSecretsCommand(console));
-    AddCommand(new KSailRunCommand(console));
+    AddCommand(new KSailRunCommand());
   }
 }

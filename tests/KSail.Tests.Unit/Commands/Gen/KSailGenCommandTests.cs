@@ -1,5 +1,7 @@
 using System.CommandLine;
+using System.CommandLine.Builder;
 using System.CommandLine.IO;
+using System.CommandLine.Parsing;
 using System.Diagnostics.CodeAnalysis;
 using System.Text.RegularExpressions;
 using KSail.Commands.Root;
@@ -10,12 +12,23 @@ namespace KSail.Tests.Commands.Gen;
 public partial class KSailGenCommandTests
 {
   readonly TestConsole _console;
-  readonly KSailRootCommand _ksailCommand;
+  readonly Parser _ksailCommand;
 
   public KSailGenCommandTests()
   {
     _console = new TestConsole();
-    _ksailCommand = new KSailRootCommand(_console);
+    _ksailCommand = new CommandLineBuilder(new KSailRootCommand(_console))
+      .UseVersionOption()
+      .UseHelp("--helpz")
+      .UseEnvironmentVariableDirective()
+      .UseParseDirective()
+      .UseSuggestDirective()
+      .RegisterWithDotnetSuggest()
+      .UseTypoCorrections()
+      .UseParseErrorReporting()
+      .UseExceptionHandler()
+      .CancelOnProcessTermination()
+      .Build();
   }
 
   [Theory]

@@ -5,15 +5,7 @@ namespace KSail.Commands.Gen.Commands.Config;
 
 class KSailGenConfigCommand : Command
 {
-  public KSailGenConfigCommand(IConsole? console = default) : base("config", "Generate a configuration file.")
-  {
-    AddCommands();
-    this.SetHandler(async (context) =>
-      {
-        context.ExitCode = await this.InvokeAsync("--help", console).ConfigureAwait(false);
-      }
-    );
-  }
+  public KSailGenConfigCommand() : base("config", "Generate a configuration file.") => AddCommands();
 
   void AddCommands()
   {

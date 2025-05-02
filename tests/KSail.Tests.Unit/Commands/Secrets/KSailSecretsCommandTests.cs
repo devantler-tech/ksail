@@ -1,5 +1,7 @@
 using System.CommandLine;
+using System.CommandLine.Builder;
 using System.CommandLine.IO;
+using System.CommandLine.Parsing;
 using Devantler.Keys.Age;
 using KSail.Commands.Root;
 
@@ -9,22 +11,33 @@ namespace KSail.Tests.Unit.Commands.Secrets;
 public class KSailSecretsCommandTests
 {
   readonly TestConsole _console;
-  readonly KSailRootCommand _ksailCommand;
+  readonly Parser _ksailCommand;
   public KSailSecretsCommandTests()
   {
     _console = new TestConsole();
-    _ksailCommand = new KSailRootCommand(_console);
+    _ksailCommand = new CommandLineBuilder(new KSailRootCommand(_console))
+      .UseVersionOption()
+      .UseHelp("--helpz")
+      .UseEnvironmentVariableDirective()
+      .UseParseDirective()
+      .UseSuggestDirective()
+      .RegisterWithDotnetSuggest()
+      .UseTypoCorrections()
+      .UseParseErrorReporting()
+      .UseExceptionHandler()
+      .CancelOnProcessTermination()
+      .Build();
   }
 
   [Theory]
-  [InlineData(["secrets", "--help"])]
-  [InlineData(["secrets", "encrypt", "--help"])]
-  [InlineData(["secrets", "decrypt", "--help"])]
-  [InlineData(["secrets", "add", "--help"])]
-  [InlineData(["secrets", "rm", "--help"])]
-  [InlineData(["secrets", "list", "--help"])]
-  [InlineData(["secrets", "import", "--help"])]
-  [InlineData(["secrets", "export", "--help"])]
+  [InlineData(["secrets", "--helpz"])]
+  [InlineData(["secrets", "encrypt", "--helpz"])]
+  [InlineData(["secrets", "decrypt", "--helpz"])]
+  [InlineData(["secrets", "add", "--helpz"])]
+  [InlineData(["secrets", "rm", "--helpz"])]
+  [InlineData(["secrets", "list", "--helpz"])]
+  [InlineData(["secrets", "import", "--helpz"])]
+  [InlineData(["secrets", "export", "--helpz"])]
   public async Task KSailSecretsHelp_SucceedsAndPrintsIntroductionAndHelp(params string[] args)
   {
     //Act
