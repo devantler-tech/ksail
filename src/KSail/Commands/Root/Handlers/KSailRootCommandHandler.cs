@@ -3,14 +3,12 @@ using System.CommandLine;
 namespace KSail.Commands.Root.Handlers;
 
 
-class KSailRootCommandHandler
+class KSailRootCommandHandler(IConsole console) : ICommandHandler
 {
-
-
-  internal static bool Handle(IConsole console)
+  public Task<int> HandleAsync(CancellationToken cancellationToken = default)
   {
     PrintIntroduction(console);
-    return true;
+    return Task.FromResult(0);
   }
 
   static void PrintIntroduction(IConsole console)

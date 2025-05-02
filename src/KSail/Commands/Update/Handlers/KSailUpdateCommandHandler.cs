@@ -8,7 +8,7 @@ using KSail.Models.Project.Enums;
 
 namespace KSail.Commands.Update.Handlers;
 
-class KSailUpdateCommandHandler
+class KSailUpdateCommandHandler : ICommandHandler
 {
   readonly IDeploymentToolProvisioner _deploymentTool;
   readonly KSailCluster _config;
@@ -16,7 +16,7 @@ class KSailUpdateCommandHandler
   readonly Uri _ociRegistryFromHost;
   internal KSailUpdateCommandHandler(KSailCluster config)
   {
-    _ksailValidateCommandHandler = new KSailValidateCommandHandler(config);
+    _ksailValidateCommandHandler = new KSailValidateCommandHandler(config, "./");
     string scheme = config.Spec.DeploymentTool.Flux.Source.Url.Scheme;
     string host = "localhost";
     int port = config.Spec.LocalRegistry.HostPort;
@@ -31,11 +31,11 @@ class KSailUpdateCommandHandler
     _config = config;
   }
 
-  internal async Task<bool> HandleAsync(CancellationToken cancellationToken = default)
+  public async Task<int> HandleAsync(CancellationToken cancellationToken = default)
   {
     if (!await Validate(_config, cancellationToken).ConfigureAwait(false))
     {
-      return false;
+      return 1;
     }
     string manifestDirectory = _config.Spec.Project.KustomizationPath
       .Replace("./", string.Empty, StringComparison.OrdinalIgnoreCase)
@@ -60,14 +60,14 @@ class KSailUpdateCommandHandler
       Console.WriteLine("✔ reconciliation completed");
     }
 
-    return true;
+    return 0;
   }
 
   async Task<bool> Validate(KSailCluster config, CancellationToken cancellationToken = default)
   {
     if (config.Spec.Validation.ValidateOnUpdate)
     {
-      bool success = await _ksailValidateCommandHandler.HandleAsync("./", cancellationToken).ConfigureAwait(false);
+      bool success = await _ksailValidateCommandHandler.HandleAsync(cancellationToken).ConfigureAwait(false) == 0;
       Console.WriteLine();
       return success;
     }

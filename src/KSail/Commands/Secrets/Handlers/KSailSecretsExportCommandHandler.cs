@@ -4,13 +4,13 @@ using KSail.Models;
 
 namespace KSail.Commands.Secrets.Handlers;
 
-class KSailSecretsExportCommandHandler(string publicKey, string outputPath, ISecretManager<AgeKey> secretManager)
+class KSailSecretsExportCommandHandler(string publicKey, string outputPath, ISecretManager<AgeKey> secretManager) : ICommandHandler
 {
   readonly string _publicKey = publicKey;
   readonly string _outputPath = outputPath;
   readonly ISecretManager<AgeKey> _secretManager = secretManager;
 
-  internal async Task<int> HandleAsync(CancellationToken cancellationToken)
+  public async Task<int> HandleAsync(CancellationToken cancellationToken)
   {
     Console.WriteLine($"► exporting '{_publicKey}' from SOPS to '{_outputPath}'");
     var key = await _secretManager.GetKeyAsync(_publicKey, cancellationToken).ConfigureAwait(false);

@@ -6,7 +6,7 @@ using KSail.Models.Project.Enums;
 
 namespace KSail.Commands.Stop.Handlers;
 
-class KSailStopCommandHandler
+class KSailStopCommandHandler : ICommandHandler
 {
   readonly KSailCluster _config;
   readonly IKubernetesClusterProvisioner _clusterProvisioner;
@@ -22,7 +22,7 @@ class KSailStopCommandHandler
     };
   }
 
-  internal async Task<int> HandleAsync(CancellationToken cancellationToken = default)
+  public async Task<int> HandleAsync(CancellationToken cancellationToken = default)
   {
     Console.WriteLine($"⏹️ Stopping cluster...");
     Console.WriteLine($"► stopping cluster '{_config.Spec.Connection.Context}'");

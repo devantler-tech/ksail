@@ -6,11 +6,11 @@ using KSail.Models.Project.Enums;
 
 namespace KSail.Commands.Status.Handlers;
 
-sealed class KSailStatusCommandHandler(KSailCluster config)
+sealed class KSailStatusCommandHandler(KSailCluster config) : ICommandHandler
 {
   readonly KSailCluster _config = config;
 
-  internal async Task<bool> HandleAsync(CancellationToken cancellationToken = default)
+  public async Task<int> HandleAsync(CancellationToken cancellationToken = default)
   {
     var (LiveCheckExitCode, LiveCheckMessage) = await Devantler.KubectlCLI.Kubectl.RunAsync(
       ["get", "--raw", $"/livez{(_config.Spec.Validation.Verbose ? "?verbose" : "")}", "--kubeconfig", _config.Spec.Connection.Kubeconfig, "--context", _config.Spec.Connection.Context],
@@ -32,6 +32,6 @@ sealed class KSailStatusCommandHandler(KSailCluster config)
       Console.WriteLine($"Live: {LiveCheckMessage}");
       Console.WriteLine($"Ready: {ReadyCheckMessage}");
     }
-    return LiveCheckExitCode == 0 && ReadyCheckExitCode == 0;
+    return (LiveCheckExitCode == 0 && ReadyCheckExitCode == 0) ? 0 : 1;
   }
 }
