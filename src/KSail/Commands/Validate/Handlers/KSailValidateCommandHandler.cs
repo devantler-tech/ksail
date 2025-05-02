@@ -5,13 +5,13 @@ using KSail.Models;
 
 namespace KSail.Commands.Validate.Handlers;
 
-class KSailValidateCommandHandler(KSailCluster config)
+class KSailValidateCommandHandler(KSailCluster config, string path) : ICommandHandler
 {
   readonly ConfigurationValidator _configValidator = new(config);
   readonly YamlSyntaxValidator _yamlSyntaxValidator = new();
   readonly SchemaValidator _schemaValidator = new();
 
-  internal async Task<bool> HandleAsync(string path, CancellationToken cancellationToken = default)
+  public async Task<int> HandleAsync(CancellationToken cancellationToken = default)
   {
     Console.WriteLine("🔍 Validating project files and configuration...");
     if (!Directory.Exists(path) || Directory.GetFiles(path, "*.yaml", SearchOption.AllDirectories).Length == 0)
@@ -33,6 +33,6 @@ class KSailValidateCommandHandler(KSailCluster config)
     if (!schemasAreValid)
       throw new KSailException(schemasMessage);
     Console.WriteLine("✔ schemas are valid");
-    return yamlIsValid && schemasAreValid;
+    return yamlIsValid && schemasAreValid ? 0 : 1;
   }
 }

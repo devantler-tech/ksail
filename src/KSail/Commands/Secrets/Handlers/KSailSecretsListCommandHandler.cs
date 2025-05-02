@@ -5,12 +5,12 @@ using KSail.Utils;
 
 namespace KSail.Commands.Secrets.Handlers;
 
-class KSailSecretsListCommandHandler(KSailCluster config, ISecretManager<AgeKey> secretManager)
+class KSailSecretsListCommandHandler(KSailCluster config, ISecretManager<AgeKey> secretManager) : ICommandHandler
 {
   readonly KSailCluster _config = config;
   readonly ISecretManager<AgeKey> _secretManager = secretManager;
 
-  internal async Task<bool> HandleAsync(CancellationToken cancellationToken)
+  public async Task<int> HandleAsync(CancellationToken cancellationToken)
   {
     var keys = await _secretManager.ListKeysAsync(cancellationToken).ConfigureAwait(false);
 
@@ -20,7 +20,7 @@ class KSailSecretsListCommandHandler(KSailCluster config, ISecretManager<AgeKey>
       if (!keys.Any(key => sopsConfig.CreationRules.Any(rule => rule.Age == key.PublicKey)))
       {
         Console.WriteLine("► no keys found");
-        return true;
+        return 0;
       }
       foreach (var key in keys.Where(key => sopsConfig.CreationRules.Any(rule => rule.Age == key.PublicKey)))
       {
@@ -40,7 +40,7 @@ class KSailSecretsListCommandHandler(KSailCluster config, ISecretManager<AgeKey>
       if (!keys.Any())
       {
         Console.WriteLine("► no keys found");
-        return true;
+        return 0;
       }
       foreach (var key in keys)
       {
@@ -55,7 +55,7 @@ class KSailSecretsListCommandHandler(KSailCluster config, ISecretManager<AgeKey>
         Console.WriteLine();
       }
     }
-    return true;
+    return 0;
   }
 
   static string Obscure(AgeKey key)

@@ -4,10 +4,10 @@ using Devantler.KubernetesGenerator.Flux.Models.HelmRelease;
 
 namespace KSail.Commands.Gen.Handlers.Flux;
 
-class KSailGenFluxHelmReleaseCommandHandler(string outputFile, bool overwrite)
+class KSailGenFluxHelmReleaseCommandHandler(string outputFile, bool overwrite) : ICommandHandler
 {
   readonly FluxHelmReleaseGenerator _generator = new();
-  internal async Task<int> HandleAsync(CancellationToken cancellationToken = default)
+  public async Task<int> HandleAsync(CancellationToken cancellationToken = default)
   {
     var helmRelease = new FluxHelmRelease()
     {

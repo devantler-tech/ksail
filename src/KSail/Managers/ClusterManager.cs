@@ -12,7 +12,7 @@ class ClusterManager(KSailCluster config) : IBootstrapManager, ICleanupManager
 {
   readonly IKubernetesClusterProvisioner _clusterProvisioner = ClusterProvisionerFactory.Create(config);
   readonly IContainerEngineProvisioner _containerEngineProvisioner = ContainerEngineProvisionerFactory.Create(config);
-  readonly KSailValidateCommandHandler _ksailValidateCommandHandler = new(config);
+  readonly KSailValidateCommandHandler _ksailValidateCommandHandler = new(config, "./");
   public async Task BootstrapAsync(CancellationToken cancellationToken = default)
   {
     await CheckPrerequisites(cancellationToken).ConfigureAwait(false);
@@ -62,7 +62,7 @@ class ClusterManager(KSailCluster config) : IBootstrapManager, ICleanupManager
   {
     if (config.Spec.Validation.ValidateOnUp)
     {
-      bool success = await _ksailValidateCommandHandler.HandleAsync("./", cancellationToken).ConfigureAwait(false);
+      bool success = (await _ksailValidateCommandHandler.HandleAsync(cancellationToken).ConfigureAwait(false)) == 0;
       Console.WriteLine();
       return success;
     }

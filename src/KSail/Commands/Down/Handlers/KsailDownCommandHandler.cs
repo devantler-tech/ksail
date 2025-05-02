@@ -12,16 +12,16 @@ using KSail.Models.Project.Enums;
 
 namespace KSail.Commands.Down.Handlers;
 
-class KSailDownCommandHandler(KSailCluster config)
+class KSailDownCommandHandler(KSailCluster config) : ICommandHandler
 {
   readonly ClusterManager _clusterManager = new(config);
   readonly MirrorRegistryManager _mirrorRegistryManager = new(config);
 
-  internal async Task<bool> HandleAsync(CancellationToken cancellationToken = default)
+  public async Task<int> HandleAsync(CancellationToken cancellationToken = default)
   {
     Console.WriteLine($"🔥 Destroying cluster...");
     await _clusterManager.CleanupAsync(cancellationToken).ConfigureAwait(false);
     await _mirrorRegistryManager.CleanupAsync(cancellationToken).ConfigureAwait(false);
-    return true;
+    return 0;
   }
 }

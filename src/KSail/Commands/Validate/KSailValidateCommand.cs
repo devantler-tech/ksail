@@ -24,8 +24,8 @@ sealed class KSailValidateCommand : Command
       {
         string path = context.ParseResult.GetValueForOption(_pathOption) ?? "./";
         var config = await KSailClusterConfigLoader.LoadWithoptionsAsync(context, path).ConfigureAwait(false);
-        var handler = new KSailValidateCommandHandler(config);
-        context.ExitCode = await handler.HandleAsync(path, context.GetCancellationToken()).ConfigureAwait(false) ? 0 : 1;
+        var handler = new KSailValidateCommandHandler(config, path);
+        context.ExitCode = await handler.HandleAsync(context.GetCancellationToken()).ConfigureAwait(false);
       }
       catch (Exception ex)
       {

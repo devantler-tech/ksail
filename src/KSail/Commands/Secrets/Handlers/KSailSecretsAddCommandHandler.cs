@@ -4,11 +4,11 @@ using Devantler.SecretManager.Core;
 
 namespace KSail.Commands.Secrets.Handlers;
 
-class KSailSecretsAddCommandHandler(ISecretManager<AgeKey> secretManager, IConsole console)
+class KSailSecretsAddCommandHandler(ISecretManager<AgeKey> secretManager, IConsole console) : ICommandHandler
 {
   readonly ISecretManager<AgeKey> _secretManager = secretManager;
 
-  internal async Task<int> HandleAsync(CancellationToken cancellationToken)
+  public async Task<int> HandleAsync(CancellationToken cancellationToken)
   {
     var key = await _secretManager.CreateKeyAsync(cancellationToken).ConfigureAwait(false);
     console.WriteLine(key.ToString());

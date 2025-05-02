@@ -5,13 +5,13 @@ using KSail.Models.Project.Enums;
 
 namespace KSail.Commands.List.Handlers;
 
-sealed class KSailListCommandHandler(KSailCluster config)
+sealed class KSailListCommandHandler(KSailCluster config) : ICommandHandler
 {
   readonly KSailCluster _config = config;
   readonly K3dProvisioner _k3dProvisioner = new();
   readonly KindProvisioner _kindProvisioner = new();
 
-  internal async Task<bool> HandleAsync(CancellationToken cancellationToken = default)
+  public async Task<int> HandleAsync(CancellationToken cancellationToken = default)
   {
     IEnumerable<string> clusters;
     if (_config.Spec.Distribution.ShowAllClustersInListings)
@@ -24,7 +24,7 @@ sealed class KSailListCommandHandler(KSailCluster config)
       Console.WriteLine("---- Kind ----");
       clusters = [.. await _kindProvisioner.ListAsync(cancellationToken).ConfigureAwait(false)];
       PrintClusters(clusters);
-      return true;
+      return 0;
     }
     else
     {
@@ -35,7 +35,7 @@ sealed class KSailListCommandHandler(KSailCluster config)
         _ => throw new NotSupportedException($"The container engine '{_config.Spec.Project.ContainerEngine}' and distribution '{_config.Spec.Project.Distribution}' combination is not supported.")
       };
       PrintClusters(clusters);
-      return true;
+      return 0;
     }
   }
 

@@ -3,7 +3,7 @@ using Devantler.KubernetesGenerator.Kustomize.Models;
 
 namespace KSail.Commands.Gen.Handlers.Kustomize;
 
-class KSailGenKustomizeComponentCommandHandler(string outputFile, bool overwrite)
+class KSailGenKustomizeComponentCommandHandler(string outputFile, bool overwrite) : ICommandHandler
 {
   readonly KustomizeComponentGenerator _generator = new();
   public async Task<int> HandleAsync(CancellationToken cancellationToken = default)

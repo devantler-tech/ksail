@@ -6,7 +6,7 @@ using KSail.Models.Project.Enums;
 
 namespace KSail.Commands.Start.Handlers;
 
-class KSailStartCommandHandler
+class KSailStartCommandHandler : ICommandHandler
 {
   readonly KSailCluster _config;
   readonly IKubernetesClusterProvisioner _clusterProvisioner;
@@ -22,7 +22,7 @@ class KSailStartCommandHandler
     };
   }
 
-  internal async Task<int> HandleAsync(CancellationToken cancellationToken = default)
+  public async Task<int> HandleAsync(CancellationToken cancellationToken = default)
   {
     Console.WriteLine($"▶️ Starting cluster...");
     Console.WriteLine($"► starting cluster '{_config.Spec.Connection.Context}'");

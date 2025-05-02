@@ -3,10 +3,10 @@ using k8s.Models;
 
 namespace KSail.Commands.Gen.Handlers.Native;
 
-class KSailGenNativeIngressCommandHandler(string outputFile, bool overwrite)
+class KSailGenNativeIngressCommandHandler(string outputFile, bool overwrite) : ICommandHandler
 {
   readonly IngressGenerator _generator = new();
-  internal async Task<int> HandleAsync(CancellationToken cancellationToken = default)
+  public async Task<int> HandleAsync(CancellationToken cancellationToken = default)
   {
     var model = new V1Ingress
     {
