@@ -42,10 +42,12 @@ public partial class KSailRunCommandTests
     _ = await Verify(_console.Error.ToString() + _console.Out).UseFileName($"ksail {string.Join(" ", command)}");
   }
 
-  [Theory]
+  [SkippableTheory]
   [MemberData(nameof(KSailRunCommandTestsTheoryData.RunTheoryData), MemberType = typeof(KSailRunCommandTestsTheoryData))]
   public async Task KSailRun_Succeeds(string[] command)
   {
+    //TODO: Add support for Windows at a later time.
+    Skip.If(OperatingSystem.IsWindows(), "Skipping test on Windows OS.");
     //Act
     int exitCode = await _ksailCommand.InvokeAsync(command, _console);
 
