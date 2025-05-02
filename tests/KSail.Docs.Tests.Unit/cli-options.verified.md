@@ -38,6 +38,7 @@ Commands:
   connect   Connect to a cluster with K9s
   gen       Generate a resource
   secrets   Manage secrets
+  run       Run a command
 ```
 
 ## `ksail up`
@@ -199,6 +200,7 @@ Commands:
   connect   Connect to a cluster with K9s
   gen       Generate a resource
   secrets   Manage secrets
+  run       Run a command
 ```
 
 ## `ksail status`

@@ -1,0 +1,14 @@
+﻿Description:
+  Run 'cilium' command
+
+Usage:
+  testhost run cilium [<args>...] [options]
+
+Arguments:
+  <args>  Arguments to pass to a binary
+
+Options:
+  -?, -h, --help  Show help and usage information
+
+
+

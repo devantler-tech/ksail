@@ -1,0 +1,14 @@
+﻿Description:
+  Run 'kubeconform' command
+
+Usage:
+  testhost run kubeconform [<args>...] [options]
+
+Arguments:
+  <args>  Arguments to pass to a binary
+
+Options:
+  -?, -h, --help  Show help and usage information
+
+
+

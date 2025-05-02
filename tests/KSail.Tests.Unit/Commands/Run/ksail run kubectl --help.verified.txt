@@ -1,0 +1,14 @@
+﻿Description:
+  Run 'kubectl' command
+
+Usage:
+  testhost run kubectl [<args>...] [options]
+
+Arguments:
+  <args>  Arguments to pass to a binary
+
+Options:
+  -?, -h, --help  Show help and usage information
+
+
+

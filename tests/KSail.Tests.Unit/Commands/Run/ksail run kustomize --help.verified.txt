@@ -1,0 +1,14 @@
+﻿Description:
+  Run 'kustomize' command
+
+Usage:
+  testhost run kustomize [<args>...] [options]
+
+Arguments:
+  <args>  Arguments to pass to a binary
+
+Options:
+  -?, -h, --help  Show help and usage information
+
+
+
