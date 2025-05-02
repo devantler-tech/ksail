@@ -1,0 +1,14 @@
+﻿Description:
+  Run 'helm' command
+
+Usage:
+  testhost run helm [<args>...] [options]
+
+Arguments:
+  <args>  Arguments to pass to a binary
+
+Options:
+  -?, -h, --help  Show help and usage information
+
+
+

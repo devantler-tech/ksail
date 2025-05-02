@@ -1,0 +1,14 @@
+﻿Description:
+  Run 'k9s' command
+
+Usage:
+  testhost run k9s [<args>...] [options]
+
+Arguments:
+  <args>  Arguments to pass to a binary
+
+Options:
+  -?, -h, --help  Show help and usage information
+
+
+
