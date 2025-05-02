@@ -8,15 +8,15 @@ Options:
   --helpz  Show help and usage information
 
 Commands:
-  kind <args>         Run 'kind' command
-  k3d <args>          Run 'k3d' command
-  kubectl <args>      Run 'kubectl' command
+  age-keygen <args>   Run 'age-keygen' command
+  cilium <args>       Run 'cilium' command
   flux <args>         Run 'flux' command
   helm <args>         Run 'helm' command
-  cilium <args>       Run 'cilium' command
-  kustomize <args>    Run 'kustomize' command
-  kubeconform <args>  Run 'kubeconform' command
-  sops <args>         Run 'sops' command
-  age-keygen <args>   Run 'age-keygen' command
+  k3d <args>          Run 'k3d' command
   k9s <args>          Run 'k9s' command
+  kind <args>         Run 'kind' command
+  kubeconform <args>  Run 'kubeconform' command
+  kubectl <args>      Run 'kubectl' command
+  kustomize <args>    Run 'kustomize' command
+  sops <args>         Run 'sops' command
 

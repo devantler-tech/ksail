@@ -27,15 +27,15 @@ static class CLIOptionsGenerator
     var helpTexts = new Dictionary<string, string?>
     {
       { "ksail", await GetHelpTextAsync(ksailCommand, "--helpz").ConfigureAwait(false) },
+      { "ksail init", await GetHelpTextAsync(ksailCommand, "init", "--helpz").ConfigureAwait(false) },
       { "ksail up", await GetHelpTextAsync(ksailCommand, "up", "--helpz").ConfigureAwait(false) },
-      { "ksail down", await GetHelpTextAsync(ksailCommand, "down", "--helpz").ConfigureAwait(false) },
       { "ksail update", await GetHelpTextAsync(ksailCommand, "update", "--helpz").ConfigureAwait(false) },
       { "ksail start", await GetHelpTextAsync(ksailCommand, "start", "--helpz").ConfigureAwait(false) },
       { "ksail stop", await GetHelpTextAsync(ksailCommand, "stop", "--helpz").ConfigureAwait(false) },
-      { "ksail init", await GetHelpTextAsync(ksailCommand, "init", "--helpz").ConfigureAwait(false) },
-      { "ksail lint", await GetHelpTextAsync(ksailCommand, "lint", "--helpz").ConfigureAwait(false) },
+      { "ksail down", await GetHelpTextAsync(ksailCommand, "down", "--helpz").ConfigureAwait(false) },
       { "ksail status", await GetHelpTextAsync(ksailCommand, "status", "--helpz").ConfigureAwait(false) },
       { "ksail list", await GetHelpTextAsync(ksailCommand, "list", "--helpz").ConfigureAwait(false) },
+      { "ksail validate", await GetHelpTextAsync(ksailCommand, "validate", "--helpz").ConfigureAwait(false) },
       { "ksail connect", await GetHelpTextAsync(ksailCommand, "connect", "--helpz").ConfigureAwait(false) },
       { "ksail gen", await GetHelpTextAsync(ksailCommand, "gen", "--helpz").ConfigureAwait(false) },
       { "ksail gen cert-manager", await GetHelpTextAsync(ksailCommand, "gen", "cert-manager", "--helpz").ConfigureAwait(false) },
@@ -83,7 +83,8 @@ static class CLIOptionsGenerator
       { "ksail secrets rm", await GetHelpTextAsync(ksailCommand, "secrets", "rm", "--helpz").ConfigureAwait(false) },
       { "ksail secrets list", await GetHelpTextAsync(ksailCommand, "secrets", "list", "--helpz").ConfigureAwait(false) },
       { "ksail secrets import", await GetHelpTextAsync(ksailCommand, "secrets", "import", "--helpz").ConfigureAwait(false) },
-      { "ksail secrets export", await GetHelpTextAsync(ksailCommand, "secrets", "export", "--helpz").ConfigureAwait(false) }
+      { "ksail secrets export", await GetHelpTextAsync(ksailCommand, "secrets", "export", "--helpz").ConfigureAwait(false) },
+      { "ksail run", await GetHelpTextAsync(ksailCommand, "run", "--helpz").ConfigureAwait(false) }
     };
 
     return GenerateMarkdown(helpTexts);

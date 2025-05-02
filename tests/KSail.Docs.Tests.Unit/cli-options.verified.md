@@ -41,6 +41,36 @@ Commands:
   run       Run a command
 ```
 
+## `ksail init`
+
+```text
+Description:
+  Initialize a new project
+
+Usage:
+  ksail init [options]
+
+Options:
+  -o, --output <output>                             Output directory for the project files. [default: ./] [default: ./]
+  -n, --name <name>                                 The name of the cluster. [default: ksail-default]
+  -c, --config <config>                             The path to the ksail configuration file. [default: ksail.yaml]
+  -dc, --distribution-config <distribution-config>  Path to the distribution configuration file. [default: kind.yaml]
+  -kp, --kustomization-path <kustomization-path>    The path to the root kustomization directory. [default: k8s]
+  -ce, --container-engine <Docker|Podman>           The container engine in which to provision the cluster. [default: Docker]
+  -d, --distribution <K3d|Kind>                     The distribution to use for the cluster. [default: Kind]
+  -dt, --deployment-tool <Flux|Kubectl>             The Deployment tool to use for applying a kustomization. [default: Kubectl]
+  --cni <Cilium|Default|None>                       The CNI to use. [default: Default]
+  --csi <Default|LocalPathProvisioner|None>         The CSI to use. [default: Default]
+  -ic, --ingress-controller <Default|None|Traefik>  The Ingress Controller to use. [default: Default]
+  -gc, --gateway-controller <Default|None>          The Gateway Controller to use. [default: Default]
+  -ms, --metrics-server                             Whether to install Metrics Server. [default: True]
+  -mr, --mirror-registries                          Enable mirror registries for the project. [default: True]
+  -sm, --secret-manager <None|SOPS>                 Whether to use a secret manager. [default: None]
+  -e, --editor <Nano|Vim>                           Editor to use. [default: Nano]
+  --overwrite                                       Overwrite existing files. [default: False]
+  --helpz                                           Show help and usage information
+```
+
 ## `ksail up`
 
 ```text
@@ -71,24 +101,6 @@ Options:
   -v, --validate                                    Validate project files before creating a new cluster. [default: True]
   -r, --reconcile                                   Reconcile manifests. [default: True]
   --helpz                                           Show help and usage information
-```
-
-## `ksail down`
-
-```text
-Description:
-  Destroy a cluster
-
-Usage:
-  ksail down [options]
-
-Options:
-  -fsu, --flux-source-url <flux-source-url>  Flux source URL for reconciling GitOps resources. [default: oci://ksail-registry:5000/ksail-registry]
-  -n, --name <name>                          The name of the cluster. [default: ksail-default]
-  -d, --distribution <K3d|Kind>              The distribution to use for the cluster. [default: Kind]
-  -ce, --container-engine <Docker|Podman>    The container engine in which to provision the cluster. [default: Docker]
-  -mr, --mirror-registries                   Enable mirror registries for the project. [default: True]
-  --helpz                                    Show help and usage information
 ```
 
 ## `ksail update`
@@ -142,65 +154,22 @@ Options:
   --helpz                                  Show help and usage information
 ```
 
-## `ksail init`
+## `ksail down`
 
 ```text
 Description:
-  Initialize a new project
+  Destroy a cluster
 
 Usage:
-  ksail init [options]
+  ksail down [options]
 
 Options:
-  -o, --output <output>                             Output directory for the project files. [default: ./] [default: ./]
-  -n, --name <name>                                 The name of the cluster. [default: ksail-default]
-  -c, --config <config>                             The path to the ksail configuration file. [default: ksail.yaml]
-  -dc, --distribution-config <distribution-config>  Path to the distribution configuration file. [default: kind.yaml]
-  -kp, --kustomization-path <kustomization-path>    The path to the root kustomization directory. [default: k8s]
-  -ce, --container-engine <Docker|Podman>           The container engine in which to provision the cluster. [default: Docker]
-  -d, --distribution <K3d|Kind>                     The distribution to use for the cluster. [default: Kind]
-  -dt, --deployment-tool <Flux|Kubectl>             The Deployment tool to use for applying a kustomization. [default: Kubectl]
-  --cni <Cilium|Default|None>                       The CNI to use. [default: Default]
-  --csi <Default|LocalPathProvisioner|None>         The CSI to use. [default: Default]
-  -ic, --ingress-controller <Default|None|Traefik>  The Ingress Controller to use. [default: Default]
-  -gc, --gateway-controller <Default|None>          The Gateway Controller to use. [default: Default]
-  -ms, --metrics-server                             Whether to install Metrics Server. [default: True]
-  -mr, --mirror-registries                          Enable mirror registries for the project. [default: True]
-  -sm, --secret-manager <None|SOPS>                 Whether to use a secret manager. [default: None]
-  -e, --editor <Nano|Vim>                           Editor to use. [default: Nano]
-  --overwrite                                       Overwrite existing files. [default: False]
-  --helpz                                           Show help and usage information
-```
-
-## `ksail lint`
-
-```text
-'lint' was not matched. Did you mean one of the following?
-list
-Description:
-  KSail is an SDK for Kubernetes. Ship k8s with ease!
-
-Usage:
-  ksail [command] [options]
-
-Options:
-  --version  Show version information
-  --helpz    Show help and usage information
-
-Commands:
-  init      Initialize a new project
-  up        Create a cluster
-  update    Update a cluster
-  start     Start a cluster
-  stop      Stop a cluster
-  down      Destroy a cluster
-  status    Show the status of a cluster
-  list      List active clusters
-  validate  Validate project files
-  connect   Connect to a cluster with K9s
-  gen       Generate a resource
-  secrets   Manage secrets
-  run       Run a command
+  -fsu, --flux-source-url <flux-source-url>  Flux source URL for reconciling GitOps resources. [default: oci://ksail-registry:5000/ksail-registry]
+  -n, --name <name>                          The name of the cluster. [default: ksail-default]
+  -d, --distribution <K3d|Kind>              The distribution to use for the cluster. [default: Kind]
+  -ce, --container-engine <Docker|Podman>    The container engine in which to provision the cluster. [default: Docker]
+  -mr, --mirror-registries                   Enable mirror registries for the project. [default: True]
+  --helpz                                    Show help and usage information
 ```
 
 ## `ksail status`
@@ -233,6 +202,20 @@ Options:
   -d, --distribution <K3d|Kind>            The distribution to use for the cluster. [default: Kind]
   -a, --all                                List clusters from all distributions. [default: False]
   --helpz                                  Show help and usage information
+```
+
+## `ksail validate`
+
+```text
+Description:
+  Validate project files
+
+Usage:
+  ksail validate [options]
+
+Options:
+  -p, --path <path>  Path to the project files. [default: ./] [default: ./]
+  --helpz            Show help and usage information
 ```
 
 ## `ksail connect`
@@ -1016,4 +999,30 @@ Arguments:
 Options:
   -o, --output <output>  A file or directory path. []
   --helpz                Show help and usage information
+```
+
+## `ksail run`
+
+```text
+Description:
+  Run a command
+
+Usage:
+  ksail run [command] [options]
+
+Options:
+  --helpz  Show help and usage information
+
+Commands:
+  age-keygen <args>   Run 'age-keygen' command
+  cilium <args>       Run 'cilium' command
+  flux <args>         Run 'flux' command
+  helm <args>         Run 'helm' command
+  k3d <args>          Run 'k3d' command
+  k9s <args>          Run 'k9s' command
+  kind <args>         Run 'kind' command
+  kubeconform <args>  Run 'kubeconform' command
+  kubectl <args>      Run 'kubectl' command
+  kustomize <args>    Run 'kustomize' command
+  sops <args>         Run 'sops' command
 ```

@@ -11,16 +11,16 @@ sealed class KSailRunCommand : Command
   internal KSailRunCommand() : base("run", "Run a command") => AddCommands();
   void AddCommands()
   {
-    AddCommand(new KSailRunKindCommand());
-    AddCommand(new KSailRunK3dCommand());
-    AddCommand(new KSailRunKubectlCommand());
+    AddCommand(new KSailRunAgeKeygenCommand());
+    AddCommand(new KSailRunCiliumCommand());
     AddCommand(new KSailRunFluxCommand());
     AddCommand(new KSailRunHelmCommand());
-    AddCommand(new KSailRunCiliumCommand());
-    AddCommand(new KSailRunKustomizeCommand());
-    AddCommand(new KSailRunKubeconformCommand());
-    AddCommand(new KSailRunSopsCommand());
-    AddCommand(new KSailRunAgeKeygenCommand());
+    AddCommand(new KSailRunK3dCommand());
     AddCommand(new KSailRunK9sCommand());
+    AddCommand(new KSailRunKindCommand());
+    AddCommand(new KSailRunKubeconformCommand());
+    AddCommand(new KSailRunKubectlCommand());
+    AddCommand(new KSailRunKustomizeCommand());
+    AddCommand(new KSailRunSopsCommand());
   }
 }
