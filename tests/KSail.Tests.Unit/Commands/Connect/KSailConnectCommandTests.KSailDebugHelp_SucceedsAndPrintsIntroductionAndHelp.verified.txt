@@ -8,6 +8,6 @@ Options:
   -k, --kubeconfig <kubeconfig>  Path to kubeconfig file. [default: {UserProfile}/.kube/config]
   -c, --context <context>        The kubernetes context to use. [default: kind-ksail-default]
   -e, --editor <Nano|Vim>        Editor to use. [default: Nano]
-  -?, -h, --help                 Show help and usage information
+  --helpz                        Show help and usage information
 
 

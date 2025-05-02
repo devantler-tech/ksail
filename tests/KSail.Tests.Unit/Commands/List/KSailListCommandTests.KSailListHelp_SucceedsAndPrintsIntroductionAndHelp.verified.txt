@@ -8,6 +8,6 @@ Options:
   -ce, --container-engine <Docker|Podman>  The container engine in which to provision the cluster. [default: Docker]
   -d, --distribution <K3d|Kind>            The distribution to use for the cluster. [default: Kind]
   -a, --all                                List clusters from all distributions. [default: False]
-  -?, -h, --help                           Show help and usage information
+  --helpz                                  Show help and usage information
 
 

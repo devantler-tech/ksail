@@ -8,16 +8,7 @@ namespace KSail.Commands.Run;
 
 sealed class KSailRunCommand : Command
 {
-  internal KSailRunCommand(IConsole? console = default) : base("run", "Run a command")
-  {
-    console ??= new SystemConsole();
-    AddCommands();
-    this.SetHandler(async (context) =>
-      {
-        context.ExitCode = await this.InvokeAsync("--help", console).ConfigureAwait(false);
-      }
-    );
-  }
+  internal KSailRunCommand() : base("run", "Run a command") => AddCommands();
   void AddCommands()
   {
     AddCommand(new KSailRunKindCommand());

@@ -1,6 +1,8 @@
 using System.Collections.ObjectModel;
 using System.CommandLine;
+using System.CommandLine.Builder;
 using System.CommandLine.IO;
+using System.CommandLine.Parsing;
 using System.Text.RegularExpressions;
 using Devantler.SecretManager.SOPS.LocalAge;
 using KSail.Commands.Root;
@@ -11,19 +13,30 @@ namespace KSail.Tests.Commands.Init;
 public partial class KSailInitCommandTests
 {
   readonly TestConsole _console;
-  readonly KSailRootCommand _ksailCommand;
+  readonly Parser _ksailCommand;
 
   public KSailInitCommandTests()
   {
     _console = new TestConsole();
-    _ksailCommand = new KSailRootCommand(_console);
+    _ksailCommand = new CommandLineBuilder(new KSailRootCommand(_console))
+      .UseVersionOption()
+      .UseHelp("--helpz")
+      .UseEnvironmentVariableDirective()
+      .UseParseDirective()
+      .UseSuggestDirective()
+      .RegisterWithDotnetSuggest()
+      .UseTypoCorrections()
+      .UseParseErrorReporting()
+      .UseExceptionHandler()
+      .CancelOnProcessTermination()
+      .Build();
   }
 
   [Fact]
   public async Task KSailInitHelp_SucceedsAndPrintsIntroductionAndHelp()
   {
     //Act
-    int exitCode = await _ksailCommand.InvokeAsync(["init", "--help"], _console);
+    int exitCode = await _ksailCommand.InvokeAsync(["init", "--helpz"], _console);
 
     //Assert
     Assert.Equal(0, exitCode);

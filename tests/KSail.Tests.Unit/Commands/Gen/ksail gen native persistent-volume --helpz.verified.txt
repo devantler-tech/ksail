@@ -1,0 +1,12 @@
+﻿Description:
+  Generate a 'core/v1/PersistentVolume' resource.
+
+Usage:
+  testhost gen native persistent-volume [options]
+
+Options:
+  -o, --output <output>  A file or directory path. [default: ./persistent-volume.yaml]
+  --overwrite            Overwrite existing files. [default: False]
+  --helpz                Show help and usage information
+
+

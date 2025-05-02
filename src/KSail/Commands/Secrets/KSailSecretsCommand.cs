@@ -11,11 +11,6 @@ sealed class KSailSecretsCommand : Command
   {
     console ??= new SystemConsole();
     AddCommands(console);
-    this.SetHandler(async (context) =>
-      {
-        context.ExitCode = await this.InvokeAsync("--help", console).ConfigureAwait(false);
-      }
-    );
   }
 
   void AddCommands(IConsole console)

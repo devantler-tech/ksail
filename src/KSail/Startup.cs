@@ -12,7 +12,18 @@ namespace KSail;
 class Startup
 {
   readonly ExceptionHandler _exceptionHandler = new();
-  readonly KSailRootCommand _ksailCommand = new(new SystemConsole());
+  readonly Parser _ksailCommand = new CommandLineBuilder(new KSailRootCommand(new SystemConsole()))
+    .UseVersionOption()
+    .UseHelp("--helpz")
+    .UseEnvironmentVariableDirective()
+    .UseParseDirective()
+    .UseSuggestDirective()
+    .RegisterWithDotnetSuggest()
+    .UseTypoCorrections()
+    .UseParseErrorReporting()
+    .UseExceptionHandler()
+    .CancelOnProcessTermination()
+    .Build();
 
   public async Task<int> RunAsync(string[] args)
   {
@@ -23,9 +34,7 @@ class Startup
     }
     else
     {
-      var commandLineBuilder = new CommandLineBuilder(_ksailCommand).Build();
-
-      int exitCode = await commandLineBuilder.InvokeAsync(args).ConfigureAwait(false);
+      int exitCode = await _ksailCommand.InvokeAsync(args).ConfigureAwait(false);
       return exitCode;
     }
   }

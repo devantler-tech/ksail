@@ -15,7 +15,7 @@ public class KSailStatusCommandTests
     var ksailCommand = new KSailRootCommand(console);
 
     //Act
-    int exitCode = await ksailCommand.InvokeAsync(["status", "--help"], console);
+    int exitCode = await ksailCommand.InvokeAsync(["status", "-h"], console);
 
     //Assert
     Assert.Equal(0, exitCode);

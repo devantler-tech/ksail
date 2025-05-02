@@ -6,15 +6,7 @@ namespace KSail.Commands.Gen.Commands.Native;
 class KSailGenNativeCommand : Command
 {
 
-  public KSailGenNativeCommand(IConsole? console = default) : base("native", "Generate a native Kubernetes resource.")
-  {
-    AddCommands();
-    this.SetHandler(async (context) =>
-      {
-        context.ExitCode = await this.InvokeAsync("--help", console).ConfigureAwait(false);
-      }
-    );
-  }
+  public KSailGenNativeCommand() : base("native", "Generate a native Kubernetes resource.") => AddCommands();
 
   void AddCommands()
   {
