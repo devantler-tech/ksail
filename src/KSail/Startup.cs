@@ -1,5 +1,7 @@
 using System.CommandLine;
+using System.CommandLine.Builder;
 using System.CommandLine.IO;
+using System.CommandLine.Parsing;
 using System.Runtime.InteropServices;
 using KSail.Commands.Root;
 using KSail.Utils;
@@ -21,7 +23,9 @@ class Startup
     }
     else
     {
-      int exitCode = await _ksailCommand.InvokeAsync(args).ConfigureAwait(false);
+      var commandLineBuilder = new CommandLineBuilder(_ksailCommand).Build();
+
+      int exitCode = await commandLineBuilder.InvokeAsync(args).ConfigureAwait(false);
       return exitCode;
     }
   }
