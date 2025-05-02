@@ -49,7 +49,7 @@ public partial class KSailRunCommandTests
     //TODO: Add support for Windows at a later time.
     Skip.If(OperatingSystem.IsWindows(), "Skipping test on Windows OS.");
     //Act
-    int exitCode = await _ksailCommand.InvokeAsync(command, _console);
+    int exitCode = await _ksailCommand.InvokeAsync(command, _console).ConfigureAwait(false);
 
     //Assert
     Assert.Equal(0, exitCode);
