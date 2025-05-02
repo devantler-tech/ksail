@@ -3,10 +3,10 @@ using k8s.Models;
 
 namespace KSail.Commands.Gen.Handlers.Native;
 
-class KSailGenNativeClusterRoleBindingCommandHandler(string outputFile, bool overwrite)
+class KSailGenNativeClusterRoleBindingCommandHandler(string outputFile, bool overwrite) : ICommandHandler
 {
   readonly ClusterRoleBindingGenerator _generator = new();
-  internal async Task<int> HandleAsync(CancellationToken cancellationToken = default)
+  public async Task<int> HandleAsync(CancellationToken cancellationToken = default)
   {
     var model = new V1ClusterRoleBinding()
     {

@@ -22,7 +22,7 @@ sealed class KSailSecretsListCommand : Command
 
         var cancellationToken = context.GetCancellationToken();
         var handler = new KSailSecretsListCommandHandler(config, new SOPSLocalAgeSecretManager());
-        context.ExitCode = await handler.HandleAsync(cancellationToken).ConfigureAwait(false) ? 0 : 1;
+        context.ExitCode = await handler.HandleAsync(cancellationToken).ConfigureAwait(false);
       }
       catch (Exception ex)
       {

@@ -4,12 +4,12 @@ using KSail.Models;
 
 namespace KSail.Commands.Secrets.Handlers;
 
-class KSailSecretsImportCommandHandler(string key, ISecretManager<AgeKey> secretManager)
+class KSailSecretsImportCommandHandler(string key, ISecretManager<AgeKey> secretManager) : ICommandHandler
 {
   readonly string _key = key;
   readonly ISecretManager<AgeKey> _secretManager = secretManager;
 
-  internal async Task<int> HandleAsync(CancellationToken cancellationToken)
+  public async Task<int> HandleAsync(CancellationToken cancellationToken)
   {
     Console.WriteLine($"► importing '{_key}' to SOPS");
     string key = _key;

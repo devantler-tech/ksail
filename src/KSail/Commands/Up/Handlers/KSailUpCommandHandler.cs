@@ -18,7 +18,7 @@ using KSail.Utils;
 
 namespace KSail.Commands.Up.Handlers;
 
-class KSailUpCommandHandler(KSailCluster config)
+class KSailUpCommandHandler(KSailCluster config) : ICommandHandler
 {
   readonly ClusterManager _clusterBootstrapper = new(config);
   readonly GitOpsSourceManager _gitOpsSourceBootstrapper = new(config);
@@ -30,7 +30,7 @@ class KSailUpCommandHandler(KSailCluster config)
   readonly MetricsServerManager _metricsServerBootstrapper = new(config);
   readonly SecretManager _secretManagerBootstrapper = new(config);
   readonly DeploymentToolManager _deploymentToolBootstrapper = new(config);
-  internal async Task<int> HandleAsync(CancellationToken cancellationToken = default)
+  public async Task<int> HandleAsync(CancellationToken cancellationToken = default)
   {
     await _clusterBootstrapper.BootstrapAsync(cancellationToken).ConfigureAwait(false);
     await _gitOpsSourceBootstrapper.BootstrapAsync(cancellationToken).ConfigureAwait(false);

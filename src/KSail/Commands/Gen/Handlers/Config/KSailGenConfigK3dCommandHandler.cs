@@ -4,7 +4,7 @@ using k8s.Models;
 
 namespace KSail.Commands.Gen.Handlers.Config;
 
-class KSailGenConfigK3dCommandHandler(string outputFile, bool overwrite)
+class KSailGenConfigK3dCommandHandler(string outputFile, bool overwrite) : ICommandHandler
 {
   readonly K3dConfigGenerator _generator = new();
 

@@ -19,7 +19,7 @@ sealed class KSailStatusCommand : Command
         var config = await KSailClusterConfigLoader.LoadWithoptionsAsync(context).ConfigureAwait(false);
         var cancellationToken = context.GetCancellationToken();
         var handler = new KSailStatusCommandHandler(config);
-        context.ExitCode = await handler.HandleAsync(cancellationToken).ConfigureAwait(false) ? 0 : 1;
+        context.ExitCode = await handler.HandleAsync(cancellationToken).ConfigureAwait(false);
       }
       catch (Exception ex)
       {

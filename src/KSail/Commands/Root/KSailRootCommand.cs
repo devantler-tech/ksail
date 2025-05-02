@@ -20,6 +20,7 @@ namespace KSail.Commands.Root;
 sealed class KSailRootCommand : RootCommand
 {
   readonly ExceptionHandler _exceptionHandler = new();
+
   internal KSailRootCommand(IConsole console) : base("KSail is an SDK for Kubernetes. Ship k8s with ease!")
   {
     AddCommands(console);
@@ -27,8 +28,13 @@ sealed class KSailRootCommand : RootCommand
       {
         try
         {
-          bool exitCode = KSailRootCommandHandler.Handle(console) && await this.InvokeAsync("--help", console).ConfigureAwait(false) == 0;
-          context.ExitCode = exitCode ? 0 : 1;
+          var ksailRootCommandHandler = new KSailRootCommandHandler(console);
+          int exitCode = await ksailRootCommandHandler.HandleAsync().ConfigureAwait(false);
+          if (exitCode == 0)
+          {
+            exitCode = await this.InvokeAsync("--help", console).ConfigureAwait(false);
+          }
+          context.ExitCode = exitCode;
         }
         catch (Exception ex)
         {
