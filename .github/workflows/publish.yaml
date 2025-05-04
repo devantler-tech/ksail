@@ -98,15 +98,7 @@ jobs:
         run: brew tap devantler-tech/formulas
       - name: 🍺 Brew bump formulas
         run: |
-          brew bump --no-fork --open-pr --formulae ksail
-        env:
-          HOMEBREW_GITHUB_API_TOKEN: ${{ secrets.HOMEBREW_GITHUB_API_TOKEN }}
-      # - name: 🍺 Brew bump core formulas
-      #  uses: Homebrew/actions/bump-packages@master
-      #  with:
-      #    token: ${{ steps.app-token.outputs.token }}
-      #    formulae: |
-      #      ksail
+          brew bump-formula-pr --no-fork
 
   # TODO: Rework docker publish with a generic reusable action
   publish-images:
