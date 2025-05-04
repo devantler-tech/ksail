@@ -87,7 +87,8 @@ jobs:
             ksail-linux-arm64
             ksail.tar.gz
           token: ${{ steps.app-token.outputs.token }}
-      - uses: crazy-max/ghaction-import-gpg@v5
+      - name: 🔑 Import GPG Key
+        uses: crazy-max/ghaction-import-gpg@v5
         with:
           gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
           passphrase: ${{ secrets.GPG_PASSPHRASE }}
