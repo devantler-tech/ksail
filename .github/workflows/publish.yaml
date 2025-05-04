@@ -98,8 +98,7 @@ jobs:
         run: brew tap devantler-tech/formulas
       - name: 🍺 Brew bump formulas
         run: |
-          brew bump-formula-pr --no-fork ksail
-
+          brew bump --no-fork --open-pr --formulae ksail
   # TODO: Rework docker publish with a generic reusable action
   publish-images:
     uses: devantler-tech/workflows/.github/workflows/image-publish.yaml@main
