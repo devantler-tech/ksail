@@ -22,7 +22,7 @@
   <ItemGroup>
     <PackageReference Include="Devantler.ContainerEngineProvisioner.Docker" Version="1.5.1" />
     <PackageReference Include="Devantler.ContainerEngineProvisioner.Podman" Version="1.5.1" />
-    <PackageReference Include="Devantler.KubernetesGenerator.CertManager" Version="1.7.8" />
+    <PackageReference Include="Devantler.KubernetesGenerator.CertManager" Version="1.7.9" />
     <PackageReference Include="Devantler.KubernetesGenerator.Flux" Version="1.7.8" />
     <PackageReference Include="Devantler.KubernetesGenerator.K3d" Version="1.7.8" />
     <PackageReference Include="Devantler.KubernetesGenerator.Kind" Version="1.7.8" />
