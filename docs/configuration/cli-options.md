@@ -116,6 +116,7 @@ Options:
   -c, --context <context>                         The kubernetes context to use. [default: kind-ksail-default]
   -k, --kubeconfig <kubeconfig>                   Path to kubeconfig file. [default: ~/.kube/config]
   -kp, --kustomization-path <kustomization-path>  The path to the root kustomization directory. [default: k8s]
+  -dt, --deployment-tool <Flux|Kubectl>           The Deployment tool to use for applying a kustomization. [default: Kubectl]
   -p, --publish                                   Publish manifests. [default: True]
   -v, --validate                                  Validate project files before applying changes to an existing cluster. [default: True]
   -r, --reconcile                                 Reconcile manifests. [default: True]
