@@ -1,6 +1,9 @@
 name: Test .NET solution or project
 on:
   workflow_dispatch:
+  pull_request:
+    branches:
+      - main
   push:
     branches:
       - main
