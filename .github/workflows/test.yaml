@@ -24,23 +24,23 @@ jobs:
     strategy:
       matrix:
         init-args:
-            - ["init", "--name", "d-n-defaults", "--container-engine", "Docker", "--distribution", "Kind"]
-            - ["init", "--name", "d-n-cilium", "--container-engine", "Docker", "--distribution", "Kind", "--cni", "Cilium"]
-            - ["init", "--name", "d-n-no-cni", "--container-engine", "Docker", "--distribution", "Kind", "--cni", "None"]
-            - ["init", "--name", "d-n-no-csi", "--container-engine", "Docker", "--distribution", "Kind", "--csi", "None"]
-            - ["init", "--name", "d-n-traefik", "--container-engine", "Docker", "--distribution", "Kind", "--ingress-controller", "Traefik"]
-            - ["init", "--name", "d-n-k-sops", "--container-engine", "Docker", "--distribution", "Kind", "--deployment-tool", "Kubectl", "--secret-manager", "SOPS"]
-            - ["init", "--name", "d-n-f-defaults", "--container-engine", "Docker", "--distribution", "Kind", "--deployment-tool", "Flux"]
-            - ["init", "--name", "d-n-f-sops", "--container-engine", "Docker", "--distribution", "Kind", "--deployment-tool", "Flux", "--secret-manager", "SOPS"]
-            - ["init", "--name", "d-n-metrics-server", "--container-engine", "Docker", "--distribution", "Kind", "--metrics-server"]
-            - ["init", "--name", "d-k-defaults", "--container-engine", "Docker", "--distribution", "K3d", "--deployment-tool", "Kubectl"]
-            - ["init", "--name", "d-k-cilium", "--container-engine", "Docker", "--distribution", "K3d", "--cni", "Cilium"]
-            - ["init", "--name", "d-k-no-cni", "--container-engine", "Docker", "--distribution", "K3d", "--cni", "None"]
-            - ["init", "--name", "d-k-no-csi", "--container-engine", "Docker", "--distribution", "K3d", "--csi", "None"]
-            - ["init", "--name", "d-k-no-ingress", "--container-engine", "Docker", "--distribution", "K3d", "--ingress-controller", "None"]
-            - ["init", "--name", "d-k-no-metrics-server", "--container-engine", "Docker", "--distribution", "K3d", "--metrics-server", "false"]
-            - ["init", "--name", "p-n-defaults", "--container-engine", "Podman", "--distribution", "Kind"]
-            - ["init", "--name", "p-k-defaults", "--container-engine", "Podman", "--distribution", "K3d"]
+            - "init --name d-n-defaults --container-engine Docker --distribution Kind"
+            - "init --name d-n-cilium --container-engine Docker --distribution Kind --cni Cilium"
+            - "init --name d-n-no-cni --container-engine Docker --distribution Kind --cni None"
+            - "init --name d-n-no-csi --container-engine Docker --distribution Kind --csi None"
+            - "init --name d-n-traefik --container-engine Docker --distribution Kind --ingress-controller Traefik"
+            - "init --name d-n-k-sops --container-engine Docker --distribution Kind --deployment-tool Kubectl --secret-manager SOPS"
+            - "init --name d-n-f-defaults --container-engine Docker --distribution Kind --deployment-tool Flux"
+            - "init --name d-n-f-sops --container-engine Docker --distribution Kind --deployment-tool Flux --secret-manager SOPS"
+            - "init --name d-n-metrics-server --container-engine Docker --distribution Kind --metrics-server"
+            - "init --name d-k-defaults --container-engine Docker --distribution K3d --deployment-tool Kubectl"
+            - "init --name d-k-cilium --container-engine Docker --distribution K3d --cni Cilium"
+            - "init --name d-k-no-cni --container-engine Docker --distribution K3d --cni None"
+            - "init --name d-k-no-csi --container-engine Docker --distribution K3d --csi None"
+            - "init --name d-k-no-ingress --container-engine Docker --distribution K3d --ingress-controller None"
+            - "init --name d-k-no-metrics-server --container-engine Docker --distribution K3d --metrics-server false"
+            - "init --name p-n-defaults --container-engine Podman --distribution Kind"
+            - "init --name p-k-defaults --container-engine Podman --distribution K3d"
     steps:
       - name: Generate GitHub App Token
         uses: tibdex/github-app-token@v2
@@ -59,7 +59,7 @@ jobs:
           dotnet-version: 9
       - name: 🧪 Run system test
         run: |
-          dotnet run -- ${{ join(matrix.init-args, ' ') }}
+          dotnet run -- ${{ matrix.init-args }}
           dotnet run -- up
           dotnet run -- status
           dotnet run -- list
