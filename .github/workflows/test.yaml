@@ -59,7 +59,7 @@ jobs:
           dotnet-version: 9
       - name: 🧪 Run system test
         run: |
-          dotnet run -- ${{ matrix.init-args }}
+          dotnet run -- ${{ join(matrix.init-args, ' ') }}
           dotnet run -- up
           dotnet run -- status
           dotnet run -- list
