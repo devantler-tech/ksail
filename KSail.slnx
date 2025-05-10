@@ -9,7 +9,6 @@
     <Project Path="tests/KSail.Docs.Tests.Unit/KSail.Docs.Tests.Unit.csproj" />
     <Project Path="tests/KSail.Generator.Tests.Unit/KSail.Generator.Tests.Unit.csproj" />
     <Project Path="tests/KSail.Models.Tests.Unit/KSail.Models.Tests.Unit.csproj" />
-    <Project Path="tests/KSail.Tests.System/KSail.Tests.System.csproj" />
     <Project Path="tests/KSail.Tests.Unit/KSail.Tests.Unit.csproj" />
   </Folder>
 </Solution>

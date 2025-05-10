@@ -5,7 +5,70 @@ on:
     branches:
       - main
 
+defaults:
+  run:
+    working-directory: src/KSail
+
 jobs:
-  test:
+  unit-test:
     uses: devantler-tech/workflows/.github/workflows/dotnet-test.yaml@main
     secrets: inherit
+
+  system-test:
+    name: System test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        init-args:
+            - ["init", "--name", "d-n-defaults", "--container-engine", "Docker", "--distribution", "Kind"]
+            - ["init", "--name", "d-n-cilium", "--container-engine", "Docker", "--distribution", "Kind", "--cni", "Cilium"]
+            - ["init", "--name", "d-n-no-cni", "--container-engine", "Docker", "--distribution", "Kind", "--cni", "None"]
+            - ["init", "--name", "d-n-no-csi", "--container-engine", "Docker", "--distribution", "Kind", "--csi", "None"]
+            - ["init", "--name", "d-n-traefik", "--container-engine", "Docker", "--distribution", "Kind", "--ingress-controller", "Traefik"]
+            - ["init", "--name", "d-n-k-sops", "--container-engine", "Docker", "--distribution", "Kind", "--deployment-tool", "Kubectl", "--secret-manager", "SOPS"]
+            - ["init", "--name", "d-n-f-defaults", "--container-engine", "Docker", "--distribution", "Kind", "--deployment-tool", "Flux"]
+            - ["init", "--name", "d-n-f-sops", "--container-engine", "Docker", "--distribution", "Kind", "--deployment-tool", "Flux", "--secret-manager", "SOPS"]
+            - ["init", "--name", "d-n-metrics-server", "--container-engine", "Docker", "--distribution", "Kind", "--metrics-server"]
+            - ["init", "--name", "d-k-defaults", "--container-engine", "Docker", "--distribution", "K3d", "--deployment-tool", "Kubectl"]
+            - ["init", "--name", "d-k-cilium", "--container-engine", "Docker", "--distribution", "K3d", "--cni", "Cilium"]
+            - ["init", "--name", "d-k-no-cni", "--container-engine", "Docker", "--distribution", "K3d", "--cni", "None"]
+            - ["init", "--name", "d-k-no-csi", "--container-engine", "Docker", "--distribution", "K3d", "--csi", "None"]
+            - ["init", "--name", "d-k-no-ingress", "--container-engine", "Docker", "--distribution", "K3d", "--ingress-controller", "None"]
+            - ["init", "--name", "d-k-no-metrics-server", "--container-engine", "Docker", "--distribution", "K3d", "--metrics-server", "false"]
+            - ["init", "--name", "p-n-defaults", "--container-engine", "Podman", "--distribution", "Kind"]
+            - ["init", "--name", "p-k-defaults", "--container-engine", "Podman", "--distribution", "K3d"]
+    steps:
+      - name: Generate GitHub App Token
+        uses: tibdex/github-app-token@v2
+        id: generate-token
+        with:
+          app_id: ${{ vars.APP_ID }}
+          private_key: ${{ secrets.APP_PRIVATE_KEY }}
+      - name: 📑 Checkout
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+          token: ${{ steps.generate-token.outputs.token }}
+      - name: ⚙️ Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9
+      - name: 🧪 Run system test
+        run: |
+          dotnet run -- ${{ matrix.init-args }}
+          dotnet run -- up
+          dotnet run -- status
+          dotnet run -- list
+          dotnet run -- list --all
+          dotnet run -- stop
+          dotnet run -- start
+          dotnet run -- update
+          dotnet run -- down
+          dotnet run -- down
+      - name: 🧹Cleanup
+        run: |
+          if [ -d "k8s" ]; then rm -rf "k8s"; fi
+          if [ -f "kind.yaml" ]; then rm "kind.yaml"; fi
+          if [ -f "k3d.yaml" ]; then rm "k3d.yaml"; fi
+          if [ -f "ksail.yaml" ]; then rm "ksail.yaml"; fi
+          if [ -f ".sops.yaml" ]; then rm ".sops.yaml"; fi
