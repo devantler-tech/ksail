@@ -93,6 +93,9 @@ static class KSailClusterConfigLoader
     // Generator
     config.UpdateConfig(c => c.Spec.Generator.Overwrite, context.ParseResult.GetValueForOption(CLIOptions.Generator.OverwriteOption));
 
+    // Publication
+    config.UpdateConfig(c => c.Spec.Publication.PublishOnUpdate, context.ParseResult.GetValueForOption(CLIOptions.Publication.PublishOnUpdateOption));
+
     // Validation
     config.UpdateConfig(c => c.Spec.Validation.ValidateOnUp, context.ParseResult.GetValueForOption(CLIOptions.Validation.ValidateOnUpOption));
     config.UpdateConfig(c => c.Spec.Validation.ValidateOnUpdate, context.ParseResult.GetValueForOption(CLIOptions.Validation.ValidateOnUpdateOption));
