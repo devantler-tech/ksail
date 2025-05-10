@@ -102,6 +102,9 @@
         Provider: Docker
       }
     ],
+    Publication: {
+      PublishOnUpdate: true
+    },
     Validation: {
       ValidateOnUp: true,
       ReconcileOnUp: true,

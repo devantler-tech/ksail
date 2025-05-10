@@ -40,17 +40,20 @@ class KSailUpdateCommandHandler : ICommandHandler
     string manifestDirectory = _config.Spec.Project.KustomizationPath
       .Replace("./", string.Empty, StringComparison.OrdinalIgnoreCase)
       .Split('/', StringSplitOptions.RemoveEmptyEntries).First();
-    if (!Directory.Exists(manifestDirectory) || Directory.GetFiles(manifestDirectory, "*.yaml", SearchOption.AllDirectories).Length == 0)
+    if (_config.Spec.Publication.PublishOnUpdate)
     {
-      throw new KSailException($"a '{manifestDirectory}' directory does not exist or is empty.");
+      if (!Directory.Exists(manifestDirectory) || Directory.GetFiles(manifestDirectory, "*.yaml", SearchOption.AllDirectories).Length == 0)
+      {
+        throw new KSailException($"a '{manifestDirectory}' directory does not exist or is empty.");
+      }
+      Console.WriteLine(_config.Spec.Project.DeploymentTool switch
+      {
+        KSailDeploymentToolType.Kubectl => $"⤴️ Applying manifests from '{_config.Spec.Project.KustomizationPath}'",
+        KSailDeploymentToolType.Flux => $"📥 Pushing manifests to '{_ociRegistryFromHost}'",
+        _ => throw new NotSupportedException($"The deployment tool '{_config.Spec.Project.DeploymentTool}' is not supported.")
+      });
+      await _deploymentTool.PushAsync(manifestDirectory, _config.Spec.Connection.Timeout, cancellationToken: cancellationToken).ConfigureAwait(false);
     }
-    Console.WriteLine(_config.Spec.Project.DeploymentTool switch
-    {
-      KSailDeploymentToolType.Kubectl => $"⤴️ Applying manifests from '{_config.Spec.Project.KustomizationPath}'",
-      KSailDeploymentToolType.Flux => $"📥 Pushing manifests to '{_ociRegistryFromHost}'",
-      _ => throw new NotSupportedException($"The deployment tool '{_config.Spec.Project.DeploymentTool}' is not supported.")
-    });
-    await _deploymentTool.PushAsync(manifestDirectory, _config.Spec.Connection.Timeout, cancellationToken: cancellationToken).ConfigureAwait(false);
 
     if (_config.Spec.Validation.ReconcileOnUpdate)
     {

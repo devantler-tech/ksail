@@ -80,5 +80,7 @@ spec:
     name: quay.io-proxy
     # The host port of the registry (if applicable). [default: 5555]
     hostPort: 5561
+  # Options for publication of manifests.
+  publication: {}
   # Options for validating the KSail cluster.
   validation: {}

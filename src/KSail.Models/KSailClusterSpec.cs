@@ -10,6 +10,7 @@ using KSail.Models.LocalRegistry;
 using KSail.Models.MirrorRegistry;
 using KSail.Models.Project;
 using KSail.Models.Project.Enums;
+using KSail.Models.Publication;
 using KSail.Models.SecretManager;
 using KSail.Models.Validation;
 using YamlDotNet.Serialization;
@@ -60,6 +61,9 @@ public class KSailClusterSpec
     new KSailMirrorRegistry { Name = "mcr.microsoft.com-proxy", HostPort = 5560, Proxy = new KSailMirrorRegistryProxy { Url = new("https://mcr.microsoft.com") } },
     new KSailMirrorRegistry { Name = "quay.io-proxy", HostPort = 5561, Proxy = new KSailMirrorRegistryProxy { Url = new("https://quay.io") } }
   ];
+
+  [Description("Options for publication of manifests.")]
+  public KSailPublication Publication { get; set; } = new();
 
   [Description("Options for validating the KSail cluster.")]
   public KSailValidation Validation { get; set; } = new();

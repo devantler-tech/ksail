@@ -171,6 +171,10 @@ spec:
     hostPort: 5561
     # The registry provider. [default: Docker]
     provider: Docker
+  # Options for publication of manifests.
+  publication:
+    # Publish manifests before applying changes to an existing cluster. [default: true]
+    publishOnUpdate: true
   # Options for validating the KSail cluster.
   validation:
     # Validate the project files and configuration before creating a new cluster. [default: true]
