@@ -90,5 +90,7 @@ spec:
     hostPort: 5561
     # The registry provider. [default: Docker]
     provider: Podman
+  # Options for publication of manifests.
+  publication: {}
   # Options for validating the KSail cluster.
   validation: {}

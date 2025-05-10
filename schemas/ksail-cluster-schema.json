@@ -273,6 +273,16 @@
             }
           }
         },
+        "publication": {
+          "description": "Options for publication of manifests.",
+          "type": "object",
+          "properties": {
+            "publishOnUpdate": {
+              "description": "Publish manifests before applying changes to an existing cluster. [default: true]",
+              "type": "boolean"
+            }
+          }
+        },
         "validation": {
           "description": "Options for validating the KSail cluster.",
           "type": "object",
