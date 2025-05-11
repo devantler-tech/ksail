@@ -11,16 +11,16 @@ class ClusterProvisionerFactory
 {
   internal static IKubernetesClusterProvisioner Create(KSailCluster config)
   {
-    switch (config.Spec.Project.Provider)
+    switch (config.Spec.Project.ContainerEngine)
     {
-      case KSailProviderType.Docker:
+      case KSailContainerEngineType.Docker:
         return GetKubernetesClusterProvisioner(config);
-      case KSailProviderType.Podman:
+      case KSailContainerEngineType.Podman:
         string socketPath = PodmanHelper.GetPodmanSocket();
         Environment.SetEnvironmentVariable("DOCKER_HOST", socketPath);
         return GetKubernetesClusterProvisioner(config);
       default:
-        throw new NotSupportedException($"The provider '{config.Spec.Project.Provider}' is not supported.");
+        throw new NotSupportedException($"The provider '{config.Spec.Project.ContainerEngine}' is not supported.");
     }
 
 
@@ -30,8 +30,8 @@ class ClusterProvisionerFactory
   {
     return config.Spec.Project.Distribution switch
     {
-      KSailDistributionType.Native => new KindProvisioner(),
-      KSailDistributionType.K3s => new K3dProvisioner(),
+      KSailDistributionType.Kind => new KindProvisioner(),
+      KSailDistributionType.K3d => new K3dProvisioner(),
       _ => throw new NotSupportedException($"The distribution '{config.Spec.Project.Distribution}' is not supported.")
     };
   }

@@ -1,5 +1,7 @@
 using System.CommandLine;
+using System.CommandLine.Builder;
 using System.CommandLine.IO;
+using System.CommandLine.Parsing;
 using System.Runtime.InteropServices;
 using KSail.Commands.Root;
 using KSail.Utils;
@@ -10,7 +12,18 @@ namespace KSail;
 class Startup
 {
   readonly ExceptionHandler _exceptionHandler = new();
-  readonly KSailRootCommand _ksailCommand = new(new SystemConsole());
+  readonly Parser _ksailCommand = new CommandLineBuilder(new KSailRootCommand(new SystemConsole()))
+    .UseVersionOption()
+    .UseHelp("--helpz")
+    .UseEnvironmentVariableDirective()
+    .UseParseDirective()
+    .UseSuggestDirective()
+    .RegisterWithDotnetSuggest()
+    .UseTypoCorrections()
+    .UseParseErrorReporting()
+    .UseExceptionHandler()
+    .CancelOnProcessTermination()
+    .Build();
 
   public async Task<int> RunAsync(string[] args)
   {

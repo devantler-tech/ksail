@@ -52,9 +52,9 @@ spec:
     # The path to the root kustomization directory. [default: k8s]
     kustomizationPath: k8s
     # The provider to use for running the KSail cluster. [default: Docker]
-    provider: Docker
-    # The Kubernetes distribution to use. [default: Native]
-    distribution: Native
+    containerEngine: Docker
+    # The Kubernetes distribution to use. [default: Kind]
+    distribution: Kind
     # The Deployment tool to use. [default: Kubectl]
     deploymentTool: Kubectl
     # The CNI to use. [default: Default]
@@ -65,6 +65,8 @@ spec:
     ingressController: Default
     # The Gateway Controller to use. [default: Default]
     gatewayController: Default
+    # Whether to install Metrics Server. [default: true]
+    metricsServer: true
     # Whether to use a secret manager. [default: None]
     secretManager: None
     # The editor to use for viewing files while debugging. [default: Nano]
@@ -169,6 +171,10 @@ spec:
     hostPort: 5561
     # The registry provider. [default: Docker]
     provider: Docker
+  # Options for publication of manifests.
+  publication:
+    # Publish manifests before applying changes to an existing cluster. [default: true]
+    publishOnUpdate: true
   # Options for validating the KSail cluster.
   validation:
     # Validate the project files and configuration before creating a new cluster. [default: true]

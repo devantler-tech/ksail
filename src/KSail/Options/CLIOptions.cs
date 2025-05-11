@@ -9,6 +9,7 @@ using KSail.Options.LocalRegistry;
 using KSail.Options.Metadata;
 using KSail.Options.MirrorRegistries;
 using KSail.Options.Project;
+using KSail.Options.Publication;
 using KSail.Options.SecretManager;
 using KSail.Options.Validation;
 using KSail.Options.WaypointController;
@@ -44,6 +45,6 @@ static class CLIOptions
 
   public static readonly GeneratorOptions Generator = new(_config);
 
+  public static readonly PublicationOptions Publication = new(_config);
   public static readonly ValidationOptions Validation = new(_config);
-
 }

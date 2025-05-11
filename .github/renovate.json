@@ -1,16 +1,10 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["config:recommended", ":disableDependencyDashboard"],
-  "flux": {
-    "fileMatch": [
-      "^k8s/.+\\.ya?ml$"
-    ]
-  },
-  "kubernetes": {
-    "fileMatch": [
-      "^k8s/.+\\.ya?ml$"
-    ]
-  },
+  "extends": [
+    "config:recommended",
+    ":disableDependencyDashboard",
+    ":semanticCommitTypeAll(fix)"
+  ],
   "github-actions": {
     "enabled": false
   },

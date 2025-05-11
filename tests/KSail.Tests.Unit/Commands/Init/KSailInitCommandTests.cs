@@ -1,6 +1,8 @@
 using System.Collections.ObjectModel;
 using System.CommandLine;
+using System.CommandLine.Builder;
 using System.CommandLine.IO;
+using System.CommandLine.Parsing;
 using System.Text.RegularExpressions;
 using Devantler.SecretManager.SOPS.LocalAge;
 using KSail.Commands.Root;
@@ -11,19 +13,30 @@ namespace KSail.Tests.Commands.Init;
 public partial class KSailInitCommandTests
 {
   readonly TestConsole _console;
-  readonly KSailRootCommand _ksailCommand;
+  readonly Parser _ksailCommand;
 
   public KSailInitCommandTests()
   {
     _console = new TestConsole();
-    _ksailCommand = new KSailRootCommand(_console);
+    _ksailCommand = new CommandLineBuilder(new KSailRootCommand(_console))
+      .UseVersionOption()
+      .UseHelp("--helpz")
+      .UseEnvironmentVariableDirective()
+      .UseParseDirective()
+      .UseSuggestDirective()
+      .RegisterWithDotnetSuggest()
+      .UseTypoCorrections()
+      .UseParseErrorReporting()
+      .UseExceptionHandler()
+      .CancelOnProcessTermination()
+      .Build();
   }
 
   [Fact]
   public async Task KSailInitHelp_SucceedsAndPrintsIntroductionAndHelp()
   {
     //Act
-    int exitCode = await _ksailCommand.InvokeAsync(["init", "--help"], _console);
+    int exitCode = await _ksailCommand.InvokeAsync(["init", "--helpz"], _console);
 
     //Assert
     Assert.Equal(0, exitCode);
@@ -33,36 +46,42 @@ public partial class KSailInitCommandTests
 
   [SkippableTheory]
   [InlineData(["init", "--output", "ksail-init-default"])]
-  [InlineData(["init", "--output", "ksail-init-docker", "--provider", "Docker"])]
-  [InlineData(["init", "--output", "ksail-init-docker-native", "--provider", "Docker", "--distribution", "Native"])]
-  [InlineData(["init", "--output", "ksail-init-docker-native-kubectl", "--provider", "Docker", "--distribution", "Native", "--deployment-tool", "Kubectl"])]
-  [InlineData(["init", "--output", "ksail-init-docker-native-kubectl-cilium", "--provider", "Docker", "--distribution", "Native", "--deployment-tool", "Kubectl", "--cni", "Cilium"])]
-  [InlineData(["init", "--output", "ksail-init-docker-native-kubectl-cilium-sops", "--provider", "Docker", "--distribution", "Native", "--deployment-tool", "Kubectl", "--cni", "Cilium", "--secret-manager", "SOPS"])]
-  [InlineData(["init", "--output", "ksail-init-docker-native-flux", "--provider", "Docker", "--distribution", "Native", "--deployment-tool", "Flux"])]
-  [InlineData(["init", "--output", "ksail-init-docker-native-flux-cilium", "--provider", "Docker", "--distribution", "Native", "--deployment-tool", "Flux", "--cni", "Cilium"])]
-  [InlineData(["init", "--output", "ksail-init-docker-native-flux-cilium-sops", "--provider", "Docker", "--distribution", "Native", "--deployment-tool", "Flux", "--cni", "Cilium", "--secret-manager", "SOPS"])]
-  [InlineData(["init", "--output", "ksail-init-docker-k3s", "--provider", "Docker", "--distribution", "K3s"])]
-  [InlineData(["init", "--output", "ksail-init-docker-k3s-kubectl", "--provider", "Docker", "--distribution", "K3s", "--deployment-tool", "Kubectl"])]
-  [InlineData(["init", "--output", "ksail-init-docker-k3s-kubectl-cilium", "--provider", "Docker", "--distribution", "K3s", "--deployment-tool", "Kubectl", "--cni", "Cilium"])]
-  [InlineData(["init", "--output", "ksail-init-docker-k3s-kubectl-cilium-sops", "--provider", "Docker", "--distribution", "K3s", "--deployment-tool", "Kubectl", "--cni", "Cilium", "--secret-manager", "SOPS"])]
-  [InlineData(["init", "--output", "ksail-init-docker-k3s-flux", "--provider", "Docker", "--distribution", "K3s", "--deployment-tool", "Flux"])]
-  [InlineData(["init", "--output", "ksail-init-docker-k3s-flux-cilium", "--provider", "Docker", "--distribution", "K3s", "--deployment-tool", "Flux", "--cni", "Cilium"])]
-  [InlineData(["init", "--output", "ksail-init-docker-k3s-flux-cilium-sops", "--provider", "Docker", "--distribution", "K3s", "--deployment-tool", "Flux", "--cni", "Cilium", "--secret-manager", "SOPS"])]
-  [InlineData(["init", "--output", "ksail-init-podman", "--provider", "Podman"])]
-  [InlineData(["init", "--output", "ksail-init-podman-native", "--provider", "Podman", "--distribution", "Native"])]
-  [InlineData(["init", "--output", "ksail-init-podman-native-kubectl", "--provider", "Podman", "--distribution", "Native", "--deployment-tool", "Kubectl"])]
-  [InlineData(["init", "--output", "ksail-init-podman-native-kubectl-cilium", "--provider", "Podman", "--distribution", "Native", "--deployment-tool", "Kubectl", "--cni", "Cilium"])]
-  [InlineData(["init", "--output", "ksail-init-podman-native-kubectl-cilium-sops", "--provider", "Podman", "--distribution", "Native", "--deployment-tool", "Kubectl", "--cni", "Cilium", "--secret-manager", "SOPS"])]
-  [InlineData(["init", "--output", "ksail-init-podman-native-flux", "--provider", "Podman", "--distribution", "Native", "--deployment-tool", "Flux"])]
-  [InlineData(["init", "--output", "ksail-init-podman-native-flux-cilium", "--provider", "Podman", "--distribution", "Native", "--deployment-tool", "Flux", "--cni", "Cilium"])]
-  [InlineData(["init", "--output", "ksail-init-podman-native-flux-cilium-sops", "--provider", "Podman", "--distribution", "Native", "--deployment-tool", "Flux", "--cni", "Cilium", "--secret-manager", "SOPS"])]
-  [InlineData(["init", "--output", "ksail-init-podman-k3s", "--provider", "Podman", "--distribution", "K3s"])]
-  [InlineData(["init", "--output", "ksail-init-podman-k3s-kubectl", "--provider", "Podman", "--distribution", "K3s", "--deployment-tool", "Kubectl"])]
-  [InlineData(["init", "--output", "ksail-init-podman-k3s-kubectl-cilium", "--provider", "Podman", "--distribution", "K3s", "--deployment-tool", "Kubectl", "--cni", "Cilium"])]
-  [InlineData(["init", "--output", "ksail-init-podman-k3s-kubectl-cilium-sops", "--provider", "Podman", "--distribution", "K3s", "--deployment-tool", "Kubectl", "--cni", "Cilium", "--secret-manager", "SOPS"])]
-  [InlineData(["init", "--output", "ksail-init-podman-k3s-flux", "--provider", "Podman", "--distribution", "K3s", "--deployment-tool", "Flux"])]
-  [InlineData(["init", "--output", "ksail-init-podman-k3s-flux-cilium", "--provider", "Podman", "--distribution", "K3s", "--deployment-tool", "Flux", "--cni", "Cilium"])]
-  [InlineData(["init", "--output", "ksail-init-podman-k3s-flux-cilium-sops", "--provider", "Podman", "--distribution", "K3s", "--deployment-tool", "Flux", "--cni", "Cilium", "--secret-manager", "SOPS"])]
+  [InlineData(["init", "--output", "ksail-init-docker", "--container-engine", "Docker"])]
+  [InlineData(["init", "--output", "ksail-init-docker-none", "--container-engine", "Docker", "--ingress-controller", "None"])]
+  [InlineData(["init", "--output", "ksail-init-docker-kind", "--container-engine", "Docker", "--distribution", "Kind"])]
+  [InlineData(["init", "--output", "ksail-init-docker-kind-kubectl", "--container-engine", "Docker", "--distribution", "Kind", "--deployment-tool", "Kubectl"])]
+  [InlineData(["init", "--output", "ksail-init-docker-kind-kubectl-cilium", "--container-engine", "Docker", "--distribution", "Kind", "--deployment-tool", "Kubectl", "--cni", "Cilium"])]
+  [InlineData(["init", "--output", "ksail-init-docker-kind-kubectl-cilium-sops", "--container-engine", "Docker", "--distribution", "Kind", "--deployment-tool", "Kubectl", "--cni", "Cilium", "--secret-manager", "SOPS"])]
+  [InlineData(["init", "--output", "ksail-init-docker-kind-flux", "--container-engine", "Docker", "--distribution", "Kind", "--deployment-tool", "Flux"])]
+  [InlineData(["init", "--output", "ksail-init-docker-kind-flux-cilium", "--container-engine", "Docker", "--distribution", "Kind", "--deployment-tool", "Flux", "--cni", "Cilium"])]
+  [InlineData(["init", "--output", "ksail-init-docker-kind-flux-cilium-sops", "--container-engine", "Docker", "--distribution", "Kind", "--deployment-tool", "Flux", "--cni", "Cilium", "--secret-manager", "SOPS"])]
+  [InlineData(["init", "--output", "ksail-init-docker-kind-metrics-server", "--container-engine", "Docker", "--distribution", "Kind", "--metrics-server"])]
+  [InlineData(["init", "--output", "ksail-init-docker-k3d", "--container-engine", "Docker", "--distribution", "K3d"])]
+  [InlineData(["init", "--output", "ksail-init-docker-k3d-none", "--container-engine", "Docker", "--distribution", "K3d", "--ingress-controller", "None"])]
+  [InlineData(["init", "--output", "ksail-init-docker-k3d-kubectl", "--container-engine", "Docker", "--distribution", "K3d", "--deployment-tool", "Kubectl"])]
+  [InlineData(["init", "--output", "ksail-init-docker-k3d-kubectl-cilium", "--container-engine", "Docker", "--distribution", "K3d", "--deployment-tool", "Kubectl", "--cni", "Cilium"])]
+  [InlineData(["init", "--output", "ksail-init-docker-k3d-kubectl-cilium-sops", "--container-engine", "Docker", "--distribution", "K3d", "--deployment-tool", "Kubectl", "--cni", "Cilium", "--secret-manager", "SOPS"])]
+  [InlineData(["init", "--output", "ksail-init-docker-k3d-flux", "--container-engine", "Docker", "--distribution", "K3d", "--deployment-tool", "Flux"])]
+  [InlineData(["init", "--output", "ksail-init-docker-k3d-flux-cilium", "--container-engine", "Docker", "--distribution", "K3d", "--deployment-tool", "Flux", "--cni", "Cilium"])]
+  [InlineData(["init", "--output", "ksail-init-docker-k3d-flux-cilium-sops", "--container-engine", "Docker", "--distribution", "K3d", "--deployment-tool", "Flux", "--cni", "Cilium", "--secret-manager", "SOPS"])]
+  [InlineData(["init", "--output", "ksail-init-docker-k3d-no-metrics-server", "--container-engine", "Docker", "--distribution", "K3d", "--metrics-server", "false"])]
+  [InlineData(["init", "--output", "ksail-init-podman", "--container-engine", "Podman"])]
+  [InlineData(["init", "--output", "ksail-init-podman-none", "--container-engine", "Podman", "--ingress-controller", "None"])]
+  [InlineData(["init", "--output", "ksail-init-podman-kind", "--container-engine", "Podman", "--distribution", "Kind"])]
+  [InlineData(["init", "--output", "ksail-init-podman-kind-kubectl", "--container-engine", "Podman", "--distribution", "Kind", "--deployment-tool", "Kubectl"])]
+  [InlineData(["init", "--output", "ksail-init-podman-kind-kubectl-cilium", "--container-engine", "Podman", "--distribution", "Kind", "--deployment-tool", "Kubectl", "--cni", "Cilium"])]
+  [InlineData(["init", "--output", "ksail-init-podman-kind-kubectl-cilium-sops", "--container-engine", "Podman", "--distribution", "Kind", "--deployment-tool", "Kubectl", "--cni", "Cilium", "--secret-manager", "SOPS"])]
+  [InlineData(["init", "--output", "ksail-init-podman-kind-flux", "--container-engine", "Podman", "--distribution", "Kind", "--deployment-tool", "Flux"])]
+  [InlineData(["init", "--output", "ksail-init-podman-kind-flux-cilium", "--container-engine", "Podman", "--distribution", "Kind", "--deployment-tool", "Flux", "--cni", "Cilium"])]
+  [InlineData(["init", "--output", "ksail-init-podman-kind-flux-cilium-sops", "--container-engine", "Podman", "--distribution", "Kind", "--deployment-tool", "Flux", "--cni", "Cilium", "--secret-manager", "SOPS"])]
+  [InlineData(["init", "--output", "ksail-init-podman-k3d", "--container-engine", "Podman", "--distribution", "K3d"])]
+  [InlineData(["init", "--output", "ksail-init-podman-k3d-none", "--container-engine", "Podman", "--distribution", "K3d", "--ingress-controller", "None"])]
+  [InlineData(["init", "--output", "ksail-init-podman-k3d-kubectl", "--container-engine", "Podman", "--distribution", "K3d", "--deployment-tool", "Kubectl"])]
+  [InlineData(["init", "--output", "ksail-init-podman-k3d-kubectl-cilium", "--container-engine", "Podman", "--distribution", "K3d", "--deployment-tool", "Kubectl", "--cni", "Cilium"])]
+  [InlineData(["init", "--output", "ksail-init-podman-k3d-kubectl-cilium-sops", "--container-engine", "Podman", "--distribution", "K3d", "--deployment-tool", "Kubectl", "--cni", "Cilium", "--secret-manager", "SOPS"])]
+  [InlineData(["init", "--output", "ksail-init-podman-k3d-flux", "--container-engine", "Podman", "--distribution", "K3d", "--deployment-tool", "Flux"])]
+  [InlineData(["init", "--output", "ksail-init-podman-k3d-flux-cilium", "--container-engine", "Podman", "--distribution", "K3d", "--deployment-tool", "Flux", "--cni", "Cilium"])]
+  [InlineData(["init", "--output", "ksail-init-podman-k3d-flux-cilium-sops", "--container-engine", "Podman", "--distribution", "K3d", "--deployment-tool", "Flux", "--cni", "Cilium", "--secret-manager", "SOPS"])]
   public async Task KSailInit_WithVariousOptions_SucceedsAndGeneratesKSailProject(params string[] args)
   {
     //TODO: Add support for Windows at a later time.

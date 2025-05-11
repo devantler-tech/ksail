@@ -4,7 +4,7 @@ using KSail.Models.Project.Enums;
 
 namespace KSail.Commands.Init.Handlers;
 
-class KSailInitCommandHandler(string outputPath, KSailCluster config)
+class KSailInitCommandHandler(string outputPath, KSailCluster config) : ICommandHandler
 {
   readonly KSailCluster _config = config;
   readonly string _outputPath = outputPath;

@@ -10,6 +10,7 @@ using KSail.Models.LocalRegistry;
 using KSail.Models.MirrorRegistry;
 using KSail.Models.Project;
 using KSail.Models.Project.Enums;
+using KSail.Models.Publication;
 using KSail.Models.SecretManager;
 using KSail.Models.Validation;
 using YamlDotNet.Serialization;
@@ -61,6 +62,9 @@ public class KSailClusterSpec
     new KSailMirrorRegistry { Name = "quay.io-proxy", HostPort = 5561, Proxy = new KSailMirrorRegistryProxy { Url = new("https://quay.io") } }
   ];
 
+  [Description("Options for publication of manifests.")]
+  public KSailPublication Publication { get; set; } = new();
+
   [Description("Options for validating the KSail cluster.")]
   public KSailValidation Validation { get; set; } = new();
 
@@ -82,8 +86,8 @@ public class KSailClusterSpec
     {
       Context = distribution switch
       {
-        KSailDistributionType.Native => $"kind-{name}",
-        KSailDistributionType.K3s => $"k3d-{name}",
+        KSailDistributionType.Kind => $"kind-{name}",
+        KSailDistributionType.K3d => $"k3d-{name}",
         _ => $"kind-{name}"
       }
     };
@@ -92,19 +96,19 @@ public class KSailClusterSpec
       Distribution = distribution,
       DistributionConfigPath = distribution switch
       {
-        KSailDistributionType.Native => "kind.yaml",
-        KSailDistributionType.K3s => "k3d.yaml",
+        KSailDistributionType.Kind => "kind.yaml",
+        KSailDistributionType.K3d => "k3d.yaml",
         _ => "kind.yaml"
       }
     };
   }
 
-  void SetOCISourceUri(KSailDistributionType distribution = KSailDistributionType.Native)
+  void SetOCISourceUri(KSailDistributionType distribution = KSailDistributionType.Kind)
   {
     DeploymentTool.Flux.Source = distribution switch
     {
-      KSailDistributionType.Native => new KSailFluxDeploymentToolRepository { Url = new Uri("oci://ksail-registry:5000/ksail-registry") },
-      KSailDistributionType.K3s => new KSailFluxDeploymentToolRepository { Url = new Uri("oci://host.k3d.internal:5555/ksail-registry") },
+      KSailDistributionType.Kind => new KSailFluxDeploymentToolRepository { Url = new Uri("oci://ksail-registry:5000/ksail-registry") },
+      KSailDistributionType.K3d => new KSailFluxDeploymentToolRepository { Url = new Uri("oci://host.k3d.internal:5555/ksail-registry") },
       _ => new KSailFluxDeploymentToolRepository { Url = new Uri("oci://ksail-registry:5000/ksail-registry") },
     };
   }

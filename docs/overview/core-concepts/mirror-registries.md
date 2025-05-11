@@ -2,7 +2,7 @@
 title: Mirror Registries
 parent: Core Concepts
 layout: default
-nav_order: 9
+nav_order: 10
 ---
 
 # Mirror Registries

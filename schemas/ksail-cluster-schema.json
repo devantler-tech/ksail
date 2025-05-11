@@ -67,7 +67,7 @@
               "description": "The path to the root kustomization directory. [default: k8s]",
               "type": "string"
             },
-            "provider": {
+            "containerEngine": {
               "description": "The provider to use for running the KSail cluster. [default: Docker]",
               "enum": [
                 "Docker",
@@ -75,10 +75,10 @@
               ]
             },
             "distribution": {
-              "description": "The Kubernetes distribution to use. [default: Native]",
+              "description": "The Kubernetes distribution to use. [default: Kind]",
               "enum": [
-                "Native",
-                "K3s"
+                "Kind",
+                "K3d"
               ]
             },
             "deploymentTool": {
@@ -92,26 +92,36 @@
               "description": "The CNI to use. [default: Default]",
               "enum": [
                 "Default",
-                "Cilium"
+                "Cilium",
+                "None"
               ]
             },
             "csi": {
               "description": "The CSI to use. [default: Default]",
               "enum": [
-                "Default"
+                "Default",
+                "LocalPathProvisioner",
+                "None"
               ]
             },
             "ingressController": {
               "description": "The Ingress Controller to use. [default: Default]",
               "enum": [
-                "Default"
+                "Default",
+                "Traefik",
+                "None"
               ]
             },
             "gatewayController": {
               "description": "The Gateway Controller to use. [default: Default]",
               "enum": [
-                "Default"
+                "Default",
+                "None"
               ]
+            },
+            "metricsServer": {
+              "description": "Whether to install Metrics Server. [default: true]",
+              "type": "boolean"
             },
             "secretManager": {
               "description": "Whether to use a secret manager. [default: None]",
@@ -260,6 +270,16 @@
                   "Podman"
                 ]
               }
+            }
+          }
+        },
+        "publication": {
+          "description": "Options for publication of manifests.",
+          "type": "object",
+          "properties": {
+            "publishOnUpdate": {
+              "description": "Publish manifests before applying changes to an existing cluster. [default: true]",
+              "type": "boolean"
             }
           }
         },

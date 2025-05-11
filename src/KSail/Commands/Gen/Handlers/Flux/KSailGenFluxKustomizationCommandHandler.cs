@@ -4,7 +4,7 @@ using Devantler.KubernetesGenerator.Flux.Models.Kustomization;
 
 namespace KSail.Commands.Gen.Handlers.Flux;
 
-class KSailGenFluxKustomizationCommandHandler(string outputFile, bool overwrite)
+class KSailGenFluxKustomizationCommandHandler(string outputFile, bool overwrite) : ICommandHandler
 {
   readonly FluxKustomizationGenerator _generator = new();
   public async Task<int> HandleAsync(CancellationToken cancellationToken = default)

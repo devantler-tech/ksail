@@ -1,6 +1,8 @@
 using System.Text;
 using Devantler.KubernetesGenerator.K3d;
 using Devantler.KubernetesGenerator.K3d.Models;
+using Devantler.KubernetesGenerator.K3d.Models.Options;
+using Devantler.KubernetesGenerator.K3d.Models.Options.K3s;
 using Devantler.KubernetesGenerator.Kind;
 using Devantler.KubernetesGenerator.Kind.Models;
 using Devantler.KubernetesGenerator.Kind.Models.Networking;
@@ -17,12 +19,12 @@ class DistributionConfigFileGenerator
   internal async Task GenerateAsync(string outputPath, KSailCluster config, CancellationToken cancellationToken = default)
   {
     string configPath = Path.Combine(outputPath, config.Spec.Project.DistributionConfigPath);
-    switch (config.Spec.Project.Provider, config.Spec.Project.Distribution)
+    switch (config.Spec.Project.Distribution)
     {
-      case (KSailProviderType.Docker or KSailProviderType.Podman, KSailDistributionType.Native):
+      case KSailDistributionType.Kind:
         await GenerateKindConfigFile(config, configPath, cancellationToken).ConfigureAwait(false);
         break;
-      case (KSailProviderType.Docker or KSailProviderType.Podman, KSailDistributionType.K3s):
+      case KSailDistributionType.K3d:
         await GenerateK3DConfigFile(config, configPath, cancellationToken).ConfigureAwait(false);
         break;
       default:
@@ -51,7 +53,7 @@ class DistributionConfigFileGenerator
       ] : null
     };
 
-    if (config.Spec.Project.CNI != KSailCNIType.Default)
+    if (config.Spec.Project.CNI is not KSailCNIType.Default)
     {
       kindConfig.Networking = new KindNetworking
       {
@@ -98,29 +100,66 @@ class DistributionConfigFileGenerator
       }
     };
 
-    if (config.Spec.Project.CNI != KSailCNIType.Default)
+    var extraArgs = new List<K3dOptionsK3sExtraArg>();
+    if (config.Spec.Project.CNI is not KSailCNIType.Default)
+    {
+      extraArgs.Add(new K3dOptionsK3sExtraArg
+      {
+        Arg = "--flannel-backend=none",
+        NodeFilters =
+        [
+          "server:*"
+        ]
+      });
+      extraArgs.Add(new K3dOptionsK3sExtraArg
+      {
+        Arg = "--disable-network-policy",
+        NodeFilters =
+        [
+          "server:*"
+        ]
+      });
+    }
+    if (config.Spec.Project.CSI is KSailCSIType.None)
+    {
+      extraArgs.Add(new K3dOptionsK3sExtraArg
+      {
+        Arg = "--disable=local-storage",
+        NodeFilters =
+        [
+          "server:*"
+        ]
+      });
+    }
+    if (config.Spec.Project.IngressController is not KSailIngressControllerType.Default and not KSailIngressControllerType.Traefik)
+    {
+      extraArgs.Add(new K3dOptionsK3sExtraArg
+      {
+        Arg = "--disable=traefik",
+        NodeFilters =
+        [
+          "server:*"
+        ]
+      });
+    }
+    if (!config.Spec.Project.MetricsServer)
+    {
+      extraArgs.Add(new K3dOptionsK3sExtraArg
+      {
+        Arg = "--disable=metrics-server",
+        NodeFilters =
+        [
+          "server:*"
+        ]
+      });
+    }
+    if (extraArgs.Count > 0)
     {
       k3dConfig.Options = new()
       {
         K3s = new()
         {
-          ExtraArgs =
-          [
-            new() {
-              Arg = "--flannel-backend=none",
-              NodeFilters =
-              [
-                "server:*"
-              ]
-            },
-            new() {
-              Arg = "--disable-network-policy",
-              NodeFilters =
-              [
-                "server:*"
-              ]
-            }
-          ]
+          ExtraArgs = [.. extraArgs]
         }
       };
     }

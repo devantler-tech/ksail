@@ -1,11 +1,105 @@
 name: Test .NET solution or project
 on:
   workflow_dispatch:
+  pull_request:
+    branches:
+      - main
   push:
     branches:
       - main
 
+defaults:
+  run:
+    working-directory: src/KSail
+
 jobs:
-  test:
+  unit-test:
+    if: github.event_name != 'pull_request'
     uses: devantler-tech/workflows/.github/workflows/dotnet-test.yaml@main
     secrets: inherit
+
+  system-test:
+    name: System test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        init-args:
+            - "init --container-engine Docker --distribution Kind --deployment-tool Kubectl"
+            - "init --container-engine Docker --distribution Kind --deployment-tool Kubectl --secret-manager SOPS"
+            - "init --container-engine Docker --distribution Kind --deployment-tool Flux"
+            - "init --container-engine Docker --distribution Kind --deployment-tool Flux --secret-manager SOPS"
+            - "init --container-engine Docker --distribution Kind --deployment-tool ArgoCD"
+            - "init --container-engine Docker --distribution Kind --deployment-tool ArgoCD --secret-manager SOPS"
+            - "init --container-engine Docker --distribution Kind --cni Default"
+            - "init --container-engine Docker --distribution Kind --cni Cilium"
+            - "init --container-engine Docker --distribution Kind --cni None"
+            - "init --container-engine Docker --distribution Kind --csi Default"
+            - "init --container-engine Docker --distribution Kind --csi LocalPathProvisioner"
+            - "init --container-engine Docker --distribution Kind --csi None"
+            - "init --container-engine Docker --distribution Kind --ingress-controller Default"
+            - "init --container-engine Docker --distribution Kind --ingress-controller Traefik"
+            - "init --container-engine Docker --distribution Kind --ingress-controller None"
+            - "init --container-engine Docker --distribution Kind --gateway-controller Default"
+            - "init --container-engine Docker --distribution Kind --gateway-controller None"
+            - "init --container-engine Docker --distribution Kind --metrics-server True"
+            - "init --container-engine Docker --distribution Kind --metrics-server False"
+            - "init --container-engine Docker --distribution Kind --mirror-registries True"
+            - "init --container-engine Docker --distribution Kind --mirror-registries False"
+            - "init --container-engine Docker --distribution K3d --deployment-tool Kubectl"
+            - "init --container-engine Docker --distribution K3d --deployment-tool Kubectl --secret-manager SOPS"
+            - "init --container-engine Docker --distribution K3d --deployment-tool Flux"
+            - "init --container-engine Docker --distribution K3d --deployment-tool Flux --secret-manager SOPS"
+            - "init --container-engine Docker --distribution K3d --deployment-tool ArgoCD"
+            - "init --container-engine Docker --distribution K3d --deployment-tool ArgoCD --secret-manager SOPS"
+            - "init --container-engine Docker --distribution K3d --cni Default"
+            - "init --container-engine Docker --distribution K3d --cni Cilium"
+            - "init --container-engine Docker --distribution K3d --cni None"
+            - "init --container-engine Docker --distribution K3d --csi Default"
+            - "init --container-engine Docker --distribution K3d --csi LocalPathProvisioner"
+            - "init --container-engine Docker --distribution K3d --csi None"
+            - "init --container-engine Docker --distribution K3d --ingress-controller Default"
+            - "init --container-engine Docker --distribution K3d --ingress-controller Traefik"
+            - "init --container-engine Docker --distribution K3d --ingress-controller None"
+            - "init --container-engine Docker --distribution K3d --gateway-controller Default"
+            - "init --container-engine Docker --distribution K3d --gateway-controller None"
+            - "init --container-engine Docker --distribution K3d --metrics-server True"
+            - "init --container-engine Docker --distribution K3d --metrics-server False"
+            - "init --container-engine Docker --distribution K3d --mirror-registries True"
+            - "init --container-engine Docker --distribution K3d --mirror-registries False"
+            - "init --container-engine Podman --distribution Kind"
+            - "init --container-engine Podman --distribution K3d"
+    steps:
+      - name: Generate GitHub App Token
+        uses: tibdex/github-app-token@v2
+        id: generate-token
+        with:
+          app_id: ${{ vars.APP_ID }}
+          private_key: ${{ secrets.APP_PRIVATE_KEY }}
+      - name: 📑 Checkout
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+          token: ${{ steps.generate-token.outputs.token }}
+      - name: ⚙️ Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9
+      - name: 🧪 Run system test
+        run: |
+          dotnet run -- ${{ matrix.init-args }}
+          dotnet run -- up
+          dotnet run -- status
+          dotnet run -- list
+          dotnet run -- list --all
+          dotnet run -- stop
+          dotnet run -- start
+          dotnet run -- update
+          dotnet run -- down
+          dotnet run -- down
+      - name: 🧹Cleanup
+        run: |
+          if [ -d "k8s" ]; then rm -rf "k8s"; fi
+          if [ -f "kind.yaml" ]; then rm "kind.yaml"; fi
+          if [ -f "k3d.yaml" ]; then rm "k3d.yaml"; fi
+          if [ -f "ksail.yaml" ]; then rm "ksail.yaml"; fi
+          if [ -f ".sops.yaml" ]; then rm ".sops.yaml"; fi

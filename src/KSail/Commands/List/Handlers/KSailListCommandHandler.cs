@@ -5,39 +5,37 @@ using KSail.Models.Project.Enums;
 
 namespace KSail.Commands.List.Handlers;
 
-sealed class KSailListCommandHandler(KSailCluster config)
+sealed class KSailListCommandHandler(KSailCluster config) : ICommandHandler
 {
   readonly KSailCluster _config = config;
   readonly K3dProvisioner _k3dProvisioner = new();
   readonly KindProvisioner _kindProvisioner = new();
 
-  internal async Task<bool> HandleAsync(CancellationToken cancellationToken = default)
+  public async Task<int> HandleAsync(CancellationToken cancellationToken = default)
   {
-    IEnumerable<string> clusters = [];
+    IEnumerable<string> clusters;
     if (_config.Spec.Distribution.ShowAllClustersInListings)
     {
       Console.WriteLine("---- K3d ----");
-      clusters = [.. clusters, .. await _k3dProvisioner.ListAsync(cancellationToken).ConfigureAwait(false)];
+      clusters = [.. await _k3dProvisioner.ListAsync(cancellationToken).ConfigureAwait(false)];
       PrintClusters(clusters);
       Console.WriteLine();
 
       Console.WriteLine("---- Kind ----");
-      clusters = [.. clusters, .. await _kindProvisioner.ListAsync(cancellationToken).ConfigureAwait(false)];
-      clusters = clusters.Where(cluster => !cluster.Contains("No kind clusters found.", StringComparison.Ordinal));
+      clusters = [.. await _kindProvisioner.ListAsync(cancellationToken).ConfigureAwait(false)];
       PrintClusters(clusters);
-      return true;
+      return 0;
     }
     else
     {
-      clusters = (_config.Spec.Project.Provider, _config.Spec.Project.Distribution) switch
+      clusters = _config.Spec.Project.Distribution switch
       {
-        (KSailProviderType.Docker or KSailProviderType.Podman, KSailDistributionType.K3s) => await _k3dProvisioner.ListAsync(cancellationToken).ConfigureAwait(false),
-        (KSailProviderType.Docker or KSailProviderType.Podman, KSailDistributionType.Native) => await _kindProvisioner.ListAsync(cancellationToken).ConfigureAwait(false),
-        _ => throw new NotSupportedException($"The container engine '{_config.Spec.Project.Provider}' and distribution '{_config.Spec.Project.Distribution}' combination is not supported.")
+        KSailDistributionType.K3d => await _k3dProvisioner.ListAsync(cancellationToken).ConfigureAwait(false),
+        KSailDistributionType.Kind => await _kindProvisioner.ListAsync(cancellationToken).ConfigureAwait(false),
+        _ => throw new NotSupportedException($"The container engine '{_config.Spec.Project.ContainerEngine}' and distribution '{_config.Spec.Project.Distribution}' combination is not supported.")
       };
-      clusters = clusters.Where(cluster => !cluster.Contains("No kind clusters found.", StringComparison.Ordinal));
       PrintClusters(clusters);
-      return true;
+      return 0;
     }
   }
 

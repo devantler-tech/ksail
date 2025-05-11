@@ -18,7 +18,7 @@ sealed class KSailListCommand : Command
         var config = await KSailClusterConfigLoader.LoadWithoptionsAsync(context).ConfigureAwait(false);
         var cancellationToken = context.GetCancellationToken();
         var handler = new KSailListCommandHandler(config);
-        context.ExitCode = await handler.HandleAsync(context.GetCancellationToken()).ConfigureAwait(false) ? 0 : 1;
+        context.ExitCode = await handler.HandleAsync(context.GetCancellationToken()).ConfigureAwait(false);
       }
       catch (Exception ex)
       {
@@ -30,7 +30,7 @@ sealed class KSailListCommand : Command
 
   internal void AddOptions()
   {
-    AddOption(CLIOptions.Project.ProviderOption);
+    AddOption(CLIOptions.Project.ContainerEngineOption);
     AddOption(CLIOptions.Project.DistributionOption);
     AddOption(CLIOptions.Distribution.ShowAllClustersInListings);
   }

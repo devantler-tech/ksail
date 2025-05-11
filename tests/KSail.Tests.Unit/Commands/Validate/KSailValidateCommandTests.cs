@@ -18,7 +18,7 @@ public class KSailValidateCommandTests
   public async Task KSailValidateHelp_SucceedsAndPrintsIntroductionAndHelp()
   {
     //Act
-    int exitCode = await _ksailCommand.InvokeAsync(["validate", "--help"], _console);
+    int exitCode = await _ksailCommand.InvokeAsync(["validate", "-h"], _console);
 
     //Assert
     Assert.Equal(0, exitCode);

@@ -87,6 +87,13 @@ jobs:
             ksail-linux-arm64
             ksail.tar.gz
           token: ${{ steps.app-token.outputs.token }}
+      - name: 🔑 Import GPG Key
+        uses: crazy-max/ghaction-import-gpg@v5
+        with:
+          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
+          passphrase: ${{ secrets.GPG_PASSPHRASE }}
+          git_user_signingkey: true
+          git_commit_gpgsign: true
       - name: 🍺 Brew tap formulas
         run: brew tap devantler-tech/formulas
       - name: 🍺 Brew bump formulas
@@ -94,13 +101,6 @@ jobs:
           brew bump --no-fork --open-pr --formulae ksail
         env:
           HOMEBREW_GITHUB_API_TOKEN: ${{ secrets.HOMEBREW_GITHUB_API_TOKEN }}
-      # - name: 🍺 Brew bump core formulas
-      #  uses: Homebrew/actions/bump-packages@master
-      #  with:
-      #    token: ${{ steps.app-token.outputs.token }}
-      #    formulae: |
-      #      ksail
-
   # TODO: Rework docker publish with a generic reusable action
   publish-images:
     uses: devantler-tech/workflows/.github/workflows/image-publish.yaml@main

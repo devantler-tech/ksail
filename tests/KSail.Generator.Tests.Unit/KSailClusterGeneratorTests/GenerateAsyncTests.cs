@@ -19,7 +19,7 @@ public partial class GenerateAsyncTests
   public async Task GenerateAsync_WithPropertiesSet_ShouldGenerateAValidKSailClusterFile()
   {
     // Arrange
-    var cluster = new KSailCluster("my-cluster", KSailDistributionType.K3s);
+    var cluster = new KSailCluster("my-cluster", KSailDistributionType.K3d);
 
     // Act
     string outputPath = Path.Combine(Path.GetTempPath(), "ksail.yaml");

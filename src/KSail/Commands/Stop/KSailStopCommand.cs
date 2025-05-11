@@ -32,7 +32,7 @@ sealed class KSailStopCommand : Command
   internal void AddOptions()
   {
     AddOption(CLIOptions.Metadata.NameOption);
+    AddOption(CLIOptions.Project.ContainerEngineOption);
     AddOption(CLIOptions.Project.DistributionOption);
-    AddOption(CLIOptions.Project.ProviderOption);
   }
 }

@@ -4,11 +4,11 @@ using k8s.Models;
 
 namespace KSail.Commands.Gen.Handlers.CertManager;
 
-class KSailGenCertManagerClusterIssuerCommandHandler(string outputFile, bool overwrite)
+class KSailGenCertManagerClusterIssuerCommandHandler(string outputFile, bool overwrite) : ICommandHandler
 {
   readonly CertManagerClusterIssuerGenerator _generator = new();
 
-  internal async Task<int> HandleAsync(CancellationToken cancellationToken = default)
+  public async Task<int> HandleAsync(CancellationToken cancellationToken = default)
   {
     var clusterIssuer = new CertManagerClusterIssuer
     {

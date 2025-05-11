@@ -45,7 +45,7 @@ public class KSailClusterInitializationTests
   public async Task InitializeKSailCluster_WithDistribution_ShouldReturnValidConfig()
   {
     // Arrange
-    var cluster = new KSailCluster(KSailDistributionType.K3s);
+    var cluster = new KSailCluster(KSailDistributionType.K3d);
 
     // Act & Assert
     var settings = new VerifySettings();
@@ -63,7 +63,7 @@ public class KSailClusterInitializationTests
   public async Task InitializeKSailCluster_WithNameAndDistribution_ShouldReturnValidConfig()
   {
     // Arrange
-    var cluster = new KSailCluster("my-cluster", KSailDistributionType.K3s);
+    var cluster = new KSailCluster("my-cluster", KSailDistributionType.K3d);
 
     // Act & Assert
     var settings = new VerifySettings();

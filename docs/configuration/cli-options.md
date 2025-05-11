@@ -22,8 +22,8 @@ Usage:
   ksail [command] [options]
 
 Options:
-  --version       Show version information
-  -?, -h, --help  Show help and usage information
+  --version  Show version information
+  --helpz    Show help and usage information
 
 Commands:
   init      Initialize a new project
@@ -35,9 +35,40 @@ Commands:
   status    Show the status of a cluster
   list      List active clusters
   validate  Validate project files
-  debug     Debug a cluster (❤️ K9s)
+  connect   Connect to a cluster with K9s
   gen       Generate a resource
   secrets   Manage secrets
+  run       Run a command
+```
+
+## `ksail init`
+
+```text
+Description:
+  Initialize a new project
+
+Usage:
+  ksail init [options]
+
+Options:
+  -o, --output <output>                             Output directory for the project files. [default: ./] [default: ./]
+  -n, --name <name>                                 The name of the cluster. [default: ksail-default]
+  -c, --config <config>                             The path to the ksail configuration file. [default: ksail.yaml]
+  -dc, --distribution-config <distribution-config>  Path to the distribution configuration file. [default: kind.yaml]
+  -kp, --kustomization-path <kustomization-path>    The path to the root kustomization directory. [default: k8s]
+  -ce, --container-engine <Docker|Podman>           The container engine in which to provision the cluster. [default: Docker]
+  -d, --distribution <K3d|Kind>                     The distribution to use for the cluster. [default: Kind]
+  -dt, --deployment-tool <Flux|Kubectl>             The Deployment tool to use for applying a kustomization. [default: Kubectl]
+  --cni <Cilium|Default|None>                       The CNI to use. [default: Default]
+  --csi <Default|LocalPathProvisioner|None>         The CSI to use. [default: Default]
+  -ic, --ingress-controller <Default|None|Traefik>  The Ingress Controller to use. [default: Default]
+  -gc, --gateway-controller <Default|None>          The Gateway Controller to use. [default: Default]
+  -ms, --metrics-server                             Whether to install Metrics Server. [default: True]
+  -mr, --mirror-registries                          Enable mirror registries for the project. [default: True]
+  -sm, --secret-manager <None|SOPS>                 Whether to use a secret manager. [default: None]
+  -e, --editor <Nano|Vim>                           Editor to use. [default: Nano]
+  --overwrite                                       Overwrite existing files. [default: False]
+  --helpz                                           Show help and usage information
 ```
 
 ## `ksail up`
@@ -56,37 +87,20 @@ Options:
   -n, --name <name>                                 The name of the cluster. [default: ksail-default]
   -dc, --distribution-config <distribution-config>  Path to the distribution configuration file. [default: kind.yaml]
   -kp, --kustomization-path <kustomization-path>    The path to the root kustomization directory. [default: k8s]
-  -p, --provider <Docker|Podman>                    The provider to use for provisioning the cluster. [default: Docker]
-  -d, --distribution <K3s|Native>                   The distribution to use for the cluster. [default: Native]
+  -ce, --container-engine <Docker|Podman>           The container engine in which to provision the cluster. [default: Docker]
+  -d, --distribution <K3d|Kind>                     The distribution to use for the cluster. [default: Kind]
   -dt, --deployment-tool <Flux|Kubectl>             The Deployment tool to use for applying a kustomization. [default: Kubectl]
-  --cni <Cilium|Default>                            The CNI to use. [default: Default]
-  --csi <Default>                                   The CSI to use. [default: Default]
-  -ic, --ingress-controller <Default>               The Ingress Controller to use. [default: Default]
-  -gc, --gateway-controller <Default>               The Gateway Controller to use. [default: Default]
+  --cni <Cilium|Default|None>                       The CNI to use. [default: Default]
+  --csi <Default|LocalPathProvisioner|None>         The CSI to use. [default: Default]
+  -ic, --ingress-controller <Default|None|Traefik>  The Ingress Controller to use. [default: Default]
+  -gc, --gateway-controller <Default|None>          The Gateway Controller to use. [default: Default]
+  -ms, --metrics-server                             Whether to install Metrics Server. [default: True]
   -mr, --mirror-registries                          Enable mirror registries for the project. [default: True]
   -sm, --secret-manager <None|SOPS>                 Whether to use a secret manager. [default: None]
   -fsu, --flux-source-url <flux-source-url>         Flux source URL for reconciling GitOps resources. [default: oci://ksail-registry:5000/ksail-registry]
   -v, --validate                                    Validate project files before creating a new cluster. [default: True]
   -r, --reconcile                                   Reconcile manifests. [default: True]
-  -?, -h, --help                                    Show help and usage information
-```
-
-## `ksail down`
-
-```text
-Description:
-  Destroy a cluster
-
-Usage:
-  ksail down [options]
-
-Options:
-  -fsu, --flux-source-url <flux-source-url>  Flux source URL for reconciling GitOps resources. [default: oci://ksail-registry:5000/ksail-registry]
-  -n, --name <name>                          The name of the cluster. [default: ksail-default]
-  -d, --distribution <K3s|Native>            The distribution to use for the cluster. [default: Native]
-  -p, --provider <Docker|Podman>             The provider to use for provisioning the cluster. [default: Docker]
-  -mr, --mirror-registries                   Enable mirror registries for the project. [default: True]
-  -?, -h, --help                             Show help and usage information
+  --helpz                                           Show help and usage information
 ```
 
 ## `ksail update`
@@ -102,9 +116,11 @@ Options:
   -c, --context <context>                         The kubernetes context to use. [default: kind-ksail-default]
   -k, --kubeconfig <kubeconfig>                   Path to kubeconfig file. [default: ~/.kube/config]
   -kp, --kustomization-path <kustomization-path>  The path to the root kustomization directory. [default: k8s]
+  -dt, --deployment-tool <Flux|Kubectl>           The Deployment tool to use for applying a kustomization. [default: Kubectl]
+  -p, --publish                                   Publish manifests. [default: True]
   -v, --validate                                  Validate project files before applying changes to an existing cluster. [default: True]
   -r, --reconcile                                 Reconcile manifests. [default: True]
-  -?, -h, --help                                  Show help and usage information
+  --helpz                                         Show help and usage information
 ```
 
 ## `ksail start`
@@ -117,11 +133,11 @@ Usage:
   ksail start [options]
 
 Options:
-  -c, --context <context>          The kubernetes context to use. [default: kind-ksail-default]
-  -n, --name <name>                The name of the cluster. [default: ksail-default]
-  -d, --distribution <K3s|Native>  The distribution to use for the cluster. [default: Native]
-  -p, --provider <Docker|Podman>   The provider to use for provisioning the cluster. [default: Docker]
-  -?, -h, --help                   Show help and usage information
+  -c, --context <context>                  The kubernetes context to use. [default: kind-ksail-default]
+  -n, --name <name>                        The name of the cluster. [default: ksail-default]
+  -ce, --container-engine <Docker|Podman>  The container engine in which to provision the cluster. [default: Docker]
+  -d, --distribution <K3d|Kind>            The distribution to use for the cluster. [default: Kind]
+  --helpz                                  Show help and usage information
 ```
 
 ## `ksail stop`
@@ -134,69 +150,28 @@ Usage:
   ksail stop [options]
 
 Options:
-  -n, --name <name>                The name of the cluster. [default: ksail-default]
-  -d, --distribution <K3s|Native>  The distribution to use for the cluster. [default: Native]
-  -p, --provider <Docker|Podman>   The provider to use for provisioning the cluster. [default: Docker]
-  -?, -h, --help                   Show help and usage information
+  -n, --name <name>                        The name of the cluster. [default: ksail-default]
+  -ce, --container-engine <Docker|Podman>  The container engine in which to provision the cluster. [default: Docker]
+  -d, --distribution <K3d|Kind>            The distribution to use for the cluster. [default: Kind]
+  --helpz                                  Show help and usage information
 ```
 
-## `ksail init`
+## `ksail down`
 
 ```text
 Description:
-  Initialize a new project
+  Destroy a cluster
 
 Usage:
-  ksail init [options]
+  ksail down [options]
 
 Options:
-  -o, --output <output>                             Output directory for the project files. [default: ./] [default: ./]
-  -n, --name <name>                                 The name of the cluster. [default: ksail-default]
-  -c, --config <config>                             The path to the ksail configuration file. [default: ksail.yaml]
-  -dc, --distribution-config <distribution-config>  Path to the distribution configuration file. [default: kind.yaml]
-  -kp, --kustomization-path <kustomization-path>    The path to the root kustomization directory. [default: k8s]
-  -p, --provider <Docker|Podman>                    The provider to use for provisioning the cluster. [default: Docker]
-  -d, --distribution <K3s|Native>                   The distribution to use for the cluster. [default: Native]
-  -dt, --deployment-tool <Flux|Kubectl>             The Deployment tool to use for applying a kustomization. [default: Kubectl]
-  --cni <Cilium|Default>                            The CNI to use. [default: Default]
-  --csi <Default>                                   The CSI to use. [default: Default]
-  -ic, --ingress-controller <Default>               The Ingress Controller to use. [default: Default]
-  -gc, --gateway-controller <Default>               The Gateway Controller to use. [default: Default]
-  -mr, --mirror-registries                          Enable mirror registries for the project. [default: True]
-  -sm, --secret-manager <None|SOPS>                 Whether to use a secret manager. [default: None]
-  -e, --editor <Nano|Vim>                           Editor to use. [default: Nano]
-  --overwrite                                       Overwrite existing files. [default: False]
-  -?, -h, --help                                    Show help and usage information
-```
-
-## `ksail lint`
-
-```text
-'lint' was not matched. Did you mean one of the following?
-list
-Description:
-  KSail is an SDK for Kubernetes. Ship k8s with ease!
-
-Usage:
-  ksail [command] [options]
-
-Options:
-  --version       Show version information
-  -?, -h, --help  Show help and usage information
-
-Commands:
-  init      Initialize a new project
-  up        Create a cluster
-  update    Update a cluster
-  start     Start a cluster
-  stop      Stop a cluster
-  down      Destroy a cluster
-  status    Show the status of a cluster
-  list      List active clusters
-  validate  Validate project files
-  debug     Debug a cluster (❤️ K9s)
-  gen       Generate a resource
-  secrets   Manage secrets
+  -fsu, --flux-source-url <flux-source-url>  Flux source URL for reconciling GitOps resources. [default: oci://ksail-registry:5000/ksail-registry]
+  -n, --name <name>                          The name of the cluster. [default: ksail-default]
+  -d, --distribution <K3d|Kind>              The distribution to use for the cluster. [default: Kind]
+  -ce, --container-engine <Docker|Podman>    The container engine in which to provision the cluster. [default: Docker]
+  -mr, --mirror-registries                   Enable mirror registries for the project. [default: True]
+  --helpz                                    Show help and usage information
 ```
 
 ## `ksail status`
@@ -212,7 +187,7 @@ Options:
   -k, --kubeconfig <kubeconfig>  Path to kubeconfig file. [default: ~/.kube/config]
   -c, --context <context>        The kubernetes context to use. [default: kind-ksail-default]
   --verbose                      Verbose output for validation or status checks. [default: False]
-  -?, -h, --help                 Show help and usage information
+  --helpz                        Show help and usage information
 ```
 
 ## `ksail list`
@@ -225,26 +200,40 @@ Usage:
   ksail list [options]
 
 Options:
-  -p, --provider <Docker|Podman>   The provider to use for provisioning the cluster. [default: Docker]
-  -d, --distribution <K3s|Native>  The distribution to use for the cluster. [default: Native]
-  -a, --all                        List clusters from all distributions. [default: False]
-  -?, -h, --help                   Show help and usage information
+  -ce, --container-engine <Docker|Podman>  The container engine in which to provision the cluster. [default: Docker]
+  -d, --distribution <K3d|Kind>            The distribution to use for the cluster. [default: Kind]
+  -a, --all                                List clusters from all distributions. [default: False]
+  --helpz                                  Show help and usage information
 ```
 
-## `ksail debug`
+## `ksail validate`
 
 ```text
 Description:
-  Debug a cluster (❤️ K9s)
+  Validate project files
 
 Usage:
-  ksail debug [options]
+  ksail validate [options]
+
+Options:
+  -p, --path <path>  Path to the project files. [default: ./] [default: ./]
+  --helpz            Show help and usage information
+```
+
+## `ksail connect`
+
+```text
+Description:
+  Connect to a cluster with K9s
+
+Usage:
+  ksail connect [options]
 
 Options:
   -k, --kubeconfig <kubeconfig>  Path to kubeconfig file. [default: ~/.kube/config]
   -c, --context <context>        The kubernetes context to use. [default: kind-ksail-default]
   -e, --editor <Nano|Vim>        Editor to use. [default: Nano]
-  -?, -h, --help                 Show help and usage information
+  --helpz                        Show help and usage information
 ```
 
 ## `ksail gen`
@@ -257,8 +246,8 @@ Usage:
   ksail gen [command] [options]
 
 Options:
-  --overwrite     Overwrite existing files. [default: False]
-  -?, -h, --help  Show help and usage information
+  --overwrite  Overwrite existing files. [default: False]
+  --helpz      Show help and usage information
 
 Commands:
   cert-manager  Generate a CertManager resource.
@@ -278,8 +267,8 @@ Usage:
   ksail gen cert-manager [command] [options]
 
 Options:
-  --overwrite     Overwrite existing files. [default: False]
-  -?, -h, --help  Show help and usage information
+  --overwrite  Overwrite existing files. [default: False]
+  --helpz      Show help and usage information
 
 Commands:
   certificate     Generate a 'cert-manager.io/v1/Certificate' resource.
@@ -298,7 +287,7 @@ Usage:
 Options:
   -o, --output <output>  A file or directory path. [default: ./certificate.yaml]
   --overwrite            Overwrite existing files. [default: False]
-  -?, -h, --help         Show help and usage information
+  --helpz                Show help and usage information
 ```
 
 ## `ksail gen cert-manager cluster-issuer`
@@ -313,7 +302,7 @@ Usage:
 Options:
   -o, --output <output>  A file or directory path. [default: ./cluster-issuer.yaml]
   --overwrite            Overwrite existing files. [default: False]
-  -?, -h, --help         Show help and usage information
+  --helpz                Show help and usage information
 ```
 
 ## `ksail gen config`
@@ -326,8 +315,8 @@ Usage:
   ksail gen config [command] [options]
 
 Options:
-  --overwrite     Overwrite existing files. [default: False]
-  -?, -h, --help  Show help and usage information
+  --overwrite  Overwrite existing files. [default: False]
+  --helpz      Show help and usage information
 
 Commands:
   k3d    Generate a 'k3d.io/v1alpha5/Simple' resource.
@@ -347,7 +336,7 @@ Usage:
 Options:
   -o, --output <output>  A file or directory path. [default: ./k3d.yaml]
   --overwrite            Overwrite existing files. [default: False]
-  -?, -h, --help         Show help and usage information
+  --helpz                Show help and usage information
 ```
 
 ## `ksail gen config ksail`
@@ -362,7 +351,7 @@ Usage:
 Options:
   -o, --output <output>  A file or directory path. [default: ./ksail.yaml]
   --overwrite            Overwrite existing files. [default: False]
-  -?, -h, --help         Show help and usage information
+  --helpz                Show help and usage information
 ```
 
 ## `ksail gen config sops`
@@ -377,7 +366,7 @@ Usage:
 Options:
   -o, --output <output>  A file or directory path. [default: ./.sops.yaml]
   --overwrite            Overwrite existing files. [default: False]
-  -?, -h, --help         Show help and usage information
+  --helpz                Show help and usage information
 ```
 
 ## `ksail gen flux`
@@ -390,8 +379,8 @@ Usage:
   ksail gen flux [command] [options]
 
 Options:
-  --overwrite     Overwrite existing files. [default: False]
-  -?, -h, --help  Show help and usage information
+  --overwrite  Overwrite existing files. [default: False]
+  --helpz      Show help and usage information
 
 Commands:
   helm-release     Generate a 'helm.toolkit.fluxcd.io/v2/HelmRelease' resource.
@@ -411,7 +400,7 @@ Usage:
 Options:
   -o, --output <output>  A file or directory path. [default: ./helm-release.yaml]
   --overwrite            Overwrite existing files. [default: False]
-  -?, -h, --help         Show help and usage information
+  --helpz                Show help and usage information
 ```
 
 ## `ksail gen flux helm-repository`
@@ -426,7 +415,7 @@ Usage:
 Options:
   -o, --output <output>  A file or directory path. [default: ./helm-repository.yaml]
   --overwrite            Overwrite existing files. [default: False]
-  -?, -h, --help         Show help and usage information
+  --helpz                Show help and usage information
 ```
 
 ## `ksail gen flux kustomization`
@@ -441,7 +430,7 @@ Usage:
 Options:
   -o, --output <output>  A file or directory path. [default: ./flux-kustomization.yaml]
   --overwrite            Overwrite existing files. [default: False]
-  -?, -h, --help         Show help and usage information
+  --helpz                Show help and usage information
 ```
 
 ## `ksail gen kustomize`
@@ -454,8 +443,8 @@ Usage:
   ksail gen kustomize [command] [options]
 
 Options:
-  --overwrite     Overwrite existing files. [default: False]
-  -?, -h, --help  Show help and usage information
+  --overwrite  Overwrite existing files. [default: False]
+  --helpz      Show help and usage information
 
 Commands:
   component      Generate a 'kustomize.config.k8s.io/v1alpha1/Component' resource.
@@ -474,7 +463,7 @@ Usage:
 Options:
   -o, --output <output>  A file or directory path. [default: ./kustomization.yaml]
   --overwrite            Overwrite existing files. [default: False]
-  -?, -h, --help         Show help and usage information
+  --helpz                Show help and usage information
 ```
 
 ## `ksail gen kustomize kustomization`
@@ -489,7 +478,7 @@ Usage:
 Options:
   -o, --output <output>  A file or directory path. [default: ./kustomization.yaml]
   --overwrite            Overwrite existing files. [default: False]
-  -?, -h, --help         Show help and usage information
+  --helpz                Show help and usage information
 ```
 
 ## `ksail gen native`
@@ -502,8 +491,8 @@ Usage:
   ksail gen native [command] [options]
 
 Options:
-  --overwrite     Overwrite existing files. [default: False]
-  -?, -h, --help  Show help and usage information
+  --overwrite  Overwrite existing files. [default: False]
+  --helpz      Show help and usage information
 
 Commands:
   cluster-role-binding       Generate a 'rbac.authorization.k8s.io/v1/ClusterRoleBinding' resource.
@@ -542,7 +531,7 @@ Usage:
 Options:
   -o, --output <output>  A file or directory path. [default: ./cluster-role-binding.yaml]
   --overwrite            Overwrite existing files. [default: False]
-  -?, -h, --help         Show help and usage information
+  --helpz                Show help and usage information
 ```
 
 ## `ksail gen native cluster-role`
@@ -557,7 +546,7 @@ Usage:
 Options:
   -o, --output <output>  A file or directory path. [default: ./cluster-role.yaml]
   --overwrite            Overwrite existing files. [default: False]
-  -?, -h, --help         Show help and usage information
+  --helpz                Show help and usage information
 ```
 
 ## `ksail gen native namespace`
@@ -572,7 +561,7 @@ Usage:
 Options:
   -o, --output <output>  A file or directory path. [default: ./namespace.yaml]
   --overwrite            Overwrite existing files. [default: False]
-  -?, -h, --help         Show help and usage information
+  --helpz                Show help and usage information
 ```
 
 ## `ksail gen native network-policy`
@@ -587,7 +576,7 @@ Usage:
 Options:
   -o, --output <output>  A file or directory path. [default: ./network-policy.yaml]
   --overwrite            Overwrite existing files. [default: False]
-  -?, -h, --help         Show help and usage information
+  --helpz                Show help and usage information
 ```
 
 ## `ksail gen native persistent-volume`
@@ -602,7 +591,7 @@ Usage:
 Options:
   -o, --output <output>  A file or directory path. [default: ./persistent-volume.yaml]
   --overwrite            Overwrite existing files. [default: False]
-  -?, -h, --help         Show help and usage information
+  --helpz                Show help and usage information
 ```
 
 ## `ksail gen native resource-quota`
@@ -617,7 +606,7 @@ Usage:
 Options:
   -o, --output <output>  A file or directory path. [default: ./resource-quota.yaml]
   --overwrite            Overwrite existing files. [default: False]
-  -?, -h, --help         Show help and usage information
+  --helpz                Show help and usage information
 ```
 
 ## `ksail gen native role-binding`
@@ -632,7 +621,7 @@ Usage:
 Options:
   -o, --output <output>  A file or directory path. [default: ./role-binding.yaml]
   --overwrite            Overwrite existing files. [default: False]
-  -?, -h, --help         Show help and usage information
+  --helpz                Show help and usage information
 ```
 
 ## `ksail gen native role`
@@ -647,7 +636,7 @@ Usage:
 Options:
   -o, --output <output>  A file or directory path. [default: ./role.yaml]
   --overwrite            Overwrite existing files. [default: False]
-  -?, -h, --help         Show help and usage information
+  --helpz                Show help and usage information
 ```
 
 ## `ksail gen native service-account`
@@ -662,7 +651,7 @@ Usage:
 Options:
   -o, --output <output>  A file or directory path. [default: ./service-account.yaml]
   --overwrite            Overwrite existing files. [default: False]
-  -?, -h, --help         Show help and usage information
+  --helpz                Show help and usage information
 ```
 
 ## `ksail gen native config-map`
@@ -677,7 +666,7 @@ Usage:
 Options:
   -o, --output <output>  A file or directory path. [default: ./config-map.yaml]
   --overwrite            Overwrite existing files. [default: False]
-  -?, -h, --help         Show help and usage information
+  --helpz                Show help and usage information
 ```
 
 ## `ksail gen native persistent-volume-claim`
@@ -692,7 +681,7 @@ Usage:
 Options:
   -o, --output <output>  A file or directory path. [default: ./persistent-volume-claim.yaml]
   --overwrite            Overwrite existing files. [default: False]
-  -?, -h, --help         Show help and usage information
+  --helpz                Show help and usage information
 ```
 
 ## `ksail gen native secret`
@@ -707,7 +696,7 @@ Usage:
 Options:
   -o, --output <output>  A file or directory path. [default: ./secret.yaml]
   --overwrite            Overwrite existing files. [default: False]
-  -?, -h, --help         Show help and usage information
+  --helpz                Show help and usage information
 ```
 
 ## `ksail gen native horizontal-pod-autoscaler`
@@ -722,7 +711,7 @@ Usage:
 Options:
   -o, --output <output>  A file or directory path. [default: ./horizontal-pod-autoscaler.yaml]
   --overwrite            Overwrite existing files. [default: False]
-  -?, -h, --help         Show help and usage information
+  --helpz                Show help and usage information
 ```
 
 ## `ksail gen native pod-disruption-budget`
@@ -737,7 +726,7 @@ Usage:
 Options:
   -o, --output <output>  A file or directory path. [default: ./pod-disruption-budget.yaml]
   --overwrite            Overwrite existing files. [default: False]
-  -?, -h, --help         Show help and usage information
+  --helpz                Show help and usage information
 ```
 
 ## `ksail gen native priority-class`
@@ -752,7 +741,7 @@ Usage:
 Options:
   -o, --output <output>  A file or directory path. [default: ./priority-class.yaml]
   --overwrite            Overwrite existing files. [default: False]
-  -?, -h, --help         Show help and usage information
+  --helpz                Show help and usage information
 ```
 
 ## `ksail gen native ingress`
@@ -767,7 +756,7 @@ Usage:
 Options:
   -o, --output <output>  A file or directory path. [default: ./ingress.yaml]
   --overwrite            Overwrite existing files. [default: False]
-  -?, -h, --help         Show help and usage information
+  --helpz                Show help and usage information
 ```
 
 ## `ksail gen native service`
@@ -782,7 +771,7 @@ Usage:
 Options:
   -o, --output <output>  A file or directory path. [default: ./service.yaml]
   --overwrite            Overwrite existing files. [default: False]
-  -?, -h, --help         Show help and usage information
+  --helpz                Show help and usage information
 ```
 
 ## `ksail gen native cron-job`
@@ -797,7 +786,7 @@ Usage:
 Options:
   -o, --output <output>  A file or directory path. [default: ./cron-job.yaml]
   --overwrite            Overwrite existing files. [default: False]
-  -?, -h, --help         Show help and usage information
+  --helpz                Show help and usage information
 ```
 
 ## `ksail gen native daemon-set`
@@ -812,7 +801,7 @@ Usage:
 Options:
   -o, --output <output>  A file or directory path. [default: ./daemon-set.yaml]
   --overwrite            Overwrite existing files. [default: False]
-  -?, -h, --help         Show help and usage information
+  --helpz                Show help and usage information
 ```
 
 ## `ksail gen native deployment`
@@ -827,7 +816,7 @@ Usage:
 Options:
   -o, --output <output>  A file or directory path. [default: ./deployment.yaml]
   --overwrite            Overwrite existing files. [default: False]
-  -?, -h, --help         Show help and usage information
+  --helpz                Show help and usage information
 ```
 
 ## `ksail gen native job`
@@ -842,7 +831,7 @@ Usage:
 Options:
   -o, --output <output>  A file or directory path. [default: ./job.yaml]
   --overwrite            Overwrite existing files. [default: False]
-  -?, -h, --help         Show help and usage information
+  --helpz                Show help and usage information
 ```
 
 ## `ksail gen native stateful-set`
@@ -857,7 +846,7 @@ Usage:
 Options:
   -o, --output <output>  A file or directory path. [default: ./stateful-set.yaml]
   --overwrite            Overwrite existing files. [default: False]
-  -?, -h, --help         Show help and usage information
+  --helpz                Show help and usage information
 ```
 
 ## `ksail secrets`
@@ -870,7 +859,7 @@ Usage:
   ksail secrets [command] [options]
 
 Options:
-  -?, -h, --help  Show help and usage information
+  --helpz  Show help and usage information
 
 Commands:
   encrypt <path>       Encrypt a file
@@ -899,7 +888,7 @@ Options:
   -pk, --public-key <public-key>  The public key. [default: ]
   -ip, --in-place                 In-place decryption/encryption. [default: False]
   -o, --output <output>           A file or directory path. []
-  -?, -h, --help                  Show help and usage information
+  --helpz                         Show help and usage information
 ```
 
 ## `ksail secrets decrypt`
@@ -917,7 +906,7 @@ Arguments:
 Options:
   -ip, --in-place        In-place decryption/encryption. [default: False]
   -o, --output <output>  A file or directory path. []
-  -?, -h, --help         Show help and usage information
+  --helpz                Show help and usage information
 ```
 
 ## `ksail secrets edit`
@@ -934,7 +923,7 @@ Arguments:
 
 Options:
   -e, --editor <Nano|Vim>  Editor to use. [default: Nano]
-  -?, -h, --help           Show help and usage information
+  --helpz                  Show help and usage information
 ```
 
 ## `ksail secrets add`
@@ -947,7 +936,7 @@ Usage:
   ksail secrets add [options]
 
 Options:
-  -?, -h, --help  Show help and usage information
+  --helpz  Show help and usage information
 ```
 
 ## `ksail secrets rm`
@@ -963,7 +952,7 @@ Arguments:
   <public-key>  Public key matching existing encryption key
 
 Options:
-  -?, -h, --help  Show help and usage information
+  --helpz  Show help and usage information
 ```
 
 ## `ksail secrets list`
@@ -978,7 +967,7 @@ Usage:
 Options:
   -spk, --show-private-keys  Show private keys. [default: False]
   -a, --all                  Show all keys. [default: False]
-  -?, -h, --help             Show help and usage information
+  --helpz                    Show help and usage information
 ```
 
 ## `ksail secrets import`
@@ -994,7 +983,7 @@ Arguments:
   <key>  The encryption key to import
 
 Options:
-  -?, -h, --help  Show help and usage information
+  --helpz  Show help and usage information
 ```
 
 ## `ksail secrets export`
@@ -1011,5 +1000,31 @@ Arguments:
 
 Options:
   -o, --output <output>  A file or directory path. []
-  -?, -h, --help         Show help and usage information
+  --helpz                Show help and usage information
+```
+
+## `ksail run`
+
+```text
+Description:
+  Run a command
+
+Usage:
+  ksail run [command] [options]
+
+Options:
+  --helpz  Show help and usage information
+
+Commands:
+  age-keygen <args>   Run 'age-keygen' command
+  cilium <args>       Run 'cilium' command
+  flux <args>         Run 'flux' command
+  helm <args>         Run 'helm' command
+  k3d <args>          Run 'k3d' command
+  k9s <args>          Run 'k9s' command
+  kind <args>         Run 'kind' command
+  kubeconform <args>  Run 'kubeconform' command
+  kubectl <args>      Run 'kubectl' command
+  kustomize <args>    Run 'kustomize' command
+  sops <args>         Run 'sops' command
 ```

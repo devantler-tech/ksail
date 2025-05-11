@@ -33,16 +33,19 @@ class ConfigurationValidator(KSailCluster config)
     var deserializer = new DeserializerBuilder().WithNamingConvention(CamelCaseNamingConvention.Instance).Build();
     switch (config.Spec.Project.Distribution)
     {
-      case KSailDistributionType.K3s:
+      case KSailDistributionType.K3d:
         {
           var distributionConfig = deserializer.Deserialize<K3dConfig>(await File.ReadAllTextAsync(Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath), cancellationToken).ConfigureAwait(false));
           CheckClusterName(projectRootPath, config.Metadata.Name, distributionConfig.Metadata.Name);
           CheckK3dCNI(projectRootPath, distributionConfig);
+          CheckK3dCSI(projectRootPath, distributionConfig);
+          CheckK3dIngressController(projectRootPath, distributionConfig);
+          CheckK3dMetricsServer(projectRootPath, distributionConfig);
           CheckK3dMirrorRegistries(projectRootPath, distributionConfig);
           break;
         }
 
-      case KSailDistributionType.Native:
+      case KSailDistributionType.Kind:
         {
           var distributionConfig = deserializer.Deserialize<KindConfig>(await File.ReadAllTextAsync(Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath), cancellationToken).ConfigureAwait(false));
           CheckClusterName(projectRootPath, config.Metadata.Name, distributionConfig.Name);
@@ -58,10 +61,10 @@ class ConfigurationValidator(KSailCluster config)
 
   static void CheckCompatibility(KSailCluster config)
   {
-    // TODO: Remove temporary MacOS + Podman + K3s compatability check when the issue is resolved.
-    if (OperatingSystem.IsMacOS() && config.Spec.Project.Provider == KSailProviderType.Podman && config.Spec.Project.Distribution == KSailDistributionType.K3s)
+    // TODO: Remove temporary MacOS + Podman + K3d compatability check when the issue is resolved.
+    if (OperatingSystem.IsMacOS() && config.Spec.Project.ContainerEngine == KSailContainerEngineType.Podman && config.Spec.Project.Distribution == KSailDistributionType.K3d)
     {
-      throw new KSailException("Podman + K3s is not supported on MacOS yet." + Environment.NewLine
+      throw new KSailException("Podman + K3d is not supported on MacOS yet." + Environment.NewLine
         + "  - 'host-gateway' is not working with 'podman machine' VMs." + Environment.NewLine
         + "    see https://github.com/containers/podman/issues/21681 for more details.");
     }
@@ -94,8 +97,8 @@ class ConfigurationValidator(KSailCluster config)
   {
     string expectedContextName = distribution switch
     {
-      KSailDistributionType.K3s => $"k3d-{name}",
-      KSailDistributionType.Native => $"kind-{name}",
+      KSailDistributionType.K3d => $"k3d-{name}",
+      KSailDistributionType.Kind => $"kind-{name}",
       _ => throw new NotSupportedException($"unsupported distribution '{distribution}'.")
     };
     if (!string.Equals(expectedContextName, context, StringComparison.Ordinal))
@@ -108,8 +111,8 @@ class ConfigurationValidator(KSailCluster config)
   {
     var expectedOCISourceUri = distribution switch
     {
-      KSailDistributionType.Native => new Uri("oci://ksail-registry:5000/ksail-registry"),
-      KSailDistributionType.K3s => new Uri("oci://host.k3d.internal:5555/ksail-registry"),
+      KSailDistributionType.Kind => new Uri("oci://ksail-registry:5000/ksail-registry"),
+      KSailDistributionType.K3d => new Uri("oci://host.k3d.internal:5555/ksail-registry"),
       _ => throw new NotSupportedException($"unsupported distribution '{distribution}'.")
     };
     if (!Equals(expectedOCISourceUri, config.Spec.DeploymentTool.Flux.Source.Url))
@@ -148,26 +151,104 @@ class ConfigurationValidator(KSailCluster config)
       };
     var expectedWithCustomCNI = expectedWithCustomCNIK3sExtraArgs.Select(x => x.Arg + ":" + x.NodeFilters?.First()) ?? [];
     var actual = distributionConfig.Options?.K3s?.ExtraArgs?.Select(x => x.Arg + ":" + (x.NodeFilters?.First() ?? "server:*")) ?? [];
-    if (config.Spec.Project.CNI == KSailCNIType.Default && actual.Intersect(expectedWithCustomCNI).Any())
+    if (config.Spec.Project.CNI is KSailCNIType.Default && actual.Intersect(expectedWithCustomCNI).Any())
     {
       throw new KSailException($"'spec.project.cni={config.Spec.Project.CNI}' in '{Path.Combine(projectRootPath, config.Spec.Project.ConfigPath)}' does not match expected values in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'." + Environment.NewLine +
         $"  - please remove '--flannel-backend=none' and '--disable-network-policy' from 'options.k3s.extraArgs' in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'.");
     }
-    else if (config.Spec.Project.CNI != KSailCNIType.Default && (!actual.Any() || !actual.All(expectedWithCustomCNI.Contains)))
+    else if (config.Spec.Project.CNI is not KSailCNIType.Default && (!actual.Any() || !actual.All(expectedWithCustomCNI.Contains)))
     {
       throw new KSailException($"'spec.project.cni={config.Spec.Project.CNI}' in '{Path.Combine(projectRootPath, config.Spec.Project.ConfigPath)}' does not match expected values in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'." + Environment.NewLine +
         $"  - please set 'options.k3s.extraArgs' to '--flannel-backend=none' and '--disable-network-policy' for 'server:*' in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'.");
     }
   }
 
+  void CheckK3dCSI(string projectRootPath, K3dConfig distributionConfig)
+  {
+    var expectedWithCustomCSIK3sExtraArgs = new List<K3dOptionsK3sExtraArg>
+      {
+        new() {
+          Arg = "--disable=local-storage",
+          NodeFilters =
+          [
+            "server:*"
+          ]
+        }
+      };
+    var expectedWithCustomCSI = expectedWithCustomCSIK3sExtraArgs.Select(x => x.Arg + ":" + x.NodeFilters?.First()) ?? [];
+    var actual = distributionConfig.Options?.K3s?.ExtraArgs?.Select(x => x.Arg + ":" + (x.NodeFilters?.First() ?? "server:*")) ?? [];
+    if (config.Spec.Project.CSI is KSailCSIType.Default or KSailCSIType.LocalPathProvisioner && actual.Intersect(expectedWithCustomCSI).Any())
+    {
+      throw new KSailException($"'spec.project.csi={config.Spec.Project.CSI}' in '{Path.Combine(projectRootPath, config.Spec.Project.ConfigPath)}' does not match expected values in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'." + Environment.NewLine +
+        $"  - please remove '--disable=local-storage' from 'options.k3s.extraArgs' in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'.");
+    }
+    else if ((config.Spec.Project.CSI is not KSailCSIType.Default and not KSailCSIType.LocalPathProvisioner) && (!actual.Any() || !actual.All(expectedWithCustomCSI.Contains)))
+    {
+      throw new KSailException($"'spec.project.csi={config.Spec.Project.CSI}' in '{Path.Combine(projectRootPath, config.Spec.Project.ConfigPath)}' does not match expected values in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'." + Environment.NewLine +
+        $"  - please set 'options.k3s.extraArgs' to '--disable=local-storage' for 'server:*' in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'.");
+    }
+  }
+
+  void CheckK3dIngressController(string projectRootPath, K3dConfig distributionConfig)
+  {
+    var expectedWithCustomIngressControllerK3sExtraArgs = new List<K3dOptionsK3sExtraArg>
+    {
+      new() {
+        Arg = "--disable=traefik",
+        NodeFilters =
+        [
+          "server:*"
+        ]
+      }
+    };
+    var expectedWithCustomIngressController = expectedWithCustomIngressControllerK3sExtraArgs.Select(x => x.Arg + ":" + x.NodeFilters?.First()) ?? [];
+    var actual = distributionConfig.Options?.K3s?.ExtraArgs?.Select(x => x.Arg + ":" + (x.NodeFilters?.First() ?? "server:*")) ?? [];
+    if (config.Spec.Project.IngressController is KSailIngressControllerType.Default or KSailIngressControllerType.Traefik && actual.Intersect(expectedWithCustomIngressController).Any())
+    {
+      throw new KSailException($"'spec.project.ingressController={config.Spec.Project.IngressController}' in '{Path.Combine(projectRootPath, config.Spec.Project.ConfigPath)}' does not match expected values in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'." + Environment.NewLine +
+        $"  - please remove '--disable=traefik' from 'options.k3s.extraArgs' in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'.");
+    }
+    else if (config.Spec.Project.IngressController is not KSailIngressControllerType.Default and not KSailIngressControllerType.Traefik && (!actual.Any() || !actual.All(expectedWithCustomIngressController.Contains)))
+    {
+      throw new KSailException($"'spec.project.ingressController={config.Spec.Project.IngressController}' in '{Path.Combine(projectRootPath, config.Spec.Project.ConfigPath)}' does not match expected values in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'." + Environment.NewLine +
+        $"  - please set 'options.k3s.extraArgs' to '--disable=traefik' for 'server:*' in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'.");
+    }
+  }
+
+  void CheckK3dMetricsServer(string projectRootPath, K3dConfig distributionConfig)
+  {
+    var expectedWithNoMetricsServerK3sExtraArgs = new List<K3dOptionsK3sExtraArg>
+    {
+      new() {
+        Arg = "--disable=metrics-server",
+        NodeFilters =
+        [
+          "server:*"
+        ]
+      }
+    };
+    var expectedWithNoMetricsServer = expectedWithNoMetricsServerK3sExtraArgs.Select(x => x.Arg + ":" + x.NodeFilters?.First()) ?? [];
+    var actual = distributionConfig.Options?.K3s?.ExtraArgs?.Select(x => x.Arg + ":" + (x.NodeFilters?.First() ?? "server:*")) ?? [];
+    if (config.Spec.Project.MetricsServer && actual.Intersect(expectedWithNoMetricsServer).Any())
+    {
+      throw new KSailException($"'spec.project.metricsServer={config.Spec.Project.MetricsServer}' in '{Path.Combine(projectRootPath, config.Spec.Project.ConfigPath)}' does not match expected values in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'." + Environment.NewLine +
+        $"  - please remove '--disable=metrics-server' from 'options.k3s.extraArgs' in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'.");
+    }
+    else if (!config.Spec.Project.MetricsServer && (!actual.Any() || !actual.All(expectedWithNoMetricsServer.Contains)))
+    {
+      throw new KSailException($"'spec.project.metricsServer={config.Spec.Project.MetricsServer}' in '{Path.Combine(projectRootPath, config.Spec.Project.ConfigPath)}' does not match expected values in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'." + Environment.NewLine +
+        $"  - please set 'options.k3s.extraArgs' to '--disable=metrics-server' for 'server:*' in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'.");
+    }
+  }
+
   void CheckKindCNI(string projectRootPath, KindConfig distributionConfig)
   {
-    if (config.Spec.Project.CNI == KSailCNIType.Default && distributionConfig.Networking?.DisableDefaultCNI == true)
+    if (config.Spec.Project.CNI is KSailCNIType.Default && distributionConfig.Networking?.DisableDefaultCNI == true)
     {
       throw new KSailException($"'spec.project.cni={config.Spec.Project.CNI}' in '{Path.Combine(projectRootPath, config.Spec.Project.ConfigPath)}' does not match expected values in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'." + Environment.NewLine +
         $"  - please set 'networking.disableDefaultCNI: false' in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'.");
     }
-    else if (config.Spec.Project.CNI != KSailCNIType.Default && distributionConfig.Networking?.DisableDefaultCNI != true)
+    else if (config.Spec.Project.CNI is not KSailCNIType.Default && distributionConfig.Networking?.DisableDefaultCNI != true)
     {
       throw new KSailException($"'spec.project.cni={config.Spec.Project.CNI}' in '{Path.Combine(projectRootPath, config.Spec.Project.ConfigPath)}' does not match expected values in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'." + Environment.NewLine +
         $"  - please set 'networking.disableDefaultCNI: true' in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'.");

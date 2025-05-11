@@ -35,7 +35,5 @@ exclude:
   - .gitignore
   - .releaserc
   - Dockerfile
-  - LICENSE
-  - SECURITY.md
   - KSail.slnx
   - entitlements.xml

@@ -5,8 +5,8 @@ Usage:
   testhost [command] [options]
 
 Options:
-  --version       Show version information
-  -?, -h, --help  Show help and usage information
+  --version  Show version information
+  --helpz    Show help and usage information
 
 Commands:
   init      Initialize a new project
@@ -18,7 +18,8 @@ Commands:
   status    Show the status of a cluster
   list      List active clusters
   validate  Validate project files
-  debug     Debug a cluster (❤️ K9s)
+  connect   Connect to a cluster with K9s
   gen       Generate a resource
   secrets   Manage secrets
+  run       Run a command
 

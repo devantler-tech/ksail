@@ -40,15 +40,17 @@ Getting started with KSail is straightforward. Begin by initializing a new KSail
 > ksail init # to create a new default project
 
 > ksail init \ # to create a new custom project (★ is default)
-  --provider <★Docker★|Podman> \
-  --distribution <★Native★|K3s> \
-  --deployment-tool <★Kubectl★|Flux> \
-  --cni <★Default★|Cilium> \
-  --csi <★Default★> \
-  --ingress-controller <★Default★> \
-  --gateway-controller <★Default★> \
-  --secret-manager <★None★|SOPS> \
-  --mirror-registries <★true★|false>
+  --container-engine <★Docker★|Podman> \ # the container engine to provision your cluster in
+  --distribution <★Kind★|K3d> \ # the kubernetes distribution for your cluster
+  --deployment-tool <★Kubectl★|Flux> \ # the tool you want to use for declarative deployments
+  --cni <★Default★|Cilium|None> \ # the Container Network Interface (CNI) you want pre-installed
+  --csi <★Default★|LocalPathProvisioner|None> \ # the Container Storage Interface (CSI) you want pre-installed
+  --ingress-controller <★Default★|Traefik|None> \ # the Ingress Controller you want pre-installed
+  --gateway-controller <★Default★|None> \ # the Gateway Controller you want pre-installed
+  --metrics-server <★True★|False> \ # whether metrics server should be pre-installed
+  --secret-manager <★None★|SOPS> \ # the secret manager you want to use to manage secrets in Git
+  --mirror-registries <★True★|False> \ # whether mirror registries should be set up or not
+  --editor <★Nano★|Vim> # the editor you want to use for commands that require it
 ```
 
 This creates the following project files, depending on your choices:
@@ -76,7 +78,7 @@ You can then modify your manifest files in the `k8s` folder as needed. To apply 
 For advanced debugging, connect to the cluster via the [K9s](https://k9scli.io) tool with:
 
 ```sh
-> ksail debug # to connect to the cluster
+> ksail connect # to connect to the cluster
 ```
 
 When you're done, you can stop the cluster to resume later:

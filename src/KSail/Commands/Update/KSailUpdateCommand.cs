@@ -20,7 +20,7 @@ sealed class KSailUpdateCommand : Command
       {
         var config = await KSailClusterConfigLoader.LoadWithoptionsAsync(context).ConfigureAwait(false);
         var handler = new KSailUpdateCommandHandler(config);
-        context.ExitCode = await handler.HandleAsync(context.GetCancellationToken()).ConfigureAwait(false) ? 0 : 1;
+        context.ExitCode = await handler.HandleAsync(context.GetCancellationToken()).ConfigureAwait(false);
       }
       catch (Exception ex)
       {
@@ -35,6 +35,8 @@ sealed class KSailUpdateCommand : Command
     AddOption(CLIOptions.Connection.ContextOption);
     AddOption(CLIOptions.Connection.KubeconfigOption);
     AddOption(CLIOptions.Project.KustomizationPathOption);
+    AddOption(CLIOptions.Project.DeploymentToolOption);
+    AddOption(CLIOptions.Publication.PublishOnUpdateOption);
     AddOption(CLIOptions.Validation.ValidateOnUpdateOption);
     AddOption(CLIOptions.Validation.ReconcileOnUpdateOption);
   }

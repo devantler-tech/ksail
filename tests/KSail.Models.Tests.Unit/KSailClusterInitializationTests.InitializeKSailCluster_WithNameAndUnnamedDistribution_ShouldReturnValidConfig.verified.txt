@@ -14,13 +14,14 @@
       ConfigPath: ksail.yaml,
       DistributionConfigPath: kind.yaml,
       KustomizationPath: k8s,
-      Provider: Docker,
+      ContainerEngine: Docker,
       Distribution: 8,
       DeploymentTool: Kubectl,
       CNI: Default,
       CSI: Default,
       IngressController: Default,
       GatewayController: Default,
+      MetricsServer: true,
       SecretManager: None,
       Editor: Nano,
       MirrorRegistries: true
@@ -101,6 +102,9 @@
         Provider: Docker
       }
     ],
+    Publication: {
+      PublishOnUpdate: true
+    },
     Validation: {
       ValidateOnUp: true,
       ReconcileOnUp: true,

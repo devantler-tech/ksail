@@ -19,10 +19,10 @@ public class KSailProject
   public string KustomizationPath { get; set; } = "k8s";
 
   [Description("The provider to use for running the KSail cluster. [default: Docker]")]
-  public KSailProviderType Provider { get; set; } = KSailProviderType.Docker;
+  public KSailContainerEngineType ContainerEngine { get; set; } = KSailContainerEngineType.Docker;
 
-  [Description("The Kubernetes distribution to use. [default: Native]")]
-  public KSailDistributionType Distribution { get; set; } = KSailDistributionType.Native;
+  [Description("The Kubernetes distribution to use. [default: Kind]")]
+  public KSailDistributionType Distribution { get; set; } = KSailDistributionType.Kind;
 
   [Description("The Deployment tool to use. [default: Kubectl]")]
   public KSailDeploymentToolType DeploymentTool { get; set; } = KSailDeploymentToolType.Kubectl;
@@ -40,6 +40,9 @@ public class KSailProject
 
   [Description("The Gateway Controller to use. [default: Default]")]
   public KSailGatewayControllerType GatewayController { get; set; } = KSailGatewayControllerType.Default;
+
+  [Description("Whether to install Metrics Server. [default: true]")]
+  public bool MetricsServer { get; set; } = true;
 
   [Description("Whether to use a secret manager. [default: None]")]
   public KSailSecretManagerType SecretManager { get; set; } = KSailSecretManagerType.None;

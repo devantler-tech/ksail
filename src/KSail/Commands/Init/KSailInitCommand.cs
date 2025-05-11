@@ -41,13 +41,14 @@ sealed class KSailInitCommand : Command
     AddOption(CLIOptions.Project.ConfigPathOption);
     AddOption(CLIOptions.Project.DistributionConfigPathOption);
     AddOption(CLIOptions.Project.KustomizationPathOption);
-    AddOption(CLIOptions.Project.ProviderOption);
+    AddOption(CLIOptions.Project.ContainerEngineOption);
     AddOption(CLIOptions.Project.DistributionOption);
     AddOption(CLIOptions.Project.DeploymentToolOption);
     AddOption(CLIOptions.Project.CNIOption);
     AddOption(CLIOptions.Project.CSIOption);
     AddOption(CLIOptions.Project.IngressControllerOption);
     AddOption(CLIOptions.Project.GatewayControllerOption);
+    AddOption(CLIOptions.Project.MetricsServerOption);
     AddOption(CLIOptions.Project.MirrorRegistriesOption);
     AddOption(CLIOptions.Project.SecretManagerOption);
     AddOption(CLIOptions.Project.EditorOption);

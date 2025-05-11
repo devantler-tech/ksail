@@ -13,24 +13,19 @@ namespace KSail.Commands.Gen;
 sealed class KSailGenCommand : Command
 {
   readonly GeneratorOverwriteOption _generatorOverwriteOption = new(new KSailCluster());
-  internal KSailGenCommand(IConsole? console = default) : base("gen", "Generate a resource")
+  internal KSailGenCommand() : base("gen", "Generate a resource")
   {
     AddGlobalOption(_generatorOverwriteOption);
-    AddCommands(console);
-    this.SetHandler(async (context) =>
-      {
-        context.ExitCode = await this.InvokeAsync("--help", console).ConfigureAwait(false);
-      }
-    );
+    AddCommands();
   }
 
-  void AddCommands(IConsole? console)
+  void AddCommands()
   {
-    AddCommand(new KSailGenCertManagerCommand(console));
-    AddCommand(new KSailGenConfigCommand(console));
-    AddCommand(new KSailGenFluxCommand(console));
-    AddCommand(new KSailGenKustomizeCommand(console));
-    AddCommand(new KSailGenNativeCommand(console));
+    AddCommand(new KSailGenCertManagerCommand());
+    AddCommand(new KSailGenConfigCommand());
+    AddCommand(new KSailGenFluxCommand());
+    AddCommand(new KSailGenKustomizeCommand());
+    AddCommand(new KSailGenNativeCommand());
   }
 }
 
