@@ -81,6 +81,8 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 9
+      - name: 🚚 Add GHCR as NuGet feed
+        run: dotnet nuget add source --username ${{ github.actor }} --password ${{ secrets.GITHUB_TOKEN }} --store-password-in-clear-text --name github "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json"
       - name: 🧪 Run system test
         run: |
           dotnet run -- ${{ matrix.init-args }}
