@@ -3,6 +3,7 @@ using System.CommandLine.IO;
 using KSail.Commands.Root;
 
 namespace KSail.Tests.Unit.Commands.Validate;
+
 public class KSailValidateCommandTests
 {
   readonly TestConsole _console;
