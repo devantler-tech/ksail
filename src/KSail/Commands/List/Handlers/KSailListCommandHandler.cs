@@ -11,13 +11,9 @@ sealed class KSailListCommandHandler(KSailCluster config) : ICommandHandler
   readonly KSailCluster _config = config;
   readonly K3dProvisioner _k3dProvisioner = new();
   readonly KindProvisioner _kindProvisioner = new();
-  readonly ContainerEngineManager _containerEngineManager = new(config);
 
   public async Task<int> HandleAsync(CancellationToken cancellationToken = default)
   {
-    Console.WriteLine($"📋 Checking prerequisites");
-    await _containerEngineManager.CheckContainerEngineIsRunning(cancellationToken).ConfigureAwait(false);
-
     IEnumerable<string> clusters;
     if (_config.Spec.Distribution.ShowAllClustersInListings)
     {
