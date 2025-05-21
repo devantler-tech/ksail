@@ -20,31 +20,31 @@ namespace KSail.Commands.Up.Handlers;
 
 class KSailUpCommandHandler(KSailCluster config) : ICommandHandler
 {
-  readonly ClusterManager _clusterBootstrapper = new(config);
-  readonly GitOpsSourceManager _gitOpsSourceBootstrapper = new(config);
-  readonly MirrorRegistryManager _mirrorRegistryBootstrapper = new(config);
-  readonly CNIManager _cniBootstrapper = new(config);
-  readonly CSIManager _csiBootstrapper = new(config);
-  readonly IngressControllerManager _ingressControllerBootstrapper = new(config);
-  readonly GatewayControllerManager _gatewayControllerBootstrapper = new(config);
-  readonly MetricsServerManager _metricsServerBootstrapper = new(config);
-  readonly SecretManager _secretManagerBootstrapper = new(config);
-  readonly DeploymentToolManager _deploymentToolBootstrapper = new(config);
+  readonly ClusterManager _clusterManager = new(config);
+  readonly GitOpsSourceManager _gitOpsSourceManager = new(config);
+  readonly MirrorRegistryManager _mirrorRegistryManager = new(config);
+  readonly CNIManager _cniManager = new(config);
+  readonly CSIManager _csiManager = new(config);
+  readonly IngressControllerManager _ingressControllerManager = new(config);
+  readonly GatewayControllerManager _gatewayControllerManager = new(config);
+  readonly MetricsServerManager _metricsServerManager = new(config);
+  readonly SecretManager _secretManagerManager = new(config);
+  readonly DeploymentToolManager _deploymentToolManager = new(config);
   public async Task<int> HandleAsync(CancellationToken cancellationToken = default)
   {
-    await _clusterBootstrapper.BootstrapAsync(cancellationToken).ConfigureAwait(false);
-    await _gitOpsSourceBootstrapper.BootstrapAsync(cancellationToken).ConfigureAwait(false);
-    await _mirrorRegistryBootstrapper.BootstrapAsync(cancellationToken).ConfigureAwait(false);
-    await _cniBootstrapper.BootstrapAsync(cancellationToken).ConfigureAwait(false);
-    await _csiBootstrapper.BootstrapAsync(cancellationToken).ConfigureAwait(false);
+    await _clusterManager.BootstrapAsync(cancellationToken).ConfigureAwait(false);
+    await _gitOpsSourceManager.BootstrapAsync(cancellationToken).ConfigureAwait(false);
+    await _mirrorRegistryManager.BootstrapAsync(cancellationToken).ConfigureAwait(false);
+    await _cniManager.BootstrapAsync(cancellationToken).ConfigureAwait(false);
+    await _csiManager.BootstrapAsync(cancellationToken).ConfigureAwait(false);
     if (config.Spec.Project.CNI != KSailCNIType.None)
     {
-      await _ingressControllerBootstrapper.BootstrapAsync(cancellationToken).ConfigureAwait(false);
-      await _gatewayControllerBootstrapper.BootstrapAsync(cancellationToken).ConfigureAwait(false);
-      await _metricsServerBootstrapper.BootstrapAsync(cancellationToken).ConfigureAwait(false);
+      await _ingressControllerManager.BootstrapAsync(cancellationToken).ConfigureAwait(false);
+      await _gatewayControllerManager.BootstrapAsync(cancellationToken).ConfigureAwait(false);
+      await _metricsServerManager.BootstrapAsync(cancellationToken).ConfigureAwait(false);
     }
-    await _secretManagerBootstrapper.BootstrapAsync(cancellationToken).ConfigureAwait(false);
-    await _deploymentToolBootstrapper.BootstrapAsync(cancellationToken).ConfigureAwait(false);
+    await _secretManagerManager.BootstrapAsync(cancellationToken).ConfigureAwait(false);
+    await _deploymentToolManager.BootstrapAsync(cancellationToken).ConfigureAwait(false);
     return 0;
   }
 }
