@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 
 namespace KSail.Tests.Unit;
+
 public class StartupTests
 {
   [Fact]
