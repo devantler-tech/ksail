@@ -2,7 +2,7 @@ using KSail.Models;
 
 namespace KSail.Managers;
 
-interface IBootstrapManager
+interface IBootstrapManager : IManager
 {
   Task BootstrapAsync(CancellationToken cancellationToken = default);
 }
