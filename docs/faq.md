@@ -13,6 +13,7 @@ nav_order: 4
   - [Option 1: Use `traefik.me` to resolve `*.traefik.me` to 127.0.0.1](#option-1-use-traefikme-to-resolve-traefikme-to-127001)
   - [Options 2: Configure your `/etc/hosts` file](#options-2-configure-your-etchosts-file)
 - [Can I use KSail to manage my existing Kubernetes cluster?](#can-i-use-ksail-to-manage-my-existing-kubernetes-cluster)
+- [How do I add KSail embedded binaries to my PATH, and alias them?](#how-do-i-add-ksail-embedded-binaries-to-my-path-and-alias-them)
 
 ## How do I configure local DNS?
 
@@ -64,3 +65,36 @@ KSail supports various operations on existing clusters, such as:
 - `ksail connect` - Connect to a cluster to debug issues.
 - `ksail gen` - Generate manifests.
 - `ksail secrets` - Manage SOPS-encrypted secrets.
+
+## How do I add KSail embedded binaries to my PATH, and alias them?
+
+It is possible to add the embedded binaries to your `PATH` and create aliases for them. This allows you to use the binaries without needing to specify the full path each time, and avoid having duplicates of the binaries if you are fine with `ksail` managing the binaries for you.
+
+To do this, you can add the following lines to your shell configuration file (e.g. `~/.bashrc`, `~/.zshrc`, etc.):
+
+```sh
+# Path - This will add all embedded binaries stored in ~/.net/ksail to your PATH
+PATH="$PATH:$(find "$HOME/.net/ksail" -mindepth 1 -maxdepth 1 -type d | tr '\n' ':' | sed 's/:$//')"
+for dir in $(find "$HOME/.net/ksail" -mindepth 1 -maxdepth 1 -type d); do
+  find "$dir" -maxdepth 1 -type f ! -name "*.*" -exec chmod +x {} \;
+done
+
+# Aliases - This will create aliases for all embedded binaries stored in ~/.net/ksail
+OS="$(uname | tr '[:upper:]' '[:lower:]')"
+case "$OS" in
+  darwin) OS="osx" ;;
+  linux) OS="linux" ;;
+esac
+ARCH="$(uname -m)"
+case "$ARCH" in
+  x86_64) ARCH="amd64" ;;
+  arm64|aarch64) ARCH="arm64" ;;
+esac
+
+for dir in $(find "$HOME/.net/ksail" -mindepth 1 -maxdepth 1 -type d); do
+  for file in $(find "$dir" -maxdepth 1 -type f -name "*-${OS}-${ARCH}"); do
+    base="$(basename "$file" "-${OS}-${ARCH}")"
+    alias "$base"="$file"
+  done
+done
+```

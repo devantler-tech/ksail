@@ -18,4 +18,4 @@ nav_order: 10
 
 `Mirror Registries` refer to registries that are used to proxy and cache images from upstream registries. This is used to avoid pull rate limits and to speed up image pulls.
 
-Using `Mirror Registries` will create a `registry:2` container for each mirror registry that is configured. You can configure as many mirror registries as you need.
+Using `Mirror Registries` will create a `registry:3` container for each mirror registry that is configured. You can configure as many mirror registries as you need.

@@ -2,6 +2,7 @@ using System.CommandLine;
 using System.CommandLine.Builder;
 using System.CommandLine.IO;
 using System.CommandLine.Parsing;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using KSail.Commands.Root;
 using KSail.Utils;
@@ -34,8 +35,38 @@ class Startup
     }
     else
     {
+      if (!CleanUpOldKSailDotnetDirectories())
+        return 1;
+
       int exitCode = await _ksailCommand.InvokeAsync(args).ConfigureAwait(false);
       return exitCode;
     }
+  }
+
+  bool CleanUpOldKSailDotnetDirectories()
+  {
+    string appDir = Path.GetDirectoryName(AppDomain.CurrentDomain.BaseDirectory) ?? string.Empty;
+    string parentDir = Path.GetDirectoryName(appDir) ?? string.Empty;
+    if (parentDir.EndsWith(".net/ksail", StringComparison.Ordinal))
+    {
+      string[] directories = Directory.GetDirectories(parentDir);
+      foreach (string directory in directories)
+      {
+        if (directory != appDir)
+        {
+          try
+          {
+            Directory.Delete(directory, true);
+          }
+          catch (Exception ex)
+          {
+            _ = _exceptionHandler.HandleException(ex);
+            return false;
+          }
+        }
+      }
+    }
+
+    return true;
   }
 }

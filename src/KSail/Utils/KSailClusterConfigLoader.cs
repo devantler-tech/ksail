@@ -103,7 +103,7 @@ static class KSailClusterConfigLoader
     config.UpdateConfig(c => c.Spec.Validation.ReconcileOnUpdate, context.ParseResult.GetValueForOption(CLIOptions.Validation.ReconcileOnUpdateOption));
     config.UpdateConfig(c => c.Spec.Validation.Verbose, context.ParseResult.GetValueForOption(CLIOptions.Validation.VerboseOption));
 
-    Console.WriteLine($"✔ '{configFilePath}' configuration loaded.");
+    Console.WriteLine($"✔ configuration loaded.");
     Console.WriteLine();
     return config;
   }
@@ -126,6 +126,7 @@ static class KSailClusterConfigLoader
       Console.WriteLine($"► '{configFilePath}' not found. Using default configuration.");
       return ksailClusterConfig;
     }
+    Console.WriteLine($"► '{configFilePath}' found.");
 
     // Deserialize KSail YAML file
     ksailClusterConfig = _deserializer.Deserialize<KSailCluster>(await File.ReadAllTextAsync(ksailYaml).ConfigureAwait(false));
