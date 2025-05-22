@@ -24,6 +24,7 @@ jobs:
   system-test:
     name: System test
     runs-on: ubuntu-latest
+    if: always()
     needs: unit-test
     strategy:
       matrix:
