@@ -35,6 +35,8 @@ class MirrorRegistryManager(KSailCluster config) : IBootstrapManager, ICleanupMa
   async Task CreateMirrorRegistries(KSailCluster config, CancellationToken cancellationToken)
   {
     Console.WriteLine("🧮 Creating mirror registries");
+
+    await _containerEngineProvisioner.PullImageAsync("registry:3", cancellationToken).ConfigureAwait(false);
     var tasks = config.Spec.MirrorRegistries.Select(async mirrorRegistry =>
     {
       Console.WriteLine($"► creating mirror registry '{mirrorRegistry.Name}' for '{mirrorRegistry.Proxy.Url}'");
