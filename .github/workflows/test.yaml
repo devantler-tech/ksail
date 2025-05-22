@@ -1,5 +1,6 @@
 name: Test .NET solution or project
-permissions: {}
+permissions:
+  packages: read
 on:
   workflow_dispatch:
   pull_request:
