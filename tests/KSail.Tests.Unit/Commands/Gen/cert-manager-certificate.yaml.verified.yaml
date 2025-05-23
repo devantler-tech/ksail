@@ -9,5 +9,5 @@ spec:
   dnsNames:
   - k8s.local
   issuerRef:
-    name: selfsigned-cluster-issuer
+    name: selfsigned
     kind: ClusterIssuer

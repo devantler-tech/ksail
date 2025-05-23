@@ -26,7 +26,7 @@ class KSailGenCertManagerCertificateCommandHandler(string outputFile, bool overw
         ],
         IssuerRef = new CertManagerIssuerRef
         {
-          Name = "selfsigned-cluster-issuer",
+          Name = "selfsigned",
           Kind = "ClusterIssuer",
         }
       }
