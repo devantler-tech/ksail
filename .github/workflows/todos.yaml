@@ -1,5 +1,6 @@
 name: "TODOs"
-permissions: {}
+permissions:
+  issues: write
 on:
   workflow_dispatch:
   push:
