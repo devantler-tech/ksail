@@ -30,7 +30,7 @@
     <PackageReference Include="Devantler.KubernetesProvisioner.Cluster.Kind" Version="1.8.60" />
     <PackageReference Include="Devantler.KubernetesProvisioner.CNI.Cilium" Version="1.8.60" />
     <PackageReference Include="Devantler.KubernetesProvisioner.Deployment.Kubectl" Version="1.8.60" />
-    <PackageReference Include="Devantler.KubernetesProvisioner.GitOps.Flux" Version="1.8.52" />
+    <PackageReference Include="Devantler.KubernetesProvisioner.GitOps.Flux" Version="1.8.60" />
     <PackageReference Include="Devantler.KubernetesValidator.ClientSide.Schemas" Version="1.1.23" />
     <PackageReference Include="Devantler.KubernetesValidator.ClientSide.YamlSyntax" Version="1.1.23" />
     <PackageReference Include="Devantler.SecretManager.SOPS.LocalAge" Version="1.4.29" />
