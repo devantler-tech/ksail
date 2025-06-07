@@ -36,7 +36,7 @@
     <PackageReference Include="Devantler.SecretManager.SOPS.LocalAge" Version="1.4.37" />
     <PackageReference Include="Devantler.K9sCLI" Version="1.11.3" />
     <PackageReference Include="Devantler.HelmCLI" Version="1.6.2" />
-    <PackageReference Include="Devantler.KubectlCLI" Version="1.4.2" />
+    <PackageReference Include="Devantler.KubectlCLI" Version="1.4.3" />
     <PackageReference Include="System.CommandLine" Version="2.0.0-beta4.22272.1" />
   </ItemGroup>
 
