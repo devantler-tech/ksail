@@ -12,11 +12,6 @@
 
 ## Getting Started
 
-> [!IMPORTANT]
-> Docker Desktop 4.42.0 bugged out KSail on MacOS. There is a temporary fixed Docker Desktop version here: https://github.com/docker/for-mac/issues/7693#issuecomment-2950044483
-> Please update Docker Desktop to the latest version, or try the above linked version before posting a bug issue :-)
-
-
 ### Prerequisites
 
 - MacOS (amd64 and arm64)
