@@ -37,7 +37,7 @@
     <PackageReference Include="Devantler.K9sCLI" Version="1.11.5" />
     <PackageReference Include="Devantler.HelmCLI" Version="1.7.0" />
     <PackageReference Include="Devantler.KubectlCLI" Version="1.5.0" />
-    <PackageReference Include="System.CommandLine" Version="2.0.0-beta4.22272.1" />
+    <PackageReference Include="System.CommandLine" Version="2.0.0-beta5.25306.1" />
   </ItemGroup>
 
   <ItemGroup>
