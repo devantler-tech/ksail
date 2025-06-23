@@ -12,7 +12,6 @@ namespace KSail;
 
 class Startup
 {
-  readonly ExceptionHandler _exceptionHandler = new();
   readonly Parser _ksailCommand = new CommandLineBuilder(new KSailRootCommand(new SystemConsole()))
     .UseVersionOption()
     .UseHelp("--helpz")
@@ -26,47 +25,57 @@ class Startup
     .CancelOnProcessTermination()
     .Build();
 
+  readonly string[] _dependentBinariesInPath =
+  [
+    RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "age-keygen.exe" : "age-keygen",
+    "argocd",
+    "cilium",
+    RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "flux.exe" : "flux",
+    RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "helm.exe" : "helm",
+    "k3d",
+    RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "k9s.exe" : "k9s",
+    "kind",
+    RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "kubeconform.exe" : "kubeconform",
+    RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "kubectl.exe" : "kubectl",
+    RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "kustomize.exe" : "kustomize",
+    "sops",
+    "talosctl",
+  ];
+
   public async Task<int> RunAsync(string[] args)
   {
-    if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows) || !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("WINDOWS_TEST")))
+    foreach (string binaryName in _dependentBinariesInPath)
     {
-      _ = _exceptionHandler.HandleException(new PlatformNotSupportedException("KSail is not supported on Windows."));
-      return 1;
+      if (!CheckBinaryIsInPath(binaryName))
+      {
+        var prevColor = Console.ForegroundColor;
+        Console.ForegroundColor = ConsoleColor.Yellow;
+        Console.WriteLine($"Warning: The '{binaryName}' CLI was not found in PATH. Some functionality might not work.");
+        Console.ForegroundColor = prevColor;
+      }
     }
-    else
-    {
-      if (!CleanUpOldKSailDotnetDirectories())
-        return 1;
 
-      int exitCode = await _ksailCommand.InvokeAsync(args).ConfigureAwait(false);
-      return exitCode;
-    }
+    int exitCode = await _ksailCommand.InvokeAsync(args).ConfigureAwait(false);
+    return exitCode;
   }
 
-  bool CleanUpOldKSailDotnetDirectories()
+  public static bool CheckBinaryIsInPath(string binaryName)
   {
-    string appDir = Path.GetDirectoryName(AppDomain.CurrentDomain.BaseDirectory) ?? string.Empty;
-    string parentDir = Path.GetDirectoryName(appDir) ?? string.Empty;
-    if (parentDir.EndsWith(".net/ksail", StringComparison.Ordinal))
+    string? pathEnv = Environment.GetEnvironmentVariable("PATH");
+
+    if (!string.IsNullOrEmpty(pathEnv))
     {
-      string[] directories = Directory.GetDirectories(parentDir);
-      foreach (string directory in directories)
+      string[] paths = pathEnv.Split(Path.PathSeparator);
+      foreach (string dir in paths)
       {
-        if (directory != appDir)
+        string fullPath = Path.Combine(dir, binaryName);
+        if (File.Exists(fullPath))
         {
-          try
-          {
-            Directory.Delete(directory, true);
-          }
-          catch (Exception ex)
-          {
-            _ = _exceptionHandler.HandleException(ex);
-            return false;
-          }
+          return true;
         }
       }
     }
 
-    return true;
+    return false;
   }
 }
