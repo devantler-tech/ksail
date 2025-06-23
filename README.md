@@ -25,7 +25,7 @@ Currently, KSail is available in two ways: via Homebrew or GitHub releases.
 
 #### Homebrew
 
-It is recommended to install KSail using [Homebrew](https://brew.sh) for easy updates and management. If you don't have Homebrew installed, you can find instructions on their [website](https://brew.sh).
+It is recommended to install KSail using [Homebrew](https://brew.sh) for easy updates and management. If you don't have Homebrew installed, you can find installation instructions on their [website](https://brew.sh).
 
 ```sh
 brew tap devantler-tech/formulas
