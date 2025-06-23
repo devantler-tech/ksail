@@ -27,6 +27,7 @@ class Startup
 
   readonly string[] _dependentBinariesInPath =
   [
+    "testertester",
     RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "age-keygen.exe" : "age-keygen",
     "argocd",
     "cilium",
@@ -44,17 +45,22 @@ class Startup
 
   public async Task<int> RunAsync(string[] args)
   {
+    bool didWriteWarning = false;
+    var prevColor = Console.ForegroundColor;
+    Console.ForegroundColor = ConsoleColor.Yellow;
     foreach (string binaryName in _dependentBinariesInPath)
     {
       if (!CheckBinaryIsInPath(binaryName))
       {
-        var prevColor = Console.ForegroundColor;
-        Console.ForegroundColor = ConsoleColor.Yellow;
-        Console.WriteLine($"Warning: The '{binaryName}' CLI was not found in PATH. Some functionality might not work.");
-        Console.ForegroundColor = prevColor;
+        Console.WriteLine($"⚠️ '{binaryName}' not found in PATH ⚠️");
+        didWriteWarning = true;
       }
     }
-
+    if (didWriteWarning)
+    {
+      Console.WriteLine("  - please install the missing binaries to enable all features.");
+    }
+    Console.ForegroundColor = prevColor;
     int exitCode = await _ksailCommand.InvokeAsync(args).ConfigureAwait(false);
     return exitCode;
   }
