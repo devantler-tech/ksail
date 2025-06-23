@@ -21,7 +21,11 @@
 
 ### Installation
 
+Currently, KSail is available in two ways: via Homebrew or GitHub releases.
+
 #### Homebrew
+
+It is recommended to install KSail using [Homebrew](https://brew.sh) for easy updates and management. If you don't have Homebrew installed, you can find instructions on their [website](https://brew.sh).
 
 ```sh
 brew tap devantler-tech/formulas
@@ -30,26 +34,12 @@ brew install ksail
 
 #### Manually
 
+> [!WARNING]
+> If you install KSail manually, you need to ensure the dependent binaries are available in your `$PATH` for all functionality to work. These include: [age](https://github.com/FiloSottile/age#installation), [argocd](https://argo-cd.readthedocs.io/en/stable/getting_started/#2-download-argo-cd-cli), [cilium](https://docs.cilium.io/en/stable/gettingstarted/k8s-install-default/#install-the-cilium-cli), [flux](https://fluxcd.io/flux/installation/#install-the-flux-cli), [helm](https://helm.sh/docs/intro/install/), [k3d](https://k3d.io/stable/#installation), [k9s](https://k9scli.io/topics/install/), [kind](https://kind.sigs.k8s.io/docs/user/quick-start/#installation), [kubeconform](https://github.com/yannh/kubeconform?tab=readme-ov-file#installation), [kubectl](https://kubernetes.io/docs/tasks/tools/#kubectl), [kustomize](https://kubectl.docs.kubernetes.io/installation/kustomize/binaries/), [sops](https://github.com/getsops/sops/releases), [talosctl](https://www.talos.dev/latest/talos-guides/install/talosctl/)
+
 1. Download the latest release for your OS from the [releases page](https://github.com/devantler-tech/ksail/releases).
 2. Make the binary executable: `chmod +x ksail`.
 3. Move the binary to a directory in your `$PATH`: `mv ksail /usr/local/bin/ksail`.
-
-> [!WARNING]
-> If you install KSail manually, you need to ensure the dependent binaries are available in your `$PATH` for all functionality to work. These include:
->
-> - [age](https://github.com/FiloSottile/age#installation)
-> - [argocd](https://argo-cd.readthedocs.io/en/stable/getting_started/#2-download-argo-cd-cli)
-> - [cilium](https://docs.cilium.io/en/stable/gettingstarted/k8s-install-default/#install-the-cilium-cli)
-> - [flux](https://fluxcd.io/flux/installation/#install-the-flux-cli)
-> - [helm](https://helm.sh/docs/intro/install/)
-> - [k3d](https://k3d.io/stable/#installation)
-> - [k9s](https://k9scli.io/topics/install/)
-> - [kind](https://kind.sigs.k8s.io/docs/user/quick-start/#installation)
-> - [kubeconform](https://github.com/yannh/kubeconform?tab=readme-ov-file#installation)
-> - [kubectl](https://kubernetes.io/docs/tasks/tools/#kubectl)
-> - [kustomize](https://kubectl.docs.kubernetes.io/installation/kustomize/binaries/)
-> - [sops](https://github.com/getsops/sops/releases)
-> - [talosctl](https://www.talos.dev/latest/talos-guides/install/talosctl/)
 
 ### Usage
 
