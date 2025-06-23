@@ -16,6 +16,8 @@
 
 - MacOS (amd64 and arm64)
 - Linux (amd64 and arm64)
+- Windows (amd64 and arm64)
+  - I am unable to test Windows builds, so please report any issues you encounter.
 
 ### Installation
 
