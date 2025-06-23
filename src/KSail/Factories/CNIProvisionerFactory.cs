@@ -1,4 +1,4 @@
-using Devantler.KubernetesProvisioner.CNI.Cilium;
+using DevantlerTech.KubernetesProvisioner.CNI.Cilium;
 using KSail.Models;
 using KSail.Models.Project.Enums;
 

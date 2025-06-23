@@ -1,6 +1,6 @@
-using Devantler.KubernetesGenerator.Flux;
-using Devantler.KubernetesGenerator.Flux.Models;
-using Devantler.KubernetesGenerator.Flux.Models.HelmRelease;
+using DevantlerTech.KubernetesGenerator.Flux;
+using DevantlerTech.KubernetesGenerator.Flux.Models;
+using DevantlerTech.KubernetesGenerator.Flux.Models.HelmRelease;
 
 namespace KSail.Commands.Gen.Handlers.Flux;
 

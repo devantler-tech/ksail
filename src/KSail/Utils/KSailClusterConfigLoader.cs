@@ -1,6 +1,6 @@
 using System.CommandLine.Invocation;
-using Devantler.KubernetesGenerator.Core.Converters;
-using Devantler.KubernetesGenerator.Core.Inspectors;
+using DevantlerTech.KubernetesGenerator.Core.Converters;
+using DevantlerTech.KubernetesGenerator.Core.Inspectors;
 using KSail.Models;
 using KSail.Models.LocalRegistry;
 using KSail.Models.Project.Enums;

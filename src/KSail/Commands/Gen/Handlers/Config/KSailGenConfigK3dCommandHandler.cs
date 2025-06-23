@@ -1,5 +1,5 @@
-using Devantler.KubernetesGenerator.K3d;
-using Devantler.KubernetesGenerator.K3d.Models;
+using DevantlerTech.KubernetesGenerator.K3d;
+using DevantlerTech.KubernetesGenerator.K3d.Models;
 using k8s.Models;
 
 namespace KSail.Commands.Gen.Handlers.Config;

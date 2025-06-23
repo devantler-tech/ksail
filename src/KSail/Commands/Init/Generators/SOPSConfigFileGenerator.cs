@@ -1,7 +1,7 @@
-using Devantler.Keys.Age;
-using Devantler.SecretManager.SOPS.LocalAge;
-using Devantler.SecretManager.SOPS.LocalAge.Models;
-using Devantler.SecretManager.SOPS.LocalAge.Utils;
+using DevantlerTech.Keys.Age;
+using DevantlerTech.SecretManager.SOPS.LocalAge;
+using DevantlerTech.SecretManager.SOPS.LocalAge.Models;
+using DevantlerTech.SecretManager.SOPS.LocalAge.Utils;
 using KSail.Models;
 
 namespace KSail.Commands.Init.Generators;

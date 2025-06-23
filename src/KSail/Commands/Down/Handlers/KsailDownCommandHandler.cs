@@ -1,9 +1,9 @@
 using System.ComponentModel;
-using Devantler.ContainerEngineProvisioner.Core;
-using Devantler.ContainerEngineProvisioner.Docker;
-using Devantler.KubernetesProvisioner.Cluster.Core;
-using Devantler.KubernetesProvisioner.Cluster.K3d;
-using Devantler.KubernetesProvisioner.Cluster.Kind;
+using DevantlerTech.ContainerEngineProvisioner.Core;
+using DevantlerTech.ContainerEngineProvisioner.Docker;
+using DevantlerTech.KubernetesProvisioner.Cluster.Core;
+using DevantlerTech.KubernetesProvisioner.Cluster.K3d;
+using DevantlerTech.KubernetesProvisioner.Cluster.Kind;
 using k8s.KubeConfigModels;
 using KSail.Factories;
 using KSail.Managers;

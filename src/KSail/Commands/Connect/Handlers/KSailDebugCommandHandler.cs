@@ -1,6 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
-using Devantler.K9sCLI;
+using DevantlerTech.K9sCLI;
 using KSail.Models;
 
 namespace KSail.Commands.Connect.Handlers;

@@ -1,5 +1,5 @@
-using Devantler.KubernetesProvisioner.CNI.Cilium;
-using Devantler.KubernetesProvisioner.CNI.Core;
+using DevantlerTech.KubernetesProvisioner.CNI.Cilium;
+using DevantlerTech.KubernetesProvisioner.CNI.Core;
 using KSail;
 using KSail.Factories;
 using KSail.Models;

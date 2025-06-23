@@ -1,6 +1,6 @@
 
-using Devantler.HelmCLI;
-using Devantler.KubectlCLI;
+using DevantlerTech.HelmCLI;
+using DevantlerTech.KubectlCLI;
 using KSail.Models;
 
 namespace KSail.HelmInstallers;

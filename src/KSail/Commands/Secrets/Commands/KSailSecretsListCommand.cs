@@ -1,5 +1,5 @@
 using System.CommandLine;
-using Devantler.SecretManager.SOPS.LocalAge;
+using DevantlerTech.SecretManager.SOPS.LocalAge;
 using KSail.Commands.Secrets.Handlers;
 using KSail.Models.Project.Enums;
 using KSail.Options;

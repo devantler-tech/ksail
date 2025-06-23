@@ -1,6 +1,6 @@
-using Devantler.KubernetesProvisioner.Cluster.Core;
-using Devantler.KubernetesProvisioner.Cluster.K3d;
-using Devantler.KubernetesProvisioner.Cluster.Kind;
+using DevantlerTech.KubernetesProvisioner.Cluster.Core;
+using DevantlerTech.KubernetesProvisioner.Cluster.K3d;
+using DevantlerTech.KubernetesProvisioner.Cluster.Kind;
 using KSail.Models;
 using KSail.Models.Project.Enums;
 

@@ -11,7 +11,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Devantler.KubernetesGenerator.Core" Version="1.7.28" />
+    <PackageReference Include="DevantlerTech.KubernetesGenerator.Core" Version="1.8.0" />
   </ItemGroup>
 
   <ItemGroup>
