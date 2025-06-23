@@ -14,7 +14,7 @@ class KSailGenCertManagerClusterIssuerCommandHandler(string outputFile, bool ove
     {
       Metadata = new V1ObjectMeta
       {
-        Name = "selfsigned-cluster-issuer",
+        Name = "selfsigned",
         NamespaceProperty = "cert-manager"
       },
       Spec = new CertManagerClusterIssuerSpec
