@@ -1,5 +1,5 @@
-using Devantler.KubernetesValidator.ClientSide.Schemas;
-using Devantler.KubernetesValidator.ClientSide.YamlSyntax;
+using DevantlerTech.KubernetesValidator.ClientSide.Schemas;
+using DevantlerTech.KubernetesValidator.ClientSide.YamlSyntax;
 using KSail.Commands.Validate.Validators;
 using KSail.Models;
 

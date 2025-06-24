@@ -1,5 +1,5 @@
-using Devantler.SecretManager.SOPS.LocalAge.Models;
-using Devantler.SecretManager.SOPS.LocalAge.Utils;
+using DevantlerTech.SecretManager.SOPS.LocalAge.Models;
+using DevantlerTech.SecretManager.SOPS.LocalAge.Utils;
 
 namespace KSail.Utils;
 

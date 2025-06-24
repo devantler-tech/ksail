@@ -1,7 +1,7 @@
-using Devantler.ContainerEngineProvisioner.Core;
-using Devantler.ContainerEngineProvisioner.Docker;
-using Devantler.ContainerEngineProvisioner.Podman;
-using Devantler.KubernetesProvisioner.Cluster.Core;
+using DevantlerTech.ContainerEngineProvisioner.Core;
+using DevantlerTech.ContainerEngineProvisioner.Docker;
+using DevantlerTech.ContainerEngineProvisioner.Podman;
+using DevantlerTech.KubernetesProvisioner.Cluster.Core;
 using KSail;
 using KSail.Factories;
 using KSail.Models;
@@ -89,7 +89,7 @@ class MirrorRegistryManager(KSailCluster config) : IBootstrapManager, ICleanupMa
           "nodes",
           "--name", $"{config.Metadata.Name}"
           ];
-        var (_, output) = await Devantler.KindCLI.Kind.RunAsync(args, silent: true, cancellationToken: cancellationToken).ConfigureAwait(false);
+        var (_, output) = await DevantlerTech.KindCLI.Kind.RunAsync(args, silent: true, cancellationToken: cancellationToken).ConfigureAwait(false);
         if (output.Contains("No kind nodes found for cluster", StringComparison.OrdinalIgnoreCase))
           throw new KSailException(output);
         string[] nodes = output.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);

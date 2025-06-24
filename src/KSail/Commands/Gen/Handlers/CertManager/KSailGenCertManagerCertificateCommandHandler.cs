@@ -1,6 +1,6 @@
-using Devantler.KubernetesGenerator.CertManager;
-using Devantler.KubernetesGenerator.CertManager.Models;
-using Devantler.KubernetesGenerator.CertManager.Models.IssuerRef;
+using DevantlerTech.KubernetesGenerator.CertManager;
+using DevantlerTech.KubernetesGenerator.CertManager.Models;
+using DevantlerTech.KubernetesGenerator.CertManager.Models.IssuerRef;
 using k8s.Models;
 
 namespace KSail.Commands.Gen.Handlers.CertManager;

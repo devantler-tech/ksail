@@ -1,7 +1,7 @@
-using Devantler.KubernetesProvisioner.Deployment.Core;
-using Devantler.KubernetesProvisioner.Deployment.Kubectl;
-using Devantler.KubernetesProvisioner.GitOps.Core;
-using Devantler.KubernetesProvisioner.GitOps.Flux;
+using DevantlerTech.KubernetesProvisioner.Deployment.Core;
+using DevantlerTech.KubernetesProvisioner.Deployment.Kubectl;
+using DevantlerTech.KubernetesProvisioner.GitOps.Core;
+using DevantlerTech.KubernetesProvisioner.GitOps.Flux;
 using KSail.Commands.Validate.Handlers;
 using KSail.Models;
 using KSail.Models.Project.Enums;

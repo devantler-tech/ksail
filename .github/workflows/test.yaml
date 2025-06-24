@@ -79,8 +79,68 @@ jobs:
       - name: 📑 Checkout
         uses: actions/checkout@v4
         with:
-          lfs: true
           token: ${{ steps.generate-token.outputs.token }}
+      - name: 📦 Install kind CLI
+        uses: jaxxstorm/action-install-gh-release@v2.1.0
+        with:
+          repo: kubernetes-sigs/kind
+          extension-matching: disable
+          rename-to: kind
+          chmod: 0755
+      - name: 📦 Install k3d CLI
+        uses: jaxxstorm/action-install-gh-release@v2.1.0
+        with:
+          repo: k3d-io/k3d
+          extension-matching: disable
+          rename-to: k3d
+          chmod: 0755
+      - name: 📦 Install talosctl CLI
+        uses: jaxxstorm/action-install-gh-release@v2.1.0
+        with:
+          repo: siderolabs/talos
+          extension-matching: disable
+          asset-name: talosctl
+          rename-to: talosctl
+          chmod: 0755
+      - name: 📦 Install Flux CLI
+        uses: jaxxstorm/action-install-gh-release@v2.1.0
+        with:
+          repo: fluxcd/flux2
+      - name: 📦 Install ArgoCD CLI
+        uses: jaxxstorm/action-install-gh-release@v2.1.0
+        with:
+          repo: argoproj/argo-cd
+          extension-matching: disable
+          rename-to: argocd
+          chmod: 0755
+      - name: 📦 Install Kubectl CLI
+        uses: azure/setup-kubectl@v4
+      - name: 📦 Install Helm CLI
+        uses: azure/setup-helm@v4.3.0
+      - name: 📦 Install Cilium CLI
+        uses: jaxxstorm/action-install-gh-release@v2.1.0
+        with:
+          repo: cilium/cilium-cli
+      - name: 📦 Install Age CLI
+        uses: jaxxstorm/action-install-gh-release@v2.1.0
+        with:
+          repo: FiloSottile/age
+          binaries-location: age
+          chmod: 0755
+      - name: 📦 Install SOPS CLI
+        uses: nhedger/setup-sops@v2
+      - name: 📦 Install K9s CLI
+        uses: jaxxstorm/action-install-gh-release@v2.1.0
+        with:
+          repo: derailed/k9s
+      - name: 📦 Install Kubeconform CLI
+        uses: jaxxstorm/action-install-gh-release@v2.1.0
+        with:
+          repo: yannh/kubeconform
+      - name: 📦 Install Kustomize CLI
+        uses: jaxxstorm/action-install-gh-release@v2.1.0
+        with:
+          repo: kubernetes-sigs/kustomize
       - name: ⚙️ Setup .NET
         uses: actions/setup-dotnet@v4
         with:

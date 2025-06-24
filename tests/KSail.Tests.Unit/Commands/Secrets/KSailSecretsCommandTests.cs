@@ -2,7 +2,7 @@ using System.CommandLine;
 using System.CommandLine.Builder;
 using System.CommandLine.IO;
 using System.CommandLine.Parsing;
-using Devantler.Keys.Age;
+using DevantlerTech.Keys.Age;
 using KSail.Commands.Root;
 
 namespace KSail.Tests.Unit.Commands.Secrets;

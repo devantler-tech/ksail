@@ -1,7 +1,7 @@
 using System.CommandLine;
-using Devantler.Keys.Age;
-using Devantler.SecretManager.Core;
-using Devantler.SOPSCLI;
+using DevantlerTech.Keys.Age;
+using DevantlerTech.SecretManager.Core;
+using DevantlerTech.SOPSCLI;
 
 namespace KSail.Commands.Run.Handlers;
 

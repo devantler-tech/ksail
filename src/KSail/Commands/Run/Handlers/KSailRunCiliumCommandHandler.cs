@@ -1,7 +1,7 @@
 using System.CommandLine;
-using Devantler.CiliumCLI;
-using Devantler.Keys.Age;
-using Devantler.SecretManager.Core;
+using DevantlerTech.CiliumCLI;
+using DevantlerTech.Keys.Age;
+using DevantlerTech.SecretManager.Core;
 
 namespace KSail.Commands.Run.Handlers;
 

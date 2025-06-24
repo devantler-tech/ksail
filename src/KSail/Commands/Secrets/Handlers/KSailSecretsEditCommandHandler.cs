@@ -1,7 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
-using Devantler.Keys.Age;
-using Devantler.SecretManager.Core;
+using DevantlerTech.Keys.Age;
+using DevantlerTech.SecretManager.Core;
 using KSail.Models;
 
 namespace KSail.Commands.Secrets.Handlers;

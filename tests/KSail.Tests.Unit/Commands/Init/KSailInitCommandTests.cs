@@ -4,7 +4,7 @@ using System.CommandLine.Builder;
 using System.CommandLine.IO;
 using System.CommandLine.Parsing;
 using System.Text.RegularExpressions;
-using Devantler.SecretManager.SOPS.LocalAge;
+using DevantlerTech.SecretManager.SOPS.LocalAge;
 using KSail.Commands.Root;
 using KSail.Utils;
 

@@ -1,6 +1,6 @@
-using Devantler.KubernetesGenerator.K3d.Models;
-using Devantler.KubernetesGenerator.K3d.Models.Options.K3s;
-using Devantler.KubernetesGenerator.Kind.Models;
+using DevantlerTech.KubernetesGenerator.K3d.Models;
+using DevantlerTech.KubernetesGenerator.K3d.Models.Options.K3s;
+using DevantlerTech.KubernetesGenerator.Kind.Models;
 using KSail.Models;
 using KSail.Models.Project.Enums;
 using YamlDotNet.Serialization;
