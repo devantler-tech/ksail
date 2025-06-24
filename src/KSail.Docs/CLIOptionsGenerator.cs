@@ -83,8 +83,7 @@ static class CLIOptionsGenerator
       { "ksail secrets rm", await GetHelpTextAsync(ksailCommand, "secrets", "rm", "--helpz").ConfigureAwait(false) },
       { "ksail secrets list", await GetHelpTextAsync(ksailCommand, "secrets", "list", "--helpz").ConfigureAwait(false) },
       { "ksail secrets import", await GetHelpTextAsync(ksailCommand, "secrets", "import", "--helpz").ConfigureAwait(false) },
-      { "ksail secrets export", await GetHelpTextAsync(ksailCommand, "secrets", "export", "--helpz").ConfigureAwait(false) },
-      { "ksail run", await GetHelpTextAsync(ksailCommand, "run", "--helpz").ConfigureAwait(false) }
+      { "ksail secrets export", await GetHelpTextAsync(ksailCommand, "secrets", "export", "--helpz").ConfigureAwait(false) }
     };
 
     return GenerateMarkdown(helpTexts);

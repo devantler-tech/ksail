@@ -38,7 +38,6 @@ Commands:
   connect   Connect to a cluster with K9s
   gen       Generate a resource
   secrets   Manage secrets
-  run       Run a command
 ```
 
 ## `ksail init`
@@ -1001,30 +1000,4 @@ Arguments:
 Options:
   -o, --output <output>  A file or directory path. []
   --helpz                Show help and usage information
-```
-
-## `ksail run`
-
-```text
-Description:
-  Run a command
-
-Usage:
-  ksail run [command] [options]
-
-Options:
-  --helpz  Show help and usage information
-
-Commands:
-  age-keygen <args>   Run 'age-keygen' command
-  cilium <args>       Run 'cilium' command
-  flux <args>         Run 'flux' command
-  helm <args>         Run 'helm' command
-  k3d <args>          Run 'k3d' command
-  k9s <args>          Run 'k9s' command
-  kind <args>         Run 'kind' command
-  kubeconform <args>  Run 'kubeconform' command
-  kubectl <args>      Run 'kubectl' command
-  kustomize <args>    Run 'kustomize' command
-  sops <args>         Run 'sops' command
 ```
