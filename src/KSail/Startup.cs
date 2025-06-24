@@ -27,7 +27,6 @@ class Startup
 
   readonly string[] _dependentBinariesInPath =
   [
-    "testertester",
     RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "age-keygen.exe" : "age-keygen",
     "argocd",
     "cilium",
