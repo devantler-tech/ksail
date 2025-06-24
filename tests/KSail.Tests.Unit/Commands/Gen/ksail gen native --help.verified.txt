@@ -5,8 +5,8 @@ Usage:
   testhost gen native [command] [options]
 
 Options:
-  --overwrite  Overwrite existing files. [default: False]
-  --help       Show help and usage information
+  --overwrite     Overwrite existing files. [default: False]
+  -?, -h, --help  Show help and usage information
 
 Commands:
   cluster-role-binding       Generate a 'rbac.authorization.k8s.io/v1/ClusterRoleBinding' resource.

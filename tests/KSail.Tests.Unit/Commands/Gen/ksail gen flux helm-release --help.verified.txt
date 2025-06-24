@@ -7,6 +7,6 @@ Usage:
 Options:
   -o, --output <output>  A file or directory path. [default: ./helm-release.yaml]
   --overwrite            Overwrite existing files. [default: False]
-  --help                 Show help and usage information
+  -?, -h, --help         Show help and usage information
 
 

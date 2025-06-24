@@ -5,8 +5,8 @@ Usage:
   testhost gen config [command] [options]
 
 Options:
-  --overwrite  Overwrite existing files. [default: False]
-  --help       Show help and usage information
+  --overwrite     Overwrite existing files. [default: False]
+  -?, -h, --help  Show help and usage information
 
 Commands:
   k3d    Generate a 'k3d.io/v1alpha5/Simple' resource.

@@ -12,18 +12,7 @@ static class CLIOptionsGenerator
   {
     // Arrange
     var console = new SystemConsole();
-    var ksailCommand = new CommandLineBuilder(new KSailRootCommand(new SystemConsole()))
-      .UseVersionOption()
-      .UseHelp("--help")
-      .UseEnvironmentVariableDirective()
-      .UseParseDirective()
-      .UseSuggestDirective()
-      .RegisterWithDotnetSuggest()
-      .UseTypoCorrections()
-      .UseParseErrorReporting()
-      .UseExceptionHandler()
-      .CancelOnProcessTermination()
-      .Build();
+    var ksailCommand = new KSailRootCommand(console);
     var helpTexts = new Dictionary<string, string?>
     {
       { "ksail", await GetHelpTextAsync(ksailCommand, "--help").ConfigureAwait(false) },
@@ -89,7 +78,7 @@ static class CLIOptionsGenerator
     return GenerateMarkdown(helpTexts);
   }
 
-  static async Task<string?> GetHelpTextAsync(Parser command, params string[] args)
+  static async Task<string?> GetHelpTextAsync(Command command, params string[] args)
   {
     var console = new TestConsole();
     _ = await command.InvokeAsync(args, console).ConfigureAwait(false);

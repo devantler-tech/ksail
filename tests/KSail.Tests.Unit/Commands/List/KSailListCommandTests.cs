@@ -14,18 +14,7 @@ public class KSailListCommandTests
   {
     //Arrange
     var console = new TestConsole();
-    var ksailCommand = new CommandLineBuilder(new KSailRootCommand(new SystemConsole()))
-      .UseVersionOption()
-      .UseHelp("--help")
-      .UseEnvironmentVariableDirective()
-      .UseParseDirective()
-      .UseSuggestDirective()
-      .RegisterWithDotnetSuggest()
-      .UseTypoCorrections()
-      .UseParseErrorReporting()
-      .UseExceptionHandler()
-      .CancelOnProcessTermination()
-      .Build();
+    var ksailCommand = new KSailRootCommand(console);
 
     //Act
     int exitCode = await ksailCommand.InvokeAsync(["list", "--help"], console);

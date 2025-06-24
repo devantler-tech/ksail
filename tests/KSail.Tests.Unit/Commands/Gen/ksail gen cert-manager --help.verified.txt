@@ -5,8 +5,8 @@ Usage:
   testhost gen cert-manager [command] [options]
 
 Options:
-  --overwrite  Overwrite existing files. [default: False]
-  --help       Show help and usage information
+  --overwrite     Overwrite existing files. [default: False]
+  -?, -h, --help  Show help and usage information
 
 Commands:
   certificate     Generate a 'cert-manager.io/v1/Certificate' resource.

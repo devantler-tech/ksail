@@ -34,11 +34,7 @@ sealed class KSailRootCommand : RootCommand
           context.ExitCode = await ksailRootCommandHandler.HandleAsync().ConfigureAwait(false);
           if (context.ParseResult.CommandResult.Children.Count == 0)
           {
-            var command = new CommandLineBuilder(this)
-              .UseHelp("--help")
-              .Build();
-
-            _ = await command.InvokeAsync("--help", console).ConfigureAwait(false);
+            _ = await this.InvokeAsync("--help", console).ConfigureAwait(false);
 
           }
         }

@@ -5,8 +5,8 @@ Usage:
   testhost gen [command] [options]
 
 Options:
-  --overwrite  Overwrite existing files. [default: False]
-  --help       Show help and usage information
+  --overwrite     Overwrite existing files. [default: False]
+  -?, -h, --help  Show help and usage information
 
 Commands:
   cert-manager  Generate a CertManager resource.

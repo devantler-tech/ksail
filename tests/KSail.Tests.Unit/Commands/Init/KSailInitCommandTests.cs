@@ -13,23 +13,12 @@ namespace KSail.Tests.Commands.Init;
 public partial class KSailInitCommandTests
 {
   readonly TestConsole _console;
-  readonly Parser _ksailCommand;
+  readonly Command _ksailCommand;
 
   public KSailInitCommandTests()
   {
     _console = new TestConsole();
-    _ksailCommand = new CommandLineBuilder(new KSailRootCommand(_console))
-      .UseVersionOption()
-      .UseHelp("--help")
-      .UseEnvironmentVariableDirective()
-      .UseParseDirective()
-      .UseSuggestDirective()
-      .RegisterWithDotnetSuggest()
-      .UseTypoCorrections()
-      .UseParseErrorReporting()
-      .UseExceptionHandler()
-      .CancelOnProcessTermination()
-      .Build();
+    _ksailCommand = new KSailRootCommand(_console);
   }
 
   [Fact]
