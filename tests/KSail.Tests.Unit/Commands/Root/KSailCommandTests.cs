@@ -16,7 +16,7 @@ public class KSailRootCommandTests
     _console = new TestConsole();
     _ksailCommand = new CommandLineBuilder(new KSailRootCommand(_console))
       .UseVersionOption()
-      .UseHelp("--helpz")
+      .UseHelp("--help")
       .UseEnvironmentVariableDirective()
       .UseParseDirective()
       .UseSuggestDirective()
@@ -44,7 +44,7 @@ public class KSailRootCommandTests
   public async Task KSailHelp_SucceedsAndPrintsHelp()
   {
     //Act
-    int exitCode = await _ksailCommand.InvokeAsync(["--helpz"], _console);
+    int exitCode = await _ksailCommand.InvokeAsync(["--help"], _console);
 
     //Assert
     Assert.Equal(0, exitCode);

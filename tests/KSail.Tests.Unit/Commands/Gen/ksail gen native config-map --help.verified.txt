@@ -1,0 +1,12 @@
+﻿Description:
+  Generate a 'core/v1/ConfigMap' resource.
+
+Usage:
+  testhost gen native config-map [options]
+
+Options:
+  -o, --output <output>  A file or directory path. [default: ./config-map.yaml]
+  --overwrite            Overwrite existing files. [default: False]
+  --help                 Show help and usage information
+
+

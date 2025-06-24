@@ -1,0 +1,12 @@
+﻿Description:
+  Generate a 'autoscaling/v2/HorizontalPodAutoscaler' resource.
+
+Usage:
+  testhost gen native horizontal-pod-autoscaler [options]
+
+Options:
+  -o, --output <output>  A file or directory path. [default: ./horizontal-pod-autoscaler.yaml]
+  --overwrite            Overwrite existing files. [default: False]
+  --help                 Show help and usage information
+
+

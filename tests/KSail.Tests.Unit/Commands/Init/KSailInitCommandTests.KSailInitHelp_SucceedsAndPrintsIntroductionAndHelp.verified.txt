@@ -22,6 +22,6 @@ Options:
   -sm, --secret-manager <None|SOPS>                 Whether to use a secret manager. [default: None]
   -e, --editor <Nano|Vim>                           Editor to use. [default: Nano]
   --overwrite                                       Overwrite existing files. [default: False]
-  --helpz                                           Show help and usage information
+  --help                                            Show help and usage information
 
 

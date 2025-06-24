@@ -6,7 +6,7 @@ Usage:
 
 Options:
   --version  Show version information
-  --helpz    Show help and usage information
+  --help     Show help and usage information
 
 Commands:
   init      Initialize a new project

@@ -19,7 +19,7 @@ public partial class KSailGenCommandTests
     _console = new TestConsole();
     _ksailCommand = new CommandLineBuilder(new KSailRootCommand(_console))
       .UseVersionOption()
-      .UseHelp("--helpz")
+      .UseHelp("--help")
       .UseEnvironmentVariableDirective()
       .UseParseDirective()
       .UseSuggestDirective()

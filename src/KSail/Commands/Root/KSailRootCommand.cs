@@ -35,10 +35,10 @@ sealed class KSailRootCommand : RootCommand
           if (context.ParseResult.CommandResult.Children.Count == 0)
           {
             var command = new CommandLineBuilder(this)
-              .UseHelp("--helpz")
+              .UseHelp("--help")
               .Build();
 
-            _ = await command.InvokeAsync("--helpz", console).ConfigureAwait(false);
+            _ = await command.InvokeAsync("--help", console).ConfigureAwait(false);
 
           }
         }

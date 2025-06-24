@@ -16,7 +16,7 @@ public class KSailConnectCommandTests
     var console = new TestConsole();
     var ksailCommand = new CommandLineBuilder(new KSailRootCommand(console))
       .UseVersionOption()
-      .UseHelp("--helpz")
+      .UseHelp("--help")
       .UseEnvironmentVariableDirective()
       .UseParseDirective()
       .UseSuggestDirective()
@@ -28,7 +28,7 @@ public class KSailConnectCommandTests
       .Build();
 
     //Act
-    int exitCode = await ksailCommand.InvokeAsync(["connect", "--helpz"], console);
+    int exitCode = await ksailCommand.InvokeAsync(["connect", "--help"], console);
 
     //Assert
     Assert.Equal(0, exitCode);

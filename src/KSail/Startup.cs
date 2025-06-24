@@ -14,7 +14,7 @@ class Startup
 {
   readonly Parser _ksailCommand = new CommandLineBuilder(new KSailRootCommand(new SystemConsole()))
     .UseVersionOption()
-    .UseHelp("--helpz")
+    .UseHelp("--help")
     .UseEnvironmentVariableDirective()
     .UseParseDirective()
     .UseSuggestDirective()

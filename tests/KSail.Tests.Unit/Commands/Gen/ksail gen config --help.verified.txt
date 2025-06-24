@@ -1,0 +1,15 @@
+﻿Description:
+  Generate a configuration file.
+
+Usage:
+  testhost gen config [command] [options]
+
+Options:
+  --overwrite  Overwrite existing files. [default: False]
+  --help       Show help and usage information
+
+Commands:
+  k3d    Generate a 'k3d.io/v1alpha5/Simple' resource.
+  ksail  Generate a 'ksail.io/v1alpha1/Cluster' resource.
+  sops   Generate a SOPS configuration file.
+

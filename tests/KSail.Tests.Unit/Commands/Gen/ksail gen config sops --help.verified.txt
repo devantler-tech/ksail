@@ -1,0 +1,12 @@
+﻿Description:
+  Generate a SOPS configuration file.
+
+Usage:
+  testhost gen config sops [options]
+
+Options:
+  -o, --output <output>  A file or directory path. [default: ./.sops.yaml]
+  --overwrite            Overwrite existing files. [default: False]
+  --help                 Show help and usage information
+
+

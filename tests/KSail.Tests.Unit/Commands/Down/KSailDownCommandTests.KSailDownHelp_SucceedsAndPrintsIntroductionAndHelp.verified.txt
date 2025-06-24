@@ -10,6 +10,6 @@ Options:
   -d, --distribution <K3d|Kind>              The distribution to use for the cluster. [default: Kind]
   -ce, --container-engine <Docker|Podman>    The container engine in which to provision the cluster. [default: Docker]
   -mr, --mirror-registries                   Enable mirror registries for the project. [default: True]
-  --helpz                                    Show help and usage information
+  --help                                     Show help and usage information
 
 

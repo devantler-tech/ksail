@@ -1,0 +1,12 @@
+﻿Description:
+  Generate a 'core/v1/Namespace' resource.
+
+Usage:
+  testhost gen native namespace [options]
+
+Options:
+  -o, --output <output>  A file or directory path. [default: ./namespace.yaml]
+  --overwrite            Overwrite existing files. [default: False]
+  --help                 Show help and usage information
+
+

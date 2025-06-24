@@ -17,7 +17,7 @@ public class KSailSecretsCommandTests
     _console = new TestConsole();
     _ksailCommand = new CommandLineBuilder(new KSailRootCommand(_console))
       .UseVersionOption()
-      .UseHelp("--helpz")
+      .UseHelp("--help")
       .UseEnvironmentVariableDirective()
       .UseParseDirective()
       .UseSuggestDirective()
@@ -30,14 +30,14 @@ public class KSailSecretsCommandTests
   }
 
   [Theory]
-  [InlineData(["secrets", "--helpz"])]
-  [InlineData(["secrets", "encrypt", "--helpz"])]
-  [InlineData(["secrets", "decrypt", "--helpz"])]
-  [InlineData(["secrets", "add", "--helpz"])]
-  [InlineData(["secrets", "rm", "--helpz"])]
-  [InlineData(["secrets", "list", "--helpz"])]
-  [InlineData(["secrets", "import", "--helpz"])]
-  [InlineData(["secrets", "export", "--helpz"])]
+  [InlineData(["secrets", "--help"])]
+  [InlineData(["secrets", "encrypt", "--help"])]
+  [InlineData(["secrets", "decrypt", "--help"])]
+  [InlineData(["secrets", "add", "--help"])]
+  [InlineData(["secrets", "rm", "--help"])]
+  [InlineData(["secrets", "list", "--help"])]
+  [InlineData(["secrets", "import", "--help"])]
+  [InlineData(["secrets", "export", "--help"])]
   public async Task KSailSecretsHelp_SucceedsAndPrintsIntroductionAndHelp(params string[] args)
   {
     //Act
