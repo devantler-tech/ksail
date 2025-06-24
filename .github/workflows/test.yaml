@@ -17,13 +17,94 @@ defaults:
 
 jobs:
   unit-test:
-    uses: devantler-tech/workflows/.github/workflows/dotnet-test.yaml@main
-    secrets: inherit
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    if: github.event.pull_request.draft == false
+    steps:
+      - name: Generate GitHub App Token
+        uses: tibdex/github-app-token@v2
+        id: generate-token
+        with:
+          app_id: ${{ vars.APP_ID }}
+          private_key: ${{ secrets.APP_PRIVATE_KEY }}
+      - name: 📑 Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ steps.generate-token.outputs.token }}
+      - name: 📦 Install kind CLI
+        uses: jaxxstorm/action-install-gh-release@v2.1.0
+        with:
+          repo: kubernetes-sigs/kind
+          extension-matching: disable
+          rename-to: kind
+          chmod: 0755
+      - name: 📦 Install k3d CLI
+        uses: jaxxstorm/action-install-gh-release@v2.1.0
+        with:
+          repo: k3d-io/k3d
+          extension-matching: disable
+          rename-to: k3d
+          chmod: 0755
+      - name: 📦 Install talosctl CLI
+        uses: jaxxstorm/action-install-gh-release@v2.1.0
+        with:
+          repo: siderolabs/talos
+          extension-matching: disable
+          asset-name: talosctl
+          rename-to: talosctl
+          chmod: 0755
+      - name: 📦 Install Flux CLI
+        uses: jaxxstorm/action-install-gh-release@v2.1.0
+        with:
+          repo: fluxcd/flux2
+      - name: 📦 Install ArgoCD CLI
+        uses: jaxxstorm/action-install-gh-release@v2.1.0
+        with:
+          repo: argoproj/argo-cd
+          extension-matching: disable
+          rename-to: argocd
+          chmod: 0755
+      - name: 📦 Install Kubectl CLI
+        uses: azure/setup-kubectl@v4
+      - name: 📦 Install Helm CLI
+        uses: azure/setup-helm@v4.3.0
+      - name: 📦 Install Cilium CLI
+        uses: jaxxstorm/action-install-gh-release@v2.1.0
+        with:
+          repo: cilium/cilium-cli
+      - name: 📦 Install Age CLI
+        uses: jaxxstorm/action-install-gh-release@v2.1.0
+        with:
+          repo: FiloSottile/age
+          binaries-location: age
+          chmod: 0755
+      - name: 📦 Install SOPS CLI
+        uses: nhedger/setup-sops@v2
+      - name: 📦 Install K9s CLI
+        uses: jaxxstorm/action-install-gh-release@v2.1.0
+        with:
+          repo: derailed/k9s
+      - name: 📦 Install Kubeconform CLI
+        uses: jaxxstorm/action-install-gh-release@v2.1.0
+        with:
+          repo: yannh/kubeconform
+      - name: 📦 Install Kustomize CLI
+        uses: jaxxstorm/action-install-gh-release@v2.1.0
+        with:
+          repo: kubernetes-sigs/kustomize
+      - name: Test .NET solution or project
+        uses: devantler-tech/dotnet-test-action@main
+        with:
+          app_id: ${{ vars.APP_ID }}
+          app_private_key: ${{ secrets.APP_PRIVATE_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          codecov-token: ${{ secrets.CODECOV_TOKEN }}
 
   system-test:
     name: System test
     runs-on: ubuntu-latest
-    if: always()
     needs: unit-test
     strategy:
       matrix:
