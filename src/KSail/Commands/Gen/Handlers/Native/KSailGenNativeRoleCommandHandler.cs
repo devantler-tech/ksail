@@ -7,7 +7,7 @@ class KSailGenNativeRoleCommandHandler(string outputFile, bool overwrite) : ICom
 {
   readonly RoleGenerator _generator = new();
 
-  public async Task<int> HandleAsync(CancellationToken cancellationToken = default)
+  public async Task HandleAsync(CancellationToken cancellationToken = default)
   {
     var model = new V1Role()
     {

@@ -12,13 +12,13 @@ class KSailGenNativeHorizontalPodAutoscalerCommand : Command
   readonly GenericPathOption _outputOption = new("./horizontal-pod-autoscaler.yaml");
   public KSailGenNativeHorizontalPodAutoscalerCommand() : base("horizontal-pod-autoscaler", "Generate a 'autoscaling/v2/HorizontalPodAutoscaler' resource.")
   {
-    AddOption(_outputOption);
-    this.SetHandler(async (context) =>
+    Options.Add(_outputOption);
+    SetAction(async (parseResult, cancellationToken) =>
       {
         try
         {
-          string outputFile = context.ParseResult.GetValueForOption(_outputOption) ?? "./horizontal-pod-autoscaler.yaml";
-          bool overwrite = context.ParseResult.CommandResult.GetValueForOption(CLIOptions.Generator.OverwriteOption) ?? false;
+          string outputFile = parseResult.GetValue(_outputOption) ?? "./horizontal-pod-autoscaler.yaml";
+          bool overwrite = parseResult.CommandResult.GetValue(CLIOptions.Generator.OverwriteOption) ?? false;
           Console.WriteLine(File.Exists(outputFile) ? (overwrite ?
             $"✚ overwriting '{outputFile}'" :
             $"✔ skipping '{outputFile}', as it already exists.") :
@@ -28,12 +28,12 @@ class KSailGenNativeHorizontalPodAutoscalerCommand : Command
             return;
           }
           KSailGenNativeHorizontalPodAutoscalerCommandHandler handler = new(outputFile, overwrite);
-          context.ExitCode = await handler.HandleAsync(context.GetCancellationToken()).ConfigureAwait(false);
+          await handler.HandleAsync(cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
           _ = _exceptionHandler.HandleException(ex);
-          context.ExitCode = 1;
+
         }
       }
     );

@@ -12,13 +12,13 @@ class KSailGenKustomizeComponentCommand : Command
   readonly GenericPathOption _outputOption = new("./kustomization.yaml");
   internal KSailGenKustomizeComponentCommand() : base("component", "Generate a 'kustomize.config.k8s.io/v1alpha1/Component' resource.")
   {
-    AddOption(_outputOption);
-    this.SetHandler(async (context) =>
+    Options.Add(_outputOption);
+    SetAction(async (parseResult, cancellationToken) =>
       {
         try
         {
-          string outputFile = context.ParseResult.GetValueForOption(_outputOption) ?? "./kustomization.yaml";
-          bool overwrite = context.ParseResult.CommandResult.GetValueForOption(CLIOptions.Generator.OverwriteOption) ?? false;
+          string outputFile = parseResult.GetValue(_outputOption) ?? "./kustomization.yaml";
+          bool overwrite = parseResult.CommandResult.GetValue(CLIOptions.Generator.OverwriteOption) ?? false;
           Console.WriteLine(File.Exists(outputFile) ? (overwrite ?
             $"✚ overwriting '{outputFile}'" :
             $"✔ skipping '{outputFile}', as it already exists.") :
@@ -28,12 +28,12 @@ class KSailGenKustomizeComponentCommand : Command
             return;
           }
           var handler = new KSailGenKustomizeComponentCommandHandler(outputFile, overwrite);
-          context.ExitCode = await handler.HandleAsync(context.GetCancellationToken()).ConfigureAwait(false);
+          await handler.HandleAsync(cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
           _ = _exceptionHandler.HandleException(ex);
-          context.ExitCode = 1;
+
         }
       }
     );

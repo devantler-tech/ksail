@@ -17,20 +17,20 @@ sealed class KSailValidateCommand : Command
    "validate", "Validate project files"
   )
   {
-    AddOption(_pathOption);
-    this.SetHandler(async (context) =>
+    Options.Add(_pathOption);
+    this.SetAction(async (parseResult, cancellationToken) =>
     {
       try
       {
-        string path = context.ParseResult.GetValueForOption(_pathOption) ?? "./";
+        string path = parseResult.GetValue(_pathOption) ?? "./";
         var config = await KSailClusterConfigLoader.LoadWithoptionsAsync(context, path).ConfigureAwait(false);
         var handler = new KSailValidateCommandHandler(config, path);
-        context.ExitCode = await handler.HandleAsync(context.GetCancellationToken()).ConfigureAwait(false);
+        await handler.HandleAsync(cancellationToken).ConfigureAwait(false);
       }
       catch (Exception ex)
       {
         _ = _exceptionHandler.HandleException(ex);
-        context.ExitCode = 1;
+
       }
     });
   }

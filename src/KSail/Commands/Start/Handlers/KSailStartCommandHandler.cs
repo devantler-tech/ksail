@@ -22,7 +22,7 @@ class KSailStartCommandHandler : ICommandHandler
     };
   }
 
-  public async Task<int> HandleAsync(CancellationToken cancellationToken = default)
+  public async Task HandleAsync(CancellationToken cancellationToken = default)
   {
     Console.WriteLine($"▶️ Starting cluster...");
     Console.WriteLine($"► starting cluster '{_config.Spec.Connection.Context}'");

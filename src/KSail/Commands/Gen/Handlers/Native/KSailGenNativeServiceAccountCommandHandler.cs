@@ -7,7 +7,7 @@ class KSailGenNativeAccountCommandHandler(string outputFile, bool overwrite) : I
 {
   readonly ServiceAccountGenerator _generator = new();
 
-  public async Task<int> HandleAsync(CancellationToken cancellationToken = default)
+  public async Task HandleAsync(CancellationToken cancellationToken = default)
   {
     var model = new V1ServiceAccount()
     {

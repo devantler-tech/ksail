@@ -21,11 +21,11 @@ sealed class KSailGenCommand : Command
 
   void AddCommands()
   {
-    AddCommand(new KSailGenCertManagerCommand());
-    AddCommand(new KSailGenConfigCommand());
-    AddCommand(new KSailGenFluxCommand());
-    AddCommand(new KSailGenKustomizeCommand());
-    AddCommand(new KSailGenNativeCommand());
+    Subcommands.Add(new KSailGenCertManagerCommand());
+    Subcommands.Add(new KSailGenConfigCommand());
+    Subcommands.Add(new KSailGenFluxCommand());
+    Subcommands.Add(new KSailGenKustomizeCommand());
+    Subcommands.Add(new KSailGenNativeCommand());
   }
 }
 

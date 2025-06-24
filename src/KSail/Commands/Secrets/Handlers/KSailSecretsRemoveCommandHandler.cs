@@ -9,7 +9,7 @@ class KSailSecretsRemoveCommandHandler(string publicKey, ISecretManager<AgeKey> 
   readonly string _publicKey = publicKey;
   readonly ISecretManager<AgeKey> _secretManager = secretManager;
 
-  public async Task<int> HandleAsync(CancellationToken cancellationToken)
+  public async Task HandleAsync(CancellationToken cancellationToken)
   {
     Console.WriteLine($"► removing '{_publicKey}' from SOPS key file");
     _ = await _secretManager.DeleteKeyAsync(_publicKey, cancellationToken).ConfigureAwait(false);

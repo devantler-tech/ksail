@@ -11,27 +11,26 @@ sealed class KSailListCommand : Command
   internal KSailListCommand() : base("list", "List active clusters")
   {
     AddOptions();
-    this.SetHandler(async (context) =>
+    this.SetAction(async (parseResult, cancellationToken) =>
     {
       try
       {
-        var config = await KSailClusterConfigLoader.LoadWithoptionsAsync(context).ConfigureAwait(false);
-        var cancellationToken = context.GetCancellationToken();
+        var config = await KSailClusterConfigLoader.LoadWithoptionsAsync(parseResult).ConfigureAwait(false);
         var handler = new KSailListCommandHandler(config);
-        context.ExitCode = await handler.HandleAsync(context.GetCancellationToken()).ConfigureAwait(false);
+        await handler.HandleAsync(cancellationToken).ConfigureAwait(false);
       }
       catch (Exception ex)
       {
         _ = _exceptionHandler.HandleException(ex);
-        context.ExitCode = 1;
+
       }
     });
   }
 
   internal void AddOptions()
   {
-    AddOption(CLIOptions.Project.ContainerEngineOption);
-    AddOption(CLIOptions.Project.DistributionOption);
-    AddOption(CLIOptions.Distribution.ShowAllClustersInListings);
+    Options.Add(CLIOptions.Project.ContainerEngineOption);
+    Options.Add(CLIOptions.Project.DistributionOption);
+    Options.Add(CLIOptions.Distribution.ShowAllClustersInListings);
   }
 }

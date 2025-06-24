@@ -1,6 +1,4 @@
 using System.CommandLine;
-using System.CommandLine.Builder;
-using System.CommandLine.IO;
 using System.CommandLine.Parsing;
 using System.Reflection;
 using System.Runtime.InteropServices;
@@ -12,12 +10,14 @@ namespace KSail;
 
 class Startup
 {
-  readonly Command _ksailCommand = new KSailRootCommand(new SystemConsole());
+  readonly Command _ksailCommand = new KSailRootCommand();
 
   public async Task<int> RunAsync(string[] args)
   {
     BinaryChecker.CheckBinariesIsInPath();
-    int exitCode = await _ksailCommand.InvokeAsync(args).ConfigureAwait(false);
-    return exitCode;
+    var parseResult = _ksailCommand.Parse(args);
+    using var cts = new CancellationTokenSource();
+    _ = await parseResult.InvokeAsync(cts.Token).ConfigureAwait(false);
+    return 0;
   }
 }

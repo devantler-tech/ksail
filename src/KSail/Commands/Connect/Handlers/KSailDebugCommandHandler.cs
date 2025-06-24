@@ -12,7 +12,7 @@ class KSailConnectCommandHandler : ICommandHandler
 
   internal KSailConnectCommandHandler(KSailCluster config) => _config = config;
 
-  public async Task<int> HandleAsync(CancellationToken cancellationToken = default)
+  public async Task HandleAsync(CancellationToken cancellationToken = default)
   {
     string[] args = ["--kubeconfig", _config.Spec.Connection.Kubeconfig, "--context", _config.Spec.Connection.Context];
     // TODO: Update k9s call when pseudo-terminal support is added to CLIWrap. See https://github.com/Tyrrrz/CliWrap/issues/225.

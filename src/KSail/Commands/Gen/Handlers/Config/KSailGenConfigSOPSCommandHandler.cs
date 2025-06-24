@@ -6,7 +6,7 @@ namespace KSail.Commands.Gen.Handlers.Config;
 class KSailGenConfigSOPSCommandHandler(string outputFile, bool overwrite) : ICommandHandler
 {
   readonly SOPSConfigHelper _configHelper = new();
-  public async Task<int> HandleAsync(CancellationToken cancellationToken = default)
+  public async Task HandleAsync(CancellationToken cancellationToken = default)
   {
     var sopsConfig = new SOPSConfig
     {

@@ -31,12 +31,9 @@ class KSailUpdateCommandHandler : ICommandHandler
     _config = config;
   }
 
-  public async Task<int> HandleAsync(CancellationToken cancellationToken = default)
+  public async Task HandleAsync(CancellationToken cancellationToken = default)
   {
-    if (!await Validate(_config, cancellationToken).ConfigureAwait(false))
-    {
-      return 1;
-    }
+    _ = await Validate(_config, cancellationToken).ConfigureAwait(false);
     string manifestDirectory = _config.Spec.Project.KustomizationPath
       .Replace("./", string.Empty, StringComparison.OrdinalIgnoreCase)
       .Split('/', StringSplitOptions.RemoveEmptyEntries).First();
@@ -62,17 +59,14 @@ class KSailUpdateCommandHandler : ICommandHandler
       await _deploymentTool.ReconcileAsync(manifestDirectory, _config.Spec.Connection.Timeout, cancellationToken).ConfigureAwait(false);
       Console.WriteLine("✔ reconciliation completed");
     }
-
-    return 0;
   }
 
   async Task<bool> Validate(KSailCluster config, CancellationToken cancellationToken = default)
   {
     if (config.Spec.Validation.ValidateOnUpdate)
     {
-      bool success = await _ksailValidateCommandHandler.HandleAsync(cancellationToken).ConfigureAwait(false) == 0;
+      await _ksailValidateCommandHandler.HandleAsync(cancellationToken).ConfigureAwait(false);
       Console.WriteLine();
-      return success;
     }
     return true;
   }

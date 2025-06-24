@@ -12,13 +12,13 @@ class KSailGenNativeNetworkPolicyCommand : Command
   readonly GenericPathOption _outputOption = new("./network-policy.yaml");
   public KSailGenNativeNetworkPolicyCommand() : base("network-policy", "Generate a 'networking.k8s.io/v1/NetworkPolicy' resource.")
   {
-    AddOption(_outputOption);
-    this.SetHandler(async (context) =>
+    Options.Add(_outputOption);
+    SetAction(async (parseResult, cancellationToken) =>
       {
         try
         {
-          string outputFile = context.ParseResult.GetValueForOption(_outputOption) ?? "./network-policy.yaml";
-          bool overwrite = context.ParseResult.CommandResult.GetValueForOption(CLIOptions.Generator.OverwriteOption) ?? false;
+          string outputFile = parseResult.GetValue(_outputOption) ?? "./network-policy.yaml";
+          bool overwrite = parseResult.CommandResult.GetValue(CLIOptions.Generator.OverwriteOption) ?? false;
           Console.WriteLine(File.Exists(outputFile) ? (overwrite ?
             $"✚ overwriting '{outputFile}'" :
             $"✔ skipping '{outputFile}', as it already exists.") :
@@ -28,12 +28,12 @@ class KSailGenNativeNetworkPolicyCommand : Command
             return;
           }
           KSailGenNativeNetworkPolicyCommandHandler handler = new(outputFile, overwrite);
-          context.ExitCode = await handler.HandleAsync(context.GetCancellationToken()).ConfigureAwait(false);
+          await handler.HandleAsync(cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
           _ = _exceptionHandler.HandleException(ex);
-          context.ExitCode = 1;
+
         }
       }
     );

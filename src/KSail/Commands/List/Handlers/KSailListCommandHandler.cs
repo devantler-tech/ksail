@@ -11,7 +11,7 @@ sealed class KSailListCommandHandler(KSailCluster config) : ICommandHandler
   readonly K3dProvisioner _k3dProvisioner = new();
   readonly KindProvisioner _kindProvisioner = new();
 
-  public async Task<int> HandleAsync(CancellationToken cancellationToken = default)
+  public async Task HandleAsync(CancellationToken cancellationToken = default)
   {
     IEnumerable<string> clusters;
     if (_config.Spec.Distribution.ShowAllClustersInListings)

@@ -10,7 +10,7 @@ class KSailSecretsListCommandHandler(KSailCluster config, ISecretManager<AgeKey>
   readonly KSailCluster _config = config;
   readonly ISecretManager<AgeKey> _secretManager = secretManager;
 
-  public async Task<int> HandleAsync(CancellationToken cancellationToken)
+  public async Task HandleAsync(CancellationToken cancellationToken)
   {
     var keys = await _secretManager.ListKeysAsync(cancellationToken).ConfigureAwait(false);
 

@@ -46,9 +46,8 @@ class ClusterManager(KSailCluster config) : IBootstrapManager, ICleanupManager
   {
     if (config.Spec.Validation.ValidateOnUp)
     {
-      bool success = (await _ksailValidateCommandHandler.HandleAsync(cancellationToken).ConfigureAwait(false)) == 0;
+      await _ksailValidateCommandHandler.HandleAsync(cancellationToken).ConfigureAwait(false);
       Console.WriteLine();
-      return success;
     }
     return true;
   }

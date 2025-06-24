@@ -13,24 +13,24 @@ class KSailGenConfigK3dCommand : Command
 
   public KSailGenConfigK3dCommand() : base("k3d", "Generate a 'k3d.io/v1alpha5/Simple' resource.")
   {
-    AddOption(_outputOption);
-    this.SetHandler(async (context) =>
+    Options.Add(_outputOption);
+    SetAction(async (parseResult, cancellationToken) =>
     {
       try
       {
-        string outputFile = context.ParseResult.CommandResult.GetValueForOption(_outputOption) ?? "./k3d.yaml";
-        bool overwrite = context.ParseResult.CommandResult.GetValueForOption(CLIOptions.Generator.OverwriteOption) ?? false;
+        string outputFile = parseResult.CommandResult.GetValue(_outputOption) ?? "./k3d.yaml";
+        bool overwrite = parseResult.CommandResult.GetValue(CLIOptions.Generator.OverwriteOption) ?? false;
         Console.WriteLine(File.Exists(outputFile) ? (overwrite ?
           $"✚ overwriting '{outputFile}'" :
           $"✔ skipping '{outputFile}', as it already exists.") :
           $"✚ generating '{outputFile}'");
         var handler = new KSailGenConfigK3dCommandHandler(outputFile, overwrite);
-        context.ExitCode = await handler.HandleAsync(context.GetCancellationToken()).ConfigureAwait(false);
+        await handler.HandleAsync(cancellationToken).ConfigureAwait(false);
       }
       catch (Exception ex)
       {
         _ = _exceptionHandler.HandleException(ex);
-        context.ExitCode = 1;
+
       }
     });
   }

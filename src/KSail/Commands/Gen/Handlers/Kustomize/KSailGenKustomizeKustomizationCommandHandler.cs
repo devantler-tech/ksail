@@ -6,7 +6,7 @@ namespace KSail.Commands.Gen.Handlers.Kustomize;
 class KSailGenKustomizeKustomizationCommandHandler(string outputFile, bool overwrite) : ICommandHandler
 {
   readonly KustomizeKustomizationGenerator _generator = new();
-  public async Task<int> HandleAsync(CancellationToken cancellationToken = default)
+  public async Task HandleAsync(CancellationToken cancellationToken = default)
   {
     var kustomization = new KustomizeKustomization
     {

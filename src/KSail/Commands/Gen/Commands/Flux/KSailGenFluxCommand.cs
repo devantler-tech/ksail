@@ -9,8 +9,8 @@ class KSailGenFluxCommand : Command
 
   void AddCommands()
   {
-    AddCommand(new KSailGenFluxHelmReleaseCommand());
-    AddCommand(new KSailGenFluxHelmRepositoryCommand());
-    AddCommand(new KSailGenFluxKustomizationCommand());
+    Subcommands.Add(new KSailGenFluxHelmReleaseCommand());
+    Subcommands.Add(new KSailGenFluxHelmRepositoryCommand());
+    Subcommands.Add(new KSailGenFluxKustomizationCommand());
   }
 }

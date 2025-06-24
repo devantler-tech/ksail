@@ -12,27 +12,26 @@ sealed class KSailStopCommand : Command
   internal KSailStopCommand() : base("stop", "Stop a cluster")
   {
     AddOptions();
-    this.SetHandler(async (context) =>
+    this.SetAction(async (parseResult, cancellationToken) =>
     {
-      var config = await KSailClusterConfigLoader.LoadWithoptionsAsync(context).ConfigureAwait(false);
+      var config = await KSailClusterConfigLoader.LoadWithoptionsAsync(parseResult).ConfigureAwait(false);
 
       var handler = new KSailStopCommandHandler(config);
       try
       {
-        _ = await handler.HandleAsync(context.GetCancellationToken()).ConfigureAwait(false);
+        _ = await handler.HandleAsync(cancellationToken).ConfigureAwait(false);
       }
       catch (Exception ex)
       {
         _ = _exceptionHandler.HandleException(ex);
-        context.ExitCode = 1;
       }
     });
   }
 
   internal void AddOptions()
   {
-    AddOption(CLIOptions.Metadata.NameOption);
-    AddOption(CLIOptions.Project.ContainerEngineOption);
-    AddOption(CLIOptions.Project.DistributionOption);
+    Options.Add(CLIOptions.Metadata.NameOption);
+    Options.Add(CLIOptions.Project.ContainerEngineOption);
+    Options.Add(CLIOptions.Project.DistributionOption);
   }
 }

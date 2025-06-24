@@ -17,23 +17,22 @@ sealed class KSailSecretsEditCommand : Command
 
   internal KSailSecretsEditCommand() : base("edit", "Edit an encrypted file")
   {
-    AddArgument(_pathArgument);
-    AddOption(CLIOptions.Project.EditorOption);
-    this.SetHandler(async (context) =>
+    Arguments.Add(_pathArgument);
+    Options.Add(CLIOptions.Project.EditorOption);
+    SetAction(async (parseResult, cancellationToken) =>
     {
       try
       {
-        var config = await KSailClusterConfigLoader.LoadWithoptionsAsync(context).ConfigureAwait(false);
-        string path = context.ParseResult.GetValueForArgument(_pathArgument);
-        var cancellationToken = context.GetCancellationToken();
+        var config = await KSailClusterConfigLoader.LoadWithoptionsAsync(parseResult).ConfigureAwait(false);
+        string path = parseResult.GetValue(_pathArgument);
         var handler = new KSailSecretsEditCommandHandler(config, path, new SOPSLocalAgeSecretManager());
-        context.ExitCode = await handler.HandleAsync(cancellationToken).ConfigureAwait(false);
+        await handler.HandleAsync(cancellationToken).ConfigureAwait(false);
         Console.WriteLine();
       }
       catch (Exception ex)
       {
         _ = _exceptionHandler.HandleException(ex);
-        context.ExitCode = 1;
+
       }
     });
   }

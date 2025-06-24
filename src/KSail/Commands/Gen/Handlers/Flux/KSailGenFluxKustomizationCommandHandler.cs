@@ -7,7 +7,7 @@ namespace KSail.Commands.Gen.Handlers.Flux;
 class KSailGenFluxKustomizationCommandHandler(string outputFile, bool overwrite) : ICommandHandler
 {
   readonly FluxKustomizationGenerator _generator = new();
-  public async Task<int> HandleAsync(CancellationToken cancellationToken = default)
+  public async Task HandleAsync(CancellationToken cancellationToken = default)
   {
     var fluxKustomization = new FluxKustomization
     {

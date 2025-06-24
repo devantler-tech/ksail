@@ -16,31 +16,30 @@ sealed class KSailSecretsDecryptCommand : Command
 
   internal KSailSecretsDecryptCommand() : base("decrypt", "Decrypt a file")
   {
-    AddArgument(_pathArgument);
+    Arguments.Add(_pathArgument);
     AddOptions();
-    this.SetHandler(async (context) =>
+    this.SetAction(async (parseResult, cancellationToken) =>
     {
       try
       {
-        var config = await KSailClusterConfigLoader.LoadWithoptionsAsync(context).ConfigureAwait(false);
-        string path = context.ParseResult.GetValueForArgument(_pathArgument);
-        string? output = context.ParseResult.GetValueForOption(_outputOption);
-        var cancellationToken = context.GetCancellationToken();
+        var config = await KSailClusterConfigLoader.LoadWithoptionsAsync(parseResult).ConfigureAwait(false);
+        string path = parseResult.GetValue(_pathArgument);
+        string? output = parseResult.GetValue(_outputOption);
         var handler = new KSailSecretsDecryptCommandHandler(config, path, output, new SOPSLocalAgeSecretManager());
-        context.ExitCode = await handler.HandleAsync(cancellationToken).ConfigureAwait(false);
+        await handler.HandleAsync(cancellationToken).ConfigureAwait(false);
         Console.WriteLine();
       }
       catch (Exception ex)
       {
         _ = _exceptionHandler.HandleException(ex);
-        context.ExitCode = 1;
+
       }
     });
   }
 
   void AddOptions()
   {
-    AddOption(CLIOptions.SecretManager.SOPS.InPlaceOption);
-    AddOption(_outputOption);
+    Options.Add(CLIOptions.SecretManager.SOPS.InPlaceOption);
+    Options.Add(_outputOption);
   }
 }

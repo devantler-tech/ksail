@@ -18,7 +18,7 @@ sealed class KSailSecretsExportCommand : Command
     AddArguments();
     AddOptions();
 
-    AddValidator(commandResult =>
+    Validators.Add(commandResult =>
     {
       string? outputFilePath = commandResult.Children.FirstOrDefault(c => c.Symbol.Name == _outputFilePathOption.Name)?.Tokens[0].Value;
       if (!commandResult.Children.Any(c => c.Symbol.Name == _outputFilePathOption.Name))
@@ -30,27 +30,26 @@ sealed class KSailSecretsExportCommand : Command
         commandResult.ErrorMessage = $"✗ '{outputFilePath}' is not a valid file path";
       }
     });
-    this.SetHandler(async (context) =>
+    this.SetAction(async (parseResult, cancellationToken) =>
     {
       try
       {
-        var config = await KSailClusterConfigLoader.LoadWithoptionsAsync(context).ConfigureAwait(false);
-        string publicKey = context.ParseResult.GetValueForArgument(_publicKeyArgument);
-        string outputPath = context.ParseResult.GetValueForOption(_outputFilePathOption) ?? throw new KSailException("output path is required");
+        var config = await KSailClusterConfigLoader.LoadWithoptionsAsync(parseResult).ConfigureAwait(false);
+        string publicKey = parseResult.GetValue(_publicKeyArgument);
+        string outputPath = parseResult.GetValue(_outputFilePathOption) ?? throw new KSailException("output path is required");
 
-        var cancellationToken = context.GetCancellationToken();
         var handler = new KSailSecretsExportCommandHandler(publicKey, outputPath, new SOPSLocalAgeSecretManager());
-        context.ExitCode = await handler.HandleAsync(cancellationToken).ConfigureAwait(false);
+        await handler.HandleAsync(cancellationToken).ConfigureAwait(false);
       }
       catch (Exception ex)
       {
         _ = _exceptionHandler.HandleException(ex);
-        context.ExitCode = 1;
+
       }
     });
   }
 
-  void AddArguments() => AddArgument(_publicKeyArgument);
+  void AddArguments() => Arguments.Add(_publicKeyArgument);
 
-  void AddOptions() => AddOption(_outputFilePathOption);
+  void AddOptions() => Options.Add(_outputFilePathOption);
 }

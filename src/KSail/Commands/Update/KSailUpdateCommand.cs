@@ -14,30 +14,30 @@ sealed class KSailUpdateCommand : Command
   )
   {
     AddOptions();
-    this.SetHandler(async (context) =>
+    this.SetAction(async (parseResult, cancellationToken) =>
     {
       try
       {
-        var config = await KSailClusterConfigLoader.LoadWithoptionsAsync(context).ConfigureAwait(false);
+        var config = await KSailClusterConfigLoader.LoadWithoptionsAsync(parseResult).ConfigureAwait(false);
         var handler = new KSailUpdateCommandHandler(config);
-        context.ExitCode = await handler.HandleAsync(context.GetCancellationToken()).ConfigureAwait(false);
+        await handler.HandleAsync(cancellationToken).ConfigureAwait(false);
       }
       catch (Exception ex)
       {
         _ = _exceptionHandler.HandleException(ex);
-        context.ExitCode = 1;
+
       }
     });
   }
 
   void AddOptions()
   {
-    AddOption(CLIOptions.Connection.ContextOption);
-    AddOption(CLIOptions.Connection.KubeconfigOption);
-    AddOption(CLIOptions.Project.KustomizationPathOption);
-    AddOption(CLIOptions.Project.DeploymentToolOption);
-    AddOption(CLIOptions.Publication.PublishOnUpdateOption);
-    AddOption(CLIOptions.Validation.ValidateOnUpdateOption);
-    AddOption(CLIOptions.Validation.ReconcileOnUpdateOption);
+    Options.Add(CLIOptions.Connection.ContextOption);
+    Options.Add(CLIOptions.Connection.KubeconfigOption);
+    Options.Add(CLIOptions.Project.KustomizationPathOption);
+    Options.Add(CLIOptions.Project.DeploymentToolOption);
+    Options.Add(CLIOptions.Publication.PublishOnUpdateOption);
+    Options.Add(CLIOptions.Validation.ValidateOnUpdateOption);
+    Options.Add(CLIOptions.Validation.ReconcileOnUpdateOption);
   }
 }

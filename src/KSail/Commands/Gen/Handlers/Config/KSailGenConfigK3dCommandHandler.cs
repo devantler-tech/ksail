@@ -8,7 +8,7 @@ class KSailGenConfigK3dCommandHandler(string outputFile, bool overwrite) : IComm
 {
   readonly K3dConfigGenerator _generator = new();
 
-  public async Task<int> HandleAsync(CancellationToken cancellationToken = default)
+  public async Task HandleAsync(CancellationToken cancellationToken = default)
   {
     var k3dConfig = new K3dConfig
     {

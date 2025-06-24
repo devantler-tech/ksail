@@ -7,7 +7,7 @@ namespace KSail.Commands.Gen.Handlers.Flux;
 class KSailGenFluxHelmReleaseCommandHandler(string outputFile, bool overwrite) : ICommandHandler
 {
   readonly FluxHelmReleaseGenerator _generator = new();
-  public async Task<int> HandleAsync(CancellationToken cancellationToken = default)
+  public async Task HandleAsync(CancellationToken cancellationToken = default)
   {
     var helmRelease = new FluxHelmRelease()
     {
