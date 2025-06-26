@@ -5,7 +5,14 @@ namespace KSail.Options.Validation;
 
 
 
-class ValidationValidateOnUpOption(KSailCluster config) : Option<bool?>(
-  ["--validate", "-v"],
-  $"Validate project files before creating a new cluster. [default: {config.Spec.Validation.ValidateOnUp}]"
-);
+class ValidationValidateOnUpOption : Option<bool?>
+{
+  public ValidationValidateOnUpOption(KSailCluster config) : base(
+    "--validate", "-v"
+  )
+  {
+    Description = "Validate project files on up.";
+    DefaultValueFactory = (result) => config.Spec.Validation.ValidateOnUp;
+  }
+}
+

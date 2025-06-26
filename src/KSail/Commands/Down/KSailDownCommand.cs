@@ -11,7 +11,7 @@ sealed class KSailDownCommand : Command
   internal KSailDownCommand() : base("down", "Destroy a cluster")
   {
     AddOptions();
-    this.SetAction(async (parseResult, cancellationToken) =>
+    SetAction(async (parseResult, cancellationToken) =>
     {
       try
       {

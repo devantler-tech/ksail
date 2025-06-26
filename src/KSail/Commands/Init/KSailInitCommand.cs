@@ -9,7 +9,7 @@ sealed class KSailInitCommand : Command
 {
   readonly GenericPathOption _outputPathOption = new("./", ["-o", "--output"])
   {
-    Description = "Output directory for the project files. [default: ./]"
+    Description = "Output directory for the project files."
   };
   readonly ExceptionHandler _exceptionHandler = new();
 
@@ -17,7 +17,7 @@ sealed class KSailInitCommand : Command
   {
     AddOptions();
 
-    this.SetAction(async (parseResult, cancellationToken) =>
+    SetAction(async (parseResult, cancellationToken) =>
     {
       try
       {

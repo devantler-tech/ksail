@@ -14,7 +14,7 @@ sealed class KSailUpdateCommand : Command
   )
   {
     AddOptions();
-    this.SetAction(async (parseResult, cancellationToken) =>
+    SetAction(async (parseResult, cancellationToken) =>
     {
       try
       {

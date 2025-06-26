@@ -53,6 +53,5 @@ class KSailGenNativeWorkloadsStatefulSetCommandHandler(string outputFile, bool o
       }
     };
     await _generator.GenerateAsync(model, outputFile, overwrite, cancellationToken: cancellationToken).ConfigureAwait(false);
-    return 0;
   }
 }

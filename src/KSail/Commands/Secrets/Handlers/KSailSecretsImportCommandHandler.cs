@@ -20,6 +20,5 @@ class KSailSecretsImportCommandHandler(string key, ISecretManager<AgeKey> secret
     var ageKey = new AgeKey(key.Trim());
     _ = await _secretManager.ImportKeyAsync(ageKey, cancellationToken).ConfigureAwait(false);
     Console.WriteLine("✔ key imported");
-    return 0;
   }
 }

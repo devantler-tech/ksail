@@ -12,12 +12,12 @@ sealed class KSailStatusCommandHandler(KSailCluster config) : ICommandHandler
 
   public async Task HandleAsync(CancellationToken cancellationToken = default)
   {
-    var (LiveCheckExitCode, LiveCheckMessage) = await DevantlerTech.KubectlCLI.Kubectl.RunAsync(
+    var (_, LiveCheckMessage) = await DevantlerTech.KubectlCLI.Kubectl.RunAsync(
       ["get", "--raw", $"/livez{(_config.Spec.Validation.Verbose ? "?verbose" : "")}", "--kubeconfig", _config.Spec.Connection.Kubeconfig, "--context", _config.Spec.Connection.Context],
       silent: true,
       cancellationToken: cancellationToken
     ).ConfigureAwait(false);
-    var (ReadyCheckExitCode, ReadyCheckMessage) = await DevantlerTech.KubectlCLI.Kubectl.RunAsync(
+    var (_, ReadyCheckMessage) = await DevantlerTech.KubectlCLI.Kubectl.RunAsync(
       ["get", "--raw", $"/readyz{(_config.Spec.Validation.Verbose ? "?verbose" : "")}", "--kubeconfig", _config.Spec.Connection.Kubeconfig, "--context", _config.Spec.Connection.Context],
       silent: true,
       cancellationToken: cancellationToken
@@ -32,6 +32,5 @@ sealed class KSailStatusCommandHandler(KSailCluster config) : ICommandHandler
       Console.WriteLine($"Live: {LiveCheckMessage}");
       Console.WriteLine($"Ready: {ReadyCheckMessage}");
     }
-    return (LiveCheckExitCode == 0 && ReadyCheckExitCode == 0) ? 0 : 1;
   }
 }

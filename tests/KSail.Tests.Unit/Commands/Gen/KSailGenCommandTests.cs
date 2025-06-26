@@ -1,6 +1,4 @@
 using System.CommandLine;
-using System.CommandLine.Builder;
-using System.CommandLine.IO;
 using System.CommandLine.Parsing;
 using System.Diagnostics.CodeAnalysis;
 using System.Text.RegularExpressions;
@@ -11,21 +9,16 @@ namespace KSail.Tests.Commands.Gen;
 
 public partial class KSailGenCommandTests
 {
-  readonly TestConsole _console;
   readonly Command _ksailCommand;
 
-  public KSailGenCommandTests()
-  {
-    _console = new TestConsole();
-    _ksailCommand = new KSailRootCommand(_console);
-  }
+  public KSailGenCommandTests() => _ksailCommand = new KSailRootCommand();
 
   [Theory]
   [MemberData(nameof(KSailGenCommandTestsTheoryData.HelpTheoryData), MemberType = typeof(KSailGenCommandTestsTheoryData))]
   public async Task KSailGen_SucceedsAndPrintsHelp(string[] command)
   {
     //Act
-    int exitCode = await _ksailCommand.InvokeAsync(command, _console);
+    int exitCode = await parseResult.InvokeAsync(command);
 
     //Assert
     Assert.Equal(0, exitCode);
@@ -48,7 +41,7 @@ public partial class KSailGenCommandTests
     {
       File.Delete(outputPath);
     }
-    int exitCode = await _ksailCommand.InvokeAsync([.. args, "--output", outputPath], _console);
+    int exitCode = await parseResult.InvokeAsync([.. args, "--output", outputPath]);
     string fileContents = await File.ReadAllTextAsync(outputPath);
 
     //Assert

@@ -11,7 +11,7 @@ sealed class KSailListCommand : Command
   internal KSailListCommand() : base("list", "List active clusters")
   {
     AddOptions();
-    this.SetAction(async (parseResult, cancellationToken) =>
+    SetAction(async (parseResult, cancellationToken) =>
     {
       try
       {

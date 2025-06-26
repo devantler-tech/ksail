@@ -1,25 +1,19 @@
 using System.CommandLine;
-using System.CommandLine.IO;
 using KSail.Commands.Root;
 
 namespace KSail.Tests.Unit.Commands.Validate;
 
 public class KSailValidateCommandTests
 {
-  readonly TestConsole _console;
-  readonly KSailRootCommand _ksailCommand;
+  readonly Command _ksailCommand;
 
-  public KSailValidateCommandTests()
-  {
-    _console = new TestConsole();
-    _ksailCommand = new KSailRootCommand(_console);
-  }
+  public KSailValidateCommandTests() => _ksailCommand = new KSailRootCommand();
 
   [Fact]
   public async Task KSailValidateHelp_SucceedsAndPrintsIntroductionAndHelp()
   {
     //Act
-    int exitCode = await _ksailCommand.InvokeAsync(["validate", "-h"], _console);
+    int exitCode = await parseResult.InvokeAsync(["validate", "-h"]);
 
     //Assert
     Assert.Equal(0, exitCode);
@@ -37,8 +31,8 @@ public class KSailValidateCommandTests
     _ = Directory.CreateDirectory(tempDir);
 
     //Act
-    int initExitCode = await _ksailCommand.InvokeAsync(["init", "--output", $"{tempDir}", "--name", "test-cluster"], _console).ConfigureAwait(false);
-    int validateExitCode = await _ksailCommand.InvokeAsync(["validate", "--path", tempDir], _console).ConfigureAwait(false);
+    int initExitCode = await parseResult.InvokeAsync(["init", "--output", $"{tempDir}", "--name", "test-cluster"]).ConfigureAwait(false);
+    int validateExitCode = await parseResult.InvokeAsync(["validate", "--path", tempDir]).ConfigureAwait(false);
 
     //Assert
     Assert.Equal(0, initExitCode);
@@ -58,7 +52,7 @@ public class KSailValidateCommandTests
     _ = Directory.CreateDirectory(tempDir);
 
     //Act
-    int validateExitCode = await _ksailCommand.InvokeAsync(["validate", "-kp", tempDir], _console);
+    int validateExitCode = await parseResult.InvokeAsync(["validate", "-kp", tempDir]);
 
     //Assert
     Assert.Equal(1, validateExitCode);
@@ -82,7 +76,7 @@ public class KSailValidateCommandTests
     - name: infrastructure
     """;
     await File.WriteAllTextAsync(Path.Combine(tempDir, "invalid.yaml"), invalidYaml);
-    int validateExitCode = await _ksailCommand.InvokeAsync(["validate", "--path", tempDir], _console);
+    int validateExitCode = await parseResult.InvokeAsync(["validate", "--path", tempDir]);
 
     //Assert
     Assert.Equal(1, validateExitCode);

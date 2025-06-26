@@ -24,7 +24,6 @@ sealed class KSailListCommandHandler(KSailCluster config) : ICommandHandler
       Console.WriteLine("---- Kind ----");
       clusters = [.. await _kindProvisioner.ListAsync(cancellationToken).ConfigureAwait(false)];
       PrintClusters(clusters);
-      return 0;
     }
     else
     {
@@ -35,7 +34,6 @@ sealed class KSailListCommandHandler(KSailCluster config) : ICommandHandler
         _ => throw new NotSupportedException($"The container engine '{_config.Spec.Project.ContainerEngine}' and distribution '{_config.Spec.Project.Distribution}' combination is not supported.")
       };
       PrintClusters(clusters);
-      return 0;
     }
   }
 

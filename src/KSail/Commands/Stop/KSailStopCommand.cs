@@ -12,14 +12,14 @@ sealed class KSailStopCommand : Command
   internal KSailStopCommand() : base("stop", "Stop a cluster")
   {
     AddOptions();
-    this.SetAction(async (parseResult, cancellationToken) =>
+    SetAction(async (parseResult, cancellationToken) =>
     {
       var config = await KSailClusterConfigLoader.LoadWithoptionsAsync(parseResult).ConfigureAwait(false);
 
       var handler = new KSailStopCommandHandler(config);
       try
       {
-        _ = await handler.HandleAsync(cancellationToken).ConfigureAwait(false);
+        await handler.HandleAsync(cancellationToken).ConfigureAwait(false);
       }
       catch (Exception ex)
       {

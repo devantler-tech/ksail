@@ -18,6 +18,5 @@ class KSailGenNativeNamespaceCommandHandler(string outputFile, bool overwrite) :
       }
     };
     await _generator.GenerateAsync(model, outputFile, overwrite, cancellationToken: cancellationToken).ConfigureAwait(false);
-    return 0;
   }
 }

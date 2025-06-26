@@ -20,22 +20,22 @@ sealed class KSailSecretsExportCommand : Command
 
     Validators.Add(commandResult =>
     {
-      string? outputFilePath = commandResult.Children.FirstOrDefault(c => c.Symbol.Name == _outputFilePathOption.Name)?.Tokens[0].Value;
-      if (!commandResult.Children.Any(c => c.Symbol.Name == _outputFilePathOption.Name))
+      string? outputFilePath = commandResult.Children.FirstOrDefault(c => Name == _outputFilePathOption.Name)?.Tokens[0].Value;
+      if (!commandResult.Children.Any(c => Name == _outputFilePathOption.Name))
       {
-        commandResult.ErrorMessage = $"✗ Option '{_outputFilePathOption.Name}' is required";
+        commandResult.AddError($"✗ Option '{_outputFilePathOption.Name}' is required");
       }
       else if (outputFilePath != null && string.IsNullOrEmpty(Path.GetFileName(outputFilePath)))
       {
-        commandResult.ErrorMessage = $"✗ '{outputFilePath}' is not a valid file path";
+        commandResult.AddError($"✗ '{outputFilePath}' is not a valid file path");
       }
     });
-    this.SetAction(async (parseResult, cancellationToken) =>
+    SetAction(async (parseResult, cancellationToken) =>
     {
       try
       {
         var config = await KSailClusterConfigLoader.LoadWithoptionsAsync(parseResult).ConfigureAwait(false);
-        string publicKey = parseResult.GetValue(_publicKeyArgument);
+        string publicKey = parseResult.GetValue(_publicKeyArgument) ?? throw new KSailException("public key is required");
         string outputPath = parseResult.GetValue(_outputFilePathOption) ?? throw new KSailException("output path is required");
 
         var handler = new KSailSecretsExportCommandHandler(publicKey, outputPath, new SOPSLocalAgeSecretManager());

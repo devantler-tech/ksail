@@ -5,7 +5,14 @@ namespace KSail.Options.SecretManager;
 
 
 
-class SecretManagerSOPSShowPrivateKeysInListingsOption(KSailCluster config) : Option<bool?>(
-  ["--show-private-keys", "-spk"],
-  $"Show private keys. [default: {config.Spec.SecretManager.SOPS.ShowPrivateKeysInListings}]"
-);
+class SecretManagerSOPSShowPrivateKeysInListingsOption : Option<bool?>
+{
+  public SecretManagerSOPSShowPrivateKeysInListingsOption(KSailCluster config) : base(
+    "--show-private-keys", "-spk"
+  )
+  {
+    Description = "Show private keys in listings.";
+    DefaultValueFactory = (result) => config.Spec.SecretManager.SOPS.ShowPrivateKeysInListings;
+  }
+}
+

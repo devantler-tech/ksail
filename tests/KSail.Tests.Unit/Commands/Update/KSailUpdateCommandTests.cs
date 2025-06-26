@@ -1,5 +1,4 @@
 using System.CommandLine;
-using System.CommandLine.IO;
 using KSail.Commands.Root;
 
 namespace KSail.Tests.Unit.Commands.Update;

@@ -5,7 +5,14 @@ using KSail.Models.Project.Enums;
 namespace KSail.Options.Project;
 
 
-class ProjectContainerEngineOption(KSailCluster config) : Option<KSailContainerEngineType?>(
-  ["-ce", "--container-engine"],
-  $"The container engine in which to provision the cluster. [default: {config.Spec.Project.ContainerEngine}]"
-);
+class ProjectContainerEngineOption : Option<KSailContainerEngineType?>
+{
+  public ProjectContainerEngineOption(KSailCluster config) : base(
+    "-ce", "--container-engine"
+  )
+  {
+    Description = "The container engine in which to provision the cluster.";
+    DefaultValueFactory = (result) => config.Spec.Project.ContainerEngine;
+  }
+}
+

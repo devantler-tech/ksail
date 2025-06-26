@@ -45,6 +45,5 @@ class KSailUpCommandHandler(KSailCluster config) : ICommandHandler
     }
     await _secretManagerManager.BootstrapAsync(cancellationToken).ConfigureAwait(false);
     await _deploymentToolManager.BootstrapAsync(cancellationToken).ConfigureAwait(false);
-    return 0;
   }
 }

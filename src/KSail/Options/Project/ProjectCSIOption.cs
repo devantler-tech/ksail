@@ -4,7 +4,14 @@ using KSail.Models.Project.Enums;
 
 namespace KSail.Options.Project;
 
-class ProjectCSIOption(KSailCluster config) : Option<KSailCSIType?>(
-  ["--csi"],
-  $"The CSI to use. [default: {config.Spec.Project.CSI}]"
-);
+class ProjectCSIOption : Option<KSailCSIType?>
+{
+  public ProjectCSIOption(KSailCluster config) : base(
+    "--csi"
+  )
+  {
+    Description = "The CSI to use.";
+    DefaultValueFactory = (result) => config.Spec.Project.CSI;
+  }
+}
+

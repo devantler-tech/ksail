@@ -23,7 +23,7 @@ sealed class KSailSecretsEncryptCommand : Command
       try
       {
         var config = await KSailClusterConfigLoader.LoadWithoptionsAsync(parseResult).ConfigureAwait(false);
-        string path = parseResult.GetValue(_pathArgument)!;
+        string path = parseResult.GetValue(_pathArgument) ?? throw new KSailException("path is required");
         string? output = parseResult.GetValue(_outputOption);
         var handler = new KSailSecretsEncryptCommandHandler(config, path, output, new SOPSLocalAgeSecretManager());
         await handler.HandleAsync(cancellationToken).ConfigureAwait(false);

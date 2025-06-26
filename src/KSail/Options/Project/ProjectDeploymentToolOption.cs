@@ -6,7 +6,14 @@ namespace KSail.Options.Project;
 
 
 
-class ProjectDeploymentToolOption(KSailCluster config) : Option<KSailDeploymentToolType?>(
-  ["-dt", "--deployment-tool"],
-  $"The Deployment tool to use for applying a kustomization. [default: {config.Spec.Project.DeploymentTool}]"
-);
+class ProjectDeploymentToolOption : Option<KSailDeploymentToolType?>
+{
+  public ProjectDeploymentToolOption(KSailCluster config) : base(
+    "-dt", "--deployment-tool"
+  )
+  {
+    Description = "The Deployment tool to use for applying a kustomization.";
+    DefaultValueFactory = (result) => config.Spec.Project.DeploymentTool;
+  }
+}
+

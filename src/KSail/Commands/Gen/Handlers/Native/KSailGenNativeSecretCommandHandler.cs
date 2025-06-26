@@ -21,6 +21,5 @@ class KSailGenNativeSecretCommandHandler(string outputFile, bool overwrite) : IC
       StringData = new Dictionary<string, string>()
     };
     await _generator.GenerateAsync(model, outputFile, overwrite, cancellationToken: cancellationToken).ConfigureAwait(false);
-    return 0;
   }
 }

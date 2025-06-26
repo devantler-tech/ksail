@@ -16,6 +16,5 @@ class KSailSecretsExportCommandHandler(string publicKey, string outputPath, ISec
     var key = await _secretManager.GetKeyAsync(_publicKey, cancellationToken).ConfigureAwait(false);
     await File.WriteAllTextAsync(_outputPath, key.ToString(), cancellationToken).ConfigureAwait(false);
     Console.WriteLine("✔ key exported");
-    return 0;
   }
 }

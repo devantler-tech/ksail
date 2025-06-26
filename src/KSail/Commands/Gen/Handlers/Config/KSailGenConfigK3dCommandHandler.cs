@@ -19,6 +19,5 @@ class KSailGenConfigK3dCommandHandler(string outputFile, bool overwrite) : IComm
     };
 
     await _generator.GenerateAsync(k3dConfig, outputFile, overwrite, cancellationToken: cancellationToken).ConfigureAwait(false);
-    return 0;
   }
 }

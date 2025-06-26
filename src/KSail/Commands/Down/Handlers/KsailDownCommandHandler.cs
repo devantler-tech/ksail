@@ -22,6 +22,5 @@ class KSailDownCommandHandler(KSailCluster config) : ICommandHandler
     Console.WriteLine($"🔥 Destroying cluster...");
     await _clusterManager.CleanupAsync(cancellationToken).ConfigureAwait(false);
     await _mirrorRegistryManager.CleanupAsync(cancellationToken).ConfigureAwait(false);
-    return 0;
   }
 }

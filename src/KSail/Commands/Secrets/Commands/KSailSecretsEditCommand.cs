@@ -24,7 +24,7 @@ sealed class KSailSecretsEditCommand : Command
       try
       {
         var config = await KSailClusterConfigLoader.LoadWithoptionsAsync(parseResult).ConfigureAwait(false);
-        string path = parseResult.GetValue(_pathArgument);
+        string path = parseResult.GetValue(_pathArgument) ?? throw new KSailException("Path argument is required.");
         var handler = new KSailSecretsEditCommandHandler(config, path, new SOPSLocalAgeSecretManager());
         await handler.HandleAsync(cancellationToken).ConfigureAwait(false);
         Console.WriteLine();

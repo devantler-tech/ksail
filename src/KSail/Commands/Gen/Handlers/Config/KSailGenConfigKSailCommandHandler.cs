@@ -10,6 +10,5 @@ class KSailGenConfigKSailCommandHandler(string outputFile, bool overwrite) : ICo
   {
     var ksailCluster = new KSailCluster();
     await _ksailClusterGenerator.GenerateAsync(ksailCluster, outputFile, overwrite, cancellationToken: cancellationToken).ConfigureAwait(false);
-    return 0;
   }
 }

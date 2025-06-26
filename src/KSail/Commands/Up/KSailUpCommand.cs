@@ -12,7 +12,7 @@ sealed class KSailUpCommand : Command
   {
     AddOptions();
 
-    this.SetAction(async (parseResult, cancellationToken) =>
+    SetAction(async (parseResult, cancellationToken) =>
     {
       try
       {

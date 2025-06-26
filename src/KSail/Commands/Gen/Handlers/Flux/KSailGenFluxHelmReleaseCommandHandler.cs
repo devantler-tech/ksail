@@ -33,6 +33,5 @@ class KSailGenFluxHelmReleaseCommandHandler(string outputFile, bool overwrite) :
       }
     };
     await _generator.GenerateAsync(helmRelease, outputFile, overwrite, cancellationToken: cancellationToken).ConfigureAwait(false);
-    return 0;
   }
 }

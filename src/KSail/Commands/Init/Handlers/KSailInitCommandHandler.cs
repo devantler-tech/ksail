@@ -50,6 +50,5 @@ class KSailInitCommandHandler(string outputPath, KSailCluster config) : ICommand
 
     ).ConfigureAwait(false);
 
-    return 0;
   }
 }

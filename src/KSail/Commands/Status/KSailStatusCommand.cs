@@ -12,7 +12,7 @@ sealed class KSailStatusCommand : Command
   internal KSailStatusCommand() : base("status", "Show the status of a cluster")
   {
     AddOptions();
-    this.SetAction(async (parseResult, cancellationToken) =>
+    SetAction(async (parseResult, cancellationToken) =>
     {
       try
       {

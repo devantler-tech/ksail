@@ -4,7 +4,14 @@ using KSail.Models;
 namespace KSail.Options.SecretManager;
 
 
-class SecretManagerSOPSShowAllKeysInListingsOption(KSailCluster config) : Option<bool?>(
-  ["--all", "-a"],
-  $"Show all keys. [default: {config.Spec.SecretManager.SOPS.ShowAllKeysInListings}]"
-);
+class SecretManagerSOPSShowAllKeysInListingsOption : Option<bool?>
+{
+  public SecretManagerSOPSShowAllKeysInListingsOption(KSailCluster config) : base(
+    "--all", "-a"
+  )
+  {
+    Description = "Show all keys in listings.";
+    DefaultValueFactory = (result) => config.Spec.SecretManager.SOPS.ShowAllKeysInListings;
+  }
+}
+

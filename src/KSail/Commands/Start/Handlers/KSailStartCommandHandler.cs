@@ -28,6 +28,5 @@ class KSailStartCommandHandler : ICommandHandler
     Console.WriteLine($"► starting cluster '{_config.Spec.Connection.Context}'");
     await _clusterProvisioner.StartAsync(_config.Metadata.Name, cancellationToken).ConfigureAwait(false);
     Console.WriteLine("✔ cluster started");
-    return 0;
   }
 }

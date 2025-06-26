@@ -22,6 +22,5 @@ class KSailSecretsEncryptCommandHandler(KSailCluster config, string path, string
       await File.WriteAllTextAsync(_output, encrypted, cancellationToken).ConfigureAwait(false);
     }
 
-    return 0;
   }
 }

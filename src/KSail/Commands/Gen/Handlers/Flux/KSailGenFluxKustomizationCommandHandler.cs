@@ -32,6 +32,5 @@ class KSailGenFluxKustomizationCommandHandler(string outputFile, bool overwrite)
     };
 
     await _generator.GenerateAsync(fluxKustomization, outputFile, overwrite, cancellationToken: cancellationToken).ConfigureAwait(false);
-    return 0;
   }
 }

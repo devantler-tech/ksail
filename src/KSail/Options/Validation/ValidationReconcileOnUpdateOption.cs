@@ -5,7 +5,14 @@ namespace KSail.Options.Validation;
 
 
 
-class ValidationReconcileOnUpdateOption(KSailCluster config) : Option<bool?>(
-  ["--reconcile", "-r"],
-  $"Reconcile manifests. [default: {config.Spec.Validation.ReconcileOnUpdate}]"
-);
+class ValidationReconcileOnUpdateOption : Option<bool?>
+{
+  public ValidationReconcileOnUpdateOption(KSailCluster config) : base(
+    "--reconcile", "-r"
+  )
+  {
+    Description = "Reconcile manifests on update.";
+    DefaultValueFactory = (result) => config.Spec.Validation.ReconcileOnUpdate;
+  }
+}
+

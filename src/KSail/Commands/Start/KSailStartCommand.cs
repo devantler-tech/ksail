@@ -12,7 +12,7 @@ sealed class KSailStartCommand : Command
   internal KSailStartCommand() : base("start", "Start a cluster")
   {
     AddOptions();
-    this.SetAction(async (parseResult, cancellationToken) =>
+    SetAction(async (parseResult, cancellationToken) =>
     {
       try
       {

@@ -5,7 +5,14 @@ using KSail.Models.Project.Enums;
 namespace KSail.Options.Project;
 
 
-class ProjectIngressControllerOption(KSailCluster config) : Option<KSailIngressControllerType?>(
-  ["-ic", "--ingress-controller"],
-  $"The Ingress Controller to use. [default: {config.Spec.Project.IngressController}]"
-);
+class ProjectIngressControllerOption : Option<KSailIngressControllerType?>
+{
+  public ProjectIngressControllerOption(KSailCluster config) : base(
+    "-ic", "--ingress-controller"
+  )
+  {
+    Description = $"The Ingress Controller to use.";
+    DefaultValueFactory = (result) => config.Spec.Project.IngressController;
+  }
+}
+

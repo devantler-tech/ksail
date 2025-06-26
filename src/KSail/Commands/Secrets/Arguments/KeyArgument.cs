@@ -1,8 +1,8 @@
 using System.CommandLine;
 
-class KeyArgument(string description) : Argument<string>(
-  "key",
-  description
-)
+class KeyArgument : Argument<string>
 {
+  public KeyArgument(string description) : base(
+    "key"
+  ) => Description = description;
 }

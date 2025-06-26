@@ -22,6 +22,5 @@ class KSailGenConfigSOPSCommandHandler(string outputFile, bool overwrite) : ICom
       ]
     };
     await _configHelper.CreateSOPSConfigAsync(outputFile, sopsConfig, overwrite, cancellationToken: cancellationToken).ConfigureAwait(false);
-    return 0;
   }
 }

@@ -32,6 +32,5 @@ class KSailGenCertManagerCertificateCommandHandler(string outputFile, bool overw
       }
     };
     await _generator.GenerateAsync(certificate, outputFile, overwrite, cancellationToken: cancellationToken).ConfigureAwait(false);
-    return 0;
   }
 }

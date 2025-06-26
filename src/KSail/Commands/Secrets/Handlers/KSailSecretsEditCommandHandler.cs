@@ -18,6 +18,5 @@ class KSailSecretsEditCommandHandler(KSailCluster config, string path, ISecretMa
     Environment.SetEnvironmentVariable("EDITOR", _config.Spec.Project.Editor.ToString().ToLower(CultureInfo.CurrentCulture));
     await _secretManager.EditAsync(_path, cancellationToken).ConfigureAwait(false);
     Environment.SetEnvironmentVariable("EDITOR", null);
-    return 0;
   }
 }

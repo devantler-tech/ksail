@@ -12,6 +12,5 @@ class KSailSecretsAddCommandHandler(ISecretManager<AgeKey> secretManager) : ICom
   {
     var key = await _secretManager.CreateKeyAsync(cancellationToken).ConfigureAwait(false);
     Console.WriteLine(key.ToString());
-    return 0;
   }
 }

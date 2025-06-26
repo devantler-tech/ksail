@@ -24,6 +24,5 @@ class KSailGenCertManagerClusterIssuerCommandHandler(string outputFile, bool ove
       }
     };
     await _generator.GenerateAsync(clusterIssuer, outputFile, overwrite, cancellationToken: cancellationToken).ConfigureAwait(false);
-    return 0;
   }
 }

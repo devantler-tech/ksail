@@ -4,7 +4,14 @@ using KSail.Models;
 namespace KSail.Options.Project;
 
 
-class ProjectConfigPathOption(KSailCluster config) : Option<string?>(
-  ["--config", "-c"],
-  $"The path to the ksail configuration file. [default: {config.Spec.Project.ConfigPath}]"
-);
+class ProjectConfigPathOption : Option<string?>
+{
+  public ProjectConfigPathOption(KSailCluster config) : base(
+    "--config", "-c"
+  )
+  {
+    Description = "The path to the ksail configuration file.";
+    DefaultValueFactory = (result) => config.Spec.Project.ConfigPath;
+  }
+}
+

@@ -3,7 +3,14 @@ using KSail.Models;
 
 namespace KSail.Options.Project;
 
-class ProjectKustomizationPathOption(KSailCluster config) : Option<string?>(
-  ["--kustomization-path", "-kp"],
-  $"The path to the root kustomization directory. [default: {config.Spec.Project.KustomizationPath}]"
-);
+class ProjectKustomizationPathOption : Option<string?>
+{
+  public ProjectKustomizationPathOption(KSailCluster config) : base(
+    "--kustomization-path", "-kp"
+  )
+  {
+    Description = "The path to the root kustomization directory.";
+    DefaultValueFactory = (result) => config.Spec.Project.KustomizationPath;
+  }
+}
+

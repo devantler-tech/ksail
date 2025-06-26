@@ -1,6 +1,4 @@
 using System.CommandLine;
-using System.CommandLine.Builder;
-using System.CommandLine.IO;
 using System.CommandLine.Parsing;
 using KSail.Commands.Root;
 
@@ -11,8 +9,7 @@ static class CLIOptionsGenerator
   public static async Task<string> GenerateAsync()
   {
     // Arrange
-    var console = new SystemConsole();
-    var ksailCommand = new KSailRootCommand(console);
+    var ksailCommand = new KSailRootCommand();
     var helpTexts = new Dictionary<string, string?>
     {
       { "ksail", await GetHelpTextAsync(ksailCommand, "--help").ConfigureAwait(false) },
@@ -80,9 +77,17 @@ static class CLIOptionsGenerator
 
   static async Task<string?> GetHelpTextAsync(Command command, params string[] args)
   {
-    var console = new TestConsole();
-    _ = await command.InvokeAsync(args, console).ConfigureAwait(false);
-    return console.Out.ToString()?.Trim()
+    var output = new StringWriter();
+    var error = new StringWriter();
+    var commandLineConfiguration = new CommandLineConfiguration(command)
+    {
+      Output = output,
+      Error = error
+    };
+    var parseResult = command.Parse(args, commandLineConfiguration);
+    using var cts = new CancellationTokenSource();
+    _ = await parseResult.InvokeAsync(cts.Token).ConfigureAwait(false);
+    return output.ToString()?.Trim()
       .Replace("KSail.Docs", "ksail", StringComparison.Ordinal)
       .Replace(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) + "/", "~/", StringComparison.Ordinal);
   }

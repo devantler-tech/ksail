@@ -25,13 +25,13 @@ sealed class KSailRootCommand : RootCommand
   internal KSailRootCommand() : base("KSail is an SDK for Kubernetes. Ship k8s with ease!")
   {
     AddCommands();
-    this.SetAction(async (parseResult, cancellationToken) =>
+    SetAction(async (parseResult, cancellationToken) =>
       {
         try
         {
           var ksailRootCommandHandler = new KSailRootCommandHandler();
-          context.ExitCode = await ksailRootCommandHandler.HandleAsync(cancellationToken).ConfigureAwait(false);
-          if (parseResult.CommandResult.Children.Count == 0)
+          await ksailRootCommandHandler.HandleAsync(cancellationToken).ConfigureAwait(false);
+          if (!parseResult.CommandResult.Children.Any())
           {
             var helpResult = Parse("--help");
             _ = await helpResult.InvokeAsync(cancellationToken).ConfigureAwait(false);

@@ -51,6 +51,5 @@ class KSailGenNativeIngressCommandHandler(string outputFile, bool overwrite) : I
       }
     };
     await _generator.GenerateAsync(model, outputFile, overwrite, cancellationToken: cancellationToken).ConfigureAwait(false);
-    return 0;
   }
 }

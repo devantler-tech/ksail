@@ -14,6 +14,5 @@ class KSailSecretsRemoveCommandHandler(string publicKey, ISecretManager<AgeKey> 
     Console.WriteLine($"► removing '{_publicKey}' from SOPS key file");
     _ = await _secretManager.DeleteKeyAsync(_publicKey, cancellationToken).ConfigureAwait(false);
     Console.WriteLine($"✔ key removed");
-    return 0;
   }
 }

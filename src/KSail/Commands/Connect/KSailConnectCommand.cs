@@ -14,7 +14,7 @@ sealed class KSailConnectCommand : Command
   internal KSailConnectCommand() : base("connect", "Connect to a cluster with K9s")
   {
     AddOptions();
-    this.SetAction(async (parseResult, cancellationToken) =>
+    SetAction(async (parseResult, cancellationToken) =>
     {
       try
       {

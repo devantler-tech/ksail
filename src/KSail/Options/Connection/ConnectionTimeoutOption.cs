@@ -4,7 +4,14 @@ using KSail.Models;
 namespace KSail.Options.Connection;
 
 
-class ConnectionTimeoutOption(KSailCluster config) : Option<string?>(
-  ["-t", "--timeout"],
-  $"The time to wait for each kustomization to become ready. [default: {config.Spec.Connection.Timeout}]"
-);
+class ConnectionTimeoutOption : Option<string?>
+{
+  public ConnectionTimeoutOption(KSailCluster config) : base(
+    "-t", "--timeout"
+  )
+  {
+    Description = "The time to wait for each kustomization to become ready.";
+    DefaultValueFactory = (result) => config.Spec.Connection.Timeout;
+  }
+}
+

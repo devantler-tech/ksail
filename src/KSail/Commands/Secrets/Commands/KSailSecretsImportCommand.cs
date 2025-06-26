@@ -13,12 +13,12 @@ sealed class KSailSecretsImportCommand : Command
   internal KSailSecretsImportCommand() : base("import", "Import a key from stdin or a file")
   {
     AddArguments();
-    this.SetAction(async (parseResult, cancellationToken) =>
+    SetAction(async (parseResult, cancellationToken) =>
     {
       try
       {
         var config = await KSailClusterConfigLoader.LoadWithoptionsAsync(parseResult).ConfigureAwait(false);
-        string key = parseResult.GetValue(_keyArgument);
+        string key = parseResult.GetValue(_keyArgument) ?? throw new KSailException("Key argument is required.");
 
         var handler = new KSailSecretsImportCommandHandler(key, new SOPSLocalAgeSecretManager());
         await handler.HandleAsync(cancellationToken).ConfigureAwait(false);

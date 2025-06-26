@@ -9,6 +9,10 @@ class ProjectSecretManagerOption : Option<KSailSecretManagerType?>
 {
   public ProjectSecretManagerOption(KSailCluster config) : base(
     "-sm", "--secret-manager"
-  ) => Description = $"Whether to use a secret manager. [default: {config.Spec.Project.SecretManager}]";
+  )
+  {
+    Description = "Whether to use a secret manager.";
+    DefaultValueFactory = (result) => config.Spec.Project.SecretManager;
+  }
 }
 

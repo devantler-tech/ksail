@@ -20,7 +20,7 @@ class KSailSecretsListCommandHandler(KSailCluster config, ISecretManager<AgeKey>
       if (!keys.Any(key => sopsConfig.CreationRules.Any(rule => rule.Age == key.PublicKey)))
       {
         Console.WriteLine("► no keys found");
-        return 0;
+        return;
       }
       foreach (var key in keys.Where(key => sopsConfig.CreationRules.Any(rule => rule.Age == key.PublicKey)))
       {
@@ -40,7 +40,7 @@ class KSailSecretsListCommandHandler(KSailCluster config, ISecretManager<AgeKey>
       if (!keys.Any())
       {
         Console.WriteLine("► no keys found");
-        return 0;
+        return;
       }
       foreach (var key in keys)
       {
@@ -55,7 +55,6 @@ class KSailSecretsListCommandHandler(KSailCluster config, ISecretManager<AgeKey>
         Console.WriteLine();
       }
     }
-    return 0;
   }
 
   static string Obscure(AgeKey key)

@@ -17,7 +17,6 @@ class KSailGenKustomizeKustomizationCommandHandler(string outputFile, bool overw
       Components = []
     };
     await _generator.GenerateAsync(kustomization, outputFile, overwrite, cancellationToken: cancellationToken).ConfigureAwait(false);
-    return 0;
   }
 }
 

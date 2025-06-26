@@ -15,7 +15,7 @@ sealed class KSailGenCommand : Command
   readonly GeneratorOverwriteOption _generatorOverwriteOption = new(new KSailCluster());
   internal KSailGenCommand() : base("gen", "Generate a resource")
   {
-    AddGlobalOption(_generatorOverwriteOption);
+    Options.Add(_generatorOverwriteOption);
     AddCommands();
   }
 

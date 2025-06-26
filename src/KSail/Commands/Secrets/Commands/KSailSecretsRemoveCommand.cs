@@ -14,12 +14,12 @@ sealed class KSailSecretsRemoveCommand : Command
   internal KSailSecretsRemoveCommand() : base("rm", "Remove an existing encryption key")
   {
     Arguments.Add(_publicKeyArgument);
-    this.SetAction(async (parseResult, cancellationToken) =>
+    SetAction(async (parseResult, cancellationToken) =>
     {
       try
       {
         var config = await KSailClusterConfigLoader.LoadWithoptionsAsync(parseResult).ConfigureAwait(false);
-        string publicKey = parseResult.GetValue(_publicKeyArgument);
+        string publicKey = parseResult.GetValue(_publicKeyArgument) ?? throw new KSailException("Public key argument is required.");
         var handler = new KSailSecretsRemoveCommandHandler(publicKey, new SOPSLocalAgeSecretManager());
         await handler.HandleAsync(cancellationToken).ConfigureAwait(false);
       }
