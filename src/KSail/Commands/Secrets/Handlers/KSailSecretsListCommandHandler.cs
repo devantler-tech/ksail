@@ -1,3 +1,4 @@
+using System.CommandLine;
 using DevantlerTech.Keys.Age;
 using DevantlerTech.SecretManager.Core;
 using KSail.Models;
@@ -5,7 +6,7 @@ using KSail.Utils;
 
 namespace KSail.Commands.Secrets.Handlers;
 
-class KSailSecretsListCommandHandler(KSailCluster config, ISecretManager<AgeKey> secretManager) : ICommandHandler
+class KSailSecretsListCommandHandler(KSailCluster config, ISecretManager<AgeKey> secretManager, ParseResult parseResult) : ICommandHandler
 {
   readonly KSailCluster _config = config;
   readonly ISecretManager<AgeKey> _secretManager = secretManager;
@@ -26,11 +27,11 @@ class KSailSecretsListCommandHandler(KSailCluster config, ISecretManager<AgeKey>
       {
         if (_config.Spec.SecretManager.SOPS.ShowPrivateKeysInListings)
         {
-          Console.WriteLine(key);
+          await parseResult.Configuration.Output.WriteLineAsync(key.ToString()).ConfigureAwait(false);
         }
         else
         {
-          Console.WriteLine(Obscure(key));
+          await parseResult.Configuration.Output.WriteLineAsync(Obscure(key)).ConfigureAwait(false);
         }
         Console.WriteLine();
       }
@@ -46,11 +47,11 @@ class KSailSecretsListCommandHandler(KSailCluster config, ISecretManager<AgeKey>
       {
         if (_config.Spec.SecretManager.SOPS.ShowPrivateKeysInListings)
         {
-          Console.WriteLine(key);
+          await parseResult.Configuration.Output.WriteLineAsync(key.ToString()).ConfigureAwait(false);
         }
         else
         {
-          Console.WriteLine(Obscure(key));
+          await parseResult.Configuration.Output.WriteLineAsync(Obscure(key)).ConfigureAwait(false);
         }
         Console.WriteLine();
       }

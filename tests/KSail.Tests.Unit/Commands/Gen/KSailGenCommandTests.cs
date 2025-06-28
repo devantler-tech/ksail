@@ -18,11 +18,19 @@ public partial class KSailGenCommandTests
   public async Task KSailGen_SucceedsAndPrintsHelp(string[] command)
   {
     //Act
-    int exitCode = await parseResult.InvokeAsync(command);
+    var outputWriter = new StringWriter();
+    var errorWriter = new StringWriter();
+    using var cts = new CancellationTokenSource();
+    var commandLineConfiguration = new CommandLineConfiguration(_ksailCommand)
+    {
+      Output = outputWriter,
+      Error = errorWriter
+    };
+    int exitCode = await _ksailCommand.Parse(command, commandLineConfiguration).InvokeAsync(cts.Token);
 
     //Assert
     Assert.Equal(0, exitCode);
-    _ = await Verify(_console.Error.ToString() + _console.Out).UseFileName($"ksail {string.Join(" ", command)}");
+    _ = await Verify(errorWriter.ToString() + outputWriter.ToString()).UseFileName($"ksail {string.Join(" ", command)}");
   }
 
 
@@ -41,7 +49,15 @@ public partial class KSailGenCommandTests
     {
       File.Delete(outputPath);
     }
-    int exitCode = await parseResult.InvokeAsync([.. args, "--output", outputPath]);
+    var outputWriter = new StringWriter();
+    var errorWriter = new StringWriter();
+    using var cts = new CancellationTokenSource();
+    var commandLineConfiguration = new CommandLineConfiguration(_ksailCommand)
+    {
+      Output = outputWriter,
+      Error = errorWriter
+    };
+    int exitCode = await _ksailCommand.Parse([.. args, "--output", outputPath], commandLineConfiguration).InvokeAsync(cts.Token);
     string fileContents = await File.ReadAllTextAsync(outputPath);
 
     //Assert

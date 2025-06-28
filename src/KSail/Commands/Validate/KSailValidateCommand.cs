@@ -30,7 +30,6 @@ sealed class KSailValidateCommand : Command
       catch (Exception ex)
       {
         _ = _exceptionHandler.HandleException(ex);
-
       }
     });
   }

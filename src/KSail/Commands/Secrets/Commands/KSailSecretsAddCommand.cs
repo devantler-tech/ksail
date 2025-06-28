@@ -17,13 +17,12 @@ sealed class KSailSecretsAddCommand : Command
       try
       {
         var config = await KSailClusterConfigLoader.LoadWithoptionsAsync(parseResult).ConfigureAwait(false);
-        var handler = new KSailSecretsAddCommandHandler(new SOPSLocalAgeSecretManager());
+        var handler = new KSailSecretsAddCommandHandler(new SOPSLocalAgeSecretManager(), parseResult);
         await handler.HandleAsync(cancellationToken).ConfigureAwait(false);
       }
       catch (Exception ex)
       {
         _ = _exceptionHandler.HandleException(ex);
-
       }
     });
   }

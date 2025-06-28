@@ -1,3 +1,4 @@
+using System.CommandLine;
 using DevantlerTech.KubernetesProvisioner.Cluster.K3d;
 using DevantlerTech.KubernetesProvisioner.Cluster.Kind;
 using DevantlerTech.KubernetesProvisioner.Resources.Native;
@@ -6,7 +7,7 @@ using KSail.Models.Project.Enums;
 
 namespace KSail.Commands.Status.Handlers;
 
-sealed class KSailStatusCommandHandler(KSailCluster config) : ICommandHandler
+sealed class KSailStatusCommandHandler(KSailCluster config, ParseResult parseResult) : ICommandHandler
 {
   readonly KSailCluster _config = config;
 
@@ -24,13 +25,13 @@ sealed class KSailStatusCommandHandler(KSailCluster config) : ICommandHandler
     ).ConfigureAwait(false);
     if (_config.Spec.Validation.Verbose)
     {
-      Console.WriteLine($"{LiveCheckMessage}");
-      Console.WriteLine($"{ReadyCheckMessage}");
+      await parseResult.Configuration.Output.WriteLineAsync(LiveCheckMessage).ConfigureAwait(false);
+      await parseResult.Configuration.Output.WriteLineAsync(ReadyCheckMessage).ConfigureAwait(false);
     }
     else
     {
-      Console.WriteLine($"Live: {LiveCheckMessage}");
-      Console.WriteLine($"Ready: {ReadyCheckMessage}");
+      await parseResult.Configuration.Output.WriteLineAsync($"Live: {LiveCheckMessage}").ConfigureAwait(false);
+      await parseResult.Configuration.Output.WriteLineAsync($"Ready: {ReadyCheckMessage}").ConfigureAwait(false);
     }
   }
 }

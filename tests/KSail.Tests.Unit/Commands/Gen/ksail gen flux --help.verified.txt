@@ -5,7 +5,6 @@ Usage:
   testhost gen flux [command] [options]
 
 Options:
-  --overwrite     Overwrite existing files. [default: False]
   -?, -h, --help  Show help and usage information
 
 Commands:

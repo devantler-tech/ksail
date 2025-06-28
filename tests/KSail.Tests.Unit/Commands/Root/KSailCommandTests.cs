@@ -14,10 +14,18 @@ public class KSailRootCommandTests
   public async Task KSail_SucceedsAndPrintsIntroduction()
   {
     //Act
-    int exitCode = await parseResult.InvokeAsync([]);
+    var outputWriter = new StringWriter();
+    var errorWriter = new StringWriter();
+    using var cts = new CancellationTokenSource();
+    var commandLineConfiguration = new CommandLineConfiguration(_ksailCommand)
+    {
+      Output = outputWriter,
+      Error = errorWriter
+    };
+    int exitCode = await _ksailCommand.Parse([], commandLineConfiguration).InvokeAsync(cts.Token);
 
     //Assert
-    _ = await Verify(_console.Error.ToString() + _console.Out);
+    _ = await Verify(errorWriter.ToString() + outputWriter.ToString());
     Assert.Equal(0, exitCode);
   }
 
@@ -26,10 +34,18 @@ public class KSailRootCommandTests
   public async Task KSailHelp_SucceedsAndPrintsHelp()
   {
     //Act
-    int exitCode = await parseResult.InvokeAsync(["--help"]);
+    var outputWriter = new StringWriter();
+    var errorWriter = new StringWriter();
+    using var cts = new CancellationTokenSource();
+    var commandLineConfiguration = new CommandLineConfiguration(_ksailCommand)
+    {
+      Output = outputWriter,
+      Error = errorWriter
+    };
+    int exitCode = await _ksailCommand.Parse(["--help"], commandLineConfiguration).InvokeAsync(cts.Token);
 
     //Assert
     Assert.Equal(0, exitCode);
-    _ = await Verify(_console.Error.ToString() + _console.Out);
+    _ = await Verify(errorWriter.ToString() + outputWriter.ToString());
   }
 }

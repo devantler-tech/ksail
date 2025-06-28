@@ -20,7 +20,7 @@ sealed class KSailSecretsListCommand : Command
       {
         var config = await KSailClusterConfigLoader.LoadWithoptionsAsync(parseResult).ConfigureAwait(false);
 
-        var handler = new KSailSecretsListCommandHandler(config, new SOPSLocalAgeSecretManager());
+        var handler = new KSailSecretsListCommandHandler(config, new SOPSLocalAgeSecretManager(), parseResult);
         await handler.HandleAsync(cancellationToken).ConfigureAwait(false);
       }
       catch (Exception ex)

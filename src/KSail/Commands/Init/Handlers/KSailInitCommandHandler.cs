@@ -1,3 +1,4 @@
+using System.CommandLine;
 using KSail.Commands.Init.Generators;
 using KSail.Models;
 using KSail.Models.Project.Enums;

@@ -8,8 +8,7 @@ namespace KSail.Tests.Unit.Commands.Secrets;
 
 public class KSailSecretsCommandTests
 {
-  readonly Command _ksailCommand;
-  public KSailSecretsCommandTests() => _ksailCommand = new KSailRootCommand();
+  readonly Command _ksailCommand = new KSailRootCommand();
 
   [Theory]
   [InlineData(["secrets", "--help"])]

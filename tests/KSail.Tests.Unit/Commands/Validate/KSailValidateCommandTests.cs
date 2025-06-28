@@ -13,11 +13,19 @@ public class KSailValidateCommandTests
   public async Task KSailValidateHelp_SucceedsAndPrintsIntroductionAndHelp()
   {
     //Act
-    int exitCode = await parseResult.InvokeAsync(["validate", "-h"]);
+    var outputWriter = new StringWriter();
+    var errorWriter = new StringWriter();
+    using var cts = new CancellationTokenSource();
+    var commandLineConfiguration = new CommandLineConfiguration(_ksailCommand)
+    {
+      Output = outputWriter,
+      Error = errorWriter
+    };
+    int exitCode = await _ksailCommand.Parse(["validate", "-h"], commandLineConfiguration).InvokeAsync(cts.Token);
 
     //Assert
     Assert.Equal(0, exitCode);
-    _ = await Verify(_console.Error.ToString() + _console.Out);
+    _ = await Verify(errorWriter.ToString() + outputWriter.ToString());
   }
 
 
@@ -31,8 +39,16 @@ public class KSailValidateCommandTests
     _ = Directory.CreateDirectory(tempDir);
 
     //Act
-    int initExitCode = await parseResult.InvokeAsync(["init", "--output", $"{tempDir}", "--name", "test-cluster"]).ConfigureAwait(false);
-    int validateExitCode = await parseResult.InvokeAsync(["validate", "--path", tempDir]).ConfigureAwait(false);
+    var outputWriter = new StringWriter();
+    var errorWriter = new StringWriter();
+    using var cts = new CancellationTokenSource();
+    var commandLineConfiguration = new CommandLineConfiguration(_ksailCommand)
+    {
+      Output = outputWriter,
+      Error = errorWriter
+    };
+    int initExitCode = await _ksailCommand.Parse(["init", "--output", $"{tempDir}", "--name", "test-cluster"], commandLineConfiguration).InvokeAsync(cts.Token).ConfigureAwait(false);
+    int validateExitCode = await _ksailCommand.Parse(["validate", "--path", tempDir], commandLineConfiguration).InvokeAsync(cts.Token).ConfigureAwait(false);
 
     //Assert
     Assert.Equal(0, initExitCode);
@@ -52,7 +68,15 @@ public class KSailValidateCommandTests
     _ = Directory.CreateDirectory(tempDir);
 
     //Act
-    int validateExitCode = await parseResult.InvokeAsync(["validate", "-kp", tempDir]);
+    var outputWriter = new StringWriter();
+    var errorWriter = new StringWriter();
+    using var cts = new CancellationTokenSource();
+    var commandLineConfiguration = new CommandLineConfiguration(_ksailCommand)
+    {
+      Output = outputWriter,
+      Error = errorWriter
+    };
+    int validateExitCode = await _ksailCommand.Parse(["validate", "-kp", tempDir], commandLineConfiguration).InvokeAsync(cts.Token);
 
     //Assert
     Assert.Equal(1, validateExitCode);
@@ -76,7 +100,15 @@ public class KSailValidateCommandTests
     - name: infrastructure
     """;
     await File.WriteAllTextAsync(Path.Combine(tempDir, "invalid.yaml"), invalidYaml);
-    int validateExitCode = await parseResult.InvokeAsync(["validate", "--path", tempDir]);
+    var outputWriter = new StringWriter();
+    var errorWriter = new StringWriter();
+    using var cts = new CancellationTokenSource();
+    var commandLineConfiguration = new CommandLineConfiguration(_ksailCommand)
+    {
+      Output = outputWriter,
+      Error = errorWriter
+    };
+    int validateExitCode = await _ksailCommand.Parse(["validate", "--path", tempDir], commandLineConfiguration).InvokeAsync(cts.Token);
 
     //Assert
     Assert.Equal(1, validateExitCode);

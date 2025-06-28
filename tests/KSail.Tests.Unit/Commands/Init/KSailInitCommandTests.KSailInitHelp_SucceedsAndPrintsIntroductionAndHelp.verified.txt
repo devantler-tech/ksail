@@ -5,11 +5,11 @@ Usage:
   testhost init [options]
 
 Options:
-  -o, --output <output>                             Output directory for the project files. [default: ./] [default: ./]
-  -n, --name <name>                                 The name of the cluster. [default: ksail-default]
-  -c, --config <config>                             The path to the ksail configuration file. [default: ksail.yaml]
-  -dc, --distribution-config <distribution-config>  Path to the distribution configuration file. [default: kind.yaml]
-  -kp, --kustomization-path <kustomization-path>    The path to the root kustomization directory. [default: k8s]
+  -o, --output                                      Output directory for the project files. [default: ./]
+  -n, --name                                        The name of the cluster. [default: ksail-default]
+  -c, --config                                      The path to the ksail configuration file. [default: ksail.yaml]
+  -dc, --distribution-config                        The path to the distribution configuration file. [default: kind.yaml]
+  -kp, --kustomization-path                         The path to the root kustomization directory. [default: k8s]
   -ce, --container-engine <Docker|Podman>           The container engine in which to provision the cluster. [default: Docker]
   -d, --distribution <K3d|Kind>                     The distribution to use for the cluster. [default: Kind]
   -dt, --deployment-tool <Flux|Kubectl>             The Deployment tool to use for applying a kustomization. [default: Kubectl]
@@ -20,7 +20,7 @@ Options:
   -ms, --metrics-server                             Whether to install Metrics Server. [default: True]
   -mr, --mirror-registries                          Enable mirror registries for the project. [default: True]
   -sm, --secret-manager <None|SOPS>                 Whether to use a secret manager. [default: None]
-  -e, --editor <Nano|Vim>                           Editor to use. [default: Nano]
+  -e, --editor <Nano|Vim>                           The editor to use for editing files from the CLI. [default: Nano]
   --overwrite                                       Overwrite existing files. [default: False]
   -?, -h, --help                                    Show help and usage information
 

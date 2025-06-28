@@ -5,7 +5,6 @@ Usage:
   testhost validate [options]
 
 Options:
-  -p, --path <path>  Path to the project files. [default: ./] [default: ./]
-  -?, -h, --help     Show help and usage information
-
+  -p, --path      Path to the project files. [default: ./]
+  -?, -h, --help  Show help and usage information
 

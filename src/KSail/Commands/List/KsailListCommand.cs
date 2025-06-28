@@ -16,7 +16,7 @@ sealed class KSailListCommand : Command
       try
       {
         var config = await KSailClusterConfigLoader.LoadWithoptionsAsync(parseResult).ConfigureAwait(false);
-        var handler = new KSailListCommandHandler(config);
+        var handler = new KSailListCommandHandler(config, parseResult);
         await handler.HandleAsync(cancellationToken).ConfigureAwait(false);
       }
       catch (Exception ex)

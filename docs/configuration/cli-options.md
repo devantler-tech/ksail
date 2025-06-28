@@ -52,20 +52,28 @@ Usage:
 Options:
   -o, --output                                      Output directory for the project files. [default: ./]
   -n, --name                                        The name of the cluster. [default: ksail-default]
-  -c, --config                                      The path to the ksail configuration file. [default: ksail.yaml]
-  -dc, --distribution-config                        The path to the distribution configuration file. [default: kind.yaml]
-  -kp, --kustomization-path                         The path to the root kustomization directory. [default: k8s]
-  -ce, --container-engine <Docker|Podman>           The container engine in which to provision the cluster. [default: Docker]
-  -d, --distribution <K3d|Kind>                     The distribution to use for the cluster. [default: Kind]
-  -dt, --deployment-tool <Flux|Kubectl>             The Deployment tool to use for applying a kustomization. [default: Kubectl]
+  -c, --config                                      The path to the ksail configuration file. [default: 
+                                                    ksail.yaml]
+  -dc, --distribution-config                        The path to the distribution configuration file. 
+                                                    [default: kind.yaml]
+  -kp, --kustomization-path                         The path to the root kustomization directory. 
+                                                    [default: k8s]
+  -ce, --container-engine <Docker|Podman>           The container engine in which to provision the 
+                                                    cluster. [default: Docker]
+  -d, --distribution <K3d|Kind>                     The distribution to use for the cluster. [default: 
+                                                    Kind]
+  -dt, --deployment-tool <Flux|Kubectl>             The Deployment tool to use for applying a 
+                                                    kustomization. [default: Kubectl]
   --cni <Cilium|Default|None>                       The CNI to use. [default: Default]
   --csi <Default|LocalPathProvisioner|None>         The CSI to use. [default: Default]
   -ic, --ingress-controller <Default|None|Traefik>  The Ingress Controller to use. [default: Default]
   -gc, --gateway-controller <Default|None>          The Gateway Controller to use. [default: Default]
   -ms, --metrics-server                             Whether to install Metrics Server. [default: True]
-  -mr, --mirror-registries                          Enable mirror registries for the project. [default: True]
+  -mr, --mirror-registries                          Enable mirror registries for the project. [default: 
+                                                    True]
   -sm, --secret-manager <None|SOPS>                 Whether to use a secret manager. [default: None]
-  -e, --editor <Nano|Vim>                           The editor to use for editing files from the CLI. [default: Nano]
+  -e, --editor <Nano|Vim>                           The editor to use for editing files from the CLI. 
+                                                    [default: Nano]
   --overwrite                                       Overwrite existing files. [default: False]
   -?, -h, --help                                    Show help and usage information
 ```
@@ -80,24 +88,33 @@ Usage:
   ksail up [options]
 
 Options:
-  -c, --context                                     The kubernetes context to use. [default: kind-ksail-default]
-  -k, --kubeconfig                                  Path to kubeconfig file. [default: ~/.kube/config]
-  -t, --timeout                                     The time to wait for each kustomization to become ready. [default: 5m]
+  -c, --context                                     The kubernetes context to use. [default: 
+                                                    kind-ksail-default]
+  -k, --kubeconfig                                  Path to kubeconfig file. [default: 
+                                                    ~/.kube/config]
+  -t, --timeout                                     The time to wait for each kustomization to become 
+                                                    ready. [default: 5m]
   -n, --name                                        The name of the cluster. [default: ksail-default]
-  -dc, --distribution-config                        The path to the distribution configuration file. [default: kind.yaml]
-  -kp, --kustomization-path                         The path to the root kustomization directory. [default: k8s]
-  -ce, --container-engine <Docker|Podman>           The container engine in which to provision the cluster. [default: Docker]
-  -d, --distribution <K3d|Kind>                     The distribution to use for the cluster. [default: Kind]
-  -dt, --deployment-tool <Flux|Kubectl>             The Deployment tool to use for applying a kustomization. [default: Kubectl]
+  -dc, --distribution-config                        The path to the distribution configuration file. 
+                                                    [default: kind.yaml]
+  -kp, --kustomization-path                         The path to the root kustomization directory. 
+                                                    [default: k8s]
+  -ce, --container-engine <Docker|Podman>           The container engine in which to provision the 
+                                                    cluster. [default: Docker]
+  -d, --distribution <K3d|Kind>                     The distribution to use for the cluster. [default: 
+                                                    Kind]
+  -dt, --deployment-tool <Flux|Kubectl>             The Deployment tool to use for applying a 
+                                                    kustomization. [default: Kubectl]
   --cni <Cilium|Default|None>                       The CNI to use. [default: Default]
   --csi <Default|LocalPathProvisioner|None>         The CSI to use. [default: Default]
   -ic, --ingress-controller <Default|None|Traefik>  The Ingress Controller to use. [default: Default]
   -gc, --gateway-controller <Default|None>          The Gateway Controller to use. [default: Default]
   -ms, --metrics-server                             Whether to install Metrics Server. [default: True]
-  -mr, --mirror-registries                          Enable mirror registries for the project. [default: True]
+  -mr, --mirror-registries                          Enable mirror registries for the project. [default: 
+                                                    True]
   -sm, --secret-manager <None|SOPS>                 Whether to use a secret manager. [default: None]
-  -fsu, --flux-source-url                           Flux source URL for reconciling GitOps resources. [default: 
-                                                    oci://ksail-registry:5000/ksail-registry]
+  -fsu, --flux-source-url                           Flux source URL for reconciling GitOps resources. 
+                                                    [default: oci://ksail-registry:5000/ksail-registry]
   -v, --validate                                    Validate project files on up. [default: True]
   -r, --reconcile                                   Reconcile manifests on up. [default: True]
   -?, -h, --help                                    Show help and usage information
@@ -116,7 +133,8 @@ Options:
   -c, --context                          The kubernetes context to use. [default: kind-ksail-default]
   -k, --kubeconfig                       Path to kubeconfig file. [default: ~/.kube/config]
   -kp, --kustomization-path              The path to the root kustomization directory. [default: k8s]
-  -dt, --deployment-tool <Flux|Kubectl>  The Deployment tool to use for applying a kustomization. [default: Kubectl]
+  -dt, --deployment-tool <Flux|Kubectl>  The Deployment tool to use for applying a kustomization. 
+                                         [default: Kubectl]
   -p, --publish                          Whether to publish manifests on update. [default: True]
   -v, --validate                         Validate project files on update. [default: True]
   -r, --reconcile                        Reconcile manifests on update. [default: True]
@@ -135,7 +153,8 @@ Usage:
 Options:
   -c, --context                            The kubernetes context to use. [default: kind-ksail-default]
   -n, --name                               The name of the cluster. [default: ksail-default]
-  -ce, --container-engine <Docker|Podman>  The container engine in which to provision the cluster. [default: Docker]
+  -ce, --container-engine <Docker|Podman>  The container engine in which to provision the cluster. 
+                                           [default: Docker]
   -d, --distribution <K3d|Kind>            The distribution to use for the cluster. [default: Kind]
   -?, -h, --help                           Show help and usage information
 ```
@@ -151,7 +170,8 @@ Usage:
 
 Options:
   -n, --name                               The name of the cluster. [default: ksail-default]
-  -ce, --container-engine <Docker|Podman>  The container engine in which to provision the cluster. [default: Docker]
+  -ce, --container-engine <Docker|Podman>  The container engine in which to provision the cluster. 
+                                           [default: Docker]
   -d, --distribution <K3d|Kind>            The distribution to use for the cluster. [default: Kind]
   -?, -h, --help                           Show help and usage information
 ```
@@ -166,10 +186,12 @@ Usage:
   ksail down [options]
 
 Options:
-  -fsu, --flux-source-url                  Flux source URL for reconciling GitOps resources. [default: oci://ksail-registry:5000/ksail-registry]
+  -fsu, --flux-source-url                  Flux source URL for reconciling GitOps resources. [default: 
+                                           oci://ksail-registry:5000/ksail-registry]
   -n, --name                               The name of the cluster. [default: ksail-default]
   -d, --distribution <K3d|Kind>            The distribution to use for the cluster. [default: Kind]
-  -ce, --container-engine <Docker|Podman>  The container engine in which to provision the cluster. [default: Docker]
+  -ce, --container-engine <Docker|Podman>  The container engine in which to provision the cluster. 
+                                           [default: Docker]
   -mr, --mirror-registries                 Enable mirror registries for the project. [default: True]
   -?, -h, --help                           Show help and usage information
 ```
@@ -200,7 +222,8 @@ Usage:
   ksail list [options]
 
 Options:
-  -ce, --container-engine <Docker|Podman>  The container engine in which to provision the cluster. [default: Docker]
+  -ce, --container-engine <Docker|Podman>  The container engine in which to provision the cluster. 
+                                           [default: Docker]
   -d, --distribution <K3d|Kind>            The distribution to use for the cluster. [default: Kind]
   -a, --all                                List clusters from all distributions. [default: False]
   -?, -h, --help                           Show help and usage information
@@ -246,7 +269,6 @@ Usage:
   ksail gen [command] [options]
 
 Options:
-  --overwrite     Overwrite existing files. [default: False]
   -?, -h, --help  Show help and usage information
 
 Commands:
@@ -285,6 +307,7 @@ Usage:
 
 Options:
   -o, --output    A file or directory path. [default: ./certificate.yaml]
+  --overwrite     Overwrite existing files. [default: False]
   -?, -h, --help  Show help and usage information
 ```
 
@@ -299,6 +322,7 @@ Usage:
 
 Options:
   -o, --output    A file or directory path. [default: ./cluster-issuer.yaml]
+  --overwrite     Overwrite existing files. [default: False]
   -?, -h, --help  Show help and usage information
 ```
 
@@ -331,6 +355,7 @@ Usage:
 
 Options:
   -o, --output    A file or directory path. [default: ./k3d.yaml]
+  --overwrite     Overwrite existing files. [default: False]
   -?, -h, --help  Show help and usage information
 ```
 
@@ -345,6 +370,7 @@ Usage:
 
 Options:
   -o, --output    A file or directory path. [default: ./ksail.yaml]
+  --overwrite     Overwrite existing files. [default: False]
   -?, -h, --help  Show help and usage information
 ```
 
@@ -359,6 +385,7 @@ Usage:
 
 Options:
   -o, --output    A file or directory path. [default: ./.sops.yaml]
+  --overwrite     Overwrite existing files. [default: False]
   -?, -h, --help  Show help and usage information
 ```
 
@@ -391,6 +418,7 @@ Usage:
 
 Options:
   -o, --output    A file or directory path. [default: ./helm-release.yaml]
+  --overwrite     Overwrite existing files. [default: False]
   -?, -h, --help  Show help and usage information
 ```
 
@@ -405,6 +433,7 @@ Usage:
 
 Options:
   -o, --output    A file or directory path. [default: ./helm-repository.yaml]
+  --overwrite     Overwrite existing files. [default: False]
   -?, -h, --help  Show help and usage information
 ```
 
@@ -419,6 +448,7 @@ Usage:
 
 Options:
   -o, --output    A file or directory path. [default: ./flux-kustomization.yaml]
+  --overwrite     Overwrite existing files. [default: False]
   -?, -h, --help  Show help and usage information
 ```
 
@@ -450,6 +480,7 @@ Usage:
 
 Options:
   -o, --output    A file or directory path. [default: ./kustomization.yaml]
+  --overwrite     Overwrite existing files. [default: False]
   -?, -h, --help  Show help and usage information
 ```
 
@@ -464,6 +495,7 @@ Usage:
 
 Options:
   -o, --output    A file or directory path. [default: ./kustomization.yaml]
+  --overwrite     Overwrite existing files. [default: False]
   -?, -h, --help  Show help and usage information
 ```
 
@@ -515,6 +547,7 @@ Usage:
 
 Options:
   -o, --output    A file or directory path. [default: ./cluster-role-binding.yaml]
+  --overwrite     Overwrite existing files. [default: False]
   -?, -h, --help  Show help and usage information
 ```
 
@@ -529,6 +562,7 @@ Usage:
 
 Options:
   -o, --output    A file or directory path. [default: ./cluster-role.yaml]
+  --overwrite     Overwrite existing files. [default: False]
   -?, -h, --help  Show help and usage information
 ```
 
@@ -543,6 +577,7 @@ Usage:
 
 Options:
   -o, --output    A file or directory path. [default: ./namespace.yaml]
+  --overwrite     Overwrite existing files. [default: False]
   -?, -h, --help  Show help and usage information
 ```
 
@@ -557,6 +592,7 @@ Usage:
 
 Options:
   -o, --output    A file or directory path. [default: ./network-policy.yaml]
+  --overwrite     Overwrite existing files. [default: False]
   -?, -h, --help  Show help and usage information
 ```
 
@@ -571,6 +607,7 @@ Usage:
 
 Options:
   -o, --output    A file or directory path. [default: ./persistent-volume.yaml]
+  --overwrite     Overwrite existing files. [default: False]
   -?, -h, --help  Show help and usage information
 ```
 
@@ -585,6 +622,7 @@ Usage:
 
 Options:
   -o, --output    A file or directory path. [default: ./resource-quota.yaml]
+  --overwrite     Overwrite existing files. [default: False]
   -?, -h, --help  Show help and usage information
 ```
 
@@ -599,6 +637,7 @@ Usage:
 
 Options:
   -o, --output    A file or directory path. [default: ./role-binding.yaml]
+  --overwrite     Overwrite existing files. [default: False]
   -?, -h, --help  Show help and usage information
 ```
 
@@ -613,6 +652,7 @@ Usage:
 
 Options:
   -o, --output    A file or directory path. [default: ./role.yaml]
+  --overwrite     Overwrite existing files. [default: False]
   -?, -h, --help  Show help and usage information
 ```
 
@@ -627,6 +667,7 @@ Usage:
 
 Options:
   -o, --output    A file or directory path. [default: ./service-account.yaml]
+  --overwrite     Overwrite existing files. [default: False]
   -?, -h, --help  Show help and usage information
 ```
 
@@ -641,6 +682,7 @@ Usage:
 
 Options:
   -o, --output    A file or directory path. [default: ./config-map.yaml]
+  --overwrite     Overwrite existing files. [default: False]
   -?, -h, --help  Show help and usage information
 ```
 
@@ -655,6 +697,7 @@ Usage:
 
 Options:
   -o, --output    A file or directory path. [default: ./persistent-volume-claim.yaml]
+  --overwrite     Overwrite existing files. [default: False]
   -?, -h, --help  Show help and usage information
 ```
 
@@ -669,6 +712,7 @@ Usage:
 
 Options:
   -o, --output    A file or directory path. [default: ./secret.yaml]
+  --overwrite     Overwrite existing files. [default: False]
   -?, -h, --help  Show help and usage information
 ```
 
@@ -683,6 +727,7 @@ Usage:
 
 Options:
   -o, --output    A file or directory path. [default: ./horizontal-pod-autoscaler.yaml]
+  --overwrite     Overwrite existing files. [default: False]
   -?, -h, --help  Show help and usage information
 ```
 
@@ -697,6 +742,7 @@ Usage:
 
 Options:
   -o, --output    A file or directory path. [default: ./pod-disruption-budget.yaml]
+  --overwrite     Overwrite existing files. [default: False]
   -?, -h, --help  Show help and usage information
 ```
 
@@ -711,6 +757,7 @@ Usage:
 
 Options:
   -o, --output    A file or directory path. [default: ./priority-class.yaml]
+  --overwrite     Overwrite existing files. [default: False]
   -?, -h, --help  Show help and usage information
 ```
 
@@ -725,6 +772,7 @@ Usage:
 
 Options:
   -o, --output    A file or directory path. [default: ./ingress.yaml]
+  --overwrite     Overwrite existing files. [default: False]
   -?, -h, --help  Show help and usage information
 ```
 
@@ -739,6 +787,7 @@ Usage:
 
 Options:
   -o, --output    A file or directory path. [default: ./service.yaml]
+  --overwrite     Overwrite existing files. [default: False]
   -?, -h, --help  Show help and usage information
 ```
 
@@ -753,6 +802,7 @@ Usage:
 
 Options:
   -o, --output    A file or directory path. [default: ./cron-job.yaml]
+  --overwrite     Overwrite existing files. [default: False]
   -?, -h, --help  Show help and usage information
 ```
 
@@ -767,6 +817,7 @@ Usage:
 
 Options:
   -o, --output    A file or directory path. [default: ./daemon-set.yaml]
+  --overwrite     Overwrite existing files. [default: False]
   -?, -h, --help  Show help and usage information
 ```
 
@@ -781,6 +832,7 @@ Usage:
 
 Options:
   -o, --output    A file or directory path. [default: ./deployment.yaml]
+  --overwrite     Overwrite existing files. [default: False]
   -?, -h, --help  Show help and usage information
 ```
 
@@ -795,6 +847,7 @@ Usage:
 
 Options:
   -o, --output    A file or directory path. [default: ./job.yaml]
+  --overwrite     Overwrite existing files. [default: False]
   -?, -h, --help  Show help and usage information
 ```
 
@@ -809,6 +862,7 @@ Usage:
 
 Options:
   -o, --output    A file or directory path. [default: ./stateful-set.yaml]
+  --overwrite     Overwrite existing files. [default: False]
   -?, -h, --help  Show help and usage information
 ```
 
