@@ -9,7 +9,7 @@ namespace KSail.Commands.Gen.Commands.Native;
 class KSailGenNativePersistentVolumeCommand : Command
 {
   readonly ExceptionHandler _exceptionHandler = new();
-  readonly GenericPathOption _outputOption = new("./persistent-volume.yaml");
+  readonly GenericPathOption _outputOption = new("--output", ["-o"], "./persistent-volume.yaml");
   public KSailGenNativePersistentVolumeCommand() : base("persistent-volume", "Generate a 'core/v1/PersistentVolume' resource.")
   {
     Options.Add(_outputOption);

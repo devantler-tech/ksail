@@ -9,7 +9,7 @@ namespace KSail.Commands.Gen.Commands.Config;
 class KSailGenConfigK3dCommand : Command
 {
   readonly ExceptionHandler _exceptionHandler = new();
-  readonly GenericPathOption _outputOption = new("./k3d.yaml");
+  readonly GenericPathOption _outputOption = new("--output", ["-o"], "./k3d.yaml");
 
   public KSailGenConfigK3dCommand() : base("k3d", "Generate a 'k3d.io/v1alpha5/Simple' resource.")
   {

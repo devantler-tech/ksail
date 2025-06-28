@@ -9,7 +9,7 @@ namespace KSail.Commands.Gen.Commands.Native;
 class KSailGenNativeNetworkPolicyCommand : Command
 {
   readonly ExceptionHandler _exceptionHandler = new();
-  readonly GenericPathOption _outputOption = new("./network-policy.yaml");
+  readonly GenericPathOption _outputOption = new("--output", ["-o"], "./network-policy.yaml");
   public KSailGenNativeNetworkPolicyCommand() : base("network-policy", "Generate a 'networking.k8s.io/v1/NetworkPolicy' resource.")
   {
     Options.Add(_outputOption);

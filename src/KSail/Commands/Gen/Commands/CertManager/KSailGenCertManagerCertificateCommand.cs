@@ -9,7 +9,7 @@ namespace KSail.Commands.Gen.Commands.CertManager;
 class KSailGenCertManagerCertificateCommand : Command
 {
   readonly ExceptionHandler _exceptionHandler = new();
-  readonly GenericPathOption _outputOption = new("./certificate.yaml");
+  readonly GenericPathOption _outputOption = new("--output", ["-o"], "./certificate.yaml");
   public KSailGenCertManagerCertificateCommand() : base("certificate", "Generate a 'cert-manager.io/v1/Certificate' resource.")
   {
     Options.Add(_outputOption);

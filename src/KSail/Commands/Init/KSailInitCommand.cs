@@ -7,7 +7,7 @@ namespace KSail.Commands.Init;
 
 sealed class KSailInitCommand : Command
 {
-  readonly GenericPathOption _outputPathOption = new("./", ["-o", "--output"])
+  readonly GenericPathOption _outputPathOption = new("--output", ["-o"], "./")
   {
     Description = "Output directory for the project files."
   };

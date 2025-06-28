@@ -9,7 +9,7 @@ namespace KSail.Commands.Gen.Commands.Native;
 class KSailGenNativeResourceQuotaCommand : Command
 {
   readonly ExceptionHandler _exceptionHandler = new();
-  readonly GenericPathOption _outputOption = new("./resource-quota.yaml");
+  readonly GenericPathOption _outputOption = new("--output", ["-o"], "./resource-quota.yaml");
   public KSailGenNativeResourceQuotaCommand() : base("resource-quota", "Generate a 'core/v1/ResourceQuota' resource.")
   {
     Options.Add(_outputOption);

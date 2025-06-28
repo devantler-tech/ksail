@@ -9,7 +9,7 @@ namespace KSail.Commands.Gen.Commands.Native;
 class KSailGenNativeWorkloadsStatefulSetCommand : Command
 {
   readonly ExceptionHandler _exceptionHandler = new();
-  readonly GenericPathOption _outputOption = new("./stateful-set.yaml");
+  readonly GenericPathOption _outputOption = new("--output", ["-o"], "./stateful-set.yaml");
   public KSailGenNativeWorkloadsStatefulSetCommand() : base("stateful-set", "Generate a 'apps/v1/StatefulSet' resource.")
   {
     Options.Add(_outputOption);

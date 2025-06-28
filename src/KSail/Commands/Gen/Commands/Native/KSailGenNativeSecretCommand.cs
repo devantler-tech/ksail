@@ -9,7 +9,7 @@ namespace KSail.Commands.Gen.Commands.Native;
 class KSailGenNativeSecretCommand : Command
 {
   readonly ExceptionHandler _exceptionHandler = new();
-  readonly GenericPathOption _outputOption = new("./secret.yaml");
+  readonly GenericPathOption _outputOption = new("--output", ["-o"], "./secret.yaml");
   public KSailGenNativeSecretCommand() : base("secret", "Generate a 'core/v1/Secret' resource.")
   {
     Options.Add(_outputOption);

@@ -7,7 +7,7 @@ namespace KSail.Commands.Validate;
 
 sealed class KSailValidateCommand : Command
 {
-  readonly GenericPathOption _pathOption = new("./", ["-p", "--path"])
+  readonly GenericPathOption _pathOption = new("--path", ["-p"], "./")
   {
     Description = "Path to the project files."
   };
@@ -26,10 +26,12 @@ sealed class KSailValidateCommand : Command
         var config = await KSailClusterConfigLoader.LoadWithoptionsAsync(parseResult, path).ConfigureAwait(false);
         var handler = new KSailValidateCommandHandler(config, path);
         await handler.HandleAsync(cancellationToken).ConfigureAwait(false);
+        return 0;
       }
       catch (Exception ex)
       {
         _ = _exceptionHandler.HandleException(ex);
+        return 1;
       }
     });
   }

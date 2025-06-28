@@ -9,7 +9,7 @@ namespace KSail.Commands.Gen.Commands.Native;
 class KSailGenNativePriorityClassCommand : Command
 {
   readonly ExceptionHandler _exceptionHandler = new();
-  readonly GenericPathOption _outputOption = new("./priority-class.yaml");
+  readonly GenericPathOption _outputOption = new("--output", ["-o"], "./priority-class.yaml");
 
   public KSailGenNativePriorityClassCommand() : base("priority-class", "Generate a 'scheduling.k8s.io/v1/PriorityClass' resource.")
   {

@@ -9,7 +9,7 @@ namespace KSail.Commands.Gen.Commands.Config;
 class KSailGenConfigSOPSCommand : Command
 {
   readonly ExceptionHandler _exceptionHandler = new();
-  readonly GenericPathOption _outputOption = new("./.sops.yaml");
+  readonly GenericPathOption _outputOption = new("--output", ["-o"], "./.sops.yaml");
   public KSailGenConfigSOPSCommand() : base("sops", "Generate a SOPS configuration file.")
   {
     Options.Add(_outputOption);

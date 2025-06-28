@@ -9,7 +9,7 @@ namespace KSail.Commands.Gen.Commands.Native;
 class KSailGenNativePodDisruptionBudgetCommand : Command
 {
   readonly ExceptionHandler _exceptionHandler = new();
-  readonly GenericPathOption _outputOption = new("./pod-disruption-budget.yaml");
+  readonly GenericPathOption _outputOption = new("--output", ["-o"], "./pod-disruption-budget.yaml");
 
   public KSailGenNativePodDisruptionBudgetCommand() : base("pod-disruption-budget", "Generate a 'policy/v1/PodDisruptionBudget' resource.")
   {

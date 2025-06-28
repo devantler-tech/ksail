@@ -12,24 +12,12 @@ sealed class KSailSecretsExportCommand : Command
 {
   readonly ExceptionHandler _exceptionHandler = new();
   readonly PublicKeyArgument _publicKeyArgument = new("The public key for the encryption key to export") { Arity = ArgumentArity.ExactlyOne };
-  readonly GenericPathOption _outputFilePathOption = new(aliases: ["--output", "-o"]) { Arity = ArgumentArity.ExactlyOne };
+  readonly GenericPathOption _outputFilePathOption = new("--output", ["-o"], string.Empty) { Arity = ArgumentArity.ExactlyOne };
   internal KSailSecretsExportCommand() : base("export", "Export a key to a file")
   {
     AddArguments();
     AddOptions();
 
-    Validators.Add(commandResult =>
-    {
-      string? outputFilePath = commandResult.Children.FirstOrDefault(c => Name == _outputFilePathOption.Name)?.Tokens[0].Value;
-      if (!commandResult.Children.Any(c => Name == _outputFilePathOption.Name))
-      {
-        commandResult.AddError($"✗ Option '{_outputFilePathOption.Name}' is required");
-      }
-      else if (outputFilePath != null && string.IsNullOrEmpty(Path.GetFileName(outputFilePath)))
-      {
-        commandResult.AddError($"✗ '{outputFilePath}' is not a valid file path");
-      }
-    });
     SetAction(async (parseResult, cancellationToken) =>
     {
       try
@@ -44,7 +32,6 @@ sealed class KSailSecretsExportCommand : Command
       catch (Exception ex)
       {
         _ = _exceptionHandler.HandleException(ex);
-
       }
     });
   }

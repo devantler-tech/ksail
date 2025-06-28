@@ -9,7 +9,7 @@ namespace KSail.Commands.Gen.Commands.Native;
 class KSailGenNativeServiceCommand : Command
 {
   readonly ExceptionHandler _exceptionHandler = new();
-  readonly GenericPathOption _outputOption = new("./service.yaml");
+  readonly GenericPathOption _outputOption = new("--output", ["-o"], "./service.yaml");
   public KSailGenNativeServiceCommand() : base("service", "Generate a 'core/v1/Service' resource.")
   {
     Options.Add(_outputOption);

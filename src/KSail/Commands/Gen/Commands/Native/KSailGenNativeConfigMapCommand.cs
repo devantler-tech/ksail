@@ -9,7 +9,7 @@ namespace KSail.Commands.Gen.Commands.Native;
 class KSailGenNativeConfigMapCommand : Command
 {
   readonly ExceptionHandler _exceptionHandler = new();
-  readonly GenericPathOption _outputOption = new("./config-map.yaml");
+  readonly GenericPathOption _outputOption = new("--output", ["-o"], "./config-map.yaml");
   public KSailGenNativeConfigMapCommand() : base("config-map", "Generate a 'core/v1/ConfigMap' resource.")
   {
     Options.Add(_outputOption);

@@ -9,7 +9,7 @@ namespace KSail.Commands.Gen.Commands.Flux;
 sealed class KSailGenFluxKustomizationCommand : Command
 {
   readonly ExceptionHandler _exceptionHandler = new();
-  readonly GenericPathOption _outputOption = new("./flux-kustomization.yaml");
+  readonly GenericPathOption _outputOption = new("--output", ["-o"], "./flux-kustomization.yaml");
   internal KSailGenFluxKustomizationCommand() : base("kustomization", "Generate a 'kustomize.toolkit.fluxcd.io/v1/Kustomization' resource.")
   {
     Options.Add(_outputOption);

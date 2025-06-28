@@ -9,7 +9,7 @@ namespace KSail.Commands.Gen.Commands.Native;
 class KSailGenNativeWorkloadsDaemonSetCommand : Command
 {
   readonly ExceptionHandler _exceptionHandler = new();
-  readonly GenericPathOption _outputOption = new("./daemon-set.yaml");
+  readonly GenericPathOption _outputOption = new("--output", ["-o"], "./daemon-set.yaml");
   public KSailGenNativeWorkloadsDaemonSetCommand() : base("daemon-set", "Generate a 'apps/v1/DaemonSet' resource.")
   {
     Options.Add(_outputOption);

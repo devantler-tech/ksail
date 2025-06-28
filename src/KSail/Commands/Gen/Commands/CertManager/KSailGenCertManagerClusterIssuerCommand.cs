@@ -9,7 +9,7 @@ namespace KSail.Commands.Gen.Commands.CertManager;
 class KSailGenCertManagerClusterIssuerCommand : Command
 {
   readonly ExceptionHandler _exceptionHandler = new();
-  readonly GenericPathOption _outputOption = new("./cluster-issuer.yaml");
+  readonly GenericPathOption _outputOption = new("--output", ["-o"], "./cluster-issuer.yaml");
 
   public KSailGenCertManagerClusterIssuerCommand() : base("cluster-issuer", "Generate a 'cert-manager.io/v1/ClusterIssuer' resource.")
   {

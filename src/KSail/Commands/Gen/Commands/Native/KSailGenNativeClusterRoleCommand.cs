@@ -9,7 +9,7 @@ namespace KSail.Commands.Gen.Commands.Native;
 class KSailGenNativeClusterRoleCommand : Command
 {
   readonly ExceptionHandler _exceptionHandler = new();
-  readonly GenericPathOption _outputOption = new("./cluster-role.yaml");
+  readonly GenericPathOption _outputOption = new("--output", ["-o"], "./cluster-role.yaml");
   public KSailGenNativeClusterRoleCommand() : base("cluster-role", "Generate a 'rbac.authorization.k8s.io/v1/ClusterRole' resource.")
   {
     Options.Add(_outputOption);

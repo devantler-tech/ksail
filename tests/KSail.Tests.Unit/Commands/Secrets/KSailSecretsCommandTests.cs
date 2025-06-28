@@ -150,6 +150,7 @@ public class KSailSecretsCommandTests
       Output = outputWriter,
       Error = errorWriter
     }).InvokeAsync(cts.Token);
+    Assert.Equal(0, addExitCode);
     string key = outputWriter.ToString().Trim();
     Assert.NotNull(key);
     Assert.NotEmpty(key);
@@ -157,11 +158,10 @@ public class KSailSecretsCommandTests
 
     // Act
     int exportExitCode = await _ksailCommand.Parse(["secrets", "export", ageKey.PublicKey, "-o", filePath]).InvokeAsync(cts.Token);
+    Assert.Equal(0, exportExitCode);
     string exportedKey = await File.ReadAllTextAsync(filePath);
 
     // Assert
-    Assert.Equal(0, addExitCode);
-    Assert.Equal(0, exportExitCode);
     Assert.NotNull(exportedKey);
     Assert.NotEmpty(exportedKey);
     var exportedAgeKey = new AgeKey(exportedKey);

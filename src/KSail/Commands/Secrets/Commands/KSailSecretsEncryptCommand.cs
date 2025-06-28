@@ -12,7 +12,7 @@ sealed class KSailSecretsEncryptCommand : Command
 {
   readonly ExceptionHandler _exceptionHandler = new();
   readonly PathArgument _pathArgument = new("The path to the file to encrypt.") { Arity = ArgumentArity.ExactlyOne };
-  readonly GenericPathOption _outputOption = new(string.Empty) { Arity = ArgumentArity.ZeroOrOne };
+  readonly GenericPathOption _outputOption = new("--output", ["-o"], string.Empty) { Arity = ArgumentArity.ZeroOrOne };
 
   internal KSailSecretsEncryptCommand() : base("encrypt", "Encrypt a file")
   {

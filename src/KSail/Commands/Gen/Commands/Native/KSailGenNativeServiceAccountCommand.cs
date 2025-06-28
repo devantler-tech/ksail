@@ -9,7 +9,7 @@ namespace KSail.Commands.Gen.Commands.Native;
 class KSailGenNativeAccountCommand : Command
 {
   readonly ExceptionHandler _exceptionHandler = new();
-  readonly GenericPathOption _outputOption = new("./service-account.yaml");
+  readonly GenericPathOption _outputOption = new("--output", ["-o"], "./service-account.yaml");
   public KSailGenNativeAccountCommand() : base("service-account", "Generate a 'core/v1/ServiceAccount' resource.")
   {
     Options.Add(_outputOption);

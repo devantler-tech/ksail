@@ -9,7 +9,7 @@ namespace KSail.Commands.Gen.Commands.Flux;
 class KSailGenFluxHelmReleaseCommand : Command
 {
   readonly ExceptionHandler _exceptionHandler = new();
-  readonly GenericPathOption _outputOption = new("./helm-release.yaml");
+  readonly GenericPathOption _outputOption = new("--output", ["-o"], "./helm-release.yaml");
   public KSailGenFluxHelmReleaseCommand() : base("helm-release", "Generate a 'helm.toolkit.fluxcd.io/v2/HelmRelease' resource.")
   {
     Options.Add(_outputOption);

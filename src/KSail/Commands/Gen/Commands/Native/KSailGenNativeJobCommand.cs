@@ -9,7 +9,7 @@ namespace KSail.Commands.Gen.Commands.Native;
 class KSailGenNativeWorkloadsJobCommand : Command
 {
   readonly ExceptionHandler _exceptionHandler = new();
-  readonly GenericPathOption _outputOption = new("./job.yaml");
+  readonly GenericPathOption _outputOption = new("--output", ["-o"], "./job.yaml");
   public KSailGenNativeWorkloadsJobCommand() : base("job", "Generate a 'batch/v1/Job' resource.")
   {
     Options.Add(_outputOption);
