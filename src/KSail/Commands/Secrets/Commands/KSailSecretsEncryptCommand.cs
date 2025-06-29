@@ -12,36 +12,35 @@ sealed class KSailSecretsEncryptCommand : Command
 {
   readonly ExceptionHandler _exceptionHandler = new();
   readonly PathArgument _pathArgument = new("The path to the file to encrypt.") { Arity = ArgumentArity.ExactlyOne };
-  readonly GenericPathOption _outputOption = new(string.Empty) { Arity = ArgumentArity.ZeroOrOne };
+  readonly GenericPathOption _outputOption = new("--output", ["-o"], string.Empty) { Arity = ArgumentArity.ZeroOrOne };
 
   internal KSailSecretsEncryptCommand() : base("encrypt", "Encrypt a file")
   {
-    AddArgument(_pathArgument);
+    Arguments.Add(_pathArgument);
     AddOptions();
-    this.SetHandler(async (context) =>
+    SetAction(async (parseResult, cancellationToken) =>
     {
       try
       {
-        var config = await KSailClusterConfigLoader.LoadWithoptionsAsync(context).ConfigureAwait(false);
-        string path = context.ParseResult.GetValueForArgument(_pathArgument);
-        string? output = context.ParseResult.GetValueForOption(_outputOption);
-        var cancellationToken = context.GetCancellationToken();
+        var config = await KSailClusterConfigLoader.LoadWithoptionsAsync(parseResult).ConfigureAwait(false);
+        string path = parseResult.GetValue(_pathArgument) ?? throw new KSailException("path is required");
+        string? output = parseResult.GetValue(_outputOption);
         var handler = new KSailSecretsEncryptCommandHandler(config, path, output, new SOPSLocalAgeSecretManager());
-        context.ExitCode = await handler.HandleAsync(cancellationToken).ConfigureAwait(false);
+        await handler.HandleAsync(cancellationToken).ConfigureAwait(false);
         Console.WriteLine();
       }
       catch (Exception ex)
       {
         _ = _exceptionHandler.HandleException(ex);
-        context.ExitCode = 1;
+
       }
     });
   }
 
   void AddOptions()
   {
-    AddOption(CLIOptions.SecretManager.SOPS.PublicKeyOption);
-    AddOption(CLIOptions.SecretManager.SOPS.InPlaceOption);
-    AddOption(_outputOption);
+    Options.Add(CLIOptions.SecretManager.SOPS.PublicKeyOption);
+    Options.Add(CLIOptions.SecretManager.SOPS.InPlaceOption);
+    Options.Add(_outputOption);
   }
 }

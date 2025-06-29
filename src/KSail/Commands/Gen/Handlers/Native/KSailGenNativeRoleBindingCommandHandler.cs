@@ -1,3 +1,4 @@
+using System.CommandLine;
 using DevantlerTech.KubernetesGenerator.Native;
 using k8s.Models;
 
@@ -7,7 +8,7 @@ class KSailGenNativeRoleBindingCommandHandler(string outputFile, bool overwrite)
 {
   readonly RoleBindingGenerator _generator = new();
 
-  public async Task<int> HandleAsync(CancellationToken cancellationToken = default)
+  public async Task HandleAsync(CancellationToken cancellationToken = default)
   {
     var model = new V1RoleBinding()
     {
@@ -35,6 +36,5 @@ class KSailGenNativeRoleBindingCommandHandler(string outputFile, bool overwrite)
       }
     };
     await _generator.GenerateAsync(model, outputFile, overwrite, cancellationToken: cancellationToken).ConfigureAwait(false);
-    return 0;
   }
 }

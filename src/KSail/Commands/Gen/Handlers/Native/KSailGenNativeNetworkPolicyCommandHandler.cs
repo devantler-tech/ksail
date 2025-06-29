@@ -1,3 +1,4 @@
+using System.CommandLine;
 using DevantlerTech.KubernetesGenerator.Native;
 using k8s.Models;
 
@@ -7,7 +8,7 @@ class KSailGenNativeNetworkPolicyCommandHandler(string outputFile, bool overwrit
 {
   readonly NetworkPolicyGenerator _generator = new();
 
-  public async Task<int> HandleAsync(CancellationToken cancellationToken = default)
+  public async Task HandleAsync(CancellationToken cancellationToken = default)
   {
     var model = new V1NetworkPolicy()
     {
@@ -44,7 +45,6 @@ class KSailGenNativeNetworkPolicyCommandHandler(string outputFile, bool overwrit
       }
     };
     await _generator.GenerateAsync(model, outputFile, overwrite, cancellationToken: cancellationToken).ConfigureAwait(false);
-    return 0;
   }
 }
 

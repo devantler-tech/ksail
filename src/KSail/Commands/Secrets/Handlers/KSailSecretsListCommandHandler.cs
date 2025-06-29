@@ -1,3 +1,4 @@
+using System.CommandLine;
 using DevantlerTech.Keys.Age;
 using DevantlerTech.SecretManager.Core;
 using KSail.Models;
@@ -5,12 +6,12 @@ using KSail.Utils;
 
 namespace KSail.Commands.Secrets.Handlers;
 
-class KSailSecretsListCommandHandler(KSailCluster config, ISecretManager<AgeKey> secretManager) : ICommandHandler
+class KSailSecretsListCommandHandler(KSailCluster config, ISecretManager<AgeKey> secretManager, ParseResult parseResult) : ICommandHandler
 {
   readonly KSailCluster _config = config;
   readonly ISecretManager<AgeKey> _secretManager = secretManager;
 
-  public async Task<int> HandleAsync(CancellationToken cancellationToken)
+  public async Task HandleAsync(CancellationToken cancellationToken)
   {
     var keys = await _secretManager.ListKeysAsync(cancellationToken).ConfigureAwait(false);
 
@@ -20,17 +21,17 @@ class KSailSecretsListCommandHandler(KSailCluster config, ISecretManager<AgeKey>
       if (!keys.Any(key => sopsConfig.CreationRules.Any(rule => rule.Age == key.PublicKey)))
       {
         Console.WriteLine("► no keys found");
-        return 0;
+        return;
       }
       foreach (var key in keys.Where(key => sopsConfig.CreationRules.Any(rule => rule.Age == key.PublicKey)))
       {
         if (_config.Spec.SecretManager.SOPS.ShowPrivateKeysInListings)
         {
-          Console.WriteLine(key);
+          await parseResult.Configuration.Output.WriteLineAsync(key.ToString()).ConfigureAwait(false);
         }
         else
         {
-          Console.WriteLine(Obscure(key));
+          await parseResult.Configuration.Output.WriteLineAsync(Obscure(key)).ConfigureAwait(false);
         }
         Console.WriteLine();
       }
@@ -40,22 +41,21 @@ class KSailSecretsListCommandHandler(KSailCluster config, ISecretManager<AgeKey>
       if (!keys.Any())
       {
         Console.WriteLine("► no keys found");
-        return 0;
+        return;
       }
       foreach (var key in keys)
       {
         if (_config.Spec.SecretManager.SOPS.ShowPrivateKeysInListings)
         {
-          Console.WriteLine(key);
+          await parseResult.Configuration.Output.WriteLineAsync(key.ToString()).ConfigureAwait(false);
         }
         else
         {
-          Console.WriteLine(Obscure(key));
+          await parseResult.Configuration.Output.WriteLineAsync(Obscure(key)).ConfigureAwait(false);
         }
         Console.WriteLine();
       }
     }
-    return 0;
   }
 
   static string Obscure(AgeKey key)

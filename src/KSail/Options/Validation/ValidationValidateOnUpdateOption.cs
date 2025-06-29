@@ -5,7 +5,14 @@ namespace KSail.Options.Validation;
 
 
 
-class ValidationValidateOnUpdateOption(KSailCluster config) : Option<bool?>(
-  ["--validate", "-v"],
-  $"Validate project files before applying changes to an existing cluster. [default: {config.Spec.Validation.ValidateOnUpdate}]"
-);
+class ValidationValidateOnUpdateOption : Option<bool?>
+{
+  public ValidationValidateOnUpdateOption(KSailCluster config) : base(
+    "--validate", "-v"
+  )
+  {
+    Description = "Validate project files on update.";
+    DefaultValueFactory = (result) => config.Spec.Validation.ValidateOnUpdate;
+  }
+}
+

@@ -5,7 +5,7 @@ Usage:
   testhost stop [options]
 
 Options:
-  -n, --name <name>                        The name of the cluster. [default: ksail-default]
+  -n, --name                               The name of the cluster. [default: ksail-default]
   -ce, --container-engine <Docker|Podman>  The container engine in which to provision the cluster. [default: Docker]
   -d, --distribution <K3d|Kind>            The distribution to use for the cluster. [default: Kind]
   -?, -h, --help                           Show help and usage information

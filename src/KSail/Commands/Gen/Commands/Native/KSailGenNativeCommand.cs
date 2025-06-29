@@ -10,31 +10,31 @@ class KSailGenNativeCommand : Command
 
   void AddCommands()
   {
-    AddCommand(new KSailGenNativeClusterRoleBindingCommand());
-    AddCommand(new KSailGenNativeClusterRoleCommand());
-    AddCommand(new KSailGenNativeNamespaceCommand());
-    AddCommand(new KSailGenNativeNetworkPolicyCommand());
-    AddCommand(new KSailGenNativePersistentVolumeCommand());
-    AddCommand(new KSailGenNativeResourceQuotaCommand());
-    AddCommand(new KSailGenNativeRoleBindingCommand());
-    AddCommand(new KSailGenNativeRoleCommand());
-    AddCommand(new KSailGenNativeAccountCommand());
+    Subcommands.Add(new KSailGenNativeClusterRoleBindingCommand());
+    Subcommands.Add(new KSailGenNativeClusterRoleCommand());
+    Subcommands.Add(new KSailGenNativeNamespaceCommand());
+    Subcommands.Add(new KSailGenNativeNetworkPolicyCommand());
+    Subcommands.Add(new KSailGenNativePersistentVolumeCommand());
+    Subcommands.Add(new KSailGenNativeResourceQuotaCommand());
+    Subcommands.Add(new KSailGenNativeRoleBindingCommand());
+    Subcommands.Add(new KSailGenNativeRoleCommand());
+    Subcommands.Add(new KSailGenNativeAccountCommand());
 
-    AddCommand(new KSailGenNativeConfigMapCommand());
-    AddCommand(new KSailGenNativePersistentVolumeClaimCommand());
-    AddCommand(new KSailGenNativeSecretCommand());
+    Subcommands.Add(new KSailGenNativeConfigMapCommand());
+    Subcommands.Add(new KSailGenNativePersistentVolumeClaimCommand());
+    Subcommands.Add(new KSailGenNativeSecretCommand());
 
-    AddCommand(new KSailGenNativeHorizontalPodAutoscalerCommand());
-    AddCommand(new KSailGenNativePodDisruptionBudgetCommand());
-    AddCommand(new KSailGenNativePriorityClassCommand());
+    Subcommands.Add(new KSailGenNativeHorizontalPodAutoscalerCommand());
+    Subcommands.Add(new KSailGenNativePodDisruptionBudgetCommand());
+    Subcommands.Add(new KSailGenNativePriorityClassCommand());
 
-    AddCommand(new KSailGenNativeIngressCommand());
-    AddCommand(new KSailGenNativeServiceCommand());
+    Subcommands.Add(new KSailGenNativeIngressCommand());
+    Subcommands.Add(new KSailGenNativeServiceCommand());
 
-    AddCommand(new KSailGenNativeWorkloadsCronJobCommand());
-    AddCommand(new KSailGenNativeWorkloadsDaemonSetCommand());
-    AddCommand(new KSailGenNativeWorkloadsDeploymentCommand());
-    AddCommand(new KSailGenNativeWorkloadsJobCommand());
-    AddCommand(new KSailGenNativeWorkloadsStatefulSetCommand());
+    Subcommands.Add(new KSailGenNativeWorkloadsCronJobCommand());
+    Subcommands.Add(new KSailGenNativeWorkloadsDaemonSetCommand());
+    Subcommands.Add(new KSailGenNativeWorkloadsDeploymentCommand());
+    Subcommands.Add(new KSailGenNativeWorkloadsJobCommand());
+    Subcommands.Add(new KSailGenNativeWorkloadsStatefulSetCommand());
   }
 }

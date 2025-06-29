@@ -1,3 +1,4 @@
+using System.CommandLine;
 using DevantlerTech.KubernetesGenerator.Native;
 using k8s.Models;
 
@@ -7,7 +8,7 @@ class KSailGenNativePersistentVolumeCommandHandler(string outputFile, bool overw
 {
   readonly PersistentVolumeGenerator _generator = new();
 
-  public async Task<int> HandleAsync(CancellationToken cancellationToken = default)
+  public async Task HandleAsync(CancellationToken cancellationToken = default)
   {
     var model = new V1PersistentVolume()
     {
@@ -28,6 +29,5 @@ class KSailGenNativePersistentVolumeCommandHandler(string outputFile, bool overw
       }
     };
     await _generator.GenerateAsync(model, outputFile, overwrite, cancellationToken: cancellationToken).ConfigureAwait(false);
-    return 0;
   }
 }

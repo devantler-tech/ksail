@@ -1,6 +1,8 @@
+using System.CommandLine;
+
 namespace KSail.Commands;
 
 interface ICommandHandler
 {
-  Task<int> HandleAsync(CancellationToken cancellationToken = default);
+  Task HandleAsync(CancellationToken cancellationToken = default);
 }

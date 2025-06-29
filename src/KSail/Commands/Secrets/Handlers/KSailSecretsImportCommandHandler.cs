@@ -9,7 +9,7 @@ class KSailSecretsImportCommandHandler(string key, ISecretManager<AgeKey> secret
   readonly string _key = key;
   readonly ISecretManager<AgeKey> _secretManager = secretManager;
 
-  public async Task<int> HandleAsync(CancellationToken cancellationToken)
+  public async Task HandleAsync(CancellationToken cancellationToken)
   {
     Console.WriteLine($"► importing '{_key}' to SOPS");
     string key = _key;
@@ -20,6 +20,5 @@ class KSailSecretsImportCommandHandler(string key, ISecretManager<AgeKey> secret
     var ageKey = new AgeKey(key.Trim());
     _ = await _secretManager.ImportKeyAsync(ageKey, cancellationToken).ConfigureAwait(false);
     Console.WriteLine("✔ key imported");
-    return 0;
   }
 }

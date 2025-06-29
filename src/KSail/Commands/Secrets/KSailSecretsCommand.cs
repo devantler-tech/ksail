@@ -1,5 +1,4 @@
 using System.CommandLine;
-using System.CommandLine.IO;
 using KSail.Commands.Secrets.Commands;
 using KSail.Options;
 
@@ -7,21 +6,17 @@ namespace KSail.Commands.Secrets;
 
 sealed class KSailSecretsCommand : Command
 {
-  internal KSailSecretsCommand(IConsole? console = default) : base("secrets", "Manage secrets")
-  {
-    console ??= new SystemConsole();
-    AddCommands(console);
-  }
+  internal KSailSecretsCommand() : base("secrets", "Manage secrets") => AddCommands();
 
-  void AddCommands(IConsole console)
+  void AddCommands()
   {
-    AddCommand(new KSailSecretsEncryptCommand());
-    AddCommand(new KSailSecretsDecryptCommand());
-    AddCommand(new KSailSecretsEditCommand());
-    AddCommand(new KSailSecretsAddCommand(console));
-    AddCommand(new KSailSecretsRemoveCommand());
-    AddCommand(new KSailSecretsListCommand());
-    AddCommand(new KSailSecretsImportCommand());
-    AddCommand(new KSailSecretsExportCommand());
+    Subcommands.Add(new KSailSecretsEncryptCommand());
+    Subcommands.Add(new KSailSecretsDecryptCommand());
+    Subcommands.Add(new KSailSecretsEditCommand());
+    Subcommands.Add(new KSailSecretsAddCommand());
+    Subcommands.Add(new KSailSecretsRemoveCommand());
+    Subcommands.Add(new KSailSecretsListCommand());
+    Subcommands.Add(new KSailSecretsImportCommand());
+    Subcommands.Add(new KSailSecretsExportCommand());
   }
 }

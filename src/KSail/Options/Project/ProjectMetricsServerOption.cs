@@ -4,7 +4,14 @@ using KSail.Models.Project.Enums;
 
 namespace KSail.Options.Project;
 
-class ProjectMetricsServerOption(KSailCluster config) : Option<bool?>(
-  ["-ms", "--metrics-server"],
-  $"Whether to install Metrics Server. [default: {config.Spec.Project.MetricsServer}]"
-);
+class ProjectMetricsServerOption : Option<bool?>
+{
+  public ProjectMetricsServerOption(KSailCluster config) : base(
+    "-ms", "--metrics-server"
+  )
+  {
+    Description = "Whether to install Metrics Server.";
+    DefaultValueFactory = (result) => config.Spec.Project.MetricsServer;
+  }
+}
+

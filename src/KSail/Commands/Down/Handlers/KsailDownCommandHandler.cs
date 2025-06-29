@@ -1,3 +1,4 @@
+using System.CommandLine;
 using System.ComponentModel;
 using DevantlerTech.ContainerEngineProvisioner.Core;
 using DevantlerTech.ContainerEngineProvisioner.Docker;
@@ -17,11 +18,10 @@ class KSailDownCommandHandler(KSailCluster config) : ICommandHandler
   readonly ClusterManager _clusterManager = new(config);
   readonly MirrorRegistryManager _mirrorRegistryManager = new(config);
 
-  public async Task<int> HandleAsync(CancellationToken cancellationToken = default)
+  public async Task HandleAsync(CancellationToken cancellationToken = default)
   {
     Console.WriteLine($"🔥 Destroying cluster...");
     await _clusterManager.CleanupAsync(cancellationToken).ConfigureAwait(false);
     await _mirrorRegistryManager.CleanupAsync(cancellationToken).ConfigureAwait(false);
-    return 0;
   }
 }

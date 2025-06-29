@@ -5,8 +5,7 @@ Usage:
   testhost gen native daemon-set [options]
 
 Options:
-  -o, --output <output>  A file or directory path. [default: ./daemon-set.yaml]
-  --overwrite            Overwrite existing files. [default: False]
-  -?, -h, --help         Show help and usage information
-
+  -o, --output    A file or directory path. [default: ./daemon-set.yaml]
+  --overwrite     Overwrite existing files. [default: False]
+  -?, -h, --help  Show help and usage information
 

@@ -1,5 +1,4 @@
 using System.CommandLine;
-using System.CommandLine.IO;
 using KSail.Commands.Root;
 
 namespace KSail.Tests.Unit.Commands.Start;
@@ -11,14 +10,21 @@ public class KSailStartCommandTests
   public async Task KSailStartHelp_SucceedsAndPrintsIntroductionAndHelp()
   {
     //Arrange
-    var console = new TestConsole();
-    var ksailCommand = new KSailRootCommand(console);
+    var ksailCommand = new KSailRootCommand();
 
     //Act
-    int exitCode = await ksailCommand.InvokeAsync(["start", "-h"], console);
+    var outputWriter = new StringWriter();
+    var errorWriter = new StringWriter();
+    using var cts = new CancellationTokenSource();
+    var commandLineConfiguration = new CommandLineConfiguration(ksailCommand)
+    {
+      Output = outputWriter,
+      Error = errorWriter
+    };
+    int exitCode = await ksailCommand.Parse(["start", "-h"], commandLineConfiguration).InvokeAsync(cts.Token);
 
     //Assert
     Assert.Equal(0, exitCode);
-    _ = await Verify(console.Error.ToString() + console.Out);
+    _ = await Verify(errorWriter.ToString() + outputWriter.ToString());
   }
 }

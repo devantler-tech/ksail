@@ -4,7 +4,14 @@ using KSail.Models;
 namespace KSail.Options.Metadata;
 
 
-class MetadataNameOption(KSailCluster config) : Option<string?>(
-  ["-n", "--name"],
-  $"The name of the cluster. [default: {config.Metadata.Name}]"
-);
+class MetadataNameOption : Option<string?>
+{
+  public MetadataNameOption(KSailCluster config) : base(
+    "-n", "--name"
+  )
+  {
+    Description = "The name of the cluster.";
+    DefaultValueFactory = (result) => config.Metadata.Name;
+  }
+}
+

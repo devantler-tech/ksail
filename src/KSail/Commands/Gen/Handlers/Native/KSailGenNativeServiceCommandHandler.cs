@@ -1,3 +1,4 @@
+using System.CommandLine;
 using DevantlerTech.KubernetesGenerator.Native;
 using k8s.Models;
 
@@ -6,7 +7,7 @@ namespace KSail.Commands.Gen.Handlers.Native;
 class KSailGenNativeServiceCommandHandler(string outputFile, bool overwrite) : ICommandHandler
 {
   readonly ServiceGenerator _generator = new();
-  public async Task<int> HandleAsync(CancellationToken cancellationToken = default)
+  public async Task HandleAsync(CancellationToken cancellationToken = default)
   {
     var model = new V1Service
     {
@@ -31,6 +32,5 @@ class KSailGenNativeServiceCommandHandler(string outputFile, bool overwrite) : I
       }
     };
     await _generator.GenerateAsync(model, outputFile, overwrite, cancellationToken: cancellationToken).ConfigureAwait(false);
-    return 0;
   }
 }

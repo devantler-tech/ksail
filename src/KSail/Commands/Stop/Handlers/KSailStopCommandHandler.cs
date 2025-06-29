@@ -1,3 +1,4 @@
+using System.CommandLine;
 using DevantlerTech.KubernetesProvisioner.Cluster.Core;
 using DevantlerTech.KubernetesProvisioner.Cluster.K3d;
 using DevantlerTech.KubernetesProvisioner.Cluster.Kind;
@@ -22,12 +23,11 @@ class KSailStopCommandHandler : ICommandHandler
     };
   }
 
-  public async Task<int> HandleAsync(CancellationToken cancellationToken = default)
+  public async Task HandleAsync(CancellationToken cancellationToken = default)
   {
     Console.WriteLine($"⏹️ Stopping cluster...");
     Console.WriteLine($"► stopping cluster '{_config.Spec.Connection.Context}'");
     await _clusterProvisioner.StopAsync(_config.Metadata.Name, cancellationToken).ConfigureAwait(false);
     Console.WriteLine("✔ cluster stopped");
-    return 0;
   }
 }

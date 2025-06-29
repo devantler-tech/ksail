@@ -9,7 +9,7 @@ class KSailGenCertManagerCertificateCommandHandler(string outputFile, bool overw
 {
   readonly CertManagerCertificateGenerator _generator = new();
 
-  public async Task<int> HandleAsync(CancellationToken cancellationToken = default)
+  public async Task HandleAsync(CancellationToken cancellationToken = default)
   {
     var certificate = new CertManagerCertificate
     {
@@ -32,6 +32,5 @@ class KSailGenCertManagerCertificateCommandHandler(string outputFile, bool overw
       }
     };
     await _generator.GenerateAsync(certificate, outputFile, overwrite, cancellationToken: cancellationToken).ConfigureAwait(false);
-    return 0;
   }
 }

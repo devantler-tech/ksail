@@ -30,7 +30,7 @@ class KSailUpCommandHandler(KSailCluster config) : ICommandHandler
   readonly MetricsServerManager _metricsServerManager = new(config);
   readonly SecretManager _secretManagerManager = new(config);
   readonly DeploymentToolManager _deploymentToolManager = new(config);
-  public async Task<int> HandleAsync(CancellationToken cancellationToken = default)
+  public async Task HandleAsync(CancellationToken cancellationToken = default)
   {
     await _clusterManager.BootstrapAsync(cancellationToken).ConfigureAwait(false);
     await _gitOpsSourceManager.BootstrapAsync(cancellationToken).ConfigureAwait(false);
@@ -45,6 +45,5 @@ class KSailUpCommandHandler(KSailCluster config) : ICommandHandler
     }
     await _secretManagerManager.BootstrapAsync(cancellationToken).ConfigureAwait(false);
     await _deploymentToolManager.BootstrapAsync(cancellationToken).ConfigureAwait(false);
-    return 0;
   }
 }

@@ -1,3 +1,4 @@
+using System.CommandLine;
 using KSail.Commands.Init.Generators;
 using KSail.Models;
 using KSail.Models.Project.Enums;
@@ -13,7 +14,7 @@ class KSailInitCommandHandler(string outputPath, KSailCluster config) : ICommand
   readonly DistributionConfigFileGenerator _distributionConfigFileGenerator = new();
   readonly ProjectGenerator _projectGenerator = new();
 
-  public async Task<int> HandleAsync(CancellationToken cancellationToken = default)
+  public async Task HandleAsync(CancellationToken cancellationToken = default)
   {
     Console.WriteLine($"📁 Initializing project...");
     await _ksailClusterConfigGenerator.GenerateAsync(
@@ -50,6 +51,5 @@ class KSailInitCommandHandler(string outputPath, KSailCluster config) : ICommand
 
     ).ConfigureAwait(false);
 
-    return 0;
   }
 }
