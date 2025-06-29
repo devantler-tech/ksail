@@ -16,6 +16,8 @@
   <img alt="KSail CLI" src="docs/images/ksail-cli-dark.png" style="width: 550px">
 </picture>
 
+Manage Kubernetes clusters and workloads with ease 😎 KSail serves as an SDK that enables you to spin up clusters and update workloads declaratively and on you own machine, while relying on the Kubernetes dev tools you love. You no longer need to know 10+ binaries to work effectively with Kubernetes.
+
 ## Getting Started
 
 ### Prerequisites
