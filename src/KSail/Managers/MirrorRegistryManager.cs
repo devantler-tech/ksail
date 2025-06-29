@@ -2,6 +2,7 @@ using DevantlerTech.ContainerEngineProvisioner.Core;
 using DevantlerTech.ContainerEngineProvisioner.Docker;
 using DevantlerTech.ContainerEngineProvisioner.Podman;
 using DevantlerTech.KubernetesProvisioner.Cluster.Core;
+using Docker.DotNet;
 using KSail;
 using KSail.Factories;
 using KSail.Models;
@@ -107,7 +108,6 @@ class MirrorRegistryManager(KSailCluster config) : IBootstrapManager, ICleanupMa
         }
         foreach (var mirrorRegistry in config.Spec.MirrorRegistries)
         {
-          Console.WriteLine($"► connect '{mirrorRegistry.Name}' to 'kind-{config.Metadata.Name}' network");
           var dockerClient = _containerEngineProvisioner switch
           {
             DockerProvisioner dockerProvisioner => dockerProvisioner.Client,
@@ -118,8 +118,16 @@ class MirrorRegistryManager(KSailCluster config) : IBootstrapManager, ICleanupMa
           var kindNetworks = dockerNetworks.Where(x => x.Name.Contains("kind", StringComparison.OrdinalIgnoreCase));
           foreach (var kindNetwork in kindNetworks)
           {
+            Console.WriteLine($"► connect '{mirrorRegistry.Name}' to '{kindNetwork.Name}' network");
             string containerId = await _containerEngineProvisioner.GetContainerIdAsync(mirrorRegistry.Name, cancellationToken).ConfigureAwait(false);
-            await _containerEngineProvisioner.ConnectContainerToNetworkByNameAsync(mirrorRegistry.Name, kindNetwork.Name, cancellationToken).ConfigureAwait(false);
+            try
+            {
+              await _containerEngineProvisioner.ConnectContainerToNetworkByNameAsync(mirrorRegistry.Name, kindNetwork.Name, cancellationToken).ConfigureAwait(false);
+            }
+            catch (DockerApiException ex) when (ex.Message.Contains("already exists in network", StringComparison.OrdinalIgnoreCase))
+            {
+              Console.WriteLine($"✔ '{mirrorRegistry.Name}' is already connected to '{kindNetwork.Name}' network");
+            }
           }
         }
         Console.WriteLine($"✔ mirror registries connected to 'kind' networks");
