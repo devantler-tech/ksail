@@ -18,7 +18,7 @@
 
 Take control of Kubernetes without the chaos. ⚡ **KSail** is your all-in-one SDK for spinning up clusters and managing workloads—right from your own machine. Instead of juggling a dozen CLI tools, KSail streamlines your workflow with a single, declarative interface built on top of the Kubernetes tools you already know and trust.
 
-> Declarative. Local. Effortless. Welcome to Kubernetes, simplified.
+🌟 Declarative. Local. Effortless. Welcome to Kubernetes, simplified.
 
 ## Getting Started
 
