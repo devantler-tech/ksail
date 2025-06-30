@@ -28,6 +28,11 @@ back_to_top_text: "Back to top"
 
 footer_content: "Built by <a href=\"https://github.com/devantler\">devantler</a><br>Distributed under the <a href=\"https://opensource.org/licenses/Apache-2.0\">Apache license.</a>"
 
+readme_index:
+  enabled:          true
+  remove_originals: false
+  with_frontmatter: true
+
 exclude:
   - .github/
   - .vscode/
