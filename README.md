@@ -1,5 +1,6 @@
 ---
-title: Home
+title: Readme
+layout: default
 ---
 
 # KSail
