@@ -6,7 +6,7 @@ gem "bigdecimal", "~> 3.1"
 
 group :jekyll_plugins do
   gem 'jekyll-gfm-admonitions', '~> 1.2.0'
-  gem 'jekyll-optional-front-matter'
+  gem 'jekyll-optional-front-matter', '~> 0.3.2'
 end
 
 gem "just-the-docs", "0.10.1"
