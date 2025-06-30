@@ -4,4 +4,5 @@ layout: home
 nav_order: 0
 ---
 
-{% include_relative README.md %}
+{% capture my_include %}{% include_relative README.md %}{% endcapture %}
+{{ my_include | markdownify }}
