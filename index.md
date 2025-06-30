@@ -4,4 +4,4 @@ layout: home
 nav_order: 0
 ---
 
-{% include_relative README.md %}
+{% include_relative README.md | markdownify %}
