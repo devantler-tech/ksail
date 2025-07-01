@@ -35,6 +35,8 @@ jobs:
     steps:
       - name: 📑 Checkout
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: 📦 Setup Homebrew
         uses: Homebrew/actions/setup-homebrew@main
       - name: ⤵️ Install KSail
