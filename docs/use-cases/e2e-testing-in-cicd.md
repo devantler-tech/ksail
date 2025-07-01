@@ -68,6 +68,6 @@ name: Run Devantler's GitOps Test Workflow
 
 jobs:
   test:
-    uses: devantler-tech/workflows/.github/workflows/gitops-test@main
+    uses: devantler-tech/github-actions/.github/workflows/gitops-test@main
     secrets: inherit
 ```

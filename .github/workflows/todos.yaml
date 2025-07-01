@@ -8,5 +8,5 @@ on:
 
 jobs:
   todos:
-    uses: devantler-tech/workflows/.github/workflows/todos.yaml@main
+    uses: devantler-tech/github-actions/.github/workflows/todos.yaml@main
     secrets: inherit

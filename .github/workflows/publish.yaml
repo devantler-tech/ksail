@@ -8,7 +8,7 @@ on:
 jobs:
   # TODO: Rework publish-binaries with a generic reusable action
   publish-binaries:
-    uses: devantler-tech/workflows/.github/workflows/dotnet-application-publish.yaml@main
+    uses: devantler-tech/github-actions/.github/workflows/dotnet-application-publish.yaml@main
     secrets: inherit
 
   # TODO: Remove old publish-binaries once the new one is working
@@ -117,5 +117,5 @@ jobs:
           fork: false
   # TODO: Rework docker publish with a generic reusable action
   publish-images:
-    uses: devantler-tech/workflows/.github/workflows/image-publish.yaml@main
+    uses: devantler-tech/github-actions/.github/workflows/image-publish.yaml@main
     secrets: inherit
