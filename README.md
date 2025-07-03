@@ -1,8 +1,19 @@
+---
+title: Home
+layout: default
+---
+
 # KSail
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Test](https://github.com/devantler-tech/ksail/actions/workflows/test.yaml/badge.svg?branch=main)](https://github.com/devantler-tech/ksail/actions/workflows/test.yaml)
 [![codecov](https://codecov.io/gh/devantler-tech/ksail/graph/badge.svg?token=DNEO90PfNR)](https://codecov.io/gh/devantler-tech/ksail)
+
+> [!IMPORTANT]
+> **🆕 UP NEXT 🆕**
+>
+> 1. Support for ArgoCD as a Deployment Tool - <https://github.com/devantler-tech/ksail/pull/878>
+> 2. Support for Talos Linux as a Distribution
 
 <picture align="center">
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/ksail-cli-dark.png" style="width: 550px">
@@ -10,16 +21,26 @@
   <img alt="KSail CLI" src="docs/images/ksail-cli-dark.png" style="width: 550px">
 </picture>
 
+Take control of Kubernetes without the chaos. ⚡ **KSail** is your all-in-one SDK for spinning up clusters and managing workloads—right from your own machine. Instead of juggling a dozen CLI tools, KSail streamlines your workflow with a single, declarative interface built on top of the Kubernetes tools you already know and trust.
+
+🌟 Declarative. Local. Effortless. Welcome to Kubernetes, simplified.
+
 ## Getting Started
 
 ### Prerequisites
 
-- MacOS (amd64 and arm64)
 - Linux (amd64 and arm64)
+- MacOS (amd64 and arm64)
+- Windows (amd64 and arm64)
+  - I am unable to test Windows builds, so please report any issues you encounter.
 
 ### Installation
 
+Currently, KSail is available in two ways: via Homebrew or GitHub releases.
+
 #### Homebrew
+
+It is recommended to install KSail using [Homebrew](https://brew.sh) for easy updates and management. If you don't have Homebrew installed, you can find installation instructions on their [website](https://brew.sh).
 
 ```sh
 brew tap devantler-tech/formulas
@@ -27,6 +48,9 @@ brew install ksail
 ```
 
 #### Manually
+
+> [!WARNING]
+> If you install KSail manually, you need to ensure the dependent binaries are available in your `$PATH` for all functionality to work. These include: [age](https://github.com/FiloSottile/age#installation), [argocd](https://argo-cd.readthedocs.io/en/stable/getting_started/#2-download-argo-cd-cli), [cilium](https://docs.cilium.io/en/stable/gettingstarted/k8s-install-default/#install-the-cilium-cli), [flux](https://fluxcd.io/flux/installation/#install-the-flux-cli), [helm](https://helm.sh/docs/intro/install/), [k3d](https://k3d.io/stable/#installation), [k9s](https://k9scli.io/topics/install/), [kind](https://kind.sigs.k8s.io/docs/user/quick-start/#installation), [kubeconform](https://github.com/yannh/kubeconform?tab=readme-ov-file#installation), [kubectl](https://kubernetes.io/docs/tasks/tools/#kubectl), [kustomize](https://kubectl.docs.kubernetes.io/installation/kustomize/binaries/), [sops](https://github.com/getsops/sops/releases), [talosctl](https://www.talos.dev/latest/talos-guides/install/talosctl/)
 
 1. Download the latest release for your OS from the [releases page](https://github.com/devantler-tech/ksail/releases).
 2. Make the binary executable: `chmod +x ksail`.

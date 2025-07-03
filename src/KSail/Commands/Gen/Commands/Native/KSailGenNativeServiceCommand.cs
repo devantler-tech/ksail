@@ -9,27 +9,27 @@ namespace KSail.Commands.Gen.Commands.Native;
 class KSailGenNativeServiceCommand : Command
 {
   readonly ExceptionHandler _exceptionHandler = new();
-  readonly GenericPathOption _outputOption = new("./service.yaml");
+  readonly GenericPathOption _outputOption = new("--output", ["-o"], "./service.yaml");
   public KSailGenNativeServiceCommand() : base("service", "Generate a 'core/v1/Service' resource.")
   {
-    AddOption(_outputOption);
-    this.SetHandler(async (context) =>
+    Options.Add(_outputOption);
+    SetAction(async (parseResult, cancellationToken) =>
       {
         try
         {
-          string outputFile = context.ParseResult.GetValueForOption(_outputOption) ?? "./service.yaml";
-          bool overwrite = context.ParseResult.CommandResult.GetValueForOption(CLIOptions.Generator.OverwriteOption) ?? false;
+          string outputFile = parseResult.GetValue(_outputOption) ?? "./service.yaml";
+          bool overwrite = parseResult.CommandResult.GetValue(CLIOptions.Generator.OverwriteOption) ?? false;
           Console.WriteLine(File.Exists(outputFile) ? (overwrite ?
             $"✚ overwriting '{outputFile}'" :
             $"✔ skipping '{outputFile}', as it already exists.") :
             $"✚ generating '{outputFile}'");
           KSailGenNativeServiceCommandHandler handler = new(outputFile, overwrite);
-          context.ExitCode = await handler.HandleAsync(context.GetCancellationToken()).ConfigureAwait(false);
+          await handler.HandleAsync(cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
           _ = _exceptionHandler.HandleException(ex);
-          context.ExitCode = 1;
+
         }
       }
     );

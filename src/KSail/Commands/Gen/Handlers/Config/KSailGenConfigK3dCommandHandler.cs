@@ -1,5 +1,5 @@
-using Devantler.KubernetesGenerator.K3d;
-using Devantler.KubernetesGenerator.K3d.Models;
+using DevantlerTech.KubernetesGenerator.K3d;
+using DevantlerTech.KubernetesGenerator.K3d.Models;
 using k8s.Models;
 
 namespace KSail.Commands.Gen.Handlers.Config;
@@ -8,7 +8,7 @@ class KSailGenConfigK3dCommandHandler(string outputFile, bool overwrite) : IComm
 {
   readonly K3dConfigGenerator _generator = new();
 
-  public async Task<int> HandleAsync(CancellationToken cancellationToken = default)
+  public async Task HandleAsync(CancellationToken cancellationToken = default)
   {
     var k3dConfig = new K3dConfig
     {
@@ -19,6 +19,5 @@ class KSailGenConfigK3dCommandHandler(string outputFile, bool overwrite) : IComm
     };
 
     await _generator.GenerateAsync(k3dConfig, outputFile, overwrite, cancellationToken: cancellationToken).ConfigureAwait(false);
-    return 0;
   }
 }

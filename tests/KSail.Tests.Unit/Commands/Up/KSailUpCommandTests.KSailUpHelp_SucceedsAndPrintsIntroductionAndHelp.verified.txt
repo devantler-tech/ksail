@@ -5,12 +5,12 @@ Usage:
   testhost up [options]
 
 Options:
-  -c, --context <context>                           The kubernetes context to use. [default: kind-ksail-default]
-  -k, --kubeconfig <kubeconfig>                     Path to kubeconfig file. [default: {UserProfile}/.kube/config]
-  -t, --timeout <timeout>                           The time to wait for each kustomization to become ready. [default: 5m]
-  -n, --name <name>                                 The name of the cluster. [default: ksail-default]
-  -dc, --distribution-config <distribution-config>  Path to the distribution configuration file. [default: kind.yaml]
-  -kp, --kustomization-path <kustomization-path>    The path to the root kustomization directory. [default: k8s]
+  -c, --context                                     The kubernetes context to use. [default: kind-ksail-default]
+  -k, --kubeconfig                                  Path to kubeconfig file. [default: {UserProfile}/.kube/config]
+  -t, --timeout                                     The time to wait for each kustomization to become ready. [default: 5m]
+  -n, --name                                        The name of the cluster. [default: ksail-default]
+  -dc, --distribution-config                        The path to the distribution configuration file. [default: kind.yaml]
+  -kp, --kustomization-path                         The path to the root kustomization directory. [default: k8s]
   -ce, --container-engine <Docker|Podman>           The container engine in which to provision the cluster. [default: Docker]
   -d, --distribution <K3d|Kind>                     The distribution to use for the cluster. [default: Kind]
   -dt, --deployment-tool <Flux|Kubectl>             The Deployment tool to use for applying a kustomization. [default: Kubectl]
@@ -21,9 +21,8 @@ Options:
   -ms, --metrics-server                             Whether to install Metrics Server. [default: True]
   -mr, --mirror-registries                          Enable mirror registries for the project. [default: True]
   -sm, --secret-manager <None|SOPS>                 Whether to use a secret manager. [default: None]
-  -fsu, --flux-source-url <flux-source-url>         Flux source URL for reconciling GitOps resources. [default: oci://ksail-registry:5000/ksail-registry]
-  -v, --validate                                    Validate project files before creating a new cluster. [default: True]
-  -r, --reconcile                                   Reconcile manifests. [default: True]
+  -fsu, --flux-source-url                           Flux source URL for reconciling GitOps resources. [default: oci://ksail-registry:5000/ksail-registry]
+  -v, --validate                                    Validate project files on up. [default: True]
+  -r, --reconcile                                   Reconcile manifests on up. [default: True]
   -?, -h, --help                                    Show help and usage information
-
 

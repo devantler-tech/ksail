@@ -1,30 +1,31 @@
-using Devantler.KubernetesProvisioner.Cluster.K3d;
-using Devantler.KubernetesProvisioner.Cluster.Kind;
+using System.CommandLine;
+using System.Threading.Tasks;
+using DevantlerTech.KubernetesProvisioner.Cluster.K3d;
+using DevantlerTech.KubernetesProvisioner.Cluster.Kind;
 using KSail.Models;
 using KSail.Models.Project.Enums;
 
 namespace KSail.Commands.List.Handlers;
 
-sealed class KSailListCommandHandler(KSailCluster config) : ICommandHandler
+sealed class KSailListCommandHandler(KSailCluster config, ParseResult parseResult) : ICommandHandler
 {
   readonly KSailCluster _config = config;
   readonly K3dProvisioner _k3dProvisioner = new();
   readonly KindProvisioner _kindProvisioner = new();
 
-  public async Task<int> HandleAsync(CancellationToken cancellationToken = default)
+  public async Task HandleAsync(CancellationToken cancellationToken = default)
   {
     IEnumerable<string> clusters;
     if (_config.Spec.Distribution.ShowAllClustersInListings)
     {
       Console.WriteLine("---- K3d ----");
       clusters = [.. await _k3dProvisioner.ListAsync(cancellationToken).ConfigureAwait(false)];
-      PrintClusters(clusters);
+      await PrintClustersAsync(clusters).ConfigureAwait(false);
       Console.WriteLine();
 
       Console.WriteLine("---- Kind ----");
       clusters = [.. await _kindProvisioner.ListAsync(cancellationToken).ConfigureAwait(false)];
-      PrintClusters(clusters);
-      return 0;
+      await PrintClustersAsync(clusters).ConfigureAwait(false);
     }
     else
     {
@@ -34,19 +35,18 @@ sealed class KSailListCommandHandler(KSailCluster config) : ICommandHandler
         KSailDistributionType.Kind => await _kindProvisioner.ListAsync(cancellationToken).ConfigureAwait(false),
         _ => throw new NotSupportedException($"The container engine '{_config.Spec.Project.ContainerEngine}' and distribution '{_config.Spec.Project.Distribution}' combination is not supported.")
       };
-      PrintClusters(clusters);
-      return 0;
+      await PrintClustersAsync(clusters).ConfigureAwait(false);
     }
   }
 
-  static void PrintClusters(IEnumerable<string> clusters)
+  async Task PrintClustersAsync(IEnumerable<string> clusters)
   {
     var clusterList = clusters.ToList();
     if (clusterList.Count != 0)
     {
       foreach (string? cluster in clusterList)
       {
-        Console.WriteLine(cluster);
+        await parseResult.Configuration.Output.WriteLineAsync(cluster).ConfigureAwait(false);
       }
     }
     else

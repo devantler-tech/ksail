@@ -1,5 +1,6 @@
-using Devantler.KubernetesValidator.ClientSide.Schemas;
-using Devantler.KubernetesValidator.ClientSide.YamlSyntax;
+using System.CommandLine;
+using DevantlerTech.KubernetesValidator.ClientSide.Schemas;
+using DevantlerTech.KubernetesValidator.ClientSide.YamlSyntax;
 using KSail.Commands.Validate.Validators;
 using KSail.Models;
 
@@ -11,7 +12,7 @@ class KSailValidateCommandHandler(KSailCluster config, string path) : ICommandHa
   readonly YamlSyntaxValidator _yamlSyntaxValidator = new();
   readonly SchemaValidator _schemaValidator = new();
 
-  public async Task<int> HandleAsync(CancellationToken cancellationToken = default)
+  public async Task HandleAsync(CancellationToken cancellationToken = default)
   {
     Console.WriteLine("🔍 Validating project files and configuration...");
     if (!Directory.Exists(path) || Directory.GetFiles(path, "*.yaml", SearchOption.AllDirectories).Length == 0)
@@ -33,6 +34,5 @@ class KSailValidateCommandHandler(KSailCluster config, string path) : ICommandHa
     if (!schemasAreValid)
       throw new KSailException(schemasMessage);
     Console.WriteLine("✔ schemas are valid");
-    return yamlIsValid && schemasAreValid ? 0 : 1;
   }
 }

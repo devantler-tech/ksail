@@ -12,27 +12,26 @@ sealed class KSailStatusCommand : Command
   internal KSailStatusCommand() : base("status", "Show the status of a cluster")
   {
     AddOptions();
-    this.SetHandler(async (context) =>
+    SetAction(async (parseResult, cancellationToken) =>
     {
       try
       {
-        var config = await KSailClusterConfigLoader.LoadWithoptionsAsync(context).ConfigureAwait(false);
-        var cancellationToken = context.GetCancellationToken();
-        var handler = new KSailStatusCommandHandler(config);
-        context.ExitCode = await handler.HandleAsync(cancellationToken).ConfigureAwait(false);
+        var config = await KSailClusterConfigLoader.LoadWithoptionsAsync(parseResult).ConfigureAwait(false);
+        var handler = new KSailStatusCommandHandler(config, parseResult);
+        await handler.HandleAsync(cancellationToken).ConfigureAwait(false);
       }
       catch (Exception ex)
       {
         _ = _exceptionHandler.HandleException(ex);
-        context.ExitCode = 1;
+
       }
     });
   }
 
   internal void AddOptions()
   {
-    AddOption(CLIOptions.Connection.KubeconfigOption);
-    AddOption(CLIOptions.Connection.ContextOption);
-    AddOption(CLIOptions.Validation.VerboseOption);
+    Options.Add(CLIOptions.Connection.KubeconfigOption);
+    Options.Add(CLIOptions.Connection.ContextOption);
+    Options.Add(CLIOptions.Validation.VerboseOption);
   }
 }

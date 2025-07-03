@@ -1,12 +1,12 @@
-using Devantler.KubernetesGenerator.Kustomize;
-using Devantler.KubernetesGenerator.Kustomize.Models;
+using DevantlerTech.KubernetesGenerator.Kustomize;
+using DevantlerTech.KubernetesGenerator.Kustomize.Models;
 
 namespace KSail.Commands.Gen.Handlers.Kustomize;
 
 class KSailGenKustomizeKustomizationCommandHandler(string outputFile, bool overwrite) : ICommandHandler
 {
   readonly KustomizeKustomizationGenerator _generator = new();
-  public async Task<int> HandleAsync(CancellationToken cancellationToken = default)
+  public async Task HandleAsync(CancellationToken cancellationToken = default)
   {
     var kustomization = new KustomizeKustomization
     {
@@ -17,7 +17,6 @@ class KSailGenKustomizeKustomizationCommandHandler(string outputFile, bool overw
       Components = []
     };
     await _generator.GenerateAsync(kustomization, outputFile, overwrite, cancellationToken: cancellationToken).ConfigureAwait(false);
-    return 0;
   }
 }
 

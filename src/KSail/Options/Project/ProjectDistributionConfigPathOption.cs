@@ -5,7 +5,14 @@ namespace KSail.Options.Project;
 
 
 
-class ProjectDistributionConfigPathOption(KSailCluster config) : Option<string?>(
-  ["--distribution-config", "-dc"],
-  $"Path to the distribution configuration file. [default: {config.Spec.Project.DistributionConfigPath}]"
-);
+class ProjectDistributionConfigPathOption : Option<string?>
+{
+  public ProjectDistributionConfigPathOption(KSailCluster config) : base(
+    "--distribution-config", "-dc"
+  )
+  {
+    Description = "The path to the distribution configuration file.";
+    DefaultValueFactory = (result) => config.Spec.Project.DistributionConfigPath;
+  }
+}
+

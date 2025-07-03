@@ -4,7 +4,14 @@ using KSail.Models;
 namespace KSail.Options.SecretManager;
 
 
-class SecretManagerSOPSPublicKeyOption(KSailCluster cluster) : Option<string?>(
-  ["--public-key", "-pk"],
-  $"The public key. [default: {cluster.Spec.SecretManager.SOPS.PublicKey}]"
-);
+class SecretManagerSOPSPublicKeyOption : Option<string?>
+{
+  public SecretManagerSOPSPublicKeyOption(KSailCluster cluster) : base(
+    "--public-key", "-pk"
+  )
+  {
+    Description = "The public key to use.";
+    DefaultValueFactory = (result) => cluster.Spec.SecretManager.SOPS.PublicKey;
+  }
+}
+

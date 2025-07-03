@@ -1,4 +1,5 @@
-using Devantler.KubernetesGenerator.Native;
+using System.CommandLine;
+using DevantlerTech.KubernetesGenerator.Native;
 using k8s.Models;
 
 namespace KSail.Commands.Gen.Handlers.Native;
@@ -7,7 +8,7 @@ class KSailGenNativeRoleCommandHandler(string outputFile, bool overwrite) : ICom
 {
   readonly RoleGenerator _generator = new();
 
-  public async Task<int> HandleAsync(CancellationToken cancellationToken = default)
+  public async Task HandleAsync(CancellationToken cancellationToken = default)
   {
     var model = new V1Role()
     {
@@ -28,6 +29,5 @@ class KSailGenNativeRoleCommandHandler(string outputFile, bool overwrite) : ICom
       ]
     };
     await _generator.GenerateAsync(model, outputFile, overwrite, cancellationToken: cancellationToken).ConfigureAwait(false);
-    return 0;
   }
 }

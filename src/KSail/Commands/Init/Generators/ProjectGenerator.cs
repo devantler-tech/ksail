@@ -1,5 +1,5 @@
-using Devantler.KubernetesGenerator.Kustomize;
-using Devantler.KubernetesGenerator.Kustomize.Models;
+using DevantlerTech.KubernetesGenerator.Kustomize;
+using DevantlerTech.KubernetesGenerator.Kustomize.Models;
 using KSail.Models;
 
 namespace KSail.Commands.Init.Generators;

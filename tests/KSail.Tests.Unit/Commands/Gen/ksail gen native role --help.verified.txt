@@ -1,0 +1,11 @@
+﻿Description:
+  Generate a 'rbac.authorization.k8s.io/v1/Role' resource.
+
+Usage:
+  testhost gen native role [options]
+
+Options:
+  -o, --output    A file or directory path. [default: ./role.yaml]
+  --overwrite     Overwrite existing files. [default: False]
+  -?, -h, --help  Show help and usage information
+

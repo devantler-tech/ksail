@@ -1,9 +1,10 @@
+using System.CommandLine;
 using System.ComponentModel;
-using Devantler.ContainerEngineProvisioner.Core;
-using Devantler.ContainerEngineProvisioner.Docker;
-using Devantler.KubernetesProvisioner.Cluster.Core;
-using Devantler.KubernetesProvisioner.Cluster.K3d;
-using Devantler.KubernetesProvisioner.Cluster.Kind;
+using DevantlerTech.ContainerEngineProvisioner.Core;
+using DevantlerTech.ContainerEngineProvisioner.Docker;
+using DevantlerTech.KubernetesProvisioner.Cluster.Core;
+using DevantlerTech.KubernetesProvisioner.Cluster.K3d;
+using DevantlerTech.KubernetesProvisioner.Cluster.Kind;
 using k8s.KubeConfigModels;
 using KSail.Factories;
 using KSail.Managers;
@@ -17,11 +18,10 @@ class KSailDownCommandHandler(KSailCluster config) : ICommandHandler
   readonly ClusterManager _clusterManager = new(config);
   readonly MirrorRegistryManager _mirrorRegistryManager = new(config);
 
-  public async Task<int> HandleAsync(CancellationToken cancellationToken = default)
+  public async Task HandleAsync(CancellationToken cancellationToken = default)
   {
     Console.WriteLine($"🔥 Destroying cluster...");
     await _clusterManager.CleanupAsync(cancellationToken).ConfigureAwait(false);
     await _mirrorRegistryManager.CleanupAsync(cancellationToken).ConfigureAwait(false);
-    return 0;
   }
 }

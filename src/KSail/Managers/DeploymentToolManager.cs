@@ -1,6 +1,6 @@
-using Devantler.KubernetesProvisioner.Deployment.Core;
-using Devantler.KubernetesProvisioner.GitOps.Core;
-using Devantler.KubernetesProvisioner.Resources.Native;
+using DevantlerTech.KubernetesProvisioner.Deployment.Core;
+using DevantlerTech.KubernetesProvisioner.GitOps.Core;
+using DevantlerTech.KubernetesProvisioner.Resources.Native;
 using KSail.Commands.Up.Extensions;
 using KSail.Factories;
 using KSail.Models;

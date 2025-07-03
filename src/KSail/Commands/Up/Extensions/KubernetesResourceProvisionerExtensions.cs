@@ -1,5 +1,5 @@
 using System.Threading.Tasks;
-using Devantler.KubernetesProvisioner.Resources.Native;
+using DevantlerTech.KubernetesProvisioner.Resources.Native;
 using k8s;
 using k8s.Models;
 

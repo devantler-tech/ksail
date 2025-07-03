@@ -1,6 +1,6 @@
 using System.Reflection.Metadata;
 using System.Threading.Tasks;
-using Devantler.HelmCLI;
+using DevantlerTech.HelmCLI;
 using KSail;
 using KSail.HelmInstallers;
 using KSail.Models;

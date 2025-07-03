@@ -3,8 +3,15 @@ using KSail.Models;
 
 namespace KSail.Options.Publication;
 
-class PublicationPublishOnUpdateOption(KSailCluster config) : Option<bool?>(
-  ["--publish", "-p"],
-  $"Publish manifests. [default: {config.Spec.Publication.PublishOnUpdate}]"
-);
+class PublicationPublishOnUpdateOption : Option<bool?>
+{
+  public PublicationPublishOnUpdateOption(KSailCluster config) : base(
+    "--publish", "-p"
+  )
+  {
+    Description = "Whether to publish manifests on update.";
+    DefaultValueFactory = (result) => config.Spec.Publication.PublishOnUpdate;
+  }
+}
+
 

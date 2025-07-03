@@ -35,12 +35,14 @@ jobs:
     steps:
       - name: 📑 Checkout
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: 📦 Setup Homebrew
+        uses: Homebrew/actions/setup-homebrew@main
       - name: ⤵️ Install KSail
         run: |
-          version=$(curl -s https://api.github.com/repos/devantler-tech/ksail/releases/latest | jq -r .tag_name)
-          curl -L -o ksail https://github.com/devantler-tech/ksail/releases/download/$version/ksail-linux-amd64
-          chmod +x ksail
-          sudo mv ksail /usr/local/bin/ksail
+          brew tap devantler-tech/formulas
+          brew install ksail
       - name: 🔑 Import Age key
         env:
           KSAIL_SOPS_KEY: ${{ secrets.KSAIL_SOPS_KEY }}
@@ -66,6 +68,6 @@ name: Run Devantler's GitOps Test Workflow
 
 jobs:
   test:
-    uses: devantler-tech/workflows/.github/workflows/gitops-test@main
+    uses: devantler-tech/github-actions/.github/workflows/gitops-test@main
     secrets: inherit
 ```

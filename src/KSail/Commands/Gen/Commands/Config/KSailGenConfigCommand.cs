@@ -9,9 +9,9 @@ class KSailGenConfigCommand : Command
 
   void AddCommands()
   {
-    AddCommand(new KSailGenConfigK3dCommand());
-    AddCommand(new KSailGenConfigKSailCommand());
-    AddCommand(new KSailGenConfigSOPSCommand());
+    Subcommands.Add(new KSailGenConfigK3dCommand());
+    Subcommands.Add(new KSailGenConfigKSailCommand());
+    Subcommands.Add(new KSailGenConfigSOPSCommand());
   }
 }
 

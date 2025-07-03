@@ -1,7 +1,7 @@
 using System.Text.RegularExpressions;
-using Devantler.KubernetesGenerator.Core;
-using Devantler.KubernetesGenerator.Core.Converters;
-using Devantler.KubernetesGenerator.Core.Inspectors;
+using DevantlerTech.KubernetesGenerator.Core;
+using DevantlerTech.KubernetesGenerator.Core.Converters;
+using DevantlerTech.KubernetesGenerator.Core.Inspectors;
 using KSail.Models;
 using KSail.Models.Project.Enums;
 using YamlDotNet.Serialization;

@@ -9,18 +9,18 @@ namespace KSail.Commands.Gen.Commands.CertManager;
 class KSailGenCertManagerClusterIssuerCommand : Command
 {
   readonly ExceptionHandler _exceptionHandler = new();
-  readonly GenericPathOption _outputOption = new("./cluster-issuer.yaml");
+  readonly GenericPathOption _outputOption = new("--output", ["-o"], "./cluster-issuer.yaml");
 
   public KSailGenCertManagerClusterIssuerCommand() : base("cluster-issuer", "Generate a 'cert-manager.io/v1/ClusterIssuer' resource.")
   {
-    AddOption(_outputOption);
+    Options.Add(_outputOption);
 
-    this.SetHandler(async (context) =>
+    SetAction(async (parseResult, cancellationToken) =>
       {
         try
         {
-          string outputFile = context.ParseResult.CommandResult.GetValueForOption(_outputOption) ?? "./cluster-issuer.yaml";
-          bool overwrite = context.ParseResult.CommandResult.GetValueForOption(CLIOptions.Generator.OverwriteOption) ?? false;
+          string outputFile = parseResult.CommandResult.GetValue(_outputOption) ?? "./cluster-issuer.yaml";
+          bool overwrite = parseResult.CommandResult.GetValue(CLIOptions.Generator.OverwriteOption) ?? false;
           Console.WriteLine(File.Exists(outputFile) ? (overwrite ?
             $"✚ overwriting '{outputFile}'" :
             $"✔ skipping '{outputFile}', as it already exists.") :
@@ -30,12 +30,12 @@ class KSailGenCertManagerClusterIssuerCommand : Command
             return;
           }
           var handler = new KSailGenCertManagerClusterIssuerCommandHandler(outputFile, overwrite);
-          context.ExitCode = await handler.HandleAsync(context.GetCancellationToken()).ConfigureAwait(false);
+          await handler.HandleAsync(cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
           _ = _exceptionHandler.HandleException(ex);
-          context.ExitCode = 1;
+
         }
       }
     );

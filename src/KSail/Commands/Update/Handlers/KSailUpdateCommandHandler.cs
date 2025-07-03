@@ -1,8 +1,9 @@
-using Devantler.KubernetesProvisioner.Deployment.Core;
-using Devantler.KubernetesProvisioner.Deployment.Kubectl;
-using Devantler.KubernetesProvisioner.GitOps.ArgoCD;
-using Devantler.KubernetesProvisioner.GitOps.Core;
-using Devantler.KubernetesProvisioner.GitOps.Flux;
+using System.CommandLine;
+using DevantlerTech.KubernetesProvisioner.Deployment.Core;
+using DevantlerTech.KubernetesProvisioner.Deployment.Kubectl;
+using DevantlerTech.KubernetesProvisioner.GitOps.ArgoCD;
+using DevantlerTech.KubernetesProvisioner.GitOps.Core;
+using DevantlerTech.KubernetesProvisioner.GitOps.Flux;
 using KSail.Commands.Validate.Handlers;
 using KSail.Factories;
 using KSail.Models;
@@ -22,12 +23,9 @@ class KSailUpdateCommandHandler : ICommandHandler
     _config = config;
   }
 
-  public async Task<int> HandleAsync(CancellationToken cancellationToken = default)
+  public async Task HandleAsync(CancellationToken cancellationToken = default)
   {
-    if (!await Validate(cancellationToken).ConfigureAwait(false))
-    {
-      return 1;
-    }
+    _ = await Validate(_config, cancellationToken).ConfigureAwait(false);
     string manifestDirectory = _config.Spec.Project.KustomizationPath
       .Replace("./", string.Empty, StringComparison.OrdinalIgnoreCase)
       .Split('/', StringSplitOptions.RemoveEmptyEntries).First();
@@ -53,17 +51,14 @@ class KSailUpdateCommandHandler : ICommandHandler
       await _deploymentTool.ReconcileAsync(manifestDirectory, _config.Spec.Connection.Timeout, cancellationToken).ConfigureAwait(false);
       Console.WriteLine("✔ reconciliation completed");
     }
-
-    return 0;
   }
 
   async Task<bool> Validate(CancellationToken cancellationToken = default)
   {
     if (_config.Spec.Validation.ValidateOnUpdate)
     {
-      bool success = await _ksailValidateCommandHandler.HandleAsync(cancellationToken).ConfigureAwait(false) == 0;
+      await _ksailValidateCommandHandler.HandleAsync(cancellationToken).ConfigureAwait(false);
       Console.WriteLine();
-      return success;
     }
     return true;
   }

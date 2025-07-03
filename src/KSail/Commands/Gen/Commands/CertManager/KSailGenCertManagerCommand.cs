@@ -9,7 +9,7 @@ class KSailGenCertManagerCommand : Command
 
   void AddCommands()
   {
-    AddCommand(new KSailGenCertManagerCertificateCommand());
-    AddCommand(new KSailGenCertManagerClusterIssuerCommand());
+    Subcommands.Add(new KSailGenCertManagerCertificateCommand());
+    Subcommands.Add(new KSailGenCertManagerClusterIssuerCommand());
   }
 }

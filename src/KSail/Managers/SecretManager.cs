@@ -1,8 +1,8 @@
 using System.Text;
-using Devantler.Keys.Age;
-using Devantler.KubernetesProvisioner.Resources.Native;
-using Devantler.SecretManager.Core;
-using Devantler.SecretManager.SOPS.LocalAge;
+using DevantlerTech.Keys.Age;
+using DevantlerTech.KubernetesProvisioner.Resources.Native;
+using DevantlerTech.SecretManager.Core;
+using DevantlerTech.SecretManager.SOPS.LocalAge;
 using k8s;
 using k8s.Models;
 using KSail;

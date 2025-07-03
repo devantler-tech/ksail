@@ -14,26 +14,26 @@ sealed class KSailConnectCommand : Command
   internal KSailConnectCommand() : base("connect", "Connect to a cluster with K9s")
   {
     AddOptions();
-    this.SetHandler(async (context) =>
+    SetAction(async (parseResult, cancellationToken) =>
     {
       try
       {
-        var config = await KSailClusterConfigLoader.LoadWithoptionsAsync(context).ConfigureAwait(false);
+        var config = await KSailClusterConfigLoader.LoadWithoptionsAsync(parseResult).ConfigureAwait(false);
         var handler = new KSailConnectCommandHandler(config);
-        context.ExitCode = await handler.HandleAsync(context.GetCancellationToken()).ConfigureAwait(false);
+        await handler.HandleAsync(cancellationToken).ConfigureAwait(false);
       }
       catch (Exception ex)
       {
         _ = _exceptionHandler.HandleException(ex);
-        context.ExitCode = 1;
+
       }
     });
   }
 
   internal void AddOptions()
   {
-    AddOption(CLIOptions.Connection.KubeconfigOption);
-    AddOption(CLIOptions.Connection.ContextOption);
-    AddOption(CLIOptions.Project.EditorOption);
+    Options.Add(CLIOptions.Connection.KubeconfigOption);
+    Options.Add(CLIOptions.Connection.ContextOption);
+    Options.Add(CLIOptions.Project.EditorOption);
   }
 }

@@ -1,13 +1,13 @@
-using Devantler.KubernetesGenerator.Flux;
-using Devantler.KubernetesGenerator.Flux.Models;
-using Devantler.KubernetesGenerator.Flux.Models.Kustomization;
+using DevantlerTech.KubernetesGenerator.Flux;
+using DevantlerTech.KubernetesGenerator.Flux.Models;
+using DevantlerTech.KubernetesGenerator.Flux.Models.Kustomization;
 
 namespace KSail.Commands.Gen.Handlers.Flux;
 
 class KSailGenFluxKustomizationCommandHandler(string outputFile, bool overwrite) : ICommandHandler
 {
   readonly FluxKustomizationGenerator _generator = new();
-  public async Task<int> HandleAsync(CancellationToken cancellationToken = default)
+  public async Task HandleAsync(CancellationToken cancellationToken = default)
   {
     var fluxKustomization = new FluxKustomization
     {
@@ -32,6 +32,5 @@ class KSailGenFluxKustomizationCommandHandler(string outputFile, bool overwrite)
     };
 
     await _generator.GenerateAsync(fluxKustomization, outputFile, overwrite, cancellationToken: cancellationToken).ConfigureAwait(false);
-    return 0;
   }
 }

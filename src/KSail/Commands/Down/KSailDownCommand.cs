@@ -11,19 +11,19 @@ sealed class KSailDownCommand : Command
   internal KSailDownCommand() : base("down", "Destroy a cluster")
   {
     AddOptions();
-    this.SetHandler(async (context) =>
+    SetAction(async (parseResult, cancellationToken) =>
     {
       try
       {
-        var config = await KSailClusterConfigLoader.LoadWithoptionsAsync(context).ConfigureAwait(false);
+        var config = await KSailClusterConfigLoader.LoadWithoptionsAsync(parseResult).ConfigureAwait(false);
 
         var handler = new KSailDownCommandHandler(config);
-        context.ExitCode = await handler.HandleAsync(context.GetCancellationToken()).ConfigureAwait(false);
+        await handler.HandleAsync(cancellationToken).ConfigureAwait(false);
       }
       catch (Exception ex)
       {
         _ = _exceptionHandler.HandleException(ex);
-        context.ExitCode = 1;
+
       }
     });
   }
@@ -31,10 +31,10 @@ sealed class KSailDownCommand : Command
   internal void AddOptions()
   {
     //AddOptions(CLIOptions.MirrorRegistries.MirrorRegistryOption);
-    AddOption(CLIOptions.DeploymentTool.Flux.SourceOption);
-    AddOption(CLIOptions.Metadata.NameOption);
-    AddOption(CLIOptions.Project.DistributionOption);
-    AddOption(CLIOptions.Project.ContainerEngineOption);
-    AddOption(CLIOptions.Project.MirrorRegistriesOption);
+    Options.Add(CLIOptions.DeploymentTool.Flux.SourceOption);
+    Options.Add(CLIOptions.Metadata.NameOption);
+    Options.Add(CLIOptions.Project.DistributionOption);
+    Options.Add(CLIOptions.Project.ContainerEngineOption);
+    Options.Add(CLIOptions.Project.MirrorRegistriesOption);
   }
 }

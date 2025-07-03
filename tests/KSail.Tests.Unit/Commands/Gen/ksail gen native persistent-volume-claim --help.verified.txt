@@ -1,0 +1,11 @@
+﻿Description:
+  Generate a 'core/v1/PersistentVolumeClaim' resource.
+
+Usage:
+  testhost gen native persistent-volume-claim [options]
+
+Options:
+  -o, --output    A file or directory path. [default: ./persistent-volume-claim.yaml]
+  --overwrite     Overwrite existing files. [default: False]
+  -?, -h, --help  Show help and usage information
+

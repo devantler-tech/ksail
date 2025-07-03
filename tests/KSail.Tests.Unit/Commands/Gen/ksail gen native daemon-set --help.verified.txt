@@ -1,0 +1,11 @@
+﻿Description:
+  Generate a 'apps/v1/DaemonSet' resource.
+
+Usage:
+  testhost gen native daemon-set [options]
+
+Options:
+  -o, --output    A file or directory path. [default: ./daemon-set.yaml]
+  --overwrite     Overwrite existing files. [default: False]
+  -?, -h, --help  Show help and usage information
+

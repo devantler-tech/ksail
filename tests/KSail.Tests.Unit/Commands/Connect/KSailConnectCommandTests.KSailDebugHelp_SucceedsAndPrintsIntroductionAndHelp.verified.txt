@@ -5,9 +5,8 @@ Usage:
   testhost connect [options]
 
 Options:
-  -k, --kubeconfig <kubeconfig>  Path to kubeconfig file. [default: {UserProfile}/.kube/config]
-  -c, --context <context>        The kubernetes context to use. [default: kind-ksail-default]
-  -e, --editor <Nano|Vim>        Editor to use. [default: Nano]
-  --helpz                        Show help and usage information
-
+  -k, --kubeconfig         Path to kubeconfig file. [default: {UserProfile}/.kube/config]
+  -c, --context            The kubernetes context to use. [default: kind-ksail-default]
+  -e, --editor <Nano|Vim>  The editor to use for editing files from the CLI. [default: Nano]
+  -?, -h, --help           Show help and usage information
 

@@ -7,9 +7,9 @@ namespace KSail.Commands.Validate;
 
 sealed class KSailValidateCommand : Command
 {
-  readonly GenericPathOption _pathOption = new("./", ["-p", "--path"])
+  readonly GenericPathOption _pathOption = new("--path", ["-p"], "./")
   {
-    Description = "Path to the project files. [default: ./]"
+    Description = "Path to the project files."
   };
 
   readonly ExceptionHandler _exceptionHandler = new();
@@ -17,20 +17,21 @@ sealed class KSailValidateCommand : Command
    "validate", "Validate project files"
   )
   {
-    AddOption(_pathOption);
-    this.SetHandler(async (context) =>
+    Options.Add(_pathOption);
+    SetAction(async (parseResult, cancellationToken) =>
     {
       try
       {
-        string path = context.ParseResult.GetValueForOption(_pathOption) ?? "./";
-        var config = await KSailClusterConfigLoader.LoadWithoptionsAsync(context, path).ConfigureAwait(false);
+        string path = parseResult.GetValue(_pathOption) ?? "./";
+        var config = await KSailClusterConfigLoader.LoadWithoptionsAsync(parseResult, path).ConfigureAwait(false);
         var handler = new KSailValidateCommandHandler(config, path);
-        context.ExitCode = await handler.HandleAsync(context.GetCancellationToken()).ConfigureAwait(false);
+        await handler.HandleAsync(cancellationToken).ConfigureAwait(false);
+        return 0;
       }
       catch (Exception ex)
       {
         _ = _exceptionHandler.HandleException(ex);
-        context.ExitCode = 1;
+        return 1;
       }
     });
   }

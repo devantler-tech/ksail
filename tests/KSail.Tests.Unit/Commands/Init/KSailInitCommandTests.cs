@@ -1,10 +1,8 @@
 using System.Collections.ObjectModel;
 using System.CommandLine;
-using System.CommandLine.Builder;
-using System.CommandLine.IO;
 using System.CommandLine.Parsing;
 using System.Text.RegularExpressions;
-using Devantler.SecretManager.SOPS.LocalAge;
+using DevantlerTech.SecretManager.SOPS.LocalAge;
 using KSail.Commands.Root;
 using KSail.Utils;
 
@@ -12,35 +10,27 @@ namespace KSail.Tests.Commands.Init;
 
 public partial class KSailInitCommandTests
 {
-  readonly TestConsole _console;
-  readonly Parser _ksailCommand;
+  readonly Command _ksailCommand;
 
-  public KSailInitCommandTests()
-  {
-    _console = new TestConsole();
-    _ksailCommand = new CommandLineBuilder(new KSailRootCommand(_console))
-      .UseVersionOption()
-      .UseHelp("--helpz")
-      .UseEnvironmentVariableDirective()
-      .UseParseDirective()
-      .UseSuggestDirective()
-      .RegisterWithDotnetSuggest()
-      .UseTypoCorrections()
-      .UseParseErrorReporting()
-      .UseExceptionHandler()
-      .CancelOnProcessTermination()
-      .Build();
-  }
+  public KSailInitCommandTests() => _ksailCommand = new KSailRootCommand();
 
   [Fact]
   public async Task KSailInitHelp_SucceedsAndPrintsIntroductionAndHelp()
   {
     //Act
-    int exitCode = await _ksailCommand.InvokeAsync(["init", "--helpz"], _console);
+    var outputWriter = new StringWriter();
+    var errorWriter = new StringWriter();
+    using var cts = new CancellationTokenSource();
+    var commandLineConfiguration = new CommandLineConfiguration(_ksailCommand)
+    {
+      Output = outputWriter,
+      Error = errorWriter
+    };
+    int exitCode = await _ksailCommand.Parse(["init", "--help"], commandLineConfiguration).InvokeAsync(cts.Token);
 
     //Assert
     Assert.Equal(0, exitCode);
-    _ = await Verify(_console.Error.ToString() + _console.Out);
+    _ = await Verify(errorWriter.ToString() + outputWriter.ToString());
   }
 
 
@@ -94,7 +84,15 @@ public partial class KSailInitCommandTests
     string outputDir = args[2];
 
     //Act
-    int exitCode = await _ksailCommand.InvokeAsync(args).ConfigureAwait(false);
+    var outputWriter = new StringWriter();
+    var errorWriter = new StringWriter();
+    using var cts = new CancellationTokenSource();
+    var commandLineConfiguration = new CommandLineConfiguration(_ksailCommand)
+    {
+      Output = outputWriter,
+      Error = errorWriter
+    };
+    int exitCode = await _ksailCommand.Parse(args, commandLineConfiguration).InvokeAsync(cts.Token).ConfigureAwait(false);
 
     //Assert
     Assert.Equal(0, exitCode);

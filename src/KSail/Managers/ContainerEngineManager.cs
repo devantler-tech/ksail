@@ -1,5 +1,5 @@
-using Devantler.ContainerEngineProvisioner.Core;
-using Devantler.KubernetesProvisioner.Cluster.Core;
+using DevantlerTech.ContainerEngineProvisioner.Core;
+using DevantlerTech.KubernetesProvisioner.Cluster.Core;
 using KSail;
 using KSail.Commands.Validate.Handlers;
 using KSail.Factories;

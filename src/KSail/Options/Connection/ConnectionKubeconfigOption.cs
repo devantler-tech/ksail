@@ -4,7 +4,13 @@ using KSail.Models;
 namespace KSail.Options.Connection;
 
 
-class ConnectionKubeconfigOption(KSailCluster config) : Option<string?>(
-  ["-k", "--kubeconfig"],
-  $"Path to kubeconfig file. [default: {config.Spec.Connection.Kubeconfig}]"
-);
+class ConnectionKubeconfigOption : Option<string?>
+{
+  public ConnectionKubeconfigOption(KSailCluster config) : base(
+    "-k", "--kubeconfig"
+  )
+  {
+    Description = "Path to kubeconfig file.";
+    DefaultValueFactory = (result) => config.Spec.Connection.Kubeconfig;
+  }
+}

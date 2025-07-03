@@ -1,6 +1,6 @@
-using Devantler.ContainerEngineProvisioner.Core;
-using Devantler.ContainerEngineProvisioner.Docker;
-using Devantler.ContainerEngineProvisioner.Podman;
+using DevantlerTech.ContainerEngineProvisioner.Core;
+using DevantlerTech.ContainerEngineProvisioner.Docker;
+using DevantlerTech.ContainerEngineProvisioner.Podman;
 using Docker.DotNet;
 using KSail;
 using KSail.Factories;
@@ -40,7 +40,6 @@ class GitOpsSourceManager(KSailCluster config) : IBootstrapManager
     switch ((config.Spec.Project.Distribution, config.Spec.Project.DeploymentTool))
     {
       case (KSailDistributionType.Kind, KSailDeploymentToolType.Flux):
-        Console.WriteLine($"► connect OCI source registry to 'kind-{config.Metadata.Name}' network");
         var dockerClient = _containerEngineProvisioner switch
         {
           DockerProvisioner dockerProvisioner => dockerProvisioner.Client,
@@ -51,13 +50,21 @@ class GitOpsSourceManager(KSailCluster config) : IBootstrapManager
         var kindNetworks = dockerNetworks.Where(x => x.Name.Contains("kind", StringComparison.OrdinalIgnoreCase));
         foreach (var kindNetwork in kindNetworks)
         {
+          Console.WriteLine($"► connect OCI source registry to '{kindNetwork.Name}' network");
           string containerName = config.Spec.DeploymentTool.Flux.Source.Url.Segments.Last();
           if (kindNetwork.Containers.Values.Any(x => x.Name == containerName))
             continue;
           string containerId = await _containerEngineProvisioner.GetContainerIdAsync(containerName, cancellationToken).ConfigureAwait(false);
-          await _containerEngineProvisioner.ConnectContainerToNetworkByNameAsync(containerName, kindNetwork.Name, cancellationToken).ConfigureAwait(false);
+          try
+          {
+            await _containerEngineProvisioner.ConnectContainerToNetworkByNameAsync(containerName, kindNetwork.Name, cancellationToken).ConfigureAwait(false);
+            Console.WriteLine($"✔ OCI source registry connected to '{kindNetwork.Name}' network");
+          }
+          catch (DockerApiException ex) when (ex.Message.Contains("already exists in network", StringComparison.OrdinalIgnoreCase))
+          {
+            Console.WriteLine($"✔ OCI source registry is already connected to '{kindNetwork.Name}' network");
+          }
         }
-        Console.WriteLine("✔ OCI source registry connected to 'kind' networks");
         break;
       default:
         break;

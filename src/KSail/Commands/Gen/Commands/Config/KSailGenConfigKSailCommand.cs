@@ -9,16 +9,16 @@ namespace KSail.Commands.Gen.Commands.Config;
 class KSailGenConfigKSailCommand : Command
 {
   readonly ExceptionHandler _exceptionHandler = new();
-  readonly GenericPathOption _outputOption = new("./ksail.yaml");
+  readonly GenericPathOption _outputOption = new("--output", ["-o"], "./ksail.yaml");
   public KSailGenConfigKSailCommand() : base("ksail", "Generate a 'ksail.io/v1alpha1/Cluster' resource.")
   {
-    AddOption(_outputOption);
-    this.SetHandler(async (context) =>
+    Options.Add(_outputOption);
+    SetAction(async (parseResult, cancellationToken) =>
       {
         try
         {
-          string outputFile = context.ParseResult.GetValueForOption(_outputOption) ?? "./ksail.yaml";
-          bool overwrite = context.ParseResult.CommandResult.GetValueForOption(CLIOptions.Generator.OverwriteOption) ?? false;
+          string outputFile = parseResult.GetValue(_outputOption) ?? "./ksail.yaml";
+          bool overwrite = parseResult.CommandResult.GetValue(CLIOptions.Generator.OverwriteOption) ?? false;
           Console.WriteLine(File.Exists(outputFile) ? (overwrite ?
             $"✚ overwriting '{outputFile}'" :
             $"✔ skipping '{outputFile}', as it already exists.") :
@@ -28,12 +28,12 @@ class KSailGenConfigKSailCommand : Command
             return;
           }
           var handler = new KSailGenConfigKSailCommandHandler(outputFile, overwrite);
-          context.ExitCode = await handler.HandleAsync(context.GetCancellationToken()).ConfigureAwait(false);
+          await handler.HandleAsync(cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
           _ = _exceptionHandler.HandleException(ex);
-          context.ExitCode = 1;
+
         }
       }
     );

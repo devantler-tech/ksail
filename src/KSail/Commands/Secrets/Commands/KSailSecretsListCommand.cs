@@ -1,5 +1,5 @@
 using System.CommandLine;
-using Devantler.SecretManager.SOPS.LocalAge;
+using DevantlerTech.SecretManager.SOPS.LocalAge;
 using KSail.Commands.Secrets.Handlers;
 using KSail.Models.Project.Enums;
 using KSail.Options;
@@ -14,27 +14,26 @@ sealed class KSailSecretsListCommand : Command
   {
     AddOptions();
 
-    this.SetHandler(async (context) =>
+    SetAction(async (parseResult, cancellationToken) =>
     {
       try
       {
-        var config = await KSailClusterConfigLoader.LoadWithoptionsAsync(context).ConfigureAwait(false);
+        var config = await KSailClusterConfigLoader.LoadWithoptionsAsync(parseResult).ConfigureAwait(false);
 
-        var cancellationToken = context.GetCancellationToken();
-        var handler = new KSailSecretsListCommandHandler(config, new SOPSLocalAgeSecretManager());
-        context.ExitCode = await handler.HandleAsync(cancellationToken).ConfigureAwait(false);
+        var handler = new KSailSecretsListCommandHandler(config, new SOPSLocalAgeSecretManager(), parseResult);
+        await handler.HandleAsync(cancellationToken).ConfigureAwait(false);
       }
       catch (Exception ex)
       {
         _ = _exceptionHandler.HandleException(ex);
-        context.ExitCode = 1;
+
       }
     });
   }
 
   void AddOptions()
   {
-    AddOption(CLIOptions.SecretManager.SOPS.ShowPrivateKeysInListingsOption);
-    AddOption(CLIOptions.SecretManager.SOPS.ShowAllKeysInListingsOption);
+    Options.Add(CLIOptions.SecretManager.SOPS.ShowPrivateKeysInListingsOption);
+    Options.Add(CLIOptions.SecretManager.SOPS.ShowAllKeysInListingsOption);
   }
 }

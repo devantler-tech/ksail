@@ -9,7 +9,7 @@ class KSailGenKustomizeCommand : Command
 
   void AddCommands()
   {
-    AddCommand(new KSailGenKustomizeComponentCommand());
-    AddCommand(new KSailGenKustomizeKustomizationCommand());
+    Subcommands.Add(new KSailGenKustomizeComponentCommand());
+    Subcommands.Add(new KSailGenKustomizeKustomizationCommand());
   }
 }

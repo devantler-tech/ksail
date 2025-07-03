@@ -7,9 +7,9 @@ namespace KSail.Commands.Init;
 
 sealed class KSailInitCommand : Command
 {
-  readonly GenericPathOption _outputPathOption = new("./", ["-o", "--output"])
+  readonly GenericPathOption _outputPathOption = new("--output", ["-o"], "./")
   {
-    Description = "Output directory for the project files. [default: ./]"
+    Description = "Output directory for the project files."
   };
   readonly ExceptionHandler _exceptionHandler = new();
 
@@ -17,41 +17,41 @@ sealed class KSailInitCommand : Command
   {
     AddOptions();
 
-    this.SetHandler(async (context) =>
+    SetAction(async (parseResult, cancellationToken) =>
     {
       try
       {
-        string outputPath = context.ParseResult.CommandResult.GetValueForOption(_outputPathOption) ?? "./";
-        var config = await KSailClusterConfigLoader.LoadWithoptionsAsync(context).ConfigureAwait(false);
+        string outputPath = parseResult.CommandResult.GetValue(_outputPathOption) ?? "./";
+        var config = await KSailClusterConfigLoader.LoadWithoptionsAsync(parseResult).ConfigureAwait(false);
         var handler = new KSailInitCommandHandler(outputPath, config);
-        context.ExitCode = await handler.HandleAsync(context.GetCancellationToken()).ConfigureAwait(false);
+        await handler.HandleAsync(cancellationToken).ConfigureAwait(false);
       }
       catch (Exception ex)
       {
         _ = _exceptionHandler.HandleException(ex);
-        context.ExitCode = 1;
+
       }
     });
   }
 
   void AddOptions()
   {
-    AddOption(_outputPathOption);
-    AddOption(CLIOptions.Metadata.NameOption);
-    AddOption(CLIOptions.Project.ConfigPathOption);
-    AddOption(CLIOptions.Project.DistributionConfigPathOption);
-    AddOption(CLIOptions.Project.KustomizationPathOption);
-    AddOption(CLIOptions.Project.ContainerEngineOption);
-    AddOption(CLIOptions.Project.DistributionOption);
-    AddOption(CLIOptions.Project.DeploymentToolOption);
-    AddOption(CLIOptions.Project.CNIOption);
-    AddOption(CLIOptions.Project.CSIOption);
-    AddOption(CLIOptions.Project.IngressControllerOption);
-    AddOption(CLIOptions.Project.GatewayControllerOption);
-    AddOption(CLIOptions.Project.MetricsServerOption);
-    AddOption(CLIOptions.Project.MirrorRegistriesOption);
-    AddOption(CLIOptions.Project.SecretManagerOption);
-    AddOption(CLIOptions.Project.EditorOption);
-    AddOption(CLIOptions.Generator.OverwriteOption);
+    Options.Add(_outputPathOption);
+    Options.Add(CLIOptions.Metadata.NameOption);
+    Options.Add(CLIOptions.Project.ConfigPathOption);
+    Options.Add(CLIOptions.Project.DistributionConfigPathOption);
+    Options.Add(CLIOptions.Project.KustomizationPathOption);
+    Options.Add(CLIOptions.Project.ContainerEngineOption);
+    Options.Add(CLIOptions.Project.DistributionOption);
+    Options.Add(CLIOptions.Project.DeploymentToolOption);
+    Options.Add(CLIOptions.Project.CNIOption);
+    Options.Add(CLIOptions.Project.CSIOption);
+    Options.Add(CLIOptions.Project.IngressControllerOption);
+    Options.Add(CLIOptions.Project.GatewayControllerOption);
+    Options.Add(CLIOptions.Project.MetricsServerOption);
+    Options.Add(CLIOptions.Project.MirrorRegistriesOption);
+    Options.Add(CLIOptions.Project.SecretManagerOption);
+    Options.Add(CLIOptions.Project.EditorOption);
+    Options.Add(CLIOptions.Generator.OverwriteOption);
   }
 }

@@ -4,7 +4,13 @@ using KSail.Models.Project.Enums;
 
 namespace KSail.Options.Project;
 
-class ProjectGatewayControllerOption(KSailCluster config) : Option<KSailGatewayControllerType?>(
-  ["-gc", "--gateway-controller"],
-  $"The Gateway Controller to use. [default: {config.Spec.Project.GatewayController}]"
-);
+class ProjectGatewayControllerOption : Option<KSailGatewayControllerType?>
+{
+  public ProjectGatewayControllerOption(KSailCluster config) : base(
+    "-gc", "--gateway-controller"
+  )
+  {
+    Description = "The Gateway Controller to use.";
+    DefaultValueFactory = (result) => config.Spec.Project.GatewayController;
+  }
+}

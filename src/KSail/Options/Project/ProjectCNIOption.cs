@@ -4,7 +4,14 @@ using KSail.Models.Project.Enums;
 
 namespace KSail.Options.Project;
 
-class ProjectCNIOption(KSailCluster config) : Option<KSailCNIType?>(
-  ["--cni"],
-  $"The CNI to use. [default: {config.Spec.Project.CNI}]"
-);
+class ProjectCNIOption : Option<KSailCNIType?>
+{
+  public ProjectCNIOption(KSailCluster config) : base(
+    "--cni"
+  )
+  {
+    Description = "The CNI to use.";
+    DefaultValueFactory = (result) => config.Spec.Project.CNI;
+  }
+}
+

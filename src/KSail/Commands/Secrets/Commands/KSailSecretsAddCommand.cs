@@ -1,5 +1,5 @@
 using System.CommandLine;
-using Devantler.SecretManager.SOPS.LocalAge;
+using DevantlerTech.SecretManager.SOPS.LocalAge;
 using KSail.Commands.Secrets.Handlers;
 using KSail.Models.Project.Enums;
 using KSail.Utils;
@@ -10,21 +10,19 @@ sealed class KSailSecretsAddCommand : Command
 {
   readonly ExceptionHandler _exceptionHandler = new();
 
-  internal KSailSecretsAddCommand(IConsole console) : base("add", "Add a new encryption key")
+  internal KSailSecretsAddCommand() : base("add", "Add a new encryption key")
   {
-    this.SetHandler(async (context) =>
+    SetAction(async (parseResult, cancellationToken) =>
     {
       try
       {
-        var config = await KSailClusterConfigLoader.LoadWithoptionsAsync(context).ConfigureAwait(false);
-        var cancellationToken = context.GetCancellationToken();
-        var handler = new KSailSecretsAddCommandHandler(new SOPSLocalAgeSecretManager(), console);
-        context.ExitCode = await handler.HandleAsync(cancellationToken).ConfigureAwait(false);
+        var config = await KSailClusterConfigLoader.LoadWithoptionsAsync(parseResult).ConfigureAwait(false);
+        var handler = new KSailSecretsAddCommandHandler(new SOPSLocalAgeSecretManager(), parseResult);
+        await handler.HandleAsync(cancellationToken).ConfigureAwait(false);
       }
       catch (Exception ex)
       {
         _ = _exceptionHandler.HandleException(ex);
-        context.ExitCode = 1;
       }
     });
   }

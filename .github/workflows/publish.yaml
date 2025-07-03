@@ -8,7 +8,7 @@ on:
 jobs:
   # TODO: Rework publish-binaries with a generic reusable action
   publish-binaries:
-    uses: devantler-tech/workflows/.github/workflows/dotnet-application-publish.yaml@main
+    uses: devantler-tech/github-actions/.github/workflows/dotnet-application-publish.yaml@main
     secrets: inherit
 
   # TODO: Remove old publish-binaries once the new one is working
@@ -26,6 +26,8 @@ jobs:
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
       - name: 📑 Checkout
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: ⚙️ Setup Homebrew
         uses: Homebrew/actions/setup-homebrew@master
       - name: ⚙️ Setup .NET
@@ -47,6 +49,12 @@ jobs:
 
           dotnet publish -c Release -r linux-arm64 src/KSail/KSail.csproj /p:Version=$version
           mv src/KSail/bin/Release/net9.0/linux-arm64/publish/ksail ksail-linux-arm64
+
+          dotnet publish -c Release -r win-x64 src/KSail/KSail.csproj /p:Version=$version
+          mv src/KSail/bin/Release/net9.0/win-x64/publish/ksail.exe ksail-windows-amd64
+
+          dotnet publish -c Release -r win-arm64 src/KSail/KSail.csproj /p:Version=$version
+          mv src/KSail/bin/Release/net9.0/win-arm64/publish/ksail.exe ksail-windows-arm64
       # https://docs.github.com/en/actions/use-cases-and-examples/deploying/installing-an-apple-certificate-on-macos-runners-for-xcode-development#creating-secrets-for-your-certificate-and-provisioning-profile
       - name: 🔑 Add Cert to Keychain
         uses: apple-actions/import-codesign-certs@v3
@@ -62,6 +70,8 @@ jobs:
           codesign --timestamp --sign "${{ env.APPLE_CERT_NAME }}" ksail-darwin-arm64 --options=runtime --no-strict --entitlements entitlements.xml -f
           codesign --timestamp --sign "${{ env.APPLE_CERT_NAME }}" ksail-linux-amd64 --options=runtime --no-strict --entitlements entitlements.xml -f
           codesign --timestamp --sign "${{ env.APPLE_CERT_NAME }}" ksail-linux-arm64 --options=runtime --no-strict --entitlements entitlements.xml -f
+          codesign --timestamp --sign "${{ env.APPLE_CERT_NAME }}" ksail-windows-amd64 --options=runtime --no-strict --entitlements entitlements.xml -f
+          codesign --timestamp --sign "${{ env.APPLE_CERT_NAME }}" ksail-windows-arm64 --options=runtime --no-strict --entitlements entitlements.xml -f
       - name: 📜 Notarize
         run: |
           echo "Create keychain profile"
@@ -76,7 +86,7 @@ jobs:
           xcrun notarytool log $id --keychain-profile "notarytool-profile" developer_log.json
           cat developer_log.json
       - name: 📦 Tar binaries
-        run: tar -czf ksail.tar.gz ksail-darwin-amd64 ksail-darwin-arm64 ksail-linux-amd64 ksail-linux-arm64
+        run: tar -czf ksail.tar.gz ksail-darwin-amd64 ksail-darwin-arm64 ksail-linux-amd64 ksail-linux-arm64 ksail-windows-amd64 ksail-windows-arm64
       - name: 🎉 Release
         uses: softprops/action-gh-release@v2
         with:
@@ -85,6 +95,8 @@ jobs:
             ksail-darwin-arm64
             ksail-linux-amd64
             ksail-linux-arm64
+            ksail-windows-amd64
+            ksail-windows-arm64
             ksail.tar.gz
           token: ${{ steps.app-token.outputs.token }}
       - name: 🔑 Import GPG Key
@@ -97,11 +109,13 @@ jobs:
       - name: 🍺 Brew tap formulas
         run: brew tap devantler-tech/formulas
       - name: 🍺 Brew bump formulas
-        run: |
-          brew bump --no-fork --open-pr --formulae ksail
-        env:
-          HOMEBREW_GITHUB_API_TOKEN: ${{ secrets.HOMEBREW_GITHUB_API_TOKEN }}
+        uses: Homebrew/actions/bump-packages@master
+        with:
+          token: ${{ secrets.HOMEBREW_GITHUB_API_TOKEN }}
+          formulae: |
+            ksail
+          fork: false
   # TODO: Rework docker publish with a generic reusable action
   publish-images:
-    uses: devantler-tech/workflows/.github/workflows/image-publish.yaml@main
+    uses: devantler-tech/github-actions/.github/workflows/image-publish.yaml@main
     secrets: inherit

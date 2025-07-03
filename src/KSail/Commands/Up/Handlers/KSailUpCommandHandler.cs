@@ -1,11 +1,11 @@
 using System.Text;
-using Devantler.ContainerEngineProvisioner.Docker;
-using Devantler.KubernetesProvisioner.Cluster.Core;
-using Devantler.KubernetesProvisioner.CNI.Cilium;
-using Devantler.KubernetesProvisioner.Deployment.Core;
-using Devantler.KubernetesProvisioner.GitOps.Core;
-using Devantler.KubernetesProvisioner.Resources.Native;
-using Devantler.SecretManager.SOPS.LocalAge;
+using DevantlerTech.ContainerEngineProvisioner.Docker;
+using DevantlerTech.KubernetesProvisioner.Cluster.Core;
+using DevantlerTech.KubernetesProvisioner.CNI.Cilium;
+using DevantlerTech.KubernetesProvisioner.Deployment.Core;
+using DevantlerTech.KubernetesProvisioner.GitOps.Core;
+using DevantlerTech.KubernetesProvisioner.Resources.Native;
+using DevantlerTech.SecretManager.SOPS.LocalAge;
 using k8s;
 using k8s.Models;
 using KSail.Commands.Validate.Handlers;
@@ -30,7 +30,7 @@ class KSailUpCommandHandler(KSailCluster config) : ICommandHandler
   readonly MetricsServerManager _metricsServerManager = new(config);
   readonly SecretManager _secretManagerManager = new(config);
   readonly DeploymentToolManager _deploymentToolManager = new(config);
-  public async Task<int> HandleAsync(CancellationToken cancellationToken = default)
+  public async Task HandleAsync(CancellationToken cancellationToken = default)
   {
     await _clusterManager.BootstrapAsync(cancellationToken).ConfigureAwait(false);
     await _gitOpsSourceManager.BootstrapAsync(cancellationToken).ConfigureAwait(false);
@@ -45,6 +45,5 @@ class KSailUpCommandHandler(KSailCluster config) : ICommandHandler
     }
     await _secretManagerManager.BootstrapAsync(cancellationToken).ConfigureAwait(false);
     await _deploymentToolManager.BootstrapAsync(cancellationToken).ConfigureAwait(false);
-    return 0;
   }
 }
