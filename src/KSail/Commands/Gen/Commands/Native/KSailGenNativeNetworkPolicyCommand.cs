@@ -25,15 +25,16 @@ class KSailGenNativeNetworkPolicyCommand : Command
             $"✚ generating '{outputFile}'");
           if (File.Exists(outputFile) && !overwrite)
           {
-            return;
+            return 0;
           }
           KSailGenNativeNetworkPolicyCommandHandler handler = new(outputFile, overwrite);
           await handler.HandleAsync(cancellationToken).ConfigureAwait(false);
+          return 0;
         }
         catch (Exception ex)
         {
           _ = _exceptionHandler.HandleException(ex);
-
+          return 1;
         }
       }
     );

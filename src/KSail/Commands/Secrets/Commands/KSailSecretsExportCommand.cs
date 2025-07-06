@@ -28,10 +28,12 @@ sealed class KSailSecretsExportCommand : Command
 
         var handler = new KSailSecretsExportCommandHandler(publicKey, outputPath, new SOPSLocalAgeSecretManager());
         await handler.HandleAsync(cancellationToken).ConfigureAwait(false);
+        return 0;
       }
       catch (Exception ex)
       {
         _ = _exceptionHandler.HandleException(ex);
+        return 1;
       }
     });
   }

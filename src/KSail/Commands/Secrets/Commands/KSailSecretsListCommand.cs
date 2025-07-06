@@ -22,11 +22,12 @@ sealed class KSailSecretsListCommand : Command
 
         var handler = new KSailSecretsListCommandHandler(config, new SOPSLocalAgeSecretManager(), parseResult);
         await handler.HandleAsync(cancellationToken).ConfigureAwait(false);
+        return 0;
       }
       catch (Exception ex)
       {
         _ = _exceptionHandler.HandleException(ex);
-
+        return 1;
       }
     });
   }
