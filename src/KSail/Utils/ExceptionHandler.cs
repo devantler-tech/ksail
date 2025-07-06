@@ -24,9 +24,9 @@ class ExceptionHandler
       var message = new StringBuilder();
       message = message.AppendLine(CultureInfo.InvariantCulture, $"✗ {ex.Message}");
       Console.ForegroundColor = ConsoleColor.Red;
-      Console.WriteLine($"✗ {ex.Message}");
       if (ex is not CommandExecutionException)
       {
+        Console.WriteLine($"✗ {ex.Message}");
         for (var inner = ex.InnerException; inner is not null; inner = inner.InnerException)
         {
           Console.WriteLine($"  {inner.Message}");
