@@ -1,3 +1,4 @@
+using System.CommandLine;
 using System.Globalization;
 using System.Text;
 using CliWrap.Exceptions;
