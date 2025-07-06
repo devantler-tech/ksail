@@ -21,11 +21,12 @@ sealed class KSailConnectCommand : Command
         var config = await KSailClusterConfigLoader.LoadWithoptionsAsync(parseResult).ConfigureAwait(false);
         var handler = new KSailConnectCommandHandler(config);
         await handler.HandleAsync(cancellationToken).ConfigureAwait(false);
+        return 0;
       }
       catch (Exception ex)
       {
         _ = _exceptionHandler.HandleException(ex);
-
+        return 1;
       }
     });
   }

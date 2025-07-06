@@ -19,11 +19,12 @@ sealed class KSailDownCommand : Command
 
         var handler = new KSailDownCommandHandler(config);
         await handler.HandleAsync(cancellationToken).ConfigureAwait(false);
+        return 0;
       }
       catch (Exception ex)
       {
         _ = _exceptionHandler.HandleException(ex);
-
+        return 1;
       }
     });
   }

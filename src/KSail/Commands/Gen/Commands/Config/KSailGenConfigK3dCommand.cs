@@ -26,11 +26,12 @@ class KSailGenConfigK3dCommand : Command
           $"✚ generating '{outputFile}'");
         var handler = new KSailGenConfigK3dCommandHandler(outputFile, overwrite);
         await handler.HandleAsync(cancellationToken).ConfigureAwait(false);
+        return 0;
       }
       catch (Exception ex)
       {
         _ = _exceptionHandler.HandleException(ex);
-
+        return 1;
       }
     });
   }

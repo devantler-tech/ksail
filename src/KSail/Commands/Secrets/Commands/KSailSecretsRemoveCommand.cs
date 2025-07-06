@@ -22,11 +22,12 @@ sealed class KSailSecretsRemoveCommand : Command
         string publicKey = parseResult.GetValue(_publicKeyArgument) ?? throw new KSailException("Public key argument is required.");
         var handler = new KSailSecretsRemoveCommandHandler(publicKey, new SOPSLocalAgeSecretManager());
         await handler.HandleAsync(cancellationToken).ConfigureAwait(false);
+        return 0;
       }
       catch (Exception ex)
       {
         _ = _exceptionHandler.HandleException(ex);
-
+        return 1;
       }
     });
   }

@@ -22,11 +22,12 @@ sealed class KSailSecretsImportCommand : Command
 
         var handler = new KSailSecretsImportCommandHandler(key, new SOPSLocalAgeSecretManager());
         await handler.HandleAsync(cancellationToken).ConfigureAwait(false);
+        return 0;
       }
       catch (Exception ex)
       {
         _ = _exceptionHandler.HandleException(ex);
-
+        return 1;
       }
     });
   }
