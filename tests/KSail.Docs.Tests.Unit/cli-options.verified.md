@@ -114,6 +114,7 @@ Usage:
 Options:
   -c, --context                          The kubernetes context to use. [default: kind-ksail-default]
   -k, --kubeconfig                       Path to kubeconfig file. [default: ~/.kube/config]
+  -t, --timeout                          The time to wait for each kustomization to become ready. [default: 5m]
   -kp, --kustomization-path              The path to the root kustomization directory. [default: k8s]
   -dt, --deployment-tool <Flux|Kubectl>  The Deployment tool to use for applying a kustomization. [default: Kubectl]
   -p, --publish                          Whether to publish manifests on update. [default: True]

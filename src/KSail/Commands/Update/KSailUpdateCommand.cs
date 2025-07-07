@@ -35,6 +35,7 @@ sealed class KSailUpdateCommand : Command
   {
     Options.Add(CLIOptions.Connection.ContextOption);
     Options.Add(CLIOptions.Connection.KubeconfigOption);
+    Options.Add(CLIOptions.Connection.TimeoutOption);
     Options.Add(CLIOptions.Project.KustomizationPathOption);
     Options.Add(CLIOptions.Project.DeploymentToolOption);
     Options.Add(CLIOptions.Publication.PublishOnUpdateOption);

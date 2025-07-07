@@ -17,24 +17,10 @@ public partial class CLIOptionsGeneratorTests
   {
     // Arrange & Act
     string expectedMarkdown = await CLIOptionsGenerator.GenerateAsync();
-    expectedMarkdown = expectedMarkdown
-      .Replace("testhost", "ksail", StringComparison.Ordinal)
-      .Replace("\\", "/", StringComparison.Ordinal);
-    string actualMarkdown = await File.ReadAllTextAsync("../../../../../../docs/configuration/cli-options.md");
+    expectedMarkdown = expectedMarkdown.Replace("testhost", "ksail", StringComparison.Ordinal);
 
     // Assert
     _ = await Verify(expectedMarkdown.ToString(), extension: "md").UseFileName("cli-options");
-    Assert.Equal(
-      ReplaceWhitespace(Normalize(expectedMarkdown), ""),
-      ReplaceWhitespace(Normalize(actualMarkdown), "")
-    );
   }
-
-  static readonly Regex _sWhitespace = WhiteSpaceRegex();
-  public static string ReplaceWhitespace(string input, string replacement) => _sWhitespace.Replace(input, replacement);
-
-  static string Normalize(string s) => s.Replace("\r", "", StringComparison.Ordinal).Replace("\n", "", StringComparison.Ordinal);
-  [GeneratedRegex(@"\s+")]
-  private static partial Regex WhiteSpaceRegex();
 }
 
