@@ -96,7 +96,7 @@ jobs:
         with:
           repo: kubernetes-sigs/kustomize
       - name: Test .NET solution or project
-        uses: devantler-tech/github-actions/composite-actions/dotnet-test-action@main
+        uses: devantler-tech/github-actions/composite-actions/dotnet-test-action@b8298f5d8bb6d8b1d807c22ec9847889b1471858 # v1.5.2
         with:
           app_id: ${{ vars.APP_ID }}
           app_private_key: ${{ secrets.APP_PRIVATE_KEY }}
