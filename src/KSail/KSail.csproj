@@ -28,7 +28,7 @@
     <PackageReference Include="DevantlerTech.KubernetesGenerator.Kind" Version="1.11.0" />
     <PackageReference Include="DevantlerTech.KubernetesProvisioner.Cluster.K3d" Version="1.9.8" />
     <PackageReference Include="DevantlerTech.KubernetesProvisioner.Cluster.Kind" Version="1.9.7" />
-    <PackageReference Include="DevantlerTech.KubernetesProvisioner.CNI.Cilium" Version="1.9.7" />
+    <PackageReference Include="DevantlerTech.KubernetesProvisioner.CNI.Cilium" Version="1.9.9" />
     <PackageReference Include="DevantlerTech.KubernetesProvisioner.Deployment.Kubectl" Version="1.9.7" />
     <PackageReference Include="DevantlerTech.KubernetesProvisioner.GitOps.Flux" Version="1.9.4" />
     <PackageReference Include="DevantlerTech.KubernetesValidator.ClientSide.Schemas" Version="1.2.0" />
