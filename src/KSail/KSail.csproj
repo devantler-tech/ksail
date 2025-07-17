@@ -33,7 +33,7 @@
     <PackageReference Include="DevantlerTech.KubernetesProvisioner.GitOps.Flux" Version="1.9.4" />
     <PackageReference Include="DevantlerTech.KubernetesValidator.ClientSide.Schemas" Version="1.2.3" />
     <PackageReference Include="DevantlerTech.KubernetesValidator.ClientSide.YamlSyntax" Version="1.2.3" />
-    <PackageReference Include="DevantlerTech.SecretManager.SOPS.LocalAge" Version="1.5.4" />
+    <PackageReference Include="DevantlerTech.SecretManager.SOPS.LocalAge" Version="1.5.7" />
     <PackageReference Include="DevantlerTech.K9sCLI" Version="1.12.3" />
     <PackageReference Include="DevantlerTech.HelmCLI" Version="1.8.3" />
     <PackageReference Include="DevantlerTech.KubectlCLI" Version="1.6.3" />
