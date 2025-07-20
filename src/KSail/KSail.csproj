@@ -31,7 +31,7 @@
     <PackageReference Include="DevantlerTech.KubernetesProvisioner.CNI.Cilium" Version="1.9.25" />
     <PackageReference Include="DevantlerTech.KubernetesProvisioner.Deployment.Kubectl" Version="1.9.22" />
     <PackageReference Include="DevantlerTech.KubernetesProvisioner.GitOps.Flux" Version="1.9.4" />
-    <PackageReference Include="DevantlerTech.KubernetesValidator.ClientSide.Schemas" Version="1.2.3" />
+    <PackageReference Include="DevantlerTech.KubernetesValidator.ClientSide.Schemas" Version="1.2.6" />
     <PackageReference Include="DevantlerTech.KubernetesValidator.ClientSide.YamlSyntax" Version="1.2.3" />
     <PackageReference Include="DevantlerTech.SecretManager.SOPS.LocalAge" Version="1.5.4" />
     <PackageReference Include="DevantlerTech.K9sCLI" Version="1.12.3" />
