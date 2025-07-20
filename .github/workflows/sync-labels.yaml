@@ -9,4 +9,11 @@ permissions:
 
 jobs:
   sync-labels:
-    uses: devantler-tech/github-actions/.github/workflows/sync-labels.yaml@main
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📑 Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: 🔄 Sync labels
+        uses: devantler-tech/composite-actions/sync-labels-action@c401eaca053e4a385c4b59269c6e859df2599890 # v1.9.2

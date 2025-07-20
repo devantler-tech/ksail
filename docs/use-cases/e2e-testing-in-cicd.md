@@ -37,20 +37,15 @@ jobs:
         uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: 📦 Setup Homebrew
-        uses: Homebrew/actions/setup-homebrew@main
-      - name: ⤵️ Install KSail
-        run: |
-          brew tap devantler-tech/formulas
-          brew install ksail
+      - name: ⚙️ Setup KSail
+        uses: devantler-tech/composite-actions/setup-ksail-action@44620f6c6e9bc2046c7959932fbd104a74d6b1a5 # v1.9.1
       - name: 🔑 Import Age key
         env:
           KSAIL_SOPS_KEY: ${{ secrets.KSAIL_SOPS_KEY }}
         if: ${{ env.KSAIL_SOPS_KEY != '' }}
         run: ksail secrets import "${{ secrets.KSAIL_SOPS_KEY }}"
-      - name: 🛥️🐳 Provision cluster
-        run: |
-          ksail up
+      - name: 🚀 Provision cluster
+        run: ksail up
       - name: 🔥 Teardown cluster
         if: always()
         run: ksail down
@@ -68,6 +63,7 @@ name: Run Devantler's GitOps Test Workflow
 
 jobs:
   test:
-    uses: devantler-tech/github-actions/.github/workflows/gitops-test@main
-    secrets: inherit
+    uses: devantler-tech/reusable-workflows/.github/workflows/ci-gitops-test@main
+    secrets:
+      KSAIL_SOPS_KEY: ${{ secrets.KSAIL_SOPS_KEY }}
 ```

@@ -8,30 +8,25 @@ on:
 jobs:
   # TODO: Rework publish-binaries with a generic reusable action
   publish-binaries:
-    uses: devantler-tech/github-actions/.github/workflows/dotnet-application-publish.yaml@main
-    secrets: inherit
-
-  # TODO: Remove old publish-binaries once the new one is working
-  publish-binaries-old:
     name: Publish binaries
     runs-on: macos-latest
     env:
       APPLE_TEAM_ID: F2NXL88V7B
     steps:
       - name: Generate GitHub App Token
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@df432ceedc7162793a195dd1713ff69aefc7379e # v2.0.6
         id: app-token
         with:
           app-id: ${{ vars.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
       - name: 📑 Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
       - name: ⚙️ Setup Homebrew
-        uses: Homebrew/actions/setup-homebrew@master
+        uses: Homebrew/actions/setup-homebrew@6c79ae0677a9b0b8046a936b4ada8980885eafb8 # main
       - name: ⚙️ Setup .NET
-        uses: actions/setup-dotnet@v4.0.0
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
         with:
           dotnet-version: 9
       - name: 📦 Publish
@@ -57,7 +52,7 @@ jobs:
           mv src/KSail/bin/Release/net9.0/win-arm64/publish/ksail.exe ksail-windows-arm64
       # https://docs.github.com/en/actions/use-cases-and-examples/deploying/installing-an-apple-certificate-on-macos-runners-for-xcode-development#creating-secrets-for-your-certificate-and-provisioning-profile
       - name: 🔑 Add Cert to Keychain
-        uses: apple-actions/import-codesign-certs@v3
+        uses: apple-actions/import-codesign-certs@65cfbc37e1464d733524cb555b724878f278b8c3 # v5.0.2
         id: import-codesign-certs
         with:
           p12-file-base64: ${{ secrets.APPLE_CERT_P12_BASE64 }}
@@ -100,7 +95,7 @@ jobs:
             ksail.tar.gz
           token: ${{ steps.app-token.outputs.token }}
       - name: 🔑 Import GPG Key
-        uses: crazy-max/ghaction-import-gpg@v5
+        uses: crazy-max/ghaction-import-gpg@e89d40939c28e39f97cf32126055eeae86ba74ec # v6.3.0
         with:
           gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
           passphrase: ${{ secrets.GPG_PASSPHRASE }}
@@ -109,13 +104,9 @@ jobs:
       - name: 🍺 Brew tap formulas
         run: brew tap devantler-tech/formulas
       - name: 🍺 Brew bump formulas
-        uses: Homebrew/actions/bump-packages@master
+        uses: Homebrew/actions/bump-packages@df537ec97fb77a615dc06a860b3d5b6d9c256cdb # main
         with:
           token: ${{ secrets.HOMEBREW_GITHUB_API_TOKEN }}
           formulae: |
             ksail
           fork: false
-  # TODO: Rework docker publish with a generic reusable action
-  publish-images:
-    uses: devantler-tech/github-actions/.github/workflows/image-publish.yaml@main
-    secrets: inherit
