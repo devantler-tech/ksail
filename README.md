@@ -12,8 +12,9 @@ layout: default
 > [!IMPORTANT]
 > **🆕 UP NEXT 🆕**
 >
-> 1. Support for ArgoCD as a Deployment Tool - <https://github.com/devantler-tech/ksail/pull/878>
-> 2. Support for Talos Linux as a Distribution
+> 1. Reworked Native Kubernetes Generators to use `kubectl create` commands
+> 2. Support for ArgoCD as a Deployment Tool - <https://github.com/devantler-tech/ksail/pull/878>
+> 3. Support for Talos Linux as a Distribution
 
 <picture align="center">
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/ksail-cli-dark.png" style="width: 550px">
