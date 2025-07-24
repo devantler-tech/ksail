@@ -1,7 +1,6 @@
 ﻿---
 title: CLI Options
 parent: Configuration
-layout: default
 nav_order: 0
 ---
 

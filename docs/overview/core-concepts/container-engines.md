@@ -1,7 +1,6 @@
 ---
 title: Container Engines
 parent: Core Concepts
-layout: default
 nav_order: 0
 ---
 

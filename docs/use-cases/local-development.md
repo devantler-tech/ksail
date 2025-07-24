@@ -1,7 +1,6 @@
 ---
 title: Local development
 parent: Use Cases
-layout: default
 nav_order: 1
 ---
 

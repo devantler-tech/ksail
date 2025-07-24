@@ -1,7 +1,6 @@
 ---
 title: Project Structure
 parent: Overview
-layout: default
 nav_order: 1
 ---
 

@@ -1,7 +1,6 @@
 ---
 title: Gateway Controllers
 parent: Core Concepts
-layout: default
 nav_order: 5
 ---
 

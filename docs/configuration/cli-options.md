@@ -1,7 +1,6 @@
 ---
 title: CLI Options
 parent: Configuration
-layout: default
 nav_order: 0
 ---
 
@@ -50,34 +49,34 @@ Usage:
   ksail init [options]
 
 Options:
-  -o, --output                               Output directory for the project files. 
+  -o, --output                               Output directory for the project files.
                                              [default: ./]
-  -n, --name                                 The name of the cluster. [default: 
+  -n, --name                                 The name of the cluster. [default:
                                              ksail-default]
-  -c, --config                               The path to the ksail configuration file. 
+  -c, --config                               The path to the ksail configuration file.
                                              [default: ksail.yaml]
-  -dc, --distribution-config                 The path to the distribution configuration 
+  -dc, --distribution-config                 The path to the distribution configuration
                                              file. [default: kind.yaml]
-  -kp, --kustomization-path                  The path to the root kustomization directory. 
+  -kp, --kustomization-path                  The path to the root kustomization directory.
                                              [default: k8s]
-  -ce, --container-engine <Docker|Podman>    The container engine in which to provision the 
+  -ce, --container-engine <Docker|Podman>    The container engine in which to provision the
                                              cluster. [default: Docker]
-  -d, --distribution <K3d|Kind>              The distribution to use for the cluster. 
+  -d, --distribution <K3d|Kind>              The distribution to use for the cluster.
                                              [default: Kind]
-  -dt, --deployment-tool <Flux|Kubectl>      The Deployment tool to use for applying a 
+  -dt, --deployment-tool <Flux|Kubectl>      The Deployment tool to use for applying a
                                              kustomization. [default: Kubectl]
   --cni <Cilium|Default|None>                The CNI to use. [default: Default]
   --csi <Default|LocalPathProvisioner|None>  The CSI to use. [default: Default]
-  -ic, --ingress-controller                  The Ingress Controller to use. [default: 
+  -ic, --ingress-controller                  The Ingress Controller to use. [default:
   <Default|None|Traefik>                     Default]
-  -gc, --gateway-controller <Default|None>   The Gateway Controller to use. [default: 
+  -gc, --gateway-controller <Default|None>   The Gateway Controller to use. [default:
                                              Default]
-  -ms, --metrics-server                      Whether to install Metrics Server. [default: 
+  -ms, --metrics-server                      Whether to install Metrics Server. [default:
                                              True]
-  -mr, --mirror-registries                   Enable mirror registries for the project. 
+  -mr, --mirror-registries                   Enable mirror registries for the project.
                                              [default: True]
   -sm, --secret-manager <None|SOPS>          Whether to use a secret manager. [default: None]
-  -e, --editor <Nano|Vim>                    The editor to use for editing files from the 
+  -e, --editor <Nano|Vim>                    The editor to use for editing files from the
                                              CLI. [default: Nano]
   --overwrite                                Overwrite existing files. [default: False]
   -?, -h, --help                             Show help and usage information
@@ -93,37 +92,37 @@ Usage:
   ksail up [options]
 
 Options:
-  -c, --context                              The kubernetes context to use. [default: 
+  -c, --context                              The kubernetes context to use. [default:
                                              kind-ksail-default]
-  -k, --kubeconfig                           Path to kubeconfig file. [default: 
+  -k, --kubeconfig                           Path to kubeconfig file. [default:
                                              ~/.kube/config]
-  -t, --timeout                              The time to wait for each kustomization to 
+  -t, --timeout                              The time to wait for each kustomization to
                                              become ready. [default: 5m]
-  -n, --name                                 The name of the cluster. [default: 
+  -n, --name                                 The name of the cluster. [default:
                                              ksail-default]
-  -dc, --distribution-config                 The path to the distribution configuration 
+  -dc, --distribution-config                 The path to the distribution configuration
                                              file. [default: kind.yaml]
-  -kp, --kustomization-path                  The path to the root kustomization directory. 
+  -kp, --kustomization-path                  The path to the root kustomization directory.
                                              [default: k8s]
-  -ce, --container-engine <Docker|Podman>    The container engine in which to provision the 
+  -ce, --container-engine <Docker|Podman>    The container engine in which to provision the
                                              cluster. [default: Docker]
-  -d, --distribution <K3d|Kind>              The distribution to use for the cluster. 
+  -d, --distribution <K3d|Kind>              The distribution to use for the cluster.
                                              [default: Kind]
-  -dt, --deployment-tool <Flux|Kubectl>      The Deployment tool to use for applying a 
+  -dt, --deployment-tool <Flux|Kubectl>      The Deployment tool to use for applying a
                                              kustomization. [default: Kubectl]
   --cni <Cilium|Default|None>                The CNI to use. [default: Default]
   --csi <Default|LocalPathProvisioner|None>  The CSI to use. [default: Default]
-  -ic, --ingress-controller                  The Ingress Controller to use. [default: 
+  -ic, --ingress-controller                  The Ingress Controller to use. [default:
   <Default|None|Traefik>                     Default]
-  -gc, --gateway-controller <Default|None>   The Gateway Controller to use. [default: 
+  -gc, --gateway-controller <Default|None>   The Gateway Controller to use. [default:
                                              Default]
-  -ms, --metrics-server                      Whether to install Metrics Server. [default: 
+  -ms, --metrics-server                      Whether to install Metrics Server. [default:
                                              True]
-  -mr, --mirror-registries                   Enable mirror registries for the project. 
+  -mr, --mirror-registries                   Enable mirror registries for the project.
                                              [default: True]
   -sm, --secret-manager <None|SOPS>          Whether to use a secret manager. [default: None]
-  -fsu, --flux-source-url                    Flux source URL for reconciling GitOps 
-                                             resources. [default: 
+  -fsu, --flux-source-url                    Flux source URL for reconciling GitOps
+                                             resources. [default:
                                              oci://ksail-registry:5000/ksail-registry]
   -v, --validate                             Validate project files on up. [default: True]
   -r, --reconcile                            Reconcile manifests on up. [default: True]
@@ -140,17 +139,17 @@ Usage:
   ksail update [options]
 
 Options:
-  -c, --context                          The kubernetes context to use. [default: 
+  -c, --context                          The kubernetes context to use. [default:
                                          kind-ksail-default]
-  -k, --kubeconfig                       Path to kubeconfig file. [default: 
+  -k, --kubeconfig                       Path to kubeconfig file. [default:
                                          ~/.kube/config]
-  -t, --timeout                          The time to wait for each kustomization to become 
+  -t, --timeout                          The time to wait for each kustomization to become
                                          ready. [default: 5m]
-  -kp, --kustomization-path              The path to the root kustomization directory. 
+  -kp, --kustomization-path              The path to the root kustomization directory.
                                          [default: k8s]
-  -dt, --deployment-tool <Flux|Kubectl>  The Deployment tool to use for applying a 
+  -dt, --deployment-tool <Flux|Kubectl>  The Deployment tool to use for applying a
                                          kustomization. [default: Kubectl]
-  -p, --publish                          Whether to publish manifests on update. [default: 
+  -p, --publish                          Whether to publish manifests on update. [default:
                                          True]
   -v, --validate                         Validate project files on update. [default: True]
   -r, --reconcile                        Reconcile manifests on update. [default: True]
@@ -167,12 +166,12 @@ Usage:
   ksail start [options]
 
 Options:
-  -c, --context                            The kubernetes context to use. [default: 
+  -c, --context                            The kubernetes context to use. [default:
                                            kind-ksail-default]
   -n, --name                               The name of the cluster. [default: ksail-default]
-  -ce, --container-engine <Docker|Podman>  The container engine in which to provision the 
+  -ce, --container-engine <Docker|Podman>  The container engine in which to provision the
                                            cluster. [default: Docker]
-  -d, --distribution <K3d|Kind>            The distribution to use for the cluster. 
+  -d, --distribution <K3d|Kind>            The distribution to use for the cluster.
                                            [default: Kind]
   -?, -h, --help                           Show help and usage information
 ```
@@ -188,9 +187,9 @@ Usage:
 
 Options:
   -n, --name                               The name of the cluster. [default: ksail-default]
-  -ce, --container-engine <Docker|Podman>  The container engine in which to provision the 
+  -ce, --container-engine <Docker|Podman>  The container engine in which to provision the
                                            cluster. [default: Docker]
-  -d, --distribution <K3d|Kind>            The distribution to use for the cluster. 
+  -d, --distribution <K3d|Kind>            The distribution to use for the cluster.
                                            [default: Kind]
   -?, -h, --help                           Show help and usage information
 ```
@@ -205,15 +204,15 @@ Usage:
   ksail down [options]
 
 Options:
-  -fsu, --flux-source-url                  Flux source URL for reconciling GitOps resources. 
-                                           [default: 
+  -fsu, --flux-source-url                  Flux source URL for reconciling GitOps resources.
+                                           [default:
                                            oci://ksail-registry:5000/ksail-registry]
   -n, --name                               The name of the cluster. [default: ksail-default]
-  -d, --distribution <K3d|Kind>            The distribution to use for the cluster. 
+  -d, --distribution <K3d|Kind>            The distribution to use for the cluster.
                                            [default: Kind]
-  -ce, --container-engine <Docker|Podman>  The container engine in which to provision the 
+  -ce, --container-engine <Docker|Podman>  The container engine in which to provision the
                                            cluster. [default: Docker]
-  -mr, --mirror-registries                 Enable mirror registries for the project. 
+  -mr, --mirror-registries                 Enable mirror registries for the project.
                                            [default: True]
   -?, -h, --help                           Show help and usage information
 ```
@@ -244,11 +243,11 @@ Usage:
   ksail list [options]
 
 Options:
-  -ce, --container-engine <Docker|Podman>  The container engine in which to provision the 
+  -ce, --container-engine <Docker|Podman>  The container engine in which to provision the
                                            cluster. [default: Docker]
-  -d, --distribution <K3d|Kind>            The distribution to use for the cluster. 
+  -d, --distribution <K3d|Kind>            The distribution to use for the cluster.
                                            [default: Kind]
-  -a, --all                                List clusters from all distributions. [default: 
+  -a, --all                                List clusters from all distributions. [default:
                                            False]
   -?, -h, --help                           Show help and usage information
 ```
@@ -536,7 +535,7 @@ Options:
   -?, -h, --help  Show help and usage information
 
 Commands:
-  cluster-role-binding       Generate a 'rbac.authorization.k8s.io/v1/ClusterRoleBinding' 
+  cluster-role-binding       Generate a 'rbac.authorization.k8s.io/v1/ClusterRoleBinding'
                              resource.
   cluster-role               Generate a 'rbac.authorization.k8s.io/v1/ClusterRole' resource.
   namespace                  Generate a 'core/v1/Namespace' resource.

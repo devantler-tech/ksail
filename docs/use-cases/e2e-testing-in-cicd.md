@@ -1,7 +1,6 @@
 ---
 title: E2E Testing in CI/CD
 parent: Use Cases
-layout: default
 nav_order: 2
 ---
 

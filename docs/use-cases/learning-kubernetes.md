@@ -1,7 +1,6 @@
 ---
 title: Learning Kubernetes
 parent: Use Cases
-layout: default
 nav_order: 0
 ---
 

@@ -1,7 +1,6 @@
 ---
 title: Local Registry
 parent: Core Concepts
-layout: default
 nav_order: 9
 ---
 

@@ -1,7 +1,6 @@
 ---
 title: Declarative Config
 parent: Configuration
-layout: default
 nav_order: 1
 ---
 

@@ -1,7 +1,6 @@
 ---
 title: Deployment Tools
 parent: Core Concepts
-layout: default
 nav_order: 6
 ---
 
