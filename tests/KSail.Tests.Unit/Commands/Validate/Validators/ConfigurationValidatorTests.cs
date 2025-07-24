@@ -8,6 +8,7 @@ using DevantlerTech.KubernetesGenerator.Kind.Models;
 using KSail.Commands.Root;
 using KSail.Commands.Validate.Validators;
 using KSail.Models;
+using KSail.Models.CNI;
 using KSail.Models.Connection;
 using KSail.Models.DeploymentTool;
 using KSail.Models.MirrorRegistry;
@@ -323,6 +324,82 @@ public class ConfigurationValidatorTest
     Assert.Contains($"'spec.project.csi={actualCSI}' in '", exception.Message, StringComparison.Ordinal);
 
     //Cleanup
+    Directory.Delete(tempDir, true);
+  }
+
+  [Theory]
+  [InlineData(KSailDistributionType.Kind, KSailCNIType.Default, KSailIngressControllerType.None)]
+  [InlineData(KSailDistributionType.Kind, KSailCNIType.Default, KSailIngressControllerType.Default)]
+  [InlineData(KSailDistributionType.Kind, KSailCNIType.Default, KSailIngressControllerType.Traefik)]
+  [InlineData(KSailDistributionType.Kind, KSailCNIType.Cilium, KSailIngressControllerType.None)]
+  [InlineData(KSailDistributionType.Kind, KSailCNIType.Cilium, KSailIngressControllerType.Default)]
+  [InlineData(KSailDistributionType.Kind, KSailCNIType.Cilium, KSailIngressControllerType.Traefik)]
+  [InlineData(KSailDistributionType.Kind, KSailCNIType.None, KSailIngressControllerType.None)]
+  [InlineData(KSailDistributionType.Kind, KSailCNIType.None, KSailIngressControllerType.Default)]
+  [InlineData(KSailDistributionType.Kind, KSailCNIType.None, KSailIngressControllerType.Traefik)]
+  [InlineData(KSailDistributionType.K3d, KSailCNIType.Default, KSailIngressControllerType.None)]
+  [InlineData(KSailDistributionType.K3d, KSailCNIType.Default, KSailIngressControllerType.Default)]
+  [InlineData(KSailDistributionType.K3d, KSailCNIType.Default, KSailIngressControllerType.Traefik)]
+  [InlineData(KSailDistributionType.K3d, KSailCNIType.Cilium, KSailIngressControllerType.None)]
+  [InlineData(KSailDistributionType.K3d, KSailCNIType.Cilium, KSailIngressControllerType.Default)]
+  [InlineData(KSailDistributionType.K3d, KSailCNIType.Cilium, KSailIngressControllerType.Traefik)]
+  [InlineData(KSailDistributionType.K3d, KSailCNIType.None, KSailIngressControllerType.None)]
+  [InlineData(KSailDistributionType.K3d, KSailCNIType.None, KSailIngressControllerType.Default)]
+  [InlineData(KSailDistributionType.K3d, KSailCNIType.None, KSailIngressControllerType.Traefik)]
+  public async Task ValidateAsync_ValidCNIAndIngressController_Succeeds(KSailDistributionType distribution, KSailCNIType cni, KSailIngressControllerType ingressController)
+  {
+    string tempDir = Path.Combine(Path.GetTempPath(), "ksail-validate-valid-cni-ingress-controller");
+    var parseResult = _rootCommand.Parse(["init", "--output", tempDir, "--distribution", distribution.ToString(), "--cni", cni.ToString(), "--ingress-controller", ingressController.ToString()]);
+    using var cts = new CancellationTokenSource();
+    _ = await parseResult.InvokeAsync(cts.Token);
+    var config = new KSailCluster
+    {
+      Spec = new KSailClusterSpec
+      {
+        Project = new KSailProject
+        {
+          Distribution = distribution,
+          CNI = cni,
+          IngressController = ingressController,
+          DistributionConfigPath = distribution switch
+          {
+            KSailDistributionType.K3d => "k3d.yaml",
+            KSailDistributionType.Kind => "kind.yaml",
+            _ => throw new KSailException($"unsupported distribution '{distribution}'.")
+          }
+        },
+        Connection = new KSailConnection
+        {
+          Context = distribution switch
+          {
+            KSailDistributionType.K3d => "k3d-ksail-default",
+            KSailDistributionType.Kind => "kind-ksail-default",
+            _ => throw new KSailException($"unsupported distribution '{distribution}'.")
+          }
+        },
+        DeploymentTool = new KSailDeploymentTool
+        {
+          Flux = new KSailFluxDeploymentTool
+          {
+            Source = new KSailFluxDeploymentToolRepository
+            {
+              Url = distribution switch
+              {
+                KSailDistributionType.Kind => new Uri("oci://ksail-registry:5000/ksail-registry"),
+                KSailDistributionType.K3d => new Uri("oci://host.k3d.internal:5555/ksail-registry"),
+                _ => throw new KSailException($"unsupported distribution '{distribution}'.")
+              }
+            }
+          }
+        },
+      }
+    };
+    var validator = new ConfigurationValidator(config);
+
+    // Act
+    await validator.ValidateAsync(tempDir, CancellationToken.None);
+
+    // Cleanup
     Directory.Delete(tempDir, true);
   }
 
