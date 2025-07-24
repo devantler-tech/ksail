@@ -149,14 +149,14 @@ class ConfigurationValidator(KSailCluster config)
           ]
         }
       };
-    var expectedWithCustomCNI = expectedWithCustomCNIK3sExtraArgs.Select(x => x.Arg + ":" + x.NodeFilters?.First()) ?? [];
+    var expected = expectedWithCustomCNIK3sExtraArgs.Select(x => x.Arg + ":" + x.NodeFilters?.First()) ?? [];
     var actual = distributionConfig.Options?.K3s?.ExtraArgs?.Select(x => x.Arg + ":" + (x.NodeFilters?.First() ?? "server:*")) ?? [];
-    if (config.Spec.Project.CNI is KSailCNIType.Default && actual.Intersect(expectedWithCustomCNI).Any())
+    if (config.Spec.Project.CNI is KSailCNIType.Default && actual.Intersect(expected).Any())
     {
       throw new KSailException($"'spec.project.cni={config.Spec.Project.CNI}' in '{Path.Combine(projectRootPath, config.Spec.Project.ConfigPath)}' does not match expected values in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'." + Environment.NewLine +
         $"  - please remove '--flannel-backend=none' and '--disable-network-policy' from 'options.k3s.extraArgs' in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'.");
     }
-    else if (config.Spec.Project.CNI is not KSailCNIType.Default && (!actual.Any() || !actual.All(expectedWithCustomCNI.Contains)))
+    else if (config.Spec.Project.CNI is not KSailCNIType.Default && (!actual.Any() || !expected.All(actual.Contains)))
     {
       throw new KSailException($"'spec.project.cni={config.Spec.Project.CNI}' in '{Path.Combine(projectRootPath, config.Spec.Project.ConfigPath)}' does not match expected values in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'." + Environment.NewLine +
         $"  - please set 'options.k3s.extraArgs' to '--flannel-backend=none' and '--disable-network-policy' for 'server:*' in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'.");
@@ -175,14 +175,14 @@ class ConfigurationValidator(KSailCluster config)
           ]
         }
       };
-    var expectedWithCustomCSI = expectedWithCustomCSIK3sExtraArgs.Select(x => x.Arg + ":" + x.NodeFilters?.First()) ?? [];
+    var expected = expectedWithCustomCSIK3sExtraArgs.Select(x => x.Arg + ":" + x.NodeFilters?.First()) ?? [];
     var actual = distributionConfig.Options?.K3s?.ExtraArgs?.Select(x => x.Arg + ":" + (x.NodeFilters?.First() ?? "server:*")) ?? [];
-    if (config.Spec.Project.CSI is KSailCSIType.Default or KSailCSIType.LocalPathProvisioner && actual.Intersect(expectedWithCustomCSI).Any())
+    if (config.Spec.Project.CSI is KSailCSIType.Default or KSailCSIType.LocalPathProvisioner && actual.Intersect(expected).Any())
     {
       throw new KSailException($"'spec.project.csi={config.Spec.Project.CSI}' in '{Path.Combine(projectRootPath, config.Spec.Project.ConfigPath)}' does not match expected values in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'." + Environment.NewLine +
         $"  - please remove '--disable=local-storage' from 'options.k3s.extraArgs' in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'.");
     }
-    else if ((config.Spec.Project.CSI is not KSailCSIType.Default and not KSailCSIType.LocalPathProvisioner) && (!actual.Any() || !actual.All(expectedWithCustomCSI.Contains)))
+    else if ((config.Spec.Project.CSI is not KSailCSIType.Default and not KSailCSIType.LocalPathProvisioner) && (!actual.Any() || !expected.All(actual.Contains)))
     {
       throw new KSailException($"'spec.project.csi={config.Spec.Project.CSI}' in '{Path.Combine(projectRootPath, config.Spec.Project.ConfigPath)}' does not match expected values in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'." + Environment.NewLine +
         $"  - please set 'options.k3s.extraArgs' to '--disable=local-storage' for 'server:*' in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'.");
@@ -201,14 +201,14 @@ class ConfigurationValidator(KSailCluster config)
         ]
       }
     };
-    var expectedWithCustomIngressController = expectedWithCustomIngressControllerK3sExtraArgs.Select(x => x.Arg + ":" + x.NodeFilters?.First()) ?? [];
+    var expected = expectedWithCustomIngressControllerK3sExtraArgs.Select(x => x.Arg + ":" + x.NodeFilters?.First()) ?? [];
     var actual = distributionConfig.Options?.K3s?.ExtraArgs?.Select(x => x.Arg + ":" + (x.NodeFilters?.First() ?? "server:*")) ?? [];
-    if (config.Spec.Project.IngressController is KSailIngressControllerType.Default or KSailIngressControllerType.Traefik && actual.Intersect(expectedWithCustomIngressController).Any())
+    if (config.Spec.Project.IngressController is KSailIngressControllerType.Default or KSailIngressControllerType.Traefik && actual.Intersect(expected).Any())
     {
       throw new KSailException($"'spec.project.ingressController={config.Spec.Project.IngressController}' in '{Path.Combine(projectRootPath, config.Spec.Project.ConfigPath)}' does not match expected values in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'." + Environment.NewLine +
         $"  - please remove '--disable=traefik' from 'options.k3s.extraArgs' in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'.");
     }
-    else if (config.Spec.Project.IngressController is not KSailIngressControllerType.Default and not KSailIngressControllerType.Traefik && (!actual.Any() || !actual.All(expectedWithCustomIngressController.Contains)))
+    else if (config.Spec.Project.IngressController is not KSailIngressControllerType.Default and not KSailIngressControllerType.Traefik && (!actual.Any() || !expected.All(actual.Contains)))
     {
       throw new KSailException($"'spec.project.ingressController={config.Spec.Project.IngressController}' in '{Path.Combine(projectRootPath, config.Spec.Project.ConfigPath)}' does not match expected values in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'." + Environment.NewLine +
         $"  - please set 'options.k3s.extraArgs' to '--disable=traefik' for 'server:*' in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'.");
@@ -227,14 +227,14 @@ class ConfigurationValidator(KSailCluster config)
         ]
       }
     };
-    var expectedWithNoMetricsServer = expectedWithNoMetricsServerK3sExtraArgs.Select(x => x.Arg + ":" + x.NodeFilters?.First()) ?? [];
+    var expected = expectedWithNoMetricsServerK3sExtraArgs.Select(x => x.Arg + ":" + x.NodeFilters?.First()) ?? [];
     var actual = distributionConfig.Options?.K3s?.ExtraArgs?.Select(x => x.Arg + ":" + (x.NodeFilters?.First() ?? "server:*")) ?? [];
-    if (config.Spec.Project.MetricsServer && actual.Intersect(expectedWithNoMetricsServer).Any())
+    if (config.Spec.Project.MetricsServer && actual.Intersect(expected).Any())
     {
       throw new KSailException($"'spec.project.metricsServer={config.Spec.Project.MetricsServer}' in '{Path.Combine(projectRootPath, config.Spec.Project.ConfigPath)}' does not match expected values in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'." + Environment.NewLine +
         $"  - please remove '--disable=metrics-server' from 'options.k3s.extraArgs' in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'.");
     }
-    else if (!config.Spec.Project.MetricsServer && (!actual.Any() || !actual.All(expectedWithNoMetricsServer.Contains)))
+    else if (!config.Spec.Project.MetricsServer && (!actual.Any() || !expected.All(actual.Contains)))
     {
       throw new KSailException($"'spec.project.metricsServer={config.Spec.Project.MetricsServer}' in '{Path.Combine(projectRootPath, config.Spec.Project.ConfigPath)}' does not match expected values in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'." + Environment.NewLine +
         $"  - please set 'options.k3s.extraArgs' to '--disable=metrics-server' for 'server:*' in '{Path.Combine(projectRootPath, config.Spec.Project.DistributionConfigPath)}'.");
