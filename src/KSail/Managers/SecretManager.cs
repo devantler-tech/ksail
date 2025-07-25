@@ -35,8 +35,8 @@ class SecretManager(KSailCluster config) : IBootstrapManager
     Console.WriteLine("🔐 Bootstrapping SOPS secret manager");
     switch (config.Spec.Project.DeploymentTool)
     {
-      case KSailDeploymentToolType.Kubectl:
-        BootstrapSOPSForKubectl();
+      case KSailDeploymentToolType.Kubectl or KSailDeploymentToolType.ArgoCD:
+        BootstrapSOPSForOther(config);
         break;
       case KSailDeploymentToolType.Flux:
         await BootstrapSOPSForFluxAsync(cancellationToken).ConfigureAwait(false);
@@ -47,9 +47,10 @@ class SecretManager(KSailCluster config) : IBootstrapManager
     Console.WriteLine();
   }
 
-  static void BootstrapSOPSForKubectl()
+  static void BootstrapSOPSForOther(KSailCluster config)
+
   {
-    Console.WriteLine($"► the kubectl deployment tool uses 'ksops' to manage SOPS encrypted secrets");
+    Console.WriteLine($"► the deployment tool '{config.Spec.Project.DeploymentTool}'  uses 'ksops' to manage SOPS encrypted secrets");
     Console.WriteLine($"  - 'ksops' is currently not managed by KSail. If you want to use it, please install and configure it manually.");
   }
 
