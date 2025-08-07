@@ -225,7 +225,7 @@ validation_checklist:
     expected: "Shows help output"
   
   - name: "Init creates project"
-    command: "cd /tmp && mkdir test && cd test && /path/to/repo/src/KSail/bin/Debug/net9.0/linux-x64/ksail init"
+    command: "cd /tmp && mkdir test && cd test && $REPO_ROOT/src/KSail/bin/Debug/net9.0/linux-x64/ksail init"
     expected: "Creates ksail.yaml, kind.yaml, k8s/kustomization.yaml"
 
 references:
