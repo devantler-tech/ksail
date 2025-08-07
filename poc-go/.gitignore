@@ -1,0 +1,14 @@
+# Binaries
+ksail-poc
+ksail-poc.exe
+
+# Go build cache
+*.test
+*.out
+
+# IDE files
+.vscode/
+.idea/
+
+# Test output
+test-output/
