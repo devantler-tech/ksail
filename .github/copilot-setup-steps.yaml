@@ -1,0 +1,249 @@
+# GitHub Copilot Setup Steps for KSail
+# This file provides structured setup instructions for the KSail project
+# Complements the comprehensive instructions in copilot-instructions.md
+
+name: "KSail Development Environment Setup"
+description: "Setup steps for KSail - Kubernetes SDK for Local GitOps Development"
+
+prerequisites:
+  - name: "Operating System"
+    description: "Linux-based environment (tested on Ubuntu/Debian)"
+    required: true
+  
+  - name: "Internet Connection"
+    description: "Required for downloading dependencies and packages"
+    required: true
+
+setup_steps:
+  # Core Development Environment
+  - step: 1
+    name: "Install .NET 9.0 SDK"
+    description: "Critical prerequisite - install .NET 9.0 SDK before building anything"
+    required: true
+    commands:
+      - "curl -sSL https://dot.net/v1/dotnet-install.sh | bash /dev/stdin --version 9.0.102"
+      - "export PATH=\"$HOME/.dotnet:$PATH\""
+    validation:
+      command: "dotnet --version"
+      expected_output: "9.0.102 or later"
+    notes:
+      - "The project targets .NET 9.0 but many environments have .NET 8.0 by default"
+      - "All subsequent steps require this to be completed first"
+
+  # Documentation Environment (Optional)
+  - step: 2
+    name: "Install Ruby and Jekyll for Documentation"
+    description: "Required only if working with documentation builds"
+    required: false
+    commands:
+      - "gem install --user-install bundler"
+      - "export PATH=\"$HOME/.local/share/gem/ruby/3.2.0/bin:$PATH\""
+      - "cd /path/to/repo"
+      - "bundle config set --local path 'vendor/bundle'"
+      - "bundle install"
+    validation:
+      command: "bundle exec jekyll build"
+      expected_output: "Documentation builds to _site/ directory"
+    notes:
+      - "Only needed for documentation development"
+      - "Takes ~2 seconds to build documentation"
+
+  # External Kubernetes Tools (Optional)
+  - step: 3
+    name: "Install External Kubernetes Tools"
+    description: "Optional tools that enable full KSail functionality"
+    required: false
+    tools:
+      container_engines:
+        - name: "Docker"
+          description: "Container engine"
+          install_url: "https://docs.docker.com/get-docker/"
+        - name: "Podman"
+          description: "Alternative container engine"
+          install_url: "https://podman.io/getting-started/installation"
+      
+      kubernetes_tools:
+        - name: "kubectl"
+          description: "Kubernetes CLI"
+          install_url: "https://kubernetes.io/docs/tasks/tools/"
+        - name: "helm"
+          description: "Kubernetes package manager"
+          install_url: "https://helm.sh/docs/intro/install/"
+        - name: "k9s"
+          description: "Kubernetes terminal UI"
+          install_url: "https://k9scli.io/topics/install/"
+      
+      cluster_distributions:
+        - name: "kind"
+          description: "Kubernetes in Docker"
+          install_url: "https://kind.sigs.k8s.io/docs/user/quick-start/"
+        - name: "k3d"
+          description: "k3s in Docker"
+          install_url: "https://k3d.io/v5.4.6/"
+      
+      gitops_tools:
+        - name: "flux"
+          description: "GitOps toolkit"
+          install_url: "https://fluxcd.io/flux/installation/"
+        - name: "argocd"
+          description: "GitOps CD"
+          install_url: "https://argo-cd.readthedocs.io/en/stable/cli_installation/"
+      
+      networking:
+        - name: "cilium"
+          description: "CNI plugin"
+          install_url: "https://cilium.io/get-started/"
+      
+      secret_management:
+        - name: "age"
+          description: "Encryption tool"
+          install_url: "https://github.com/FiloSottile/age"
+        - name: "sops"
+          description: "Secrets encryption"
+          install_url: "https://github.com/mozilla/sops"
+      
+      validation:
+        - name: "kubeconform"
+          description: "Kubernetes manifest validation"
+          install_url: "https://github.com/yannh/kubeconform"
+    
+    notes:
+      - "The CLI shows warnings for missing tools but basic functionality works without them"
+      - "Install tools as needed for desired functionality"
+      - "Most basic operations work without external tools"
+
+build_and_test:
+  # Build Application
+  - step: 4
+    name: "Build KSail Application"
+    description: "Build the main application and verify it works"
+    required: true
+    commands:
+      - "cd src/KSail"
+      - "export PATH=\"$HOME/.dotnet:$PATH\""
+      - "dotnet build"
+    validation:
+      command: "dotnet build"
+      expected_output: "Build succeeded"
+      timeout: "90 seconds"
+    notes:
+      - "Takes ~40 seconds: 30s NuGet restore + 5s compilation"
+      - "NEVER CANCEL - builds need time to download packages and compile"
+      - "Always set timeouts to 90+ seconds for builds"
+
+  # Run Tests
+  - step: 5
+    name: "Run Unit Tests"
+    description: "Execute unit tests to verify functionality"
+    required: true
+    commands:
+      - "cd /path/to/repo"
+      - "export PATH=\"$HOME/.dotnet:$PATH\""
+      - "dotnet test tests/KSail.Tests.Unit/"
+    validation:
+      command: "dotnet test tests/KSail.Tests.Unit/"
+      expected_output: "Most tests should pass (some may fail if external tools are missing)"
+      timeout: "60 seconds"
+    notes:
+      - "Takes ~18 seconds to complete"
+      - "Some tests may fail if external Kubernetes tools are missing - this is expected"
+      - "NEVER CANCEL - set timeout to 60+ seconds"
+
+  # Test CLI Functionality
+  - step: 6
+    name: "Test CLI Functionality"
+    description: "Verify the CLI application works correctly"
+    required: true
+    commands:
+      - "cd src/KSail"
+      - "export PATH=\"$HOME/.dotnet:$PATH\""
+      - "dotnet run -- --help"
+    validation:
+      command: "dotnet run -- --help"
+      expected_output: "Shows KSail command help with available commands"
+    notes:
+      - "May show warnings about missing external tools - this is normal"
+      - "Basic CLI functionality should work without external tools"
+
+usage_examples:
+  # Basic Usage
+  - step: 7
+    name: "Test Basic KSail Commands"
+    description: "Try basic KSail functionality"
+    required: false
+    commands:
+      - "cd /tmp && mkdir test-ksail && cd test-ksail"
+      - "export PATH=\"$HOME/.dotnet:$PATH\""
+      - "/path/to/repo/src/KSail/bin/Debug/net9.0/linux-x64/ksail init"
+    validation:
+      expected_files:
+        - "ksail.yaml"
+        - "kind.yaml" 
+        - "k8s/kustomization.yaml"
+    notes:
+      - "This creates a sample project structure"
+      - "Cluster operations (up/down) require external tools"
+
+common_commands:
+  build: "cd src/KSail && export PATH=\"$HOME/.dotnet:$PATH\" && dotnet build"
+  test: "cd /path/to/repo && export PATH=\"$HOME/.dotnet:$PATH\" && dotnet test tests/KSail.Tests.Unit/"
+  run_cli: "cd src/KSail && export PATH=\"$HOME/.dotnet:$PATH\" && dotnet run -- [command]"
+  build_docs: "export PATH=\"$HOME/.local/share/gem/ruby/3.2.0/bin:$PATH\" && bundle exec jekyll build"
+
+troubleshooting:
+  - issue: "NETSDK1045: The current .NET SDK does not support targeting .NET 9.0"
+    solution:
+      - "Install .NET 9.0 SDK using the command in step 1"
+      - "Verify installation with: dotnet --version"
+  
+  - issue: "MSB4068: The element <Solution> is unrecognized"
+    solution:
+      - "KSail.slnx requires .NET 9.0 SDK"
+      - "Build individual projects with: dotnet build src/KSail/"
+  
+  - issue: "Jekyll Permission Errors"
+    solution:
+      - "bundle config set --local path 'vendor/bundle'"
+      - "bundle install"
+  
+  - issue: "Missing External Tools"
+    solution:
+      - "The CLI shows warnings for missing tools but basic functionality works"
+      - "Install tools from step 3 as needed for desired functionality"
+
+validation_checklist:
+  - name: "Build succeeds"
+    command: "cd src/KSail && dotnet build"
+    expected: "Build succeeded"
+  
+  - name: "Tests run"
+    command: "dotnet test tests/KSail.Tests.Unit/"
+    expected: "Most tests pass (some failures due to missing tools is normal)"
+  
+  - name: "CLI works"
+    command: "cd src/KSail && dotnet run -- --help"
+    expected: "Shows help output"
+  
+  - name: "Init creates project"
+    command: "cd /tmp && mkdir test && cd test && /path/to/repo/src/KSail/bin/Debug/net9.0/linux-x64/ksail init"
+    expected: "Creates ksail.yaml, kind.yaml, k8s/kustomization.yaml"
+
+references:
+  - name: "Comprehensive Instructions"
+    path: ".github/copilot-instructions.md"
+    description: "Detailed instructions with full context and examples"
+  
+  - name: "Project Structure"
+    items:
+      - "src/KSail/ - Main CLI application"
+      - "src/KSail.Models/ - Data models and configuration"
+      - "src/KSail.Generator/ - Code generation utilities"
+      - "tests/KSail.Tests.Unit/ - Unit tests"
+      - "docs/ - Jekyll documentation source"
+      - "KSail.slnx - .NET solution file (requires .NET 9.0)"
+
+build_times:
+  initial_build: "~40 seconds"
+  tests: "~18 seconds"
+  documentation: "~2 seconds"
+  note: "NEVER CANCEL long-running builds - they need time to download packages"
