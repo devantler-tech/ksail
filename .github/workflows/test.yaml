@@ -82,7 +82,7 @@ jobs:
           binaries-location: age
           chmod: 0755
       - name: 📦 Install SOPS CLI
-        uses: nhedger/setup-sops@v2
+        uses: nhedger/setup-sops@187c90dbb4e28c3225263886266a5b92baa7e5a1 # v2.1.1
       - name: 📦 Install K9s CLI
         uses: jaxxstorm/action-install-gh-release@6096f2a2bbfee498ced520b6922ac2c06e990ed2 # v2.1.0
         with:
