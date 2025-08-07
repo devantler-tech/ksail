@@ -63,7 +63,7 @@ public partial class KSailGenCommandTests
       Output = outputWriter,
       Error = errorWriter
     };
-    int exitCode = await _ksailCommand.Parse([.. args, "--output", outputPath], commandLineConfiguration).InvokeAsync(cts.Token);
+    int exitCode = await _ksailCommand.Parse([.. args, "--output", outputPath], commandLineConfiguration).InvokeAsync(cts.Token).ConfigureAwait(false);
     string fileContents = await File.ReadAllTextAsync(outputPath).ConfigureAwait(false);
 
     //Assert
