@@ -5,6 +5,7 @@ using System.Text.RegularExpressions;
 using DevantlerTech.SecretManager.SOPS.LocalAge;
 using KSail.Commands.Root;
 using KSail.Utils;
+using Xunit;
 
 namespace KSail.Tests.Commands.Init;
 
@@ -76,11 +77,20 @@ public partial class KSailInitCommandTests
   {
     //TODO: Add support for Windows at a later time.
     Skip.If(OperatingSystem.IsWindows(), "Skipping test on Windows OS.");
+
     //Arrange
     if (args == null)
     {
       throw new ArgumentNullException(nameof(args), "The argument 'args' cannot be null.");
     }
+
+    // Skip tests that require external tools that aren't available
+    bool requiresAge = args.Contains("--secret-manager") && args.Contains("SOPS");
+    bool requiresFlux = args.Contains("--deployment-tool") && args.Contains("Flux");
+
+    Skip.If(requiresAge && !BinaryChecker.CheckBinaryIsInPath("age-keygen"), "age-keygen CLI not found in PATH - required for SOPS secret manager");
+    Skip.If(requiresFlux && !BinaryChecker.CheckBinaryIsInPath("flux"), "flux CLI not found in PATH - required for Flux deployment tool");
+
     string outputDir = args[2];
 
     //Act

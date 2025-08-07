@@ -1,5 +1,7 @@
 using System.CommandLine;
 using KSail.Commands.Root;
+using KSail.Utils;
+using Xunit;
 
 namespace KSail.Tests.Unit.Commands.Validate;
 
@@ -34,6 +36,9 @@ public class KSailValidateCommandTests
   {
     // TODO: Add support for Windows at a later time.
     Skip.If(OperatingSystem.IsWindows(), "Skipping test on Windows OS.");
+    // Skip if required tools are not available
+    Skip.If(!BinaryChecker.CheckBinaryIsInPath("kubeconform"), "kubeconform CLI not found in PATH - required for schema validation");
+
     //Arrange
     string tempDir = Path.Combine(Path.GetTempPath(), "ksail-validate-given-valid-path-test");
     _ = Directory.CreateDirectory(tempDir);
