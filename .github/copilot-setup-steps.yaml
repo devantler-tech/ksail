@@ -174,7 +174,8 @@ usage_examples:
     commands:
       - "cd /tmp && mkdir test-ksail && cd test-ksail"
       - "export PATH=\"$HOME/.dotnet:$PATH\""
-      - "$(pwd)/src/KSail/bin/Debug/net9.0/linux-x64/ksail init"
+      - "export REPO_ROOT=$(git rev-parse --show-toplevel)"
+      - "$REPO_ROOT/src/KSail/bin/Debug/net9.0/linux-x64/ksail init"
     validation:
       expected_files:
         - "ksail.yaml"
