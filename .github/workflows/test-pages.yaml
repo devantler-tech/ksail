@@ -1,4 +1,6 @@
 name: Test - Pages
+permissions:
+  contents: read
 
 on:
   push:
