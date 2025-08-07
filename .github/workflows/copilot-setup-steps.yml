@@ -54,6 +54,83 @@ jobs:
           dotnet test tests/KSail.Tests.Unit/
         continue-on-error: true
 
+      - name: Install kind CLI
+        uses: jaxxstorm/action-install-gh-release@6096f2a2bbfee498ced520b6922ac2c06e990ed2 # v2.1.0
+        with:
+          repo: kubernetes-sigs/kind
+          extension-matching: disable
+          rename-to: kind
+          chmod: 0755
+        continue-on-error: true
+
+      - name: Install k3d CLI
+        uses: jaxxstorm/action-install-gh-release@6096f2a2bbfee498ced520b6922ac2c06e990ed2 # v2.1.0
+        with:
+          repo: k3d-io/k3d
+          extension-matching: disable
+          rename-to: k3d
+          chmod: 0755
+        continue-on-error: true
+
+      - name: Install Flux CLI
+        uses: jaxxstorm/action-install-gh-release@6096f2a2bbfee498ced520b6922ac2c06e990ed2 # v2.1.0
+        with:
+          repo: fluxcd/flux2
+        continue-on-error: true
+
+      - name: Install ArgoCD CLI
+        uses: jaxxstorm/action-install-gh-release@6096f2a2bbfee498ced520b6922ac2c06e990ed2 # v2.1.0
+        with:
+          repo: argoproj/argo-cd
+          extension-matching: disable
+          rename-to: argocd
+          chmod: 0755
+        continue-on-error: true
+
+      - name: Install Kubectl CLI
+        uses: azure/setup-kubectl@776406bce94f63e41d621b960d78ee25c8b76ede # v4.0.1
+        continue-on-error: true
+
+      - name: Install Helm CLI
+        uses: azure/setup-helm@b9e51907a09c216f16ebe8536097933489208112 # v4.3.0
+        continue-on-error: true
+
+      - name: Install Cilium CLI
+        uses: jaxxstorm/action-install-gh-release@6096f2a2bbfee498ced520b6922ac2c06e990ed2 # v2.1.0
+        with:
+          repo: cilium/cilium-cli
+        continue-on-error: true
+
+      - name: Install Age CLI
+        uses: jaxxstorm/action-install-gh-release@6096f2a2bbfee498ced520b6922ac2c06e990ed2 # v2.1.0
+        with:
+          repo: FiloSottile/age
+          binaries-location: age
+          chmod: 0755
+        continue-on-error: true
+
+      - name: Install SOPS CLI
+        uses: nhedger/setup-sops@187c90dbb4e28c3225263886266a5b92baa7e5a1 # v2.1.1
+        continue-on-error: true
+
+      - name: Install K9s CLI
+        uses: jaxxstorm/action-install-gh-release@6096f2a2bbfee498ced520b6922ac2c06e990ed2 # v2.1.0
+        with:
+          repo: derailed/k9s
+        continue-on-error: true
+
+      - name: Install Kubeconform CLI
+        uses: jaxxstorm/action-install-gh-release@6096f2a2bbfee498ced520b6922ac2c06e990ed2 # v2.1.0
+        with:
+          repo: yannh/kubeconform
+        continue-on-error: true
+
+      - name: Install Kustomize CLI
+        uses: jaxxstorm/action-install-gh-release@6096f2a2bbfee498ced520b6922ac2c06e990ed2 # v2.1.0
+        with:
+          repo: kubernetes-sigs/kustomize
+        continue-on-error: true
+
       - name: Validate CLI functionality
         run: |
           export PATH="$HOME/.dotnet:$PATH"
