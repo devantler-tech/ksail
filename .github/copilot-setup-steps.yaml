@@ -79,7 +79,7 @@ setup_steps:
           install_url: "https://kind.sigs.k8s.io/docs/user/quick-start/"
         - name: "k3d"
           description: "k3s in Docker"
-          install_url: "https://k3d.io/v5.4.6/"
+          install_url: "https://k3d.io/stable/"
       
       gitops_tools:
         - name: "flux"
