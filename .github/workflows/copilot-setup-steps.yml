@@ -1,0 +1,62 @@
+name: "Copilot Setup Steps"
+
+# Automatically run the setup steps when they are changed to allow for easy validation, and
+# allow manual testing through the repository's "Actions" tab
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/copilot-setup-steps.yml
+  pull_request:
+    paths:
+      - .github/workflows/copilot-setup-steps.yml
+
+jobs:
+  # The job MUST be called `copilot-setup-steps` or it will not be picked up by Copilot.
+  copilot-setup-steps:
+    runs-on: ubuntu-latest
+
+    # Set the permissions to the lowest permissions possible needed for your steps.
+    # Copilot will be given its own token for its operations.
+    permissions:
+      contents: read
+
+    # You can define any steps you want, and they will run before the agent starts.
+    # If you do not check out your code, Copilot will do this for you.
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install .NET 9.0 SDK
+        run: |
+          curl -sSL https://dot.net/v1/dotnet-install.sh | bash /dev/stdin --version 9.0.102
+          echo "$HOME/.dotnet" >> $GITHUB_PATH
+          export PATH="$HOME/.dotnet:$PATH"
+          dotnet --version
+
+      - name: Install Ruby and Jekyll for documentation (optional)
+        run: |
+          gem install --user-install bundler
+          echo "$HOME/.local/share/gem/ruby/3.2.0/bin" >> $GITHUB_PATH
+          bundle config set --local path 'vendor/bundle'
+          bundle install
+        continue-on-error: true
+
+      - name: Build KSail Application
+        run: |
+          export PATH="$HOME/.dotnet:$PATH"
+          cd src/KSail
+          dotnet build
+
+      - name: Run Unit Tests
+        run: |
+          export PATH="$HOME/.dotnet:$PATH"
+          dotnet test tests/KSail.Tests.Unit/
+        continue-on-error: true
+
+      - name: Validate CLI functionality
+        run: |
+          export PATH="$HOME/.dotnet:$PATH"
+          cd src/KSail
+          dotnet run -- --help
+        continue-on-error: true
