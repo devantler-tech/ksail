@@ -1,3 +1,4 @@
+using System.Globalization;
 using DevantlerTech.KubernetesProvisioner.Deployment.Core;
 using DevantlerTech.KubernetesProvisioner.GitOps.Core;
 using DevantlerTech.KubernetesProvisioner.Resources.Native;
@@ -34,9 +35,24 @@ class DeploymentToolManager(KSailCluster config) : IBootstrapManager
   async Task ReconcileAsync(CancellationToken cancellationToken)
   {
     Console.WriteLine();
-    Console.WriteLine("🔄 Reconciling changes...");
     string kubernetesDirectory = config.Spec.Project.KustomizationPath.TrimStart('.', '/').Split('/').First();
-    await _deploymentToolProvisioner.ReconcileAsync(kubernetesDirectory, config.Spec.Connection.Timeout, cancellationToken).ConfigureAwait(false);
-    Console.WriteLine("✔ reconciliation completed");
+
+    // Use enhanced reconciliation progress manager for Flux
+    if (_deploymentToolProvisioner is IGitOpsProvisioner)
+    {
+      using var progressManager = new ReconciliationProgressManager(
+        config.Spec.Connection.Kubeconfig,
+        config.Spec.Connection.Context,
+        TimeSpan.Parse(config.Spec.Connection.Timeout, CultureInfo.InvariantCulture));
+
+      await progressManager.ReconcileWithProgressAsync(_deploymentToolProvisioner, kubernetesDirectory, cancellationToken).ConfigureAwait(false);
+    }
+    else
+    {
+      // Fallback to original behavior for non-GitOps provisioners
+      Console.WriteLine("🔄 Reconciling changes...");
+      await _deploymentToolProvisioner.ReconcileAsync(kubernetesDirectory, config.Spec.Connection.Timeout, cancellationToken).ConfigureAwait(false);
+      Console.WriteLine("✔ reconciliation completed");
+    }
   }
 }
