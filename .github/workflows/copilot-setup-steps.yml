@@ -36,14 +36,6 @@ jobs:
           export PATH="$HOME/.dotnet:$PATH"
           dotnet --version
 
-      - name: Install Ruby and Jekyll for documentation (optional)
-        run: |
-          gem install --user-install bundler
-          echo "$HOME/.local/share/gem/ruby/3.2.0/bin" >> $GITHUB_PATH
-          bundle config set --local path 'vendor/bundle'
-          bundle install
-        continue-on-error: true
-
       - name: Install kind CLI
         uses: jaxxstorm/action-install-gh-release@6096f2a2bbfee498ced520b6922ac2c06e990ed2 # v2.1.0
         with:
