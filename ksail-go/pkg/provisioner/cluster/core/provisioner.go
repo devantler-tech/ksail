@@ -1,24 +1,22 @@
-package provisioner_core
-
-import "context"
+package provcore
 
 // ClusterProvisioner defines methods for managing Kubernetes clusters.
 type ClusterProvisioner interface {
 	// Create creates a Kubernetes cluster.
-	Create(name string, configPath string, ctx context.Context) error
+	Create() error
 
 	// Delete deletes a Kubernetes cluster.
-	Delete(name string, ctx context.Context) error
+	Delete() error
 
 	// Start starts a Kubernetes cluster.
-	Start(name string, ctx context.Context) error
+	Start() error
 
 	// Stop stops a Kubernetes cluster.
-	Stop(name string, ctx context.Context) error
+	Stop() error
 
 	// List lists all Kubernetes clusters.
-	List(ctx context.Context) ([]string, error)
+	List() ([]string, error)
 
 	// Exists checks if a Kubernetes cluster exists.
-	Exists(name string, ctx context.Context) (bool, error)
+	Exists() (bool, error)
 }

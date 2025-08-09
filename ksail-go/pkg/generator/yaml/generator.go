@@ -1,10 +1,10 @@
-package yamlGenerator
+package genyaml
 
 import (
 	"fmt"
 	"os"
 
-	yamlMarshaller "devantler.tech/ksail/pkg/marshaller/yaml"
+	yamlmarshal "devantler.tech/ksail/pkg/marshaller/yaml"
 )
 
 // YamlGeneratorOptions defines options for the YAML generator.
@@ -14,9 +14,7 @@ type YamlGeneratorOptions struct {
 }
 
 // YamlGenerator implements core.Generator for producing YAML output.
-type YamlGenerator[T any] struct {
-	Marshaller yamlMarshaller.YamlMarshaller[*T]
-}
+type YamlGenerator[T any] struct { Marshaller yamlmarshal.Marshaller[*T] }
 
 func (g *YamlGenerator[T]) Generate(model T, options YamlGeneratorOptions) (string, error) {
 	output := options.Output
@@ -31,7 +29,7 @@ func (g *YamlGenerator[T]) Generate(model T, options YamlGeneratorOptions) (stri
 	// process output
 	if output != "" {
 		// Check if file exists and we're not forcing
-		if _, err := os.Stat(output); err == nil && !force {
+	if _, err := os.Stat(output); err == nil && !force {
 			fmt.Printf("► skipping %s as it already exists, use --force to overwrite\n", output)
 			return modelYaml, nil
 		}
@@ -44,7 +42,7 @@ func (g *YamlGenerator[T]) Generate(model T, options YamlGeneratorOptions) (stri
 		}
 
 		// Write the file
-		if err := os.WriteFile(output, []byte(modelYaml), 0644); err != nil {
+	if err := os.WriteFile(output, []byte(modelYaml), 0644); err != nil {
 			return "", fmt.Errorf("failed to write file %s: %w", output, err)
 		}
 	}
@@ -54,7 +52,7 @@ func (g *YamlGenerator[T]) Generate(model T, options YamlGeneratorOptions) (stri
 
 // NewYamlGenerator creates a new YamlGenerator instance.
 func NewYamlGenerator[T any]() *YamlGenerator[T] {
-	marshaller := yamlMarshaller.NewYamlMarshaller[*T]()
+	marshaller := yamlmarshal.NewMarshaller[*T]()
 	return &YamlGenerator[T]{
 		Marshaller: *marshaller,
 	}

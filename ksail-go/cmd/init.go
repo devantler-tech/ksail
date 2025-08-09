@@ -4,13 +4,13 @@ import (
 	"fmt"
 
 	"devantler.tech/ksail/internal/util"
-	"devantler.tech/ksail/pkg/apis/v1alpha1/cluster"
+	ksailcluster "devantler.tech/ksail/pkg/apis/v1alpha1/cluster"
 	"github.com/spf13/cobra"
 )
 
 var (
 	name         string               = "ksail-default"
-	distribution cluster.Distribution = cluster.DistributionKind
+	distribution ksailcluster.Distribution = ksailcluster.DistributionKind
 	output       string               = "./"
 	srcDir       string               = "k8s"
 	force        bool                 = false
@@ -28,23 +28,26 @@ var initCmd = &cobra.Command{
   - 'k8s/kustomization.yaml' as an entry point for Kustomize
   `,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		ksailConfig := cluster.NewCluster()
+		ksailConfig := ksailcluster.NewCluster()
 		SetInitialValuesFromInput(ksailConfig, name, distribution, srcDir)
-		Scaffold(*ksailConfig, output, force)
-
-		return nil
+	return Scaffold(*ksailConfig, output, force)
 	},
 }
 
-func Scaffold(ksailConfig cluster.Cluster, output string, force bool) {
+// Scaffold generates initial project files according to the provided configuration.
+func Scaffold(ksailConfig ksailcluster.Cluster, output string, force bool) error {
 	scaffolder := util.NewScaffolder(ksailConfig)
 	fmt.Println("📝 Scaffolding new project...")
-	scaffolder.Scaffold(output, force)
+	if err := scaffolder.Scaffold(output, force); err != nil {
+		return err
+	}
 	fmt.Println("✔ project scaffolded")
+	return nil
 }
 
 // TODO: Move SetInitialValuesFromInput to a more fitting file
-func SetInitialValuesFromInput(clusterObj *cluster.Cluster, name string, distribution cluster.Distribution, srcDir string) {
+// SetInitialValuesFromInput mutates clusterObj with CLI-provided values.
+func SetInitialValuesFromInput(clusterObj *ksailcluster.Cluster, name string, distribution ksailcluster.Distribution, srcDir string) {
 	clusterObj.Metadata.Name = name
 	clusterObj.Spec.Distribution = distribution
 	clusterObj.Spec.SourceDirectory = srcDir

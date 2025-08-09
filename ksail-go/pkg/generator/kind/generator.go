@@ -1,19 +1,18 @@
-package kindGenerator
+package genkind
 
 import (
-	"os"
+	"fmt"
 
-	color "devantler.tech/ksail/internal/util/fmt"
-	"devantler.tech/ksail/pkg/apis/v1alpha1/cluster"
+	ksailcluster "devantler.tech/ksail/pkg/apis/v1alpha1/cluster"
 	yamlGenerator "devantler.tech/ksail/pkg/generator/yaml"
-	yamlMarshaller "devantler.tech/ksail/pkg/marshaller/yaml"
+	yamlmarshal "devantler.tech/ksail/pkg/marshaller/yaml"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
 
 // KindGenerator is a generator for kind resources.
 type KindGenerator struct {
-	Cluster    *cluster.Cluster
-	Marshaller yamlMarshaller.YamlMarshaller[*v1alpha4.Cluster]
+	Cluster    *ksailcluster.Cluster
+	Marshaller yamlmarshal.Marshaller[*v1alpha4.Cluster]
 	Generator  yamlGenerator.YamlGenerator[v1alpha4.Cluster]
 }
 
@@ -27,15 +26,13 @@ func (g *KindGenerator) Generate(opts yamlGenerator.YamlGeneratorOptions) (strin
 	v1alpha4.SetDefaultsCluster(&kindCluster)
 	result, err := g.Generator.Generate(kindCluster, opts)
 	if err != nil {
-		color.PrintError("%s", err)
-		os.Exit(1)
+		return "", fmt.Errorf("generate kind config: %w", err)
 	}
-
 	return result, nil
 }
 
-func NewKindGenerator(ksailConfig *cluster.Cluster) *KindGenerator {
-	marshaller := yamlMarshaller.NewYamlMarshaller[*v1alpha4.Cluster]()
+func NewKindGenerator(ksailConfig *ksailcluster.Cluster) *KindGenerator {
+	marshaller := yamlmarshal.NewMarshaller[*v1alpha4.Cluster]()
 	generator := yamlGenerator.NewYamlGenerator[v1alpha4.Cluster]()
 
 	return &KindGenerator{

@@ -1,4 +1,4 @@
-package provisioner_k3d
+package provk3d
 
 // K3dClusterProvisioner is an implementation of the ClusterProvisioner interface for provisioning k3d clusters.
 type K3dClusterProvisioner struct {

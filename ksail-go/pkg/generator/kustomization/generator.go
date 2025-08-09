@@ -1,21 +1,20 @@
-// TODO: Fix `KustomizationGenerator` to not omit an empty resources list
-package kustomizationGenerator
+package genkustomization
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 
-	color "devantler.tech/ksail/internal/util/fmt"
-	"devantler.tech/ksail/pkg/apis/v1alpha1/cluster"
+	ksailcluster "devantler.tech/ksail/pkg/apis/v1alpha1/cluster"
 	yamlGenerator "devantler.tech/ksail/pkg/generator/yaml"
-	yamlMarshaller "devantler.tech/ksail/pkg/marshaller/yaml"
+	yamlmarshal "devantler.tech/ksail/pkg/marshaller/yaml"
 	"sigs.k8s.io/kustomize/api/types"
 )
 
 // KustomizationGenerator is a generator for kustomization resources.
 type KustomizationGenerator struct {
-	Cluster    *cluster.Cluster
-	Marshaller yamlMarshaller.YamlMarshaller[*types.Kustomization]
+	Cluster    *ksailcluster.Cluster
+	Marshaller yamlmarshal.Marshaller[*types.Kustomization]
 	Generator  yamlGenerator.YamlGenerator[types.Kustomization]
 }
 
@@ -29,19 +28,17 @@ func (g *KustomizationGenerator) Generate(opts yamlGenerator.YamlGeneratorOption
 	}
 	outputFile := filepath.Join(opts.Output, "kustomization.yaml")
 	if err := os.MkdirAll(filepath.Dir(outputFile), 0755); err != nil {
-		color.PrintError("%s", err)
-		os.Exit(1)
+		return "", fmt.Errorf("create kustomization dir: %w", err)
 	}
 	result, err := g.Generator.Generate(kustomization, yamlGenerator.YamlGeneratorOptions{Output: outputFile, Force: opts.Force})
 	if err != nil {
-		color.PrintError("%s", err)
-		os.Exit(1)
+		return "", fmt.Errorf("generate kustomization: %w", err)
 	}
 	return result, nil
 }
 
-func NewKustomizationGenerator(ksailConfig *cluster.Cluster) *KustomizationGenerator {
-	marshaller := yamlMarshaller.NewYamlMarshaller[*types.Kustomization]()
+func NewKustomizationGenerator(ksailConfig *ksailcluster.Cluster) *KustomizationGenerator {
+	marshaller := yamlmarshal.NewMarshaller[*types.Kustomization]()
 	generator := yamlGenerator.NewYamlGenerator[types.Kustomization]()
 
 	return &KustomizationGenerator{

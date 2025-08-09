@@ -1,4 +1,4 @@
-package coreGenerator
+package gencore
 
 // GeneratorOption represents a configuration option for the generator.
 type GeneratorOption any

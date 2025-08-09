@@ -5,32 +5,29 @@ import (
 	"os"
 	"path/filepath"
 
-	color "devantler.tech/ksail/internal/util/fmt"
-	"devantler.tech/ksail/pkg/apis/v1alpha1/cluster"
-	yamlMarshaller "devantler.tech/ksail/pkg/marshaller/yaml"
+	ksailcluster "devantler.tech/ksail/pkg/apis/v1alpha1/cluster"
+	yamlmarshal "devantler.tech/ksail/pkg/marshaller/yaml"
 )
 
-type KSailConfigLoader struct {
-	Marshaller yamlMarshaller.YamlMarshaller[*cluster.Cluster]
-}
+type KSailConfigLoader struct { Marshaller yamlmarshal.Marshaller[*ksailcluster.Cluster] }
 
-func (cl *KSailConfigLoader) LoadKSailConfig() *cluster.Cluster {
-	fmt.Println("⏳ Loading configuration...")
+func (cl *KSailConfigLoader) LoadKSailConfig() (*ksailcluster.Cluster, error) {
+	fmt.Println("⏳ Loading KSail configuration...")
 	for dir := "."; ; dir = filepath.Dir(dir) {
 		configPath := filepath.Join(dir, "ksail.yaml")
 		if _, err := os.Stat(configPath); err == nil {
 			data, err := os.ReadFile(configPath)
 			if err != nil {
-				color.PrintError("%s", err)
-				os.Exit(1)
+				return nil, fmt.Errorf("read ksail config: %w", err)
 			}
-			ksailConfig := &cluster.Cluster{}
+			ksailConfig := &ksailcluster.Cluster{}
 			if err := cl.Marshaller.Unmarshal(data, ksailConfig); err != nil {
-				color.PrintError("%s", err)
-				os.Exit(1)
+				return nil, fmt.Errorf("unmarshal ksail config: %w", err)
 			}
 			fmt.Printf("► '%s' found.\n", configPath)
-			return ksailConfig
+			fmt.Println("✔ ksail configuration loaded")
+			fmt.Println("")
+			return ksailConfig, nil
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir || dir == "" {
@@ -38,15 +35,14 @@ func (cl *KSailConfigLoader) LoadKSailConfig() *cluster.Cluster {
 		}
 	}
 	fmt.Println("► './ksail.yaml' not found. Using default configuration.")
-	ksailConfig := cluster.NewCluster()
-
-	fmt.Println("✔ configuration loaded")
+	ksailConfig := ksailcluster.NewCluster()
+	fmt.Println("✔ ksail configuration loaded")
 	fmt.Println("")
-	return ksailConfig
+	return ksailConfig, nil
 }
 
 func NewKSailConfigLoader() *KSailConfigLoader {
-	marshaller := yamlMarshaller.NewYamlMarshaller[*cluster.Cluster]()
+	marshaller := yamlmarshal.NewMarshaller[*ksailcluster.Cluster]()
 	return &KSailConfigLoader{
 		Marshaller: *marshaller,
 	}

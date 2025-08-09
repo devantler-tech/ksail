@@ -1,15 +1,14 @@
-package yamlMarshaller
+package marshalleryaml
 
 import (
 	"sigs.k8s.io/yaml"
 )
 
-// YAMLMarshaller is a struct for marshalling YAML resources.
-type YamlMarshaller[T any] struct {
-}
+// Marshaller marshals/unmarshals YAML documents for a model type.
+type Marshaller[T any] struct{}
 
 // Marshal serializes the model into a string representation.
-func (g *YamlMarshaller[T]) Marshal(model T) (string, error) {
+func (g *Marshaller[T]) Marshal(model T) (string, error) {
 	data, err := yaml.Marshal(model)
 	if err != nil {
 		return "", err
@@ -19,15 +18,15 @@ func (g *YamlMarshaller[T]) Marshal(model T) (string, error) {
 }
 
 // Unmarshal deserializes the model from a byte representation.
-func (g *YamlMarshaller[T]) Unmarshal(data []byte, model T) error {
+func (g *Marshaller[T]) Unmarshal(data []byte, model T) error {
 	return yaml.Unmarshal(data, model)
 }
 
-func (g *YamlMarshaller[T]) UnmarshalString(data string, model T) error {
+func (g *Marshaller[T]) UnmarshalString(data string, model T) error {
 	return yaml.Unmarshal([]byte(data), model)
 }
 
-// NewYamlMarshaller creates a new YamlMarshaller instance.
-func NewYamlMarshaller[T any]() *YamlMarshaller[T] {
-	return &YamlMarshaller[T]{}
+// NewMarshaller creates a new Marshaller instance.
+func NewMarshaller[T any]() *Marshaller[T] {
+	return &Marshaller[T]{}
 }

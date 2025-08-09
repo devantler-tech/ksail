@@ -1,9 +1,6 @@
-package cluster
+package ksailcluster
 
 import (
-	"fmt"
-	"strings"
-
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -23,15 +20,16 @@ type Cluster struct {
 
 // Spec defines the desired state of a KSail cluster.
 type Spec struct {
-	SourceDirectory        string `json:"sourceDirectory,omitzero"`
-	Connection             `json:"connection,omitzero"`
-	Distribution           Distribution      `json:"distribution,omitzero"`
-	CNI                    CNI               `json:"cni,omitzero"`
-	CSI                    CSI               `json:"csi,omitzero"`
-	IngressController      IngressController `json:"ingressController,omitzero"`
-	GatewayController      GatewayController `json:"gatewayController,omitzero"`
-	DeploymentTool         DeploymentTool    `json:"deploymentTool,omitzero"`
-	Options                Options           `json:"options,omitzero"`
+	DistributionConfig string            `json:"distributionConfig,omitzero"`
+	SourceDirectory    string            `json:"sourceDirectory,omitzero"`
+	Connection         Connection        `json:"connection,omitzero"`
+	Distribution       Distribution      `json:"distribution,omitzero"`
+	CNI                CNI               `json:"cni,omitzero"`
+	CSI                CSI               `json:"csi,omitzero"`
+	IngressController  IngressController `json:"ingressController,omitzero"`
+	GatewayController  GatewayController `json:"gatewayController,omitzero"`
+	DeploymentTool     DeploymentTool    `json:"deploymentTool,omitzero"`
+	Options            Options           `json:"options,omitzero"`
 }
 
 // Connection defines connection options for a KSail cluster.
@@ -44,53 +42,14 @@ type Connection struct {
 // Distribution defines the distribution options for a KSail cluster.
 type Distribution string
 
-// Set implements pflag.Value.
-func (d *Distribution) Set(value string) error {
-	// Check against constant values with case-insensitive comparison
-	for _, dist := range []Distribution{DistributionKind, DistributionK3d, DistributionTalosInDocker} {
-		if strings.EqualFold(value, string(dist)) {
-			*d = dist
-			return nil
-		}
-	}
-
-	return fmt.Errorf("invalid distribution: %s (valid options: %s, %s, %s)",
-		value, DistributionKind, DistributionK3d, DistributionTalosInDocker)
-}
-
-// String implements pflag.Value.
-func (d *Distribution) String() string {
-	switch *d {
-	case DistributionKind:
-		return "Kind"
-	case DistributionK3d:
-		return "K3d"
-	case DistributionTalosInDocker:
-		return "TalosInDocker"
-	default:
-		return "Unknown"
-	}
-}
-
-// Type implements pflag.Value.
-func (d *Distribution) Type() string {
-	switch *d {
-	case DistributionKind:
-		return "Kind"
-	case DistributionK3d:
-		return "K3d"
-	case DistributionTalosInDocker:
-		return "TalosInDocker"
-	default:
-		return "Unknown"
-	}
-}
-
 const (
-	DistributionKind          Distribution = "Kind"
-	DistributionK3d           Distribution = "K3d"
-	DistributionTalosInDocker Distribution = "TalosInDocker"
+	DistributionKind Distribution = "Kind"
+	DistributionK3d  Distribution = "K3d"
+	DistributionTind Distribution = "Tind"
 )
+
+// validDistributions enumerates supported distribution values.
+var validDistributions = []Distribution{DistributionKind, DistributionK3d, DistributionTind}
 
 // CNI defines the CNI options for a KSail cluster.
 type CNI string
@@ -136,11 +95,11 @@ const (
 	DeploymentToolArgoCD  DeploymentTool = "ArgoCD"
 )
 
-// ClusterSpecFluxDeploymentTool defines the Flux deployment tool options for a KSail cluster.
+// Options holds optional settings for distributions, networking, and deployment tools.
 type Options struct {
-	Kind          OptionsKind          `json:"kind,omitzero"`
-	K3d           OptionsK3d           `json:"k3d,omitzero"`
-	TalosInDocker OptionsTalosInDocker `json:"talosInDocker,omitzero"`
+	Kind OptionsKind `json:"kind,omitzero"`
+	K3d  OptionsK3d  `json:"k3d,omitzero"`
+	Tind OptionsTind `json:"talosInDocker,omitzero"`
 
 	Cilium OptionsCilium `json:"cilium,omitzero"`
 
@@ -152,122 +111,47 @@ type Options struct {
 	Kustomize OptionsKustomize `json:"kustomize,omitzero"`
 }
 
-// OptionsKind defines the options for the Kind distribution.
+// OptionsKind defines options specific to the Kind distribution.
 type OptionsKind struct {
 	// Add any specific fields for the Kind distribution here.
 }
 
-// OptionsK3d defines the options for the K3d distribution.
+// OptionsK3d defines options specific to the K3d distribution.
 type OptionsK3d struct {
 	// Add any specific fields for the K3d distribution here.
 }
 
-// OptionsTalosInDocker defines the options for the TalosInDocker distribution.
-type OptionsTalosInDocker struct {
-	// Add any specific fields for the TalosInDocker distribution here.
+// OptionsTind defines options specific to the Tind distribution.
+type OptionsTind struct {
+	// Add any specific fields for the Tind distribution here.
 }
 
-// OptionsCilium defines the options for the Cilium CNI.
+// OptionsCilium defines options for the Cilium CNI.
 type OptionsCilium struct {
 	// Add any specific fields for the Cilium CNI here.
 }
 
-// OptionsKubectl defines the options for the Kubectl distribution.
+// OptionsKubectl defines options for the kubectl deployment tool.
 type OptionsKubectl struct {
 	// Add any specific fields for the Kubectl distribution here.
 }
 
-// OptionsFlux defines the options for the Flux distribution.
+// OptionsFlux defines options for the Flux deployment tool.
 type OptionsFlux struct {
 	// Add any specific fields for the Flux distribution here.
 }
 
-// OptionsArgoCD defines the options for the ArgoCD distribution.
+// OptionsArgoCD defines options for the ArgoCD deployment tool.
 type OptionsArgoCD struct {
 	// Add any specific fields for the ArgoCD distribution here.
 }
 
-// OptionsHelm defines the options for the Helm distribution.
+// OptionsHelm defines options for the Helm tool.
 type OptionsHelm struct {
 	// Add any specific fields for the Helm distribution here.
 }
 
-// OptionsKustomize defines the options for the Kustomize distribution.
+// OptionsKustomize defines options for the Kustomize tool.
 type OptionsKustomize struct {
 	// Add any specific fields for the Kustomize distribution here.
-}
-
-// NewCluster creates a new KSail cluster with the given options.
-func NewCluster(options ...func(*Cluster)) *Cluster {
-	c := &Cluster{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       Kind,
-			APIVersion: APIVersion,
-		},
-	}
-	for _, opt := range options {
-		opt(c)
-	}
-	SetDefaults(c)
-	return c
-}
-
-func WithMetadataName(name string) func(*Cluster) {
-	return func(c *Cluster) {
-		c.Metadata.Name = name
-	}
-}
-
-func WithSpecDistribution(distribution Distribution) func(*Cluster) {
-	return func(c *Cluster) {
-		c.Spec.Distribution = distribution
-	}
-}
-
-func WithSpecConnectionKubeconfig(kubeconfig string) func(*Cluster) {
-	return func(c *Cluster) {
-		c.Spec.Connection.Kubeconfig = kubeconfig
-	}
-}
-
-func WithSpecConnectionContext(context string) func(*Cluster) {
-	return func(c *Cluster) {
-		c.Spec.Connection.Context = context
-	}
-}
-
-func WithSpecConnectionTimeout(timeout metav1.Duration) func(*Cluster) {
-	return func(c *Cluster) {
-		c.Spec.Connection.Timeout = timeout
-	}
-}
-
-func WithSpecCNI(cni CNI) func(*Cluster) {
-	return func(c *Cluster) {
-		c.Spec.CNI = cni
-	}
-}
-
-func WithSpecCSI(csi CSI) func(*Cluster) {
-	return func(c *Cluster) {
-		c.Spec.CSI = csi
-	}
-}
-
-func WithSpecIngressController(ingressController IngressController) func(*Cluster) {
-	return func(c *Cluster) {
-		c.Spec.IngressController = ingressController
-	}
-}
-
-func WithSpecGatewayController(gatewayController GatewayController) func(*Cluster) {
-	return func(c *Cluster) {
-		c.Spec.GatewayController = gatewayController
-	}
-}
-
-func WithSpecDeploymentTool(deploymentTool DeploymentTool) func(*Cluster) {
-	return func(c *Cluster) {
-		c.Spec.DeploymentTool = deploymentTool
-	}
 }

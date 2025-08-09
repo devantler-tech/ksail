@@ -1,4 +1,4 @@
-package marshaller_core
+package marshallercore
 
 // Marshaller is an interface for a resource marshaller.
 type Marshaller[T any] interface {
