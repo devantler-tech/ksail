@@ -1,0 +1,9 @@
+# KSail
+ksail
+k3d.yaml
+kind.yaml
+ksail.yaml
+k8s/
+
+# Added by goreleaser init:
+dist/

@@ -1,0 +1,9 @@
+name: CD - Go
+on:
+  workflow_dispatch:
+jobs:
+  # Goreleaser
+  cd:
+    uses: avamsi/go-nogo/.github/workflows/ci.yml@main
+    with:
+      runs-on: ubuntu-latest
