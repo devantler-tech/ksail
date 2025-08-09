@@ -2,9 +2,9 @@
 package talosInDockerGenerator
 
 import (
-	"fmt"
 	"os"
 
+	color "devantler.tech/ksail/internal/util/fmt"
 	"devantler.tech/ksail/pkg/apis/v1alpha1/cluster"
 	yamlGenerator "devantler.tech/ksail/pkg/generator/yaml"
 )
@@ -15,7 +15,7 @@ type TalosInDockerGenerator struct {
 }
 
 func (g *TalosInDockerGenerator) Generate(opts yamlGenerator.YamlGeneratorOptions) (string, error) {
-	fmt.Fprintln(os.Stderr, "\033[31m"+"✗ TalosInDocker distribution is not yet implemented"+"\033[0m")
+  color.PrintError("TalosInDocker distribution is not yet implemented")
 	os.Exit(1)
 
 	return "", nil

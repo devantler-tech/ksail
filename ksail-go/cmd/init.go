@@ -1,11 +1,10 @@
 package cmd
 
 import (
-	"devantler.tech/ksail/cmd/handler"
-	"devantler.tech/ksail/cmd/helper"
-	ksail "devantler.tech/ksail/internal/utils"
+	"fmt"
+
+	"devantler.tech/ksail/internal/util"
 	"devantler.tech/ksail/pkg/apis/v1alpha1/cluster"
-	yamlMarshaller "devantler.tech/ksail/pkg/marshaller/yaml"
 	"github.com/spf13/cobra"
 )
 
@@ -20,16 +19,35 @@ var (
 var initCmd = &cobra.Command{
 	Use:   "init",
 	Short: "Scaffold a new project",
-	Long:  ``,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		var marshaller = yamlMarshaller.NewYamlMarshaller[*cluster.Cluster]()
-		var clusterLoader *ksail.ClusterLoader = ksail.NewClusterLoader(marshaller)
+	Long: `Scaffold a new Kubernetes project in the specified directory.
 
-		clusterObj := helper.LoadConfiguration(cmd, clusterLoader, output, name, distribution, srcDir)
-		handler.Scaffold(cmd, clusterObj, output, force)
+  Includes:
+  - 'ksail.yaml' configuration file for configuring KSail
+  - 'kind.yaml'|'k3d.yaml'|'talos/*' configuration file(s) for configuring the distribution
+  - '.sops.yaml' for managing secrets with SOPS (optional)
+  - 'k8s/kustomization.yaml' as an entry point for Kustomize
+  `,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		ksailConfig := cluster.NewCluster()
+		SetInitialValuesFromInput(ksailConfig, name, distribution, srcDir)
+		Scaffold(*ksailConfig, output, force)
 
 		return nil
 	},
+}
+
+func Scaffold(ksailConfig cluster.Cluster, output string, force bool) {
+	scaffolder := util.NewScaffolder(ksailConfig)
+	fmt.Println("📝 Scaffolding new project...")
+	scaffolder.Scaffold(output, force)
+	fmt.Println("✔ project scaffolded")
+}
+
+// TODO: Move SetInitialValuesFromInput to a more fitting file
+func SetInitialValuesFromInput(clusterObj *cluster.Cluster, name string, distribution cluster.Distribution, srcDir string) {
+	clusterObj.Metadata.Name = name
+	clusterObj.Spec.Distribution = distribution
+	clusterObj.Spec.SourceDirectory = srcDir
 }
 
 func init() {

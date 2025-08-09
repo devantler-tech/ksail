@@ -1,17 +1,24 @@
-package provisioner_kind
+package kindProvisioner
+
+import (
+	ksail "devantler.tech/ksail/pkg/apis/v1alpha1/cluster"
+	"sigs.k8s.io/kind/pkg/cluster"
+)
 
 // KindClusterProvisioner is an implementation of the ClusterProvisioner interface for provisioning kind clusters.
 type KindClusterProvisioner struct {
+  ksailConfig *ksail.Cluster
+  dockerProvider *cluster.Provider
 }
 
 // Create creates a kind cluster.
 func (k *KindClusterProvisioner) Create(name string, configPath string) error {
-	return nil
+	return k.dockerProvider.Create(name, cluster.CreateWithConfigFile(configPath))
 }
 
 // Delete deletes a kind cluster.
 func (k *KindClusterProvisioner) Delete(name string) error {
-	return nil
+	return k.dockerProvider.Delete(name, k.ksailConfig.Spec.Connection.Kubeconfig)
 }
 
 // Starts a kind cluster.
@@ -35,6 +42,9 @@ func (k *KindClusterProvisioner) Exists(name string) (bool, error) {
 }
 
 // / NewKindClusterProvisioner creates a new KindClusterProvisioner.
-func NewKindClusterProvisioner() *KindClusterProvisioner {
-	return &KindClusterProvisioner{}
+func NewKindClusterProvisioner(ksailConfig *ksail.Cluster) *KindClusterProvisioner {
+	return &KindClusterProvisioner{
+		ksailConfig:  ksailConfig,
+		dockerProvider: cluster.NewProvider(),
+  }
 }

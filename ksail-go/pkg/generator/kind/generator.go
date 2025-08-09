@@ -1,9 +1,9 @@
 package kindGenerator
 
 import (
-	"fmt"
 	"os"
 
+	color "devantler.tech/ksail/internal/util/fmt"
 	"devantler.tech/ksail/pkg/apis/v1alpha1/cluster"
 	yamlGenerator "devantler.tech/ksail/pkg/generator/yaml"
 	yamlMarshaller "devantler.tech/ksail/pkg/marshaller/yaml"
@@ -27,7 +27,7 @@ func (g *KindGenerator) Generate(opts yamlGenerator.YamlGeneratorOptions) (strin
 	v1alpha4.SetDefaultsCluster(&kindCluster)
 	result, err := g.Generator.Generate(kindCluster, opts)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "\033[31m"+err.Error()+"\033[0m")
+		color.PrintError("%s", err)
 		os.Exit(1)
 	}
 

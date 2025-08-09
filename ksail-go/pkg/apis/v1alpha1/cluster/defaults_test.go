@@ -14,7 +14,7 @@ func TestSetDefaults(t *testing.T) {
 		t.Fatalf("expected name ksail-default after defaulting, got %s", c.Metadata.Name)
 	}
 	// c.Spec.Connection.ConnectionKubeconfig should be set to "~/.kube/config"
-	if c.Spec.Connection.ConnectionKubeconfig != "~/.kube/config" {
-		t.Fatalf("expected kubeconfig ~/.kube/config after defaulting, got %s", c.Spec.Connection.ConnectionKubeconfig)
+	if c.Spec.Connection.Kubeconfig != "~/.kube/config" {
+		t.Fatalf("expected kubeconfig ~/.kube/config after defaulting, got %s", c.Spec.Connection.Kubeconfig)
 	}
 }

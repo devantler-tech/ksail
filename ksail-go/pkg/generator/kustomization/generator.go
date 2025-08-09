@@ -2,10 +2,10 @@
 package kustomizationGenerator
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 
+	color "devantler.tech/ksail/internal/util/fmt"
 	"devantler.tech/ksail/pkg/apis/v1alpha1/cluster"
 	yamlGenerator "devantler.tech/ksail/pkg/generator/yaml"
 	yamlMarshaller "devantler.tech/ksail/pkg/marshaller/yaml"
@@ -29,12 +29,12 @@ func (g *KustomizationGenerator) Generate(opts yamlGenerator.YamlGeneratorOption
 	}
 	outputFile := filepath.Join(opts.Output, "kustomization.yaml")
 	if err := os.MkdirAll(filepath.Dir(outputFile), 0755); err != nil {
-		fmt.Fprintln(os.Stderr, "\033[31m"+err.Error()+"\033[0m")
+		color.PrintError("%s", err)
 		os.Exit(1)
 	}
 	result, err := g.Generator.Generate(kustomization, yamlGenerator.YamlGeneratorOptions{Output: outputFile, Force: opts.Force})
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "\033[31m"+err.Error()+"\033[0m")
+		color.PrintError("%s", err)
 		os.Exit(1)
 	}
 	return result, nil

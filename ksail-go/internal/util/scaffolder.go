@@ -1,24 +1,24 @@
-package ksail
+package util
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 
+	color "devantler.tech/ksail/internal/util/fmt"
 	"devantler.tech/ksail/pkg/apis/v1alpha1/cluster"
 	k3dGenerator "devantler.tech/ksail/pkg/generator/k3d"
 	kindGenerator "devantler.tech/ksail/pkg/generator/kind"
-	talosInDockerGenerator "devantler.tech/ksail/pkg/generator/talos_in_docker"
 	kustomizationGenerator "devantler.tech/ksail/pkg/generator/kustomization"
+	talosInDockerGenerator "devantler.tech/ksail/pkg/generator/talos_in_docker"
 	yamlGenerator "devantler.tech/ksail/pkg/generator/yaml"
 )
 
 type Scaffolder struct {
-	KSailConfig             cluster.Cluster
+	KSailConfig            cluster.Cluster
 	KSailYamlGenerator     *yamlGenerator.YamlGenerator[cluster.Cluster]
 	KindGenerator          *kindGenerator.KindGenerator
 	K3dGenerator           *k3dGenerator.K3dGenerator
-	TalosInDockerGenerator  *talosInDockerGenerator.TalosInDockerGenerator
+	TalosInDockerGenerator *talosInDockerGenerator.TalosInDockerGenerator
 	KustomizationGenerator *kustomizationGenerator.KustomizationGenerator
 }
 
@@ -26,11 +26,11 @@ func (s *Scaffolder) Scaffold(output string, force bool) error {
 	// generate ksail.yaml file
 	_, err := s.KSailYamlGenerator.Generate(s.KSailConfig, yamlGenerator.YamlGeneratorOptions{Output: output + "ksail.yaml", Force: force})
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "\033[31m"+err.Error()+"\033[0m")
+		color.PrintError("%s", err)
 		os.Exit(1)
 	}
 
-	// generate distribution config file (kind.yaml, k3d.yaml)
+	// generate distribution config file
 	switch s.KSailConfig.Spec.Distribution {
 	case cluster.DistributionKind:
 		s.KindGenerator.Generate(yamlGenerator.YamlGeneratorOptions{Output: output + "kind.yaml", Force: force})
@@ -39,7 +39,7 @@ func (s *Scaffolder) Scaffold(output string, force bool) error {
 	case cluster.DistributionTalosInDocker:
 		s.TalosInDockerGenerator.Generate(yamlGenerator.YamlGeneratorOptions{Output: output + "talos-in-docker.yaml", Force: force})
 	default:
-		fmt.Fprintln(os.Stderr, "\033[31m"+"✗ provided distribution is unknown"+"\033[0m")
+		color.PrintError("provided distribution is unknown")
 		os.Exit(1)
 	}
 
@@ -56,7 +56,7 @@ func NewScaffolder(ksailConfig cluster.Cluster) *Scaffolder {
 	kustomizationGenerator := kustomizationGenerator.NewKustomizationGenerator(&ksailConfig)
 
 	return &Scaffolder{
-		KSailConfig:             ksailConfig,
+		KSailConfig:            ksailConfig,
 		KSailYamlGenerator:     ksailGenerator,
 		KindGenerator:          kindGenerator,
 		K3dGenerator:           k3dGenerator,

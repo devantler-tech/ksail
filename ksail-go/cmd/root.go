@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	color "devantler.tech/ksail/internal/util/fmt"
 	"github.com/spf13/cobra"
 )
 
@@ -15,9 +16,9 @@ var asciiArt string
 var rootCmd = &cobra.Command{
 	Use:   "ksail",
 	Short: "Spin up K8s clusters + ship workloads fast.",
-	Long: `KSail is an SDK for rapid Kubernetes iteration.
+	Long: `KSail is an SDK for operating and managing Kubernetes clusters and workloads.
 
-  Create ephemeral (or persistent) clusters, deploy and update workloads, test, and tear them down — all through one concise, declarative interface. Stop stitching together a dozen CLIs; KSail gives you a consistent UX built on the tools you already trust.`,
+  Create ephemeral (or persistent) clusters, deploy and update workloads, test and validate behavior — all through one concise, declarative interface. Stop stitching together a dozen CLIs; KSail gives you a consistent UX built on the tools you already trust.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		printAsciiArt()
 		return cmd.Help()
@@ -30,7 +31,7 @@ func SetVersionInfo(version, commit, date string) {
 
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Println(err)
+    color.PrintError("%s", err)
 		os.Exit(1)
 	}
 }

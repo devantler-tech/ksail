@@ -23,24 +23,22 @@ type Cluster struct {
 
 // Spec defines the desired state of a KSail cluster.
 type Spec struct {
-	ConfigPath             string `json:"configPath,omitzero"`
-	DistributionConfigPath string `json:"distributionConfigPath,omitzero"`
 	SourceDirectory        string `json:"sourceDirectory,omitzero"`
 	Connection             `json:"connection,omitzero"`
 	Distribution           Distribution      `json:"distribution,omitzero"`
 	CNI                    CNI               `json:"cni,omitzero"`
 	CSI                    CSI               `json:"csi,omitzero"`
-	IngressController      IngressController `json:"ingress,omitzero"`
-	GatewayController      GatewayController `json:"gateway,omitzero"`
+	IngressController      IngressController `json:"ingressController,omitzero"`
+	GatewayController      GatewayController `json:"gatewayController,omitzero"`
 	DeploymentTool         DeploymentTool    `json:"deploymentTool,omitzero"`
 	Options                Options           `json:"options,omitzero"`
 }
 
 // Connection defines connection options for a KSail cluster.
 type Connection struct {
-	ConnectionKubeconfig string          `json:"kubeconfig,omitzero"`
-	ConnectionContext    string          `json:"context,omitzero"`
-	ConnectionTimeout    metav1.Duration `json:"timeout,omitzero"`
+	Kubeconfig string          `json:"kubeconfig,omitzero"`
+	Context    string          `json:"context,omitzero"`
+	Timeout    metav1.Duration `json:"timeout,omitzero"`
 }
 
 // Distribution defines the distribution options for a KSail cluster.
@@ -220,18 +218,6 @@ func WithMetadataName(name string) func(*Cluster) {
 	}
 }
 
-func WithSpecConfigPath(path string) func(*Cluster) {
-	return func(c *Cluster) {
-		c.Spec.ConfigPath = path
-	}
-}
-
-func WithSpecDistributionConfigPath(path string) func(*Cluster) {
-	return func(c *Cluster) {
-		c.Spec.DistributionConfigPath = path
-	}
-}
-
 func WithSpecDistribution(distribution Distribution) func(*Cluster) {
 	return func(c *Cluster) {
 		c.Spec.Distribution = distribution
@@ -240,19 +226,19 @@ func WithSpecDistribution(distribution Distribution) func(*Cluster) {
 
 func WithSpecConnectionKubeconfig(kubeconfig string) func(*Cluster) {
 	return func(c *Cluster) {
-		c.Spec.Connection.ConnectionKubeconfig = kubeconfig
+		c.Spec.Connection.Kubeconfig = kubeconfig
 	}
 }
 
 func WithSpecConnectionContext(context string) func(*Cluster) {
 	return func(c *Cluster) {
-		c.Spec.Connection.ConnectionContext = context
+		c.Spec.Connection.Context = context
 	}
 }
 
 func WithSpecConnectionTimeout(timeout metav1.Duration) func(*Cluster) {
 	return func(c *Cluster) {
-		c.Spec.Connection.ConnectionTimeout = timeout
+		c.Spec.Connection.Timeout = timeout
 	}
 }
 
