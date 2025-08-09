@@ -6,7 +6,6 @@ import (
 	"os"
 	"strings"
 
-	"devantler.tech/ksail/internal/ui/notify"
 	"github.com/spf13/cobra"
 )
 
@@ -33,7 +32,6 @@ func SetVersionInfo(version, commit, date string) {
 // Execute runs the root command.
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
-		notify.Errorf("%s", err)
 		os.Exit(1)
 	}
 }

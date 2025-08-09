@@ -28,15 +28,15 @@ var initCmd = &cobra.Command{
   - 'k8s/kustomization.yaml' as an entry point for Kustomize
   `,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		ksailConfig := ksailcluster.NewCluster()
-		SetInitialValuesFromInput(ksailConfig, name, distribution, srcDir)
-	return Scaffold(*ksailConfig, output, force)
+	  return Scaffold(output, force)
 	},
 }
 
 // Scaffold generates initial project files according to the provided configuration.
-func Scaffold(ksailConfig ksailcluster.Cluster, output string, force bool) error {
-	scaffolder := util.NewScaffolder(ksailConfig)
+func Scaffold(output string, force bool) error {
+  ksailConfig := ksailcluster.NewCluster()
+  SetInitialValuesFromInput(ksailConfig, name, distribution, srcDir)
+  scaffolder := util.NewScaffolder(*ksailConfig)
 	fmt.Println("📝 Scaffolding new project...")
 	if err := scaffolder.Scaffold(output, force); err != nil {
 		return err

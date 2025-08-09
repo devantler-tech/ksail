@@ -59,7 +59,7 @@ func Provision(ksailConfig *ksailcluster.Cluster) error {
 			}
 		}
 	}
-  fmt.Printf("► creating cluster '%s'...\n", kindConfig.Name)
+  fmt.Printf("► creating cluster '%s'...\n", ksailConfig.Metadata.Name)
 	if err := kindProvisioner.Create(); err != nil {
 		return err
 	}
