@@ -9,11 +9,6 @@ nav_order: 0
 [![Test](https://github.com/devantler-tech/ksail/actions/workflows/test.yaml/badge.svg?branch=main)](https://github.com/devantler-tech/ksail/actions/workflows/test.yaml)
 [![codecov](https://codecov.io/gh/devantler-tech/ksail/graph/badge.svg?token=DNEO90PfNR)](https://codecov.io/gh/devantler-tech/ksail)
 
-> [!CAUTION]
-> Docker Desktop currently suffers from a bug that prevents KSail from exposing ports correctly. This affects the Kind distribution. A working build of Docker Desktop is shared [here](https://github.com/docker/for-mac/issues/7693#issuecomment-2950044483).
->
-> For the full context of the issue, see [this GitHub issue](https://github.com/docker/for-mac/issues/7693).
-
 > [!IMPORTANT]
 > **🆕 UP NEXT 🆕**
 >
