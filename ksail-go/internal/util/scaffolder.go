@@ -5,25 +5,20 @@ import (
 	"path/filepath"
 
 	ksailcluster "devantler.tech/ksail/pkg/apis/v1alpha1/cluster"
-	k3dgen "devantler.tech/ksail/pkg/generator/k3d"
-	kindgen "devantler.tech/ksail/pkg/generator/kind"
-	kustgen "devantler.tech/ksail/pkg/generator/kustomization"
-	talosdockergen "devantler.tech/ksail/pkg/generator/tind"
-	yamlgen "devantler.tech/ksail/pkg/generator/yaml"
+	gen "devantler.tech/ksail/pkg/generator"
 )
 
 type Scaffolder struct {
 	KSailConfig            ksailcluster.Cluster
-	KSailYamlGenerator     *yamlgen.YamlGenerator[ksailcluster.Cluster]
-	KindGenerator          *kindgen.KindGenerator
-	K3dGenerator           *k3dgen.K3dGenerator
-	TindGenerator *talosdockergen.TindGenerator
-	KustomizationGenerator *kustgen.KustomizationGenerator
+	KSailYamlGenerator     *gen.YamlGenerator[ksailcluster.Cluster]
+	KindGenerator          *gen.KindGenerator
+	K3dGenerator           *gen.K3dGenerator
+	KustomizationGenerator *gen.KustomizationGenerator
 }
 
 func (s *Scaffolder) Scaffold(output string, force bool) error {
 	// generate ksail.yaml file
-	_, err := s.KSailYamlGenerator.Generate(s.KSailConfig, yamlgen.YamlGeneratorOptions{Output: output + "ksail.yaml", Force: force})
+	_, err := s.KSailYamlGenerator.Generate(s.KSailConfig, gen.Options{Output: output + "ksail.yaml", Force: force})
 	if err != nil {
 		return err
 	}
@@ -31,22 +26,20 @@ func (s *Scaffolder) Scaffold(output string, force bool) error {
 	// generate distribution config file
 	switch s.KSailConfig.Spec.Distribution {
 	case ksailcluster.DistributionKind:
-	if _, err := s.KindGenerator.Generate(yamlgen.YamlGeneratorOptions{Output: output + "kind.yaml", Force: force}); err != nil {
+	if _, err := s.KindGenerator.Generate(gen.Options{Output: output + "kind.yaml", Force: force}); err != nil {
 			return err
 		}
 	case ksailcluster.DistributionK3d:
-	if _, err := s.K3dGenerator.Generate(yamlgen.YamlGeneratorOptions{Output: output + "k3d.yaml", Force: force}); err != nil {
+	if _, err := s.K3dGenerator.Generate(gen.Options{Output: output + "k3d.yaml", Force: force}); err != nil {
 			return err
 		}
 	case ksailcluster.DistributionTind:
-	if _, err := s.TindGenerator.Generate(yamlgen.YamlGeneratorOptions{Output: output + "talos-in-docker.yaml", Force: force}); err != nil {
-			return err
-		}
+		return fmt.Errorf("talos-in-docker distribution is not yet implemented")
 	default:
 		return fmt.Errorf("provided distribution is unknown")
 	}
 
-	if _, err := s.KustomizationGenerator.Generate(yamlgen.YamlGeneratorOptions{Output: filepath.Join(output, s.KSailConfig.Spec.SourceDirectory), Force: force}); err != nil {
+	if _, err := s.KustomizationGenerator.Generate(gen.Options{Output: filepath.Join(output, s.KSailConfig.Spec.SourceDirectory), Force: force}); err != nil {
 		return err
 	}
 
@@ -54,18 +47,16 @@ func (s *Scaffolder) Scaffold(output string, force bool) error {
 }
 
 func NewScaffolder(ksailConfig ksailcluster.Cluster) *Scaffolder {
-	ksailGen := yamlgen.NewYamlGenerator[ksailcluster.Cluster]()
-	kindGen := kindgen.NewKindGenerator(&ksailConfig)
-	k3dGen := k3dgen.NewK3dGenerator(&ksailConfig)
-	talosDockerGen := talosdockergen.NewTindGenerator(&ksailConfig)
-	kustGen := kustgen.NewKustomizationGenerator(&ksailConfig)
+	ksailGen := gen.NewYamlGenerator[ksailcluster.Cluster]()
+	kindGen := gen.NewKindGenerator(&ksailConfig)
+	k3dGen := gen.NewK3dGenerator(&ksailConfig)
+	kustGen := gen.NewKustomizationGenerator(&ksailConfig)
 
 	return &Scaffolder{
 		KSailConfig:            ksailConfig,
 		KSailYamlGenerator:     ksailGen,
 		KindGenerator:          kindGen,
 		K3dGenerator:           k3dGen,
-		TindGenerator: talosDockerGen,
 		KustomizationGenerator: kustGen,
 	}
 }

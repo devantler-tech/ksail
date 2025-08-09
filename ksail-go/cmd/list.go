@@ -7,9 +7,9 @@ import (
 
 	"devantler.tech/ksail/internal/ui/notify"
 	"devantler.tech/ksail/internal/ui/quiet"
-	"devantler.tech/ksail/internal/util"
+	"devantler.tech/ksail/internal/loader"
 	ksailcluster "devantler.tech/ksail/pkg/apis/v1alpha1/cluster"
-	kindProvisioner "devantler.tech/ksail/pkg/provisioner/cluster/kind"
+	clusterprov "devantler.tech/ksail/pkg/provisioner/cluster"
 	"github.com/spf13/cobra"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
@@ -35,18 +35,30 @@ func ListClusters(all bool) error {
 	// Silence stdout while loading configs to avoid noisy loader prints for this command
 	var ksailConfig *ksailcluster.Cluster
 	if err := quiet.SilenceStdout(func() error {
-		var err error
-		ksailConfig, err = util.NewKSailConfigLoader().LoadKSailConfig()
-		return err
+		anyCfg, err := loader.NewKSailConfigLoader(nil).Load()
+		if err != nil { return err }
+		ksailConfig = anyCfg.(*ksailcluster.Cluster)
+		return nil
 	}); err != nil {
 		return err
 	}
 	var kindConfig *v1alpha4.Cluster
 	_ = quiet.SilenceStdout(func() error {
 		// ignore any error; kind config is not required for listing
-		kindConfig, _ = util.NewKindConfigLoader().LoadKindConfig()
+		anyKind, _ := loader.NewKindConfigLoader(nil).Load()
+		kindConfig, _ = anyKind.(*v1alpha4.Cluster)
 		return nil
 	})
+	// k3d simple config (optional)
+	k3dCfg, _ := func() (*struct{}, error) {
+		// Silence inside to avoid loader prints
+		var dummy struct{}
+		_ = quiet.SilenceStdout(func() error {
+			_, _ = loader.NewK3dConfigLoader(nil).Load()
+			return nil
+		})
+		return &dummy, nil
+	}()
 
 	// Decide which distributions to list
 	var dists []ksailcluster.Distribution
@@ -61,7 +73,7 @@ func ListClusters(all bool) error {
 	for _, d := range dists {
 		switch d {
 		case ksailcluster.DistributionKind:
-			prov := kindProvisioner.NewKindClusterProvisioner(ksailConfig, kindConfig)
+			prov := clusterprov.NewKindClusterProvisioner(ksailConfig, kindConfig)
 			clusters, err := prov.List()
 			if err != nil {
 				return err
@@ -70,7 +82,15 @@ func ListClusters(all bool) error {
 				rows = append(rows, [2]string{"kind", c})
 			}
 		case ksailcluster.DistributionK3d:
-			// TODO: implement when k3d provisioner supports List
+			_ = k3dCfg // already loaded above; not needed to list
+			prov := clusterprov.NewK3dClusterProvisioner(ksailConfig, nil)
+			clusters, err := prov.List()
+			if err != nil {
+				return err
+			}
+			for _, c := range clusters {
+				rows = append(rows, [2]string{"k3d", c})
+			}
 		case ksailcluster.DistributionTind:
 			// TODO: implement when tind provisioner supports List
 		}
