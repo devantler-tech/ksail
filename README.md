@@ -12,7 +12,7 @@ nav_order: 0
 > [!IMPORTANT]
 > **🆕 UP NEXT 🆕**
 >
-> 1. Reworked Native Kubernetes Generators to use `kubectl create` commands
+> 1. KSail as Go project (same cli <-> total rework)
 > 2. Support for ArgoCD as a Deployment Tool - <https://github.com/devantler-tech/ksail/pull/878>
 > 3. Support for Talos Linux as a Distribution
 
