@@ -1,0 +1,9 @@
+name: CI - Go
+on:
+  workflow_dispatch:
+jobs:
+  # lint, format, test
+  ci:
+    uses: avamsi/go-nogo/.github/workflows/ci.yml@main
+    with:
+      runs-on: ubuntu-latest
