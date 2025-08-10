@@ -88,10 +88,10 @@ func WithSpecGatewayController(gatewayController GatewayController) func(*Cluste
 	}
 }
 
-// WithSpecDeploymentTool sets the deployment tool on the cluster spec.
-func WithSpecDeploymentTool(deploymentTool ReconciliationTool) func(*Cluster) {
+// WithSpecReconciliationTool sets the deployment tool on the cluster spec.
+func WithSpecReconciliationTool(reconciliationTool ReconciliationTool) func(*Cluster) {
 	return func(c *Cluster) {
-		c.Spec.ReconciliationTool = deploymentTool
+		c.Spec.ReconciliationTool = reconciliationTool
 	}
 }
 
@@ -131,8 +131,8 @@ func WithGatewayController(gc GatewayController) func(*Cluster) {
 	return func(c *Cluster) { c.Spec.GatewayController = gc }
 }
 
-// WithDeploymentTool sets the deployment tool.
-func WithDeploymentTool(dt ReconciliationTool) func(*Cluster) {
+// WithReconciliationTool sets the deployment tool.
+func WithReconciliationTool(dt ReconciliationTool) func(*Cluster) {
 	return func(c *Cluster) { c.Spec.ReconciliationTool = dt }
 }
 

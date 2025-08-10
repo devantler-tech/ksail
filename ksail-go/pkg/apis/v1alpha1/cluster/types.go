@@ -28,7 +28,7 @@ type Spec struct {
 	CSI                CSI               `json:"csi,omitzero"`
 	IngressController  IngressController `json:"ingressController,omitzero"`
 	GatewayController  GatewayController `json:"gatewayController,omitzero"`
-	ReconciliationTool     ReconciliationTool    `json:"deploymentTool,omitzero"`
+	ReconciliationTool     ReconciliationTool    `json:"reconciliationTool,omitzero"`
 	Options            Options           `json:"options,omitzero"`
 }
 
