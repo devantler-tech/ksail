@@ -72,7 +72,7 @@ func renderTable(distributions []ksailcluster.Distribution, ksailConfig *ksailcl
 		}
 	}
 	for _, r := range rows {
-		fmt.Printf("%s\n", r[0], r[1])
+		fmt.Printf("%s, %s\n", r[0], r[1])
 	}
 	return nil
 }

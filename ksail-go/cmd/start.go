@@ -46,7 +46,7 @@ func start(ksailConfig *ksailcluster.Cluster) error {
 	}
 
 	fmt.Println()
-	fmt.Printf("▶️ Starting '%s'\n", name, distribution)
+	fmt.Printf("▶️ Starting '%s'\n", name)
 	exists, err := provisioner.Exists(name)
 	if err != nil {
 		return err

@@ -17,7 +17,6 @@ type K3dConfigLoader struct {
 
 func (cl *K3dConfigLoader) Load() (confv1alpha5.SimpleConfig, error) {
 	fmt.Println("⏳ Loading K3d configuration")
-	var configPath string
 	for dir := "./"; ; dir = filepath.Dir(dir) {
 		configPath := filepath.Join(dir, "k3d.yaml")
 		if _, err := os.Stat(configPath); err == nil {
@@ -30,7 +29,7 @@ func (cl *K3dConfigLoader) Load() (confv1alpha5.SimpleConfig, error) {
 				return confv1alpha5.SimpleConfig{}, fmt.Errorf("unmarshal k3d config: %w", err)
 			}
 			fmt.Printf("► '%s' found\n", configPath)
-			fmt.Printf("✔ '%s' loaded\n", configPath)
+			fmt.Println("✔ config loaded")
 			return *cfg, nil
 		}
 		parent := filepath.Dir(dir)
@@ -45,7 +44,7 @@ func (cl *K3dConfigLoader) Load() (confv1alpha5.SimpleConfig, error) {
 	} else {
 		config = &confv1alpha5.SimpleConfig{Servers: 1, Agents: 0}
 	}
-	fmt.Printf("✔ '%s' loaded\n", configPath)
+	fmt.Println("✔ config loaded")
 	return *config, nil
 
 }

@@ -45,8 +45,8 @@ func stop(ksailConfig *ksailcluster.Cluster) error {
 		return err
 	}
 
-  fmt.Println()
-  fmt.Printf("⏹️ Stopping '%s'\n", name, distribution)
+	fmt.Println()
+	fmt.Printf("⏹️ Stopping '%s'\n", name)
 	exists, err := provisioner.Exists(name)
 	if err != nil {
 		return err

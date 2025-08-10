@@ -17,7 +17,6 @@ type KindConfigLoader struct {
 
 func (cl *KindConfigLoader) Load() (v1alpha4.Cluster, error) {
     fmt.Println("⏳ Loading Kind configuration")
-    var configPath string
     for dir := "./"; ; dir = filepath.Dir(dir) {
         configPath := filepath.Join(dir, "kind.yaml")
         if _, err := os.Stat(configPath); err == nil {
@@ -30,7 +29,7 @@ func (cl *KindConfigLoader) Load() (v1alpha4.Cluster, error) {
                 return v1alpha4.Cluster{}, fmt.Errorf("unmarshal kind config: %w", err)
             }
             fmt.Printf("► '%s' found\n", configPath)
-            fmt.Printf("✔ '%s' loaded\n", configPath)
+            fmt.Println("✔ config loaded")
             return *kindConfig, nil
         }
         parent := filepath.Dir(dir)
@@ -48,7 +47,7 @@ func (cl *KindConfigLoader) Load() (v1alpha4.Cluster, error) {
         kindConfig = &kc
     }
 
-    fmt.Printf("✔ '%s' loaded\n", configPath)
+    fmt.Println("✔ config loaded")
     return *kindConfig, nil
 }
 
