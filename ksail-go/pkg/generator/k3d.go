@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	ksailcluster "devantler.tech/ksail/pkg/apis/v1alpha1/cluster"
+	"devantler.tech/ksail/pkg/io"
 	"devantler.tech/ksail/pkg/marshaller"
 	"github.com/k3d-io/k3d/v5/pkg/config/types"
 	v1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
@@ -11,6 +12,7 @@ import (
 
 // K3dGenerator generates a k3d SimpleConfig YAML.
 type K3dGenerator struct {
+	io.FileWriter
 	Cluster    *ksailcluster.Cluster
 	Marshaller marshaller.Marshaller[*v1alpha5.SimpleConfig]
 }
@@ -27,7 +29,7 @@ func (g *K3dGenerator) Generate(opts Options) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("marshal k3d config: %w", err)
 	}
-	return writeMaybe(out, opts)
+	return g.FileWriter.TryWrite(out, opts.Output, opts.Force)
 }
 
 func NewK3dGenerator(ksailConfig *ksailcluster.Cluster) *K3dGenerator {

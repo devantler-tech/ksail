@@ -10,7 +10,7 @@ import (
 
 type Scaffolder struct {
 	KSailConfig            ksailcluster.Cluster
-	KSailYamlGenerator     *gen.YamlGenerator[ksailcluster.Cluster]
+	KSailYAMLGenerator     *gen.YAMLGenerator[ksailcluster.Cluster]
 	KindGenerator          *gen.KindGenerator
 	K3dGenerator           *gen.K3dGenerator
 	KustomizationGenerator *gen.KustomizationGenerator
@@ -18,7 +18,7 @@ type Scaffolder struct {
 
 func (s *Scaffolder) Scaffold(output string, force bool) error {
 	// generate ksail.yaml file
-	_, err := s.KSailYamlGenerator.Generate(s.KSailConfig, gen.Options{Output: output + "ksail.yaml", Force: force})
+	_, err := s.KSailYAMLGenerator.Generate(s.KSailConfig, gen.Options{Output: output + "ksail.yaml", Force: force})
 	if err != nil {
 		return err
 	}
@@ -47,16 +47,18 @@ func (s *Scaffolder) Scaffold(output string, force bool) error {
 }
 
 func NewScaffolder(ksailConfig ksailcluster.Cluster) *Scaffolder {
-	ksailGen := gen.NewYamlGenerator[ksailcluster.Cluster]()
+	ksailGen := gen.NewYAMLGenerator[ksailcluster.Cluster]()
 	kindGen := gen.NewKindGenerator(&ksailConfig)
 	k3dGen := gen.NewK3dGenerator(&ksailConfig)
 	kustGen := gen.NewKustomizationGenerator(&ksailConfig)
 
 	return &Scaffolder{
 		KSailConfig:            ksailConfig,
-		KSailYamlGenerator:     ksailGen,
+	KSailYAMLGenerator:     ksailGen,
 		KindGenerator:          kindGen,
 		K3dGenerator:           k3dGen,
 		KustomizationGenerator: kustGen,
 	}
 }
+
+// --- internals ---

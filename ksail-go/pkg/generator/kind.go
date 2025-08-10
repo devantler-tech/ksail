@@ -4,12 +4,14 @@ import (
 	"fmt"
 
 	ksailcluster "devantler.tech/ksail/pkg/apis/v1alpha1/cluster"
+	"devantler.tech/ksail/pkg/io"
 	"devantler.tech/ksail/pkg/marshaller"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
 
 // KindGenerator generates a kind Cluster YAML.
 type KindGenerator struct {
+	io.FileWriter
 	Cluster    *ksailcluster.Cluster
 	Marshaller marshaller.Marshaller[*v1alpha4.Cluster]
 }
@@ -23,7 +25,7 @@ func (g *KindGenerator) Generate(opts Options) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("marshal kind config: %w", err)
 	}
-	return writeMaybe(out, opts)
+	return g.FileWriter.TryWrite(out, opts.Output, opts.Force)
 }
 
 func NewKindGenerator(ksailConfig *ksailcluster.Cluster) *KindGenerator {

@@ -14,7 +14,7 @@ import (
 )
 
 var (
-	upForce bool
+	upForce        bool
 	upDistribution ksailcluster.Distribution
 )
 
@@ -26,12 +26,12 @@ var upCmd = &cobra.Command{
 
   If not found in the current directory, it will search the parent directories, and use the first one it finds.`,
 	Run: func(cmd *cobra.Command, args []string) {
-	ksailAny, err := loader.NewKSailConfigLoader(nil).Load()
+		ksailAny, err := loader.NewKSailConfigLoader(nil).Load()
 		if err != nil {
 			notify.Errorf("%s", err)
 			os.Exit(1)
 		}
-	ksailConfig := ksailAny.(*ksailcluster.Cluster)
+		ksailConfig := ksailAny.(*ksailcluster.Cluster)
 		if err := Provision(ksailConfig); err != nil {
 			notify.Errorf("%s", err)
 			os.Exit(1)
@@ -69,7 +69,7 @@ func Provision(ksailConfig *ksailcluster.Cluster) error {
 	switch dist {
 	case ksailcluster.DistributionKind:
 		kindCfg, _ := cfg.(*v1alpha4.Cluster)
-	prov := clusterprov.NewKindClusterProvisioner(ksailConfig, kindCfg)
+		prov := clusterprov.NewKindClusterProvisioner(ksailConfig, kindCfg)
 		if upForce {
 			fmt.Printf("► deleting existing cluster '%s'...\n", ksailConfig.Metadata.Name)
 			exists, err := prov.Exists("")
@@ -83,10 +83,10 @@ func Provision(ksailConfig *ksailcluster.Cluster) error {
 			}
 		}
 		fmt.Printf("► creating cluster '%s'...\n", ksailConfig.Metadata.Name)
-	return prov.Create("")
+		return prov.Create("")
 	case ksailcluster.DistributionK3d:
 		k3dCfg, _ := cfg.(*confv1alpha5.SimpleConfig)
-	prov := clusterprov.NewK3dClusterProvisioner(ksailConfig, k3dCfg)
+		prov := clusterprov.NewK3dClusterProvisioner(ksailConfig, k3dCfg)
 		if upForce {
 			fmt.Printf("► deleting existing cluster '%s'...\n", ksailConfig.Metadata.Name)
 			exists, err := prov.Exists("")
@@ -100,10 +100,13 @@ func Provision(ksailConfig *ksailcluster.Cluster) error {
 			}
 		}
 		fmt.Printf("► creating cluster '%s'...\n", ksailConfig.Metadata.Name)
-	return prov.Create("")
+		return prov.Create("")
 	default:
 		return fmt.Errorf("unsupported distribution: %s", dist)
 	}
+
+   fmt.Printf("⚙️ Bootstrapping '%s' to '%s' cluster...\n", ksailConfig.Spec.DeploymentTool, ksailConfig.Metadata.Name)
+
 }
 
 func init() {

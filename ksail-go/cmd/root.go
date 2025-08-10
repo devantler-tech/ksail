@@ -19,7 +19,7 @@ var rootCmd = &cobra.Command{
 
   Create ephemeral clusters for development and CI purposes, deploy and update workloads, test and validate behavior — all through one concise, declarative interface. Stop stitching together a dozen CLIs; KSail gives you a consistent UX built on the tools you already trust.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		printAsciiArt()
+		printASCIIArt()
 		return cmd.Help()
 	},
 }
@@ -36,7 +36,9 @@ func Execute() {
 	}
 }
 
-func printAsciiArt() {
+// --- internals ---
+
+func printASCIIArt() {
 	lines := strings.Split(asciiArt, "\n")
 	for i, line := range lines {
 		if i < 4 {

@@ -1,24 +1,37 @@
 package generator
 
 import (
+	"devantler.tech/ksail/pkg/io"
 	"devantler.tech/ksail/pkg/marshaller"
 )
 
-// YamlGenerator emits YAML for an arbitrary model using a provided marshaller.
-type YamlGenerator[T any] struct{ Marshaller marshaller.Marshaller[*T] }
+// Options defines options for generators when emitting files.
+type Options struct {
+	Output string
+	Force  bool
+}
 
-func (g *YamlGenerator[T]) Generate(model T, opts Options) (string, error) {
+// YAMLGenerator emits YAML for an arbitrary model using a provided marshaller.
+type YAMLGenerator[T any] struct {
+	io.FileWriter
+	Marshaller marshaller.Marshaller[*T]
+}
+
+func (g *YAMLGenerator[T]) Generate(model T, opts Options) (string, error) {
 	// marshal model
-	modelYaml, err := g.Marshaller.Marshal(&model)
+	modelYAML, err := g.Marshaller.Marshal(&model)
 	if err != nil {
 		return "", err
 	}
 	// write if requested
-	return writeMaybe(modelYaml, opts)
+	return g.FileWriter.TryWrite(modelYAML, opts.Output, opts.Force)
 }
 
-// NewYamlGenerator creates a new YamlGenerator instance.
-func NewYamlGenerator[T any]() *YamlGenerator[T] {
+// TryWrite writes content to opts.Output if set, handling force/overwrite messaging.
+// TryWrite is still available on YAMLGenerator via the embedded FileWriter.
+
+// NewYAMLGenerator creates a new YAMLGenerator instance.
+func NewYAMLGenerator[T any]() *YAMLGenerator[T] {
 	m := marshaller.NewMarshaller[*T]()
-	return &YamlGenerator[T]{Marshaller: m}
+	return &YAMLGenerator[T]{Marshaller: m}
 }

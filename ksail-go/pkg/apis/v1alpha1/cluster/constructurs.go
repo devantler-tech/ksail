@@ -21,7 +21,7 @@ func NewCluster(options ...func(*Cluster)) *Cluster {
 	for _, opt := range options {
 		opt(c)
 	}
-	SetDefaults(c)
+	c.SetDefaults()
 	return c
 }
 
@@ -138,7 +138,7 @@ func WithDeploymentTool(dt DeploymentTool) func(*Cluster) {
 
 // --- Defaults ---
 
-func SetDefaults(c *Cluster) {
+func (c *Cluster) SetDefaults() {
 	if c.Metadata.Name == "" {
 		c.Metadata.Name = "ksail-default"
 	}
