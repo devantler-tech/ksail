@@ -9,11 +9,12 @@ import (
 )
 
 var (
-	name         string               = "ksail-default"
-	distribution ksailcluster.Distribution = ksailcluster.DistributionKind
-	output       string               = "./"
-	srcDir       string               = "k8s"
-	force        bool                 = false
+	initName               string                          = "ksail-default"
+	initDistribution       ksailcluster.Distribution       = ksailcluster.DistributionKind
+	initReconciliationTool ksailcluster.ReconciliationTool = ksailcluster.ReconciliationToolKubectl
+	initOutput             string                          = "./"
+	initSrcDir             string                          = "k8s"
+	initForce              bool                            = false
 )
 
 var initCmd = &cobra.Command{
@@ -28,17 +29,22 @@ var initCmd = &cobra.Command{
   - 'k8s/kustomization.yaml' as an entry point for Kustomize
   `,
 	RunE: func(cmd *cobra.Command, args []string) error {
-	  return Scaffold(output, force)
+		return HandleInit()
 	},
 }
 
+// HandleInit handles the init command.
+func HandleInit() error {
+	ksailConfig := ksailcluster.NewCluster()
+	SetInitialValuesFromInput(ksailConfig)
+	return Scaffold(ksailConfig)
+}
+
 // Scaffold generates initial project files according to the provided configuration.
-func Scaffold(output string, force bool) error {
-  ksailConfig := ksailcluster.NewCluster()
-  SetInitialValuesFromInput(ksailConfig, name, distribution, srcDir)
-  scaffolder := util.NewScaffolder(*ksailConfig)
+func Scaffold(ksailConfig *ksailcluster.Cluster) error {
+	scaffolder := util.NewScaffolder(*ksailConfig)
 	fmt.Println("📝 Scaffolding new project...")
-	if err := scaffolder.Scaffold(output, force); err != nil {
+	if err := scaffolder.Scaffold(initOutput, initForce); err != nil {
 		return err
 	}
 	fmt.Println("✔ project scaffolded")
@@ -47,17 +53,19 @@ func Scaffold(output string, force bool) error {
 
 // TODO: Move SetInitialValuesFromInput to a more fitting file
 // SetInitialValuesFromInput mutates clusterObj with CLI-provided values.
-func SetInitialValuesFromInput(clusterObj *ksailcluster.Cluster, name string, distribution ksailcluster.Distribution, srcDir string) {
-	clusterObj.Metadata.Name = name
-	clusterObj.Spec.Distribution = distribution
-	clusterObj.Spec.SourceDirectory = srcDir
+func SetInitialValuesFromInput(ksailConfig *ksailcluster.Cluster) {
+	ksailConfig.Metadata.Name = initName
+	ksailConfig.Spec.Distribution = initDistribution
+	ksailConfig.Spec.ReconciliationTool = initReconciliationTool
+	ksailConfig.Spec.SourceDirectory = initSrcDir
 }
 
 func init() {
 	rootCmd.AddCommand(initCmd)
-	initCmd.Flags().StringVarP(&output, "output", "o", "./", "Output directory")
-	initCmd.Flags().StringVarP(&name, "name", "n", "ksail-default", "Name of the KSail cluster")
-	initCmd.Flags().VarP(&distribution, "distribution", "d", "Kubernetes distribution to use (kind, k3d, talos-in-docker)")
-	initCmd.Flags().StringVarP(&srcDir, "source-directory", "", "k8s", "Relative path to the source directory")
-	initCmd.Flags().BoolVarP(&force, "force", "f", false, "Overwrite existing files if present")
+	initCmd.Flags().StringVarP(&initOutput, "output", "o", "./", "output directory")
+	initCmd.Flags().StringVarP(&initName, "name", "n", "ksail-default", "name of cluster")
+	initCmd.Flags().VarP(&initDistribution, "distribution", "d", "distribution to use")
+	initCmd.Flags().VarP(&initReconciliationTool, "reconciliation-tool", "r", "reconciliation tool to use")
+	initCmd.Flags().StringVarP(&initSrcDir, "source-directory", "", "k8s", "manifests source directory")
+	initCmd.Flags().BoolVarP(&initForce, "force", "f", false, "overwrite files")
 }
