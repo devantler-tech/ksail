@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	"devantler.tech/ksail/internal/ui/notify"
 	"github.com/spf13/cobra"
 )
 
@@ -14,12 +15,12 @@ var asciiArt string
 
 var rootCmd = &cobra.Command{
 	Use:   "ksail",
-	Short: "Spin up K8s clusters + ship workloads fast.",
+	Short: "SDK for operating and managing K8s clusters and workloads",
 	Long: `KSail is an SDK for operating and managing Kubernetes clusters and workloads.
 
   Create ephemeral clusters for development and CI purposes, deploy and update workloads, test and validate behavior — all through one concise, declarative interface. Stop stitching together a dozen CLIs; KSail gives you a consistent UX built on the tools you already trust.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		printASCIIArt()
+		handleRoot()
 		return cmd.Help()
 	},
 }
@@ -32,11 +33,18 @@ func SetVersionInfo(version, commit, date string) {
 // Execute runs the root command.
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
+		notify.Errorf("%s", err)
 		os.Exit(1)
 	}
 }
 
 // --- internals ---
+
+// handleRoot handles the root command.
+func handleRoot() error {
+	printASCIIArt()
+	return nil
+}
 
 func printASCIIArt() {
 	lines := strings.Split(asciiArt, "\n")
