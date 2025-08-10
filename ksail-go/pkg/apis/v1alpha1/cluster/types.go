@@ -28,7 +28,7 @@ type Spec struct {
 	CSI                CSI               `json:"csi,omitzero"`
 	IngressController  IngressController `json:"ingressController,omitzero"`
 	GatewayController  GatewayController `json:"gatewayController,omitzero"`
-	DeploymentTool     DeploymentTool    `json:"deploymentTool,omitzero"`
+	ReconciliationTool     ReconciliationTool    `json:"deploymentTool,omitzero"`
 	Options            Options           `json:"options,omitzero"`
 }
 
@@ -86,14 +86,17 @@ const (
 	GatewayControllerNone    GatewayController = "None"
 )
 
-// DeploymentTool defines the Deployment Tool options for a KSail cluster.
-type DeploymentTool string
+// ReconciliationTool defines the Deployment Tool options for a KSail cluster.
+type ReconciliationTool string
 
 const (
-	DeploymentToolKubectl DeploymentTool = "Kubectl"
-	DeploymentToolFlux    DeploymentTool = "Flux"
-	DeploymentToolArgoCD  DeploymentTool = "ArgoCD"
+	ReconciliationToolKubectl ReconciliationTool = "Kubectl"
+	ReconciliationToolFlux    ReconciliationTool = "Flux"
+	ReconciliationToolArgoCD  ReconciliationTool = "ArgoCD"
 )
+
+// validReconciliationTools enumerates supported reconciliation tool values.
+var validReconciliationTools = []ReconciliationTool{ReconciliationToolKubectl, ReconciliationToolFlux, ReconciliationToolArgoCD}
 
 // Options holds optional settings for distributions, networking, and deployment tools.
 type Options struct {

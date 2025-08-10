@@ -89,9 +89,9 @@ func WithSpecGatewayController(gatewayController GatewayController) func(*Cluste
 }
 
 // WithSpecDeploymentTool sets the deployment tool on the cluster spec.
-func WithSpecDeploymentTool(deploymentTool DeploymentTool) func(*Cluster) {
+func WithSpecDeploymentTool(deploymentTool ReconciliationTool) func(*Cluster) {
 	return func(c *Cluster) {
-		c.Spec.DeploymentTool = deploymentTool
+		c.Spec.ReconciliationTool = deploymentTool
 	}
 }
 
@@ -132,8 +132,8 @@ func WithGatewayController(gc GatewayController) func(*Cluster) {
 }
 
 // WithDeploymentTool sets the deployment tool.
-func WithDeploymentTool(dt DeploymentTool) func(*Cluster) {
-	return func(c *Cluster) { c.Spec.DeploymentTool = dt }
+func WithDeploymentTool(dt ReconciliationTool) func(*Cluster) {
+	return func(c *Cluster) { c.Spec.ReconciliationTool = dt }
 }
 
 // --- Defaults ---
@@ -160,8 +160,8 @@ func (c *Cluster) SetDefaults() {
 	if c.Spec.Distribution == "" {
 		c.Spec.Distribution = DistributionKind
 	}
-	if c.Spec.DeploymentTool == "" {
-		c.Spec.DeploymentTool = DeploymentToolKubectl
+	if c.Spec.ReconciliationTool == "" {
+		c.Spec.ReconciliationTool = ReconciliationToolKubectl
 	}
 	if c.Spec.CNI == "" {
 		c.Spec.CNI = CNIDefault
@@ -193,6 +193,20 @@ func (d *Distribution) Set(value string) error {
 		value, DistributionKind, DistributionK3d, DistributionTind)
 }
 
+// Set for ReconciliationTool
+func (d *ReconciliationTool) Set(value string) error {
+	// Check against constant values with case-insensitive comparison
+	for _, tool := range validReconciliationTools {
+		if strings.EqualFold(value, string(tool)) {
+			*d = tool
+			return nil
+		}
+	}
+
+	return fmt.Errorf("invalid reconciliation tool: %s (valid options: %s, %s, %s)",
+		value, ReconciliationToolKubectl, ReconciliationToolFlux, ReconciliationToolArgoCD)
+}
+
 // --- pflag Values ---
 
 // String returns the string representation of the Distribution.
@@ -203,4 +217,14 @@ func (d *Distribution) String() string {
 // Type returns the type of the Distribution.
 func (d *Distribution) Type() string {
 	return "Distribution"
+}
+
+// String returns the string representation of the ReconciliationTool
+func (d *ReconciliationTool) String() string {
+	return string(*d)
+}
+
+// Type returns the type of the ReconciliationTool.
+func (d *ReconciliationTool) Type() string {
+	return "ReconciliationTool"
 }

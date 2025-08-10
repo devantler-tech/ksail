@@ -1,4 +1,4 @@
-package bootstrapper
+package reconboot
 
 import (
 	"context"
@@ -14,35 +14,26 @@ type FluxOperatorBootstrapper struct {
 	KubeconfigPath string
 	// KubeContext selects a specific context in the kubeconfig (optional)
 	KubeContext string
-	// Namespace to install the release into. Default: "flux-system"
-	Namespace string
-	// ReleaseName for the Helm release. Default: "flux-operator"
-	ReleaseName string
-	// Version of the chart to install (SemVer / OCI tag). Empty means latest.
-	Version string
 }
 
-func NewFluxOperatorBootstrapper() *FluxOperatorBootstrapper {
-	return &FluxOperatorBootstrapper{}
+func NewFluxOperatorBootstrapper(kubeconfigPath string, kubeContext string) *FluxOperatorBootstrapper {
+	return &FluxOperatorBootstrapper{
+		KubeconfigPath: kubeconfigPath,
+		KubeContext:    kubeContext,
+	}
 }
 
 // Install installs or upgrades the Flux Operator via its OCI Helm chart.
 func (b *FluxOperatorBootstrapper) Install() error {
-	if b.ReleaseName == "" {
-		b.ReleaseName = "flux-operator"
-	}
-	if b.Namespace == "" {
-		b.Namespace = "flux-system"
-	}
 	client, err := b.newHelmClient()
 	if err != nil {
 		return err
 	}
 
 	spec := helmclient.ChartSpec{
-		ReleaseName:     b.ReleaseName,
+		ReleaseName:     "flux-operator",
 		ChartName:       "oci://ghcr.io/controlplaneio-fluxcd/charts/flux-operator",
-		Namespace:       b.Namespace,
+		Namespace:       "flux-system",
 		CreateNamespace: true,
 		Atomic:          true,
 		UpgradeCRDs:     true,
@@ -57,17 +48,11 @@ func (b *FluxOperatorBootstrapper) Install() error {
 
 // Uninstall removes the Helm release for the Flux Operator.
 func (b *FluxOperatorBootstrapper) Uninstall() error {
-	if b.ReleaseName == "" {
-		b.ReleaseName = "flux-operator"
-	}
-	if b.Namespace == "" {
-		b.Namespace = "flux-system"
-	}
 	client, err := b.newHelmClient()
 	if err != nil {
 		return err
 	}
-	return client.UninstallReleaseByName(b.ReleaseName)
+	return client.UninstallReleaseByName("flux-operator")
 }
 
 // --- internals ---
@@ -83,7 +68,7 @@ func (b *FluxOperatorBootstrapper) newHelmClient() (helmclient.Client, error) {
 	}
 	opts := &helmclient.KubeConfClientOptions{
 		Options: &helmclient.Options{
-			Namespace: b.Namespace,
+			Namespace: "flux-system",
 			Debug:     false,
 		},
 		KubeConfig:  data,

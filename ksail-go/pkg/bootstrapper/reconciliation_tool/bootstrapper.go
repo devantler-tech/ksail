@@ -1,4 +1,4 @@
-package bootstrapper
+package reconboot
 
 type Bootstrapper interface {
 	Install() error
