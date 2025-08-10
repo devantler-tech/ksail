@@ -1,4 +1,4 @@
-package cluster
+package clusterprovisioner
 
 import (
 	"bytes"

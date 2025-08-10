@@ -1,12 +1,12 @@
 package loader
 
 import (
-    "fmt"
-    "os"
-    "path/filepath"
+	"fmt"
+	"os"
+	"path/filepath"
 
-    ksailcluster "devantler.tech/ksail/pkg/apis/v1alpha1/cluster"
-    "devantler.tech/ksail/pkg/marshaller"
+	ksailcluster "devantler.tech/ksail/pkg/apis/v1alpha1/cluster"
+	"devantler.tech/ksail/pkg/marshaller"
 )
 
 // KSailConfigLoader loads KSail config; uses Default when file isn't found.
@@ -15,23 +15,22 @@ type KSailConfigLoader struct {
     Default    *ksailcluster.Cluster
 }
 
-func (cl *KSailConfigLoader) Load() (any, error) {
+func (cl *KSailConfigLoader) Load() (ksailcluster.Cluster, error) {
     fmt.Println("⏳ Loading KSail configuration...")
     for dir := "."; ; dir = filepath.Dir(dir) {
         configPath := filepath.Join(dir, "ksail.yaml")
         if _, err := os.Stat(configPath); err == nil {
             data, err := os.ReadFile(configPath)
             if err != nil {
-                return nil, fmt.Errorf("read ksail config: %w", err)
+                return ksailcluster.Cluster{}, fmt.Errorf("read ksail config: %w", err)
             }
             ksailConfig := &ksailcluster.Cluster{}
             if err := cl.Marshaller.Unmarshal(data, ksailConfig); err != nil {
-                return nil, fmt.Errorf("unmarshal ksail config: %w", err)
+                return ksailcluster.Cluster{}, fmt.Errorf("unmarshal ksail config: %w", err)
             }
             fmt.Printf("► '%s' found.\n", configPath)
             fmt.Println("✔ ksail configuration loaded")
-            fmt.Println("")
-            return ksailConfig, nil
+            return *ksailConfig, nil
         }
         parent := filepath.Dir(dir)
         if parent == dir || dir == "" {
@@ -44,14 +43,13 @@ func (cl *KSailConfigLoader) Load() (any, error) {
         ksailConfig = ksailcluster.NewCluster()
     }
     fmt.Println("✔ ksail configuration loaded")
-    fmt.Println("")
-    return ksailConfig, nil
+    return *ksailConfig, nil
 }
 
-func NewKSailConfigLoader(defaultModel *ksailcluster.Cluster) *KSailConfigLoader {
+func NewKSailConfigLoader() *KSailConfigLoader {
     m := marshaller.NewMarshaller[*ksailcluster.Cluster]()
     return &KSailConfigLoader{
         Marshaller: m,
-        Default:    defaultModel,
+        Default:    ksailcluster.NewCluster(),
     }
 }

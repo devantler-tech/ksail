@@ -1,4 +1,4 @@
-package cluster
+package clusterprovisioner
 
 // ClusterProvisioner defines methods for managing Kubernetes clusters.
 type ClusterProvisioner interface {
