@@ -43,6 +43,7 @@ func provision(ksailConfig *ksailcluster.Cluster) error {
 	distribution := helpers.Distribution(ksailConfig, shared.Distribution)
 	reconciliationTool := helpers.ReconciliationTool(ksailConfig, shared.ReconciliationTool)
 
+	fmt.Println()
 	provisioner, err := factory.Provisioner(distribution, ksailConfig)
 	if err != nil {
 		return err
@@ -53,25 +54,26 @@ func provision(ksailConfig *ksailcluster.Cluster) error {
 		return err
 	}
 
-	fmt.Printf("🚀 Provisioning '%s' with '%s'...\n", name, distribution)
+	fmt.Println()
+	fmt.Printf("🚀 Provisioning '%s'\n", name, distribution)
 	if shared.Force {
 		exists, err := provisioner.Exists(name)
 		if err != nil {
 			return err
 		}
 		if exists {
-			fmt.Printf("► deleting existing cluster '%s'\n", name)
 			if err := provisioner.Delete(name); err != nil {
 				return err
 			}
 		}
 	}
-	fmt.Printf("► creating cluster '%s'\n", name)
 	if err := provisioner.Create(name); err != nil {
 		return err
 	}
+	fmt.Printf("✔ '%s' created\n", name)
 
-	fmt.Printf("⚙️ Bootstrapping '%s' to '%s' cluster...\n", reconciliationTool, name)
+	fmt.Println()
+	fmt.Printf("⚙️ Bootstrapping '%s' to '%s' cluster\n", reconciliationTool, name)
 	fmt.Printf("► installing '%s'\n", reconciliationTool)
 	_ = reconciliationToolBootstrapper.Install()
 

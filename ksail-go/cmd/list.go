@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"strings"
 
 	"devantler.tech/ksail/cmd/shared"
 	factory "devantler.tech/ksail/internal"
@@ -42,7 +41,7 @@ func list(ksailConfig *ksailcluster.Cluster) error {
 
 	var distributions []ksailcluster.Distribution
 	if shared.All {
-		distributions = []ksailcluster.Distribution{ksailcluster.DistributionKind, ksailcluster.DistributionK3d, ksailcluster.DistributionTind}
+		distributions = []ksailcluster.Distribution{ksailcluster.DistributionKind, ksailcluster.DistributionK3d}
 	} else {
 		distributions = []ksailcluster.Distribution{ksailConfig.Spec.Distribution}
 	}
@@ -54,42 +53,26 @@ func renderTable(distributions []ksailcluster.Distribution, ksailConfig *ksailcl
 	rows := make([][2]string, 0)
 	for _, distribution := range distributions {
 		var provisioner clusterprovisioner.ClusterProvisioner
-		var err error
 		if err := quiet.SilenceStdout(func() error {
-			provisioner, err = factory.Provisioner(distribution, ksailConfig)
-			return nil
+			var innerErr error
+			provisioner, innerErr = factory.Provisioner(distribution, ksailConfig)
+			return innerErr
 		}); err != nil {
 			return err
+		}
+		if provisioner == nil {
+			continue
 		}
 		clusters, err := provisioner.List()
 		if err != nil {
 			return err
 		}
 		for _, c := range clusters {
-			rows = append(rows, [2]string{distribution.String(), c})
+			rows = append(rows, [2]string{c, distribution.String()})
 		}
 	}
-
-	headers := [2]string{"DISTRIBUTION", "NAME"}
-	widths := [2]int{len(headers[0]), len(headers[1])}
 	for _, r := range rows {
-		if len(r[0]) > widths[0] {
-			widths[0] = len(r[0])
-		}
-		if len(r[1]) > widths[1] {
-			widths[1] = len(r[1])
-		}
-	}
-
-	// Build a format string with the computed widths
-	fmtStr := fmt.Sprintf("%%-%ds  %%-%ds\n", widths[0], widths[1])
-	// Print header
-	fmt.Printf(fmtStr, headers[0], headers[1])
-	// Print separator
-	fmt.Println(strings.Repeat("-", widths[0]) + "  " + strings.Repeat("-", widths[1]))
-	// Print rows
-	for _, r := range rows {
-		fmt.Printf(fmtStr, r[0], r[1])
+		fmt.Printf("%s\n", r[0], r[1])
 	}
 	return nil
 }

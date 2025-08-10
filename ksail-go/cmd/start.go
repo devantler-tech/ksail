@@ -39,25 +39,27 @@ func start(ksailConfig *ksailcluster.Cluster) error {
 	name := helpers.Name(ksailConfig, shared.Name)
 	distribution := helpers.Distribution(ksailConfig, shared.Distribution)
 
+	fmt.Println()
 	provisioner, err := factory.Provisioner(distribution, ksailConfig)
 	if err != nil {
 		return err
 	}
 
-	fmt.Printf("▶️ Starting '%s'...\n", name)
+	fmt.Println()
+	fmt.Printf("▶️ Starting '%s'\n", name, distribution)
 	exists, err := provisioner.Exists(name)
 	if err != nil {
 		return err
 	}
 	if !exists {
-		fmt.Printf("✔ no cluster named '%s' found\n", name)
+		fmt.Printf("✔ '%s' not found\n", name)
 		return nil
 	}
 	if err := provisioner.Start(name); err != nil {
 		return err
 	}
-	fmt.Printf("✔ cluster named '%s' started\n", name)
-  return nil
+	fmt.Printf("✔ '%s' started\n", name)
+	return nil
 }
 
 func init() {

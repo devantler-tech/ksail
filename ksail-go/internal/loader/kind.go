@@ -9,14 +9,15 @@ import (
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
 
-// KindConfigLoader loads Kind config; uses Default when file isn't found.
+// KindConfigLoader loads Kind config; uses Default when file isn't found
 type KindConfigLoader struct {
     Marshaller marshaller.Marshaller[*v1alpha4.Cluster]
     Default    *v1alpha4.Cluster
 }
 
 func (cl *KindConfigLoader) Load() (v1alpha4.Cluster, error) {
-    fmt.Println("⏳ Loading Kind configuration...")
+    fmt.Println("⏳ Loading Kind configuration")
+    var configPath string
     for dir := "./"; ; dir = filepath.Dir(dir) {
         configPath := filepath.Join(dir, "kind.yaml")
         if _, err := os.Stat(configPath); err == nil {
@@ -28,8 +29,8 @@ func (cl *KindConfigLoader) Load() (v1alpha4.Cluster, error) {
             if err := cl.Marshaller.Unmarshal(data, kindConfig); err != nil {
                 return v1alpha4.Cluster{}, fmt.Errorf("unmarshal kind config: %w", err)
             }
-            fmt.Printf("► '%s' found.\n", configPath)
-            fmt.Println("✔ kind configuration loaded")
+            fmt.Printf("► '%s' found\n", configPath)
+            fmt.Printf("✔ '%s' loaded\n", configPath)
             return *kindConfig, nil
         }
         parent := filepath.Dir(dir)
@@ -37,7 +38,7 @@ func (cl *KindConfigLoader) Load() (v1alpha4.Cluster, error) {
             break
         }
     }
-    fmt.Println("► './kind.yaml' not found. Using default configuration.")
+    fmt.Println("► './kind.yaml' not found, using default configuration")
     var kindConfig *v1alpha4.Cluster
     if cl.Default != nil {
         kindConfig = cl.Default
@@ -47,7 +48,7 @@ func (cl *KindConfigLoader) Load() (v1alpha4.Cluster, error) {
         kindConfig = &kc
     }
 
-    fmt.Println("✔ kind configuration loaded")
+    fmt.Printf("✔ '%s' loaded\n", configPath)
     return *kindConfig, nil
 }
 

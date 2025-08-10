@@ -9,14 +9,15 @@ import (
 	"devantler.tech/ksail/pkg/marshaller"
 )
 
-// KSailConfigLoader loads KSail config; uses Default when file isn't found.
+// KSailConfigLoader loads KSail config; uses Default when file isn't found
 type KSailConfigLoader struct {
     Marshaller marshaller.Marshaller[*ksailcluster.Cluster]
     Default    *ksailcluster.Cluster
 }
 
 func (cl *KSailConfigLoader) Load() (ksailcluster.Cluster, error) {
-    fmt.Println("⏳ Loading KSail configuration...")
+    fmt.Println("⏳ Loading KSail configuration")
+    var configPath string
     for dir := "."; ; dir = filepath.Dir(dir) {
         configPath := filepath.Join(dir, "ksail.yaml")
         if _, err := os.Stat(configPath); err == nil {
@@ -28,8 +29,8 @@ func (cl *KSailConfigLoader) Load() (ksailcluster.Cluster, error) {
             if err := cl.Marshaller.Unmarshal(data, ksailConfig); err != nil {
                 return ksailcluster.Cluster{}, fmt.Errorf("unmarshal ksail config: %w", err)
             }
-            fmt.Printf("► '%s' found.\n", configPath)
-            fmt.Println("✔ ksail configuration loaded")
+            fmt.Printf("► '%s' found\n", configPath)
+            fmt.Printf("✔ '%s' loaded\n", configPath)
             return *ksailConfig, nil
         }
         parent := filepath.Dir(dir)
@@ -37,12 +38,12 @@ func (cl *KSailConfigLoader) Load() (ksailcluster.Cluster, error) {
             break
         }
     }
-    fmt.Println("► './ksail.yaml' not found. Using default configuration.")
+    fmt.Println("► './ksail.yaml' not found, using default configuration")
     ksailConfig := cl.Default
     if ksailConfig == nil {
         ksailConfig = ksailcluster.NewCluster()
     }
-    fmt.Println("✔ ksail configuration loaded")
+    fmt.Printf("✔ '%s' loaded\n", configPath)
     return *ksailConfig, nil
 }
 

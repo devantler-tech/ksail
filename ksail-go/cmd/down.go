@@ -37,6 +37,7 @@ func handleDown() error {
 	if err != nil {
 		return err
 	}
+  fmt.Println()
 	return teardown(&ksailConfig)
 }
 
@@ -50,13 +51,14 @@ func teardown(ksailConfig *ksailcluster.Cluster) error {
 		return err
 	}
 
-	fmt.Printf("🔥 Destroying '%s'...\n", name)
+  fmt.Println()
+	fmt.Printf("🔥 Destroying '%s'\n", name, distribution)
 	exists, err := provisioner.Exists(name)
 	if err != nil {
 		return err
 	}
 	if !exists {
-		fmt.Printf("✔ no cluster named '%s' found\n", name)
+		fmt.Printf("✔ '%s' not found\n", name)
 		return nil
 	}
 	if err := provisioner.Delete(name); err != nil {

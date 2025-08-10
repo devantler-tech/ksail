@@ -37,7 +37,7 @@ func handleInit() error {
 // scaffold generates initial project files according to the provided configuration.
 func scaffold(ksailConfig *ksailcluster.Cluster) error {
 	scaffolder := util.NewScaffolder(*ksailConfig)
-	fmt.Println("📝 Scaffolding new project...")
+	fmt.Println("📝 Scaffolding new project")
 	if err := scaffolder.Scaffold(shared.Output, shared.Force); err != nil {
 		return err
 	}
@@ -47,10 +47,18 @@ func scaffold(ksailConfig *ksailcluster.Cluster) error {
 
 // setInitialValuesFromInput mutates ksailConfig with CLI-provided values.
 func setInitialValuesFromInput(ksailConfig *ksailcluster.Cluster) {
-	ksailConfig.Metadata.Name = shared.Name
-	ksailConfig.Spec.Distribution = shared.Distribution
-	ksailConfig.Spec.ReconciliationTool = shared.ReconciliationTool
-	ksailConfig.Spec.SourceDirectory = shared.SourceDirectory
+  if shared.Name != "" {
+	  ksailConfig.Metadata.Name = shared.Name
+  }
+  if shared.Distribution != "" {
+	  ksailConfig.Spec.Distribution = shared.Distribution
+  }
+  if shared.ReconciliationTool != "" {
+	  ksailConfig.Spec.ReconciliationTool = shared.ReconciliationTool
+  }
+  if shared.SourceDirectory != "" {
+	  ksailConfig.Spec.SourceDirectory = shared.SourceDirectory
+  }
 }
 
 // init initializes the init command.

@@ -39,23 +39,26 @@ func stop(ksailConfig *ksailcluster.Cluster) error {
 	name := helpers.Name(ksailConfig, shared.Name)
 	distribution := helpers.Distribution(ksailConfig, shared.Distribution)
 
+  fmt.Println()
 	provisioner, err := factory.Provisioner(distribution, ksailConfig)
 	if err != nil {
 		return err
 	}
 
+  fmt.Println()
+  fmt.Printf("⏹️ Stopping '%s'\n", name, distribution)
 	exists, err := provisioner.Exists(name)
 	if err != nil {
 		return err
 	}
 	if !exists {
-		fmt.Printf("✔ no cluster named '%s' found\n", name)
+		fmt.Printf("✔ '%s' not found\n", name)
 		return nil
 	}
 	if err := provisioner.Stop(name); err != nil {
 		return err
 	}
-	fmt.Printf("✔ cluster named '%s' stopped\n", name)
+	fmt.Printf("✔ '%s' stopped\n", name)
   return nil
 }
 

@@ -6,13 +6,13 @@ import (
 )
 
 var (
-	Output             string                          = "./"
-	Name               string                          = "ksail-default"
-	Distribution       ksailcluster.Distribution       = ksailcluster.DistributionKind
-	ReconciliationTool ksailcluster.ReconciliationTool = ksailcluster.ReconciliationToolKubectl
-	SourceDirectory    string                          = "k8s"
-	Force              bool                            = false
-	All                bool                            = false
+	Output             string
+	Name               string
+	Distribution       ksailcluster.Distribution
+	ReconciliationTool ksailcluster.ReconciliationTool
+	SourceDirectory    string
+	Force              bool
+	All                bool
 )
 
 // AddOutputFlag adds the --output flag to the given command.
