@@ -16,7 +16,7 @@ type KindConfigLoader struct {
 }
 
 func (cl *KindConfigLoader) Load() (v1alpha4.Cluster, error) {
-    fmt.Println("⏳ Loading Kind configuration")
+    fmt.Println("⏳ Loading Kind config")
     for dir := "./"; ; dir = filepath.Dir(dir) {
         configPath := filepath.Join(dir, "kind.yaml")
         if _, err := os.Stat(configPath); err == nil {

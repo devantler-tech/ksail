@@ -69,7 +69,7 @@ func (b *FluxOperatorBootstrapper) newHelmClient() (helmclient.Client, error) {
 	opts := &helmclient.KubeConfClientOptions{
 		Options: &helmclient.Options{
 			Namespace: "flux-system",
-			Debug:     false,
+			Debug:     true,
 		},
 		KubeConfig:  data,
 		KubeContext: b.KubeContext,

@@ -16,7 +16,7 @@ type KSailConfigLoader struct {
 }
 
 func (cl *KSailConfigLoader) Load() (ksailcluster.Cluster, error) {
-	fmt.Println("⏳ Loading KSail configuration")
+	fmt.Println("⏳ Loading KSail config")
 	for dir := "."; ; dir = filepath.Dir(dir) {
 		configPath := filepath.Join(dir, "ksail.yaml")
 		if _, err := os.Stat(configPath); err == nil {

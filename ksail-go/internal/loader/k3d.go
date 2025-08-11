@@ -16,7 +16,7 @@ type K3dConfigLoader struct {
 }
 
 func (cl *K3dConfigLoader) Load() (confv1alpha5.SimpleConfig, error) {
-	fmt.Println("⏳ Loading K3d configuration")
+	fmt.Println("⏳ Loading K3d config")
 	for dir := "./"; ; dir = filepath.Dir(dir) {
 		configPath := filepath.Join(dir, "k3d.yaml")
 		if _, err := os.Stat(configPath); err == nil {

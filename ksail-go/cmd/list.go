@@ -71,8 +71,12 @@ func renderTable(distributions []ksailcluster.Distribution, ksailConfig *ksailcl
 			rows = append(rows, [2]string{c, distribution.String()})
 		}
 	}
-	for _, r := range rows {
-		fmt.Printf("%s, %s\n", r[0], r[1])
+	if len(rows) != 0 {
+		for _, r := range rows {
+			fmt.Printf("%s, %s\n", r[0], r[1])
+		}
+	} else {
+		fmt.Println("✔ no clusters found")
 	}
 	return nil
 }
