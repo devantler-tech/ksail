@@ -36,29 +36,29 @@ func handleStart() error {
 }
 
 func start(ksailConfig *ksailcluster.Cluster) error {
-	name := helpers.Name(ksailConfig, inputs.Name)
-	distribution := helpers.Distribution(ksailConfig, inputs.Distribution)
+	ksailConfig.Metadata.Name = helpers.Name(ksailConfig, inputs.Name)
+	ksailConfig.Spec.Distribution = helpers.Distribution(ksailConfig, inputs.Distribution)
 
 	fmt.Println()
-	provisioner, err := factory.Provisioner(distribution, ksailConfig)
+	provisioner, err := factory.Provisioner(ksailConfig)
 	if err != nil {
 		return err
 	}
 
 	fmt.Println()
-	fmt.Printf("▶️ Starting '%s'\n", name)
-	exists, err := provisioner.Exists(name)
+	fmt.Printf("▶️ Starting '%s'\n", ksailConfig.Metadata.Name)
+	exists, err := provisioner.Exists(ksailConfig.Metadata.Name)
 	if err != nil {
 		return err
 	}
 	if !exists {
-		fmt.Printf("✔ '%s' not found\n", name)
+		fmt.Printf("✔ '%s' not found\n", ksailConfig.Metadata.Name)
 		return nil
 	}
-	if err := provisioner.Start(name); err != nil {
+	if err := provisioner.Start(ksailConfig.Metadata.Name); err != nil {
 		return err
 	}
-	fmt.Printf("✔ '%s' started\n", name)
+	fmt.Printf("✔ '%s' started\n", ksailConfig.Metadata.Name)
 	return nil
 }
 

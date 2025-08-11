@@ -2,6 +2,7 @@ package factory
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/devantler-tech/ksail/internal/loader"
 	"github.com/devantler-tech/ksail/internal/utils"
@@ -10,9 +11,13 @@ import (
 	clusterprovisioner "github.com/devantler-tech/ksail/pkg/provisioner/cluster"
 )
 
-func Provisioner(distribution ksailcluster.Distribution, ksailConfig *ksailcluster.Cluster) (clusterprovisioner.ClusterProvisioner, error) {
+func Provisioner(ksailConfig *ksailcluster.Cluster) (clusterprovisioner.ClusterProvisioner, error) {
 	var provisioner clusterprovisioner.ClusterProvisioner
-	switch distribution {
+	if ksailConfig.Spec.ContainerEngine == ksailcluster.ContainerEnginePodman {
+		podmanSock := fmt.Sprintf("unix:///run/user/%d/podman/podman.sock", os.Getuid())
+		os.Setenv("DOCKER_HOST", podmanSock)
+	}
+	switch ksailConfig.Spec.Distribution {
 	case ksailcluster.DistributionKind:
 		kindConfig, err := loader.NewKindConfigLoader().Load()
 		if err != nil {
@@ -26,7 +31,7 @@ func Provisioner(distribution ksailcluster.Distribution, ksailConfig *ksailclust
 		}
 		provisioner = clusterprovisioner.NewK3dClusterProvisioner(ksailConfig, &k3dConfig)
 	default:
-		return nil, fmt.Errorf("unsupported distribution '%s'", distribution)
+		return nil, fmt.Errorf("unsupported distribution '%s'", ksailConfig.Spec.Distribution)
 	}
 	return provisioner, nil
 }

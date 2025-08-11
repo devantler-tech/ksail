@@ -121,6 +121,5 @@ func (k *K3dClusterProvisioner) Exists(name string) (bool, error) {
 
 // NewK3dClusterProvisioner constructs a k3d provisioner instance.
 func NewK3dClusterProvisioner(ksailConfig *ksailcluster.Cluster, simpleCfg *conf.SimpleConfig) *K3dClusterProvisioner {
-	// Ensure the name is set later at Create() time
 	return &K3dClusterProvisioner{ksailConfig: ksailConfig, simpleCfg: simpleCfg}
 }

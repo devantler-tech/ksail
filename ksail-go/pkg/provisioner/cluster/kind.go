@@ -123,8 +123,6 @@ func NewKindClusterProvisioner(ksailConfig *ksailcluster.Cluster, kindConfig *v1
 	return &KindClusterProvisioner{
 		ksailConfig: ksailConfig,
 		kindConfig:  kindConfig,
-		// Initialize kind's provider with the same logger the CLI uses,
-		// so we get progress spinners and rich output.
 		dockerProvider: cluster.NewProvider(
 			cluster.ProviderWithLogger(kindcmd.NewLogger()),
 		),

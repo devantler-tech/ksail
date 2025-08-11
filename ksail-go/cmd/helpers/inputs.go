@@ -27,3 +27,11 @@ func ReconciliationTool(ksailConfig *ksailcluster.Cluster, input ksailcluster.Re
 	}
 	return reconciliationTool
 }
+
+func ContainerEngine(ksailConfig *ksailcluster.Cluster, input ksailcluster.ContainerEngine) ksailcluster.ContainerEngine {
+	containerEngine := input
+	if containerEngine == "" {
+		containerEngine = ksailConfig.Spec.ContainerEngine
+	}
+	return containerEngine
+}

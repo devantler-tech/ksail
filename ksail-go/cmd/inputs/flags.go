@@ -13,6 +13,7 @@ var (
 	SourceDirectory    string
 	Force              bool
 	All                bool
+	ContainerEngine    ksailcluster.ContainerEngine
 )
 
 // AddOutputFlag adds the --output flag to the given command.
@@ -48,4 +49,9 @@ func AddForceFlag(cmd *cobra.Command) {
 // AddAllFlag adds the --all flag to the given command.
 func AddAllFlag(cmd *cobra.Command) {
 	cmd.Flags().BoolVarP(&All, "all", "a", false, "include all resources")
+}
+
+// AddContainerEngineFlag adds the --container-engine flag to the given command.
+func AddContainerEngineFlag(cmd *cobra.Command) {
+	cmd.Flags().VarP(&ContainerEngine, "container-engine", "c", "container engine to use")
 }

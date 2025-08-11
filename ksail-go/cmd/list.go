@@ -52,10 +52,11 @@ func list(ksailConfig *ksailcluster.Cluster) error {
 func renderTable(distributions []ksailcluster.Distribution, ksailConfig *ksailcluster.Cluster) error {
 	rows := make([][2]string, 0)
 	for _, distribution := range distributions {
+    ksailConfig.Spec.Distribution = distribution
 		var provisioner clusterprovisioner.ClusterProvisioner
 		if err := quiet.SilenceStdout(func() error {
 			var innerErr error
-			provisioner, innerErr = factory.Provisioner(distribution, ksailConfig)
+			provisioner, innerErr = factory.Provisioner(ksailConfig)
 			return innerErr
 		}); err != nil {
 			return err

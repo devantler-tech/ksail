@@ -39,13 +39,13 @@ func handleUp() error {
 
 // provision provisions a cluster based on the provided configuration.
 func provision(ksailConfig *ksailcluster.Cluster) error {
-	name := helpers.Name(ksailConfig, inputs.Name)
+	ksailConfig.Metadata.Name = helpers.Name(ksailConfig, inputs.Name)
 
   // TODO: Check if docker is running
 
 	// TODO: Create local registry 'ksail-registry' with a docker provisioner
 
-	err := provisionCluster(name, ksailConfig)
+	err := provisionCluster(ksailConfig)
 	if err != nil {
 		return err
 	}
@@ -62,7 +62,7 @@ func provision(ksailConfig *ksailcluster.Cluster) error {
 
 	// TODO: Bootstrap Metrics Server with a metrics server provisioner
 
-	err = bootstrapReconciliationTool(name, ksailConfig)
+	err = bootstrapReconciliationTool(ksailConfig)
 	if err != nil {
 		return err
 	}
@@ -71,34 +71,35 @@ func provision(ksailConfig *ksailcluster.Cluster) error {
 }
 
 // provisionCluster provisions a cluster based on the provided configuration.
-func provisionCluster(name string, ksailConfig *ksailcluster.Cluster) error {
+func provisionCluster(ksailConfig *ksailcluster.Cluster) error {
 	fmt.Println()
-	distribution := helpers.Distribution(ksailConfig, inputs.Distribution)
-	provisioner, err := factory.Provisioner(distribution, ksailConfig)
+	ksailConfig.Spec.Distribution = helpers.Distribution(ksailConfig, inputs.Distribution)
+	ksailConfig.Spec.ContainerEngine = helpers.ContainerEngine(ksailConfig, inputs.ContainerEngine)
+	provisioner, err := factory.Provisioner(ksailConfig)
 	if err != nil {
 		return err
 	}
 	fmt.Println()
-	fmt.Printf("🚀 Provisioning '%s'\n", name)
+	fmt.Printf("🚀 Provisioning '%s'\n", ksailConfig.Metadata.Name)
 	if inputs.Force {
-		exists, err := provisioner.Exists(name)
+		exists, err := provisioner.Exists(ksailConfig.Metadata.Name)
 		if err != nil {
 			return err
 		}
 		if exists {
-			if err := provisioner.Delete(name); err != nil {
+			if err := provisioner.Delete(ksailConfig.Metadata.Name); err != nil {
 				return err
 			}
 		}
 	}
-	if err := provisioner.Create(name); err != nil {
+	if err := provisioner.Create(ksailConfig.Metadata.Name); err != nil {
 		return err
 	}
-	fmt.Printf("✔ '%s' created\n", name)
+	fmt.Printf("✔ '%s' created\n", ksailConfig.Metadata.Name)
 	return nil
 }
 
-func bootstrapReconciliationTool(name string, k *ksailcluster.Cluster) error {
+func bootstrapReconciliationTool(k *ksailcluster.Cluster) error {
 	reconciliationTool := helpers.ReconciliationTool(k, inputs.ReconciliationTool)
 	reconciliationToolBootstrapper, err := factory.ReconciliationTool(reconciliationTool, k)
 	if err != nil {
@@ -106,7 +107,7 @@ func bootstrapReconciliationTool(name string, k *ksailcluster.Cluster) error {
 	}
 
 	fmt.Println()
-	fmt.Printf("⚙️ Bootstrapping '%s' to '%s'\n", reconciliationTool, name)
+	fmt.Printf("⚙️ Bootstrapping '%s' to '%s'\n", reconciliationTool, k.Metadata.Name)
 	_ = reconciliationToolBootstrapper.Install()
 	fmt.Printf("✔ '%s' installed\n", reconciliationTool)
 	return nil
@@ -118,4 +119,5 @@ func init() {
 	inputs.AddDistributionFlag(upCmd)
 	inputs.AddReconciliationToolFlag(upCmd)
 	inputs.AddForceFlag(upCmd)
+	inputs.AddContainerEngineFlag(upCmd)
 }

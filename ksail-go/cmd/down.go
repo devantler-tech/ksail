@@ -38,28 +38,28 @@ func handleDown() error {
 
 // teardown tears down a cluster using the provided name or the loaded kind config name.
 func teardown(ksailConfig *ksailcluster.Cluster) error {
-	name := helpers.Name(ksailConfig, inputs.Name)
-	distribution := helpers.Distribution(ksailConfig, inputs.Distribution)
+	ksailConfig.Metadata.Name = helpers.Name(ksailConfig, inputs.Name)
+	ksailConfig.Spec.Distribution = helpers.Distribution(ksailConfig, inputs.Distribution)
 
-	provisioner, err := factory.Provisioner(distribution, ksailConfig)
+	provisioner, err := factory.Provisioner(ksailConfig)
 	if err != nil {
 		return err
 	}
 
 	fmt.Println()
-	fmt.Printf("🔥 Destroying '%s'\n", name)
-	exists, err := provisioner.Exists(name)
+	fmt.Printf("🔥 Destroying '%s'\n", ksailConfig.Metadata.Name)
+	exists, err := provisioner.Exists(ksailConfig.Metadata.Name)
 	if err != nil {
 		return err
 	}
 	if !exists {
-		fmt.Printf("✔ '%s' not found\n", name)
+		fmt.Printf("✔ '%s' not found\n", ksailConfig.Metadata.Name)
 		return nil
 	}
-	if err := provisioner.Delete(name); err != nil {
+	if err := provisioner.Delete(ksailConfig.Metadata.Name); err != nil {
 		return err
 	}
-	fmt.Printf("✔ '%s' destroyed\n", name)
+	fmt.Printf("✔ '%s' destroyed\n", ksailConfig.Metadata.Name)
 	return nil
 }
 
