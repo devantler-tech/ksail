@@ -41,6 +41,8 @@ func handleUp() error {
 func provision(ksailConfig *ksailcluster.Cluster) error {
 	name := helpers.Name(ksailConfig, inputs.Name)
 
+  // TODO: Check if docker is running
+
 	// TODO: Create local registry 'ksail-registry' with a docker provisioner
 
 	err := provisionCluster(name, ksailConfig)
