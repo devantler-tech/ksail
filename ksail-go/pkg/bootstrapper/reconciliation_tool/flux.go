@@ -25,6 +25,27 @@ func NewFluxBootstrapper(kubeconfig, context string, timeout time.Duration) *Flu
 
 // Install installs or upgrades the Flux Operator via its OCI Helm chart.
 func (b *FluxBootstrapper) Install() error {
+	err := helmInstallOrUpgradeFluxOperator(b)
+	if err != nil {
+		return err
+	}
+
+  // TODO: Apply FluxInstance that syncs with local 'ksail-registry'
+	return nil
+}
+
+// Uninstall removes the Helm release for the Flux Operator.
+func (b *FluxBootstrapper) Uninstall() error {
+	client, err := b.newHelmClient()
+	if err != nil {
+		return err
+	}
+	return client.UninstallReleaseByName("flux-operator")
+}
+
+// --- internals ---
+
+func helmInstallOrUpgradeFluxOperator(b *FluxBootstrapper) error {
 	client, err := b.newHelmClient()
 	if err != nil {
 		return err
@@ -45,17 +66,6 @@ func (b *FluxBootstrapper) Install() error {
 	_, err = client.InstallOrUpgradeChart(ctx, &spec, nil)
 	return err
 }
-
-// Uninstall removes the Helm release for the Flux Operator.
-func (b *FluxBootstrapper) Uninstall() error {
-	client, err := b.newHelmClient()
-	if err != nil {
-		return err
-	}
-	return client.UninstallReleaseByName("flux-operator")
-}
-
-// --- internals ---
 
 func (b *FluxBootstrapper) newHelmClient() (helmclient.Client, error) {
 	kubeconfigPath, _ := utils.ExpandPath(b.kubeconfig)

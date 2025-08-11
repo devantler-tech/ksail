@@ -40,20 +40,42 @@ func handleUp() error {
 // provision provisions a cluster based on the provided configuration.
 func provision(ksailConfig *ksailcluster.Cluster) error {
 	name := helpers.Name(ksailConfig, inputs.Name)
-	distribution := helpers.Distribution(ksailConfig, inputs.Distribution)
-	reconciliationTool := helpers.ReconciliationTool(ksailConfig, inputs.ReconciliationTool)
 
+	// TODO: Create local registry 'ksail-registry' with a docker provisioner
+
+	err := provisionCluster(name, ksailConfig)
+	if err != nil {
+		return err
+	}
+
+	// TODO: Bootstrap CNI with a cni provisioner
+
+	// TODO: Bootstrap CSI with a csi provisioner
+
+	// TODO: Bootstrap IngressController with an ingress controller provisioner
+
+	// TODO: Bootstrap GatewayController with a gateway controller provisioner
+
+	// TODO: Bootstrap CertManager with a cert manager provisioner
+
+	// TODO: Bootstrap Metrics Server with a metrics server provisioner
+
+	err = bootstrapReconciliationTool(name, ksailConfig)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// provisionCluster provisions a cluster based on the provided configuration.
+func provisionCluster(name string, ksailConfig *ksailcluster.Cluster) error {
 	fmt.Println()
+	distribution := helpers.Distribution(ksailConfig, inputs.Distribution)
 	provisioner, err := factory.Provisioner(distribution, ksailConfig)
 	if err != nil {
 		return err
 	}
-
-	reconciliationToolBootstrapper, err := factory.ReconciliationTool(reconciliationTool, ksailConfig)
-	if err != nil {
-		return err
-	}
-
 	fmt.Println()
 	fmt.Printf("🚀 Provisioning '%s'\n", name)
 	if inputs.Force {
@@ -71,12 +93,20 @@ func provision(ksailConfig *ksailcluster.Cluster) error {
 		return err
 	}
 	fmt.Printf("✔ '%s' created\n", name)
+	return nil
+}
+
+func bootstrapReconciliationTool(name string, k *ksailcluster.Cluster) error {
+	reconciliationTool := helpers.ReconciliationTool(k, inputs.ReconciliationTool)
+	reconciliationToolBootstrapper, err := factory.ReconciliationTool(reconciliationTool, k)
+	if err != nil {
+		return err
+	}
 
 	fmt.Println()
 	fmt.Printf("⚙️ Bootstrapping '%s' to '%s'\n", reconciliationTool, name)
 	_ = reconciliationToolBootstrapper.Install()
-  fmt.Printf("✔ '%s' installed\n", reconciliationTool)
-
+	fmt.Printf("✔ '%s' installed\n", reconciliationTool)
 	return nil
 }
 
