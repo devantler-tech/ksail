@@ -6,11 +6,11 @@ package cmd
 import (
 	"fmt"
 
-	"devantler.tech/ksail/cmd/helpers"
-	"devantler.tech/ksail/cmd/shared"
-	factory "devantler.tech/ksail/internal"
-	"devantler.tech/ksail/internal/loader"
-	ksailcluster "devantler.tech/ksail/pkg/apis/v1alpha1/cluster"
+	"github.com/devantler-tech/ksail/cmd/helpers"
+	"github.com/devantler-tech/ksail/cmd/shared"
+	factory "github.com/devantler-tech/ksail/internal"
+	"github.com/devantler-tech/ksail/internal/loader"
+	ksailcluster "github.com/devantler-tech/ksail/pkg/apis/v1alpha1/cluster"
 	"github.com/spf13/cobra"
 )
 

@@ -3,9 +3,9 @@ package generator
 import (
 	"fmt"
 
-	ksailcluster "devantler.tech/ksail/pkg/apis/v1alpha1/cluster"
-	"devantler.tech/ksail/pkg/io"
-	"devantler.tech/ksail/pkg/marshaller"
+	ksailcluster "github.com/devantler-tech/ksail/pkg/apis/v1alpha1/cluster"
+	"github.com/devantler-tech/ksail/pkg/io"
+	"github.com/devantler-tech/ksail/pkg/marshaller"
 	"github.com/k3d-io/k3d/v5/pkg/config/types"
 	v1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 )

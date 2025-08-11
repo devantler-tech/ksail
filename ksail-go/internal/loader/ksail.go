@@ -5,8 +5,8 @@ import (
 	"os"
 	"path/filepath"
 
-	ksailcluster "devantler.tech/ksail/pkg/apis/v1alpha1/cluster"
-	"devantler.tech/ksail/pkg/marshaller"
+	ksailcluster "github.com/devantler-tech/ksail/pkg/apis/v1alpha1/cluster"
+	"github.com/devantler-tech/ksail/pkg/marshaller"
 )
 
 // KSailConfigLoader loads KSail config; uses Default when file isn't found

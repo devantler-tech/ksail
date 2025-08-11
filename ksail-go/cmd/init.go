@@ -3,9 +3,9 @@ package cmd
 import (
 	"fmt"
 
-	"devantler.tech/ksail/cmd/shared"
-	"devantler.tech/ksail/internal/util"
-	ksailcluster "devantler.tech/ksail/pkg/apis/v1alpha1/cluster"
+	"github.com/devantler-tech/ksail/cmd/shared"
+	"github.com/devantler-tech/ksail/internal/util"
+	ksailcluster "github.com/devantler-tech/ksail/pkg/apis/v1alpha1/cluster"
 	"github.com/spf13/cobra"
 )
 

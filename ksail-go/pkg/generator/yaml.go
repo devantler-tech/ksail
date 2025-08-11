@@ -1,8 +1,8 @@
 package generator
 
 import (
-	"devantler.tech/ksail/pkg/io"
-	"devantler.tech/ksail/pkg/marshaller"
+	"github.com/devantler-tech/ksail/pkg/io"
+	"github.com/devantler-tech/ksail/pkg/marshaller"
 )
 
 // Options defines options for generators when emitting files.

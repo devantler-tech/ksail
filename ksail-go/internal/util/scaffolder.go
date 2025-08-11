@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"path/filepath"
 
-	ksailcluster "devantler.tech/ksail/pkg/apis/v1alpha1/cluster"
-	gen "devantler.tech/ksail/pkg/generator"
+	ksailcluster "github.com/devantler-tech/ksail/pkg/apis/v1alpha1/cluster"
+	gen "github.com/devantler-tech/ksail/pkg/generator"
 )
 
 type Scaffolder struct {

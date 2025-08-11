@@ -3,12 +3,12 @@ package cmd
 import (
 	"fmt"
 
-	"devantler.tech/ksail/cmd/shared"
-	factory "devantler.tech/ksail/internal"
-	"devantler.tech/ksail/internal/loader"
-	"devantler.tech/ksail/internal/ui/quiet"
-	ksailcluster "devantler.tech/ksail/pkg/apis/v1alpha1/cluster"
-	clusterprovisioner "devantler.tech/ksail/pkg/provisioner/cluster"
+	"github.com/devantler-tech/ksail/cmd/shared"
+	factory "github.com/devantler-tech/ksail/internal"
+	"github.com/devantler-tech/ksail/internal/loader"
+	"github.com/devantler-tech/ksail/internal/ui/quiet"
+	ksailcluster "github.com/devantler-tech/ksail/pkg/apis/v1alpha1/cluster"
+	clusterprovisioner "github.com/devantler-tech/ksail/pkg/provisioner/cluster"
 	"github.com/spf13/cobra"
 )
 

@@ -3,10 +3,10 @@ package factory
 import (
 	"fmt"
 
-	"devantler.tech/ksail/internal/loader"
-	ksailcluster "devantler.tech/ksail/pkg/apis/v1alpha1/cluster"
-	reconboot "devantler.tech/ksail/pkg/bootstrapper/reconciliation_tool"
-	clusterprovisioner "devantler.tech/ksail/pkg/provisioner/cluster"
+	"github.com/devantler-tech/ksail/internal/loader"
+	ksailcluster "github.com/devantler-tech/ksail/pkg/apis/v1alpha1/cluster"
+	reconboot "github.com/devantler-tech/ksail/pkg/bootstrapper/reconciliation_tool"
+	clusterprovisioner "github.com/devantler-tech/ksail/pkg/provisioner/cluster"
 )
 
 func Provisioner(distribution ksailcluster.Distribution, ksailConfig *ksailcluster.Cluster) (clusterprovisioner.ClusterProvisioner, error) {
