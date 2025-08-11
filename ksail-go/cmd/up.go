@@ -39,8 +39,8 @@ func handleUp() error {
 
 // provision provisions a cluster based on the provided configuration.
 func provision(ksailConfig *ksailcluster.Cluster) error {
-	ksailConfig.Metadata.Name = helpers.NameInputOrFallback(ksailConfig, inputs.Name)
-	ksailConfig.Spec.ContainerEngine = helpers.ContainerEngineInputOrFallback(ksailConfig, inputs.ContainerEngine)
+	ksailConfig.Metadata.Name = helpers.InputOrFallback(ksailConfig.Metadata.Name, inputs.Name)
+	ksailConfig.Spec.ContainerEngine = helpers.InputOrFallback(ksailConfig.Spec.ContainerEngine, inputs.ContainerEngine)
 	containerEngineProvisioner, err := factory.ContainerEngineProvisioner(ksailConfig)
 	if err != nil {
 		return err
@@ -84,8 +84,8 @@ func provision(ksailConfig *ksailcluster.Cluster) error {
 // provisionCluster provisions a cluster based on the provided configuration.
 func provisionCluster(ksailConfig *ksailcluster.Cluster) error {
 	fmt.Println()
-	ksailConfig.Spec.Distribution = helpers.DistributionInputOrFallback(ksailConfig, inputs.Distribution)
-	ksailConfig.Spec.ContainerEngine = helpers.ContainerEngineInputOrFallback(ksailConfig, inputs.ContainerEngine)
+	ksailConfig.Spec.Distribution = helpers.InputOrFallback(ksailConfig.Spec.Distribution, inputs.Distribution)
+	ksailConfig.Spec.ContainerEngine = helpers.InputOrFallback(ksailConfig.Spec.ContainerEngine, inputs.ContainerEngine)
 	provisioner, err := factory.ClusterProvisioner(ksailConfig)
 	if err != nil {
 		return err
@@ -110,15 +110,15 @@ func provisionCluster(ksailConfig *ksailcluster.Cluster) error {
 	return nil
 }
 
-func bootstrapReconciliationTool(k *ksailcluster.Cluster) error {
-	reconciliationTool := helpers.ReconciliationToolInputOrFallback(k, inputs.ReconciliationTool)
-	reconciliationToolBootstrapper, err := factory.ReconciliationTool(reconciliationTool, k)
+func bootstrapReconciliationTool(ksailConfig *ksailcluster.Cluster) error {
+	reconciliationTool := helpers.InputOrFallback(ksailConfig.Spec.ReconciliationTool, inputs.ReconciliationTool)
+	reconciliationToolBootstrapper, err := factory.ReconciliationTool(reconciliationTool, ksailConfig)
 	if err != nil {
 		return err
 	}
 
 	fmt.Println()
-	fmt.Printf("⚙️ Bootstrapping '%s' to '%s'\n", reconciliationTool, k.Metadata.Name)
+	fmt.Printf("⚙️ Bootstrapping '%s' to '%s'\n", reconciliationTool, ksailConfig.Metadata.Name)
 	_ = reconciliationToolBootstrapper.Install()
 	fmt.Printf("✔ '%s' installed\n", reconciliationTool)
 	return nil
