@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/devantler-tech/ksail/cmd/shared"
-	factory "github.com/devantler-tech/ksail/internal"
+	factory "github.com/devantler-tech/ksail/internal/factories"
 	"github.com/devantler-tech/ksail/internal/loader"
 	"github.com/devantler-tech/ksail/internal/ui/quiet"
 	ksailcluster "github.com/devantler-tech/ksail/pkg/apis/v1alpha1/cluster"

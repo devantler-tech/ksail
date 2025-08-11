@@ -8,7 +8,7 @@ import (
 
 	"github.com/devantler-tech/ksail/cmd/helpers"
 	"github.com/devantler-tech/ksail/cmd/shared"
-	factory "github.com/devantler-tech/ksail/internal"
+	factory "github.com/devantler-tech/ksail/internal/factories"
 	"github.com/devantler-tech/ksail/internal/loader"
 	ksailcluster "github.com/devantler-tech/ksail/pkg/apis/v1alpha1/cluster"
 	"github.com/spf13/cobra"
