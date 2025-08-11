@@ -155,7 +155,7 @@ func (c *Cluster) SetDefaults() {
 		c.Spec.Connection.Context = "kind-ksail-default"
 	}
 	if c.Spec.Connection.Timeout.Duration == 0 {
-		c.Spec.Connection.Timeout = metav1.Duration{Duration: 30 * time.Second}
+		c.Spec.Connection.Timeout = metav1.Duration{Duration: 2 * time.Minute}
 	}
 	if c.Spec.Distribution == "" {
 		c.Spec.Distribution = DistributionKind

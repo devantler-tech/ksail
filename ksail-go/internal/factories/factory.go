@@ -41,9 +41,10 @@ func ReconciliationTool(reconciliationTool ksailcluster.ReconciliationTool, ksai
 		if err != nil {
 			return nil, err
 		}
-		reconciliationToolBootstrapper = reconboot.NewFluxOperatorBootstrapper(
+		reconciliationToolBootstrapper = reconboot.NewFluxBootstrapper(
 			kubeconfigPath,
 			ksailConfig.Spec.Connection.Context,
+			ksailConfig.Spec.Connection.Timeout.Duration,
 		)
 	case ksailcluster.ReconciliationToolArgoCD:
 		// Bootstrap with ArgoCD

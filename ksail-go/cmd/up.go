@@ -74,8 +74,8 @@ func provision(ksailConfig *ksailcluster.Cluster) error {
 
 	fmt.Println()
 	fmt.Printf("⚙️ Bootstrapping '%s' to '%s'\n", reconciliationTool, name)
-	fmt.Printf("► installing '%s'\n", reconciliationTool)
 	_ = reconciliationToolBootstrapper.Install()
+  fmt.Printf("✔ '%s' installed\n", reconciliationTool)
 
 	return nil
 }
