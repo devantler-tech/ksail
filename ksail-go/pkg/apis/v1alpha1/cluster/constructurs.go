@@ -39,6 +39,13 @@ func WithSpecDistribution(distribution Distribution) func(*Cluster) {
 	}
 }
 
+// WithSpecContainerEngine sets the container engine of the cluster.
+func WithSpecContainerEngine(engine ContainerEngine) func(*Cluster) {
+	return func(c *Cluster) {
+		c.Spec.ContainerEngine = engine
+	}
+}
+
 // WithSpecConnectionKubeconfig sets the kubeconfig for the cluster.
 func WithSpecConnectionKubeconfig(kubeconfig string) func(*Cluster) {
 	return func(c *Cluster) {
@@ -95,47 +102,6 @@ func WithSpecReconciliationTool(reconciliationTool ReconciliationTool) func(*Clu
 	}
 }
 
-// WithDistribution sets the Distribution on the cluster spec.
-func WithDistribution(distribution Distribution) func(*Cluster) {
-	return func(c *Cluster) { c.Spec.Distribution = distribution }
-}
-
-// WithConnectionKubeconfig sets the kubeconfig path.
-func WithConnectionKubeconfig(kubeconfig string) func(*Cluster) {
-	return func(c *Cluster) { c.Spec.Connection.Kubeconfig = kubeconfig }
-}
-
-// WithConnectionContext sets the kubeconfig context.
-func WithConnectionContext(context string) func(*Cluster) {
-	return func(c *Cluster) { c.Spec.Connection.Context = context }
-}
-
-// WithConnectionTimeout sets the connection timeout.
-func WithConnectionTimeout(timeout metav1.Duration) func(*Cluster) {
-	return func(c *Cluster) { c.Spec.Connection.Timeout = timeout }
-}
-
-// WithCNI sets the cluster CNI.
-func WithCNI(cni CNI) func(*Cluster) { return func(c *Cluster) { c.Spec.CNI = cni } }
-
-// WithCSI sets the cluster CSI.
-func WithCSI(csi CSI) func(*Cluster) { return func(c *Cluster) { c.Spec.CSI = csi } }
-
-// WithIngressController sets the ingress controller.
-func WithIngressController(ic IngressController) func(*Cluster) {
-	return func(c *Cluster) { c.Spec.IngressController = ic }
-}
-
-// WithGatewayController sets the gateway controller.
-func WithGatewayController(gc GatewayController) func(*Cluster) {
-	return func(c *Cluster) { c.Spec.GatewayController = gc }
-}
-
-// WithReconciliationTool sets the deployment tool.
-func WithReconciliationTool(dt ReconciliationTool) func(*Cluster) {
-	return func(c *Cluster) { c.Spec.ReconciliationTool = dt }
-}
-
 // --- Defaults ---
 
 func (c *Cluster) SetDefaults() {
@@ -159,6 +125,9 @@ func (c *Cluster) SetDefaults() {
 	}
 	if c.Spec.Distribution == "" {
 		c.Spec.Distribution = DistributionKind
+	}
+	if c.Spec.ContainerEngine == "" {
+		c.Spec.ContainerEngine = ContainerEngineDocker
 	}
 	if c.Spec.ReconciliationTool == "" {
 		c.Spec.ReconciliationTool = ReconciliationToolKubectl
@@ -207,6 +176,17 @@ func (d *ReconciliationTool) Set(value string) error {
 		value, ReconciliationToolKubectl, ReconciliationToolFlux, ReconciliationToolArgoCD)
 }
 
+// Set for ContainerEngine
+func (e *ContainerEngine) Set(value string) error {
+	for _, engine := range validContainerEngines {
+		if strings.EqualFold(value, string(engine)) {
+			*e = engine
+			return nil
+		}
+	}
+ return fmt.Errorf("invalid container engine: %s (valid options: %s, %s)", value, ContainerEngineDocker, ContainerEnginePodman)
+}
+
 // --- pflag Values ---
 
 // String returns the string representation of the Distribution.
@@ -228,3 +208,9 @@ func (d *ReconciliationTool) String() string {
 func (d *ReconciliationTool) Type() string {
 	return "ReconciliationTool"
 }
+
+// String returns the string representation of the ContainerEngine
+func (e *ContainerEngine) String() string { return string(*e) }
+
+// Type returns the type of the ContainerEngine.
+func (e *ContainerEngine) Type() string { return "ContainerEngine" }

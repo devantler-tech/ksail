@@ -24,6 +24,7 @@ type Spec struct {
 	SourceDirectory    string            `json:"sourceDirectory,omitzero"`
 	Connection         Connection        `json:"connection,omitzero"`
 	Distribution       Distribution      `json:"distribution,omitzero"`
+	ContainerEngine    ContainerEngine   `json:"containerEngine,omitzero"`
 	CNI                CNI               `json:"cni,omitzero"`
 	CSI                CSI               `json:"csi,omitzero"`
 	IngressController  IngressController `json:"ingressController,omitzero"`
@@ -97,6 +98,17 @@ const (
 
 // validReconciliationTools enumerates supported reconciliation tool values.
 var validReconciliationTools = []ReconciliationTool{ReconciliationToolKubectl, ReconciliationToolFlux, ReconciliationToolArgoCD}
+
+// ContainerEngine defines the container engine used for local cluster lifecycle.
+type ContainerEngine string
+
+const (
+	ContainerEngineDocker ContainerEngine = "Docker"
+	ContainerEnginePodman ContainerEngine = "Podman"
+)
+
+// validContainerEngines enumerates supported container engines.
+var validContainerEngines = []ContainerEngine{ContainerEngineDocker, ContainerEnginePodman}
 
 // Options holds optional settings for distributions, networking, and deployment tools.
 type Options struct {
