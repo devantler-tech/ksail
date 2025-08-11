@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/devantler-tech/ksail/internal/loader"
+	"github.com/devantler-tech/ksail/internal/utils"
 	ksailcluster "github.com/devantler-tech/ksail/pkg/apis/v1alpha1/cluster"
 	reconboot "github.com/devantler-tech/ksail/pkg/bootstrapper/reconciliation_tool"
 	clusterprovisioner "github.com/devantler-tech/ksail/pkg/provisioner/cluster"
@@ -36,8 +37,12 @@ func ReconciliationTool(reconciliationTool ksailcluster.ReconciliationTool, ksai
 	case ksailcluster.ReconciliationToolKubectl:
 		// Bootstrap with kubectl
 	case ksailcluster.ReconciliationToolFlux:
+		kubeconfigPath, err := utils.ExpandPath(ksailConfig.Spec.Connection.Kubeconfig)
+		if err != nil {
+			return nil, err
+		}
 		reconciliationToolBootstrapper = reconboot.NewFluxOperatorBootstrapper(
-			ksailConfig.Spec.Connection.Kubeconfig,
+			kubeconfigPath,
 			ksailConfig.Spec.Connection.Context,
 		)
 	case ksailcluster.ReconciliationToolArgoCD:

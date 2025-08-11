@@ -7,18 +7,11 @@ import (
 	"fmt"
 
 	"github.com/devantler-tech/ksail/cmd/helpers"
-	"github.com/devantler-tech/ksail/cmd/shared"
+	"github.com/devantler-tech/ksail/cmd/inputs"
 	factory "github.com/devantler-tech/ksail/internal/factories"
 	"github.com/devantler-tech/ksail/internal/loader"
 	ksailcluster "github.com/devantler-tech/ksail/pkg/apis/v1alpha1/cluster"
 	"github.com/spf13/cobra"
-)
-
-
-
-var (
-	downName         string
-	downDistribution ksailcluster.Distribution
 )
 
 // downCmd represents the down command
@@ -45,8 +38,8 @@ func handleDown() error {
 
 // teardown tears down a cluster using the provided name or the loaded kind config name.
 func teardown(ksailConfig *ksailcluster.Cluster) error {
-	name := helpers.Name(ksailConfig, shared.Name)
-	distribution := helpers.Distribution(ksailConfig, shared.Distribution)
+	name := helpers.Name(ksailConfig, inputs.Name)
+	distribution := helpers.Distribution(ksailConfig, inputs.Distribution)
 
 	provisioner, err := factory.Provisioner(distribution, ksailConfig)
 	if err != nil {
@@ -54,7 +47,7 @@ func teardown(ksailConfig *ksailcluster.Cluster) error {
 	}
 
 	fmt.Println()
-		fmt.Printf("🔥 Destroying '%s'\n", name)
+	fmt.Printf("🔥 Destroying '%s'\n", name)
 	exists, err := provisioner.Exists(name)
 	if err != nil {
 		return err
@@ -72,6 +65,6 @@ func teardown(ksailConfig *ksailcluster.Cluster) error {
 
 func init() {
 	rootCmd.AddCommand(downCmd)
-  shared.AddNameFlag(downCmd)
-  shared.AddDistributionFlag(downCmd)
+	inputs.AddNameFlag(downCmd)
+	inputs.AddDistributionFlag(downCmd)
 }

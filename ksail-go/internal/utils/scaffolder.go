@@ -1,4 +1,4 @@
-package util
+package utils
 
 import (
 	"fmt"
@@ -26,11 +26,11 @@ func (s *Scaffolder) Scaffold(output string, force bool) error {
 	// generate distribution config file
 	switch s.KSailConfig.Spec.Distribution {
 	case ksailcluster.DistributionKind:
-	if _, err := s.KindGenerator.Generate(gen.Options{Output: output + "kind.yaml", Force: force}); err != nil {
+		if _, err := s.KindGenerator.Generate(gen.Options{Output: output + "kind.yaml", Force: force}); err != nil {
 			return err
 		}
 	case ksailcluster.DistributionK3d:
-	if _, err := s.K3dGenerator.Generate(gen.Options{Output: output + "k3d.yaml", Force: force}); err != nil {
+		if _, err := s.K3dGenerator.Generate(gen.Options{Output: output + "k3d.yaml", Force: force}); err != nil {
 			return err
 		}
 	case ksailcluster.DistributionTind:
@@ -54,7 +54,7 @@ func NewScaffolder(ksailConfig ksailcluster.Cluster) *Scaffolder {
 
 	return &Scaffolder{
 		KSailConfig:            ksailConfig,
-	KSailYAMLGenerator:     ksailGen,
+		KSailYAMLGenerator:     ksailGen,
 		KindGenerator:          kindGen,
 		K3dGenerator:           k3dGen,
 		KustomizationGenerator: kustGen,

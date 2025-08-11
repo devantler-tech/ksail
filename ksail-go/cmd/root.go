@@ -13,6 +13,7 @@ import (
 //go:embed assets/ascii-art.txt
 var asciiArt string
 
+// rootCmd represents the root command
 var rootCmd = &cobra.Command{
 	Use:   "ksail",
 	Short: "SDK for operating and managing K8s clusters and workloads",

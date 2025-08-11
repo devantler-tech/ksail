@@ -3,13 +3,13 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/devantler-tech/ksail/cmd/shared"
-	"github.com/devantler-tech/ksail/internal/util"
+	"github.com/devantler-tech/ksail/cmd/inputs"
+	"github.com/devantler-tech/ksail/internal/utils"
 	ksailcluster "github.com/devantler-tech/ksail/pkg/apis/v1alpha1/cluster"
 	"github.com/spf13/cobra"
 )
 
-
+// initCmd represents the init command
 var initCmd = &cobra.Command{
 	Use:   "init",
 	Short: "Scaffold a new project",
@@ -37,9 +37,9 @@ func handleInit() error {
 
 // scaffold generates initial project files according to the provided configuration.
 func scaffold(ksailConfig *ksailcluster.Cluster) error {
-	scaffolder := util.NewScaffolder(*ksailConfig)
+	scaffolder := utils.NewScaffolder(*ksailConfig)
 	fmt.Println("📝 Scaffolding new project")
-	if err := scaffolder.Scaffold(shared.Output, shared.Force); err != nil {
+	if err := scaffolder.Scaffold(inputs.Output, inputs.Force); err != nil {
 		return err
 	}
 	fmt.Println("✔ project scaffolded")
@@ -48,26 +48,26 @@ func scaffold(ksailConfig *ksailcluster.Cluster) error {
 
 // setInitialValuesFromInput mutates ksailConfig with CLI-provided values.
 func setInitialValuesFromInput(ksailConfig *ksailcluster.Cluster) {
-  if shared.Name != "" {
-	  ksailConfig.Metadata.Name = shared.Name
-  }
-  if shared.Distribution != "" {
-	  ksailConfig.Spec.Distribution = shared.Distribution
-  }
-  if shared.ReconciliationTool != "" {
-	  ksailConfig.Spec.ReconciliationTool = shared.ReconciliationTool
-  }
-  if shared.SourceDirectory != "" {
-	  ksailConfig.Spec.SourceDirectory = shared.SourceDirectory
-  }
+	if inputs.Name != "" {
+		ksailConfig.Metadata.Name = inputs.Name
+	}
+	if inputs.Distribution != "" {
+		ksailConfig.Spec.Distribution = inputs.Distribution
+	}
+	if inputs.ReconciliationTool != "" {
+		ksailConfig.Spec.ReconciliationTool = inputs.ReconciliationTool
+	}
+	if inputs.SourceDirectory != "" {
+		ksailConfig.Spec.SourceDirectory = inputs.SourceDirectory
+	}
 }
 
 // init initializes the init command.
 func init() {
 	rootCmd.AddCommand(initCmd)
-	shared.AddNameFlag(initCmd)
-	shared.AddDistributionFlag(initCmd)
-	shared.AddReconciliationToolFlag(initCmd)
-	shared.AddSourceDirectoryFlag(initCmd)
-	shared.AddForceFlag(initCmd)
+	inputs.AddNameFlag(initCmd)
+	inputs.AddDistributionFlag(initCmd)
+	inputs.AddReconciliationToolFlag(initCmd)
+	inputs.AddSourceDirectoryFlag(initCmd)
+	inputs.AddForceFlag(initCmd)
 }

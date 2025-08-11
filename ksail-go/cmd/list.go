@@ -3,7 +3,7 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/devantler-tech/ksail/cmd/shared"
+	"github.com/devantler-tech/ksail/cmd/inputs"
 	factory "github.com/devantler-tech/ksail/internal/factories"
 	"github.com/devantler-tech/ksail/internal/loader"
 	"github.com/devantler-tech/ksail/internal/ui/quiet"
@@ -24,7 +24,7 @@ var listCmd = &cobra.Command{
 	},
 }
 
-// --- internal ---
+// --- internals ---
 
 func handleList() error {
 	var ksailConfig ksailcluster.Cluster
@@ -40,7 +40,7 @@ func handleList() error {
 func list(ksailConfig *ksailcluster.Cluster) error {
 
 	var distributions []ksailcluster.Distribution
-	if shared.All {
+	if inputs.All {
 		distributions = []ksailcluster.Distribution{ksailcluster.DistributionKind, ksailcluster.DistributionK3d}
 	} else {
 		distributions = []ksailcluster.Distribution{ksailConfig.Spec.Distribution}
@@ -83,5 +83,5 @@ func renderTable(distributions []ksailcluster.Distribution, ksailConfig *ksailcl
 
 func init() {
 	rootCmd.AddCommand(listCmd)
-	shared.AddAllFlag(listCmd)
+	inputs.AddAllFlag(listCmd)
 }

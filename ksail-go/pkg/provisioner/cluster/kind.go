@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"slices"
 
+	"github.com/devantler-tech/ksail/internal/utils"
 	ksailcluster "github.com/devantler-tech/ksail/pkg/apis/v1alpha1/cluster"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 	"sigs.k8s.io/kind/pkg/cluster"
@@ -39,7 +40,11 @@ func (k *KindClusterProvisioner) Delete(name string) error {
 	if target == "" {
 		target = k.ksailConfig.Metadata.Name
 	}
-	return k.dockerProvider.Delete(target, k.ksailConfig.Spec.Connection.Kubeconfig)
+	kubeconfigPath, err := utils.ExpandPath(k.ksailConfig.Spec.Connection.Kubeconfig)
+	if err != nil {
+		return err
+	}
+	return k.dockerProvider.Delete(target, kubeconfigPath)
 }
 
 // Starts a kind cluster.

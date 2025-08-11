@@ -7,7 +7,7 @@ import (
 	"fmt"
 
 	"github.com/devantler-tech/ksail/cmd/helpers"
-	"github.com/devantler-tech/ksail/cmd/shared"
+	"github.com/devantler-tech/ksail/cmd/inputs"
 	factory "github.com/devantler-tech/ksail/internal/factories"
 	"github.com/devantler-tech/ksail/internal/loader"
 	ksailcluster "github.com/devantler-tech/ksail/pkg/apis/v1alpha1/cluster"
@@ -36,8 +36,8 @@ func handleStop() error {
 }
 
 func stop(ksailConfig *ksailcluster.Cluster) error {
-	name := helpers.Name(ksailConfig, shared.Name)
-	distribution := helpers.Distribution(ksailConfig, shared.Distribution)
+	name := helpers.Name(ksailConfig, inputs.Name)
+	distribution := helpers.Distribution(ksailConfig, inputs.Distribution)
 
   fmt.Println()
 	provisioner, err := factory.Provisioner(distribution, ksailConfig)
@@ -64,6 +64,6 @@ func stop(ksailConfig *ksailcluster.Cluster) error {
 
 func init() {
 	rootCmd.AddCommand(stopCmd)
-	shared.AddNameFlag(stopCmd)
-	shared.AddDistributionFlag(stopCmd)
+	inputs.AddNameFlag(stopCmd)
+	inputs.AddDistributionFlag(stopCmd)
 }

@@ -6,6 +6,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/devantler-tech/ksail/internal/utils"
 	helmclient "github.com/mittwald/go-helm-client"
 )
 
@@ -17,6 +18,7 @@ type FluxOperatorBootstrapper struct {
 }
 
 func NewFluxOperatorBootstrapper(kubeconfigPath string, kubeContext string) *FluxOperatorBootstrapper {
+	kubeconfigPath, _ = utils.ExpandPath(kubeconfigPath)
 	return &FluxOperatorBootstrapper{
 		KubeconfigPath: kubeconfigPath,
 		KubeContext:    kubeContext,
@@ -37,6 +39,7 @@ func (b *FluxOperatorBootstrapper) Install() error {
 		CreateNamespace: true,
 		Atomic:          true,
 		UpgradeCRDs:     true,
+		Timeout: 5 * time.Minute,
 	}
 
 	// No custom values for now; install with chart defaults
@@ -69,7 +72,6 @@ func (b *FluxOperatorBootstrapper) newHelmClient() (helmclient.Client, error) {
 	opts := &helmclient.KubeConfClientOptions{
 		Options: &helmclient.Options{
 			Namespace: "flux-system",
-			Debug:     true,
 		},
 		KubeConfig:  data,
 		KubeContext: b.KubeContext,

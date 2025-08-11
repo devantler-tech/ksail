@@ -1,4 +1,4 @@
-package shared
+package inputs
 
 import (
 	ksailcluster "github.com/devantler-tech/ksail/pkg/apis/v1alpha1/cluster"

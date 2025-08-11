@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/devantler-tech/ksail/cmd/helpers"
-	"github.com/devantler-tech/ksail/cmd/shared"
+	"github.com/devantler-tech/ksail/cmd/inputs"
 	factory "github.com/devantler-tech/ksail/internal/factories"
 	"github.com/devantler-tech/ksail/internal/loader"
 	ksailcluster "github.com/devantler-tech/ksail/pkg/apis/v1alpha1/cluster"
@@ -39,9 +39,9 @@ func handleUp() error {
 
 // provision provisions a cluster based on the provided configuration.
 func provision(ksailConfig *ksailcluster.Cluster) error {
-	name := helpers.Name(ksailConfig, shared.Name)
-	distribution := helpers.Distribution(ksailConfig, shared.Distribution)
-	reconciliationTool := helpers.ReconciliationTool(ksailConfig, shared.ReconciliationTool)
+	name := helpers.Name(ksailConfig, inputs.Name)
+	distribution := helpers.Distribution(ksailConfig, inputs.Distribution)
+	reconciliationTool := helpers.ReconciliationTool(ksailConfig, inputs.ReconciliationTool)
 
 	fmt.Println()
 	provisioner, err := factory.Provisioner(distribution, ksailConfig)
@@ -56,7 +56,7 @@ func provision(ksailConfig *ksailcluster.Cluster) error {
 
 	fmt.Println()
 	fmt.Printf("🚀 Provisioning '%s'\n", name)
-	if shared.Force {
+	if inputs.Force {
 		exists, err := provisioner.Exists(name)
 		if err != nil {
 			return err
@@ -82,8 +82,8 @@ func provision(ksailConfig *ksailcluster.Cluster) error {
 
 func init() {
 	rootCmd.AddCommand(upCmd)
-	shared.AddNameFlag(upCmd)
-	shared.AddDistributionFlag(upCmd)
-	shared.AddReconciliationToolFlag(upCmd)
-	shared.AddForceFlag(upCmd)
+	inputs.AddNameFlag(upCmd)
+	inputs.AddDistributionFlag(upCmd)
+	inputs.AddReconciliationToolFlag(upCmd)
+	inputs.AddForceFlag(upCmd)
 }
