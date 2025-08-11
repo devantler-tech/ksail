@@ -4,7 +4,7 @@ import (
 	"context"
 	"slices"
 
-	ksailcluster "devantler.tech/ksail/pkg/apis/v1alpha1/cluster"
+	ksailcluster "github.com/devantler-tech/ksail/pkg/apis/v1alpha1/cluster"
 	k3dclient "github.com/k3d-io/k3d/v5/pkg/client"
 	k3dconfig "github.com/k3d-io/k3d/v5/pkg/config"
 	conf "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"

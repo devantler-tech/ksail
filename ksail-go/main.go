@@ -1,7 +1,7 @@
 package main
 
 import (
-	"devantler.tech/ksail/cmd"
+	"github.com/devantler-tech/ksail/cmd"
 )
 
 var (

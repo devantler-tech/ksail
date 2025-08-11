@@ -1,7 +1,7 @@
 package shared
 
 import (
-	ksailcluster "devantler.tech/ksail/pkg/apis/v1alpha1/cluster"
+	ksailcluster "github.com/devantler-tech/ksail/pkg/apis/v1alpha1/cluster"
 	"github.com/spf13/cobra"
 )
 
