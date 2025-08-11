@@ -36,8 +36,8 @@ func handleStart() error {
 }
 
 func start(ksailConfig *ksailcluster.Cluster) error {
-	ksailConfig.Metadata.Name = helpers.Name(ksailConfig, inputs.Name)
-	ksailConfig.Spec.Distribution = helpers.Distribution(ksailConfig, inputs.Distribution)
+	ksailConfig.Metadata.Name = helpers.NameInputOrFallback(ksailConfig, inputs.Name)
+	ksailConfig.Spec.Distribution = helpers.DistributionInputOrFallback(ksailConfig, inputs.Distribution)
 
 	fmt.Println()
 	provisioner, err := factory.ClusterProvisioner(ksailConfig)

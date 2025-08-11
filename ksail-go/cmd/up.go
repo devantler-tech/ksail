@@ -39,8 +39,8 @@ func handleUp() error {
 
 // provision provisions a cluster based on the provided configuration.
 func provision(ksailConfig *ksailcluster.Cluster) error {
-	ksailConfig.Metadata.Name = helpers.Name(ksailConfig, inputs.Name)
-  ksailConfig.Spec.ContainerEngine = helpers.ContainerEngine(ksailConfig, inputs.ContainerEngine)
+	ksailConfig.Metadata.Name = helpers.NameInputOrFallback(ksailConfig, inputs.Name)
+	ksailConfig.Spec.ContainerEngine = helpers.ContainerEngineInputOrFallback(ksailConfig, inputs.ContainerEngine)
 	containerEngineProvisioner, err := factory.ContainerEngineProvisioner(ksailConfig)
 	if err != nil {
 		return err
@@ -84,8 +84,8 @@ func provision(ksailConfig *ksailcluster.Cluster) error {
 // provisionCluster provisions a cluster based on the provided configuration.
 func provisionCluster(ksailConfig *ksailcluster.Cluster) error {
 	fmt.Println()
-	ksailConfig.Spec.Distribution = helpers.Distribution(ksailConfig, inputs.Distribution)
-	ksailConfig.Spec.ContainerEngine = helpers.ContainerEngine(ksailConfig, inputs.ContainerEngine)
+	ksailConfig.Spec.Distribution = helpers.DistributionInputOrFallback(ksailConfig, inputs.Distribution)
+	ksailConfig.Spec.ContainerEngine = helpers.ContainerEngineInputOrFallback(ksailConfig, inputs.ContainerEngine)
 	provisioner, err := factory.ClusterProvisioner(ksailConfig)
 	if err != nil {
 		return err
@@ -111,7 +111,7 @@ func provisionCluster(ksailConfig *ksailcluster.Cluster) error {
 }
 
 func bootstrapReconciliationTool(k *ksailcluster.Cluster) error {
-	reconciliationTool := helpers.ReconciliationTool(k, inputs.ReconciliationTool)
+	reconciliationTool := helpers.ReconciliationToolInputOrFallback(k, inputs.ReconciliationTool)
 	reconciliationToolBootstrapper, err := factory.ReconciliationTool(reconciliationTool, k)
 	if err != nil {
 		return err
