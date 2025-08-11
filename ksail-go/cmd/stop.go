@@ -40,7 +40,7 @@ func stop(ksailConfig *ksailcluster.Cluster) error {
 	ksailConfig.Spec.Distribution = helpers.Distribution(ksailConfig, inputs.Distribution)
 
 	fmt.Println()
-	provisioner, err := factory.Provisioner(ksailConfig)
+	provisioner, err := factory.ClusterProvisioner(ksailConfig)
 	if err != nil {
 		return err
 	}

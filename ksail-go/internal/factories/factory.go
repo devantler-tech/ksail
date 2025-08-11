@@ -9,9 +9,10 @@ import (
 	ksailcluster "github.com/devantler-tech/ksail/pkg/apis/v1alpha1/cluster"
 	reconboot "github.com/devantler-tech/ksail/pkg/bootstrapper/reconciliation_tool"
 	clusterprovisioner "github.com/devantler-tech/ksail/pkg/provisioner/cluster"
+	containerengineprovisioner "github.com/devantler-tech/ksail/pkg/provisioner/container_engine"
 )
 
-func Provisioner(ksailConfig *ksailcluster.Cluster) (clusterprovisioner.ClusterProvisioner, error) {
+func ClusterProvisioner(ksailConfig *ksailcluster.Cluster) (clusterprovisioner.ClusterProvisioner, error) {
 	var provisioner clusterprovisioner.ClusterProvisioner
 	if ksailConfig.Spec.ContainerEngine == ksailcluster.ContainerEnginePodman {
 		podmanSock := fmt.Sprintf("unix:///run/user/%d/podman/podman.sock", os.Getuid())
@@ -34,6 +35,17 @@ func Provisioner(ksailConfig *ksailcluster.Cluster) (clusterprovisioner.ClusterP
 		return nil, fmt.Errorf("unsupported distribution '%s'", ksailConfig.Spec.Distribution)
 	}
 	return provisioner, nil
+}
+
+func ContainerEngineProvisioner(ksailConfig *ksailcluster.Cluster) (containerengineprovisioner.ContainerEngineProvisioner, error) {
+	switch ksailConfig.Spec.ContainerEngine {
+	case ksailcluster.ContainerEngineDocker:
+		return containerengineprovisioner.NewDockerProvisioner(ksailConfig), nil
+	case ksailcluster.ContainerEnginePodman:
+		return containerengineprovisioner.NewPodmanProvisioner(ksailConfig), nil
+	default:
+		return nil, fmt.Errorf("unsupported container engine '%s'", ksailConfig.Spec.ContainerEngine)
+	}
 }
 
 func ReconciliationTool(reconciliationTool ksailcluster.ReconciliationTool, ksailConfig *ksailcluster.Cluster) (reconboot.Bootstrapper, error) {

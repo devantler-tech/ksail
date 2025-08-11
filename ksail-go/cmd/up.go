@@ -40,12 +40,23 @@ func handleUp() error {
 // provision provisions a cluster based on the provided configuration.
 func provision(ksailConfig *ksailcluster.Cluster) error {
 	ksailConfig.Metadata.Name = helpers.Name(ksailConfig, inputs.Name)
+  ksailConfig.Spec.ContainerEngine = helpers.ContainerEngine(ksailConfig, inputs.ContainerEngine)
+	containerEngineProvisioner, err := factory.ContainerEngineProvisioner(ksailConfig)
+	if err != nil {
+		return err
+	}
 
-  // TODO: Check if docker is running
+  fmt.Println("📋 Checking prerequisites")
+  fmt.Printf("► checking '%s' is ready\n", ksailConfig.Spec.ContainerEngine)
+	ready, err := containerEngineProvisioner.CheckReady()
+	if err != nil || !ready {
+		return fmt.Errorf("container engine '%s' is not ready: %v", ksailConfig.Spec.ContainerEngine, err)
+	}
+  fmt.Printf("✔ '%s' is ready\n", ksailConfig.Spec.ContainerEngine)
 
 	// TODO: Create local registry 'ksail-registry' with a docker provisioner
 
-	err := provisionCluster(ksailConfig)
+	err = provisionCluster(ksailConfig)
 	if err != nil {
 		return err
 	}
@@ -75,7 +86,7 @@ func provisionCluster(ksailConfig *ksailcluster.Cluster) error {
 	fmt.Println()
 	ksailConfig.Spec.Distribution = helpers.Distribution(ksailConfig, inputs.Distribution)
 	ksailConfig.Spec.ContainerEngine = helpers.ContainerEngine(ksailConfig, inputs.ContainerEngine)
-	provisioner, err := factory.Provisioner(ksailConfig)
+	provisioner, err := factory.ClusterProvisioner(ksailConfig)
 	if err != nil {
 		return err
 	}

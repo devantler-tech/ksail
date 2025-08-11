@@ -56,7 +56,7 @@ func renderTable(distributions []ksailcluster.Distribution, ksailConfig *ksailcl
 		var provisioner clusterprovisioner.ClusterProvisioner
 		if err := quiet.SilenceStdout(func() error {
 			var innerErr error
-			provisioner, innerErr = factory.Provisioner(ksailConfig)
+			provisioner, innerErr = factory.ClusterProvisioner(ksailConfig)
 			return innerErr
 		}); err != nil {
 			return err

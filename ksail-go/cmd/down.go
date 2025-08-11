@@ -41,7 +41,7 @@ func teardown(ksailConfig *ksailcluster.Cluster) error {
 	ksailConfig.Metadata.Name = helpers.Name(ksailConfig, inputs.Name)
 	ksailConfig.Spec.Distribution = helpers.Distribution(ksailConfig, inputs.Distribution)
 
-	provisioner, err := factory.Provisioner(ksailConfig)
+	provisioner, err := factory.ClusterProvisioner(ksailConfig)
 	if err != nil {
 		return err
 	}
