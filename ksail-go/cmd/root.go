@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"devantler.tech/ksail/internal/ui/notify"
+	"github.com/devantler-tech/ksail/internal/ui/notify"
 	"github.com/spf13/cobra"
 )
 
