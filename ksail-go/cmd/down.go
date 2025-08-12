@@ -32,15 +32,13 @@ func handleDown() error {
 	if err != nil {
 		return err
 	}
-	fmt.Println()
+  helpers.SetInputsOrFallback(&ksailConfig)
 	return teardown(&ksailConfig)
 }
 
 // teardown tears down a cluster using the provided name or the loaded kind config name.
 func teardown(ksailConfig *ksailcluster.Cluster) error {
-	ksailConfig.Metadata.Name = helpers.InputOrFallback(inputs.Name, ksailConfig.Metadata.Name)
-	ksailConfig.Spec.Distribution = helpers.InputOrFallback(inputs.Distribution, ksailConfig.Spec.Distribution)
-
+	fmt.Println()
 	provisioner, err := factory.ClusterProvisioner(ksailConfig)
 	if err != nil {
 		return err

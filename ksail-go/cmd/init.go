@@ -32,10 +32,7 @@ var initCmd = &cobra.Command{
 // handleInit handles the init command.
 func handleInit() error {
 	ksailConfig := ksailcluster.NewCluster()
-	ksailConfig.Metadata.Name = helpers.InputOrFallback(inputs.Name, ksailConfig.Metadata.Name)
-	ksailConfig.Spec.Distribution = helpers.InputOrFallback(inputs.Distribution, ksailConfig.Spec.Distribution)
-	ksailConfig.Spec.ReconciliationTool = helpers.InputOrFallback(inputs.ReconciliationTool, ksailConfig.Spec.ReconciliationTool)
-	ksailConfig.Spec.SourceDirectory = helpers.InputOrFallback(inputs.SourceDirectory, ksailConfig.Spec.SourceDirectory)
+	helpers.SetInputsOrFallback(ksailConfig)
 	return scaffold(ksailConfig)
 }
 

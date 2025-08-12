@@ -29,8 +29,9 @@ var upCmd = &cobra.Command{
 func handleUp() error {
 	ksailConfig, err := loader.NewKSailConfigLoader().Load()
 	if err != nil {
-		return err
+    return err
 	}
+  helpers.SetInputsOrFallback(&ksailConfig)
 	if err := provision(&ksailConfig); err != nil {
 		return err
 	}
@@ -39,9 +40,6 @@ func handleUp() error {
 
 // provision provisions a cluster based on the provided configuration.
 func provision(ksailConfig *ksailcluster.Cluster) error {
-	ksailConfig.Metadata.Name = helpers.InputOrFallback(inputs.Name, ksailConfig.Metadata.Name)
-	ksailConfig.Spec.ContainerEngine = helpers.InputOrFallback(inputs.ContainerEngine, ksailConfig.Spec.ContainerEngine)
-
 	// TODO: Create local registry 'ksail-registry' with a docker provisioner
 
 	err := provisionCluster(ksailConfig)
@@ -72,9 +70,6 @@ func provision(ksailConfig *ksailcluster.Cluster) error {
 // provisionCluster provisions a cluster based on the provided configuration.
 func provisionCluster(ksailConfig *ksailcluster.Cluster) error {
 	fmt.Println()
-	ksailConfig.Metadata.Name = helpers.InputOrFallback(inputs.Name, ksailConfig.Metadata.Name)
-	ksailConfig.Spec.Distribution = helpers.InputOrFallback(inputs.Distribution, ksailConfig.Spec.Distribution)
-	ksailConfig.Spec.ContainerEngine = helpers.InputOrFallback(inputs.ContainerEngine, ksailConfig.Spec.ContainerEngine)
 	provisioner, err := factory.ClusterProvisioner(ksailConfig)
 	if err != nil {
 		return err
@@ -112,16 +107,15 @@ func provisionCluster(ksailConfig *ksailcluster.Cluster) error {
 }
 
 func bootstrapReconciliationTool(ksailConfig *ksailcluster.Cluster) error {
-	reconciliationTool := helpers.InputOrFallback(inputs.ReconciliationTool, ksailConfig.Spec.ReconciliationTool)
-	reconciliationToolBootstrapper, err := factory.ReconciliationTool(reconciliationTool, ksailConfig)
+	reconciliationToolBootstrapper, err := factory.ReconciliationTool(ksailConfig.Spec.ReconciliationTool, ksailConfig)
 	if err != nil {
 		return err
 	}
 
 	fmt.Println()
-	fmt.Printf("⚙️ Bootstrapping '%s' to '%s'\n", reconciliationTool, ksailConfig.Metadata.Name)
+	fmt.Printf("⚙️ Bootstrapping '%s' to '%s'\n", ksailConfig.Spec.ReconciliationTool, ksailConfig.Metadata.Name)
 	_ = reconciliationToolBootstrapper.Install()
-	fmt.Printf("✔ '%s' installed\n", reconciliationTool)
+	fmt.Printf("✔ '%s' installed\n", ksailConfig.Spec.ReconciliationTool)
 	return nil
 }
 

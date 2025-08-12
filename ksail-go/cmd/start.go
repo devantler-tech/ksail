@@ -32,13 +32,11 @@ func handleStart() error {
 	if err != nil {
 		return err
 	}
+	helpers.SetInputsOrFallback(&ksailConfig)
 	return start(&ksailConfig)
 }
 
 func start(ksailConfig *ksailcluster.Cluster) error {
-	ksailConfig.Metadata.Name = helpers.InputOrFallback(inputs.Name, ksailConfig.Metadata.Name)
-	ksailConfig.Spec.Distribution = helpers.InputOrFallback(inputs.Distribution, ksailConfig.Spec.Distribution)
-
 	fmt.Println()
 	provisioner, err := factory.ClusterProvisioner(ksailConfig)
 	if err != nil {
