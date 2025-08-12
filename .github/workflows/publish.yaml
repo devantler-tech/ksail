@@ -54,7 +54,7 @@ jobs:
           mv src/KSail/bin/Release/net9.0/win-arm64/publish/ksail.exe ksail-windows-arm64
       # https://docs.github.com/en/actions/use-cases-and-examples/deploying/installing-an-apple-certificate-on-macos-runners-for-xcode-development#creating-secrets-for-your-certificate-and-provisioning-profile
       - name: 🔑 Add Cert to Keychain
-        uses: apple-actions/import-codesign-certs@65cfbc37e1464d733524cb555b724878f278b8c3 # v5.0.2
+        uses: apple-actions/import-codesign-certs@95e84a1a18f2bdbc5c6ab9b7f4429372e4b13a8b # v5.0.3
         id: import-codesign-certs
         with:
           p12-file-base64: ${{ secrets.APPLE_CERT_P12_BASE64 }}
