@@ -6,7 +6,6 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/devantler-tech/ksail/cmd/helpers"
 	"github.com/devantler-tech/ksail/cmd/inputs"
 	factory "github.com/devantler-tech/ksail/internal/factories"
 	"github.com/devantler-tech/ksail/internal/loader"
@@ -32,7 +31,7 @@ func handleStart() error {
 	if err != nil {
 		return err
 	}
-	helpers.SetInputsOrFallback(&ksailConfig)
+	inputs.SetInputsOrFallback(&ksailConfig)
 	return start(&ksailConfig)
 }
 

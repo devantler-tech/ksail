@@ -1,9 +1,8 @@
-package helpers
+package inputs
 
 import (
 	"testing"
 
-	"github.com/devantler-tech/ksail/cmd/inputs"
 	ksailcluster "github.com/devantler-tech/ksail/pkg/apis/v1alpha1/cluster"
 )
 
@@ -14,11 +13,11 @@ func TestSetInputsOrFallback(t *testing.T) {
 		original := *cluster // copy for later comparison
 
 		// Set some CLI inputs (simulate flags)
-		inputs.Name = "custom-name"
-		inputs.Distribution = ksailcluster.DistributionK3d
-		inputs.ReconciliationTool = ksailcluster.ReconciliationToolFlux
+		Name = "custom-name"
+		Distribution = ksailcluster.DistributionK3d
+		ReconciliationTool = ksailcluster.ReconciliationToolFlux
 		// Leave SourceDirectory empty so fallback should remain default
-		inputs.SourceDirectory = ""
+		SourceDirectory = ""
 		// ContainerEngine left zero so fallback remains default
 
 		// Act
@@ -43,9 +42,9 @@ func TestSetInputsOrFallback(t *testing.T) {
 		}
 
 		// Cleanup mutated global inputs for other tests
-		inputs.Name = ""
-		inputs.Distribution = ""
-		inputs.ReconciliationTool = ""
+		Name = ""
+		Distribution = ""
+		ReconciliationTool = ""
 	})
 }
 

@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/devantler-tech/ksail/cmd/helpers"
 	"github.com/devantler-tech/ksail/cmd/inputs"
 	"github.com/devantler-tech/ksail/internal/utils"
 	ksailcluster "github.com/devantler-tech/ksail/pkg/apis/v1alpha1/cluster"
@@ -32,7 +31,7 @@ var initCmd = &cobra.Command{
 // handleInit handles the init command.
 func handleInit() error {
 	ksailConfig := ksailcluster.NewCluster()
-	helpers.SetInputsOrFallback(ksailConfig)
+	inputs.SetInputsOrFallback(ksailConfig)
 	return scaffold(ksailConfig)
 }
 

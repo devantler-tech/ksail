@@ -4,7 +4,7 @@ Copyright © 2025 NAME HERE <EMAIL ADDRESS>
 package cmd
 
 import (
-	"github.com/devantler-tech/ksail/cmd/helpers"
+	"github.com/devantler-tech/ksail/cmd/inputs"
 	"github.com/devantler-tech/ksail/internal/loader"
 	"github.com/spf13/cobra"
 )
@@ -31,7 +31,7 @@ func handleSync() error {
 	if err != nil {
 		return err
 	}
-	helpers.SetInputsOrFallback(&ksailConfig)
+	inputs.SetInputsOrFallback(&ksailConfig)
 	return nil
 }
 
