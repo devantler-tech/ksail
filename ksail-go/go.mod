@@ -3,6 +3,7 @@ module github.com/devantler-tech/ksail
 go 1.24.6
 
 require (
+	github.com/docker/docker v27.0.3+incompatible
 	github.com/fatih/color v1.18.0
 	github.com/k3d-io/k3d/v5 v5.8.3
 	github.com/mittwald/go-helm-client v0.12.18
@@ -41,7 +42,6 @@ require (
 	github.com/distribution/reference v0.6.0 // indirect
 	github.com/docker/cli v27.0.3+incompatible // indirect
 	github.com/docker/distribution v2.8.2+incompatible // indirect
-	github.com/docker/docker v27.0.3+incompatible // indirect
 	github.com/docker/docker-credential-helpers v0.8.2 // indirect
 	github.com/docker/go v1.5.1-1.0.20160303222718-d30aec9fd63c // indirect
 	github.com/docker/go-connections v0.5.0 // indirect
