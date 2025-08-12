@@ -60,7 +60,7 @@ func (b *KubectlBootstrapper) Install() error {
 	const crdName = "applysets.k8s.devantler.tech"
 	_, err = apiExtClient.ApiextensionsV1().CustomResourceDefinitions().Get(context, crdName, metav1.GetOptions{})
 	if apierrors.IsNotFound(err) {
-		fmt.Println("► applying crd 'applysets.k8s.devantler.tech'")
+		fmt.Println("► applying applysets crd 'applysets.k8s.devantler.tech'")
 		if err := b.applyCRD(context, apiExtClient); err != nil {
 			return err
 		}
@@ -70,7 +70,7 @@ func (b *KubectlBootstrapper) Install() error {
 	} else if err != nil {
 		return err
 	}
-	fmt.Println("✔ crd 'applysets.k8s.devantler.tech' applied")
+	fmt.Println("✔ applysets crd 'applysets.k8s.devantler.tech' applied")
 
 	// --- CR (ApplySet parent) ---
 	dynClient, err := dynamic.NewForConfig(restConfigWrapper)
@@ -81,14 +81,14 @@ func (b *KubectlBootstrapper) Install() error {
 	const applySetName = "ksail"
 	_, err = dynClient.Resource(gvr).Get(context, applySetName, metav1.GetOptions{})
 	if apierrors.IsNotFound(err) {
-		fmt.Println("► applying applyset cr 'ksail'")
+		fmt.Println("► applying applysets cr 'ksail'")
 		if err := b.applyApplySetCR(context, dynClient, gvr, applySetName); err != nil {
 			return err
 		}
 	} else if err != nil {
 		return fmt.Errorf("failed to get ApplySet CR: %w", err)
 	}
-	fmt.Println("✔ applyset cr 'ksail' applied")
+	fmt.Println("✔ applysets cr 'ksail' applied")
 	return nil
 }
 

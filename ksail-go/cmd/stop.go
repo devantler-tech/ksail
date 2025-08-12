@@ -44,9 +44,20 @@ func stop(ksailConfig *ksailcluster.Cluster) error {
 	if err != nil {
 		return err
 	}
+	containerEngineProvisioner, err := factory.ContainerEngineProvisioner(ksailConfig)
+	if err != nil {
+		return err
+	}
 
 	fmt.Println()
 	fmt.Printf("⏹️ Stopping '%s'\n", ksailConfig.Metadata.Name)
+	fmt.Printf("► checking '%s' is ready\n", ksailConfig.Spec.ContainerEngine)
+	ready, err := containerEngineProvisioner.CheckReady()
+	if err != nil || !ready {
+		return fmt.Errorf("container engine '%s' is not ready: %v", ksailConfig.Spec.ContainerEngine, err)
+	}
+	fmt.Printf("✔ '%s' is ready\n", ksailConfig.Spec.ContainerEngine)
+	fmt.Printf("► stopping '%s'\n", ksailConfig.Metadata.Name)
 	exists, err := provisioner.Exists(ksailConfig.Metadata.Name)
 	if err != nil {
 		return err

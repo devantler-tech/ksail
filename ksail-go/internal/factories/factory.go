@@ -68,7 +68,6 @@ func ReconciliationTool(reconciliationTool ksailcluster.ReconciliationTool, ksai
 			ksailConfig.Spec.Connection.Timeout.Duration,
 		)
 	case ksailcluster.ReconciliationToolArgoCD:
-		return nil, fmt.Errorf("unsupported reconciliation tool '%s'", reconciliationTool)
 	default:
 		return nil, fmt.Errorf("unsupported reconciliation tool '%s'", reconciliationTool)
 	}

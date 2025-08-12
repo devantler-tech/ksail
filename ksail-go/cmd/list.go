@@ -58,6 +58,10 @@ func fetchClusterDistributionPairs(distributions []ksailcluster.Distribution, ks
 	for _, distribution := range distributions {
 		ksailConfig.Spec.Distribution = distribution
 		var provisioner clusterprovisioner.ClusterProvisioner
+		containerEngineProvisioner, err := factory.ContainerEngineProvisioner(ksailConfig)
+		if err != nil {
+			return nil, err
+		}
 		if err := quiet.SilenceStdout(func() error {
 			var innerErr error
 			provisioner, innerErr = factory.ClusterProvisioner(ksailConfig)
@@ -68,6 +72,7 @@ func fetchClusterDistributionPairs(distributions []ksailcluster.Distribution, ks
 		if provisioner == nil {
 			continue
 		}
+		containerEngineProvisioner.CheckReady()
 		clusters, err := provisioner.List()
 		if err != nil {
 			return nil, err
