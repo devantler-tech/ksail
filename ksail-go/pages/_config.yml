@@ -1,0 +1,46 @@
+theme: just-the-docs
+url: https://ksail.devantler.tech
+title: "🛥️🐳 KSail"
+favicon_ico: "docs/images/ksail-logo.png"
+description: >-
+  SDK for Kubernetes ☸️
+
+plugins:
+  - jekyll-gfm-admonitions
+  - jekyll-optional-front-matter
+
+aux_links:
+  "<img src=\"https:\/\/raw.githubusercontent.com\/devantler-tech\/ksail\/refs\/heads\/main\/pages\/docs\/images\/github-mark-white.png\" alt=\"GitHub\" width=\"18\" height=\"18\">&nbsp;&nbsp;devantler-tech/ksail":
+    - "//github.com/devantler-tech/ksail"
+
+last_edit_timestamp: true
+last_edit_time_format: "%b %e %Y at %I:%M %p"
+
+gh_edit_link: true
+gh_edit_link_text: Edit this page on GitHub.
+gh_edit_repository: https://github.com/devantler-tech/ksail
+gh_edit_branch: main
+gh_edit_view_mode: tree
+
+back_to_top: true
+back_to_top_text: "Back to top"
+
+footer_content: "Built by <a href=\"https://github.com/devantler\">devantler</a><br>Distributed under the <a href=\"https://opensource.org/licenses/Apache-2.0\">Apache license.</a>"
+
+defaults:
+  - scope:
+      path: "" # an empty string here means all files in the project
+    values:
+      layout: "default"
+
+exclude:
+  - .github/
+  - .vscode/
+  - src/
+  - tests/
+  - .editorconfig
+  - .gitignore
+  - .releaserc
+  - Dockerfile
+  - KSail.slnx
+  - entitlements.xml
