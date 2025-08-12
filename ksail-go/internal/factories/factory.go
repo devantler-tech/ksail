@@ -13,11 +13,11 @@ import (
 )
 
 func ClusterProvisioner(ksailConfig *ksailcluster.Cluster) (clusterprovisioner.ClusterProvisioner, error) {
-	var provisioner clusterprovisioner.ClusterProvisioner
 	if ksailConfig.Spec.ContainerEngine == ksailcluster.ContainerEnginePodman {
 		podmanSock := fmt.Sprintf("unix:///run/user/%d/podman/podman.sock", os.Getuid())
 		os.Setenv("DOCKER_HOST", podmanSock)
 	}
+	var provisioner clusterprovisioner.ClusterProvisioner
 	switch ksailConfig.Spec.Distribution {
 	case ksailcluster.DistributionKind:
 		kindConfig, err := loader.NewKindConfigLoader().Load()

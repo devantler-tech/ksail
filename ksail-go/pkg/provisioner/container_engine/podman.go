@@ -1,18 +1,24 @@
 package containerengineprovisioner
 
 import (
-	"os/exec"
+	"context"
+	"fmt"
+	"os"
 
 	ksailcluster "github.com/devantler-tech/ksail/pkg/apis/v1alpha1/cluster"
+	"github.com/docker/docker/client"
 )
 
 // PodmanProvisioner implements ContainerEngineProvisioner for Podman.
-type PodmanProvisioner struct{}
+type PodmanProvisioner struct {
+	client *client.Client
+}
 
 // CheckReady checks if the Podman service/socket is available.
 func (p *PodmanProvisioner) CheckReady() (bool, error) {
-	cmd := exec.Command("podman", "info")
-	if err := cmd.Run(); err != nil {
+	ctx := context.Background()
+	_, err := p.client.Ping(ctx)
+	if err != nil {
 		return false, err
 	}
 	return true, nil
@@ -20,5 +26,8 @@ func (p *PodmanProvisioner) CheckReady() (bool, error) {
 
 // NewPodmanProvisioner creates a new PodmanProvisioner.
 func NewPodmanProvisioner(ksailConfig *ksailcluster.Cluster) *PodmanProvisioner {
-	return &PodmanProvisioner{}
+	podmanSock := fmt.Sprintf("unix:///run/user/%d/podman/podman.sock", os.Getuid())
+	os.Setenv("DOCKER_HOST", podmanSock)
+	cli, _ := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	return &PodmanProvisioner{client: cli}
 }
