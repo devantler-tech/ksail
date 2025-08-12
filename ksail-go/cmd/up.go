@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/devantler-tech/ksail/cmd/inputs"
 	factory "github.com/devantler-tech/ksail/internal/factories"
@@ -28,9 +29,11 @@ var upCmd = &cobra.Command{
 func handleUp() error {
 	ksailConfig, err := loader.NewKSailConfigLoader().Load()
 	if err != nil {
-    return err
+		return err
 	}
-  inputs.SetInputsOrFallback(&ksailConfig)
+	inputs.SetInputsOrFallback(&ksailConfig)
+	// TODO: Validate configurations
+	// TODO: Validate workloads
 	if err := provision(&ksailConfig); err != nil {
 		return err
 	}
@@ -46,22 +49,65 @@ func provision(ksailConfig *ksailcluster.Cluster) error {
 		return err
 	}
 
-	// TODO: Bootstrap CNI with a cni provisioner
+  // Define bootstrap functions
+  bootstrapTasks := []struct {
+    name string
+    fn   func(*ksailcluster.Cluster) error
+  }{
+    {"CNI", func(cfg *ksailcluster.Cluster) error {
+      // TODO: Bootstrap CNI with a cni provisioner
+      return nil
+    }},
+    {"CSI", func(cfg *ksailcluster.Cluster) error {
+      // TODO: Bootstrap CSI with a csi provisioner
+      return nil
+    }},
+    {"IngressController", func(cfg *ksailcluster.Cluster) error {
+      // TODO: Bootstrap IngressController with an ingress controller provisioner
+      return nil
+    }},
+    {"GatewayController", func(cfg *ksailcluster.Cluster) error {
+      // TODO: Bootstrap GatewayController with a gateway controller provisioner
+      return nil
+    }},
+    {"CertManager", func(cfg *ksailcluster.Cluster) error {
+      // TODO: Bootstrap CertManager with a cert manager provisioner
+      return nil
+    }},
+    {"MetricsServer", func(cfg *ksailcluster.Cluster) error {
+      // TODO: Bootstrap Metrics Server with a metrics server provisioner
+      return nil
+    }},
+    {"ReconciliationTool", bootstrapReconciliationTool},
+  }
 
-	// TODO: Bootstrap CSI with a csi provisioner
+  type result struct {
+    name string
+    err  error
+  }
 
-	// TODO: Bootstrap IngressController with an ingress controller provisioner
+  results := make([]result, len(bootstrapTasks))
+  var wg sync.WaitGroup
 
-	// TODO: Bootstrap GatewayController with a gateway controller provisioner
+  for i, task := range bootstrapTasks {
+    wg.Add(1)
+    go func(i int, taskName string, fn func(*ksailcluster.Cluster) error) {
+      defer wg.Done()
+      results[i] = result{name: taskName, err: fn(ksailConfig)}
+    }(i, task.name, task.fn)
+  }
+  wg.Wait()
 
-	// TODO: Bootstrap CertManager with a cert manager provisioner
+  // Sequential output
+  for _, res := range results {
+    if res.err != nil {
+      return res.err
+    } else {
+      fmt.Printf("✔ %s bootstrapped\n", res.name)
+    }
+  }
 
-	// TODO: Bootstrap Metrics Server with a metrics server provisioner
-
-	err = bootstrapReconciliationTool(ksailConfig)
-	if err != nil {
-		return err
-	}
+	// TODO: Reconcile
 
 	return nil
 }

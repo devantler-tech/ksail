@@ -32,6 +32,10 @@ func handleSync() error {
 		return err
 	}
 	inputs.SetInputsOrFallback(&ksailConfig)
+
+  // TODO: Validate configurations
+  // TODO: Validate workloads
+  // TODO: Reconcile
 	return nil
 }
 
