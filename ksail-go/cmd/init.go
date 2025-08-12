@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 
+	"github.com/devantler-tech/ksail/cmd/helpers"
 	"github.com/devantler-tech/ksail/cmd/inputs"
 	"github.com/devantler-tech/ksail/internal/utils"
 	ksailcluster "github.com/devantler-tech/ksail/pkg/apis/v1alpha1/cluster"
@@ -31,7 +32,10 @@ var initCmd = &cobra.Command{
 // handleInit handles the init command.
 func handleInit() error {
 	ksailConfig := ksailcluster.NewCluster()
-	setInitialValuesFromInput(ksailConfig)
+	ksailConfig.Metadata.Name = helpers.InputOrFallback(inputs.Name, ksailConfig.Metadata.Name)
+	ksailConfig.Spec.Distribution = helpers.InputOrFallback(inputs.Distribution, ksailConfig.Spec.Distribution)
+	ksailConfig.Spec.ReconciliationTool = helpers.InputOrFallback(inputs.ReconciliationTool, ksailConfig.Spec.ReconciliationTool)
+	ksailConfig.Spec.SourceDirectory = helpers.InputOrFallback(inputs.SourceDirectory, ksailConfig.Spec.SourceDirectory)
 	return scaffold(ksailConfig)
 }
 
@@ -44,22 +48,6 @@ func scaffold(ksailConfig *ksailcluster.Cluster) error {
 	}
 	fmt.Println("✔ project scaffolded")
 	return nil
-}
-
-// setInitialValuesFromInput mutates ksailConfig with CLI-provided values.
-func setInitialValuesFromInput(ksailConfig *ksailcluster.Cluster) {
-	if inputs.Name != "" {
-		ksailConfig.Metadata.Name = inputs.Name
-	}
-	if inputs.Distribution != "" {
-		ksailConfig.Spec.Distribution = inputs.Distribution
-	}
-	if inputs.ReconciliationTool != "" {
-		ksailConfig.Spec.ReconciliationTool = inputs.ReconciliationTool
-	}
-	if inputs.SourceDirectory != "" {
-		ksailConfig.Spec.SourceDirectory = inputs.SourceDirectory
-	}
 }
 
 // init initializes the init command.
