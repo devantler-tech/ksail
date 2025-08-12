@@ -7,7 +7,7 @@ import (
 	"github.com/devantler-tech/ksail/internal/loader"
 	"github.com/devantler-tech/ksail/internal/utils"
 	ksailcluster "github.com/devantler-tech/ksail/pkg/apis/v1alpha1/cluster"
-	reconboot "github.com/devantler-tech/ksail/pkg/bootstrapper/reconciliation_tool"
+	reconciliationtoolbootstrapper "github.com/devantler-tech/ksail/pkg/bootstrapper/reconciliation_tool"
 	clusterprovisioner "github.com/devantler-tech/ksail/pkg/provisioner/cluster"
 	containerengineprovisioner "github.com/devantler-tech/ksail/pkg/provisioner/container_engine"
 )
@@ -37,39 +37,39 @@ func ClusterProvisioner(ksailConfig *ksailcluster.Cluster) (clusterprovisioner.C
 	return provisioner, nil
 }
 
-func ContainerEngineProvisioner(ksailConfig *ksailcluster.Cluster) (containerengineprovisioner.ContainerEngineProvisioner, error) {
-	switch ksailConfig.Spec.ContainerEngine {
+func ContainerEngineProvisioner(cfg *ksailcluster.Cluster) (containerengineprovisioner.ContainerEngineProvisioner, error) {
+	switch cfg.Spec.ContainerEngine {
 	case ksailcluster.ContainerEngineDocker:
-		return containerengineprovisioner.NewDockerProvisioner(ksailConfig), nil
+		return containerengineprovisioner.NewDockerProvisioner(cfg), nil
 	case ksailcluster.ContainerEnginePodman:
-		return containerengineprovisioner.NewPodmanProvisioner(ksailConfig), nil
+		return containerengineprovisioner.NewPodmanProvisioner(cfg), nil
 	default:
-		return nil, fmt.Errorf("unsupported container engine '%s'", ksailConfig.Spec.ContainerEngine)
+		return nil, fmt.Errorf("unsupported container engine '%s'", cfg.Spec.ContainerEngine)
 	}
 }
 
-func ReconciliationTool(reconciliationTool ksailcluster.ReconciliationTool, ksailConfig *ksailcluster.Cluster) (reconboot.Bootstrapper, error) {
-	kubeconfigPath, err := utils.ExpandPath(ksailConfig.Spec.Connection.Kubeconfig)
+func ReconciliationTool(cfg *ksailcluster.Cluster) (reconciliationtoolbootstrapper.Bootstrapper, error) {
+	kubeconfigPath, err := utils.ExpandPath(cfg.Spec.Connection.Kubeconfig)
 	if err != nil {
 		return nil, err
 	}
-	var reconciliationToolBootstrapper reconboot.Bootstrapper
-	switch reconciliationTool {
+	var reconciliationToolBootstrapper reconciliationtoolbootstrapper.Bootstrapper
+	switch cfg.Spec.ReconciliationTool {
 	case ksailcluster.ReconciliationToolKubectl:
-		reconciliationToolBootstrapper = reconboot.NewKubectlBootstrapper(
+		reconciliationToolBootstrapper = reconciliationtoolbootstrapper.NewKubectlBootstrapper(
 			kubeconfigPath,
-			ksailConfig.Spec.Connection.Context,
-			ksailConfig.Spec.Connection.Timeout.Duration,
+			cfg.Spec.Connection.Context,
+			cfg.Spec.Connection.Timeout.Duration,
 		)
 	case ksailcluster.ReconciliationToolFlux:
-		reconciliationToolBootstrapper = reconboot.NewFluxBootstrapper(
+		reconciliationToolBootstrapper = reconciliationtoolbootstrapper.NewFluxBootstrapper(
 			kubeconfigPath,
-			ksailConfig.Spec.Connection.Context,
-			ksailConfig.Spec.Connection.Timeout.Duration,
+			cfg.Spec.Connection.Context,
+			cfg.Spec.Connection.Timeout.Duration,
 		)
 	case ksailcluster.ReconciliationToolArgoCD:
 	default:
-		return nil, fmt.Errorf("unsupported reconciliation tool '%s'", reconciliationTool)
+		return nil, fmt.Errorf("unsupported reconciliation tool '%s'", cfg.Spec.ReconciliationTool)
 	}
 	return reconciliationToolBootstrapper, nil
 }

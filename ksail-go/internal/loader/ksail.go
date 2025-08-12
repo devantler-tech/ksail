@@ -24,13 +24,14 @@ func (cl *KSailConfigLoader) Load() (ksailcluster.Cluster, error) {
 			if err != nil {
 				return ksailcluster.Cluster{}, fmt.Errorf("read ksail config: %w", err)
 			}
-			ksailConfig := &ksailcluster.Cluster{}
-			if err := cl.Marshaller.Unmarshal(data, ksailConfig); err != nil {
+			cfg := &ksailcluster.Cluster{}
+			if err := cl.Marshaller.Unmarshal(data, cfg); err != nil {
 				return ksailcluster.Cluster{}, fmt.Errorf("unmarshal ksail config: %w", err)
 			}
 			fmt.Printf("► '%s' found\n", configPath)
 			fmt.Println("✔ config loaded")
-			return *ksailConfig, nil
+      fmt.Println()
+			return *cfg, nil
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir || dir == "" {
@@ -38,12 +39,13 @@ func (cl *KSailConfigLoader) Load() (ksailcluster.Cluster, error) {
 		}
 	}
 	fmt.Println("► './ksail.yaml' not found, using default configuration")
-	ksailConfig := cl.Default
-	if ksailConfig == nil {
-		ksailConfig = ksailcluster.NewCluster()
+	cfg := cl.Default
+	if cfg == nil {
+		cfg = ksailcluster.NewCluster()
 	}
 	fmt.Println("✔ config loaded")
-	return *ksailConfig, nil
+  fmt.Println()
+	return *cfg, nil
 }
 
 func NewKSailConfigLoader() *KSailConfigLoader {

@@ -23,7 +23,7 @@ func (d *DockerProvisioner) CheckReady() (bool, error) {
 }
 
 // NewDockerProvisioner creates a new DockerProvisioner.
-func NewDockerProvisioner(ksailConfig *ksailcluster.Cluster) *DockerProvisioner {
+func NewDockerProvisioner(cfg *ksailcluster.Cluster) *DockerProvisioner {
 	cli, _ := client.NewClientWithOpts(client.FromEnv)
 	return &DockerProvisioner{client: cli}
 }

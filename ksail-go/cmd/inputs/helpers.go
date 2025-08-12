@@ -6,12 +6,12 @@ import (
 	ksailcluster "github.com/devantler-tech/ksail/pkg/apis/v1alpha1/cluster"
 )
 
-func SetInputsOrFallback(ksailConfig *ksailcluster.Cluster) {
-	ksailConfig.Metadata.Name = inputOrFallback(Name, ksailConfig.Metadata.Name)
-	ksailConfig.Spec.ContainerEngine = inputOrFallback(ContainerEngine, ksailConfig.Spec.ContainerEngine)
-	ksailConfig.Spec.Distribution = inputOrFallback(Distribution, ksailConfig.Spec.Distribution)
-	ksailConfig.Spec.ReconciliationTool = inputOrFallback(ReconciliationTool, ksailConfig.Spec.ReconciliationTool)
-	ksailConfig.Spec.SourceDirectory = inputOrFallback(SourceDirectory, ksailConfig.Spec.SourceDirectory)
+func SetInputsOrFallback(cfg *ksailcluster.Cluster) {
+	cfg.Metadata.Name = inputOrFallback(Name, cfg.Metadata.Name)
+	cfg.Spec.ContainerEngine = inputOrFallback(ContainerEngine, cfg.Spec.ContainerEngine)
+	cfg.Spec.Distribution = inputOrFallback(Distribution, cfg.Spec.Distribution)
+	cfg.Spec.ReconciliationTool = inputOrFallback(ReconciliationTool, cfg.Spec.ReconciliationTool)
+	cfg.Spec.SourceDirectory = inputOrFallback(SourceDirectory, cfg.Spec.SourceDirectory)
 }
 
 // --- internals ---

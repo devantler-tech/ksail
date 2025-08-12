@@ -28,9 +28,9 @@ func (g *KindGenerator) Generate(opts Options) (string, error) {
 	return g.FileWriter.TryWrite(out, opts.Output, opts.Force)
 }
 
-func NewKindGenerator(ksailConfig *ksailcluster.Cluster) *KindGenerator {
+func NewKindGenerator(cfg *ksailcluster.Cluster) *KindGenerator {
 	return &KindGenerator{
-		Cluster:    ksailConfig,
+		Cluster:    cfg,
 		Marshaller: marshaller.NewMarshaller[*v1alpha4.Cluster](),
 	}
 }

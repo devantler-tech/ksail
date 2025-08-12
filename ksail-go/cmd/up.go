@@ -6,8 +6,6 @@ import (
 
 	"github.com/devantler-tech/ksail/cmd/inputs"
 	factory "github.com/devantler-tech/ksail/internal/factories"
-	"github.com/devantler-tech/ksail/internal/loader"
-	ksailcluster "github.com/devantler-tech/ksail/pkg/apis/v1alpha1/cluster"
 	"github.com/spf13/cobra"
 )
 
@@ -27,85 +25,84 @@ var upCmd = &cobra.Command{
 
 // handleUp handles the up command.
 func handleUp() error {
-	ksailConfig, err := loader.NewKSailConfigLoader().Load()
+  InitServices()
+	err := configValidator.Validate()
 	if err != nil {
 		return err
 	}
-	inputs.SetInputsOrFallback(&ksailConfig)
-	// TODO: Validate configurations
 	// TODO: Validate workloads
-	if err := provision(&ksailConfig); err != nil {
+	if err := provision(); err != nil {
 		return err
 	}
 	return nil
 }
 
 // provision provisions a cluster based on the provided configuration.
-func provision(ksailConfig *ksailcluster.Cluster) error {
+func provision() error {
 	// TODO: Create local registry 'ksail-registry' with a docker provisioner
 
-	err := provisionCluster(ksailConfig)
+	err := provisionCluster()
 	if err != nil {
 		return err
 	}
 
-  // Define bootstrap functions
-  bootstrapTasks := []struct {
-    name string
-    fn   func(*ksailcluster.Cluster) error
-  }{
-    {"CNI", func(cfg *ksailcluster.Cluster) error {
-      // TODO: Bootstrap CNI with a cni provisioner
-      return nil
-    }},
-    {"CSI", func(cfg *ksailcluster.Cluster) error {
-      // TODO: Bootstrap CSI with a csi provisioner
-      return nil
-    }},
-    {"IngressController", func(cfg *ksailcluster.Cluster) error {
-      // TODO: Bootstrap IngressController with an ingress controller provisioner
-      return nil
-    }},
-    {"GatewayController", func(cfg *ksailcluster.Cluster) error {
-      // TODO: Bootstrap GatewayController with a gateway controller provisioner
-      return nil
-    }},
-    {"CertManager", func(cfg *ksailcluster.Cluster) error {
-      // TODO: Bootstrap CertManager with a cert manager provisioner
-      return nil
-    }},
-    {"MetricsServer", func(cfg *ksailcluster.Cluster) error {
-      // TODO: Bootstrap Metrics Server with a metrics server provisioner
-      return nil
-    }},
-    {"ReconciliationTool", bootstrapReconciliationTool},
-  }
+	// Define bootstrap functions
+	bootstrapTasks := []struct {
+		name string
+		fn   func() error
+	}{
+		{"CNI", func() error {
+			// TODO: Bootstrap CNI with a cni provisioner
+			return nil
+		}},
+		{"CSI", func() error {
+			// TODO: Bootstrap CSI with a csi provisioner
+			return nil
+		}},
+		{"IngressController", func() error {
+			// TODO: Bootstrap IngressController with an ingress controller provisioner
+			return nil
+		}},
+		{"GatewayController", func() error {
+			// TODO: Bootstrap GatewayController with a gateway controller provisioner
+			return nil
+		}},
+		{"CertManager", func() error {
+			// TODO: Bootstrap CertManager with a cert manager provisioner
+			return nil
+		}},
+		{"MetricsServer", func() error {
+			// TODO: Bootstrap Metrics Server with a metrics server provisioner
+			return nil
+		}},
+		{"ReconciliationTool", bootstrapReconciliationTool},
+	}
 
-  type result struct {
-    name string
-    err  error
-  }
+	type result struct {
+		name string
+		err  error
+	}
 
-  results := make([]result, len(bootstrapTasks))
-  var wg sync.WaitGroup
+	results := make([]result, len(bootstrapTasks))
+	var wg sync.WaitGroup
 
-  for i, task := range bootstrapTasks {
-    wg.Add(1)
-    go func(i int, taskName string, fn func(*ksailcluster.Cluster) error) {
-      defer wg.Done()
-      results[i] = result{name: taskName, err: fn(ksailConfig)}
-    }(i, task.name, task.fn)
-  }
-  wg.Wait()
+	for i, task := range bootstrapTasks {
+		wg.Add(1)
+		go func(i int, taskName string, fn func() error) {
+			defer wg.Done()
+			results[i] = result{name: taskName, err: fn()}
+		}(i, task.name, task.fn)
+	}
+	wg.Wait()
 
-  // Sequential output
-  for _, res := range results {
-    if res.err != nil {
-      return res.err
-    } else {
-      fmt.Printf("✔ %s bootstrapped\n", res.name)
-    }
-  }
+	// Sequential output
+	for _, res := range results {
+		if res.err != nil {
+			return res.err
+		} else {
+			fmt.Printf("✔ %s bootstrapped\n", res.name)
+		}
+	}
 
 	// TODO: Reconcile
 
@@ -113,17 +110,7 @@ func provision(ksailConfig *ksailcluster.Cluster) error {
 }
 
 // provisionCluster provisions a cluster based on the provided configuration.
-func provisionCluster(ksailConfig *ksailcluster.Cluster) error {
-	fmt.Println()
-	provisioner, err := factory.ClusterProvisioner(ksailConfig)
-	if err != nil {
-		return err
-	}
-	containerEngineProvisioner, err := factory.ContainerEngineProvisioner(ksailConfig)
-	if err != nil {
-		return err
-	}
-
+func provisionCluster() error {
 	fmt.Println()
 	fmt.Printf("🚀 Provisioning '%s'\n", ksailConfig.Metadata.Name)
 	fmt.Printf("► checking '%s' is ready\n", ksailConfig.Spec.ContainerEngine)
@@ -134,25 +121,25 @@ func provisionCluster(ksailConfig *ksailcluster.Cluster) error {
 	fmt.Printf("✔ '%s' is ready\n", ksailConfig.Spec.ContainerEngine)
 	fmt.Printf("► provisioning '%s'\n", ksailConfig.Metadata.Name)
 	if inputs.Force {
-		exists, err := provisioner.Exists(ksailConfig.Metadata.Name)
+		exists, err := clusterProvisioner.Exists(ksailConfig.Metadata.Name)
 		if err != nil {
 			return err
 		}
 		if exists {
-			if err := provisioner.Delete(ksailConfig.Metadata.Name); err != nil {
+			if err := clusterProvisioner.Delete(ksailConfig.Metadata.Name); err != nil {
 				return err
 			}
 		}
 	}
-	if err := provisioner.Create(ksailConfig.Metadata.Name); err != nil {
+	if err := clusterProvisioner.Create(ksailConfig.Metadata.Name); err != nil {
 		return err
 	}
 	fmt.Printf("✔ '%s' created\n", ksailConfig.Metadata.Name)
 	return nil
 }
 
-func bootstrapReconciliationTool(ksailConfig *ksailcluster.Cluster) error {
-	reconciliationToolBootstrapper, err := factory.ReconciliationTool(ksailConfig.Spec.ReconciliationTool, ksailConfig)
+func bootstrapReconciliationTool() error {
+	reconciliationToolBootstrapper, err := factory.ReconciliationTool(&ksailConfig)
 	if err != nil {
 		return err
 	}

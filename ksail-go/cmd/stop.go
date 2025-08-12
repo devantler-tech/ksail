@@ -8,8 +8,6 @@ import (
 
 	"github.com/devantler-tech/ksail/cmd/inputs"
 	factory "github.com/devantler-tech/ksail/internal/factories"
-	"github.com/devantler-tech/ksail/internal/loader"
-	ksailcluster "github.com/devantler-tech/ksail/pkg/apis/v1alpha1/cluster"
 	"github.com/spf13/cobra"
 )
 
@@ -27,21 +25,17 @@ var stopCmd = &cobra.Command{
 
 // handleStop handles the stop command
 func handleStop() error {
-	ksailConfig, err := loader.NewKSailConfigLoader().Load()
-	if err != nil {
-		return err
-	}
-	inputs.SetInputsOrFallback(&ksailConfig)
-	return stop(&ksailConfig)
+  InitServices()
+	return stop()
 }
 
-func stop(ksailConfig *ksailcluster.Cluster) error {
+func stop() error {
 	fmt.Println()
-	provisioner, err := factory.ClusterProvisioner(ksailConfig)
+	provisioner, err := factory.ClusterProvisioner(&ksailConfig)
 	if err != nil {
 		return err
 	}
-	containerEngineProvisioner, err := factory.ContainerEngineProvisioner(ksailConfig)
+	containerEngineProvisioner, err := factory.ContainerEngineProvisioner(&ksailConfig)
 	if err != nil {
 		return err
 	}

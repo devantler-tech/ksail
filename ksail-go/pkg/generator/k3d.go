@@ -32,9 +32,9 @@ func (g *K3dGenerator) Generate(opts Options) (string, error) {
 	return g.FileWriter.TryWrite(out, opts.Output, opts.Force)
 }
 
-func NewK3dGenerator(ksailConfig *ksailcluster.Cluster) *K3dGenerator {
+func NewK3dGenerator(cfg *ksailcluster.Cluster) *K3dGenerator {
 	return &K3dGenerator{
-		Cluster:    ksailConfig,
+		Cluster:    cfg,
 		Marshaller: marshaller.NewMarshaller[*v1alpha5.SimpleConfig](),
 	}
 }

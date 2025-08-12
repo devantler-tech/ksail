@@ -30,14 +30,14 @@ var initCmd = &cobra.Command{
 
 // handleInit handles the init command.
 func handleInit() error {
-	ksailConfig := ksailcluster.NewCluster()
-	inputs.SetInputsOrFallback(ksailConfig)
-	return scaffold(ksailConfig)
+	cfg := ksailcluster.NewCluster()
+	inputs.SetInputsOrFallback(cfg)
+	return scaffold(cfg)
 }
 
 // scaffold generates initial project files according to the provided configuration.
-func scaffold(ksailConfig *ksailcluster.Cluster) error {
-	scaffolder := utils.NewScaffolder(*ksailConfig)
+func scaffold(cfg *ksailcluster.Cluster) error {
+	scaffolder := utils.NewScaffolder(*cfg)
 	fmt.Println("📝 Scaffolding new project")
 	if err := scaffolder.Scaffold(inputs.Output, inputs.Force); err != nil {
 		return err

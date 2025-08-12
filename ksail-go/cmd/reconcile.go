@@ -4,8 +4,6 @@ Copyright © 2025 NAME HERE <EMAIL ADDRESS>
 package cmd
 
 import (
-	"github.com/devantler-tech/ksail/cmd/inputs"
-	"github.com/devantler-tech/ksail/internal/loader"
 	"github.com/spf13/cobra"
 )
 
@@ -27,13 +25,11 @@ to quickly create a Cobra application.`,
 // --- internals ---
 
 func handleReconcile() error {
-	ksailConfig, err := loader.NewKSailConfigLoader().Load()
+  InitServices()
+	err := configValidator.Validate()
 	if err != nil {
 		return err
 	}
-	inputs.SetInputsOrFallback(&ksailConfig)
-
-  // TODO: Validate configurations
   // TODO: Validate workloads
   // TODO: Reconcile
 	return nil

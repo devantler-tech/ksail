@@ -46,14 +46,14 @@ func (s *Scaffolder) Scaffold(output string, force bool) error {
 	return nil
 }
 
-func NewScaffolder(ksailConfig ksailcluster.Cluster) *Scaffolder {
+func NewScaffolder(cfg ksailcluster.Cluster) *Scaffolder {
 	ksailGen := gen.NewYAMLGenerator[ksailcluster.Cluster]()
-	kindGen := gen.NewKindGenerator(&ksailConfig)
-	k3dGen := gen.NewK3dGenerator(&ksailConfig)
-	kustGen := gen.NewKustomizationGenerator(&ksailConfig)
+	kindGen := gen.NewKindGenerator(&cfg)
+	k3dGen := gen.NewK3dGenerator(&cfg)
+	kustGen := gen.NewKustomizationGenerator(&cfg)
 
 	return &Scaffolder{
-		KSailConfig:            ksailConfig,
+		KSailConfig:            cfg,
 		KSailYAMLGenerator:     ksailGen,
 		KindGenerator:          kindGen,
 		K3dGenerator:           k3dGen,

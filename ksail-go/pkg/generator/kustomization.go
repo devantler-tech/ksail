@@ -34,9 +34,9 @@ func (g *KustomizationGenerator) Generate(opts Options) (string, error) {
 	return g.FileWriter.TryWrite(out, outputFile, opts.Force)
 }
 
-func NewKustomizationGenerator(ksailConfig *ksailcluster.Cluster) *KustomizationGenerator {
+func NewKustomizationGenerator(cfg *ksailcluster.Cluster) *KustomizationGenerator {
 	return &KustomizationGenerator{
-		KSailConfig:    ksailConfig,
+		KSailConfig:    cfg,
 		Marshaller: marshaller.NewMarshaller[*ktypes.Kustomization](),
 	}
 }

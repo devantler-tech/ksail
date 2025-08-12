@@ -6,8 +6,24 @@ import (
 	"os"
 	"strings"
 
+	"github.com/devantler-tech/ksail/cmd/inputs"
+	factory "github.com/devantler-tech/ksail/internal/factories"
+	"github.com/devantler-tech/ksail/internal/loader"
 	"github.com/devantler-tech/ksail/internal/ui/notify"
+	"github.com/devantler-tech/ksail/internal/validators"
+	ksailcluster "github.com/devantler-tech/ksail/pkg/apis/v1alpha1/cluster"
+	reconciliationtoolbootstrapper "github.com/devantler-tech/ksail/pkg/bootstrapper/reconciliation_tool"
+	clusterprovisioner "github.com/devantler-tech/ksail/pkg/provisioner/cluster"
+	containerengineprovisioner "github.com/devantler-tech/ksail/pkg/provisioner/container_engine"
 	"github.com/spf13/cobra"
+)
+
+var (
+	ksailConfig                    ksailcluster.Cluster
+	clusterProvisioner             clusterprovisioner.ClusterProvisioner
+	containerEngineProvisioner     containerengineprovisioner.ContainerEngineProvisioner
+	reconciliationToolBootstrapper reconciliationtoolbootstrapper.Bootstrapper
+	configValidator                *validators.ConfigValidator
 )
 
 //go:embed assets/ascii-art.txt
@@ -20,9 +36,10 @@ var rootCmd = &cobra.Command{
 	Long: `KSail is an SDK for operating and managing Kubernetes clusters and workloads.
 
   Create ephemeral clusters for development and CI purposes, deploy and update workloads, test and validate behavior — all through one concise, declarative interface. Stop stitching together a dozen CLIs; KSail gives you a consistent UX built on the tools you already trust.`,
+	SilenceErrors: true,
+  SilenceUsage:  true,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		handleRoot()
-		return cmd.Help()
+		return handleRoot(cmd)
 	},
 }
 
@@ -39,12 +56,22 @@ func Execute() {
 	}
 }
 
+// InitServices initializes the services required by the CLI.
+func InitServices() {
+	ksailConfig, _ = loader.NewKSailConfigLoader().Load()
+	inputs.SetInputsOrFallback(&ksailConfig)
+	clusterProvisioner, _ = factory.ClusterProvisioner(&ksailConfig)
+	containerEngineProvisioner, _ = factory.ContainerEngineProvisioner(&ksailConfig)
+	reconciliationToolBootstrapper, _ = factory.ReconciliationTool(&ksailConfig)
+	configValidator = validators.NewConfigValidator(&ksailConfig)
+}
+
 // --- internals ---
 
 // handleRoot handles the root command.
-func handleRoot() error {
+func handleRoot(cmd *cobra.Command) error {
 	printASCIIArt()
-	return nil
+	return cmd.Help()
 }
 
 func printASCIIArt() {

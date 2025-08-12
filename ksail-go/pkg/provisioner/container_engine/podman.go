@@ -25,7 +25,7 @@ func (p *PodmanProvisioner) CheckReady() (bool, error) {
 }
 
 // NewPodmanProvisioner creates a new PodmanProvisioner.
-func NewPodmanProvisioner(ksailConfig *ksailcluster.Cluster) *PodmanProvisioner {
+func NewPodmanProvisioner(cfg *ksailcluster.Cluster) *PodmanProvisioner {
 	podmanSock := fmt.Sprintf("unix:///run/user/%d/podman/podman.sock", os.Getuid())
 	os.Setenv("DOCKER_HOST", podmanSock)
 	cli, _ := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())

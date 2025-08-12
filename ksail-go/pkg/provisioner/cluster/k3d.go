@@ -14,7 +14,7 @@ import (
 
 // K3dClusterProvisioner implements provisioning for k3d clusters.
 type K3dClusterProvisioner struct {
-	ksailConfig *ksailcluster.Cluster
+	cfg *ksailcluster.Cluster
 	simpleCfg   *conf.SimpleConfig
 }
 
@@ -28,7 +28,7 @@ func (k *K3dClusterProvisioner) Create(name string) error {
 	// Ensure name in SimpleConfig; default to ksail name
 	target := name
 	if target == "" {
-		target = k.ksailConfig.Metadata.Name
+		target = k.cfg.Metadata.Name
 	}
 	k.simpleCfg.Name = target
 
@@ -55,7 +55,7 @@ func (k *K3dClusterProvisioner) Delete(name string) error {
 	rt := k3drt.SelectedRuntime
 	target := name
 	if target == "" {
-		target = k.ksailConfig.Metadata.Name
+		target = k.cfg.Metadata.Name
 	}
 	cluster := &k3dtypes.Cluster{Name: target}
 	return k3dclient.ClusterDelete(ctx, rt, cluster, k3dtypes.ClusterDeleteOpts{})
@@ -67,7 +67,7 @@ func (k *K3dClusterProvisioner) Start(name string) error {
 	rt := k3drt.SelectedRuntime
 	target := name
 	if target == "" {
-		target = k.ksailConfig.Metadata.Name
+		target = k.cfg.Metadata.Name
 	}
 	c, err := k3dclient.ClusterGet(ctx, rt, &k3dtypes.Cluster{Name: target})
 	if err != nil {
@@ -82,7 +82,7 @@ func (k *K3dClusterProvisioner) Stop(name string) error {
 	rt := k3drt.SelectedRuntime
 	target := name
 	if target == "" {
-		target = k.ksailConfig.Metadata.Name
+		target = k.cfg.Metadata.Name
 	}
 	c, err := k3dclient.ClusterGet(ctx, rt, &k3dtypes.Cluster{Name: target})
 	if err != nil {
@@ -114,12 +114,12 @@ func (k *K3dClusterProvisioner) Exists(name string) (bool, error) {
 	}
 	target := name
 	if target == "" {
-		target = k.ksailConfig.Metadata.Name
+		target = k.cfg.Metadata.Name
 	}
 	return slices.Contains(clusters, target), nil
 }
 
 // NewK3dClusterProvisioner constructs a k3d provisioner instance.
-func NewK3dClusterProvisioner(ksailConfig *ksailcluster.Cluster, simpleCfg *conf.SimpleConfig) *K3dClusterProvisioner {
-	return &K3dClusterProvisioner{ksailConfig: ksailConfig, simpleCfg: simpleCfg}
+func NewK3dClusterProvisioner(cfg *ksailcluster.Cluster, simpleCfg *conf.SimpleConfig) *K3dClusterProvisioner {
+	return &K3dClusterProvisioner{cfg: cfg, simpleCfg: simpleCfg}
 }

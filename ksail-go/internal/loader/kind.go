@@ -24,13 +24,14 @@ func (cl *KindConfigLoader) Load() (v1alpha4.Cluster, error) {
             if err != nil {
                 return v1alpha4.Cluster{}, fmt.Errorf("read kind config: %w", err)
             }
-            kindConfig := &v1alpha4.Cluster{}
-            if err := cl.Marshaller.Unmarshal(data, kindConfig); err != nil {
+            cfg := &v1alpha4.Cluster{}
+            if err := cl.Marshaller.Unmarshal(data, cfg); err != nil {
                 return v1alpha4.Cluster{}, fmt.Errorf("unmarshal kind config: %w", err)
             }
             fmt.Printf("► '%s' found\n", configPath)
             fmt.Println("✔ config loaded")
-            return *kindConfig, nil
+            fmt.Println()
+            return *cfg, nil
         }
         parent := filepath.Dir(dir)
         if parent == dir || dir == "" {
@@ -38,17 +39,18 @@ func (cl *KindConfigLoader) Load() (v1alpha4.Cluster, error) {
         }
     }
     fmt.Println("► './kind.yaml' not found, using default configuration")
-    var kindConfig *v1alpha4.Cluster
+    var cfg *v1alpha4.Cluster
     if cl.Default != nil {
-        kindConfig = cl.Default
+        cfg = cl.Default
     } else {
         kc := v1alpha4.Cluster{}
         v1alpha4.SetDefaultsCluster(&kc)
-        kindConfig = &kc
+        cfg = &kc
     }
 
     fmt.Println("✔ config loaded")
-    return *kindConfig, nil
+    fmt.Println()
+    return *cfg, nil
 }
 
 func NewKindConfigLoader() *KindConfigLoader {
