@@ -38,7 +38,7 @@ func AddReconciliationToolFlag(cmd *cobra.Command) {
 
 // AddSourceDirectoryFlag adds the --source-directory flag to the given command.
 func AddSourceDirectoryFlag(cmd *cobra.Command) {
-	cmd.Flags().StringVarP(&SourceDirectory, "source-directory", "s", "k8s", "manifests source directory")
+	cmd.Flags().StringVarP(&SourceDirectory, "source-directory", "s", "", "manifests source directory")
 }
 
 // AddForceFlag adds the --force flag to the given command.
