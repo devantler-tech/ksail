@@ -49,22 +49,26 @@ func ContainerEngineProvisioner(ksailConfig *ksailcluster.Cluster) (containereng
 }
 
 func ReconciliationTool(reconciliationTool ksailcluster.ReconciliationTool, ksailConfig *ksailcluster.Cluster) (reconboot.Bootstrapper, error) {
+	kubeconfigPath, err := utils.ExpandPath(ksailConfig.Spec.Connection.Kubeconfig)
+	if err != nil {
+		return nil, err
+	}
 	var reconciliationToolBootstrapper reconboot.Bootstrapper
 	switch reconciliationTool {
 	case ksailcluster.ReconciliationToolKubectl:
-		// Bootstrap with kubectl
+		reconciliationToolBootstrapper = reconboot.NewKubectlBootstrapper(
+			kubeconfigPath,
+			ksailConfig.Spec.Connection.Context,
+			ksailConfig.Spec.Connection.Timeout.Duration,
+		)
 	case ksailcluster.ReconciliationToolFlux:
-		kubeconfigPath, err := utils.ExpandPath(ksailConfig.Spec.Connection.Kubeconfig)
-		if err != nil {
-			return nil, err
-		}
 		reconciliationToolBootstrapper = reconboot.NewFluxBootstrapper(
 			kubeconfigPath,
 			ksailConfig.Spec.Connection.Context,
 			ksailConfig.Spec.Connection.Timeout.Duration,
 		)
 	case ksailcluster.ReconciliationToolArgoCD:
-		// Bootstrap with ArgoCD
+		return nil, fmt.Errorf("unsupported reconciliation tool '%s'", reconciliationTool)
 	default:
 		return nil, fmt.Errorf("unsupported reconciliation tool '%s'", reconciliationTool)
 	}

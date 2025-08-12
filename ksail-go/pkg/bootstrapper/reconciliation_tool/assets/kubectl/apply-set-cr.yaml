@@ -1,0 +1,12 @@
+apiVersion: k8s.devantler.tech/v1
+kind: ApplySet
+metadata:
+  name: ksail
+  annotations:
+    applyset.kubernetes.io/tooling: "kubectl/v1.33"
+    # The following resources are included in this ApplySet
+    applyset.kubernetes.io/contains-group-kinds: "configmaps,deployments.apps,secrets,services"
+  labels:
+    applyset.kubernetes.io/id: "applyset-UG-KqWfGc9D8EBUO6vM3DO-AVJmtBLTk95UF_fHcaxM-v1"
+spec:
+  description: "ApplySet parent object for ksail"
