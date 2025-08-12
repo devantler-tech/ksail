@@ -39,8 +39,8 @@ func handleUp() error {
 
 // provision provisions a cluster based on the provided configuration.
 func provision(ksailConfig *ksailcluster.Cluster) error {
-	ksailConfig.Metadata.Name = helpers.InputOrFallback(ksailConfig.Metadata.Name, inputs.Name)
-	ksailConfig.Spec.ContainerEngine = helpers.InputOrFallback(ksailConfig.Spec.ContainerEngine, inputs.ContainerEngine)
+	ksailConfig.Metadata.Name = helpers.InputOrFallback(inputs.Name, ksailConfig.Metadata.Name)
+	ksailConfig.Spec.ContainerEngine = helpers.InputOrFallback(inputs.ContainerEngine, ksailConfig.Spec.ContainerEngine)
 	containerEngineProvisioner, err := factory.ContainerEngineProvisioner(ksailConfig)
 	if err != nil {
 		return err
@@ -84,8 +84,9 @@ func provision(ksailConfig *ksailcluster.Cluster) error {
 // provisionCluster provisions a cluster based on the provided configuration.
 func provisionCluster(ksailConfig *ksailcluster.Cluster) error {
 	fmt.Println()
-	ksailConfig.Spec.Distribution = helpers.InputOrFallback(ksailConfig.Spec.Distribution, inputs.Distribution)
-	ksailConfig.Spec.ContainerEngine = helpers.InputOrFallback(ksailConfig.Spec.ContainerEngine, inputs.ContainerEngine)
+  ksailConfig.Metadata.Name = helpers.InputOrFallback(inputs.Name, ksailConfig.Metadata.Name)
+	ksailConfig.Spec.Distribution = helpers.InputOrFallback(inputs.Distribution, ksailConfig.Spec.Distribution)
+	ksailConfig.Spec.ContainerEngine = helpers.InputOrFallback(inputs.ContainerEngine, ksailConfig.Spec.ContainerEngine)
 	provisioner, err := factory.ClusterProvisioner(ksailConfig)
 	if err != nil {
 		return err
@@ -111,7 +112,7 @@ func provisionCluster(ksailConfig *ksailcluster.Cluster) error {
 }
 
 func bootstrapReconciliationTool(ksailConfig *ksailcluster.Cluster) error {
-	reconciliationTool := helpers.InputOrFallback(ksailConfig.Spec.ReconciliationTool, inputs.ReconciliationTool)
+	reconciliationTool := helpers.InputOrFallback(inputs.ReconciliationTool, ksailConfig.Spec.ReconciliationTool)
 	reconciliationToolBootstrapper, err := factory.ReconciliationTool(reconciliationTool, ksailConfig)
 	if err != nil {
 		return err
