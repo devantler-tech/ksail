@@ -129,6 +129,6 @@ func init() {
 	inputs.AddNameFlag(upCmd)
 	inputs.AddDistributionFlag(upCmd)
 	inputs.AddReconciliationToolFlag(upCmd)
-	inputs.AddForceFlag(upCmd)
+	inputs.AddForceFlag(upCmd, "recreate cluster")
 	inputs.AddContainerEngineFlag(upCmd)
 }

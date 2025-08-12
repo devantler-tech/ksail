@@ -69,5 +69,5 @@ func init() {
 	inputs.AddDistributionFlag(initCmd)
 	inputs.AddReconciliationToolFlag(initCmd)
 	inputs.AddSourceDirectoryFlag(initCmd)
-	inputs.AddForceFlag(initCmd)
+	inputs.AddForceFlag(initCmd, "overwrite files")
 }

@@ -84,5 +84,6 @@ func renderTable(distributions []ksailcluster.Distribution, ksailConfig *ksailcl
 
 func init() {
 	rootCmd.AddCommand(listCmd)
-	inputs.AddAllFlag(listCmd)
+  inputs.AddDistributionFlag(listCmd)
+	inputs.AddAllFlag(listCmd, "include clusters from all distributions")
 }

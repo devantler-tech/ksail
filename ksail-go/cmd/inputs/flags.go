@@ -42,13 +42,21 @@ func AddSourceDirectoryFlag(cmd *cobra.Command) {
 }
 
 // AddForceFlag adds the --force flag to the given command.
-func AddForceFlag(cmd *cobra.Command) {
-	cmd.Flags().BoolVarP(&Force, "force", "f", false, "force operation")
+func AddForceFlag(cmd *cobra.Command, description ...string) {
+  desc := "force operation"
+  if len(description) > 0 {
+    desc = description[0]
+  }
+  cmd.Flags().BoolVarP(&Force, "force", "f", false, desc)
 }
 
 // AddAllFlag adds the --all flag to the given command.
-func AddAllFlag(cmd *cobra.Command) {
-	cmd.Flags().BoolVarP(&All, "all", "a", false, "include all resources")
+func AddAllFlag(cmd *cobra.Command, description ...string) {
+  desc := "include all resources"
+  if len(description) > 0 {
+    desc = description[0]
+  }
+  cmd.Flags().BoolVarP(&All, "all", "a", false, desc)
 }
 
 // AddContainerEngineFlag adds the --container-engine flag to the given command.
