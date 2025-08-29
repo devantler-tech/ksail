@@ -12,9 +12,10 @@ nav_order: 0
 > [!IMPORTANT]
 > **🆕 UP NEXT 🆕**
 >
-> 1. Reworked Native Kubernetes Generators to use `kubectl create` commands
+> 1. Reworked KSail from .NET to Go with feature-parity - <https://github.com/devantler-tech/ksail-go>
+> 2. Support for EKS as a Distribution - <https://github.com/eksctl-io/eksctl>
 > 2. Support for ArgoCD as a Deployment Tool - <https://github.com/devantler-tech/ksail/pull/878>
-> 3. Support for Talos Linux as a Distribution
+> 3. Support for Talos Linux as a Distribution - <https://github.com/siderolabs/talos>
 
 <picture align="center">
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/ksail-cli-dark.png" style="width: 550px">
