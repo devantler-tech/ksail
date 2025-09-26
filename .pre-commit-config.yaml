@@ -1,0 +1,5 @@
+# Pre-commit configuration for automatic Go code formatting and mockery
+# See https://pre-commit.com for more information
+# See https://pre-commit.com/hooks.html for more hooks
+
+repos: []
