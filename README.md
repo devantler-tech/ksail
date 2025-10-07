@@ -12,7 +12,7 @@ nav_order: 0
 > [!IMPORTANT]
 > **🆕 UP NEXT 🆕**
 >
-> 1. Reworked KSail from .NET to Go with feature-parity - <https://github.com/devantler-tech/ksail-go>
+> 1. Rework KSail from .NET to Go with feature-parity **BREAKING change** - <https://github.com/devantler-tech/ksail-go>
 > 2. Support for EKS as a Distribution - <https://github.com/eksctl-io/eksctl>
 > 2. Support for ArgoCD as a Deployment Tool - <https://github.com/devantler-tech/ksail/pull/878>
 > 3. Support for Talos Linux as a Distribution - <https://github.com/siderolabs/talos>
