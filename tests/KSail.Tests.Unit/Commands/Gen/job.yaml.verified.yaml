@@ -5,7 +5,7 @@ metadata:
   name: my-job
 spec:
   template:
-    metadata: {}
+    metadata:
     spec:
       containers:
       - image: my-image
