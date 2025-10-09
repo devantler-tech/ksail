@@ -64,7 +64,8 @@ public partial class KSailGenCommandTests
     Assert.Equal(0, exitCode);
     _ = await Verify(fileContents, extension: "yaml")
       .UseFileName(fileName)
-      .ScrubLinesWithReplace(line => UrlRegex().Replace(line, "url: <url>"));
+      .ScrubLinesWithReplace(line => UrlRegex().Replace(line, "url: <url>"))
+      .ScrubLinesContaining("creationTimestamp: null");
 
     //Cleanup
     File.Delete(outputPath);
