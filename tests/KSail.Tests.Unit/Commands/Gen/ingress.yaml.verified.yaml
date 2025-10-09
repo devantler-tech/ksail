@@ -4,15 +4,16 @@ kind: Ingress
 metadata:
   name: my-ingress
 spec:
-  ingressClassName: my-ingress-class
   rules:
-  - host: my-host
+  - host: example.com
     http:
       paths:
       - backend:
           service:
             name: my-service
             port:
-              number: 0
+              number: 80
         path: /
-        pathType: ImplementationSpecific
+        pathType: Exact
+status:
+  loadBalancer: {}

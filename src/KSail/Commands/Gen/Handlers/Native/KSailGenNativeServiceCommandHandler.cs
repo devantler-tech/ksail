@@ -6,29 +6,39 @@ namespace KSail.Commands.Gen.Handlers.Native;
 
 class KSailGenNativeServiceCommandHandler(string outputFile, bool overwrite) : ICommandHandler
 {
-  readonly ServiceGenerator _generator = new();
+  readonly NodePortServiceGenerator _generator = new();
   public async Task HandleAsync(CancellationToken cancellationToken = default)
   {
     var model = new V1Service
     {
-      ApiVersion = "networking.k8s.io/v1",
+      ApiVersion = "v1",
       Kind = "Service",
-      Metadata = new V1ObjectMeta()
+      Metadata = new V1ObjectMeta
       {
         Name = "my-service",
+        Labels = new Dictionary<string, string>
+        {
+          ["app"] = "my-service"
+        }
       },
-      Spec = new V1ServiceSpec()
+      Spec = new V1ServiceSpec
       {
+        Type = "NodePort",
+        Selector = new Dictionary<string, string>
+        {
+          ["app"] = "my-service"
+        },
         Ports =
         [
-          new V1ServicePort()
+          new V1ServicePort
           {
-            Name = "my-port",
-            Port = 0,
-            TargetPort = 0,
-          },
-        ],
-        Selector = new Dictionary<string, string>()
+            Name = "http",
+            Port = 80,
+            TargetPort = 80,
+            Protocol = "TCP",
+            NodePort = 30080
+          }
+        ]
       }
     };
     await _generator.GenerateAsync(model, outputFile, overwrite, cancellationToken: cancellationToken).ConfigureAwait(false);

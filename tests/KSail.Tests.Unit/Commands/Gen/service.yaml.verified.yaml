@@ -1,11 +1,19 @@
 ﻿---
-apiVersion: networking.k8s.io/v1
+apiVersion: v1
 kind: Service
 metadata:
+  labels:
+    app: my-service
   name: my-service
 spec:
   ports:
-  - name: my-port
-    port: 0
-    targetPort: 0
-  selector: {}
+  - name: 80-80
+    nodePort: 30080
+    port: 80
+    protocol: TCP
+    targetPort: 80
+  selector:
+    app: my-service
+  type: NodePort
+status:
+  loadBalancer: {}

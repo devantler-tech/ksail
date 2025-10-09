@@ -1,5 +1,6 @@
 using System.CommandLine;
 using DevantlerTech.KubernetesGenerator.Native;
+using DevantlerTech.KubernetesGenerator.Native.Models;
 using k8s.Models;
 
 namespace KSail.Commands.Gen.Handlers.Native;
@@ -9,47 +10,26 @@ class KSailGenNativeIngressCommandHandler(string outputFile, bool overwrite) : I
   readonly IngressGenerator _generator = new();
   public async Task HandleAsync(CancellationToken cancellationToken = default)
   {
-    var model = new V1Ingress
+    var model = new Ingress
     {
-      ApiVersion = "networking.k8s.io/v1",
-      Kind = "Ingress",
-      Metadata = new V1ObjectMeta()
+      Metadata = new Metadata
       {
-        Name = "my-ingress"
+        Name = "my-ingress",
+        Labels = new Dictionary<string, string>
+        {
+          ["app"] = "my-ingress"
+        }
       },
-      Spec = new V1IngressSpec()
-      {
-        IngressClassName = "my-ingress-class",
-        Rules =
-       [
-         new V1IngressRule()
-         {
-           Host = "my-host",
-           Http = new V1HTTPIngressRuleValue()
-           {
-             Paths =
-             [
-               new V1HTTPIngressPath()
-               {
-                 Path = "/",
-                 PathType = "ImplementationSpecific",
-                 Backend = new V1IngressBackend()
-                 {
-                   Service = new V1IngressServiceBackend()
-                   {
-                     Name = "my-service",
-                     Port = new V1ServiceBackendPort()
-                     {
-                       Number = 0,
-                     },
-                   },
-                 },
-               },
-             ],
-           },
-         },
-       ],
-      }
+      Rules =
+      [
+        new IngressRule
+        {
+          Host = "example.com",
+          Path = string.Empty,
+          ServiceName = "my-service",
+          ServicePort = "80"
+        }
+      ]
     };
     await _generator.GenerateAsync(model, outputFile, overwrite, cancellationToken: cancellationToken).ConfigureAwait(false);
   }

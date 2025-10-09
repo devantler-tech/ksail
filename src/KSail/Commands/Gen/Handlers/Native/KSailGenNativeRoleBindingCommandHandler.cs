@@ -1,5 +1,6 @@
 using System.CommandLine;
 using DevantlerTech.KubernetesGenerator.Native;
+using DevantlerTech.KubernetesGenerator.Native.Models;
 using k8s.Models;
 
 namespace KSail.Commands.Gen.Handlers.Native;
@@ -10,30 +11,14 @@ class KSailGenNativeRoleBindingCommandHandler(string outputFile, bool overwrite)
 
   public async Task HandleAsync(CancellationToken cancellationToken = default)
   {
-    var model = new V1RoleBinding()
+    var model = new RoleBinding("my-role-binding")
     {
-      ApiVersion = "rbac.authorization.k8s.io/v1",
-      Kind = "RoleBinding",
-      Metadata = new V1ObjectMeta()
+      RoleRef = new RoleBindingRoleRef
       {
-        Name = "my-role-binding",
-        NamespaceProperty = "<namespace>",
-      },
-      Subjects =
-      [
-        new Rbacv1Subject()
-        {
-          Kind = "User",
-          Name = "my-user",
-          ApiGroup = "rbac.authorization.k8s.io",
-        }
-      ],
-      RoleRef = new V1RoleRef()
-      {
-        Kind = "Role",
         Name = "my-role",
-        ApiGroup = "rbac.authorization.k8s.io",
-      }
+        Kind = RoleBindingRoleRefKind.Role,
+      },
+      Subjects = []
     };
     await _generator.GenerateAsync(model, outputFile, overwrite, cancellationToken: cancellationToken).ConfigureAwait(false);
   }
