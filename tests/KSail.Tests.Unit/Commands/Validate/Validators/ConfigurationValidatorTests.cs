@@ -32,7 +32,7 @@ public class ConfigurationValidatorTest
     string tempDir = Path.Combine(Path.GetTempPath(), "ksail-validate-unsupported-distribution");
     var parseResult = _rootCommand.Parse(["init", "--output", tempDir]);
     using var cts = new CancellationTokenSource();
-    _ = await parseResult.InvokeAsync(cts.Token);
+    _ = await parseResult.InvokeAsync(parseResult.InvocationConfiguration, cts.Token);
     var config = new KSailCluster
     {
       Spec = new KSailClusterSpec
@@ -62,7 +62,7 @@ public class ConfigurationValidatorTest
     string tempDir = Path.Combine(Path.GetTempPath(), "ksail-validate-invalid-context-name");
     var parseResult = _rootCommand.Parse(["init", "--output", tempDir, "--distribution", distribution.ToString()]);
     using var cts = new CancellationTokenSource();
-    _ = await parseResult.InvokeAsync(cts.Token);
+    _ = await parseResult.InvokeAsync(parseResult.InvocationConfiguration, cts.Token);
     var config = new KSailCluster
     {
       Spec = new KSailClusterSpec
@@ -95,7 +95,7 @@ public class ConfigurationValidatorTest
     string tempDir = Path.Combine(Path.GetTempPath(), "ksail-validate-invalid-oci-source-uri");
     var parseResult = _rootCommand.Parse(["init", "--output", tempDir, "--distribution", distribution.ToString()]);
     using var cts = new CancellationTokenSource();
-    _ = await parseResult.InvokeAsync(cts.Token);
+    _ = await parseResult.InvokeAsync(parseResult.InvocationConfiguration, cts.Token);
     var config = new KSailCluster
     {
       Spec = new KSailClusterSpec
@@ -144,7 +144,7 @@ public class ConfigurationValidatorTest
     string tempDir = Path.Combine(Path.GetTempPath(), "ksail-validate-invalid-cluster-name");
     var parseResult = _rootCommand.Parse(["init", "--output", tempDir, "--distribution", distribution.ToString()]);
     using var cts = new CancellationTokenSource();
-    _ = await parseResult.InvokeAsync(cts.Token);
+    _ = await parseResult.InvokeAsync(parseResult.InvocationConfiguration, cts.Token);
     var config = new KSailCluster
     {
       Metadata = new KSailMetadata
@@ -213,7 +213,7 @@ public class ConfigurationValidatorTest
     string tempDir = Path.Combine(Path.GetTempPath(), "ksail-validate-invalid-cni");
     var parseResult = _rootCommand.Parse(["init", "--output", tempDir, "--distribution", distribution.ToString(), "--cni", expectedCNI.ToString()]);
     using var cts = new CancellationTokenSource();
-    _ = await parseResult.InvokeAsync(cts.Token);
+    _ = await parseResult.InvokeAsync(parseResult.InvocationConfiguration, cts.Token);
     var config = new KSailCluster
     {
       Spec = new KSailClusterSpec
@@ -275,7 +275,7 @@ public class ConfigurationValidatorTest
     string tempDir = Path.Combine(Path.GetTempPath(), "ksail-validate-invalid-csi");
     var parseResult = _rootCommand.Parse(["init", "--output", tempDir, "--distribution", distribution.ToString(), "--csi", expectedCSI.ToString()]);
     using var cts = new CancellationTokenSource();
-    _ = await parseResult.InvokeAsync(cts.Token);
+    _ = await parseResult.InvokeAsync(parseResult.InvocationConfiguration, cts.Token);
     var config = new KSailCluster
     {
       Spec = new KSailClusterSpec
@@ -351,7 +351,7 @@ public class ConfigurationValidatorTest
     string tempDir = Path.Combine(Path.GetTempPath(), "ksail-validate-valid-cni-ingress-controller");
     var parseResult = _rootCommand.Parse(["init", "--output", tempDir, "--distribution", distribution.ToString(), "--cni", cni.ToString(), "--ingress-controller", ingressController.ToString()]);
     using var cts = new CancellationTokenSource();
-    _ = await parseResult.InvokeAsync(cts.Token);
+    _ = await parseResult.InvokeAsync(parseResult.InvocationConfiguration, cts.Token);
     var config = new KSailCluster
     {
       Spec = new KSailClusterSpec
@@ -413,7 +413,7 @@ public class ConfigurationValidatorTest
     string tempDir = Path.Combine(Path.GetTempPath(), "ksail-validate-invalid-ingress-controller");
     var parseResult = _rootCommand.Parse(["init", "--output", tempDir, "--distribution", distribution.ToString(), "--ingress-controller", expectedIngressController.ToString()]);
     using var cts = new CancellationTokenSource();
-    _ = await parseResult.InvokeAsync(cts.Token);
+    _ = await parseResult.InvokeAsync(parseResult.InvocationConfiguration, cts.Token);
     var config = new KSailCluster
     {
       Spec = new KSailClusterSpec
@@ -473,7 +473,7 @@ public class ConfigurationValidatorTest
     string tempDir = Path.Combine(Path.GetTempPath(), "ksail-validate-invalid-metrics-server");
     var parseResult = _rootCommand.Parse(["init", "--output", tempDir, "--distribution", distribution.ToString(), "--metrics-server", expectedMetricsServer.ToString()]);
     using var cts = new CancellationTokenSource();
-    _ = await parseResult.InvokeAsync(cts.Token);
+    _ = await parseResult.InvokeAsync(parseResult.InvocationConfiguration, cts.Token);
     var config = new KSailCluster
     {
       Spec = new KSailClusterSpec
@@ -532,7 +532,7 @@ public class ConfigurationValidatorTest
     string tempDir = Path.Combine(Path.GetTempPath(), "ksail-validate-invalid-mirror-registries");
     var parseResult = _rootCommand.Parse(["init", "--output", tempDir, "--distribution", distribution.ToString(), "--mirror-registries"]);
     using var cts = new CancellationTokenSource();
-    _ = await parseResult.InvokeAsync(cts.Token);
+    _ = await parseResult.InvokeAsync(parseResult.InvocationConfiguration, cts.Token);
     var config = new KSailCluster
     {
       Spec = new KSailClusterSpec

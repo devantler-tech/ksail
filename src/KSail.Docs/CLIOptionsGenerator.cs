@@ -79,14 +79,14 @@ static class CLIOptionsGenerator
   {
     var output = new StringWriter();
     var error = new StringWriter();
-    var commandLineConfiguration = new CommandLineConfiguration(command)
+    var invocationConfiguration = new InvocationConfiguration()
     {
       Output = output,
       Error = error
     };
-    var parseResult = command.Parse(args, commandLineConfiguration);
+    var parseResult = command.Parse(args);
     using var cts = new CancellationTokenSource();
-    _ = await parseResult.InvokeAsync(cts.Token).ConfigureAwait(false);
+    _ = await parseResult.InvokeAsync(invocationConfiguration, cts.Token).ConfigureAwait(false);
     return output.ToString()?.Trim()
       .Replace("KSail.Docs", "ksail", StringComparison.Ordinal)
       .Replace(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) + "/", "~/", StringComparison.Ordinal);

@@ -46,7 +46,7 @@ sealed class KSailListCommandHandler(KSailCluster config, ParseResult parseResul
     {
       foreach (string? cluster in clusterList)
       {
-        await parseResult.Configuration.Output.WriteLineAsync(cluster).ConfigureAwait(false);
+        await parseResult.InvocationConfiguration.Output.WriteLineAsync(cluster).ConfigureAwait(false);
       }
     }
     else

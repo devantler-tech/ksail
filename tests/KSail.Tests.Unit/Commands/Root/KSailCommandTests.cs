@@ -17,12 +17,12 @@ public class KSailRootCommandTests
     var outputWriter = new StringWriter();
     var errorWriter = new StringWriter();
     using var cts = new CancellationTokenSource();
-    var commandLineConfiguration = new CommandLineConfiguration(_ksailCommand)
+    var invocationConfiguration = new InvocationConfiguration()
     {
       Output = outputWriter,
       Error = errorWriter
     };
-    int exitCode = await _ksailCommand.Parse([], commandLineConfiguration).InvokeAsync(cts.Token);
+    int exitCode = await _ksailCommand.Parse([]).InvokeAsync(invocationConfiguration, cts.Token);
 
     //Assert
     _ = await Verify(errorWriter.ToString() + outputWriter.ToString());
@@ -37,12 +37,12 @@ public class KSailRootCommandTests
     var outputWriter = new StringWriter();
     var errorWriter = new StringWriter();
     using var cts = new CancellationTokenSource();
-    var commandLineConfiguration = new CommandLineConfiguration(_ksailCommand)
+    var invocationConfiguration = new InvocationConfiguration()
     {
       Output = outputWriter,
       Error = errorWriter
     };
-    int exitCode = await _ksailCommand.Parse(["--help"], commandLineConfiguration).InvokeAsync(cts.Token);
+    int exitCode = await _ksailCommand.Parse(["--help"]).InvokeAsync(invocationConfiguration, cts.Token);
 
     //Assert
     Assert.Equal(0, exitCode);

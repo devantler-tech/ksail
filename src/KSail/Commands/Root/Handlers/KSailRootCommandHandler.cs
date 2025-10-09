@@ -28,7 +28,7 @@ class KSailRootCommandHandler(ParseResult parseResult) : ICommandHandler
       @""
     ];
 
-    var outputWriter = parseResult.Configuration.Output;
+    var outputWriter = parseResult.InvocationConfiguration.Output;
     Console.ForegroundColor = ConsoleColor.Yellow;
     outputWriter.WriteLine(lines[0]);
     outputWriter.WriteLine(lines[1]);

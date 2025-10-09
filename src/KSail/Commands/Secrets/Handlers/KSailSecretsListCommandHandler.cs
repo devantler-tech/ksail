@@ -27,11 +27,11 @@ class KSailSecretsListCommandHandler(KSailCluster config, ISecretManager<AgeKey>
       {
         if (_config.Spec.SecretManager.SOPS.ShowPrivateKeysInListings)
         {
-          await parseResult.Configuration.Output.WriteLineAsync(key.ToString()).ConfigureAwait(false);
+          await parseResult.InvocationConfiguration.Output.WriteLineAsync(key.ToString()).ConfigureAwait(false);
         }
         else
         {
-          await parseResult.Configuration.Output.WriteLineAsync(Obscure(key)).ConfigureAwait(false);
+          await parseResult.InvocationConfiguration.Output.WriteLineAsync(Obscure(key)).ConfigureAwait(false);
         }
         Console.WriteLine();
       }
@@ -47,11 +47,11 @@ class KSailSecretsListCommandHandler(KSailCluster config, ISecretManager<AgeKey>
       {
         if (_config.Spec.SecretManager.SOPS.ShowPrivateKeysInListings)
         {
-          await parseResult.Configuration.Output.WriteLineAsync(key.ToString()).ConfigureAwait(false);
+          await parseResult.InvocationConfiguration.Output.WriteLineAsync(key.ToString()).ConfigureAwait(false);
         }
         else
         {
-          await parseResult.Configuration.Output.WriteLineAsync(Obscure(key)).ConfigureAwait(false);
+          await parseResult.InvocationConfiguration.Output.WriteLineAsync(Obscure(key)).ConfigureAwait(false);
         }
         Console.WriteLine();
       }

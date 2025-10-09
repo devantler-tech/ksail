@@ -25,13 +25,13 @@ sealed class KSailStatusCommandHandler(KSailCluster config, ParseResult parseRes
     ).ConfigureAwait(false);
     if (_config.Spec.Validation.Verbose)
     {
-      await parseResult.Configuration.Output.WriteLineAsync(LiveCheckMessage).ConfigureAwait(false);
-      await parseResult.Configuration.Output.WriteLineAsync(ReadyCheckMessage).ConfigureAwait(false);
+      await parseResult.InvocationConfiguration.Output.WriteLineAsync(LiveCheckMessage).ConfigureAwait(false);
+      await parseResult.InvocationConfiguration.Output.WriteLineAsync(ReadyCheckMessage).ConfigureAwait(false);
     }
     else
     {
-      await parseResult.Configuration.Output.WriteLineAsync($"Live: {LiveCheckMessage}").ConfigureAwait(false);
-      await parseResult.Configuration.Output.WriteLineAsync($"Ready: {ReadyCheckMessage}").ConfigureAwait(false);
+      await parseResult.InvocationConfiguration.Output.WriteLineAsync($"Live: {LiveCheckMessage}").ConfigureAwait(false);
+      await parseResult.InvocationConfiguration.Output.WriteLineAsync($"Ready: {ReadyCheckMessage}").ConfigureAwait(false);
     }
   }
 }

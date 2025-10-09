@@ -33,14 +33,13 @@ sealed class KSailRootCommand : RootCommand
           await ksailRootCommandHandler.HandleAsync(cancellationToken).ConfigureAwait(false);
           if (!parseResult.CommandResult.Children.Any())
           {
-            var helpResult = Parse("--help",
-              new CommandLineConfiguration(this)
-              {
-                Output = parseResult.Configuration.Output,
-                Error = parseResult.Configuration.Error
-              }
-            );
-            _ = await helpResult.InvokeAsync(cancellationToken).ConfigureAwait(false);
+            var helpResult = Parse("--help");
+            var invocationConfiguration = new InvocationConfiguration
+            {
+              Output = parseResult.InvocationConfiguration.Output,
+              Error = parseResult.InvocationConfiguration.Error
+            };
+            _ = await helpResult.InvokeAsync(invocationConfiguration, cancellationToken).ConfigureAwait(false);
           }
           return 0;
         }

@@ -11,6 +11,6 @@ class KSailSecretsAddCommandHandler(ISecretManager<AgeKey> secretManager, ParseR
   public async Task HandleAsync(CancellationToken cancellationToken)
   {
     var key = await _secretManager.CreateKeyAsync(cancellationToken).ConfigureAwait(false);
-    await parseResult.Configuration.Output.WriteLineAsync(key.ToString()).ConfigureAwait(false);
+    await parseResult.InvocationConfiguration.Output.WriteLineAsync(key.ToString()).ConfigureAwait(false);
   }
 }

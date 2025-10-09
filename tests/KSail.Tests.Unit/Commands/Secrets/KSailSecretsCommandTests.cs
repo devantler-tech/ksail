@@ -25,11 +25,11 @@ public class KSailSecretsCommandTests
     using var cts = new CancellationTokenSource();
     var outputWriter = new StringWriter();
     var errorWriter = new StringWriter();
-    int exitCode = await _ksailCommand.Parse(args, new CommandLineConfiguration(_ksailCommand)
+    int exitCode = await _ksailCommand.Parse(args).InvokeAsync(new InvocationConfiguration
     {
       Output = outputWriter,
       Error = errorWriter
-    }).InvokeAsync(cts.Token);
+    }, cts.Token);
 
     //Assert
     Assert.Equal(0, exitCode);
@@ -44,11 +44,11 @@ public class KSailSecretsCommandTests
     using var cts = new CancellationTokenSource();
     var outputWriter = new StringWriter();
     var errorWriter = new StringWriter();
-    int addExitCode = await _ksailCommand.Parse(["secrets", "add"], new CommandLineConfiguration(_ksailCommand)
+    int addExitCode = await _ksailCommand.Parse(["secrets", "add"]).InvokeAsync(new InvocationConfiguration
     {
       Output = outputWriter,
       Error = errorWriter
-    }).InvokeAsync(cts.Token);
+    }, cts.Token);
     string key = outputWriter.ToString().Trim();
 
     //Assert
@@ -58,7 +58,11 @@ public class KSailSecretsCommandTests
 
     // Cleanup
     var ageKey = new AgeKey(key);
-    int rmExitCode = await _ksailCommand.Parse(["secrets", "rm", ageKey.PublicKey]).InvokeAsync(cts.Token);
+    int rmExitCode = await _ksailCommand.Parse(["secrets", "rm", ageKey.PublicKey]).InvokeAsync(new InvocationConfiguration
+    {
+      Output = outputWriter,
+      Error = errorWriter
+    }, cts.Token);
     Assert.Equal(0, rmExitCode);
   }
 
@@ -74,16 +78,20 @@ public class KSailSecretsCommandTests
     using var cts = new CancellationTokenSource();
     var outputWriter = new StringWriter();
     var errorWriter = new StringWriter();
-    int addExitCode = await _ksailCommand.Parse(["secrets", "add"], new CommandLineConfiguration(_ksailCommand)
+    int addExitCode = await _ksailCommand.Parse(["secrets", "add"]).InvokeAsync(new InvocationConfiguration
     {
       Output = outputWriter,
       Error = errorWriter
-    }).InvokeAsync(cts.Token);
+    }, cts.Token);
     string key = outputWriter.ToString().Trim();
     Assert.NotNull(key);
     Assert.NotEmpty(key);
     var ageKey = new AgeKey(key);
-    int encryptExitCode = await _ksailCommand.Parse(["secrets", "encrypt", "--in-place", "--public-key", ageKey.PublicKey, filePath]).InvokeAsync(cts.Token);
+    int encryptExitCode = await _ksailCommand.Parse(["secrets", "encrypt", "--in-place", "--public-key", ageKey.PublicKey, filePath]).InvokeAsync(new InvocationConfiguration
+    {
+      Output = outputWriter,
+      Error = errorWriter
+    }, cts.Token);
     string encryptedFileContent = await File.ReadAllTextAsync(filePath);
 
     // Assert
@@ -92,7 +100,11 @@ public class KSailSecretsCommandTests
     Assert.NotEqual(content, encryptedFileContent);
 
     // Cleanup
-    int rmExitCode = await _ksailCommand.Parse(["secrets", "rm", ageKey.PublicKey]).InvokeAsync(cts.Token);
+    int rmExitCode = await _ksailCommand.Parse(["secrets", "rm", ageKey.PublicKey]).InvokeAsync(new InvocationConfiguration
+    {
+      Output = outputWriter,
+      Error = errorWriter
+    }, cts.Token);
     Assert.Equal(0, rmExitCode);
     File.Delete(filePath);
   }
@@ -109,18 +121,26 @@ public class KSailSecretsCommandTests
     await File.WriteAllTextAsync(filePath, content);
 
     // Act
-    int addExitCode = await _ksailCommand.Parse(["secrets", "add"], new CommandLineConfiguration(_ksailCommand)
+    int addExitCode = await _ksailCommand.Parse(["secrets", "add"]).InvokeAsync(new InvocationConfiguration
     {
       Output = outputWriter,
       Error = errorWriter
-    }).InvokeAsync(cts.Token);
+    }, cts.Token);
     string key = outputWriter.ToString().Trim();
     Assert.NotNull(key);
     Assert.NotEmpty(key);
     var ageKey = new AgeKey(key);
-    int encryptExitCode = await _ksailCommand.Parse(["secrets", "encrypt", filePath, "--in-place", "--public-key", ageKey.PublicKey]).InvokeAsync(cts.Token);
+    int encryptExitCode = await _ksailCommand.Parse(["secrets", "encrypt", filePath, "--in-place", "--public-key", ageKey.PublicKey]).InvokeAsync(new InvocationConfiguration
+    {
+      Output = outputWriter,
+      Error = errorWriter
+    }, cts.Token);
     string encryptedFileContent = await File.ReadAllTextAsync(filePath);
-    int decryptExitCode = await _ksailCommand.Parse(["secrets", "decrypt", filePath, "--in-place"]).InvokeAsync(cts.Token);
+    int decryptExitCode = await _ksailCommand.Parse(["secrets", "decrypt", filePath, "--in-place"]).InvokeAsync(new InvocationConfiguration
+    {
+      Output = outputWriter,
+      Error = errorWriter
+    }, cts.Token);
     string decryptedFileContent = await File.ReadAllTextAsync(filePath);
 
 
@@ -132,7 +152,11 @@ public class KSailSecretsCommandTests
     Assert.Equal(content, decryptedFileContent);
 
     // Cleanup
-    int rmExitCode = await _ksailCommand.Parse(["secrets", "rm", ageKey.PublicKey]).InvokeAsync(cts.Token);
+    int rmExitCode = await _ksailCommand.Parse(["secrets", "rm", ageKey.PublicKey]).InvokeAsync(new InvocationConfiguration
+    {
+      Output = outputWriter,
+      Error = errorWriter
+    }, cts.Token);
     Assert.Equal(0, rmExitCode);
     File.Delete(filePath);
   }
@@ -145,11 +169,11 @@ public class KSailSecretsCommandTests
     var outputWriter = new StringWriter();
     var errorWriter = new StringWriter();
     string filePath = Path.Combine(Path.GetTempPath(), "exported_key.txt");
-    int addExitCode = await _ksailCommand.Parse(["secrets", "add"], new CommandLineConfiguration(_ksailCommand)
+    int addExitCode = await _ksailCommand.Parse(["secrets", "add"]).InvokeAsync(new InvocationConfiguration
     {
       Output = outputWriter,
       Error = errorWriter
-    }).InvokeAsync(cts.Token);
+    }, cts.Token);
     Assert.Equal(0, addExitCode);
     string key = outputWriter.ToString().Trim();
     Assert.NotNull(key);
@@ -157,7 +181,11 @@ public class KSailSecretsCommandTests
     var ageKey = new AgeKey(key);
 
     // Act
-    int exportExitCode = await _ksailCommand.Parse(["secrets", "export", ageKey.PublicKey, "-o", filePath]).InvokeAsync(cts.Token);
+    int exportExitCode = await _ksailCommand.Parse(["secrets", "export", ageKey.PublicKey, "-o", filePath]).InvokeAsync(new InvocationConfiguration
+    {
+      Output = outputWriter,
+      Error = errorWriter
+    }, cts.Token);
     Assert.Equal(0, exportExitCode);
     string exportedKey = await File.ReadAllTextAsync(filePath);
 
@@ -169,7 +197,11 @@ public class KSailSecretsCommandTests
     Assert.Contains(exportedAgeKey.PrivateKey, exportedKey, StringComparison.Ordinal);
 
     // Cleanup
-    int rmExitCode = await _ksailCommand.Parse(["secrets", "rm", ageKey.PublicKey]).InvokeAsync(cts.Token);
+    int rmExitCode = await _ksailCommand.Parse(["secrets", "rm", ageKey.PublicKey]).InvokeAsync(new InvocationConfiguration
+    {
+      Output = outputWriter,
+      Error = errorWriter
+    }, cts.Token);
     Assert.Equal(0, rmExitCode);
     File.Delete(filePath);
   }
@@ -181,11 +213,11 @@ public class KSailSecretsCommandTests
     var outputWriter = new StringWriter();
     var errorWriter = new StringWriter();
     using var cts = new CancellationTokenSource();
-    int addExitCode = await _ksailCommand.Parse(["secrets", "add"], new CommandLineConfiguration(_ksailCommand)
+    int addExitCode = await _ksailCommand.Parse(["secrets", "add"]).InvokeAsync(new InvocationConfiguration
     {
       Output = outputWriter,
       Error = errorWriter
-    }).InvokeAsync(cts.Token);
+    }, cts.Token);
     string key = outputWriter.ToString().Trim();
     Assert.NotNull(key);
     Assert.NotEmpty(key);
@@ -193,13 +225,37 @@ public class KSailSecretsCommandTests
     string filePath = Path.Combine(Path.GetTempPath(), "import_key.txt");
 
     // Act
-    int exportExitCode = await _ksailCommand.Parse(["secrets", "export", ageKey.PublicKey, "-o", filePath]).InvokeAsync(cts.Token);
+    int exportExitCode = await _ksailCommand.Parse(["secrets", "export", ageKey.PublicKey, "-o", filePath]).InvokeAsync(new InvocationConfiguration
+    {
+      Output = outputWriter,
+      Error = errorWriter
+    }, cts.Token);
     string exportedKey = await File.ReadAllTextAsync(filePath);
-    int rmExitCode = await _ksailCommand.Parse(["secrets", "rm", ageKey.PublicKey]).InvokeAsync(cts.Token);
-    int importExitCode1 = await _ksailCommand.Parse(["secrets", "import", filePath]).InvokeAsync(cts.Token);
-    int rmImportedKeyExitCode1 = await _ksailCommand.Parse(["secrets", "rm", ageKey.PublicKey]).InvokeAsync(cts.Token);
-    int importExitCode2 = await _ksailCommand.Parse(["secrets", "import", ageKey.ToString()]).InvokeAsync(cts.Token);
-    int rmImportedKeyExitCode2 = await _ksailCommand.Parse(["secrets", "rm", ageKey.PublicKey]).InvokeAsync(cts.Token);
+    int rmExitCode = await _ksailCommand.Parse(["secrets", "rm", ageKey.PublicKey]).InvokeAsync(new InvocationConfiguration
+    {
+      Output = outputWriter,
+      Error = errorWriter
+    }, cts.Token);
+    int importExitCode1 = await _ksailCommand.Parse(["secrets", "import", filePath]).InvokeAsync(new InvocationConfiguration
+    {
+      Output = outputWriter,
+      Error = errorWriter
+    }, cts.Token);
+    int rmImportedKeyExitCode1 = await _ksailCommand.Parse(["secrets", "rm", ageKey.PublicKey]).InvokeAsync(new InvocationConfiguration
+    {
+      Output = outputWriter,
+      Error = errorWriter
+    }, cts.Token);
+    int importExitCode2 = await _ksailCommand.Parse(["secrets", "import", ageKey.ToString()]).InvokeAsync(new InvocationConfiguration
+    {
+      Output = outputWriter,
+      Error = errorWriter
+    }, cts.Token);
+    int rmImportedKeyExitCode2 = await _ksailCommand.Parse(["secrets", "rm", ageKey.PublicKey]).InvokeAsync(new InvocationConfiguration
+    {
+      Output = outputWriter,
+      Error = errorWriter
+    }, cts.Token);
 
     // Assert
     Assert.Equal(0, addExitCode);
@@ -223,13 +279,14 @@ public class KSailSecretsCommandTests
     // Arrange
     var outputWriter = new StringWriter();
     var errorWriter = new StringWriter();
-    var parseResult = _ksailCommand.Parse(["secrets", "add"], new CommandLineConfiguration(_ksailCommand)
+    var parseResult = _ksailCommand.Parse(["secrets", "add"]);
+    var invocationConfiguration = new InvocationConfiguration
     {
       Output = outputWriter,
       Error = errorWriter
-    });
+    };
     using var cts = new CancellationTokenSource();
-    int addExitCode = await parseResult.InvokeAsync(cts.Token);
+    int addExitCode = await parseResult.InvokeAsync(invocationConfiguration, cts.Token);
     string key = outputWriter.ToString().Trim();
     Assert.NotNull(key);
     Assert.NotEmpty(key);
@@ -237,7 +294,7 @@ public class KSailSecretsCommandTests
 
     // Act
     parseResult = _ksailCommand.Parse(["secrets", "list", "--all"]);
-    int listExitCode = await parseResult.InvokeAsync(cts.Token);
+    int listExitCode = await parseResult.InvokeAsync(invocationConfiguration, cts.Token);
 
     // Assert
     Assert.Equal(0, addExitCode);
@@ -245,7 +302,7 @@ public class KSailSecretsCommandTests
 
     // Cleanup
     parseResult = _ksailCommand.Parse(["secrets", "rm", ageKey.PublicKey]);
-    int rmExitCode = await parseResult.InvokeAsync(cts.Token);
+    int rmExitCode = await parseResult.InvokeAsync(invocationConfiguration, cts.Token);
     Assert.Equal(0, rmExitCode);
   }
 }
