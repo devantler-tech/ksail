@@ -5,8 +5,8 @@ Usage:
   testhost status [options]
 
 Options:
-  -k, --kubeconfig  Path to kubeconfig file. [default: {UserProfile}/.kube/config]
-  -c, --context     The kubernetes context to use. [default: kind-ksail-default]
-  --verbose         Verbose output for validation or status checks. [default: False]
-  -?, -h, --help    Show help and usage information
+  -k, --kubeconfig <k>  Path to kubeconfig file. [default: {UserProfile}/.kube/config]
+  -c, --context <c>     The kubernetes context to use. [default: kind-ksail-default]
+  --verbose             Verbose output for validation or status checks.
+  -?, -h, --help        Show help and usage information
 

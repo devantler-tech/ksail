@@ -17,6 +17,6 @@ class Startup
     BinaryChecker.CheckBinariesIsInPath();
     var parseResult = _ksailCommand.Parse(args);
     using var cts = new CancellationTokenSource();
-    return await parseResult.InvokeAsync(cts.Token).ConfigureAwait(false);
+    return await parseResult.InvokeAsync(parseResult.InvocationConfiguration, cts.Token).ConfigureAwait(false);
   }
 }

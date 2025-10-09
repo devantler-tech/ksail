@@ -5,7 +5,7 @@ Usage:
   testhost gen native role-binding [options]
 
 Options:
-  -o, --output    A file or directory path. [default: ./role-binding.yaml]
-  --overwrite     Overwrite existing files. [default: False]
-  -?, -h, --help  Show help and usage information
+  -o, --output <output>  A file or directory path. [default: ./role-binding.yaml]
+  --overwrite            Overwrite existing files.
+  -?, -h, --help         Show help and usage information
 

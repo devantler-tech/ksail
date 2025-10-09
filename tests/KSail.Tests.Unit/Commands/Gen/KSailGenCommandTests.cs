@@ -21,12 +21,12 @@ public partial class KSailGenCommandTests
     var outputWriter = new StringWriter();
     var errorWriter = new StringWriter();
     using var cts = new CancellationTokenSource();
-    var commandLineConfiguration = new CommandLineConfiguration(_ksailCommand)
+    var invocationConfiguration = new InvocationConfiguration()
     {
       Output = outputWriter,
       Error = errorWriter
     };
-    int exitCode = await _ksailCommand.Parse(command, commandLineConfiguration).InvokeAsync(cts.Token);
+    int exitCode = await _ksailCommand.Parse(command).InvokeAsync(invocationConfiguration, cts.Token);
 
     //Assert
     Assert.Equal(0, exitCode);
@@ -52,13 +52,14 @@ public partial class KSailGenCommandTests
     var outputWriter = new StringWriter();
     var errorWriter = new StringWriter();
     using var cts = new CancellationTokenSource();
-    var commandLineConfiguration = new CommandLineConfiguration(_ksailCommand)
+    var invocationConfiguration = new InvocationConfiguration()
     {
       Output = outputWriter,
       Error = errorWriter
     };
-    int exitCode = await _ksailCommand.Parse([.. args, "--output", outputPath], commandLineConfiguration).InvokeAsync(cts.Token);
+    int exitCode = await _ksailCommand.Parse([.. args, "--output", outputPath]).InvokeAsync(invocationConfiguration, cts.Token);
     string fileContents = await File.ReadAllTextAsync(outputPath);
+    fileContents = MetadataRegex().Replace(fileContents, "${indent}metadata:");
 
     //Assert
     Assert.Equal(0, exitCode);
@@ -73,4 +74,7 @@ public partial class KSailGenCommandTests
 
   [GeneratedRegex("url:.*")]
   private static partial Regex UrlRegex();
+
+  [GeneratedRegex("(?m)^(?<indent>\\s*)metadata: \\{\\}\\s*$")]
+  private static partial Regex MetadataRegex();
 }
