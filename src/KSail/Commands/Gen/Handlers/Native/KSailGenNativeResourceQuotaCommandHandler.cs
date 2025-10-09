@@ -1,5 +1,6 @@
 using System.CommandLine;
 using DevantlerTech.KubernetesGenerator.Native;
+using DevantlerTech.KubernetesGenerator.Native.Models;
 using k8s.Models;
 
 namespace KSail.Commands.Gen.Handlers.Native;
@@ -10,19 +11,8 @@ class KSailGenNativeResourceQuotaCommandHandler(string outputFile, bool overwrit
 
   public async Task HandleAsync(CancellationToken cancellationToken = default)
   {
-    var model = new V1ResourceQuota()
+    var model = new ResourceQuota("my-resource-quota")
     {
-      ApiVersion = "v1",
-      Kind = "ResourceQuota",
-      Metadata = new V1ObjectMeta()
-      {
-        Name = "my-resource-quota"
-      },
-      Spec = new V1ResourceQuotaSpec()
-      {
-        Hard = new Dictionary<string, ResourceQuantity>(),
-        ScopeSelector = new V1ScopeSelector()
-      }
     };
     await _generator.GenerateAsync(model, outputFile, overwrite, cancellationToken: cancellationToken).ConfigureAwait(false);
   }
