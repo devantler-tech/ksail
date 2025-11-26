@@ -126,7 +126,7 @@ GEM
     terminal-table (1.8.0)
       unicode-display_width (~> 1.1, >= 1.1.1)
     unicode-display_width (1.8.0)
-    webrick (1.9.1)
+    webrick (1.9.2)
 
 PLATFORMS
   aarch64-linux-gnu
