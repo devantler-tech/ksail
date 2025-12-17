@@ -19,6 +19,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// defaultArtifactTag is used when no explicit tag is provided for a workload
+// artifact. Using "latest" makes reconciliations pick up the most recently
+// pushed version, which is convenient for local development but not suitable
+// for reproducible or production deployments where explicit version tags
+// should be used instead.
 const defaultArtifactTag = "latest"
 
 var errLocalRegistryRequired = errors.New("local registry must be enabled to reconcile workloads")
