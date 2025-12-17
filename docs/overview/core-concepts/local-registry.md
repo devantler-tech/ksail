@@ -1,24 +1,29 @@
 # Local Registry
 
-KSail-Go can run local [OCI Distribution](https://distribution.github.io/distribution/) containers to store images and cache upstream content. Mirror registries launch automatically when you pass one or more `--mirror-registry` flags to `ksail cluster init` or add entries to `spec.registries.mirrors` in `ksail.yaml`.
-
-> **Limitations:** Remote registries cannot yet be reused as mirrors, and anonymous pulls from upstream registries remain unsupported. Authentication support is on the roadmap.
+KSail can run a local [OCI Distribution](https://distribution.github.io/distribution/) container to store images. Enable it with `--local-registry Enabled` during `ksail cluster init` or set `spec.localRegistry: Enabled` in `ksail.yaml`.
 
 ## Why Use a Local Registry?
 
-- **Faster dev loops:** Push locally built images with `docker push localhost:<port>/<image>` and reference them in your manifests.
-- **Offline resilience:** Mirror upstream repositories such as `docker.io` and continue to work when the public registry is rate limited or unavailable.
-- **GitOps parity:** Flux and other controllers pull from the local registry exactly like they would in production.
+- **Faster dev loops:** Push locally built images with `docker push localhost:<port>/<image>` and reference them in your manifests
+- **GitOps integration:** Controllers can pull from the local registry like they would in production
+- **Testing:** Validate image pull policies and registry behavior locally
 
 ## How It Works
 
-1. **Initialization:** `ksail cluster init --mirror-registry docker.io=https://registry-1.docker.io` writes registry definitions into `ksail.yaml` and the generated distribution configs.
-2. **Creation:** `ksail cluster create` starts `registry:3` containers for each mirror and connects them to the cluster network.
-3. **Use:** Tag images with the mirror host (for example `docker tag my-api localhost:5001/my-api`) and push. Containerd inside the cluster is pre-configured to pull through the mirror.
-4. **Cleanup:** `ksail cluster delete --delete-volumes` tears down mirror containers and their storage.
+1. **Initialization:** `ksail cluster init --local-registry Enabled --local-registry-port 5111` writes configuration to `ksail.yaml`
+2. **Creation:** `ksail cluster create` starts a `registry:2` container and connects it to the cluster network
+3. **Use:** Tag images with the registry host (e.g., `docker tag my-api localhost:5111/my-api`) and push
+4. **Cleanup:** `ksail cluster delete` tears down the registry container
+
+## Configuration
+
+The local registry listens on port `5111` by default. Change it with `--local-registry-port`:
+
+```bash
+ksail cluster init --local-registry Enabled --local-registry-port 5000
+```
 
 ## Troubleshooting
 
-- **Image pulls still hit upstream:** Confirm pods reference the mirror host (e.g., `localhost:5001/namespace/image`).
-- **Registry container fails to start:** Check if the host port is already in use; update the port in `ksail.yaml` and rerun `ksail cluster create`.
-- **Push requires authentication:** KSail-Go currently exposes mirrors without authentication; ensure your Docker client allows insecure registries when using HTTP.
+- **Registry container fails to start:** Check if the host port is already in use
+- **Push requires authentication:** The local registry currently runs without authentication

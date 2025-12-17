@@ -1,9 +1,40 @@
 # Metrics Server
 
-[Metrics Server](https://github.com/kubernetes-sigs/metrics-server) aggregates CPU and memory usage across the cluster. Enable or disable it with `ksail cluster init --metrics-server` or by setting `spec.cluster.metricsServer`.
+[Metrics Server](https://github.com/kubernetes-sigs/metrics-server) aggregates CPU and memory usage across the cluster. Enable or disable it with `ksail cluster init --metrics-server` or by setting `spec.metricsServer` in `ksail.yaml`.
 
-> **Distribution defaults:** Kind disables Metrics Server by default; K3d enables it.
+Metrics Server is **enabled by default**.
 
-When Metrics Server is enabled, KSail-Go installs the upstream Helm chart after cluster creation. For K3d, disabling metrics adds the `--disable=metrics-server` flag to K3s so you preserve parity with production clusters that do not expose metrics by default.
+## Configuration
 
-Use metrics when testing Horizontal Pod Autoscaler flows, dashboard tooling, or alerts. Skip it for minimal clusters or when profiling raw resource consumption without the overhead of additional controllers.
+### During init
+
+```bash
+ksail cluster init --metrics-server Enabled  # default
+ksail cluster init --metrics-server Disabled
+```
+
+### In ksail.yaml
+
+```yaml
+apiVersion: ksail.dev/v1alpha1
+kind: Cluster
+spec:
+  metricsServer: Enabled  # or Disabled
+```
+
+### Override during create
+
+```bash
+ksail cluster create --metrics-server Disabled
+```
+
+## When to Use Metrics Server
+
+Enable metrics server when:
+- Testing Horizontal Pod Autoscaler (HPA)
+- Using dashboard tools that display resource usage
+- Working with alerts based on CPU/memory metrics
+
+Disable it for:
+- Minimal resource consumption during development
+- Simple testing that doesn't require metrics

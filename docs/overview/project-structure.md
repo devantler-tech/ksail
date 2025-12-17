@@ -1,22 +1,52 @@
 # Project Structure
 
-Running `ksail cluster init` scaffolds a repository that is immediately compatible with the KSail-Go command set. The exact layout varies depending on flags such as `--distribution`, `--gateway-controller`, and declarative overrides in [`ksail.yaml`](../configuration/declarative-config.md), but every project starts with the same core folders:
+Running `ksail cluster init` scaffolds a project with the necessary configuration files. The layout varies based on flags like `--distribution` and options in `ksail.yaml`, but every project starts with:
 
 ```text
-├── ksail.yaml              # Declarative cluster definition consumed by ksail
-├── kind.yaml / k3d.yaml     # Distribution-specific overrides generated during init
-└── k8s/                     # GitOps-ready manifests (bases, overlays, and Flux wiring)
-    └── kustomization.yaml   # Root Kustomize entrypoint referenced by workload commands
+├── ksail.yaml              # Declarative cluster configuration
+├── kind.yaml / k3d.yaml    # Distribution-specific configuration
+└── k8s/                    # Workload manifests directory
+    └── kustomization.yaml  # Root Kustomize entrypoint
 ```
-
-When the `--secret-manager SOPS` option is enabled (or `spec.project.secretManager` is set in `ksail.yaml`), KSail-Go also adds a `.sops.yaml` file and a `keys/` directory stub so the `ksail cipher` commands have an opinionated home for Age recipients. See the [configuration docs](../configuration/#when-to-edit-what) for guidance on managing these files in version control.
 
 ## Organizing with Kustomize
 
-KSail-Go embraces a [Kustomize](https://kustomize.io/) first architecture. The `k8s/kustomization.yaml` file generated at init time becomes the anchor for both local iterations and GitOps automation:
+KSail uses [Kustomize](https://kustomize.io/) for manifest management. The `k8s/kustomization.yaml` file serves as the entry point for workload commands:
 
-- **Bases and overlays** – Declarative configuration from `ksail.yaml` is rendered into Kustomize bases so you can patch provider-specific differences without copy/paste.
-- **Flux integration** – Optional Flux manifests are generated under `k8s/flux/` and referenced from the root kustomization, allowing you to bootstrap GitOps reconciliations with `ksail workload reconcile`.
-- **Configurable entrypoint** – Use `ksail cluster init --kustomization-path <path>` or set `spec.project.kustomizationPath` to change which file becomes the default overlay.
+- **Structure** – Organize manifests using Kustomize bases and overlays
+- **Validation** – Test changes locally with `ksail workload apply`
+- **GitOps ready** – When GitOps support is added, the same manifests will be used
 
-Because the CLI loads the same manifests that Flux consumes, every change you make locally can be validated with `ksail workload apply` or `ksail workload reconcile` before it reaches CI/CD. The [local development playbook](../use-cases/local-development.md) walks through that feedback loop end-to-end.
+Use `--source-directory` during init to change where workloads are stored (default: `k8s`).
+
+## Configuration Files
+
+### `ksail.yaml`
+
+The main configuration file defining your cluster setup. See [Declarative Config](../configuration/declarative-config.md) for details.
+
+### Distribution configs
+
+- **`kind.yaml`** – [Kind configuration](https://kind.sigs.k8s.io/docs/user/configuration/) for node layout, networking, and port mappings
+- **`k3d.yaml`** – [K3d configuration](https://k3d.io/stable/usage/configfile/) for K3s-specific options
+
+Choose which file to use with the `spec.distributionConfig` field in `ksail.yaml`.
+
+## Adding Workloads
+
+Place Kubernetes manifests in the `k8s/` directory (or your configured `sourceDirectory`). Use standard Kustomize structure:
+
+```text
+k8s/
+├── kustomization.yaml
+├── namespace.yaml
+└── apps/
+    ├── kustomization.yaml
+    └── deployment.yaml
+```
+
+Apply workloads with:
+
+```bash
+ksail workload apply -k k8s/
+```

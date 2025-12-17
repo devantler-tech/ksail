@@ -1,17 +1,23 @@
 # Ingress Controllers
 
-Ingress controllers expose HTTP(S) services from inside the cluster. Configure your choice with `ksail cluster init --ingress-controller` or set `spec.networking.ingressController`.
+Ingress controllers expose HTTP(S) services from inside the cluster.
 
-## Default
+> **Note:** Ingress controller configuration is not yet implemented in KSail. This document describes planned functionality.
 
-The `Default` option keeps the controller bundled with the distribution. Kind does not install any ingress by default, while K3d deploys [Traefik](https://doc.traefik.io/traefik/) automatically.
+## Planned Options
 
-> **Distribution defaults:** Kind ships without an ingress controller; K3d installs Traefik.
+### Default
 
-## Traefik
+The `Default` option will use the controller bundled with the distribution. Kind does not install an ingress controller by default, while K3d includes Traefik.
 
-Selecting `Traefik` ensures the controller is installed even if the distribution leaves it out. KSail-Go applies the Traefik Helm chart and configures a LoadBalancer service so you can access workloads via host ports.
+### Traefik
 
-## None
+Installing Traefik explicitly will ensure it's available regardless of distribution defaults.
 
-Use `None` to skip ingress installation entirely. This is helpful when you want to test headless services, deploy an alternative controller, or rely on lightweight port-forwarding during development.
+### None
+
+Skips ingress installation. Useful for testing headless services or deploying alternative controllers manually.
+
+## Current Status
+
+Configure ingress through your distribution's configuration file (`kind.yaml` or `k3d.yaml`) for now.

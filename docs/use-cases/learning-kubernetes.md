@@ -1,23 +1,25 @@
 # Learning Kubernetes
 
-KSail-Go removes the heavy lifting required to experiment with Kubernetes. By wrapping Kind and K3d behind a consistent interface you can focus on objects, workloads, and reconciliation instead of cluster plumbing. Review the [configuration reference](../configuration/) if you want a deeper explanation of the fields mentioned in this guide.
+KSail simplifies Kubernetes experimentation by wrapping Kind and K3d with a consistent interface. Focus on learning Kubernetes concepts without complex cluster setup.
 
 ## Quick start session
 
 1. **Scaffold a playground**
 
    ```bash
-   ksail cluster init --distribution Kind --source-directory lab/k8s
+   ksail cluster init --distribution Kind --source-directory k8s
    ```
 
-   Edit the generated `ksail.yaml` or rerun the command with different flags to compare distributions, CNIs, or metrics-server behavior.
+   Edit `ksail.yaml` or rerun with different flags to try distributions, CNIs, or metrics-server options.
+
 2. **Create a cluster**
 
    ```bash
    ksail cluster create
    ```
 
-   KSail-Go installs your chosen CNI and metrics stack automatically, so you can move straight to workloads.
+   KSail installs your chosen CNI and metrics-server automatically.
+
 3. **Try common workloads**
 
    ```bash
@@ -26,22 +28,25 @@ KSail-Go removes the heavy lifting required to experiment with Kubernetes. By wr
    ksail workload wait --for=condition=Available deployment/echo --timeout=120s
    ```
 
-   Pair the generators with manual YAML edits to see how Kustomize overlays affect resources.
+   Experiment with generators and manual YAML edits to learn Kustomize.
+
 4. **Inspect the cluster**
-   Launch k9s with `ksail cluster connect -- --namespace default`, or explore via `kubectl get all -A`.
+
+   Use `ksail cluster connect` to launch k9s, or explore with `kubectl get all -A`.
+
 5. **Reset quickly**
 
    ```bash
    ksail cluster delete
    ```
 
-   Recreate the environment as often as needed without touching production infrastructure.
+   Recreate as often as needed.
 
-## Tips for deeper dives
+## Learning tips
 
-- Switch between `--distribution Kind` and `--distribution K3d` to understand how different runtimes expose networking.
-- Use `--cni Cilium` or `--cni Calico` during `ksail cluster init` to watch how CNIs alter namespace defaults and available CRDs.
-- Add Flux by enabling the Flux option in `ksail.yaml` and experiment with GitOps reconciliation via `ksail workload reconcile`.
-- Track configuration changes with Git—rollback to any commit to see how the cluster behaves with previous settings.
+- Switch between `--distribution Kind` and `--distribution K3d` to compare runtimes
+- Try `--cni Cilium` during init to explore advanced networking
+- Use `--cert-manager Enabled` to learn about TLS certificate management
+- Track configuration in Git to understand how changes affect cluster behavior
 
-When questions pop up, reference `kubectl explain`, the [Kubernetes documentation](https://kubernetes.io/docs/), or open a discussion in the KSail-Go repository.
+Reference `kubectl explain` and the [Kubernetes documentation](https://kubernetes.io/docs/) for deeper understanding.

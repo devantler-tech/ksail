@@ -1,14 +1,14 @@
 # Cert-Manager
 
-[cert-manager](https://cert-manager.io/) is the de-facto Kubernetes controller for issuing and renewing TLS certificates.
+[cert-manager](https://cert-manager.io/) is a Kubernetes controller for issuing and renewing TLS certificates.
 
-KSail-Go can optionally install cert-manager during `ksail cluster create`.
+KSail can optionally install cert-manager during cluster creation.
 
 Cert-manager is **disabled by default**.
 
-## Recommended: enable during init
+## Enable during init
 
-Most workflows should enable cert-manager during `ksail cluster init`, so the setting is persisted into `ksail.yaml` and applies to subsequent `ksail cluster create` runs.
+Enable cert-manager during `ksail cluster init` to persist the setting in `ksail.yaml`:
 
 ```bash
 ksail cluster init --cert-manager Enabled
@@ -32,7 +32,7 @@ Then create the cluster:
 ksail cluster create
 ```
 
-## Enable via create flag (one-off override)
+## Enable via create flag
 
 You can also enable cert-manager for a single `cluster create` invocation:
 
@@ -42,7 +42,7 @@ ksail cluster create --cert-manager Enabled
 
 ## Installation details
 
-When enabled, KSail-Go installs the upstream Helm chart `jetstack/cert-manager` into the `cert-manager` namespace and sets `installCRDs: true`.
+When enabled, KSail installs the Helm chart `jetstack/cert-manager` into the `cert-manager` namespace with `installCRDs: true`.
 
 Verify it is running:
 

@@ -1,19 +1,19 @@
 # Container Network Interfaces (CNI)
 
-The Container Network Interface determines how pods receive IP addresses and communicate inside your cluster. KSail-Go exposes CNI selection both declaratively (via `spec.cluster.cni`) and imperatively with `ksail cluster init --cni`.
+The Container Network Interface determines how pods receive IP addresses and communicate inside your cluster. KSail exposes CNI selection declaratively via `spec.cni` in `ksail.yaml` or with `ksail cluster init --cni`.
 
 ## Available Options
 
 ### `Default`
 
-Uses the distribution's built-in networking (`kindnetd` for Kind, `flannel` for K3d). Choose this for quick local iterations and CI environments where defaults are already pre-tested.
+Uses the distribution's built-in networking (`kindnetd` for Kind, `flannel` for K3d). Choose this for quick local iterations and CI environments.
 
 ### `Cilium`
 
-Installs [Cilium](https://cilium.io/) through the GitOps manifests generated at init time. Pick Cilium when you need advanced observability, eBPF-based policies, or WireGuard encryption.
+Installs [Cilium](https://cilium.io/) through Helm. Pick Cilium when you need advanced observability, eBPF-based policies, or WireGuard encryption.
 
 ### `None`
 
-Skips CNI installation entirely. Use this option when you want to install a different CNI manually (for example Calico or custom lab scenarios).
+Skips CNI installation entirely. Use this when you want to install a different CNI manually.
 
-> **Tip:** The init command writes your selection to `ksail.yaml`. Future runs of `ksail cluster create` read from that file, so the entire team shares the same networking baseline.
+> **Tip:** The init command writes your selection to `ksail.yaml`. Future runs of `ksail cluster create` use that configuration.
