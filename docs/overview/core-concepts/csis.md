@@ -1,17 +1,17 @@
 # Container Storage Interfaces (CSI)
 
-Storage options determine how persistent volumes are provisioned for workloads. Configure CSI during initialization with `ksail cluster init --csi` or declaratively through `spec.cluster.csi`.
+Storage options determine how persistent volumes are provisioned for workloads. Configure CSI with `ksail cluster init --csi` or declaratively through `spec.csi` in `ksail.yaml`.
+
+> **Note:** CSI configuration is defined in the spec but not yet fully implemented in cluster creation.
 
 ## Default
 
-When you choose `Default`, KSail-Go keeps the distribution's builtin storage class. Today both Kind and K3d rely on [local-path-provisioner](https://github.com/rancher/local-path-provisioner), which works well for day-to-day development but offers limited features.
+When you choose `Default`, KSail uses the distribution's built-in storage class. Both Kind and K3d use [local-path-provisioner](https://github.com/rancher/local-path-provisioner), which works well for development but offers limited features.
 
-> **Distribution defaults:** Both Kind and K3d provision local-path-provisioner when `Default` is selected.
+## LocalPathStorage
 
-## Local Path Provisioner
-
-Selecting `LocalPathProvisioner` installs the same controller explicitly. This is helpful when you opt into the `None` distribution default elsewhere but still want quick local storage. Expect host-path-backed volumes, so avoid running stateful workloads that require high availability.
+Explicitly installs local-path-provisioner. This option provides the same functionality as `Default` but makes the choice explicit.
 
 ## None
 
-Choose `None` when you plan to supply your own storage controller or connect to external persistent volumes. KSail-Go skips CSI installation entirely, leaving all PersistentVolumeClaims pending until your custom solution handles them.
+Choose `None` when you plan to supply your own storage controller. KSail skips CSI installation entirely, leaving PersistentVolumeClaims pending until your custom solution handles them.

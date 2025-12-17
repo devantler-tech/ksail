@@ -1,15 +1,15 @@
 # CLI Options
 
-The KSail-Go CLI exposes the same configuration surface everywhere: strongly typed flags that typically feed into `ksail.yaml`. Run `ksail <command> --help` to see the latest options, or use the quick references below when you need to remember which flag overrides which field.
+KSail CLI provides strongly typed flags that map to `ksail.yaml` configuration. Run `ksail <command> --help` to see the latest options, or use the quick references below.
 
 ## Quick reference
 
 ```bash
 ksail --help                     # Top-level commands
 ksail cluster init --help        # Project scaffolding flags
-ksail cluster create --help      # Runtime overrides for an existing config
+ksail cluster create --help      # Cluster creation options
 ksail cluster delete --help      # Clean-up options
-ksail cluster connect -- --help  # Pass-through flags to k9s (note the `--`)
+ksail cluster connect --help     # k9s connection options
 ```
 
 ## Global flags
@@ -30,66 +30,75 @@ When enabled, each successful activity prints a timing block immediately after t
 
 ## Shared cluster flags
 
-The cluster subcommands (`init`, `create`, `start`, `stop`, `delete`, `list`, `connect`) all bind to the same underlying configuration manager. Flags map directly to fields inside `ksail.yaml`, environment variables prefixed with `KSAIL_`, and sensible defaults.
+The cluster subcommands bind to the same configuration. Flags map to fields in `ksail.yaml` and environment variables prefixed with `KSAIL_`.
 
-| Flag                    | Short | Config key                   | Env variable                       | Default                   | Available on                                                                                                           |
-| ----------------------- | ----- | ---------------------------- | ---------------------------------- | ------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `--distribution`        | `-d`  | `spec.distribution`          | `KSAIL_SPEC_DISTRIBUTION`          | `Kind`                    | `cluster init`, `cluster create`, `cluster start`, `cluster stop`, `cluster delete`, `cluster list`, `cluster connect` |
-| `--distribution-config` | –     | `spec.distributionConfig`    | `KSAIL_SPEC_DISTRIBUTIONCONFIG`    | `kind.yaml`               | Same as above                                                                                                          |
-| `--context`             | `-c`  | `spec.connection.context`    | `KSAIL_SPEC_CONNECTION_CONTEXT`    | Derived from distribution | Same as above                                                                                                          |
-| `--kubeconfig`          | `-k`  | `spec.connection.kubeconfig` | `KSAIL_SPEC_CONNECTION_KUBECONFIG` | `~/.kube/config`          | Same as above                                                                                                          |
-| `--source-directory`    | `-s`  | `spec.sourceDirectory`       | `KSAIL_SPEC_SOURCEDIRECTORY`       | `k8s`                     | `cluster init`                                                                                                         |
-| `--cni`                 | –     | `spec.cni`                   | `KSAIL_SPEC_CNI`                   | `Default`                 | `cluster init`                                                                                                         |
-| `--metrics-server`      | –     | `spec.metricsServer`         | `KSAIL_SPEC_METRICSSERVER`         | `Enabled`                 | `cluster init`, `cluster create`                                                                                       |
-| `--gitops-engine`       | `-g`  | `spec.gitOpsEngine`          | `KSAIL_SPEC_GITOPSENGINE`          | `None`                    | `cluster init`, `cluster create`, `cluster start`, `cluster stop`, `cluster delete`, `cluster list`, `cluster connect` |
+| Flag                    | Short | Config key                   | Default                   | Available on                 |
+| ----------------------- | ----- | ---------------------------- | ------------------------- | ---------------------------- |
+| `--distribution`        | `-d`  | `spec.distribution`          | `Kind`                    | `cluster init`               |
+| `--distribution-config` | –     | `spec.distributionConfig`    | `kind.yaml`               | `cluster init`               |
+| `--context`             | `-c`  | `spec.connection.context`    | Derived from distribution | `cluster init`               |
+| `--kubeconfig`          | `-k`  | `spec.connection.kubeconfig` | `~/.kube/config`          | `cluster init`               |
+| `--source-directory`    | `-s`  | `spec.sourceDirectory`       | `k8s`                     | `cluster init`               |
+| `--cni`                 | –     | `spec.cni`                   | `Default`                 | `cluster init`               |
+| `--csi`                 | –     | `spec.csi`                   | `Default`                 | `cluster init` (not yet implemented) |
+| `--metrics-server`      | –     | `spec.metricsServer`         | `Enabled`                 | `cluster init`, `cluster create` |
+| `--cert-manager`        | –     | `spec.certManager`           | `Disabled`                | `cluster init`, `cluster create` |
+| `--local-registry`      | –     | `spec.localRegistry`         | `Disabled`                | `cluster init`               |
+| `--local-registry-port` | –     | (port configuration)         | `5111`                    | `cluster init`               |
+| `--gitops-engine`       | `-g`  | `spec.gitOpsEngine`          | `None`                    | `cluster init`               |
+| `--flux-interval`       | –     | (Flux reconciliation)        | `1m0s`                    | `cluster init`               |
+| `--mirror-registry`     | –     | (multiple allowed)           | None                      | `cluster init`               |
 
-> **Environment variables:** Viper replaces dots (`.`) and hyphens (`-`) with underscores, so any field in `ksail.yaml` can be overridden with `KSAIL_<UPPERCASE_PATH>`. For example, `KSAIL_SPEC_CONNECTION_TIMEOUT=10m` sets the optional timeout even though there is no dedicated flag.
+> **Note:** Environment variables follow the pattern `KSAIL_SPEC_<FIELD>` where field names are uppercase with underscores.
 
 ## Command reference
 
 ### `ksail cluster init`
 
-Creates a new project in the current directory (or in `--output`). The command writes `ksail.yaml`, `kind.yaml`, and optional `k3d.yaml`, then seeds the Flux-ready `k8s/` tree.
+Creates a new project in the current directory (or in `--output`). The command writes `ksail.yaml`, `kind.yaml` or `k3d.yaml`, and the `k8s/` tree for workloads.
 
-- `--source-directory` controls where generated workloads live (`k8s` by default).
-- `--cni` accepts `Default`, `Cilium`, or `Calico`. The value is stored in `ksail.yaml` for future `create` runs.
-- `--metrics-server` toggles installing the Kubernetes metrics-server controller (`Enabled` / `Disabled`).
-- `--gitops-engine` selects the GitOps engine (`None`, `Flux`, `ArgoCD`). When set to a GitOps engine, `cluster create` installs and configures the relevant controller.
-- `--mirror-registry host=upstream` can be repeated to preconfigure local registry mirrors (for example `docker.io=https://registry-1.docker.io`).
-- `--force` overwrites existing files, and `--output` chooses the target directory.
+- `--distribution` chooses between `Kind` and `K3d`
+- `--source-directory` controls where workloads live (`k8s` by default)
+- `--cni` accepts `Default`, `Cilium`, or `None`
+- `--metrics-server` toggles metrics-server installation (`Enabled` / `Disabled`)
+- `--cert-manager` toggles cert-manager installation (`Enabled` / `Disabled`)
+- `--local-registry` provisions a local OCI registry (`Enabled` / `Disabled`)
+- `--local-registry-port` sets the host port for the local registry (default `5111`)
+- `--gitops-engine` currently only supports `None` (Flux and ArgoCD planned)
+- `--flux-interval` sets Flux reconciliation interval (e.g., `1m`, `30s`)
+- `--mirror-registry host=upstream` can be repeated to configure registry mirrors
+- `--force` overwrites existing files
+- `--output` chooses the target directory
 
 ### `ksail cluster create`
 
-Reads the committed configuration and provisions a cluster. Every flag listed in the shared table is available, plus:
+Reads `ksail.yaml` and provisions a cluster. The command loads the distribution config and installs the CNI and metrics-server after the core cluster boots.
 
-- `--mirror-registry host=upstream` creates (or reuses) Docker registries before provisioning, then attaches them to the cluster network.
-- `--metrics-server` lets you override the value stored in `ksail.yaml` when you need a one-off run.
-
-The command automatically loads distribution configs (`kind.yaml` or `k3d.yaml`) and installs the requested CNI and metrics-server after the core cluster boots.
+- `--metrics-server` overrides the value in `ksail.yaml`
+- `--cert-manager` overrides the value in `ksail.yaml`
 
 ### `ksail cluster start` and `ksail cluster stop`
 
-Resume or pause an existing cluster without rebuilding it. Both commands honour `--distribution`, `--distribution-config`, `--context`, and `--kubeconfig` so you can point at an alternate project directory or kubeconfig during operations.
+Resume or pause an existing cluster. Both commands use the configuration from `ksail.yaml`.
 
 ### `ksail cluster delete`
 
-Destroys the cluster defined in `ksail.yaml` and removes any mirror registries that were created. Use `--delete-volumes` when you want Docker volumes cleaned up as well.
+Destroys the cluster defined in `ksail.yaml` and cleans up resources. Use `--delete-volumes` to remove Docker volumes as well.
 
 ### `ksail cluster list`
 
-Shows the clusters currently managed by the selected distribution. Add `-a`/`--all` to query every supported distribution, even if it differs from the one in `ksail.yaml`.
+Shows clusters managed by the current distribution. Add `-a`/`--all` to query all supported distributions.
 
 ### `ksail cluster info`
 
-Proxies directly to `kubectl cluster-info`. Any arguments you pass are forwarded to `kubectl`, so standard flags such as `--context` or `--namespace` work as expected.
+Displays cluster information using `kubectl cluster-info`. Arguments are forwarded to `kubectl`.
 
 ### `ksail cluster connect`
 
-Launches [k9s](https://k9scli.io/) against the distribution and context defined in `ksail.yaml`. Add `--` before k9s flags to avoid Cobra parsing them (`ksail cluster connect -- --namespace flux-system`).
+Launches [k9s](https://k9scli.io/) against the cluster defined in `ksail.yaml`.
 
 ## Workload and cipher commands
 
-Other command groups (`ksail workload`, `ksail cipher`, and the generators under `ksail workload gen`) inherit
-Kubernetes-native semantics. They forward all flags to the underlying tooling (`kubectl`, Helm, or SOPS), so rely on
-the upstream help output for exhaustive flag listings. The configuration rules above still apply: any cluster-related
-override you set for lifecycle commands carries across to workload reconciliation and secret management.
+The `ksail workload` commands wrap `kubectl` and Helm, forwarding flags to the underlying tools. Use `ksail workload <command> --help` for command-specific options.
+
+The `ksail cipher` commands provide SOPS integration for encrypting and decrypting files. See `ksail cipher --help` for available operations.
