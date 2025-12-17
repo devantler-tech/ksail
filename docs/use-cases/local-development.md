@@ -10,7 +10,7 @@ in CI so developers share a consistent workflow. If you need a refresher on conf
 1. **Scaffold your project**
 
    ```bash
-   ksail cluster init --distribution Kind --source-directory services/api/k8s --cni Cilium --metrics-server true
+   ksail cluster init --distribution Kind --source-directory services/api/k8s --cni Cilium --metrics-server Enabled
    ```
 
    Commit the generated `ksail.yaml`, `kind.yaml`, and baseline manifests so teammates can clone and run the exact configuration.
@@ -56,7 +56,7 @@ in CI so developers share a consistent workflow. If you need a refresher on conf
 
 ## Tips for faster feedback
 
-- Enable `--metrics-server true` and `--gateway-controller default` when scaffolding to align local observability with higher environments.
+- Enable `--metrics-server Enabled` and `--gateway-controller default` when scaffolding to align local observability with higher environments.
 - Run `ksail workload gen` to create sample Deployments, Services, or Jobs when prototyping manifests for new components.
 - Switch the `distribution` field between `Kind` and `K3d` to mirror the container runtime used in staging.
 - Use `ksail cluster connect -- --namespace your-team` to open k9s against the active cluster without remembering kubeconfig paths.
