@@ -25,12 +25,12 @@ import (
 )
 
 const (
-	defaultInterval      = 1 * time.Minute
-	defaultTimeout       = 5 * time.Minute
-	kindNameSeparator    = 2
-	namespaceSeparator   = 2
-	dependencyParts      = 2
-	singleDependencyPart = 1
+	defaultInterval         = 1 * time.Minute
+	defaultTimeout          = 5 * time.Minute
+	expectedKindNameParts   = 2
+	expectedNamespaceParts  = 2
+	expectedDependencyParts = 2
+	singleDependencyPart    = 1
 )
 
 const helmReleaseExamples = `  # Generate a HelmRelease with a chart from a HelmRepository source
@@ -109,7 +109,7 @@ func parseResourceReference(
 	ref, defaultNamespace, errorContext string,
 ) (*resourceReference, error) {
 	parts := strings.Split(ref, "/")
-	if len(parts) != kindNameSeparator {
+	if len(parts) != expectedKindNameParts {
 		return nil, fmt.Errorf(
 			"%w: %s, expected Kind/name or Kind/name.namespace",
 			errInvalidFormat,
@@ -125,7 +125,7 @@ func parseResourceReference(
 
 	// Check if namespace is included in the name
 	if strings.Contains(resRef.Name, ".") {
-		nameParts := strings.SplitN(resRef.Name, ".", namespaceSeparator)
+		nameParts := strings.SplitN(resRef.Name, ".", expectedNamespaceParts)
 		resRef.Name = nameParts[0]
 		resRef.Namespace = nameParts[1]
 	}
@@ -180,7 +180,7 @@ func parseDependency(dep string) (*helmv2.DependencyReference, error) {
 		}, nil
 	}
 
-	if len(parts) == dependencyParts {
+	if len(parts) == expectedDependencyParts {
 		// Different namespace
 		return &helmv2.DependencyReference{
 			Namespace: parts[0],
