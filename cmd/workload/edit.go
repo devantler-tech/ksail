@@ -5,15 +5,12 @@ import (
 
 	"github.com/devantler-tech/ksail/pkg/client/kubectl"
 	cmdhelpers "github.com/devantler-tech/ksail/pkg/cmd"
-	runtime "github.com/devantler-tech/ksail/pkg/di"
 	"github.com/spf13/cobra"
 	"k8s.io/cli-runtime/pkg/genericiooptions"
 )
 
 // NewEditCmd creates the workload edit command.
-// The runtime parameter is kept for consistency with other workload command constructors,
-// though it's currently unused as this command wraps kubectl directly.
-func NewEditCmd(_ *runtime.Runtime) *cobra.Command {
+func NewEditCmd() *cobra.Command {
 	// Try to load config silently to get kubeconfig path
 	kubeconfigPath := cmdhelpers.GetKubeconfigPathSilently()
 

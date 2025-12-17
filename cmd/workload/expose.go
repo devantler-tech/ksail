@@ -5,15 +5,12 @@ import (
 
 	"github.com/devantler-tech/ksail/pkg/client/kubectl"
 	cmdhelpers "github.com/devantler-tech/ksail/pkg/cmd"
-	runtime "github.com/devantler-tech/ksail/pkg/di"
 	"github.com/spf13/cobra"
 	"k8s.io/cli-runtime/pkg/genericiooptions"
 )
 
 // NewExposeCmd creates the workload expose command.
-// The runtime parameter is kept for consistency with other workload command constructors,
-// though it's currently unused as this command wraps kubectl directly.
-func NewExposeCmd(_ *runtime.Runtime) *cobra.Command {
+func NewExposeCmd() *cobra.Command {
 	// Try to load config silently to get kubeconfig path
 	kubeconfigPath := cmdhelpers.GetKubeconfigPathSilently()
 

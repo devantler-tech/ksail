@@ -21,21 +21,21 @@ func NewWorkloadCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
 	}
 
 	cmd.AddCommand(NewReconcileCmd(runtimeContainer))
-	cmd.AddCommand(NewApplyCmd(runtimeContainer))
+	cmd.AddCommand(NewApplyCmd())
 	cmd.AddCommand(NewCreateCmd(runtimeContainer))
-	cmd.AddCommand(NewDeleteCmd(runtimeContainer))
-	cmd.AddCommand(NewDescribeCmd(runtimeContainer))
-	cmd.AddCommand(NewEditCmd(runtimeContainer))
-	cmd.AddCommand(NewExecCmd(runtimeContainer))
-	cmd.AddCommand(NewExplainCmd(runtimeContainer))
-	cmd.AddCommand(NewExposeCmd(runtimeContainer))
-	cmd.AddCommand(NewGetCmd(runtimeContainer))
+	cmd.AddCommand(NewDeleteCmd())
+	cmd.AddCommand(NewDescribeCmd())
+	cmd.AddCommand(NewEditCmd())
+	cmd.AddCommand(NewExecCmd())
+	cmd.AddCommand(NewExplainCmd())
+	cmd.AddCommand(NewExposeCmd())
+	cmd.AddCommand(NewGetCmd())
 	cmd.AddCommand(gen.NewGenCmd(runtimeContainer))
 	cmd.AddCommand(NewInstallCmd(runtimeContainer))
-	cmd.AddCommand(NewLogsCmd(runtimeContainer))
-	cmd.AddCommand(NewRolloutCmd(runtimeContainer))
-	cmd.AddCommand(NewScaleCmd(runtimeContainer))
-	cmd.AddCommand(NewWaitCmd(runtimeContainer))
+	cmd.AddCommand(NewLogsCmd())
+	cmd.AddCommand(NewRolloutCmd())
+	cmd.AddCommand(NewScaleCmd())
+	cmd.AddCommand(NewWaitCmd())
 
 	return cmd
 }

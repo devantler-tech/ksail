@@ -20,11 +20,12 @@ import (
 )
 
 // defaultArtifactTag is used when no explicit tag is provided for a workload
-// artifact. Using "latest" makes reconciliations pick up the most recently
-// pushed version, which is convenient for local development but not suitable
-// for reproducible or production deployments where explicit version tags
-// should be used instead.
-const defaultArtifactTag = "latest"
+// artifact. The "dev" tag is intended only for local development and will
+// typically point to the most recently built image, which is convenient but
+// not suitable for reproducible or production deployments where explicit
+// immutable version tags (for example, semantic versions or digests) should
+// be used instead.
+const defaultArtifactTag = "dev"
 
 var errLocalRegistryRequired = errors.New("local registry must be enabled to reconcile workloads")
 
