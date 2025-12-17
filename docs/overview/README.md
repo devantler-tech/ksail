@@ -1,27 +1,27 @@
 # Overview
 
-KSail-Go is the next generation of the KSail developer experience—rewritten in Go and designed to give operators and developers a single CLI for cluster and workload lifecycle management. The tool wraps trusted Kubernetes utilities behind consistent commands so local development, CI validation, and GitOps workflows share the same interface.
+KSail is a CLI tool for managing local Kubernetes clusters and workloads. Rewritten in Go, it provides a unified interface for cluster lifecycle management and wraps common Kubernetes tools behind consistent commands.
 
 ![KSail Architecture](../images/architecture.drawio.png)
 
-## Who Uses KSail-Go?
+## Who Uses KSail?
 
-KSail-Go is built for platform engineers, site reliability engineers, and developers who want a fast feedback loop when working with Kubernetes. Because the CLI hides provider differences behind a shared contract, it is also approachable for engineers learning Kubernetes for the first time.
+KSail is built for platform engineers, developers, and anyone working with Kubernetes who wants a fast feedback loop. The CLI provides a consistent interface across different distributions, making it approachable for engineers learning Kubernetes.
 
-## What You Can Do with KSail-Go
+## What You Can Do with KSail
 
-- **Scaffold projects** – `ksail cluster init` creates a ready-to-run repo with declarative configuration, Kustomize scaffolding, and optional GitOps wiring.
-- **Create and steward clusters** – Use the `ksail cluster` subcommands (`create`, `start`, `stop`, `delete`, `info`, `list`, `connect`) to manage Kind or K3d environments from one binary.
-- **Reconcile workloads** – `ksail workload reconcile` integrates with Flux-aligned GitOps layouts so you can sync applications without leaving the terminal.
-- **Generate manifests on demand** – The `ksail workload gen` namespace mirrors `kubectl create --dry-run` for common resources and Helm releases.
-- **Manage encrypted assets** – `ksail cipher` wraps SOPS-based encryption, decryption, and editing flows for secrets stored in Git.
-- **Validate as you iterate** – Workload commands provide guardrails for cluster assets, ensuring your configuration is valid before deployment.
+- **Scaffold projects** – `ksail cluster init` creates a project with configuration files and Kustomize structure
+- **Manage clusters** – Use `ksail cluster` subcommands (`create`, `start`, `stop`, `delete`, `info`, `list`, `connect`) to manage Kind or K3d clusters
+- **Work with manifests** – `ksail workload` commands wrap `kubectl` and Helm for applying and managing workloads
+- **Generate resources** – `ksail workload gen` helps create Kubernetes resource manifests
+- **Encrypt secrets** – `ksail cipher` wraps SOPS for encrypting and decrypting files
 
 ## Navigating the Documentation
 
-- [Project structure](project-structure.md) explains how the repository scaffolding is organized and how Kustomize overlays fit into the workflow.
-- [Support matrix](support-matrix.md) lists the combinations we currently validate for platforms, container engines, and controllers.
-- [Configuration guides](../configuration/) describe the CLI flags, declarative YAML, and precedence rules that shape each cluster.
-- [Use-case playbooks](../use-cases/) capture guided workflows for local development, learning Kubernetes, and running KSail-Go inside CI pipelines.
+- [Project structure](project-structure.md) explains repository organization and Kustomize usage
+- [Support matrix](support-matrix.md) lists currently supported features and platforms
+- [Core concepts](core-concepts/) describes CNI, distributions, storage, and other building blocks
+- [Configuration guides](../configuration/) detail CLI flags and YAML structure
+- [Use-case playbooks](../use-cases/) provide guided workflows
 
-Each section references the Go-based CLI and links back to the commands or configuration files you will touch most frequently.
+> **Note:** KSail is being rewritten in Go. Some features from the previous .NET version are still being reimplemented.

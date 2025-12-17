@@ -1,63 +1,72 @@
 # Local Development
 
-KSail-Go lets you reproduce production-grade manifests on your laptop without hand-crafting cluster plumbing each time.
-The CLI leans on your existing container engine (Docker or Podman) and applies the same declarative configuration used
-in CI so developers share a consistent workflow. If you need a refresher on configuration precedence or flags, see the
-[configuration overview](../configuration/) before starting.
+KSail helps you run Kubernetes manifests locally using your container engine (Docker). The CLI provides a consistent workflow that matches your deployment configuration.
 
-## Day-to-day loop
+## Day-to-day workflow
 
 1. **Scaffold your project**
 
    ```bash
-   ksail cluster init --distribution Kind --source-directory services/api/k8s --cni Cilium --metrics-server Enabled
+   ksail cluster init --distribution Kind --source-directory k8s --cni Cilium --metrics-server Enabled
    ```
 
-   Commit the generated `ksail.yaml`, `kind.yaml`, and baseline manifests so teammates can clone and run the exact configuration.
-2. **Start the cluster with dependencies**
+   Commit the generated `ksail.yaml`, `kind.yaml`, and manifests so teammates can use the same configuration.
+
+2. **Create the cluster**
 
    ```bash
-   ksail cluster create --wait
-   ksail cluster status
+   ksail cluster create
+   ksail cluster info
    ```
 
-   The `--wait` flag ensures the CNI, metrics stack, and Flux (if enabled) finish reconciling before you deploy workloads.
-3. **Build and tag application images**
+   This provisions the cluster with your chosen CNI and metrics-server configuration.
+
+3. **Build and use local images** (if using local registry)
 
    ```bash
-   docker build -t local.registry.dev/my-app:dev .
-   docker push local.registry.dev/my-app:dev
+   # Initialize with local registry
+   ksail cluster init --local-registry Enabled --local-registry-port 5111
+   
+   # Build and push
+   docker build -t localhost:5111/my-app:dev .
+   docker push localhost:5111/my-app:dev
    ```
 
-   Update your manifests to point at the freshly built tag. Use `ksail cluster init --mirror-registries true` when you need registry mirrors for air-gapped setups.
-4. **Apply and iterate on workloads**
+   Update manifests to reference your local images.
+
+4. **Apply workloads**
 
    ```bash
-   ksail workload reconcile -f k8s/overlays/local
-   ksail workload diff -f k8s/overlays/local
+   ksail workload apply -k k8s/
+   ksail workload get pods
    ```
 
-   `reconcile` keeps the declarative directory as the source of truth, while `diff` highlights pending changes before they land in the cluster.
-5. **Debug quickly**
+   Apply your Kustomize manifests and verify deployment.
+
+5. **Debug and inspect**
 
    ```bash
-   ksail workload logs deployment/my-app --container api --tail 200
-   ksail workload exec deployment/my-app --container api -- sh
+   ksail workload logs deployment/my-app --tail 200
+   ksail workload exec deployment/my-app -- sh
+   ksail cluster connect  # Opens k9s
    ```
 
-   Combine KSail-Go helpers with familiar `kubectl` commands for deeper inspection when necessary.
-6. **Tear down when finished**
+   Use workload commands or k9s for debugging.
+
+6. **Clean up**
 
    ```bash
    ksail cluster delete
    ```
 
-   The command removes the Kind cluster and frees local resources so you can start fresh for the next task.
+   Remove the cluster when finished.
 
-## Tips for faster feedback
+## Tips
 
-- Enable `--metrics-server Enabled` and `--gateway-controller default` when scaffolding to align local observability with higher environments.
-- Run `ksail workload gen` to create sample Deployments, Services, or Jobs when prototyping manifests for new components.
+- Use `--cert-manager Enabled` during init if you need TLS certificates
+- Configure mirror registries with `--mirror-registry` to cache upstream images
+- Use `ksail workload gen` to create sample resource manifests
+- Test manifests locally before committing to version control
 - Switch the `distribution` field between `Kind` and `K3d` to mirror the container runtime used in staging.
 - Use `ksail cluster connect -- --namespace your-team` to open k9s against the active cluster without remembering kubeconfig paths.
 
