@@ -1,0 +1,60 @@
+
+[TestGenerate/with_file - 1]
+apiVersion: k3d.io/v1alpha5
+kind: Simple
+kubeAPI: {}
+metadata: {}
+options:
+  k3d:
+    disableImageVolume: false
+    disableLoadbalancer: false
+    disableRollback: false
+    loadbalancer: {}
+    wait: false
+  k3s: {}
+  kubeconfig: {}
+  runtime:
+    HostPidMode: false
+registries: {}
+
+---
+
+[TestGenerate/with_force_overwrite - 1]
+apiVersion: k3d.io/v1alpha5
+kind: Simple
+kubeAPI: {}
+metadata: {}
+options:
+  k3d:
+    disableImageVolume: false
+    disableLoadbalancer: false
+    disableRollback: false
+    loadbalancer: {}
+    wait: false
+  k3s: {}
+  kubeconfig: {}
+  runtime:
+    HostPidMode: false
+registries: {}
+
+---
+
+[TestGenerate/without_file - 1]
+apiVersion: k3d.io/v1alpha5
+kind: Simple
+kubeAPI: {}
+metadata: {}
+options:
+  k3d:
+    disableImageVolume: false
+    disableLoadbalancer: false
+    disableRollback: false
+    loadbalancer: {}
+    wait: false
+  k3s: {}
+  kubeconfig: {}
+  runtime:
+    HostPidMode: false
+registries: {}
+
+---

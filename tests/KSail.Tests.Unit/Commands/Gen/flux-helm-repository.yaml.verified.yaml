@@ -1,8 +1,0 @@
-﻿---
-apiVersion: source.toolkit.fluxcd.io/v1
-kind: HelmRepository
-metadata:
-  name: my-helm-repo
-  namespace: my-namespace
-spec:
-  url: <url>

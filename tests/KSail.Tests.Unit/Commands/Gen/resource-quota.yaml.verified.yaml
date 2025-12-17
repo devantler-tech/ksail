@@ -1,7 +1,0 @@
-﻿---
-apiVersion: v1
-kind: ResourceQuota
-metadata:
-  name: my-resource-quota
-spec: {}
-status: {}

@@ -1,0 +1,264 @@
+name: CI - Go (Repo)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions: {}
+
+jobs:
+  generate-schema:
+    name: 📝 Generate JSON Schema
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: 🔑 Generate GitHub App Token
+        uses: tibdex/github-app-token@3beb63f4bd073e61482598c45c71c1019b59b73a # v2.1.0
+        id: generate-token
+        with:
+          app_id: ${{ vars.APP_ID }}
+          private_key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - name: 📄 Checkout
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          persist-credentials: true
+          token: ${{ steps.generate-token.outputs.token }}
+
+      - name: ⚙️ Setup Go
+        uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6.1.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: 📝 Generate JSON schema
+        run: .github/scripts/generate-schema.sh
+
+      - name: 📤 Commit and push schema changes
+        uses: stefanzweifel/git-auto-commit-action@04702edda442b2e678b25b537cec683a1493fcb9 # v7.1.0
+        with:
+          commit_message: "chore: update generated JSON schema"
+          commit_user_name: generator-bot
+          commit_user_email: generator-bot@users.noreply.github.com
+
+  ci:
+    name: 🔄 CI - Go
+    if: github.event_name != 'pull_request'
+    uses: devantler-tech/reusable-workflows/.github/workflows/ci-go.yaml@c049d0ad8110b0a74920fecf22525d2f771264b7 # v1.22.5
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+      APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
+    permissions:
+      contents: write
+      issues: write
+      packages: read
+      pull-requests: write
+
+  build-artifact:
+    name: 🏗️ Build KSail Binary
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          persist-credentials: false
+
+      - name: ⚙️ Setup Go
+        id: setup-go
+        uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6.1.0
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.sum
+
+      - name: 📦 Prepare ksail binary
+        uses: ./.github/actions/prepare-ksail-binary
+        with:
+          go-version: ${{ steps.setup-go.outputs.go-version }}
+          source-hash: ${{ hashFiles('go.mod', 'go.sum', '**/*.go') }}
+          output-path: ksail
+          run-smoke-test: "true"
+
+  system-test:
+    runs-on: ubuntu-latest
+    needs: [build-artifact]
+    strategy:
+      matrix:
+        include:
+          - init-args: "--distribution Kind"
+          - init-args: "--distribution Kind --cert-manager Enabled"
+          - init-args: "--distribution Kind --cni Cilium"
+          - init-args: "--distribution Kind --cni Calico"
+          - init-args: "--distribution Kind --gitops-engine Flux"
+          - init-args: "--distribution Kind --gitops-engine ArgoCD"
+          - init-args: "--distribution Kind --mirror-registry docker.io=https://registry-1.docker.io"
+          - init-args: "--distribution Kind --mirror-registry docker.io=https://registry-1.docker.io --mirror-registry ghcr.io=https://ghcr.io"
+          - init-args: "--distribution K3d"
+          - init-args: "--distribution K3d --cert-manager Enabled"
+          - init-args: "--distribution K3d --cni Cilium"
+          - init-args: "--distribution K3d --cni Calico"
+          - init-args: "--distribution K3d --gitops-engine Flux"
+          - init-args: "--distribution K3d --gitops-engine ArgoCD"
+          - init-args: "--distribution K3d --mirror-registry docker.io=https://registry-1.docker.io"
+          - init-args: "--distribution K3d --mirror-registry docker.io=https://registry-1.docker.io --mirror-registry ghcr.io=https://ghcr.io"
+          - init-args: "--distribution K3d --metrics-server Disabled"
+    steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          persist-credentials: false
+
+      - name: ⚙️ Setup Go
+        id: setup-go
+        uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6.1.0
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: ./go.sum
+
+      - name: 📦 Prepare ksail binary
+        uses: ./.github/actions/prepare-ksail-binary
+        with:
+          go-version: ${{ steps.setup-go.outputs.go-version }}
+          source-hash: ${{ hashFiles('go.mod', 'go.sum', '**/*.go') }}
+          output-path: bin/ksail
+          run-smoke-test: "false"
+
+      - name: 🧪 ksail cluster init
+        run: |
+          ./bin/ksail cluster init ${{ matrix.init-args }}
+
+      - name: 🧪 ksail cluster create
+        run: |
+          ./bin/ksail cluster create
+
+      - name: 🧪 ksail cluster list
+        run: |
+          ./bin/ksail cluster list
+
+      - name: 🧪 ksail workload create
+        run: |
+          ./bin/ksail workload create deployment whoami --image=traefik/whoami:latest
+          ./bin/ksail workload wait --for=condition=Available deployment/whoami --timeout=300s
+
+      - name: 🧪 ksail workload apply
+        run: |
+          mkdir -p /tmp/podinfo-overlay
+          cat > /tmp/podinfo-overlay/kustomization.yaml <<'EOF'
+          apiVersion: kustomize.config.k8s.io/v1beta1
+          kind: Kustomization
+          resources:
+            - https://github.com/stefanprodan/podinfo//kustomize
+          patches:
+            - target:
+                kind: HorizontalPodAutoscaler
+              patch: |-
+                $patch: delete
+                apiVersion: autoscaling/v2
+                kind: HorizontalPodAutoscaler
+                metadata:
+                  name: podinfo
+          EOF
+          ./bin/ksail workload apply -k /tmp/podinfo-overlay
+          ./bin/ksail workload wait --for=condition=Available deployment/podinfo --timeout=300s
+
+      - name: 🧪 ksail workload reconcile
+        if: contains(matrix.init-args, '--gitops-engine Flux') || contains(matrix.init-args, '--gitops-engine ArgoCD')
+        run: |
+          cat > k8s/reconcile-test-deployment.yaml <<'EOF'
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: ksail-reconcile-test
+            namespace: default
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app: ksail-reconcile-test
+            template:
+              metadata:
+                labels:
+                  app: ksail-reconcile-test
+              spec:
+                containers:
+                  - name: ksail-reconcile-test
+                    image: nginx:stable-alpine
+                    ports:
+                      - containerPort: 80
+          EOF
+
+          if [ -f k8s/kustomization.yaml ] && grep -q '^resources: \[\]$' k8s/kustomization.yaml; then
+            sed -i 's/^resources: \[\]$/resources:\n  - reconcile-test-deployment.yaml/' k8s/kustomization.yaml
+          elif [ -f k8s/kustomization.yaml ] && grep -q '^resources:' k8s/kustomization.yaml; then
+            if ! grep -q 'reconcile-test-deployment.yaml' k8s/kustomization.yaml; then
+              sed -i '/^resources:/a\  - reconcile-test-deployment.yaml' k8s/kustomization.yaml
+            fi
+          else
+          cat > k8s/kustomization.yaml <<'EOF'
+          apiVersion: kustomize.config.k8s.io/v1beta1
+          kind: Kustomization
+          resources:
+            - reconcile-test-deployment.yaml
+          EOF
+          fi
+
+          # Validate the kustomization.yaml was properly updated
+          if ! kubectl kustomize k8s/ > /dev/null 2>&1; then
+            echo "ERROR: kustomization.yaml is malformed after modification"
+            cat k8s/kustomization.yaml
+            exit 1
+          fi
+
+          if ! grep -q 'reconcile-test-deployment.yaml' k8s/kustomization.yaml; then
+            echo "ERROR: reconcile-test-deployment.yaml was not added to kustomization.yaml"
+            cat k8s/kustomization.yaml
+            exit 1
+          fi
+
+          ./bin/ksail workload reconcile
+
+      - name: 🧪 ksail cluster stop
+        run: |
+          ./bin/ksail cluster stop
+
+      - name: 🧪 ksail cluster start
+        run: |
+          ./bin/ksail cluster start
+
+      - name: 🧪 ksail cluster delete
+        run: |
+          ./bin/ksail cluster delete
+
+      - name: 🧹 Cleanup
+        run: |
+          if [ -d "k8s" ]; then rm -rf "k8s"; fi
+          if [ -f "kind.yaml" ]; then rm "kind.yaml"; fi
+          if [ -f "k3d.yaml" ]; then rm "k3d.yaml"; fi
+          if [ -f "ksail.yaml" ]; then rm "ksail.yaml"; fi
+
+  system-test-status:
+    runs-on: ubuntu-latest
+    needs: [system-test, build-artifact]
+    if: ${{ !cancelled() && needs.build-artifact.result == 'success' }}
+    steps:
+      - name: Summarize matrix result
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          echo "system-test result: $MATRIX_RESULT"
+          case "$MATRIX_RESULT" in
+            success|skipped)
+              echo "All matrix runs succeeded or were skipped."
+              ;;
+            *)
+              echo "At least one matrix run failed."
+              exit 1
+              ;;
+          esac
+        env:
+          MATRIX_RESULT: ${{ needs.system-test.result }}

@@ -1,20 +1,18 @@
----
-title: Mirror Registries
-parent: Core Concepts
-nav_order: 10
----
-
 # Mirror Registries
 
-> [!WARNING]
-> Remote `Mirror Registries` are not supported yet. This means that remote registries cannot be used as mirrors for upstream registries.
->
-> Support for unauthenticated access to upstream registries is also unsupported. This means that you cannot setup authentication in front of the mirror registry, or to authenticate from the mirror registry to the upstream registry.
->
-> Lastly, mirror registries do not support secure connections to upstream registries with TLS.
->
-> These are limitations of the current implementation and will be fixed in the future.
+Mirror registries proxy upstream repositories (for example `docker.io`) and cache content close to your cluster. Configure mirrors with repeated `--mirror-registry <host>=<upstream>` flags during `ksail cluster init` or define them in `spec.registries.mirrors`.
 
-`Mirror Registries` refer to registries that are used to proxy and cache images from upstream registries. This is used to avoid pull rate limits and to speed up image pulls.
+> **Current limitations:**
+>
+> - Remote mirrors are not yet supported; KSail-Go always launches local `registry:3` containers.
+> - Authentication to upstream registries is unsupported, so rate-limited public repositories may still require manual intervention.
+> - TLS for upstream connections is planned but not currently wired through the CLI flags.
 
-Using `Mirror Registries` will create a `registry:3` container for each mirror registry that is configured. You can configure as many mirror registries as you need.
+## Workflow Overview
+
+1. Add mirrors (e.g., `ksail cluster init --mirror-registry docker.io=https://registry-1.docker.io`).
+2. Run `ksail cluster create`; mirror containers start alongside your cluster.
+3. Push images or let controllers pull through the mirror hosts you defined.
+4. Delete the cluster with `ksail cluster delete --delete-volumes` to clean up persistent cache data.
+
+Mirrors pair well with the [Local Registry](./local-registry.md) concept, keeping your development clusters responsive even with flaky internet connections.

@@ -1,24 +1,17 @@
----
-title: Ingress Controllers
-parent: Core Concepts
-nav_order: 4
----
-
 # Ingress Controllers
 
-`Ingress Controllers` refer to the controllers that manage ingress resources in a Kubernetes cluster. They are responsible for routing external traffic to the appropriate services within the cluster. Below is a table of the of default `Ingress Controllers` on each Kubernetes distribution supported by KSail:
+Ingress controllers expose HTTP(S) services from inside the cluster. Configure your choice with `ksail cluster init --ingress-controller` or set `spec.networking.ingressController`.
 
 ## Default
 
-| Distribution | Ingress Controller |
-| ------------ | ------------------ |
-| kind         | None               |
-| k3d          | Traefik            |
+The `Default` option keeps the controller bundled with the distribution. Kind does not install any ingress by default, while K3d deploys [Traefik](https://doc.traefik.io/traefik/) automatically.
+
+> **Distribution defaults:** Kind ships without an ingress controller; K3d installs Traefik.
 
 ## Traefik
 
-If you choose [`Traefik`](https://github.com/traefik/traefik-helm-chart), the Traefik Ingress Controller will be installed in your cluster. Traefik is a popular open-source ingress controller that provides advanced routing capabilities, including support for dynamic configuration, load balancing, and SSL termination.
+Selecting `Traefik` ensures the controller is installed even if the distribution leaves it out. KSail-Go applies the Traefik Helm chart and configures a LoadBalancer service so you can access workloads via host ports.
 
 ## None
 
-The `None` Ingress Controller option means that no Ingress Controller will be installed in your Kubernetes cluster. This is useful if you do not need an ingress controller or if you plan to use an unsupported ingress controller.
+Use `None` to skip ingress installation entirely. This is helpful when you want to test headless services, deploy an alternative controller, or rely on lightweight port-forwarding during development.

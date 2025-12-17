@@ -1,5 +1,0 @@
-﻿creation_rules:
-- path_regex: ^.+\.enc\.ya?ml$
-  encrypted_regex: ^(data|stringData)$
-  age: |-
-    <age-public-key-1>

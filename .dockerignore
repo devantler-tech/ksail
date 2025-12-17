@@ -1,0 +1,38 @@
+# Exclude repository metadata and tooling configs
+.git
+.github
+.specify
+.serena
+.vscode
+
+# Exclude build outputs and binaries
+bin/
+dist/
+*.test
+*.out
+vendor/
+tmp/
+
+# Exclude dependency directories
+node_modules/
+
+# Exclude coverage and lint artifacts
+coverage*
+megalinter-reports/
+report/
+
+# Exclude environment and log files
+Dockerfile*
+.env*
+*.log*
+.dockerignore
+
+# Exclude documentation specs from Docker context
+specs/
+docs/
+
+# Exclude generated KSail config files
+ksail.yaml
+k3d.yaml
+kind.yaml
+k8s/

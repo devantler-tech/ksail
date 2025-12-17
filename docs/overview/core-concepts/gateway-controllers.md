@@ -1,25 +1,13 @@
----
-title: Gateway Controllers
-parent: Core Concepts
-nav_order: 5
----
-
 # Gateway Controllers
 
-> [!NOTE]
-> The [Gateway API](https://gateway-api.sigs.k8s.io) is a fairly new API that is designed to supercede the Ingress API. It solves some of the limitations of the Ingress API, but it is not yet widely adopted, and may have limited support in the implementation you are using.
+Gateway controllers manage [Gateway API](https://gateway-api.sigs.k8s.io) resources and provide a successor to traditional ingress routing. Configure the controller with `ksail cluster init --gateway-controller` or set `spec.networking.gatewayController` in `ksail.yaml`.
 
-`Gateway Controllers` refer to the controllers that manage gateway resources in a Kubernetes cluster. They are responsible for routing external traffic to the appropriate services within the cluster. The `Gateway Controller` is responsible for managing the gateway resources and providing a way to route external traffic to the appropriate services.
+> **Note:** Gateway API adoption is still growing. Some controllers ship alpha features and may not be suitable for production traffic.
 
 ## Default
 
-The `Default` option is used when you want to use the default `Gateway Controller` that is bundled with the Kubernetes distribution you are using. Below is a table of the default `Gateway Controllers` for each Kubernetes distribution supported by KSail:
-
-| Distribution | Gateway Controller |
-| ------------ | ------------------ |
-| kind         | None               |
-| k3d          | None               |
+`Default` preserves whatever the distribution provides. Today both Kind and K3d do not install a gateway implementation automatically, so you must deploy one manually if you need Gateway API resources.
 
 ## None
 
-The `None` option is used when you do not want to use a `Gateway Controller`. In cases where a distribution installs a `Gateway Controller` by default, this option can be used to disable it.
+`None` explicitly disables gateway installation even when a distribution offers one. Use this if you prefer to rely on ingress controllers or want full control over which Gateway implementation is installed later.

@@ -1,28 +1,22 @@
----
-title: Project Structure
-parent: Overview
-nav_order: 1
----
-
 # Project Structure
 
-When you create a new project with `ksail init`, it will generate a set of files and directories to get you started. The generated project structure depends on how you configure the project via the declarative config and the CLI options.
+Running `ksail cluster init` scaffolds a repository that is immediately compatible with the KSail-Go command set. The exact layout varies depending on flags such as `--distribution`, `--gateway-controller`, and declarative overrides in [`ksail.yaml`](../configuration/declarative-config.md), but every project starts with the same core folders:
 
-Below is a typical project structure for a KSail project:
-
-```shell
-├── ksail.yaml # KSail configuration file
-├── <distribution>.yaml # Distribution configuration file
-└── k8s # Kubernetes manifests
-    └── kustomization.yaml # Kustomize index file
+```text
+├── ksail.yaml              # Declarative cluster definition consumed by ksail-go
+├── kind.yaml / k3d.yaml     # Distribution-specific overrides generated during init
+└── k8s/                     # GitOps-ready manifests (bases, overlays, and Flux wiring)
+    └── kustomization.yaml   # Root Kustomize entrypoint referenced by workload commands
 ```
 
-If you choose to enable the Secret Manager, the project will also include a `.sops.yaml` file that configures the SOPS secret management tool to be able to encrypt and decrypt secrets.
+When the `--secret-manager SOPS` option is enabled (or `spec.project.secretManager` is set in `ksail.yaml`), KSail-Go also adds a `.sops.yaml` file and a `keys/` directory stub so the `ksail cipher` commands have an opinionated home for Age recipients. See the [configuration docs](../configuration/#when-to-edit-what) for guidance on managing these files in version control.
 
-## Kustomize-based
+## Organizing with Kustomize
 
-KSail generates projects that follow a [Kustomize](https://kubernetes-sigs.github.io/kustomize/)-based structure. Kustomize is a tool designed to simplify and manage Kubernetes YAML configurations. At the core of every KSail project is the `k8s/kustomization.yaml` file, which acts as the main index for the project. This file defines the resources and configurations that will be applied to your Kubernetes cluster.
+KSail-Go embraces a [Kustomize](https://kustomize.io/) first architecture. The `k8s/kustomization.yaml` file generated at init time becomes the anchor for both local iterations and GitOps automation:
 
-Using Kustomize, you can organize your project into reusable "bases" and apply "patches" to customize configurations for different environments or clusters. For example, you might have a base configuration for a service and then apply patches to adjust settings for development, staging, or production clusters. By referencing different `kustomization.yaml` files, you can easily switch between configurations, ensuring flexibility and consistency across multiple clusters.
+- **Bases and overlays** – Declarative configuration from `ksail.yaml` is rendered into Kustomize bases so you can patch provider-specific differences without copy/paste.
+- **Flux integration** – Optional Flux manifests are generated under `k8s/flux/` and referenced from the root kustomization, allowing you to bootstrap GitOps reconciliations with `ksail workload reconcile`.
+- **Configurable entrypoint** – Use `ksail cluster init --kustomization-path <path>` or set `spec.project.kustomizationPath` to change which file becomes the default overlay.
 
-You can set the index `kustomization.yaml` file with the `--kustomization-path` option or by setting the `spec.project.kustomizationPath` field in the KSail configuration file.
+Because the CLI loads the same manifests that Flux consumes, every change you make locally can be validated with `ksail workload apply` or `ksail workload reconcile` before it reaches CI/CD. The [local development playbook](../use-cases/local-development.md) walks through that feedback loop end-to-end.

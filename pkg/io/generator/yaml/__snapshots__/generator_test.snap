@@ -1,0 +1,15 @@
+
+[TestGenerate/with_file - 1]
+name: file-cluster
+
+---
+
+[TestGenerate/with_force_overwrite - 1]
+name: force-cluster
+
+---
+
+[TestGenerate/without_file - 1]
+name: test-cluster
+
+---

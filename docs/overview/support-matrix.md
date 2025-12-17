@@ -1,106 +1,19 @@
----
-title: Support Matrix
-parent: Overview
-nav_order: 2
----
-
 # Support Matrix
 
-KSail aims to support a wide range of use cases by providing the flexibility to run popular Kubernetes distributions in various container engines. Below is a detailed support matrix.
+KSail-Go focuses on fast local feedback while keeping GitOps compatibility. The matrix below captures the officially supported combinations for the Go CLI. Items marked ✅ are fully tested and verified.
 
-<table>
-  <thead>
-    <tr>
-      <th>Category</th>
-      <th>Support</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td><strong>CLI</strong></td>
-      <td>
-        Linux (amd64 and arm64),<br>
-        macOS (amd64 and arm64)
-      </td>
-    </tr>
-    <tr>
-      <td><strong>Container Engines</strong></td>
-      <td><a href="https://www.docker.com">Docker</a>,
-      <a href="https://podman.io">Podman</a></td>
-    </tr>
-    <tr>
-      <td><strong>Distributions</strong></td>
-      <td>
-        <a href="https://kind.sigs.k8s.io">Kind</a>,
-        <a href="https://k3d.io">K3d</a>
-      </td>
-    </tr>
-    <tr>
-      <td><strong>Deployment Tools</strong></td>
-      <td>
-        <a href="https://kubernetes.io/docs/reference/kubectl/">Kubectl</a>,
-        <a href="https://fluxcd.io">Flux</a>
-      </td>
-    </tr>
-    <tr>
-      <td><strong>Container Network Interfaces (CNI)</strong></td>
-      <td>
-        Default,
-        <a href="https://cilium.io">Cilium</a>,
-        None
-      </td>
-    </tr>
-    <tr>
-      <td><strong>Container Storage Interfaces (CSI)</strong></td>
-      <td>
-        Default,
-        <a href="https://github.com/rancher/local-path-provisioner">Local Path Provisioner</a>,
-        None
-      </td>
-    </tr>
-    <tr>
-      <td><strong>Ingress Controllers</strong></td>
-      <td>
-        Default,
-        <a href="https://github.com/traefik/traefik-helm-chart">Traefik</a>,
-        None
-      </td>
-    </tr>
-    <tr>
-      <td><strong>Gateway Controllers</strong></td>
-      <td>
-        Default,
-        None
-      </td>
-    </tr>
-    <tr>
-      <td><strong>Metrics Server</strong></td>
-      <td>
-        true,
-        false
-      </td>
-    </tr>
-      <td><strong>Secret Manager</strong></td>
-      <td>
-        <a href="https://github.com/getsops/sops">SOPS</a>
-      </td>
-    </tr>
-    <tr>
-      <td><strong>Editors</strong></td>
-      <td>
-        <a href="https://www.nano-editor.org">Nano</a>,
-        <a href="https://www.vim.org">Vim</a>
-      </td>
-    <tr>
-    <tr>
-      <td><strong>Client-Side Validation</strong></td>
-      <td>
-        Configuration,
-        <a href="https://github.com/aaubry/YamlDotNet">YAML syntax</a>,
-        <a href="https://github.com/yannh/kubeconform">Schema </a>
-      </td>
-    </tr>
-  </tbody>
-</table>
+| Category                           | Supported Options                                  | Notes                                                                                                     |
+|------------------------------------|----------------------------------------------------|-----------------------------------------------------------------------------------------------------------|
+| CLI Platforms                      | Linux (amd64, arm64), macOS (amd64, arm64)         | Pre-built binaries ship via GoReleaser; Windows support is tracked separately.                            |
+| Container Engines                  | Docker ✅, Podman (preview)                         | Kind and K3d use Docker by default; Podman support is experimental and tracked in follow-up issues.       |
+| Distributions                      | Kind ✅, K3d ✅                                      | Additional distributions (Talos, EKS) are planned post-MVP.                                               |
+| Deployment Tooling                 | Flux ✅, kubectl ✅                                  | Flux manifests are generated during `cluster init`; kubectl commands are wrapped inside `ksail workload`. |
+| Container Network Interfaces (CNI) | Default (Kind), Cilium (via GitOps overlay)        | Choose via `spec.cluster.cni` or `ksail cluster init --cni`.                                              |
+| Container Storage Interfaces (CSI) | Default, Local Path Provisioner                    | Configurable through `ksail.yaml`.                                                                        |
+| Ingress Controllers                | Default, Traefik                                   | Select with `--ingress-controller` or the declarative config field.                                       |
+| Gateway Controllers                | None (default), Experimental                       | Gateway support will return as the Go controllers mature.                                                 |
+| Metrics Server                     | Enabled (default), Disabled                        | Toggle with `--metrics-server` during init.                                                               |
+| Secret Management                  | SOPS via `ksail cipher` ✅                          | Age keys live alongside `.sops.yaml` when enabled.                                                        |
+| Editors for Interactive Flows      | nano, vim (configurable via `spec.project.editor`) | Used by `ksail cipher edit` and other interactive commands.                                               |
 
-If you would like to see additional tools supported, please open an issue or pull request on [GitHub](https://github.com/devantler-tech/ksail).
+If you rely on a combination that is not listed here, please open an issue so we can track validation coverage.

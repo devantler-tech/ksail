@@ -1,16 +1,9 @@
----
-title: Metrics Server
-parent: Core Concepts
-nav_order: 6
----
-
 # Metrics Server
 
-[Metrics Server](https://github.com/kubernetes-sigs/metrics-server) is a cluster-wide aggregator of resource usage data. It collects metrics from the kubelet on each node and exposes them via the Kubernetes API server. It is used by various Kubernetes components, for purposes such as monitoring and autoscaling.
+[Metrics Server](https://github.com/kubernetes-sigs/metrics-server) aggregates CPU and memory usage across the cluster. Enable or disable it with `ksail cluster init --metrics-server` or by setting `spec.cluster.metricsServer`.
 
-With KSail you can choose to enable or disable the `Metrics Server` when initializing your project and creating your cluster. The default is to enable the `Metrics Server`, but the underlying distribution may have other defaults. Refer to the below table for the default settings for each distribution:
+> **Distribution defaults:** Kind disables Metrics Server by default; K3d enables it.
 
-| Distribution | Metrics Server |
-| ------------ | -------------- |
-| kind         | Disabled       |
-| k3d          | Enabled        |
+When Metrics Server is enabled, KSail-Go installs the upstream Helm chart after cluster creation. For K3d, disabling metrics adds the `--disable=metrics-server` flag to K3s so you preserve parity with production clusters that do not expose metrics by default.
+
+Use metrics when testing Horizontal Pod Autoscaler flows, dashboard tooling, or alerts. Skip it for minimal clusters or when profiling raw resource consumption without the overhead of additional controllers.

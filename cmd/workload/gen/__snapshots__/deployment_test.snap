@@ -1,0 +1,26 @@
+
+[TestGenDeployment - 1]
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: test-deployment
+  name: test-deployment
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: test-deployment
+  strategy: {}
+  template:
+    metadata:
+      labels:
+        app: test-deployment
+    spec:
+      containers:
+      - image: nginx:1.21
+        name: nginx
+        resources: {}
+status: {}
+
+---

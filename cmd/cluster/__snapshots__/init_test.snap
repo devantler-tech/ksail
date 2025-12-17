@@ -1,0 +1,18 @@
+
+[TestHandleInitRunE_SuccessWithOutputFlag - 1]
+📂 Initialize project...
+✚ created 'ksail.yaml'
+✚ created 'kind.yaml'
+✚ created 'k8s/kustomization.yaml'
+✔ initialized project
+
+---
+
+[TestHandleInitRunE_UsesWorkingDirectoryWhenOutputUnset - 1]
+📂 Initialize project...
+✚ created 'ksail.yaml'
+✚ created 'kind.yaml'
+✚ created 'k8s/kustomization.yaml'
+✔ initialized project
+
+---

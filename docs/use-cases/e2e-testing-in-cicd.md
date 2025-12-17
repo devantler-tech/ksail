@@ -1,68 +1,95 @@
----
-title: E2E Testing in CI/CD
-parent: Use Cases
-nav_order: 2
----
-
 # E2E Testing in CI/CD
 
-KSail can also be used for end-to-end (E2E) testing in CI/CD pipelines. As easily as you can create a local Kubernetes cluster, you can also create ephemeral clusters in your CI/CD pipelines. As you have already configured your cluster locally, it is as simple as running `ksail up` in your pipeline to create the cluster. This allows you to validate that project files do not contain errors or typos, that your cluster spins up correctly, and that your workloads reconcile as expected.
+KSail-Go enables pull-request pipelines to stand up disposable Kubernetes clusters, run integration suites, and tear everything down before merging. Because the CLI encapsulates cluster provisioning, you can reuse the same declarative configuration that developers run locally. Review the [CLI options](../configuration/cli-options.md) if you need to override settings dynamically within your pipeline.
 
-If you want to go that extra mile, you can even run validations against the cluster after it has reconciled its workloads. With such an approach, you can validate data flows, health checks, or whatever your heart desires.
+## Pipeline essentials
 
-Running KSail in CI/CD pipelines is a great way to ensure unintended changes to your Kubernetes are caught in Pull Requests, and that your workloads always stay healthy between deployments. This is super valuable in teams where multiple changes happen in parallel, and where the risk of causing issues server-side is high.
+1. **Check out the repository and install dependencies**
 
-By migrating to a traditional GitHub Flow, where you create a Pull Request for every change, and where you run KSail in your CI/CD pipeline, you can build super stable and reliable clusters while never having to connect to a remote cluster.
+   ```bash
+   ksail cluster init --distribution Kind --source-directory ci/k8s --metrics-server true --gateway-controller default
+   ```
 
-## Example of GitHub Workflow
+   Commit the generated config so your CI job only needs to run `ksail cluster create` without additional flags.
+2. **Create the cluster and wait for readiness**
 
-Below is an example of a GitHub workflow that runs KSail in a CI/CD pipeline. It provisions a cluster, and tears it down after the tests have run. The workflow is triggered on every Pull Request.
+   ```bash
+   ksail cluster create --wait --timeout 10m
+   ksail cluster status --output table
+   ```
+
+   The extended timeout accounts for container pulls on cold runners. `status` verifies controllers are healthy before tests begin.
+3. **Deploy workloads and run tests**
+
+   ```bash
+   ksail workload reconcile -f k8s/overlays/ci
+   ksail workload wait --for=condition=Available deployment/my-app --timeout=180s
+   go test ./tests/e2e/... -count=1
+   ```
+
+   Swap the test command for your framework of choice (JUnit, pytest, etc.) while leaving KSail-Go responsible for cluster state.
+4. **Collect diagnostics on failure**
+
+   ```bash
+   ksail workload logs deployment/my-app --since 5m
+   kubectl get events --all-namespaces
+   ```
+
+   Persist the output as pipeline artifacts so engineers can inspect issues without rerunning the job immediately.
+5. **Destroy the cluster**
+
+   ```bash
+   ksail cluster delete
+   ```
+
+   Always clean up to keep shared runners fast and avoid leaking Docker resources.
+
+## GitHub Actions example
 
 ```yaml
-name: GitOps Test
-
+name: e2e
 on:
-  workflow_call:
-    secrets:
-      KSAIL_SOPS_KEY:
-        required: false
   pull_request:
+    paths:
+      - 'k8s/**'
+      - 'docs/**'
+      - 'src/**'
 
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - name: 📑 Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
         with:
-          persist-credentials: false
-      - name: ⚙️ Setup KSail
-        uses: devantler-tech/composite-actions/setup-ksail-action@44620f6c6e9bc2046c7959932fbd104a74d6b1a5 # v1.9.1
-      - name: 🔑 Import Age key
-        env:
-          KSAIL_SOPS_KEY: ${{ secrets.KSAIL_SOPS_KEY }}
-        if: ${{ env.KSAIL_SOPS_KEY != '' }}
-        run: ksail secrets import "${{ secrets.KSAIL_SOPS_KEY }}"
-      - name: 🚀 Provision cluster
-        run: ksail up
-      - name: 🔥 Teardown cluster
+          go-version-file: go.mod
+      - name: Install ksail-go
+        run: go install ./cmd/ksail
+      - name: Create cluster
+        run: |
+          ksail cluster create --wait --timeout 10m
+      - name: Deploy workloads
+        run: |
+          ksail workload reconcile -f k8s/overlays/ci
+          ksail workload wait --for=condition=Available deployment/my-app --timeout=180s
+      - name: Run tests
+        run: go test ./tests/e2e/... -count=1
+      - name: Upload logs on failure
+        if: failure()
+        run: |
+          ksail workload logs deployment/my-app --since 5m > logs.txt
+          kubectl get events --all-namespaces > events.txt
+      - name: Destroy cluster
         if: always()
-        run: ksail down
+        run: ksail cluster delete
 ```
 
-The above workflow is a great starting point for running KSail in your CI/CD pipeline, and it is publicly available, so you are free to use it yourself:
+For hosted runners without Docker cache, consider pre-building images in a preceding job and pushing them to a registry that the KSail-Go cluster can pull from. You can also run the workflow on self-hosted runners equipped with faster storage to keep end-to-end cycles under 10 minutes.
 
-```yaml
-name: Run Devantler's GitOps Test Workflow
-  workflow_dispatch:
-  push:
-    branches:
-      - main
-  pull_request:
+## Hardening recommendations
 
-jobs:
-  test:
-    uses: devantler-tech/reusable-workflows/.github/workflows/ci-gitops-test@main
-    secrets:
-      KSAIL_SOPS_KEY: ${{ secrets.KSAIL_SOPS_KEY }}
-```
+- Store test-only secrets with SOPS and decrypt them during the pipeline with `ksail cipher decrypt` so they never appear in plain text.
+- Use `ksail cluster create --registry local --mirror-registries true` if your registries require mirroring or authentication on private runners.
+- Add a nightly job that exercises the same pipeline against the default branch to catch drift in Kubernetes versions or base images.
+- Track time-to-ready metrics by wrapping `ksail cluster create` with timestamps and pushing results to your observability stack.

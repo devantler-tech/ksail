@@ -1,0 +1,80 @@
+
+[TestGenIngressSimple - 1]
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: test-ingress
+spec:
+  rules:
+  - host: example.com
+    http:
+      paths:
+      - backend:
+          service:
+            name: svc
+            port:
+              number: 80
+        path: /
+        pathType: Prefix
+status:
+  loadBalancer: {}
+
+---
+
+[TestGenIngressWithTLS - 1]
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: test-ingress-tls
+spec:
+  rules:
+  - host: secure.example.com
+    http:
+      paths:
+      - backend:
+          service:
+            name: svc
+            port:
+              number: 443
+        path: /
+        pathType: Prefix
+  tls:
+  - hosts:
+    - secure.example.com
+    secretName: my-tls-secret
+status:
+  loadBalancer: {}
+
+---
+
+[TestGenIngressMultipleRules - 1]
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: test-ingress-multi
+spec:
+  rules:
+  - host: api.example.com
+    http:
+      paths:
+      - backend:
+          service:
+            name: api-svc
+            port:
+              number: 8080
+        path: /
+        pathType: Prefix
+  - host: web.example.com
+    http:
+      paths:
+      - backend:
+          service:
+            name: web-svc
+            port:
+              number: 80
+        path: /
+        pathType: Prefix
+status:
+  loadBalancer: {}
+
+---

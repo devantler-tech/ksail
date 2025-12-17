@@ -1,0 +1,11 @@
+
+[TestGenPriorityClass - 1]
+apiVersion: scheduling.k8s.io/v1
+description: Test priority class
+kind: PriorityClass
+metadata:
+  name: test-priority
+preemptionPolicy: PreemptLowerPriority
+value: 1000
+
+---

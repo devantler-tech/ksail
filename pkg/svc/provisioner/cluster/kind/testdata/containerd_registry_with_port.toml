@@ -1,0 +1,2 @@
+[plugins."io.containerd.grpc.v1.cri".registry.mirrors."registry.example.com:5000"]
+  endpoint = ["http://mirror.example.com:8080/v2"]

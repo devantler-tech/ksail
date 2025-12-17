@@ -1,26 +1,17 @@
----
-title: Container Storage Interfaces (CSIs)
-parent: Core Concepts
-nav_order: 3
----
+# Container Storage Interfaces (CSI)
 
-# Container Storage Interfaces (CSIs)
+Storage options determine how persistent volumes are provisioned for workloads. Configure CSI during initialization with `ksail cluster init --csi` or declaratively through `spec.cluster.csi`.
 
 ## Default
 
-The `Default` CSI is the default Container Storage Interface plugin that is bundled with the Kubernetes distribution you are using. It is often a basic CSI plugin with limited features.
+When you choose `Default`, KSail-Go keeps the distribution's builtin storage class. Today both Kind and K3d rely on [local-path-provisioner](https://github.com/rancher/local-path-provisioner), which works well for day-to-day development but offers limited features.
 
-Below is a table of the default CSI plugins for each Kubernetes distribution supported by KSail:
-
-| Distribution | CSI                                                                         |
-| ------------ | --------------------------------------------------------------------------- |
-| Kind         | [local-path-provisioner](https://github.com/rancher/local-path-provisioner) |
-| K3d          | [local-path-provisioner](https://github.com/rancher/local-path-provisioner) |
+> **Distribution defaults:** Both Kind and K3d provision local-path-provisioner when `Default` is selected.
 
 ## Local Path Provisioner
 
-The [`local-path-provisioner`](https://github.com/rancher/local-path-provisioner) is a simple and lightweight CSI plugin that allows you to use local storage on your Kubernetes nodes. It creates a local path on each node and uses it as a persistent volume for your applications. This is useful for development and testing purposes, but not recommended for production environments.
+Selecting `LocalPathProvisioner` installs the same controller explicitly. This is helpful when you opt into the `None` distribution default elsewhere but still want quick local storage. Expect host-path-backed volumes, so avoid running stateful workloads that require high availability.
 
 ## None
 
-The `None` CSI option means that no Container Storage Interface plugin will be installed in your Kubernetes cluster. This is useful if you want to manage storage manually or use a different storage solution that does not require a CSI plugin.
+Choose `None` when you plan to supply your own storage controller or connect to external persistent volumes. KSail-Go skips CSI installation entirely, leaving all PersistentVolumeClaims pending until your custom solution handles them.
