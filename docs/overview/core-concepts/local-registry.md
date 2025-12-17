@@ -23,8 +23,6 @@ The local registry listens on port `5111` by default. Change it with `--local-re
 ksail cluster init --local-registry Enabled --local-registry-port 5000
 ```
 
-Or set it in `ksail.yaml` (note: port configuration structure may vary based on implementation).
-
 ## Troubleshooting
 
 - **Registry container fails to start:** Check if the host port is already in use

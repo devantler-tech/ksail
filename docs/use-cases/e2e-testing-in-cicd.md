@@ -61,25 +61,6 @@ KSail enables CI/CD pipelines to create disposable Kubernetes clusters for integ
 ## Example GitHub Actions workflow
 
 ```yaml
-jobs:
-  e2e:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Create cluster
-        run: ksail cluster create
-      - name: Deploy workloads
-        run: ksail workload apply -k k8s/
-      - name: Run tests
-        run: go test ./tests/e2e/...
-      - name: Cleanup
-        if: always()
-        run: ksail cluster delete
-```
-
-## Example GitHub Actions workflow
-
-```yaml
 name: e2e
 on:
   pull_request:
