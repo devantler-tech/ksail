@@ -67,6 +67,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
+          # Assumes a go.mod at the repository root; otherwise, use "go-version" with an explicit Go version.
           go-version-file: go.mod
       - name: Install ksail
         run: go install ./cmd/ksail
