@@ -1,6 +1,6 @@
 package configmanager
 
-import "github.com/devantler-tech/ksail-go/pkg/ui/timer"
+import "github.com/devantler-tech/ksail/pkg/ui/timer"
 
 // ConfigManager provides configuration management functionality.
 //

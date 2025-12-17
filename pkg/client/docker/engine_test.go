@@ -3,7 +3,7 @@ package docker_test
 import (
 	"testing"
 
-	"github.com/devantler-tech/ksail-go/pkg/client/docker"
+	"github.com/devantler-tech/ksail/pkg/client/docker"
 )
 
 func TestGetDockerClient(t *testing.T) {

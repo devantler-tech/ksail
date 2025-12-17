@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/devantler-tech/ksail-go/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/pkg/apis/cluster/v1alpha1"
 	"github.com/spf13/cobra"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )

@@ -8,9 +8,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/devantler-tech/ksail-go/pkg/io"
-	yamlmarshaller "github.com/devantler-tech/ksail-go/pkg/io/marshaller/yaml"
-	"github.com/devantler-tech/ksail-go/pkg/io/validator"
+	"github.com/devantler-tech/ksail/pkg/io"
+	yamlmarshaller "github.com/devantler-tech/ksail/pkg/io/marshaller/yaml"
+	"github.com/devantler-tech/ksail/pkg/io/validator"
 )
 
 // Configuration validation errors.

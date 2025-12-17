@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/devantler-tech/ksail-go/cmd/workload"
-	runtime "github.com/devantler-tech/ksail-go/pkg/di"
+	"github.com/devantler-tech/ksail/cmd/workload"
+	runtime "github.com/devantler-tech/ksail/pkg/di"
 )
 
 func TestNewInstallCmdRequiresMinimumArgs(t *testing.T) {

@@ -7,10 +7,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/devantler-tech/ksail-go/cmd"
-	pkgcmd "github.com/devantler-tech/ksail-go/pkg/cmd"
-	"github.com/devantler-tech/ksail-go/pkg/ui/notify"
-	"github.com/devantler-tech/ksail-go/pkg/ui/timer"
+	"github.com/devantler-tech/ksail/cmd"
+	pkgcmd "github.com/devantler-tech/ksail/pkg/cmd"
+	"github.com/devantler-tech/ksail/pkg/ui/notify"
+	"github.com/devantler-tech/ksail/pkg/ui/timer"
 	"github.com/gkampitakis/go-snaps/snaps"
 	"github.com/spf13/cobra"
 )

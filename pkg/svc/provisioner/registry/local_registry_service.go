@@ -9,8 +9,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/devantler-tech/ksail-go/pkg/apis/cluster/v1alpha1"
-	dockerclient "github.com/devantler-tech/ksail-go/pkg/client/docker"
+	"github.com/devantler-tech/ksail/pkg/apis/cluster/v1alpha1"
+	dockerclient "github.com/devantler-tech/ksail/pkg/client/docker"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/mount"

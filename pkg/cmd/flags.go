@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/devantler-tech/ksail-go/pkg/ui/timer"
+	"github.com/devantler-tech/ksail/pkg/ui/timer"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )

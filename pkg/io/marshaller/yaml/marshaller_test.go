@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/devantler-tech/ksail-go/pkg/io/marshaller"
-	yamlmarshaller "github.com/devantler-tech/ksail-go/pkg/io/marshaller/yaml"
+	"github.com/devantler-tech/ksail/pkg/io/marshaller"
+	yamlmarshaller "github.com/devantler-tech/ksail/pkg/io/marshaller/yaml"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

@@ -3,10 +3,10 @@ package cluster
 import (
 	"fmt"
 
-	"github.com/devantler-tech/ksail-go/pkg/client/k9s"
-	cmdhelpers "github.com/devantler-tech/ksail-go/pkg/cmd"
-	runtime "github.com/devantler-tech/ksail-go/pkg/di"
-	ksailconfigmanager "github.com/devantler-tech/ksail-go/pkg/io/config-manager/ksail"
+	"github.com/devantler-tech/ksail/pkg/client/k9s"
+	cmdhelpers "github.com/devantler-tech/ksail/pkg/cmd"
+	runtime "github.com/devantler-tech/ksail/pkg/di"
+	ksailconfigmanager "github.com/devantler-tech/ksail/pkg/io/config-manager/ksail"
 	"github.com/spf13/cobra"
 )
 
@@ -16,7 +16,7 @@ func NewConnectCmd(_ *runtime.Runtime) *cobra.Command {
 		Use:   "connect",
 		Short: "Connect to cluster with k9s",
 		Long: `Launch k9s terminal UI to interactively manage your Kubernetes cluster.
-		
+
 All k9s flags and arguments are passed through unchanged, allowing you to use
 any k9s functionality. Examples:
 

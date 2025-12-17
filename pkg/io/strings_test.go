@@ -3,7 +3,7 @@ package io_test
 import (
 	"testing"
 
-	io "github.com/devantler-tech/ksail-go/pkg/io"
+	io "github.com/devantler-tech/ksail/pkg/io"
 	"github.com/stretchr/testify/assert"
 )
 

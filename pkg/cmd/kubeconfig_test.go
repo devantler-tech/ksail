@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/devantler-tech/ksail-go/pkg/apis/cluster/v1alpha1"
-	pkgcmd "github.com/devantler-tech/ksail-go/pkg/cmd"
+	"github.com/devantler-tech/ksail/pkg/apis/cluster/v1alpha1"
+	pkgcmd "github.com/devantler-tech/ksail/pkg/cmd"
 	"github.com/stretchr/testify/require"
 )
 

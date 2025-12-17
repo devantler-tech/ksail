@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/devantler-tech/ksail-go/pkg/client/helm"
+	"github.com/devantler-tech/ksail/pkg/client/helm"
 )
 
 const (

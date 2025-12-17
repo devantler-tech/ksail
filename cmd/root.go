@@ -3,13 +3,13 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/devantler-tech/ksail-go/cmd/cipher"
-	cluster "github.com/devantler-tech/ksail-go/cmd/cluster"
-	"github.com/devantler-tech/ksail-go/cmd/workload"
-	pkgcmd "github.com/devantler-tech/ksail-go/pkg/cmd"
-	runtime "github.com/devantler-tech/ksail-go/pkg/di"
-	"github.com/devantler-tech/ksail-go/pkg/ui/asciiart"
-	errorhandler "github.com/devantler-tech/ksail-go/pkg/ui/error-handler"
+	"github.com/devantler-tech/ksail/cmd/cipher"
+	cluster "github.com/devantler-tech/ksail/cmd/cluster"
+	"github.com/devantler-tech/ksail/cmd/workload"
+	pkgcmd "github.com/devantler-tech/ksail/pkg/cmd"
+	runtime "github.com/devantler-tech/ksail/pkg/di"
+	"github.com/devantler-tech/ksail/pkg/ui/asciiart"
+	errorhandler "github.com/devantler-tech/ksail/pkg/ui/error-handler"
 	"github.com/spf13/cobra"
 )
 

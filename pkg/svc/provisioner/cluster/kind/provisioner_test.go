@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/devantler-tech/ksail-go/pkg/client/docker"
-	cmdrunner "github.com/devantler-tech/ksail-go/pkg/cmd/runner"
-	kindprovisioner "github.com/devantler-tech/ksail-go/pkg/svc/provisioner/cluster/kind"
+	"github.com/devantler-tech/ksail/pkg/client/docker"
+	cmdrunner "github.com/devantler-tech/ksail/pkg/cmd/runner"
+	kindprovisioner "github.com/devantler-tech/ksail/pkg/svc/provisioner/cluster/kind"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"

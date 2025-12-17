@@ -1,8 +1,8 @@
 package workload
 
 import (
-	"github.com/devantler-tech/ksail-go/cmd/workload/gen"
-	runtime "github.com/devantler-tech/ksail-go/pkg/di"
+	"github.com/devantler-tech/ksail/cmd/workload/gen"
+	runtime "github.com/devantler-tech/ksail/pkg/di"
 	"github.com/spf13/cobra"
 )
 

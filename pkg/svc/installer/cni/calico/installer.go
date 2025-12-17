@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/devantler-tech/ksail-go/pkg/client/helm"
-	"github.com/devantler-tech/ksail-go/pkg/k8s"
-	"github.com/devantler-tech/ksail-go/pkg/svc/installer"
-	"github.com/devantler-tech/ksail-go/pkg/svc/installer/cni"
+	"github.com/devantler-tech/ksail/pkg/client/helm"
+	"github.com/devantler-tech/ksail/pkg/k8s"
+	"github.com/devantler-tech/ksail/pkg/svc/installer"
+	"github.com/devantler-tech/ksail/pkg/svc/installer/cni"
 )
 
 // CalicoInstaller implements the installer.Installer interface for Calico.

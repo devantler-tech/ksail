@@ -7,7 +7,7 @@ package clusterprovisioner
 import (
 	"context"
 
-	"github.com/devantler-tech/ksail-go/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/pkg/apis/cluster/v1alpha1"
 	mock "github.com/stretchr/testify/mock"
 )
 

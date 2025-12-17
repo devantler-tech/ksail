@@ -1,8 +1,8 @@
 package gen
 
 import (
-	"github.com/devantler-tech/ksail-go/pkg/client/kubectl"
-	runtime "github.com/devantler-tech/ksail-go/pkg/di"
+	"github.com/devantler-tech/ksail/pkg/client/kubectl"
+	runtime "github.com/devantler-tech/ksail/pkg/di"
 	"github.com/spf13/cobra"
 )
 

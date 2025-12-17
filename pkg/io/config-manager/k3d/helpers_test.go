@@ -3,8 +3,8 @@ package k3d_test
 import (
 	"testing"
 
-	v1alpha1 "github.com/devantler-tech/ksail-go/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail-go/pkg/io/config-manager/k3d"
+	v1alpha1 "github.com/devantler-tech/ksail/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/pkg/io/config-manager/k3d"
 	"github.com/k3d-io/k3d/v5/pkg/config/types"
 	v1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/stretchr/testify/assert"

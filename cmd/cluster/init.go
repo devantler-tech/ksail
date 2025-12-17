@@ -4,13 +4,13 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/devantler-tech/ksail-go/pkg/apis/cluster/v1alpha1"
-	cmdhelpers "github.com/devantler-tech/ksail-go/pkg/cmd"
-	runtime "github.com/devantler-tech/ksail-go/pkg/di"
-	ksailconfigmanager "github.com/devantler-tech/ksail-go/pkg/io/config-manager/ksail"
-	"github.com/devantler-tech/ksail-go/pkg/io/scaffolder"
-	"github.com/devantler-tech/ksail-go/pkg/ui/notify"
-	"github.com/devantler-tech/ksail-go/pkg/ui/timer"
+	"github.com/devantler-tech/ksail/pkg/apis/cluster/v1alpha1"
+	cmdhelpers "github.com/devantler-tech/ksail/pkg/cmd"
+	runtime "github.com/devantler-tech/ksail/pkg/di"
+	ksailconfigmanager "github.com/devantler-tech/ksail/pkg/io/config-manager/ksail"
+	"github.com/devantler-tech/ksail/pkg/io/scaffolder"
+	"github.com/devantler-tech/ksail/pkg/ui/notify"
+	"github.com/devantler-tech/ksail/pkg/ui/timer"
 	"github.com/spf13/cobra"
 )
 

@@ -12,9 +12,9 @@ import (
 	"strings"
 	"testing"
 
-	docker "github.com/devantler-tech/ksail-go/pkg/client/docker"
-	kindprovisioner "github.com/devantler-tech/ksail-go/pkg/svc/provisioner/cluster/kind"
-	"github.com/devantler-tech/ksail-go/pkg/svc/provisioner/registry"
+	docker "github.com/devantler-tech/ksail/pkg/client/docker"
+	kindprovisioner "github.com/devantler-tech/ksail/pkg/svc/provisioner/cluster/kind"
+	"github.com/devantler-tech/ksail/pkg/svc/provisioner/registry"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/network"

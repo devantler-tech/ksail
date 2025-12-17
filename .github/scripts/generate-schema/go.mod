@@ -1,15 +1,15 @@
-module github.com/devantler-tech/ksail-go/generate-schema
+module github.com/devantler-tech/ksail/generate-schema
 
 go 1.25.4
 
 require (
-	github.com/devantler-tech/ksail-go v1.14.0
+	github.com/devantler-tech/ksail v1.14.0
 	github.com/invopop/jsonschema v0.13.0
 	github.com/wk8/go-ordered-map/v2 v2.1.8
 	k8s.io/apimachinery v0.34.3
 )
 
-replace github.com/devantler-tech/ksail-go => ../../..
+replace github.com/devantler-tech/ksail => ../../..
 
 require (
 	github.com/bahlo/generic-list-go v0.2.0 // indirect

@@ -3,7 +3,7 @@ package validator_test
 import (
 	"testing"
 
-	"github.com/devantler-tech/ksail-go/pkg/io/validator"
+	"github.com/devantler-tech/ksail/pkg/io/validator"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

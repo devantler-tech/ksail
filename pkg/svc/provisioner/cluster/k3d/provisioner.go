@@ -8,7 +8,7 @@ import (
 	"slices"
 	"strings"
 
-	runner "github.com/devantler-tech/ksail-go/pkg/cmd/runner"
+	runner "github.com/devantler-tech/ksail/pkg/cmd/runner"
 	clustercommand "github.com/k3d-io/k3d/v5/cmd/cluster"
 	v1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/sirupsen/logrus"

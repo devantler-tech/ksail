@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/devantler-tech/ksail-go/pkg/apis/cluster/v1alpha1"
-	dockerclient "github.com/devantler-tech/ksail-go/pkg/client/docker"
-	registry "github.com/devantler-tech/ksail-go/pkg/svc/provisioner/registry"
+	"github.com/devantler-tech/ksail/pkg/apis/cluster/v1alpha1"
+	dockerclient "github.com/devantler-tech/ksail/pkg/client/docker"
+	registry "github.com/devantler-tech/ksail/pkg/svc/provisioner/registry"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/network"
 	"github.com/stretchr/testify/assert"

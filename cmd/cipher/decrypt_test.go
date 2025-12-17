@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/devantler-tech/ksail-go/cmd/cipher"
-	runtime "github.com/devantler-tech/ksail-go/pkg/di"
+	"github.com/devantler-tech/ksail/cmd/cipher"
+	runtime "github.com/devantler-tech/ksail/pkg/di"
 )
 
 func TestNewDecryptCmd(t *testing.T) {

@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/devantler-tech/ksail-go/cmd/cipher"
-	runtime "github.com/devantler-tech/ksail-go/pkg/di"
+	"github.com/devantler-tech/ksail/cmd/cipher"
+	runtime "github.com/devantler-tech/ksail/pkg/di"
 	"github.com/spf13/cobra"
 )
 
