@@ -19,13 +19,13 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// defaultArtifactTag is used when no explicit tag is provided for a workload
+// defaultLocalArtifactTag is used when no explicit tag is provided for a workload
 // artifact. The "dev" tag is intended only for local development and will
 // typically point to the most recently built image, which is convenient but
 // not suitable for reproducible or production deployments where explicit
 // immutable version tags (for example, semantic versions or digests) should
 // be used instead.
-const defaultArtifactTag = "dev"
+const defaultLocalArtifactTag = "dev"
 
 var errLocalRegistryRequired = errors.New("local registry must be enabled to reconcile workloads")
 
@@ -105,7 +105,7 @@ func NewReconcileCmd(_ *runtime.Runtime) *cobra.Command {
 		}
 
 		repoName := sourceDir
-		artifactVersion := defaultArtifactTag
+		artifactVersion := defaultLocalArtifactTag
 
 		registryPort := clusterCfg.Spec.Options.LocalRegistry.HostPort
 		if registryPort == 0 {
