@@ -77,7 +77,7 @@ jobs:
         run: ksail cluster delete
 ```
 
-## GitHub Actions example
+## Example GitHub Actions workflow
 
 ```yaml
 name: e2e
@@ -98,13 +98,12 @@ jobs:
         with:
           go-version-file: go.mod
       - name: Install ksail
-        run: go install ./cmd/ksail
+        run: go install github.com/devantler-tech/ksail@latest
       - name: Create cluster
-        run: |
-          ksail cluster create --wait --timeout 10m
+        run: ksail cluster create
       - name: Deploy workloads
         run: |
-          ksail workload reconcile -f k8s/overlays/ci
+          ksail workload apply -k k8s/
           ksail workload wait --for=condition=Available deployment/my-app --timeout=180s
       - name: Run tests
         run: go test ./tests/e2e/... -count=1
@@ -112,17 +111,17 @@ jobs:
         if: failure()
         run: |
           ksail workload logs deployment/my-app --since 5m > logs.txt
-          kubectl get events --all-namespaces > events.txt
+          ksail workload get events -A > events.txt
       - name: Destroy cluster
         if: always()
         run: ksail cluster delete
 ```
 
-For hosted runners without Docker cache, consider pre-building images in a preceding job and pushing them to a registry that the KSail-Go cluster can pull from. You can also run the workflow on self-hosted runners equipped with faster storage to keep end-to-end cycles under 10 minutes.
+For hosted runners without Docker cache, consider pre-building images in a preceding job and pushing them to a registry that the KSail cluster can pull from. You can also run the workflow on self-hosted runners equipped with faster storage to keep end-to-end cycles under 10 minutes.
 
 ## Hardening recommendations
 
-- Store test-only secrets with SOPS and decrypt them during the pipeline with `ksail cipher decrypt` so they never appear in plain text.
-- Use `ksail cluster create --registry local --mirror-registries true` if your registries require mirroring or authentication on private runners.
-- Add a nightly job that exercises the same pipeline against the default branch to catch drift in Kubernetes versions or base images.
-- Track time-to-ready metrics by wrapping `ksail cluster create` with timestamps and pushing results to your observability stack.
+- Store test-only secrets with SOPS and decrypt them during the pipeline with `ksail cipher decrypt` so they never appear in plain text
+- Use `--mirror-registry` flags if your registries require mirroring or you want to cache upstream images
+- Add a nightly job that exercises the same pipeline against the default branch to catch drift in Kubernetes versions or base images
+- Track cluster creation times to identify performance regressions
