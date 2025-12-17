@@ -81,5 +81,5 @@ bin/
 
 # actionlint binary
 actionlint
-/ksail-go
+/ksail
 .github/scripts/generate-schema/generate-schema

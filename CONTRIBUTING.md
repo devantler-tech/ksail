@@ -3,7 +3,7 @@
 > [!NOTE]
 > If you are looking to become a maintainer of ksail, please reach out to @devantler on <https://devantler.tech/contact/>. I can facilitate introductions, mentorship, and regular check-ins, while also providing premium GitHub features to maintainers. As a maintainer, you will have the opportunity to obtain mandate to steer the project's direction in collaboration with me and the community.
 
-This project accepts contributions in the form of [**bug reports**](https://github.com/devantler-tech/ksail-go/issues/new/choose), [**feature requests**](https://github.com/devantler-tech/ksail-go/issues/new/choose), and **pull requests** (see below). If you are looking to contribute code, please follow the guidelines outlined in this document.
+This project accepts contributions in the form of [**bug reports**](https://github.com/devantler-tech/ksail/issues/new/choose), [**feature requests**](https://github.com/devantler-tech/ksail/issues/new/choose), and **pull requests** (see below). If you are looking to contribute code, please follow the guidelines outlined in this document.
 
 ## Getting Started
 
@@ -13,7 +13,7 @@ To understand the codebase it is recommended to read the `.github/copilot-instru
 
 ### Code Documentation
 
-For detailed package and API documentation, refer to the Go documentation at [pkg.go.dev/github.com/devantler-tech/ksail-go](https://pkg.go.dev/github.com/devantler-tech/ksail-go). This provides comprehensive documentation for all exported packages, types, functions, and methods.
+For detailed package and API documentation, refer to the Go documentation at [pkg.go.dev/github.com/devantler-tech/ksail](https://pkg.go.dev/github.com/devantler-tech/ksail). This provides comprehensive documentation for all exported packages, types, functions, and methods.
 
 ### Prerequisites
 
@@ -68,7 +68,7 @@ The repository is organized into two main directories:
 
 This project strives to be fully open-source friendly, and as such, all core functionality is implemented in the `pkg/` directory, and the `internal/` directory is not used. This allows external projects to import and use any part of the codebase.
 
-For detailed package and API documentation, refer to [pkg.go.dev/github.com/devantler-tech/ksail-go](https://pkg.go.dev/github.com/devantler-tech/ksail-go).
+For detailed package and API documentation, refer to [pkg.go.dev/github.com/devantler-tech/ksail](https://pkg.go.dev/github.com/devantler-tech/ksail).
 
 ## CI
 

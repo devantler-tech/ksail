@@ -27,7 +27,7 @@ archives:
 
 dockers_v2:
   - images:
-      - "ghcr.io/devantler-tech/ksail-go"
+      - "ghcr.io/devantler-tech/ksail"
     tags:
       - "{{ .Tag }}"
       - "latest"
@@ -82,16 +82,16 @@ release:
 
     **Go Install**:
     ```bash
-    go install github.com/devantler-tech/ksail-go@{{ .Tag }}
+    go install github.com/devantler-tech/ksail@{{ .Tag }}
     ```
 
     **Download Binary**: Choose your platform from the assets above
 
     **Docker**:
     ```bash
-    docker pull ghcr.io/devantler-tech/ksail-go:{{ .Tag }}
+    docker pull ghcr.io/devantler-tech/ksail:{{ .Tag }}
     # or use :latest for the latest release
     ```
 
     ---
-    **Full Changelog**: https://github.com/devantler-tech/ksail-go/compare/{{ .PreviousTag }}...{{ .Tag }}
+    **Full Changelog**: https://github.com/devantler-tech/ksail/compare/{{ .PreviousTag }}...{{ .Tag }}

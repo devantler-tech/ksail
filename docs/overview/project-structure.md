@@ -3,7 +3,7 @@
 Running `ksail cluster init` scaffolds a repository that is immediately compatible with the KSail-Go command set. The exact layout varies depending on flags such as `--distribution`, `--gateway-controller`, and declarative overrides in [`ksail.yaml`](../configuration/declarative-config.md), but every project starts with the same core folders:
 
 ```text
-├── ksail.yaml              # Declarative cluster definition consumed by ksail-go
+├── ksail.yaml              # Declarative cluster definition consumed by ksail
 ├── kind.yaml / k3d.yaml     # Distribution-specific overrides generated during init
 └── k8s/                     # GitOps-ready manifests (bases, overlays, and Flux wiring)
     └── kustomization.yaml   # Root Kustomize entrypoint referenced by workload commands

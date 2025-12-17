@@ -4,7 +4,7 @@ A composite action that consolidates the binary preparation logic used across mu
 
 ## Purpose
 
-This action extracts the duplicated cache-based binary preparation pattern into a reusable component, addressing the maintenance burden identified in [#527](https://github.com/devantler-tech/ksail-go/pull/527).
+This action extracts the duplicated cache-based binary preparation pattern into a reusable component, addressing the maintenance burden identified in [#527](https://github.com/devantler-tech/ksail/pull/527).
 
 ## What It Does
 
@@ -35,14 +35,14 @@ This path flexibility is intentional and necessary because:
   with:
     go-version: ${{ steps.setup-go.outputs.go-version }}
     source-hash: ${{ hashFiles('go.mod', 'go.sum', '**/*.go') }}
-    output-path: ksail  # or bin/ksail
-    run-smoke-test: 'true'  # optional, defaults to 'true'
+    output-path: ksail # or bin/ksail
+    run-smoke-test: "true" # optional, defaults to 'true'
 ```
 
 ## Inputs
 
 | Input            | Required | Default  | Description                                                                                                                                                                                                     |
-|------------------|----------|----------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| ---------------- | -------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `go-version`     | Yes      | -        | Go version from `setup-go` output, used for cache key computation                                                                                                                                               |
 | `source-hash`    | Yes      | -        | Hash of source files (use `hashFiles('go.mod', 'go.sum', '**/*.go')`)                                                                                                                                           |
 | `output-path`    | No       | `ksail`  | Target path for the binary relative to repository root (e.g., `ksail` or `bin/ksail`). Must be relative to repository root and must not contain path traversal sequences (e.g., `..`, `../`, `*/../*`, `*/..`). |
@@ -51,7 +51,7 @@ This path flexibility is intentional and necessary because:
 ## Outputs
 
 | Output                   | Description                                                         |
-|--------------------------|---------------------------------------------------------------------|
+| ------------------------ | ------------------------------------------------------------------- |
 | `cache-hit`              | Whether the cache was hit (`'true'` or `'false'`)                   |
 | `binary-path`            | Absolute path to the prepared binary                                |
 | `output-path-normalized` | Normalized relative path to the binary (with leading `./` stripped) |
@@ -67,7 +67,7 @@ This path flexibility is intentional and necessary because:
     go-version: ${{ steps.setup-go.outputs.go-version }}
     source-hash: ${{ hashFiles('go.mod', 'go.sum', '**/*.go') }}
     output-path: ksail
-    run-smoke-test: 'true'
+    run-smoke-test: "true"
 ```
 
 ### System-Test Job
@@ -79,9 +79,9 @@ This path flexibility is intentional and necessary because:
     go-version: ${{ steps.setup-go.outputs.go-version }}
     source-hash: ${{ hashFiles('go.mod', 'go.sum', '**/*.go') }}
     output-path: bin/ksail
-    run-smoke-test: 'false'  # tests handle validation
+    run-smoke-test: "false" # tests handle validation
 ```
 
 ## Related
 
-- Original issue: [#527 - Optimize CI system-test build time](https://github.com/devantler-tech/ksail-go/pull/527)
+- Original issue: [#527 - Optimize CI system-test build time](https://github.com/devantler-tech/ksail/pull/527)

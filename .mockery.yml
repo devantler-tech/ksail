@@ -4,7 +4,7 @@ structname: "Mock{{.InterfaceName}}"
 pkgname: "{{.PackageName}}"
 include-auto-generated: true
 packages:
-  github.com/devantler-tech/ksail-go/pkg/io/generator:
+  github.com/devantler-tech/ksail/pkg/io/generator:
     config:
       recursive: false
       dir: pkg/io/generator
@@ -12,7 +12,7 @@ packages:
       pkgname: generator
     interfaces:
       Generator:
-  github.com/devantler-tech/ksail-go/pkg/io/config-manager:
+  github.com/devantler-tech/ksail/pkg/io/config-manager:
     config:
       recursive: false
       dir: pkg/io/config-manager
@@ -20,7 +20,7 @@ packages:
       pkgname: configmanager
     interfaces:
       ConfigManager:
-  github.com/devantler-tech/ksail-go/pkg/client/helm:
+  github.com/devantler-tech/ksail/pkg/client/helm:
     config:
       recursive: false
       dir: pkg/client/helm
@@ -28,7 +28,7 @@ packages:
       pkgname: helm
     interfaces:
       Interface:
-  github.com/devantler-tech/ksail-go/pkg/svc/provisioner/cluster:
+  github.com/devantler-tech/ksail/pkg/svc/provisioner/cluster:
     config:
       recursive: false
       dir: pkg/svc/provisioner/cluster
@@ -37,7 +37,7 @@ packages:
     interfaces:
       ClusterProvisioner:
       Factory:
-  github.com/devantler-tech/ksail-go/pkg/io/validator:
+  github.com/devantler-tech/ksail/pkg/io/validator:
     config:
       recursive: false
       dir: pkg/io/validator
@@ -70,7 +70,7 @@ packages:
       pkgname: applysetinstaller
     interfaces:
       ResourceInterface:
-  github.com/devantler-tech/ksail-go/pkg/ui/timer:
+  github.com/devantler-tech/ksail/pkg/ui/timer:
     config:
       recursive: false
       dir: pkg/ui/timer
@@ -78,7 +78,7 @@ packages:
       pkgname: timer
     interfaces:
       Timer:
-  github.com/devantler-tech/ksail-go/pkg/cmd/runner:
+  github.com/devantler-tech/ksail/pkg/cmd/runner:
     config:
       recursive: false
       dir: pkg/cmd/runner
@@ -86,7 +86,7 @@ packages:
       pkgname: runner
     interfaces:
       CommandRunner:
-  github.com/devantler-tech/ksail-go/pkg/svc/installer:
+  github.com/devantler-tech/ksail/pkg/svc/installer:
     config:
       recursive: false
       dir: pkg/svc/installer
@@ -94,7 +94,7 @@ packages:
       pkgname: installer
     interfaces:
       Installer:
-  github.com/devantler-tech/ksail-go/pkg/svc/provisioner/cluster/kind:
+  github.com/devantler-tech/ksail/pkg/svc/provisioner/cluster/kind:
     config:
       recursive: false
       dir: pkg/svc/provisioner/cluster/kind
@@ -102,7 +102,7 @@ packages:
       pkgname: kindprovisioner
     interfaces:
       KindProvider:
-  github.com/devantler-tech/ksail-go/pkg/di:
+  github.com/devantler-tech/ksail/pkg/di:
     config:
       recursive: false
       dir: pkg/di
@@ -110,7 +110,7 @@ packages:
       pkgname: di
     interfaces:
       Injector:
-  github.com/devantler-tech/ksail-go/pkg/io/marshaller:
+  github.com/devantler-tech/ksail/pkg/io/marshaller:
     config:
       recursive: false
       dir: pkg/io/marshaller
@@ -118,7 +118,7 @@ packages:
       pkgname: marshaller
     interfaces:
       Marshaller:
-  github.com/devantler-tech/ksail-go/pkg/client/argocd:
+  github.com/devantler-tech/ksail/pkg/client/argocd:
     config:
       recursive: false
       dir: pkg/client/argocd

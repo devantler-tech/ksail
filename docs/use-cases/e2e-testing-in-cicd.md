@@ -11,6 +11,7 @@ KSail-Go enables pull-request pipelines to stand up disposable Kubernetes cluste
    ```
 
    Commit the generated config so your CI job only needs to run `ksail cluster create` without additional flags.
+
 2. **Create the cluster and wait for readiness**
 
    ```bash
@@ -19,6 +20,7 @@ KSail-Go enables pull-request pipelines to stand up disposable Kubernetes cluste
    ```
 
    The extended timeout accounts for container pulls on cold runners. `status` verifies controllers are healthy before tests begin.
+
 3. **Deploy workloads and run tests**
 
    ```bash
@@ -28,6 +30,7 @@ KSail-Go enables pull-request pipelines to stand up disposable Kubernetes cluste
    ```
 
    Swap the test command for your framework of choice (JUnit, pytest, etc.) while leaving KSail-Go responsible for cluster state.
+
 4. **Collect diagnostics on failure**
 
    ```bash
@@ -36,6 +39,7 @@ KSail-Go enables pull-request pipelines to stand up disposable Kubernetes cluste
    ```
 
    Persist the output as pipeline artifacts so engineers can inspect issues without rerunning the job immediately.
+
 5. **Destroy the cluster**
 
    ```bash
@@ -51,9 +55,9 @@ name: e2e
 on:
   pull_request:
     paths:
-      - 'k8s/**'
-      - 'docs/**'
-      - 'src/**'
+      - "k8s/**"
+      - "docs/**"
+      - "src/**"
 
 jobs:
   test:
@@ -64,7 +68,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - name: Install ksail-go
+      - name: Install ksail
         run: go install ./cmd/ksail
       - name: Create cluster
         run: |
