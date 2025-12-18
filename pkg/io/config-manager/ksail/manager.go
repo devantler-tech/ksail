@@ -98,8 +98,9 @@ func (m *ConfigManager) LoadConfigSilent() (*v1alpha1.Cluster, error) {
 	return m.loadConfigWithOptions(nil, true, false)
 }
 
-// LoadConfigWithoutFileSilent loads configuration ignoring on-disk config files without notifications.
-func (m *ConfigManager) LoadConfigWithoutFileSilent() (*v1alpha1.Cluster, error) {
+// LoadConfigFromFlagsOnly loads configuration from flags and defaults only, ignoring on-disk config files.
+// No notifications are emitted during the loading process.
+func (m *ConfigManager) LoadConfigFromFlagsOnly() (*v1alpha1.Cluster, error) {
 	return m.loadConfigWithOptions(nil, true, true)
 }
 
