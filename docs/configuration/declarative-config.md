@@ -60,11 +60,7 @@ Use the `spec.distributionConfig` field in `ksail.yaml` to point to the desired 
 
 ## Schema support and editor assistance
 
-The KSail repository provides a JSON Schema for `ksail.yaml` validation and IntelliSense. The schema file is located at `schemas/ksail-config.schema.json` in the [KSail GitHub repository](https://github.com/devantler-tech/ksail/tree/main/schemas).
-
-### For users
-
-Reference the schema directly from GitHub in your `ksail.yaml`:
+The KSail repository provides a JSON Schema for `ksail.yaml` validation and IntelliSense. Reference the schema directly from GitHub in your `ksail.yaml`:
 
 ```yaml
 # yaml-language-server: $schema=https://raw.githubusercontent.com/devantler-tech/ksail/main/schemas/ksail-config.schema.json
@@ -73,19 +69,4 @@ kind: Cluster
 ...
 ```
 
-This provides IDE validation and autocompletion without requiring a local copy of the schema.
-
-### For contributors
-
-If you're working within a clone of the KSail repository, you can use a relative path:
-
-```yaml
-# yaml-language-server: $schema=../schemas/ksail-config.schema.json
-apiVersion: ksail.dev/v1alpha1
-kind: Cluster
-...
-```
-
-Adjust the relative path (`../`, `../../`, etc.) based on your `ksail.yaml` location relative to the repository root.
-
-IDEs that support SchemaStore (including VS Code with the Red Hat YAML extension) will provide completions and validation.
+This provides IDE validation and autocompletion without requiring a local copy of the schema. IDEs that support SchemaStore (including VS Code with the Red Hat YAML extension) will provide completions and validation.
