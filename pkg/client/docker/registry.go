@@ -55,7 +55,7 @@ const (
 	// MaxImagePullRetries is the maximum number of retries for image pulls.
 	MaxImagePullRetries = 3
 	// ImagePullRetryDelay is the base delay for exponential backoff between retries.
-	// Actual delays will be: 2s (2^0), 4s (2^1), 8s (2^2) for attempts 1, 2, 3.
+	// Delays after failed attempts will be: 2s (2 * 2^0), 4s (2 * 2^1) for attempts 1 and 2.
 	ImagePullRetryDelay = 2 * time.Second
 	// HostPortParts is the expected number of parts in a host:port string.
 	HostPortParts = 2
@@ -422,21 +422,17 @@ func (rm *RegistryManager) ensureRegistryImage(ctx context.Context) error {
 	}
 
 	// Pull image with retry logic
-	var lastErr error
-
 	for attempt := 1; attempt <= MaxImagePullRetries; attempt++ {
 		// Check if context has been cancelled before attempting
 		if err := ctx.Err(); err != nil {
 			return fmt.Errorf("context cancelled before retry attempt %d: %w", attempt, err)
 		}
 
-		// Calculate delay based on attempt number for consistent backoff
-		delay := ImagePullRetryDelay * time.Duration(1<<(attempt-1))
-
 		reader, pullErr := rm.client.ImagePull(ctx, RegistryImageName, image.PullOptions{})
 		if pullErr != nil {
-			lastErr = pullErr
 			if attempt < MaxImagePullRetries {
+				// Calculate delay only when needed for retry
+				delay := ImagePullRetryDelay * time.Duration(1<<(attempt-1))
 				fmt.Fprintf(
 					os.Stderr,
 					"warning: image pull attempt %d/%d failed: %v, retrying in %v...\n",
@@ -458,19 +454,20 @@ func (rm *RegistryManager) ensureRegistryImage(ctx context.Context) error {
 		// Handle both read and close errors
 		if err != nil || closeErr != nil {
 			// Prefer reporting the read error if both exist
-			if err != nil {
-				lastErr = err
-			} else {
-				lastErr = closeErr
+			readErr := err
+			if readErr == nil {
+				readErr = closeErr
 			}
 
 			if attempt < MaxImagePullRetries {
+				// Calculate delay only when needed for retry
+				delay := ImagePullRetryDelay * time.Duration(1<<(attempt-1))
 				fmt.Fprintf(
 					os.Stderr,
 					"warning: image pull attempt %d/%d failed: %v, retrying in %v...\n",
 					attempt,
 					MaxImagePullRetries,
-					lastErr,
+					readErr,
 					delay,
 				)
 				time.Sleep(delay)
@@ -487,8 +484,9 @@ func (rm *RegistryManager) ensureRegistryImage(ctx context.Context) error {
 		return nil
 	}
 
-	// Should not reach here, but return error for safety
-	return fmt.Errorf("failed to pull registry image after %d attempts: %w", MaxImagePullRetries, lastErr)
+	// This line should never be reached since the loop always returns within its body,
+	// but Go requires a return statement here to satisfy the compiler.
+	return fmt.Errorf("unexpected: retry loop completed without returning")
 }
 
 // createVolume creates a Docker volume if it doesn't already exist.
