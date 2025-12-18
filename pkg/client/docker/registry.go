@@ -423,11 +423,6 @@ func (rm *RegistryManager) ensureRegistryImage(ctx context.Context) error {
 
 	// Pull image with retry logic
 	for attempt := 1; attempt <= MaxImagePullRetries; attempt++ {
-		// Check if context has been cancelled before attempting
-		if err := ctx.Err(); err != nil {
-			return fmt.Errorf("context cancelled before retry attempt %d: %w", attempt, err)
-		}
-
 		reader, pullErr := rm.client.ImagePull(ctx, RegistryImageName, image.PullOptions{})
 		if pullErr != nil {
 			if attempt < MaxImagePullRetries {
@@ -441,7 +436,14 @@ func (rm *RegistryManager) ensureRegistryImage(ctx context.Context) error {
 					pullErr,
 					delay,
 				)
-				time.Sleep(delay)
+				
+				// Use context-aware sleep to respect cancellation during delay
+				select {
+				case <-time.After(delay):
+					// Continue with retry
+				case <-ctx.Done():
+					return fmt.Errorf("context cancelled during retry delay after attempt %d: %w", attempt, ctx.Err())
+				}
 				continue
 			}
 			return fmt.Errorf("failed to pull registry image after %d attempts: %w", MaxImagePullRetries, pullErr)
@@ -470,7 +472,14 @@ func (rm *RegistryManager) ensureRegistryImage(ctx context.Context) error {
 					readErr,
 					delay,
 				)
-				time.Sleep(delay)
+				
+				// Use context-aware sleep to respect cancellation during delay
+				select {
+				case <-time.After(delay):
+					// Continue with retry
+				case <-ctx.Done():
+					return fmt.Errorf("context cancelled during retry delay after attempt %d: %w", attempt, ctx.Err())
+				}
 				continue
 			}
 

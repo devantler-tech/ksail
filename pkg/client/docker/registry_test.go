@@ -6,6 +6,7 @@ import (
 	"io"
 	"strings"
 	"testing"
+	"time"
 
 	docker "github.com/devantler-tech/ksail/pkg/client/docker"
 	"github.com/docker/docker/api/types/container"
@@ -1002,6 +1003,7 @@ func TestEnsureRegistryImage_SuccessOnSecondAttempt(t *testing.T) {
 	mockImageNotFound(ctx, mockClient)
 
 	// First attempt fails, second succeeds
+	// Note: There will be a 2-second delay between attempts due to exponential backoff
 	mockClient.EXPECT().
 		ImagePull(ctx, docker.RegistryImageName, mock.Anything).
 		Return(nil, errImagePullFailed).
@@ -1023,21 +1025,59 @@ func TestEnsureRegistryImage_SuccessOnSecondAttempt(t *testing.T) {
 func TestEnsureRegistryImage_ContextCancellation(t *testing.T) {
 	t.Parallel()
 
-	mockClient, manager, _ := setupTestRegistryManager(t)
-
-	config := newTestRegistryConfig()
-
-	// Create a cancelled context
+	// Create a cancelled context first
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
+
+	mockClient := docker.NewMockAPIClient(t)
+	manager, err := docker.NewRegistryManager(mockClient)
+	require.NoError(t, err)
+
+	config := newTestRegistryConfig()
 
 	mockRegistryNotExists(ctx, mockClient)
 	mockImageNotFound(ctx, mockClient)
 
-	err := manager.CreateRegistry(ctx, config)
+	// First attempt will fail with regular error, then the retry delay will detect cancellation
+	mockClient.EXPECT().
+		ImagePull(ctx, docker.RegistryImageName, mock.Anything).
+		Return(nil, errImagePullFailed).
+		Once()
+
+	err = manager.CreateRegistry(ctx, config)
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "context cancelled")
+	// Verify error contains context cancellation during retry delay
+	assert.Contains(t, err.Error(), "failed to ensure registry image")
+	assert.Contains(t, err.Error(), "context cancelled during retry delay")
+}
+
+func TestEnsureRegistryImage_ContextCancellationDuringRetryDelay(t *testing.T) {
+	t.Parallel()
+
+	mockClient, manager, ctx := setupTestRegistryManager(t)
+
+	config := newTestRegistryConfig()
+
+	// Create a context that will be cancelled during the retry delay
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
+	defer cancel()
+
+	mockRegistryNotExists(ctxWithTimeout, mockClient)
+	mockImageNotFound(ctxWithTimeout, mockClient)
+
+	// First attempt fails, and during the 2-second retry delay, the context times out
+	mockClient.EXPECT().
+		ImagePull(ctxWithTimeout, docker.RegistryImageName, mock.Anything).
+		Return(nil, errImagePullFailed).
+		Once()
+
+	err := manager.CreateRegistry(ctxWithTimeout, config)
+
+	require.Error(t, err)
+	// Should contain "context cancelled during retry delay" due to timeout during the 2s sleep
+	assert.Contains(t, err.Error(), "context cancelled during retry delay")
+	assert.Contains(t, err.Error(), "attempt 1")
 }
 
 // errorCloser wraps an io.Reader and returns an error on Close.
@@ -1072,4 +1112,6 @@ func TestEnsureRegistryImage_CloseError(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to ensure registry image")
 	assert.Contains(t, err.Error(), "failed to close image pull reader after 3 attempts")
+	// Verify the close error is wrapped in the error chain
+	assert.ErrorContains(t, err, "close failed")
 }
