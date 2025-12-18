@@ -20,7 +20,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var errLocalRegistryRequired = errors.New("local registry must be enabled to reconcile workloads")
+var errLocalRegistryRequired = errors.New("local registry and a gitops engine must be enabled to reconcile workloads; enable it with '--local-registry Enabled' and '--gitops-engine Flux|ArgoCD' during cluster init or set 'spec.localRegistry: Enabled' and 'spec.gitOpsEngine: Flux' in ksail.yaml")
 
 // refreshArgoCDApplication refreshes the ArgoCD application with the new artifact version.
 func refreshArgoCDApplication(
