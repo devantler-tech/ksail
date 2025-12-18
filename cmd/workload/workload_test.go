@@ -134,8 +134,8 @@ func TestWorkloadCommandsLoadConfigOnly(t *testing.T) {
 			require.ErrorContains(
 				t,
 				err,
-				"local registry must be enabled",
-				"expected workload %s handler to require local registry",
+				"local registry and a gitops engine must be enabled",
+				"expected workload %s handler to require local registry and gitops engine",
 				commandName,
 			)
 
