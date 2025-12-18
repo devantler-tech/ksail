@@ -20,10 +20,30 @@ builds:
       - CGO_ENABLED=0
 
 archives:
-  - formats: ["tar.gz"]
+  - name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    formats: ["tar.gz"]
     format_overrides:
       - goos: windows
         formats: ["zip"]
+
+brews:
+  - name: ksail
+    homepage: "https://github.com/devantler-tech/ksail"
+    description: "KSail is a CLI tool to manage clusters and workloads."
+    license: "Apache-2.0"
+    directory: Formula
+    url_template: "https://github.com/devantler-tech/ksail/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
+    repository:
+      owner: devantler-tech
+      name: homebrew-formulas
+      token: "{{ .Env.HOMEBREW_GITHUB_API_TOKEN }}"
+    commit_author:
+      name: goreleaserbot
+      email: goreleaserbot@users.noreply.github.com
+    install: |
+      bin.install "ksail"
+    test: |
+      system "#{bin}/ksail", "--help"
 
 dockers_v2:
   - images:
@@ -77,7 +97,7 @@ release:
 
     **Homebrew** (macOS/Linux):
     ```bash
-    brew install devantler-tech/taps/ksail
+    brew install devantler-tech/formulas/ksail
     ```
 
     **Go Install**:
