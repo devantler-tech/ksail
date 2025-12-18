@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	cerrdefs "github.com/containerd/errdefs"
 	"github.com/docker/docker/api/types/container"
@@ -48,6 +49,15 @@ const (
 	DefaultRegistryPort = 5000
 	// RegistryPortBase is the base port number for calculating registry ports.
 	RegistryPortBase = 5000
+
+	// Image pull retry configuration.
+
+	// MaxImagePullRetries is the maximum number of retries for image pulls.
+	MaxImagePullRetries = 3
+	// ImagePullRetryDelay is the initial delay between retries.
+	ImagePullRetryDelay = 2 * time.Second
+	// ImagePullRetryBackoffFactor is the multiplier for exponential backoff.
+	ImagePullRetryBackoffFactor = 2
 	// HostPortParts is the expected number of parts in a host:port string.
 	HostPortParts = 2
 	// RegistryContainerPort is the internal port exposed by the registry container.
@@ -403,6 +413,8 @@ func (rm *RegistryManager) listAllRegistryContainers(
 }
 
 // ensureRegistryImage pulls the registry image if not already present locally.
+// Implements retry logic with exponential backoff to handle transient failures
+// like Docker Hub rate limiting.
 func (rm *RegistryManager) ensureRegistryImage(ctx context.Context) error {
 	// Check if image exists
 	_, err := rm.client.ImageInspect(ctx, RegistryImageName)
@@ -410,25 +422,60 @@ func (rm *RegistryManager) ensureRegistryImage(ctx context.Context) error {
 		return nil
 	}
 
-	// Pull image
-	reader, err := rm.client.ImagePull(ctx, RegistryImageName, image.PullOptions{})
-	if err != nil {
-		return fmt.Errorf("failed to pull registry image: %w", err)
+	// Pull image with retry logic
+	var lastErr error
+	delay := ImagePullRetryDelay
+
+	for attempt := 1; attempt <= MaxImagePullRetries; attempt++ {
+		reader, pullErr := rm.client.ImagePull(ctx, RegistryImageName, image.PullOptions{})
+		if pullErr != nil {
+			lastErr = pullErr
+			if attempt < MaxImagePullRetries {
+				fmt.Fprintf(
+					os.Stderr,
+					"warning: image pull attempt %d/%d failed: %v, retrying in %v...\n",
+					attempt,
+					MaxImagePullRetries,
+					pullErr,
+					delay,
+				)
+				time.Sleep(delay)
+				delay *= ImagePullRetryBackoffFactor
+				continue
+			}
+			return fmt.Errorf("failed to pull registry image after %d attempts: %w", MaxImagePullRetries, pullErr)
+		}
+
+		// Consume pull output
+		_, err = io.Copy(io.Discard, reader)
+		closeErr := reader.Close()
+
+		if err != nil {
+			lastErr = err
+			if attempt < MaxImagePullRetries {
+				fmt.Fprintf(
+					os.Stderr,
+					"warning: image pull read attempt %d/%d failed: %v, retrying in %v...\n",
+					attempt,
+					MaxImagePullRetries,
+					err,
+					delay,
+				)
+				time.Sleep(delay)
+				delay *= ImagePullRetryBackoffFactor
+				continue
+			}
+			return fmt.Errorf("failed to read image pull output after %d attempts: %w", MaxImagePullRetries, err)
+		}
+
+		if closeErr != nil {
+			return fmt.Errorf("failed to close image pull reader: %w", closeErr)
+		}
+
+		return nil
 	}
 
-	// Consume pull output
-	_, err = io.Copy(io.Discard, reader)
-	closeErr := reader.Close()
-
-	if err != nil {
-		return fmt.Errorf("failed to read image pull output: %w", err)
-	}
-
-	if closeErr != nil {
-		return fmt.Errorf("failed to close image pull reader: %w", closeErr)
-	}
-
-	return nil
+	return fmt.Errorf("failed to pull registry image after %d attempts: %w", MaxImagePullRetries, lastErr)
 }
 
 // createVolume creates a Docker volume if it doesn't already exist.
