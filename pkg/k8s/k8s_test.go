@@ -58,7 +58,7 @@ func testWaitForDaemonSetReadyReady(t *testing.T) {
 		name      = "test-daemon"
 	)
 
-	client := fake.NewSimpleClientset(&appsv1.DaemonSet{
+	client := fake.NewClientset(&appsv1.DaemonSet{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
 		Status: appsv1.DaemonSetStatus{
 			DesiredNumberScheduled: 1,
@@ -84,7 +84,7 @@ func testWaitForDaemonSetReadyAPIError(t *testing.T) {
 		name      = "test-agent"
 	)
 
-	client := fake.NewSimpleClientset()
+	client := fake.NewClientset()
 	client.PrependReactor(
 		"get",
 		"daemonsets",
@@ -115,7 +115,7 @@ func testWaitForDaemonSetReadyTimeout(t *testing.T) {
 		name      = "test-daemon"
 	)
 
-	client := fake.NewSimpleClientset()
+	client := fake.NewClientset()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
 	defer cancel()
@@ -144,7 +144,7 @@ func testWaitForDeploymentReadyReady(t *testing.T) {
 		name      = "test-deployment"
 	)
 
-	client := fake.NewSimpleClientset(&appsv1.Deployment{
+	client := fake.NewClientset(&appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
 		Status: appsv1.DeploymentStatus{
 			Replicas:          1,
@@ -170,7 +170,7 @@ func testWaitForDeploymentReadyAPIError(t *testing.T) {
 		name      = "test-operator"
 	)
 
-	client := fake.NewSimpleClientset()
+	client := fake.NewClientset()
 	client.PrependReactor(
 		"get",
 		"deployments",
@@ -201,7 +201,7 @@ func testWaitForDeploymentReadyTimeout(t *testing.T) {
 		name      = "test-operator"
 	)
 
-	client := fake.NewSimpleClientset(&appsv1.Deployment{
+	client := fake.NewClientset(&appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
 		Status: appsv1.DeploymentStatus{
 			Replicas:        2,
