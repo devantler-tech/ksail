@@ -104,7 +104,7 @@ func TestBuildOptionsValidate(t *testing.T) {
 		require.ErrorIs(t, err, oci.ErrVersionRequired)
 	})
 
-	t.Run("requires semantic version", func(t *testing.T) {
+	t.Run("accepts any non-empty version", func(t *testing.T) {
 		t.Parallel()
 
 		tempDir := t.TempDir()
@@ -112,12 +112,13 @@ func TestBuildOptionsValidate(t *testing.T) {
 		opts := oci.BuildOptions{
 			SourcePath:       tempDir,
 			RegistryEndpoint: "localhost:5000",
-			Version:          "invalid",
+			Version:          "dev",
 		}
 
-		_, err := opts.Validate()
+		validated, err := opts.Validate()
 
-		require.ErrorIs(t, err, oci.ErrVersionInvalid)
+		require.NoError(t, err)
+		require.Equal(t, "dev", validated.Version)
 	})
 
 	t.Run("allows latest tag", func(t *testing.T) {
