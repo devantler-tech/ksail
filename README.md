@@ -5,7 +5,7 @@
 
 # KSail
 
-KSail is a CLI tool for creating and maintaining Kubernetes clusters—locally or in the cloud. It provides a unified interface for managing clusters and workloads across different distributions (currently Kind and K3d, with more planned). By wrapping existing tools with a consistent command-line experience, KSail eliminates the complexity of juggling multiple CLIs.
+KSail is a CLI tool for creating and maintaining local Kubernetes clusters. It provides a unified interface for managing clusters and workloads across different distributions (currently Kind and K3d, with more planned). By wrapping existing tools with a consistent command-line experience, KSail eliminates the complexity of juggling multiple CLIs.
 
 KSail simplifies your Kubernetes workflow by providing:
 
