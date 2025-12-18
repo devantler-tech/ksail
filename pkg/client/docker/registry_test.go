@@ -680,16 +680,17 @@ func TestCreateRegistry_ImagePullError(t *testing.T) {
 	mockRegistryNotExists(ctx, mockClient)
 	mockImageNotFound(ctx, mockClient)
 
-	// Mock image pull failure
+	// Mock image pull failure for all retry attempts
 	mockClient.EXPECT().
 		ImagePull(ctx, docker.RegistryImageName, mock.Anything).
 		Return(nil, errImagePullFailed).
-		Once()
+		Times(3) // MaxImagePullRetries
 
 	err := manager.CreateRegistry(ctx, config)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to ensure registry image")
+	assert.Contains(t, err.Error(), "failed to pull registry image after 3 attempts")
 }
 
 func TestCreateRegistry_VolumeCreateError(t *testing.T) {
@@ -977,15 +978,64 @@ func TestEnsureRegistryImage_ImagePullReadError(t *testing.T) {
 	mockRegistryNotExists(ctx, mockClient)
 	mockImageNotFound(ctx, mockClient)
 
-	// Mock image pull with error reader
-	errorRdr := &errorReader{err: errReadFailed}
+	// Mock image pull with error reader for all retry attempts
 	mockClient.EXPECT().
 		ImagePull(ctx, docker.RegistryImageName, mock.Anything).
-		Return(io.NopCloser(errorRdr), nil).
-		Once()
+		Return(io.NopCloser(&errorReader{err: errReadFailed}), nil).
+		Times(3) // MaxImagePullRetries
 
 	err := manager.CreateRegistry(ctx, config)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to ensure registry image")
+	assert.Contains(t, err.Error(), "failed to read image pull output after 3 attempts")
+}
+
+func TestEnsureRegistryImage_SuccessOnSecondAttempt(t *testing.T) {
+	t.Parallel()
+
+	mockClient, manager, ctx := setupTestRegistryManager(t)
+
+	config := newTestRegistryConfig()
+
+	mockRegistryNotExists(ctx, mockClient)
+	mockImageNotFound(ctx, mockClient)
+
+	// First attempt fails, second succeeds
+	mockClient.EXPECT().
+		ImagePull(ctx, docker.RegistryImageName, mock.Anything).
+		Return(nil, errImagePullFailed).
+		Once()
+
+	mockClient.EXPECT().
+		ImagePull(ctx, docker.RegistryImageName, mock.Anything).
+		Return(io.NopCloser(strings.NewReader("")), nil).
+		Once()
+
+	mockVolumeCreateSequence(ctx, mockClient, config.Name)
+	mockContainerCreateStart(ctx, mockClient, config.Name, "test-container-id")
+
+	err := manager.CreateRegistry(ctx, config)
+
+	require.NoError(t, err)
+}
+
+func TestEnsureRegistryImage_ContextCancellation(t *testing.T) {
+	t.Parallel()
+
+	mockClient, manager, _ := setupTestRegistryManager(t)
+
+	config := newTestRegistryConfig()
+
+	// Create a cancelled context
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	mockRegistryNotExists(ctx, mockClient)
+	mockImageNotFound(ctx, mockClient)
+
+	err := manager.CreateRegistry(ctx, config)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "context cancelled")
 }

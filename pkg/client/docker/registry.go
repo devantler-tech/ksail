@@ -54,10 +54,9 @@ const (
 
 	// MaxImagePullRetries is the maximum number of retries for image pulls.
 	MaxImagePullRetries = 3
-	// ImagePullRetryDelay is the initial delay between retries.
+	// ImagePullRetryDelay is the base delay for exponential backoff between retries.
+	// Actual delays will be: 2s (2^0), 4s (2^1), 8s (2^2) for attempts 1, 2, 3.
 	ImagePullRetryDelay = 2 * time.Second
-	// ImagePullRetryBackoffFactor is the multiplier for exponential backoff.
-	ImagePullRetryBackoffFactor = 2
 	// HostPortParts is the expected number of parts in a host:port string.
 	HostPortParts = 2
 	// RegistryContainerPort is the internal port exposed by the registry container.
@@ -424,9 +423,16 @@ func (rm *RegistryManager) ensureRegistryImage(ctx context.Context) error {
 
 	// Pull image with retry logic
 	var lastErr error
-	delay := ImagePullRetryDelay
 
 	for attempt := 1; attempt <= MaxImagePullRetries; attempt++ {
+		// Check if context has been cancelled before attempting
+		if err := ctx.Err(); err != nil {
+			return fmt.Errorf("context cancelled before retry attempt %d: %w", attempt, err)
+		}
+
+		// Calculate delay based on attempt number for consistent backoff
+		delay := ImagePullRetryDelay * time.Duration(1<<(attempt-1))
+
 		reader, pullErr := rm.client.ImagePull(ctx, RegistryImageName, image.PullOptions{})
 		if pullErr != nil {
 			lastErr = pullErr
@@ -440,7 +446,6 @@ func (rm *RegistryManager) ensureRegistryImage(ctx context.Context) error {
 					delay,
 				)
 				time.Sleep(delay)
-				delay *= ImagePullRetryBackoffFactor
 				continue
 			}
 			return fmt.Errorf("failed to pull registry image after %d attempts: %w", MaxImagePullRetries, pullErr)
@@ -462,7 +467,6 @@ func (rm *RegistryManager) ensureRegistryImage(ctx context.Context) error {
 					delay,
 				)
 				time.Sleep(delay)
-				delay *= ImagePullRetryBackoffFactor
 				continue
 			}
 			return fmt.Errorf("failed to read image pull output after %d attempts: %w", MaxImagePullRetries, err)
@@ -475,6 +479,7 @@ func (rm *RegistryManager) ensureRegistryImage(ctx context.Context) error {
 		return nil
 	}
 
+	// This should never be reached since the loop always returns
 	return fmt.Errorf("failed to pull registry image after %d attempts: %w", MaxImagePullRetries, lastErr)
 }
 
