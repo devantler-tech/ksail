@@ -121,7 +121,7 @@ dotnet build
 ## Common Tasks
 
 ### Project Structure
-```
+```text
 /
 ├── src/
 │   ├── KSail/              # Main CLI application (builds to 'ksail' executable)
