@@ -5,7 +5,7 @@
 
 # KSail
 
-KSail is a CLI tool for creating and maintaining Kubernetes clusters—locally or in the cloud. It provides a unified interface for managing clusters and workloads across different distributions (currently Kind and K3d, with more planned). By wrapping existing tools with a consistent command-line experience, KSail eliminates the complexity of juggling multiple CLIs.
+KSail is a CLI tool for creating and maintaining local Kubernetes clusters. It provides a unified interface for managing clusters and workloads across different distributions (currently Kind and K3d, with more planned). By wrapping existing tools with a consistent command-line experience, KSail eliminates the complexity of juggling multiple CLIs.
 
 KSail simplifies your Kubernetes workflow by providing:
 
@@ -23,7 +23,7 @@ Whether you're developing applications, testing infrastructure changes, or learn
 ### Prerequisites
 
 - 🐧 Linux (amd64 and arm64)
--  MacOS (amd64 and arm64)
+-  MacOS (arm64)
 - ⊞ Windows (amd64 and arm64)
 - 🐳 Docker
 
@@ -31,11 +31,14 @@ Whether you're developing applications, testing infrastructure changes, or learn
 
 #### Homebrew
 
+```bash
+brew install devantler-tech/formulas/ksail
+```
+
 #### Go install
 
 ```bash
 go install github.com/devantler-tech/ksail@latest
-ksail --help
 ```
 
 #### From source
@@ -44,7 +47,6 @@ ksail --help
 git clone https://github.com/devantler-tech/ksail.git
 cd ksail
 go build -o ksail
-./ksail --help
 ```
 
 ## Usage
