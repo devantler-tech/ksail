@@ -1012,7 +1012,11 @@ func TestGenerateContainerdPatches_InvalidSpecs(t *testing.T) {
 	t.Parallel()
 
 	mirrorRegistries := []string{"invalid", "=missing", "missing="}
-	scaffolderInstance := scaffolder.NewScaffolder(*v1alpha1.NewCluster(), &bytes.Buffer{}, mirrorRegistries)
+	scaffolderInstance := scaffolder.NewScaffolder(
+		*v1alpha1.NewCluster(),
+		&bytes.Buffer{},
+		mirrorRegistries,
+	)
 
 	patches := scaffolderInstance.GenerateContainerdPatches()
 	assert.Empty(t, patches)
