@@ -1,24 +1,23 @@
----
-title: Ingress Controllers
-parent: Core Concepts
-nav_order: 4
----
-
 # Ingress Controllers
 
-`Ingress Controllers` refer to the controllers that manage ingress resources in a Kubernetes cluster. They are responsible for routing external traffic to the appropriate services within the cluster. Below is a table of the of default `Ingress Controllers` on each Kubernetes distribution supported by KSail:
+Ingress controllers expose HTTP(S) services from inside the cluster.
 
-## Default
+> **Note:** Ingress controller configuration is not yet implemented in KSail. This document describes planned functionality.
 
-| Distribution | Ingress Controller |
-| ------------ | ------------------ |
-| kind         | None               |
-| k3d          | Traefik            |
+## Planned Options
 
-## Traefik
+### Default
 
-If you choose [`Traefik`](https://github.com/traefik/traefik-helm-chart), the Traefik Ingress Controller will be installed in your cluster. Traefik is a popular open-source ingress controller that provides advanced routing capabilities, including support for dynamic configuration, load balancing, and SSL termination.
+The `Default` option will use the controller bundled with the distribution. Kind does not install an ingress controller by default, while K3d includes Traefik.
 
-## None
+### Traefik
 
-The `None` Ingress Controller option means that no Ingress Controller will be installed in your Kubernetes cluster. This is useful if you do not need an ingress controller or if you plan to use an unsupported ingress controller.
+Installing Traefik explicitly will ensure it's available regardless of distribution defaults.
+
+### None
+
+Skips ingress installation. Useful for testing headless services or deploying alternative controllers manually.
+
+## Current Status
+
+Configure ingress through your distribution's configuration file (`kind.yaml` or `k3d.yaml`) for now.

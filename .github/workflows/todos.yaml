@@ -1,14 +1,12 @@
 name: "TODOs"
 
-permissions:
-  contents: write
-  issues: write
-  pull-requests: write
-
 on:
   workflow_dispatch:
   push:
     branches: [main]
+
+permissions:
+  issues: write
 
 jobs:
   todos:

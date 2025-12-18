@@ -1,17 +1,52 @@
----
-title: Learning Kubernetes
-parent: Use Cases
-nav_order: 0
----
-
 # Learning Kubernetes
 
-KSail is an excellent tool for learning Kubernetes, offering a hands-on approach to exploring different distributions and configurations.
+KSail simplifies Kubernetes experimentation by wrapping Kind and K3d with a consistent interface. Focus on learning Kubernetes concepts without complex cluster setup.
 
-It simplifies running Kubernetes clusters on your laptop, providing intuitive tooling to support your learning journey.
+## Quick start session
 
-With its user-friendly CLI and rapid feedback loop, KSail is perfect for experimenting with new ideas and understanding the complexities of Kubernetes.
+1. **Scaffold a playground**
 
-Additionally, it streamlines the management of configurations and resources, making your learning process more efficient and effective.
+   ```bash
+   ksail cluster init --distribution Kind --source-directory k8s
+   ```
 
-If you have a problem on your journey to become a Kubernetes expert, please open an issue on GitHub, or reach out to me on my [Contact Me](https://devantler.com/contact/) page.
+   Edit `ksail.yaml` or rerun with different flags to try distributions, CNIs, or metrics-server options.
+
+2. **Create a cluster**
+
+   ```bash
+   ksail cluster create
+   ```
+
+   KSail installs your chosen CNI and metrics-server automatically.
+
+3. **Try common workloads**
+
+   ```bash
+   ksail workload gen deployment echo --image=hashicorp/http-echo:0.2.3 --port 5678
+   ksail workload apply -f echo.yaml
+   ksail workload wait --for=condition=Available deployment/echo --timeout=120s
+   ```
+
+   Experiment with generators and manual YAML edits to learn Kustomize.
+
+4. **Inspect the cluster**
+
+   Use `ksail cluster connect` to launch k9s, or explore with `kubectl get all -A`.
+
+5. **Reset quickly**
+
+   ```bash
+   ksail cluster delete
+   ```
+
+   Recreate as often as needed.
+
+## Learning tips
+
+- Switch between `--distribution Kind` and `--distribution K3d` to compare runtimes
+- Try `--cni Cilium` during init to explore advanced networking
+- Use `--cert-manager Enabled` to learn about TLS certificate management
+- Track configuration in Git to understand how changes affect cluster behavior
+
+Reference `kubectl explain` and the [Kubernetes documentation](https://kubernetes.io/docs/) for deeper understanding.

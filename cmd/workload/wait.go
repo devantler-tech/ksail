@@ -1,0 +1,29 @@
+package workload
+
+import (
+	"os"
+
+	"github.com/devantler-tech/ksail/pkg/client/kubectl"
+	"github.com/devantler-tech/ksail/pkg/cmd"
+	"github.com/spf13/cobra"
+	"k8s.io/cli-runtime/pkg/genericiooptions"
+)
+
+// NewWaitCmd creates the workload wait command.
+func NewWaitCmd() *cobra.Command {
+	// Try to load config silently to get kubeconfig path
+	kubeconfigPath := cmd.GetKubeconfigPathSilently()
+
+	// Create IO streams for kubectl
+	ioStreams := genericiooptions.IOStreams{
+		In:     os.Stdin,
+		Out:    os.Stdout,
+		ErrOut: os.Stderr,
+	}
+
+	// Create kubectl client and get the wait command directly
+	client := kubectl.NewClient(ioStreams)
+	waitCmd := client.CreateWaitCommand(kubeconfigPath)
+
+	return waitCmd
+}

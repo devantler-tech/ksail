@@ -1,0 +1,2 @@
+[plugins."io.containerd.grpc.v1.cri".registry.mirrors."docker.io"]
+  endpoint = [not-a-valid-url]

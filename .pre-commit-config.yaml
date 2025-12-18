@@ -1,5 +1,0 @@
-# Pre-commit configuration for automatic .NET code formatting and linting
-# See https://pre-commit.com for more information
-# See https://pre-commit.com/hooks.html for more hooks
-
-repos: []

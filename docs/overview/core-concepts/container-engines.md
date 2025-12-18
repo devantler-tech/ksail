@@ -1,17 +1,9 @@
----
-title: Container Engines
-parent: Core Concepts
-nav_order: 0
----
-
 # Container Engines
 
-`Container Engines` refer to the underlying container engine on which a supported Kubernetes Distribution is spun up.
+KSail currently supports Docker as the container engine for running Kind and K3d clusters.
 
 ## Docker
 
-[`Docker`](https://www.docker.com/) is a widely used container engine for creating and managing containers. It is supported on all major operating systems. It is the default container engine used by KSail.
+[Docker](https://www.docker.com/) is the standard container engine. It integrates with Kind and K3d distributions and works across macOS, Linux, and Windows.
 
-## Podman
-
-[`Podman`](https://podman.io/) is a container engine that is designed to be a drop-in replacement for Docker. It is daemonless and can run containers without requiring a background service. Podman is supported on Linux, Windows, and MacOS.
+> **Note:** Podman support is planned for a future release.

@@ -1,0 +1,18 @@
+
+[TestGenJob - 1]
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: test-job
+spec:
+  template:
+    metadata: {}
+    spec:
+      containers:
+      - image: busybox:latest
+        name: test-job
+        resources: {}
+      restartPolicy: Never
+status: {}
+
+---

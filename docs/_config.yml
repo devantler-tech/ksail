@@ -1,0 +1,45 @@
+theme: just-the-docs
+url: https://ksail.devantler.tech
+title: "🛥️🐳 KSail Documentation"
+favicon_ico: "images/ksail-logo.png"
+description: >-
+  Documentation for KSail - SDK for Kubernetes ☸️
+
+plugins:
+  - jekyll-readme-index
+  - jekyll-gfm-admonitions
+  - jekyll-optional-front-matter
+
+aux_links:
+  '<img src="/images/github-mark-white.png" alt="GitHub" width="18" height="18">&nbsp;&nbsp;devantler-tech/ksail-docs':
+    - "https://github.com/devantler-tech/ksail-docs"
+
+last_edit_timestamp: true
+last_edit_time_format: "%b %e %Y at %I:%M %p"
+
+gh_edit_link: true
+gh_edit_link_text: Edit this page on GitHub.
+gh_edit_repository: https://github.com/devantler-tech/ksail-docs
+gh_edit_branch: main
+gh_edit_view_mode: tree
+
+back_to_top: true
+back_to_top_text: "Back to top"
+
+footer_content: 'Built by <a href="https://github.com/devantler">devantler</a><br>Distributed under the <a href="https://opensource.org/licenses/Apache-2.0">Apache license.</a>'
+
+defaults:
+  - scope:
+      path: "" # an empty string here means all files in the project
+    values:
+      layout: "default"
+
+readme_index:
+  enabled: true
+  remove_originals: false
+  with_frontmatter: true
+
+exclude:
+  - .github/
+  - .gitignore
+  - LICENSE

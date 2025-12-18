@@ -1,106 +1,22 @@
----
-title: Support Matrix
-parent: Overview
-nav_order: 2
----
-
 # Support Matrix
 
-KSail aims to support a wide range of use cases by providing the flexibility to run popular Kubernetes distributions in various container engines. Below is a detailed support matrix.
+KSail focuses on fast local Kubernetes development. The matrix below captures officially supported features. Items marked ✅ are fully implemented and tested.
 
-<table>
-  <thead>
-    <tr>
-      <th>Category</th>
-      <th>Support</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td><strong>CLI</strong></td>
-      <td>
-        Linux (amd64 and arm64),<br>
-        macOS (amd64 and arm64)
-      </td>
-    </tr>
-    <tr>
-      <td><strong>Container Engines</strong></td>
-      <td><a href="https://www.docker.com">Docker</a>,
-      <a href="https://podman.io">Podman</a></td>
-    </tr>
-    <tr>
-      <td><strong>Distributions</strong></td>
-      <td>
-        <a href="https://kind.sigs.k8s.io">Kind</a>,
-        <a href="https://k3d.io">K3d</a>
-      </td>
-    </tr>
-    <tr>
-      <td><strong>Deployment Tools</strong></td>
-      <td>
-        <a href="https://kubernetes.io/docs/reference/kubectl/">Kubectl</a>,
-        <a href="https://fluxcd.io">Flux</a>
-      </td>
-    </tr>
-    <tr>
-      <td><strong>Container Network Interfaces (CNI)</strong></td>
-      <td>
-        Default,
-        <a href="https://cilium.io">Cilium</a>,
-        None
-      </td>
-    </tr>
-    <tr>
-      <td><strong>Container Storage Interfaces (CSI)</strong></td>
-      <td>
-        Default,
-        <a href="https://github.com/rancher/local-path-provisioner">Local Path Provisioner</a>,
-        None
-      </td>
-    </tr>
-    <tr>
-      <td><strong>Ingress Controllers</strong></td>
-      <td>
-        Default,
-        <a href="https://github.com/traefik/traefik-helm-chart">Traefik</a>,
-        None
-      </td>
-    </tr>
-    <tr>
-      <td><strong>Gateway Controllers</strong></td>
-      <td>
-        Default,
-        None
-      </td>
-    </tr>
-    <tr>
-      <td><strong>Metrics Server</strong></td>
-      <td>
-        true,
-        false
-      </td>
-    </tr>
-      <td><strong>Secret Manager</strong></td>
-      <td>
-        <a href="https://github.com/getsops/sops">SOPS</a>
-      </td>
-    </tr>
-    <tr>
-      <td><strong>Editors</strong></td>
-      <td>
-        <a href="https://www.nano-editor.org">Nano</a>,
-        <a href="https://www.vim.org">Vim</a>
-      </td>
-    <tr>
-    <tr>
-      <td><strong>Client-Side Validation</strong></td>
-      <td>
-        Configuration,
-        <a href="https://github.com/aaubry/YamlDotNet">YAML syntax</a>,
-        <a href="https://github.com/yannh/kubeconform">Schema </a>
-      </td>
-    </tr>
-  </tbody>
-</table>
+| Category                           | Supported Options                                  | Notes                                                                                                     |
+|------------------------------------|----------------------------------------------------|-----------------------------------------------------------------------------------------------------------|
+| CLI Platforms                      | Linux (amd64, arm64), macOS (amd64, arm64)         | Pre-built binaries available; Windows support tracked separately.                                        |
+| Container Engines                  | Docker ✅                                           | Podman support planned for future release.                                                                |
+| Distributions                      | Kind ✅, K3d ✅                                      | Both distributions fully supported.                                                                       |
+| Workload Management                | kubectl ✅, Helm ✅                                  | Commands wrapped via `ksail workload`.                                                                    |
+| GitOps Engines                     | ArgoCD ✅ (Flux planned)                            | ArgoCD integration available; Flux integration in development.                                           |
+| Container Network Interfaces (CNI) | Default ✅, Cilium ✅, None ✅                        | Choose via `spec.cni` or `--cni` flag.                                                                    |
+| Container Storage Interfaces (CSI) | Default, LocalPathStorage (not yet implemented)    | Configuration defined but not fully implemented.                                                          |
+| Metrics Server                     | Enabled ✅, Disabled ✅                              | Toggle with `--metrics-server` during init or create.                                                     |
+| Cert-Manager                       | Enabled ✅, Disabled ✅                              | Toggle with `--cert-manager` during init or create.                                                       |
+| Local Registry                     | Enabled ✅, Disabled ✅                              | OCI registry for local image storage and GitOps scenarios.                                                |
+| Mirror Registries                  | Supported ✅                                        | Configure with `--mirror-registry` flags.                                                                 |
+| Secret Management                  | SOPS via `ksail cipher` ✅                          | Encrypt/decrypt files with SOPS; GitOps integration planned.                                              |
+| Ingress Controllers                | Planned (use distribution defaults for now)        | Configure through `kind.yaml` or `k3d.yaml`.                                                              |
+| Gateway Controllers                | Planned                                            | Gateway API support in development.                                                                       |
 
-If you would like to see additional tools supported, please open an issue or pull request on [GitHub](https://github.com/devantler-tech/ksail).
+> **Note:** This support matrix reflects the Go rewrite of KSail. Features such as Podman support, GitOps engines (Flux and ArgoCD), advanced CSI backends, and Ingress/Gateway controllers are in active development or being reimplemented from the previous .NET version. For up‑to‑date details and timelines, see the KSail roadmap and issues at https://github.com/devantler-tech/ksail/issues.

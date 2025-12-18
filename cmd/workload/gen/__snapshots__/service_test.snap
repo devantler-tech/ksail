@@ -1,0 +1,80 @@
+
+[TestGenServiceClusterIP - 1]
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: test-svc
+  name: test-svc
+spec:
+  ports:
+  - name: 80-8080
+    port: 80
+    protocol: TCP
+    targetPort: 8080
+  selector:
+    app: test-svc
+  type: ClusterIP
+status:
+  loadBalancer: {}
+
+---
+
+[TestGenServiceNodePort - 1]
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: test-svc
+  name: test-svc
+spec:
+  ports:
+  - name: 80-8080
+    port: 80
+    protocol: TCP
+    targetPort: 8080
+  selector:
+    app: test-svc
+  type: NodePort
+status:
+  loadBalancer: {}
+
+---
+
+[TestGenServiceLoadBalancer - 1]
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: test-svc
+  name: test-svc
+spec:
+  ports:
+  - name: 80-8080
+    port: 80
+    protocol: TCP
+    targetPort: 8080
+  selector:
+    app: test-svc
+  type: LoadBalancer
+status:
+  loadBalancer: {}
+
+---
+
+[TestGenServiceExternalName - 1]
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: test-svc
+  name: test-svc
+spec:
+  externalName: example.com
+  selector:
+    app: test-svc
+  type: ExternalName
+status:
+  loadBalancer: {}
+
+---

@@ -1,28 +1,19 @@
----
-title: Container Network Interfaces (CNIs)
-parent: Core Concepts
-nav_order: 2
----
+# Container Network Interfaces (CNI)
 
-# Container Network Interfaces (CNIs)
+The Container Network Interface determines how pods receive IP addresses and communicate inside your cluster. KSail exposes CNI selection declaratively via `spec.cni` in `ksail.yaml` or with `ksail cluster init --cni`.
 
-## Default
+## Available Options
 
-The `Default` CNI is the default Container Network Interface plugin that is bundled with the Kubernetes distribution you are using. It is often a basic CNI plugin with limited features.
+### `Default`
 
-Below is a table of the default CNI plugins for each Kubernetes distribution supported by KSail:
+Uses the distribution's built-in networking (`kindnetd` for Kind, `flannel` for K3d). Choose this for quick local iterations and CI environments.
 
-| Distribution | CNI                                                                           |
-| ------------ | ----------------------------------------------------------------------------- |
-| Kind         | [kindnetd](https://github.com/kubernetes-sigs/kind/tree/main/images/kindnetd) |
-| K3d          | [flannel](https://github.com/flannel-io/flannel)                              |
+### `Cilium`
 
-## Cilium
+Installs [Cilium](https://cilium.io/) through Helm. Pick Cilium when you need advanced observability, eBPF-based policies, or WireGuard encryption.
 
-[Cilium](https://cilium.io/) is a powerful CNI plugin that provides advanced networking and security features for Kubernetes clusters. It uses eBPF (Extended Berkeley Packet Filter) technology to provide high-performance networking, load balancing, and security policies.
+### `None`
 
-Using the [Cilium](https://cilium.io/) CNI will create a Kubernetes cluster with the Cilium CNI plugin pre-installed.
+Skips CNI installation entirely. Use this when you want to install a different CNI manually.
 
-## None
-
-The `None` CNI option means that no Container Network Interface plugin will be installed in your Kubernetes cluster. This is useful if you want to install an unsupported CNI plugin.
+> **Tip:** The init command writes your selection to `ksail.yaml`. Future runs of `ksail cluster create` use that configuration.

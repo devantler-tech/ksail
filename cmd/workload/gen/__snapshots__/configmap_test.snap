@@ -1,0 +1,11 @@
+
+[TestGenConfigMap - 1]
+apiVersion: v1
+data:
+  APP_ENV: production
+  DEBUG: "false"
+kind: ConfigMap
+metadata:
+  name: test-config
+
+---

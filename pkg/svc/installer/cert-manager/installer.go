@@ -1,0 +1,77 @@
+// Package certmanagerinstaller installs cert-manager via Helm.
+package certmanagerinstaller
+
+import (
+	"context"
+	"fmt"
+	"time"
+
+	"github.com/devantler-tech/ksail/pkg/client/helm"
+)
+
+const (
+	certManagerRepoName  = "jetstack"
+	certManagerRepoURL   = "https://charts.jetstack.io"
+	certManagerRelease   = "cert-manager"
+	certManagerNamespace = "cert-manager"
+	certManagerChartName = "jetstack/cert-manager"
+	certManagerValuesYml = "installCRDs: true\n"
+)
+
+// CertManagerInstaller installs or upgrades cert-manager.
+//
+// It implements installer.Installer semantics (Install/Uninstall) so it can be
+// orchestrated by cluster lifecycle flows.
+type CertManagerInstaller struct {
+	client  helm.Interface
+	timeout time.Duration
+}
+
+// NewCertManagerInstaller creates a new cert-manager installer instance.
+func NewCertManagerInstaller(client helm.Interface, timeout time.Duration) *CertManagerInstaller {
+	return &CertManagerInstaller{client: client, timeout: timeout}
+}
+
+// Install installs or upgrades cert-manager via its Helm chart.
+func (c *CertManagerInstaller) Install(ctx context.Context) error {
+	return c.helmInstallOrUpgradeCertManager(ctx)
+}
+
+// Uninstall removes the Helm release for cert-manager.
+func (c *CertManagerInstaller) Uninstall(ctx context.Context) error {
+	err := c.client.UninstallRelease(ctx, certManagerRelease, certManagerNamespace)
+	if err != nil {
+		return fmt.Errorf("failed to uninstall cert-manager release: %w", err)
+	}
+
+	return nil
+}
+
+func (c *CertManagerInstaller) helmInstallOrUpgradeCertManager(ctx context.Context) error {
+	repoEntry := &helm.RepositoryEntry{Name: certManagerRepoName, URL: certManagerRepoURL}
+
+	err := c.client.AddRepository(ctx, repoEntry)
+	if err != nil {
+		return fmt.Errorf("failed to add jetstack repository: %w", err)
+	}
+
+	spec := &helm.ChartSpec{
+		ReleaseName:     certManagerRelease,
+		ChartName:       certManagerChartName,
+		Namespace:       certManagerNamespace,
+		RepoURL:         certManagerRepoURL,
+		CreateNamespace: true,
+		Atomic:          true,
+		Wait:            true,
+		WaitForJobs:     true,
+		Timeout:         c.timeout,
+		ValuesYaml:      certManagerValuesYml,
+	}
+
+	_, err = c.client.InstallOrUpgradeChart(ctx, spec)
+	if err != nil {
+		return fmt.Errorf("failed to install cert-manager chart: %w", err)
+	}
+
+	return nil
+}

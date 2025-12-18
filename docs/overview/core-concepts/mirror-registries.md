@@ -1,20 +1,37 @@
----
-title: Mirror Registries
-parent: Core Concepts
-nav_order: 10
----
-
 # Mirror Registries
 
-> [!WARNING]
-> Remote `Mirror Registries` are not supported yet. This means that remote registries cannot be used as mirrors for upstream registries.
->
-> Support for unauthenticated access to upstream registries is also unsupported. This means that you cannot setup authentication in front of the mirror registry, or to authenticate from the mirror registry to the upstream registry.
->
-> Lastly, mirror registries do not support secure connections to upstream registries with TLS.
->
-> These are limitations of the current implementation and will be fixed in the future.
+Mirror registries proxy upstream container registries (e.g., `docker.io`) and cache content locally. Configure mirrors with `--mirror-registry <host>=<upstream>` flags during `ksail cluster init`.
 
-`Mirror Registries` refer to registries that are used to proxy and cache images from upstream registries. This is used to avoid pull rate limits and to speed up image pulls.
+## Workflow Overview
 
-Using `Mirror Registries` will create a `registry:3` container for each mirror registry that is configured. You can configure as many mirror registries as you need.
+1. Add mirrors during initialization:
+   ```bash
+   ksail cluster init --mirror-registry docker.io=https://registry-1.docker.io
+   ```
+2. Run `ksail cluster create` to start mirror containers alongside your cluster
+3. Images pulled from the mirrored registries will be cached locally
+4. Delete the cluster with `ksail cluster delete --delete-volumes` to clean up cache data
+
+## Configuration
+
+Example mirror configuration in init:
+
+```bash
+ksail cluster init \
+  --mirror-registry docker.io=https://registry-1.docker.io \
+  --mirror-registry gcr.io=https://gcr.io
+```
+
+This creates local mirror containers that cache content from the upstream registries.
+
+## Current Limitations
+
+- Authentication to upstream registries is not yet fully supported
+- TLS configuration for upstream connections is being developed
+- Mirrors are always provisioned as local containers
+
+## Use Cases
+
+- **Rate limit avoidance:** Cache frequently pulled images to avoid Docker Hub rate limits
+- **Offline development:** Work with previously pulled images when disconnected
+- **CI/CD pipelines:** Speed up image pulls in automated testing

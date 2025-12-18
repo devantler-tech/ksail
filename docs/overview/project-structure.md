@@ -1,28 +1,52 @@
----
-title: Project Structure
-parent: Overview
-nav_order: 1
----
-
 # Project Structure
 
-When you create a new project with `ksail init`, it will generate a set of files and directories to get you started. The generated project structure depends on how you configure the project via the declarative config and the CLI options.
+Running `ksail cluster init` scaffolds a project with the necessary configuration files. The layout varies based on flags like `--distribution` and options in `ksail.yaml`, but every project starts with:
 
-Below is a typical project structure for a KSail project:
-
-```shell
-├── ksail.yaml # KSail configuration file
-├── <distribution>.yaml # Distribution configuration file
-└── k8s # Kubernetes manifests
-    └── kustomization.yaml # Kustomize index file
+```text
+├── ksail.yaml              # Declarative cluster configuration
+├── kind.yaml / k3d.yaml    # Distribution-specific configuration
+└── k8s/                    # Workload manifests directory
+    └── kustomization.yaml  # Root Kustomize entrypoint
 ```
 
-If you choose to enable the Secret Manager, the project will also include a `.sops.yaml` file that configures the SOPS secret management tool to be able to encrypt and decrypt secrets.
+## Organizing with Kustomize
 
-## Kustomize-based
+KSail uses [Kustomize](https://kustomize.io/) for manifest management. The `k8s/kustomization.yaml` file serves as the entry point for workload commands:
 
-KSail generates projects that follow a [Kustomize](https://kubernetes-sigs.github.io/kustomize/)-based structure. Kustomize is a tool designed to simplify and manage Kubernetes YAML configurations. At the core of every KSail project is the `k8s/kustomization.yaml` file, which acts as the main index for the project. This file defines the resources and configurations that will be applied to your Kubernetes cluster.
+- **Structure** – Organize manifests using Kustomize bases and overlays
+- **Validation** – Test changes locally with `ksail workload apply`
+- **GitOps ready** – When GitOps support is added, the same manifests will be used
 
-Using Kustomize, you can organize your project into reusable "bases" and apply "patches" to customize configurations for different environments or clusters. For example, you might have a base configuration for a service and then apply patches to adjust settings for development, staging, or production clusters. By referencing different `kustomization.yaml` files, you can easily switch between configurations, ensuring flexibility and consistency across multiple clusters.
+Use `--source-directory` during init to change where workloads are stored (default: `k8s`).
 
-You can set the index `kustomization.yaml` file with the `--kustomization-path` option or by setting the `spec.project.kustomizationPath` field in the KSail configuration file.
+## Configuration Files
+
+### `ksail.yaml`
+
+The main configuration file defining your cluster setup. See [Declarative Config](../configuration/declarative-config.md) for details.
+
+### Distribution configs
+
+- **`kind.yaml`** – [Kind configuration](https://kind.sigs.k8s.io/docs/user/configuration/) for node layout, networking, and port mappings
+- **`k3d.yaml`** – [K3d configuration](https://k3d.io/stable/usage/configfile/) for K3s-specific options
+
+Choose which file to use with the `spec.distributionConfig` field in `ksail.yaml`.
+
+## Adding Workloads
+
+Place Kubernetes manifests in the `k8s/` directory (or your configured `sourceDirectory`). Use standard Kustomize structure:
+
+```text
+k8s/
+├── kustomization.yaml
+├── namespace.yaml
+└── apps/
+    ├── kustomization.yaml
+    └── deployment.yaml
+```
+
+Apply workloads with:
+
+```bash
+ksail workload apply -k k8s/
+```

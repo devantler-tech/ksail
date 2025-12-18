@@ -1,0 +1,4 @@
+[plugins."io.containerd.grpc.v1.cri".registry.mirrors."docker.io"]
+  endpoint = ["http://localhost:5000"]
+[plugins."io.containerd.grpc.v1.cri".registry.mirrors."gcr.io"]
+  endpoint = ["http://localhost:5001"]

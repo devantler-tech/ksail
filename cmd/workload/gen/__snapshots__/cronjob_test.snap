@@ -1,0 +1,23 @@
+
+[TestGenCronJob - 1]
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: test-cronjob
+spec:
+  jobTemplate:
+    metadata:
+      name: test-cronjob
+    spec:
+      template:
+        metadata: {}
+        spec:
+          containers:
+          - image: busybox:latest
+            name: test-cronjob
+            resources: {}
+          restartPolicy: OnFailure
+  schedule: '*/5 * * * *'
+status: {}
+
+---
