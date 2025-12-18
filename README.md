@@ -23,7 +23,7 @@ Whether you're developing applications, testing infrastructure changes, or learn
 ### Prerequisites
 
 - 🐧 Linux (amd64 and arm64)
--  MacOS (amd64 and arm64)
+-  MacOS (arm64)
 - ⊞ Windows (amd64 and arm64)
 - 🐳 Docker
 
@@ -31,11 +31,14 @@ Whether you're developing applications, testing infrastructure changes, or learn
 
 #### Homebrew
 
+```bash
+brew install devantler-tech/formulas/ksail
+```
+
 #### Go install
 
 ```bash
 go install github.com/devantler-tech/ksail@latest
-ksail --help
 ```
 
 #### From source
@@ -44,7 +47,6 @@ ksail --help
 git clone https://github.com/devantler-tech/ksail.git
 cd ksail
 go build -o ksail
-./ksail --help
 ```
 
 ## Usage
