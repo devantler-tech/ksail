@@ -455,31 +455,39 @@ func (rm *RegistryManager) ensureRegistryImage(ctx context.Context) error {
 		_, err = io.Copy(io.Discard, reader)
 		closeErr := reader.Close()
 
-		if err != nil {
-			lastErr = err
+		// Handle both read and close errors
+		if err != nil || closeErr != nil {
+			// Prefer reporting the read error if both exist
+			if err != nil {
+				lastErr = err
+			} else {
+				lastErr = closeErr
+			}
+
 			if attempt < MaxImagePullRetries {
 				fmt.Fprintf(
 					os.Stderr,
-					"warning: image pull read attempt %d/%d failed: %v, retrying in %v...\n",
+					"warning: image pull attempt %d/%d failed: %v, retrying in %v...\n",
 					attempt,
 					MaxImagePullRetries,
-					err,
+					lastErr,
 					delay,
 				)
 				time.Sleep(delay)
 				continue
 			}
-			return fmt.Errorf("failed to read image pull output after %d attempts: %w", MaxImagePullRetries, err)
+
+			if err != nil {
+				return fmt.Errorf("failed to read image pull output after %d attempts: %w", MaxImagePullRetries, err)
+			}
+			return fmt.Errorf("failed to close image pull reader after %d attempts: %w", MaxImagePullRetries, closeErr)
 		}
 
-		if closeErr != nil {
-			return fmt.Errorf("failed to close image pull reader: %w", closeErr)
-		}
-
+		// Success - image pulled and ready
 		return nil
 	}
 
-	// This should never be reached since the loop always returns
+	// Should not reach here, but return error for safety
 	return fmt.Errorf("failed to pull registry image after %d attempts: %w", MaxImagePullRetries, lastErr)
 }
 

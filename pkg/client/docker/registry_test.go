@@ -1039,3 +1039,37 @@ func TestEnsureRegistryImage_ContextCancellation(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "context cancelled")
 }
+
+// errorCloser wraps an io.Reader and returns an error on Close.
+type errorCloser struct {
+	io.Reader
+	closeErr error
+}
+
+func (e *errorCloser) Close() error {
+	return e.closeErr
+}
+
+func TestEnsureRegistryImage_CloseError(t *testing.T) {
+	t.Parallel()
+
+	mockClient, manager, ctx := setupTestRegistryManager(t)
+
+	config := newTestRegistryConfig()
+
+	mockRegistryNotExists(ctx, mockClient)
+	mockImageNotFound(ctx, mockClient)
+
+	// Mock image pull with error on close for all retry attempts
+	errClose := errors.New("close failed")
+	mockClient.EXPECT().
+		ImagePull(ctx, docker.RegistryImageName, mock.Anything).
+		Return(&errorCloser{Reader: strings.NewReader(""), closeErr: errClose}, nil).
+		Times(3) // MaxImagePullRetries
+
+	err := manager.CreateRegistry(ctx, config)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to ensure registry image")
+	assert.Contains(t, err.Error(), "failed to close image pull reader after 3 attempts")
+}
