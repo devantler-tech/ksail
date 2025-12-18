@@ -93,8 +93,10 @@ func NewReconcileCmd(_ *runtime.Runtime) *cobra.Command {
 			return fmt.Errorf("load config: %w", err)
 		}
 
-		if clusterCfg.Spec.LocalRegistry != v1alpha1.LocalRegistryEnabled ||
-			clusterCfg.Spec.GitOpsEngine == v1alpha1.GitOpsEngineNone {
+		localRegistryEnabled := clusterCfg.Spec.LocalRegistry == v1alpha1.LocalRegistryEnabled
+		gitOpsEngineConfigured := clusterCfg.Spec.GitOpsEngine != v1alpha1.GitOpsEngineNone
+
+		if !localRegistryEnabled || !gitOpsEngineConfigured {
 			return errLocalRegistryRequired
 		}
 
