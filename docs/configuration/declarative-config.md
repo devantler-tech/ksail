@@ -69,4 +69,4 @@ kind: Cluster
 ...
 ```
 
-This provides IDE validation and autocompletion without requiring a local copy of the schema. IDEs that support SchemaStore (including VS Code with the Red Hat YAML extension) will provide completions and validation.
+This provides IDE validation and autocompletion without requiring a local copy of the schema. IDEs that support SchemaStore (including VS Code with the Red Hat YAML extension) will provide completions and validation automatically.
