@@ -17,7 +17,7 @@ require (
 	github.com/go-viper/mapstructure/v2 v2.4.0
 	github.com/google/go-containerregistry v0.20.7
 	github.com/jinzhu/copier v0.4.0
-	github.com/k3d-io/k3d/v5 v5.8.3
+	github.com/k3d-io/k3d/v5 v5.9.0-rc.0
 	github.com/mitchellh/go-wordwrap v1.0.1
 	github.com/mittwald/go-helm-client v0.12.19
 	github.com/opencontainers/image-spec v1.1.1
