@@ -14,18 +14,11 @@ import (
 	runtime "github.com/devantler-tech/ksail/pkg/di"
 	iopath "github.com/devantler-tech/ksail/pkg/io"
 	ksailconfigmanager "github.com/devantler-tech/ksail/pkg/io/config-manager/ksail"
+	"github.com/devantler-tech/ksail/pkg/svc/provisioner/registry"
 	"github.com/devantler-tech/ksail/pkg/ui/notify"
 	"github.com/devantler-tech/ksail/pkg/ui/timer"
 	"github.com/spf13/cobra"
 )
-
-// defaultLocalArtifactTag is used when no explicit tag is provided for a workload
-// artifact. The "dev" tag is intended only for local development and will
-// typically point to the most recently built image, which is convenient but
-// not suitable for reproducible or production deployments where explicit
-// immutable version tags (for example, semantic versions or digests) should
-// be used instead.
-const defaultLocalArtifactTag = "dev"
 
 var errLocalRegistryRequired = errors.New("local registry must be enabled to reconcile workloads")
 
@@ -105,7 +98,7 @@ func NewReconcileCmd(_ *runtime.Runtime) *cobra.Command {
 		}
 
 		repoName := sourceDir
-		artifactVersion := defaultLocalArtifactTag
+		artifactVersion := registry.DefaultLocalArtifactTag
 
 		registryPort := clusterCfg.Spec.Options.LocalRegistry.HostPort
 		if registryPort == 0 {
