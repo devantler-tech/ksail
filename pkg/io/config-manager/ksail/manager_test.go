@@ -193,7 +193,7 @@ func TestLoadConfigLoadsK3dDistributionConfig(t *testing.T) {
 }
 
 //nolint:paralleltest // Uses t.Chdir to isolate file system state for config loading.
-func TestLoadConfigWithoutFileIgnoresExistingConfig(t *testing.T) {
+func TestLoadConfigFromFlagsOnlyIgnoresExistingConfig(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Chdir(tempDir)
 
@@ -204,7 +204,7 @@ func TestLoadConfigWithoutFileIgnoresExistingConfig(t *testing.T) {
 		configmanager.DefaultClusterFieldSelectors()...)
 	manager.Viper.SetConfigFile("ksail.yaml")
 
-	config, err := manager.LoadConfigWithoutFileSilent()
+	config, err := manager.LoadConfigFromFlagsOnly()
 	require.NoError(t, err)
 
 	assert.Equal(t, v1alpha1.DistributionKind, config.Spec.Distribution)

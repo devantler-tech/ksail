@@ -36,7 +36,7 @@ type BuildOptions struct {
 	RegistryEndpoint string
 	// Repository is the repository path (defaults to source directory basename if empty).
 	Repository string
-	// Version is the artifact tag (required, must be semver or "latest").
+	// Version is the artifact tag (required, can be any non-empty string such as "dev", "latest", or a semantic version).
 	Version string
 	// GitOpsEngine specifies the GitOps engine for which to optimize the artifact structure.
 	// When set to GitOpsEngineFlux, files are placed at the root.
