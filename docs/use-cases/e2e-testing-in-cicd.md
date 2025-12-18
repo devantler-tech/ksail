@@ -103,7 +103,10 @@ For hosted runners without Docker cache, consider pre-building images in a prece
 
 ## Hardening recommendations
 
-- Store test-only secrets with SOPS and decrypt them during the pipeline with `ksail cipher decrypt` so they never appear in plain text
+- Store test-only secrets with SOPS and decrypt them during the pipeline with `ksail cipher decrypt` so they never appear in plain text:
+  - Keep SOPS/age private keys **out of the repository** and container images.
+  - Provide decryption keys to the pipeline via your CI’s secret store (for example, GitHub Actions secrets such as `AGE_PRIVATE_KEY` or `SOPS_*` environment variables) or a supported KMS backend.
+  - Configure the workflow to export these secrets as environment variables only for the steps that run `ksail cipher decrypt`.
 - Use `--mirror-registry` flags if your registries require mirroring or you want to cache upstream images
 - Add a nightly job that exercises the same pipeline against the default branch to catch drift in Kubernetes versions or base images
 - Track cluster creation times to identify performance regressions
