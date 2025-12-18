@@ -839,8 +839,8 @@ github.com/json-iterator/go v1.1.12/go.mod h1:e30LSqwooZae/UwlEbR2852Gd8hjQvJoHm
 github.com/jstemmer/go-junit-report v0.0.0-20190106144839-af01ea7f8024/go.mod h1:6v2b51hI/fHJwM22ozAgKL4VKDeJcHhJFhtBdhmNjmU=
 github.com/jstemmer/go-junit-report v0.9.1/go.mod h1:Brl9GWCQeLvo8nXZwPNNblvFj/XSXhF0NWZEnDohbsk=
 github.com/julienschmidt/httprouter v1.2.0/go.mod h1:SYymIcj16QtmaHHD7aYtjjsJG7VTCxuUUipMqKk8s4w=
-github.com/k3d-io/k3d/v5 v5.9.0-rc.0 h1:7PyKVgDfCCMV4k0ikwGqE4B5xGHmFws/vAiuV5lGks4=
-github.com/k3d-io/k3d/v5 v5.9.0-rc.0/go.mod h1:d6VpYEq6pOEKS2WEOA8MJkCeCFq+9cxARBO5aZk60MM=
+github.com/k3d-io/k3d/v5 v5.8.3 h1:TRgPQNEV48b2PYXfus2F7fPepE7BKub4erNkY17K8Zs=
+github.com/k3d-io/k3d/v5 v5.8.3/go.mod h1:bFlhRV/R1cPT42ZZzQAHPHUF33CbCT8VSbjtjTr3J1Y=
 github.com/kastenhq/goversion v0.0.0-20230811215019-93b2f8823953 h1:WdAeg/imY2JFPc/9CST4bZ80nNJbiBFCAdSZCSgrS5Y=
 github.com/kastenhq/goversion v0.0.0-20230811215019-93b2f8823953/go.mod h1:6o+UrvuZWc4UTyBhQf0LGjW9Ld7qJxLz/OqvSOWWlEc=
 github.com/kevinburke/ssh_config v1.4.0 h1:6xxtP5bZ2E4NF5tuQulISpTO2z8XbtH8cg1PWkxoFkQ=
