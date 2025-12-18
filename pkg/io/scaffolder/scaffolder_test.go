@@ -969,10 +969,10 @@ func setupExistingKSailFile(
 func newK3dScaffolder(t *testing.T, mirrors []string) *scaffolder.Scaffolder {
 	t.Helper()
 
-	instance := scaffolder.NewScaffolder(*v1alpha1.NewCluster(), &bytes.Buffer{}, mirrors)
-	instance.KSailConfig.Spec.Distribution = v1alpha1.DistributionK3d
+	cluster := v1alpha1.NewCluster()
+	cluster.Spec.Distribution = v1alpha1.DistributionK3d
 
-	return instance
+	return scaffolder.NewScaffolder(*cluster, &bytes.Buffer{}, mirrors)
 }
 
 func TestGenerateK3dRegistryConfig_EmptyMirrors(t *testing.T) {
