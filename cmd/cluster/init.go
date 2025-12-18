@@ -99,8 +99,8 @@ func HandleInitRunE(
 	scaffolderInstance := scaffolder.NewScaffolder(
 		*clusterCfg,
 		cmd.OutOrStdout(),
+		mirrorRegistries,
 	)
-	scaffolderInstance.MirrorRegistries = mirrorRegistries
 
 	if deps.Timer != nil {
 		deps.Timer.NewStage()

@@ -44,7 +44,7 @@ func TestNewScaffolder(t *testing.T) {
 	t.Parallel()
 
 	cluster := createTestCluster("test-cluster")
-	scaffolder := scaffolder.NewScaffolder(cluster, io.Discard)
+	scaffolder := scaffolder.NewScaffolder(cluster, io.Discard, nil)
 
 	require.NotNil(t, scaffolder)
 	require.Equal(t, cluster, scaffolder.KSailConfig)
@@ -98,7 +98,7 @@ func TestScaffoldBasicOperations(t *testing.T) {
 			t.Parallel()
 
 			cluster := testCase.setupFunc(testCase.name)
-			scaffolder := scaffolder.NewScaffolder(cluster, io.Discard)
+			scaffolder := scaffolder.NewScaffolder(cluster, io.Discard, nil)
 
 			err := scaffolder.Scaffold(testCase.outputPath, testCase.force)
 
@@ -122,7 +122,7 @@ func TestScaffoldContentValidation(t *testing.T) {
 			t.Parallel()
 
 			cluster := testCase.setupFunc("test-cluster")
-			scaffolder := scaffolder.NewScaffolder(cluster, io.Discard)
+			scaffolder := scaffolder.NewScaffolder(cluster, io.Discard, nil)
 			generateDistributionContent(t, scaffolder, cluster, testCase.distribution)
 
 			kustomization := ktypes.Kustomization{}
@@ -153,7 +153,7 @@ func TestScaffoldErrorHandling(t *testing.T) {
 		t.Parallel()
 
 		cluster := createTestCluster("error-test")
-		scaffolderInstance := scaffolder.NewScaffolder(cluster, io.Discard)
+		scaffolderInstance := scaffolder.NewScaffolder(cluster, io.Discard, nil)
 
 		// Use invalid path with null byte to trigger file system error
 		err := scaffolderInstance.Scaffold("/invalid/\x00path/", false)
@@ -168,7 +168,7 @@ func TestScaffoldErrorHandling(t *testing.T) {
 
 		// Test Unknown distribution
 		unknownCluster := createUnknownCluster("unknown-test")
-		scaffolderInstance := scaffolder.NewScaffolder(unknownCluster, io.Discard)
+		scaffolderInstance := scaffolder.NewScaffolder(unknownCluster, io.Discard, nil)
 
 		err := scaffolderInstance.Scaffold("/tmp/test-unknown/", false)
 		require.Error(t, err)
@@ -202,7 +202,7 @@ func TestScaffoldGeneratorFailures(t *testing.T) {
 			longPath := filepath.Join(longPathParts...)
 
 			cluster := testCase.clusterFunc("error-test")
-			scaffolderInstance := scaffolder.NewScaffolder(cluster, io.Discard)
+			scaffolderInstance := scaffolder.NewScaffolder(cluster, io.Discard, nil)
 
 			err := scaffolderInstance.Scaffold(longPath, false)
 
@@ -416,7 +416,7 @@ func TestScaffold_DistributionConfigPreservation(t *testing.T) {
 			cluster := createK3dCluster(testCase.name)
 			cluster.Spec.DistributionConfig = scaffolder.KindConfigFile
 
-			instance := scaffolder.NewScaffolder(cluster, testCase.writer)
+			instance := scaffolder.NewScaffolder(cluster, testCase.writer, nil)
 
 			err := instance.Scaffold(outputDir, testCase.force)
 			require.NoError(t, err)
@@ -895,7 +895,7 @@ func newScaffolderWithMocks(
 	t.Helper()
 
 	cluster := createTestCluster("mock-cluster")
-	scaffolderInstance := scaffolder.NewScaffolder(cluster, writer)
+	scaffolderInstance := scaffolder.NewScaffolder(cluster, writer, nil)
 
 	mocks := &generatorMocks{
 		ksail: generator.NewMockGenerator[
@@ -969,9 +969,8 @@ func setupExistingKSailFile(
 func newK3dScaffolder(t *testing.T, mirrors []string) *scaffolder.Scaffolder {
 	t.Helper()
 
-	instance := scaffolder.NewScaffolder(*v1alpha1.NewCluster(), &bytes.Buffer{})
+	instance := scaffolder.NewScaffolder(*v1alpha1.NewCluster(), &bytes.Buffer{}, mirrors)
 	instance.KSailConfig.Spec.Distribution = v1alpha1.DistributionK3d
-	instance.MirrorRegistries = mirrors
 
 	return instance
 }
@@ -1012,8 +1011,8 @@ func TestGenerateK3dRegistryConfig_WithValidMirror(t *testing.T) {
 func TestGenerateContainerdPatches_InvalidSpecs(t *testing.T) {
 	t.Parallel()
 
-	scaffolderInstance := scaffolder.NewScaffolder(*v1alpha1.NewCluster(), &bytes.Buffer{})
-	scaffolderInstance.MirrorRegistries = []string{"invalid", "=missing", "missing="}
+	mirrorRegistries := []string{"invalid", "=missing", "missing="}
+	scaffolderInstance := scaffolder.NewScaffolder(*v1alpha1.NewCluster(), &bytes.Buffer{}, mirrorRegistries)
 
 	patches := scaffolderInstance.GenerateContainerdPatches()
 	assert.Empty(t, patches)
@@ -1030,7 +1029,7 @@ func TestCreateK3dConfig_MetricsServerDisabled(t *testing.T) {
 		},
 	}
 
-	scaffolderInstance := scaffolder.NewScaffolder(cluster, &bytes.Buffer{})
+	scaffolderInstance := scaffolder.NewScaffolder(cluster, &bytes.Buffer{}, nil)
 	config := scaffolderInstance.CreateK3dConfig()
 
 	// Check that --disable=metrics-server flag is present
@@ -1059,7 +1058,7 @@ func TestCreateK3dConfig_MetricsServerEnabled(t *testing.T) {
 		},
 	}
 
-	scaffolderInstance := scaffolder.NewScaffolder(cluster, &bytes.Buffer{})
+	scaffolderInstance := scaffolder.NewScaffolder(cluster, &bytes.Buffer{}, nil)
 	config := scaffolderInstance.CreateK3dConfig()
 
 	// Check that --disable=metrics-server flag is NOT present
@@ -1084,7 +1083,7 @@ func TestCreateK3dConfig_MetricsServerDisabledWithCilium(t *testing.T) {
 		},
 	}
 
-	scaffolderInstance := scaffolder.NewScaffolder(cluster, &bytes.Buffer{})
+	scaffolderInstance := scaffolder.NewScaffolder(cluster, &bytes.Buffer{}, nil)
 	config := scaffolderInstance.CreateK3dConfig()
 
 	// Check that both CNI and metrics-server flags are present
