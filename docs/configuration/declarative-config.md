@@ -60,7 +60,7 @@ Use the `spec.distributionConfig` field in `ksail.yaml` to point to the desired 
 
 ## Schema support and editor assistance
 
-The repository ships a JSON Schema at `schemas/ksail-config.schema.json`. Reference it from your YAML for IntelliSense:
+The repository includes a JSON Schema at `schemas/ksail-config.schema.json` (located at the repository root). Reference it from your YAML for IntelliSense:
 
 ```yaml
 # yaml-language-server: $schema=../schemas/ksail-config.schema.json
@@ -68,5 +68,7 @@ apiVersion: ksail.dev/v1alpha1
 kind: Cluster
 ...
 ```
+
+The relative path in the example above assumes your `ksail.yaml` is in a subdirectory (e.g., `examples/` or a project folder). Adjust the path based on your `ksail.yaml` location relative to the repository root.
 
 IDEs that support SchemaStore (including VS Code with the Red Hat YAML extension) will provide completions and validation.

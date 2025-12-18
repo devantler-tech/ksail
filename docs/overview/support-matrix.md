@@ -19,4 +19,4 @@ KSail focuses on fast local Kubernetes development. The matrix below captures of
 | Ingress Controllers                | Planned (use distribution defaults for now)        | Configure through `kind.yaml` or `k3d.yaml`.                                                              |
 | Gateway Controllers                | Planned                                            | Gateway API support in development.                                                                       |
 
-> **Note:** This reflects the Go rewrite of KSail. Some features from the previous .NET version are being reimplemented.
+> **Note:** This support matrix reflects the Go rewrite of KSail. Features such as Podman support, GitOps engines (Flux and ArgoCD), advanced CSI backends, and Ingress/Gateway controllers are in active development or being reimplemented from the previous .NET version. For up‑to‑date details and timelines, see the KSail roadmap and issues at https://github.com/devantler-tech/ksail/issues.

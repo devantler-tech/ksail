@@ -1,10 +1,10 @@
-# Cert-Manager
+# cert-manager
 
 [cert-manager](https://cert-manager.io/) is a Kubernetes controller for issuing and renewing TLS certificates.
 
 KSail can optionally install cert-manager during cluster creation.
 
-Cert-manager is **disabled by default**.
+cert-manager is **disabled by default**.
 
 ## Enable during init
 
