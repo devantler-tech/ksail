@@ -9,7 +9,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const minInstallArgs = 2
+const requiredInstallArgs = 2
 
 // NewInstallCmd creates the workload install command.
 func NewInstallCmd(_ *runtime.Runtime) *cobra.Command {
@@ -21,7 +21,7 @@ func NewInstallCmd(_ *runtime.Runtime) *cobra.Command {
 		Short: "Install Helm charts",
 		Long: "Install Helm charts to provision workloads through KSail. " +
 			"This command provides native Helm chart installation capabilities.",
-		Args: cobra.MinimumNArgs(minInstallArgs),
+		Args: cobra.ExactArgs(requiredInstallArgs),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			releaseName := args[0]
 			chartName := args[1]
