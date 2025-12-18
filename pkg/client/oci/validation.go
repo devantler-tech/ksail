@@ -6,8 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-
-	semver "github.com/Masterminds/semver/v3"
 )
 
 // Validate normalizes and verifies the build options before artifact construction.
@@ -15,7 +13,7 @@ import (
 // This method performs the following validation steps:
 //  1. Validates and resolves the source path to an absolute directory
 //  2. Normalizes and validates the registry endpoint
-//  3. Validates and normalizes the version (semantic versioning or "latest")
+//  3. Validates and normalizes the version (any non-empty string)
 //  4. Normalizes repository and artifact names using source path defaults
 //
 // Returns ValidatedBuildOptions ready for use by the builder, or an error if validation fails.
@@ -91,26 +89,11 @@ func normalizeRegistryEndpoint(raw string) (string, error) {
 }
 
 // normalizeVersion validates and normalizes a version string.
-// Accepts semantic versions (with optional "v" prefix) or the special value "latest".
+// Accepts any non-empty string as a valid tag.
 func normalizeVersion(raw string) (string, error) {
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {
 		return "", ErrVersionRequired
-	}
-
-	if strings.EqualFold(trimmed, "latest") {
-		return "latest", nil
-	}
-
-	trimmed = strings.TrimPrefix(trimmed, "v")
-
-	if trimmed == "" {
-		return "", ErrVersionRequired
-	}
-
-	_, err := semver.NewVersion(trimmed)
-	if err != nil {
-		return "", fmt.Errorf("%w: %w", ErrVersionInvalid, err)
 	}
 
 	return trimmed, nil
