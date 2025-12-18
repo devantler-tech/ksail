@@ -1560,7 +1560,7 @@ func ensureArgoCDResources(
 		RepositoryURL:   repoURL,
 		SourcePath:      sourceDir,
 		ApplicationName: "ksail",
-		TargetRevision:  "latest",
+		TargetRevision:  "dev",
 	})
 	if err != nil {
 		return fmt.Errorf("ensure argocd resources: %w", err)
