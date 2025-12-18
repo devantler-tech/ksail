@@ -8,7 +8,7 @@ KSail focuses on fast local Kubernetes development. The matrix below captures of
 | Container Engines                  | Docker ✅                                           | Podman support planned for future release.                                                                |
 | Distributions                      | Kind ✅, K3d ✅                                      | Both distributions fully supported.                                                                       |
 | Workload Management                | kubectl ✅, Helm ✅                                  | Commands wrapped via `ksail workload`.                                                                    |
-| GitOps Engines                     | None ✅ (Flux and ArgoCD planned)                   | GitOps integration in development.                                                                        |
+| GitOps Engines                     | ArgoCD ✅ (Flux planned)                            | ArgoCD integration available; Flux integration in development.                                           |
 | Container Network Interfaces (CNI) | Default ✅, Cilium ✅, None ✅                        | Choose via `spec.cni` or `--cni` flag.                                                                    |
 | Container Storage Interfaces (CSI) | Default, LocalPathStorage (not yet implemented)    | Configuration defined but not fully implemented.                                                          |
 | Metrics Server                     | Enabled ✅, Disabled ✅                              | Toggle with `--metrics-server` during init or create.                                                     |
