@@ -64,7 +64,7 @@ func (m *ManagerImpl) Ensure(ctx context.Context, opts EnsureOptions) error {
 	}
 
 	if opts.TargetRevision == "" {
-		opts.TargetRevision = "latest"
+		opts.TargetRevision = "dev"
 	}
 
 	err := m.ensureNamespace(ctx, argoCDNamespace)

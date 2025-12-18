@@ -27,7 +27,7 @@ import (
 const (
 	defaultProjectName       = "ksail-workloads"
 	defaultSourceDirectory   = "k8s"
-	defaultArtifactTag       = "latest"
+	defaultArtifactTag       = "dev"
 	defaultOCIRepositoryName = fluxclient.DefaultNamespace
 	fluxIntervalFallback     = time.Minute
 	fluxDistributionVersion  = "2.x"
