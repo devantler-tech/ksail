@@ -71,7 +71,7 @@ type Scaffolder struct {
 }
 
 // NewScaffolder creates a new Scaffolder instance with the provided KSail cluster configuration.
-func NewScaffolder(cfg v1alpha1.Cluster, writer io.Writer) *Scaffolder {
+func NewScaffolder(cfg v1alpha1.Cluster, writer io.Writer, mirrorRegistries []string) *Scaffolder {
 	ksailGenerator := yamlgenerator.NewYAMLGenerator[v1alpha1.Cluster]()
 	kindGenerator := kindgenerator.NewKindGenerator()
 	k3dGenerator := k3dgenerator.NewK3dGenerator()
@@ -84,6 +84,7 @@ func NewScaffolder(cfg v1alpha1.Cluster, writer io.Writer) *Scaffolder {
 		K3dGenerator:           k3dGenerator,
 		KustomizationGenerator: kustomizationGenerator,
 		Writer:                 writer,
+		MirrorRegistries:       mirrorRegistries,
 	}
 }
 

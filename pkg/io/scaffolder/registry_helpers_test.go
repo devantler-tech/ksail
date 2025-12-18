@@ -22,7 +22,7 @@ func createTestScaffolderForKind() *scaffolder.Scaffolder {
 		},
 	}
 
-	return scaffolder.NewScaffolder(*cluster, io.Discard)
+	return scaffolder.NewScaffolder(*cluster, io.Discard, nil)
 }
 
 func createTestScaffolderForK3d() *scaffolder.Scaffolder {
@@ -36,7 +36,7 @@ func createTestScaffolderForK3d() *scaffolder.Scaffolder {
 		},
 	}
 
-	return scaffolder.NewScaffolder(*cluster, io.Discard)
+	return scaffolder.NewScaffolder(*cluster, io.Discard, nil)
 }
 
 type containerdPatchExpectation struct {
