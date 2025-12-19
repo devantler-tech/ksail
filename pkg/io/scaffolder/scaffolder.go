@@ -468,6 +468,14 @@ func (s *Scaffolder) generateKindConfig(output string, force bool) error {
 			Kind:       "Cluster",
 		},
 		Name: "kind",
+		// Pin to Kubernetes 1.34.3 (stable version before 1.35 breaking changes)
+		// Kind v0.31.0 defaults to Kubernetes 1.35.0 which requires kubeadm v1beta4
+		Nodes: []v1alpha4.Node{
+			{
+				Role:  v1alpha4.ControlPlaneRole,
+				Image: "kindest/node:v1.34.3@sha256:08497ee19eace7b4b5348db5c6a1591d7752b164530a36f855cb0f2bdcbadd48",
+			},
+		},
 	}
 
 	// Disable default CNI if Cilium is requested
