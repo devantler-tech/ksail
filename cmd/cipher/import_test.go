@@ -173,6 +173,11 @@ func TestImportKeyBasic(t *testing.T) {
 		t.Errorf("expected key file to contain public key comment")
 	}
 
+	// Verify the derived public key matches the expected value
+	if !strings.Contains(contentStr, validPublicKey) {
+		t.Errorf("expected key file to contain the correct public key %s", validPublicKey)
+	}
+
 	// Verify the key is present
 	if !strings.Contains(contentStr, validAgeKey) {
 		t.Errorf("expected key file to contain the age key")
@@ -238,6 +243,116 @@ func TestImportKeyWithXDGConfigHome(t *testing.T) {
 
 	if !strings.Contains(string(content), validAgeKey) {
 		t.Errorf("expected key file to contain the age key")
+	}
+}
+
+func TestImportKeyAppendsToExistingFile(t *testing.T) {
+	// Note: Not running in parallel due to environment variable modifications
+
+	// Create a temporary directory for testing
+	tmpDir := t.TempDir()
+
+	// Set HOME to temp directory
+	originalHome := os.Getenv(homeEnv)
+	t.Cleanup(func() {
+		_ = os.Setenv(homeEnv, originalHome)
+	})
+	err := os.Setenv(homeEnv, tmpDir)
+	if err != nil {
+		t.Fatalf("failed to set HOME: %v", err)
+	}
+
+	// Clear XDG_CONFIG_HOME
+	originalXDG := os.Getenv(xdgConfigHomeEnv)
+	t.Cleanup(func() {
+		if originalXDG != "" {
+			_ = os.Setenv(xdgConfigHomeEnv, originalXDG)
+		} else {
+			_ = os.Unsetenv(xdgConfigHomeEnv)
+		}
+	})
+	_ = os.Unsetenv(xdgConfigHomeEnv)
+
+	// On Windows, set AppData
+	if runtime.GOOS == windowsOS {
+		originalAppData := os.Getenv(appDataEnv)
+		t.Cleanup(func() {
+			_ = os.Setenv(appDataEnv, originalAppData)
+		})
+		err = os.Setenv(appDataEnv, tmpDir)
+		if err != nil {
+			t.Fatalf("failed to set AppData: %v", err)
+		}
+	}
+
+	// Determine the expected path
+	var expectedPath string
+
+	switch runtime.GOOS {
+	case windowsOS:
+		expectedPath = filepath.Join(tmpDir, sopsSubdir, ageSubdir, keyFileName)
+	case darwinOS:
+		expectedPath = filepath.Join(
+			tmpDir,
+			"Library",
+			"Application Support",
+			sopsSubdir,
+			ageSubdir,
+			keyFileName,
+		)
+	default:
+		expectedPath = filepath.Join(tmpDir, ".config", sopsSubdir, ageSubdir, keyFileName)
+	}
+
+	// Create directory and pre-populate with an existing key
+	err = os.MkdirAll(filepath.Dir(expectedPath), 0o700)
+	if err != nil {
+		t.Fatalf("failed to create directory: %v", err)
+	}
+
+	existingKey := `# created: 2024-01-01T00:00:00Z
+# public key: age1existing123
+AGE-SECRET-KEY-1EXISTINGKEYFORTEST123456789012345678901234567890ABC
+`
+	err = os.WriteFile(expectedPath, []byte(existingKey), 0o600)
+	if err != nil {
+		t.Fatalf("failed to write existing key: %v", err)
+	}
+
+	// Execute import command with a new key
+	rt := rtruntime.NewRuntime()
+	cipherCmd := cipher.NewCipherCmd(rt)
+
+	var out bytes.Buffer
+	cipherCmd.SetOut(&out)
+	cipherCmd.SetArgs([]string{"import", validAgeKey})
+
+	err = cipherCmd.Execute()
+	if err != nil {
+		t.Errorf("expected no error executing import, got: %v", err)
+	}
+
+	// Read the file content
+	content, err := os.ReadFile(expectedPath) //#nosec G304 -- test file path
+	if err != nil {
+		t.Errorf("expected key file to exist at %s, got error: %v", expectedPath, err)
+	}
+
+	contentStr := string(content)
+
+	// Verify both keys are present (old and new)
+	if !strings.Contains(contentStr, "AGE-SECRET-KEY-1EXISTINGKEYFORTEST123456789012345678901234567890ABC") {
+		t.Errorf("expected existing key to be preserved")
+	}
+
+	if !strings.Contains(contentStr, validAgeKey) {
+		t.Errorf("expected new key to be appended")
+	}
+
+	// Verify both metadata sections are present
+	countCreated := strings.Count(contentStr, "# created:")
+	if countCreated != 2 {
+		t.Errorf("expected 2 'created' metadata lines (one for each key), got %d", countCreated)
 	}
 }
 
