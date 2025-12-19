@@ -17,4 +17,4 @@ https://gateway-api.sigs.k8s.io/
 ^https://github\.com/devantler-tech/ksail/releases/download/.*
 
 # Temporarily ignore the pkg.go.dev links until they have been sourced properly
-https://pkg.go.dev/github.com/devantler-tech/ksail/
+https://pkg.go.dev/github.com/devantler-tech/ksail
