@@ -14,7 +14,6 @@ import (
 
 const (
 	kustomizationFileName = "kustomization.yaml"
-	maxLineLength         = 120
 )
 
 // NewValidateCmd creates the workload validate command.
@@ -240,7 +239,7 @@ func findKustomizations(rootPath string) ([]string, error) {
 	return kustomizations, nil
 }
 
-// findYAMLFiles finds all YAML files in a directory.
+// findYAMLFiles finds all YAML files in a directory, excluding kustomization.yaml files.
 func findYAMLFiles(rootPath string) ([]string, error) {
 	var yamlFiles []string
 
@@ -249,7 +248,8 @@ func findYAMLFiles(rootPath string) ([]string, error) {
 			return err
 		}
 
-		if !info.IsDir() && isYAMLFile(path) {
+		// Skip kustomization.yaml files as they are validated separately via kustomize build
+		if !info.IsDir() && isYAMLFile(path) && filepath.Base(path) != kustomizationFileName {
 			yamlFiles = append(yamlFiles, path)
 		}
 
