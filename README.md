@@ -52,7 +52,7 @@ go build -o ksail
 ## Usage
 
 | Purpose                                                    | Command Example            |
-| ---------------------------------------------------------- | -------------------------- |
+|------------------------------------------------------------|----------------------------|
 | Initialize a new KSail cluster project                     | `ksail cluster init`       |
 | Create and start the cluster                               | `ksail cluster create`     |
 | Create a workload in the cluster                           | `ksail workload create`    |
@@ -80,7 +80,7 @@ This is just a small sample of what KSail can do. For a full list of commands an
 KSail is a powerful tool that can be used in many different ways. Here are some projects that use KSail in their setup:
 
 | Project                                                               | Description         | Type     |
-| --------------------------------------------------------------------- | ------------------- | -------- |
+|-----------------------------------------------------------------------|---------------------|----------|
 | [devantler-tech/platform](https://github.com/devantler-tech/platform) | My personal homelab | Platform |
 
 If you use KSail in your project, feel free to open a PR to add it to the list, so others can see how you use KSail.

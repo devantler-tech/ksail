@@ -1,4 +1,5 @@
 ---
+title: "cert-manager"
 parent: Core Concepts
 grand_parent: Overview
 nav_order: 2
