@@ -10,12 +10,11 @@ import (
 	"github.com/devantler-tech/ksail/cmd/workload"
 )
 
-const validManifestTemplate = `apiVersion: v1
-kind: %s
+const validNamespaceManifest = `apiVersion: v1
+kind: Namespace
 metadata:
-  name: %s
-  namespace: default
-%s`
+  name: test-namespace
+`
 
 func TestNewValidateCmdHasCorrectDefaults(t *testing.T) {
 	t.Parallel()
@@ -165,6 +164,7 @@ data:
   key: value
 `
 	manifestPath := filepath.Join(tmpDir, "valid-manifest.yaml")
+
 	err := os.WriteFile(manifestPath, []byte(validManifest), 0o600)
 	if err != nil {
 		t.Fatalf("failed to write test manifest: %v", err)
@@ -177,7 +177,7 @@ data:
 	cmd.SetOut(&output)
 	cmd.SetErr(&output)
 
-	err := cmd.Execute()
+	err = cmd.Execute()
 	if err != nil {
 		t.Fatalf("expected validation to succeed, got error: %v", err)
 	}
@@ -197,6 +197,7 @@ metadata:
 data: "invalid structure"
 `
 	manifestPath := filepath.Join(tmpDir, "invalid-manifest.yaml")
+
 	err := os.WriteFile(manifestPath, []byte(invalidManifest), 0o600)
 	if err != nil {
 		t.Fatalf("failed to write test manifest: %v", err)
@@ -209,7 +210,7 @@ data: "invalid structure"
 	cmd.SetOut(&output)
 	cmd.SetErr(&output)
 
-	err := cmd.Execute()
+	err = cmd.Execute()
 	if err == nil {
 		t.Fatal("expected validation to fail for invalid manifest")
 	}
@@ -241,11 +242,13 @@ kind: Kustomization
 resources:
   - configmap.yaml
 `
-	if err := os.WriteFile(
+
+	err = os.WriteFile(
 		filepath.Join(tmpDir, "kustomization.yaml"),
 		[]byte(kustomizationYAML),
 		0o600,
-	); err != nil {
+	)
+	if err != nil {
 		t.Fatalf("failed to write kustomization: %v", err)
 	}
 
@@ -256,7 +259,7 @@ resources:
 	cmd.SetOut(&output)
 	cmd.SetErr(&output)
 
-	err := cmd.Execute()
+	err = cmd.Execute()
 	if err != nil {
 		t.Fatalf("expected validation to succeed, got error: %v", err)
 	}
@@ -282,7 +285,8 @@ sops:
   # SOPS metadata that would fail validation without skip-secrets
   encrypted_regex: ^(data|stringData)$
 `
-	if err := os.WriteFile(filepath.Join(tmpDir, "secret.yaml"), []byte(secretYAML), 0o600); err != nil {
+	err := os.WriteFile(filepath.Join(tmpDir, "secret.yaml"), []byte(secretYAML), 0o600)
+	if err != nil {
 		t.Fatalf("failed to write secret: %v", err)
 	}
 
@@ -296,7 +300,7 @@ sops:
 	cmd.SetOut(&output)
 	cmd.SetErr(&output)
 
-	err := cmd.Execute()
+	err = cmd.Execute()
 	if err != nil {
 		t.Fatalf("expected validation with skip-secrets to succeed, got error: %v", err)
 	}
@@ -308,13 +312,10 @@ func TestValidateCmdWithVerboseFlag(t *testing.T) {
 	// Create a temporary directory with a valid manifest
 	tmpDir := t.TempDir()
 
-	validManifest := `apiVersion: v1
-kind: Namespace
-metadata:
-  name: test-namespace
-`
 	manifestPath := filepath.Join(tmpDir, "namespace.yaml")
-	if err := os.WriteFile(manifestPath, []byte(validManifest), 0o600); err != nil {
+
+	err := os.WriteFile(manifestPath, []byte(validNamespaceManifest), 0o600)
+	if err != nil {
 		t.Fatalf("failed to write test manifest: %v", err)
 	}
 
@@ -328,7 +329,7 @@ metadata:
 	cmd.SetOut(&output)
 	cmd.SetErr(&output)
 
-	err := cmd.Execute()
+	err = cmd.Execute()
 	if err != nil {
 		t.Fatalf("expected validation to succeed, got error: %v", err)
 	}
@@ -343,13 +344,9 @@ func TestValidateCmdWithDefaultPath(t *testing.T) {
 	// Create a temporary directory with a valid manifest and change to it
 	tmpDir := t.TempDir()
 
-	validManifest := `apiVersion: v1
-kind: Namespace
-metadata:
-  name: test-namespace
-`
 	manifestPath := filepath.Join(tmpDir, "namespace.yaml")
-	err := os.WriteFile(manifestPath, []byte(validManifest), 0o600)
+
+	err := os.WriteFile(manifestPath, []byte(validNamespaceManifest), 0o600)
 	if err != nil {
 		t.Fatalf("failed to write test manifest: %v", err)
 	}
@@ -403,11 +400,12 @@ kind: Namespace
 metadata:
   name: test-namespace
 `
-	if err := os.WriteFile(
+	err := os.WriteFile(
 		filepath.Join(tmpDir, "valid.yaml"),
 		[]byte(validManifest),
 		0o600,
-	); err != nil {
+	)
+	if err != nil {
 		t.Fatalf("failed to write valid manifest: %v", err)
 	}
 
@@ -418,11 +416,12 @@ metadata:
   name: test-config
 data: "invalid"
 `
-	if err := os.WriteFile(
+	err = os.WriteFile(
 		filepath.Join(tmpDir, "invalid.yaml"),
 		[]byte(invalidManifest),
 		0o600,
-	); err != nil {
+	)
+	if err != nil {
 		t.Fatalf("failed to write invalid manifest: %v", err)
 	}
 
@@ -433,7 +432,7 @@ data: "invalid"
 	cmd.SetOut(&output)
 	cmd.SetErr(&output)
 
-	err := cmd.Execute()
+	err = cmd.Execute()
 	// Should fail because one file is invalid
 	if err == nil {
 		t.Fatal("expected validation to fail when directory contains invalid files")
@@ -444,15 +443,9 @@ func setupValidManifestDir(t *testing.T) string {
 	t.Helper()
 
 	tmpDir := t.TempDir()
-
-	validManifest := `apiVersion: v1
-kind: Namespace
-metadata:
-  name: test-namespace
-`
-
 	manifestPath := filepath.Join(tmpDir, "namespace.yaml")
-	err := os.WriteFile(manifestPath, []byte(validManifest), 0o600)
+
+	err := os.WriteFile(manifestPath, []byte(validNamespaceManifest), 0o600)
 	if err != nil {
 		t.Fatalf("failed to write test manifest: %v", err)
 	}

@@ -68,7 +68,9 @@ data:
   key: value
 `
 	manifestPath := filepath.Join(tmpDir, "valid-manifest.yaml")
-	if err := os.WriteFile(manifestPath, []byte(validManifest), 0o600); err != nil {
+
+	err := os.WriteFile(manifestPath, []byte(validManifest), 0o600)
+	if err != nil {
 		t.Fatalf("failed to write test manifest: %v", err)
 	}
 
@@ -81,7 +83,8 @@ data:
 	}
 
 	ctx := context.Background()
-	err := client.ValidateFile(ctx, manifestPath, opts)
+
+	err = client.ValidateFile(ctx, manifestPath, opts)
 	if err != nil {
 		t.Fatalf("expected valid manifest to pass validation, got error: %v", err)
 	}
@@ -102,7 +105,9 @@ metadata:
 data: invalid
 `
 	manifestPath := filepath.Join(tmpDir, "invalid-manifest.yaml")
-	if err := os.WriteFile(manifestPath, []byte(invalidManifest), 0o600); err != nil {
+
+	err := os.WriteFile(manifestPath, []byte(invalidManifest), 0o600)
+	if err != nil {
 		t.Fatalf("failed to write test manifest: %v", err)
 	}
 
@@ -115,7 +120,8 @@ data: invalid
 	}
 
 	ctx := context.Background()
-	err := client.ValidateFile(ctx, manifestPath, opts)
+
+	err = client.ValidateFile(ctx, manifestPath, opts)
 	if err == nil {
 		t.Fatal("expected invalid manifest to fail validation")
 	}
@@ -137,6 +143,7 @@ func TestValidateFile_NonExistentFile(t *testing.T) {
 	}
 
 	ctx := context.Background()
+
 	err := client.ValidateFile(ctx, "/nonexistent/file.yaml", opts)
 	if err == nil {
 		t.Fatal("expected error for nonexistent file")
@@ -166,7 +173,9 @@ data:
   key: dmFsdWU=
 `
 	manifestPath := filepath.Join(tmpDir, "secret.yaml")
-	if err := os.WriteFile(manifestPath, []byte(secretManifest), 0o600); err != nil {
+
+	err := os.WriteFile(manifestPath, []byte(secretManifest), 0o600)
+	if err != nil {
 		t.Fatalf("failed to write test manifest: %v", err)
 	}
 
@@ -180,7 +189,8 @@ data:
 	}
 
 	ctx := context.Background()
-	err := client.ValidateFile(ctx, manifestPath, opts)
+
+	err = client.ValidateFile(ctx, manifestPath, opts)
 	// Should succeed because Secret is skipped
 	if err != nil {
 		t.Fatalf("expected skipped Secret to pass validation, got error: %v", err)
@@ -214,6 +224,7 @@ data:
 
 	ctx := context.Background()
 	reader := bytes.NewReader([]byte(validYAML))
+
 	err := client.ValidateManifests(ctx, reader, opts)
 	if err != nil {
 		t.Fatalf("expected valid YAML to pass validation, got error: %v", err)
@@ -240,6 +251,7 @@ data: "this is not valid"
 
 	ctx := context.Background()
 	reader := bytes.NewReader([]byte(invalidYAML))
+
 	err := client.ValidateManifests(ctx, reader, opts)
 	if err == nil {
 		t.Fatal("expected invalid YAML to fail validation")
@@ -265,6 +277,7 @@ metadata:
 
 	ctx := context.Background()
 	reader := bytes.NewReader([]byte(validYAML))
+
 	err := client.ValidateManifests(ctx, reader, nil)
 	if err != nil {
 		t.Fatalf("expected validation with nil options to succeed, got error: %v", err)
@@ -284,7 +297,9 @@ metadata:
   name: test-namespace
 `
 	manifestPath := filepath.Join(tmpDir, "valid-manifest.yaml")
-	if err := os.WriteFile(manifestPath, []byte(validManifest), 0o600); err != nil {
+
+	err := os.WriteFile(manifestPath, []byte(validManifest), 0o600)
+	if err != nil {
 		t.Fatalf("failed to write test manifest: %v", err)
 	}
 

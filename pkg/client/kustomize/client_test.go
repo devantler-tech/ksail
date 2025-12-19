@@ -34,7 +34,9 @@ metadata:
 data:
   key: value
 `
-	if err := os.WriteFile(filepath.Join(tmpDir, "configmap.yaml"), []byte(configMapYAML), 0o600); err != nil {
+
+	err := os.WriteFile(filepath.Join(tmpDir, "configmap.yaml"), []byte(configMapYAML), 0o600)
+	if err != nil {
 		t.Fatalf("failed to write configmap: %v", err)
 	}
 
@@ -44,7 +46,9 @@ kind: Kustomization
 resources:
   - configmap.yaml
 `
-	if err := os.WriteFile(filepath.Join(tmpDir, "kustomization.yaml"), []byte(kustomizationYAML), 0o600); err != nil {
+
+	err = os.WriteFile(filepath.Join(tmpDir, "kustomization.yaml"), []byte(kustomizationYAML), 0o600)
+	if err != nil {
 		t.Fatalf("failed to write kustomization: %v", err)
 	}
 
@@ -58,9 +62,11 @@ resources:
 
 	// Verify output contains expected content
 	outputStr := output.String()
+
 	if !strings.Contains(outputStr, "kind: ConfigMap") {
 		t.Fatal("expected output to contain ConfigMap")
 	}
+
 	if !strings.Contains(outputStr, "name: test-config") {
 		t.Fatal("expected output to contain test-config name")
 	}
@@ -103,14 +109,17 @@ kind: Kustomization
 resources:
   - nonexistent.yaml
 `
-	if err := os.WriteFile(filepath.Join(tmpDir, "kustomization.yaml"), []byte(kustomizationYAML), 0o600); err != nil {
+
+	err := os.WriteFile(filepath.Join(tmpDir, "kustomization.yaml"), []byte(kustomizationYAML), 0o600)
+	if err != nil {
 		t.Fatalf("failed to write kustomization: %v", err)
 	}
 
 	// Test build
 	client := kustomize.NewClient()
 	ctx := context.Background()
-	_, err := client.Build(ctx, tmpDir)
+
+	_, err = client.Build(ctx, tmpDir)
 	if err == nil {
 		t.Fatal("expected error for invalid kustomization")
 	}
@@ -165,7 +174,11 @@ resources:
 commonLabels:
   environment: test
 `
-	err = os.WriteFile(filepath.Join(tmpDir, "kustomization.yaml"), []byte(kustomizationYAML), 0o600)
+	err = os.WriteFile(
+		filepath.Join(tmpDir, "kustomization.yaml"),
+		[]byte(kustomizationYAML),
+		0o600,
+	)
 	if err != nil {
 		t.Fatalf("failed to write kustomization: %v", err)
 	}
