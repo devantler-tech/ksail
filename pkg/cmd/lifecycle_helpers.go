@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/devantler-tech/ksail/pkg/apis/cluster/v1alpha1"
 	runtime "github.com/devantler-tech/ksail/pkg/di"
@@ -17,6 +18,9 @@ import (
 
 // ErrMissingClusterProvisionerDependency indicates that a lifecycle command resolved a nil provisioner.
 var ErrMissingClusterProvisionerDependency = errors.New("missing cluster provisioner dependency")
+
+// ErrClusterConfigRequired indicates that a nil cluster configuration was provided.
+var ErrClusterConfigRequired = errors.New("cluster configuration is required")
 
 // LifecycleAction represents a lifecycle operation executed against a cluster provisioner.
 // The action receives a context for cancellation, the provisioner instance, and the cluster name.
@@ -137,13 +141,97 @@ func showLifecycleTitle(cmd *cobra.Command, emoji, content string) {
 	)
 }
 
+// getClusterNameFromConfigOrContext extracts the cluster name, preferring the context if set.
+// When a context is explicitly provided (e.g., "kind-my-cluster"), it derives the cluster name
+// from it (e.g., "my-cluster"). Otherwise, it falls back to the distribution config name.
+func getClusterNameFromConfigOrContext(
+	distributionConfig any,
+	clusterCfg *v1alpha1.Cluster,
+) (string, error) {
+	// If context is explicitly set, derive cluster name from it
+	if clusterCfg != nil && clusterCfg.Spec.Connection.Context != "" {
+		clusterName := ExtractClusterNameFromContext(
+			clusterCfg.Spec.Connection.Context,
+			clusterCfg.Spec.Distribution,
+		)
+		if clusterName != "" {
+			return clusterName, nil
+		}
+	}
+
+	// Fall back to distribution config name
+	clusterName, err := configmanager.GetClusterName(distributionConfig)
+	if err != nil {
+		return "", fmt.Errorf("failed to get cluster name from distribution config: %w", err)
+	}
+
+	return clusterName, nil
+}
+
+// ExtractClusterNameFromContext extracts the cluster name from a context string.
+// For kind clusters, contexts follow the pattern "kind-<cluster-name>".
+// For k3d clusters, contexts follow the pattern "k3d-<cluster-name>".
+// Returns empty string if the context doesn't match the expected pattern.
+func ExtractClusterNameFromContext(context string, distribution v1alpha1.Distribution) string {
+	switch distribution {
+	case v1alpha1.DistributionKind:
+		if clusterName, ok := strings.CutPrefix(context, "kind-"); ok {
+			return clusterName
+		}
+	case v1alpha1.DistributionK3d:
+		if clusterName, ok := strings.CutPrefix(context, "k3d-"); ok {
+			return clusterName
+		}
+	}
+
+	return ""
+}
+
+// GetClusterNameFromConfig extracts the cluster name from the KSail cluster configuration.
+// When a context is explicitly set, it derives the cluster name from it.
+// Otherwise, it loads the distribution config and extracts the name from there.
+// This function is exported for use in command handlers that need the cluster name
+// for operations beyond the standard lifecycle actions.
+func GetClusterNameFromConfig(
+	clusterCfg *v1alpha1.Cluster,
+	factory clusterprovisioner.Factory,
+) (string, error) {
+	if clusterCfg == nil {
+		return "", ErrClusterConfigRequired
+	}
+
+	// If context is explicitly set, derive cluster name from it
+	if clusterCfg.Spec.Connection.Context != "" {
+		clusterName := ExtractClusterNameFromContext(
+			clusterCfg.Spec.Connection.Context,
+			clusterCfg.Spec.Distribution,
+		)
+		if clusterName != "" {
+			return clusterName, nil
+		}
+	}
+
+	// Fall back to distribution config name
+	_, distributionConfig, err := factory.Create(context.Background(), clusterCfg)
+	if err != nil {
+		return "", fmt.Errorf("failed to load distribution config: %w", err)
+	}
+
+	clusterName, err := configmanager.GetClusterName(distributionConfig)
+	if err != nil {
+		return "", fmt.Errorf("failed to get cluster name from distribution config: %w", err)
+	}
+
+	return clusterName, nil
+}
+
 // RunLifecycleWithConfig executes a lifecycle command using a pre-loaded cluster configuration.
 // This function is useful when the cluster configuration has already been loaded, avoiding
 // the need to reload it.
 //
 // It performs the following steps:
 //  1. Create the cluster provisioner using the factory
-//  2. Extract the cluster name from the distribution config
+//  2. Extract the cluster name from the distribution config or context
 //  3. Execute the lifecycle action
 //  4. Display success message with timing information
 //
@@ -163,9 +251,9 @@ func RunLifecycleWithConfig(
 		return ErrMissingClusterProvisionerDependency
 	}
 
-	clusterName, err := configmanager.GetClusterName(distributionConfig)
+	clusterName, err := getClusterNameFromConfigOrContext(distributionConfig, clusterCfg)
 	if err != nil {
-		return fmt.Errorf("failed to get cluster name from config: %w", err)
+		return fmt.Errorf("failed to get cluster name: %w", err)
 	}
 
 	return runLifecycleWithProvisioner(cmd, deps, config, provisioner, clusterName)

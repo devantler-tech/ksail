@@ -189,3 +189,258 @@ spec:
   distributionConfig: kind.yaml
   sourceDirectory: k8s
 `
+
+func TestExtractClusterNameFromContext(t *testing.T) {
+	t.Parallel()
+
+	tests := getExtractClusterNameTestCases()
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			result := pkgcmd.ExtractClusterNameFromContext(testCase.context, testCase.distribution)
+			if result != testCase.expected {
+				t.Errorf("extractClusterNameFromContext(%q, %v) = %q; want %q",
+					testCase.context, testCase.distribution, result, testCase.expected)
+			}
+		})
+	}
+}
+
+//nolint:funlen // Test data structures are intentionally long for comprehensive coverage
+func getExtractClusterNameTestCases() []struct {
+	name         string
+	context      string
+	distribution v1alpha1.Distribution
+	expected     string
+} {
+	return []struct {
+		name         string
+		context      string
+		distribution v1alpha1.Distribution
+		expected     string
+	}{
+		{
+			name:         "kind cluster with valid context",
+			context:      "kind-my-cluster",
+			distribution: v1alpha1.DistributionKind,
+			expected:     "my-cluster",
+		},
+		{
+			name:         "k3d cluster with valid context",
+			context:      "k3d-my-cluster",
+			distribution: v1alpha1.DistributionK3d,
+			expected:     "my-cluster",
+		},
+		{
+			name:         "kind cluster with hyphenated name",
+			context:      "kind-my-test-cluster",
+			distribution: v1alpha1.DistributionKind,
+			expected:     "my-test-cluster",
+		},
+		{
+			name:         "k3d cluster with hyphenated name",
+			context:      "k3d-my-test-cluster",
+			distribution: v1alpha1.DistributionK3d,
+			expected:     "my-test-cluster",
+		},
+		{
+			name:         "empty context",
+			context:      "",
+			distribution: v1alpha1.DistributionKind,
+			expected:     "",
+		},
+		{
+			name:         "context with only prefix - kind",
+			context:      "kind-",
+			distribution: v1alpha1.DistributionKind,
+			expected:     "",
+		},
+		{
+			name:         "context with only prefix - k3d",
+			context:      "k3d-",
+			distribution: v1alpha1.DistributionK3d,
+			expected:     "",
+		},
+		{
+			name:         "context without expected prefix for kind",
+			context:      "my-cluster",
+			distribution: v1alpha1.DistributionKind,
+			expected:     "",
+		},
+		{
+			name:         "context without expected prefix for k3d",
+			context:      "my-cluster",
+			distribution: v1alpha1.DistributionK3d,
+			expected:     "",
+		},
+		{
+			name:         "wrong prefix for kind distribution",
+			context:      "k3d-my-cluster",
+			distribution: v1alpha1.DistributionKind,
+			expected:     "",
+		},
+		{
+			name:         "wrong prefix for k3d distribution",
+			context:      "kind-my-cluster",
+			distribution: v1alpha1.DistributionK3d,
+			expected:     "",
+		},
+		{
+			name:         "kind cluster with default name",
+			context:      "kind-kind",
+			distribution: v1alpha1.DistributionKind,
+			expected:     "kind",
+		},
+		{
+			name:         "k3d cluster with default name",
+			context:      "k3d-k3d-default",
+			distribution: v1alpha1.DistributionK3d,
+			expected:     "k3d-default",
+		},
+	}
+}
+
+func TestGetClusterNameFromConfig(t *testing.T) {
+	t.Parallel()
+
+	tests := getClusterNameConfigTestCases()
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			cfg, factory := testCase.setup(t)
+			result, err := pkgcmd.GetClusterNameFromConfig(cfg, factory)
+
+			assertGetClusterNameResult(t, result, err, testCase)
+		})
+	}
+}
+
+//nolint:funlen // Test data structures are intentionally long for comprehensive coverage
+func getClusterNameConfigTestCases() []struct {
+	name        string
+	setup       func(*testing.T) (*v1alpha1.Cluster, clusterprovisioner.Factory)
+	expectError bool
+	errorMsg    string
+	expected    string
+} {
+	return []struct {
+		name        string
+		setup       func(*testing.T) (*v1alpha1.Cluster, clusterprovisioner.Factory)
+		expectError bool
+		errorMsg    string
+		expected    string
+	}{
+		{
+			name: "nil config returns error",
+			setup: func(t *testing.T) (*v1alpha1.Cluster, clusterprovisioner.Factory) {
+				t.Helper()
+
+				factory := clusterprovisioner.NewMockFactory(t)
+
+				return nil, factory
+			},
+			expectError: true,
+			errorMsg:    "cluster configuration is required",
+		},
+		{
+			name: "kind cluster with explicit context",
+			setup: func(t *testing.T) (*v1alpha1.Cluster, clusterprovisioner.Factory) {
+				t.Helper()
+
+				cfg := v1alpha1.NewCluster()
+				cfg.Spec.Distribution = v1alpha1.DistributionKind
+				cfg.Spec.Connection.Context = "kind-my-cluster"
+				factory := clusterprovisioner.NewMockFactory(t)
+
+				return cfg, factory
+			},
+			expectError: false,
+			expected:    "my-cluster",
+		},
+		{
+			name: "k3d cluster with explicit context",
+			setup: func(t *testing.T) (*v1alpha1.Cluster, clusterprovisioner.Factory) {
+				t.Helper()
+
+				cfg := v1alpha1.NewCluster()
+				cfg.Spec.Distribution = v1alpha1.DistributionK3d
+				cfg.Spec.Connection.Context = "k3d-test-cluster"
+				factory := clusterprovisioner.NewMockFactory(t)
+
+				return cfg, factory
+			},
+			expectError: false,
+			expected:    "test-cluster",
+		},
+		{
+			name: "empty context with factory error",
+			setup: func(t *testing.T) (*v1alpha1.Cluster, clusterprovisioner.Factory) {
+				t.Helper()
+
+				cfg := v1alpha1.NewCluster()
+				cfg.Spec.Distribution = v1alpha1.DistributionKind
+				cfg.Spec.Connection.Context = ""
+				factory := &errorFactory{err: errFactoryError}
+
+				return cfg, factory
+			},
+			expectError: true,
+			errorMsg:    "failed to load distribution config",
+		},
+		{
+			name: "invalid context format falls back to config",
+			setup: func(t *testing.T) (*v1alpha1.Cluster, clusterprovisioner.Factory) {
+				t.Helper()
+
+				cfg := v1alpha1.NewCluster()
+				cfg.Spec.Distribution = v1alpha1.DistributionKind
+				cfg.Spec.Connection.Context = "invalid-context"
+				// This should fall back to factory, which will error
+				factory := &errorFactory{err: errFactoryError}
+
+				return cfg, factory
+			},
+			expectError: true,
+			errorMsg:    "failed to load distribution config",
+		},
+	}
+}
+
+func assertGetClusterNameResult(
+	t *testing.T,
+	result string,
+	err error,
+	testCase struct {
+		name        string
+		setup       func(*testing.T) (*v1alpha1.Cluster, clusterprovisioner.Factory)
+		expectError bool
+		errorMsg    string
+		expected    string
+	},
+) {
+	t.Helper()
+
+	if testCase.expectError {
+		if err == nil {
+			t.Fatalf("expected error containing %q, got nil", testCase.errorMsg)
+		}
+
+		if !strings.Contains(err.Error(), testCase.errorMsg) {
+			t.Errorf("expected error containing %q, got %q", testCase.errorMsg, err.Error())
+		}
+
+		return
+	}
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result != testCase.expected {
+		t.Errorf("GetClusterNameFromConfig() = %q; want %q", result, testCase.expected)
+	}
+}
