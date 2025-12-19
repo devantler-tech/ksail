@@ -59,6 +59,36 @@ mockery
 go test ./...
 ```
 
+### Documentation
+
+The project documentation is built using [Jekyll](https://jekyllrb.com/) with the [Just the Docs](https://just-the-docs.com/) theme and is located in the `docs/` directory.
+
+#### Prerequisites
+
+To build the documentation locally, you need:
+
+- [Ruby (v3.2+)](https://www.ruby-lang.org/en/documentation/installation/)
+- [Bundler](https://bundler.io/)
+
+#### Building the documentation
+
+```sh
+# working-directory: ./docs
+
+# Install dependencies (first time only or when Gemfile changes)
+bundle config set --local path 'vendor/bundle'
+bundle install
+
+# Build the site
+bundle exec jekyll build
+
+# Serve the site locally with live reload (optional)
+bundle exec jekyll serve
+# Visit http://localhost:4000 to view the site
+```
+
+The built site will be available in `docs/_site/`. Note that `docs/_site/`, `docs/vendor/`, and `docs/.bundle/` are excluded from git via `.gitignore`.
+
 ## Project Structure
 
 The repository is organized into two main directories:
