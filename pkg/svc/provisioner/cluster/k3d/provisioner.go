@@ -9,6 +9,7 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"sync"
 
 	runner "github.com/devantler-tech/ksail/pkg/cmd/runner"
 	clustercommand "github.com/k3d-io/k3d/v5/cmd/cluster"
@@ -105,6 +106,9 @@ func (k *K3dClusterProvisioner) Stop(ctx context.Context, name string) error {
 	)
 }
 
+// stdoutMutex protects concurrent access to os.Stdout during List operations.
+var stdoutMutex sync.Mutex
+
 // List returns cluster names reported by the Cobra command.
 func (k *K3dClusterProvisioner) List(ctx context.Context) ([]string, error) {
 	// Temporarily redirect logrus to discard output during list
@@ -113,9 +117,17 @@ func (k *K3dClusterProvisioner) List(ctx context.Context) ([]string, error) {
 	logrus.SetOutput(io.Discard)
 	defer logrus.SetOutput(originalLogOutput)
 
+	// Lock to prevent concurrent modifications of os.Stdout
+	stdoutMutex.Lock()
+	defer stdoutMutex.Unlock()
+
 	// Temporarily redirect os.Stdout to capture/suppress k3d's direct stdout writes
 	originalStdout := os.Stdout
-	r, w, _ := os.Pipe()
+	r, w, err := os.Pipe()
+	if err != nil {
+		return nil, fmt.Errorf("cluster list: create stdout pipe: %w", err)
+	}
+	defer r.Close()
 	os.Stdout = w
 	defer func() {
 		os.Stdout = originalStdout
@@ -129,17 +141,18 @@ func (k *K3dClusterProvisioner) List(ctx context.Context) ([]string, error) {
 	var buf bytes.Buffer
 	listRunner := runner.NewCobraCommandRunner(&buf, io.Discard)
 
-	res, err := listRunner.Run(ctx, cmd, args)
+	res, runErr := listRunner.Run(ctx, cmd, args)
 
-	// Close the write end and restore stdout before reading
+	// Close the write end before reading
 	w.Close()
-	os.Stdout = originalStdout
 
 	// Discard any output that was written to our pipe
-	io.Copy(io.Discard, r)
+	if _, copyErr := io.Copy(io.Discard, r); copyErr != nil {
+		logrus.WithError(copyErr).Debug("failed to drain stdout pipe when listing k3d clusters")
+	}
 
-	if err != nil {
-		return nil, fmt.Errorf("cluster list: %w", err)
+	if runErr != nil {
+		return nil, fmt.Errorf("cluster list: %w", runErr)
 	}
 
 	output := strings.TrimSpace(res.Stdout)

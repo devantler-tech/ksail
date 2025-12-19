@@ -236,7 +236,7 @@ func displayClusterList(
 			case v1alpha1.DistributionKind:
 				fmt.Fprintln(writer, "No kind clusters found.")
 			case v1alpha1.DistributionK3d:
-				fmt.Fprintln(writer, "[]")
+				fmt.Fprintln(writer, "No k3d clusters found.")
 			default:
 				fmt.Fprintln(writer, "No clusters found.")
 			}
