@@ -1,29 +1,25 @@
 ---
-title: "ksail-docs"
+title: "Documentation"
 nav_order: 1
 ---
 
-# ksail-docs
+# KSail Documentation
 
-Documentation for KSail published as GitHub Markdown files and as a Just the Docs GitHub Pages site.
+Documentation for KSail - a CLI tool for managing local Kubernetes clusters and workloads.
 
 ## 📚 Documentation Structure
 
-This repository is organized by topic to help you browse or link to specific guidance:
-
-- **[overview/](overview/)** – Product overview, architecture, project structure, and support matrix
-- **[configuration/](configuration/)** – CLI flag reference, declarative configuration guides, and precedence rules
-- **[use-cases/](use-cases/)** – Scenario playbooks covering learning, local development, and CI/CD pipelines
-- **[images/](images/)** – Shared diagrams used across the guides
-
-Each folder contains index pages to help you navigate deeper into specific topics.
+- **[Overview](overview.md)** – Product overview, architecture, and key features
+- **[Configuration](configuration.md)** – Declarative config, CLI options, and configuration precedence
+- **[Use Cases](use-cases.md)** – Scenario guides for learning, development, and CI/CD
+- **[Core Concepts](core-concepts.md)** – Detailed guides for CNI, distributions, registries, and cluster components
 
 ## 🚀 Getting Started
 
-- **New to KSail?** Start with [overview/](overview/)
-- **Installing KSail?** Visit [devantler-tech/ksail](https://github.com/devantler-tech/ksail)
+- **New to KSail?** Start with [Overview](overview.md)
+- **Installing KSail?** Visit [devantler-tech/ksail](https://github.com/devantler-tech/ksail#installation)
 - **Need API docs?** See [pkg.go.dev](https://pkg.go.dev/github.com/devantler-tech/ksail)
 
 ## 💬 Need Help?
 
-If you encounter issues, have questions, or want to suggest improvements to the documentation, please open an issue or start a discussion in the repository.
+If you encounter issues, have questions, or want to suggest improvements, please open an issue or start a discussion in the repository.

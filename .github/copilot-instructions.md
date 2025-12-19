@@ -1,6 +1,6 @@
 # KSail - Kubernetes SDK for Local GitOps Development
 
-KSail is a .NET-based CLI application that provides a unified SDK for spinning up local Kubernetes clusters and managing workloads declaratively. It streamlines Kubernetes development by providing a single interface over multiple container engines (Docker, Podman), distributions (Kind, K3d), and deployment tools (Kubectl, Flux).
+KSail is a Go-based CLI application that provides a unified SDK for spinning up local Kubernetes clusters and managing workloads declaratively. It embeds common Kubernetes tools as Go libraries, requiring only Docker as an external dependency.
 
 **ALWAYS reference these instructions first and fallback to search or bash commands only when you encounter unexpected information that does not match the info here.**
 
@@ -8,12 +8,11 @@ KSail is a .NET-based CLI application that provides a unified SDK for spinning u
 
 ### Prerequisites and Dependencies
 
-**CRITICAL**: Install .NET 9.0 SDK before building anything:
+**CRITICAL**: Install Docker before using KSail:
 
-```bash
-curl -sSL https://dot.net/v1/dotnet-install.sh | bash /dev/stdin --version 9.0.102
-export PATH="$HOME/.dotnet:$PATH"
-```
+- Docker is the only required external dependency
+- KSail embeds kubectl, helm, kind, k3d, flux, and argocd as Go libraries
+- No separate installation of these tools is needed
 
 **Required for Documentation**:
 
@@ -26,41 +25,28 @@ bundle config set --local path 'vendor/bundle'
 bundle install
 ```
 
-**External Kubernetes Tools** (optional but enable full functionality):
-
-- Docker or Podman (container engine)
-- kubectl, helm, k9s (Kubernetes tools)
-- kind, k3d (local cluster distributions)
-- flux, argocd (GitOps tools)
-- cilium (CNI)
-- age, sops (secret management)
-- kubeconform (validation)
-
 ### Build Commands
 
 **Main Application Build**:
 
 ```bash
-cd src/KSail
-export PATH="$HOME/.dotnet:$PATH"
-dotnet build
-# Takes ~40 seconds: 30s NuGet restore + 5s compilation. NEVER CANCEL. Set timeout to 90+ seconds.
+cd /path/to/repo
+go build -o ksail
+# Takes a few seconds on first run for Go module downloads
 ```
 
 **Run Unit Tests**:
 
 ```bash
 cd /path/to/repo
-export PATH="$HOME/.dotnet:$PATH"
-dotnet test tests/KSail.Tests.Unit/
-# Takes ~18 seconds. NEVER CANCEL. Set timeout to 60+ seconds.
-# Note: Some tests may fail if external Kubernetes tools are missing - this is expected
+go test ./...
+# Runs all tests in the repository
 ```
 
 **Build Documentation**:
 
 ```bash
-cd /path/to/repo
+cd /path/to/repo/docs
 export PATH="$HOME/.local/share/gem/ruby/3.2.0/bin:$PATH"
 bundle exec jekyll build
 # Takes ~2 seconds. Documentation builds to _site/ directory
@@ -71,23 +57,19 @@ bundle exec jekyll build
 **CLI Usage**:
 
 ```bash
-cd src/KSail
-export PATH="$HOME/.dotnet:$PATH"
-dotnet run -- --help                    # Show all commands
-dotnet run -- init --help               # Show init options
-dotnet run -- init                      # Initialize default project
-dotnet run -- up                        # Create cluster (requires external tools)
-dotnet run -- status                    # Show cluster status
-dotnet run -- down                      # Destroy cluster
+cd /path/to/repo
+./ksail --help                    # Show all commands
+./ksail cluster init --help       # Show init options
+./ksail cluster init              # Initialize default project
+./ksail cluster create            # Create cluster (requires Docker)
+./ksail cluster info              # Show cluster info
+./ksail cluster delete            # Destroy cluster
 ```
 
-**Build and Use Executable**:
+**Or build and run directly**:
 
 ```bash
-cd src/KSail
-export PATH="$HOME/.dotnet:$PATH"
-dotnet build
-./bin/Debug/net9.0/linux-x64/ksail --help
+go run main.go --help
 ```
 
 ## Validation
@@ -97,38 +79,33 @@ dotnet build
 1. **Build Validation**:
 
    ```bash
-   cd src/KSail
-   export PATH="$HOME/.dotnet:$PATH"
-   dotnet build  # Must succeed
+   cd /path/to/repo
+   go build -o ksail  # Must succeed
    ```
 
 2. **Test Validation**:
 
    ```bash
    cd /path/to/repo
-   export PATH="$HOME/.dotnet:$PATH"
-   dotnet test tests/KSail.Tests.Unit/  # Most tests should pass
+   go test ./...  # Most tests should pass
    ```
 
 3. **CLI Functional Validation**:
 
    ```bash
    cd /tmp && mkdir test-ksail && cd test-ksail
-   export PATH="$HOME/.dotnet:$PATH"
-   /path/to/repo/src/KSail/bin/Debug/net9.0/linux-x64/ksail init
+   /path/to/repo/ksail cluster init
    # Should create: ksail.yaml, kind.yaml, k8s/kustomization.yaml
    ```
 
 4. **Documentation Validation**:
 
    ```bash
-   cd /path/to/repo
+   cd /path/to/repo/docs
    export PATH="$HOME/.local/share/gem/ruby/3.2.0/bin:$PATH"
    bundle exec jekyll build  # Must succeed
    ls _site/  # Should contain generated HTML files
    ```
-
-**NEVER CANCEL BUILDS**: .NET builds can take 40+ seconds on first run. Always set timeouts to 90+ seconds for builds and 60+ seconds for tests.
 
 ## Common Tasks
 
@@ -136,79 +113,69 @@ dotnet build
 
 ```text
 /
-├── src/
-│   ├── KSail/              # Main CLI application (builds to 'ksail' executable)
-│   ├── KSail.Models/       # Data models and configuration
-│   ├── KSail.Generator/    # Code generation utilities  
-│   └── KSail.Docs/         # Documentation generation
-├── tests/
-│   ├── KSail.Tests.Unit/   # Unit tests for main application
-│   └── *Tests.Unit/        # Unit tests for each component
+├── cmd/                    # CLI command implementations
+├── pkg/                    # Core packages
+│   ├── apis/               # API types and schemas
+│   ├── client/             # Embedded tool clients (kubectl, helm, flux, etc.)
+│   ├── di/                 # Dependency injection
+│   ├── io/                 # I/O utilities
+│   └── svc/                # Services (installers, managers, etc.)
 ├── docs/                   # Jekyll documentation source
 ├── _site/                  # Generated documentation (after jekyll build)
-├── KSail.slnx             # .NET solution file (requires .NET 9.0)
-├── Gemfile                # Ruby dependencies for documentation
-└── README.md              # Main repository documentation
+├── go.mod                  # Go module file
+├── main.go                 # Main entry point
+├── Gemfile                 # Ruby dependencies for documentation
+└── README.md               # Main repository documentation
 ```
 
 ### Key Configuration Files
 
-- **KSail.slnx**: .NET solution file (XML format, requires .NET 9.0 SDK)
-- **src/KSail/KSail.csproj**: Main application project targeting .NET 9.0
+- **go.mod**: Go module dependencies (includes embedded kubectl, helm, kind, k3d, flux, argocd)
 - **Gemfile**: Jekyll documentation dependencies
-- **_config.yml**: Jekyll site configuration
-- **.github/workflows/test.yaml**: CI pipeline with comprehensive system tests
+- **_config.yml**: Jekyll site configuration in docs/
+- **.github/workflows/*.yaml**: CI/CD pipelines
 
 ### CLI Commands Reference
 
-All CLI commands require external Kubernetes tools for full functionality:
+All CLI commands only require Docker to be installed:
 
 ```bash
-ksail init [options]           # Initialize new KSail project
-ksail up                       # Create and start cluster
-ksail down                     # Destroy cluster and resources
-ksail start                    # Start existing cluster
-ksail stop                     # Stop running cluster
-ksail update                   # Apply configuration changes
-ksail status                   # Show cluster status
-ksail list [--all]             # List clusters
-ksail connect                  # Connect to cluster with K9s
-ksail validate                 # Validate project files
-ksail gen <type> <resource>    # Generate resources
-ksail secrets <command>        # Manage secrets (requires SOPS)
+ksail cluster init [options]           # Initialize new KSail project
+ksail cluster create                   # Create and start cluster
+ksail cluster delete                   # Destroy cluster and resources
+ksail cluster start                    # Start existing cluster
+ksail cluster stop                     # Stop running cluster
+ksail cluster info                     # Show cluster status
+ksail cluster list [--all]             # List clusters
+ksail cluster connect                  # Connect to cluster with K9s
+ksail workload apply                   # Apply workloads
+ksail workload gen <resource>          # Generate resources
+ksail cipher <command>                 # Manage secrets with SOPS
 ```
 
 ### Init Command Options
 
 ```bash
-ksail init \
-  --container-engine <Docker|Podman> \
+ksail cluster init \
   --distribution <Kind|K3d> \
-  --deployment-tool <Kubectl|Flux> \
   --cni <Default|Cilium|None> \
-  --csi <Default|LocalPathProvisioner|None> \
-  --ingress-controller <Default|Traefik|None> \
-  --gateway-controller <Default|None> \
-  --metrics-server <True|False> \
-  --secret-manager <None|SOPS> \
-  --mirror-registries <True|False> \
-  --editor <Nano|Vim>
+  --csi <Default|LocalPathStorage|None> \
+  --metrics-server <Enabled|Disabled> \
+  --cert-manager <Enabled|Disabled> \
+  --local-registry <Enabled|Disabled> \
+  --local-registry-port <port> \
+  --gitops-engine <None|Flux|ArgoCD> \
+  --mirror-registry <host>=<upstream>
 ```
 
 ### Troubleshooting Build Issues
 
-**"NETSDK1045: The current .NET SDK does not support targeting .NET 9.0"**:
+**"Go version mismatch"**:
 
 ```bash
-curl -sSL https://dot.net/v1/dotnet-install.sh | bash /dev/stdin --version 9.0.102
-export PATH="$HOME/.dotnet:$PATH"
-dotnet --version  # Should show 9.0.102 or later
+go version  # Should show Go 1.21 or later
+# If not, install/update Go from https://go.dev/dl/
 ```
-
-**"MSB4068: The element <Solution> is unrecognized"**:
-
-- KSail.slnx requires .NET 9.0 SDK
-- Build individual projects with `dotnet build src/KSail/` instead
 
 **Jekyll Permission Errors**:
 
@@ -217,11 +184,12 @@ bundle config set --local path 'vendor/bundle'
 bundle install
 ```
 
-**Missing External Tools**:
+**Docker Connection Issues**:
 
-- The CLI shows warnings for missing tools (age, flux, k3d, etc.)
-- Install tools as needed for desired functionality
-- Most basic operations work without external tools
+```bash
+docker ps  # Should list running containers
+# If not, ensure Docker daemon is running
+```
 
 ### Making Changes
 
