@@ -3,7 +3,20 @@
 [![codecov](https://codecov.io/gh/devantler-tech/ksail/graph/badge.svg?token=HSUfhaiXwq)](https://codecov.io/gh/devantler-tech/ksail)
 [![CI - Go](https://github.com/devantler-tech/ksail/actions/workflows/ci.yaml/badge.svg)](https://github.com/devantler-tech/ksail/actions/workflows/ci.yaml)
 
-# KSail
+# 🛥️🐳 KSail
+
+```txt
+                    __ ______     _ __
+                   / //_/ __/__ _(_) /
+                  / ,< _\ \/ _ `/ / /
+                 /_/|_/___/\_,_/_/_/
+                                   . . .
+              __/___                 :
+        _____/______|             ___|____     |"\/"|
+_______/_____\_______\_____     ,'        `.    \  /
+\   -----       -\-\-\-    |    |  ^        \___/  |
+~^~^~^~^~^~^~^~^~^~^~^~^~^~^~^~^~^~^~^~^~^~^~^~^~^~^~
+```
 
 KSail is a CLI tool for creating and maintaining local Kubernetes clusters. It provides a unified interface for managing clusters and workloads across different distributions (currently Kind and K3d, with more planned). By wrapping existing tools with a consistent command-line experience, KSail eliminates the complexity of juggling multiple CLIs.
 
