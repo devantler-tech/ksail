@@ -27,7 +27,16 @@ KSail helps you run Kubernetes manifests locally using your container engine (Do
 
    This provisions the cluster with your chosen CNI and metrics-server configuration.
 
-3. **Build and use local images** (if using local registry)
+3. **Set up persistent storage** (if needed)
+
+   ```bash
+   # Initialize with LocalPathStorage for persistent volumes
+   ksail cluster init --distribution Kind --csi LocalPathStorage
+   ```
+
+   This ensures a default `StorageClass` is available for `PersistentVolumeClaim`s to bind automatically. On Kind, this installs the local-path-provisioner. On K3d, it uses the built-in storage provisioner.
+
+4. **Build and use local images** (if using local registry)
 
    ```bash
    # Initialize with local registry
@@ -40,7 +49,7 @@ KSail helps you run Kubernetes manifests locally using your container engine (Do
 
    Update manifests to reference your local images.
 
-4. **Apply workloads**
+5. **Apply workloads**
 
    ```bash
    ksail workload apply -k k8s/
@@ -49,7 +58,7 @@ KSail helps you run Kubernetes manifests locally using your container engine (Do
 
    Apply your Kustomize manifests and verify deployment.
 
-5. **Debug and inspect**
+6. **Debug and inspect**
 
    ```bash
    ksail workload logs deployment/my-app --tail 200
@@ -59,7 +68,7 @@ KSail helps you run Kubernetes manifests locally using your container engine (Do
 
    Use workload commands or k9s for debugging.
 
-6. **Clean up**
+7. **Clean up**
 
    ```bash
    ksail cluster delete
@@ -70,6 +79,7 @@ KSail helps you run Kubernetes manifests locally using your container engine (Do
 ## Tips
 
 - Use `--cert-manager Enabled` during init if you need TLS certificates
+- Use `--csi LocalPathStorage` during init if your workloads require persistent volumes
 - Configure mirror registries with `--mirror-registry` to cache upstream images
 - Use `ksail workload gen` to create sample resource manifests
 - Test manifests locally before committing to version control

@@ -16,7 +16,7 @@ KSail enables CI/CD pipelines to create disposable Kubernetes clusters for integ
    ksail cluster init --distribution Kind --source-directory k8s --metrics-server Enabled
    ```
 
-   Commit the config so CI only needs to run `ksail cluster create`.
+   Commit the config so CI only needs to run `ksail cluster create`. If your tests require persistent volumes, add `--csi LocalPathStorage` to ensure a default `StorageClass` is available.
 
 2. **Create the cluster**
 
@@ -59,6 +59,7 @@ KSail enables CI/CD pipelines to create disposable Kubernetes clusters for integ
 ## CI Tips
 
 - Use Kind for fastest cluster creation in CI
+- Use `--csi LocalPathStorage` if your tests need persistent volumes (PVCs)
 - Set reasonable timeouts for cluster creation and workload readiness
 - Cache Docker images to speed up subsequent runs
 - Use `--mirror-registry` flags to reduce external registry dependencies
