@@ -195,9 +195,9 @@ func (c *Client) extractTarGz(reader io.Reader, dest string) error {
 }
 
 // extractFile extracts a single file from a tar archive.
-func (c *Client) extractFile(tr *tar.Reader, target string, mode int64) error {
+func (c *Client) extractFile(tr *tar.Reader, target string, mode int64) (err error) {
 	// Ensure the directory exists
-	err := os.MkdirAll(filepath.Dir(target), 0o755)
+	err = os.MkdirAll(filepath.Dir(target), 0o755)
 	if err != nil {
 		return fmt.Errorf("create directory: %w", err)
 	}
@@ -206,12 +206,16 @@ func (c *Client) extractFile(tr *tar.Reader, target string, mode int64) error {
 	if err != nil {
 		return fmt.Errorf("create file: %w", err)
 	}
-	defer file.Close()
+	defer func() {
+		if cerr := file.Close(); cerr != nil && err == nil {
+			err = fmt.Errorf("close file: %w", cerr)
+		}
+	}()
 
 	_, err = io.Copy(file, tr)
 	if err != nil {
 		return fmt.Errorf("write file: %w", err)
 	}
 
-	return nil
+	return
 }
