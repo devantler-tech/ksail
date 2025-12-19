@@ -28,5 +28,6 @@ jobs:
   pages:
     uses: devantler-tech/reusable-workflows/.github/workflows/cd-pages-publish.yaml@main
     with:
-      RUBY_VERSION: '3.3'
-      JEKYLL_ENV: production
+      ruby-version: '3.3'
+      jekyll-env: production
+      working-directory: "./docs"
