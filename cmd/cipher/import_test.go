@@ -61,20 +61,6 @@ func setupTestEnvironment(t *testing.T, tmpDir string) {
 	}
 }
 
-// createKeyFile creates a temporary key file for testing.
-func createKeyFile(t *testing.T, tmpDir, key string) string {
-	t.Helper()
-
-	keyFile := filepath.Join(tmpDir, "test-key.txt")
-
-	err := os.WriteFile(keyFile, []byte(key), 0o600)
-	if err != nil {
-		t.Fatalf("failed to create key file: %v", err)
-	}
-
-	return keyFile
-}
-
 // verifyKeyFileContent verifies the content of the key file.
 func verifyKeyFileContent(t *testing.T, expectedPath string) {
 	t.Helper()
@@ -188,17 +174,14 @@ func TestImportKeyBasic(t *testing.T) {
 	// Setup environment
 	setupTestEnvironment(t, tmpDir)
 
-	// Create a key file
-	keyFile := createKeyFile(t, tmpDir, validAgeKey)
-
-	// Execute import command with the key file
+	// Execute import command with just the private key
 	rt := rtruntime.NewRuntime()
 	cipherCmd := cipher.NewCipherCmd(rt)
 
 	var out bytes.Buffer
 
 	cipherCmd.SetOut(&out)
-	cipherCmd.SetArgs([]string{"import", keyFile})
+	cipherCmd.SetArgs([]string{"import", validAgeKey})
 
 	err := cipherCmd.Execute()
 	if err != nil {
@@ -228,9 +211,6 @@ func TestImportKeyWithXDGConfigHome(t *testing.T) {
 	// Set XDG_CONFIG_HOME
 	t.Setenv(xdgConfigHomeEnv, xdgConfigDir)
 
-	// Create a key file
-	keyFile := createKeyFile(t, tmpDir, validAgeKey)
-
 	// Execute import command
 	rt := rtruntime.NewRuntime()
 	cipherCmd := cipher.NewCipherCmd(rt)
@@ -238,7 +218,7 @@ func TestImportKeyWithXDGConfigHome(t *testing.T) {
 	var out bytes.Buffer
 
 	cipherCmd.SetOut(&out)
-	cipherCmd.SetArgs([]string{"import", keyFile})
+	cipherCmd.SetArgs([]string{"import", validAgeKey})
 
 	err := cipherCmd.Execute()
 	if err != nil {
@@ -286,9 +266,6 @@ AGE-SECRET-KEY-1EXISTINGKEYFORTEST123456789012345678901234567890ABC
 		t.Fatalf("failed to write existing key: %v", err)
 	}
 
-	// Create a key file
-	keyFile := createKeyFile(t, tmpDir, validAgeKey)
-
 	// Execute import command with a new key
 	rt := rtruntime.NewRuntime()
 	cipherCmd := cipher.NewCipherCmd(rt)
@@ -296,7 +273,7 @@ AGE-SECRET-KEY-1EXISTINGKEYFORTEST123456789012345678901234567890ABC
 	var out bytes.Buffer
 
 	cipherCmd.SetOut(&out)
-	cipherCmd.SetArgs([]string{"import", keyFile})
+	cipherCmd.SetArgs([]string{"import", validAgeKey})
 
 	err = cipherCmd.Execute()
 	if err != nil {
@@ -359,11 +336,16 @@ func TestImportInvalidKey(t *testing.T) {
 			// Create a temporary directory for testing
 			tmpDir := t.TempDir()
 
-			// Setup environment
-			setupTestEnvironment(t, tmpDir)
+			// Set HOME to temp directory
+			t.Setenv(homeEnv, tmpDir)
 
-			// Create a key file with invalid data
-			keyFile := createKeyFile(t, tmpDir, testCase.keyData)
+			// Clear XDG_CONFIG_HOME
+			_ = os.Unsetenv(xdgConfigHomeEnv)
+
+			// On Windows, set AppData
+			if runtime.GOOS == windowsOS {
+				t.Setenv(appDataEnv, tmpDir)
+			}
 
 			// Execute import command with invalid key
 			rt := rtruntime.NewRuntime()
@@ -372,7 +354,7 @@ func TestImportInvalidKey(t *testing.T) {
 			var out bytes.Buffer
 
 			cipherCmd.SetOut(&out)
-			cipherCmd.SetArgs([]string{"import", keyFile})
+			cipherCmd.SetArgs([]string{"import", testCase.keyData})
 
 			err := cipherCmd.Execute()
 			if err == nil {

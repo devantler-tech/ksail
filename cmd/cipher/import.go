@@ -3,7 +3,6 @@ package cipher
 import (
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -21,7 +20,6 @@ var (
 	errAppDataNotSet        = errors.New("AppData environment variable not set")
 	errFailedToGetUserHome  = errors.New("failed to get user home directory")
 	errFailedToDetermineAge = errors.New("failed to determine age key path")
-	errNoStdinData          = errors.New("no data provided via stdin")
 )
 
 const (
@@ -84,110 +82,27 @@ func getAgeKeyPath() (string, error) {
 }
 
 // validateAgeKey performs basic validation on an age private key string.
-// The input is expected to be the raw key text and must contain at least one line
-// starting with "AGE-SECRET-KEY-". For robustness, empty lines and lines starting
-// with "#" are skipped, but any other non-empty line that is not an age key causes validation to fail.
-func validateAgeKey(keyContent string) error {
-	keyContent = strings.TrimSpace(keyContent)
+// The input must start with "AGE-SECRET-KEY-" and meet minimum length requirements.
+func validateAgeKey(privateKey string) error {
+	privateKey = strings.TrimSpace(privateKey)
 
-	if keyContent == "" {
+	if privateKey == "" {
 		return fmt.Errorf("%w: key is empty", errInvalidAgeKey)
 	}
 
-	// Parse lines and find the secret key
-	lines := strings.Split(keyContent, "\n")
-	foundKey := false
-
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-
-		// Skip empty lines and comments
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-
-		// Check if this line is an age secret key
-		if strings.HasPrefix(line, ageKeyPrefix) {
-			// Basic length check: AGE-SECRET-KEY- (15) + base64 chars (should be around 59-74 chars total)
-			if len(line) < minAgeKeyLength {
-				return fmt.Errorf("%w: key is too short", errInvalidAgeKey)
-			}
-
-			foundKey = true
-
-			break
-		}
-
-		// If we hit a non-comment, non-key line, it's invalid
-		return fmt.Errorf(
-			"%w: input contains non-comment line that is not an age key",
-			errInvalidAgeKey,
-		)
+	if !strings.HasPrefix(privateKey, ageKeyPrefix) {
+		return fmt.Errorf("%w: key must start with %s", errInvalidAgeKey, ageKeyPrefix)
 	}
 
-	if !foundKey {
+	if len(privateKey) < minAgeKeyLength {
 		return fmt.Errorf(
-			"%w: no age secret key found (must start with '%s')",
+			"%w: key is too short (minimum %d characters)",
 			errInvalidAgeKey,
-			ageKeyPrefix,
+			minAgeKeyLength,
 		)
 	}
 
 	return nil
-}
-
-// extractPrivateKey extracts the private key line from input (may contain comments).
-func extractPrivateKey(keyData string) (string, error) {
-	keyData = strings.TrimSpace(keyData)
-	lines := strings.Split(keyData, "\n") //nolint:modernize // Not using iter-based APIs yet
-
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, ageKeyPrefix) {
-			return line, nil
-		}
-	}
-
-	return "", fmt.Errorf("%w: no age secret key found in input", errInvalidAgeKey)
-}
-
-// keyExistsInFile checks if a private key already exists in the file.
-func keyExistsInFile(filePath, privateKey string) (bool, error) {
-	// If file doesn't exist, key doesn't exist
-	_, err := os.Stat(filePath)
-	if os.IsNotExist(err) {
-		return false, nil
-	}
-
-	content, err := os.ReadFile(filePath) //#nosec G304 -- filePath comes from getAgeKeyPath
-	if err != nil {
-		return false, fmt.Errorf("failed to read existing key file: %w", err)
-	}
-
-	// Extract just the private key part for comparison
-	privateKey = strings.TrimSpace(privateKey)
-
-	return strings.Contains(string(content), privateKey), nil
-}
-
-// readKeyFromStdin reads key data from stdin.
-func readKeyFromStdin() (string, error) {
-	stat, err := os.Stdin.Stat()
-	if err != nil {
-		return "", fmt.Errorf("failed to stat stdin: %w", err)
-	}
-
-	// Check if stdin has data
-	if (stat.Mode() & os.ModeCharDevice) != 0 {
-		return "", errNoStdinData
-	}
-
-	data, err := io.ReadAll(os.Stdin)
-	if err != nil {
-		return "", fmt.Errorf("failed to read from stdin: %w", err)
-	}
-
-	return string(data), nil
 }
 
 // derivePublicKey derives the public key from an age private key.
@@ -287,43 +202,23 @@ func appendToExistingFile(targetPath, formattedKey string) error {
 }
 
 // importKey imports an age private key and automatically derives the public key.
-// It is idempotent - if the key already exists in the file, it skips importing.
-func importKey(keyData string) error {
-	// Validate and trim the input
-	keyData = strings.TrimSpace(keyData)
-
-	err := validateAgeKey(keyData)
+func importKey(privateKey string) error {
+	// Validate the private key
+	err := validateAgeKey(privateKey)
 	if err != nil {
 		return err
-	}
-
-	// Extract the private key line
-	privateKey, err := extractPrivateKey(keyData)
-	if err != nil {
-		return err
-	}
-
-	// Get target path
-	targetPath, err := getAgeKeyPath()
-	if err != nil {
-		return fmt.Errorf("%w: %w", errFailedToDetermineAge, err)
-	}
-
-	// Check if key already exists (idempotency)
-	exists, err := keyExistsInFile(targetPath, privateKey)
-	if err != nil {
-		return err
-	}
-
-	if exists {
-		// Key already exists, skip import (idempotent)
-		return nil
 	}
 
 	// Derive the public key from the private key
 	publicKey, err := derivePublicKey(privateKey)
 	if err != nil {
 		return fmt.Errorf("failed to derive public key: %w", err)
+	}
+
+	// Get target path
+	targetPath, err := getAgeKeyPath()
+	if err != nil {
+		return fmt.Errorf("%w: %w", errFailedToDetermineAge, err)
 	}
 
 	// Create directory if it doesn't exist
@@ -344,17 +239,14 @@ func importKey(keyData string) error {
 // NewImportCmd creates and returns the import command.
 func NewImportCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "import [key-file]",
+		Use:   "import PRIVATE_KEY",
 		Short: "Import an age key to the system's SOPS key location",
 		Long: `Import an age private key to the system's default SOPS age key location.
 
-The key can be provided in three ways:
-  1. From a file: ksail cipher import my-key.txt
-  2. From stdin: cat my-key.txt | ksail cipher import
-  3. From stdin: echo "AGE-SECRET-KEY-..." | ksail cipher import
+The private key must be provided as a command argument and must include the full
+key with the AGE-SECRET-KEY- prefix.
 
 The public key will be automatically derived from the private key.
-The command is idempotent - it will not import duplicate keys.
 
 The command will automatically add metadata including:
   - Creation timestamp
@@ -369,52 +261,23 @@ Key file location (checked in order):
      Windows: %AppData%\sops\age\keys.txt
 
 The private key must be in age format (starting with "AGE-SECRET-KEY-").
-Input is trimmed and tolerates extra newlines and comment lines.
 
 Examples:
-  # Import from a file
-  ksail cipher import my-key.txt
-
-  # Import from stdin
-  cat my-key.txt | ksail cipher import
-  
-  # Import directly
-  echo "AGE-SECRET-KEY-1ABCDEF..." | ksail cipher import`,
+  # Import a private key (public key will be derived automatically)
+  ksail cipher import AGE-SECRET-KEY-1ABCDEF...`,
 		SilenceUsage: true,
-		Args:         cobra.MaximumNArgs(1),
-		RunE:         handleImportRunE,
+		Args:         cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return handleImportRunE(cmd, args[0])
+		},
 	}
 
 	return cmd
 }
 
 // handleImportRunE is the main handler for the import command.
-func handleImportRunE(cmd *cobra.Command, args []string) error {
-	var keyData string
-
-	var err error
-
-	// Determine input source
-	if len(args) > 0 {
-		// Read from file
-		filePath := args[0]
-
-		data, readErr := os.ReadFile(filePath) //#nosec G304 -- user-provided file path
-		if readErr != nil {
-			return fmt.Errorf("failed to read key file %s: %w", filePath, readErr)
-		}
-
-		keyData = string(data)
-	} else {
-		// Read from stdin
-		keyData, err = readKeyFromStdin()
-		if err != nil {
-			return err
-		}
-	}
-
-	// Import the key
-	err = importKey(keyData)
+func handleImportRunE(cmd *cobra.Command, privateKey string) error {
+	err := importKey(privateKey)
 	if err != nil {
 		return fmt.Errorf("failed to import age key: %w", err)
 	}
