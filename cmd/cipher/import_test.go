@@ -13,19 +13,104 @@ import (
 )
 
 const (
-	validAgeKey    = "AGE-SECRET-KEY-12CDPTUPWF92L47FH8TK6P7N2S53J0KZTQUJTUZQCCA4NW87C8JHQSP4L99"
+	validAgeKey = "AGE-SECRET-KEY-12CDPTUPWF92L47FH8TK6P7N2S53J0KZTQUJTUZQCCA4NW87C8JHQSP4L99"
+
 	validPublicKey = "age1nr74d6yw2mp7tcvj5zgv7e9wj8gnae408kczun3ktggsdqdp3ymszg6s7w"
 	windowsOS      = "windows"
 	darwinOS       = "darwin"
 	keyFileName    = "keys.txt"
 	sopsSubdir     = "sops"
 	ageSubdir      = "age"
+
 	filePermissions = 0o600
 	expectedPerm    = os.FileMode(filePermissions)
+
 	xdgConfigHomeEnv = "XDG_CONFIG_HOME"
 	homeEnv          = "HOME"
 	appDataEnv       = "AppData"
 )
+
+// getExpectedKeyPath returns the expected path for age keys based on the OS and tmpDir.
+func getExpectedKeyPath(tmpDir string) string {
+	switch runtime.GOOS {
+	case windowsOS:
+		return filepath.Join(tmpDir, sopsSubdir, ageSubdir, keyFileName)
+	case darwinOS:
+		return filepath.Join(
+			tmpDir,
+			"Library",
+			"Application Support",
+			sopsSubdir,
+			ageSubdir,
+			keyFileName,
+		)
+	default:
+		return filepath.Join(tmpDir, ".config", sopsSubdir, ageSubdir, keyFileName)
+	}
+}
+
+// setupTestEnvironment sets up test environment variables.
+func setupTestEnvironment(t *testing.T, tmpDir string) {
+	t.Helper()
+	t.Setenv(homeEnv, tmpDir)
+
+	_ = os.Unsetenv(xdgConfigHomeEnv)
+
+	if runtime.GOOS == windowsOS {
+		t.Setenv(appDataEnv, tmpDir)
+	}
+}
+
+// verifyKeyFileContent verifies the content of the key file.
+func verifyKeyFileContent(t *testing.T, expectedPath string) {
+	t.Helper()
+
+	content, err := os.ReadFile(expectedPath) //#nosec G304 -- test file path
+	if err != nil {
+		t.Errorf("expected key file to exist at %s, got error: %v", expectedPath, err)
+	}
+
+	contentStr := string(content)
+
+	// Verify the key contains metadata
+	if !strings.Contains(contentStr, "# created:") {
+		t.Errorf("expected key file to contain creation timestamp")
+	}
+
+	// Verify the public key is automatically derived and included
+	if !strings.Contains(contentStr, "# public key:") {
+		t.Errorf("expected key file to contain public key comment")
+	}
+
+	// Verify the derived public key matches the expected value
+	if !strings.Contains(contentStr, validPublicKey) {
+		t.Errorf("expected key file to contain the correct public key %s", validPublicKey)
+	}
+
+	// Verify the key is present
+	if !strings.Contains(contentStr, validAgeKey) {
+		t.Errorf("expected key file to contain the age key")
+	}
+}
+
+// verifyFilePermissions verifies the file permissions.
+func verifyFilePermissions(t *testing.T, expectedPath string) {
+	t.Helper()
+
+	info, err := os.Stat(expectedPath)
+	if err != nil {
+		t.Fatalf("failed to stat key file: %v", err)
+	}
+
+	// Check permissions (on Unix-like systems)
+	if runtime.GOOS != windowsOS {
+		perm := info.Mode().Perm()
+
+		if perm != expectedPerm {
+			t.Errorf("expected file permissions %o, got %o", expectedPerm, perm)
+		}
+	}
+}
 
 func TestNewImportCmd(t *testing.T) {
 	t.Parallel()
@@ -86,48 +171,19 @@ func TestImportKeyBasic(t *testing.T) {
 	// Create a temporary directory for testing
 	tmpDir := t.TempDir()
 
-	// Set HOME to temp directory
-	originalHome := os.Getenv(homeEnv)
-	t.Cleanup(func() {
-		_ = os.Setenv(homeEnv, originalHome)
-	})
-	err := os.Setenv(homeEnv, tmpDir)
-	if err != nil {
-		t.Fatalf("failed to set HOME: %v", err)
-	}
-
-	// Clear XDG_CONFIG_HOME
-	originalXDG := os.Getenv(xdgConfigHomeEnv)
-	t.Cleanup(func() {
-		if originalXDG != "" {
-			_ = os.Setenv(xdgConfigHomeEnv, originalXDG)
-		} else {
-			_ = os.Unsetenv(xdgConfigHomeEnv)
-		}
-	})
-	_ = os.Unsetenv(xdgConfigHomeEnv)
-
-	// On Windows, set AppData
-	if runtime.GOOS == windowsOS {
-		originalAppData := os.Getenv(appDataEnv)
-		t.Cleanup(func() {
-			_ = os.Setenv(appDataEnv, originalAppData)
-		})
-		err = os.Setenv(appDataEnv, tmpDir)
-		if err != nil {
-			t.Fatalf("failed to set AppData: %v", err)
-		}
-	}
+	// Setup environment
+	setupTestEnvironment(t, tmpDir)
 
 	// Execute import command with just the private key
 	rt := rtruntime.NewRuntime()
 	cipherCmd := cipher.NewCipherCmd(rt)
 
 	var out bytes.Buffer
+
 	cipherCmd.SetOut(&out)
 	cipherCmd.SetArgs([]string{"import", validAgeKey})
 
-	err = cipherCmd.Execute()
+	err := cipherCmd.Execute()
 	if err != nil {
 		t.Errorf("expected no error executing import, got: %v", err)
 	}
@@ -138,65 +194,11 @@ func TestImportKeyBasic(t *testing.T) {
 	}
 
 	// Verify the key was written to the correct location
-	var expectedPath string
+	expectedPath := getExpectedKeyPath(tmpDir)
 
-	switch runtime.GOOS {
-	case windowsOS:
-		expectedPath = filepath.Join(tmpDir, sopsSubdir, ageSubdir, keyFileName)
-	case darwinOS:
-		expectedPath = filepath.Join(
-			tmpDir,
-			"Library",
-			"Application Support",
-			sopsSubdir,
-			ageSubdir,
-			keyFileName,
-		)
-	default:
-		expectedPath = filepath.Join(tmpDir, ".config", sopsSubdir, ageSubdir, keyFileName)
-	}
-
-	content, err := os.ReadFile(expectedPath) //#nosec G304 -- test file path
-	if err != nil {
-		t.Errorf("expected key file to exist at %s, got error: %v", expectedPath, err)
-	}
-
-	contentStr := string(content)
-
-	// Verify the key contains metadata
-	if !strings.Contains(contentStr, "# created:") {
-		t.Errorf("expected key file to contain creation timestamp")
-	}
-
-	// Verify the public key is automatically derived and included
-	if !strings.Contains(contentStr, "# public key:") {
-		t.Errorf("expected key file to contain public key comment")
-	}
-
-	// Verify the derived public key matches the expected value
-	if !strings.Contains(contentStr, validPublicKey) {
-		t.Errorf("expected key file to contain the correct public key %s", validPublicKey)
-	}
-
-	// Verify the key is present
-	if !strings.Contains(contentStr, validAgeKey) {
-		t.Errorf("expected key file to contain the age key")
-	}
-
-	// Verify file permissions
-	info, err := os.Stat(expectedPath)
-	if err != nil {
-		t.Fatalf("failed to stat key file: %v", err)
-	}
-
-	// Check permissions (on Unix-like systems)
-	if runtime.GOOS != windowsOS {
-		perm := info.Mode().Perm()
-
-		if perm != expectedPerm {
-			t.Errorf("expected file permissions %o, got %o", expectedPerm, perm)
-		}
-	}
+	// Verify content and permissions
+	verifyKeyFileContent(t, expectedPath)
+	verifyFilePermissions(t, expectedPath)
 }
 
 func TestImportKeyWithXDGConfigHome(t *testing.T) {
@@ -207,28 +209,18 @@ func TestImportKeyWithXDGConfigHome(t *testing.T) {
 	xdgConfigDir := filepath.Join(tmpDir, "xdg-config")
 
 	// Set XDG_CONFIG_HOME
-	originalXDG := os.Getenv(xdgConfigHomeEnv)
-	t.Cleanup(func() {
-		if originalXDG != "" {
-			_ = os.Setenv(xdgConfigHomeEnv, originalXDG)
-		} else {
-			_ = os.Unsetenv(xdgConfigHomeEnv)
-		}
-	})
-	err := os.Setenv(xdgConfigHomeEnv, xdgConfigDir)
-	if err != nil {
-		t.Fatalf("failed to set XDG_CONFIG_HOME: %v", err)
-	}
+	t.Setenv(xdgConfigHomeEnv, xdgConfigDir)
 
 	// Execute import command
 	rt := rtruntime.NewRuntime()
 	cipherCmd := cipher.NewCipherCmd(rt)
 
 	var out bytes.Buffer
+
 	cipherCmd.SetOut(&out)
 	cipherCmd.SetArgs([]string{"import", validAgeKey})
 
-	err = cipherCmd.Execute()
+	err := cipherCmd.Execute()
 	if err != nil {
 		t.Errorf("expected no error executing import, got: %v", err)
 	}
@@ -252,60 +244,14 @@ func TestImportKeyAppendsToExistingFile(t *testing.T) {
 	// Create a temporary directory for testing
 	tmpDir := t.TempDir()
 
-	// Set HOME to temp directory
-	originalHome := os.Getenv(homeEnv)
-	t.Cleanup(func() {
-		_ = os.Setenv(homeEnv, originalHome)
-	})
-	err := os.Setenv(homeEnv, tmpDir)
-	if err != nil {
-		t.Fatalf("failed to set HOME: %v", err)
-	}
-
-	// Clear XDG_CONFIG_HOME
-	originalXDG := os.Getenv(xdgConfigHomeEnv)
-	t.Cleanup(func() {
-		if originalXDG != "" {
-			_ = os.Setenv(xdgConfigHomeEnv, originalXDG)
-		} else {
-			_ = os.Unsetenv(xdgConfigHomeEnv)
-		}
-	})
-	_ = os.Unsetenv(xdgConfigHomeEnv)
-
-	// On Windows, set AppData
-	if runtime.GOOS == windowsOS {
-		originalAppData := os.Getenv(appDataEnv)
-		t.Cleanup(func() {
-			_ = os.Setenv(appDataEnv, originalAppData)
-		})
-		err = os.Setenv(appDataEnv, tmpDir)
-		if err != nil {
-			t.Fatalf("failed to set AppData: %v", err)
-		}
-	}
+	// Setup environment
+	setupTestEnvironment(t, tmpDir)
 
 	// Determine the expected path
-	var expectedPath string
-
-	switch runtime.GOOS {
-	case windowsOS:
-		expectedPath = filepath.Join(tmpDir, sopsSubdir, ageSubdir, keyFileName)
-	case darwinOS:
-		expectedPath = filepath.Join(
-			tmpDir,
-			"Library",
-			"Application Support",
-			sopsSubdir,
-			ageSubdir,
-			keyFileName,
-		)
-	default:
-		expectedPath = filepath.Join(tmpDir, ".config", sopsSubdir, ageSubdir, keyFileName)
-	}
+	expectedPath := getExpectedKeyPath(tmpDir)
 
 	// Create directory and pre-populate with an existing key
-	err = os.MkdirAll(filepath.Dir(expectedPath), 0o700)
+	err := os.MkdirAll(filepath.Dir(expectedPath), 0o700)
 	if err != nil {
 		t.Fatalf("failed to create directory: %v", err)
 	}
@@ -314,6 +260,7 @@ func TestImportKeyAppendsToExistingFile(t *testing.T) {
 # public key: age1existing123
 AGE-SECRET-KEY-1EXISTINGKEYFORTEST123456789012345678901234567890ABC
 `
+
 	err = os.WriteFile(expectedPath, []byte(existingKey), 0o600)
 	if err != nil {
 		t.Fatalf("failed to write existing key: %v", err)
@@ -324,6 +271,7 @@ AGE-SECRET-KEY-1EXISTINGKEYFORTEST123456789012345678901234567890ABC
 	cipherCmd := cipher.NewCipherCmd(rt)
 
 	var out bytes.Buffer
+
 	cipherCmd.SetOut(&out)
 	cipherCmd.SetArgs([]string{"import", validAgeKey})
 
@@ -341,7 +289,8 @@ AGE-SECRET-KEY-1EXISTINGKEYFORTEST123456789012345678901234567890ABC
 	contentStr := string(content)
 
 	// Verify both keys are present (old and new)
-	if !strings.Contains(contentStr, "AGE-SECRET-KEY-1EXISTINGKEYFORTEST123456789012345678901234567890ABC") {
+	existingKeyStr := "AGE-SECRET-KEY-1EXISTINGKEYFORTEST123456789012345678901234567890ABC"
+	if !strings.Contains(contentStr, existingKeyStr) {
 		t.Errorf("expected existing key to be preserved")
 	}
 
@@ -358,7 +307,6 @@ AGE-SECRET-KEY-1EXISTINGKEYFORTEST123456789012345678901234567890ABC
 
 func TestImportInvalidKey(t *testing.T) {
 	// Note: Not running in parallel due to environment variable modifications
-
 	testCases := []struct {
 		name    string
 		keyData string
@@ -381,44 +329,22 @@ func TestImportInvalidKey(t *testing.T) {
 		},
 	}
 
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
 			// Note: Not running in parallel due to environment variable modifications
 
 			// Create a temporary directory for testing
 			tmpDir := t.TempDir()
 
 			// Set HOME to temp directory
-			originalHome := os.Getenv(homeEnv)
-			t.Cleanup(func() {
-				_ = os.Setenv(homeEnv, originalHome)
-			})
-			err := os.Setenv(homeEnv, tmpDir)
-			if err != nil {
-				t.Fatalf("failed to set HOME: %v", err)
-			}
+			t.Setenv(homeEnv, tmpDir)
 
 			// Clear XDG_CONFIG_HOME
-			originalXDG := os.Getenv(xdgConfigHomeEnv)
-			t.Cleanup(func() {
-				if originalXDG != "" {
-					_ = os.Setenv(xdgConfigHomeEnv, originalXDG)
-				} else {
-					_ = os.Unsetenv(xdgConfigHomeEnv)
-				}
-			})
 			_ = os.Unsetenv(xdgConfigHomeEnv)
 
 			// On Windows, set AppData
 			if runtime.GOOS == windowsOS {
-				originalAppData := os.Getenv(appDataEnv)
-				t.Cleanup(func() {
-					_ = os.Setenv(appDataEnv, originalAppData)
-				})
-				err = os.Setenv(appDataEnv, tmpDir)
-				if err != nil {
-					t.Fatalf("failed to set AppData: %v", err)
-				}
+				t.Setenv(appDataEnv, tmpDir)
 			}
 
 			// Execute import command with invalid key
@@ -426,16 +352,17 @@ func TestImportInvalidKey(t *testing.T) {
 			cipherCmd := cipher.NewCipherCmd(rt)
 
 			var out bytes.Buffer
-			cipherCmd.SetOut(&out)
-			cipherCmd.SetArgs([]string{"import", tc.keyData})
 
-			err = cipherCmd.Execute()
+			cipherCmd.SetOut(&out)
+			cipherCmd.SetArgs([]string{"import", testCase.keyData})
+
+			err := cipherCmd.Execute()
 			if err == nil {
 				t.Errorf("expected error for invalid key, got none")
 			}
 
-			if !strings.Contains(err.Error(), tc.errMsg) {
-				t.Errorf("expected error to contain %q, got: %v", tc.errMsg, err)
+			if !strings.Contains(err.Error(), testCase.errMsg) {
+				t.Errorf("expected error to contain %q, got: %v", testCase.errMsg, err)
 			}
 		})
 	}

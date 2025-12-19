@@ -111,11 +111,18 @@ func validateAgeKey(keyContent string) error {
 		}
 
 		// If we hit a non-comment, non-key line, it's invalid
-		return fmt.Errorf("%w: input contains non-comment line that is not an age key", errInvalidAgeKey)
+		return fmt.Errorf(
+			"%w: input contains non-comment line that is not an age key",
+			errInvalidAgeKey,
+		)
 	}
 
 	if !foundKey {
-		return fmt.Errorf("%w: no age secret key found (must start with '%s')", errInvalidAgeKey, ageKeyPrefix)
+		return fmt.Errorf(
+			"%w: no age secret key found (must start with '%s')",
+			errInvalidAgeKey,
+			ageKeyPrefix,
+		)
 	}
 
 	return nil
@@ -162,10 +169,65 @@ func formatAgeKeyWithMetadata(privateKey, publicKey string) string {
 	return builder.String()
 }
 
+// writeKeyToFile writes the formatted key to the target path, either creating a new file or appending to existing one.
+func writeKeyToFile(targetPath, formattedKey string) error {
+	_, statErr := os.Stat(targetPath)
+	if statErr != nil {
+		return handleNewFile(targetPath, formattedKey, statErr)
+	}
+
+	return appendToExistingFile(targetPath, formattedKey)
+}
+
+// handleNewFile creates a new file with the formatted key or returns an error if stat failed for other reasons.
+func handleNewFile(targetPath, formattedKey string, statErr error) error {
+	if errors.Is(statErr, os.ErrNotExist) {
+		// File does not exist yet; create it
+		err := os.WriteFile(targetPath, []byte(formattedKey), ageKeyFilePermissions)
+		if err != nil {
+			return fmt.Errorf("%w to %s: %w", errFailedToWriteKey, targetPath, err)
+		}
+
+		return nil
+	}
+
+	// Some other error accessing the file
+	return fmt.Errorf("%w to %s: %w", errFailedToWriteKey, targetPath, statErr)
+}
+
+// appendToExistingFile appends the formatted key to an existing file.
+func appendToExistingFile(targetPath, formattedKey string) error {
+	//#nosec G304 -- targetPath comes from getAgeKeyPath
+	file, openErr := os.OpenFile(
+		targetPath,
+		os.O_APPEND|os.O_WRONLY,
+		ageKeyFilePermissions,
+	)
+	if openErr != nil {
+		return fmt.Errorf("%w to %s: %w", errFailedToWriteKey, targetPath, openErr)
+	}
+
+	var err error
+
+	defer func() {
+		cerr := file.Close()
+		if cerr != nil && err == nil {
+			err = fmt.Errorf("%w to %s: %w", errFailedToWriteKey, targetPath, cerr)
+		}
+	}()
+
+	_, err = file.WriteString("\n" + formattedKey)
+	if err != nil {
+		return fmt.Errorf("%w to %s: %w", errFailedToWriteKey, targetPath, err)
+	}
+
+	return nil
+}
+
 // importKey imports an age private key and automatically derives the public key.
-func importKey(privateKey string) (err error) {
+func importKey(privateKey string) error {
 	// Validate the private key
-	err = validateAgeKey(privateKey)
+	err := validateAgeKey(privateKey)
 	if err != nil {
 		return err
 	}
@@ -193,37 +255,8 @@ func importKey(privateKey string) (err error) {
 	// Format key with metadata
 	formattedKey := formatAgeKeyWithMetadata(privateKey, publicKey)
 
-	// Check if the file exists
-	_, statErr := os.Stat(targetPath)
-	if statErr != nil {
-		if errors.Is(statErr, os.ErrNotExist) {
-			// File does not exist yet; create it
-			err = os.WriteFile(targetPath, []byte(formattedKey), ageKeyFilePermissions)
-			if err != nil {
-				return fmt.Errorf("%w to %s: %w", errFailedToWriteKey, targetPath, err)
-			}
-		} else {
-			// Some other error accessing the file
-			return fmt.Errorf("%w to %s: %w", errFailedToWriteKey, targetPath, statErr)
-		}
-	} else {
-		// File exists; append the new key instead of overwriting
-		f, openErr := os.OpenFile(targetPath, os.O_APPEND|os.O_WRONLY, ageKeyFilePermissions)
-		if openErr != nil {
-			return fmt.Errorf("%w to %s: %w", errFailedToWriteKey, targetPath, openErr)
-		}
-		defer func() {
-			if cerr := f.Close(); cerr != nil && err == nil {
-				err = fmt.Errorf("%w to %s: %w", errFailedToWriteKey, targetPath, cerr)
-			}
-		}()
-
-		if _, err = f.WriteString("\n" + formattedKey); err != nil {
-			return fmt.Errorf("%w to %s: %w", errFailedToWriteKey, targetPath, err)
-		}
-	}
-
-	return nil
+	// Write or append key to file
+	return writeKeyToFile(targetPath, formattedKey)
 }
 
 // NewImportCmd creates and returns the import command.
@@ -271,7 +304,7 @@ func handleImportRunE(cmd *cobra.Command, privateKey string) error {
 
 	targetPath, err := getAgeKeyPath()
 	if err != nil {
-		return fmt.Errorf("%w: %v", errFailedToDetermineAge, err)
+		return fmt.Errorf("%w: %w", errFailedToDetermineAge, err)
 	}
 
 	_, err = fmt.Fprintf(cmd.OutOrStdout(), "Successfully imported age key to %s\n", targetPath)
