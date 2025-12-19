@@ -77,6 +77,9 @@ linters:
           - revive
         text: "var-naming: avoid package names that conflict with Go standard library package names"
         path: pkg/io/
+      - linters:
+          - paralleltest
+        path: cmd/cipher/import_test.go
   settings:
     wsl_v5:
       allow-first-in-block: true
@@ -116,6 +119,7 @@ linters:
             - github.com/spf13/viper
             - github.com/stretchr/testify
             - github.com/sirupsen/logrus
+            - filippo.io/age
             - helm.sh/helm
             - k8s.io
             - sigs.k8s.io
