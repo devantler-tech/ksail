@@ -1,3 +1,8 @@
+---
+parent: Configuration
+nav_order: 2
+---
+
 # Declarative Config
 
 Every KSail project includes a `ksail.yaml` file that describes the desired cluster along with supporting distribution configs (`kind.yaml`, `k3d.yaml`). The CLI reads these files on every invocation and validates them before taking action.

@@ -1,3 +1,9 @@
+---
+parent: Core Concepts
+grand_parent: Overview
+nav_order: 5
+---
+
 # Distributions
 
 Distributions determine how Kubernetes is packaged and run. Select the distribution with `ksail cluster init --distribution` or set `spec.distribution` in `ksail.yaml`.
