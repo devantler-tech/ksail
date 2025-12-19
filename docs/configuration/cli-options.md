@@ -119,6 +119,7 @@ Validates Kubernetes manifest files and kustomizations using kubeconform. This c
 - `--verbose` — Enable verbose output
 
 The validator uses two schema sources:
+
 1. Default Kubernetes schemas
 2. Datree CRDs catalog for comprehensive CRD validation
 
