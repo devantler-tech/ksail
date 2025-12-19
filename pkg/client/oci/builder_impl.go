@@ -34,25 +34,7 @@ var manifestExtensions = map[string]struct{}{
 	".json": {},
 }
 
-// Registry push abstraction.
-
-// imagePusher abstracts pushing OCI images to a registry.
-type imagePusher interface {
-	Push(ctx context.Context, ref name.Reference, img v1.Image) error
-}
-
-// remoteImagePusher pushes OCI images using the go-containerregistry remote helpers.
-type remoteImagePusher struct{}
-
-// Push writes an OCI image to the specified registry reference.
-func (remoteImagePusher) Push(ctx context.Context, ref name.Reference, img v1.Image) error {
-	err := remote.Write(ref, img, remote.WithContext(ctx))
-	if err != nil {
-		return fmt.Errorf("write image to registry: %w", err)
-	}
-
-	return nil
-}
+// Registry push operations.
 
 // Builder implementation.
 
@@ -61,12 +43,10 @@ func (remoteImagePusher) Push(ctx context.Context, ref name.Reference, img v1.Im
 // The returned builder uses the go-containerregistry library to package manifests
 // into OCI artifacts and push them to container registries.
 func NewWorkloadArtifactBuilder() WorkloadArtifactBuilder {
-	return &builder{pusher: remoteImagePusher{}}
+	return &builder{}
 }
 
-type builder struct {
-	pusher imagePusher
-}
+type builder struct{}
 
 // Build collects manifests from the source path, packages them into an OCI artifact, and pushes it to the registry.
 //
@@ -119,9 +99,7 @@ func (b *builder) Build(ctx context.Context, opts BuildOptions) (BuildResult, er
 		return BuildResult{}, fmt.Errorf("parse reference: %w", err)
 	}
 
-	pusher := b.ensurePusher()
-
-	err = pusher.Push(ctx, ref, img)
+	err = remote.Write(ref, img, remote.WithContext(ctx))
 	if err != nil {
 		return BuildResult{}, fmt.Errorf("push artifact: %w", err)
 	}
@@ -137,19 +115,6 @@ func (b *builder) Build(ctx context.Context, opts BuildOptions) (BuildResult, er
 	}
 
 	return BuildResult{Artifact: artifact}, nil
-}
-
-// ensurePusher returns the configured pusher or initializes a default remote pusher.
-//
-
-func (b *builder) ensurePusher() imagePusher {
-	if b.pusher != nil {
-		return b.pusher
-	}
-
-	b.pusher = remoteImagePusher{}
-
-	return b.pusher
 }
 
 // Manifest collection helpers.
