@@ -1,3 +1,8 @@
+---
+parent: Use Cases
+nav_order: 3
+---
+
 # E2E Testing in CI/CD
 
 KSail enables CI/CD pipelines to create disposable Kubernetes clusters for integration testing. Use the same declarative configuration that developers use locally.
