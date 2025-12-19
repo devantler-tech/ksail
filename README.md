@@ -3,20 +3,22 @@
 [![codecov](https://codecov.io/gh/devantler-tech/ksail/graph/badge.svg?token=HSUfhaiXwq)](https://codecov.io/gh/devantler-tech/ksail)
 [![CI - Go](https://github.com/devantler-tech/ksail/actions/workflows/ci.yaml/badge.svg)](https://github.com/devantler-tech/ksail/actions/workflows/ci.yaml)
 
-# KSail
+# 🛥️🐳 KSail
 
-KSail is a CLI tool for creating and maintaining local Kubernetes clusters. It provides a unified interface for managing clusters and workloads across different distributions (currently Kind and K3d, with more planned). By wrapping existing tools with a consistent command-line experience, KSail eliminates the complexity of juggling multiple CLIs.
+![ksail-cli-dark](./docs/images/ksail-cli-dark.png)
 
-KSail simplifies your Kubernetes workflow by providing:
+KSail is a CLI tool for creating and maintaining local Kubernetes clusters and workloads. It provides a unified interface that works across different distributions and workflows. By packaging the tools you know and love with a consistent command-line experience, KSail eliminates the complexity of juggling multiple CLIs.
 
-- 🎯 A single command-line interface for Kind and K3d clusters
-- 📝 Declarative configuration for reproducible environments
-- 🔐 Integrated workload and secrets management
-- ⚡ Fast cluster lifecycle operations (create, start, stop, delete)
+## Key Features
 
-Whether you're developing applications, testing infrastructure changes, or learning Kubernetes, KSail gets you from zero to a working cluster in seconds.
-
-🌟 Declarative. Local. Effortless. Welcome to Kubernetes, simplified.
+- ☝🏻 **Single Binary** - One binary with no external dependencies
+- 🎯 **Unified CLI** — One interface for cluster and workload management
+- 🚀 **Fast Setup** — Spin up local clusters in seconds
+- ⚡ **GitOps Ready** — Built-in Flux and ArgoCD support for reconciliation via local registry and OCI artifacts
+- 📄 **Declarative Configuration** — Configuration as code for reproducible clusters
+- 🔧 **Flexible Configuration** — Configure your cluster with your preferred distribution, CNI, CSI, service mesh and more.
+- 🪞 **Mirror Registries** — Cache images locally to avoid rate limits
+- 🔐 **Secrets Management** — SOPS integration for encrypting manifests at rest
 
 ## Getting Started
 
@@ -51,18 +53,47 @@ go build -o ksail
 
 ## Usage
 
-| Purpose                                                    | Command Example            |
-|------------------------------------------------------------|----------------------------|
-| Initialize a new KSail cluster project                     | `ksail cluster init`       |
-| Create and start the cluster                               | `ksail cluster create`     |
-| Create a workload in the cluster                           | `ksail workload create`    |
-| Apply workloads to the cluster                             | `ksail workload apply`     |
-| Reconcile workloads (requires configuring a GitOps engine) | `ksail workload reconcile` |
-| Connect to the cluster                                     | `ksail cluster connect`    |
-| Stop the cluster                                           | `ksail cluster stop`       |
-| Delete the cluster                                         | `ksail cluster delete`     |
+### Quick Start
 
-This is just a small sample of what KSail can do. For a full list of commands and options, run `ksail --help` or refer to the [documentation](#documentation).
+Get up and running with a local Kubernetes cluster in three steps:
+
+```bash
+# 1. Initialize a new project with your preferred stack
+ksail cluster init --distribution Kind --cni Cilium
+
+# 2. Create and start the cluster
+ksail cluster create
+
+# 3. Deploy your workloads
+ksail workload apply -k ./k8s
+```
+
+### Development Workflow
+
+KSail organizes commands around your development lifecycle:
+
+**Cluster Lifecycle**
+
+- `ksail cluster init` — Scaffold a new project with declarative configuration
+- `ksail cluster create` — Provision a new cluster (Kind or K3d)
+- `ksail cluster start` — Resume a stopped cluster
+- `ksail cluster stop` — Pause a running cluster without losing state
+- `ksail cluster connect` — Open k9s for interactive debugging
+- `ksail cluster delete` — Clean up resources
+
+**Workload Management**
+
+- `ksail workload apply` — Deploy manifests with kubectl or Kustomize
+- `ksail workload reconcile` — Trigger GitOps reconciliation (Flux or ArgoCD)
+- `ksail workload logs` — View logs from running pods
+- `ksail workload exec` — Execute commands in running pods
+- `ksail workload gen` — Generate resource templates
+
+**Secrets & Security**
+
+- `ksail cipher encrypt` — Encrypt manifests with SOPS
+- `ksail cipher decrypt` — Decrypt manifests with SOPS
+- `ksail cipher edit` — Edit encrypted files in place
 
 ## Documentation
 
@@ -87,7 +118,7 @@ If you use KSail in your project, feel free to open a PR to add it to the list, 
 
 ## Presentations
 
-- **[KSail - a Kubernetes SDK for local GitOps development and CI](https://youtu.be/Q-Hfn_-B7p8?si=2Uec_kld--fNw3gm)** - A presentation on KSail at KCD2024 (Early version of KSail).
+- **[KSail - a Kubernetes SDK for local GitOps development and CI](https://youtu.be/Q-Hfn_-B7p8?si=2Uec_kld--fNw3gm)** - A presentation on KSail at KCD2024 (Early version of KSail that was built in .NET).
 
 ## Star History ⭐
 
