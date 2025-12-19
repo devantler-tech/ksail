@@ -3,25 +3,22 @@ package cipher
 import (
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 )
 
 var (
 	errInvalidAgeKey        = errors.New("invalid age key format")
-	errKeyFileNotFound      = errors.New("key file not found")
 	errFailedToCreateDir    = errors.New("failed to create directory")
 	errFailedToWriteKey     = errors.New("failed to write key")
 	errAppDataNotSet        = errors.New("AppData environment variable not set")
 	errFailedToGetUserHome  = errors.New("failed to get user home directory")
 	errFailedToDetermineAge = errors.New("failed to determine age key path")
-	errFailedToReadKey      = errors.New("failed to read key")
-	errFailedToReadStdin    = errors.New("failed to read key from stdin")
 )
 
 const (
@@ -122,33 +119,37 @@ func validateAgeKey(keyContent string) error {
 	return nil
 }
 
-// importKey reads a key from the specified source and writes it to the age keys file.
-func importKey(keySource string, readFromStdin bool, stdin io.Reader) error {
-	var keyData []byte
+// formatAgeKeyWithMetadata formats an age private key with metadata comments.
+func formatAgeKeyWithMetadata(privateKey, publicKey string) string {
+	var builder strings.Builder
 
-	var err error
+	// Add creation timestamp
+	builder.WriteString("# created: ")
+	builder.WriteString(time.Now().UTC().Format(time.RFC3339))
+	builder.WriteString("\n")
 
-	// Read key from stdin or file
-	if readFromStdin {
-		keyData, err = io.ReadAll(stdin)
-		if err != nil {
-			return fmt.Errorf("%w: %w", errFailedToReadStdin, err)
-		}
-	} else {
-		keyData, err = os.ReadFile(keySource) //#nosec G304 -- file path is provided by user
-		if err != nil {
-			if os.IsNotExist(err) {
-				return fmt.Errorf("%w: %s", errKeyFileNotFound, keySource)
-			}
-
-			return fmt.Errorf("%w: %w", errFailedToReadKey, err)
-		}
+	// Add public key if provided
+	if publicKey != "" {
+		builder.WriteString("# public key: ")
+		builder.WriteString(publicKey)
+		builder.WriteString("\n")
 	}
 
-	keyString := string(keyData)
+	// Add the private key
+	builder.WriteString(privateKey)
 
-	// Validate the key
-	err = validateAgeKey(keyString)
+	// Ensure trailing newline
+	if !strings.HasSuffix(privateKey, "\n") {
+		builder.WriteString("\n")
+	}
+
+	return builder.String()
+}
+
+// importKey imports an age private key with optional metadata to the keys file.
+func importKey(privateKey, publicKey string) error {
+	// Validate the private key
+	err := validateAgeKey(privateKey)
 	if err != nil {
 		return err
 	}
@@ -167,13 +168,11 @@ func importKey(keySource string, readFromStdin bool, stdin io.Reader) error {
 		return fmt.Errorf("%w: %s: %w", errFailedToCreateDir, targetDir, err)
 	}
 
-	// Ensure the key ends with a newline
-	if !strings.HasSuffix(keyString, "\n") {
-		keyString += "\n"
-	}
+	// Format key with metadata
+	formattedKey := formatAgeKeyWithMetadata(privateKey, publicKey)
 
 	// Write key to file
-	err = os.WriteFile(targetPath, []byte(keyString), ageKeyFilePermissions)
+	err = os.WriteFile(targetPath, []byte(formattedKey), ageKeyFilePermissions)
 	if err != nil {
 		return fmt.Errorf("%w to %s: %w", errFailedToWriteKey, targetPath, err)
 	}
@@ -183,12 +182,19 @@ func importKey(keySource string, readFromStdin bool, stdin io.Reader) error {
 
 // NewImportCmd creates and returns the import command.
 func NewImportCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "import [key-file]",
-		Short: "Import an age key to the system's SOPS key location",
-		Long: `Import an age key to the system's default SOPS age key location.
+	var publicKey string
 
-The key can be provided via a file path or through stdin (pipe or redirect).
+	cmd := &cobra.Command{
+		Use:   "import PRIVATE_KEY",
+		Short: "Import an age key to the system's SOPS key location",
+		Long: `Import an age private key to the system's default SOPS age key location.
+
+The private key must be provided as a command argument (not a file path).
+An optional public key can be provided via the --public-key flag.
+
+The command will automatically add metadata including:
+  - Creation timestamp
+  - Public key (if provided)
 
 Platform-specific key locations:
   Linux:   $XDG_CONFIG_HOME/sops/age/keys.txt
@@ -197,35 +203,29 @@ Platform-specific key locations:
            or $HOME/Library/Application Support/sops/age/keys.txt
   Windows: %AppData%\sops\age\keys.txt
 
-The key must be in age format (starting with "AGE-SECRET-KEY-").
+The private key must be in age format (starting with "AGE-SECRET-KEY-").
 
 Examples:
-  # Import from a file
-  ksail cipher import my-age-key.txt
+  # Import a private key
+  ksail cipher import AGE-SECRET-KEY-1ABCDEF...
 
-  # Import from stdin
-  cat my-age-key.txt | ksail cipher import
-
-  # Import from stdin (redirect)
-  ksail cipher import < my-age-key.txt`,
+  # Import with public key metadata
+  ksail cipher import AGE-SECRET-KEY-1ABCDEF... --public-key age1abc...`,
 		SilenceUsage: true,
-		Args:         cobra.MaximumNArgs(1),
-		RunE:         handleImportRunE,
+		Args:         cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return handleImportRunE(cmd, args[0], publicKey)
+		},
 	}
+
+	cmd.Flags().StringVar(&publicKey, "public-key", "", "optional public key to include in metadata")
 
 	return cmd
 }
 
 // handleImportRunE is the main handler for the import command.
-func handleImportRunE(cmd *cobra.Command, args []string) error {
-	readFromStdin := len(args) == 0
-
-	var keySource string
-	if !readFromStdin {
-		keySource = args[0]
-	}
-
-	err := importKey(keySource, readFromStdin, cmd.InOrStdin())
+func handleImportRunE(cmd *cobra.Command, privateKey, publicKey string) error {
+	err := importKey(privateKey, publicKey)
 	if err != nil {
 		return fmt.Errorf("failed to import age key: %w", err)
 	}
