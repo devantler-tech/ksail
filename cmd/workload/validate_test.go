@@ -2,6 +2,8 @@ package workload_test
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -39,6 +41,11 @@ func TestNewValidateCmdHasCorrectDefaults(t *testing.T) {
 	if !ignoreMissingSchemas {
 		t.Fatal("expected ignore-missing-schemas to default to true")
 	}
+
+	verbose, _ := cmd.Flags().GetBool("verbose")
+	if verbose {
+		t.Fatal("expected verbose to default to false")
+	}
 }
 
 func TestValidateCmdShowsHelp(t *testing.T) {
@@ -71,6 +78,14 @@ func TestValidateCmdShowsHelp(t *testing.T) {
 
 	if !strings.Contains(helpText, "--strict") {
 		t.Fatal("expected help text to include --strict flag")
+	}
+
+	if !strings.Contains(helpText, "--ignore-missing-schemas") {
+		t.Fatal("expected help text to include --ignore-missing-schemas flag")
+	}
+
+	if !strings.Contains(helpText, "--verbose") {
+		t.Fatal("expected help text to include --verbose flag")
 	}
 }
 
@@ -125,5 +140,367 @@ func TestValidateCmdAcceptsSinglePath(t *testing.T) {
 	// The error should be about path access, not argument parsing
 	if !strings.Contains(err.Error(), "access path") {
 		t.Fatalf("expected error about path access, got %v", err)
+	}
+}
+
+func TestValidateCmdWithValidManifest(t *testing.T) {
+	t.Parallel()
+
+	// Create a temporary directory with a valid manifest
+	tmpDir := t.TempDir()
+
+	validManifest := `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: test-config
+  namespace: default
+data:
+  key: value
+`
+	manifestPath := filepath.Join(tmpDir, "valid-manifest.yaml")
+	if err := os.WriteFile(manifestPath, []byte(validManifest), 0o600); err != nil {
+		t.Fatalf("failed to write test manifest: %v", err)
+	}
+
+	cmd := workload.NewValidateCmd()
+	cmd.SetArgs([]string{tmpDir})
+
+	var output bytes.Buffer
+	cmd.SetOut(&output)
+	cmd.SetErr(&output)
+
+	err := cmd.Execute()
+	if err != nil {
+		t.Fatalf("expected validation to succeed, got error: %v", err)
+	}
+}
+
+func TestValidateCmdWithInvalidManifest(t *testing.T) {
+	t.Parallel()
+
+	// Create a temporary directory with an invalid manifest
+	tmpDir := t.TempDir()
+
+	// Create an invalid manifest
+	invalidManifest := `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: test-config
+data: "invalid structure"
+`
+	manifestPath := filepath.Join(tmpDir, "invalid-manifest.yaml")
+	if err := os.WriteFile(manifestPath, []byte(invalidManifest), 0o600); err != nil {
+		t.Fatalf("failed to write test manifest: %v", err)
+	}
+
+	cmd := workload.NewValidateCmd()
+	cmd.SetArgs([]string{tmpDir})
+
+	var output bytes.Buffer
+	cmd.SetOut(&output)
+	cmd.SetErr(&output)
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected validation to fail for invalid manifest")
+	}
+}
+
+func TestValidateCmdWithKustomization(t *testing.T) {
+	t.Parallel()
+
+	// Create a temporary directory with a valid kustomization
+	tmpDir := t.TempDir()
+
+	// Create a simple ConfigMap
+	configMapYAML := `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: test-config
+  namespace: default
+data:
+  key: value
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "configmap.yaml"), []byte(configMapYAML), 0o600); err != nil {
+		t.Fatalf("failed to write configmap: %v", err)
+	}
+
+	// Create a kustomization.yaml
+	kustomizationYAML := `apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - configmap.yaml
+`
+	if err := os.WriteFile(
+		filepath.Join(tmpDir, "kustomization.yaml"),
+		[]byte(kustomizationYAML),
+		0o600,
+	); err != nil {
+		t.Fatalf("failed to write kustomization: %v", err)
+	}
+
+	cmd := workload.NewValidateCmd()
+	cmd.SetArgs([]string{tmpDir})
+
+	var output bytes.Buffer
+	cmd.SetOut(&output)
+	cmd.SetErr(&output)
+
+	err := cmd.Execute()
+	if err != nil {
+		t.Fatalf("expected validation to succeed, got error: %v", err)
+	}
+}
+
+func TestValidateCmdWithSkipSecretsFlag(t *testing.T) {
+	t.Parallel()
+
+	// Create a temporary directory with a Secret
+	tmpDir := t.TempDir()
+
+	// Create a Secret (which may have SOPS fields that could fail validation)
+	secretYAML := `apiVersion: v1
+kind: Secret
+metadata:
+  name: test-secret
+  namespace: default
+type: Opaque
+data:
+  key: dmFsdWU=
+sops:
+  # SOPS metadata that would fail validation without skip-secrets
+  encrypted_regex: ^(data|stringData)$
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "secret.yaml"), []byte(secretYAML), 0o600); err != nil {
+		t.Fatalf("failed to write secret: %v", err)
+	}
+
+	cmd := workload.NewValidateCmd()
+	cmd.SetArgs([]string{
+		"--skip-secrets=true",
+		tmpDir,
+	})
+
+	var output bytes.Buffer
+	cmd.SetOut(&output)
+	cmd.SetErr(&output)
+
+	err := cmd.Execute()
+	if err != nil {
+		t.Fatalf("expected validation with skip-secrets to succeed, got error: %v", err)
+	}
+}
+
+func TestValidateCmdWithVerboseFlag(t *testing.T) {
+	t.Parallel()
+
+	// Create a temporary directory with a valid manifest
+	tmpDir := t.TempDir()
+
+	validManifest := `apiVersion: v1
+kind: Namespace
+metadata:
+  name: test-namespace
+`
+	manifestPath := filepath.Join(tmpDir, "namespace.yaml")
+	if err := os.WriteFile(manifestPath, []byte(validManifest), 0o600); err != nil {
+		t.Fatalf("failed to write test manifest: %v", err)
+	}
+
+	cmd := workload.NewValidateCmd()
+	cmd.SetArgs([]string{
+		"--verbose",
+		tmpDir,
+	})
+
+	var output bytes.Buffer
+	cmd.SetOut(&output)
+	cmd.SetErr(&output)
+
+	err := cmd.Execute()
+	if err != nil {
+		t.Fatalf("expected validation to succeed, got error: %v", err)
+	}
+
+	// Note: We can't easily check for verbose output without capturing stdout/stderr
+	// but we can verify the command ran successfully with the flag
+}
+
+func TestValidateCmdWithDefaultPath(t *testing.T) {
+	t.Parallel()
+
+	// Save current directory and restore after test
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get current directory: %v", err)
+	}
+	defer func() {
+		_ = os.Chdir(originalDir)
+	}()
+
+	// Create a temporary directory with a valid manifest and change to it
+	tmpDir := t.TempDir()
+
+	validManifest := `apiVersion: v1
+kind: Namespace
+metadata:
+  name: test-namespace
+`
+	manifestPath := filepath.Join(tmpDir, "namespace.yaml")
+	if err := os.WriteFile(manifestPath, []byte(validManifest), 0o600); err != nil {
+		t.Fatalf("failed to write test manifest: %v", err)
+	}
+
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("failed to change directory: %v", err)
+	}
+
+	// Run validate without path argument (should use current directory)
+	cmd := workload.NewValidateCmd()
+	cmd.SetArgs([]string{})
+
+	var output bytes.Buffer
+	cmd.SetOut(&output)
+	cmd.SetErr(&output)
+
+	err = cmd.Execute()
+	if err != nil {
+		t.Fatalf("expected validation to succeed with default path, got error: %v", err)
+	}
+}
+
+func TestValidateCmdWithEmptyDirectory(t *testing.T) {
+	t.Parallel()
+
+	// Create an empty temporary directory
+	tmpDir := t.TempDir()
+
+	cmd := workload.NewValidateCmd()
+	cmd.SetArgs([]string{tmpDir})
+
+	var output bytes.Buffer
+	cmd.SetOut(&output)
+	cmd.SetErr(&output)
+
+	// Empty directory should succeed (no files to validate)
+	err := cmd.Execute()
+	if err != nil {
+		t.Fatalf("expected validation of empty directory to succeed, got error: %v", err)
+	}
+}
+
+func TestValidateCmdWithMixedValidAndInvalidFiles(t *testing.T) {
+	t.Parallel()
+
+	// Create a temporary directory with both valid and invalid manifests
+	tmpDir := t.TempDir()
+
+	// Valid manifest
+	validManifest := `apiVersion: v1
+kind: Namespace
+metadata:
+  name: test-namespace
+`
+	if err := os.WriteFile(
+		filepath.Join(tmpDir, "valid.yaml"),
+		[]byte(validManifest),
+		0o600,
+	); err != nil {
+		t.Fatalf("failed to write valid manifest: %v", err)
+	}
+
+	// Invalid manifest
+	invalidManifest := `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: test-config
+data: "invalid"
+`
+	if err := os.WriteFile(
+		filepath.Join(tmpDir, "invalid.yaml"),
+		[]byte(invalidManifest),
+		0o600,
+	); err != nil {
+		t.Fatalf("failed to write invalid manifest: %v", err)
+	}
+
+	cmd := workload.NewValidateCmd()
+	cmd.SetArgs([]string{tmpDir})
+
+	var output bytes.Buffer
+	cmd.SetOut(&output)
+	cmd.SetErr(&output)
+
+	err := cmd.Execute()
+	// Should fail because one file is invalid
+	if err == nil {
+		t.Fatal("expected validation to fail when directory contains invalid files")
+	}
+}
+
+func TestValidateCmdFlagCombinations(t *testing.T) {
+	t.Parallel()
+
+	// Create a temporary directory with a valid manifest
+	tmpDir := t.TempDir()
+
+	validManifest := `apiVersion: v1
+kind: Namespace
+metadata:
+  name: test-namespace
+`
+	manifestPath := filepath.Join(tmpDir, "namespace.yaml")
+	if err := os.WriteFile(manifestPath, []byte(validManifest), 0o600); err != nil {
+		t.Fatalf("failed to write test manifest: %v", err)
+	}
+
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{
+			name: "strict enabled",
+			args: []string{"--strict=true", tmpDir},
+		},
+		{
+			name: "strict disabled",
+			args: []string{"--strict=false", tmpDir},
+		},
+		{
+			name: "ignore-missing-schemas enabled",
+			args: []string{"--ignore-missing-schemas=true", tmpDir},
+		},
+		{
+			name: "ignore-missing-schemas disabled",
+			args: []string{"--ignore-missing-schemas=false", tmpDir},
+		},
+		{
+			name: "all flags",
+			args: []string{
+				"--skip-secrets=true",
+				"--strict=true",
+				"--ignore-missing-schemas=true",
+				"--verbose",
+				tmpDir,
+			},
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			cmd := workload.NewValidateCmd()
+			cmd.SetArgs(testCase.args)
+
+			var output bytes.Buffer
+			cmd.SetOut(&output)
+			cmd.SetErr(&output)
+
+			err := cmd.Execute()
+			if err != nil {
+				t.Fatalf("expected validation to succeed with %s, got error: %v", testCase.name, err)
+			}
+		})
 	}
 }
