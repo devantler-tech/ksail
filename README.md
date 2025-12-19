@@ -74,7 +74,8 @@ KSail organizes commands around your development lifecycle:
 
 - `ksail cluster init` — Scaffold a new project with declarative configuration
 - `ksail cluster create` — Provision a new cluster (Kind or K3d)
-- `ksail cluster start/stop` — Pause and resume without losing state
+- `ksail cluster start` — Resume a stopped cluster
+- `ksail cluster stop` — Pause a running cluster without losing state
 - `ksail cluster connect` — Open k9s for interactive debugging
 - `ksail cluster delete` — Clean up resources
 
@@ -82,12 +83,14 @@ KSail organizes commands around your development lifecycle:
 
 - `ksail workload apply` — Deploy manifests with kubectl or Kustomize
 - `ksail workload reconcile` — Trigger GitOps reconciliation (Flux or ArgoCD)
-- `ksail workload logs/exec` — Debug running pods
+- `ksail workload logs` — View logs from running pods
+- `ksail workload exec` — Execute commands in running pods
 - `ksail workload gen` — Generate resource templates
 
 **Secrets & Security**
 
-- `ksail cipher encrypt/decrypt` — Manage encrypted secrets with SOPS
+- `ksail cipher encrypt` — Encrypt secrets with SOPS
+- `ksail cipher decrypt` — Decrypt secrets with SOPS
 - `ksail cipher edit` — Edit encrypted files in place
 
 ### Key Features
@@ -95,7 +98,7 @@ KSail organizes commands around your development lifecycle:
 🎯 **Unified CLI** — One interface for Kind and K3d  
 📦 **Local Registry** — Build and push images without external registries  
 🔐 **Secrets Management** — SOPS integration for encrypted credentials  
-⚡ **GitOps Ready** — Built-in Flux and ArgoCD support for triggering reconciliation
+⚡ **GitOps Ready** — Built-in Flux and ArgoCD support for reconciliation
 🔧 **Extensible** — Cilium CNI, cert-manager, metrics-server, and more
 
 For a complete command reference, run `ksail --help` or explore the [documentation](#documentation).
