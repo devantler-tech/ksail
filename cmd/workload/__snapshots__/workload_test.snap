@@ -78,7 +78,7 @@ Flags:
   -h, --help                            help for apply
   -k, --kustomize string                Process a kustomization directory. This flag can't be used together with -f or -R.
       --openapi-patch                   If true, use openapi to calculate diff when the openapi presents and the resource can be found in the openapi spec. Otherwise, fall back to use baked-in types. (default true)
-  -o, --output string                   Output format. One of: (json, yaml, name, go-template, go-template-file, template, templatefile, jsonpath, jsonpath-as-json, jsonpath-file).
+  -o, --output string                   Output format. One of: (json, yaml, kyaml, name, go-template, go-template-file, template, templatefile, jsonpath, jsonpath-as-json, jsonpath-file).
       --overwrite                       Automatically resolve conflicts between the modified and live configuration by using values from the modified configuration (default true)
       --prune                           Automatically delete resource objects, that do not appear in the configs and are created by either apply or create --save-config. Should be used with either -l or --all.
       --prune-allowlist stringArray     Overwrite the default allowlist with <group/version/kind> for --prune
@@ -146,7 +146,7 @@ Flags:
   -f, --filename strings               Filename, directory, or URL to files to use to create the resource
   -h, --help                           help for create
   -k, --kustomize string               Process the kustomization directory. This flag can't be used together with -f or -R.
-  -o, --output string                  Output format. One of: (json, yaml, name, go-template, go-template-file, template, templatefile, jsonpath, jsonpath-as-json, jsonpath-file).
+  -o, --output string                  Output format. One of: (json, yaml, kyaml, name, go-template, go-template-file, template, templatefile, jsonpath, jsonpath-as-json, jsonpath-file).
       --raw string                     Raw URI to POST to the server.  Uses the transport specified by the kubeconfig file.
   -R, --recursive                      Process the directory used in -f, --filename recursively. Useful when you want to manage related manifests organized within the same directory.
       --save-config                    If true, the configuration of current object will be saved in its annotation. Otherwise, the annotation will be unchanged. This flag is useful when you want to perform kubectl apply on this object in the future.
@@ -313,7 +313,7 @@ Examples:
 
 Flags:
   -A, --all-namespaces     If present, list the requested object(s) across all namespaces. Namespace in current context is ignored even if specified with --namespace.
-      --chunk-size int     Return large lists in chunks rather than all at once. Pass 0 to disable. This flag is beta and may change in the future. (default 500)
+      --chunk-size int     Return large lists in chunks rather than all at once. Pass 0 to disable. (default 500)
   -f, --filename strings   Filename, directory, or URL to files containing the resource to describe
   -h, --help               help for describe
   -k, --kustomize string   Process the kustomization directory. This flag can't be used together with -f or -R.
@@ -354,7 +354,7 @@ Flags:
   -f, --filename strings              Filename, directory, or URL to files to use to edit the resource
   -h, --help                          help for edit
   -k, --kustomize string              Process the kustomization directory. This flag can't be used together with -f or -R.
-  -o, --output string                 Output format. One of: (json, yaml, name, go-template, go-template-file, template, templatefile, jsonpath, jsonpath-as-json, jsonpath-file).
+  -o, --output string                 Output format. One of: (json, yaml, kyaml, name, go-template, go-template-file, template, templatefile, jsonpath, jsonpath-as-json, jsonpath-file).
       --output-patch                  Output the patch if the resource is edited.
   -R, --recursive                     Process the directory used in -f, --filename recursively. Useful when you want to manage related manifests organized within the same directory.
       --save-config                   If true, the configuration of current object will be saved in its annotation. Otherwise, the annotation will be unchanged. This flag is useful when you want to perform kubectl apply on this object in the future.
@@ -486,14 +486,14 @@ Flags:
   -l, --labels string                  Labels to apply to the service created by this call.
       --load-balancer-ip string        IP to assign to the LoadBalancer. If empty, an ephemeral IP will be created and used (cloud-provider specific).
       --name string                    The name for the newly created object.
-  -o, --output string                  Output format. One of: (json, yaml, name, go-template, go-template-file, template, templatefile, jsonpath, jsonpath-as-json, jsonpath-file).
+  -o, --output string                  Output format. One of: (json, yaml, kyaml, name, go-template, go-template-file, template, templatefile, jsonpath, jsonpath-as-json, jsonpath-file).
       --override-type string           The method used to override the generated object: json, merge, or strategic. (default "merge")
       --overrides string               An inline JSON override for the generated object. If this is non-empty, it is used to override the generated object. Requires that the object supply a valid apiVersion field.
       --port string                    The port that the service should serve on. Copied from the resource being exposed, if unspecified
       --protocol string                The network protocol for the service to be created. Default is 'TCP'.
   -R, --recursive                      Process the directory used in -f, --filename recursively. Useful when you want to manage related manifests organized within the same directory.
       --save-config                    If true, the configuration of current object will be saved in its annotation. Otherwise, the annotation will be unchanged. This flag is useful when you want to perform kubectl apply on this object in the future.
-      --selector string                A label selector to use for this service. Only equality-based selector requirements are supported. If empty (the default) infer the selector from the replication controller or replica set.)
+      --selector string                A label selector to use for this service. Only equality-based selector requirements are supported. If empty (the default) infer the selector from the resource being exposed.
       --session-affinity string        If non-empty, set the session affinity for the service to this; legal values: 'None', 'ClientIP'
       --show-managed-fields            If true, keep the managedFields when printing objects in JSON or YAML format.
       --target-port string             Name or number for the port on the container that the service should direct traffic to. Optional.
@@ -557,7 +557,7 @@ Examples:
 Flags:
   -A, --all-namespaces                If present, list the requested object(s) across all namespaces. Namespace in current context is ignored even if specified with --namespace.
       --allow-missing-template-keys   If true, ignore any errors in templates when a field or map key is missing in the template. Only applies to golang and jsonpath output formats. (default true)
-      --chunk-size int                Return large lists in chunks rather than all at once. Pass 0 to disable. This flag is beta and may change in the future. (default 500)
+      --chunk-size int                Return large lists in chunks rather than all at once. Pass 0 to disable. (default 500)
       --field-selector string         Selector (field query) to filter on, supports '=', '==', and '!='.(e.g. --field-selector key1=value1,key2=value2). The server only supports a limited number of field queries per type.
   -f, --filename strings              Filename, directory, or URL to files identifying the resource to get from a server.
   -h, --help                          help for get
@@ -565,7 +565,7 @@ Flags:
   -k, --kustomize string              Process the kustomization directory. This flag can't be used together with -f or -R.
   -L, --label-columns strings         Accepts a comma separated list of labels that are going to be presented as columns. Names are case-sensitive. You can also use multiple flag options like -L label1 -L label2...
       --no-headers                    When using the default or custom-column output format, don't print headers (default print headers).
-  -o, --output string                 Output format. One of: (json, yaml, name, go-template, go-template-file, template, templatefile, jsonpath, jsonpath-as-json, jsonpath-file, custom-columns, custom-columns-file, wide). See custom columns [https://kubernetes.io/docs/reference/kubectl/#custom-columns], golang template [http://golang.org/pkg/text/template/#pkg-overview] and jsonpath template [https://kubernetes.io/docs/reference/kubectl/jsonpath/].
+  -o, --output string                 Output format. One of: (json, yaml, kyaml, name, go-template, go-template-file, template, templatefile, jsonpath, jsonpath-as-json, jsonpath-file, custom-columns, custom-columns-file, wide). See custom columns [https://kubernetes.io/docs/reference/kubectl/#custom-columns], golang template [http://golang.org/pkg/text/template/#pkg-overview] and jsonpath template [https://kubernetes.io/docs/reference/kubectl/jsonpath/].
       --output-watch-events           Output watch event objects when --watch or --watch-only is used. Existing objects are output as initial ADDED events.
       --raw string                    Raw URI to request from the server.  Uses the transport specified by the kubeconfig file.
   -R, --recursive                     Process the directory used in -f, --filename recursively. Useful when you want to manage related manifests organized within the same directory.
@@ -805,7 +805,7 @@ Flags:
   -f, --filename strings               Filename, directory, or URL to files identifying the resource to set a new size
   -h, --help                           help for scale
   -k, --kustomize string               Process the kustomization directory. This flag can't be used together with -f or -R.
-  -o, --output string                  Output format. One of: (json, yaml, name, go-template, go-template-file, template, templatefile, jsonpath, jsonpath-as-json, jsonpath-file).
+  -o, --output string                  Output format. One of: (json, yaml, kyaml, name, go-template, go-template-file, template, templatefile, jsonpath, jsonpath-as-json, jsonpath-file).
   -R, --recursive                      Process the directory used in -f, --filename recursively. Useful when you want to manage related manifests organized within the same directory.
       --replicas int                   The new desired number of replicas. Required.
       --resource-version string        Precondition for resource version. Requires that the current resource version match this value in order to scale.
@@ -858,7 +858,7 @@ Flags:
       --for string                    The condition to wait on: [create|delete|condition=condition-name[=condition-value]|jsonpath='{JSONPath expression}'=[JSONPath value]]. The default condition-value is true. Condition values are compared after Unicode simple case folding, which is a more general form of case-insensitivity.
   -h, --help                          help for wait
       --local                         If true, annotation will NOT contact api-server but run locally.
-  -o, --output string                 Output format. One of: (json, yaml, name, go-template, go-template-file, template, templatefile, jsonpath, jsonpath-as-json, jsonpath-file).
+  -o, --output string                 Output format. One of: (json, yaml, kyaml, name, go-template, go-template-file, template, templatefile, jsonpath, jsonpath-as-json, jsonpath-file).
   -R, --recursive                     Process the directory used in -f, --filename recursively. Useful when you want to manage related manifests organized within the same directory. (default true)
   -l, --selector string               Selector (label query) to filter on, supports '=', '==', and '!='.(e.g. -l key1=value1,key2=value2)
       --show-managed-fields           If true, keep the managedFields when printing objects in JSON or YAML format.
