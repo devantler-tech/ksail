@@ -14,5 +14,5 @@ https://kubernetes.default.svc/
 https://gateway-api.sigs.k8s.io/
 
 # GoReleaser template URL (not a real URL, contains {{ .Tag }} placeholder)
-^https://github\.com/devantler-tech/ksail/releases/download/
+^https://github\.com/devantler-tech/ksail/releases/download/.*
 
