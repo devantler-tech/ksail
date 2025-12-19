@@ -13,10 +13,10 @@ KSail is a CLI tool for creating and maintaining local Kubernetes clusters and w
 
 - ☝🏻 **Single Binary** - One binary with no external dependencies
 - 🎯 **Unified CLI** — One interface for cluster and workload management
-- 📄 **Declarative Configuration** — Configuration as code for reproducible clusters
-- 🔧 **Flexible Configuration** — Configure your cluster with your preferred distribution, CNI, CSI, service mesh and more.
 - 🚀 **Fast Setup** — Spin up local clusters in seconds
 - ⚡ **GitOps Ready** — Built-in Flux and ArgoCD support for reconciliation via local registry and OCI artifacts
+- 📄 **Declarative Configuration** — Configuration as code for reproducible clusters
+- 🔧 **Flexible Configuration** — Configure your cluster with your preferred distribution, CNI, CSI, service mesh and more.
 - 🪞 **Mirror Registries** — Cache images locally to avoid rate limits
 - 🔐 **Secrets Management** — SOPS integration for encrypting manifests at rest
 
