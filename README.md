@@ -7,19 +7,18 @@
 
 ![ksail-cli-dark](./docs/images/ksail-cli-dark.png)
 
-KSail is a CLI tool for creating and maintaining local Kubernetes clusters. It provides a unified interface for managing clusters and workloads across different distributions (currently Kind and K3d, with more planned). By wrapping existing tools with a consistent command-line experience, KSail eliminates the complexity of juggling multiple CLIs.
+KSail is a CLI tool for creating and maintaining local Kubernetes clusters and workloads. It provides a unified interface that works across different distributions and workflows. By packaging the tools you know and love with a consistent command-line experience, KSail eliminates the complexity of juggling multiple CLIs.
 
-KSail simplifies your Kubernetes workflow by providing:
+## Key Features
 
+- ☝🏻 **Single Binary** - One binary with no external dependencies
 - 🎯 **Unified CLI** — One interface for cluster and workload management
-- 📄 **Declarative Configuration** — Configuration as code for reproducible clusters
-- 🔧 **Flexible Configuration** — Configure your cluster with your preferred distribution, CNI, CSI, service mesh and more.
 - 🚀 **Fast Setup** — Spin up local clusters in seconds
 - ⚡ **GitOps Ready** — Built-in Flux and ArgoCD support for reconciliation via local registry and OCI artifacts
+- 📄 **Declarative Configuration** — Configuration as code for reproducible clusters
+- 🔧 **Flexible Configuration** — Configure your cluster with your preferred distribution, CNI, CSI, service mesh and more.
 - 🪞 **Mirror Registries** — Cache images locally to avoid rate limits
 - 🔐 **Secrets Management** — SOPS integration for encrypting manifests at rest
-
-Whether you're developing applications, testing infrastructure changes, or learning Kubernetes, KSail gets you from zero to a working cluster in seconds.
 
 ## Getting Started
 
@@ -119,7 +118,7 @@ If you use KSail in your project, feel free to open a PR to add it to the list, 
 
 ## Presentations
 
-- **[KSail - a Kubernetes SDK for local GitOps development and CI](https://youtu.be/Q-Hfn_-B7p8?si=2Uec_kld--fNw3gm)** - A presentation on KSail at KCD2024 (Early version of KSail).
+- **[KSail - a Kubernetes SDK for local GitOps development and CI](https://youtu.be/Q-Hfn_-B7p8?si=2Uec_kld--fNw3gm)** - A presentation on KSail at KCD2024 (Early version of KSail that was built in .NET).
 
 ## Star History ⭐
 
