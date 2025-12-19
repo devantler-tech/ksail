@@ -31,21 +31,21 @@ spec:
 
 ### Key fields inside `spec`
 
-| Field                   | Type     | Allowed values                 | Purpose                                                                                                |
-|-------------------------|----------|--------------------------------|--------------------------------------------------------------------------------------------------------|
-| `distribution`          | enum     | `Kind`, `K3d`                  | Chooses the Kubernetes distribution.                                                                   |
-| `distributionConfig`    | string   | File path                      | Points to the distribution-specific YAML (`kind.yaml` or `k3d.yaml`).                                  |
-| `sourceDirectory`       | string   | Directory path                 | Location of the manifests for workload commands (default: `k8s`).                                     |
-| `connection.kubeconfig` | string   | File path                      | Path to the kubeconfig used for cluster commands (default: `~/.kube/config`).                          |
-| `connection.context`    | string   | kubeconfig context             | Context name for the cluster (e.g., `kind-<name>`).                                                   |
-| `connection.timeout`    | duration | Go duration (e.g. `30s`, `5m`) | Optional timeout for cluster operations.                                                              |
-| `cni`                   | enum     | `Default`, `Cilium`            | Container Network Interface to install (default: `Default`).                                          |
-| `csi`                   | enum     | `Default`, `LocalPathStorage`  | Container Storage Interface (not yet implemented).                                                    |
-| `metricsServer`         | enum     | `Enabled`, `Disabled`          | Install metrics-server (default: `Enabled`).                                                          |
-| `certManager`           | enum     | `Enabled`, `Disabled`          | Install cert-manager (default: `Disabled`).                                                           |
-| `localRegistry`         | enum     | `Enabled`, `Disabled`          | Provision a local OCI registry (default: `Disabled`).                                                 |
-| `gitOpsEngine`          | enum     | `None`                         | GitOps engine (currently only `None` is supported; Flux/ArgoCD planned).                              |
-| `options.*`             | object   | Provider-specific fields       | Advanced knobs for Kind, K3d, Flux, or Helm (currently placeholder).                                  |
+| Field                   | Type     | Allowed values                 | Purpose                                                                       |
+|-------------------------|----------|--------------------------------|-------------------------------------------------------------------------------|
+| `distribution`          | enum     | `Kind`, `K3d`                  | Chooses the Kubernetes distribution.                                          |
+| `distributionConfig`    | string   | File path                      | Points to the distribution-specific YAML (`kind.yaml` or `k3d.yaml`).         |
+| `sourceDirectory`       | string   | Directory path                 | Location of the manifests for workload commands (default: `k8s`).             |
+| `connection.kubeconfig` | string   | File path                      | Path to the kubeconfig used for cluster commands (default: `~/.kube/config`). |
+| `connection.context`    | string   | kubeconfig context             | Context name for the cluster (e.g., `kind-<name>`).                           |
+| `connection.timeout`    | duration | Go duration (e.g. `30s`, `5m`) | Optional timeout for cluster operations.                                      |
+| `cni`                   | enum     | `Default`, `Cilium`            | Container Network Interface to install (default: `Default`).                  |
+| `csi`                   | enum     | `Default`, `LocalPathStorage`  | Container Storage Interface (not yet implemented).                            |
+| `metricsServer`         | enum     | `Enabled`, `Disabled`          | Install metrics-server (default: `Enabled`).                                  |
+| `certManager`           | enum     | `Enabled`, `Disabled`          | Install cert-manager (default: `Disabled`).                                   |
+| `localRegistry`         | enum     | `Enabled`, `Disabled`          | Provision a local OCI registry (default: `Disabled`).                         |
+| `gitOpsEngine`          | enum     | `None`                         | GitOps engine (currently only `None` is supported; Flux/ArgoCD planned).      |
+| `options.*`             | object   | Provider-specific fields       | Advanced knobs for Kind, K3d, Flux, or Helm (currently placeholder).          |
 
 > The CLI applies defaults for any field you omit. For example, if `cni` is not present, KSail uses `Default`, which uses the distribution's built-in networking (`kindnetd` for Kind, `flannel` for K3d).
 

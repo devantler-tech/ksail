@@ -20,6 +20,7 @@ ksail cipher edit <file>       # Edit an encrypted file with SOPS
 ```
 
 SOPS supports multiple key management systems:
+
 - age recipients
 - PGP fingerprints
 - AWS KMS
