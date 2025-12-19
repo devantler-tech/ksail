@@ -41,20 +41,20 @@ spec:
 
 ### Configuration Fields
 
-| Field                   | Type     | Default              | Values                         | Description                                                                   |
-|-------------------------|----------|----------------------|--------------------------------|-------------------------------------------------------------------------------|
-| `distribution`          | enum     | `Kind`               | `Kind`, `K3d`                  | Kubernetes distribution to use.                                               |
-| `distributionConfig`    | string   | `kind.yaml`          | File path                      | Path to distribution-specific YAML (`kind.yaml` or `k3d.yaml`).              |
-| `sourceDirectory`       | string   | `k8s`                | Directory path                 | Location of workload manifests.                                               |
-| `connection.kubeconfig` | string   | `~/.kube/config`     | File path                      | Path to kubeconfig file.                                                      |
-| `connection.context`    | string   | Derived from cluster | kubeconfig context             | Context name (Kind: `kind-<name>`, K3d: `k3d-<name>`).                        |
-| `connection.timeout`    | duration | –                    | Go duration (e.g. `30s`, `5m`) | Optional timeout for cluster operations.                                      |
-| `cni`                   | enum     | `Default`            | `Default`, `Cilium`, `None`    | Container Network Interface to install.                                       |
-| `csi`                   | enum     | `Default`            | `Default`, `LocalPathStorage`  | Container Storage Interface (not yet implemented).                            |
-| `metricsServer`         | enum     | `Enabled`            | `Enabled`, `Disabled`          | Install metrics-server for resource metrics.                                  |
-| `certManager`           | enum     | `Disabled`           | `Enabled`, `Disabled`          | Install cert-manager for TLS certificates.                                    |
-| `localRegistry`         | enum     | `Disabled`           | `Enabled`, `Disabled`          | Provision local OCI registry.                                                 |
-| `gitOpsEngine`          | enum     | `None`               | `None`                         | GitOps engine (Flux/ArgoCD support planned).                                  |
+| Field                   | Type     | Default              | Values                         | Description                                                     |
+|-------------------------|----------|----------------------|--------------------------------|-----------------------------------------------------------------|
+| `distribution`          | enum     | `Kind`               | `Kind`, `K3d`                  | Kubernetes distribution to use.                                 |
+| `distributionConfig`    | string   | `kind.yaml`          | File path                      | Path to distribution-specific YAML (`kind.yaml` or `k3d.yaml`). |
+| `sourceDirectory`       | string   | `k8s`                | Directory path                 | Location of workload manifests.                                 |
+| `connection.kubeconfig` | string   | `~/.kube/config`     | File path                      | Path to kubeconfig file.                                        |
+| `connection.context`    | string   | Derived from cluster | kubeconfig context             | Context name (Kind: `kind-<name>`, K3d: `k3d-<name>`).          |
+| `connection.timeout`    | duration | –                    | Go duration (e.g. `30s`, `5m`) | Optional timeout for cluster operations.                        |
+| `cni`                   | enum     | `Default`            | `Default`, `Cilium`, `None`    | Container Network Interface to install.                         |
+| `csi`                   | enum     | `Default`            | `Default`, `LocalPathStorage`  | Container Storage Interface (not yet implemented).              |
+| `metricsServer`         | enum     | `Enabled`            | `Enabled`, `Disabled`          | Install metrics-server for resource metrics.                    |
+| `certManager`           | enum     | `Disabled`           | `Enabled`, `Disabled`          | Install cert-manager for TLS certificates.                      |
+| `localRegistry`         | enum     | `Disabled`           | `Enabled`, `Disabled`          | Provision local OCI registry.                                   |
+| `gitOpsEngine`          | enum     | `None`               | `None`                         | GitOps engine (Flux/ArgoCD support planned).                    |
 
 > The CLI applies defaults for any omitted field. For example, if `cni` is not present, KSail uses `Default`, which uses the distribution's built-in networking (`kindnetd` for Kind, `flannel` for K3d).
 
@@ -103,21 +103,21 @@ ksail cluster delete --help      # Clean-up options
 
 All cluster commands support these flags (availability varies by command):
 
-| Flag                    | Short | Config Field                 | Default       | Commands                       |
-|-------------------------|-------|------------------------------|---------------|--------------------------------|
-| `--distribution`        | `-d`  | `spec.distribution`          | `Kind`        | `init`                         |
-| `--distribution-config` | –     | `spec.distributionConfig`    | `kind.yaml`   | `init`                         |
-| `--context`             | `-c`  | `spec.connection.context`    | Auto-derived  | `init`                         |
-| `--kubeconfig`          | `-k`  | `spec.connection.kubeconfig` | `~/.kube/config` | `init`                      |
-| `--source-directory`    | `-s`  | `spec.sourceDirectory`       | `k8s`         | `init`                         |
-| `--cni`                 | –     | `spec.cni`                   | `Default`     | `init`                         |
-| `--csi`                 | –     | `spec.csi`                   | `Default`     | `init` (not yet implemented)   |
-| `--metrics-server`      | –     | `spec.metricsServer`         | `Enabled`     | `init`, `create`               |
-| `--cert-manager`        | –     | `spec.certManager`           | `Disabled`    | `init`, `create`               |
-| `--local-registry`      | –     | `spec.localRegistry`         | `Disabled`    | `init`                         |
-| `--local-registry-port` | –     | (port configuration)         | `5111`        | `init`                         |
-| `--gitops-engine`       | `-g`  | `spec.gitOpsEngine`          | `None`        | `init`                         |
-| `--mirror-registry`     | –     | (multiple allowed)           | None          | `init`                         |
+| Flag                    | Short | Config Field                 | Default          | Commands                     |
+|-------------------------|-------|------------------------------|------------------|------------------------------|
+| `--distribution`        | `-d`  | `spec.distribution`          | `Kind`           | `init`                       |
+| `--distribution-config` | –     | `spec.distributionConfig`    | `kind.yaml`      | `init`                       |
+| `--context`             | `-c`  | `spec.connection.context`    | Auto-derived     | `init`                       |
+| `--kubeconfig`          | `-k`  | `spec.connection.kubeconfig` | `~/.kube/config` | `init`                       |
+| `--source-directory`    | `-s`  | `spec.sourceDirectory`       | `k8s`            | `init`                       |
+| `--cni`                 | –     | `spec.cni`                   | `Default`        | `init`                       |
+| `--csi`                 | –     | `spec.csi`                   | `Default`        | `init` (not yet implemented) |
+| `--metrics-server`      | –     | `spec.metricsServer`         | `Enabled`        | `init`, `create`             |
+| `--cert-manager`        | –     | `spec.certManager`           | `Disabled`       | `init`, `create`             |
+| `--local-registry`      | –     | `spec.localRegistry`         | `Disabled`       | `init`                       |
+| `--local-registry-port` | –     | (port configuration)         | `5111`           | `init`                       |
+| `--gitops-engine`       | `-g`  | `spec.gitOpsEngine`          | `None`           | `init`                       |
+| `--mirror-registry`     | –     | (multiple allowed)           | None             | `init`                       |
 
 > Environment variables follow the pattern `KSAIL_SPEC_<FIELD>` where field names are uppercase with underscores.
 

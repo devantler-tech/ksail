@@ -56,11 +56,13 @@ Storage options determine how persistent volumes are provisioned. Configure via 
 Configure via `spec.metricsServer` in `ksail.yaml` or `--metrics-server` flag.
 
 **When to enable:**
+
 - Testing Horizontal Pod Autoscaler (HPA)
 - Using dashboard tools that display resource usage
 - Working with alerts based on CPU/memory metrics
 
 **When to disable:**
+
 - Minimal resource consumption during development
 - Simple testing that doesn't require metrics
 
@@ -96,6 +98,7 @@ KSail can run a local [OCI Distribution](https://distribution.github.io/distribu
 Configure via `spec.localRegistry` in `ksail.yaml` or `--local-registry` flag.
 
 **Why use a local registry:**
+
 - **Faster dev loops** – Push locally built images and reference them in manifests
 - **GitOps integration** – Controllers can pull from local registry like in production
 - **Testing** – Validate image pull policies and registry behavior locally
@@ -137,11 +140,13 @@ ksail cluster delete --delete-volumes
 ```
 
 **Use cases:**
+
 - **Rate limit avoidance** – Cache frequently pulled images to avoid Docker Hub rate limits
 - **Offline development** – Work with previously pulled images when disconnected
 - **CI/CD pipelines** – Speed up image pulls in automated testing
 
 **Current limitations:**
+
 - Authentication to upstream registries not yet fully supported
 - TLS configuration for upstream connections in development
 - Mirrors are always provisioned as local containers
@@ -176,6 +181,7 @@ ksail cipher import AGE-SECRET-KEY-1ZYXWVUTSRQPONMLKJIHGFEDCBA...
 ### Key Management Systems
 
 SOPS supports multiple key management systems:
+
 - age recipients (recommended for local development)
 - PGP fingerprints
 - AWS KMS, GCP KMS, Azure Key Vault
@@ -194,6 +200,7 @@ Ingress controllers expose HTTP(S) services from inside the cluster.
 > **Note:** Ingress controller configuration is not yet implemented in KSail. Configure through your distribution's configuration file (`kind.yaml` or `k3d.yaml`) for now.
 
 **Planned options:**
+
 - **`Default`** – Use distribution's bundled controller (Kind: none, K3d: Traefik)
 - **`Traefik`** – Install Traefik explicitly
 - **`None`** – Skip ingress installation
@@ -205,5 +212,6 @@ Gateway controllers manage [Gateway API](https://gateway-api.sigs.k8s.io) resour
 > **Note:** Gateway controller configuration is not yet implemented. Gateway API support is planned for a future release. Install gateway controllers manually using `ksail workload install` for now.
 
 **Planned options:**
+
 - **`Default`** – Preserve distribution defaults (currently none)
 - **`None`** – Explicitly disable gateway installation

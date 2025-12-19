@@ -55,21 +55,21 @@ Use `--source-directory` during init to change where workloads are stored (defau
 
 KSail focuses on fast local Kubernetes development. The matrix below captures officially supported features.
 
-| Category                | Supported Options                                 | Status/Notes                                                      |
-|-------------------------|---------------------------------------------------|-------------------------------------------------------------------|
-| CLI Platforms           | Linux (amd64, arm64), macOS (amd64, arm64)       | Pre-built binaries available; Windows support tracked separately. |
-| Container Engines       | Docker                                            | ✅ Fully supported; Podman support planned.                       |
-| Distributions           | Kind, K3d                                         | ✅ Both distributions fully supported.                            |
-| Workload Management     | kubectl, Helm                                     | ✅ Commands wrapped via `ksail workload`.                         |
-| GitOps Engines          | ArgoCD                                            | ✅ Available; Flux integration in development.                    |
-| CNI                     | Default, Cilium, None                             | ✅ Choose via `spec.cni` or `--cni` flag.                         |
-| CSI                     | Default, LocalPathStorage                         | ⚠️ Configuration defined but not fully implemented.               |
-| Metrics Server          | Enabled, Disabled                                 | ✅ Toggle with `--metrics-server` flag.                           |
-| Cert-Manager            | Enabled, Disabled                                 | ✅ Toggle with `--cert-manager` flag.                             |
-| Local Registry          | Enabled, Disabled                                 | ✅ OCI registry for local image storage.                          |
-| Mirror Registries       | Configurable                                      | ✅ Configure with `--mirror-registry` flags.                      |
-| Secret Management       | SOPS via `ksail cipher`                           | ✅ Encrypt/decrypt files; GitOps integration planned.             |
-| Ingress Controllers     | Distribution defaults                             | ⚠️ Configure through `kind.yaml` or `k3d.yaml` for now.           |
-| Gateway Controllers     | Planned                                           | ⚠️ Gateway API support in development.                            |
+| Category            | Supported Options                          | Status/Notes                                                      |
+|---------------------|--------------------------------------------|-------------------------------------------------------------------|
+| CLI Platforms       | Linux (amd64, arm64), macOS (amd64, arm64) | Pre-built binaries available; Windows support tracked separately. |
+| Container Engines   | Docker                                     | ✅ Fully supported; Podman support planned.                        |
+| Distributions       | Kind, K3d                                  | ✅ Both distributions fully supported.                             |
+| Workload Management | kubectl, Helm                              | ✅ Commands wrapped via `ksail workload`.                          |
+| GitOps Engines      | ArgoCD                                     | ✅ Available; Flux integration in development.                     |
+| CNI                 | Default, Cilium, None                      | ✅ Choose via `spec.cni` or `--cni` flag.                          |
+| CSI                 | Default, LocalPathStorage                  | ⚠️ Configuration defined but not fully implemented.               |
+| Metrics Server      | Enabled, Disabled                          | ✅ Toggle with `--metrics-server` flag.                            |
+| Cert-Manager        | Enabled, Disabled                          | ✅ Toggle with `--cert-manager` flag.                              |
+| Local Registry      | Enabled, Disabled                          | ✅ OCI registry for local image storage.                           |
+| Mirror Registries   | Configurable                               | ✅ Configure with `--mirror-registry` flags.                       |
+| Secret Management   | SOPS via `ksail cipher`                    | ✅ Encrypt/decrypt files; GitOps integration planned.              |
+| Ingress Controllers | Distribution defaults                      | ⚠️ Configure through `kind.yaml` or `k3d.yaml` for now.           |
+| Gateway Controllers | Planned                                    | ⚠️ Gateway API support in development.                            |
 
 > **Note:** Features marked with ⚠️ are in active development or being reimplemented. For up‑to‑date details, see the KSail [roadmap and issues](https://github.com/devantler-tech/ksail/issues).
