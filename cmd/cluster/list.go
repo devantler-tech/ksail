@@ -1,8 +1,10 @@
+// Package cluster provides commands for managing Kubernetes clusters with KSail.
 package cluster
 
 import (
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/devantler-tech/ksail/pkg/apis/cluster/v1alpha1"
@@ -226,50 +228,67 @@ func displayClusterList(
 
 	// Add distribution header when showing all distributions
 	if includeDistribution {
-		fmt.Fprintf(writer, "---|%s|---\n", strings.ToLower(string(distribution)))
+		_, _ = fmt.Fprintf(writer, "---|%s|---\n", strings.ToLower(string(distribution)))
 	}
 
 	if len(clusters) == 0 {
-		// When showing all distributions, show distribution-specific empty messages
-		if includeDistribution {
-			switch distribution {
-			case v1alpha1.DistributionKind:
-				fmt.Fprintln(writer, "No kind clusters found.")
-			case v1alpha1.DistributionK3d:
-				fmt.Fprintln(writer, "No k3d clusters found.")
-			default:
-				fmt.Fprintln(writer, "No clusters found.")
-			}
-		} else {
-			notify.WriteMessage(notify.Message{
-				Type:    notify.ActivityType,
-				Content: "no clusters found",
-				Writer:  writer,
-			})
-		}
+		displayEmptyClusters(distribution, includeDistribution, writer)
 	} else {
-		var builder strings.Builder
-		if includeDistribution {
-			builder.WriteString(strings.ToLower(string(distribution)))
-			builder.WriteString(": ")
-		}
-
-		builder.WriteString(strings.Join(clusters, ", "))
-		builder.WriteString("\n")
-
-		_, err := fmt.Fprint(writer, builder.String())
-		if err != nil {
-			notify.WriteMessage(notify.Message{
-				Type:    notify.ErrorType,
-				Content: fmt.Sprintf("failed to display %s clusters", distribution),
-				Writer:  writer,
-			})
-		}
+		displayClusterNames(distribution, clusters, includeDistribution, writer)
 	}
 
 	// Add blank line after each distribution section when showing all
 	if includeDistribution {
-		fmt.Fprintln(writer)
+		_, _ = fmt.Fprintln(writer)
+	}
+}
+
+func displayEmptyClusters(
+	distribution v1alpha1.Distribution,
+	includeDistribution bool,
+	writer io.Writer,
+) {
+	// When showing all distributions, show distribution-specific empty messages
+	if includeDistribution {
+		switch distribution {
+		case v1alpha1.DistributionKind:
+			_, _ = fmt.Fprintln(writer, "No kind clusters found.")
+		case v1alpha1.DistributionK3d:
+			_, _ = fmt.Fprintln(writer, "No k3d clusters found.")
+		default:
+			_, _ = fmt.Fprintln(writer, "No clusters found.")
+		}
+	} else {
+		notify.WriteMessage(notify.Message{
+			Type:    notify.ActivityType,
+			Content: "no clusters found",
+			Writer:  writer,
+		})
+	}
+}
+
+func displayClusterNames(
+	distribution v1alpha1.Distribution,
+	clusters []string,
+	includeDistribution bool,
+	writer io.Writer,
+) {
+	var builder strings.Builder
+	if includeDistribution {
+		builder.WriteString(strings.ToLower(string(distribution)))
+		builder.WriteString(": ")
+	}
+
+	builder.WriteString(strings.Join(clusters, ", "))
+	builder.WriteString("\n")
+
+	_, err := fmt.Fprint(writer, builder.String())
+	if err != nil {
+		notify.WriteMessage(notify.Message{
+			Type:    notify.ErrorType,
+			Content: fmt.Sprintf("failed to display %s clusters", distribution),
+			Writer:  writer,
+		})
 	}
 }
 

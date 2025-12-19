@@ -1,3 +1,4 @@
+// Package k3dprovisioner provides a provisioner implementation for k3d Kubernetes clusters.
 package k3dprovisioner
 
 import (
@@ -106,48 +107,49 @@ func (k *K3dClusterProvisioner) Stop(ctx context.Context, name string) error {
 	)
 }
 
-// stdoutMutex protects concurrent access to os.Stdout during List operations.
-var stdoutMutex sync.Mutex
+// listMutex protects concurrent access to os.Stdout during List operations.
+// This is required because k3d writes directly to os.Stdout before Cobra's output redirection takes effect.
+var listMutex sync.Mutex //nolint:gochecknoglobals // Required for thread-safe stdout manipulation
 
 // List returns cluster names reported by the Cobra command.
 func (k *K3dClusterProvisioner) List(ctx context.Context) ([]string, error) {
 	// Temporarily redirect logrus to discard output during list
 	// to prevent JSON output from appearing in console
 	originalLogOutput := logrus.StandardLogger().Out
+
 	logrus.SetOutput(io.Discard)
 	defer logrus.SetOutput(originalLogOutput)
 
 	// Lock to prevent concurrent modifications of os.Stdout
-	stdoutMutex.Lock()
-	defer stdoutMutex.Unlock()
+	listMutex.Lock()
+	defer listMutex.Unlock()
 
-	// Temporarily redirect os.Stdout to capture/suppress k3d's direct stdout writes
+	// Setup stdout redirection
 	originalStdout := os.Stdout
-	r, w, err := os.Pipe()
+
+	pipeReader, pipeWriter, err := os.Pipe()
 	if err != nil {
 		return nil, fmt.Errorf("cluster list: create stdout pipe: %w", err)
 	}
-	defer r.Close()
-	os.Stdout = w
+
+	defer func() { _ = pipeReader.Close() }()
+
+	os.Stdout = pipeWriter
+
 	defer func() {
 		os.Stdout = originalStdout
-		w.Close()
+		_ = pipeWriter.Close()
 	}()
 
-	cmd := clustercommand.NewCmdClusterList()
-	args := []string{"--output", "json"}
+	output, runErr := k.runListCommand(ctx)
 
-	// Use a buffer runner to capture command output
-	var buf bytes.Buffer
-	listRunner := runner.NewCobraCommandRunner(&buf, io.Discard)
-
-	res, runErr := listRunner.Run(ctx, cmd, args)
-
-	// Close the write end before reading
-	w.Close()
+	// Close write end and restore stdout
+	_ = pipeWriter.Close()
+	os.Stdout = originalStdout
 
 	// Discard any output that was written to our pipe
-	if _, copyErr := io.Copy(io.Discard, r); copyErr != nil {
+	copyErr := discardPipeOutput(pipeReader)
+	if copyErr != nil {
 		logrus.WithError(copyErr).Debug("failed to drain stdout pipe when listing k3d clusters")
 	}
 
@@ -155,7 +157,44 @@ func (k *K3dClusterProvisioner) List(ctx context.Context) ([]string, error) {
 		return nil, fmt.Errorf("cluster list: %w", runErr)
 	}
 
-	output := strings.TrimSpace(res.Stdout)
+	return parseClusterNames(output)
+}
+
+// Exists returns whether the target cluster is present.
+func (k *K3dClusterProvisioner) Exists(ctx context.Context, name string) (bool, error) {
+	clusters, err := k.List(ctx)
+	if err != nil {
+		return false, fmt.Errorf("list: %w", err)
+	}
+
+	target := k.resolveName(name)
+	if target == "" {
+		return false, nil
+	}
+
+	return slices.Contains(clusters, target), nil
+}
+
+// runListCommand executes the k3d cluster list command and returns the output.
+func (k *K3dClusterProvisioner) runListCommand(ctx context.Context) (string, error) {
+	cmd := clustercommand.NewCmdClusterList()
+	args := []string{"--output", "json"}
+
+	// Use a buffer runner to capture command output
+	var buf bytes.Buffer
+
+	listRunner := runner.NewCobraCommandRunner(&buf, io.Discard)
+
+	res, runErr := listRunner.Run(ctx, cmd, args)
+	if runErr != nil {
+		return "", fmt.Errorf("run k3d cluster list: %w", runErr)
+	}
+
+	return strings.TrimSpace(res.Stdout), nil
+}
+
+// parseClusterNames parses JSON output and extracts cluster names.
+func parseClusterNames(output string) ([]string, error) {
 	if output == "" {
 		return nil, nil
 	}
@@ -179,19 +218,14 @@ func (k *K3dClusterProvisioner) List(ctx context.Context) ([]string, error) {
 	return names, nil
 }
 
-// Exists returns whether the target cluster is present.
-func (k *K3dClusterProvisioner) Exists(ctx context.Context, name string) (bool, error) {
-	clusters, err := k.List(ctx)
+// discardPipeOutput reads and discards all data from a pipe reader.
+func discardPipeOutput(pipeReader *os.File) error {
+	_, err := io.Copy(io.Discard, pipeReader)
 	if err != nil {
-		return false, fmt.Errorf("list: %w", err)
+		return fmt.Errorf("copy pipe output: %w", err)
 	}
 
-	target := k.resolveName(name)
-	if target == "" {
-		return false, nil
-	}
-
-	return slices.Contains(clusters, target), nil
+	return nil
 }
 
 func (k *K3dClusterProvisioner) appendConfigFlag(args []string) []string {
