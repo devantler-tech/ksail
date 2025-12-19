@@ -78,21 +78,45 @@ func getAgeKeyPath() (string, error) {
 }
 
 // validateAgeKey performs basic validation on an age key.
-// Age keys should start with "AGE-SECRET-KEY-".
-func validateAgeKey(key string) error {
-	key = strings.TrimSpace(key)
+// Age keys should contain at least one line starting with "AGE-SECRET-KEY-".
+// The file may contain comment lines (starting with #) which are ignored during validation.
+func validateAgeKey(keyContent string) error {
+	keyContent = strings.TrimSpace(keyContent)
 
-	if key == "" {
+	if keyContent == "" {
 		return fmt.Errorf("%w: key is empty", errInvalidAgeKey)
 	}
 
-	if !strings.HasPrefix(key, ageKeyPrefix) {
-		return fmt.Errorf("%w: key must start with '%s'", errInvalidAgeKey, ageKeyPrefix)
+	// Parse lines and find the secret key
+	lines := strings.Split(keyContent, "\n")
+	foundKey := false
+
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+
+		// Skip empty lines and comments
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		// Check if this line is an age secret key
+		if strings.HasPrefix(line, ageKeyPrefix) {
+			// Basic length check: AGE-SECRET-KEY- (15) + base64 chars (should be around 59-74 chars total)
+			if len(line) < minAgeKeyLength {
+				return fmt.Errorf("%w: key is too short", errInvalidAgeKey)
+			}
+
+			foundKey = true
+
+			break
+		}
+
+		// If we hit a non-comment, non-key line, it's invalid
+		return fmt.Errorf("%w: file contains non-comment line that is not an age key", errInvalidAgeKey)
 	}
 
-	// Basic length check: AGE-SECRET-KEY- (15) + base64 chars (should be around 59-74 chars total)
-	if len(key) < minAgeKeyLength {
-		return fmt.Errorf("%w: key is too short", errInvalidAgeKey)
+	if !foundKey {
+		return fmt.Errorf("%w: no age secret key found (must start with '%s')", errInvalidAgeKey, ageKeyPrefix)
 	}
 
 	return nil
