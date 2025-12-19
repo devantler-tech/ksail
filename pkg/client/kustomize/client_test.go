@@ -116,10 +116,9 @@ resources:
 	}
 }
 
-func TestBuild_ComplexKustomization(t *testing.T) {
-	t.Parallel()
+func setupComplexKustomization(t *testing.T) string {
+	t.Helper()
 
-	// Create a temporary directory with a more complex kustomization
 	tmpDir := t.TempDir()
 
 	// Create base resources
@@ -128,7 +127,8 @@ kind: Namespace
 metadata:
   name: test-namespace
 `
-	if err := os.WriteFile(filepath.Join(tmpDir, "namespace.yaml"), []byte(namespaceYAML), 0o600); err != nil {
+	err := os.WriteFile(filepath.Join(tmpDir, "namespace.yaml"), []byte(namespaceYAML), 0o600)
+	if err != nil {
 		t.Fatalf("failed to write namespace: %v", err)
 	}
 
@@ -151,7 +151,8 @@ spec:
       - name: test
         image: nginx:latest
 `
-	if err := os.WriteFile(filepath.Join(tmpDir, "deployment.yaml"), []byte(deploymentYAML), 0o600); err != nil {
+	err = os.WriteFile(filepath.Join(tmpDir, "deployment.yaml"), []byte(deploymentYAML), 0o600)
+	if err != nil {
 		t.Fatalf("failed to write deployment: %v", err)
 	}
 
@@ -164,9 +165,18 @@ resources:
 commonLabels:
   environment: test
 `
-	if err := os.WriteFile(filepath.Join(tmpDir, "kustomization.yaml"), []byte(kustomizationYAML), 0o600); err != nil {
+	err = os.WriteFile(filepath.Join(tmpDir, "kustomization.yaml"), []byte(kustomizationYAML), 0o600)
+	if err != nil {
 		t.Fatalf("failed to write kustomization: %v", err)
 	}
+
+	return tmpDir
+}
+
+func TestBuild_ComplexKustomization(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := setupComplexKustomization(t)
 
 	// Test build
 	client := kustomize.NewClient()
@@ -178,12 +188,15 @@ commonLabels:
 
 	// Verify output contains expected content
 	outputStr := output.String()
+
 	if !strings.Contains(outputStr, "kind: Namespace") {
 		t.Fatal("expected output to contain Namespace")
 	}
+
 	if !strings.Contains(outputStr, "kind: Deployment") {
 		t.Fatal("expected output to contain Deployment")
 	}
+
 	if !strings.Contains(outputStr, "environment: test") {
 		t.Fatal("expected output to contain commonLabels")
 	}
@@ -237,9 +250,11 @@ resources:
 
 	// Verify output contains YAML content
 	outputStr := output.String()
+
 	if !strings.Contains(outputStr, "apiVersion:") {
 		t.Fatal("expected output to contain apiVersion")
 	}
+
 	if !strings.Contains(outputStr, "kind:") {
 		t.Fatal("expected output to contain kind")
 	}

@@ -155,6 +155,7 @@ func TestValidateFile_SkipKinds(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Create a Secret manifest (which we'll skip)
+	//nolint:gosec // G101: This is a test secret manifest, not a hardcoded credential
 	secretManifest := `apiVersion: v1
 kind: Secret
 metadata:

@@ -10,6 +10,13 @@ import (
 	"github.com/devantler-tech/ksail/cmd/workload"
 )
 
+const validManifestTemplate = `apiVersion: v1
+kind: %s
+metadata:
+  name: %s
+  namespace: default
+%s`
+
 func TestNewValidateCmdHasCorrectDefaults(t *testing.T) {
 	t.Parallel()
 
@@ -158,7 +165,8 @@ data:
   key: value
 `
 	manifestPath := filepath.Join(tmpDir, "valid-manifest.yaml")
-	if err := os.WriteFile(manifestPath, []byte(validManifest), 0o600); err != nil {
+	err := os.WriteFile(manifestPath, []byte(validManifest), 0o600)
+	if err != nil {
 		t.Fatalf("failed to write test manifest: %v", err)
 	}
 
@@ -189,7 +197,8 @@ metadata:
 data: "invalid structure"
 `
 	manifestPath := filepath.Join(tmpDir, "invalid-manifest.yaml")
-	if err := os.WriteFile(manifestPath, []byte(invalidManifest), 0o600); err != nil {
+	err := os.WriteFile(manifestPath, []byte(invalidManifest), 0o600)
+	if err != nil {
 		t.Fatalf("failed to write test manifest: %v", err)
 	}
 
@@ -221,7 +230,8 @@ metadata:
 data:
   key: value
 `
-	if err := os.WriteFile(filepath.Join(tmpDir, "configmap.yaml"), []byte(configMapYAML), 0o600); err != nil {
+	err := os.WriteFile(filepath.Join(tmpDir, "configmap.yaml"), []byte(configMapYAML), 0o600)
+	if err != nil {
 		t.Fatalf("failed to write configmap: %v", err)
 	}
 
@@ -259,6 +269,7 @@ func TestValidateCmdWithSkipSecretsFlag(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Create a Secret (which may have SOPS fields that could fail validation)
+	//nolint:gosec // G101: This is a test secret manifest, not a hardcoded credential
 	secretYAML := `apiVersion: v1
 kind: Secret
 metadata:
@@ -329,15 +340,6 @@ metadata:
 func TestValidateCmdWithDefaultPath(t *testing.T) {
 	t.Parallel()
 
-	// Save current directory and restore after test
-	originalDir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("failed to get current directory: %v", err)
-	}
-	defer func() {
-		_ = os.Chdir(originalDir)
-	}()
-
 	// Create a temporary directory with a valid manifest and change to it
 	tmpDir := t.TempDir()
 
@@ -347,13 +349,13 @@ metadata:
   name: test-namespace
 `
 	manifestPath := filepath.Join(tmpDir, "namespace.yaml")
-	if err := os.WriteFile(manifestPath, []byte(validManifest), 0o600); err != nil {
+	err := os.WriteFile(manifestPath, []byte(validManifest), 0o600)
+	if err != nil {
 		t.Fatalf("failed to write test manifest: %v", err)
 	}
 
-	if err := os.Chdir(tmpDir); err != nil {
-		t.Fatalf("failed to change directory: %v", err)
-	}
+	// Use t.Chdir to change directory (automatically reverts after test)
+	t.Chdir(tmpDir)
 
 	// Run validate without path argument (should use current directory)
 	cmd := workload.NewValidateCmd()
@@ -438,10 +440,9 @@ data: "invalid"
 	}
 }
 
-func TestValidateCmdFlagCombinations(t *testing.T) {
-	t.Parallel()
+func setupValidManifestDir(t *testing.T) string {
+	t.Helper()
 
-	// Create a temporary directory with a valid manifest
 	tmpDir := t.TempDir()
 
 	validManifest := `apiVersion: v1
@@ -449,10 +450,20 @@ kind: Namespace
 metadata:
   name: test-namespace
 `
+
 	manifestPath := filepath.Join(tmpDir, "namespace.yaml")
-	if err := os.WriteFile(manifestPath, []byte(validManifest), 0o600); err != nil {
+	err := os.WriteFile(manifestPath, []byte(validManifest), 0o600)
+	if err != nil {
 		t.Fatalf("failed to write test manifest: %v", err)
 	}
+
+	return tmpDir
+}
+
+func TestValidateCmdFlagCombinations(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := setupValidManifestDir(t)
 
 	tests := []struct {
 		name string
@@ -499,7 +510,11 @@ metadata:
 
 			err := cmd.Execute()
 			if err != nil {
-				t.Fatalf("expected validation to succeed with %s, got error: %v", testCase.name, err)
+				t.Fatalf(
+					"expected validation to succeed with %s, got error: %v",
+					testCase.name,
+					err,
+				)
 			}
 		})
 	}
