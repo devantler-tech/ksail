@@ -1,3 +1,9 @@
+---
+parent: Core Concepts
+grand_parent: Overview
+nav_order: 2
+---
+
 # cert-manager
 
 [cert-manager](https://cert-manager.io/) is a Kubernetes controller for issuing and renewing TLS certificates.

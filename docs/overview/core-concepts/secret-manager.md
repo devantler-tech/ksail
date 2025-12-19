@@ -1,3 +1,9 @@
+---
+parent: Core Concepts
+grand_parent: Overview
+nav_order: 11
+---
+
 # Secret Manager
 
 KSail integrates [SOPS](https://github.com/getsops/sops) for encrypting manifests through the `ksail cipher` commands.

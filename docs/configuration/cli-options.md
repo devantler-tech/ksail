@@ -1,3 +1,8 @@
+---
+parent: Configuration
+nav_order: 1
+---
+
 # CLI Options
 
 KSail CLI provides strongly typed flags that map to `ksail.yaml` configuration. Run `ksail <command> --help` to see the latest options, or use the quick references below.

@@ -1,3 +1,9 @@
+---
+parent: Core Concepts
+grand_parent: Overview
+nav_order: 10
+---
+
 # Mirror Registries
 
 Mirror registries proxy upstream container registries (e.g., `docker.io`) and cache content locally. Configure mirrors with `--mirror-registry <host>=<upstream>` flags during `ksail cluster init`.

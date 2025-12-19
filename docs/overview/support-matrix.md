@@ -1,3 +1,8 @@
+---
+parent: Overview
+nav_order: 2
+---
+
 # Support Matrix
 
 KSail focuses on fast local Kubernetes development. The matrix below captures officially supported features. Items marked ✅ are fully implemented and tested.
