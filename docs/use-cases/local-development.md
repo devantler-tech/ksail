@@ -27,7 +27,15 @@ KSail helps you run Kubernetes manifests locally using your container engine (Do
 
    This provisions the cluster with your chosen CNI and metrics-server configuration.
 
-3. **Build and use local images** (if using local registry)
+3. **Validate manifests**
+
+   ```bash
+   ksail workload validate k8s/
+   ```
+
+   Validate your Kubernetes manifests and kustomizations before applying them. This uses kubeconform with support for CRDs from the Datree catalog.
+
+4. **Build and use local images** (if using local registry)
 
    ```bash
    # Initialize with local registry
@@ -40,7 +48,7 @@ KSail helps you run Kubernetes manifests locally using your container engine (Do
 
    Update manifests to reference your local images.
 
-4. **Apply workloads**
+5. **Apply workloads**
 
    ```bash
    ksail workload apply -k k8s/
@@ -49,7 +57,7 @@ KSail helps you run Kubernetes manifests locally using your container engine (Do
 
    Apply your Kustomize manifests and verify deployment.
 
-5. **Debug and inspect**
+6. **Debug and inspect**
 
    ```bash
    ksail workload logs deployment/my-app --tail 200
@@ -59,7 +67,7 @@ KSail helps you run Kubernetes manifests locally using your container engine (Do
 
    Use workload commands or k9s for debugging.
 
-6. **Clean up**
+7. **Clean up**
 
    ```bash
    ksail cluster delete
@@ -72,6 +80,7 @@ KSail helps you run Kubernetes manifests locally using your container engine (Do
 - Use `--cert-manager Enabled` during init if you need TLS certificates
 - Configure mirror registries with `--mirror-registry` to cache upstream images
 - Use `ksail workload gen` to create sample resource manifests
+- Validate manifests with `ksail workload validate` before applying to catch errors early
 - Test manifests locally before committing to version control
 - Switch the `distribution` field between `Kind` and `K3d` to mirror the container runtime used in staging.
 - Use `ksail cluster connect -- --namespace your-team` to open k9s against the active cluster without remembering kubeconfig paths.

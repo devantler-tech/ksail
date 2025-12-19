@@ -16,6 +16,7 @@ ksail cluster init --help        # Project scaffolding flags
 ksail cluster create --help      # Cluster creation options
 ksail cluster delete --help      # Clean-up options
 ksail cluster connect --help     # k9s connection options
+ksail workload validate --help   # Manifest validation options
 ```
 
 ## Global flags
@@ -106,5 +107,35 @@ Launches [k9s](https://k9scli.io/) against the cluster defined in `ksail.yaml`.
 ## Workload and cipher commands
 
 The `ksail workload` commands wrap `kubectl` and Helm, forwarding flags to the underlying tools. Use `ksail workload <command> --help` for command-specific options.
+
+### `ksail workload validate`
+
+Validates Kubernetes manifest files and kustomizations using kubeconform. This command helps catch configuration errors before applying resources to a cluster.
+
+- `[PATH]` — Path to validate (defaults to current directory)
+- `--skip-secrets` — Skip validation of Kubernetes Secrets (default: `true`, useful for SOPS-encrypted secrets)
+- `--strict` — Enable strict validation mode (default: `true`)
+- `--ignore-missing-schemas` — Ignore resources with missing schemas (default: `true`)
+- `--verbose` — Enable verbose output
+
+The validator uses two schema sources:
+1. Default Kubernetes schemas
+2. Datree CRDs catalog for comprehensive CRD validation
+
+Examples:
+
+```bash
+# Validate manifests in current directory
+ksail workload validate
+
+# Validate specific path
+ksail workload validate ./k8s
+
+# Validate with verbose output
+ksail workload validate --verbose ./manifests
+
+# Validate including secrets
+ksail workload validate --skip-secrets=false ./k8s
+```
 
 The `ksail cipher` commands provide SOPS integration for encrypting and decrypting files. See `ksail cipher --help` for available operations.
