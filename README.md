@@ -71,6 +71,7 @@ ksail workload apply -k ./k8s
 KSail organizes commands around your development lifecycle:
 
 **Cluster Lifecycle**
+
 - `ksail cluster init` — Scaffold a new project with declarative configuration
 - `ksail cluster create` — Provision a new cluster (Kind or K3d)
 - `ksail cluster start/stop` — Pause and resume without losing state
@@ -78,12 +79,14 @@ KSail organizes commands around your development lifecycle:
 - `ksail cluster delete` — Clean up resources
 
 **Workload Management**
+
 - `ksail workload apply` — Deploy manifests with kubectl or Kustomize
 - `ksail workload reconcile` — Trigger GitOps reconciliation (Flux or ArgoCD)
 - `ksail workload logs/exec` — Debug running pods
 - `ksail workload gen` — Generate resource templates
 
 **Secrets & Security**
+
 - `ksail cipher encrypt/decrypt` — Manage encrypted secrets with SOPS
 - `ksail cipher edit` — Edit encrypted files in place
 
