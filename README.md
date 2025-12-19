@@ -91,8 +91,8 @@ KSail organizes commands around your development lifecycle:
 
 **Secrets & Security**
 
-- `ksail cipher encrypt` — Encrypt secrets with SOPS
-- `ksail cipher decrypt` — Decrypt secrets with SOPS
+- `ksail cipher encrypt` — Encrypt manifests with SOPS
+- `ksail cipher decrypt` — Decrypt manifests with SOPS
 - `ksail cipher edit` — Edit encrypted files in place
 
 ## Documentation
