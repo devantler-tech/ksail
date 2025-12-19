@@ -15,10 +15,10 @@ KSail is built for platform engineers, developers, and anyone working with Kuber
 
 ## Key Features
 
-- **Single binary** – One executable with embedded tools, no external dependencies required
+- **Single binary** – One executable with embedded tools; only Docker required
 - **Unified CLI** – Consistent commands across Kind and K3d distributions
 - **Fast setup** – Spin up clusters in seconds with sensible defaults
-- **GitOps ready** – Built-in support for Flux and ArgoCD with local registry and OCI artifacts
+- **GitOps ready** – Built-in support for both Flux and ArgoCD with local registry and OCI artifacts
 - **Declarative configuration** – Configuration as code for reproducible clusters
 - **Flexible components** – Choose your preferred distribution, CNI, CSI, and more
 - **Mirror registries** – Cache images locally to avoid rate limits
@@ -61,7 +61,7 @@ KSail focuses on fast local Kubernetes development. The matrix below captures of
 | Container Engines   | Docker                                     | ✅ Fully supported; Podman support planned.                        |
 | Distributions       | Kind, K3d                                  | ✅ Both distributions fully supported.                             |
 | Workload Management | kubectl, Helm                              | ✅ Commands wrapped via `ksail workload`.                          |
-| GitOps Engines      | ArgoCD                                     | ✅ Available; Flux integration in development.                     |
+| GitOps Engines      | Flux, ArgoCD                               | ✅ Both engines fully supported.                                   |
 | CNI                 | Default, Cilium, None                      | ✅ Choose via `spec.cni` or `--cni` flag.                          |
 | CSI                 | Default, LocalPathStorage                  | ⚠️ Configuration defined but not fully implemented.               |
 | Metrics Server      | Enabled, Disabled                          | ✅ Toggle with `--metrics-server` flag.                            |

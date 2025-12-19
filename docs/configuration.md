@@ -54,7 +54,7 @@ spec:
 | `metricsServer`         | enum     | `Enabled`            | `Enabled`, `Disabled`          | Install metrics-server for resource metrics.                    |
 | `certManager`           | enum     | `Disabled`           | `Enabled`, `Disabled`          | Install cert-manager for TLS certificates.                      |
 | `localRegistry`         | enum     | `Disabled`           | `Enabled`, `Disabled`          | Provision local OCI registry.                                   |
-| `gitOpsEngine`          | enum     | `None`               | `None`                         | GitOps engine (Flux/ArgoCD support planned).                    |
+| `gitOpsEngine`          | enum     | `None`               | `None`, `Flux`, `ArgoCD`       | GitOps engine to install.                                       |
 
 > The CLI applies defaults for any omitted field. For example, if `cni` is not present, KSail uses `Default`, which uses the distribution's built-in networking (`kindnetd` for Kind, `flannel` for K3d).
 
