@@ -1,3 +1,9 @@
+---
+parent: Core Concepts
+grand_parent: Overview
+nav_order: 6
+---
+
 # Gateway Controllers
 
 Gateway controllers manage [Gateway API](https://gateway-api.sigs.k8s.io) resources.

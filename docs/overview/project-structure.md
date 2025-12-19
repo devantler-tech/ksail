@@ -1,3 +1,8 @@
+---
+parent: Overview
+nav_order: 1
+---
+
 # Project Structure
 
 Running `ksail cluster init` scaffolds a project with the necessary configuration files. The layout varies based on flags like `--distribution` and options in `ksail.yaml`, but every project starts with:
