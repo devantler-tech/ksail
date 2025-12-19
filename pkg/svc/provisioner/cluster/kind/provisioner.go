@@ -1,4 +1,3 @@
-// Package kindprovisioner provides a provisioner implementation for kind (Kubernetes IN Docker) clusters.
 package kindprovisioner
 
 import (

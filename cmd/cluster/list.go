@@ -1,4 +1,3 @@
-// Package cluster provides commands for managing Kubernetes clusters with KSail.
 package cluster
 
 import (

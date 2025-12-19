@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// TestK3dClusterProvisioner_List tests the List method of K3dClusterProvisioner
+// TestK3dClusterProvisioner_List tests the List method of K3dClusterProvisioner.
 func TestK3dClusterProvisioner_List(t *testing.T) {
 	t.Parallel()
 
@@ -51,7 +51,7 @@ func TestK3dClusterProvisioner_List(t *testing.T) {
 	})
 }
 
-// TestK3dClusterProvisioner_Exists tests the Exists method
+// TestK3dClusterProvisioner_Exists tests the Exists method.
 func TestK3dClusterProvisioner_Exists(t *testing.T) {
 	t.Parallel()
 
@@ -82,7 +82,7 @@ func TestK3dClusterProvisioner_Exists(t *testing.T) {
 	}
 }
 
-// TestK3dClusterProvisioner_NewProvisioner tests the constructor
+// TestK3dClusterProvisioner_NewProvisioner tests the constructor.
 func TestK3dClusterProvisioner_NewProvisioner(t *testing.T) {
 	t.Parallel()
 
@@ -110,22 +110,34 @@ func TestK3dClusterProvisioner_NewProvisioner(t *testing.T) {
 	}
 }
 
-// TestK3dClusterProvisioner_Create tests the Create method
+// TestK3dClusterProvisioner_Create tests the Create method.
 func TestK3dClusterProvisioner_Create(t *testing.T) {
+	t.Parallel()
+
 	t.Skip("Skipping Create test - k3d binary not available in test environment")
 }
 
-// TestK3dClusterProvisioner_Delete tests the Delete method
+// TestK3dClusterProvisioner_Delete tests the Delete method.
 func TestK3dClusterProvisioner_Delete(t *testing.T) {
+	t.Parallel()
+
 	t.Skip("Skipping Delete test - k3d binary not available in test environment")
 }
 
-// TestK3dClusterProvisioner_Start tests the Start method
+// TestK3dClusterProvisioner_Start tests the Start method.
 func TestK3dClusterProvisioner_Start(t *testing.T) {
-	t.Skip("Skipping Start test - k3d binary not available in test environment and may cause fatal errors")
+	t.Parallel()
+
+	t.Skip(
+		"Skipping Start test - k3d binary not available in test environment and may cause fatal errors",
+	)
 }
 
-// TestK3dClusterProvisioner_Stop tests the Stop method
+// TestK3dClusterProvisioner_Stop tests the Stop method.
 func TestK3dClusterProvisioner_Stop(t *testing.T) {
-	t.Skip("Skipping Stop test - k3d binary not available in test environment and may cause fatal errors")
+	t.Parallel()
+
+	t.Skip(
+		"Skipping Stop test - k3d binary not available in test environment and may cause fatal errors",
+	)
 }

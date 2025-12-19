@@ -1,4 +1,3 @@
-// Package k3dprovisioner provides a provisioner implementation for k3d Kubernetes clusters.
 package k3dprovisioner
 
 import (
