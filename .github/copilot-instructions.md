@@ -9,12 +9,14 @@ KSail is a .NET-based CLI application that provides a unified SDK for spinning u
 ### Prerequisites and Dependencies
 
 **CRITICAL**: Install .NET 9.0 SDK before building anything:
+
 ```bash
 curl -sSL https://dot.net/v1/dotnet-install.sh | bash /dev/stdin --version 9.0.102
 export PATH="$HOME/.dotnet:$PATH"
 ```
 
 **Required for Documentation**:
+
 ```bash
 # Ruby and Jekyll for documentation builds
 gem install --user-install bundler
@@ -25,6 +27,7 @@ bundle install
 ```
 
 **External Kubernetes Tools** (optional but enable full functionality):
+
 - Docker or Podman (container engine)
 - kubectl, helm, k9s (Kubernetes tools)
 - kind, k3d (local cluster distributions)
@@ -36,6 +39,7 @@ bundle install
 ### Build Commands
 
 **Main Application Build**:
+
 ```bash
 cd src/KSail
 export PATH="$HOME/.dotnet:$PATH"
@@ -44,6 +48,7 @@ dotnet build
 ```
 
 **Run Unit Tests**:
+
 ```bash
 cd /path/to/repo
 export PATH="$HOME/.dotnet:$PATH"
@@ -53,6 +58,7 @@ dotnet test tests/KSail.Tests.Unit/
 ```
 
 **Build Documentation**:
+
 ```bash
 cd /path/to/repo
 export PATH="$HOME/.local/share/gem/ruby/3.2.0/bin:$PATH"
@@ -63,6 +69,7 @@ bundle exec jekyll build
 ### Running the Application
 
 **CLI Usage**:
+
 ```bash
 cd src/KSail
 export PATH="$HOME/.dotnet:$PATH"
@@ -75,6 +82,7 @@ dotnet run -- down                      # Destroy cluster
 ```
 
 **Build and Use Executable**:
+
 ```bash
 cd src/KSail
 export PATH="$HOME/.dotnet:$PATH"
@@ -87,6 +95,7 @@ dotnet build
 **ALWAYS validate changes by running through complete scenarios:**
 
 1. **Build Validation**:
+
    ```bash
    cd src/KSail
    export PATH="$HOME/.dotnet:$PATH"
@@ -94,6 +103,7 @@ dotnet build
    ```
 
 2. **Test Validation**:
+
    ```bash
    cd /path/to/repo
    export PATH="$HOME/.dotnet:$PATH"
@@ -101,6 +111,7 @@ dotnet build
    ```
 
 3. **CLI Functional Validation**:
+
    ```bash
    cd /tmp && mkdir test-ksail && cd test-ksail
    export PATH="$HOME/.dotnet:$PATH"
@@ -109,6 +120,7 @@ dotnet build
    ```
 
 4. **Documentation Validation**:
+
    ```bash
    cd /path/to/repo
    export PATH="$HOME/.local/share/gem/ruby/3.2.0/bin:$PATH"
@@ -121,6 +133,7 @@ dotnet build
 ## Common Tasks
 
 ### Project Structure
+
 ```text
 /
 ├── src/
@@ -139,6 +152,7 @@ dotnet build
 ```
 
 ### Key Configuration Files
+
 - **KSail.slnx**: .NET solution file (XML format, requires .NET 9.0 SDK)
 - **src/KSail/KSail.csproj**: Main application project targeting .NET 9.0
 - **Gemfile**: Jekyll documentation dependencies
@@ -146,6 +160,7 @@ dotnet build
 - **.github/workflows/test.yaml**: CI pipeline with comprehensive system tests
 
 ### CLI Commands Reference
+
 All CLI commands require external Kubernetes tools for full functionality:
 
 ```bash
@@ -164,6 +179,7 @@ ksail secrets <command>        # Manage secrets (requires SOPS)
 ```
 
 ### Init Command Options
+
 ```bash
 ksail init \
   --container-engine <Docker|Podman> \
@@ -182,6 +198,7 @@ ksail init \
 ### Troubleshooting Build Issues
 
 **"NETSDK1045: The current .NET SDK does not support targeting .NET 9.0"**:
+
 ```bash
 curl -sSL https://dot.net/v1/dotnet-install.sh | bash /dev/stdin --version 9.0.102
 export PATH="$HOME/.dotnet:$PATH"
@@ -189,16 +206,19 @@ dotnet --version  # Should show 9.0.102 or later
 ```
 
 **"MSB4068: The element <Solution> is unrecognized"**:
+
 - KSail.slnx requires .NET 9.0 SDK
 - Build individual projects with `dotnet build src/KSail/` instead
 
 **Jekyll Permission Errors**:
+
 ```bash
 bundle config set --local path 'vendor/bundle'
 bundle install
 ```
 
 **Missing External Tools**:
+
 - The CLI shows warnings for missing tools (age, flux, k3d, etc.)
 - Install tools as needed for desired functionality
 - Most basic operations work without external tools
@@ -206,6 +226,7 @@ bundle install
 ### Making Changes
 
 **Always build and test after making changes**:
+
 ```bash
 cd src/KSail
 export PATH="$HOME/.dotnet:$PATH"
@@ -215,6 +236,7 @@ dotnet run -- init                    # Test CLI functionality
 ```
 
 **For documentation changes**:
+
 ```bash
 export PATH="$HOME/.local/share/gem/ruby/3.2.0/bin:$PATH"
 bundle exec jekyll build               # Verify docs build
