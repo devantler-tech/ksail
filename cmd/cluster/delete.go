@@ -74,12 +74,18 @@ func handleDeleteRunE(
 
 	clusterCfg := cfgManager.Config
 
+	// Get cluster name respecting the --context flag
+	clusterName, err := cmdhelpers.GetClusterNameFromConfig(clusterCfg, deps.Factory)
+	if err != nil {
+		return fmt.Errorf("failed to get cluster name: %w", err)
+	}
+
 	deleteVolumes, flagErr := cmd.Flags().GetBool("delete-volumes")
 	if flagErr != nil {
 		return fmt.Errorf("failed to get delete-volumes flag: %w", flagErr)
 	}
 
-	err = cleanupMirrorRegistries(cmd, clusterCfg, deps, deleteVolumes)
+	err = cleanupMirrorRegistries(cmd, clusterCfg, deps, clusterName, deleteVolumes)
 	if err != nil {
 		// Log warning but don't fail the delete operation
 		notify.WriteMessage(notify.Message{
@@ -109,13 +115,14 @@ func cleanupMirrorRegistries(
 	cmd *cobra.Command,
 	clusterCfg *v1alpha1.Cluster,
 	deps cmdhelpers.LifecycleDeps,
+	clusterName string,
 	deleteVolumes bool,
 ) error {
 	switch clusterCfg.Spec.Distribution {
 	case v1alpha1.DistributionKind:
-		return cleanupKindMirrorRegistries(cmd, clusterCfg, deps, deleteVolumes)
+		return cleanupKindMirrorRegistries(cmd, clusterCfg, deps, clusterName, deleteVolumes)
 	case v1alpha1.DistributionK3d:
-		return cleanupK3dMirrorRegistries(cmd, clusterCfg, deps, deleteVolumes)
+		return cleanupK3dMirrorRegistries(cmd, clusterCfg, deps, clusterName, deleteVolumes)
 	default:
 		return nil
 	}
@@ -125,6 +132,7 @@ func cleanupKindMirrorRegistries(
 	cmd *cobra.Command,
 	clusterCfg *v1alpha1.Cluster,
 	deps cmdhelpers.LifecycleDeps,
+	clusterName string,
 	deleteVolumes bool,
 ) error {
 	kindConfigMgr := kindconfigmanager.NewConfigManager(clusterCfg.Spec.DistributionConfig)
@@ -149,7 +157,7 @@ func cleanupKindMirrorRegistries(
 			return kindprovisioner.CleanupRegistries(
 				cmd.Context(),
 				kindConfig,
-				kindConfig.Name,
+				clusterName,
 				dockerClient,
 				deleteVolumes,
 			)
@@ -161,6 +169,7 @@ func cleanupK3dMirrorRegistries(
 	cmd *cobra.Command,
 	clusterCfg *v1alpha1.Cluster,
 	deps cmdhelpers.LifecycleDeps,
+	clusterName string,
 	deleteVolumes bool,
 ) error {
 	if clusterCfg.Spec.DistributionConfig == "" {
@@ -189,7 +198,7 @@ func cleanupK3dMirrorRegistries(
 			return k3dprovisioner.CleanupRegistries(
 				cmd.Context(),
 				k3dConfig,
-				k3dConfig.Name,
+				clusterName,
 				dockerClient,
 				deleteVolumes,
 				cmd.ErrOrStderr(),
