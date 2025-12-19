@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/devantler-tech/ksail/pkg/apis/cluster/v1alpha1"
 	runtime "github.com/devantler-tech/ksail/pkg/di"
@@ -146,7 +147,7 @@ func getClusterNameFromConfigOrContext(
 ) (string, error) {
 	// If context is explicitly set, derive cluster name from it
 	if clusterCfg != nil && clusterCfg.Spec.Connection.Context != "" {
-		clusterName := extractClusterNameFromContext(
+		clusterName := ExtractClusterNameFromContext(
 			clusterCfg.Spec.Connection.Context,
 			clusterCfg.Spec.Distribution,
 		)
@@ -159,19 +160,19 @@ func getClusterNameFromConfigOrContext(
 	return configmanager.GetClusterName(distributionConfig)
 }
 
-// extractClusterNameFromContext extracts the cluster name from a context string.
+// ExtractClusterNameFromContext extracts the cluster name from a context string.
 // For kind clusters, contexts follow the pattern "kind-<cluster-name>".
 // For k3d clusters, contexts follow the pattern "k3d-<cluster-name>".
 // Returns empty string if the context doesn't match the expected pattern.
-func extractClusterNameFromContext(context string, distribution v1alpha1.Distribution) string {
+func ExtractClusterNameFromContext(context string, distribution v1alpha1.Distribution) string {
 	switch distribution {
 	case v1alpha1.DistributionKind:
-		if len(context) > 5 && context[:5] == "kind-" {
-			return context[5:]
+		if strings.HasPrefix(context, "kind-") {
+			return strings.TrimPrefix(context, "kind-")
 		}
 	case v1alpha1.DistributionK3d:
-		if len(context) > 4 && context[:4] == "k3d-" {
-			return context[4:]
+		if strings.HasPrefix(context, "k3d-") {
+			return strings.TrimPrefix(context, "k3d-")
 		}
 	}
 	return ""
@@ -192,7 +193,7 @@ func GetClusterNameFromConfig(
 
 	// If context is explicitly set, derive cluster name from it
 	if clusterCfg.Spec.Connection.Context != "" {
-		clusterName := extractClusterNameFromContext(
+		clusterName := ExtractClusterNameFromContext(
 			clusterCfg.Spec.Connection.Context,
 			clusterCfg.Spec.Distribution,
 		)
