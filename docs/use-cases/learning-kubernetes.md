@@ -1,3 +1,8 @@
+---
+parent: Use Cases
+nav_order: 1
+---
+
 # Learning Kubernetes
 
 KSail simplifies Kubernetes experimentation by wrapping Kind and K3d with a consistent interface. Focus on learning Kubernetes concepts without complex cluster setup.
