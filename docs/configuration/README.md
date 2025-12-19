@@ -10,9 +10,9 @@ KSail keeps cluster configuration reproducible through well-defined configuratio
 
 ## Configuration surfaces
 
-- [CLI options](cli-options.md) – Override configuration at runtime with flags for one-off changes
-- [Declarative config](declarative-config.md) – Define settings in `ksail.yaml`, `kind.yaml`, and `k3d.yaml` for persistent configuration
-- Workloads – The generated `k8s/` directory contains Kustomize-based manifests; see [project structure](../overview/project-structure.md)
+- [CLI options](cli-options.html) – Override configuration at runtime with flags for one-off changes
+- [Declarative config](declarative-config.html) – Define settings in `ksail.yaml`, `kind.yaml`, and `k3d.yaml` for persistent configuration
+- Workloads – The generated `k8s/` directory contains Kustomize-based manifests; see [project structure](../overview/project-structure.html)
 
 ## Precedence and loading
 

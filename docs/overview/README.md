@@ -24,8 +24,8 @@ KSail is built for platform engineers, developers, and anyone working with Kuber
 
 ## Navigating the Documentation
 
-- [Project structure](project-structure.md) explains repository organization and Kustomize usage
-- [Support matrix](support-matrix.md) lists currently supported features and platforms
+- [Project structure](project-structure.html) explains repository organization and Kustomize usage
+- [Support matrix](support-matrix.html) lists currently supported features and platforms
 - [Core concepts](core-concepts/) describes CNI, distributions, storage, and other building blocks
 - [Configuration guides](../configuration/) detail CLI flags and YAML structure
 - [Use-case playbooks](../use-cases/) provide guided workflows

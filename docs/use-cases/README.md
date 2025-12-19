@@ -12,8 +12,8 @@ Each scenario uses the same configuration primitives documented in the [configur
 
 ## Scenarios
 
-- [Learning Kubernetes](learning-kubernetes.md) – Explore distributions, networking options, and kubectl workflows
-- [Local development](local-development.md) – Work with manifests locally and validate changes before deployment
-- [E2E testing in CI/CD](e2e-testing-in-cicd.md) – Spin up ephemeral clusters in pull-request pipelines
+- [Learning Kubernetes](learning-kubernetes.html) – Explore distributions, networking options, and kubectl workflows
+- [Local development](local-development.html) – Work with manifests locally and validate changes before deployment
+- [E2E testing in CI/CD](e2e-testing-in-cicd.html) – Spin up ephemeral clusters in pull-request pipelines
 
-> **Note:** Some workflows reference features still being implemented (like full GitOps integration). Check the [support matrix](../overview/support-matrix.md) for current capabilities.
+> **Note:** Some workflows reference features still being implemented (like full GitOps integration). Check the [support matrix](../overview/support-matrix.html) for current capabilities.
