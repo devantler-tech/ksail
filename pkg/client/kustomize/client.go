@@ -4,7 +4,10 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"os/exec"
+
+	"sigs.k8s.io/kustomize/api/krusty"
+	"sigs.k8s.io/kustomize/api/types"
+	"sigs.k8s.io/kustomize/kyaml/filesys"
 )
 
 // Client provides kustomize build functionality.
@@ -16,20 +19,28 @@ func NewClient() *Client {
 }
 
 // Build runs kustomize build on the specified directory and returns the output.
-func (c *Client) Build(ctx context.Context, path string) (*bytes.Buffer, error) {
-	args := []string{"build", path, "--load-restrictor=LoadRestrictionsNone"}
+func (c *Client) Build(_ context.Context, path string) (*bytes.Buffer, error) {
+	// Create a file system abstraction
+	fSys := filesys.MakeFsOnDisk()
 
-	cmd := exec.CommandContext(ctx, "kustomize", args...) //nolint:gosec // kustomize is a trusted tool
+	// Create kustomize options with load restrictions disabled
+	opts := krusty.MakeDefaultOptions()
+	opts.LoadRestrictions = types.LoadRestrictionsNone
 
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
+	// Create a kustomizer
+	k := krusty.MakeKustomizer(opts)
 
-	err := cmd.Run()
+	// Run the build
+	resMap, err := k.Run(fSys, path)
 	if err != nil {
-		return nil, fmt.Errorf("kustomize build %s: %w\n%s", path, err, stderr.String())
+		return nil, fmt.Errorf("kustomize build %s: %w", path, err)
 	}
 
-	return &stdout, nil
+	// Convert resource map to YAML
+	yaml, err := resMap.AsYaml()
+	if err != nil {
+		return nil, fmt.Errorf("convert resources to yaml: %w", err)
+	}
+
+	return bytes.NewBuffer(yaml), nil
 }
