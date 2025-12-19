@@ -106,16 +106,26 @@ func (l *LocalPathStorageInstaller) applyManifest(ctx context.Context) error {
 	return nil
 }
 
-// waitForReadiness waits for the local-path-provisioner deployment to become ready.
-func (l *LocalPathStorageInstaller) waitForReadiness(ctx context.Context) error {
+// createClientset creates a Kubernetes clientset for the configured cluster.
+func (l *LocalPathStorageInstaller) createClientset() (*kubernetes.Clientset, error) {
 	restConfig, err := k8s.BuildRESTConfig(l.kubeconfig, l.context)
 	if err != nil {
-		return fmt.Errorf("failed to build rest config: %w", err)
+		return nil, fmt.Errorf("failed to build rest config: %w", err)
 	}
 
 	clientset, err := kubernetes.NewForConfig(restConfig)
 	if err != nil {
-		return fmt.Errorf("failed to create kubernetes client: %w", err)
+		return nil, fmt.Errorf("failed to create kubernetes client: %w", err)
+	}
+
+	return clientset, nil
+}
+
+// waitForReadiness waits for the local-path-provisioner deployment to become ready.
+func (l *LocalPathStorageInstaller) waitForReadiness(ctx context.Context) error {
+	clientset, err := l.createClientset()
+	if err != nil {
+		return err
 	}
 
 	checks := []k8s.ReadinessCheck{
@@ -132,14 +142,9 @@ func (l *LocalPathStorageInstaller) waitForReadiness(ctx context.Context) error 
 
 // setDefaultStorageClass marks the local-path storage class as the default.
 func (l *LocalPathStorageInstaller) setDefaultStorageClass(ctx context.Context) error {
-	restConfig, err := k8s.BuildRESTConfig(l.kubeconfig, l.context)
+	clientset, err := l.createClientset()
 	if err != nil {
-		return fmt.Errorf("failed to build rest config: %w", err)
-	}
-
-	clientset, err := kubernetes.NewForConfig(restConfig)
-	if err != nil {
-		return fmt.Errorf("failed to create kubernetes client: %w", err)
+		return err
 	}
 
 	// Get the storage class
