@@ -47,6 +47,7 @@ func (f *fakeProvisionerWithClusters) Stop(context.Context, string) error   { re
 func (f *fakeProvisionerWithClusters) List(context.Context) ([]string, error) {
 	return f.clusters, f.listErr
 }
+
 func (f *fakeProvisionerWithClusters) Exists(context.Context, string) (bool, error) {
 	return len(f.clusters) > 0, nil
 }
@@ -78,7 +79,10 @@ spec:
     kubeconfig: ./kubeconfig
 `
 
-	require.NoError(t, os.WriteFile(filepath.Join(workingDir, "ksail.yaml"), []byte(ksailYAML), 0o600))
+	require.NoError(
+		t,
+		os.WriteFile(filepath.Join(workingDir, "ksail.yaml"), []byte(ksailYAML), 0o600),
+	)
 	require.NoError(t, os.WriteFile(
 		filepath.Join(workingDir, "kind.yaml"),
 		[]byte("kind: Cluster\napiVersion: kind.x-k8s.io/v1alpha4\nname: test\nnodes: []\n"),
