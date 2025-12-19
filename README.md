@@ -94,7 +94,7 @@ KSail organizes commands around your development lifecycle:
 - `ksail cipher encrypt` — Encrypt manifests with SOPS
 - `ksail cipher decrypt` — Decrypt manifests with SOPS
 - `ksail cipher edit` — Edit encrypted files in place
-- `ksail cipher import` — Import age keys for SOPS encryption
+- `ksail cipher import` — Import age keys from file or stdin
 
 ## Documentation
 
