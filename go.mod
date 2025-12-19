@@ -27,7 +27,8 @@ require (
 	github.com/spf13/pflag v1.0.10
 	github.com/spf13/viper v1.21.0
 	github.com/stretchr/testify v1.11.1
-	helm.sh/helm/v3 v3.19.4
+	helm.sh/helm/v3 v3.19.0
+	helm.sh/helm/v4 v4.0.4
 	k8s.io/api v0.35.0
 	k8s.io/apiextensions-apiserver v0.35.0
 	k8s.io/apimachinery v0.35.0
