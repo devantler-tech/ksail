@@ -1,4 +1,5 @@
 ---
+title: "Learning Kubernetes"
 parent: Use Cases
 nav_order: 1
 ---

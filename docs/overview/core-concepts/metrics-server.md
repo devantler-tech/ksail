@@ -1,4 +1,5 @@
 ---
+title: "Metrics Server"
 parent: Core Concepts
 grand_parent: Overview
 nav_order: 9
@@ -37,10 +38,12 @@ ksail cluster create --metrics-server Disabled
 ## When to Use Metrics Server
 
 Enable metrics server when:
+
 - Testing Horizontal Pod Autoscaler (HPA)
 - Using dashboard tools that display resource usage
 - Working with alerts based on CPU/memory metrics
 
 Disable it for:
+
 - Minimal resource consumption during development
 - Simple testing that doesn't require metrics
