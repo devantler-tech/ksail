@@ -1,4 +1,5 @@
 ---
+title: "Project Structure"
 parent: Overview
 nav_order: 1
 ---

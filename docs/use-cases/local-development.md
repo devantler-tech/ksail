@@ -1,4 +1,5 @@
 ---
+title: "Local Development"
 parent: Use Cases
 nav_order: 2
 ---
