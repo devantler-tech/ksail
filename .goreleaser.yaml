@@ -74,7 +74,7 @@ changelog:
       - "Merge branch"
   groups:
     - title: "Breaking Changes"
-      regexp: '^.*?((feat|fix|perf|refactor|revert|test|docs|style|chore|build|ci)(\(.+\))?!:|BREAKING CHANGE:)'
+      regexp: '^.*?((feat|fix|perf|refactor)(\(.+\))?!:|BREAKING CHANGE:)'
       order: 0
     - title: "Features"
       regexp: '^.*?feat(\(.+\))?:'
