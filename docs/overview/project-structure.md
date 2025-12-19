@@ -29,7 +29,7 @@ Use `--source-directory` during init to change where workloads are stored (defau
 
 ### `ksail.yaml`
 
-The main configuration file defining your cluster setup. See [Declarative Config](../configuration/declarative-config.html) for details.
+The main configuration file defining your cluster setup. See [Declarative Config](../configuration/declarative-config.md) for details.
 
 ### Distribution configs
 
