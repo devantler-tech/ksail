@@ -63,7 +63,7 @@ go test ./...
 
 The project documentation is built using [Jekyll](https://jekyllrb.com/) with the [Just the Docs](https://just-the-docs.com/) theme and is located in the `docs/` directory.
 
-#### Prerequisites
+#### Documentation Prerequisites
 
 To build the documentation locally, you need:
 
