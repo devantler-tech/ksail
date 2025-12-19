@@ -19,7 +19,8 @@ func NewClient() *Client {
 func (c *Client) Build(ctx context.Context, path string) (*bytes.Buffer, error) {
 	args := []string{"build", path, "--load-restrictor=LoadRestrictionsNone"}
 
-	cmd := exec.CommandContext(ctx, "kustomize", args...)
+	cmd := exec.CommandContext(ctx, "kustomize", args...) //nolint:gosec // kustomize is a trusted tool
+
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	cmd.Stdout = &stdout

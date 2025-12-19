@@ -14,6 +14,7 @@ import (
 
 const (
 	kustomizationFileName = "kustomization.yaml"
+	maxLineLength         = 120
 )
 
 // NewValidateCmd creates the workload validate command.
@@ -43,50 +44,17 @@ The validation process:
 By default, Kubernetes Secrets are skipped to avoid validation failures due to SOPS fields.`,
 		Args: cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx := cmd.Context()
-
-			// Default to current directory if no paths provided
-			if len(args) == 0 {
-				args = []string{"."}
-			}
-
-			// Create kubeconform client
-			var kubeconformClient *kubeconform.Client
-			if schemaLocation != "" {
-				kubeconformClient = kubeconform.NewClientWithSchemaLocation(schemaLocation)
-			} else {
-				kubeconformClient = kubeconform.NewClient()
-			}
-
-			// Download Flux schemas if requested
-			if downloadSchemas {
-				fmt.Fprintln(cmd.OutOrStdout(), "INFO - Downloading Flux OpenAPI schemas")
-				err := kubeconformClient.DownloadFluxSchemas(ctx)
-				if err != nil {
-					return fmt.Errorf("download Flux schemas: %w", err)
-				}
-			}
-
-			// Build validation options
-			validationOpts := &kubeconform.ValidationOptions{
-				Strict:               strict,
-				IgnoreMissingSchemas: ignoreMissingSchemas,
-				Verbose:              verbose,
-			}
-			if skipSecrets {
-				validationOpts.SkipKinds = append(validationOpts.SkipKinds, "Secret")
-			}
-
-			// Validate each path
-			for _, path := range args {
-				err := validatePath(ctx, cmd, path, kubeconformClient, validationOpts)
-				if err != nil {
-					return err
-				}
-			}
-
-			fmt.Fprintln(cmd.OutOrStdout(), "✅ All validations passed")
-			return nil
+			return runValidateCmd(
+				cmd.Context(),
+				cmd,
+				args,
+				skipSecrets,
+				strict,
+				ignoreMissingSchemas,
+				verbose,
+				downloadSchemas,
+				schemaLocation,
+			)
 		},
 	}
 
@@ -96,9 +64,71 @@ By default, Kubernetes Secrets are skipped to avoid validation failures due to S
 	cmd.Flags().BoolVar(&ignoreMissingSchemas, "ignore-missing-schemas", true, "Ignore resources with missing schemas")
 	cmd.Flags().BoolVar(&verbose, "verbose", false, "Enable verbose output")
 	cmd.Flags().BoolVar(&downloadSchemas, "download-schemas", true, "Download Flux OpenAPI schemas before validation")
-	cmd.Flags().StringVar(&schemaLocation, "schema-location", "", "Custom location for schemas (default: /tmp/flux-crd-schemas/master-standalone-strict)")
+	cmd.Flags().StringVar(
+		&schemaLocation,
+		"schema-location",
+		"",
+		"Custom schema location (default: /tmp/flux-crd-schemas/master-standalone-strict)",
+	)
 
 	return cmd
+}
+
+func runValidateCmd(
+	ctx context.Context,
+	cmd *cobra.Command,
+	args []string,
+	skipSecrets bool,
+	strict bool,
+	ignoreMissingSchemas bool,
+	verbose bool,
+	downloadSchemas bool,
+	schemaLocation string,
+) error {
+	// Default to current directory if no paths provided
+	if len(args) == 0 {
+		args = []string{"."}
+	}
+
+	// Create kubeconform client
+	var kubeconformClient *kubeconform.Client
+	if schemaLocation != "" {
+		kubeconformClient = kubeconform.NewClientWithSchemaLocation(schemaLocation)
+	} else {
+		kubeconformClient = kubeconform.NewClient()
+	}
+
+	// Download Flux schemas if requested
+	if downloadSchemas {
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "INFO - Downloading Flux OpenAPI schemas")
+
+		err := kubeconformClient.DownloadFluxSchemas(ctx)
+		if err != nil {
+			return fmt.Errorf("download Flux schemas: %w", err)
+		}
+	}
+
+	// Build validation options
+	validationOpts := &kubeconform.ValidationOptions{
+		Strict:               strict,
+		IgnoreMissingSchemas: ignoreMissingSchemas,
+		Verbose:              verbose,
+	}
+	if skipSecrets {
+		validationOpts.SkipKinds = append(validationOpts.SkipKinds, "Secret")
+	}
+
+	// Validate each path
+	for _, path := range args {
+		err := validatePath(ctx, cmd, path, kubeconformClient, validationOpts)
+		if err != nil {
+			return err
+		}
+	}
+
+	_, _ = fmt.Fprintln(cmd.OutOrStdout(), "✅ All validations passed")
+
+	return nil
 }
 
 // validatePath validates all manifests in the given path.
@@ -137,7 +167,7 @@ func validateFile(
 		return nil
 	}
 
-	fmt.Fprintf(cmd.OutOrStdout(), "INFO - Validating %s\n", filePath)
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "INFO - Validating %s\n", filePath)
 
 	err := kubeconformClient.ValidateFile(ctx, filePath, opts)
 	if err != nil {
@@ -163,7 +193,8 @@ func validateDirectory(
 
 	// Validate kustomizations
 	if len(kustomizations) > 0 {
-		fmt.Fprintln(cmd.OutOrStdout(), "INFO - Validating kustomize overlays")
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "INFO - Validating kustomize overlays")
+
 		kustomizeClient := kustomize.NewClient()
 
 		for _, kustDir := range kustomizations {
@@ -199,7 +230,7 @@ func validateKustomization(
 	kustomizeClient *kustomize.Client,
 	opts *kubeconform.ValidationOptions,
 ) error {
-	fmt.Fprintf(cmd.OutOrStdout(), "INFO - Validating kustomization %s\n", kustDir)
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "INFO - Validating kustomization %s\n", kustDir)
 
 	// Build the kustomization
 	output, err := kustomizeClient.Build(ctx, kustDir)
@@ -265,5 +296,6 @@ func findYAMLFiles(rootPath string) ([]string, error) {
 // isYAMLFile checks if a file has a YAML extension.
 func isYAMLFile(filePath string) bool {
 	ext := strings.ToLower(filepath.Ext(filePath))
+
 	return ext == ".yaml" || ext == ".yml"
 }
