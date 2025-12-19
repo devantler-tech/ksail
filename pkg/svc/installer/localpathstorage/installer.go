@@ -69,6 +69,12 @@ func (l *LocalPathStorageInstaller) installLocalPathProvisioner(ctx context.Cont
 		return fmt.Errorf("failed to apply manifest: %w", err)
 	}
 
+	// Wait for the deployment to be ready
+	err = l.waitForReadiness(ctx)
+	if err != nil {
+		return fmt.Errorf("failed waiting for local-path-provisioner readiness: %w", err)
+	}
+
 	// Mark the local-path storage class as default
 	err = l.setDefaultStorageClass(ctx)
 	if err != nil {
@@ -95,6 +101,30 @@ func (l *LocalPathStorageInstaller) applyManifest(ctx context.Context) error {
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("kubectl apply failed: %w, output: %s", err, string(output))
+	}
+
+	return nil
+}
+
+// waitForReadiness waits for the local-path-provisioner deployment to become ready.
+func (l *LocalPathStorageInstaller) waitForReadiness(ctx context.Context) error {
+	restConfig, err := k8s.BuildRESTConfig(l.kubeconfig, l.context)
+	if err != nil {
+		return fmt.Errorf("failed to build rest config: %w", err)
+	}
+
+	clientset, err := kubernetes.NewForConfig(restConfig)
+	if err != nil {
+		return fmt.Errorf("failed to create kubernetes client: %w", err)
+	}
+
+	checks := []k8s.ReadinessCheck{
+		{Type: "deployment", Namespace: "local-path-storage", Name: "local-path-provisioner"},
+	}
+
+	err = k8s.WaitForMultipleResources(ctx, clientset, checks, l.timeout)
+	if err != nil {
+		return fmt.Errorf("wait for local-path-provisioner deployment: %w", err)
 	}
 
 	return nil

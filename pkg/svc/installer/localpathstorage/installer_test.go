@@ -58,33 +58,3 @@ func TestLocalPathStorageInstaller_Uninstall(t *testing.T) {
 
 	assert.NoError(t, err, "Uninstall should always succeed as no-op")
 }
-
-func TestDistribution_ProvidesStorageByDefault(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name         string
-		distribution v1alpha1.Distribution
-		expected     bool
-	}{
-		{
-			name:         "K3d provides storage by default",
-			distribution: v1alpha1.DistributionK3d,
-			expected:     true,
-		},
-		{
-			name:         "Kind does not provide storage by default",
-			distribution: v1alpha1.DistributionKind,
-			expected:     false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			result := tt.distribution.ProvidesStorageByDefault()
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}

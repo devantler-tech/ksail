@@ -16,6 +16,12 @@ KSail helps you run Kubernetes manifests locally using your container engine (Do
    ksail cluster init --distribution Kind --source-directory k8s --cni Cilium --metrics-server Enabled
    ```
 
+   If your workloads need persistent volumes, include CSI configuration during initialization:
+
+   ```bash
+   ksail cluster init --distribution Kind --source-directory k8s --cni Cilium --metrics-server Enabled --csi LocalPathStorage
+   ```
+
    Commit the generated `ksail.yaml`, `kind.yaml`, and manifests so teammates can use the same configuration.
 
 2. **Create the cluster**
@@ -25,18 +31,9 @@ KSail helps you run Kubernetes manifests locally using your container engine (Do
    ksail cluster info
    ```
 
-   This provisions the cluster with your chosen CNI and metrics-server configuration.
+   This provisions the cluster with your chosen CNI, metrics-server, and storage configuration. On Kind, LocalPathStorage installs the local-path-provisioner. On K3d, it uses the built-in storage provisioner.
 
-3. **Set up persistent storage** (if needed)
-
-   ```bash
-   # Initialize with LocalPathStorage for persistent volumes
-   ksail cluster init --distribution Kind --csi LocalPathStorage
-   ```
-
-   This ensures a default `StorageClass` is available for `PersistentVolumeClaim`s to bind automatically. On Kind, this installs the local-path-provisioner. On K3d, it uses the built-in storage provisioner.
-
-4. **Build and use local images** (if using local registry)
+3. **Build and use local images** (if using local registry)
 
    ```bash
    # Initialize with local registry
@@ -49,7 +46,7 @@ KSail helps you run Kubernetes manifests locally using your container engine (Do
 
    Update manifests to reference your local images.
 
-5. **Apply workloads**
+4. **Apply workloads**
 
    ```bash
    ksail workload apply -k k8s/
@@ -58,7 +55,7 @@ KSail helps you run Kubernetes manifests locally using your container engine (Do
 
    Apply your Kustomize manifests and verify deployment.
 
-6. **Debug and inspect**
+5. **Debug and inspect**
 
    ```bash
    ksail workload logs deployment/my-app --tail 200
@@ -68,7 +65,7 @@ KSail helps you run Kubernetes manifests locally using your container engine (Do
 
    Use workload commands or k9s for debugging.
 
-7. **Clean up**
+6. **Clean up**
 
    ```bash
    ksail cluster delete
