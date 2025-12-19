@@ -18,7 +18,10 @@ func TestNewValidateCmdHasCorrectDefaults(t *testing.T) {
 	}
 
 	if cmd.Short != "Validate Kubernetes manifests and kustomizations" {
-		t.Fatalf("expected Short description to be 'Validate Kubernetes manifests and kustomizations', got %q", cmd.Short)
+		t.Fatalf(
+			"expected Short description to be 'Validate Kubernetes manifests and kustomizations', got %q",
+			cmd.Short,
+		)
 	}
 
 	// Check default flag values

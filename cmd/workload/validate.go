@@ -55,7 +55,12 @@ By default, Kubernetes Secrets are skipped to avoid validation failures due to S
 	// Add flags
 	cmd.Flags().BoolVar(&skipSecrets, "skip-secrets", true, "Skip validation of Kubernetes Secrets")
 	cmd.Flags().BoolVar(&strict, "strict", true, "Enable strict validation mode")
-	cmd.Flags().BoolVar(&ignoreMissingSchemas, "ignore-missing-schemas", true, "Ignore resources with missing schemas")
+	cmd.Flags().BoolVar(
+		&ignoreMissingSchemas,
+		"ignore-missing-schemas",
+		true,
+		"Ignore resources with missing schemas",
+	)
 	cmd.Flags().BoolVar(&verbose, "verbose", false, "Enable verbose output")
 
 	return cmd
@@ -167,7 +172,14 @@ func validateDirectory(
 		kustomizeClient := kustomize.NewClient()
 
 		for _, kustDir := range kustomizations {
-			err := validateKustomization(ctx, cmd, kustDir, kubeconformClient, kustomizeClient, opts)
+			err := validateKustomization(
+				ctx,
+				cmd,
+				kustDir,
+				kubeconformClient,
+				kustomizeClient,
+				opts,
+			)
 			if err != nil {
 				return err
 			}
@@ -231,7 +243,6 @@ func findKustomizations(rootPath string) ([]string, error) {
 
 		return nil
 	})
-
 	if err != nil {
 		return nil, fmt.Errorf("walk directory %s: %w", rootPath, err)
 	}
@@ -255,7 +266,6 @@ func findYAMLFiles(rootPath string) ([]string, error) {
 
 		return nil
 	})
-
 	if err != nil {
 		return nil, fmt.Errorf("walk directory %s: %w", rootPath, err)
 	}

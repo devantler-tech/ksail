@@ -2,12 +2,16 @@ package kubeconform
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 
 	"github.com/yannh/kubeconform/pkg/validator"
 )
+
+// ErrValidationFailed indicates that validation failed.
+var ErrValidationFailed = errors.New("validation failed")
 
 // Client provides kubeconform validation functionality.
 type Client struct{}
@@ -24,39 +28,26 @@ func (c *Client) ValidateFile(_ context.Context, filePath string, opts *Validati
 	}
 
 	// Open the file
-	file, err := os.Open(filePath)
+	file, err := os.Open(filePath) //nolint:gosec // filePath is provided by the caller
 	if err != nil {
 		return fmt.Errorf("open file %s: %w", filePath, err)
 	}
-	defer file.Close()
+
+	defer func() {
+		_ = file.Close()
+	}()
 
 	// Create validator
-	v, err := c.createValidator(opts)
+	kubeValidator, err := c.createValidator(opts)
 	if err != nil {
 		return fmt.Errorf("create validator: %w", err)
 	}
 
 	// Validate resources from file
-	results := v.Validate(filePath, file)
+	results := kubeValidator.Validate(filePath, file)
 
 	// Check for validation errors
-	hasErrors := false
-	for _, res := range results {
-		if res.Status == validator.Invalid || res.Status == validator.Error {
-			hasErrors = true
-			if opts.Verbose {
-				fmt.Printf("❌ %s: %v\n", filePath, res.Err)
-			}
-		} else if res.Status == validator.Valid && opts.Verbose {
-			fmt.Printf("✅ %s is valid\n", filePath)
-		}
-	}
-
-	if hasErrors {
-		return fmt.Errorf("validation failed for %s", filePath)
-	}
-
-	return nil
+	return c.processResults(results, filePath, opts.Verbose)
 }
 
 // ValidateManifests validates Kubernetes manifests from a reader (e.g., kustomize build output).
@@ -70,7 +61,7 @@ func (c *Client) ValidateManifests(
 	}
 
 	// Create validator
-	v, err := c.createValidator(opts)
+	kubeValidator, err := c.createValidator(opts)
 	if err != nil {
 		return fmt.Errorf("create validator: %w", err)
 	}
@@ -79,23 +70,30 @@ func (c *Client) ValidateManifests(
 	rc := io.NopCloser(reader)
 
 	// Validate resources from reader
-	results := v.Validate("stdin", rc)
+	results := kubeValidator.Validate("stdin", rc)
 
 	// Check for validation errors
+	return c.processResults(results, "stdin", opts.Verbose)
+}
+
+// processResults processes validation results and returns an error if validation failed.
+func (c *Client) processResults(results []validator.Result, source string, verbose bool) error {
 	hasErrors := false
+
 	for _, res := range results {
 		if res.Status == validator.Invalid || res.Status == validator.Error {
 			hasErrors = true
-			if opts.Verbose {
-				fmt.Printf("❌ validation error: %v\n", res.Err)
+
+			if verbose {
+				_, _ = fmt.Fprintf(os.Stderr, "❌ %s: %v\n", source, res.Err)
 			}
-		} else if res.Status == validator.Valid && opts.Verbose {
-			fmt.Printf("✅ resource is valid\n")
+		} else if res.Status == validator.Valid && verbose {
+			_, _ = fmt.Fprintf(os.Stdout, "✅ %s is valid\n", source)
 		}
 	}
 
 	if hasErrors {
-		return fmt.Errorf("validation failed")
+		return fmt.Errorf("%w for %s", ErrValidationFailed, source)
 	}
 
 	return nil
@@ -120,7 +118,8 @@ func (c *Client) createValidator(opts *ValidationOptions) (validator.Validator, 
 		// Default Kubernetes schemas
 		"default",
 		// Add Datree CRDs catalog for additional CRD schemas
-		"https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json",
+		"https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/" +
+			"{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json",
 	}
 
 	// Convert skip kinds to map
@@ -141,6 +140,10 @@ func (c *Client) createValidator(opts *ValidationOptions) (validator.Validator, 
 		Debug:                false,
 	}
 
-	return validator.New(schemaLocations, validatorOpts)
-}
+	v, err := validator.New(schemaLocations, validatorOpts)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create validator: %w", err)
+	}
 
+	return v, nil
+}
