@@ -42,7 +42,7 @@ This path flexibility is intentional and necessary because:
 ## Inputs
 
 | Input            | Required | Default  | Description                                                                                                                                                                                                     |
-| ---------------- | -------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+|------------------|----------|----------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `go-version`     | Yes      | -        | Go version from `setup-go` output, used for cache key computation                                                                                                                                               |
 | `source-hash`    | Yes      | -        | Hash of source files (use `hashFiles('go.mod', 'go.sum', '**/*.go')`)                                                                                                                                           |
 | `output-path`    | No       | `ksail`  | Target path for the binary relative to repository root (e.g., `ksail` or `bin/ksail`). Must be relative to repository root and must not contain path traversal sequences (e.g., `..`, `../`, `*/../*`, `*/..`). |
@@ -51,7 +51,7 @@ This path flexibility is intentional and necessary because:
 ## Outputs
 
 | Output                   | Description                                                         |
-| ------------------------ | ------------------------------------------------------------------- |
+|--------------------------|---------------------------------------------------------------------|
 | `cache-hit`              | Whether the cache was hit (`'true'` or `'false'`)                   |
 | `binary-path`            | Absolute path to the prepared binary                                |
 | `output-path-normalized` | Normalized relative path to the binary (with leading `./` stripped) |
