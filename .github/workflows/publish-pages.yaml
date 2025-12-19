@@ -1,4 +1,4 @@
-# This workflow uses actions that are not certified by GitHub.
+
 # They are provided by a third-party and are governed by
 # separate terms of service, privacy policy, and support
 # documentation.
@@ -28,6 +28,6 @@ jobs:
   pages:
     uses: devantler-tech/reusable-workflows/.github/workflows/cd-pages-publish.yaml@main
     with:
-      ruby_version: '3.3'
-      jekyll_env: production
-      working_directory: docs
+      ruby-version: '3.3'
+      jekyll-env: production
+      working-directory: "docs/"
