@@ -17,7 +17,7 @@ Documentation for KSail - a CLI tool for managing local Kubernetes clusters and 
 ## 🚀 Getting Started
 
 - **New to KSail?** Start with [Overview](overview.md)
-- **Installing KSail?** Visit [devantler-tech/ksail](https://github.com/devantler-tech/ksail)
+- **Installing KSail?** Visit [devantler-tech/ksail](https://github.com/devantler-tech/ksail#installation)
 - **Need API docs?** See [pkg.go.dev](https://pkg.go.dev/github.com/devantler-tech/ksail)
 
 ## 💬 Need Help?
