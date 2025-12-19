@@ -222,15 +222,32 @@ func displayClusterList(
 	cmd *cobra.Command,
 	includeDistribution bool,
 ) {
-	if len(clusters) == 0 {
-		notify.WriteMessage(notify.Message{
-			Type:    notify.ActivityType,
-			Content: "no clusters found",
-			Writer:  cmd.OutOrStdout(),
-		})
-	} else {
-		writer := cmd.OutOrStdout()
+	writer := cmd.OutOrStdout()
 
+	// Add distribution header when showing all distributions
+	if includeDistribution {
+		fmt.Fprintf(writer, "---|%s|---\n", strings.ToLower(string(distribution)))
+	}
+
+	if len(clusters) == 0 {
+		// When showing all distributions, show distribution-specific empty messages
+		if includeDistribution {
+			switch distribution {
+			case v1alpha1.DistributionKind:
+				fmt.Fprintln(writer, "No kind clusters found.")
+			case v1alpha1.DistributionK3d:
+				fmt.Fprintln(writer, "[]")
+			default:
+				fmt.Fprintln(writer, "No clusters found.")
+			}
+		} else {
+			notify.WriteMessage(notify.Message{
+				Type:    notify.ActivityType,
+				Content: "no clusters found",
+				Writer:  writer,
+			})
+		}
+	} else {
 		var builder strings.Builder
 		if includeDistribution {
 			builder.WriteString(strings.ToLower(string(distribution)))
@@ -248,6 +265,11 @@ func displayClusterList(
 				Writer:  writer,
 			})
 		}
+	}
+
+	// Add blank line after each distribution section when showing all
+	if includeDistribution {
+		fmt.Fprintln(writer)
 	}
 }
 

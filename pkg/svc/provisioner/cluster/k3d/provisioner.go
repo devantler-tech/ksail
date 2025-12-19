@@ -1,9 +1,11 @@
 package k3dprovisioner
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"slices"
 	"strings"
@@ -105,10 +107,37 @@ func (k *K3dClusterProvisioner) Stop(ctx context.Context, name string) error {
 
 // List returns cluster names reported by the Cobra command.
 func (k *K3dClusterProvisioner) List(ctx context.Context) ([]string, error) {
+	// Temporarily redirect logrus to discard output during list
+	// to prevent JSON output from appearing in console
+	originalLogOutput := logrus.StandardLogger().Out
+	logrus.SetOutput(io.Discard)
+	defer logrus.SetOutput(originalLogOutput)
+
+	// Temporarily redirect os.Stdout to capture/suppress k3d's direct stdout writes
+	originalStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+	defer func() {
+		os.Stdout = originalStdout
+		w.Close()
+	}()
+
 	cmd := clustercommand.NewCmdClusterList()
 	args := []string{"--output", "json"}
 
-	res, err := k.runner.Run(ctx, cmd, args)
+	// Use a buffer runner to capture command output
+	var buf bytes.Buffer
+	listRunner := runner.NewCobraCommandRunner(&buf, io.Discard)
+
+	res, err := listRunner.Run(ctx, cmd, args)
+
+	// Close the write end and restore stdout before reading
+	w.Close()
+	os.Stdout = originalStdout
+
+	// Discard any output that was written to our pipe
+	io.Copy(io.Discard, r)
+
 	if err != nil {
 		return nil, fmt.Errorf("cluster list: %w", err)
 	}

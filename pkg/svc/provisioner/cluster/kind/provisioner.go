@@ -304,13 +304,16 @@ func (k *KindClusterProvisioner) Stop(ctx context.Context, name string) error {
 
 // List returns all kind clusters using kind's Cobra command.
 func (k *KindClusterProvisioner) List(ctx context.Context) ([]string, error) {
-	// Kind writes output through its logger interface - send directly to stdout
-	logger := &streamLogger{writer: os.Stdout}
+	// Use a buffer to capture output without displaying it
+	var outBuf bytes.Buffer
 
-	// Set up IOStreams - kind commands may also write here
+	// Kind writes output through its logger interface - capture to buffer
+	logger := &streamLogger{writer: &outBuf}
+
+	// Set up IOStreams - capture kind commands output to buffer
 	streams := kindcmd.IOStreams{
-		Out:    os.Stdout,
-		ErrOut: os.Stderr,
+		Out:    &outBuf,
+		ErrOut: io.Discard,
 	}
 
 	cmd := getclusters.NewCommand(logger, streams)
