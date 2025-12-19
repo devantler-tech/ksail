@@ -11,9 +11,11 @@ Mirror registries proxy upstream container registries (e.g., `docker.io`) and ca
 ## Workflow Overview
 
 1. Add mirrors during initialization:
+
    ```bash
    ksail cluster init --mirror-registry docker.io=https://registry-1.docker.io
    ```
+
 2. Run `ksail cluster create` to start mirror containers alongside your cluster
 3. Images pulled from the mirrored registries will be cached locally
 4. Delete the cluster with `ksail cluster delete --delete-volumes` to clean up cache data

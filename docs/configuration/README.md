@@ -24,18 +24,18 @@ Configuration is resolved in the following order (highest precedence first):
 
 ## Common defaults
 
-| Setting                      | Default               | Notes                                                                |
-| ---------------------------- | --------------------- | -------------------------------------------------------------------- |
-| `spec.distribution`          | `Kind`                | Switch to `K3d` for the K3s-based runtime.                          |
-| `spec.distributionConfig`    | `kind.yaml`           | Points to the distribution configuration file.                       |
-| `spec.sourceDirectory`       | `k8s`                 | Directory containing workload manifests.                             |
-| `spec.connection.kubeconfig` | `~/.kube/config`      | Path to kubeconfig file.                                             |
-| `spec.connection.context`    | Derived from cluster  | Kind: `kind-<name>`, K3d: `k3d-<name>`.                              |
-| `spec.cni`                   | `Default`             | Choose `Cilium` or `None` for different networking.                  |
-| `spec.metricsServer`         | `Enabled`             | Set to `Disabled` to skip metrics-server installation.               |
-| `spec.certManager`           | `Disabled`            | Set to `Enabled` to install cert-manager.                            |
-| `spec.localRegistry`         | `Disabled`            | Set to `Enabled` to provision a local OCI registry.                  |
-| `spec.gitOpsEngine`          | `None`                | Currently only `None` supported; Flux/ArgoCD planned.                |
+| Setting                      | Default              | Notes                                                  |
+|------------------------------|----------------------|--------------------------------------------------------|
+| `spec.distribution`          | `Kind`               | Switch to `K3d` for the K3s-based runtime.             |
+| `spec.distributionConfig`    | `kind.yaml`          | Points to the distribution configuration file.         |
+| `spec.sourceDirectory`       | `k8s`                | Directory containing workload manifests.               |
+| `spec.connection.kubeconfig` | `~/.kube/config`     | Path to kubeconfig file.                               |
+| `spec.connection.context`    | Derived from cluster | Kind: `kind-<name>`, K3d: `k3d-<name>`.                |
+| `spec.cni`                   | `Default`            | Choose `Cilium` or `None` for different networking.    |
+| `spec.metricsServer`         | `Enabled`            | Set to `Disabled` to skip metrics-server installation. |
+| `spec.certManager`           | `Disabled`           | Set to `Enabled` to install cert-manager.              |
+| `spec.localRegistry`         | `Disabled`           | Set to `Enabled` to provision a local OCI registry.    |
+| `spec.gitOpsEngine`          | `None`               | Currently only `None` supported; Flux/ArgoCD planned.  |
 
 ## When to edit what
 

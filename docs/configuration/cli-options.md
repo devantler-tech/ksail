@@ -22,7 +22,7 @@ ksail cluster connect --help     # k9s connection options
 Some options affect CLI behavior rather than configuration.
 
 | Flag       | Purpose                                                            |
-| ---------- | ------------------------------------------------------------------ |
+|------------|--------------------------------------------------------------------|
 | `--timing` | Enable per-activity timing output for the current invocation only. |
 
 When enabled, each successful activity prints a timing block immediately after the `✔` success line:
@@ -37,22 +37,22 @@ When enabled, each successful activity prints a timing block immediately after t
 
 The cluster subcommands bind to the same configuration. Flags map to fields in `ksail.yaml` and environment variables prefixed with `KSAIL_`.
 
-| Flag                    | Short | Config key                   | Default                   | Available on                 |
-| ----------------------- | ----- | ---------------------------- | ------------------------- | ---------------------------- |
-| `--distribution`        | `-d`  | `spec.distribution`          | `Kind`                    | `cluster init`               |
-| `--distribution-config` | –     | `spec.distributionConfig`    | `kind.yaml`               | `cluster init`               |
-| `--context`             | `-c`  | `spec.connection.context`    | Derived from distribution | `cluster init`               |
-| `--kubeconfig`          | `-k`  | `spec.connection.kubeconfig` | `~/.kube/config`          | `cluster init`               |
-| `--source-directory`    | `-s`  | `spec.sourceDirectory`       | `k8s`                     | `cluster init`               |
-| `--cni`                 | –     | `spec.cni`                   | `Default`                 | `cluster init`               |
+| Flag                    | Short | Config key                   | Default                   | Available on                         |
+|-------------------------|-------|------------------------------|---------------------------|--------------------------------------|
+| `--distribution`        | `-d`  | `spec.distribution`          | `Kind`                    | `cluster init`                       |
+| `--distribution-config` | –     | `spec.distributionConfig`    | `kind.yaml`               | `cluster init`                       |
+| `--context`             | `-c`  | `spec.connection.context`    | Derived from distribution | `cluster init`                       |
+| `--kubeconfig`          | `-k`  | `spec.connection.kubeconfig` | `~/.kube/config`          | `cluster init`                       |
+| `--source-directory`    | `-s`  | `spec.sourceDirectory`       | `k8s`                     | `cluster init`                       |
+| `--cni`                 | –     | `spec.cni`                   | `Default`                 | `cluster init`                       |
 | `--csi`                 | –     | `spec.csi`                   | `Default`                 | `cluster init` (not yet implemented) |
-| `--metrics-server`      | –     | `spec.metricsServer`         | `Enabled`                 | `cluster init`, `cluster create` |
-| `--cert-manager`        | –     | `spec.certManager`           | `Disabled`                | `cluster init`, `cluster create` |
-| `--local-registry`      | –     | `spec.localRegistry`         | `Disabled`                | `cluster init`               |
-| `--local-registry-port` | –     | (port configuration)         | `5111`                    | `cluster init`               |
-| `--gitops-engine`       | `-g`  | `spec.gitOpsEngine`          | `None`                    | `cluster init`               |
-| `--flux-interval`       | –     | (Flux reconciliation)        | `1m0s`                    | `cluster init`               |
-| `--mirror-registry`     | –     | (multiple allowed)           | None                      | `cluster init`               |
+| `--metrics-server`      | –     | `spec.metricsServer`         | `Enabled`                 | `cluster init`, `cluster create`     |
+| `--cert-manager`        | –     | `spec.certManager`           | `Disabled`                | `cluster init`, `cluster create`     |
+| `--local-registry`      | –     | `spec.localRegistry`         | `Disabled`                | `cluster init`                       |
+| `--local-registry-port` | –     | (port configuration)         | `5111`                    | `cluster init`                       |
+| `--gitops-engine`       | `-g`  | `spec.gitOpsEngine`          | `None`                    | `cluster init`                       |
+| `--flux-interval`       | –     | (Flux reconciliation)        | `1m0s`                    | `cluster init`                       |
+| `--mirror-registry`     | –     | (multiple allowed)           | None                      | `cluster init`                       |
 
 > **Note:** Environment variables follow the pattern `KSAIL_SPEC_<FIELD>` where field names are uppercase with underscores.
 
