@@ -16,17 +16,6 @@ func TestNewClient(t *testing.T) {
 	}
 }
 
-func TestNewClientWithSchemaLocation(t *testing.T) {
-	t.Parallel()
-
-	customLocation := "/custom/schema/location"
-	client := kubeconform.NewClientWithSchemaLocation(customLocation)
-
-	if client == nil {
-		t.Fatal("expected non-nil client")
-	}
-}
-
 func TestValidationOptions(t *testing.T) {
 	t.Parallel()
 

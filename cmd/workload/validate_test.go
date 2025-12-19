@@ -36,11 +36,6 @@ func TestNewValidateCmdHasCorrectDefaults(t *testing.T) {
 	if !ignoreMissingSchemas {
 		t.Fatal("expected ignore-missing-schemas to default to true")
 	}
-
-	downloadSchemas, _ := cmd.Flags().GetBool("download-schemas")
-	if !downloadSchemas {
-		t.Fatal("expected download-schemas to default to true")
-	}
 }
 
 func TestValidateCmdShowsHelp(t *testing.T) {
@@ -83,9 +78,7 @@ func TestValidateCmdAcceptsMultiplePaths(t *testing.T) {
 
 	// This test just validates that the command accepts multiple path arguments
 	// It will fail during execution because the paths don't exist, but that's expected
-	// Disable schema download to avoid network calls in tests
 	cmd.SetArgs([]string{
-		"--download-schemas=false",
 		"/nonexistent/path1",
 		"/nonexistent/path2",
 	})

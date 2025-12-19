@@ -24,8 +24,6 @@ func NewValidateCmd() *cobra.Command {
 		strict               bool
 		ignoreMissingSchemas bool
 		verbose              bool
-		downloadSchemas      bool
-		schemaLocation       string
 	)
 
 	cmd := &cobra.Command{
@@ -37,9 +35,8 @@ This command validates individual YAML files and kustomizations in the specified
 If no path is provided, it validates the current directory.
 
 The validation process:
-1. Downloads Flux OpenAPI schemas (optional, enabled by default)
-2. Validates individual YAML files
-3. Validates kustomizations by building them with kustomize and validating the output
+1. Validates individual YAML files
+2. Validates kustomizations by building them with kustomize and validating the output
 
 By default, Kubernetes Secrets are skipped to avoid validation failures due to SOPS fields.`,
 		Args: cobra.ArbitraryArgs,
@@ -52,8 +49,6 @@ By default, Kubernetes Secrets are skipped to avoid validation failures due to S
 				strict,
 				ignoreMissingSchemas,
 				verbose,
-				downloadSchemas,
-				schemaLocation,
 			)
 		},
 	}
@@ -63,13 +58,6 @@ By default, Kubernetes Secrets are skipped to avoid validation failures due to S
 	cmd.Flags().BoolVar(&strict, "strict", true, "Enable strict validation mode")
 	cmd.Flags().BoolVar(&ignoreMissingSchemas, "ignore-missing-schemas", true, "Ignore resources with missing schemas")
 	cmd.Flags().BoolVar(&verbose, "verbose", false, "Enable verbose output")
-	cmd.Flags().BoolVar(&downloadSchemas, "download-schemas", true, "Download Flux OpenAPI schemas before validation")
-	cmd.Flags().StringVar(
-		&schemaLocation,
-		"schema-location",
-		"",
-		"Custom schema location (default: /tmp/flux-crd-schemas/master-standalone-strict)",
-	)
 
 	return cmd
 }
@@ -82,8 +70,6 @@ func runValidateCmd(
 	strict bool,
 	ignoreMissingSchemas bool,
 	verbose bool,
-	downloadSchemas bool,
-	schemaLocation string,
 ) error {
 	// Default to current directory if no paths provided
 	if len(args) == 0 {
@@ -91,22 +77,7 @@ func runValidateCmd(
 	}
 
 	// Create kubeconform client
-	var kubeconformClient *kubeconform.Client
-	if schemaLocation != "" {
-		kubeconformClient = kubeconform.NewClientWithSchemaLocation(schemaLocation)
-	} else {
-		kubeconformClient = kubeconform.NewClient()
-	}
-
-	// Download Flux schemas if requested
-	if downloadSchemas {
-		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "INFO - Downloading Flux OpenAPI schemas")
-
-		err := kubeconformClient.DownloadFluxSchemas(ctx)
-		if err != nil {
-			return fmt.Errorf("download Flux schemas: %w", err)
-		}
-	}
+	kubeconformClient := kubeconform.NewClient()
 
 	// Build validation options
 	validationOpts := &kubeconform.ValidationOptions{
