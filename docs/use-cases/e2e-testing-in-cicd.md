@@ -1,4 +1,5 @@
 ---
+title: "E2E Testing in CI/CD"
 parent: Use Cases
 nav_order: 3
 ---
