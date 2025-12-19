@@ -30,4 +30,4 @@ jobs:
     with:
       ruby-version: '3.3'
       jekyll-env: production
-      working-directory: "docs/"
+      working-directory: "./docs"
