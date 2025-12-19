@@ -163,9 +163,9 @@ func formatAgeKeyWithMetadata(privateKey, publicKey string) string {
 }
 
 // importKey imports an age private key and automatically derives the public key.
-func importKey(privateKey string) error {
+func importKey(privateKey string) (err error) {
 	// Validate the private key
-	err := validateAgeKey(privateKey)
+	err = validateAgeKey(privateKey)
 	if err != nil {
 		return err
 	}
@@ -212,7 +212,11 @@ func importKey(privateKey string) error {
 		if openErr != nil {
 			return fmt.Errorf("%w to %s: %w", errFailedToWriteKey, targetPath, openErr)
 		}
-		defer f.Close()
+		defer func() {
+			if cerr := f.Close(); cerr != nil && err == nil {
+				err = fmt.Errorf("%w to %s: %w", errFailedToWriteKey, targetPath, cerr)
+			}
+		}()
 
 		if _, err = f.WriteString("\n" + formattedKey); err != nil {
 			return fmt.Errorf("%w to %s: %w", errFailedToWriteKey, targetPath, err)
