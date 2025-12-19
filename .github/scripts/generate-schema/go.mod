@@ -3,7 +3,7 @@ module github.com/devantler-tech/ksail/generate-schema
 go 1.25.4
 
 require (
-	github.com/devantler-tech/ksail v1.14.0
+	github.com/devantler-tech/ksail v3.1.118+incompatible
 	github.com/invopop/jsonschema v0.13.0
 	github.com/wk8/go-ordered-map/v2 v2.1.8
 	k8s.io/apimachinery v0.35.0
