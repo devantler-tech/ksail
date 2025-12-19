@@ -6,7 +6,7 @@ description: >-
   Documentation for KSail - SDK for Kubernetes ☸️
 
 # Color scheme configuration
-color_scheme: nil  # Uses system preference for dark/light mode
+color_scheme: nil # Uses system preference for dark/light mode
 
 # Search configuration
 search_enabled: true
@@ -21,7 +21,7 @@ search:
 
 # Navigation configuration
 nav_enabled: true
-nav_sort: case_insensitive  # Sort navigation case-insensitively
+nav_sort: case_insensitive # Sort navigation case-insensitively
 
 # Heading anchors
 heading_anchors: true

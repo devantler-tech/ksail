@@ -1,4 +1,5 @@
 ---
+title: "ksail-docs"
 nav_order: 1
 ---
 
