@@ -13,8 +13,8 @@ func TestNewValidateCmdHasCorrectDefaults(t *testing.T) {
 
 	cmd := workload.NewValidateCmd()
 
-	if cmd.Use != "validate [PATH]..." {
-		t.Fatalf("expected Use to be 'validate [PATH]...', got %q", cmd.Use)
+	if cmd.Use != "validate [PATH]" {
+		t.Fatalf("expected Use to be 'validate [PATH]', got %q", cmd.Use)
 	}
 
 	if cmd.Short != "Validate Kubernetes manifests and kustomizations" {
@@ -71,16 +71,15 @@ func TestValidateCmdShowsHelp(t *testing.T) {
 	}
 }
 
-func TestValidateCmdAcceptsMultiplePaths(t *testing.T) {
+func TestValidateCmdRejectsMultiplePaths(t *testing.T) {
 	t.Parallel()
 
 	cmd := workload.NewValidateCmd()
 
-	// This test just validates that the command accepts multiple path arguments
-	// It will fail during execution because the paths don't exist, but that's expected
+	// This test validates that the command rejects multiple path arguments
 	cmd.SetArgs([]string{
-		"/nonexistent/path1",
-		"/nonexistent/path2",
+		"/some/path1",
+		"/some/path2",
 	})
 
 	var output bytes.Buffer
@@ -88,9 +87,36 @@ func TestValidateCmdAcceptsMultiplePaths(t *testing.T) {
 	cmd.SetErr(&output)
 
 	err := cmd.Execute()
-	// We expect an error because the paths don't exist
+	// We expect an error because multiple paths are not allowed
 	if err == nil {
-		t.Fatal("expected error for nonexistent paths")
+		t.Fatal("expected error for multiple paths")
+	}
+
+	// The error should be about too many arguments
+	if !strings.Contains(err.Error(), "accepts at most 1 arg(s)") {
+		t.Fatalf("expected error about too many arguments, got %v", err)
+	}
+}
+
+func TestValidateCmdAcceptsSinglePath(t *testing.T) {
+	t.Parallel()
+
+	cmd := workload.NewValidateCmd()
+
+	// This test validates that the command accepts a single path argument
+	// It will fail during execution because the path doesn't exist, but that's expected
+	cmd.SetArgs([]string{
+		"/nonexistent/path",
+	})
+
+	var output bytes.Buffer
+	cmd.SetOut(&output)
+	cmd.SetErr(&output)
+
+	err := cmd.Execute()
+	// We expect an error because the path doesn't exist
+	if err == nil {
+		t.Fatal("expected error for nonexistent path")
 	}
 
 	// The error should be about path access, not argument parsing

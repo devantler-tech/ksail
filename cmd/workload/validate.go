@@ -27,11 +27,11 @@ func NewValidateCmd() *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "validate [PATH]...",
+		Use:   "validate [PATH]",
 		Short: "Validate Kubernetes manifests and kustomizations",
 		Long: `Validate Kubernetes manifest files and kustomizations using kubeconform.
 
-This command validates individual YAML files and kustomizations in the specified paths.
+This command validates individual YAML files and kustomizations in the specified path.
 If no path is provided, it validates the current directory.
 
 The validation process:
@@ -39,7 +39,7 @@ The validation process:
 2. Validates kustomizations by building them with kustomize and validating the output
 
 By default, Kubernetes Secrets are skipped to avoid validation failures due to SOPS fields.`,
-		Args: cobra.ArbitraryArgs,
+		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runValidateCmd(
 				cmd.Context(),
@@ -71,9 +71,10 @@ func runValidateCmd(
 	ignoreMissingSchemas bool,
 	verbose bool,
 ) error {
-	// Default to current directory if no paths provided
-	if len(args) == 0 {
-		args = []string{"."}
+	// Default to current directory if no path provided
+	path := "."
+	if len(args) > 0 {
+		path = args[0]
 	}
 
 	// Create kubeconform client
@@ -89,12 +90,10 @@ func runValidateCmd(
 		validationOpts.SkipKinds = append(validationOpts.SkipKinds, "Secret")
 	}
 
-	// Validate each path
-	for _, path := range args {
-		err := validatePath(ctx, cmd, path, kubeconformClient, validationOpts)
-		if err != nil {
-			return err
-		}
+	// Validate the path
+	err := validatePath(ctx, cmd, path, kubeconformClient, validationOpts)
+	if err != nil {
+		return err
 	}
 
 	_, _ = fmt.Fprintln(cmd.OutOrStdout(), "✅ All validations passed")
