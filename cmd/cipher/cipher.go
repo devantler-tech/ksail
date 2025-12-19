@@ -27,6 +27,7 @@ SOPS supports multiple key management systems:
 	cmd.AddCommand(NewEncryptCmd())
 	cmd.AddCommand(NewEditCmd())
 	cmd.AddCommand(NewDecryptCmd())
+	cmd.AddCommand(NewImportCmd())
 
 	return cmd
 }
