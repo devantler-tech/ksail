@@ -92,7 +92,7 @@ KSail organizes commands around your development lifecycle:
 🎯 **Unified CLI** — One interface for Kind and K3d  
 📦 **Local Registry** — Build and push images without external registries  
 🔐 **Secrets Management** — SOPS integration for encrypted credentials  
-⚡ **GitOps Ready** — Built-in Flux support for reconciliation  
+⚡ **GitOps Ready** — Built-in Flux and ArgoCD support for triggering reconciliation
 🔧 **Extensible** — Cilium CNI, cert-manager, metrics-server, and more
 
 For a complete command reference, run `ksail --help` or explore the [documentation](#documentation).
