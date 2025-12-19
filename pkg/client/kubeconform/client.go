@@ -148,6 +148,12 @@ func (c *Client) buildArgs(opts *ValidationOptions) []string {
 	// Add schema locations
 	args = append(args, "-schema-location", "default")
 	args = append(args, "-schema-location", c.schemaLocation)
+	// Add Datree CRDs catalog for additional CRD schemas
+	args = append(
+		args,
+		"-schema-location",
+		"https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json",
+	)
 
 	return args
 }
