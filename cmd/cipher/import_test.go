@@ -12,7 +12,19 @@ import (
 	rtruntime "github.com/devantler-tech/ksail/pkg/di"
 )
 
-const validAgeKey = "AGE-SECRET-KEY-1ABCDEFGHIJKLMNOPQRSTUVWXYZ234567890ABCDEFGHIJKLMNOP"
+const (
+	validAgeKey      = "AGE-SECRET-KEY-1ABCDEFGHIJKLMNOPQRSTUVWXYZ234567890ABCDEFGHIJKLMNOP"
+	windowsOS        = "windows"
+	darwinOS         = "darwin"
+	keyFileName      = "keys.txt"
+	sopsSubdir       = "sops"
+	ageSubdir        = "age"
+	filePermissions  = 0o600
+	expectedPerm     = os.FileMode(filePermissions)
+	xdgConfigHomeEnv = "XDG_CONFIG_HOME"
+	homeEnv          = "HOME"
+	appDataEnv       = "AppData"
+)
 
 func TestNewImportCmd(t *testing.T) {
 	t.Parallel()
@@ -79,23 +91,23 @@ func TestImportKeyFromFile(t *testing.T) {
 	}
 
 	// Also clear XDG_CONFIG_HOME to use HOME-based path
-	originalXDG := os.Getenv("XDG_CONFIG_HOME")
+	originalXDG := os.Getenv(xdgConfigHomeEnv)
 	t.Cleanup(func() {
 		if originalXDG != "" {
-			_ = os.Setenv("XDG_CONFIG_HOME", originalXDG)
+			_ = os.Setenv(xdgConfigHomeEnv, originalXDG)
 		} else {
-			_ = os.Unsetenv("XDG_CONFIG_HOME")
+			_ = os.Unsetenv(xdgConfigHomeEnv)
 		}
 	})
-	_ = os.Unsetenv("XDG_CONFIG_HOME")
+	_ = os.Unsetenv(xdgConfigHomeEnv)
 
 	// On Windows, also set AppData
-	if runtime.GOOS == "windows" {
-		originalAppData := os.Getenv("AppData")
+	if runtime.GOOS == windowsOS {
+		originalAppData := os.Getenv(appDataEnv)
 		t.Cleanup(func() {
-			_ = os.Setenv("AppData", originalAppData)
+			_ = os.Setenv(appDataEnv, originalAppData)
 		})
-		err = os.Setenv("AppData", tmpDir)
+		err = os.Setenv(appDataEnv, tmpDir)
 		if err != nil {
 			t.Fatalf("failed to set AppData: %v", err)
 		}
@@ -130,15 +142,22 @@ func TestImportKeyFromFile(t *testing.T) {
 	var expectedPath string
 
 	switch runtime.GOOS {
-	case "windows":
-		expectedPath = filepath.Join(tmpDir, "sops", "age", "keys.txt")
-	case "darwin":
-		expectedPath = filepath.Join(tmpDir, "Library", "Application Support", "sops", "age", "keys.txt")
+	case windowsOS:
+		expectedPath = filepath.Join(tmpDir, sopsSubdir, ageSubdir, keyFileName)
+	case darwinOS:
+		expectedPath = filepath.Join(
+			tmpDir,
+			"Library",
+			"Application Support",
+			sopsSubdir,
+			ageSubdir,
+			keyFileName,
+		)
 	default:
-		expectedPath = filepath.Join(tmpDir, ".config", "sops", "age", "keys.txt")
+		expectedPath = filepath.Join(tmpDir, ".config", sopsSubdir, ageSubdir, keyFileName)
 	}
 
-	content, err := os.ReadFile(expectedPath)
+	content, err := os.ReadFile(expectedPath) //#nosec G304 -- test file path
 	if err != nil {
 		t.Errorf("expected key file to exist at %s, got error: %v", expectedPath, err)
 	}
@@ -154,9 +173,8 @@ func TestImportKeyFromFile(t *testing.T) {
 	}
 
 	// Check permissions (on Unix-like systems)
-	if runtime.GOOS != "windows" {
+	if runtime.GOOS != windowsOS {
 		perm := info.Mode().Perm()
-		expectedPerm := os.FileMode(0o600)
 
 		if perm != expectedPerm {
 			t.Errorf("expected file permissions %o, got %o", expectedPerm, perm)
@@ -181,23 +199,23 @@ func TestImportKeyFromStdin(t *testing.T) {
 	}
 
 	// Clear XDG_CONFIG_HOME
-	originalXDG := os.Getenv("XDG_CONFIG_HOME")
+	originalXDG := os.Getenv(xdgConfigHomeEnv)
 	t.Cleanup(func() {
 		if originalXDG != "" {
-			_ = os.Setenv("XDG_CONFIG_HOME", originalXDG)
+			_ = os.Setenv(xdgConfigHomeEnv, originalXDG)
 		} else {
-			_ = os.Unsetenv("XDG_CONFIG_HOME")
+			_ = os.Unsetenv(xdgConfigHomeEnv)
 		}
 	})
-	_ = os.Unsetenv("XDG_CONFIG_HOME")
+	_ = os.Unsetenv(xdgConfigHomeEnv)
 
 	// On Windows, set AppData
-	if runtime.GOOS == "windows" {
-		originalAppData := os.Getenv("AppData")
+	if runtime.GOOS == windowsOS {
+		originalAppData := os.Getenv(appDataEnv)
 		t.Cleanup(func() {
-			_ = os.Setenv("AppData", originalAppData)
+			_ = os.Setenv(appDataEnv, originalAppData)
 		})
-		err = os.Setenv("AppData", tmpDir)
+		err = os.Setenv(appDataEnv, tmpDir)
 		if err != nil {
 			t.Fatalf("failed to set AppData: %v", err)
 		}
@@ -226,15 +244,22 @@ func TestImportKeyFromStdin(t *testing.T) {
 	var expectedPath string
 
 	switch runtime.GOOS {
-	case "windows":
-		expectedPath = filepath.Join(tmpDir, "sops", "age", "keys.txt")
-	case "darwin":
-		expectedPath = filepath.Join(tmpDir, "Library", "Application Support", "sops", "age", "keys.txt")
+	case windowsOS:
+		expectedPath = filepath.Join(tmpDir, sopsSubdir, ageSubdir, keyFileName)
+	case darwinOS:
+		expectedPath = filepath.Join(
+			tmpDir,
+			"Library",
+			"Application Support",
+			sopsSubdir,
+			ageSubdir,
+			keyFileName,
+		)
 	default:
-		expectedPath = filepath.Join(tmpDir, ".config", "sops", "age", "keys.txt")
+		expectedPath = filepath.Join(tmpDir, ".config", sopsSubdir, ageSubdir, keyFileName)
 	}
 
-	content, err := os.ReadFile(expectedPath)
+	content, err := os.ReadFile(expectedPath) //#nosec G304 -- test file path
 	if err != nil {
 		t.Errorf("expected key file to exist at %s, got error: %v", expectedPath, err)
 	}
@@ -252,15 +277,15 @@ func TestImportKeyWithXDGConfigHome(t *testing.T) {
 	xdgConfigDir := filepath.Join(tmpDir, "xdg-config")
 
 	// Set XDG_CONFIG_HOME
-	originalXDG := os.Getenv("XDG_CONFIG_HOME")
+	originalXDG := os.Getenv(xdgConfigHomeEnv)
 	t.Cleanup(func() {
 		if originalXDG != "" {
-			_ = os.Setenv("XDG_CONFIG_HOME", originalXDG)
+			_ = os.Setenv(xdgConfigHomeEnv, originalXDG)
 		} else {
-			_ = os.Unsetenv("XDG_CONFIG_HOME")
+			_ = os.Unsetenv(xdgConfigHomeEnv)
 		}
 	})
-	err := os.Setenv("XDG_CONFIG_HOME", xdgConfigDir)
+	err := os.Setenv(xdgConfigHomeEnv, xdgConfigDir)
 	if err != nil {
 		t.Fatalf("failed to set XDG_CONFIG_HOME: %v", err)
 	}
@@ -286,9 +311,9 @@ func TestImportKeyWithXDGConfigHome(t *testing.T) {
 	}
 
 	// Verify the key was written to XDG_CONFIG_HOME location
-	expectedPath := filepath.Join(xdgConfigDir, "sops", "age", "keys.txt")
+	expectedPath := filepath.Join(xdgConfigDir, sopsSubdir, ageSubdir, keyFileName)
 
-	content, err := os.ReadFile(expectedPath)
+	content, err := os.ReadFile(expectedPath) //#nosec G304 -- test file path
 	if err != nil {
 		t.Errorf("expected key file to exist at %s, got error: %v", expectedPath, err)
 	}
@@ -341,23 +366,23 @@ func TestImportInvalidKey(t *testing.T) {
 			}
 
 			// Clear XDG_CONFIG_HOME
-			originalXDG := os.Getenv("XDG_CONFIG_HOME")
+			originalXDG := os.Getenv(xdgConfigHomeEnv)
 			t.Cleanup(func() {
 				if originalXDG != "" {
-					_ = os.Setenv("XDG_CONFIG_HOME", originalXDG)
+					_ = os.Setenv(xdgConfigHomeEnv, originalXDG)
 				} else {
-					_ = os.Unsetenv("XDG_CONFIG_HOME")
+					_ = os.Unsetenv(xdgConfigHomeEnv)
 				}
 			})
-			_ = os.Unsetenv("XDG_CONFIG_HOME")
+			_ = os.Unsetenv(xdgConfigHomeEnv)
 
 			// On Windows, set AppData
-			if runtime.GOOS == "windows" {
-				originalAppData := os.Getenv("AppData")
+			if runtime.GOOS == windowsOS {
+				originalAppData := os.Getenv(appDataEnv)
 				t.Cleanup(func() {
-					_ = os.Setenv("AppData", originalAppData)
+					_ = os.Setenv(appDataEnv, originalAppData)
 				})
-				err = os.Setenv("AppData", tmpDir)
+				err = os.Setenv(appDataEnv, tmpDir)
 				if err != nil {
 					t.Fatalf("failed to set AppData: %v", err)
 				}
@@ -401,12 +426,12 @@ func TestImportKeyFileNotFound(t *testing.T) {
 	}
 
 	// On Windows, set AppData
-	if runtime.GOOS == "windows" {
-		originalAppData := os.Getenv("AppData")
+	if runtime.GOOS == windowsOS {
+		originalAppData := os.Getenv(appDataEnv)
 		t.Cleanup(func() {
-			_ = os.Setenv("AppData", originalAppData)
+			_ = os.Setenv(appDataEnv, originalAppData)
 		})
-		err = os.Setenv("AppData", tmpDir)
+		err = os.Setenv(appDataEnv, tmpDir)
 		if err != nil {
 			t.Fatalf("failed to set AppData: %v", err)
 		}

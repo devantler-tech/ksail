@@ -13,13 +13,23 @@ import (
 )
 
 var (
-	errInvalidAgeKey     = errors.New("invalid age key format")
-	errKeyFileNotFound   = errors.New("key file not found")
-	errFailedToCreateDir = errors.New("failed to create directory")
-	errFailedToWriteKey  = errors.New("failed to write key")
+	errInvalidAgeKey        = errors.New("invalid age key format")
+	errKeyFileNotFound      = errors.New("key file not found")
+	errFailedToCreateDir    = errors.New("failed to create directory")
+	errFailedToWriteKey     = errors.New("failed to write key")
+	errAppDataNotSet        = errors.New("AppData environment variable not set")
+	errFailedToGetUserHome  = errors.New("failed to get user home directory")
+	errFailedToDetermineAge = errors.New("failed to determine age key path")
+	errFailedToReadKey      = errors.New("failed to read key")
+	errFailedToReadStdin    = errors.New("failed to read key from stdin")
 )
 
-const ageKeyFilePermissions = 0o600
+const (
+	ageKeyFilePermissions = 0o600
+	ageKeyDirPermissions  = 0o700
+	ageKeyPrefix          = "AGE-SECRET-KEY-"
+	minAgeKeyLength       = 60
+)
 
 // getAgeKeyPath returns the platform-specific path for the age keys file.
 // It follows the SOPS convention:
@@ -37,7 +47,7 @@ func getAgeKeyPath() (string, error) {
 	case "windows":
 		appData := os.Getenv("AppData")
 		if appData == "" {
-			return "", fmt.Errorf("AppData environment variable not set")
+			return "", errAppDataNotSet
 		}
 
 		return filepath.Join(appData, "sops", "age", "keys.txt"), nil
@@ -45,15 +55,22 @@ func getAgeKeyPath() (string, error) {
 	case "darwin":
 		homeDir, err := os.UserHomeDir()
 		if err != nil {
-			return "", fmt.Errorf("failed to get user home directory: %w", err)
+			return "", fmt.Errorf("%w: %w", errFailedToGetUserHome, err)
 		}
 
-		return filepath.Join(homeDir, "Library", "Application Support", "sops", "age", "keys.txt"), nil
+		return filepath.Join(
+			homeDir,
+			"Library",
+			"Application Support",
+			"sops",
+			"age",
+			"keys.txt",
+		), nil
 
 	default: // Linux and other Unix-like systems
 		homeDir, err := os.UserHomeDir()
 		if err != nil {
-			return "", fmt.Errorf("failed to get user home directory: %w", err)
+			return "", fmt.Errorf("%w: %w", errFailedToGetUserHome, err)
 		}
 
 		return filepath.Join(homeDir, ".config", "sops", "age", "keys.txt"), nil
@@ -69,12 +86,12 @@ func validateAgeKey(key string) error {
 		return fmt.Errorf("%w: key is empty", errInvalidAgeKey)
 	}
 
-	if !strings.HasPrefix(key, "AGE-SECRET-KEY-") {
-		return fmt.Errorf("%w: key must start with 'AGE-SECRET-KEY-'", errInvalidAgeKey)
+	if !strings.HasPrefix(key, ageKeyPrefix) {
+		return fmt.Errorf("%w: key must start with '%s'", errInvalidAgeKey, ageKeyPrefix)
 	}
 
 	// Basic length check: AGE-SECRET-KEY- (15) + base64 chars (should be around 59-74 chars total)
-	if len(key) < 60 {
+	if len(key) < minAgeKeyLength {
 		return fmt.Errorf("%w: key is too short", errInvalidAgeKey)
 	}
 
@@ -91,36 +108,37 @@ func importKey(keySource string, readFromStdin bool, stdin io.Reader) error {
 	if readFromStdin {
 		keyData, err = io.ReadAll(stdin)
 		if err != nil {
-			return fmt.Errorf("failed to read key from stdin: %w", err)
+			return fmt.Errorf("%w: %w", errFailedToReadStdin, err)
 		}
 	} else {
-		keyData, err = os.ReadFile(keySource)
+		keyData, err = os.ReadFile(keySource) //#nosec G304 -- file path is provided by user
 		if err != nil {
 			if os.IsNotExist(err) {
 				return fmt.Errorf("%w: %s", errKeyFileNotFound, keySource)
 			}
 
-			return fmt.Errorf("failed to read key file: %w", err)
+			return fmt.Errorf("%w: %w", errFailedToReadKey, err)
 		}
 	}
 
 	keyString := string(keyData)
 
 	// Validate the key
-	if err := validateAgeKey(keyString); err != nil {
+	err = validateAgeKey(keyString)
+	if err != nil {
 		return err
 	}
 
 	// Get target path
 	targetPath, err := getAgeKeyPath()
 	if err != nil {
-		return fmt.Errorf("failed to determine age key path: %w", err)
+		return fmt.Errorf("%w: %w", errFailedToDetermineAge, err)
 	}
 
 	// Create directory if it doesn't exist
 	targetDir := filepath.Dir(targetPath)
 
-	err = os.MkdirAll(targetDir, 0o700)
+	err = os.MkdirAll(targetDir, ageKeyDirPermissions)
 	if err != nil {
 		return fmt.Errorf("%w: %s: %w", errFailedToCreateDir, targetDir, err)
 	}
