@@ -15,7 +15,7 @@ require (
 	github.com/getsops/sops/v3 v3.11.0
 	github.com/gkampitakis/go-snaps v0.5.18
 	github.com/go-viper/mapstructure/v2 v2.4.0
-	github.com/google/go-containerregistry v0.20.7
+	github.com/google/go-containerregistry v0.20.6
 	github.com/jinzhu/copier v0.4.0
 	github.com/k3d-io/k3d/v5 v5.8.3
 	github.com/mitchellh/go-wordwrap v1.0.1
