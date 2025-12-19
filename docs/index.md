@@ -9,14 +9,14 @@ Documentation for KSail - a CLI tool for managing local Kubernetes clusters and 
 
 ## 📚 Documentation Structure
 
-- **[Overview](overview)** – Product overview, architecture, and key features
-- **[Configuration](configuration)** – Declarative config, CLI options, and configuration precedence
-- **[Use Cases](use-cases)** – Scenario guides for learning, development, and CI/CD
-- **[Core Concepts](core-concepts)** – Detailed guides for CNI, distributions, registries, and cluster components
+- **[Overview](overview.html)** – Product overview, architecture, and key features
+- **[Configuration](configuration.html)** – Declarative config, CLI options, and configuration precedence
+- **[Use Cases](use-cases.html)** – Scenario guides for learning, development, and CI/CD
+- **[Core Concepts](core-concepts.html)** – Detailed guides for CNI, distributions, registries, and cluster components
 
 ## 🚀 Getting Started
 
-- **New to KSail?** Start with [Overview](overview)
+- **New to KSail?** Start with [Overview](overview.html)
 - **Installing KSail?** Visit [devantler-tech/ksail](https://github.com/devantler-tech/ksail)
 - **Need API docs?** See [pkg.go.dev](https://pkg.go.dev/github.com/devantler-tech/ksail)
 
