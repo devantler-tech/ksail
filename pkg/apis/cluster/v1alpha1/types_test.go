@@ -54,3 +54,51 @@ func TestDistribution_ProvidesMetricsServerByDefault(t *testing.T) {
 		assert.False(t, result, "Empty distribution should not provide metrics-server by default")
 	})
 }
+
+func TestDistribution_ProvidesStorageByDefault(t *testing.T) {
+	t.Parallel()
+
+	t.Run("returns_true_for_k3d", func(t *testing.T) {
+		t.Parallel()
+
+		dist := v1alpha1.DistributionK3d
+
+		result := dist.ProvidesStorageByDefault()
+
+		assert.True(t, result, "K3d should provide storage by default")
+	})
+
+	t.Run("returns_false_for_kind", func(t *testing.T) {
+		t.Parallel()
+
+		dist := v1alpha1.DistributionKind
+
+		result := dist.ProvidesStorageByDefault()
+
+		assert.False(t, result, "Kind should not provide storage by default")
+	})
+
+	t.Run("returns_false_for_unknown_distribution", func(t *testing.T) {
+		t.Parallel()
+
+		dist := v1alpha1.Distribution("unknown")
+
+		result := dist.ProvidesStorageByDefault()
+
+		assert.False(
+			t,
+			result,
+			"Unknown distributions should not provide storage by default",
+		)
+	})
+
+	t.Run("returns_false_for_empty_distribution", func(t *testing.T) {
+		t.Parallel()
+
+		dist := v1alpha1.Distribution("")
+
+		result := dist.ProvidesStorageByDefault()
+
+		assert.False(t, result, "Empty distribution should not provide storage by default")
+	})
+}
