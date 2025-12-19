@@ -25,6 +25,11 @@ Before you begin, ensure you have the following installed:
 - [mega-linter](https://megalinter.io/latest/mega-linter-runner/#installation)
 - [Docker](https://www.docker.com/get-started/)
 
+For building documentation:
+
+- [Ruby (v3.2+)](https://www.ruby-lang.org/en/documentation/installation/)
+- [Bundler](https://bundler.io/)
+
 ### Lint
 
 KSail uses mega-linter with the go flavor, and uses a strict configuration to ensure code quality and consistency. You can run the linter with the following command:
@@ -62,13 +67,6 @@ go test ./...
 ### Documentation
 
 The project documentation is built using [Jekyll](https://jekyllrb.com/) with the [Just the Docs](https://just-the-docs.com/) theme and is located in the `docs/` directory.
-
-#### Documentation Prerequisites
-
-To build the documentation locally, you need:
-
-- [Ruby (v3.2+)](https://www.ruby-lang.org/en/documentation/installation/)
-- [Bundler](https://bundler.io/)
 
 #### Building the documentation
 
