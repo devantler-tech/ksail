@@ -74,19 +74,19 @@ changelog:
       - "Merge branch"
   groups:
     - title: "Breaking Changes"
-      regexp: "^.*!:"
+      regexp: '^.*?(feat|fix|perf|refactor|revert|test|docs|style|chore|build|ci)(\(.+\))?!:'
       order: 0
     - title: "Features"
-      regexp: '^.*?feat(\(.+\))?!?:'
+      regexp: '^.*?feat(\(.+\))?:'
       order: 1
     - title: "Bug Fixes"
-      regexp: '^.*?fix(\(.+\))?!?:'
+      regexp: '^.*?fix(\(.+\))?:'
       order: 2
     - title: "Performance Improvements"
-      regexp: '^.*?perf(\(.+\))?!?:'
+      regexp: '^.*?perf(\(.+\))?:'
       order: 3
     - title: "Refactoring"
-      regexp: '^.*?refactor(\(.+\))?!?:'
+      regexp: '^.*?refactor(\(.+\))?:'
       order: 4
     - title: "Other Changes"
       order: 999
