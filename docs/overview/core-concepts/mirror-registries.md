@@ -1,4 +1,5 @@
 ---
+title: "Mirror Registries"
 parent: Core Concepts
 grand_parent: Overview
 nav_order: 10

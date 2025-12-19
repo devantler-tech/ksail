@@ -1,4 +1,5 @@
 ---
+title: "CLI Options"
 parent: Configuration
 nav_order: 1
 ---
