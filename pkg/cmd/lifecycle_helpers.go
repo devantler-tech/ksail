@@ -19,6 +19,9 @@ import (
 // ErrMissingClusterProvisionerDependency indicates that a lifecycle command resolved a nil provisioner.
 var ErrMissingClusterProvisionerDependency = errors.New("missing cluster provisioner dependency")
 
+// ErrClusterConfigRequired indicates that a nil cluster configuration was provided.
+var ErrClusterConfigRequired = errors.New("cluster configuration is required")
+
 // LifecycleAction represents a lifecycle operation executed against a cluster provisioner.
 // The action receives a context for cancellation, the provisioner instance, and the cluster name.
 // It returns an error if the lifecycle operation fails.
@@ -157,7 +160,12 @@ func getClusterNameFromConfigOrContext(
 	}
 
 	// Fall back to distribution config name
-	return configmanager.GetClusterName(distributionConfig)
+	clusterName, err := configmanager.GetClusterName(distributionConfig)
+	if err != nil {
+		return "", fmt.Errorf("failed to get cluster name from distribution config: %w", err)
+	}
+
+	return clusterName, nil
 }
 
 // ExtractClusterNameFromContext extracts the cluster name from a context string.
@@ -167,14 +175,15 @@ func getClusterNameFromConfigOrContext(
 func ExtractClusterNameFromContext(context string, distribution v1alpha1.Distribution) string {
 	switch distribution {
 	case v1alpha1.DistributionKind:
-		if strings.HasPrefix(context, "kind-") {
-			return strings.TrimPrefix(context, "kind-")
+		if clusterName, ok := strings.CutPrefix(context, "kind-"); ok {
+			return clusterName
 		}
 	case v1alpha1.DistributionK3d:
-		if strings.HasPrefix(context, "k3d-") {
-			return strings.TrimPrefix(context, "k3d-")
+		if clusterName, ok := strings.CutPrefix(context, "k3d-"); ok {
+			return clusterName
 		}
 	}
+
 	return ""
 }
 
@@ -188,7 +197,7 @@ func GetClusterNameFromConfig(
 	factory clusterprovisioner.Factory,
 ) (string, error) {
 	if clusterCfg == nil {
-		return "", fmt.Errorf("cluster configuration is required")
+		return "", ErrClusterConfigRequired
 	}
 
 	// If context is explicitly set, derive cluster name from it
@@ -208,7 +217,12 @@ func GetClusterNameFromConfig(
 		return "", fmt.Errorf("failed to load distribution config: %w", err)
 	}
 
-	return configmanager.GetClusterName(distributionConfig)
+	clusterName, err := configmanager.GetClusterName(distributionConfig)
+	if err != nil {
+		return "", fmt.Errorf("failed to get cluster name from distribution config: %w", err)
+	}
+
+	return clusterName, nil
 }
 
 // RunLifecycleWithConfig executes a lifecycle command using a pre-loaded cluster configuration.

@@ -193,7 +193,28 @@ spec:
 func TestExtractClusterNameFromContext(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
+	tests := getExtractClusterNameTestCases()
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			result := pkgcmd.ExtractClusterNameFromContext(testCase.context, testCase.distribution)
+			if result != testCase.expected {
+				t.Errorf("extractClusterNameFromContext(%q, %v) = %q; want %q",
+					testCase.context, testCase.distribution, result, testCase.expected)
+			}
+		})
+	}
+}
+
+func getExtractClusterNameTestCases() []struct {
+	name         string
+	context      string
+	distribution v1alpha1.Distribution
+	expected     string
+} {
+	return []struct {
 		name         string
 		context      string
 		distribution v1alpha1.Distribution
@@ -278,24 +299,33 @@ func TestExtractClusterNameFromContext(t *testing.T) {
 			expected:     "k3d-default",
 		},
 	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			result := pkgcmd.ExtractClusterNameFromContext(tt.context, tt.distribution)
-			if result != tt.expected {
-				t.Errorf("extractClusterNameFromContext(%q, %v) = %q; want %q",
-					tt.context, tt.distribution, result, tt.expected)
-			}
-		})
-	}
 }
 
 func TestGetClusterNameFromConfig(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
+	tests := getClusterNameConfigTestCases()
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			cfg, factory := testCase.setup(t)
+			result, err := pkgcmd.GetClusterNameFromConfig(cfg, factory)
+
+			assertGetClusterNameResult(t, result, err, testCase)
+		})
+	}
+}
+
+func getClusterNameConfigTestCases() []struct {
+	name        string
+	setup       func(*testing.T) (*v1alpha1.Cluster, clusterprovisioner.Factory)
+	expectError bool
+	errorMsg    string
+	expected    string
+} {
+	return []struct {
 		name        string
 		setup       func(*testing.T) (*v1alpha1.Cluster, clusterprovisioner.Factory)
 		expectError bool
@@ -306,7 +336,9 @@ func TestGetClusterNameFromConfig(t *testing.T) {
 			name: "nil config returns error",
 			setup: func(t *testing.T) (*v1alpha1.Cluster, clusterprovisioner.Factory) {
 				t.Helper()
+
 				factory := clusterprovisioner.NewMockFactory(t)
+
 				return nil, factory
 			},
 			expectError: true,
@@ -316,10 +348,12 @@ func TestGetClusterNameFromConfig(t *testing.T) {
 			name: "kind cluster with explicit context",
 			setup: func(t *testing.T) (*v1alpha1.Cluster, clusterprovisioner.Factory) {
 				t.Helper()
+
 				cfg := v1alpha1.NewCluster()
 				cfg.Spec.Distribution = v1alpha1.DistributionKind
 				cfg.Spec.Connection.Context = "kind-my-cluster"
 				factory := clusterprovisioner.NewMockFactory(t)
+
 				return cfg, factory
 			},
 			expectError: false,
@@ -329,10 +363,12 @@ func TestGetClusterNameFromConfig(t *testing.T) {
 			name: "k3d cluster with explicit context",
 			setup: func(t *testing.T) (*v1alpha1.Cluster, clusterprovisioner.Factory) {
 				t.Helper()
+
 				cfg := v1alpha1.NewCluster()
 				cfg.Spec.Distribution = v1alpha1.DistributionK3d
 				cfg.Spec.Connection.Context = "k3d-test-cluster"
 				factory := clusterprovisioner.NewMockFactory(t)
+
 				return cfg, factory
 			},
 			expectError: false,
@@ -342,10 +378,12 @@ func TestGetClusterNameFromConfig(t *testing.T) {
 			name: "empty context with factory error",
 			setup: func(t *testing.T) (*v1alpha1.Cluster, clusterprovisioner.Factory) {
 				t.Helper()
+
 				cfg := v1alpha1.NewCluster()
 				cfg.Spec.Distribution = v1alpha1.DistributionKind
 				cfg.Spec.Connection.Context = ""
 				factory := &errorFactory{err: errFactoryError}
+
 				return cfg, factory
 			},
 			expectError: true,
@@ -355,42 +393,53 @@ func TestGetClusterNameFromConfig(t *testing.T) {
 			name: "invalid context format falls back to config",
 			setup: func(t *testing.T) (*v1alpha1.Cluster, clusterprovisioner.Factory) {
 				t.Helper()
+
 				cfg := v1alpha1.NewCluster()
 				cfg.Spec.Distribution = v1alpha1.DistributionKind
 				cfg.Spec.Connection.Context = "invalid-context"
 				// This should fall back to factory, which will error
 				factory := &errorFactory{err: errFactoryError}
+
 				return cfg, factory
 			},
 			expectError: true,
 			errorMsg:    "failed to load distribution config",
 		},
 	}
+}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
+func assertGetClusterNameResult(
+	t *testing.T,
+	result string,
+	err error,
+	testCase struct {
+		name        string
+		setup       func(*testing.T) (*v1alpha1.Cluster, clusterprovisioner.Factory)
+		expectError bool
+		errorMsg    string
+		expected    string
+	},
+) {
+	t.Helper()
 
-			cfg, factory := tt.setup(t)
+	if testCase.expectError {
+		if err == nil {
+			t.Fatalf("expected error containing %q, got nil", testCase.errorMsg)
+		}
 
-			result, err := pkgcmd.GetClusterNameFromConfig(cfg, factory)
+		if !strings.Contains(err.Error(), testCase.errorMsg) {
+			t.Errorf("expected error containing %q, got %q", testCase.errorMsg, err.Error())
+		}
 
-			if tt.expectError {
-				if err == nil {
-					t.Fatalf("expected error containing %q, got nil", tt.errorMsg)
-				}
-				if !strings.Contains(err.Error(), tt.errorMsg) {
-					t.Errorf("expected error containing %q, got %q", tt.errorMsg, err.Error())
-				}
-			} else {
-				if err != nil {
-					t.Fatalf("unexpected error: %v", err)
-				}
-				if result != tt.expected {
-					t.Errorf("GetClusterNameFromConfig() = %q; want %q", result, tt.expected)
-				}
-			}
-		})
+		return
+	}
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result != testCase.expected {
+		t.Errorf("GetClusterNameFromConfig() = %q; want %q", result, testCase.expected)
 	}
 }
 
