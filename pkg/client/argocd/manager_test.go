@@ -25,7 +25,7 @@ type testManager struct {
 func newTestManager(t *testing.T) testManager {
 	t.Helper()
 
-	clientset := k8sfake.NewSimpleClientset()
+	clientset := k8sfake.NewClientset()
 	gvr := schema.GroupVersionResource{
 		Group:    "argoproj.io",
 		Version:  "v1alpha1",
@@ -141,7 +141,7 @@ func TestManagerEnsure_UsesConfiguredSourcePath(t *testing.T) {
 func TestManagerEnsure_IsIdempotentAndUpdatesTargetRevision(t *testing.T) {
 	t.Parallel()
 
-	clientset := k8sfake.NewSimpleClientset(
+	clientset := k8sfake.NewClientset(
 		&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "unrelated", Namespace: "default"}},
 	)
 	gvr := schema.GroupVersionResource{
