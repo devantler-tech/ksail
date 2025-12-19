@@ -26,6 +26,7 @@ import (
 	calicoinstaller "github.com/devantler-tech/ksail/pkg/svc/installer/cni/calico"
 	ciliuminstaller "github.com/devantler-tech/ksail/pkg/svc/installer/cni/cilium"
 	fluxinstaller "github.com/devantler-tech/ksail/pkg/svc/installer/flux"
+	localpathstorageinstaller "github.com/devantler-tech/ksail/pkg/svc/installer/localpathstorage"
 	metricsserverinstaller "github.com/devantler-tech/ksail/pkg/svc/installer/metrics-server"
 	clusterprovisioner "github.com/devantler-tech/ksail/pkg/svc/provisioner/cluster"
 	k3dprovisioner "github.com/devantler-tech/ksail/pkg/svc/provisioner/cluster/k3d"
@@ -84,6 +85,7 @@ func NewCreateCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
 	fieldSelectors := ksailconfigmanager.DefaultClusterFieldSelectors()
 	fieldSelectors = append(fieldSelectors, ksailconfigmanager.DefaultMetricsServerFieldSelector())
 	fieldSelectors = append(fieldSelectors, ksailconfigmanager.DefaultCertManagerFieldSelector())
+	fieldSelectors = append(fieldSelectors, ksailconfigmanager.DefaultCSIFieldSelector())
 
 	cfgManager := ksailconfigmanager.NewCommandConfigManager(
 		cmd,
@@ -269,7 +271,7 @@ func connectMirrorRegistriesWithWarning(
 	}
 }
 
-// handlePostCreationSetup installs CNI and metrics-server after cluster creation.
+// handlePostCreationSetup installs CNI, CSI, and metrics-server after cluster creation.
 // Order depends on CNI configuration to resolve dependencies.
 func handlePostCreationSetup(
 	cmd *cobra.Command,
@@ -292,6 +294,11 @@ func handlePostCreationSetup(
 		return fmt.Errorf("%w: %s", ErrUnsupportedCNI, clusterCfg.Spec.CNI)
 	}
 
+	if err != nil {
+		return err
+	}
+
+	err = installCSIIfConfigured(cmd, clusterCfg, tmr, firstActivityShown)
 	if err != nil {
 		return err
 	}
@@ -1321,6 +1328,68 @@ func runMetricsServerInstallation(
 	notify.WriteMessage(notify.Message{
 		Type:    notify.SuccessType,
 		Content: "metrics server installed",
+		Timer:   outputTimer,
+		Writer:  cmd.OutOrStdout(),
+	})
+
+	return nil
+}
+
+func installCSIIfConfigured(
+	cmd *cobra.Command,
+	clusterCfg *v1alpha1.Cluster,
+	tmr timer.Timer,
+	firstActivityShown *bool,
+) error {
+	// Only install if CSI is set to LocalPathStorage
+	if clusterCfg.Spec.CSI != v1alpha1.CSILocalPathStorage {
+		return nil
+	}
+
+	if *firstActivityShown {
+		_, _ = fmt.Fprintln(cmd.OutOrStdout())
+	}
+
+	*firstActivityShown = true
+
+	tmr.NewStage()
+
+	notify.WriteMessage(notify.Message{
+		Type:    notify.TitleType,
+		Content: "Install CSI...",
+		Emoji:   "💾",
+		Writer:  cmd.OutOrStdout(),
+	})
+
+	_, kubeconfig, err := createHelmClientForCluster(clusterCfg)
+	if err != nil {
+		return err
+	}
+
+	timeout := installer.GetInstallTimeout(clusterCfg)
+	csiInstaller := localpathstorageinstaller.NewLocalPathStorageInstaller(
+		kubeconfig,
+		clusterCfg.Spec.Connection.Context,
+		timeout,
+		clusterCfg.Spec.Distribution,
+	)
+
+	notify.WriteMessage(notify.Message{
+		Type:    notify.ActivityType,
+		Content: "installing local-path-storage",
+		Writer:  cmd.OutOrStdout(),
+	})
+
+	installErr := csiInstaller.Install(cmd.Context())
+	if installErr != nil {
+		return fmt.Errorf("local-path-storage installation failed: %w", installErr)
+	}
+
+	outputTimer := cmdhelpers.MaybeTimer(cmd, tmr)
+
+	notify.WriteMessage(notify.Message{
+		Type:    notify.SuccessType,
+		Content: "csi installed",
 		Timer:   outputTimer,
 		Writer:  cmd.OutOrStdout(),
 	})
