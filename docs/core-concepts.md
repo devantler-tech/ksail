@@ -19,12 +19,6 @@ Distributions determine how Kubernetes is packaged and run. Select with `ksail c
 
 [K3d](https://k3d.io/) wraps the lightweight [K3s](https://k3s.io/) distribution in containers. It uses fewer resources while preserving core Kubernetes APIs. Configure host port mappings in `k3d.yaml`.
 
-## Container Engines
-
-KSail currently supports [Docker](https://www.docker.com/) as the container engine for running Kind and K3d clusters. Docker integrates with both distributions and works across macOS, Linux, and Windows.
-
-> **Note:** Podman support is planned for a future release.
-
 ## Cluster Components
 
 ### Container Network Interface (CNI)
@@ -106,9 +100,9 @@ Configure via `spec.localRegistry` in `ksail.yaml` or `--local-registry` flag.
 **How it works:**
 
 1. Initialize with `--local-registry Enabled --local-registry-port 5111`
-2. Create cluster starts a `registry:2` container connected to cluster network
-3. Tag and push images: `docker tag my-api localhost:5111/my-api && docker push localhost:5111/my-api`
-4. Reference in manifests: `image: localhost:5111/my-api`
+2. Create cluster starts a `registry:3` container connected to cluster network
+3. Tag and push images from host: `docker tag my-api localhost:5111/my-api && docker push localhost:5111/my-api`
+4. Reference in manifests using container name: `image: ksail-registry:5000/my-api`
 5. Delete cluster tears down registry container
 
 **Configuration:**
@@ -190,28 +184,3 @@ SOPS supports multiple key management systems:
 Configure SOPS using a `.sops.yaml` file in your project directory. See the [SOPS documentation](https://github.com/getsops/sops#usage) for details.
 
 > **Note:** Full GitOps integration with automatic decryption is planned when Flux support is added.
-
-## Traffic Management
-
-### Ingress Controllers
-
-Ingress controllers expose HTTP(S) services from inside the cluster.
-
-> **Note:** Ingress controller configuration is not yet implemented in KSail. Configure through your distribution's configuration file (`kind.yaml` or `k3d.yaml`) for now.
-
-**Planned options:**
-
-- **`Default`** – Use distribution's bundled controller (Kind: none, K3d: Traefik)
-- **`Traefik`** – Install Traefik explicitly
-- **`None`** – Skip ingress installation
-
-### Gateway Controllers
-
-Gateway controllers manage [Gateway API](https://gateway-api.sigs.k8s.io) resources.
-
-> **Note:** Gateway controller configuration is not yet implemented. Gateway API support is planned for a future release. Install gateway controllers manually using `ksail workload install` for now.
-
-**Planned options:**
-
-- **`Default`** – Preserve distribution defaults (currently none)
-- **`None`** – Explicitly disable gateway installation
