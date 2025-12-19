@@ -9,14 +9,15 @@ KSail is a CLI tool for creating and maintaining local Kubernetes clusters. It p
 
 KSail simplifies your Kubernetes workflow by providing:
 
-- 🎯 A single command-line interface for Kind and K3d clusters
-- 📝 Declarative configuration for reproducible environments
-- 🔐 Integrated workload and secrets management
-- ⚡ Fast cluster lifecycle operations (create, start, stop, delete)
+- 🎯 **Unified CLI** — One interface for cluster and workload management
+- 📄 **Declarative Configuration** — Configuration as code for reproducible clusters
+- 🔧 **Flexible Configuration** — Configure your cluster with your preferred distribution, CNI, CSI, service mesh and more.
+- 🚀 **Fast Setup** — Spin up local clusters in seconds
+- ⚡ **GitOps Ready** — Built-in Flux and ArgoCD support for reconciliation via local registry and OCI artifacts
+- 🪞 **Mirror Registries** — Cache images locally to avoid rate limits
+- 🔐 **Secrets Management** — SOPS integration for encrypting manifests at rest
 
 Whether you're developing applications, testing infrastructure changes, or learning Kubernetes, KSail gets you from zero to a working cluster in seconds.
-
-🌟 Declarative. Local. Effortless. Welcome to Kubernetes, simplified.
 
 ## Getting Started
 
@@ -93,16 +94,6 @@ KSail organizes commands around your development lifecycle:
 - `ksail cipher decrypt` — Decrypt secrets with SOPS
 - `ksail cipher edit` — Edit encrypted files in place
 
-### Key Features
-
-🎯 **Unified CLI** — One interface for Kind and K3d  
-📦 **Local Registry** — Build and push images without external registries  
-🔐 **Secrets Management** — SOPS integration for encrypted credentials  
-⚡ **GitOps Ready** — Built-in Flux and ArgoCD support for reconciliation
-🔧 **Extensible** — Cilium CNI, cert-manager, metrics-server, and more
-
-For a complete command reference, run `ksail --help` or explore the [documentation](#documentation).
-
 ## Documentation
 
 ### For users
@@ -119,7 +110,7 @@ For a complete command reference, run `ksail --help` or explore the [documentati
 KSail is a powerful tool that can be used in many different ways. Here are some projects that use KSail in their setup:
 
 | Project                                                               | Description         | Type     |
-|-----------------------------------------------------------------------|---------------------|----------|
+| --------------------------------------------------------------------- | ------------------- | -------- |
 | [devantler-tech/platform](https://github.com/devantler-tech/platform) | My personal homelab | Platform |
 
 If you use KSail in your project, feel free to open a PR to add it to the list, so others can see how you use KSail.
