@@ -51,18 +51,51 @@ go build -o ksail
 
 ## Usage
 
-| Purpose                                                    | Command Example            |
-|------------------------------------------------------------|----------------------------|
-| Initialize a new KSail cluster project                     | `ksail cluster init`       |
-| Create and start the cluster                               | `ksail cluster create`     |
-| Create a workload in the cluster                           | `ksail workload create`    |
-| Apply workloads to the cluster                             | `ksail workload apply`     |
-| Reconcile workloads (requires configuring a GitOps engine) | `ksail workload reconcile` |
-| Connect to the cluster                                     | `ksail cluster connect`    |
-| Stop the cluster                                           | `ksail cluster stop`       |
-| Delete the cluster                                         | `ksail cluster delete`     |
+### Quick Start
 
-This is just a small sample of what KSail can do. For a full list of commands and options, run `ksail --help` or refer to the [documentation](#documentation).
+Get up and running with a local Kubernetes cluster in three steps:
+
+```bash
+# 1. Initialize a new project with your preferred stack
+ksail cluster init --distribution Kind --cni Cilium
+
+# 2. Create and start the cluster
+ksail cluster create
+
+# 3. Deploy your workloads
+ksail workload apply -k ./k8s
+```
+
+### Development Workflow
+
+KSail organizes commands around your development lifecycle:
+
+**Cluster Lifecycle**
+- `ksail cluster init` — Scaffold a new project with declarative configuration
+- `ksail cluster create` — Provision a new cluster (Kind or K3d)
+- `ksail cluster start/stop` — Pause and resume without losing state
+- `ksail cluster connect` — Open k9s for interactive debugging
+- `ksail cluster delete` — Clean up resources
+
+**Workload Management**
+- `ksail workload apply` — Deploy manifests with kubectl or Kustomize
+- `ksail workload reconcile` — Trigger GitOps reconciliation (Flux)
+- `ksail workload logs/exec` — Debug running pods
+- `ksail workload gen` — Generate resource templates
+
+**Secrets & Security**
+- `ksail cipher encrypt/decrypt` — Manage encrypted secrets with SOPS
+- `ksail cipher edit` — Edit encrypted files in place
+
+### Key Features
+
+🎯 **Unified CLI** — One interface for Kind and K3d  
+📦 **Local Registry** — Build and push images without external registries  
+🔐 **Secrets Management** — SOPS integration for encrypted credentials  
+⚡ **GitOps Ready** — Built-in Flux support for reconciliation  
+🔧 **Extensible** — Cilium CNI, cert-manager, metrics-server, and more
+
+For a complete command reference, run `ksail --help` or explore the [documentation](#documentation).
 
 ## Documentation
 
