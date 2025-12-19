@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"filippo.io/age"
 	"github.com/spf13/cobra"
 )
 
@@ -119,6 +120,20 @@ func validateAgeKey(keyContent string) error {
 	return nil
 }
 
+// derivePublicKey derives the public key from an age private key.
+func derivePublicKey(privateKey string) (string, error) {
+	// Parse the private key to get the identity
+	identity, err := age.ParseX25519Identity(strings.TrimSpace(privateKey))
+	if err != nil {
+		return "", fmt.Errorf("failed to parse private key: %w", err)
+	}
+
+	// Get the recipient (public key) from the identity
+	recipient := identity.Recipient()
+
+	return recipient.String(), nil
+}
+
 // formatAgeKeyWithMetadata formats an age private key with metadata comments.
 func formatAgeKeyWithMetadata(privateKey, publicKey string) string {
 	var builder strings.Builder
@@ -146,12 +161,18 @@ func formatAgeKeyWithMetadata(privateKey, publicKey string) string {
 	return builder.String()
 }
 
-// importKey imports an age private key with optional metadata to the keys file.
-func importKey(privateKey, publicKey string) error {
+// importKey imports an age private key and automatically derives the public key.
+func importKey(privateKey string) error {
 	// Validate the private key
 	err := validateAgeKey(privateKey)
 	if err != nil {
 		return err
+	}
+
+	// Derive the public key from the private key
+	publicKey, err := derivePublicKey(privateKey)
+	if err != nil {
+		return fmt.Errorf("failed to derive public key: %w", err)
 	}
 
 	// Get target path
@@ -182,19 +203,17 @@ func importKey(privateKey, publicKey string) error {
 
 // NewImportCmd creates and returns the import command.
 func NewImportCmd() *cobra.Command {
-	var publicKey string
-
 	cmd := &cobra.Command{
 		Use:   "import PRIVATE_KEY",
 		Short: "Import an age key to the system's SOPS key location",
 		Long: `Import an age private key to the system's default SOPS age key location.
 
 The private key must be provided as a command argument (not a file path).
-An optional public key can be provided via the --public-key flag.
+The public key will be automatically derived from the private key.
 
 The command will automatically add metadata including:
   - Creation timestamp
-  - Public key (if provided)
+  - Public key (derived from private key)
 
 Platform-specific key locations:
   Linux:   $XDG_CONFIG_HOME/sops/age/keys.txt
@@ -206,26 +225,21 @@ Platform-specific key locations:
 The private key must be in age format (starting with "AGE-SECRET-KEY-").
 
 Examples:
-  # Import a private key
-  ksail cipher import AGE-SECRET-KEY-1ABCDEF...
-
-  # Import with public key metadata
-  ksail cipher import AGE-SECRET-KEY-1ABCDEF... --public-key age1abc...`,
+  # Import a private key (public key will be derived automatically)
+  ksail cipher import AGE-SECRET-KEY-1ABCDEF...`,
 		SilenceUsage: true,
 		Args:         cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return handleImportRunE(cmd, args[0], publicKey)
+			return handleImportRunE(cmd, args[0])
 		},
 	}
-
-	cmd.Flags().StringVar(&publicKey, "public-key", "", "optional public key to include in metadata")
 
 	return cmd
 }
 
 // handleImportRunE is the main handler for the import command.
-func handleImportRunE(cmd *cobra.Command, privateKey, publicKey string) error {
-	err := importKey(privateKey, publicKey)
+func handleImportRunE(cmd *cobra.Command, privateKey string) error {
+	err := importKey(privateKey)
 	if err != nil {
 		return fmt.Errorf("failed to import age key: %w", err)
 	}

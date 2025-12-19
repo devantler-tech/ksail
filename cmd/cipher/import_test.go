@@ -13,15 +13,15 @@ import (
 )
 
 const (
-	validAgeKey      = "AGE-SECRET-KEY-1ABCDEFGHIJKLMNOPQRSTUVWXYZ234567890ABCDEFGHIJKLMNOP"
-	validPublicKey   = "age1abcdefghijklmnopqrstuvwxyz1234567890abcdefghijklmnopqr"
-	windowsOS        = "windows"
-	darwinOS         = "darwin"
-	keyFileName      = "keys.txt"
-	sopsSubdir       = "sops"
-	ageSubdir        = "age"
-	filePermissions  = 0o600
-	expectedPerm     = os.FileMode(filePermissions)
+	validAgeKey    = "AGE-SECRET-KEY-12CDPTUPWF92L47FH8TK6P7N2S53J0KZTQUJTUZQCCA4NW87C8JHQSP4L99"
+	validPublicKey = "age1nr74d6yw2mp7tcvj5zgv7e9wj8gnae408kczun3ktggsdqdp3ymszg6s7w"
+	windowsOS      = "windows"
+	darwinOS       = "darwin"
+	keyFileName    = "keys.txt"
+	sopsSubdir     = "sops"
+	ageSubdir      = "age"
+	filePermissions = 0o600
+	expectedPerm    = os.FileMode(filePermissions)
 	xdgConfigHomeEnv = "XDG_CONFIG_HOME"
 	homeEnv          = "HOME"
 	appDataEnv       = "AppData"
@@ -42,12 +42,6 @@ func TestNewImportCmd(t *testing.T) {
 
 	if cmd.Short == "" {
 		t.Error("expected Short description to be set")
-	}
-
-	// Verify public-key flag exists
-	publicKeyFlag := cmd.Flags().Lookup("public-key")
-	if publicKeyFlag == nil {
-		t.Error("expected public-key flag to be registered")
 	}
 }
 
@@ -80,8 +74,9 @@ func TestImportCommandHelp(t *testing.T) {
 		t.Error("expected help output to mention age")
 	}
 
-	if !strings.Contains(output, "public-key") {
-		t.Error("expected help output to mention public-key flag")
+	// Verify help output mentions automatic public key derivation
+	if !strings.Contains(output, "derived") {
+		t.Error("expected help output to mention public key derivation")
 	}
 }
 
@@ -173,6 +168,11 @@ func TestImportKeyBasic(t *testing.T) {
 		t.Errorf("expected key file to contain creation timestamp")
 	}
 
+	// Verify the public key is automatically derived and included
+	if !strings.Contains(contentStr, "# public key:") {
+		t.Errorf("expected key file to contain public key comment")
+	}
+
 	// Verify the key is present
 	if !strings.Contains(contentStr, validAgeKey) {
 		t.Errorf("expected key file to contain the age key")
@@ -191,105 +191,6 @@ func TestImportKeyBasic(t *testing.T) {
 		if perm != expectedPerm {
 			t.Errorf("expected file permissions %o, got %o", expectedPerm, perm)
 		}
-	}
-}
-
-func TestImportKeyWithPublicKey(t *testing.T) {
-	// Note: Not running in parallel due to environment variable modifications
-
-	// Create a temporary directory for testing
-	tmpDir := t.TempDir()
-
-	// Set HOME to temp directory
-	originalHome := os.Getenv(homeEnv)
-	t.Cleanup(func() {
-		_ = os.Setenv(homeEnv, originalHome)
-	})
-	err := os.Setenv(homeEnv, tmpDir)
-	if err != nil {
-		t.Fatalf("failed to set HOME: %v", err)
-	}
-
-	// Clear XDG_CONFIG_HOME
-	originalXDG := os.Getenv(xdgConfigHomeEnv)
-	t.Cleanup(func() {
-		if originalXDG != "" {
-			_ = os.Setenv(xdgConfigHomeEnv, originalXDG)
-		} else {
-			_ = os.Unsetenv(xdgConfigHomeEnv)
-		}
-	})
-	_ = os.Unsetenv(xdgConfigHomeEnv)
-
-	// On Windows, set AppData
-	if runtime.GOOS == windowsOS {
-		originalAppData := os.Getenv(appDataEnv)
-		t.Cleanup(func() {
-			_ = os.Setenv(appDataEnv, originalAppData)
-		})
-		err = os.Setenv(appDataEnv, tmpDir)
-		if err != nil {
-			t.Fatalf("failed to set AppData: %v", err)
-		}
-	}
-
-	// Execute import command with private key and public key
-	rt := rtruntime.NewRuntime()
-	cipherCmd := cipher.NewCipherCmd(rt)
-
-	var out bytes.Buffer
-	cipherCmd.SetOut(&out)
-	cipherCmd.SetArgs([]string{"import", validAgeKey, "--public-key", validPublicKey})
-
-	err = cipherCmd.Execute()
-	if err != nil {
-		t.Errorf("expected no error executing import with public key, got: %v", err)
-	}
-
-	output := out.String()
-	if !strings.Contains(output, "Successfully imported") {
-		t.Errorf("expected success message, got: %s", output)
-	}
-
-	// Verify the key was written to the correct location
-	var expectedPath string
-
-	switch runtime.GOOS {
-	case windowsOS:
-		expectedPath = filepath.Join(tmpDir, sopsSubdir, ageSubdir, keyFileName)
-	case darwinOS:
-		expectedPath = filepath.Join(
-			tmpDir,
-			"Library",
-			"Application Support",
-			sopsSubdir,
-			ageSubdir,
-			keyFileName,
-		)
-	default:
-		expectedPath = filepath.Join(tmpDir, ".config", sopsSubdir, ageSubdir, keyFileName)
-	}
-
-	content, err := os.ReadFile(expectedPath) //#nosec G304 -- test file path
-	if err != nil {
-		t.Errorf("expected key file to exist at %s, got error: %v", expectedPath, err)
-	}
-
-	contentStr := string(content)
-
-	// Verify the key contains creation timestamp
-	if !strings.Contains(contentStr, "# created:") {
-		t.Errorf("expected key file to contain creation timestamp")
-	}
-
-	// Verify the key contains public key
-	if !strings.Contains(contentStr, "# public key: "+validPublicKey) {
-		t.Errorf("expected key file to contain public key comment")
-	}
-
-	// Verify the private key is present
-	if !strings.Contains(contentStr, validAgeKey) {
-		t.Errorf("expected key file to contain the age key")
 	}
 }
 
