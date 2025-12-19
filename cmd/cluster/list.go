@@ -223,31 +223,30 @@ func displayClusterList(
 	includeDistribution bool,
 ) {
 	if len(clusters) == 0 {
+		// When no clusters are found, the provisioner (e.g., kind) already displays
+		// its own message (e.g., "No kind clusters found."), so we don't need to
+		// display an additional message here.
+		return
+	}
+
+	writer := cmd.OutOrStdout()
+
+	var builder strings.Builder
+	if includeDistribution {
+		builder.WriteString(strings.ToLower(string(distribution)))
+		builder.WriteString(": ")
+	}
+
+	builder.WriteString(strings.Join(clusters, ", "))
+	builder.WriteString("\n")
+
+	_, err := fmt.Fprint(writer, builder.String())
+	if err != nil {
 		notify.WriteMessage(notify.Message{
-			Type:    notify.ActivityType,
-			Content: "no clusters found",
-			Writer:  cmd.OutOrStdout(),
+			Type:    notify.ErrorType,
+			Content: fmt.Sprintf("failed to display %s clusters", distribution),
+			Writer:  writer,
 		})
-	} else {
-		writer := cmd.OutOrStdout()
-
-		var builder strings.Builder
-		if includeDistribution {
-			builder.WriteString(strings.ToLower(string(distribution)))
-			builder.WriteString(": ")
-		}
-
-		builder.WriteString(strings.Join(clusters, ", "))
-		builder.WriteString("\n")
-
-		_, err := fmt.Fprint(writer, builder.String())
-		if err != nil {
-			notify.WriteMessage(notify.Message{
-				Type:    notify.ErrorType,
-				Content: fmt.Sprintf("failed to display %s clusters", distribution),
-				Writer:  writer,
-			})
-		}
 	}
 }
 
