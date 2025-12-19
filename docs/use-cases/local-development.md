@@ -1,8 +1,9 @@
 ---
-title: Local Development
 parent: Use Cases
 nav_order: 2
 ---
+
+# Local Development
 
 KSail helps you run Kubernetes manifests locally using your container engine (Docker). The CLI provides a consistent workflow that matches your deployment configuration.
 

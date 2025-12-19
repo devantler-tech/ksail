@@ -1,9 +1,10 @@
 ---
-title: CSI
 parent: Core Concepts
 grand_parent: Overview
 nav_order: 4
 ---
+
+# Container Storage Interfaces (CSI)
 
 Storage options determine how persistent volumes are provisioned for workloads. Configure CSI with `ksail cluster init --csi` or declaratively through `spec.csi` in `ksail.yaml`.
 

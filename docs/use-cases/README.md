@@ -1,8 +1,9 @@
 ---
-title: Use Cases
 nav_order: 4
 has_children: true
 ---
+
+# Use Cases
 
 KSail focuses on fast, reproducible feedback loops for local Kubernetes development. The CLI targets developer desktops, CI pipelines, and learning environments where rapid provisioning is important.
 

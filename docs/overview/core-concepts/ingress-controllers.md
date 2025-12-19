@@ -1,9 +1,10 @@
 ---
-title: Ingress Controllers
 parent: Core Concepts
 grand_parent: Overview
 nav_order: 7
 ---
+
+# Ingress Controllers
 
 Ingress controllers expose HTTP(S) services from inside the cluster.
 
