@@ -4,8 +4,6 @@ nav_order: 4
 has_children: true
 ---
 
-# Use Cases
-
 KSail focuses on fast, reproducible feedback loops for local Kubernetes development. The CLI targets developer desktops, CI pipelines, and learning environments where rapid provisioning is important.
 
 Each scenario uses the same configuration primitives documented in the [configuration guides](../configuration/). Start with `ksail cluster init` to scaffold a project, then apply the workflows below.

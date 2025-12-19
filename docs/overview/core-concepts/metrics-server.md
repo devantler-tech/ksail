@@ -5,8 +5,6 @@ grand_parent: Overview
 nav_order: 9
 ---
 
-# Metrics Server
-
 [Metrics Server](https://github.com/kubernetes-sigs/metrics-server) aggregates CPU and memory usage across the cluster. Enable or disable it with `ksail cluster init --metrics-server` or by setting `spec.metricsServer` in `ksail.yaml`.
 
 Metrics Server is **enabled by default**.

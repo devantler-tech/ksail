@@ -5,8 +5,6 @@ grand_parent: Overview
 nav_order: 1
 ---
 
-# Container Network Interfaces (CNI)
-
 The Container Network Interface determines how pods receive IP addresses and communicate inside your cluster. KSail exposes CNI selection declaratively via `spec.cni` in `ksail.yaml` or with `ksail cluster init --cni`.
 
 ## Available Options

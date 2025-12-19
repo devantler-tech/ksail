@@ -4,8 +4,6 @@ nav_order: 3
 has_children: true
 ---
 
-# Configuration
-
 KSail keeps cluster configuration reproducible through well-defined configuration files. Run `ksail cluster init` once, commit the generated files, and the team can rely on consistent defaults.
 
 ## Configuration surfaces

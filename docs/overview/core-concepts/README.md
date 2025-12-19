@@ -5,8 +5,6 @@ nav_order: 3
 has_children: true
 ---
 
-# Core Concepts
-
 This section explains the building blocks behind KSail. Each page links configuration values in `ksail.yaml` with CLI flags exposed by `ksail cluster` commands.
 
 - [Container Network Interfaces](./cnis.md) — Choose networking providers such as the default distribution CNI or Cilium

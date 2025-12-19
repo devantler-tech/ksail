@@ -5,8 +5,6 @@ grand_parent: Overview
 nav_order: 6
 ---
 
-# Gateway Controllers
-
 Gateway controllers manage [Gateway API](https://gateway-api.sigs.k8s.io) resources.
 
 > **Note:** Gateway controller configuration is not yet implemented in KSail. This document describes planned functionality.

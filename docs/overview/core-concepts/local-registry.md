@@ -5,8 +5,6 @@ grand_parent: Overview
 nav_order: 8
 ---
 
-# Local Registry
-
 KSail can run a local [OCI Distribution](https://distribution.github.io/distribution/) container to store images. Enable it with `--local-registry Enabled` during `ksail cluster init` or set `spec.localRegistry: Enabled` in `ksail.yaml`.
 
 ## Why Use a Local Registry?

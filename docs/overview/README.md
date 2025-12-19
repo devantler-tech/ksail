@@ -4,8 +4,6 @@ nav_order: 2
 has_children: true
 ---
 
-# Overview
-
 KSail is a CLI tool for managing local Kubernetes clusters and workloads. Rewritten in Go, it provides a unified interface for cluster lifecycle management and wraps common Kubernetes tools behind consistent commands.
 
 ![KSail Architecture](../images/architecture.drawio.png)

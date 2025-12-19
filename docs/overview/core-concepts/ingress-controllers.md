@@ -5,8 +5,6 @@ grand_parent: Overview
 nav_order: 7
 ---
 
-# Ingress Controllers
-
 Ingress controllers expose HTTP(S) services from inside the cluster.
 
 > **Note:** Ingress controller configuration is not yet implemented in KSail. This document describes planned functionality.
