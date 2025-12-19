@@ -145,6 +145,16 @@ func TestStandardFieldSelectors(t *testing.T) {
 				assertPointerSame(t, ptr, &cluster.Spec.CertManager)
 			},
 		},
+		{
+			name:            "csi",
+			factory:         configmanager.DefaultCSIFieldSelector,
+			expectedDesc:    "Container Storage Interface (CSI) to use",
+			expectedDefault: v1alpha1.CSIDefault,
+			assertPointer: func(t *testing.T, cluster *v1alpha1.Cluster, ptr any) {
+				t.Helper()
+				assertPointerSame(t, ptr, &cluster.Spec.CSI)
+			},
+		},
 	}
 
 	for _, testCase := range cases {

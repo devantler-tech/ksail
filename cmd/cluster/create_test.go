@@ -257,6 +257,84 @@ func TestCreate_ArgoCD_PrintsInstallStage(t *testing.T) {
 	snaps.MatchSnapshot(t, buf.String())
 }
 
+//nolint:paralleltest // uses t.Chdir and mutates shared test hooks
+func TestCreate_LocalPathStorageCSI_InstallsOnKind(t *testing.T) {
+	workingDir := t.TempDir()
+	t.Chdir(workingDir)
+	
+	ksailYAML := `apiVersion: ksail.dev/v1alpha1
+kind: Cluster
+spec:
+  distribution: Kind
+  distributionConfig: kind.yaml
+  csi: LocalPathStorage
+  metricsServer: Disabled
+  connection:
+    kubeconfig: ./kubeconfig
+`
+	writeFile(t, workingDir, "ksail.yaml", ksailYAML)
+	writeFile(
+		t,
+		workingDir,
+		"kind.yaml",
+		"kind: Cluster\napiVersion: kind.x-k8s.io/v1alpha4\nname: test\nnodes: []\n",
+	)
+	writeFile(
+		t,
+		workingDir,
+		"kubeconfig",
+		"apiVersion: v1\nkind: Config\nclusters: []\ncontexts: []\nusers: []\n",
+	)
+
+	fake := &fakeInstaller{}
+
+	restore := clusterpkg.SetCSIInstallerFactoryForTests(
+		func(_ *v1alpha1.Cluster) (installer.Installer, error) {
+			return fake, nil
+		},
+	)
+	defer restore()
+
+	cmd := clusterpkg.NewCreateCmd(newTestRuntimeContainer(t))
+
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+	cmd.SetContext(context.Background())
+
+	err := cmd.Execute()
+	if err != nil {
+		t.Fatalf("create command failed: %v\noutput:\n%s", err, buf.String())
+	}
+
+	if !fake.called {
+		t.Fatalf("expected CSI installer to be invoked")
+	}
+
+	require.Contains(t, buf.String(), "Install CSI...")
+}
+
+//nolint:paralleltest // uses t.Chdir and mutates shared test hooks
+func TestCreate_DefaultCSI_DoesNotInstall(t *testing.T) {
+	workingDir := t.TempDir()
+	t.Chdir(workingDir)
+	writeTestConfigFiles(t, workingDir)
+
+	cmd := clusterpkg.NewCreateCmd(newTestRuntimeContainer(t))
+
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+	cmd.SetContext(context.Background())
+
+	err := cmd.Execute()
+	if err != nil {
+		t.Fatalf("create command failed: %v\noutput:\n%s", err, buf.String())
+	}
+
+	require.NotContains(t, buf.String(), "Install CSI...")
+}
+
 // Ensure fake types satisfy interfaces at compile time.
 var (
 	_ clusterprovisioner.ClusterProvisioner = (*fakeProvisioner)(nil)

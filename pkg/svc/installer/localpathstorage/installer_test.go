@@ -1,4 +1,4 @@
-package localpathstorageinstaller
+package localpathstorageinstaller_test
 
 import (
 	"context"
@@ -6,13 +6,14 @@ import (
 	"time"
 
 	"github.com/devantler-tech/ksail/pkg/apis/cluster/v1alpha1"
+	localpathstorageinstaller "github.com/devantler-tech/ksail/pkg/svc/installer/localpathstorage"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestNewLocalPathStorageInstaller(t *testing.T) {
 	t.Parallel()
 
-	installer := NewLocalPathStorageInstaller(
+	installer := localpathstorageinstaller.NewLocalPathStorageInstaller(
 		"/path/to/kubeconfig",
 		"test-context",
 		5*time.Minute,
@@ -20,17 +21,13 @@ func TestNewLocalPathStorageInstaller(t *testing.T) {
 	)
 
 	assert.NotNil(t, installer)
-	assert.Equal(t, "/path/to/kubeconfig", installer.kubeconfig)
-	assert.Equal(t, "test-context", installer.context)
-	assert.Equal(t, 5*time.Minute, installer.timeout)
-	assert.Equal(t, v1alpha1.DistributionKind, installer.distribution)
 }
 
 func TestLocalPathStorageInstaller_Install_K3d(t *testing.T) {
 	t.Parallel()
 
 	// K3d already has local-path-provisioner, so Install should be a no-op
-	installer := NewLocalPathStorageInstaller(
+	installer := localpathstorageinstaller.NewLocalPathStorageInstaller(
 		"/path/to/kubeconfig",
 		"test-context",
 		5*time.Minute,
@@ -46,7 +43,7 @@ func TestLocalPathStorageInstaller_Install_K3d(t *testing.T) {
 func TestLocalPathStorageInstaller_Uninstall(t *testing.T) {
 	t.Parallel()
 
-	installer := NewLocalPathStorageInstaller(
+	installer := localpathstorageinstaller.NewLocalPathStorageInstaller(
 		"/path/to/kubeconfig",
 		"test-context",
 		5*time.Minute,

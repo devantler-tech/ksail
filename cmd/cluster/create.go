@@ -503,6 +503,26 @@ var (
 	// certManagerInstallerFactoryMu protects concurrent access to certManagerInstallerFactory in tests.
 	//nolint:gochecknoglobals // protects certManagerInstallerFactory global variable
 	certManagerInstallerFactoryMu sync.RWMutex
+	// csiInstallerFactory is overridden in tests to stub CSI installer creation.
+	//nolint:gochecknoglobals // dependency injection for tests
+	csiInstallerFactory = func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error) {
+		_, kubeconfig, err := createHelmClientForCluster(clusterCfg)
+		if err != nil {
+			return nil, err
+		}
+
+		timeout := installer.GetInstallTimeout(clusterCfg)
+
+		return localpathstorageinstaller.NewLocalPathStorageInstaller(
+			kubeconfig,
+			clusterCfg.Spec.Connection.Context,
+			timeout,
+			clusterCfg.Spec.Distribution,
+		), nil
+	}
+	// csiInstallerFactoryMu protects concurrent access to csiInstallerFactory in tests.
+	//nolint:gochecknoglobals // protects csiInstallerFactory global variable
+	csiInstallerFactoryMu sync.RWMutex
 	// argocdInstallerFactory is overridden in tests to stub Argo CD installer creation.
 	//nolint:gochecknoglobals // dependency injection for tests
 	argocdInstallerFactory = func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error) {
@@ -554,6 +574,28 @@ func SetCertManagerInstallerFactoryForTests(
 		certManagerInstallerFactory = previous
 
 		certManagerInstallerFactoryMu.Unlock()
+	}
+}
+
+// SetCSIInstallerFactoryForTests overrides the CSI installer factory.
+//
+// It returns a restore function that resets the factory to its previous value.
+func SetCSIInstallerFactoryForTests(
+	factory func(*v1alpha1.Cluster) (installer.Installer, error),
+) func() {
+	csiInstallerFactoryMu.Lock()
+
+	previous := csiInstallerFactory
+	csiInstallerFactory = factory
+
+	csiInstallerFactoryMu.Unlock()
+
+	return func() {
+		csiInstallerFactoryMu.Lock()
+
+		csiInstallerFactory = previous
+
+		csiInstallerFactoryMu.Unlock()
 	}
 }
 
@@ -1361,18 +1403,13 @@ func installCSIIfConfigured(
 		Writer:  cmd.OutOrStdout(),
 	})
 
-	_, kubeconfig, err := createHelmClientForCluster(clusterCfg)
-	if err != nil {
-		return err
-	}
+	csiInstallerFactoryMu.RLock()
+	csiInstaller, err := csiInstallerFactory(clusterCfg)
+	csiInstallerFactoryMu.RUnlock()
 
-	timeout := installer.GetInstallTimeout(clusterCfg)
-	csiInstaller := localpathstorageinstaller.NewLocalPathStorageInstaller(
-		kubeconfig,
-		clusterCfg.Spec.Connection.Context,
-		timeout,
-		clusterCfg.Spec.Distribution,
-	)
+	if err != nil {
+		return fmt.Errorf("failed to create CSI installer: %w", err)
+	}
 
 	notify.WriteMessage(notify.Message{
 		Type:    notify.ActivityType,
