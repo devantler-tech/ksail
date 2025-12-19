@@ -11,7 +11,30 @@ _______/_____\_______\_____     ,'        `.    \  /
 \   -----       -\-\-\-    |    |  ^        \___/  |
 ~^~^~^~^~^~^~^~^~^~^~^~^~^~^~^~^~^~^~^~^~^~^~^~^~^~^~
 
-KSail helps you easily create, manage, and test local Kubernetes clusters and workloads from one simple command line tool.
+KSail is a CLI tool for creating and maintaining local Kubernetes clusters
+
+Usage:
+  ksail [flags]
+  ksail [command]
+
+Available Commands:
+  cipher      Manage encrypted files with SOPS
+  cluster     Manage cluster lifecycle
+  completion  Generate the autocompletion script for the specified shell
+  help        Help about any command
+  workload    Manage workload operations
+
+Flags:
+  -h, --help      help for ksail
+      --timing    Show per-activity timing output
+  -v, --version   version for ksail
+
+Use "ksail [command] --help" for more information about a command.
+
+---
+
+[TestExecuteShowsHelpFlag - 1]
+KSail is a CLI tool for creating and maintaining local Kubernetes clusters
 
 Usage:
   ksail [flags]
@@ -35,29 +58,6 @@ Use "ksail [command] --help" for more information about a command.
 
 [TestExecuteShowsVersion - 1]
 ksail version 1.2.3 (Built on 2025-08-17 from Git SHA abc123)
-
----
-
-[TestExecuteShowsHelpFlag - 1]
-KSail helps you easily create, manage, and test local Kubernetes clusters and workloads from one simple command line tool.
-
-Usage:
-  ksail [flags]
-  ksail [command]
-
-Available Commands:
-  cipher      Manage encrypted files with SOPS
-  cluster     Manage cluster lifecycle
-  completion  Generate the autocompletion script for the specified shell
-  help        Help about any command
-  workload    Manage workload operations
-
-Flags:
-  -h, --help      help for ksail
-      --timing    Show per-activity timing output
-  -v, --version   version for ksail
-
-Use "ksail [command] --help" for more information about a command.
 
 ---
 
