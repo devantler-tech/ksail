@@ -208,6 +208,7 @@ func TestExtractClusterNameFromContext(t *testing.T) {
 	}
 }
 
+//nolint:funlen // Test data structures are intentionally long for comprehensive coverage
 func getExtractClusterNameTestCases() []struct {
 	name         string
 	context      string
@@ -318,6 +319,7 @@ func TestGetClusterNameFromConfig(t *testing.T) {
 	}
 }
 
+//nolint:funlen // Test data structures are intentionally long for comprehensive coverage
 func getClusterNameConfigTestCases() []struct {
 	name        string
 	setup       func(*testing.T) (*v1alpha1.Cluster, clusterprovisioner.Factory)
@@ -442,4 +444,3 @@ func assertGetClusterNameResult(
 		t.Errorf("GetClusterNameFromConfig() = %q; want %q", result, testCase.expected)
 	}
 }
-
