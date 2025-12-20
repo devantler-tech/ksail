@@ -24,6 +24,7 @@ ksail cluster create
 
 # 3. Try workloads
 ksail workload gen deployment echo --image=hashicorp/http-echo:0.2.3 --port 5678
+ksail workload validate -f echo.yaml
 ksail workload apply -f echo.yaml
 ksail workload wait --for=condition=Available deployment/echo --timeout=120s
 
@@ -56,16 +57,19 @@ ksail cluster init --distribution Kind --cni Cilium --metrics-server Enabled
 # 2. Create cluster
 ksail cluster create
 
-# 3. Apply workloads
+# 3. Validate and apply workloads
+ksail workload validate k8s/
+
+# 4. Apply workloads
 ksail workload apply -k k8s/
 ksail workload get pods
 
-# 4. Debug and inspect
+# 5. Debug and inspect
 ksail workload logs deployment/my-app --tail 200
 ksail workload exec deployment/my-app -- sh
 ksail cluster connect  # Opens k9s
 
-# 5. Clean up
+# 6. Clean up
 ksail cluster delete
 ```
 
@@ -93,6 +97,8 @@ ksail workload apply -k k8s/
 - Use `--cert-manager Enabled` if you need TLS certificates
 - Configure `--mirror-registry` to cache upstream images and avoid rate limits
 - Use `ksail workload gen` to create sample resource manifests
+- **Validate manifests with `ksail workload validate` before applying** to catch errors early
+- Use `--verbose` flag with validate to see detailed validation output
 - Test manifests locally before committing to version control
 - Commit `ksail.yaml` so your team inherits the same setup automatically
 
@@ -111,6 +117,7 @@ ksail cluster create
 ksail cluster info
 
 # 3. Deploy and test
+ksail workload validate k8s/
 ksail workload apply -k k8s/
 ksail workload wait --for=condition=Available deployment/my-app --timeout=180s
 go test ./tests/e2e/... -count=1
@@ -146,6 +153,7 @@ jobs:
         run: ksail cluster create
       - name: Deploy workloads
         run: |
+          ksail workload validate k8s/
           ksail workload apply -k k8s/
           ksail workload wait --for=condition=Available deployment/my-app --timeout=180s
       - name: Run tests
