@@ -184,6 +184,64 @@ jobs:
 - Use `--mirror-registry` flags to reduce external registry dependencies
 - Collect cluster state before deletion for debugging failed runs
 
+## GitOps Development Workflow
+
+KSail enables local GitOps workflows with Flux or ArgoCD. This workflow mirrors production GitOps practices while keeping everything local.
+
+### GitOps Workflow with Flux
+
+```bash
+# 1. Initialize with Flux and local registry
+ksail cluster init --gitops-engine Flux --local-registry Enabled
+
+# 2. Create cluster (installs Flux and local registry)
+ksail cluster create
+
+# 3. Edit your manifests
+# ... modify k8s/deployment.yaml ...
+
+# 4. Push manifests as OCI artifact
+ksail workload push
+
+# 5. Trigger reconciliation and wait
+ksail workload reconcile
+
+# 6. Verify deployment
+ksail workload get pods
+ksail cluster connect  # Opens k9s to inspect
+```
+
+### GitOps Workflow with ArgoCD
+
+```bash
+# 1. Initialize with ArgoCD and local registry
+ksail cluster init --gitops-engine ArgoCD --local-registry Enabled
+
+# 2. Create cluster (installs ArgoCD and local registry)
+ksail cluster create
+
+# 3. Edit your manifests
+# ... modify k8s/deployment.yaml ...
+
+# 4. Push manifests as OCI artifact
+ksail workload push
+
+# 5. Trigger reconciliation with custom timeout
+ksail workload reconcile --timeout 10m
+
+# 6. Access ArgoCD UI (if needed)
+# Forward the ArgoCD server port and open in browser
+```
+
+### GitOps Development Tips
+
+- Use `ksail workload push` after every manifest change to update the OCI artifact
+- The `reconcile` command waits for full reconciliation, so you know when changes are applied
+- Flux automatically detects new OCI artifacts; ArgoCD requires manual trigger
+- Use `--timeout` flag during reconciliation if your workloads take longer to become ready
+- Test GitOps workflows locally before promoting to production registries
+- Commit `ksail.yaml` with GitOps configuration so team members inherit the same setup
+
 ### Security Recommendations
 
 - Store secrets with SOPS and decrypt during pipeline with `ksail cipher decrypt`

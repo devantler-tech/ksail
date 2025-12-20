@@ -152,6 +152,56 @@ ksail cluster init \
   --mirror-registry gcr.io=https://gcr.io
 ```
 
+**Enable GitOps engine:**
+
+```bash
+ksail cluster init --gitops-engine Flux --local-registry Enabled
+```
+
+### Workload Commands
+
+KSail provides commands for managing workloads through the `ksail workload` subcommand family:
+
+**Manifest management:**
+- `ksail workload apply` - Apply manifests using kubectl or kustomize
+- `ksail workload validate` - Validate manifests with kubeconform
+- `ksail workload gen` - Generate Kubernetes resource templates
+
+**GitOps workflow:**
+- `ksail workload push` - Package and push manifests as OCI artifact to local registry
+- `ksail workload reconcile` - Trigger GitOps reconciliation and wait for completion
+
+**Kubectl wrappers:**
+- `ksail workload get` - Get resources
+- `ksail workload edit` - Edit resources
+- `ksail workload logs` - View container logs
+- `ksail workload exec` - Execute commands in containers
+- `ksail workload wait` - Wait for resource conditions
+
+**Reconcile command flags:**
+
+| Flag        | Purpose                                                      |
+|-------------|--------------------------------------------------------------|
+| `--timeout` | Timeout for reconciliation (e.g., `10m`). Overrides config.  |
+
+The `reconcile` command respects timeout in this order:
+1. `--timeout` flag if provided
+2. `spec.connection.timeout` from `ksail.yaml`
+3. Default 5-minute timeout
+
+**Example usage:**
+
+```bash
+# Push manifests to local registry
+ksail workload push
+
+# Trigger reconciliation with default timeout
+ksail workload reconcile
+
+# Override timeout
+ksail workload reconcile --timeout 10m
+```
+
 ## When to Use What
 
 - **Use CLI flags** for temporary overrides during development

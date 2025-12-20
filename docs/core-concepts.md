@@ -188,4 +188,89 @@ SOPS supports multiple key management systems:
 
 Configure SOPS using a `.sops.yaml` file in your project directory. See the [SOPS documentation](https://github.com/getsops/sops#usage) for details.
 
-> **Note:** Full GitOps integration with automatic decryption is planned when Flux support is added.
+## GitOps Engines
+
+KSail supports GitOps workflows through [Flux](https://fluxcd.io/) and [ArgoCD](https://argo-cd.readthedocs.io/), enabling declarative, automated deployment of workloads. Configure via `spec.gitOpsEngine` in `ksail.yaml` or `--gitops-engine` flag during init.
+
+**Available options:**
+
+- **`None`** (default) – No GitOps engine installed; manage workloads manually with `ksail workload apply`
+- **`Flux`** – Installs Flux CD for GitOps-based reconciliation
+- **`ArgoCD`** – Installs ArgoCD for GitOps-based reconciliation
+
+### How GitOps Works with KSail
+
+When you enable a GitOps engine with a local registry, KSail packages your manifests as OCI artifacts and pushes them to the local registry. The GitOps engine then pulls and reconciles these artifacts into the cluster.
+
+**Workflow:**
+
+```bash
+# 1. Initialize with GitOps engine and local registry
+ksail cluster init --gitops-engine Flux --local-registry Enabled
+
+# 2. Create cluster (installs Flux and local registry)
+ksail cluster create
+
+# 3. Update your manifests in k8s/
+# ... edit k8s/deployment.yaml ...
+
+# 4. Push manifests as OCI artifact to local registry
+ksail workload push
+
+# 5. Trigger reconciliation and wait for completion
+ksail workload reconcile
+```
+
+### Push Command
+
+The `ksail workload push` command packages your workload manifests from the source directory (default: `k8s/`) into an OCI artifact and pushes it to the local registry.
+
+**Requirements:**
+- Local registry must be enabled (`--local-registry Enabled`)
+- GitOps engine must be configured (`--gitops-engine Flux` or `--gitops-engine ArgoCD`)
+
+**What it does:**
+- Builds an OCI artifact from your manifests using Kustomize
+- Pushes the artifact to the local registry with the `dev` tag
+- Makes the artifact available for the GitOps engine to reconcile
+
+### Reconcile Command
+
+The `ksail workload reconcile` command triggers the GitOps engine to reconcile the latest artifacts and waits for the reconciliation to complete.
+
+**What it does:**
+- **Flux**: Annotates the root kustomization to trigger immediate reconciliation, then polls until the `Ready` condition is `True`
+- **ArgoCD**: Triggers a hard refresh of the root application, then polls until status is `Synced` and `Healthy`
+
+**Timeout configuration:**
+
+The reconcile command respects timeout configuration in this order:
+1. `--timeout` flag (e.g., `--timeout 10m`)
+2. `spec.connection.timeout` in `ksail.yaml`
+3. Default 5-minute timeout
+
+**Example:**
+
+```bash
+# Use default or config timeout
+ksail workload reconcile
+
+# Override with custom timeout
+ksail workload reconcile --timeout 10m
+```
+
+### Choosing Between Flux and ArgoCD
+
+**Flux:**
+- Automatically watches OCI registry and reconciles when new artifacts are pushed
+- Lightweight and Kubernetes-native
+- Configuration managed through CRDs
+- Best for: Teams preferring GitOps Toolkit's modular architecture
+
+**ArgoCD:**
+- Provides a web UI for visualizing deployments
+- Requires manual refresh to pick up new OCI artifact versions
+- Rich application management features
+- Best for: Teams wanting visual feedback and application-level controls
+
+Both engines work seamlessly with KSail's local registry and OCI artifact workflow.
