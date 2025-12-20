@@ -64,6 +64,21 @@ func TestCreateClusterProvisioner(t *testing.T) {
 	}
 }
 
+func TestCreateClusterProvisioner_NilCluster(t *testing.T) {
+	t.Parallel()
+
+	factory := clusterprovisioner.DefaultFactory{}
+	provisioner, distributionConfig, err := factory.Create(
+		context.Background(),
+		nil,
+	)
+
+	require.Error(t, err)
+	require.Nil(t, provisioner)
+	require.Nil(t, distributionConfig)
+	assert.ErrorIs(t, err, clusterprovisioner.ErrUnsupportedDistribution)
+}
+
 func buildCreateClusterProvisionerCases(t *testing.T) []createClusterProvisionerCase {
 	t.Helper()
 

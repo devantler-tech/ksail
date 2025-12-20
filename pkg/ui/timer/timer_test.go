@@ -289,8 +289,30 @@ func testMultipleStopCalls(t *testing.T) {
 	}
 }
 
-// TestCR007_DurationPrecision validates duration precision and formatting.
-func TestCR007_DurationPrecision(t *testing.T) {
+// TestCR007_StopIsNoOp validates that Stop is a no-op.
+func TestCR007_StopIsNoOp(t *testing.T) {
+	t.Parallel()
+
+	tmr := timer.New()
+	tmr.Start()
+	time.Sleep(50 * time.Millisecond)
+
+	// Call Stop and verify it doesn't panic or cause issues
+	tmr.Stop()
+
+	// Verify we can still get timing after Stop
+	total, stage := tmr.GetTiming()
+	if total <= 0 {
+		t.Errorf("Expected total > 0 after Stop(), got %v", total)
+	}
+
+	if stage <= 0 {
+		t.Errorf("Expected stage > 0 after Stop(), got %v", stage)
+	}
+}
+
+// TestCR008_DurationPrecision validates duration precision and formatting.
+func TestCR008_DurationPrecision(t *testing.T) {
 	t.Parallel()
 
 	t.Run("Sub-millisecond operations return non-zero durations", func(t *testing.T) {
