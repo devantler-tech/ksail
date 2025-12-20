@@ -58,7 +58,6 @@ KSail focuses on fast local Kubernetes development. The matrix below captures of
 | Category            | Supported Options                          | Status/Notes                                                      |
 |---------------------|--------------------------------------------|-------------------------------------------------------------------|
 | CLI Platforms       | Linux (amd64, arm64), macOS (amd64, arm64) | Pre-built binaries available; Windows support tracked separately. |
-| Container Engines   | Docker                                     | ✅ Fully supported; Podman support planned.                        |
 | Distributions       | Kind, K3d                                  | ✅ Both distributions fully supported.                             |
 | Workload Management | kubectl, Helm                              | ✅ Commands wrapped via `ksail workload`.                          |
 | GitOps Engines      | Flux, ArgoCD                               | ✅ Both engines fully supported.                                   |
