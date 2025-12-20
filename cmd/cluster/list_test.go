@@ -3,18 +3,14 @@ package cluster_test
 import (
 	"bytes"
 	"context"
-<<<<<<< HEAD
 	"errors"
 	"io"
 	"os"
 	"path/filepath"
-=======
->>>>>>> origin/main
 	"testing"
 
 	clusterpkg "github.com/devantler-tech/ksail/cmd/cluster"
 	"github.com/devantler-tech/ksail/pkg/apis/cluster/v1alpha1"
-<<<<<<< HEAD
 	runtime "github.com/devantler-tech/ksail/pkg/di"
 	ksailconfigmanager "github.com/devantler-tech/ksail/pkg/io/config-manager/ksail"
 	clusterprovisioner "github.com/devantler-tech/ksail/pkg/svc/provisioner/cluster"
@@ -229,7 +225,6 @@ func TestHandleListRunE_Success(t *testing.T) {
 	cmd.SetErr(io.Discard)
 	cmd.SetContext(context.Background())
 
-=======
 	ksailconfigmanager "github.com/devantler-tech/ksail/pkg/io/config-manager/ksail"
 	clusterprovisioner "github.com/devantler-tech/ksail/pkg/svc/provisioner/cluster"
 	"github.com/spf13/cobra"
@@ -398,13 +393,11 @@ func setupTestConfig(
 ) *ksailconfigmanager.ConfigManager {
 	t.Helper()
 
->>>>>>> origin/main
 	cfgManager := ksailconfigmanager.NewCommandConfigManager(
 		cmd,
 		ksailconfigmanager.DefaultClusterFieldSelectors(),
 	)
 
-<<<<<<< HEAD
 	cmd.Flags().BoolP("all", "a", false, "List all clusters")
 	_ = cfgManager.Viper.BindPFlag("all", cmd.Flags().Lookup("all"))
 
@@ -455,7 +448,6 @@ var (
 	_ clusterprovisioner.Factory            = (*fakeFactoryWithClusters)(nil)
 	_ clusterprovisioner.Factory            = (*fakeFactoryWithErrors)(nil)
 )
-=======
 	// Create flags
 	cmd.Flags().Bool("all", false, "List all clusters")
 
@@ -520,4 +512,3 @@ func (f *fakeListProvisioner) List(context.Context) ([]string, error) {
 func (f *fakeListProvisioner) Exists(context.Context, string) (bool, error) {
 	return len(f.clusters) > 0, nil
 }
->>>>>>> origin/main
