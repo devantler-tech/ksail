@@ -6,12 +6,9 @@ import (
 
 	v1alpha1 "github.com/devantler-tech/ksail/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/pkg/client/oci"
-	cmdhelpers "github.com/devantler-tech/ksail/pkg/cmd"
 	runtime "github.com/devantler-tech/ksail/pkg/di"
-	ksailconfigmanager "github.com/devantler-tech/ksail/pkg/io/config-manager/ksail"
 	"github.com/devantler-tech/ksail/pkg/svc/provisioner/registry"
 	"github.com/devantler-tech/ksail/pkg/ui/notify"
-	"github.com/devantler-tech/ksail/pkg/ui/timer"
 	"github.com/spf13/cobra"
 )
 
@@ -27,18 +24,14 @@ func NewPushCmd(_ *runtime.Runtime) *cobra.Command {
 	}
 
 	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
-		tmr := timer.New()
-		tmr.Start()
-
-		fieldSelectors := ksailconfigmanager.DefaultClusterFieldSelectors()
-		cfgManager := ksailconfigmanager.NewCommandConfigManager(cmd, fieldSelectors)
-
-		outputTimer := cmdhelpers.MaybeTimer(cmd, tmr)
-
-		clusterCfg, err := cfgManager.LoadConfig(outputTimer)
+		ctx, err := initCommandContext(cmd)
 		if err != nil {
-			return fmt.Errorf("load config: %w", err)
+			return err
 		}
+
+		clusterCfg := ctx.ClusterCfg
+		outputTimer := ctx.OutputTimer
+		tmr := ctx.Timer
 
 		localRegistryEnabled := clusterCfg.Spec.LocalRegistry == v1alpha1.LocalRegistryEnabled
 		gitOpsEngineConfigured := clusterCfg.Spec.GitOpsEngine != v1alpha1.GitOpsEngineNone

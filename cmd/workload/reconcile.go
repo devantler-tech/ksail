@@ -10,10 +10,8 @@ import (
 
 	v1alpha1 "github.com/devantler-tech/ksail/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/pkg/client/argocd"
-	cmdhelpers "github.com/devantler-tech/ksail/pkg/cmd"
 	runtime "github.com/devantler-tech/ksail/pkg/di"
 	iopath "github.com/devantler-tech/ksail/pkg/io"
-	ksailconfigmanager "github.com/devantler-tech/ksail/pkg/io/config-manager/ksail"
 	"github.com/devantler-tech/ksail/pkg/k8s"
 	"github.com/devantler-tech/ksail/pkg/svc/provisioner/registry"
 	"github.com/devantler-tech/ksail/pkg/ui/notify"
@@ -65,12 +63,11 @@ func reconcileFluxKustomization(
 		return err
 	}
 
-	notify.WriteMessage(notify.Message{
-		Type:    notify.ActivityType,
-		Content: "triggering flux kustomization reconciliation",
-		Timer:   outputTimer,
-		Writer:  writer,
-	})
+	writeActivityNotification(
+		"triggering flux kustomization reconciliation",
+		outputTimer,
+		writer,
+	)
 
 	kustomizationClient, err := getFluxKustomizationClient(kubeconfigPath)
 	if err != nil {
@@ -82,12 +79,11 @@ func reconcileFluxKustomization(
 		return err
 	}
 
-	notify.WriteMessage(notify.Message{
-		Type:    notify.ActivityType,
-		Content: "waiting for flux kustomization to reconcile",
-		Timer:   outputTimer,
-		Writer:  writer,
-	})
+	writeActivityNotification(
+		"waiting for flux kustomization to reconcile",
+		outputTimer,
+		writer,
+	)
 
 	return waitForFluxReconciliation(ctx, kustomizationClient, timeout)
 }
@@ -205,24 +201,22 @@ func reconcileArgoCDApplication(
 		return err
 	}
 
-	notify.WriteMessage(notify.Message{
-		Type:    notify.ActivityType,
-		Content: "triggering argocd application refresh",
-		Timer:   outputTimer,
-		Writer:  writer,
-	})
+	writeActivityNotification(
+		"triggering argocd application refresh",
+		outputTimer,
+		writer,
+	)
 
 	err = triggerArgoCDRefresh(ctx, kubeconfigPath, artifactVersion)
 	if err != nil {
 		return err
 	}
 
-	notify.WriteMessage(notify.Message{
-		Type:    notify.ActivityType,
-		Content: "waiting for argocd application to sync",
-		Timer:   outputTimer,
-		Writer:  writer,
-	})
+	writeActivityNotification(
+		"waiting for argocd application to sync",
+		outputTimer,
+		writer,
+	)
 
 	applicationClient, err := getArgoCDApplicationClient(kubeconfigPath)
 	if err != nil {
@@ -373,17 +367,14 @@ func NewReconcileCmd(_ *runtime.Runtime) *cobra.Command {
 
 // runReconcile executes the reconcile command logic.
 func runReconcile(cmd *cobra.Command) error {
-	tmr := timer.New()
-	tmr.Start()
-
-	fieldSelectors := ksailconfigmanager.DefaultClusterFieldSelectors()
-	cfgManager := ksailconfigmanager.NewCommandConfigManager(cmd, fieldSelectors)
-	outputTimer := cmdhelpers.MaybeTimer(cmd, tmr)
-
-	clusterCfg, err := cfgManager.LoadConfig(outputTimer)
+	ctx, err := initCommandContext(cmd)
 	if err != nil {
-		return fmt.Errorf("load config: %w", err)
+		return err
 	}
+
+	clusterCfg := ctx.ClusterCfg
+	outputTimer := ctx.OutputTimer
+	tmr := ctx.Timer
 
 	if clusterCfg.Spec.GitOpsEngine == v1alpha1.GitOpsEngineNone {
 		return errGitOpsEngineRequired
