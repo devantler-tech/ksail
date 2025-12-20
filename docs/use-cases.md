@@ -59,15 +59,17 @@ ksail cluster create
 
 # 3. Validate and apply workloads
 ksail workload validate k8s/
+
+# 4. Apply workloads
 ksail workload apply -k k8s/
 ksail workload get pods
 
-# 4. Debug and inspect
+# 5. Debug and inspect
 ksail workload logs deployment/my-app --tail 200
 ksail workload exec deployment/my-app -- sh
 ksail cluster connect  # Opens k9s
 
-# 5. Clean up
+# 6. Clean up
 ksail cluster delete
 ```
 
