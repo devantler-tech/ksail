@@ -163,15 +163,18 @@ ksail cluster init --gitops-engine Flux --local-registry Enabled
 KSail provides commands for managing workloads through the `ksail workload` subcommand family:
 
 **Manifest management:**
+
 - `ksail workload apply` - Apply manifests using kubectl or kustomize
 - `ksail workload validate` - Validate manifests with kubeconform
 - `ksail workload gen` - Generate Kubernetes resource templates
 
 **GitOps workflow:**
+
 - `ksail workload push` - Package and push manifests as OCI artifact to local registry
 - `ksail workload reconcile` - Trigger GitOps reconciliation and wait for completion
 
 **Kubectl wrappers:**
+
 - `ksail workload get` - Get resources
 - `ksail workload edit` - Edit resources
 - `ksail workload logs` - View container logs
@@ -180,11 +183,12 @@ KSail provides commands for managing workloads through the `ksail workload` subc
 
 **Reconcile command flags:**
 
-| Flag        | Purpose                                                      |
-|-------------|--------------------------------------------------------------|
-| `--timeout` | Timeout for reconciliation (e.g., `10m`). Overrides config.  |
+| Flag        | Purpose                                                     |
+|-------------|-------------------------------------------------------------|
+| `--timeout` | Timeout for reconciliation (e.g., `10m`). Overrides config. |
 
 The `reconcile` command respects timeout in this order:
+
 1. `--timeout` flag if provided
 2. `spec.connection.timeout` from `ksail.yaml`
 3. Default 5-minute timeout

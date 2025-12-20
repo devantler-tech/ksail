@@ -77,6 +77,7 @@ Configure via `spec.localRegistry` or `--local-registry` flag.
 **Benefits:** Faster dev loops, GitOps integration, testing image pull policies
 
 **How it works:**
+
 1. Initialize: `ksail cluster init --local-registry Enabled --local-registry-port 5111`
 2. Registry container starts with cluster (port 5111 default)
 3. Push from host: `docker tag my-api localhost:5111/my-api && docker push localhost:5111/my-api`
@@ -166,11 +167,13 @@ ksail workload reconcile --timeout 10m
 ### Choosing an Engine
 
 **Flux:**
+
 - Auto-watches OCI registry for new artifacts
 - Lightweight, Kubernetes-native
 - CRD-based configuration
 
 **ArgoCD:**
+
 - Web UI for visualizing deployments
 - Manual refresh for new artifacts
 - Rich application management
