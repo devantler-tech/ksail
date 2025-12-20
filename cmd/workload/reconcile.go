@@ -111,23 +111,13 @@ func getKubeconfigPath(clusterCfg *v1alpha1.Cluster) (string, error) {
 func getFluxKustomizationClient(
 	kubeconfigPath string,
 ) (dynamic.ResourceInterface, error) {
-	restConfig, err := k8s.BuildRESTConfig(kubeconfigPath, "")
-	if err != nil {
-		return nil, fmt.Errorf("build rest config: %w", err)
-	}
-
-	dynamicClient, err := dynamic.NewForConfig(restConfig)
-	if err != nil {
-		return nil, fmt.Errorf("create dynamic client: %w", err)
-	}
-
 	kustomizationGVR := schema.GroupVersionResource{
 		Group:    "kustomize.toolkit.fluxcd.io",
 		Version:  "v1",
 		Resource: "kustomizations",
 	}
 
-	return dynamicClient.Resource(kustomizationGVR).Namespace(fluxNamespace), nil
+	return getDynamicResourceClient(kubeconfigPath, kustomizationGVR, fluxNamespace)
 }
 
 // triggerFluxReconciliation annotates the kustomization to trigger reconciliation.
@@ -166,31 +156,15 @@ func waitForFluxReconciliation(
 	kustomizationClient dynamic.ResourceInterface,
 	timeout time.Duration,
 ) error {
-	timeoutCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-
-	ticker := time.NewTicker(reconcilePollInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-timeoutCtx.Done():
-			return errFluxReconcileTimeout
-		case <-ticker.C:
-			kustomization, err := kustomizationClient.Get(
-				ctx,
-				fluxRootKustomizationName,
-				metav1.GetOptions{},
-			)
-			if err != nil {
-				return fmt.Errorf("get flux kustomization status: %w", err)
-			}
-
-			if isFluxKustomizationReady(kustomization) {
-				return nil
-			}
-		}
-	}
+	return waitForResourceCondition(
+		ctx,
+		kustomizationClient,
+		fluxRootKustomizationName,
+		timeout,
+		isFluxKustomizationReady,
+		errFluxReconcileTimeout,
+		"get flux kustomization status",
+	)
 }
 
 // isFluxKustomizationReady checks if the kustomization has Ready=True condition.
@@ -282,6 +256,21 @@ func triggerArgoCDRefresh(
 
 // getArgoCDApplicationClient creates a dynamic client for ArgoCD applications.
 func getArgoCDApplicationClient(kubeconfigPath string) (dynamic.ResourceInterface, error) {
+	applicationGVR := schema.GroupVersionResource{
+		Group:    "argoproj.io",
+		Version:  "v1alpha1",
+		Resource: "applications",
+	}
+
+	return getDynamicResourceClient(kubeconfigPath, applicationGVR, argoCDNamespace)
+}
+
+// getDynamicResourceClient creates a dynamic Kubernetes client for a specific resource.
+func getDynamicResourceClient(
+	kubeconfigPath string,
+	gvr schema.GroupVersionResource,
+	namespace string,
+) (dynamic.ResourceInterface, error) {
 	restConfig, err := k8s.BuildRESTConfig(kubeconfigPath, "")
 	if err != nil {
 		return nil, fmt.Errorf("build rest config: %w", err)
@@ -292,13 +281,7 @@ func getArgoCDApplicationClient(kubeconfigPath string) (dynamic.ResourceInterfac
 		return nil, fmt.Errorf("create dynamic client: %w", err)
 	}
 
-	applicationGVR := schema.GroupVersionResource{
-		Group:    "argoproj.io",
-		Version:  "v1alpha1",
-		Resource: "applications",
-	}
-
-	return dynamicClient.Resource(applicationGVR).Namespace(argoCDNamespace), nil
+	return dynamicClient.Resource(gvr).Namespace(namespace), nil
 }
 
 // waitForArgoCDSync waits for the application to sync and become healthy.
@@ -306,6 +289,27 @@ func waitForArgoCDSync(
 	ctx context.Context,
 	applicationClient dynamic.ResourceInterface,
 	timeout time.Duration,
+) error {
+	return waitForResourceCondition(
+		ctx,
+		applicationClient,
+		argoCDRootApplicationName,
+		timeout,
+		isArgoCDApplicationSynced,
+		errArgoCDReconcileTimeout,
+		"get argocd application status",
+	)
+}
+
+// waitForResourceCondition is a generic function to wait for a resource to meet a condition.
+func waitForResourceCondition(
+	ctx context.Context,
+	client dynamic.ResourceInterface,
+	resourceName string,
+	timeout time.Duration,
+	checkCondition func(*unstructured.Unstructured) bool,
+	timeoutErr error,
+	errorMsg string,
 ) error {
 	timeoutCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
@@ -316,14 +320,14 @@ func waitForArgoCDSync(
 	for {
 		select {
 		case <-timeoutCtx.Done():
-			return errArgoCDReconcileTimeout
+			return timeoutErr
 		case <-ticker.C:
-			app, err := applicationClient.Get(ctx, argoCDRootApplicationName, metav1.GetOptions{})
+			resource, err := client.Get(ctx, resourceName, metav1.GetOptions{})
 			if err != nil {
-				return fmt.Errorf("get argocd application status: %w", err)
+				return fmt.Errorf("%s: %w", errorMsg, err)
 			}
 
-			if isArgoCDApplicationSynced(app) {
+			if checkCondition(resource) {
 				return nil
 			}
 		}
