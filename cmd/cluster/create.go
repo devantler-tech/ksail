@@ -1404,7 +1404,9 @@ func installCSIIfConfigured(
 	})
 
 	csiInstallerFactoryMu.RLock()
+
 	csiInstaller, err := csiInstallerFactory(clusterCfg)
+
 	csiInstallerFactoryMu.RUnlock()
 
 	if err != nil {

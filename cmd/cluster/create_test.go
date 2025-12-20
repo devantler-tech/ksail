@@ -261,7 +261,7 @@ func TestCreate_ArgoCD_PrintsInstallStage(t *testing.T) {
 func TestCreate_LocalPathStorageCSI_InstallsOnKind(t *testing.T) {
 	workingDir := t.TempDir()
 	t.Chdir(workingDir)
-	
+
 	ksailYAML := `apiVersion: ksail.dev/v1alpha1
 kind: Cluster
 spec:

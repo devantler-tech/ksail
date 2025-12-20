@@ -16,7 +16,8 @@ const (
 	// localPathProvisionerVersion is the version of Rancher local-path-provisioner to install.
 	localPathProvisionerVersion = "v0.0.32"
 	// localPathProvisionerManifestURL is the URL to the local-path-provisioner manifest.
-	localPathProvisionerManifestURL = "https://raw.githubusercontent.com/rancher/local-path-provisioner/" + localPathProvisionerVersion + "/deploy/local-path-storage.yaml"
+	localPathProvisionerManifestURL = "https://raw.githubusercontent.com/rancher/local-path-provisioner/" +
+		localPathProvisionerVersion + "/deploy/local-path-storage.yaml"
 )
 
 // LocalPathStorageInstaller installs local-path-provisioner on Kind clusters.
@@ -57,7 +58,7 @@ func (l *LocalPathStorageInstaller) Install(ctx context.Context) error {
 }
 
 // Uninstall is a no-op as we don't support uninstalling storage provisioners.
-func (l *LocalPathStorageInstaller) Uninstall(ctx context.Context) error {
+func (l *LocalPathStorageInstaller) Uninstall(_ context.Context) error {
 	return nil
 }
 
@@ -148,19 +149,20 @@ func (l *LocalPathStorageInstaller) setDefaultStorageClass(ctx context.Context) 
 	}
 
 	// Get the storage class
-	sc, err := clientset.StorageV1().StorageClasses().Get(ctx, "local-path", metav1.GetOptions{})
+	storageClass, err := clientset.StorageV1().StorageClasses().Get(ctx, "local-path", metav1.GetOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to get storage class: %w", err)
 	}
 
 	// Add the default annotation
-	if sc.Annotations == nil {
-		sc.Annotations = make(map[string]string)
+	if storageClass.Annotations == nil {
+		storageClass.Annotations = make(map[string]string)
 	}
-	sc.Annotations["storageclass.kubernetes.io/is-default-class"] = "true"
+
+	storageClass.Annotations["storageclass.kubernetes.io/is-default-class"] = "true"
 
 	// Update the storage class
-	_, err = clientset.StorageV1().StorageClasses().Update(ctx, sc, metav1.UpdateOptions{})
+	_, err = clientset.StorageV1().StorageClasses().Update(ctx, storageClass, metav1.UpdateOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to update storage class: %w", err)
 	}
