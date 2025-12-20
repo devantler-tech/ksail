@@ -330,40 +330,22 @@ Global Flags:
 [TestWorkloadHelpSnapshots/edit - 1]
 Edit a Kubernetes resource from the default editor.
 
-Usage:
-  ksail workload edit
+The editor is determined by (in order of precedence):
+  1. --editor flag
+  2. spec.editor from ksail.yaml config
+  3. KUBE_EDITOR, EDITOR, or VISUAL environment variables
+  4. Fallback to vim, nano, or vi
 
-Examples:
-  # Edit the service named 'registry'
-  ksail workload edit svc/registry
-  
-  # Use an alternative editor
-  KUBE_EDITOR="nano" ksail workload edit svc/registry
-  
-  # Edit the job 'myjob' in JSON using the v1 API format
-  ksail workload edit job.v1.batch/myjob -o json
-  
-  # Edit the deployment 'mydeployment' in YAML and save the modified config in its annotation
-  ksail workload edit deployment/mydeployment -o yaml --save-config
-  
-  # Edit the 'status' subresource for the 'mydeployment' deployment
-  ksail workload edit deployment mydeployment --subresource='status'
+Example:
+  ksail workload edit deployment/my-deployment
+  ksail workload edit --editor "code --wait" deployment/my-deployment
+
+Usage:
+  ksail workload edit [flags]
 
 Flags:
-      --allow-missing-template-keys   If true, ignore any errors in templates when a field or map key is missing in the template. Only applies to golang and jsonpath output formats. (default true)
-      --field-manager string          Name of the manager used to track field ownership. (default "kubectl-edit")
-  -f, --filename strings              Filename, directory, or URL to files to use to edit the resource
-  -h, --help                          help for edit
-  -k, --kustomize string              Process the kustomization directory. This flag can't be used together with -f or -R.
-  -o, --output string                 Output format. One of: (json, yaml, kyaml, name, go-template, go-template-file, template, templatefile, jsonpath, jsonpath-as-json, jsonpath-file).
-      --output-patch                  Output the patch if the resource is edited.
-  -R, --recursive                     Process the directory used in -f, --filename recursively. Useful when you want to manage related manifests organized within the same directory.
-      --save-config                   If true, the configuration of current object will be saved in its annotation. Otherwise, the annotation will be unchanged. This flag is useful when you want to perform kubectl apply on this object in the future.
-      --show-managed-fields           If true, keep the managedFields when printing objects in JSON or YAML format.
-      --subresource string            If specified, edit will operate on the subresource of the requested object.
-      --template string               Template string or path to template file to use when -o=go-template, -o=go-template-file. The template format is golang templates [http://golang.org/pkg/text/template/#pkg-overview].
-      --validate string[="strict"]    Must be one of: strict (or true), warn, ignore (or false). "true" or "strict" will use a schema to validate the input and fail the request if invalid. It will perform server side validation if ServerSideFieldValidation is enabled on the api-server, but will fall back to less reliable client-side validation if not. "warn" will warn about unknown or duplicate fields without blocking the request if server-side field validation is enabled on the API server, and behave as "ignore" otherwise. "false" or "ignore" will not perform any schema validation, silently dropping any unknown or duplicate fields. (default "strict")
-      --windows-line-endings          Defaults to the line ending native to your platform.
+      --editor string   editor command to use (e.g., 'code --wait', 'vim', 'nano')
+  -h, --help            help for edit
 
 Global Flags:
       --timing   Show per-activity timing output
