@@ -93,6 +93,7 @@ ksail --help                     # Top-level commands
 ksail cluster init --help        # Project scaffolding flags
 ksail cluster create --help      # Cluster creation options
 ksail cluster delete --help      # Clean-up options
+ksail workload validate --help   # Manifest validation options
 ```
 
 ### Global Flags
