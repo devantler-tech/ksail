@@ -177,7 +177,12 @@ func TestNewClusterRoleBindingCmd(t *testing.T) {
 	cmd := gen.NewClusterRoleBindingCmd(rt)
 
 	require.NotNil(t, cmd, "expected clusterrolebinding command to be created")
-	require.Equal(t, "clusterrolebinding", cmd.Name(), "expected command name to be 'clusterrolebinding'")
+	require.Equal(
+		t,
+		"clusterrolebinding",
+		cmd.Name(),
+		"expected command name to be 'clusterrolebinding'",
+	)
 }
 
 func TestNewServiceAccountCmd(t *testing.T) {
@@ -207,7 +212,12 @@ func TestNewPodDisruptionBudgetCmd(t *testing.T) {
 	cmd := gen.NewPodDisruptionBudgetCmd(rt)
 
 	require.NotNil(t, cmd, "expected poddisruptionbudget command to be created")
-	require.Equal(t, "poddisruptionbudget", cmd.Name(), "expected command name to be 'poddisruptionbudget'")
+	require.Equal(
+		t,
+		"poddisruptionbudget",
+		cmd.Name(),
+		"expected command name to be 'poddisruptionbudget'",
+	)
 }
 
 func TestNewPriorityClassCmd(t *testing.T) {
