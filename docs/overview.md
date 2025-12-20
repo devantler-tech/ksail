@@ -11,45 +11,30 @@ KSail is a CLI tool for managing local Kubernetes clusters and workloads. Built 
 
 ## Who Uses KSail?
 
-KSail is built for platform engineers, developers, and anyone working with Kubernetes who wants a fast feedback loop. The CLI provides a consistent interface across different distributions, making it approachable for engineers learning Kubernetes.
+Platform engineers, developers, and anyone working with Kubernetes who wants fast feedback loops and consistent tooling across different distributions.
 
-## Key Features
+## Command Groups
 
-- **Single binary** – One executable with embedded tools; only Docker required
-- **Unified CLI** – Consistent commands across Kind and K3d distributions
-- **Fast setup** – Spin up clusters in seconds with sensible defaults
-- **GitOps ready** – Built-in support for both Flux and ArgoCD with local registry and OCI artifacts
-- **Declarative configuration** – Configuration as code for reproducible clusters
-- **Flexible components** – Choose your preferred distribution, CNI, CSI, and more
-- **Mirror registries** – Cache images locally to avoid rate limits
-- **Secrets management** – SOPS integration for encrypting manifests at rest
-
-## What You Can Do with KSail
-
-- **Scaffold projects** – `ksail cluster init` creates a project with configuration files and Kustomize structure
-- **Manage clusters** – Use `ksail cluster` subcommands (`create`, `start`, `stop`, `delete`, `info`, `list`, `connect`) to manage clusters
-- **Work with manifests** – `ksail workload` commands wrap `kubectl` and Helm for applying and managing workloads
-- **Generate resources** – `ksail workload gen` helps create Kubernetes resource manifests
-- **Encrypt secrets** – `ksail cipher` wraps SOPS for encrypting and decrypting files
+- **`ksail cluster`** – Scaffold, create, and manage clusters
+- **`ksail workload`** – Apply, validate, and manage Kubernetes resources
+- **`ksail cipher`** – Encrypt and decrypt secrets with SOPS
 
 ## Project Structure
 
-Running `ksail cluster init` scaffolds a project with the necessary configuration files:
+`ksail cluster init` scaffolds:
 
 ```text
-├── ksail.yaml              # Declarative cluster configuration
-├── kind.yaml / k3d.yaml    # Distribution-specific configuration
-└── k8s/                    # Workload manifests directory
-    └── kustomization.yaml  # Root Kustomize entrypoint
+├── ksail.yaml              # Cluster configuration
+├── kind.yaml / k3d.yaml    # Distribution config
+└── k8s/                    # Workload manifests
+    └── kustomization.yaml
 ```
 
-### Configuration Files
+- **`ksail.yaml`** – Main configuration (see [Configuration](configuration.md))
+- **Distribution configs** – [Kind](https://kind.sigs.k8s.io/docs/user/configuration/) or [K3d](https://k3d.io/stable/usage/configfile/) options
+- **`k8s/`** – [Kustomize](https://kustomize.io/) manifests
 
-- **`ksail.yaml`** – Main configuration defining cluster setup (see [Configuration](configuration.md))
-- **Distribution configs** – [Kind](https://kind.sigs.k8s.io/docs/user/configuration/) or [K3d](https://k3d.io/stable/usage/configfile/) specific options
-- **`k8s/`** – [Kustomize](https://kustomize.io/) manifests for workload management
-
-Use `--source-directory` during init to change where workloads are stored (default: `k8s`).
+Use `--source-directory` to change the workload directory (default: `k8s`).
 
 ## Support Matrix
 
