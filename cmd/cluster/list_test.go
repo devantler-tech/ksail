@@ -3,244 +3,287 @@ package cluster_test
 import (
 	"bytes"
 	"context"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
 	"testing"
 
 	clusterpkg "github.com/devantler-tech/ksail/cmd/cluster"
 	"github.com/devantler-tech/ksail/pkg/apis/cluster/v1alpha1"
+	runtime "github.com/devantler-tech/ksail/pkg/di"
 	ksailconfigmanager "github.com/devantler-tech/ksail/pkg/io/config-manager/ksail"
 	clusterprovisioner "github.com/devantler-tech/ksail/pkg/svc/provisioner/cluster"
+	"github.com/gkampitakis/go-snaps/snaps"
+	"github.com/samber/do/v2"
 	"github.com/spf13/cobra"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
 
-// TestListCmd_NoAllFlag tests listing clusters without the --all flag.
-func TestListCmd_NoAllFlag(t *testing.T) {
-	t.Parallel()
+var (
+	errTestListClusters = errors.New("failed to list clusters")
+	errTestFactoryError = errors.New("factory error")
+)
 
-	tests := []struct {
-		name           string
-		clusters       []string
-		expectedOutput string
-	}{
-		{
-			name:           "no clusters found",
-			clusters:       []string{},
-			expectedOutput: "► no clusters found",
-		},
-		{
-			name:           "single cluster",
-			clusters:       []string{"test-cluster"},
-			expectedOutput: "test-cluster",
-		},
-		{
-			name:           "multiple clusters",
-			clusters:       []string{"cluster1", "cluster2"},
-			expectedOutput: "cluster1, cluster2",
-		},
+func TestMain(m *testing.M) {
+	exitCode := m.Run()
+
+	_, err := snaps.Clean(m, snaps.CleanOpts{Sort: true})
+	if err != nil {
+		_, _ = os.Stderr.WriteString("failed to clean snapshots: " + err.Error() + "\n")
+
+		os.Exit(1)
 	}
 
-	for _, testCase := range tests {
-		t.Run(testCase.name, func(t *testing.T) {
-			t.Parallel()
-
-			var buf bytes.Buffer
-
-			cmd := setupTestCommand(t, &buf)
-
-			// Create fake factory and config manager
-			factory := &fakeListFactory{clusters: testCase.clusters}
-			cfgManager := setupTestConfig(t, cmd, false)
-			deps := clusterpkg.ListDeps{
-				Factory:             factory,
-				DistributionFactory: factory,
-			}
-
-			err := clusterpkg.HandleListRunE(cmd, cfgManager, deps)
-			require.NoError(t, err)
-
-			output := buf.String()
-			assert.Contains(t, output, testCase.expectedOutput)
-		})
-	}
+	os.Exit(exitCode)
 }
 
-// TestListCmd_WithAllFlag tests listing clusters with the --all flag.
-func TestListCmd_WithAllFlag(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name                string
-		kindClusters        []string
-		k3dClusters         []string
-		expectedKindSection string
-		expectedK3dSection  string
-	}{
-		{
-			name:                "no clusters in either distribution",
-			kindClusters:        []string{},
-			k3dClusters:         []string{},
-			expectedKindSection: "---|kind|---\nNo kind clusters found.",
-			expectedK3dSection:  "---|k3d|---\nNo k3d clusters found.",
-		},
-		{
-			name:                "kind clusters only",
-			kindClusters:        []string{"kind-cluster"},
-			k3dClusters:         []string{},
-			expectedKindSection: "---|kind|---\nkind: kind-cluster",
-			expectedK3dSection:  "---|k3d|---\nNo k3d clusters found.",
-		},
-		{
-			name:                "k3d clusters only",
-			kindClusters:        []string{},
-			k3dClusters:         []string{"k3d-cluster"},
-			expectedKindSection: "---|kind|---\nNo kind clusters found.",
-			expectedK3dSection:  "---|k3d|---\nk3d: k3d-cluster",
-		},
-		{
-			name:                "both distributions have clusters",
-			kindClusters:        []string{"kind1", "kind2"},
-			k3dClusters:         []string{"k3d1"},
-			expectedKindSection: "---|kind|---\nkind: kind1, kind2",
-			expectedK3dSection:  "---|k3d|---\nk3d: k3d1",
-		},
-	}
-
-	for _, testCase := range tests {
-		t.Run(testCase.name, func(t *testing.T) {
-			t.Parallel()
-
-			testWithAllFlag(
-				t,
-				testCase.name,
-				testCase.kindClusters,
-				testCase.k3dClusters,
-				testCase.expectedKindSection,
-				testCase.expectedK3dSection,
-			)
-		})
-	}
+// fakeProvisionerWithClusters returns a list of clusters for testing.
+type fakeProvisionerWithClusters struct {
+	clusters []string
+	listErr  error
 }
 
-func testWithAllFlag(
-	t *testing.T,
-	_ string,
-	kindClusters,
-	k3dClusters []string,
-	expectedKindSection,
-	expectedK3dSection string,
-) {
+func (f *fakeProvisionerWithClusters) Create(context.Context, string) error { return nil }
+func (f *fakeProvisionerWithClusters) Delete(context.Context, string) error { return nil }
+func (f *fakeProvisionerWithClusters) Start(context.Context, string) error  { return nil }
+func (f *fakeProvisionerWithClusters) Stop(context.Context, string) error   { return nil }
+func (f *fakeProvisionerWithClusters) List(context.Context) ([]string, error) {
+	return f.clusters, f.listErr
+}
+
+func (f *fakeProvisionerWithClusters) Exists(context.Context, string) (bool, error) {
+	return len(f.clusters) > 0, nil
+}
+
+// fakeFactoryWithClusters creates a provisioner that returns clusters.
+type fakeFactoryWithClusters struct {
+	clusters []string
+	listErr  error
+}
+
+func (f fakeFactoryWithClusters) Create(
+	_ context.Context,
+	_ *v1alpha1.Cluster,
+) (clusterprovisioner.ClusterProvisioner, any, error) {
+	cfg := &v1alpha4.Cluster{Name: "test"}
+
+	return &fakeProvisionerWithClusters{clusters: f.clusters, listErr: f.listErr}, cfg, nil
+}
+
+func setupListTest(t *testing.T, workingDir string) {
 	t.Helper()
+
+	ksailYAML := `apiVersion: ksail.dev/v1alpha1
+kind: Cluster
+spec:
+  distribution: Kind
+  distributionConfig: kind.yaml
+  metricsServer: Disabled
+  connection:
+    kubeconfig: ./kubeconfig
+`
+
+	require.NoError(
+		t,
+		os.WriteFile(filepath.Join(workingDir, "ksail.yaml"), []byte(ksailYAML), 0o600),
+	)
+	require.NoError(t, os.WriteFile(
+		filepath.Join(workingDir, "kind.yaml"),
+		[]byte("kind: Cluster\napiVersion: kind.x-k8s.io/v1alpha4\nname: test\nnodes: []\n"),
+		0o600,
+	))
+}
+
+func newListRuntimeContainer(t *testing.T, factory clusterprovisioner.Factory) *runtime.Runtime {
+	t.Helper()
+
+	return runtime.New(
+		func(i runtime.Injector) error {
+			do.Provide(i, func(runtime.Injector) (clusterprovisioner.Factory, error) {
+				return factory, nil
+			})
+
+			return nil
+		},
+	)
+}
+
+//nolint:paralleltest // uses t.Chdir
+func TestListCmd_NoClusterFound(t *testing.T) {
+	workingDir := t.TempDir()
+	t.Chdir(workingDir)
+	setupListTest(t, workingDir)
+
+	factory := fakeFactoryWithClusters{clusters: []string{}}
+	testRuntime := newListRuntimeContainer(t, factory)
+
+	cmd := clusterpkg.NewListCmd(testRuntime)
 
 	var buf bytes.Buffer
-
-	cmd := setupTestCommand(t, &buf)
-
-	// Create fake factory and config manager
-	factory := &fakeListFactoryForAll{
-		kindClusters: kindClusters,
-		k3dClusters:  k3dClusters,
-	}
-	cfgManager := setupTestConfig(t, cmd, true)
-	deps := clusterpkg.ListDeps{
-		Factory:             factory,
-		DistributionFactory: factory,
-	}
-
-	err := clusterpkg.HandleListRunE(cmd, cfgManager, deps)
-	require.NoError(t, err)
-
-	output := buf.String()
-	assert.Contains(t, output, expectedKindSection)
-	assert.Contains(t, output, expectedK3dSection)
-}
-
-// setupTestCommand creates a test command with output buffer.
-func setupTestCommand(t *testing.T, buf *bytes.Buffer) *cobra.Command {
-	t.Helper()
-
-	cmd := &cobra.Command{Use: "list"}
-	cmd.SetOut(buf)
-	cmd.SetErr(buf)
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
 	cmd.SetContext(context.Background())
 
-	return cmd
+	err := cmd.Execute()
+	require.NoError(t, err)
+
+	snaps.MatchSnapshot(t, buf.String())
 }
 
-// setupTestConfig creates a test config manager with appropriate settings.
-func setupTestConfig(
-	t *testing.T,
-	cmd *cobra.Command,
-	allFlag bool,
-) *ksailconfigmanager.ConfigManager {
-	t.Helper()
+//nolint:paralleltest // uses t.Chdir
+func TestListCmd_SingleClusterFound(t *testing.T) {
+	workingDir := t.TempDir()
+	t.Chdir(workingDir)
+	setupListTest(t, workingDir)
+
+	factory := fakeFactoryWithClusters{clusters: []string{"test-cluster"}}
+	testRuntime := newListRuntimeContainer(t, factory)
+
+	cmd := clusterpkg.NewListCmd(testRuntime)
+
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+	cmd.SetContext(context.Background())
+
+	err := cmd.Execute()
+	require.NoError(t, err)
+
+	snaps.MatchSnapshot(t, buf.String())
+}
+
+//nolint:paralleltest // uses t.Chdir
+func TestListCmd_MultipleClustersFound(t *testing.T) {
+	workingDir := t.TempDir()
+	t.Chdir(workingDir)
+	setupListTest(t, workingDir)
+
+	factory := fakeFactoryWithClusters{clusters: []string{"cluster-1", "cluster-2", "cluster-3"}}
+	testRuntime := newListRuntimeContainer(t, factory)
+
+	cmd := clusterpkg.NewListCmd(testRuntime)
+
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+	cmd.SetContext(context.Background())
+
+	err := cmd.Execute()
+	require.NoError(t, err)
+
+	snaps.MatchSnapshot(t, buf.String())
+}
+
+//nolint:paralleltest // uses t.Chdir
+func TestListCmd_WithAllFlag(t *testing.T) {
+	workingDir := t.TempDir()
+	t.Chdir(workingDir)
+	setupListTest(t, workingDir)
+
+	factory := fakeFactoryWithClusters{clusters: []string{"test-cluster"}}
+	testRuntime := newListRuntimeContainer(t, factory)
+
+	cmd := clusterpkg.NewListCmd(testRuntime)
+
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+	cmd.SetContext(context.Background())
+	cmd.SetArgs([]string{"--all"})
+
+	err := cmd.Execute()
+	require.NoError(t, err)
+
+	snaps.MatchSnapshot(t, buf.String())
+}
+
+//nolint:paralleltest // uses t.Chdir
+func TestListCmd_ListError(t *testing.T) {
+	workingDir := t.TempDir()
+	t.Chdir(workingDir)
+	setupListTest(t, workingDir)
+
+	factory := fakeFactoryWithClusters{listErr: fmt.Errorf("test error: %w", errTestListClusters)}
+	testRuntime := newListRuntimeContainer(t, factory)
+
+	cmd := clusterpkg.NewListCmd(testRuntime)
+
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+	cmd.SetContext(context.Background())
+
+	err := cmd.Execute()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "failed to list clusters")
+}
+
+//nolint:paralleltest // uses t.Chdir
+func TestHandleListRunE_Success(t *testing.T) {
+	workingDir := t.TempDir()
+	t.Chdir(workingDir)
+	setupListTest(t, workingDir)
+
+	cmd := &cobra.Command{Use: "list"}
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
+	cmd.SetContext(context.Background())
 
 	cfgManager := ksailconfigmanager.NewCommandConfigManager(
 		cmd,
 		ksailconfigmanager.DefaultClusterFieldSelectors(),
 	)
 
-	// Create flags
-	cmd.Flags().Bool("all", false, "List all clusters")
-
-	// Bind the all flag
+	cmd.Flags().BoolP("all", "a", false, "List all clusters")
 	_ = cfgManager.Viper.BindPFlag("all", cmd.Flags().Lookup("all"))
 
-	// Set the all flag value if needed
-	if allFlag {
-		_ = cmd.Flags().Set("all", "true")
+	deps := clusterpkg.ListDeps{
+		Factory:             fakeFactoryWithClusters{clusters: []string{"test"}},
+		DistributionFactory: clusterprovisioner.DefaultFactory{},
 	}
 
-	// Set minimal cluster config in viper
-	cfgManager.Viper.Set("cluster.name", "test-cluster")
-	cfgManager.Viper.Set("cluster.spec.distribution", "kind")
-
-	return cfgManager
+	err := clusterpkg.HandleListRunE(cmd, cfgManager, deps)
+	require.NoError(t, err)
 }
 
-// fakeListFactory is a test double for the provisioner factory.
-type fakeListFactory struct {
-	clusters []string
+//nolint:paralleltest // uses t.Chdir
+func TestListCmd_FactoryError(t *testing.T) {
+	workingDir := t.TempDir()
+	t.Chdir(workingDir)
+	setupListTest(t, workingDir)
+
+	// Create factory that returns error
+	factory := fakeFactoryWithErrors{}
+	testRuntime := newListRuntimeContainer(t, factory)
+
+	cmd := clusterpkg.NewListCmd(testRuntime)
+
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+	cmd.SetContext(context.Background())
+
+	err := cmd.Execute()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "failed to resolve cluster provisioner")
 }
 
-func (f *fakeListFactory) Create(
+// fakeFactoryWithErrors creates a provisioner that returns an error.
+type fakeFactoryWithErrors struct{}
+
+func (fakeFactoryWithErrors) Create(
 	_ context.Context,
 	_ *v1alpha1.Cluster,
 ) (clusterprovisioner.ClusterProvisioner, any, error) {
-	return &fakeListProvisioner{clusters: f.clusters}, nil, nil
+	return nil, nil, fmt.Errorf("test error: %w", errTestFactoryError)
 }
 
-// fakeListFactoryForAll is a test double that handles both distributions.
-type fakeListFactoryForAll struct {
-	kindClusters []string
-	k3dClusters  []string
-}
-
-func (f *fakeListFactoryForAll) Create(
-	_ context.Context,
-	cluster *v1alpha1.Cluster,
-) (clusterprovisioner.ClusterProvisioner, any, error) {
-	if cluster.Spec.Distribution == v1alpha1.DistributionKind {
-		return &fakeListProvisioner{clusters: f.kindClusters}, nil, nil
-	}
-
-	return &fakeListProvisioner{clusters: f.k3dClusters}, nil, nil
-}
-
-// fakeListProvisioner implements the ClusterProvisioner interface for testing.
-type fakeListProvisioner struct {
-	clusters []string
-}
-
-func (f *fakeListProvisioner) Create(context.Context, string) error { return nil }
-func (f *fakeListProvisioner) Delete(context.Context, string) error { return nil }
-func (f *fakeListProvisioner) Start(context.Context, string) error  { return nil }
-func (f *fakeListProvisioner) Stop(context.Context, string) error   { return nil }
-
-func (f *fakeListProvisioner) List(context.Context) ([]string, error) {
-	return f.clusters, nil
-}
-
-func (f *fakeListProvisioner) Exists(context.Context, string) (bool, error) {
-	return len(f.clusters) > 0, nil
-}
+// Ensure fake types satisfy interfaces at compile time.
+var (
+	_ clusterprovisioner.ClusterProvisioner = (*fakeProvisionerWithClusters)(nil)
+	_ clusterprovisioner.Factory            = (*fakeFactoryWithClusters)(nil)
+	_ clusterprovisioner.Factory            = (*fakeFactoryWithErrors)(nil)
+)

@@ -257,13 +257,9 @@ func displayEmptyClusters(
 		default:
 			_, _ = fmt.Fprintln(writer, "No clusters found.")
 		}
-	} else {
-		notify.WriteMessage(notify.Message{
-			Type:    notify.ActivityType,
-			Content: "no clusters found",
-			Writer:  writer,
-		})
 	}
+	// When not showing all distributions, the provisioner already displays its own message
+	// (e.g., "No kind clusters found."), so we don't display an additional message here.
 }
 
 func displayClusterNames(

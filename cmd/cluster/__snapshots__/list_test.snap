@@ -8,3 +8,27 @@ alpha
 kind-mgmt
 
 ---
+
+[TestListCmd_NoClusterFound - 1]
+
+---
+
+[TestListCmd_SingleClusterFound - 1]
+test-cluster
+
+---
+
+[TestListCmd_MultipleClustersFound - 1]
+cluster-1, cluster-2, cluster-3
+
+---
+
+[TestListCmd_WithAllFlag - 1]
+---|kind|---
+kind: test-cluster
+
+---|k3d|---
+No k3d clusters found.
+
+
+---
