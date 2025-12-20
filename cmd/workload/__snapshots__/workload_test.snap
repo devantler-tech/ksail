@@ -1,6 +1,6 @@
 
 [TestNewWorkloadCmdRunETriggersHelp - 1]
-Group workload commands under a single namespace to reconcile, apply, create, delete, describe, edit, exec, explain, expose, get, gen, install, logs, rollout, scale, or wait for workloads.
+Group workload commands under a single namespace to reconcile, apply, create, delete, describe, edit, exec, explain, expose, get, gen, install, logs, rollout, scale, validate, or wait for workloads.
 
 Usage:
   workload [flags]
@@ -24,6 +24,7 @@ Available Commands:
   reconcile   Reconcile workloads with the cluster
   rollout     Manage the rollout of a resource
   scale       Scale resources
+  validate    Validate Kubernetes manifests and kustomizations
   wait        Wait for a specific condition on one or many resources
 
 Flags:
@@ -689,7 +690,7 @@ Global Flags:
 ---
 
 [TestWorkloadHelpSnapshots/namespace - 1]
-Group workload commands under a single namespace to reconcile, apply, create, delete, describe, edit, exec, explain, expose, get, gen, install, logs, rollout, scale, or wait for workloads.
+Group workload commands under a single namespace to reconcile, apply, create, delete, describe, edit, exec, explain, expose, get, gen, install, logs, rollout, scale, validate, or wait for workloads.
 
 Usage:
   ksail workload [flags]
@@ -711,6 +712,7 @@ Available Commands:
   reconcile   Reconcile workloads with the cluster
   rollout     Manage the rollout of a resource
   scale       Scale resources
+  validate    Validate Kubernetes manifests and kustomizations
   wait        Wait for a specific condition on one or many resources
 
 Flags:
