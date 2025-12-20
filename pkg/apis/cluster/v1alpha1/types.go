@@ -33,6 +33,7 @@ type Cluster struct {
 type Spec struct {
 	DistributionConfig string        `json:"distributionConfig,omitzero"`
 	SourceDirectory    string        `json:"sourceDirectory,omitzero"`
+	Editor             string        `json:"editor,omitzero"             jsonschema:"description=Editor command for interactive workflows (e.g. code --wait)"` //nolint:lll
 	Connection         Connection    `json:"connection,omitzero"`
 	Distribution       Distribution  `json:"distribution,omitzero"`
 	CNI                CNI           `json:"cni,omitzero"`

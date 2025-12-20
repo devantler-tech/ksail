@@ -21,6 +21,10 @@
         "sourceDirectory": {
           "type": "string"
         },
+        "editor": {
+          "type": "string",
+          "description": "Editor command for interactive workflows (e.g. code --wait)"
+        },
         "connection": {
           "properties": {
             "kubeconfig": {
