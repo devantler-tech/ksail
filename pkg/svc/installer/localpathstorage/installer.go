@@ -149,7 +149,11 @@ func (l *LocalPathStorageInstaller) setDefaultStorageClass(ctx context.Context) 
 	}
 
 	// Get the storage class
-	storageClass, err := clientset.StorageV1().StorageClasses().Get(ctx, "local-path", metav1.GetOptions{})
+	storageClass, err := clientset.StorageV1().StorageClasses().Get(
+		ctx,
+		"local-path",
+		metav1.GetOptions{},
+	)
 	if err != nil {
 		return fmt.Errorf("failed to get storage class: %w", err)
 	}
@@ -162,7 +166,11 @@ func (l *LocalPathStorageInstaller) setDefaultStorageClass(ctx context.Context) 
 	storageClass.Annotations["storageclass.kubernetes.io/is-default-class"] = "true"
 
 	// Update the storage class
-	_, err = clientset.StorageV1().StorageClasses().Update(ctx, storageClass, metav1.UpdateOptions{})
+	_, err = clientset.StorageV1().StorageClasses().Update(
+		ctx,
+		storageClass,
+		metav1.UpdateOptions{},
+	)
 	if err != nil {
 		return fmt.Errorf("failed to update storage class: %w", err)
 	}
