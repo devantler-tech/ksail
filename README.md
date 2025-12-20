@@ -84,6 +84,7 @@ KSail organizes commands around your development lifecycle:
 #### Workload Management
 
 - `ksail workload apply` — Deploy manifests with kubectl or Kustomize
+- `ksail workload validate` — Validate Kubernetes manifests and kustomizations
 - `ksail workload reconcile` — Trigger GitOps reconciliation (Flux or ArgoCD)
 - `ksail workload logs` — View logs from running pods
 - `ksail workload exec` — Execute commands in running pods

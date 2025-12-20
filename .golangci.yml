@@ -68,6 +68,9 @@ linters:
           - ireturn
         path: pkg/client/oci/builder_impl.go
       - linters:
+          - ireturn
+        path: pkg/client/kubeconform/client.go
+      - linters:
           - nlreturn
         path: pkg/scaffolder/scaffolder_test.go
       - linters:
@@ -119,6 +122,7 @@ linters:
             - github.com/spf13/viper
             - github.com/stretchr/testify
             - github.com/sirupsen/logrus
+            - github.com/yannh
             - filippo.io/age
             - helm.sh/helm
             - k8s.io
