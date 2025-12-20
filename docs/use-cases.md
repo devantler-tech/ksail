@@ -46,7 +46,7 @@ Reference `kubectl explain` and the [Kubernetes documentation](https://kubernete
 
 ## Local Development
 
-KSail helps you run Kubernetes manifests locally using your container engine. The CLI provides a consistent workflow that matches your deployment configuration.
+KSail helps you run Kubernetes manifests locally. The CLI provides a consistent workflow that matches your deployment configuration.
 
 ### Development Workflow
 
