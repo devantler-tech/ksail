@@ -29,6 +29,7 @@ spec:
   distribution: Kind
   distributionConfig: kind.yaml
   sourceDirectory: k8s
+  editor: code --wait
   connection:
     kubeconfig: ~/.kube/config
     context: kind-local
@@ -46,6 +47,7 @@ spec:
 | `distribution`          | enum     | `Kind`               | `Kind`, `K3d`                  | Kubernetes distribution to use.                                 |
 | `distributionConfig`    | string   | `kind.yaml`          | File path                      | Path to distribution-specific YAML (`kind.yaml` or `k3d.yaml`). |
 | `sourceDirectory`       | string   | `k8s`                | Directory path                 | Location of workload manifests.                                 |
+| `editor`                | string   | –                    | Command with args              | Editor for interactive workflows (e.g. `code --wait`, `vim`).   |
 | `connection.kubeconfig` | string   | `~/.kube/config`     | File path                      | Path to kubeconfig file.                                        |
 | `connection.context`    | string   | Derived from cluster | kubeconfig context             | Context name (Kind: `kind-<name>`, K3d: `k3d-<name>`).          |
 | `connection.timeout`    | duration | –                    | Go duration (e.g. `30s`, `5m`) | Optional timeout for cluster operations.                        |
@@ -158,3 +160,67 @@ ksail cluster init \
 - **Use environment variables** for CI/CD pipelines or machine-specific overrides
 
 These configuration layers allow you to balance version-controlled defaults with flexible runtime overrides.
+
+## Editor Configuration
+
+KSail supports configuring a default editor for interactive workflows. This editor is used by:
+
+- `ksail cipher edit` - Edit encrypted secrets with SOPS
+- `ksail workload edit` - Edit Kubernetes resources with kubectl
+- `ksail cluster connect` - Editor for k9s edit actions
+
+### Editor Resolution Order
+
+The editor is resolved with the following precedence (highest to lowest):
+
+1. `--editor` flag on the command
+2. `spec.editor` field in `ksail.yaml`
+3. Environment variables (`SOPS_EDITOR`, `KUBE_EDITOR`, `EDITOR`, `VISUAL`)
+4. Fallback to available editors (`vim`, `nano`, `vi`)
+
+### Configuration Examples
+
+**Via ksail.yaml:**
+
+```yaml
+apiVersion: ksail.dev/v1alpha1
+kind: Cluster
+spec:
+  editor: code --wait
+  # ... other configuration
+```
+
+**Via CLI flag:**
+
+```bash
+# Edit a secret with VS Code
+ksail cipher edit --editor "code --wait" secrets.yaml
+
+# Edit a deployment with vim
+ksail workload edit --editor vim deployment/my-app
+
+# Connect with nano as the default editor
+ksail cluster connect --editor nano
+```
+
+**Via environment variable:**
+
+```bash
+# Set for all commands
+export EDITOR="code --wait"
+ksail cipher edit secrets.yaml
+
+# Or use SOPS_EDITOR for cipher commands
+export SOPS_EDITOR="vim"
+ksail cipher edit secrets.yaml
+```
+
+### Editor Command Format
+
+The editor value can include command-line arguments:
+
+- `vim` - Simple editor
+- `code --wait` - VS Code with wait flag
+- `emacs -nw` - Emacs in terminal mode
+
+The command is parsed by splitting on whitespace, similar to how shell commands work.

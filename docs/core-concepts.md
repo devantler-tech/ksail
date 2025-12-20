@@ -35,13 +35,18 @@ The CNI determines how pods receive IP addresses and communicate. Configure via 
 
 Storage options determine how persistent volumes are provisioned. Configure via `spec.csi` in `ksail.yaml` or `--csi` flag.
 
-> **Note:** CSI configuration is defined but not yet fully implemented in cluster creation.
+**Available options:**
 
-**Planned options:**
+- **`Default`** – Uses distribution's built-in storage class. K3d includes [local-path-provisioner](https://github.com/rancher/local-path-provisioner) by default, while Kind does not have a default storage class. Works well for simple development scenarios.
+- **`LocalPathStorage`** – Explicitly installs [local-path-provisioner](https://github.com/rancher/local-path-provisioner) version v0.0.32. On Kind clusters, KSail installs the provisioner into the `local-path-storage` namespace and creates a `StorageClass` named `local-path` marked as the cluster default, ensuring PersistentVolumeClaims bind without additional configuration. On K3d clusters, KSail performs no action as K3d already includes local-path-provisioner.
+- **`None`** – Skips CSI installation for custom storage controllers. Leaves PersistentVolumeClaims pending until your custom solution handles them.
 
-- **`Default`** – Uses distribution's built-in storage (local-path-provisioner for both Kind and K3d)
-- **`LocalPathStorage`** – Explicitly installs local-path-provisioner
-- **`None`** – Skips CSI installation for custom storage controllers
+**Example:**
+
+```bash
+ksail cluster init --csi LocalPathStorage
+ksail cluster create
+```
 
 ### Metrics Server
 

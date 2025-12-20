@@ -33,6 +33,7 @@ type Cluster struct {
 type Spec struct {
 	DistributionConfig string        `json:"distributionConfig,omitzero"`
 	SourceDirectory    string        `json:"sourceDirectory,omitzero"`
+	Editor             string        `json:"editor,omitzero"             jsonschema:"description=Editor command for interactive workflows (e.g. code --wait)"` //nolint:lll
 	Connection         Connection    `json:"connection,omitzero"`
 	Distribution       Distribution  `json:"distribution,omitzero"`
 	CNI                CNI           `json:"cni,omitzero"`
@@ -163,6 +164,19 @@ const (
 // ProvidesMetricsServerByDefault returns true if the distribution includes metrics-server by default.
 // K3d (based on K3s) includes metrics-server, Kind does not.
 func (d *Distribution) ProvidesMetricsServerByDefault() bool {
+	switch *d {
+	case DistributionK3d:
+		return true
+	case DistributionKind:
+		return false
+	default:
+		return false
+	}
+}
+
+// ProvidesStorageByDefault returns true if the distribution includes a storage provisioner by default.
+// K3d (based on K3s) includes local-path-provisioner, Kind does not have a default storage class.
+func (d *Distribution) ProvidesStorageByDefault() bool {
 	switch *d {
 	case DistributionK3d:
 		return true

@@ -21,6 +21,10 @@
         "sourceDirectory": {
           "type": "string"
         },
+        "editor": {
+          "type": "string",
+          "description": "Editor command for interactive workflows (e.g. code --wait)"
+        },
         "connection": {
           "properties": {
             "kubeconfig": {
@@ -48,7 +52,8 @@
           "type": "string",
           "enum": [
             "Default",
-            "Cilium"
+            "Cilium",
+            "Calico"
           ]
         },
         "csi": {
@@ -82,7 +87,9 @@
         "gitOpsEngine": {
           "type": "string",
           "enum": [
-            "None"
+            "None",
+            "Flux",
+            "ArgoCD"
           ]
         },
         "options": {
