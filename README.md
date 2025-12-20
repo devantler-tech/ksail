@@ -106,7 +106,7 @@ KSail organizes commands around your development lifecycle:
 
 ### For users
 
-- Browse the documentation in [`docs/`](./docs/) (Markdown) or on <https://ksail.devantler.tech> (GitHub Pages).
+- Browse the documentation in [`docs/`](./docs/index.md) (Markdown) or on <https://ksail.devantler.tech> (GitHub Pages).
 
 ### For contributors
 
