@@ -9,9 +9,9 @@ import (
 )
 
 // TestK3dClusterProvisioner_List tests the List method of K3dClusterProvisioner.
+//
+//nolint:paralleltest // Cannot use t.Parallel() because List() modifies global os.Stdout.
 func TestK3dClusterProvisioner_List(t *testing.T) {
-	// Note: Not using t.Parallel() because List() modifies global os.Stdout
-
 	// Test with nil config
 	t.Run("list with nil config", func(t *testing.T) {
 		provisioner := k3dprovisioner.NewK3dClusterProvisioner(nil, "")
@@ -48,9 +48,9 @@ func TestK3dClusterProvisioner_List(t *testing.T) {
 }
 
 // TestK3dClusterProvisioner_Exists tests the Exists method.
+//
+//nolint:paralleltest // Cannot use t.Parallel() because Exists() calls List() which modifies global os.Stdout.
 func TestK3dClusterProvisioner_Exists(t *testing.T) {
-	// Note: Not using t.Parallel() because Exists() calls List() which modifies global os.Stdout
-
 	tests := []struct {
 		name        string
 		clusterName string
@@ -65,10 +65,11 @@ func TestK3dClusterProvisioner_Exists(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		testCase := testCase
+		t.Run(testCase.name, func(t *testing.T) {
 			provisioner := k3dprovisioner.NewK3dClusterProvisioner(nil, "")
-			_, _ = provisioner.Exists(context.Background(), tt.clusterName)
+			_, _ = provisioner.Exists(context.Background(), testCase.clusterName)
 
 			// In test environment without actual k3d clusters, this may return an error
 			// We just verify the method can be called without panicking
@@ -94,11 +95,11 @@ func TestK3dClusterProvisioner_NewProvisioner(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			provisioner := k3dprovisioner.NewK3dClusterProvisioner(nil, tt.configPath)
+			provisioner := k3dprovisioner.NewK3dClusterProvisioner(nil, testCase.configPath)
 			assert.NotNil(t, provisioner)
 		})
 	}
