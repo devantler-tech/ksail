@@ -173,6 +173,19 @@ func (d *Distribution) ProvidesMetricsServerByDefault() bool {
 	}
 }
 
+// ProvidesStorageByDefault returns true if the distribution includes a storage provisioner by default.
+// K3d (based on K3s) includes local-path-provisioner, Kind does not have a default storage class.
+func (d *Distribution) ProvidesStorageByDefault() bool {
+	switch *d {
+	case DistributionK3d:
+		return true
+	case DistributionKind:
+		return false
+	default:
+		return false
+	}
+}
+
 // --- CNI Types ---
 
 // CNI defines the CNI options for a KSail cluster.

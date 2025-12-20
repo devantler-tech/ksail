@@ -125,6 +125,15 @@ func DefaultCertManagerFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	}
 }
 
+// DefaultCSIFieldSelector creates a standard field selector for CSI.
+func DefaultCSIFieldSelector() FieldSelector[v1alpha1.Cluster] {
+	return FieldSelector[v1alpha1.Cluster]{
+		Selector:     func(c *v1alpha1.Cluster) any { return &c.Spec.CSI },
+		Description:  "Container Storage Interface (CSI) to use",
+		DefaultValue: v1alpha1.CSIDefault,
+	}
+}
+
 // DefaultKubeconfigFieldSelector creates a standard field selector for kubeconfig.
 func DefaultKubeconfigFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	return FieldSelector[v1alpha1.Cluster]{

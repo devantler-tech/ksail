@@ -54,6 +54,9 @@ KSail helps you run Kubernetes manifests locally using your container engine. Th
 # 1. Scaffold project (commit these files for team consistency)
 ksail cluster init --distribution Kind --cni Cilium --metrics-server Enabled
 
+# If your workloads need persistent volumes, include CSI configuration:
+# ksail cluster init --distribution Kind --cni Cilium --metrics-server Enabled --csi LocalPathStorage
+
 # 2. Create cluster
 ksail cluster create
 
@@ -94,6 +97,7 @@ ksail workload apply -k k8s/
 
 ### Development Tips
 
+- Use `--csi LocalPathStorage` if your workloads require persistent volumes
 - Use `--cert-manager Enabled` if you need TLS certificates
 - Configure `--mirror-registry` to cache upstream images and avoid rate limits
 - Use `ksail workload gen` to create sample resource manifests
@@ -111,6 +115,9 @@ KSail enables CI/CD pipelines to create disposable Kubernetes clusters for integ
 ```bash
 # 1. Initialize (commit config so CI only needs to run create)
 ksail cluster init --distribution Kind --metrics-server Enabled
+
+# If your tests need persistent volumes, add CSI configuration:
+# ksail cluster init --distribution Kind --metrics-server Enabled --csi LocalPathStorage
 
 # 2. Create cluster in CI
 ksail cluster create
@@ -171,6 +178,7 @@ jobs:
 ### CI/CD Tips
 
 - Use Kind for fastest cluster creation in CI environments
+- Use `--csi LocalPathStorage` if your tests need persistent volumes (PVCs)
 - Set reasonable timeouts for cluster creation and workload readiness
 - Cache Docker images to speed up subsequent runs
 - Use `--mirror-registry` flags to reduce external registry dependencies

@@ -48,7 +48,8 @@
           "type": "string",
           "enum": [
             "Default",
-            "Cilium"
+            "Cilium",
+            "Calico"
           ]
         },
         "csi": {
@@ -82,7 +83,9 @@
         "gitOpsEngine": {
           "type": "string",
           "enum": [
-            "None"
+            "None",
+            "Flux",
+            "ArgoCD"
           ]
         },
         "options": {
