@@ -3,7 +3,6 @@ package cmd
 import (
 	"os"
 	"os/exec"
-	"strings"
 
 	"github.com/devantler-tech/ksail/pkg/apis/cluster/v1alpha1"
 	ksailconfigmanager "github.com/devantler-tech/ksail/pkg/io/config-manager/ksail"
@@ -134,12 +133,6 @@ func (r *EditorResolver) SetEditorEnvVars(editor string, forCommand string) func
 			_ = os.Unsetenv("VISUAL")
 		}
 	}
-}
-
-// ParseEditorCommand parses an editor command string into parts.
-// This handles commands like "code --wait" or "vim".
-func ParseEditorCommand(editor string) []string {
-	return strings.Fields(editor)
 }
 
 // SetupEditorEnv sets up the editor environment variables based on flag and config.
