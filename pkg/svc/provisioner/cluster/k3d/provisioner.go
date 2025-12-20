@@ -136,15 +136,14 @@ func (k *K3dClusterProvisioner) List(ctx context.Context) ([]string, error) {
 	os.Stdout = pipeWriter
 
 	defer func() {
-		os.Stdout = originalStdout
 		_ = pipeWriter.Close()
+		os.Stdout = originalStdout
 	}()
 
 	output, runErr := k.runListCommand(ctx)
 
-	// Close write end and restore stdout
+	// Close write end before reading
 	_ = pipeWriter.Close()
-	os.Stdout = originalStdout
 
 	// Discard any output that was written to our pipe
 	copyErr := discardPipeOutput(pipeReader)
