@@ -4,211 +4,177 @@ import (
 	"os"
 	"testing"
 
-	pkgcmd "github.com/devantler-tech/ksail/pkg/cmd"
-
 	"github.com/devantler-tech/ksail/pkg/apis/cluster/v1alpha1"
+	pkgcmd "github.com/devantler-tech/ksail/pkg/cmd"
 )
 
+//nolint:paralleltest // Cannot parallelize tests that modify environment variables
 func TestEditorResolver_ResolveEditor(t *testing.T) {
-	tests := []struct {
-		name         string
-		flagEditor   string
-		configEditor string
-		envVars      map[string]string
-		expected     string
-	}{
-		{
-			name:       "flag takes precedence over config",
-			flagEditor: "code --wait",
-			configEditor: "vim",
-			expected:   "code --wait",
-		},
-		{
-			name:         "config takes precedence over env vars",
-			flagEditor:   "",
-			configEditor: "nano",
-			envVars: map[string]string{
-				"EDITOR": "vim",
-			},
-			expected: "nano",
-		},
-		{
-			name:         "SOPS_EDITOR env var is used when no flag or config",
-			flagEditor:   "",
-			configEditor: "",
-			envVars: map[string]string{
-				"SOPS_EDITOR": "code --wait",
-			},
-			expected: "code --wait",
-		},
-		{
-			name:         "KUBE_EDITOR env var is used when SOPS_EDITOR not set",
-			flagEditor:   "",
-			configEditor: "",
-			envVars: map[string]string{
-				"KUBE_EDITOR": "vim",
-			},
-			expected: "vim",
-		},
-		{
-			name:         "EDITOR env var is used when SOPS_EDITOR and KUBE_EDITOR not set",
-			flagEditor:   "",
-			configEditor: "",
-			envVars: map[string]string{
-				"EDITOR": "nano",
-			},
-			expected: "nano",
-		},
-		{
-			name:         "VISUAL env var is used when other env vars not set",
-			flagEditor:   "",
-			configEditor: "",
-			envVars: map[string]string{
-				"VISUAL": "emacs",
-			},
-			expected: "emacs",
-		},
-		{
-			name:         "SOPS_EDITOR takes precedence over KUBE_EDITOR",
-			flagEditor:   "",
-			configEditor: "",
-			envVars: map[string]string{
-				"SOPS_EDITOR": "code",
-				"KUBE_EDITOR": "vim",
-			},
-			expected: "code",
-		},
+	//nolint:paralleltest // Cannot parallelize tests that modify environment variables
+	t.Run("flag takes precedence over config", func(t *testing.T) {
+		testEditorPrecedence(t, "code --wait", "vim", nil, "code --wait")
+	})
+
+	//nolint:paralleltest // Cannot parallelize tests that modify environment variables
+	t.Run("config takes precedence over env vars", func(t *testing.T) {
+		testEditorPrecedence(t, "", "nano", map[string]string{"EDITOR": "vim"}, "nano")
+	})
+
+	//nolint:paralleltest // Cannot parallelize tests that modify environment variables
+	t.Run("SOPS_EDITOR env var is used when no flag or config", func(t *testing.T) {
+		testEditorPrecedence(
+			t,
+			"",
+			"",
+			map[string]string{"SOPS_EDITOR": "code --wait"},
+			"code --wait",
+		)
+	})
+
+	//nolint:paralleltest // Cannot parallelize tests that modify environment variables
+	t.Run("KUBE_EDITOR env var is used when SOPS_EDITOR not set", func(t *testing.T) {
+		testEditorPrecedence(t, "", "", map[string]string{"KUBE_EDITOR": "vim"}, "vim")
+	})
+
+	//nolint:paralleltest // Cannot parallelize tests that modify environment variables
+	t.Run("EDITOR env var is used when SOPS_EDITOR and KUBE_EDITOR not set", func(t *testing.T) {
+		testEditorPrecedence(t, "", "", map[string]string{"EDITOR": "nano"}, "nano")
+	})
+
+	//nolint:paralleltest // Cannot parallelize tests that modify environment variables
+	t.Run("VISUAL env var is used when other env vars not set", func(t *testing.T) {
+		testEditorPrecedence(t, "", "", map[string]string{"VISUAL": "emacs"}, "emacs")
+	})
+
+	//nolint:paralleltest // Cannot parallelize tests that modify environment variables
+	t.Run("SOPS_EDITOR takes precedence over KUBE_EDITOR", func(t *testing.T) {
+		testEditorPrecedence(t, "", "", map[string]string{
+			"SOPS_EDITOR": "code",
+			"KUBE_EDITOR": "vim",
+		}, "code")
+	})
+}
+
+func testEditorPrecedence(
+	t *testing.T,
+	flagEditor, configEditor string,
+	envVars map[string]string,
+	expected string,
+) {
+	t.Helper()
+
+	// Set up environment variables
+	for key, value := range envVars {
+		t.Setenv(key, value)
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Set up environment variables
-			for k, v := range tt.envVars {
-				t.Setenv(k, v)
-			}
+	// Create config if configEditor is set
+	var cfg *v1alpha1.Cluster
+	if configEditor != "" {
+		cfg = &v1alpha1.Cluster{
+			Spec: v1alpha1.Spec{
+				Editor: configEditor,
+			},
+		}
+	}
 
-			// Create config if configEditor is set
-			var cfg *v1alpha1.Cluster
-			if tt.configEditor != "" {
-				cfg = &v1alpha1.Cluster{
-					Spec: v1alpha1.Spec{
-						Editor: tt.configEditor,
-					},
-				}
-			}
+	resolver := pkgcmd.NewEditorResolver(flagEditor, cfg)
+	result := resolver.ResolveEditor()
 
-			resolver := pkgcmd.NewEditorResolver(tt.flagEditor, cfg)
-			result := resolver.ResolveEditor()
-
-			if result != tt.expected {
-				t.Errorf("ResolveEditor() = %q, want %q", result, tt.expected)
-			}
-		})
+	if result != expected {
+		t.Errorf("ResolveEditor() = %q, want %q", result, expected)
 	}
 }
 
+//nolint:paralleltest // Cannot parallelize tests that modify environment variables
 func TestEditorResolver_SetEditorEnvVars(t *testing.T) {
-	tests := []struct {
-		name           string
-		editor         string
-		forCommand     string
-		expectedVars   map[string]string
-		unexpectedVars []string
-	}{
-		{
-			name:       "cipher command sets SOPS_EDITOR and EDITOR",
-			editor:     "vim",
-			forCommand: "cipher",
-			expectedVars: map[string]string{
-				"SOPS_EDITOR": "vim",
-				"EDITOR":      "vim",
-			},
-		},
-		{
-			name:       "workload command sets KUBE_EDITOR, EDITOR, and VISUAL",
-			editor:     "nano",
-			forCommand: "workload",
-			expectedVars: map[string]string{
-				"KUBE_EDITOR": "nano",
-				"EDITOR":      "nano",
-				"VISUAL":      "nano",
-			},
-		},
-		{
-			name:       "connect command sets EDITOR, VISUAL, and KUBE_EDITOR",
-			editor:     "code --wait",
-			forCommand: "connect",
-			expectedVars: map[string]string{
-				"EDITOR":      "code --wait",
-				"VISUAL":      "code --wait",
-				"KUBE_EDITOR": "code --wait",
-			},
-		},
+	//nolint:paralleltest // Cannot parallelize tests that modify environment variables
+	t.Run("cipher command sets SOPS_EDITOR and EDITOR", func(t *testing.T) {
+		testEditorEnvVars(t, "vim", "cipher", map[string]string{
+			"SOPS_EDITOR": "vim",
+			"EDITOR":      "vim",
+		})
+	})
+
+	//nolint:paralleltest // Cannot parallelize tests that modify environment variables
+	t.Run("workload command sets KUBE_EDITOR, EDITOR, and VISUAL", func(t *testing.T) {
+		testEditorEnvVars(t, "nano", "workload", map[string]string{
+			"KUBE_EDITOR": "nano",
+			"EDITOR":      "nano",
+			"VISUAL":      "nano",
+		})
+	})
+
+	//nolint:paralleltest // Cannot parallelize tests that modify environment variables
+	t.Run("connect command sets EDITOR, VISUAL, and KUBE_EDITOR", func(t *testing.T) {
+		testEditorEnvVars(t, "code --wait", "connect", map[string]string{
+			"EDITOR":      "code --wait",
+			"VISUAL":      "code --wait",
+			"KUBE_EDITOR": "code --wait",
+		})
+	})
+}
+
+func testEditorEnvVars(t *testing.T, editor, forCommand string, expectedVars map[string]string) {
+	t.Helper()
+
+	// Store original environment variables before test
+	originals := saveEnvVars()
+
+	// Clean up after test - restore originals
+	t.Cleanup(func() {
+		restoreEnvVars(originals)
+	})
+
+	resolver := pkgcmd.NewEditorResolver("", nil)
+	cleanup := resolver.SetEditorEnvVars(editor, forCommand)
+
+	// Verify expected environment variables are set
+	for key, value := range expectedVars {
+		if got := os.Getenv(key); got != value {
+			t.Errorf("environment variable %s = %q, want %q", key, got, value)
+		}
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Store original environment variables before test
-			originalSOPS := os.Getenv("SOPS_EDITOR")
-			originalKube := os.Getenv("KUBE_EDITOR")
-			originalEditor := os.Getenv("EDITOR")
-			originalVisual := os.Getenv("VISUAL")
+	// Clean up
+	cleanup()
 
-			// Clean up after test - restore originals
-			defer func() {
-				if originalSOPS != "" {
-					_ = os.Setenv("SOPS_EDITOR", originalSOPS)
-				} else {
-					_ = os.Unsetenv("SOPS_EDITOR")
-				}
-				if originalKube != "" {
-					_ = os.Setenv("KUBE_EDITOR", originalKube)
-				} else {
-					_ = os.Unsetenv("KUBE_EDITOR")
-				}
-				if originalEditor != "" {
-					_ = os.Setenv("EDITOR", originalEditor)
-				} else {
-					_ = os.Unsetenv("EDITOR")
-				}
-				if originalVisual != "" {
-					_ = os.Setenv("VISUAL", originalVisual)
-				} else {
-					_ = os.Unsetenv("VISUAL")
-				}
-			}()
+	// Verify cleanup restored original values
+	verifyEnvVarsRestored(t, originals)
+}
 
-			resolver := pkgcmd.NewEditorResolver("", nil)
-			cleanup := resolver.SetEditorEnvVars(tt.editor, tt.forCommand)
+func saveEnvVars() map[string]string {
+	return map[string]string{
+		"SOPS_EDITOR": os.Getenv("SOPS_EDITOR"),
+		"KUBE_EDITOR": os.Getenv("KUBE_EDITOR"),
+		"EDITOR":      os.Getenv("EDITOR"),
+		"VISUAL":      os.Getenv("VISUAL"),
+	}
+}
 
-			// Verify expected environment variables are set
-			for k, v := range tt.expectedVars {
-				if got := os.Getenv(k); got != v {
-					t.Errorf("environment variable %s = %q, want %q", k, got, v)
-				}
-			}
+func restoreEnvVars(originals map[string]string) {
+	for key, value := range originals {
+		if value != "" {
+			_ = os.Setenv(key, value)
+		} else {
+			_ = os.Unsetenv(key)
+		}
+	}
+}
 
-			// Clean up
-			cleanup()
+func verifyEnvVarsRestored(t *testing.T, originals map[string]string) {
+	t.Helper()
 
-			// Verify cleanup restored original values
-			if got := os.Getenv("SOPS_EDITOR"); got != originalSOPS {
-				t.Errorf("SOPS_EDITOR not restored: got %q, want %q", got, originalSOPS)
-			}
-			if got := os.Getenv("KUBE_EDITOR"); got != originalKube {
-				t.Errorf("KUBE_EDITOR not restored: got %q, want %q", got, originalKube)
-			}
-			if got := os.Getenv("EDITOR"); got != originalEditor {
-				t.Errorf("EDITOR not restored: got %q, want %q", got, originalEditor)
-			}
-			if got := os.Getenv("VISUAL"); got != originalVisual {
-				t.Errorf("VISUAL not restored: got %q, want %q", got, originalVisual)
-			}
-		})
+	for key, originalValue := range originals {
+		if got := os.Getenv(key); got != originalValue {
+			t.Errorf("%s not restored: got %q, want %q", key, got, originalValue)
+		}
 	}
 }
 
 func TestParseEditorCommand(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		editor   string
@@ -236,19 +202,30 @@ func TestParseEditorCommand(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := pkgcmd.ParseEditorCommand(tt.editor)
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
 
-			if len(result) != len(tt.expected) {
-				t.Errorf("ParseEditorCommand() length = %d, want %d", len(result), len(tt.expected))
+			result := pkgcmd.ParseEditorCommand(testCase.editor)
+
+			if len(result) != len(testCase.expected) {
+				t.Errorf(
+					"ParseEditorCommand() length = %d, want %d",
+					len(result),
+					len(testCase.expected),
+				)
 
 				return
 			}
 
-			for i, part := range result {
-				if part != tt.expected[i] {
-					t.Errorf("ParseEditorCommand()[%d] = %q, want %q", i, part, tt.expected[i])
+			for index, part := range result {
+				if part != testCase.expected[index] {
+					t.Errorf(
+						"ParseEditorCommand()[%d] = %q, want %q",
+						index,
+						part,
+						testCase.expected[index],
+					)
 				}
 			}
 		})
