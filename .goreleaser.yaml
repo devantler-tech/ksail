@@ -29,7 +29,7 @@ archives:
 brews:
   - name: ksail
     homepage: "https://github.com/devantler-tech/ksail"
-    description: "A CLI tool to manage clusters and workloads"
+    description: "CLI tool to manage clusters and workloads"
     license: "Apache-2.0"
     directory: Formula
     url_template: "https://github.com/devantler-tech/ksail/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
@@ -40,10 +40,14 @@ brews:
     commit_author:
       name: goreleaserbot
       email: goreleaserbot@users.noreply.github.com
-    install: |
-      bin.install "ksail"
-    test: |
-      system bin/"ksail", "--help"
+    custom_block: |
+      def install
+        bin.install "ksail"
+      end
+
+      test do
+        system bin/"ksail", "--help"
+      end
 
 dockers_v2:
   - images:
