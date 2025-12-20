@@ -42,13 +42,13 @@ func TestDistribution_ProvidesMetricsServerByDefault(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			result := tt.distribution.ProvidesMetricsServerByDefault()
+			result := testCase.distribution.ProvidesMetricsServerByDefault()
 
-			assert.Equal(t, tt.want, result, tt.description)
+			assert.Equal(t, testCase.want, result, testCase.description)
 		})
 	}
 }
@@ -88,13 +88,13 @@ func TestDistribution_ProvidesStorageByDefault(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			result := tt.distribution.ProvidesStorageByDefault()
+			result := testCase.distribution.ProvidesStorageByDefault()
 
-			assert.Equal(t, tt.want, result, tt.description)
+			assert.Equal(t, testCase.want, result, testCase.description)
 		})
 	}
 }
