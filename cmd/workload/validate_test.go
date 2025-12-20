@@ -231,6 +231,7 @@ metadata:
 data:
   key: value
 `
+
 	err := os.WriteFile(filepath.Join(tmpDir, "configmap.yaml"), []byte(configMapYAML), 0o600)
 	if err != nil {
 		t.Fatalf("failed to write configmap: %v", err)
@@ -285,6 +286,7 @@ sops:
   # SOPS metadata that would fail validation without skip-secrets
   encrypted_regex: ^(data|stringData)$
 `
+
 	err := os.WriteFile(filepath.Join(tmpDir, "secret.yaml"), []byte(secretYAML), 0o600)
 	if err != nil {
 		t.Fatalf("failed to write secret: %v", err)
@@ -400,6 +402,7 @@ kind: Namespace
 metadata:
   name: test-namespace
 `
+
 	err := os.WriteFile(
 		filepath.Join(tmpDir, "valid.yaml"),
 		[]byte(validManifest),
@@ -416,6 +419,7 @@ metadata:
   name: test-config
 data: "invalid"
 `
+
 	err = os.WriteFile(
 		filepath.Join(tmpDir, "invalid.yaml"),
 		[]byte(invalidManifest),

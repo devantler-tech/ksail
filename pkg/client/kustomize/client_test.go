@@ -47,7 +47,11 @@ resources:
   - configmap.yaml
 `
 
-	err = os.WriteFile(filepath.Join(tmpDir, "kustomization.yaml"), []byte(kustomizationYAML), 0o600)
+	err = os.WriteFile(
+		filepath.Join(tmpDir, "kustomization.yaml"),
+		[]byte(kustomizationYAML),
+		0o600,
+	)
 	if err != nil {
 		t.Fatalf("failed to write kustomization: %v", err)
 	}
@@ -55,6 +59,7 @@ resources:
 	// Test build
 	client := kustomize.NewClient()
 	ctx := context.Background()
+
 	output, err := client.Build(ctx, tmpDir)
 	if err != nil {
 		t.Fatalf("expected build to succeed, got error: %v", err)
@@ -77,6 +82,7 @@ func TestBuild_NonExistentDirectory(t *testing.T) {
 
 	client := kustomize.NewClient()
 	ctx := context.Background()
+
 	_, err := client.Build(ctx, "/nonexistent/directory")
 	if err == nil {
 		t.Fatal("expected error for nonexistent directory")
@@ -91,6 +97,7 @@ func TestBuild_MissingKustomization(t *testing.T) {
 
 	client := kustomize.NewClient()
 	ctx := context.Background()
+
 	_, err := client.Build(ctx, tmpDir)
 	if err == nil {
 		t.Fatal("expected error for missing kustomization.yaml")
@@ -110,7 +117,11 @@ resources:
   - nonexistent.yaml
 `
 
-	err := os.WriteFile(filepath.Join(tmpDir, "kustomization.yaml"), []byte(kustomizationYAML), 0o600)
+	err := os.WriteFile(
+		filepath.Join(tmpDir, "kustomization.yaml"),
+		[]byte(kustomizationYAML),
+		0o600,
+	)
 	if err != nil {
 		t.Fatalf("failed to write kustomization: %v", err)
 	}
@@ -136,6 +147,7 @@ kind: Namespace
 metadata:
   name: test-namespace
 `
+
 	err := os.WriteFile(filepath.Join(tmpDir, "namespace.yaml"), []byte(namespaceYAML), 0o600)
 	if err != nil {
 		t.Fatalf("failed to write namespace: %v", err)
@@ -160,6 +172,7 @@ spec:
       - name: test
         image: nginx:latest
 `
+
 	err = os.WriteFile(filepath.Join(tmpDir, "deployment.yaml"), []byte(deploymentYAML), 0o600)
 	if err != nil {
 		t.Fatalf("failed to write deployment: %v", err)
@@ -174,6 +187,7 @@ resources:
 commonLabels:
   environment: test
 `
+
 	err = os.WriteFile(
 		filepath.Join(tmpDir, "kustomization.yaml"),
 		[]byte(kustomizationYAML),
@@ -194,6 +208,7 @@ func TestBuild_ComplexKustomization(t *testing.T) {
 	// Test build
 	client := kustomize.NewClient()
 	ctx := context.Background()
+
 	output, err := client.Build(ctx, tmpDir)
 	if err != nil {
 		t.Fatalf("expected build to succeed, got error: %v", err)
@@ -234,7 +249,9 @@ spec:
   - port: 80
     targetPort: 8080
 `
-	if err := os.WriteFile(filepath.Join(tmpDir, "service.yaml"), []byte(serviceYAML), 0o600); err != nil {
+
+	err := os.WriteFile(filepath.Join(tmpDir, "service.yaml"), []byte(serviceYAML), 0o600)
+	if err != nil {
 		t.Fatalf("failed to write service: %v", err)
 	}
 
@@ -244,13 +261,20 @@ kind: Kustomization
 resources:
   - service.yaml
 `
-	if err := os.WriteFile(filepath.Join(tmpDir, "kustomization.yaml"), []byte(kustomizationYAML), 0o600); err != nil {
+
+	err = os.WriteFile(
+		filepath.Join(tmpDir, "kustomization.yaml"),
+		[]byte(kustomizationYAML),
+		0o600,
+	)
+	if err != nil {
 		t.Fatalf("failed to write kustomization: %v", err)
 	}
 
 	// Test build
 	client := kustomize.NewClient()
 	ctx := context.Background()
+
 	output, err := client.Build(ctx, tmpDir)
 	if err != nil {
 		t.Fatalf("expected build to succeed, got error: %v", err)
@@ -287,7 +311,9 @@ metadata:
 data:
   key: value
 `
-	if err := os.WriteFile(filepath.Join(tmpDir, "configmap.yaml"), []byte(configMapYAML), 0o600); err != nil {
+
+	err := os.WriteFile(filepath.Join(tmpDir, "configmap.yaml"), []byte(configMapYAML), 0o600)
+	if err != nil {
 		t.Fatalf("failed to write configmap: %v", err)
 	}
 
@@ -296,13 +322,20 @@ kind: Kustomization
 resources:
   - configmap.yaml
 `
-	if err := os.WriteFile(filepath.Join(tmpDir, "kustomization.yaml"), []byte(kustomizationYAML), 0o600); err != nil {
+
+	err = os.WriteFile(
+		filepath.Join(tmpDir, "kustomization.yaml"),
+		[]byte(kustomizationYAML),
+		0o600,
+	)
+	if err != nil {
 		t.Fatalf("failed to write kustomization: %v", err)
 	}
 
 	// Test build
 	client := kustomize.NewClient()
 	ctx := context.Background()
+
 	output, err := client.Build(ctx, tmpDir)
 	if err != nil {
 		t.Fatalf("expected build to succeed, got error: %v", err)

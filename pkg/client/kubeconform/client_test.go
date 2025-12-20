@@ -307,7 +307,8 @@ metadata:
 	client := kubeconform.NewClient()
 
 	ctx := context.Background()
-	err := client.ValidateFile(ctx, manifestPath, nil)
+
+	err = client.ValidateFile(ctx, manifestPath, nil)
 	if err != nil {
 		t.Fatalf("expected validation with nil options to succeed, got error: %v", err)
 	}
