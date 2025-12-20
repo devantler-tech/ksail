@@ -6,7 +6,6 @@ import (
 	"github.com/devantler-tech/ksail/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/pkg/client/k9s"
 	pkgcmd "github.com/devantler-tech/ksail/pkg/cmd"
-	cmdhelpers "github.com/devantler-tech/ksail/pkg/cmd"
 	runtime "github.com/devantler-tech/ksail/pkg/di"
 	ksailconfigmanager "github.com/devantler-tech/ksail/pkg/io/config-manager/ksail"
 	"github.com/spf13/cobra"
@@ -76,7 +75,7 @@ func HandleConnectRunE(
 	defer cleanup()
 
 	// Get kubeconfig path with tilde expansion
-	kubeConfigPath, err := cmdhelpers.GetKubeconfigPathFromConfig(cfg)
+	kubeConfigPath, err := pkgcmd.GetKubeconfigPathFromConfig(cfg)
 	if err != nil {
 		return fmt.Errorf("get kubeconfig path: %w", err)
 	}

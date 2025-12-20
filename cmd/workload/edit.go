@@ -5,7 +5,6 @@ import (
 
 	"github.com/devantler-tech/ksail/pkg/client/kubectl"
 	pkgcmd "github.com/devantler-tech/ksail/pkg/cmd"
-	cmdhelpers "github.com/devantler-tech/ksail/pkg/cmd"
 	"github.com/spf13/cobra"
 	"k8s.io/cli-runtime/pkg/genericiooptions"
 )
@@ -35,7 +34,7 @@ Example:
 			defer cleanup()
 
 			// Try to load config silently to get kubeconfig path
-			kubeconfigPath := cmdhelpers.GetKubeconfigPathSilently()
+			kubeconfigPath := pkgcmd.GetKubeconfigPathSilently()
 
 			// Create IO streams for kubectl
 			ioStreams := genericiooptions.IOStreams{
