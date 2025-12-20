@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/devantler-tech/ksail/pkg/apis/cluster/v1alpha1"
+	ksailconfigmanager "github.com/devantler-tech/ksail/pkg/io/config-manager/ksail"
 )
 
 // EditorResolver handles editor configuration resolution with proper precedence.
@@ -31,7 +32,7 @@ func NewEditorResolver(flagEditor string, cfg *v1alpha1.Cluster) *EditorResolver
 // 1. --editor flag
 // 2. spec.editor from config
 // 3. Environment variables (SOPS_EDITOR, KUBE_EDITOR, EDITOR, VISUAL)
-// 4. Fallback to vim, nano, vi
+// 4. Fallback to vim, nano, vi.
 func (r *EditorResolver) ResolveEditor() string {
 	// Priority 1: --editor flag
 	if r.flagEditor != "" {
@@ -66,8 +67,9 @@ func (r *EditorResolver) ResolveEditor() string {
 
 	// Priority 4: Fallback to common editors
 	for _, editorName := range []string{"vim", "nano", "vi"} {
-		if _, err := exec.LookPath(editorName); err == nil {
-			return editorName
+		editorPath, err := exec.LookPath(editorName)
+		if err == nil {
+			return editorPath
 		}
 	}
 
@@ -138,4 +140,28 @@ func (r *EditorResolver) SetEditorEnvVars(editor string, forCommand string) func
 // This handles commands like "code --wait" or "vim".
 func ParseEditorCommand(editor string) []string {
 	return strings.Fields(editor)
+}
+
+// SetupEditorEnv sets up the editor environment variables based on flag and config.
+// It returns a cleanup function that should be called to restore the original environment.
+func SetupEditorEnv(editorFlag, forCommand string) func() {
+	// Try to load config silently (don't error if it fails)
+	var cfg *v1alpha1.Cluster
+
+	fieldSelectors := ksailconfigmanager.DefaultClusterFieldSelectors()
+	cfgManager := ksailconfigmanager.NewConfigManager(nil, fieldSelectors...)
+
+	loadedCfg, err := cfgManager.LoadConfigSilent()
+	if err == nil {
+		cfg = loadedCfg
+	}
+
+	// Create editor resolver
+	resolver := NewEditorResolver(editorFlag, cfg)
+
+	// Resolve the editor
+	editor := resolver.ResolveEditor()
+
+	// Set environment variables for the command
+	return resolver.SetEditorEnvVars(editor, forCommand)
 }

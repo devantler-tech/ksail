@@ -12,9 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/devantler-tech/ksail/pkg/apis/cluster/v1alpha1"
 	pkgcmd "github.com/devantler-tech/ksail/pkg/cmd"
-	ksailconfigmanager "github.com/devantler-tech/ksail/pkg/io/config-manager/ksail"
 	"github.com/getsops/sops/v3"
 	"github.com/getsops/sops/v3/aes"
 	"github.com/getsops/sops/v3/cmd/sops/codes"
@@ -574,32 +572,13 @@ func editNewFile(opts editOpts, inputStore sops.Store) ([]byte, error) {
 	})
 }
 
-// setupEditorEnv sets up the editor environment variables based on flag and config.
-// It returns a cleanup function that should be called to restore the original environment.
-func setupEditorEnv(editorFlag string) func() {
-	// Try to load config silently (don't error if it fails)
-	var cfg *v1alpha1.Cluster
-
-	fieldSelectors := ksailconfigmanager.DefaultClusterFieldSelectors()
-	cfgManager := ksailconfigmanager.NewConfigManager(nil, fieldSelectors...)
-
-	loadedCfg, err := cfgManager.LoadConfigSilent()
-	if err == nil {
-		cfg = loadedCfg
-	}
-
-	// Create editor resolver
-	resolver := pkgcmd.NewEditorResolver(editorFlag, cfg)
-
-	// Resolve the editor
-	editor := resolver.ResolveEditor()
-
-	// Set environment variables for cipher command
-	return resolver.SetEditorEnvVars(editor, "cipher")
-}
-
 // handleEditRunE is the main handler for the edit command.
-func handleEditRunE(cmd *cobra.Command, args []string, ignoreMac, showMasterKeys bool, editorFlag string) error {
+func handleEditRunE(
+	cmd *cobra.Command,
+	args []string,
+	ignoreMac, showMasterKeys bool,
+	editorFlag string,
+) error {
 	inputPath := args[0]
 
 	inputStore, outputStore, err := getStores(inputPath)
@@ -619,7 +598,7 @@ func handleEditRunE(cmd *cobra.Command, args []string, ignoreMac, showMasterKeys
 	}
 
 	// Set up editor environment variables before edit
-	cleanup := setupEditorEnv(editorFlag)
+	cleanup := pkgcmd.SetupEditorEnv(editorFlag, "cipher")
 	defer cleanup()
 
 	var output []byte
