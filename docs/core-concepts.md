@@ -175,5 +175,5 @@ ksail workload reconcile --timeout 10m
 **ArgoCD:**
 
 - Web UI for visualizing deployments
-- Manual refresh for new artifacts
+- Requires `ksail workload reconcile` for new artifacts
 - Rich application management
