@@ -135,8 +135,8 @@ func TestWorkloadCommandsLoadConfigOnly(t *testing.T) {
 			require.ErrorContains(
 				t,
 				err,
-				"gitops engine must be enabled",
-				"expected workload %s handler to require gitops engine",
+				"GitOps engine must be enabled",
+				"expected workload %s handler to require GitOps engine (push also requires local registry)",
 				commandName,
 			)
 

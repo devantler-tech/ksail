@@ -23,14 +23,15 @@ import (
 	"k8s.io/client-go/dynamic"
 )
 
+//nolint:staticcheck // "GitOps" is a proper noun and must be capitalized
 var errGitOpsEngineRequired = errors.New(
-	"a gitops engine must be enabled to reconcile workloads; " +
+	"A GitOps engine must be enabled to reconcile workloads; " +
 		"enable it with '--gitops-engine Flux|ArgoCD' during cluster init or " +
 		"set 'spec.gitOpsEngine: Flux|ArgoCD' in ksail.yaml",
 )
 
 var errLocalRegistryRequired = errors.New(
-	"local registry and a gitops engine must be enabled to push workloads; " +
+	"local registry and a GitOps engine must be enabled to push workloads; " +
 		"enable it with '--local-registry Enabled' and '--gitops-engine Flux|ArgoCD' " +
 		"during cluster init or set 'spec.localRegistry: Enabled' and " +
 		"'spec.gitOpsEngine: Flux|ArgoCD' in ksail.yaml",
@@ -316,7 +317,7 @@ func waitForResourceCondition(
 		case <-timeoutCtx.Done():
 			return timeoutErr
 		case <-ticker.C:
-			resource, err := client.Get(ctx, resourceName, metav1.GetOptions{})
+			resource, err := client.Get(timeoutCtx, resourceName, metav1.GetOptions{})
 			if err != nil {
 				return fmt.Errorf("%s: %w", errorMsg, err)
 			}
