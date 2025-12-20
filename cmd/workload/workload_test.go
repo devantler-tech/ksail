@@ -64,6 +64,7 @@ func TestWorkloadHelpSnapshots(t *testing.T) {
 	}{
 		{name: "namespace", args: []string{"workload", "--help"}},
 		{name: "reconcile", args: []string{"workload", "reconcile", "--help"}},
+		{name: "push", args: []string{"workload", "push", "--help"}},
 		{name: "apply", args: []string{"workload", "apply", "--help"}},
 		{name: "create", args: []string{"workload", "create", "--help"}},
 		{name: "create_source", args: []string{"workload", "create", "source", "--help"}},
@@ -114,7 +115,7 @@ func TestWorkloadHelpSnapshots(t *testing.T) {
 //nolint:paralleltest // Uses t.Chdir which is incompatible with parallel tests.
 func TestWorkloadCommandsLoadConfigOnly(t *testing.T) {
 	// Note: "apply" and "install" are excluded as they are full implementations with kubectl/helm wrappers
-	commands := []string{"reconcile"}
+	commands := []string{"reconcile", "push"}
 
 	for _, commandName := range commands {
 		t.Run(commandName, func(t *testing.T) {
@@ -134,8 +135,8 @@ func TestWorkloadCommandsLoadConfigOnly(t *testing.T) {
 			require.ErrorContains(
 				t,
 				err,
-				"local registry and a gitops engine must be enabled",
-				"expected workload %s handler to require local registry and gitops engine",
+				"gitops engine must be enabled",
+				"expected workload %s handler to require gitops engine",
 				commandName,
 			)
 
