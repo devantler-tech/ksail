@@ -66,8 +66,7 @@ func TestK3dClusterProvisioner_Exists(t *testing.T) {
 	}
 
 	for _, testCase := range tests {
-		testCase := testCase
-		t.Run(testCase.name, func(t *testing.T) {
+		t.Run(testCase.name, func(_ *testing.T) {
 			provisioner := k3dprovisioner.NewK3dClusterProvisioner(nil, "")
 			_, _ = provisioner.Exists(context.Background(), testCase.clusterName)
 
