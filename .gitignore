@@ -90,6 +90,7 @@ docs/.bundle/
 # act (GitHub Actions local testing)
 bin/
 .act-artifacts/
+.cache/
 
 # actionlint binary
 actionlint
