@@ -29,7 +29,7 @@ archives:
 brews:
   - name: ksail
     homepage: "https://github.com/devantler-tech/ksail"
-    description: "KSail is a CLI tool to manage clusters and workloads."
+    description: "A CLI tool to manage clusters and workloads."
     license: "Apache-2.0"
     directory: Formula
     url_template: "https://github.com/devantler-tech/ksail/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
