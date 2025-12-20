@@ -171,7 +171,7 @@ ksail workload push
 ksail workload reconcile --timeout 10m
 ```
 
-**Tips:** Push after every manifest change, `reconcile` waits for completion, Flux auto-detects artifacts (ArgoCD needs manual trigger), use `--timeout` for long deployments, test locally before production, commit `ksail.yaml`.
+**Tips:** Push after every manifest change, `reconcile` waits for completion and triggers both Flux and ArgoCD, Flux auto-detects new artifacts from the OCI registry while ArgoCD relies on `ksail workload reconcile`, use `--timeout` for long deployments, test locally before production, commit `ksail.yaml`.
 
 ### Security
 
