@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -19,6 +20,11 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
+)
+
+var (
+	errTestListClusters = errors.New("failed to list clusters")
+	errTestFactoryError = errors.New("factory error")
 )
 
 func TestMain(m *testing.M) {
@@ -196,7 +202,7 @@ func TestListCmd_ListError(t *testing.T) {
 	t.Chdir(workingDir)
 	setupListTest(t, workingDir)
 
-	factory := fakeFactoryWithClusters{listErr: errors.New("failed to list clusters")}
+	factory := fakeFactoryWithClusters{listErr: fmt.Errorf("test error: %w", errTestListClusters)}
 	testRuntime := newListRuntimeContainer(t, factory)
 
 	cmd := clusterpkg.NewListCmd(testRuntime)
@@ -268,7 +274,7 @@ func (fakeFactoryWithErrors) Create( //nolint:ireturn // test double matches int
 	_ context.Context,
 	_ *v1alpha1.Cluster,
 ) (clusterprovisioner.ClusterProvisioner, any, error) {
-	return nil, nil, errors.New("factory error")
+	return nil, nil, fmt.Errorf("test error: %w", errTestFactoryError)
 }
 
 // Ensure fake types satisfy interfaces at compile time.
