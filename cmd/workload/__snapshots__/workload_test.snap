@@ -730,7 +730,8 @@ Usage:
   ksail workload reconcile [flags]
 
 Flags:
-  -h, --help   help for reconcile
+  -h, --help               help for reconcile
+      --timeout duration   timeout for waiting for reconciliation to complete (overrides config timeout)
 
 Global Flags:
       --timing   Show per-activity timing output

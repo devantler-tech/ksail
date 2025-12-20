@@ -43,7 +43,7 @@ const (
 	fluxRootKustomizationName = "flux-system"
 	argoCDNamespace           = "argocd"
 	argoCDRootApplicationName = "ksail"
-	reconcileTimeout          = 5 * time.Minute
+	defaultReconcileTimeout   = 5 * time.Minute
 	reconcilePollInterval     = 2 * time.Second
 )
 
@@ -51,6 +51,7 @@ const (
 func reconcileFluxKustomization(
 	ctx context.Context,
 	clusterCfg *v1alpha1.Cluster,
+	timeout time.Duration,
 	outputTimer timer.Timer,
 	writer io.Writer,
 ) error {
@@ -118,7 +119,7 @@ func reconcileFluxKustomization(
 	})
 
 	// Wait for reconciliation to complete
-	timeoutCtx, cancel := context.WithTimeout(ctx, reconcileTimeout)
+	timeoutCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	ticker := time.NewTicker(reconcilePollInterval)
@@ -162,6 +163,7 @@ func reconcileArgoCDApplication(
 	ctx context.Context,
 	clusterCfg *v1alpha1.Cluster,
 	artifactVersion string,
+	timeout time.Duration,
 	outputTimer timer.Timer,
 	writer io.Writer,
 ) error {
@@ -221,7 +223,7 @@ func reconcileArgoCDApplication(
 	}
 
 	// Wait for application to sync and become healthy
-	timeoutCtx, cancel := context.WithTimeout(ctx, reconcileTimeout)
+	timeoutCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	ticker := time.NewTicker(reconcilePollInterval)
@@ -267,6 +269,8 @@ func NewReconcileCmd(_ *runtime.Runtime) *cobra.Command {
 		SilenceUsage: true,
 	}
 
+	cmd.Flags().Duration("timeout", 0, "timeout for waiting for reconciliation to complete (overrides config timeout)")
+
 	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
 		tmr := timer.New()
 		tmr.Start()
@@ -287,6 +291,21 @@ func NewReconcileCmd(_ *runtime.Runtime) *cobra.Command {
 			return errGitOpsEngineRequired
 		}
 
+		// Determine timeout: flag > config > default
+		timeout, err := cmd.Flags().GetDuration("timeout")
+		if err != nil {
+			return fmt.Errorf("get timeout flag: %w", err)
+		}
+
+		if timeout == 0 {
+			// Check config timeout
+			if clusterCfg.Spec.Connection.Timeout.Duration > 0 {
+				timeout = clusterCfg.Spec.Connection.Timeout.Duration
+			} else {
+				timeout = defaultReconcileTimeout
+			}
+		}
+
 		artifactVersion := registry.DefaultLocalArtifactTag
 
 		cmd.Println()
@@ -304,6 +323,7 @@ func NewReconcileCmd(_ *runtime.Runtime) *cobra.Command {
 				cmd.Context(),
 				clusterCfg,
 				artifactVersion,
+				timeout,
 				outputTimer,
 				cmd.OutOrStdout(),
 			)
@@ -314,6 +334,7 @@ func NewReconcileCmd(_ *runtime.Runtime) *cobra.Command {
 			err = reconcileFluxKustomization(
 				cmd.Context(),
 				clusterCfg,
+				timeout,
 				outputTimer,
 				cmd.OutOrStdout(),
 			)
