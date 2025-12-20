@@ -42,7 +42,6 @@ mermaid:
   version: "10.6.1"
 
 plugins:
-  - jekyll-readme-index
   - jekyll-gfm-admonitions
   - jekyll-optional-front-matter
   - jekyll-relative-links
@@ -78,11 +77,6 @@ defaults:
       path: "" # an empty string here means all files in the project
     values:
       layout: "default"
-
-readme_index:
-  enabled: true
-  remove_originals: false
-  with_frontmatter: true
 
 exclude:
   - .github/
