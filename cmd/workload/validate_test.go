@@ -341,7 +341,7 @@ func TestValidateCmdWithVerboseFlag(t *testing.T) {
 }
 
 func TestValidateCmdWithDefaultPath(t *testing.T) {
-	t.Parallel()
+	// Note: Cannot use t.Parallel() here because we use t.Chdir()
 
 	// Create a temporary directory with a valid manifest and change to it
 	tmpDir := t.TempDir()
