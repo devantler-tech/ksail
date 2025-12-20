@@ -340,6 +340,7 @@ func TestValidateCmdWithVerboseFlag(t *testing.T) {
 	// but we can verify the command ran successfully with the flag
 }
 
+//nolint:paralleltest // Cannot use t.Parallel() with t.Chdir() - they are incompatible
 func TestValidateCmdWithDefaultPath(t *testing.T) {
 	// Note: Cannot use t.Parallel() here because we use t.Chdir()
 
