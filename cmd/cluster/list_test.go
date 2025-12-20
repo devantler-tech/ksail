@@ -64,11 +64,12 @@ type fakeFactoryWithClusters struct {
 	listErr  error
 }
 
-func (f fakeFactoryWithClusters) Create( //nolint:ireturn // test double matches interface-based factory signature
+func (f fakeFactoryWithClusters) Create(
 	_ context.Context,
 	_ *v1alpha1.Cluster,
 ) (clusterprovisioner.ClusterProvisioner, any, error) {
 	cfg := &v1alpha4.Cluster{Name: "test"}
+
 	return &fakeProvisionerWithClusters{clusters: f.clusters, listErr: f.listErr}, cfg, nil
 }
 
@@ -85,7 +86,10 @@ spec:
     kubeconfig: ./kubeconfig
 `
 
-	require.NoError(t, os.WriteFile(filepath.Join(workingDir, "ksail.yaml"), []byte(ksailYAML), 0o600))
+	require.NoError(
+		t,
+		os.WriteFile(filepath.Join(workingDir, "ksail.yaml"), []byte(ksailYAML), 0o600),
+	)
 	require.NoError(t, os.WriteFile(
 		filepath.Join(workingDir, "kind.yaml"),
 		[]byte("kind: Cluster\napiVersion: kind.x-k8s.io/v1alpha4\nname: test\nnodes: []\n"),
@@ -270,7 +274,7 @@ func TestListCmd_FactoryError(t *testing.T) {
 // fakeFactoryWithErrors creates a provisioner that returns an error.
 type fakeFactoryWithErrors struct{}
 
-func (fakeFactoryWithErrors) Create( //nolint:ireturn // test double matches interface-based factory signature
+func (fakeFactoryWithErrors) Create(
 	_ context.Context,
 	_ *v1alpha1.Cluster,
 ) (clusterprovisioner.ClusterProvisioner, any, error) {
