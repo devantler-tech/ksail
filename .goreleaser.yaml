@@ -43,7 +43,7 @@ brews:
     install: |
       bin.install "ksail"
     test: |
-      system "#{bin}/ksail", "--help"
+      system bin/"ksail", "--help"
 
 dockers_v2:
   - images:
