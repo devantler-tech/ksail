@@ -7,11 +7,11 @@
 
 ![ksail-cli-dark](./docs/images/ksail-cli-dark.png)
 
-KSail is a CLI tool for creating and maintaining local Kubernetes clusters and workloads. It provides a unified interface that works across different distributions and workflows. By packaging the tools you know and love with a consistent command-line experience, KSail eliminates the complexity of juggling multiple CLIs or bespoke scripts per project.
+KSail is a CLI tool for creating and operating Kubernetes clusters and cloud-native workloads. It provides a unified CLI interface that works across different distributions, tools and ways-of-working.
 
 ## Why?
 
-Setting up local Kubernetes clusters for development typically requires juggling multiple CLI tools (kubectl, helm, kind, k3d, flux, argocd), writing bespoke scripts for each project, and dealing with inconsistent workflows across different distributions. This complexity slows down development, creates friction when onboarding new team members, and makes it difficult to maintain reproducible environments.
+Setting up and operating Kubernetes clusters is a skill of its own, often requiring juggling multiple CLI tools, writing bespoke scripts, and dealing with inconsistent developer workflows, all determined by the specific project. This complexity and inconsistency slow down development, make Kubernetes hard for newcomers, and make it difficult to maintain reproducible environments and ways of working. With KSail, you create and operate clusters and cloud-native workloads with one unified interface.
 
 ## Key Features
 
@@ -21,6 +21,7 @@ Setting up local Kubernetes clusters for development typically requires juggling
 - ⚡ **GitOps Ready** — Built-in Flux and ArgoCD support for reconciliation via local registry and OCI artifacts
 - 📄 **Declarative Configuration** — Configuration as code for reproducible clusters
 - 🔧 **Flexible Configuration** — Configure your cluster with your preferred distribution, CNI, CSI, service mesh and more.
+- 🟰 **Native** — Stay true to best practices, tooling configurations and industry ways-of-working. KSail is a superset on the tools and practices you love today.
 - 🪞 **Mirror Registries** — Cache images locally to avoid rate limits
 - 🔐 **Secrets Management** — SOPS integration for encrypting manifests at rest
 
