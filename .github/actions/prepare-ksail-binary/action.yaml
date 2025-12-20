@@ -80,7 +80,7 @@ runs:
           cp ./.cache/ksail "$output_relative"
         else
           # Build binary
-          go build -o "$GITHUB_WORKSPACE/${output_relative}" .
+          go build -o "$output_relative" .
           # Store for cache
           mkdir -p ./.cache
           cp "$output_relative" ./.cache/ksail
@@ -107,6 +107,11 @@ runs:
         OUTPUT_PATH_NORMALIZED: ${{ steps.prepare.outputs.output-path-normalized }}
       run: |
         set -Eeuo pipefail
+        # Validate that OUTPUT_PATH_NORMALIZED is set
+        if [ -z "$OUTPUT_PATH_NORMALIZED" ]; then
+          echo "Error: OUTPUT_PATH_NORMALIZED is not set or empty" >&2
+          exit 1
+        fi
         # Strip leading './' for consistency with prepare step
         output_relative="${OUTPUT_PATH_NORMALIZED#./}"
         # Always use ./ prefix for execution; works for both root and subdirectory binaries

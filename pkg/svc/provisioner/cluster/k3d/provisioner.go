@@ -1,18 +1,30 @@
 package k3dprovisioner
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"slices"
 	"strings"
+	"sync"
 
 	runner "github.com/devantler-tech/ksail/pkg/cmd/runner"
 	clustercommand "github.com/k3d-io/k3d/v5/cmd/cluster"
 	v1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+)
+
+var (
+	// listMutex protects concurrent access to os.Stdout during List operations.
+	// This is required because k3d writes directly to os.Stdout before Cobra's output redirection takes effect.
+	listMutex sync.Mutex //nolint:gochecknoglobals // Required for thread-safe stdout manipulation
+
+	// logrusConfigOnce ensures logrus is configured exactly once to avoid data races.
+	logrusConfigOnce sync.Once //nolint:gochecknoglobals // Required for one-time logrus initialization
 )
 
 // K3dClusterProvisioner executes k3d lifecycle commands via Cobra.
@@ -27,16 +39,19 @@ func NewK3dClusterProvisioner(
 	simpleCfg *v1alpha5.SimpleConfig,
 	configPath string,
 ) *K3dClusterProvisioner {
-	// Configure logrus for k3d's console output
+	// Configure logrus for k3d's console output once
 	// k3d uses logrus for logging, so we need to set it up properly
-	logrus.SetOutput(os.Stdout)
-	logrus.SetFormatter(&logrus.TextFormatter{
-		ForceColors:      true,
-		DisableTimestamp: false,
-		FullTimestamp:    false,
-		TimestampFormat:  "2006-01-02T15:04:05Z",
+	// Use sync.Once to prevent data races when called from parallel tests
+	logrusConfigOnce.Do(func() {
+		logrus.SetOutput(os.Stdout)
+		logrus.SetFormatter(&logrus.TextFormatter{
+			ForceColors:      true,
+			DisableTimestamp: false,
+			FullTimestamp:    false,
+			TimestampFormat:  "2006-01-02T15:04:05Z",
+		})
+		logrus.SetLevel(logrus.InfoLevel)
 	})
-	logrus.SetLevel(logrus.InfoLevel)
 
 	prov := &K3dClusterProvisioner{
 		simpleCfg:  simpleCfg,
@@ -105,15 +120,88 @@ func (k *K3dClusterProvisioner) Stop(ctx context.Context, name string) error {
 
 // List returns cluster names reported by the Cobra command.
 func (k *K3dClusterProvisioner) List(ctx context.Context) ([]string, error) {
+	// Temporarily redirect logrus to discard output during list
+	// to prevent JSON output from appearing in console
+	originalLogOutput := logrus.StandardLogger().Out
+
+	logrus.SetOutput(io.Discard)
+	defer logrus.SetOutput(originalLogOutput)
+
+	// Lock to prevent concurrent modifications of os.Stdout
+	listMutex.Lock()
+
+	// Setup stdout redirection
+	originalStdout := os.Stdout
+
+	pipeReader, pipeWriter, err := os.Pipe()
+	if err != nil {
+		listMutex.Unlock()
+
+		return nil, fmt.Errorf("cluster list: create stdout pipe: %w", err)
+	}
+
+	os.Stdout = pipeWriter
+
+	// Run the command
+	output, runErr := k.runListCommand(ctx)
+
+	// Close write end before reading and restore stdout while still holding the lock
+	_ = pipeWriter.Close()
+	os.Stdout = originalStdout
+
+	// Unlock mutex before potentially blocking I/O operations
+	listMutex.Unlock()
+
+	// Discard any output that was written to our pipe
+	copyErr := discardPipeOutput(pipeReader)
+	_ = pipeReader.Close()
+
+	if copyErr != nil {
+		logrus.WithError(copyErr).Debug("failed to drain stdout pipe when listing k3d clusters")
+	}
+
+	if runErr != nil {
+		return nil, fmt.Errorf("cluster list: %w", runErr)
+	}
+
+	return parseClusterNames(output)
+}
+
+// Exists returns whether the target cluster is present.
+func (k *K3dClusterProvisioner) Exists(ctx context.Context, name string) (bool, error) {
+	clusters, err := k.List(ctx)
+	if err != nil {
+		return false, fmt.Errorf("list: %w", err)
+	}
+
+	target := k.resolveName(name)
+	if target == "" {
+		return false, nil
+	}
+
+	return slices.Contains(clusters, target), nil
+}
+
+// runListCommand executes the k3d cluster list command and returns the output.
+func (k *K3dClusterProvisioner) runListCommand(ctx context.Context) (string, error) {
 	cmd := clustercommand.NewCmdClusterList()
 	args := []string{"--output", "json"}
 
-	res, err := k.runner.Run(ctx, cmd, args)
-	if err != nil {
-		return nil, fmt.Errorf("cluster list: %w", err)
+	// Use a buffer runner to capture command output
+	var buf bytes.Buffer
+
+	listRunner := runner.NewCobraCommandRunner(&buf, io.Discard)
+
+	res, runErr := listRunner.Run(ctx, cmd, args)
+	if runErr != nil {
+		return "", fmt.Errorf("run k3d cluster list: %w", runErr)
 	}
 
-	output := strings.TrimSpace(res.Stdout)
+	return strings.TrimSpace(res.Stdout), nil
+}
+
+// parseClusterNames parses JSON output and extracts cluster names.
+func parseClusterNames(output string) ([]string, error) {
 	if output == "" {
 		return nil, nil
 	}
@@ -137,19 +225,14 @@ func (k *K3dClusterProvisioner) List(ctx context.Context) ([]string, error) {
 	return names, nil
 }
 
-// Exists returns whether the target cluster is present.
-func (k *K3dClusterProvisioner) Exists(ctx context.Context, name string) (bool, error) {
-	clusters, err := k.List(ctx)
+// discardPipeOutput reads and discards all data from a pipe reader.
+func discardPipeOutput(pipeReader *os.File) error {
+	_, err := io.Copy(io.Discard, pipeReader)
 	if err != nil {
-		return false, fmt.Errorf("list: %w", err)
+		return fmt.Errorf("copy pipe output: %w", err)
 	}
 
-	target := k.resolveName(name)
-	if target == "" {
-		return false, nil
-	}
-
-	return slices.Contains(clusters, target), nil
+	return nil
 }
 
 func (k *K3dClusterProvisioner) appendConfigFlag(args []string) []string {
