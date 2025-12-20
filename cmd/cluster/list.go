@@ -3,6 +3,7 @@ package cluster
 import (
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/devantler-tech/ksail/pkg/apis/cluster/v1alpha1"
@@ -222,15 +223,51 @@ func displayClusterList(
 	cmd *cobra.Command,
 	includeDistribution bool,
 ) {
-	if len(clusters) == 0 {
-		// When no clusters are found, the provisioner (e.g., kind) already displays
-		// its own message (e.g., "No kind clusters found."), so we don't need to
-		// display an additional message here.
-		return
-	}
-
 	writer := cmd.OutOrStdout()
 
+	// Add distribution header when showing all distributions
+	if includeDistribution {
+		_, _ = fmt.Fprintf(writer, "---|%s|---\n", strings.ToLower(string(distribution)))
+	}
+
+	if len(clusters) == 0 {
+		displayEmptyClusters(distribution, includeDistribution, writer)
+	} else {
+		displayClusterNames(distribution, clusters, includeDistribution, writer)
+	}
+
+	// Add blank line after each distribution section when showing all
+	if includeDistribution {
+		_, _ = fmt.Fprintln(writer)
+	}
+}
+
+func displayEmptyClusters(
+	distribution v1alpha1.Distribution,
+	includeDistribution bool,
+	writer io.Writer,
+) {
+	// When showing all distributions, show distribution-specific empty messages
+	if includeDistribution {
+		switch distribution {
+		case v1alpha1.DistributionKind:
+			_, _ = fmt.Fprintln(writer, "No kind clusters found.")
+		case v1alpha1.DistributionK3d:
+			_, _ = fmt.Fprintln(writer, "No k3d clusters found.")
+		default:
+			_, _ = fmt.Fprintln(writer, "No clusters found.")
+		}
+	}
+	// When not showing all distributions, the provisioner already displays its own message
+	// (e.g., "No kind clusters found."), so we don't display an additional message here.
+}
+
+func displayClusterNames(
+	distribution v1alpha1.Distribution,
+	clusters []string,
+	includeDistribution bool,
+	writer io.Writer,
+) {
 	var builder strings.Builder
 	if includeDistribution {
 		builder.WriteString(strings.ToLower(string(distribution)))
