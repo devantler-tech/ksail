@@ -82,6 +82,7 @@ docs/.jekyll-cache/
 # Ruby/Bundler artifacts
 docs/vendor/bundle/
 docs/.bundle/
+.bundle/
 
 # ==============================================================================
 # Testing Tools
