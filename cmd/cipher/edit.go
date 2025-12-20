@@ -12,6 +12,9 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/devantler-tech/ksail/pkg/apis/cluster/v1alpha1"
+	pkgcmd "github.com/devantler-tech/ksail/pkg/cmd"
+	ksailconfigmanager "github.com/devantler-tech/ksail/pkg/io/config-manager/ksail"
 	"github.com/getsops/sops/v3"
 	"github.com/getsops/sops/v3/aes"
 	"github.com/getsops/sops/v3/cmd/sops/codes"
@@ -495,6 +498,8 @@ func NewEditCmd() *cobra.Command {
 
 	var showMasterKeys bool
 
+	var editor string
+
 	cmd := &cobra.Command{
 		Use:   "edit <file>",
 		Short: "Edit an encrypted file with SOPS",
@@ -503,8 +508,11 @@ func NewEditCmd() *cobra.Command {
 If the file exists and is encrypted, it will be decrypted for editing.
 If the file does not exist, an example file will be created.
 
-The editor is determined by the SOPS_EDITOR or EDITOR environment variables.
-If neither is set, the command will try vim, nano, or vi in that order.
+The editor is determined by (in order of precedence):
+  1. --editor flag
+  2. spec.editor from ksail.yaml config
+  3. SOPS_EDITOR or EDITOR environment variables
+  4. Fallback to vim, nano, or vi
 
 SOPS supports multiple key management systems:
   - age recipients
@@ -516,11 +524,12 @@ SOPS supports multiple key management systems:
 
 Example:
   ksail cipher edit secrets.yaml
+  ksail cipher edit --editor "code --wait" secrets.yaml
   SOPS_EDITOR="code --wait" ksail cipher edit secrets.yaml`,
 		SilenceUsage: true,
 		Args:         cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return handleEditRunE(cmd, args, ignoreMac, showMasterKeys)
+			return handleEditRunE(cmd, args, ignoreMac, showMasterKeys, editor)
 		},
 	}
 
@@ -535,6 +544,12 @@ Example:
 		"show-master-keys",
 		false,
 		"show master keys in the editor",
+	)
+	cmd.Flags().StringVar(
+		&editor,
+		"editor",
+		"",
+		"editor command to use (e.g., 'code --wait', 'vim', 'nano')",
 	)
 
 	return cmd
@@ -559,8 +574,32 @@ func editNewFile(opts editOpts, inputStore sops.Store) ([]byte, error) {
 	})
 }
 
+// setupEditorEnv sets up the editor environment variables based on flag and config.
+// It returns a cleanup function that should be called to restore the original environment.
+func setupEditorEnv(editorFlag string) func() {
+	// Try to load config silently (don't error if it fails)
+	var cfg *v1alpha1.Cluster
+
+	fieldSelectors := ksailconfigmanager.DefaultClusterFieldSelectors()
+	cfgManager := ksailconfigmanager.NewConfigManager(nil, fieldSelectors...)
+
+	loadedCfg, err := cfgManager.LoadConfigSilent()
+	if err == nil {
+		cfg = loadedCfg
+	}
+
+	// Create editor resolver
+	resolver := pkgcmd.NewEditorResolver(editorFlag, cfg)
+
+	// Resolve the editor
+	editor := resolver.ResolveEditor()
+
+	// Set environment variables for cipher command
+	return resolver.SetEditorEnvVars(editor, "cipher")
+}
+
 // handleEditRunE is the main handler for the edit command.
-func handleEditRunE(cmd *cobra.Command, args []string, ignoreMac, showMasterKeys bool) error {
+func handleEditRunE(cmd *cobra.Command, args []string, ignoreMac, showMasterKeys bool, editorFlag string) error {
 	inputPath := args[0]
 
 	inputStore, outputStore, err := getStores(inputPath)
@@ -578,6 +617,10 @@ func handleEditRunE(cmd *cobra.Command, args []string, ignoreMac, showMasterKeys
 		DecryptionOrder: []string{},
 		ShowMasterKeys:  showMasterKeys,
 	}
+
+	// Set up editor environment variables before edit
+	cleanup := setupEditorEnv(editorFlag)
+	defer cleanup()
 
 	var output []byte
 
