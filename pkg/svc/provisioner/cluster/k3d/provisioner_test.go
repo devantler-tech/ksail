@@ -10,12 +10,10 @@ import (
 
 // TestK3dClusterProvisioner_List tests the List method of K3dClusterProvisioner.
 func TestK3dClusterProvisioner_List(t *testing.T) {
-	t.Parallel()
+	// Note: Not using t.Parallel() because List() modifies global os.Stdout
 
 	// Test with nil config
 	t.Run("list with nil config", func(t *testing.T) {
-		t.Parallel()
-
 		provisioner := k3dprovisioner.NewK3dClusterProvisioner(nil, "")
 		result, err := provisioner.List(context.Background())
 
@@ -33,8 +31,6 @@ func TestK3dClusterProvisioner_List(t *testing.T) {
 
 	// Test with empty config path
 	t.Run("list with empty config path", func(t *testing.T) {
-		t.Parallel()
-
 		provisioner := k3dprovisioner.NewK3dClusterProvisioner(nil, "")
 		result, err := provisioner.List(context.Background())
 
@@ -53,7 +49,7 @@ func TestK3dClusterProvisioner_List(t *testing.T) {
 
 // TestK3dClusterProvisioner_Exists tests the Exists method.
 func TestK3dClusterProvisioner_Exists(t *testing.T) {
-	t.Parallel()
+	// Note: Not using t.Parallel() because Exists() calls List() which modifies global os.Stdout
 
 	tests := []struct {
 		name        string
@@ -71,8 +67,6 @@ func TestK3dClusterProvisioner_Exists(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
 			provisioner := k3dprovisioner.NewK3dClusterProvisioner(nil, "")
 			_, _ = provisioner.Exists(context.Background(), tt.clusterName)
 

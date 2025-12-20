@@ -18,6 +18,15 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var (
+	// listMutex protects concurrent access to os.Stdout during List operations.
+	// This is required because k3d writes directly to os.Stdout before Cobra's output redirection takes effect.
+	listMutex sync.Mutex //nolint:gochecknoglobals // Required for thread-safe stdout manipulation
+
+	// logrusConfigOnce ensures logrus is configured exactly once to avoid data races.
+	logrusConfigOnce sync.Once //nolint:gochecknoglobals // Required for one-time logrus initialization
+)
+
 // K3dClusterProvisioner executes k3d lifecycle commands via Cobra.
 type K3dClusterProvisioner struct {
 	simpleCfg  *v1alpha5.SimpleConfig
@@ -30,16 +39,19 @@ func NewK3dClusterProvisioner(
 	simpleCfg *v1alpha5.SimpleConfig,
 	configPath string,
 ) *K3dClusterProvisioner {
-	// Configure logrus for k3d's console output
+	// Configure logrus for k3d's console output once
 	// k3d uses logrus for logging, so we need to set it up properly
-	logrus.SetOutput(os.Stdout)
-	logrus.SetFormatter(&logrus.TextFormatter{
-		ForceColors:      true,
-		DisableTimestamp: false,
-		FullTimestamp:    false,
-		TimestampFormat:  "2006-01-02T15:04:05Z",
+	// Use sync.Once to prevent data races when called from parallel tests
+	logrusConfigOnce.Do(func() {
+		logrus.SetOutput(os.Stdout)
+		logrus.SetFormatter(&logrus.TextFormatter{
+			ForceColors:      true,
+			DisableTimestamp: false,
+			FullTimestamp:    false,
+			TimestampFormat:  "2006-01-02T15:04:05Z",
+		})
+		logrus.SetLevel(logrus.InfoLevel)
 	})
-	logrus.SetLevel(logrus.InfoLevel)
 
 	prov := &K3dClusterProvisioner{
 		simpleCfg:  simpleCfg,
@@ -106,10 +118,6 @@ func (k *K3dClusterProvisioner) Stop(ctx context.Context, name string) error {
 	)
 }
 
-// listMutex protects concurrent access to os.Stdout during List operations.
-// This is required because k3d writes directly to os.Stdout before Cobra's output redirection takes effect.
-var listMutex sync.Mutex //nolint:gochecknoglobals // Required for thread-safe stdout manipulation
-
 // List returns cluster names reported by the Cobra command.
 func (k *K3dClusterProvisioner) List(ctx context.Context) ([]string, error) {
 	// Temporarily redirect logrus to discard output during list
@@ -121,32 +129,33 @@ func (k *K3dClusterProvisioner) List(ctx context.Context) ([]string, error) {
 
 	// Lock to prevent concurrent modifications of os.Stdout
 	listMutex.Lock()
-	defer listMutex.Unlock()
 
 	// Setup stdout redirection
 	originalStdout := os.Stdout
 
 	pipeReader, pipeWriter, err := os.Pipe()
 	if err != nil {
+		listMutex.Unlock()
+
 		return nil, fmt.Errorf("cluster list: create stdout pipe: %w", err)
 	}
 
-	defer func() { _ = pipeReader.Close() }()
-
 	os.Stdout = pipeWriter
 
-	defer func() {
-		_ = pipeWriter.Close()
-		os.Stdout = originalStdout
-	}()
-
+	// Run the command
 	output, runErr := k.runListCommand(ctx)
 
-	// Close write end before reading
+	// Close write end before reading and restore stdout while still holding the lock
 	_ = pipeWriter.Close()
+	os.Stdout = originalStdout
+
+	// Unlock mutex before potentially blocking I/O operations
+	listMutex.Unlock()
 
 	// Discard any output that was written to our pipe
 	copyErr := discardPipeOutput(pipeReader)
+	_ = pipeReader.Close()
+
 	if copyErr != nil {
 		logrus.WithError(copyErr).Debug("failed to drain stdout pipe when listing k3d clusters")
 	}
