@@ -183,6 +183,8 @@ func k3dRegistryConfigCases() []k3dRegistryConfigCase {
 func TestGenerateContainerdPatches(t *testing.T) {
 	t.Parallel()
 
+	// GenerateContainerdPatches is now deprecated and always returns nil.
+	// The hosts directory pattern is used instead at runtime.
 	for _, testCase := range containerdPatchCases() {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
@@ -191,7 +193,9 @@ func TestGenerateContainerdPatches(t *testing.T) {
 			scaf.MirrorRegistries = testCase.mirrors
 
 			patches := scaf.GenerateContainerdPatches()
-			assertContainerdPatches(t, patches, testCase)
+			
+			// Should always be empty now - deprecated functionality
+			require.Empty(t, patches, "GenerateContainerdPatches is deprecated and should return empty")
 		})
 	}
 }
