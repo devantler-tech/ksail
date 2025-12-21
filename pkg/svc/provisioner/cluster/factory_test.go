@@ -40,9 +40,10 @@ func TestCreateClusterProvisioner(t *testing.T) {
 				Spec: v1alpha1.Spec{
 					Cluster: v1alpha1.ClusterSpec{
 						Distribution:       testCase.distribution,
-					DistributionConfig: configPath,
-					Connection: v1alpha1.Connection{
-						Kubeconfig: "",
+						DistributionConfig: configPath,
+						Connection: v1alpha1.Connection{
+							Kubeconfig: "",
+						},
 					},
 				},
 			}

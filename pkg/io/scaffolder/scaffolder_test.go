@@ -1091,8 +1091,9 @@ func TestCreateK3dConfig_MetricsServerDisabledWithCilium(t *testing.T) {
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{
 				Distribution:  v1alpha1.DistributionK3d,
-			CNI:           v1alpha1.CNICilium,
-			MetricsServer: v1alpha1.MetricsServerDisabled,
+				CNI:           v1alpha1.CNICilium,
+				MetricsServer: v1alpha1.MetricsServerDisabled,
+			},
 		},
 	}
 

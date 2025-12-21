@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	specDistributionField = "spec.distribution"
+	specDistributionField = "spec.cluster.distribution"
 	specCNIField          = "spec.cni"
 	kindKSailContext      = "kind-ksail"
 )
@@ -812,9 +812,10 @@ func createTestClusterConfig(
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{
 				Distribution:       distribution,
-			DistributionConfig: configFile,
-			Connection: v1alpha1.Connection{
-				Context: context,
+				DistributionConfig: configFile,
+				Connection: v1alpha1.Connection{
+					Context: context,
+				},
 			},
 		},
 	}
@@ -1198,7 +1199,7 @@ func testEmptyDistribution(t *testing.T) {
 				strings.Contains(err.Message, "distribution is required") {
 				found = true
 
-				assert.Contains(t, err.FixSuggestion, "Set spec.distribution")
+				assert.Contains(t, err.FixSuggestion, "Set spec.cluster.distribution")
 
 				break
 			}
@@ -1237,11 +1238,11 @@ func testEmptyDistributionConfig(t *testing.T) {
 		found := false
 
 		for _, err := range result.Errors {
-			if err.Field == "spec.distributionConfig" &&
+			if err.Field == "spec.cluster.distributionConfig" &&
 				strings.Contains(err.Message, "distributionConfig is required") {
 				found = true
 
-				assert.Contains(t, err.FixSuggestion, "Set spec.distributionConfig")
+				assert.Contains(t, err.FixSuggestion, "Set spec.cluster.distributionConfig")
 
 				break
 			}

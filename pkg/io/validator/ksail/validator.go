@@ -125,14 +125,14 @@ func (v *Validator) validateDistribution(
 
 		if distribution == "" {
 			message = "distribution is required"
-			fixSuggestion = "Set spec.distribution to a supported distribution type"
+			fixSuggestion = "Set spec.cluster.distribution to a supported distribution type"
 		} else {
 			message = "invalid distribution value"
 			fixSuggestion = "Use a supported distribution: Kind, K3d, or EKS"
 		}
 
 		result.AddError(validator.ValidationError{
-			Field:         "spec.distribution",
+			Field:         "spec.cluster.distribution",
 			Message:       message,
 			CurrentValue:  distribution,
 			ExpectedValue: "one of: Kind, K3d, EKS",
@@ -143,9 +143,9 @@ func (v *Validator) validateDistribution(
 	// Validate distributionConfig field
 	if config.Spec.Cluster.DistributionConfig == "" {
 		result.AddError(validator.ValidationError{
-			Field:         "spec.distributionConfig",
+			Field:         "spec.cluster.distributionConfig",
 			Message:       "distributionConfig is required",
-			FixSuggestion: "Set spec.distributionConfig to the distribution configuration file path",
+			FixSuggestion: "Set spec.cluster.distributionConfig to the distribution configuration file path",
 		})
 	}
 }
