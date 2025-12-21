@@ -173,68 +173,79 @@ func TestKSailValidatorCrossConfiguration(t *testing.T) {
 	t.Run("cross_config_validation_current_scope", func(t *testing.T) {
 		t.Parallel()
 
-		// Test current cross-configuration validation capabilities
-		// The KSail validator is implemented and validates basic semantic correctness
-		// Full cross-configuration coordination with config managers is future work (T034)
-
-		config := &v1alpha1.Cluster{
-			TypeMeta: metav1.TypeMeta{
-				APIVersion: "ksail.dev/v1alpha1",
-				Kind:       "Cluster",
-			},
-			Spec: v1alpha1.Spec{
-				Cluster: v1alpha1.ClusterSpec{
-					Distribution:       v1alpha1.DistributionKind,
-					DistributionConfig: "kind.yaml",
-					Connection: v1alpha1.Connection{
-						Context: "kind-kind", // No distribution config provided, so use conventional default
-					},
-				},
-			},
-		}
-
-		result := validator.Validate(config)
-		require.NotNil(t, result, "Validation result should not be nil")
-
-		// The validator exists and performs basic validation
-		// Currently validates distribution types and required fields
-		assert.True(t, result.Valid, "Valid configuration should pass validation")
-		assert.Empty(t, result.Errors, "Valid configuration should have no errors")
-
-		// Test cross-configuration validation for invalid distribution
-		invalidConfig := &v1alpha1.Cluster{
-			TypeMeta: metav1.TypeMeta{
-				APIVersion: "ksail.dev/v1alpha1",
-				Kind:       "Cluster",
-			},
-			Spec: v1alpha1.Spec{
-				Cluster: v1alpha1.ClusterSpec{
-					Distribution: "InvalidDistribution",
-				},
-			},
-		}
-
-		invalidResult := validator.Validate(invalidConfig)
-		require.NotNil(t, invalidResult, "Validation result should not be nil")
-		assert.False(t, invalidResult.Valid, "Invalid distribution should fail validation")
-		assert.NotEmpty(t, invalidResult.Errors, "Invalid configuration should have errors")
-
-		// Verify error contains actionable information
-		found := false
-
-		for _, err := range invalidResult.Errors {
-			if err.Field == specDistributionField {
-				found = true
-
-				assert.NotEmpty(t, err.Message, "Error message should not be empty")
-				assert.NotEmpty(t, err.FixSuggestion, "Error should have fix suggestion")
-
-				break
-			}
-		}
-
-		assert.True(t, found, "Should find distribution validation error")
+		testValidConfiguration(t, validator)
+		testInvalidDistribution(t, validator)
 	})
+}
+
+func testValidConfiguration(t *testing.T, validator *ksailvalidator.Validator) {
+	t.Helper()
+
+	// Test current cross-configuration validation capabilities
+	// The KSail validator is implemented and validates basic semantic correctness
+	// Full cross-configuration coordination with config managers is future work (T034)
+
+	config := &v1alpha1.Cluster{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "ksail.dev/v1alpha1",
+			Kind:       "Cluster",
+		},
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				Distribution:       v1alpha1.DistributionKind,
+				DistributionConfig: "kind.yaml",
+				Connection: v1alpha1.Connection{
+					Context: "kind-kind", // No distribution config provided, so use conventional default
+				},
+			},
+		},
+	}
+
+	result := validator.Validate(config)
+	require.NotNil(t, result, "Validation result should not be nil")
+
+	// The validator exists and performs basic validation
+	// Currently validates distribution types and required fields
+	assert.True(t, result.Valid, "Valid configuration should pass validation")
+	assert.Empty(t, result.Errors, "Valid configuration should have no errors")
+}
+
+func testInvalidDistribution(t *testing.T, validator *ksailvalidator.Validator) {
+	t.Helper()
+
+	// Test cross-configuration validation for invalid distribution
+	invalidConfig := &v1alpha1.Cluster{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "ksail.dev/v1alpha1",
+			Kind:       "Cluster",
+		},
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				Distribution: "InvalidDistribution",
+			},
+		},
+	}
+
+	invalidResult := validator.Validate(invalidConfig)
+	require.NotNil(t, invalidResult, "Validation result should not be nil")
+	assert.False(t, invalidResult.Valid, "Invalid distribution should fail validation")
+	assert.NotEmpty(t, invalidResult.Errors, "Invalid configuration should have errors")
+
+	// Verify error contains actionable information
+	found := false
+
+	for _, err := range invalidResult.Errors {
+		if err.Field == specDistributionField {
+			found = true
+
+			assert.NotEmpty(t, err.Message, "Error message should not be empty")
+			assert.NotEmpty(t, err.FixSuggestion, "Error should have fix suggestion")
+
+			break
+		}
+	}
+
+	assert.True(t, found, "Should find distribution validation error")
 }
 
 // createValidKSailConfig creates a valid KSail configuration with the specified distribution.
@@ -264,10 +275,10 @@ func createValidKSailConfig(distribution v1alpha1.Distribution) *v1alpha1.Cluste
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{
 				Distribution:       distribution,
-					DistributionConfig: distributionConfigFile,
-					Connection: v1alpha1.Connection{
-						Context: contextName,
-					},
+				DistributionConfig: distributionConfigFile,
+				Connection: v1alpha1.Connection{
+					Context: contextName,
+				},
 			},
 		},
 	}
@@ -492,7 +503,7 @@ func testInvalidContextPatternWithConfig(t *testing.T) {
 		found := false
 
 		for _, err := range result.Errors {
-			if err.Field == "spec.connection.context" {
+			if err.Field == "spec.cluster.connection.context" {
 				found = true
 
 				assert.Contains(t, err.Message, "context name does not match expected pattern")
@@ -812,10 +823,10 @@ func createTestClusterConfig(
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{
 				Distribution:       distribution,
-					DistributionConfig: configFile,
-					Connection: v1alpha1.Connection{
-						Context: context,
-					},
+				DistributionConfig: configFile,
+				Connection: v1alpha1.Connection{
+					Context: context,
+				},
 			},
 		},
 	}
@@ -953,9 +964,9 @@ func testEmptyContextValidationSkipped(t *testing.T) {
 					Connection: v1alpha1.Connection{
 						Context: "", // Empty context should skip validation
 					},
+				},
 			},
-		},
-	}
+		}
 
 		validator := ksailvalidator.NewValidator()
 		result := validator.Validate(config)
@@ -993,9 +1004,9 @@ func testKindCrossValidationWithConfigName(t *testing.T) {
 					Connection: v1alpha1.Connection{
 						Context: "kind-custom-kind-cluster", // Should match the Kind config name
 					},
+				},
 			},
-		},
-	}
+		}
 
 		validator := ksailvalidator.NewValidatorForKind(kindConfig)
 		result := validator.Validate(config)
@@ -1027,9 +1038,9 @@ func testK3dCrossValidationWithConfigName(t *testing.T) {
 					Connection: v1alpha1.Connection{
 						Context: "k3d-custom-k3d-cluster", // Should match the K3d config name
 					},
+				},
 			},
-		},
-	}
+		}
 
 		validator := ksailvalidator.NewValidatorForK3d(k3dConfig)
 		result := validator.Validate(config)
@@ -1067,9 +1078,9 @@ func testKindEmptyConfigName(t *testing.T) {
 					Connection: v1alpha1.Connection{
 						Context: "any-context-name", // Any context is valid when config name is empty
 					},
+				},
 			},
-		},
-	}
+		}
 
 		validator := ksailvalidator.NewValidatorForKind(kindConfig)
 		result := validator.Validate(config)
@@ -1105,9 +1116,9 @@ func testK3dEmptyConfigName(t *testing.T) {
 					Connection: v1alpha1.Connection{
 						Context: "any-context-name", // Any context is valid when config name is empty
 					},
+				},
 			},
-		},
-	}
+		}
 
 		validator := ksailvalidator.NewValidatorForK3d(k3dConfig)
 		result := validator.Validate(config)
@@ -1147,9 +1158,9 @@ func testNoDistributionConfigProvided(t *testing.T) {
 					Connection: v1alpha1.Connection{
 						Context: "any-custom-context", // Any context should be valid when no config provided
 					},
+				},
 			},
-		},
-	}
+		}
 
 		validator := ksailvalidator.NewValidator() // No distribution config provided
 		result := validator.Validate(config)
@@ -1345,9 +1356,9 @@ func TestKSailValidatorKindConfigEdgeCases(t *testing.T) {
 						Connection: v1alpha1.Connection{
 							Context: "kind-" + test.expectedName,
 						},
+					},
 				},
-			},
-}
+			}
 
 			validator := ksailvalidator.NewValidatorForKind(test.kindConfig)
 			result := validator.Validate(config)
@@ -1409,9 +1420,9 @@ func TestKSailValidatorK3dConfigEdgeCases(t *testing.T) {
 						Connection: v1alpha1.Connection{
 							Context: "k3d-" + test.expectedName,
 						},
+					},
 				},
-			},
-}
+			}
 
 			validator := ksailvalidator.NewValidatorForK3d(test.k3dConfig)
 			result := validator.Validate(config)
@@ -1500,9 +1511,9 @@ func runKindContextValidationTest(
 				Connection: v1alpha1.Connection{
 					Context: test.context,
 				},
+			},
 		},
-	},
-}
+	}
 
 	var validator *ksailvalidator.Validator
 
@@ -1590,9 +1601,9 @@ func runK3dContextValidationTest(
 				Connection: v1alpha1.Connection{
 					Context: test.context,
 				},
+			},
 		},
-	},
-}
+	}
 
 	var validator *ksailvalidator.Validator
 
@@ -1673,9 +1684,9 @@ func createMultiConfigTestCluster(
 				Connection: v1alpha1.Connection{
 					Context: context,
 				},
+			},
 		},
-	},
-}
+	}
 }
 
 // createKindConfigValidator creates a validator with Kind distribution config.
