@@ -67,4 +67,5 @@ KSail focuses on fast local Kubernetes development. The matrix below captures of
 ## Quick Links
 
 - **Installing?** See [github.com/devantler-tech/ksail](https://github.com/devantler-tech/ksail#installation)
-- **Issues or questions?** Open an issue or discussion in the repository
+- **Issues?** Open an [issue](https://github.com/devantler-tech/ksail/issues) in the repository
+- **Questions?** Start a [discussion](https://github.com/devantler-tech/ksail/discussions) in the repository
