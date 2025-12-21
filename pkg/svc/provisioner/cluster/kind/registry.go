@@ -6,8 +6,8 @@ import (
 	"io"
 	"strings"
 
-	dockerclient "github.com/devantler-tech/ksail/pkg/client/docker"
-	"github.com/devantler-tech/ksail/pkg/svc/provisioner/registry"
+	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	"github.com/docker/docker/client"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )

@@ -3,7 +3,7 @@ package yamlmarshaller
 import (
 	"fmt"
 
-	"github.com/devantler-tech/ksail/pkg/io/marshaller"
+	"github.com/devantler-tech/ksail/v5/pkg/io/marshaller"
 	"sigs.k8s.io/yaml"
 )
 

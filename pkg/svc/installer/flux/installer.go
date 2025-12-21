@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/devantler-tech/ksail/pkg/client/helm"
+	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
 )
 
 // FluxInstaller implements the installer.Installer interface for Flux.

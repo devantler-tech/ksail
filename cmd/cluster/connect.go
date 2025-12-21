@@ -3,11 +3,11 @@ package cluster
 import (
 	"fmt"
 
-	"github.com/devantler-tech/ksail/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/pkg/client/k9s"
-	pkgcmd "github.com/devantler-tech/ksail/pkg/cmd"
-	runtime "github.com/devantler-tech/ksail/pkg/di"
-	ksailconfigmanager "github.com/devantler-tech/ksail/pkg/io/config-manager/ksail"
+	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v5/pkg/client/k9s"
+	pkgcmd "github.com/devantler-tech/ksail/v5/pkg/cmd"
+	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
+	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
 	"github.com/spf13/cobra"
 )
 

@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/devantler-tech/ksail/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/pkg/io/validator"
-	"github.com/devantler-tech/ksail/pkg/io/validator/metadata"
+	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v5/pkg/io/validator"
+	"github.com/devantler-tech/ksail/v5/pkg/io/validator/metadata"
 	k3dapi "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	kindv1alpha4 "sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )

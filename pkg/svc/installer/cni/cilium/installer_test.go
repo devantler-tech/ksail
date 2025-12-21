@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	ciliuminstaller "github.com/devantler-tech/ksail/pkg/svc/installer/cni/cilium"
+	ciliuminstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/cni/cilium"
 	"github.com/stretchr/testify/require"
 )
 

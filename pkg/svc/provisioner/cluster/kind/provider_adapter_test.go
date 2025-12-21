@@ -3,7 +3,7 @@ package kindprovisioner_test
 import (
 	"testing"
 
-	kindprovisioner "github.com/devantler-tech/ksail/pkg/svc/provisioner/cluster/kind"
+	kindprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/kind"
 	"github.com/stretchr/testify/assert"
 )
 

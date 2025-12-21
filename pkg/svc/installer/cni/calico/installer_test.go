@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	calicoinstaller "github.com/devantler-tech/ksail/pkg/svc/installer/cni/calico"
+	calicoinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/cni/calico"
 	"github.com/stretchr/testify/require"
 )
 

@@ -1,6 +1,6 @@
 package metadata
 
-import "github.com/devantler-tech/ksail/pkg/io/validator"
+import "github.com/devantler-tech/ksail/v5/pkg/io/validator"
 
 // ValidateMetadata validates Kind and APIVersion fields using provided expected values.
 func ValidateMetadata(

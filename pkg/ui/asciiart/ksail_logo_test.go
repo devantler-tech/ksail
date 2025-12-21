@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/devantler-tech/ksail/pkg/ui/asciiart"
+	"github.com/devantler-tech/ksail/v5/pkg/ui/asciiart"
 	"github.com/gkampitakis/go-snaps/snaps"
 )
 

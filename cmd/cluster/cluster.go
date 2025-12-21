@@ -3,7 +3,7 @@ package cluster
 import (
 	"fmt"
 
-	runtime "github.com/devantler-tech/ksail/pkg/di"
+	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	"github.com/spf13/cobra"
 )
 

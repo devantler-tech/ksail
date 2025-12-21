@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/devantler-tech/ksail/pkg/client/docker"
+	"github.com/devantler-tech/ksail/v5/pkg/client/docker"
 	"github.com/docker/docker/client"
 	"sigs.k8s.io/kind/pkg/cluster"
 )

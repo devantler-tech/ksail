@@ -1,5 +1,5 @@
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Go Reference](https://pkg.go.dev/badge/github.com/devantler-tech/ksail.svg)](https://pkg.go.dev/github.com/devantler-tech/ksail)
+[![Go Reference](https://pkg.go.dev/badge/github.com/devantler-tech/ksail/v5.svg)](https://pkg.go.dev/github.com/devantler-tech/ksail/v5)
 [![codecov](https://codecov.io/gh/devantler-tech/ksail/graph/badge.svg?token=HSUfhaiXwq)](https://codecov.io/gh/devantler-tech/ksail)
 [![CI - Go](https://github.com/devantler-tech/ksail/actions/workflows/ci.yaml/badge.svg)](https://github.com/devantler-tech/ksail/actions/workflows/ci.yaml)
 
@@ -45,7 +45,7 @@ brew install devantler-tech/formulas/ksail
 #### Go install
 
 ```bash
-go install github.com/devantler-tech/ksail@latest
+go install github.com/devantler-tech/ksail/v5@latest
 ```
 
 #### From source
@@ -112,7 +112,7 @@ KSail organizes commands around your development lifecycle:
 ### For contributors
 
 - [CONTRIBUTING.md](./CONTRIBUTING.md) — Contribution guide, development prerequisites, and workflows
-- [API Documentation](https://pkg.go.dev/github.com/devantler-tech/ksail) — Go package documentation
+- [API Documentation](https://pkg.go.dev/github.com/devantler-tech/ksail/v5) — Go package documentation
 
 ## Related Projects
 

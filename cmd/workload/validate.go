@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/devantler-tech/ksail/pkg/client/kubeconform"
-	"github.com/devantler-tech/ksail/pkg/client/kustomize"
+	"github.com/devantler-tech/ksail/v5/pkg/client/kubeconform"
+	"github.com/devantler-tech/ksail/v5/pkg/client/kustomize"
 	"github.com/spf13/cobra"
 )
 

@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	ksailio "github.com/devantler-tech/ksail/pkg/io"
+	ksailio "github.com/devantler-tech/ksail/v5/pkg/io"
 	helmclientlib "github.com/mittwald/go-helm-client"
 	valueslib "github.com/mittwald/go-helm-client/values"
 	"helm.sh/helm/v3/pkg/cli"

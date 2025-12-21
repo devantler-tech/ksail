@@ -3,9 +3,9 @@ package cluster
 import (
 	"os"
 
-	"github.com/devantler-tech/ksail/pkg/client/kubectl"
-	cmdhelpers "github.com/devantler-tech/ksail/pkg/cmd"
-	runtime "github.com/devantler-tech/ksail/pkg/di"
+	"github.com/devantler-tech/ksail/v5/pkg/client/kubectl"
+	cmdhelpers "github.com/devantler-tech/ksail/v5/pkg/cmd"
+	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	"github.com/spf13/cobra"
 	"k8s.io/cli-runtime/pkg/genericiooptions"
 )

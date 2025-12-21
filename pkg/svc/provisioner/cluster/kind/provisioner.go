@@ -11,9 +11,9 @@ import (
 	"strings"
 	"time"
 
-	runner "github.com/devantler-tech/ksail/pkg/cmd/runner"
-	iopath "github.com/devantler-tech/ksail/pkg/io"
-	yamlmarshaller "github.com/devantler-tech/ksail/pkg/io/marshaller/yaml"
+	runner "github.com/devantler-tech/ksail/v5/pkg/cmd/runner"
+	iopath "github.com/devantler-tech/ksail/v5/pkg/io"
+	yamlmarshaller "github.com/devantler-tech/ksail/v5/pkg/io/marshaller/yaml"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"

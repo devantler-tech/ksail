@@ -4,9 +4,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/devantler-tech/ksail/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/pkg/io/validator"
-	ksailvalidator "github.com/devantler-tech/ksail/pkg/io/validator/ksail"
+	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v5/pkg/io/validator"
+	ksailvalidator "github.com/devantler-tech/ksail/v5/pkg/io/validator/ksail"
 	k3dtypes "github.com/k3d-io/k3d/v5/pkg/config/types"
 	k3dapi "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/stretchr/testify/assert"

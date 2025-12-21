@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/devantler-tech/ksail/pkg/client/helm"
-	fluxinstaller "github.com/devantler-tech/ksail/pkg/svc/installer/flux"
+	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
+	fluxinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/flux"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"

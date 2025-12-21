@@ -3,7 +3,7 @@ package configmanager_test
 import (
 	"testing"
 
-	configmanager "github.com/devantler-tech/ksail/pkg/io/config-manager"
+	configmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager"
 	configtypes "github.com/k3d-io/k3d/v5/pkg/config/types"
 	"github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/stretchr/testify/require"

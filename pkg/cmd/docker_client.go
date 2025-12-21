@@ -3,7 +3,7 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/devantler-tech/ksail/pkg/ui/notify"
+	"github.com/devantler-tech/ksail/v5/pkg/ui/notify"
 	"github.com/docker/docker/client"
 	"github.com/spf13/cobra"
 )

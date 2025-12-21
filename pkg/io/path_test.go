@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	iopath "github.com/devantler-tech/ksail/pkg/io"
+	iopath "github.com/devantler-tech/ksail/v5/pkg/io"
 )
 
 func TestExpandHomePath(t *testing.T) {

@@ -3,7 +3,7 @@ package di_test
 import (
 	"testing"
 
-	runtime "github.com/devantler-tech/ksail/pkg/di"
+	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	"github.com/stretchr/testify/require"
 )
 

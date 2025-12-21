@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/devantler-tech/ksail/cmd/cipher"
-	rtruntime "github.com/devantler-tech/ksail/pkg/di"
+	"github.com/devantler-tech/ksail/v5/cmd/cipher"
+	rtruntime "github.com/devantler-tech/ksail/v5/pkg/di"
 )
 
 const (

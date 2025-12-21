@@ -3,8 +3,8 @@ package gen_test
 import (
 	"testing"
 
-	"github.com/devantler-tech/ksail/cmd/workload/gen"
-	runtime "github.com/devantler-tech/ksail/pkg/di"
+	"github.com/devantler-tech/ksail/v5/cmd/workload/gen"
+	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	"github.com/stretchr/testify/require"
 )
 

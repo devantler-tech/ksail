@@ -1,8 +1,8 @@
 package kind
 
 import (
-	"github.com/devantler-tech/ksail/pkg/io/validator"
-	"github.com/devantler-tech/ksail/pkg/io/validator/metadata"
+	"github.com/devantler-tech/ksail/v5/pkg/io/validator"
+	"github.com/devantler-tech/ksail/v5/pkg/io/validator/metadata"
 	kindapi "sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
 

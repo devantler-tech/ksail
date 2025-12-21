@@ -3,7 +3,7 @@ package registry
 import (
 	"context"
 
-	dockerclient "github.com/devantler-tech/ksail/pkg/client/docker"
+	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
 )
 
 // Backend defines the minimal registry operations required by both mirror and local registry flows.

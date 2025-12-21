@@ -10,7 +10,7 @@ To understand the codebase it is recommended to read the `.github/copilot-instru
 
 ### Code Documentation
 
-For detailed package and API documentation, refer to the Go documentation at [pkg.go.dev/github.com/devantler-tech/ksail](https://pkg.go.dev/github.com/devantler-tech/ksail). This provides comprehensive documentation for all exported packages, types, functions, and methods.
+For detailed package and API documentation, refer to the Go documentation at [pkg.go.dev/github.com/devantler-tech/ksail/v5](https://pkg.go.dev/github.com/devantler-tech/ksail/v5). This provides comprehensive documentation for all exported packages, types, functions, and methods.
 
 ### Prerequisites
 
@@ -93,7 +93,7 @@ The repository is organized into two main directories:
 
 This project strives to be fully open-source friendly, and as such, all core functionality is implemented in the `pkg/` directory, and the `internal/` directory is not used. This allows external projects to import and use any part of the codebase.
 
-For detailed package and API documentation, refer to [pkg.go.dev/github.com/devantler-tech/ksail](https://pkg.go.dev/github.com/devantler-tech/ksail).
+For detailed package and API documentation, refer to [pkg.go.dev/github.com/devantler-tech/ksail/v5](https://pkg.go.dev/github.com/devantler-tech/ksail/v5).
 
 ## CI
 

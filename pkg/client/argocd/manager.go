@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/devantler-tech/ksail/pkg/k8s"
+	"github.com/devantler-tech/ksail/v5/pkg/k8s"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

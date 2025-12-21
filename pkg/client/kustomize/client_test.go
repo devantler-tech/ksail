@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/devantler-tech/ksail/pkg/client/kustomize"
+	"github.com/devantler-tech/ksail/v5/pkg/client/kustomize"
 )
 
 func TestNewClient(t *testing.T) {

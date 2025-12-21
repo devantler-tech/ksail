@@ -3,10 +3,10 @@ package k3d
 import (
 	"fmt"
 
-	configmanager "github.com/devantler-tech/ksail/pkg/io/config-manager"
-	"github.com/devantler-tech/ksail/pkg/io/config-manager/helpers"
-	k3dvalidator "github.com/devantler-tech/ksail/pkg/io/validator/k3d"
-	"github.com/devantler-tech/ksail/pkg/ui/timer"
+	configmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager"
+	"github.com/devantler-tech/ksail/v5/pkg/io/config-manager/helpers"
+	k3dvalidator "github.com/devantler-tech/ksail/v5/pkg/io/validator/k3d"
+	"github.com/devantler-tech/ksail/v5/pkg/ui/timer"
 	"github.com/k3d-io/k3d/v5/pkg/config/types"
 	v1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 )

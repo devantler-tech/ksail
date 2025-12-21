@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/devantler-tech/ksail/cmd/cipher"
-	runtime "github.com/devantler-tech/ksail/pkg/di"
+	"github.com/devantler-tech/ksail/v5/cmd/cipher"
+	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 )
 
 func TestNewEncryptCmd(t *testing.T) {

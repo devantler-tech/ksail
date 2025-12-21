@@ -3,9 +3,9 @@ package yamlgenerator
 import (
 	"fmt"
 
-	"github.com/devantler-tech/ksail/pkg/io"
-	"github.com/devantler-tech/ksail/pkg/io/marshaller"
-	yamlmarshaller "github.com/devantler-tech/ksail/pkg/io/marshaller/yaml"
+	"github.com/devantler-tech/ksail/v5/pkg/io"
+	"github.com/devantler-tech/ksail/v5/pkg/io/marshaller"
+	yamlmarshaller "github.com/devantler-tech/ksail/v5/pkg/io/marshaller/yaml"
 )
 
 // Options defines options for YAML generators when emitting files.

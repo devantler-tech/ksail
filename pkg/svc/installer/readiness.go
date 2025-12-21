@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/devantler-tech/ksail/pkg/k8s"
+	"github.com/devantler-tech/ksail/v5/pkg/k8s"
 	"k8s.io/client-go/kubernetes"
 )
 

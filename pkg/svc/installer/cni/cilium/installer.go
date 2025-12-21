@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/devantler-tech/ksail/pkg/client/helm"
-	"github.com/devantler-tech/ksail/pkg/k8s"
-	"github.com/devantler-tech/ksail/pkg/svc/installer"
-	"github.com/devantler-tech/ksail/pkg/svc/installer/cni"
+	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
+	"github.com/devantler-tech/ksail/v5/pkg/k8s"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/installer"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/installer/cni"
 )
 
 // CiliumInstaller implements the installer.Installer interface for Cilium.

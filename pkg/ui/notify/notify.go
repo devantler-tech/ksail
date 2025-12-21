@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/devantler-tech/ksail/pkg/ui/timer"
+	"github.com/devantler-tech/ksail/v5/pkg/ui/timer"
 	fcolor "github.com/fatih/color"
 )
 
