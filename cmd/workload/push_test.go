@@ -22,13 +22,20 @@ func TestNewPushCmdHasValidateFlag(t *testing.T) {
 
 	// Check default value
 	if validateFlag.DefValue != "false" {
-		t.Fatalf("expected --validate flag default value to be false, got %s", validateFlag.DefValue)
+		t.Fatalf(
+			"expected --validate flag default value to be false, got %s",
+			validateFlag.DefValue,
+		)
 	}
 
 	// Check usage text
 	expectedUsage := "Validate manifests before pushing"
 	if validateFlag.Usage != expectedUsage {
-		t.Fatalf("expected --validate flag usage to be %q, got %q", expectedUsage, validateFlag.Usage)
+		t.Fatalf(
+			"expected --validate flag usage to be %q, got %q",
+			expectedUsage,
+			validateFlag.Usage,
+		)
 	}
 }
 
@@ -89,15 +96,15 @@ func TestPushCmdAcceptsValidateFlag(t *testing.T) {
 		},
 	}
 
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			cmd := workload.NewPushCmd(runtime.New(nil))
-			cmd.SetArgs(tc.args)
+			cmd.SetArgs(testCase.args)
 
 			// Parse flags without executing the command
-			err := cmd.ParseFlags(tc.args)
+			err := cmd.ParseFlags(testCase.args)
 			if err != nil {
 				t.Fatalf("expected no error parsing flags, got %v", err)
 			}
@@ -107,8 +114,8 @@ func TestPushCmdAcceptsValidateFlag(t *testing.T) {
 				t.Fatalf("expected no error getting validate flag, got %v", err)
 			}
 
-			if validate != tc.expected {
-				t.Fatalf("expected validate flag to be %v, got %v", tc.expected, validate)
+			if validate != testCase.expected {
+				t.Fatalf("expected validate flag to be %v, got %v", testCase.expected, validate)
 			}
 		})
 	}
