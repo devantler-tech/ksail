@@ -1,7 +1,6 @@
 package kindprovisioner_test
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -222,7 +221,7 @@ func TestCleanupHostsDirectory(t *testing.T) {
 
 	// Create a test directory
 	clusterName := "test-cleanup-cluster"
-	hostsDir := fmt.Sprintf(".ksail/kind-hosts-%s", clusterName)
+	hostsDir := "kind-mirror-config"
 
 	err := os.MkdirAll(hostsDir, 0o755)
 	require.NoError(t, err)
