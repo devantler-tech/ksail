@@ -53,6 +53,7 @@ type ClusterSpec struct {
 // WorkloadSpec defines workload-related configuration.
 type WorkloadSpec struct {
 	SourceDirectory string `json:"sourceDirectory,omitzero"`
+	ValidateOnPush  bool   `json:"validateOnPush,omitzero" jsonschema:"description=Enable validation of workloads before pushing to OCI registry"` //nolint:lll
 }
 
 // Connection defines connection options for a KSail cluster.

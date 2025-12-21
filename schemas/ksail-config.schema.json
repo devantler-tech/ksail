@@ -193,12 +193,17 @@
           "properties": {
             "sourceDirectory": {
               "type": "string"
+            },
+            "validateOnPush": {
+              "type": "boolean",
+              "description": "Enable validation of workloads before pushing to OCI registry"
             }
           },
           "additionalProperties": false,
           "type": "object",
           "required": [
-            "sourceDirectory"
+            "sourceDirectory",
+            "validateOnPush"
           ]
         }
       },

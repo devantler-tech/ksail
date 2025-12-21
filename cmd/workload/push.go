@@ -16,12 +16,16 @@ import (
 //
 //nolint:funlen // Cobra command RunE functions typically combine setup, validation, and execution
 func NewPushCmd(_ *runtime.Runtime) *cobra.Command {
+	var validate bool
+
 	cmd := &cobra.Command{
 		Use:          "push",
 		Short:        "Package and push an OCI artifact to the local registry",
 		Long:         "Build and push local workloads as an OCI artifact to the local registry.",
 		SilenceUsage: true,
 	}
+
+	cmd.Flags().BoolVar(&validate, "validate", false, "Validate workloads before pushing (overrides config)")
 
 	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
 		ctx, err := initCommandContext(cmd)
@@ -43,6 +47,49 @@ func NewPushCmd(_ *runtime.Runtime) *cobra.Command {
 		sourceDir := clusterCfg.Spec.Workload.SourceDirectory
 		if strings.TrimSpace(sourceDir) == "" {
 			sourceDir = v1alpha1.DefaultSourceDirectory
+		}
+
+		// Determine if validation should run: flag takes precedence over config
+		shouldValidate := validate || clusterCfg.Spec.Workload.ValidateOnPush
+
+		// Run validation if enabled
+		if shouldValidate {
+			cmd.Println()
+			notify.WriteMessage(notify.Message{
+				Type:    notify.TitleType,
+				Emoji:   "✅",
+				Content: "Validating Workloads...",
+				Writer:  cmd.OutOrStdout(),
+			})
+
+			tmr.NewStage()
+
+			notify.WriteMessage(notify.Message{
+				Type:    notify.ActivityType,
+				Content: "validating manifests",
+				Timer:   outputTimer,
+				Writer:  cmd.OutOrStdout(),
+			})
+
+			err = runValidateCmd(
+				cmd.Context(),
+				cmd,
+				[]string{sourceDir},
+				true,  // skipSecrets
+				true,  // strict
+				true,  // ignoreMissingSchemas
+				false, // verbose
+			)
+			if err != nil {
+				return fmt.Errorf("validate workloads: %w", err)
+			}
+
+			notify.WriteMessage(notify.Message{
+				Type:    notify.SuccessType,
+				Content: "validation passed",
+				Timer:   outputTimer,
+				Writer:  cmd.OutOrStdout(),
+			})
 		}
 
 		repoName := sourceDir
