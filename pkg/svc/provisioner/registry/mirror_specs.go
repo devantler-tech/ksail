@@ -374,3 +374,31 @@ func splitMirrorSpec(spec string) (string, string, bool) {
 
 	return spec[:idx], spec[idx+1:], true
 }
+
+// GenerateScaffoldedHostsToml generates a hosts.toml file content for scaffolded registry mirrors.
+// Unlike GenerateHostsToml (which is used at cluster create time with local cache containers),
+// this function generates configuration that redirects requests directly to an upstream mirror
+// without requiring a local registry container.
+//
+// Parameters:
+//   - spec: MirrorSpec containing Host (e.g., "docker.io") and Remote (e.g., "https://registry-1.docker.io")
+//
+// Example output for docker.io with upstream https://registry-1.docker.io:
+//
+//	server = "https://docker.io"
+//
+//	[host."https://registry-1.docker.io"]
+//	  capabilities = ["pull", "resolve"]
+func GenerateScaffoldedHostsToml(spec MirrorSpec) string {
+	var builder strings.Builder
+
+	// The server is the original registry host as an HTTPS URL
+	serverURL := "https://" + spec.Host
+	builder.WriteString(fmt.Sprintf("server = %q\n\n", serverURL))
+
+	// The host block contains the upstream mirror URL
+	builder.WriteString(fmt.Sprintf("[host.%q]\n", spec.Remote))
+	builder.WriteString("  capabilities = [\"pull\", \"resolve\"]\n")
+
+	return builder.String()
+}

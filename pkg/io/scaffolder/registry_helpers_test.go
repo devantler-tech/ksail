@@ -6,6 +6,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/io/scaffolder"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	k3dv1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -184,24 +185,55 @@ func k3dRegistryConfigCases() []k3dRegistryConfigCase {
 	}
 }
 
-func TestGenerateContainerdPatches(t *testing.T) {
+func TestGenerateScaffoldedHostsToml(t *testing.T) {
 	t.Parallel()
 
-	// GenerateContainerdPatches is now deprecated and always returns nil.
-	// The hosts directory pattern is used instead at runtime.
+	// Test that GenerateScaffoldedHostsToml produces correct hosts.toml content
+	// for the scaffolded kind-mirrors directory pattern.
 	for _, testCase := range containerdPatchCases() {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			scaf := createTestScaffolderForKind()
-			scaf.MirrorRegistries = testCase.mirrors
+			if testCase.expectEmpty || len(testCase.mirrors) == 0 {
+				return // Skip empty cases
+			}
 
-			patches := scaf.GenerateContainerdPatches()
-			
-			// Should always be empty now - deprecated functionality
-			require.Empty(t, patches, "GenerateContainerdPatches is deprecated and should return empty")
+			// Parse mirror specs from the test case
+			for _, mirrorSpec := range testCase.mirrors {
+				parts := splitMirrorSpec(mirrorSpec)
+				if len(parts) != 2 {
+					continue // Skip invalid specs
+				}
+
+				spec := registry.MirrorSpec{
+					Host:   parts[0],
+					Remote: parts[1],
+				}
+
+				content := registry.GenerateScaffoldedHostsToml(spec)
+
+				// Verify the content structure
+				require.Contains(t, content, "server = \"https://"+spec.Host+"\"")
+				require.Contains(t, content, "[host.\""+spec.Remote+"\"]")
+				require.Contains(t, content, "capabilities = [\"pull\", \"resolve\"]")
+			}
 		})
 	}
+}
+
+// splitMirrorSpec is a test helper that splits a mirror spec string.
+func splitMirrorSpec(spec string) []string {
+	idx := 0
+	for i, c := range spec {
+		if c == '=' {
+			idx = i
+			break
+		}
+	}
+	if idx == 0 || idx == len(spec)-1 {
+		return nil
+	}
+	return []string{spec[:idx], spec[idx+1:]}
 }
 
 func TestGenerateK3dRegistryConfig(t *testing.T) {

@@ -1018,20 +1018,6 @@ func TestGenerateK3dRegistryConfig_WithValidMirror(t *testing.T) {
 	assert.Empty(t, config.Use)
 }
 
-func TestGenerateContainerdPatches_InvalidSpecs(t *testing.T) {
-	t.Parallel()
-
-	mirrorRegistries := []string{"invalid", "=missing", "missing="}
-	scaffolderInstance := scaffolder.NewScaffolder(
-		*v1alpha1.NewCluster(),
-		&bytes.Buffer{},
-		mirrorRegistries,
-	)
-
-	patches := scaffolderInstance.GenerateContainerdPatches()
-	assert.Empty(t, patches)
-}
-
 // Tests for createK3dConfig with MetricsServer configuration.
 func TestCreateK3dConfig_MetricsServerDisabled(t *testing.T) {
 	t.Parallel()
