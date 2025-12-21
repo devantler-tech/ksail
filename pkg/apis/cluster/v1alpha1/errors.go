@@ -22,3 +22,6 @@ var ErrInvalidCertManager = errors.New("invalid cert-manager")
 
 // ErrInvalidLocalRegistry is returned when an invalid local registry mode is specified.
 var ErrInvalidLocalRegistry = errors.New("invalid local registry mode")
+
+// ErrInvalidValidateWorkloadOnCreate is returned when an invalid validate workload on create option is specified.
+var ErrInvalidValidateWorkloadOnCreate = errors.New("invalid validate workload on create")

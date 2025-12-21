@@ -172,20 +172,21 @@ func (m *ConfigManager) handleDurationFlag(
 // We initialize this map once and reuse it for better performance.
 func (m *ConfigManager) getFieldMappings() map[any]string {
 	return map[any]string{
-		&m.Config.Spec.Cluster.Distribution:                   "distribution",
-		&m.Config.Spec.Cluster.DistributionConfig:             "distribution-config",
-		&m.Config.Spec.Workload.SourceDirectory:               "source-directory",
-		&m.Config.Spec.Cluster.Connection.Context:             "context",
-		&m.Config.Spec.Cluster.Connection.Kubeconfig:          "kubeconfig",
-		&m.Config.Spec.Cluster.Connection.Timeout:             "timeout",
-		&m.Config.Spec.Cluster.GitOpsEngine:                   "gitops-engine",
-		&m.Config.Spec.Cluster.CNI:                            "cni",
-		&m.Config.Spec.Cluster.CSI:                            "csi",
-		&m.Config.Spec.Cluster.MetricsServer:                  "metrics-server",
-		&m.Config.Spec.Cluster.CertManager:                    "cert-manager",
-		&m.Config.Spec.Cluster.LocalRegistry:                  "local-registry",
-		&m.Config.Spec.Cluster.Options.LocalRegistry.HostPort: "local-registry-port",
-		&m.Config.Spec.Cluster.Options.Flux.Interval:          "flux-interval",
+		&m.Config.Spec.Cluster.Distribution:                      "distribution",
+		&m.Config.Spec.Cluster.DistributionConfig:                "distribution-config",
+		&m.Config.Spec.Workload.SourceDirectory:                  "source-directory",
+		&m.Config.Spec.Cluster.Connection.Context:                "context",
+		&m.Config.Spec.Cluster.Connection.Kubeconfig:             "kubeconfig",
+		&m.Config.Spec.Cluster.Connection.Timeout:                "timeout",
+		&m.Config.Spec.Cluster.GitOpsEngine:                      "gitops-engine",
+		&m.Config.Spec.Cluster.CNI:                               "cni",
+		&m.Config.Spec.Cluster.CSI:                               "csi",
+		&m.Config.Spec.Cluster.MetricsServer:                     "metrics-server",
+		&m.Config.Spec.Cluster.CertManager:                       "cert-manager",
+		&m.Config.Spec.Cluster.ValidateWorkloadOnCreate:          "validate-workload",
+		&m.Config.Spec.Cluster.LocalRegistry:                     "local-registry",
+		&m.Config.Spec.Cluster.Options.LocalRegistry.HostPort:    "local-registry-port",
+		&m.Config.Spec.Cluster.Options.Flux.Interval:             "flux-interval",
 	}
 }
 
@@ -263,6 +264,8 @@ func (m *ConfigManager) setPflagValueDefault(pflagValue interface {
 	case v1alpha1.MetricsServer:
 		_ = pflagValue.Set(string(val))
 	case v1alpha1.CertManager:
+		_ = pflagValue.Set(string(val))
+	case v1alpha1.ValidateWorkloadOnCreate:
 		_ = pflagValue.Set(string(val))
 	case v1alpha1.LocalRegistry:
 		_ = pflagValue.Set(string(val))

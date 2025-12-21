@@ -44,3 +44,11 @@ func validCertManagers() []CertManager {
 func validLocalRegistryModes() []LocalRegistry {
 	return []LocalRegistry{LocalRegistryEnabled, LocalRegistryDisabled}
 }
+
+// validValidateWorkloadOnCreate returns supported validate workload on create values.
+func validValidateWorkloadOnCreate() []ValidateWorkloadOnCreate {
+	return []ValidateWorkloadOnCreate{
+		ValidateWorkloadOnCreateEnabled,
+		ValidateWorkloadOnCreateDisabled,
+	}
+}

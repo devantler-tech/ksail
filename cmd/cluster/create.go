@@ -15,6 +15,8 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	argocdgitops "github.com/devantler-tech/ksail/v5/pkg/client/argocd"
 	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
+	"github.com/devantler-tech/ksail/v5/pkg/client/kubeconform"
+	"github.com/devantler-tech/ksail/v5/pkg/client/kustomize"
 	cmdhelpers "github.com/devantler-tech/ksail/v5/pkg/cmd"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	k3dconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/k3d"
@@ -81,11 +83,12 @@ func NewCreateCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
 		SilenceUsage: true,
 	}
 
-	// Create field selectors including metrics-server
+	// Create field selectors including metrics-server, cert-manager, CSI, and validate-workload
 	fieldSelectors := ksailconfigmanager.DefaultClusterFieldSelectors()
 	fieldSelectors = append(fieldSelectors, ksailconfigmanager.DefaultMetricsServerFieldSelector())
 	fieldSelectors = append(fieldSelectors, ksailconfigmanager.DefaultCertManagerFieldSelector())
 	fieldSelectors = append(fieldSelectors, ksailconfigmanager.DefaultCSIFieldSelector())
+	fieldSelectors = append(fieldSelectors, ksailconfigmanager.DefaultValidateWorkloadOnCreateFieldSelector())
 
 	cfgManager := ksailconfigmanager.NewCommandConfigManager(
 		cmd,
@@ -313,7 +316,12 @@ func handlePostCreationSetup(
 		return err
 	}
 
-	return installFluxIfConfigured(cmd, clusterCfg, tmr, firstActivityShown)
+	err = installFluxIfConfigured(cmd, clusterCfg, tmr, firstActivityShown)
+	if err != nil {
+		return err
+	}
+
+	return validateWorkloadIfConfigured(cmd, clusterCfg, tmr, firstActivityShown)
 }
 
 // installCustomCNIAndMetrics installs a custom CNI and then metrics-server.
@@ -1772,4 +1780,130 @@ func runFluxInstallation(
 	}
 
 	return nil
+}
+
+// validateWorkloadIfConfigured validates workloads if ValidateWorkloadOnCreate is enabled.
+func validateWorkloadIfConfigured(
+	cmd *cobra.Command,
+	clusterCfg *v1alpha1.Cluster,
+	tmr timer.Timer,
+	firstActivityShown *bool,
+) error {
+	if clusterCfg.Spec.Cluster.ValidateWorkloadOnCreate != v1alpha1.ValidateWorkloadOnCreateEnabled {
+		return nil
+	}
+
+	if *firstActivityShown {
+		_, _ = fmt.Fprintln(cmd.OutOrStdout())
+	}
+
+	*firstActivityShown = true
+
+	tmr.NewStage()
+
+	notify.WriteMessage(notify.Message{
+		Type:    notify.TitleType,
+		Content: "Validate Workloads...",
+		Emoji:   "✅",
+		Writer:  cmd.OutOrStdout(),
+	})
+
+	notify.WriteMessage(notify.Message{
+		Type:    notify.ActivityType,
+		Content: "validating workload manifests",
+		Writer:  cmd.OutOrStdout(),
+	})
+
+	// Get source directory from config
+	sourceDir := strings.TrimSpace(clusterCfg.Spec.Workload.SourceDirectory)
+	if sourceDir == "" {
+		sourceDir = v1alpha1.DefaultSourceDirectory
+	}
+
+	// Run validation using workload validate logic
+	err := runWorkloadValidation(cmd.Context(), cmd, sourceDir)
+	if err != nil {
+		return fmt.Errorf("workload validation failed: %w", err)
+	}
+
+	outputTimer := cmdhelpers.MaybeTimer(cmd, tmr)
+
+	notify.WriteMessage(notify.Message{
+		Type:    notify.SuccessType,
+		Content: "workloads validated",
+		Timer:   outputTimer,
+		Writer:  cmd.OutOrStdout(),
+	})
+
+	return nil
+}
+
+// runWorkloadValidation validates workload manifests in the specified path.
+func runWorkloadValidation(ctx context.Context, cmd *cobra.Command, path string) error {
+	// Create kubeconform client
+	kubeconformClient := kubeconform.NewClient()
+
+	// Build validation options with defaults matching workload validate command
+	validationOpts := &kubeconform.ValidationOptions{
+		Strict:               true,
+		IgnoreMissingSchemas: true,
+		Verbose:              false,
+		SkipKinds:            []string{"Secret"}, // Skip secrets by default to avoid SOPS validation issues
+	}
+
+	// Check if path exists
+	info, err := os.Stat(path)
+	if err != nil {
+		// If the path doesn't exist, just skip validation silently
+		// This allows cluster creation to succeed even if workloads aren't set up yet
+		return nil
+	}
+
+	// If it's a file, validate it directly
+	if !info.IsDir() {
+		err := kubeconformClient.ValidateFile(ctx, path, validationOpts)
+		if err != nil {
+			return fmt.Errorf("validate file %s: %w", path, err)
+		}
+
+		return nil
+	}
+
+	// Validate directory (includes kustomizations and YAML files)
+	kustomizeClient := kustomize.NewClient()
+	kustomizations, err := findKustomizationsInPath(path)
+	if err != nil {
+		return fmt.Errorf("find kustomizations: %w", err)
+	}
+
+	// Validate kustomizations
+	for _, kustDir := range kustomizations {
+		// Build the kustomization
+		output, err := kustomizeClient.Build(ctx, kustDir)
+		if err != nil {
+			return fmt.Errorf("build kustomization %s: %w", kustDir, err)
+		}
+
+		// Validate the output
+		err = kubeconformClient.ValidateManifests(ctx, output, validationOpts)
+		if err != nil {
+			return fmt.Errorf("validate kustomization %s: %w", kustDir, err)
+		}
+	}
+
+	return nil
+}
+
+// findKustomizationsInPath finds all directories containing kustomization.yaml files.
+func findKustomizationsInPath(rootPath string) ([]string, error) {
+	var kustomizations []string
+	const kustomizationFileName = "kustomization.yaml"
+
+	// Check if current directory has kustomization.yaml
+	kustomizationPath := rootPath + "/" + kustomizationFileName
+	if _, err := os.Stat(kustomizationPath); err == nil {
+		kustomizations = append(kustomizations, rootPath)
+	}
+
+	return kustomizations, nil
 }

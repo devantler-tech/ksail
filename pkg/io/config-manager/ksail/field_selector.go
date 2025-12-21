@@ -134,6 +134,15 @@ func DefaultCSIFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	}
 }
 
+// DefaultValidateWorkloadOnCreateFieldSelector creates a standard field selector for ValidateWorkloadOnCreate.
+func DefaultValidateWorkloadOnCreateFieldSelector() FieldSelector[v1alpha1.Cluster] {
+	return FieldSelector[v1alpha1.Cluster]{
+		Selector:     func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.ValidateWorkloadOnCreate },
+		Description:  "Validate workloads during cluster creation (Enabled: validate, Disabled: skip)",
+		DefaultValue: v1alpha1.ValidateWorkloadOnCreateDisabled,
+	}
+}
+
 // DefaultKubeconfigFieldSelector creates a standard field selector for kubeconfig.
 func DefaultKubeconfigFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	return FieldSelector[v1alpha1.Cluster]{

@@ -38,16 +38,17 @@ type Spec struct {
 
 // ClusterSpec defines cluster-related configuration.
 type ClusterSpec struct {
-	DistributionConfig string        `json:"distributionConfig,omitzero"`
-	Connection         Connection    `json:"connection,omitzero"`
-	Distribution       Distribution  `json:"distribution,omitzero"`
-	CNI                CNI           `json:"cni,omitzero"`
-	CSI                CSI           `json:"csi,omitzero"`
-	MetricsServer      MetricsServer `json:"metricsServer,omitzero"`
-	CertManager        CertManager   `json:"certManager,omitzero"`
-	LocalRegistry      LocalRegistry `json:"localRegistry,omitzero"`
-	GitOpsEngine       GitOpsEngine  `json:"gitOpsEngine,omitzero"`
-	Options            Options       `json:"options,omitzero"`
+	DistributionConfig      string                  `json:"distributionConfig,omitzero"`
+	Connection              Connection              `json:"connection,omitzero"`
+	Distribution            Distribution            `json:"distribution,omitzero"`
+	CNI                     CNI                     `json:"cni,omitzero"`
+	CSI                     CSI                     `json:"csi,omitzero"`
+	MetricsServer           MetricsServer           `json:"metricsServer,omitzero"`
+	CertManager             CertManager             `json:"certManager,omitzero"`
+	LocalRegistry           LocalRegistry           `json:"localRegistry,omitzero"`
+	GitOpsEngine            GitOpsEngine            `json:"gitOpsEngine,omitzero"`
+	ValidateWorkloadOnCreate ValidateWorkloadOnCreate `json:"validateWorkloadOnCreate,omitzero"`
+	Options                 Options                 `json:"options,omitzero"`
 }
 
 // WorkloadSpec defines workload-related configuration.
@@ -259,6 +260,18 @@ const (
 	LocalRegistryDisabled LocalRegistry = "Disabled"
 )
 
+// --- Validate Workload On Create Types ---
+
+// ValidateWorkloadOnCreate defines whether workload validation should run during cluster creation.
+type ValidateWorkloadOnCreate string
+
+const (
+	// ValidateWorkloadOnCreateEnabled validates workloads after cluster creation.
+	ValidateWorkloadOnCreateEnabled ValidateWorkloadOnCreate = "Enabled"
+	// ValidateWorkloadOnCreateDisabled skips workload validation during cluster creation.
+	ValidateWorkloadOnCreateDisabled ValidateWorkloadOnCreate = "Disabled"
+)
+
 // --- GitOps Engine Types ---
 
 // GitOpsEngine defines the GitOps Engine options for a KSail cluster.
@@ -443,6 +456,26 @@ func (c *CertManager) Set(value string) error {
 	)
 }
 
+// Set for ValidateWorkloadOnCreate.
+func (v *ValidateWorkloadOnCreate) Set(value string) error {
+	// Check against constant values with case-insensitive comparison
+	for _, vw := range validValidateWorkloadOnCreate() {
+		if strings.EqualFold(value, string(vw)) {
+			*v = vw
+
+			return nil
+		}
+	}
+
+	return fmt.Errorf(
+		"%w: %s (valid options: %s, %s)",
+		ErrInvalidValidateWorkloadOnCreate,
+		value,
+		ValidateWorkloadOnCreateEnabled,
+		ValidateWorkloadOnCreateDisabled,
+	)
+}
+
 // Set for LocalRegistry.
 func (l *LocalRegistry) Set(value string) error {
 	// Check against constant values with case-insensitive comparison
@@ -536,4 +569,14 @@ func (c *CertManager) String() string {
 // Type returns the type of the CertManager.
 func (c *CertManager) Type() string {
 	return "CertManager"
+}
+
+// String returns the string representation of the ValidateWorkloadOnCreate.
+func (v *ValidateWorkloadOnCreate) String() string {
+	return string(*v)
+}
+
+// Type returns the type of the ValidateWorkloadOnCreate.
+func (v *ValidateWorkloadOnCreate) Type() string {
+	return "ValidateWorkloadOnCreate"
 }
