@@ -389,10 +389,10 @@ func TestLoadConfigParsesFluxIntervalFromString(t *testing.T) {
 	writeKindConfigFile(t)
 	writeClusterConfigFile(
 		t,
-		"  gitOpsEngine: Flux\n",
-		"  options:\n",
-		"    flux:\n",
-		"      interval: 2m30s\n",
+		"    gitOpsEngine: Flux\n",
+		"    options:\n",
+		"      flux:\n",
+		"        interval: 2m30s\n",
 	)
 
 	manager := configmanager.NewConfigManager(io.Discard)
@@ -412,10 +412,10 @@ func TestLoadConfigFailsOnInvalidFluxIntervalString(t *testing.T) {
 	writeKindConfigFile(t)
 	writeClusterConfigFile(
 		t,
-		"  gitOpsEngine: Flux\n",
-		"  options:\n",
-		"    flux:\n",
-		"      interval: not-a-duration\n",
+		"    gitOpsEngine: Flux\n",
+		"    options:\n",
+		"      flux:\n",
+		"        interval: not-a-duration\n",
 	)
 
 	manager := configmanager.NewConfigManager(io.Discard)
@@ -434,8 +434,8 @@ func TestLoadConfigHonorsExplicitLocalRegistrySetting(t *testing.T) {
 	writeKindConfigFile(t)
 	writeClusterConfigFile(
 		t,
-		"  gitOpsEngine: Flux\n",
-		"  localRegistry: Disabled\n",
+		"    gitOpsEngine: Flux\n",
+		"    localRegistry: Disabled\n",
 	)
 
 	manager := newManagerWithDefaultSelectors()
@@ -477,7 +477,7 @@ func TestLoadConfigAppliesLocalRegistryDefaults(t *testing.T) {
 			writeKindConfigFile(t)
 			writeClusterConfigFile(
 				t,
-				fmt.Sprintf("  gitOpsEngine: %s\n", testCase.gitOpsEngine),
+				fmt.Sprintf("    gitOpsEngine: %s\n", testCase.gitOpsEngine),
 			)
 
 			manager := newManagerWithDefaultSelectors()
@@ -595,7 +595,7 @@ func TestLoadConfigValidationFailureMessages(t *testing.T) {
 	assert.Contains(t, logOutput, "error:")
 	assert.Contains(t, logOutput, "kind is required")
 	assert.Contains(t, logOutput, "apiVersion is required")
-	assert.Contains(t, logOutput, "field: spec.distribution")
+	assert.Contains(t, logOutput, "field: spec.cluster.distribution")
 	assert.Contains(t, logOutput, "distributionConfig is required")
 }
 
