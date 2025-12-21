@@ -185,9 +185,11 @@ kind: Cluster
 metadata:
   name: sample
 spec:
-  distribution: Kind
-  distributionConfig: kind.yaml
-  sourceDirectory: k8s
+  cluster:
+    distribution: Kind
+    distributionConfig: kind.yaml
+  workload:
+    sourceDirectory: k8s
 `
 
 func TestExtractClusterNameFromContext(t *testing.T) {

@@ -65,11 +65,11 @@ func configureViperEnvironment(viperInstance *viper.Viper) {
 
 	// Explicitly bind nested environment variables for better compatibility
 	_ = viperInstance.BindEnv("metadata.name", "KSAIL_METADATA_NAME")
-	_ = viperInstance.BindEnv("spec.distribution", "KSAIL_SPEC_DISTRIBUTION")
-	_ = viperInstance.BindEnv("spec.sourcedirectory", "KSAIL_SPEC_SOURCEDIRECTORY")
-	_ = viperInstance.BindEnv("spec.connection.context", "KSAIL_SPEC_CONNECTION_CONTEXT")
-	_ = viperInstance.BindEnv("spec.connection.kubeconfig", "KSAIL_SPEC_CONNECTION_KUBECONFIG")
-	_ = viperInstance.BindEnv("spec.connection.timeout", "KSAIL_SPEC_CONNECTION_TIMEOUT")
+	_ = viperInstance.BindEnv("spec.cluster.distribution", "KSAIL_SPEC_DISTRIBUTION")
+	_ = viperInstance.BindEnv("spec.workload.sourcedirectory", "KSAIL_SPEC_SOURCEDIRECTORY")
+	_ = viperInstance.BindEnv("spec.cluster.connection.context", "KSAIL_SPEC_CONNECTION_CONTEXT")
+	_ = viperInstance.BindEnv("spec.cluster.connection.kubeconfig", "KSAIL_SPEC_CONNECTION_KUBECONFIG")
+	_ = viperInstance.BindEnv("spec.cluster.connection.timeout", "KSAIL_SPEC_CONNECTION_TIMEOUT")
 }
 
 // addParentDirectoriesToViperPaths adds parent directories containing ksail.yaml to Viper's search paths.
