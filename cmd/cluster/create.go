@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -1894,13 +1895,14 @@ func runWorkloadValidation(ctx context.Context, cmd *cobra.Command, path string)
 	return nil
 }
 
-// findKustomizationsInPath finds all directories containing kustomization.yaml files.
+// findKustomizationsInPath finds directories containing kustomization.yaml in the root path.
+// Note: This only checks the root directory, not subdirectories recursively.
 func findKustomizationsInPath(rootPath string) ([]string, error) {
 	var kustomizations []string
 	const kustomizationFileName = "kustomization.yaml"
 
 	// Check if current directory has kustomization.yaml
-	kustomizationPath := rootPath + "/" + kustomizationFileName
+	kustomizationPath := filepath.Join(rootPath, kustomizationFileName)
 	if _, err := os.Stat(kustomizationPath); err == nil {
 		kustomizations = append(kustomizations, rootPath)
 	}

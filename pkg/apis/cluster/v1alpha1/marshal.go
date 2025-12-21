@@ -44,16 +44,17 @@ type clusterSpecOutput struct {
 }
 
 type clusterSubSpecOutput struct {
-	DistributionConfig string                   `json:"distributionConfig,omitempty" yaml:"distributionConfig,omitempty"`
-	Connection         *clusterConnectionOutput `json:"connection,omitempty"         yaml:"connection,omitempty"`
-	Distribution       string                   `json:"distribution,omitempty"       yaml:"distribution,omitempty"`
-	CNI                string                   `json:"cni,omitempty"                yaml:"cni,omitempty"`
-	CSI                string                   `json:"csi,omitempty"                yaml:"csi,omitempty"`
-	MetricsServer      string                   `json:"metricsServer,omitempty"      yaml:"metricsServer,omitempty"`
-	CertManager        string                   `json:"certManager,omitempty"        yaml:"certManager,omitempty"`
-	LocalRegistry      string                   `json:"localRegistry,omitempty"      yaml:"localRegistry,omitempty"`
-	GitOpsEngine       string                   `json:"gitOpsEngine,omitempty"       yaml:"gitOpsEngine,omitempty"`
-	Options            *clusterOptionsOutput    `json:"options,omitempty"            yaml:"options,omitempty"`
+	DistributionConfig       string                   `json:"distributionConfig,omitempty"       yaml:"distributionConfig,omitempty"`
+	Connection               *clusterConnectionOutput `json:"connection,omitempty"               yaml:"connection,omitempty"`
+	Distribution             string                   `json:"distribution,omitempty"             yaml:"distribution,omitempty"`
+	CNI                      string                   `json:"cni,omitempty"                      yaml:"cni,omitempty"`
+	CSI                      string                   `json:"csi,omitempty"                      yaml:"csi,omitempty"`
+	MetricsServer            string                   `json:"metricsServer,omitempty"            yaml:"metricsServer,omitempty"`
+	CertManager              string                   `json:"certManager,omitempty"              yaml:"certManager,omitempty"`
+	LocalRegistry            string                   `json:"localRegistry,omitempty"            yaml:"localRegistry,omitempty"`
+	GitOpsEngine             string                   `json:"gitOpsEngine,omitempty"             yaml:"gitOpsEngine,omitempty"`
+	ValidateWorkloadOnCreate string                   `json:"validateWorkloadOnCreate,omitempty" yaml:"validateWorkloadOnCreate,omitempty"`
+	Options                  *clusterOptionsOutput    `json:"options,omitempty"                  yaml:"options,omitempty"`
 }
 
 type workloadSubSpecOutput struct {
@@ -145,6 +146,11 @@ func buildClusterOutput(cluster Cluster) clusterOutput {
 
 	if cluster.Spec.Cluster.LocalRegistry != "" {
 		clusterSubSpec.LocalRegistry = string(cluster.Spec.Cluster.LocalRegistry)
+		hasClusterSubSpec = true
+	}
+
+	if cluster.Spec.Cluster.ValidateWorkloadOnCreate != "" {
+		clusterSubSpec.ValidateWorkloadOnCreate = string(cluster.Spec.Cluster.ValidateWorkloadOnCreate)
 		hasClusterSubSpec = true
 	}
 
@@ -264,6 +270,11 @@ func pruneClusterDefaults(cluster Cluster) Cluster {
 
 	if cluster.Spec.Cluster.LocalRegistry == LocalRegistryDisabled || cluster.Spec.Cluster.LocalRegistry == "" {
 		cluster.Spec.Cluster.LocalRegistry = ""
+	}
+
+	if cluster.Spec.Cluster.ValidateWorkloadOnCreate == ValidateWorkloadOnCreateDisabled ||
+		cluster.Spec.Cluster.ValidateWorkloadOnCreate == "" {
+		cluster.Spec.Cluster.ValidateWorkloadOnCreate = ""
 	}
 
 	if cluster.Spec.Cluster.GitOpsEngine == GitOpsEngineNone || cluster.Spec.Cluster.GitOpsEngine == "" {
