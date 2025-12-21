@@ -104,7 +104,7 @@ func NewScaffolder(cfg v1alpha1.Cluster, writer io.Writer, mirrorRegistries []st
 // Returns:
 //   - error: Any error encountered during scaffolding
 func (s *Scaffolder) Scaffold(output string, force bool) error {
-	previousDistributionConfig := strings.TrimSpace(s.KSailConfig.Spec.DistributionConfig)
+	previousDistributionConfig := strings.TrimSpace(s.KSailConfig.Spec.Cluster.DistributionConfig)
 
 	err := s.generateKSailConfig(output, force)
 	if err != nil {
@@ -148,7 +148,7 @@ func (s *Scaffolder) GenerateContainerdPatches() []string {
 func (s *Scaffolder) GenerateK3dRegistryConfig() k3dv1alpha5.SimpleConfigRegistries {
 	registryConfig := k3dv1alpha5.SimpleConfigRegistries{}
 
-	if s.KSailConfig.Spec.Distribution != v1alpha1.DistributionK3d {
+	if s.KSailConfig.Spec.Cluster.Distribution != v1alpha1.DistributionK3d {
 		return registryConfig
 	}
 
@@ -182,7 +182,7 @@ func (s *Scaffolder) CreateK3dConfig() k3dv1alpha5.SimpleConfig {
 	var extraArgs []k3dv1alpha5.K3sArgWithNodeFilters
 
 	// Disable default CNI (Flannel) if Cilium is requested
-	if s.KSailConfig.Spec.CNI == v1alpha1.CNICilium {
+	if s.KSailConfig.Spec.Cluster.CNI == v1alpha1.CNICilium {
 		extraArgs = append(extraArgs,
 			k3dv1alpha5.K3sArgWithNodeFilters{
 				Arg:         "--flannel-backend=none",
@@ -196,7 +196,7 @@ func (s *Scaffolder) CreateK3dConfig() k3dv1alpha5.SimpleConfig {
 	}
 
 	// Disable metrics-server if explicitly disabled (K3s includes it by default)
-	if s.KSailConfig.Spec.MetricsServer == v1alpha1.MetricsServerDisabled {
+	if s.KSailConfig.Spec.Cluster.MetricsServer == v1alpha1.MetricsServerDisabled {
 		extraArgs = append(extraArgs,
 			k3dv1alpha5.K3sArgWithNodeFilters{
 				Arg:         "--disable=metrics-server",
@@ -227,17 +227,20 @@ func (s *Scaffolder) applyKSailConfigDefaults() v1alpha1.Cluster {
 	config := s.KSailConfig
 
 	// Set the expected context if it's empty, based on the distribution and default cluster names
-	if config.Spec.Connection.Context == "" {
-		expectedContext := v1alpha1.ExpectedContextName(config.Spec.Distribution)
+	if config.Spec.Cluster.Connection.Context == "" {
+		expectedContext := v1alpha1.ExpectedContextName(config.Spec.Cluster.Distribution)
 		if expectedContext != "" {
-			config.Spec.Connection.Context = expectedContext
+			config.Spec.Cluster.Connection.Context = expectedContext
 		}
 	}
 
 	// Set the expected distribution config filename if it's empty or set to default
-	if config.Spec.DistributionConfig == "" || config.Spec.DistributionConfig == KindConfigFile {
-		expectedConfigName := v1alpha1.ExpectedDistributionConfigName(config.Spec.Distribution)
-		config.Spec.DistributionConfig = expectedConfigName
+	if config.Spec.Cluster.DistributionConfig == "" ||
+		config.Spec.Cluster.DistributionConfig == KindConfigFile {
+		expectedConfigName := v1alpha1.ExpectedDistributionConfigName(
+			config.Spec.Cluster.Distribution,
+		)
+		config.Spec.Cluster.DistributionConfig = expectedConfigName
 	}
 
 	return config
@@ -399,7 +402,7 @@ func (s *Scaffolder) generateKSailConfig(output string, force bool) error {
 
 // generateDistributionConfig generates the distribution-specific configuration file.
 func (s *Scaffolder) generateDistributionConfig(output string, force bool) error {
-	switch s.KSailConfig.Spec.Distribution {
+	switch s.KSailConfig.Spec.Cluster.Distribution {
 	case v1alpha1.DistributionKind:
 		return s.generateKindConfig(output, force)
 	case v1alpha1.DistributionK3d:
@@ -415,7 +418,9 @@ func (s *Scaffolder) removeFormerDistributionConfig(output, previous string) err
 		return nil
 	}
 
-	newConfigName := v1alpha1.ExpectedDistributionConfigName(s.KSailConfig.Spec.Distribution)
+	newConfigName := v1alpha1.ExpectedDistributionConfigName(
+		s.KSailConfig.Spec.Cluster.Distribution,
+	)
 	newConfigPath := filepath.Join(output, newConfigName)
 
 	previousPath := previous
@@ -466,7 +471,7 @@ func (s *Scaffolder) generateKindConfig(output string, force bool) error {
 	}
 
 	// Disable default CNI if Cilium is requested
-	if s.KSailConfig.Spec.CNI == v1alpha1.CNICilium {
+	if s.KSailConfig.Spec.Cluster.CNI == v1alpha1.CNICilium {
 		kindConfig.Networking.DisableDefaultCNI = true
 	}
 
@@ -523,18 +528,25 @@ func (s *Scaffolder) generateKustomizationConfig(output string, force bool) erro
 	kustomization := ktypes.Kustomization{}
 
 	opts := yamlgenerator.Options{
-		Output: filepath.Join(output, s.KSailConfig.Spec.SourceDirectory, "kustomization.yaml"),
-		Force:  force,
+		Output: filepath.Join(
+			output,
+			s.KSailConfig.Spec.Workload.SourceDirectory,
+			"kustomization.yaml",
+		),
+		Force: force,
 	}
 
 	return generateWithFileHandling(
 		s,
 		GenerationParams[*ktypes.Kustomization]{
-			Gen:         s.KustomizationGenerator,
-			Model:       &kustomization,
-			Opts:        opts,
-			DisplayName: filepath.Join(s.KSailConfig.Spec.SourceDirectory, "kustomization.yaml"),
-			Force:       force,
+			Gen:   s.KustomizationGenerator,
+			Model: &kustomization,
+			Opts:  opts,
+			DisplayName: filepath.Join(
+				s.KSailConfig.Spec.Workload.SourceDirectory,
+				"kustomization.yaml",
+			),
+			Force: force,
 			WrapErr: func(err error) error {
 				return fmt.Errorf("%w: %w", ErrKustomizationGeneration, err)
 			},

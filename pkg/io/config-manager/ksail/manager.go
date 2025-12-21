@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strconv"
 	"strings"
@@ -196,7 +197,7 @@ func (m *ConfigManager) unmarshalAndApplyDefaults() error {
 	}
 
 	// Reset derived defaults so we can detect whether users explicitly configured these values.
-	m.Config.Spec.LocalRegistry = ""
+	m.Config.Spec.Cluster.LocalRegistry = ""
 
 	// Reset TypeMeta fields only if a config file was found.
 	// This allows validation to catch incorrect values from config files
@@ -214,8 +215,8 @@ func (m *ConfigManager) unmarshalAndApplyDefaults() error {
 	// Do NOT restore defaults for TypeMeta fields - they should be validated as-is.
 	// This ensures validation will catch incorrect/missing apiVersion and kind values.
 
-	m.localRegistryExplicit = m.Config.Spec.LocalRegistry != ""
-	m.localRegistryHostPortExplicit = m.Config.Spec.Options.LocalRegistry.HostPort != 0
+	m.localRegistryExplicit = m.Config.Spec.Cluster.LocalRegistry != ""
+	m.localRegistryHostPortExplicit = m.Config.Spec.Cluster.Options.LocalRegistry.HostPort != 0
 
 	// Apply field selector defaults for empty fields
 	for _, fieldSelector := range m.fieldSelectors {
@@ -224,6 +225,51 @@ func (m *ConfigManager) unmarshalAndApplyDefaults() error {
 			setFieldValue(fieldPtr, fieldSelector.DefaultValue)
 		}
 	}
+
+	// Make kubeconfig path absolute relative to config file directory
+	err = m.makeKubeconfigPathAbsolute()
+	if err != nil {
+		return fmt.Errorf("failed to resolve kubeconfig path: %w", err)
+	}
+
+	return nil
+}
+
+// makeKubeconfigPathAbsolute converts the kubeconfig path to an absolute path.
+// If the path is relative, it's made absolute relative to the config file's directory.
+// If the path starts with ~/, it's expanded to the user's home directory.
+// If no config file was used, the path is made absolute relative to the current working directory.
+func (m *ConfigManager) makeKubeconfigPathAbsolute() error {
+	kubeconfigPath := m.Config.Spec.Cluster.Connection.Kubeconfig
+	if kubeconfigPath == "" {
+		return nil
+	}
+
+	// If it starts with ~/, that will be handled by ExpandHomePath later
+	// If it's already absolute, no change needed
+	if strings.HasPrefix(kubeconfigPath, "~/") || filepath.IsAbs(kubeconfigPath) {
+		return nil
+	}
+
+	// Path is relative - make it absolute
+	var basePath string
+
+	if m.configFileFound && m.Viper.ConfigFileUsed() != "" {
+		// Make it relative to the config file's directory
+		configDir := filepath.Dir(m.Viper.ConfigFileUsed())
+		basePath = configDir
+	} else {
+		// No config file - use current working directory
+		var err error
+
+		basePath, err = os.Getwd()
+		if err != nil {
+			return fmt.Errorf("failed to get working directory: %w", err)
+		}
+	}
+
+	absPath := filepath.Join(basePath, kubeconfigPath)
+	m.Config.Spec.Cluster.Connection.Kubeconfig = absPath
 
 	return nil
 }
@@ -276,7 +322,7 @@ func (m *ConfigManager) applyGitOpsAwareDefaults(flagOverrides map[string]string
 	}
 
 	if !m.wasLocalRegistryExplicit(flagOverrides) {
-		m.Config.Spec.LocalRegistry = m.defaultLocalRegistryBehavior()
+		m.Config.Spec.Cluster.LocalRegistry = m.defaultLocalRegistryBehavior()
 	}
 
 	hostPortExplicit := m.wasLocalRegistryHostPortExplicit(flagOverrides)
@@ -320,16 +366,16 @@ func (m *ConfigManager) defaultLocalRegistryBehavior() v1alpha1.LocalRegistry {
 }
 
 func (m *ConfigManager) applyLocalRegistryPortDefaults(hostPortExplicit bool) {
-	if m.Config.Spec.LocalRegistry == v1alpha1.LocalRegistryEnabled {
-		if !hostPortExplicit && m.Config.Spec.Options.LocalRegistry.HostPort == 0 {
-			m.Config.Spec.Options.LocalRegistry.HostPort = defaultLocalRegistryPort
+	if m.Config.Spec.Cluster.LocalRegistry == v1alpha1.LocalRegistryEnabled {
+		if !hostPortExplicit && m.Config.Spec.Cluster.Options.LocalRegistry.HostPort == 0 {
+			m.Config.Spec.Cluster.Options.LocalRegistry.HostPort = defaultLocalRegistryPort
 		}
 
 		return
 	}
 
 	if !hostPortExplicit {
-		m.Config.Spec.Options.LocalRegistry.HostPort = 0
+		m.Config.Spec.Cluster.Options.LocalRegistry.HostPort = 0
 	}
 }
 
@@ -338,7 +384,7 @@ func (m *ConfigManager) gitOpsEngineSelected() bool {
 		return false
 	}
 
-	switch m.Config.Spec.GitOpsEngine {
+	switch m.Config.Spec.Cluster.GitOpsEngine {
 	case "", v1alpha1.GitOpsEngineNone:
 		return false
 	case v1alpha1.GitOpsEngineFlux:
@@ -531,14 +577,15 @@ func (m *ConfigManager) applyDistributionConfigDefaults() {
 		return
 	}
 
-	expected := expectedDistributionConfigName(m.Config.Spec.Distribution)
+	expected := expectedDistributionConfigName(m.Config.Spec.Cluster.Distribution)
 	if expected == "" {
 		return
 	}
 
-	current := strings.TrimSpace(m.Config.Spec.DistributionConfig)
-	if current == "" || distributionConfigIsOppositeDefault(current, m.Config.Spec.Distribution) {
-		m.Config.Spec.DistributionConfig = expected
+	current := strings.TrimSpace(m.Config.Spec.Cluster.DistributionConfig)
+	if current == "" ||
+		distributionConfigIsOppositeDefault(current, m.Config.Spec.Cluster.Distribution) {
+		m.Config.Spec.Cluster.DistributionConfig = expected
 	}
 }
 
@@ -587,12 +634,13 @@ func isFieldEmpty(fieldPtr any) bool {
 //nolint:cyclop // Switch statement with error handling requires multiple branches
 func (m *ConfigManager) createValidatorForDistribution() (*ksailvalidator.Validator, error) {
 	// Only load distribution config for Cilium CNI validation
-	if m.Config.Spec.DistributionConfig == "" || m.Config.Spec.CNI != v1alpha1.CNICilium {
+	if m.Config.Spec.Cluster.DistributionConfig == "" ||
+		m.Config.Spec.Cluster.CNI != v1alpha1.CNICilium {
 		return ksailvalidator.NewValidator(), nil
 	}
 
 	// Create distribution-specific validator based on configured distribution
-	switch m.Config.Spec.Distribution {
+	switch m.Config.Spec.Cluster.Distribution {
 	case v1alpha1.DistributionKind:
 		kindConfig, err := m.loadKindConfig()
 		if err != nil && !errors.Is(err, ErrDistributionConfigNotFound) {
@@ -622,13 +670,13 @@ func (m *ConfigManager) createValidatorForDistribution() (*ksailvalidator.Valida
 func (m *ConfigManager) loadKindConfig() (*kindv1alpha4.Cluster, error) {
 	// Check if the file actually exists before trying to load it
 	// This prevents validation against default configs during init
-	_, err := os.Stat(m.Config.Spec.DistributionConfig)
+	_, err := os.Stat(m.Config.Spec.Cluster.DistributionConfig)
 	if os.IsNotExist(err) {
 		// File doesn't exist
 		return nil, ErrDistributionConfigNotFound
 	}
 
-	kindManager := kindconfigmanager.NewConfigManager(m.Config.Spec.DistributionConfig)
+	kindManager := kindconfigmanager.NewConfigManager(m.Config.Spec.Cluster.DistributionConfig)
 
 	config, err := kindManager.LoadConfig(nil)
 	if err != nil {
@@ -645,13 +693,13 @@ func (m *ConfigManager) loadKindConfig() (*kindv1alpha4.Cluster, error) {
 func (m *ConfigManager) loadK3dConfig() (*k3dv1alpha5.SimpleConfig, error) {
 	// Check if the file actually exists before trying to load it
 	// This prevents validation against default configs during init
-	_, err := os.Stat(m.Config.Spec.DistributionConfig)
+	_, err := os.Stat(m.Config.Spec.Cluster.DistributionConfig)
 	if os.IsNotExist(err) {
 		// File doesn't exist
 		return nil, ErrDistributionConfigNotFound
 	}
 
-	k3dManager := k3dconfigmanager.NewConfigManager(m.Config.Spec.DistributionConfig)
+	k3dManager := k3dconfigmanager.NewConfigManager(m.Config.Spec.Cluster.DistributionConfig)
 
 	config, err := k3dManager.LoadConfig(nil)
 	if err != nil {

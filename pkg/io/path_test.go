@@ -17,9 +17,10 @@ func TestExpandHomePath(t *testing.T) {
 	}
 
 	tests := []struct {
-		name     string
-		input    string
-		expected string
+		name        string
+		input       string
+		expected    string
+		expectAbsOf string // If set, expect an absolute path of this relative path
 	}{
 		{
 			name:     "expands home prefix",
@@ -27,19 +28,19 @@ func TestExpandHomePath(t *testing.T) {
 			expected: filepath.Join(usr.HomeDir, "some", "nested", "dir"),
 		},
 		{
-			name:     "returns unchanged when no tilde - relative path",
-			input:    filepath.Join("var", "tmp"),
-			expected: filepath.Join("var", "tmp"),
+			name:        "converts relative path to absolute",
+			input:       filepath.Join("var", "tmp"),
+			expectAbsOf: filepath.Join("var", "tmp"),
 		},
 		{
-			name:     "returns unchanged when no tilde - absolute path",
+			name:     "returns unchanged when already absolute",
 			input:    filepath.Join(string(filepath.Separator), "tmp", "file"),
 			expected: filepath.Join(string(filepath.Separator), "tmp", "file"),
 		},
 		{
-			name:     "tilde only unchanged",
-			input:    "~",
-			expected: "~",
+			name:        "tilde only converted to absolute",
+			input:       "~",
+			expectAbsOf: "~",
 		},
 	}
 
@@ -52,7 +53,17 @@ func TestExpandHomePath(t *testing.T) {
 				t.Fatalf("ExpandHomePath returned error: %v", err)
 			}
 
-			if got != testCase.expected {
+			if testCase.expectAbsOf != "" {
+				// Verify it's the absolute version of the relative path
+				expected, err := filepath.Abs(testCase.expectAbsOf)
+				if err != nil {
+					t.Fatalf("failed to get absolute path: %v", err)
+				}
+
+				if got != expected {
+					t.Fatalf("ExpandHomePath(%q) = %q, want %q", testCase.input, got, expected)
+				}
+			} else if got != testCase.expected {
 				t.Fatalf("ExpandHomePath(%q) = %q, want %q", testCase.input, got, testCase.expected)
 			}
 		})

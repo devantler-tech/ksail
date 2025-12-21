@@ -28,7 +28,7 @@ func GetDefaultKubeconfigPath() string {
 //
 // Returns an error if path expansion fails.
 func GetKubeconfigPathFromConfig(cfg *v1alpha1.Cluster) (string, error) {
-	kubeconfigPath := cfg.Spec.Connection.Kubeconfig
+	kubeconfigPath := cfg.Spec.Cluster.Connection.Kubeconfig
 	if kubeconfigPath == "" {
 		kubeconfigPath = GetDefaultKubeconfigPath()
 	}

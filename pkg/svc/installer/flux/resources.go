@@ -122,7 +122,7 @@ func EnsureDefaultResources(
 		return err
 	}
 
-	if clusterCfg.Spec.LocalRegistry == v1alpha1.LocalRegistryEnabled {
+	if clusterCfg.Spec.Cluster.LocalRegistry == v1alpha1.LocalRegistryEnabled {
 		return ensureLocalOCIRepositoryInsecure(ctx, fluxClient)
 	}
 
@@ -131,17 +131,17 @@ func EnsureDefaultResources(
 
 //nolint:unparam // error return kept for consistency with resource building patterns
 func buildFluxInstance(clusterCfg *v1alpha1.Cluster) (*FluxInstance, error) {
-	interval := clusterCfg.Spec.Options.Flux.Interval.Duration
+	interval := clusterCfg.Spec.Cluster.Options.Flux.Interval.Duration
 	if interval <= 0 {
 		interval = fluxIntervalFallback
 	}
 
-	hostPort := clusterCfg.Spec.Options.LocalRegistry.HostPort
+	hostPort := clusterCfg.Spec.Cluster.Options.LocalRegistry.HostPort
 	if hostPort == 0 {
 		hostPort = v1alpha1.DefaultLocalRegistryPort
 	}
 
-	sourceDir := strings.TrimSpace(clusterCfg.Spec.SourceDirectory)
+	sourceDir := strings.TrimSpace(clusterCfg.Spec.Workload.SourceDirectory)
 	if sourceDir == "" {
 		sourceDir = defaultSourceDirectory
 	}
@@ -150,7 +150,7 @@ func buildFluxInstance(clusterCfg *v1alpha1.Cluster) (*FluxInstance, error) {
 	repoHost := registry.LocalRegistryClusterHost
 	repoPort := registry.DefaultRegistryPort
 
-	if clusterCfg.Spec.LocalRegistry != v1alpha1.LocalRegistryEnabled {
+	if clusterCfg.Spec.Cluster.LocalRegistry != v1alpha1.LocalRegistryEnabled {
 		repoHost = registry.DefaultEndpointHost
 		repoPort = int(hostPort)
 	}

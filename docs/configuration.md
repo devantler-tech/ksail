@@ -26,39 +26,41 @@ Each KSail project includes a `ksail.yaml` describing the desired cluster.
 apiVersion: ksail.dev/v1alpha1
 kind: Cluster
 spec:
-  distribution: Kind
-  distributionConfig: kind.yaml
-  sourceDirectory: k8s
   editor: code --wait
-  connection:
-    kubeconfig: ~/.kube/config
-    context: kind-local
-  cni: Default
-  metricsServer: Enabled
-  certManager: Disabled
-  localRegistry: Disabled
-  gitOpsEngine: None
+  cluster:
+    distribution: Kind
+    distributionConfig: kind.yaml
+    connection:
+      kubeconfig: ~/.kube/config
+      context: kind-local
+    cni: Default
+    metricsServer: Enabled
+    certManager: Disabled
+    localRegistry: Disabled
+    gitOpsEngine: None
+  workload:
+    sourceDirectory: k8s
 ```
 
 ### Configuration Fields
 
-| Field                   | Type     | Default              | Values                         | Description                                                     |
-|-------------------------|----------|----------------------|--------------------------------|-----------------------------------------------------------------|
-| `distribution`          | enum     | `Kind`               | `Kind`, `K3d`                  | Kubernetes distribution to use.                                 |
-| `distributionConfig`    | string   | `kind.yaml`          | File path                      | Path to distribution-specific YAML (`kind.yaml` or `k3d.yaml`). |
-| `sourceDirectory`       | string   | `k8s`                | Directory path                 | Location of workload manifests.                                 |
-| `editor`                | string   | –                    | Command with args              | Editor for interactive workflows (e.g. `code --wait`, `vim`).   |
-| `connection.kubeconfig` | string   | `~/.kube/config`     | File path                      | Path to kubeconfig file.                                        |
-| `connection.context`    | string   | Derived from cluster | kubeconfig context             | Context name (Kind: `kind-<name>`, K3d: `k3d-<name>`).          |
-| `connection.timeout`    | duration | –                    | Go duration (e.g. `30s`, `5m`) | Optional timeout for cluster operations.                        |
-| `cni`                   | enum     | `Default`            | `Default`, `Cilium`, `None`    | Container Network Interface to install.                         |
-| `csi`                   | enum     | `Default`            | `Default`, `LocalPathStorage`  | Container Storage Interface (not yet implemented).              |
-| `metricsServer`         | enum     | `Enabled`            | `Enabled`, `Disabled`          | Install metrics-server for resource metrics.                    |
-| `certManager`           | enum     | `Disabled`           | `Enabled`, `Disabled`          | Install cert-manager for TLS certificates.                      |
-| `localRegistry`         | enum     | `Disabled`           | `Enabled`, `Disabled`          | Provision local OCI registry.                                   |
-| `gitOpsEngine`          | enum     | `None`               | `None`, `Flux`, `ArgoCD`       | GitOps engine to install.                                       |
+| Field                           | Type     | Default              | Values                         | Description                                                     |
+|---------------------------------|----------|----------------------|--------------------------------|-----------------------------------------------------------------|
+| `editor`                        | string   | –                    | Command with args              | Editor for interactive workflows (e.g. `code --wait`, `vim`).   |
+| `cluster.distribution`          | enum     | `Kind`               | `Kind`, `K3d`                  | Kubernetes distribution to use.                                 |
+| `cluster.distributionConfig`    | string   | `kind.yaml`          | File path                      | Path to distribution-specific YAML (`kind.yaml` or `k3d.yaml`). |
+| `cluster.connection.kubeconfig` | string   | `~/.kube/config`     | File path                      | Path to kubeconfig file.                                        |
+| `cluster.connection.context`    | string   | Derived from cluster | kubeconfig context             | Context name (Kind: `kind-<name>`, K3d: `k3d-<name>`).          |
+| `cluster.connection.timeout`    | duration | –                    | Go duration (e.g. `30s`, `5m`) | Optional timeout for cluster operations.                        |
+| `cluster.cni`                   | enum     | `Default`            | `Default`, `Cilium`, `None`    | Container Network Interface to install.                         |
+| `cluster.csi`                   | enum     | `Default`            | `Default`, `LocalPathStorage`  | Container Storage Interface (not yet implemented).              |
+| `cluster.metricsServer`         | enum     | `Enabled`            | `Enabled`, `Disabled`          | Install metrics-server for resource metrics.                    |
+| `cluster.certManager`           | enum     | `Disabled`           | `Enabled`, `Disabled`          | Install cert-manager for TLS certificates.                      |
+| `cluster.localRegistry`         | enum     | `Disabled`           | `Enabled`, `Disabled`          | Provision local OCI registry.                                   |
+| `cluster.gitOpsEngine`          | enum     | `None`               | `None`, `Flux`, `ArgoCD`       | GitOps engine to install.                                       |
+| `workload.sourceDirectory`      | string   | `k8s`                | Directory path                 | Location of workload manifests.                                 |
 
-> Omitted fields use defaults (e.g., `cni` defaults to `Default`).
+> Omitted fields use defaults (e.g., `cluster.cni` defaults to `Default`).
 
 ### Distribution Configs
 
@@ -67,7 +69,7 @@ Distribution configuration sits alongside `ksail.yaml`:
 - **`kind.yaml`** – [Kind configuration](https://kind.sigs.k8s.io/docs/user/configuration/)
 - **`k3d.yaml`** – [K3d configuration](https://k3d.io/stable/usage/configfile/)
 
-Reference via `spec.distributionConfig`.
+Reference via `spec.cluster.distributionConfig`.
 
 ### Schema Support
 
@@ -106,21 +108,21 @@ ksail workload validate --help   # Manifest validation options
 
 All cluster commands support these flags (availability varies by command):
 
-| Flag                    | Short | Config Field                 | Default          | Commands                     |
-|-------------------------|-------|------------------------------|------------------|------------------------------|
-| `--distribution`        | `-d`  | `spec.distribution`          | `Kind`           | `init`                       |
-| `--distribution-config` | –     | `spec.distributionConfig`    | `kind.yaml`      | `init`                       |
-| `--context`             | `-c`  | `spec.connection.context`    | Auto-derived     | `init`                       |
-| `--kubeconfig`          | `-k`  | `spec.connection.kubeconfig` | `~/.kube/config` | `init`                       |
-| `--source-directory`    | `-s`  | `spec.sourceDirectory`       | `k8s`            | `init`                       |
-| `--cni`                 | –     | `spec.cni`                   | `Default`        | `init`                       |
-| `--csi`                 | –     | `spec.csi`                   | `Default`        | `init` (not yet implemented) |
-| `--metrics-server`      | –     | `spec.metricsServer`         | `Enabled`        | `init`, `create`             |
-| `--cert-manager`        | –     | `spec.certManager`           | `Disabled`       | `init`, `create`             |
-| `--local-registry`      | –     | `spec.localRegistry`         | `Disabled`       | `init`                       |
-| `--local-registry-port` | –     | (port configuration)         | `5111`           | `init`                       |
-| `--gitops-engine`       | `-g`  | `spec.gitOpsEngine`          | `None`           | `init`                       |
-| `--mirror-registry`     | –     | (multiple allowed)           | None             | `init`                       |
+| Flag                    | Short | Config Field                         | Default          | Commands                     |
+|-------------------------|-------|--------------------------------------|------------------|------------------------------|
+| `--distribution`        | `-d`  | `spec.cluster.distribution`          | `Kind`           | `init`                       |
+| `--distribution-config` | –     | `spec.cluster.distributionConfig`    | `kind.yaml`      | `init`                       |
+| `--context`             | `-c`  | `spec.cluster.connection.context`    | Auto-derived     | `init`                       |
+| `--kubeconfig`          | `-k`  | `spec.cluster.connection.kubeconfig` | `~/.kube/config` | `init`                       |
+| `--source-directory`    | `-s`  | `spec.workload.sourceDirectory`      | `k8s`            | `init`                       |
+| `--cni`                 | –     | `spec.cluster.cni`                   | `Default`        | `init`                       |
+| `--csi`                 | –     | `spec.cluster.csi`                   | `Default`        | `init` (not yet implemented) |
+| `--metrics-server`      | –     | `spec.cluster.metricsServer`         | `Enabled`        | `init`, `create`             |
+| `--cert-manager`        | –     | `spec.cluster.certManager`           | `Disabled`       | `init`, `create`             |
+| `--local-registry`      | –     | `spec.cluster.localRegistry`         | `Disabled`       | `init`                       |
+| `--local-registry-port` | –     | (port configuration)                 | `5111`           | `init`                       |
+| `--gitops-engine`       | `-g`  | `spec.cluster.gitOpsEngine`          | `None`           | `init`                       |
+| `--mirror-registry`     | –     | (multiple allowed)                   | None             | `init`                       |
 
 > Environment variables follow the pattern `KSAIL_SPEC_<FIELD>` where field names are uppercase with underscores.
 
@@ -190,7 +192,7 @@ KSail provides commands for managing workloads through the `ksail workload` subc
 The `reconcile` command respects timeout in this order:
 
 1. `--timeout` flag if provided
-2. `spec.connection.timeout` from `ksail.yaml`
+2. `spec.cluster.connection.timeout` from `ksail.yaml`
 3. Default 5-minute timeout
 
 **Example usage:**

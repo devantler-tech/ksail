@@ -38,10 +38,12 @@ func TestCreateClusterProvisioner(t *testing.T) {
 			factory := clusterprovisioner.DefaultFactory{}
 			cluster := &v1alpha1.Cluster{
 				Spec: v1alpha1.Spec{
-					Distribution:       testCase.distribution,
-					DistributionConfig: configPath,
-					Connection: v1alpha1.Connection{
-						Kubeconfig: "",
+					Cluster: v1alpha1.ClusterSpec{
+						Distribution:       testCase.distribution,
+						DistributionConfig: configPath,
+						Connection: v1alpha1.Connection{
+							Kubeconfig: "",
+						},
 					},
 				},
 			}
@@ -207,10 +209,12 @@ func assertInvalidClusterConfig(
 	factory := clusterprovisioner.DefaultFactory{}
 	cluster := &v1alpha1.Cluster{
 		Spec: v1alpha1.Spec{
-			Distribution:       distribution,
-			DistributionConfig: configPath,
-			Connection: v1alpha1.Connection{
-				Kubeconfig: "",
+			Cluster: v1alpha1.ClusterSpec{
+				Distribution:       distribution,
+				DistributionConfig: configPath,
+				Connection: v1alpha1.Connection{
+					Kubeconfig: "",
+				},
 			},
 		},
 	}

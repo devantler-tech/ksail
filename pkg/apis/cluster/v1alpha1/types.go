@@ -31,9 +31,14 @@ type Cluster struct {
 
 // Spec defines the desired state of a KSail cluster.
 type Spec struct {
+	Editor   string       `json:"editor,omitzero"   jsonschema:"description=Editor command for interactive workflows (e.g. code --wait)"` //nolint:lll
+	Cluster  ClusterSpec  `json:"cluster,omitzero"`
+	Workload WorkloadSpec `json:"workload,omitzero"`
+}
+
+// ClusterSpec defines cluster-related configuration.
+type ClusterSpec struct {
 	DistributionConfig string        `json:"distributionConfig,omitzero"`
-	SourceDirectory    string        `json:"sourceDirectory,omitzero"`
-	Editor             string        `json:"editor,omitzero"             jsonschema:"description=Editor command for interactive workflows (e.g. code --wait)"` //nolint:lll
 	Connection         Connection    `json:"connection,omitzero"`
 	Distribution       Distribution  `json:"distribution,omitzero"`
 	CNI                CNI           `json:"cni,omitzero"`
@@ -43,6 +48,11 @@ type Spec struct {
 	LocalRegistry      LocalRegistry `json:"localRegistry,omitzero"`
 	GitOpsEngine       GitOpsEngine  `json:"gitOpsEngine,omitzero"`
 	Options            Options       `json:"options,omitzero"`
+}
+
+// WorkloadSpec defines workload-related configuration.
+type WorkloadSpec struct {
+	SourceDirectory string `json:"sourceDirectory,omitzero"`
 }
 
 // Connection defines connection options for a KSail cluster.

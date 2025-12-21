@@ -81,7 +81,7 @@ func HandleConnectRunE(
 	}
 
 	// Get context from config
-	context := cfg.Spec.Connection.Context
+	context := cfg.Spec.Cluster.Connection.Context
 
 	// Create k9s client and command
 	k9sClient := k9s.NewClient()
