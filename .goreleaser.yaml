@@ -29,7 +29,7 @@ archives:
 brews:
   - name: ksail
     homepage: "https://github.com/devantler-tech/ksail"
-    description: "CLI tool to manage clusters and workloads"
+    description: "Kubernetes SDK for local GitOps development - manage clusters and cloud-native workloads"
     license: "Apache-2.0"
     directory: Formula
     url_template: "https://github.com/devantler-tech/ksail/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
@@ -40,12 +40,32 @@ brews:
     commit_author:
       name: goreleaserbot
       email: goreleaserbot@users.noreply.github.com
+    dependencies:
+      - name: docker
+        type: optional
     custom_block: |
       def install
         bin.install "ksail"
+
+        # Install shell completions
+        generate_completions_from_executable(bin/"ksail", "completion")
+      end
+
+      def caveats
+        <<~EOS
+          KSail requires Docker to create and manage Kubernetes clusters.
+          Install Docker from: https://docs.docker.com/get-docker/
+
+          Get started with:
+            ksail cluster init
+            ksail cluster create
+        EOS
       end
 
       test do
+        assert_match version.to_s, shell_output("#{bin}/ksail --version")
+        
+        # Test basic initialization (without Docker dependency)
         system bin/"ksail", "--help"
       end
 
