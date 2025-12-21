@@ -240,8 +240,11 @@ func (s *Scaffolder) applyKSailConfigDefaults() v1alpha1.Cluster {
 	}
 
 	// Set the expected distribution config filename if it's empty or set to default
-	if config.Spec.Cluster.DistributionConfig == "" || config.Spec.Cluster.DistributionConfig == KindConfigFile {
-		expectedConfigName := v1alpha1.ExpectedDistributionConfigName(config.Spec.Cluster.Distribution)
+	if config.Spec.Cluster.DistributionConfig == "" ||
+		config.Spec.Cluster.DistributionConfig == KindConfigFile {
+		expectedConfigName := v1alpha1.ExpectedDistributionConfigName(
+			config.Spec.Cluster.Distribution,
+		)
 		config.Spec.Cluster.DistributionConfig = expectedConfigName
 	}
 
@@ -420,7 +423,9 @@ func (s *Scaffolder) removeFormerDistributionConfig(output, previous string) err
 		return nil
 	}
 
-	newConfigName := v1alpha1.ExpectedDistributionConfigName(s.KSailConfig.Spec.Cluster.Distribution)
+	newConfigName := v1alpha1.ExpectedDistributionConfigName(
+		s.KSailConfig.Spec.Cluster.Distribution,
+	)
 	newConfigPath := filepath.Join(output, newConfigName)
 
 	previousPath := previous
@@ -529,18 +534,25 @@ func (s *Scaffolder) generateKustomizationConfig(output string, force bool) erro
 	kustomization := ktypes.Kustomization{}
 
 	opts := yamlgenerator.Options{
-		Output: filepath.Join(output, s.KSailConfig.Spec.Workload.SourceDirectory, "kustomization.yaml"),
-		Force:  force,
+		Output: filepath.Join(
+			output,
+			s.KSailConfig.Spec.Workload.SourceDirectory,
+			"kustomization.yaml",
+		),
+		Force: force,
 	}
 
 	return generateWithFileHandling(
 		s,
 		GenerationParams[*ktypes.Kustomization]{
-			Gen:         s.KustomizationGenerator,
-			Model:       &kustomization,
-			Opts:        opts,
-			DisplayName: filepath.Join(s.KSailConfig.Spec.Workload.SourceDirectory, "kustomization.yaml"),
-			Force:       force,
+			Gen:   s.KustomizationGenerator,
+			Model: &kustomization,
+			Opts:  opts,
+			DisplayName: filepath.Join(
+				s.KSailConfig.Spec.Workload.SourceDirectory,
+				"kustomization.yaml",
+			),
+			Force: force,
 			WrapErr: func(err error) error {
 				return fmt.Errorf("%w: %w", ErrKustomizationGeneration, err)
 			},

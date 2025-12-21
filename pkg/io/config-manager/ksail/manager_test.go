@@ -873,7 +873,11 @@ func TestSetFieldValueWithConvertibleTypes(t *testing.T) {
 		func(t *testing.T, cluster *v1alpha1.Cluster) {
 			t.Helper()
 			// Converted value should be set
-			assert.Equal(t, time.Duration(5000000000), cluster.Spec.Cluster.Connection.Timeout.Duration)
+			assert.Equal(
+				t,
+				time.Duration(5000000000),
+				cluster.Spec.Cluster.Connection.Timeout.Duration,
+			)
 		},
 		false,
 		configmanager.FieldSelector[v1alpha1.Cluster]{

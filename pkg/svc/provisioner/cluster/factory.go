@@ -50,7 +50,11 @@ func (DefaultFactory) Create(
 			cluster.Spec.Cluster.DistributionConfig,
 		)
 	default:
-		return nil, "", fmt.Errorf("%w: %s", ErrUnsupportedDistribution, cluster.Spec.Cluster.Distribution)
+		return nil, "", fmt.Errorf(
+			"%w: %s",
+			ErrUnsupportedDistribution,
+			cluster.Spec.Cluster.Distribution,
+		)
 	}
 }
 

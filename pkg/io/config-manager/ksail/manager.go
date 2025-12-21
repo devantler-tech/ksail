@@ -537,7 +537,8 @@ func (m *ConfigManager) applyDistributionConfigDefaults() {
 	}
 
 	current := strings.TrimSpace(m.Config.Spec.Cluster.DistributionConfig)
-	if current == "" || distributionConfigIsOppositeDefault(current, m.Config.Spec.Cluster.Distribution) {
+	if current == "" ||
+		distributionConfigIsOppositeDefault(current, m.Config.Spec.Cluster.Distribution) {
 		m.Config.Spec.Cluster.DistributionConfig = expected
 	}
 }
@@ -587,7 +588,8 @@ func isFieldEmpty(fieldPtr any) bool {
 //nolint:cyclop // Switch statement with error handling requires multiple branches
 func (m *ConfigManager) createValidatorForDistribution() (*ksailvalidator.Validator, error) {
 	// Only load distribution config for Cilium CNI validation
-	if m.Config.Spec.Cluster.DistributionConfig == "" || m.Config.Spec.Cluster.CNI != v1alpha1.CNICilium {
+	if m.Config.Spec.Cluster.DistributionConfig == "" ||
+		m.Config.Spec.Cluster.CNI != v1alpha1.CNICilium {
 		return ksailvalidator.NewValidator(), nil
 	}
 

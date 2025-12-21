@@ -83,7 +83,11 @@ func TestScaffoldAppliesDistributionDefaults(t *testing.T) {
 			_ = scaffolderInstance.Scaffold(tempDir, false)
 
 			require.Equal(t, testCase.distribution, mocks.ksailLastModel.Spec.Cluster.Distribution)
-			require.Equal(t, testCase.expected, mocks.ksailLastModel.Spec.Cluster.DistributionConfig)
+			require.Equal(
+				t,
+				testCase.expected,
+				mocks.ksailLastModel.Spec.Cluster.DistributionConfig,
+			)
 		})
 	}
 }

@@ -321,7 +321,11 @@ func TestGenerateFlagName(t *testing.T) {
 			&manager.Config.Spec.Cluster.DistributionConfig,
 			"distribution-config",
 		},
-		{"SourceDirectory field", &manager.Config.Spec.Workload.SourceDirectory, "source-directory"},
+		{
+			"SourceDirectory field",
+			&manager.Config.Spec.Workload.SourceDirectory,
+			"source-directory",
+		},
 		{
 			"GitOpsEngine field",
 			&manager.Config.Spec.Cluster.GitOpsEngine,

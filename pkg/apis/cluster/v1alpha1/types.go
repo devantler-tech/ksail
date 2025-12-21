@@ -31,9 +31,9 @@ type Cluster struct {
 
 // Spec defines the desired state of a KSail cluster.
 type Spec struct {
-	Editor   string        `json:"editor,omitzero"   jsonschema:"description=Editor command for interactive workflows (e.g. code --wait)"` //nolint:lll
-	Cluster  ClusterSpec   `json:"cluster,omitzero"`
-	Workload WorkloadSpec  `json:"workload,omitzero"`
+	Editor   string       `json:"editor,omitzero"   jsonschema:"description=Editor command for interactive workflows (e.g. code --wait)"` //nolint:lll
+	Cluster  ClusterSpec  `json:"cluster,omitzero"`
+	Workload WorkloadSpec `json:"workload,omitzero"`
 }
 
 // ClusterSpec defines cluster-related configuration.

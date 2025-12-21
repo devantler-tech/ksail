@@ -36,7 +36,7 @@ func createClusterConfig(context string) *v1alpha1.Cluster {
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{
 				Connection: v1alpha1.Connection{
-						Context: context,
+					Context: context,
 				},
 			},
 		},

@@ -38,9 +38,9 @@ type clusterOutput struct {
 }
 
 type clusterSpecOutput struct {
-	Editor   string                    `json:"editor,omitempty"   yaml:"editor,omitempty"`
-	Cluster  *clusterSubSpecOutput     `json:"cluster,omitempty"  yaml:"cluster,omitempty"`
-	Workload *workloadSubSpecOutput    `json:"workload,omitempty" yaml:"workload,omitempty"`
+	Editor   string                 `json:"editor,omitempty"   yaml:"editor,omitempty"`
+	Cluster  *clusterSubSpecOutput  `json:"cluster,omitempty"  yaml:"cluster,omitempty"`
+	Workload *workloadSubSpecOutput `json:"workload,omitempty" yaml:"workload,omitempty"`
 }
 
 type clusterSubSpecOutput struct {
@@ -93,6 +93,7 @@ func buildClusterOutput(cluster Cluster) clusterOutput {
 
 	// Build cluster sub-spec
 	var clusterSubSpec clusterSubSpecOutput
+
 	hasClusterSubSpec := false
 
 	if cluster.Spec.Cluster.Distribution != "" {
@@ -154,6 +155,7 @@ func buildClusterOutput(cluster Cluster) clusterOutput {
 	}
 
 	var opts clusterOptionsOutput
+
 	hasOpts := false
 
 	if cluster.Spec.Cluster.Options.Flux.Interval.Duration != 0 {
@@ -183,6 +185,7 @@ func buildClusterOutput(cluster Cluster) clusterOutput {
 
 	// Build workload sub-spec
 	var workloadSubSpec workloadSubSpecOutput
+
 	hasWorkloadSubSpec := false
 
 	if cluster.Spec.Workload.SourceDirectory != "" {
@@ -254,19 +257,23 @@ func pruneClusterDefaults(cluster Cluster) Cluster {
 		cluster.Spec.Cluster.CSI = ""
 	}
 
-	if cluster.Spec.Cluster.MetricsServer == MetricsServerEnabled || cluster.Spec.Cluster.MetricsServer == "" {
+	if cluster.Spec.Cluster.MetricsServer == MetricsServerEnabled ||
+		cluster.Spec.Cluster.MetricsServer == "" {
 		cluster.Spec.Cluster.MetricsServer = ""
 	}
 
-	if cluster.Spec.Cluster.CertManager == CertManagerDisabled || cluster.Spec.Cluster.CertManager == "" {
+	if cluster.Spec.Cluster.CertManager == CertManagerDisabled ||
+		cluster.Spec.Cluster.CertManager == "" {
 		cluster.Spec.Cluster.CertManager = ""
 	}
 
-	if cluster.Spec.Cluster.LocalRegistry == LocalRegistryDisabled || cluster.Spec.Cluster.LocalRegistry == "" {
+	if cluster.Spec.Cluster.LocalRegistry == LocalRegistryDisabled ||
+		cluster.Spec.Cluster.LocalRegistry == "" {
 		cluster.Spec.Cluster.LocalRegistry = ""
 	}
 
-	if cluster.Spec.Cluster.GitOpsEngine == GitOpsEngineNone || cluster.Spec.Cluster.GitOpsEngine == "" {
+	if cluster.Spec.Cluster.GitOpsEngine == GitOpsEngineNone ||
+		cluster.Spec.Cluster.GitOpsEngine == "" {
 		cluster.Spec.Cluster.GitOpsEngine = ""
 	}
 
