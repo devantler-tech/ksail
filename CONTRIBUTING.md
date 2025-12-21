@@ -1,8 +1,5 @@
 # Contributing
 
-> [!NOTE]
-> If you are looking to become a maintainer of ksail, please reach out to @devantler on <https://devantler.tech/contact/>. I can facilitate introductions, mentorship, and regular check-ins, while also providing premium GitHub features to maintainers. As a maintainer, you will have the opportunity to obtain mandate to steer the project's direction in collaboration with me and the community.
-
 This project accepts contributions in the form of [**bug reports**](https://github.com/devantler-tech/ksail/issues/new/choose), [**feature requests**](https://github.com/devantler-tech/ksail/issues/new/choose), and **pull requests** (see below). If you are looking to contribute code, please follow the guidelines outlined in this document.
 
 ## Getting Started
