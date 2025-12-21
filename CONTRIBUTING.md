@@ -1,8 +1,5 @@
 # Contributing
 
-> [!NOTE]
-> If you are looking to become a maintainer of ksail, please reach out to @devantler on <https://devantler.tech/contact/>. I can facilitate introductions, mentorship, and regular check-ins, while also providing premium GitHub features to maintainers. As a maintainer, you will have the opportunity to obtain mandate to steer the project's direction in collaboration with me and the community.
-
 This project accepts contributions in the form of [**bug reports**](https://github.com/devantler-tech/ksail/issues/new/choose), [**feature requests**](https://github.com/devantler-tech/ksail/issues/new/choose), and **pull requests** (see below). If you are looking to contribute code, please follow the guidelines outlined in this document.
 
 ## Getting Started
@@ -99,18 +96,6 @@ This project strives to be fully open-source friendly, and as such, all core fun
 For detailed package and API documentation, refer to [pkg.go.dev/github.com/devantler-tech/ksail/v5](https://pkg.go.dev/github.com/devantler-tech/ksail/v5).
 
 ## CI
-
-### Pre-commit Hooks
-
-> **Note**: Pre-commit hooks are automatically executed for user pushes through the [pre-commit.ci](https://pre-commit.ci/) GitHub app, which validates and runs these hooks if you forget to configure them locally or push without hooks enabled. This automatic execution only applies to user pushes and not bot pushes.
-
-KSail uses pre-commit hooks to ensure code quality and consistency before commits are made. This is done via the [pre-commit framework](https://pre-commit.com/). Active hooks are defined in the `.pre-commit-config.yaml` file.
-
-To use these hooks, install pre-commit and run:
-
-```sh
-pre-commit install
-```
 
 ### GitHub Workflows
 
