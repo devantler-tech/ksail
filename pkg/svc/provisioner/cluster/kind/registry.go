@@ -228,7 +228,17 @@ func CleanupRegistries(
 		return fmt.Errorf("failed to cleanup kind registries: %w", errCleanup)
 	}
 
+	// Cleanup hosts directory if it exists
+	CleanupHostsDirectory(clusterName)
+
 	return nil
+}
+
+// CleanupHostsDirectory removes the hosts directory created for the cluster.
+// This is best-effort cleanup and does not return errors.
+func CleanupHostsDirectory(clusterName string) {
+	tempDir := filepath.Join(os.TempDir(), fmt.Sprintf("ksail-kind-hosts-%s", clusterName))
+	_ = os.RemoveAll(tempDir)
 }
 
 // ExtractRegistriesFromKindForTesting extracts registry information from Kind configuration.
