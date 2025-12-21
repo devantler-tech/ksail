@@ -16,7 +16,8 @@ func assertTimeoutEquals(t *testing.T, clusterTimeout time.Duration, expected ti
 
 	cluster := &v1alpha1.Cluster{
 		Spec: v1alpha1.Spec{
-			Connection: v1alpha1.Connection{
+			Cluster: v1alpha1.ClusterSpec{
+				Connection: v1alpha1.Connection{
 				Timeout: metav1.Duration{Duration: clusterTimeout},
 			},
 		},

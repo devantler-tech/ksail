@@ -86,8 +86,10 @@ func TestGetKubeconfigPathFromConfig(t *testing.T) {
 
 			cfg := &v1alpha1.Cluster{
 				Spec: v1alpha1.Spec{
-					Connection: v1alpha1.Connection{
-						Kubeconfig: testCase.kubeconfigPath,
+					Cluster: v1alpha1.ClusterSpec{
+						Connection: v1alpha1.Connection{
+							Kubeconfig: testCase.kubeconfigPath,
+						},
 					},
 				},
 			}

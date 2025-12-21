@@ -104,27 +104,27 @@ func newFieldSelector(
 func createStandardFieldSelectors() []configmanager.FieldSelector[v1alpha1.Cluster] {
 	return []configmanager.FieldSelector[v1alpha1.Cluster]{
 		newFieldSelector(
-			func(c *v1alpha1.Cluster) any { return &c.Spec.Distribution },
+			func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.Distribution },
 			v1alpha1.DistributionKind,
 			"Kubernetes distribution",
 		),
 		newFieldSelector(
-			func(c *v1alpha1.Cluster) any { return &c.Spec.DistributionConfig },
+			func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.DistributionConfig },
 			"",
 			"Distribution config",
 		),
 		newFieldSelector(
-			func(c *v1alpha1.Cluster) any { return &c.Spec.SourceDirectory },
+			func(c *v1alpha1.Cluster) any { return &c.Spec.Workload.SourceDirectory },
 			"k8s",
 			"Source directory",
 		),
 		newFieldSelector(
-			func(c *v1alpha1.Cluster) any { return &c.Spec.Connection.Context },
+			func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.Connection.Context },
 			"",
 			"Kubernetes context",
 		),
 		newFieldSelector(
-			func(c *v1alpha1.Cluster) any { return &c.Spec.Connection.Timeout },
+			func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.Connection.Timeout },
 			metav1.Duration{Duration: 5 * time.Minute},
 			"Connection timeout",
 		),
@@ -158,7 +158,7 @@ func TestLoadConfigLoadsKindDistributionConfig(t *testing.T) {
 
 	_, err := manager.LoadConfig(nil)
 	require.NoError(t, err)
-	assert.Equal(t, kindConfigPath, manager.Config.Spec.DistributionConfig)
+	assert.Equal(t, kindConfigPath, manager.Config.Spec.Cluster.DistributionConfig)
 }
 
 //nolint:paralleltest // Uses t.Chdir to isolate file system state for config loading.
@@ -189,7 +189,7 @@ func TestLoadConfigLoadsK3dDistributionConfig(t *testing.T) {
 	_, err := manager.LoadConfig(nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "validation reported")
-	assert.Equal(t, k3dConfigPath, manager.Config.Spec.DistributionConfig)
+	assert.Equal(t, k3dConfigPath, manager.Config.Spec.Cluster.DistributionConfig)
 }
 
 //nolint:paralleltest // Uses t.Chdir to isolate file system state for config loading.
@@ -207,8 +207,8 @@ func TestLoadConfigFromFlagsOnlyIgnoresExistingConfig(t *testing.T) {
 	config, err := manager.LoadConfigFromFlagsOnly()
 	require.NoError(t, err)
 
-	assert.Equal(t, v1alpha1.DistributionKind, config.Spec.Distribution)
-	assert.Equal(t, "kind.yaml", config.Spec.DistributionConfig)
+	assert.Equal(t, v1alpha1.DistributionKind, config.Spec.Cluster.Distribution)
+	assert.Equal(t, "kind.yaml", config.Spec.Cluster.DistributionConfig)
 }
 
 //nolint:paralleltest // Uses t.Chdir to isolate file system state for config loading.
@@ -234,15 +234,15 @@ func TestLoadConfigAppliesFlagOverrides(t *testing.T) {
 	_, err := manager.LoadConfig(nil)
 	require.NoError(t, err)
 
-	assert.Equal(t, v1alpha1.DistributionK3d, manager.Config.Spec.Distribution)
-	assert.Equal(t, "k3d.yaml", manager.Config.Spec.DistributionConfig)
+	assert.Equal(t, v1alpha1.DistributionK3d, manager.Config.Spec.Cluster.Distribution)
+	assert.Equal(t, "k3d.yaml", manager.Config.Spec.Cluster.DistributionConfig)
 }
 
 // createFieldSelectorsWithName creates field selectors including name field.
 func createFieldSelectorsWithName() []configmanager.FieldSelector[v1alpha1.Cluster] {
 	selectors := []configmanager.FieldSelector[v1alpha1.Cluster]{
 		newFieldSelector(
-			func(c *v1alpha1.Cluster) any { return &c.Spec.Distribution },
+			func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.Distribution },
 			v1alpha1.Distribution(""), // Empty distribution for testing defaults
 			"Kubernetes distribution",
 		),
@@ -395,7 +395,7 @@ func TestLoadConfigParsesFluxIntervalFromString(t *testing.T) {
 	_, err := manager.LoadConfig(nil)
 	require.NoError(t, err)
 
-	assert.Equal(t, 150*time.Second, manager.Config.Spec.Options.Flux.Interval.Duration)
+	assert.Equal(t, 150*time.Second, manager.Config.Spec.Cluster.Options.Flux.Interval.Duration)
 }
 
 //nolint:paralleltest // Uses t.Chdir for isolated filesystem state.
@@ -437,8 +437,8 @@ func TestLoadConfigHonorsExplicitLocalRegistrySetting(t *testing.T) {
 	_, err := manager.LoadConfig(nil)
 	require.NoError(t, err)
 
-	require.Equal(t, v1alpha1.GitOpsEngineFlux, manager.Config.Spec.GitOpsEngine)
-	assert.Equal(t, v1alpha1.LocalRegistryDisabled, manager.Config.Spec.LocalRegistry)
+	require.Equal(t, v1alpha1.GitOpsEngineFlux, manager.Config.Spec.Cluster.GitOpsEngine)
+	assert.Equal(t, v1alpha1.LocalRegistryDisabled, manager.Config.Spec.Cluster.LocalRegistry)
 }
 
 //nolint:paralleltest // Uses t.Chdir for isolated filesystem state.
@@ -479,12 +479,12 @@ func TestLoadConfigAppliesLocalRegistryDefaults(t *testing.T) {
 			_, err := manager.LoadConfig(nil)
 			require.NoError(t, err)
 
-			require.Equal(t, testCase.gitOpsEngine, manager.Config.Spec.GitOpsEngine)
-			assert.Equal(t, testCase.expectedBehavior, manager.Config.Spec.LocalRegistry)
+			require.Equal(t, testCase.gitOpsEngine, manager.Config.Spec.Cluster.GitOpsEngine)
+			assert.Equal(t, testCase.expectedBehavior, manager.Config.Spec.Cluster.LocalRegistry)
 			assert.Equal(
 				t,
 				testCase.expectedHostPort,
-				manager.Config.Spec.Options.LocalRegistry.HostPort,
+				manager.Config.Spec.Cluster.Options.LocalRegistry.HostPort,
 			)
 		})
 	}
@@ -504,8 +504,8 @@ func TestLoadConfigDefaultsLocalRegistryDisabledWhenGitOpsEngineUnset(t *testing
 	_, err := manager.LoadConfig(nil)
 	require.NoError(t, err)
 
-	assert.Equal(t, v1alpha1.LocalRegistryDisabled, manager.Config.Spec.LocalRegistry)
-	assert.Equal(t, int32(0), manager.Config.Spec.Options.LocalRegistry.HostPort)
+	assert.Equal(t, v1alpha1.LocalRegistryDisabled, manager.Config.Spec.Cluster.LocalRegistry)
+	assert.Equal(t, int32(0), manager.Config.Spec.Cluster.Options.LocalRegistry.HostPort)
 }
 
 func TestNewCommandConfigManagerBindsFlags(t *testing.T) {
@@ -557,8 +557,8 @@ func TestLoadConfigSilentSkipsNotifications(t *testing.T) {
 	assert.Empty(t, output.String(), "silent load should not emit notifications")
 
 	require.NotNil(t, cluster)
-	assert.Equal(t, v1alpha1.DistributionKind, cluster.Spec.Distribution)
-	assert.Equal(t, "kind.yaml", cluster.Spec.DistributionConfig)
+	assert.Equal(t, v1alpha1.DistributionKind, cluster.Spec.Cluster.Distribution)
+	assert.Equal(t, "kind.yaml", cluster.Spec.Cluster.DistributionConfig)
 }
 
 // TestLoadConfigValidationFailureMessages verifies validation error notifications.
@@ -577,8 +577,8 @@ func TestLoadConfigValidationFailureMessages(t *testing.T) {
 
 	manager.Config.Kind = ""
 	manager.Config.APIVersion = ""
-	manager.Config.Spec.Distribution = ""
-	manager.Config.Spec.DistributionConfig = ""
+	manager.Config.Spec.Cluster.Distribution = ""
+	manager.Config.Spec.Cluster.DistributionConfig = ""
 
 	_, err := manager.LoadConfig(nil)
 	require.Error(t, err)
@@ -624,7 +624,7 @@ func testLoadConfigCase(
 		require.NoError(t, err)
 
 		require.NotNil(t, cluster)
-		assert.Equal(t, testCase.expectedDistribution, cluster.Spec.Distribution)
+		assert.Equal(t, testCase.expectedDistribution, cluster.Spec.Cluster.Distribution)
 
 		// Test that subsequent calls return the same config
 		cluster2, err := manager.LoadConfig(nil)
@@ -654,7 +654,7 @@ func TestAddFlagsFromFields(t *testing.T) {
 			name: "AddFlagsFromFields with distribution selector",
 			fieldSelectors: []configmanager.FieldSelector[v1alpha1.Cluster]{
 				newFieldSelector(
-					func(c *v1alpha1.Cluster) any { return &c.Spec.Distribution },
+					func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.Distribution },
 					v1alpha1.DistributionKind,
 					"Kubernetes distribution",
 				),
@@ -726,7 +726,7 @@ func TestLoadConfigConfigProperty(t *testing.T) {
 
 	// After loading, Config property should be accessible and equal to returned cluster
 	assert.Equal(t, cluster, manager.Config)
-	assert.Equal(t, v1alpha1.DistributionKind, manager.Config.Spec.Distribution)
+	assert.Equal(t, v1alpha1.DistributionKind, manager.Config.Spec.Cluster.Distribution)
 }
 
 // testFieldValueSetting is a helper function for testing field value setting scenarios.
@@ -752,7 +752,7 @@ func testFieldValueSetting(
 			Description:  description,
 		},
 		{
-			Selector:     func(c *v1alpha1.Cluster) any { return &c.Spec.DistributionConfig },
+			Selector:     func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.DistributionConfig },
 			DefaultValue: "kind.yaml",
 			Description:  "Distribution config",
 		},
@@ -780,14 +780,14 @@ func testFieldValueSetting(
 func TestSetFieldValueWithNilDefault(t *testing.T) {
 	testFieldValueSetting(
 		t,
-		func(c *v1alpha1.Cluster) any { return &c.Spec.Distribution },
+		func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.Distribution },
 		nil, // nil value should be handled gracefully
 		"Test nil default",
 		func(t *testing.T, cluster *v1alpha1.Cluster) {
 			t.Helper()
 			// When default is nil, field should remain empty
 			if cluster != nil {
-				assert.Empty(t, cluster.Spec.Distribution)
+				assert.Empty(t, cluster.Spec.Cluster.Distribution)
 			}
 		},
 		true,
@@ -800,14 +800,14 @@ func TestSetFieldValueWithNilDefault(t *testing.T) {
 func TestSetFieldValueWithNonConvertibleTypes(t *testing.T) {
 	testFieldValueSetting(
 		t,
-		func(c *v1alpha1.Cluster) any { return &c.Spec.Distribution },
+		func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.Distribution },
 		123, // int cannot be converted to string
 		"Test non-convertible type",
 		func(t *testing.T, cluster *v1alpha1.Cluster) {
 			t.Helper()
 			// When type is not convertible, field should remain empty
 			if cluster != nil {
-				assert.Empty(t, cluster.Spec.Distribution)
+				assert.Empty(t, cluster.Spec.Cluster.Distribution)
 			}
 		},
 		true,
@@ -820,13 +820,13 @@ func TestSetFieldValueWithNonConvertibleTypes(t *testing.T) {
 func TestSetFieldValueWithDirectlyAssignableTypes(t *testing.T) {
 	testFieldValueSetting(
 		t,
-		func(c *v1alpha1.Cluster) any { return &c.Spec.Distribution },
+		func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.Distribution },
 		v1alpha1.DistributionK3d,
 		"Test direct assignment",
 		func(t *testing.T, cluster *v1alpha1.Cluster) {
 			t.Helper()
 			// Direct string assignment should work
-			assert.Equal(t, v1alpha1.DistributionK3d, cluster.Spec.Distribution)
+			assert.Equal(t, v1alpha1.DistributionK3d, cluster.Spec.Cluster.Distribution)
 		},
 		false,
 	)
@@ -838,14 +838,14 @@ func TestSetFieldValueWithDirectlyAssignableTypes(t *testing.T) {
 func TestSetFieldValueWithNonPointerField(t *testing.T) {
 	testFieldValueSetting(
 		t,
-		func(c *v1alpha1.Cluster) any { return c.Spec.Distribution }, // Return value, not pointer
+		func(c *v1alpha1.Cluster) any { return c.Spec.Cluster.Distribution }, // Return value, not pointer
 		"should-not-set",
 		"Test non-pointer field",
 		func(t *testing.T, cluster *v1alpha1.Cluster) {
 			t.Helper()
 			// Non-pointer field should remain empty
 			if cluster != nil {
-				assert.Empty(t, cluster.Spec.Distribution)
+				assert.Empty(t, cluster.Spec.Cluster.Distribution)
 			}
 		},
 		true,
@@ -860,18 +860,18 @@ func TestSetFieldValueWithConvertibleTypes(t *testing.T) {
 		t,
 		func(c *v1alpha1.Cluster) any {
 			// Use the timeout field which accepts time.Duration
-			return &c.Spec.Connection.Timeout.Duration
+			return &c.Spec.Cluster.Connection.Timeout.Duration
 		},
 		int64(5000000000), // 5 seconds as nanoseconds
 		"Test convertible types",
 		func(t *testing.T, cluster *v1alpha1.Cluster) {
 			t.Helper()
 			// Converted value should be set
-			assert.Equal(t, time.Duration(5000000000), cluster.Spec.Connection.Timeout.Duration)
+			assert.Equal(t, time.Duration(5000000000), cluster.Spec.Cluster.Connection.Timeout.Duration)
 		},
 		false,
 		configmanager.FieldSelector[v1alpha1.Cluster]{
-			Selector:     func(c *v1alpha1.Cluster) any { return &c.Spec.Distribution },
+			Selector:     func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.Distribution },
 			DefaultValue: v1alpha1.DistributionKind,
 			Description:  "Distribution",
 		},
@@ -962,8 +962,8 @@ spec:
 	require.NotNil(t, cluster)
 
 	// Verify config was loaded properly (this exercises the "else" branch in readConfigurationFile)
-	assert.Equal(t, v1alpha1.DistributionKind, cluster.Spec.Distribution)
-	assert.Equal(t, "test-config-found", cluster.Spec.SourceDirectory)
+	assert.Equal(t, v1alpha1.DistributionKind, cluster.Spec.Cluster.Distribution)
+	assert.Equal(t, "test-config-found", cluster.Spec.Workload.SourceDirectory)
 }
 
 //nolint:paralleltest // Cannot use t.Parallel() because test changes directories using t.Chdir()
@@ -987,12 +987,12 @@ func TestLoadConfig_ValidationFailureOutputs(t *testing.T) {
 			DefaultValue: "",
 		},
 		configmanager.FieldSelector[v1alpha1.Cluster]{
-			Selector:     func(c *v1alpha1.Cluster) any { return &c.Spec.Distribution },
+			Selector:     func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.Distribution },
 			Description:  "Kubernetes distribution",
 			DefaultValue: v1alpha1.Distribution(""),
 		},
 		configmanager.FieldSelector[v1alpha1.Cluster]{
-			Selector:     func(c *v1alpha1.Cluster) any { return &c.Spec.DistributionConfig },
+			Selector:     func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.DistributionConfig },
 			Description:  "Distribution config",
 			DefaultValue: "",
 		},
@@ -1177,8 +1177,8 @@ func runK3dDistributionScenario(t *testing.T, scenario k3dScenario) {
 		t.Fatalf("expected config to be loaded")
 	}
 
-	if config.Spec.Distribution != v1alpha1.DistributionK3d {
-		t.Fatalf("expected distribution to be K3d, got %s", config.Spec.Distribution)
+	if config.Spec.Cluster.Distribution != v1alpha1.DistributionK3d {
+		t.Fatalf("expected distribution to be K3d, got %s", config.Spec.Cluster.Distribution)
 	}
 }
 

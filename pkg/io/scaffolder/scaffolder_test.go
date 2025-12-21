@@ -857,7 +857,8 @@ func createTestCluster(_ string) v1alpha1.Cluster {
 			Kind:       v1alpha1.Kind,
 		},
 		Spec: v1alpha1.Spec{
-			Distribution:       v1alpha1.DistributionKind,
+			Cluster: v1alpha1.ClusterSpec{
+				Distribution:       v1alpha1.DistributionKind,
 			SourceDirectory:    "k8s",
 			DistributionConfig: "kind.yaml",
 		},
@@ -1028,7 +1029,8 @@ func TestCreateK3dConfig_MetricsServerDisabled(t *testing.T) {
 
 	cluster := v1alpha1.Cluster{
 		Spec: v1alpha1.Spec{
-			Distribution:  v1alpha1.DistributionK3d,
+			Cluster: v1alpha1.ClusterSpec{
+				Distribution:  v1alpha1.DistributionK3d,
 			MetricsServer: v1alpha1.MetricsServerDisabled,
 		},
 	}
@@ -1057,7 +1059,8 @@ func TestCreateK3dConfig_MetricsServerEnabled(t *testing.T) {
 
 	cluster := v1alpha1.Cluster{
 		Spec: v1alpha1.Spec{
-			Distribution:  v1alpha1.DistributionK3d,
+			Cluster: v1alpha1.ClusterSpec{
+				Distribution:  v1alpha1.DistributionK3d,
 			MetricsServer: v1alpha1.MetricsServerEnabled,
 		},
 	}
@@ -1081,7 +1084,8 @@ func TestCreateK3dConfig_MetricsServerDisabledWithCilium(t *testing.T) {
 
 	cluster := v1alpha1.Cluster{
 		Spec: v1alpha1.Spec{
-			Distribution:  v1alpha1.DistributionK3d,
+			Cluster: v1alpha1.ClusterSpec{
+				Distribution:  v1alpha1.DistributionK3d,
 			CNI:           v1alpha1.CNICilium,
 			MetricsServer: v1alpha1.MetricsServerDisabled,
 		},

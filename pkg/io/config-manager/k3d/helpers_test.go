@@ -34,8 +34,10 @@ func createK3dConfig(name string) *v1alpha5.SimpleConfig {
 func createClusterConfig(context string) *v1alpha1.Cluster {
 	return &v1alpha1.Cluster{
 		Spec: v1alpha1.Spec{
-			Connection: v1alpha1.Connection{
-				Context: context,
+			Cluster: v1alpha1.ClusterSpec{
+				Connection: v1alpha1.Connection{
+						Context: context,
+				},
 			},
 		},
 	}
@@ -250,8 +252,9 @@ func TestResolveClusterName(t *testing.T) {
 		}
 		clusterCfg := &v1alpha1.Cluster{
 			Spec: v1alpha1.Spec{
-				Connection: v1alpha1.Connection{
-					Context: "should-not-use-this",
+				Cluster: v1alpha1.ClusterSpec{
+					Connection: v1alpha1.Connection{
+						Context: "should-not-use-this",
 				},
 			},
 		}
@@ -312,8 +315,9 @@ func TestResolveClusterName(t *testing.T) {
 
 		clusterCfg := &v1alpha1.Cluster{
 			Spec: v1alpha1.Spec{
-				Connection: v1alpha1.Connection{
-					Context: "  test-context  ",
+				Cluster: v1alpha1.ClusterSpec{
+					Connection: v1alpha1.Connection{
+						Context: "  test-context  ",
 				},
 			},
 		}

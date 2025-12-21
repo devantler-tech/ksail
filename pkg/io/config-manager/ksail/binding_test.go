@@ -72,7 +72,7 @@ func newDistributionFieldTest() fieldTestCase {
 	return fieldTestCase{
 		name: "Distribution field",
 		fieldSelector: newFieldSelector(
-			func(c *v1alpha1.Cluster) any { return &c.Spec.Distribution },
+			func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.Distribution },
 			v1alpha1.DistributionKind,
 			"Kubernetes distribution",
 		),
@@ -85,7 +85,7 @@ func newSourceDirectoryFieldTest() fieldTestCase {
 	return fieldTestCase{
 		name: "SourceDirectory field",
 		fieldSelector: newFieldSelector(
-			func(c *v1alpha1.Cluster) any { return &c.Spec.SourceDirectory },
+			func(c *v1alpha1.Cluster) any { return &c.Spec.Workload.SourceDirectory },
 			"k8s",
 			"Source directory",
 		),
@@ -98,7 +98,7 @@ func newGitOpsEngineFieldTest() fieldTestCase {
 	return fieldTestCase{
 		name: "GitOpsEngine field",
 		fieldSelector: newFieldSelector(
-			func(c *v1alpha1.Cluster) any { return &c.Spec.GitOpsEngine },
+			func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.GitOpsEngine },
 			v1alpha1.GitOpsEngineNone,
 			"GitOps engine",
 		),
@@ -111,7 +111,7 @@ func newLocalRegistryFieldTest() fieldTestCase {
 	return fieldTestCase{
 		name: "LocalRegistry field",
 		fieldSelector: newFieldSelector(
-			func(c *v1alpha1.Cluster) any { return &c.Spec.LocalRegistry },
+			func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.LocalRegistry },
 			v1alpha1.LocalRegistryDisabled,
 			"Local registry",
 		),
@@ -124,7 +124,7 @@ func newRegistryPortFieldTest() fieldTestCase {
 	return fieldTestCase{
 		name: "RegistryPort field",
 		fieldSelector: newFieldSelector(
-			func(c *v1alpha1.Cluster) any { return &c.Spec.Options.LocalRegistry.HostPort },
+			func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.Options.LocalRegistry.HostPort },
 			int32(5000),
 			"Registry port",
 		),
@@ -137,7 +137,7 @@ func newFluxIntervalFieldTest() fieldTestCase {
 	return fieldTestCase{
 		name: "FluxInterval field",
 		fieldSelector: newFieldSelector(
-			func(c *v1alpha1.Cluster) any { return &c.Spec.Options.Flux.Interval },
+			func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.Options.Flux.Interval },
 			metav1.Duration{Duration: time.Minute},
 			"Flux interval",
 		),
@@ -176,7 +176,7 @@ func getConnectionFieldTests() []fieldTestCase {
 		{
 			name: "Context field",
 			fieldSelector: newFieldSelector(
-				func(c *v1alpha1.Cluster) any { return &c.Spec.Connection.Context },
+				func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.Connection.Context },
 				"",
 				"Kubernetes context",
 			),
@@ -186,7 +186,7 @@ func getConnectionFieldTests() []fieldTestCase {
 		{
 			name: "Timeout field",
 			fieldSelector: newFieldSelector(
-				func(c *v1alpha1.Cluster) any { return &c.Spec.Connection.Timeout },
+				func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.Connection.Timeout },
 				metav1.Duration{Duration: 5 * time.Minute},
 				"Connection timeout",
 			),
@@ -202,7 +202,7 @@ func getNetworkingFieldTests() []fieldTestCase {
 		{
 			name: "CNI field",
 			fieldSelector: newFieldSelector(
-				func(c *v1alpha1.Cluster) any { return &c.Spec.CNI },
+				func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.CNI },
 				v1alpha1.CNICilium,
 				"CNI plugin",
 			),
@@ -212,7 +212,7 @@ func getNetworkingFieldTests() []fieldTestCase {
 		{
 			name: "CSI field",
 			fieldSelector: newFieldSelector(
-				func(c *v1alpha1.Cluster) any { return &c.Spec.CSI },
+				func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.CSI },
 				v1alpha1.CSILocalPathStorage,
 				"CSI driver",
 			),
@@ -222,7 +222,7 @@ func getNetworkingFieldTests() []fieldTestCase {
 		{
 			name: "MetricsServer field",
 			fieldSelector: newFieldSelector(
-				func(c *v1alpha1.Cluster) any { return &c.Spec.MetricsServer },
+				func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.MetricsServer },
 				v1alpha1.MetricsServerEnabled,
 				"Metrics Server configuration",
 			),
@@ -232,7 +232,7 @@ func getNetworkingFieldTests() []fieldTestCase {
 		{
 			name: "CertManager field",
 			fieldSelector: newFieldSelector(
-				func(c *v1alpha1.Cluster) any { return &c.Spec.CertManager },
+				func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.CertManager },
 				v1alpha1.CertManagerDisabled,
 				"Cert-Manager configuration",
 			),
@@ -261,7 +261,7 @@ func testAddFlagFromFieldErrorHandling(t *testing.T) {
 		{
 			name: "Valid field selector",
 			fieldSelector: newFieldSelector(
-				func(c *v1alpha1.Cluster) any { return &c.Spec.Distribution },
+				func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.Distribution },
 				"test",
 				"Test field",
 			),
@@ -315,41 +315,41 @@ func TestGenerateFlagName(t *testing.T) {
 	manager := configmanager.NewConfigManager(io.Discard)
 
 	tests := []flagNameTestCase{
-		{"Distribution field", &manager.Config.Spec.Distribution, "distribution"},
+		{"Distribution field", &manager.Config.Spec.Cluster.Distribution, "distribution"},
 		{
 			"DistributionConfig field",
-			&manager.Config.Spec.DistributionConfig,
+			&manager.Config.Spec.Cluster.DistributionConfig,
 			"distribution-config",
 		},
-		{"SourceDirectory field", &manager.Config.Spec.SourceDirectory, "source-directory"},
+		{"SourceDirectory field", &manager.Config.Spec.Workload.SourceDirectory, "source-directory"},
 		{
 			"GitOpsEngine field",
-			&manager.Config.Spec.GitOpsEngine,
+			&manager.Config.Spec.Cluster.GitOpsEngine,
 			"gitops-engine",
 		},
-		{"Context field", &manager.Config.Spec.Connection.Context, "context"},
-		{"Kubeconfig field", &manager.Config.Spec.Connection.Kubeconfig, "kubeconfig"},
-		{"Timeout field", &manager.Config.Spec.Connection.Timeout, "timeout"},
-		{"CNI field", &manager.Config.Spec.CNI, "cni"},
-		{"CSI field", &manager.Config.Spec.CSI, "csi"},
+		{"Context field", &manager.Config.Spec.Cluster.Connection.Context, "context"},
+		{"Kubeconfig field", &manager.Config.Spec.Cluster.Connection.Kubeconfig, "kubeconfig"},
+		{"Timeout field", &manager.Config.Spec.Cluster.Connection.Timeout, "timeout"},
+		{"CNI field", &manager.Config.Spec.Cluster.CNI, "cni"},
+		{"CSI field", &manager.Config.Spec.Cluster.CSI, "csi"},
 		{
 			"MetricsServer field",
-			&manager.Config.Spec.MetricsServer,
+			&manager.Config.Spec.Cluster.MetricsServer,
 			"metrics-server",
 		},
 		{
 			"LocalRegistry field",
-			&manager.Config.Spec.LocalRegistry,
+			&manager.Config.Spec.Cluster.LocalRegistry,
 			"local-registry",
 		},
 		{
 			"RegistryPort field",
-			&manager.Config.Spec.Options.LocalRegistry.HostPort,
+			&manager.Config.Spec.Cluster.Options.LocalRegistry.HostPort,
 			"local-registry-port",
 		},
 		{
 			"FluxInterval field",
-			&manager.Config.Spec.Options.Flux.Interval,
+			&manager.Config.Spec.Cluster.Options.Flux.Interval,
 			"flux-interval",
 		},
 	}
@@ -443,5 +443,5 @@ func TestAddFlagsFromFields_GitOpsEngineAcceptsArgoCD(t *testing.T) {
 	manager.AddFlagsFromFields(cmd)
 
 	require.NoError(t, cmd.Flags().Set("gitops-engine", "ArgoCD"))
-	assert.Equal(t, v1alpha1.GitOpsEngine("ArgoCD"), manager.Config.Spec.GitOpsEngine)
+	assert.Equal(t, v1alpha1.GitOpsEngine("ArgoCD"), manager.Config.Spec.Cluster.GitOpsEngine)
 }
