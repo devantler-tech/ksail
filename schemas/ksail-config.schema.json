@@ -193,13 +193,13 @@
           "properties": {
             "sourceDirectory": {
               "type": "string"
+            },
+            "validateOnPush": {
+              "type": "boolean"
             }
           },
           "additionalProperties": false,
-          "type": "object",
-          "required": [
-            "sourceDirectory"
-          ]
+          "type": "object"
         }
       },
       "additionalProperties": false,
