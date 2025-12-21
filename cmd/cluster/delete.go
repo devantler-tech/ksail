@@ -140,7 +140,7 @@ func cleanupKindMirrorRegistries(
 	flagSpecs := registry.ParseMirrorSpecs(cfgManager.Viper.GetStringSlice("mirror-registry"))
 	
 	// Try to read existing hosts.toml files
-	existingSpecs, _ := registry.ReadExistingHostsToml("kind-mirror-config")
+	existingSpecs, _ := registry.ReadExistingHostsToml("kind-mirrors")
 	
 	// Merge specs: flag specs override existing specs
 	mirrorSpecs := mergeKindSpecs(existingSpecs, flagSpecs)

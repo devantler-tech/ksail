@@ -221,7 +221,7 @@ func TestCleanupHostsDirectory(t *testing.T) {
 
 	// Create a test directory
 	clusterName := "test-cleanup-cluster"
-	hostsDir := "kind-mirror-config"
+	hostsDir := "kind-mirrors"
 
 	err := os.MkdirAll(hostsDir, 0o755)
 	require.NoError(t, err)

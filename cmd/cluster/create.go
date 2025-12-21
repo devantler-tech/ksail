@@ -959,8 +959,8 @@ func runRegistryStageWithRole(
 		cfgManager.Viper.GetStringSlice("mirror-registry"),
 	)
 
-	// Try to read existing hosts.toml files from kind-mirror-config directory
-	existingSpecs, err := registry.ReadExistingHostsToml("kind-mirror-config")
+	// Try to read existing hosts.toml files from kind-mirrors directory
+	existingSpecs, err := registry.ReadExistingHostsToml("kind-mirrors")
 	if err != nil {
 		return fmt.Errorf("failed to read existing hosts configuration: %w", err)
 	}
@@ -1276,7 +1276,7 @@ func prepareKindConfigWithMirrors(
 	mirrorRegistries := cfgManager.Viper.GetStringSlice("mirror-registry")
 	
 	// Also check for existing hosts.toml files
-	existingSpecs, _ := registry.ReadExistingHostsToml("kind-mirror-config")
+	existingSpecs, _ := registry.ReadExistingHostsToml("kind-mirrors")
 	
 	// If we have either flag specs or existing specs, configuration is needed
 	if len(mirrorRegistries) > 0 || len(existingSpecs) > 0 {
