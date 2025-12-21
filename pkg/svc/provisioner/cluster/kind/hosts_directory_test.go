@@ -1,6 +1,7 @@
 package kindprovisioner_test
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -221,22 +222,22 @@ func TestCleanupHostsDirectory(t *testing.T) {
 
 	// Create a test directory
 	clusterName := "test-cleanup-cluster"
-	tempDir := filepath.Join(os.TempDir(), "ksail-kind-hosts-"+clusterName)
+	hostsDir := fmt.Sprintf(".ksail/kind-hosts-%s", clusterName)
 
-	err := os.MkdirAll(tempDir, 0o755)
+	err := os.MkdirAll(hostsDir, 0o755)
 	require.NoError(t, err)
 
 	// Create a test file
-	testFile := filepath.Join(tempDir, "test.txt")
+	testFile := filepath.Join(hostsDir, "test.txt")
 	err = os.WriteFile(testFile, []byte("test"), 0o644)
 	require.NoError(t, err)
 
 	// Verify directory exists
-	assert.DirExists(t, tempDir)
+	assert.DirExists(t, hostsDir)
 
 	// Cleanup
 	kindprovisioner.CleanupHostsDirectory(clusterName)
 
 	// Verify directory was removed
-	assert.NoDirExists(t, tempDir)
+	assert.NoDirExists(t, hostsDir)
 }

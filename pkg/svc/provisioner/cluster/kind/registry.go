@@ -27,9 +27,10 @@ func SetupRegistryHostsDirectory(
 		return nil, nil
 	}
 
-	// Create temporary directory for hosts configuration
-	tempDir := filepath.Join(os.TempDir(), fmt.Sprintf("ksail-kind-hosts-%s", clusterName))
-	mgr, err := registry.NewHostsDirectoryManager(tempDir)
+	// Create hosts directory in current working directory for declarative configuration
+	// Users can inspect and modify these files as needed
+	hostsDir := fmt.Sprintf(".ksail/kind-hosts-%s", clusterName)
+	mgr, err := registry.NewHostsDirectoryManager(hostsDir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create hosts directory manager: %w", err)
 	}
@@ -237,8 +238,8 @@ func CleanupRegistries(
 // CleanupHostsDirectory removes the hosts directory created for the cluster.
 // This is best-effort cleanup and does not return errors.
 func CleanupHostsDirectory(clusterName string) {
-	tempDir := filepath.Join(os.TempDir(), fmt.Sprintf("ksail-kind-hosts-%s", clusterName))
-	_ = os.RemoveAll(tempDir)
+	hostsDir := fmt.Sprintf(".ksail/kind-hosts-%s", clusterName)
+	_ = os.RemoveAll(hostsDir)
 }
 
 // ExtractRegistriesFromKindForTesting extracts registry information from Kind configuration.
