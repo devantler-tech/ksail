@@ -185,9 +185,10 @@ func TestKSailValidatorCrossConfiguration(t *testing.T) {
 			Spec: v1alpha1.Spec{
 				Cluster: v1alpha1.ClusterSpec{
 					Distribution:       v1alpha1.DistributionKind,
-				DistributionConfig: "kind.yaml",
-				Connection: v1alpha1.Connection{
-					Context: "kind-kind", // No distribution config provided, so use conventional default
+					DistributionConfig: "kind.yaml",
+					Connection: v1alpha1.Connection{
+						Context: "kind-kind", // No distribution config provided, so use conventional default
+					},
 				},
 			},
 		}
@@ -263,9 +264,10 @@ func createValidKSailConfig(distribution v1alpha1.Distribution) *v1alpha1.Cluste
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{
 				Distribution:       distribution,
-			DistributionConfig: distributionConfigFile,
-			Connection: v1alpha1.Connection{
-				Context: contextName,
+				DistributionConfig: distributionConfigFile,
+				Connection: v1alpha1.Connection{
+					Context: contextName,
+				},
 			},
 		},
 	}

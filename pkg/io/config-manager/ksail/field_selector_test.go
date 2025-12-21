@@ -38,7 +38,7 @@ func TestStandardFieldSelectors(t *testing.T) {
 			expectedDefault: v1alpha1.DistributionKind,
 			assertPointer: func(t *testing.T, cluster *v1alpha1.Cluster, ptr any) {
 				t.Helper()
-				assertPointerSame(t, ptr, &cluster.Spec.Distribution)
+				assertPointerSame(t, ptr, &cluster.Spec.Cluster.Distribution)
 			},
 		},
 		{
@@ -48,7 +48,7 @@ func TestStandardFieldSelectors(t *testing.T) {
 			expectedDefault: "k8s",
 			assertPointer: func(t *testing.T, cluster *v1alpha1.Cluster, ptr any) {
 				t.Helper()
-				assertPointerSame(t, ptr, &cluster.Spec.SourceDirectory)
+				assertPointerSame(t, ptr, &cluster.Spec.Workload.SourceDirectory)
 			},
 		},
 		{
@@ -58,7 +58,7 @@ func TestStandardFieldSelectors(t *testing.T) {
 			expectedDefault: "",
 			assertPointer: func(t *testing.T, cluster *v1alpha1.Cluster, ptr any) {
 				t.Helper()
-				assertPointerSame(t, ptr, &cluster.Spec.DistributionConfig)
+				assertPointerSame(t, ptr, &cluster.Spec.Cluster.DistributionConfig)
 			},
 		},
 		{
@@ -68,7 +68,7 @@ func TestStandardFieldSelectors(t *testing.T) {
 			expectedDefault: nil,
 			assertPointer: func(t *testing.T, cluster *v1alpha1.Cluster, ptr any) {
 				t.Helper()
-				assertPointerSame(t, ptr, &cluster.Spec.Connection.Context)
+				assertPointerSame(t, ptr, &cluster.Spec.Cluster.Connection.Context)
 			},
 		},
 		{
@@ -78,7 +78,7 @@ func TestStandardFieldSelectors(t *testing.T) {
 			expectedDefault: v1alpha1.CNIDefault,
 			assertPointer: func(t *testing.T, cluster *v1alpha1.Cluster, ptr any) {
 				t.Helper()
-				assertPointerSame(t, ptr, &cluster.Spec.CNI)
+				assertPointerSame(t, ptr, &cluster.Spec.Cluster.CNI)
 			},
 		},
 		{
@@ -90,7 +90,7 @@ func TestStandardFieldSelectors(t *testing.T) {
 			expectedDefault: v1alpha1.GitOpsEngineNone,
 			assertPointer: func(t *testing.T, cluster *v1alpha1.Cluster, ptr any) {
 				t.Helper()
-				assertPointerSame(t, ptr, &cluster.Spec.GitOpsEngine)
+				assertPointerSame(t, ptr, &cluster.Spec.Cluster.GitOpsEngine)
 			},
 		},
 		{
@@ -102,7 +102,7 @@ func TestStandardFieldSelectors(t *testing.T) {
 			expectedDefault: v1alpha1.LocalRegistryDisabled,
 			assertPointer: func(t *testing.T, cluster *v1alpha1.Cluster, ptr any) {
 				t.Helper()
-				assertPointerSame(t, ptr, &cluster.Spec.LocalRegistry)
+				assertPointerSame(t, ptr, &cluster.Spec.Cluster.LocalRegistry)
 			},
 		},
 		{
@@ -112,7 +112,7 @@ func TestStandardFieldSelectors(t *testing.T) {
 			expectedDefault: v1alpha1.DefaultLocalRegistryPort,
 			assertPointer: func(t *testing.T, cluster *v1alpha1.Cluster, ptr any) {
 				t.Helper()
-				assertPointerSame(t, ptr, &cluster.Spec.Options.LocalRegistry.HostPort)
+				assertPointerSame(t, ptr, &cluster.Spec.Cluster.Options.LocalRegistry.HostPort)
 			},
 		},
 		{
@@ -122,7 +122,7 @@ func TestStandardFieldSelectors(t *testing.T) {
 			expectedDefault: metav1.Duration{Duration: time.Minute},
 			assertPointer: func(t *testing.T, cluster *v1alpha1.Cluster, ptr any) {
 				t.Helper()
-				assertPointerSame(t, ptr, &cluster.Spec.Options.Flux.Interval)
+				assertPointerSame(t, ptr, &cluster.Spec.Cluster.Options.Flux.Interval)
 			},
 		},
 		{
@@ -132,7 +132,7 @@ func TestStandardFieldSelectors(t *testing.T) {
 			expectedDefault: v1alpha1.MetricsServerEnabled,
 			assertPointer: func(t *testing.T, cluster *v1alpha1.Cluster, ptr any) {
 				t.Helper()
-				assertPointerSame(t, ptr, &cluster.Spec.MetricsServer)
+				assertPointerSame(t, ptr, &cluster.Spec.Cluster.MetricsServer)
 			},
 		},
 		{
@@ -142,7 +142,7 @@ func TestStandardFieldSelectors(t *testing.T) {
 			expectedDefault: v1alpha1.CertManagerDisabled,
 			assertPointer: func(t *testing.T, cluster *v1alpha1.Cluster, ptr any) {
 				t.Helper()
-				assertPointerSame(t, ptr, &cluster.Spec.CertManager)
+				assertPointerSame(t, ptr, &cluster.Spec.Cluster.CertManager)
 			},
 		},
 		{
@@ -152,7 +152,7 @@ func TestStandardFieldSelectors(t *testing.T) {
 			expectedDefault: v1alpha1.CSIDefault,
 			assertPointer: func(t *testing.T, cluster *v1alpha1.Cluster, ptr any) {
 				t.Helper()
-				assertPointerSame(t, ptr, &cluster.Spec.CSI)
+				assertPointerSame(t, ptr, &cluster.Spec.Cluster.CSI)
 			},
 		},
 	}
