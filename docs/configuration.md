@@ -58,6 +58,7 @@ spec:
 | `cluster.certManager`           | enum     | `Disabled`           | `Enabled`, `Disabled`          | Install cert-manager for TLS certificates.                      |
 | `cluster.localRegistry`         | enum     | `Disabled`           | `Enabled`, `Disabled`          | Provision local OCI registry.                                   |
 | `cluster.gitOpsEngine`          | enum     | `None`               | `None`, `Flux`, `ArgoCD`       | GitOps engine to install.                                       |
+| `cluster.validateWorkloadOnCreate` | enum  | `Disabled`           | `Enabled`, `Disabled`          | Validate workload manifests after cluster creation.             |
 | `workload.sourceDirectory`      | string   | `k8s`                | Directory path                 | Location of workload manifests.                                 |
 
 > Omitted fields use defaults (e.g., `cluster.cni` defaults to `Default`).
@@ -122,6 +123,7 @@ All cluster commands support these flags (availability varies by command):
 | `--local-registry`      | –     | `spec.cluster.localRegistry`         | `Disabled`       | `init`                       |
 | `--local-registry-port` | –     | (port configuration)                 | `5111`           | `init`                       |
 | `--gitops-engine`       | `-g`  | `spec.cluster.gitOpsEngine`          | `None`           | `init`                       |
+| `--validate-workload`   | –     | `spec.cluster.validateWorkloadOnCreate` | `Disabled`    | `create`                     |
 | `--mirror-registry`     | –     | (multiple allowed)                   | None             | `init`                       |
 
 > Environment variables follow the pattern `KSAIL_SPEC_<FIELD>` where field names are uppercase with underscores.
@@ -158,6 +160,12 @@ ksail cluster init \
 
 ```bash
 ksail cluster init --gitops-engine Flux --local-registry Enabled
+```
+
+**Validate workloads during cluster creation:**
+
+```bash
+ksail cluster create --validate-workload Enabled
 ```
 
 ### Workload Commands
