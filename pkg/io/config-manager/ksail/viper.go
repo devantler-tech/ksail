@@ -68,7 +68,10 @@ func configureViperEnvironment(viperInstance *viper.Viper) {
 	_ = viperInstance.BindEnv("spec.cluster.distribution", "KSAIL_SPEC_DISTRIBUTION")
 	_ = viperInstance.BindEnv("spec.workload.sourcedirectory", "KSAIL_SPEC_SOURCEDIRECTORY")
 	_ = viperInstance.BindEnv("spec.cluster.connection.context", "KSAIL_SPEC_CONNECTION_CONTEXT")
-	_ = viperInstance.BindEnv("spec.cluster.connection.kubeconfig", "KSAIL_SPEC_CONNECTION_KUBECONFIG")
+	_ = viperInstance.BindEnv(
+		"spec.cluster.connection.kubeconfig",
+		"KSAIL_SPEC_CONNECTION_KUBECONFIG",
+	)
 	_ = viperInstance.BindEnv("spec.cluster.connection.timeout", "KSAIL_SPEC_CONNECTION_TIMEOUT")
 }
 
