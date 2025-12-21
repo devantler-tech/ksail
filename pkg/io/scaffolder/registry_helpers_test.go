@@ -18,7 +18,9 @@ func createTestScaffolderForKind() *scaffolder.Scaffolder {
 			Kind:       "Cluster",
 		},
 		Spec: v1alpha1.Spec{
-			Distribution: v1alpha1.DistributionKind,
+			Cluster: v1alpha1.ClusterSpec{
+				Distribution: v1alpha1.DistributionKind,
+			},
 		},
 	}
 
@@ -32,7 +34,9 @@ func createTestScaffolderForK3d() *scaffolder.Scaffolder {
 			Kind:       "Cluster",
 		},
 		Spec: v1alpha1.Spec{
-			Distribution: v1alpha1.DistributionK3d,
+			Cluster: v1alpha1.ClusterSpec{
+				Distribution: v1alpha1.DistributionK3d,
+			},
 		},
 	}
 

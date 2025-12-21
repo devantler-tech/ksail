@@ -118,7 +118,7 @@ func listPrimaryClusters(
 		return fmt.Errorf("failed to list clusters: %w", err)
 	}
 
-	displayClusterList(clusterCfg.Spec.Distribution, clusters, cmd, includeDistribution)
+	displayClusterList(clusterCfg.Spec.Cluster.Distribution, clusters, cmd, includeDistribution)
 
 	return nil
 }
@@ -132,7 +132,7 @@ func listAdditionalDistributionClusters(
 		v1alpha1.DistributionKind,
 		v1alpha1.DistributionK3d,
 	} {
-		if distribution == clusterCfg.Spec.Distribution {
+		if distribution == clusterCfg.Spec.Cluster.Distribution {
 			continue
 		}
 
@@ -197,10 +197,10 @@ func cloneClusterForDistribution(
 
 	clone := *original
 	clone.Spec = original.Spec
-	clone.Spec.Distribution = distribution
+	clone.Spec.Cluster.Distribution = distribution
 
-	if distribution != original.Spec.Distribution {
-		clone.Spec.DistributionConfig = defaultDistributionConfigPath(distribution)
+	if distribution != original.Spec.Cluster.Distribution {
+		clone.Spec.Cluster.DistributionConfig = defaultDistributionConfigPath(distribution)
 	}
 
 	return &clone

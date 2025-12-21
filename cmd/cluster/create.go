@@ -283,7 +283,7 @@ func handlePostCreationSetup(
 
 	// For custom CNI (Cilium or Calico), install CNI first as metrics-server needs networking
 	// For default CNI, install metrics-server first as it's independent
-	switch clusterCfg.Spec.CNI {
+	switch clusterCfg.Spec.Cluster.CNI {
 	case v1alpha1.CNICilium:
 		err = installCustomCNIAndMetrics(cmd, clusterCfg, tmr, installCiliumCNI, firstActivityShown)
 	case v1alpha1.CNICalico:
@@ -291,7 +291,7 @@ func handlePostCreationSetup(
 	case v1alpha1.CNIDefault, "":
 		err = handleMetricsServer(cmd, clusterCfg, tmr, firstActivityShown)
 	default:
-		return fmt.Errorf("%w: %s", ErrUnsupportedCNI, clusterCfg.Spec.CNI)
+		return fmt.Errorf("%w: %s", ErrUnsupportedCNI, clusterCfg.Spec.Cluster.CNI)
 	}
 
 	if err != nil {
@@ -345,23 +345,23 @@ func loadDistributionConfigs(
 	clusterCfg *v1alpha1.Cluster,
 	lifecycleTimer timer.Timer,
 ) (*v1alpha4.Cluster, *v1alpha5.SimpleConfig, error) {
-	defaultConfigPath := defaultDistributionConfigPath(clusterCfg.Spec.Distribution)
+	defaultConfigPath := defaultDistributionConfigPath(clusterCfg.Spec.Cluster.Distribution)
 
-	configPath := strings.TrimSpace(clusterCfg.Spec.DistributionConfig)
+	configPath := strings.TrimSpace(clusterCfg.Spec.Cluster.DistributionConfig)
 	if configPath == "" || strings.EqualFold(configPath, "auto") {
-		clusterCfg.Spec.DistributionConfig = defaultConfigPath
+		clusterCfg.Spec.Cluster.DistributionConfig = defaultConfigPath
 		configPath = defaultConfigPath
 	}
 
 	// If distribution is K3d but the config path still points to the kind default,
 	// switch to the k3d default so we don’t try to read kind.yaml.
-	if clusterCfg.Spec.Distribution == v1alpha1.DistributionK3d &&
+	if clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionK3d &&
 		configPath == defaultDistributionConfigPath(v1alpha1.DistributionKind) {
-		clusterCfg.Spec.DistributionConfig = defaultConfigPath
+		clusterCfg.Spec.Cluster.DistributionConfig = defaultConfigPath
 		configPath = defaultConfigPath
 	}
 
-	switch clusterCfg.Spec.Distribution {
+	switch clusterCfg.Spec.Cluster.Distribution {
 	case v1alpha1.DistributionKind:
 		manager := kindconfigmanager.NewConfigManager(configPath)
 
@@ -393,12 +393,12 @@ func loadDistributionConfigs(
 // 3. Ensures consistency even if the scaffolder-generated config was modified.
 func setupK3dMetricsServer(clusterCfg *v1alpha1.Cluster, k3dConfig *v1alpha5.SimpleConfig) {
 	// Only apply to K3d distribution
-	if clusterCfg.Spec.Distribution != v1alpha1.DistributionK3d || k3dConfig == nil {
+	if clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionK3d || k3dConfig == nil {
 		return
 	}
 
 	// Only add disable flag if explicitly disabled
-	if clusterCfg.Spec.MetricsServer != v1alpha1.MetricsServerDisabled {
+	if clusterCfg.Spec.Cluster.MetricsServer != v1alpha1.MetricsServerDisabled {
 		return
 	}
 
@@ -515,9 +515,9 @@ var (
 
 		return localpathstorageinstaller.NewLocalPathStorageInstaller(
 			kubeconfig,
-			clusterCfg.Spec.Connection.Context,
+			clusterCfg.Spec.Cluster.Connection.Context,
 			timeout,
-			clusterCfg.Spec.Distribution,
+			clusterCfg.Spec.Cluster.Distribution,
 		), nil
 	}
 	// csiInstallerFactoryMu protects concurrent access to csiInstallerFactory in tests.
@@ -906,7 +906,7 @@ func handleRegistryStage(
 		k3dAction,
 	)
 
-	handler, ok := handlers[clusterCfg.Spec.Distribution]
+	handler, ok := handlers[clusterCfg.Spec.Cluster.Distribution]
 	if !ok {
 		return nil
 	}
@@ -1054,7 +1054,7 @@ func createHelmClientForCluster(clusterCfg *v1alpha1.Cluster) (*helm.Client, str
 		return nil, "", fmt.Errorf("failed to access kubeconfig file: %w", err)
 	}
 
-	helmClient, err := helm.NewClient(kubeconfig, clusterCfg.Spec.Connection.Context)
+	helmClient, err := helm.NewClient(kubeconfig, clusterCfg.Spec.Cluster.Connection.Context)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to create Helm client: %w", err)
 	}
@@ -1099,7 +1099,7 @@ func newCiliumInstaller(
 	return ciliuminstaller.NewCiliumInstaller(
 		helmClient,
 		kubeconfig,
-		clusterCfg.Spec.Connection.Context,
+		clusterCfg.Spec.Cluster.Connection.Context,
 		timeout,
 	)
 }
@@ -1147,7 +1147,7 @@ func newCalicoInstaller(
 	return calicoinstaller.NewCalicoInstaller(
 		helmClient,
 		kubeconfig,
-		clusterCfg.Spec.Connection.Context,
+		clusterCfg.Spec.Cluster.Connection.Context,
 		timeout,
 	)
 }
@@ -1209,7 +1209,7 @@ func prepareKindConfigWithMirrors(
 	kindConfig *v1alpha4.Cluster,
 ) bool {
 	// Only for Kind distribution
-	if clusterCfg.Spec.Distribution != v1alpha1.DistributionKind || kindConfig == nil {
+	if clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionKind || kindConfig == nil {
 		return false
 	}
 
@@ -1232,7 +1232,7 @@ func prepareK3dConfigWithMirrors(
 	k3dConfig *v1alpha5.SimpleConfig,
 	mirrorSpecs []registry.MirrorSpec,
 ) bool {
-	if clusterCfg.Spec.Distribution != v1alpha1.DistributionK3d || k3dConfig == nil {
+	if clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionK3d || k3dConfig == nil {
 		return false
 	}
 
@@ -1283,10 +1283,10 @@ func handleMetricsServer(
 	firstActivityShown *bool,
 ) error {
 	// Check if distribution provides metrics-server by default
-	hasMetricsByDefault := clusterCfg.Spec.Distribution.ProvidesMetricsServerByDefault()
+	hasMetricsByDefault := clusterCfg.Spec.Cluster.Distribution.ProvidesMetricsServerByDefault()
 
 	// Enabled: Install if not present by default
-	if clusterCfg.Spec.MetricsServer == v1alpha1.MetricsServerEnabled {
+	if clusterCfg.Spec.Cluster.MetricsServer == v1alpha1.MetricsServerEnabled {
 		if hasMetricsByDefault {
 			// Already present, no action needed
 			return nil
@@ -1305,8 +1305,8 @@ func handleMetricsServer(
 
 	// Disabled: For K3d, this is handled via config before cluster creation (setupK3dMetricsServer)
 	// No post-creation action needed for K3d
-	if clusterCfg.Spec.MetricsServer == v1alpha1.MetricsServerDisabled {
-		if clusterCfg.Spec.Distribution == v1alpha1.DistributionK3d {
+	if clusterCfg.Spec.Cluster.MetricsServer == v1alpha1.MetricsServerDisabled {
+		if clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionK3d {
 			// K3d metrics-server is disabled via config, no action needed here
 			return nil
 		}
@@ -1341,7 +1341,7 @@ func installMetricsServer(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster, tmr 
 	msInstaller := metricsserverinstaller.NewMetricsServerInstaller(
 		helmClient,
 		kubeconfig,
-		clusterCfg.Spec.Connection.Context,
+		clusterCfg.Spec.Cluster.Connection.Context,
 		timeout,
 	)
 
@@ -1384,7 +1384,7 @@ func installCSIIfConfigured(
 	firstActivityShown *bool,
 ) error {
 	// Only install if CSI is set to LocalPathStorage
-	if clusterCfg.Spec.CSI != v1alpha1.CSILocalPathStorage {
+	if clusterCfg.Spec.Cluster.CSI != v1alpha1.CSILocalPathStorage {
 		return nil
 	}
 
@@ -1442,7 +1442,7 @@ func installCertManagerIfConfigured(
 	tmr timer.Timer,
 	firstActivityShown *bool,
 ) error {
-	if clusterCfg.Spec.CertManager != v1alpha1.CertManagerEnabled {
+	if clusterCfg.Spec.Cluster.CertManager != v1alpha1.CertManagerEnabled {
 		return nil
 	}
 
@@ -1519,7 +1519,7 @@ func installArgoCDIfConfigured(
 	tmr timer.Timer,
 	firstActivityShown *bool,
 ) error {
-	if clusterCfg.Spec.GitOpsEngine != v1alpha1.GitOpsEngineArgoCD {
+	if clusterCfg.Spec.Cluster.GitOpsEngine != v1alpha1.GitOpsEngineArgoCD {
 		return nil
 	}
 
@@ -1653,7 +1653,7 @@ func ensureArgoCDResources(
 		return fmt.Errorf("create argocd manager: %w", err)
 	}
 
-	sourceDir := strings.TrimSpace(clusterCfg.Spec.SourceDirectory)
+	sourceDir := strings.TrimSpace(clusterCfg.Spec.Workload.SourceDirectory)
 	if sourceDir == "" {
 		sourceDir = v1alpha1.DefaultSourceDirectory
 	}
@@ -1683,7 +1683,7 @@ func installFluxIfConfigured(
 	tmr timer.Timer,
 	firstActivityShown *bool,
 ) error {
-	if clusterCfg.Spec.GitOpsEngine != v1alpha1.GitOpsEngineFlux {
+	if clusterCfg.Spec.Cluster.GitOpsEngine != v1alpha1.GitOpsEngineFlux {
 		return nil
 	}
 

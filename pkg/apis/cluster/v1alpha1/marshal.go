@@ -38,10 +38,15 @@ type clusterOutput struct {
 }
 
 type clusterSpecOutput struct {
-	Distribution       string                   `json:"distribution,omitempty"       yaml:"distribution,omitempty"`
+	Editor   string                 `json:"editor,omitempty"   yaml:"editor,omitempty"`
+	Cluster  *clusterSubSpecOutput  `json:"cluster,omitempty"  yaml:"cluster,omitempty"`
+	Workload *workloadSubSpecOutput `json:"workload,omitempty" yaml:"workload,omitempty"`
+}
+
+type clusterSubSpecOutput struct {
 	DistributionConfig string                   `json:"distributionConfig,omitempty" yaml:"distributionConfig,omitempty"`
-	SourceDirectory    string                   `json:"sourceDirectory,omitempty"    yaml:"sourceDirectory,omitempty"`
 	Connection         *clusterConnectionOutput `json:"connection,omitempty"         yaml:"connection,omitempty"`
+	Distribution       string                   `json:"distribution,omitempty"       yaml:"distribution,omitempty"`
 	CNI                string                   `json:"cni,omitempty"                yaml:"cni,omitempty"`
 	CSI                string                   `json:"csi,omitempty"                yaml:"csi,omitempty"`
 	MetricsServer      string                   `json:"metricsServer,omitempty"      yaml:"metricsServer,omitempty"`
@@ -49,6 +54,10 @@ type clusterSpecOutput struct {
 	LocalRegistry      string                   `json:"localRegistry,omitempty"      yaml:"localRegistry,omitempty"`
 	GitOpsEngine       string                   `json:"gitOpsEngine,omitempty"       yaml:"gitOpsEngine,omitempty"`
 	Options            *clusterOptionsOutput    `json:"options,omitempty"            yaml:"options,omitempty"`
+}
+
+type workloadSubSpecOutput struct {
+	SourceDirectory string `json:"sourceDirectory,omitempty" yaml:"sourceDirectory,omitempty"`
 }
 
 type clusterConnectionOutput struct {
@@ -76,90 +85,116 @@ func buildClusterOutput(cluster Cluster) clusterOutput {
 
 	hasSpec := false
 
-	if cluster.Spec.Distribution != "" {
-		spec.Distribution = string(cluster.Spec.Distribution)
+	// Editor field (top-level)
+	if cluster.Spec.Editor != "" {
+		spec.Editor = cluster.Spec.Editor
 		hasSpec = true
 	}
 
-	if trimmed := strings.TrimSpace(cluster.Spec.DistributionConfig); trimmed != "" {
-		spec.DistributionConfig = trimmed
-		hasSpec = true
+	// Build cluster sub-spec
+	var clusterSubSpec clusterSubSpecOutput
+
+	hasClusterSubSpec := false
+
+	if cluster.Spec.Cluster.Distribution != "" {
+		clusterSubSpec.Distribution = string(cluster.Spec.Cluster.Distribution)
+		hasClusterSubSpec = true
 	}
 
-	if cluster.Spec.SourceDirectory != "" {
-		spec.SourceDirectory = cluster.Spec.SourceDirectory
-		hasSpec = true
+	if trimmed := strings.TrimSpace(cluster.Spec.Cluster.DistributionConfig); trimmed != "" {
+		clusterSubSpec.DistributionConfig = trimmed
+		hasClusterSubSpec = true
 	}
 
 	var conn clusterConnectionOutput
-	if cluster.Spec.Connection.Kubeconfig != "" {
-		conn.Kubeconfig = cluster.Spec.Connection.Kubeconfig
+	if cluster.Spec.Cluster.Connection.Kubeconfig != "" {
+		conn.Kubeconfig = cluster.Spec.Cluster.Connection.Kubeconfig
 	}
 
-	if cluster.Spec.Connection.Context != "" {
-		conn.Context = cluster.Spec.Connection.Context
+	if cluster.Spec.Cluster.Connection.Context != "" {
+		conn.Context = cluster.Spec.Cluster.Connection.Context
 	}
 
-	if cluster.Spec.Connection.Timeout.Duration != 0 {
-		conn.Timeout = cluster.Spec.Connection.Timeout.Duration.String()
+	if cluster.Spec.Cluster.Connection.Timeout.Duration != 0 {
+		conn.Timeout = cluster.Spec.Cluster.Connection.Timeout.Duration.String()
 	}
 
 	if conn.Kubeconfig != "" || conn.Context != "" || conn.Timeout != "" {
-		spec.Connection = &conn
-		hasSpec = true
+		clusterSubSpec.Connection = &conn
+		hasClusterSubSpec = true
 	}
 
-	if cluster.Spec.CNI != "" {
-		spec.CNI = string(cluster.Spec.CNI)
-		hasSpec = true
+	if cluster.Spec.Cluster.CNI != "" {
+		clusterSubSpec.CNI = string(cluster.Spec.Cluster.CNI)
+		hasClusterSubSpec = true
 	}
 
-	if cluster.Spec.CSI != "" {
-		spec.CSI = string(cluster.Spec.CSI)
-		hasSpec = true
+	if cluster.Spec.Cluster.CSI != "" {
+		clusterSubSpec.CSI = string(cluster.Spec.Cluster.CSI)
+		hasClusterSubSpec = true
 	}
 
-	if cluster.Spec.MetricsServer != "" {
-		spec.MetricsServer = string(cluster.Spec.MetricsServer)
-		hasSpec = true
+	if cluster.Spec.Cluster.MetricsServer != "" {
+		clusterSubSpec.MetricsServer = string(cluster.Spec.Cluster.MetricsServer)
+		hasClusterSubSpec = true
 	}
 
-	if cluster.Spec.CertManager != "" {
-		spec.CertManager = string(cluster.Spec.CertManager)
-		hasSpec = true
+	if cluster.Spec.Cluster.CertManager != "" {
+		clusterSubSpec.CertManager = string(cluster.Spec.Cluster.CertManager)
+		hasClusterSubSpec = true
 	}
 
-	if cluster.Spec.LocalRegistry != "" {
-		spec.LocalRegistry = string(cluster.Spec.LocalRegistry)
-		hasSpec = true
+	if cluster.Spec.Cluster.LocalRegistry != "" {
+		clusterSubSpec.LocalRegistry = string(cluster.Spec.Cluster.LocalRegistry)
+		hasClusterSubSpec = true
 	}
 
-	if cluster.Spec.GitOpsEngine != "" {
-		spec.GitOpsEngine = string(cluster.Spec.GitOpsEngine)
-		hasSpec = true
+	if cluster.Spec.Cluster.GitOpsEngine != "" {
+		clusterSubSpec.GitOpsEngine = string(cluster.Spec.Cluster.GitOpsEngine)
+		hasClusterSubSpec = true
 	}
 
 	var opts clusterOptionsOutput
 
 	hasOpts := false
 
-	if cluster.Spec.Options.Flux.Interval.Duration != 0 {
+	if cluster.Spec.Cluster.Options.Flux.Interval.Duration != 0 {
 		opts.Flux = &fluxOptionsOutput{
-			Interval: cluster.Spec.Options.Flux.Interval.Duration.String(),
+			Interval: cluster.Spec.Cluster.Options.Flux.Interval.Duration.String(),
 		}
 		hasOpts = true
 	}
 
-	if cluster.Spec.Options.LocalRegistry.HostPort != 0 {
+	if cluster.Spec.Cluster.Options.LocalRegistry.HostPort != 0 {
 		opts.LocalRegistry = &localRegistryOptionsOutput{
-			HostPort: cluster.Spec.Options.LocalRegistry.HostPort,
+			HostPort: cluster.Spec.Cluster.Options.LocalRegistry.HostPort,
 		}
 
 		hasOpts = true
 	}
 
 	if hasOpts {
-		spec.Options = &opts
+		clusterSubSpec.Options = &opts
+		hasClusterSubSpec = true
+	}
+
+	if hasClusterSubSpec {
+		spec.Cluster = &clusterSubSpec
+		hasSpec = true
+	}
+
+	// Build workload sub-spec
+	var workloadSubSpec workloadSubSpecOutput
+
+	hasWorkloadSubSpec := false
+
+	if cluster.Spec.Workload.SourceDirectory != "" {
+		workloadSubSpec.SourceDirectory = cluster.Spec.Workload.SourceDirectory
+		hasWorkloadSubSpec = true
+	}
+
+	if hasWorkloadSubSpec {
+		spec.Workload = &workloadSubSpec
 		hasSpec = true
 	}
 
@@ -180,72 +215,76 @@ func buildClusterOutput(cluster Cluster) clusterOutput {
 //nolint:cyclop,funlen // default pruning requires checking multiple fields
 func pruneClusterDefaults(cluster Cluster) Cluster {
 	// Distribution defaults
-	distribution := cluster.Spec.Distribution
+	distribution := cluster.Spec.Cluster.Distribution
 	if distribution == "" {
 		distribution = DistributionKind
 	}
 
-	if cluster.Spec.Distribution == DistributionKind {
-		cluster.Spec.Distribution = ""
+	if cluster.Spec.Cluster.Distribution == DistributionKind {
+		cluster.Spec.Cluster.Distribution = ""
 	}
 
 	expectedDistConfig := ExpectedDistributionConfigName(distribution)
 
-	trimmedConfig := strings.TrimSpace(cluster.Spec.DistributionConfig)
+	trimmedConfig := strings.TrimSpace(cluster.Spec.Cluster.DistributionConfig)
 	if trimmedConfig == "" || trimmedConfig == expectedDistConfig {
-		cluster.Spec.DistributionConfig = ""
+		cluster.Spec.Cluster.DistributionConfig = ""
 	}
 
-	if cluster.Spec.SourceDirectory == DefaultSourceDirectory ||
-		cluster.Spec.SourceDirectory == "" {
-		cluster.Spec.SourceDirectory = ""
+	if cluster.Spec.Workload.SourceDirectory == DefaultSourceDirectory ||
+		cluster.Spec.Workload.SourceDirectory == "" {
+		cluster.Spec.Workload.SourceDirectory = ""
 	}
 
-	if cluster.Spec.Connection.Kubeconfig == DefaultKubeconfigPath ||
-		cluster.Spec.Connection.Kubeconfig == "" {
-		cluster.Spec.Connection.Kubeconfig = ""
+	if cluster.Spec.Cluster.Connection.Kubeconfig == DefaultKubeconfigPath ||
+		cluster.Spec.Cluster.Connection.Kubeconfig == "" {
+		cluster.Spec.Cluster.Connection.Kubeconfig = ""
 	}
 
-	if defaultCtx := ExpectedContextName(distribution); cluster.Spec.Connection.Context == defaultCtx {
-		cluster.Spec.Connection.Context = ""
+	if defaultCtx := ExpectedContextName(distribution); cluster.Spec.Cluster.Connection.Context == defaultCtx {
+		cluster.Spec.Cluster.Connection.Context = ""
 	}
 
-	if cluster.Spec.Connection.Timeout.Duration == 0 {
-		cluster.Spec.Connection.Timeout = metav1.Duration{}
+	if cluster.Spec.Cluster.Connection.Timeout.Duration == 0 {
+		cluster.Spec.Cluster.Connection.Timeout = metav1.Duration{}
 	}
 
-	if cluster.Spec.CNI == CNIDefault {
-		cluster.Spec.CNI = ""
+	if cluster.Spec.Cluster.CNI == CNIDefault {
+		cluster.Spec.Cluster.CNI = ""
 	}
 
-	if cluster.Spec.CSI == CSIDefault {
-		cluster.Spec.CSI = ""
+	if cluster.Spec.Cluster.CSI == CSIDefault {
+		cluster.Spec.Cluster.CSI = ""
 	}
 
-	if cluster.Spec.MetricsServer == MetricsServerEnabled || cluster.Spec.MetricsServer == "" {
-		cluster.Spec.MetricsServer = ""
+	if cluster.Spec.Cluster.MetricsServer == MetricsServerEnabled ||
+		cluster.Spec.Cluster.MetricsServer == "" {
+		cluster.Spec.Cluster.MetricsServer = ""
 	}
 
-	if cluster.Spec.CertManager == CertManagerDisabled || cluster.Spec.CertManager == "" {
-		cluster.Spec.CertManager = ""
+	if cluster.Spec.Cluster.CertManager == CertManagerDisabled ||
+		cluster.Spec.Cluster.CertManager == "" {
+		cluster.Spec.Cluster.CertManager = ""
 	}
 
-	if cluster.Spec.LocalRegistry == LocalRegistryDisabled || cluster.Spec.LocalRegistry == "" {
-		cluster.Spec.LocalRegistry = ""
+	if cluster.Spec.Cluster.LocalRegistry == LocalRegistryDisabled ||
+		cluster.Spec.Cluster.LocalRegistry == "" {
+		cluster.Spec.Cluster.LocalRegistry = ""
 	}
 
-	if cluster.Spec.GitOpsEngine == GitOpsEngineNone || cluster.Spec.GitOpsEngine == "" {
-		cluster.Spec.GitOpsEngine = ""
+	if cluster.Spec.Cluster.GitOpsEngine == GitOpsEngineNone ||
+		cluster.Spec.Cluster.GitOpsEngine == "" {
+		cluster.Spec.Cluster.GitOpsEngine = ""
 	}
 
-	if cluster.Spec.Options.Flux.Interval == DefaultFluxInterval ||
-		cluster.Spec.Options.Flux.Interval.Duration == 0 {
-		cluster.Spec.Options.Flux.Interval = metav1.Duration{}
+	if cluster.Spec.Cluster.Options.Flux.Interval == DefaultFluxInterval ||
+		cluster.Spec.Cluster.Options.Flux.Interval.Duration == 0 {
+		cluster.Spec.Cluster.Options.Flux.Interval = metav1.Duration{}
 	}
 
-	if cluster.Spec.Options.LocalRegistry.HostPort == DefaultLocalRegistryPort ||
-		cluster.Spec.Options.LocalRegistry.HostPort == 0 {
-		cluster.Spec.Options.LocalRegistry.HostPort = 0
+	if cluster.Spec.Cluster.Options.LocalRegistry.HostPort == DefaultLocalRegistryPort ||
+		cluster.Spec.Cluster.Options.LocalRegistry.HostPort == 0 {
+		cluster.Spec.Cluster.Options.LocalRegistry.HostPort = 0
 	}
 
 	return cluster

@@ -7,7 +7,8 @@ unknown distribution
 apiVersion: ksail.dev/v1alpha1
 kind: Cluster
 spec:
-  distribution: K3d
+  cluster:
+    distribution: K3d
 
 ---
 

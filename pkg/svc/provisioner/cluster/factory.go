@@ -39,18 +39,22 @@ func (DefaultFactory) Create(
 		)
 	}
 
-	switch cluster.Spec.Distribution {
+	switch cluster.Spec.Cluster.Distribution {
 	case v1alpha1.DistributionKind:
 		return createKindProvisioner(
-			cluster.Spec.DistributionConfig,
-			cluster.Spec.Connection.Kubeconfig,
+			cluster.Spec.Cluster.DistributionConfig,
+			cluster.Spec.Cluster.Connection.Kubeconfig,
 		)
 	case v1alpha1.DistributionK3d:
 		return createK3dProvisioner(
-			cluster.Spec.DistributionConfig,
+			cluster.Spec.Cluster.DistributionConfig,
 		)
 	default:
-		return nil, "", fmt.Errorf("%w: %s", ErrUnsupportedDistribution, cluster.Spec.Distribution)
+		return nil, "", fmt.Errorf(
+			"%w: %s",
+			ErrUnsupportedDistribution,
+			cluster.Spec.Cluster.Distribution,
+		)
 	}
 }
 

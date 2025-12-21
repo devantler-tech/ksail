@@ -9,7 +9,7 @@ Key building blocks of KSail mapped to configuration values in `ksail.yaml` and 
 
 ## Distributions
 
-Select with `--distribution` or `spec.distribution` in `ksail.yaml`.
+Select with `--distribution` or `spec.cluster.distribution` in `ksail.yaml`.
 
 ### Kind
 
@@ -23,7 +23,7 @@ Select with `--distribution` or `spec.distribution` in `ksail.yaml`.
 
 ### Container Network Interface (CNI)
 
-Configure via `spec.cni` or `--cni` flag.
+Configure via `spec.cluster.cni` or `--cni` flag.
 
 - **`Default`** – Distribution's built-in networking (`kindnetd` for Kind, `flannel` for K3d)
 - **`Cilium`** – [Cilium](https://cilium.io/) via Helm for advanced observability and eBPF policies
@@ -31,7 +31,7 @@ Configure via `spec.cni` or `--cni` flag.
 
 ### Container Storage Interface (CSI)
 
-Configure via `spec.csi` or `--csi` flag.
+Configure via `spec.cluster.csi` or `--csi` flag.
 
 - **`Default`** – Distribution's built-in storage. K3d includes local-path-provisioner; Kind does not
 - **`LocalPathStorage`** – Explicitly install [local-path-provisioner](https://github.com/rancher/local-path-provisioner) v0.0.32. On Kind, creates default `StorageClass` in `local-path-storage` namespace. No action on K3d (already included)
@@ -47,7 +47,7 @@ ksail cluster init --csi LocalPathStorage
 
 [Metrics Server](https://github.com/kubernetes-sigs/metrics-server) aggregates CPU and memory usage. **Enabled by default.**
 
-Configure via `spec.metricsServer` or `--metrics-server` flag.
+Configure via `spec.cluster.metricsServer` or `--metrics-server` flag.
 
 **Enable for:** HPA testing, dashboards with resource usage, CPU/memory-based alerts  
 **Disable for:** Minimal resource usage, simple testing
@@ -60,7 +60,7 @@ ksail cluster create --metrics-server Disabled
 
 [cert-manager](https://cert-manager.io/) manages TLS certificates. **Disabled by default.**
 
-Configure via `spec.certManager` or `--cert-manager` flag. Installs `jetstack/cert-manager` Helm chart in `cert-manager` namespace with CRDs.
+Configure via `spec.cluster.certManager` or `--cert-manager` flag. Installs `jetstack/cert-manager` Helm chart in `cert-manager` namespace with CRDs.
 
 ```bash
 ksail cluster init --cert-manager Enabled
@@ -72,7 +72,7 @@ ksail cluster init --cert-manager Enabled
 
 Run a local [OCI Distribution](https://distribution.github.io/distribution/) container for image storage. **Disabled by default.**
 
-Configure via `spec.localRegistry` or `--local-registry` flag.
+Configure via `spec.cluster.localRegistry` or `--local-registry` flag.
 
 **Benefits:** Faster dev loops, GitOps integration, testing image pull policies
 
@@ -125,7 +125,7 @@ Configure via `.sops.yaml` in your project (see [SOPS documentation](https://git
 
 ## GitOps Engines
 
-GitOps workflows via [Flux](https://fluxcd.io/) or [ArgoCD](https://argo-cd.readthedocs.io/). Configure via `spec.gitOpsEngine` or `--gitops-engine`.
+GitOps workflows via [Flux](https://fluxcd.io/) or [ArgoCD](https://argo-cd.readthedocs.io/). Configure via `spec.cluster.gitOpsEngine` or `--gitops-engine`.
 
 - **`None`** (default) – No GitOps; use `ksail workload apply`
 - **`Flux`** – Install Flux CD
@@ -158,7 +158,7 @@ ksail workload reconcile
 - **Flux:** Annotates root kustomization, polls for `Ready=True`
 - **ArgoCD:** Hard refresh, polls for `Synced` and `Healthy`
 
-**Timeout:** `--timeout` flag > `spec.connection.timeout` > 5m default
+**Timeout:** `--timeout` flag > `spec.cluster.connection.timeout` > 5m default
 
 ```bash
 ksail workload reconcile --timeout 10m
