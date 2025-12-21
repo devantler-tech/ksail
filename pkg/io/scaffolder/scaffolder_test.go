@@ -839,8 +839,10 @@ func createMinimalClusterForSnapshot(
 	case v1alpha1.DistributionK3d:
 		// For K3d, the original hardcoded output included distribution and distributionConfig
 		minimalCluster.Spec = v1alpha1.Spec{
-			Distribution:       v1alpha1.DistributionK3d,
-			DistributionConfig: "k3d.yaml",
+			Cluster: v1alpha1.ClusterSpec{
+				Distribution:       v1alpha1.DistributionK3d,
+				DistributionConfig: "k3d.yaml",
+			},
 		}
 
 		return minimalCluster
@@ -1034,7 +1036,8 @@ func TestCreateK3dConfig_MetricsServerDisabled(t *testing.T) {
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{
 				Distribution:  v1alpha1.DistributionK3d,
-			MetricsServer: v1alpha1.MetricsServerDisabled,
+				MetricsServer: v1alpha1.MetricsServerDisabled,
+			},
 		},
 	}
 
@@ -1064,7 +1067,8 @@ func TestCreateK3dConfig_MetricsServerEnabled(t *testing.T) {
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{
 				Distribution:  v1alpha1.DistributionK3d,
-			MetricsServer: v1alpha1.MetricsServerEnabled,
+				MetricsServer: v1alpha1.MetricsServerEnabled,
+			},
 		},
 	}
 
@@ -1089,8 +1093,9 @@ func TestCreateK3dConfig_MetricsServerDisabledWithCilium(t *testing.T) {
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{
 				Distribution:  v1alpha1.DistributionK3d,
-			CNI:           v1alpha1.CNICilium,
-			MetricsServer: v1alpha1.MetricsServerDisabled,
+				CNI:           v1alpha1.CNICilium,
+				MetricsServer: v1alpha1.MetricsServerDisabled,
+			},
 		},
 	}
 
