@@ -97,18 +97,6 @@ For detailed package and API documentation, refer to [pkg.go.dev/github.com/deva
 
 ## CI
 
-### Pre-commit Hooks
-
-> **Note**: Pre-commit hooks are automatically executed for user pushes through the [pre-commit.ci](https://pre-commit.ci/) GitHub app, which validates and runs these hooks if you forget to configure them locally or push without hooks enabled. This automatic execution only applies to user pushes and not bot pushes.
-
-KSail uses pre-commit hooks to ensure code quality and consistency before commits are made. This is done via the [pre-commit framework](https://pre-commit.com/). Active hooks are defined in the `.pre-commit-config.yaml` file.
-
-To use these hooks, install pre-commit and run:
-
-```sh
-pre-commit install
-```
-
 ### GitHub Workflows
 
 #### Unit Tests
