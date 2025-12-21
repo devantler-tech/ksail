@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // HostsDirectoryManager manages the containerd hosts directory structure for registry mirrors.
@@ -85,4 +86,82 @@ func (m *HostsDirectoryManager) Cleanup() error {
 // GetBaseDir returns the base directory path.
 func (m *HostsDirectoryManager) GetBaseDir() string {
 	return m.baseDir
+}
+
+// ReadExistingHostsToml reads existing hosts.toml files from the kind-mirror-config directory
+// and returns MirrorSpec entries. This allows inferring mirror registry configuration
+// from previously scaffolded hosts files.
+func ReadExistingHostsToml(baseDir string) ([]MirrorSpec, error) {
+	// Check if directory exists
+	if _, err := os.Stat(baseDir); os.IsNotExist(err) {
+		return nil, nil // No existing config
+	}
+
+	// Read directory entries
+	entries, err := os.ReadDir(baseDir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read directory %s: %w", baseDir, err)
+	}
+
+	var specs []MirrorSpec
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+
+		host := entry.Name()
+		hostsFilePath := filepath.Join(baseDir, host, "hosts.toml")
+
+		// Check if hosts.toml exists
+		if _, err := os.Stat(hostsFilePath); os.IsNotExist(err) {
+			continue
+		}
+
+		// Read hosts.toml file
+		content, err := os.ReadFile(hostsFilePath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read %s: %w", hostsFilePath, err)
+		}
+
+		// Parse the server URL from hosts.toml
+		remote := parseServerFromHostsToml(string(content))
+		if remote == "" {
+			// Skip if we can't find the server URL
+			continue
+		}
+
+		specs = append(specs, MirrorSpec{
+			Host:   host,
+			Remote: remote,
+		})
+	}
+
+	return specs, nil
+}
+
+// parseServerFromHostsToml extracts the server URL from hosts.toml content.
+// Example: server = "https://registry-1.docker.io"
+func parseServerFromHostsToml(content string) string {
+	lines := strings.Split(content, "\n")
+	
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		
+		// Look for server = "url" pattern
+		if strings.HasPrefix(line, "server") && strings.Contains(line, "=") {
+			parts := strings.SplitN(line, "=", 2)
+			if len(parts) != 2 {
+				continue
+			}
+			
+			value := strings.TrimSpace(parts[1])
+			// Remove quotes
+			value = strings.Trim(value, `"'`)
+			
+			return value
+		}
+	}
+	
+	return ""
 }

@@ -954,9 +954,19 @@ func runRegistryStageWithRole(
 	role registryStageRole,
 	firstActivityShown *bool,
 ) error {
-	mirrorSpecs := registry.ParseMirrorSpecs(
+	// Get mirror specs from --mirror-registry flag
+	flagSpecs := registry.ParseMirrorSpecs(
 		cfgManager.Viper.GetStringSlice("mirror-registry"),
 	)
+
+	// Try to read existing hosts.toml files from kind-mirror-config directory
+	existingSpecs, err := registry.ReadExistingHostsToml("kind-mirror-config")
+	if err != nil {
+		return fmt.Errorf("failed to read existing hosts configuration: %w", err)
+	}
+
+	// Merge specs: flag specs override existing specs for the same host
+	mirrorSpecs := mergeSpecs(existingSpecs, flagSpecs)
 
 	definition, ok := registryStageDefinitions[role]
 	if !ok {
@@ -1224,6 +1234,31 @@ func runCNIInstallation(
 	return nil
 }
 
+// mergeSpecs merges two sets of mirror specs, with flagSpecs taking precedence.
+// If the same host appears in both, the version from flagSpecs is used.
+func mergeSpecs(existingSpecs, flagSpecs []registry.MirrorSpec) []registry.MirrorSpec {
+	// If there are flag specs, they take full precedence for those hosts
+	// Start with a map of existing specs
+	specMap := make(map[string]registry.MirrorSpec)
+	
+	for _, spec := range existingSpecs {
+		specMap[spec.Host] = spec
+	}
+	
+	// Override with flag specs
+	for _, spec := range flagSpecs {
+		specMap[spec.Host] = spec
+	}
+	
+	// Convert map back to slice
+	result := make([]registry.MirrorSpec, 0, len(specMap))
+	for _, spec := range specMap {
+		result = append(result, spec)
+	}
+	
+	return result
+}
+
 // prepareKindConfigWithMirrors prepares the Kind config by setting up hosts directory for mirrors.
 // Returns true if mirror configuration is needed, false otherwise.
 // This uses the modern hosts directory pattern instead of deprecated ContainerdConfigPatches.
@@ -1239,13 +1274,16 @@ func prepareKindConfigWithMirrors(
 
 	// Check for --mirror-registry flag
 	mirrorRegistries := cfgManager.Viper.GetStringSlice("mirror-registry")
-	if len(mirrorRegistries) == 0 {
-		// Also check for legacy ContainerdConfigPatches
-		return len(kindConfig.ContainerdConfigPatches) > 0
+	
+	// Also check for existing hosts.toml files
+	existingSpecs, _ := registry.ReadExistingHostsToml("kind-mirror-config")
+	
+	// If we have either flag specs or existing specs, configuration is needed
+	if len(mirrorRegistries) > 0 || len(existingSpecs) > 0 {
+		return true
 	}
 
-	// Mirror registries specified - will be configured via hosts directory
-	return true
+	return false
 }
 
 func prepareK3dConfigWithMirrors(

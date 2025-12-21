@@ -86,49 +86,9 @@ func matchListOptionsByName(name string) any {
 	})
 }
 
-func TestExtractRegistriesFromKind(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name      string
-		inputFile string
-		isEmpty   bool
-	}{
-		{name: "single registry", inputFile: "containerd_single_endpoint.toml"},
-		{name: "multiple registries", inputFile: "containerd_multiple_mirrors.toml"},
-		{name: "multiple registries same port", inputFile: "containerd_multiple_same_port.toml"},
-		{
-			name:      "duplicate registries in multiple patches",
-			inputFile: "containerd_duplicate_patches.toml",
-		},
-		{
-			name:      "registry with special characters",
-			inputFile: "containerd_registry_special_chars.toml",
-		},
-		{name: "no containerd patches", isEmpty: true},
-		{
-			name:      "multiple endpoints uses first",
-			inputFile: "containerd_multiple_endpoints_inline.toml",
-		},
-	}
-
-	for _, testCase := range tests {
-		t.Run(testCase.name, func(t *testing.T) {
-			t.Parallel()
-
-			var config *v1alpha4.Cluster
-			if testCase.isEmpty {
-				config = &v1alpha4.Cluster{ContainerdConfigPatches: []string{}}
-			} else {
-				patch := loadTestData(t, testCase.inputFile)
-				config = &v1alpha4.Cluster{ContainerdConfigPatches: []string{patch}}
-			}
-
-			result := kindprovisioner.ExtractRegistriesFromKindForTesting(config, nil)
-			snaps.MatchSnapshot(t, result)
-		})
-	}
-}
+// Deprecated test removed - ContainerdConfigPatches parsing is no longer supported
+// Tests for SetupRegistries, ConnectRegistriesToNetwork, and CleanupRegistries
+// now use MirrorSpec directly instead of parsing ContainerdConfigPatches
 
 func TestSetupRegistries_NilKindConfig(t *testing.T) {
 	t.Parallel()
@@ -416,7 +376,7 @@ func newInspectResponse(networks ...string) container.InspectResponse {
 	}
 }
 
-func TestConnectRegistriesToNetwork_NilKindConfig(t *testing.T) {
+func TestConnectRegistriesToNetwork_NilMirrorSpecs(t *testing.T) {
 	t.Parallel()
 
 	mockClient := docker.NewMockAPIClient(t)
@@ -433,15 +393,13 @@ func TestConnectRegistriesToNetwork_NoRegistries(t *testing.T) {
 
 	mockClient, ctx, buf := setupTestEnvironment(t)
 
-	kindConfig := &v1alpha4.Cluster{
-		ContainerdConfigPatches: []string{},
-	}
+	emptySpecs := []registry.MirrorSpec{}
 
-	err := kindprovisioner.ConnectRegistriesToNetwork(ctx, kindConfig, mockClient, buf)
+	err := kindprovisioner.ConnectRegistriesToNetwork(ctx, emptySpecs, mockClient, buf)
 	assert.NoError(t, err)
 }
 
-func TestCleanupRegistries_NilKindConfig(t *testing.T) {
+func TestCleanupRegistries_NilMirrorSpecs(t *testing.T) {
 	t.Parallel()
 
 	mockClient := docker.NewMockAPIClient(t)
@@ -457,11 +415,9 @@ func TestCleanupRegistries_NoRegistries(t *testing.T) {
 	mockClient := docker.NewMockAPIClient(t)
 	ctx := context.Background()
 
-	kindConfig := &v1alpha4.Cluster{
-		ContainerdConfigPatches: []string{},
-	}
+	emptySpecs := []registry.MirrorSpec{}
 
-	err := kindprovisioner.CleanupRegistries(ctx, kindConfig, "test-cluster", mockClient, false)
+	err := kindprovisioner.CleanupRegistries(ctx, emptySpecs, "test-cluster", mockClient, false)
 	assert.NoError(t, err)
 }
 
@@ -528,24 +484,24 @@ func TestBuildRegistryInfo(t *testing.T) {
 	}
 }
 
-func TestExtractRegistriesFromKind_UsesUpstreamOverride(t *testing.T) {
-	t.Parallel()
-
-	patch := `[plugins."io.containerd.grpc.v1.cri".registry.mirrors."docker.io"]
-  endpoint = ["http://docker.io:5000"]`
-
-	kindConfig := &v1alpha4.Cluster{
-		ContainerdConfigPatches: []string{patch},
-	}
-
-	registries := kindprovisioner.ExtractRegistriesFromKindForTesting(
-		kindConfig,
-		map[string]string{"docker.io": "https://mirror.example.com"},
-	)
-
-	require.Len(t, registries, 1)
-	assert.Equal(t, "https://mirror.example.com", registries[0].Upstream)
-}
+// func TestExtractRegistriesFromKind_UsesUpstreamOverride(t *testing.T) {
+// 	t.Parallel()
+// 
+// 	patch := `[plugins."io.containerd.grpc.v1.cri".registry.mirrors."docker.io"]
+//   endpoint = ["http://docker.io:5000"]`
+// 
+// 	kindConfig := &v1alpha4.Cluster{
+// 		ContainerdConfigPatches: []string{patch},
+// 	}
+// 
+// 	registries := kindprovisioner.ExtractRegistriesFromKindForTesting(
+// 		kindConfig,
+// 		map[string]string{"docker.io": "https://mirror.example.com"},
+// 	)
+// 
+// 	require.Len(t, registries, 1)
+// 	assert.Equal(t, "https://mirror.example.com", registries[0].Upstream)
+// }
 
 func formatEndpoints(endpoints []string) string {
 	if len(endpoints) == 0 {
@@ -601,18 +557,18 @@ func TestGenerateUpstreamURL(t *testing.T) {
 }
 
 // testRegistryExtraction is a helper for testing registry extraction from Kind config.
-func testRegistryExtraction(t *testing.T, host, endpoint string) []registry.Info {
-	t.Helper()
-
-	patch := fmt.Sprintf(`[plugins."io.containerd.grpc.v1.cri".registry.mirrors."%s"]
-  endpoint = ["%s"]`, host, endpoint)
-
-	config := &v1alpha4.Cluster{
-		ContainerdConfigPatches: []string{patch},
-	}
-
-	return kindprovisioner.ExtractRegistriesFromKindForTesting(config, nil)
-}
+// func testRegistryExtraction(t *testing.T, host, endpoint string) []registry.Info {
+// 	t.Helper()
+// 
+// 	patch := fmt.Sprintf(`[plugins."io.containerd.grpc.v1.cri".registry.mirrors."%s"]
+//   endpoint = ["%s"]`, host, endpoint)
+// 
+// 	config := &v1alpha4.Cluster{
+// 		ContainerdConfigPatches: []string{patch},
+// 	}
+// 
+// 	return kindprovisioner.ExtractRegistriesFromKindForTesting(config, nil)
+// }
 
 // runRegistryExtractionTest is a helper to run a single registry extraction test case.
 func runRegistryExtractionTest(t *testing.T, host string) []registry.Info {
@@ -624,25 +580,25 @@ func runRegistryExtractionTest(t *testing.T, host string) []registry.Info {
 }
 
 // runRegistryExtractionTestCases runs a set of test cases with a custom assertion function.
-func runRegistryExtractionTestCases(
-	t *testing.T,
-	tests []struct {
-		name     string
-		host     string
-		expected string
-	},
-	assertFunc func(*testing.T, string, []registry.Info),
-) {
-	t.Helper()
-
-	for _, testCase := range tests {
-		t.Run(testCase.name, func(t *testing.T) {
-			t.Parallel()
-			registries := runRegistryExtractionTest(t, testCase.host)
-			assertFunc(t, testCase.expected, registries)
-		})
-	}
-}
+// func runRegistryExtractionTestCases(
+// 	t *testing.T,
+// 	tests []struct {
+// 		name     string
+// 		host     string
+// 		expected string
+// 	},
+// 	assertFunc func(*testing.T, string, []registry.Info),
+// ) {
+// 	t.Helper()
+// 
+// 	for _, testCase := range tests {
+// 		t.Run(testCase.name, func(t *testing.T) {
+// 			t.Parallel()
+// 			registries := runRegistryExtractionTest(t, testCase.host)
+// 			assertFunc(t, testCase.expected, registries)
+// 		})
+// 	}
+// }
 
 func TestExtractPortFromEndpoint(t *testing.T) {
 	t.Parallel()

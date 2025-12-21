@@ -137,9 +137,14 @@ func cleanupKindMirrorRegistries(
 ) error {
 	// Get mirror registry specs from command line flag
 	cfgManager := deps.KSailConfigManager
-	mirrorRegistrySpecs := cfgManager.Viper.GetStringSlice("mirror-registry")
+	flagSpecs := registry.ParseMirrorSpecs(cfgManager.Viper.GetStringSlice("mirror-registry"))
 	
-	mirrorSpecs := registry.ParseMirrorSpecs(mirrorRegistrySpecs)
+	// Try to read existing hosts.toml files
+	existingSpecs, _ := registry.ReadExistingHostsToml("kind-mirror-config")
+	
+	// Merge specs: flag specs override existing specs
+	mirrorSpecs := mergeSpecs(existingSpecs, flagSpecs)
+	
 	if len(mirrorSpecs) == 0 {
 		return nil
 	}
@@ -169,6 +174,31 @@ func cleanupKindMirrorRegistries(
 			)
 		},
 	)
+}
+
+// mergeSpecs merges two sets of mirror specs, with flagSpecs taking precedence.
+// If the same host appears in both, the version from flagSpecs is used.
+func mergeSpecs(existingSpecs, flagSpecs []registry.MirrorSpec) []registry.MirrorSpec {
+	// If there are flag specs, they take full precedence for those hosts
+	// Start with a map of existing specs
+	specMap := make(map[string]registry.MirrorSpec)
+	
+	for _, spec := range existingSpecs {
+		specMap[spec.Host] = spec
+	}
+	
+	// Override with flag specs
+	for _, spec := range flagSpecs {
+		specMap[spec.Host] = spec
+	}
+	
+	// Convert map back to slice
+	result := make([]registry.MirrorSpec, 0, len(specMap))
+	for _, spec := range specMap {
+		result = append(result, spec)
+	}
+	
+	return result
 }
 
 func cleanupK3dMirrorRegistries(
