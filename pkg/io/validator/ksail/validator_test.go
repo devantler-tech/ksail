@@ -80,6 +80,7 @@ func createInvalidDistributionKSailCase() ksailTestCase {
 			Spec: v1alpha1.Spec{
 				Cluster: v1alpha1.ClusterSpec{
 					Distribution: "InvalidDistribution",
+				},
 			},
 		},
 		expectValid:  false,
@@ -208,6 +209,7 @@ func TestKSailValidatorCrossConfiguration(t *testing.T) {
 			Spec: v1alpha1.Spec{
 				Cluster: v1alpha1.ClusterSpec{
 					Distribution: "InvalidDistribution",
+				},
 			},
 		}
 

@@ -255,6 +255,7 @@ func TestResolveClusterName(t *testing.T) {
 				Cluster: v1alpha1.ClusterSpec{
 					Connection: v1alpha1.Connection{
 						Context: "should-not-use-this",
+					},
 				},
 			},
 		}
@@ -318,6 +319,7 @@ func TestResolveClusterName(t *testing.T) {
 				Cluster: v1alpha1.ClusterSpec{
 					Connection: v1alpha1.Connection{
 						Context: "  test-context  ",
+					},
 				},
 			},
 		}
