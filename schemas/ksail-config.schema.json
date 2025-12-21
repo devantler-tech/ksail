@@ -96,6 +96,9 @@
                 "ArgoCD"
               ]
             },
+            "validateWorkloadOnCreate": {
+              "type": "string"
+            },
             "options": {
               "properties": {
                 "kind": {
@@ -186,6 +189,7 @@
             "certManager",
             "localRegistry",
             "gitOpsEngine",
+            "validateWorkloadOnCreate",
             "options"
           ]
         },
