@@ -25,8 +25,9 @@ const (
 	ksailClusterBaseYAML  = "apiVersion: ksail.dev/v1alpha1\n" +
 		"kind: Cluster\n" +
 		"spec:\n" +
-		"  distribution: Kind\n" +
-		"  distributionConfig: kind.yaml\n"
+		"  cluster:\n" +
+		"    distribution: Kind\n" +
+		"    distributionConfig: kind.yaml\n"
 )
 
 func writeValidKsailConfig(t *testing.T, dir string) {
@@ -38,9 +39,11 @@ func writeValidKsailConfig(t *testing.T, dir string) {
 	ksailConfigContent := "apiVersion: ksail.dev/v1alpha1\n" +
 		"kind: Cluster\n" +
 		"spec:\n" +
-		"  distribution: Kind\n" +
-		"  distributionConfig: kind.yaml\n" +
-		"  sourceDirectory: k8s\n"
+		"  cluster:\n" +
+		"    distribution: Kind\n" +
+		"    distributionConfig: kind.yaml\n" +
+		"  workload:\n" +
+		"    sourceDirectory: k8s\n"
 
 	require.NoError(
 		t,
@@ -146,11 +149,12 @@ func TestLoadConfigLoadsKindDistributionConfig(t *testing.T) {
 	ksailConfig := "apiVersion: ksail.dev/v1alpha1\n" +
 		"kind: Cluster\n" +
 		"spec:\n" +
-		"  distribution: Kind\n" +
-		"  distributionConfig: " + kindConfigPath + "\n" +
-		"  cni: Cilium\n" +
-		"  connection:\n" +
-		"    context: kind-kind\n"
+		"  cluster:\n" +
+		"    distribution: Kind\n" +
+		"    distributionConfig: " + kindConfigPath + "\n" +
+		"    cni: Cilium\n" +
+		"    connection:\n" +
+		"      context: kind-kind\n"
 	require.NoError(t, os.WriteFile("ksail.yaml", []byte(ksailConfig), 0o600))
 
 	manager := configmanager.NewConfigManager(io.Discard)
@@ -176,11 +180,12 @@ func TestLoadConfigLoadsK3dDistributionConfig(t *testing.T) {
 	ksailConfig := "apiVersion: ksail.dev/v1alpha1\n" +
 		"kind: Cluster\n" +
 		"spec:\n" +
-		"  distribution: K3d\n" +
-		"  distributionConfig: " + k3dConfigPath + "\n" +
-		"  cni: Cilium\n" +
-		"  connection:\n" +
-		"    context: k3d-k3d-default\n"
+		"  cluster:\n" +
+		"    distribution: K3d\n" +
+		"    distributionConfig: " + k3dConfigPath + "\n" +
+		"    cni: Cilium\n" +
+		"    connection:\n" +
+		"      context: k3d-k3d-default\n"
 	require.NoError(t, os.WriteFile("ksail.yaml", []byte(ksailConfig), 0o600))
 
 	manager := configmanager.NewConfigManager(io.Discard)
@@ -219,8 +224,9 @@ func TestLoadConfigAppliesFlagOverrides(t *testing.T) {
 	ksailConfig := "apiVersion: ksail.dev/v1alpha1\n" +
 		"kind: Cluster\n" +
 		"spec:\n" +
-		"  distribution: Kind\n" +
-		"  distributionConfig: kind.yaml\n"
+		"  cluster:\n" +
+		"    distribution: Kind\n" +
+		"    distributionConfig: kind.yaml\n"
 	require.NoError(t, os.WriteFile("ksail.yaml", []byte(ksailConfig), 0o600))
 
 	cmd := &cobra.Command{Use: "test"}
@@ -938,8 +944,10 @@ func TestManager_readConfigurationFile_ConfigFound(t *testing.T) {
 apiVersion: ksail.dev/v1alpha1
 kind: Cluster
 spec:
-  distribution: Kind
-  sourceDirectory: test-config-found
+  cluster:
+    distribution: Kind
+  workload:
+    sourceDirectory: test-config-found
 `
 
 	// Create a temporary directory and file
@@ -1094,10 +1102,10 @@ networking:
 	ksailContents := fmt.Sprintf(`apiVersion: ksail.dev/v1alpha1
 kind: Cluster
 spec:
-  distribution: Kind
-  distributionConfig: kind.yaml
-  sourceDirectory: k8s
-  cni: Cilium
+  cluster:
+    distribution: Kind
+    distributionConfig: kind.yaml
+    cni: Cilium
   connection:
     context: kind-%s
 `, scenario.configName)
@@ -1198,12 +1206,12 @@ func newK3dManagerForScenario(
 	ksailContents := "apiVersion: ksail.dev/v1alpha1\n" +
 		"kind: Cluster\n" +
 		"spec:\n" +
-		"  distribution: K3d\n" +
-		"  distributionConfig: k3d.yaml\n" +
-		"  sourceDirectory: k8s\n" +
-		"  cni: Cilium\n" +
-		"  connection:\n" +
-		"    context: k3d-k3d-default\n"
+		"  cluster:\n" +
+		"    distribution: K3d\n" +
+		"    distributionConfig: k3d.yaml\n" +
+		"    cni: Cilium\n" +
+		"    connection:\n" +
+		"      context: k3d-k3d-default\n"
 	writeFile(t, "ksail.yaml", ksailContents)
 
 	var (
