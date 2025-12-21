@@ -38,7 +38,12 @@
                 }
               },
               "additionalProperties": false,
-              "type": "object"
+              "type": "object",
+              "required": [
+                "kubeconfig",
+                "context",
+                "timeout"
+              ]
             },
             "distribution": {
               "type": "string",
@@ -96,26 +101,22 @@
                 "kind": {
                   "properties": {},
                   "additionalProperties": false,
-                  "type": "object",
-                  "description": "Alpha placeholder (currently unsupported)."
+                  "type": "object"
                 },
                 "k3d": {
                   "properties": {},
                   "additionalProperties": false,
-                  "type": "object",
-                  "description": "Alpha placeholder (currently unsupported)."
+                  "type": "object"
                 },
                 "cilium": {
                   "properties": {},
                   "additionalProperties": false,
-                  "type": "object",
-                  "description": "Alpha placeholder (currently unsupported)."
+                  "type": "object"
                 },
                 "calico": {
                   "properties": {},
                   "additionalProperties": false,
-                  "type": "object",
-                  "description": "Alpha placeholder (currently unsupported)."
+                  "type": "object"
                 },
                 "flux": {
                   "properties": {
@@ -125,13 +126,15 @@
                     }
                   },
                   "additionalProperties": false,
-                  "type": "object"
+                  "type": "object",
+                  "required": [
+                    "interval"
+                  ]
                 },
                 "argocd": {
                   "properties": {},
                   "additionalProperties": false,
-                  "type": "object",
-                  "description": "Alpha placeholder (currently unsupported)."
+                  "type": "object"
                 },
                 "localRegistry": {
                   "properties": {
@@ -148,22 +151,43 @@
                 "helm": {
                   "properties": {},
                   "additionalProperties": false,
-                  "type": "object",
-                  "description": "Alpha placeholder (currently unsupported)."
+                  "type": "object"
                 },
                 "kustomize": {
                   "properties": {},
                   "additionalProperties": false,
-                  "type": "object",
-                  "description": "Alpha placeholder (currently unsupported)."
+                  "type": "object"
                 }
               },
               "additionalProperties": false,
-              "type": "object"
+              "type": "object",
+              "required": [
+                "kind",
+                "k3d",
+                "cilium",
+                "calico",
+                "flux",
+                "argocd",
+                "localRegistry",
+                "helm",
+                "kustomize"
+              ]
             }
           },
           "additionalProperties": false,
-          "type": "object"
+          "type": "object",
+          "required": [
+            "distributionConfig",
+            "connection",
+            "distribution",
+            "cni",
+            "csi",
+            "metricsServer",
+            "certManager",
+            "localRegistry",
+            "gitOpsEngine",
+            "options"
+          ]
         },
         "workload": {
           "properties": {
@@ -172,7 +196,10 @@
             }
           },
           "additionalProperties": false,
-          "type": "object"
+          "type": "object",
+          "required": [
+            "sourceDirectory"
+          ]
         }
       },
       "additionalProperties": false,
