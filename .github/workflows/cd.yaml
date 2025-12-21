@@ -30,7 +30,7 @@ jobs:
       - name: ⚙️ Setup Go
         uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6.1.0
         with:
-          go-version: "1.25.5"
+          go-version-file: go.mod
           # Disable module cache restoration in release workflows to avoid
           # cache-poisoning risk for runtime artifacts (see https://docs.zizmor.sh/audits/#cache-poisoning)
           cache: false
