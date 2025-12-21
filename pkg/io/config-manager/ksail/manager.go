@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strconv"
 	"strings"
@@ -224,6 +225,51 @@ func (m *ConfigManager) unmarshalAndApplyDefaults() error {
 			setFieldValue(fieldPtr, fieldSelector.DefaultValue)
 		}
 	}
+
+	// Make kubeconfig path absolute relative to config file directory
+	err = m.makeKubeconfigPathAbsolute()
+	if err != nil {
+		return fmt.Errorf("failed to resolve kubeconfig path: %w", err)
+	}
+
+	return nil
+}
+
+// makeKubeconfigPathAbsolute converts the kubeconfig path to an absolute path.
+// If the path is relative, it's made absolute relative to the config file's directory.
+// If the path starts with ~/, it's expanded to the user's home directory.
+// If no config file was used, the path is made absolute relative to the current working directory.
+func (m *ConfigManager) makeKubeconfigPathAbsolute() error {
+	kubeconfigPath := m.Config.Spec.Cluster.Connection.Kubeconfig
+	if kubeconfigPath == "" {
+		return nil
+	}
+
+	// If it starts with ~/, that will be handled by ExpandHomePath later
+	// If it's already absolute, no change needed
+	if strings.HasPrefix(kubeconfigPath, "~/") || filepath.IsAbs(kubeconfigPath) {
+		return nil
+	}
+
+	// Path is relative - make it absolute
+	var basePath string
+
+	if m.configFileFound && m.Viper.ConfigFileUsed() != "" {
+		// Make it relative to the config file's directory
+		configDir := filepath.Dir(m.Viper.ConfigFileUsed())
+		basePath = configDir
+	} else {
+		// No config file - use current working directory
+		var err error
+
+		basePath, err = os.Getwd()
+		if err != nil {
+			return fmt.Errorf("failed to get working directory: %w", err)
+		}
+	}
+
+	absPath := filepath.Join(basePath, kubeconfigPath)
+	m.Config.Spec.Cluster.Connection.Kubeconfig = absPath
 
 	return nil
 }
