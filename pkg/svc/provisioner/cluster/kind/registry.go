@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 
 	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
@@ -13,6 +15,87 @@ import (
 )
 
 const kindNetworkName = "kind"
+
+// SetupRegistryHostsDirectory creates the containerd hosts directory structure for registry mirrors.
+// This uses the modern hosts directory pattern instead of deprecated ContainerdConfigPatches.
+// Returns the hosts directory manager and any error encountered.
+func SetupRegistryHostsDirectory(
+	mirrorSpecs []registry.MirrorSpec,
+	clusterName string,
+) (*registry.HostsDirectoryManager, error) {
+	if len(mirrorSpecs) == 0 {
+		return nil, nil
+	}
+
+	// Create temporary directory for hosts configuration
+	tempDir := filepath.Join(os.TempDir(), fmt.Sprintf("ksail-kind-hosts-%s", clusterName))
+	mgr, err := registry.NewHostsDirectoryManager(tempDir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create hosts directory manager: %w", err)
+	}
+
+	// Build mirror entries
+	entries := registry.BuildMirrorEntries(mirrorSpecs, "", nil, nil, nil)
+	if len(entries) == 0 {
+		return nil, nil
+	}
+
+	// Write all hosts.toml files
+	_, err = mgr.WriteAllHostsToml(entries)
+	if err != nil {
+		_ = mgr.Cleanup() // Try to cleanup on error
+		return nil, fmt.Errorf("failed to write hosts.toml files: %w", err)
+	}
+
+	return mgr, nil
+}
+
+// ConfigureKindWithHostsDirectory adds extraMounts to Kind nodes to mount the hosts directory.
+// This configures containerd to use the modern hosts directory pattern for registry mirrors.
+func ConfigureKindWithHostsDirectory(
+	kindConfig *v1alpha4.Cluster,
+	hostsDir string,
+	mirrorSpecs []registry.MirrorSpec,
+) error {
+	if kindConfig == nil || hostsDir == "" || len(mirrorSpecs) == 0 {
+		return nil
+	}
+
+	// Ensure nodes exist
+	if len(kindConfig.Nodes) == 0 {
+		// Add default control-plane node if none exist
+		kindConfig.Nodes = []v1alpha4.Node{
+			{
+				Role: v1alpha4.ControlPlaneRole,
+			},
+		}
+	}
+
+	// Add extraMounts for each registry host
+	for _, spec := range mirrorSpecs {
+		host := strings.TrimSpace(spec.Host)
+		if host == "" {
+			continue
+		}
+
+		// Each registry gets its own directory mounted to /etc/containerd/certs.d/<host>
+		hostPath := filepath.Join(hostsDir, host)
+		containerPath := fmt.Sprintf("/etc/containerd/certs.d/%s", host)
+
+		mount := v1alpha4.Mount{
+			HostPath:      hostPath,
+			ContainerPath: containerPath,
+			Readonly:      true,
+		}
+
+		// Add mount to all nodes
+		for i := range kindConfig.Nodes {
+			kindConfig.Nodes[i].ExtraMounts = append(kindConfig.Nodes[i].ExtraMounts, mount)
+		}
+	}
+
+	return nil
+}
 
 // setupRegistryManager creates a registry manager and extracts registries from Kind config.
 // Returns nil if no setup is needed.

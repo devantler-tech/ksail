@@ -335,9 +335,44 @@ func AllocatePort(nextPort *int, usedPorts map[int]struct{}) int {
 }
 
 // KindPatch renders a containerd mirror patch for the provided entry.
+// Deprecated: Use GenerateHostsToml instead. This function is maintained for
+// backward compatibility but the ContainerdConfigPatches approach has been
+// deprecated in favor of the hosts directory pattern.
 func KindPatch(entry MirrorEntry) string {
 	return fmt.Sprintf(`[plugins."io.containerd.grpc.v1.cri".registry.mirrors."%s"]
   endpoint = ["%s"]`, entry.Host, entry.Endpoint)
+}
+
+// GenerateHostsToml generates a hosts.toml file content for containerd registry configuration.
+// This uses the modern hosts directory pattern as documented at:
+// https://gardener.cloud/docs/gardener/advanced/containerd-registry-configuration/#hosts-directory-pattern
+//
+// The generated content includes:
+//   - server: The upstream registry URL (fallback when mirrors are unavailable)
+//   - host: Local mirror endpoint with pull and resolve capabilities
+//
+// Example output for docker.io with a local mirror:
+//
+//	server = "https://registry-1.docker.io"
+//
+//	[host."http://docker.io:5000"]
+//	  capabilities = ["pull", "resolve"]
+func GenerateHostsToml(entry MirrorEntry) string {
+	var builder strings.Builder
+
+	// Determine the upstream server URL
+	upstream := entry.Remote
+	if upstream == "" {
+		upstream = GenerateUpstreamURL(entry.Host)
+	}
+
+	builder.WriteString(fmt.Sprintf("server = %q\n\n", upstream))
+
+	// Add local mirror endpoint configuration
+	builder.WriteString(fmt.Sprintf("[host.%q]\n", entry.Endpoint))
+	builder.WriteString("  capabilities = [\"pull\", \"resolve\"]\n")
+
+	return builder.String()
 }
 
 func splitMirrorSpec(spec string) (string, string, bool) {

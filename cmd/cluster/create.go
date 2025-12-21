@@ -774,7 +774,27 @@ func runKindMirrorAction(
 	writer := ctx.cmd.OutOrStdout()
 	clusterName := ctx.kindConfig.Name
 
-	err := kindprovisioner.SetupRegistries(
+	// Setup hosts directory and configure Kind with extraMounts
+	hostsDirMgr, err := kindprovisioner.SetupRegistryHostsDirectory(ctx.mirrorSpecs, clusterName)
+	if err != nil {
+		return fmt.Errorf("failed to setup hosts directory: %w", err)
+	}
+
+	// Configure Kind to use hosts directory via extraMounts
+	if hostsDirMgr != nil {
+		err = kindprovisioner.ConfigureKindWithHostsDirectory(
+			ctx.kindConfig,
+			hostsDirMgr.GetBaseDir(),
+			ctx.mirrorSpecs,
+		)
+		if err != nil {
+			_ = hostsDirMgr.Cleanup()
+			return fmt.Errorf("failed to configure Kind with hosts directory: %w", err)
+		}
+	}
+
+	// Setup registry containers
+	err = kindprovisioner.SetupRegistries(
 		execCtx,
 		ctx.kindConfig,
 		clusterName,
@@ -783,6 +803,9 @@ func runKindMirrorAction(
 		writer,
 	)
 	if err != nil {
+		if hostsDirMgr != nil {
+			_ = hostsDirMgr.Cleanup()
+		}
 		return fmt.Errorf("failed to setup kind registries: %w", err)
 	}
 
@@ -1201,8 +1224,9 @@ func runCNIInstallation(
 	return nil
 }
 
-// prepareKindConfigWithMirrors prepares the Kind config by adding mirror registry patches if needed.
-// Returns true if there are containerd patches to process, false otherwise.
+// prepareKindConfigWithMirrors prepares the Kind config by setting up hosts directory for mirrors.
+// Returns true if mirror configuration is needed, false otherwise.
+// This uses the modern hosts directory pattern instead of deprecated ContainerdConfigPatches.
 func prepareKindConfigWithMirrors(
 	clusterCfg *v1alpha1.Cluster,
 	cfgManager *ksailconfigmanager.ConfigManager,
@@ -1213,18 +1237,15 @@ func prepareKindConfigWithMirrors(
 		return false
 	}
 
-	// Check for --mirror-registry flag overrides
+	// Check for --mirror-registry flag
 	mirrorRegistries := cfgManager.Viper.GetStringSlice("mirror-registry")
-	if len(mirrorRegistries) > 0 {
-		// Add containerd patches from flag
-		kindConfig.ContainerdConfigPatches = append(
-			kindConfig.ContainerdConfigPatches,
-			generateContainerdPatchesFromSpecs(mirrorRegistries)...,
-		)
+	if len(mirrorRegistries) == 0 {
+		// Also check for legacy ContainerdConfigPatches
+		return len(kindConfig.ContainerdConfigPatches) > 0
 	}
 
-	// Return true if there are containerd patches to process
-	return len(kindConfig.ContainerdConfigPatches) > 0
+	// Mirror registries specified - will be configured via hosts directory
+	return true
 }
 
 func prepareK3dConfigWithMirrors(

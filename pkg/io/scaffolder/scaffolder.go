@@ -129,22 +129,17 @@ func (s *Scaffolder) Scaffold(output string, force bool) error {
 // Registry configuration helpers.
 
 // GenerateContainerdPatches generates containerd config patches for Kind mirror registry.
+// Deprecated: The ContainerdConfigPatches approach has been deprecated in favor of the hosts
+// directory pattern. This function is maintained for backward compatibility with existing
+// kind.yaml files that may have been created with older versions, but new configurations
+// should not generate these patches. The hosts directory is configured at runtime during
+// cluster creation using extraMounts.
 // Input format: "name=upstream" (e.g., "docker.io=https://registry-1.docker.io")
 // Container names match the registry host after sanitization to align with runtime provisioning.
 func (s *Scaffolder) GenerateContainerdPatches() []string {
-	specs := registry.ParseMirrorSpecs(s.MirrorRegistries)
-	if len(specs) == 0 {
-		return nil
-	}
-
-	entries := registry.BuildMirrorEntries(specs, "", nil, nil, nil)
-	patches := make([]string, 0, len(entries))
-
-	for _, entry := range entries {
-		patches = append(patches, registry.KindPatch(entry))
-	}
-
-	return patches
+	// No longer generate containerd patches for new configurations.
+	// The hosts directory pattern is used instead.
+	return nil
 }
 
 // GenerateK3dRegistryConfig generates K3d registry configuration for mirror registry.
@@ -475,10 +470,9 @@ func (s *Scaffolder) generateKindConfig(output string, force bool) error {
 		kindConfig.Networking.DisableDefaultCNI = true
 	}
 
-	// Add containerd config patches for mirror registries
-	if len(s.MirrorRegistries) > 0 {
-		kindConfig.ContainerdConfigPatches = s.GenerateContainerdPatches()
-	}
+	// Note: Mirror registries are now configured at runtime using the hosts directory pattern
+	// via extraMounts instead of ContainerdConfigPatches. The hosts directory is created and
+	// mounted during cluster creation in the Kind provisioner.
 
 	opts := yamlgenerator.Options{
 		Output: filepath.Join(output, KindConfigFile),
