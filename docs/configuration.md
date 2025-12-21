@@ -40,6 +40,7 @@ spec:
     gitOpsEngine: None
   workload:
     sourceDirectory: k8s
+    validateOnPush: false
 ```
 
 ### Configuration Fields
@@ -59,6 +60,7 @@ spec:
 | `cluster.localRegistry`         | enum     | `Disabled`           | `Enabled`, `Disabled`          | Provision local OCI registry.                                   |
 | `cluster.gitOpsEngine`          | enum     | `None`               | `None`, `Flux`, `ArgoCD`       | GitOps engine to install.                                       |
 | `workload.sourceDirectory`      | string   | `k8s`                | Directory path                 | Location of workload manifests.                                 |
+| `workload.validateOnPush`       | boolean  | `false`              | `true`, `false`                | Automatically validate manifests after pushing to local registry. |
 
 > Omitted fields use defaults (e.g., `cluster.cni` defaults to `Default`).
 
@@ -175,6 +177,17 @@ KSail provides commands for managing workloads through the `ksail workload` subc
 - `ksail workload push` - Package and push manifests as OCI artifact to local registry
 - `ksail workload reconcile` - Trigger GitOps reconciliation and wait for completion
 
+**Push command flags:**
+
+| Flag         | Purpose                                        |
+|--------------|------------------------------------------------|
+| `--validate` | Validate manifests after pushing to registry. |
+
+The `push` command validates manifests when either:
+
+1. The `--validate` flag is set
+2. `spec.workload.validateOnPush` is `true` in `ksail.yaml`
+
 **Kubectl wrappers:**
 
 - `ksail workload get` - Get resources
@@ -200,6 +213,9 @@ The `reconcile` command respects timeout in this order:
 ```bash
 # Push manifests to local registry
 ksail workload push
+
+# Push and validate manifests
+ksail workload push --validate
 
 # Trigger reconciliation with default timeout
 ksail workload reconcile
