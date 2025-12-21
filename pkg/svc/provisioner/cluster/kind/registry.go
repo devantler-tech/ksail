@@ -17,6 +17,7 @@ const kindNetworkName = "kind"
 
 // SetupRegistryHostsDirectory creates the containerd hosts directory structure for registry mirrors.
 // This uses the modern hosts directory pattern instead of deprecated ContainerdConfigPatches.
+// If a hosts.toml file already exists (from scaffolding), it is preserved.
 // Returns the hosts directory manager and any error encountered.
 func SetupRegistryHostsDirectory(
 	mirrorSpecs []registry.MirrorSpec,
@@ -34,17 +35,24 @@ func SetupRegistryHostsDirectory(
 		return nil, fmt.Errorf("failed to create hosts directory manager: %w", err)
 	}
 
-	// Build mirror entries
+	// Build mirror entries for any hosts that don't already have scaffolded files
 	entries := registry.BuildMirrorEntries(mirrorSpecs, "", nil, nil, nil)
 	if len(entries) == 0 {
 		return nil, nil
 	}
 
-	// Write all hosts.toml files
-	_, err = mgr.WriteAllHostsToml(entries)
-	if err != nil {
-		_ = mgr.Cleanup() // Try to cleanup on error
-		return nil, fmt.Errorf("failed to write hosts.toml files: %w", err)
+	// Only write hosts.toml files for registries that don't already have one
+	for _, entry := range entries {
+		hostsPath := filepath.Join(hostsDir, entry.Host, "hosts.toml")
+		if _, statErr := os.Stat(hostsPath); statErr == nil {
+			// File exists from scaffolding, preserve it
+			continue
+		}
+		// File doesn't exist, write it
+		if _, writeErr := mgr.WriteHostsToml(entry); writeErr != nil {
+			_ = mgr.Cleanup()
+			return nil, fmt.Errorf("failed to write hosts.toml for %s: %w", entry.Host, writeErr)
+		}
 	}
 
 	return mgr, nil

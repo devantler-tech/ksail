@@ -468,9 +468,48 @@ func (s *Scaffolder) generateKindConfig(output string, force bool) error {
 		kindConfig.Networking.DisableDefaultCNI = true
 	}
 
-	// Note: Mirror registries are now configured at runtime using the hosts directory pattern
-	// via extraMounts instead of ContainerdConfigPatches. The hosts directory is created and
-	// mounted during cluster creation in the Kind provisioner.
+	// Add extraMounts for mirror registries if configured
+	specs := registry.ParseMirrorSpecs(s.MirrorRegistries)
+	if len(specs) > 0 {
+		// Get absolute path to mirrors directory
+		mirrorsDir := filepath.Join(output, KindMirrorsDir)
+		absHostsDir, err := filepath.Abs(mirrorsDir)
+		if err != nil {
+			absHostsDir = mirrorsDir
+		}
+
+		// Ensure at least one node exists for adding mounts
+		if len(kindConfig.Nodes) == 0 {
+			kindConfig.Nodes = []v1alpha4.Node{
+				{
+					Role: v1alpha4.ControlPlaneRole,
+				},
+			}
+		}
+
+		// Add extraMounts for each registry host
+		for _, spec := range specs {
+			host := strings.TrimSpace(spec.Host)
+			if host == "" {
+				continue
+			}
+
+			// Each registry gets its own directory mounted to /etc/containerd/certs.d/<host>
+			hostPath := filepath.Join(absHostsDir, host)
+			containerPath := fmt.Sprintf("/etc/containerd/certs.d/%s", host)
+
+			mount := v1alpha4.Mount{
+				HostPath:      hostPath,
+				ContainerPath: containerPath,
+				Readonly:      true,
+			}
+
+			// Add mount to all nodes
+			for i := range kindConfig.Nodes {
+				kindConfig.Nodes[i].ExtraMounts = append(kindConfig.Nodes[i].ExtraMounts, mount)
+			}
+		}
+	}
 
 	opts := yamlgenerator.Options{
 		Output: filepath.Join(output, KindConfigFile),
