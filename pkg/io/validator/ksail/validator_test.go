@@ -185,10 +185,10 @@ func TestKSailValidatorCrossConfiguration(t *testing.T) {
 			Spec: v1alpha1.Spec{
 				Cluster: v1alpha1.ClusterSpec{
 					Distribution:       v1alpha1.DistributionKind,
-						DistributionConfig: "kind.yaml",
-						Connection: v1alpha1.Connection{
-							Context: "kind-kind", // No distribution config provided, so use conventional default
-						},
+					DistributionConfig: "kind.yaml",
+					Connection: v1alpha1.Connection{
+						Context: "kind-kind", // No distribution config provided, so use conventional default
+					},
 				},
 			},
 		}
@@ -212,7 +212,7 @@ func TestKSailValidatorCrossConfiguration(t *testing.T) {
 					Distribution: "InvalidDistribution",
 				},
 			},
-		},
+		}
 
 		invalidResult := validator.Validate(invalidConfig)
 		require.NotNil(t, invalidResult, "Validation result should not be nil")
@@ -955,6 +955,7 @@ func testEmptyContextValidationSkipped(t *testing.T) {
 					},
 			},
 		},
+	}
 
 		validator := ksailvalidator.NewValidator()
 		result := validator.Validate(config)
@@ -994,6 +995,7 @@ func testKindCrossValidationWithConfigName(t *testing.T) {
 					},
 			},
 		},
+	}
 
 		validator := ksailvalidator.NewValidatorForKind(kindConfig)
 		result := validator.Validate(config)
@@ -1027,6 +1029,7 @@ func testK3dCrossValidationWithConfigName(t *testing.T) {
 					},
 			},
 		},
+	}
 
 		validator := ksailvalidator.NewValidatorForK3d(k3dConfig)
 		result := validator.Validate(config)
@@ -1066,6 +1069,7 @@ func testKindEmptyConfigName(t *testing.T) {
 					},
 			},
 		},
+	}
 
 		validator := ksailvalidator.NewValidatorForKind(kindConfig)
 		result := validator.Validate(config)
@@ -1103,6 +1107,7 @@ func testK3dEmptyConfigName(t *testing.T) {
 					},
 			},
 		},
+	}
 
 		validator := ksailvalidator.NewValidatorForK3d(k3dConfig)
 		result := validator.Validate(config)
@@ -1144,6 +1149,7 @@ func testNoDistributionConfigProvided(t *testing.T) {
 					},
 			},
 		},
+	}
 
 		validator := ksailvalidator.NewValidator() // No distribution config provided
 		result := validator.Validate(config)
@@ -1182,6 +1188,7 @@ func testEmptyDistribution(t *testing.T) {
 				Cluster: v1alpha1.ClusterSpec{
 					Distribution:       "", // Empty distribution
 					DistributionConfig: "config.yaml",
+				},
 			},
 		}
 
@@ -1225,6 +1232,7 @@ func testEmptyDistributionConfig(t *testing.T) {
 				Cluster: v1alpha1.ClusterSpec{
 					Distribution:       v1alpha1.DistributionKind,
 					DistributionConfig: "", // Empty distribution config
+				},
 			},
 		}
 
@@ -1268,6 +1276,7 @@ func testInvalidDistributionValue(t *testing.T) {
 				Cluster: v1alpha1.ClusterSpec{
 					Distribution:       v1alpha1.Distribution("InvalidDistribution"),
 					DistributionConfig: "config.yaml",
+				},
 			},
 		}
 
@@ -1338,6 +1347,7 @@ func TestKSailValidatorKindConfigEdgeCases(t *testing.T) {
 						},
 				},
 			},
+}
 
 			validator := ksailvalidator.NewValidatorForKind(test.kindConfig)
 			result := validator.Validate(config)
@@ -1401,6 +1411,7 @@ func TestKSailValidatorK3dConfigEdgeCases(t *testing.T) {
 						},
 				},
 			},
+}
 
 			validator := ksailvalidator.NewValidatorForK3d(test.k3dConfig)
 			result := validator.Validate(config)
@@ -1491,6 +1502,7 @@ func runKindContextValidationTest(
 				},
 		},
 	},
+}
 
 	var validator *ksailvalidator.Validator
 
@@ -1580,6 +1592,7 @@ func runK3dContextValidationTest(
 				},
 		},
 	},
+}
 
 	var validator *ksailvalidator.Validator
 
@@ -1662,6 +1675,7 @@ func createMultiConfigTestCluster(
 				},
 		},
 	},
+}
 }
 
 // createKindConfigValidator creates a validator with Kind distribution config.
@@ -1806,7 +1820,7 @@ func runK3dDefaultCNITest(t *testing.T, testCase k3dDefaultCNITestCase) {
 				ExtraArgs: testCase.extraArgs,
 			},
 		},
-	},
+	}
 
 	validator := ksailvalidator.NewValidatorForK3d(k3dConfig)
 
