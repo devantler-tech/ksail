@@ -143,6 +143,15 @@ func DefaultKubeconfigFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	}
 }
 
+// DefaultPushAndReconcileWorkloadOnCreateFieldSelector creates a standard field selector for pushing and reconciling workload on cluster creation.
+func DefaultPushAndReconcileWorkloadOnCreateFieldSelector() FieldSelector[v1alpha1.Cluster] {
+	return FieldSelector[v1alpha1.Cluster]{
+		Selector:     func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.PushAndReconcileWorkloadOnCreate },
+		Description:  "Automatically push and reconcile workloads after cluster creation",
+		DefaultValue: false,
+	}
+}
+
 // DefaultClusterFieldSelectors returns the default field selectors shared by cluster commands.
 func DefaultClusterFieldSelectors() []FieldSelector[v1alpha1.Cluster] {
 	return []FieldSelector[v1alpha1.Cluster]{

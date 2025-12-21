@@ -15,7 +15,9 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	argocdgitops "github.com/devantler-tech/ksail/v5/pkg/client/argocd"
 	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
+	"github.com/devantler-tech/ksail/v5/pkg/client/oci"
 	cmdhelpers "github.com/devantler-tech/ksail/v5/pkg/cmd"
+	workloadcmd "github.com/devantler-tech/ksail/v5/cmd/workload"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	k3dconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/k3d"
 	kindconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/kind"
@@ -86,6 +88,7 @@ func NewCreateCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
 	fieldSelectors = append(fieldSelectors, ksailconfigmanager.DefaultMetricsServerFieldSelector())
 	fieldSelectors = append(fieldSelectors, ksailconfigmanager.DefaultCertManagerFieldSelector())
 	fieldSelectors = append(fieldSelectors, ksailconfigmanager.DefaultCSIFieldSelector())
+	fieldSelectors = append(fieldSelectors, ksailconfigmanager.DefaultPushAndReconcileWorkloadOnCreateFieldSelector())
 
 	cfgManager := ksailconfigmanager.NewCommandConfigManager(
 		cmd,
@@ -313,7 +316,12 @@ func handlePostCreationSetup(
 		return err
 	}
 
-	return installFluxIfConfigured(cmd, clusterCfg, tmr, firstActivityShown)
+	err = installFluxIfConfigured(cmd, clusterCfg, tmr, firstActivityShown)
+	if err != nil {
+		return err
+	}
+
+	return pushAndReconcileWorkloadIfConfigured(cmd, clusterCfg, tmr, firstActivityShown)
 }
 
 // installCustomCNIAndMetrics installs a custom CNI and then metrics-server.
@@ -1773,3 +1781,177 @@ func runFluxInstallation(
 
 	return nil
 }
+
+// pushAndReconcileWorkloadIfConfigured pushes and reconciles workloads after cluster creation if enabled.
+func pushAndReconcileWorkloadIfConfigured(
+	cmd *cobra.Command,
+	clusterCfg *v1alpha1.Cluster,
+	tmr timer.Timer,
+	firstActivityShown *bool,
+) error {
+	// Skip if not enabled
+	if !clusterCfg.Spec.Cluster.PushAndReconcileWorkloadOnCreate {
+		return nil
+	}
+
+	// Check prerequisites
+	localRegistryEnabled := clusterCfg.Spec.Cluster.LocalRegistry == v1alpha1.LocalRegistryEnabled
+	gitOpsEngineConfigured := clusterCfg.Spec.Cluster.GitOpsEngine != v1alpha1.GitOpsEngineNone
+
+	if !localRegistryEnabled || !gitOpsEngineConfigured {
+		notify.WriteMessage(notify.Message{
+			Type:    notify.WarningType,
+			Content: "skipping workload push and reconcile: local registry and GitOps engine must be enabled",
+			Writer:  cmd.OutOrStdout(),
+		})
+
+		return nil
+	}
+
+	if *firstActivityShown {
+		_, _ = fmt.Fprintln(cmd.OutOrStdout())
+	}
+
+	*firstActivityShown = true
+
+	tmr.NewStage()
+
+	notify.WriteMessage(notify.Message{
+		Type:    notify.TitleType,
+		Emoji:   "📦",
+		Content: "Build and Push OCI Artifact...",
+		Writer:  cmd.OutOrStdout(),
+	})
+
+	outputTimer := cmdhelpers.MaybeTimer(cmd, tmr)
+
+	// Push workload
+	err := pushWorkload(cmd, clusterCfg, outputTimer)
+	if err != nil {
+		return fmt.Errorf("failed to push workload: %w", err)
+	}
+
+	notify.WriteMessage(notify.Message{
+		Type:    notify.SuccessType,
+		Content: "oci artifact pushed",
+		Timer:   outputTimer,
+		Writer:  cmd.OutOrStdout(),
+	})
+
+	// Reconcile workload
+	_, _ = fmt.Fprintln(cmd.OutOrStdout())
+
+	tmr.NewStage()
+
+	notify.WriteMessage(notify.Message{
+		Type:    notify.TitleType,
+		Emoji:   "🔄",
+		Content: "Trigger Reconciliation...",
+		Writer:  cmd.OutOrStdout(),
+	})
+
+	err = reconcileWorkload(cmd, clusterCfg, outputTimer)
+	if err != nil {
+		return fmt.Errorf("failed to reconcile workload: %w", err)
+	}
+
+	notify.WriteMessage(notify.Message{
+		Type:    notify.SuccessType,
+		Content: "reconciliation completed",
+		Timer:   outputTimer,
+		Writer:  cmd.OutOrStdout(),
+	})
+
+	return nil
+}
+
+// pushWorkload builds and pushes the workload OCI artifact.
+func pushWorkload(
+	cmd *cobra.Command,
+	clusterCfg *v1alpha1.Cluster,
+	outputTimer timer.Timer,
+) error {
+	sourceDir := clusterCfg.Spec.Workload.SourceDirectory
+	if strings.TrimSpace(sourceDir) == "" {
+		sourceDir = v1alpha1.DefaultSourceDirectory
+	}
+
+	repoName := sourceDir
+	artifactVersion := registry.DefaultLocalArtifactTag
+
+	registryPort := clusterCfg.Spec.Cluster.Options.LocalRegistry.HostPort
+	if registryPort == 0 {
+		registryPort = v1alpha1.DefaultLocalRegistryPort
+	}
+
+	builder := oci.NewWorkloadArtifactBuilder()
+
+	notify.WriteMessage(notify.Message{
+		Type:    notify.ActivityType,
+		Content: "building oci artifact",
+		Timer:   outputTimer,
+		Writer:  cmd.OutOrStdout(),
+	})
+
+	notify.WriteMessage(notify.Message{
+		Type:    notify.ActivityType,
+		Content: "pushing oci artifact",
+		Timer:   outputTimer,
+		Writer:  cmd.OutOrStdout(),
+	})
+
+	_, err := builder.Build(cmd.Context(), oci.BuildOptions{
+		Name:             repoName,
+		SourcePath:       sourceDir,
+		RegistryEndpoint: fmt.Sprintf("localhost:%d", registryPort),
+		Repository:       repoName,
+		Version:          artifactVersion,
+		GitOpsEngine:     clusterCfg.Spec.Cluster.GitOpsEngine,
+	})
+	if err != nil {
+		return fmt.Errorf("build and push oci artifact: %w", err)
+	}
+
+	return nil
+}
+
+// reconcileWorkload triggers GitOps reconciliation.
+func reconcileWorkload(
+	cmd *cobra.Command,
+	clusterCfg *v1alpha1.Cluster,
+	outputTimer timer.Timer,
+) error {
+	// Determine timeout - use default reconcile timeout
+	timeout := defaultReconcileTimeout
+	if clusterCfg.Spec.Cluster.Connection.Timeout.Duration > 0 {
+		timeout = clusterCfg.Spec.Cluster.Connection.Timeout.Duration
+	}
+
+	artifactVersion := registry.DefaultLocalArtifactTag
+
+	switch clusterCfg.Spec.Cluster.GitOpsEngine {
+	case v1alpha1.GitOpsEngineArgoCD:
+		return workloadcmd.ReconcileArgoCDApplication(
+			cmd.Context(),
+			clusterCfg,
+			artifactVersion,
+			timeout,
+			outputTimer,
+			cmd.OutOrStdout(),
+		)
+	case v1alpha1.GitOpsEngineFlux:
+		return workloadcmd.ReconcileFluxKustomization(
+			cmd.Context(),
+			clusterCfg,
+			timeout,
+			outputTimer,
+			cmd.OutOrStdout(),
+		)
+	default:
+		return nil
+	}
+}
+
+const (
+	defaultReconcileTimeout = 5 * time.Minute
+)

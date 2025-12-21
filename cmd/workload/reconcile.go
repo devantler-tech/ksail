@@ -51,8 +51,8 @@ const (
 	reconcilePollInterval     = 2 * time.Second
 )
 
-// reconcileFluxKustomization triggers and waits for Flux kustomization reconciliation.
-func reconcileFluxKustomization(
+// ReconcileFluxKustomization triggers and waits for Flux kustomization reconciliation.
+func ReconcileFluxKustomization(
 	ctx context.Context,
 	clusterCfg *v1alpha1.Cluster,
 	timeout time.Duration,
@@ -188,8 +188,8 @@ func isFluxKustomizationReady(kustomization *unstructured.Unstructured) bool {
 	return false
 }
 
-// reconcileArgoCDApplication refreshes and waits for the ArgoCD application to sync.
-func reconcileArgoCDApplication(
+// ReconcileArgoCDApplication refreshes and waits for the ArgoCD application to sync.
+func ReconcileArgoCDApplication(
 	ctx context.Context,
 	clusterCfg *v1alpha1.Cluster,
 	artifactVersion string,
@@ -440,7 +440,7 @@ func executeReconciliation(
 
 	switch clusterCfg.Spec.Cluster.GitOpsEngine {
 	case v1alpha1.GitOpsEngineArgoCD:
-		return reconcileArgoCDApplication(
+		return ReconcileArgoCDApplication(
 			cmd.Context(),
 			clusterCfg,
 			artifactVersion,
@@ -449,7 +449,7 @@ func executeReconciliation(
 			cmd.OutOrStdout(),
 		)
 	case v1alpha1.GitOpsEngineFlux:
-		return reconcileFluxKustomization(
+		return ReconcileFluxKustomization(
 			cmd.Context(),
 			clusterCfg,
 			timeout,

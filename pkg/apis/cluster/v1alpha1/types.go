@@ -38,16 +38,17 @@ type Spec struct {
 
 // ClusterSpec defines cluster-related configuration.
 type ClusterSpec struct {
-	DistributionConfig string        `json:"distributionConfig,omitzero"`
-	Connection         Connection    `json:"connection,omitzero"`
-	Distribution       Distribution  `json:"distribution,omitzero"`
-	CNI                CNI           `json:"cni,omitzero"`
-	CSI                CSI           `json:"csi,omitzero"`
-	MetricsServer      MetricsServer `json:"metricsServer,omitzero"`
-	CertManager        CertManager   `json:"certManager,omitzero"`
-	LocalRegistry      LocalRegistry `json:"localRegistry,omitzero"`
-	GitOpsEngine       GitOpsEngine  `json:"gitOpsEngine,omitzero"`
-	Options            Options       `json:"options,omitzero"`
+	DistributionConfig                string        `json:"distributionConfig,omitzero"`
+	Connection                        Connection    `json:"connection,omitzero"`
+	Distribution                      Distribution  `json:"distribution,omitzero"`
+	CNI                               CNI           `json:"cni,omitzero"`
+	CSI                               CSI           `json:"csi,omitzero"`
+	MetricsServer                     MetricsServer `json:"metricsServer,omitzero"`
+	CertManager                       CertManager   `json:"certManager,omitzero"`
+	LocalRegistry                     LocalRegistry `json:"localRegistry,omitzero"`
+	GitOpsEngine                      GitOpsEngine  `json:"gitOpsEngine,omitzero"`
+	PushAndReconcileWorkloadOnCreate  bool          `json:"pushAndReconcileWorkloadOnCreate,omitzero"`
+	Options                           Options       `json:"options,omitzero"`
 }
 
 // WorkloadSpec defines workload-related configuration.
