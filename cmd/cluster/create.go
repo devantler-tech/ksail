@@ -819,7 +819,7 @@ func runKindConnectAction(
 ) error {
 	err := kindprovisioner.ConnectRegistriesToNetwork(
 		execCtx,
-		ctx.kindConfig,
+		ctx.mirrorSpecs,
 		dockerClient,
 		ctx.cmd.OutOrStdout(),
 	)
@@ -1275,24 +1275,6 @@ func prepareK3dConfigWithMirrors(
 	k3dConfig.Registries.Config = rendered
 
 	return true
-}
-
-// generateContainerdPatchesFromSpecs generates containerd config patches from mirror registry specs.
-// Input format: "registry=endpoint" (e.g., "docker.io=http://localhost:5000")
-func generateContainerdPatchesFromSpecs(mirrorSpecs []string) []string {
-	parsed := registry.ParseMirrorSpecs(mirrorSpecs)
-	if len(parsed) == 0 {
-		return nil
-	}
-
-	entries := registry.BuildMirrorEntries(parsed, "", nil, nil, nil)
-
-	patches := make([]string, 0, len(entries))
-	for _, entry := range entries {
-		patches = append(patches, registry.KindPatch(entry))
-	}
-
-	return patches
 }
 
 // handleMetricsServer manages metrics-server installation based on cluster configuration.

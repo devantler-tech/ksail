@@ -135,16 +135,22 @@ func cleanupKindMirrorRegistries(
 	clusterName string,
 	deleteVolumes bool,
 ) error {
-	kindConfigMgr := kindconfigmanager.NewConfigManager(clusterCfg.Spec.Cluster.DistributionConfig)
-
-	kindConfig, loadErr := kindConfigMgr.LoadConfig(deps.Timer)
-	if loadErr != nil {
-		return fmt.Errorf("failed to load kind config: %w", loadErr)
+	// Get mirror registry specs from command line flag
+	cfgManager := deps.KSailConfigManager
+	mirrorRegistrySpecs := cfgManager.Viper.GetStringSlice("mirror-registry")
+	
+	mirrorSpecs := registry.ParseMirrorSpecs(mirrorRegistrySpecs)
+	if len(mirrorSpecs) == 0 {
+		return nil
 	}
 
-	registriesInfo := kindprovisioner.ExtractRegistriesFromKindForTesting(kindConfig, nil)
+	// Build registry info to get names
+	entries := registry.BuildMirrorEntries(mirrorSpecs, "", nil, nil, nil)
+	var registryNames []string
+	for _, entry := range entries {
+		registryNames = append(registryNames, entry.Name)
+	}
 
-	registryNames := registry.CollectRegistryNames(registriesInfo)
 	if len(registryNames) == 0 {
 		return nil
 	}
@@ -156,7 +162,7 @@ func cleanupKindMirrorRegistries(
 		func(dockerClient client.APIClient) error {
 			return kindprovisioner.CleanupRegistries(
 				cmd.Context(),
-				kindConfig,
+				mirrorSpecs,
 				clusterName,
 				dockerClient,
 				deleteVolumes,
