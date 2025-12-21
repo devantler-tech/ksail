@@ -45,21 +45,21 @@ spec:
 
 ### Configuration Fields
 
-| Field                           | Type     | Default              | Values                         | Description                                                     |
-|---------------------------------|----------|----------------------|--------------------------------|-----------------------------------------------------------------|
-| `editor`                        | string   | –                    | Command with args              | Editor for interactive workflows (e.g. `code --wait`, `vim`).   |
-| `cluster.distribution`          | enum     | `Kind`               | `Kind`, `K3d`                  | Kubernetes distribution to use.                                 |
-| `cluster.distributionConfig`    | string   | `kind.yaml`          | File path                      | Path to distribution-specific YAML (`kind.yaml` or `k3d.yaml`). |
-| `cluster.connection.kubeconfig` | string   | `~/.kube/config`     | File path                      | Path to kubeconfig file.                                        |
-| `cluster.connection.context`    | string   | Derived from cluster | kubeconfig context             | Context name (Kind: `kind-<name>`, K3d: `k3d-<name>`).          |
-| `cluster.connection.timeout`    | duration | –                    | Go duration (e.g. `30s`, `5m`) | Optional timeout for cluster operations.                        |
-| `cluster.cni`                   | enum     | `Default`            | `Default`, `Cilium`, `None`    | Container Network Interface to install.                         |
-| `cluster.csi`                   | enum     | `Default`            | `Default`, `LocalPathStorage`  | Container Storage Interface (not yet implemented).              |
-| `cluster.metricsServer`         | enum     | `Enabled`            | `Enabled`, `Disabled`          | Install metrics-server for resource metrics.                    |
-| `cluster.certManager`           | enum     | `Disabled`           | `Enabled`, `Disabled`          | Install cert-manager for TLS certificates.                      |
-| `cluster.localRegistry`         | enum     | `Disabled`           | `Enabled`, `Disabled`          | Provision local OCI registry.                                   |
-| `cluster.gitOpsEngine`          | enum     | `None`               | `None`, `Flux`, `ArgoCD`       | GitOps engine to install.                                       |
-| `workload.sourceDirectory`      | string   | `k8s`                | Directory path                 | Location of workload manifests.                                 |
+| Field                           | Type     | Default              | Values                         | Description                                                        |
+|---------------------------------|----------|----------------------|--------------------------------|--------------------------------------------------------------------|
+| `editor`                        | string   | –                    | Command with args              | Editor for interactive workflows (e.g. `code --wait`, `vim`).      |
+| `cluster.distribution`          | enum     | `Kind`               | `Kind`, `K3d`                  | Kubernetes distribution to use.                                    |
+| `cluster.distributionConfig`    | string   | `kind.yaml`          | File path                      | Path to distribution-specific YAML (`kind.yaml` or `k3d.yaml`).    |
+| `cluster.connection.kubeconfig` | string   | `~/.kube/config`     | File path                      | Path to kubeconfig file.                                           |
+| `cluster.connection.context`    | string   | Derived from cluster | kubeconfig context             | Context name (Kind: `kind-<name>`, K3d: `k3d-<name>`).             |
+| `cluster.connection.timeout`    | duration | –                    | Go duration (e.g. `30s`, `5m`) | Optional timeout for cluster operations.                           |
+| `cluster.cni`                   | enum     | `Default`            | `Default`, `Cilium`, `None`    | Container Network Interface to install.                            |
+| `cluster.csi`                   | enum     | `Default`            | `Default`, `LocalPathStorage`  | Container Storage Interface (not yet implemented).                 |
+| `cluster.metricsServer`         | enum     | `Enabled`            | `Enabled`, `Disabled`          | Install metrics-server for resource metrics.                       |
+| `cluster.certManager`           | enum     | `Disabled`           | `Enabled`, `Disabled`          | Install cert-manager for TLS certificates.                         |
+| `cluster.localRegistry`         | enum     | `Disabled`           | `Enabled`, `Disabled`          | Provision local OCI registry.                                      |
+| `cluster.gitOpsEngine`          | enum     | `None`               | `None`, `Flux`, `ArgoCD`       | GitOps engine to install.                                          |
+| `workload.sourceDirectory`      | string   | `k8s`                | Directory path                 | Location of workload manifests.                                    |
 | `workload.validateOnPush`       | boolean  | `false`              | `true`, `false`                | Automatically validate manifests before pushing to local registry. |
 
 > Omitted fields use defaults (e.g., `cluster.cni` defaults to `Default`).
