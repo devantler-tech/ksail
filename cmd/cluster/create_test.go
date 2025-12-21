@@ -65,11 +65,12 @@ func writeTestConfigFiles(t *testing.T, workingDir string) {
 	ksailYAML := `apiVersion: ksail.dev/v1alpha1
 kind: Cluster
 spec:
-  distribution: Kind
-  distributionConfig: kind.yaml
-  metricsServer: Disabled
-  connection:
-    kubeconfig: ./kubeconfig
+  cluster:
+    distribution: Kind
+    distributionConfig: kind.yaml
+    metricsServer: Disabled
+    connection:
+      kubeconfig: ./kubeconfig
 `
 
 	writeFile(t, workingDir, "ksail.yaml", ksailYAML)
@@ -265,12 +266,13 @@ func TestCreate_LocalPathStorageCSI_InstallsOnKind(t *testing.T) {
 	ksailYAML := `apiVersion: ksail.dev/v1alpha1
 kind: Cluster
 spec:
-  distribution: Kind
-  distributionConfig: kind.yaml
-  csi: LocalPathStorage
-  metricsServer: Disabled
-  connection:
-    kubeconfig: ./kubeconfig
+  cluster:
+    distribution: Kind
+    distributionConfig: kind.yaml
+    csi: LocalPathStorage
+    metricsServer: Disabled
+    connection:
+      kubeconfig: ./kubeconfig
 `
 	writeFile(t, workingDir, "ksail.yaml", ksailYAML)
 	writeFile(
