@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"strings"
 
-	v1alpha1 "github.com/devantler-tech/ksail/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/pkg/client/oci"
-	runtime "github.com/devantler-tech/ksail/pkg/di"
-	"github.com/devantler-tech/ksail/pkg/svc/provisioner/registry"
-	"github.com/devantler-tech/ksail/pkg/ui/notify"
+	v1alpha1 "github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v5/pkg/client/oci"
+	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
+	"github.com/devantler-tech/ksail/v5/pkg/ui/notify"
 	"github.com/spf13/cobra"
 )
 

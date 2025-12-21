@@ -4,8 +4,8 @@ import (
 	"os"
 	"os/exec"
 
-	"github.com/devantler-tech/ksail/pkg/apis/cluster/v1alpha1"
-	ksailconfigmanager "github.com/devantler-tech/ksail/pkg/io/config-manager/ksail"
+	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
 )
 
 // EditorResolver handles editor configuration resolution with proper precedence.

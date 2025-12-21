@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	v1alpha1 "github.com/devantler-tech/ksail/pkg/apis/cluster/v1alpha1"
+	v1alpha1 "github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/empty"

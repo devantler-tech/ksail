@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/devantler-tech/ksail/pkg/client/helm"
-	"github.com/devantler-tech/ksail/pkg/svc/installer/cni"
+	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/installer/cni"
 )
 
 func expectNoError(t *testing.T, err error, description string) {

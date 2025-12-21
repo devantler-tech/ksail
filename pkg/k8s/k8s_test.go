@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/devantler-tech/ksail/pkg/k8s"
+	"github.com/devantler-tech/ksail/v5/pkg/k8s"
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"

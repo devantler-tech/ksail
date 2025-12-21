@@ -10,8 +10,8 @@ import (
 	"time"
 	"unicode"
 
-	notify "github.com/devantler-tech/ksail/pkg/ui/notify"
-	"github.com/devantler-tech/ksail/pkg/ui/timer"
+	notify "github.com/devantler-tech/ksail/v5/pkg/ui/notify"
+	"github.com/devantler-tech/ksail/v5/pkg/ui/timer"
 )
 
 func TestWriteMessage_ErrorType(t *testing.T) {

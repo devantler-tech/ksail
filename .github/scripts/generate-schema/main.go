@@ -12,7 +12,7 @@ import (
 	orderedmap "github.com/wk8/go-ordered-map/v2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/devantler-tech/ksail/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 )
 
 const (

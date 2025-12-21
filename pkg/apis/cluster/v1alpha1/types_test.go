@@ -3,7 +3,7 @@ package v1alpha1_test
 import (
 	"testing"
 
-	v1alpha1 "github.com/devantler-tech/ksail/pkg/apis/cluster/v1alpha1"
+	v1alpha1 "github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/stretchr/testify/assert"
 )
 

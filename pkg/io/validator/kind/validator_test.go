@@ -3,8 +3,8 @@ package kind_test
 import (
 	"testing"
 
-	"github.com/devantler-tech/ksail/pkg/io/validator"
-	kindvalidator "github.com/devantler-tech/ksail/pkg/io/validator/kind"
+	"github.com/devantler-tech/ksail/v5/pkg/io/validator"
+	kindvalidator "github.com/devantler-tech/ksail/v5/pkg/io/validator/kind"
 	"github.com/stretchr/testify/require"
 	kindapi "sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )

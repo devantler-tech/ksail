@@ -6,10 +6,10 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/devantler-tech/ksail/pkg/apis/cluster/v1alpha1"
-	iopath "github.com/devantler-tech/ksail/pkg/io"
-	ksailconfigmanager "github.com/devantler-tech/ksail/pkg/io/config-manager/ksail"
-	"github.com/devantler-tech/ksail/pkg/ui/timer"
+	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	iopath "github.com/devantler-tech/ksail/v5/pkg/io"
+	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
+	"github.com/devantler-tech/ksail/v5/pkg/ui/timer"
 )
 
 // GetDefaultKubeconfigPath returns the default kubeconfig path for the current user.

@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	generator "github.com/devantler-tech/ksail/pkg/io/generator/k3d"
-	yamlgenerator "github.com/devantler-tech/ksail/pkg/io/generator/yaml"
+	generator "github.com/devantler-tech/ksail/v5/pkg/io/generator/k3d"
+	yamlgenerator "github.com/devantler-tech/ksail/v5/pkg/io/generator/yaml"
 	"github.com/gkampitakis/go-snaps/snaps"
 	"github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/stretchr/testify/assert"

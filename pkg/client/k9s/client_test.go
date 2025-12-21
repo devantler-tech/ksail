@@ -3,7 +3,7 @@ package k9s_test
 import (
 	"testing"
 
-	"github.com/devantler-tech/ksail/pkg/client/k9s"
+	"github.com/devantler-tech/ksail/v5/pkg/client/k9s"
 	"github.com/stretchr/testify/require"
 )
 

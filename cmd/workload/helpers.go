@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"io"
 
-	v1alpha1 "github.com/devantler-tech/ksail/pkg/apis/cluster/v1alpha1"
-	cmdhelpers "github.com/devantler-tech/ksail/pkg/cmd"
-	ksailconfigmanager "github.com/devantler-tech/ksail/pkg/io/config-manager/ksail"
-	"github.com/devantler-tech/ksail/pkg/ui/notify"
-	"github.com/devantler-tech/ksail/pkg/ui/timer"
+	v1alpha1 "github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	cmdhelpers "github.com/devantler-tech/ksail/v5/pkg/cmd"
+	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
+	"github.com/devantler-tech/ksail/v5/pkg/ui/notify"
+	"github.com/devantler-tech/ksail/v5/pkg/ui/timer"
 	"github.com/spf13/cobra"
 )
 

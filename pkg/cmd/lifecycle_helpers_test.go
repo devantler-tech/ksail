@@ -10,10 +10,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/devantler-tech/ksail/pkg/apis/cluster/v1alpha1"
-	pkgcmd "github.com/devantler-tech/ksail/pkg/cmd"
-	ksailconfigmanager "github.com/devantler-tech/ksail/pkg/io/config-manager/ksail"
-	clusterprovisioner "github.com/devantler-tech/ksail/pkg/svc/provisioner/cluster"
+	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	pkgcmd "github.com/devantler-tech/ksail/v5/pkg/cmd"
+	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
+	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	"github.com/spf13/cobra"
 )
 

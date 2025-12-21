@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	configmanager "github.com/devantler-tech/ksail/pkg/io/config-manager/ksail"
+	configmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

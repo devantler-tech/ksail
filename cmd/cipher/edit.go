@@ -12,7 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	pkgcmd "github.com/devantler-tech/ksail/pkg/cmd"
+	pkgcmd "github.com/devantler-tech/ksail/v5/pkg/cmd"
 	"github.com/getsops/sops/v3"
 	"github.com/getsops/sops/v3/aes"
 	"github.com/getsops/sops/v3/cmd/sops/codes"

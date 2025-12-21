@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	ioutils "github.com/devantler-tech/ksail/pkg/io"
+	ioutils "github.com/devantler-tech/ksail/v5/pkg/io"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

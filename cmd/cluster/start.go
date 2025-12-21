@@ -4,11 +4,11 @@ import (
 	"context"
 	"fmt"
 
-	v1alpha1 "github.com/devantler-tech/ksail/pkg/apis/cluster/v1alpha1"
-	cmdhelpers "github.com/devantler-tech/ksail/pkg/cmd"
-	runtime "github.com/devantler-tech/ksail/pkg/di"
-	ksailconfigmanager "github.com/devantler-tech/ksail/pkg/io/config-manager/ksail"
-	clusterprovisioner "github.com/devantler-tech/ksail/pkg/svc/provisioner/cluster"
+	v1alpha1 "github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	cmdhelpers "github.com/devantler-tech/ksail/v5/pkg/cmd"
+	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
+	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
+	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	"github.com/spf13/cobra"
 )
 

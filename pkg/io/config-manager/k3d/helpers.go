@@ -3,7 +3,7 @@ package k3d
 import (
 	"strings"
 
-	"github.com/devantler-tech/ksail/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	v1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"sigs.k8s.io/yaml"
 )

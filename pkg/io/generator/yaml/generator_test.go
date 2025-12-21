@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	yamlgenerator "github.com/devantler-tech/ksail/pkg/io/generator/yaml"
+	yamlgenerator "github.com/devantler-tech/ksail/v5/pkg/io/generator/yaml"
 	"github.com/gkampitakis/go-snaps/snaps"
 	"github.com/stretchr/testify/require"
 )

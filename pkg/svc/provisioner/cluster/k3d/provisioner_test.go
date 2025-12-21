@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	k3dprovisioner "github.com/devantler-tech/ksail/pkg/svc/provisioner/cluster/k3d"
+	k3dprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/k3d"
 	"github.com/stretchr/testify/assert"
 )
 

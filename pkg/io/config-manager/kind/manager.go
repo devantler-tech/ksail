@@ -3,10 +3,10 @@ package kind
 import (
 	"fmt"
 
-	configmanager "github.com/devantler-tech/ksail/pkg/io/config-manager"
-	"github.com/devantler-tech/ksail/pkg/io/config-manager/helpers"
-	kindvalidator "github.com/devantler-tech/ksail/pkg/io/validator/kind"
-	"github.com/devantler-tech/ksail/pkg/ui/timer"
+	configmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager"
+	"github.com/devantler-tech/ksail/v5/pkg/io/config-manager/helpers"
+	kindvalidator "github.com/devantler-tech/ksail/v5/pkg/io/validator/kind"
+	"github.com/devantler-tech/ksail/v5/pkg/ui/timer"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
 

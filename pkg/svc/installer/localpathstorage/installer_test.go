@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/devantler-tech/ksail/pkg/apis/cluster/v1alpha1"
-	localpathstorageinstaller "github.com/devantler-tech/ksail/pkg/svc/installer/localpathstorage"
+	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	localpathstorageinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/localpathstorage"
 	"github.com/stretchr/testify/assert"
 )
 

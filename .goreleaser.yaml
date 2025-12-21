@@ -106,7 +106,7 @@ release:
 
     **Go Install**:
     ```bash
-    go install github.com/devantler-tech/ksail@{{ .Tag }}
+    go install github.com/devantler-tech/ksail/v5@{{ .Tag }}
     ```
 
     **Download Binary**: Choose your platform from the assets above

@@ -5,7 +5,7 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/devantler-tech/ksail/pkg/client/flux"
+	"github.com/devantler-tech/ksail/v5/pkg/client/flux"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
 	"k8s.io/cli-runtime/pkg/genericiooptions"

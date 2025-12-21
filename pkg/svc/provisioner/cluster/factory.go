@@ -5,11 +5,11 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/devantler-tech/ksail/pkg/apis/cluster/v1alpha1"
-	k3dconfigmanager "github.com/devantler-tech/ksail/pkg/io/config-manager/k3d"
-	kindconfigmanager "github.com/devantler-tech/ksail/pkg/io/config-manager/kind"
-	k3dprovisioner "github.com/devantler-tech/ksail/pkg/svc/provisioner/cluster/k3d"
-	kindprovisioner "github.com/devantler-tech/ksail/pkg/svc/provisioner/cluster/kind"
+	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	k3dconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/k3d"
+	kindconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/kind"
+	k3dprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/k3d"
+	kindprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/kind"
 	k3dv1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
