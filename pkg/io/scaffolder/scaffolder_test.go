@@ -839,8 +839,10 @@ func createMinimalClusterForSnapshot(
 	case v1alpha1.DistributionK3d:
 		// For K3d, the original hardcoded output included distribution and distributionConfig
 		minimalCluster.Spec = v1alpha1.Spec{
-			Distribution:       v1alpha1.DistributionK3d,
-			DistributionConfig: "k3d.yaml",
+			Cluster: v1alpha1.ClusterSpec{
+				Distribution:       v1alpha1.DistributionK3d,
+				DistributionConfig: "k3d.yaml",
+			},
 		}
 
 		return minimalCluster

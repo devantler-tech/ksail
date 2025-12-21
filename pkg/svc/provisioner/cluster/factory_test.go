@@ -211,9 +211,10 @@ func assertInvalidClusterConfig(
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{
 				Distribution:       distribution,
-			DistributionConfig: configPath,
-			Connection: v1alpha1.Connection{
-				Kubeconfig: "",
+				DistributionConfig: configPath,
+				Connection: v1alpha1.Connection{
+					Kubeconfig: "",
+				},
 			},
 		},
 	}

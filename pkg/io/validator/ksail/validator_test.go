@@ -82,7 +82,7 @@ func createInvalidDistributionKSailCase() ksailTestCase {
 					Distribution: "InvalidDistribution",
 				},
 			},
-		},,
+		},
 		expectValid:  false,
 		expectErrors: []string{specDistributionField},
 	}
@@ -190,7 +190,7 @@ func TestKSailValidatorCrossConfiguration(t *testing.T) {
 							Context: "kind-kind", // No distribution config provided, so use conventional default
 						},
 				},
-			},,
+			},
 		}
 
 		result := validator.Validate(config)
@@ -269,7 +269,7 @@ func createValidKSailConfig(distribution v1alpha1.Distribution) *v1alpha1.Cluste
 						Context: contextName,
 					},
 			},
-		},,
+		},
 	}
 }
 
@@ -817,7 +817,7 @@ func createTestClusterConfig(
 						Context: context,
 					},
 			},
-		},,
+		},
 	}
 }
 
