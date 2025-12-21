@@ -86,7 +86,7 @@ func (v *Validator) validateContextName(
 	config *v1alpha1.Cluster,
 	result *validator.ValidationResult,
 ) {
-	if config.Spec.Connection.Context == "" {
+	if config.Spec.Cluster.Connection.Context == "" {
 		// Context is optional, no validation needed if empty
 		return
 	}
@@ -97,16 +97,16 @@ func (v *Validator) validateContextName(
 		return
 	}
 
-	if config.Spec.Connection.Context != expectedContext {
+	if config.Spec.Cluster.Connection.Context != expectedContext {
 		result.AddError(validator.ValidationError{
 			Field:         "spec.connection.context",
 			Message:       "context name does not match expected pattern for distribution",
-			CurrentValue:  config.Spec.Connection.Context,
+			CurrentValue:  config.Spec.Cluster.Connection.Context,
 			ExpectedValue: expectedContext,
 			FixSuggestion: fmt.Sprintf(
 				"Set context to '%s' to match the %s distribution pattern",
 				expectedContext,
-				config.Spec.Distribution,
+				config.Spec.Cluster.Distribution,
 			),
 		})
 	}
@@ -117,7 +117,7 @@ func (v *Validator) validateDistribution(
 	config *v1alpha1.Cluster,
 	result *validator.ValidationResult,
 ) {
-	distribution := config.Spec.Distribution
+	distribution := config.Spec.Cluster.Distribution
 
 	// Check if distribution is empty or invalid
 	if distribution == "" || !distribution.IsValid() {
@@ -141,7 +141,7 @@ func (v *Validator) validateDistribution(
 	}
 
 	// Validate distributionConfig field
-	if config.Spec.DistributionConfig == "" {
+	if config.Spec.Cluster.DistributionConfig == "" {
 		result.AddError(validator.ValidationError{
 			Field:         "spec.distributionConfig",
 			Message:       "distributionConfig is required",
@@ -154,13 +154,13 @@ func (v *Validator) validateDistribution(
 // Context name follows the pattern: {distribution}-{cluster_name}, where cluster_name is extracted
 // from the distribution config. Returns empty string if no distribution config is available.
 func (v *Validator) getExpectedContextName(config *v1alpha1.Cluster) string {
-	distributionName := v.getDistributionConfigName(config.Spec.Distribution)
+	distributionName := v.getDistributionConfigName(config.Spec.Cluster.Distribution)
 	if distributionName == "" {
 		// No distribution config available, skip context validation
 		return ""
 	}
 
-	switch config.Spec.Distribution {
+	switch config.Spec.Cluster.Distribution {
 	case v1alpha1.DistributionKind:
 		return "kind-" + distributionName
 	case v1alpha1.DistributionK3d:
@@ -212,8 +212,8 @@ func (v *Validator) validateCNIAlignment(
 	result *validator.ValidationResult,
 ) {
 	// Validate Cilium CNI alignment
-	if config.Spec.CNI == v1alpha1.CNICilium {
-		switch config.Spec.Distribution {
+	if config.Spec.Cluster.CNI == v1alpha1.CNICilium {
+		switch config.Spec.Cluster.Distribution {
 		case v1alpha1.DistributionKind:
 			v.validateKindCiliumCNIAlignment(result)
 		case v1alpha1.DistributionK3d:
@@ -224,8 +224,8 @@ func (v *Validator) validateCNIAlignment(
 	}
 
 	// Validate Default CNI alignment (empty string or explicit "Default")
-	if config.Spec.CNI == "" || config.Spec.CNI == v1alpha1.CNIDefault {
-		switch config.Spec.Distribution {
+	if config.Spec.Cluster.CNI == "" || config.Spec.Cluster.CNI == v1alpha1.CNIDefault {
+		switch config.Spec.Cluster.Distribution {
 		case v1alpha1.DistributionKind:
 			v.validateKindDefaultCNIAlignment(result)
 		case v1alpha1.DistributionK3d:
@@ -364,18 +364,18 @@ func (v *Validator) validateGitOpsEngine(
 	config *v1alpha1.Cluster,
 	result *validator.ValidationResult,
 ) {
-	if config.Spec.GitOpsEngine == "" {
+	if config.Spec.Cluster.GitOpsEngine == "" {
 		return
 	}
 
-	switch config.Spec.GitOpsEngine {
+	switch config.Spec.Cluster.GitOpsEngine {
 	case v1alpha1.GitOpsEngineNone, v1alpha1.GitOpsEngineFlux, v1alpha1.GitOpsEngineArgoCD:
 		return
 	default:
 		result.AddError(validator.ValidationError{
 			Field:         "spec.gitOpsEngine",
 			Message:       "invalid GitOps engine value",
-			CurrentValue:  config.Spec.GitOpsEngine,
+			CurrentValue:  config.Spec.Cluster.GitOpsEngine,
 			ExpectedValue: "one of: None, Flux, ArgoCD",
 			FixSuggestion: "Set spec.gitOpsEngine to a supported value (None, Flux, or ArgoCD)",
 		})
@@ -387,9 +387,9 @@ func (v *Validator) validateRegistry(
 	config *v1alpha1.Cluster,
 	result *validator.ValidationResult,
 ) {
-	port := config.Spec.Options.LocalRegistry.HostPort
+	port := config.Spec.Cluster.Options.LocalRegistry.HostPort
 
-	enabled := config.Spec.LocalRegistry == v1alpha1.LocalRegistryEnabled
+	enabled := config.Spec.Cluster.LocalRegistry == v1alpha1.LocalRegistryEnabled
 
 	if enabled {
 		if port <= 0 || port > 65535 {
@@ -411,15 +411,15 @@ func (v *Validator) validateFlux(
 	config *v1alpha1.Cluster,
 	result *validator.ValidationResult,
 ) {
-	if config.Spec.GitOpsEngine != v1alpha1.GitOpsEngineFlux {
+	if config.Spec.Cluster.GitOpsEngine != v1alpha1.GitOpsEngineFlux {
 		return
 	}
 
-	if config.Spec.Options.Flux.Interval.Duration <= 0 {
+	if config.Spec.Cluster.Options.Flux.Interval.Duration <= 0 {
 		result.AddError(validator.ValidationError{
 			Field:         "spec.options.flux.interval",
 			Message:       "fluxInterval must be a positive duration when Flux is enabled",
-			CurrentValue:  config.Spec.Options.Flux.Interval.Duration,
+			CurrentValue:  config.Spec.Cluster.Options.Flux.Interval.Duration,
 			ExpectedValue: "> 0",
 			FixSuggestion: "Set spec.options.flux.interval to a positive duration (e.g., 1m)",
 		})

@@ -149,10 +149,10 @@ func getClusterNameFromConfigOrContext(
 	clusterCfg *v1alpha1.Cluster,
 ) (string, error) {
 	// If context is explicitly set, derive cluster name from it
-	if clusterCfg != nil && clusterCfg.Spec.Connection.Context != "" {
+	if clusterCfg != nil && clusterCfg.Spec.Cluster.Connection.Context != "" {
 		clusterName := ExtractClusterNameFromContext(
-			clusterCfg.Spec.Connection.Context,
-			clusterCfg.Spec.Distribution,
+			clusterCfg.Spec.Cluster.Connection.Context,
+			clusterCfg.Spec.Cluster.Distribution,
 		)
 		if clusterName != "" {
 			return clusterName, nil
@@ -201,10 +201,10 @@ func GetClusterNameFromConfig(
 	}
 
 	// If context is explicitly set, derive cluster name from it
-	if clusterCfg.Spec.Connection.Context != "" {
+	if clusterCfg.Spec.Cluster.Connection.Context != "" {
 		clusterName := ExtractClusterNameFromContext(
-			clusterCfg.Spec.Connection.Context,
-			clusterCfg.Spec.Distribution,
+			clusterCfg.Spec.Cluster.Connection.Context,
+			clusterCfg.Spec.Cluster.Distribution,
 		)
 		if clusterName != "" {
 			return clusterName, nil

@@ -91,7 +91,7 @@ func reconcileFluxKustomization(
 
 // getKubeconfigPath returns the kubeconfig path from config or default.
 func getKubeconfigPath(clusterCfg *v1alpha1.Cluster) (string, error) {
-	kubeconfigPath := strings.TrimSpace(clusterCfg.Spec.Connection.Kubeconfig)
+	kubeconfigPath := strings.TrimSpace(clusterCfg.Spec.Cluster.Connection.Kubeconfig)
 	if kubeconfigPath == "" {
 		kubeconfigPath = v1alpha1.DefaultKubeconfigPath
 	}
@@ -377,7 +377,7 @@ func runReconcile(cmd *cobra.Command) error {
 	outputTimer := ctx.OutputTimer
 	tmr := ctx.Timer
 
-	if clusterCfg.Spec.GitOpsEngine == v1alpha1.GitOpsEngineNone {
+	if clusterCfg.Spec.Cluster.GitOpsEngine == v1alpha1.GitOpsEngineNone {
 		return errGitOpsEngineRequired
 	}
 
@@ -419,8 +419,8 @@ func getReconcileTimeout(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster) (time
 	}
 
 	if timeout == 0 {
-		if clusterCfg.Spec.Connection.Timeout.Duration > 0 {
-			timeout = clusterCfg.Spec.Connection.Timeout.Duration
+		if clusterCfg.Spec.Cluster.Connection.Timeout.Duration > 0 {
+			timeout = clusterCfg.Spec.Cluster.Connection.Timeout.Duration
 		} else {
 			timeout = defaultReconcileTimeout
 		}
@@ -438,7 +438,7 @@ func executeReconciliation(
 ) error {
 	artifactVersion := registry.DefaultLocalArtifactTag
 
-	switch clusterCfg.Spec.GitOpsEngine {
+	switch clusterCfg.Spec.Cluster.GitOpsEngine {
 	case v1alpha1.GitOpsEngineArgoCD:
 		return reconcileArgoCDApplication(
 			cmd.Context(),

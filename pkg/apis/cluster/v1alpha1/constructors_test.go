@@ -20,21 +20,23 @@ func TestClusterDirectCreation(t *testing.T) {
 			APIVersion: v1alpha1.APIVersion,
 		},
 		Spec: v1alpha1.Spec{
-			Distribution: v1alpha1.DistributionK3d,
-			Connection: v1alpha1.Connection{
-				Kubeconfig: "/test",
-				Context:    "test-ctx",
-				Timeout:    metav1.Duration{Duration: time.Duration(10) * time.Minute},
+			Cluster: v1alpha1.ClusterSpec{
+				Distribution: v1alpha1.DistributionK3d,
+				Connection: v1alpha1.Connection{
+					Kubeconfig: "/test",
+					Context:    "test-ctx",
+					Timeout:    metav1.Duration{Duration: time.Duration(10) * time.Minute},
+				},
+				CNI:          v1alpha1.CNICilium,
+				CSI:          v1alpha1.CSILocalPathStorage,
+				GitOpsEngine: v1alpha1.GitOpsEngineNone,
 			},
-			CNI:          v1alpha1.CNICilium,
-			CSI:          v1alpha1.CSILocalPathStorage,
-			GitOpsEngine: v1alpha1.GitOpsEngineNone,
 		},
 	}
 
 	assert.Equal(t, v1alpha1.Kind, cluster.Kind)
 	assert.Equal(t, v1alpha1.APIVersion, cluster.APIVersion)
-	assert.Equal(t, v1alpha1.DistributionK3d, cluster.Spec.Distribution)
+	assert.Equal(t, v1alpha1.DistributionK3d, cluster.Spec.Cluster.Distribution)
 }
 
 func TestDistributionSet(t *testing.T) {
@@ -325,14 +327,14 @@ func TestNewClusterSpec(t *testing.T) {
 
 	spec := v1alpha1.NewClusterSpec()
 
-	assert.Empty(t, spec.DistributionConfig)
-	assert.Empty(t, spec.SourceDirectory)
-	assert.NotNil(t, spec.Connection)
-	assert.Equal(t, v1alpha1.Distribution(""), spec.Distribution)
-	assert.Equal(t, v1alpha1.CNI(""), spec.CNI)
-	assert.Equal(t, v1alpha1.CSI(""), spec.CSI)
-	assert.Equal(t, v1alpha1.GitOpsEngineNone, spec.GitOpsEngine)
-	assert.NotNil(t, spec.Options)
+	assert.Empty(t, spec.Cluster.DistributionConfig)
+	assert.Empty(t, spec.Workload.SourceDirectory)
+	assert.NotNil(t, spec.Cluster.Connection)
+	assert.Equal(t, v1alpha1.Distribution(""), spec.Cluster.Distribution)
+	assert.Equal(t, v1alpha1.CNI(""), spec.Cluster.CNI)
+	assert.Equal(t, v1alpha1.CSI(""), spec.Cluster.CSI)
+	assert.Equal(t, v1alpha1.GitOpsEngineNone, spec.Cluster.GitOpsEngine)
+	assert.NotNil(t, spec.Cluster.Options)
 }
 
 func TestNewClusterConnection(t *testing.T) {

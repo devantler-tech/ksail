@@ -20,7 +20,7 @@ type FieldSelector[T any] struct {
 // DefaultDistributionFieldSelector creates a standard field selector for distribution.
 func DefaultDistributionFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	return FieldSelector[v1alpha1.Cluster]{
-		Selector:     func(c *v1alpha1.Cluster) any { return &c.Spec.Distribution },
+		Selector:     func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.Distribution },
 		Description:  "Kubernetes distribution to use",
 		DefaultValue: v1alpha1.DistributionKind,
 	}
@@ -29,7 +29,7 @@ func DefaultDistributionFieldSelector() FieldSelector[v1alpha1.Cluster] {
 // StandardSourceDirectoryFieldSelector creates a standard field selector for source directory.
 func StandardSourceDirectoryFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	return FieldSelector[v1alpha1.Cluster]{
-		Selector:     func(c *v1alpha1.Cluster) any { return &c.Spec.SourceDirectory },
+		Selector:     func(c *v1alpha1.Cluster) any { return &c.Spec.Workload.SourceDirectory },
 		Description:  "Directory containing workloads to deploy",
 		DefaultValue: "k8s",
 	}
@@ -38,7 +38,7 @@ func StandardSourceDirectoryFieldSelector() FieldSelector[v1alpha1.Cluster] {
 // DefaultDistributionConfigFieldSelector creates a standard field selector for distribution config.
 func DefaultDistributionConfigFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	return FieldSelector[v1alpha1.Cluster]{
-		Selector:     func(c *v1alpha1.Cluster) any { return &c.Spec.DistributionConfig },
+		Selector:     func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.DistributionConfig },
 		Description:  "Configuration file for the distribution",
 		DefaultValue: defaultDistributionConfigPath,
 	}
@@ -49,7 +49,7 @@ func DefaultDistributionConfigFieldSelector() FieldSelector[v1alpha1.Cluster] {
 // determined by the scaffolder based on the distribution type.
 func DefaultContextFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	return FieldSelector[v1alpha1.Cluster]{
-		Selector:    func(c *v1alpha1.Cluster) any { return &c.Spec.Connection.Context },
+		Selector:    func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.Connection.Context },
 		Description: "Kubernetes context of cluster",
 	}
 }
@@ -57,7 +57,7 @@ func DefaultContextFieldSelector() FieldSelector[v1alpha1.Cluster] {
 // DefaultCNIFieldSelector creates a standard field selector for CNI.
 func DefaultCNIFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	return FieldSelector[v1alpha1.Cluster]{
-		Selector:     func(c *v1alpha1.Cluster) any { return &c.Spec.CNI },
+		Selector:     func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.CNI },
 		Description:  "Container Network Interface (CNI) to use",
 		DefaultValue: v1alpha1.CNIDefault,
 	}
@@ -66,7 +66,7 @@ func DefaultCNIFieldSelector() FieldSelector[v1alpha1.Cluster] {
 // DefaultGitOpsEngineFieldSelector creates a standard field selector for GitOps Engine.
 func DefaultGitOpsEngineFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	return FieldSelector[v1alpha1.Cluster]{
-		Selector:     func(c *v1alpha1.Cluster) any { return &c.Spec.GitOpsEngine },
+		Selector:     func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.GitOpsEngine },
 		Description:  "GitOps engine to use (None disables GitOps, Flux installs Flux controllers, ArgoCD installs Argo CD)",
 		DefaultValue: v1alpha1.GitOpsEngineNone,
 	}
@@ -76,7 +76,7 @@ func DefaultGitOpsEngineFieldSelector() FieldSelector[v1alpha1.Cluster] {
 func DefaultLocalRegistryFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	return FieldSelector[v1alpha1.Cluster]{
 		Selector: func(c *v1alpha1.Cluster) any {
-			return &c.Spec.LocalRegistry
+			return &c.Spec.Cluster.LocalRegistry
 		},
 		Description: "Local registry behavior (Enabled provisions a registry; " +
 			"Disabled skips provisioning. Defaults to Enabled when " +
@@ -89,7 +89,7 @@ func DefaultLocalRegistryFieldSelector() FieldSelector[v1alpha1.Cluster] {
 func DefaultRegistryPortFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	return FieldSelector[v1alpha1.Cluster]{
 		Selector: func(c *v1alpha1.Cluster) any {
-			return &c.Spec.Options.LocalRegistry.HostPort
+			return &c.Spec.Cluster.Options.LocalRegistry.HostPort
 		},
 		Description:  "Host port to expose the local OCI registry on",
 		DefaultValue: v1alpha1.DefaultLocalRegistryPort,
@@ -100,7 +100,7 @@ func DefaultRegistryPortFieldSelector() FieldSelector[v1alpha1.Cluster] {
 func DefaultFluxIntervalFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	return FieldSelector[v1alpha1.Cluster]{
 		Selector: func(c *v1alpha1.Cluster) any {
-			return &c.Spec.Options.Flux.Interval
+			return &c.Spec.Cluster.Options.Flux.Interval
 		},
 		Description:  "Flux reconciliation interval (e.g. 1m, 30s)",
 		DefaultValue: metav1.Duration{Duration: time.Minute},
@@ -110,7 +110,7 @@ func DefaultFluxIntervalFieldSelector() FieldSelector[v1alpha1.Cluster] {
 // DefaultMetricsServerFieldSelector creates a standard field selector for Metrics Server.
 func DefaultMetricsServerFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	return FieldSelector[v1alpha1.Cluster]{
-		Selector:     func(c *v1alpha1.Cluster) any { return &c.Spec.MetricsServer },
+		Selector:     func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.MetricsServer },
 		Description:  "Metrics Server configuration (Enabled: install, Disabled: uninstall)",
 		DefaultValue: v1alpha1.MetricsServerEnabled,
 	}
@@ -119,7 +119,7 @@ func DefaultMetricsServerFieldSelector() FieldSelector[v1alpha1.Cluster] {
 // DefaultCertManagerFieldSelector creates a standard field selector for Cert-Manager.
 func DefaultCertManagerFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	return FieldSelector[v1alpha1.Cluster]{
-		Selector:     func(c *v1alpha1.Cluster) any { return &c.Spec.CertManager },
+		Selector:     func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.CertManager },
 		Description:  "Cert-Manager configuration (Enabled: install, Disabled: skip)",
 		DefaultValue: v1alpha1.CertManagerDisabled,
 	}
@@ -128,7 +128,7 @@ func DefaultCertManagerFieldSelector() FieldSelector[v1alpha1.Cluster] {
 // DefaultCSIFieldSelector creates a standard field selector for CSI.
 func DefaultCSIFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	return FieldSelector[v1alpha1.Cluster]{
-		Selector:     func(c *v1alpha1.Cluster) any { return &c.Spec.CSI },
+		Selector:     func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.CSI },
 		Description:  "Container Storage Interface (CSI) to use",
 		DefaultValue: v1alpha1.CSIDefault,
 	}
@@ -137,7 +137,7 @@ func DefaultCSIFieldSelector() FieldSelector[v1alpha1.Cluster] {
 // DefaultKubeconfigFieldSelector creates a standard field selector for kubeconfig.
 func DefaultKubeconfigFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	return FieldSelector[v1alpha1.Cluster]{
-		Selector:     func(c *v1alpha1.Cluster) any { return &c.Spec.Connection.Kubeconfig },
+		Selector:     func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.Connection.Kubeconfig },
 		Description:  "Path to kubeconfig file",
 		DefaultValue: "~/.kube/config",
 	}

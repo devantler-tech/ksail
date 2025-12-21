@@ -144,7 +144,7 @@ func runLocalRegistryAction(
 	firstActivityShown *bool,
 	options ...localRegistryOption,
 ) error {
-	if clusterCfg.Spec.LocalRegistry != v1alpha1.LocalRegistryEnabled {
+	if clusterCfg.Spec.Cluster.LocalRegistry != v1alpha1.LocalRegistryEnabled {
 		return nil
 	}
 
@@ -309,7 +309,7 @@ func cleanupLocalRegistryWithOptions(
 	deleteVolumes bool,
 	options ...localRegistryOption,
 ) error {
-	if clusterCfg.Spec.LocalRegistry != v1alpha1.LocalRegistryEnabled {
+	if clusterCfg.Spec.Cluster.LocalRegistry != v1alpha1.LocalRegistryEnabled {
 		return nil
 	}
 
@@ -375,7 +375,7 @@ func resolveLocalRegistryClusterName(
 	kindConfig *kindv1alpha4.Cluster,
 	k3dConfig *k3dv1alpha5.SimpleConfig,
 ) string {
-	switch clusterCfg.Spec.Distribution {
+	switch clusterCfg.Spec.Cluster.Distribution {
 	case v1alpha1.DistributionKind:
 		if kindConfig != nil {
 			if name := strings.TrimSpace(kindConfig.Name); name != "" {
@@ -386,7 +386,7 @@ func resolveLocalRegistryClusterName(
 		return k3dconfigmanager.ResolveClusterName(clusterCfg, k3dConfig)
 	}
 
-	if name := strings.TrimSpace(clusterCfg.Spec.Connection.Context); name != "" {
+	if name := strings.TrimSpace(clusterCfg.Spec.Cluster.Connection.Context); name != "" {
 		return name
 	}
 
@@ -397,7 +397,7 @@ func resolveLocalRegistryNetworkName(
 	clusterCfg *v1alpha1.Cluster,
 	clusterName string,
 ) string {
-	switch clusterCfg.Spec.Distribution {
+	switch clusterCfg.Spec.Cluster.Distribution {
 	case v1alpha1.DistributionKind:
 		return "kind"
 	case v1alpha1.DistributionK3d:
@@ -430,8 +430,8 @@ func buildLocalRegistryName() string {
 }
 
 func resolveLocalRegistryPort(clusterCfg *v1alpha1.Cluster) int {
-	if clusterCfg.Spec.Options.LocalRegistry.HostPort > 0 {
-		return int(clusterCfg.Spec.Options.LocalRegistry.HostPort)
+	if clusterCfg.Spec.Cluster.Options.LocalRegistry.HostPort > 0 {
+		return int(clusterCfg.Spec.Cluster.Options.LocalRegistry.HostPort)
 	}
 
 	return dockerclient.DefaultRegistryPort

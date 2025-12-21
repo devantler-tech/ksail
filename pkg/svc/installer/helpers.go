@@ -15,9 +15,9 @@ const (
 // Uses cluster connection timeout if configured, otherwise defaults to DefaultInstallTimeout.
 // Returns DefaultInstallTimeout if clusterCfg is nil.
 func GetInstallTimeout(clusterCfg *v1alpha1.Cluster) time.Duration {
-	if clusterCfg == nil || clusterCfg.Spec.Connection.Timeout.Duration <= 0 {
+	if clusterCfg == nil || clusterCfg.Spec.Cluster.Connection.Timeout.Duration <= 0 {
 		return DefaultInstallTimeout
 	}
 
-	return clusterCfg.Spec.Connection.Timeout.Duration
+	return clusterCfg.Spec.Cluster.Connection.Timeout.Duration
 }

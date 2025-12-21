@@ -95,7 +95,7 @@ func handleDeleteRunE(
 		})
 	}
 
-	if clusterCfg.Spec.LocalRegistry == v1alpha1.LocalRegistryEnabled {
+	if clusterCfg.Spec.Cluster.LocalRegistry == v1alpha1.LocalRegistryEnabled {
 		err = cleanupLocalRegistry(cmd, clusterCfg, deps, deleteVolumes)
 		if err != nil {
 			notify.WriteMessage(notify.Message{
@@ -118,7 +118,7 @@ func cleanupMirrorRegistries(
 	clusterName string,
 	deleteVolumes bool,
 ) error {
-	switch clusterCfg.Spec.Distribution {
+	switch clusterCfg.Spec.Cluster.Distribution {
 	case v1alpha1.DistributionKind:
 		return cleanupKindMirrorRegistries(cmd, clusterCfg, deps, clusterName, deleteVolumes)
 	case v1alpha1.DistributionK3d:
@@ -135,7 +135,7 @@ func cleanupKindMirrorRegistries(
 	clusterName string,
 	deleteVolumes bool,
 ) error {
-	kindConfigMgr := kindconfigmanager.NewConfigManager(clusterCfg.Spec.DistributionConfig)
+	kindConfigMgr := kindconfigmanager.NewConfigManager(clusterCfg.Spec.Cluster.DistributionConfig)
 
 	kindConfig, loadErr := kindConfigMgr.LoadConfig(deps.Timer)
 	if loadErr != nil {
@@ -172,11 +172,11 @@ func cleanupK3dMirrorRegistries(
 	clusterName string,
 	deleteVolumes bool,
 ) error {
-	if clusterCfg.Spec.DistributionConfig == "" {
+	if clusterCfg.Spec.Cluster.DistributionConfig == "" {
 		return nil
 	}
 
-	k3dConfigMgr := k3dconfigmanager.NewConfigManager(clusterCfg.Spec.DistributionConfig)
+	k3dConfigMgr := k3dconfigmanager.NewConfigManager(clusterCfg.Spec.Cluster.DistributionConfig)
 
 	k3dConfig, loadErr := k3dConfigMgr.LoadConfig(deps.Timer)
 	if loadErr != nil {

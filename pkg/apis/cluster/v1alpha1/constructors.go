@@ -19,8 +19,16 @@ func NewCluster() *Cluster {
 // NewClusterSpec creates a new Spec with default values.
 func NewClusterSpec() Spec {
 	return Spec{
+		Editor:   "",
+		Cluster:  NewClusterSubSpec(),
+		Workload: NewWorkloadSubSpec(),
+	}
+}
+
+// NewClusterSubSpec creates a new ClusterSpec with default values.
+func NewClusterSubSpec() ClusterSpec {
+	return ClusterSpec{
 		DistributionConfig: "",
-		SourceDirectory:    "",
 		Connection:         NewClusterConnection(),
 		Distribution:       "",
 		CNI:                "",
@@ -28,6 +36,13 @@ func NewClusterSpec() Spec {
 		LocalRegistry:      LocalRegistryDisabled,
 		GitOpsEngine:       GitOpsEngineNone,
 		Options:            NewClusterOptions(),
+	}
+}
+
+// NewWorkloadSubSpec creates a new WorkloadSpec with default values.
+func NewWorkloadSubSpec() WorkloadSpec {
+	return WorkloadSpec{
+		SourceDirectory: "",
 	}
 }
 

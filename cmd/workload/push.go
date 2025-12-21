@@ -33,14 +33,14 @@ func NewPushCmd(_ *runtime.Runtime) *cobra.Command {
 		outputTimer := ctx.OutputTimer
 		tmr := ctx.Timer
 
-		localRegistryEnabled := clusterCfg.Spec.LocalRegistry == v1alpha1.LocalRegistryEnabled
-		gitOpsEngineConfigured := clusterCfg.Spec.GitOpsEngine != v1alpha1.GitOpsEngineNone
+		localRegistryEnabled := clusterCfg.Spec.Cluster.LocalRegistry == v1alpha1.LocalRegistryEnabled
+		gitOpsEngineConfigured := clusterCfg.Spec.Cluster.GitOpsEngine != v1alpha1.GitOpsEngineNone
 
 		if !localRegistryEnabled || !gitOpsEngineConfigured {
 			return errLocalRegistryRequired
 		}
 
-		sourceDir := clusterCfg.Spec.SourceDirectory
+		sourceDir := clusterCfg.Spec.Workload.SourceDirectory
 		if strings.TrimSpace(sourceDir) == "" {
 			sourceDir = v1alpha1.DefaultSourceDirectory
 		}
@@ -48,7 +48,7 @@ func NewPushCmd(_ *runtime.Runtime) *cobra.Command {
 		repoName := sourceDir
 		artifactVersion := registry.DefaultLocalArtifactTag
 
-		registryPort := clusterCfg.Spec.Options.LocalRegistry.HostPort
+		registryPort := clusterCfg.Spec.Cluster.Options.LocalRegistry.HostPort
 		if registryPort == 0 {
 			registryPort = v1alpha1.DefaultLocalRegistryPort
 		}
@@ -85,7 +85,7 @@ func NewPushCmd(_ *runtime.Runtime) *cobra.Command {
 			RegistryEndpoint: fmt.Sprintf("localhost:%d", registryPort),
 			Repository:       repoName,
 			Version:          artifactVersion,
-			GitOpsEngine:     clusterCfg.Spec.GitOpsEngine,
+			GitOpsEngine:     clusterCfg.Spec.Cluster.GitOpsEngine,
 		})
 		if err != nil {
 			return fmt.Errorf("build and push oci artifact: %w", err)

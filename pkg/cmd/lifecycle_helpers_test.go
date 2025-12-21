@@ -352,8 +352,8 @@ func getClusterNameConfigTestCases() []struct {
 				t.Helper()
 
 				cfg := v1alpha1.NewCluster()
-				cfg.Spec.Distribution = v1alpha1.DistributionKind
-				cfg.Spec.Connection.Context = "kind-my-cluster"
+				cfg.Spec.Cluster.Distribution = v1alpha1.DistributionKind
+				cfg.Spec.Cluster.Connection.Context = "kind-my-cluster"
 				factory := clusterprovisioner.NewMockFactory(t)
 
 				return cfg, factory
@@ -367,8 +367,8 @@ func getClusterNameConfigTestCases() []struct {
 				t.Helper()
 
 				cfg := v1alpha1.NewCluster()
-				cfg.Spec.Distribution = v1alpha1.DistributionK3d
-				cfg.Spec.Connection.Context = "k3d-test-cluster"
+				cfg.Spec.Cluster.Distribution = v1alpha1.DistributionK3d
+				cfg.Spec.Cluster.Connection.Context = "k3d-test-cluster"
 				factory := clusterprovisioner.NewMockFactory(t)
 
 				return cfg, factory
@@ -382,8 +382,8 @@ func getClusterNameConfigTestCases() []struct {
 				t.Helper()
 
 				cfg := v1alpha1.NewCluster()
-				cfg.Spec.Distribution = v1alpha1.DistributionKind
-				cfg.Spec.Connection.Context = ""
+				cfg.Spec.Cluster.Distribution = v1alpha1.DistributionKind
+				cfg.Spec.Cluster.Connection.Context = ""
 				factory := &errorFactory{err: errFactoryError}
 
 				return cfg, factory
@@ -397,8 +397,8 @@ func getClusterNameConfigTestCases() []struct {
 				t.Helper()
 
 				cfg := v1alpha1.NewCluster()
-				cfg.Spec.Distribution = v1alpha1.DistributionKind
-				cfg.Spec.Connection.Context = "invalid-context"
+				cfg.Spec.Cluster.Distribution = v1alpha1.DistributionKind
+				cfg.Spec.Cluster.Connection.Context = "invalid-context"
 				// This should fall back to factory, which will error
 				factory := &errorFactory{err: errFactoryError}
 

@@ -77,13 +77,13 @@ func TestScaffoldAppliesDistributionDefaults(t *testing.T) {
 			buffer := &bytes.Buffer{}
 			scaffolderInstance, mocks := newScaffolderWithMocks(t, buffer)
 
-			scaffolderInstance.KSailConfig.Spec.Distribution = testCase.distribution
-			scaffolderInstance.KSailConfig.Spec.DistributionConfig = ""
+			scaffolderInstance.KSailConfig.Spec.Cluster.Distribution = testCase.distribution
+			scaffolderInstance.KSailConfig.Spec.Cluster.DistributionConfig = ""
 
 			_ = scaffolderInstance.Scaffold(tempDir, false)
 
-			require.Equal(t, testCase.distribution, mocks.ksailLastModel.Spec.Distribution)
-			require.Equal(t, testCase.expected, mocks.ksailLastModel.Spec.DistributionConfig)
+			require.Equal(t, testCase.distribution, mocks.ksailLastModel.Spec.Cluster.Distribution)
+			require.Equal(t, testCase.expected, mocks.ksailLastModel.Spec.Cluster.DistributionConfig)
 		})
 	}
 }
@@ -339,7 +339,7 @@ func runDistributionErrorTest(t *testing.T, test distributionErrorTestCase) {
 	buffer := &bytes.Buffer{}
 	scaffolderInstance, mocks := newScaffolderWithMocks(t, buffer)
 
-	scaffolderInstance.KSailConfig.Spec.Distribution = test.distribution
+	scaffolderInstance.KSailConfig.Spec.Cluster.Distribution = test.distribution
 	test.configure(mocks)
 
 	err := scaffolderInstance.Scaffold(tempDir, false)
@@ -414,7 +414,7 @@ func TestScaffold_DistributionConfigPreservation(t *testing.T) {
 			require.NoError(t, os.WriteFile(oldConfig, []byte("old"), 0o600))
 
 			cluster := createK3dCluster(testCase.name)
-			cluster.Spec.DistributionConfig = scaffolder.KindConfigFile
+			cluster.Spec.Cluster.DistributionConfig = scaffolder.KindConfigFile
 
 			instance := scaffolder.NewScaffolder(cluster, testCase.writer, nil)
 
@@ -588,16 +588,16 @@ func captureScaffoldedContext(
 	buffer := &bytes.Buffer{}
 	instance, mocks := newScaffolderWithMocks(t, buffer)
 
-	instance.KSailConfig.Spec.Distribution = distribution
-	instance.KSailConfig.Spec.Connection.Context = initial
-	instance.KSailConfig.Spec.DistributionConfig = ""
+	instance.KSailConfig.Spec.Cluster.Distribution = distribution
+	instance.KSailConfig.Spec.Cluster.Connection.Context = initial
+	instance.KSailConfig.Spec.Cluster.DistributionConfig = ""
 
 	err := instance.Scaffold(tempDir, false)
 	if err != nil {
 		return "", fmt.Errorf("scaffold context: %w", err)
 	}
 
-	return mocks.ksailLastModel.Spec.Connection.Context, nil
+	return mocks.ksailLastModel.Spec.Cluster.Connection.Context, nil
 }
 
 func runCniCapture(
@@ -686,8 +686,8 @@ func setupScaffolderForCNI(
 	tempDir := t.TempDir()
 	buffer := &bytes.Buffer{}
 	instance, mocks := newScaffolderWithMocks(t, buffer)
-	instance.KSailConfig.Spec.CNI = cni
-	instance.KSailConfig.Spec.Distribution = distribution
+	instance.KSailConfig.Spec.Cluster.CNI = cni
+	instance.KSailConfig.Spec.Cluster.Distribution = distribution
 
 	return instance, mocks, tempDir
 }
@@ -867,15 +867,15 @@ func createTestCluster(_ string) v1alpha1.Cluster {
 func createKindCluster(name string) v1alpha1.Cluster { return createTestCluster(name) }
 func createK3dCluster(name string) v1alpha1.Cluster {
 	c := createTestCluster(name)
-	c.Spec.Distribution = v1alpha1.DistributionK3d
-	c.Spec.DistributionConfig = "k3d.yaml"
+	c.Spec.Cluster.Distribution = v1alpha1.DistributionK3d
+	c.Spec.Cluster.DistributionConfig = "k3d.yaml"
 
 	return c
 }
 
 func createUnknownCluster(name string) v1alpha1.Cluster {
 	c := createTestCluster(name)
-	c.Spec.Distribution = "unknown"
+	c.Spec.Cluster.Distribution = "unknown"
 
 	return c
 }
@@ -970,7 +970,7 @@ func newK3dScaffolder(t *testing.T, mirrors []string) *scaffolder.Scaffolder {
 	t.Helper()
 
 	cluster := v1alpha1.NewCluster()
-	cluster.Spec.Distribution = v1alpha1.DistributionK3d
+	cluster.Spec.Cluster.Distribution = v1alpha1.DistributionK3d
 
 	return scaffolder.NewScaffolder(*cluster, &bytes.Buffer{}, mirrors)
 }
