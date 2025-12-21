@@ -199,11 +199,7 @@
             }
           },
           "additionalProperties": false,
-          "type": "object",
-          "required": [
-            "sourceDirectory",
-            "validateOnPush"
-          ]
+          "type": "object"
         }
       },
       "additionalProperties": false,

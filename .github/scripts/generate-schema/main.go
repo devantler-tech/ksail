@@ -125,6 +125,11 @@ func customizeSpecProperties(properties *orderedmap.OrderedMap[string, *jsonsche
 		connProp.Required = nil
 	}
 
+	// Also fix required fields for workload (all fields have omitzero so they're optional)
+	if workloadProp, ok := specProp.Properties.Get("workload"); ok && workloadProp != nil {
+		workloadProp.Required = nil
+	}
+
 	// Also fix required fields for options (all fields have omitzero so they're optional)
 	if optionsProp, ok := specProp.Properties.Get("options"); ok && optionsProp != nil {
 		optionsProp.Required = nil
