@@ -717,7 +717,7 @@ Usage:
 
 Flags:
   -h, --help       help for push
-      --validate   Validate manifests after pushing
+      --validate   Validate manifests before pushing
 
 Global Flags:
       --timing   Show per-activity timing output

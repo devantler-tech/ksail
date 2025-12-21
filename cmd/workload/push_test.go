@@ -26,7 +26,7 @@ func TestNewPushCmdHasValidateFlag(t *testing.T) {
 	}
 
 	// Check usage text
-	expectedUsage := "Validate manifests after pushing"
+	expectedUsage := "Validate manifests before pushing"
 	if validateFlag.Usage != expectedUsage {
 		t.Fatalf("expected --validate flag usage to be %q, got %q", expectedUsage, validateFlag.Usage)
 	}
@@ -54,7 +54,7 @@ func TestPushCmdShowsValidateFlagInHelp(t *testing.T) {
 		t.Fatal("expected help text to include --validate flag")
 	}
 
-	if !strings.Contains(helpText, "Validate manifests after pushing") {
+	if !strings.Contains(helpText, "Validate manifests before pushing") {
 		t.Fatal("expected help text to include validate flag description")
 	}
 }

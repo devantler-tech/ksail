@@ -60,7 +60,7 @@ spec:
 | `cluster.localRegistry`         | enum     | `Disabled`           | `Enabled`, `Disabled`          | Provision local OCI registry.                                   |
 | `cluster.gitOpsEngine`          | enum     | `None`               | `None`, `Flux`, `ArgoCD`       | GitOps engine to install.                                       |
 | `workload.sourceDirectory`      | string   | `k8s`                | Directory path                 | Location of workload manifests.                                 |
-| `workload.validateOnPush`       | boolean  | `false`              | `true`, `false`                | Automatically validate manifests after pushing to local registry. |
+| `workload.validateOnPush`       | boolean  | `false`              | `true`, `false`                | Automatically validate manifests before pushing to local registry. |
 
 > Omitted fields use defaults (e.g., `cluster.cni` defaults to `Default`).
 
@@ -181,7 +181,7 @@ KSail provides commands for managing workloads through the `ksail workload` subc
 
 | Flag         | Purpose                                        |
 |--------------|------------------------------------------------|
-| `--validate` | Validate manifests after pushing to registry. |
+| `--validate` | Validate manifests before pushing to registry. |
 
 The `push` command validates manifests when either:
 
