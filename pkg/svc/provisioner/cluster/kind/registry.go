@@ -15,9 +15,10 @@ import (
 
 const kindNetworkName = "kind"
 
-// SetupRegistryHostsDirectory creates the containerd hosts directory structure for registry mirrors.
+// SetupRegistryHostsDirectory creates or uses existing containerd hosts directory for registry mirrors.
 // This uses the modern hosts directory pattern instead of deprecated ContainerdConfigPatches.
-// If a hosts.toml file already exists (from scaffolding), it is preserved.
+// If scaffolded hosts.toml files exist (from cluster init), they are preserved.
+// Otherwise, files are generated at runtime based on mirror specs.
 // Returns the hosts directory manager and any error encountered.
 func SetupRegistryHostsDirectory(
 	mirrorSpecs []registry.MirrorSpec,
@@ -27,28 +28,26 @@ func SetupRegistryHostsDirectory(
 		return nil, nil
 	}
 
-	// Create hosts directory in current working directory for declarative configuration
-	// Users can inspect, modify, and share these files as needed
 	hostsDir := "kind-mirrors"
 	mgr, err := registry.NewHostsDirectoryManager(hostsDir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create hosts directory manager: %w", err)
 	}
 
-	// Build mirror entries for any hosts that don't already have scaffolded files
+	// Build mirror entries for runtime generation
 	entries := registry.BuildMirrorEntries(mirrorSpecs, "", nil, nil, nil)
 	if len(entries) == 0 {
 		return nil, nil
 	}
 
-	// Only write hosts.toml files for registries that don't already have one
+	// Write hosts.toml files only for registries that don't already have scaffolded config
 	for _, entry := range entries {
 		hostsPath := filepath.Join(hostsDir, entry.Host, "hosts.toml")
 		if _, statErr := os.Stat(hostsPath); statErr == nil {
 			// File exists from scaffolding, preserve it
 			continue
 		}
-		// File doesn't exist, write it
+		// File doesn't exist, generate it at runtime
 		if _, writeErr := mgr.WriteHostsToml(entry); writeErr != nil {
 			_ = mgr.Cleanup()
 			return nil, fmt.Errorf("failed to write hosts.toml for %s: %w", entry.Host, writeErr)

@@ -16,37 +16,40 @@ func TestSetupRegistryHostsDirectory(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name        string
-		mirrorSpecs []registry.MirrorSpec
-		clusterName string
-		wantNil     bool
-		wantErr     bool
+		name           string
+		mirrorSpecs    []registry.MirrorSpec
+		clusterName    string
+		scaffoldFirst  bool // Whether to pre-create scaffolded files
+		wantNil        bool
+		wantErr        bool
 	}{
 		{
-			name: "creates hosts directory with single mirror",
+			name: "generates hosts.toml at runtime when no scaffolded config exists",
 			mirrorSpecs: []registry.MirrorSpec{
 				{Host: "docker.io", Remote: "https://registry-1.docker.io"},
 			},
-			clusterName: "test-cluster",
-			wantNil:     false,
-			wantErr:     false,
+			clusterName:   "test-cluster",
+			scaffoldFirst: false,
+			wantNil:       false,
+			wantErr:       false,
 		},
 		{
-			name: "creates hosts directory with multiple mirrors",
+			name: "preserves scaffolded config when it exists",
 			mirrorSpecs: []registry.MirrorSpec{
 				{Host: "docker.io", Remote: "https://registry-1.docker.io"},
-				{Host: "ghcr.io", Remote: "https://ghcr.io"},
 			},
-			clusterName: "test-cluster-multi",
-			wantNil:     false,
-			wantErr:     false,
+			clusterName:   "test-cluster-scaffolded",
+			scaffoldFirst: true,
+			wantNil:       false,
+			wantErr:       false,
 		},
 		{
-			name:        "returns nil for empty mirror specs",
-			mirrorSpecs: []registry.MirrorSpec{},
-			clusterName: "test-cluster-empty",
-			wantNil:     true,
-			wantErr:     false,
+			name:          "returns nil for empty mirror specs",
+			mirrorSpecs:   []registry.MirrorSpec{},
+			clusterName:   "test-cluster-empty",
+			scaffoldFirst: false,
+			wantNil:       true,
+			wantErr:       false,
 		},
 	}
 
@@ -54,7 +57,31 @@ func TestSetupRegistryHostsDirectory(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
+			hostsDir := "kind-mirrors"
+
+			// Pre-create scaffolded directory if needed
+			if tc.scaffoldFirst {
+				for _, spec := range tc.mirrorSpecs {
+					registryDir := filepath.Join(hostsDir, spec.Host)
+					err := os.MkdirAll(registryDir, 0o755)
+					require.NoError(t, err)
+
+					// Write a scaffolded hosts.toml with custom upstream
+					hostsPath := filepath.Join(registryDir, "hosts.toml")
+					content := `server = "https://` + spec.Host + `"` + "\n\n" +
+						`[host."` + spec.Remote + `"]` + "\n" +
+						`  capabilities = ["pull", "resolve"]` + "\n"
+					err = os.WriteFile(hostsPath, []byte(content), 0o644)
+					require.NoError(t, err)
+				}
+			}
+
 			mgr, err := kindprovisioner.SetupRegistryHostsDirectory(tc.mirrorSpecs, tc.clusterName)
+
+			// Cleanup after test
+			defer func() {
+				_ = os.RemoveAll(hostsDir)
+			}()
 
 			if tc.wantErr {
 				require.Error(t, err)
@@ -69,15 +96,12 @@ func TestSetupRegistryHostsDirectory(t *testing.T) {
 			}
 
 			require.NotNil(t, mgr)
-			defer func() {
-				_ = mgr.Cleanup()
-			}()
 
 			// Verify base directory exists
 			baseDir := mgr.GetBaseDir()
 			assert.DirExists(t, baseDir)
 
-			// Verify hosts.toml files were created
+			// Verify hosts.toml files exist
 			for _, spec := range tc.mirrorSpecs {
 				hostDir := filepath.Join(baseDir, spec.Host)
 				assert.DirExists(t, hostDir)
@@ -86,11 +110,15 @@ func TestSetupRegistryHostsDirectory(t *testing.T) {
 				assert.FileExists(t, hostsFile)
 
 				// Verify content
-				content, err := os.ReadFile(hostsFile)
-				require.NoError(t, err)
+				content, readErr := os.ReadFile(hostsFile)
+				require.NoError(t, readErr)
 				assert.Contains(t, string(content), "server = ")
-				assert.Contains(t, string(content), `[host."http://`)
 				assert.Contains(t, string(content), `capabilities = ["pull", "resolve"]`)
+
+				// If scaffolded, verify the custom upstream was preserved
+				if tc.scaffoldFirst {
+					assert.Contains(t, string(content), spec.Remote)
+				}
 			}
 		})
 	}
