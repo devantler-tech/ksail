@@ -859,8 +859,11 @@ func createTestCluster(_ string) v1alpha1.Cluster {
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{
 				Distribution:       v1alpha1.DistributionKind,
-			SourceDirectory:    "k8s",
-			DistributionConfig: "kind.yaml",
+				DistributionConfig: "kind.yaml",
+			},
+			Workload: v1alpha1.WorkloadSpec{
+				SourceDirectory: "k8s",
+			},
 		},
 	}
 }

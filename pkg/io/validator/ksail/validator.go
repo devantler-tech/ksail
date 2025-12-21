@@ -99,7 +99,7 @@ func (v *Validator) validateContextName(
 
 	if config.Spec.Cluster.Connection.Context != expectedContext {
 		result.AddError(validator.ValidationError{
-			Field:         "spec.connection.context",
+			Field:         "spec.cluster.connection.context",
 			Message:       "context name does not match expected pattern for distribution",
 			CurrentValue:  config.Spec.Cluster.Connection.Context,
 			ExpectedValue: expectedContext,
