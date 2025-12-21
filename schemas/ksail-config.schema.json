@@ -193,6 +193,9 @@
           "properties": {
             "sourceDirectory": {
               "type": "string"
+            },
+            "validateOnPush": {
+              "type": "boolean"
             }
           },
           "additionalProperties": false,

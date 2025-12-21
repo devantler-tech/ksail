@@ -16,6 +16,8 @@ import (
 //
 //nolint:funlen // Cobra command RunE functions typically combine setup, validation, and execution
 func NewPushCmd(_ *runtime.Runtime) *cobra.Command {
+	var validate bool
+
 	cmd := &cobra.Command{
 		Use:          "push",
 		Short:        "Package and push an OCI artifact to the local registry",
@@ -98,8 +100,41 @@ func NewPushCmd(_ *runtime.Runtime) *cobra.Command {
 			Writer:  cmd.OutOrStdout(),
 		})
 
+		// Validate if flag is set or config option is enabled
+		shouldValidate := validate || clusterCfg.Spec.Workload.ValidateOnPush
+		if shouldValidate {
+			notify.WriteMessage(notify.Message{
+				Type:    notify.ActivityType,
+				Content: "validating manifests",
+				Timer:   outputTimer,
+				Writer:  cmd.OutOrStdout(),
+			})
+
+			err = runValidateCmd(
+				cmd.Context(),
+				cmd,
+				[]string{sourceDir},
+				true,  // skipSecrets
+				true,  // strict
+				true,  // ignoreMissingSchemas
+				false, // verbose
+			)
+			if err != nil {
+				return fmt.Errorf("validate manifests: %w", err)
+			}
+
+			notify.WriteMessage(notify.Message{
+				Type:    notify.SuccessType,
+				Content: "manifests validated",
+				Timer:   outputTimer,
+				Writer:  cmd.OutOrStdout(),
+			})
+		}
+
 		return nil
 	}
+
+	cmd.Flags().BoolVar(&validate, "validate", false, "Validate manifests after pushing")
 
 	return cmd
 }
