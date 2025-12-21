@@ -17,5 +17,4 @@ CLI tool for managing local Kubernetes clusters and workloads.
 ## Quick Links
 
 - **Installing?** See [github.com/devantler-tech/ksail](https://github.com/devantler-tech/ksail#installation)
-- **API docs?** See [pkg.go.dev](https://pkg.go.dev/github.com/devantler-tech/ksail)
 - **Issues or questions?** Open an issue or discussion in the repository
