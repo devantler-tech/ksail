@@ -5,20 +5,20 @@ nav_order: 3
 
 # Configuration
 
-KSail keeps cluster configuration reproducible through declarative YAML files and CLI overrides. Run `ksail cluster init` to generate configuration files that the team can commit and share.
+KSail uses declarative YAML files and CLI overrides for reproducible cluster configuration. Run `ksail cluster init` to generate files that can be committed and shared.
 
 ## Configuration Precedence
 
-Configuration is resolved in the following order (highest precedence first):
+Configuration is resolved (highest to lowest):
 
-1. CLI flags supplied on the command (e.g., `--metrics-server Disabled`)
-2. Environment variables prefixed with `KSAIL_` (e.g., `KSAIL_SPEC_DISTRIBUTION=K3d`)
-3. The nearest `ksail.yaml` in the current or parent directories
+1. CLI flags (e.g., `--metrics-server Disabled`)
+2. Environment variables with `KSAIL_` prefix (e.g., `KSAIL_SPEC_DISTRIBUTION=K3d`)
+3. Nearest `ksail.yaml` in current or parent directories
 4. Built-in defaults
 
 ## Declarative Configuration
 
-Every KSail project includes a `ksail.yaml` file that describes the desired cluster. The CLI reads this file on every invocation and validates it before taking action.
+Each KSail project includes a `ksail.yaml` describing the desired cluster.
 
 ### Example ksail.yaml
 
@@ -58,16 +58,16 @@ spec:
 | `localRegistry`         | enum     | `Disabled`           | `Enabled`, `Disabled`          | Provision local OCI registry.                                   |
 | `gitOpsEngine`          | enum     | `None`               | `None`, `Flux`, `ArgoCD`       | GitOps engine to install.                                       |
 
-> The CLI applies defaults for any omitted field. For example, if `cni` is not present, KSail uses `Default`, which uses the distribution's built-in networking (`kindnetd` for Kind, `flannel` for K3d).
+> Omitted fields use defaults (e.g., `cni` defaults to `Default`).
 
 ### Distribution Configs
 
-KSail stores distribution configuration alongside `ksail.yaml`:
+Distribution configuration sits alongside `ksail.yaml`:
 
-- **`kind.yaml`** – [Kind configuration](https://kind.sigs.k8s.io/docs/user/configuration/) for node layout, networking, and port mappings
-- **`k3d.yaml`** – [K3d configuration](https://k3d.io/stable/usage/configfile/) for K3s-specific options
+- **`kind.yaml`** – [Kind configuration](https://kind.sigs.k8s.io/docs/user/configuration/)
+- **`k3d.yaml`** – [K3d configuration](https://k3d.io/stable/usage/configfile/)
 
-Use the `spec.distributionConfig` field to point to the desired file.
+Reference via `spec.distributionConfig`.
 
 ### Schema Support
 
@@ -152,75 +152,101 @@ ksail cluster init \
   --mirror-registry gcr.io=https://gcr.io
 ```
 
+**Enable GitOps engine:**
+
+```bash
+ksail cluster init --gitops-engine Flux --local-registry Enabled
+```
+
+### Workload Commands
+
+KSail provides commands for managing workloads through the `ksail workload` subcommand family:
+
+**Manifest management:**
+
+- `ksail workload apply` - Apply manifests using kubectl or kustomize
+- `ksail workload validate` - Validate manifests with kubeconform
+- `ksail workload gen` - Generate Kubernetes resource templates
+
+**GitOps workflow:**
+
+- `ksail workload push` - Package and push manifests as OCI artifact to local registry
+- `ksail workload reconcile` - Trigger GitOps reconciliation and wait for completion
+
+**Kubectl wrappers:**
+
+- `ksail workload get` - Get resources
+- `ksail workload edit` - Edit resources
+- `ksail workload logs` - View container logs
+- `ksail workload exec` - Execute commands in containers
+- `ksail workload wait` - Wait for resource conditions
+
+**Reconcile command flags:**
+
+| Flag        | Purpose                                                     |
+|-------------|-------------------------------------------------------------|
+| `--timeout` | Timeout for reconciliation (e.g., `10m`). Overrides config. |
+
+The `reconcile` command respects timeout in this order:
+
+1. `--timeout` flag if provided
+2. `spec.connection.timeout` from `ksail.yaml`
+3. Default 5-minute timeout
+
+**Example usage:**
+
+```bash
+# Push manifests to local registry
+ksail workload push
+
+# Trigger reconciliation with default timeout
+ksail workload reconcile
+
+# Override timeout
+ksail workload reconcile --timeout 10m
+```
+
 ## When to Use What
 
-- **Use CLI flags** for temporary overrides during development
-- **Edit `ksail.yaml`** for project-wide defaults that all commands will use
-- **Edit `kind.yaml` or `k3d.yaml`** for distribution-specific settings like node counts or port mappings
-- **Use environment variables** for CI/CD pipelines or machine-specific overrides
-
-These configuration layers allow you to balance version-controlled defaults with flexible runtime overrides.
+- **CLI flags** – Temporary overrides during development
+- **`ksail.yaml`** – Project-wide defaults
+- **Distribution configs** – Distribution-specific settings (node counts, port mappings)
+- **Environment variables** – CI/CD or machine-specific overrides
 
 ## Editor Configuration
 
-KSail supports configuring a default editor for interactive workflows. This editor is used by:
+KSail uses a configured editor for:
 
-- `ksail cipher edit` - Edit encrypted secrets with SOPS
-- `ksail workload edit` - Edit Kubernetes resources with kubectl
-- `ksail cluster connect` - Editor for k9s edit actions
+- `ksail cipher edit` – Edit encrypted secrets with SOPS
+- `ksail workload edit` – Edit Kubernetes resources
+- `ksail cluster connect` – Edit actions in k9s
 
-### Editor Resolution Order
+### Editor Resolution (highest to lowest)
 
-The editor is resolved with the following precedence (highest to lowest):
-
-1. `--editor` flag on the command
-2. `spec.editor` field in `ksail.yaml`
+1. `--editor` flag
+2. `spec.editor` in `ksail.yaml`
 3. Environment variables (`SOPS_EDITOR`, `KUBE_EDITOR`, `EDITOR`, `VISUAL`)
-4. Fallback to available editors (`vim`, `nano`, `vi`)
+4. Fallback (`vim`, `nano`, `vi`)
 
-### Configuration Examples
+### Examples
 
-**Via ksail.yaml:**
+**Via `ksail.yaml`:**
 
 ```yaml
-apiVersion: ksail.dev/v1alpha1
-kind: Cluster
 spec:
   editor: code --wait
-  # ... other configuration
 ```
 
-**Via CLI flag:**
+**Via CLI:**
 
 ```bash
-# Edit a secret with VS Code
 ksail cipher edit --editor "code --wait" secrets.yaml
-
-# Edit a deployment with vim
 ksail workload edit --editor vim deployment/my-app
-
-# Connect with nano as the default editor
-ksail cluster connect --editor nano
 ```
 
-**Via environment variable:**
+**Via environment:**
 
 ```bash
-# Set for all commands
 export EDITOR="code --wait"
 ksail cipher edit secrets.yaml
-
-# Or use SOPS_EDITOR for cipher commands
-export SOPS_EDITOR="vim"
-ksail cipher edit secrets.yaml
 ```
-
-### Editor Command Format
-
-The editor value can include command-line arguments:
-
-- `vim` - Simple editor
-- `code --wait` - VS Code with wait flag
-- `emacs -nw` - Emacs in terminal mode
-
-The command is parsed by splitting on whitespace, similar to how shell commands work.

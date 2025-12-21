@@ -71,6 +71,9 @@ linters:
           - ireturn
         path: pkg/client/kubeconform/client.go
       - linters:
+          - ireturn
+        path: cmd/workload/reconcile.go
+      - linters:
           - nlreturn
         path: pkg/scaffolder/scaffolder_test.go
       - linters:

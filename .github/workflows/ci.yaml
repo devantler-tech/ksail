@@ -168,7 +168,7 @@ jobs:
           ./bin/ksail workload apply -k /tmp/podinfo-overlay
           ./bin/ksail workload wait --for=condition=Available deployment/podinfo --timeout=300s
 
-      - name: 🧪 ksail workload reconcile
+      - name: 🧪 ksail workload push and reconcile
         if: contains(matrix.init-args, '--gitops-engine Flux') || contains(matrix.init-args, '--gitops-engine ArgoCD')
         run: |
           cat > k8s/reconcile-test-deployment.yaml <<'EOF'
@@ -222,6 +222,10 @@ jobs:
             exit 1
           fi
 
+          # Push the OCI artifact to the local registry
+          ./bin/ksail workload push
+
+          # Trigger reconciliation and wait for completion
           ./bin/ksail workload reconcile
 
       - name: 🧪 ksail cluster stop

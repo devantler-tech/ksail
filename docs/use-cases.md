@@ -5,139 +5,104 @@ nav_order: 4
 
 # Use Cases
 
-KSail focuses on fast, reproducible feedback loops for local Kubernetes development. The CLI targets developer desktops, CI pipelines, and learning environments where rapid provisioning is important.
+Fast, reproducible workflows for local Kubernetes development, CI pipelines, and learning environments.
 
-All scenarios use the same configuration primitives documented in [Configuration](configuration.md). Start with `ksail cluster init` to scaffold a project, then follow the workflows below.
+All scenarios use configuration primitives from [Configuration](configuration.md). Start with `ksail cluster init`.
 
 ## Learning Kubernetes
 
-KSail simplifies Kubernetes experimentation by providing a consistent interface over Kind and K3d. Focus on learning Kubernetes concepts without complex cluster setup.
-
-### Quick Learning Session
+Experiment with Kubernetes without complex setup.
 
 ```bash
-# 1. Create a playground
+# Create playground
 ksail cluster init --distribution Kind --cni Cilium
-
-# 2. Start the cluster
 ksail cluster create
 
-# 3. Try workloads
+# Try workloads
 ksail workload gen deployment echo --image=hashicorp/http-echo:0.2.3 --port 5678
 ksail workload validate -f echo.yaml
 ksail workload apply -f echo.yaml
 ksail workload wait --for=condition=Available deployment/echo --timeout=120s
 
-# 4. Inspect with k9s
+# Inspect
 ksail cluster connect
 
-# 5. Clean up and repeat
+# Clean up
 ksail cluster delete
 ```
 
-### Learning Tips
-
-- Switch between `--distribution Kind` and `--distribution K3d` to compare runtimes
-- Try `--cni Cilium` to explore advanced networking features
-- Use `--cert-manager Enabled` to learn about TLS certificate management
-- Track configuration in Git to understand how changes affect cluster behavior
-
-Reference `kubectl explain` and the [Kubernetes documentation](https://kubernetes.io/docs/) for deeper understanding.
+**Tips:** Switch distributions (`--distribution K3d`), try `--cni Cilium` or `--cert-manager Enabled`, commit config to track changes.
 
 ## Local Development
 
-KSail helps you run Kubernetes manifests locally. The CLI provides a consistent workflow that matches your deployment configuration.
-
-### Development Workflow
+Run Kubernetes manifests locally with consistent workflow.
 
 ```bash
-# 1. Scaffold project (commit these files for team consistency)
+# Scaffold project
 ksail cluster init --distribution Kind --cni Cilium --metrics-server Enabled
-
-# If your workloads need persistent volumes, include CSI configuration:
-# ksail cluster init --distribution Kind --cni Cilium --metrics-server Enabled --csi LocalPathStorage
-
-# 2. Create cluster
-ksail cluster create
-
-# 3. Validate and apply workloads
-ksail workload validate k8s/
-
-# 4. Apply workloads
-ksail workload apply -k k8s/
-ksail workload get pods
-
-# 5. Debug and inspect
-ksail workload logs deployment/my-app --tail 200
-ksail workload exec deployment/my-app -- sh
-ksail cluster connect  # Opens k9s
-
-# 6. Clean up
-ksail cluster delete
-```
-
-### Local Registry Workflow
-
-For faster dev loops with local images:
-
-```bash
-# Initialize with local registry
-ksail cluster init --local-registry Enabled --local-registry-port 5111
 
 # Create cluster
 ksail cluster create
 
-# Build and push local images
+# Validate and apply workloads
+ksail workload validate k8s/
+ksail workload apply -k k8s/
+ksail workload get pods
+
+# Debug
+ksail workload logs deployment/my-app --tail 200
+ksail workload exec deployment/my-app -- sh
+ksail cluster connect
+
+# Clean up
+ksail cluster delete
+```
+
+### Local Registry
+
+For local images:
+
+```bash
+ksail cluster init --local-registry Enabled --local-registry-port 5111
+ksail cluster create
+
+# Build and push
 docker build -t localhost:5111/my-app:dev .
 docker push localhost:5111/my-app:dev
 
-# Update manifests to reference localhost:5111/my-app:dev
+# Reference in manifests: localhost:5111/my-app:dev
 ksail workload apply -k k8s/
 ```
 
-### Development Tips
-
-- Use `--csi LocalPathStorage` if your workloads require persistent volumes
-- Use `--cert-manager Enabled` if you need TLS certificates
-- Configure `--mirror-registry` to cache upstream images and avoid rate limits
-- Use `ksail workload gen` to create sample resource manifests
-- **Validate manifests with `ksail workload validate` before applying** to catch errors early
-- Use `--verbose` flag with validate to see detailed validation output
-- Test manifests locally before committing to version control
-- Commit `ksail.yaml` so your team inherits the same setup automatically
+**Tips:** Use `--csi LocalPathStorage` for persistent volumes, `--cert-manager Enabled` for TLS, `--mirror-registry` to avoid rate limits, validate before applying, commit `ksail.yaml` for team consistency.
 
 ## E2E Testing in CI/CD
 
-KSail enables CI/CD pipelines to create disposable Kubernetes clusters for integration testing using the same declarative configuration that developers use locally.
-
-### Pipeline Workflow
+Disposable Kubernetes clusters for integration testing.
 
 ```bash
-# 1. Initialize (commit config so CI only needs to run create)
+# Initialize (commit config)
 ksail cluster init --distribution Kind --metrics-server Enabled
 
-# If your tests need persistent volumes, add CSI configuration:
-# ksail cluster init --distribution Kind --metrics-server Enabled --csi LocalPathStorage
-
-# 2. Create cluster in CI
+# Create cluster in CI
 ksail cluster create
 ksail cluster info
 
-# 3. Deploy and test
+# Deploy and test
 ksail workload validate k8s/
 ksail workload apply -k k8s/
 ksail workload wait --for=condition=Available deployment/my-app --timeout=180s
 go test ./tests/e2e/... -count=1
 
-# 4. Collect diagnostics on failure
+# Collect diagnostics on failure
 ksail workload logs deployment/my-app --since 5m
 ksail workload get events -A
 
-# 5. Clean up
+# Clean up
 ksail cluster delete
 ```
 
-### Example GitHub Actions Workflow
+### GitHub Actions Example
 
 ```yaml
 name: e2e
@@ -150,45 +115,69 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Go
-        uses: actions/setup-go@v5
+      - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - name: Install ksail
-        run: go install github.com/devantler-tech/ksail@latest
-      - name: Create cluster
-        run: ksail cluster create
-      - name: Deploy workloads
-        run: |
+      - run: go install github.com/devantler-tech/ksail@latest
+      - run: ksail cluster create
+      - run: |
           ksail workload validate k8s/
           ksail workload apply -k k8s/
           ksail workload wait --for=condition=Available deployment/my-app --timeout=180s
-      - name: Run tests
-        run: go test ./tests/e2e/... -count=1
-      - name: Upload logs on failure
-        if: failure()
+      - run: go test ./tests/e2e/... -count=1
+      - if: failure()
         run: |
           ksail workload logs deployment/my-app --since 5m > logs.txt
           ksail workload get events -A > events.txt
-      - name: Destroy cluster
-        if: always()
+      - if: always()
         run: ksail cluster delete
 ```
 
-### CI/CD Tips
+**Tips:** Use Kind for speed, `--csi LocalPathStorage` for PVCs, set reasonable timeouts, cache images, use `--mirror-registry`, collect state before deletion.
 
-- Use Kind for fastest cluster creation in CI environments
-- Use `--csi LocalPathStorage` if your tests need persistent volumes (PVCs)
-- Set reasonable timeouts for cluster creation and workload readiness
-- Cache Docker images to speed up subsequent runs
-- Use `--mirror-registry` flags to reduce external registry dependencies
-- Collect cluster state before deletion for debugging failed runs
+## GitOps Development Workflow
 
-### Security Recommendations
+Local GitOps workflows with Flux or ArgoCD.
 
-- Store secrets with SOPS and decrypt during pipeline with `ksail cipher decrypt`
-- Keep SOPS/age private keys out of repository and images
-- Provide decryption keys via CI secret store (e.g., GitHub Actions secrets)
-- Use `--mirror-registry` for registries requiring mirroring
-- Add nightly jobs against default branch to catch drift
-- Track cluster creation times to identify performance regressions
+### Flux
+
+```bash
+# Initialize
+ksail cluster init --gitops-engine Flux --local-registry Enabled
+ksail cluster create
+
+# Edit manifests in k8s/
+
+# Push and reconcile
+ksail workload push
+ksail workload reconcile
+
+# Verify
+ksail workload get pods
+ksail cluster connect
+```
+
+### ArgoCD
+
+```bash
+# Initialize
+ksail cluster init --gitops-engine ArgoCD --local-registry Enabled
+ksail cluster create
+
+# Edit manifests in k8s/
+
+# Push and reconcile
+ksail workload push
+ksail workload reconcile --timeout 10m
+```
+
+**Tips:** Push after every manifest change, `reconcile` waits for completion and triggers both Flux and ArgoCD, Flux auto-detects new artifacts from the OCI registry while ArgoCD relies on `ksail workload reconcile`, use `--timeout` for long deployments, test locally before production, commit `ksail.yaml`.
+
+### Security
+
+- Encrypt secrets with SOPS: `ksail cipher encrypt`
+- Decrypt in pipeline: `ksail cipher decrypt`
+- Keep age keys out of repo and images
+- Provide keys via CI secrets
+- Use `--mirror-registry` as needed
+- Add nightly jobs for drift detection
