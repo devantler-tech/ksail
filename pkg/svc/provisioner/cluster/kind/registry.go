@@ -3,6 +3,8 @@ package kindprovisioner
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net"
@@ -182,6 +184,18 @@ func listKindNodes(
 	return nodes, nil
 }
 
+// generateRandomDelimiter creates a random heredoc delimiter to prevent injection attacks.
+// The delimiter is prefixed with "EOF_" and followed by 16 random hex characters,
+// making it extremely unlikely to appear in user-controlled content.
+func generateRandomDelimiter() (string, error) {
+	randomBytes := make([]byte, 8) // 8 bytes = 16 hex chars
+	_, err := rand.Read(randomBytes)
+	if err != nil {
+		return "", fmt.Errorf("failed to generate random delimiter: %w", err)
+	}
+	return "EOF_" + hex.EncodeToString(randomBytes), nil
+}
+
 // injectHostsToml creates the hosts directory and writes the hosts.toml file inside a Kind node.
 func injectHostsToml(
 	ctx context.Context,
@@ -196,12 +210,19 @@ func injectHostsToml(
 	// Escape the directory path for safe use in shell commands
 	escapedCertsDir := EscapeShellArg(certsDir)
 
+	// Generate a random heredoc delimiter to prevent injection attacks
+	delimiter, err := generateRandomDelimiter()
+	if err != nil {
+		return err
+	}
+
 	// Execute: mkdir -p <dir> && cat > <dir>/hosts.toml
 	// We use a shell command to create the directory and write the file in one go
+	// The heredoc delimiter is randomized to prevent content injection attacks
 	cmd := []string{
 		"sh", "-c",
-		fmt.Sprintf("mkdir -p %s && cat > %s/hosts.toml << 'HOSTS_TOML_EOF'\n%s\nHOSTS_TOML_EOF",
-			escapedCertsDir, escapedCertsDir, hostsTomlContent),
+		fmt.Sprintf("mkdir -p %s && cat > %s/hosts.toml << '%s'\n%s\n%s",
+			escapedCertsDir, escapedCertsDir, delimiter, hostsTomlContent, delimiter),
 	}
 
 	execConfig := container.ExecOptions{

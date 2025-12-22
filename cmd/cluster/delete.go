@@ -10,6 +10,7 @@ import (
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	k3dconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/k3d"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
+	"github.com/devantler-tech/ksail/v5/pkg/io/scaffolder"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	k3dprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/k3d"
 	kindprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/kind"
@@ -148,7 +149,7 @@ func cleanupKindMirrorRegistries(
 
 	// Try to read existing hosts.toml files.
 	// ReadExistingHostsToml returns (nil, nil) for missing directories, and an error for actual I/O issues.
-	existingSpecs, err := registry.ReadExistingHostsToml("kind-mirrors")
+	existingSpecs, err := registry.ReadExistingHostsToml(scaffolder.KindMirrorsDir)
 	if err != nil {
 		return fmt.Errorf("failed to read existing hosts configuration: %w", err)
 	}
