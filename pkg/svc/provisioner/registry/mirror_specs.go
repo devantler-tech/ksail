@@ -50,6 +50,31 @@ func ParseMirrorSpecs(specs []string) []MirrorSpec {
 	return parsed
 }
 
+// MergeSpecs merges two sets of mirror specs, with flagSpecs taking precedence.
+// If the same host appears in both, the version from flagSpecs is used.
+func MergeSpecs(existingSpecs, flagSpecs []MirrorSpec) []MirrorSpec {
+	// If there are flag specs, they take full precedence for those hosts
+	// Start with a map of existing specs
+	specMap := make(map[string]MirrorSpec)
+
+	for _, spec := range existingSpecs {
+		specMap[spec.Host] = spec
+	}
+
+	// Override with flag specs
+	for _, spec := range flagSpecs {
+		specMap[spec.Host] = spec
+	}
+
+	// Convert map back to slice
+	result := make([]MirrorSpec, 0, len(specMap))
+	for _, spec := range specMap {
+		result = append(result, spec)
+	}
+
+	return result
+}
+
 // BuildMirrorEntries converts mirror specs into registry entries using the provided prefix.
 // Prefix should exclude the trailing hyphen (e.g., "kind", "k3d"). An empty prefix results in
 // container names that match the sanitized host directly, which is useful when sharing mirrors across distributions.

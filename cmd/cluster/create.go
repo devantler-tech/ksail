@@ -951,14 +951,19 @@ func runRegistryStageWithRole(
 		cfgManager.Viper.GetStringSlice("mirror-registry"),
 	)
 
-	// Try to read existing hosts.toml files from kind-mirrors directory
+	// Try to read existing hosts.toml files from kind-mirrors directory.
+	// Missing directories/files are treated as "no existing configuration".
 	existingSpecs, err := registry.ReadExistingHostsToml("kind-mirrors")
 	if err != nil {
-		return fmt.Errorf("failed to read existing hosts configuration: %w", err)
+		if errors.Is(err, os.ErrNotExist) {
+			existingSpecs = nil
+		} else {
+			return fmt.Errorf("failed to read existing hosts configuration: %w", err)
+		}
 	}
 
 	// Merge specs: flag specs override existing specs for the same host
-	mirrorSpecs := mergeSpecs(existingSpecs, flagSpecs)
+	mirrorSpecs := registry.MergeSpecs(existingSpecs, flagSpecs)
 
 	definition, ok := registryStageDefinitions[role]
 	if !ok {
@@ -1224,31 +1229,6 @@ func runCNIInstallation(
 	})
 
 	return nil
-}
-
-// mergeSpecs merges two sets of mirror specs, with flagSpecs taking precedence.
-// If the same host appears in both, the version from flagSpecs is used.
-func mergeSpecs(existingSpecs, flagSpecs []registry.MirrorSpec) []registry.MirrorSpec {
-	// If there are flag specs, they take full precedence for those hosts
-	// Start with a map of existing specs
-	specMap := make(map[string]registry.MirrorSpec)
-
-	for _, spec := range existingSpecs {
-		specMap[spec.Host] = spec
-	}
-
-	// Override with flag specs
-	for _, spec := range flagSpecs {
-		specMap[spec.Host] = spec
-	}
-
-	// Convert map back to slice
-	result := make([]registry.MirrorSpec, 0, len(specMap))
-	for _, spec := range specMap {
-		result = append(result, spec)
-	}
-
-	return result
 }
 
 // prepareKindConfigWithMirrors prepares the Kind config by setting up hosts directory for mirrors.
