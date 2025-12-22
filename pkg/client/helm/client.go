@@ -414,6 +414,8 @@ func (c *Client) performInstall(ctx context.Context, spec *ChartSpec) (*v1.Relea
 
 	if spec.Wait {
 		client.WaitStrategy = helmv4kube.StatusWatcherStrategy
+	} else {
+		client.WaitStrategy = helmv4kube.HookOnlyStrategy
 	}
 
 	client.WaitForJobs = spec.WaitForJobs
@@ -444,6 +446,8 @@ func (c *Client) upgradeRelease(ctx context.Context, spec *ChartSpec) (*v1.Relea
 
 	if spec.Wait {
 		client.WaitStrategy = helmv4kube.StatusWatcherStrategy
+	} else {
+		client.WaitStrategy = helmv4kube.HookOnlyStrategy
 	}
 
 	client.WaitForJobs = spec.WaitForJobs
