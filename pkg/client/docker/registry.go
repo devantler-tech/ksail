@@ -5,8 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -61,27 +59,6 @@ const (
 	RegistryDataPath = "/var/lib/registry"
 	// RegistryRestartPolicy defines the container restart policy.
 	RegistryRestartPolicy = "unless-stopped"
-
-	// RegistryConfigTemplate is the base configuration template for registry containers.
-	RegistryConfigTemplate = `version: 0.1
-log:
-  level: info
-  fields:
-    service: registry
-storage:
-  cache:
-    blobdescriptor: inmemory
-  filesystem:
-    rootdirectory: /var/lib/registry
-  delete:
-    enabled: true
-http:
-  addr: :5000
-health:
-  storagedriver:
-    enabled: true
-    interval: 10s
-    threshold: 3`
 )
 
 // RegistryManager manages Docker registry containers for mirror/pull-through caching.
@@ -130,21 +107,14 @@ func (rm *RegistryManager) CreateRegistry(ctx context.Context, config RegistryCo
 		return fmt.Errorf("failed to ensure registry image: %w", err)
 	}
 
-	// Prepare registry resources (volume and config file)
-	volumeName, configFilePath, err := rm.prepareRegistryResources(ctx, config)
+	// Prepare registry resources (volume)
+	volumeName, err := rm.prepareRegistryResources(ctx, config)
 	if err != nil {
 		return fmt.Errorf("failed to prepare registry resources: %w", err)
 	}
 
-	// Clean up config file when done
-	if configFilePath != "" {
-		defer func() {
-			_ = os.Remove(configFilePath)
-		}()
-	}
-
 	// Create and start the container
-	return rm.createAndStartContainer(ctx, config, volumeName, configFilePath)
+	return rm.createAndStartContainer(ctx, config, volumeName)
 }
 
 // DeleteRegistry removes a registry container and optionally its volume.
@@ -286,11 +256,11 @@ func (rm *RegistryManager) GetRegistryPort(ctx context.Context, name string) (in
 	return 0, ErrRegistryPortNotFound
 }
 
-// prepareRegistryResources creates the volume and config file for a registry.
+// prepareRegistryResources creates the volume for a registry.
 func (rm *RegistryManager) prepareRegistryResources(
 	ctx context.Context,
 	config RegistryConfig,
-) (string, string, error) {
+) (string, error) {
 	// Create volume for registry data using a distribution-agnostic name for reuse
 	volumeName := rm.resolveVolumeName(config)
 	if volumeName == "" {
@@ -299,33 +269,21 @@ func (rm *RegistryManager) prepareRegistryResources(
 
 	err := rm.createVolume(ctx, volumeName)
 	if err != nil {
-		return "", "", fmt.Errorf("failed to create registry volume: %w", err)
+		return "", fmt.Errorf("failed to create registry volume: %w", err)
 	}
 
-	// Create config file if upstream URL is provided
-	var configFilePath string
-	if config.UpstreamURL != "" {
-		configFilePath, err = rm.createRegistryConfigFile(config.Name, config.UpstreamURL)
-		if err != nil {
-			// Clean up the volume we just created since config file creation failed
-			_ = rm.client.VolumeRemove(ctx, volumeName, false)
-
-			return "", "", fmt.Errorf("failed to create registry config file: %w", err)
-		}
-	}
-
-	return volumeName, configFilePath, nil
+	return volumeName, nil
 }
 
 // createAndStartContainer creates and starts a registry container.
 func (rm *RegistryManager) createAndStartContainer(
 	ctx context.Context,
 	config RegistryConfig,
-	volumeName, configFilePath string,
+	volumeName string,
 ) error {
 	// Prepare container configuration
 	containerConfig := rm.buildContainerConfig(config)
-	hostConfig := rm.buildHostConfig(config, volumeName, configFilePath)
+	hostConfig := rm.buildHostConfig(config, volumeName)
 	networkConfig := rm.buildNetworkConfig(config)
 
 	// Create container
@@ -456,6 +414,8 @@ func (rm *RegistryManager) createVolume(
 // Configuration builders.
 
 // buildContainerConfig builds the container configuration for a registry.
+// If an upstream URL is provided, environment variables are set to configure
+// the registry as a pull-through cache (proxy) to that upstream.
 func (rm *RegistryManager) buildContainerConfig(
 	config RegistryConfig,
 ) *container.Config {
@@ -464,69 +424,27 @@ func (rm *RegistryManager) buildContainerConfig(
 		labels[RegistryLabelKey] = config.Name
 	}
 
+	// Build environment variables for registry configuration
+	var env []string
+	if config.UpstreamURL != "" {
+		// Configure registry as a pull-through cache to the upstream
+		env = append(env, "REGISTRY_PROXY_REMOTEURL="+config.UpstreamURL)
+	}
+
 	return &container.Config{
 		Image: RegistryImageName,
 		ExposedPorts: nat.PortSet{
 			RegistryContainerPort: struct{}{},
 		},
 		Labels: labels,
+		Env:    env,
 	}
-}
-
-// generateRegistryConfig creates a registry configuration with optional proxy settings.
-func (rm *RegistryManager) generateRegistryConfig(upstreamURL string) string {
-	baseConfig := RegistryConfigTemplate
-
-	if upstreamURL != "" {
-		baseConfig += "\nproxy:\n  remoteurl: " + upstreamURL
-	}
-
-	return baseConfig
-}
-
-// createRegistryConfigFile creates a temporary registry configuration file.
-// The caller is responsible for deleting the returned file path when done.
-// Deletion can be done with os.Remove() - if deletion fails, it will leave
-// a temporary file in the system temp directory.
-func (rm *RegistryManager) createRegistryConfigFile(
-	registryName, upstreamURL string,
-) (string, error) {
-	configContent := rm.generateRegistryConfig(upstreamURL)
-
-	// Create temp file
-	tmpFile, err := os.CreateTemp("", "registry-config-"+registryName+"-*.yml")
-	if err != nil {
-		return "", fmt.Errorf("failed to create temp config file: %w", err)
-	}
-
-	defer func() {
-		closeErr := tmpFile.Close()
-		if closeErr != nil {
-			fmt.Fprintf(
-				os.Stderr,
-				"warning: failed to close temp config file %s: %v\n",
-				tmpFile.Name(),
-				closeErr,
-			)
-		}
-	}()
-
-	// Write config content
-	_, err = tmpFile.WriteString(configContent)
-	if err != nil {
-		_ = os.Remove(tmpFile.Name())
-
-		return "", fmt.Errorf("failed to write config content: %w", err)
-	}
-
-	return tmpFile.Name(), nil
 }
 
 // buildHostConfig builds the host configuration including port bindings and mounts.
 func (rm *RegistryManager) buildHostConfig(
 	config RegistryConfig,
 	volumeName string,
-	configFilePath string,
 ) *container.HostConfig {
 	portBindings := nat.PortMap{}
 	if config.Port > 0 {
@@ -544,30 +462,6 @@ func (rm *RegistryManager) buildHostConfig(
 			Source: volumeName,
 			Target: RegistryDataPath,
 		},
-	}
-
-	// If config file path is provided, mount it
-	if configFilePath != "" {
-		absPath, err := filepath.Abs(configFilePath)
-		if err != nil {
-			// Log structured error - this is a critical configuration issue
-			// Registry will start but without proxy configuration, which defeats the purpose
-			errMsg := "error: failed to resolve absolute path for config file %s: %v\n" +
-				"warning: registry will start without proxy configuration\n"
-			fmt.Fprintf(
-				os.Stderr,
-				errMsg,
-				configFilePath,
-				err,
-			)
-		} else {
-			mounts = append(mounts, mount.Mount{
-				Type:     mount.TypeBind,
-				Source:   absPath,
-				Target:   "/etc/distribution/config.yml",
-				ReadOnly: true,
-			})
-		}
 	}
 
 	return &container.HostConfig{

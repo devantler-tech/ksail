@@ -9,8 +9,8 @@ import (
 	cmdhelpers "github.com/devantler-tech/ksail/v5/pkg/cmd"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	k3dconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/k3d"
-	kindconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/kind"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
+	"github.com/devantler-tech/ksail/v5/pkg/io/scaffolder"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	k3dprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/k3d"
 	kindprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/kind"
@@ -85,7 +85,7 @@ func handleDeleteRunE(
 		return fmt.Errorf("failed to get delete-volumes flag: %w", flagErr)
 	}
 
-	err = cleanupMirrorRegistries(cmd, clusterCfg, deps, clusterName, deleteVolumes)
+	err = cleanupMirrorRegistries(cmd, cfgManager, clusterCfg, deps, clusterName, deleteVolumes)
 	if err != nil {
 		// Log warning but don't fail the delete operation
 		notify.WriteMessage(notify.Message{
@@ -113,6 +113,7 @@ func handleDeleteRunE(
 // K3d handles registry cleanup natively through its own configuration.
 func cleanupMirrorRegistries(
 	cmd *cobra.Command,
+	cfgManager *ksailconfigmanager.ConfigManager,
 	clusterCfg *v1alpha1.Cluster,
 	deps cmdhelpers.LifecycleDeps,
 	clusterName string,
@@ -120,7 +121,14 @@ func cleanupMirrorRegistries(
 ) error {
 	switch clusterCfg.Spec.Cluster.Distribution {
 	case v1alpha1.DistributionKind:
-		return cleanupKindMirrorRegistries(cmd, clusterCfg, deps, clusterName, deleteVolumes)
+		return cleanupKindMirrorRegistries(
+			cmd,
+			cfgManager,
+			clusterCfg,
+			deps,
+			clusterName,
+			deleteVolumes,
+		)
 	case v1alpha1.DistributionK3d:
 		return cleanupK3dMirrorRegistries(cmd, clusterCfg, deps, clusterName, deleteVolumes)
 	default:
@@ -130,21 +138,37 @@ func cleanupMirrorRegistries(
 
 func cleanupKindMirrorRegistries(
 	cmd *cobra.Command,
-	clusterCfg *v1alpha1.Cluster,
+	cfgManager *ksailconfigmanager.ConfigManager,
+	_ *v1alpha1.Cluster,
 	deps cmdhelpers.LifecycleDeps,
 	clusterName string,
 	deleteVolumes bool,
 ) error {
-	kindConfigMgr := kindconfigmanager.NewConfigManager(clusterCfg.Spec.Cluster.DistributionConfig)
+	// Get mirror registry specs from command line flag
+	flagSpecs := registry.ParseMirrorSpecs(cfgManager.Viper.GetStringSlice("mirror-registry"))
 
-	kindConfig, loadErr := kindConfigMgr.LoadConfig(deps.Timer)
-	if loadErr != nil {
-		return fmt.Errorf("failed to load kind config: %w", loadErr)
+	// Try to read existing hosts.toml files.
+	// ReadExistingHostsToml returns (nil, nil) for missing directories, and an error for actual I/O issues.
+	existingSpecs, err := registry.ReadExistingHostsToml(scaffolder.KindMirrorsDir)
+	if err != nil {
+		return fmt.Errorf("failed to read existing hosts configuration: %w", err)
 	}
 
-	registriesInfo := kindprovisioner.ExtractRegistriesFromKindForTesting(kindConfig, nil)
+	// Merge specs: flag specs override existing specs
+	mirrorSpecs := registry.MergeSpecs(existingSpecs, flagSpecs)
 
-	registryNames := registry.CollectRegistryNames(registriesInfo)
+	if len(mirrorSpecs) == 0 {
+		return nil
+	}
+
+	// Build registry info to get names
+	entries := registry.BuildMirrorEntries(mirrorSpecs, "", nil, nil, nil)
+
+	registryNames := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		registryNames = append(registryNames, entry.ContainerName)
+	}
+
 	if len(registryNames) == 0 {
 		return nil
 	}
@@ -156,7 +180,7 @@ func cleanupKindMirrorRegistries(
 		func(dockerClient client.APIClient) error {
 			return kindprovisioner.CleanupRegistries(
 				cmd.Context(),
-				kindConfig,
+				mirrorSpecs,
 				clusterName,
 				dockerClient,
 				deleteVolumes,

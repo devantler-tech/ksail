@@ -34,6 +34,12 @@ const (
 )
 
 const (
+	// File permission constants.
+	dirPerm  = 0o750
+	filePerm = 0o600
+)
+
+const (
 	// Default images.
 
 	// defaultK3sImage pins K3d clusters to a Flux-compatible Kubernetes version.
@@ -95,6 +101,7 @@ func NewScaffolder(cfg v1alpha1.Cluster, writer io.Writer, mirrorRegistries []st
 // This method orchestrates the generation of:
 //   - ksail.yaml configuration
 //   - Distribution-specific configuration (kind.yaml or k3d.yaml)
+//   - kind-mirrors directory with hosts.toml files (for Kind with mirror registries)
 //   - kustomization.yaml in the source directory
 //
 // Parameters:
@@ -123,29 +130,16 @@ func (s *Scaffolder) Scaffold(output string, force bool) error {
 		return err
 	}
 
+	// Generate Kind mirror hosts configuration if applicable
+	err = s.generateKindMirrorsConfig(output, force)
+	if err != nil {
+		return err
+	}
+
 	return s.generateKustomizationConfig(output, force)
 }
 
 // Registry configuration helpers.
-
-// GenerateContainerdPatches generates containerd config patches for Kind mirror registry.
-// Input format: "name=upstream" (e.g., "docker.io=https://registry-1.docker.io")
-// Container names match the registry host after sanitization to align with runtime provisioning.
-func (s *Scaffolder) GenerateContainerdPatches() []string {
-	specs := registry.ParseMirrorSpecs(s.MirrorRegistries)
-	if len(specs) == 0 {
-		return nil
-	}
-
-	entries := registry.BuildMirrorEntries(specs, "", nil, nil, nil)
-	patches := make([]string, 0, len(entries))
-
-	for _, entry := range entries {
-		patches = append(patches, registry.KindPatch(entry))
-	}
-
-	return patches
-}
 
 // GenerateK3dRegistryConfig generates K3d registry configuration for mirror registry.
 // Input format: "name=upstream" (e.g., "docker.io=https://registry-1.docker.io")
@@ -466,24 +460,7 @@ func (s *Scaffolder) removeFormerDistributionConfig(output, previous string) err
 
 // generateKindConfig generates the kind.yaml configuration file.
 func (s *Scaffolder) generateKindConfig(output string, force bool) error {
-	// Create Kind cluster configuration with standard KSail name
-	kindConfig := &v1alpha4.Cluster{
-		TypeMeta: v1alpha4.TypeMeta{
-			APIVersion: "kind.x-k8s.io/v1alpha4",
-			Kind:       "Cluster",
-		},
-		Name: "kind",
-	}
-
-	// Disable default CNI if Cilium is requested
-	if s.KSailConfig.Spec.Cluster.CNI == v1alpha1.CNICilium {
-		kindConfig.Networking.DisableDefaultCNI = true
-	}
-
-	// Add containerd config patches for mirror registries
-	if len(s.MirrorRegistries) > 0 {
-		kindConfig.ContainerdConfigPatches = s.GenerateContainerdPatches()
-	}
+	kindConfig := s.buildKindConfig(output)
 
 	opts := yamlgenerator.Options{
 		Output: filepath.Join(output, KindConfigFile),
@@ -503,6 +480,61 @@ func (s *Scaffolder) generateKindConfig(output string, force bool) error {
 			},
 		},
 	)
+}
+
+// buildKindConfig creates the Kind cluster configuration object.
+func (s *Scaffolder) buildKindConfig(output string) *v1alpha4.Cluster {
+	kindConfig := &v1alpha4.Cluster{
+		TypeMeta: v1alpha4.TypeMeta{
+			APIVersion: "kind.x-k8s.io/v1alpha4",
+			Kind:       "Cluster",
+		},
+		Name: "kind",
+	}
+
+	if s.KSailConfig.Spec.Cluster.CNI == v1alpha1.CNICilium {
+		kindConfig.Networking.DisableDefaultCNI = true
+	}
+
+	s.addMirrorMountsToKindConfig(kindConfig, output)
+
+	return kindConfig
+}
+
+// addMirrorMountsToKindConfig adds extraMounts for mirror registries to the Kind config.
+func (s *Scaffolder) addMirrorMountsToKindConfig(kindConfig *v1alpha4.Cluster, output string) {
+	specs := registry.ParseMirrorSpecs(s.MirrorRegistries)
+	if len(specs) == 0 {
+		return
+	}
+
+	mirrorsDir := filepath.Join(output, KindMirrorsDir)
+
+	absHostsDir, err := filepath.Abs(mirrorsDir)
+	if err != nil {
+		absHostsDir = mirrorsDir
+	}
+
+	if len(kindConfig.Nodes) == 0 {
+		kindConfig.Nodes = []v1alpha4.Node{{Role: v1alpha4.ControlPlaneRole}}
+	}
+
+	for _, spec := range specs {
+		host := strings.TrimSpace(spec.Host)
+		if host == "" {
+			continue
+		}
+
+		mount := v1alpha4.Mount{
+			HostPath:      filepath.Join(absHostsDir, host),
+			ContainerPath: "/etc/containerd/certs.d/" + host,
+			Readonly:      true,
+		}
+
+		for i := range kindConfig.Nodes {
+			kindConfig.Nodes[i].ExtraMounts = append(kindConfig.Nodes[i].ExtraMounts, mount)
+		}
+	}
 }
 
 // generateK3dConfig generates the k3d.yaml configuration file.
@@ -558,4 +590,60 @@ func (s *Scaffolder) generateKustomizationConfig(output string, force bool) erro
 			},
 		},
 	)
+}
+
+// KindMirrorsDir is the directory name for Kind containerd host mirror configuration.
+const KindMirrorsDir = "kind-mirrors"
+
+// generateKindMirrorsConfig generates hosts.toml files for Kind registry mirrors.
+// Each mirror registry specification creates a subdirectory under kind-mirrors/
+// with a hosts.toml file that configures containerd to use the specified upstream.
+func (s *Scaffolder) generateKindMirrorsConfig(output string, force bool) error {
+	if s.KSailConfig.Spec.Cluster.Distribution != v1alpha1.DistributionKind {
+		return nil
+	}
+
+	specs := registry.ParseMirrorSpecs(s.MirrorRegistries)
+	if len(specs) == 0 {
+		return nil
+	}
+
+	mirrorsDir := filepath.Join(output, KindMirrorsDir)
+
+	for _, spec := range specs {
+		registryDir := filepath.Join(mirrorsDir, spec.Host)
+		hostsPath := filepath.Join(registryDir, "hosts.toml")
+		displayName := filepath.Join(KindMirrorsDir, spec.Host, "hosts.toml")
+
+		skip, existed, previousModTime := s.checkFileExistsAndSkip(hostsPath, displayName, force)
+		if skip {
+			continue
+		}
+
+		// Create directory structure
+		err := os.MkdirAll(registryDir, dirPerm)
+		if err != nil {
+			return fmt.Errorf("failed to create mirror directory %s: %w", registryDir, err)
+		}
+
+		// Generate hosts.toml content
+		content := registry.GenerateScaffoldedHostsToml(spec)
+
+		// Write hosts.toml file
+		err = os.WriteFile(hostsPath, []byte(content), filePerm)
+		if err != nil {
+			return fmt.Errorf("failed to write hosts.toml to %s: %w", hostsPath, err)
+		}
+
+		if force && existed {
+			err = ensureOverwriteModTime(hostsPath, previousModTime)
+			if err != nil {
+				return fmt.Errorf("failed to update mod time for %s: %w", displayName, err)
+			}
+		}
+
+		s.notifyFileAction(displayName, existed)
+	}
+
+	return nil
 }

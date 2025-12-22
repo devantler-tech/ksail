@@ -1,68 +1,328 @@
 package kindprovisioner
 
 import (
+	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"io"
+	"net"
+	"strconv"
 	"strings"
 
 	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
+	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
+	"github.com/docker/docker/pkg/stdcopy"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
 
 const kindNetworkName = "kind"
 
-// setupRegistryManager creates a registry manager and extracts registries from Kind config.
-// Returns nil if no setup is needed.
-func setupRegistryManager(
+// randomDelimiterBytes is the number of random bytes used to generate heredoc delimiters.
+// 8 bytes produces 16 hex characters, making collisions with user content extremely unlikely.
+const randomDelimiterBytes = 8
+
+// ConfigureContainerdRegistryMirrors injects hosts.toml files directly into Kind nodes
+// to configure containerd to use the local registry mirrors. This is called after the
+// cluster is created and registries are connected to the network.
+//
+// This approach doesn't require file mounts or declarative configuration - it works
+// purely in-memory by executing commands inside the Kind nodes via Docker.
+//
+// If scaffolded hosts.toml files are already mounted via extraMounts in the Kind config,
+// this function skips injection for those hosts to avoid read-only filesystem errors.
+func ConfigureContainerdRegistryMirrors(
 	ctx context.Context,
 	kindConfig *v1alpha4.Cluster,
+	mirrorSpecs []registry.MirrorSpec,
 	dockerClient client.APIClient,
-	upstreams map[string]string,
-) (*dockerclient.RegistryManager, []registry.Info, error) {
+	_ io.Writer,
+) error {
+	entriesToInject := getEntriesToInject(kindConfig, mirrorSpecs)
+	if len(entriesToInject) == 0 {
+		return nil
+	}
+
+	nodes, err := getKindNodesForCluster(ctx, dockerClient, kindConfig)
+	if err != nil {
+		return err
+	}
+
+	return injectHostsTomlIntoNodes(ctx, dockerClient, nodes, entriesToInject)
+}
+
+// getEntriesToInject returns mirror entries that need to be injected into Kind nodes.
+// It filters out entries that already have extraMounts configured in the Kind config.
+func getEntriesToInject(
+	kindConfig *v1alpha4.Cluster,
+	mirrorSpecs []registry.MirrorSpec,
+) []registry.MirrorEntry {
+	if len(mirrorSpecs) == 0 {
+		return nil
+	}
+
+	mountedHosts := buildMountedHostsSet(kindConfig)
+	entries := registry.BuildMirrorEntries(mirrorSpecs, "", nil, nil, nil)
+
+	var entriesToInject []registry.MirrorEntry
+
+	for _, entry := range entries {
+		if !mountedHosts[entry.Host] {
+			entriesToInject = append(entriesToInject, entry)
+		}
+	}
+
+	return entriesToInject
+}
+
+// getKindNodesForCluster returns the list of Kind nodes for the given cluster configuration.
+func getKindNodesForCluster(
+	ctx context.Context,
+	dockerClient client.APIClient,
+	kindConfig *v1alpha4.Cluster,
+) ([]string, error) {
+	clusterName := "kind"
+	if kindConfig != nil && kindConfig.Name != "" {
+		clusterName = kindConfig.Name
+	}
+
+	nodes, err := listKindNodes(ctx, dockerClient, clusterName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list Kind nodes: %w", err)
+	}
+
+	if len(nodes) == 0 {
+		return nil, fmt.Errorf("%w: %s", ErrNoKindNodes, clusterName)
+	}
+
+	return nodes, nil
+}
+
+// injectHostsTomlIntoNodes injects hosts.toml files into all Kind nodes for the given entries.
+func injectHostsTomlIntoNodes(
+	ctx context.Context,
+	dockerClient client.APIClient,
+	nodes []string,
+	entries []registry.MirrorEntry,
+) error {
+	for _, entry := range entries {
+		hostsTomlContent := registry.GenerateHostsToml(entry)
+
+		for _, node := range nodes {
+			err := injectHostsToml(ctx, dockerClient, node, entry.Host, hostsTomlContent)
+			if err != nil {
+				return fmt.Errorf(
+					"failed to inject hosts.toml for %s into node %s: %w",
+					entry.Host,
+					node,
+					err,
+				)
+			}
+		}
+	}
+
+	return nil
+}
+
+// buildMountedHostsSet returns a set of registry hosts that have extraMounts configured
+// in the Kind config. These hosts have scaffolded hosts.toml files that will be mounted
+// directly into the containers.
+func buildMountedHostsSet(kindConfig *v1alpha4.Cluster) map[string]bool {
+	mountedHosts := make(map[string]bool)
+
 	if kindConfig == nil {
+		return mountedHosts
+	}
+
+	certsPrefix := "/etc/containerd/certs.d/"
+
+	for _, node := range kindConfig.Nodes {
+		for _, mount := range node.ExtraMounts {
+			// Check if this mount is for containerd certs.d
+			if after, ok := strings.CutPrefix(mount.ContainerPath, certsPrefix); ok {
+				// Extract the registry host from the path
+				// e.g., /etc/containerd/certs.d/docker.io -> docker.io
+				host := after
+
+				host = strings.TrimSuffix(host, "/")
+				if host != "" {
+					mountedHosts[host] = true
+				}
+			}
+		}
+	}
+
+	return mountedHosts
+}
+
+// listKindNodes returns the container IDs/names of Kind nodes for the given cluster.
+func listKindNodes(
+	ctx context.Context,
+	dockerClient client.APIClient,
+	clusterName string,
+) ([]string, error) {
+	containers, err := dockerClient.ContainerList(ctx, container.ListOptions{
+		All: true,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list containers: %w", err)
+	}
+
+	var nodes []string
+
+	labelKey := "io.x-k8s.kind.cluster"
+
+	for _, c := range containers {
+		if c.Labels[labelKey] == clusterName {
+			// Use the first name (without leading slash)
+			if len(c.Names) > 0 {
+				name := strings.TrimPrefix(c.Names[0], "/")
+				nodes = append(nodes, name)
+			}
+		}
+	}
+
+	return nodes, nil
+}
+
+// generateRandomDelimiter creates a random heredoc delimiter to prevent injection attacks.
+// The delimiter is prefixed with "EOF_" and followed by 16 random hex characters,
+// making it extremely unlikely to appear in user-controlled content.
+func generateRandomDelimiter() (string, error) {
+	randomBytes := make([]byte, randomDelimiterBytes)
+
+	_, err := rand.Read(randomBytes)
+	if err != nil {
+		return "", fmt.Errorf("failed to generate random delimiter: %w", err)
+	}
+
+	return "EOF_" + hex.EncodeToString(randomBytes), nil
+}
+
+// injectHostsToml creates the hosts directory and writes the hosts.toml file inside a Kind node.
+func injectHostsToml(
+	ctx context.Context,
+	dockerClient client.APIClient,
+	nodeName string,
+	registryHost string,
+	hostsTomlContent string,
+) error {
+	// Create the directory structure: /etc/containerd/certs.d/<registry-host>/
+	certsDir := "/etc/containerd/certs.d/" + registryHost
+
+	// Escape the directory path for safe use in shell commands
+	escapedCertsDir := EscapeShellArg(certsDir)
+
+	// Generate a random heredoc delimiter to prevent injection attacks
+	delimiter, err := generateRandomDelimiter()
+	if err != nil {
+		return err
+	}
+
+	// Execute: mkdir -p <dir> && cat > <dir>/hosts.toml
+	// We use a shell command to create the directory and write the file in one go
+	// The heredoc delimiter is randomized to prevent content injection attacks
+	cmd := []string{
+		"sh", "-c",
+		fmt.Sprintf("mkdir -p %s && cat > %s/hosts.toml << '%s'\n%s\n%s",
+			escapedCertsDir, escapedCertsDir, delimiter, hostsTomlContent, delimiter),
+	}
+
+	execConfig := container.ExecOptions{
+		Cmd:          cmd,
+		AttachStdout: true,
+		AttachStderr: true,
+	}
+
+	execID, err := dockerClient.ContainerExecCreate(ctx, nodeName, execConfig)
+	if err != nil {
+		return fmt.Errorf("failed to create exec: %w", err)
+	}
+
+	resp, err := dockerClient.ContainerExecAttach(ctx, execID.ID, container.ExecStartOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to attach to exec: %w", err)
+	}
+	defer resp.Close()
+
+	// Read and discard output
+	var stdout, stderr bytes.Buffer
+
+	_, _ = stdcopy.StdCopy(&stdout, &stderr, resp.Reader)
+
+	// Check exit code
+	inspectResp, err := dockerClient.ContainerExecInspect(ctx, execID.ID)
+	if err != nil {
+		return fmt.Errorf("failed to inspect exec: %w", err)
+	}
+
+	if inspectResp.ExitCode != 0 {
+		return fmt.Errorf(
+			"%w with exit code %d: %s",
+			ErrExecFailed,
+			inspectResp.ExitCode,
+			stderr.String(),
+		)
+	}
+
+	return nil
+}
+
+// EscapeShellArg escapes a string for safe use in POSIX shell commands.
+// It wraps the string in single quotes and escapes any single quotes within.
+func EscapeShellArg(arg string) string {
+	// Replace ' with '\'' (end quote, escaped quote, start quote)
+	escaped := strings.ReplaceAll(arg, "'", "'\\''")
+
+	return "'" + escaped + "'"
+}
+
+// prepareKindRegistryManager is a helper that prepares the registry manager and registry infos
+// for Kind registry operations. Returns nil manager if mirrorSpecs is empty.
+func prepareKindRegistryManager(
+	ctx context.Context,
+	mirrorSpecs []registry.MirrorSpec,
+	dockerClient client.APIClient,
+) (*dockerclient.RegistryManager, []registry.Info, error) {
+	if len(mirrorSpecs) == 0 {
 		return nil, nil, nil
 	}
+
+	upstreams := registry.BuildUpstreamLookup(mirrorSpecs)
 
 	registryMgr, infos, err := registry.PrepareRegistryManager(
 		ctx,
 		dockerClient,
 		func(usedPorts map[int]struct{}) []registry.Info {
-			return extractRegistriesFromKind(kindConfig, upstreams, usedPorts)
+			return buildRegistryInfosFromSpecs(mirrorSpecs, upstreams, usedPorts)
 		},
 	)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to prepare kind registry manager: %w", err)
+		return nil, nil, fmt.Errorf("failed to prepare registry manager: %w", err)
 	}
 
 	return registryMgr, infos, nil
 }
 
-// SetupRegistries creates mirror registries based on Kind cluster configuration.
+// SetupRegistries creates mirror registries based on mirror specifications.
 // Registries are created without network attachment first, as the "kind" network
 // doesn't exist until after the cluster is created. mirrorSpecs should contain the
 // user-supplied mirror definitions so upstream URLs can be preserved when creating
 // local proxy registry.
 func SetupRegistries(
 	ctx context.Context,
-	kindConfig *v1alpha4.Cluster,
+	_ *v1alpha4.Cluster,
 	clusterName string,
 	dockerClient client.APIClient,
 	mirrorSpecs []registry.MirrorSpec,
 	writer io.Writer,
 ) error {
-	upstreams := registry.BuildUpstreamLookup(mirrorSpecs)
-
-	registryMgr, registriesInfo, err := setupRegistryManager(
-		ctx,
-		kindConfig,
-		dockerClient,
-		upstreams,
-	)
+	registryMgr, registriesInfo, err := prepareKindRegistryManager(ctx, mirrorSpecs, dockerClient)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to prepare kind registry manager: %w", err)
 	}
 
 	if registryMgr == nil {
@@ -84,19 +344,56 @@ func SetupRegistries(
 	return nil
 }
 
+// buildRegistryInfosFromSpecs builds registry info from mirror specs directly.
+func buildRegistryInfosFromSpecs(
+	mirrorSpecs []registry.MirrorSpec,
+	upstreams map[string]string,
+	baseUsedPorts map[int]struct{},
+) []registry.Info {
+	registryInfos := make([]registry.Info, 0, len(mirrorSpecs))
+
+	usedPorts, nextPort := registry.InitPortAllocation(baseUsedPorts)
+
+	for _, spec := range mirrorSpecs {
+		host := strings.TrimSpace(spec.Host)
+		if host == "" {
+			continue
+		}
+
+		// Build endpoint for this host
+		port := registry.AllocatePort(&nextPort, usedPorts)
+		endpoint := "http://" + net.JoinHostPort(host, strconv.Itoa(port))
+
+		// Get upstream URL
+		upstream := spec.Remote
+		if upstream == "" {
+			upstream = registry.GenerateUpstreamURL(host)
+		}
+
+		if upstreams != nil && upstreams[host] != "" {
+			upstream = upstreams[host]
+		}
+
+		info := registry.BuildRegistryInfo(host, []string{endpoint}, port, "", upstream)
+		registryInfos = append(registryInfos, info)
+	}
+
+	return registryInfos
+}
+
 // ConnectRegistriesToNetwork connects existing registries to the Kind network.
 // This should be called after the Kind cluster is created and the "kind" network exists.
 func ConnectRegistriesToNetwork(
 	ctx context.Context,
-	kindConfig *v1alpha4.Cluster,
+	mirrorSpecs []registry.MirrorSpec,
 	dockerClient client.APIClient,
 	writer io.Writer,
 ) error {
-	if kindConfig == nil {
+	if len(mirrorSpecs) == 0 {
 		return nil
 	}
 
-	registriesInfo := extractRegistriesFromKind(kindConfig, nil, nil)
+	registriesInfo := buildRegistryInfosFromSpecs(mirrorSpecs, nil, nil)
 	if len(registriesInfo) == 0 {
 		return nil
 	}
@@ -118,14 +415,14 @@ func ConnectRegistriesToNetwork(
 // CleanupRegistries removes registries that are no longer in use.
 func CleanupRegistries(
 	ctx context.Context,
-	kindConfig *v1alpha4.Cluster,
+	mirrorSpecs []registry.MirrorSpec,
 	clusterName string,
 	dockerClient client.APIClient,
 	deleteVolumes bool,
 ) error {
-	registryMgr, registriesInfo, err := setupRegistryManager(ctx, kindConfig, dockerClient, nil)
+	registryMgr, registriesInfo, err := prepareKindRegistryManager(ctx, mirrorSpecs, dockerClient)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to prepare registry manager for cleanup: %w", err)
 	}
 
 	if registryMgr == nil {
@@ -146,270 +443,4 @@ func CleanupRegistries(
 	}
 
 	return nil
-}
-
-// ExtractRegistriesFromKindForTesting extracts registry information from Kind configuration.
-// This function is exported for testing purposes.
-func ExtractRegistriesFromKindForTesting(
-	kindConfig *v1alpha4.Cluster,
-	upstreams map[string]string,
-) []registry.Info {
-	return extractRegistriesFromKind(kindConfig, upstreams, nil)
-}
-
-// extractRegistriesFromKind is the internal implementation.
-func extractRegistriesFromKind(
-	kindConfig *v1alpha4.Cluster,
-	upstreams map[string]string,
-	baseUsedPorts map[int]struct{},
-) []registry.Info {
-	if kindConfig == nil {
-		return nil
-	}
-
-	var registryInfos []registry.Info
-
-	seenHosts := make(map[string]bool)
-	usedPorts, nextPort := registry.InitPortAllocation(baseUsedPorts)
-
-	for _, patch := range kindConfig.ContainerdConfigPatches {
-		mirrors := parseContainerdConfig(patch)
-		if len(mirrors) == 0 {
-			continue
-		}
-
-		hosts := make([]string, 0, len(mirrors))
-		for host := range mirrors {
-			hosts = append(hosts, host)
-		}
-
-		registry.SortHosts(hosts)
-
-		for _, host := range hosts {
-			if seenHosts[host] {
-				continue
-			}
-
-			seenHosts[host] = true
-
-			endpoints := mirrors[host]
-			port := registry.ExtractRegistryPort(endpoints, usedPorts, &nextPort)
-			info := registry.BuildRegistryInfo(host, endpoints, port, "", upstreams[host])
-			registryInfos = append(registryInfos, info)
-		}
-	}
-
-	return registryInfos
-}
-
-// parseContainerdConfig is the internal implementation.
-func parseContainerdConfig(patch string) map[string][]string {
-	mirrors := make(map[string][]string)
-	lines := strings.Split(patch, "\n")
-
-	var currentHost string
-
-	var inEndpointArray bool
-
-	var currentEndpoints []string
-
-	for i := range lines {
-		line := strings.TrimSpace(lines[i])
-
-		// Skip empty lines and comments
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-
-		// Process registry mirror section headers
-		if strings.Contains(line, `registry.mirrors."`) {
-			currentHost = processHostMirrorsLine(
-				line,
-				currentHost,
-				currentEndpoints,
-				mirrors,
-			)
-			currentEndpoints = nil
-			inEndpointArray = false
-
-			continue
-		}
-
-		// Process endpoint configuration lines
-		if currentHost != "" && strings.Contains(line, "endpoint") {
-			currentHost, currentEndpoints, inEndpointArray = processEndpointLine(
-				line,
-				currentHost,
-				currentEndpoints,
-				mirrors,
-			)
-
-			continue
-		}
-
-		// Process multiline array elements
-		if inEndpointArray {
-			currentHost, currentEndpoints, inEndpointArray = processMultilineArrayLine(
-				line,
-				currentHost,
-				currentEndpoints,
-				mirrors,
-			)
-		}
-	}
-
-	// Save any remaining host endpoints
-	saveHostEndpoints(currentHost, currentEndpoints, mirrors)
-
-	return mirrors
-}
-
-// processHostMirrorsLine processes a registry mirrors section header line.
-// Returns updated currentHost.
-func processHostMirrorsLine(
-	line string,
-	currentHost string,
-	currentEndpoints []string,
-	mirrors map[string][]string,
-) string {
-	// Save previous host's endpoints if any
-	saveHostEndpoints(currentHost, currentEndpoints, mirrors)
-
-	// Extract new host from line like: [plugins."io.containerd.grpc.v1.cri".registry.mirrors."docker.io"]
-	start := strings.Index(line, `mirrors."`)
-	if start < 0 {
-		return ""
-	}
-
-	start += len(`mirrors."`)
-
-	end := strings.Index(line[start:], `"`)
-	if end <= 0 {
-		return ""
-	}
-
-	newHost := line[start : start+end]
-
-	// Skip if this host is already in mirrors (preserve first occurrence)
-	if _, exists := mirrors[newHost]; exists {
-		return ""
-	}
-
-	return newHost
-}
-
-// processEndpointLine processes an endpoint configuration line.
-// Returns updated currentHost, currentEndpoints, and inEndpointArray.
-func processEndpointLine(
-	line string,
-	currentHost string,
-	currentEndpoints []string,
-	mirrors map[string][]string,
-) (string, []string, bool) {
-	// Check for inline array format: endpoint = ["http://..."]
-	cleanLine := strings.ReplaceAll(line, " ", "")
-	if strings.Contains(cleanLine, `["`) && strings.Contains(cleanLine, `"]`) {
-		endpoints := extractEndpointsFromInlineArray(line)
-		currentEndpoints = append(currentEndpoints, endpoints...)
-		// Save immediately for inline format
-		saveHostEndpoints(currentHost, currentEndpoints, mirrors)
-
-		return "", nil, false
-	}
-
-	// Check for multiline array start: endpoint = [
-	if strings.Contains(cleanLine, "[") && !strings.Contains(cleanLine, "]") {
-		return currentHost, currentEndpoints, true
-	}
-
-	return currentHost, currentEndpoints, false
-}
-
-// processMultilineArrayLine processes a line within a multiline endpoint array.
-// Returns updated currentHost, currentEndpoints, and inEndpointArray.
-func processMultilineArrayLine(
-	line string,
-	currentHost string,
-	currentEndpoints []string,
-	mirrors map[string][]string,
-) (string, []string, bool) {
-	if strings.Contains(line, "]") {
-		// End of array - extract any endpoint on the closing line
-		if endpoint := extractEndpointFromLine(line); endpoint != "" {
-			currentEndpoints = append(currentEndpoints, endpoint)
-		}
-		// Save collected endpoints
-		saveHostEndpoints(currentHost, currentEndpoints, mirrors)
-
-		return "", nil, false
-	}
-
-	// Extract endpoint from array element line
-	if endpoint := extractEndpointFromLine(line); endpoint != "" {
-		currentEndpoints = append(currentEndpoints, endpoint)
-	}
-
-	return currentHost, currentEndpoints, true
-}
-
-// saveHostEndpoints saves endpoints for a host to the mirrors map.
-func saveHostEndpoints(host string, endpoints []string, mirrors map[string][]string) {
-	if host != "" && len(endpoints) > 0 {
-		mirrors[host] = endpoints
-	}
-}
-
-// extractEndpointsFromInlineArray extracts all endpoints from an inline array format.
-// Example: endpoint = ["http://localhost:5000", "http://localhost:5001"]
-func extractEndpointsFromInlineArray(line string) []string {
-	var endpoints []string
-
-	// Find the array content between [ and ]
-	start := strings.Index(line, "[")
-
-	end := strings.LastIndex(line, "]")
-	if start < 0 || end < 0 || start >= end {
-		return endpoints
-	}
-
-	arrayContent := line[start+1 : end]
-
-	// Split by comma and extract quoted strings
-	parts := strings.SplitSeq(arrayContent, ",")
-	for part := range parts {
-		part = strings.TrimSpace(part)
-		if endpoint := extractQuotedString(part); endpoint != "" {
-			endpoints = append(endpoints, endpoint)
-		}
-	}
-
-	return endpoints
-}
-
-// extractEndpointFromLine extracts an endpoint URL from a line.
-// Handles quoted strings with surrounding whitespace.
-func extractEndpointFromLine(line string) string {
-	line = strings.TrimSpace(line)
-	// Remove trailing comma if present
-	line = strings.TrimSuffix(line, ",")
-
-	return extractQuotedString(line)
-}
-
-// extractQuotedString is the internal implementation.
-func extractQuotedString(str string) string {
-	str = strings.TrimSpace(str)
-
-	// Find first and last quote
-	firstQuote := strings.Index(str, `"`)
-	if firstQuote < 0 {
-		return ""
-	}
-
-	lastQuote := strings.LastIndex(str, `"`)
-	if lastQuote <= firstQuote {
-		return ""
-	}
-
-	return str[firstQuote+1 : lastQuote]
 }

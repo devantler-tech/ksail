@@ -20,6 +20,7 @@ import (
 	k3dconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/k3d"
 	kindconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/kind"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
+	"github.com/devantler-tech/ksail/v5/pkg/io/scaffolder"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/installer"
 	argocdinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/argocd"
 	certmanagerinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/cert-manager"
@@ -774,6 +775,7 @@ func runKindMirrorAction(
 	writer := ctx.cmd.OutOrStdout()
 	clusterName := ctx.kindConfig.Name
 
+	// Setup registry containers (they will be connected to network after cluster creation)
 	err := kindprovisioner.SetupRegistries(
 		execCtx,
 		ctx.kindConfig,
@@ -794,14 +796,28 @@ func runKindConnectAction(
 	ctx *registryStageContext,
 	dockerClient client.APIClient,
 ) error {
+	// Connect registries to the Kind network
 	err := kindprovisioner.ConnectRegistriesToNetwork(
 		execCtx,
-		ctx.kindConfig,
+		ctx.mirrorSpecs,
 		dockerClient,
 		ctx.cmd.OutOrStdout(),
 	)
 	if err != nil {
 		return fmt.Errorf("failed to connect kind registries to network: %w", err)
+	}
+
+	// Configure containerd inside Kind nodes to use the registry mirrors
+	// This injects hosts.toml files directly into the running nodes
+	err = kindprovisioner.ConfigureContainerdRegistryMirrors(
+		execCtx,
+		ctx.kindConfig,
+		ctx.mirrorSpecs,
+		dockerClient,
+		ctx.cmd.OutOrStdout(),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to configure containerd registry mirrors: %w", err)
 	}
 
 	return nil
@@ -931,9 +947,20 @@ func runRegistryStageWithRole(
 	role registryStageRole,
 	firstActivityShown *bool,
 ) error {
-	mirrorSpecs := registry.ParseMirrorSpecs(
+	// Get mirror specs from --mirror-registry flag
+	flagSpecs := registry.ParseMirrorSpecs(
 		cfgManager.Viper.GetStringSlice("mirror-registry"),
 	)
+
+	// Try to read existing hosts.toml files from kind-mirrors directory.
+	// ReadExistingHostsToml returns (nil, nil) for missing directories, and an error for actual I/O issues.
+	existingSpecs, err := registry.ReadExistingHostsToml(scaffolder.KindMirrorsDir)
+	if err != nil {
+		return fmt.Errorf("failed to read existing hosts configuration: %w", err)
+	}
+
+	// Merge specs: flag specs override existing specs for the same host
+	mirrorSpecs := registry.MergeSpecs(existingSpecs, flagSpecs)
 
 	definition, ok := registryStageDefinitions[role]
 	if !ok {
@@ -1201,8 +1228,9 @@ func runCNIInstallation(
 	return nil
 }
 
-// prepareKindConfigWithMirrors prepares the Kind config by adding mirror registry patches if needed.
-// Returns true if there are containerd patches to process, false otherwise.
+// prepareKindConfigWithMirrors prepares the Kind config by setting up hosts directory for mirrors.
+// Returns true if mirror configuration is needed, false otherwise.
+// This uses the modern hosts directory pattern instead of deprecated ContainerdConfigPatches.
 func prepareKindConfigWithMirrors(
 	clusterCfg *v1alpha1.Cluster,
 	cfgManager *ksailconfigmanager.ConfigManager,
@@ -1213,18 +1241,27 @@ func prepareKindConfigWithMirrors(
 		return false
 	}
 
-	// Check for --mirror-registry flag overrides
+	// Check for --mirror-registry flag
 	mirrorRegistries := cfgManager.Viper.GetStringSlice("mirror-registry")
-	if len(mirrorRegistries) > 0 {
-		// Add containerd patches from flag
-		kindConfig.ContainerdConfigPatches = append(
-			kindConfig.ContainerdConfigPatches,
-			generateContainerdPatchesFromSpecs(mirrorRegistries)...,
-		)
+
+	// Also check for existing hosts.toml files
+	existingSpecs, err := registry.ReadExistingHostsToml(scaffolder.KindMirrorsDir)
+	if err != nil {
+		// Log error but don't fail - missing configuration is acceptable
+		notify.WriteMessage(notify.Message{
+			Type:    notify.WarningType,
+			Content: "failed to read existing hosts configuration: %v",
+			Args:    []any{err},
+			Writer:  os.Stderr,
+		})
 	}
 
-	// Return true if there are containerd patches to process
-	return len(kindConfig.ContainerdConfigPatches) > 0
+	// If we have either flag specs or existing specs, configuration is needed
+	if len(mirrorRegistries) > 0 || len(existingSpecs) > 0 {
+		return true
+	}
+
+	return false
 }
 
 func prepareK3dConfigWithMirrors(
@@ -1254,24 +1291,6 @@ func prepareK3dConfigWithMirrors(
 	k3dConfig.Registries.Config = rendered
 
 	return true
-}
-
-// generateContainerdPatchesFromSpecs generates containerd config patches from mirror registry specs.
-// Input format: "registry=endpoint" (e.g., "docker.io=http://localhost:5000")
-func generateContainerdPatchesFromSpecs(mirrorSpecs []string) []string {
-	parsed := registry.ParseMirrorSpecs(mirrorSpecs)
-	if len(parsed) == 0 {
-		return nil
-	}
-
-	entries := registry.BuildMirrorEntries(parsed, "", nil, nil, nil)
-
-	patches := make([]string, 0, len(entries))
-	for _, entry := range entries {
-		patches = append(patches, registry.KindPatch(entry))
-	}
-
-	return patches
 }
 
 // handleMetricsServer manages metrics-server installation based on cluster configuration.
