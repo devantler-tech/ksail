@@ -136,12 +136,9 @@ func (rm *RegistryManager) CreateRegistry(ctx context.Context, config RegistryCo
 		return fmt.Errorf("failed to prepare registry resources: %w", err)
 	}
 
-	// Clean up config file when done
-	if configFilePath != "" {
-		defer func() {
-			_ = os.Remove(configFilePath)
-		}()
-	}
+	// Note: Config file is NOT deleted here. It must persist for the container's lifetime
+	// since it's mounted as a bind mount. Config files are stored in ~/.ksail/registry-configs/
+	// and are only cleaned up when the registry is deleted.
 
 	// Create and start the container
 	return rm.createAndStartContainer(ctx, config, volumeName, configFilePath)
@@ -207,6 +204,9 @@ func (rm *RegistryManager) DeleteRegistry(
 	if removeErr != nil {
 		return fmt.Errorf("failed to remove registry container: %w", removeErr)
 	}
+
+	// Cleanup config file
+	deleteRegistryConfigFile(name)
 
 	return cleanupRegistryVolume(ctx, rm.client, registryContainer, volumeName, name, deleteVolume)
 }
@@ -484,42 +484,50 @@ func (rm *RegistryManager) generateRegistryConfig(upstreamURL string) string {
 	return baseConfig
 }
 
-// createRegistryConfigFile creates a temporary registry configuration file.
-// The caller is responsible for deleting the returned file path when done.
-// Deletion can be done with os.Remove() - if deletion fails, it will leave
-// a temporary file in the system temp directory.
+// RegistryConfigDir is the directory where registry configuration files are stored.
+const RegistryConfigDir = ".ksail/registry-configs"
+
+// createRegistryConfigFile creates a persistent registry configuration file.
+// The config file is stored in ~/.ksail/registry-configs/ and persists for the
+// container's lifetime since it's mounted as a bind mount. Config files are
+// automatically cleaned up when the registry is deleted via DeleteRegistry.
 func (rm *RegistryManager) createRegistryConfigFile(
 	registryName, upstreamURL string,
 ) (string, error) {
 	configContent := rm.generateRegistryConfig(upstreamURL)
 
-	// Create temp file
-	tmpFile, err := os.CreateTemp("", "registry-config-"+registryName+"-*.yml")
+	// Get user home directory
+	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		return "", fmt.Errorf("failed to create temp config file: %w", err)
+		return "", fmt.Errorf("failed to get user home directory: %w", err)
 	}
 
-	defer func() {
-		closeErr := tmpFile.Close()
-		if closeErr != nil {
-			fmt.Fprintf(
-				os.Stderr,
-				"warning: failed to close temp config file %s: %v\n",
-				tmpFile.Name(),
-				closeErr,
-			)
-		}
-	}()
-
-	// Write config content
-	_, err = tmpFile.WriteString(configContent)
+	// Create config directory
+	configDir := filepath.Join(homeDir, RegistryConfigDir)
+	err = os.MkdirAll(configDir, 0o755)
 	if err != nil {
-		_ = os.Remove(tmpFile.Name())
-
-		return "", fmt.Errorf("failed to write config content: %w", err)
+		return "", fmt.Errorf("failed to create config directory: %w", err)
 	}
 
-	return tmpFile.Name(), nil
+	// Create config file with deterministic name
+	configPath := filepath.Join(configDir, "registry-config-"+registryName+".yml")
+	err = os.WriteFile(configPath, []byte(configContent), 0o644)
+	if err != nil {
+		return "", fmt.Errorf("failed to write config file: %w", err)
+	}
+
+	return configPath, nil
+}
+
+// deleteRegistryConfigFile removes the registry configuration file.
+func deleteRegistryConfigFile(registryName string) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return
+	}
+
+	configPath := filepath.Join(homeDir, RegistryConfigDir, "registry-config-"+registryName+".yml")
+	_ = os.Remove(configPath)
 }
 
 // buildHostConfig builds the host configuration including port bindings and mounts.

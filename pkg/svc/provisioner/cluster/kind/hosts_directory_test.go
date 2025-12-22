@@ -13,7 +13,8 @@ import (
 )
 
 func TestSetupRegistryHostsDirectory(t *testing.T) {
-	t.Parallel()
+	// Not parallel: SetupRegistryHostsDirectory uses hardcoded "kind-mirrors" path
+	// which causes race conditions when tests run in parallel
 
 	tests := []struct {
 		name           string
@@ -55,9 +56,12 @@ func TestSetupRegistryHostsDirectory(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
+			// Run tests sequentially since they use shared directory
 
 			hostsDir := "kind-mirrors"
+
+			// Ensure clean state before test
+			_ = os.RemoveAll(hostsDir)
 
 			// Pre-create scaffolded directory if needed
 			if tc.scaffoldFirst {
