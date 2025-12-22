@@ -57,7 +57,7 @@ homebrew_casks:
     directory: Casks
     repository:
       owner: devantler-tech
-      name: homebrew-formulas
+      name: homebrew-tap
       token: "{{ .Env.HOMEBREW_GITHUB_API_TOKEN }}"
     commit_author:
       name: goreleaserbot
