@@ -548,32 +548,28 @@ func (c *Client) locateChartFromRepo(spec *ChartSpec, client any) (string, error
 		chartName = spec.ChartName
 	}
 
-	// Set ChartPathOptions for the action client
-	setChartPathOptions(client, spec)
-
-	// Use FindChartInRepoURL with options
-	options := []repov1.FindChartInRepoURLOption{
-		repov1.WithChartVersion(spec.Version),
+	// Set ChartPathOptions for the action client and use LocateChart to download
+	opts := helmv4action.ChartPathOptions{
+		RepoURL:               spec.RepoURL,
+		Version:               spec.Version,
+		Username:              spec.Username,
+		Password:              spec.Password,
+		CertFile:              spec.CertFile,
+		KeyFile:               spec.KeyFile,
+		CaFile:                spec.CaFile,
+		InsecureSkipTLSverify: spec.InsecureSkipTLSverify,
 	}
 
-	if spec.Username != "" || spec.Password != "" {
-		options = append(options, repov1.WithUsernamePassword(spec.Username, spec.Password))
+	// Apply options to action client as well
+	switch cl := client.(type) {
+	case *helmv4action.Install:
+		cl.ChartPathOptions = opts
+	case *helmv4action.Upgrade:
+		cl.ChartPathOptions = opts
 	}
 
-	if spec.CertFile != "" || spec.KeyFile != "" || spec.CaFile != "" {
-		options = append(options, repov1.WithClientTLS(spec.CertFile, spec.KeyFile, spec.CaFile))
-	}
-
-	if spec.InsecureSkipTLSverify {
-		options = append(options, repov1.WithInsecureSkipTLSverify(spec.InsecureSkipTLSverify))
-	}
-
-	chartURL, err := repov1.FindChartInRepoURL(
-		spec.RepoURL,
-		chartName,
-		helmv4getter.All(c.settings),
-		options...,
-	)
+	// Use LocateChart to download the chart to cache and return the local path
+	chartPath, err := opts.LocateChart(chartName, c.settings)
 	if err != nil {
 		return "", fmt.Errorf(
 			"failed to locate chart %q in repository %s: %w",
@@ -583,26 +579,7 @@ func (c *Client) locateChartFromRepo(spec *ChartSpec, client any) (string, error
 		)
 	}
 
-	return chartURL, nil
-}
-
-func setChartPathOptions(client any, spec *ChartSpec) {
-	opts := helmv4action.ChartPathOptions{
-		RepoURL:               spec.RepoURL,
-		Username:              spec.Username,
-		Password:              spec.Password,
-		CertFile:              spec.CertFile,
-		KeyFile:               spec.KeyFile,
-		CaFile:                spec.CaFile,
-		InsecureSkipTLSverify: spec.InsecureSkipTLSverify,
-	}
-
-	switch cl := client.(type) {
-	case *helmv4action.Install:
-		cl.ChartPathOptions = opts
-	case *helmv4action.Upgrade:
-		cl.ChartPathOptions = opts
-	}
+	return chartPath, nil
 }
 
 func (c *Client) mergeValues(spec *ChartSpec, chartPath string) (map[string]any, error) {
