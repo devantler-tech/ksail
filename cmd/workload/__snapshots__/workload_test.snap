@@ -716,7 +716,8 @@ Usage:
   ksail workload push [flags]
 
 Flags:
-  -h, --help   help for push
+  -h, --help       help for push
+      --validate   Validate manifests before pushing
 
 Global Flags:
       --timing   Show per-activity timing output
