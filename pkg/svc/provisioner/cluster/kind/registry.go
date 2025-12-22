@@ -249,6 +249,7 @@ func injectHostsToml(
 func EscapeShellArg(arg string) string {
 	// Replace ' with '\'' (end quote, escaped quote, start quote)
 	escaped := strings.ReplaceAll(arg, "'", "'\\''")
+
 	return "'" + escaped + "'"
 }
 

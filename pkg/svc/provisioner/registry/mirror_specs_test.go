@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestMergeSpecs(t *testing.T) {
+func TestMergeSpecs(t *testing.T) { //nolint:funlen // table-driven test with many cases
 	t.Parallel()
 
 	testCases := []struct {
@@ -35,7 +35,7 @@ func TestMergeSpecs(t *testing.T) {
 			expected:      []registry.MirrorSpec{},
 		},
 		{
-			name:          "onlyExistingSpecs",
+			name: "onlyExistingSpecs",
 			existingSpecs: []registry.MirrorSpec{
 				{Host: "docker.io", Remote: "https://registry-1.docker.io"},
 				{Host: "ghcr.io", Remote: "https://ghcr.io"},
@@ -158,11 +158,17 @@ func TestMergeSpecs_DeterministicOrder(t *testing.T) {
 
 	// Run multiple times to ensure deterministic output
 	var previousResult []registry.MirrorSpec
-	for i := 0; i < 10; i++ {
+
+	for i := range 10 {
 		result := registry.MergeSpecs(existingSpecs, flagSpecs)
 
 		if i > 0 {
-			assert.Equal(t, previousResult, result, "Results should be identical across multiple runs")
+			assert.Equal(
+				t,
+				previousResult,
+				result,
+				"Results should be identical across multiple runs",
+			)
 		}
 
 		previousResult = result

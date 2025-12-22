@@ -21,17 +21,20 @@ import (
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
 
-// mockConn is a minimal net.Conn implementation for testing
+// Static error for testing.
+var errSecurityExecCreateFailed = errors.New("exec create failed")
+
+// mockConn is a minimal net.Conn implementation for testing.
 type mockConn struct{}
 
-func (m *mockConn) Read(b []byte) (n int, err error)   { return 0, io.EOF }
-func (m *mockConn) Write(b []byte) (n int, err error)  { return len(b), nil }
+func (m *mockConn) Read(_ []byte) (int, error)         { return 0, io.EOF }
+func (m *mockConn) Write(b []byte) (int, error)        { return len(b), nil }
 func (m *mockConn) Close() error                       { return nil }
 func (m *mockConn) LocalAddr() net.Addr                { return nil }
 func (m *mockConn) RemoteAddr() net.Addr               { return nil }
-func (m *mockConn) SetDeadline(t time.Time) error      { return nil }
-func (m *mockConn) SetReadDeadline(t time.Time) error  { return nil }
-func (m *mockConn) SetWriteDeadline(t time.Time) error { return nil }
+func (m *mockConn) SetDeadline(_ time.Time) error      { return nil }
+func (m *mockConn) SetReadDeadline(_ time.Time) error  { return nil }
+func (m *mockConn) SetWriteDeadline(_ time.Time) error { return nil }
 
 func newMockHijackedResponse() types.HijackedResponse {
 	return types.HijackedResponse{
@@ -40,7 +43,7 @@ func newMockHijackedResponse() types.HijackedResponse {
 	}
 }
 
-func TestEscapeShellArg(t *testing.T) {
+func TestEscapeShellArg(t *testing.T) { //nolint:funlen // table-driven test with many cases
 	t.Parallel()
 
 	testCases := []struct {
@@ -193,12 +196,10 @@ func TestConfigureContainerdRegistryMirrors_ContainerListError(t *testing.T) {
 		{Host: "docker.io", Remote: "https://registry-1.docker.io"},
 	}
 
-	listErr := errors.New("container list failed")
-
 	// Mock ContainerList to return an error
 	mockClient.EXPECT().
 		ContainerList(ctx, mock.Anything).
-		Return(nil, listErr).
+		Return(nil, errContainerListFailed).
 		Once()
 
 	err := kindprovisioner.ConfigureContainerdRegistryMirrors(
@@ -247,7 +248,7 @@ func TestConfigureContainerdRegistryMirrors_WithExtraMounts(t *testing.T) {
 		io.Discard,
 	)
 
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	// Verify no ContainerList was called (no injection needed)
 	mockClient.AssertNotCalled(t, "ContainerList", mock.Anything, mock.Anything)
 }
@@ -305,7 +306,7 @@ func TestConfigureContainerdRegistryMirrors_SuccessfulInjection(t *testing.T) {
 		io.Discard,
 	)
 
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	mockClient.AssertExpectations(t)
 }
 
@@ -339,7 +340,7 @@ func TestConfigureContainerdRegistryMirrors_ExecCreateFailure(t *testing.T) {
 	// Mock ContainerExecCreate to fail
 	mockClient.EXPECT().
 		ContainerExecCreate(ctx, "test-cluster-control-plane", mock.Anything).
-		Return(container.ExecCreateResponse{}, errors.New("exec create failed")).
+		Return(container.ExecCreateResponse{}, errSecurityExecCreateFailed).
 		Once()
 
 	err := kindprovisioner.ConfigureContainerdRegistryMirrors(
