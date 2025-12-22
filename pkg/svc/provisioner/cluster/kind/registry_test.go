@@ -113,37 +113,27 @@ func TestSetupRegistries_NoRegistries(t *testing.T) {
 func TestSetupRegistries_NilDockerClient(t *testing.T) {
 	t.Parallel()
 
-	patch := `[plugins."io.containerd.grpc.v1.cri".registry.mirrors."docker.io"]
-  endpoint = ["http://localhost:5000"]`
-
-	kindConfig := &v1alpha4.Cluster{
-		ContainerdConfigPatches: []string{patch},
-	}
+	kindConfig := &v1alpha4.Cluster{}
+	mirrorSpecs := newSingleMirrorSpec()
 
 	err := kindprovisioner.SetupRegistries(
 		context.Background(),
 		kindConfig,
 		"test",
 		nil,
-		nil,
+		mirrorSpecs,
 		io.Discard,
 	)
 
 	require.Error(t, err)
-	require.ErrorContains(t, err, "failed to create registry manager")
+	require.ErrorContains(t, err, "failed to prepare kind registry manager")
 }
 
 func TestSetupRegistries_CreateRegistryError(t *testing.T) {
-	t.Parallel()
-
 	mockClient, ctx, buf := setupTestEnvironment(t)
 
-	patch := `[plugins."io.containerd.grpc.v1.cri".registry.mirrors."docker.io"]
-  endpoint = ["http://localhost:5000"]`
-
-	kindConfig := &v1alpha4.Cluster{
-		ContainerdConfigPatches: []string{patch},
-	}
+	kindConfig := &v1alpha4.Cluster{}
+	mirrorSpecs := newSingleMirrorSpec()
 
 	expectRegistryPortScan(mockClient, []container.Summary{})
 	mockClient.EXPECT().
@@ -152,21 +142,17 @@ func TestSetupRegistries_CreateRegistryError(t *testing.T) {
 		Once()
 	mockClient.EXPECT().ContainerList(ctx, mock.Anything).Return(nil, errContainerListFailed).Once()
 
-	err := kindprovisioner.SetupRegistries(ctx, kindConfig, "test", mockClient, nil, buf)
+	err := kindprovisioner.SetupRegistries(ctx, kindConfig, "test", mockClient, mirrorSpecs, buf)
 
 	require.Error(t, err)
-	require.ErrorContains(t, err, "failed to create registry")
+	require.ErrorContains(t, err, "failed to setup kind registries")
 }
 
 func TestSetupRegistries_CleansUpAfterPartialFailure(t *testing.T) {
-	t.Parallel()
-
 	runSetupRegistriesPartialFailureScenario(t)
 }
 
 func TestSetupRegistries_DoesNotRemoveExistingRegistriesOnFailure(t *testing.T) {
-	t.Parallel()
-
 	runSetupRegistriesExistingRegistryScenario(t)
 }
 
@@ -175,6 +161,7 @@ func runSetupRegistriesPartialFailureScenario(t *testing.T) {
 
 	mockClient, ctx, buf := setupTestEnvironment(t)
 	kindConfig := newTwoMirrorKindConfig()
+	mirrorSpecs := newTwoMirrorSpecs()
 	firstRegistryID := "docker.io-id"
 
 	expectInitialRegistryScan(mockClient)
@@ -182,9 +169,9 @@ func runSetupRegistriesPartialFailureScenario(t *testing.T) {
 	expectMirrorProvisionFailure(mockClient, "ghcr.io", errRegistryCreateFailed)
 	expectCleanupRunningRegistry(mockClient, firstRegistryID, "docker.io")
 
-	err := kindprovisioner.SetupRegistries(ctx, kindConfig, "test", mockClient, nil, buf)
+	err := kindprovisioner.SetupRegistries(ctx, kindConfig, "test", mockClient, mirrorSpecs, buf)
 	require.Error(t, err)
-	require.ErrorContains(t, err, "failed to create registry ghcr.io")
+	require.ErrorContains(t, err, "failed to setup kind registries")
 	mockClient.AssertExpectations(t)
 }
 
@@ -193,6 +180,7 @@ func runSetupRegistriesExistingRegistryScenario(t *testing.T) {
 
 	mockClient, ctx, buf := setupTestEnvironment(t)
 	kindConfig := newTwoMirrorKindConfig()
+	mirrorSpecs := newTwoMirrorSpecs()
 
 	existing := container.Summary{
 		ID:    "docker.io-id",
@@ -220,9 +208,9 @@ func runSetupRegistriesExistingRegistryScenario(t *testing.T) {
 
 	expectMirrorProvisionFailure(mockClient, "ghcr.io", errRegistryCreateFailed)
 
-	err := kindprovisioner.SetupRegistries(ctx, kindConfig, "test", mockClient, nil, buf)
+	err := kindprovisioner.SetupRegistries(ctx, kindConfig, "test", mockClient, mirrorSpecs, buf)
 	require.Error(t, err)
-	require.ErrorContains(t, err, "failed to create registry ghcr.io")
+	require.ErrorContains(t, err, "failed to setup kind registries")
 
 	mockClient.AssertNotCalled(t, "ContainerStop", mock.Anything, mock.Anything, mock.Anything)
 	mockClient.AssertNotCalled(t, "ContainerRemove", mock.Anything, mock.Anything, mock.Anything)
@@ -236,6 +224,19 @@ func newTwoMirrorKindConfig() *v1alpha4.Cluster {
   endpoint = ["http://localhost:5001"]`
 
 	return &v1alpha4.Cluster{ContainerdConfigPatches: []string{patch}}
+}
+
+func newTwoMirrorSpecs() []registry.MirrorSpec {
+	return []registry.MirrorSpec{
+		{Host: "docker.io", Remote: "https://registry-1.docker.io"},
+		{Host: "ghcr.io", Remote: "https://ghcr.io"},
+	}
+}
+
+func newSingleMirrorSpec() []registry.MirrorSpec {
+	return []registry.MirrorSpec{
+		{Host: "docker.io", Remote: "https://registry-1.docker.io"},
+	}
 }
 
 func expectInitialRegistryScan(mockClient *docker.MockAPIClient) {
