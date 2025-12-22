@@ -15,7 +15,6 @@ const (
 	certManagerRelease   = "cert-manager"
 	certManagerNamespace = "cert-manager"
 	certManagerChartName = "jetstack/cert-manager"
-	certManagerValuesYml = "installCRDs: true\n"
 )
 
 // CertManagerInstaller installs or upgrades cert-manager.
@@ -65,7 +64,7 @@ func (c *CertManagerInstaller) helmInstallOrUpgradeCertManager(ctx context.Conte
 		Wait:            true,
 		WaitForJobs:     true,
 		Timeout:         c.timeout,
-		ValuesYaml:      certManagerValuesYml,
+		SetValues:       map[string]string{"installCRDs": "true"},
 	}
 
 	_, err = c.client.InstallOrUpgradeChart(ctx, spec)
