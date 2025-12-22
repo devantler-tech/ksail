@@ -7,6 +7,7 @@ import (
 	"io"
 	"strings"
 
+	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
@@ -198,6 +199,28 @@ func injectHostsToml(
 	return nil
 }
 
+// prepareKindRegistryManager is a helper that prepares the registry manager and registry infos
+// for Kind registry operations. Returns nil manager if mirrorSpecs is empty.
+func prepareKindRegistryManager(
+	ctx context.Context,
+	mirrorSpecs []registry.MirrorSpec,
+	dockerClient client.APIClient,
+) (*dockerclient.RegistryManager, []registry.Info, error) {
+	if len(mirrorSpecs) == 0 {
+		return nil, nil, nil
+	}
+
+	upstreams := registry.BuildUpstreamLookup(mirrorSpecs)
+
+	return registry.PrepareRegistryManager(
+		ctx,
+		dockerClient,
+		func(usedPorts map[int]struct{}) []registry.Info {
+			return buildRegistryInfosFromSpecs(mirrorSpecs, upstreams, usedPorts)
+		},
+	)
+}
+
 // SetupRegistries creates mirror registries based on mirror specifications.
 // Registries are created without network attachment first, as the "kind" network
 // doesn't exist until after the cluster is created. mirrorSpecs should contain the
@@ -211,19 +234,7 @@ func SetupRegistries(
 	mirrorSpecs []registry.MirrorSpec,
 	writer io.Writer,
 ) error {
-	if len(mirrorSpecs) == 0 {
-		return nil
-	}
-
-	upstreams := registry.BuildUpstreamLookup(mirrorSpecs)
-
-	registryMgr, registriesInfo, err := registry.PrepareRegistryManager(
-		ctx,
-		dockerClient,
-		func(usedPorts map[int]struct{}) []registry.Info {
-			return buildRegistryInfosFromSpecs(mirrorSpecs, upstreams, usedPorts)
-		},
-	)
+	registryMgr, registriesInfo, err := prepareKindRegistryManager(ctx, mirrorSpecs, dockerClient)
 	if err != nil {
 		return fmt.Errorf("failed to prepare kind registry manager: %w", err)
 	}
@@ -322,19 +333,7 @@ func CleanupRegistries(
 	dockerClient client.APIClient,
 	deleteVolumes bool,
 ) error {
-	if len(mirrorSpecs) == 0 {
-		return nil
-	}
-
-	upstreams := registry.BuildUpstreamLookup(mirrorSpecs)
-
-	registryMgr, registriesInfo, err := registry.PrepareRegistryManager(
-		ctx,
-		dockerClient,
-		func(usedPorts map[int]struct{}) []registry.Info {
-			return buildRegistryInfosFromSpecs(mirrorSpecs, upstreams, usedPorts)
-		},
-	)
+	registryMgr, registriesInfo, err := prepareKindRegistryManager(ctx, mirrorSpecs, dockerClient)
 	if err != nil {
 		return fmt.Errorf("failed to prepare registry manager for cleanup: %w", err)
 	}
