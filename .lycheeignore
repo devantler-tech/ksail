@@ -1,20 +1,27 @@
 # Check this link for .lycheeignore syntax
+
 # https://lychee.cli.rs/recipes/excluding-links/#permanently-excluding-links
 
 # Upstream image registries (uses HTTP API V2 and don't respond to bare GET requests)
+
 https://registry-1.docker.io/
 
 # GitHub repository paths used in kustomize (not web URLs)
+
 https://github.com/stefanprodan/podinfo//kustomize
 
 # Cluster-local Kubernetes API endpoint (not reachable outside cluster)
+
 https://kubernetes.default.svc/
 
 # Certificate issues with gateway-api.sigs.k8s.io
+
 https://gateway-api.sigs.k8s.io/
 
 # GoReleaser template URL (not a real URL, contains {{ .Tag }} placeholder)
-^https://github\.com/devantler-tech/ksail/releases/download/.*
 
-# Temporarily ignore the pkg.go.dev links until they have been sourced properly
-https://pkg.go.dev/github.com/devantler-tech/ksail
+^https://github\.com/devantler-tech/ksail/releases/download/.\*
+
+# Certificate issues with kind.sigs.k8s.io
+
+https://kind.sigs.k8s.io/docs/user/configuration/
