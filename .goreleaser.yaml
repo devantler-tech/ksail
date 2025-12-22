@@ -35,7 +35,7 @@ brews:
     url_template: "https://github.com/devantler-tech/ksail/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
     repository:
       owner: devantler-tech
-      name: homebrew-formulas
+      name: homebrew-tap
       token: "{{ .Env.HOMEBREW_GITHUB_API_TOKEN }}"
     commit_author:
       name: goreleaserbot
