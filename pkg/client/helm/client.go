@@ -49,6 +49,49 @@ var (
 // stderrCaptureMu protects process-wide stderr redirection from concurrent access.
 var stderrCaptureMu sync.Mutex //nolint:gochecknoglobals // global lock required to coordinate stderr interception
 
+// helmActionConfig defines common configuration fields shared by Install and Upgrade actions.
+type helmActionConfig interface {
+	setWaitStrategy(strategy helmv4kube.WaitStrategy)
+	setWaitForJobs(wait bool)
+	setTimeout(timeout time.Duration)
+	setVersion(version string)
+}
+
+// installActionAdapter wraps Install to implement helmActionConfig.
+type installActionAdapter struct{ *helmv4action.Install }
+
+func (a installActionAdapter) setWaitStrategy(s helmv4kube.WaitStrategy) { a.WaitStrategy = s }
+func (a installActionAdapter) setWaitForJobs(w bool)                     { a.WaitForJobs = w }
+func (a installActionAdapter) setTimeout(t time.Duration)                { a.Timeout = t }
+func (a installActionAdapter) setVersion(v string)                       { a.Version = v }
+
+// upgradeActionAdapter wraps Upgrade to implement helmActionConfig.
+type upgradeActionAdapter struct{ *helmv4action.Upgrade }
+
+func (a upgradeActionAdapter) setWaitStrategy(s helmv4kube.WaitStrategy) { a.WaitStrategy = s }
+func (a upgradeActionAdapter) setWaitForJobs(w bool)                     { a.WaitForJobs = w }
+func (a upgradeActionAdapter) setTimeout(t time.Duration)                { a.Timeout = t }
+func (a upgradeActionAdapter) setVersion(v string)                       { a.Version = v }
+
+// applyCommonActionConfig applies shared configuration from spec to action.
+func applyCommonActionConfig(action helmActionConfig, spec *ChartSpec) {
+	if spec.Wait {
+		action.setWaitStrategy(helmv4kube.StatusWatcherStrategy)
+	} else {
+		action.setWaitStrategy(helmv4kube.HookOnlyStrategy)
+	}
+
+	action.setWaitForJobs(spec.WaitForJobs)
+
+	timeout := spec.Timeout
+	if timeout == 0 {
+		timeout = DefaultTimeout
+	}
+
+	action.setTimeout(timeout)
+	action.setVersion(spec.Version)
+}
+
 // ChartSpec mirrors the mittwald chart specification while keeping KSail
 // specific convenience fields.
 type ChartSpec struct {
@@ -410,24 +453,11 @@ func (c *Client) performInstall(ctx context.Context, spec *ChartSpec) (*v1.Relea
 	client := helmv4action.NewInstall(c.actionConfig)
 	client.ReleaseName = spec.ReleaseName
 	client.Namespace = spec.Namespace
-
 	client.CreateNamespace = spec.CreateNamespace
 
-	if spec.Wait {
-		client.WaitStrategy = helmv4kube.StatusWatcherStrategy
-	} else {
-		client.WaitStrategy = helmv4kube.HookOnlyStrategy
-	}
-
-	client.WaitForJobs = spec.WaitForJobs
-
-	client.Timeout = spec.Timeout
-	if client.Timeout == 0 {
-		client.Timeout = DefaultTimeout
-	}
+	applyCommonActionConfig(installActionAdapter{client}, spec)
 
 	// Note: Atomic is not supported in Helm v4 Install action
-	client.Version = spec.Version
 
 	chart, vals, err := c.loadChartAndValues(spec, client)
 	if err != nil {
@@ -445,21 +475,9 @@ func (c *Client) upgradeRelease(ctx context.Context, spec *ChartSpec) (*v1.Relea
 	client := helmv4action.NewUpgrade(c.actionConfig)
 	client.Namespace = spec.Namespace
 
-	if spec.Wait {
-		client.WaitStrategy = helmv4kube.StatusWatcherStrategy
-	} else {
-		client.WaitStrategy = helmv4kube.HookOnlyStrategy
-	}
-
-	client.WaitForJobs = spec.WaitForJobs
-
-	client.Timeout = spec.Timeout
-	if client.Timeout == 0 {
-		client.Timeout = DefaultTimeout
-	}
+	applyCommonActionConfig(upgradeActionAdapter{client}, spec)
 
 	// Note: Atomic is not supported in Helm v4 Upgrade action
-	client.Version = spec.Version
 	client.SkipCRDs = !spec.UpgradeCRDs // Inverted logic in v4
 
 	chart, vals, err := c.loadChartAndValues(spec, client)
@@ -570,31 +588,27 @@ func (c *Client) locateOCIChart(spec *ChartSpec, client any) (string, error) {
 		InsecureSkipTLSverify: spec.InsecureSkipTLSverify,
 	}
 
-	// Apply options and registry client to action client, then use its LocateChart
+	// Apply options and registry client, then locate chart
+	var chartPath string
+
 	switch actionClient := client.(type) {
 	case *helmv4action.Install:
 		actionClient.ChartPathOptions = opts
 		actionClient.SetRegistryClient(registryClient)
-
-		chartPath, err := actionClient.LocateChart(spec.ChartName, c.settings)
-		if err != nil {
-			return "", fmt.Errorf("failed to locate OCI chart %q: %w", spec.ChartName, err)
-		}
-
-		return chartPath, nil
+		chartPath, err = actionClient.LocateChart(spec.ChartName, c.settings)
 	case *helmv4action.Upgrade:
 		actionClient.ChartPathOptions = opts
 		actionClient.SetRegistryClient(registryClient)
-
-		chartPath, err := actionClient.LocateChart(spec.ChartName, c.settings)
-		if err != nil {
-			return "", fmt.Errorf("failed to locate OCI chart %q: %w", spec.ChartName, err)
-		}
-
-		return chartPath, nil
+		chartPath, err = actionClient.LocateChart(spec.ChartName, c.settings)
 	default:
 		return "", fmt.Errorf("%w: %T", errUnsupportedClientType, client)
 	}
+
+	if err != nil {
+		return "", fmt.Errorf("failed to locate OCI chart %q: %w", spec.ChartName, err)
+	}
+
+	return chartPath, nil
 }
 
 func (c *Client) locateChartFromRepo(spec *ChartSpec, client any) (string, error) {
