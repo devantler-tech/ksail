@@ -1,44 +1,46 @@
 package helm
 
 import (
-"bytes"
-"context"
-"errors"
-"fmt"
-"io"
-"os"
-"path/filepath"
-"strings"
-"sync"
-"time"
+	"bytes"
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
+	"time"
 
-ksailio "github.com/devantler-tech/ksail/v5/pkg/io"
-helmv4action "helm.sh/helm/v4/pkg/action"
-chartv2 "helm.sh/helm/v4/pkg/chart/v2"
-helmv4loader "helm.sh/helm/v4/pkg/chart/loader"
-helmv4cli "helm.sh/helm/v4/pkg/cli"
-helmv4getter "helm.sh/helm/v4/pkg/getter"
-helmv4kube "helm.sh/helm/v4/pkg/kube"
-v1 "helm.sh/helm/v4/pkg/release/v1"
-repov1 "helm.sh/helm/v4/pkg/repo/v1"
-helmv4strvals "helm.sh/helm/v4/pkg/strvals"
+	ksailio "github.com/devantler-tech/ksail/v5/pkg/io"
+	helmv4action "helm.sh/helm/v4/pkg/action"
+	helmv4loader "helm.sh/helm/v4/pkg/chart/loader"
+	chartv2 "helm.sh/helm/v4/pkg/chart/v2"
+	helmv4cli "helm.sh/helm/v4/pkg/cli"
+	helmv4getter "helm.sh/helm/v4/pkg/getter"
+	helmv4kube "helm.sh/helm/v4/pkg/kube"
+	v1 "helm.sh/helm/v4/pkg/release/v1"
+	repov1 "helm.sh/helm/v4/pkg/repo/v1"
+	helmv4strvals "helm.sh/helm/v4/pkg/strvals"
 )
 
 const (
-// DefaultTimeout defines the fallback Helm chart installation timeout.
-DefaultTimeout = 5 * time.Minute
-repoDirMode    = 0o750
-repoFileMode   = 0o640
-chartRefParts  = 2
+	// DefaultTimeout defines the fallback Helm chart installation timeout.
+	DefaultTimeout = 5 * time.Minute
+	repoDirMode    = 0o750
+	repoFileMode   = 0o640
+	chartRefParts  = 2
 )
 
 var (
-errReleaseNameRequired     = errors.New("helm: release name is required")
-errRepositoryEntryRequired = errors.New("helm: repository entry is required")
-errRepositoryNameRequired  = errors.New("helm: repository name is required")
-errRepositoryCacheUnset    = errors.New("helm: repository cache path is not set")
-errRepositoryConfigUnset   = errors.New("helm: repository config path is not set")
-errChartSpecRequired       = errors.New("helm: chart spec is required")
+	errReleaseNameRequired     = errors.New("helm: release name is required")
+	errRepositoryEntryRequired = errors.New("helm: repository entry is required")
+	errRepositoryNameRequired  = errors.New("helm: repository name is required")
+	errRepositoryCacheUnset    = errors.New("helm: repository cache path is not set")
+	errRepositoryConfigUnset   = errors.New("helm: repository config path is not set")
+	errChartSpecRequired       = errors.New("helm: chart spec is required")
+	errUnexpectedReleaseType   = errors.New("helm: unexpected release type")
+	errUnexpectedChartType     = errors.New("helm: unexpected chart type")
 )
 
 // stderrCaptureMu protects process-wide stderr redirection from concurrent access.
@@ -138,14 +140,17 @@ func newClient(
 	}
 
 	settings := helmv4cli.New()
+
 	if kubeConfig != "" {
 		settings.KubeConfig = kubeConfig
 	}
+
 	if kubeContext != "" {
 		settings.KubeContext = kubeContext
 	}
 
 	actionConfig := new(helmv4action.Configuration)
+
 	initErr := actionConfig.Init(
 		settings.RESTClientGetter(),
 		settings.Namespace(),
@@ -189,6 +194,7 @@ func (c *Client) UninstallRelease(ctx context.Context, releaseName, namespace st
 	if err != nil {
 		return err
 	}
+
 	defer cleanup()
 
 	client := helmv4action.NewUninstall(c.actionConfig)
@@ -245,169 +251,176 @@ func (c *Client) AddRepository(ctx context.Context, entry *RepositoryEntry) erro
 }
 
 func validateRepositoryRequest(ctx context.Context, entry *RepositoryEntry) error {
-if entry == nil {
-return errRepositoryEntryRequired
-}
+	if entry == nil {
+		return errRepositoryEntryRequired
+	}
 
-if entry.Name == "" {
-return errRepositoryNameRequired
-}
+	if entry.Name == "" {
+		return errRepositoryNameRequired
+	}
 
-ctxErr := ctx.Err()
-if ctxErr != nil {
-return fmt.Errorf("add repository context cancelled: %w", ctxErr)
-}
+	ctxErr := ctx.Err()
+	if ctxErr != nil {
+		return fmt.Errorf("add repository context cancelled: %w", ctxErr)
+	}
 
-return nil
+	return nil
 }
 
 func ensureRepositoryConfig(settings *helmv4cli.EnvSettings) (string, error) {
-repoFile := settings.RepositoryConfig
+	repoFile := settings.RepositoryConfig
 
-envRepoConfig := os.Getenv("HELM_REPOSITORY_CONFIG")
-if envRepoConfig != "" {
-repoFile = envRepoConfig
-settings.RepositoryConfig = envRepoConfig
-}
+	envRepoConfig := os.Getenv("HELM_REPOSITORY_CONFIG")
+	if envRepoConfig != "" {
+		repoFile = envRepoConfig
+		settings.RepositoryConfig = envRepoConfig
+	}
 
-if repoFile == "" {
-return "", errRepositoryConfigUnset
-}
+	if repoFile == "" {
+		return "", errRepositoryConfigUnset
+	}
 
-repoDir := filepath.Dir(repoFile)
+	repoDir := filepath.Dir(repoFile)
 
-mkdirErr := os.MkdirAll(repoDir, repoDirMode)
-if mkdirErr != nil {
-return "", fmt.Errorf("create repository directory: %w", mkdirErr)
-}
+	mkdirErr := os.MkdirAll(repoDir, repoDirMode)
+	if mkdirErr != nil {
+		return "", fmt.Errorf("create repository directory: %w", mkdirErr)
+	}
 
-return repoFile, nil
+	return repoFile, nil
 }
 
 func loadOrInitRepositoryFile(repoFile string) *repov1.File {
-repositoryFile, err := repov1.LoadFile(repoFile)
-if err != nil {
-return repov1.NewFile()
-}
+	repositoryFile, err := repov1.LoadFile(repoFile)
+	if err != nil {
+		return repov1.NewFile()
+	}
 
-return repositoryFile
+	return repositoryFile
 }
 
 func convertRepositoryEntry(entry *RepositoryEntry) *repov1.Entry {
-return &repov1.Entry{
-Name:                  entry.Name,
-URL:                   entry.URL,
-Username:              entry.Username,
-Password:              entry.Password,
-CertFile:              entry.CertFile,
-KeyFile:               entry.KeyFile,
-CAFile:                entry.CaFile,
-InsecureSkipTLSverify: entry.InsecureSkipTLSverify,
-}
+	return &repov1.Entry{
+		Name:                  entry.Name,
+		URL:                   entry.URL,
+		Username:              entry.Username,
+		Password:              entry.Password,
+		CertFile:              entry.CertFile,
+		KeyFile:               entry.KeyFile,
+		CAFile:                entry.CaFile,
+		InsecureSkipTLSverify: entry.InsecureSkipTLSverify,
+	}
 }
 
 func ensureRepositoryCache(settings *helmv4cli.EnvSettings) (string, error) {
-repoCache := settings.RepositoryCache
+	repoCache := settings.RepositoryCache
 
-if envCache := os.Getenv("HELM_REPOSITORY_CACHE"); envCache != "" {
-repoCache = envCache
-settings.RepositoryCache = envCache
-}
+	if envCache := os.Getenv("HELM_REPOSITORY_CACHE"); envCache != "" {
+		repoCache = envCache
+		settings.RepositoryCache = envCache
+	}
 
-if repoCache == "" {
-return "", errRepositoryCacheUnset
-}
+	if repoCache == "" {
+		return "", errRepositoryCacheUnset
+	}
 
-mkdirCacheErr := os.MkdirAll(repoCache, repoDirMode)
-if mkdirCacheErr != nil {
-return "", fmt.Errorf("create repository cache directory: %w", mkdirCacheErr)
-}
+	mkdirCacheErr := os.MkdirAll(repoCache, repoDirMode)
+	if mkdirCacheErr != nil {
+		return "", fmt.Errorf("create repository cache directory: %w", mkdirCacheErr)
+	}
 
-return repoCache, nil
+	return repoCache, nil
 }
 
 func newChartRepository(
-settings *helmv4cli.EnvSettings,
-repoEntry *repov1.Entry,
-repoCache string,
+	settings *helmv4cli.EnvSettings,
+	repoEntry *repov1.Entry,
+	repoCache string,
 ) (*repov1.ChartRepository, error) {
-chartRepository, err := repov1.NewChartRepository(repoEntry, helmv4getter.All(settings))
-if err != nil {
-return nil, fmt.Errorf("create chart repository: %w", err)
-}
+	chartRepository, err := repov1.NewChartRepository(repoEntry, helmv4getter.All(settings))
+	if err != nil {
+		return nil, fmt.Errorf("create chart repository: %w", err)
+	}
 
-chartRepository.CachePath = repoCache
+	chartRepository.CachePath = repoCache
 
-return chartRepository, nil
+	return chartRepository, nil
 }
 
 func downloadRepositoryIndex(chartRepository *repov1.ChartRepository) error {
-indexPath, err := chartRepository.DownloadIndexFile()
-if err != nil {
-return fmt.Errorf("failed to download repository index file: %w", err)
-}
+	indexPath, err := chartRepository.DownloadIndexFile()
+	if err != nil {
+		return fmt.Errorf("failed to download repository index file: %w", err)
+	}
 
-_, statErr := os.Stat(indexPath)
-if statErr != nil {
-return fmt.Errorf("failed to verify repository index file: %w", statErr)
-}
+	_, statErr := os.Stat(indexPath)
+	if statErr != nil {
+		return fmt.Errorf("failed to verify repository index file: %w", statErr)
+	}
 
-return nil
+	return nil
 }
 
 func (c *Client) installRelease(
-ctx context.Context,
-spec *ChartSpec,
-upgrade bool,
+	ctx context.Context,
+	spec *ChartSpec,
+	upgrade bool,
 ) (*ReleaseInfo, error) {
-if spec == nil {
-return nil, errChartSpecRequired
-}
+	if spec == nil {
+		return nil, errChartSpecRequired
+	}
 
-cleanup, err := c.switchNamespace(spec.Namespace)
-if err != nil {
-return nil, err
-}
-defer cleanup()
+	cleanup, err := c.switchNamespace(spec.Namespace)
+	if err != nil {
+		return nil, err
+	}
 
-// Check if release exists when doing upgrade
-var rel *v1.Release
-if upgrade {
-histClient := helmv4action.NewHistory(c.actionConfig)
-histClient.Max = 1
-releases, histErr := histClient.Run(spec.ReleaseName)
+	defer cleanup()
 
-if histErr == nil && len(releases) > 0 {
-// Release exists, perform upgrade
-rel, err = c.upgradeRelease(ctx, spec)
-} else {
-// Release doesn't exist, perform install
-rel, err = c.performInstall(ctx, spec)
-}
-} else {
-rel, err = c.performInstall(ctx, spec)
-}
+	// Check if release exists when doing upgrade
+	var rel *v1.Release
 
-if err != nil {
-return nil, err
-}
+	if upgrade {
+		histClient := helmv4action.NewHistory(c.actionConfig)
+		histClient.Max = 1
+		releases, histErr := histClient.Run(spec.ReleaseName)
 
-return releaseToInfo(rel), nil
+		if histErr == nil && len(releases) > 0 {
+			// Release exists, perform upgrade
+			rel, err = c.upgradeRelease(ctx, spec)
+		} else {
+			// Release doesn't exist, perform install
+			rel, err = c.performInstall(ctx, spec)
+		}
+	} else {
+		rel, err = c.performInstall(ctx, spec)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	return releaseToInfo(rel), nil
 }
 
 func (c *Client) performInstall(ctx context.Context, spec *ChartSpec) (*v1.Release, error) {
 	client := helmv4action.NewInstall(c.actionConfig)
 	client.ReleaseName = spec.ReleaseName
 	client.Namespace = spec.Namespace
+
 	client.CreateNamespace = spec.CreateNamespace
+
 	if spec.Wait {
 		client.WaitStrategy = helmv4kube.StatusWatcherStrategy
 	}
+
 	client.WaitForJobs = spec.WaitForJobs
+
 	client.Timeout = spec.Timeout
 	if client.Timeout == 0 {
 		client.Timeout = DefaultTimeout
 	}
+
 	// Note: Atomic is not supported in Helm v4 Install action
 	client.Version = spec.Version
 
@@ -416,7 +429,7 @@ func (c *Client) performInstall(ctx context.Context, spec *ChartSpec) (*v1.Relea
 		return nil, err
 	}
 
-	runFn := func() (interface{}, error) {
+	runFn := func() (any, error) {
 		return client.RunWithContext(ctx, chart, vals)
 	}
 
@@ -426,14 +439,18 @@ func (c *Client) performInstall(ctx context.Context, spec *ChartSpec) (*v1.Relea
 func (c *Client) upgradeRelease(ctx context.Context, spec *ChartSpec) (*v1.Release, error) {
 	client := helmv4action.NewUpgrade(c.actionConfig)
 	client.Namespace = spec.Namespace
+
 	if spec.Wait {
 		client.WaitStrategy = helmv4kube.StatusWatcherStrategy
 	}
+
 	client.WaitForJobs = spec.WaitForJobs
+
 	client.Timeout = spec.Timeout
 	if client.Timeout == 0 {
 		client.Timeout = DefaultTimeout
 	}
+
 	// Note: Atomic is not supported in Helm v4 Upgrade action
 	client.Version = spec.Version
 	client.SkipCRDs = !spec.UpgradeCRDs // Inverted logic in v4
@@ -443,7 +460,7 @@ func (c *Client) upgradeRelease(ctx context.Context, spec *ChartSpec) (*v1.Relea
 		return nil, err
 	}
 
-	runFn := func() (interface{}, error) {
+	runFn := func() (any, error) {
 		return client.RunWithContext(ctx, spec.ReleaseName, chart, vals)
 	}
 
@@ -452,8 +469,8 @@ func (c *Client) upgradeRelease(ctx context.Context, spec *ChartSpec) (*v1.Relea
 
 func (c *Client) loadChartAndValues(
 	spec *ChartSpec,
-	client interface{},
-) (*chartv2.Chart, map[string]interface{}, error) {
+	client any,
+) (*chartv2.Chart, map[string]any, error) {
 	chartPath, chart, err := c.locateAndLoadChart(spec, client)
 	if err != nil {
 		return nil, nil, err
@@ -468,10 +485,11 @@ func (c *Client) loadChartAndValues(
 }
 
 func executeAndExtractRelease(
-	runFn func() (interface{}, error),
+	runFn func() (any, error),
 	silent bool,
 ) (*v1.Release, error) {
-	var releaser interface{}
+	var releaser any
+
 	var err error
 
 	if silent {
@@ -486,41 +504,45 @@ func executeAndExtractRelease(
 
 	rel, ok := releaser.(*v1.Release)
 	if !ok {
-		return nil, fmt.Errorf("unexpected release type: %T", releaser)
+		return nil, fmt.Errorf("%w: %T", errUnexpectedReleaseType, releaser)
 	}
 
 	return rel, nil
 }
 
-func (c *Client) locateAndLoadChart(spec *ChartSpec, client interface{}) (string, *chartv2.Chart, error) {
-var chartPath string
-var err error
+func (c *Client) locateAndLoadChart(
+	spec *ChartSpec,
+	client any,
+) (string, *chartv2.Chart, error) {
+	var chartPath string
 
-if spec.RepoURL != "" {
-chartPath, err = c.locateChartFromRepo(spec, client)
-} else {
-chartPath = spec.ChartName
+	var err error
+
+	if spec.RepoURL != "" {
+		chartPath, err = c.locateChartFromRepo(spec, client)
+	} else {
+		chartPath = spec.ChartName
+	}
+
+	if err != nil {
+		return "", nil, err
+	}
+
+	chartInterface, err := helmv4loader.Load(chartPath)
+	if err != nil {
+		return "", nil, fmt.Errorf("failed to load chart: %w", err)
+	}
+
+	// Type assert to *chartv2.Chart
+	chart, ok := chartInterface.(*chartv2.Chart)
+	if !ok {
+		return "", nil, fmt.Errorf("%w: %T", errUnexpectedChartType, chartInterface)
+	}
+
+	return chartPath, chart, nil
 }
 
-if err != nil {
-return "", nil, err
-}
-
-chartInterface, err := helmv4loader.Load(chartPath)
-if err != nil {
-return "", nil, fmt.Errorf("failed to load chart: %w", err)
-}
-
-// Type assert to *chartv2.Chart
-chart, ok := chartInterface.(*chartv2.Chart)
-if !ok {
-return "", nil, fmt.Errorf("unexpected chart type: %T", chartInterface)
-}
-
-return chartPath, chart, nil
-}
-
-func (c *Client) locateChartFromRepo(spec *ChartSpec, client interface{}) (string, error) {
+func (c *Client) locateChartFromRepo(spec *ChartSpec, client any) (string, error) {
 	_, chartName := parseChartRef(spec.ChartName)
 	if chartName == "" {
 		chartName = spec.ChartName
@@ -564,13 +586,7 @@ func (c *Client) locateChartFromRepo(spec *ChartSpec, client interface{}) (strin
 	return chartURL, nil
 }
 
-// chartPathOptionsSetter defines the interface for setting chart path options.
-type chartPathOptionsSetter interface {
-	SetChartPathOptions(opts helmv4action.ChartPathOptions)
-	GetChartPathOptions() helmv4action.ChartPathOptions
-}
-
-func setChartPathOptions(client interface{}, spec *ChartSpec) {
+func setChartPathOptions(client any, spec *ChartSpec) {
 	opts := helmv4action.ChartPathOptions{
 		RepoURL:               spec.RepoURL,
 		Username:              spec.Username,
@@ -589,86 +605,144 @@ func setChartPathOptions(client interface{}, spec *ChartSpec) {
 	}
 }
 
-func (c *Client) mergeValues(spec *ChartSpec, chartPath string) (map[string]interface{}, error) {
-	base := map[string]interface{}{}
+func (c *Client) mergeValues(spec *ChartSpec, chartPath string) (map[string]any, error) {
+	base := map[string]any{}
 
-	// Load values from files
-	for _, filePath := range spec.ValueFiles {
-		fileBytes, err := readFileFromPath(chartPath, filePath)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read values file %s: %w", filePath, err)
-		}
-
-		parsedMap, err := helmv4strvals.ParseString(string(fileBytes))
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse values file %s: %w", filePath, err)
-		}
-
-		base = mergeMaps(base, parsedMap)
+	err := mergeValueFiles(spec.ValueFiles, chartPath, base)
+	if err != nil {
+		return nil, err
 	}
 
-	// Merge ValuesYaml
-	if spec.ValuesYaml != "" {
-		parsedMap, err := helmv4strvals.ParseString(spec.ValuesYaml)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse ValuesYaml: %w", err)
-		}
-		base = mergeMaps(base, parsedMap)
+	err = mergeValuesYaml(spec.ValuesYaml, base)
+	if err != nil {
+		return nil, err
 	}
 
-	// Merge SetValues
-	for key, val := range spec.SetValues {
-		if err := helmv4strvals.ParseInto(fmt.Sprintf("%s=%s", key, val), base); err != nil {
-			return nil, fmt.Errorf("failed to parse set value %s=%s: %w", key, val, err)
-		}
+	err = mergeSetValues(spec.SetValues, base)
+	if err != nil {
+		return nil, err
 	}
 
-	// Merge SetJSONVals
-	for key, val := range spec.SetJSONVals {
-		if err := helmv4strvals.ParseJSON(fmt.Sprintf("%s=%s", key, val), base); err != nil {
-			return nil, fmt.Errorf("failed to parse JSON value %s=%s: %w", key, val, err)
-		}
+	err = mergeSetJSONValues(spec.SetJSONVals, base)
+	if err != nil {
+		return nil, err
 	}
 
-	// Merge SetFileVals
-	for key, filePath := range spec.SetFileVals {
-		fileBytes, err := readFileFromPath(chartPath, filePath)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read file value %s: %w", filePath, err)
-		}
-
-		if err := helmv4strvals.ParseInto(fmt.Sprintf("%s=%s", key, string(fileBytes)), base); err != nil {
-			return nil, fmt.Errorf("failed to parse file value %s: %w", key, err)
-		}
+	err = mergeSetFileValues(spec.SetFileVals, chartPath, base)
+	if err != nil {
+		return nil, err
 	}
 
 	return base, nil
 }
 
-func readFileFromPath(chartPath, filePath string) ([]byte, error) {
-	if filepath.IsAbs(filePath) {
-		return os.ReadFile(filePath)
+func mergeValueFiles(valueFiles []string, chartPath string, base map[string]any) error {
+	for _, filePath := range valueFiles {
+		fileBytes, err := readFileFromPath(chartPath, filePath)
+		if err != nil {
+			return fmt.Errorf("failed to read values file %s: %w", filePath, err)
+		}
+
+		parsedMap, err := helmv4strvals.ParseString(string(fileBytes))
+		if err != nil {
+			return fmt.Errorf("failed to parse values file %s: %w", filePath, err)
+		}
+
+		mergeMapsInto(base, parsedMap)
 	}
-	return ksailio.ReadFileSafe(filepath.Dir(chartPath), filePath)
+
+	return nil
 }
 
-func mergeMaps(a, b map[string]interface{}) map[string]interface{} {
-out := make(map[string]interface{}, len(a))
-for k, v := range a {
-out[k] = v
+func mergeValuesYaml(valuesYaml string, base map[string]any) error {
+	if valuesYaml == "" {
+		return nil
+	}
+
+	parsedMap, err := helmv4strvals.ParseString(valuesYaml)
+	if err != nil {
+		return fmt.Errorf("failed to parse ValuesYaml: %w", err)
+	}
+
+	mergeMapsInto(base, parsedMap)
+
+	return nil
 }
-for k, v := range b {
-if v, ok := v.(map[string]interface{}); ok {
-if bv, ok := out[k]; ok {
-if bv, ok := bv.(map[string]interface{}); ok {
-out[k] = mergeMaps(bv, v)
-continue
+
+func mergeSetValues(setValues map[string]string, base map[string]any) error {
+	for key, val := range setValues {
+		err := helmv4strvals.ParseInto(fmt.Sprintf("%s=%s", key, val), base)
+		if err != nil {
+			return fmt.Errorf("failed to parse set value %s=%s: %w", key, val, err)
+		}
+	}
+
+	return nil
 }
+
+func mergeSetJSONValues(setJSONVals map[string]string, base map[string]any) error {
+	for key, val := range setJSONVals {
+		err := helmv4strvals.ParseJSON(fmt.Sprintf("%s=%s", key, val), base)
+		if err != nil {
+			return fmt.Errorf("failed to parse JSON value %s=%s: %w", key, val, err)
+		}
+	}
+
+	return nil
 }
+
+func mergeSetFileValues(
+	setFileVals map[string]string,
+	chartPath string,
+	base map[string]any,
+) error {
+	for key, filePath := range setFileVals {
+		fileBytes, err := readFileFromPath(chartPath, filePath)
+		if err != nil {
+			return fmt.Errorf("failed to read file value %s: %w", filePath, err)
+		}
+
+		err = helmv4strvals.ParseInto(fmt.Sprintf("%s=%s", key, string(fileBytes)), base)
+		if err != nil {
+			return fmt.Errorf("failed to parse file value %s: %w", key, err)
+		}
+	}
+
+	return nil
 }
-out[k] = v
+
+func readFileFromPath(chartPath, filePath string) ([]byte, error) {
+	if filepath.IsAbs(filePath) {
+		data, err := os.ReadFile(filePath) //nolint:gosec // filePath is validated by caller
+		if err != nil {
+			return nil, fmt.Errorf("read file %s: %w", filePath, err)
+		}
+
+		return data, nil
+	}
+
+	data, err := ksailio.ReadFileSafe(filepath.Dir(chartPath), filePath)
+	if err != nil {
+		return nil, fmt.Errorf("read file safe %s: %w", filePath, err)
+	}
+
+	return data, nil
 }
-return out
+
+func mergeMapsInto(dest, src map[string]any) {
+	for key, srcVal := range src {
+		if srcMap, ok := srcVal.(map[string]any); ok {
+			if destVal, exists := dest[key]; exists {
+				if destMap, ok := destVal.(map[string]any); ok {
+					mergeMapsInto(destMap, srcMap)
+
+					continue
+				}
+			}
+		}
+
+		dest[key] = srcVal
+	}
 }
 
 func (c *Client) switchNamespace(namespace string) (func(), error) {
@@ -689,12 +763,14 @@ func (c *Client) switchNamespace(namespace string) (func(), error) {
 		os.Getenv("HELM_DRIVER"),
 	)
 	if reinitErr != nil {
-		c.restoreNamespace(previousNamespace)
+		_ = c.restoreNamespace(previousNamespace)
+
 		return nil, fmt.Errorf("failed to set helm namespace %q: %w", namespace, reinitErr)
 	}
 
 	return func() {
-		if restoreErr := c.restoreNamespace(previousNamespace); restoreErr != nil {
+		restoreErr := c.restoreNamespace(previousNamespace)
+		if restoreErr != nil {
 			c.debugLog("failed to restore helm namespace: %v", restoreErr)
 		}
 	}, nil
@@ -702,90 +778,96 @@ func (c *Client) switchNamespace(namespace string) (func(), error) {
 
 func (c *Client) restoreNamespace(namespace string) error {
 	c.settings.SetNamespace(namespace)
-	return c.actionConfig.Init(
+
+	err := c.actionConfig.Init(
 		c.settings.RESTClientGetter(),
 		namespace,
 		os.Getenv("HELM_DRIVER"),
 	)
+	if err != nil {
+		return fmt.Errorf("init action config for namespace %s: %w", namespace, err)
+	}
+
+	return nil
 }
 
 func parseChartRef(chartRef string) (string, string) {
-parts := strings.SplitN(chartRef, "/", chartRefParts)
-if len(parts) == 1 {
-return "", parts[0]
-}
+	parts := strings.SplitN(chartRef, "/", chartRefParts)
+	if len(parts) == 1 {
+		return "", parts[0]
+	}
 
-return parts[0], parts[1]
+	return parts[0], parts[1]
 }
 
 func releaseToInfo(rel *v1.Release) *ReleaseInfo {
-if rel == nil {
-return nil
-}
+	if rel == nil {
+		return nil
+	}
 
-return &ReleaseInfo{
-Name:       rel.Name,
-Namespace:  rel.Namespace,
-Revision:   rel.Version,
-Status:     rel.Info.Status.String(),
-Chart:      rel.Chart.Metadata.Name,
-AppVersion: rel.Chart.Metadata.AppVersion,
-Updated:    rel.Info.LastDeployed,
-Notes:      rel.Info.Notes,
-}
+	return &ReleaseInfo{
+		Name:       rel.Name,
+		Namespace:  rel.Namespace,
+		Revision:   rel.Version,
+		Status:     rel.Info.Status.String(),
+		Chart:      rel.Chart.Metadata.Name,
+		AppVersion: rel.Chart.Metadata.AppVersion,
+		Updated:    rel.Info.LastDeployed,
+		Notes:      rel.Info.Notes,
+	}
 }
 
 func runWithSilencedStderr(
-operation func() (interface{}, error),
-) (interface{}, error) {
-readPipe, writePipe, pipeErr := os.Pipe()
-if pipeErr != nil {
-return operation()
-}
+	operation func() (any, error),
+) (any, error) {
+	readPipe, writePipe, pipeErr := os.Pipe()
+	if pipeErr != nil {
+		return operation()
+	}
 
-stderrCaptureMu.Lock()
-defer stderrCaptureMu.Unlock()
+	stderrCaptureMu.Lock()
+	defer stderrCaptureMu.Unlock()
 
-originalStderr := os.Stderr
+	originalStderr := os.Stderr
 
-var (
-stderrBuffer bytes.Buffer
-waitGroup    sync.WaitGroup
-)
+	var (
+		stderrBuffer bytes.Buffer
+		waitGroup    sync.WaitGroup
+	)
 
-//nolint:modernize // sync.WaitGroup does not have Go() method; that's only in errgroup.Group
-waitGroup.Add(1)
+	//nolint:modernize // sync.WaitGroup does not have Go() method; that's only in errgroup.Group
+	waitGroup.Add(1)
 
-go func() {
-defer waitGroup.Done()
+	go func() {
+		defer waitGroup.Done()
 
-_, _ = io.Copy(&stderrBuffer, readPipe)
-}()
+		_, _ = io.Copy(&stderrBuffer, readPipe)
+	}()
 
-os.Stderr = writePipe
+	os.Stderr = writePipe
 
-var (
-releaseResult interface{}
-runErr        error
-)
+	var (
+		releaseResult any
+		runErr        error
+	)
 
-defer func() {
-_ = writePipe.Close()
+	defer func() {
+		_ = writePipe.Close()
 
-waitGroup.Wait()
+		waitGroup.Wait()
 
-_ = readPipe.Close()
-os.Stderr = originalStderr
+		_ = readPipe.Close()
+		os.Stderr = originalStderr
 
-if runErr != nil {
-logs := strings.TrimSpace(stderrBuffer.String())
-if logs != "" {
-runErr = fmt.Errorf("%w: %s", runErr, logs)
-}
-}
-}()
+		if runErr != nil {
+			logs := strings.TrimSpace(stderrBuffer.String())
+			if logs != "" {
+				runErr = fmt.Errorf("%w: %s", runErr, logs)
+			}
+		}
+	}()
 
-releaseResult, runErr = operation()
+	releaseResult, runErr = operation()
 
-return releaseResult, runErr
+	return releaseResult, runErr
 }
