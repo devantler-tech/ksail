@@ -134,7 +134,7 @@ release:
 
     **Homebrew Formula** (macOS/Linux):
     ```bash
-    brew install devantler-tech/formulas/ksail
+    brew install devantler-tech/tap/ksail
     ```
 
     **Go Install**:
