@@ -1,104 +1,148 @@
 package kindprovisioner
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
-	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
+	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
+	"github.com/docker/docker/pkg/stdcopy"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
 
 const kindNetworkName = "kind"
 
-// SetupRegistryHostsDirectory creates or uses existing containerd hosts directory for registry mirrors.
-// This uses the modern hosts directory pattern instead of deprecated ContainerdConfigPatches.
-// If scaffolded hosts.toml files exist (from cluster init), they are preserved.
-// Otherwise, files are generated at runtime based on mirror specs.
-// Returns the hosts directory manager and any error encountered.
-func SetupRegistryHostsDirectory(
-	mirrorSpecs []registry.MirrorSpec,
-	clusterName string,
-) (*registry.HostsDirectoryManager, error) {
-	if len(mirrorSpecs) == 0 {
-		return nil, nil
-	}
-
-	hostsDir := "kind-mirrors"
-	mgr, err := registry.NewHostsDirectoryManager(hostsDir)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create hosts directory manager: %w", err)
-	}
-
-	// Build mirror entries for runtime generation
-	entries := registry.BuildMirrorEntries(mirrorSpecs, "", nil, nil, nil)
-	if len(entries) == 0 {
-		return nil, nil
-	}
-
-	// Write hosts.toml files only for registries that don't already have scaffolded config
-	for _, entry := range entries {
-		hostsPath := filepath.Join(hostsDir, entry.Host, "hosts.toml")
-		if _, statErr := os.Stat(hostsPath); statErr == nil {
-			// File exists from scaffolding, preserve it
-			continue
-		}
-		// File doesn't exist, generate it at runtime
-		if _, writeErr := mgr.WriteHostsToml(entry); writeErr != nil {
-			_ = mgr.Cleanup()
-			return nil, fmt.Errorf("failed to write hosts.toml for %s: %w", entry.Host, writeErr)
-		}
-	}
-
-	return mgr, nil
-}
-
-// ConfigureKindWithHostsDirectory adds extraMounts to Kind nodes to mount the hosts directory.
-// This configures containerd to use the modern hosts directory pattern for registry mirrors.
-func ConfigureKindWithHostsDirectory(
+// ConfigureContainerdRegistryMirrors injects hosts.toml files directly into Kind nodes
+// to configure containerd to use the local registry mirrors. This is called after the
+// cluster is created and registries are connected to the network.
+//
+// This approach doesn't require file mounts or declarative configuration - it works
+// purely in-memory by executing commands inside the Kind nodes via Docker.
+func ConfigureContainerdRegistryMirrors(
+	ctx context.Context,
 	kindConfig *v1alpha4.Cluster,
-	hostsDir string,
 	mirrorSpecs []registry.MirrorSpec,
+	dockerClient client.APIClient,
+	writer io.Writer,
 ) error {
-	if kindConfig == nil || hostsDir == "" || len(mirrorSpecs) == 0 {
+	if len(mirrorSpecs) == 0 {
 		return nil
 	}
 
-	// Ensure nodes exist
-	if len(kindConfig.Nodes) == 0 {
-		// Add default control-plane node if none exist
-		kindConfig.Nodes = []v1alpha4.Node{
-			{
-				Role: v1alpha4.ControlPlaneRole,
-			},
+	// Build mirror entries to get the hosts.toml content
+	entries := registry.BuildMirrorEntries(mirrorSpecs, "", nil, nil, nil)
+	if len(entries) == 0 {
+		return nil
+	}
+
+	// Get the cluster name to find nodes
+	clusterName := "kind"
+	if kindConfig != nil && kindConfig.Name != "" {
+		clusterName = kindConfig.Name
+	}
+
+	// List Kind nodes (containers with label "io.x-k8s.kind.cluster=<name>")
+	nodes, err := listKindNodes(ctx, dockerClient, clusterName)
+	if err != nil {
+		return fmt.Errorf("failed to list Kind nodes: %w", err)
+	}
+
+	if len(nodes) == 0 {
+		return fmt.Errorf("no Kind nodes found for cluster %s", clusterName)
+	}
+
+	// Inject hosts.toml files into each node
+	for _, entry := range entries {
+		hostsTomlContent := registry.GenerateHostsToml(entry)
+
+		for _, node := range nodes {
+			err := injectHostsToml(ctx, dockerClient, node, entry.Host, hostsTomlContent)
+			if err != nil {
+				return fmt.Errorf("failed to inject hosts.toml for %s into node %s: %w", entry.Host, node, err)
+			}
 		}
 	}
 
-	// Add extraMounts for each registry host
-	for _, spec := range mirrorSpecs {
-		host := strings.TrimSpace(spec.Host)
-		if host == "" {
-			continue
-		}
+	return nil
+}
 
-		// Each registry gets its own directory mounted to /etc/containerd/certs.d/<host>
-		hostPath := filepath.Join(hostsDir, host)
-		containerPath := fmt.Sprintf("/etc/containerd/certs.d/%s", host)
+// listKindNodes returns the container IDs/names of Kind nodes for the given cluster.
+func listKindNodes(ctx context.Context, dockerClient client.APIClient, clusterName string) ([]string, error) {
+	containers, err := dockerClient.ContainerList(ctx, container.ListOptions{
+		All: true,
+	})
+	if err != nil {
+		return nil, err
+	}
 
-		mount := v1alpha4.Mount{
-			HostPath:      hostPath,
-			ContainerPath: containerPath,
-			Readonly:      true,
-		}
+	var nodes []string
+	labelKey := "io.x-k8s.kind.cluster"
 
-		// Add mount to all nodes
-		for i := range kindConfig.Nodes {
-			kindConfig.Nodes[i].ExtraMounts = append(kindConfig.Nodes[i].ExtraMounts, mount)
+	for _, c := range containers {
+		if c.Labels[labelKey] == clusterName {
+			// Use the first name (without leading slash)
+			if len(c.Names) > 0 {
+				name := strings.TrimPrefix(c.Names[0], "/")
+				nodes = append(nodes, name)
+			}
 		}
+	}
+
+	return nodes, nil
+}
+
+// injectHostsToml creates the hosts directory and writes the hosts.toml file inside a Kind node.
+func injectHostsToml(
+	ctx context.Context,
+	dockerClient client.APIClient,
+	nodeName string,
+	registryHost string,
+	hostsTomlContent string,
+) error {
+	// Create the directory structure: /etc/containerd/certs.d/<registry-host>/
+	certsDir := fmt.Sprintf("/etc/containerd/certs.d/%s", registryHost)
+
+	// Execute: mkdir -p <dir> && cat > <dir>/hosts.toml
+	// We use a shell command to create the directory and write the file in one go
+	cmd := []string{
+		"sh", "-c",
+		fmt.Sprintf("mkdir -p %s && cat > %s/hosts.toml << 'HOSTS_TOML_EOF'\n%s\nHOSTS_TOML_EOF",
+			certsDir, certsDir, hostsTomlContent),
+	}
+
+	execConfig := container.ExecOptions{
+		Cmd:          cmd,
+		AttachStdout: true,
+		AttachStderr: true,
+	}
+
+	execID, err := dockerClient.ContainerExecCreate(ctx, nodeName, execConfig)
+	if err != nil {
+		return fmt.Errorf("failed to create exec: %w", err)
+	}
+
+	resp, err := dockerClient.ContainerExecAttach(ctx, execID.ID, container.ExecStartOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to attach to exec: %w", err)
+	}
+	defer resp.Close()
+
+	// Read and discard output
+	var stdout, stderr bytes.Buffer
+	_, _ = stdcopy.StdCopy(&stdout, &stderr, resp.Reader)
+
+	// Check exit code
+	inspectResp, err := dockerClient.ContainerExecInspect(ctx, execID.ID)
+	if err != nil {
+		return fmt.Errorf("failed to inspect exec: %w", err)
+	}
+
+	if inspectResp.ExitCode != 0 {
+		return fmt.Errorf("exec failed with exit code %d: %s", inspectResp.ExitCode, stderr.String())
 	}
 
 	return nil
@@ -229,8 +273,6 @@ func CleanupRegistries(
 	deleteVolumes bool,
 ) error {
 	if len(mirrorSpecs) == 0 {
-		// Also cleanup hosts directory
-		CleanupHostsDirectory(clusterName)
 		return nil
 	}
 
@@ -248,8 +290,6 @@ func CleanupRegistries(
 	}
 
 	if registryMgr == nil {
-		// Still cleanup hosts directory
-		CleanupHostsDirectory(clusterName)
 		return nil
 	}
 
@@ -266,15 +306,5 @@ func CleanupRegistries(
 		return fmt.Errorf("failed to cleanup kind registries: %w", errCleanup)
 	}
 
-	// Cleanup hosts directory if it exists
-	CleanupHostsDirectory(clusterName)
-
 	return nil
-}
-
-// CleanupHostsDirectory removes the hosts directory created for the cluster.
-// This is best-effort cleanup and does not return errors.
-func CleanupHostsDirectory(clusterName string) {
-	hostsDir := "kind-mirrors"
-	_ = os.RemoveAll(hostsDir)
 }

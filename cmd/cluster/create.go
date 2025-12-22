@@ -774,27 +774,8 @@ func runKindMirrorAction(
 	writer := ctx.cmd.OutOrStdout()
 	clusterName := ctx.kindConfig.Name
 
-	// Setup hosts directory and configure Kind with extraMounts
-	hostsDirMgr, err := kindprovisioner.SetupRegistryHostsDirectory(ctx.mirrorSpecs, clusterName)
-	if err != nil {
-		return fmt.Errorf("failed to setup hosts directory: %w", err)
-	}
-
-	// Configure Kind to use hosts directory via extraMounts
-	if hostsDirMgr != nil {
-		err = kindprovisioner.ConfigureKindWithHostsDirectory(
-			ctx.kindConfig,
-			hostsDirMgr.GetBaseDir(),
-			ctx.mirrorSpecs,
-		)
-		if err != nil {
-			_ = hostsDirMgr.Cleanup()
-			return fmt.Errorf("failed to configure Kind with hosts directory: %w", err)
-		}
-	}
-
-	// Setup registry containers
-	err = kindprovisioner.SetupRegistries(
+	// Setup registry containers (they will be connected to network after cluster creation)
+	err := kindprovisioner.SetupRegistries(
 		execCtx,
 		ctx.kindConfig,
 		clusterName,
@@ -803,9 +784,6 @@ func runKindMirrorAction(
 		writer,
 	)
 	if err != nil {
-		if hostsDirMgr != nil {
-			_ = hostsDirMgr.Cleanup()
-		}
 		return fmt.Errorf("failed to setup kind registries: %w", err)
 	}
 
@@ -817,6 +795,7 @@ func runKindConnectAction(
 	ctx *registryStageContext,
 	dockerClient client.APIClient,
 ) error {
+	// Connect registries to the Kind network
 	err := kindprovisioner.ConnectRegistriesToNetwork(
 		execCtx,
 		ctx.mirrorSpecs,
@@ -825,6 +804,19 @@ func runKindConnectAction(
 	)
 	if err != nil {
 		return fmt.Errorf("failed to connect kind registries to network: %w", err)
+	}
+
+	// Configure containerd inside Kind nodes to use the registry mirrors
+	// This injects hosts.toml files directly into the running nodes
+	err = kindprovisioner.ConfigureContainerdRegistryMirrors(
+		execCtx,
+		ctx.kindConfig,
+		ctx.mirrorSpecs,
+		dockerClient,
+		ctx.cmd.OutOrStdout(),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to configure containerd registry mirrors: %w", err)
 	}
 
 	return nil
