@@ -952,7 +952,7 @@ func runRegistryStageWithRole(
 	)
 
 	// Try to read existing hosts.toml files from kind-mirrors directory.
-	// Returns (nil, nil) if directory doesn't exist, which is treated as no configuration.
+	// ReadExistingHostsToml returns (nil, nil) for missing directories, and an error for actual I/O issues.
 	existingSpecs, err := registry.ReadExistingHostsToml("kind-mirrors")
 	if err != nil {
 		return fmt.Errorf("failed to read existing hosts configuration: %w", err)
