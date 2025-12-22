@@ -191,7 +191,7 @@ func injectHostsToml(
 	hostsTomlContent string,
 ) error {
 	// Escape the registry host to prevent shell injection
-	escapedHost := escapeShellArg(registryHost)
+	escapedHost := EscapeShellArg(registryHost)
 
 	// Create the directory structure: /etc/containerd/certs.d/<registry-host>/
 	certsDir := "/etc/containerd/certs.d/" + escapedHost
@@ -244,9 +244,9 @@ func injectHostsToml(
 	return nil
 }
 
-// escapeShellArg escapes a string for safe use in POSIX shell commands.
+// EscapeShellArg escapes a string for safe use in POSIX shell commands.
 // It wraps the string in single quotes and escapes any single quotes within.
-func escapeShellArg(arg string) string {
+func EscapeShellArg(arg string) string {
 	// Replace ' with '\'' (end quote, escaped quote, start quote)
 	escaped := strings.ReplaceAll(arg, "'", "'\\''")
 	return "'" + escaped + "'"
