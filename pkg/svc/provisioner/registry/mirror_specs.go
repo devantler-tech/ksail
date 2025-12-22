@@ -3,6 +3,7 @@ package registry
 import (
 	"fmt"
 	"net"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -52,6 +53,7 @@ func ParseMirrorSpecs(specs []string) []MirrorSpec {
 
 // MergeSpecs merges two sets of mirror specs, with flagSpecs taking precedence.
 // If the same host appears in both, the version from flagSpecs is used.
+// The result is sorted by host to ensure deterministic output.
 func MergeSpecs(existingSpecs, flagSpecs []MirrorSpec) []MirrorSpec {
 	// If there are flag specs, they take full precedence for those hosts
 	// Start with a map of existing specs
@@ -71,6 +73,11 @@ func MergeSpecs(existingSpecs, flagSpecs []MirrorSpec) []MirrorSpec {
 	for _, spec := range specMap {
 		result = append(result, spec)
 	}
+
+	// Sort by host to ensure deterministic output
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Host < result[j].Host
+	})
 
 	return result
 }

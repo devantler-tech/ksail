@@ -193,12 +193,15 @@ func injectHostsToml(
 	// Create the directory structure: /etc/containerd/certs.d/<registry-host>/
 	certsDir := "/etc/containerd/certs.d/" + registryHost
 
+	// Escape the directory path for safe use in shell commands
+	escapedCertsDir := EscapeShellArg(certsDir)
+
 	// Execute: mkdir -p <dir> && cat > <dir>/hosts.toml
 	// We use a shell command to create the directory and write the file in one go
 	cmd := []string{
 		"sh", "-c",
 		fmt.Sprintf("mkdir -p %s && cat > %s/hosts.toml << 'HOSTS_TOML_EOF'\n%s\nHOSTS_TOML_EOF",
-			certsDir, certsDir, hostsTomlContent),
+			escapedCertsDir, escapedCertsDir, hostsTomlContent),
 	}
 
 	execConfig := container.ExecOptions{
@@ -239,6 +242,14 @@ func injectHostsToml(
 	}
 
 	return nil
+}
+
+// EscapeShellArg escapes a string for safe use in POSIX shell commands.
+// It wraps the string in single quotes and escapes any single quotes within.
+func EscapeShellArg(arg string) string {
+	// Replace ' with '\'' (end quote, escaped quote, start quote)
+	escaped := strings.ReplaceAll(arg, "'", "'\\''")
+	return "'" + escaped + "'"
 }
 
 // prepareKindRegistryManager is a helper that prepares the registry manager and registry infos
