@@ -2,9 +2,7 @@ package cluster
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"os"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
@@ -149,14 +147,10 @@ func cleanupKindMirrorRegistries(
 	flagSpecs := registry.ParseMirrorSpecs(cfgManager.Viper.GetStringSlice("mirror-registry"))
 
 	// Try to read existing hosts.toml files.
-	// Missing directories/files are treated as "no existing configuration".
+	// Returns (nil, nil) if directory doesn't exist, which is treated as no configuration.
 	existingSpecs, err := registry.ReadExistingHostsToml("kind-mirrors")
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			existingSpecs = nil
-		} else {
-			return fmt.Errorf("failed to read existing hosts configuration: %w", err)
-		}
+		return fmt.Errorf("failed to read existing hosts configuration: %w", err)
 	}
 
 	// Merge specs: flag specs override existing specs

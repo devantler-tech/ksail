@@ -952,14 +952,10 @@ func runRegistryStageWithRole(
 	)
 
 	// Try to read existing hosts.toml files from kind-mirrors directory.
-	// Missing directories/files are treated as "no existing configuration".
+	// Returns (nil, nil) if directory doesn't exist, which is treated as no configuration.
 	existingSpecs, err := registry.ReadExistingHostsToml("kind-mirrors")
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			existingSpecs = nil
-		} else {
-			return fmt.Errorf("failed to read existing hosts configuration: %w", err)
-		}
+		return fmt.Errorf("failed to read existing hosts configuration: %w", err)
 	}
 
 	// Merge specs: flag specs override existing specs for the same host
