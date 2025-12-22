@@ -17,10 +17,10 @@ type HostsDirectoryManager struct {
 // The baseDir will be created if it doesn't exist.
 func NewHostsDirectoryManager(baseDir string) (*HostsDirectoryManager, error) {
 	if baseDir == "" {
-		return nil, fmt.Errorf("baseDir cannot be empty")
+		return nil, ErrEmptyBaseDir
 	}
 
-	err := os.MkdirAll(baseDir, 0o755)
+	err := os.MkdirAll(baseDir, 0o750)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create base directory %s: %w", baseDir, err)
 	}
@@ -35,7 +35,8 @@ func NewHostsDirectoryManager(baseDir string) (*HostsDirectoryManager, error) {
 func (m *HostsDirectoryManager) WriteHostsToml(entry MirrorEntry) (string, error) {
 	// Create directory for this registry host
 	registryDir := filepath.Join(m.baseDir, entry.Host)
-	err := os.MkdirAll(registryDir, 0o755)
+
+	err := os.MkdirAll(registryDir, 0o750)
 	if err != nil {
 		return "", fmt.Errorf("failed to create registry directory %s: %w", registryDir, err)
 	}
@@ -45,7 +46,8 @@ func (m *HostsDirectoryManager) WriteHostsToml(entry MirrorEntry) (string, error
 
 	// Write hosts.toml file
 	hostsPath := filepath.Join(registryDir, "hosts.toml")
-	err = os.WriteFile(hostsPath, []byte(content), 0o644)
+
+	err = os.WriteFile(hostsPath, []byte(content), 0o600)
 	if err != nil {
 		return "", fmt.Errorf("failed to write hosts.toml to %s: %w", hostsPath, err)
 	}
@@ -55,7 +57,9 @@ func (m *HostsDirectoryManager) WriteHostsToml(entry MirrorEntry) (string, error
 
 // WriteAllHostsToml creates hosts.toml files for all provided mirror entries.
 // Returns a map of registry host to directory path.
-func (m *HostsDirectoryManager) WriteAllHostsToml(entries []MirrorEntry) (map[string]string, error) {
+func (m *HostsDirectoryManager) WriteAllHostsToml(
+	entries []MirrorEntry,
+) (map[string]string, error) {
 	result := make(map[string]string, len(entries))
 
 	for _, entry := range entries {
@@ -63,6 +67,7 @@ func (m *HostsDirectoryManager) WriteAllHostsToml(entries []MirrorEntry) (map[st
 		if err != nil {
 			return nil, fmt.Errorf("failed to write hosts.toml for %s: %w", entry.Host, err)
 		}
+
 		result[entry.Host] = dir
 	}
 
@@ -143,25 +148,25 @@ func ReadExistingHostsToml(baseDir string) ([]MirrorSpec, error) {
 // parseServerFromHostsToml extracts the server URL from hosts.toml content.
 // Example: server = "https://registry-1.docker.io"
 func parseServerFromHostsToml(content string) string {
-	lines := strings.Split(content, "\n")
-	
-	for _, line := range lines {
+	lines := strings.SplitSeq(content, "\n")
+
+	for line := range lines {
 		line = strings.TrimSpace(line)
-		
+
 		// Look for server = "url" pattern
 		if strings.HasPrefix(line, "server") && strings.Contains(line, "=") {
 			parts := strings.SplitN(line, "=", 2)
 			if len(parts) != 2 {
 				continue
 			}
-			
+
 			value := strings.TrimSpace(parts[1])
 			// Remove quotes
 			value = strings.Trim(value, `"'`)
-			
+
 			return value
 		}
 	}
-	
+
 	return ""
 }

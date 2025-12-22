@@ -228,15 +228,19 @@ func TestGenerateScaffoldedHostsToml(t *testing.T) {
 // splitMirrorSpec is a test helper that splits a mirror spec string.
 func splitMirrorSpec(spec string) []string {
 	idx := 0
+
 	for i, c := range spec {
 		if c == '=' {
 			idx = i
+
 			break
 		}
 	}
+
 	if idx == 0 || idx == len(spec)-1 {
 		return nil
 	}
+
 	return []string{spec[:idx], spec[idx+1:]}
 }
 

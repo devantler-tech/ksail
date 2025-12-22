@@ -399,6 +399,7 @@ func GenerateScaffoldedHostsToml(spec MirrorSpec) string {
 	if serverURL == "" {
 		serverURL = GenerateUpstreamURL(spec.Host)
 	}
+
 	builder.WriteString(fmt.Sprintf("server = %q\n\n", serverURL))
 
 	// The host block points to the local registry container

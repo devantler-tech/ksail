@@ -454,62 +454,7 @@ func (s *Scaffolder) removeFormerDistributionConfig(output, previous string) err
 
 // generateKindConfig generates the kind.yaml configuration file.
 func (s *Scaffolder) generateKindConfig(output string, force bool) error {
-	// Create Kind cluster configuration with standard KSail name
-	kindConfig := &v1alpha4.Cluster{
-		TypeMeta: v1alpha4.TypeMeta{
-			APIVersion: "kind.x-k8s.io/v1alpha4",
-			Kind:       "Cluster",
-		},
-		Name: "kind",
-	}
-
-	// Disable default CNI if Cilium is requested
-	if s.KSailConfig.Spec.Cluster.CNI == v1alpha1.CNICilium {
-		kindConfig.Networking.DisableDefaultCNI = true
-	}
-
-	// Add extraMounts for mirror registries if configured
-	specs := registry.ParseMirrorSpecs(s.MirrorRegistries)
-	if len(specs) > 0 {
-		// Get absolute path to mirrors directory
-		mirrorsDir := filepath.Join(output, KindMirrorsDir)
-		absHostsDir, err := filepath.Abs(mirrorsDir)
-		if err != nil {
-			absHostsDir = mirrorsDir
-		}
-
-		// Ensure at least one node exists for adding mounts
-		if len(kindConfig.Nodes) == 0 {
-			kindConfig.Nodes = []v1alpha4.Node{
-				{
-					Role: v1alpha4.ControlPlaneRole,
-				},
-			}
-		}
-
-		// Add extraMounts for each registry host
-		for _, spec := range specs {
-			host := strings.TrimSpace(spec.Host)
-			if host == "" {
-				continue
-			}
-
-			// Each registry gets its own directory mounted to /etc/containerd/certs.d/<host>
-			hostPath := filepath.Join(absHostsDir, host)
-			containerPath := fmt.Sprintf("/etc/containerd/certs.d/%s", host)
-
-			mount := v1alpha4.Mount{
-				HostPath:      hostPath,
-				ContainerPath: containerPath,
-				Readonly:      true,
-			}
-
-			// Add mount to all nodes
-			for i := range kindConfig.Nodes {
-				kindConfig.Nodes[i].ExtraMounts = append(kindConfig.Nodes[i].ExtraMounts, mount)
-			}
-		}
-	}
+	kindConfig := s.buildKindConfig(output)
 
 	opts := yamlgenerator.Options{
 		Output: filepath.Join(output, KindConfigFile),
@@ -529,6 +474,61 @@ func (s *Scaffolder) generateKindConfig(output string, force bool) error {
 			},
 		},
 	)
+}
+
+// buildKindConfig creates the Kind cluster configuration object.
+func (s *Scaffolder) buildKindConfig(output string) *v1alpha4.Cluster {
+	kindConfig := &v1alpha4.Cluster{
+		TypeMeta: v1alpha4.TypeMeta{
+			APIVersion: "kind.x-k8s.io/v1alpha4",
+			Kind:       "Cluster",
+		},
+		Name: "kind",
+	}
+
+	if s.KSailConfig.Spec.Cluster.CNI == v1alpha1.CNICilium {
+		kindConfig.Networking.DisableDefaultCNI = true
+	}
+
+	s.addMirrorMountsToKindConfig(kindConfig, output)
+
+	return kindConfig
+}
+
+// addMirrorMountsToKindConfig adds extraMounts for mirror registries to the Kind config.
+func (s *Scaffolder) addMirrorMountsToKindConfig(kindConfig *v1alpha4.Cluster, output string) {
+	specs := registry.ParseMirrorSpecs(s.MirrorRegistries)
+	if len(specs) == 0 {
+		return
+	}
+
+	mirrorsDir := filepath.Join(output, KindMirrorsDir)
+
+	absHostsDir, err := filepath.Abs(mirrorsDir)
+	if err != nil {
+		absHostsDir = mirrorsDir
+	}
+
+	if len(kindConfig.Nodes) == 0 {
+		kindConfig.Nodes = []v1alpha4.Node{{Role: v1alpha4.ControlPlaneRole}}
+	}
+
+	for _, spec := range specs {
+		host := strings.TrimSpace(spec.Host)
+		if host == "" {
+			continue
+		}
+
+		mount := v1alpha4.Mount{
+			HostPath:      filepath.Join(absHostsDir, host),
+			ContainerPath: "/etc/containerd/certs.d/" + host,
+			Readonly:      true,
+		}
+
+		for i := range kindConfig.Nodes {
+			kindConfig.Nodes[i].ExtraMounts = append(kindConfig.Nodes[i].ExtraMounts, mount)
+		}
+	}
 }
 
 // generateK3dConfig generates the k3d.yaml configuration file.

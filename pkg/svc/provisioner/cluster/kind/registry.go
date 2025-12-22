@@ -31,59 +31,87 @@ func ConfigureContainerdRegistryMirrors(
 	kindConfig *v1alpha4.Cluster,
 	mirrorSpecs []registry.MirrorSpec,
 	dockerClient client.APIClient,
-	writer io.Writer,
+	_ io.Writer,
 ) error {
+	entriesToInject := getEntriesToInject(kindConfig, mirrorSpecs)
+	if len(entriesToInject) == 0 {
+		return nil
+	}
+
+	nodes, err := getKindNodesForCluster(ctx, dockerClient, kindConfig)
+	if err != nil {
+		return err
+	}
+
+	return injectHostsTomlIntoNodes(ctx, dockerClient, nodes, entriesToInject)
+}
+
+// getEntriesToInject returns mirror entries that need to be injected into Kind nodes.
+// It filters out entries that already have extraMounts configured in the Kind config.
+func getEntriesToInject(
+	kindConfig *v1alpha4.Cluster,
+	mirrorSpecs []registry.MirrorSpec,
+) []registry.MirrorEntry {
 	if len(mirrorSpecs) == 0 {
 		return nil
 	}
 
-	// Build a set of registry hosts that already have mounts configured
-	// If a host has an extraMount, the scaffolded hosts.toml is already in place
 	mountedHosts := buildMountedHostsSet(kindConfig)
-
-	// Build mirror entries to get the hosts.toml content
 	entries := registry.BuildMirrorEntries(mirrorSpecs, "", nil, nil, nil)
-	if len(entries) == 0 {
-		return nil
-	}
 
-	// Filter out entries that are already mounted
 	var entriesToInject []registry.MirrorEntry
+
 	for _, entry := range entries {
 		if !mountedHosts[entry.Host] {
 			entriesToInject = append(entriesToInject, entry)
 		}
 	}
 
-	// If all entries are already mounted, nothing to do
-	if len(entriesToInject) == 0 {
-		return nil
-	}
+	return entriesToInject
+}
 
-	// Get the cluster name to find nodes
+// getKindNodesForCluster returns the list of Kind nodes for the given cluster configuration.
+func getKindNodesForCluster(
+	ctx context.Context,
+	dockerClient client.APIClient,
+	kindConfig *v1alpha4.Cluster,
+) ([]string, error) {
 	clusterName := "kind"
 	if kindConfig != nil && kindConfig.Name != "" {
 		clusterName = kindConfig.Name
 	}
 
-	// List Kind nodes (containers with label "io.x-k8s.kind.cluster=<name>")
 	nodes, err := listKindNodes(ctx, dockerClient, clusterName)
 	if err != nil {
-		return fmt.Errorf("failed to list Kind nodes: %w", err)
+		return nil, fmt.Errorf("failed to list Kind nodes: %w", err)
 	}
 
 	if len(nodes) == 0 {
-		return fmt.Errorf("no Kind nodes found for cluster %s", clusterName)
+		return nil, fmt.Errorf("%w: %s", ErrNoKindNodes, clusterName)
 	}
 
-	// Inject hosts.toml files into each node (only for non-mounted hosts)
-	for _, entry := range entriesToInject {
+	return nodes, nil
+}
+
+// injectHostsTomlIntoNodes injects hosts.toml files into all Kind nodes for the given entries.
+func injectHostsTomlIntoNodes(
+	ctx context.Context,
+	dockerClient client.APIClient,
+	nodes []string,
+	entries []registry.MirrorEntry,
+) error {
+	for _, entry := range entries {
 		hostsTomlContent := registry.GenerateHostsToml(entry)
 
 		for _, node := range nodes {
 			err := injectHostsToml(ctx, dockerClient, node, entry.Host, hostsTomlContent)
 			if err != nil {
-				return fmt.Errorf("failed to inject hosts.toml for %s into node %s: %w", entry.Host, node, err)
+				return fmt.Errorf(
+					"failed to inject hosts.toml for %s into node %s: %w",
+					entry.Host,
+					node,
+					err,
+				)
 			}
 		}
 	}
@@ -106,10 +134,11 @@ func buildMountedHostsSet(kindConfig *v1alpha4.Cluster) map[string]bool {
 	for _, node := range kindConfig.Nodes {
 		for _, mount := range node.ExtraMounts {
 			// Check if this mount is for containerd certs.d
-			if strings.HasPrefix(mount.ContainerPath, certsPrefix) {
+			if after, ok := strings.CutPrefix(mount.ContainerPath, certsPrefix); ok {
 				// Extract the registry host from the path
 				// e.g., /etc/containerd/certs.d/docker.io -> docker.io
-				host := strings.TrimPrefix(mount.ContainerPath, certsPrefix)
+				host := after
+
 				host = strings.TrimSuffix(host, "/")
 				if host != "" {
 					mountedHosts[host] = true
@@ -122,7 +151,11 @@ func buildMountedHostsSet(kindConfig *v1alpha4.Cluster) map[string]bool {
 }
 
 // listKindNodes returns the container IDs/names of Kind nodes for the given cluster.
-func listKindNodes(ctx context.Context, dockerClient client.APIClient, clusterName string) ([]string, error) {
+func listKindNodes(
+	ctx context.Context,
+	dockerClient client.APIClient,
+	clusterName string,
+) ([]string, error) {
 	containers, err := dockerClient.ContainerList(ctx, container.ListOptions{
 		All: true,
 	})
@@ -131,6 +164,7 @@ func listKindNodes(ctx context.Context, dockerClient client.APIClient, clusterNa
 	}
 
 	var nodes []string
+
 	labelKey := "io.x-k8s.kind.cluster"
 
 	for _, c := range containers {
@@ -155,7 +189,7 @@ func injectHostsToml(
 	hostsTomlContent string,
 ) error {
 	// Create the directory structure: /etc/containerd/certs.d/<registry-host>/
-	certsDir := fmt.Sprintf("/etc/containerd/certs.d/%s", registryHost)
+	certsDir := "/etc/containerd/certs.d/" + registryHost
 
 	// Execute: mkdir -p <dir> && cat > <dir>/hosts.toml
 	// We use a shell command to create the directory and write the file in one go
@@ -184,6 +218,7 @@ func injectHostsToml(
 
 	// Read and discard output
 	var stdout, stderr bytes.Buffer
+
 	_, _ = stdcopy.StdCopy(&stdout, &stderr, resp.Reader)
 
 	// Check exit code
@@ -193,7 +228,12 @@ func injectHostsToml(
 	}
 
 	if inspectResp.ExitCode != 0 {
-		return fmt.Errorf("exec failed with exit code %d: %s", inspectResp.ExitCode, stderr.String())
+		return fmt.Errorf(
+			"%w with exit code %d: %s",
+			ErrExecFailed,
+			inspectResp.ExitCode,
+			stderr.String(),
+		)
 	}
 
 	return nil
@@ -283,6 +323,7 @@ func buildRegistryInfosFromSpecs(
 		if upstream == "" {
 			upstream = registry.GenerateUpstreamURL(host)
 		}
+
 		if upstreams != nil && upstreams[host] != "" {
 			upstream = upstreams[host]
 		}
