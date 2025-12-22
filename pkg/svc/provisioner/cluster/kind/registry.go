@@ -5,6 +5,8 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
+	"strconv"
 	"strings"
 
 	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
@@ -160,7 +162,7 @@ func listKindNodes(
 		All: true,
 	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to list containers: %w", err)
 	}
 
 	var nodes []string
@@ -252,13 +254,18 @@ func prepareKindRegistryManager(
 
 	upstreams := registry.BuildUpstreamLookup(mirrorSpecs)
 
-	return registry.PrepareRegistryManager(
+	registryMgr, infos, err := registry.PrepareRegistryManager(
 		ctx,
 		dockerClient,
 		func(usedPorts map[int]struct{}) []registry.Info {
 			return buildRegistryInfosFromSpecs(mirrorSpecs, upstreams, usedPorts)
 		},
 	)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to prepare registry manager: %w", err)
+	}
+
+	return registryMgr, infos, nil
 }
 
 // SetupRegistries creates mirror registries based on mirror specifications.
@@ -268,7 +275,7 @@ func prepareKindRegistryManager(
 // local proxy registry.
 func SetupRegistries(
 	ctx context.Context,
-	kindConfig *v1alpha4.Cluster,
+	_ *v1alpha4.Cluster,
 	clusterName string,
 	dockerClient client.APIClient,
 	mirrorSpecs []registry.MirrorSpec,
@@ -304,7 +311,7 @@ func buildRegistryInfosFromSpecs(
 	upstreams map[string]string,
 	baseUsedPorts map[int]struct{},
 ) []registry.Info {
-	var registryInfos []registry.Info
+	registryInfos := make([]registry.Info, 0, len(mirrorSpecs))
 
 	usedPorts, nextPort := registry.InitPortAllocation(baseUsedPorts)
 
@@ -316,7 +323,7 @@ func buildRegistryInfosFromSpecs(
 
 		// Build endpoint for this host
 		port := registry.AllocatePort(&nextPort, usedPorts)
-		endpoint := fmt.Sprintf("http://%s:%d", host, port)
+		endpoint := "http://" + net.JoinHostPort(host, strconv.Itoa(port))
 
 		// Get upstream URL
 		upstream := spec.Remote

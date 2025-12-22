@@ -12,22 +12,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func createTestScaffolderForKind() *scaffolder.Scaffolder {
-	cluster := &v1alpha1.Cluster{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "ksail.io/v1alpha1",
-			Kind:       "Cluster",
-		},
-		Spec: v1alpha1.Spec{
-			Cluster: v1alpha1.ClusterSpec{
-				Distribution: v1alpha1.DistributionKind,
-			},
-		},
-	}
-
-	return scaffolder.NewScaffolder(*cluster, io.Discard, nil)
-}
-
 func createTestScaffolderForK3d() *scaffolder.Scaffolder {
 	cluster := &v1alpha1.Cluster{
 		TypeMeta: metav1.TypeMeta{
@@ -257,26 +241,6 @@ func TestGenerateK3dRegistryConfig(t *testing.T) {
 			registryConfig := scaf.GenerateK3dRegistryConfig()
 			assertK3dRegistryConfig(t, registryConfig, testCase.expected)
 		})
-	}
-}
-
-func assertContainerdPatches(t *testing.T, patches []string, testCase containerdPatchCase) {
-	t.Helper()
-
-	if testCase.expectEmpty {
-		require.Empty(t, patches)
-
-		return
-	}
-
-	require.Len(t, patches, len(testCase.expected))
-
-	for idx, expected := range testCase.expected {
-		require.Contains(t, patches[idx], expected.host)
-
-		if expected.fallback != "" {
-			require.Contains(t, patches[idx], expected.fallback)
-		}
 	}
 }
 

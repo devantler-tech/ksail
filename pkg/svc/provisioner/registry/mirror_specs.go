@@ -404,7 +404,7 @@ func GenerateScaffoldedHostsToml(spec MirrorSpec) string {
 
 	// The host block points to the local registry container
 	// The container will be named after the registry host (e.g., docker.io:5000)
-	localMirrorURL := fmt.Sprintf("http://%s:5000", spec.Host)
+	localMirrorURL := "http://" + net.JoinHostPort(spec.Host, "5000")
 	builder.WriteString(fmt.Sprintf("[host.%q]\n", localMirrorURL))
 	builder.WriteString("  capabilities = [\"pull\", \"resolve\"]\n")
 

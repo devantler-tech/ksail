@@ -7,6 +7,15 @@ import (
 	"strings"
 )
 
+// File permission constants.
+const (
+	dirPerm  = 0o750
+	filePerm = 0o600
+)
+
+// splitParts is the number of parts when splitting key=value pairs.
+const splitParts = 2
+
 // HostsDirectoryManager manages the containerd hosts directory structure for registry mirrors.
 // It creates temporary directories with hosts.toml files that can be mounted into Kind nodes.
 type HostsDirectoryManager struct {
@@ -20,7 +29,7 @@ func NewHostsDirectoryManager(baseDir string) (*HostsDirectoryManager, error) {
 		return nil, ErrEmptyBaseDir
 	}
 
-	err := os.MkdirAll(baseDir, 0o750)
+	err := os.MkdirAll(baseDir, dirPerm)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create base directory %s: %w", baseDir, err)
 	}
@@ -36,7 +45,7 @@ func (m *HostsDirectoryManager) WriteHostsToml(entry MirrorEntry) (string, error
 	// Create directory for this registry host
 	registryDir := filepath.Join(m.baseDir, entry.Host)
 
-	err := os.MkdirAll(registryDir, 0o750)
+	err := os.MkdirAll(registryDir, dirPerm)
 	if err != nil {
 		return "", fmt.Errorf("failed to create registry directory %s: %w", registryDir, err)
 	}
@@ -47,7 +56,7 @@ func (m *HostsDirectoryManager) WriteHostsToml(entry MirrorEntry) (string, error
 	// Write hosts.toml file
 	hostsPath := filepath.Join(registryDir, "hosts.toml")
 
-	err = os.WriteFile(hostsPath, []byte(content), 0o600)
+	err = os.WriteFile(hostsPath, []byte(content), filePerm)
 	if err != nil {
 		return "", fmt.Errorf("failed to write hosts.toml to %s: %w", hostsPath, err)
 	}
@@ -98,7 +107,8 @@ func (m *HostsDirectoryManager) GetBaseDir() string {
 // from previously scaffolded hosts files.
 func ReadExistingHostsToml(baseDir string) ([]MirrorSpec, error) {
 	// Check if directory exists
-	if _, err := os.Stat(baseDir); os.IsNotExist(err) {
+	_, err := os.Stat(baseDir)
+	if os.IsNotExist(err) {
 		return nil, nil // No existing config
 	}
 
@@ -108,7 +118,7 @@ func ReadExistingHostsToml(baseDir string) ([]MirrorSpec, error) {
 		return nil, fmt.Errorf("failed to read directory %s: %w", baseDir, err)
 	}
 
-	var specs []MirrorSpec
+	specs := make([]MirrorSpec, 0, len(entries))
 
 	for _, entry := range entries {
 		if !entry.IsDir() {
@@ -119,11 +129,13 @@ func ReadExistingHostsToml(baseDir string) ([]MirrorSpec, error) {
 		hostsFilePath := filepath.Join(baseDir, host, "hosts.toml")
 
 		// Check if hosts.toml exists
-		if _, err := os.Stat(hostsFilePath); os.IsNotExist(err) {
+		_, statErr := os.Stat(hostsFilePath)
+		if os.IsNotExist(statErr) {
 			continue
 		}
 
 		// Read hosts.toml file
+		//nolint:gosec // Path is constructed from trusted directory entries
 		content, err := os.ReadFile(hostsFilePath)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read %s: %w", hostsFilePath, err)
@@ -155,8 +167,8 @@ func parseServerFromHostsToml(content string) string {
 
 		// Look for server = "url" pattern
 		if strings.HasPrefix(line, "server") && strings.Contains(line, "=") {
-			parts := strings.SplitN(line, "=", 2)
-			if len(parts) != 2 {
+			parts := strings.SplitN(line, "=", splitParts)
+			if len(parts) != splitParts {
 				continue
 			}
 

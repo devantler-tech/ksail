@@ -138,7 +138,7 @@ func cleanupMirrorRegistries(
 func cleanupKindMirrorRegistries(
 	cmd *cobra.Command,
 	cfgManager *ksailconfigmanager.ConfigManager,
-	clusterCfg *v1alpha1.Cluster,
+	_ *v1alpha1.Cluster,
 	deps cmdhelpers.LifecycleDeps,
 	clusterName string,
 	deleteVolumes bool,
@@ -159,7 +159,7 @@ func cleanupKindMirrorRegistries(
 	// Build registry info to get names
 	entries := registry.BuildMirrorEntries(mirrorSpecs, "", nil, nil, nil)
 
-	var registryNames []string
+	registryNames := make([]string, 0, len(entries))
 	for _, entry := range entries {
 		registryNames = append(registryNames, entry.ContainerName)
 	}

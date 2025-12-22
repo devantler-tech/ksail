@@ -6,7 +6,6 @@ import (
 	"errors"
 	"io"
 	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -40,18 +39,6 @@ func TestMain(m *testing.M) {
 	_, _ = snaps.Clean(m)
 
 	os.Exit(v)
-}
-
-// loadTestData loads test data from testdata directory.
-func loadTestData(t *testing.T, filename string) string {
-	t.Helper()
-	//nolint:gosec // Test data files are safe
-	data, err := os.ReadFile(filepath.Join("testdata", filename))
-	if err != nil {
-		t.Fatalf("failed to load test data %s: %v", filename, err)
-	}
-
-	return string(data)
 }
 
 // setupTestEnvironment creates a standard test environment with mock client, context, and buffer.
@@ -130,6 +117,8 @@ func TestSetupRegistries_NilDockerClient(t *testing.T) {
 }
 
 func TestSetupRegistries_CreateRegistryError(t *testing.T) {
+	t.Parallel()
+
 	mockClient, ctx, buf := setupTestEnvironment(t)
 
 	kindConfig := &v1alpha4.Cluster{}
@@ -149,10 +138,14 @@ func TestSetupRegistries_CreateRegistryError(t *testing.T) {
 }
 
 func TestSetupRegistries_CleansUpAfterPartialFailure(t *testing.T) {
+	t.Parallel()
+
 	runSetupRegistriesPartialFailureScenario(t)
 }
 
 func TestSetupRegistries_DoesNotRemoveExistingRegistriesOnFailure(t *testing.T) {
+	t.Parallel()
+
 	runSetupRegistriesExistingRegistryScenario(t)
 }
 

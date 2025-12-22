@@ -34,6 +34,12 @@ const (
 )
 
 const (
+	// File permission constants.
+	dirPerm  = 0o750
+	filePerm = 0o600
+)
+
+const (
 	// Default images.
 
 	// defaultK3sImage pins K3d clusters to a Flux-compatible Kubernetes version.
@@ -615,7 +621,7 @@ func (s *Scaffolder) generateKindMirrorsConfig(output string, force bool) error 
 		}
 
 		// Create directory structure
-		err := os.MkdirAll(registryDir, 0o755)
+		err := os.MkdirAll(registryDir, dirPerm)
 		if err != nil {
 			return fmt.Errorf("failed to create mirror directory %s: %w", registryDir, err)
 		}
@@ -624,7 +630,7 @@ func (s *Scaffolder) generateKindMirrorsConfig(output string, force bool) error 
 		content := registry.GenerateScaffoldedHostsToml(spec)
 
 		// Write hosts.toml file
-		err = os.WriteFile(hostsPath, []byte(content), 0o644)
+		err = os.WriteFile(hostsPath, []byte(content), filePerm)
 		if err != nil {
 			return fmt.Errorf("failed to write hosts.toml to %s: %w", hostsPath, err)
 		}

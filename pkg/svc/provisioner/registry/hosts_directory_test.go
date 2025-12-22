@@ -108,7 +108,7 @@ func TestHostsDirectoryManager_WriteHostsToml(t *testing.T) {
 	assert.FileExists(t, hostsPath)
 
 	// Verify content
-	content, err := os.ReadFile(hostsPath)
+	content, err := os.ReadFile(hostsPath) //nolint:gosec // Test file with controlled path
 	require.NoError(t, err)
 
 	expected := `server = "https://registry-1.docker.io"
@@ -159,7 +159,7 @@ func TestHostsDirectoryManager_EmptyBaseDir(t *testing.T) {
 	t.Parallel()
 
 	mgr, err := registry.NewHostsDirectoryManager("")
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, mgr)
 	assert.ErrorContains(t, err, "baseDir cannot be empty")
 }
@@ -215,6 +215,7 @@ func TestReadExistingHostsToml(t *testing.T) {
 			name: "returns empty when directory doesn't exist",
 			setupFunc: func(t *testing.T) string {
 				t.Helper()
+
 				return filepath.Join(t.TempDir(), "nonexistent")
 			},
 			expectedSpecs: nil,
