@@ -16,10 +16,10 @@ import (
 	ksailio "github.com/devantler-tech/ksail/v5/pkg/io"
 	helmclientlib "github.com/mittwald/go-helm-client"
 	valueslib "github.com/mittwald/go-helm-client/values"
-	"helm.sh/helm/v3/pkg/cli"
-	"helm.sh/helm/v3/pkg/getter"
-	"helm.sh/helm/v3/pkg/release"
-	"helm.sh/helm/v3/pkg/repo"
+	"helm.sh/helm/v4/pkg/cli"
+	"helm.sh/helm/v4/pkg/getter"
+	v1 "helm.sh/helm/v4/pkg/release/v1"
+	repov1 "helm.sh/helm/v4/pkg/repo/v1"
 )
 
 const (
@@ -362,17 +362,17 @@ func ensureRepositoryConfig(settings *cli.EnvSettings) (string, error) {
 	return repoFile, nil
 }
 
-func loadOrInitRepositoryFile(repoFile string) *repo.File {
-	repositoryFile, err := repo.LoadFile(repoFile)
+func loadOrInitRepositoryFile(repoFile string) *repov1.File {
+	repositoryFile, err := repov1.LoadFile(repoFile)
 	if err != nil {
-		return repo.NewFile()
+		return repov1.NewFile()
 	}
 
 	return repositoryFile
 }
 
-func convertRepositoryEntry(entry *RepositoryEntry) *repo.Entry {
-	return &repo.Entry{
+func convertRepositoryEntry(entry *RepositoryEntry) *repov1.Entry {
+	return &repov1.Entry{
 		Name:                  entry.Name,
 		URL:                   entry.URL,
 		Username:              entry.Username,
@@ -406,10 +406,10 @@ func ensureRepositoryCache(settings *cli.EnvSettings) (string, error) {
 
 func newChartRepository(
 	settings *cli.EnvSettings,
-	repoEntry *repo.Entry,
+	repoEntry *repov1.Entry,
 	repoCache string,
-) (*repo.ChartRepository, error) {
-	chartRepository, err := repo.NewChartRepository(repoEntry, getter.All(settings))
+) (*repov1.ChartRepository, error) {
+	chartRepository, err := repov1.NewChartRepository(repoEntry, getter.All(settings))
 	if err != nil {
 		return nil, fmt.Errorf("create chart repository: %w", err)
 	}
@@ -419,7 +419,7 @@ func newChartRepository(
 	return chartRepository, nil
 }
 
-func downloadRepositoryIndex(chartRepository *repo.ChartRepository) error {
+func downloadRepositoryIndex(chartRepository *repov1.ChartRepository) error {
 	indexPath, err := chartRepository.DownloadIndexFile()
 	if err != nil {
 		return fmt.Errorf("failed to download repository index file: %w", err)
@@ -442,7 +442,7 @@ func (c *Client) installRelease(
 		ctx,
 		spec,
 		true,
-		func(ctx context.Context, chartSpec *helmclientlib.ChartSpec) (*release.Release, error) {
+		func(ctx context.Context, chartSpec *helmclientlib.ChartSpec) (*v1.Release, error) {
 			if upgrade {
 				return c.inner.InstallOrUpgradeChart(ctx, chartSpec, nil)
 			}
@@ -503,7 +503,7 @@ func (c *Client) executeReleaseOp(
 	ctx context.Context,
 	spec *ChartSpec,
 	applyDefaultTimeout bool,
-	operation func(context.Context, *helmclientlib.ChartSpec) (*release.Release, error),
+	operation func(context.Context, *helmclientlib.ChartSpec) (*v1.Release, error),
 ) (*ReleaseInfo, error) {
 	chartSpec, cleanup, err := c.prepareChartSpec(spec, applyDefaultTimeout)
 	if err != nil {
@@ -511,11 +511,11 @@ func (c *Client) executeReleaseOp(
 	}
 	defer cleanup()
 
-	run := func() (*release.Release, error) {
+	run := func() (*v1.Release, error) {
 		return operation(ctx, chartSpec)
 	}
 
-	var rel *release.Release
+	var rel *v1.Release
 	if spec != nil && spec.Silent {
 		rel, err = runReleaseWithSilencedStderr(run)
 	} else {
@@ -568,7 +568,7 @@ func (c *Client) ensureRepository(spec *ChartSpec, chartSpec *helmclientlib.Char
 
 	settings := c.inner.GetSettings()
 
-	chartURL, err := repo.FindChartInAuthAndTLSAndPassRepoURL(
+	chartURL, err := repov1.FindChartInAuthAndTLSAndPassRepoURL(
 		spec.RepoURL,
 		spec.Username,
 		spec.Password,
@@ -657,7 +657,7 @@ func parseChartRef(chartRef string) (string, string) {
 	return parts[0], parts[1]
 }
 
-func releaseToInfo(rel *release.Release) *ReleaseInfo {
+func releaseToInfo(rel *v1.Release) *ReleaseInfo {
 	if rel == nil {
 		return nil
 	}
@@ -675,8 +675,8 @@ func releaseToInfo(rel *release.Release) *ReleaseInfo {
 }
 
 func runReleaseWithSilencedStderr(
-	operation func() (*release.Release, error),
-) (*release.Release, error) {
+	operation func() (*v1.Release, error),
+) (*v1.Release, error) {
 	readPipe, writePipe, pipeErr := os.Pipe()
 	if pipeErr != nil {
 		return operation()
@@ -704,7 +704,7 @@ func runReleaseWithSilencedStderr(
 	os.Stderr = writePipe
 
 	var (
-		releaseResult *release.Release
+		releaseResult *v1.Release
 		runErr        error
 	)
 
