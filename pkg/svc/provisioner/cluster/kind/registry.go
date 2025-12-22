@@ -190,18 +190,18 @@ func injectHostsToml(
 	registryHost string,
 	hostsTomlContent string,
 ) error {
-	// Escape the registry host to prevent shell injection
-	escapedHost := EscapeShellArg(registryHost)
-
 	// Create the directory structure: /etc/containerd/certs.d/<registry-host>/
-	certsDir := "/etc/containerd/certs.d/" + escapedHost
+	certsDir := "/etc/containerd/certs.d/" + registryHost
+
+	// Escape the directory path for safe use in shell commands
+	escapedCertsDir := EscapeShellArg(certsDir)
 
 	// Execute: mkdir -p <dir> && cat > <dir>/hosts.toml
 	// We use a shell command to create the directory and write the file in one go
 	cmd := []string{
 		"sh", "-c",
 		fmt.Sprintf("mkdir -p %s && cat > %s/hosts.toml << 'HOSTS_TOML_EOF'\n%s\nHOSTS_TOML_EOF",
-			certsDir, certsDir, hostsTomlContent),
+			escapedCertsDir, escapedCertsDir, hostsTomlContent),
 	}
 
 	execConfig := container.ExecOptions{
