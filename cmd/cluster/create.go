@@ -1232,22 +1232,22 @@ func mergeSpecs(existingSpecs, flagSpecs []registry.MirrorSpec) []registry.Mirro
 	// If there are flag specs, they take full precedence for those hosts
 	// Start with a map of existing specs
 	specMap := make(map[string]registry.MirrorSpec)
-	
+
 	for _, spec := range existingSpecs {
 		specMap[spec.Host] = spec
 	}
-	
+
 	// Override with flag specs
 	for _, spec := range flagSpecs {
 		specMap[spec.Host] = spec
 	}
-	
+
 	// Convert map back to slice
 	result := make([]registry.MirrorSpec, 0, len(specMap))
 	for _, spec := range specMap {
 		result = append(result, spec)
 	}
-	
+
 	return result
 }
 
@@ -1266,10 +1266,10 @@ func prepareKindConfigWithMirrors(
 
 	// Check for --mirror-registry flag
 	mirrorRegistries := cfgManager.Viper.GetStringSlice("mirror-registry")
-	
+
 	// Also check for existing hosts.toml files
 	existingSpecs, _ := registry.ReadExistingHostsToml("kind-mirrors")
-	
+
 	// If we have either flag specs or existing specs, configuration is needed
 	if len(mirrorRegistries) > 0 || len(existingSpecs) > 0 {
 		return true
