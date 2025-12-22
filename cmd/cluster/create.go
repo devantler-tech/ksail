@@ -20,6 +20,7 @@ import (
 	k3dconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/k3d"
 	kindconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/kind"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
+	"github.com/devantler-tech/ksail/v5/pkg/io/scaffolder"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/installer"
 	argocdinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/argocd"
 	certmanagerinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/cert-manager"
@@ -953,7 +954,7 @@ func runRegistryStageWithRole(
 
 	// Try to read existing hosts.toml files from kind-mirrors directory.
 	// ReadExistingHostsToml returns (nil, nil) for missing directories, and an error for actual I/O issues.
-	existingSpecs, err := registry.ReadExistingHostsToml("kind-mirrors")
+	existingSpecs, err := registry.ReadExistingHostsToml(scaffolder.KindMirrorsDir)
 	if err != nil {
 		return fmt.Errorf("failed to read existing hosts configuration: %w", err)
 	}
@@ -1244,7 +1245,16 @@ func prepareKindConfigWithMirrors(
 	mirrorRegistries := cfgManager.Viper.GetStringSlice("mirror-registry")
 
 	// Also check for existing hosts.toml files
-	existingSpecs, _ := registry.ReadExistingHostsToml("kind-mirrors")
+	existingSpecs, err := registry.ReadExistingHostsToml(scaffolder.KindMirrorsDir)
+	if err != nil {
+		// Log error but don't fail - missing configuration is acceptable
+		notify.WriteMessage(notify.Message{
+			Type:    notify.WarningType,
+			Content: "failed to read existing hosts configuration: %v",
+			Args:    []any{err},
+			Writer:  os.Stderr,
+		})
+	}
 
 	// If we have either flag specs or existing specs, configuration is needed
 	if len(mirrorRegistries) > 0 || len(existingSpecs) > 0 {
