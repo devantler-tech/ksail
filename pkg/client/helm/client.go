@@ -19,6 +19,7 @@ import (
 	helmv4cli "helm.sh/helm/v4/pkg/cli"
 	helmv4getter "helm.sh/helm/v4/pkg/getter"
 	helmv4kube "helm.sh/helm/v4/pkg/kube"
+	helmv4registry "helm.sh/helm/v4/pkg/registry"
 	v1 "helm.sh/helm/v4/pkg/release/v1"
 	repov1 "helm.sh/helm/v4/pkg/repo/v1"
 	helmv4strvals "helm.sh/helm/v4/pkg/strvals"
@@ -41,6 +42,7 @@ var (
 	errChartSpecRequired       = errors.New("helm: chart spec is required")
 	errUnexpectedReleaseType   = errors.New("helm: unexpected release type")
 	errUnexpectedChartType     = errors.New("helm: unexpected chart type")
+	errUnsupportedClientType   = errors.New("helm: unsupported client type for OCI chart")
 )
 
 // stderrCaptureMu protects process-wide stderr redirection from concurrent access.
@@ -518,9 +520,12 @@ func (c *Client) locateAndLoadChart(
 
 	var err error
 
-	if spec.RepoURL != "" {
+	switch {
+	case spec.RepoURL != "":
 		chartPath, err = c.locateChartFromRepo(spec, client)
-	} else {
+	case helmv4registry.IsOCI(spec.ChartName):
+		chartPath, err = c.locateOCIChart(spec, client)
+	default:
 		chartPath = spec.ChartName
 	}
 
@@ -540,6 +545,51 @@ func (c *Client) locateAndLoadChart(
 	}
 
 	return chartPath, chart, nil
+}
+
+func (c *Client) locateOCIChart(spec *ChartSpec, client any) (string, error) {
+	// Create a registry client for OCI operations
+	registryClient, err := helmv4registry.NewClient()
+	if err != nil {
+		return "", fmt.Errorf("failed to create registry client: %w", err)
+	}
+
+	// Set ChartPathOptions for the action client with registry client
+	opts := helmv4action.ChartPathOptions{
+		Version:               spec.Version,
+		Username:              spec.Username,
+		Password:              spec.Password,
+		CertFile:              spec.CertFile,
+		KeyFile:               spec.KeyFile,
+		CaFile:                spec.CaFile,
+		InsecureSkipTLSverify: spec.InsecureSkipTLSverify,
+	}
+
+	// Apply options and registry client to action client, then use its LocateChart
+	switch actionClient := client.(type) {
+	case *helmv4action.Install:
+		actionClient.ChartPathOptions = opts
+		actionClient.SetRegistryClient(registryClient)
+
+		chartPath, err := actionClient.LocateChart(spec.ChartName, c.settings)
+		if err != nil {
+			return "", fmt.Errorf("failed to locate OCI chart %q: %w", spec.ChartName, err)
+		}
+
+		return chartPath, nil
+	case *helmv4action.Upgrade:
+		actionClient.ChartPathOptions = opts
+		actionClient.SetRegistryClient(registryClient)
+
+		chartPath, err := actionClient.LocateChart(spec.ChartName, c.settings)
+		if err != nil {
+			return "", fmt.Errorf("failed to locate OCI chart %q: %w", spec.ChartName, err)
+		}
+
+		return chartPath, nil
+	default:
+		return "", fmt.Errorf("%w: %T", errUnsupportedClientType, client)
+	}
 }
 
 func (c *Client) locateChartFromRepo(spec *ChartSpec, client any) (string, error) {
