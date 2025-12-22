@@ -49,6 +49,32 @@ brews:
         system bin/"ksail", "--help"
       end
 
+homebrew_casks:
+  - name: ksail
+    homepage: "https://github.com/devantler-tech/ksail"
+    description: "CLI tool to manage clusters and workloads"
+    license: "Apache-2.0"
+    directory: Casks
+    repository:
+      owner: devantler-tech
+      name: homebrew-formulas
+      token: "{{ .Env.HOMEBREW_GITHUB_API_TOKEN }}"
+    commit_author:
+      name: goreleaserbot
+      email: goreleaserbot@users.noreply.github.com
+    commit_msg_template: "Cask update for {{ .ProjectName }} version {{ .Tag }}"
+    url:
+      template: "https://github.com/devantler-tech/ksail/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
+      verified: "github.com/devantler-tech/ksail"
+    binaries:
+      - ksail
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/ksail"]
+          end
+
 dockers_v2:
   - images:
       - "ghcr.io/devantler-tech/ksail"
@@ -99,7 +125,14 @@ release:
   footer: |
     ## Quick Start
 
-    **Homebrew** (macOS/Linux):
+    **Homebrew Cask** (macOS):
+    ```bash
+    brew install --cask devantler-tech/formulas/ksail
+    ```
+    > Note: Since the binary is not signed/notarized, you may need to use `--no-quarantine`:
+    > `brew install --cask --no-quarantine devantler-tech/formulas/ksail`
+
+    **Homebrew Formula** (macOS/Linux):
     ```bash
     brew install devantler-tech/formulas/ksail
     ```
