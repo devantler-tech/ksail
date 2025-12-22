@@ -692,7 +692,9 @@ func mergeValuesYaml(valuesYaml string, base map[string]any) error {
 	}
 
 	var parsedMap map[string]any
-	if err := yaml.Unmarshal([]byte(valuesYaml), &parsedMap); err != nil {
+
+	err := yaml.Unmarshal([]byte(valuesYaml), &parsedMap)
+	if err != nil {
 		return fmt.Errorf("failed to parse ValuesYaml: %w", err)
 	}
 
