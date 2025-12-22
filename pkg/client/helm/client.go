@@ -23,6 +23,7 @@ import (
 	v1 "helm.sh/helm/v4/pkg/release/v1"
 	repov1 "helm.sh/helm/v4/pkg/repo/v1"
 	helmv4strvals "helm.sh/helm/v4/pkg/strvals"
+	"sigs.k8s.io/yaml"
 )
 
 const (
@@ -690,8 +691,8 @@ func mergeValuesYaml(valuesYaml string, base map[string]any) error {
 		return nil
 	}
 
-	parsedMap, err := helmv4strvals.ParseString(valuesYaml)
-	if err != nil {
+	var parsedMap map[string]any
+	if err := yaml.Unmarshal([]byte(valuesYaml), &parsedMap); err != nil {
 		return fmt.Errorf("failed to parse ValuesYaml: %w", err)
 	}
 
