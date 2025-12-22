@@ -95,6 +95,7 @@ func NewScaffolder(cfg v1alpha1.Cluster, writer io.Writer, mirrorRegistries []st
 // This method orchestrates the generation of:
 //   - ksail.yaml configuration
 //   - Distribution-specific configuration (kind.yaml or k3d.yaml)
+//   - kind-mirrors directory with hosts.toml files (for Kind with mirror registries)
 //   - kustomization.yaml in the source directory
 //
 // Parameters:
@@ -123,29 +124,16 @@ func (s *Scaffolder) Scaffold(output string, force bool) error {
 		return err
 	}
 
+	// Generate Kind mirror hosts configuration if applicable
+	err = s.generateKindMirrorsConfig(output, force)
+	if err != nil {
+		return err
+	}
+
 	return s.generateKustomizationConfig(output, force)
 }
 
 // Registry configuration helpers.
-
-// GenerateContainerdPatches generates containerd config patches for Kind mirror registry.
-// Input format: "name=upstream" (e.g., "docker.io=https://registry-1.docker.io")
-// Container names match the registry host after sanitization to align with runtime provisioning.
-func (s *Scaffolder) GenerateContainerdPatches() []string {
-	specs := registry.ParseMirrorSpecs(s.MirrorRegistries)
-	if len(specs) == 0 {
-		return nil
-	}
-
-	entries := registry.BuildMirrorEntries(specs, "", nil, nil, nil)
-	patches := make([]string, 0, len(entries))
-
-	for _, entry := range entries {
-		patches = append(patches, registry.KindPatch(entry))
-	}
-
-	return patches
-}
 
 // GenerateK3dRegistryConfig generates K3d registry configuration for mirror registry.
 // Input format: "name=upstream" (e.g., "docker.io=https://registry-1.docker.io")
@@ -480,9 +468,47 @@ func (s *Scaffolder) generateKindConfig(output string, force bool) error {
 		kindConfig.Networking.DisableDefaultCNI = true
 	}
 
-	// Add containerd config patches for mirror registries
-	if len(s.MirrorRegistries) > 0 {
-		kindConfig.ContainerdConfigPatches = s.GenerateContainerdPatches()
+	// Add extraMounts for mirror registries if configured
+	specs := registry.ParseMirrorSpecs(s.MirrorRegistries)
+	if len(specs) > 0 {
+		// Get absolute path to mirrors directory
+		mirrorsDir := filepath.Join(output, KindMirrorsDir)
+		absHostsDir, err := filepath.Abs(mirrorsDir)
+		if err != nil {
+			absHostsDir = mirrorsDir
+		}
+
+		// Ensure at least one node exists for adding mounts
+		if len(kindConfig.Nodes) == 0 {
+			kindConfig.Nodes = []v1alpha4.Node{
+				{
+					Role: v1alpha4.ControlPlaneRole,
+				},
+			}
+		}
+
+		// Add extraMounts for each registry host
+		for _, spec := range specs {
+			host := strings.TrimSpace(spec.Host)
+			if host == "" {
+				continue
+			}
+
+			// Each registry gets its own directory mounted to /etc/containerd/certs.d/<host>
+			hostPath := filepath.Join(absHostsDir, host)
+			containerPath := fmt.Sprintf("/etc/containerd/certs.d/%s", host)
+
+			mount := v1alpha4.Mount{
+				HostPath:      hostPath,
+				ContainerPath: containerPath,
+				Readonly:      true,
+			}
+
+			// Add mount to all nodes
+			for i := range kindConfig.Nodes {
+				kindConfig.Nodes[i].ExtraMounts = append(kindConfig.Nodes[i].ExtraMounts, mount)
+			}
+		}
 	}
 
 	opts := yamlgenerator.Options{
@@ -558,4 +584,60 @@ func (s *Scaffolder) generateKustomizationConfig(output string, force bool) erro
 			},
 		},
 	)
+}
+
+// KindMirrorsDir is the directory name for Kind containerd host mirror configuration.
+const KindMirrorsDir = "kind-mirrors"
+
+// generateKindMirrorsConfig generates hosts.toml files for Kind registry mirrors.
+// Each mirror registry specification creates a subdirectory under kind-mirrors/
+// with a hosts.toml file that configures containerd to use the specified upstream.
+func (s *Scaffolder) generateKindMirrorsConfig(output string, force bool) error {
+	if s.KSailConfig.Spec.Cluster.Distribution != v1alpha1.DistributionKind {
+		return nil
+	}
+
+	specs := registry.ParseMirrorSpecs(s.MirrorRegistries)
+	if len(specs) == 0 {
+		return nil
+	}
+
+	mirrorsDir := filepath.Join(output, KindMirrorsDir)
+
+	for _, spec := range specs {
+		registryDir := filepath.Join(mirrorsDir, spec.Host)
+		hostsPath := filepath.Join(registryDir, "hosts.toml")
+		displayName := filepath.Join(KindMirrorsDir, spec.Host, "hosts.toml")
+
+		skip, existed, previousModTime := s.checkFileExistsAndSkip(hostsPath, displayName, force)
+		if skip {
+			continue
+		}
+
+		// Create directory structure
+		err := os.MkdirAll(registryDir, 0o755)
+		if err != nil {
+			return fmt.Errorf("failed to create mirror directory %s: %w", registryDir, err)
+		}
+
+		// Generate hosts.toml content
+		content := registry.GenerateScaffoldedHostsToml(spec)
+
+		// Write hosts.toml file
+		err = os.WriteFile(hostsPath, []byte(content), 0o644)
+		if err != nil {
+			return fmt.Errorf("failed to write hosts.toml to %s: %w", hostsPath, err)
+		}
+
+		if force && existed {
+			err = ensureOverwriteModTime(hostsPath, previousModTime)
+			if err != nil {
+				return fmt.Errorf("failed to update mod time for %s: %w", displayName, err)
+			}
+		}
+
+		s.notifyFileAction(displayName, existed)
+	}
+
+	return nil
 }

@@ -9,7 +9,6 @@ import (
 	cmdhelpers "github.com/devantler-tech/ksail/v5/pkg/cmd"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	k3dconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/k3d"
-	kindconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/kind"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	k3dprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/k3d"
@@ -85,7 +84,7 @@ func handleDeleteRunE(
 		return fmt.Errorf("failed to get delete-volumes flag: %w", flagErr)
 	}
 
-	err = cleanupMirrorRegistries(cmd, clusterCfg, deps, clusterName, deleteVolumes)
+	err = cleanupMirrorRegistries(cmd, cfgManager, clusterCfg, deps, clusterName, deleteVolumes)
 	if err != nil {
 		// Log warning but don't fail the delete operation
 		notify.WriteMessage(notify.Message{
@@ -113,6 +112,7 @@ func handleDeleteRunE(
 // K3d handles registry cleanup natively through its own configuration.
 func cleanupMirrorRegistries(
 	cmd *cobra.Command,
+	cfgManager *ksailconfigmanager.ConfigManager,
 	clusterCfg *v1alpha1.Cluster,
 	deps cmdhelpers.LifecycleDeps,
 	clusterName string,
@@ -120,7 +120,7 @@ func cleanupMirrorRegistries(
 ) error {
 	switch clusterCfg.Spec.Cluster.Distribution {
 	case v1alpha1.DistributionKind:
-		return cleanupKindMirrorRegistries(cmd, clusterCfg, deps, clusterName, deleteVolumes)
+		return cleanupKindMirrorRegistries(cmd, cfgManager, clusterCfg, deps, clusterName, deleteVolumes)
 	case v1alpha1.DistributionK3d:
 		return cleanupK3dMirrorRegistries(cmd, clusterCfg, deps, clusterName, deleteVolumes)
 	default:
@@ -130,21 +130,32 @@ func cleanupMirrorRegistries(
 
 func cleanupKindMirrorRegistries(
 	cmd *cobra.Command,
+	cfgManager *ksailconfigmanager.ConfigManager,
 	clusterCfg *v1alpha1.Cluster,
 	deps cmdhelpers.LifecycleDeps,
 	clusterName string,
 	deleteVolumes bool,
 ) error {
-	kindConfigMgr := kindconfigmanager.NewConfigManager(clusterCfg.Spec.Cluster.DistributionConfig)
-
-	kindConfig, loadErr := kindConfigMgr.LoadConfig(deps.Timer)
-	if loadErr != nil {
-		return fmt.Errorf("failed to load kind config: %w", loadErr)
+	// Get mirror registry specs from command line flag
+	flagSpecs := registry.ParseMirrorSpecs(cfgManager.Viper.GetStringSlice("mirror-registry"))
+	
+	// Try to read existing hosts.toml files
+	existingSpecs, _ := registry.ReadExistingHostsToml("kind-mirrors")
+	
+	// Merge specs: flag specs override existing specs
+	mirrorSpecs := mergeKindSpecs(existingSpecs, flagSpecs)
+	
+	if len(mirrorSpecs) == 0 {
+		return nil
 	}
 
-	registriesInfo := kindprovisioner.ExtractRegistriesFromKindForTesting(kindConfig, nil)
+	// Build registry info to get names
+	entries := registry.BuildMirrorEntries(mirrorSpecs, "", nil, nil, nil)
+	var registryNames []string
+	for _, entry := range entries {
+		registryNames = append(registryNames, entry.ContainerName)
+	}
 
-	registryNames := registry.CollectRegistryNames(registriesInfo)
 	if len(registryNames) == 0 {
 		return nil
 	}
@@ -156,13 +167,38 @@ func cleanupKindMirrorRegistries(
 		func(dockerClient client.APIClient) error {
 			return kindprovisioner.CleanupRegistries(
 				cmd.Context(),
-				kindConfig,
+				mirrorSpecs,
 				clusterName,
 				dockerClient,
 				deleteVolumes,
 			)
 		},
 	)
+}
+
+// mergeKindSpecs merges two sets of mirror specs for Kind, with flagSpecs taking precedence.
+// If the same host appears in both, the version from flagSpecs is used.
+func mergeKindSpecs(existingSpecs, flagSpecs []registry.MirrorSpec) []registry.MirrorSpec {
+	// If there are flag specs, they take full precedence for those hosts
+	// Start with a map of existing specs
+	specMap := make(map[string]registry.MirrorSpec)
+	
+	for _, spec := range existingSpecs {
+		specMap[spec.Host] = spec
+	}
+	
+	// Override with flag specs
+	for _, spec := range flagSpecs {
+		specMap[spec.Host] = spec
+	}
+	
+	// Convert map back to slice
+	result := make([]registry.MirrorSpec, 0, len(specMap))
+	for _, spec := range specMap {
+		result = append(result, spec)
+	}
+	
+	return result
 }
 
 func cleanupK3dMirrorRegistries(

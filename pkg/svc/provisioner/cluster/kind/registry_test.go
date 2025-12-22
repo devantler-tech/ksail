@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -86,50 +85,6 @@ func matchListOptionsByName(name string) any {
 	})
 }
 
-func TestExtractRegistriesFromKind(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name      string
-		inputFile string
-		isEmpty   bool
-	}{
-		{name: "single registry", inputFile: "containerd_single_endpoint.toml"},
-		{name: "multiple registries", inputFile: "containerd_multiple_mirrors.toml"},
-		{name: "multiple registries same port", inputFile: "containerd_multiple_same_port.toml"},
-		{
-			name:      "duplicate registries in multiple patches",
-			inputFile: "containerd_duplicate_patches.toml",
-		},
-		{
-			name:      "registry with special characters",
-			inputFile: "containerd_registry_special_chars.toml",
-		},
-		{name: "no containerd patches", isEmpty: true},
-		{
-			name:      "multiple endpoints uses first",
-			inputFile: "containerd_multiple_endpoints_inline.toml",
-		},
-	}
-
-	for _, testCase := range tests {
-		t.Run(testCase.name, func(t *testing.T) {
-			t.Parallel()
-
-			var config *v1alpha4.Cluster
-			if testCase.isEmpty {
-				config = &v1alpha4.Cluster{ContainerdConfigPatches: []string{}}
-			} else {
-				patch := loadTestData(t, testCase.inputFile)
-				config = &v1alpha4.Cluster{ContainerdConfigPatches: []string{patch}}
-			}
-
-			result := kindprovisioner.ExtractRegistriesFromKindForTesting(config, nil)
-			snaps.MatchSnapshot(t, result)
-		})
-	}
-}
-
 func TestSetupRegistries_NilKindConfig(t *testing.T) {
 	t.Parallel()
 
@@ -158,37 +113,27 @@ func TestSetupRegistries_NoRegistries(t *testing.T) {
 func TestSetupRegistries_NilDockerClient(t *testing.T) {
 	t.Parallel()
 
-	patch := `[plugins."io.containerd.grpc.v1.cri".registry.mirrors."docker.io"]
-  endpoint = ["http://localhost:5000"]`
-
-	kindConfig := &v1alpha4.Cluster{
-		ContainerdConfigPatches: []string{patch},
-	}
+	kindConfig := &v1alpha4.Cluster{}
+	mirrorSpecs := newSingleMirrorSpec()
 
 	err := kindprovisioner.SetupRegistries(
 		context.Background(),
 		kindConfig,
 		"test",
 		nil,
-		nil,
+		mirrorSpecs,
 		io.Discard,
 	)
 
 	require.Error(t, err)
-	require.ErrorContains(t, err, "failed to create registry manager")
+	require.ErrorContains(t, err, "failed to prepare kind registry manager")
 }
 
 func TestSetupRegistries_CreateRegistryError(t *testing.T) {
-	t.Parallel()
-
 	mockClient, ctx, buf := setupTestEnvironment(t)
 
-	patch := `[plugins."io.containerd.grpc.v1.cri".registry.mirrors."docker.io"]
-  endpoint = ["http://localhost:5000"]`
-
-	kindConfig := &v1alpha4.Cluster{
-		ContainerdConfigPatches: []string{patch},
-	}
+	kindConfig := &v1alpha4.Cluster{}
+	mirrorSpecs := newSingleMirrorSpec()
 
 	expectRegistryPortScan(mockClient, []container.Summary{})
 	mockClient.EXPECT().
@@ -197,21 +142,17 @@ func TestSetupRegistries_CreateRegistryError(t *testing.T) {
 		Once()
 	mockClient.EXPECT().ContainerList(ctx, mock.Anything).Return(nil, errContainerListFailed).Once()
 
-	err := kindprovisioner.SetupRegistries(ctx, kindConfig, "test", mockClient, nil, buf)
+	err := kindprovisioner.SetupRegistries(ctx, kindConfig, "test", mockClient, mirrorSpecs, buf)
 
 	require.Error(t, err)
-	require.ErrorContains(t, err, "failed to create registry")
+	require.ErrorContains(t, err, "failed to setup kind registries")
 }
 
 func TestSetupRegistries_CleansUpAfterPartialFailure(t *testing.T) {
-	t.Parallel()
-
 	runSetupRegistriesPartialFailureScenario(t)
 }
 
 func TestSetupRegistries_DoesNotRemoveExistingRegistriesOnFailure(t *testing.T) {
-	t.Parallel()
-
 	runSetupRegistriesExistingRegistryScenario(t)
 }
 
@@ -220,6 +161,7 @@ func runSetupRegistriesPartialFailureScenario(t *testing.T) {
 
 	mockClient, ctx, buf := setupTestEnvironment(t)
 	kindConfig := newTwoMirrorKindConfig()
+	mirrorSpecs := newTwoMirrorSpecs()
 	firstRegistryID := "docker.io-id"
 
 	expectInitialRegistryScan(mockClient)
@@ -227,9 +169,9 @@ func runSetupRegistriesPartialFailureScenario(t *testing.T) {
 	expectMirrorProvisionFailure(mockClient, "ghcr.io", errRegistryCreateFailed)
 	expectCleanupRunningRegistry(mockClient, firstRegistryID, "docker.io")
 
-	err := kindprovisioner.SetupRegistries(ctx, kindConfig, "test", mockClient, nil, buf)
+	err := kindprovisioner.SetupRegistries(ctx, kindConfig, "test", mockClient, mirrorSpecs, buf)
 	require.Error(t, err)
-	require.ErrorContains(t, err, "failed to create registry ghcr.io")
+	require.ErrorContains(t, err, "failed to setup kind registries")
 	mockClient.AssertExpectations(t)
 }
 
@@ -238,6 +180,7 @@ func runSetupRegistriesExistingRegistryScenario(t *testing.T) {
 
 	mockClient, ctx, buf := setupTestEnvironment(t)
 	kindConfig := newTwoMirrorKindConfig()
+	mirrorSpecs := newTwoMirrorSpecs()
 
 	existing := container.Summary{
 		ID:    "docker.io-id",
@@ -265,9 +208,9 @@ func runSetupRegistriesExistingRegistryScenario(t *testing.T) {
 
 	expectMirrorProvisionFailure(mockClient, "ghcr.io", errRegistryCreateFailed)
 
-	err := kindprovisioner.SetupRegistries(ctx, kindConfig, "test", mockClient, nil, buf)
+	err := kindprovisioner.SetupRegistries(ctx, kindConfig, "test", mockClient, mirrorSpecs, buf)
 	require.Error(t, err)
-	require.ErrorContains(t, err, "failed to create registry ghcr.io")
+	require.ErrorContains(t, err, "failed to setup kind registries")
 
 	mockClient.AssertNotCalled(t, "ContainerStop", mock.Anything, mock.Anything, mock.Anything)
 	mockClient.AssertNotCalled(t, "ContainerRemove", mock.Anything, mock.Anything, mock.Anything)
@@ -281,6 +224,19 @@ func newTwoMirrorKindConfig() *v1alpha4.Cluster {
   endpoint = ["http://localhost:5001"]`
 
 	return &v1alpha4.Cluster{ContainerdConfigPatches: []string{patch}}
+}
+
+func newTwoMirrorSpecs() []registry.MirrorSpec {
+	return []registry.MirrorSpec{
+		{Host: "docker.io", Remote: "https://registry-1.docker.io"},
+		{Host: "ghcr.io", Remote: "https://ghcr.io"},
+	}
+}
+
+func newSingleMirrorSpec() []registry.MirrorSpec {
+	return []registry.MirrorSpec{
+		{Host: "docker.io", Remote: "https://registry-1.docker.io"},
+	}
 }
 
 func expectInitialRegistryScan(mockClient *docker.MockAPIClient) {
@@ -416,7 +372,7 @@ func newInspectResponse(networks ...string) container.InspectResponse {
 	}
 }
 
-func TestConnectRegistriesToNetwork_NilKindConfig(t *testing.T) {
+func TestConnectRegistriesToNetwork_NilMirrorSpecs(t *testing.T) {
 	t.Parallel()
 
 	mockClient := docker.NewMockAPIClient(t)
@@ -433,15 +389,13 @@ func TestConnectRegistriesToNetwork_NoRegistries(t *testing.T) {
 
 	mockClient, ctx, buf := setupTestEnvironment(t)
 
-	kindConfig := &v1alpha4.Cluster{
-		ContainerdConfigPatches: []string{},
-	}
+	emptySpecs := []registry.MirrorSpec{}
 
-	err := kindprovisioner.ConnectRegistriesToNetwork(ctx, kindConfig, mockClient, buf)
+	err := kindprovisioner.ConnectRegistriesToNetwork(ctx, emptySpecs, mockClient, buf)
 	assert.NoError(t, err)
 }
 
-func TestCleanupRegistries_NilKindConfig(t *testing.T) {
+func TestCleanupRegistries_NilMirrorSpecs(t *testing.T) {
 	t.Parallel()
 
 	mockClient := docker.NewMockAPIClient(t)
@@ -457,342 +411,10 @@ func TestCleanupRegistries_NoRegistries(t *testing.T) {
 	mockClient := docker.NewMockAPIClient(t)
 	ctx := context.Background()
 
-	kindConfig := &v1alpha4.Cluster{
-		ContainerdConfigPatches: []string{},
-	}
+	emptySpecs := []registry.MirrorSpec{}
 
-	err := kindprovisioner.CleanupRegistries(ctx, kindConfig, "test-cluster", mockClient, false)
+	err := kindprovisioner.CleanupRegistries(ctx, emptySpecs, "test-cluster", mockClient, false)
 	assert.NoError(t, err)
 }
 
-func TestBuildRegistryInfo(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name             string
-		host             string
-		endpoints        []string
-		expectedName     string
-		expectedPort     int
-		expectedUpstream string
-		expectedVolume   string
-	}{
-		{
-			name:             "docker.io with port in endpoint",
-			host:             "docker.io",
-			endpoints:        []string{"http://localhost:5000"},
-			expectedName:     "docker.io",
-			expectedPort:     5000,
-			expectedUpstream: "https://registry-1.docker.io",
-			expectedVolume:   "docker.io",
-		},
-		{
-			name:             "ghcr.io with port offset",
-			host:             "ghcr.io",
-			endpoints:        []string{"http://localhost:5001"}, // Provide valid endpoint
-			expectedName:     "ghcr.io",
-			expectedPort:     5001,
-			expectedUpstream: "https://ghcr.io",
-			expectedVolume:   "ghcr.io",
-		},
-		{
-			name:             "quay.io with endpoint name extraction",
-			host:             "quay.io",
-			endpoints:        []string{"http://quay.io:5002"},
-			expectedName:     "quay.io",
-			expectedPort:     5002,
-			expectedUpstream: "https://quay.io",
-			expectedVolume:   "quay.io",
-		},
-	}
-
-	for _, testCase := range tests {
-		t.Run(testCase.name, func(t *testing.T) {
-			t.Parallel()
-
-			// Since buildRegistryInfo is unexported, we test it through extractRegistriesFromKind
-			patch := fmt.Sprintf(`[plugins."io.containerd.grpc.v1.cri".registry.mirrors."%s"]
-  endpoint = %v`, testCase.host, formatEndpoints(testCase.endpoints))
-
-			config := &v1alpha4.Cluster{
-				ContainerdConfigPatches: []string{patch},
-			}
-
-			registries := kindprovisioner.ExtractRegistriesFromKindForTesting(config, nil)
-			assert.Len(t, registries, 1)
-			assert.Equal(t, testCase.expectedName, registries[0].Name)
-			assert.Equal(t, testCase.expectedUpstream, registries[0].Upstream)
-			assert.Equal(t, testCase.expectedPort, registries[0].Port)
-			assert.Equal(t, testCase.expectedVolume, registries[0].Volume)
-		})
-	}
-}
-
-func TestExtractRegistriesFromKind_UsesUpstreamOverride(t *testing.T) {
-	t.Parallel()
-
-	patch := `[plugins."io.containerd.grpc.v1.cri".registry.mirrors."docker.io"]
-  endpoint = ["http://docker.io:5000"]`
-
-	kindConfig := &v1alpha4.Cluster{
-		ContainerdConfigPatches: []string{patch},
-	}
-
-	registries := kindprovisioner.ExtractRegistriesFromKindForTesting(
-		kindConfig,
-		map[string]string{"docker.io": "https://mirror.example.com"},
-	)
-
-	require.Len(t, registries, 1)
-	assert.Equal(t, "https://mirror.example.com", registries[0].Upstream)
-}
-
-func formatEndpoints(endpoints []string) string {
-	if len(endpoints) == 0 {
-		return "[]"
-	}
-
-	quoted := make([]string, len(endpoints))
-	for i, ep := range endpoints {
-		quoted[i] = fmt.Sprintf(`"%s"`, ep)
-	}
-
-	return "[" + strings.Join(quoted, ", ") + "]"
-}
-
-func TestGenerateUpstreamURL(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name     string
-		host     string
-		expected string
-	}{
-		{
-			name:     "docker.io special case",
-			host:     "docker.io",
-			expected: "https://registry-1.docker.io",
-		},
-		{
-			name:     "ghcr.io standard case",
-			host:     "ghcr.io",
-			expected: "https://ghcr.io",
-		},
-		{
-			name:     "quay.io standard case",
-			host:     "quay.io",
-			expected: "https://quay.io",
-		},
-		{
-			name:     "custom registry with port",
-			host:     "registry.example.com:5000",
-			expected: "https://registry.example.com:5000",
-		},
-	}
-
-	runRegistryExtractionTestCases(
-		t,
-		tests,
-		func(t *testing.T, expected string, registries []registry.Info) {
-			t.Helper()
-			assert.Equal(t, expected, registries[0].Upstream)
-		},
-	)
-}
-
-// testRegistryExtraction is a helper for testing registry extraction from Kind config.
-func testRegistryExtraction(t *testing.T, host, endpoint string) []registry.Info {
-	t.Helper()
-
-	patch := fmt.Sprintf(`[plugins."io.containerd.grpc.v1.cri".registry.mirrors."%s"]
-  endpoint = ["%s"]`, host, endpoint)
-
-	config := &v1alpha4.Cluster{
-		ContainerdConfigPatches: []string{patch},
-	}
-
-	return kindprovisioner.ExtractRegistriesFromKindForTesting(config, nil)
-}
-
-// runRegistryExtractionTest is a helper to run a single registry extraction test case.
-func runRegistryExtractionTest(t *testing.T, host string) []registry.Info {
-	t.Helper()
-	registries := testRegistryExtraction(t, host, "http://localhost:5000")
-	assert.Len(t, registries, 1)
-
-	return registries
-}
-
-// runRegistryExtractionTestCases runs a set of test cases with a custom assertion function.
-func runRegistryExtractionTestCases(
-	t *testing.T,
-	tests []struct {
-		name     string
-		host     string
-		expected string
-	},
-	assertFunc func(*testing.T, string, []registry.Info),
-) {
-	t.Helper()
-
-	for _, testCase := range tests {
-		t.Run(testCase.name, func(t *testing.T) {
-			t.Parallel()
-			registries := runRegistryExtractionTest(t, testCase.host)
-			assertFunc(t, testCase.expected, registries)
-		})
-	}
-}
-
-func TestExtractPortFromEndpoint(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name     string
-		endpoint string
-		expected int
-	}{
-		{
-			name:     "http with port",
-			endpoint: "http://localhost:5000",
-			expected: 5000,
-		},
-		{
-			name:     "https with port",
-			endpoint: "https://registry:5001",
-			expected: 5001,
-		},
-		{
-			name:     "with trailing slash",
-			endpoint: "http://localhost:5002/",
-			expected: 5002,
-		},
-		{
-			name:     "with path",
-			endpoint: "http://localhost:5003/v2",
-			expected: 5003,
-		},
-		{
-			name:     "no port",
-			endpoint: "http://localhost",
-			expected: 0,
-		},
-		{
-			name:     "invalid port",
-			endpoint: "http://localhost:invalid",
-			expected: 0,
-		},
-		{
-			name:     "port too high",
-			endpoint: "http://localhost:99999",
-			expected: 0,
-		},
-	}
-
-	for _, testCase := range tests {
-		t.Run(testCase.name, func(t *testing.T) {
-			t.Parallel()
-
-			registries := testRegistryExtraction(t, "test.io", testCase.endpoint)
-			if testCase.expected > 0 {
-				assert.Len(t, registries, 1)
-				assert.Equal(t, testCase.expected, registries[0].Port)
-			}
-		})
-	}
-}
-
-func TestGenerateNameFromHost(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name     string
-		host     string
-		expected string
-	}{
-		{
-			name:     "simple host",
-			host:     "docker.io",
-			expected: "docker.io",
-		},
-		{
-			name:     "host with subdomain",
-			host:     "registry.example.com",
-			expected: "registry.example.com",
-		},
-		{
-			name:     "host with port",
-			host:     "registry.io:5000",
-			expected: "registry.io-5000",
-		},
-		{
-			name:     "host with slashes",
-			host:     "example.com/path",
-			expected: "example.com-path",
-		},
-	}
-
-	runRegistryExtractionTestCases(
-		t,
-		tests,
-		func(t *testing.T, expected string, registries []registry.Info) {
-			t.Helper()
-			assert.Equal(t, expected, registries[0].Name)
-		},
-	)
-}
-
-func TestExtractNameFromEndpoint(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name         string
-		endpoint     string
-		expectedName string
-	}{
-		{
-			name:         "standard endpoint with port",
-			endpoint:     "http://docker.io:5000",
-			expectedName: "test.io",
-		},
-		{
-			name:         "https endpoint",
-			endpoint:     "https://ghcr.io:5001",
-			expectedName: "test.io",
-		},
-		{
-			name:         "non-kind endpoint",
-			endpoint:     "http://localhost:5000",
-			expectedName: "test.io",
-		},
-		{
-			name:         "malformed endpoint",
-			endpoint:     "invalid",
-			expectedName: "test.io",
-		},
-		{
-			name:         "endpoint without port",
-			endpoint:     "http://kind-registry",
-			expectedName: "test.io",
-		},
-	}
-
-	for _, testCase := range tests {
-		t.Run(testCase.name, func(t *testing.T) {
-			t.Parallel()
-
-			// Test through extractRegistriesFromKind
-			patch := fmt.Sprintf(`[plugins."io.containerd.grpc.v1.cri".registry.mirrors."test.io"]
-  endpoint = ["%s"]`, testCase.endpoint)
-
-			config := &v1alpha4.Cluster{
-				ContainerdConfigPatches: []string{patch},
-			}
-
-			infos := kindprovisioner.ExtractRegistriesFromKindForTesting(config, nil)
-			assert.Len(t, infos, 1)
-			assert.Equal(t, testCase.expectedName, infos[0].Name)
-			assert.Equal(t, registry.GenerateUpstreamURL("test.io"), infos[0].Upstream)
-		})
-	}
-}
+// Deprecated test removed - uses legacy ExtractRegistriesFromKindForTesting

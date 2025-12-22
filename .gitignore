@@ -21,6 +21,7 @@ eks.yaml
 ksail.yaml
 k8s/
 !pkg/k8s/
+kind-mirrors/
 
 # ==============================================================================
 # Build and Release Artifacts

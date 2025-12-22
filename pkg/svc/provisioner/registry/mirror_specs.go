@@ -334,10 +334,36 @@ func AllocatePort(nextPort *int, usedPorts map[int]struct{}) int {
 	}
 }
 
-// KindPatch renders a containerd mirror patch for the provided entry.
-func KindPatch(entry MirrorEntry) string {
-	return fmt.Sprintf(`[plugins."io.containerd.grpc.v1.cri".registry.mirrors."%s"]
-  endpoint = ["%s"]`, entry.Host, entry.Endpoint)
+// GenerateHostsToml generates a hosts.toml file content for containerd registry configuration.
+// This uses the modern hosts directory pattern as documented at:
+// https://gardener.cloud/docs/gardener/advanced/containerd-registry-configuration/#hosts-directory-pattern
+//
+// The generated content includes:
+//   - server: The upstream registry URL (fallback when mirrors are unavailable)
+//   - host: Local mirror endpoint with pull and resolve capabilities
+//
+// Example output for docker.io with a local mirror:
+//
+//	server = "https://registry-1.docker.io"
+//
+//	[host."http://docker.io:5000"]
+//	  capabilities = ["pull", "resolve"]
+func GenerateHostsToml(entry MirrorEntry) string {
+	var builder strings.Builder
+
+	// Determine the upstream server URL
+	upstream := entry.Remote
+	if upstream == "" {
+		upstream = GenerateUpstreamURL(entry.Host)
+	}
+
+	builder.WriteString(fmt.Sprintf("server = %q\n\n", upstream))
+
+	// Add local mirror endpoint configuration
+	builder.WriteString(fmt.Sprintf("[host.%q]\n", entry.Endpoint))
+	builder.WriteString("  capabilities = [\"pull\", \"resolve\"]\n")
+
+	return builder.String()
 }
 
 func splitMirrorSpec(spec string) (string, string, bool) {
@@ -347,4 +373,39 @@ func splitMirrorSpec(spec string) (string, string, bool) {
 	}
 
 	return spec[:idx], spec[idx+1:], true
+}
+
+// GenerateScaffoldedHostsToml generates a hosts.toml file content for scaffolded registry mirrors.
+// This generates configuration that redirects requests through a local registry container
+// that acts as a pull-through cache for the upstream registry.
+//
+// Parameters:
+//   - spec: MirrorSpec containing Host (e.g., "docker.io") and Remote (e.g., "https://registry-1.docker.io")
+//
+// Example output for docker.io:
+//
+//	server = "https://registry-1.docker.io"
+//
+//	[host."http://docker.io:5000"]
+//	  capabilities = ["pull", "resolve"]
+//
+// The local registry container (e.g., docker.io:5000) will be configured with
+// REGISTRY_PROXY_REMOTEURL to proxy requests to the upstream.
+func GenerateScaffoldedHostsToml(spec MirrorSpec) string {
+	var builder strings.Builder
+
+	// The server is the upstream registry URL (fallback if local mirror is unavailable)
+	serverURL := spec.Remote
+	if serverURL == "" {
+		serverURL = GenerateUpstreamURL(spec.Host)
+	}
+	builder.WriteString(fmt.Sprintf("server = %q\n\n", serverURL))
+
+	// The host block points to the local registry container
+	// The container will be named after the registry host (e.g., docker.io:5000)
+	localMirrorURL := fmt.Sprintf("http://%s:5000", spec.Host)
+	builder.WriteString(fmt.Sprintf("[host.%q]\n", localMirrorURL))
+	builder.WriteString("  capabilities = [\"pull\", \"resolve\"]\n")
+
+	return builder.String()
 }
