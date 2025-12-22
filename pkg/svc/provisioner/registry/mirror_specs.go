@@ -376,28 +376,35 @@ func splitMirrorSpec(spec string) (string, string, bool) {
 }
 
 // GenerateScaffoldedHostsToml generates a hosts.toml file content for scaffolded registry mirrors.
-// Unlike GenerateHostsToml (which is used at cluster create time with local cache containers),
-// this function generates configuration that redirects requests directly to an upstream mirror
-// without requiring a local registry container.
+// This generates configuration that redirects requests through a local registry container
+// that acts as a pull-through cache for the upstream registry.
 //
 // Parameters:
 //   - spec: MirrorSpec containing Host (e.g., "docker.io") and Remote (e.g., "https://registry-1.docker.io")
 //
-// Example output for docker.io with upstream https://registry-1.docker.io:
+// Example output for docker.io:
 //
-//	server = "https://docker.io"
+//	server = "https://registry-1.docker.io"
 //
-//	[host."https://registry-1.docker.io"]
+//	[host."http://docker.io:5000"]
 //	  capabilities = ["pull", "resolve"]
+//
+// The local registry container (e.g., docker.io:5000) will be configured with
+// REGISTRY_PROXY_REMOTEURL to proxy requests to the upstream.
 func GenerateScaffoldedHostsToml(spec MirrorSpec) string {
 	var builder strings.Builder
 
-	// The server is the original registry host as an HTTPS URL
-	serverURL := "https://" + spec.Host
+	// The server is the upstream registry URL (fallback if local mirror is unavailable)
+	serverURL := spec.Remote
+	if serverURL == "" {
+		serverURL = GenerateUpstreamURL(spec.Host)
+	}
 	builder.WriteString(fmt.Sprintf("server = %q\n\n", serverURL))
 
-	// The host block contains the upstream mirror URL
-	builder.WriteString(fmt.Sprintf("[host.%q]\n", spec.Remote))
+	// The host block points to the local registry container
+	// The container will be named after the registry host (e.g., docker.io:5000)
+	localMirrorURL := fmt.Sprintf("http://%s:5000", spec.Host)
+	builder.WriteString(fmt.Sprintf("[host.%q]\n", localMirrorURL))
 	builder.WriteString("  capabilities = [\"pull\", \"resolve\"]\n")
 
 	return builder.String()

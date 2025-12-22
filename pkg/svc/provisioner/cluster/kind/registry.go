@@ -22,6 +22,9 @@ const kindNetworkName = "kind"
 //
 // This approach doesn't require file mounts or declarative configuration - it works
 // purely in-memory by executing commands inside the Kind nodes via Docker.
+//
+// If scaffolded hosts.toml files are already mounted via extraMounts in the Kind config,
+// this function skips injection for those hosts to avoid read-only filesystem errors.
 func ConfigureContainerdRegistryMirrors(
 	ctx context.Context,
 	kindConfig *v1alpha4.Cluster,
@@ -33,9 +36,26 @@ func ConfigureContainerdRegistryMirrors(
 		return nil
 	}
 
+	// Build a set of registry hosts that already have mounts configured
+	// If a host has an extraMount, the scaffolded hosts.toml is already in place
+	mountedHosts := buildMountedHostsSet(kindConfig)
+
 	// Build mirror entries to get the hosts.toml content
 	entries := registry.BuildMirrorEntries(mirrorSpecs, "", nil, nil, nil)
 	if len(entries) == 0 {
+		return nil
+	}
+
+	// Filter out entries that are already mounted
+	var entriesToInject []registry.MirrorEntry
+	for _, entry := range entries {
+		if !mountedHosts[entry.Host] {
+			entriesToInject = append(entriesToInject, entry)
+		}
+	}
+
+	// If all entries are already mounted, nothing to do
+	if len(entriesToInject) == 0 {
 		return nil
 	}
 
@@ -55,8 +75,8 @@ func ConfigureContainerdRegistryMirrors(
 		return fmt.Errorf("no Kind nodes found for cluster %s", clusterName)
 	}
 
-	// Inject hosts.toml files into each node
-	for _, entry := range entries {
+	// Inject hosts.toml files into each node (only for non-mounted hosts)
+	for _, entry := range entriesToInject {
 		hostsTomlContent := registry.GenerateHostsToml(entry)
 
 		for _, node := range nodes {
@@ -68,6 +88,36 @@ func ConfigureContainerdRegistryMirrors(
 	}
 
 	return nil
+}
+
+// buildMountedHostsSet returns a set of registry hosts that have extraMounts configured
+// in the Kind config. These hosts have scaffolded hosts.toml files that will be mounted
+// directly into the containers.
+func buildMountedHostsSet(kindConfig *v1alpha4.Cluster) map[string]bool {
+	mountedHosts := make(map[string]bool)
+
+	if kindConfig == nil {
+		return mountedHosts
+	}
+
+	certsPrefix := "/etc/containerd/certs.d/"
+
+	for _, node := range kindConfig.Nodes {
+		for _, mount := range node.ExtraMounts {
+			// Check if this mount is for containerd certs.d
+			if strings.HasPrefix(mount.ContainerPath, certsPrefix) {
+				// Extract the registry host from the path
+				// e.g., /etc/containerd/certs.d/docker.io -> docker.io
+				host := strings.TrimPrefix(mount.ContainerPath, certsPrefix)
+				host = strings.TrimSuffix(host, "/")
+				if host != "" {
+					mountedHosts[host] = true
+				}
+			}
+		}
+	}
+
+	return mountedHosts
 }
 
 // listKindNodes returns the container IDs/names of Kind nodes for the given cluster.

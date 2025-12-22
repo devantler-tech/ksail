@@ -190,6 +190,7 @@ func TestGenerateScaffoldedHostsToml(t *testing.T) {
 
 	// Test that GenerateScaffoldedHostsToml produces correct hosts.toml content
 	// for the scaffolded kind-mirrors directory pattern.
+	// The scaffolded hosts.toml should point to the local registry container.
 	for _, testCase := range containerdPatchCases() {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
@@ -213,8 +214,11 @@ func TestGenerateScaffoldedHostsToml(t *testing.T) {
 				content := registry.GenerateScaffoldedHostsToml(spec)
 
 				// Verify the content structure
-				require.Contains(t, content, "server = \"https://"+spec.Host+"\"")
-				require.Contains(t, content, "[host.\""+spec.Remote+"\"]")
+				// Server should be the upstream URL (fallback)
+				require.Contains(t, content, "server = \""+spec.Remote+"\"")
+				// Host block should point to the local registry container
+				localMirrorURL := "http://" + spec.Host + ":5000"
+				require.Contains(t, content, "[host.\""+localMirrorURL+"\"]")
 				require.Contains(t, content, "capabilities = [\"pull\", \"resolve\"]")
 			}
 		})
