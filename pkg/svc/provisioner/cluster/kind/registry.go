@@ -21,6 +21,10 @@ import (
 
 const kindNetworkName = "kind"
 
+// randomDelimiterBytes is the number of random bytes used to generate heredoc delimiters.
+// 8 bytes produces 16 hex characters, making collisions with user content extremely unlikely.
+const randomDelimiterBytes = 8
+
 // ConfigureContainerdRegistryMirrors injects hosts.toml files directly into Kind nodes
 // to configure containerd to use the local registry mirrors. This is called after the
 // cluster is created and registries are connected to the network.
@@ -188,11 +192,13 @@ func listKindNodes(
 // The delimiter is prefixed with "EOF_" and followed by 16 random hex characters,
 // making it extremely unlikely to appear in user-controlled content.
 func generateRandomDelimiter() (string, error) {
-	randomBytes := make([]byte, 8) // 8 bytes = 16 hex chars
+	randomBytes := make([]byte, randomDelimiterBytes)
+
 	_, err := rand.Read(randomBytes)
 	if err != nil {
 		return "", fmt.Errorf("failed to generate random delimiter: %w", err)
 	}
+
 	return "EOF_" + hex.EncodeToString(randomBytes), nil
 }
 
