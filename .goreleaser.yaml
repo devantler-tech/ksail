@@ -66,8 +66,6 @@ homebrew_casks:
     url:
       template: "https://github.com/devantler-tech/ksail/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
       verified: "github.com/devantler-tech/ksail"
-    binaries:
-      - ksail
     hooks:
       post:
         install: |
