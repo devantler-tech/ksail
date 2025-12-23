@@ -63,9 +63,6 @@ homebrew_casks:
       name: goreleaserbot
       email: goreleaserbot@users.noreply.github.com
     commit_msg_template: "Cask update for {{ .ProjectName }} version {{ .Tag }}"
-    url:
-      template: "https://github.com/devantler-tech/ksail/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
-      verified: "github.com/devantler-tech/ksail"
     hooks:
       post:
         install: |
