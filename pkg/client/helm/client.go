@@ -689,12 +689,14 @@ func mergeValueFiles(valueFiles []string, chartPath string, base map[string]any)
 			return fmt.Errorf("failed to read values file %s: %w", filePath, err)
 		}
 
-		parsedMap, err := helmv4strvals.ParseString(string(fileBytes))
-		if err != nil {
-			return fmt.Errorf("failed to parse values file %s: %w", filePath, err)
+		var parsedMap map[string]any
+		if err := yaml.Unmarshal(fileBytes, &parsedMap); err != nil {
+			return fmt.Errorf("failed to parse values file %s as YAML: %w", filePath, err)
 		}
 
-		mergeMapsInto(base, parsedMap)
+		if parsedMap != nil {
+			mergeMapsInto(base, parsedMap)
+		}
 	}
 
 	return nil
