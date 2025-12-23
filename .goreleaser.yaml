@@ -90,7 +90,7 @@ release:
   footer: |
     ## Quick Start
 
-    **Homebrew Cask** (macOS/Linux):
+    **Homebrew Cask** (macOS):
 
     > [!NOTE] 
     > Since the binary is not signed/notarized, you may need to use `--no-quarantine`:
