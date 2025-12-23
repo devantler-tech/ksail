@@ -54,7 +54,6 @@ homebrew_casks:
     homepage: "https://github.com/devantler-tech/ksail"
     description: "CLI tool to manage clusters and workloads"
     license: "Apache-2.0"
-    directory: Casks
     repository:
       owner: devantler-tech
       name: homebrew-tap
