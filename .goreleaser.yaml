@@ -94,7 +94,7 @@ release:
 
     > [!NOTE] 
     > Since the binary is not signed/notarized, you may need to use `--no-quarantine`:
-    > `brew install --cask --no-quarantine devantler-tech/formulas/ksail`
+    > `brew install --cask --no-quarantine devantler-tech/tap/ksail`
 
     ```bash
     brew install --cask devantler-tech/tap/ksail
