@@ -122,7 +122,7 @@ func expectCertManagerInstall(t *testing.T, client *helm.MockInterface, installE
 				assert.True(t, spec.Wait)
 				assert.True(t, spec.WaitForJobs)
 				assert.Equal(t, 2*time.Minute, spec.Timeout)
-				assert.Equal(t, "installCRDs: true\n", spec.ValuesYaml)
+				assert.Equal(t, map[string]string{"installCRDs": "true"}, spec.SetValues)
 
 				return true
 			}),
