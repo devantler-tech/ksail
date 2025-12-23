@@ -93,10 +93,14 @@ release:
     **Homebrew Cask** (macOS):
 
     > [!NOTE] 
-    > Since the binary is not signed/notarized, you may need to use `--no-quarantine`:
-    > `brew install --cask --no-quarantine devantler-tech/tap/ksail`
+    > [!NOTE]
+    > Since the binary is not signed/notarized, you may need to add the `--no-quarantine` flag on some macOS systems.
 
     ```bash
+    # If you encounter macOS quarantine issues:
+    brew install --cask --no-quarantine devantler-tech/tap/ksail
+    
+    # Standard installation:
     brew install --cask devantler-tech/tap/ksail
     ```
 
