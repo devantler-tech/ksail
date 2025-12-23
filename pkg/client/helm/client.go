@@ -690,7 +690,8 @@ func mergeValueFiles(valueFiles []string, chartPath string, base map[string]any)
 		}
 
 		var parsedMap map[string]any
-		if err := yaml.Unmarshal(fileBytes, &parsedMap); err != nil {
+		err = yaml.Unmarshal(fileBytes, &parsedMap)
+		if err != nil {
 			return fmt.Errorf("failed to parse values file %s as YAML: %w", filePath, err)
 		}
 
