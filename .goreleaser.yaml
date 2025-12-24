@@ -28,8 +28,6 @@ archives:
 
 brews:
   - name: ksail
-    description: "CLI tool to manage clusters and workloads"
-    license: "Apache-2.0"
     repository:
       owner: devantler-tech
       name: homebrew-tap
@@ -37,8 +35,6 @@ brews:
 
 homebrew_casks:
   - name: ksail
-    description: "CLI tool to manage clusters and workloads"
-    license: "Apache-2.0"
     repository:
       owner: devantler-tech
       name: homebrew-tap
