@@ -48,14 +48,6 @@ brew install --cask devantler-tech/tap/ksail
 go install github.com/devantler-tech/ksail/v5@latest
 ```
 
-#### From source
-
-```bash
-git clone https://github.com/devantler-tech/ksail.git
-cd ksail
-go build -o ksail
-```
-
 ## Usage
 
 ### Quick Start
