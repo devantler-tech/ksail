@@ -42,6 +42,7 @@ homebrew_casks:
     repository:
       owner: devantler-tech
       name: homebrew-tap
+      #token: "{{ .Env.HOMEBREW_GITHUB_API_TOKEN }}"
     hooks:
       post:
         install: |
