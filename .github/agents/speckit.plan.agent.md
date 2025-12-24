@@ -1,6 +1,5 @@
 ---
 description: Execute the implementation planning workflow using the plan template to generate design artifacts.
-model: GPT-5.2 (Preview) (copilot)
 handoffs:
   - label: Create Tasks
     agent: speckit.tasks
@@ -82,7 +81,7 @@ You **MUST** consider the user input before proceeding (if not empty).
    - Add only new technology from current plan
    - Preserve manual additions between markers
 
-**Output**: data-model.md, /contracts/*, quickstart.md, agent-specific file
+**Output**: data-model.md, /contracts/\*, quickstart.md, agent-specific file
 
 ## Key rules
 

@@ -1,6 +1,5 @@
 ---
 description: Execute the implementation plan by processing and executing all tasks defined in tasks.md
-model: GPT-5.2 (Preview) (copilot)
 ---
 
 ## User Input

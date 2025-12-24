@@ -1,6 +1,5 @@
 ---
 description: Create or update the feature specification from a natural language feature description.
-model: GPT-5.2 (Preview) (copilot)
 handoffs:
   - label: Build Technical Plan
     agent: speckit.plan
