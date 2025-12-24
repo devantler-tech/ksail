@@ -5,16 +5,16 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
 func TestGeneratedSchema_AlphaPlaceholderDescriptions(t *testing.T) {
-	// Black-box test: execute the generator and validate schema output.
 	outDir := t.TempDir()
 	outPath := filepath.Join(outDir, "ksail-config.schema.json")
 
 	cmd := exec.Command("go", "run", ".", outPath)
-	cmd.Dir = "." // package directory: .github/scripts/generate-schema
+	cmd.Dir = "."
 
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -31,27 +31,37 @@ func TestGeneratedSchema_AlphaPlaceholderDescriptions(t *testing.T) {
 		t.Fatalf("unmarshal generated schema: %v", err)
 	}
 
+	// These option keys should be marked as alpha placeholders (empty structs)
 	alphaKeys := []string{"kind", "k3d", "cilium", "calico", "argocd", "helm", "kustomize"}
 	for _, key := range alphaKeys {
-		desc := mustGetOptionsPropertyDescription(t, schema, key)
-		if desc == "" {
-			t.Fatalf("expected options.%s to have a description", key)
+		desc := getOptionsPropertyDescription(t, schema, key)
+		if !strings.Contains(desc, "Alpha placeholder") {
+			t.Errorf("expected options.%s description to contain 'Alpha placeholder', got %q", key, desc)
 		}
-		if desc != "Alpha placeholder (currently unsupported)." && !contains(desc, "Alpha placeholder") {
-			t.Fatalf("expected options.%s description to contain alpha placeholder note, got %q", key, desc)
+	}
+
+	// These option keys should NOT be marked as alpha (they have properties)
+	nonAlphaKeys := []string{"flux", "localRegistry"}
+	for _, key := range nonAlphaKeys {
+		desc := getOptionsPropertyDescription(t, schema, key)
+		if strings.Contains(desc, "Alpha placeholder") {
+			t.Errorf("expected options.%s to NOT have alpha placeholder, got %q", key, desc)
 		}
 	}
 }
 
-func mustGetOptionsPropertyDescription(t *testing.T, schema map[string]any, key string) string {
+func getOptionsPropertyDescription(t *testing.T, schema map[string]any, key string) string {
 	t.Helper()
 
-	properties := mustMap(t, schema["properties"], "properties")
-	spec := mustMap(t, properties["spec"], "properties.spec")
-	specProps := mustMap(t, spec["properties"], "properties.spec.properties")
-	options := mustMap(t, specProps["options"], "properties.spec.properties.options")
-	optionsProps := mustMap(t, options["properties"], "properties.spec.properties.options.properties")
-	prop := mustMap(t, optionsProps[key], "properties.spec.properties.options.properties."+key)
+	// Path: properties.spec.properties.cluster.properties.options.properties.<key>
+	props := mustMap(t, schema["properties"], "properties")
+	spec := mustMap(t, props["spec"], "spec")
+	specProps := mustMap(t, spec["properties"], "spec.properties")
+	cluster := mustMap(t, specProps["cluster"], "cluster")
+	clusterProps := mustMap(t, cluster["properties"], "cluster.properties")
+	options := mustMap(t, clusterProps["options"], "options")
+	optionsProps := mustMap(t, options["properties"], "options.properties")
+	prop := mustMap(t, optionsProps[key], "options."+key)
 
 	desc, _ := prop["description"].(string)
 	return desc
@@ -59,22 +69,9 @@ func mustGetOptionsPropertyDescription(t *testing.T, schema map[string]any, key 
 
 func mustMap(t *testing.T, v any, path string) map[string]any {
 	t.Helper()
-
 	m, ok := v.(map[string]any)
 	if !ok {
 		t.Fatalf("expected %s to be an object, got %T", path, v)
 	}
-
 	return m
-}
-
-func contains(haystack, needle string) bool {
-	// Avoid bringing in extra deps for a single substring check.
-	for i := 0; i+len(needle) <= len(haystack); i++ {
-		if haystack[i:i+len(needle)] == needle {
-			return true
-		}
-	}
-
-	return false
 }

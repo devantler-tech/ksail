@@ -341,7 +341,7 @@ type OptionsKustomize struct {
 // Set for Distribution.
 func (d *Distribution) Set(value string) error {
 	// Check against constant values with case-insensitive comparison
-	for _, dist := range validDistributions() {
+	for _, dist := range ValidDistributions() {
 		if strings.EqualFold(value, string(dist)) {
 			*d = dist
 
@@ -356,7 +356,7 @@ func (d *Distribution) Set(value string) error {
 // Set for GitOpsEngine.
 func (g *GitOpsEngine) Set(value string) error {
 	// Check against constant values with case-insensitive comparison
-	for _, tool := range validGitOpsEngines() {
+	for _, tool := range ValidGitOpsEngines() {
 		if strings.EqualFold(value, string(tool)) {
 			*g = tool
 
@@ -377,7 +377,7 @@ func (g *GitOpsEngine) Set(value string) error {
 // Set for CNI.
 func (c *CNI) Set(value string) error {
 	// Check against constant values with case-insensitive comparison
-	for _, cni := range validCNIs() {
+	for _, cni := range ValidCNIs() {
 		if strings.EqualFold(value, string(cni)) {
 			*c = cni
 
@@ -392,7 +392,7 @@ func (c *CNI) Set(value string) error {
 // Set for CSI.
 func (c *CSI) Set(value string) error {
 	// Check against constant values with case-insensitive comparison
-	for _, csi := range validCSIs() {
+	for _, csi := range ValidCSIs() {
 		if strings.EqualFold(value, string(csi)) {
 			*c = csi
 
@@ -407,7 +407,7 @@ func (c *CSI) Set(value string) error {
 // Set for MetricsServer.
 func (m *MetricsServer) Set(value string) error {
 	// Check against constant values with case-insensitive comparison
-	for _, ms := range validMetricsServers() {
+	for _, ms := range ValidMetricsServers() {
 		if strings.EqualFold(value, string(ms)) {
 			*m = ms
 
@@ -427,7 +427,7 @@ func (m *MetricsServer) Set(value string) error {
 // Set for CertManager.
 func (c *CertManager) Set(value string) error {
 	// Check against constant values with case-insensitive comparison
-	for _, cm := range validCertManagers() {
+	for _, cm := range ValidCertManagers() {
 		if strings.EqualFold(value, string(cm)) {
 			*c = cm
 
@@ -447,7 +447,7 @@ func (c *CertManager) Set(value string) error {
 // Set for LocalRegistry.
 func (l *LocalRegistry) Set(value string) error {
 	// Check against constant values with case-insensitive comparison
-	for _, mode := range validLocalRegistryModes() {
+	for _, mode := range ValidLocalRegistryModes() {
 		if strings.EqualFold(value, string(mode)) {
 			*l = mode
 
@@ -476,7 +476,7 @@ func (l *LocalRegistry) Type() string {
 
 // IsValid checks if the distribution value is supported.
 func (d *Distribution) IsValid() bool {
-	return slices.Contains(validDistributions(), *d)
+	return slices.Contains(ValidDistributions(), *d)
 }
 
 // String returns the string representation of the Distribution.
