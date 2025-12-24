@@ -65,12 +65,6 @@ changelog:
   sort: asc
   filters:
     exclude:
-      - "^docs"
-      - "^test"
-      - "^chore"
-      - "^ci"
-      - "^build"
-      - "^style"
       - "Merge pull request"
       - "Merge branch"
   groups:
