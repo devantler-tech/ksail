@@ -170,11 +170,56 @@ func (p *TalosInDockerProvisioner) Create(ctx context.Context, name string) erro
 
 // Delete deletes a Talos-in-Docker cluster.
 // If name is non-empty, it overrides the configured cluster name.
-func (p *TalosInDockerProvisioner) Delete(_ context.Context, name string) error {
-	clusterName := p.resolveClusterName(name)
-	_ = clusterName
+func (p *TalosInDockerProvisioner) Delete(ctx context.Context, name string) error {
+	// Verify Docker is available and running
+	err := p.checkDockerAvailable(ctx)
+	if err != nil {
+		return err
+	}
 
-	return ErrNotImplemented
+	clusterName := p.resolveClusterName(name)
+
+	// Check if cluster exists
+	exists, err := p.Exists(ctx, clusterName)
+	if err != nil {
+		return fmt.Errorf("failed to check if cluster exists: %w", err)
+	}
+
+	if !exists {
+		return fmt.Errorf("%w: %s", ErrClusterNotFound, clusterName)
+	}
+
+	// Get state directory for cluster state
+	stateDir, err := getStateDirectory()
+	if err != nil {
+		return fmt.Errorf("failed to get state directory: %w", err)
+	}
+
+	// Create Talos provisioner
+	talosProvisioner, err := p.provisionerFactory(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to create Talos provisioner: %w", err)
+	}
+
+	defer func() { _ = talosProvisioner.Close() }()
+
+	// Reflect to get cluster object from existing state
+	cluster, err := talosProvisioner.Reflect(ctx, clusterName, stateDir)
+	if err != nil {
+		return fmt.Errorf("failed to reflect cluster state: %w", err)
+	}
+
+	// Destroy the cluster
+	_, _ = fmt.Fprintf(p.logWriter, "Deleting Talos cluster %q...\n", clusterName)
+
+	err = talosProvisioner.Destroy(ctx, cluster, provision.WithLogWriter(p.logWriter))
+	if err != nil {
+		return fmt.Errorf("failed to destroy cluster: %w", err)
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "Successfully deleted Talos cluster %q\n", clusterName)
+
+	return nil
 }
 
 // Exists checks if a Talos-in-Docker cluster exists.

@@ -216,19 +216,6 @@ func verifyNodesHaveConfigs(req provision.ClusterRequest) bool {
 	return true
 }
 
-func TestTalosInDockerProvisioner_Delete_NotImplemented(t *testing.T) {
-	t.Parallel()
-
-	config := talosindockerprovisioner.NewTalosInDockerConfig()
-	provisioner := talosindockerprovisioner.NewTalosInDockerProvisioner(config)
-
-	ctx := context.Background()
-	err := provisioner.Delete(ctx, "")
-
-	require.Error(t, err)
-	assert.ErrorIs(t, err, talosindockerprovisioner.ErrNotImplemented)
-}
-
 func TestTalosInDockerProvisioner_Start_NotImplemented(t *testing.T) {
 	t.Parallel()
 
@@ -431,6 +418,91 @@ func TestTalosInDockerProvisioner_Create_WithMirrorRegistries(t *testing.T) {
 
 	ctx := context.Background()
 	err := provisioner.Create(ctx, "test-cluster-mirrors")
+
+	require.NoError(t, err)
+	mockProvisioner.AssertExpectations(t)
+	mockCluster.AssertExpectations(t)
+}
+
+func TestTalosInDockerProvisioner_Delete_NoDockerClient(t *testing.T) {
+	t.Parallel()
+
+	config := talosindockerprovisioner.NewTalosInDockerConfig().
+		WithClusterName("test-cluster")
+	provisioner := talosindockerprovisioner.NewTalosInDockerProvisioner(config)
+
+	ctx := context.Background()
+	err := provisioner.Delete(ctx, "")
+
+	require.Error(t, err)
+	require.ErrorIs(t, err, talosindockerprovisioner.ErrDockerNotAvailable)
+}
+
+func TestTalosInDockerProvisioner_Delete_ClusterNotFound(t *testing.T) {
+	t.Parallel()
+
+	// Mock Docker client - no existing clusters
+	mockClient := docker.NewMockAPIClient(t)
+	mockClient.EXPECT().
+		Ping(mock.Anything).
+		Return(types.Ping{}, nil)
+	mockClient.EXPECT().
+		ContainerList(mock.Anything, mock.Anything).
+		Return([]container.Summary{}, nil)
+
+	config := talosindockerprovisioner.NewTalosInDockerConfig().
+		WithClusterName("nonexistent-cluster")
+	provisioner := talosindockerprovisioner.NewTalosInDockerProvisioner(config).
+		WithDockerClient(mockClient)
+
+	ctx := context.Background()
+	err := provisioner.Delete(ctx, "")
+
+	require.Error(t, err)
+	require.ErrorIs(t, err, talosindockerprovisioner.ErrClusterNotFound)
+}
+
+func TestTalosInDockerProvisioner_Delete_Success(t *testing.T) {
+	t.Parallel()
+
+	// Mock Docker client - cluster exists
+	mockClient := docker.NewMockAPIClient(t)
+	mockClient.EXPECT().
+		Ping(mock.Anything).
+		Return(types.Ping{}, nil)
+	mockClient.EXPECT().
+		ContainerList(mock.Anything, mock.Anything).
+		Return([]container.Summary{
+			{
+				Labels: map[string]string{
+					talosindockerprovisioner.LabelTalosOwned:       "true",
+					talosindockerprovisioner.LabelTalosClusterName: "test-cluster-delete",
+				},
+			},
+		}, nil)
+
+	// Mock Cluster to return from Reflect
+	mockCluster := NewMockCluster()
+
+	// Mock Provisioner
+	mockProvisioner := NewMockProvisioner()
+	mockProvisioner.On("Reflect", mock.Anything, "test-cluster-delete", mock.Anything).
+		Return(mockCluster, nil)
+	mockProvisioner.On("Destroy", mock.Anything, mockCluster, mock.Anything).
+		Return(nil)
+	mockProvisioner.On("Close").Return(nil)
+
+	config := talosindockerprovisioner.NewTalosInDockerConfig().
+		WithClusterName("test-cluster-delete")
+	provisioner := talosindockerprovisioner.NewTalosInDockerProvisioner(config).
+		WithDockerClient(mockClient).
+		WithProvisionerFactory(func(_ context.Context) (provision.Provisioner, error) {
+			return mockProvisioner, nil
+		}).
+		WithLogWriter(io.Discard)
+
+	ctx := context.Background()
+	err := provisioner.Delete(ctx, "test-cluster-delete")
 
 	require.NoError(t, err)
 	mockProvisioner.AssertExpectations(t)
