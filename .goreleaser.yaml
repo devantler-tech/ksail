@@ -93,7 +93,6 @@ release:
     **Homebrew Cask** (macOS):
 
     > [!NOTE] 
-    > [!NOTE]
     > Since the binary is not signed/notarized, you may need to add the `--no-quarantine` flag on some macOS systems.
 
     ```bash
