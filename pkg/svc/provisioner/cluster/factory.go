@@ -135,5 +135,13 @@ func createTalosInDockerProvisioner(
 
 	provisioner := talosindickerprovisioner.NewTalosInDockerProvisioner(config)
 
+	// Create Docker client for container operations
+	dockerClient, err := kindprovisioner.NewDefaultDockerClient()
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create Docker client: %w", err)
+	}
+
+	provisioner.WithDockerClient(dockerClient)
+
 	return provisioner, config, nil
 }

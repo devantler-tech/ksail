@@ -14,8 +14,10 @@ import (
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/client"
+	"github.com/docker/go-connections/nat"
 	"github.com/siderolabs/talos/pkg/machinery/config/bundle"
 	"github.com/siderolabs/talos/pkg/machinery/config/configpatcher"
+	"github.com/siderolabs/talos/pkg/machinery/config/generate"
 	"github.com/siderolabs/talos/pkg/machinery/config/machine"
 	"github.com/siderolabs/talos/pkg/provision"
 	"github.com/siderolabs/talos/pkg/provision/access"
@@ -306,10 +308,28 @@ func (p *TalosInDockerProvisioner) bootstrapAndSaveKubeconfig(
 	cluster provision.Cluster,
 	configBundle *bundle.Bundle,
 ) error {
+	// Get the mapped Talos API endpoint for Docker-in-VM environments (macOS, Windows).
+	// On these platforms, the container's internal IP is not accessible from the host,
+	// so we need to use 127.0.0.1 with the mapped port.
+	mappedEndpoint, err := p.getMappedTalosAPIEndpoint(ctx, cluster.Info().ClusterName)
+	if err != nil {
+		return fmt.Errorf("failed to get mapped Talos API endpoint: %w", err)
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "Using Talos API endpoint: %s\n", mappedEndpoint)
+
+	// Create a modified talosconfig with the mapped endpoint
+	talosConfig := configBundle.TalosConfig()
+	if talosConfig != nil && talosConfig.Context != "" {
+		if context, ok := talosConfig.Contexts[talosConfig.Context]; ok {
+			context.Endpoints = []string{mappedEndpoint}
+		}
+	}
+
 	// Create access adapter for cluster operations
 	clusterAccess := access.NewAdapter(
 		cluster,
-		provision.WithTalosConfig(configBundle.TalosConfig()),
+		provision.WithTalosConfig(talosConfig),
 	)
 
 	defer func() { _ = clusterAccess.Close() }()
@@ -317,7 +337,7 @@ func (p *TalosInDockerProvisioner) bootstrapAndSaveKubeconfig(
 	// Bootstrap the cluster
 	_, _ = fmt.Fprintf(p.logWriter, "Bootstrapping cluster...\n")
 
-	err := clusterAccess.Bootstrap(ctx, p.logWriter)
+	err = clusterAccess.Bootstrap(ctx, p.logWriter)
 	if err != nil {
 		return fmt.Errorf("bootstrap failed: %w", err)
 	}
@@ -479,12 +499,18 @@ func (p *TalosInDockerProvisioner) createConfigBundle(
 
 	controlPlaneEndpoint := "https://" + net.JoinHostPort(controlPlaneIP.String(), "6443")
 
+	// Build generate options - must include endpoint list for talosconfig
+	genOptions := []generate.Option{
+		generate.WithEndpointList([]string{controlPlaneIP.String()}),
+	}
+
 	// Build bundle options
 	bundleOpts := []bundle.Option{
 		bundle.WithInputOptions(&bundle.InputOptions{
 			ClusterName: clusterName,
 			Endpoint:    controlPlaneEndpoint,
 			KubeVersion: p.config.KubernetesVersion,
+			GenOptions:  genOptions,
 		}),
 	}
 
@@ -690,4 +716,58 @@ func getStateDirectory() (string, error) {
 	}
 
 	return stateDir, nil
+}
+
+// talosAPIPort is the Talos apid service port.
+const talosAPIPort = 50000
+
+// getMappedTalosAPIEndpoint finds the control plane container and returns the mapped Talos API endpoint.
+// On macOS and other non-Linux systems, Docker runs in a VM, so we need to use the mapped port
+// via 127.0.0.1 instead of the container's internal IP.
+func (p *TalosInDockerProvisioner) getMappedTalosAPIEndpoint(
+	ctx context.Context,
+	clusterName string,
+) (string, error) {
+	if p.dockerClient == nil {
+		return "", ErrDockerNotAvailable
+	}
+
+	// Find the control plane container for this cluster
+	containers, err := p.dockerClient.ContainerList(ctx, container.ListOptions{
+		All: true,
+		Filters: filters.NewArgs(
+			filters.Arg("label", LabelTalosOwned+"=true"),
+			filters.Arg("label", LabelTalosClusterName+"="+clusterName),
+			filters.Arg("label", "talos.type=controlplane"),
+		),
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to list containers: %w", err)
+	}
+
+	if len(containers) == 0 {
+		return "", fmt.Errorf("no control plane container found for cluster %s", clusterName)
+	}
+
+	// Get the first control plane container (they all have the same port mapping)
+	containerID := containers[0].ID
+
+	// Inspect the container to get port mappings
+	inspect, err := p.dockerClient.ContainerInspect(ctx, containerID)
+	if err != nil {
+		return "", fmt.Errorf("failed to inspect container: %w", err)
+	}
+
+	// Find the mapped port for Talos API (50000/tcp)
+	portKey := nat.Port(fmt.Sprintf("%d/tcp", talosAPIPort))
+
+	bindings, ok := inspect.NetworkSettings.Ports[portKey]
+	if !ok || len(bindings) == 0 {
+		return "", fmt.Errorf("no port mapping found for Talos API port %d", talosAPIPort)
+	}
+
+	// Use the first binding's host port
+	hostPort := bindings[0].HostPort
+
+	return net.JoinHostPort("127.0.0.1", hostPort), nil
 }
