@@ -115,7 +115,6 @@ release:
 
     ```bash
     docker pull ghcr.io/devantler-tech/ksail:{{ .Tag }}
-    # or use :latest for the latest release
     ```
 
     ---
