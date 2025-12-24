@@ -7,7 +7,7 @@
 
 ![ksail-cli-dark](./docs/images/ksail-cli-dark.png)
 
-KSail is a CLI tool for creating and operating Kubernetes clusters and cloud-native workloads. It provides a unified CLI interface that works across different distributions, tools and ways-of-working.
+KSail is a CLI tool for creating, maintaining and operating Kubernetes clusters and cloud-native workloads. It provides a unified CLI interface that works across different distributions, tools and ways-of-working.
 
 ## Why?
 
@@ -39,21 +39,13 @@ Setting up and operating Kubernetes clusters is a skill of its own, often requir
 #### Homebrew
 
 ```bash
-brew install devantler-tech/tap/ksail
+brew install --cask devantler-tech/tap/ksail
 ```
 
 #### Go install
 
 ```bash
 go install github.com/devantler-tech/ksail/v5@latest
-```
-
-#### From source
-
-```bash
-git clone https://github.com/devantler-tech/ksail.git
-cd ksail
-go build -o ksail
 ```
 
 ## Usage
