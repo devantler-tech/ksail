@@ -26,13 +26,6 @@ archives:
       - goos: windows
         formats: ["zip"]
 
-brews:
-  - name: ksail
-    repository:
-      owner: devantler-tech
-      name: homebrew-tap
-      token: "{{ .Env.HOMEBREW_GITHUB_API_TOKEN }}"
-
 homebrew_casks:
   - name: ksail
     repository:
