@@ -182,6 +182,11 @@ func ExtractClusterNameFromContext(context string, distribution v1alpha1.Distrib
 		if clusterName, ok := strings.CutPrefix(context, "k3d-"); ok {
 			return clusterName
 		}
+	case v1alpha1.DistributionTalosInDocker:
+		// TalosInDocker uses admin@<cluster-name> context pattern
+		if clusterName, ok := strings.CutPrefix(context, "admin@"); ok {
+			return clusterName
+		}
 	}
 
 	return ""

@@ -124,6 +124,7 @@ linters:
             - github.com/spf13/pflag
             - github.com/spf13/viper
             - github.com/stretchr/testify
+            - github.com/siderolabs
             - github.com/sirupsen/logrus
             - github.com/yannh
             - filippo.io/age

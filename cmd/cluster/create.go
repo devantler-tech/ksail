@@ -342,6 +342,7 @@ func installCustomCNIAndMetrics(
 	return handleMetricsServer(cmd, clusterCfg, tmr, firstActivityShown)
 }
 
+//nolint:cyclop // Complexity slightly above threshold due to TalosInDocker support
 func loadDistributionConfigs(
 	clusterCfg *v1alpha1.Cluster,
 	lifecycleTimer timer.Timer,
@@ -381,6 +382,9 @@ func loadDistributionConfigs(
 		}
 
 		return nil, k3dConfig, nil
+	case v1alpha1.DistributionTalosInDocker:
+		// TalosInDocker config loading will be implemented in User Story 2
+		return nil, nil, nil
 	default:
 		return nil, nil, nil
 	}

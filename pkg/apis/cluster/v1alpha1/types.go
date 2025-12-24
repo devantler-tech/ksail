@@ -170,15 +170,17 @@ const (
 	DistributionKind Distribution = "Kind"
 	// DistributionK3d is the K3d distribution.
 	DistributionK3d Distribution = "K3d"
+	// DistributionTalosInDocker is the Talos-in-Docker distribution.
+	DistributionTalosInDocker Distribution = "TalosInDocker"
 )
 
 // ProvidesMetricsServerByDefault returns true if the distribution includes metrics-server by default.
-// K3d (based on K3s) includes metrics-server, Kind does not.
+// K3d (based on K3s) includes metrics-server, Kind and TalosInDocker do not.
 func (d *Distribution) ProvidesMetricsServerByDefault() bool {
 	switch *d {
 	case DistributionK3d:
 		return true
-	case DistributionKind:
+	case DistributionKind, DistributionTalosInDocker:
 		return false
 	default:
 		return false
@@ -186,12 +188,12 @@ func (d *Distribution) ProvidesMetricsServerByDefault() bool {
 }
 
 // ProvidesStorageByDefault returns true if the distribution includes a storage provisioner by default.
-// K3d (based on K3s) includes local-path-provisioner, Kind does not have a default storage class.
+// K3d (based on K3s) includes local-path-provisioner, Kind and TalosInDocker do not have a default storage class.
 func (d *Distribution) ProvidesStorageByDefault() bool {
 	switch *d {
 	case DistributionK3d:
 		return true
-	case DistributionKind:
+	case DistributionKind, DistributionTalosInDocker:
 		return false
 	default:
 		return false
@@ -349,8 +351,8 @@ func (d *Distribution) Set(value string) error {
 		}
 	}
 
-	return fmt.Errorf("%w: %s (valid options: %s, %s)",
-		ErrInvalidDistribution, value, DistributionKind, DistributionK3d)
+	return fmt.Errorf("%w: %s (valid options: %s, %s, %s)",
+		ErrInvalidDistribution, value, DistributionKind, DistributionK3d, DistributionTalosInDocker)
 }
 
 // Set for GitOpsEngine.

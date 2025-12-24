@@ -66,6 +66,11 @@ func TestScaffoldAppliesDistributionDefaults(t *testing.T) {
 			expected:     scaffolder.KindConfigFile,
 		},
 		{name: "K3d", distribution: v1alpha1.DistributionK3d, expected: scaffolder.K3dConfigFile},
+		{
+			name:         "TalosInDocker",
+			distribution: v1alpha1.DistributionTalosInDocker,
+			expected:     scaffolder.TalosInDockerConfigDir,
+		},
 		{name: "Unknown", distribution: "unknown", expected: scaffolder.KindConfigFile},
 	}
 
@@ -481,6 +486,13 @@ func TestScaffoldAppliesContextDefaults(t *testing.T) {
 			},
 		},
 		{
+			name: "TalosInDockerDefaultContext",
+			scenario: scaffoldContextCase{
+				distribution: v1alpha1.DistributionTalosInDocker,
+				expected:     v1alpha1.ExpectedContextName(v1alpha1.DistributionTalosInDocker),
+			},
+		},
+		{
 			name: "KeepExistingContext",
 			scenario: scaffoldContextCase{
 				distribution: v1alpha1.DistributionKind,
@@ -768,6 +780,13 @@ func getScaffoldTestCases() []scaffoldTestCase {
 			expectError: false,
 		},
 		{
+			name:        "TalosInDocker distribution",
+			setupFunc:   createTalosInDockerCluster,
+			outputPath:  "/tmp/test-talosindocker/",
+			force:       true,
+			expectError: false,
+		},
+		{
 			name:        "Unknown distribution",
 			setupFunc:   createUnknownCluster,
 			outputPath:  "/tmp/test-unknown/",
@@ -819,6 +838,9 @@ func generateDistributionContent(
 		// Create minimal K3d configuration that matches the original hardcoded output
 		k3dContent := "apiVersion: k3d.io/v1alpha5\nkind: Simple\nmetadata:\n  name: ksail-default\n"
 		snaps.MatchSnapshot(t, k3dContent)
+
+	case v1alpha1.DistributionTalosInDocker:
+		// TalosInDocker doesn't have a separate distribution config file to snapshot
 	}
 }
 
@@ -846,6 +868,16 @@ func createMinimalClusterForSnapshot(
 			Cluster: v1alpha1.ClusterSpec{
 				Distribution:       v1alpha1.DistributionK3d,
 				DistributionConfig: "k3d.yaml",
+			},
+		}
+
+		return minimalCluster
+	case v1alpha1.DistributionTalosInDocker:
+		// For TalosInDocker, include distribution and distributionConfig
+		minimalCluster.Spec = v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				Distribution:       v1alpha1.DistributionTalosInDocker,
+				DistributionConfig: "talos",
 			},
 		}
 
@@ -879,6 +911,14 @@ func createK3dCluster(name string) v1alpha1.Cluster {
 	c := createTestCluster(name)
 	c.Spec.Cluster.Distribution = v1alpha1.DistributionK3d
 	c.Spec.Cluster.DistributionConfig = "k3d.yaml"
+
+	return c
+}
+
+func createTalosInDockerCluster(name string) v1alpha1.Cluster {
+	c := createTestCluster(name)
+	c.Spec.Cluster.Distribution = v1alpha1.DistributionTalosInDocker
+	c.Spec.Cluster.DistributionConfig = scaffolder.TalosInDockerConfigDir
 
 	return c
 }
@@ -1117,4 +1157,49 @@ func TestCreateK3dConfig_SetsDefaultImage(t *testing.T) {
 	config := scaffolderInstance.CreateK3dConfig()
 
 	assert.Equal(t, "rancher/k3s:v1.29.4-k3s1", config.Image)
+}
+
+func TestScaffoldTalosInDocker_CreatesDirectoryStructure(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	cluster := createTalosInDockerCluster("talos-test")
+	scaffolderInstance := scaffolder.NewScaffolder(cluster, io.Discard, nil)
+
+	err := scaffolderInstance.Scaffold(tempDir, false)
+	require.NoError(t, err)
+
+	// Verify the directory structure was created
+	expectedPaths := []string{
+		filepath.Join(tempDir, scaffolder.TalosInDockerConfigDir, "cluster", ".gitkeep"),
+		filepath.Join(tempDir, scaffolder.TalosInDockerConfigDir, "control-planes", ".gitkeep"),
+		filepath.Join(tempDir, scaffolder.TalosInDockerConfigDir, "workers", ".gitkeep"),
+		filepath.Join(tempDir, "ksail.yaml"),
+		filepath.Join(tempDir, "k8s", "kustomization.yaml"),
+	}
+
+	for _, path := range expectedPaths {
+		_, err := os.Stat(path)
+		require.NoError(t, err, "expected path to exist: %s", path)
+	}
+}
+
+func TestScaffoldTalosInDocker_SetsCorrectDistribution(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	buffer := &bytes.Buffer{}
+	cluster := createTalosInDockerCluster("talos-context-test")
+	scaffolderInstance := scaffolder.NewScaffolder(cluster, buffer, nil)
+
+	err := scaffolderInstance.Scaffold(tempDir, false)
+	require.NoError(t, err)
+
+	// Read the generated ksail.yaml to verify distribution is set
+	ksailPath := filepath.Join(tempDir, "ksail.yaml")
+	ksailContent, err := os.ReadFile(ksailPath) //nolint:gosec // Test file path is safe
+	require.NoError(t, err)
+
+	// Verify the distribution is set correctly
+	assert.Contains(t, string(ksailContent), "distribution: TalosInDocker")
 }

@@ -262,6 +262,9 @@ func createValidKSailConfig(distribution v1alpha1.Distribution) *v1alpha1.Cluste
 	case v1alpha1.DistributionK3d:
 		distributionConfigFile = "k3d.yaml"
 		contextName = "k3d-k3d-default" // Sample context name
+	case v1alpha1.DistributionTalosInDocker:
+		distributionConfigFile = "talos"
+		contextName = "admin@talos-default" // Sample context name
 	default:
 		distributionConfigFile = "cluster.yaml"
 		contextName = "ksail"

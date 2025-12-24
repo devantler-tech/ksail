@@ -212,6 +212,8 @@ func defaultDistributionConfigPath(distribution v1alpha1.Distribution) string {
 		return "kind.yaml"
 	case v1alpha1.DistributionK3d:
 		return "k3d.yaml"
+	case v1alpha1.DistributionTalosInDocker:
+		return "talos"
 	default:
 		return "kind.yaml"
 	}
@@ -254,6 +256,8 @@ func displayEmptyClusters(
 			_, _ = fmt.Fprintln(writer, "No kind clusters found.")
 		case v1alpha1.DistributionK3d:
 			_, _ = fmt.Fprintln(writer, "No k3d clusters found.")
+		case v1alpha1.DistributionTalosInDocker:
+			_, _ = fmt.Fprintln(writer, "No TalosInDocker clusters found.")
 		default:
 			_, _ = fmt.Fprintln(writer, "No clusters found.")
 		}

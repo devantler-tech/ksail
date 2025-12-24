@@ -98,6 +98,7 @@ jobs:
           - init-args: "--distribution Kind --gitops-engine ArgoCD"
           - init-args: "--distribution Kind --mirror-registry docker.io=https://registry-1.docker.io"
           - init-args: "--distribution Kind --mirror-registry docker.io=https://registry-1.docker.io --mirror-registry ghcr.io=https://ghcr.io"
+          - init-args: "--distribution Kind --metrics-server Disabled"
           - init-args: "--distribution K3d"
           - init-args: "--distribution K3d --cert-manager Enabled"
           - init-args: "--distribution K3d --cni Cilium"
@@ -108,6 +109,16 @@ jobs:
           - init-args: "--distribution K3d --mirror-registry docker.io=https://registry-1.docker.io"
           - init-args: "--distribution K3d --mirror-registry docker.io=https://registry-1.docker.io --mirror-registry ghcr.io=https://ghcr.io"
           - init-args: "--distribution K3d --metrics-server Disabled"
+          - init-args: "--distribution TalosInDocker"
+          - init-args: "--distribution TalosInDocker --cert-manager Enabled"
+          - init-args: "--distribution TalosInDocker --cni Cilium"
+          - init-args: "--distribution TalosInDocker --cni Calico"
+          - init-args: "--distribution TalosInDocker --csi LocalPathStorage"
+          - init-args: "--distribution TalosInDocker --gitops-engine Flux"
+          - init-args: "--distribution TalosInDocker --gitops-engine ArgoCD"
+          - init-args: "--distribution TalosInDocker --mirror-registry docker.io=https://registry-1.docker.io"
+          - init-args: "--distribution TalosInDocker --mirror-registry docker.io=https://registry-1.docker.io --mirror-registry ghcr.io=https://ghcr.io"
+          - init-args: "--distribution TalosInDocker --metrics-server Disabled"
     steps:
       - name: 📄 Checkout
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1

@@ -152,6 +152,62 @@ func TestHandleInitRunE_RespectsDistributionFlag(t *testing.T) {
 	}
 }
 
+func TestHandleInitRunE_RespectsDistributionFlagTalosInDocker(t *testing.T) {
+	t.Parallel()
+
+	outDir := t.TempDir()
+
+	var buffer bytes.Buffer
+
+	cmd := newInitCommand(t)
+	cfgManager := newConfigManager(t, cmd, &buffer)
+
+	setFlags(t, cmd, map[string]string{
+		"output":       outDir,
+		"distribution": "TalosInDocker",
+		"force":        "true",
+	})
+
+	deps := newInitDeps(t)
+
+	err := clusterpkg.HandleInitRunE(cmd, cfgManager, deps)
+	if err != nil {
+		t.Fatalf("HandleInitRunE returned error: %v", err)
+	}
+
+	// Verify the talos patches directory structure was created
+	expectedPaths := []string{
+		filepath.Join(outDir, "talos", "cluster", ".gitkeep"),
+		filepath.Join(outDir, "talos", "control-planes", ".gitkeep"),
+		filepath.Join(outDir, "talos", "workers", ".gitkeep"),
+	}
+
+	for _, path := range expectedPaths {
+		_, err = os.Stat(path)
+		if err != nil {
+			t.Fatalf("expected path to be scaffolded: %s, error: %v", path, err)
+		}
+	}
+
+	// Verify ksail.yaml contains TalosInDocker distribution
+	ksailPath := filepath.Join(outDir, "ksail.yaml")
+
+	content, err := os.ReadFile(ksailPath) //nolint:gosec // Test file path is safe
+	if err != nil {
+		t.Fatalf("expected ksail.yaml to be scaffolded: %v", err)
+	}
+
+	if !strings.Contains(string(content), "distribution: TalosInDocker") {
+		t.Fatalf("expected ksail.yaml to contain TalosInDocker distribution\n%s", content)
+	}
+
+	// Verify output contains created files
+	output := buffer.String()
+	if !strings.Contains(output, "talos/cluster/.gitkeep") {
+		t.Fatalf("expected output to mention created talos directory structure\n%s", output)
+	}
+}
+
 //nolint:paralleltest // Uses t.Chdir for snapshot setup.
 func TestHandleInitRunE_UsesWorkingDirectoryWhenOutputUnset(t *testing.T) {
 	workingDir := t.TempDir()

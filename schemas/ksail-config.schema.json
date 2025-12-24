@@ -44,7 +44,8 @@
               "type": "string",
               "enum": [
                 "Kind",
-                "K3d"
+                "K3d",
+                "TalosInDocker"
               ]
             },
             "cni": {

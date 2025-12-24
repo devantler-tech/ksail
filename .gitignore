@@ -22,6 +22,7 @@ ksail.yaml
 k8s/
 !pkg/k8s/
 kind-mirrors/
+talos/
 
 # ==============================================================================
 # Build and Release Artifacts

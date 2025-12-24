@@ -14,6 +14,7 @@ import (
 	k3dgenerator "github.com/devantler-tech/ksail/v5/pkg/io/generator/k3d"
 	kindgenerator "github.com/devantler-tech/ksail/v5/pkg/io/generator/kind"
 	kustomizationgenerator "github.com/devantler-tech/ksail/v5/pkg/io/generator/kustomization"
+	talosgenerator "github.com/devantler-tech/ksail/v5/pkg/io/generator/talosindocker"
 	yamlgenerator "github.com/devantler-tech/ksail/v5/pkg/io/generator/yaml"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	"github.com/devantler-tech/ksail/v5/pkg/ui/notify"
@@ -31,6 +32,9 @@ const (
 
 	// K3dConfigFile is the default filename for K3d distribution configuration.
 	K3dConfigFile = "k3d.yaml"
+
+	// TalosInDockerConfigDir is the default directory for TalosInDocker distribution configuration (Talos patches).
+	TalosInDockerConfigDir = "talos"
 )
 
 const (
@@ -61,6 +65,9 @@ var (
 	// ErrK3dConfigGeneration wraps failures when creating K3d configuration.
 	ErrK3dConfigGeneration = errors.New("failed to generate k3d configuration")
 
+	// ErrTalosInDockerConfigGeneration wraps failures when creating TalosInDocker configuration.
+	ErrTalosInDockerConfigGeneration = errors.New("failed to generate talosindocker configuration")
+
 	// ErrKustomizationGeneration wraps failures when creating kustomization.yaml.
 	ErrKustomizationGeneration = errors.New("failed to generate kustomization configuration")
 )
@@ -71,6 +78,7 @@ type Scaffolder struct {
 	KSailYAMLGenerator     generator.Generator[v1alpha1.Cluster, yamlgenerator.Options]
 	KindGenerator          generator.Generator[*v1alpha4.Cluster, yamlgenerator.Options]
 	K3dGenerator           generator.Generator[*k3dv1alpha5.SimpleConfig, yamlgenerator.Options]
+	TalosInDockerGenerator *talosgenerator.TalosInDockerGenerator
 	KustomizationGenerator generator.Generator[*ktypes.Kustomization, yamlgenerator.Options]
 	Writer                 io.Writer
 	MirrorRegistries       []string // Format: "name=upstream" (e.g., "docker.io=https://registry-1.docker.io")
@@ -81,6 +89,7 @@ func NewScaffolder(cfg v1alpha1.Cluster, writer io.Writer, mirrorRegistries []st
 	ksailGenerator := yamlgenerator.NewYAMLGenerator[v1alpha1.Cluster]()
 	kindGenerator := kindgenerator.NewKindGenerator()
 	k3dGenerator := k3dgenerator.NewK3dGenerator()
+	talosGen := talosgenerator.NewTalosInDockerGenerator()
 	kustomizationGenerator := kustomizationgenerator.NewKustomizationGenerator()
 
 	return &Scaffolder{
@@ -88,6 +97,7 @@ func NewScaffolder(cfg v1alpha1.Cluster, writer io.Writer, mirrorRegistries []st
 		KSailYAMLGenerator:     ksailGenerator,
 		KindGenerator:          kindGenerator,
 		K3dGenerator:           k3dGenerator,
+		TalosInDockerGenerator: talosGen,
 		KustomizationGenerator: kustomizationGenerator,
 		Writer:                 writer,
 		MirrorRegistries:       mirrorRegistries,
@@ -406,6 +416,8 @@ func (s *Scaffolder) generateDistributionConfig(output string, force bool) error
 		return s.generateKindConfig(output, force)
 	case v1alpha1.DistributionK3d:
 		return s.generateK3dConfig(output, force)
+	case v1alpha1.DistributionTalosInDocker:
+		return s.generateTalosInDockerConfig(output, force)
 	default:
 		return ErrUnknownDistribution
 	}
@@ -559,6 +571,49 @@ func (s *Scaffolder) generateK3dConfig(output string, force bool) error {
 			},
 		},
 	)
+}
+
+// generateTalosInDockerConfig generates the TalosInDocker patches directory structure.
+func (s *Scaffolder) generateTalosInDockerConfig(output string, force bool) error {
+	config := &talosgenerator.TalosInDockerConfig{
+		PatchesDir:       TalosInDockerConfigDir,
+		MirrorRegistries: s.MirrorRegistries,
+	}
+
+	opts := yamlgenerator.Options{
+		Output: output,
+		Force:  force,
+	}
+
+	_, err := s.TalosInDockerGenerator.Generate(config, opts)
+	if err != nil {
+		return fmt.Errorf("%w: %w", ErrTalosInDockerConfigGeneration, err)
+	}
+
+	// Notify about created directories
+	subdirs := []string{"cluster", "control-planes", "workers"}
+	for _, subdir := range subdirs {
+		displayPath := filepath.Join(TalosInDockerConfigDir, subdir, ".gitkeep")
+		notify.WriteMessage(notify.Message{
+			Type:    notify.GenerateType,
+			Content: "created '%s'",
+			Args:    []any{displayPath},
+			Writer:  s.Writer,
+		})
+	}
+
+	// Notify about mirror registries patch if created
+	if len(s.MirrorRegistries) > 0 {
+		displayPath := filepath.Join(TalosInDockerConfigDir, "cluster", "mirror-registries.yaml")
+		notify.WriteMessage(notify.Message{
+			Type:    notify.GenerateType,
+			Content: "created '%s'",
+			Args:    []any{displayPath},
+			Writer:  s.Writer,
+		})
+	}
+
+	return nil
 }
 
 // generateKustomizationConfig generates the kustomization.yaml file.

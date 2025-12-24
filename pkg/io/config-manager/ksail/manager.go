@@ -595,6 +595,8 @@ func expectedDistributionConfigName(distribution v1alpha1.Distribution) string {
 		return "kind.yaml"
 	case v1alpha1.DistributionK3d:
 		return "k3d.yaml"
+	case v1alpha1.DistributionTalosInDocker:
+		return "talos"
 	default:
 		return ""
 	}
@@ -603,9 +605,14 @@ func expectedDistributionConfigName(distribution v1alpha1.Distribution) string {
 func distributionConfigIsOppositeDefault(current string, distribution v1alpha1.Distribution) bool {
 	switch distribution {
 	case v1alpha1.DistributionKind:
-		return current == expectedDistributionConfigName(v1alpha1.DistributionK3d)
+		return current == expectedDistributionConfigName(v1alpha1.DistributionK3d) ||
+			current == expectedDistributionConfigName(v1alpha1.DistributionTalosInDocker)
 	case v1alpha1.DistributionK3d:
-		return current == expectedDistributionConfigName(v1alpha1.DistributionKind)
+		return current == expectedDistributionConfigName(v1alpha1.DistributionKind) ||
+			current == expectedDistributionConfigName(v1alpha1.DistributionTalosInDocker)
+	case v1alpha1.DistributionTalosInDocker:
+		return current == expectedDistributionConfigName(v1alpha1.DistributionKind) ||
+			current == expectedDistributionConfigName(v1alpha1.DistributionK3d)
 	default:
 		return false
 	}
@@ -659,6 +666,9 @@ func (m *ConfigManager) createValidatorForDistribution() (*ksailvalidator.Valida
 		if k3dConfig != nil {
 			return ksailvalidator.NewValidatorForK3d(k3dConfig), nil
 		}
+	case v1alpha1.DistributionTalosInDocker:
+		// TalosInDocker validator will be implemented in User Story 2
+		return ksailvalidator.NewValidator(), nil
 	}
 
 	return ksailvalidator.NewValidator(), nil

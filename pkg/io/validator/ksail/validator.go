@@ -165,6 +165,8 @@ func (v *Validator) getExpectedContextName(config *v1alpha1.Cluster) string {
 		return "kind-" + distributionName
 	case v1alpha1.DistributionK3d:
 		return "k3d-" + distributionName
+	case v1alpha1.DistributionTalosInDocker:
+		return "admin@" + distributionName
 	default:
 		return ""
 	}
@@ -177,6 +179,8 @@ func (v *Validator) getDistributionConfigName(distribution v1alpha1.Distribution
 		return v.getKindConfigName()
 	case v1alpha1.DistributionK3d:
 		return v.getK3dConfigName()
+	case v1alpha1.DistributionTalosInDocker:
+		return "talos-default" // TalosInDocker uses a fixed cluster name pattern
 	default:
 		return ""
 	}
@@ -218,6 +222,8 @@ func (v *Validator) validateCNIAlignment(
 			v.validateKindCiliumCNIAlignment(result)
 		case v1alpha1.DistributionK3d:
 			v.validateK3dCiliumCNIAlignment(result)
+		case v1alpha1.DistributionTalosInDocker:
+			// TalosInDocker CNI validation will be added in User Story 2
 		}
 
 		return
@@ -230,6 +236,8 @@ func (v *Validator) validateCNIAlignment(
 			v.validateKindDefaultCNIAlignment(result)
 		case v1alpha1.DistributionK3d:
 			v.validateK3dDefaultCNIAlignment(result)
+		case v1alpha1.DistributionTalosInDocker:
+			// TalosInDocker default CNI validation will be added in User Story 2
 		}
 	}
 }

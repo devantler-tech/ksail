@@ -10,6 +10,7 @@ import (
 	kindconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/kind"
 	k3dprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/k3d"
 	kindprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/kind"
+	talosindickerprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/talosindocker"
 	k3dv1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
@@ -48,6 +49,11 @@ func (DefaultFactory) Create(
 	case v1alpha1.DistributionK3d:
 		return createK3dProvisioner(
 			cluster.Spec.Cluster.DistributionConfig,
+		)
+	case v1alpha1.DistributionTalosInDocker:
+		return createTalosInDockerProvisioner(
+			cluster.Spec.Cluster.DistributionConfig,
+			cluster.Spec.Cluster.Connection.Kubeconfig,
 		)
 	default:
 		return nil, "", fmt.Errorf(
@@ -116,4 +122,18 @@ func createK3dProvisioner(
 	)
 
 	return provisioner, k3dConfig, nil
+}
+
+//nolint:unparam // Error return will be used when config loading is implemented in User Story 2
+func createTalosInDockerProvisioner(
+	distributionConfigPath string,
+	kubeconfigPath string,
+) (*talosindickerprovisioner.TalosInDockerProvisioner, *talosindickerprovisioner.TalosInDockerConfig, error) {
+	config := talosindickerprovisioner.NewTalosInDockerConfig().
+		WithPatchesDir(distributionConfigPath).
+		WithKubeconfigPath(kubeconfigPath)
+
+	provisioner := talosindickerprovisioner.NewTalosInDockerProvisioner(config)
+
+	return provisioner, config, nil
 }

@@ -11,6 +11,7 @@ import (
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	k3dprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/k3d"
 	kindprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/kind"
+	talosindockerprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/talosindocker"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -118,6 +119,15 @@ func buildCreateClusterProvisionerCases(t *testing.T) []createClusterProvisioner
 			distribution:   v1alpha1.DistributionK3d,
 			configProvider: tempConfig("k3d.yaml", k3dConfig),
 			assertion:      expectSuccess("custom-k3d", &k3dprovisioner.K3dClusterProvisioner{}),
+		},
+		{
+			name:           "talosindocker default config uses fallback name",
+			distribution:   v1alpha1.DistributionTalosInDocker,
+			configProvider: staticPath("non-existent-talos"),
+			assertion: expectSuccess(
+				"talos-default",
+				&talosindockerprovisioner.TalosInDockerProvisioner{},
+			),
 		},
 		{
 			name:           "unsupported distribution returns error",
