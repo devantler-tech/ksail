@@ -1,12 +1,12 @@
 package v1alpha1
 
-// validDistributions returns supported distribution values.
-func validDistributions() []Distribution {
-	return []Distribution{DistributionK3d, DistributionKind}
+// ValidDistributions returns supported distribution values.
+func ValidDistributions() []Distribution {
+	return []Distribution{DistributionKind, DistributionK3d}
 }
 
-// validGitOpsEngines enumerates supported GitOps engine values.
-func validGitOpsEngines() []GitOpsEngine {
+// ValidGitOpsEngines enumerates supported GitOps engine values.
+func ValidGitOpsEngines() []GitOpsEngine {
 	return []GitOpsEngine{
 		GitOpsEngineNone,
 		GitOpsEngineFlux,
@@ -14,33 +14,33 @@ func validGitOpsEngines() []GitOpsEngine {
 	}
 }
 
-// validCNIs returns supported CNI values.
-func validCNIs() []CNI {
+// ValidCNIs returns supported CNI values.
+func ValidCNIs() []CNI {
 	return []CNI{CNIDefault, CNICilium, CNICalico}
 }
 
-// validCSIs returns supported CSI values.
-func validCSIs() []CSI {
+// ValidCSIs returns supported CSI values.
+func ValidCSIs() []CSI {
 	return []CSI{CSIDefault, CSILocalPathStorage}
 }
 
-// validMetricsServers returns supported metrics server values.
-func validMetricsServers() []MetricsServer {
+// ValidMetricsServers returns supported metrics server values.
+func ValidMetricsServers() []MetricsServer {
 	return []MetricsServer{
 		MetricsServerEnabled,
 		MetricsServerDisabled,
 	}
 }
 
-// validCertManagers returns supported cert-manager values.
-func validCertManagers() []CertManager {
+// ValidCertManagers returns supported cert-manager values.
+func ValidCertManagers() []CertManager {
 	return []CertManager{
 		CertManagerEnabled,
 		CertManagerDisabled,
 	}
 }
 
-// validLocalRegistryModes returns supported local registry configuration modes.
-func validLocalRegistryModes() []LocalRegistry {
+// ValidLocalRegistryModes returns supported local registry configuration modes.
+func ValidLocalRegistryModes() []LocalRegistry {
 	return []LocalRegistry{LocalRegistryEnabled, LocalRegistryDisabled}
 }
