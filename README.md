@@ -39,7 +39,7 @@ Setting up and operating Kubernetes clusters is a skill of its own, often requir
 #### Homebrew
 
 ```bash
-brew install devantler-tech/tap/ksail
+brew install --cask devantler-tech/tap/ksail
 ```
 
 #### Go install
