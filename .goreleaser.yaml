@@ -28,26 +28,26 @@ archives:
 
 brews:
   - name: ksail
-    homepage: "https://github.com/devantler-tech/ksail"
     description: "CLI tool to manage clusters and workloads"
     license: "Apache-2.0"
-    directory: Formula
-    url_template: "https://github.com/devantler-tech/ksail/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
     repository:
       owner: devantler-tech
       name: homebrew-tap
-      token: "{{ .Env.HOMEBREW_GITHUB_API_TOKEN }}"
-    commit_author:
-      name: goreleaserbot
-      email: goreleaserbot@users.noreply.github.com
-    custom_block: |
-      def install
-        bin.install "ksail"
-      end
+      #token: "{{ .Env.HOMEBREW_GITHUB_API_TOKEN }}"
 
-      test do
-        system bin/"ksail", "--help"
-      end
+homebrew_casks:
+  - name: ksail
+    description: "CLI tool to manage clusters and workloads"
+    license: "Apache-2.0"
+    repository:
+      owner: devantler-tech
+      name: homebrew-tap
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/ksail"]
+          end
 
 dockers_v2:
   - images:
@@ -99,12 +99,21 @@ release:
   footer: |
     ## Quick Start
 
-    **Homebrew** (macOS/Linux):
+    **Homebrew Cask** (macOS):
+
+    > [!NOTE]
+    > Since the binary is not signed/notarized, you may need to add the `--no-quarantine` flag on some macOS systems.
+
     ```bash
-    brew install devantler-tech/tap/ksail
+    # Standard installation:
+    brew install --cask devantler-tech/tap/ksail
+
+    # If you encounter macOS quarantine issues:
+    brew install --cask --no-quarantine devantler-tech/tap/ksail
     ```
 
     **Go Install**:
+
     ```bash
     go install github.com/devantler-tech/ksail/v5@{{ .Tag }}
     ```
@@ -112,6 +121,7 @@ release:
     **Download Binary**: Choose your platform from the assets above
 
     **Docker**:
+
     ```bash
     docker pull ghcr.io/devantler-tech/ksail:{{ .Tag }}
     # or use :latest for the latest release
