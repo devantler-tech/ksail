@@ -31,14 +31,14 @@ brews:
     repository:
       owner: devantler-tech
       name: homebrew-tap
-      #token: "{{ .Env.HOMEBREW_GITHUB_API_TOKEN }}"
+      token: "{{ .Env.HOMEBREW_GITHUB_API_TOKEN }}"
 
 homebrew_casks:
   - name: ksail
     repository:
       owner: devantler-tech
       name: homebrew-tap
-      #token: "{{ .Env.HOMEBREW_GITHUB_API_TOKEN }}"
+      token: "{{ .Env.HOMEBREW_GITHUB_API_TOKEN }}"
     hooks:
       post:
         install: |
