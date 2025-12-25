@@ -106,6 +106,12 @@
                   "type": "object",
                   "description": "Alpha placeholder (currently unsupported)."
                 },
+                "talosInDocker": {
+                  "properties": {},
+                  "additionalProperties": false,
+                  "type": "object",
+                  "description": "Alpha placeholder (currently unsupported)."
+                },
                 "cilium": {
                   "properties": {},
                   "additionalProperties": false,

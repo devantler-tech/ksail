@@ -71,6 +71,10 @@ var (
 	ErrIPv6NotSupported = errors.New("IPv6 not supported")
 	// ErrNegativeOffset is returned when a negative offset is provided for IP calculation.
 	ErrNegativeOffset = errors.New("negative offset not allowed")
+	// ErrNoControlPlane is returned when no control plane container is found.
+	ErrNoControlPlane = errors.New("no control plane container found")
+	// ErrNoPortMapping is returned when no port mapping is found for a required port.
+	ErrNoPortMapping = errors.New("no port mapping found")
 )
 
 // TalosInDockerProvisioner implements ClusterProvisioner for Talos-in-Docker clusters.
@@ -303,6 +307,8 @@ func (p *TalosInDockerProvisioner) Stop(_ context.Context, name string) error {
 }
 
 // bootstrapAndSaveKubeconfig bootstraps the cluster and saves the kubeconfig.
+//
+//nolint:cyclop,funlen // Bootstrap sequence is inherently complex but logically coherent
 func (p *TalosInDockerProvisioner) bootstrapAndSaveKubeconfig(
 	ctx context.Context,
 	cluster provision.Cluster,
@@ -367,7 +373,8 @@ func (p *TalosInDockerProvisioner) bootstrapAndSaveKubeconfig(
 	// Ensure kubeconfig directory exists
 	kubeconfigDir := filepath.Dir(p.config.KubeconfigPath)
 	if kubeconfigDir != "" && kubeconfigDir != "." {
-		if mkdirErr := os.MkdirAll(kubeconfigDir, stateDirectoryPermissions); mkdirErr != nil {
+		mkdirErr := os.MkdirAll(kubeconfigDir, stateDirectoryPermissions)
+		if mkdirErr != nil {
 			return fmt.Errorf("failed to create kubeconfig directory: %w", mkdirErr)
 		}
 	}
@@ -771,7 +778,7 @@ func (p *TalosInDockerProvisioner) getMappedTalosAPIEndpoint(
 	}
 
 	if len(containers) == 0 {
-		return "", fmt.Errorf("no control plane container found for cluster %s", clusterName)
+		return "", fmt.Errorf("%w for cluster %s", ErrNoControlPlane, clusterName)
 	}
 
 	// Get the first control plane container (they all have the same port mapping)
@@ -788,7 +795,7 @@ func (p *TalosInDockerProvisioner) getMappedTalosAPIEndpoint(
 
 	bindings, ok := inspect.NetworkSettings.Ports[portKey]
 	if !ok || len(bindings) == 0 {
-		return "", fmt.Errorf("no port mapping found for Talos API port %d", talosAPIPort)
+		return "", fmt.Errorf("%w for Talos API port %d", ErrNoPortMapping, talosAPIPort)
 	}
 
 	// Use the first binding's host port
@@ -825,7 +832,7 @@ func (p *TalosInDockerProvisioner) getMappedKubernetesAPIEndpoint(
 	}
 
 	if len(containers) == 0 {
-		return "", fmt.Errorf("no control plane container found for cluster %s", clusterName)
+		return "", fmt.Errorf("%w for cluster %s", ErrNoControlPlane, clusterName)
 	}
 
 	// Get the first control plane container
@@ -842,7 +849,7 @@ func (p *TalosInDockerProvisioner) getMappedKubernetesAPIEndpoint(
 
 	bindings, ok := inspect.NetworkSettings.Ports[portKey]
 	if !ok || len(bindings) == 0 {
-		return "", fmt.Errorf("no port mapping found for Kubernetes API port %d", kubernetesAPIPort)
+		return "", fmt.Errorf("%w for Kubernetes API port %d", ErrNoPortMapping, kubernetesAPIPort)
 	}
 
 	// Use the first binding's host port
@@ -853,6 +860,8 @@ func (p *TalosInDockerProvisioner) getMappedKubernetesAPIEndpoint(
 
 // fixKubeconfigServerEndpoint replaces the internal server endpoint in the kubeconfig
 // with the mapped localhost endpoint for Docker-in-VM environments.
+//
+//nolint:unparam // error return kept for future error handling
 func fixKubeconfigServerEndpoint(kubeconfig []byte, newServerEndpoint string) ([]byte, error) {
 	// Parse the kubeconfig as a simple string replacement since we know the format
 	// The server field will be something like "server: https://10.5.0.2:6443"
@@ -873,7 +882,8 @@ func fixKubeconfigServerEndpoint(kubeconfig []byte, newServerEndpoint string) ([
 	for _, prefix := range []string{"https://10.", "https://172.", "https://192.168."} {
 		for {
 			startIdx := -1
-			for i := 0; i < len(result)-len("server: "+prefix); i++ {
+
+			for i := range len(result) - len("server: "+prefix) {
 				if result[i:i+len("server: "+prefix)] == "server: "+prefix {
 					startIdx = i + len("server: ")
 

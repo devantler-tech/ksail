@@ -54,6 +54,7 @@ func (DefaultFactory) Create(
 		return createTalosInDockerProvisioner(
 			cluster.Spec.Cluster.DistributionConfig,
 			cluster.Spec.Cluster.Connection.Kubeconfig,
+			cluster.Spec.Cluster.Options.TalosInDocker,
 		)
 	default:
 		return nil, "", fmt.Errorf(
@@ -124,10 +125,10 @@ func createK3dProvisioner(
 	return provisioner, k3dConfig, nil
 }
 
-//nolint:unparam // Error return will be used when config loading is implemented in User Story 2
 func createTalosInDockerProvisioner(
 	distributionConfigPath string,
 	kubeconfigPath string,
+	_ v1alpha1.OptionsTalosInDocker,
 ) (*talosindickerprovisioner.TalosInDockerProvisioner, *talosindickerprovisioner.TalosInDockerConfig, error) {
 	config := talosindickerprovisioner.NewTalosInDockerConfig().
 		WithPatchesDir(distributionConfigPath).

@@ -45,22 +45,22 @@ spec:
 
 ### Configuration Fields
 
-| Field                           | Type     | Default              | Values                         | Description                                                        |
-|---------------------------------|----------|----------------------|--------------------------------|--------------------------------------------------------------------|
-| `editor`                        | string   | –                    | Command with args              | Editor for interactive workflows (e.g. `code --wait`, `vim`).      |
-| `cluster.distribution`          | enum     | `Kind`               | `Kind`, `K3d`                  | Kubernetes distribution to use.                                    |
-| `cluster.distributionConfig`    | string   | `kind.yaml`          | File path                      | Path to distribution-specific YAML (`kind.yaml` or `k3d.yaml`).    |
-| `cluster.connection.kubeconfig` | string   | `~/.kube/config`     | File path                      | Path to kubeconfig file.                                           |
-| `cluster.connection.context`    | string   | Derived from cluster | kubeconfig context             | Context name (Kind: `kind-<name>`, K3d: `k3d-<name>`).             |
-| `cluster.connection.timeout`    | duration | –                    | Go duration (e.g. `30s`, `5m`) | Optional timeout for cluster operations.                           |
-| `cluster.cni`                   | enum     | `Default`            | `Default`, `Cilium`, `None`    | Container Network Interface to install.                            |
-| `cluster.csi`                   | enum     | `Default`            | `Default`, `LocalPathStorage`  | Container Storage Interface (not yet implemented).                 |
-| `cluster.metricsServer`         | enum     | `Enabled`            | `Enabled`, `Disabled`          | Install metrics-server for resource metrics.                       |
-| `cluster.certManager`           | enum     | `Disabled`           | `Enabled`, `Disabled`          | Install cert-manager for TLS certificates.                         |
-| `cluster.localRegistry`         | enum     | `Disabled`           | `Enabled`, `Disabled`          | Provision local OCI registry.                                      |
-| `cluster.gitOpsEngine`          | enum     | `None`               | `None`, `Flux`, `ArgoCD`       | GitOps engine to install.                                          |
-| `workload.sourceDirectory`      | string   | `k8s`                | Directory path                 | Location of workload manifests.                                    |
-| `workload.validateOnPush`       | boolean  | `false`              | `true`, `false`                | Automatically validate manifests before pushing to local registry. |
+| Field                           | Type     | Default              | Values                         | Description                                                                                    |
+| ------------------------------- | -------- | -------------------- | ------------------------------ | ---------------------------------------------------------------------------------------------- |
+| `editor`                        | string   | –                    | Command with args              | Editor for interactive workflows (e.g. `code --wait`, `vim`).                                  |
+| `cluster.distribution`          | enum     | `Kind`               | `Kind`, `K3d`, `TalosInDocker` | Kubernetes distribution to use.                                                                |
+| `cluster.distributionConfig`    | string   | `kind.yaml`          | File path                      | Path to distribution-specific config (`kind.yaml`, `k3d.yaml`, or `talos/` for TalosInDocker). |
+| `cluster.connection.kubeconfig` | string   | `~/.kube/config`     | File path                      | Path to kubeconfig file.                                                                       |
+| `cluster.connection.context`    | string   | Derived from cluster | kubeconfig context             | Context name (Kind: `kind-<name>`, K3d: `k3d-<name>`).                                         |
+| `cluster.connection.timeout`    | duration | –                    | Go duration (e.g. `30s`, `5m`) | Optional timeout for cluster operations.                                                       |
+| `cluster.cni`                   | enum     | `Default`            | `Default`, `Cilium`, `None`    | Container Network Interface to install.                                                        |
+| `cluster.csi`                   | enum     | `Default`            | `Default`, `LocalPathStorage`  | Container Storage Interface (not yet implemented).                                             |
+| `cluster.metricsServer`         | enum     | `Enabled`            | `Enabled`, `Disabled`          | Install metrics-server for resource metrics.                                                   |
+| `cluster.certManager`           | enum     | `Disabled`           | `Enabled`, `Disabled`          | Install cert-manager for TLS certificates.                                                     |
+| `cluster.localRegistry`         | enum     | `Disabled`           | `Enabled`, `Disabled`          | Provision local OCI registry.                                                                  |
+| `cluster.gitOpsEngine`          | enum     | `None`               | `None`, `Flux`, `ArgoCD`       | GitOps engine to install.                                                                      |
+| `workload.sourceDirectory`      | string   | `k8s`                | Directory path                 | Location of workload manifests.                                                                |
+| `workload.validateOnPush`       | boolean  | `false`              | `true`, `false`                | Automatically validate manifests before pushing to local registry.                             |
 
 > Omitted fields use defaults (e.g., `cluster.cni` defaults to `Default`).
 
@@ -70,8 +70,39 @@ Distribution configuration sits alongside `ksail.yaml`:
 
 - **`kind.yaml`** – [Kind configuration](https://kind.sigs.k8s.io/docs/user/configuration/)
 - **`k3d.yaml`** – [K3d configuration](https://k3d.io/stable/usage/configfile/)
+- **`talos/`** – Talos patches directory (for TalosInDocker)
 
 Reference via `spec.cluster.distributionConfig`.
+
+### TalosInDocker Configuration
+
+TalosInDocker uses a patches directory structure instead of a single config file:
+
+```
+talos/
+├── cluster/           # Patches applied to all nodes
+├── control-planes/    # Patches for control-plane nodes only
+└── workers/           # Patches for worker nodes only
+```
+
+Patches are YAML files using [Talos machine configuration](https://www.talos.dev/latest/reference/configuration/) format:
+
+```yaml
+# talos/cluster/kubelet.yaml
+machine:
+  kubelet:
+    extraArgs:
+      max-pods: "250"
+```
+
+TalosInDocker-specific options can be set in `ksail.yaml`:
+
+```yaml
+spec:
+  cluster:
+    distribution: TalosInDocker
+    distributionConfig: talos
+```
 
 ### Schema Support
 
@@ -103,7 +134,7 @@ ksail workload validate --help   # Manifest validation options
 ### Global Flags
 
 | Flag       | Purpose                                              |
-|------------|------------------------------------------------------|
+| ---------- | ---------------------------------------------------- |
 | `--timing` | Enable timing output for the current invocation only |
 
 ### Cluster Flags
@@ -111,7 +142,7 @@ ksail workload validate --help   # Manifest validation options
 All cluster commands support these flags (availability varies by command):
 
 | Flag                    | Short | Config Field                         | Default          | Commands                     |
-|-------------------------|-------|--------------------------------------|------------------|------------------------------|
+| ----------------------- | ----- | ------------------------------------ | ---------------- | ---------------------------- |
 | `--distribution`        | `-d`  | `spec.cluster.distribution`          | `Kind`           | `init`                       |
 | `--distribution-config` | –     | `spec.cluster.distributionConfig`    | `kind.yaml`      | `init`                       |
 | `--context`             | `-c`  | `spec.cluster.connection.context`    | Auto-derived     | `init`                       |
@@ -180,7 +211,7 @@ KSail provides commands for managing workloads through the `ksail workload` subc
 **Push command flags:**
 
 | Flag         | Purpose                                        |
-|--------------|------------------------------------------------|
+| ------------ | ---------------------------------------------- |
 | `--validate` | Validate manifests before pushing to registry. |
 
 The `push` command validates manifests when either:
@@ -199,7 +230,7 @@ The `push` command validates manifests when either:
 **Reconcile command flags:**
 
 | Flag        | Purpose                                                     |
-|-------------|-------------------------------------------------------------|
+| ----------- | ----------------------------------------------------------- |
 | `--timeout` | Timeout for reconciliation (e.g., `10m`). Overrides config. |
 
 The `reconcile` command respects timeout in this order:

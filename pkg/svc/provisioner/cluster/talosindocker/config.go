@@ -1,7 +1,12 @@
 package talosindockerprovisioner
 
 import (
+	"fmt"
+	"os"
 	"path/filepath"
+	"strings"
+
+	"sigs.k8s.io/yaml"
 )
 
 // Default configuration values for TalosInDocker clusters.
@@ -164,4 +169,71 @@ func (c *TalosInDockerConfig) WithMirrorRegistries(mirrors []string) *TalosInDoc
 	}
 
 	return c
+}
+
+// ValidatePatchDirectory validates that patch directories exist and contain valid YAML files.
+// Returns a warning if the talos directory doesn't exist (patches are optional),
+// or an error if YAML files are invalid.
+func (c *TalosInDockerConfig) ValidatePatchDirectory() (string, error) {
+	// Check if patches directory exists
+	_, statErr := os.Stat(c.PatchesDir)
+	if os.IsNotExist(statErr) {
+		return "Patch directory '" + c.PatchesDir + "/' not found. " +
+			"Create it or run 'ksail cluster init --distribution TalosInDocker'.", nil
+	}
+
+	// Validate YAML files in each subdirectory
+	subdirs := []string{c.ClusterPatchesDir, c.ControlPlanePatchesDir, c.WorkerPatchesDir}
+
+	for _, dir := range subdirs {
+		_, dirStatErr := os.Stat(dir)
+		if os.IsNotExist(dirStatErr) {
+			continue // Subdirectory doesn't exist, skip
+		}
+
+		validateErr := validateYAMLFilesInDir(dir)
+		if validateErr != nil {
+			return "", validateErr
+		}
+	}
+
+	return "", nil
+}
+
+// validateYAMLFilesInDir checks that all .yaml and .yml files in a directory are valid YAML.
+func validateYAMLFilesInDir(dir string) error {
+	cleanDir := filepath.Clean(dir)
+
+	entries, err := os.ReadDir(cleanDir)
+	if err != nil {
+		return fmt.Errorf("failed to read directory %s: %w", cleanDir, err)
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		name := entry.Name()
+		if !strings.HasSuffix(name, ".yaml") && !strings.HasSuffix(name, ".yml") {
+			continue
+		}
+
+		filePath := filepath.Join(cleanDir, filepath.Clean(name))
+
+		//nolint:gosec // Path from validated directory
+		content, readErr := os.ReadFile(filePath)
+		if readErr != nil {
+			return fmt.Errorf("failed to read patch file '%s': %w", filePath, readErr)
+		}
+
+		var parsed any
+
+		yamlErr := yaml.Unmarshal(content, &parsed)
+		if yamlErr != nil {
+			return fmt.Errorf("failed to parse patch file '%s': %w", filePath, yamlErr)
+		}
+	}
+
+	return nil
 }

@@ -281,8 +281,9 @@ const (
 
 // Options holds optional settings for distributions, networking, and deployment tools.
 type Options struct {
-	Kind OptionsKind `json:"kind,omitzero"`
-	K3d  OptionsK3d  `json:"k3d,omitzero"`
+	Kind          OptionsKind          `json:"kind,omitzero"`
+	K3d           OptionsK3d           `json:"k3d,omitzero"`
+	TalosInDocker OptionsTalosInDocker `json:"talosInDocker,omitzero"`
 
 	Cilium OptionsCilium `json:"cilium,omitzero"`
 	Calico OptionsCalico `json:"calico,omitzero"`
@@ -302,6 +303,10 @@ type OptionsKind struct {
 
 // OptionsK3d defines options specific to the K3d distribution.
 type OptionsK3d struct{}
+
+// OptionsTalosInDocker defines options specific to the TalosInDocker distribution.
+// Currently empty - provisioner uses defaults (1 control-plane node, 0 workers).
+type OptionsTalosInDocker struct{}
 
 // OptionsCilium defines options for the Cilium CNI.
 type OptionsCilium struct {

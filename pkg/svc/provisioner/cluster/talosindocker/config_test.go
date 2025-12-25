@@ -1,6 +1,7 @@
 package talosindockerprovisioner_test
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -128,4 +129,55 @@ func TestTalosInDockerConfig_Chaining(t *testing.T) {
 	assert.Equal(t, 3, config.ControlPlaneNodes)
 	assert.Equal(t, 2, config.WorkerNodes)
 	assert.Equal(t, "/tmp/kubeconfig", config.KubeconfigPath)
+}
+
+func TestTalosInDockerConfig_ValidatePatchDirectory_MissingDir(t *testing.T) {
+	t.Parallel()
+
+	config := talosindockerprovisioner.NewTalosInDockerConfig().
+		WithPatchesDir("/nonexistent/path")
+
+	warning, err := config.ValidatePatchDirectory()
+	require.NoError(t, err)
+	assert.Contains(t, warning, "not found")
+}
+
+func TestTalosInDockerConfig_ValidatePatchDirectory_ValidDir(t *testing.T) {
+	t.Parallel()
+
+	// Create temp directory structure
+	tmpDir := t.TempDir()
+	clusterDir := filepath.Join(tmpDir, "cluster")
+	require.NoError(t, os.MkdirAll(clusterDir, 0o750))
+
+	// Create valid YAML file
+	validYAML := []byte("key: value\n")
+	require.NoError(t, os.WriteFile(filepath.Join(clusterDir, "test.yaml"), validYAML, 0o600))
+
+	config := talosindockerprovisioner.NewTalosInDockerConfig().
+		WithPatchesDir(tmpDir)
+
+	warning, err := config.ValidatePatchDirectory()
+	require.NoError(t, err)
+	assert.Empty(t, warning)
+}
+
+func TestTalosInDockerConfig_ValidatePatchDirectory_InvalidYAML(t *testing.T) {
+	t.Parallel()
+
+	// Create temp directory structure
+	tmpDir := t.TempDir()
+	clusterDir := filepath.Join(tmpDir, "cluster")
+	require.NoError(t, os.MkdirAll(clusterDir, 0o750))
+
+	// Create invalid YAML file
+	invalidYAML := []byte("not: valid: yaml: here: [\n")
+	require.NoError(t, os.WriteFile(filepath.Join(clusterDir, "bad.yaml"), invalidYAML, 0o600))
+
+	config := talosindockerprovisioner.NewTalosInDockerConfig().
+		WithPatchesDir(tmpDir)
+
+	_, err := config.ValidatePatchDirectory()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to parse patch file")
 }

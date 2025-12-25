@@ -50,6 +50,14 @@ go install github.com/devantler-tech/ksail/v5@latest
 
 ## Usage
 
+### Supported Distributions
+
+| Distribution      | Description                                                                  |
+| ----------------- | ---------------------------------------------------------------------------- |
+| **Kind**          | Kubernetes IN Docker - lightweight clusters using Docker containers as nodes |
+| **K3d**           | K3s in Docker - lightweight Kubernetes distribution wrapped in Docker        |
+| **TalosInDocker** | Talos Linux in Docker - immutable, minimal OS designed for Kubernetes        |
+
 ### Quick Start
 
 Get up and running with a local Kubernetes cluster in three steps:
@@ -111,7 +119,7 @@ KSail organizes commands around your development lifecycle:
 KSail is a powerful tool that can be used in many different ways. Here are some projects that use KSail in their setup:
 
 | Project                                                               | Description         | Type     |
-|-----------------------------------------------------------------------|---------------------|----------|
+| --------------------------------------------------------------------- | ------------------- | -------- |
 | [devantler-tech/platform](https://github.com/devantler-tech/platform) | My personal homelab | Platform |
 
 If you use KSail in your project, feel free to open a PR to add it to the list, so others can see how you use KSail.
