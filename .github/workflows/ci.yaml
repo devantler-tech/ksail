@@ -166,38 +166,7 @@ jobs:
       - name: 🧪 ksail workload push and reconcile
         if: contains(matrix.init-args, '--gitops-engine Flux') || contains(matrix.init-args, '--gitops-engine ArgoCD')
         run: |
-          # Copy reconcile test fixtures to k8s/ directory
-          cp .github/fixtures/reconcile-test/deployment.yaml k8s/reconcile-test-deployment.yaml
-
-          # Update kustomization.yaml to include the deployment
-          if [ -f k8s/kustomization.yaml ] && grep -q '^resources: \[\]$' k8s/kustomization.yaml; then
-            sed -i 's/^resources: \[\]$/resources:\n  - reconcile-test-deployment.yaml/' k8s/kustomization.yaml
-          elif [ -f k8s/kustomization.yaml ] && grep -q '^resources:' k8s/kustomization.yaml; then
-            if ! grep -q 'reconcile-test-deployment.yaml' k8s/kustomization.yaml; then
-              sed -i '/^resources:/a\  - reconcile-test-deployment.yaml' k8s/kustomization.yaml
-            fi
-          else
-            cp .github/fixtures/reconcile-test/kustomization.yaml k8s/kustomization.yaml
-            sed -i 's/deployment.yaml/reconcile-test-deployment.yaml/' k8s/kustomization.yaml
-          fi
-
-          # Validate the kustomization.yaml was properly updated
-          if ! kubectl kustomize k8s/ > /dev/null 2>&1; then
-            echo "ERROR: kustomization.yaml is malformed after modification"
-            cat k8s/kustomization.yaml
-            exit 1
-          fi
-
-          if ! grep -q 'reconcile-test-deployment.yaml' k8s/kustomization.yaml; then
-            echo "ERROR: reconcile-test-deployment.yaml was not added to kustomization.yaml"
-            cat k8s/kustomization.yaml
-            exit 1
-          fi
-
-          # Push the OCI artifact to the local registry
-          ./bin/ksail workload push
-
-          # Trigger reconciliation and wait for completion
+          ./bin/ksail workload push .github/fixtures/reconcile-test
           ./bin/ksail workload reconcile
 
       - name: 🧪 ksail cluster stop

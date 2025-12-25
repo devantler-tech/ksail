@@ -19,13 +19,14 @@ func NewPushCmd(_ *runtime.Runtime) *cobra.Command {
 	var validate bool
 
 	cmd := &cobra.Command{
-		Use:          "push",
+		Use:          "push [source-directory]",
 		Short:        "Package and push an OCI artifact to the local registry",
 		Long:         "Build and push local workloads as an OCI artifact to the local registry.",
+		Args:         cobra.MaximumNArgs(1),
 		SilenceUsage: true,
 	}
 
-	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
 		ctx, err := initCommandContext(cmd)
 		if err != nil {
 			return err
@@ -42,7 +43,13 @@ func NewPushCmd(_ *runtime.Runtime) *cobra.Command {
 			return errLocalRegistryRequired
 		}
 
-		sourceDir := clusterCfg.Spec.Workload.SourceDirectory
+		// Use positional arg if provided, otherwise fall back to config
+		var sourceDir string
+		if len(args) > 0 {
+			sourceDir = args[0]
+		} else {
+			sourceDir = clusterCfg.Spec.Workload.SourceDirectory
+		}
 		if strings.TrimSpace(sourceDir) == "" {
 			sourceDir = v1alpha1.DefaultSourceDirectory
 		}
