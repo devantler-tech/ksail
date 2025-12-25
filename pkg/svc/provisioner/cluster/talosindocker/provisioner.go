@@ -169,6 +169,12 @@ func (p *TalosInDockerProvisioner) Create(ctx context.Context, name string) erro
 	mirrorPatches := p.createMirrorPatches()
 	patches = append(patches, mirrorPatches...)
 
+	// Add disable-default-cni patch if Cilium is requested
+	disableCNIPatch := p.createDisableCNIPatch()
+	if disableCNIPatch != nil {
+		patches = append(patches, *disableCNIPatch)
+	}
+
 	// Create config bundle with patches
 	configBundle, err := p.createConfigBundle(clusterName, patches)
 	if err != nil {
@@ -591,6 +597,28 @@ func (p *TalosInDockerProvisioner) createMirrorPatches() []TalosPatch {
 	}
 
 	return []TalosPatch{patch}
+}
+
+// createDisableCNIPatch generates an in-memory patch to disable the default CNI (Flannel).
+// This is required when using an alternative CNI like Cilium.
+// Returns nil if DisableDefaultCNI is false.
+// See: https://docs.siderolabs.com/kubernetes-guides/cni/deploying-cilium
+func (p *TalosInDockerProvisioner) createDisableCNIPatch() *TalosPatch {
+	if !p.config.DisableDefaultCNI {
+		return nil
+	}
+
+	patchContent := `cluster:
+  network:
+    cni:
+      name: none
+`
+
+	return &TalosPatch{
+		Path:    "in-memory:disable-default-cni",
+		Scope:   PatchScopeCluster,
+		Content: []byte(patchContent),
+	}
 }
 
 // checkDockerAvailable verifies that Docker is configured and running.

@@ -196,3 +196,54 @@ func TestTalosInDockerGenerator_Generate_OverwritesWithForce(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, string(content))
 }
+
+func TestTalosInDockerGenerator_Generate_DisableDefaultCNI(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	gen := talosgenerator.NewTalosInDockerGenerator()
+
+	config := &talosgenerator.TalosInDockerConfig{
+		PatchesDir:        "talos",
+		DisableDefaultCNI: true,
+	}
+	opts := yamlgenerator.Options{
+		Output: tempDir,
+	}
+
+	result, err := gen.Generate(config, opts)
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(tempDir, "talos"), result)
+
+	// Verify disable-default-cni.yaml was created
+	patchPath := filepath.Join(tempDir, "talos", "cluster", "disable-default-cni.yaml")
+	content, err := os.ReadFile(patchPath) //nolint:gosec // Test file path is safe
+	require.NoError(t, err)
+	assert.Contains(t, string(content), "cluster:")
+	assert.Contains(t, string(content), "network:")
+	assert.Contains(t, string(content), "cni:")
+	assert.Contains(t, string(content), "name: none")
+}
+
+func TestTalosInDockerGenerator_Generate_NoDisableCNIPatchWhenFalse(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	gen := talosgenerator.NewTalosInDockerGenerator()
+
+	config := &talosgenerator.TalosInDockerConfig{
+		PatchesDir:        "talos",
+		DisableDefaultCNI: false,
+	}
+	opts := yamlgenerator.Options{
+		Output: tempDir,
+	}
+
+	_, err := gen.Generate(config, opts)
+	require.NoError(t, err)
+
+	// Verify disable-default-cni.yaml was NOT created
+	patchPath := filepath.Join(tempDir, "talos", "cluster", "disable-default-cni.yaml")
+	_, err = os.Stat(patchPath)
+	assert.True(t, os.IsNotExist(err), "expected disable-default-cni.yaml to not exist")
+}

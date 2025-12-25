@@ -132,7 +132,9 @@ func cleanupMirrorRegistries(
 	case v1alpha1.DistributionK3d:
 		return cleanupK3dMirrorRegistries(cmd, clusterCfg, deps, clusterName, deleteVolumes)
 	case v1alpha1.DistributionTalosInDocker:
-		// TalosInDocker doesn't support mirror registries yet
+		// TalosInDocker configures mirror registries via machine config patches, not as
+		// separate registry containers. No cleanup is needed as the patches are applied
+		// at cluster creation time and stored in the cluster's machine configuration.
 		return nil
 	default:
 		return nil

@@ -385,7 +385,12 @@ func resolveLocalRegistryClusterName(
 	case v1alpha1.DistributionK3d:
 		return k3dconfigmanager.ResolveClusterName(clusterCfg, k3dConfig)
 	case v1alpha1.DistributionTalosInDocker:
-		// TalosInDocker cluster name resolution will be implemented in User Story 2
+		// TalosInDocker uses Connection.Context from ksail.yaml, falling back to default
+		if name := strings.TrimSpace(clusterCfg.Spec.Cluster.Connection.Context); name != "" {
+			return name
+		}
+
+		return "talos-default"
 	}
 
 	if name := strings.TrimSpace(clusterCfg.Spec.Cluster.Connection.Context); name != "" {
@@ -410,8 +415,13 @@ func resolveLocalRegistryNetworkName(
 
 		return "k3d-" + trimmed
 	case v1alpha1.DistributionTalosInDocker:
-		// TalosInDocker network name resolution will be implemented in User Story 2
-		return ""
+		// TalosInDocker uses cluster name as Docker network name
+		trimmed := strings.TrimSpace(clusterName)
+		if trimmed == "" {
+			trimmed = "talos-default"
+		}
+
+		return trimmed
 	default:
 		return ""
 	}

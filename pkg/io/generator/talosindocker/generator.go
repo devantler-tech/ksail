@@ -20,6 +20,8 @@ const (
 	mirrorRegistriesFileName = "mirror-registries.yaml"
 	// allowSchedulingFileName is the name of the control-plane scheduling patch file.
 	allowSchedulingFileName = "allow-scheduling-on-control-planes.yaml"
+	// disableCNIFileName is the name of the CNI disable patch file.
+	disableCNIFileName = "disable-default-cni.yaml"
 )
 
 // ErrConfigRequired is returned when a nil config is provided.
@@ -35,6 +37,10 @@ type TalosInDockerConfig struct {
 	// WorkerNodes is the number of worker nodes configured.
 	// When 0 (default), generates allow-scheduling-on-control-planes.yaml.
 	WorkerNodes int
+	// DisableDefaultCNI indicates whether to disable Talos's default CNI (Flannel).
+	// When true, generates a disable-default-cni.yaml patch to set cluster.network.cni.name to "none".
+	// This is required when using an alternative CNI like Cilium.
+	DisableDefaultCNI bool
 }
 
 // TalosInDockerGenerator generates the TalosInDocker directory structure.
@@ -74,23 +80,46 @@ func (g *TalosInDockerGenerator) Generate(
 		return "", err
 	}
 
+	// Generate conditional patches based on configuration
+	err = g.generateConditionalPatches(rootPath, model, opts.Force)
+	if err != nil {
+		return "", err
+	}
+
+	return rootPath, nil
+}
+
+// generateConditionalPatches generates optional patches based on the configuration.
+func (g *TalosInDockerGenerator) generateConditionalPatches(
+	rootPath string,
+	model *TalosInDockerConfig,
+	force bool,
+) error {
 	// Generate mirror registries patch if configured
 	if len(model.MirrorRegistries) > 0 {
-		err := g.generateMirrorRegistriesPatch(rootPath, model.MirrorRegistries, opts.Force)
+		err := g.generateMirrorRegistriesPatch(rootPath, model.MirrorRegistries, force)
 		if err != nil {
-			return "", err
+			return err
 		}
 	}
 
 	// Generate allow-scheduling-on-control-planes patch when no workers are configured
 	if model.WorkerNodes == 0 {
-		err := g.generateAllowSchedulingPatch(rootPath, opts.Force)
+		err := g.generateAllowSchedulingPatch(rootPath, force)
 		if err != nil {
-			return "", err
+			return err
 		}
 	}
 
-	return rootPath, nil
+	// Generate disable-default-cni patch when alternative CNI is requested
+	if model.DisableDefaultCNI {
+		err := g.generateDisableCNIPatch(rootPath, force)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // createSubdirectories creates the Talos patches subdirectories with .gitkeep files.
@@ -182,6 +211,36 @@ func (g *TalosInDockerGenerator) generateAllowSchedulingPatch(
 	err := os.WriteFile(patchPath, []byte(patchContent), filePerm)
 	if err != nil {
 		return fmt.Errorf("failed to create allow-scheduling-on-control-planes patch: %w", err)
+	}
+
+	return nil
+}
+
+// generateDisableCNIPatch creates a Talos patch file to disable the default CNI (Flannel).
+// This is required when using an alternative CNI like Cilium.
+// The patch sets cluster.network.cni.name to "none" as per Talos documentation:
+// https://docs.siderolabs.com/kubernetes-guides/cni/deploying-cilium
+func (g *TalosInDockerGenerator) generateDisableCNIPatch(
+	rootPath string,
+	force bool,
+) error {
+	patchPath := filepath.Join(rootPath, "cluster", disableCNIFileName)
+
+	// Check if file already exists
+	_, statErr := os.Stat(patchPath)
+	if statErr == nil && !force {
+		return nil
+	}
+
+	patchContent := `cluster:
+  network:
+    cni:
+      name: none
+`
+
+	err := os.WriteFile(patchPath, []byte(patchContent), filePerm)
+	if err != nil {
+		return fmt.Errorf("failed to create disable-default-cni patch: %w", err)
 	}
 
 	return nil

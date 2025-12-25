@@ -200,7 +200,7 @@ func TestHandleInitRunE_RespectsDistributionFlagTalosInDocker(t *testing.T) {
 
 	allowSchedulingContent, err := os.ReadFile(
 		allowSchedulingPath,
-	) //nolint:gosec // Test file path is safe
+	)
 	if err != nil {
 		t.Fatalf("expected allow-scheduling-on-control-planes.yaml to be scaffolded: %v", err)
 	}

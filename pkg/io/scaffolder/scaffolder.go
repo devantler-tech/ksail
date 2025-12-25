@@ -578,10 +578,14 @@ func (s *Scaffolder) generateTalosInDockerConfig(output string, force bool) erro
 	// Get worker count from config (default 0)
 	workers := int(s.KSailConfig.Spec.Cluster.Options.TalosInDocker.Workers)
 
+	// Disable default CNI (Flannel) if Cilium is requested
+	disableDefaultCNI := s.KSailConfig.Spec.Cluster.CNI == v1alpha1.CNICilium
+
 	config := &talosgenerator.TalosInDockerConfig{
-		PatchesDir:       TalosInDockerConfigDir,
-		MirrorRegistries: s.MirrorRegistries,
-		WorkerNodes:      workers,
+		PatchesDir:        TalosInDockerConfigDir,
+		MirrorRegistries:  s.MirrorRegistries,
+		WorkerNodes:       workers,
+		DisableDefaultCNI: disableDefaultCNI,
 	}
 
 	opts := yamlgenerator.Options{
@@ -624,6 +628,17 @@ func (s *Scaffolder) generateTalosInDockerConfig(output string, force bool) erro
 	// Notify about mirror registries patch if created
 	if len(s.MirrorRegistries) > 0 {
 		displayPath := filepath.Join(TalosInDockerConfigDir, "cluster", "mirror-registries.yaml")
+		notify.WriteMessage(notify.Message{
+			Type:    notify.GenerateType,
+			Content: "created '%s'",
+			Args:    []any{displayPath},
+			Writer:  s.Writer,
+		})
+	}
+
+	// Notify about disable-default-cni patch if created
+	if disableDefaultCNI {
+		displayPath := filepath.Join(TalosInDockerConfigDir, "cluster", "disable-default-cni.yaml")
 		notify.WriteMessage(notify.Message{
 			Type:    notify.GenerateType,
 			Content: "created '%s'",

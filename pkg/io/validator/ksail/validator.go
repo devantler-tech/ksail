@@ -223,7 +223,10 @@ func (v *Validator) validateCNIAlignment(
 		case v1alpha1.DistributionK3d:
 			v.validateK3dCiliumCNIAlignment(result)
 		case v1alpha1.DistributionTalosInDocker:
-			// TalosInDocker CNI validation will be added in User Story 2
+			// TalosInDocker uses Flannel as its default CNI. When Cilium is selected,
+			// 'ksail cluster init' generates a disable-default-cni.yaml patch that sets
+			// cluster.network.cni.name to "none". Users with existing clusters should
+			// add this patch to their talos/cluster directory.
 		}
 
 		return
@@ -237,7 +240,9 @@ func (v *Validator) validateCNIAlignment(
 		case v1alpha1.DistributionK3d:
 			v.validateK3dDefaultCNIAlignment(result)
 		case v1alpha1.DistributionTalosInDocker:
-			// TalosInDocker default CNI validation will be added in User Story 2
+			// TalosInDocker uses Flannel as its default CNI, but ksail always installs
+			// Cilium for network policy support. Run 'ksail cluster init --cni Cilium'
+			// or add a disable-default-cni.yaml patch to your talos/cluster directory.
 		}
 	}
 }

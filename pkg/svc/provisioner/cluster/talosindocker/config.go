@@ -68,6 +68,11 @@ type TalosInDockerConfig struct {
 	// MirrorRegistries contains mirror registry specifications in "host=upstream" format.
 	// Example: ["docker.io=https://registry.example.com", "ghcr.io=https://ghcr.example.com"]
 	MirrorRegistries []string
+
+	// DisableDefaultCNI indicates whether to disable Talos's default CNI (Flannel).
+	// When true, the provisioner will inject a patch to set cluster.network.cni.name to "none".
+	// This is required when using an alternative CNI like Cilium.
+	DisableDefaultCNI bool
 }
 
 // NewTalosInDockerConfig creates a new TalosInDockerConfig with default values.
@@ -167,6 +172,15 @@ func (c *TalosInDockerConfig) WithMirrorRegistries(mirrors []string) *TalosInDoc
 	if len(mirrors) > 0 {
 		c.MirrorRegistries = mirrors
 	}
+
+	return c
+}
+
+// WithDisableDefaultCNI sets whether to disable the default CNI (Flannel).
+// When true, a patch will be injected to set cluster.network.cni.name to "none".
+// This is required when using an alternative CNI like Cilium.
+func (c *TalosInDockerConfig) WithDisableDefaultCNI(disable bool) *TalosInDockerConfig {
+	c.DisableDefaultCNI = disable
 
 	return c
 }

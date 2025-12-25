@@ -667,7 +667,8 @@ func (m *ConfigManager) createValidatorForDistribution() (*ksailvalidator.Valida
 			return ksailvalidator.NewValidatorForK3d(k3dConfig), nil
 		}
 	case v1alpha1.DistributionTalosInDocker:
-		// TalosInDocker validator will be implemented in User Story 2
+		// TalosInDocker doesn't have a separate config file like Kind/K3d.
+		// Configuration is embedded in ksail.yaml, so basic validation suffices.
 		return ksailvalidator.NewValidator(), nil
 	}
 

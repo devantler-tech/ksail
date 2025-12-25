@@ -55,6 +55,7 @@ func (DefaultFactory) Create(
 			cluster.Spec.Cluster.DistributionConfig,
 			cluster.Spec.Cluster.Connection.Kubeconfig,
 			cluster.Spec.Cluster.Options.TalosInDocker,
+			cluster.Spec.Cluster.CNI,
 		)
 	default:
 		return nil, "", fmt.Errorf(
@@ -129,6 +130,7 @@ func createTalosInDockerProvisioner(
 	distributionConfigPath string,
 	kubeconfigPath string,
 	opts v1alpha1.OptionsTalosInDocker,
+	cni v1alpha1.CNI,
 ) (*talosindickerprovisioner.TalosInDockerProvisioner, *talosindickerprovisioner.TalosInDockerConfig, error) {
 	config := talosindickerprovisioner.NewTalosInDockerConfig().
 		WithPatchesDir(distributionConfigPath).
@@ -141,6 +143,12 @@ func createTalosInDockerProvisioner(
 
 	if opts.Workers > 0 {
 		config.WithWorkerNodes(int(opts.Workers))
+	}
+
+	// Disable default CNI (Flannel) if Cilium is requested
+	// This injects a patch programmatically when not using scaffolded patches
+	if cni == v1alpha1.CNICilium {
+		config.WithDisableDefaultCNI(true)
 	}
 
 	provisioner := talosindickerprovisioner.NewTalosInDockerProvisioner(config)

@@ -383,7 +383,9 @@ func loadDistributionConfigs(
 
 		return nil, k3dConfig, nil
 	case v1alpha1.DistributionTalosInDocker:
-		// TalosInDocker config loading will be implemented in User Story 2
+		// TalosInDocker uses patch directories (talos/cluster, talos/control-planes, talos/workers)
+		// instead of a single config file. Configuration is read from ksail.yaml spec.
+		// The provisioner handles loading patches from the configured directories.
 		return nil, nil, nil
 	default:
 		return nil, nil, nil
