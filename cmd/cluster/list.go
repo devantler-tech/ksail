@@ -131,6 +131,7 @@ func listAdditionalDistributionClusters(
 	for _, distribution := range []v1alpha1.Distribution{
 		v1alpha1.DistributionKind,
 		v1alpha1.DistributionK3d,
+		v1alpha1.DistributionTalosInDocker,
 	} {
 		if distribution == clusterCfg.Spec.Cluster.Distribution {
 			continue
