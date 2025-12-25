@@ -18,6 +18,7 @@ import (
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
+	"github.com/siderolabs/talos/pkg/cluster/check"
 	"github.com/siderolabs/talos/pkg/machinery/config/bundle"
 	"github.com/siderolabs/talos/pkg/machinery/config/configpatcher"
 	"github.com/siderolabs/talos/pkg/machinery/config/generate"
@@ -27,6 +28,7 @@ import (
 	"github.com/siderolabs/talos/pkg/provision/providers"
 	k8smetav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/clientcmd"
 )
 
 // TalosProviderName is the name used by the Talos SDK for Docker provisioner.
@@ -341,10 +343,22 @@ func (p *TalosInDockerProvisioner) bootstrapAndSaveKubeconfig(
 		}
 	}
 
-	// Create access adapter for cluster operations
+	// Get the Kubernetes API endpoint from the cluster info.
+	// The Docker provisioner automatically sets this to the external endpoint
+	// (https://127.0.0.1:<mapped-port>) when the cluster is created.
+	kubernetesEndpoint := cluster.Info().KubernetesEndpoint
+	if kubernetesEndpoint == "" {
+		return fmt.Errorf("cluster info missing KubernetesEndpoint")
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "Using Kubernetes API endpoint: %s\n", kubernetesEndpoint)
+
+	// Create access adapter for cluster operations.
+	// WithKubernetesEndpoint sets ForceEndpoint which is used to rewrite the kubeconfig.
 	clusterAccess := access.NewAdapter(
 		cluster,
 		provision.WithTalosConfig(talosConfig),
+		provision.WithKubernetesEndpoint(kubernetesEndpoint),
 	)
 
 	defer func() { _ = clusterAccess.Close() }()
@@ -357,6 +371,17 @@ func (p *TalosInDockerProvisioner) bootstrapAndSaveKubeconfig(
 		return fmt.Errorf("bootstrap failed: %w", err)
 	}
 
+	// Wait for cluster to be ready (Talos API, etcd, Kubernetes API)
+	_, _ = fmt.Fprintf(p.logWriter, "Waiting for cluster to be ready...\n")
+
+	checkCtx, checkCancel := context.WithTimeout(ctx, apiReadinessTimeout)
+	defer checkCancel()
+
+	err = check.Wait(checkCtx, clusterAccess, check.DefaultClusterChecks(), check.StderrReporter())
+	if err != nil {
+		return fmt.Errorf("cluster readiness check failed: %w", err)
+	}
+
 	// Fetch kubeconfig from cluster
 	_, _ = fmt.Fprintf(p.logWriter, "Fetching kubeconfig...\n")
 
@@ -365,19 +390,12 @@ func (p *TalosInDockerProvisioner) bootstrapAndSaveKubeconfig(
 		return fmt.Errorf("failed to fetch kubeconfig: %w", err)
 	}
 
-	// Get the mapped Kubernetes API endpoint for Docker-in-VM environments
-	mappedK8sEndpoint, err := p.getMappedKubernetesAPIEndpoint(ctx, cluster.Info().ClusterName)
+	// Rewrite kubeconfig server endpoint using ForceEndpoint (set via WithKubernetesEndpoint).
+	// The kubeconfig from Talos uses internal IPs, but we need the mapped localhost endpoint.
+	kubeconfig, err = rewriteKubeconfigEndpoint(kubeconfig, clusterAccess.ForceEndpoint)
 	if err != nil {
-		return fmt.Errorf("failed to get mapped Kubernetes API endpoint: %w", err)
+		return fmt.Errorf("failed to rewrite kubeconfig endpoint: %w", err)
 	}
-
-	// Fix the kubeconfig to use the mapped endpoint instead of internal IP
-	kubeconfig, err = fixKubeconfigServerEndpoint(kubeconfig, mappedK8sEndpoint)
-	if err != nil {
-		return fmt.Errorf("failed to fix kubeconfig endpoint: %w", err)
-	}
-
-	_, _ = fmt.Fprintf(p.logWriter, "Using Kubernetes API endpoint: %s\n", mappedK8sEndpoint)
 
 	// Expand tilde in kubeconfig path (e.g., ~/.kube/config -> /home/user/.kube/config)
 	kubeconfigPath, err := iopath.ExpandHomePath(p.config.KubeconfigPath)
@@ -402,9 +420,9 @@ func (p *TalosInDockerProvisioner) bootstrapAndSaveKubeconfig(
 
 	_, _ = fmt.Fprintf(p.logWriter, "Saved kubeconfig to %s\n", kubeconfigPath)
 
-	// Wait for Kubernetes API to be ready
-	// Talos clusters take time for the API server to fully stabilize after bootstrap
-	_, _ = fmt.Fprintf(p.logWriter, "Waiting for Kubernetes API to be ready...\n")
+	// Verify Kubernetes API is accessible via the mapped endpoint
+	// DefaultClusterChecks validates via internal IPs; this ensures host connectivity works
+	_, _ = fmt.Fprintf(p.logWriter, "Verifying Kubernetes API connectivity from host...\n")
 
 	if err := p.waitForAPIReady(ctx, kubeconfigPath); err != nil {
 		return fmt.Errorf("failed waiting for Kubernetes API: %w", err)
@@ -864,107 +882,25 @@ func (p *TalosInDockerProvisioner) getMappedTalosAPIEndpoint(
 	return net.JoinHostPort("127.0.0.1", hostPort), nil
 }
 
-// kubernetesAPIPort is the Kubernetes API server port.
-const kubernetesAPIPort = 6443
-
-// getMappedKubernetesAPIEndpoint finds the control plane container and returns the mapped Kubernetes API endpoint.
-// On macOS and other non-Linux systems, Docker runs in a VM, so we need to use the mapped port
-// via 127.0.0.1 instead of the container's internal IP.
-func (p *TalosInDockerProvisioner) getMappedKubernetesAPIEndpoint(
-	ctx context.Context,
-	clusterName string,
-) (string, error) {
-	if p.dockerClient == nil {
-		return "", ErrDockerNotAvailable
+// rewriteKubeconfigEndpoint rewrites all cluster server endpoints in the kubeconfig
+// to use the specified endpoint. This is used for Docker-in-VM environments where
+// the internal container IPs are not accessible from the host.
+// This follows the same pattern as the Talos SDK's mergeKubeconfig function.
+func rewriteKubeconfigEndpoint(kubeconfigBytes []byte, endpoint string) ([]byte, error) {
+	if endpoint == "" {
+		return kubeconfigBytes, nil
 	}
 
-	// Find the control plane container for this cluster
-	containers, err := p.dockerClient.ContainerList(ctx, container.ListOptions{
-		All: true,
-		Filters: filters.NewArgs(
-			filters.Arg("label", LabelTalosOwned+"=true"),
-			filters.Arg("label", LabelTalosClusterName+"="+clusterName),
-			filters.Arg("label", "talos.type=controlplane"),
-		),
-	})
+	kubeConfig, err := clientcmd.Load(kubeconfigBytes)
 	if err != nil {
-		return "", fmt.Errorf("failed to list containers: %w", err)
+		return nil, fmt.Errorf("failed to parse kubeconfig: %w", err)
 	}
 
-	if len(containers) == 0 {
-		return "", fmt.Errorf("%w for cluster %s", ErrNoControlPlane, clusterName)
+	// Rewrite server endpoint for all clusters
+	for name := range kubeConfig.Clusters {
+		kubeConfig.Clusters[name].Server = endpoint
 	}
 
-	// Get the first control plane container
-	containerID := containers[0].ID
-
-	// Inspect the container to get port mappings
-	inspect, err := p.dockerClient.ContainerInspect(ctx, containerID)
-	if err != nil {
-		return "", fmt.Errorf("failed to inspect container: %w", err)
-	}
-
-	// Find the mapped port for Kubernetes API (6443/tcp)
-	portKey := nat.Port(fmt.Sprintf("%d/tcp", kubernetesAPIPort))
-
-	bindings, ok := inspect.NetworkSettings.Ports[portKey]
-	if !ok || len(bindings) == 0 {
-		return "", fmt.Errorf("%w for Kubernetes API port %d", ErrNoPortMapping, kubernetesAPIPort)
-	}
-
-	// Use the first binding's host port
-	hostPort := bindings[0].HostPort
-
-	return "https://" + net.JoinHostPort("127.0.0.1", hostPort), nil
-}
-
-// fixKubeconfigServerEndpoint replaces the internal server endpoint in the kubeconfig
-// with the mapped localhost endpoint for Docker-in-VM environments.
-//
-//nolint:unparam // error return kept for future error handling
-func fixKubeconfigServerEndpoint(kubeconfig []byte, newServerEndpoint string) ([]byte, error) {
-	// Parse the kubeconfig as a simple string replacement since we know the format
-	// The server field will be something like "server: https://10.5.0.2:6443"
-	// and we need to replace it with "server: https://127.0.0.1:<mapped-port>"
-	kubeconfigStr := string(kubeconfig)
-
-	// Find and replace the server endpoint - the kubeconfig from Talos
-	// has a single cluster with the internal IP
-	// We use a simple approach: look for server: https://10. and replace
-	// the entire URL up to the next newline or space
-
-	// Simple approach: look for the pattern and replace
-	// The kubeconfig is YAML so the format is predictable
-	result := kubeconfigStr
-
-	// Pattern: "server: https://10.x.x.x:6443" - internal IPs in 10.x range
-	// Replace with the new endpoint
-	for _, prefix := range []string{"https://10.", "https://172.", "https://192.168."} {
-		for {
-			startIdx := -1
-
-			for i := range len(result) - len("server: "+prefix) {
-				if result[i:i+len("server: "+prefix)] == "server: "+prefix {
-					startIdx = i + len("server: ")
-
-					break
-				}
-			}
-
-			if startIdx == -1 {
-				break
-			}
-
-			// Find the end of the URL (newline or end of string)
-			endIdx := startIdx
-			for endIdx < len(result) && result[endIdx] != '\n' && result[endIdx] != '\r' {
-				endIdx++
-			}
-
-			// Replace the URL
-			result = result[:startIdx] + newServerEndpoint + result[endIdx:]
-		}
-	}
-
-	return []byte(result), nil
+	// Serialize back to YAML
+	return clientcmd.Write(*kubeConfig)
 }
