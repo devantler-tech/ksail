@@ -216,30 +216,143 @@ func verifyNodesHaveConfigs(req provision.ClusterRequest) bool {
 	return true
 }
 
-func TestTalosInDockerProvisioner_Start_NotImplemented(t *testing.T) {
+func TestTalosInDockerProvisioner_Start_NoDockerClient(t *testing.T) {
 	t.Parallel()
 
 	config := talosindockerprovisioner.NewTalosInDockerConfig()
 	provisioner := talosindockerprovisioner.NewTalosInDockerProvisioner(config)
+	// No Docker client set
 
 	ctx := context.Background()
 	err := provisioner.Start(ctx, "")
 
 	require.Error(t, err)
-	assert.ErrorIs(t, err, talosindockerprovisioner.ErrNotImplemented)
+	assert.ErrorIs(t, err, talosindockerprovisioner.ErrDockerNotAvailable)
 }
 
-func TestTalosInDockerProvisioner_Stop_NotImplemented(t *testing.T) {
+func TestTalosInDockerProvisioner_Start_ClusterNotFound(t *testing.T) {
+	t.Parallel()
+
+	mockClient := docker.NewMockAPIClient(t)
+	mockClient.EXPECT().Ping(mock.Anything).Return(types.Ping{}, nil)
+	mockClient.EXPECT().
+		ContainerList(mock.Anything, mock.Anything).
+		Return([]container.Summary{}, nil)
+
+	config := talosindockerprovisioner.NewTalosInDockerConfig()
+	provisioner := talosindockerprovisioner.NewTalosInDockerProvisioner(config).
+		WithDockerClient(mockClient)
+
+	ctx := context.Background()
+	err := provisioner.Start(ctx, "nonexistent")
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, talosindockerprovisioner.ErrClusterNotFound)
+}
+
+func TestTalosInDockerProvisioner_Start_Success(t *testing.T) {
+	t.Parallel()
+
+	mockClient := docker.NewMockAPIClient(t)
+	setupContainerOperationMock(mockClient, "container-1", "test-cluster", true)
+
+	config := talosindockerprovisioner.NewTalosInDockerConfig()
+	provisioner := talosindockerprovisioner.NewTalosInDockerProvisioner(config).
+		WithDockerClient(mockClient).
+		WithLogWriter(io.Discard)
+
+	ctx := context.Background()
+	err := provisioner.Start(ctx, "test-cluster")
+
+	require.NoError(t, err)
+}
+
+func TestTalosInDockerProvisioner_Stop_NoDockerClient(t *testing.T) {
 	t.Parallel()
 
 	config := talosindockerprovisioner.NewTalosInDockerConfig()
 	provisioner := talosindockerprovisioner.NewTalosInDockerProvisioner(config)
+	// No Docker client set
 
 	ctx := context.Background()
 	err := provisioner.Stop(ctx, "")
 
 	require.Error(t, err)
-	assert.ErrorIs(t, err, talosindockerprovisioner.ErrNotImplemented)
+	assert.ErrorIs(t, err, talosindockerprovisioner.ErrDockerNotAvailable)
+}
+
+func TestTalosInDockerProvisioner_Stop_ClusterNotFound(t *testing.T) {
+	t.Parallel()
+
+	mockClient := docker.NewMockAPIClient(t)
+	mockClient.EXPECT().Ping(mock.Anything).Return(types.Ping{}, nil)
+	mockClient.EXPECT().
+		ContainerList(mock.Anything, mock.Anything).
+		Return([]container.Summary{}, nil)
+
+	config := talosindockerprovisioner.NewTalosInDockerConfig()
+	provisioner := talosindockerprovisioner.NewTalosInDockerProvisioner(config).
+		WithDockerClient(mockClient)
+
+	ctx := context.Background()
+	err := provisioner.Stop(ctx, "nonexistent")
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, talosindockerprovisioner.ErrClusterNotFound)
+}
+
+func TestTalosInDockerProvisioner_Stop_Success(t *testing.T) {
+	t.Parallel()
+
+	mockClient := docker.NewMockAPIClient(t)
+	setupContainerOperationMock(mockClient, "container-1", "test-cluster", false)
+
+	config := talosindockerprovisioner.NewTalosInDockerConfig()
+	provisioner := talosindockerprovisioner.NewTalosInDockerProvisioner(config).
+		WithDockerClient(mockClient).
+		WithLogWriter(io.Discard)
+
+	ctx := context.Background()
+	err := provisioner.Stop(ctx, "test-cluster")
+
+	require.NoError(t, err)
+}
+
+// setupContainerOperationMock configures mock expectations for Start/Stop operations.
+// isStart=true sets up ContainerStart mock, isStart=false sets up ContainerStop mock.
+func setupContainerOperationMock(
+	mockClient *docker.MockAPIClient,
+	containerID, clusterName string,
+	isStart bool,
+) {
+	containerSummary := container.Summary{
+		ID: containerID,
+		Labels: map[string]string{
+			talosindockerprovisioner.LabelTalosOwned:       "true",
+			talosindockerprovisioner.LabelTalosClusterName: clusterName,
+		},
+		Names: []string{"/" + clusterName + "-control-plane-1"},
+	}
+
+	mockClient.EXPECT().Ping(mock.Anything).Return(types.Ping{}, nil)
+	// Exists check
+	mockClient.EXPECT().
+		ContainerList(mock.Anything, mock.Anything).
+		Return([]container.Summary{containerSummary}, nil).Once()
+	// List containers for operation
+	mockClient.EXPECT().
+		ContainerList(mock.Anything, mock.Anything).
+		Return([]container.Summary{containerSummary}, nil).Once()
+
+	if isStart {
+		mockClient.EXPECT().
+			ContainerStart(mock.Anything, containerID, mock.Anything).
+			Return(nil)
+	} else {
+		mockClient.EXPECT().
+			ContainerStop(mock.Anything, containerID, mock.Anything).
+			Return(nil)
+	}
 }
 
 func TestTalosInDockerProvisioner_List_NoDockerClient(t *testing.T) {

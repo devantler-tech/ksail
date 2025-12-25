@@ -91,6 +91,8 @@ type TalosInDockerProvisioner struct {
 	dockerClient       client.APIClient
 	provisionerFactory func(ctx context.Context) (provision.Provisioner, error)
 	logWriter          io.Writer
+	// parsedCIDR caches the parsed network CIDR to avoid duplicate parsing.
+	parsedCIDR netip.Prefix
 }
 
 // NewTalosInDockerProvisioner creates a new TalosInDockerProvisioner with the given configuration.
@@ -298,20 +300,102 @@ func (p *TalosInDockerProvisioner) List(ctx context.Context) ([]string, error) {
 
 // Start starts a stopped Talos-in-Docker cluster.
 // If name is non-empty, it overrides the configured cluster name.
-func (p *TalosInDockerProvisioner) Start(_ context.Context, name string) error {
-	clusterName := p.resolveClusterName(name)
-	_ = clusterName
+func (p *TalosInDockerProvisioner) Start(ctx context.Context, name string) error {
+	// Verify Docker is available and running
+	err := p.checkDockerAvailable(ctx)
+	if err != nil {
+		return err
+	}
 
-	return ErrNotImplemented
+	clusterName := p.resolveClusterName(name)
+
+	// Check if cluster exists
+	exists, err := p.Exists(ctx, clusterName)
+	if err != nil {
+		return fmt.Errorf("failed to check if cluster exists: %w", err)
+	}
+
+	if !exists {
+		return fmt.Errorf("%w: %s", ErrClusterNotFound, clusterName)
+	}
+
+	// Find all containers for this cluster
+	containers, err := p.dockerClient.ContainerList(ctx, container.ListOptions{
+		All: true, // Include stopped containers
+		Filters: filters.NewArgs(
+			filters.Arg("label", LabelTalosOwned+"=true"),
+			filters.Arg("label", LabelTalosClusterName+"="+clusterName),
+		),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to list containers: %w", err)
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "Starting Talos cluster %q...\n", clusterName)
+
+	// Start each container
+	for _, c := range containers {
+		err = p.dockerClient.ContainerStart(ctx, c.ID, container.StartOptions{})
+		if err != nil {
+			return fmt.Errorf("failed to start container %s: %w", c.Names[0], err)
+		}
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "Successfully started Talos cluster %q\n", clusterName)
+
+	return nil
 }
+
+// containerStopTimeout is the timeout for stopping a container gracefully.
+const containerStopTimeout = 30
 
 // Stop stops a running Talos-in-Docker cluster.
 // If name is non-empty, it overrides the configured cluster name.
-func (p *TalosInDockerProvisioner) Stop(_ context.Context, name string) error {
-	clusterName := p.resolveClusterName(name)
-	_ = clusterName
+func (p *TalosInDockerProvisioner) Stop(ctx context.Context, name string) error {
+	// Verify Docker is available and running
+	err := p.checkDockerAvailable(ctx)
+	if err != nil {
+		return err
+	}
 
-	return ErrNotImplemented
+	clusterName := p.resolveClusterName(name)
+
+	// Check if cluster exists
+	exists, err := p.Exists(ctx, clusterName)
+	if err != nil {
+		return fmt.Errorf("failed to check if cluster exists: %w", err)
+	}
+
+	if !exists {
+		return fmt.Errorf("%w: %s", ErrClusterNotFound, clusterName)
+	}
+
+	// Find all containers for this cluster
+	containers, err := p.dockerClient.ContainerList(ctx, container.ListOptions{
+		All: true, // Include stopped containers
+		Filters: filters.NewArgs(
+			filters.Arg("label", LabelTalosOwned+"=true"),
+			filters.Arg("label", LabelTalosClusterName+"="+clusterName),
+		),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to list containers: %w", err)
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "Stopping Talos cluster %q...\n", clusterName)
+
+	// Stop each container with a graceful timeout
+	timeout := containerStopTimeout
+	for _, c := range containers {
+		err = p.dockerClient.ContainerStop(ctx, c.ID, container.StopOptions{Timeout: &timeout})
+		if err != nil {
+			return fmt.Errorf("failed to stop container %s: %w", c.Names[0], err)
+		}
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "Successfully stopped Talos cluster %q\n", clusterName)
+
+	return nil
 }
 
 // bootstrapAndSaveKubeconfig bootstraps the cluster and saves the kubeconfig.
@@ -548,14 +632,14 @@ func (p *TalosInDockerProvisioner) createConfigBundle(
 		return nil, err
 	}
 
-	// Calculate control plane endpoint
-	cidr, err := netip.ParsePrefix(p.config.NetworkCIDR)
+	// Parse and cache the network CIDR (used here and in buildClusterRequest)
+	p.parsedCIDR, err = netip.ParsePrefix(p.config.NetworkCIDR)
 	if err != nil {
 		return nil, fmt.Errorf("invalid network CIDR: %w", err)
 	}
 
 	// First control plane node IP for endpoint
-	controlPlaneIP, err := nthIPInNetwork(cidr, ipv4Offset)
+	controlPlaneIP, err := nthIPInNetwork(p.parsedCIDR, ipv4Offset)
 	if err != nil {
 		return nil, fmt.Errorf("failed to calculate control plane IP: %w", err)
 	}
@@ -631,15 +715,13 @@ func categorizePatchesByScope(
 }
 
 // buildClusterRequest creates a provision.ClusterRequest from our config.
+// Must be called after createConfigBundle which parses and caches the CIDR.
 func (p *TalosInDockerProvisioner) buildClusterRequest(
 	clusterName string,
 	configBundle *bundle.Bundle,
 ) (provision.ClusterRequest, error) {
-	// Parse network CIDR
-	cidr, err := netip.ParsePrefix(p.config.NetworkCIDR)
-	if err != nil {
-		return provision.ClusterRequest{}, fmt.Errorf("invalid network CIDR: %w", err)
-	}
+	// Use the CIDR parsed and cached by createConfigBundle
+	cidr := p.parsedCIDR
 
 	// Calculate gateway (first usable IP)
 	gatewayIP, err := nthIPInNetwork(cidr, 1)
