@@ -18,10 +18,10 @@ test-cluster
 kind: test-cluster
 
 ---|k3d|---
-No k3d clusters found.
+No clusters found.
 
 ---|talosindocker|---
-No TalosInDocker clusters found.
+No clusters found.
 
 
 ---

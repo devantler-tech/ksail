@@ -252,16 +252,7 @@ func displayEmptyClusters(
 ) {
 	// When showing all distributions, show distribution-specific empty messages
 	if includeDistribution {
-		switch distribution {
-		case v1alpha1.DistributionKind:
-			_, _ = fmt.Fprintln(writer, "No kind clusters found.")
-		case v1alpha1.DistributionK3d:
-			_, _ = fmt.Fprintln(writer, "No k3d clusters found.")
-		case v1alpha1.DistributionTalosInDocker:
-			_, _ = fmt.Fprintln(writer, "No TalosInDocker clusters found.")
-		default:
 			_, _ = fmt.Fprintln(writer, "No clusters found.")
-		}
 	}
 	// When not showing all distributions, the provisioner already displays its own message
 	// (e.g., "No kind clusters found."), so we don't display an additional message here.
