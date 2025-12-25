@@ -152,6 +152,7 @@ func TestHandleInitRunE_RespectsDistributionFlag(t *testing.T) {
 	}
 }
 
+//nolint:funlen // Test function includes comprehensive assertions for TalosInDocker scaffolding
 func TestHandleInitRunE_RespectsDistributionFlagTalosInDocker(t *testing.T) {
 	t.Parallel()
 
@@ -198,9 +199,8 @@ func TestHandleInitRunE_RespectsDistributionFlagTalosInDocker(t *testing.T) {
 		"allow-scheduling-on-control-planes.yaml",
 	)
 
-	allowSchedulingContent, err := os.ReadFile(
-		allowSchedulingPath,
-	)
+	//nolint:gosec // Test file path is safe
+	allowSchedulingContent, err := os.ReadFile(allowSchedulingPath)
 	if err != nil {
 		t.Fatalf("expected allow-scheduling-on-control-planes.yaml to be scaffolded: %v", err)
 	}

@@ -14,7 +14,7 @@ import (
 
 // NewPushCmd creates the workload push command.
 //
-//nolint:funlen // Cobra command RunE functions typically combine setup, validation, and execution
+//nolint:funlen,cyclop // Cobra command RunE functions typically combine setup, validation, and execution
 func NewPushCmd(_ *runtime.Runtime) *cobra.Command {
 	var validate bool
 

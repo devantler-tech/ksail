@@ -246,7 +246,7 @@ func displayClusterList(
 }
 
 func displayEmptyClusters(
-	distribution v1alpha1.Distribution,
+	_ v1alpha1.Distribution,
 	includeDistribution bool,
 	writer io.Writer,
 ) {
