@@ -107,10 +107,16 @@
                   "description": "Alpha placeholder (currently unsupported)."
                 },
                 "talosInDocker": {
-                  "properties": {},
+                  "properties": {
+                    "controlPlanes": {
+                      "type": "integer"
+                    },
+                    "workers": {
+                      "type": "integer"
+                    }
+                  },
                   "additionalProperties": false,
-                  "type": "object",
-                  "description": "Alpha placeholder (currently unsupported)."
+                  "type": "object"
                 },
                 "cilium": {
                   "properties": {},
