@@ -19,8 +19,6 @@ import (
 	"github.com/docker/go-connections/nat"
 	"github.com/siderolabs/talos/pkg/cluster/check"
 	"github.com/siderolabs/talos/pkg/machinery/config/bundle"
-	"github.com/siderolabs/talos/pkg/machinery/config/configpatcher"
-	"github.com/siderolabs/talos/pkg/machinery/config/generate"
 	"github.com/siderolabs/talos/pkg/machinery/config/machine"
 	"github.com/siderolabs/talos/pkg/provision"
 	"github.com/siderolabs/talos/pkg/provision/access"
@@ -159,26 +157,32 @@ func (p *TalosInDockerProvisioner) Create(ctx context.Context, name string) erro
 		return fmt.Errorf("%w: %s", ErrClusterAlreadyExists, clusterName)
 	}
 
-	// Load patches from configured directories
-	patches, err := LoadPatches(p.config)
-	if err != nil {
-		return fmt.Errorf("failed to load patches: %w", err)
-	}
+	// Update config with resolved cluster name for LoadConfigsWithPatches
+	p.config.ClusterName = clusterName
+
+	// Collect runtime patches (mirror registries, CNI disable)
+	var runtimePatches []TalosPatch
 
 	// Add mirror registry patches if configured
-	mirrorPatches := p.createMirrorPatches()
-	patches = append(patches, mirrorPatches...)
+	runtimePatches = append(runtimePatches, p.createMirrorPatches()...)
 
 	// Add disable-default-cni patch if Cilium is requested
-	disableCNIPatch := p.createDisableCNIPatch()
-	if disableCNIPatch != nil {
-		patches = append(patches, *disableCNIPatch)
+	if disableCNIPatch := p.createDisableCNIPatch(); disableCNIPatch != nil {
+		runtimePatches = append(runtimePatches, *disableCNIPatch)
 	}
 
-	// Create config bundle with patches
-	configBundle, err := p.createConfigBundle(clusterName, patches)
+	// Load configs with file patches and runtime patches applied
+	configs, err := p.config.LoadConfigsWithPatches(runtimePatches)
 	if err != nil {
 		return fmt.Errorf("failed to create config bundle: %w", err)
+	}
+
+	configBundle := configs.Bundle()
+
+	// Cache the parsed CIDR for later use in buildClusterRequest
+	p.parsedCIDR, err = netip.ParsePrefix(p.config.NetworkCIDR)
+	if err != nil {
+		return fmt.Errorf("invalid network CIDR: %w", err)
 	}
 
 	// Provision cluster and save configurations
@@ -645,109 +649,13 @@ func (p *TalosInDockerProvisioner) checkDockerAvailable(ctx context.Context) err
 	return nil
 }
 
-// createConfigBundle creates a Talos config bundle with patches applied.
-// Patches are categorized by scope and applied appropriately:
-// cluster patches are applied to all nodes, control-plane patches are applied
-// to control-plane nodes only, and worker patches are applied to worker nodes only.
-func (p *TalosInDockerProvisioner) createConfigBundle(
-	clusterName string,
-	patches []TalosPatch,
-) (*bundle.Bundle, error) {
-	// Categorize patches by scope
-	clusterPatches, controlPlanePatches, workerPatches, err := categorizePatchesByScope(patches)
-	if err != nil {
-		return nil, err
-	}
-
-	// Parse and cache the network CIDR (used here and in buildClusterRequest)
-	p.parsedCIDR, err = netip.ParsePrefix(p.config.NetworkCIDR)
-	if err != nil {
-		return nil, fmt.Errorf("invalid network CIDR: %w", err)
-	}
-
-	// First control plane node IP for endpoint
-	controlPlaneIP, err := nthIPInNetwork(p.parsedCIDR, ipv4Offset)
-	if err != nil {
-		return nil, fmt.Errorf("failed to calculate control plane IP: %w", err)
-	}
-
-	controlPlaneEndpoint := "https://" + net.JoinHostPort(controlPlaneIP.String(), "6443")
-
-	// Build generate options - must include endpoint list for talosconfig
-	// Also add 127.0.0.1 as SAN for Docker-in-VM environments (macOS, Windows)
-	// where we connect via mapped ports on localhost instead of internal IPs
-	genOptions := []generate.Option{
-		generate.WithEndpointList([]string{controlPlaneIP.String()}),
-		generate.WithAdditionalSubjectAltNames([]string{"127.0.0.1"}),
-	}
-
-	// Build bundle options
-	bundleOpts := []bundle.Option{
-		bundle.WithInputOptions(&bundle.InputOptions{
-			ClusterName: clusterName,
-			Endpoint:    controlPlaneEndpoint,
-			KubeVersion: p.config.KubernetesVersion,
-			GenOptions:  genOptions,
-		}),
-	}
-
-	// Add patches by scope
-	if len(clusterPatches) > 0 {
-		bundleOpts = append(bundleOpts, bundle.WithPatch(clusterPatches))
-	}
-
-	if len(controlPlanePatches) > 0 {
-		bundleOpts = append(bundleOpts, bundle.WithPatchControlPlane(controlPlanePatches))
-	}
-
-	if len(workerPatches) > 0 {
-		bundleOpts = append(bundleOpts, bundle.WithPatchWorker(workerPatches))
-	}
-
-	// Create the bundle
-	configBundle, err := bundle.NewBundle(bundleOpts...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create config bundle: %w", err)
-	}
-
-	return configBundle, nil
-}
-
-// categorizePatchesByScope separates patches into cluster, control-plane, and worker categories.
-func categorizePatchesByScope(
-	patches []TalosPatch,
-) ([]configpatcher.Patch, []configpatcher.Patch, []configpatcher.Patch, error) {
-	var clusterPatches, controlPlanePatches, workerPatches []configpatcher.Patch
-
-	for _, patch := range patches {
-		configPatch, loadErr := configpatcher.LoadPatch(patch.Content)
-		if loadErr != nil {
-			return nil, nil, nil, fmt.Errorf("%w: %s: %w", ErrInvalidPatch, patch.Path, loadErr)
-		}
-
-		switch patch.Scope {
-		case PatchScopeCluster:
-			clusterPatches = append(clusterPatches, configPatch)
-		case PatchScopeControlPlane:
-			controlPlanePatches = append(controlPlanePatches, configPatch)
-		case PatchScopeWorker:
-			workerPatches = append(workerPatches, configPatch)
-		default:
-			// Default to cluster scope for unknown scopes
-			clusterPatches = append(clusterPatches, configPatch)
-		}
-	}
-
-	return clusterPatches, controlPlanePatches, workerPatches, nil
-}
-
 // buildClusterRequest creates a provision.ClusterRequest from our config.
-// Must be called after createConfigBundle which parses and caches the CIDR.
+// Must be called after parsedCIDR is populated (e.g., during Create).
 func (p *TalosInDockerProvisioner) buildClusterRequest(
 	clusterName string,
 	configBundle *bundle.Bundle,
 ) (provision.ClusterRequest, error) {
-	// Use the CIDR parsed and cached by createConfigBundle
+	// Use the CIDR parsed and cached during Create
 	cidr := p.parsedCIDR
 
 	// Calculate gateway (first usable IP)

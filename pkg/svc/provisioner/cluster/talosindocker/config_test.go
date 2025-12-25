@@ -181,3 +181,68 @@ func TestTalosInDockerConfig_ValidatePatchDirectory_InvalidYAML(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to parse patch file")
 }
+
+func TestTalosInDockerConfig_ValidateConfigs_Success(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	clusterDir := filepath.Join(tmpDir, "cluster")
+	cpDir := filepath.Join(tmpDir, "control-planes")
+	workerDir := filepath.Join(tmpDir, "workers")
+
+	require.NoError(t, os.MkdirAll(clusterDir, 0o750))
+	require.NoError(t, os.MkdirAll(cpDir, 0o750))
+	require.NoError(t, os.MkdirAll(workerDir, 0o750))
+
+	validPatch := []byte(`cluster:
+  network:
+    cni:
+      name: none
+`)
+	require.NoError(t, os.WriteFile(filepath.Join(clusterDir, "cni.yaml"), validPatch, 0o600))
+
+	config := talosindockerprovisioner.NewTalosInDockerConfig().
+		WithClusterName("test-cluster").
+		WithPatchesDir(tmpDir)
+
+	configs, err := config.ValidateConfigs()
+	require.NoError(t, err)
+	require.NotNil(t, configs)
+
+	// Verify patch was applied correctly
+	assert.Equal(t, "none", configs.ControlPlane().Cluster().Network().CNI().Name())
+}
+
+func TestTalosInDockerConfig_ValidateConfigs_InvalidPatch(t *testing.T) {
+	t.Parallel()
+
+	// Create temp directory structure
+	tmpDir := t.TempDir()
+	clusterDir := filepath.Join(tmpDir, "cluster")
+	require.NoError(t, os.MkdirAll(clusterDir, 0o750))
+
+	// Create invalid YAML that won't parse
+	invalidYAML := []byte("not: valid: yaml: [\n")
+	require.NoError(t, os.WriteFile(filepath.Join(clusterDir, "bad.yaml"), invalidYAML, 0o600))
+
+	config := talosindockerprovisioner.NewTalosInDockerConfig().
+		WithClusterName("test-cluster").
+		WithPatchesDir(tmpDir)
+
+	_, err := config.ValidateConfigs()
+	require.Error(t, err)
+}
+
+func TestTalosInDockerConfig_ValidateConfigs_MissingDir(t *testing.T) {
+	t.Parallel()
+
+	config := talosindockerprovisioner.NewTalosInDockerConfig().
+		WithClusterName("test-cluster").
+		WithPatchesDir("/nonexistent/path")
+
+	// Should still succeed with base config even without patches directory
+	configs, err := config.ValidateConfigs()
+	require.NoError(t, err)
+	require.NotNil(t, configs)
+	assert.Equal(t, "test-cluster", configs.ControlPlane().Cluster().Name())
+}

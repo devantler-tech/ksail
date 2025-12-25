@@ -100,6 +100,13 @@ func (c *TalosInDockerConfig) WithClusterName(name string) *TalosInDockerConfig 
 	return c
 }
 
+// GetClusterName returns the cluster name.
+// This implements the TalosInDockerConfigNameProvider interface for use with
+// configmanager.GetClusterName.
+func (c *TalosInDockerConfig) GetClusterName() string {
+	return c.ClusterName
+}
+
 // WithPatchesDir sets the patches directory and updates subdirectory paths.
 func (c *TalosInDockerConfig) WithPatchesDir(dir string) *TalosInDockerConfig {
 	if dir != "" {
@@ -188,6 +195,9 @@ func (c *TalosInDockerConfig) WithDisableDefaultCNI(disable bool) *TalosInDocker
 // ValidatePatchDirectory validates that patch directories exist and contain valid YAML files.
 // Returns a warning if the talos directory doesn't exist (patches are optional),
 // or an error if YAML files are invalid.
+//
+// For deeper semantic validation that checks patches can actually be applied,
+// use ValidateConfigs() instead.
 func (c *TalosInDockerConfig) ValidatePatchDirectory() (string, error) {
 	// Check if patches directory exists
 	_, statErr := os.Stat(c.PatchesDir)
@@ -212,6 +222,37 @@ func (c *TalosInDockerConfig) ValidatePatchDirectory() (string, error) {
 	}
 
 	return "", nil
+}
+
+// ValidateConfigs performs semantic validation of the Talos configuration.
+// Unlike ValidatePatchDirectory which only checks YAML syntax, this method
+// actually loads and applies patches to verify they are valid Talos patches
+// that can be successfully merged with the base configuration.
+//
+// Returns the loaded TalosConfigs on success for potential further inspection,
+// or an error if patches cannot be applied.
+//
+// Use this for thorough pre-flight validation before cluster creation.
+func (c *TalosInDockerConfig) ValidateConfigs() (*TalosConfigs, error) {
+	// First do basic YAML validation
+	warning, err := c.ValidatePatchDirectory()
+	if err != nil {
+		return nil, err
+	}
+
+	// If patches directory doesn't exist, that's just a warning - create minimal configs
+	if warning != "" {
+		// No patches to validate, but we can still validate the base config
+		return c.LoadConfigs()
+	}
+
+	// Actually load and apply patches - this validates they are valid Talos patches
+	configs, err := c.LoadConfigs()
+	if err != nil {
+		return nil, fmt.Errorf("failed to validate Talos configuration: %w", err)
+	}
+
+	return configs, nil
 }
 
 // validateYAMLFilesInDir checks that all .yaml and .yml files in a directory are valid YAML.
