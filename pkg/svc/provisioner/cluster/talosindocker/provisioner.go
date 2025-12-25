@@ -456,7 +456,16 @@ func (p *TalosInDockerProvisioner) bootstrapAndSaveKubeconfig(
 	checkCtx, checkCancel := context.WithTimeout(ctx, clusterReadinessTimeout)
 	defer checkCancel()
 
-	err = check.Wait(checkCtx, clusterAccess, check.DefaultClusterChecks(), check.StderrReporter())
+	// Select appropriate cluster checks based on CNI configuration.
+	// When using a custom CNI (e.g., Cilium), skip K8s component checks (CoreDNS, kube-proxy)
+	// because pods cannot start until the CNI is installed.
+	// See: https://pkg.go.dev/github.com/siderolabs/talos/pkg/cluster/check#K8sComponentsReadinessChecks
+	clusterChecks := check.DefaultClusterChecks()
+	if p.config.DisableDefaultCNI {
+		clusterChecks = check.PreBootSequenceChecks()
+	}
+
+	err = check.Wait(checkCtx, clusterAccess, clusterChecks, check.StderrReporter())
 	if err != nil {
 		return fmt.Errorf("cluster readiness check failed: %w", err)
 	}
