@@ -187,22 +187,9 @@ func (p *TalosInDockerProvisioner) Create(ctx context.Context, name string) erro
 // Delete deletes a Talos-in-Docker cluster.
 // If name is non-empty, it overrides the configured cluster name.
 func (p *TalosInDockerProvisioner) Delete(ctx context.Context, name string) error {
-	// Verify Docker is available and running
-	err := p.checkDockerAvailable(ctx)
+	clusterName, err := p.validateClusterOperation(ctx, name)
 	if err != nil {
 		return err
-	}
-
-	clusterName := p.resolveClusterName(name)
-
-	// Check if cluster exists
-	exists, err := p.Exists(ctx, clusterName)
-	if err != nil {
-		return fmt.Errorf("failed to check if cluster exists: %w", err)
-	}
-
-	if !exists {
-		return fmt.Errorf("%w: %s", ErrClusterNotFound, clusterName)
 	}
 
 	// Get state directory for cluster state
@@ -301,37 +288,12 @@ func (p *TalosInDockerProvisioner) List(ctx context.Context) ([]string, error) {
 // Start starts a stopped Talos-in-Docker cluster.
 // If name is non-empty, it overrides the configured cluster name.
 func (p *TalosInDockerProvisioner) Start(ctx context.Context, name string) error {
-	// Verify Docker is available and running
-	err := p.checkDockerAvailable(ctx)
+	clusterName, containers, err := p.getClusterContainers(ctx, name)
 	if err != nil {
 		return err
 	}
 
-	clusterName := p.resolveClusterName(name)
-
-	// Check if cluster exists
-	exists, err := p.Exists(ctx, clusterName)
-	if err != nil {
-		return fmt.Errorf("failed to check if cluster exists: %w", err)
-	}
-
-	if !exists {
-		return fmt.Errorf("%w: %s", ErrClusterNotFound, clusterName)
-	}
-
-	// Find all containers for this cluster
-	containers, err := p.dockerClient.ContainerList(ctx, container.ListOptions{
-		All: true, // Include stopped containers
-		Filters: filters.NewArgs(
-			filters.Arg("label", LabelTalosOwned+"=true"),
-			filters.Arg("label", LabelTalosClusterName+"="+clusterName),
-		),
-	})
-	if err != nil {
-		return fmt.Errorf("failed to list containers: %w", err)
-	}
-
-	_, _ = fmt.Fprintf(p.logWriter, "Starting Talos cluster %q...\n", clusterName)
+	_, _ = fmt.Fprintf(p.logWriter, "Starting Talos cluster %q...\\n", clusterName)
 
 	// Start each container
 	for _, c := range containers {
@@ -341,7 +303,7 @@ func (p *TalosInDockerProvisioner) Start(ctx context.Context, name string) error
 		}
 	}
 
-	_, _ = fmt.Fprintf(p.logWriter, "Successfully started Talos cluster %q\n", clusterName)
+	_, _ = fmt.Fprintf(p.logWriter, "Successfully started Talos cluster %q\\n", clusterName)
 
 	return nil
 }
@@ -352,10 +314,37 @@ const containerStopTimeout = 30
 // Stop stops a running Talos-in-Docker cluster.
 // If name is non-empty, it overrides the configured cluster name.
 func (p *TalosInDockerProvisioner) Stop(ctx context.Context, name string) error {
+	clusterName, containers, err := p.getClusterContainers(ctx, name)
+	if err != nil {
+		return err
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "Stopping Talos cluster %q...\\n", clusterName)
+
+	// Stop each container with a graceful timeout
+	timeout := containerStopTimeout
+	for _, c := range containers {
+		err = p.dockerClient.ContainerStop(ctx, c.ID, container.StopOptions{Timeout: &timeout})
+		if err != nil {
+			return fmt.Errorf("failed to stop container %s: %w", c.Names[0], err)
+		}
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "Successfully stopped Talos cluster %q\\n", clusterName)
+
+	return nil
+}
+
+// validateClusterOperation validates that Docker is available and the cluster exists.
+// Returns the resolved cluster name or an error.
+func (p *TalosInDockerProvisioner) validateClusterOperation(
+	ctx context.Context,
+	name string,
+) (string, error) {
 	// Verify Docker is available and running
 	err := p.checkDockerAvailable(ctx)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	clusterName := p.resolveClusterName(name)
@@ -363,11 +352,25 @@ func (p *TalosInDockerProvisioner) Stop(ctx context.Context, name string) error 
 	// Check if cluster exists
 	exists, err := p.Exists(ctx, clusterName)
 	if err != nil {
-		return fmt.Errorf("failed to check if cluster exists: %w", err)
+		return "", fmt.Errorf("failed to check if cluster exists: %w", err)
 	}
 
 	if !exists {
-		return fmt.Errorf("%w: %s", ErrClusterNotFound, clusterName)
+		return "", fmt.Errorf("%w: %s", ErrClusterNotFound, clusterName)
+	}
+
+	return clusterName, nil
+}
+
+// getClusterContainers validates the operation and returns the cluster's containers.
+// This combines validation with container listing for Start/Stop operations.
+func (p *TalosInDockerProvisioner) getClusterContainers(
+	ctx context.Context,
+	name string,
+) (string, []container.Summary, error) {
+	clusterName, err := p.validateClusterOperation(ctx, name)
+	if err != nil {
+		return "", nil, err
 	}
 
 	// Find all containers for this cluster
@@ -379,23 +382,10 @@ func (p *TalosInDockerProvisioner) Stop(ctx context.Context, name string) error 
 		),
 	})
 	if err != nil {
-		return fmt.Errorf("failed to list containers: %w", err)
+		return "", nil, fmt.Errorf("failed to list containers: %w", err)
 	}
 
-	_, _ = fmt.Fprintf(p.logWriter, "Stopping Talos cluster %q...\n", clusterName)
-
-	// Stop each container with a graceful timeout
-	timeout := containerStopTimeout
-	for _, c := range containers {
-		err = p.dockerClient.ContainerStop(ctx, c.ID, container.StopOptions{Timeout: &timeout})
-		if err != nil {
-			return fmt.Errorf("failed to stop container %s: %w", c.Names[0], err)
-		}
-	}
-
-	_, _ = fmt.Fprintf(p.logWriter, "Successfully stopped Talos cluster %q\n", clusterName)
-
-	return nil
+	return clusterName, containers, nil
 }
 
 // bootstrapAndSaveKubeconfig bootstraps the cluster and saves the kubeconfig.
