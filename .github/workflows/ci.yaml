@@ -160,51 +160,16 @@ jobs:
 
       - name: 🧪 ksail workload apply
         run: |
-          mkdir -p /tmp/podinfo-overlay
-          cat > /tmp/podinfo-overlay/kustomization.yaml <<'EOF'
-          apiVersion: kustomize.config.k8s.io/v1beta1
-          kind: Kustomization
-          resources:
-            - https://github.com/stefanprodan/podinfo//kustomize
-          patches:
-            - target:
-                kind: HorizontalPodAutoscaler
-              patch: |-
-                $patch: delete
-                apiVersion: autoscaling/v2
-                kind: HorizontalPodAutoscaler
-                metadata:
-                  name: podinfo
-          EOF
-          ./bin/ksail workload apply -k /tmp/podinfo-overlay
+          ./bin/ksail workload apply -k .github/fixtures/podinfo-overlay
           ./bin/ksail workload wait --for=condition=Available deployment/podinfo --timeout=300s
 
       - name: 🧪 ksail workload push and reconcile
         if: contains(matrix.init-args, '--gitops-engine Flux') || contains(matrix.init-args, '--gitops-engine ArgoCD')
         run: |
-          cat > k8s/reconcile-test-deployment.yaml <<'EOF'
-          apiVersion: apps/v1
-          kind: Deployment
-          metadata:
-            name: ksail-reconcile-test
-            namespace: default
-          spec:
-            replicas: 1
-            selector:
-              matchLabels:
-                app: ksail-reconcile-test
-            template:
-              metadata:
-                labels:
-                  app: ksail-reconcile-test
-              spec:
-                containers:
-                  - name: ksail-reconcile-test
-                    image: nginx:stable-alpine
-                    ports:
-                      - containerPort: 80
-          EOF
+          # Copy reconcile test fixtures to k8s/ directory
+          cp .github/fixtures/reconcile-test/deployment.yaml k8s/reconcile-test-deployment.yaml
 
+          # Update kustomization.yaml to include the deployment
           if [ -f k8s/kustomization.yaml ] && grep -q '^resources: \[\]$' k8s/kustomization.yaml; then
             sed -i 's/^resources: \[\]$/resources:\n  - reconcile-test-deployment.yaml/' k8s/kustomization.yaml
           elif [ -f k8s/kustomization.yaml ] && grep -q '^resources:' k8s/kustomization.yaml; then
@@ -212,12 +177,8 @@ jobs:
               sed -i '/^resources:/a\  - reconcile-test-deployment.yaml' k8s/kustomization.yaml
             fi
           else
-          cat > k8s/kustomization.yaml <<'EOF'
-          apiVersion: kustomize.config.k8s.io/v1beta1
-          kind: Kustomization
-          resources:
-            - reconcile-test-deployment.yaml
-          EOF
+            cp .github/fixtures/reconcile-test/kustomization.yaml k8s/kustomization.yaml
+            sed -i 's/deployment.yaml/reconcile-test-deployment.yaml/' k8s/kustomization.yaml
           fi
 
           # Validate the kustomization.yaml was properly updated
