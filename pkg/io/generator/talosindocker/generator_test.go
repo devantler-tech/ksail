@@ -24,8 +24,10 @@ func TestTalosInDockerGenerator_Generate_CreatesDirectoryStructure(t *testing.T)
 	tempDir := t.TempDir()
 	gen := talosgenerator.NewTalosInDockerGenerator()
 
+	// With workers > 0 and no other patches, all dirs should have .gitkeep
 	config := &talosgenerator.TalosInDockerConfig{
-		PatchesDir: "talos",
+		PatchesDir:  "talos",
+		WorkerNodes: 1, // Prevents allow-scheduling patch from being generated
 	}
 	opts := yamlgenerator.Options{
 		Output: tempDir,
@@ -35,7 +37,7 @@ func TestTalosInDockerGenerator_Generate_CreatesDirectoryStructure(t *testing.T)
 	require.NoError(t, err)
 	assert.Equal(t, filepath.Join(tempDir, "talos"), result)
 
-	// Verify directory structure
+	// Verify directory structure - all should have .gitkeep since no patches generated
 	expectedPaths := []string{
 		filepath.Join(tempDir, "talos", "cluster", ".gitkeep"),
 		filepath.Join(tempDir, "talos", "control-planes", ".gitkeep"),
@@ -70,7 +72,8 @@ func TestTalosInDockerGenerator_Generate_DefaultPatchesDir(t *testing.T) {
 	gen := talosgenerator.NewTalosInDockerGenerator()
 
 	config := &talosgenerator.TalosInDockerConfig{
-		PatchesDir: "", // Empty should default to "talos"
+		PatchesDir:  "", // Empty should default to "talos"
+		WorkerNodes: 1,  // Prevents allow-scheduling patch
 	}
 	opts := yamlgenerator.Options{
 		Output: tempDir,
@@ -80,7 +83,7 @@ func TestTalosInDockerGenerator_Generate_DefaultPatchesDir(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, filepath.Join(tempDir, "talos"), result)
 
-	// Verify the default directory was created
+	// Verify the default directory was created with .gitkeep
 	_, err = os.Stat(filepath.Join(tempDir, "talos", "cluster", ".gitkeep"))
 	require.NoError(t, err)
 }
@@ -92,7 +95,8 @@ func TestTalosInDockerGenerator_Generate_CustomPatchesDir(t *testing.T) {
 	gen := talosgenerator.NewTalosInDockerGenerator()
 
 	config := &talosgenerator.TalosInDockerConfig{
-		PatchesDir: "custom-patches",
+		PatchesDir:  "custom-patches",
+		WorkerNodes: 1, // Prevents allow-scheduling patch
 	}
 	opts := yamlgenerator.Options{
 		Output: tempDir,
@@ -102,7 +106,7 @@ func TestTalosInDockerGenerator_Generate_CustomPatchesDir(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, filepath.Join(tempDir, "custom-patches"), result)
 
-	// Verify the custom directory was created
+	// Verify the custom directory was created with .gitkeep
 	_, err = os.Stat(filepath.Join(tempDir, "custom-patches", "cluster", ".gitkeep"))
 	require.NoError(t, err)
 }
@@ -116,7 +120,8 @@ func TestTalosInDockerGenerator_Generate_DefaultOutputDir(t *testing.T) {
 	gen := talosgenerator.NewTalosInDockerGenerator()
 
 	config := &talosgenerator.TalosInDockerConfig{
-		PatchesDir: "talos",
+		PatchesDir:  "talos",
+		WorkerNodes: 1, // Prevents allow-scheduling patch
 	}
 	opts := yamlgenerator.Options{
 		Output: "", // Empty should default to "."
@@ -126,7 +131,7 @@ func TestTalosInDockerGenerator_Generate_DefaultOutputDir(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, filepath.Join(".", "talos"), result)
 
-	// Verify directory was created in current directory
+	// Verify directory was created in current directory with .gitkeep
 	_, err = os.Stat(filepath.Join(".", "talos", "cluster", ".gitkeep"))
 	require.NoError(t, err)
 }
@@ -147,7 +152,8 @@ func TestTalosInDockerGenerator_Generate_SkipsExistingWithoutForce(t *testing.T)
 	require.NoError(t, err)
 
 	config := &talosgenerator.TalosInDockerConfig{
-		PatchesDir: "talos",
+		PatchesDir:  "talos",
+		WorkerNodes: 1, // Prevents allow-scheduling patch, so .gitkeep should be preserved
 	}
 	opts := yamlgenerator.Options{
 		Output: tempDir,
@@ -180,7 +186,8 @@ func TestTalosInDockerGenerator_Generate_OverwritesWithForce(t *testing.T) {
 	require.NoError(t, err)
 
 	config := &talosgenerator.TalosInDockerConfig{
-		PatchesDir: "talos",
+		PatchesDir:  "talos",
+		WorkerNodes: 1, // Prevents allow-scheduling patch, so .gitkeep should be written
 	}
 	opts := yamlgenerator.Options{
 		Output: tempDir,
@@ -206,6 +213,7 @@ func TestTalosInDockerGenerator_Generate_DisableDefaultCNI(t *testing.T) {
 	config := &talosgenerator.TalosInDockerConfig{
 		PatchesDir:        "talos",
 		DisableDefaultCNI: true,
+		WorkerNodes:       1, // Prevents allow-scheduling patch
 	}
 	opts := yamlgenerator.Options{
 		Output: tempDir,
@@ -223,6 +231,17 @@ func TestTalosInDockerGenerator_Generate_DisableDefaultCNI(t *testing.T) {
 	assert.Contains(t, string(content), "network:")
 	assert.Contains(t, string(content), "cni:")
 	assert.Contains(t, string(content), "name: none")
+
+	// Verify .gitkeep was NOT created in cluster/ since we have a patch there
+	gitkeepPath := filepath.Join(tempDir, "talos", "cluster", ".gitkeep")
+	_, err = os.Stat(gitkeepPath)
+	assert.True(t, os.IsNotExist(err), "expected .gitkeep to not exist when patches are generated")
+
+	// Verify .gitkeep WAS created in other directories
+	_, err = os.Stat(filepath.Join(tempDir, "talos", "control-planes", ".gitkeep"))
+	require.NoError(t, err, "expected .gitkeep in control-planes/")
+	_, err = os.Stat(filepath.Join(tempDir, "talos", "workers", ".gitkeep"))
+	require.NoError(t, err, "expected .gitkeep in workers/")
 }
 
 func TestTalosInDockerGenerator_Generate_NoDisableCNIPatchWhenFalse(t *testing.T) {
@@ -234,6 +253,7 @@ func TestTalosInDockerGenerator_Generate_NoDisableCNIPatchWhenFalse(t *testing.T
 	config := &talosgenerator.TalosInDockerConfig{
 		PatchesDir:        "talos",
 		DisableDefaultCNI: false,
+		WorkerNodes:       1, // Prevents allow-scheduling patch
 	}
 	opts := yamlgenerator.Options{
 		Output: tempDir,
@@ -246,4 +266,9 @@ func TestTalosInDockerGenerator_Generate_NoDisableCNIPatchWhenFalse(t *testing.T
 	patchPath := filepath.Join(tempDir, "talos", "cluster", "disable-default-cni.yaml")
 	_, err = os.Stat(patchPath)
 	assert.True(t, os.IsNotExist(err), "expected disable-default-cni.yaml to not exist")
+
+	// Verify .gitkeep WAS created since no patches in cluster/
+	gitkeepPath := filepath.Join(tempDir, "talos", "cluster", ".gitkeep")
+	_, err = os.Stat(gitkeepPath)
+	require.NoError(t, err, "expected .gitkeep in cluster/ when no patches generated")
 }

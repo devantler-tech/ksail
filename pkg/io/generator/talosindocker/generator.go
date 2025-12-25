@@ -74,8 +74,11 @@ func (g *TalosInDockerGenerator) Generate(
 
 	rootPath := filepath.Join(baseDir, patchesDir)
 
-	// Create subdirectories with .gitkeep files
-	err := g.createSubdirectories(rootPath, opts.Force)
+	// Determine which subdirectories will have patches generated
+	dirsWithPatches := g.getDirectoriesWithPatches(model)
+
+	// Create subdirectories, only adding .gitkeep to empty ones
+	err := g.createSubdirectories(rootPath, dirsWithPatches, opts.Force)
 	if err != nil {
 		return "", err
 	}
@@ -87,6 +90,30 @@ func (g *TalosInDockerGenerator) Generate(
 	}
 
 	return rootPath, nil
+}
+
+// getDirectoriesWithPatches returns a set of subdirectory names that will have patches generated.
+func (g *TalosInDockerGenerator) getDirectoriesWithPatches(
+	model *TalosInDockerConfig,
+) map[string]bool {
+	dirs := make(map[string]bool)
+
+	// Mirror registries patch goes to cluster/
+	if len(model.MirrorRegistries) > 0 {
+		dirs["cluster"] = true
+	}
+
+	// Allow scheduling patch goes to cluster/
+	if model.WorkerNodes == 0 {
+		dirs["cluster"] = true
+	}
+
+	// Disable CNI patch goes to cluster/
+	if model.DisableDefaultCNI {
+		dirs["cluster"] = true
+	}
+
+	return dirs
 }
 
 // generateConditionalPatches generates optional patches based on the configuration.
@@ -122,8 +149,13 @@ func (g *TalosInDockerGenerator) generateConditionalPatches(
 	return nil
 }
 
-// createSubdirectories creates the Talos patches subdirectories with .gitkeep files.
-func (g *TalosInDockerGenerator) createSubdirectories(rootPath string, force bool) error {
+// createSubdirectories creates the Talos patches subdirectories.
+// Only creates .gitkeep files in directories that won't have patches generated.
+func (g *TalosInDockerGenerator) createSubdirectories(
+	rootPath string,
+	dirsWithPatches map[string]bool,
+	force bool,
+) error {
 	subdirs := []string{
 		"cluster",
 		"control-planes",
@@ -136,6 +168,11 @@ func (g *TalosInDockerGenerator) createSubdirectories(rootPath string, force boo
 		err := os.MkdirAll(dirPath, dirPerm)
 		if err != nil {
 			return fmt.Errorf("failed to create directory %s: %w", dirPath, err)
+		}
+
+		// Only create .gitkeep if no patches will be generated in this directory
+		if dirsWithPatches[subdir] {
+			continue
 		}
 
 		gitkeepPath := filepath.Join(dirPath, ".gitkeep")

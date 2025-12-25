@@ -176,8 +176,8 @@ func TestHandleInitRunE_RespectsDistributionFlagTalosInDocker(t *testing.T) {
 	}
 
 	// Verify the talos patches directory structure was created
+	// Note: .gitkeep is NOT created in cluster/ because allow-scheduling patch is generated there
 	expectedPaths := []string{
-		filepath.Join(outDir, "talos", "cluster", ".gitkeep"),
 		filepath.Join(outDir, "talos", "control-planes", ".gitkeep"),
 		filepath.Join(outDir, "talos", "workers", ".gitkeep"),
 		filepath.Join(outDir, "talos", "cluster", "allow-scheduling-on-control-planes.yaml"),
@@ -225,8 +225,9 @@ func TestHandleInitRunE_RespectsDistributionFlagTalosInDocker(t *testing.T) {
 	}
 
 	// Verify output contains created files
+	// Note: cluster/.gitkeep is NOT in output because allow-scheduling patch replaces it
 	output := buffer.String()
-	if !strings.Contains(output, "talos/cluster/.gitkeep") {
+	if !strings.Contains(output, "talos/control-planes/.gitkeep") {
 		t.Fatalf("expected output to mention created talos directory structure\n%s", output)
 	}
 }

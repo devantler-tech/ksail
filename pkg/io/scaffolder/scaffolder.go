@@ -598,9 +598,24 @@ func (s *Scaffolder) generateTalosInDockerConfig(output string, force bool) erro
 		return fmt.Errorf("%w: %w", ErrTalosInDockerConfigGeneration, err)
 	}
 
-	// Notify about created directories
+	s.notifyTalosInDockerGenerated(workers, disableDefaultCNI)
+
+	return nil
+}
+
+// notifyTalosInDockerGenerated sends notifications about generated TalosInDocker files.
+func (s *Scaffolder) notifyTalosInDockerGenerated(workers int, disableDefaultCNI bool) {
+	// Determine which directories have patches (no .gitkeep generated there)
+	clusterHasPatches := workers == 0 || len(s.MirrorRegistries) > 0 || disableDefaultCNI
+
+	// Notify about .gitkeep files only for directories without patches
 	subdirs := []string{"cluster", "control-planes", "workers"}
 	for _, subdir := range subdirs {
+		// Skip .gitkeep notification for cluster/ if it has patches
+		if subdir == "cluster" && clusterHasPatches {
+			continue
+		}
+
 		displayPath := filepath.Join(TalosInDockerConfigDir, subdir, ".gitkeep")
 		notify.WriteMessage(notify.Message{
 			Type:    notify.GenerateType,
@@ -646,8 +661,6 @@ func (s *Scaffolder) generateTalosInDockerConfig(output string, force bool) erro
 			Writer:  s.Writer,
 		})
 	}
-
-	return nil
 }
 
 // generateKustomizationConfig generates the kustomization.yaml file.
