@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 
+	iopath "github.com/devantler-tech/ksail/v5/pkg/io"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
@@ -370,8 +371,14 @@ func (p *TalosInDockerProvisioner) bootstrapAndSaveKubeconfig(
 
 	_, _ = fmt.Fprintf(p.logWriter, "Using Kubernetes API endpoint: %s\n", mappedK8sEndpoint)
 
+	// Expand tilde in kubeconfig path (e.g., ~/.kube/config -> /home/user/.kube/config)
+	kubeconfigPath, err := iopath.ExpandHomePath(p.config.KubeconfigPath)
+	if err != nil {
+		return fmt.Errorf("failed to expand kubeconfig path: %w", err)
+	}
+
 	// Ensure kubeconfig directory exists
-	kubeconfigDir := filepath.Dir(p.config.KubeconfigPath)
+	kubeconfigDir := filepath.Dir(kubeconfigPath)
 	if kubeconfigDir != "" && kubeconfigDir != "." {
 		mkdirErr := os.MkdirAll(kubeconfigDir, stateDirectoryPermissions)
 		if mkdirErr != nil {
@@ -380,12 +387,12 @@ func (p *TalosInDockerProvisioner) bootstrapAndSaveKubeconfig(
 	}
 
 	// Write kubeconfig to file
-	err = os.WriteFile(p.config.KubeconfigPath, kubeconfig, kubeconfigFileMode)
+	err = os.WriteFile(kubeconfigPath, kubeconfig, kubeconfigFileMode)
 	if err != nil {
 		return fmt.Errorf("failed to write kubeconfig: %w", err)
 	}
 
-	_, _ = fmt.Fprintf(p.logWriter, "Saved kubeconfig to %s\n", p.config.KubeconfigPath)
+	_, _ = fmt.Fprintf(p.logWriter, "Saved kubeconfig to %s\n", kubeconfigPath)
 
 	return nil
 }
