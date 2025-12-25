@@ -350,6 +350,28 @@ func (p *TalosInDockerProvisioner) bootstrapAndSaveKubeconfig(
 		return fmt.Errorf("failed to fetch kubeconfig: %w", err)
 	}
 
+	// Get the mapped Kubernetes API endpoint for Docker-in-VM environments
+	mappedK8sEndpoint, err := p.getMappedKubernetesAPIEndpoint(ctx, cluster.Info().ClusterName)
+	if err != nil {
+		return fmt.Errorf("failed to get mapped Kubernetes API endpoint: %w", err)
+	}
+
+	// Fix the kubeconfig to use the mapped endpoint instead of internal IP
+	kubeconfig, err = fixKubeconfigServerEndpoint(kubeconfig, mappedK8sEndpoint)
+	if err != nil {
+		return fmt.Errorf("failed to fix kubeconfig endpoint: %w", err)
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "Using Kubernetes API endpoint: %s\n", mappedK8sEndpoint)
+
+	// Ensure kubeconfig directory exists
+	kubeconfigDir := filepath.Dir(p.config.KubeconfigPath)
+	if kubeconfigDir != "" && kubeconfigDir != "." {
+		if mkdirErr := os.MkdirAll(kubeconfigDir, stateDirectoryPermissions); mkdirErr != nil {
+			return fmt.Errorf("failed to create kubeconfig directory: %w", mkdirErr)
+		}
+	}
+
 	// Write kubeconfig to file
 	err = os.WriteFile(p.config.KubeconfigPath, kubeconfig, kubeconfigFileMode)
 	if err != nil {
@@ -500,8 +522,11 @@ func (p *TalosInDockerProvisioner) createConfigBundle(
 	controlPlaneEndpoint := "https://" + net.JoinHostPort(controlPlaneIP.String(), "6443")
 
 	// Build generate options - must include endpoint list for talosconfig
+	// Also add 127.0.0.1 as SAN for Docker-in-VM environments (macOS, Windows)
+	// where we connect via mapped ports on localhost instead of internal IPs
 	genOptions := []generate.Option{
 		generate.WithEndpointList([]string{controlPlaneIP.String()}),
+		generate.WithAdditionalSubjectAltNames([]string{"127.0.0.1"}),
 	}
 
 	// Build bundle options
@@ -770,4 +795,106 @@ func (p *TalosInDockerProvisioner) getMappedTalosAPIEndpoint(
 	hostPort := bindings[0].HostPort
 
 	return net.JoinHostPort("127.0.0.1", hostPort), nil
+}
+
+// kubernetesAPIPort is the Kubernetes API server port.
+const kubernetesAPIPort = 6443
+
+// getMappedKubernetesAPIEndpoint finds the control plane container and returns the mapped Kubernetes API endpoint.
+// On macOS and other non-Linux systems, Docker runs in a VM, so we need to use the mapped port
+// via 127.0.0.1 instead of the container's internal IP.
+func (p *TalosInDockerProvisioner) getMappedKubernetesAPIEndpoint(
+	ctx context.Context,
+	clusterName string,
+) (string, error) {
+	if p.dockerClient == nil {
+		return "", ErrDockerNotAvailable
+	}
+
+	// Find the control plane container for this cluster
+	containers, err := p.dockerClient.ContainerList(ctx, container.ListOptions{
+		All: true,
+		Filters: filters.NewArgs(
+			filters.Arg("label", LabelTalosOwned+"=true"),
+			filters.Arg("label", LabelTalosClusterName+"="+clusterName),
+			filters.Arg("label", "talos.type=controlplane"),
+		),
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to list containers: %w", err)
+	}
+
+	if len(containers) == 0 {
+		return "", fmt.Errorf("no control plane container found for cluster %s", clusterName)
+	}
+
+	// Get the first control plane container
+	containerID := containers[0].ID
+
+	// Inspect the container to get port mappings
+	inspect, err := p.dockerClient.ContainerInspect(ctx, containerID)
+	if err != nil {
+		return "", fmt.Errorf("failed to inspect container: %w", err)
+	}
+
+	// Find the mapped port for Kubernetes API (6443/tcp)
+	portKey := nat.Port(fmt.Sprintf("%d/tcp", kubernetesAPIPort))
+
+	bindings, ok := inspect.NetworkSettings.Ports[portKey]
+	if !ok || len(bindings) == 0 {
+		return "", fmt.Errorf("no port mapping found for Kubernetes API port %d", kubernetesAPIPort)
+	}
+
+	// Use the first binding's host port
+	hostPort := bindings[0].HostPort
+
+	return "https://" + net.JoinHostPort("127.0.0.1", hostPort), nil
+}
+
+// fixKubeconfigServerEndpoint replaces the internal server endpoint in the kubeconfig
+// with the mapped localhost endpoint for Docker-in-VM environments.
+func fixKubeconfigServerEndpoint(kubeconfig []byte, newServerEndpoint string) ([]byte, error) {
+	// Parse the kubeconfig as a simple string replacement since we know the format
+	// The server field will be something like "server: https://10.5.0.2:6443"
+	// and we need to replace it with "server: https://127.0.0.1:<mapped-port>"
+	kubeconfigStr := string(kubeconfig)
+
+	// Find and replace the server endpoint - the kubeconfig from Talos
+	// has a single cluster with the internal IP
+	// We use a simple approach: look for server: https://10. and replace
+	// the entire URL up to the next newline or space
+
+	// Simple approach: look for the pattern and replace
+	// The kubeconfig is YAML so the format is predictable
+	result := kubeconfigStr
+
+	// Pattern: "server: https://10.x.x.x:6443" - internal IPs in 10.x range
+	// Replace with the new endpoint
+	for _, prefix := range []string{"https://10.", "https://172.", "https://192.168."} {
+		for {
+			startIdx := -1
+			for i := 0; i < len(result)-len("server: "+prefix); i++ {
+				if result[i:i+len("server: "+prefix)] == "server: "+prefix {
+					startIdx = i + len("server: ")
+
+					break
+				}
+			}
+
+			if startIdx == -1 {
+				break
+			}
+
+			// Find the end of the URL (newline or end of string)
+			endIdx := startIdx
+			for endIdx < len(result) && result[endIdx] != '\n' && result[endIdx] != '\r' {
+				endIdx++
+			}
+
+			// Replace the URL
+			result = result[:startIdx] + newServerEndpoint + result[endIdx:]
+		}
+	}
+
+	return []byte(result), nil
 }
