@@ -12,7 +12,7 @@ import (
 	"time"
 
 	iopath "github.com/devantler-tech/ksail/v5/pkg/io"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
+	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/client"
@@ -85,22 +85,34 @@ var (
 
 // TalosInDockerProvisioner implements ClusterProvisioner for Talos-in-Docker clusters.
 type TalosInDockerProvisioner struct {
-	config             *TalosInDockerConfig
+	// talosConfigs holds the loaded Talos machine configurations with all patches applied.
+	talosConfigs *talosconfigmanager.Configs
+	// options holds runtime configuration for provisioning.
+	options            *Options
 	dockerClient       client.APIClient
 	provisionerFactory func(ctx context.Context) (provision.Provisioner, error)
 	logWriter          io.Writer
 	// parsedCIDR caches the parsed network CIDR to avoid duplicate parsing.
 	parsedCIDR netip.Prefix
+	// disableDefaultCNI indicates whether to skip CNI-dependent checks during bootstrap.
+	disableDefaultCNI bool
 }
 
-// NewTalosInDockerProvisioner creates a new TalosInDockerProvisioner with the given configuration.
-func NewTalosInDockerProvisioner(config *TalosInDockerConfig) *TalosInDockerProvisioner {
-	if config == nil {
-		config = NewTalosInDockerConfig()
+// NewTalosInDockerProvisioner creates a new TalosInDockerProvisioner.
+// The talosConfigs parameter contains the pre-loaded Talos machine configurations
+// with all patches (file-based and runtime) already applied.
+// The options parameter contains runtime settings like node counts and output paths.
+func NewTalosInDockerProvisioner(
+	talosConfigs *talosconfigmanager.Configs,
+	options *Options,
+) *TalosInDockerProvisioner {
+	if options == nil {
+		options = NewOptions()
 	}
 
 	return &TalosInDockerProvisioner{
-		config: config,
+		talosConfigs: talosConfigs,
+		options:      options,
 		provisionerFactory: func(ctx context.Context) (provision.Provisioner, error) {
 			return providers.Factory(ctx, TalosProviderName)
 		},
@@ -131,13 +143,26 @@ func (p *TalosInDockerProvisioner) WithLogWriter(w io.Writer) *TalosInDockerProv
 	return p
 }
 
-// Config returns the current configuration.
-func (p *TalosInDockerProvisioner) Config() *TalosInDockerConfig {
-	return p.config
+// WithDisableDefaultCNI sets whether to skip CNI-dependent checks during bootstrap.
+// Set this to true when using an alternative CNI like Cilium.
+func (p *TalosInDockerProvisioner) WithDisableDefaultCNI(disable bool) *TalosInDockerProvisioner {
+	p.disableDefaultCNI = disable
+
+	return p
+}
+
+// Options returns the current runtime options.
+func (p *TalosInDockerProvisioner) Options() *Options {
+	return p.options
+}
+
+// TalosConfigs returns the loaded Talos machine configurations.
+func (p *TalosInDockerProvisioner) TalosConfigs() *talosconfigmanager.Configs {
+	return p.talosConfigs
 }
 
 // Create creates a Talos-in-Docker cluster.
-// If name is non-empty, it overrides the configured cluster name.
+// If name is non-empty, it overrides the cluster name from talosConfigs.
 func (p *TalosInDockerProvisioner) Create(ctx context.Context, name string) error {
 	// Verify Docker is available and running
 	err := p.checkDockerAvailable(ctx)
@@ -157,30 +182,11 @@ func (p *TalosInDockerProvisioner) Create(ctx context.Context, name string) erro
 		return fmt.Errorf("%w: %s", ErrClusterAlreadyExists, clusterName)
 	}
 
-	// Update config with resolved cluster name for LoadConfigsWithPatches
-	p.config.ClusterName = clusterName
-
-	// Collect runtime patches (mirror registries, CNI disable)
-	var runtimePatches []TalosPatch
-
-	// Add mirror registry patches if configured
-	runtimePatches = append(runtimePatches, p.createMirrorPatches()...)
-
-	// Add disable-default-cni patch if Cilium is requested
-	if disableCNIPatch := p.createDisableCNIPatch(); disableCNIPatch != nil {
-		runtimePatches = append(runtimePatches, *disableCNIPatch)
-	}
-
-	// Load configs with file patches and runtime patches applied
-	configs, err := p.config.LoadConfigsWithPatches(runtimePatches)
-	if err != nil {
-		return fmt.Errorf("failed to create config bundle: %w", err)
-	}
-
-	configBundle := configs.Bundle()
+	// Use the pre-loaded configs (already have all patches applied)
+	configBundle := p.talosConfigs.Bundle()
 
 	// Cache the parsed CIDR for later use in buildClusterRequest
-	p.parsedCIDR, err = netip.ParsePrefix(p.config.NetworkCIDR)
+	p.parsedCIDR, err = netip.ParsePrefix(p.options.NetworkCIDR)
 	if err != nil {
 		return fmt.Errorf("invalid network CIDR: %w", err)
 	}
@@ -465,7 +471,7 @@ func (p *TalosInDockerProvisioner) bootstrapAndSaveKubeconfig(
 	// because pods cannot start until the CNI is installed.
 	// See: https://pkg.go.dev/github.com/siderolabs/talos/pkg/cluster/check#K8sComponentsReadinessChecks
 	clusterChecks := check.DefaultClusterChecks()
-	if p.config.DisableDefaultCNI {
+	if p.disableDefaultCNI {
 		clusterChecks = check.PreBootSequenceChecks()
 	}
 
@@ -492,7 +498,7 @@ func (p *TalosInDockerProvisioner) bootstrapAndSaveKubeconfig(
 	}
 
 	// Expand tilde in kubeconfig path (e.g., ~/.kube/config -> /home/user/.kube/config)
-	kubeconfigPath, err := iopath.ExpandHomePath(p.config.KubeconfigPath)
+	kubeconfigPath, err := iopath.ExpandHomePath(p.options.KubeconfigPath)
 	if err != nil {
 		return fmt.Errorf("failed to expand kubeconfig path: %w", err)
 	}
@@ -565,17 +571,17 @@ func (p *TalosInDockerProvisioner) saveClusterConfigs(
 	configBundle *bundle.Bundle,
 ) error {
 	// Save talosconfig if path is configured
-	if p.config.TalosconfigPath != "" {
-		saveErr := configBundle.TalosConfig().Save(p.config.TalosconfigPath)
+	if p.options.TalosconfigPath != "" {
+		saveErr := configBundle.TalosConfig().Save(p.options.TalosconfigPath)
 		if saveErr != nil {
 			return fmt.Errorf("failed to save talosconfig: %w", saveErr)
 		}
 
-		_, _ = fmt.Fprintf(p.logWriter, "Saved talosconfig to %s\n", p.config.TalosconfigPath)
+		_, _ = fmt.Fprintf(p.logWriter, "Saved talosconfig to %s\n", p.options.TalosconfigPath)
 	}
 
 	// Bootstrap the cluster and retrieve kubeconfig
-	if p.config.KubeconfigPath != "" {
+	if p.options.KubeconfigPath != "" {
 		saveErr := p.bootstrapAndSaveKubeconfig(ctx, cluster, configBundle)
 		if saveErr != nil {
 			return fmt.Errorf("failed to save kubeconfig: %w", saveErr)
@@ -583,55 +589,6 @@ func (p *TalosInDockerProvisioner) saveClusterConfigs(
 	}
 
 	return nil
-}
-
-// createMirrorPatches generates in-memory mirror registry patches from configuration.
-// Returns an empty slice if no mirror registries are configured.
-func (p *TalosInDockerProvisioner) createMirrorPatches() []TalosPatch {
-	if len(p.config.MirrorRegistries) == 0 {
-		return nil
-	}
-
-	// Parse mirror specifications from config
-	mirrorSpecs := registry.ParseMirrorSpecs(p.config.MirrorRegistries)
-
-	if len(mirrorSpecs) == 0 {
-		return nil
-	}
-
-	// Generate the YAML patch content
-	patchContent := GenerateMirrorPatchYAML(mirrorSpecs)
-
-	// Create a TalosPatch with cluster scope (applies to all nodes)
-	patch := TalosPatch{
-		Path:    "in-memory:mirror-registries",
-		Scope:   PatchScopeCluster,
-		Content: []byte(patchContent),
-	}
-
-	return []TalosPatch{patch}
-}
-
-// createDisableCNIPatch generates an in-memory patch to disable the default CNI (Flannel).
-// This is required when using an alternative CNI like Cilium.
-// Returns nil if DisableDefaultCNI is false.
-// See: https://docs.siderolabs.com/kubernetes-guides/cni/deploying-cilium
-func (p *TalosInDockerProvisioner) createDisableCNIPatch() *TalosPatch {
-	if !p.config.DisableDefaultCNI {
-		return nil
-	}
-
-	patchContent := `cluster:
-  network:
-    cni:
-      name: none
-`
-
-	return &TalosPatch{
-		Path:    "in-memory:disable-default-cni",
-		Scope:   PatchScopeCluster,
-		Content: []byte(patchContent),
-	}
 }
 
 // checkDockerAvailable verifies that Docker is configured and running.
@@ -678,7 +635,7 @@ func (p *TalosInDockerProvisioner) buildClusterRequest(
 
 	return provision.ClusterRequest{
 		Name:           clusterName,
-		Image:          p.config.TalosImage,
+		Image:          p.options.TalosImage,
 		StateDirectory: stateDir,
 		Network: provision.NetworkRequest{
 			Name:         clusterName,
@@ -696,10 +653,10 @@ func (p *TalosInDockerProvisioner) buildNodeRequests(
 	cidr netip.Prefix,
 	configBundle *bundle.Bundle,
 ) ([]provision.NodeRequest, error) {
-	nodes := make([]provision.NodeRequest, 0, p.config.ControlPlaneNodes+p.config.WorkerNodes)
+	nodes := make([]provision.NodeRequest, 0, p.options.ControlPlaneNodes+p.options.WorkerNodes)
 
 	// Control plane nodes - use ControlPlane config from bundle
-	for nodeIndex := range p.config.ControlPlaneNodes {
+	for nodeIndex := range p.options.ControlPlaneNodes {
 		nodeIP, ipErr := nthIPInNetwork(cidr, nodeIndex+ipv4Offset)
 		if ipErr != nil {
 			return nil, fmt.Errorf(
@@ -720,8 +677,8 @@ func (p *TalosInDockerProvisioner) buildNodeRequests(
 	}
 
 	// Worker nodes - use Worker config from bundle
-	for nodeIndex := range p.config.WorkerNodes {
-		nodeIP, ipErr := nthIPInNetwork(cidr, p.config.ControlPlaneNodes+nodeIndex+ipv4Offset)
+	for nodeIndex := range p.options.WorkerNodes {
+		nodeIP, ipErr := nthIPInNetwork(cidr, p.options.ControlPlaneNodes+nodeIndex+ipv4Offset)
 		if ipErr != nil {
 			return nil, fmt.Errorf(
 				"failed to calculate IP for worker-%d: %w",
@@ -743,13 +700,17 @@ func (p *TalosInDockerProvisioner) buildNodeRequests(
 	return nodes, nil
 }
 
-// resolveClusterName returns the provided name if non-empty, otherwise the configured name.
+// resolveClusterName returns the provided name if non-empty, otherwise the cluster name from configs.
 func (p *TalosInDockerProvisioner) resolveClusterName(name string) string {
 	if name != "" {
 		return name
 	}
 
-	return p.config.ClusterName
+	if p.talosConfigs != nil {
+		return p.talosConfigs.Name
+	}
+
+	return DefaultClusterName
 }
 
 // nthIPInNetwork returns the nth IP in the network (1-indexed).

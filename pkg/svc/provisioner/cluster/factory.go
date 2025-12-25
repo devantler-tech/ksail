@@ -4,13 +4,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	k3dconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/k3d"
 	kindconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/kind"
+	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
 	k3dprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/k3d"
 	kindprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/kind"
 	talosindickerprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/talosindocker"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	k3dv1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
@@ -51,11 +54,19 @@ func (DefaultFactory) Create(
 			cluster.Spec.Cluster.DistributionConfig,
 		)
 	case v1alpha1.DistributionTalosInDocker:
+		// Derive cluster name from context or use default
+		clusterName := strings.TrimSpace(cluster.Spec.Cluster.Connection.Context)
+		if clusterName == "" {
+			clusterName = talosconfigmanager.DefaultPatchesDir + "-default"
+		}
+
 		return createTalosInDockerProvisioner(
 			cluster.Spec.Cluster.DistributionConfig,
 			cluster.Spec.Cluster.Connection.Kubeconfig,
+			clusterName,
 			cluster.Spec.Cluster.Options.TalosInDocker,
 			cluster.Spec.Cluster.CNI,
+			nil, // Mirror registries from scaffolded patches; runtime mirrors not supported here
 		)
 	default:
 		return nil, "", fmt.Errorf(
@@ -129,29 +140,72 @@ func createK3dProvisioner(
 func createTalosInDockerProvisioner(
 	distributionConfigPath string,
 	kubeconfigPath string,
+	clusterName string,
 	opts v1alpha1.OptionsTalosInDocker,
 	cni v1alpha1.CNI,
-) (*talosindickerprovisioner.TalosInDockerProvisioner, *talosindickerprovisioner.TalosInDockerConfig, error) {
-	config := talosindickerprovisioner.NewTalosInDockerConfig().
-		WithPatchesDir(distributionConfigPath).
+	mirrorRegistries []string,
+) (*talosindickerprovisioner.TalosInDockerProvisioner, *talosconfigmanager.Configs, error) {
+	// Determine if we need to disable default CNI
+	disableDefaultCNI := cni == v1alpha1.CNICilium
+
+	// Build runtime patches
+	var runtimePatches []talosconfigmanager.Patch
+
+	// Add CNI disable patch if needed
+	if disableDefaultCNI {
+		runtimePatches = append(runtimePatches, talosconfigmanager.Patch{
+			Path:  "in-memory:disable-default-cni",
+			Scope: talosconfigmanager.PatchScopeCluster,
+			Content: []byte(`cluster:
+  network:
+    cni:
+      name: none
+`),
+		})
+	}
+
+	// Add mirror registry patches if configured
+	if len(mirrorRegistries) > 0 {
+		mirrorSpecs := registry.ParseMirrorSpecs(mirrorRegistries)
+		if len(mirrorSpecs) > 0 {
+			patchContent := talosindickerprovisioner.GenerateMirrorPatchYAML(mirrorSpecs)
+			runtimePatches = append(runtimePatches, talosconfigmanager.Patch{
+				Path:    "in-memory:mirror-registries",
+				Scope:   talosconfigmanager.PatchScopeCluster,
+				Content: []byte(patchContent),
+			})
+		}
+	}
+
+	// Load talos config with runtime patches applied
+	manager := talosconfigmanager.NewConfigManager(
+		distributionConfigPath,
+		clusterName,
+		"", // Use default Kubernetes version
+		"", // Use default network CIDR
+	).WithAdditionalPatches(runtimePatches)
+
+	talosConfigs, err := manager.LoadConfig(nil)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to load Talos configuration: %w", err)
+	}
+
+	// Create options
+	options := talosindickerprovisioner.NewOptions().
 		WithKubeconfigPath(kubeconfigPath)
 
 	// Apply configured node counts (use defaults if not set)
 	if opts.ControlPlanes > 0 {
-		config.WithControlPlaneNodes(int(opts.ControlPlanes))
+		options.WithControlPlaneNodes(int(opts.ControlPlanes))
 	}
 
 	if opts.Workers > 0 {
-		config.WithWorkerNodes(int(opts.Workers))
+		options.WithWorkerNodes(int(opts.Workers))
 	}
 
-	// Disable default CNI (Flannel) if Cilium is requested
-	// This injects a patch programmatically when not using scaffolded patches
-	if cni == v1alpha1.CNICilium {
-		config.WithDisableDefaultCNI(true)
-	}
-
-	provisioner := talosindickerprovisioner.NewTalosInDockerProvisioner(config)
+	// Create provisioner with loaded configs and options
+	provisioner := talosindickerprovisioner.NewTalosInDockerProvisioner(talosConfigs, options).
+		WithDisableDefaultCNI(disableDefaultCNI)
 
 	// Create Docker client for container operations
 	dockerClient, err := kindprovisioner.NewDefaultDockerClient()
@@ -161,5 +215,5 @@ func createTalosInDockerProvisioner(
 
 	provisioner.WithDockerClient(dockerClient)
 
-	return provisioner, config, nil
+	return provisioner, talosConfigs, nil
 }

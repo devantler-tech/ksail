@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/devantler-tech/ksail/v5/pkg/client/docker"
+	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
 	talosindockerprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/talosindocker"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
@@ -16,42 +17,86 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// createTestTalosConfigs creates a minimal TalosConfigs for testing.
+func createTestTalosConfigs(t *testing.T, clusterName string) *talosconfigmanager.Configs {
+	t.Helper()
+
+	// Create a temp directory with empty patch directories
+	tempDir := t.TempDir()
+	require.NoError(t, os.MkdirAll(tempDir+"/cluster", 0o750))
+	require.NoError(t, os.MkdirAll(tempDir+"/control-planes", 0o750))
+	require.NoError(t, os.MkdirAll(tempDir+"/workers", 0o750))
+
+	manager := talosconfigmanager.NewConfigManager(tempDir, clusterName, "", "")
+	configs, err := manager.LoadConfig(nil)
+	require.NoError(t, err)
+
+	return configs
+}
+
+// createTestTalosConfigsWithPatches creates TalosConfigs with a sample patch for testing.
+func createTestTalosConfigsWithPatches(t *testing.T, clusterName string) *talosconfigmanager.Configs {
+	t.Helper()
+
+	tempDir := setupPatchDirectories(t)
+
+	manager := talosconfigmanager.NewConfigManager(tempDir, clusterName, "", "")
+	configs, err := manager.LoadConfig(nil)
+	require.NoError(t, err)
+
+	return configs
+}
+
 func TestNewTalosInDockerProvisioner(t *testing.T) {
 	t.Parallel()
 
-	config := talosindockerprovisioner.NewTalosInDockerConfig()
-	provisioner := talosindockerprovisioner.NewTalosInDockerProvisioner(config)
+	configs := createTestTalosConfigs(t, "test-cluster")
+	options := talosindockerprovisioner.NewOptions()
+	provisioner := talosindockerprovisioner.NewTalosInDockerProvisioner(configs, options)
 
 	require.NotNil(t, provisioner)
 }
 
-func TestNewTalosInDockerProvisioner_NilConfig(t *testing.T) {
+func TestNewTalosInDockerProvisioner_NilOptions(t *testing.T) {
 	t.Parallel()
 
-	// Should create with default config when nil is passed
-	provisioner := talosindockerprovisioner.NewTalosInDockerProvisioner(nil)
+	configs := createTestTalosConfigs(t, "test-cluster")
+	// Should create with default options when nil is passed
+	provisioner := talosindockerprovisioner.NewTalosInDockerProvisioner(configs, nil)
 
 	require.NotNil(t, provisioner)
 }
 
-func TestTalosInDockerProvisioner_Config(t *testing.T) {
+func TestTalosInDockerProvisioner_Options(t *testing.T) {
 	t.Parallel()
 
-	config := talosindockerprovisioner.NewTalosInDockerConfig().
-		WithClusterName("test-cluster")
+	configs := createTestTalosConfigs(t, "test-cluster")
+	options := talosindockerprovisioner.NewOptions().
+		WithKubeconfigPath("/tmp/kubeconfig")
 
-	provisioner := talosindockerprovisioner.NewTalosInDockerProvisioner(config)
-	retrievedConfig := provisioner.Config()
+	provisioner := talosindockerprovisioner.NewTalosInDockerProvisioner(configs, options)
+	retrievedOptions := provisioner.Options()
 
-	require.NotNil(t, retrievedConfig)
-	assert.Equal(t, "test-cluster", retrievedConfig.ClusterName)
+	require.NotNil(t, retrievedOptions)
+	assert.Equal(t, "/tmp/kubeconfig", retrievedOptions.KubeconfigPath)
+}
+
+func TestTalosInDockerProvisioner_TalosConfigs(t *testing.T) {
+	t.Parallel()
+
+	configs := createTestTalosConfigs(t, "test-cluster")
+	provisioner := talosindockerprovisioner.NewTalosInDockerProvisioner(configs, nil)
+
+	retrievedConfigs := provisioner.TalosConfigs()
+	require.NotNil(t, retrievedConfigs)
+	assert.Equal(t, "test-cluster", retrievedConfigs.Name)
 }
 
 func TestTalosInDockerProvisioner_Create_NoDockerClient(t *testing.T) {
 	t.Parallel()
 
-	config := talosindockerprovisioner.NewTalosInDockerConfig()
-	provisioner := talosindockerprovisioner.NewTalosInDockerProvisioner(config)
+	configs := createTestTalosConfigs(t, "test-cluster")
+	provisioner := talosindockerprovisioner.NewTalosInDockerProvisioner(configs, nil)
 
 	ctx := context.Background()
 	err := provisioner.Create(ctx, "")
@@ -79,8 +124,8 @@ func TestTalosInDockerProvisioner_Create_ClusterAlreadyExists(t *testing.T) {
 			},
 		}, nil)
 
-	config := talosindockerprovisioner.NewTalosInDockerConfig()
-	provisioner := talosindockerprovisioner.NewTalosInDockerProvisioner(config).
+	configs := createTestTalosConfigs(t, "existing-cluster")
+	provisioner := talosindockerprovisioner.NewTalosInDockerProvisioner(configs, nil).
 		WithDockerClient(mockClient)
 
 	ctx := context.Background()
@@ -115,8 +160,8 @@ func TestTalosInDockerProvisioner_Create_Success(t *testing.T) {
 		Return(mockCluster, nil)
 	mockProvisioner.On("Close").Return(nil)
 
-	config := talosindockerprovisioner.NewTalosInDockerConfig()
-	provisioner := talosindockerprovisioner.NewTalosInDockerProvisioner(config).
+	configs := createTestTalosConfigs(t, "test-cluster")
+	provisioner := talosindockerprovisioner.NewTalosInDockerProvisioner(configs, nil).
 		WithDockerClient(mockClient).
 		WithProvisionerFactory(func(_ context.Context) (provision.Provisioner, error) {
 			return mockProvisioner, nil
@@ -133,9 +178,6 @@ func TestTalosInDockerProvisioner_Create_Success(t *testing.T) {
 
 func TestTalosInDockerProvisioner_Create_WithPatches(t *testing.T) {
 	t.Parallel()
-
-	// Setup patch directories and write sample patch
-	tempDir := setupPatchDirectories(t)
 
 	// Mock Docker client - no existing clusters
 	mockClient := docker.NewMockAPIClient(t)
@@ -160,10 +202,8 @@ func TestTalosInDockerProvisioner_Create_WithPatches(t *testing.T) {
 	), mock.Anything).Return(mockCluster, nil)
 	mockProvisioner.On("Close").Return(nil)
 
-	config := talosindockerprovisioner.NewTalosInDockerConfig().
-		WithClusterName("test-cluster-patches").
-		WithPatchesDir(tempDir)
-	provisioner := talosindockerprovisioner.NewTalosInDockerProvisioner(config).
+	configs := createTestTalosConfigsWithPatches(t, "test-cluster-patches")
+	provisioner := talosindockerprovisioner.NewTalosInDockerProvisioner(configs, nil).
 		WithDockerClient(mockClient).
 		WithProvisionerFactory(func(_ context.Context) (provision.Provisioner, error) {
 			return mockProvisioner, nil
@@ -219,8 +259,8 @@ func verifyNodesHaveConfigs(req provision.ClusterRequest) bool {
 func TestTalosInDockerProvisioner_Start_NoDockerClient(t *testing.T) {
 	t.Parallel()
 
-	config := talosindockerprovisioner.NewTalosInDockerConfig()
-	provisioner := talosindockerprovisioner.NewTalosInDockerProvisioner(config)
+	configs := createTestTalosConfigs(t, "test-cluster")
+	provisioner := talosindockerprovisioner.NewTalosInDockerProvisioner(configs, nil)
 	// No Docker client set
 
 	ctx := context.Background()
@@ -239,8 +279,8 @@ func TestTalosInDockerProvisioner_Start_ClusterNotFound(t *testing.T) {
 		ContainerList(mock.Anything, mock.Anything).
 		Return([]container.Summary{}, nil)
 
-	config := talosindockerprovisioner.NewTalosInDockerConfig()
-	provisioner := talosindockerprovisioner.NewTalosInDockerProvisioner(config).
+	configs := createTestTalosConfigs(t, "test-cluster")
+	provisioner := talosindockerprovisioner.NewTalosInDockerProvisioner(configs, nil).
 		WithDockerClient(mockClient)
 
 	ctx := context.Background()
@@ -256,8 +296,8 @@ func TestTalosInDockerProvisioner_Start_Success(t *testing.T) {
 	mockClient := docker.NewMockAPIClient(t)
 	setupContainerOperationMock(mockClient, "container-1", "test-cluster", true)
 
-	config := talosindockerprovisioner.NewTalosInDockerConfig()
-	provisioner := talosindockerprovisioner.NewTalosInDockerProvisioner(config).
+	configs := createTestTalosConfigs(t, "test-cluster")
+	provisioner := talosindockerprovisioner.NewTalosInDockerProvisioner(configs, nil).
 		WithDockerClient(mockClient).
 		WithLogWriter(io.Discard)
 
@@ -270,8 +310,8 @@ func TestTalosInDockerProvisioner_Start_Success(t *testing.T) {
 func TestTalosInDockerProvisioner_Stop_NoDockerClient(t *testing.T) {
 	t.Parallel()
 
-	config := talosindockerprovisioner.NewTalosInDockerConfig()
-	provisioner := talosindockerprovisioner.NewTalosInDockerProvisioner(config)
+	configs := createTestTalosConfigs(t, "test-cluster")
+	provisioner := talosindockerprovisioner.NewTalosInDockerProvisioner(configs, nil)
 	// No Docker client set
 
 	ctx := context.Background()
@@ -290,8 +330,8 @@ func TestTalosInDockerProvisioner_Stop_ClusterNotFound(t *testing.T) {
 		ContainerList(mock.Anything, mock.Anything).
 		Return([]container.Summary{}, nil)
 
-	config := talosindockerprovisioner.NewTalosInDockerConfig()
-	provisioner := talosindockerprovisioner.NewTalosInDockerProvisioner(config).
+	configs := createTestTalosConfigs(t, "test-cluster")
+	provisioner := talosindockerprovisioner.NewTalosInDockerProvisioner(configs, nil).
 		WithDockerClient(mockClient)
 
 	ctx := context.Background()
@@ -307,8 +347,8 @@ func TestTalosInDockerProvisioner_Stop_Success(t *testing.T) {
 	mockClient := docker.NewMockAPIClient(t)
 	setupContainerOperationMock(mockClient, "container-1", "test-cluster", false)
 
-	config := talosindockerprovisioner.NewTalosInDockerConfig()
-	provisioner := talosindockerprovisioner.NewTalosInDockerProvisioner(config).
+	configs := createTestTalosConfigs(t, "test-cluster")
+	provisioner := talosindockerprovisioner.NewTalosInDockerProvisioner(configs, nil).
 		WithDockerClient(mockClient).
 		WithLogWriter(io.Discard)
 
@@ -358,8 +398,8 @@ func setupContainerOperationMock(
 func TestTalosInDockerProvisioner_List_NoDockerClient(t *testing.T) {
 	t.Parallel()
 
-	config := talosindockerprovisioner.NewTalosInDockerConfig()
-	provisioner := talosindockerprovisioner.NewTalosInDockerProvisioner(config)
+	configs := createTestTalosConfigs(t, "test-cluster")
+	provisioner := talosindockerprovisioner.NewTalosInDockerProvisioner(configs, nil)
 	// No Docker client set
 
 	ctx := context.Background()
@@ -378,8 +418,8 @@ func TestTalosInDockerProvisioner_List_EmptyResult(t *testing.T) {
 		ContainerList(mock.Anything, mock.Anything).
 		Return([]container.Summary{}, nil)
 
-	config := talosindockerprovisioner.NewTalosInDockerConfig()
-	provisioner := talosindockerprovisioner.NewTalosInDockerProvisioner(config).
+	configs := createTestTalosConfigs(t, "test-cluster")
+	provisioner := talosindockerprovisioner.NewTalosInDockerProvisioner(configs, nil).
 		WithDockerClient(mockClient)
 
 	ctx := context.Background()
@@ -416,8 +456,8 @@ func TestTalosInDockerProvisioner_List_WithClusters(t *testing.T) {
 			},
 		}, nil)
 
-	config := talosindockerprovisioner.NewTalosInDockerConfig()
-	provisioner := talosindockerprovisioner.NewTalosInDockerProvisioner(config).
+	configs := createTestTalosConfigs(t, "test-cluster")
+	provisioner := talosindockerprovisioner.NewTalosInDockerProvisioner(configs, nil).
 		WithDockerClient(mockClient)
 
 	ctx := context.Background()
@@ -432,8 +472,8 @@ func TestTalosInDockerProvisioner_List_WithClusters(t *testing.T) {
 func TestTalosInDockerProvisioner_Exists_NoDockerClient(t *testing.T) {
 	t.Parallel()
 
-	config := talosindockerprovisioner.NewTalosInDockerConfig()
-	provisioner := talosindockerprovisioner.NewTalosInDockerProvisioner(config)
+	configs := createTestTalosConfigs(t, "test-cluster")
+	provisioner := talosindockerprovisioner.NewTalosInDockerProvisioner(configs, nil)
 	// No Docker client set
 
 	ctx := context.Background()
@@ -459,9 +499,8 @@ func TestTalosInDockerProvisioner_Exists_ClusterExists(t *testing.T) {
 			},
 		}, nil)
 
-	config := talosindockerprovisioner.NewTalosInDockerConfig().
-		WithClusterName("test-cluster")
-	provisioner := talosindockerprovisioner.NewTalosInDockerProvisioner(config).
+	configs := createTestTalosConfigs(t, "test-cluster")
+	provisioner := talosindockerprovisioner.NewTalosInDockerProvisioner(configs, nil).
 		WithDockerClient(mockClient)
 
 	ctx := context.Background()
@@ -479,9 +518,8 @@ func TestTalosInDockerProvisioner_Exists_ClusterNotFound(t *testing.T) {
 		ContainerList(mock.Anything, mock.Anything).
 		Return([]container.Summary{}, nil)
 
-	config := talosindockerprovisioner.NewTalosInDockerConfig().
-		WithClusterName("nonexistent-cluster")
-	provisioner := talosindockerprovisioner.NewTalosInDockerProvisioner(config).
+	configs := createTestTalosConfigs(t, "nonexistent-cluster")
+	provisioner := talosindockerprovisioner.NewTalosInDockerProvisioner(configs, nil).
 		WithDockerClient(mockClient)
 
 	ctx := context.Background()
@@ -491,58 +529,11 @@ func TestTalosInDockerProvisioner_Exists_ClusterNotFound(t *testing.T) {
 	assert.False(t, exists)
 }
 
-func TestTalosInDockerProvisioner_Create_WithMirrorRegistries(t *testing.T) {
-	t.Parallel()
-
-	// Mock Docker client - no existing clusters
-	mockClient := docker.NewMockAPIClient(t)
-	mockClient.EXPECT().
-		Ping(mock.Anything).
-		Return(types.Ping{}, nil)
-	mockClient.EXPECT().
-		ContainerList(mock.Anything, mock.Anything).
-		Return([]container.Summary{}, nil)
-
-	// Mock Cluster to return from Create
-	mockCluster := NewMockCluster()
-	mockCluster.On("Info").Return(provision.ClusterInfo{
-		ClusterName: "test-cluster-mirrors",
-		Nodes:       []provision.NodeInfo{{Name: "node-1"}},
-	})
-
-	// Mock Provisioner
-	mockProvisioner := NewMockProvisioner()
-	mockProvisioner.On("Create", mock.Anything, mock.MatchedBy(
-		verifyNodesHaveConfigs,
-	), mock.Anything).Return(mockCluster, nil)
-	mockProvisioner.On("Close").Return(nil)
-
-	// Configure with mirror registries
-	config := talosindockerprovisioner.NewTalosInDockerConfig().
-		WithClusterName("test-cluster-mirrors").
-		WithMirrorRegistries([]string{"docker.io=https://registry-1.docker.io"})
-
-	provisioner := talosindockerprovisioner.NewTalosInDockerProvisioner(config).
-		WithDockerClient(mockClient).
-		WithProvisionerFactory(func(_ context.Context) (provision.Provisioner, error) {
-			return mockProvisioner, nil
-		}).
-		WithLogWriter(io.Discard)
-
-	ctx := context.Background()
-	err := provisioner.Create(ctx, "test-cluster-mirrors")
-
-	require.NoError(t, err)
-	mockProvisioner.AssertExpectations(t)
-	mockCluster.AssertExpectations(t)
-}
-
 func TestTalosInDockerProvisioner_Delete_NoDockerClient(t *testing.T) {
 	t.Parallel()
 
-	config := talosindockerprovisioner.NewTalosInDockerConfig().
-		WithClusterName("test-cluster")
-	provisioner := talosindockerprovisioner.NewTalosInDockerProvisioner(config)
+	configs := createTestTalosConfigs(t, "test-cluster")
+	provisioner := talosindockerprovisioner.NewTalosInDockerProvisioner(configs, nil)
 
 	ctx := context.Background()
 	err := provisioner.Delete(ctx, "")
@@ -563,9 +554,8 @@ func TestTalosInDockerProvisioner_Delete_ClusterNotFound(t *testing.T) {
 		ContainerList(mock.Anything, mock.Anything).
 		Return([]container.Summary{}, nil)
 
-	config := talosindockerprovisioner.NewTalosInDockerConfig().
-		WithClusterName("nonexistent-cluster")
-	provisioner := talosindockerprovisioner.NewTalosInDockerProvisioner(config).
+	configs := createTestTalosConfigs(t, "nonexistent-cluster")
+	provisioner := talosindockerprovisioner.NewTalosInDockerProvisioner(configs, nil).
 		WithDockerClient(mockClient)
 
 	ctx := context.Background()
@@ -605,9 +595,8 @@ func TestTalosInDockerProvisioner_Delete_Success(t *testing.T) {
 		Return(nil)
 	mockProvisioner.On("Close").Return(nil)
 
-	config := talosindockerprovisioner.NewTalosInDockerConfig().
-		WithClusterName("test-cluster-delete")
-	provisioner := talosindockerprovisioner.NewTalosInDockerProvisioner(config).
+	configs := createTestTalosConfigs(t, "test-cluster-delete")
+	provisioner := talosindockerprovisioner.NewTalosInDockerProvisioner(configs, nil).
 		WithDockerClient(mockClient).
 		WithProvisionerFactory(func(_ context.Context) (provision.Provisioner, error) {
 			return mockProvisioner, nil
