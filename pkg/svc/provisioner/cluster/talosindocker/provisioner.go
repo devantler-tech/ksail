@@ -9,8 +9,10 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"time"
 
 	iopath "github.com/devantler-tech/ksail/v5/pkg/io"
+	"github.com/devantler-tech/ksail/v5/pkg/k8s"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
@@ -23,6 +25,8 @@ import (
 	"github.com/siderolabs/talos/pkg/provision"
 	"github.com/siderolabs/talos/pkg/provision/access"
 	"github.com/siderolabs/talos/pkg/provision/providers"
+	k8smetav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 )
 
 // TalosProviderName is the name used by the Talos SDK for Docker provisioner.
@@ -47,6 +51,10 @@ const (
 	stateDirectoryPermissions = 0o750
 	// kubeconfigFileMode is the file mode for kubeconfig files.
 	kubeconfigFileMode = 0o600
+	// apiReadinessTimeout is the timeout for waiting for the Kubernetes API to become ready.
+	apiReadinessTimeout = 5 * time.Minute
+	// apiReadinessInterval is the interval between API readiness checks.
+	apiReadinessInterval = 5 * time.Second
 )
 
 // IP byte shift constants for IPv4 address manipulation.
@@ -394,7 +402,52 @@ func (p *TalosInDockerProvisioner) bootstrapAndSaveKubeconfig(
 
 	_, _ = fmt.Fprintf(p.logWriter, "Saved kubeconfig to %s\n", kubeconfigPath)
 
+	// Wait for Kubernetes API to be ready
+	// Talos clusters take time for the API server to fully stabilize after bootstrap
+	_, _ = fmt.Fprintf(p.logWriter, "Waiting for Kubernetes API to be ready...\n")
+
+	if err := p.waitForAPIReady(ctx, kubeconfigPath); err != nil {
+		return fmt.Errorf("failed waiting for Kubernetes API: %w", err)
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "Kubernetes API is ready\n")
+
 	return nil
+}
+
+// waitForAPIReady waits for the Kubernetes API server to become responsive.
+func (p *TalosInDockerProvisioner) waitForAPIReady(ctx context.Context, kubeconfigPath string) error {
+	timeoutCtx, cancel := context.WithTimeout(ctx, apiReadinessTimeout)
+	defer cancel()
+
+	restConfig, err := k8s.BuildRESTConfig(kubeconfigPath, "")
+	if err != nil {
+		return fmt.Errorf("failed to build REST config: %w", err)
+	}
+
+	// Create kubernetes client
+	clientset, err := kubernetes.NewForConfig(restConfig)
+	if err != nil {
+		return fmt.Errorf("failed to create kubernetes client: %w", err)
+	}
+
+	// Poll until API is ready or timeout
+	ticker := time.NewTicker(apiReadinessInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-timeoutCtx.Done():
+			return fmt.Errorf("timeout waiting for Kubernetes API to be ready")
+		case <-ticker.C:
+			// Try to list nodes to verify API is responsive
+			_, err := clientset.CoreV1().Nodes().List(ctx, k8smetav1.ListOptions{})
+			if err == nil {
+				return nil
+			}
+			// API not ready yet, continue polling
+		}
+	}
 }
 
 // provisionCluster creates the Talos cluster using the SDK.
