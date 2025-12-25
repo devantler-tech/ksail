@@ -12,7 +12,6 @@ import (
 	"time"
 
 	iopath "github.com/devantler-tech/ksail/v5/pkg/io"
-	"github.com/devantler-tech/ksail/v5/pkg/k8s"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
@@ -26,8 +25,6 @@ import (
 	"github.com/siderolabs/talos/pkg/provision"
 	"github.com/siderolabs/talos/pkg/provision/access"
 	"github.com/siderolabs/talos/pkg/provision/providers"
-	k8smetav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 )
 
@@ -53,10 +50,8 @@ const (
 	stateDirectoryPermissions = 0o750
 	// kubeconfigFileMode is the file mode for kubeconfig files.
 	kubeconfigFileMode = 0o600
-	// apiReadinessTimeout is the timeout for waiting for the Kubernetes API to become ready.
-	apiReadinessTimeout = 5 * time.Minute
-	// apiReadinessInterval is the interval between API readiness checks.
-	apiReadinessInterval = 5 * time.Second
+	// clusterReadinessTimeout is the timeout for waiting for the cluster to become ready.
+	clusterReadinessTimeout = 5 * time.Minute
 )
 
 // IP byte shift constants for IPv4 address manipulation.
@@ -86,6 +81,8 @@ var (
 	ErrNoControlPlane = errors.New("no control plane container found")
 	// ErrNoPortMapping is returned when no port mapping is found for a required port.
 	ErrNoPortMapping = errors.New("no port mapping found")
+	// ErrMissingKubernetesEndpoint is returned when the cluster info is missing the Kubernetes endpoint.
+	ErrMissingKubernetesEndpoint = errors.New("cluster info missing KubernetesEndpoint")
 )
 
 // TalosInDockerProvisioner implements ClusterProvisioner for Talos-in-Docker clusters.
@@ -348,7 +345,7 @@ func (p *TalosInDockerProvisioner) bootstrapAndSaveKubeconfig(
 	// (https://127.0.0.1:<mapped-port>) when the cluster is created.
 	kubernetesEndpoint := cluster.Info().KubernetesEndpoint
 	if kubernetesEndpoint == "" {
-		return fmt.Errorf("cluster info missing KubernetesEndpoint")
+		return ErrMissingKubernetesEndpoint
 	}
 
 	_, _ = fmt.Fprintf(p.logWriter, "Using Kubernetes API endpoint: %s\n", kubernetesEndpoint)
@@ -371,16 +368,20 @@ func (p *TalosInDockerProvisioner) bootstrapAndSaveKubeconfig(
 		return fmt.Errorf("bootstrap failed: %w", err)
 	}
 
-	// Wait for cluster to be ready (Talos API, etcd, Kubernetes API)
+	// Wait for cluster to be ready (Talos API, etcd, Kubernetes API via external endpoint).
+	// Since clusterAccess has ForceEndpoint set to the mapped localhost port,
+	// K8s checks in DefaultClusterChecks() validate host connectivity.
 	_, _ = fmt.Fprintf(p.logWriter, "Waiting for cluster to be ready...\n")
 
-	checkCtx, checkCancel := context.WithTimeout(ctx, apiReadinessTimeout)
+	checkCtx, checkCancel := context.WithTimeout(ctx, clusterReadinessTimeout)
 	defer checkCancel()
 
 	err = check.Wait(checkCtx, clusterAccess, check.DefaultClusterChecks(), check.StderrReporter())
 	if err != nil {
 		return fmt.Errorf("cluster readiness check failed: %w", err)
 	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "Cluster is ready\n")
 
 	// Fetch kubeconfig from cluster
 	_, _ = fmt.Fprintf(p.logWriter, "Fetching kubeconfig...\n")
@@ -420,52 +421,7 @@ func (p *TalosInDockerProvisioner) bootstrapAndSaveKubeconfig(
 
 	_, _ = fmt.Fprintf(p.logWriter, "Saved kubeconfig to %s\n", kubeconfigPath)
 
-	// Verify Kubernetes API is accessible via the mapped endpoint
-	// DefaultClusterChecks validates via internal IPs; this ensures host connectivity works
-	_, _ = fmt.Fprintf(p.logWriter, "Verifying Kubernetes API connectivity from host...\n")
-
-	if err := p.waitForAPIReady(ctx, kubeconfigPath); err != nil {
-		return fmt.Errorf("failed waiting for Kubernetes API: %w", err)
-	}
-
-	_, _ = fmt.Fprintf(p.logWriter, "Kubernetes API is ready\n")
-
 	return nil
-}
-
-// waitForAPIReady waits for the Kubernetes API server to become responsive.
-func (p *TalosInDockerProvisioner) waitForAPIReady(ctx context.Context, kubeconfigPath string) error {
-	timeoutCtx, cancel := context.WithTimeout(ctx, apiReadinessTimeout)
-	defer cancel()
-
-	restConfig, err := k8s.BuildRESTConfig(kubeconfigPath, "")
-	if err != nil {
-		return fmt.Errorf("failed to build REST config: %w", err)
-	}
-
-	// Create kubernetes client
-	clientset, err := kubernetes.NewForConfig(restConfig)
-	if err != nil {
-		return fmt.Errorf("failed to create kubernetes client: %w", err)
-	}
-
-	// Poll until API is ready or timeout
-	ticker := time.NewTicker(apiReadinessInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-timeoutCtx.Done():
-			return fmt.Errorf("timeout waiting for Kubernetes API to be ready")
-		case <-ticker.C:
-			// Try to list nodes to verify API is responsive
-			_, err := clientset.CoreV1().Nodes().List(ctx, k8smetav1.ListOptions{})
-			if err == nil {
-				return nil
-			}
-			// API not ready yet, continue polling
-		}
-	}
 }
 
 // provisionCluster creates the Talos cluster using the SDK.
@@ -902,5 +858,10 @@ func rewriteKubeconfigEndpoint(kubeconfigBytes []byte, endpoint string) ([]byte,
 	}
 
 	// Serialize back to YAML
-	return clientcmd.Write(*kubeConfig)
+	result, err := clientcmd.Write(*kubeConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to serialize kubeconfig: %w", err)
+	}
+
+	return result, nil
 }

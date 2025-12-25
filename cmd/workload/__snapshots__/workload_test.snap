@@ -45,20 +45,20 @@ Usage:
 Examples:
   # Apply the configuration in pod.json to a pod
   ksail workload apply -f ./pod.json
-
+  
   # Apply resources from a directory containing kustomization.yaml - e.g. dir/kustomization.yaml
   ksail workload apply -k dir/
-
+  
   # Apply the JSON passed into stdin to a pod
   cat pod.json | ksail workload apply -f -
-
+  
   # Apply the configuration from all files that end with '.json'
   ksail workload apply -f '*.json'
-
+  
   # Note: --prune is still in Alpha
   # Apply the configuration in manifest.yaml that matches label app=nginx and delete all other resources that are not in the file and match label app=nginx
   ksail workload apply --prune -f manifest.yaml -l app=nginx
-
+  
   # Apply the configuration in manifest.yaml and delete all the other config maps that are not in the file
   ksail workload apply --prune -f manifest.yaml --all --prune-allowlist=core/v1/ConfigMap
 
@@ -111,10 +111,10 @@ Usage:
 Examples:
   # Create a pod using the data in pod.json
   ksail workload create -f ./pod.json
-
+  
   # Create a pod based on the JSON passed into stdin
   cat pod.json | ksail workload create -f -
-
+  
   # Edit the data in registry.yaml in JSON then create the resource using the edited data
   ksail workload create -f registry.yaml --edit -o json
 
@@ -233,31 +233,31 @@ Usage:
 Examples:
   # Delete a pod using the type and name specified in pod.json
   ksail workload delete -f ./pod.json
-
+  
   # Delete resources from a directory containing kustomization.yaml - e.g. dir/kustomization.yaml
   ksail workload delete -k dir
-
+  
   # Delete resources from all files that end with '.json'
   ksail workload delete -f '*.json'
-
+  
   # Delete a pod based on the type and name in the JSON passed into stdin
   cat pod.json | ksail workload delete -f -
-
+  
   # Delete pods and services with same names "baz" and "foo"
   ksail workload delete pod,service baz foo
-
+  
   # Delete pods and services with label name=myLabel
   ksail workload delete pods,services -l name=myLabel
-
+  
   # Delete a pod with minimal delay
   ksail workload delete pod foo --now
-
+  
   # Force delete a pod on a dead node
   ksail workload delete pod foo --force
-
+  
   # Delete all pods
   ksail workload delete pods --all
-
+  
   # Delete all pods only if the user confirms the deletion
   ksail workload delete pods --all --interactive
 
@@ -296,19 +296,19 @@ Usage:
 Examples:
   # Describe a node
   ksail workload describe nodes kubernetes-node-emt8.c.myproject.internal
-
+  
   # Describe a pod
   ksail workload describe pods/nginx
-
+  
   # Describe a pod identified by type and name in "pod.json"
   ksail workload describe -f pod.json
-
+  
   # Describe all pods
   ksail workload describe pods
-
+  
   # Describe pods by label name=myLabel
   ksail workload describe pods -l name=myLabel
-
+  
   # Describe all pods managed by the 'frontend' replication controller
   # (rc-created pods get the name of the rc as a prefix in the pod name)
   ksail workload describe pods frontend
@@ -362,24 +362,24 @@ Usage:
 Examples:
   # Get output from running the 'date' command from pod mypod, using the first container by default
   ksail workload exec mypod -- date
-
+  
   # Get output from running the 'date' command in ruby-container from pod mypod
   ksail workload exec mypod -c ruby-container -- date
-
+  
   # Switch to raw terminal mode; sends stdin to 'bash' in ruby-container from pod mypod
   # and sends stdout/stderr from 'bash' back to the client
   ksail workload exec mypod -c ruby-container -i -t -- bash -il
-
+  
   # List contents of /usr from the first container of pod mypod and sort by modification time
   # If the command you want to execute in the pod has any flags in common (e.g. -i),
   # you must use two dashes (--) to separate your command's flags/arguments
   # Also note, do not surround your command and its flags/arguments with quotes
   # unless that is how you would execute it normally (i.e., do ls -t /usr, not "ls -t /usr")
   ksail workload exec mypod -i -t -- ls -t /usr
-
+  
   # Get output from running 'date' command from the first pod of the deployment mydeployment, using the first container by default
   ksail workload exec deploy/mydeployment -- date
-
+  
   # Get output from running 'date' command from the first pod of the service myservice, using the first container by default
   ksail workload exec svc/myservice -- date
 
@@ -406,16 +406,16 @@ Usage:
 Examples:
   # Get the documentation of the resource and its fields
   ksail workload explain pods
-
+  
   # Get all the fields in the resource
   ksail workload explain pods --recursive
-
+  
   # Get the explanation for deployment in supported api versions
   ksail workload explain deployments --api-version=apps/v1
-
+  
   # Get the documentation of a specific field of a resource
   ksail workload explain pods.spec.containers
-
+  
   # Get the documentation of resources in different format
   ksail workload explain deployment --output=plaintext-openapiv2
 
@@ -439,22 +439,22 @@ Usage:
 Examples:
   # Create a service for a replicated nginx, which serves on port 80 and connects to the containers on port 8000
   ksail workload expose rc nginx --port=80 --target-port=8000
-
+  
   # Create a service for a replication controller identified by type and name specified in "nginx-controller.yaml", which serves on port 80 and connects to the containers on port 8000
   ksail workload expose -f nginx-controller.yaml --port=80 --target-port=8000
-
+  
   # Create a service for a pod valid-pod, which serves on port 444 with the name "frontend"
   ksail workload expose pod valid-pod --port=444 --name=frontend
-
+  
   # Create a second service based on the above service, exposing the container port 8443 as port 443 with the name "nginx-https"
   ksail workload expose service nginx --port=443 --target-port=8443 --name=nginx-https
-
+  
   # Create a service for a replicated streaming application on port 4100 balancing UDP traffic and named 'video-stream'.
   ksail workload expose rc streamer --port=4100 --protocol=UDP --name=video-stream
-
+  
   # Create a service for a replicated nginx using replica set, which serves on port 80 and connects to the containers on port 8000
   ksail workload expose rs nginx --port=80 --target-port=8000
-
+  
   # Create a service for an nginx deployment, which serves on port 80 and connects to the containers on port 8000
   ksail workload expose deployment nginx --port=80 --target-port=8000
 
@@ -498,43 +498,43 @@ Usage:
 Examples:
   # List all pods in ps output format
   ksail workload get pods
-
+  
   # List all pods in ps output format with more information (such as node name)
   ksail workload get pods -o wide
-
+  
   # List a single replication controller with specified NAME in ps output format
   ksail workload get replicationcontroller web
-
+  
   # List deployments in JSON output format, in the "v1" version of the "apps" API group
   ksail workload get deployments.v1.apps -o json
-
+  
   # List a single pod in JSON output format
   ksail workload get -o json pod web-pod-13je7
-
+  
   # List a pod identified by type and name specified in "pod.yaml" in JSON output format
   ksail workload get -f pod.yaml -o json
-
+  
   # List resources from a directory with kustomization.yaml - e.g. dir/kustomization.yaml
   ksail workload get -k dir/
-
+  
   # Return only the phase value of the specified pod
   ksail workload get -o template pod/web-pod-13je7 --template={{.status.phase}}
-
+  
   # List resource information in custom columns
   ksail workload get pod test-pod -o custom-columns=CONTAINER:.spec.containers[0].name,IMAGE:.spec.containers[0].image
-
+  
   # List all replication controllers and services together in ps output format
   ksail workload get rc,services
-
+  
   # List one or more resources by their type and names
   ksail workload get rc/web service/frontend pods/web-pod-13je7
-
+  
   # List the 'status' subresource for a single pod
   ksail workload get pod web-pod-13je7 --subresource status
-
+  
   # List all deployments in namespace 'backend'
   ksail workload get deployments.apps --namespace backend
-
+  
   # List all pods existing in all namespaces
   ksail workload get pods --all-namespaces
 
@@ -596,55 +596,55 @@ Usage:
 Examples:
   # Return snapshot logs from pod nginx with only one container
   ksail workload logs nginx
-
+  
   # Return snapshot logs from pod nginx, prefixing each line with the source pod and container name
   ksail workload logs nginx --prefix
-
+  
   # Return snapshot logs from pod nginx, limiting output to 500 bytes
   ksail workload logs nginx --limit-bytes=500
-
+  
   # Return snapshot logs from pod nginx, waiting up to 20 seconds for it to start running.
   ksail workload logs nginx --pod-running-timeout=20s
-
+  
   # Return snapshot logs from pod nginx with multi containers
   ksail workload logs nginx --all-containers=true
-
+  
   # Return snapshot logs from all pods in the deployment nginx
   ksail workload logs deployment/nginx --all-pods=true
-
+  
   # Return snapshot logs from all containers in pods defined by label app=nginx
   ksail workload logs -l app=nginx --all-containers=true
-
+  
   # Return snapshot logs from all pods defined by label app=nginx, limiting concurrent log requests to 10 pods
   ksail workload logs -l app=nginx --max-log-requests=10
-
+  
   # Return snapshot of previous terminated ruby container logs from pod web-1
   ksail workload logs -p -c ruby web-1
-
+  
   # Begin streaming the logs from pod nginx, continuing even if errors occur
   ksail workload logs nginx -f --ignore-errors=true
-
+  
   # Begin streaming the logs of the ruby container in pod web-1
   ksail workload logs -f -c ruby web-1
-
+  
   # Begin streaming the logs from all containers in pods defined by label app=nginx
   ksail workload logs -f -l app=nginx --all-containers=true
-
+  
   # Display only the most recent 20 lines of output in pod nginx
   ksail workload logs --tail=20 nginx
-
+  
   # Show all logs from pod nginx written in the last hour
   ksail workload logs --since=1h nginx
-
+  
   # Show all logs with timestamps from pod nginx starting from August 30, 2024, at 06:00:00 UTC
   ksail workload logs nginx --since-time=2024-08-30T06:00:00Z --timestamps=true
-
+  
   # Show logs from a kubelet with an expired serving certificate
   ksail workload logs --insecure-skip-tls-verify-backend nginx
-
+  
   # Return snapshot logs from first container of a job named hello
   ksail workload logs job/hello
-
+  
   # Return snapshot logs from container nginx-1 of a deployment named nginx
   ksail workload logs deployment/nginx -c nginx-1
 
@@ -749,13 +749,13 @@ Usage:
 Examples:
   # Rollback to the previous deployment
   ksail workload rollout undo deployment/abc
-
+  
   # Check the rollout status of a daemonset
   ksail workload rollout status daemonset/foo
-
+  
   # Restart a deployment
   ksail workload rollout restart deployment/abc
-
+  
   # Restart deployments with the 'app=nginx' label
   ksail workload rollout restart deployment --selector=app=nginx
 
@@ -786,16 +786,16 @@ Usage:
 Examples:
   # Scale a replica set named 'foo' to 3
   ksail workload scale --replicas=3 rs/foo
-
+  
   # Scale a resource identified by type and name specified in "foo.yaml" to 3
   ksail workload scale --replicas=3 -f foo.yaml
-
+  
   # If the deployment named mysql's current size is 2, scale mysql to 3
   ksail workload scale --current-replicas=2 --replicas=3 deployment/mysql
-
+  
   # Scale multiple replication controllers
   ksail workload scale --replicas=5 rc/example1 rc/example2 rc/example3
-
+  
   # Scale stateful set named 'web' to 3
   ksail workload scale --replicas=3 statefulset/web
 
@@ -830,23 +830,23 @@ Usage:
 Examples:
   # Wait for the pod "busybox1" to contain the status condition of type "Ready"
   ksail workload wait --for=condition=Ready pod/busybox1
-
+  
   # The default value of status condition is true; you can wait for other targets after an equal delimiter (compared after Unicode simple case folding, which is a more general form of case-insensitivity)
   ksail workload wait --for=condition=Ready=false pod/busybox1
-
+  
   # Wait for the pod "busybox1" to contain the status phase to be "Running"
   ksail workload wait --for=jsonpath='{.status.phase}'=Running pod/busybox1
-
+  
   # Wait for pod "busybox1" to be Ready
   ksail workload wait --for='jsonpath={.status.conditions[?(@.type=="Ready")].status}=True' pod/busybox1
-
+  
   # Wait for the service "loadbalancer" to have ingress
   ksail workload wait --for=jsonpath='{.status.loadBalancer.ingress}' service/loadbalancer
-
+  
   # Wait for the secret "busybox1" to be created, with a timeout of 30s
   ksail workload create secret generic busybox1
   ksail workload wait --for=create secret/busybox1 --timeout=30s
-
+  
   # Wait for the pod "busybox1" to be deleted, with a timeout of 60s, after having issued the "delete" command
   ksail workload delete pod/busybox1
   ksail workload wait --for=delete pod/busybox1 --timeout=60s
