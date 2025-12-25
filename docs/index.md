@@ -5,13 +5,9 @@ nav_order: 1
 
 # KSail Documentation
 
-KSail is a CLI tool for managing local Kubernetes clusters and workloads. Built in Go, it provides a unified interface for cluster lifecycle management and wraps common Kubernetes tools behind consistent commands.
+KSail is a CLI tool for managing Kubernetes clusters and workloads. Built in Go, it provides a unified interface for cluster lifecycle management and wraps common Kubernetes tools behind consistent commands.
 
 ![KSail Architecture](images/architecture.drawio.png)
-
-## Who Uses KSail?
-
-Platform engineers, developers, and anyone working with Kubernetes who wants fast feedback loops and consistent tooling across different distributions.
 
 ## Command Groups
 
@@ -24,14 +20,14 @@ Platform engineers, developers, and anyone working with Kubernetes who wants fas
 `ksail cluster init` scaffolds:
 
 ```text
-├── ksail.yaml              # Cluster configuration
-├── kind.yaml / k3d.yaml    # Distribution config
-└── k8s/                    # Workload manifests
+├── ksail.yaml                      # Cluster configuration
+├── kind.yaml / k3d.yaml / talos/   # Distribution config
+└── k8s/                            # Workload manifests
     └── kustomization.yaml
 ```
 
 - **`ksail.yaml`** – Main configuration (see [Configuration](configuration.md))
-- **Distribution configs** – [Kind](https://kind.sigs.k8s.io/docs/user/configuration/) or [K3d](https://k3d.io/stable/usage/configfile/) options
+- **Distribution configs** – [Kind](https://kind.sigs.k8s.io/docs/user/configuration/), [K3d](https://k3d.io/stable/usage/configfile/), or [Talos](https://docs.siderolabs.com/talos/v1.9/reference/configuration/v1alpha1/config) options.
 - **`k8s/`** – [Kustomize](https://kustomize.io/) manifests
 
 Use `--source-directory` to change the workload directory (default: `k8s`).
