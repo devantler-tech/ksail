@@ -578,6 +578,7 @@ func (s *Scaffolder) generateTalosInDockerConfig(output string, force bool) erro
 	config := &talosgenerator.TalosInDockerConfig{
 		PatchesDir:       TalosInDockerConfigDir,
 		MirrorRegistries: s.MirrorRegistries,
+		WorkerNodes:      0, // Default: no workers, enables scheduling on control-planes
 	}
 
 	opts := yamlgenerator.Options{
@@ -601,6 +602,15 @@ func (s *Scaffolder) generateTalosInDockerConfig(output string, force bool) erro
 			Writer:  s.Writer,
 		})
 	}
+
+	// Notify about allow-scheduling-on-control-planes patch (always created when no workers)
+	displayPath := filepath.Join(TalosInDockerConfigDir, "cluster", "allow-scheduling-on-control-planes.yaml")
+	notify.WriteMessage(notify.Message{
+		Type:    notify.GenerateType,
+		Content: "created '%s'",
+		Args:    []any{displayPath},
+		Writer:  s.Writer,
+	})
 
 	// Notify about mirror registries patch if created
 	if len(s.MirrorRegistries) > 0 {
