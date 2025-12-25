@@ -50,6 +50,8 @@ func InitFieldSelectors() []ksailconfigmanager.FieldSelector[v1alpha1.Cluster] {
 	selectors = append(selectors, ksailconfigmanager.DefaultCSIFieldSelector())
 	selectors = append(selectors, ksailconfigmanager.DefaultMetricsServerFieldSelector())
 	selectors = append(selectors, ksailconfigmanager.DefaultCertManagerFieldSelector())
+	selectors = append(selectors, ksailconfigmanager.TalosInDockerControlPlanesFieldSelector())
+	selectors = append(selectors, ksailconfigmanager.TalosInDockerWorkersFieldSelector())
 
 	return selectors
 }

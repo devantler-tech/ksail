@@ -128,11 +128,20 @@ func createK3dProvisioner(
 func createTalosInDockerProvisioner(
 	distributionConfigPath string,
 	kubeconfigPath string,
-	_ v1alpha1.OptionsTalosInDocker,
+	opts v1alpha1.OptionsTalosInDocker,
 ) (*talosindickerprovisioner.TalosInDockerProvisioner, *talosindickerprovisioner.TalosInDockerConfig, error) {
 	config := talosindickerprovisioner.NewTalosInDockerConfig().
 		WithPatchesDir(distributionConfigPath).
 		WithKubeconfigPath(kubeconfigPath)
+
+	// Apply configured node counts (use defaults if not set)
+	if opts.ControlPlanes > 0 {
+		config.WithControlPlaneNodes(int(opts.ControlPlanes))
+	}
+
+	if opts.Workers > 0 {
+		config.WithWorkerNodes(int(opts.Workers))
+	}
 
 	provisioner := talosindickerprovisioner.NewTalosInDockerProvisioner(config)
 

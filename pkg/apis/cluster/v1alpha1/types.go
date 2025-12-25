@@ -305,8 +305,13 @@ type OptionsKind struct {
 type OptionsK3d struct{}
 
 // OptionsTalosInDocker defines options specific to the TalosInDocker distribution.
-// Currently empty - provisioner uses defaults (1 control-plane node, 0 workers).
-type OptionsTalosInDocker struct{}
+type OptionsTalosInDocker struct {
+	// ControlPlanes is the number of control-plane nodes (default: 1).
+	ControlPlanes int32 `json:"controlPlanes,omitzero"`
+	// Workers is the number of worker nodes (default: 0).
+	// When 0, scheduling is allowed on control-plane nodes.
+	Workers int32 `json:"workers,omitzero"`
+}
 
 // OptionsCilium defines options for the Cilium CNI.
 type OptionsCilium struct {

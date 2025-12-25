@@ -156,3 +156,25 @@ func DefaultClusterFieldSelectors() []FieldSelector[v1alpha1.Cluster] {
 		DefaultFluxIntervalFieldSelector(),
 	}
 }
+
+// TalosInDockerControlPlanesFieldSelector creates a field selector for TalosInDocker control-planes.
+func TalosInDockerControlPlanesFieldSelector() FieldSelector[v1alpha1.Cluster] {
+	return FieldSelector[v1alpha1.Cluster]{
+		Selector: func(c *v1alpha1.Cluster) any {
+			return &c.Spec.Cluster.Options.TalosInDocker.ControlPlanes
+		},
+		Description:  "Number of control-planes for TalosInDocker cluster",
+		DefaultValue: int32(1),
+	}
+}
+
+// TalosInDockerWorkersFieldSelector creates a field selector for TalosInDocker workers.
+func TalosInDockerWorkersFieldSelector() FieldSelector[v1alpha1.Cluster] {
+	return FieldSelector[v1alpha1.Cluster]{
+		Selector: func(c *v1alpha1.Cluster) any {
+			return &c.Spec.Cluster.Options.TalosInDocker.Workers
+		},
+		Description:  "Number of workers for TalosInDocker cluster",
+		DefaultValue: int32(0),
+	}
+}
