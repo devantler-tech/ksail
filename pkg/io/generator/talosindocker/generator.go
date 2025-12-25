@@ -5,10 +5,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
-	"strings"
 
 	yamlgenerator "github.com/devantler-tech/ksail/v5/pkg/io/generator/yaml"
+	talosindockerprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/talosindocker"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 )
 
@@ -139,8 +138,8 @@ func (g *TalosInDockerGenerator) generateMirrorRegistriesPatch(
 		return nil
 	}
 
-	// Generate YAML content
-	patchContent := generateMirrorPatchYAML(specs)
+	// Generate YAML content using shared implementation
+	patchContent := talosindockerprovisioner.GenerateMirrorPatchYAML(specs)
 	if patchContent == "" {
 		return nil
 	}
@@ -186,51 +185,4 @@ func (g *TalosInDockerGenerator) generateAllowSchedulingPatch(
 	}
 
 	return nil
-}
-
-// generateMirrorPatchYAML generates a Talos machine config patch for registry mirrors.
-func generateMirrorPatchYAML(specs []registry.MirrorSpec) string {
-	if len(specs) == 0 {
-		return ""
-	}
-
-	// Sort specs by host for deterministic output
-	sortedSpecs := make([]registry.MirrorSpec, len(specs))
-	copy(sortedSpecs, specs)
-	sort.Slice(sortedSpecs, func(i, j int) bool {
-		return sortedSpecs[i].Host < sortedSpecs[j].Host
-	})
-
-	var builder strings.Builder
-	builder.WriteString("machine:\n")
-	builder.WriteString("  registries:\n")
-	builder.WriteString("    mirrors:\n")
-
-	for _, spec := range sortedSpecs {
-		host := strings.TrimSpace(spec.Host)
-		if host == "" {
-			continue
-		}
-
-		// Determine the upstream URL
-		upstream := strings.TrimSpace(spec.Remote)
-		if upstream == "" {
-			upstream = registry.GenerateUpstreamURL(host)
-		}
-
-		// Generate the mirror entry
-		builder.WriteString(fmt.Sprintf("      %s:\n", host))
-		builder.WriteString("        endpoints:\n")
-		builder.WriteString(fmt.Sprintf("          - %s\n", upstream))
-
-		// Add the default upstream as fallback
-		defaultUpstream := registry.GenerateUpstreamURL(host)
-		if upstream != defaultUpstream {
-			builder.WriteString(fmt.Sprintf("          - %s\n", defaultUpstream))
-		}
-
-		builder.WriteString("        overridePath: true\n")
-	}
-
-	return builder.String()
 }
