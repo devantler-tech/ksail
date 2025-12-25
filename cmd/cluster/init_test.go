@@ -191,15 +191,25 @@ func TestHandleInitRunE_RespectsDistributionFlagTalosInDocker(t *testing.T) {
 	}
 
 	// Verify allow-scheduling-on-control-planes.yaml content
-	allowSchedulingPath := filepath.Join(outDir, "talos", "cluster", "allow-scheduling-on-control-planes.yaml")
+	allowSchedulingPath := filepath.Join(
+		outDir,
+		"talos",
+		"cluster",
+		"allow-scheduling-on-control-planes.yaml",
+	)
 
-	allowSchedulingContent, err := os.ReadFile(allowSchedulingPath) //nolint:gosec // Test file path is safe
+	allowSchedulingContent, err := os.ReadFile(
+		allowSchedulingPath,
+	) //nolint:gosec // Test file path is safe
 	if err != nil {
 		t.Fatalf("expected allow-scheduling-on-control-planes.yaml to be scaffolded: %v", err)
 	}
 
 	if !strings.Contains(string(allowSchedulingContent), "allowSchedulingOnControlPlanes: true") {
-		t.Fatalf("expected allow-scheduling-on-control-planes.yaml to contain correct config\n%s", allowSchedulingContent)
+		t.Fatalf(
+			"expected allow-scheduling-on-control-planes.yaml to contain correct config\n%s",
+			allowSchedulingContent,
+		)
 	}
 
 	// Verify ksail.yaml contains TalosInDocker distribution

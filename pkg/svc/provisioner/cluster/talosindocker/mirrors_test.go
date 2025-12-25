@@ -6,7 +6,6 @@ import (
 	talosindockerprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/talosindocker"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestGenerateMirrorPatchYAML_EmptySpecs(t *testing.T) {
@@ -85,30 +84,6 @@ func TestGenerateMirrorPatchYAML_SkipsEmptyHosts(t *testing.T) {
 
 	assert.Contains(t, result, "docker.io:")
 	assert.NotContains(t, result, "https://example.com")
-}
-
-func TestCreateMirrorConfigPatch_EmptySpecs(t *testing.T) {
-	t.Parallel()
-
-	patch, err := talosindockerprovisioner.CreateMirrorConfigPatch(nil)
-	require.NoError(t, err)
-	assert.Nil(t, patch)
-
-	patch, err = talosindockerprovisioner.CreateMirrorConfigPatch([]registry.MirrorSpec{})
-	require.NoError(t, err)
-	assert.Nil(t, patch)
-}
-
-func TestCreateMirrorConfigPatch_ValidSpecs(t *testing.T) {
-	t.Parallel()
-
-	specs := []registry.MirrorSpec{
-		{Host: "docker.io", Remote: "https://registry.example.com"},
-	}
-
-	patch, err := talosindockerprovisioner.CreateMirrorConfigPatch(specs)
-	require.NoError(t, err)
-	assert.NotNil(t, patch)
 }
 
 // indexOf returns the index of the first occurrence of substr in s, or -1 if not found.

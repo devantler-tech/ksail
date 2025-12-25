@@ -252,7 +252,7 @@ func displayEmptyClusters(
 ) {
 	// When showing all distributions, show distribution-specific empty messages
 	if includeDistribution {
-			_, _ = fmt.Fprintln(writer, "No clusters found.")
+		_, _ = fmt.Fprintln(writer, "No clusters found.")
 	}
 	// When not showing all distributions, the provisioner already displays its own message
 	// (e.g., "No kind clusters found."), so we don't display an additional message here.

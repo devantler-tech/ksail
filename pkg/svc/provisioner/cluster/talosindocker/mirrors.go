@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
-	"github.com/siderolabs/talos/pkg/machinery/config/configpatcher"
 )
 
 // GenerateMirrorPatchYAML generates a Talos machine config patch for registry mirrors.
@@ -66,30 +65,4 @@ func GenerateMirrorPatchYAML(specs []registry.MirrorSpec) string {
 	}
 
 	return builder.String()
-}
-
-// CreateMirrorConfigPatch creates an in-memory Talos config patch for registry mirrors.
-// This is used when --mirror-registry flag is provided but no declarative config exists.
-//
-//nolint:ireturn // configpatcher.Patch is the SDK's interface type
-func CreateMirrorConfigPatch(specs []registry.MirrorSpec) (configpatcher.Patch, error) {
-	if len(specs) == 0 {
-		return nil, nil //nolint:nilnil // nil patch means no mirrors configured
-	}
-
-	patchYAML := GenerateMirrorPatchYAML(specs)
-	if patchYAML == "" {
-		return nil, nil //nolint:nilnil // empty patch content
-	}
-
-	patches, err := configpatcher.LoadPatches([]string{patchYAML})
-	if err != nil {
-		return nil, fmt.Errorf("failed to load mirror config patch: %w", err)
-	}
-
-	if len(patches) == 0 {
-		return nil, nil //nolint:nilnil // no patches loaded
-	}
-
-	return patches[0], nil
 }

@@ -608,7 +608,11 @@ func (s *Scaffolder) generateTalosInDockerConfig(output string, force bool) erro
 
 	// Notify about allow-scheduling-on-control-planes patch (only created when no workers)
 	if workers == 0 {
-		displayPath := filepath.Join(TalosInDockerConfigDir, "cluster", "allow-scheduling-on-control-planes.yaml")
+		displayPath := filepath.Join(
+			TalosInDockerConfigDir,
+			"cluster",
+			"allow-scheduling-on-control-planes.yaml",
+		)
 		notify.WriteMessage(notify.Message{
 			Type:    notify.GenerateType,
 			Content: "created '%s'",

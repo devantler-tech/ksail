@@ -50,6 +50,7 @@ func NewPushCmd(_ *runtime.Runtime) *cobra.Command {
 		} else {
 			sourceDir = clusterCfg.Spec.Workload.SourceDirectory
 		}
+
 		if strings.TrimSpace(sourceDir) == "" {
 			sourceDir = v1alpha1.DefaultSourceDirectory
 		}
