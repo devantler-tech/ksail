@@ -78,7 +78,7 @@ Reference via `spec.cluster.distributionConfig`.
 
 TalosInDocker uses a patches directory structure instead of a single config file:
 
-```
+```text
 talos/
 ├── cluster/           # Patches applied to all nodes
 ├── control-planes/    # Patches for control-plane nodes only
