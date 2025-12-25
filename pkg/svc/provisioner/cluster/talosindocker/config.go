@@ -101,8 +101,7 @@ func (c *TalosInDockerConfig) WithClusterName(name string) *TalosInDockerConfig 
 }
 
 // GetClusterName returns the cluster name.
-// This implements the TalosInDockerConfigNameProvider interface for use with
-// configmanager.GetClusterName.
+// This implements configmanager.ClusterNameProvider interface.
 func (c *TalosInDockerConfig) GetClusterName() string {
 	return c.ClusterName
 }
