@@ -164,7 +164,7 @@ jobs:
           ./bin/ksail workload wait --for=condition=Available deployment/podinfo --timeout=300s
 
       - name: 🧪 ksail workload push and reconcile
-        if: contains(matrix.init-args, '--gitops-engine Flux') || contains(matrix.init-args, '--gitops-engine ArgoCD')
+        if: contains(matrix.init-args, '--gitops-engine')
         run: |
           ./bin/ksail workload push .github/fixtures/reconcile-test
           ./bin/ksail workload reconcile
