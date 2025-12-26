@@ -1,0 +1,11 @@
+---
+# Trivy configuration for KSail project
+# https://aquasecurity.github.io/trivy/latest/docs/configuration/
+
+# Configure allowed container registries for Kubernetes misconfiguration scanning
+# This addresses AVD-KSV-0125: Container uses an image from an untrusted registry
+kubernetes:
+  options:
+    allowedRegistries:
+      - docker.io
+      - ghcr.io
