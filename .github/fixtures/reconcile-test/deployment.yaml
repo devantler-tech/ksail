@@ -21,20 +21,15 @@ spec:
           type: RuntimeDefault
       containers:
         - name: ksail-reconcile-test
-          image: nginx:stable-alpine
+          image: nginxinc/nginx-unprivileged
           ports:
             - containerPort: 8080
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
-            runAsNonRoot: true
-            runAsUser: 10001
-            runAsGroup: 10001
             capabilities:
               drop:
                 - ALL
-            seccompProfile:
-              type: RuntimeDefault
           resources:
             requests:
               cpu: 100m
@@ -47,8 +42,12 @@ spec:
               mountPath: /var/cache/nginx
             - name: run
               mountPath: /var/run
+            - name: tmp
+              mountPath: /tmp
       volumes:
         - name: cache
           emptyDir: {}
         - name: run
+          emptyDir: {}
+        - name: tmp
           emptyDir: {}
