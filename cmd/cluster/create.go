@@ -400,7 +400,7 @@ func loadDistributionConfigs(
 		// Derive cluster name from context or use default
 		clusterName := strings.TrimSpace(clusterCfg.Spec.Cluster.Connection.Context)
 		if clusterName == "" {
-			clusterName = talosconfigmanager.DefaultPatchesDir + "-default"
+			clusterName = talosconfigmanager.DefaultClusterName
 		}
 
 		manager := talosconfigmanager.NewConfigManager(

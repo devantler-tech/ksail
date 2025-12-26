@@ -1,23 +1,19 @@
 package talosindockerprovisioner
 
-import "path/filepath"
+import (
+	"path/filepath"
 
-// Default configuration values for TalosInDocker clusters.
+	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
+)
+
+// Default provisioner-specific values.
+// Talos configuration defaults (cluster name, image, network CIDR, k8s version)
+// are defined in the talos config-manager package.
 const (
-	// DefaultClusterName is the default name for TalosInDocker clusters.
-	DefaultClusterName = "talos-default"
-	// DefaultPatchesDir is the default directory for Talos patches.
-	DefaultPatchesDir = "talos"
-	// DefaultTalosImage is the default Talos container image.
-	DefaultTalosImage = "ghcr.io/siderolabs/talos:latest"
 	// DefaultControlPlaneNodes is the default number of control-plane nodes.
 	DefaultControlPlaneNodes = 1
 	// DefaultWorkerNodes is the default number of worker nodes.
 	DefaultWorkerNodes = 0
-	// DefaultNetworkCIDR is the default CIDR for the cluster network.
-	DefaultNetworkCIDR = "10.5.0.0/24"
-	// DefaultKubernetesVersion is the default Kubernetes version.
-	DefaultKubernetesVersion = "1.32.0"
 )
 
 // Options holds runtime options for a TalosInDocker provisioner.
@@ -47,10 +43,10 @@ type Options struct {
 // NewOptions creates new Options with default values.
 func NewOptions() *Options {
 	return &Options{
-		TalosImage:        DefaultTalosImage,
+		TalosImage:        talosconfigmanager.DefaultTalosImage,
 		ControlPlaneNodes: DefaultControlPlaneNodes,
 		WorkerNodes:       DefaultWorkerNodes,
-		NetworkCIDR:       DefaultNetworkCIDR,
+		NetworkCIDR:       talosconfigmanager.DefaultNetworkCIDR,
 	}
 }
 
@@ -119,7 +115,7 @@ type PatchDirs struct {
 // NewPatchDirs creates a PatchDirs structure from a root patches directory.
 func NewPatchDirs(patchesDir string) PatchDirs {
 	if patchesDir == "" {
-		patchesDir = DefaultPatchesDir
+		patchesDir = talosconfigmanager.DefaultPatchesDir
 	}
 
 	return PatchDirs{

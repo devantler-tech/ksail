@@ -57,7 +57,7 @@ func (DefaultFactory) Create(
 		// Derive cluster name from context or use default
 		clusterName := strings.TrimSpace(cluster.Spec.Cluster.Connection.Context)
 		if clusterName == "" {
-			clusterName = talosconfigmanager.DefaultPatchesDir + "-default"
+			clusterName = talosconfigmanager.DefaultClusterName
 		}
 
 		return createTalosInDockerProvisioner(

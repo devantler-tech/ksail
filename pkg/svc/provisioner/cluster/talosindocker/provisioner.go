@@ -694,7 +694,7 @@ func (p *TalosInDockerProvisioner) resolveClusterName(name string) string {
 		return p.talosConfigs.Name
 	}
 
-	return DefaultClusterName
+	return talosconfigmanager.DefaultClusterName
 }
 
 // nthIPInNetwork returns the nth IP in the network (1-indexed).
