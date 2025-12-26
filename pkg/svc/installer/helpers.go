@@ -11,8 +11,8 @@ const (
 	DefaultInstallTimeout = 5 * time.Minute
 	// TalosInstallTimeout is the default timeout for Talos component installation.
 	// Talos clusters take longer to bootstrap due to the immutable OS design,
-	// so we use a longer timeout (20 minutes) per operation.
-	TalosInstallTimeout = 20 * time.Minute
+	// so we use a longer timeout (10 minutes) per operation.
+	TalosInstallTimeout = 10 * time.Minute
 )
 
 // GetInstallTimeout determines the timeout for component installation.
