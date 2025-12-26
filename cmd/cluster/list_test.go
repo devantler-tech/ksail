@@ -256,7 +256,9 @@ func TestHandleListRunE_Success(t *testing.T) {
 	_ = cfgManager.Viper.BindPFlag("all", cmd.Flags().Lookup("all"))
 
 	deps := clusterpkg.ListDeps{
-		Factory: fakeFactoryWithClusters{clusters: []string{"test"}},
+		DistributionFactoryCreator: func(_ v1alpha1.Distribution) clusterprovisioner.Factory {
+			return fakeFactoryWithClusters{clusters: []string{"test"}}
+		},
 	}
 
 	err := clusterpkg.HandleListRunE(cmd, cfgManager, deps)

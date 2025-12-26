@@ -12,7 +12,6 @@ import (
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v5/pkg/ui/notify"
 	k3dv1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
-	"github.com/samber/do/v2"
 	"github.com/spf13/cobra"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
@@ -36,15 +35,8 @@ func NewListCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
 	bindAllFlag(cmd, cfgManager)
 
 	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
-		return runtimeContainer.Invoke(func(injector runtime.Injector) error {
-			factory, err := do.Invoke[clusterprovisioner.Factory](injector)
-			if err != nil {
-				return fmt.Errorf("resolve provisioner factory dependency: %w", err)
-			}
-
-			deps := ListDeps{
-				Factory: factory,
-			}
+		return runtimeContainer.Invoke(func(_ runtime.Injector) error {
+			deps := ListDeps{}
 
 			return HandleListRunE(cmd, cfgManager, deps)
 		})
@@ -55,8 +47,7 @@ func NewListCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
 
 // ListDeps captures dependencies needed for the list command logic.
 type ListDeps struct {
-	Factory clusterprovisioner.Factory
-	// DistributionFactoryCreator is an optional function that creates factories for other distributions.
+	// DistributionFactoryCreator is an optional function that creates factories for distributions.
 	// If nil, real factories with empty configs are used.
 	// This is primarily for testing purposes.
 	DistributionFactoryCreator func(v1alpha1.Distribution) clusterprovisioner.Factory
@@ -110,7 +101,18 @@ func listPrimaryClusters(
 	deps ListDeps,
 	includeDistribution bool,
 ) error {
-	provisioner, _, err := deps.Factory.Create(cmd.Context(), clusterCfg)
+	// Create a factory with an empty config for the distribution.
+	// For list operations, we only need the provisioner type, not specific config data.
+	var factory clusterprovisioner.Factory
+	if deps.DistributionFactoryCreator != nil {
+		factory = deps.DistributionFactoryCreator(clusterCfg.Spec.Cluster.Distribution)
+	} else {
+		factory = clusterprovisioner.DefaultFactory{
+			DistributionConfig: createEmptyDistributionConfig(clusterCfg.Spec.Cluster.Distribution),
+		}
+	}
+
+	provisioner, _, err := factory.Create(cmd.Context(), clusterCfg)
 	if err != nil {
 		return fmt.Errorf("failed to resolve cluster provisioner: %w", err)
 	}
