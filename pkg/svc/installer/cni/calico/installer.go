@@ -153,12 +153,13 @@ func talosCalicoValues() map[string]string {
 		"installation.calicoNetwork.linuxDataplane": `"Nftables"`,
 		// Disable BGP for Docker-based environments
 		"installation.calicoNetwork.bgp": `"Disabled"`,
-		// Use VXLAN encapsulation for overlay networking
+		// IP pool configuration matching Siderolabs docs exactly
+		"installation.calicoNetwork.ipPools[0].name":          `"default-ipv4-ippool"`,
+		"installation.calicoNetwork.ipPools[0].blockSize":     "26",
+		"installation.calicoNetwork.ipPools[0].cidr":          `"10.244.0.0/16"`,
 		"installation.calicoNetwork.ipPools[0].encapsulation": `"VXLAN"`,
 		"installation.calicoNetwork.ipPools[0].natOutgoing":   `"Enabled"`,
 		"installation.calicoNetwork.ipPools[0].nodeSelector":  `"all()"`,
-		"installation.calicoNetwork.ipPools[0].blockSize":     "26",
-		"installation.calicoNetwork.ipPools[0].cidr":          `"10.244.0.0/16"`,
 	}
 }
 
