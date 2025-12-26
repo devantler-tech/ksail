@@ -5,24 +5,48 @@ nav_order: 3
 
 # Configuration
 
-KSail uses declarative YAML files and CLI overrides for reproducible cluster configuration. Run `ksail cluster init` to generate files that can be committed and shared.
+KSail uses declarative YAML configuration files for reproducible cluster setup. This page describes `ksail.yaml` — the project-level configuration file that defines your cluster's desired state.
+
+## What is ksail.yaml?
+
+Each KSail project includes a `ksail.yaml` file describing the cluster and workload configuration. Run `ksail cluster init` to generate this file, which can be committed to version control and shared with your team.
+
+The configuration file uses the `ksail.dev/v1alpha1` API version and follows the `Cluster` kind schema. It defines:
+
+- **Cluster settings**: distribution, networking, components
+- **Connection details**: kubeconfig path, context, timeouts
+- **Workload configuration**: manifest directory, validation preferences
+- **Editor preferences**: for interactive workflows
 
 ## Configuration Precedence
 
-Configuration is resolved (highest to lowest):
+KSail resolves configuration from multiple sources in this order (highest to lowest priority):
 
 1. CLI flags (e.g., `--metrics-server Disabled`)
 2. Environment variables with `KSAIL_` prefix (e.g., `KSAIL_SPEC_DISTRIBUTION=K3d`)
 3. Nearest `ksail.yaml` in current or parent directories
 4. Built-in defaults
 
-## Declarative Configuration
+This means you can commit sensible defaults in `ksail.yaml` while still allowing temporary overrides via CLI flags or environment variables.
 
-Each KSail project includes a `ksail.yaml` describing the desired cluster.
-
-### Example ksail.yaml
+## Minimal Example
 
 ```yaml
+# yaml-language-server: $schema=https://raw.githubusercontent.com/devantler-tech/ksail/main/schemas/ksail-config.schema.json
+apiVersion: ksail.dev/v1alpha1
+kind: Cluster
+spec:
+  cluster:
+    distribution: Kind
+    distributionConfig: kind.yaml
+```
+
+This minimal configuration creates a Kind cluster using defaults for all other settings.
+
+## Complete Example
+
+```yaml
+# yaml-language-server: $schema=https://raw.githubusercontent.com/devantler-tech/ksail/main/schemas/ksail-config.schema.json
 apiVersion: ksail.dev/v1alpha1
 kind: Cluster
 spec:
@@ -32,51 +56,243 @@ spec:
     distributionConfig: kind.yaml
     connection:
       kubeconfig: ~/.kube/config
-      context: kind-local
-    cni: Default
+      context: kind-kind
+      timeout: 5m
+    cni: Cilium
+    csi: Default
     metricsServer: Enabled
-    certManager: Disabled
-    localRegistry: Disabled
-    gitOpsEngine: None
+    certManager: Enabled
+    localRegistry: Enabled
+    gitOpsEngine: Flux
+    options:
+      localRegistry:
+        hostPort: 5111
+      flux:
+        interval: 1m
   workload:
     sourceDirectory: k8s
-    validateOnPush: false
+    validateOnPush: true
 ```
 
-### Configuration Fields
+## Configuration Reference
 
-| Field                           | Type     | Default              | Values                         | Description                                                                                    |
-| ------------------------------- | -------- | -------------------- | ------------------------------ | ---------------------------------------------------------------------------------------------- |
-| `editor`                        | string   | –                    | Command with args              | Editor for interactive workflows (e.g. `code --wait`, `vim`).                                  |
-| `cluster.distribution`          | enum     | `Kind`               | `Kind`, `K3d`, `TalosInDocker` | Kubernetes distribution to use.                                                                |
-| `cluster.distributionConfig`    | string   | `kind.yaml`          | File path                      | Path to distribution-specific config (`kind.yaml`, `k3d.yaml`, or `talos/` for TalosInDocker). |
-| `cluster.connection.kubeconfig` | string   | `~/.kube/config`     | File path                      | Path to kubeconfig file.                                                                       |
-| `cluster.connection.context`    | string   | Derived from cluster | kubeconfig context             | Context name (Kind: `kind-<name>`, K3d: `k3d-<name>`).                                         |
-| `cluster.connection.timeout`    | duration | –                    | Go duration (e.g. `30s`, `5m`) | Optional timeout for cluster operations.                                                       |
-| `cluster.cni`                   | enum     | `Default`            | `Default`, `Cilium`, `None`    | Container Network Interface to install.                                                        |
-| `cluster.csi`                   | enum     | `Default`            | `Default`, `LocalPathStorage`  | Container Storage Interface (not yet implemented).                                             |
-| `cluster.metricsServer`         | enum     | `Enabled`            | `Enabled`, `Disabled`          | Install metrics-server for resource metrics.                                                   |
-| `cluster.certManager`           | enum     | `Disabled`           | `Enabled`, `Disabled`          | Install cert-manager for TLS certificates.                                                     |
-| `cluster.localRegistry`         | enum     | `Disabled`           | `Enabled`, `Disabled`          | Provision local OCI registry.                                                                  |
-| `cluster.gitOpsEngine`          | enum     | `None`               | `None`, `Flux`, `ArgoCD`       | GitOps engine to install.                                                                      |
-| `workload.sourceDirectory`      | string   | `k8s`                | Directory path                 | Location of workload manifests.                                                                |
-| `workload.validateOnPush`       | boolean  | `false`              | `true`, `false`                | Automatically validate manifests before pushing to local registry.                             |
+### Top-Level Fields
 
-> Omitted fields use defaults (e.g., `cluster.cni` defaults to `Default`).
+| Field        | Type   | Required | Description                                    |
+| ------------ | ------ | -------- | ---------------------------------------------- |
+| `apiVersion` | string | Yes      | Must be `ksail.dev/v1alpha1`                   |
+| `kind`       | string | Yes      | Must be `Cluster`                              |
+| `spec`       | object | Yes      | Cluster and workload specification (see below) |
 
-### Distribution Configs
+### spec (Spec)
 
-Distribution configuration sits alongside `ksail.yaml`:
+| Field      | Type         | Default | Description                                      |
+| ---------- | ------------ | ------- | ------------------------------------------------ |
+| `editor`   | string       | –       | Editor command for interactive workflows         |
+| `cluster`  | ClusterSpec  | –       | Cluster configuration (distribution, components) |
+| `workload` | WorkloadSpec | –       | Workload manifest configuration                  |
 
-- **`kind.yaml`** – [Kind configuration](https://kind.sigs.k8s.io/docs/user/configuration/)
-- **`k3d.yaml`** – [K3d configuration](https://k3d.io/stable/usage/configfile/)
-- **`talos/`** – Talos patches directory (for TalosInDocker)
+### spec.editor
 
-Reference via `spec.cluster.distributionConfig`.
+Editor command used by KSail for interactive workflows like `ksail cipher edit` or `ksail workload edit`.
+
+**Examples:** `code --wait`, `vim`, `nano`
+
+If not specified, KSail falls back to standard editor environment variables (`SOPS_EDITOR`, `KUBE_EDITOR`, `EDITOR`, `VISUAL`) or system defaults (`vim`, `nano`, `vi`).
+
+### spec.cluster (ClusterSpec)
+
+| Field                | Type          | Default          | Description                                   |
+| -------------------- | ------------- | ---------------- | --------------------------------------------- |
+| `distribution`       | enum          | `Kind`           | Kubernetes distribution to use                |
+| `distributionConfig` | string        | (see below)      | Path to distribution-specific configuration   |
+| `connection`         | Connection    | –                | Cluster connection settings                   |
+| `cni`                | enum          | `Default`        | Container Network Interface                   |
+| `csi`                | enum          | `Default`        | Container Storage Interface                   |
+| `metricsServer`      | enum          | `Enabled`        | Install metrics-server                        |
+| `certManager`        | enum          | `Disabled`       | Install cert-manager                          |
+| `localRegistry`      | enum          | `Disabled`       | Provision local OCI registry                  |
+| `gitOpsEngine`       | enum          | `None`           | GitOps engine to install                      |
+| `options`            | Options       | –                | Advanced options for distributions and tools  |
+
+#### distribution
+
+Kubernetes distribution to use for the local cluster.
+
+**Valid values:**
+
+- `Kind` (default) – Uses [Kind](https://kind.sigs.k8s.io/) to run Kubernetes in Docker
+- `K3d` – Uses [K3d](https://k3d.io/) to run lightweight K3s in Docker
+- `TalosInDocker` – Uses [Talos Linux](https://www.talos.dev/) in Docker containers
+
+#### distributionConfig
+
+Path to the distribution-specific configuration file or directory. This tells KSail where to find settings like node counts, port mappings, and distribution-specific features.
+
+**Default values by distribution:**
+
+- `Kind` → `kind.yaml`
+- `K3d` → `k3d.yaml`
+- `TalosInDocker` → `talos/` (directory)
+
+See [Distribution Configuration](#distribution-configuration) below for details on each format.
+
+#### connection (Connection)
+
+| Field        | Type     | Default              | Description                       |
+| ------------ | -------- | -------------------- | --------------------------------- |
+| `kubeconfig` | string   | `~/.kube/config`     | Path to kubeconfig file           |
+| `context`    | string   | (derived)            | Kubeconfig context name           |
+| `timeout`    | duration | –                    | Timeout for cluster operations    |
+
+**Context defaults by distribution:**
+
+- `Kind` → `kind-kind`
+- `K3d` → `k3d-k3d-default`
+- `TalosInDocker` → `admin@talos-default`
+
+**Timeout format:** Go duration string (e.g., `30s`, `5m`, `1h`)
+
+#### cni
+
+Container Network Interface to install.
+
+**Valid values:**
+
+- `Default` – Uses the distribution's built-in CNI (`kindnetd` for Kind, `flannel` for K3d)
+- `Cilium` – Installs [Cilium](https://cilium.io/) for advanced networking and observability
+- `Calico` – Installs [Calico](https://www.tigera.io/project-calico/) for network policies
+
+#### csi
+
+Container Storage Interface to install.
+
+**Valid values:**
+
+- `Default` – Uses the distribution's built-in storage (K3d includes local-path-provisioner; Kind does not)
+- `LocalPathStorage` – Explicitly installs [local-path-provisioner](https://github.com/rancher/local-path-provisioner)
+
+#### metricsServer
+
+Whether to install [metrics-server](https://github.com/kubernetes-sigs/metrics-server) for resource metrics.
+
+**Valid values:**
+
+- `Enabled` (default) – Install metrics-server
+- `Disabled` – Skip installation
+
+Note: K3d includes metrics-server by default, so this setting has no effect on K3d.
+
+#### certManager
+
+Whether to install [cert-manager](https://cert-manager.io/) for TLS certificate management.
+
+**Valid values:**
+
+- `Enabled` – Install cert-manager
+- `Disabled` (default) – Skip installation
+
+#### localRegistry
+
+Whether to provision a local OCI registry container for image storage.
+
+**Valid values:**
+
+- `Enabled` – Provision local registry
+- `Disabled` (default) – Skip registry
+
+See `spec.cluster.options.localRegistry.hostPort` to configure the registry port (default: `5111`).
+
+#### gitOpsEngine
+
+GitOps engine to install for continuous deployment workflows.
+
+**Valid values:**
+
+- `None` (default) – No GitOps engine
+- `Flux` – Install [Flux CD](https://fluxcd.io/)
+- `ArgoCD` – Install [Argo CD](https://argo-cd.readthedocs.io/)
+
+#### options (Options)
+
+Advanced configuration options for specific distributions, networking, and deployment tools. See the [JSON schema](https://raw.githubusercontent.com/devantler-tech/ksail/main/schemas/ksail-config.schema.json) for the complete structure.
+
+**Common options:**
+
+- `options.localRegistry.hostPort` – Host port for local registry (default: `5111`)
+- `options.flux.interval` – Flux reconciliation interval (default: `1m`)
+- `options.talosInDocker.controlPlanes` – Number of control-plane nodes (default: `1`)
+- `options.talosInDocker.workers` – Number of worker nodes (default: `0`)
+
+### spec.workload (WorkloadSpec)
+
+| Field             | Type    | Default | Description                                      |
+| ----------------- | ------- | ------- | ------------------------------------------------ |
+| `sourceDirectory` | string  | `k8s`   | Directory containing Kubernetes manifests        |
+| `validateOnPush`  | boolean | `false` | Validate manifests before pushing to registry    |
+
+## Distribution Configuration
+
+KSail references distribution-specific configuration files to customize cluster behavior. The path to these files is set via `spec.cluster.distributionConfig`.
+
+### Kind Configuration
+
+**Default:** `kind.yaml`
+
+Kind clusters are configured via a YAML file following the Kind configuration schema. This allows you to customize:
+
+- Node images and versions
+- Extra port mappings
+- Extra mounts
+- Networking settings
+
+**Documentation:** [Kind Configuration](https://kind.sigs.k8s.io/docs/user/configuration/)
+
+**Example:**
+
+```yaml
+# kind.yaml
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+  - role: control-plane
+    extraPortMappings:
+      - containerPort: 30000
+        hostPort: 30000
+```
+
+### K3d Configuration
+
+**Default:** `k3d.yaml`
+
+K3d clusters are configured via a YAML file following the K3d configuration schema. This allows you to customize:
+
+- Server and agent counts
+- Port mappings
+- Volume mounts
+- Registry configurations
+
+**Documentation:** [K3d Configuration](https://k3d.io/stable/usage/configfile/)
+
+**Example:**
+
+```yaml
+# k3d.yaml
+apiVersion: k3d.io/v1alpha5
+kind: Simple
+servers: 1
+agents: 2
+ports:
+  - port: 8080:80
+    nodeFilters:
+      - loadbalancer
+```
 
 ### TalosInDocker Configuration
 
-TalosInDocker uses a patches directory structure instead of a single config file:
+**Default:** `talos/` directory
+
+TalosInDocker uses a directory structure for [Talos machine configuration patches](https://www.talos.dev/latest/reference/configuration/). Patches are applied in layers:
 
 ```text
 talos/
@@ -85,7 +301,11 @@ talos/
 └── workers/           # Patches for worker nodes only
 ```
 
-Patches are YAML files using [Talos machine configuration](https://www.talos.dev/latest/reference/configuration/) format:
+Each directory contains YAML patch files that modify the Talos machine configuration.
+
+**Documentation:** [Talos Configuration Reference](https://www.talos.dev/latest/reference/configuration/)
+
+**Example:**
 
 ```yaml
 # talos/cluster/kubelet.yaml
@@ -95,207 +315,90 @@ machine:
       max-pods: "250"
 ```
 
-TalosInDocker-specific options can be set in `ksail.yaml`:
+```yaml
+# talos/control-planes/api.yaml
+machine:
+  kubelet:
+    extraArgs:
+      feature-gates: "EphemeralContainers=true"
+```
+
+Use `spec.cluster.options.talosInDocker` to configure node counts:
 
 ```yaml
 spec:
   cluster:
     distribution: TalosInDocker
     distributionConfig: talos
+    options:
+      talosInDocker:
+        controlPlanes: 3
+        workers: 2
 ```
 
-### Schema Support
+## Schema Support
 
-The KSail repository provides a JSON Schema for validation and IntelliSense. Reference it in your `ksail.yaml`:
+KSail provides a JSON Schema for IDE validation and autocompletion. Reference it at the top of your `ksail.yaml`:
 
 ```yaml
 # yaml-language-server: $schema=https://raw.githubusercontent.com/devantler-tech/ksail/main/schemas/ksail-config.schema.json
 apiVersion: ksail.dev/v1alpha1
 kind: Cluster
-...
+spec:
+  # ...
 ```
 
-IDEs with YAML language support (like VS Code with the Red Hat YAML extension) will provide completions and validation automatically.
+IDEs with YAML language support (like VS Code with the Red Hat YAML extension) will provide:
 
-## CLI Options
+- Field autocompletion
+- Inline documentation
+- Validation errors for invalid values
+- Enum suggestions for fields like `distribution`, `cni`, etc.
 
-All configuration fields can be overridden via CLI flags. Run `ksail <command> --help` to see the latest options.
+## CLI Flags
 
-### Quick Reference
+All `ksail.yaml` fields can be overridden via CLI flags. This is useful for:
+
+- Temporary testing with different settings
+- CI/CD pipelines that need environment-specific overrides
+- Quick experiments without modifying committed configuration
+
+To see available flags for each command, run:
 
 ```bash
-ksail --help                     # Top-level commands
-ksail cluster init --help        # Project scaffolding flags
-ksail cluster create --help      # Cluster creation options
-ksail cluster delete --help      # Clean-up options
-ksail workload validate --help   # Manifest validation options
+ksail <command> --help
 ```
 
-### Global Flags
+**Examples:**
 
-| Flag       | Purpose                                              |
-| ---------- | ---------------------------------------------------- |
-| `--timing` | Enable timing output for the current invocation only |
+- `ksail cluster init --help` – Project scaffolding flags
+- `ksail cluster create --help` – Cluster creation options
+- `ksail workload push --help` – Workload push flags
 
-### Cluster Flags
-
-All cluster commands support these flags (availability varies by command):
-
-| Flag                    | Short | Config Field                         | Default          | Commands                     |
-| ----------------------- | ----- | ------------------------------------ | ---------------- | ---------------------------- |
-| `--distribution`        | `-d`  | `spec.cluster.distribution`          | `Kind`           | `init`                       |
-| `--distribution-config` | –     | `spec.cluster.distributionConfig`    | `kind.yaml`      | `init`                       |
-| `--context`             | `-c`  | `spec.cluster.connection.context`    | Auto-derived     | `init`                       |
-| `--kubeconfig`          | `-k`  | `spec.cluster.connection.kubeconfig` | `~/.kube/config` | `init`                       |
-| `--source-directory`    | `-s`  | `spec.workload.sourceDirectory`      | `k8s`            | `init`                       |
-| `--cni`                 | –     | `spec.cluster.cni`                   | `Default`        | `init`                       |
-| `--csi`                 | –     | `spec.cluster.csi`                   | `Default`        | `init` (not yet implemented) |
-| `--metrics-server`      | –     | `spec.cluster.metricsServer`         | `Enabled`        | `init`, `create`             |
-| `--cert-manager`        | –     | `spec.cluster.certManager`           | `Disabled`       | `init`, `create`             |
-| `--local-registry`      | –     | `spec.cluster.localRegistry`         | `Disabled`       | `init`                       |
-| `--local-registry-port` | –     | (port configuration)                 | `5111`           | `init`                       |
-| `--gitops-engine`       | `-g`  | `spec.cluster.gitOpsEngine`          | `None`           | `init`                       |
-| `--mirror-registry`     | –     | (multiple allowed)                   | None             | `init`                       |
-
-> Environment variables follow the pattern `KSAIL_SPEC_<FIELD>` where field names are uppercase with underscores.
-
-### Command Examples
-
-**Initialize a new project:**
-
-```bash
-ksail cluster init --distribution Kind --cni Cilium --metrics-server Enabled
-```
-
-**Create cluster with overrides:**
-
-```bash
-ksail cluster create --metrics-server Disabled
-```
-
-**Enable local registry:**
-
-```bash
-ksail cluster init --local-registry Enabled --local-registry-port 5111
-```
-
-**Configure mirror registries:**
-
-```bash
-ksail cluster init \
-  --mirror-registry docker.io=https://registry-1.docker.io \
-  --mirror-registry gcr.io=https://gcr.io
-```
-
-**Enable GitOps engine:**
-
-```bash
-ksail cluster init --gitops-engine Flux --local-registry Enabled
-```
-
-### Workload Commands
-
-KSail provides commands for managing workloads through the `ksail workload` subcommand family:
-
-**Manifest management:**
-
-- `ksail workload apply` - Apply manifests using kubectl or kustomize
-- `ksail workload validate` - Validate manifests with kubeconform
-- `ksail workload gen` - Generate Kubernetes resource templates
-
-**GitOps workflow:**
-
-- `ksail workload push` - Package and push manifests as OCI artifact to local registry
-- `ksail workload reconcile` - Trigger GitOps reconciliation and wait for completion
-
-**Push command flags:**
-
-| Flag         | Purpose                                        |
-| ------------ | ---------------------------------------------- |
-| `--validate` | Validate manifests before pushing to registry. |
-
-The `push` command validates manifests when either:
-
-1. The `--validate` flag is set
-2. `spec.workload.validateOnPush` is `true` in `ksail.yaml`
-
-**Kubectl wrappers:**
-
-- `ksail workload get` - Get resources
-- `ksail workload edit` - Edit resources
-- `ksail workload logs` - View container logs
-- `ksail workload exec` - Execute commands in containers
-- `ksail workload wait` - Wait for resource conditions
-
-**Reconcile command flags:**
-
-| Flag        | Purpose                                                     |
-| ----------- | ----------------------------------------------------------- |
-| `--timeout` | Timeout for reconciliation (e.g., `10m`). Overrides config. |
-
-The `reconcile` command respects timeout in this order:
-
-1. `--timeout` flag if provided
-2. `spec.cluster.connection.timeout` from `ksail.yaml`
-3. Default 5-minute timeout
-
-**Example usage:**
-
-```bash
-# Push manifests to local registry
-ksail workload push
-
-# Push and validate manifests
-ksail workload push --validate
-
-# Trigger reconciliation with default timeout
-ksail workload reconcile
-
-# Override timeout
-ksail workload reconcile --timeout 10m
-```
+For detailed CLI reference, see the command-specific help pages (run `ksail --help` for a list of all commands).
 
 ## When to Use What
 
-- **CLI flags** – Temporary overrides during development
-- **`ksail.yaml`** – Project-wide defaults
-- **Distribution configs** – Distribution-specific settings (node counts, port mappings)
-- **Environment variables** – CI/CD or machine-specific overrides
+**Use `ksail.yaml` for:**
 
-## Editor Configuration
+- Project-wide defaults that should be version-controlled
+- Configuration that should be consistent across team members
+- Settings that define your cluster's identity (distribution, CNI, etc.)
 
-KSail uses a configured editor for:
+**Use CLI flags for:**
 
-- `ksail cipher edit` – Edit encrypted secrets with SOPS
-- `ksail workload edit` – Edit Kubernetes resources
-- `ksail cluster connect` – Edit actions in k9s
+- Temporary overrides during development
+- Testing different configurations without editing files
+- CI/CD environment-specific settings
 
-### Editor Resolution (highest to lowest)
+**Use environment variables for:**
 
-1. `--editor` flag
-2. `spec.editor` in `ksail.yaml`
-3. Environment variables (`SOPS_EDITOR`, `KUBE_EDITOR`, `EDITOR`, `VISUAL`)
-4. Fallback (`vim`, `nano`, `vi`)
+- Machine-specific settings (e.g., different kubeconfig paths)
+- CI/CD secrets and credentials
+- Global preferences that apply to all projects
 
-### Examples
+**Use distribution config files for:**
 
-**Via `ksail.yaml`:**
-
-```yaml
-spec:
-  editor: code --wait
-```
-
-**Via CLI:**
-
-```bash
-ksail cipher edit --editor "code --wait" secrets.yaml
-ksail workload edit --editor vim deployment/my-app
-```
-
-**Via environment:**
-
-```bash
-export EDITOR="code --wait"
-ksail cipher edit secrets.yaml
-```
+- Distribution-specific features (node counts, port mappings)
+- Advanced customization (kernel parameters for Talos, extra mounts for Kind)
+- Settings not exposed through KSail's configuration schema
