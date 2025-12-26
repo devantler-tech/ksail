@@ -31,9 +31,9 @@ create_doc_page() {
 	local grand_parent="$4"
 	shift 4
 	local cmd_args=("$@")
-	
+
 	mkdir -p "$(dirname "$output_file")"
-	
+
 	{
 		echo "---"
 		echo "title: \"$title\""
@@ -73,13 +73,13 @@ generate_command_docs() {
 	local grand_parent_title="$2"
 	shift 2
 	local cmd_parts=("$@")
-	
+
 	# Build paths and titles
 	local cmd_path="${cmd_parts[*]}"
 	local dir_path="${cmd_path// //}"
 	local file_prefix="${cmd_path// /-}"
 	local full_cmd_title="ksail ${cmd_path}"
-	
+
 	# Create the root page for this command
 	echo "Generating ${full_cmd_title} documentation..."
 	mkdir -p "$DOCS_DIR/$dir_path"
@@ -89,25 +89,25 @@ generate_command_docs() {
 		"$parent_title" \
 		"$grand_parent_title" \
 		"${cmd_parts[@]}"
-	
+
 	# Get subcommands for this command
 	local subcommands
 	subcommands=$(get_subcommands "${cmd_parts[@]}")
-	
+
 	# Generate docs for each subcommand
 	if [ -n "$subcommands" ]; then
 		while IFS= read -r subcmd; do
 			[ -z "$subcmd" ] && continue
-			
+
 			local subcmd_parts=("${cmd_parts[@]}" "$subcmd")
 			local subcmd_path="${subcmd_parts[*]}"
 			local subcmd_title="ksail ${subcmd_path}"
 			local subcmd_file="${file_prefix}-${subcmd}.md"
-			
+
 			# Check if this subcommand has further subcommands
 			local has_subcommands
 			has_subcommands=$(get_subcommands "${subcmd_parts[@]}")
-			
+
 			if [ -n "$has_subcommands" ]; then
 				# This is a command group with subcommands - recurse
 				generate_command_docs "$full_cmd_title" "$parent_title" "${subcmd_parts[@]}"
@@ -128,7 +128,7 @@ generate_command_docs() {
 echo "Generating root documentation..."
 create_doc_page \
 	"$DOCS_DIR/root.md" \
-	"CLI Flags Reference" \
+	"CLI Flags" \
 	"" \
 	""
 
@@ -138,7 +138,7 @@ top_level_commands=$(get_subcommands)
 # Generate docs for each top-level command and its subcommands
 while IFS= read -r cmd; do
 	[ -z "$cmd" ] && continue
-	generate_command_docs "CLI Flags Reference" "" "$cmd"
+	generate_command_docs "CLI Flags" "" "$cmd"
 done <<< "$top_level_commands"
 
 echo "CLI flags documentation generation completed successfully"
