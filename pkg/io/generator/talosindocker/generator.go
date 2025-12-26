@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 
-	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
 	yamlgenerator "github.com/devantler-tech/ksail/v5/pkg/io/generator/yaml"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 )
@@ -204,8 +203,8 @@ func (g *TalosInDockerGenerator) generateMirrorRegistriesPatch(
 		return nil
 	}
 
-	// Generate YAML content using shared implementation
-	patchContent := talosconfigmanager.GenerateMirrorPatchYAML(specs)
+	// Generate YAML content
+	patchContent := generateMirrorPatchYAML(specs)
 	if patchContent == "" {
 		return nil
 	}
@@ -225,6 +224,31 @@ func (g *TalosInDockerGenerator) generateMirrorRegistriesPatch(
 	}
 
 	return nil
+}
+
+// generateMirrorPatchYAML generates Talos machine config patch YAML for mirror registries.
+func generateMirrorPatchYAML(specs []registry.MirrorSpec) string {
+	if len(specs) == 0 {
+		return ""
+	}
+
+	var result string
+
+	result += "machine:\n"
+	result += "  registries:\n"
+	result += "    mirrors:\n"
+
+	for _, spec := range specs {
+		if spec.Host == "" {
+			continue
+		}
+
+		result += "      " + spec.Host + ":\n"
+		result += "        endpoints:\n"
+		result += "          - http://" + spec.Host + ":5000\n"
+	}
+
+	return result
 }
 
 // generateAllowSchedulingPatch creates a Talos patch file to allow scheduling on control-plane nodes.

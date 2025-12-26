@@ -137,11 +137,8 @@ func createK3dProvisioner(
 	return provisioner, k3dConfig, nil
 }
 
-// buildTalosRuntimePatches creates runtime patches for CNI and mirror registries.
-func buildTalosRuntimePatches(
-	cni v1alpha1.CNI,
-	mirrorRegistries []string,
-) []talosconfigmanager.Patch {
+// buildTalosCNIPatches creates runtime patches for CNI configuration.
+func buildTalosCNIPatches(cni v1alpha1.CNI) []talosconfigmanager.Patch {
 	var runtimePatches []talosconfigmanager.Patch
 
 	// Add CNI disable patch if using alternative CNI like Cilium
@@ -157,19 +154,6 @@ func buildTalosRuntimePatches(
 		})
 	}
 
-	// Add mirror registry patches if configured
-	if len(mirrorRegistries) > 0 {
-		mirrorSpecs := registry.ParseMirrorSpecs(mirrorRegistries)
-		if len(mirrorSpecs) > 0 {
-			patchContent := talosconfigmanager.GenerateMirrorPatchYAML(mirrorSpecs)
-			runtimePatches = append(runtimePatches, talosconfigmanager.Patch{
-				Path:    "in-memory:mirror-registries",
-				Scope:   talosconfigmanager.PatchScopeCluster,
-				Content: []byte(patchContent),
-			})
-		}
-	}
-
 	return runtimePatches
 }
 
@@ -181,20 +165,41 @@ func createTalosInDockerProvisioner(
 	cni v1alpha1.CNI,
 	mirrorRegistries []string,
 ) (*talosindickerprovisioner.TalosInDockerProvisioner, *talosconfigmanager.Configs, error) {
-	// Build runtime patches for CNI and mirrors
-	runtimePatches := buildTalosRuntimePatches(cni, mirrorRegistries)
+	// Build runtime patches for CNI
+	cniPatches := buildTalosCNIPatches(cni)
 
-	// Load talos config with runtime patches applied
+	// Load talos config with CNI patches applied
 	manager := talosconfigmanager.NewConfigManager(
 		distributionConfigPath,
 		clusterName,
 		"", // Use default Kubernetes version
 		"", // Use default network CIDR
-	).WithAdditionalPatches(runtimePatches)
+	).WithAdditionalPatches(cniPatches)
 
 	talosConfigs, err := manager.LoadConfig(nil)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to load Talos configuration: %w", err)
+	}
+
+	// Apply mirror registries directly to the config (type-safe approach)
+	if len(mirrorRegistries) > 0 {
+		mirrorSpecs := registry.ParseMirrorSpecs(mirrorRegistries)
+		mirrors := make([]talosconfigmanager.MirrorRegistry, 0, len(mirrorSpecs))
+
+		for _, spec := range mirrorSpecs {
+			if spec.Host == "" {
+				continue
+			}
+
+			mirrors = append(mirrors, talosconfigmanager.MirrorRegistry{
+				Host:      spec.Host,
+				Endpoints: []string{"http://" + spec.Host + ":5000"},
+			})
+		}
+
+		if err := talosConfigs.ApplyMirrorRegistries(mirrors); err != nil {
+			return nil, nil, fmt.Errorf("failed to apply mirror registries: %w", err)
+		}
 	}
 
 	// Create options
