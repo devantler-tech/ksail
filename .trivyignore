@@ -1,0 +1,5 @@
+# Trivy ignore file for KSail project
+# Skip AVD-KSV-0125 check for untrusted registry
+# The docker.io/nginxinc/nginx-unprivileged image is from the official nginxinc organization
+# and is a legitimate, trusted source used in test fixtures
+AVD-KSV-0125
