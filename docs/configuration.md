@@ -59,6 +59,9 @@ spec:
       context: kind-kind
       timeout: 5m
     cni: Cilium
+    # CSI "Default" uses the distribution's built-in storage behavior:
+    # - K3d: includes local-path-provisioner by default
+    # - Kind and TalosInDocker: no CSI installed; use LocalPathStorage if needed
     csi: Default
     metricsServer: Enabled
     certManager: Enabled
@@ -84,7 +87,9 @@ spec:
 | `kind`       | string | Yes      | Must be `Cluster`                              |
 | `spec`       | object | Yes      | Cluster and workload specification (see below) |
 
-### spec (Spec)
+### spec
+
+The `spec` field is a `Spec` object that defines editor, cluster, and workload configuration.
 
 | Field      | Type         | Default | Description                                      |
 | ---------- | ------------ | ------- | ------------------------------------------------ |
@@ -201,7 +206,7 @@ Whether to provision a local OCI registry container for image storage.
 - `Enabled` – Provision local registry
 - `Disabled` (default) – Skip registry
 
-See `spec.cluster.options.localRegistry.hostPort` to configure the registry port (default: `5111`).
+See [options](#options-options) for configuration details including `hostPort` (default: `5111`).
 
 #### gitOpsEngine
 
@@ -215,7 +220,7 @@ GitOps engine to install for continuous deployment workflows.
 
 #### options (Options)
 
-Advanced configuration options for specific distributions, networking, and deployment tools. See the [JSON schema](https://raw.githubusercontent.com/devantler-tech/ksail/main/schemas/ksail-config.schema.json) for the complete structure.
+Advanced configuration options for specific distributions, networking, and deployment tools. See [Schema Support](#schema-support) for the complete structure.
 
 **Common options:**
 
@@ -292,23 +297,15 @@ ports:
 
 **Default:** `talos/` directory
 
-TalosInDocker uses a directory structure for [Talos machine configuration patches](https://www.talos.dev/latest/reference/configuration/). Patches are applied in layers:
-
-```text
-talos/
-├── cluster/           # Patches applied to all nodes
-├── control-planes/    # Patches for control-plane nodes only
-└── workers/           # Patches for worker nodes only
-```
-
-Each directory contains YAML patch files that modify the Talos machine configuration.
+TalosInDocker uses a directory structure for [Talos machine configuration patches](https://www.talos.dev/latest/reference/configuration/). Each directory contains YAML patch files that modify the Talos machine configuration.
 
 **Documentation:** [Talos Configuration Reference](https://www.talos.dev/latest/reference/configuration/)
 
-**Example:**
+**Directory structure and examples:**
 
 ```yaml
 # talos/cluster/kubelet.yaml
+# Patches applied to all nodes
 machine:
   kubelet:
     extraArgs:
@@ -317,10 +314,19 @@ machine:
 
 ```yaml
 # talos/control-planes/api.yaml
+# Patches for control-plane nodes only
 machine:
   kubelet:
     extraArgs:
       feature-gates: "EphemeralContainers=true"
+```
+
+```yaml
+# talos/workers/custom.yaml
+# Patches for worker nodes only
+machine:
+  sysctls:
+    net.core.somaxconn: "65535"
 ```
 
 Use `spec.cluster.options.talosInDocker` to configure node counts:
