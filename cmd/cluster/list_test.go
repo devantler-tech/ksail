@@ -183,18 +183,33 @@ func TestListCmd_WithAllFlag(t *testing.T) {
 	t.Chdir(workingDir)
 	setupListTest(t, workingDir)
 
-	factory := fakeFactoryWithClusters{clusters: []string{"test-cluster"}}
-	testRuntime := newListRuntimeContainer(t, factory)
-
-	cmd := clusterpkg.NewListCmd(testRuntime)
-
+	cmd := &cobra.Command{Use: "list"}
 	var buf bytes.Buffer
 	cmd.SetOut(&buf)
 	cmd.SetErr(&buf)
 	cmd.SetContext(context.Background())
-	cmd.SetArgs([]string{"--all"})
 
-	err := cmd.Execute()
+	cfgManager := ksailconfigmanager.NewCommandConfigManager(
+		cmd,
+		ksailconfigmanager.DefaultClusterFieldSelectors(),
+	)
+
+	cmd.Flags().BoolP("all", "a", true, "List all clusters")
+	_ = cfgManager.Viper.BindPFlag("all", cmd.Flags().Lookup("all"))
+	_ = cmd.Flags().Set("all", "true")
+
+	// Create a mock factory that returns empty clusters for all distributions.
+	emptyFactory := fakeFactoryWithClusters{clusters: []string{}}
+
+	deps := clusterpkg.ListDeps{
+		Factory: fakeFactoryWithClusters{clusters: []string{"test-cluster"}},
+		// Use mock factory for all other distributions to avoid hitting real Docker.
+		DistributionFactoryCreator: func(_ v1alpha1.Distribution) clusterprovisioner.Factory {
+			return emptyFactory
+		},
+	}
+
+	err := clusterpkg.HandleListRunE(cmd, cfgManager, deps)
 	require.NoError(t, err)
 
 	snaps.MatchSnapshot(t, buf.String())
@@ -241,8 +256,7 @@ func TestHandleListRunE_Success(t *testing.T) {
 	_ = cfgManager.Viper.BindPFlag("all", cmd.Flags().Lookup("all"))
 
 	deps := clusterpkg.ListDeps{
-		Factory:             fakeFactoryWithClusters{clusters: []string{"test"}},
-		DistributionFactory: clusterprovisioner.DefaultFactory{},
+		Factory: fakeFactoryWithClusters{clusters: []string{"test"}},
 	}
 
 	err := clusterpkg.HandleListRunE(cmd, cfgManager, deps)

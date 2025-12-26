@@ -147,6 +147,16 @@ func handleCreateRunE(
 	// Configure metrics-server for K3d before cluster creation
 	setupK3dMetricsServer(clusterCfg, k3dConfig)
 
+	// Pass pre-loaded distribution configs to the factory to preserve in-memory modifications
+	// (e.g., mirror registries, metrics-server flags). This avoids double-loading from disk.
+	deps.Factory = clusterprovisioner.DefaultFactory{
+		DistributionConfig: &clusterprovisioner.DistributionConfig{
+			Kind:          kindConfig,
+			K3d:           k3dConfig,
+			TalosInDocker: talosConfig,
+		},
+	}
+
 	err = executeClusterLifecycle(cmd, clusterCfg, deps, &firstActivityShown)
 	if err != nil {
 		return err

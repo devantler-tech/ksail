@@ -1,7 +1,6 @@
 package cluster
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -12,13 +11,13 @@ import (
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v5/pkg/ui/notify"
+	k3dv1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/samber/do/v2"
 	"github.com/spf13/cobra"
+	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
 
 const allFlag = "all"
-
-var errDistributionFactoryUnset = errors.New("distribution factory dependency is not configured")
 
 // NewListCmd creates the list command for clusters.
 func NewListCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
@@ -44,8 +43,7 @@ func NewListCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
 			}
 
 			deps := ListDeps{
-				Factory:             factory,
-				DistributionFactory: clusterprovisioner.DefaultFactory{},
+				Factory: factory,
 			}
 
 			return HandleListRunE(cmd, cfgManager, deps)
@@ -57,8 +55,11 @@ func NewListCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
 
 // ListDeps captures dependencies needed for the list command logic.
 type ListDeps struct {
-	Factory             clusterprovisioner.Factory
-	DistributionFactory clusterprovisioner.Factory
+	Factory clusterprovisioner.Factory
+	// DistributionFactoryCreator is an optional function that creates factories for other distributions.
+	// If nil, real factories with empty configs are used.
+	// This is primarily for testing purposes.
+	DistributionFactoryCreator func(v1alpha1.Distribution) clusterprovisioner.Factory
 }
 
 // HandleListRunE handles the list command.
@@ -158,12 +159,16 @@ func listDistributionClusters(
 		return nil
 	}
 
-	distributionFactory := deps.DistributionFactory
-	if distributionFactory == nil {
-		return fmt.Errorf(
-			"distribution factory dependency is not configured: %w",
-			errDistributionFactoryUnset,
-		)
+	// Use custom factory creator if provided (for testing), otherwise create real factory.
+	var distributionFactory clusterprovisioner.Factory
+	if deps.DistributionFactoryCreator != nil {
+		distributionFactory = deps.DistributionFactoryCreator(distribution)
+	} else {
+		// Create a factory with an empty config for the distribution.
+		// For list operations, we only need the provisioner type, not specific config data.
+		distributionFactory = clusterprovisioner.DefaultFactory{
+			DistributionConfig: createEmptyDistributionConfig(distribution),
+		}
 	}
 
 	otherProv, _, err := distributionFactory.Create(cmd.Context(), otherCluster)
@@ -218,6 +223,29 @@ func defaultDistributionConfigPath(distribution v1alpha1.Distribution) string {
 		return talosconfigmanager.DefaultPatchesDir
 	default:
 		return "kind.yaml"
+	}
+}
+
+// createEmptyDistributionConfig creates an empty distribution config for the given distribution.
+// This is used for list operations where we only need the provisioner type, not specific config data.
+func createEmptyDistributionConfig(distribution v1alpha1.Distribution) *clusterprovisioner.DistributionConfig {
+	switch distribution {
+	case v1alpha1.DistributionKind:
+		return &clusterprovisioner.DistributionConfig{
+			Kind: &v1alpha4.Cluster{},
+		}
+	case v1alpha1.DistributionK3d:
+		return &clusterprovisioner.DistributionConfig{
+			K3d: &k3dv1alpha5.SimpleConfig{},
+		}
+	case v1alpha1.DistributionTalosInDocker:
+		return &clusterprovisioner.DistributionConfig{
+			TalosInDocker: &talosconfigmanager.Configs{},
+		}
+	default:
+		return &clusterprovisioner.DistributionConfig{
+			Kind: &v1alpha4.Cluster{},
+		}
 	}
 }
 
