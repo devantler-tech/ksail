@@ -92,10 +92,6 @@ type TalosInDockerProvisioner struct {
 	dockerClient       client.APIClient
 	provisionerFactory func(ctx context.Context) (provision.Provisioner, error)
 	logWriter          io.Writer
-	// parsedCIDR caches the parsed network CIDR to avoid duplicate parsing.
-	parsedCIDR netip.Prefix
-	// disableDefaultCNI indicates whether to skip CNI-dependent checks during bootstrap.
-	disableDefaultCNI bool
 }
 
 // NewTalosInDockerProvisioner creates a new TalosInDockerProvisioner.
@@ -143,14 +139,6 @@ func (p *TalosInDockerProvisioner) WithLogWriter(w io.Writer) *TalosInDockerProv
 	return p
 }
 
-// WithDisableDefaultCNI sets whether to skip CNI-dependent checks during bootstrap.
-// Set this to true when using an alternative CNI like Cilium.
-func (p *TalosInDockerProvisioner) WithDisableDefaultCNI(disable bool) *TalosInDockerProvisioner {
-	p.disableDefaultCNI = disable
-
-	return p
-}
-
 // Options returns the current runtime options.
 func (p *TalosInDockerProvisioner) Options() *Options {
 	return p.options
@@ -184,12 +172,6 @@ func (p *TalosInDockerProvisioner) Create(ctx context.Context, name string) erro
 
 	// Use the pre-loaded configs (already have all patches applied)
 	configBundle := p.talosConfigs.Bundle()
-
-	// Cache the parsed CIDR for later use in buildClusterRequest
-	p.parsedCIDR, err = netip.ParsePrefix(p.options.NetworkCIDR)
-	if err != nil {
-		return fmt.Errorf("invalid network CIDR: %w", err)
-	}
 
 	// Provision cluster and save configurations
 	cluster, err := p.provisionCluster(ctx, clusterName, configBundle)
@@ -471,7 +453,7 @@ func (p *TalosInDockerProvisioner) bootstrapAndSaveKubeconfig(
 	// because pods cannot start until the CNI is installed.
 	// See: https://pkg.go.dev/github.com/siderolabs/talos/pkg/cluster/check#K8sComponentsReadinessChecks
 	clusterChecks := check.DefaultClusterChecks()
-	if p.disableDefaultCNI {
+	if p.talosConfigs != nil && p.talosConfigs.IsCNIDisabled() {
 		clusterChecks = check.PreBootSequenceChecks()
 	}
 
@@ -607,13 +589,15 @@ func (p *TalosInDockerProvisioner) checkDockerAvailable(ctx context.Context) err
 }
 
 // buildClusterRequest creates a provision.ClusterRequest from our config.
-// Must be called after parsedCIDR is populated (e.g., during Create).
 func (p *TalosInDockerProvisioner) buildClusterRequest(
 	clusterName string,
 	configBundle *bundle.Bundle,
 ) (provision.ClusterRequest, error) {
-	// Use the CIDR parsed and cached during Create
-	cidr := p.parsedCIDR
+	// Parse the network CIDR
+	cidr, err := netip.ParsePrefix(p.options.NetworkCIDR)
+	if err != nil {
+		return provision.ClusterRequest{}, fmt.Errorf("invalid network CIDR: %w", err)
+	}
 
 	// Calculate gateway (first usable IP)
 	gatewayIP, err := nthIPInNetwork(cidr, 1)

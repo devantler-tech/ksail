@@ -35,7 +35,10 @@ func createTestTalosConfigs(t *testing.T, clusterName string) *talosconfigmanage
 }
 
 // createTestTalosConfigsWithPatches creates TalosConfigs with a sample patch for testing.
-func createTestTalosConfigsWithPatches(t *testing.T, clusterName string) *talosconfigmanager.Configs {
+func createTestTalosConfigsWithPatches(
+	t *testing.T,
+	clusterName string,
+) *talosconfigmanager.Configs {
 	t.Helper()
 
 	tempDir := setupPatchDirectories(t)
@@ -231,11 +234,10 @@ func setupPatchDirectories(t *testing.T) string {
 
 	// Write a sample cluster patch
 	clusterPatchContent := "machine:\n  network:\n    hostname: test-hostname\n"
-	//nolint:gosec // G306: test file, permissions are fine
 	require.NoError(t, os.WriteFile(
 		clusterPatchesDir+"/hostname.yaml",
 		[]byte(clusterPatchContent),
-		0o644,
+		0o600,
 	))
 
 	return tempDir

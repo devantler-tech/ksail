@@ -6,8 +6,8 @@ import (
 	"os"
 	"path/filepath"
 
+	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
 	yamlgenerator "github.com/devantler-tech/ksail/v5/pkg/io/generator/yaml"
-	talosindockerprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/talosindocker"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 )
 
@@ -205,7 +205,7 @@ func (g *TalosInDockerGenerator) generateMirrorRegistriesPatch(
 	}
 
 	// Generate YAML content using shared implementation
-	patchContent := talosindockerprovisioner.GenerateMirrorPatchYAML(specs)
+	patchContent := talosconfigmanager.GenerateMirrorPatchYAML(specs)
 	if patchContent == "" {
 		return nil
 	}
