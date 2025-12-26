@@ -18,6 +18,7 @@ import (
 	kindconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/kind"
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
 	ksailvalidator "github.com/devantler-tech/ksail/v5/pkg/io/validator/ksail"
+	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v5/pkg/ui/notify"
 	"github.com/devantler-tech/ksail/v5/pkg/ui/timer"
 	mapstructure "github.com/go-viper/mapstructure/v2"
@@ -36,15 +37,18 @@ var ErrDistributionConfigNotFound = errors.New("distribution config file not fou
 
 // ConfigManager implements configuration management for KSail v1alpha1.Cluster configurations.
 type ConfigManager struct {
-	Viper                         *viper.Viper
-	fieldSelectors                []FieldSelector[v1alpha1.Cluster]
-	Config                        *v1alpha1.Cluster // Exposed config property as suggested
-	configLoaded                  bool              // Track if config has been actually loaded
-	configFileFound               bool              // Track if a config file was found and read
-	Writer                        io.Writer         // Writer for output notifications
-	command                       *cobra.Command    // Associated Cobra command for flag introspection
-	localRegistryExplicit         bool              // Tracks if config explicitly set the local registry behavior
-	localRegistryHostPortExplicit bool              // Tracks if config explicitly set the registry host port
+	Viper              *viper.Viper
+	fieldSelectors     []FieldSelector[v1alpha1.Cluster]
+	Config             *v1alpha1.Cluster
+	DistributionConfig *clusterprovisioner.DistributionConfig
+	configLoaded       bool
+	configFileFound    bool
+	Writer             io.Writer
+	command            *cobra.Command
+	// localRegistryExplicit tracks if config explicitly set the local registry behavior
+	localRegistryExplicit bool
+	// localRegistryHostPortExplicit tracks if config explicitly set the registry host port
+	localRegistryHostPortExplicit bool
 }
 
 // Compile-time interface compliance verification.
@@ -155,6 +159,12 @@ func (m *ConfigManager) loadConfigWithOptions(
 	m.applyDistributionConfigDefaults()
 
 	err = m.validateConfig()
+	if err != nil {
+		return nil, err
+	}
+
+	// Load distribution config after validation (reuses cached configs from validation)
+	err = m.loadAndCacheDistributionConfig()
 	if err != nil {
 		return nil, err
 	}
@@ -770,4 +780,68 @@ func (m *ConfigManager) loadTalosConfig() (*talosconfigmanager.Configs, error) {
 	}
 
 	return config, nil
+}
+
+// loadAndCacheDistributionConfig loads the distribution-specific configuration based on
+// the cluster's distribution type and caches it in the ConfigManager.
+// This allows commands to access the distribution config via cfgManager.DistributionConfig.
+// If distribution config file doesn't exist, an empty DistributionConfig is created.
+func (m *ConfigManager) loadAndCacheDistributionConfig() error {
+	m.DistributionConfig = &clusterprovisioner.DistributionConfig{}
+
+	switch m.Config.Spec.Cluster.Distribution {
+	case v1alpha1.DistributionKind:
+		return m.cacheKindConfig()
+	case v1alpha1.DistributionK3d:
+		return m.cacheK3dConfig()
+	case v1alpha1.DistributionTalosInDocker:
+		return m.cacheTalosConfig()
+	default:
+		return nil
+	}
+}
+
+func (m *ConfigManager) cacheKindConfig() error {
+	kindConfig, err := m.loadKindConfig()
+	if err != nil && !errors.Is(err, ErrDistributionConfigNotFound) {
+		return fmt.Errorf("failed to load Kind distribution config: %w", err)
+	}
+
+	if kindConfig == nil {
+		kindConfig = &kindv1alpha4.Cluster{}
+	}
+
+	m.DistributionConfig.Kind = kindConfig
+
+	return nil
+}
+
+func (m *ConfigManager) cacheK3dConfig() error {
+	k3dConfig, err := m.loadK3dConfig()
+	if err != nil && !errors.Is(err, ErrDistributionConfigNotFound) {
+		return fmt.Errorf("failed to load K3d distribution config: %w", err)
+	}
+
+	if k3dConfig == nil {
+		k3dConfig = &k3dv1alpha5.SimpleConfig{}
+	}
+
+	m.DistributionConfig.K3d = k3dConfig
+
+	return nil
+}
+
+func (m *ConfigManager) cacheTalosConfig() error {
+	talosConfig, err := m.loadTalosConfig()
+	if err != nil && !errors.Is(err, ErrDistributionConfigNotFound) {
+		return fmt.Errorf("failed to load TalosInDocker distribution config: %w", err)
+	}
+
+	if talosConfig == nil {
+		talosConfig = &talosconfigmanager.Configs{}
+	}
+
+	m.DistributionConfig.TalosInDocker = talosConfig
+
+	return nil
 }

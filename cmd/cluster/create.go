@@ -19,7 +19,6 @@ import (
 	cmdhelpers "github.com/devantler-tech/ksail/v5/pkg/cmd"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	k3dconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/k3d"
-	kindconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/kind"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
 	"github.com/devantler-tech/ksail/v5/pkg/io/scaffolder"
@@ -199,12 +198,11 @@ func loadClusterConfiguration(
 		return nil, nil, nil, nil, fmt.Errorf("failed to load cluster configuration: %w", err)
 	}
 
-	kindConfig, k3dConfig, talosConfig, err := loadDistributionConfigs(clusterCfg, tmr)
-	if err != nil {
-		return nil, nil, nil, nil, err
-	}
+	// Use cached distribution config from ConfigManager
+	// These are pointers so in-memory modifications will be preserved
+	distConfig := cfgManager.DistributionConfig
 
-	return clusterCfg, kindConfig, k3dConfig, talosConfig, nil
+	return clusterCfg, distConfig.Kind, distConfig.K3d, distConfig.TalosInDocker, nil
 }
 
 func ensureLocalRegistriesReady(
@@ -367,71 +365,6 @@ func installCustomCNIAndMetrics(
 
 	// Install metrics-server after CNI is ready
 	return handleMetricsServer(cmd, clusterCfg, tmr, firstActivityShown)
-}
-
-//nolint:cyclop // Complexity slightly above threshold due to TalosInDocker support
-func loadDistributionConfigs(
-	clusterCfg *v1alpha1.Cluster,
-	lifecycleTimer timer.Timer,
-) (*v1alpha4.Cluster, *v1alpha5.SimpleConfig, *talosconfigmanager.Configs, error) {
-	defaultConfigPath := defaultDistributionConfigPath(clusterCfg.Spec.Cluster.Distribution)
-
-	configPath := strings.TrimSpace(clusterCfg.Spec.Cluster.DistributionConfig)
-	if configPath == "" || strings.EqualFold(configPath, "auto") {
-		clusterCfg.Spec.Cluster.DistributionConfig = defaultConfigPath
-		configPath = defaultConfigPath
-	}
-
-	// If distribution is K3d but the config path still points to the kind default,
-	// switch to the k3d default so we don’t try to read kind.yaml.
-	if clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionK3d &&
-		configPath == defaultDistributionConfigPath(v1alpha1.DistributionKind) {
-		clusterCfg.Spec.Cluster.DistributionConfig = defaultConfigPath
-		configPath = defaultConfigPath
-	}
-
-	switch clusterCfg.Spec.Cluster.Distribution {
-	case v1alpha1.DistributionKind:
-		manager := kindconfigmanager.NewConfigManager(configPath)
-
-		kindConfig, err := manager.LoadConfig(lifecycleTimer)
-		if err != nil {
-			return nil, nil, nil, fmt.Errorf("failed to load kind config: %w", err)
-		}
-
-		return kindConfig, nil, nil, nil
-	case v1alpha1.DistributionK3d:
-		manager := k3dconfigmanager.NewConfigManager(configPath)
-
-		k3dConfig, err := manager.LoadConfig(lifecycleTimer)
-		if err != nil {
-			return nil, nil, nil, fmt.Errorf("failed to load k3d config: %w", err)
-		}
-
-		return nil, k3dConfig, nil, nil
-	case v1alpha1.DistributionTalosInDocker:
-		// Derive cluster name from context or use default
-		clusterName := strings.TrimSpace(clusterCfg.Spec.Cluster.Connection.Context)
-		if clusterName == "" {
-			clusterName = talosconfigmanager.DefaultClusterName
-		}
-
-		manager := talosconfigmanager.NewConfigManager(
-			configPath,
-			clusterName,
-			"", // Use default Kubernetes version
-			"", // Use default network CIDR
-		)
-
-		talosConfig, err := manager.LoadConfig(lifecycleTimer)
-		if err != nil {
-			return nil, nil, nil, fmt.Errorf("failed to load talos config: %w", err)
-		}
-
-		return nil, nil, talosConfig, nil
-	default:
-		return nil, nil, nil, nil
-	}
 }
 
 // setupK3dMetricsServer configures metrics-server for K3d clusters by adding K3s flags.

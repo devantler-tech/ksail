@@ -10,6 +10,7 @@ import (
 	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
 	cmdhelpers "github.com/devantler-tech/ksail/v5/pkg/cmd"
 	k3dconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/k3d"
+	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
 	registry "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	"github.com/docker/docker/client"
@@ -306,16 +307,18 @@ func connectLocalRegistryActionBuilder(_ *v1alpha1.Cluster) localRegistryStageAc
 
 func cleanupLocalRegistry(
 	cmd *cobra.Command,
+	cfgManager *ksailconfigmanager.ConfigManager,
 	clusterCfg *v1alpha1.Cluster,
 	deps cmdhelpers.LifecycleDeps,
 	deleteVolumes bool,
 	options ...localRegistryOption,
 ) error {
-	return cleanupLocalRegistryWithOptions(cmd, clusterCfg, deps, deleteVolumes, options...)
+	return cleanupLocalRegistryWithOptions(cmd, cfgManager, clusterCfg, deps, deleteVolumes, options...)
 }
 
 func cleanupLocalRegistryWithOptions(
 	cmd *cobra.Command,
+	cfgManager *ksailconfigmanager.ConfigManager,
 	clusterCfg *v1alpha1.Cluster,
 	deps cmdhelpers.LifecycleDeps,
 	deleteVolumes bool,
@@ -325,10 +328,8 @@ func cleanupLocalRegistryWithOptions(
 		return nil
 	}
 
-	kindConfig, k3dConfig, talosConfig, err := loadDistributionConfigs(clusterCfg, deps.Timer)
-	if err != nil {
-		return fmt.Errorf("failed to load distribution config: %w", err)
-	}
+	// Use cached distribution config from ConfigManager
+	distConfig := cfgManager.DistributionConfig
 
 	// Cleanup doesn't show title activity messages, so use a dummy tracker
 	dummyTracker := true
@@ -337,9 +338,9 @@ func cleanupLocalRegistryWithOptions(
 		cmd,
 		clusterCfg,
 		deps,
-		kindConfig,
-		k3dConfig,
-		talosConfig,
+		distConfig.Kind,
+		distConfig.K3d,
+		distConfig.TalosInDocker,
 		localRegistryCleanupStageInfo(),
 		func(execCtx context.Context, svc registry.Service, ctx localRegistryContext) error {
 			registryName := buildLocalRegistryName()

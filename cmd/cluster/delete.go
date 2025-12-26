@@ -64,18 +64,8 @@ func handleDeleteRunE(
 	cfgManager *ksailconfigmanager.ConfigManager,
 	deps cmdhelpers.LifecycleDeps,
 ) error {
-	// Start the timer for the config loading phase
-	if deps.Timer != nil {
-		deps.Timer.Start()
-	}
-
-	outputTimer := cmdhelpers.MaybeTimer(cmd, deps.Timer)
-
-	// Load the cluster config first - this must happen before accessing cfgManager.Config
-	clusterCfg, err := cfgManager.LoadConfig(outputTimer)
-	if err != nil {
-		return fmt.Errorf("failed to load cluster configuration: %w", err)
-	}
+	// Config is already loaded by WrapLifecycleHandler, so use the cached config
+	clusterCfg := cfgManager.Config
 
 	// Get cluster name respecting the --context flag
 	clusterName, err := cmdhelpers.GetClusterNameFromConfig(clusterCfg, deps.Factory)
@@ -137,7 +127,7 @@ func cleanupRegistries(
 	}
 
 	if clusterCfg.Spec.Cluster.LocalRegistry == v1alpha1.LocalRegistryEnabled {
-		err = cleanupLocalRegistry(cmd, clusterCfg, deps, deleteVolumes)
+		err = cleanupLocalRegistry(cmd, cfgManager, clusterCfg, deps, deleteVolumes)
 		if err != nil {
 			notify.WriteMessage(notify.Message{
 				Type:    notify.WarningType,

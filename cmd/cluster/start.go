@@ -62,10 +62,8 @@ func handleStartRunE(
 		return nil
 	}
 
-	kindConfig, k3dConfig, talosConfig, err := loadDistributionConfigs(clusterCfg, deps.Timer)
-	if err != nil {
-		return fmt.Errorf("load distribution configs: %w", err)
-	}
+	// Use cached distribution config from ConfigManager
+	distConfig := cfgManager.DistributionConfig
 
 	// Start command's registry connection happens after cluster start, so use a dummy tracker
 	dummyTracker := true
@@ -74,9 +72,9 @@ func handleStartRunE(
 		cmd,
 		clusterCfg,
 		deps,
-		kindConfig,
-		k3dConfig,
-		talosConfig,
+		distConfig.Kind,
+		distConfig.K3d,
+		distConfig.TalosInDocker,
 		localRegistryStageConnect,
 		&dummyTracker,
 	)

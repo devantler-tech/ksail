@@ -102,7 +102,9 @@ func TestListCmd_NoClusterFound(t *testing.T) {
 	setupListTest(t, workingDir)
 
 	cmd := &cobra.Command{Use: "list"}
+
 	var buf bytes.Buffer
+
 	cmd.SetOut(&buf)
 	cmd.SetErr(&buf)
 	cmd.SetContext(context.Background())
@@ -224,6 +226,7 @@ func TestListCmd_WithAllFlag(t *testing.T) {
 			if dist == v1alpha1.DistributionKind {
 				return primaryFactory
 			}
+
 			return emptyFactory
 		},
 	}
@@ -241,7 +244,9 @@ func TestListCmd_ListError(t *testing.T) {
 	setupListTest(t, workingDir)
 
 	cmd := &cobra.Command{Use: "list"}
+
 	var buf bytes.Buffer
+
 	cmd.SetOut(&buf)
 	cmd.SetErr(&buf)
 	cmd.SetContext(context.Background())
