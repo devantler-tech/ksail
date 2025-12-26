@@ -14,6 +14,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	argocdgitops "github.com/devantler-tech/ksail/v5/pkg/client/argocd"
+	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
 	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
 	cmdhelpers "github.com/devantler-tech/ksail/v5/pkg/cmd"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
@@ -33,7 +34,6 @@ import (
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	k3dprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/k3d"
 	kindprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/kind"
-	talosindockerprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/talosindocker"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	"github.com/devantler-tech/ksail/v5/pkg/ui/notify"
 	"github.com/devantler-tech/ksail/v5/pkg/ui/timer"
@@ -939,8 +939,12 @@ func talosRegistryActionFor(
 func runTalosMirrorAction(
 	execCtx context.Context,
 	ctx *registryStageContext,
-	dockerClient client.APIClient,
+	dockerAPIClient client.APIClient,
 ) error {
+	if len(ctx.mirrorSpecs) == 0 {
+		return nil
+	}
+
 	writer := ctx.cmd.OutOrStdout()
 	clusterName := ""
 
@@ -952,13 +956,30 @@ func runTalosMirrorAction(
 		clusterName = talosconfigmanager.DefaultClusterName
 	}
 
+	// TalosInDocker uses the cluster name as the network name
+	networkName := clusterName
+
+	// Build registry infos from mirror specs
+	upstreams := registry.BuildUpstreamLookup(ctx.mirrorSpecs)
+	registryInfos := registry.BuildRegistryInfosFromSpecs(ctx.mirrorSpecs, upstreams, nil)
+
+	if len(registryInfos) == 0 {
+		return nil
+	}
+
+	// Create registry manager
+	registryMgr, err := dockerclient.NewRegistryManager(dockerAPIClient)
+	if err != nil {
+		return fmt.Errorf("failed to create registry manager: %w", err)
+	}
+
 	// Setup registry containers (they will be connected to network after cluster creation)
-	err := talosindockerprovisioner.SetupRegistries(
+	err = registry.SetupRegistries(
 		execCtx,
-		ctx.talosConfig,
+		registryMgr,
+		registryInfos,
 		clusterName,
-		dockerClient,
-		ctx.mirrorSpecs,
+		networkName,
 		writer,
 	)
 	if err != nil {
@@ -971,8 +992,12 @@ func runTalosMirrorAction(
 func runTalosConnectAction(
 	execCtx context.Context,
 	ctx *registryStageContext,
-	dockerClient client.APIClient,
+	dockerAPIClient client.APIClient,
 ) error {
+	if len(ctx.mirrorSpecs) == 0 {
+		return nil
+	}
+
 	clusterName := ""
 
 	if ctx.talosConfig != nil {
@@ -983,12 +1008,22 @@ func runTalosConnectAction(
 		clusterName = talosconfigmanager.DefaultClusterName
 	}
 
+	// TalosInDocker uses the cluster name as the network name
+	networkName := clusterName
+
+	// Build registry infos from mirror specs
+	registryInfos := registry.BuildRegistryInfosFromSpecs(ctx.mirrorSpecs, nil, nil)
+
+	if len(registryInfos) == 0 {
+		return nil
+	}
+
 	// Connect registries to the TalosInDocker network
-	err := talosindockerprovisioner.ConnectRegistriesToNetwork(
+	err := registry.ConnectRegistriesToNetwork(
 		execCtx,
-		ctx.mirrorSpecs,
-		clusterName,
-		dockerClient,
+		dockerAPIClient,
+		registryInfos,
+		networkName,
 		ctx.cmd.OutOrStdout(),
 	)
 	if err != nil {

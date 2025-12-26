@@ -14,7 +14,6 @@ import (
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	k3dprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/k3d"
 	kindprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/kind"
-	talosindockerprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/talosindocker"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	"github.com/devantler-tech/ksail/v5/pkg/ui/notify"
 	"github.com/devantler-tech/ksail/v5/pkg/ui/timer"
@@ -370,17 +369,35 @@ func cleanupTalosInDockerMirrorRegistries(
 		return nil
 	}
 
+	// TalosInDocker uses the cluster name as the network name
+	networkName := clusterName
+
 	return runMirrorRegistryCleanup(
 		cmd,
 		deps,
 		registryNames,
-		func(dockerClient client.APIClient) error {
-			return talosindockerprovisioner.CleanupRegistries(
+		func(dockerAPIClient client.APIClient) error {
+			// Build registry infos from mirror specs
+			registryInfos := registry.BuildRegistryInfosFromSpecs(mirrorSpecs, nil, nil)
+
+			if len(registryInfos) == 0 {
+				return nil
+			}
+
+			// Create registry manager
+			registryMgr, mgrErr := dockerclient.NewRegistryManager(dockerAPIClient)
+			if mgrErr != nil {
+				return fmt.Errorf("failed to create registry manager: %w", mgrErr)
+			}
+
+			return registry.CleanupRegistries(
 				cmd.Context(),
-				mirrorSpecs,
+				registryMgr,
+				registryInfos,
 				clusterName,
-				dockerClient,
 				deleteVolumes,
+				networkName,
+				nil,
 			)
 		},
 	)

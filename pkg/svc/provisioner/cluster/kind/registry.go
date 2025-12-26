@@ -7,8 +7,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
-	"net"
-	"strconv"
 	"strings"
 
 	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
@@ -297,7 +295,7 @@ func prepareKindRegistryManager(
 		ctx,
 		dockerClient,
 		func(usedPorts map[int]struct{}) []registry.Info {
-			return buildRegistryInfosFromSpecs(mirrorSpecs, upstreams, usedPorts)
+			return registry.BuildRegistryInfosFromSpecs(mirrorSpecs, upstreams, usedPorts)
 		},
 	)
 	if err != nil {
@@ -344,43 +342,6 @@ func SetupRegistries(
 	return nil
 }
 
-// buildRegistryInfosFromSpecs builds registry info from mirror specs directly.
-func buildRegistryInfosFromSpecs(
-	mirrorSpecs []registry.MirrorSpec,
-	upstreams map[string]string,
-	baseUsedPorts map[int]struct{},
-) []registry.Info {
-	registryInfos := make([]registry.Info, 0, len(mirrorSpecs))
-
-	usedPorts, nextPort := registry.InitPortAllocation(baseUsedPorts)
-
-	for _, spec := range mirrorSpecs {
-		host := strings.TrimSpace(spec.Host)
-		if host == "" {
-			continue
-		}
-
-		// Build endpoint for this host
-		port := registry.AllocatePort(&nextPort, usedPorts)
-		endpoint := "http://" + net.JoinHostPort(host, strconv.Itoa(port))
-
-		// Get upstream URL
-		upstream := spec.Remote
-		if upstream == "" {
-			upstream = registry.GenerateUpstreamURL(host)
-		}
-
-		if upstreams != nil && upstreams[host] != "" {
-			upstream = upstreams[host]
-		}
-
-		info := registry.BuildRegistryInfo(host, []string{endpoint}, port, "", upstream)
-		registryInfos = append(registryInfos, info)
-	}
-
-	return registryInfos
-}
-
 // ConnectRegistriesToNetwork connects existing registries to the Kind network.
 // This should be called after the Kind cluster is created and the "kind" network exists.
 func ConnectRegistriesToNetwork(
@@ -393,7 +354,7 @@ func ConnectRegistriesToNetwork(
 		return nil
 	}
 
-	registriesInfo := buildRegistryInfosFromSpecs(mirrorSpecs, nil, nil)
+	registriesInfo := registry.BuildRegistryInfosFromSpecs(mirrorSpecs, nil, nil)
 	if len(registriesInfo) == 0 {
 		return nil
 	}
