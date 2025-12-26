@@ -1,4 +1,3 @@
-// Package talosindockerprovisioner provides TalosInDocker cluster provisioning.
 package talosindockerprovisioner
 
 import (
@@ -147,7 +146,7 @@ func prepareTalosRegistryManager(
 	_ context.Context,
 	mirrorSpecs []registry.MirrorSpec,
 	dockerClient client.APIClient,
-) (registry.Backend, []registry.Info, error) {
+) (*dockerclient.RegistryManager, []registry.Info, error) {
 	if len(mirrorSpecs) == 0 {
 		return nil, nil, nil
 	}

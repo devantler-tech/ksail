@@ -1430,7 +1430,7 @@ func prepareK3dConfigWithMirrors(
 
 func prepareTalosConfigWithMirrors(
 	clusterCfg *v1alpha1.Cluster,
-	talosConfig *talosconfigmanager.Configs,
+	_ *talosconfigmanager.Configs,
 	mirrorSpecs []registry.MirrorSpec,
 ) bool {
 	if clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionTalosInDocker {
