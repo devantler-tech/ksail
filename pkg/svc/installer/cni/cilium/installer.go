@@ -61,6 +61,14 @@ func NewCiliumInstallerWithDistribution(
 
 // Install installs or upgrades Cilium via its Helm chart.
 func (c *CiliumInstaller) Install(ctx context.Context) error {
+	// For TalosInDocker, wait for API server to stabilize before CNI installation.
+	// The API server may be unstable immediately after bootstrap.
+	if c.distribution == DistributionTalosInDocker {
+		if err := c.WaitForAPIServerStability(ctx); err != nil {
+			return fmt.Errorf("failed to wait for API server stability: %w", err)
+		}
+	}
+
 	err := c.helmInstallOrUpgradeCilium(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to install Cilium: %w", err)

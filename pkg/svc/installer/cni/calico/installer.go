@@ -66,8 +66,14 @@ func NewCalicoInstallerWithDistribution(
 // Install installs or upgrades Calico via its Helm chart.
 func (c *CalicoInstaller) Install(ctx context.Context) error {
 	// For Talos, we need to create namespaces with PSS labels before installing
-	// because Talos has PSS enforcement enabled by default
+	// because Talos has PSS enforcement enabled by default.
+	// We also need to wait for API server stability as the API server may be
+	// unstable immediately after bootstrap.
 	if c.distribution == DistributionTalosInDocker {
+		if err := c.WaitForAPIServerStability(ctx); err != nil {
+			return fmt.Errorf("failed to wait for API server stability: %w", err)
+		}
+
 		err := c.ensurePrivilegedNamespaces(ctx)
 		if err != nil {
 			return fmt.Errorf("failed to create privileged namespaces: %w", err)
