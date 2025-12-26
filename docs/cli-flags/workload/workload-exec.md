@@ -1,0 +1,50 @@
+---
+title: "workload exec"
+parent: "workload"
+grand_parent: "CLI Flags Reference"
+---
+
+# workload exec
+
+```text
+Execute a command in a container in a pod.
+
+Usage:
+  ksail workload exec
+
+Examples:
+  # Get output from running the 'date' command from pod mypod, using the first container by default
+  ksail workload exec mypod -- date
+  
+  # Get output from running the 'date' command in ruby-container from pod mypod
+  ksail workload exec mypod -c ruby-container -- date
+  
+  # Switch to raw terminal mode; sends stdin to 'bash' in ruby-container from pod mypod
+  # and sends stdout/stderr from 'bash' back to the client
+  ksail workload exec mypod -c ruby-container -i -t -- bash -il
+  
+  # List contents of /usr from the first container of pod mypod and sort by modification time
+  # If the command you want to execute in the pod has any flags in common (e.g. -i),
+  # you must use two dashes (--) to separate your command's flags/arguments
+  # Also note, do not surround your command and its flags/arguments with quotes
+  # unless that is how you would execute it normally (i.e., do ls -t /usr, not "ls -t /usr")
+  ksail workload exec mypod -i -t -- ls -t /usr
+  
+  # Get output from running 'date' command from the first pod of the deployment mydeployment, using the first container by default
+  ksail workload exec deploy/mydeployment -- date
+  
+  # Get output from running 'date' command from the first pod of the service myservice, using the first container by default
+  ksail workload exec svc/myservice -- date
+
+Flags:
+  -c, --container string               Container name. If omitted, use the kubectl.kubernetes.io/default-container annotation for selecting the container to be attached or the first container in the pod will be chosen
+  -f, --filename strings               to use to exec into the resource
+  -h, --help                           help for exec
+      --pod-running-timeout duration   The length of time (like 5s, 2m, or 3h, higher than zero) to wait until at least one pod is running (default 1m0s)
+  -q, --quiet                          Only print output from the remote session
+  -i, --stdin                          Pass stdin to the container
+  -t, --tty                            Stdin is a TTY
+
+Global Flags:
+      --timing   Show per-activity timing output
+```

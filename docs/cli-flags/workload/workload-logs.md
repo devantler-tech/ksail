@@ -1,0 +1,91 @@
+---
+title: "workload logs"
+parent: "workload"
+grand_parent: "CLI Flags Reference"
+---
+
+# workload logs
+
+```text
+Print the logs for a container in a pod or specified resource. If the pod has only one container, the container name is optional.
+
+Usage:
+  ksail workload logs
+
+Examples:
+  # Return snapshot logs from pod nginx with only one container
+  ksail workload logs nginx
+  
+  # Return snapshot logs from pod nginx, prefixing each line with the source pod and container name
+  ksail workload logs nginx --prefix
+  
+  # Return snapshot logs from pod nginx, limiting output to 500 bytes
+  ksail workload logs nginx --limit-bytes=500
+  
+  # Return snapshot logs from pod nginx, waiting up to 20 seconds for it to start running.
+  ksail workload logs nginx --pod-running-timeout=20s
+  
+  # Return snapshot logs from pod nginx with multi containers
+  ksail workload logs nginx --all-containers=true
+  
+  # Return snapshot logs from all pods in the deployment nginx
+  ksail workload logs deployment/nginx --all-pods=true
+  
+  # Return snapshot logs from all containers in pods defined by label app=nginx
+  ksail workload logs -l app=nginx --all-containers=true
+  
+  # Return snapshot logs from all pods defined by label app=nginx, limiting concurrent log requests to 10 pods
+  ksail workload logs -l app=nginx --max-log-requests=10
+  
+  # Return snapshot of previous terminated ruby container logs from pod web-1
+  ksail workload logs -p -c ruby web-1
+  
+  # Begin streaming the logs from pod nginx, continuing even if errors occur
+  ksail workload logs nginx -f --ignore-errors=true
+  
+  # Begin streaming the logs of the ruby container in pod web-1
+  ksail workload logs -f -c ruby web-1
+  
+  # Begin streaming the logs from all containers in pods defined by label app=nginx
+  ksail workload logs -f -l app=nginx --all-containers=true
+  
+  # Display only the most recent 20 lines of output in pod nginx
+  ksail workload logs --tail=20 nginx
+  
+  # Show all logs from pod nginx written in the last hour
+  ksail workload logs --since=1h nginx
+  
+  # Show all logs with timestamps from pod nginx starting from August 30, 2024, at 06:00:00 UTC
+  ksail workload logs nginx --since-time=2024-08-30T06:00:00Z --timestamps=true
+  
+  # Show logs from a kubelet with an expired serving certificate
+  ksail workload logs --insecure-skip-tls-verify-backend nginx
+  
+  # Return snapshot logs from first container of a job named hello
+  ksail workload logs job/hello
+  
+  # Return snapshot logs from container nginx-1 of a deployment named nginx
+  ksail workload logs deployment/nginx -c nginx-1
+
+Flags:
+      --all-containers                     Get all containers' logs in the pod(s).
+      --all-pods                           Get logs from all pod(s). Sets prefix to true.
+  -c, --container string                   Print the logs of this container
+  -f, --follow                             Specify if the logs should be streamed.
+  -h, --help                               help for logs
+      --ignore-errors                      If watching / following pod logs, allow for any errors that occur to be non-fatal
+      --insecure-skip-tls-verify-backend   Skip verifying the identity of the kubelet that logs are requested from.  In theory, an attacker could provide invalid log content back. You might want to use this if your kubelet serving certificates have expired.
+      --limit-bytes int                    Maximum bytes of logs to return. Defaults to no limit.
+      --max-log-requests int               Specify maximum number of concurrent logs to follow when using by a selector. Defaults to 5. (default 5)
+      --pod-running-timeout duration       The length of time (like 5s, 2m, or 3h, higher than zero) to wait until at least one pod is running (default 20s)
+      --prefix                             Prefix each log line with the log source (pod name and container name)
+  -p, --previous                           If true, print the logs for the previous instance of the container in a pod if it exists.
+  -l, --selector string                    Selector (label query) to filter on, supports '=', '==', '!=', 'in', 'notin'.(e.g. -l key1=value1,key2=value2,key3 in (value3)). Matching objects must satisfy all of the specified label constraints.
+      --since duration                     Only return logs newer than a relative duration like 5s, 2m, or 3h. Defaults to all logs. Only one of since-time / since may be used.
+      --since-time string                  Only return logs after a specific date (RFC3339). Defaults to all logs. Only one of since-time / since may be used.
+      --tail int                           Lines of recent log file to display. Defaults to -1 with no selector, showing all log lines otherwise 10, if a selector is provided. (default -1)
+      --timestamps                         Include timestamps on each line in the log output
+
+Global Flags:
+      --timing   Show per-activity timing output
+```

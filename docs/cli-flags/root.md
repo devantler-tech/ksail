@@ -1,0 +1,27 @@
+---
+title: "CLI Flags Reference"
+---
+
+# CLI Flags Reference
+
+```text
+KSail is a CLI tool for creating and maintaining local Kubernetes clusters
+
+Usage:
+  ksail [flags]
+  ksail [command]
+
+Available Commands:
+  cipher      Manage encrypted files with SOPS
+  cluster     Manage cluster lifecycle
+  completion  Generate the autocompletion script for the specified shell
+  help        Help about any command
+  workload    Manage workload operations
+
+Flags:
+  -h, --help      help for ksail
+      --timing    Show per-activity timing output
+  -v, --version   version for ksail
+
+Use "ksail [command] --help" for more information about a command.
+```

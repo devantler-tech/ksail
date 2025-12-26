@@ -1,0 +1,42 @@
+---
+title: "workload"
+parent: "CLI Flags Reference"
+---
+
+# workload
+
+```text
+Group workload commands under a single namespace to reconcile, apply, create, delete, describe, edit, exec, explain, expose, get, gen, install, logs, push, rollout, scale, validate, or wait for workloads.
+
+Usage:
+  ksail workload [flags]
+  ksail workload [command]
+
+Available Commands:
+  apply       Apply manifests
+  create      Create resources
+  delete      Delete resources
+  describe    Describe resources
+  edit        Edit a resource
+  exec        Execute a command in a container
+  explain     Get documentation for a resource
+  expose      Expose a resource as a service
+  gen         Generate Kubernetes resource manifests
+  get         Get resources
+  install     Install Helm charts
+  logs        Print container logs
+  push        Package and push an OCI artifact to the local registry
+  reconcile   Trigger reconciliation for GitOps workloads
+  rollout     Manage the rollout of a resource
+  scale       Scale resources
+  validate    Validate Kubernetes manifests and kustomizations
+  wait        Wait for a specific condition on one or many resources
+
+Flags:
+  -h, --help   help for workload
+
+Global Flags:
+      --timing   Show per-activity timing output
+
+Use "ksail workload [command] --help" for more information about a command.
+```
