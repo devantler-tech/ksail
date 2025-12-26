@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
 	"github.com/devantler-tech/ksail/v5/pkg/io/validator"
 	"github.com/devantler-tech/ksail/v5/pkg/io/validator/metadata"
 	k3dapi "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
@@ -15,8 +16,9 @@ const requiredCiliumArgs = 2
 
 // Validator validates KSail cluster configurations for semantic correctness and cross-configuration consistency.
 type Validator struct {
-	kindConfig *kindv1alpha4.Cluster
-	k3dConfig  *k3dapi.SimpleConfig
+	kindConfig  *kindv1alpha4.Cluster
+	k3dConfig   *k3dapi.SimpleConfig
+	talosConfig *talosconfigmanager.Configs
 }
 
 // NewValidator creates a new KSail configuration validator without distribution configuration.
@@ -38,6 +40,14 @@ func NewValidatorForKind(kindConfig *kindv1alpha4.Cluster) *Validator {
 func NewValidatorForK3d(k3dConfig *k3dapi.SimpleConfig) *Validator {
 	return &Validator{
 		k3dConfig: k3dConfig,
+	}
+}
+
+// NewValidatorForTalos creates a new KSail configuration validator with Talos distribution configuration.
+// The Talos config is used for cross-configuration validation (CNI alignment).
+func NewValidatorForTalos(talosConfig *talosconfigmanager.Configs) *Validator {
+	return &Validator{
+		talosConfig: talosConfig,
 	}
 }
 
@@ -223,10 +233,7 @@ func (v *Validator) validateCNIAlignment(
 		case v1alpha1.DistributionK3d:
 			v.validateK3dCiliumCNIAlignment(result)
 		case v1alpha1.DistributionTalosInDocker:
-			// TalosInDocker uses Flannel as its default CNI. When Cilium is selected,
-			// 'ksail cluster init' generates a disable-default-cni.yaml patch that sets
-			// cluster.network.cni.name to "none". Users with existing clusters should
-			// add this patch to their talos/cluster directory.
+			v.validateTalosCiliumCNIAlignment(result)
 		}
 
 		return
@@ -240,9 +247,7 @@ func (v *Validator) validateCNIAlignment(
 		case v1alpha1.DistributionK3d:
 			v.validateK3dDefaultCNIAlignment(result)
 		case v1alpha1.DistributionTalosInDocker:
-			// TalosInDocker uses Flannel as its default CNI, but ksail always installs
-			// Cilium for network policy support. Run 'ksail cluster init --cni Cilium'
-			// or add a disable-default-cni.yaml patch to your talos/cluster directory.
+			v.validateTalosDefaultCNIAlignment(result)
 		}
 	}
 }
@@ -370,6 +375,41 @@ func (v *Validator) validateK3dDefaultCNIAlignment(result *validator.ValidationR
 			strings.Join(problematicArgs, " and "),
 		),
 	})
+}
+
+// validateTalosCiliumCNIAlignment validates that Talos configuration has default CNI disabled when Cilium is requested.
+func (v *Validator) validateTalosCiliumCNIAlignment(result *validator.ValidationResult) {
+	if v.talosConfig == nil {
+		// No Talos config provided for validation, skip
+		return
+	}
+
+	if !v.talosConfig.IsCNIDisabled() {
+		result.AddError(validator.ValidationError{
+			Field:   "spec.cni",
+			Message: "Cilium CNI requires cluster.network.cni.name to be 'none' in Talos configuration",
+			FixSuggestion: "Add a disable-default-cni.yaml patch to your talos/cluster directory with " +
+				"'cluster.network.cni.name: none', or run 'ksail cluster init --cni Cilium'",
+		})
+	}
+}
+
+// validateTalosDefaultCNIAlignment validates that Talos configuration has default CNI enabled
+// when Default CNI is requested.
+func (v *Validator) validateTalosDefaultCNIAlignment(result *validator.ValidationResult) {
+	if v.talosConfig == nil {
+		// No Talos config provided for validation, skip
+		return
+	}
+
+	if v.talosConfig.IsCNIDisabled() {
+		result.AddError(validator.ValidationError{
+			Field:   "spec.cni",
+			Message: "Default CNI requires Flannel to be enabled, but Talos configuration has CNI disabled",
+			FixSuggestion: "Remove the disable-default-cni.yaml patch from your talos/cluster directory, " +
+				"or set CNI to Cilium in your ksail.yaml",
+		})
+	}
 }
 
 // validateGitOpsEngine ensures the GitOps engine value is supported.

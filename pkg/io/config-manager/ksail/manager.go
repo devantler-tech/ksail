@@ -16,6 +16,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/io/config-manager/helpers"
 	k3dconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/k3d"
 	kindconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/kind"
+	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
 	ksailvalidator "github.com/devantler-tech/ksail/v5/pkg/io/validator/ksail"
 	"github.com/devantler-tech/ksail/v5/pkg/ui/notify"
 	"github.com/devantler-tech/ksail/v5/pkg/ui/timer"
@@ -667,9 +668,14 @@ func (m *ConfigManager) createValidatorForDistribution() (*ksailvalidator.Valida
 			return ksailvalidator.NewValidatorForK3d(k3dConfig), nil
 		}
 	case v1alpha1.DistributionTalosInDocker:
-		// TalosInDocker doesn't have a separate config file like Kind/K3d.
-		// Configuration is embedded in ksail.yaml, so basic validation suffices.
-		return ksailvalidator.NewValidator(), nil
+		talosConfig, err := m.loadTalosConfig()
+		if err != nil && !errors.Is(err, ErrDistributionConfigNotFound) {
+			return nil, err
+		}
+
+		if talosConfig != nil {
+			return ksailvalidator.NewValidatorForTalos(talosConfig), nil
+		}
 	}
 
 	return ksailvalidator.NewValidator(), nil
@@ -716,6 +722,51 @@ func (m *ConfigManager) loadK3dConfig() (*k3dv1alpha5.SimpleConfig, error) {
 	if err != nil {
 		// Propagate validation errors
 		return nil, fmt.Errorf("failed to load K3d config: %w", err)
+	}
+
+	return config, nil
+}
+
+// loadTalosConfig loads the Talos distribution configuration if the patches directory exists.
+// Returns ErrDistributionConfigNotFound if the directory doesn't exist.
+// Returns error if config loading or validation fails.
+func (m *ConfigManager) loadTalosConfig() (*talosconfigmanager.Configs, error) {
+	// For TalosInDocker, DistributionConfig points to the patches directory (e.g., "talos")
+	patchesDir := m.Config.Spec.Cluster.DistributionConfig
+	if patchesDir == "" {
+		patchesDir = talosconfigmanager.DefaultPatchesDir
+	}
+
+	// Check if the directory exists
+	info, err := os.Stat(patchesDir)
+	if os.IsNotExist(err) {
+		return nil, ErrDistributionConfigNotFound
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to stat talos patches directory: %w", err)
+	}
+
+	if !info.IsDir() {
+		return nil, ErrDistributionConfigNotFound
+	}
+
+	// Get cluster name from context or use default
+	clusterName := strings.TrimSpace(m.Config.Spec.Cluster.Connection.Context)
+	if clusterName == "" {
+		clusterName = talosconfigmanager.DefaultClusterName
+	}
+
+	talosManager := talosconfigmanager.NewConfigManager(
+		patchesDir,
+		clusterName,
+		"", // Use default Kubernetes version
+		"", // Use default network CIDR
+	)
+
+	config, err := talosManager.LoadConfig(nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load Talos config: %w", err)
 	}
 
 	return config, nil
