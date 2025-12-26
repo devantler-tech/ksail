@@ -64,7 +64,18 @@ func handleDeleteRunE(
 	cfgManager *ksailconfigmanager.ConfigManager,
 	deps cmdhelpers.LifecycleDeps,
 ) error {
-	clusterCfg := cfgManager.Config
+	// Start the timer for the config loading phase
+	if deps.Timer != nil {
+		deps.Timer.Start()
+	}
+
+	outputTimer := cmdhelpers.MaybeTimer(cmd, deps.Timer)
+
+	// Load the cluster config first - this must happen before accessing cfgManager.Config
+	clusterCfg, err := cfgManager.LoadConfig(outputTimer)
+	if err != nil {
+		return fmt.Errorf("failed to load cluster configuration: %w", err)
+	}
 
 	// Get cluster name respecting the --context flag
 	clusterName, err := cmdhelpers.GetClusterNameFromConfig(clusterCfg, deps.Factory)
@@ -84,10 +95,15 @@ func handleDeleteRunE(
 		cleanupRegistriesBeforeDelete(cmd, cfgManager, clusterCfg, deps, clusterName, deleteVolumes)
 	}
 
+	// Start a new timer stage for the cluster deletion
+	if deps.Timer != nil {
+		deps.Timer.NewStage()
+	}
+
 	config := newDeleteLifecycleConfig()
 
-	// Execute cluster deletion
-	err = cmdhelpers.HandleLifecycleRunE(cmd, cfgManager, deps, config)
+	// Execute cluster deletion using the already-loaded config
+	err = cmdhelpers.RunLifecycleWithConfig(cmd, deps, config, clusterCfg)
 	if err != nil {
 		return fmt.Errorf("cluster deletion failed: %w", err)
 	}
