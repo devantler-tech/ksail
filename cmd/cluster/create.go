@@ -1354,11 +1354,24 @@ func newCalicoInstaller(
 ) *calicoinstaller.CalicoInstaller {
 	timeout := installer.GetInstallTimeout(clusterCfg)
 
-	return calicoinstaller.NewCalicoInstaller(
+	// Map cluster distribution to Calico installer distribution
+	var distribution calicoinstaller.Distribution
+
+	switch clusterCfg.Spec.Cluster.Distribution {
+	case v1alpha1.DistributionTalosInDocker:
+		distribution = calicoinstaller.DistributionTalosInDocker
+	case v1alpha1.DistributionKind:
+		distribution = calicoinstaller.DistributionKind
+	case v1alpha1.DistributionK3d:
+		distribution = calicoinstaller.DistributionK3d
+	}
+
+	return calicoinstaller.NewCalicoInstallerWithDistribution(
 		helmClient,
 		kubeconfig,
 		clusterCfg.Spec.Cluster.Connection.Context,
 		timeout,
+		distribution,
 	)
 }
 

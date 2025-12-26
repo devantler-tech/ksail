@@ -3,6 +3,7 @@ package calicoinstaller
 import (
 	"context"
 	"fmt"
+	"maps"
 	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
@@ -11,9 +12,21 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/svc/installer/cni"
 )
 
+// Distribution represents the Kubernetes distribution type.
+type Distribution string
+
+// Supported distribution types.
+const (
+	DistributionKind          Distribution = "kind"
+	DistributionK3d           Distribution = "k3d"
+	DistributionTalosInDocker Distribution = "talosindocker"
+)
+
 // CalicoInstaller implements the installer.Installer interface for Calico.
 type CalicoInstaller struct {
 	*cni.InstallerBase
+
+	distribution Distribution
 }
 
 // NewCalicoInstaller creates a new Calico installer instance.
@@ -22,7 +35,19 @@ func NewCalicoInstaller(
 	kubeconfig, context string,
 	timeout time.Duration,
 ) *CalicoInstaller {
-	calicoInstaller := &CalicoInstaller{}
+	return NewCalicoInstallerWithDistribution(client, kubeconfig, context, timeout, "")
+}
+
+// NewCalicoInstallerWithDistribution creates a new Calico installer with distribution-specific configuration.
+func NewCalicoInstallerWithDistribution(
+	client helm.Interface,
+	kubeconfig, context string,
+	timeout time.Duration,
+	distribution Distribution,
+) *CalicoInstaller {
+	calicoInstaller := &CalicoInstaller{
+		distribution: distribution,
+	}
 	calicoInstaller.InstallerBase = cni.NewInstallerBase(
 		client,
 		kubeconfig,
@@ -84,6 +109,7 @@ func (c *CalicoInstaller) helmInstallOrUpgradeCalico(ctx context.Context) error 
 		Namespace:       "tigera-operator",
 		RepoURL:         "https://docs.tigera.io/calico/charts",
 		CreateNamespace: true,
+		SetJSONVals:     c.getCalicoValues(),
 	}
 
 	err = helm.InstallOrUpgradeChart(ctx, client, repoConfig, chartConfig, c.GetTimeout())
@@ -92,6 +118,46 @@ func (c *CalicoInstaller) helmInstallOrUpgradeCalico(ctx context.Context) error 
 	}
 
 	return nil
+}
+
+// getCalicoValues returns the Helm values for Calico based on the distribution.
+func (c *CalicoInstaller) getCalicoValues() map[string]string {
+	values := defaultCalicoValues()
+
+	// Add distribution-specific values
+	switch c.distribution {
+	case DistributionTalosInDocker:
+		// Talos-specific settings from https://docs.siderolabs.com/kubernetes-guides/cni/deploy-calico
+		maps.Copy(values, talosCalicoValues())
+	case DistributionKind, DistributionK3d:
+		// Kind and K3d use default values
+	}
+
+	return values
+}
+
+func defaultCalicoValues() map[string]string {
+	return map[string]string{}
+}
+
+// talosCalicoValues returns Talos-specific Calico configuration.
+// These settings are required for Calico to work correctly on Talos Linux.
+// See: https://docs.siderolabs.com/kubernetes-guides/cni/deploy-calico
+func talosCalicoValues() map[string]string {
+	return map[string]string{
+		// Talos uses a read-only filesystem, so kubelet volume plugin path must be None
+		"installation.kubeletVolumePluginPath": `"None"`,
+		// Use NFTables dataplane which is recommended for Talos
+		"installation.calicoNetwork.linuxDataplane": `"Nftables"`,
+		// Disable BGP for Docker-based environments
+		"installation.calicoNetwork.bgp": `"Disabled"`,
+		// Use VXLAN encapsulation for overlay networking
+		"installation.calicoNetwork.ipPools[0].encapsulation": `"VXLAN"`,
+		"installation.calicoNetwork.ipPools[0].natOutgoing":   `"Enabled"`,
+		"installation.calicoNetwork.ipPools[0].nodeSelector":  `"all()"`,
+		"installation.calicoNetwork.ipPools[0].blockSize":     "26",
+		"installation.calicoNetwork.ipPools[0].cidr":          `"10.244.0.0/16"`,
+	}
 }
 
 func (c *CalicoInstaller) waitForReadiness(ctx context.Context) error {
