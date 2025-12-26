@@ -9,6 +9,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
+	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v5/pkg/ui/notify"
 	"github.com/samber/do/v2"
@@ -131,6 +132,7 @@ func listAdditionalDistributionClusters(
 	for _, distribution := range []v1alpha1.Distribution{
 		v1alpha1.DistributionKind,
 		v1alpha1.DistributionK3d,
+		v1alpha1.DistributionTalosInDocker,
 	} {
 		if distribution == clusterCfg.Spec.Cluster.Distribution {
 			continue
@@ -212,6 +214,8 @@ func defaultDistributionConfigPath(distribution v1alpha1.Distribution) string {
 		return "kind.yaml"
 	case v1alpha1.DistributionK3d:
 		return "k3d.yaml"
+	case v1alpha1.DistributionTalosInDocker:
+		return talosconfigmanager.DefaultPatchesDir
 	default:
 		return "kind.yaml"
 	}
@@ -243,20 +247,13 @@ func displayClusterList(
 }
 
 func displayEmptyClusters(
-	distribution v1alpha1.Distribution,
+	_ v1alpha1.Distribution,
 	includeDistribution bool,
 	writer io.Writer,
 ) {
 	// When showing all distributions, show distribution-specific empty messages
 	if includeDistribution {
-		switch distribution {
-		case v1alpha1.DistributionKind:
-			_, _ = fmt.Fprintln(writer, "No kind clusters found.")
-		case v1alpha1.DistributionK3d:
-			_, _ = fmt.Fprintln(writer, "No k3d clusters found.")
-		default:
-			_, _ = fmt.Fprintln(writer, "No clusters found.")
-		}
+		_, _ = fmt.Fprintln(writer, "No clusters found.")
 	}
 	// When not showing all distributions, the provisioner already displays its own message
 	// (e.g., "No kind clusters found."), so we don't display an additional message here.

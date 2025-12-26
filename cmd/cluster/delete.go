@@ -64,15 +64,18 @@ func handleDeleteRunE(
 	cfgManager *ksailconfigmanager.ConfigManager,
 	deps cmdhelpers.LifecycleDeps,
 ) error {
-	config := newDeleteLifecycleConfig()
-
-	// Execute cluster deletion
-	err := cmdhelpers.HandleLifecycleRunE(cmd, cfgManager, deps, config)
-	if err != nil {
-		return fmt.Errorf("cluster deletion failed: %w", err)
+	// Start the timer for the config loading phase
+	if deps.Timer != nil {
+		deps.Timer.Start()
 	}
 
-	clusterCfg := cfgManager.Config
+	outputTimer := cmdhelpers.MaybeTimer(cmd, deps.Timer)
+
+	// Load the cluster config first - this must happen before accessing cfgManager.Config
+	clusterCfg, err := cfgManager.LoadConfig(outputTimer)
+	if err != nil {
+		return fmt.Errorf("failed to load cluster configuration: %w", err)
+	}
 
 	// Get cluster name respecting the --context flag
 	clusterName, err := cmdhelpers.GetClusterNameFromConfig(clusterCfg, deps.Factory)
@@ -85,9 +88,47 @@ func handleDeleteRunE(
 		return fmt.Errorf("failed to get delete-volumes flag: %w", flagErr)
 	}
 
-	err = cleanupMirrorRegistries(cmd, cfgManager, clusterCfg, deps, clusterName, deleteVolumes)
+	// For TalosInDocker, we must cleanup registries BEFORE deleting the cluster
+	// because the registries are connected to the cluster network. If we delete
+	// the cluster first, the network removal fails with "has active endpoints".
+	if clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionTalosInDocker {
+		cleanupRegistries(cmd, cfgManager, clusterCfg, deps, clusterName, deleteVolumes)
+	}
+
+	// Start a new timer stage for the cluster deletion
+	if deps.Timer != nil {
+		deps.Timer.NewStage()
+	}
+
+	config := newDeleteLifecycleConfig()
+
+	// Execute cluster deletion using the already-loaded config
+	err = cmdhelpers.RunLifecycleWithConfig(cmd, deps, config, clusterCfg)
 	if err != nil {
-		// Log warning but don't fail the delete operation
+		return fmt.Errorf("cluster deletion failed: %w", err)
+	}
+
+	// For non-TalosInDocker distributions, cleanup registries after cluster deletion
+	if clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionTalosInDocker {
+		cleanupRegistries(cmd, cfgManager, clusterCfg, deps, clusterName, deleteVolumes)
+	}
+
+	return nil
+}
+
+// cleanupRegistries cleans up mirror and local registries during cluster deletion.
+// For TalosInDocker, this must be called BEFORE cluster deletion because registries
+// are connected to the cluster network. For Kind and K3d, it's called after.
+func cleanupRegistries(
+	cmd *cobra.Command,
+	cfgManager *ksailconfigmanager.ConfigManager,
+	clusterCfg *v1alpha1.Cluster,
+	deps cmdhelpers.LifecycleDeps,
+	clusterName string,
+	deleteVolumes bool,
+) {
+	err := cleanupMirrorRegistries(cmd, cfgManager, clusterCfg, deps, clusterName, deleteVolumes)
+	if err != nil {
 		notify.WriteMessage(notify.Message{
 			Type:    notify.WarningType,
 			Content: fmt.Sprintf("failed to cleanup registries: %v", err),
@@ -105,8 +146,6 @@ func handleDeleteRunE(
 			})
 		}
 	}
-
-	return nil
 }
 
 // cleanupMirrorRegistries cleans up registries for Kind after cluster deletion.
@@ -131,9 +170,50 @@ func cleanupMirrorRegistries(
 		)
 	case v1alpha1.DistributionK3d:
 		return cleanupK3dMirrorRegistries(cmd, clusterCfg, deps, clusterName, deleteVolumes)
+	case v1alpha1.DistributionTalosInDocker:
+		return cleanupTalosInDockerMirrorRegistries(
+			cmd,
+			cfgManager,
+			deps,
+			clusterName,
+			deleteVolumes,
+		)
 	default:
 		return nil
 	}
+}
+
+// collectMirrorSpecs collects and merges mirror specs from flags and existing config.
+// Returns the merged specs, registry names, and any error.
+func collectMirrorSpecs(
+	cfgManager *ksailconfigmanager.ConfigManager,
+	mirrorsDir string,
+) ([]registry.MirrorSpec, []string, error) {
+	// Get mirror registry specs from command line flag
+	flagSpecs := registry.ParseMirrorSpecs(cfgManager.Viper.GetStringSlice("mirror-registry"))
+
+	// Try to read existing hosts.toml files.
+	existingSpecs, err := registry.ReadExistingHostsToml(mirrorsDir)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to read existing hosts configuration: %w", err)
+	}
+
+	// Merge specs: flag specs override existing specs
+	mirrorSpecs := registry.MergeSpecs(existingSpecs, flagSpecs)
+
+	if len(mirrorSpecs) == 0 {
+		return nil, nil, nil
+	}
+
+	// Build registry info to get names
+	entries := registry.BuildMirrorEntries(mirrorSpecs, "", nil, nil, nil)
+
+	registryNames := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		registryNames = append(registryNames, entry.ContainerName)
+	}
+
+	return mirrorSpecs, registryNames, nil
 }
 
 func cleanupKindMirrorRegistries(
@@ -144,29 +224,9 @@ func cleanupKindMirrorRegistries(
 	clusterName string,
 	deleteVolumes bool,
 ) error {
-	// Get mirror registry specs from command line flag
-	flagSpecs := registry.ParseMirrorSpecs(cfgManager.Viper.GetStringSlice("mirror-registry"))
-
-	// Try to read existing hosts.toml files.
-	// ReadExistingHostsToml returns (nil, nil) for missing directories, and an error for actual I/O issues.
-	existingSpecs, err := registry.ReadExistingHostsToml(scaffolder.KindMirrorsDir)
+	mirrorSpecs, registryNames, err := collectMirrorSpecs(cfgManager, scaffolder.KindMirrorsDir)
 	if err != nil {
-		return fmt.Errorf("failed to read existing hosts configuration: %w", err)
-	}
-
-	// Merge specs: flag specs override existing specs
-	mirrorSpecs := registry.MergeSpecs(existingSpecs, flagSpecs)
-
-	if len(mirrorSpecs) == 0 {
-		return nil
-	}
-
-	// Build registry info to get names
-	entries := registry.BuildMirrorEntries(mirrorSpecs, "", nil, nil, nil)
-
-	registryNames := make([]string, 0, len(entries))
-	for _, entry := range entries {
-		registryNames = append(registryNames, entry.ContainerName)
+		return err
 	}
 
 	if len(registryNames) == 0 {
@@ -323,4 +383,54 @@ func notifyRegistryDeletions(
 			Args:    []any{name},
 		})
 	}
+}
+
+func cleanupTalosInDockerMirrorRegistries(
+	cmd *cobra.Command,
+	cfgManager *ksailconfigmanager.ConfigManager,
+	deps cmdhelpers.LifecycleDeps,
+	clusterName string,
+	deleteVolumes bool,
+) error {
+	mirrorSpecs, registryNames, err := collectMirrorSpecs(cfgManager, scaffolder.KindMirrorsDir)
+	if err != nil {
+		return err
+	}
+
+	if len(registryNames) == 0 {
+		return nil
+	}
+
+	// TalosInDocker uses the cluster name as the network name
+	networkName := clusterName
+
+	return runMirrorRegistryCleanup(
+		cmd,
+		deps,
+		registryNames,
+		func(dockerAPIClient client.APIClient) error {
+			// Build registry infos from mirror specs
+			registryInfos := registry.BuildRegistryInfosFromSpecs(mirrorSpecs, nil, nil)
+
+			if len(registryInfos) == 0 {
+				return nil
+			}
+
+			// Create registry manager
+			registryMgr, mgrErr := dockerclient.NewRegistryManager(dockerAPIClient)
+			if mgrErr != nil {
+				return fmt.Errorf("failed to create registry manager: %w", mgrErr)
+			}
+
+			return registry.CleanupRegistries(
+				cmd.Context(),
+				registryMgr,
+				registryInfos,
+				clusterName,
+				deleteVolumes,
+				networkName,
+				nil,
+			)
+		},
+	)
 }

@@ -8,7 +8,17 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
 	"github.com/devantler-tech/ksail/v5/pkg/k8s"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+)
+
+// API server stability configuration for distributions that need it.
+const (
+	// APIServerStabilityTimeout is the timeout for waiting for API server stability.
+	APIServerStabilityTimeout = 60 * time.Second
+	// APIServerRequiredSuccesses is the number of consecutive successful API server
+	// responses required before considering it stable.
+	APIServerRequiredSuccesses = 3
 )
 
 // InstallerBase provides common fields and methods for CNI installers.
@@ -93,6 +103,34 @@ func (b *InstallerBase) BuildRESTConfig() (*rest.Config, error) {
 	}
 
 	return config, nil
+}
+
+// WaitForAPIServerStability waits for the Kubernetes API server to be stable.
+// This is needed for distributions like TalosInDocker where the API server may be
+// unstable immediately after bootstrap, causing transient connection errors.
+// This method should be called before Helm operations for such distributions.
+func (b *InstallerBase) WaitForAPIServerStability(ctx context.Context) error {
+	restConfig, err := b.BuildRESTConfig()
+	if err != nil {
+		return fmt.Errorf("failed to build REST config: %w", err)
+	}
+
+	clientset, err := kubernetes.NewForConfig(restConfig)
+	if err != nil {
+		return fmt.Errorf("failed to create kubernetes clientset: %w", err)
+	}
+
+	err = k8s.WaitForAPIServerStable(
+		ctx,
+		clientset,
+		APIServerStabilityTimeout,
+		APIServerRequiredSuccesses,
+	)
+	if err != nil {
+		return fmt.Errorf("API server stability check failed: %w", err)
+	}
+
+	return nil
 }
 
 var errHelmClientNil = errors.New("helm client is nil")

@@ -132,8 +132,8 @@ go run main.go --help
 
 - **go.mod**: Go module dependencies (includes embedded kubectl, helm, kind, k3d, flux, argocd)
 - **Gemfile**: Jekyll documentation dependencies
-- **_config.yml**: Jekyll site configuration in docs/
-- **.github/workflows/*.yaml**: CI/CD pipelines
+- **\_config.yml**: Jekyll site configuration in docs/
+- **.github/workflows/\*.yaml**: CI/CD pipelines
 
 ### CLI Commands Reference
 
@@ -220,3 +220,12 @@ bundle exec jekyll serve --host 0.0.0.0  # Test locally (if needed)
 - Documentation is built with Jekyll and uses the "just-the-docs" theme
 - Build times: ~40s for initial build, ~18s for tests, ~2s for docs
 - **NEVER CANCEL** long-running builds - they need time to download packages and compile
+
+## Active Technologies
+
+- Go 1.21+ (001-talosindocker-distribution)
+- Local filesystem for Talos patches (`talos/` folder structure), cluster state directory (001-talosindocker-distribution)
+
+## Recent Changes
+
+- 001-talosindocker-distribution: Added Go 1.21+, renamed Tind to TalosInDocker

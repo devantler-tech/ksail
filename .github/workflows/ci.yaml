@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
 
+concurrency:
+  group: "ci-go-repo-${{ github.ref }}"
+  cancel-in-progress: true
+
 permissions: {}
 
 jobs:
@@ -72,8 +76,6 @@ jobs:
         uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6.1.0
         with:
           go-version-file: go.mod
-          cache: true
-          cache-dependency-path: go.sum
 
       - name: 📦 Prepare ksail binary
         uses: ./.github/actions/prepare-ksail-binary
@@ -98,6 +100,7 @@ jobs:
           - init-args: "--distribution Kind --gitops-engine ArgoCD"
           - init-args: "--distribution Kind --mirror-registry docker.io=https://registry-1.docker.io"
           - init-args: "--distribution Kind --mirror-registry docker.io=https://registry-1.docker.io --mirror-registry ghcr.io=https://ghcr.io"
+          - init-args: "--distribution Kind --metrics-server Disabled"
           - init-args: "--distribution K3d"
           - init-args: "--distribution K3d --cert-manager Enabled"
           - init-args: "--distribution K3d --cni Cilium"
@@ -108,6 +111,16 @@ jobs:
           - init-args: "--distribution K3d --mirror-registry docker.io=https://registry-1.docker.io"
           - init-args: "--distribution K3d --mirror-registry docker.io=https://registry-1.docker.io --mirror-registry ghcr.io=https://ghcr.io"
           - init-args: "--distribution K3d --metrics-server Disabled"
+          - init-args: "--distribution TalosInDocker"
+          - init-args: "--distribution TalosInDocker --cert-manager Enabled"
+          - init-args: "--distribution TalosInDocker --cni Cilium"
+          - init-args: "--distribution TalosInDocker --cni Calico"
+          - init-args: "--distribution TalosInDocker --csi LocalPathStorage"
+          - init-args: "--distribution TalosInDocker --gitops-engine Flux"
+          - init-args: "--distribution TalosInDocker --gitops-engine ArgoCD"
+          - init-args: "--distribution TalosInDocker --mirror-registry docker.io=https://registry-1.docker.io"
+          - init-args: "--distribution TalosInDocker --mirror-registry docker.io=https://registry-1.docker.io --mirror-registry ghcr.io=https://ghcr.io"
+          - init-args: "--distribution TalosInDocker --metrics-server Disabled"
     steps:
       - name: 📄 Checkout
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
@@ -134,6 +147,12 @@ jobs:
         run: |
           ./bin/ksail cluster init ${{ matrix.init-args }}
 
+      - name: 🔧 Load br_netfilter kernel module (required for TalosInDocker)
+        if: contains(matrix.init-args, 'TalosInDocker')
+        run: |
+          sudo modprobe br_netfilter
+          echo "br_netfilter module loaded successfully"
+
       - name: 🧪 ksail cluster create
         run: |
           ./bin/ksail cluster create
@@ -149,83 +168,13 @@ jobs:
 
       - name: 🧪 ksail workload apply
         run: |
-          mkdir -p /tmp/podinfo-overlay
-          cat > /tmp/podinfo-overlay/kustomization.yaml <<'EOF'
-          apiVersion: kustomize.config.k8s.io/v1beta1
-          kind: Kustomization
-          resources:
-            - https://github.com/stefanprodan/podinfo//kustomize
-          patches:
-            - target:
-                kind: HorizontalPodAutoscaler
-              patch: |-
-                $patch: delete
-                apiVersion: autoscaling/v2
-                kind: HorizontalPodAutoscaler
-                metadata:
-                  name: podinfo
-          EOF
-          ./bin/ksail workload apply -k /tmp/podinfo-overlay
+          ./bin/ksail workload apply -k .github/fixtures/podinfo-overlay
           ./bin/ksail workload wait --for=condition=Available deployment/podinfo --timeout=300s
 
       - name: 🧪 ksail workload push and reconcile
-        if: contains(matrix.init-args, '--gitops-engine Flux') || contains(matrix.init-args, '--gitops-engine ArgoCD')
+        if: contains(matrix.init-args, '--gitops-engine')
         run: |
-          cat > k8s/reconcile-test-deployment.yaml <<'EOF'
-          apiVersion: apps/v1
-          kind: Deployment
-          metadata:
-            name: ksail-reconcile-test
-            namespace: default
-          spec:
-            replicas: 1
-            selector:
-              matchLabels:
-                app: ksail-reconcile-test
-            template:
-              metadata:
-                labels:
-                  app: ksail-reconcile-test
-              spec:
-                containers:
-                  - name: ksail-reconcile-test
-                    image: nginx:stable-alpine
-                    ports:
-                      - containerPort: 80
-          EOF
-
-          if [ -f k8s/kustomization.yaml ] && grep -q '^resources: \[\]$' k8s/kustomization.yaml; then
-            sed -i 's/^resources: \[\]$/resources:\n  - reconcile-test-deployment.yaml/' k8s/kustomization.yaml
-          elif [ -f k8s/kustomization.yaml ] && grep -q '^resources:' k8s/kustomization.yaml; then
-            if ! grep -q 'reconcile-test-deployment.yaml' k8s/kustomization.yaml; then
-              sed -i '/^resources:/a\  - reconcile-test-deployment.yaml' k8s/kustomization.yaml
-            fi
-          else
-          cat > k8s/kustomization.yaml <<'EOF'
-          apiVersion: kustomize.config.k8s.io/v1beta1
-          kind: Kustomization
-          resources:
-            - reconcile-test-deployment.yaml
-          EOF
-          fi
-
-          # Validate the kustomization.yaml was properly updated
-          if ! kubectl kustomize k8s/ > /dev/null 2>&1; then
-            echo "ERROR: kustomization.yaml is malformed after modification"
-            cat k8s/kustomization.yaml
-            exit 1
-          fi
-
-          if ! grep -q 'reconcile-test-deployment.yaml' k8s/kustomization.yaml; then
-            echo "ERROR: reconcile-test-deployment.yaml was not added to kustomization.yaml"
-            cat k8s/kustomization.yaml
-            exit 1
-          fi
-
-          # Push the OCI artifact to the local registry
-          ./bin/ksail workload push
-
-          # Trigger reconciliation and wait for completion
+          ./bin/ksail workload push .github/fixtures/reconcile-test
           ./bin/ksail workload reconcile
 
       - name: 🧪 ksail cluster stop

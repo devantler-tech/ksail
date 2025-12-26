@@ -1,0 +1,20 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ksail-reconcile-test
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ksail-reconcile-test
+  template:
+    metadata:
+      labels:
+        app: ksail-reconcile-test
+    spec:
+      containers:
+        - name: ksail-reconcile-test
+          image: nginx:stable-alpine
+          ports:
+            - containerPort: 80

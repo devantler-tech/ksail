@@ -713,7 +713,7 @@ Use "ksail workload [command] --help" for more information about a command.
 Build and push local workloads as an OCI artifact to the local registry.
 
 Usage:
-  ksail workload push [flags]
+  ksail workload push [source-directory] [flags]
 
 Flags:
   -h, --help       help for push

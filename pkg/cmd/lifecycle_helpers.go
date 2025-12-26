@@ -131,6 +131,7 @@ func HandleLifecycleRunE(
 
 // showLifecycleTitle displays the title message for a lifecycle operation.
 func showLifecycleTitle(cmd *cobra.Command, emoji, content string) {
+	_, _ = fmt.Fprintln(cmd.OutOrStdout()) // Add newline before title for visual separation
 	notify.WriteMessage(
 		notify.Message{
 			Type:    notify.TitleType,
@@ -180,6 +181,11 @@ func ExtractClusterNameFromContext(context string, distribution v1alpha1.Distrib
 		}
 	case v1alpha1.DistributionK3d:
 		if clusterName, ok := strings.CutPrefix(context, "k3d-"); ok {
+			return clusterName
+		}
+	case v1alpha1.DistributionTalosInDocker:
+		// TalosInDocker uses admin@<cluster-name> context pattern
+		if clusterName, ok := strings.CutPrefix(context, "admin@"); ok {
 			return clusterName
 		}
 	}

@@ -170,15 +170,17 @@ const (
 	DistributionKind Distribution = "Kind"
 	// DistributionK3d is the K3d distribution.
 	DistributionK3d Distribution = "K3d"
+	// DistributionTalosInDocker is the Talos-in-Docker distribution.
+	DistributionTalosInDocker Distribution = "TalosInDocker"
 )
 
 // ProvidesMetricsServerByDefault returns true if the distribution includes metrics-server by default.
-// K3d (based on K3s) includes metrics-server, Kind does not.
+// K3d (based on K3s) includes metrics-server, Kind and TalosInDocker do not.
 func (d *Distribution) ProvidesMetricsServerByDefault() bool {
 	switch *d {
 	case DistributionK3d:
 		return true
-	case DistributionKind:
+	case DistributionKind, DistributionTalosInDocker:
 		return false
 	default:
 		return false
@@ -186,12 +188,12 @@ func (d *Distribution) ProvidesMetricsServerByDefault() bool {
 }
 
 // ProvidesStorageByDefault returns true if the distribution includes a storage provisioner by default.
-// K3d (based on K3s) includes local-path-provisioner, Kind does not have a default storage class.
+// K3d (based on K3s) includes local-path-provisioner, Kind and TalosInDocker do not have a default storage class.
 func (d *Distribution) ProvidesStorageByDefault() bool {
 	switch *d {
 	case DistributionK3d:
 		return true
-	case DistributionKind:
+	case DistributionKind, DistributionTalosInDocker:
 		return false
 	default:
 		return false
@@ -279,8 +281,9 @@ const (
 
 // Options holds optional settings for distributions, networking, and deployment tools.
 type Options struct {
-	Kind OptionsKind `json:"kind,omitzero"`
-	K3d  OptionsK3d  `json:"k3d,omitzero"`
+	Kind          OptionsKind          `json:"kind,omitzero"`
+	K3d           OptionsK3d           `json:"k3d,omitzero"`
+	TalosInDocker OptionsTalosInDocker `json:"talosInDocker,omitzero"`
 
 	Cilium OptionsCilium `json:"cilium,omitzero"`
 	Calico OptionsCalico `json:"calico,omitzero"`
@@ -300,6 +303,15 @@ type OptionsKind struct {
 
 // OptionsK3d defines options specific to the K3d distribution.
 type OptionsK3d struct{}
+
+// OptionsTalosInDocker defines options specific to the TalosInDocker distribution.
+type OptionsTalosInDocker struct {
+	// ControlPlanes is the number of control-plane nodes (default: 1).
+	ControlPlanes int32 `json:"controlPlanes,omitzero"`
+	// Workers is the number of worker nodes (default: 0).
+	// When 0, scheduling is allowed on control-plane nodes.
+	Workers int32 `json:"workers,omitzero"`
+}
 
 // OptionsCilium defines options for the Cilium CNI.
 type OptionsCilium struct {
@@ -349,8 +361,8 @@ func (d *Distribution) Set(value string) error {
 		}
 	}
 
-	return fmt.Errorf("%w: %s (valid options: %s, %s)",
-		ErrInvalidDistribution, value, DistributionKind, DistributionK3d)
+	return fmt.Errorf("%w: %s (valid options: %s, %s, %s)",
+		ErrInvalidDistribution, value, DistributionKind, DistributionK3d, DistributionTalosInDocker)
 }
 
 // Set for GitOpsEngine.

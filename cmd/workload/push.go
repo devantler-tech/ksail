@@ -14,18 +14,19 @@ import (
 
 // NewPushCmd creates the workload push command.
 //
-//nolint:funlen // Cobra command RunE functions typically combine setup, validation, and execution
+//nolint:funlen,cyclop // Cobra command RunE functions typically combine setup, validation, and execution
 func NewPushCmd(_ *runtime.Runtime) *cobra.Command {
 	var validate bool
 
 	cmd := &cobra.Command{
-		Use:          "push",
+		Use:          "push [source-directory]",
 		Short:        "Package and push an OCI artifact to the local registry",
 		Long:         "Build and push local workloads as an OCI artifact to the local registry.",
+		Args:         cobra.MaximumNArgs(1),
 		SilenceUsage: true,
 	}
 
-	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
 		ctx, err := initCommandContext(cmd)
 		if err != nil {
 			return err
@@ -42,12 +43,25 @@ func NewPushCmd(_ *runtime.Runtime) *cobra.Command {
 			return errLocalRegistryRequired
 		}
 
-		sourceDir := clusterCfg.Spec.Workload.SourceDirectory
-		if strings.TrimSpace(sourceDir) == "" {
-			sourceDir = v1alpha1.DefaultSourceDirectory
+		// Determine the configured source directory for the repo name.
+		// The repo name is always derived from the config's sourceDirectory,
+		// ensuring artifacts are pushed to the repository Flux is watching.
+		configSourceDir := strings.TrimSpace(clusterCfg.Spec.Workload.SourceDirectory)
+		if configSourceDir == "" {
+			configSourceDir = v1alpha1.DefaultSourceDirectory
 		}
 
-		repoName := sourceDir
+		repoName := registry.SanitizeRepoName(configSourceDir)
+
+		// Use positional arg if provided to specify which directory to package,
+		// otherwise fall back to the configured source directory.
+		var sourceDir string
+		if len(args) > 0 {
+			sourceDir = args[0]
+		} else {
+			sourceDir = configSourceDir
+		}
+
 		artifactVersion := registry.DefaultLocalArtifactTag
 
 		registryPort := clusterCfg.Spec.Cluster.Options.LocalRegistry.HostPort

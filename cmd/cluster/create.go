@@ -14,12 +14,14 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	argocdgitops "github.com/devantler-tech/ksail/v5/pkg/client/argocd"
+	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
 	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
 	cmdhelpers "github.com/devantler-tech/ksail/v5/pkg/cmd"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	k3dconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/k3d"
 	kindconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/kind"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
+	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
 	"github.com/devantler-tech/ksail/v5/pkg/io/scaffolder"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/installer"
 	argocdinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/argocd"
@@ -104,6 +106,8 @@ func NewCreateCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
 }
 
 // handleCreateRunE executes cluster creation with mirror registry setup and CNI installation.
+//
+//nolint:funlen // Function orchestrates multiple lifecycle stages
 func handleCreateRunE(
 	cmd *cobra.Command,
 	cfgManager *ksailconfigmanager.ConfigManager,
@@ -113,7 +117,10 @@ func handleCreateRunE(
 
 	outputTimer := cmdhelpers.MaybeTimer(cmd, deps.Timer)
 
-	clusterCfg, kindConfig, k3dConfig, err := loadClusterConfiguration(cfgManager, outputTimer)
+	clusterCfg, kindConfig, k3dConfig, talosConfig, err := loadClusterConfiguration(
+		cfgManager,
+		outputTimer,
+	)
 	if err != nil {
 		return err
 	}
@@ -128,6 +135,7 @@ func handleCreateRunE(
 		cfgManager,
 		kindConfig,
 		k3dConfig,
+		talosConfig,
 		&firstActivityShown,
 	)
 	if err != nil {
@@ -149,6 +157,7 @@ func handleCreateRunE(
 		cfgManager,
 		kindConfig,
 		k3dConfig,
+		talosConfig,
 		&firstActivityShown,
 	)
 
@@ -158,6 +167,7 @@ func handleCreateRunE(
 		deps,
 		kindConfig,
 		k3dConfig,
+		talosConfig,
 		localRegistryStageConnect,
 		&firstActivityShown,
 	)
@@ -171,18 +181,18 @@ func handleCreateRunE(
 func loadClusterConfiguration(
 	cfgManager *ksailconfigmanager.ConfigManager,
 	tmr timer.Timer,
-) (*v1alpha1.Cluster, *v1alpha4.Cluster, *v1alpha5.SimpleConfig, error) {
+) (*v1alpha1.Cluster, *v1alpha4.Cluster, *v1alpha5.SimpleConfig, *talosconfigmanager.Configs, error) {
 	clusterCfg, err := cfgManager.LoadConfig(tmr)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to load cluster configuration: %w", err)
+		return nil, nil, nil, nil, fmt.Errorf("failed to load cluster configuration: %w", err)
 	}
 
-	kindConfig, k3dConfig, err := loadDistributionConfigs(clusterCfg, tmr)
+	kindConfig, k3dConfig, talosConfig, err := loadDistributionConfigs(clusterCfg, tmr)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 
-	return clusterCfg, kindConfig, k3dConfig, nil
+	return clusterCfg, kindConfig, k3dConfig, talosConfig, nil
 }
 
 func ensureLocalRegistriesReady(
@@ -192,6 +202,7 @@ func ensureLocalRegistriesReady(
 	cfgManager *ksailconfigmanager.ConfigManager,
 	kindConfig *v1alpha4.Cluster,
 	k3dConfig *v1alpha5.SimpleConfig,
+	talosConfig *talosconfigmanager.Configs,
 	firstActivityShown *bool,
 ) error {
 	err := executeLocalRegistryStage(
@@ -200,6 +211,7 @@ func ensureLocalRegistriesReady(
 		deps,
 		kindConfig,
 		k3dConfig,
+		talosConfig,
 		localRegistryStageProvision,
 		firstActivityShown,
 	)
@@ -214,6 +226,7 @@ func ensureLocalRegistriesReady(
 		cfgManager,
 		kindConfig,
 		k3dConfig,
+		talosConfig,
 		firstActivityShown,
 	)
 	if err != nil {
@@ -252,6 +265,7 @@ func connectMirrorRegistriesWithWarning(
 	cfgManager *ksailconfigmanager.ConfigManager,
 	kindConfig *v1alpha4.Cluster,
 	k3dConfig *v1alpha5.SimpleConfig,
+	talosConfig *talosconfigmanager.Configs,
 	firstActivityShown *bool,
 ) {
 	err := connectRegistriesToClusterNetwork(
@@ -261,6 +275,7 @@ func connectMirrorRegistriesWithWarning(
 		cfgManager,
 		kindConfig,
 		k3dConfig,
+		talosConfig,
 		firstActivityShown,
 	)
 	if err != nil {
@@ -342,10 +357,11 @@ func installCustomCNIAndMetrics(
 	return handleMetricsServer(cmd, clusterCfg, tmr, firstActivityShown)
 }
 
+//nolint:cyclop // Complexity slightly above threshold due to TalosInDocker support
 func loadDistributionConfigs(
 	clusterCfg *v1alpha1.Cluster,
 	lifecycleTimer timer.Timer,
-) (*v1alpha4.Cluster, *v1alpha5.SimpleConfig, error) {
+) (*v1alpha4.Cluster, *v1alpha5.SimpleConfig, *talosconfigmanager.Configs, error) {
 	defaultConfigPath := defaultDistributionConfigPath(clusterCfg.Spec.Cluster.Distribution)
 
 	configPath := strings.TrimSpace(clusterCfg.Spec.Cluster.DistributionConfig)
@@ -368,21 +384,41 @@ func loadDistributionConfigs(
 
 		kindConfig, err := manager.LoadConfig(lifecycleTimer)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to load kind config: %w", err)
+			return nil, nil, nil, fmt.Errorf("failed to load kind config: %w", err)
 		}
 
-		return kindConfig, nil, nil
+		return kindConfig, nil, nil, nil
 	case v1alpha1.DistributionK3d:
 		manager := k3dconfigmanager.NewConfigManager(configPath)
 
 		k3dConfig, err := manager.LoadConfig(lifecycleTimer)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to load k3d config: %w", err)
+			return nil, nil, nil, fmt.Errorf("failed to load k3d config: %w", err)
 		}
 
-		return nil, k3dConfig, nil
+		return nil, k3dConfig, nil, nil
+	case v1alpha1.DistributionTalosInDocker:
+		// Derive cluster name from context or use default
+		clusterName := strings.TrimSpace(clusterCfg.Spec.Cluster.Connection.Context)
+		if clusterName == "" {
+			clusterName = talosconfigmanager.DefaultClusterName
+		}
+
+		manager := talosconfigmanager.NewConfigManager(
+			configPath,
+			clusterName,
+			"", // Use default Kubernetes version
+			"", // Use default network CIDR
+		)
+
+		talosConfig, err := manager.LoadConfig(lifecycleTimer)
+		if err != nil {
+			return nil, nil, nil, fmt.Errorf("failed to load talos config: %w", err)
+		}
+
+		return nil, nil, talosConfig, nil
 	default:
-		return nil, nil, nil
+		return nil, nil, nil, nil
 	}
 }
 
@@ -468,14 +504,16 @@ var (
 	//nolint:gochecknoglobals // Stage action definitions reused across lifecycle flows.
 	registryStageDefinitions = map[registryStageRole]registryStageDefinition{
 		registryStageRoleMirror: {
-			info:       mirrorRegistryStageInfo,
-			kindAction: kindRegistryActionFor(registryStageRoleMirror),
-			k3dAction:  k3dRegistryActionFor(registryStageRoleMirror),
+			info:        mirrorRegistryStageInfo,
+			kindAction:  kindRegistryActionFor(registryStageRoleMirror),
+			k3dAction:   k3dRegistryActionFor(registryStageRoleMirror),
+			talosAction: talosRegistryActionFor(registryStageRoleMirror),
 		},
 		registryStageRoleConnect: {
-			info:       connectRegistryStageInfo,
-			kindAction: kindRegistryActionFor(registryStageRoleConnect),
-			k3dAction:  k3dRegistryActionFor(registryStageRoleConnect),
+			info:        connectRegistryStageInfo,
+			kindAction:  kindRegistryActionFor(registryStageRoleConnect),
+			k3dAction:   k3dRegistryActionFor(registryStageRoleConnect),
+			talosAction: talosRegistryActionFor(registryStageRoleConnect),
 		},
 	}
 	// setupMirrorRegistries configures mirror registries before cluster creation.
@@ -691,13 +729,15 @@ type registryStageContext struct {
 	clusterCfg  *v1alpha1.Cluster
 	kindConfig  *v1alpha4.Cluster
 	k3dConfig   *v1alpha5.SimpleConfig
+	talosConfig *talosconfigmanager.Configs
 	mirrorSpecs []registry.MirrorSpec
 }
 
 type registryStageDefinition struct {
-	info       registryStageInfo
-	kindAction func(*registryStageContext) func(context.Context, client.APIClient) error
-	k3dAction  func(*registryStageContext) func(context.Context, client.APIClient) error
+	info        registryStageInfo
+	kindAction  func(*registryStageContext) func(context.Context, client.APIClient) error
+	k3dAction   func(*registryStageContext) func(context.Context, client.APIClient) error
+	talosAction func(*registryStageContext) func(context.Context, client.APIClient) error
 }
 
 type registryAction func(context.Context, *registryStageContext, client.APIClient) error
@@ -728,6 +768,7 @@ func makeRegistryStageRunner(role registryStageRole) func(
 	*ksailconfigmanager.ConfigManager,
 	*v1alpha4.Cluster,
 	*v1alpha5.SimpleConfig,
+	*talosconfigmanager.Configs,
 	*bool,
 ) error {
 	return func(
@@ -737,6 +778,7 @@ func makeRegistryStageRunner(role registryStageRole) func(
 		cfgManager *ksailconfigmanager.ConfigManager,
 		kindConfig *v1alpha4.Cluster,
 		k3dConfig *v1alpha5.SimpleConfig,
+		talosConfig *talosconfigmanager.Configs,
 		firstActivityShown *bool,
 	) error {
 		return runRegistryStageWithRole(
@@ -746,6 +788,7 @@ func makeRegistryStageRunner(role registryStageRole) func(
 			cfgManager,
 			kindConfig,
 			k3dConfig,
+			talosConfig,
 			role,
 			firstActivityShown,
 		)
@@ -878,14 +921,128 @@ func runK3DRegistryAction(
 	return nil
 }
 
+func talosRegistryActionFor(
+	role registryStageRole,
+) func(*registryStageContext) func(context.Context, client.APIClient) error {
+	return registryActionFor(role, func(currentRole registryStageRole) registryAction {
+		switch currentRole {
+		case registryStageRoleMirror:
+			return runTalosMirrorAction
+		case registryStageRoleConnect:
+			return runTalosConnectAction
+		default:
+			return nil
+		}
+	})
+}
+
+func runTalosMirrorAction(
+	execCtx context.Context,
+	ctx *registryStageContext,
+	dockerAPIClient client.APIClient,
+) error {
+	if len(ctx.mirrorSpecs) == 0 {
+		return nil
+	}
+
+	writer := ctx.cmd.OutOrStdout()
+	clusterName := ""
+
+	if ctx.talosConfig != nil {
+		clusterName = ctx.talosConfig.Name
+	}
+
+	if clusterName == "" {
+		clusterName = talosconfigmanager.DefaultClusterName
+	}
+
+	// TalosInDocker uses the cluster name as the network name
+	networkName := clusterName
+
+	// Build registry infos from mirror specs
+	upstreams := registry.BuildUpstreamLookup(ctx.mirrorSpecs)
+	registryInfos := registry.BuildRegistryInfosFromSpecs(ctx.mirrorSpecs, upstreams, nil)
+
+	if len(registryInfos) == 0 {
+		return nil
+	}
+
+	// Create registry manager
+	registryMgr, err := dockerclient.NewRegistryManager(dockerAPIClient)
+	if err != nil {
+		return fmt.Errorf("failed to create registry manager: %w", err)
+	}
+
+	// Setup registry containers (they will be connected to network after cluster creation)
+	err = registry.SetupRegistries(
+		execCtx,
+		registryMgr,
+		registryInfos,
+		clusterName,
+		networkName,
+		writer,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to setup talos registries: %w", err)
+	}
+
+	return nil
+}
+
+func runTalosConnectAction(
+	execCtx context.Context,
+	ctx *registryStageContext,
+	dockerAPIClient client.APIClient,
+) error {
+	if len(ctx.mirrorSpecs) == 0 {
+		return nil
+	}
+
+	clusterName := ""
+
+	if ctx.talosConfig != nil {
+		clusterName = ctx.talosConfig.Name
+	}
+
+	if clusterName == "" {
+		clusterName = talosconfigmanager.DefaultClusterName
+	}
+
+	// TalosInDocker uses the cluster name as the network name
+	networkName := clusterName
+
+	// Build registry infos from mirror specs
+	registryInfos := registry.BuildRegistryInfosFromSpecs(ctx.mirrorSpecs, nil, nil)
+
+	if len(registryInfos) == 0 {
+		return nil
+	}
+
+	// Connect registries to the TalosInDocker network
+	err := registry.ConnectRegistriesToNetwork(
+		execCtx,
+		dockerAPIClient,
+		registryInfos,
+		networkName,
+		ctx.cmd.OutOrStdout(),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to connect talos registries to network: %w", err)
+	}
+
+	return nil
+}
+
 func newRegistryHandlers(
 	clusterCfg *v1alpha1.Cluster,
 	cfgManager *ksailconfigmanager.ConfigManager,
 	kindConfig *v1alpha4.Cluster,
 	k3dConfig *v1alpha5.SimpleConfig,
+	talosConfig *talosconfigmanager.Configs,
 	mirrorSpecs []registry.MirrorSpec,
 	kindAction func(context.Context, client.APIClient) error,
 	k3dAction func(context.Context, client.APIClient) error,
+	talosAction func(context.Context, client.APIClient) error,
 ) map[v1alpha1.Distribution]registryStageHandler {
 	return map[v1alpha1.Distribution]registryStageHandler{
 		v1alpha1.DistributionKind: {
@@ -895,6 +1052,10 @@ func newRegistryHandlers(
 		v1alpha1.DistributionK3d: {
 			prepare: func() bool { return prepareK3dConfigWithMirrors(clusterCfg, k3dConfig, mirrorSpecs) },
 			action:  k3dAction,
+		},
+		v1alpha1.DistributionTalosInDocker: {
+			prepare: func() bool { return prepareTalosConfigWithMirrors(clusterCfg, talosConfig, mirrorSpecs) },
+			action:  talosAction,
 		},
 	}
 }
@@ -906,10 +1067,12 @@ func handleRegistryStage(
 	cfgManager *ksailconfigmanager.ConfigManager,
 	kindConfig *v1alpha4.Cluster,
 	k3dConfig *v1alpha5.SimpleConfig,
+	talosConfig *talosconfigmanager.Configs,
 	info registryStageInfo,
 	mirrorSpecs []registry.MirrorSpec,
 	kindAction func(context.Context, client.APIClient) error,
 	k3dAction func(context.Context, client.APIClient) error,
+	talosAction func(context.Context, client.APIClient) error,
 	firstActivityShown *bool,
 ) error {
 	handlers := newRegistryHandlers(
@@ -917,9 +1080,11 @@ func handleRegistryStage(
 		cfgManager,
 		kindConfig,
 		k3dConfig,
+		talosConfig,
 		mirrorSpecs,
 		kindAction,
 		k3dAction,
+		talosAction,
 	)
 
 	handler, ok := handlers[clusterCfg.Spec.Cluster.Distribution]
@@ -944,6 +1109,7 @@ func runRegistryStageWithRole(
 	cfgManager *ksailconfigmanager.ConfigManager,
 	kindConfig *v1alpha4.Cluster,
 	k3dConfig *v1alpha5.SimpleConfig,
+	talosConfig *talosconfigmanager.Configs,
 	role registryStageRole,
 	firstActivityShown *bool,
 ) error {
@@ -972,11 +1138,13 @@ func runRegistryStageWithRole(
 		clusterCfg:  clusterCfg,
 		kindConfig:  kindConfig,
 		k3dConfig:   k3dConfig,
+		talosConfig: talosConfig,
 		mirrorSpecs: mirrorSpecs,
 	}
 
 	kindAction := definition.kindAction(stageCtx)
 	k3dAction := definition.k3dAction(stageCtx)
+	talosAction := definition.talosAction(stageCtx)
 
 	return handleRegistryStage(
 		cmd,
@@ -985,10 +1153,12 @@ func runRegistryStageWithRole(
 		cfgManager,
 		kindConfig,
 		k3dConfig,
+		talosConfig,
 		definition.info,
 		mirrorSpecs,
 		kindAction,
 		k3dAction,
+		talosAction,
 		firstActivityShown,
 	)
 }
@@ -1123,11 +1293,24 @@ func newCiliumInstaller(
 ) *ciliuminstaller.CiliumInstaller {
 	timeout := installer.GetInstallTimeout(clusterCfg)
 
-	return ciliuminstaller.NewCiliumInstaller(
+	// Map cluster distribution to Cilium installer distribution
+	var distribution ciliuminstaller.Distribution
+
+	switch clusterCfg.Spec.Cluster.Distribution {
+	case v1alpha1.DistributionTalosInDocker:
+		distribution = ciliuminstaller.DistributionTalosInDocker
+	case v1alpha1.DistributionKind:
+		distribution = ciliuminstaller.DistributionKind
+	case v1alpha1.DistributionK3d:
+		distribution = ciliuminstaller.DistributionK3d
+	}
+
+	return ciliuminstaller.NewCiliumInstallerWithDistribution(
 		helmClient,
 		kubeconfig,
 		clusterCfg.Spec.Cluster.Connection.Context,
 		timeout,
+		distribution,
 	)
 }
 
@@ -1171,11 +1354,24 @@ func newCalicoInstaller(
 ) *calicoinstaller.CalicoInstaller {
 	timeout := installer.GetInstallTimeout(clusterCfg)
 
-	return calicoinstaller.NewCalicoInstaller(
+	// Map cluster distribution to Calico installer distribution
+	var distribution calicoinstaller.Distribution
+
+	switch clusterCfg.Spec.Cluster.Distribution {
+	case v1alpha1.DistributionTalosInDocker:
+		distribution = calicoinstaller.DistributionTalosInDocker
+	case v1alpha1.DistributionKind:
+		distribution = calicoinstaller.DistributionKind
+	case v1alpha1.DistributionK3d:
+		distribution = calicoinstaller.DistributionK3d
+	}
+
+	return calicoinstaller.NewCalicoInstallerWithDistribution(
 		helmClient,
 		kubeconfig,
 		clusterCfg.Spec.Cluster.Connection.Context,
 		timeout,
+		distribution,
 	)
 }
 
@@ -1291,6 +1487,21 @@ func prepareK3dConfigWithMirrors(
 	k3dConfig.Registries.Config = rendered
 
 	return true
+}
+
+func prepareTalosConfigWithMirrors(
+	clusterCfg *v1alpha1.Cluster,
+	_ *talosconfigmanager.Configs,
+	mirrorSpecs []registry.MirrorSpec,
+) bool {
+	if clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionTalosInDocker {
+		return false
+	}
+
+	// TalosInDocker configures mirrors via machine config patches.
+	// We need mirrors to be set up even if talosConfig is nil (using defaults).
+	// The actual configuration happens during cluster creation via patches.
+	return len(mirrorSpecs) > 0
 }
 
 // handleMetricsServer manages metrics-server installation based on cluster configuration.
@@ -1677,15 +1888,18 @@ func ensureArgoCDResources(
 		sourceDir = v1alpha1.DefaultSourceDirectory
 	}
 
+	repoName := registry.SanitizeRepoName(sourceDir)
 	hostPort := net.JoinHostPort(
 		registry.LocalRegistryClusterHost,
 		strconv.Itoa(registry.DefaultRegistryPort),
 	)
-	repoURL := fmt.Sprintf("oci://%s/%s", hostPort, sourceDir)
+	repoURL := fmt.Sprintf("oci://%s/%s", hostPort, repoName)
 
+	// SourcePath is "." because the OCI artifact contains the source directory contents
+	// at the root level, not in a subdirectory.
 	err = mgr.Ensure(ctx, argocdgitops.EnsureOptions{
 		RepositoryURL:   repoURL,
-		SourcePath:      sourceDir,
+		SourcePath:      ".",
 		ApplicationName: "ksail",
 		TargetRevision:  "dev",
 	})

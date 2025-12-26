@@ -152,6 +152,86 @@ func TestHandleInitRunE_RespectsDistributionFlag(t *testing.T) {
 	}
 }
 
+//nolint:funlen // Test function includes comprehensive assertions for TalosInDocker scaffolding
+func TestHandleInitRunE_RespectsDistributionFlagTalosInDocker(t *testing.T) {
+	t.Parallel()
+
+	outDir := t.TempDir()
+
+	var buffer bytes.Buffer
+
+	cmd := newInitCommand(t)
+	cfgManager := newConfigManager(t, cmd, &buffer)
+
+	setFlags(t, cmd, map[string]string{
+		"output":       outDir,
+		"distribution": "TalosInDocker",
+		"force":        "true",
+	})
+
+	deps := newInitDeps(t)
+
+	err := clusterpkg.HandleInitRunE(cmd, cfgManager, deps)
+	if err != nil {
+		t.Fatalf("HandleInitRunE returned error: %v", err)
+	}
+
+	// Verify the talos patches directory structure was created
+	// Note: .gitkeep is NOT created in cluster/ because allow-scheduling patch is generated there
+	expectedPaths := []string{
+		filepath.Join(outDir, "talos", "control-planes", ".gitkeep"),
+		filepath.Join(outDir, "talos", "workers", ".gitkeep"),
+		filepath.Join(outDir, "talos", "cluster", "allow-scheduling-on-control-planes.yaml"),
+	}
+
+	for _, path := range expectedPaths {
+		_, err = os.Stat(path)
+		if err != nil {
+			t.Fatalf("expected path to be scaffolded: %s, error: %v", path, err)
+		}
+	}
+
+	// Verify allow-scheduling-on-control-planes.yaml content
+	allowSchedulingPath := filepath.Join(
+		outDir,
+		"talos",
+		"cluster",
+		"allow-scheduling-on-control-planes.yaml",
+	)
+
+	//nolint:gosec // Test file path is safe
+	allowSchedulingContent, err := os.ReadFile(allowSchedulingPath)
+	if err != nil {
+		t.Fatalf("expected allow-scheduling-on-control-planes.yaml to be scaffolded: %v", err)
+	}
+
+	if !strings.Contains(string(allowSchedulingContent), "allowSchedulingOnControlPlanes: true") {
+		t.Fatalf(
+			"expected allow-scheduling-on-control-planes.yaml to contain correct config\n%s",
+			allowSchedulingContent,
+		)
+	}
+
+	// Verify ksail.yaml contains TalosInDocker distribution
+	ksailPath := filepath.Join(outDir, "ksail.yaml")
+
+	content, err := os.ReadFile(ksailPath) //nolint:gosec // Test file path is safe
+	if err != nil {
+		t.Fatalf("expected ksail.yaml to be scaffolded: %v", err)
+	}
+
+	if !strings.Contains(string(content), "distribution: TalosInDocker") {
+		t.Fatalf("expected ksail.yaml to contain TalosInDocker distribution\n%s", content)
+	}
+
+	// Verify output contains created files
+	// Note: cluster/.gitkeep is NOT in output because allow-scheduling patch replaces it
+	output := buffer.String()
+	if !strings.Contains(output, "talos/control-planes/.gitkeep") {
+		t.Fatalf("expected output to mention created talos directory structure\n%s", output)
+	}
+}
+
 //nolint:paralleltest // Uses t.Chdir for snapshot setup.
 func TestHandleInitRunE_UsesWorkingDirectoryWhenOutputUnset(t *testing.T) {
 	workingDir := t.TempDir()

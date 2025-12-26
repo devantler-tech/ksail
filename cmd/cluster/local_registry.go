@@ -10,6 +10,7 @@ import (
 	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
 	cmdhelpers "github.com/devantler-tech/ksail/v5/pkg/cmd"
 	k3dconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/k3d"
+	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
 	registry "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	"github.com/docker/docker/client"
 	k3dv1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
@@ -89,12 +90,13 @@ const (
 )
 
 type localRegistryStageRequest struct {
-	cmd        *cobra.Command
-	clusterCfg *v1alpha1.Cluster
-	deps       cmdhelpers.LifecycleDeps
-	kindConfig *kindv1alpha4.Cluster
-	k3dConfig  *k3dv1alpha5.SimpleConfig
-	options    []localRegistryOption
+	cmd         *cobra.Command
+	clusterCfg  *v1alpha1.Cluster
+	deps        cmdhelpers.LifecycleDeps
+	kindConfig  *kindv1alpha4.Cluster
+	k3dConfig   *k3dv1alpha5.SimpleConfig
+	talosConfig *talosconfigmanager.Configs
+	options     []localRegistryOption
 }
 
 func newLocalRegistryStageRequest(
@@ -103,15 +105,17 @@ func newLocalRegistryStageRequest(
 	deps cmdhelpers.LifecycleDeps,
 	kindConfig *kindv1alpha4.Cluster,
 	k3dConfig *k3dv1alpha5.SimpleConfig,
+	talosConfig *talosconfigmanager.Configs,
 	options ...localRegistryOption,
 ) localRegistryStageRequest {
 	return localRegistryStageRequest{
-		cmd:        cmd,
-		clusterCfg: clusterCfg,
-		deps:       deps,
-		kindConfig: kindConfig,
-		k3dConfig:  k3dConfig,
-		options:    append([]localRegistryOption(nil), options...),
+		cmd:         cmd,
+		clusterCfg:  clusterCfg,
+		deps:        deps,
+		kindConfig:  kindConfig,
+		k3dConfig:   k3dConfig,
+		talosConfig: talosConfig,
+		options:     append([]localRegistryOption(nil), options...),
 	}
 }
 
@@ -126,6 +130,7 @@ func (r localRegistryStageRequest) run(
 		r.deps,
 		r.kindConfig,
 		r.k3dConfig,
+		r.talosConfig,
 		info,
 		action,
 		firstActivityShown,
@@ -139,6 +144,7 @@ func runLocalRegistryAction(
 	deps cmdhelpers.LifecycleDeps,
 	kindConfig *kindv1alpha4.Cluster,
 	k3dConfig *k3dv1alpha5.SimpleConfig,
+	talosConfig *talosconfigmanager.Configs,
 	info registryStageInfo,
 	action func(context.Context, registry.Service, localRegistryContext) error,
 	firstActivityShown *bool,
@@ -148,7 +154,7 @@ func runLocalRegistryAction(
 		return nil
 	}
 
-	ctx := newLocalRegistryContext(clusterCfg, kindConfig, k3dConfig)
+	ctx := newLocalRegistryContext(clusterCfg, kindConfig, k3dConfig, talosConfig)
 
 	return runLocalRegistryStage(
 		cmd,
@@ -168,6 +174,7 @@ func executeLocalRegistryStage(
 	deps cmdhelpers.LifecycleDeps,
 	kindConfig *kindv1alpha4.Cluster,
 	k3dConfig *k3dv1alpha5.SimpleConfig,
+	talosConfig *talosconfigmanager.Configs,
 	stage localRegistryStageType,
 	firstActivityShown *bool,
 	options ...localRegistryOption,
@@ -183,6 +190,7 @@ func executeLocalRegistryStage(
 		deps,
 		kindConfig,
 		k3dConfig,
+		talosConfig,
 		info,
 		builder,
 		firstActivityShown,
@@ -196,6 +204,7 @@ func newLocalRegistryStageExecutor(
 	deps cmdhelpers.LifecycleDeps,
 	kindConfig *kindv1alpha4.Cluster,
 	k3dConfig *k3dv1alpha5.SimpleConfig,
+	talosConfig *talosconfigmanager.Configs,
 	firstActivityShown *bool,
 	options ...localRegistryOption,
 ) localRegistryStageExecutor {
@@ -205,6 +214,7 @@ func newLocalRegistryStageExecutor(
 		deps,
 		kindConfig,
 		k3dConfig,
+		talosConfig,
 		options...,
 	)
 
@@ -219,6 +229,7 @@ func runLocalRegistryStageFromBuilder(
 	deps cmdhelpers.LifecycleDeps,
 	kindConfig *kindv1alpha4.Cluster,
 	k3dConfig *k3dv1alpha5.SimpleConfig,
+	talosConfig *talosconfigmanager.Configs,
 	info registryStageInfo,
 	buildAction func(*v1alpha1.Cluster) localRegistryStageAction,
 	firstActivityShown *bool,
@@ -230,6 +241,7 @@ func runLocalRegistryStageFromBuilder(
 		deps,
 		kindConfig,
 		k3dConfig,
+		talosConfig,
 		firstActivityShown,
 		options...,
 	)
@@ -313,7 +325,7 @@ func cleanupLocalRegistryWithOptions(
 		return nil
 	}
 
-	kindConfig, k3dConfig, err := loadDistributionConfigs(clusterCfg, deps.Timer)
+	kindConfig, k3dConfig, talosConfig, err := loadDistributionConfigs(clusterCfg, deps.Timer)
 	if err != nil {
 		return fmt.Errorf("failed to load distribution config: %w", err)
 	}
@@ -327,6 +339,7 @@ func cleanupLocalRegistryWithOptions(
 		deps,
 		kindConfig,
 		k3dConfig,
+		talosConfig,
 		localRegistryCleanupStageInfo(),
 		func(execCtx context.Context, svc registry.Service, ctx localRegistryContext) error {
 			registryName := buildLocalRegistryName()
@@ -363,8 +376,9 @@ func newLocalRegistryContext(
 	clusterCfg *v1alpha1.Cluster,
 	kindConfig *kindv1alpha4.Cluster,
 	k3dConfig *k3dv1alpha5.SimpleConfig,
+	talosConfig *talosconfigmanager.Configs,
 ) localRegistryContext {
-	clusterName := resolveLocalRegistryClusterName(clusterCfg, kindConfig, k3dConfig)
+	clusterName := resolveLocalRegistryClusterName(clusterCfg, kindConfig, k3dConfig, talosConfig)
 	networkName := resolveLocalRegistryNetworkName(clusterCfg, clusterName)
 
 	return localRegistryContext{clusterName: clusterName, networkName: networkName}
@@ -374,6 +388,7 @@ func resolveLocalRegistryClusterName(
 	clusterCfg *v1alpha1.Cluster,
 	kindConfig *kindv1alpha4.Cluster,
 	k3dConfig *k3dv1alpha5.SimpleConfig,
+	talosConfig *talosconfigmanager.Configs,
 ) string {
 	switch clusterCfg.Spec.Cluster.Distribution {
 	case v1alpha1.DistributionKind:
@@ -384,6 +399,17 @@ func resolveLocalRegistryClusterName(
 		}
 	case v1alpha1.DistributionK3d:
 		return k3dconfigmanager.ResolveClusterName(clusterCfg, k3dConfig)
+	case v1alpha1.DistributionTalosInDocker:
+		// TalosInDocker uses talos config name if available, falls back to Connection.Context
+		if talosConfig != nil && talosConfig.Name != "" {
+			return talosConfig.Name
+		}
+
+		if name := strings.TrimSpace(clusterCfg.Spec.Cluster.Connection.Context); name != "" {
+			return name
+		}
+
+		return "talos-default"
 	}
 
 	if name := strings.TrimSpace(clusterCfg.Spec.Cluster.Connection.Context); name != "" {
@@ -407,6 +433,14 @@ func resolveLocalRegistryNetworkName(
 		}
 
 		return "k3d-" + trimmed
+	case v1alpha1.DistributionTalosInDocker:
+		// TalosInDocker uses cluster name as Docker network name
+		trimmed := strings.TrimSpace(clusterName)
+		if trimmed == "" {
+			trimmed = "talos-default"
+		}
+
+		return trimmed
 	default:
 		return ""
 	}

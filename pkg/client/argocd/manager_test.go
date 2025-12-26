@@ -105,7 +105,8 @@ func TestManagerEnsure_CreatesApplication(t *testing.T) {
 		getNestedString(t, app, "spec", "source", "repoURL"),
 	)
 	require.Equal(t, "v1", getNestedString(t, app, "spec", "source", "targetRevision"))
-	require.Equal(t, "k8s", getNestedString(t, app, "spec", "source", "path"))
+	// Default path is "." for OCI artifacts since manifests are at root level.
+	require.Equal(t, ".", getNestedString(t, app, "spec", "source", "path"))
 	require.Equal(
 		t,
 		"https://kubernetes.default.svc",

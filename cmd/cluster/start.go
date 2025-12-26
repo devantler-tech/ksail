@@ -62,7 +62,7 @@ func handleStartRunE(
 		return nil
 	}
 
-	kindConfig, k3dConfig, err := loadDistributionConfigs(clusterCfg, deps.Timer)
+	kindConfig, k3dConfig, talosConfig, err := loadDistributionConfigs(clusterCfg, deps.Timer)
 	if err != nil {
 		return fmt.Errorf("load distribution configs: %w", err)
 	}
@@ -76,6 +76,7 @@ func handleStartRunE(
 		deps,
 		kindConfig,
 		k3dConfig,
+		talosConfig,
 		localRegistryStageConnect,
 		&dummyTracker,
 	)

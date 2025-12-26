@@ -15,13 +15,13 @@
 
 # KSail binaries and configs
 /ksail
-k3d.yaml
-kind.yaml
-eks.yaml
-ksail.yaml
-k8s/
-!pkg/k8s/
-kind-mirrors/
+/k3d.yaml
+/kind.yaml
+/eks.yaml
+/ksail.yaml
+/k8s
+/kind-mirrors
+/talos
 
 # ==============================================================================
 # Build and Release Artifacts

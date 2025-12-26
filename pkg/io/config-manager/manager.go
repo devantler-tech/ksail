@@ -1,6 +1,8 @@
 package configmanager
 
-import "github.com/devantler-tech/ksail/v5/pkg/ui/timer"
+import (
+	"github.com/devantler-tech/ksail/v5/pkg/ui/timer"
+)
 
 // ConfigManager provides configuration management functionality.
 //
