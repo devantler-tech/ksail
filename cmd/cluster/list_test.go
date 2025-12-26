@@ -117,17 +117,27 @@ func TestListCmd_NoClusterFound(t *testing.T) {
 	t.Chdir(workingDir)
 	setupListTest(t, workingDir)
 
-	factory := fakeFactoryWithClusters{clusters: []string{}}
-	testRuntime := newListRuntimeContainer(t, factory)
-
-	cmd := clusterpkg.NewListCmd(testRuntime)
-
+	cmd := &cobra.Command{Use: "list"}
 	var buf bytes.Buffer
 	cmd.SetOut(&buf)
 	cmd.SetErr(&buf)
 	cmd.SetContext(context.Background())
 
-	err := cmd.Execute()
+	cfgManager := ksailconfigmanager.NewCommandConfigManager(
+		cmd,
+		ksailconfigmanager.DefaultClusterFieldSelectors(),
+	)
+
+	cmd.Flags().BoolP("all", "a", false, "List all clusters")
+	_ = cfgManager.Viper.BindPFlag("all", cmd.Flags().Lookup("all"))
+
+	deps := clusterpkg.ListDeps{
+		DistributionFactoryCreator: func(_ v1alpha1.Distribution) clusterprovisioner.Factory {
+			return fakeFactoryWithClusters{clusters: []string{}}
+		},
+	}
+
+	err := clusterpkg.HandleListRunE(cmd, cfgManager, deps)
 	require.NoError(t, err)
 
 	snaps.MatchSnapshot(t, buf.String())
@@ -139,17 +149,27 @@ func TestListCmd_SingleClusterFound(t *testing.T) {
 	t.Chdir(workingDir)
 	setupListTest(t, workingDir)
 
-	factory := fakeFactoryWithClusters{clusters: []string{"test-cluster"}}
-	testRuntime := newListRuntimeContainer(t, factory)
-
-	cmd := clusterpkg.NewListCmd(testRuntime)
-
+	cmd := &cobra.Command{Use: "list"}
 	var buf bytes.Buffer
 	cmd.SetOut(&buf)
 	cmd.SetErr(&buf)
 	cmd.SetContext(context.Background())
 
-	err := cmd.Execute()
+	cfgManager := ksailconfigmanager.NewCommandConfigManager(
+		cmd,
+		ksailconfigmanager.DefaultClusterFieldSelectors(),
+	)
+
+	cmd.Flags().BoolP("all", "a", false, "List all clusters")
+	_ = cfgManager.Viper.BindPFlag("all", cmd.Flags().Lookup("all"))
+
+	deps := clusterpkg.ListDeps{
+		DistributionFactoryCreator: func(_ v1alpha1.Distribution) clusterprovisioner.Factory {
+			return fakeFactoryWithClusters{clusters: []string{"test-cluster"}}
+		},
+	}
+
+	err := clusterpkg.HandleListRunE(cmd, cfgManager, deps)
 	require.NoError(t, err)
 
 	snaps.MatchSnapshot(t, buf.String())
@@ -161,17 +181,27 @@ func TestListCmd_MultipleClustersFound(t *testing.T) {
 	t.Chdir(workingDir)
 	setupListTest(t, workingDir)
 
-	factory := fakeFactoryWithClusters{clusters: []string{"cluster-1", "cluster-2", "cluster-3"}}
-	testRuntime := newListRuntimeContainer(t, factory)
-
-	cmd := clusterpkg.NewListCmd(testRuntime)
-
+	cmd := &cobra.Command{Use: "list"}
 	var buf bytes.Buffer
 	cmd.SetOut(&buf)
 	cmd.SetErr(&buf)
 	cmd.SetContext(context.Background())
 
-	err := cmd.Execute()
+	cfgManager := ksailconfigmanager.NewCommandConfigManager(
+		cmd,
+		ksailconfigmanager.DefaultClusterFieldSelectors(),
+	)
+
+	cmd.Flags().BoolP("all", "a", false, "List all clusters")
+	_ = cfgManager.Viper.BindPFlag("all", cmd.Flags().Lookup("all"))
+
+	deps := clusterpkg.ListDeps{
+		DistributionFactoryCreator: func(_ v1alpha1.Distribution) clusterprovisioner.Factory {
+			return fakeFactoryWithClusters{clusters: []string{"cluster-1", "cluster-2", "cluster-3"}}
+		},
+	}
+
+	err := clusterpkg.HandleListRunE(cmd, cfgManager, deps)
 	require.NoError(t, err)
 
 	snaps.MatchSnapshot(t, buf.String())
@@ -198,13 +228,18 @@ func TestListCmd_WithAllFlag(t *testing.T) {
 	_ = cfgManager.Viper.BindPFlag("all", cmd.Flags().Lookup("all"))
 	_ = cmd.Flags().Set("all", "true")
 
-	// Create a mock factory that returns empty clusters for all distributions.
+	// Create a mock factory that returns test-cluster for primary distribution
+	// and empty clusters for other distributions.
+	primaryFactory := fakeFactoryWithClusters{clusters: []string{"test-cluster"}}
 	emptyFactory := fakeFactoryWithClusters{clusters: []string{}}
 
 	deps := clusterpkg.ListDeps{
-		Factory: fakeFactoryWithClusters{clusters: []string{"test-cluster"}},
-		// Use mock factory for all other distributions to avoid hitting real Docker.
-		DistributionFactoryCreator: func(_ v1alpha1.Distribution) clusterprovisioner.Factory {
+		// Use mock factory for all distributions to avoid hitting real Docker.
+		DistributionFactoryCreator: func(dist v1alpha1.Distribution) clusterprovisioner.Factory {
+			// Primary distribution (Kind) returns test-cluster, others return empty
+			if dist == v1alpha1.DistributionKind {
+				return primaryFactory
+			}
 			return emptyFactory
 		},
 	}
@@ -221,17 +256,27 @@ func TestListCmd_ListError(t *testing.T) {
 	t.Chdir(workingDir)
 	setupListTest(t, workingDir)
 
-	factory := fakeFactoryWithClusters{listErr: fmt.Errorf("test error: %w", errTestListClusters)}
-	testRuntime := newListRuntimeContainer(t, factory)
-
-	cmd := clusterpkg.NewListCmd(testRuntime)
-
+	cmd := &cobra.Command{Use: "list"}
 	var buf bytes.Buffer
 	cmd.SetOut(&buf)
 	cmd.SetErr(&buf)
 	cmd.SetContext(context.Background())
 
-	err := cmd.Execute()
+	cfgManager := ksailconfigmanager.NewCommandConfigManager(
+		cmd,
+		ksailconfigmanager.DefaultClusterFieldSelectors(),
+	)
+
+	cmd.Flags().BoolP("all", "a", false, "List all clusters")
+	_ = cfgManager.Viper.BindPFlag("all", cmd.Flags().Lookup("all"))
+
+	deps := clusterpkg.ListDeps{
+		DistributionFactoryCreator: func(_ v1alpha1.Distribution) clusterprovisioner.Factory {
+			return fakeFactoryWithClusters{listErr: fmt.Errorf("test error: %w", errTestListClusters)}
+		},
+	}
+
+	err := clusterpkg.HandleListRunE(cmd, cfgManager, deps)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "failed to list clusters")
 }
