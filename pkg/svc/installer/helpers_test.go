@@ -54,7 +54,7 @@ func assertTimeoutEqualsWithDistribution(
 func TestGetInstallTimeout(t *testing.T) {
 	t.Parallel()
 
-	t.Run("returns_default_when_cluster_is_nil", func(t *testing.T) {
+	t.Run("nil_cluster", func(t *testing.T) {
 		t.Parallel()
 
 		timeout := installer.GetInstallTimeout(nil)
@@ -62,68 +62,64 @@ func TestGetInstallTimeout(t *testing.T) {
 		assert.Equal(t, installer.DefaultInstallTimeout, timeout)
 	})
 
-	t.Run("returns_default_when_timeout_is_zero", func(t *testing.T) {
+	t.Run("zero_timeout", func(t *testing.T) {
 		t.Parallel()
 		assertTimeoutEquals(t, 0, installer.DefaultInstallTimeout)
 	})
 
-	t.Run("returns_default_when_timeout_is_negative", func(t *testing.T) {
+	t.Run("negative_timeout", func(t *testing.T) {
 		t.Parallel()
 		assertTimeoutEquals(t, -1*time.Minute, installer.DefaultInstallTimeout)
 	})
 
-	t.Run("returns_configured_timeout_when_set", func(t *testing.T) {
+	t.Run("explicit_timeout", func(t *testing.T) {
 		t.Parallel()
 		assertTimeoutEquals(t, 10*time.Minute, 10*time.Minute)
 	})
 
-	t.Run("returns_configured_timeout_for_short_duration", func(t *testing.T) {
+	t.Run("short_duration", func(t *testing.T) {
 		t.Parallel()
 		assertTimeoutEquals(t, 30*time.Second, 30*time.Second)
 	})
 
-	t.Run("returns_configured_timeout_for_long_duration", func(t *testing.T) {
+	t.Run("long_duration", func(t *testing.T) {
 		t.Parallel()
 		assertTimeoutEquals(t, 2*time.Hour, 2*time.Hour)
 	})
+}
 
-	t.Run("returns_talos_timeout_for_talosindocker_without_explicit_timeout", func(t *testing.T) {
+func TestGetInstallTimeoutDistributions(t *testing.T) {
+	t.Parallel()
+
+	t.Run("talos_default", func(t *testing.T) {
 		t.Parallel()
+
 		assertTimeoutEqualsWithDistribution(
-			t,
-			v1alpha1.DistributionTalosInDocker,
-			0,
-			installer.TalosInstallTimeout,
+			t, v1alpha1.DistributionTalosInDocker, 0, installer.TalosInstallTimeout,
 		)
 	})
 
-	t.Run("returns_explicit_timeout_for_talosindocker_when_configured", func(t *testing.T) {
+	t.Run("talos_explicit", func(t *testing.T) {
 		t.Parallel()
+
 		assertTimeoutEqualsWithDistribution(
-			t,
-			v1alpha1.DistributionTalosInDocker,
-			15*time.Minute,
-			15*time.Minute,
+			t, v1alpha1.DistributionTalosInDocker, 15*time.Minute, 15*time.Minute,
 		)
 	})
 
-	t.Run("returns_default_timeout_for_kind_distribution", func(t *testing.T) {
+	t.Run("kind_default", func(t *testing.T) {
 		t.Parallel()
+
 		assertTimeoutEqualsWithDistribution(
-			t,
-			v1alpha1.DistributionKind,
-			0,
-			installer.DefaultInstallTimeout,
+			t, v1alpha1.DistributionKind, 0, installer.DefaultInstallTimeout,
 		)
 	})
 
-	t.Run("returns_default_timeout_for_k3d_distribution", func(t *testing.T) {
+	t.Run("k3d_default", func(t *testing.T) {
 		t.Parallel()
+
 		assertTimeoutEqualsWithDistribution(
-			t,
-			v1alpha1.DistributionK3d,
-			0,
-			installer.DefaultInstallTimeout,
+			t, v1alpha1.DistributionK3d, 0, installer.DefaultInstallTimeout,
 		)
 	})
 }
