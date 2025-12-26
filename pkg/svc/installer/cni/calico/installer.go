@@ -70,11 +70,12 @@ func (c *CalicoInstaller) Install(ctx context.Context) error {
 	// We also need to wait for API server stability as the API server may be
 	// unstable immediately after bootstrap.
 	if c.distribution == DistributionTalosInDocker {
-		if err := c.WaitForAPIServerStability(ctx); err != nil {
+		err := c.WaitForAPIServerStability(ctx)
+		if err != nil {
 			return fmt.Errorf("failed to wait for API server stability: %w", err)
 		}
 
-		err := c.ensurePrivilegedNamespaces(ctx)
+		err = c.ensurePrivilegedNamespaces(ctx)
 		if err != nil {
 			return fmt.Errorf("failed to create privileged namespaces: %w", err)
 		}
