@@ -43,19 +43,25 @@ func NewPushCmd(_ *runtime.Runtime) *cobra.Command {
 			return errLocalRegistryRequired
 		}
 
-		// Use positional arg if provided, otherwise fall back to config
+		// Determine the configured source directory for the repo name.
+		// The repo name is always derived from the config's sourceDirectory,
+		// ensuring artifacts are pushed to the repository Flux is watching.
+		configSourceDir := strings.TrimSpace(clusterCfg.Spec.Workload.SourceDirectory)
+		if configSourceDir == "" {
+			configSourceDir = v1alpha1.DefaultSourceDirectory
+		}
+
+		repoName := registry.SanitizeRepoName(configSourceDir)
+
+		// Use positional arg if provided to specify which directory to package,
+		// otherwise fall back to the configured source directory.
 		var sourceDir string
 		if len(args) > 0 {
 			sourceDir = args[0]
 		} else {
-			sourceDir = clusterCfg.Spec.Workload.SourceDirectory
+			sourceDir = configSourceDir
 		}
 
-		if strings.TrimSpace(sourceDir) == "" {
-			sourceDir = v1alpha1.DefaultSourceDirectory
-		}
-
-		repoName := sourceDir
 		artifactVersion := registry.DefaultLocalArtifactTag
 
 		registryPort := clusterCfg.Spec.Cluster.Options.LocalRegistry.HostPort

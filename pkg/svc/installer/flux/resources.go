@@ -17,7 +17,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -25,7 +24,6 @@ import (
 )
 
 const (
-	defaultProjectName       = "ksail-workloads"
 	defaultSourceDirectory   = "k8s"
 	defaultArtifactTag       = "dev"
 	defaultOCIRepositoryName = fluxclient.DefaultNamespace
@@ -146,7 +144,7 @@ func buildFluxInstance(clusterCfg *v1alpha1.Cluster) (*FluxInstance, error) {
 		sourceDir = defaultSourceDirectory
 	}
 
-	projectName := sanitizeFluxName(sourceDir, defaultProjectName)
+	projectName := registry.SanitizeRepoName(sourceDir)
 	repoHost := registry.LocalRegistryClusterHost
 	repoPort := registry.DefaultRegistryPort
 
@@ -279,57 +277,6 @@ func ensureLocalOCIRepositoryInsecure(ctx context.Context, fluxClient client.Cli
 			}
 		}
 	}
-}
-
-//nolint:cyclop // name sanitization requires character-by-character validation
-func sanitizeFluxName(value, fallback string) string {
-	trimmed := strings.ToLower(strings.TrimSpace(value))
-	if trimmed == "" {
-		trimmed = fallback
-	}
-
-	var builder strings.Builder
-
-	previousHyphen := false
-
-	for _, char := range trimmed {
-		switch {
-		case char >= 'a' && char <= 'z':
-			builder.WriteRune(char)
-
-			previousHyphen = false
-		case char >= '0' && char <= '9':
-			builder.WriteRune(char)
-
-			previousHyphen = false
-		default:
-			if !previousHyphen {
-				builder.WriteRune('-')
-
-				previousHyphen = true
-			}
-		}
-	}
-
-	sanitized := strings.Trim(builder.String(), "-")
-	if sanitized == "" {
-		sanitized = fallback
-	}
-
-	if len(sanitized) > validation.DNS1123LabelMaxLength {
-		sanitized = sanitized[:validation.DNS1123LabelMaxLength]
-		sanitized = strings.Trim(sanitized, "-")
-	}
-
-	if sanitized == "" {
-		sanitized = fallback
-	}
-
-	if len(validation.IsDNS1123Label(sanitized)) == 0 {
-		return sanitized
-	}
-
-	return fallback
 }
 
 func normalizeFluxPath() string {
