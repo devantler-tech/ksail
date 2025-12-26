@@ -57,17 +57,17 @@ create_doc_page() {
 		# Sanitize user-specific paths (e.g., /Users/username/... or /home/username/...) to use ~
 		"$KSAIL_BINARY" "${cmd_args[@]}" --help 2>&1 | sed -E 's|"/Users/[^/]+/|"~/|g; s|"/home/[^/]+/|"~/|g'
 		echo '```'
-	} > "$output_file"
+	} >"$output_file"
 }
 
 # Helper function to extract available commands from help output
 # Returns: list of subcommand names, one per line
 get_subcommands() {
-	"$KSAIL_BINARY" "$@" --help 2>&1 | \
-		sed -n '/^Available Commands:/,/^Flags:/p' | \
-		grep -E '^  [a-z]' | \
-		awk '{print $1}' | \
-		grep -v '^help$' | \
+	"$KSAIL_BINARY" "$@" --help 2>&1 |
+		sed -n '/^Available Commands:/,/^Flags:/p' |
+		grep -E '^  [a-z]' |
+		awk '{print $1}' |
+		grep -v '^help$' |
 		grep -v '^completion$' || true
 }
 
@@ -127,7 +127,7 @@ generate_command_docs() {
 					"" \
 					"${subcmd_parts[@]}"
 			fi
-		done <<< "$subcommands"
+		done <<<"$subcommands"
 	fi
 }
 
@@ -147,7 +147,7 @@ top_level_commands=$(get_subcommands)
 while IFS= read -r cmd; do
 	[ -z "$cmd" ] && continue
 	generate_command_docs "CLI Flags" "" "$cmd"
-done <<< "$top_level_commands"
+done <<<"$top_level_commands"
 
 echo "CLI flags documentation generation completed successfully"
 echo "Generated $(find "$DOCS_DIR" -name '*.md' | wc -l) documentation pages"
