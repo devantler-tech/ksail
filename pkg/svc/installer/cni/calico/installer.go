@@ -230,7 +230,7 @@ func (c *CalicoInstaller) ensurePrivilegedNamespace(
 		"pod-security.kubernetes.io/warn":    "privileged",
 	}
 
-	ns, err := clientset.CoreV1().Namespaces().Get(ctx, name, metav1.GetOptions{})
+	namespace, err := clientset.CoreV1().Namespaces().Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Create the namespace with PSS labels
@@ -253,21 +253,21 @@ func (c *CalicoInstaller) ensurePrivilegedNamespace(
 	}
 
 	// Namespace exists, ensure PSS labels are set
-	if ns.Labels == nil {
-		ns.Labels = make(map[string]string)
+	if namespace.Labels == nil {
+		namespace.Labels = make(map[string]string)
 	}
 
 	updated := false
 
 	for k, v := range pssLabels {
-		if ns.Labels[k] != v {
-			ns.Labels[k] = v
+		if namespace.Labels[k] != v {
+			namespace.Labels[k] = v
 			updated = true
 		}
 	}
 
 	if updated {
-		_, err = clientset.CoreV1().Namespaces().Update(ctx, ns, metav1.UpdateOptions{})
+		_, err = clientset.CoreV1().Namespaces().Update(ctx, namespace, metav1.UpdateOptions{})
 		if err != nil {
 			return fmt.Errorf("update namespace labels: %w", err)
 		}
