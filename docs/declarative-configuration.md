@@ -82,7 +82,7 @@ spec:
 ### Top-Level Fields
 
 | Field        | Type   | Required | Description                                    |
-| ------------ | ------ | -------- | ---------------------------------------------- |
+|--------------|--------|----------|------------------------------------------------|
 | `apiVersion` | string | Yes      | Must be `ksail.dev/v1alpha1`                   |
 | `kind`       | string | Yes      | Must be `Cluster`                              |
 | `spec`       | object | Yes      | Cluster and workload specification (see below) |
@@ -92,7 +92,7 @@ spec:
 The `spec` field is a `Spec` object that defines editor, cluster, and workload configuration.
 
 | Field      | Type         | Default | Description                                      |
-| ---------- | ------------ | ------- | ------------------------------------------------ |
+|------------|--------------|---------|--------------------------------------------------|
 | `editor`   | string       | –       | Editor command for interactive workflows         |
 | `cluster`  | ClusterSpec  | –       | Cluster configuration (distribution, components) |
 | `workload` | WorkloadSpec | –       | Workload manifest configuration                  |
@@ -107,18 +107,18 @@ If not specified, KSail falls back to standard editor environment variables (`SO
 
 ### spec.cluster (ClusterSpec)
 
-| Field                | Type          | Default          | Description                                   |
-| -------------------- | ------------- | ---------------- | --------------------------------------------- |
-| `distribution`       | enum          | `Kind`           | Kubernetes distribution to use                |
-| `distributionConfig` | string        | (see below)      | Path to distribution-specific configuration   |
-| `connection`         | Connection    | –                | Cluster connection settings                   |
-| `cni`                | enum          | `Default`        | Container Network Interface                   |
-| `csi`                | enum          | `Default`        | Container Storage Interface                   |
-| `metricsServer`      | enum          | `Enabled`        | Install metrics-server                        |
-| `certManager`        | enum          | `Disabled`       | Install cert-manager                          |
-| `localRegistry`      | enum          | `Disabled`       | Provision local OCI registry                  |
-| `gitOpsEngine`       | enum          | `None`           | GitOps engine to install                      |
-| `options`            | Options       | –                | Advanced options for distributions and tools  |
+| Field                | Type       | Default     | Description                                  |
+|----------------------|------------|-------------|----------------------------------------------|
+| `distribution`       | enum       | `Kind`      | Kubernetes distribution to use               |
+| `distributionConfig` | string     | (see below) | Path to distribution-specific configuration  |
+| `connection`         | Connection | –           | Cluster connection settings                  |
+| `cni`                | enum       | `Default`   | Container Network Interface                  |
+| `csi`                | enum       | `Default`   | Container Storage Interface                  |
+| `metricsServer`      | enum       | `Enabled`   | Install metrics-server                       |
+| `certManager`        | enum       | `Disabled`  | Install cert-manager                         |
+| `localRegistry`      | enum       | `Disabled`  | Provision local OCI registry                 |
+| `gitOpsEngine`       | enum       | `None`      | GitOps engine to install                     |
+| `options`            | Options    | –           | Advanced options for distributions and tools |
 
 #### distribution
 
@@ -144,11 +144,11 @@ See [Distribution Configuration](#distribution-configuration) below for details 
 
 #### connection (Connection)
 
-| Field        | Type     | Default              | Description                       |
-| ------------ | -------- | -------------------- | --------------------------------- |
-| `kubeconfig` | string   | `~/.kube/config`     | Path to kubeconfig file           |
-| `context`    | string   | (derived)            | Kubeconfig context name           |
-| `timeout`    | duration | –                    | Timeout for cluster operations    |
+| Field        | Type     | Default          | Description                    |
+|--------------|----------|------------------|--------------------------------|
+| `kubeconfig` | string   | `~/.kube/config` | Path to kubeconfig file        |
+| `context`    | string   | (derived)        | Kubeconfig context name        |
+| `timeout`    | duration | –                | Timeout for cluster operations |
 
 **Context defaults by distribution:**
 
@@ -231,10 +231,10 @@ Advanced configuration options for specific distributions, networking, and deplo
 
 ### spec.workload (WorkloadSpec)
 
-| Field             | Type    | Default | Description                                      |
-| ----------------- | ------- | ------- | ------------------------------------------------ |
-| `sourceDirectory` | string  | `k8s`   | Directory containing Kubernetes manifests        |
-| `validateOnPush`  | boolean | `false` | Validate manifests before pushing to registry    |
+| Field             | Type    | Default | Description                                   |
+|-------------------|---------|---------|-----------------------------------------------|
+| `sourceDirectory` | string  | `k8s`   | Directory containing Kubernetes manifests     |
+| `validateOnPush`  | boolean | `false` | Validate manifests before pushing to registry |
 
 ## Distribution Configuration
 
