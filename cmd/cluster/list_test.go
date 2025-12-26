@@ -12,11 +12,9 @@ import (
 
 	clusterpkg "github.com/devantler-tech/ksail/v5/cmd/cluster"
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	"github.com/gkampitakis/go-snaps/snaps"
-	"github.com/samber/do/v2"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
@@ -95,20 +93,6 @@ spec:
 		[]byte("kind: Cluster\napiVersion: kind.x-k8s.io/v1alpha4\nname: test\nnodes: []\n"),
 		0o600,
 	))
-}
-
-func newListRuntimeContainer(t *testing.T, factory clusterprovisioner.Factory) *runtime.Runtime {
-	t.Helper()
-
-	return runtime.New(
-		func(i runtime.Injector) error {
-			do.Provide(i, func(runtime.Injector) (clusterprovisioner.Factory, error) {
-				return factory, nil
-			})
-
-			return nil
-		},
-	)
 }
 
 //nolint:paralleltest // uses t.Chdir
@@ -316,18 +300,27 @@ func TestListCmd_FactoryError(t *testing.T) {
 	t.Chdir(workingDir)
 	setupListTest(t, workingDir)
 
-	// Create factory that returns error
-	factory := fakeFactoryWithErrors{}
-	testRuntime := newListRuntimeContainer(t, factory)
-
-	cmd := clusterpkg.NewListCmd(testRuntime)
-
+	cmd := &cobra.Command{Use: "list"}
 	var buf bytes.Buffer
 	cmd.SetOut(&buf)
 	cmd.SetErr(&buf)
 	cmd.SetContext(context.Background())
 
-	err := cmd.Execute()
+	cfgManager := ksailconfigmanager.NewCommandConfigManager(
+		cmd,
+		ksailconfigmanager.DefaultClusterFieldSelectors(),
+	)
+
+	cmd.Flags().BoolP("all", "a", false, "List all clusters")
+	_ = cfgManager.Viper.BindPFlag("all", cmd.Flags().Lookup("all"))
+
+	deps := clusterpkg.ListDeps{
+		DistributionFactoryCreator: func(_ v1alpha1.Distribution) clusterprovisioner.Factory {
+			return fakeFactoryWithErrors{}
+		},
+	}
+
+	err := clusterpkg.HandleListRunE(cmd, cfgManager, deps)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "failed to resolve cluster provisioner")
 }
