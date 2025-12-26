@@ -1293,11 +1293,24 @@ func newCiliumInstaller(
 ) *ciliuminstaller.CiliumInstaller {
 	timeout := installer.GetInstallTimeout(clusterCfg)
 
-	return ciliuminstaller.NewCiliumInstaller(
+	// Map cluster distribution to Cilium installer distribution
+	var distribution ciliuminstaller.Distribution
+
+	switch clusterCfg.Spec.Cluster.Distribution {
+	case v1alpha1.DistributionTalosInDocker:
+		distribution = ciliuminstaller.DistributionTalosInDocker
+	case v1alpha1.DistributionKind:
+		distribution = ciliuminstaller.DistributionKind
+	case v1alpha1.DistributionK3d:
+		distribution = ciliuminstaller.DistributionK3d
+	}
+
+	return ciliuminstaller.NewCiliumInstallerWithDistribution(
 		helmClient,
 		kubeconfig,
 		clusterCfg.Spec.Cluster.Connection.Context,
 		timeout,
+		distribution,
 	)
 }
 
