@@ -7,7 +7,7 @@ nav_order: 4
 
 Fast, reproducible workflows for local Kubernetes development, CI pipelines, and learning environments.
 
-All scenarios use configuration primitives from [Configuration](configuration.md). Start with `ksail cluster init`.
+All scenarios use configuration primitives from [Declarative Configuration](declarative-configuration.md) or [CLI Flags](cli-flags/root.md). Start with `ksail cluster init`.
 
 ## Learning Kubernetes
 
