@@ -1,10 +1,10 @@
 ---
-title: "workload delete"
-parent: "workload"
+title: "ksail workload delete"
+parent: "ksail workload"
 grand_parent: "CLI Flags Reference"
 ---
 
-# workload delete
+# ksail workload delete
 
 ```text
 Delete Kubernetes resources by file names, stdin, resources and names, or by resources and label selector.

@@ -1,10 +1,10 @@
 ---
-title: "workload get"
-parent: "workload"
+title: "ksail workload get"
+parent: "ksail workload"
 grand_parent: "CLI Flags Reference"
 ---
 
-# workload get
+# ksail workload get
 
 ```text
 Display one or many Kubernetes resources from your cluster.

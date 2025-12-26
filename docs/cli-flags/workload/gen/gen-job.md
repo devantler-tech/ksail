@@ -1,10 +1,10 @@
 ---
-title: "gen job"
-parent: "gen"
-grand_parent: "workload"
+title: "ksail workload gen job"
+parent: "ksail workload gen"
+grand_parent: "ksail workload"
 ---
 
-# gen job
+# ksail workload gen job
 
 ```text
 Create a job with the specified name.

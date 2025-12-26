@@ -1,10 +1,10 @@
 ---
-title: "gen poddisruptionbudget"
-parent: "gen"
-grand_parent: "workload"
+title: "ksail workload gen poddisruptionbudget"
+parent: "ksail workload gen"
+grand_parent: "ksail workload"
 ---
 
-# gen poddisruptionbudget
+# ksail workload gen poddisruptionbudget
 
 ```text
 Create a pod disruption budget with the specified name, selector, and desired minimum available pods.

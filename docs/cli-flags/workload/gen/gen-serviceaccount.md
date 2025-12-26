@@ -1,10 +1,10 @@
 ---
-title: "gen serviceaccount"
-parent: "gen"
-grand_parent: "workload"
+title: "ksail workload gen serviceaccount"
+parent: "ksail workload gen"
+grand_parent: "ksail workload"
 ---
 
-# gen serviceaccount
+# ksail workload gen serviceaccount
 
 ```text
 Create a service account with the specified name.

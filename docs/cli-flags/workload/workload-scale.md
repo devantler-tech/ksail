@@ -1,10 +1,10 @@
 ---
-title: "workload scale"
-parent: "workload"
+title: "ksail workload scale"
+parent: "ksail workload"
 grand_parent: "CLI Flags Reference"
 ---
 
-# workload scale
+# ksail workload scale
 
 ```text
 Set a new size for a deployment, replica set, replication controller, or stateful set.

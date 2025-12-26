@@ -1,10 +1,10 @@
 ---
-title: "workload wait"
-parent: "workload"
+title: "ksail workload wait"
+parent: "ksail workload"
 grand_parent: "CLI Flags Reference"
 ---
 
-# workload wait
+# ksail workload wait
 
 ```text
 Wait for a specific condition on one or many resources. The command takes multiple resources and waits until the specified condition is seen in the Status field of every given resource.

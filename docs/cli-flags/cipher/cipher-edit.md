@@ -1,10 +1,10 @@
 ---
-title: "cipher edit"
-parent: "cipher"
+title: "ksail cipher edit"
+parent: "ksail cipher"
 grand_parent: "CLI Flags Reference"
 ---
 
-# cipher edit
+# ksail cipher edit
 
 ```text
 Edit an encrypted file using SOPS (Secrets OPerationS).

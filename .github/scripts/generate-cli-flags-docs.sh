@@ -65,64 +65,64 @@ mkdir -p "$DOCS_DIR/cluster"
 
 create_doc_page \
 	"$DOCS_DIR/cluster/cluster-root.md" \
-	"cluster" \
+	"ksail cluster" \
 	"CLI Flags Reference" \
 	"" \
 	"'$KSAIL_BINARY' cluster --help"
 
 create_doc_page \
 	"$DOCS_DIR/cluster/cluster-connect.md" \
-	"cluster connect" \
-	"cluster" \
+	"ksail cluster connect" \
+	"ksail cluster" \
 	"CLI Flags Reference" \
 	"'$KSAIL_BINARY' cluster connect --help"
 
 create_doc_page \
 	"$DOCS_DIR/cluster/cluster-create.md" \
-	"cluster create" \
-	"cluster" \
+	"ksail cluster create" \
+	"ksail cluster" \
 	"CLI Flags Reference" \
 	"'$KSAIL_BINARY' cluster create --help"
 
 create_doc_page \
 	"$DOCS_DIR/cluster/cluster-delete.md" \
-	"cluster delete" \
-	"cluster" \
+	"ksail cluster delete" \
+	"ksail cluster" \
 	"CLI Flags Reference" \
 	"'$KSAIL_BINARY' cluster delete --help"
 
 create_doc_page \
 	"$DOCS_DIR/cluster/cluster-info.md" \
-	"cluster info" \
-	"cluster" \
+	"ksail cluster info" \
+	"ksail cluster" \
 	"CLI Flags Reference" \
 	"'$KSAIL_BINARY' cluster info --help"
 
 create_doc_page \
 	"$DOCS_DIR/cluster/cluster-init.md" \
-	"cluster init" \
-	"cluster" \
+	"ksail cluster init" \
+	"ksail cluster" \
 	"CLI Flags Reference" \
 	"'$KSAIL_BINARY' cluster init --help"
 
 create_doc_page \
 	"$DOCS_DIR/cluster/cluster-list.md" \
-	"cluster list" \
-	"cluster" \
+	"ksail cluster list" \
+	"ksail cluster" \
 	"CLI Flags Reference" \
 	"'$KSAIL_BINARY' cluster list --help"
 
 create_doc_page \
 	"$DOCS_DIR/cluster/cluster-start.md" \
-	"cluster start" \
-	"cluster" \
+	"ksail cluster start" \
+	"ksail cluster" \
 	"CLI Flags Reference" \
 	"'$KSAIL_BINARY' cluster start --help"
 
 create_doc_page \
 	"$DOCS_DIR/cluster/cluster-stop.md" \
-	"cluster stop" \
-	"cluster" \
+	"ksail cluster stop" \
+	"ksail cluster" \
 	"CLI Flags Reference" \
 	"'$KSAIL_BINARY' cluster stop --help"
 
@@ -131,36 +131,36 @@ mkdir -p "$DOCS_DIR/cipher"
 
 create_doc_page \
 	"$DOCS_DIR/cipher/cipher-root.md" \
-	"cipher" \
+	"ksail cipher" \
 	"CLI Flags Reference" \
 	"" \
 	"'$KSAIL_BINARY' cipher --help"
 
 create_doc_page \
 	"$DOCS_DIR/cipher/cipher-decrypt.md" \
-	"cipher decrypt" \
-	"cipher" \
+	"ksail cipher decrypt" \
+	"ksail cipher" \
 	"CLI Flags Reference" \
 	"'$KSAIL_BINARY' cipher decrypt --help"
 
 create_doc_page \
 	"$DOCS_DIR/cipher/cipher-edit.md" \
-	"cipher edit" \
-	"cipher" \
+	"ksail cipher edit" \
+	"ksail cipher" \
 	"CLI Flags Reference" \
 	"'$KSAIL_BINARY' cipher edit --help"
 
 create_doc_page \
 	"$DOCS_DIR/cipher/cipher-encrypt.md" \
-	"cipher encrypt" \
-	"cipher" \
+	"ksail cipher encrypt" \
+	"ksail cipher" \
 	"CLI Flags Reference" \
 	"'$KSAIL_BINARY' cipher encrypt --help"
 
 create_doc_page \
 	"$DOCS_DIR/cipher/cipher-import.md" \
-	"cipher import" \
-	"cipher" \
+	"ksail cipher import" \
+	"ksail cipher" \
 	"CLI Flags Reference" \
 	"'$KSAIL_BINARY' cipher import --help"
 
@@ -169,127 +169,127 @@ mkdir -p "$DOCS_DIR/workload"
 
 create_doc_page \
 	"$DOCS_DIR/workload/workload-root.md" \
-	"workload" \
+	"ksail workload" \
 	"CLI Flags Reference" \
 	"" \
 	"'$KSAIL_BINARY' workload --help"
 
 create_doc_page \
 	"$DOCS_DIR/workload/workload-apply.md" \
-	"workload apply" \
-	"workload" \
+	"ksail workload apply" \
+	"ksail workload" \
 	"CLI Flags Reference" \
 	"'$KSAIL_BINARY' workload apply --help"
 
 create_doc_page \
 	"$DOCS_DIR/workload/workload-create.md" \
-	"workload create" \
-	"workload" \
+	"ksail workload create" \
+	"ksail workload" \
 	"CLI Flags Reference" \
 	"'$KSAIL_BINARY' workload create --help"
 
 create_doc_page \
 	"$DOCS_DIR/workload/workload-delete.md" \
-	"workload delete" \
-	"workload" \
+	"ksail workload delete" \
+	"ksail workload" \
 	"CLI Flags Reference" \
 	"'$KSAIL_BINARY' workload delete --help"
 
 create_doc_page \
 	"$DOCS_DIR/workload/workload-describe.md" \
-	"workload describe" \
-	"workload" \
+	"ksail workload describe" \
+	"ksail workload" \
 	"CLI Flags Reference" \
 	"'$KSAIL_BINARY' workload describe --help"
 
 create_doc_page \
 	"$DOCS_DIR/workload/workload-edit.md" \
-	"workload edit" \
-	"workload" \
+	"ksail workload edit" \
+	"ksail workload" \
 	"CLI Flags Reference" \
 	"'$KSAIL_BINARY' workload edit --help"
 
 create_doc_page \
 	"$DOCS_DIR/workload/workload-exec.md" \
-	"workload exec" \
-	"workload" \
+	"ksail workload exec" \
+	"ksail workload" \
 	"CLI Flags Reference" \
 	"'$KSAIL_BINARY' workload exec --help"
 
 create_doc_page \
 	"$DOCS_DIR/workload/workload-explain.md" \
-	"workload explain" \
-	"workload" \
+	"ksail workload explain" \
+	"ksail workload" \
 	"CLI Flags Reference" \
 	"'$KSAIL_BINARY' workload explain --help"
 
 create_doc_page \
 	"$DOCS_DIR/workload/workload-expose.md" \
-	"workload expose" \
-	"workload" \
+	"ksail workload expose" \
+	"ksail workload" \
 	"CLI Flags Reference" \
 	"'$KSAIL_BINARY' workload expose --help"
 
 create_doc_page \
 	"$DOCS_DIR/workload/workload-get.md" \
-	"workload get" \
-	"workload" \
+	"ksail workload get" \
+	"ksail workload" \
 	"CLI Flags Reference" \
 	"'$KSAIL_BINARY' workload get --help"
 
 create_doc_page \
 	"$DOCS_DIR/workload/workload-install.md" \
-	"workload install" \
-	"workload" \
+	"ksail workload install" \
+	"ksail workload" \
 	"CLI Flags Reference" \
 	"'$KSAIL_BINARY' workload install --help"
 
 create_doc_page \
 	"$DOCS_DIR/workload/workload-logs.md" \
-	"workload logs" \
-	"workload" \
+	"ksail workload logs" \
+	"ksail workload" \
 	"CLI Flags Reference" \
 	"'$KSAIL_BINARY' workload logs --help"
 
 create_doc_page \
 	"$DOCS_DIR/workload/workload-push.md" \
-	"workload push" \
-	"workload" \
+	"ksail workload push" \
+	"ksail workload" \
 	"CLI Flags Reference" \
 	"'$KSAIL_BINARY' workload push --help"
 
 create_doc_page \
 	"$DOCS_DIR/workload/workload-reconcile.md" \
-	"workload reconcile" \
-	"workload" \
+	"ksail workload reconcile" \
+	"ksail workload" \
 	"CLI Flags Reference" \
 	"'$KSAIL_BINARY' workload reconcile --help"
 
 create_doc_page \
 	"$DOCS_DIR/workload/workload-rollout.md" \
-	"workload rollout" \
-	"workload" \
+	"ksail workload rollout" \
+	"ksail workload" \
 	"CLI Flags Reference" \
 	"'$KSAIL_BINARY' workload rollout --help"
 
 create_doc_page \
 	"$DOCS_DIR/workload/workload-scale.md" \
-	"workload scale" \
-	"workload" \
+	"ksail workload scale" \
+	"ksail workload" \
 	"CLI Flags Reference" \
 	"'$KSAIL_BINARY' workload scale --help"
 
 create_doc_page \
 	"$DOCS_DIR/workload/workload-validate.md" \
-	"workload validate" \
-	"workload" \
+	"ksail workload validate" \
+	"ksail workload" \
 	"CLI Flags Reference" \
 	"'$KSAIL_BINARY' workload validate --help"
 
 create_doc_page \
 	"$DOCS_DIR/workload/workload-wait.md" \
-	"workload wait" \
-	"workload" \
+	"ksail workload wait" \
+	"ksail workload" \
 	"CLI Flags Reference" \
 	"'$KSAIL_BINARY' workload wait --help"
 
@@ -298,128 +298,128 @@ mkdir -p "$DOCS_DIR/workload/gen"
 
 create_doc_page \
 	"$DOCS_DIR/workload/gen/gen-root.md" \
-	"gen" \
-	"workload" \
+	"ksail workload gen" \
+	"ksail workload" \
 	"CLI Flags Reference" \
 	"'$KSAIL_BINARY' workload gen --help"
 
 create_doc_page \
 	"$DOCS_DIR/workload/gen/gen-clusterrole.md" \
-	"gen clusterrole" \
-	"gen" \
-	"workload" \
+	"ksail workload gen clusterrole" \
+	"ksail workload gen" \
+	"ksail workload" \
 	"'$KSAIL_BINARY' workload gen clusterrole --help"
 
 create_doc_page \
 	"$DOCS_DIR/workload/gen/gen-clusterrolebinding.md" \
-	"gen clusterrolebinding" \
-	"gen" \
-	"workload" \
+	"ksail workload gen clusterrolebinding" \
+	"ksail workload gen" \
+	"ksail workload" \
 	"'$KSAIL_BINARY' workload gen clusterrolebinding --help"
 
 create_doc_page \
 	"$DOCS_DIR/workload/gen/gen-configmap.md" \
-	"gen configmap" \
-	"gen" \
-	"workload" \
+	"ksail workload gen configmap" \
+	"ksail workload gen" \
+	"ksail workload" \
 	"'$KSAIL_BINARY' workload gen configmap --help"
 
 create_doc_page \
 	"$DOCS_DIR/workload/gen/gen-cronjob.md" \
-	"gen cronjob" \
-	"gen" \
-	"workload" \
+	"ksail workload gen cronjob" \
+	"ksail workload gen" \
+	"ksail workload" \
 	"'$KSAIL_BINARY' workload gen cronjob --help"
 
 create_doc_page \
 	"$DOCS_DIR/workload/gen/gen-deployment.md" \
-	"gen deployment" \
-	"gen" \
-	"workload" \
+	"ksail workload gen deployment" \
+	"ksail workload gen" \
+	"ksail workload" \
 	"'$KSAIL_BINARY' workload gen deployment --help"
 
 create_doc_page \
 	"$DOCS_DIR/workload/gen/gen-helmrelease.md" \
-	"gen helmrelease" \
-	"gen" \
-	"workload" \
+	"ksail workload gen helmrelease" \
+	"ksail workload gen" \
+	"ksail workload" \
 	"'$KSAIL_BINARY' workload gen helmrelease --help"
 
 create_doc_page \
 	"$DOCS_DIR/workload/gen/gen-ingress.md" \
-	"gen ingress" \
-	"gen" \
-	"workload" \
+	"ksail workload gen ingress" \
+	"ksail workload gen" \
+	"ksail workload" \
 	"'$KSAIL_BINARY' workload gen ingress --help"
 
 create_doc_page \
 	"$DOCS_DIR/workload/gen/gen-job.md" \
-	"gen job" \
-	"gen" \
-	"workload" \
+	"ksail workload gen job" \
+	"ksail workload gen" \
+	"ksail workload" \
 	"'$KSAIL_BINARY' workload gen job --help"
 
 create_doc_page \
 	"$DOCS_DIR/workload/gen/gen-namespace.md" \
-	"gen namespace" \
-	"gen" \
-	"workload" \
+	"ksail workload gen namespace" \
+	"ksail workload gen" \
+	"ksail workload" \
 	"'$KSAIL_BINARY' workload gen namespace --help"
 
 create_doc_page \
 	"$DOCS_DIR/workload/gen/gen-poddisruptionbudget.md" \
-	"gen poddisruptionbudget" \
-	"gen" \
-	"workload" \
+	"ksail workload gen poddisruptionbudget" \
+	"ksail workload gen" \
+	"ksail workload" \
 	"'$KSAIL_BINARY' workload gen poddisruptionbudget --help"
 
 create_doc_page \
 	"$DOCS_DIR/workload/gen/gen-priorityclass.md" \
-	"gen priorityclass" \
-	"gen" \
-	"workload" \
+	"ksail workload gen priorityclass" \
+	"ksail workload gen" \
+	"ksail workload" \
 	"'$KSAIL_BINARY' workload gen priorityclass --help"
 
 create_doc_page \
 	"$DOCS_DIR/workload/gen/gen-quota.md" \
-	"gen quota" \
-	"gen" \
-	"workload" \
+	"ksail workload gen quota" \
+	"ksail workload gen" \
+	"ksail workload" \
 	"'$KSAIL_BINARY' workload gen quota --help"
 
 create_doc_page \
 	"$DOCS_DIR/workload/gen/gen-role.md" \
-	"gen role" \
-	"gen" \
-	"workload" \
+	"ksail workload gen role" \
+	"ksail workload gen" \
+	"ksail workload" \
 	"'$KSAIL_BINARY' workload gen role --help"
 
 create_doc_page \
 	"$DOCS_DIR/workload/gen/gen-rolebinding.md" \
-	"gen rolebinding" \
-	"gen" \
-	"workload" \
+	"ksail workload gen rolebinding" \
+	"ksail workload gen" \
+	"ksail workload" \
 	"'$KSAIL_BINARY' workload gen rolebinding --help"
 
 create_doc_page \
 	"$DOCS_DIR/workload/gen/gen-secret.md" \
-	"gen secret" \
-	"gen" \
-	"workload" \
+	"ksail workload gen secret" \
+	"ksail workload gen" \
+	"ksail workload" \
 	"'$KSAIL_BINARY' workload gen secret --help"
 
 create_doc_page \
 	"$DOCS_DIR/workload/gen/gen-service.md" \
-	"gen service" \
-	"gen" \
-	"workload" \
+	"ksail workload gen service" \
+	"ksail workload gen" \
+	"ksail workload" \
 	"'$KSAIL_BINARY' workload gen service --help"
 
 create_doc_page \
 	"$DOCS_DIR/workload/gen/gen-serviceaccount.md" \
-	"gen serviceaccount" \
-	"gen" \
-	"workload" \
+	"ksail workload gen serviceaccount" \
+	"ksail workload gen" \
+	"ksail workload" \
 	"'$KSAIL_BINARY' workload gen serviceaccount --help"
 
 echo "CLI flags documentation generation completed successfully"

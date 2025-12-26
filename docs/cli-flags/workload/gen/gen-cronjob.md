@@ -1,10 +1,10 @@
 ---
-title: "gen cronjob"
-parent: "gen"
-grand_parent: "workload"
+title: "ksail workload gen cronjob"
+parent: "ksail workload gen"
+grand_parent: "ksail workload"
 ---
 
-# gen cronjob
+# ksail workload gen cronjob
 
 ```text
 Create a cron job with the specified name.

@@ -1,10 +1,10 @@
 ---
-title: "workload create"
-parent: "workload"
+title: "ksail workload create"
+parent: "ksail workload"
 grand_parent: "CLI Flags Reference"
 ---
 
-# workload create
+# ksail workload create
 
 ```text
 Create Kubernetes resources from files or stdin.

@@ -1,10 +1,10 @@
 ---
-title: "cipher import"
-parent: "cipher"
+title: "ksail cipher import"
+parent: "ksail cipher"
 grand_parent: "CLI Flags Reference"
 ---
 
-# cipher import
+# ksail cipher import
 
 ```text
 Import an age private key to the system's default SOPS age key location.

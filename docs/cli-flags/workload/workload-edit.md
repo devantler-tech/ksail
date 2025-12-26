@@ -1,10 +1,10 @@
 ---
-title: "workload edit"
-parent: "workload"
+title: "ksail workload edit"
+parent: "ksail workload"
 grand_parent: "CLI Flags Reference"
 ---
 
-# workload edit
+# ksail workload edit
 
 ```text
 Edit a Kubernetes resource from the default editor.

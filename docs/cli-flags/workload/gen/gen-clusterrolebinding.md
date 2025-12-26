@@ -1,10 +1,10 @@
 ---
-title: "gen clusterrolebinding"
-parent: "gen"
-grand_parent: "workload"
+title: "ksail workload gen clusterrolebinding"
+parent: "ksail workload gen"
+grand_parent: "ksail workload"
 ---
 
-# gen clusterrolebinding
+# ksail workload gen clusterrolebinding
 
 ```text
 Create a cluster role binding for a particular cluster role.

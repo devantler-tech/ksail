@@ -1,10 +1,10 @@
 ---
-title: "workload validate"
-parent: "workload"
+title: "ksail workload validate"
+parent: "ksail workload"
 grand_parent: "CLI Flags Reference"
 ---
 
-# workload validate
+# ksail workload validate
 
 ```text
 Validate Kubernetes manifest files and kustomizations using kubeconform.

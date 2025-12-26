@@ -1,10 +1,10 @@
 ---
-title: "gen secret"
-parent: "gen"
-grand_parent: "workload"
+title: "ksail workload gen secret"
+parent: "ksail workload gen"
+grand_parent: "ksail workload"
 ---
 
-# gen secret
+# ksail workload gen secret
 
 ```text
 Create a secret with specified type.

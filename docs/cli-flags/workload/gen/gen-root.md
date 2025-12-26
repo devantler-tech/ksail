@@ -1,10 +1,10 @@
 ---
-title: "gen"
-parent: "workload"
+title: "ksail workload gen"
+parent: "ksail workload"
 grand_parent: "CLI Flags Reference"
 ---
 
-# gen
+# ksail workload gen
 
 ```text
 Generate Kubernetes resource manifests using kubectl create with --dry-run=client -o yaml. The generated YAML is printed to stdout and can be redirected to a file using shell redirection (> file.yaml).

@@ -1,10 +1,10 @@
 ---
-title: "gen deployment"
-parent: "gen"
-grand_parent: "workload"
+title: "ksail workload gen deployment"
+parent: "ksail workload gen"
+grand_parent: "ksail workload"
 ---
 
-# gen deployment
+# ksail workload gen deployment
 
 ```text
 Create a deployment with the specified name.

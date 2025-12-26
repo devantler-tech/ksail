@@ -1,10 +1,10 @@
 ---
-title: "workload exec"
-parent: "workload"
+title: "ksail workload exec"
+parent: "ksail workload"
 grand_parent: "CLI Flags Reference"
 ---
 
-# workload exec
+# ksail workload exec
 
 ```text
 Execute a command in a container in a pod.

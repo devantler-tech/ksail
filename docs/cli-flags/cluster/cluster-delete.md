@@ -1,10 +1,10 @@
 ---
-title: "cluster delete"
-parent: "cluster"
+title: "ksail cluster delete"
+parent: "ksail cluster"
 grand_parent: "CLI Flags Reference"
 ---
 
-# cluster delete
+# ksail cluster delete
 
 ```text
 Destroy a cluster.

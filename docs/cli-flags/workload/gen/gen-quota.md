@@ -1,10 +1,10 @@
 ---
-title: "gen quota"
-parent: "gen"
-grand_parent: "workload"
+title: "ksail workload gen quota"
+parent: "ksail workload gen"
+grand_parent: "ksail workload"
 ---
 
-# gen quota
+# ksail workload gen quota
 
 ```text
 Create a resource quota with the specified name, hard limits, and optional scopes.

@@ -1,10 +1,10 @@
 ---
-title: "workload rollout"
-parent: "workload"
+title: "ksail workload rollout"
+parent: "ksail workload"
 grand_parent: "CLI Flags Reference"
 ---
 
-# workload rollout
+# ksail workload rollout
 
 ```text
 Manage the rollout of one or many resources.

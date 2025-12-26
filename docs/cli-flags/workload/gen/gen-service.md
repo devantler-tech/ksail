@@ -1,10 +1,10 @@
 ---
-title: "gen service"
-parent: "gen"
-grand_parent: "workload"
+title: "ksail workload gen service"
+parent: "ksail workload gen"
+grand_parent: "ksail workload"
 ---
 
-# gen service
+# ksail workload gen service
 
 ```text
 Create a service using a specified subcommand.

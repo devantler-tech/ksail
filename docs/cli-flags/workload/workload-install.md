@@ -1,10 +1,10 @@
 ---
-title: "workload install"
-parent: "workload"
+title: "ksail workload install"
+parent: "ksail workload"
 grand_parent: "CLI Flags Reference"
 ---
 
-# workload install
+# ksail workload install
 
 ```text
 Install Helm charts to provision workloads through KSail. This command provides native Helm chart installation capabilities.

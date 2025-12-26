@@ -1,10 +1,10 @@
 ---
-title: "cluster create"
-parent: "cluster"
+title: "ksail cluster create"
+parent: "ksail cluster"
 grand_parent: "CLI Flags Reference"
 ---
 
-# cluster create
+# ksail cluster create
 
 ```text
 Create a Kubernetes cluster as defined by configuration.

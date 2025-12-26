@@ -1,10 +1,10 @@
 ---
-title: "cipher encrypt"
-parent: "cipher"
+title: "ksail cipher encrypt"
+parent: "ksail cipher"
 grand_parent: "CLI Flags Reference"
 ---
 
-# cipher encrypt
+# ksail cipher encrypt
 
 ```text
 Encrypt a file using SOPS (Secrets OPerationS).

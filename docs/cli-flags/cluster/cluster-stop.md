@@ -1,10 +1,10 @@
 ---
-title: "cluster stop"
-parent: "cluster"
+title: "ksail cluster stop"
+parent: "ksail cluster"
 grand_parent: "CLI Flags Reference"
 ---
 
-# cluster stop
+# ksail cluster stop
 
 ```text
 Stop a running Kubernetes cluster.

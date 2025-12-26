@@ -1,9 +1,9 @@
 ---
-title: "workload"
+title: "ksail workload"
 parent: "CLI Flags Reference"
 ---
 
-# workload
+# ksail workload
 
 ```text
 Group workload commands under a single namespace to reconcile, apply, create, delete, describe, edit, exec, explain, expose, get, gen, install, logs, push, rollout, scale, validate, or wait for workloads.

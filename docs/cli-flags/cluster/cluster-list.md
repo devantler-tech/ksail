@@ -1,10 +1,10 @@
 ---
-title: "cluster list"
-parent: "cluster"
+title: "ksail cluster list"
+parent: "ksail cluster"
 grand_parent: "CLI Flags Reference"
 ---
 
-# cluster list
+# ksail cluster list
 
 ```text
 List all Kubernetes clusters managed by KSail.

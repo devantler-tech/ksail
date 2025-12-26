@@ -1,9 +1,9 @@
 ---
-title: "cluster"
+title: "ksail cluster"
 parent: "CLI Flags Reference"
 ---
 
-# cluster
+# ksail cluster
 
 ```text
 Manage lifecycle operations for local Kubernetes clusters, including provisioning, teardown, and status.

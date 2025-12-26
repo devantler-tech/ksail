@@ -1,10 +1,10 @@
 ---
-title: "gen configmap"
-parent: "gen"
-grand_parent: "workload"
+title: "ksail workload gen configmap"
+parent: "ksail workload gen"
+grand_parent: "ksail workload"
 ---
 
-# gen configmap
+# ksail workload gen configmap
 
 ```text
 Create a config map based on a file, directory, or specified literal value.

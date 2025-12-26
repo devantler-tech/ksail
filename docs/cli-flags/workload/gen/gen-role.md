@@ -1,10 +1,10 @@
 ---
-title: "gen role"
-parent: "gen"
-grand_parent: "workload"
+title: "ksail workload gen role"
+parent: "ksail workload gen"
+grand_parent: "ksail workload"
 ---
 
-# gen role
+# ksail workload gen role
 
 ```text
 Create a role with single rule.

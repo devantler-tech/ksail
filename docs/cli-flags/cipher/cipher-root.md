@@ -1,9 +1,9 @@
 ---
-title: "cipher"
+title: "ksail cipher"
 parent: "CLI Flags Reference"
 ---
 
-# cipher
+# ksail cipher
 
 ```text
 Cipher command provides access to SOPS (Secrets OPerationS) functionality

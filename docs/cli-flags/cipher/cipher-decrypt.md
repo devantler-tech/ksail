@@ -1,10 +1,10 @@
 ---
-title: "cipher decrypt"
-parent: "cipher"
+title: "ksail cipher decrypt"
+parent: "ksail cipher"
 grand_parent: "CLI Flags Reference"
 ---
 
-# cipher decrypt
+# ksail cipher decrypt
 
 ```text
 Decrypt a file using SOPS (Secrets OPerationS).

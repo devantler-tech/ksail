@@ -1,10 +1,10 @@
 ---
-title: "gen ingress"
-parent: "gen"
-grand_parent: "workload"
+title: "ksail workload gen ingress"
+parent: "ksail workload gen"
+grand_parent: "ksail workload"
 ---
 
-# gen ingress
+# ksail workload gen ingress
 
 ```text
 Create an ingress with the specified name.

@@ -1,10 +1,10 @@
 ---
-title: "gen clusterrole"
-parent: "gen"
-grand_parent: "workload"
+title: "ksail workload gen clusterrole"
+parent: "ksail workload gen"
+grand_parent: "ksail workload"
 ---
 
-# gen clusterrole
+# ksail workload gen clusterrole
 
 ```text
 Create a cluster role.

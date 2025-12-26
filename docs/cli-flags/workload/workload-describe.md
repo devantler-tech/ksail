@@ -1,10 +1,10 @@
 ---
-title: "workload describe"
-parent: "workload"
+title: "ksail workload describe"
+parent: "ksail workload"
 grand_parent: "CLI Flags Reference"
 ---
 
-# workload describe
+# ksail workload describe
 
 ```text
 Show details of a specific resource or group of resources.

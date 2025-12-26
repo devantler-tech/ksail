@@ -1,10 +1,10 @@
 ---
-title: "workload reconcile"
-parent: "workload"
+title: "ksail workload reconcile"
+parent: "ksail workload"
 grand_parent: "CLI Flags Reference"
 ---
 
-# workload reconcile
+# ksail workload reconcile
 
 ```text
 Trigger reconciliation/sync for the root Flux kustomization or root ArgoCD application.

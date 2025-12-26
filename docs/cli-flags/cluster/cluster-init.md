@@ -1,10 +1,10 @@
 ---
-title: "cluster init"
-parent: "cluster"
+title: "ksail cluster init"
+parent: "ksail cluster"
 grand_parent: "CLI Flags Reference"
 ---
 
-# cluster init
+# ksail cluster init
 
 ```text
 Initialize a new project in the specified directory (or current directory if none specified).

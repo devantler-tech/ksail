@@ -1,10 +1,10 @@
 ---
-title: "cluster start"
-parent: "cluster"
+title: "ksail cluster start"
+parent: "ksail cluster"
 grand_parent: "CLI Flags Reference"
 ---
 
-# cluster start
+# ksail cluster start
 
 ```text
 Start a previously stopped cluster.

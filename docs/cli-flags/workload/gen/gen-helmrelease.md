@@ -1,10 +1,10 @@
 ---
-title: "gen helmrelease"
-parent: "gen"
-grand_parent: "workload"
+title: "ksail workload gen helmrelease"
+parent: "ksail workload gen"
+grand_parent: "ksail workload"
 ---
 
-# gen helmrelease
+# ksail workload gen helmrelease
 
 ```text
 Generate a HelmRelease resource for a given HelmRepository, GitRepository, Bucket, or chart reference source.

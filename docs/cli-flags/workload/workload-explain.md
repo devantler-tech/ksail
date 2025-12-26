@@ -1,10 +1,10 @@
 ---
-title: "workload explain"
-parent: "workload"
+title: "ksail workload explain"
+parent: "ksail workload"
 grand_parent: "CLI Flags Reference"
 ---
 
-# workload explain
+# ksail workload explain
 
 ```text
 Get documentation for Kubernetes resources, including field descriptions and structure.

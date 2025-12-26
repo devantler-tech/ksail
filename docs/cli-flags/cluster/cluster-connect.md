@@ -1,10 +1,10 @@
 ---
-title: "cluster connect"
-parent: "cluster"
+title: "ksail cluster connect"
+parent: "ksail cluster"
 grand_parent: "CLI Flags Reference"
 ---
 
-# cluster connect
+# ksail cluster connect
 
 ```text
 Launch k9s terminal UI to interactively manage your Kubernetes cluster.

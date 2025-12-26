@@ -1,10 +1,10 @@
 ---
-title: "workload logs"
-parent: "workload"
+title: "ksail workload logs"
+parent: "ksail workload"
 grand_parent: "CLI Flags Reference"
 ---
 
-# workload logs
+# ksail workload logs
 
 ```text
 Print the logs for a container in a pod or specified resource. If the pod has only one container, the container name is optional.

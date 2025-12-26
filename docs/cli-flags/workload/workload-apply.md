@@ -1,10 +1,10 @@
 ---
-title: "workload apply"
-parent: "workload"
+title: "ksail workload apply"
+parent: "ksail workload"
 grand_parent: "CLI Flags Reference"
 ---
 
-# workload apply
+# ksail workload apply
 
 ```text
 Apply local Kubernetes manifests to your cluster.

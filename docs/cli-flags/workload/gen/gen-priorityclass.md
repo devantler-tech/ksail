@@ -1,10 +1,10 @@
 ---
-title: "gen priorityclass"
-parent: "gen"
-grand_parent: "workload"
+title: "ksail workload gen priorityclass"
+parent: "ksail workload gen"
+grand_parent: "ksail workload"
 ---
 
-# gen priorityclass
+# ksail workload gen priorityclass
 
 ```text
 Create a priority class with the specified name, value, globalDefault and description.

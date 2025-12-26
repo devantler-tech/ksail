@@ -1,10 +1,10 @@
 ---
-title: "workload push"
-parent: "workload"
+title: "ksail workload push"
+parent: "ksail workload"
 grand_parent: "CLI Flags Reference"
 ---
 
-# workload push
+# ksail workload push
 
 ```text
 Build and push local workloads as an OCI artifact to the local registry.

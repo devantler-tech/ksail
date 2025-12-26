@@ -1,10 +1,10 @@
 ---
-title: "workload expose"
-parent: "workload"
+title: "ksail workload expose"
+parent: "ksail workload"
 grand_parent: "CLI Flags Reference"
 ---
 
-# workload expose
+# ksail workload expose
 
 ```text
 Expose a resource as a new Kubernetes service.

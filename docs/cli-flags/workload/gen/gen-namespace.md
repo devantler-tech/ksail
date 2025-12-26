@@ -1,10 +1,10 @@
 ---
-title: "gen namespace"
-parent: "gen"
-grand_parent: "workload"
+title: "ksail workload gen namespace"
+parent: "ksail workload gen"
+grand_parent: "ksail workload"
 ---
 
-# gen namespace
+# ksail workload gen namespace
 
 ```text
 Create a namespace with the specified name.
