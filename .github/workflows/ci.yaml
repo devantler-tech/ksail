@@ -147,6 +147,12 @@ jobs:
         run: |
           ./bin/ksail cluster init ${{ matrix.init-args }}
 
+      - name: 🔧 Load br_netfilter kernel module (required for TalosInDocker)
+        if: contains(matrix.init-args, 'TalosInDocker')
+        run: |
+          sudo modprobe br_netfilter
+          echo "br_netfilter module loaded successfully"
+
       - name: 🧪 ksail cluster create
         run: |
           ./bin/ksail cluster create
