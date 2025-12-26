@@ -6,7 +6,6 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/siderolabs/talos/pkg/machinery/config/configpatcher"
 )
@@ -91,36 +90,19 @@ func loadPatchesFromDir(dir string, scope PatchScope) ([]Patch, error) {
 		return nil, nil // Directory doesn't exist, no patches to load
 	}
 
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read directory %s: %w", dir, err)
-	}
+	var patches []Patch
 
-	patches := make([]Patch, 0, len(entries))
-
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-
-		name := entry.Name()
-		if !strings.HasSuffix(name, ".yaml") && !strings.HasSuffix(name, ".yml") {
-			continue
-		}
-
-		filePath := filepath.Join(dir, name)
-
-		//nolint:gosec // Path is constructed from validated directory
-		content, readErr := os.ReadFile(filePath)
-		if readErr != nil {
-			return nil, fmt.Errorf("failed to read patch file %s: %w", filePath, readErr)
-		}
-
+	iterErr := forEachYAMLFile(dir, func(filePath string, content []byte) error {
 		patches = append(patches, Patch{
 			Path:    filePath,
 			Scope:   scope,
 			Content: content,
 		})
+
+		return nil
+	})
+	if iterErr != nil {
+		return nil, iterErr
 	}
 
 	return patches, nil

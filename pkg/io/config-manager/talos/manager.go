@@ -174,8 +174,9 @@ func (m *ConfigManager) ValidateConfigs() (*Configs, error) {
 	return configs, nil
 }
 
-// validateYAMLFilesInDir checks that all .yaml and .yml files in a directory are valid YAML.
-func validateYAMLFilesInDir(dir string) error {
+// forEachYAMLFile iterates over YAML files in a directory and calls the callback for each.
+// This is a shared helper to avoid code duplication between manager and patches.
+func forEachYAMLFile(dir string, callback func(filePath string, content []byte) error) error {
 	cleanDir := filepath.Clean(dir)
 
 	entries, err := os.ReadDir(cleanDir)
@@ -197,16 +198,27 @@ func validateYAMLFilesInDir(dir string) error {
 
 		content, readErr := os.ReadFile(filePath) //nolint:gosec // Path from validated directory
 		if readErr != nil {
-			return fmt.Errorf("failed to read patch file '%s': %w", filePath, readErr)
+			return fmt.Errorf("failed to read file '%s': %w", filePath, readErr)
 		}
 
+		if err := callback(filePath, content); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// validateYAMLFilesInDir checks that all .yaml and .yml files in a directory are valid YAML.
+func validateYAMLFilesInDir(dir string) error {
+	return forEachYAMLFile(dir, func(filePath string, content []byte) error {
 		var parsed any
 
 		yamlErr := yaml.Unmarshal(content, &parsed)
 		if yamlErr != nil {
 			return fmt.Errorf("failed to parse patch file '%s': %w", filePath, yamlErr)
 		}
-	}
 
-	return nil
+		return nil
+	})
 }

@@ -144,29 +144,26 @@ func cleanupMirrorRegistries(
 	}
 }
 
-func cleanupKindMirrorRegistries(
-	cmd *cobra.Command,
+// collectMirrorSpecs collects and merges mirror specs from flags and existing config.
+// Returns the merged specs, registry names, and any error.
+func collectMirrorSpecs(
 	cfgManager *ksailconfigmanager.ConfigManager,
-	_ *v1alpha1.Cluster,
-	deps cmdhelpers.LifecycleDeps,
-	clusterName string,
-	deleteVolumes bool,
-) error {
+	mirrorsDir string,
+) ([]registry.MirrorSpec, []string, error) {
 	// Get mirror registry specs from command line flag
 	flagSpecs := registry.ParseMirrorSpecs(cfgManager.Viper.GetStringSlice("mirror-registry"))
 
 	// Try to read existing hosts.toml files.
-	// ReadExistingHostsToml returns (nil, nil) for missing directories, and an error for actual I/O issues.
-	existingSpecs, err := registry.ReadExistingHostsToml(scaffolder.KindMirrorsDir)
+	existingSpecs, err := registry.ReadExistingHostsToml(mirrorsDir)
 	if err != nil {
-		return fmt.Errorf("failed to read existing hosts configuration: %w", err)
+		return nil, nil, fmt.Errorf("failed to read existing hosts configuration: %w", err)
 	}
 
 	// Merge specs: flag specs override existing specs
 	mirrorSpecs := registry.MergeSpecs(existingSpecs, flagSpecs)
 
 	if len(mirrorSpecs) == 0 {
-		return nil
+		return nil, nil, nil
 	}
 
 	// Build registry info to get names
@@ -175,6 +172,22 @@ func cleanupKindMirrorRegistries(
 	registryNames := make([]string, 0, len(entries))
 	for _, entry := range entries {
 		registryNames = append(registryNames, entry.ContainerName)
+	}
+
+	return mirrorSpecs, registryNames, nil
+}
+
+func cleanupKindMirrorRegistries(
+	cmd *cobra.Command,
+	cfgManager *ksailconfigmanager.ConfigManager,
+	_ *v1alpha1.Cluster,
+	deps cmdhelpers.LifecycleDeps,
+	clusterName string,
+	deleteVolumes bool,
+) error {
+	mirrorSpecs, registryNames, err := collectMirrorSpecs(cfgManager, scaffolder.KindMirrorsDir)
+	if err != nil {
+		return err
 	}
 
 	if len(registryNames) == 0 {
@@ -340,29 +353,9 @@ func cleanupTalosInDockerMirrorRegistries(
 	clusterName string,
 	deleteVolumes bool,
 ) error {
-	// Get mirror registry specs from command line flag
-	flagSpecs := registry.ParseMirrorSpecs(cfgManager.Viper.GetStringSlice("mirror-registry"))
-
-	// Try to read existing hosts.toml files.
-	// ReadExistingHostsToml returns (nil, nil) for missing directories, and an error for actual I/O issues.
-	existingSpecs, err := registry.ReadExistingHostsToml(scaffolder.KindMirrorsDir)
+	mirrorSpecs, registryNames, err := collectMirrorSpecs(cfgManager, scaffolder.KindMirrorsDir)
 	if err != nil {
-		return fmt.Errorf("failed to read existing hosts configuration: %w", err)
-	}
-
-	// Merge specs: flag specs override existing specs
-	mirrorSpecs := registry.MergeSpecs(existingSpecs, flagSpecs)
-
-	if len(mirrorSpecs) == 0 {
-		return nil
-	}
-
-	// Build registry info to get names
-	entries := registry.BuildMirrorEntries(mirrorSpecs, "", nil, nil, nil)
-
-	registryNames := make([]string, 0, len(entries))
-	for _, entry := range entries {
-		registryNames = append(registryNames, entry.ContainerName)
+		return err
 	}
 
 	if len(registryNames) == 0 {
