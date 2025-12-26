@@ -138,7 +138,7 @@ func (c *CiliumInstaller) getCiliumValues() map[string]string {
 
 func defaultCiliumValues() map[string]string {
 	return map[string]string{
-		"operator.replicas": "1",
+		"operator.replicas": "1", // numeric values don't need quotes
 	}
 }
 
@@ -149,16 +149,17 @@ func talosCiliumValues() map[string]string {
 	// Talos does not allow loading kernel modules by Kubernetes workloads,
 	// so SYS_MODULE capability must be dropped from ciliumAgent.
 	// The capability list below excludes SYS_MODULE from the default set.
-	ciliumAgentCaps := "{CHOWN,KILL,NET_ADMIN,NET_RAW,IPC_LOCK," +
-		"SYS_ADMIN,SYS_RESOURCE,DAC_OVERRIDE,FOWNER,SETGID,SETUID}"
-	cleanCiliumStateCaps := "{NET_ADMIN,SYS_ADMIN,SYS_RESOURCE}"
+	// Values must be valid JSON since they're parsed via SetJSONVals.
+	ciliumAgentCaps := `["CHOWN","KILL","NET_ADMIN","NET_RAW","IPC_LOCK",` +
+		`"SYS_ADMIN","SYS_RESOURCE","DAC_OVERRIDE","FOWNER","SETGID","SETUID"]`
+	cleanCiliumStateCaps := `["NET_ADMIN","SYS_ADMIN","SYS_RESOURCE"]`
 
 	return map[string]string{
 		// IPAM mode set to kubernetes as recommended for Talos
-		"ipam.mode": "kubernetes",
+		"ipam.mode": `"kubernetes"`,
 		// Talos mounts cgroupv2 at /sys/fs/cgroup, disable auto-mount
 		"cgroup.autoMount.enabled":                      "false",
-		"cgroup.hostRoot":                               "/sys/fs/cgroup",
+		"cgroup.hostRoot":                               `"/sys/fs/cgroup"`,
 		"securityContext.capabilities.ciliumAgent":      ciliumAgentCaps,
 		"securityContext.capabilities.cleanCiliumState": cleanCiliumStateCaps,
 	}
