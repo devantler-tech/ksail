@@ -1862,11 +1862,12 @@ func ensureArgoCDResources(
 		sourceDir = v1alpha1.DefaultSourceDirectory
 	}
 
+	repoName := registry.SanitizeRepoName(sourceDir)
 	hostPort := net.JoinHostPort(
 		registry.LocalRegistryClusterHost,
 		strconv.Itoa(registry.DefaultRegistryPort),
 	)
-	repoURL := fmt.Sprintf("oci://%s/%s", hostPort, sourceDir)
+	repoURL := fmt.Sprintf("oci://%s/%s", hostPort, repoName)
 
 	err = mgr.Ensure(ctx, argocdgitops.EnsureOptions{
 		RepositoryURL:   repoURL,
