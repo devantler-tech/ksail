@@ -18,10 +18,10 @@ Usage:
 Examples:
   # Create a pod using the data in pod.json
   ksail workload create -f ./pod.json
-
+  
   # Create a pod based on the JSON passed into stdin
   cat pod.json | ksail workload create -f -
-
+  
   # Edit the data in registry.yaml in JSON then create the resource using the edited data
   ksail workload create -f registry.yaml --edit -o json
 

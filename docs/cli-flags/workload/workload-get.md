@@ -17,43 +17,43 @@ Usage:
 Examples:
   # List all pods in ps output format
   ksail workload get pods
-
+  
   # List all pods in ps output format with more information (such as node name)
   ksail workload get pods -o wide
-
+  
   # List a single replication controller with specified NAME in ps output format
   ksail workload get replicationcontroller web
-
+  
   # List deployments in JSON output format, in the "v1" version of the "apps" API group
   ksail workload get deployments.v1.apps -o json
-
+  
   # List a single pod in JSON output format
   ksail workload get -o json pod web-pod-13je7
-
+  
   # List a pod identified by type and name specified in "pod.yaml" in JSON output format
   ksail workload get -f pod.yaml -o json
-
+  
   # List resources from a directory with kustomization.yaml - e.g. dir/kustomization.yaml
   ksail workload get -k dir/
-
+  
   # Return only the phase value of the specified pod
   ksail workload get -o template pod/web-pod-13je7 --template={{.status.phase}}
-
+  
   # List resource information in custom columns
   ksail workload get pod test-pod -o custom-columns=CONTAINER:.spec.containers[0].name,IMAGE:.spec.containers[0].image
-
+  
   # List all replication controllers and services together in ps output format
   ksail workload get rc,services
-
+  
   # List one or more resources by their type and names
   ksail workload get rc/web service/frontend pods/web-pod-13je7
-
+  
   # List the 'status' subresource for a single pod
   ksail workload get pod web-pod-13je7 --subresource status
-
+  
   # List all deployments in namespace 'backend'
   ksail workload get deployments.apps --namespace backend
-
+  
   # List all pods existing in all namespaces
   ksail workload get pods --all-namespaces
 

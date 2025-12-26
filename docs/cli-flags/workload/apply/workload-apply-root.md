@@ -18,20 +18,20 @@ Usage:
 Examples:
   # Apply the configuration in pod.json to a pod
   ksail workload apply -f ./pod.json
-
+  
   # Apply resources from a directory containing kustomization.yaml - e.g. dir/kustomization.yaml
   ksail workload apply -k dir/
-
+  
   # Apply the JSON passed into stdin to a pod
   cat pod.json | ksail workload apply -f -
-
+  
   # Apply the configuration from all files that end with '.json'
   ksail workload apply -f '*.json'
-
+  
   # Note: --prune is still in Alpha
   # Apply the configuration in manifest.yaml that matches label app=nginx and delete all other resources that are not in the file and match label app=nginx
   ksail workload apply --prune -f manifest.yaml -l app=nginx
-
+  
   # Apply the configuration in manifest.yaml and delete all the other config maps that are not in the file
   ksail workload apply --prune -f manifest.yaml --all --prune-allowlist=core/v1/ConfigMap
 

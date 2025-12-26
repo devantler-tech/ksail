@@ -17,31 +17,31 @@ Usage:
 Examples:
   # Delete a pod using the type and name specified in pod.json
   ksail workload delete -f ./pod.json
-
+  
   # Delete resources from a directory containing kustomization.yaml - e.g. dir/kustomization.yaml
   ksail workload delete -k dir
-
+  
   # Delete resources from all files that end with '.json'
   ksail workload delete -f '*.json'
-
+  
   # Delete a pod based on the type and name in the JSON passed into stdin
   cat pod.json | ksail workload delete -f -
-
+  
   # Delete pods and services with same names "baz" and "foo"
   ksail workload delete pod,service baz foo
-
+  
   # Delete pods and services with label name=myLabel
   ksail workload delete pods,services -l name=myLabel
-
+  
   # Delete a pod with minimal delay
   ksail workload delete pod foo --now
-
+  
   # Force delete a pod on a dead node
   ksail workload delete pod foo --force
-
+  
   # Delete all pods
   ksail workload delete pods --all
-
+  
   # Delete all pods only if the user confirms the deletion
   ksail workload delete pods --all --interactive
 

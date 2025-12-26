@@ -17,55 +17,55 @@ Usage:
 Examples:
   # Return snapshot logs from pod nginx with only one container
   ksail workload logs nginx
-
+  
   # Return snapshot logs from pod nginx, prefixing each line with the source pod and container name
   ksail workload logs nginx --prefix
-
+  
   # Return snapshot logs from pod nginx, limiting output to 500 bytes
   ksail workload logs nginx --limit-bytes=500
-
+  
   # Return snapshot logs from pod nginx, waiting up to 20 seconds for it to start running.
   ksail workload logs nginx --pod-running-timeout=20s
-
+  
   # Return snapshot logs from pod nginx with multi containers
   ksail workload logs nginx --all-containers=true
-
+  
   # Return snapshot logs from all pods in the deployment nginx
   ksail workload logs deployment/nginx --all-pods=true
-
+  
   # Return snapshot logs from all containers in pods defined by label app=nginx
   ksail workload logs -l app=nginx --all-containers=true
-
+  
   # Return snapshot logs from all pods defined by label app=nginx, limiting concurrent log requests to 10 pods
   ksail workload logs -l app=nginx --max-log-requests=10
-
+  
   # Return snapshot of previous terminated ruby container logs from pod web-1
   ksail workload logs -p -c ruby web-1
-
+  
   # Begin streaming the logs from pod nginx, continuing even if errors occur
   ksail workload logs nginx -f --ignore-errors=true
-
+  
   # Begin streaming the logs of the ruby container in pod web-1
   ksail workload logs -f -c ruby web-1
-
+  
   # Begin streaming the logs from all containers in pods defined by label app=nginx
   ksail workload logs -f -l app=nginx --all-containers=true
-
+  
   # Display only the most recent 20 lines of output in pod nginx
   ksail workload logs --tail=20 nginx
-
+  
   # Show all logs from pod nginx written in the last hour
   ksail workload logs --since=1h nginx
-
+  
   # Show all logs with timestamps from pod nginx starting from August 30, 2024, at 06:00:00 UTC
   ksail workload logs nginx --since-time=2024-08-30T06:00:00Z --timestamps=true
-
+  
   # Show logs from a kubelet with an expired serving certificate
   ksail workload logs --insecure-skip-tls-verify-backend nginx
-
+  
   # Return snapshot logs from first container of a job named hello
   ksail workload logs job/hello
-
+  
   # Return snapshot logs from container nginx-1 of a deployment named nginx
   ksail workload logs deployment/nginx -c nginx-1
 

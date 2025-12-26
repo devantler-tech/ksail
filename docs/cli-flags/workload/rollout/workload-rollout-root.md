@@ -18,13 +18,13 @@ Usage:
 Examples:
   # Rollback to the previous deployment
   ksail workload rollout undo deployment/abc
-
+  
   # Check the rollout status of a daemonset
   ksail workload rollout status daemonset/foo
-
+  
   # Restart a deployment
   ksail workload rollout restart deployment/abc
-
+  
   # Restart deployments with the 'app=nginx' label
   ksail workload rollout restart deployment --selector=app=nginx
 

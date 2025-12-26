@@ -17,23 +17,23 @@ Usage:
 Examples:
   # Wait for the pod "busybox1" to contain the status condition of type "Ready"
   ksail workload wait --for=condition=Ready pod/busybox1
-
+  
   # The default value of status condition is true; you can wait for other targets after an equal delimiter (compared after Unicode simple case folding, which is a more general form of case-insensitivity)
   ksail workload wait --for=condition=Ready=false pod/busybox1
-
+  
   # Wait for the pod "busybox1" to contain the status phase to be "Running"
   ksail workload wait --for=jsonpath='{.status.phase}'=Running pod/busybox1
-
+  
   # Wait for pod "busybox1" to be Ready
   ksail workload wait --for='jsonpath={.status.conditions[?(@.type=="Ready")].status}=True' pod/busybox1
-
+  
   # Wait for the service "loadbalancer" to have ingress
   ksail workload wait --for=jsonpath='{.status.loadBalancer.ingress}' service/loadbalancer
-
+  
   # Wait for the secret "busybox1" to be created, with a timeout of 30s
   ksail workload create secret generic busybox1
   ksail workload wait --for=create secret/busybox1 --timeout=30s
-
+  
   # Wait for the pod "busybox1" to be deleted, with a timeout of 60s, after having issued the "delete" command
   ksail workload delete pod/busybox1
   ksail workload wait --for=delete pod/busybox1 --timeout=60s
