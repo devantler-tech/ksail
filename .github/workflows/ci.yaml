@@ -47,6 +47,44 @@ jobs:
           commit_user_name: generator-bot
           commit_user_email: generator-bot@users.noreply.github.com
 
+  generate-cli-flags-docs:
+    name: 📚 Generate CLI Flags Docs
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: 🔑 Generate GitHub App Token
+        uses: tibdex/github-app-token@3beb63f4bd073e61482598c45c71c1019b59b73a # v2.1.0
+        id: generate-token
+        with:
+          app_id: ${{ vars.APP_ID }}
+          private_key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - name: 📄 Checkout
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          persist-credentials: true
+          token: ${{ steps.generate-token.outputs.token }}
+
+      - name: ⚙️ Setup Go
+        uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6.1.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: 🏗️ Build KSail binary
+        run: go build -o ksail
+
+      - name: 📚 Generate CLI flags documentation
+        run: .github/scripts/generate-cli-flags-docs.sh
+
+      - name: 📤 Commit and push CLI flags docs
+        uses: stefanzweifel/git-auto-commit-action@04702edda442b2e678b25b537cec683a1493fcb9 # v7.1.0
+        with:
+          commit_message: "chore: update generated CLI flags docs"
+          commit_user_name: generator-bot
+          commit_user_email: generator-bot@users.noreply.github.com
+
   ci:
     name: 🔄 CI - Go
     if: github.event_name != 'pull_request'
