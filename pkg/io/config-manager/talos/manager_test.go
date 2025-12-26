@@ -10,68 +10,46 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestNewConfigManager(t *testing.T) {
+func TestNewConfigManager_WithAllParameters(t *testing.T) {
+	t.Parallel()
+
+	manager := talos.NewConfigManager("custom-talos", "my-cluster", "1.31.0", "10.6.0.0/24")
+
+	require.NotNil(t, manager)
+}
+
+func TestNewConfigManager_WithDefaults(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
 		name              string
 		patchesDir        string
-		clusterName       string
 		kubernetesVersion string
 		networkCIDR       string
-		wantPatchesDir    string
-		wantK8sVersion    string
-		wantNetworkCIDR   string
 	}{
 		{
-			name:              "with all parameters",
-			patchesDir:        "custom-talos",
-			clusterName:       "my-cluster",
-			kubernetesVersion: "1.31.0",
-			networkCIDR:       "10.6.0.0/24",
-			wantPatchesDir:    "custom-talos",
-			wantK8sVersion:    "1.31.0",
-			wantNetworkCIDR:   "10.6.0.0/24",
-		},
-		{
-			name:              "with default patches dir",
+			name:              "default patches dir",
 			patchesDir:        "",
-			clusterName:       "test-cluster",
 			kubernetesVersion: "1.30.0",
 			networkCIDR:       "10.5.0.0/24",
-			wantPatchesDir:    talos.DefaultPatchesDir,
-			wantK8sVersion:    "1.30.0",
-			wantNetworkCIDR:   "10.5.0.0/24",
 		},
 		{
-			name:              "with default kubernetes version",
+			name:              "default kubernetes version",
 			patchesDir:        "talos",
-			clusterName:       "default-k8s",
 			kubernetesVersion: "",
 			networkCIDR:       "10.5.0.0/24",
-			wantPatchesDir:    "talos",
-			wantK8sVersion:    talos.DefaultKubernetesVersion,
-			wantNetworkCIDR:   "10.5.0.0/24",
 		},
 		{
-			name:              "with default network CIDR",
+			name:              "default network CIDR",
 			patchesDir:        "talos",
-			clusterName:       "default-network",
 			kubernetesVersion: "1.32.0",
 			networkCIDR:       "",
-			wantPatchesDir:    "talos",
-			wantK8sVersion:    "1.32.0",
-			wantNetworkCIDR:   talos.DefaultNetworkCIDR,
 		},
 		{
-			name:              "with all defaults",
+			name:              "all defaults",
 			patchesDir:        "",
-			clusterName:       "all-defaults",
 			kubernetesVersion: "",
 			networkCIDR:       "",
-			wantPatchesDir:    talos.DefaultPatchesDir,
-			wantK8sVersion:    talos.DefaultKubernetesVersion,
-			wantNetworkCIDR:   talos.DefaultNetworkCIDR,
 		},
 	}
 
@@ -83,7 +61,7 @@ func TestNewConfigManager(t *testing.T) {
 
 			manager := talos.NewConfigManager(
 				testCase.patchesDir,
-				testCase.clusterName,
+				"test-cluster",
 				testCase.kubernetesVersion,
 				testCase.networkCIDR,
 			)
@@ -143,10 +121,10 @@ func TestConfigManager_ValidatePatchDirectory_ValidYAMLFiles(t *testing.T) {
 	tmpDir := t.TempDir()
 	clusterDir := filepath.Join(tmpDir, "cluster")
 
-	require.NoError(t, os.MkdirAll(clusterDir, 0o755))
+	require.NoError(t, os.MkdirAll(clusterDir, 0o750))
 
 	validYAML := []byte("machine:\n  network:\n    hostname: test\n")
-	require.NoError(t, os.WriteFile(filepath.Join(clusterDir, "patch.yaml"), validYAML, 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(clusterDir, "patch.yaml"), validYAML, 0o600))
 
 	manager := talos.NewConfigManager(tmpDir, "test", "1.32.0", "10.5.0.0/24")
 
@@ -162,10 +140,10 @@ func TestConfigManager_ValidatePatchDirectory_InvalidYAMLFile(t *testing.T) {
 	tmpDir := t.TempDir()
 	clusterDir := filepath.Join(tmpDir, "cluster")
 
-	require.NoError(t, os.MkdirAll(clusterDir, 0o755))
+	require.NoError(t, os.MkdirAll(clusterDir, 0o750))
 
 	invalidYAML := []byte("invalid: yaml: content: [")
-	require.NoError(t, os.WriteFile(filepath.Join(clusterDir, "bad.yaml"), invalidYAML, 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(clusterDir, "bad.yaml"), invalidYAML, 0o600))
 
 	manager := talos.NewConfigManager(tmpDir, "test", "1.32.0", "10.5.0.0/24")
 
@@ -216,10 +194,10 @@ func TestConfigManager_LoadConfig_WithPatches(t *testing.T) {
 	tmpDir := t.TempDir()
 	clusterDir := filepath.Join(tmpDir, "cluster")
 
-	require.NoError(t, os.MkdirAll(clusterDir, 0o755))
+	require.NoError(t, os.MkdirAll(clusterDir, 0o750))
 
 	patchYAML := []byte("machine:\n  network:\n    hostname: test-node\n")
-	require.NoError(t, os.WriteFile(filepath.Join(clusterDir, "hostname.yaml"), patchYAML, 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(clusterDir, "hostname.yaml"), patchYAML, 0o600))
 
 	manager := talos.NewConfigManager(tmpDir, "patched-cluster", "1.32.0", "10.5.0.0/24")
 
@@ -250,10 +228,10 @@ func TestConfigManager_ValidateConfigs_WithInvalidYAML(t *testing.T) {
 	tmpDir := t.TempDir()
 	clusterDir := filepath.Join(tmpDir, "cluster")
 
-	require.NoError(t, os.MkdirAll(clusterDir, 0o755))
+	require.NoError(t, os.MkdirAll(clusterDir, 0o750))
 
 	invalidYAML := []byte("invalid: yaml: [")
-	require.NoError(t, os.WriteFile(filepath.Join(clusterDir, "bad.yaml"), invalidYAML, 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(clusterDir, "bad.yaml"), invalidYAML, 0o600))
 
 	manager := talos.NewConfigManager(tmpDir, "invalid-cluster", "1.32.0", "10.5.0.0/24")
 

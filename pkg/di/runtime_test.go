@@ -11,6 +11,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+var (
+	errHandler = errors.New("handler error")
+	errModule  = errors.New("module error")
+)
+
 func TestNew_EmptyModules(t *testing.T) {
 	t.Parallel()
 
@@ -23,16 +28,16 @@ func TestNew_WithModules(t *testing.T) {
 	t.Parallel()
 
 	called := false
-	module := func(i di.Injector) error {
+	module := func(_ di.Injector) error {
 		called = true
 
 		return nil
 	}
 
-	rt := di.New(module)
-	require.NotNil(t, rt)
+	runtime := di.New(module)
+	require.NotNil(t, runtime)
 
-	err := rt.Invoke(func(di.Injector) error {
+	err := runtime.Invoke(func(di.Injector) error {
 		return nil
 	})
 
@@ -59,57 +64,55 @@ func TestRuntime_Invoke_Success(t *testing.T) {
 func TestRuntime_Invoke_HandlerError(t *testing.T) {
 	t.Parallel()
 
-	rt := di.New()
+	runtime := di.New()
 
-	expectedErr := errors.New("handler error")
-	err := rt.Invoke(func(di.Injector) error {
-		return expectedErr
+	err := runtime.Invoke(func(di.Injector) error {
+		return errHandler
 	})
 
 	require.Error(t, err)
-	assert.Equal(t, expectedErr, err)
+	assert.Equal(t, errHandler, err)
 }
 
 func TestRuntime_Invoke_ModuleError(t *testing.T) {
 	t.Parallel()
 
-	expectedErr := errors.New("module error")
 	failingModule := func(di.Injector) error {
-		return expectedErr
+		return errModule
 	}
 
-	rt := di.New(failingModule)
+	runtime := di.New(failingModule)
 
-	err := rt.Invoke(func(di.Injector) error {
+	err := runtime.Invoke(func(di.Injector) error {
 		t.Fatal("handler should not be called when module fails")
 
 		return nil
 	})
 
 	require.Error(t, err)
-	assert.Equal(t, expectedErr, err)
+	assert.Equal(t, errModule, err)
 }
 
 func TestRuntime_Invoke_WithExtraModules(t *testing.T) {
 	t.Parallel()
 
 	baseModuleCalled := false
-	baseModule := func(i di.Injector) error {
+	baseModule := func(_ di.Injector) error {
 		baseModuleCalled = true
 
 		return nil
 	}
 
-	rt := di.New(baseModule)
+	runtime := di.New(baseModule)
 
 	extraModuleCalled := false
-	extraModule := func(i di.Injector) error {
+	extraModule := func(_ di.Injector) error {
 		extraModuleCalled = true
 
 		return nil
 	}
 
-	err := rt.Invoke(func(di.Injector) error {
+	err := runtime.Invoke(func(di.Injector) error {
 		return nil
 	}, extraModule)
 
@@ -123,27 +126,27 @@ func TestRuntime_Invoke_ModuleOrder(t *testing.T) {
 
 	var order []int
 
-	module1 := func(i di.Injector) error {
+	module1 := func(_ di.Injector) error {
 		order = append(order, 1)
 
 		return nil
 	}
 
-	module2 := func(i di.Injector) error {
+	module2 := func(_ di.Injector) error {
 		order = append(order, 2)
 
 		return nil
 	}
 
-	rt := di.New(module1)
+	runtime := di.New(module1)
 
-	module3 := func(i di.Injector) error {
+	module3 := func(_ di.Injector) error {
 		order = append(order, 3)
 
 		return nil
 	}
 
-	err := rt.Invoke(func(di.Injector) error {
+	err := runtime.Invoke(func(di.Injector) error {
 		order = append(order, 4)
 
 		return nil
@@ -156,9 +159,9 @@ func TestRuntime_Invoke_ModuleOrder(t *testing.T) {
 func TestRuntime_Invoke_NilModule(t *testing.T) {
 	t.Parallel()
 
-	rt := di.New(nil)
+	runtime := di.New(nil)
 
-	err := rt.Invoke(func(di.Injector) error {
+	err := runtime.Invoke(func(di.Injector) error {
 		return nil
 	}, nil)
 
@@ -203,12 +206,13 @@ func TestRuntime_Invoke_DependencyResolution(t *testing.T) {
 func TestRunEWithRuntime_Success(t *testing.T) {
 	t.Parallel()
 
-	rt := di.New()
+	runtime := di.New()
 
 	handlerCalled := false
+
 	var receivedCmd *cobra.Command
 
-	runE := di.RunEWithRuntime(rt, func(cmd *cobra.Command, injector di.Injector) error {
+	runE := di.RunEWithRuntime(runtime, func(cmd *cobra.Command, _ di.Injector) error {
 		handlerCalled = true
 		receivedCmd = cmd
 
@@ -226,18 +230,17 @@ func TestRunEWithRuntime_Success(t *testing.T) {
 func TestRunEWithRuntime_HandlerError(t *testing.T) {
 	t.Parallel()
 
-	rt := di.New()
+	runtime := di.New()
 
-	expectedErr := errors.New("handler error")
-	runE := di.RunEWithRuntime(rt, func(*cobra.Command, di.Injector) error {
-		return expectedErr
+	runE := di.RunEWithRuntime(runtime, func(*cobra.Command, di.Injector) error {
+		return errHandler
 	})
 
 	cmd := &cobra.Command{Use: "test"}
 	err := runE(cmd, nil)
 
 	require.Error(t, err)
-	assert.Equal(t, expectedErr, err)
+	assert.Equal(t, errHandler, err)
 }
 
 func TestRunEWithRuntime_WithDependencies(t *testing.T) {
@@ -278,12 +281,12 @@ func TestRunEWithRuntime_WithDependencies(t *testing.T) {
 func TestRuntime_Invoke_InjectorShutdown(t *testing.T) {
 	t.Parallel()
 
-	rt := di.New()
+	runtime := di.New()
 
 	var capturedInjector di.Injector
 
-	err := rt.Invoke(func(i di.Injector) error {
-		capturedInjector = i
+	err := runtime.Invoke(func(injector di.Injector) error {
+		capturedInjector = injector
 
 		return nil
 	})
@@ -298,16 +301,16 @@ func TestRuntime_Invoke_InjectorShutdown(t *testing.T) {
 func TestRuntime_Invoke_MultipleInvocations(t *testing.T) {
 	t.Parallel()
 
-	rt := di.New()
+	runtime := di.New()
 
 	// First invocation
-	err1 := rt.Invoke(func(di.Injector) error {
+	err1 := runtime.Invoke(func(di.Injector) error {
 		return nil
 	})
 	require.NoError(t, err1)
 
 	// Second invocation - should create a fresh injector
-	err2 := rt.Invoke(func(di.Injector) error {
+	err2 := runtime.Invoke(func(di.Injector) error {
 		return nil
 	})
 	require.NoError(t, err2)

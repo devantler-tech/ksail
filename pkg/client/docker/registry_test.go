@@ -1026,7 +1026,7 @@ func TestRegistryConfig_WithAllFields(t *testing.T) {
 	assert.Equal(t, "my-volume", config.VolumeName)
 }
 
-func TestNormalizeVolumeName_SimpleNames(t *testing.T) {
+func TestNormalizeVolumeName_BasicCases(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -1034,51 +1034,38 @@ func TestNormalizeVolumeName_SimpleNames(t *testing.T) {
 		input    string
 		expected string
 	}{
-		{
-			name:     "simple name",
-			input:    "docker.io",
-			expected: "docker.io",
-		},
-		{
-			name:     "with port",
-			input:    "localhost:5000",
-			expected: "localhost:5000",
-		},
-		{
-			name:     "kind prefix stripped",
-			input:    "kind-registry",
-			expected: "registry",
-		},
-		{
-			name:     "k3d prefix stripped",
-			input:    "k3d-registry",
-			expected: "registry",
-		},
-		{
-			name:     "kind prefix with dots",
-			input:    "kind-docker.io",
-			expected: "docker.io",
-		},
-		{
-			name:     "k3d prefix with colons",
-			input:    "k3d-localhost:5000",
-			expected: "localhost:5000",
-		},
-		{
-			name:     "no prefix",
-			input:    "registry-name",
-			expected: "registry-name",
-		},
-		{
-			name:     "empty string",
-			input:    "",
-			expected: "",
-		},
-		{
-			name:     "whitespace trimmed",
-			input:    "  docker.io  ",
-			expected: "docker.io",
-		},
+		{name: "simple name", input: "docker.io", expected: "docker.io"},
+		{name: "with port", input: "localhost:5000", expected: "localhost:5000"},
+		{name: "no prefix", input: "registry-name", expected: "registry-name"},
+		{name: "empty string", input: "", expected: ""},
+		{name: "whitespace trimmed", input: "  docker.io  ", expected: "docker.io"},
+	}
+
+	for i := range tests {
+		testCase := tests[i]
+
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			result := docker.NormalizeVolumeName(testCase.input)
+
+			assert.Equal(t, testCase.expected, result)
+		})
+	}
+}
+
+func TestNormalizeVolumeName_PrefixStripping(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{name: "kind prefix stripped", input: "kind-registry", expected: "registry"},
+		{name: "k3d prefix stripped", input: "k3d-registry", expected: "registry"},
+		{name: "kind prefix with dots", input: "kind-docker.io", expected: "docker.io"},
+		{name: "k3d prefix with colons", input: "k3d-localhost:5000", expected: "localhost:5000"},
 	}
 
 	for i := range tests {
@@ -1113,10 +1100,10 @@ func TestErrConstants(t *testing.T) {
 	t.Parallel()
 
 	// Test that error constants are defined
-	assert.NotNil(t, docker.ErrAPIClientNil)
-	assert.NotNil(t, docker.ErrRegistryNotFound)
-	assert.NotNil(t, docker.ErrRegistryAlreadyExists)
-	assert.NotNil(t, docker.ErrRegistryPortNotFound)
+	require.Error(t, docker.ErrAPIClientNil)
+	require.Error(t, docker.ErrRegistryNotFound)
+	require.Error(t, docker.ErrRegistryAlreadyExists)
+	require.Error(t, docker.ErrRegistryPortNotFound)
 
 	// Test error messages contain useful information
 	assert.Contains(t, docker.ErrAPIClientNil.Error(), "apiClient")

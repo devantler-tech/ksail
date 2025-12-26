@@ -60,10 +60,11 @@ func TestLoadPatches_ClusterPatches(t *testing.T) {
 	tmpDir := t.TempDir()
 	clusterDir := filepath.Join(tmpDir, "cluster")
 
-	require.NoError(t, os.MkdirAll(clusterDir, 0o755))
+	require.NoError(t, os.MkdirAll(clusterDir, 0o750))
 
 	patchContent := []byte("machine:\n  network:\n    hostname: cluster-node\n")
-	require.NoError(t, os.WriteFile(filepath.Join(clusterDir, "hostname.yaml"), patchContent, 0o644))
+	patchFile := filepath.Join(clusterDir, "hostname.yaml")
+	require.NoError(t, os.WriteFile(patchFile, patchContent, 0o600))
 
 	patches, err := talos.LoadPatches(tmpDir)
 
@@ -80,10 +81,10 @@ func TestLoadPatches_ControlPlanePatches(t *testing.T) {
 	tmpDir := t.TempDir()
 	cpDir := filepath.Join(tmpDir, "control-planes")
 
-	require.NoError(t, os.MkdirAll(cpDir, 0o755))
+	require.NoError(t, os.MkdirAll(cpDir, 0o750))
 
 	patchContent := []byte("machine:\n  controlPlane:\n    controllerManager: {}\n")
-	require.NoError(t, os.WriteFile(filepath.Join(cpDir, "cp.yaml"), patchContent, 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(cpDir, "cp.yaml"), patchContent, 0o600))
 
 	patches, err := talos.LoadPatches(tmpDir)
 
@@ -98,10 +99,10 @@ func TestLoadPatches_WorkerPatches(t *testing.T) {
 	tmpDir := t.TempDir()
 	workerDir := filepath.Join(tmpDir, "workers")
 
-	require.NoError(t, os.MkdirAll(workerDir, 0o755))
+	require.NoError(t, os.MkdirAll(workerDir, 0o750))
 
 	patchContent := []byte("machine:\n  kubelet:\n    image: test\n")
-	require.NoError(t, os.WriteFile(filepath.Join(workerDir, "kubelet.yaml"), patchContent, 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(workerDir, "kubelet.yaml"), patchContent, 0o600))
 
 	patches, err := talos.LoadPatches(tmpDir)
 
@@ -120,25 +121,25 @@ func TestLoadPatches_MultipleScopes(t *testing.T) {
 	cpDir := filepath.Join(tmpDir, "control-planes")
 	workerDir := filepath.Join(tmpDir, "workers")
 
-	require.NoError(t, os.MkdirAll(clusterDir, 0o755))
-	require.NoError(t, os.MkdirAll(cpDir, 0o755))
-	require.NoError(t, os.MkdirAll(workerDir, 0o755))
+	require.NoError(t, os.MkdirAll(clusterDir, 0o750))
+	require.NoError(t, os.MkdirAll(cpDir, 0o750))
+	require.NoError(t, os.MkdirAll(workerDir, 0o750))
 
 	// Create patches in each directory
 	require.NoError(t, os.WriteFile(
 		filepath.Join(clusterDir, "cluster.yaml"),
 		[]byte("machine:\n  network: {}\n"),
-		0o644,
+		0o600,
 	))
 	require.NoError(t, os.WriteFile(
 		filepath.Join(cpDir, "cp.yaml"),
 		[]byte("machine:\n  controlPlane: {}\n"),
-		0o644,
+		0o600,
 	))
 	require.NoError(t, os.WriteFile(
 		filepath.Join(workerDir, "worker.yaml"),
 		[]byte("machine:\n  kubelet: {}\n"),
-		0o644,
+		0o600,
 	))
 
 	patches, err := talos.LoadPatches(tmpDir)
@@ -163,11 +164,11 @@ func TestLoadPatches_YMLExtension(t *testing.T) {
 	tmpDir := t.TempDir()
 	clusterDir := filepath.Join(tmpDir, "cluster")
 
-	require.NoError(t, os.MkdirAll(clusterDir, 0o755))
+	require.NoError(t, os.MkdirAll(clusterDir, 0o750))
 
 	// Use .yml extension instead of .yaml
 	patchContent := []byte("machine:\n  network:\n    hostname: test\n")
-	require.NoError(t, os.WriteFile(filepath.Join(clusterDir, "patch.yml"), patchContent, 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(clusterDir, "patch.yml"), patchContent, 0o600))
 
 	patches, err := talos.LoadPatches(tmpDir)
 
@@ -182,18 +183,21 @@ func TestLoadPatches_IgnoresNonYAMLFiles(t *testing.T) {
 	tmpDir := t.TempDir()
 	clusterDir := filepath.Join(tmpDir, "cluster")
 
-	require.NoError(t, os.MkdirAll(clusterDir, 0o755))
+	require.NoError(t, os.MkdirAll(clusterDir, 0o750))
 
 	// Create YAML file
 	require.NoError(t, os.WriteFile(
 		filepath.Join(clusterDir, "valid.yaml"),
 		[]byte("machine:\n  network: {}\n"),
-		0o644,
+		0o600,
 	))
 
 	// Create non-YAML files that should be ignored
-	require.NoError(t, os.WriteFile(filepath.Join(clusterDir, "README.md"), []byte("# README"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(clusterDir, "script.sh"), []byte("#!/bin/bash"), 0o644))
+	readmeFile := filepath.Join(clusterDir, "README.md")
+	require.NoError(t, os.WriteFile(readmeFile, []byte("# README"), 0o600))
+
+	scriptFile := filepath.Join(clusterDir, "script.sh")
+	require.NoError(t, os.WriteFile(scriptFile, []byte("#!/bin/bash"), 0o600))
 
 	patches, err := talos.LoadPatches(tmpDir)
 
@@ -208,19 +212,14 @@ func TestLoadPatches_MultipleYAMLFiles(t *testing.T) {
 	tmpDir := t.TempDir()
 	clusterDir := filepath.Join(tmpDir, "cluster")
 
-	require.NoError(t, os.MkdirAll(clusterDir, 0o755))
+	require.NoError(t, os.MkdirAll(clusterDir, 0o750))
 
 	// Create multiple YAML files
-	for i := 1; i <= 3; i++ {
-		filename := filepath.Join(clusterDir, "patch1.yaml")
-		if i == 2 {
-			filename = filepath.Join(clusterDir, "patch2.yaml")
-		} else if i == 3 {
-			filename = filepath.Join(clusterDir, "patch3.yaml")
-		}
-
+	filenames := []string{"patch1.yaml", "patch2.yaml", "patch3.yaml"}
+	for _, filename := range filenames {
+		fullPath := filepath.Join(clusterDir, filename)
 		content := []byte("machine:\n  network: {}\n")
-		require.NoError(t, os.WriteFile(filename, content, 0o644))
+		require.NoError(t, os.WriteFile(fullPath, content, 0o600))
 	}
 
 	patches, err := talos.LoadPatches(tmpDir)
