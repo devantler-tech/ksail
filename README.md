@@ -50,14 +50,6 @@ go install github.com/devantler-tech/ksail/v5@latest
 
 ## Usage
 
-### Supported Distributions
-
-| Distribution      | Description                                                                  |
-| ----------------- | ---------------------------------------------------------------------------- |
-| **Kind**          | Kubernetes IN Docker - lightweight clusters using Docker containers as nodes |
-| **K3d**           | K3s in Docker - lightweight Kubernetes distribution wrapped in Docker        |
-| **TalosInDocker** | Talos Linux in Docker - immutable, minimal OS designed for Kubernetes        |
-
 ### Quick Start
 
 Get up and running with a local Kubernetes cluster in three steps:
