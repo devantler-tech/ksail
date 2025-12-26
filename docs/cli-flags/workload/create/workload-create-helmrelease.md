@@ -1,0 +1,47 @@
+---
+title: "ksail workload create helmrelease"
+parent: "ksail workload create"
+grand_parent: "ksail workload"
+---
+
+# ksail workload create helmrelease
+
+```text
+Create or update a HelmRelease resource using Flux APIs
+
+Usage:
+  ksail workload create helmrelease [name] [flags]
+
+Aliases:
+  helmrelease, hr
+
+Examples:
+  # Create a HelmRelease with a chart from a HelmRepository source
+  ksail workload create helmrelease podinfo \
+    --source=HelmRepository/podinfo \
+    --chart=podinfo \
+    --chart-version=6.6.2 \
+    --namespace=flux-system
+
+  # Create a HelmRelease targeting a different namespace
+  ksail workload create helmrelease podinfo \
+    --source=HelmRepository/podinfo \
+    --chart=podinfo \
+    --target-namespace=production \
+    --create-target-namespace=true
+
+Flags:
+      --chart string              Helm chart name or path
+      --chart-version string      Helm chart version
+      --create-target-namespace   create the target namespace if it doesn't exist
+      --depends-on strings        HelmRelease that must be ready before this one
+      --export                    export in YAML format to stdout
+  -h, --help                      help for helmrelease
+      --interval duration         reconciliation interval (default 1m0s)
+      --source string             source name in format 'Kind/name' or 'Kind/name.namespace'
+      --source-kind string        source kind (HelmRepository, GitRepository, Bucket) (default "HelmRepository")
+      --target-namespace string   namespace to install the Helm release
+
+Global Flags:
+      --timing   Show per-activity timing output
+```

@@ -1,0 +1,27 @@
+---
+title: "ksail workload create source"
+parent: "ksail workload create"
+grand_parent: "ksail workload"
+---
+
+# ksail workload create source
+
+```text
+Create or update Flux sources
+
+Usage:
+  ksail workload create source [command]
+
+Available Commands:
+  git         Create or update a GitRepository source
+  helm        Create or update a HelmRepository source
+  oci         Create or update an OCIRepository source
+
+Flags:
+  -h, --help   help for source
+
+Global Flags:
+      --timing   Show per-activity timing output
+
+Use "ksail workload create source [command] --help" for more information about a command.
+```
