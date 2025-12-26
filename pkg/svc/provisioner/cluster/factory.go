@@ -179,7 +179,12 @@ func applyMirrorRegistriesToTalosConfig(
 		})
 	}
 
-	return talosConfigs.ApplyMirrorRegistries(mirrors)
+	err := talosConfigs.ApplyMirrorRegistries(mirrors)
+	if err != nil {
+		return fmt.Errorf("failed to apply mirror registries to Talos config: %w", err)
+	}
+
+	return nil
 }
 
 func createTalosInDockerProvisioner(
@@ -203,7 +208,8 @@ func createTalosInDockerProvisioner(
 		return nil, nil, fmt.Errorf("failed to load Talos configuration: %w", err)
 	}
 
-	if err := applyMirrorRegistriesToTalosConfig(talosConfigs, mirrorRegistries); err != nil {
+	err = applyMirrorRegistriesToTalosConfig(talosConfigs, mirrorRegistries)
+	if err != nil {
 		return nil, nil, fmt.Errorf("failed to apply mirror registries: %w", err)
 	}
 
