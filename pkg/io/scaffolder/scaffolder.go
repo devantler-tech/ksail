@@ -579,7 +579,8 @@ func (s *Scaffolder) generateTalosInDockerConfig(output string, force bool) erro
 	workers := int(s.KSailConfig.Spec.Cluster.Options.TalosInDocker.Workers)
 
 	// Disable default CNI (Flannel) if using any non-default CNI (e.g., Cilium, Calico, None)
-	disableDefaultCNI := s.KSailConfig.Spec.Cluster.CNI != v1alpha1.CNIDefault
+	// Empty string is treated as default CNI (for imperative mode without config file)
+	disableDefaultCNI := s.KSailConfig.Spec.Cluster.CNI != v1alpha1.CNIDefault && s.KSailConfig.Spec.Cluster.CNI != ""
 
 	config := &talosgenerator.TalosInDockerConfig{
 		PatchesDir:        TalosInDockerConfigDir,
