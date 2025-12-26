@@ -35,7 +35,13 @@ func CleanupKubeconfig(
 		return nil
 	}
 
-	return removeEntriesFromKubeconfig(kubeconfigPath, clusterName, contextName, userName, logWriter)
+	return removeEntriesFromKubeconfig(
+		kubeconfigPath,
+		clusterName,
+		contextName,
+		userName,
+		logWriter,
+	)
 }
 
 // removeEntriesFromKubeconfig loads the kubeconfig, removes the specified entries, and saves it.

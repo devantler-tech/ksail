@@ -862,11 +862,16 @@ func (p *TalosInDockerProvisioner) cleanupKubeconfig(clusterName string) error {
 	contextName := "admin@" + clusterName
 	userName := contextName
 
-	return k8s.CleanupKubeconfig(
+	err = k8s.CleanupKubeconfig(
 		kubeconfigPath,
 		clusterName,
 		contextName,
 		userName,
 		p.logWriter,
 	)
+	if err != nil {
+		return fmt.Errorf("failed to cleanup kubeconfig: %w", err)
+	}
+
+	return nil
 }
