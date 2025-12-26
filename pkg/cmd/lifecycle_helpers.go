@@ -131,7 +131,7 @@ func HandleLifecycleRunE(
 
 // showLifecycleTitle displays the title message for a lifecycle operation.
 func showLifecycleTitle(cmd *cobra.Command, emoji, content string) {
-	fmt.Fprintln(cmd.OutOrStdout()) // Add newline before title for visual separation
+	_, _ = fmt.Fprintln(cmd.OutOrStdout()) // Add newline before title for visual separation
 	notify.WriteMessage(
 		notify.Message{
 			Type:    notify.TitleType,

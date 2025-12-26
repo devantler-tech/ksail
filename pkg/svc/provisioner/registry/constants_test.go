@@ -1,6 +1,10 @@
-package registry
+package registry_test
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
+)
 
 func TestSanitizeRepoName(t *testing.T) {
 	t.Parallel()
@@ -10,70 +14,35 @@ func TestSanitizeRepoName(t *testing.T) {
 		input    string
 		expected string
 	}{
-		{
-			name:     "simple directory",
-			input:    "k8s",
-			expected: "k8s",
-		},
-		{
-			name:     "directory with dots",
-			input:    ".github",
-			expected: "github",
-		},
+		{name: "simple directory", input: "k8s", expected: "k8s"},
+		{name: "directory with dots", input: ".github", expected: "github"},
 		{
 			name:     "path with slashes",
 			input:    ".github/fixtures/reconcile-test",
 			expected: "github-fixtures-reconcile-test",
 		},
-		{
-			name:     "uppercase converted to lowercase",
-			input:    "MyProject",
-			expected: "myproject",
-		},
-		{
-			name:     "spaces replaced with hyphens",
-			input:    "my project",
-			expected: "my-project",
-		},
-		{
-			name:     "consecutive special chars collapsed",
-			input:    "my...project",
-			expected: "my-project",
-		},
-		{
-			name:     "leading and trailing hyphens trimmed",
-			input:    "---my-project---",
-			expected: "my-project",
-		},
-		{
-			name:     "empty string returns default",
-			input:    "",
-			expected: DefaultRepoName,
-		},
-		{
-			name:     "whitespace only returns default",
-			input:    "   ",
-			expected: DefaultRepoName,
-		},
-		{
-			name:     "numeric values preserved",
-			input:    "project123",
-			expected: "project123",
-		},
-		{
-			name:     "complex path",
-			input:    "path/to/my-workloads",
-			expected: "path-to-my-workloads",
-		},
+		{name: "uppercase to lowercase", input: "MyProject", expected: "myproject"},
+		{name: "spaces to hyphens", input: "my project", expected: "my-project"},
+		{name: "consecutive chars collapsed", input: "my...project", expected: "my-project"},
+		{name: "trim leading trailing hyphens", input: "---my-project---", expected: "my-project"},
+		{name: "empty returns default", input: "", expected: registry.DefaultRepoName},
+		{name: "whitespace returns default", input: "   ", expected: registry.DefaultRepoName},
+		{name: "numeric preserved", input: "project123", expected: "project123"},
+		{name: "complex path", input: "path/to/my-workloads", expected: "path-to-my-workloads"},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			result := SanitizeRepoName(tc.input)
-			if result != tc.expected {
-				t.Errorf("SanitizeRepoName(%q) = %q, want %q", tc.input, result, tc.expected)
+			result := registry.SanitizeRepoName(testCase.input)
+			if result != testCase.expected {
+				t.Errorf(
+					"SanitizeRepoName(%q) = %q, want %q",
+					testCase.input,
+					result,
+					testCase.expected,
+				)
 			}
 		})
 	}
