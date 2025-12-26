@@ -180,35 +180,16 @@ type MirrorRegistry struct {
 
 // ApplyMirrorRegistries modifies the configs to add registry mirror configurations.
 // This directly patches the underlying v1alpha1.Config structs.
+// It adds both the mirror endpoints and the registry config with insecureSkipVerify: true
+// to allow HTTP connections to local registry containers.
 func (c *Configs) ApplyMirrorRegistries(mirrors []MirrorRegistry) error {
 	if len(mirrors) == 0 {
 		return nil
 	}
 
-	// Define the patcher function that adds mirrors to the config
+	// Define the patcher function that adds mirrors and registry configs
 	patcher := func(cfg *v1alpha1.Config) error {
-		if cfg.MachineConfig == nil {
-			return nil
-		}
-
-		// Initialize mirrors map if nil
-		if cfg.MachineConfig.MachineRegistries.RegistryMirrors == nil {
-			cfg.MachineConfig.MachineRegistries.RegistryMirrors = make(
-				map[string]*v1alpha1.RegistryMirrorConfig,
-			)
-		}
-
-		for _, mirror := range mirrors {
-			if mirror.Host == "" {
-				continue
-			}
-
-			cfg.MachineConfig.MachineRegistries.RegistryMirrors[mirror.Host] = &v1alpha1.RegistryMirrorConfig{
-				MirrorEndpoints: mirror.Endpoints,
-			}
-		}
-
-		return nil
+		return applyMirrorsToConfig(cfg, mirrors)
 	}
 
 	// Apply to control plane config
@@ -232,4 +213,102 @@ func (c *Configs) ApplyMirrorRegistries(mirrors []MirrorRegistry) error {
 	}
 
 	return nil
+}
+
+// applyMirrorsToConfig applies mirror configurations to a Talos v1alpha1 config.
+func applyMirrorsToConfig(cfg *v1alpha1.Config, mirrors []MirrorRegistry) error {
+	if cfg.MachineConfig == nil {
+		return nil
+	}
+
+	initRegistryMaps(cfg)
+
+	for _, mirror := range mirrors {
+		if mirror.Host == "" {
+			continue
+		}
+
+		addMirrorEndpoints(cfg, mirror)
+		addInsecureRegistryConfigs(cfg, mirror.Endpoints)
+	}
+
+	return nil
+}
+
+// initRegistryMaps initializes the registry maps if they are nil.
+func initRegistryMaps(cfg *v1alpha1.Config) {
+	if cfg.MachineConfig.MachineRegistries.RegistryMirrors == nil {
+		cfg.MachineConfig.MachineRegistries.RegistryMirrors = make(
+			map[string]*v1alpha1.RegistryMirrorConfig,
+		)
+	}
+
+	if cfg.MachineConfig.MachineRegistries.RegistryConfig == nil {
+		cfg.MachineConfig.MachineRegistries.RegistryConfig = make(
+			map[string]*v1alpha1.RegistryConfig,
+		)
+	}
+}
+
+// addMirrorEndpoints adds mirror endpoint configuration for a registry host.
+func addMirrorEndpoints(cfg *v1alpha1.Config, mirror MirrorRegistry) {
+	cfg.MachineConfig.MachineRegistries.RegistryMirrors[mirror.Host] = &v1alpha1.RegistryMirrorConfig{
+		MirrorEndpoints: mirror.Endpoints,
+	}
+}
+
+// addInsecureRegistryConfigs adds insecureSkipVerify config for HTTP endpoints.
+func addInsecureRegistryConfigs(cfg *v1alpha1.Config, endpoints []string) {
+	for _, endpoint := range endpoints {
+		if !isHTTPEndpoint(endpoint) {
+			continue
+		}
+
+		configKey := extractHostPortFromEndpoint(endpoint)
+		if configKey == "" {
+			continue
+		}
+
+		insecureSkipVerify := true
+		cfg.MachineConfig.MachineRegistries.RegistryConfig[configKey] = &v1alpha1.RegistryConfig{
+			RegistryTLS: &v1alpha1.RegistryTLSConfig{
+				TLSInsecureSkipVerify: &insecureSkipVerify,
+			},
+		}
+	}
+}
+
+// extractHostPortFromEndpoint extracts the host:port portion from an endpoint URL.
+// For example, "http://docker.io:5000" returns "docker.io:5000".
+func extractHostPortFromEndpoint(endpoint string) string {
+	// Remove scheme (http:// or https://)
+	hostPort := endpoint
+	if idx := len("http://"); len(endpoint) > idx && endpoint[:idx] == "http://" {
+		hostPort = endpoint[idx:]
+	} else if idx := len("https://"); len(endpoint) > idx && endpoint[:idx] == "https://" {
+		hostPort = endpoint[idx:]
+	}
+
+	// Remove any path component
+	if slashIdx := indexByte(hostPort, '/'); slashIdx >= 0 {
+		hostPort = hostPort[:slashIdx]
+	}
+
+	return hostPort
+}
+
+// isHTTPEndpoint returns true if the endpoint uses HTTP (not HTTPS).
+func isHTTPEndpoint(endpoint string) bool {
+	return len(endpoint) >= 7 && endpoint[:7] == "http://"
+}
+
+// indexByte returns the index of the first occurrence of c in s, or -1 if not present.
+func indexByte(s string, c byte) int {
+	for i := range len(s) {
+		if s[i] == c {
+			return i
+		}
+	}
+
+	return -1
 }

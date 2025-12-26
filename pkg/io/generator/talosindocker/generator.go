@@ -228,6 +228,8 @@ func (g *TalosInDockerGenerator) generateMirrorRegistriesPatch(
 }
 
 // generateMirrorPatchYAML generates Talos machine config patch YAML for mirror registries.
+// The patch includes both the mirrors section (with endpoints) and the config section
+// (with insecureSkipVerify: true) to allow HTTP connections to the local registry containers.
 func generateMirrorPatchYAML(specs []registry.MirrorSpec) string {
 	if len(specs) == 0 {
 		return ""
@@ -251,6 +253,23 @@ func generateMirrorPatchYAML(specs []registry.MirrorSpec) string {
 		result.WriteString("          - http://")
 		result.WriteString(spec.Host)
 		result.WriteString(":5000\n")
+	}
+
+	// Add registry config section for each mirror to allow HTTP (insecure) connections.
+	// The container name format is "<host>:5000" which matches the endpoint.
+	result.WriteString("    config:\n")
+
+	for _, spec := range specs {
+		if spec.Host == "" {
+			continue
+		}
+
+		// The config key must match the endpoint hostname:port (container name:5000)
+		result.WriteString("      ")
+		result.WriteString(spec.Host)
+		result.WriteString(":5000:\n")
+		result.WriteString("        tls:\n")
+		result.WriteString("          insecureSkipVerify: true\n")
 	}
 
 	return result.String()
