@@ -6,7 +6,7 @@ on:
   pull_request:
 
 concurrency:
-  group: "ci-go-${{ github.ref }}"
+  group: "ci-go-repo-${{ github.ref }}"
   cancel-in-progress: true
 
 permissions: {}
