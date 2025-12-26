@@ -820,8 +820,18 @@ func runKindMirrorAction(
 	writer := ctx.cmd.OutOrStdout()
 	clusterName := ctx.kindConfig.Name
 
-	// Setup registry containers (they will be connected to network after cluster creation)
-	err := kindprovisioner.SetupRegistries(
+	// Kind always uses a network named "kind"
+	networkName := "kind"
+
+	// Pre-create the Docker network so registries can be connected before Kind nodes start.
+	// This ensures registry containers are reachable via Docker DNS when nodes pull images.
+	err := ensureDockerNetworkExists(execCtx, dockerClient, networkName, writer)
+	if err != nil {
+		return fmt.Errorf("failed to create docker network: %w", err)
+	}
+
+	// Setup registry containers
+	err = kindprovisioner.SetupRegistries(
 		execCtx,
 		ctx.kindConfig,
 		clusterName,
@@ -833,6 +843,17 @@ func runKindMirrorAction(
 		return fmt.Errorf("failed to setup kind registries: %w", err)
 	}
 
+	// Connect registries to the network immediately for Docker DNS resolution
+	err = kindprovisioner.ConnectRegistriesToNetwork(
+		execCtx,
+		ctx.mirrorSpecs,
+		dockerClient,
+		writer,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to connect kind registries to network: %w", err)
+	}
+
 	return nil
 }
 
@@ -841,20 +862,10 @@ func runKindConnectAction(
 	ctx *registryStageContext,
 	dockerClient client.APIClient,
 ) error {
-	// Connect registries to the Kind network
-	err := kindprovisioner.ConnectRegistriesToNetwork(
-		execCtx,
-		ctx.mirrorSpecs,
-		dockerClient,
-		ctx.cmd.OutOrStdout(),
-	)
-	if err != nil {
-		return fmt.Errorf("failed to connect kind registries to network: %w", err)
-	}
-
-	// Configure containerd inside Kind nodes to use the registry mirrors
-	// This injects hosts.toml files directly into the running nodes
-	err = kindprovisioner.ConfigureContainerdRegistryMirrors(
+	// Registries are already connected to the network in runKindMirrorAction.
+	// This function only configures containerd inside Kind nodes to use the registry mirrors.
+	// This injects hosts.toml files directly into the running nodes.
+	err := kindprovisioner.ConfigureContainerdRegistryMirrors(
 		execCtx,
 		ctx.kindConfig,
 		ctx.mirrorSpecs,
@@ -877,16 +888,29 @@ func k3dRegistryActionFor(
 		switch currentRole {
 		case registryStageRoleMirror:
 			return func(execCtx context.Context, ctx *registryStageContext, dockerClient client.APIClient) error {
-				return runK3DRegistryAction(
+				// Setup registries first
+				err := runK3DRegistryAction(
 					execCtx,
 					ctx,
 					dockerClient,
 					"setup k3d registries",
 					k3dprovisioner.SetupRegistries,
 				)
-			}
-		case registryStageRoleConnect:
-			return func(execCtx context.Context, ctx *registryStageContext, dockerClient client.APIClient) error {
+				if err != nil {
+					return err
+				}
+
+				// Pre-create Docker network and connect registries before cluster creation.
+				// This ensures registries are reachable via Docker DNS when K3d nodes pull images.
+				clusterName := k3dconfigmanager.ResolveClusterName(ctx.clusterCfg, ctx.k3dConfig)
+				networkName := "k3d-" + clusterName
+				writer := ctx.cmd.OutOrStdout()
+
+				errNetwork := ensureDockerNetworkExists(execCtx, dockerClient, networkName, writer)
+				if errNetwork != nil {
+					return fmt.Errorf("failed to create k3d network: %w", errNetwork)
+				}
+
 				return runK3DRegistryAction(
 					execCtx,
 					ctx,
@@ -894,6 +918,12 @@ func k3dRegistryActionFor(
 					"connect k3d registries to network",
 					k3dprovisioner.ConnectRegistriesToNetwork,
 				)
+			}
+		case registryStageRoleConnect:
+			// Registries are already connected to the network in the mirror action.
+			// No additional work needed after cluster creation.
+			return func(_ context.Context, _ *registryStageContext, _ client.APIClient) error {
+				return nil
 			}
 		default:
 			return nil
