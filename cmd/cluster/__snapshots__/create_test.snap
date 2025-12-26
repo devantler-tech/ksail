@@ -3,6 +3,7 @@
 🗄️ Create local registry...
 ► creating local registry
 
+
 🚀 Create cluster...
 ► creating cluster
 ✔ cluster created
@@ -19,6 +20,7 @@
 ---
 
 [TestCreate_EnabledCertManager_PrintsInstallStage - 1]
+
 🚀 Create cluster...
 ► creating cluster
 ✔ cluster created

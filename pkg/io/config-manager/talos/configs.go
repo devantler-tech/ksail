@@ -145,6 +145,7 @@ func newConfigs(
 			KubeVersion: kubernetesVersion,
 			GenOptions:  genOptions,
 		}),
+		bundle.WithVerbose(false), // Suppress "generating PKI and tokens" output
 	}
 
 	// Add patches by scope
