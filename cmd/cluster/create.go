@@ -1869,9 +1869,11 @@ func ensureArgoCDResources(
 	)
 	repoURL := fmt.Sprintf("oci://%s/%s", hostPort, repoName)
 
+	// SourcePath is "." because the OCI artifact contains the source directory contents
+	// at the root level, not in a subdirectory.
 	err = mgr.Ensure(ctx, argocdgitops.EnsureOptions{
 		RepositoryURL:   repoURL,
-		SourcePath:      sourceDir,
+		SourcePath:      ".",
 		ApplicationName: "ksail",
 		TargetRevision:  "dev",
 	})
