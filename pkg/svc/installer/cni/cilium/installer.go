@@ -64,7 +64,8 @@ func (c *CiliumInstaller) Install(ctx context.Context) error {
 	// For TalosInDocker, wait for API server to stabilize before CNI installation.
 	// The API server may be unstable immediately after bootstrap.
 	if c.distribution == DistributionTalosInDocker {
-		if err := c.WaitForAPIServerStability(ctx); err != nil {
+		err := c.WaitForAPIServerStability(ctx)
+		if err != nil {
 			return fmt.Errorf("failed to wait for API server stability: %w", err)
 		}
 	}
