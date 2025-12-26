@@ -1,9 +1,9 @@
 ---
-title: "Configuration"
+title: "Declarative Configuration"
 nav_order: 3
 ---
 
-# Configuration
+# Declarative Configuration
 
 KSail uses declarative YAML configuration files for reproducible cluster setup. This page describes `ksail.yaml` — the project-level configuration file that defines your cluster's desired state.
 
