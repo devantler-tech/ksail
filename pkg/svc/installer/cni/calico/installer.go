@@ -143,12 +143,12 @@ func defaultCalicoValues() map[string]string {
 // talosCalicoValues returns Talos-specific Calico configuration.
 // These settings are required for Calico to work correctly on Talos Linux.
 // See: https://docs.siderolabs.com/kubernetes-guides/cni/deploy-calico
+// See: https://github.com/projectcalico/calico/blob/main/charts/tigera-operator/values.yaml
 func talosCalicoValues() map[string]string {
 	return map[string]string{
 		// Talos uses a read-only filesystem, so kubelet volume plugin path must be None
-		// NOTE: This is a TOP-LEVEL Helm value, not under installation.
-		// See: https://github.com/projectcalico/calico/blob/main/charts/tigera-operator/README.md
-		"kubeletVolumePluginPath": `"None"`,
+		// This is under installation. in the Helm chart values.yaml
+		"installation.kubeletVolumePluginPath": `"None"`,
 		// Use NFTables dataplane which is recommended for Talos
 		"installation.calicoNetwork.linuxDataplane": `"Nftables"`,
 		// Disable BGP for Docker-based environments
