@@ -10,7 +10,8 @@ const (
 	defaultDestinationNamespace = "default"
 	defaultDestinationServer    = "https://kubernetes.default.svc"
 	defaultProject              = "default"
-	defaultSourcePath           = "k8s"
+	// defaultSourcePath is "." because OCI artifacts contain manifests at root level.
+	defaultSourcePath = "."
 
 	argoCDRefreshAnnotationKey  = "argocd.argoproj.io/refresh"
 	argoCDHardRefreshAnnotation = "hard"
