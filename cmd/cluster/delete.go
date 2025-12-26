@@ -64,14 +64,6 @@ func handleDeleteRunE(
 	cfgManager *ksailconfigmanager.ConfigManager,
 	deps cmdhelpers.LifecycleDeps,
 ) error {
-	config := newDeleteLifecycleConfig()
-
-	// Execute cluster deletion
-	err := cmdhelpers.HandleLifecycleRunE(cmd, cfgManager, deps, config)
-	if err != nil {
-		return fmt.Errorf("cluster deletion failed: %w", err)
-	}
-
 	clusterCfg := cfgManager.Config
 
 	// Get cluster name respecting the --context flag
@@ -85,9 +77,41 @@ func handleDeleteRunE(
 		return fmt.Errorf("failed to get delete-volumes flag: %w", flagErr)
 	}
 
-	err = cleanupMirrorRegistries(cmd, cfgManager, clusterCfg, deps, clusterName, deleteVolumes)
+	// For TalosInDocker, we must cleanup registries BEFORE deleting the cluster
+	// because the registries are connected to the cluster network. If we delete
+	// the cluster first, the network removal fails with "has active endpoints".
+	if clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionTalosInDocker {
+		cleanupRegistriesBeforeDelete(cmd, cfgManager, clusterCfg, deps, clusterName, deleteVolumes)
+	}
+
+	config := newDeleteLifecycleConfig()
+
+	// Execute cluster deletion
+	err = cmdhelpers.HandleLifecycleRunE(cmd, cfgManager, deps, config)
 	if err != nil {
-		// Log warning but don't fail the delete operation
+		return fmt.Errorf("cluster deletion failed: %w", err)
+	}
+
+	// For non-TalosInDocker distributions, cleanup registries after cluster deletion
+	if clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionTalosInDocker {
+		cleanupRegistriesAfterDelete(cmd, cfgManager, clusterCfg, deps, clusterName, deleteVolumes)
+	}
+
+	return nil
+}
+
+// cleanupRegistriesBeforeDelete cleans up registries before cluster deletion.
+// This is required for TalosInDocker where registries are connected to the cluster network.
+func cleanupRegistriesBeforeDelete(
+	cmd *cobra.Command,
+	cfgManager *ksailconfigmanager.ConfigManager,
+	clusterCfg *v1alpha1.Cluster,
+	deps cmdhelpers.LifecycleDeps,
+	clusterName string,
+	deleteVolumes bool,
+) {
+	err := cleanupMirrorRegistries(cmd, cfgManager, clusterCfg, deps, clusterName, deleteVolumes)
+	if err != nil {
 		notify.WriteMessage(notify.Message{
 			Type:    notify.WarningType,
 			Content: fmt.Sprintf("failed to cleanup registries: %v", err),
@@ -105,8 +129,37 @@ func handleDeleteRunE(
 			})
 		}
 	}
+}
 
-	return nil
+// cleanupRegistriesAfterDelete cleans up registries after cluster deletion.
+// This is the default behavior for Kind and K3d distributions.
+func cleanupRegistriesAfterDelete(
+	cmd *cobra.Command,
+	cfgManager *ksailconfigmanager.ConfigManager,
+	clusterCfg *v1alpha1.Cluster,
+	deps cmdhelpers.LifecycleDeps,
+	clusterName string,
+	deleteVolumes bool,
+) {
+	err := cleanupMirrorRegistries(cmd, cfgManager, clusterCfg, deps, clusterName, deleteVolumes)
+	if err != nil {
+		notify.WriteMessage(notify.Message{
+			Type:    notify.WarningType,
+			Content: fmt.Sprintf("failed to cleanup registries: %v", err),
+			Writer:  cmd.OutOrStdout(),
+		})
+	}
+
+	if clusterCfg.Spec.Cluster.LocalRegistry == v1alpha1.LocalRegistryEnabled {
+		err = cleanupLocalRegistry(cmd, clusterCfg, deps, deleteVolumes)
+		if err != nil {
+			notify.WriteMessage(notify.Message{
+				Type:    notify.WarningType,
+				Content: fmt.Sprintf("failed to cleanup local registry: %v", err),
+				Writer:  cmd.OutOrStdout(),
+			})
+		}
+	}
 }
 
 // cleanupMirrorRegistries cleans up registries for Kind after cluster deletion.
