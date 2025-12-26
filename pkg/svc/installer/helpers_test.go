@@ -27,6 +27,30 @@ func assertTimeoutEquals(t *testing.T, clusterTimeout time.Duration, expected ti
 	assert.Equal(t, expected, timeout)
 }
 
+// assertTimeoutEqualsWithDistribution is a helper that creates a cluster with
+// the given distribution and timeout and asserts the result.
+func assertTimeoutEqualsWithDistribution(
+	t *testing.T,
+	distribution v1alpha1.Distribution,
+	clusterTimeout time.Duration,
+	expected time.Duration,
+) {
+	t.Helper()
+
+	cluster := &v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				Distribution: distribution,
+				Connection: v1alpha1.Connection{
+					Timeout: metav1.Duration{Duration: clusterTimeout},
+				},
+			},
+		},
+	}
+	timeout := installer.GetInstallTimeout(cluster)
+	assert.Equal(t, expected, timeout)
+}
+
 func TestGetInstallTimeout(t *testing.T) {
 	t.Parallel()
 
@@ -61,5 +85,45 @@ func TestGetInstallTimeout(t *testing.T) {
 	t.Run("returns_configured_timeout_for_long_duration", func(t *testing.T) {
 		t.Parallel()
 		assertTimeoutEquals(t, 2*time.Hour, 2*time.Hour)
+	})
+
+	t.Run("returns_talos_timeout_for_talosindocker_without_explicit_timeout", func(t *testing.T) {
+		t.Parallel()
+		assertTimeoutEqualsWithDistribution(
+			t,
+			v1alpha1.DistributionTalosInDocker,
+			0,
+			installer.TalosInstallTimeout,
+		)
+	})
+
+	t.Run("returns_explicit_timeout_for_talosindocker_when_configured", func(t *testing.T) {
+		t.Parallel()
+		assertTimeoutEqualsWithDistribution(
+			t,
+			v1alpha1.DistributionTalosInDocker,
+			15*time.Minute,
+			15*time.Minute,
+		)
+	})
+
+	t.Run("returns_default_timeout_for_kind_distribution", func(t *testing.T) {
+		t.Parallel()
+		assertTimeoutEqualsWithDistribution(
+			t,
+			v1alpha1.DistributionKind,
+			0,
+			installer.DefaultInstallTimeout,
+		)
+	})
+
+	t.Run("returns_default_timeout_for_k3d_distribution", func(t *testing.T) {
+		t.Parallel()
+		assertTimeoutEqualsWithDistribution(
+			t,
+			v1alpha1.DistributionK3d,
+			0,
+			installer.DefaultInstallTimeout,
+		)
 	})
 }
