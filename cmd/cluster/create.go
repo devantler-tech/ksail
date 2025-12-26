@@ -23,6 +23,7 @@ import (
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
 	"github.com/devantler-tech/ksail/v5/pkg/io/scaffolder"
+	"github.com/devantler-tech/ksail/v5/pkg/k8s"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/installer"
 	argocdinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/argocd"
 	certmanagerinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/cert-manager"
@@ -40,6 +41,7 @@ import (
 	"github.com/docker/docker/client"
 	"github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/spf13/cobra"
+	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
 
@@ -1268,6 +1270,15 @@ func installCiliumCNI(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster, tmr time
 		Writer:  cmd.OutOrStdout(),
 	})
 
+	// For TalosInDocker, wait for API server to stabilize before CNI installation.
+	// The API server may be unstable immediately after bootstrap.
+	if clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionTalosInDocker {
+		err := waitForAPIServerStability(cmd, clusterCfg)
+		if err != nil {
+			return err
+		}
+	}
+
 	helmClient, kubeconfig, err := createHelmClientForCluster(clusterCfg)
 	if err != nil {
 		return err
@@ -1337,6 +1348,15 @@ func installCalicoCNI(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster, tmr time
 		Writer:  cmd.OutOrStdout(),
 	})
 
+	// For TalosInDocker, wait for API server to stabilize before CNI installation.
+	// The API server may be unstable immediately after bootstrap.
+	if clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionTalosInDocker {
+		err := waitForAPIServerStability(cmd, clusterCfg)
+		if err != nil {
+			return err
+		}
+	}
+
 	helmClient, kubeconfig, err := createHelmClientForCluster(clusterCfg)
 	if err != nil {
 		return err
@@ -1381,6 +1401,60 @@ func runCalicoInstallation(
 	tmr timer.Timer,
 ) error {
 	return runCNIInstallation(cmd, installer, "calico", tmr)
+}
+
+// API server stability configuration for TalosInDocker.
+const (
+	// apiServerStabilityTimeout is the timeout for waiting for API server stability.
+	apiServerStabilityTimeout = 60 * time.Second
+	// apiServerRequiredSuccesses is the number of consecutive successful API server
+	// responses required before considering it stable.
+	apiServerRequiredSuccesses = 3
+)
+
+// waitForAPIServerStability waits for the Kubernetes API server to be stable.
+// This is needed for TalosInDocker where the API server may be unstable
+// immediately after bootstrap, causing transient connection errors.
+func waitForAPIServerStability(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster) error {
+	notify.WriteMessage(notify.Message{
+		Type:    notify.ActivityType,
+		Content: "waiting for API server to stabilize",
+		Writer:  cmd.OutOrStdout(),
+	})
+
+	// Get kubeconfig path using the existing helper
+	kubeconfigPath, err := cmdhelpers.GetKubeconfigPathFromConfig(clusterCfg)
+	if err != nil {
+		return fmt.Errorf("failed to get kubeconfig path: %w", err)
+	}
+
+	// Build REST config
+	restConfig, err := k8s.BuildRESTConfig(
+		kubeconfigPath,
+		clusterCfg.Spec.Cluster.Connection.Context,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to build REST config: %w", err)
+	}
+
+	// Create kubernetes clientset
+	clientset, err := kubernetes.NewForConfig(restConfig)
+	if err != nil {
+		return fmt.Errorf("failed to create kubernetes clientset: %w", err)
+	}
+
+	// Wait for API server to be stable
+	err = k8s.WaitForAPIServerStable(
+		cmd.Context(),
+		clientset,
+		apiServerStabilityTimeout,
+		apiServerRequiredSuccesses,
+	)
+	if err != nil {
+		return fmt.Errorf("API server stability check failed: %w", err)
+	}
+
+	return nil
 }
 
 // runCNIInstallation is the generic implementation for running CNI installation.
