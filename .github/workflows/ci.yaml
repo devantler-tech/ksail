@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
 
+concurrency:
+  group: "ci-go-${{ github.ref }}"
+  cancel-in-progress: true
+
 permissions: {}
 
 jobs:

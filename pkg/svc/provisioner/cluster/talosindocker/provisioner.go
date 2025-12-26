@@ -13,6 +13,7 @@ import (
 
 	iopath "github.com/devantler-tech/ksail/v5/pkg/io"
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
+	"github.com/devantler-tech/ksail/v5/pkg/k8s"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/client"
@@ -217,6 +218,19 @@ func (p *TalosInDockerProvisioner) Delete(ctx context.Context, name string) erro
 	err = talosProvisioner.Destroy(ctx, cluster, provision.WithLogWriter(p.logWriter))
 	if err != nil {
 		return fmt.Errorf("failed to destroy cluster: %w", err)
+	}
+
+	// Clean up kubeconfig - remove only the context for this cluster
+	if p.options.KubeconfigPath != "" {
+		cleanupErr := p.cleanupKubeconfig(clusterName)
+		if cleanupErr != nil {
+			// Log warning but don't fail the delete operation
+			_, _ = fmt.Fprintf(
+				p.logWriter,
+				"Warning: failed to clean up kubeconfig: %v\n",
+				cleanupErr,
+			)
+		}
 	}
 
 	_, _ = fmt.Fprintf(p.logWriter, "Successfully deleted Talos cluster %q\n", clusterName)
@@ -832,4 +846,27 @@ func rewriteKubeconfigEndpoint(kubeconfigBytes []byte, endpoint string) ([]byte,
 	}
 
 	return result, nil
+}
+
+// cleanupKubeconfig removes the cluster, context, and user entries for the deleted cluster
+// from the kubeconfig file. This only removes entries matching the cluster name,
+// leaving other cluster configurations intact.
+func (p *TalosInDockerProvisioner) cleanupKubeconfig(clusterName string) error {
+	// Expand tilde in kubeconfig path
+	kubeconfigPath, err := iopath.ExpandHomePath(p.options.KubeconfigPath)
+	if err != nil {
+		return fmt.Errorf("failed to expand kubeconfig path: %w", err)
+	}
+
+	// Talos uses "admin@<cluster-name>" format for context and user names
+	contextName := "admin@" + clusterName
+	userName := contextName
+
+	return k8s.CleanupKubeconfig(
+		kubeconfigPath,
+		clusterName,
+		contextName,
+		userName,
+		p.logWriter,
+	)
 }
