@@ -9,6 +9,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
+  talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v5/pkg/ui/notify"
 	"github.com/samber/do/v2"
@@ -214,7 +215,7 @@ func defaultDistributionConfigPath(distribution v1alpha1.Distribution) string {
 	case v1alpha1.DistributionK3d:
 		return "k3d.yaml"
 	case v1alpha1.DistributionTalosInDocker:
-		return "talos"
+		return talosconfigmanager.DefaultPatchesDir
 	default:
 		return "kind.yaml"
 	}

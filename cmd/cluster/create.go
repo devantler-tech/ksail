@@ -33,6 +33,7 @@ import (
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	k3dprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/k3d"
 	kindprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/kind"
+	talosindockerprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/talosindocker"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	"github.com/devantler-tech/ksail/v5/pkg/ui/notify"
 	"github.com/devantler-tech/ksail/v5/pkg/ui/timer"
@@ -503,14 +504,16 @@ var (
 	//nolint:gochecknoglobals // Stage action definitions reused across lifecycle flows.
 	registryStageDefinitions = map[registryStageRole]registryStageDefinition{
 		registryStageRoleMirror: {
-			info:       mirrorRegistryStageInfo,
-			kindAction: kindRegistryActionFor(registryStageRoleMirror),
-			k3dAction:  k3dRegistryActionFor(registryStageRoleMirror),
+			info:        mirrorRegistryStageInfo,
+			kindAction:  kindRegistryActionFor(registryStageRoleMirror),
+			k3dAction:   k3dRegistryActionFor(registryStageRoleMirror),
+			talosAction: talosRegistryActionFor(registryStageRoleMirror),
 		},
 		registryStageRoleConnect: {
-			info:       connectRegistryStageInfo,
-			kindAction: kindRegistryActionFor(registryStageRoleConnect),
-			k3dAction:  k3dRegistryActionFor(registryStageRoleConnect),
+			info:        connectRegistryStageInfo,
+			kindAction:  kindRegistryActionFor(registryStageRoleConnect),
+			k3dAction:   k3dRegistryActionFor(registryStageRoleConnect),
+			talosAction: talosRegistryActionFor(registryStageRoleConnect),
 		},
 	}
 	// setupMirrorRegistries configures mirror registries before cluster creation.
@@ -731,9 +734,10 @@ type registryStageContext struct {
 }
 
 type registryStageDefinition struct {
-	info       registryStageInfo
-	kindAction func(*registryStageContext) func(context.Context, client.APIClient) error
-	k3dAction  func(*registryStageContext) func(context.Context, client.APIClient) error
+	info        registryStageInfo
+	kindAction  func(*registryStageContext) func(context.Context, client.APIClient) error
+	k3dAction   func(*registryStageContext) func(context.Context, client.APIClient) error
+	talosAction func(*registryStageContext) func(context.Context, client.APIClient) error
 }
 
 type registryAction func(context.Context, *registryStageContext, client.APIClient) error
@@ -917,6 +921,83 @@ func runK3DRegistryAction(
 	return nil
 }
 
+func talosRegistryActionFor(
+	role registryStageRole,
+) func(*registryStageContext) func(context.Context, client.APIClient) error {
+	return registryActionFor(role, func(currentRole registryStageRole) registryAction {
+		switch currentRole {
+		case registryStageRoleMirror:
+			return runTalosMirrorAction
+		case registryStageRoleConnect:
+			return runTalosConnectAction
+		default:
+			return nil
+		}
+	})
+}
+
+func runTalosMirrorAction(
+	execCtx context.Context,
+	ctx *registryStageContext,
+	dockerClient client.APIClient,
+) error {
+	writer := ctx.cmd.OutOrStdout()
+	clusterName := ""
+
+	if ctx.talosConfig != nil {
+		clusterName = ctx.talosConfig.Name
+	}
+
+	if clusterName == "" {
+		clusterName = talosconfigmanager.DefaultClusterName
+	}
+
+	// Setup registry containers (they will be connected to network after cluster creation)
+	err := talosindockerprovisioner.SetupRegistries(
+		execCtx,
+		ctx.talosConfig,
+		clusterName,
+		dockerClient,
+		ctx.mirrorSpecs,
+		writer,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to setup talos registries: %w", err)
+	}
+
+	return nil
+}
+
+func runTalosConnectAction(
+	execCtx context.Context,
+	ctx *registryStageContext,
+	dockerClient client.APIClient,
+) error {
+	clusterName := ""
+
+	if ctx.talosConfig != nil {
+		clusterName = ctx.talosConfig.Name
+	}
+
+	if clusterName == "" {
+		clusterName = talosconfigmanager.DefaultClusterName
+	}
+
+	// Connect registries to the TalosInDocker network
+	err := talosindockerprovisioner.ConnectRegistriesToNetwork(
+		execCtx,
+		ctx.mirrorSpecs,
+		clusterName,
+		dockerClient,
+		ctx.cmd.OutOrStdout(),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to connect talos registries to network: %w", err)
+	}
+
+	return nil
+}
+
 func newRegistryHandlers(
 	clusterCfg *v1alpha1.Cluster,
 	cfgManager *ksailconfigmanager.ConfigManager,
@@ -926,11 +1007,8 @@ func newRegistryHandlers(
 	mirrorSpecs []registry.MirrorSpec,
 	kindAction func(context.Context, client.APIClient) error,
 	k3dAction func(context.Context, client.APIClient) error,
+	talosAction func(context.Context, client.APIClient) error,
 ) map[v1alpha1.Distribution]registryStageHandler {
-	// Suppress unused variable warning for talosConfig
-	// TalosInDocker registry handling will be added in a future iteration
-	_ = talosConfig
-
 	return map[v1alpha1.Distribution]registryStageHandler{
 		v1alpha1.DistributionKind: {
 			prepare: func() bool { return prepareKindConfigWithMirrors(clusterCfg, cfgManager, kindConfig) },
@@ -939,6 +1017,10 @@ func newRegistryHandlers(
 		v1alpha1.DistributionK3d: {
 			prepare: func() bool { return prepareK3dConfigWithMirrors(clusterCfg, k3dConfig, mirrorSpecs) },
 			action:  k3dAction,
+		},
+		v1alpha1.DistributionTalosInDocker: {
+			prepare: func() bool { return prepareTalosConfigWithMirrors(clusterCfg, talosConfig, mirrorSpecs) },
+			action:  talosAction,
 		},
 	}
 }
@@ -955,6 +1037,7 @@ func handleRegistryStage(
 	mirrorSpecs []registry.MirrorSpec,
 	kindAction func(context.Context, client.APIClient) error,
 	k3dAction func(context.Context, client.APIClient) error,
+	talosAction func(context.Context, client.APIClient) error,
 	firstActivityShown *bool,
 ) error {
 	handlers := newRegistryHandlers(
@@ -966,6 +1049,7 @@ func handleRegistryStage(
 		mirrorSpecs,
 		kindAction,
 		k3dAction,
+		talosAction,
 	)
 
 	handler, ok := handlers[clusterCfg.Spec.Cluster.Distribution]
@@ -1025,6 +1109,7 @@ func runRegistryStageWithRole(
 
 	kindAction := definition.kindAction(stageCtx)
 	k3dAction := definition.k3dAction(stageCtx)
+	talosAction := definition.talosAction(stageCtx)
 
 	return handleRegistryStage(
 		cmd,
@@ -1038,6 +1123,7 @@ func runRegistryStageWithRole(
 		mirrorSpecs,
 		kindAction,
 		k3dAction,
+		talosAction,
 		firstActivityShown,
 	)
 }
@@ -1340,6 +1426,21 @@ func prepareK3dConfigWithMirrors(
 	k3dConfig.Registries.Config = rendered
 
 	return true
+}
+
+func prepareTalosConfigWithMirrors(
+	clusterCfg *v1alpha1.Cluster,
+	talosConfig *talosconfigmanager.Configs,
+	mirrorSpecs []registry.MirrorSpec,
+) bool {
+	if clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionTalosInDocker {
+		return false
+	}
+
+	// TalosInDocker configures mirrors via machine config patches.
+	// We need mirrors to be set up even if talosConfig is nil (using defaults).
+	// The actual configuration happens during cluster creation via patches.
+	return len(mirrorSpecs) > 0
 }
 
 // handleMetricsServer manages metrics-server installation based on cluster configuration.

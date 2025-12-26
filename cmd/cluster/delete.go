@@ -14,6 +14,7 @@ import (
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	k3dprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/k3d"
 	kindprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/kind"
+	talosindockerprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/talosindocker"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	"github.com/devantler-tech/ksail/v5/pkg/ui/notify"
 	"github.com/devantler-tech/ksail/v5/pkg/ui/timer"
@@ -132,10 +133,7 @@ func cleanupMirrorRegistries(
 	case v1alpha1.DistributionK3d:
 		return cleanupK3dMirrorRegistries(cmd, clusterCfg, deps, clusterName, deleteVolumes)
 	case v1alpha1.DistributionTalosInDocker:
-		// TalosInDocker configures mirror registries via machine config patches, not as
-		// separate registry containers. No cleanup is needed as the patches are applied
-		// at cluster creation time and stored in the cluster's machine configuration.
-		return nil
+		return cleanupTalosInDockerMirrorRegistries(cmd, cfgManager, deps, clusterName, deleteVolumes)
 	default:
 		return nil
 	}
@@ -328,4 +326,56 @@ func notifyRegistryDeletions(
 			Args:    []any{name},
 		})
 	}
+}
+
+func cleanupTalosInDockerMirrorRegistries(
+	cmd *cobra.Command,
+	cfgManager *ksailconfigmanager.ConfigManager,
+	deps cmdhelpers.LifecycleDeps,
+	clusterName string,
+	deleteVolumes bool,
+) error {
+	// Get mirror registry specs from command line flag
+	flagSpecs := registry.ParseMirrorSpecs(cfgManager.Viper.GetStringSlice("mirror-registry"))
+
+	// Try to read existing hosts.toml files.
+	// ReadExistingHostsToml returns (nil, nil) for missing directories, and an error for actual I/O issues.
+	existingSpecs, err := registry.ReadExistingHostsToml(scaffolder.KindMirrorsDir)
+	if err != nil {
+		return fmt.Errorf("failed to read existing hosts configuration: %w", err)
+	}
+
+	// Merge specs: flag specs override existing specs
+	mirrorSpecs := registry.MergeSpecs(existingSpecs, flagSpecs)
+
+	if len(mirrorSpecs) == 0 {
+		return nil
+	}
+
+	// Build registry info to get names
+	entries := registry.BuildMirrorEntries(mirrorSpecs, "", nil, nil, nil)
+
+	registryNames := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		registryNames = append(registryNames, entry.ContainerName)
+	}
+
+	if len(registryNames) == 0 {
+		return nil
+	}
+
+	return runMirrorRegistryCleanup(
+		cmd,
+		deps,
+		registryNames,
+		func(dockerClient client.APIClient) error {
+			return talosindockerprovisioner.CleanupRegistries(
+				cmd.Context(),
+				mirrorSpecs,
+				clusterName,
+				dockerClient,
+				deleteVolumes,
+			)
+		},
+	)
 }
