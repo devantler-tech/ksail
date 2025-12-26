@@ -141,8 +141,8 @@ func createK3dProvisioner(
 func buildTalosCNIPatches(cni v1alpha1.CNI) []talosconfigmanager.Patch {
 	var runtimePatches []talosconfigmanager.Patch
 
-	// Add CNI disable patch if using alternative CNI like Cilium
-	if cni == v1alpha1.CNICilium {
+	// Add CNI disable patch if using any non-default CNI (e.g., Cilium, Calico, None)
+	if cni != v1alpha1.CNIDefault {
 		runtimePatches = append(runtimePatches, talosconfigmanager.Patch{
 			Path:  "in-memory:disable-default-cni",
 			Scope: talosconfigmanager.PatchScopeCluster,
