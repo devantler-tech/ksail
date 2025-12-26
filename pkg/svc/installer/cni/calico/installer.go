@@ -146,7 +146,9 @@ func defaultCalicoValues() map[string]string {
 func talosCalicoValues() map[string]string {
 	return map[string]string{
 		// Talos uses a read-only filesystem, so kubelet volume plugin path must be None
-		"installation.kubeletVolumePluginPath": `"None"`,
+		// NOTE: This is a TOP-LEVEL Helm value, not under installation.
+		// See: https://github.com/projectcalico/calico/blob/main/charts/tigera-operator/README.md
+		"kubeletVolumePluginPath": `"None"`,
 		// Use NFTables dataplane which is recommended for Talos
 		"installation.calicoNetwork.linuxDataplane": `"Nftables"`,
 		// Disable BGP for Docker-based environments
