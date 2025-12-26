@@ -212,7 +212,13 @@ func TestLoadPatches_MultipleYAMLFiles(t *testing.T) {
 
 	// Create multiple YAML files
 	for i := 1; i <= 3; i++ {
-		filename := filepath.Join(clusterDir, "patch"+string(rune('0'+i))+".yaml")
+		filename := filepath.Join(clusterDir, "patch1.yaml")
+		if i == 2 {
+			filename = filepath.Join(clusterDir, "patch2.yaml")
+		} else if i == 3 {
+			filename = filepath.Join(clusterDir, "patch3.yaml")
+		}
+
 		content := []byte("machine:\n  network: {}\n")
 		require.NoError(t, os.WriteFile(filename, content, 0o644))
 	}
