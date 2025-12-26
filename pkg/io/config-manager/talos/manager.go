@@ -201,8 +201,9 @@ func forEachYAMLFile(dir string, callback func(filePath string, content []byte) 
 			return fmt.Errorf("failed to read file '%s': %w", filePath, readErr)
 		}
 
-		if err := callback(filePath, content); err != nil {
-			return err
+		callbackErr := callback(filePath, content)
+		if callbackErr != nil {
+			return callbackErr
 		}
 	}
 

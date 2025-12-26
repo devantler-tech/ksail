@@ -157,6 +157,31 @@ func buildTalosCNIPatches(cni v1alpha1.CNI) []talosconfigmanager.Patch {
 	return runtimePatches
 }
 
+func applyMirrorRegistriesToTalosConfig(
+	talosConfigs *talosconfigmanager.Configs,
+	mirrorRegistries []string,
+) error {
+	if len(mirrorRegistries) == 0 {
+		return nil
+	}
+
+	mirrorSpecs := registry.ParseMirrorSpecs(mirrorRegistries)
+	mirrors := make([]talosconfigmanager.MirrorRegistry, 0, len(mirrorSpecs))
+
+	for _, spec := range mirrorSpecs {
+		if spec.Host == "" {
+			continue
+		}
+
+		mirrors = append(mirrors, talosconfigmanager.MirrorRegistry{
+			Host:      spec.Host,
+			Endpoints: []string{"http://" + spec.Host + ":5000"},
+		})
+	}
+
+	return talosConfigs.ApplyMirrorRegistries(mirrors)
+}
+
 func createTalosInDockerProvisioner(
 	distributionConfigPath string,
 	kubeconfigPath string,
@@ -165,48 +190,25 @@ func createTalosInDockerProvisioner(
 	cni v1alpha1.CNI,
 	mirrorRegistries []string,
 ) (*talosindickerprovisioner.TalosInDockerProvisioner, *talosconfigmanager.Configs, error) {
-	// Build runtime patches for CNI
-	cniPatches := buildTalosCNIPatches(cni)
-
 	// Load talos config with CNI patches applied
 	manager := talosconfigmanager.NewConfigManager(
 		distributionConfigPath,
 		clusterName,
 		"", // Use default Kubernetes version
 		"", // Use default network CIDR
-	).WithAdditionalPatches(cniPatches)
+	).WithAdditionalPatches(buildTalosCNIPatches(cni))
 
 	talosConfigs, err := manager.LoadConfig(nil)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to load Talos configuration: %w", err)
 	}
 
-	// Apply mirror registries directly to the config (type-safe approach)
-	if len(mirrorRegistries) > 0 {
-		mirrorSpecs := registry.ParseMirrorSpecs(mirrorRegistries)
-		mirrors := make([]talosconfigmanager.MirrorRegistry, 0, len(mirrorSpecs))
-
-		for _, spec := range mirrorSpecs {
-			if spec.Host == "" {
-				continue
-			}
-
-			mirrors = append(mirrors, talosconfigmanager.MirrorRegistry{
-				Host:      spec.Host,
-				Endpoints: []string{"http://" + spec.Host + ":5000"},
-			})
-		}
-
-		if err := talosConfigs.ApplyMirrorRegistries(mirrors); err != nil {
-			return nil, nil, fmt.Errorf("failed to apply mirror registries: %w", err)
-		}
+	if err := applyMirrorRegistriesToTalosConfig(talosConfigs, mirrorRegistries); err != nil {
+		return nil, nil, fmt.Errorf("failed to apply mirror registries: %w", err)
 	}
 
-	// Create options
-	options := talosindickerprovisioner.NewOptions().
-		WithKubeconfigPath(kubeconfigPath)
-
-	// Apply configured node counts (use defaults if not set)
+	// Create options and apply configured node counts
+	options := talosindickerprovisioner.NewOptions().WithKubeconfigPath(kubeconfigPath)
 	if opts.ControlPlanes > 0 {
 		options.WithControlPlaneNodes(int(opts.ControlPlanes))
 	}
@@ -218,7 +220,6 @@ func createTalosInDockerProvisioner(
 	// Create provisioner with loaded configs and options
 	provisioner := talosindickerprovisioner.NewTalosInDockerProvisioner(talosConfigs, options)
 
-	// Create Docker client for container operations
 	dockerClient, err := kindprovisioner.NewDefaultDockerClient()
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create Docker client: %w", err)

@@ -223,20 +223,6 @@ func (p *TalosInDockerProvisioner) Delete(ctx context.Context, name string) erro
 	return nil
 }
 
-// listTalosContainers lists all containers for a specific Talos cluster.
-func (p *TalosInDockerProvisioner) listTalosContainers(
-	ctx context.Context,
-	clusterName string,
-) ([]container.Summary, error) {
-	return p.dockerClient.ContainerList(ctx, container.ListOptions{
-		All: true, // Include stopped containers
-		Filters: filters.NewArgs(
-			filters.Arg("label", LabelTalosOwned+"=true"),
-			filters.Arg("label", LabelTalosClusterName+"="+clusterName),
-		),
-	})
-}
-
 // Exists checks if a Talos-in-Docker cluster exists.
 // If name is non-empty, it overrides the configured cluster name.
 func (p *TalosInDockerProvisioner) Exists(ctx context.Context, name string) (bool, error) {
@@ -338,6 +324,25 @@ func (p *TalosInDockerProvisioner) Stop(ctx context.Context, name string) error 
 	_, _ = fmt.Fprintf(p.logWriter, "Successfully stopped Talos cluster %q\\n", clusterName)
 
 	return nil
+}
+
+// listTalosContainers lists all containers for a specific Talos cluster.
+func (p *TalosInDockerProvisioner) listTalosContainers(
+	ctx context.Context,
+	clusterName string,
+) ([]container.Summary, error) {
+	containers, err := p.dockerClient.ContainerList(ctx, container.ListOptions{
+		All: true, // Include stopped containers
+		Filters: filters.NewArgs(
+			filters.Arg("label", LabelTalosOwned+"=true"),
+			filters.Arg("label", LabelTalosClusterName+"="+clusterName),
+		),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list Talos containers: %w", err)
+	}
+
+	return containers, nil
 }
 
 // validateClusterOperation validates that Docker is available and the cluster exists.

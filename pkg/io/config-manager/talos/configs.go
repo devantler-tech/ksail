@@ -192,7 +192,9 @@ func (c *Configs) ApplyMirrorRegistries(mirrors []MirrorRegistry) error {
 
 		// Initialize mirrors map if nil
 		if cfg.MachineConfig.MachineRegistries.RegistryMirrors == nil {
-			cfg.MachineConfig.MachineRegistries.RegistryMirrors = make(map[string]*v1alpha1.RegistryMirrorConfig)
+			cfg.MachineConfig.MachineRegistries.RegistryMirrors = make(
+				map[string]*v1alpha1.RegistryMirrorConfig,
+			)
 		}
 
 		for _, mirror := range mirrors {

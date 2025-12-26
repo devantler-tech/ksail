@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	yamlgenerator "github.com/devantler-tech/ksail/v5/pkg/io/generator/yaml"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
@@ -232,23 +233,27 @@ func generateMirrorPatchYAML(specs []registry.MirrorSpec) string {
 		return ""
 	}
 
-	var result string
+	var result strings.Builder
 
-	result += "machine:\n"
-	result += "  registries:\n"
-	result += "    mirrors:\n"
+	result.WriteString("machine:\n")
+	result.WriteString("  registries:\n")
+	result.WriteString("    mirrors:\n")
 
 	for _, spec := range specs {
 		if spec.Host == "" {
 			continue
 		}
 
-		result += "      " + spec.Host + ":\n"
-		result += "        endpoints:\n"
-		result += "          - http://" + spec.Host + ":5000\n"
+		result.WriteString("      ")
+		result.WriteString(spec.Host)
+		result.WriteString(":\n")
+		result.WriteString("        endpoints:\n")
+		result.WriteString("          - http://")
+		result.WriteString(spec.Host)
+		result.WriteString(":5000\n")
 	}
 
-	return result
+	return result.String()
 }
 
 // generateAllowSchedulingPatch creates a Talos patch file to allow scheduling on control-plane nodes.
