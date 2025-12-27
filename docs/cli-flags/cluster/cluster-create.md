@@ -17,6 +17,7 @@ Usage:
 Flags:
       --cert-manager CertManager       Cert-Manager configuration (Enabled: install, Disabled: skip) (default Disabled)
   -c, --context string                 Kubernetes context of cluster
+      --control-planes int32           Number of control-plane nodes (default 1)
       --csi CSI                        Container Storage Interface (CSI) to use (default Default)
   -d, --distribution Distribution      Kubernetes distribution to use (default Kind)
       --distribution-config string     Configuration file for the distribution
@@ -28,6 +29,7 @@ Flags:
       --local-registry-port int32      Host port to expose the local OCI registry on (default 5111)
       --metrics-server MetricsServer   Metrics Server configuration (Enabled: install, Disabled: uninstall) (default Enabled)
       --mirror-registry strings        Configure mirror registries with format 'host=upstream' (e.g., docker.io=https://registry-1.docker.io)
+      --workers int32                  Number of worker nodes
 
 Global Flags:
       --timing   Show per-activity timing output
