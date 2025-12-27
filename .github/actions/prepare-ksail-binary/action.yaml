@@ -10,7 +10,7 @@ inputs:
     description: Hash of source files (from hashFiles() in workflow).
     required: true
   output-path:
-    description: Target path for the binary relative to repository root (e.g., 'ksail' or 'bin/ksail'). Must not be an absolute path.
+    description: Target path for the binary. Can be relative (e.g., 'ksail') or absolute (e.g., '/usr/local/bin/ksail').
     required: false
     default: ksail
 
@@ -54,40 +54,60 @@ runs:
       run: |
         set -Eeuo pipefail
 
-        # Validate output path is relative and does not escape repository
-        if [[ "$OUTPUT_PATH" = /* ]]; then
-          echo "Error: output-path must be relative to repository root, got: $OUTPUT_PATH" >&2
-          exit 1
-        fi
+        # Validate output path does not escape repository with relative traversal
         if [[ "$OUTPUT_PATH" == ".." ]] || [[ "$OUTPUT_PATH" == ../* ]] || [[ "$OUTPUT_PATH" == */../* ]] || [[ "$OUTPUT_PATH" == */.. ]]; then
           echo "Error: output-path must not traverse parent directories (../), got: $OUTPUT_PATH" >&2
           exit 1
         fi
 
-        # Strip leading './' from OUTPUT_PATH for clearer path construction
-        output_relative="${OUTPUT_PATH#./}"
+        # Handle absolute vs relative paths
+        if [[ "$OUTPUT_PATH" = /* ]]; then
+          # Absolute path - use as-is
+          output_target="$OUTPUT_PATH"
+        else
+          # Relative path - strip leading './' for cleaner path construction
+          output_target="${OUTPUT_PATH#./}"
+        fi
 
-        # Create output directory
-        output_dir=$(dirname "$output_relative")
-        mkdir -p "$output_dir"
+        # Create output directory (use sudo for system paths)
+        output_dir=$(dirname "$output_target")
+        if [[ "$output_dir" = /usr* ]] || [[ "$output_dir" = /opt* ]] || [[ "$output_dir" = /bin* ]] || [[ "$output_dir" = /sbin* ]]; then
+          sudo mkdir -p "$output_dir"
+        else
+          mkdir -p "$output_dir"
+        fi
 
         if [ "$CACHE_HIT" = "true" ] && [ -f ./.cache/ksail ]; then
           # Use cached binary
-          cp ./.cache/ksail "$output_relative"
+          if [[ "$output_target" = /* ]]; then
+            sudo cp ./.cache/ksail "$output_target"
+            sudo chmod +x "$output_target"
+          else
+            cp ./.cache/ksail "$output_target"
+            chmod +x "$output_target"
+          fi
         else
-          # Build binary
-          go build -o "$output_relative" .
-          # Store for cache
+          # Build binary to local cache first
+          go build -o ./.cache/ksail .
           mkdir -p ./.cache
-          cp "$output_relative" ./.cache/ksail
+          # Copy to target location
+          if [[ "$output_target" = /* ]]; then
+            sudo cp ./.cache/ksail "$output_target"
+            sudo chmod +x "$output_target"
+          else
+            cp ./.cache/ksail "$output_target"
+            chmod +x "$output_target"
+          fi
         fi
 
-        # Ensure binary is executable
-        chmod +x "$output_relative"
-
-        # Output absolute path and normalized relative path
-        echo "binary-path=$(realpath "$output_relative")" >> "$GITHUB_OUTPUT"
-        echo "output-path-normalized=$output_relative" >> "$GITHUB_OUTPUT"
+        # Output absolute path and normalized path
+        if [[ "$output_target" = /* ]]; then
+          echo "binary-path=$output_target" >> "$GITHUB_OUTPUT"
+          echo "output-path-normalized=$output_target" >> "$GITHUB_OUTPUT"
+        else
+          echo "binary-path=$(realpath "$output_target")" >> "$GITHUB_OUTPUT"
+          echo "output-path-normalized=$output_target" >> "$GITHUB_OUTPUT"
+        fi
 
     - name: ♻️ Save ksail binary cache
       if: steps.ksail-cache.outputs.cache-hit != 'true'

@@ -7,14 +7,21 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-KSAIL_BINARY="$REPO_ROOT/ksail"
 DOCS_DIR="$REPO_ROOT/docs/cli-flags"
 
+# Check for global ksail first, then fall back to local
+if command -v ksail &>/dev/null; then
+	KSAIL_BINARY="$(command -v ksail)"
+else
+	KSAIL_BINARY="$REPO_ROOT/ksail"
+fi
+
 echo "Generating CLI flags documentation from KSail help output..."
+echo "Using ksail binary: $KSAIL_BINARY"
 
 # Ensure KSail binary exists
 if [ ! -f "$KSAIL_BINARY" ]; then
-	echo "Error: KSail binary not found at $KSAIL_BINARY. Build it first with 'go build -o ksail'" >&2
+	echo "Error: KSail binary not found. Install globally or build locally with 'go build -o ksail'" >&2
 	exit 1
 fi
 

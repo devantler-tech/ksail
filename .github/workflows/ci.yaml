@@ -34,7 +34,7 @@ jobs:
         with:
           go-version: ${{ steps.setup-go.outputs.go-version }}
           source-hash: ${{ hashFiles('go.mod', 'go.sum', '**/*.go') }}
-          output-path: ksail
+          output-path: /usr/local/bin/ksail
 
   generate-schema:
     name: 📝 Generate JSON Schema
@@ -102,7 +102,7 @@ jobs:
         with:
           go-version: ${{ steps.setup-go.outputs.go-version }}
           source-hash: ${{ hashFiles('go.mod', 'go.sum', '**/*.go') }}
-          output-path: ksail
+          output-path: /usr/local/bin/ksail
 
       - name: 📚 Generate CLI flags documentation
         run: .github/scripts/generate-cli-flags-docs.sh
@@ -182,11 +182,11 @@ jobs:
         with:
           go-version: ${{ steps.setup-go.outputs.go-version }}
           source-hash: ${{ hashFiles('go.mod', 'go.sum', '**/*.go') }}
-          output-path: ksail
+          output-path: /usr/local/bin/ksail
 
       - name: 🧪 ksail cluster init
         run: |
-          ./ksail cluster init ${{ matrix.init-args }}
+          ksail cluster init ${{ matrix.init-args }}
 
       - name: 🔧 Load br_netfilter kernel module (required for TalosInDocker)
         if: contains(matrix.init-args, 'TalosInDocker')
@@ -196,39 +196,39 @@ jobs:
 
       - name: 🧪 ksail cluster create
         run: |
-          ./ksail cluster create
+          ksail cluster create
 
       - name: 🧪 ksail cluster list
         run: |
-          ./ksail cluster list
+          ksail cluster list
 
       - name: 🧪 ksail workload create
         run: |
-          ./ksail workload create deployment whoami --image=traefik/whoami:latest
-          ./ksail workload wait --for=condition=Available deployment/whoami --timeout=300s
+          ksail workload create deployment whoami --image=traefik/whoami:latest
+          ksail workload wait --for=condition=Available deployment/whoami --timeout=300s
 
       - name: 🧪 ksail workload apply
         run: |
-          ./ksail workload apply -k .github/fixtures/podinfo-overlay
-          ./ksail workload wait --for=condition=Available deployment/podinfo --timeout=300s
+          ksail workload apply -k .github/fixtures/podinfo-overlay
+          ksail workload wait --for=condition=Available deployment/podinfo --timeout=300s
 
       - name: 🧪 ksail workload push and reconcile
         if: contains(matrix.init-args, '--gitops-engine')
         run: |
-          ./ksail workload push .github/fixtures/reconcile-test
-          ./ksail workload reconcile
+          ksail workload push .github/fixtures/reconcile-test
+          ksail workload reconcile
 
       - name: 🧪 ksail cluster stop
         run: |
-          ./ksail cluster stop
+          ksail cluster stop
 
       - name: 🧪 ksail cluster start
         run: |
-          ./ksail cluster start
+          ksail cluster start
 
       - name: 🧪 ksail cluster delete
         run: |
-          ./ksail cluster delete
+          ksail cluster delete
 
       - name: 🧹 Cleanup
         run: |
