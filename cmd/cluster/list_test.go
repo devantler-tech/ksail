@@ -136,7 +136,9 @@ func TestListCmd_SingleClusterFound(t *testing.T) {
 	setupListTest(t, workingDir)
 
 	cmd := &cobra.Command{Use: "list"}
+
 	var buf bytes.Buffer
+
 	cmd.SetOut(&buf)
 	cmd.SetErr(&buf)
 	cmd.SetContext(context.Background())
@@ -168,7 +170,9 @@ func TestListCmd_MultipleClustersFound(t *testing.T) {
 	setupListTest(t, workingDir)
 
 	cmd := &cobra.Command{Use: "list"}
+
 	var buf bytes.Buffer
+
 	cmd.SetOut(&buf)
 	cmd.SetErr(&buf)
 	cmd.SetContext(context.Background())
@@ -183,7 +187,9 @@ func TestListCmd_MultipleClustersFound(t *testing.T) {
 
 	deps := clusterpkg.ListDeps{
 		DistributionFactoryCreator: func(_ v1alpha1.Distribution) clusterprovisioner.Factory {
-			return fakeFactoryWithClusters{clusters: []string{"cluster-1", "cluster-2", "cluster-3"}}
+			return fakeFactoryWithClusters{
+				clusters: []string{"cluster-1", "cluster-2", "cluster-3"},
+			}
 		},
 	}
 
@@ -200,7 +206,9 @@ func TestListCmd_WithAllFlag(t *testing.T) {
 	setupListTest(t, workingDir)
 
 	cmd := &cobra.Command{Use: "list"}
+
 	var buf bytes.Buffer
+
 	cmd.SetOut(&buf)
 	cmd.SetErr(&buf)
 	cmd.SetContext(context.Background())
@@ -261,7 +269,9 @@ func TestListCmd_ListError(t *testing.T) {
 
 	deps := clusterpkg.ListDeps{
 		DistributionFactoryCreator: func(_ v1alpha1.Distribution) clusterprovisioner.Factory {
-			return fakeFactoryWithClusters{listErr: fmt.Errorf("test error: %w", errTestListClusters)}
+			return fakeFactoryWithClusters{
+				listErr: fmt.Errorf("test error: %w", errTestListClusters),
+			}
 		},
 	}
 
@@ -306,7 +316,9 @@ func TestListCmd_FactoryError(t *testing.T) {
 	setupListTest(t, workingDir)
 
 	cmd := &cobra.Command{Use: "list"}
+
 	var buf bytes.Buffer
+
 	cmd.SetOut(&buf)
 	cmd.SetErr(&buf)
 	cmd.SetContext(context.Background())

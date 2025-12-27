@@ -17,6 +17,7 @@ import (
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
 
+//nolint:funlen // table-driven test with multiple test cases
 func TestCreateClusterProvisioner_WithDistributionConfig(t *testing.T) {
 	t.Parallel()
 
@@ -74,17 +75,17 @@ func TestCreateClusterProvisioner_WithDistributionConfig(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			factory := clusterprovisioner.DefaultFactory{
-				DistributionConfig: tt.distributionConfig,
+				DistributionConfig: testCase.distributionConfig,
 			}
 			cluster := &v1alpha1.Cluster{
 				Spec: v1alpha1.Spec{
 					Cluster: v1alpha1.ClusterSpec{
-						Distribution: tt.distribution,
+						Distribution: testCase.distribution,
 						Connection: v1alpha1.Connection{
 							Kubeconfig: "",
 						},
@@ -97,16 +98,17 @@ func TestCreateClusterProvisioner_WithDistributionConfig(t *testing.T) {
 				cluster,
 			)
 
-			if tt.expectError {
+			if testCase.expectError {
 				require.Error(t, err)
 				require.Nil(t, provisioner)
-				if tt.errorIs != nil {
-					assert.ErrorIs(t, err, tt.errorIs)
+
+				if testCase.errorIs != nil {
+					require.ErrorIs(t, err, testCase.errorIs)
 				}
 			} else {
 				require.NoError(t, err)
 				require.NotNil(t, provisioner)
-				assert.IsType(t, tt.expectedType, provisioner)
+				assert.IsType(t, testCase.expectedType, provisioner)
 			}
 		})
 	}
@@ -187,17 +189,17 @@ func TestCreateClusterProvisioner_WrongDistributionConfig(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			factory := clusterprovisioner.DefaultFactory{
-				DistributionConfig: tt.distributionConfig,
+				DistributionConfig: testCase.distributionConfig,
 			}
 			cluster := &v1alpha1.Cluster{
 				Spec: v1alpha1.Spec{
 					Cluster: v1alpha1.ClusterSpec{
-						Distribution: tt.distribution,
+						Distribution: testCase.distribution,
 						Connection: v1alpha1.Connection{
 							Kubeconfig: "",
 						},

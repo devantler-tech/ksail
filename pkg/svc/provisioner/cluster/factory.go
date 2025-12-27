@@ -87,7 +87,7 @@ func (f DefaultFactory) createKindProvisioner(
 ) (ClusterProvisioner, any, error) {
 	if f.DistributionConfig.Kind == nil {
 		return nil, nil, fmt.Errorf(
-			"Kind config is required for Kind distribution: %w",
+			"kind config is required for Kind distribution: %w",
 			ErrMissingDistributionConfig,
 		)
 	}

@@ -236,6 +236,8 @@ func applyMirrorsToConfig(cfg *v1alpha1.Config, mirrors []MirrorRegistry) error 
 }
 
 // initRegistryMaps initializes the registry maps if they are nil.
+//
+//nolint:staticcheck // MachineRegistries is deprecated but still functional in Talos v1.x
 func initRegistryMaps(cfg *v1alpha1.Config) {
 	if cfg.MachineConfig.MachineRegistries.RegistryMirrors == nil {
 		cfg.MachineConfig.MachineRegistries.RegistryMirrors = make(
@@ -251,6 +253,8 @@ func initRegistryMaps(cfg *v1alpha1.Config) {
 }
 
 // addMirrorEndpoints adds mirror endpoint configuration for a registry host.
+//
+//nolint:staticcheck // MachineRegistries is deprecated but still functional in Talos v1.x
 func addMirrorEndpoints(cfg *v1alpha1.Config, mirror MirrorRegistry) {
 	cfg.MachineConfig.MachineRegistries.RegistryMirrors[mirror.Host] = &v1alpha1.RegistryMirrorConfig{
 		MirrorEndpoints: mirror.Endpoints,
@@ -258,6 +262,8 @@ func addMirrorEndpoints(cfg *v1alpha1.Config, mirror MirrorRegistry) {
 }
 
 // addInsecureRegistryConfigs adds insecureSkipVerify config for HTTP endpoints.
+//
+//nolint:staticcheck // MachineRegistries is deprecated but still functional in Talos v1.x
 func addInsecureRegistryConfigs(cfg *v1alpha1.Config, endpoints []string) {
 	for _, endpoint := range endpoints {
 		if !isHTTPEndpoint(endpoint) {

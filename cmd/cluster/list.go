@@ -230,7 +230,9 @@ func defaultDistributionConfigPath(distribution v1alpha1.Distribution) string {
 
 // createEmptyDistributionConfig creates an empty distribution config for the given distribution.
 // This is used for list operations where we only need the provisioner type, not specific config data.
-func createEmptyDistributionConfig(distribution v1alpha1.Distribution) *clusterprovisioner.DistributionConfig {
+func createEmptyDistributionConfig(
+	distribution v1alpha1.Distribution,
+) *clusterprovisioner.DistributionConfig {
 	switch distribution {
 	case v1alpha1.DistributionKind:
 		return &clusterprovisioner.DistributionConfig{

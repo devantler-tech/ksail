@@ -313,7 +313,14 @@ func cleanupLocalRegistry(
 	deleteVolumes bool,
 	options ...localRegistryOption,
 ) error {
-	return cleanupLocalRegistryWithOptions(cmd, cfgManager, clusterCfg, deps, deleteVolumes, options...)
+	return cleanupLocalRegistryWithOptions(
+		cmd,
+		cfgManager,
+		clusterCfg,
+		deps,
+		deleteVolumes,
+		options...,
+	)
 }
 
 func cleanupLocalRegistryWithOptions(
