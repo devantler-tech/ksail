@@ -59,7 +59,6 @@ jobs:
         uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6.1.0
         with:
           go-version-file: go.mod
-          cache: true
 
       - name: 📝 Generate JSON schema
         run: .github/scripts/generate-schema.sh
@@ -92,10 +91,10 @@ jobs:
           token: ${{ steps.generate-token.outputs.token }}
 
       - name: ⚙️ Setup Go
+        id: setup-go
         uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6.1.0
         with:
           go-version-file: go.mod
-          cache: true
 
       - name: 📦 Prepare ksail binary
         uses: ./.github/actions/prepare-ksail-binary
@@ -174,8 +173,6 @@ jobs:
         uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6.1.0
         with:
           go-version-file: go.mod
-          cache: true
-          cache-dependency-path: ./go.sum
 
       - name: 📦 Prepare ksail binary
         uses: ./.github/actions/prepare-ksail-binary
