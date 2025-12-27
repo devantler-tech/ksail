@@ -184,8 +184,9 @@ func (m *ConfigManager) getFieldMappings() map[any]string {
 		&m.Config.Spec.Cluster.MetricsServer:                       "metrics-server",
 		&m.Config.Spec.Cluster.CertManager:                         "cert-manager",
 		&m.Config.Spec.Cluster.LocalRegistry:                       "local-registry",
-		&m.Config.Spec.Cluster.Options.LocalRegistry.HostPort:      "local-registry-port",
-		&m.Config.Spec.Cluster.Options.Flux.Interval:               "flux-interval",
+		&m.Config.Spec.Cluster.Options.LocalRegistry.HostPort: "local-registry-port",
+		&m.Config.Spec.Cluster.Options.Flux.Interval:          "flux-interval",
+		// Unified node counts for all distributions
 		&m.Config.Spec.Cluster.Options.TalosInDocker.ControlPlanes: "control-planes",
 		&m.Config.Spec.Cluster.Options.TalosInDocker.Workers:       "workers",
 	}

@@ -92,15 +92,51 @@ func (f DefaultFactory) createKindProvisioner(
 		)
 	}
 
+	kindConfig := f.DistributionConfig.Kind
+
+	// Apply node count overrides from CLI flags (stored in TalosInDocker options)
+	applyKindNodeCounts(kindConfig, cluster.Spec.Cluster.Options.TalosInDocker)
+
 	provisioner, err := kindprovisioner.CreateProvisioner(
-		f.DistributionConfig.Kind,
+		kindConfig,
 		cluster.Spec.Cluster.Connection.Kubeconfig,
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create Kind provisioner: %w", err)
 	}
 
-	return provisioner, f.DistributionConfig.Kind, nil
+	return provisioner, kindConfig, nil
+}
+
+// applyKindNodeCounts applies node count overrides from CLI flags to the Kind config.
+// This enables --control-planes and --workers CLI flags to override the kind.yaml at runtime.
+func applyKindNodeCounts(kindConfig *v1alpha4.Cluster, opts v1alpha1.OptionsTalosInDocker) {
+	// Only apply if explicitly set (non-zero values indicate override)
+	if opts.ControlPlanes <= 0 && opts.Workers <= 0 {
+		return
+	}
+
+	// Calculate target node counts
+	targetCP := int(opts.ControlPlanes)
+	if targetCP <= 0 {
+		targetCP = 1 // default to 1 control-plane
+	}
+	targetWorkers := int(opts.Workers)
+
+	// Build new nodes slice based on target counts
+	var newNodes []v1alpha4.Node
+
+	// Add control-plane nodes
+	for range targetCP {
+		newNodes = append(newNodes, v1alpha4.Node{Role: v1alpha4.ControlPlaneRole})
+	}
+
+	// Add worker nodes
+	for range targetWorkers {
+		newNodes = append(newNodes, v1alpha4.Node{Role: v1alpha4.WorkerRole})
+	}
+
+	kindConfig.Nodes = newNodes
 }
 
 func (f DefaultFactory) createK3dProvisioner(
@@ -113,12 +149,38 @@ func (f DefaultFactory) createK3dProvisioner(
 		)
 	}
 
+	k3dConfig := f.DistributionConfig.K3d
+
+	// Apply node count overrides from CLI flags (stored in TalosInDocker options)
+	applyK3dNodeCounts(k3dConfig, cluster.Spec.Cluster.Options.TalosInDocker)
+
 	provisioner := k3dprovisioner.CreateProvisioner(
-		f.DistributionConfig.K3d,
+		k3dConfig,
 		cluster.Spec.Cluster.DistributionConfig,
 	)
 
-	return provisioner, f.DistributionConfig.K3d, nil
+	return provisioner, k3dConfig, nil
+}
+
+// applyK3dNodeCounts applies node count overrides from CLI flags to the K3d config.
+// This enables --control-planes and --workers CLI flags to override the k3d.yaml at runtime.
+func applyK3dNodeCounts(k3dConfig *k3dv1alpha5.SimpleConfig, opts v1alpha1.OptionsTalosInDocker) {
+	// Only apply if explicitly set (non-zero values indicate override)
+	if opts.ControlPlanes <= 0 && opts.Workers <= 0 {
+		return
+	}
+
+	// Apply server (control-plane) count if explicitly set
+	if opts.ControlPlanes > 0 {
+		k3dConfig.Servers = int(opts.ControlPlanes)
+	}
+
+	// Apply agent (worker) count - 0 is valid when control-planes is set
+	if opts.ControlPlanes > 0 {
+		k3dConfig.Agents = int(opts.Workers)
+	} else if opts.Workers > 0 {
+		k3dConfig.Agents = int(opts.Workers)
+	}
 }
 
 func (f DefaultFactory) createTalosInDockerProvisioner(

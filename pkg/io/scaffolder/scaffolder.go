@@ -176,6 +176,7 @@ func (s *Scaffolder) GenerateK3dRegistryConfig() k3dv1alpha5.SimpleConfigRegistr
 // Distribution configuration builders.
 
 // CreateK3dConfig creates a K3d configuration with distribution-specific settings.
+// Node counts can be set via --control-planes and --workers CLI flags.
 func (s *Scaffolder) CreateK3dConfig() k3dv1alpha5.SimpleConfig {
 	config := k3dv1alpha5.SimpleConfig{
 		TypeMeta: types.TypeMeta{
@@ -183,15 +184,25 @@ func (s *Scaffolder) CreateK3dConfig() k3dv1alpha5.SimpleConfig {
 			Kind:       "Simple",
 		},
 		Image: defaultK3sImage,
-		// Additional configuration will be handled by the provisioner with sensible defaults
-		// Users can override any settings in this generated config file
+	}
+
+	// Apply node counts from CLI flags (stored in TalosInDocker options)
+	// These values are used across all distributions for consistency
+	controlPlanes := int(s.KSailConfig.Spec.Cluster.Options.TalosInDocker.ControlPlanes)
+	workers := int(s.KSailConfig.Spec.Cluster.Options.TalosInDocker.Workers)
+	if controlPlanes > 0 {
+		config.Servers = controlPlanes
+	}
+	if workers > 0 {
+		config.Agents = workers
 	}
 
 	// Initialize ExtraArgs slice
 	var extraArgs []k3dv1alpha5.K3sArgWithNodeFilters
 
-	// Disable default CNI (Flannel) if Cilium is requested
-	if s.KSailConfig.Spec.Cluster.CNI == v1alpha1.CNICilium {
+	// Disable default CNI (Flannel) if using a non-default CNI (Cilium or Calico)
+	if s.KSailConfig.Spec.Cluster.CNI == v1alpha1.CNICilium ||
+		s.KSailConfig.Spec.Cluster.CNI == v1alpha1.CNICalico {
 		extraArgs = append(extraArgs,
 			k3dv1alpha5.K3sArgWithNodeFilters{
 				Arg:         "--flannel-backend=none",
@@ -495,6 +506,7 @@ func (s *Scaffolder) generateKindConfig(output string, force bool) error {
 }
 
 // buildKindConfig creates the Kind cluster configuration object.
+// Node counts can be set via --control-planes and --workers CLI flags.
 func (s *Scaffolder) buildKindConfig(output string) *v1alpha4.Cluster {
 	kindConfig := &v1alpha4.Cluster{
 		TypeMeta: v1alpha4.TypeMeta{
@@ -504,13 +516,45 @@ func (s *Scaffolder) buildKindConfig(output string) *v1alpha4.Cluster {
 		Name: "kind",
 	}
 
-	if s.KSailConfig.Spec.Cluster.CNI == v1alpha1.CNICilium {
+	// Disable default CNI if using a non-default CNI (Cilium or Calico)
+	if s.KSailConfig.Spec.Cluster.CNI == v1alpha1.CNICilium ||
+		s.KSailConfig.Spec.Cluster.CNI == v1alpha1.CNICalico {
 		kindConfig.Networking.DisableDefaultCNI = true
 	}
+
+	// Apply node counts from CLI flags (stored in TalosInDocker options)
+	s.applyKindNodeCounts(kindConfig)
 
 	s.addMirrorMountsToKindConfig(kindConfig, output)
 
 	return kindConfig
+}
+
+// applyKindNodeCounts sets up Kind nodes based on --control-planes and --workers CLI flags.
+func (s *Scaffolder) applyKindNodeCounts(kindConfig *v1alpha4.Cluster) {
+	controlPlanes := int(s.KSailConfig.Spec.Cluster.Options.TalosInDocker.ControlPlanes)
+	workers := int(s.KSailConfig.Spec.Cluster.Options.TalosInDocker.Workers)
+
+	// Only generate nodes if explicitly configured
+	if controlPlanes <= 0 && workers <= 0 {
+		return
+	}
+
+	// Default to 1 control-plane if workers specified but not control-planes
+	if controlPlanes <= 0 {
+		controlPlanes = 1
+	}
+
+	// Build nodes slice
+	var nodes []v1alpha4.Node
+	for range controlPlanes {
+		nodes = append(nodes, v1alpha4.Node{Role: v1alpha4.ControlPlaneRole})
+	}
+	for range workers {
+		nodes = append(nodes, v1alpha4.Node{Role: v1alpha4.WorkerRole})
+	}
+
+	kindConfig.Nodes = nodes
 }
 
 // addMirrorMountsToKindConfig adds extraMounts for mirror registries to the Kind config.
@@ -575,7 +619,7 @@ func (s *Scaffolder) generateK3dConfig(output string, force bool) error {
 
 // generateTalosInDockerConfig generates the TalosInDocker patches directory structure.
 func (s *Scaffolder) generateTalosInDockerConfig(output string, force bool) error {
-	// Get worker count from config (default 0)
+	// Get worker count from TalosInDocker options (default 0)
 	workers := int(s.KSailConfig.Spec.Cluster.Options.TalosInDocker.Workers)
 
 	// Disable default CNI (Flannel) if using any non-default CNI (e.g., Cilium, Calico, None)

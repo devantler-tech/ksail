@@ -90,6 +90,9 @@ func NewCreateCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
 	fieldSelectors = append(fieldSelectors, ksailconfigmanager.DefaultMetricsServerFieldSelector())
 	fieldSelectors = append(fieldSelectors, ksailconfigmanager.DefaultCertManagerFieldSelector())
 	fieldSelectors = append(fieldSelectors, ksailconfigmanager.DefaultCSIFieldSelector())
+	// Unified node count selectors for all distributions (runtime overrides)
+	fieldSelectors = append(fieldSelectors, ksailconfigmanager.ControlPlanesFieldSelector())
+	fieldSelectors = append(fieldSelectors, ksailconfigmanager.WorkersFieldSelector())
 
 	cfgManager := ksailconfigmanager.NewCommandConfigManager(
 		cmd,

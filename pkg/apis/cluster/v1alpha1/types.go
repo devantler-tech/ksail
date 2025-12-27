@@ -297,12 +297,16 @@ type Options struct {
 }
 
 // OptionsKind defines options specific to the Kind distribution.
+// Node counts should be configured directly in kind.yaml.
 type OptionsKind struct {
 	// Add any specific fields for the Kind distribution here.
 }
 
 // OptionsK3d defines options specific to the K3d distribution.
-type OptionsK3d struct{}
+// Node counts should be configured directly in k3d.yaml.
+type OptionsK3d struct {
+	// Add any specific fields for the K3d distribution here.
+}
 
 // OptionsTalosInDocker defines options specific to the TalosInDocker distribution.
 type OptionsTalosInDocker struct {
