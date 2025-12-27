@@ -9,6 +9,7 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	iopath "github.com/devantler-tech/ksail/v5/pkg/io"
@@ -18,7 +19,9 @@ import (
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
+	"github.com/siderolabs/go-retry/retry"
 	"github.com/siderolabs/talos/pkg/cluster/check"
+	machineapi "github.com/siderolabs/talos/pkg/machinery/api/machine"
 	talosclient "github.com/siderolabs/talos/pkg/machinery/client"
 	"github.com/siderolabs/talos/pkg/machinery/config/bundle"
 	"github.com/siderolabs/talos/pkg/machinery/config/machine"
@@ -53,6 +56,14 @@ const (
 	// clusterReadinessTimeout is the timeout for waiting for the cluster to become ready.
 	// This matches the upstream talosctl default of 10 minutes.
 	clusterReadinessTimeout = 10 * time.Minute
+	// bootstrapAPIRetryInterval is the interval between retries when waiting for the Talos API.
+	bootstrapAPIRetryInterval = 500 * time.Millisecond
+	// bootstrapRetryInterval is the interval between retries when bootstrapping the cluster.
+	bootstrapRetryInterval = 100 * time.Millisecond
+	// bootstrapRequestTimeout is the timeout for individual bootstrap requests.
+	bootstrapRequestTimeout = 2 * time.Second
+	// bootstrapMaxRetryDelay is the maximum delay between bootstrap retries (matches gRPC default).
+	bootstrapMaxRetryDelay = 120 * time.Second
 )
 
 // IP byte shift constants for IPv4 address manipulation.
@@ -461,10 +472,11 @@ func (p *TalosInDockerProvisioner) bootstrapAndSaveKubeconfig(
 
 	_, _ = fmt.Fprintf(p.logWriter, "Using Kubernetes API endpoint: %s\n", kubernetesEndpoint)
 
-	// Create access adapter for cluster operations.
-	// WithTalosClient passes the pre-configured client so Bootstrap uses
-	// the mapped endpoint instead of internal container IPs.
+	// Create access adapter for cluster operations (used for checks and kubeconfig).
 	// WithKubernetesEndpoint sets ForceEndpoint which is used to rewrite the kubeconfig.
+	// NOTE: We use bootstrapDirect() instead of clusterAccess.Bootstrap() because
+	// the SDK's Bootstrap uses client.WithNodes() with internal container IPs that
+	// are unreachable on macOS/Windows (Docker runs in a VM).
 	clusterAccess := access.NewAdapter(
 		cluster,
 		provision.WithTalosConfig(talosConfig),
@@ -474,10 +486,9 @@ func (p *TalosInDockerProvisioner) bootstrapAndSaveKubeconfig(
 
 	defer func() { _ = clusterAccess.Close() }()
 
-	// Bootstrap the cluster
-	_, _ = fmt.Fprintf(p.logWriter, "Bootstrapping cluster...\n")
-
-	err = clusterAccess.Bootstrap(ctx, p.logWriter)
+	// Bootstrap the cluster using direct client calls.
+	// This bypasses the SDK's Bootstrap() which uses internal container IPs.
+	err = p.bootstrapDirect(ctx, talosClient)
 	if err != nil {
 		return fmt.Errorf("bootstrap failed: %w", err)
 	}
@@ -545,6 +556,93 @@ func (p *TalosInDockerProvisioner) bootstrapAndSaveKubeconfig(
 	_, _ = fmt.Fprintf(p.logWriter, "Saved kubeconfig to %s\n", kubeconfigPath)
 
 	return nil
+}
+
+// bootstrapDirect bootstraps the Talos cluster using direct client calls.
+// This bypasses the SDK's Bootstrap() function which uses client.WithNodes()
+// to route gRPC requests to internal container IPs. On macOS/Windows, these
+// internal IPs (e.g., 10.5.0.x) are unreachable because Docker runs in a VM.
+// By using direct client calls without WithNodes, we ensure the pre-configured
+// client endpoint (127.0.0.1:mapped-port) is used for all operations.
+func (p *TalosInDockerProvisioner) bootstrapDirect(
+	ctx context.Context,
+	talosClient *talosclient.Client,
+) error {
+	_, _ = fmt.Fprintln(p.logWriter, "waiting for Talos API (to bootstrap the cluster)")
+
+	// Wait for Talos API to be ready.
+	// Uses the pre-configured client endpoint directly without node routing.
+	retryOpts := retry.Constant(
+		clusterReadinessTimeout,
+		retry.WithUnits(bootstrapAPIRetryInterval),
+	)
+
+	err := retryOpts.RetryWithContext(ctx, func(ctx context.Context) error {
+		retryCtx, cancel := context.WithTimeout(ctx, bootstrapRequestTimeout)
+		defer cancel()
+
+		_, versionErr := talosClient.Version(retryCtx)
+		if versionErr != nil {
+			return retry.ExpectedError(versionErr)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("failed waiting for Talos API: %w", err)
+	}
+
+	_, _ = fmt.Fprintln(p.logWriter, "bootstrapping cluster")
+
+	// Bootstrap the cluster.
+	// Uses direct client call without WithNodes to avoid routing to internal IPs.
+	bootstrapRetryOpts := retry.Constant(
+		bootstrapMaxRetryDelay,
+		retry.WithUnits(bootstrapRetryInterval),
+	)
+
+	//nolint:wrapcheck // RetryWithContext returns retry.ExpectedError which shouldn't be wrapped
+	return bootstrapRetryOpts.RetryWithContext(ctx, func(ctx context.Context) error {
+		retryCtx, cancel := context.WithTimeout(ctx, bootstrapRequestTimeout)
+		defer cancel()
+
+		bootstrapErr := talosClient.Bootstrap(retryCtx, &machineapi.BootstrapRequest{})
+		if bootstrapErr == nil {
+			return nil
+		}
+
+		return p.handleBootstrapError(bootstrapErr)
+	})
+}
+
+// handleBootstrapError categorizes bootstrap errors as retryable or fatal.
+//
+//nolint:wrapcheck // retry.ExpectedError signals retryable errors, not wrapped intentionally
+func (p *TalosInDockerProvisioner) handleBootstrapError(err error) error {
+	errMsg := err.Error()
+
+	// Check for retryable error conditions using string matching.
+	// This avoids importing google.golang.org/grpc/codes which is blocked by depguard.
+	switch {
+	// deadline exceeded (context timeout)
+	case errors.Is(err, context.DeadlineExceeded):
+		return retry.ExpectedError(err)
+	// FailedPrecondition (time not synced) or DeadlineExceeded in gRPC layer
+	case strings.Contains(errMsg, "FailedPrecondition"),
+		strings.Contains(errMsg, "DeadlineExceeded"):
+		return retry.ExpectedError(err)
+	// connection refused (container not ready or proxied connection refused)
+	case strings.Contains(errMsg, "connection refused"):
+		return retry.ExpectedError(err)
+	// connection timeout / EOF
+	case strings.Contains(errMsg, "error reading from server: EOF"):
+		return retry.ExpectedError(err)
+	// AlreadyExists means bootstrap was already done (idempotent success)
+	case strings.Contains(errMsg, "AlreadyExists"):
+		return nil
+	}
+
+	return fmt.Errorf("bootstrap error: %w", err)
 }
 
 // provisionCluster creates the Talos cluster using the SDK.
