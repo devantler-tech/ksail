@@ -34,7 +34,7 @@ func (*fakeProvisioner) Exists(context.Context, string) (bool, error) { return t
 
 type fakeFactory struct{}
 
-func (fakeFactory) Create( //nolint:ireturn // test double matches interface-based factory signature
+func (fakeFactory) Create(
 	_ context.Context,
 	_ *v1alpha1.Cluster,
 ) (clusterprovisioner.ClusterProvisioner, any, error) {
