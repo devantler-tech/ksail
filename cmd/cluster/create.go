@@ -146,14 +146,26 @@ func handleCreateRunE(
 	// Configure metrics-server for K3d before cluster creation
 	setupK3dMetricsServer(clusterCfg, k3dConfig)
 
-	// Pass pre-loaded distribution configs to the factory to preserve in-memory modifications
-	// (e.g., mirror registries, metrics-server flags). This avoids double-loading from disk.
-	deps.Factory = clusterprovisioner.DefaultFactory{
-		DistributionConfig: &clusterprovisioner.DistributionConfig{
-			Kind:          kindConfig,
-			K3d:           k3dConfig,
-			TalosInDocker: talosConfig,
-		},
+	// Check if a test override is set for the factory
+	clusterProvisionerFactoryMu.RLock()
+
+	factoryOverride := clusterProvisionerFactoryOverride
+
+	clusterProvisionerFactoryMu.RUnlock()
+
+	if factoryOverride != nil {
+		// Use the test override factory
+		deps.Factory = factoryOverride
+	} else {
+		// Pass pre-loaded distribution configs to the factory to preserve in-memory modifications
+		// (e.g., mirror registries, metrics-server flags). This avoids double-loading from disk.
+		deps.Factory = clusterprovisioner.DefaultFactory{
+			DistributionConfig: &clusterprovisioner.DistributionConfig{
+				Kind:          kindConfig,
+				K3d:           k3dConfig,
+				TalosInDocker: talosConfig,
+			},
+		}
 	}
 
 	err = executeClusterLifecycle(cmd, clusterCfg, deps, &firstActivityShown)
@@ -537,6 +549,13 @@ var (
 	// dockerClientInvokerMu protects concurrent access to dockerClientInvoker in tests.
 	//nolint:gochecknoglobals // protects dockerClientInvoker global variable
 	dockerClientInvokerMu sync.RWMutex
+	// clusterProvisionerFactoryOverride allows tests to override the factory creation.
+	// When set, this factory is used instead of creating a new DefaultFactory.
+	//nolint:gochecknoglobals // dependency injection for tests
+	clusterProvisionerFactoryOverride clusterprovisioner.Factory
+	// clusterProvisionerFactoryMu protects concurrent access to clusterProvisionerFactoryOverride.
+	//nolint:gochecknoglobals // protects clusterProvisionerFactoryOverride global variable
+	clusterProvisionerFactoryMu sync.RWMutex
 )
 
 // SetCertManagerInstallerFactoryForTests overrides the cert-manager installer factory.
@@ -646,6 +665,27 @@ func SetDockerClientInvokerForTests(
 		dockerClientInvoker = previous
 
 		dockerClientInvokerMu.Unlock()
+	}
+}
+
+// SetClusterProvisionerFactoryForTests overrides the cluster provisioner factory for testing.
+//
+// When set, this factory is used instead of creating a new DefaultFactory in handleCreateRunE.
+// It returns a restore function that resets the factory to nil.
+func SetClusterProvisionerFactoryForTests(factory clusterprovisioner.Factory) func() {
+	clusterProvisionerFactoryMu.Lock()
+
+	previous := clusterProvisionerFactoryOverride
+	clusterProvisionerFactoryOverride = factory
+
+	clusterProvisionerFactoryMu.Unlock()
+
+	return func() {
+		clusterProvisionerFactoryMu.Lock()
+
+		clusterProvisionerFactoryOverride = previous
+
+		clusterProvisionerFactoryMu.Unlock()
 	}
 }
 
