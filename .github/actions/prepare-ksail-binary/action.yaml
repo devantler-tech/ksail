@@ -13,10 +13,6 @@ inputs:
     description: Target path for the binary relative to repository root (e.g., 'ksail' or 'bin/ksail'). Must not be an absolute path.
     required: false
     default: ksail
-  run-smoke-test:
-    description: Whether to run the smoke test after preparation.
-    required: false
-    default: "true"
 
 outputs:
   cache-hit:
@@ -99,20 +95,3 @@ runs:
       with:
         path: ./.cache/ksail
         key: ${{ steps.ksail-cache-key.outputs.value }}
-
-    - name: 🧪 Smoke test
-      if: inputs.run-smoke-test == 'true'
-      shell: bash
-      env:
-        OUTPUT_PATH_NORMALIZED: ${{ steps.prepare.outputs.output-path-normalized }}
-      run: |
-        set -Eeuo pipefail
-        # Validate that OUTPUT_PATH_NORMALIZED is set
-        if [ -z "$OUTPUT_PATH_NORMALIZED" ]; then
-          echo "Error: OUTPUT_PATH_NORMALIZED is not set or empty" >&2
-          exit 1
-        fi
-        # Strip leading './' for consistency with prepare step
-        output_relative="${OUTPUT_PATH_NORMALIZED#./}"
-        # Always use ./ prefix for execution; works for both root and subdirectory binaries
-        "./$output_relative" --version

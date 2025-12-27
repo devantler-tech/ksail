@@ -72,8 +72,12 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: 🏗️ Build KSail binary
-        run: go build -o ksail
+      - name: 📦 Prepare ksail binary
+        uses: ./.github/actions/prepare-ksail-binary
+        with:
+          go-version: ${{ steps.setup-go.outputs.go-version }}
+          source-hash: ${{ hashFiles('go.mod', 'go.sum', '**/*.go') }}
+          output-path: ksail
 
       - name: 📚 Generate CLI flags documentation
         run: .github/scripts/generate-cli-flags-docs.sh
@@ -121,7 +125,6 @@ jobs:
           go-version: ${{ steps.setup-go.outputs.go-version }}
           source-hash: ${{ hashFiles('go.mod', 'go.sum', '**/*.go') }}
           output-path: ksail
-          run-smoke-test: "true"
 
   system-test:
     runs-on: ubuntu-latest
@@ -179,7 +182,6 @@ jobs:
           go-version: ${{ steps.setup-go.outputs.go-version }}
           source-hash: ${{ hashFiles('go.mod', 'go.sum', '**/*.go') }}
           output-path: bin/ksail
-          run-smoke-test: "false"
 
       - name: 🧪 ksail cluster init
         run: |
