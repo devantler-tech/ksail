@@ -88,6 +88,33 @@ func (c *Configs) IsCNIDisabled() bool {
 	return cni.Name() == "none"
 }
 
+// ExtractMirrorHosts returns a list of registry hosts that have mirror configurations.
+// This extracts hosts from the loaded config bundle, which includes any patches that
+// were applied (including scaffolded mirror-registries.yaml patches).
+// Returns nil if no mirrors are configured.
+//
+// Note: This method only returns host names, not remote URLs. For full MirrorSpec
+// extraction including remotes, parsing from the generator-created patch files is
+// needed, or use DefaultGenerateUpstreamURL to derive conventional upstream URLs.
+func (c *Configs) ExtractMirrorHosts() []string {
+	cp := c.ControlPlane()
+	if cp == nil {
+		return nil
+	}
+
+	mirrors := cp.RegistryMirrorConfigs()
+	if len(mirrors) == 0 {
+		return nil
+	}
+
+	hosts := make([]string, 0, len(mirrors))
+	for host := range mirrors {
+		hosts = append(hosts, host)
+	}
+
+	return hosts
+}
+
 // NetworkCIDR returns the network CIDR from the cluster configuration.
 // This is extracted from the pod CIDRs in the cluster network settings.
 func (c *Configs) NetworkCIDR() string {
@@ -229,7 +256,10 @@ func applyMirrorsToConfig(cfg *v1alpha1.Config, mirrors []MirrorRegistry) error 
 		}
 
 		addMirrorEndpoints(cfg, mirror)
-		addInsecureRegistryConfigs(cfg, mirror.Endpoints)
+		// NOTE: We intentionally do NOT call addInsecureRegistryConfigs for HTTP endpoints.
+		// containerd will reject TLS configuration for non-HTTPS registries with the error:
+		// "TLS config specified for non-HTTPS registry"
+		// HTTP endpoints work without any additional configuration.
 	}
 
 	return nil
