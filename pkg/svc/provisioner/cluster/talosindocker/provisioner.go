@@ -19,6 +19,7 @@ import (
 	"github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
 	"github.com/siderolabs/talos/pkg/cluster/check"
+	talosclient "github.com/siderolabs/talos/pkg/machinery/client"
 	"github.com/siderolabs/talos/pkg/machinery/config/bundle"
 	"github.com/siderolabs/talos/pkg/machinery/config/machine"
 	"github.com/siderolabs/talos/pkg/provision"
@@ -424,13 +425,31 @@ func (p *TalosInDockerProvisioner) bootstrapAndSaveKubeconfig(
 
 	_, _ = fmt.Fprintf(p.logWriter, "Using Talos API endpoint: %s\n", mappedEndpoint)
 
-	// Create a modified talosconfig with the mapped endpoint
+	// Create a modified talosconfig with the mapped endpoint.
+	// CRITICAL: Set both Endpoints AND Nodes to the mapped endpoint.
+	// The Bootstrap function uses client.WithNodes() which would otherwise
+	// target internal container IPs that are unreachable on macOS/Windows
+	// (Docker Desktop runs containers in a VM).
 	talosConfig := configBundle.TalosConfig()
 	if talosConfig != nil && talosConfig.Context != "" {
 		if context, ok := talosConfig.Contexts[talosConfig.Context]; ok {
 			context.Endpoints = []string{mappedEndpoint}
+			context.Nodes = []string{mappedEndpoint}
 		}
 	}
+
+	// Create a pre-configured Talos client with the mapped endpoint.
+	// This ensures that Bootstrap and other operations use the correct
+	// localhost endpoint instead of internal container IPs.
+	talosClient, err := talosclient.New(ctx,
+		talosclient.WithConfig(talosConfig),
+		talosclient.WithEndpoints(mappedEndpoint),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create Talos client: %w", err)
+	}
+
+	defer func() { _ = talosClient.Close() }()
 
 	// Get the Kubernetes API endpoint from the cluster info.
 	// The Docker provisioner automatically sets this to the external endpoint
@@ -443,10 +462,13 @@ func (p *TalosInDockerProvisioner) bootstrapAndSaveKubeconfig(
 	_, _ = fmt.Fprintf(p.logWriter, "Using Kubernetes API endpoint: %s\n", kubernetesEndpoint)
 
 	// Create access adapter for cluster operations.
+	// WithTalosClient passes the pre-configured client so Bootstrap uses
+	// the mapped endpoint instead of internal container IPs.
 	// WithKubernetesEndpoint sets ForceEndpoint which is used to rewrite the kubeconfig.
 	clusterAccess := access.NewAdapter(
 		cluster,
 		provision.WithTalosConfig(talosConfig),
+		provision.WithTalosClient(talosClient),
 		provision.WithKubernetesEndpoint(kubernetesEndpoint),
 	)
 

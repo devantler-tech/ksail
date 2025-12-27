@@ -9,9 +9,6 @@ import (
 	"runtime/debug"
 
 	"github.com/devantler-tech/ksail/v5/cmd"
-	// Import gRPC compatibility package first to ensure environment is set
-	// before any gRPC connections are made.
-	_ "github.com/devantler-tech/ksail/v5/pkg/grpc/compat"
 	"github.com/devantler-tech/ksail/v5/pkg/ui/notify"
 )
 
