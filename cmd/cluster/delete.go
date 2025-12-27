@@ -8,7 +8,6 @@ import (
 	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
 	cmdhelpers "github.com/devantler-tech/ksail/v5/pkg/cmd"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
-	k3dconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/k3d"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
 	"github.com/devantler-tech/ksail/v5/pkg/io/scaffolder"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
@@ -64,18 +63,8 @@ func handleDeleteRunE(
 	cfgManager *ksailconfigmanager.ConfigManager,
 	deps cmdhelpers.LifecycleDeps,
 ) error {
-	// Start the timer for the config loading phase
-	if deps.Timer != nil {
-		deps.Timer.Start()
-	}
-
-	outputTimer := cmdhelpers.MaybeTimer(cmd, deps.Timer)
-
-	// Load the cluster config first - this must happen before accessing cfgManager.Config
-	clusterCfg, err := cfgManager.LoadConfig(outputTimer)
-	if err != nil {
-		return fmt.Errorf("failed to load cluster configuration: %w", err)
-	}
+	// Config is already loaded by WrapLifecycleHandler, so use the cached config
+	clusterCfg := cfgManager.Config
 
 	// Get cluster name respecting the --context flag
 	clusterName, err := cmdhelpers.GetClusterNameFromConfig(clusterCfg, deps.Factory)
@@ -137,7 +126,7 @@ func cleanupRegistries(
 	}
 
 	if clusterCfg.Spec.Cluster.LocalRegistry == v1alpha1.LocalRegistryEnabled {
-		err = cleanupLocalRegistry(cmd, clusterCfg, deps, deleteVolumes)
+		err = cleanupLocalRegistry(cmd, cfgManager, clusterCfg, deps, deleteVolumes)
 		if err != nil {
 			notify.WriteMessage(notify.Message{
 				Type:    notify.WarningType,
@@ -169,7 +158,13 @@ func cleanupMirrorRegistries(
 			deleteVolumes,
 		)
 	case v1alpha1.DistributionK3d:
-		return cleanupK3dMirrorRegistries(cmd, clusterCfg, deps, clusterName, deleteVolumes)
+		return cleanupK3dMirrorRegistries(
+			cmd,
+			cfgManager,
+			deps,
+			clusterName,
+			deleteVolumes,
+		)
 	case v1alpha1.DistributionTalosInDocker:
 		return cleanupTalosInDockerMirrorRegistries(
 			cmd,
@@ -251,20 +246,15 @@ func cleanupKindMirrorRegistries(
 
 func cleanupK3dMirrorRegistries(
 	cmd *cobra.Command,
-	clusterCfg *v1alpha1.Cluster,
+	cfgManager *ksailconfigmanager.ConfigManager,
 	deps cmdhelpers.LifecycleDeps,
 	clusterName string,
 	deleteVolumes bool,
 ) error {
-	if clusterCfg.Spec.Cluster.DistributionConfig == "" {
+	// Use cached distribution config from ConfigManager
+	k3dConfig := cfgManager.DistributionConfig.K3d
+	if k3dConfig == nil {
 		return nil
-	}
-
-	k3dConfigMgr := k3dconfigmanager.NewConfigManager(clusterCfg.Spec.Cluster.DistributionConfig)
-
-	k3dConfig, loadErr := k3dConfigMgr.LoadConfig(deps.Timer)
-	if loadErr != nil {
-		return fmt.Errorf("failed to load k3d config: %w", loadErr)
 	}
 
 	registriesInfo := k3dprovisioner.ExtractRegistriesFromConfigForTesting(k3dConfig)

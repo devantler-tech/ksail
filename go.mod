@@ -22,6 +22,7 @@ require (
 	github.com/mitchellh/go-wordwrap v1.0.1
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/samber/do/v2 v2.0.0
+	github.com/siderolabs/go-retry v0.3.3
 	github.com/siderolabs/talos v1.11.6
 	github.com/siderolabs/talos/pkg/machinery v1.12.0
 	github.com/sirupsen/logrus v1.9.4-0.20251023124752-b61f268f75b6
@@ -413,7 +414,6 @@ require (
 	github.com/siderolabs/go-kubernetes v0.2.26 // indirect
 	github.com/siderolabs/go-pointer v1.0.1 // indirect
 	github.com/siderolabs/go-procfs v0.1.2 // indirect
-	github.com/siderolabs/go-retry v0.3.3 // indirect
 	github.com/siderolabs/go-talos-support v0.1.2 // indirect
 	github.com/siderolabs/net v0.4.0 // indirect
 	github.com/siderolabs/protoenc v0.2.4 // indirect

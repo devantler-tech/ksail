@@ -85,12 +85,6 @@ func TestHandleLifecycleRunE_ErrorPaths(t *testing.T) {
 		expectedStages int
 	}{
 		{
-			name:           "config load error",
-			setup:          configLoadErrorSetup,
-			expectedErr:    "failed to load cluster configuration",
-			expectedStages: 0,
-		},
-		{
 			name:           "factory create error",
 			setup:          factoryErrorSetup,
 			expectedErr:    "failed to resolve cluster provisioner",
@@ -109,35 +103,6 @@ func TestHandleLifecycleRunE_ErrorPaths(t *testing.T) {
 			assertLifecycleFailure(t, timer, err, testCase.expectedErr, testCase.expectedStages)
 		})
 	}
-}
-
-func configLoadErrorSetup(t *testing.T) (
-	*ksailconfigmanager.ConfigManager,
-	pkgcmd.LifecycleDeps,
-	pkgcmd.LifecycleConfig,
-	*lifecycleTimer,
-	*cobra.Command,
-) {
-	t.Helper()
-
-	tempDir := t.TempDir()
-	badPath := filepath.Join(tempDir, "ksail.yaml")
-
-	err := os.WriteFile(badPath, []byte(": invalid yaml"), 0o600)
-	if err != nil {
-		t.Fatalf("failed to write bad config: %v", err)
-	}
-
-	cfgManager := ksailconfigmanager.NewConfigManager(io.Discard)
-	cfgManager.Viper.SetConfigFile(badPath)
-
-	timer := &lifecycleTimer{}
-	factory := clusterprovisioner.NewMockFactory(t)
-	deps := pkgcmd.LifecycleDeps{Timer: timer, Factory: factory}
-	cmd := &cobra.Command{}
-	cmd.SetOut(io.Discard)
-
-	return cfgManager, deps, pkgcmd.LifecycleConfig{}, timer, cmd
 }
 
 func factoryErrorSetup(t *testing.T) (
@@ -160,7 +125,14 @@ func factoryErrorSetup(t *testing.T) (
 	cfgManager := ksailconfigmanager.NewConfigManager(io.Discard)
 	cfgManager.Viper.SetConfigFile(path)
 
-	timer := &lifecycleTimer{}
+	// Pre-load config since HandleLifecycleRunE expects it to already be loaded
+	// (WrapLifecycleHandler does this in normal flow)
+	_, loadErr := cfgManager.LoadConfigSilent()
+	if loadErr != nil {
+		t.Fatalf("load config: %v", loadErr)
+	}
+
+	timer := &lifecycleTimer{started: true} // Timer is already started by WrapLifecycleHandler
 	deps := pkgcmd.LifecycleDeps{Timer: timer, Factory: &errorFactory{err: errFactoryError}}
 	cmd := &cobra.Command{}
 	cmd.SetOut(io.Discard)

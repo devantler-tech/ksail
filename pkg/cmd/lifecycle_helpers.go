@@ -72,6 +72,10 @@ func NewStandardLifecycleRunE(
 // WrapLifecycleHandler resolves lifecycle dependencies from the runtime container
 // and invokes the provided handler function with those dependencies.
 //
+// This function loads the cluster configuration first, then creates a factory
+// using the cached distribution config from the config manager. This ensures
+// the factory has the proper distribution-specific configuration.
+//
 // This function is used internally by NewStandardLifecycleRunE but can also be used
 // directly for custom lifecycle handlers that need dependency injection but require
 // custom logic beyond the standard HandleLifecycleRunE flow.
@@ -83,10 +87,22 @@ func WrapLifecycleHandler(
 	return runtime.RunEWithRuntime(
 		runtimeContainer,
 		runtime.WithTimer(
-			func(cmd *cobra.Command, injector runtime.Injector, tmr timer.Timer) error {
-				factory, err := runtime.ResolveClusterProvisionerFactory(injector)
+			func(cmd *cobra.Command, _ runtime.Injector, tmr timer.Timer) error {
+				// Start timer and load config first to get distribution config
+				if tmr != nil {
+					tmr.Start()
+				}
+
+				outputTimer := MaybeTimer(cmd, tmr)
+
+				_, err := cfgManager.LoadConfig(outputTimer)
 				if err != nil {
-					return fmt.Errorf("resolve provisioner factory dependency: %w", err)
+					return fmt.Errorf("failed to load cluster configuration: %w", err)
+				}
+
+				// Create factory with the cached distribution config
+				factory := clusterprovisioner.DefaultFactory{
+					DistributionConfig: cfgManager.DistributionConfig,
 				}
 
 				deps := LifecycleDeps{Timer: tmr, Factory: factory}
@@ -99,28 +115,19 @@ func WrapLifecycleHandler(
 
 // HandleLifecycleRunE orchestrates the standard lifecycle workflow.
 // It performs the following steps in order:
-//  1. Start the timer
-//  2. Load the cluster configuration
-//  3. Create a new timer stage
-//  4. Execute the lifecycle action via RunLifecycleWithConfig
+//  1. Create a new timer stage (config was already loaded in WrapLifecycleHandler)
+//  2. Execute the lifecycle action via RunLifecycleWithConfig
 //
-// This function provides the complete workflow for standard lifecycle commands.
+// Note: The cluster configuration is already loaded by WrapLifecycleHandler,
+// so this function uses the cached config from cfgManager.Config.
 func HandleLifecycleRunE(
 	cmd *cobra.Command,
 	cfgManager *ksailconfigmanager.ConfigManager,
 	deps LifecycleDeps,
 	config LifecycleConfig,
 ) error {
-	if deps.Timer != nil {
-		deps.Timer.Start()
-	}
-
-	outputTimer := MaybeTimer(cmd, deps.Timer)
-
-	clusterCfg, err := cfgManager.LoadConfig(outputTimer)
-	if err != nil {
-		return fmt.Errorf("failed to load cluster configuration: %w", err)
-	}
+	// Config is already loaded by WrapLifecycleHandler, so we use the cached config
+	clusterCfg := cfgManager.Config
 
 	if deps.Timer != nil {
 		deps.Timer.NewStage()
