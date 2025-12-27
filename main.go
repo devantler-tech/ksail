@@ -12,6 +12,17 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/ui/notify"
 )
 
+// init sets up gRPC compatibility with Talos API.
+// gRPC 1.67.0+ enforces ALPN by default, which causes TLS handshake failures
+// with Talos API: "transport: authentication handshake failed: EOF"
+// This must be set before any gRPC connections are made.
+// See: https://github.com/grpc/grpc-go/pull/7564
+//
+//nolint:gochecknoinits // Required to set environment before gRPC initialization
+func init() {
+	_ = os.Setenv("GRPC_ENFORCE_ALPN_ENABLED", "false")
+}
+
 //nolint:gochecknoglobals
 var (
 	version = "dev"
