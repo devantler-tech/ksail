@@ -111,26 +111,18 @@ func (m *ConfigManager) LoadConfigFromFlagsOnly() (*v1alpha1.Cluster, error) {
 }
 
 // loadConfigWithOptions is the internal implementation with silent option.
-//
-//nolint:cyclop // config loading requires multiple option checks
 func (m *ConfigManager) loadConfigWithOptions(
 	tmr timer.Timer,
 	silent bool,
 	ignoreConfigFile bool,
 ) (*v1alpha1.Cluster, error) {
-	if !silent {
-		m.notifyLoadingStart()
-	}
-
+	// Check if config was already loaded before outputting any messages
 	if m.configLoaded {
-		if !silent {
-			m.notifyConfigReused()
-		}
-
 		return m.Config, nil
 	}
 
 	if !silent {
+		m.notifyLoadingStart()
 		m.notifyLoadingConfig()
 	}
 
@@ -493,14 +485,6 @@ func (m *ConfigManager) notifyLoadingStart() {
 		Type:    notify.TitleType,
 		Content: "Load config...",
 		Emoji:   "⏳",
-		Writer:  m.Writer,
-	})
-}
-
-func (m *ConfigManager) notifyConfigReused() {
-	notify.WriteMessage(notify.Message{
-		Type:    notify.SuccessType,
-		Content: "config already loaded, reusing existing config",
 		Writer:  m.Writer,
 	})
 }

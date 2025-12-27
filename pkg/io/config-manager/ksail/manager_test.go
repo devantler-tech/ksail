@@ -365,7 +365,8 @@ func TestLoadConfigConfigFileNotifiesFound(t *testing.T) {
 	assert.Contains(t, output.String(), "'"+configPath+"' found")
 }
 
-// TestLoadConfig_ConfigReusedNotification verifies notification when config is reused.
+// TestLoadConfigConfigReusedNotification verifies that reused config produces no output.
+// When config is already loaded, LoadConfig should silently return the cached config.
 //
 //nolint:paralleltest // Uses t.Chdir for isolated filesystem state.
 func TestLoadConfigConfigReusedNotification(t *testing.T) {
@@ -375,10 +376,12 @@ func TestLoadConfigConfigReusedNotification(t *testing.T) {
 	manager, output, _ := loadConfigAndCaptureOutput(t, createStandardFieldSelectors()...)
 	output.Reset()
 
-	_, err := manager.LoadConfig(nil)
+	cfg, err := manager.LoadConfig(nil)
 	require.NoError(t, err)
+	require.NotNil(t, cfg)
 
-	assert.Contains(t, output.String(), "config already loaded, reusing existing config")
+	// When config is already loaded, no output should be produced
+	assert.Empty(t, output.String(), "expected no output when reusing cached config")
 }
 
 //nolint:paralleltest // Uses t.Chdir for isolated filesystem state.
