@@ -280,9 +280,9 @@ func TestTalosGenerator_Generate_EnableKubeletCertRotation(t *testing.T) {
 	gen := talosgenerator.NewTalosGenerator()
 
 	config := &talosgenerator.TalosConfig{
-		PatchesDir:               "talos",
+		PatchesDir:                "talos",
 		EnableKubeletCertRotation: true,
-		WorkerNodes:              1, // Prevents allow-scheduling patch
+		WorkerNodes:               1, // Prevents allow-scheduling patch
 	}
 	opts := yamlgenerator.Options{
 		Output: tempDir,
@@ -315,9 +315,9 @@ func TestTalosGenerator_Generate_NoKubeletCertPatchWhenFalse(t *testing.T) {
 	gen := talosgenerator.NewTalosGenerator()
 
 	config := &talosgenerator.TalosConfig{
-		PatchesDir:               "talos",
+		PatchesDir:                "talos",
 		EnableKubeletCertRotation: false,
-		WorkerNodes:              1, // Prevents allow-scheduling patch
+		WorkerNodes:               1, // Prevents allow-scheduling patch
 	}
 	opts := yamlgenerator.Options{
 		Output: tempDir,
@@ -339,10 +339,10 @@ func TestTalosGenerator_Generate_BothCNIAndKubeletCertPatches(t *testing.T) {
 	gen := talosgenerator.NewTalosGenerator()
 
 	config := &talosgenerator.TalosConfig{
-		PatchesDir:               "talos",
-		DisableDefaultCNI:        true,
+		PatchesDir:                "talos",
+		DisableDefaultCNI:         true,
 		EnableKubeletCertRotation: true,
-		WorkerNodes:              1, // Prevents allow-scheduling patch
+		WorkerNodes:               1, // Prevents allow-scheduling patch
 	}
 	opts := yamlgenerator.Options{
 		Output: tempDir,
@@ -357,7 +357,12 @@ func TestTalosGenerator_Generate_BothCNIAndKubeletCertPatches(t *testing.T) {
 	_, err = os.Stat(cniPatchPath)
 	require.NoError(t, err, "expected disable-default-cni.yaml to exist")
 
-	kubeletPatchPath := filepath.Join(tempDir, "talos", "cluster", "kubelet-serving-cert-rotation.yaml")
+	kubeletPatchPath := filepath.Join(
+		tempDir,
+		"talos",
+		"cluster",
+		"kubelet-serving-cert-rotation.yaml",
+	)
 	_, err = os.Stat(kubeletPatchPath)
 	require.NoError(t, err, "expected kubelet-serving-cert-rotation.yaml to exist")
 

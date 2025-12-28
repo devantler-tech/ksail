@@ -428,7 +428,10 @@ func setupK3dMetricsServer(clusterCfg *v1alpha1.Cluster, k3dConfig *v1alpha5.Sim
 // 1. The user overrides --metrics-server flag at create time (different from init-time config).
 // 2. The talos patches directory doesn't contain the kubelet cert rotation patch.
 // 3. Ensures consistency even if the scaffolder-generated patch was deleted.
-func setupTalosKubeletCertRotation(clusterCfg *v1alpha1.Cluster, talosConfig *talosconfigmanager.Configs) {
+func setupTalosKubeletCertRotation(
+	clusterCfg *v1alpha1.Cluster,
+	talosConfig *talosconfigmanager.Configs,
+) {
 	// Only apply to Talos distribution
 	if clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionTalos || talosConfig == nil {
 		return

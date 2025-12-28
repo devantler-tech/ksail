@@ -249,12 +249,7 @@ func applyMirrorsToConfig(cfg *v1alpha1.Config, mirrors []MirrorRegistry) error 
 // This is required for metrics-server to scrape kubelet metrics over HTTPS without TLS errors.
 // The setting applies to both control-plane and worker nodes.
 func (c *Configs) ApplyKubeletCertRotation() error {
-	// Define the patcher function that enables cert rotation
-	patcher := func(cfg *v1alpha1.Config) error {
-		return applyKubeletCertRotationToConfig(cfg)
-	}
-
-	return c.applyPatchToBothConfigs(patcher)
+	return c.applyPatchToBothConfigs(applyKubeletCertRotationToConfig)
 }
 
 // applyPatchToBothConfigs applies a patcher function to both control-plane and worker configs.
