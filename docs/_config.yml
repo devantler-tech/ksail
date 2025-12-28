@@ -1,9 +1,9 @@
 theme: just-the-docs
 url: https://ksail.devantler.tech
-title: "🛥️🐳 KSail Documentation"
+title: "🛥️🐳 KSail"
 favicon_ico: "images/ksail-logo.png"
 description: >-
-  Documentation for KSail - SDK for Kubernetes ☸️
+  Documentation for KSail - CLI tool for creating, maintaining and operating Kubernetes clusters. ☸️
 
 # Color scheme configuration
 color_scheme: dark # Uses dark mode
