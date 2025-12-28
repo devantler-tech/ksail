@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"os"
 	"strconv"
@@ -151,7 +150,7 @@ func handleCreateRunE(
 	setupK3dMetricsServer(clusterCfg, k3dConfig)
 
 	// Configure kubelet cert rotation for Talos when metrics-server is enabled
-	setupTalosKubeletCertRotation(clusterCfg, talosConfig)
+	setupTalosKubeletCertRotation(cmd.OutOrStdout(), clusterCfg, talosConfig)
 
 	// Check if a test override is set for the factory
 	clusterProvisionerFactoryMu.RLock()
@@ -430,6 +429,7 @@ func setupK3dMetricsServer(clusterCfg *v1alpha1.Cluster, k3dConfig *v1alpha5.Sim
 // 2. The talos patches directory doesn't contain the kubelet cert rotation patch.
 // 3. Ensures consistency even if the scaffolder-generated patch was deleted.
 func setupTalosKubeletCertRotation(
+	writer io.Writer,
 	clusterCfg *v1alpha1.Cluster,
 	talosConfig *talosconfigmanager.Configs,
 ) {
@@ -448,7 +448,11 @@ func setupTalosKubeletCertRotation(
 	// Error is logged but not fatal - cluster can still function without cert rotation
 	err := talosConfig.ApplyKubeletCertRotation()
 	if err != nil {
-		log.Printf("Warning: failed to apply kubelet cert rotation: %v", err)
+		notify.WriteMessage(notify.Message{
+			Type:    notify.WarningType,
+			Content: fmt.Sprintf("failed to apply kubelet cert rotation: %v", err),
+			Writer:  writer,
+		})
 	}
 }
 
