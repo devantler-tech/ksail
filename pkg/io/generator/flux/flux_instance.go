@@ -100,8 +100,12 @@ func (g *InstanceGenerator) Generate(opts InstanceGeneratorOptions) (string, err
 				Registry: "ghcr.io/fluxcd",
 			},
 			Sync: &Sync{
-				Kind:     "OCIRepository",
-				URL:      generator.BuildOCIURL(opts.RegistryHost, opts.RegistryPort, opts.ProjectName),
+				Kind: "OCIRepository",
+				URL: generator.BuildOCIURL(
+					opts.RegistryHost,
+					opts.RegistryPort,
+					opts.ProjectName,
+				),
 				Ref:      "oci://latest",
 				Path:     ".",
 				Interval: &metav1.Duration{Duration: interval},

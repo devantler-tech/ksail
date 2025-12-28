@@ -101,7 +101,11 @@ func (g *ApplicationGenerator) Generate(opts ApplicationGeneratorOptions) (strin
 		Spec: ApplicationSpec{
 			Project: "default",
 			Source: ApplicationSource{
-				RepoURL:        generator.BuildOCIURL(opts.RegistryHost, opts.RegistryPort, opts.ProjectName),
+				RepoURL: generator.BuildOCIURL(
+					opts.RegistryHost,
+					opts.RegistryPort,
+					opts.ProjectName,
+				),
 				TargetRevision: "latest",
 				Path:           ".",
 				Directory: &DirectorySpec{
