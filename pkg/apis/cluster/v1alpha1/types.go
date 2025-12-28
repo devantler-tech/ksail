@@ -47,7 +47,22 @@ type ClusterSpec struct {
 	CertManager        CertManager   `json:"certManager,omitzero"`
 	LocalRegistry      LocalRegistry `json:"localRegistry,omitzero"`
 	GitOpsEngine       GitOpsEngine  `json:"gitOpsEngine,omitzero"`
-	Options            Options       `json:"options,omitzero"`
+
+	// Distribution-specific options (previously under Options)
+	Kind  OptionsKind  `json:"kind,omitzero"`
+	K3d   OptionsK3d   `json:"k3d,omitzero"`
+	Talos OptionsTalos `json:"talos,omitzero"`
+
+	// CNI-specific options
+	Cilium OptionsCilium `json:"cilium,omitzero"`
+	Calico OptionsCalico `json:"calico,omitzero"`
+
+	// Tool-specific options
+	Flux               OptionsFlux          `json:"flux,omitzero"`
+	ArgoCD             OptionsArgoCD        `json:"argocd,omitzero"`
+	LocalRegistryOpts  OptionsLocalRegistry `json:"localRegistryOptions,omitzero"`
+	Helm               OptionsHelm          `json:"helm,omitzero"`
+	Kustomize          OptionsKustomize     `json:"kustomize,omitzero"`
 }
 
 // WorkloadSpec defines workload-related configuration.
@@ -277,29 +292,14 @@ const (
 	GitOpsEngineArgoCD GitOpsEngine = "ArgoCD"
 )
 
-// --- Options Types ---
-
-// Options holds optional settings for distributions, networking, and deployment tools.
-type Options struct {
-	Kind          OptionsKind          `json:"kind,omitzero"`
-	K3d           OptionsK3d           `json:"k3d,omitzero"`
-	TalosInDocker OptionsTalosInDocker `json:"talosInDocker,omitzero"`
-
-	Cilium OptionsCilium `json:"cilium,omitzero"`
-	Calico OptionsCalico `json:"calico,omitzero"`
-
-	Flux          OptionsFlux          `json:"flux,omitzero"`
-	ArgoCD        OptionsArgoCD        `json:"argocd,omitzero"`
-	LocalRegistry OptionsLocalRegistry `json:"localRegistry,omitzero"`
-
-	Helm      OptionsHelm      `json:"helm,omitzero"`
-	Kustomize OptionsKustomize `json:"kustomize,omitzero"`
-}
+// --- Distribution-specific Options Types ---
 
 // OptionsKind defines options specific to the Kind distribution.
 // Node counts should be configured directly in kind.yaml.
 type OptionsKind struct {
-	// Add any specific fields for the Kind distribution here.
+	// MirrorsDir is the directory for containerd host mirror configuration.
+	// Defaults to "kind/mirrors" if not specified.
+	MirrorsDir string `json:"mirrorsDir,omitzero"`
 }
 
 // OptionsK3d defines options specific to the K3d distribution.
@@ -308,8 +308,18 @@ type OptionsK3d struct {
 	// Add any specific fields for the K3d distribution here.
 }
 
-// OptionsTalosInDocker defines options specific to the TalosInDocker distribution.
-type OptionsTalosInDocker struct {
+// TalosProvider defines the provider backend for running Talos clusters.
+type TalosProvider string
+
+const (
+	// TalosProviderDocker runs Talos nodes as Docker containers.
+	TalosProviderDocker TalosProvider = "Docker"
+)
+
+// OptionsTalos defines options specific to the Talos distribution.
+type OptionsTalos struct {
+	// Provider specifies the backend for running Talos nodes (default: Docker).
+	Provider TalosProvider `json:"provider,omitzero"`
 	// ControlPlanes is the number of control-plane nodes (default: 1).
 	ControlPlanes int32 `json:"controlPlanes,omitzero"`
 	// Workers is the number of worker nodes (default: 0).

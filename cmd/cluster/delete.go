@@ -214,12 +214,12 @@ func collectMirrorSpecs(
 func cleanupKindMirrorRegistries(
 	cmd *cobra.Command,
 	cfgManager *ksailconfigmanager.ConfigManager,
-	_ *v1alpha1.Cluster,
+	clusterCfg *v1alpha1.Cluster,
 	deps cmdhelpers.LifecycleDeps,
 	clusterName string,
 	deleteVolumes bool,
 ) error {
-	mirrorSpecs, registryNames, err := collectMirrorSpecs(cfgManager, scaffolder.KindMirrorsDir)
+	mirrorSpecs, registryNames, err := collectMirrorSpecs(cfgManager, getKindMirrorsDirForCluster(clusterCfg))
 	if err != nil {
 		return err
 	}
@@ -382,7 +382,7 @@ func cleanupTalosInDockerMirrorRegistries(
 	clusterName string,
 	deleteVolumes bool,
 ) error {
-	// Collect mirror specs from Talos config (not kind-mirrors directory)
+	// Collect mirror specs from Talos config (not kind/mirrors directory)
 	mirrorSpecs, registryNames, err := collectTalosMirrorSpecs(cfgManager)
 	if err != nil {
 		return err
@@ -463,4 +463,12 @@ func collectTalosMirrorSpecs(
 	}
 
 	return mirrorSpecs, registryNames, nil
+}
+
+// getKindMirrorsDir returns the configured Kind mirrors directory or the default.
+func getKindMirrorsDirForCluster(clusterCfg *v1alpha1.Cluster) string {
+	if clusterCfg != nil && clusterCfg.Spec.Cluster.Kind.MirrorsDir != "" {
+		return clusterCfg.Spec.Cluster.Kind.MirrorsDir
+	}
+	return scaffolder.DefaultKindMirrorsDir
 }

@@ -329,17 +329,16 @@ machine:
     net.core.somaxconn: "65535"
 ```
 
-Use `spec.cluster.options.talosInDocker` to configure node counts:
+Use `spec.cluster.talos` to configure node counts:
 
 ```yaml
 spec:
   cluster:
     distribution: TalosInDocker
     distributionConfig: talos
-    options:
-      talosInDocker:
-        controlPlanes: 3
-        workers: 2
+    talos:
+      controlPlanes: 3
+      workers: 2
 ```
 
 ## Schema Support

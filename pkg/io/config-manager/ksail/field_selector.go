@@ -89,7 +89,7 @@ func DefaultLocalRegistryFieldSelector() FieldSelector[v1alpha1.Cluster] {
 func DefaultRegistryPortFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	return FieldSelector[v1alpha1.Cluster]{
 		Selector: func(c *v1alpha1.Cluster) any {
-			return &c.Spec.Cluster.Options.LocalRegistry.HostPort
+			return &c.Spec.Cluster.LocalRegistryOpts.HostPort
 		},
 		Description:  "Host port to expose the local OCI registry on",
 		DefaultValue: v1alpha1.DefaultLocalRegistryPort,
@@ -100,7 +100,7 @@ func DefaultRegistryPortFieldSelector() FieldSelector[v1alpha1.Cluster] {
 func DefaultFluxIntervalFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	return FieldSelector[v1alpha1.Cluster]{
 		Selector: func(c *v1alpha1.Cluster) any {
-			return &c.Spec.Cluster.Options.Flux.Interval
+			return &c.Spec.Cluster.Flux.Interval
 		},
 		Description:  "Flux reconciliation interval (e.g. 1m, 30s)",
 		DefaultValue: metav1.Duration{Duration: time.Minute},
@@ -163,7 +163,7 @@ func DefaultClusterFieldSelectors() []FieldSelector[v1alpha1.Cluster] {
 func ControlPlanesFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	return FieldSelector[v1alpha1.Cluster]{
 		Selector: func(c *v1alpha1.Cluster) any {
-			return &c.Spec.Cluster.Options.TalosInDocker.ControlPlanes
+			return &c.Spec.Cluster.Talos.ControlPlanes
 		},
 		Description:  "Number of control-plane nodes",
 		DefaultValue: int32(1),
@@ -176,7 +176,7 @@ func ControlPlanesFieldSelector() FieldSelector[v1alpha1.Cluster] {
 func WorkersFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	return FieldSelector[v1alpha1.Cluster]{
 		Selector: func(c *v1alpha1.Cluster) any {
-			return &c.Spec.Cluster.Options.TalosInDocker.Workers
+			return &c.Spec.Cluster.Talos.Workers
 		},
 		Description:  "Number of worker nodes",
 		DefaultValue: int32(0),

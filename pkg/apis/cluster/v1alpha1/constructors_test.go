@@ -334,7 +334,6 @@ func TestNewClusterSpec(t *testing.T) {
 	assert.Equal(t, v1alpha1.CNI(""), spec.Cluster.CNI)
 	assert.Equal(t, v1alpha1.CSI(""), spec.Cluster.CSI)
 	assert.Equal(t, v1alpha1.GitOpsEngineNone, spec.Cluster.GitOpsEngine)
-	assert.NotNil(t, spec.Cluster.Options)
 }
 
 func TestNewClusterConnection(t *testing.T) {
@@ -345,21 +344,6 @@ func TestNewClusterConnection(t *testing.T) {
 	assert.Empty(t, connection.Kubeconfig)
 	assert.Empty(t, connection.Context)
 	assert.Equal(t, metav1.Duration{Duration: 0}, connection.Timeout)
-}
-
-func TestNewClusterOptions(t *testing.T) {
-	t.Parallel()
-
-	options := v1alpha1.NewClusterOptions()
-
-	assert.NotNil(t, options.Kind)
-	assert.NotNil(t, options.K3d)
-	assert.NotNil(t, options.Cilium)
-	assert.NotNil(t, options.Flux)
-	assert.NotNil(t, options.ArgoCD)
-	assert.NotNil(t, options.LocalRegistry)
-	assert.NotNil(t, options.Helm)
-	assert.NotNil(t, options.Kustomize)
 }
 
 // Tests for individual option constructors

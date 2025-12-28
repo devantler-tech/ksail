@@ -393,9 +393,8 @@ func TestLoadConfigParsesFluxIntervalFromString(t *testing.T) {
 	writeClusterConfigFile(
 		t,
 		"    gitOpsEngine: Flux\n",
-		"    options:\n",
-		"      flux:\n",
-		"        interval: 2m30s\n",
+		"    flux:\n",
+		"      interval: 2m30s\n",
 	)
 
 	manager := configmanager.NewConfigManager(io.Discard)
@@ -404,7 +403,7 @@ func TestLoadConfigParsesFluxIntervalFromString(t *testing.T) {
 	_, err := manager.LoadConfig(nil)
 	require.NoError(t, err)
 
-	assert.Equal(t, 150*time.Second, manager.Config.Spec.Cluster.Options.Flux.Interval.Duration)
+	assert.Equal(t, 150*time.Second, manager.Config.Spec.Cluster.Flux.Interval.Duration)
 }
 
 //nolint:paralleltest // Uses t.Chdir for isolated filesystem state.
@@ -416,9 +415,8 @@ func TestLoadConfigFailsOnInvalidFluxIntervalString(t *testing.T) {
 	writeClusterConfigFile(
 		t,
 		"    gitOpsEngine: Flux\n",
-		"    options:\n",
-		"      flux:\n",
-		"        interval: not-a-duration\n",
+		"    flux:\n",
+		"      interval: not-a-duration\n",
 	)
 
 	manager := configmanager.NewConfigManager(io.Discard)
@@ -493,7 +491,7 @@ func TestLoadConfigAppliesLocalRegistryDefaults(t *testing.T) {
 			assert.Equal(
 				t,
 				testCase.expectedHostPort,
-				manager.Config.Spec.Cluster.Options.LocalRegistry.HostPort,
+				manager.Config.Spec.Cluster.LocalRegistryOpts.HostPort,
 			)
 		})
 	}
@@ -514,7 +512,7 @@ func TestLoadConfigDefaultsLocalRegistryDisabledWhenGitOpsEngineUnset(t *testing
 	require.NoError(t, err)
 
 	assert.Equal(t, v1alpha1.LocalRegistryDisabled, manager.Config.Spec.Cluster.LocalRegistry)
-	assert.Equal(t, int32(0), manager.Config.Spec.Cluster.Options.LocalRegistry.HostPort)
+	assert.Equal(t, int32(0), manager.Config.Spec.Cluster.LocalRegistryOpts.HostPort)
 }
 
 func TestNewCommandConfigManagerBindsFlags(t *testing.T) {

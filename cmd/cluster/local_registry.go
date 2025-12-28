@@ -472,8 +472,8 @@ func buildLocalRegistryName() string {
 }
 
 func resolveLocalRegistryPort(clusterCfg *v1alpha1.Cluster) int {
-	if clusterCfg.Spec.Cluster.Options.LocalRegistry.HostPort > 0 {
-		return int(clusterCfg.Spec.Cluster.Options.LocalRegistry.HostPort)
+	if clusterCfg.Spec.Cluster.LocalRegistryOpts.HostPort > 0 {
+		return int(clusterCfg.Spec.Cluster.LocalRegistryOpts.HostPort)
 	}
 
 	return dockerclient.DefaultRegistryPort

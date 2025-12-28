@@ -219,7 +219,7 @@ func (m *ConfigManager) unmarshalAndApplyDefaults() error {
 	// This ensures validation will catch incorrect/missing apiVersion and kind values.
 
 	m.localRegistryExplicit = m.Config.Spec.Cluster.LocalRegistry != ""
-	m.localRegistryHostPortExplicit = m.Config.Spec.Cluster.Options.LocalRegistry.HostPort != 0
+	m.localRegistryHostPortExplicit = m.Config.Spec.Cluster.LocalRegistryOpts.HostPort != 0
 
 	// Apply field selector defaults for empty fields
 	for _, fieldSelector := range m.fieldSelectors {
@@ -370,15 +370,15 @@ func (m *ConfigManager) defaultLocalRegistryBehavior() v1alpha1.LocalRegistry {
 
 func (m *ConfigManager) applyLocalRegistryPortDefaults(hostPortExplicit bool) {
 	if m.Config.Spec.Cluster.LocalRegistry == v1alpha1.LocalRegistryEnabled {
-		if !hostPortExplicit && m.Config.Spec.Cluster.Options.LocalRegistry.HostPort == 0 {
-			m.Config.Spec.Cluster.Options.LocalRegistry.HostPort = defaultLocalRegistryPort
+		if !hostPortExplicit && m.Config.Spec.Cluster.LocalRegistryOpts.HostPort == 0 {
+			m.Config.Spec.Cluster.LocalRegistryOpts.HostPort = defaultLocalRegistryPort
 		}
 
 		return
 	}
 
 	if !hostPortExplicit {
-		m.Config.Spec.Cluster.Options.LocalRegistry.HostPort = 0
+		m.Config.Spec.Cluster.LocalRegistryOpts.HostPort = 0
 	}
 }
 

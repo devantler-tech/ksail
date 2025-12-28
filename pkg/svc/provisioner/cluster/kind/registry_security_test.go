@@ -227,7 +227,7 @@ func TestConfigureContainerdRegistryMirrors_WithExtraMounts(t *testing.T) {
 			{
 				ExtraMounts: []v1alpha4.Mount{
 					{
-						HostPath:      "/tmp/kind-mirrors/docker.io",
+						HostPath:      "/tmp/kind/mirrors/docker.io",
 						ContainerPath: "/etc/containerd/certs.d/docker.io",
 					},
 				},

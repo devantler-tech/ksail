@@ -1241,9 +1241,9 @@ func runRegistryStageWithRole(
 		cfgManager.Viper.GetStringSlice("mirror-registry"),
 	)
 
-	// Try to read existing hosts.toml files from kind-mirrors directory.
+	// Try to read existing hosts.toml files from the configured mirrors directory.
 	// ReadExistingHostsToml returns (nil, nil) for missing directories, and an error for actual I/O issues.
-	existingSpecs, err := registry.ReadExistingHostsToml(scaffolder.KindMirrorsDir)
+	existingSpecs, err := registry.ReadExistingHostsToml(getKindMirrorsDir(clusterCfg))
 	if err != nil {
 		return fmt.Errorf("failed to read existing hosts configuration: %w", err)
 	}
@@ -1586,7 +1586,7 @@ func prepareKindConfigWithMirrors(
 	mirrorRegistries := cfgManager.Viper.GetStringSlice("mirror-registry")
 
 	// Also check for existing hosts.toml files
-	existingSpecs, err := registry.ReadExistingHostsToml(scaffolder.KindMirrorsDir)
+	existingSpecs, err := registry.ReadExistingHostsToml(getKindMirrorsDir(clusterCfg))
 	if err != nil {
 		// Log error but don't fail - missing configuration is acceptable
 		notify.WriteMessage(notify.Message{
@@ -2168,4 +2168,12 @@ func runFluxInstallation(
 	}
 
 	return nil
+}
+
+// getKindMirrorsDir returns the configured Kind mirrors directory or the default.
+func getKindMirrorsDir(clusterCfg *v1alpha1.Cluster) string {
+	if clusterCfg != nil && clusterCfg.Spec.Cluster.Kind.MirrorsDir != "" {
+		return clusterCfg.Spec.Cluster.Kind.MirrorsDir
+	}
+	return scaffolder.DefaultKindMirrorsDir
 }

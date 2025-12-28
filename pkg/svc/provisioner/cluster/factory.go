@@ -95,7 +95,7 @@ func (f DefaultFactory) createKindProvisioner(
 	kindConfig := f.DistributionConfig.Kind
 
 	// Apply node count overrides from CLI flags (stored in TalosInDocker options)
-	applyKindNodeCounts(kindConfig, cluster.Spec.Cluster.Options.TalosInDocker)
+	applyKindNodeCounts(kindConfig, cluster.Spec.Cluster.Talos)
 
 	provisioner, err := kindprovisioner.CreateProvisioner(
 		kindConfig,
@@ -110,7 +110,7 @@ func (f DefaultFactory) createKindProvisioner(
 
 // applyKindNodeCounts applies node count overrides from CLI flags to the Kind config.
 // This enables --control-planes and --workers CLI flags to override the kind.yaml at runtime.
-func applyKindNodeCounts(kindConfig *v1alpha4.Cluster, opts v1alpha1.OptionsTalosInDocker) {
+func applyKindNodeCounts(kindConfig *v1alpha4.Cluster, opts v1alpha1.OptionsTalos) {
 	// Only apply if explicitly set (non-zero values indicate override)
 	if opts.ControlPlanes <= 0 && opts.Workers <= 0 {
 		return
@@ -152,7 +152,7 @@ func (f DefaultFactory) createK3dProvisioner(
 	k3dConfig := f.DistributionConfig.K3d
 
 	// Apply node count overrides from CLI flags (stored in TalosInDocker options)
-	applyK3dNodeCounts(k3dConfig, cluster.Spec.Cluster.Options.TalosInDocker)
+	applyK3dNodeCounts(k3dConfig, cluster.Spec.Cluster.Talos)
 
 	provisioner := k3dprovisioner.CreateProvisioner(
 		k3dConfig,
@@ -164,7 +164,7 @@ func (f DefaultFactory) createK3dProvisioner(
 
 // applyK3dNodeCounts applies node count overrides from CLI flags to the K3d config.
 // This enables --control-planes and --workers CLI flags to override the k3d.yaml at runtime.
-func applyK3dNodeCounts(k3dConfig *k3dv1alpha5.SimpleConfig, opts v1alpha1.OptionsTalosInDocker) {
+func applyK3dNodeCounts(k3dConfig *k3dv1alpha5.SimpleConfig, opts v1alpha1.OptionsTalos) {
 	// Only apply if explicitly set (non-zero values indicate override)
 	if opts.ControlPlanes <= 0 && opts.Workers <= 0 {
 		return
@@ -196,7 +196,7 @@ func (f DefaultFactory) createTalosInDockerProvisioner(
 	provisioner, err := talosindockerprovisioner.CreateProvisioner(
 		f.DistributionConfig.TalosInDocker,
 		cluster.Spec.Cluster.Connection.Kubeconfig,
-		cluster.Spec.Cluster.Options.TalosInDocker,
+		cluster.Spec.Cluster.Talos,
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create TalosInDocker provisioner: %w", err)

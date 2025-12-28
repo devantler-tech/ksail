@@ -111,7 +111,7 @@ func NewScaffolder(cfg v1alpha1.Cluster, writer io.Writer, mirrorRegistries []st
 // This method orchestrates the generation of:
 //   - ksail.yaml configuration
 //   - Distribution-specific configuration (kind.yaml or k3d.yaml)
-//   - kind-mirrors directory with hosts.toml files (for Kind with mirror registries)
+//   - kind/mirrors directory with hosts.toml files (for Kind with mirror registries)
 //   - kustomization.yaml in the source directory
 //
 // Parameters:
@@ -188,8 +188,8 @@ func (s *Scaffolder) CreateK3dConfig() k3dv1alpha5.SimpleConfig {
 
 	// Apply node counts from CLI flags (stored in TalosInDocker options)
 	// These values are used across all distributions for consistency
-	controlPlanes := int(s.KSailConfig.Spec.Cluster.Options.TalosInDocker.ControlPlanes)
-	workers := int(s.KSailConfig.Spec.Cluster.Options.TalosInDocker.Workers)
+	controlPlanes := int(s.KSailConfig.Spec.Cluster.Talos.ControlPlanes)
+	workers := int(s.KSailConfig.Spec.Cluster.Talos.Workers)
 	if controlPlanes > 0 {
 		config.Servers = controlPlanes
 	}
@@ -532,8 +532,8 @@ func (s *Scaffolder) buildKindConfig(output string) *v1alpha4.Cluster {
 
 // applyKindNodeCounts sets up Kind nodes based on --control-planes and --workers CLI flags.
 func (s *Scaffolder) applyKindNodeCounts(kindConfig *v1alpha4.Cluster) {
-	controlPlanes := int(s.KSailConfig.Spec.Cluster.Options.TalosInDocker.ControlPlanes)
-	workers := int(s.KSailConfig.Spec.Cluster.Options.TalosInDocker.Workers)
+	controlPlanes := int(s.KSailConfig.Spec.Cluster.Talos.ControlPlanes)
+	workers := int(s.KSailConfig.Spec.Cluster.Talos.Workers)
 
 	// Only generate nodes if explicitly configured
 	if controlPlanes <= 0 && workers <= 0 {
@@ -564,7 +564,8 @@ func (s *Scaffolder) addMirrorMountsToKindConfig(kindConfig *v1alpha4.Cluster, o
 		return
 	}
 
-	mirrorsDir := filepath.Join(output, KindMirrorsDir)
+	kindMirrorsDir := s.GetKindMirrorsDir()
+	mirrorsDir := filepath.Join(output, kindMirrorsDir)
 
 	absHostsDir, err := filepath.Abs(mirrorsDir)
 	if err != nil {
@@ -620,7 +621,7 @@ func (s *Scaffolder) generateK3dConfig(output string, force bool) error {
 // generateTalosInDockerConfig generates the TalosInDocker patches directory structure.
 func (s *Scaffolder) generateTalosInDockerConfig(output string, force bool) error {
 	// Get worker count from TalosInDocker options (default 0)
-	workers := int(s.KSailConfig.Spec.Cluster.Options.TalosInDocker.Workers)
+	workers := int(s.KSailConfig.Spec.Cluster.Talos.Workers)
 
 	// Disable default CNI (Flannel) if using any non-default CNI (e.g., Cilium, Calico, None)
 	// Empty string is treated as default CNI (for imperative mode without config file)
@@ -740,12 +741,20 @@ func (s *Scaffolder) generateKustomizationConfig(output string, force bool) erro
 	)
 }
 
-// KindMirrorsDir is the directory name for Kind containerd host mirror configuration.
-const KindMirrorsDir = "kind-mirrors"
+// DefaultKindMirrorsDir is the default directory name for Kind containerd host mirror configuration.
+const DefaultKindMirrorsDir = "kind/mirrors"
+
+// GetKindMirrorsDir returns the configured mirrors directory or the default.
+func (s *Scaffolder) GetKindMirrorsDir() string {
+	if s.KSailConfig.Spec.Cluster.Kind.MirrorsDir != "" {
+		return s.KSailConfig.Spec.Cluster.Kind.MirrorsDir
+	}
+	return DefaultKindMirrorsDir
+}
 
 // generateKindMirrorsConfig generates hosts.toml files for Kind registry mirrors.
-// Each mirror registry specification creates a subdirectory under kind-mirrors/
-// with a hosts.toml file that configures containerd to use the specified upstream.
+// Each mirror registry specification creates a subdirectory under the configured mirrors directory
+// (default: kind/mirrors) with a hosts.toml file that configures containerd to use the specified upstream.
 func (s *Scaffolder) generateKindMirrorsConfig(output string, force bool) error {
 	if s.KSailConfig.Spec.Cluster.Distribution != v1alpha1.DistributionKind {
 		return nil
@@ -756,12 +765,13 @@ func (s *Scaffolder) generateKindMirrorsConfig(output string, force bool) error 
 		return nil
 	}
 
-	mirrorsDir := filepath.Join(output, KindMirrorsDir)
+	kindMirrorsDir := s.GetKindMirrorsDir()
+	mirrorsDir := filepath.Join(output, kindMirrorsDir)
 
 	for _, spec := range specs {
 		registryDir := filepath.Join(mirrorsDir, spec.Host)
 		hostsPath := filepath.Join(registryDir, "hosts.toml")
-		displayName := filepath.Join(KindMirrorsDir, spec.Host, "hosts.toml")
+		displayName := filepath.Join(kindMirrorsDir, spec.Host, "hosts.toml")
 
 		skip, existed, previousModTime := s.checkFileExistsAndSkip(hostsPath, displayName, force)
 		if skip {

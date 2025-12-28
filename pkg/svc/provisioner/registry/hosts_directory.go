@@ -102,9 +102,9 @@ func (m *HostsDirectoryManager) GetBaseDir() string {
 	return m.baseDir
 }
 
-// ReadExistingHostsToml reads existing hosts.toml files from the kind-mirrors directory
-// and returns MirrorSpec entries. This allows inferring mirror registry configuration
-// from previously scaffolded hosts files.
+// ReadExistingHostsToml reads existing hosts.toml files from the Kind mirrors directory
+// (typically kind/mirrors) and returns MirrorSpec entries. This allows inferring mirror
+// registry configuration from previously scaffolded hosts files.
 func ReadExistingHostsToml(baseDir string) ([]MirrorSpec, error) {
 	// Check if directory exists
 	_, err := os.Stat(baseDir)

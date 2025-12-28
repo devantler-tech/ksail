@@ -440,7 +440,7 @@ func (v *Validator) validateRegistry(
 	config *v1alpha1.Cluster,
 	result *validator.ValidationResult,
 ) {
-	port := config.Spec.Cluster.Options.LocalRegistry.HostPort
+	port := config.Spec.Cluster.LocalRegistryOpts.HostPort
 
 	enabled := config.Spec.Cluster.LocalRegistry == v1alpha1.LocalRegistryEnabled
 
@@ -468,11 +468,11 @@ func (v *Validator) validateFlux(
 		return
 	}
 
-	if config.Spec.Cluster.Options.Flux.Interval.Duration <= 0 {
+	if config.Spec.Cluster.Flux.Interval.Duration <= 0 {
 		result.AddError(validator.ValidationError{
 			Field:         "spec.options.flux.interval",
 			Message:       "fluxInterval must be a positive duration when Flux is enabled",
-			CurrentValue:  config.Spec.Cluster.Options.Flux.Interval.Duration,
+			CurrentValue:  config.Spec.Cluster.Flux.Interval.Duration,
 			ExpectedValue: "> 0",
 			FixSuggestion: "Set spec.options.flux.interval to a positive duration (e.g., 1m)",
 		})

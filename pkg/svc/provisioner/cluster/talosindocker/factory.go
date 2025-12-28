@@ -19,7 +19,7 @@ import (
 func CreateProvisioner(
 	talosConfigs *talosconfigmanager.Configs,
 	kubeconfigPath string,
-	opts v1alpha1.OptionsTalosInDocker,
+	opts v1alpha1.OptionsTalos,
 ) (*TalosInDockerProvisioner, error) {
 	// Create options and apply configured node counts
 	options := NewOptions().WithKubeconfigPath(kubeconfigPath)

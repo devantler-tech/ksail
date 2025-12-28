@@ -35,7 +35,17 @@ func NewClusterSubSpec() ClusterSpec {
 		CSI:                "",
 		LocalRegistry:      LocalRegistryDisabled,
 		GitOpsEngine:       GitOpsEngineNone,
-		Options:            NewClusterOptions(),
+		// Flattened options (previously nested under Options)
+		Kind:              NewClusterOptionsKind(),
+		K3d:               NewClusterOptionsK3d(),
+		Talos:             NewClusterOptionsTalos(),
+		Cilium:            NewClusterOptionsCilium(),
+		Calico:            OptionsCalico{},
+		Flux:              NewClusterOptionsFlux(),
+		ArgoCD:            NewClusterOptionsArgoCD(),
+		LocalRegistryOpts: NewClusterOptionsLocalRegistry(),
+		Helm:              NewClusterOptionsHelm(),
+		Kustomize:         NewClusterOptionsKustomize(),
 	}
 }
 
@@ -55,20 +65,6 @@ func NewClusterConnection() Connection {
 	}
 }
 
-// NewClusterOptions creates a new Options with default values.
-func NewClusterOptions() Options {
-	return Options{
-		Kind:          NewClusterOptionsKind(),
-		K3d:           NewClusterOptionsK3d(),
-		Cilium:        NewClusterOptionsCilium(),
-		Flux:          NewClusterOptionsFlux(),
-		ArgoCD:        NewClusterOptionsArgoCD(),
-		LocalRegistry: NewClusterOptionsLocalRegistry(),
-		Helm:          NewClusterOptionsHelm(),
-		Kustomize:     NewClusterOptionsKustomize(),
-	}
-}
-
 // NewClusterOptionsKind creates a new OptionsKind with default values.
 func NewClusterOptionsKind() OptionsKind {
 	return OptionsKind{}
@@ -77,6 +73,13 @@ func NewClusterOptionsKind() OptionsKind {
 // NewClusterOptionsK3d creates a new OptionsK3d with default values.
 func NewClusterOptionsK3d() OptionsK3d {
 	return OptionsK3d{}
+}
+
+// NewClusterOptionsTalos creates a new OptionsTalos with default values.
+func NewClusterOptionsTalos() OptionsTalos {
+	return OptionsTalos{
+		Provider: TalosProviderDocker,
+	}
 }
 
 // NewClusterOptionsCilium creates a new OptionsCilium with default values.

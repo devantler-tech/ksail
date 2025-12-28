@@ -158,16 +158,16 @@ func buildClusterOutput(cluster Cluster) clusterOutput {
 
 	hasOpts := false
 
-	if cluster.Spec.Cluster.Options.Flux.Interval.Duration != 0 {
+	if cluster.Spec.Cluster.Flux.Interval.Duration != 0 {
 		opts.Flux = &fluxOptionsOutput{
-			Interval: cluster.Spec.Cluster.Options.Flux.Interval.Duration.String(),
+			Interval: cluster.Spec.Cluster.Flux.Interval.Duration.String(),
 		}
 		hasOpts = true
 	}
 
-	if cluster.Spec.Cluster.Options.LocalRegistry.HostPort != 0 {
+	if cluster.Spec.Cluster.LocalRegistryOpts.HostPort != 0 {
 		opts.LocalRegistry = &localRegistryOptionsOutput{
-			HostPort: cluster.Spec.Cluster.Options.LocalRegistry.HostPort,
+			HostPort: cluster.Spec.Cluster.LocalRegistryOpts.HostPort,
 		}
 
 		hasOpts = true
@@ -277,14 +277,14 @@ func pruneClusterDefaults(cluster Cluster) Cluster {
 		cluster.Spec.Cluster.GitOpsEngine = ""
 	}
 
-	if cluster.Spec.Cluster.Options.Flux.Interval == DefaultFluxInterval ||
-		cluster.Spec.Cluster.Options.Flux.Interval.Duration == 0 {
-		cluster.Spec.Cluster.Options.Flux.Interval = metav1.Duration{}
+	if cluster.Spec.Cluster.Flux.Interval == DefaultFluxInterval ||
+		cluster.Spec.Cluster.Flux.Interval.Duration == 0 {
+		cluster.Spec.Cluster.Flux.Interval = metav1.Duration{}
 	}
 
-	if cluster.Spec.Cluster.Options.LocalRegistry.HostPort == DefaultLocalRegistryPort ||
-		cluster.Spec.Cluster.Options.LocalRegistry.HostPort == 0 {
-		cluster.Spec.Cluster.Options.LocalRegistry.HostPort = 0
+	if cluster.Spec.Cluster.LocalRegistryOpts.HostPort == DefaultLocalRegistryPort ||
+		cluster.Spec.Cluster.LocalRegistryOpts.HostPort == 0 {
+		cluster.Spec.Cluster.LocalRegistryOpts.HostPort = 0
 	}
 
 	return cluster

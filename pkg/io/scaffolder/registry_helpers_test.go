@@ -173,7 +173,7 @@ func TestGenerateScaffoldedHostsToml(t *testing.T) {
 	t.Parallel()
 
 	// Test that GenerateScaffoldedHostsToml produces correct hosts.toml content
-	// for the scaffolded kind-mirrors directory pattern.
+	// for the scaffolded kind/mirrors directory pattern.
 	// The scaffolded hosts.toml should point to the local registry container.
 	for _, testCase := range containerdPatchCases() {
 		t.Run(testCase.name, func(t *testing.T) {

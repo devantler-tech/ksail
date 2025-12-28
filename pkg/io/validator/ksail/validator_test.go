@@ -397,7 +397,7 @@ func validateRegistryPortRequiredCase(t *testing.T) {
 	validator := ksailvalidator.NewValidator()
 	config := createValidKSailConfig(v1alpha1.DistributionKind)
 	config.Spec.Cluster.LocalRegistry = v1alpha1.LocalRegistryEnabled
-	config.Spec.Cluster.Options.LocalRegistry.HostPort = 0
+	config.Spec.Cluster.LocalRegistryOpts.HostPort = 0
 
 	result := validator.Validate(config)
 	assert.False(t, result.Valid)
@@ -410,7 +410,7 @@ func validateRegistryPortRangeCase(t *testing.T) {
 	validator := ksailvalidator.NewValidator()
 	config := createValidKSailConfig(v1alpha1.DistributionKind)
 	config.Spec.Cluster.LocalRegistry = v1alpha1.LocalRegistryEnabled
-	config.Spec.Cluster.Options.LocalRegistry.HostPort = 70000
+	config.Spec.Cluster.LocalRegistryOpts.HostPort = 70000
 
 	result := validator.Validate(config)
 	assert.False(t, result.Valid)
@@ -423,7 +423,7 @@ func validateRegistryPortWarningCase(t *testing.T) {
 	validator := ksailvalidator.NewValidator()
 	config := createValidKSailConfig(v1alpha1.DistributionKind)
 	config.Spec.Cluster.LocalRegistry = v1alpha1.LocalRegistryDisabled
-	config.Spec.Cluster.Options.LocalRegistry.HostPort = 5001
+	config.Spec.Cluster.LocalRegistryOpts.HostPort = 5001
 
 	result := validator.Validate(config)
 	assert.True(t, result.Valid)
@@ -436,7 +436,7 @@ func validateFluxIntervalCase(t *testing.T) {
 	validator := ksailvalidator.NewValidator()
 	config := createValidKSailConfig(v1alpha1.DistributionKind)
 	config.Spec.Cluster.GitOpsEngine = v1alpha1.GitOpsEngineFlux
-	config.Spec.Cluster.Options.Flux.Interval = metav1.Duration{}
+	config.Spec.Cluster.Flux.Interval = metav1.Duration{}
 
 	result := validator.Validate(config)
 	assert.False(t, result.Valid)
