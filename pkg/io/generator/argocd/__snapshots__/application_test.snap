@@ -1,0 +1,104 @@
+
+[TestApplicationGenerator_Generate/with_empty_project_name_uses_default - 1]
+APIVersion: argoproj.io/v1alpha1
+Kind: Application
+Metadata:
+  Labels:
+    app.kubernetes.io/managed-by: ksail
+  Name: ksail
+  Namespace: argocd
+Spec:
+  Destination:
+    Namespace: default
+    Server: https://kubernetes.default.svc
+  Project: default
+  Source:
+    Directory:
+      Recurse: true
+    Path: .
+    RepoURL: oci://registry.localhost:5000/ksail
+    TargetRevision: latest
+  SyncPolicy:
+    Automated:
+      Prune: true
+      SelfHeal: true
+
+---
+
+[TestApplicationGenerator_Generate/with_default_values - 1]
+APIVersion: argoproj.io/v1alpha1
+Kind: Application
+Metadata:
+  Labels:
+    app.kubernetes.io/managed-by: ksail
+  Name: ksail
+  Namespace: argocd
+Spec:
+  Destination:
+    Namespace: default
+    Server: https://kubernetes.default.svc
+  Project: default
+  Source:
+    Directory:
+      Recurse: true
+    Path: .
+    RepoURL: oci://ksail-registry.localhost:5000/ksail
+    TargetRevision: latest
+  SyncPolicy:
+    Automated:
+      Prune: true
+      SelfHeal: true
+
+---
+
+[TestApplicationGenerator_Generate/with_custom_registry_host_and_port - 1]
+APIVersion: argoproj.io/v1alpha1
+Kind: Application
+Metadata:
+  Labels:
+    app.kubernetes.io/managed-by: ksail
+  Name: ksail
+  Namespace: argocd
+Spec:
+  Destination:
+    Namespace: default
+    Server: https://kubernetes.default.svc
+  Project: default
+  Source:
+    Directory:
+      Recurse: true
+    Path: .
+    RepoURL: oci://custom-registry.localhost:8080/my-project
+    TargetRevision: latest
+  SyncPolicy:
+    Automated:
+      Prune: true
+      SelfHeal: true
+
+---
+
+[TestApplicationGenerator_Generate/with_zero_port_uses_default - 1]
+APIVersion: argoproj.io/v1alpha1
+Kind: Application
+Metadata:
+  Labels:
+    app.kubernetes.io/managed-by: ksail
+  Name: ksail
+  Namespace: argocd
+Spec:
+  Destination:
+    Namespace: default
+    Server: https://kubernetes.default.svc
+  Project: default
+  Source:
+    Directory:
+      Recurse: true
+    Path: .
+    RepoURL: oci://registry.localhost:5000/test-project
+    TargetRevision: latest
+  SyncPolicy:
+    Automated:
+      Prune: true
+      SelfHeal: true
+
+---

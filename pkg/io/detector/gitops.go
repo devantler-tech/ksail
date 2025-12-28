@@ -182,8 +182,16 @@ func isYAMLFile(path string) bool {
 
 // splitYAMLDocuments splits a multi-document YAML file into individual documents.
 func splitYAMLDocuments(data []byte) [][]byte {
+	content := string(data)
+
+	// Handle documents starting with "---" at the beginning of the file
+	// by normalizing to always have a newline before the separator.
+	if strings.HasPrefix(content, "---") {
+		content = "\n" + content
+	}
+
 	// Split on YAML document separator
-	parts := strings.Split(string(data), "\n---")
+	parts := strings.Split(content, "\n---")
 	docs := make([][]byte, 0, len(parts))
 
 	for _, part := range parts {

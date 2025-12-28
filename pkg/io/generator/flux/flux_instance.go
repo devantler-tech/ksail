@@ -106,7 +106,7 @@ func (g *InstanceGenerator) Generate(opts InstanceGeneratorOptions) (string, err
 					opts.RegistryPort,
 					opts.ProjectName,
 				),
-				Ref:      "oci://latest",
+				Ref:      "latest",
 				Path:     ".",
 				Interval: &metav1.Duration{Duration: interval},
 			},
