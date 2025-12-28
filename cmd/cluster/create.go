@@ -423,6 +423,22 @@ func installPostCNIComponentsParallel(
 
 	*firstActivityShown = true
 
+	// Show a unified title for all components being installed
+	componentList := buildComponentList(
+		needsMetricsServer,
+		needsCSI,
+		needsCertManager,
+		needsArgoCD,
+		needsFlux,
+	)
+
+	notify.WriteMessage(notify.Message{
+		Type:    notify.TitleType,
+		Content: "Install " + componentList + "...",
+		Emoji:   "📦",
+		Writer:  cmd.OutOrStdout(),
+	})
+
 	syncWriter := parallel.NewSyncWriter(cmd.OutOrStdout())
 	executor := parallel.NewExecutor(0) // Use default concurrency (2-8 based on CPU)
 
@@ -586,6 +602,19 @@ func installSingleComponent(
 func buildSuccessMessage(
 	needsMetricsServer, needsCSI, needsCertManager, needsArgoCD, needsFlux bool,
 ) string {
+	return buildComponentList(
+		needsMetricsServer,
+		needsCSI,
+		needsCertManager,
+		needsArgoCD,
+		needsFlux,
+	) + " installed"
+}
+
+// buildComponentList builds a comma-separated list of component names.
+func buildComponentList(
+	needsMetricsServer, needsCSI, needsCertManager, needsArgoCD, needsFlux bool,
+) string {
 	var components []string
 
 	if needsMetricsServer {
@@ -608,22 +637,15 @@ func buildSuccessMessage(
 		components = append(components, "flux")
 	}
 
-	return strings.Join(components, ", ") + " installed"
+	return strings.Join(components, ", ")
 }
 
-// installMetricsServerWithWriter installs metrics-server using the provided writer for output.
+// installMetricsServerWithWriter installs metrics-server silently for parallel execution.
 func installMetricsServerWithWriter(
 	ctx context.Context,
-	writer io.Writer,
+	_ io.Writer,
 	clusterCfg *v1alpha1.Cluster,
 ) error {
-	notify.WriteMessage(notify.Message{
-		Type:    notify.TitleType,
-		Content: "Install Metrics Server...",
-		Emoji:   "📊",
-		Writer:  writer,
-	})
-
 	helmClient, kubeconfig, err := createHelmClientForCluster(clusterCfg)
 	if err != nil {
 		return fmt.Errorf("failed to create helm client: %w", err)
@@ -637,12 +659,6 @@ func installMetricsServerWithWriter(
 		timeout,
 	)
 
-	notify.WriteMessage(notify.Message{
-		Type:    notify.ActivityType,
-		Content: "installing metrics-server",
-		Writer:  writer,
-	})
-
 	installErr := msInstaller.Install(ctx)
 	if installErr != nil {
 		return fmt.Errorf("metrics-server installation failed: %w", installErr)
@@ -651,29 +667,16 @@ func installMetricsServerWithWriter(
 	return nil
 }
 
-// installArgoCDWithWriter installs ArgoCD using the provided writer for output.
+// installArgoCDWithWriter installs ArgoCD silently for parallel execution.
 func installArgoCDWithWriter(
 	ctx context.Context,
-	writer io.Writer,
+	_ io.Writer,
 	clusterCfg *v1alpha1.Cluster,
 ) error {
-	notify.WriteMessage(notify.Message{
-		Type:    notify.TitleType,
-		Content: argoCDStageTitle,
-		Emoji:   argoCDStageEmoji,
-		Writer:  writer,
-	})
-
 	argoInstaller, err := newArgoCDInstallerForCluster(clusterCfg)
 	if err != nil {
 		return fmt.Errorf("failed to create argocd installer: %w", err)
 	}
-
-	notify.WriteMessage(notify.Message{
-		Type:    notify.ActivityType,
-		Content: argoCDStageActivity,
-		Writer:  writer,
-	})
 
 	installErr := argoInstaller.Install(ctx)
 	if installErr != nil {
@@ -683,31 +686,18 @@ func installArgoCDWithWriter(
 	return nil
 }
 
-// installFluxWithWriter installs Flux using the provided writer for output.
+// installFluxWithWriter installs Flux silently for parallel execution.
 func installFluxWithWriter(
 	ctx context.Context,
-	writer io.Writer,
+	_ io.Writer,
 	clusterCfg *v1alpha1.Cluster,
 ) error {
-	notify.WriteMessage(notify.Message{
-		Type:    notify.TitleType,
-		Content: fluxStageTitle,
-		Emoji:   fluxStageEmoji,
-		Writer:  writer,
-	})
-
 	helmClient, _, err := createHelmClientForCluster(clusterCfg)
 	if err != nil {
 		return fmt.Errorf("failed to create helm client: %w", err)
 	}
 
 	fluxInstaller := newFluxInstallerForCluster(clusterCfg, helmClient)
-
-	notify.WriteMessage(notify.Message{
-		Type:    notify.ActivityType,
-		Content: fluxStageActivity,
-		Writer:  writer,
-	})
 
 	installErr := fluxInstaller.Install(ctx)
 	if installErr != nil {
@@ -717,19 +707,12 @@ func installFluxWithWriter(
 	return nil
 }
 
-// installCSIWithWriter installs CSI using the provided writer for output.
+// installCSIWithWriter installs CSI silently for parallel execution.
 func installCSIWithWriter(
 	ctx context.Context,
-	writer io.Writer,
+	_ io.Writer,
 	clusterCfg *v1alpha1.Cluster,
 ) error {
-	notify.WriteMessage(notify.Message{
-		Type:    notify.TitleType,
-		Content: "Install CSI...",
-		Emoji:   "💾",
-		Writer:  writer,
-	})
-
 	csiInstallerFactoryMu.RLock()
 
 	csiInstaller, err := csiInstallerFactory(clusterCfg)
@@ -740,12 +723,6 @@ func installCSIWithWriter(
 		return fmt.Errorf("failed to create CSI installer: %w", err)
 	}
 
-	notify.WriteMessage(notify.Message{
-		Type:    notify.ActivityType,
-		Content: "installing local-path-storage",
-		Writer:  writer,
-	})
-
 	installErr := csiInstaller.Install(ctx)
 	if installErr != nil {
 		return fmt.Errorf("local-path-storage installation failed: %w", installErr)
@@ -754,29 +731,16 @@ func installCSIWithWriter(
 	return nil
 }
 
-// installCertManagerWithWriter installs cert-manager using the provided writer for output.
+// installCertManagerWithWriter installs cert-manager silently for parallel execution.
 func installCertManagerWithWriter(
 	ctx context.Context,
-	writer io.Writer,
+	_ io.Writer,
 	clusterCfg *v1alpha1.Cluster,
 ) error {
-	notify.WriteMessage(notify.Message{
-		Type:    notify.TitleType,
-		Content: certManagerStageTitle,
-		Emoji:   certManagerStageEmoji,
-		Writer:  writer,
-	})
-
 	installer, err := newCertManagerInstallerForCluster(clusterCfg)
 	if err != nil {
 		return fmt.Errorf("failed to create cert-manager installer: %w", err)
 	}
-
-	notify.WriteMessage(notify.Message{
-		Type:    notify.ActivityType,
-		Content: certManagerStageActivity,
-		Writer:  writer,
-	})
 
 	installErr := installer.Install(ctx)
 	if installErr != nil {
