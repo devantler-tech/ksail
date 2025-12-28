@@ -7,7 +7,7 @@
 
 ![ksail-cli-dark](./docs/images/ksail-cli-dark.png)
 
-KSail is a CLI tool that bundles common Kubernetes tooling into a single binary. It provides one consistent workflow for creating clusters, deploying workloads, and managing GitOps across different distributions.
+KSail is a CLI tool that bundles common Kubernetes tooling into a single binary. It provides one consistent workflow for creating clusters, deploying workloads, and managing workloads across different distributions.
 
 ## Why?
 
