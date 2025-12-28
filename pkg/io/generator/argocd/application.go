@@ -3,8 +3,6 @@ package argocd
 
 import (
 	"fmt"
-	"net"
-	"strconv"
 
 	"github.com/devantler-tech/ksail/v5/pkg/io/detector"
 	"github.com/devantler-tech/ksail/v5/pkg/io/generator"
@@ -103,7 +101,7 @@ func (g *ApplicationGenerator) Generate(opts ApplicationGeneratorOptions) (strin
 		Spec: ApplicationSpec{
 			Project: "default",
 			Source: ApplicationSource{
-				RepoURL:        buildOCIURL(opts.RegistryHost, opts.RegistryPort, opts.ProjectName),
+				RepoURL:        generator.BuildOCIURL(opts.RegistryHost, opts.RegistryPort, opts.ProjectName),
 				TargetRevision: "latest",
 				Path:           ".",
 				Directory: &DirectorySpec{
@@ -129,23 +127,4 @@ func (g *ApplicationGenerator) Generate(opts ApplicationGeneratorOptions) (strin
 	}
 
 	return output, nil
-}
-
-// buildOCIURL constructs the OCI registry URL for the source.
-func buildOCIURL(host string, port int32, projectName string) string {
-	if host == "" {
-		host = "ksail-registry.localhost"
-	}
-
-	if port == 0 {
-		port = 5000
-	}
-
-	if projectName == "" {
-		projectName = "ksail"
-	}
-
-	hostPort := net.JoinHostPort(host, strconv.Itoa(int(port)))
-
-	return fmt.Sprintf("oci://%s/%s", hostPort, projectName)
 }

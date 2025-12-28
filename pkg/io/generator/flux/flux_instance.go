@@ -3,8 +3,6 @@ package flux
 
 import (
 	"fmt"
-	"net"
-	"strconv"
 	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/io/detector"
@@ -103,7 +101,7 @@ func (g *InstanceGenerator) Generate(opts InstanceGeneratorOptions) (string, err
 			},
 			Sync: &Sync{
 				Kind:     "OCIRepository",
-				URL:      buildOCIURL(opts.RegistryHost, opts.RegistryPort, opts.ProjectName),
+				URL:      generator.BuildOCIURL(opts.RegistryHost, opts.RegistryPort, opts.ProjectName),
 				Ref:      "oci://latest",
 				Path:     ".",
 				Interval: &metav1.Duration{Duration: interval},
@@ -117,23 +115,4 @@ func (g *InstanceGenerator) Generate(opts InstanceGeneratorOptions) (string, err
 	}
 
 	return output, nil
-}
-
-// buildOCIURL constructs the OCI registry URL for the sync source.
-func buildOCIURL(host string, port int32, projectName string) string {
-	if host == "" {
-		host = "ksail-registry.localhost"
-	}
-
-	if port == 0 {
-		port = 5000
-	}
-
-	if projectName == "" {
-		projectName = "ksail"
-	}
-
-	hostPort := net.JoinHostPort(host, strconv.Itoa(int(port)))
-
-	return fmt.Sprintf("oci://%s/%s", hostPort, projectName)
 }
