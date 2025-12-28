@@ -382,7 +382,8 @@ func cleanupTalosInDockerMirrorRegistries(
 	clusterName string,
 	deleteVolumes bool,
 ) error {
-	mirrorSpecs, registryNames, err := collectMirrorSpecs(cfgManager, scaffolder.KindMirrorsDir)
+	// Collect mirror specs from Talos config (not kind-mirrors directory)
+	mirrorSpecs, registryNames, err := collectTalosMirrorSpecs(cfgManager)
 	if err != nil {
 		return err
 	}
@@ -423,4 +424,43 @@ func cleanupTalosInDockerMirrorRegistries(
 			)
 		},
 	)
+}
+
+// collectTalosMirrorSpecs collects mirror specs from Talos config and command line flags.
+// This extracts mirror hosts from the loaded Talos config bundle which includes any
+// mirror-registries.yaml patches that were applied during cluster creation.
+func collectTalosMirrorSpecs(
+	cfgManager *ksailconfigmanager.ConfigManager,
+) ([]registry.MirrorSpec, []string, error) {
+	// Get mirror registry specs from command line flag
+	flagSpecs := registry.ParseMirrorSpecs(cfgManager.Viper.GetStringSlice("mirror-registry"))
+
+	// Extract mirror hosts from the loaded Talos config
+	var talosSpecs []registry.MirrorSpec
+	if cfgManager.DistributionConfig != nil && cfgManager.DistributionConfig.TalosInDocker != nil {
+		talosHosts := cfgManager.DistributionConfig.TalosInDocker.ExtractMirrorHosts()
+		for _, host := range talosHosts {
+			talosSpecs = append(talosSpecs, registry.MirrorSpec{
+				Host:   host,
+				Remote: registry.GenerateUpstreamURL(host),
+			})
+		}
+	}
+
+	// Merge specs: flag specs override Talos config specs for the same host
+	mirrorSpecs := registry.MergeSpecs(talosSpecs, flagSpecs)
+
+	if len(mirrorSpecs) == 0 {
+		return nil, nil, nil
+	}
+
+	// Build registry info to get container names
+	entries := registry.BuildMirrorEntries(mirrorSpecs, "", nil, nil, nil)
+
+	registryNames := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		registryNames = append(registryNames, entry.ContainerName)
+	}
+
+	return mirrorSpecs, registryNames, nil
 }

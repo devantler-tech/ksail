@@ -1116,6 +1116,9 @@ func ensureDockerNetworkExists(
 		Args:    []any{networkName},
 	})
 
+	// Default MTU for Docker bridge networks - required by Talos SDK's Reflect() function
+	const defaultNetworkMTU = "1500"
+
 	createOptions := network.CreateOptions{
 		Driver: "bridge",
 		// Use Talos labels so the SDK recognizes this as a Talos network
@@ -1123,10 +1126,14 @@ func ensureDockerNetworkExists(
 			"talos.owned":        "true",
 			"talos.cluster.name": networkName,
 		},
-		// Enable container name DNS resolution
+		// Enable container name DNS resolution and set MTU
+		// The MTU option is required by the Talos SDK's Reflect() function which
+		// reads com.docker.network.driver.mtu to parse network state. Without it,
+		// strconv.Atoi("") fails with "invalid syntax" during cluster deletion.
 		Options: map[string]string{
 			"com.docker.network.bridge.enable_icc":           "true",
 			"com.docker.network.bridge.enable_ip_masquerade": "true",
+			"com.docker.network.driver.mtu":                  defaultNetworkMTU,
 		},
 	}
 
