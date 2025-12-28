@@ -186,3 +186,73 @@ func TestMirrorRegistry_Structure(t *testing.T) {
 	assert.Equal(t, "docker.io", mirror.Host)
 	assert.Equal(t, []string{"http://localhost:5000", "http://localhost:5001"}, mirror.Endpoints)
 }
+
+func TestConfigs_ApplyKubeletCertRotation(t *testing.T) {
+	t.Parallel()
+
+	manager := talos.NewConfigManager("", "kubelet-cert-rotation", "1.32.0", "10.5.0.0/24")
+
+	configs, err := manager.LoadConfig(nil)
+	require.NoError(t, err)
+	require.NotNil(t, configs)
+
+	// Apply kubelet cert rotation
+	err = configs.ApplyKubeletCertRotation()
+	require.NoError(t, err)
+
+	// Verify both control-plane and worker configs exist
+	require.NotNil(t, configs.ControlPlane())
+	require.NotNil(t, configs.Worker())
+
+	// Verify the rotate-server-certificates flag was applied to control-plane
+	cpKubelet := configs.ControlPlane().Machine().Kubelet()
+	require.NotNil(t, cpKubelet, "control-plane kubelet config should not be nil")
+	cpExtraArgs := cpKubelet.ExtraArgs()
+	require.NotNil(t, cpExtraArgs, "control-plane kubelet extra args should not be nil")
+	assert.Equal(t, "true", cpExtraArgs["rotate-server-certificates"],
+		"control-plane should have rotate-server-certificates=true")
+
+	// Verify the rotate-server-certificates flag was applied to worker
+	workerKubelet := configs.Worker().Machine().Kubelet()
+	require.NotNil(t, workerKubelet, "worker kubelet config should not be nil")
+	workerExtraArgs := workerKubelet.ExtraArgs()
+	require.NotNil(t, workerExtraArgs, "worker kubelet extra args should not be nil")
+	assert.Equal(t, "true", workerExtraArgs["rotate-server-certificates"],
+		"worker should have rotate-server-certificates=true")
+}
+
+func TestConfigs_ApplyKubeletCertRotation_Idempotent(t *testing.T) {
+	t.Parallel()
+
+	manager := talos.NewConfigManager("", "kubelet-cert-idempotent", "1.32.0", "10.5.0.0/24")
+
+	configs, err := manager.LoadConfig(nil)
+	require.NoError(t, err)
+	require.NotNil(t, configs)
+
+	// Apply kubelet cert rotation first time
+	err = configs.ApplyKubeletCertRotation()
+	require.NoError(t, err)
+
+	// Verify state after first call
+	cpKubelet := configs.ControlPlane().Machine().Kubelet()
+	require.NotNil(t, cpKubelet)
+	assert.Equal(t, "true", cpKubelet.ExtraArgs()["rotate-server-certificates"])
+
+	workerKubelet := configs.Worker().Machine().Kubelet()
+	require.NotNil(t, workerKubelet)
+	assert.Equal(t, "true", workerKubelet.ExtraArgs()["rotate-server-certificates"])
+
+	// Apply kubelet cert rotation second time - should not error and state should remain consistent
+	err = configs.ApplyKubeletCertRotation()
+	require.NoError(t, err)
+
+	// Verify state after second call is the same (no duplicates or conflicts)
+	cpKubeletAfter := configs.ControlPlane().Machine().Kubelet()
+	require.NotNil(t, cpKubeletAfter)
+	assert.Equal(t, "true", cpKubeletAfter.ExtraArgs()["rotate-server-certificates"])
+
+	workerKubeletAfter := configs.Worker().Machine().Kubelet()
+	require.NotNil(t, workerKubeletAfter)
+	assert.Equal(t, "true", workerKubeletAfter.ExtraArgs()["rotate-server-certificates"])
+}

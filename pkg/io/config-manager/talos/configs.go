@@ -219,6 +219,46 @@ func (c *Configs) ApplyMirrorRegistries(mirrors []MirrorRegistry) error {
 		return applyMirrorsToConfig(cfg, mirrors)
 	}
 
+	return c.applyPatchToBothConfigs(patcher)
+}
+
+// applyMirrorsToConfig applies mirror configurations to a Talos v1alpha1 config.
+func applyMirrorsToConfig(cfg *v1alpha1.Config, mirrors []MirrorRegistry) error {
+	if cfg.MachineConfig == nil {
+		return nil
+	}
+
+	initRegistryMaps(cfg)
+
+	for _, mirror := range mirrors {
+		if mirror.Host == "" {
+			continue
+		}
+
+		addMirrorEndpoints(cfg, mirror)
+		// NOTE: We intentionally do NOT call addInsecureRegistryConfigs for HTTP endpoints.
+		// containerd will reject TLS configuration for non-HTTPS registries with the error:
+		// "TLS config specified for non-HTTPS registry"
+		// HTTP endpoints work without any additional configuration.
+	}
+
+	return nil
+}
+
+// ApplyKubeletCertRotation modifies the configs to enable kubelet server certificate rotation.
+// This is required for metrics-server to scrape kubelet metrics over HTTPS without TLS errors.
+// The setting applies to both control-plane and worker nodes.
+func (c *Configs) ApplyKubeletCertRotation() error {
+	return c.applyPatchToBothConfigs(applyKubeletCertRotationToConfig)
+}
+
+// applyPatchToBothConfigs applies the provided patcher function to both the control-plane and
+// worker machine configurations in the Talos bundle, if they are present. It delegates the
+// actual mutation to the Talos v1alpha1 PatchV1Alpha1 method on each config and updates the
+// bundle with the patched results. This shared helper centralizes the patching mechanism and
+// avoids code duplication in higher-level helpers such as ApplyMirrorRegistries and
+// ApplyKubeletCertRotation.
+func (c *Configs) applyPatchToBothConfigs(patcher func(*v1alpha1.Config) error) error {
 	// Apply to control plane config
 	if c.bundle.ControlPlaneCfg != nil {
 		patched, err := c.bundle.ControlPlaneCfg.PatchV1Alpha1(patcher)
@@ -242,25 +282,24 @@ func (c *Configs) ApplyMirrorRegistries(mirrors []MirrorRegistry) error {
 	return nil
 }
 
-// applyMirrorsToConfig applies mirror configurations to a Talos v1alpha1 config.
-func applyMirrorsToConfig(cfg *v1alpha1.Config, mirrors []MirrorRegistry) error {
+// applyKubeletCertRotationToConfig enables kubelet server certificate rotation on a Talos v1alpha1 config.
+func applyKubeletCertRotationToConfig(cfg *v1alpha1.Config) error {
 	if cfg.MachineConfig == nil {
 		return nil
 	}
 
-	initRegistryMaps(cfg)
-
-	for _, mirror := range mirrors {
-		if mirror.Host == "" {
-			continue
-		}
-
-		addMirrorEndpoints(cfg, mirror)
-		// NOTE: We intentionally do NOT call addInsecureRegistryConfigs for HTTP endpoints.
-		// containerd will reject TLS configuration for non-HTTPS registries with the error:
-		// "TLS config specified for non-HTTPS registry"
-		// HTTP endpoints work without any additional configuration.
+	// Initialize kubelet config if nil
+	if cfg.MachineConfig.MachineKubelet == nil {
+		cfg.MachineConfig.MachineKubelet = &v1alpha1.KubeletConfig{}
 	}
+
+	// Initialize extra args if nil
+	if cfg.MachineConfig.MachineKubelet.KubeletExtraArgs == nil {
+		cfg.MachineConfig.MachineKubelet.KubeletExtraArgs = make(map[string]string)
+	}
+
+	// Set rotate-server-certificates to enable certificate rotation
+	cfg.MachineConfig.MachineKubelet.KubeletExtraArgs["rotate-server-certificates"] = "true"
 
 	return nil
 }

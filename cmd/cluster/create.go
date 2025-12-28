@@ -149,6 +149,9 @@ func handleCreateRunE(
 	// Configure metrics-server for K3d before cluster creation
 	setupK3dMetricsServer(clusterCfg, k3dConfig)
 
+	// Configure kubelet cert rotation for Talos when metrics-server is enabled
+	setupTalosKubeletCertRotation(cmd.OutOrStdout(), clusterCfg, talosConfig)
+
 	// Check if a test override is set for the factory
 	clusterProvisionerFactoryMu.RLock()
 
@@ -415,6 +418,42 @@ func setupK3dMetricsServer(clusterCfg *v1alpha1.Cluster, k3dConfig *v1alpha5.Sim
 			NodeFilters: []string{"server:*"},
 		},
 	)
+}
+
+// setupTalosKubeletCertRotation configures kubelet server certificate rotation for Talos clusters.
+// This is required for metrics-server to scrape kubelet metrics over HTTPS without TLS errors.
+// When metrics-server is enabled on a Talos cluster, the kubelet needs to rotate its serving
+// certificates so that metrics-server can verify them against the cluster's CA.
+// This function is called during cluster creation to:
+//  1. Respect any overrides to the --metrics-server flag at create time (different from init-time config).
+//  2. Programmatically apply kubelet cert rotation on the in-memory Talos configuration used for cluster creation,
+//     ensuring consistent metrics-server support regardless of any Talos patches that may or may not exist on disk.
+func setupTalosKubeletCertRotation(
+	writer io.Writer,
+	clusterCfg *v1alpha1.Cluster,
+	talosConfig *talosconfigmanager.Configs,
+) {
+	// Only apply to Talos distribution
+	if clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionTalos || talosConfig == nil {
+		return
+	}
+
+	// Only enable cert rotation if metrics-server is enabled
+	if clusterCfg.Spec.Cluster.MetricsServer != v1alpha1.MetricsServerEnabled {
+		return
+	}
+
+	// Apply kubelet cert rotation to the Talos config
+	// This modifies the in-memory config that will be used for cluster creation
+	// Error is logged but not fatal - cluster can still function without cert rotation
+	err := talosConfig.ApplyKubeletCertRotation()
+	if err != nil {
+		notify.WriteMessage(notify.Message{
+			Type:    notify.WarningType,
+			Content: fmt.Sprintf("failed to apply kubelet cert rotation: %v", err),
+			Writer:  writer,
+		})
+	}
 }
 
 const (
