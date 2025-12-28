@@ -461,20 +461,9 @@ func (v *Validator) validateRegistry(
 
 // validateFlux ensures Flux-specific settings are valid when Flux is enabled.
 func (v *Validator) validateFlux(
-	config *v1alpha1.Cluster,
-	result *validator.ValidationResult,
+	_ *v1alpha1.Cluster,
+	_ *validator.ValidationResult,
 ) {
-	if config.Spec.Cluster.GitOpsEngine != v1alpha1.GitOpsEngineFlux {
-		return
-	}
-
-	if config.Spec.Cluster.Flux.Interval.Duration <= 0 {
-		result.AddError(validator.ValidationError{
-			Field:         "spec.options.flux.interval",
-			Message:       "fluxInterval must be a positive duration when Flux is enabled",
-			CurrentValue:  config.Spec.Cluster.Flux.Interval.Duration,
-			ExpectedValue: "> 0",
-			FixSuggestion: "Set spec.options.flux.interval to a positive duration (e.g., 1m)",
-		})
-	}
+	// Flux-specific configuration is now handled via the FluxInstance CR.
+	// No additional validation required in the KSail config.
 }

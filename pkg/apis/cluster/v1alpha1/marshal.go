@@ -67,12 +67,7 @@ type clusterConnectionOutput struct {
 }
 
 type clusterOptionsOutput struct {
-	Flux          *fluxOptionsOutput          `json:"flux,omitempty"          yaml:"flux,omitempty"`
 	LocalRegistry *localRegistryOptionsOutput `json:"localRegistry,omitempty" yaml:"localRegistry,omitempty"`
-}
-
-type fluxOptionsOutput struct {
-	Interval string `json:"interval,omitempty" yaml:"interval,omitempty"`
 }
 
 type localRegistryOptionsOutput struct {
@@ -157,13 +152,6 @@ func buildClusterOutput(cluster Cluster) clusterOutput {
 	var opts clusterOptionsOutput
 
 	hasOpts := false
-
-	if cluster.Spec.Cluster.Flux.Interval.Duration != 0 {
-		opts.Flux = &fluxOptionsOutput{
-			Interval: cluster.Spec.Cluster.Flux.Interval.Duration.String(),
-		}
-		hasOpts = true
-	}
 
 	if cluster.Spec.Cluster.LocalRegistryOpts.HostPort != 0 {
 		opts.LocalRegistry = &localRegistryOptionsOutput{
@@ -275,11 +263,6 @@ func pruneClusterDefaults(cluster Cluster) Cluster {
 	if cluster.Spec.Cluster.GitOpsEngine == GitOpsEngineNone ||
 		cluster.Spec.Cluster.GitOpsEngine == "" {
 		cluster.Spec.Cluster.GitOpsEngine = ""
-	}
-
-	if cluster.Spec.Cluster.Flux.Interval == DefaultFluxInterval ||
-		cluster.Spec.Cluster.Flux.Interval.Duration == 0 {
-		cluster.Spec.Cluster.Flux.Interval = metav1.Duration{}
 	}
 
 	if cluster.Spec.Cluster.LocalRegistryOpts.HostPort == DefaultLocalRegistryPort ||

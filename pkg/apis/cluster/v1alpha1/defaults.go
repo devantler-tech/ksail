@@ -1,11 +1,5 @@
 package v1alpha1
 
-import (
-	"time"
-
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-)
-
 const (
 	// DefaultDistributionConfig is the default cluster distribution configuration filename.
 	DefaultDistributionConfig = "kind.yaml"
@@ -20,11 +14,6 @@ const (
 	// DefaultLocalRegistryPort is the default port for the local registry.
 	DefaultLocalRegistryPort int32 = 5111
 )
-
-// DefaultFluxInterval is the default reconciliation interval for Flux.
-//
-//nolint:gochecknoglobals // Default configuration value
-var DefaultFluxInterval = metav1.Duration{Duration: time.Minute}
 
 // ExpectedDistributionConfigName returns the default config filename for a distribution.
 func ExpectedDistributionConfigName(distribution Distribution) string {

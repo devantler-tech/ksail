@@ -1205,3 +1205,212 @@ func TestScaffoldTalos_SetsCorrectDistribution(t *testing.T) {
 	// Verify the distribution is set correctly
 	assert.Contains(t, string(ksailContent), "distribution: Talos")
 }
+
+// GitOps scaffolding tests.
+
+func TestScaffoldFluxGitOps_CreatesFluxInstanceManifest(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	cluster := createKindCluster("flux-test")
+	cluster.Spec.Cluster.GitOpsEngine = v1alpha1.GitOpsEngineFlux
+	scaffolderInstance := scaffolder.NewScaffolder(cluster, io.Discard, nil)
+
+	err := scaffolderInstance.Scaffold(tempDir, false)
+	require.NoError(t, err)
+
+	// Verify FluxInstance manifest was created
+	fluxInstancePath := filepath.Join(tempDir, "k8s", "gitops", "flux", "flux-instance.yaml")
+	content, err := os.ReadFile(fluxInstancePath) //nolint:gosec // Test file path is safe
+	require.NoError(t, err)
+
+	// Verify content contains expected fields
+	assert.Contains(t, string(content), "apiVersion: fluxcd.controlplane.io/v1")
+	assert.Contains(t, string(content), "kind: FluxInstance")
+	assert.Contains(t, string(content), "name: flux")
+	assert.Contains(t, string(content), "namespace: flux-system")
+}
+
+func TestScaffoldArgoCDGitOps_CreatesApplicationManifest(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	cluster := createKindCluster("argocd-test")
+	cluster.Spec.Cluster.GitOpsEngine = v1alpha1.GitOpsEngineArgoCD
+	scaffolderInstance := scaffolder.NewScaffolder(cluster, io.Discard, nil)
+
+	err := scaffolderInstance.Scaffold(tempDir, false)
+	require.NoError(t, err)
+
+	// Verify ArgoCD Application manifest was created
+	applicationPath := filepath.Join(tempDir, "k8s", "gitops", "argocd", "application.yaml")
+	content, err := os.ReadFile(applicationPath) //nolint:gosec // Test file path is safe
+	require.NoError(t, err)
+
+	// Verify content contains expected fields
+	assert.Contains(t, string(content), "apiVersion: argoproj.io/v1alpha1")
+	assert.Contains(t, string(content), "kind: Application")
+	assert.Contains(t, string(content), "name: ksail")
+	assert.Contains(t, string(content), "namespace: argocd")
+}
+
+func TestScaffoldGitOps_SkipsWhenGitOpsEngineIsNone(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	cluster := createKindCluster("no-gitops-test")
+	cluster.Spec.Cluster.GitOpsEngine = v1alpha1.GitOpsEngineNone
+	scaffolderInstance := scaffolder.NewScaffolder(cluster, io.Discard, nil)
+
+	err := scaffolderInstance.Scaffold(tempDir, false)
+	require.NoError(t, err)
+
+	// Verify no GitOps manifests were created
+	fluxDir := filepath.Join(tempDir, "k8s", "gitops", "flux")
+	argocdDir := filepath.Join(tempDir, "k8s", "gitops", "argocd")
+
+	_, fluxErr := os.Stat(fluxDir)
+	_, argocdErr := os.Stat(argocdDir)
+
+	assert.True(t, os.IsNotExist(fluxErr), "flux gitops dir should not exist")
+	assert.True(t, os.IsNotExist(argocdErr), "argocd gitops dir should not exist")
+}
+
+type skipExistingCRTestCase struct {
+	name            string
+	gitOpsEngine    v1alpha1.GitOpsEngine
+	subDir          string
+	existingFile    string
+	outputFile      string
+	existingContent string
+	expectSkipMsg   string
+}
+
+func getSkipExistingCRTestCases() []skipExistingCRTestCase {
+	return []skipExistingCRTestCase{
+		{
+			name:         "skips existing FluxInstance",
+			gitOpsEngine: v1alpha1.GitOpsEngineFlux,
+			subDir:       filepath.Join("gitops", "flux"),
+			existingFile: "existing-flux.yaml",
+			outputFile:   "flux-instance.yaml",
+			existingContent: `apiVersion: fluxcd.controlplane.io/v1
+kind: FluxInstance
+metadata:
+  name: flux
+  namespace: flux-system
+spec:
+  distribution:
+    version: "2.x"
+`,
+			expectSkipMsg: "skipping FluxInstance scaffolding: existing found at",
+		},
+		{
+			name:         "skips existing ArgoCD Application",
+			gitOpsEngine: v1alpha1.GitOpsEngineArgoCD,
+			subDir:       filepath.Join("gitops", "argocd"),
+			existingFile: "existing-app.yaml",
+			outputFile:   "application.yaml",
+			existingContent: `apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ksail
+  namespace: argocd
+spec:
+  project: default
+`,
+			expectSkipMsg: "skipping ArgoCD Application scaffolding: existing found at",
+		},
+	}
+}
+
+func TestScaffoldGitOps_SkipsExistingCR(t *testing.T) {
+	t.Parallel()
+
+	tests := getSkipExistingCRTestCases()
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			tempDir := t.TempDir()
+			cluster := createKindCluster(testCase.name)
+			cluster.Spec.Cluster.GitOpsEngine = testCase.gitOpsEngine
+			buffer := &bytes.Buffer{}
+			scaffolderInstance := scaffolder.NewScaffolder(cluster, buffer, nil)
+
+			// Create an existing CR manifest
+			crDir := filepath.Join(tempDir, "k8s", testCase.subDir)
+
+			err := os.MkdirAll(crDir, 0o750)
+			require.NoError(t, err)
+
+			err = os.WriteFile(
+				filepath.Join(crDir, testCase.existingFile),
+				[]byte(testCase.existingContent),
+				0o600,
+			)
+			require.NoError(t, err)
+
+			// Scaffold - should skip CR generation
+			err = scaffolderInstance.Scaffold(tempDir, false)
+			require.NoError(t, err)
+
+			// Verify the skip message was printed
+			assert.Contains(t, buffer.String(), testCase.expectSkipMsg)
+
+			// Verify no new output file was created
+			_, err = os.Stat(filepath.Join(crDir, testCase.outputFile))
+			assert.True(t, os.IsNotExist(err), "%s should not be created", testCase.outputFile)
+		})
+	}
+}
+
+func TestScaffoldGitOps_OverwritesWithForce(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	cluster := createKindCluster("force-flux-test")
+	cluster.Spec.Cluster.GitOpsEngine = v1alpha1.GitOpsEngineFlux
+	buffer := &bytes.Buffer{}
+	scaffolderInstance := scaffolder.NewScaffolder(cluster, buffer, nil)
+
+	// First scaffold to create the FluxInstance
+	err := scaffolderInstance.Scaffold(tempDir, false)
+	require.NoError(t, err)
+
+	fluxInstancePath := filepath.Join(tempDir, "k8s", "gitops", "flux", "flux-instance.yaml")
+
+	// Verify file was created
+	_, err = os.Stat(fluxInstancePath)
+	require.NoError(t, err)
+
+	// Get original mod time
+	originalInfo, err := os.Stat(fluxInstancePath)
+	require.NoError(t, err)
+
+	originalModTime := originalInfo.ModTime()
+
+	// Wait a tiny bit to ensure mod time can differ
+	time.Sleep(10 * time.Millisecond)
+
+	// Scaffold again with force=true - should skip because detector finds existing
+	// (force only affects file overwriting, not CR detection)
+	buffer.Reset()
+
+	err = scaffolderInstance.Scaffold(tempDir, true)
+	require.NoError(t, err)
+
+	// Since existing FluxInstance is detected, it should be skipped
+	assert.Contains(t, buffer.String(), "skipping FluxInstance scaffolding: existing found at")
+
+	// Verify file mod time is unchanged (was not regenerated)
+	newInfo, err := os.Stat(fluxInstancePath)
+	require.NoError(t, err)
+	assert.Equal(
+		t,
+		originalModTime,
+		newInfo.ModTime(),
+		"file should not be regenerated when existing CR detected",
+	)
+}

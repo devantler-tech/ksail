@@ -22,7 +22,6 @@ Flags:
       --csi CSI                        Container Storage Interface (CSI) to use (default Default)
   -d, --distribution Distribution      Kubernetes distribution to use (default Kind)
       --distribution-config string     Configuration file for the distribution
-      --flux-interval duration         Flux reconciliation interval (e.g. 1m, 30s) (default 1m0s)
   -f, --force                          Overwrite existing files
   -g, --gitops-engine GitOpsEngine     GitOps engine to use (None disables GitOps, Flux installs Flux controllers, ArgoCD installs Argo CD) (default None)
   -h, --help                           help for init

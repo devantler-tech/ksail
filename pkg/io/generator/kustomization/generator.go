@@ -34,7 +34,11 @@ func (g *KustomizationGenerator) Generate(
 		APIVersion: "kustomize.config.k8s.io/v1beta1",
 		Kind:       "Kustomization",
 	}
-	kustomization.Resources = []string{}
+
+	// Initialize resources if nil
+	if kustomization.Resources == nil {
+		kustomization.Resources = []string{}
+	}
 
 	out, err := g.Marshaller.Marshal(kustomization)
 	if err != nil {

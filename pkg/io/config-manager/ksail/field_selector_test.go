@@ -2,13 +2,11 @@ package configmanager_test
 
 import (
 	"testing"
-	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	configmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 type standardFieldSelectorCase struct {
@@ -116,16 +114,6 @@ func TestStandardFieldSelectors(t *testing.T) {
 			},
 		},
 		{
-			name:            "flux interval",
-			factory:         configmanager.DefaultFluxIntervalFieldSelector,
-			expectedDesc:    "Flux reconciliation interval (e.g. 1m, 30s)",
-			expectedDefault: metav1.Duration{Duration: time.Minute},
-			assertPointer: func(t *testing.T, cluster *v1alpha1.Cluster, ptr any) {
-				t.Helper()
-				assertPointerSame(t, ptr, &cluster.Spec.Cluster.Flux.Interval)
-			},
-		},
-		{
 			name:            "metrics server",
 			factory:         configmanager.DefaultMetricsServerFieldSelector,
 			expectedDesc:    "Metrics Server configuration (Enabled: install, Disabled: uninstall)",
@@ -186,7 +174,7 @@ func TestDefaultClusterFieldSelectorsProvideDefaults(t *testing.T) {
 	t.Parallel()
 
 	selectors := configmanager.DefaultClusterFieldSelectors()
-	require.Len(t, selectors, 8)
+	require.Len(t, selectors, 7)
 
 	cluster := v1alpha1.NewCluster()
 
@@ -283,17 +271,6 @@ func defaultClusterSelectorCases(
 				t.Helper()
 
 				_, ok := field.(*int32)
-				require.True(t, ok)
-			},
-		},
-		{
-			name:            "flux interval",
-			selector:        selectors[7],
-			expectedDefault: metav1.Duration{Duration: time.Minute},
-			assertField: func(t *testing.T, field any) {
-				t.Helper()
-
-				_, ok := field.(*metav1.Duration)
 				require.True(t, ok)
 			},
 		},

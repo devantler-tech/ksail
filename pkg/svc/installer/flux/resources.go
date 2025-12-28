@@ -129,10 +129,9 @@ func EnsureDefaultResources(
 
 //nolint:unparam // error return kept for consistency with resource building patterns
 func buildFluxInstance(clusterCfg *v1alpha1.Cluster) (*FluxInstance, error) {
-	interval := clusterCfg.Spec.Cluster.Flux.Interval.Duration
-	if interval <= 0 {
-		interval = fluxIntervalFallback
-	}
+	// Use the fallback interval value. Interval configuration is now managed
+	// via the FluxInstance CR in the source directory, not in the KSail config.
+	interval := fluxIntervalFallback
 
 	hostPort := clusterCfg.Spec.Cluster.LocalRegistryOpts.HostPort
 	if hostPort == 0 {

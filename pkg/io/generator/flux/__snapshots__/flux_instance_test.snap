@@ -1,0 +1,84 @@
+
+[TestInstanceGenerator_Generate/with_custom_interval - 1]
+apiVersion: fluxcd.controlplane.io/v1
+kind: FluxInstance
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: ksail
+  name: flux
+  namespace: flux-system
+spec:
+  distribution:
+    registry: ghcr.io/fluxcd
+    version: 2.x
+  sync:
+    interval: 5m0s
+    kind: OCIRepository
+    path: .
+    ref: latest
+    url: oci://registry.localhost:5000/test-project
+
+---
+
+[TestInstanceGenerator_Generate/with_custom_registry_host_and_port - 1]
+apiVersion: fluxcd.controlplane.io/v1
+kind: FluxInstance
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: ksail
+  name: flux
+  namespace: flux-system
+spec:
+  distribution:
+    registry: ghcr.io/fluxcd
+    version: 2.x
+  sync:
+    interval: 1m0s
+    kind: OCIRepository
+    path: .
+    ref: latest
+    url: oci://custom-registry.localhost:8080/my-project
+
+---
+
+[TestInstanceGenerator_Generate/with_default_values - 1]
+apiVersion: fluxcd.controlplane.io/v1
+kind: FluxInstance
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: ksail
+  name: flux
+  namespace: flux-system
+spec:
+  distribution:
+    registry: ghcr.io/fluxcd
+    version: 2.x
+  sync:
+    interval: 1m0s
+    kind: OCIRepository
+    path: .
+    ref: latest
+    url: oci://ksail-registry.localhost:5000/ksail
+
+---
+
+[TestInstanceGenerator_Generate/with_zero_port_uses_default - 1]
+apiVersion: fluxcd.controlplane.io/v1
+kind: FluxInstance
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: ksail
+  name: flux
+  namespace: flux-system
+spec:
+  distribution:
+    registry: ghcr.io/fluxcd
+    version: 2.x
+  sync:
+    interval: 1m0s
+    kind: OCIRepository
+    path: .
+    ref: latest
+    url: oci://registry.localhost:5000/test-project
+
+---
