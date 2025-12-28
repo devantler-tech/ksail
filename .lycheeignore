@@ -10,11 +10,10 @@ https://github.com/stefanprodan/podinfo//kustomize
 # Cluster-local Kubernetes API endpoint (not reachable outside cluster)
 https://kubernetes.default.svc/
 
-# Certificate issues with gateway-api.sigs.k8s.io
-https://gateway-api.sigs.k8s.io/
-
 # GoReleaser template URL (not a real URL)
 https://github.com/devantler-tech/ksail/releases/download/
 
-# Certificate issues with kind.sigs.k8s.io
+# Certificate issues
 https://kind.sigs.k8s.io/
+https://www.talos.dev/
+https://gateway-api.sigs.k8s.io/
