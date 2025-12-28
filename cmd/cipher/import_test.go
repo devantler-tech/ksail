@@ -189,7 +189,7 @@ func TestImportKeyBasic(t *testing.T) {
 	}
 
 	output := out.String()
-	if !strings.Contains(output, "Successfully imported") {
+	if !strings.Contains(output, "imported") {
 		t.Errorf("expected success message, got: %s", output)
 	}
 

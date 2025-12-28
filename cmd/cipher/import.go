@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"filippo.io/age"
+	"github.com/devantler-tech/ksail/v5/pkg/ui/notify"
 	"github.com/spf13/cobra"
 )
 
@@ -287,10 +288,12 @@ func handleImportRunE(cmd *cobra.Command, privateKey string) error {
 		return fmt.Errorf("%w: %w", errFailedToDetermineAge, err)
 	}
 
-	_, err = fmt.Fprintf(cmd.OutOrStdout(), "Successfully imported age key to %s\n", targetPath)
-	if err != nil {
-		return fmt.Errorf("failed to write output: %w", err)
-	}
+	notify.WriteMessage(notify.Message{
+		Type:    notify.SuccessType,
+		Content: "imported age key to %s",
+		Args:    []any{targetPath},
+		Writer:  cmd.OutOrStdout(),
+	})
 
 	return nil
 }

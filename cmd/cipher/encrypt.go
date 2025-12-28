@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/devantler-tech/ksail/v5/pkg/ui/notify"
 	"github.com/getsops/sops/v3"
 	"github.com/getsops/sops/v3/aes"
 	"github.com/getsops/sops/v3/cmd/sops/codes"
@@ -286,10 +287,12 @@ func handleEncryptRunE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to write encrypted file: %w", err)
 	}
 
-	_, err = fmt.Fprintf(cmd.OutOrStdout(), "Successfully encrypted %s\n", inputPath)
-	if err != nil {
-		return fmt.Errorf("failed to write output: %w", err)
-	}
+	notify.WriteMessage(notify.Message{
+		Type:    notify.SuccessType,
+		Content: "encrypted %s",
+		Args:    []any{inputPath},
+		Writer:  cmd.OutOrStdout(),
+	})
 
 	return nil
 }

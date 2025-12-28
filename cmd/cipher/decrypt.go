@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/devantler-tech/ksail/v5/pkg/ui/notify"
 	"github.com/getsops/sops/v3"
 	"github.com/getsops/sops/v3/aes"
 	"github.com/getsops/sops/v3/cmd/sops/codes"
@@ -246,10 +247,12 @@ func writeDecryptedOutput(cmd *cobra.Command, data []byte, outputPath string) er
 			return fmt.Errorf("failed to write decrypted file: %w", err)
 		}
 
-		_, err = fmt.Fprintf(cmd.OutOrStdout(), "Successfully decrypted to %s\n", outputPath)
-		if err != nil {
-			return fmt.Errorf("failed to write output: %w", err)
-		}
+		notify.WriteMessage(notify.Message{
+			Type:    notify.SuccessType,
+			Content: "decrypted to %s",
+			Args:    []any{outputPath},
+			Writer:  cmd.OutOrStdout(),
+		})
 
 		return nil
 	}
