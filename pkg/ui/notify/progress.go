@@ -47,8 +47,16 @@ const (
 	taskFailed
 )
 
-// spinner characters for animation.
-var spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+const (
+	// spinnerTickInterval is the interval between spinner animation frames.
+	spinnerTickInterval = 100 * time.Millisecond
+)
+
+// getSpinnerFrames returns the spinner animation frames.
+// Using a function instead of a global variable satisfies gochecknoglobals.
+func getSpinnerFrames() []string {
+	return []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+}
 
 // NewProgressGroup creates a new ProgressGroup for parallel task execution.
 // title: The title shown during execution (e.g., "Installing components")
@@ -129,9 +137,16 @@ func (pg *ProgressGroup) Run(ctx context.Context, tasks ...ProgressTask) error {
 
 	// Clear the progress line and print final status
 	pg.clearLine()
-	pg.printFinalStatus(taskNames, err)
 
-	return err
+	if err != nil {
+		pg.printFinalStatus(taskNames, err)
+
+		return fmt.Errorf("parallel execution: %w", err)
+	}
+
+	pg.printFinalStatus(taskNames, nil)
+
+	return nil
 }
 
 // setTaskState safely updates a task's state.
@@ -142,19 +157,13 @@ func (pg *ProgressGroup) setTaskState(name string, state taskState) {
 	pg.taskStatus[name] = state
 }
 
-// getTaskState safely retrieves a task's state.
-func (pg *ProgressGroup) getTaskState(name string) taskState {
-	pg.mu.Lock()
-	defer pg.mu.Unlock()
-
-	return pg.taskStatus[name]
-}
-
 // runSpinner animates the spinner until stopped.
 func (pg *ProgressGroup) runSpinner(taskNames []string) {
 	defer close(pg.spinnerDone)
 
-	ticker := time.NewTicker(100 * time.Millisecond)
+	frames := getSpinnerFrames()
+	ticker := time.NewTicker(spinnerTickInterval)
+
 	defer ticker.Stop()
 
 	for {
@@ -163,7 +172,7 @@ func (pg *ProgressGroup) runSpinner(taskNames []string) {
 			return
 		case <-ticker.C:
 			pg.mu.Lock()
-			pg.spinnerIdx = (pg.spinnerIdx + 1) % len(spinnerFrames)
+			pg.spinnerIdx = (pg.spinnerIdx + 1) % len(frames)
 			pg.mu.Unlock()
 			pg.printProgress(taskNames)
 		}
@@ -175,7 +184,7 @@ func (pg *ProgressGroup) printProgress(taskNames []string) {
 	pg.mu.Lock()
 	defer pg.mu.Unlock()
 
-	var parts []string
+	parts := make([]string, 0, len(taskNames))
 
 	for _, name := range taskNames {
 		state := pg.taskStatus[name]
@@ -196,7 +205,8 @@ func (pg *ProgressGroup) formatTaskStatus(name string, state taskState) string {
 	case taskPending:
 		return fcolor.New(fcolor.FgHiBlack).Sprintf("[%s ○]", name)
 	case taskRunning:
-		spinner := spinnerFrames[pg.spinnerIdx]
+		frames := getSpinnerFrames()
+		spinner := frames[pg.spinnerIdx]
 
 		return fcolor.New(fcolor.FgCyan).Sprintf("[%s %s]", name, spinner)
 	case taskComplete:

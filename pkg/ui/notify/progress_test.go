@@ -11,13 +11,20 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/ui/notify"
 )
 
+// Static errors for testing.
+var (
+	errTestInstallationFailed = errors.New("installation failed")
+	errTestTaskFailed         = errors.New("failed")
+)
+
 func TestProgressGroup_EmptyTasks(t *testing.T) {
 	t.Parallel()
 
 	var buf bytes.Buffer
-	pg := notify.NewProgressGroup("Installing", "📦", &buf, nil)
 
-	err := pg.Run(context.Background())
+	progressGroup := notify.NewProgressGroup("Installing", "📦", &buf, nil)
+
+	err := progressGroup.Run(context.Background())
 	if err != nil {
 		t.Errorf("expected no error, got: %v", err)
 	}
@@ -31,7 +38,8 @@ func TestProgressGroup_SingleTaskSuccess(t *testing.T) {
 	t.Parallel()
 
 	var buf bytes.Buffer
-	pg := notify.NewProgressGroup("Installing", "📦", &buf, nil)
+
+	progressGroup := notify.NewProgressGroup("Installing", "📦", &buf, nil)
 
 	tasks := []notify.ProgressTask{
 		{
@@ -42,7 +50,7 @@ func TestProgressGroup_SingleTaskSuccess(t *testing.T) {
 		},
 	}
 
-	err := pg.Run(context.Background(), tasks...)
+	err := progressGroup.Run(context.Background(), tasks...)
 	if err != nil {
 		t.Errorf("expected no error, got: %v", err)
 	}
@@ -61,19 +69,19 @@ func TestProgressGroup_SingleTaskFailure(t *testing.T) {
 	t.Parallel()
 
 	var buf bytes.Buffer
-	pg := notify.NewProgressGroup("Installing", "📦", &buf, nil)
 
-	expectedErr := errors.New("installation failed")
+	progressGroup := notify.NewProgressGroup("Installing", "📦", &buf, nil)
+
 	tasks := []notify.ProgressTask{
 		{
 			Name: "failing-component",
 			Fn: func(_ context.Context) error {
-				return expectedErr
+				return errTestInstallationFailed
 			},
 		},
 	}
 
-	err := pg.Run(context.Background(), tasks...)
+	err := progressGroup.Run(context.Background(), tasks...)
 	if err == nil {
 		t.Error("expected error, got nil")
 	}
@@ -92,13 +100,15 @@ func TestProgressGroup_MultipleTasksSuccess(t *testing.T) {
 	t.Parallel()
 
 	var buf bytes.Buffer
-	pg := notify.NewProgressGroup("Installing", "📦", &buf, nil)
+
+	progressGroup := notify.NewProgressGroup("Installing", "📦", &buf, nil)
 
 	tasks := []notify.ProgressTask{
 		{
 			Name: "component-a",
 			Fn: func(_ context.Context) error {
 				time.Sleep(10 * time.Millisecond)
+
 				return nil
 			},
 		},
@@ -106,12 +116,13 @@ func TestProgressGroup_MultipleTasksSuccess(t *testing.T) {
 			Name: "component-b",
 			Fn: func(_ context.Context) error {
 				time.Sleep(10 * time.Millisecond)
+
 				return nil
 			},
 		},
 	}
 
-	err := pg.Run(context.Background(), tasks...)
+	err := progressGroup.Run(context.Background(), tasks...)
 	if err != nil {
 		t.Errorf("expected no error, got: %v", err)
 	}
@@ -134,7 +145,8 @@ func TestProgressGroup_PartialFailure(t *testing.T) {
 	t.Parallel()
 
 	var buf bytes.Buffer
-	pg := notify.NewProgressGroup("Installing", "📦", &buf, nil)
+
+	progressGroup := notify.NewProgressGroup("Installing", "📦", &buf, nil)
 
 	tasks := []notify.ProgressTask{
 		{
@@ -146,12 +158,12 @@ func TestProgressGroup_PartialFailure(t *testing.T) {
 		{
 			Name: "bad-component",
 			Fn: func(_ context.Context) error {
-				return errors.New("failed")
+				return errTestTaskFailed
 			},
 		},
 	}
 
-	err := pg.Run(context.Background(), tasks...)
+	err := progressGroup.Run(context.Background(), tasks...)
 	if err == nil {
 		t.Error("expected error, got nil")
 	}
@@ -165,7 +177,8 @@ func TestProgressGroup_ContextCancellation(t *testing.T) {
 	t.Parallel()
 
 	var buf bytes.Buffer
-	pg := notify.NewProgressGroup("Installing", "📦", &buf, nil)
+
+	progressGroup := notify.NewProgressGroup("Installing", "📦", &buf, nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -189,7 +202,7 @@ func TestProgressGroup_ContextCancellation(t *testing.T) {
 		cancel()
 	}()
 
-	err := pg.Run(ctx, tasks...)
+	err := progressGroup.Run(ctx, tasks...)
 	if err == nil {
 		t.Error("expected error due to cancellation, got nil")
 	}
@@ -203,10 +216,10 @@ func TestProgressGroup_DefaultWriter(t *testing.T) {
 	t.Parallel()
 
 	// Test that nil writer defaults to os.Stdout (just ensure no panic)
-	pg := notify.NewProgressGroup("Installing", "", nil, nil)
+	progressGroup := notify.NewProgressGroup("Installing", "", nil, nil)
 
 	// Run with empty tasks to verify no panic
-	err := pg.Run(context.Background())
+	err := progressGroup.Run(context.Background())
 	if err != nil {
 		t.Errorf("expected no error, got: %v", err)
 	}

@@ -490,7 +490,9 @@ func installPostCNIComponentsParallel(
 	// Run with live progress display
 	pg := notify.NewProgressGroup("Installing", "📦", cmd.OutOrStdout(), tmr)
 
-	if executeErr := pg.Run(ctx, tasks...); executeErr != nil {
+	executeErr := pg.Run(ctx, tasks...)
+	if executeErr != nil {
+		//nolint:wrapcheck // Error already wrapped with context inside ProgressGroup.Run
 		return executeErr
 	}
 
