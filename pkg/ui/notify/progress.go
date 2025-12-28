@@ -23,31 +23,35 @@ type ProgressTask struct {
 
 // ProgressGroup manages parallel execution of tasks with synchronized progress output.
 // It shows a title line followed by a line per task with live spinner updates.
+// Tasks are ordered by start time, with pending tasks shown at the bottom.
 //
 // Example output during execution:
 //
 //	📦 Install components...
-//	► installing metrics-server ⠦
-//	► installing flux ⠦
+//	⠦ installing metrics-server
+//	⠦ installing flux
+//	○ pending argocd
 //
 // After completion:
 //
 //	📦 Install components...
 //	✔ metrics-server installed
 //	✔ flux installed
+//	✔ argocd installed
 type ProgressGroup struct {
 	title  string
 	emoji  string
 	writer io.Writer
 	timer  timer.Timer
 
-	mu          sync.Mutex
-	taskStatus  map[string]taskState
-	taskOrder   []string // Preserves task order for display
-	spinnerIdx  int
-	stopSpinner chan struct{}
-	spinnerDone chan struct{}
-	linesDrawn  int // Number of lines currently drawn (for cursor movement)
+	mu             sync.Mutex
+	taskStatus     map[string]taskState
+	taskOrder      []string // Original task order
+	taskStartOrder []string // Order tasks started running (for display)
+	spinnerIdx     int
+	stopSpinner    chan struct{}
+	spinnerDone    chan struct{}
+	linesDrawn     int // Number of lines currently drawn (for cursor movement)
 }
 
 // taskState represents the current state of a task.
@@ -86,14 +90,15 @@ func NewProgressGroup(title, emoji string, writer io.Writer, tmr timer.Timer) *P
 	}
 
 	return &ProgressGroup{
-		title:       title,
-		emoji:       emoji,
-		writer:      writer,
-		timer:       tmr,
-		taskStatus:  make(map[string]taskState),
-		taskOrder:   make([]string, 0),
-		stopSpinner: make(chan struct{}),
-		spinnerDone: make(chan struct{}),
+		title:          title,
+		emoji:          emoji,
+		writer:         writer,
+		timer:          tmr,
+		taskStatus:     make(map[string]taskState),
+		taskOrder:      make([]string, 0),
+		taskStartOrder: make([]string, 0),
+		stopSpinner:    make(chan struct{}),
+		spinnerDone:    make(chan struct{}),
 	}
 }
 
@@ -168,10 +173,15 @@ func (pg *ProgressGroup) Run(ctx context.Context, tasks ...ProgressTask) error {
 	return nil
 }
 
-// setTaskState safely updates a task's state.
+// setTaskState safely updates a task's state and tracks start order.
 func (pg *ProgressGroup) setTaskState(name string, state taskState) {
 	pg.mu.Lock()
 	defer pg.mu.Unlock()
+
+	// Track when tasks start running (for display order)
+	if state == taskRunning && pg.taskStatus[name] == taskPending {
+		pg.taskStartOrder = append(pg.taskStartOrder, name)
+	}
 
 	pg.taskStatus[name] = state
 }
@@ -213,6 +223,7 @@ func (pg *ProgressGroup) printAllLines() {
 }
 
 // redrawAllLines moves cursor up and redraws all task lines.
+// Tasks are ordered: started tasks first (in start order), then pending tasks.
 func (pg *ProgressGroup) redrawAllLines() {
 	pg.mu.Lock()
 	defer pg.mu.Unlock()
@@ -224,8 +235,11 @@ func (pg *ProgressGroup) redrawAllLines() {
 	// Move cursor up N lines
 	_, _ = fmt.Fprintf(pg.writer, "\033[%dA", pg.linesDrawn)
 
+	// Build display order: started tasks first, then pending
+	displayOrder := pg.getDisplayOrder()
+
 	// Redraw each line
-	for _, name := range pg.taskOrder {
+	for _, name := range displayOrder {
 		state := pg.taskStatus[name]
 		line := pg.formatTaskLine(name, state)
 		// Clear line and print new content
@@ -234,17 +248,40 @@ func (pg *ProgressGroup) redrawAllLines() {
 	}
 }
 
+// getDisplayOrder returns tasks ordered by start time, with pending tasks at the end.
+// Must be called with mutex held.
+func (pg *ProgressGroup) getDisplayOrder() []string {
+	// Create a set of started tasks for quick lookup
+	startedSet := make(map[string]bool, len(pg.taskStartOrder))
+	for _, name := range pg.taskStartOrder {
+		startedSet[name] = true
+	}
+
+	// Build result: started tasks first (in start order), then pending
+	result := make([]string, 0, len(pg.taskOrder))
+	result = append(result, pg.taskStartOrder...)
+
+	// Add pending tasks (maintain original order among pending)
+	for _, name := range pg.taskOrder {
+		if !startedSet[name] {
+			result = append(result, name)
+		}
+	}
+
+	return result
+}
+
 // formatTaskLine formats a task's status line for display.
 func (pg *ProgressGroup) formatTaskLine(name string, state taskState) string {
 	frames := getSpinnerFrames()
 
 	switch state {
 	case taskPending:
-		return fcolor.New(fcolor.FgHiBlack).Sprintf("► installing %s ○", name)
+		return fcolor.New(fcolor.FgHiBlack).Sprintf("○ pending %s", name)
 	case taskRunning:
 		spinner := frames[pg.spinnerIdx]
 
-		return fcolor.New(fcolor.FgCyan).Sprintf("► installing %s %s", name, spinner)
+		return fcolor.New(fcolor.FgCyan).Sprintf("%s installing %s", spinner, name)
 	case taskComplete:
 		return fcolor.New(fcolor.FgGreen).Sprintf("✔ %s installed", name)
 	case taskFailed:
