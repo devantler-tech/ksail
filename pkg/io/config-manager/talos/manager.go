@@ -25,9 +25,9 @@ const (
 	// DefaultClusterName is the default cluster name for Talos clusters.
 	DefaultClusterName = "talos-default"
 	// DefaultTalosImage is the default Talos container image.
-	// NOTE: This MUST match the Talos SDK version (pkg/machinery v1.12.0) to ensure
+	// NOTE: This should match the Talos SDK version (siderolabs/talos v1.11.6) to ensure
 	// generated machine configs are compatible with the running container.
-	DefaultTalosImage = "ghcr.io/siderolabs/talos:v1.12.0"
+	DefaultTalosImage = "ghcr.io/siderolabs/talos:v1.11.6"
 )
 
 // ConfigManager implements configuration management for Talos cluster patches.
