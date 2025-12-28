@@ -132,8 +132,10 @@ Configure via `.sops.yaml` in your project (see [SOPS documentation](https://git
 GitOps workflows via [Flux](https://fluxcd.io/) or [ArgoCD](https://argo-cd.readthedocs.io/). Configure via `spec.cluster.gitOpsEngine` or `--gitops-engine`.
 
 - **`None`** (default) – No GitOps; use `ksail workload apply`
-- **`Flux`** – Install Flux CD
-- **`ArgoCD`** – Install ArgoCD
+- **`Flux`** – Install Flux CD and scaffold FluxInstance CR
+- **`ArgoCD`** – Install ArgoCD and scaffold Application CR
+
+When you enable a GitOps engine, KSail automatically scaffolds the corresponding CR into your source directory (`gitops/flux/flux-instance.yaml` or `gitops/argocd/application.yaml`). This CR configures the GitOps engine to watch your OCI registry for updates. You can customize settings like reconciliation interval directly in the scaffolded CR.
 
 ### Workflow
 

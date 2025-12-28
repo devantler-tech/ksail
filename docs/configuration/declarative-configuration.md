@@ -58,8 +58,6 @@ spec:
     gitOpsEngine: Flux
     localRegistryOptions:
       hostPort: 5111
-    flux:
-      interval: 1m
   workload:
     sourceDirectory: k8s
     validateOnPush: true
@@ -198,13 +196,13 @@ See [options](#options-options) for configuration details including `hostPort` (
 
 #### gitOpsEngine
 
-GitOps engine to install for continuous deployment workflows.
+GitOps engine to install for continuous deployment workflows. When set to `Flux` or `ArgoCD`, KSail scaffolds a GitOps CR (FluxInstance or ArgoCD Application) into your source directory at `gitops/flux/flux-instance.yaml` or `gitops/argocd/application.yaml`.
 
 **Valid values:**
 
 - `None` (default) – No GitOps engine
-- `Flux` – Install [Flux CD](https://fluxcd.io/)
-- `ArgoCD` – Install [Argo CD](https://argo-cd.readthedocs.io/)
+- `Flux` – Install [Flux CD](https://fluxcd.io/) and scaffold FluxInstance CR
+- `ArgoCD` – Install [Argo CD](https://argo-cd.readthedocs.io/) and scaffold Application CR
 
 #### options (Options)
 
@@ -213,7 +211,6 @@ Advanced configuration options for specific distributions, networking, and deplo
 **Common options:**
 
 - `spec.cluster.localRegistryOptions.hostPort` – Host port for local registry (default: `5111`)
-- `spec.cluster.flux.interval` – Flux reconciliation interval (default: `1m`)
 - `spec.cluster.talos.controlPlanes` – Number of control-plane nodes (default: `1`)
 - `spec.cluster.talos.workers` – Number of worker nodes (default: `0`)
 

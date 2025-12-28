@@ -1,10 +1,7 @@
 package configmanager
 
 import (
-	"time"
-
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // defaultDistributionConfigPath left empty so distribution-specific defaults are applied later (Kind vs K3d).
@@ -96,17 +93,6 @@ func DefaultRegistryPortFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	}
 }
 
-// DefaultFluxIntervalFieldSelector creates a selector for the Flux reconciliation interval.
-func DefaultFluxIntervalFieldSelector() FieldSelector[v1alpha1.Cluster] {
-	return FieldSelector[v1alpha1.Cluster]{
-		Selector: func(c *v1alpha1.Cluster) any {
-			return &c.Spec.Cluster.Flux.Interval
-		},
-		Description:  "Flux reconciliation interval (e.g. 1m, 30s)",
-		DefaultValue: metav1.Duration{Duration: time.Minute},
-	}
-}
-
 // DefaultMetricsServerFieldSelector creates a standard field selector for Metrics Server.
 func DefaultMetricsServerFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	return FieldSelector[v1alpha1.Cluster]{
@@ -153,7 +139,6 @@ func DefaultClusterFieldSelectors() []FieldSelector[v1alpha1.Cluster] {
 		DefaultGitOpsEngineFieldSelector(),
 		DefaultLocalRegistryFieldSelector(),
 		DefaultRegistryPortFieldSelector(),
-		DefaultFluxIntervalFieldSelector(),
 	}
 }
 

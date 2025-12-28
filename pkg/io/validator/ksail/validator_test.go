@@ -375,7 +375,6 @@ func fluxRegistryValidationCases() []fluxRegistryValidationCase {
 		{name: "registry_port_required_when_enabled", run: validateRegistryPortRequiredCase},
 		{name: "registry_port_range", run: validateRegistryPortRangeCase},
 		{name: "registry_port_warning_when_disabled", run: validateRegistryPortWarningCase},
-		{name: "flux_interval_must_be_positive", run: validateFluxIntervalCase},
 	}
 }
 
@@ -428,19 +427,6 @@ func validateRegistryPortWarningCase(t *testing.T) {
 	result := validator.Validate(config)
 	assert.True(t, result.Valid)
 	assert.Empty(t, result.Warnings)
-}
-
-func validateFluxIntervalCase(t *testing.T) {
-	t.Helper()
-
-	validator := ksailvalidator.NewValidator()
-	config := createValidKSailConfig(v1alpha1.DistributionKind)
-	config.Spec.Cluster.GitOpsEngine = v1alpha1.GitOpsEngineFlux
-	config.Spec.Cluster.Flux.Interval = metav1.Duration{}
-
-	result := validator.Validate(config)
-	assert.False(t, result.Valid)
-	validateExpectedErrors(t, []string{"spec.options.flux.interval"}, result.Errors)
 }
 
 func testKindValidContext(t *testing.T) {
