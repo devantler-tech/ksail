@@ -52,8 +52,6 @@ const (
 	fluxResourcesSuccess        = "flux installed"
 	argoCDResourcesActivity     = "configuring argocd resources"
 	argoCDResourcesSuccess      = "argocd installed"
-	// parallelInstallMaxConcurrency is the maximum concurrency for parallel installations.
-	parallelInstallMaxConcurrency = 2
 )
 
 // ErrUnsupportedCNI is returned when an unsupported CNI type is encountered.
@@ -315,115 +313,406 @@ func connectMirrorRegistriesWithWarning(
 	}
 }
 
-// handlePostCreationSetup installs CNI, CSI, cert-manager, and GitOps engines after cluster creation.
+// handlePostCreationSetup installs CNI, CSI, cert-manager, metrics-server, and GitOps engines after cluster creation.
 // Order depends on CNI configuration to resolve dependencies.
-// CSI and cert-manager are installed in parallel after CNI for improved performance.
+// After CNI is installed, all remaining components are installed in parallel for maximum performance.
 func handlePostCreationSetup(
 	cmd *cobra.Command,
 	clusterCfg *v1alpha1.Cluster,
 	tmr timer.Timer,
 	firstActivityShown *bool,
 ) error {
-	var err error
-
-	// For custom CNI (Cilium or Calico), install CNI first as metrics-server needs networking
-	// For default CNI, install metrics-server first as it's independent
+	// For custom CNI (Cilium or Calico), install CNI first as all other components need networking
 	switch clusterCfg.Spec.Cluster.CNI {
 	case v1alpha1.CNICilium:
-		err = installCustomCNIAndMetrics(cmd, clusterCfg, tmr, installCiliumCNI, firstActivityShown)
+		err := installCNIOnly(cmd, clusterCfg, tmr, installCiliumCNI, firstActivityShown)
+		if err != nil {
+			return err
+		}
 	case v1alpha1.CNICalico:
-		err = installCustomCNIAndMetrics(cmd, clusterCfg, tmr, installCalicoCNI, firstActivityShown)
+		err := installCNIOnly(cmd, clusterCfg, tmr, installCalicoCNI, firstActivityShown)
+		if err != nil {
+			return err
+		}
 	case v1alpha1.CNIDefault, "":
-		err = handleMetricsServer(cmd, clusterCfg, tmr, firstActivityShown)
+		// No custom CNI to install
 	default:
 		return fmt.Errorf("%w: %s", ErrUnsupportedCNI, clusterCfg.Spec.Cluster.CNI)
 	}
 
-	if err != nil {
-		return err
-	}
-
-	// Install CSI and cert-manager in parallel - they are independent
-	err = installCSIAndCertManagerParallel(cmd, clusterCfg, tmr, firstActivityShown)
-	if err != nil {
-		return err
-	}
-
-	err = installArgoCDIfConfigured(cmd, clusterCfg, tmr, firstActivityShown)
-	if err != nil {
-		return err
-	}
-
-	return installFluxIfConfigured(cmd, clusterCfg, tmr, firstActivityShown)
+	// Install all remaining components in parallel
+	return installPostCNIComponentsParallel(cmd, clusterCfg, tmr, firstActivityShown)
 }
 
-// installCSIAndCertManagerParallel installs CSI and cert-manager concurrently.
-// Both components are independent and can be installed in parallel for better performance.
-func installCSIAndCertManagerParallel(
+// installCNIOnly installs a custom CNI without metrics-server.
+// Metrics-server will be installed in parallel with other components later.
+func installCNIOnly(
 	cmd *cobra.Command,
 	clusterCfg *v1alpha1.Cluster,
 	tmr timer.Timer,
+	installFunc func(*cobra.Command, *v1alpha1.Cluster, timer.Timer) error,
 	firstActivityShown *bool,
 ) error {
-	// Check if any of the components need to be installed
-	needsCSI := clusterCfg.Spec.Cluster.CSI == v1alpha1.CSILocalPathStorage
-	needsCertManager := clusterCfg.Spec.Cluster.CertManager == v1alpha1.CertManagerEnabled
-
-	// If neither is needed, return early
-	if !needsCSI && !needsCertManager {
-		return nil
-	}
-
-	// If only one component is needed, use sequential install
-	if !needsCSI {
-		return installCertManagerIfConfigured(cmd, clusterCfg, tmr, firstActivityShown)
-	}
-
-	if !needsCertManager {
-		return installCSIIfConfigured(cmd, clusterCfg, tmr, firstActivityShown)
-	}
-
-	// Both components need to be installed - run in parallel
 	if *firstActivityShown {
 		_, _ = fmt.Fprintln(cmd.OutOrStdout())
 	}
 
 	*firstActivityShown = true
 
-	// Use synchronized writer for thread-safe output
+	tmr.NewStage()
+
+	return installFunc(cmd, clusterCfg, tmr)
+}
+
+// installPostCNIComponentsParallel installs all post-CNI components in parallel.
+// This includes: metrics-server, CSI, cert-manager, and GitOps engine (ArgoCD or Flux).
+// All these components are independent and can be installed concurrently.
+//
+//nolint:funlen,cyclop // Orchestrates multiple parallel installations with proper error handling
+func installPostCNIComponentsParallel(
+	cmd *cobra.Command,
+	clusterCfg *v1alpha1.Cluster,
+	tmr timer.Timer,
+	firstActivityShown *bool,
+) error {
+	// Determine which components need to be installed
+	needsMetricsServer := needsMetricsServerInstall(clusterCfg)
+	needsCSI := clusterCfg.Spec.Cluster.CSI == v1alpha1.CSILocalPathStorage
+	needsCertManager := clusterCfg.Spec.Cluster.CertManager == v1alpha1.CertManagerEnabled
+	needsArgoCD := clusterCfg.Spec.Cluster.GitOpsEngine == v1alpha1.GitOpsEngineArgoCD
+	needsFlux := clusterCfg.Spec.Cluster.GitOpsEngine == v1alpha1.GitOpsEngineFlux
+
+	// Count how many installations we need
+	componentCount := 0
+
+	if needsMetricsServer {
+		componentCount++
+	}
+
+	if needsCSI {
+		componentCount++
+	}
+
+	if needsCertManager {
+		componentCount++
+	}
+
+	if needsArgoCD {
+		componentCount++
+	}
+
+	if needsFlux {
+		componentCount++
+	}
+
+	// If no components needed, return early
+	if componentCount == 0 {
+		return nil
+	}
+
+	// If only one component, use sequential install for simpler output
+	if componentCount == 1 {
+		return installSingleComponent(cmd, clusterCfg, tmr, firstActivityShown,
+			needsMetricsServer, needsCSI, needsCertManager, needsArgoCD, needsFlux)
+	}
+
+	// Multiple components - run in parallel
+	if *firstActivityShown {
+		_, _ = fmt.Fprintln(cmd.OutOrStdout())
+	}
+
+	*firstActivityShown = true
+
 	syncWriter := parallel.NewSyncWriter(cmd.OutOrStdout())
-	executor := parallel.NewExecutor(parallelInstallMaxConcurrency)
+	executor := parallel.NewExecutor(0) // Use default concurrency (2-8 based on CPU)
 
 	ctx := cmd.Context()
 	if ctx == nil {
 		ctx = context.Background()
 	}
 
-	// Reset timer for the parallel phase
 	tmr.NewStage()
 
-	tasks := []parallel.Task{
-		func(taskCtx context.Context) error {
+	// Build the task list
+	var tasks []parallel.Task
+
+	// Track if we need post-install GitOps configuration
+	var gitOpsKubeconfig string
+
+	var gitOpsKubeconfigErr error
+
+	if needsArgoCD || needsFlux {
+		_, gitOpsKubeconfig, gitOpsKubeconfigErr = createHelmClientForCluster(clusterCfg)
+		if gitOpsKubeconfigErr != nil {
+			return gitOpsKubeconfigErr
+		}
+	}
+
+	if needsMetricsServer {
+		tasks = append(tasks, func(taskCtx context.Context) error {
+			return installMetricsServerWithWriter(taskCtx, syncWriter, clusterCfg)
+		})
+	}
+
+	if needsCSI {
+		tasks = append(tasks, func(taskCtx context.Context) error {
 			return installCSIWithWriter(taskCtx, syncWriter, clusterCfg)
-		},
-		func(taskCtx context.Context) error {
+		})
+	}
+
+	if needsCertManager {
+		tasks = append(tasks, func(taskCtx context.Context) error {
 			return installCertManagerWithWriter(taskCtx, syncWriter, clusterCfg)
-		},
+		})
+	}
+
+	if needsArgoCD {
+		tasks = append(tasks, func(taskCtx context.Context) error {
+			return installArgoCDWithWriter(taskCtx, syncWriter, clusterCfg)
+		})
+	}
+
+	if needsFlux {
+		tasks = append(tasks, func(taskCtx context.Context) error {
+			return installFluxWithWriter(taskCtx, syncWriter, clusterCfg)
+		})
 	}
 
 	executeErr := executor.Execute(ctx, tasks...)
 	if executeErr != nil {
-		return fmt.Errorf("parallel installation failed: %w", executeErr)
+		return fmt.Errorf("parallel component installation failed: %w", executeErr)
+	}
+
+	// Post-install GitOps configuration (must run after installation completes)
+	if needsArgoCD {
+		notify.WriteMessage(notify.Message{
+			Type:    notify.ActivityType,
+			Content: argoCDResourcesActivity,
+			Writer:  cmd.OutOrStdout(),
+		})
+
+		ensureArgoCDResourcesMu.RLock()
+
+		ensureFn := ensureArgoCDResourcesFunc
+
+		ensureArgoCDResourcesMu.RUnlock()
+
+		err := ensureFn(ctx, gitOpsKubeconfig, clusterCfg)
+		if err != nil {
+			return fmt.Errorf("failed to configure Argo CD resources: %w", err)
+		}
+
+		// Print access guidance for ArgoCD UI
+		notify.WriteMessage(notify.Message{
+			Type:    notify.InfoType,
+			Content: "Access ArgoCD UI at https://localhost:8080 via: kubectl port-forward svc/argocd-server -n argocd 8080:443",
+			Writer:  cmd.OutOrStdout(),
+		})
+	}
+
+	if needsFlux {
+		notify.WriteMessage(notify.Message{
+			Type:    notify.ActivityType,
+			Content: fluxResourcesActivity,
+			Writer:  cmd.OutOrStdout(),
+		})
+
+		err := ensureFluxResourcesFunc(ctx, gitOpsKubeconfig, clusterCfg)
+		if err != nil {
+			return fmt.Errorf("failed to configure Flux resources: %w", err)
+		}
 	}
 
 	outputTimer := cmdhelpers.MaybeTimer(cmd, tmr)
 
 	notify.WriteMessage(notify.Message{
-		Type:    notify.SuccessType,
-		Content: "csi and cert-manager installed",
-		Timer:   outputTimer,
-		Writer:  cmd.OutOrStdout(),
+		Type: notify.SuccessType,
+		Content: buildSuccessMessage(
+			needsMetricsServer,
+			needsCSI,
+			needsCertManager,
+			needsArgoCD,
+			needsFlux,
+		),
+		Timer:  outputTimer,
+		Writer: cmd.OutOrStdout(),
 	})
+
+	return nil
+}
+
+// needsMetricsServerInstall determines if metrics-server needs to be installed.
+func needsMetricsServerInstall(clusterCfg *v1alpha1.Cluster) bool {
+	if clusterCfg.Spec.Cluster.MetricsServer != v1alpha1.MetricsServerEnabled {
+		return false
+	}
+
+	// Don't install if distribution provides it by default
+	return !clusterCfg.Spec.Cluster.Distribution.ProvidesMetricsServerByDefault()
+}
+
+// installSingleComponent installs a single component using sequential install.
+func installSingleComponent(
+	cmd *cobra.Command,
+	clusterCfg *v1alpha1.Cluster,
+	tmr timer.Timer,
+	firstActivityShown *bool,
+	needsMetricsServer, needsCSI, needsCertManager, needsArgoCD, needsFlux bool,
+) error {
+	if needsMetricsServer {
+		return handleMetricsServer(cmd, clusterCfg, tmr, firstActivityShown)
+	}
+
+	if needsCSI {
+		return installCSIIfConfigured(cmd, clusterCfg, tmr, firstActivityShown)
+	}
+
+	if needsCertManager {
+		return installCertManagerIfConfigured(cmd, clusterCfg, tmr, firstActivityShown)
+	}
+
+	if needsArgoCD {
+		return installArgoCDIfConfigured(cmd, clusterCfg, tmr, firstActivityShown)
+	}
+
+	if needsFlux {
+		return installFluxIfConfigured(cmd, clusterCfg, tmr, firstActivityShown)
+	}
+
+	return nil
+}
+
+// buildSuccessMessage builds a success message listing installed components.
+func buildSuccessMessage(
+	needsMetricsServer, needsCSI, needsCertManager, needsArgoCD, needsFlux bool,
+) string {
+	var components []string
+
+	if needsMetricsServer {
+		components = append(components, "metrics-server")
+	}
+
+	if needsCSI {
+		components = append(components, "csi")
+	}
+
+	if needsCertManager {
+		components = append(components, "cert-manager")
+	}
+
+	if needsArgoCD {
+		components = append(components, "argocd")
+	}
+
+	if needsFlux {
+		components = append(components, "flux")
+	}
+
+	return strings.Join(components, ", ") + " installed"
+}
+
+// installMetricsServerWithWriter installs metrics-server using the provided writer for output.
+func installMetricsServerWithWriter(
+	ctx context.Context,
+	writer io.Writer,
+	clusterCfg *v1alpha1.Cluster,
+) error {
+	notify.WriteMessage(notify.Message{
+		Type:    notify.TitleType,
+		Content: "Install Metrics Server...",
+		Emoji:   "📊",
+		Writer:  writer,
+	})
+
+	helmClient, kubeconfig, err := createHelmClientForCluster(clusterCfg)
+	if err != nil {
+		return fmt.Errorf("failed to create helm client: %w", err)
+	}
+
+	timeout := installer.GetInstallTimeout(clusterCfg)
+	msInstaller := metricsserverinstaller.NewMetricsServerInstaller(
+		helmClient,
+		kubeconfig,
+		clusterCfg.Spec.Cluster.Connection.Context,
+		timeout,
+	)
+
+	notify.WriteMessage(notify.Message{
+		Type:    notify.ActivityType,
+		Content: "installing metrics-server",
+		Writer:  writer,
+	})
+
+	installErr := msInstaller.Install(ctx)
+	if installErr != nil {
+		return fmt.Errorf("metrics-server installation failed: %w", installErr)
+	}
+
+	return nil
+}
+
+// installArgoCDWithWriter installs ArgoCD using the provided writer for output.
+func installArgoCDWithWriter(
+	ctx context.Context,
+	writer io.Writer,
+	clusterCfg *v1alpha1.Cluster,
+) error {
+	notify.WriteMessage(notify.Message{
+		Type:    notify.TitleType,
+		Content: argoCDStageTitle,
+		Emoji:   argoCDStageEmoji,
+		Writer:  writer,
+	})
+
+	argoInstaller, err := newArgoCDInstallerForCluster(clusterCfg)
+	if err != nil {
+		return fmt.Errorf("failed to create argocd installer: %w", err)
+	}
+
+	notify.WriteMessage(notify.Message{
+		Type:    notify.ActivityType,
+		Content: argoCDStageActivity,
+		Writer:  writer,
+	})
+
+	installErr := argoInstaller.Install(ctx)
+	if installErr != nil {
+		return fmt.Errorf("failed to install argocd: %w", installErr)
+	}
+
+	return nil
+}
+
+// installFluxWithWriter installs Flux using the provided writer for output.
+func installFluxWithWriter(
+	ctx context.Context,
+	writer io.Writer,
+	clusterCfg *v1alpha1.Cluster,
+) error {
+	notify.WriteMessage(notify.Message{
+		Type:    notify.TitleType,
+		Content: fluxStageTitle,
+		Emoji:   fluxStageEmoji,
+		Writer:  writer,
+	})
+
+	helmClient, _, err := createHelmClientForCluster(clusterCfg)
+	if err != nil {
+		return fmt.Errorf("failed to create helm client: %w", err)
+	}
+
+	fluxInstaller := newFluxInstallerForCluster(clusterCfg, helmClient)
+
+	notify.WriteMessage(notify.Message{
+		Type:    notify.ActivityType,
+		Content: fluxStageActivity,
+		Writer:  writer,
+	})
+
+	installErr := fluxInstaller.Install(ctx)
+	if installErr != nil {
+		return fmt.Errorf("failed to install flux controllers: %w", installErr)
+	}
 
 	return nil
 }
@@ -495,31 +784,6 @@ func installCertManagerWithWriter(
 	}
 
 	return nil
-}
-
-// installCustomCNIAndMetrics installs a custom CNI and then metrics-server.
-func installCustomCNIAndMetrics(
-	cmd *cobra.Command,
-	clusterCfg *v1alpha1.Cluster,
-	tmr timer.Timer,
-	installFunc func(*cobra.Command, *v1alpha1.Cluster, timer.Timer) error,
-	firstActivityShown *bool,
-) error {
-	if *firstActivityShown {
-		_, _ = fmt.Fprintln(cmd.OutOrStdout())
-	}
-
-	*firstActivityShown = true
-
-	tmr.NewStage()
-
-	err := installFunc(cmd, clusterCfg, tmr)
-	if err != nil {
-		return err
-	}
-
-	// Install metrics-server after CNI is ready
-	return handleMetricsServer(cmd, clusterCfg, tmr, firstActivityShown)
 }
 
 // setupK3dMetricsServer configures metrics-server for K3d clusters by adding K3s flags.
