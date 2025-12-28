@@ -24,7 +24,7 @@ Configuration can come from multiple sources, allowing you to:
 KSail accepts configuration from four sources:
 
 | Source                                         | Description                       | Use Case                           |
-| ---------------------------------------------- | --------------------------------- | ---------------------------------- |
+|------------------------------------------------|-----------------------------------|------------------------------------|
 | **[ksail.yaml](declarative-configuration.md)** | Declarative YAML file             | Project defaults, version control  |
 | **[CLI Flags](cli-flags/root.md)**             | Command-line arguments            | Temporary overrides, CI/CD         |
 | **Environment Variables**                      | `KSAIL_`-prefixed variables       | Machine-specific settings, secrets |
@@ -101,7 +101,7 @@ ksail cluster create
 Environment variables use the `KSAIL_` prefix and follow the configuration path in uppercase with underscores:
 
 | Setting                     | Environment Variable              |
-| --------------------------- | --------------------------------- |
+|-----------------------------|-----------------------------------|
 | `spec.cluster.distribution` | `KSAIL_SPEC_CLUSTER_DISTRIBUTION` |
 | `spec.cluster.cni`          | `KSAIL_SPEC_CLUSTER_CNI`          |
 | `spec.cluster.gitOpsEngine` | `KSAIL_SPEC_CLUSTER_GITOPSENGINE` |
