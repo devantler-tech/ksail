@@ -34,7 +34,6 @@ Flags:
   -d, --distribution Distribution      Kubernetes distribution to use (default Kind)
       --distribution-config string     Configuration file for the distribution
       --editor string                  editor command to use for k9s edit actions (e.g., 'code --wait', 'vim', 'nano')
-      --flux-interval duration         Flux reconciliation interval (e.g. 1m, 30s) (default 1m0s)
   -g, --gitops-engine GitOpsEngine     GitOps engine to use (None disables GitOps, Flux installs Flux controllers, ArgoCD installs Argo CD) (default None)
   -h, --help                           help for connect
   -k, --kubeconfig string              Path to kubeconfig file (default "~/.kube/config")
