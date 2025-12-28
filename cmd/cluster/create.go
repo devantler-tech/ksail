@@ -409,13 +409,7 @@ func installPostCNIComponentsParallel(
 		return nil
 	}
 
-	// If only one component, use sequential install for simpler output
-	if componentCount == 1 {
-		return installSingleComponent(cmd, clusterCfg, tmr, firstActivityShown,
-			needsMetricsServer, needsCSI, needsCertManager, needsArgoCD, needsFlux)
-	}
-
-	// Multiple components - run in parallel with live progress
+	// Run component installation with live progress display
 	if *firstActivityShown {
 		_, _ = fmt.Fprintln(cmd.OutOrStdout())
 	}
@@ -493,7 +487,7 @@ func installPostCNIComponentsParallel(
 		"📦",
 		cmd.OutOrStdout(),
 		notify.WithLabels(notify.InstallingLabels()),
-		notify.WithTimer(tmr),
+		notify.WithTimer(cmdhelpers.MaybeTimer(cmd, tmr)),
 	)
 
 	executeErr := progressGroup.Run(ctx, tasks...)
@@ -553,37 +547,6 @@ func needsMetricsServerInstall(clusterCfg *v1alpha1.Cluster) bool {
 
 	// Don't install if distribution provides it by default
 	return !clusterCfg.Spec.Cluster.Distribution.ProvidesMetricsServerByDefault()
-}
-
-// installSingleComponent installs a single component using sequential install.
-func installSingleComponent(
-	cmd *cobra.Command,
-	clusterCfg *v1alpha1.Cluster,
-	tmr timer.Timer,
-	firstActivityShown *bool,
-	needsMetricsServer, needsCSI, needsCertManager, needsArgoCD, needsFlux bool,
-) error {
-	if needsMetricsServer {
-		return handleMetricsServer(cmd, clusterCfg, tmr, firstActivityShown)
-	}
-
-	if needsCSI {
-		return installCSIIfConfigured(cmd, clusterCfg, tmr, firstActivityShown)
-	}
-
-	if needsCertManager {
-		return installCertManagerIfConfigured(cmd, clusterCfg, tmr, firstActivityShown)
-	}
-
-	if needsArgoCD {
-		return installArgoCDIfConfigured(cmd, clusterCfg, tmr, firstActivityShown)
-	}
-
-	if needsFlux {
-		return installFluxIfConfigured(cmd, clusterCfg, tmr, firstActivityShown)
-	}
-
-	return nil
 }
 
 // installMetricsServerSilent installs metrics-server silently for parallel execution.
@@ -738,19 +701,6 @@ const (
 	connectStageActivity = "connecting registries"
 	connectStageSuccess  = "registries connected"
 	connectStageFailure  = "failed to connect registries"
-
-	certManagerStageTitle    = "Install Cert-Manager..."
-	certManagerStageEmoji    = "🔐"
-	certManagerStageActivity = "installing cert-manager"
-	certManagerStageSuccess  = "cert-manager installed"
-
-	fluxStageTitle    = "Install Flux..."
-	fluxStageEmoji    = "☸️"
-	fluxStageActivity = "installing controllers"
-
-	argoCDStageTitle    = "Install Argo CD..."
-	argoCDStageEmoji    = "🦑"
-	argoCDStageActivity = "installing argocd"
 )
 
 var (
@@ -1988,228 +1938,6 @@ func prepareTalosConfigWithMirrors(
 	return true
 }
 
-// handleMetricsServer manages metrics-server installation based on cluster configuration.
-// For K3d, metrics-server should be disabled via config (handled in setupK3dMetricsServer), not uninstalled.
-func handleMetricsServer(
-	cmd *cobra.Command,
-	clusterCfg *v1alpha1.Cluster,
-	tmr timer.Timer,
-	firstActivityShown *bool,
-) error {
-	// Check if distribution provides metrics-server by default
-	hasMetricsByDefault := clusterCfg.Spec.Cluster.Distribution.ProvidesMetricsServerByDefault()
-
-	// Enabled: Install if not present by default
-	if clusterCfg.Spec.Cluster.MetricsServer == v1alpha1.MetricsServerEnabled {
-		if hasMetricsByDefault {
-			// Already present, no action needed
-			return nil
-		}
-
-		if *firstActivityShown {
-			_, _ = fmt.Fprintln(cmd.OutOrStdout())
-		}
-
-		*firstActivityShown = true
-
-		tmr.NewStage()
-
-		return installMetricsServer(cmd, clusterCfg, tmr)
-	}
-
-	// Disabled: For K3d, this is handled via config before cluster creation (setupK3dMetricsServer)
-	// No post-creation action needed for K3d
-	if clusterCfg.Spec.Cluster.MetricsServer == v1alpha1.MetricsServerDisabled {
-		if clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionK3d {
-			// K3d metrics-server is disabled via config, no action needed here
-			return nil
-		}
-
-		if !hasMetricsByDefault {
-			// Not present, no action needed
-			return nil
-		}
-
-		// For other distributions that have it by default, we would uninstall here
-		// But currently only K3d has it by default, and that's handled via config
-	}
-
-	return nil
-}
-
-// installMetricsServer installs metrics-server on the cluster.
-func installMetricsServer(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster, tmr timer.Timer) error {
-	notify.WriteMessage(notify.Message{
-		Type:    notify.TitleType,
-		Content: "Install Metrics Server...",
-		Emoji:   "📊",
-		Writer:  cmd.OutOrStdout(),
-	})
-
-	helmClient, kubeconfig, err := createHelmClientForCluster(clusterCfg)
-	if err != nil {
-		return err
-	}
-
-	timeout := installer.GetInstallTimeout(clusterCfg)
-	msInstaller := metricsserverinstaller.NewMetricsServerInstaller(
-		helmClient,
-		kubeconfig,
-		clusterCfg.Spec.Cluster.Connection.Context,
-		timeout,
-	)
-
-	return runMetricsServerInstallation(cmd, msInstaller, tmr)
-}
-
-// runMetricsServerInstallation performs the metrics-server installation.
-func runMetricsServerInstallation(
-	cmd *cobra.Command,
-	installer *metricsserverinstaller.MetricsServerInstaller,
-	tmr timer.Timer,
-) error {
-	notify.WriteMessage(notify.Message{
-		Type:    notify.ActivityType,
-		Content: "installing metrics-server",
-		Writer:  cmd.OutOrStdout(),
-	})
-
-	installErr := installer.Install(cmd.Context())
-	if installErr != nil {
-		return fmt.Errorf("metrics-server installation failed: %w", installErr)
-	}
-
-	outputTimer := cmdhelpers.MaybeTimer(cmd, tmr)
-
-	notify.WriteMessage(notify.Message{
-		Type:    notify.SuccessType,
-		Content: "metrics server installed",
-		Timer:   outputTimer,
-		Writer:  cmd.OutOrStdout(),
-	})
-
-	return nil
-}
-
-func installCSIIfConfigured(
-	cmd *cobra.Command,
-	clusterCfg *v1alpha1.Cluster,
-	tmr timer.Timer,
-	firstActivityShown *bool,
-) error {
-	// Only install if CSI is set to LocalPathStorage
-	if clusterCfg.Spec.Cluster.CSI != v1alpha1.CSILocalPathStorage {
-		return nil
-	}
-
-	if *firstActivityShown {
-		_, _ = fmt.Fprintln(cmd.OutOrStdout())
-	}
-
-	*firstActivityShown = true
-
-	tmr.NewStage()
-
-	notify.WriteMessage(notify.Message{
-		Type:    notify.TitleType,
-		Content: "Install CSI...",
-		Emoji:   "💾",
-		Writer:  cmd.OutOrStdout(),
-	})
-
-	csiInstallerFactoryMu.RLock()
-
-	csiInstaller, err := csiInstallerFactory(clusterCfg)
-
-	csiInstallerFactoryMu.RUnlock()
-
-	if err != nil {
-		return fmt.Errorf("failed to create CSI installer: %w", err)
-	}
-
-	notify.WriteMessage(notify.Message{
-		Type:    notify.ActivityType,
-		Content: "installing local-path-storage",
-		Writer:  cmd.OutOrStdout(),
-	})
-
-	installErr := csiInstaller.Install(cmd.Context())
-	if installErr != nil {
-		return fmt.Errorf("local-path-storage installation failed: %w", installErr)
-	}
-
-	outputTimer := cmdhelpers.MaybeTimer(cmd, tmr)
-
-	notify.WriteMessage(notify.Message{
-		Type:    notify.SuccessType,
-		Content: "csi installed",
-		Timer:   outputTimer,
-		Writer:  cmd.OutOrStdout(),
-	})
-
-	return nil
-}
-
-func installCertManagerIfConfigured(
-	cmd *cobra.Command,
-	clusterCfg *v1alpha1.Cluster,
-	tmr timer.Timer,
-	firstActivityShown *bool,
-) error {
-	if clusterCfg.Spec.Cluster.CertManager != v1alpha1.CertManagerEnabled {
-		return nil
-	}
-
-	if *firstActivityShown {
-		_, _ = fmt.Fprintln(cmd.OutOrStdout())
-	}
-
-	*firstActivityShown = true
-
-	notify.WriteMessage(notify.Message{
-		Type:    notify.TitleType,
-		Content: certManagerStageTitle,
-		Emoji:   certManagerStageEmoji,
-		Writer:  cmd.OutOrStdout(),
-	})
-
-	if tmr != nil {
-		tmr.NewStage()
-	}
-
-	ctx := cmd.Context()
-	if ctx == nil {
-		ctx = context.Background()
-	}
-
-	installer, err := newCertManagerInstallerForCluster(clusterCfg)
-	if err != nil {
-		return fmt.Errorf("failed to create cert-manager installer: %w", err)
-	}
-
-	notify.WriteMessage(notify.Message{
-		Type:    notify.ActivityType,
-		Content: certManagerStageActivity,
-		Writer:  cmd.OutOrStdout(),
-	})
-
-	err = installer.Install(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to install cert-manager: %w", err)
-	}
-
-	outputTimer := cmdhelpers.MaybeTimer(cmd, tmr)
-
-	notify.WriteMessage(notify.Message{
-		Type:    notify.SuccessType,
-		Content: certManagerStageSuccess,
-		Timer:   outputTimer,
-		Writer:  cmd.OutOrStdout(),
-	})
-
-	return nil
-}
-
 // newCertManagerInstallerForCluster returns an installer tuned for the cluster context.
 //
 //nolint:ireturn // factory returns interface for dependency injection in tests
@@ -2227,68 +1955,6 @@ func newCertManagerInstallerForCluster(clusterCfg *v1alpha1.Cluster) (installer.
 	return factory(clusterCfg)
 }
 
-func installArgoCDIfConfigured(
-	cmd *cobra.Command,
-	clusterCfg *v1alpha1.Cluster,
-	tmr timer.Timer,
-	firstActivityShown *bool,
-) error {
-	if clusterCfg.Spec.Cluster.GitOpsEngine != v1alpha1.GitOpsEngineArgoCD {
-		return nil
-	}
-
-	// We need kubeconfig for readiness/resource configuration.
-	_, kubeconfig, err := createHelmClientForCluster(clusterCfg)
-	if err != nil {
-		return err
-	}
-
-	argoInstaller, err := newArgoCDInstallerForCluster(clusterCfg)
-	if err != nil {
-		return fmt.Errorf("failed to create argocd installer: %w", err)
-	}
-
-	err = runArgoCDInstallation(cmd, argoInstaller, tmr, firstActivityShown)
-	if err != nil {
-		return err
-	}
-
-	notify.WriteMessage(notify.Message{
-		Type:    notify.ActivityType,
-		Content: argoCDResourcesActivity,
-		Writer:  cmd.OutOrStdout(),
-	})
-
-	ensureArgoCDResourcesMu.RLock()
-
-	ensureFn := ensureArgoCDResourcesFunc
-
-	ensureArgoCDResourcesMu.RUnlock()
-
-	err = ensureFn(cmd.Context(), kubeconfig, clusterCfg)
-	if err != nil {
-		return fmt.Errorf("failed to configure Argo CD resources: %w", err)
-	}
-
-	outputTimer := cmdhelpers.MaybeTimer(cmd, tmr)
-
-	notify.WriteMessage(notify.Message{
-		Type:    notify.SuccessType,
-		Content: argoCDResourcesSuccess,
-		Timer:   outputTimer,
-		Writer:  cmd.OutOrStdout(),
-	})
-
-	// Print access guidance for ArgoCD UI
-	notify.WriteMessage(notify.Message{
-		Type:    notify.InfoType,
-		Content: "Access ArgoCD UI at https://localhost:8080 via: kubectl port-forward svc/argocd-server -n argocd 8080:443",
-		Writer:  cmd.OutOrStdout(),
-	})
-
-	return nil
-}
-
 // newArgoCDInstallerForCluster returns an installer tuned for the cluster context.
 //
 //nolint:ireturn // factory returns interface for dependency injection in tests
@@ -2304,46 +1970,6 @@ func newArgoCDInstallerForCluster(clusterCfg *v1alpha1.Cluster) (installer.Insta
 	}
 
 	return factory(clusterCfg)
-}
-
-func runArgoCDInstallation(
-	cmd *cobra.Command,
-	installer installer.Installer,
-	tmr timer.Timer,
-	firstActivityShown *bool,
-) error {
-	if *firstActivityShown {
-		_, _ = fmt.Fprintln(cmd.OutOrStdout())
-	}
-
-	*firstActivityShown = true
-
-	notify.WriteMessage(notify.Message{
-		Type:    notify.TitleType,
-		Content: argoCDStageTitle,
-		Emoji:   argoCDStageEmoji,
-		Writer:  cmd.OutOrStdout(),
-	})
-
-	tmr.NewStage()
-
-	ctx := cmd.Context()
-	if ctx == nil {
-		ctx = context.Background()
-	}
-
-	notify.WriteMessage(notify.Message{
-		Type:    notify.ActivityType,
-		Content: argoCDStageActivity,
-		Writer:  cmd.OutOrStdout(),
-	})
-
-	err := installer.Install(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to install argocd: %w", err)
-	}
-
-	return nil
 }
 
 func ensureArgoCDResources(
@@ -2394,51 +2020,6 @@ func ensureArgoCDResources(
 	return nil
 }
 
-func installFluxIfConfigured(
-	cmd *cobra.Command,
-	clusterCfg *v1alpha1.Cluster,
-	tmr timer.Timer,
-	firstActivityShown *bool,
-) error {
-	if clusterCfg.Spec.Cluster.GitOpsEngine != v1alpha1.GitOpsEngineFlux {
-		return nil
-	}
-
-	helmClient, kubeconfig, err := createHelmClientForCluster(clusterCfg)
-	if err != nil {
-		return err
-	}
-
-	fluxInstaller := newFluxInstallerForCluster(clusterCfg, helmClient)
-
-	err = runFluxInstallation(cmd, fluxInstaller, tmr, firstActivityShown)
-	if err != nil {
-		return err
-	}
-
-	notify.WriteMessage(notify.Message{
-		Type:    notify.ActivityType,
-		Content: fluxResourcesActivity,
-		Writer:  cmd.OutOrStdout(),
-	})
-
-	err = ensureFluxResourcesFunc(cmd.Context(), kubeconfig, clusterCfg)
-	if err != nil {
-		return fmt.Errorf("failed to configure Flux resources: %w", err)
-	}
-
-	outputTimer := cmdhelpers.MaybeTimer(cmd, tmr)
-
-	notify.WriteMessage(notify.Message{
-		Type:    notify.SuccessType,
-		Content: fluxResourcesSuccess,
-		Timer:   outputTimer,
-		Writer:  cmd.OutOrStdout(),
-	})
-
-	return nil
-}
-
 // newFluxInstallerForCluster returns an installer tuned for the cluster context.
 //
 //nolint:ireturn // factory returns interface for dependency injection in tests
@@ -2449,46 +2030,6 @@ func newFluxInstallerForCluster(
 	timeout := installer.GetInstallTimeout(clusterCfg)
 
 	return fluxInstallerFactory(helmClient, timeout)
-}
-
-func runFluxInstallation(
-	cmd *cobra.Command,
-	installer installer.Installer,
-	tmr timer.Timer,
-	firstActivityShown *bool,
-) error {
-	if *firstActivityShown {
-		_, _ = fmt.Fprintln(cmd.OutOrStdout())
-	}
-
-	*firstActivityShown = true
-
-	notify.WriteMessage(notify.Message{
-		Type:    notify.TitleType,
-		Content: fluxStageTitle,
-		Emoji:   fluxStageEmoji,
-		Writer:  cmd.OutOrStdout(),
-	})
-
-	tmr.NewStage()
-
-	ctx := cmd.Context()
-	if ctx == nil {
-		ctx = context.Background()
-	}
-
-	notify.WriteMessage(notify.Message{
-		Type:    notify.ActivityType,
-		Content: fluxStageActivity,
-		Writer:  cmd.OutOrStdout(),
-	})
-
-	err := installer.Install(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to install flux controllers: %w", err)
-	}
-
-	return nil
 }
 
 // getKindMirrorsDir returns the configured Kind mirrors directory or the default.

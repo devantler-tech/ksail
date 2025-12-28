@@ -329,7 +329,7 @@ spec:
 		t.Fatalf("expected CSI installer to be invoked")
 	}
 
-	require.Contains(t, buf.String(), "Install CSI...")
+	require.Contains(t, buf.String(), "csi installing")
 }
 
 //nolint:paralleltest // uses t.Chdir and mutates shared test hooks
@@ -354,7 +354,7 @@ func TestCreate_DefaultCSI_DoesNotInstall(t *testing.T) {
 		t.Fatalf("create command failed: %v\noutput:\n%s", err, buf.String())
 	}
 
-	require.NotContains(t, buf.String(), "Install CSI...")
+	require.NotContains(t, buf.String(), "csi installing")
 }
 
 // Ensure fake types satisfy interfaces at compile time.

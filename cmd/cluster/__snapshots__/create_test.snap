@@ -11,10 +11,10 @@
 🔌 Attach local registry...
 ► attaching local registry to cluster
 
-🦑 Install Argo CD...
-► installing argocd
-► configuring argocd resources
+📦 Installing components...
+► argocd installing
 ✔ argocd installed
+► configuring argocd resources
 ℹ Access ArgoCD UI at https://localhost:8080 via: kubectl port-forward svc/argocd-server -n argocd 8080:443
 
 ---
@@ -25,8 +25,8 @@
 ► creating cluster
 ✔ cluster created
 
-🔐 Install Cert-Manager...
-► installing cert-manager
+📦 Installing components...
+► cert-manager installing
 ✔ cert-manager installed
 
 ---
