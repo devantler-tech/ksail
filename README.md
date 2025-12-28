@@ -16,7 +16,7 @@ Setting up and operating Kubernetes clusters is a skill of its own, often requir
 ## Key Features
 
 - 📦 **One Binary** — Embeds cluster provisioning, GitOps engines, and deployment tooling. No tool sprawl.
-- 🚀 **Simple Clusters** — Spin up Kind, K3d, or Talos with one command. Same workflow across supported distributions and providers.
+- ☸️ **Simple Clusters** — Spin up Kind, K3d, or Talos with one command. Same workflow across supported distributions and providers.
 - 📄 **Everything as Code** — Cluster settings, distribution configs, and workloads all live in version-controlled files.
 - 🔄 **GitOps Native** — Opt into Flux or ArgoCD. KSail handles the bootstrap and gives you push and reconcile commands.
 - ⚙️ **Customizable Stack** — Select your CNI, CSI, enable cert-manager, add mirror registries to match your setup.
