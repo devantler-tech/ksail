@@ -58,11 +58,11 @@ type ClusterSpec struct {
 	Calico OptionsCalico `json:"calico,omitzero"`
 
 	// Tool-specific options
-	Flux               OptionsFlux          `json:"flux,omitzero"`
-	ArgoCD             OptionsArgoCD        `json:"argocd,omitzero"`
-	LocalRegistryOpts  OptionsLocalRegistry `json:"localRegistryOptions,omitzero"`
-	Helm               OptionsHelm          `json:"helm,omitzero"`
-	Kustomize          OptionsKustomize     `json:"kustomize,omitzero"`
+	Flux              OptionsFlux          `json:"flux,omitzero"`
+	ArgoCD            OptionsArgoCD        `json:"argocd,omitzero"`
+	LocalRegistryOpts OptionsLocalRegistry `json:"localRegistryOptions,omitzero"`
+	Helm              OptionsHelm          `json:"helm,omitzero"`
+	Kustomize         OptionsKustomize     `json:"kustomize,omitzero"`
 }
 
 // WorkloadSpec defines workload-related configuration.

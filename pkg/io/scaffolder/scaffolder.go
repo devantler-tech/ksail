@@ -78,7 +78,7 @@ type Scaffolder struct {
 	KSailYAMLGenerator     generator.Generator[v1alpha1.Cluster, yamlgenerator.Options]
 	KindGenerator          generator.Generator[*v1alpha4.Cluster, yamlgenerator.Options]
 	K3dGenerator           generator.Generator[*k3dv1alpha5.SimpleConfig, yamlgenerator.Options]
-	TalosGenerator *talosgenerator.TalosGenerator
+	TalosGenerator         *talosgenerator.TalosGenerator
 	KustomizationGenerator generator.Generator[*ktypes.Kustomization, yamlgenerator.Options]
 	Writer                 io.Writer
 	MirrorRegistries       []string // Format: "name=upstream" (e.g., "docker.io=https://registry-1.docker.io")
@@ -97,7 +97,7 @@ func NewScaffolder(cfg v1alpha1.Cluster, writer io.Writer, mirrorRegistries []st
 		KSailYAMLGenerator:     ksailGenerator,
 		KindGenerator:          kindGenerator,
 		K3dGenerator:           k3dGenerator,
-		TalosGenerator: talosGen,
+		TalosGenerator:         talosGen,
 		KustomizationGenerator: kustomizationGenerator,
 		Writer:                 writer,
 		MirrorRegistries:       mirrorRegistries,
@@ -190,9 +190,11 @@ func (s *Scaffolder) CreateK3dConfig() k3dv1alpha5.SimpleConfig {
 	// These values are used across all distributions for consistency
 	controlPlanes := int(s.KSailConfig.Spec.Cluster.Talos.ControlPlanes)
 	workers := int(s.KSailConfig.Spec.Cluster.Talos.Workers)
+
 	if controlPlanes > 0 {
 		config.Servers = controlPlanes
 	}
+
 	if workers > 0 {
 		config.Agents = workers
 	}
@@ -236,6 +238,18 @@ func (s *Scaffolder) CreateK3dConfig() k3dv1alpha5.SimpleConfig {
 	}
 
 	return config
+}
+
+// DefaultKindMirrorsDir is the default directory name for Kind containerd host mirror configuration.
+const DefaultKindMirrorsDir = "kind/mirrors"
+
+// GetKindMirrorsDir returns the configured mirrors directory or the default.
+func (s *Scaffolder) GetKindMirrorsDir() string {
+	if s.KSailConfig.Spec.Cluster.Kind.MirrorsDir != "" {
+		return s.KSailConfig.Spec.Cluster.Kind.MirrorsDir
+	}
+
+	return DefaultKindMirrorsDir
 }
 
 // Configuration defaults and helpers.
@@ -546,10 +560,12 @@ func (s *Scaffolder) applyKindNodeCounts(kindConfig *v1alpha4.Cluster) {
 	}
 
 	// Build nodes slice
-	var nodes []v1alpha4.Node
+	nodes := make([]v1alpha4.Node, 0, controlPlanes+workers)
+
 	for range controlPlanes {
 		nodes = append(nodes, v1alpha4.Node{Role: v1alpha4.ControlPlaneRole})
 	}
+
 	for range workers {
 		nodes = append(nodes, v1alpha4.Node{Role: v1alpha4.WorkerRole})
 	}
@@ -739,17 +755,6 @@ func (s *Scaffolder) generateKustomizationConfig(output string, force bool) erro
 			},
 		},
 	)
-}
-
-// DefaultKindMirrorsDir is the default directory name for Kind containerd host mirror configuration.
-const DefaultKindMirrorsDir = "kind/mirrors"
-
-// GetKindMirrorsDir returns the configured mirrors directory or the default.
-func (s *Scaffolder) GetKindMirrorsDir() string {
-	if s.KSailConfig.Spec.Cluster.Kind.MirrorsDir != "" {
-		return s.KSailConfig.Spec.Cluster.Kind.MirrorsDir
-	}
-	return DefaultKindMirrorsDir
 }
 
 // generateKindMirrorsConfig generates hosts.toml files for Kind registry mirrors.

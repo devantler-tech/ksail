@@ -121,10 +121,11 @@ func applyKindNodeCounts(kindConfig *v1alpha4.Cluster, opts v1alpha1.OptionsTalo
 	if targetCP <= 0 {
 		targetCP = 1 // default to 1 control-plane
 	}
+
 	targetWorkers := int(opts.Workers)
 
 	// Build new nodes slice based on target counts
-	var newNodes []v1alpha4.Node
+	newNodes := make([]v1alpha4.Node, 0, targetCP+targetWorkers)
 
 	// Add control-plane nodes
 	for range targetCP {
@@ -144,7 +145,7 @@ func (f DefaultFactory) createK3dProvisioner(
 ) (ClusterProvisioner, any, error) {
 	if f.DistributionConfig.K3d == nil {
 		return nil, nil, fmt.Errorf(
-			"K3d config is required for K3d distribution: %w",
+			"k3d config is required for K3d distribution: %w",
 			ErrMissingDistributionConfig,
 		)
 	}
@@ -188,7 +189,7 @@ func (f DefaultFactory) createTalosProvisioner(
 ) (ClusterProvisioner, any, error) {
 	if f.DistributionConfig.Talos == nil {
 		return nil, nil, fmt.Errorf(
-			"Talos config is required for Talos distribution: %w",
+			"talos config is required for Talos distribution: %w",
 			ErrMissingDistributionConfig,
 		)
 	}

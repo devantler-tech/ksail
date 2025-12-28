@@ -164,8 +164,8 @@ func handleCreateRunE(
 		// (e.g., mirror registries, metrics-server flags). This avoids double-loading from disk.
 		deps.Factory = clusterprovisioner.DefaultFactory{
 			DistributionConfig: &clusterprovisioner.DistributionConfig{
-				Kind:          kindConfig,
-				K3d:           k3dConfig,
+				Kind:  kindConfig,
+				K3d:   k3dConfig,
 				Talos: talosConfig,
 			},
 		}
@@ -894,7 +894,13 @@ func k3dRegistryActionFor(
 				writer := ctx.cmd.OutOrStdout()
 
 				// For K3d, we don't need to specify a CIDR as K3d manages its own network settings.
-				errNetwork := ensureDockerNetworkExists(execCtx, dockerClient, networkName, "", writer)
+				errNetwork := ensureDockerNetworkExists(
+					execCtx,
+					dockerClient,
+					networkName,
+					"",
+					writer,
+				)
 				if errNetwork != nil {
 					return fmt.Errorf("failed to create k3d network: %w", errNetwork)
 				}
@@ -1078,6 +1084,8 @@ func runTalosConnectAction(
 //
 // The network is created with Talos-compatible labels and CIDR so that the Talos SDK
 // will recognize and reuse it when creating the cluster.
+//
+//nolint:funlen // Network creation requires multiple configuration steps
 func ensureDockerNetworkExists(
 	ctx context.Context,
 	dockerClient client.APIClient,
@@ -1225,6 +1233,7 @@ func handleRegistryStage(
 	)
 }
 
+//nolint:funlen // Registry stage requires multiple validation and merge steps
 func runRegistryStageWithRole(
 	cmd *cobra.Command,
 	clusterCfg *v1alpha1.Cluster,
@@ -1255,12 +1264,15 @@ func runRegistryStageWithRole(
 		for _, host := range talosHosts {
 			// Only add if not already present in existingSpecs
 			found := false
+
 			for _, spec := range existingSpecs {
 				if spec.Host == host {
 					found = true
+
 					break
 				}
 			}
+
 			if !found {
 				existingSpecs = append(existingSpecs, registry.MirrorSpec{
 					Host:   host,
@@ -2175,5 +2187,6 @@ func getKindMirrorsDir(clusterCfg *v1alpha1.Cluster) string {
 	if clusterCfg != nil && clusterCfg.Spec.Cluster.Kind.MirrorsDir != "" {
 		return clusterCfg.Spec.Cluster.Kind.MirrorsDir
 	}
+
 	return scaffolder.DefaultKindMirrorsDir
 }
