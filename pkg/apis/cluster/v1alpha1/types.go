@@ -366,12 +366,6 @@ type OptionsKustomize struct {
 
 // Set for Distribution.
 func (d *Distribution) Set(value string) error {
-	// Handle backwards compatibility alias
-	if strings.EqualFold(value, "talosindocker") {
-		*d = DistributionTalos
-		return nil
-	}
-
 	// Check against constant values with case-insensitive comparison
 	for _, dist := range ValidDistributions() {
 		if strings.EqualFold(value, string(dist)) {

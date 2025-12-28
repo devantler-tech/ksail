@@ -23,9 +23,8 @@ func TestDistributionSet_CaseInsensitive(t *testing.T) {
 		input    string
 		expected v1alpha1.Distribution
 	}{
-		{"talosindocker", v1alpha1.DistributionTalos},
-		{"TALOSINDOCKER", v1alpha1.DistributionTalos},
 		{"Talos", v1alpha1.DistributionTalos},
+		{"talos", v1alpha1.DistributionTalos},
 	}
 
 	for _, testCase := range testCases {
