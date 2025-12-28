@@ -38,19 +38,16 @@ jobs:
               - '**/*.go'
               - 'go.mod'
               - 'go.sum'
-              - '.github/workflows/ci.yaml'
               - '.github/actions/**'
             schema:
               - 'pkg/apis/**/*.go'
               - 'go.mod'
               - '.github/scripts/generate-schema*'
-              - '.github/workflows/ci.yaml'
             cli:
               - 'cmd/**/*.go'
               - 'pkg/**/*.go'
               - 'go.mod'
               - '.github/scripts/generate-cli-flags-docs.sh'
-              - '.github/workflows/ci.yaml'
 
   build-artifact:
     name: 🏗️ Build KSail Binary
