@@ -17,38 +17,38 @@ const DefaultInterval = time.Minute
 // Instance represents a Flux Operator FluxInstance CR for scaffolding.
 // This is a simplified version for YAML generation, without runtime.Object methods.
 type Instance struct {
-	APIVersion string           `yaml:"apiVersion"`
-	Kind       string           `yaml:"kind"`
-	Metadata   InstanceMetadata `yaml:"metadata"`
-	Spec       InstanceSpec     `yaml:"spec"`
+	APIVersion string           `json:"apiVersion" yaml:"apiVersion"`
+	Kind       string           `json:"kind" yaml:"kind"`
+	Metadata   InstanceMetadata `json:"metadata" yaml:"metadata"`
+	Spec       InstanceSpec     `json:"spec" yaml:"spec"`
 }
 
 // InstanceMetadata contains the metadata for a FluxInstance.
 type InstanceMetadata struct {
-	Name      string            `yaml:"name"`
-	Namespace string            `yaml:"namespace"`
-	Labels    map[string]string `yaml:"labels,omitempty"`
+	Name      string            `json:"name" yaml:"name"`
+	Namespace string            `json:"namespace" yaml:"namespace"`
+	Labels    map[string]string `json:"labels,omitempty" yaml:"labels,omitempty"`
 }
 
 // InstanceSpec contains the distribution and sync configuration.
 type InstanceSpec struct {
-	Distribution Distribution `yaml:"distribution"`
-	Sync         *Sync        `yaml:"sync,omitempty"`
+	Distribution Distribution `json:"distribution" yaml:"distribution"`
+	Sync         *Sync        `json:"sync,omitempty" yaml:"sync,omitempty"`
 }
 
 // Distribution references the Flux manifests and controller images.
 type Distribution struct {
-	Version  string `yaml:"version"`
-	Registry string `yaml:"registry"`
+	Version  string `json:"version" yaml:"version"`
+	Registry string `json:"registry" yaml:"registry"`
 }
 
 // Sync configures the OCI source that Flux will track and apply.
 type Sync struct {
-	Kind     string           `yaml:"kind"`
-	URL      string           `yaml:"url"`
-	Ref      string           `yaml:"ref"`
-	Path     string           `yaml:"path"`
-	Interval *metav1.Duration `yaml:"interval,omitempty"`
+	Kind     string           `json:"kind" yaml:"kind"`
+	URL      string           `json:"url" yaml:"url"`
+	Ref      string           `json:"ref" yaml:"ref"`
+	Path     string           `json:"path" yaml:"path"`
+	Interval *metav1.Duration `json:"interval,omitempty" yaml:"interval,omitempty"`
 }
 
 // InstanceGeneratorOptions contains options for generating FluxInstance.

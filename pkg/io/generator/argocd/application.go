@@ -11,55 +11,55 @@ import (
 
 // Application represents an ArgoCD Application CR for scaffolding.
 type Application struct {
-	APIVersion string              `yaml:"apiVersion"`
-	Kind       string              `yaml:"kind"`
-	Metadata   ApplicationMetadata `yaml:"metadata"`
-	Spec       ApplicationSpec     `yaml:"spec"`
+	APIVersion string              `json:"apiVersion" yaml:"apiVersion"`
+	Kind       string              `json:"kind" yaml:"kind"`
+	Metadata   ApplicationMetadata `json:"metadata" yaml:"metadata"`
+	Spec       ApplicationSpec     `json:"spec" yaml:"spec"`
 }
 
 // ApplicationMetadata contains the metadata for an ArgoCD Application.
 type ApplicationMetadata struct {
-	Name      string            `yaml:"name"`
-	Namespace string            `yaml:"namespace"`
-	Labels    map[string]string `yaml:"labels,omitempty"`
+	Name      string            `json:"name" yaml:"name"`
+	Namespace string            `json:"namespace" yaml:"namespace"`
+	Labels    map[string]string `json:"labels,omitempty" yaml:"labels,omitempty"`
 }
 
 // ApplicationSpec contains the source and destination configuration.
 type ApplicationSpec struct {
-	Project     string                 `yaml:"project"`
-	Source      ApplicationSource      `yaml:"source"`
-	Destination ApplicationDestination `yaml:"destination"`
-	SyncPolicy  *SyncPolicy            `yaml:"syncPolicy,omitempty"`
+	Project     string                 `json:"project" yaml:"project"`
+	Source      ApplicationSource      `json:"source" yaml:"source"`
+	Destination ApplicationDestination `json:"destination" yaml:"destination"`
+	SyncPolicy  *SyncPolicy            `json:"syncPolicy,omitempty" yaml:"syncPolicy,omitempty"`
 }
 
 // ApplicationSource defines where ArgoCD should fetch manifests from.
 type ApplicationSource struct {
-	RepoURL        string         `yaml:"repoUrl"`
-	TargetRevision string         `yaml:"targetRevision"`
-	Path           string         `yaml:"path,omitempty"`
-	Directory      *DirectorySpec `yaml:"directory,omitempty"`
+	RepoURL        string         `json:"repoUrl" yaml:"repoUrl"`
+	TargetRevision string         `json:"targetRevision" yaml:"targetRevision"`
+	Path           string         `json:"path,omitempty" yaml:"path,omitempty"`
+	Directory      *DirectorySpec `json:"directory,omitempty" yaml:"directory,omitempty"`
 }
 
 // DirectorySpec configures directory-based source options.
 type DirectorySpec struct {
-	Recurse bool `yaml:"recurse"`
+	Recurse bool `json:"recurse" yaml:"recurse"`
 }
 
 // ApplicationDestination defines where ArgoCD should deploy resources.
 type ApplicationDestination struct {
-	Server    string `yaml:"server"`
-	Namespace string `yaml:"namespace"`
+	Server    string `json:"server" yaml:"server"`
+	Namespace string `json:"namespace" yaml:"namespace"`
 }
 
 // SyncPolicy defines automated sync behavior.
 type SyncPolicy struct {
-	Automated *AutomatedSync `yaml:"automated,omitempty"`
+	Automated *AutomatedSync `json:"automated,omitempty" yaml:"automated,omitempty"`
 }
 
 // AutomatedSync enables automatic syncing.
 type AutomatedSync struct {
-	Prune    bool `yaml:"prune"`
-	SelfHeal bool `yaml:"selfHeal"`
+	Prune    bool `json:"prune" yaml:"prune"`
+	SelfHeal bool `json:"selfHeal" yaml:"selfHeal"`
 }
 
 // ApplicationGeneratorOptions contains options for generating ArgoCD Application.
