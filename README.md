@@ -47,50 +47,23 @@ go install github.com/devantler-tech/ksail/v5@latest
 
 ## Usage
 
-### Quick Start
-
-Get up and running with a local Kubernetes cluster in three steps:
+Get up and running with a simple kind cluster in four steps:
 
 ```bash
 # 1. Initialize a new project with your preferred stack
-ksail cluster init --distribution Kind --cni Cilium
+ksail cluster init
 
 # 2. Create and start the cluster
 ksail cluster create
 
+# Add your manifests to the k8s/kustomization.yaml file
+
 # 3. Deploy your workloads
 ksail workload apply -k ./k8s
+
+# 4. Connect to the cluster with k9s
+ksail cluster connect
 ```
-
-### Development Workflow
-
-KSail organizes commands around your development lifecycle:
-
-#### Cluster Lifecycle
-
-- `ksail cluster init` — Scaffold a new project with declarative configuration
-- `ksail cluster create` — Provision a new cluster (Kind or K3d)
-- `ksail cluster start` — Resume a stopped cluster
-- `ksail cluster stop` — Pause a running cluster without losing state
-- `ksail cluster connect` — Open k9s for interactive debugging
-- `ksail cluster delete` — Clean up resources
-
-#### Workload Management
-
-- `ksail workload apply` — Deploy manifests with kubectl or Kustomize
-- `ksail workload validate` — Validate Kubernetes manifests and kustomizations
-- `ksail workload push` — Package and push an OCI artifact to the local registry
-- `ksail workload reconcile` — Trigger GitOps reconciliation (Flux or ArgoCD)
-- `ksail workload logs` — View logs from running pods
-- `ksail workload exec` — Execute commands in running pods
-- `ksail workload gen` — Generate resource templates
-
-#### Secrets & Security
-
-- `ksail cipher encrypt` — Encrypt manifests with SOPS
-- `ksail cipher decrypt` — Decrypt manifests with SOPS
-- `ksail cipher edit` — Edit encrypted files in place
-- `ksail cipher import` — Import age keys for SOPS encryption
 
 ## Documentation
 
