@@ -11,6 +11,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/ui/timer"
 	fcolor "github.com/fatih/color"
 	"golang.org/x/sync/errgroup"
+	"golang.org/x/term"
 )
 
 // ProgressTask represents a named task to be executed with progress tracking.
@@ -25,24 +26,32 @@ type ProgressTask struct {
 // It shows a title line followed by a line per task with live spinner updates.
 // Tasks are ordered by start time, with pending tasks shown at the bottom.
 //
-// Example output during execution:
+// In TTY environments (interactive terminals), it uses ANSI escape codes to
+// update lines in place with animated spinners.
+//
+// In non-TTY environments (CI, pipes), it uses a simpler output that only
+// prints state changes (started, completed, failed) to avoid log spam.
+//
+// Example TTY output during execution:
 //
 //	📦 Install components...
-//	⠦ installing metrics-server
-//	⠦ installing flux
-//	○ pending argocd
+//	⠦ metrics-server installing
+//	⠦ flux installing
+//	○ argocd pending
 //
-// After completion:
+// Example CI output:
 //
 //	📦 Install components...
-//	✔ metrics-server installed
+//	► metrics-server started
+//	► flux started
 //	✔ flux installed
-//	✔ argocd installed
+//	✔ metrics-server installed
 type ProgressGroup struct {
 	title  string
 	emoji  string
 	writer io.Writer
 	timer  timer.Timer
+	isTTY  bool // Whether output is a TTY (interactive terminal)
 
 	mu             sync.Mutex
 	taskStatus     map[string]taskState
@@ -89,11 +98,18 @@ func NewProgressGroup(title, emoji string, writer io.Writer, tmr timer.Timer) *P
 		emoji = "📦"
 	}
 
+	// Detect if we're outputting to a TTY
+	isTTY := false
+	if file, ok := writer.(*os.File); ok {
+		isTTY = term.IsTerminal(int(file.Fd()))
+	}
+
 	return &ProgressGroup{
 		title:          title,
 		emoji:          emoji,
 		writer:         writer,
 		timer:          tmr,
+		isTTY:          isTTY,
 		taskStatus:     make(map[string]taskState),
 		taskOrder:      make([]string, 0),
 		taskStartOrder: make([]string, 0),
@@ -123,6 +139,16 @@ func (pg *ProgressGroup) Run(ctx context.Context, tasks ...ProgressTask) error {
 	// Print title
 	_, _ = fmt.Fprintf(pg.writer, "%s %s...\n", pg.emoji, pg.title)
 
+	// Use different modes for TTY vs non-TTY
+	if pg.isTTY {
+		return pg.runInteractive(ctx, tasks)
+	}
+
+	return pg.runCI(ctx, tasks)
+}
+
+// runInteractive runs tasks with animated spinner output for interactive terminals.
+func (pg *ProgressGroup) runInteractive(ctx context.Context, tasks []ProgressTask) error {
 	// Print initial state (all pending)
 	pg.printAllLines()
 
@@ -160,10 +186,7 @@ func (pg *ProgressGroup) Run(ctx context.Context, tasks ...ProgressTask) error {
 
 	// Print timing if available
 	if err == nil && pg.timer != nil {
-		total, stage := pg.timer.GetTiming()
-		successColor := fcolor.New(fcolor.FgGreen)
-		_, _ = successColor.Fprintf(pg.writer, "⏲ current: %s\n", stage.String())
-		_, _ = successColor.Fprintf(pg.writer, "  total:  %s\n", total.String())
+		pg.printTiming()
 	}
 
 	if err != nil {
@@ -171,6 +194,64 @@ func (pg *ProgressGroup) Run(ctx context.Context, tasks ...ProgressTask) error {
 	}
 
 	return nil
+}
+
+// runCI runs tasks with simple line-based output for CI environments.
+// Only prints when tasks start or complete (no spinner animation).
+func (pg *ProgressGroup) runCI(ctx context.Context, tasks []ProgressTask) error {
+	// Execute tasks in parallel
+	group, groupCtx := errgroup.WithContext(ctx)
+
+	for _, task := range tasks {
+		group.Go(func() error {
+			// Print start message
+			pg.mu.Lock()
+			pg.taskStatus[task.Name] = taskRunning
+			_, _ = fmt.Fprintf(pg.writer, "► %s started\n", task.Name)
+			pg.mu.Unlock()
+
+			taskErr := task.Fn(groupCtx)
+
+			pg.mu.Lock()
+
+			if taskErr != nil {
+				pg.taskStatus[task.Name] = taskFailed
+				_, _ = fcolor.New(fcolor.FgRed).Fprintf(pg.writer, "✗ %s failed\n", task.Name)
+			} else {
+				pg.taskStatus[task.Name] = taskComplete
+				_, _ = fcolor.New(fcolor.FgGreen).Fprintf(pg.writer, "✔ %s installed\n", task.Name)
+			}
+
+			pg.mu.Unlock()
+
+			if taskErr != nil {
+				return fmt.Errorf("%s: %w", task.Name, taskErr)
+			}
+
+			return nil
+		})
+	}
+
+	err := group.Wait()
+
+	// Print timing if available
+	if err == nil && pg.timer != nil {
+		pg.printTiming()
+	}
+
+	if err != nil {
+		return fmt.Errorf("parallel execution: %w", err)
+	}
+
+	return nil
+}
+
+// printTiming prints the timing information.
+func (pg *ProgressGroup) printTiming() {
+	total, stage := pg.timer.GetTiming()
+	successColor := fcolor.New(fcolor.FgGreen)
+	_, _ = successColor.Fprintf(pg.writer, "⏲ current: %s\n", stage.String())
+	_, _ = successColor.Fprintf(pg.writer, "  total:  %s\n", total.String())
 }
 
 // setTaskState safely updates a task's state and tracks start order.
