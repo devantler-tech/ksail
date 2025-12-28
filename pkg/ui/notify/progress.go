@@ -277,11 +277,11 @@ func (pg *ProgressGroup) formatTaskLine(name string, state taskState) string {
 
 	switch state {
 	case taskPending:
-		return fcolor.New(fcolor.FgHiBlack).Sprintf("○ pending %s", name)
+		return fcolor.New(fcolor.FgHiBlack).Sprintf("○ %s pending", name)
 	case taskRunning:
 		spinner := frames[pg.spinnerIdx]
 
-		return fcolor.New(fcolor.FgCyan).Sprintf("%s installing %s", spinner, name)
+		return fcolor.New(fcolor.FgCyan).Sprintf("%s %s installing", spinner, name)
 	case taskComplete:
 		return fcolor.New(fcolor.FgGreen).Sprintf("✔ %s installed", name)
 	case taskFailed:
