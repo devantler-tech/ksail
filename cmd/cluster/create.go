@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"os"
 	"strconv"
@@ -444,7 +445,11 @@ func setupTalosKubeletCertRotation(
 
 	// Apply kubelet cert rotation to the Talos config
 	// This modifies the in-memory config that will be used for cluster creation
-	_ = talosConfig.ApplyKubeletCertRotation()
+	// Error is logged but not fatal - cluster can still function without cert rotation
+	err := talosConfig.ApplyKubeletCertRotation()
+	if err != nil {
+		log.Printf("Warning: failed to apply kubelet cert rotation: %v", err)
+	}
 }
 
 const (

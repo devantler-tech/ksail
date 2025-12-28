@@ -200,11 +200,25 @@ func TestConfigs_ApplyKubeletCertRotation(t *testing.T) {
 	err = configs.ApplyKubeletCertRotation()
 	require.NoError(t, err)
 
-	// Verify the setting was applied by checking the machine config
-	// The exact verification depends on how configs exposes the underlying structure
-	// Since we modify both control-plane and worker configs, both should have the setting
+	// Verify both control-plane and worker configs exist
 	require.NotNil(t, configs.ControlPlane())
 	require.NotNil(t, configs.Worker())
+
+	// Verify the rotate-server-certificates flag was applied to control-plane
+	cpKubelet := configs.ControlPlane().Machine().Kubelet()
+	require.NotNil(t, cpKubelet, "control-plane kubelet config should not be nil")
+	cpExtraArgs := cpKubelet.ExtraArgs()
+	require.NotNil(t, cpExtraArgs, "control-plane kubelet extra args should not be nil")
+	assert.Equal(t, "true", cpExtraArgs["rotate-server-certificates"],
+		"control-plane should have rotate-server-certificates=true")
+
+	// Verify the rotate-server-certificates flag was applied to worker
+	workerKubelet := configs.Worker().Machine().Kubelet()
+	require.NotNil(t, workerKubelet, "worker kubelet config should not be nil")
+	workerExtraArgs := workerKubelet.ExtraArgs()
+	require.NotNil(t, workerExtraArgs, "worker kubelet extra args should not be nil")
+	assert.Equal(t, "true", workerExtraArgs["rotate-server-certificates"],
+		"worker should have rotate-server-certificates=true")
 }
 
 func TestConfigs_ApplyKubeletCertRotation_Idempotent(t *testing.T) {
