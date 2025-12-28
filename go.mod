@@ -30,6 +30,7 @@ require (
 	github.com/spf13/viper v1.21.0
 	github.com/stretchr/testify v1.11.1
 	github.com/yannh/kubeconform v0.7.0
+	golang.org/x/sync v0.19.0
 	helm.sh/helm/v4 v4.0.4
 	k8s.io/api v0.35.0
 	k8s.io/apiextensions-apiserver v0.35.0
@@ -491,7 +492,6 @@ require (
 	golang.org/x/mod v0.31.0 // indirect
 	golang.org/x/net v0.48.0 // indirect
 	golang.org/x/oauth2 v0.31.0 // indirect
-	golang.org/x/sync v0.19.0 // indirect
 	golang.org/x/sys v0.39.0 // indirect
 	golang.org/x/telemetry v0.0.0-20251203150158-8fff8a5912fc // indirect
 	golang.org/x/term v0.38.0 // indirect
