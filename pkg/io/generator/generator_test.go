@@ -7,16 +7,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestBuildOCIURL(t *testing.T) {
-	t.Parallel()
+type buildOCIURLTestCase struct {
+	name        string
+	host        string
+	port        int32
+	projectName string
+	expected    string
+}
 
-	tests := []struct {
-		name        string
-		host        string
-		port        int32
-		projectName string
-		expected    string
-	}{
+func getBuildOCIURLTestCases() []buildOCIURLTestCase {
+	return []buildOCIURLTestCase{
 		{
 			name:        "with all default values",
 			host:        "",
@@ -74,6 +74,12 @@ func TestBuildOCIURL(t *testing.T) {
 			expected:    "oci://registry.localhost:5000/my-awesome-project",
 		},
 	}
+}
+
+func TestBuildOCIURL(t *testing.T) {
+	t.Parallel()
+
+	tests := getBuildOCIURLTestCases()
 
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {

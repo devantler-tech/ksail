@@ -98,7 +98,7 @@ func TestApplicationGenerator_GenerateToFile(t *testing.T) {
 	require.NotEmpty(t, result)
 
 	// Verify file was written
-	content, err := os.ReadFile(outputPath)
+	content, err := os.ReadFile(outputPath) //nolint:gosec // Test file path is safe
 	require.NoError(t, err)
 	require.Equal(t, result, string(content))
 }
@@ -129,7 +129,7 @@ func TestApplicationGenerator_GenerateWithForce(t *testing.T) {
 	require.NotEmpty(t, result)
 
 	// Verify file was overwritten
-	content, err := os.ReadFile(outputPath)
+	content, err := os.ReadFile(outputPath) //nolint:gosec // Test file path is safe
 	require.NoError(t, err)
 	require.Equal(t, result, string(content))
 	require.NotEqual(t, "existing content", string(content))

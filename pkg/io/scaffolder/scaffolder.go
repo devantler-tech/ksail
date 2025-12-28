@@ -759,9 +759,11 @@ func (s *Scaffolder) generateGitOpsConfig(output string, force bool) error {
 		return s.generateFluxInstanceConfig(sourceDir, force)
 	case v1alpha1.GitOpsEngineArgoCD:
 		return s.generateArgoCDApplicationConfig(sourceDir, force)
-	default:
+	case v1alpha1.GitOpsEngineNone:
 		return nil
 	}
+
+	return nil
 }
 
 // generateFluxInstanceConfig generates a FluxInstance CR manifest.
