@@ -131,6 +131,7 @@ linters:
             - github.com/sirupsen/logrus
             - github.com/yannh
             - filippo.io/age
+            - golang.org/x/sync
             - helm.sh/helm
             - k8s.io
             - sigs.k8s.io

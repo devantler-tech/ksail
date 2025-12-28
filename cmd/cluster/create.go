@@ -17,6 +17,7 @@ import (
 	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
 	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
 	cmdhelpers "github.com/devantler-tech/ksail/v5/pkg/cmd"
+	"github.com/devantler-tech/ksail/v5/pkg/cmd/parallel"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	k3dconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/k3d"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
@@ -51,6 +52,8 @@ const (
 	fluxResourcesSuccess        = "flux installed"
 	argoCDResourcesActivity     = "configuring argocd resources"
 	argoCDResourcesSuccess      = "argocd installed"
+	// parallelInstallMaxConcurrency is the maximum concurrency for parallel installations.
+	parallelInstallMaxConcurrency = 2
 )
 
 // ErrUnsupportedCNI is returned when an unsupported CNI type is encountered.
@@ -312,8 +315,9 @@ func connectMirrorRegistriesWithWarning(
 	}
 }
 
-// handlePostCreationSetup installs CNI, CSI, and metrics-server after cluster creation.
+// handlePostCreationSetup installs CNI, CSI, cert-manager, and GitOps engines after cluster creation.
 // Order depends on CNI configuration to resolve dependencies.
+// CSI and cert-manager are installed in parallel after CNI for improved performance.
 func handlePostCreationSetup(
 	cmd *cobra.Command,
 	clusterCfg *v1alpha1.Cluster,
@@ -339,12 +343,8 @@ func handlePostCreationSetup(
 		return err
 	}
 
-	err = installCSIIfConfigured(cmd, clusterCfg, tmr, firstActivityShown)
-	if err != nil {
-		return err
-	}
-
-	err = installCertManagerIfConfigured(cmd, clusterCfg, tmr, firstActivityShown)
+	// Install CSI and cert-manager in parallel - they are independent
+	err = installCSIAndCertManagerParallel(cmd, clusterCfg, tmr, firstActivityShown)
 	if err != nil {
 		return err
 	}
@@ -355,6 +355,146 @@ func handlePostCreationSetup(
 	}
 
 	return installFluxIfConfigured(cmd, clusterCfg, tmr, firstActivityShown)
+}
+
+// installCSIAndCertManagerParallel installs CSI and cert-manager concurrently.
+// Both components are independent and can be installed in parallel for better performance.
+func installCSIAndCertManagerParallel(
+	cmd *cobra.Command,
+	clusterCfg *v1alpha1.Cluster,
+	tmr timer.Timer,
+	firstActivityShown *bool,
+) error {
+	// Check if any of the components need to be installed
+	needsCSI := clusterCfg.Spec.Cluster.CSI == v1alpha1.CSILocalPathStorage
+	needsCertManager := clusterCfg.Spec.Cluster.CertManager == v1alpha1.CertManagerEnabled
+
+	// If neither is needed, return early
+	if !needsCSI && !needsCertManager {
+		return nil
+	}
+
+	// If only one component is needed, use sequential install
+	if !needsCSI {
+		return installCertManagerIfConfigured(cmd, clusterCfg, tmr, firstActivityShown)
+	}
+
+	if !needsCertManager {
+		return installCSIIfConfigured(cmd, clusterCfg, tmr, firstActivityShown)
+	}
+
+	// Both components need to be installed - run in parallel
+	if *firstActivityShown {
+		_, _ = fmt.Fprintln(cmd.OutOrStdout())
+	}
+
+	*firstActivityShown = true
+
+	// Use synchronized writer for thread-safe output
+	syncWriter := parallel.NewSyncWriter(cmd.OutOrStdout())
+	executor := parallel.NewExecutor(parallelInstallMaxConcurrency)
+
+	ctx := cmd.Context()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	// Reset timer for the parallel phase
+	tmr.NewStage()
+
+	tasks := []parallel.Task{
+		func(taskCtx context.Context) error {
+			return installCSIWithWriter(taskCtx, syncWriter, clusterCfg)
+		},
+		func(taskCtx context.Context) error {
+			return installCertManagerWithWriter(taskCtx, syncWriter, clusterCfg)
+		},
+	}
+
+	executeErr := executor.Execute(ctx, tasks...)
+	if executeErr != nil {
+		return fmt.Errorf("parallel installation failed: %w", executeErr)
+	}
+
+	outputTimer := cmdhelpers.MaybeTimer(cmd, tmr)
+
+	notify.WriteMessage(notify.Message{
+		Type:    notify.SuccessType,
+		Content: "csi and cert-manager installed",
+		Timer:   outputTimer,
+		Writer:  cmd.OutOrStdout(),
+	})
+
+	return nil
+}
+
+// installCSIWithWriter installs CSI using the provided writer for output.
+func installCSIWithWriter(
+	ctx context.Context,
+	writer io.Writer,
+	clusterCfg *v1alpha1.Cluster,
+) error {
+	notify.WriteMessage(notify.Message{
+		Type:    notify.TitleType,
+		Content: "Install CSI...",
+		Emoji:   "💾",
+		Writer:  writer,
+	})
+
+	csiInstallerFactoryMu.RLock()
+
+	csiInstaller, err := csiInstallerFactory(clusterCfg)
+
+	csiInstallerFactoryMu.RUnlock()
+
+	if err != nil {
+		return fmt.Errorf("failed to create CSI installer: %w", err)
+	}
+
+	notify.WriteMessage(notify.Message{
+		Type:    notify.ActivityType,
+		Content: "installing local-path-storage",
+		Writer:  writer,
+	})
+
+	installErr := csiInstaller.Install(ctx)
+	if installErr != nil {
+		return fmt.Errorf("local-path-storage installation failed: %w", installErr)
+	}
+
+	return nil
+}
+
+// installCertManagerWithWriter installs cert-manager using the provided writer for output.
+func installCertManagerWithWriter(
+	ctx context.Context,
+	writer io.Writer,
+	clusterCfg *v1alpha1.Cluster,
+) error {
+	notify.WriteMessage(notify.Message{
+		Type:    notify.TitleType,
+		Content: certManagerStageTitle,
+		Emoji:   certManagerStageEmoji,
+		Writer:  writer,
+	})
+
+	installer, err := newCertManagerInstallerForCluster(clusterCfg)
+	if err != nil {
+		return fmt.Errorf("failed to create cert-manager installer: %w", err)
+	}
+
+	notify.WriteMessage(notify.Message{
+		Type:    notify.ActivityType,
+		Content: certManagerStageActivity,
+		Writer:  writer,
+	})
+
+	installErr := installer.Install(ctx)
+	if installErr != nil {
+		return fmt.Errorf("failed to install cert-manager: %w", installErr)
+	}
+
+	return nil
 }
 
 // installCustomCNIAndMetrics installs a custom CNI and then metrics-server.

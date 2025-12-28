@@ -3,12 +3,14 @@ package workload
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/devantler-tech/ksail/v5/pkg/client/kubeconform"
 	"github.com/devantler-tech/ksail/v5/pkg/client/kustomize"
+	"github.com/devantler-tech/ksail/v5/pkg/cmd/parallel"
 	"github.com/spf13/cobra"
 )
 
@@ -152,6 +154,7 @@ func validateFile(
 }
 
 // validateDirectory validates all YAML files and kustomizations in a directory.
+// Validation is performed in parallel with controlled concurrency for better performance.
 func validateDirectory(
 	ctx context.Context,
 	cmd *cobra.Command,
@@ -159,43 +162,61 @@ func validateDirectory(
 	kubeconformClient *kubeconform.Client,
 	opts *kubeconform.ValidationOptions,
 ) error {
+	// Use synchronized writer for thread-safe output
+	syncWriter := parallel.NewSyncWriter(cmd.OutOrStdout())
+
 	// Find all kustomizations
 	kustomizations, err := findKustomizations(dirPath)
 	if err != nil {
 		return fmt.Errorf("find kustomizations: %w", err)
 	}
 
-	// Validate kustomizations
+	// Validate kustomizations in parallel
 	if len(kustomizations) > 0 {
-		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "INFO - Validating kustomize overlays")
+		_, _ = fmt.Fprintln(syncWriter, "INFO - Validating kustomize overlays")
 
 		kustomizeClient := kustomize.NewClient()
+		executor := parallel.NewExecutor(0) // Use default concurrency
 
-		for _, kustDir := range kustomizations {
-			err := validateKustomization(
-				ctx,
-				cmd,
-				kustDir,
-				kubeconformClient,
-				kustomizeClient,
-				opts,
-			)
-			if err != nil {
-				return err
+		tasks := make([]parallel.Task, len(kustomizations))
+		for i, kustDir := range kustomizations {
+			tasks[i] = func(taskCtx context.Context) error {
+				return validateKustomization(
+					taskCtx,
+					syncWriter,
+					kustDir,
+					kubeconformClient,
+					kustomizeClient,
+					opts,
+				)
 			}
+		}
+
+		executeErr := executor.Execute(ctx, tasks...)
+		if executeErr != nil {
+			return fmt.Errorf("parallel kustomization validation failed: %w", executeErr)
 		}
 	}
 
-	// Find and validate individual YAML files
+	// Find and validate individual YAML files in parallel
 	yamlFiles, err := findYAMLFiles(dirPath)
 	if err != nil {
 		return fmt.Errorf("find YAML files: %w", err)
 	}
 
-	for _, file := range yamlFiles {
-		err := validateFile(ctx, cmd, file, kubeconformClient, opts)
-		if err != nil {
-			return err
+	if len(yamlFiles) > 0 {
+		executor := parallel.NewExecutor(0) // Use default concurrency
+
+		tasks := make([]parallel.Task, len(yamlFiles))
+		for i, file := range yamlFiles {
+			tasks[i] = func(taskCtx context.Context) error {
+				return validateFileWithWriter(taskCtx, syncWriter, file, kubeconformClient, opts)
+			}
+		}
+
+		executeErr := executor.Execute(ctx, tasks...)
+		if executeErr != nil {
+			return fmt.Errorf("parallel YAML validation failed: %w", executeErr)
 		}
 	}
 
@@ -205,13 +226,13 @@ func validateDirectory(
 // validateKustomization validates a kustomization by building it and validating the output.
 func validateKustomization(
 	ctx context.Context,
-	cmd *cobra.Command,
+	writer io.Writer,
 	kustDir string,
 	kubeconformClient *kubeconform.Client,
 	kustomizeClient *kustomize.Client,
 	opts *kubeconform.ValidationOptions,
 ) error {
-	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "INFO - Validating kustomization %s\n", kustDir)
+	_, _ = fmt.Fprintf(writer, "INFO - Validating kustomization %s\n", kustDir)
 
 	// Build the kustomization
 	output, err := kustomizeClient.Build(ctx, kustDir)
@@ -223,6 +244,29 @@ func validateKustomization(
 	err = kubeconformClient.ValidateManifests(ctx, output, opts)
 	if err != nil {
 		return fmt.Errorf("validate kustomization %s: %w", kustDir, err)
+	}
+
+	return nil
+}
+
+// validateFileWithWriter validates a single YAML file using the provided writer.
+func validateFileWithWriter(
+	ctx context.Context,
+	writer io.Writer,
+	filePath string,
+	kubeconformClient *kubeconform.Client,
+	opts *kubeconform.ValidationOptions,
+) error {
+	// Only validate YAML files
+	if !isYAMLFile(filePath) {
+		return nil
+	}
+
+	_, _ = fmt.Fprintf(writer, "INFO - Validating %s\n", filePath)
+
+	err := kubeconformClient.ValidateFile(ctx, filePath, opts)
+	if err != nil {
+		return fmt.Errorf("validate file %s: %w", filePath, err)
 	}
 
 	return nil
