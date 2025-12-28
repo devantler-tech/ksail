@@ -38,9 +38,7 @@ jobs:
               - '**/*.go'
               - 'go.mod'
               - 'go.sum'
-              - '.github/workflows/ci.yaml'
               - '.github/actions/**'
-              - '.github/scripts/**'
             schema:
               - 'pkg/apis/**/*.go'
               - 'go.mod'
