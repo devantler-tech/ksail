@@ -135,14 +135,10 @@
               "description": "Alpha placeholder (currently unsupported)."
             },
             "flux": {
-              "properties": {
-                "interval": {
-                  "type": "string",
-                  "pattern": "^[0-9]+(ns|us|µs|ms|s|m|h)$"
-                }
-              },
+              "properties": {},
               "additionalProperties": false,
-              "type": "object"
+              "type": "object",
+              "description": "Alpha placeholder (currently unsupported)."
             },
             "argocd": {
               "properties": {},
