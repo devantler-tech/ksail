@@ -149,6 +149,9 @@ func handleCreateRunE(
 	// Configure metrics-server for K3d before cluster creation
 	setupK3dMetricsServer(clusterCfg, k3dConfig)
 
+	// Configure kubelet cert rotation for Talos when metrics-server is enabled
+	setupTalosKubeletCertRotation(clusterCfg, talosConfig)
+
 	// Check if a test override is set for the factory
 	clusterProvisionerFactoryMu.RLock()
 
@@ -415,6 +418,30 @@ func setupK3dMetricsServer(clusterCfg *v1alpha1.Cluster, k3dConfig *v1alpha5.Sim
 			NodeFilters: []string{"server:*"},
 		},
 	)
+}
+
+// setupTalosKubeletCertRotation configures kubelet server certificate rotation for Talos clusters.
+// This is required for metrics-server to scrape kubelet metrics over HTTPS without TLS errors.
+// When metrics-server is enabled on a Talos cluster, the kubelet needs to rotate its serving
+// certificates so that metrics-server can verify them against the cluster's CA.
+// This function is called during cluster creation to handle cases where:
+// 1. The user overrides --metrics-server flag at create time (different from init-time config).
+// 2. The talos patches directory doesn't contain the kubelet cert rotation patch.
+// 3. Ensures consistency even if the scaffolder-generated patch was deleted.
+func setupTalosKubeletCertRotation(clusterCfg *v1alpha1.Cluster, talosConfig *talosconfigmanager.Configs) {
+	// Only apply to Talos distribution
+	if clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionTalos || talosConfig == nil {
+		return
+	}
+
+	// Only enable cert rotation if metrics-server is enabled
+	if clusterCfg.Spec.Cluster.MetricsServer != v1alpha1.MetricsServerEnabled {
+		return
+	}
+
+	// Apply kubelet cert rotation to the Talos config
+	// This modifies the in-memory config that will be used for cluster creation
+	_ = talosConfig.ApplyKubeletCertRotation()
 }
 
 const (

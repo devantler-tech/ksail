@@ -265,6 +265,60 @@ func applyMirrorsToConfig(cfg *v1alpha1.Config, mirrors []MirrorRegistry) error 
 	return nil
 }
 
+// ApplyKubeletCertRotation modifies the configs to enable kubelet server certificate rotation.
+// This is required for metrics-server to scrape kubelet metrics over HTTPS without TLS errors.
+// The setting applies to both control-plane and worker nodes.
+func (c *Configs) ApplyKubeletCertRotation() error {
+	// Define the patcher function that enables cert rotation
+	patcher := func(cfg *v1alpha1.Config) error {
+		return applyKubeletCertRotationToConfig(cfg)
+	}
+
+	// Apply to control plane config
+	if c.bundle.ControlPlaneCfg != nil {
+		patched, err := c.bundle.ControlPlaneCfg.PatchV1Alpha1(patcher)
+		if err != nil {
+			return fmt.Errorf("failed to patch control plane config: %w", err)
+		}
+
+		c.bundle.ControlPlaneCfg = patched
+	}
+
+	// Apply to worker config
+	if c.bundle.WorkerCfg != nil {
+		patched, err := c.bundle.WorkerCfg.PatchV1Alpha1(patcher)
+		if err != nil {
+			return fmt.Errorf("failed to patch worker config: %w", err)
+		}
+
+		c.bundle.WorkerCfg = patched
+	}
+
+	return nil
+}
+
+// applyKubeletCertRotationToConfig enables kubelet server certificate rotation on a Talos v1alpha1 config.
+func applyKubeletCertRotationToConfig(cfg *v1alpha1.Config) error {
+	if cfg.MachineConfig == nil {
+		return nil
+	}
+
+	// Initialize kubelet config if nil
+	if cfg.MachineConfig.MachineKubelet == nil {
+		cfg.MachineConfig.MachineKubelet = &v1alpha1.KubeletConfig{}
+	}
+
+	// Initialize extra args if nil
+	if cfg.MachineConfig.MachineKubelet.KubeletExtraArgs == nil {
+		cfg.MachineConfig.MachineKubelet.KubeletExtraArgs = make(map[string]string)
+	}
+
+	// Set rotate-server-certificates to enable certificate rotation
+	cfg.MachineConfig.MachineKubelet.KubeletExtraArgs["rotate-server-certificates"] = "true"
+
+	return nil
+}
+
 // initRegistryMaps initializes the registry maps if they are nil.
 //
 //nolint:staticcheck // MachineRegistries is deprecated but still functional in Talos v1.x

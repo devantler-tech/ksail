@@ -22,6 +22,8 @@ const (
 	allowSchedulingFileName = "allow-scheduling-on-control-planes.yaml"
 	// disableCNIFileName is the name of the CNI disable patch file.
 	disableCNIFileName = "disable-default-cni.yaml"
+	// kubeletCertsFileName is the name of the kubelet certificate rotation patch file.
+	kubeletCertsFileName = "kubelet-serving-cert-rotation.yaml"
 )
 
 // ErrConfigRequired is returned when a nil config is provided.
@@ -41,6 +43,10 @@ type TalosConfig struct {
 	// When true, generates a disable-default-cni.yaml patch to set cluster.network.cni.name to "none".
 	// This is required when using an alternative CNI like Cilium.
 	DisableDefaultCNI bool
+	// EnableKubeletCertRotation indicates whether to enable kubelet server certificate rotation.
+	// When true, generates a kubelet-serving-cert-rotation.yaml patch.
+	// This is required for metrics-server to scrape kubelet metrics over HTTPS on Talos.
+	EnableKubeletCertRotation bool
 }
 
 // TalosGenerator generates the Talos directory structure.
@@ -113,6 +119,11 @@ func (g *TalosGenerator) getDirectoriesWithPatches(
 		dirs["cluster"] = true
 	}
 
+	// Kubelet cert rotation patch goes to cluster/
+	if model.EnableKubeletCertRotation {
+		dirs["cluster"] = true
+	}
+
 	return dirs
 }
 
@@ -141,6 +152,14 @@ func (g *TalosGenerator) generateConditionalPatches(
 	// Generate disable-default-cni patch when alternative CNI is requested
 	if model.DisableDefaultCNI {
 		err := g.generateDisableCNIPatch(rootPath, force)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Generate kubelet-serving-cert-rotation patch when metrics-server is enabled
+	if model.EnableKubeletCertRotation {
+		err := g.generateKubeletCertRotationPatch(rootPath, force)
 		if err != nil {
 			return err
 		}
@@ -314,6 +333,35 @@ func (g *TalosGenerator) generateDisableCNIPatch(
 	err := os.WriteFile(patchPath, []byte(patchContent), filePerm)
 	if err != nil {
 		return fmt.Errorf("failed to create disable-default-cni patch: %w", err)
+	}
+
+	return nil
+}
+
+// generateKubeletCertRotationPatch creates a Talos patch file to enable kubelet server certificate rotation.
+// This is required for metrics-server to successfully scrape kubelet metrics over HTTPS.
+// The patch sets machine.kubelet.extraArgs.rotate-server-certificates to "true".
+func (g *TalosGenerator) generateKubeletCertRotationPatch(
+	rootPath string,
+	force bool,
+) error {
+	patchPath := filepath.Join(rootPath, "cluster", kubeletCertsFileName)
+
+	// Check if file already exists
+	_, statErr := os.Stat(patchPath)
+	if statErr == nil && !force {
+		return nil
+	}
+
+	patchContent := `machine:
+  kubelet:
+    extraArgs:
+      rotate-server-certificates: "true"
+`
+
+	err := os.WriteFile(patchPath, []byte(patchContent), filePerm)
+	if err != nil {
+		return fmt.Errorf("failed to create kubelet-serving-cert-rotation patch: %w", err)
 	}
 
 	return nil

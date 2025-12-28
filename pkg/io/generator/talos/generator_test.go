@@ -272,3 +272,97 @@ func TestTalosGenerator_Generate_NoDisableCNIPatchWhenFalse(t *testing.T) {
 	_, err = os.Stat(gitkeepPath)
 	require.NoError(t, err, "expected .gitkeep in cluster/ when no patches generated")
 }
+
+func TestTalosGenerator_Generate_EnableKubeletCertRotation(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	gen := talosgenerator.NewTalosGenerator()
+
+	config := &talosgenerator.TalosConfig{
+		PatchesDir:               "talos",
+		EnableKubeletCertRotation: true,
+		WorkerNodes:              1, // Prevents allow-scheduling patch
+	}
+	opts := yamlgenerator.Options{
+		Output: tempDir,
+	}
+
+	result, err := gen.Generate(config, opts)
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(tempDir, "talos"), result)
+
+	// Verify kubelet-serving-cert-rotation.yaml was created
+	patchPath := filepath.Join(tempDir, "talos", "cluster", "kubelet-serving-cert-rotation.yaml")
+	content, err := os.ReadFile(patchPath) //nolint:gosec // Test file path is safe
+	require.NoError(t, err)
+	assert.Contains(t, string(content), "machine:")
+	assert.Contains(t, string(content), "kubelet:")
+	assert.Contains(t, string(content), "extraArgs:")
+	assert.Contains(t, string(content), "rotate-server-certificates:")
+	assert.Contains(t, string(content), `"true"`)
+
+	// Verify .gitkeep was NOT created in cluster/ since we have a patch there
+	gitkeepPath := filepath.Join(tempDir, "talos", "cluster", ".gitkeep")
+	_, err = os.Stat(gitkeepPath)
+	assert.True(t, os.IsNotExist(err), "expected .gitkeep to not exist when patches are generated")
+}
+
+func TestTalosGenerator_Generate_NoKubeletCertPatchWhenFalse(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	gen := talosgenerator.NewTalosGenerator()
+
+	config := &talosgenerator.TalosConfig{
+		PatchesDir:               "talos",
+		EnableKubeletCertRotation: false,
+		WorkerNodes:              1, // Prevents allow-scheduling patch
+	}
+	opts := yamlgenerator.Options{
+		Output: tempDir,
+	}
+
+	_, err := gen.Generate(config, opts)
+	require.NoError(t, err)
+
+	// Verify kubelet-serving-cert-rotation.yaml was NOT created
+	patchPath := filepath.Join(tempDir, "talos", "cluster", "kubelet-serving-cert-rotation.yaml")
+	_, err = os.Stat(patchPath)
+	assert.True(t, os.IsNotExist(err), "expected kubelet-serving-cert-rotation.yaml to not exist")
+}
+
+func TestTalosGenerator_Generate_BothCNIAndKubeletCertPatches(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	gen := talosgenerator.NewTalosGenerator()
+
+	config := &talosgenerator.TalosConfig{
+		PatchesDir:               "talos",
+		DisableDefaultCNI:        true,
+		EnableKubeletCertRotation: true,
+		WorkerNodes:              1, // Prevents allow-scheduling patch
+	}
+	opts := yamlgenerator.Options{
+		Output: tempDir,
+	}
+
+	result, err := gen.Generate(config, opts)
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(tempDir, "talos"), result)
+
+	// Verify both patches were created
+	cniPatchPath := filepath.Join(tempDir, "talos", "cluster", "disable-default-cni.yaml")
+	_, err = os.Stat(cniPatchPath)
+	require.NoError(t, err, "expected disable-default-cni.yaml to exist")
+
+	kubeletPatchPath := filepath.Join(tempDir, "talos", "cluster", "kubelet-serving-cert-rotation.yaml")
+	_, err = os.Stat(kubeletPatchPath)
+	require.NoError(t, err, "expected kubelet-serving-cert-rotation.yaml to exist")
+
+	// Verify .gitkeep was NOT created in cluster/ since we have patches there
+	gitkeepPath := filepath.Join(tempDir, "talos", "cluster", ".gitkeep")
+	_, err = os.Stat(gitkeepPath)
+	assert.True(t, os.IsNotExist(err), "expected .gitkeep to not exist when patches are generated")
+}

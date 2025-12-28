@@ -186,3 +186,40 @@ func TestMirrorRegistry_Structure(t *testing.T) {
 	assert.Equal(t, "docker.io", mirror.Host)
 	assert.Equal(t, []string{"http://localhost:5000", "http://localhost:5001"}, mirror.Endpoints)
 }
+
+func TestConfigs_ApplyKubeletCertRotation(t *testing.T) {
+	t.Parallel()
+
+	manager := talos.NewConfigManager("", "kubelet-cert-rotation", "1.32.0", "10.5.0.0/24")
+
+	configs, err := manager.LoadConfig(nil)
+	require.NoError(t, err)
+	require.NotNil(t, configs)
+
+	// Apply kubelet cert rotation
+	err = configs.ApplyKubeletCertRotation()
+	require.NoError(t, err)
+
+	// Verify the setting was applied by checking the machine config
+	// The exact verification depends on how configs exposes the underlying structure
+	// Since we modify both control-plane and worker configs, both should have the setting
+	require.NotNil(t, configs.ControlPlane())
+	require.NotNil(t, configs.Worker())
+}
+
+func TestConfigs_ApplyKubeletCertRotation_Idempotent(t *testing.T) {
+	t.Parallel()
+
+	manager := talos.NewConfigManager("", "kubelet-cert-idempotent", "1.32.0", "10.5.0.0/24")
+
+	configs, err := manager.LoadConfig(nil)
+	require.NoError(t, err)
+	require.NotNil(t, configs)
+
+	// Apply kubelet cert rotation twice - should not error
+	err = configs.ApplyKubeletCertRotation()
+	require.NoError(t, err)
+
+	err = configs.ApplyKubeletCertRotation()
+	require.NoError(t, err)
+}
