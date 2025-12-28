@@ -152,8 +152,8 @@ func TestHandleInitRunE_RespectsDistributionFlag(t *testing.T) {
 	}
 }
 
-//nolint:funlen // Test function includes comprehensive assertions for TalosInDocker scaffolding
-func TestHandleInitRunE_RespectsDistributionFlagTalosInDocker(t *testing.T) {
+//nolint:funlen // Test function includes comprehensive assertions for Talos scaffolding
+func TestHandleInitRunE_RespectsDistributionFlagTalos(t *testing.T) {
 	t.Parallel()
 
 	outDir := t.TempDir()
@@ -165,7 +165,7 @@ func TestHandleInitRunE_RespectsDistributionFlagTalosInDocker(t *testing.T) {
 
 	setFlags(t, cmd, map[string]string{
 		"output":       outDir,
-		"distribution": "TalosInDocker",
+		"distribution": "Talos",
 		"force":        "true",
 	})
 
@@ -212,7 +212,7 @@ func TestHandleInitRunE_RespectsDistributionFlagTalosInDocker(t *testing.T) {
 		)
 	}
 
-	// Verify ksail.yaml contains TalosInDocker distribution
+	// Verify ksail.yaml contains Talos distribution
 	ksailPath := filepath.Join(outDir, "ksail.yaml")
 
 	content, err := os.ReadFile(ksailPath) //nolint:gosec // Test file path is safe
@@ -220,8 +220,8 @@ func TestHandleInitRunE_RespectsDistributionFlagTalosInDocker(t *testing.T) {
 		t.Fatalf("expected ksail.yaml to be scaffolded: %v", err)
 	}
 
-	if !strings.Contains(string(content), "distribution: TalosInDocker") {
-		t.Fatalf("expected ksail.yaml to contain TalosInDocker distribution\n%s", content)
+	if !strings.Contains(string(content), "distribution: Talos") {
+		t.Fatalf("expected ksail.yaml to contain Talos distribution\n%s", content)
 	}
 
 	// Verify output contains created files

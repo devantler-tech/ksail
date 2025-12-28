@@ -175,7 +175,7 @@ func (v *Validator) getExpectedContextName(config *v1alpha1.Cluster) string {
 		return "kind-" + distributionName
 	case v1alpha1.DistributionK3d:
 		return "k3d-" + distributionName
-	case v1alpha1.DistributionTalosInDocker:
+	case v1alpha1.DistributionTalos:
 		return "admin@" + distributionName
 	default:
 		return ""
@@ -189,8 +189,8 @@ func (v *Validator) getDistributionConfigName(distribution v1alpha1.Distribution
 		return v.getKindConfigName()
 	case v1alpha1.DistributionK3d:
 		return v.getK3dConfigName()
-	case v1alpha1.DistributionTalosInDocker:
-		return "talos-default" // TalosInDocker uses a fixed cluster name pattern
+	case v1alpha1.DistributionTalos:
+		return "talos-default" // Talos uses a fixed cluster name pattern
 	default:
 		return ""
 	}
@@ -232,7 +232,7 @@ func (v *Validator) validateCNIAlignment(
 			v.validateKindCiliumCNIAlignment(result)
 		case v1alpha1.DistributionK3d:
 			v.validateK3dCiliumCNIAlignment(result)
-		case v1alpha1.DistributionTalosInDocker:
+		case v1alpha1.DistributionTalos:
 			v.validateTalosCiliumCNIAlignment(result)
 		}
 
@@ -246,7 +246,7 @@ func (v *Validator) validateCNIAlignment(
 			v.validateKindDefaultCNIAlignment(result)
 		case v1alpha1.DistributionK3d:
 			v.validateK3dDefaultCNIAlignment(result)
-		case v1alpha1.DistributionTalosInDocker:
+		case v1alpha1.DistributionTalos:
 			v.validateTalosDefaultCNIAlignment(result)
 		}
 	}
@@ -440,7 +440,7 @@ func (v *Validator) validateRegistry(
 	config *v1alpha1.Cluster,
 	result *validator.ValidationResult,
 ) {
-	port := config.Spec.Cluster.Options.LocalRegistry.HostPort
+	port := config.Spec.Cluster.LocalRegistryOpts.HostPort
 
 	enabled := config.Spec.Cluster.LocalRegistry == v1alpha1.LocalRegistryEnabled
 
@@ -468,11 +468,11 @@ func (v *Validator) validateFlux(
 		return
 	}
 
-	if config.Spec.Cluster.Options.Flux.Interval.Duration <= 0 {
+	if config.Spec.Cluster.Flux.Interval.Duration <= 0 {
 		result.AddError(validator.ValidationError{
 			Field:         "spec.options.flux.interval",
 			Message:       "fluxInterval must be a positive duration when Flux is enabled",
-			CurrentValue:  config.Spec.Cluster.Options.Flux.Interval.Duration,
+			CurrentValue:  config.Spec.Cluster.Flux.Interval.Duration,
 			ExpectedValue: "> 0",
 			FixSuggestion: "Set spec.options.flux.interval to a positive duration (e.g., 1m)",
 		})

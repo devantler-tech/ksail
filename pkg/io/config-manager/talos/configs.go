@@ -88,6 +88,33 @@ func (c *Configs) IsCNIDisabled() bool {
 	return cni.Name() == "none"
 }
 
+// ExtractMirrorHosts returns a list of registry hosts that have mirror configurations.
+// This extracts hosts from the loaded config bundle, which includes any patches that
+// were applied (including scaffolded mirror-registries.yaml patches).
+// Returns nil if no mirrors are configured.
+//
+// Note: This method only returns host names, not remote URLs. For full MirrorSpec
+// extraction including remotes, parsing from the generator-created patch files is
+// needed, or use DefaultGenerateUpstreamURL to derive conventional upstream URLs.
+func (c *Configs) ExtractMirrorHosts() []string {
+	cp := c.ControlPlane()
+	if cp == nil {
+		return nil
+	}
+
+	mirrors := cp.RegistryMirrorConfigs()
+	if len(mirrors) == 0 {
+		return nil
+	}
+
+	hosts := make([]string, 0, len(mirrors))
+	for host := range mirrors {
+		hosts = append(hosts, host)
+	}
+
+	return hosts
+}
+
 // NetworkCIDR returns the network CIDR from the cluster configuration.
 // This is extracted from the pod CIDRs in the cluster network settings.
 func (c *Configs) NetworkCIDR() string {
@@ -180,35 +207,16 @@ type MirrorRegistry struct {
 
 // ApplyMirrorRegistries modifies the configs to add registry mirror configurations.
 // This directly patches the underlying v1alpha1.Config structs.
+// It adds both the mirror endpoints and the registry config with insecureSkipVerify: true
+// to allow HTTP connections to local registry containers.
 func (c *Configs) ApplyMirrorRegistries(mirrors []MirrorRegistry) error {
 	if len(mirrors) == 0 {
 		return nil
 	}
 
-	// Define the patcher function that adds mirrors to the config
+	// Define the patcher function that adds mirrors and registry configs
 	patcher := func(cfg *v1alpha1.Config) error {
-		if cfg.MachineConfig == nil {
-			return nil
-		}
-
-		// Initialize mirrors map if nil
-		if cfg.MachineConfig.MachineRegistries.RegistryMirrors == nil {
-			cfg.MachineConfig.MachineRegistries.RegistryMirrors = make(
-				map[string]*v1alpha1.RegistryMirrorConfig,
-			)
-		}
-
-		for _, mirror := range mirrors {
-			if mirror.Host == "" {
-				continue
-			}
-
-			cfg.MachineConfig.MachineRegistries.RegistryMirrors[mirror.Host] = &v1alpha1.RegistryMirrorConfig{
-				MirrorEndpoints: mirror.Endpoints,
-			}
-		}
-
-		return nil
+		return applyMirrorsToConfig(cfg, mirrors)
 	}
 
 	// Apply to control plane config
@@ -232,4 +240,53 @@ func (c *Configs) ApplyMirrorRegistries(mirrors []MirrorRegistry) error {
 	}
 
 	return nil
+}
+
+// applyMirrorsToConfig applies mirror configurations to a Talos v1alpha1 config.
+func applyMirrorsToConfig(cfg *v1alpha1.Config, mirrors []MirrorRegistry) error {
+	if cfg.MachineConfig == nil {
+		return nil
+	}
+
+	initRegistryMaps(cfg)
+
+	for _, mirror := range mirrors {
+		if mirror.Host == "" {
+			continue
+		}
+
+		addMirrorEndpoints(cfg, mirror)
+		// NOTE: We intentionally do NOT call addInsecureRegistryConfigs for HTTP endpoints.
+		// containerd will reject TLS configuration for non-HTTPS registries with the error:
+		// "TLS config specified for non-HTTPS registry"
+		// HTTP endpoints work without any additional configuration.
+	}
+
+	return nil
+}
+
+// initRegistryMaps initializes the registry maps if they are nil.
+//
+//nolint:staticcheck // MachineRegistries is deprecated but still functional in Talos v1.x
+func initRegistryMaps(cfg *v1alpha1.Config) {
+	if cfg.MachineConfig.MachineRegistries.RegistryMirrors == nil {
+		cfg.MachineConfig.MachineRegistries.RegistryMirrors = make(
+			map[string]*v1alpha1.RegistryMirrorConfig,
+		)
+	}
+
+	if cfg.MachineConfig.MachineRegistries.RegistryConfig == nil {
+		cfg.MachineConfig.MachineRegistries.RegistryConfig = make(
+			map[string]*v1alpha1.RegistryConfig,
+		)
+	}
+}
+
+// addMirrorEndpoints adds mirror endpoint configuration for a registry host.
+//
+//nolint:staticcheck // MachineRegistries is deprecated but still functional in Talos v1.x
+func addMirrorEndpoints(cfg *v1alpha1.Config, mirror MirrorRegistry) {
+	cfg.MachineConfig.MachineRegistries.RegistryMirrors[mirror.Host] = &v1alpha1.RegistryMirrorConfig{
+		MirrorEndpoints: mirror.Endpoints,
+	}
 }

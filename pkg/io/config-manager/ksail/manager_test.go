@@ -365,7 +365,8 @@ func TestLoadConfigConfigFileNotifiesFound(t *testing.T) {
 	assert.Contains(t, output.String(), "'"+configPath+"' found")
 }
 
-// TestLoadConfig_ConfigReusedNotification verifies notification when config is reused.
+// TestLoadConfigConfigReusedNotification verifies that reused config produces no output.
+// When config is already loaded, LoadConfig should silently return the cached config.
 //
 //nolint:paralleltest // Uses t.Chdir for isolated filesystem state.
 func TestLoadConfigConfigReusedNotification(t *testing.T) {
@@ -375,10 +376,12 @@ func TestLoadConfigConfigReusedNotification(t *testing.T) {
 	manager, output, _ := loadConfigAndCaptureOutput(t, createStandardFieldSelectors()...)
 	output.Reset()
 
-	_, err := manager.LoadConfig(nil)
+	cfg, err := manager.LoadConfig(nil)
 	require.NoError(t, err)
+	require.NotNil(t, cfg)
 
-	assert.Contains(t, output.String(), "config already loaded, reusing existing config")
+	// When config is already loaded, no output should be produced
+	assert.Empty(t, output.String(), "expected no output when reusing cached config")
 }
 
 //nolint:paralleltest // Uses t.Chdir for isolated filesystem state.
@@ -390,9 +393,8 @@ func TestLoadConfigParsesFluxIntervalFromString(t *testing.T) {
 	writeClusterConfigFile(
 		t,
 		"    gitOpsEngine: Flux\n",
-		"    options:\n",
-		"      flux:\n",
-		"        interval: 2m30s\n",
+		"    flux:\n",
+		"      interval: 2m30s\n",
 	)
 
 	manager := configmanager.NewConfigManager(io.Discard)
@@ -401,7 +403,7 @@ func TestLoadConfigParsesFluxIntervalFromString(t *testing.T) {
 	_, err := manager.LoadConfig(nil)
 	require.NoError(t, err)
 
-	assert.Equal(t, 150*time.Second, manager.Config.Spec.Cluster.Options.Flux.Interval.Duration)
+	assert.Equal(t, 150*time.Second, manager.Config.Spec.Cluster.Flux.Interval.Duration)
 }
 
 //nolint:paralleltest // Uses t.Chdir for isolated filesystem state.
@@ -413,9 +415,8 @@ func TestLoadConfigFailsOnInvalidFluxIntervalString(t *testing.T) {
 	writeClusterConfigFile(
 		t,
 		"    gitOpsEngine: Flux\n",
-		"    options:\n",
-		"      flux:\n",
-		"        interval: not-a-duration\n",
+		"    flux:\n",
+		"      interval: not-a-duration\n",
 	)
 
 	manager := configmanager.NewConfigManager(io.Discard)
@@ -490,7 +491,7 @@ func TestLoadConfigAppliesLocalRegistryDefaults(t *testing.T) {
 			assert.Equal(
 				t,
 				testCase.expectedHostPort,
-				manager.Config.Spec.Cluster.Options.LocalRegistry.HostPort,
+				manager.Config.Spec.Cluster.LocalRegistryOpts.HostPort,
 			)
 		})
 	}
@@ -511,7 +512,7 @@ func TestLoadConfigDefaultsLocalRegistryDisabledWhenGitOpsEngineUnset(t *testing
 	require.NoError(t, err)
 
 	assert.Equal(t, v1alpha1.LocalRegistryDisabled, manager.Config.Spec.Cluster.LocalRegistry)
-	assert.Equal(t, int32(0), manager.Config.Spec.Cluster.Options.LocalRegistry.HostPort)
+	assert.Equal(t, int32(0), manager.Config.Spec.Cluster.LocalRegistryOpts.HostPort)
 }
 
 func TestNewCommandConfigManagerBindsFlags(t *testing.T) {

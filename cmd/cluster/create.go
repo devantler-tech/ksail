@@ -19,7 +19,6 @@ import (
 	cmdhelpers "github.com/devantler-tech/ksail/v5/pkg/cmd"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	k3dconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/k3d"
-	kindconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/kind"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
 	"github.com/devantler-tech/ksail/v5/pkg/io/scaffolder"
@@ -37,6 +36,8 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	"github.com/devantler-tech/ksail/v5/pkg/ui/notify"
 	"github.com/devantler-tech/ksail/v5/pkg/ui/timer"
+	"github.com/docker/docker/api/types/filters"
+	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
 	"github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/spf13/cobra"
@@ -89,6 +90,9 @@ func NewCreateCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
 	fieldSelectors = append(fieldSelectors, ksailconfigmanager.DefaultMetricsServerFieldSelector())
 	fieldSelectors = append(fieldSelectors, ksailconfigmanager.DefaultCertManagerFieldSelector())
 	fieldSelectors = append(fieldSelectors, ksailconfigmanager.DefaultCSIFieldSelector())
+	// Unified node count selectors for all distributions (runtime overrides)
+	fieldSelectors = append(fieldSelectors, ksailconfigmanager.ControlPlanesFieldSelector())
+	fieldSelectors = append(fieldSelectors, ksailconfigmanager.WorkersFieldSelector())
 
 	cfgManager := ksailconfigmanager.NewCommandConfigManager(
 		cmd,
@@ -145,6 +149,28 @@ func handleCreateRunE(
 	// Configure metrics-server for K3d before cluster creation
 	setupK3dMetricsServer(clusterCfg, k3dConfig)
 
+	// Check if a test override is set for the factory
+	clusterProvisionerFactoryMu.RLock()
+
+	factoryOverride := clusterProvisionerFactoryOverride
+
+	clusterProvisionerFactoryMu.RUnlock()
+
+	if factoryOverride != nil {
+		// Use the test override factory
+		deps.Factory = factoryOverride
+	} else {
+		// Pass pre-loaded distribution configs to the factory to preserve in-memory modifications
+		// (e.g., mirror registries, metrics-server flags). This avoids double-loading from disk.
+		deps.Factory = clusterprovisioner.DefaultFactory{
+			DistributionConfig: &clusterprovisioner.DistributionConfig{
+				Kind:  kindConfig,
+				K3d:   k3dConfig,
+				Talos: talosConfig,
+			},
+		}
+	}
+
 	err = executeClusterLifecycle(cmd, clusterCfg, deps, &firstActivityShown)
 	if err != nil {
 		return err
@@ -187,12 +213,11 @@ func loadClusterConfiguration(
 		return nil, nil, nil, nil, fmt.Errorf("failed to load cluster configuration: %w", err)
 	}
 
-	kindConfig, k3dConfig, talosConfig, err := loadDistributionConfigs(clusterCfg, tmr)
-	if err != nil {
-		return nil, nil, nil, nil, err
-	}
+	// Use cached distribution config from ConfigManager
+	// These are pointers so in-memory modifications will be preserved
+	distConfig := cfgManager.DistributionConfig
 
-	return clusterCfg, kindConfig, k3dConfig, talosConfig, nil
+	return clusterCfg, distConfig.Kind, distConfig.K3d, distConfig.Talos, nil
 }
 
 func ensureLocalRegistriesReady(
@@ -355,71 +380,6 @@ func installCustomCNIAndMetrics(
 
 	// Install metrics-server after CNI is ready
 	return handleMetricsServer(cmd, clusterCfg, tmr, firstActivityShown)
-}
-
-//nolint:cyclop // Complexity slightly above threshold due to TalosInDocker support
-func loadDistributionConfigs(
-	clusterCfg *v1alpha1.Cluster,
-	lifecycleTimer timer.Timer,
-) (*v1alpha4.Cluster, *v1alpha5.SimpleConfig, *talosconfigmanager.Configs, error) {
-	defaultConfigPath := defaultDistributionConfigPath(clusterCfg.Spec.Cluster.Distribution)
-
-	configPath := strings.TrimSpace(clusterCfg.Spec.Cluster.DistributionConfig)
-	if configPath == "" || strings.EqualFold(configPath, "auto") {
-		clusterCfg.Spec.Cluster.DistributionConfig = defaultConfigPath
-		configPath = defaultConfigPath
-	}
-
-	// If distribution is K3d but the config path still points to the kind default,
-	// switch to the k3d default so we don’t try to read kind.yaml.
-	if clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionK3d &&
-		configPath == defaultDistributionConfigPath(v1alpha1.DistributionKind) {
-		clusterCfg.Spec.Cluster.DistributionConfig = defaultConfigPath
-		configPath = defaultConfigPath
-	}
-
-	switch clusterCfg.Spec.Cluster.Distribution {
-	case v1alpha1.DistributionKind:
-		manager := kindconfigmanager.NewConfigManager(configPath)
-
-		kindConfig, err := manager.LoadConfig(lifecycleTimer)
-		if err != nil {
-			return nil, nil, nil, fmt.Errorf("failed to load kind config: %w", err)
-		}
-
-		return kindConfig, nil, nil, nil
-	case v1alpha1.DistributionK3d:
-		manager := k3dconfigmanager.NewConfigManager(configPath)
-
-		k3dConfig, err := manager.LoadConfig(lifecycleTimer)
-		if err != nil {
-			return nil, nil, nil, fmt.Errorf("failed to load k3d config: %w", err)
-		}
-
-		return nil, k3dConfig, nil, nil
-	case v1alpha1.DistributionTalosInDocker:
-		// Derive cluster name from context or use default
-		clusterName := strings.TrimSpace(clusterCfg.Spec.Cluster.Connection.Context)
-		if clusterName == "" {
-			clusterName = talosconfigmanager.DefaultClusterName
-		}
-
-		manager := talosconfigmanager.NewConfigManager(
-			configPath,
-			clusterName,
-			"", // Use default Kubernetes version
-			"", // Use default network CIDR
-		)
-
-		talosConfig, err := manager.LoadConfig(lifecycleTimer)
-		if err != nil {
-			return nil, nil, nil, fmt.Errorf("failed to load talos config: %w", err)
-		}
-
-		return nil, nil, talosConfig, nil
-	default:
-		return nil, nil, nil, nil
-	}
 }
 
 // setupK3dMetricsServer configures metrics-server for K3d clusters by adding K3s flags.
@@ -592,6 +552,13 @@ var (
 	// dockerClientInvokerMu protects concurrent access to dockerClientInvoker in tests.
 	//nolint:gochecknoglobals // protects dockerClientInvoker global variable
 	dockerClientInvokerMu sync.RWMutex
+	// clusterProvisionerFactoryOverride allows tests to override the factory creation.
+	// When set, this factory is used instead of creating a new DefaultFactory.
+	//nolint:gochecknoglobals // dependency injection for tests
+	clusterProvisionerFactoryOverride clusterprovisioner.Factory
+	// clusterProvisionerFactoryMu protects concurrent access to clusterProvisionerFactoryOverride.
+	//nolint:gochecknoglobals // protects clusterProvisionerFactoryOverride global variable
+	clusterProvisionerFactoryMu sync.RWMutex
 )
 
 // SetCertManagerInstallerFactoryForTests overrides the cert-manager installer factory.
@@ -701,6 +668,27 @@ func SetDockerClientInvokerForTests(
 		dockerClientInvoker = previous
 
 		dockerClientInvokerMu.Unlock()
+	}
+}
+
+// SetClusterProvisionerFactoryForTests overrides the cluster provisioner factory for testing.
+//
+// When set, this factory is used instead of creating a new DefaultFactory in handleCreateRunE.
+// It returns a restore function that resets the factory to nil.
+func SetClusterProvisionerFactoryForTests(factory clusterprovisioner.Factory) func() {
+	clusterProvisionerFactoryMu.Lock()
+
+	previous := clusterProvisionerFactoryOverride
+	clusterProvisionerFactoryOverride = factory
+
+	clusterProvisionerFactoryMu.Unlock()
+
+	return func() {
+		clusterProvisionerFactoryMu.Lock()
+
+		clusterProvisionerFactoryOverride = previous
+
+		clusterProvisionerFactoryMu.Unlock()
 	}
 }
 
@@ -818,8 +806,19 @@ func runKindMirrorAction(
 	writer := ctx.cmd.OutOrStdout()
 	clusterName := ctx.kindConfig.Name
 
-	// Setup registry containers (they will be connected to network after cluster creation)
-	err := kindprovisioner.SetupRegistries(
+	// Kind always uses a network named "kind"
+	networkName := "kind"
+
+	// Pre-create the Docker network so registries can be connected before Kind nodes start.
+	// This ensures registry containers are reachable via Docker DNS when nodes pull images.
+	// For Kind, we don't need to specify a CIDR as Kind manages its own network settings.
+	err := ensureDockerNetworkExists(execCtx, dockerClient, networkName, "", writer)
+	if err != nil {
+		return fmt.Errorf("failed to create docker network: %w", err)
+	}
+
+	// Setup registry containers
+	err = kindprovisioner.SetupRegistries(
 		execCtx,
 		ctx.kindConfig,
 		clusterName,
@@ -831,6 +830,17 @@ func runKindMirrorAction(
 		return fmt.Errorf("failed to setup kind registries: %w", err)
 	}
 
+	// Connect registries to the network immediately for Docker DNS resolution
+	err = kindprovisioner.ConnectRegistriesToNetwork(
+		execCtx,
+		ctx.mirrorSpecs,
+		dockerClient,
+		writer,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to connect kind registries to network: %w", err)
+	}
+
 	return nil
 }
 
@@ -839,20 +849,10 @@ func runKindConnectAction(
 	ctx *registryStageContext,
 	dockerClient client.APIClient,
 ) error {
-	// Connect registries to the Kind network
-	err := kindprovisioner.ConnectRegistriesToNetwork(
-		execCtx,
-		ctx.mirrorSpecs,
-		dockerClient,
-		ctx.cmd.OutOrStdout(),
-	)
-	if err != nil {
-		return fmt.Errorf("failed to connect kind registries to network: %w", err)
-	}
-
-	// Configure containerd inside Kind nodes to use the registry mirrors
-	// This injects hosts.toml files directly into the running nodes
-	err = kindprovisioner.ConfigureContainerdRegistryMirrors(
+	// Registries are already connected to the network in runKindMirrorAction.
+	// This function only configures containerd inside Kind nodes to use the registry mirrors.
+	// This injects hosts.toml files directly into the running nodes.
+	err := kindprovisioner.ConfigureContainerdRegistryMirrors(
 		execCtx,
 		ctx.kindConfig,
 		ctx.mirrorSpecs,
@@ -875,16 +875,36 @@ func k3dRegistryActionFor(
 		switch currentRole {
 		case registryStageRoleMirror:
 			return func(execCtx context.Context, ctx *registryStageContext, dockerClient client.APIClient) error {
-				return runK3DRegistryAction(
+				// Setup registries first
+				err := runK3DRegistryAction(
 					execCtx,
 					ctx,
 					dockerClient,
 					"setup k3d registries",
 					k3dprovisioner.SetupRegistries,
 				)
-			}
-		case registryStageRoleConnect:
-			return func(execCtx context.Context, ctx *registryStageContext, dockerClient client.APIClient) error {
+				if err != nil {
+					return err
+				}
+
+				// Pre-create Docker network and connect registries before cluster creation.
+				// This ensures registries are reachable via Docker DNS when K3d nodes pull images.
+				clusterName := k3dconfigmanager.ResolveClusterName(ctx.clusterCfg, ctx.k3dConfig)
+				networkName := "k3d-" + clusterName
+				writer := ctx.cmd.OutOrStdout()
+
+				// For K3d, we don't need to specify a CIDR as K3d manages its own network settings.
+				errNetwork := ensureDockerNetworkExists(
+					execCtx,
+					dockerClient,
+					networkName,
+					"",
+					writer,
+				)
+				if errNetwork != nil {
+					return fmt.Errorf("failed to create k3d network: %w", errNetwork)
+				}
+
 				return runK3DRegistryAction(
 					execCtx,
 					ctx,
@@ -892,6 +912,12 @@ func k3dRegistryActionFor(
 					"connect k3d registries to network",
 					k3dprovisioner.ConnectRegistriesToNetwork,
 				)
+			}
+		case registryStageRoleConnect:
+			// Registries are already connected to the network in the mirror action.
+			// No additional work needed after cluster creation.
+			return func(_ context.Context, _ *registryStageContext, _ client.APIClient) error {
+				return nil
 			}
 		default:
 			return nil
@@ -945,19 +971,10 @@ func runTalosMirrorAction(
 		return nil
 	}
 
+	clusterName := resolveTalosClusterName(ctx.talosConfig)
+	networkName := clusterName // Talos uses cluster name as network name
+	networkCIDR := resolveTalosNetworkCIDR(ctx.talosConfig)
 	writer := ctx.cmd.OutOrStdout()
-	clusterName := ""
-
-	if ctx.talosConfig != nil {
-		clusterName = ctx.talosConfig.Name
-	}
-
-	if clusterName == "" {
-		clusterName = talosconfigmanager.DefaultClusterName
-	}
-
-	// TalosInDocker uses the cluster name as the network name
-	networkName := clusterName
 
 	// Build registry infos from mirror specs
 	upstreams := registry.BuildUpstreamLookup(ctx.mirrorSpecs)
@@ -967,15 +984,60 @@ func runTalosMirrorAction(
 		return nil
 	}
 
-	// Create registry manager
+	// Pre-create Docker network and setup registries before Talos nodes boot.
+	// This ensures registries are reachable via Docker DNS when nodes pull images.
+	return setupTalosMirrorRegistries(
+		execCtx,
+		dockerAPIClient,
+		clusterName,
+		networkName,
+		networkCIDR,
+		registryInfos,
+		writer,
+	)
+}
+
+// resolveTalosClusterName extracts the cluster name from Talos config or returns the default.
+func resolveTalosClusterName(talosConfig *talosconfigmanager.Configs) string {
+	if talosConfig != nil && talosConfig.Name != "" {
+		return talosConfig.Name
+	}
+
+	return talosconfigmanager.DefaultClusterName
+}
+
+// resolveTalosNetworkCIDR returns the Docker network CIDR for Talos.
+// This is always DefaultNetworkCIDR (10.5.0.0/24) - NOT the pod CIDR from cluster config.
+// The Talos SDK uses this CIDR for the Docker bridge network that nodes connect to.
+func resolveTalosNetworkCIDR(_ *talosconfigmanager.Configs) string {
+	return talosconfigmanager.DefaultNetworkCIDR
+}
+
+// setupTalosMirrorRegistries creates network, registry containers, and connects them.
+func setupTalosMirrorRegistries(
+	ctx context.Context,
+	dockerAPIClient client.APIClient,
+	clusterName string,
+	networkName string,
+	networkCIDR string,
+	registryInfos []registry.Info,
+	writer io.Writer,
+) error {
+	// Pre-create the Docker network with Talos-compatible labels and CIDR.
+	// This allows the Talos SDK to recognize and reuse the network when creating the cluster.
+	err := ensureDockerNetworkExists(ctx, dockerAPIClient, networkName, networkCIDR, writer)
+	if err != nil {
+		return fmt.Errorf("failed to create docker network: %w", err)
+	}
+
+	// Create registry manager and setup containers
 	registryMgr, err := dockerclient.NewRegistryManager(dockerAPIClient)
 	if err != nil {
 		return fmt.Errorf("failed to create registry manager: %w", err)
 	}
 
-	// Setup registry containers (they will be connected to network after cluster creation)
 	err = registry.SetupRegistries(
-		execCtx,
+		ctx,
 		registryMgr,
 		registryInfos,
 		clusterName,
@@ -986,48 +1048,117 @@ func runTalosMirrorAction(
 		return fmt.Errorf("failed to setup talos registries: %w", err)
 	}
 
+	// Connect registries to the network with static IPs from the high end of the subnet
+	// to avoid conflicts with Talos node IPs that start from .2
+	err = registry.ConnectRegistriesToNetworkWithStaticIPs(
+		ctx,
+		dockerAPIClient,
+		registryInfos,
+		networkName,
+		networkCIDR,
+		writer,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to connect talos registries to network: %w", err)
+	}
+
 	return nil
 }
 
 func runTalosConnectAction(
-	execCtx context.Context,
-	ctx *registryStageContext,
-	dockerAPIClient client.APIClient,
+	_ context.Context,
+	_ *registryStageContext,
+	_ client.APIClient,
 ) error {
-	if len(ctx.mirrorSpecs) == 0 {
-		return nil
-	}
+	// For Talos, registries are already connected to the network in runTalosMirrorAction.
+	// This function is a no-op but kept for consistency with the Kind/K3d flow.
+	// The early connection in runTalosMirrorAction ensures registries are available
+	// when Talos nodes start pulling images during boot.
+	return nil
+}
 
-	clusterName := ""
-
-	if ctx.talosConfig != nil {
-		clusterName = ctx.talosConfig.Name
-	}
-
-	if clusterName == "" {
-		clusterName = talosconfigmanager.DefaultClusterName
-	}
-
-	// TalosInDocker uses the cluster name as the network name
-	networkName := clusterName
-
-	// Build registry infos from mirror specs
-	registryInfos := registry.BuildRegistryInfosFromSpecs(ctx.mirrorSpecs, nil, nil)
-
-	if len(registryInfos) == 0 {
-		return nil
-	}
-
-	// Connect registries to the TalosInDocker network
-	err := registry.ConnectRegistriesToNetwork(
-		execCtx,
-		dockerAPIClient,
-		registryInfos,
-		networkName,
-		ctx.cmd.OutOrStdout(),
-	)
+// ensureDockerNetworkExists creates a Docker network if it doesn't already exist.
+// This is used by Talos to pre-create the cluster network before registry setup,
+// allowing registry containers to be connected and accessible via Docker DNS when
+// Talos nodes start pulling images during boot.
+//
+// The network is created with Talos-compatible labels and CIDR so that the Talos SDK
+// will recognize and reuse it when creating the cluster.
+//
+//nolint:funlen // Network creation requires multiple configuration steps
+func ensureDockerNetworkExists(
+	ctx context.Context,
+	dockerClient client.APIClient,
+	networkName string,
+	networkCIDR string,
+	writer io.Writer,
+) error {
+	// Check if network already exists
+	networks, err := dockerClient.NetworkList(ctx, network.ListOptions{
+		Filters: filters.NewArgs(filters.Arg("name", networkName)),
+	})
 	if err != nil {
-		return fmt.Errorf("failed to connect talos registries to network: %w", err)
+		return fmt.Errorf("failed to list networks: %w", err)
+	}
+
+	// Network with exact name match
+	for _, nw := range networks {
+		if nw.Name == networkName {
+			notify.WriteMessage(notify.Message{
+				Type:    notify.ActivityType,
+				Content: "network '%s' already exists",
+				Writer:  writer,
+				Args:    []any{networkName},
+			})
+
+			return nil
+		}
+	}
+
+	// Create the network with Talos-compatible labels and CIDR
+	// This ensures the Talos SDK will recognize and reuse the network
+	notify.WriteMessage(notify.Message{
+		Type:    notify.ActivityType,
+		Content: "creating network '%s'",
+		Writer:  writer,
+		Args:    []any{networkName},
+	})
+
+	// Default MTU for Docker bridge networks - required by Talos SDK's Reflect() function
+	const defaultNetworkMTU = "1500"
+
+	createOptions := network.CreateOptions{
+		Driver: "bridge",
+		// Use Talos labels so the SDK recognizes this as a Talos network
+		Labels: map[string]string{
+			"talos.owned":        "true",
+			"talos.cluster.name": networkName,
+		},
+		// Enable container name DNS resolution and set MTU
+		// The MTU option is required by the Talos SDK's Reflect() function which
+		// reads com.docker.network.driver.mtu to parse network state. Without it,
+		// strconv.Atoi("") fails with "invalid syntax" during cluster deletion.
+		Options: map[string]string{
+			"com.docker.network.bridge.enable_icc":           "true",
+			"com.docker.network.bridge.enable_ip_masquerade": "true",
+			"com.docker.network.driver.mtu":                  defaultNetworkMTU,
+		},
+	}
+
+	// Add IPAM config if CIDR is provided
+	if networkCIDR != "" {
+		createOptions.IPAM = &network.IPAM{
+			Config: []network.IPAMConfig{
+				{
+					Subnet: networkCIDR,
+				},
+			},
+		}
+	}
+
+	_, err = dockerClient.NetworkCreate(ctx, networkName, createOptions)
+	if err != nil {
+		return fmt.Errorf("failed to create network: %w", err)
 	}
 
 	return nil
@@ -1053,7 +1184,7 @@ func newRegistryHandlers(
 			prepare: func() bool { return prepareK3dConfigWithMirrors(clusterCfg, k3dConfig, mirrorSpecs) },
 			action:  k3dAction,
 		},
-		v1alpha1.DistributionTalosInDocker: {
+		v1alpha1.DistributionTalos: {
 			prepare: func() bool { return prepareTalosConfigWithMirrors(clusterCfg, talosConfig, mirrorSpecs) },
 			action:  talosAction,
 		},
@@ -1102,6 +1233,7 @@ func handleRegistryStage(
 	)
 }
 
+//nolint:funlen // Registry stage requires multiple validation and merge steps
 func runRegistryStageWithRole(
 	cmd *cobra.Command,
 	clusterCfg *v1alpha1.Cluster,
@@ -1118,11 +1250,36 @@ func runRegistryStageWithRole(
 		cfgManager.Viper.GetStringSlice("mirror-registry"),
 	)
 
-	// Try to read existing hosts.toml files from kind-mirrors directory.
+	// Try to read existing hosts.toml files from the configured mirrors directory.
 	// ReadExistingHostsToml returns (nil, nil) for missing directories, and an error for actual I/O issues.
-	existingSpecs, err := registry.ReadExistingHostsToml(scaffolder.KindMirrorsDir)
+	existingSpecs, err := registry.ReadExistingHostsToml(getKindMirrorsDir(clusterCfg))
 	if err != nil {
 		return fmt.Errorf("failed to read existing hosts configuration: %w", err)
+	}
+
+	// For Talos, also extract mirror hosts from the loaded Talos config.
+	// The Talos config includes any mirror-registries.yaml patches that were applied.
+	if talosConfig != nil {
+		talosHosts := talosConfig.ExtractMirrorHosts()
+		for _, host := range talosHosts {
+			// Only add if not already present in existingSpecs
+			found := false
+
+			for _, spec := range existingSpecs {
+				if spec.Host == host {
+					found = true
+
+					break
+				}
+			}
+
+			if !found {
+				existingSpecs = append(existingSpecs, registry.MirrorSpec{
+					Host:   host,
+					Remote: registry.GenerateUpstreamURL(host),
+				})
+			}
+		}
 	}
 
 	// Merge specs: flag specs override existing specs for the same host
@@ -1297,8 +1454,8 @@ func newCiliumInstaller(
 	var distribution ciliuminstaller.Distribution
 
 	switch clusterCfg.Spec.Cluster.Distribution {
-	case v1alpha1.DistributionTalosInDocker:
-		distribution = ciliuminstaller.DistributionTalosInDocker
+	case v1alpha1.DistributionTalos:
+		distribution = ciliuminstaller.DistributionTalos
 	case v1alpha1.DistributionKind:
 		distribution = ciliuminstaller.DistributionKind
 	case v1alpha1.DistributionK3d:
@@ -1358,8 +1515,8 @@ func newCalicoInstaller(
 	var distribution calicoinstaller.Distribution
 
 	switch clusterCfg.Spec.Cluster.Distribution {
-	case v1alpha1.DistributionTalosInDocker:
-		distribution = calicoinstaller.DistributionTalosInDocker
+	case v1alpha1.DistributionTalos:
+		distribution = calicoinstaller.DistributionTalos
 	case v1alpha1.DistributionKind:
 		distribution = calicoinstaller.DistributionKind
 	case v1alpha1.DistributionK3d:
@@ -1441,7 +1598,7 @@ func prepareKindConfigWithMirrors(
 	mirrorRegistries := cfgManager.Viper.GetStringSlice("mirror-registry")
 
 	// Also check for existing hosts.toml files
-	existingSpecs, err := registry.ReadExistingHostsToml(scaffolder.KindMirrorsDir)
+	existingSpecs, err := registry.ReadExistingHostsToml(getKindMirrorsDir(clusterCfg))
 	if err != nil {
 		// Log error but don't fail - missing configuration is acceptable
 		notify.WriteMessage(notify.Message{
@@ -1491,17 +1648,35 @@ func prepareK3dConfigWithMirrors(
 
 func prepareTalosConfigWithMirrors(
 	clusterCfg *v1alpha1.Cluster,
-	_ *talosconfigmanager.Configs,
+	talosConfig *talosconfigmanager.Configs,
 	mirrorSpecs []registry.MirrorSpec,
 ) bool {
-	if clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionTalosInDocker {
+	if clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionTalos {
 		return false
 	}
 
-	// TalosInDocker configures mirrors via machine config patches.
-	// We need mirrors to be set up even if talosConfig is nil (using defaults).
-	// The actual configuration happens during cluster creation via patches.
-	return len(mirrorSpecs) > 0
+	if len(mirrorSpecs) == 0 {
+		return false
+	}
+
+	// Apply mirror registries to the Talos config.
+	// This enables --mirror-registry CLI flags to work for both:
+	// 1. Clusters created solely from CLI with no declarative config
+	// 2. Clusters with declarative config where additional mirrors are added via CLI
+	if talosConfig != nil {
+		mirrors := make([]talosconfigmanager.MirrorRegistry, 0, len(mirrorSpecs))
+		for _, spec := range mirrorSpecs {
+			mirrors = append(mirrors, talosconfigmanager.MirrorRegistry{
+				Host:      spec.Host,
+				Endpoints: []string{"http://" + spec.Host + ":5000"},
+			})
+		}
+
+		// Apply mirrors to the Talos config - this merges with any existing mirrors
+		_ = talosConfig.ApplyMirrorRegistries(mirrors)
+	}
+
+	return true
 }
 
 // handleMetricsServer manages metrics-server installation based on cluster configuration.
@@ -2005,4 +2180,13 @@ func runFluxInstallation(
 	}
 
 	return nil
+}
+
+// getKindMirrorsDir returns the configured Kind mirrors directory or the default.
+func getKindMirrorsDir(clusterCfg *v1alpha1.Cluster) string {
+	if clusterCfg != nil && clusterCfg.Spec.Cluster.Kind.MirrorsDir != "" {
+		return clusterCfg.Spec.Cluster.Kind.MirrorsDir
+	}
+
+	return scaffolder.DefaultKindMirrorsDir
 }

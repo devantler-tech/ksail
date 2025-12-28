@@ -8,11 +8,11 @@ nav_order: 5
 | Category            | Supported Options                                           | Status/Notes                                         |
 |---------------------|-------------------------------------------------------------|------------------------------------------------------|
 | Platforms           | Linux (amd64, arm64), macOS (arm64), Windows (amd64, arm64) | ⚠️ Windows support is untested.                      |
-| Distributions       | Kind, K3d, Talos in Docker                                  | ✅ Both distributions fully supported.                |
+| Distributions       | Kind, K3d, Talos                                            | ✅ All three distributions fully supported.           |
 | Workload Management | kubectl, Helm                                               | ✅ Commands wrapped via `ksail workload`.             |
 | GitOps Engines      | Flux, ArgoCD                                                | ✅ Both engines fully supported.                      |
 | CNI                 | Default, Cilium, None                                       | ✅ Choose via `spec.cni` or `--cni` flag.             |
-| CSI                 | Default, LocalPathStorage                                   | ⚠️ Configuration defined but not fully implemented.  |
+| CSI                 | Default, LocalPathStorage                                   | ⚠️ Configuration defined but not implemented.        |
 | Metrics Server      | Enabled, Disabled                                           | ✅ Toggle with `--metrics-server` flag.               |
 | Cert-Manager        | Enabled, Disabled                                           | ✅ Toggle with `--cert-manager` flag.                 |
 | Local Registry      | Enabled, Disabled                                           | ✅ OCI registry for local image storage.              |

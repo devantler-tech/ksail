@@ -18,6 +18,7 @@ import (
 	kindconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/kind"
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
 	ksailvalidator "github.com/devantler-tech/ksail/v5/pkg/io/validator/ksail"
+	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v5/pkg/ui/notify"
 	"github.com/devantler-tech/ksail/v5/pkg/ui/timer"
 	mapstructure "github.com/go-viper/mapstructure/v2"
@@ -36,15 +37,18 @@ var ErrDistributionConfigNotFound = errors.New("distribution config file not fou
 
 // ConfigManager implements configuration management for KSail v1alpha1.Cluster configurations.
 type ConfigManager struct {
-	Viper                         *viper.Viper
-	fieldSelectors                []FieldSelector[v1alpha1.Cluster]
-	Config                        *v1alpha1.Cluster // Exposed config property as suggested
-	configLoaded                  bool              // Track if config has been actually loaded
-	configFileFound               bool              // Track if a config file was found and read
-	Writer                        io.Writer         // Writer for output notifications
-	command                       *cobra.Command    // Associated Cobra command for flag introspection
-	localRegistryExplicit         bool              // Tracks if config explicitly set the local registry behavior
-	localRegistryHostPortExplicit bool              // Tracks if config explicitly set the registry host port
+	Viper              *viper.Viper
+	fieldSelectors     []FieldSelector[v1alpha1.Cluster]
+	Config             *v1alpha1.Cluster
+	DistributionConfig *clusterprovisioner.DistributionConfig
+	configLoaded       bool
+	configFileFound    bool
+	Writer             io.Writer
+	command            *cobra.Command
+	// localRegistryExplicit tracks if config explicitly set the local registry behavior
+	localRegistryExplicit bool
+	// localRegistryHostPortExplicit tracks if config explicitly set the registry host port
+	localRegistryHostPortExplicit bool
 }
 
 // Compile-time interface compliance verification.
@@ -107,26 +111,18 @@ func (m *ConfigManager) LoadConfigFromFlagsOnly() (*v1alpha1.Cluster, error) {
 }
 
 // loadConfigWithOptions is the internal implementation with silent option.
-//
-//nolint:cyclop // config loading requires multiple option checks
 func (m *ConfigManager) loadConfigWithOptions(
 	tmr timer.Timer,
 	silent bool,
 	ignoreConfigFile bool,
 ) (*v1alpha1.Cluster, error) {
-	if !silent {
-		m.notifyLoadingStart()
-	}
-
+	// Check if config was already loaded before outputting any messages
 	if m.configLoaded {
-		if !silent {
-			m.notifyConfigReused()
-		}
-
 		return m.Config, nil
 	}
 
 	if !silent {
+		m.notifyLoadingStart()
 		m.notifyLoadingConfig()
 	}
 
@@ -155,6 +151,12 @@ func (m *ConfigManager) loadConfigWithOptions(
 	m.applyDistributionConfigDefaults()
 
 	err = m.validateConfig()
+	if err != nil {
+		return nil, err
+	}
+
+	// Load distribution config after validation (reuses cached configs from validation)
+	err = m.loadAndCacheDistributionConfig()
 	if err != nil {
 		return nil, err
 	}
@@ -217,7 +219,7 @@ func (m *ConfigManager) unmarshalAndApplyDefaults() error {
 	// This ensures validation will catch incorrect/missing apiVersion and kind values.
 
 	m.localRegistryExplicit = m.Config.Spec.Cluster.LocalRegistry != ""
-	m.localRegistryHostPortExplicit = m.Config.Spec.Cluster.Options.LocalRegistry.HostPort != 0
+	m.localRegistryHostPortExplicit = m.Config.Spec.Cluster.LocalRegistryOpts.HostPort != 0
 
 	// Apply field selector defaults for empty fields
 	for _, fieldSelector := range m.fieldSelectors {
@@ -368,15 +370,15 @@ func (m *ConfigManager) defaultLocalRegistryBehavior() v1alpha1.LocalRegistry {
 
 func (m *ConfigManager) applyLocalRegistryPortDefaults(hostPortExplicit bool) {
 	if m.Config.Spec.Cluster.LocalRegistry == v1alpha1.LocalRegistryEnabled {
-		if !hostPortExplicit && m.Config.Spec.Cluster.Options.LocalRegistry.HostPort == 0 {
-			m.Config.Spec.Cluster.Options.LocalRegistry.HostPort = defaultLocalRegistryPort
+		if !hostPortExplicit && m.Config.Spec.Cluster.LocalRegistryOpts.HostPort == 0 {
+			m.Config.Spec.Cluster.LocalRegistryOpts.HostPort = defaultLocalRegistryPort
 		}
 
 		return
 	}
 
 	if !hostPortExplicit {
-		m.Config.Spec.Cluster.Options.LocalRegistry.HostPort = 0
+		m.Config.Spec.Cluster.LocalRegistryOpts.HostPort = 0
 	}
 }
 
@@ -487,14 +489,6 @@ func (m *ConfigManager) notifyLoadingStart() {
 	})
 }
 
-func (m *ConfigManager) notifyConfigReused() {
-	notify.WriteMessage(notify.Message{
-		Type:    notify.SuccessType,
-		Content: "config already loaded, reusing existing config",
-		Writer:  m.Writer,
-	})
-}
-
 func (m *ConfigManager) notifyLoadingConfig() {
 	notify.WriteMessage(notify.Message{
 		Type:    notify.ActivityType,
@@ -596,7 +590,7 @@ func expectedDistributionConfigName(distribution v1alpha1.Distribution) string {
 		return "kind.yaml"
 	case v1alpha1.DistributionK3d:
 		return "k3d.yaml"
-	case v1alpha1.DistributionTalosInDocker:
+	case v1alpha1.DistributionTalos:
 		return "talos"
 	default:
 		return ""
@@ -607,11 +601,11 @@ func distributionConfigIsOppositeDefault(current string, distribution v1alpha1.D
 	switch distribution {
 	case v1alpha1.DistributionKind:
 		return current == expectedDistributionConfigName(v1alpha1.DistributionK3d) ||
-			current == expectedDistributionConfigName(v1alpha1.DistributionTalosInDocker)
+			current == expectedDistributionConfigName(v1alpha1.DistributionTalos)
 	case v1alpha1.DistributionK3d:
 		return current == expectedDistributionConfigName(v1alpha1.DistributionKind) ||
-			current == expectedDistributionConfigName(v1alpha1.DistributionTalosInDocker)
-	case v1alpha1.DistributionTalosInDocker:
+			current == expectedDistributionConfigName(v1alpha1.DistributionTalos)
+	case v1alpha1.DistributionTalos:
 		return current == expectedDistributionConfigName(v1alpha1.DistributionKind) ||
 			current == expectedDistributionConfigName(v1alpha1.DistributionK3d)
 	default:
@@ -667,7 +661,7 @@ func (m *ConfigManager) createValidatorForDistribution() (*ksailvalidator.Valida
 		if k3dConfig != nil {
 			return ksailvalidator.NewValidatorForK3d(k3dConfig), nil
 		}
-	case v1alpha1.DistributionTalosInDocker:
+	case v1alpha1.DistributionTalos:
 		talosConfig, err := m.loadTalosConfig()
 		if err != nil && !errors.Is(err, ErrDistributionConfigNotFound) {
 			return nil, err
@@ -731,7 +725,7 @@ func (m *ConfigManager) loadK3dConfig() (*k3dv1alpha5.SimpleConfig, error) {
 // Returns ErrDistributionConfigNotFound if the directory doesn't exist.
 // Returns error if config loading or validation fails.
 func (m *ConfigManager) loadTalosConfig() (*talosconfigmanager.Configs, error) {
-	// For TalosInDocker, DistributionConfig points to the patches directory (e.g., "talos")
+	// For Talos, DistributionConfig points to the patches directory (e.g., "talos")
 	patchesDir := m.Config.Spec.Cluster.DistributionConfig
 	if patchesDir == "" {
 		patchesDir = talosconfigmanager.DefaultPatchesDir
@@ -770,4 +764,68 @@ func (m *ConfigManager) loadTalosConfig() (*talosconfigmanager.Configs, error) {
 	}
 
 	return config, nil
+}
+
+// loadAndCacheDistributionConfig loads the distribution-specific configuration based on
+// the cluster's distribution type and caches it in the ConfigManager.
+// This allows commands to access the distribution config via cfgManager.DistributionConfig.
+// If distribution config file doesn't exist, an empty DistributionConfig is created.
+func (m *ConfigManager) loadAndCacheDistributionConfig() error {
+	m.DistributionConfig = &clusterprovisioner.DistributionConfig{}
+
+	switch m.Config.Spec.Cluster.Distribution {
+	case v1alpha1.DistributionKind:
+		return m.cacheKindConfig()
+	case v1alpha1.DistributionK3d:
+		return m.cacheK3dConfig()
+	case v1alpha1.DistributionTalos:
+		return m.cacheTalosConfig()
+	default:
+		return nil
+	}
+}
+
+func (m *ConfigManager) cacheKindConfig() error {
+	kindConfig, err := m.loadKindConfig()
+	if err != nil && !errors.Is(err, ErrDistributionConfigNotFound) {
+		return fmt.Errorf("failed to load Kind distribution config: %w", err)
+	}
+
+	if kindConfig == nil {
+		kindConfig = &kindv1alpha4.Cluster{}
+	}
+
+	m.DistributionConfig.Kind = kindConfig
+
+	return nil
+}
+
+func (m *ConfigManager) cacheK3dConfig() error {
+	k3dConfig, err := m.loadK3dConfig()
+	if err != nil && !errors.Is(err, ErrDistributionConfigNotFound) {
+		return fmt.Errorf("failed to load K3d distribution config: %w", err)
+	}
+
+	if k3dConfig == nil {
+		k3dConfig = &k3dv1alpha5.SimpleConfig{}
+	}
+
+	m.DistributionConfig.K3d = k3dConfig
+
+	return nil
+}
+
+func (m *ConfigManager) cacheTalosConfig() error {
+	talosConfig, err := m.loadTalosConfig()
+	if err != nil && !errors.Is(err, ErrDistributionConfigNotFound) {
+		return fmt.Errorf("failed to load Talos distribution config: %w", err)
+	}
+
+	if talosConfig == nil {
+		talosConfig = &talosconfigmanager.Configs{}
+	}
+
+	m.DistributionConfig.Talos = talosConfig
+
+	return nil
 }

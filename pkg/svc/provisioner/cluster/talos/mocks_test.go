@@ -1,4 +1,4 @@
-package talosindockerprovisioner_test
+package talosprovisioner_test
 
 import (
 	"context"

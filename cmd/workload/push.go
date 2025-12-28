@@ -64,7 +64,7 @@ func NewPushCmd(_ *runtime.Runtime) *cobra.Command {
 
 		artifactVersion := registry.DefaultLocalArtifactTag
 
-		registryPort := clusterCfg.Spec.Cluster.Options.LocalRegistry.HostPort
+		registryPort := clusterCfg.Spec.Cluster.LocalRegistryOpts.HostPort
 		if registryPort == 0 {
 			registryPort = v1alpha1.DefaultLocalRegistryPort
 		}

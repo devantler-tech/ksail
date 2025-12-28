@@ -17,9 +17,9 @@ type Distribution string
 
 // Supported distribution types.
 const (
-	DistributionKind          Distribution = "kind"
-	DistributionK3d           Distribution = "k3d"
-	DistributionTalosInDocker Distribution = "talosindocker"
+	DistributionKind  Distribution = "kind"
+	DistributionK3d   Distribution = "k3d"
+	DistributionTalos Distribution = "talos"
 )
 
 // CiliumInstaller implements the installer.Installer interface for Cilium.
@@ -61,9 +61,9 @@ func NewCiliumInstallerWithDistribution(
 
 // Install installs or upgrades Cilium via its Helm chart.
 func (c *CiliumInstaller) Install(ctx context.Context) error {
-	// For TalosInDocker, wait for API server to stabilize before CNI installation.
+	// For Talos, wait for API server to stabilize before CNI installation.
 	// The API server may be unstable immediately after bootstrap.
-	if c.distribution == DistributionTalosInDocker {
+	if c.distribution == DistributionTalos {
 		err := c.WaitForAPIServerStability(ctx)
 		if err != nil {
 			return fmt.Errorf("failed to wait for API server stability: %w", err)
@@ -135,7 +135,7 @@ func (c *CiliumInstaller) getCiliumValues() map[string]string {
 
 	// Add distribution-specific values
 	switch c.distribution {
-	case DistributionTalosInDocker:
+	case DistributionTalos:
 		// Talos-specific settings from https://docs.siderolabs.com/kubernetes-guides/cni/deploying-cilium
 		maps.Copy(values, talosCiliumValues())
 	case DistributionKind, DistributionK3d:

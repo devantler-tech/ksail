@@ -112,7 +112,7 @@ func TestStandardFieldSelectors(t *testing.T) {
 			expectedDefault: v1alpha1.DefaultLocalRegistryPort,
 			assertPointer: func(t *testing.T, cluster *v1alpha1.Cluster, ptr any) {
 				t.Helper()
-				assertPointerSame(t, ptr, &cluster.Spec.Cluster.Options.LocalRegistry.HostPort)
+				assertPointerSame(t, ptr, &cluster.Spec.Cluster.LocalRegistryOpts.HostPort)
 			},
 		},
 		{
@@ -122,7 +122,7 @@ func TestStandardFieldSelectors(t *testing.T) {
 			expectedDefault: metav1.Duration{Duration: time.Minute},
 			assertPointer: func(t *testing.T, cluster *v1alpha1.Cluster, ptr any) {
 				t.Helper()
-				assertPointerSame(t, ptr, &cluster.Spec.Cluster.Options.Flux.Interval)
+				assertPointerSame(t, ptr, &cluster.Spec.Cluster.Flux.Interval)
 			},
 		},
 		{

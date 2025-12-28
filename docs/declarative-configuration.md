@@ -61,17 +61,16 @@ spec:
     cni: Cilium
     # CSI "Default" uses the distribution's built-in storage behavior:
     # - K3d: includes local-path-provisioner by default
-    # - Kind and TalosInDocker: no CSI installed; use LocalPathStorage if needed
+    # - Kind and Talos: no CSI installed; use LocalPathStorage if needed
     csi: Default
     metricsServer: Enabled
     certManager: Enabled
     localRegistry: Enabled
     gitOpsEngine: Flux
-    options:
-      localRegistry:
-        hostPort: 5111
-      flux:
-        interval: 1m
+    localRegistryOptions:
+      hostPort: 5111
+    flux:
+      interval: 1m
   workload:
     sourceDirectory: k8s
     validateOnPush: true
@@ -128,7 +127,7 @@ Kubernetes distribution to use for the local cluster.
 
 - `Kind` (default) – Uses [Kind](https://kind.sigs.k8s.io/) to run Kubernetes in Docker
 - `K3d` – Uses [K3d](https://k3d.io/) to run lightweight K3s in Docker
-- `TalosInDocker` – Uses [Talos Linux](https://www.talos.dev/) in Docker containers
+- `Talos` – Uses [Talos Linux](https://www.talos.dev/) in Docker containers
 
 #### distributionConfig
 
@@ -138,7 +137,7 @@ Path to the distribution-specific configuration file or directory. This tells KS
 
 - `Kind` → `kind.yaml`
 - `K3d` → `k3d.yaml`
-- `TalosInDocker` → `talos/` (directory)
+- `Talos` → `talos/` (directory)
 
 See [Distribution Configuration](#distribution-configuration) below for details on each format.
 
@@ -154,7 +153,7 @@ See [Distribution Configuration](#distribution-configuration) below for details 
 
 - `Kind` → `kind-kind`
 - `K3d` → `k3d-k3d-default`
-- `TalosInDocker` → `admin@talos-default`
+- `Talos` → `admin@talos-default`
 
 **Timeout format:** Go duration string (e.g., `30s`, `5m`, `1h`)
 
@@ -224,10 +223,10 @@ Advanced configuration options for specific distributions, networking, and deplo
 
 **Common options:**
 
-- `options.localRegistry.hostPort` – Host port for local registry (default: `5111`)
-- `options.flux.interval` – Flux reconciliation interval (default: `1m`)
-- `options.talosInDocker.controlPlanes` – Number of control-plane nodes (default: `1`)
-- `options.talosInDocker.workers` – Number of worker nodes (default: `0`)
+- `spec.cluster.localRegistryOptions.hostPort` – Host port for local registry (default: `5111`)
+- `spec.cluster.flux.interval` – Flux reconciliation interval (default: `1m`)
+- `spec.cluster.talos.controlPlanes` – Number of control-plane nodes (default: `1`)
+- `spec.cluster.talos.workers` – Number of worker nodes (default: `0`)
 
 ### spec.workload (WorkloadSpec)
 
@@ -293,11 +292,11 @@ ports:
       - loadbalancer
 ```
 
-### TalosInDocker Configuration
+### Talos Configuration
 
 **Default:** `talos/` directory
 
-TalosInDocker uses a directory structure for [Talos machine configuration patches](https://www.talos.dev/latest/reference/configuration/). Each directory contains YAML patch files that modify the Talos machine configuration.
+Talos uses a directory structure for [Talos machine configuration patches](https://www.talos.dev/latest/reference/configuration/). Each directory contains YAML patch files that modify the Talos machine configuration.
 
 **Documentation:** [Talos Configuration Reference](https://www.talos.dev/latest/reference/configuration/)
 
@@ -329,17 +328,16 @@ machine:
     net.core.somaxconn: "65535"
 ```
 
-Use `spec.cluster.options.talosInDocker` to configure node counts:
+Use `spec.cluster.talos` to configure node counts:
 
 ```yaml
 spec:
   cluster:
-    distribution: TalosInDocker
+    distribution: Talos
     distributionConfig: talos
-    options:
-      talosInDocker:
-        controlPlanes: 3
-        workers: 2
+    talos:
+      controlPlanes: 3
+      workers: 2
 ```
 
 ## Schema Support

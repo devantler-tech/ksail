@@ -2,46 +2,90 @@ package clusterprovisioner_test
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	configmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager"
+	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	k3dprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/k3d"
 	kindprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/kind"
-	talosindockerprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/talosindocker"
+	talosprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/talos"
+	k3dTypes "github.com/k3d-io/k3d/v5/pkg/config/types"
+	k3dv1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
 
-type expectation func(*testing.T, clusterprovisioner.ClusterProvisioner, string, error)
-
-type pathProvider func(*testing.T) string
-
-type createClusterProvisionerCase struct {
-	name           string
-	distribution   v1alpha1.Distribution
-	configProvider pathProvider
-	assertion      expectation
-}
-
-func TestCreateClusterProvisioner(t *testing.T) {
+//nolint:funlen // table-driven test with multiple test cases
+func TestCreateClusterProvisioner_WithDistributionConfig(t *testing.T) {
 	t.Parallel()
 
-	for _, testCase := range buildCreateClusterProvisionerCases(t) {
+	tests := []struct {
+		name               string
+		distribution       v1alpha1.Distribution
+		distributionConfig *clusterprovisioner.DistributionConfig
+		expectedType       any
+		expectError        bool
+		errorIs            error
+	}{
+		{
+			name:         "kind with pre-loaded config",
+			distribution: v1alpha1.DistributionKind,
+			distributionConfig: &clusterprovisioner.DistributionConfig{
+				Kind: &v1alpha4.Cluster{
+					Name: "test-kind",
+				},
+			},
+			expectedType: &kindprovisioner.KindClusterProvisioner{},
+			expectError:  false,
+		},
+		{
+			name:         "k3d with pre-loaded config",
+			distribution: v1alpha1.DistributionK3d,
+			distributionConfig: &clusterprovisioner.DistributionConfig{
+				K3d: &k3dv1alpha5.SimpleConfig{
+					ObjectMeta: k3dTypes.ObjectMeta{
+						Name: "test-k3d",
+					},
+				},
+			},
+			expectedType: &k3dprovisioner.K3dClusterProvisioner{},
+			expectError:  false,
+		},
+		{
+			name:         "talos with pre-loaded config",
+			distribution: v1alpha1.DistributionTalos,
+			distributionConfig: &clusterprovisioner.DistributionConfig{
+				Talos: &talosconfigmanager.Configs{
+					Name: "test-talos",
+				},
+			},
+			expectedType: &talosprovisioner.TalosProvisioner{},
+			expectError:  false,
+		},
+		{
+			name:         "unsupported distribution returns error",
+			distribution: v1alpha1.Distribution("unknown"),
+			distributionConfig: &clusterprovisioner.DistributionConfig{
+				Kind: &v1alpha4.Cluster{},
+			},
+			expectError: true,
+			errorIs:     clusterprovisioner.ErrUnsupportedDistribution,
+		},
+	}
+
+	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			configPath := testCase.configProvider(t)
-
-			factory := clusterprovisioner.DefaultFactory{}
+			factory := clusterprovisioner.DefaultFactory{
+				DistributionConfig: testCase.distributionConfig,
+			}
 			cluster := &v1alpha1.Cluster{
 				Spec: v1alpha1.Spec{
 					Cluster: v1alpha1.ClusterSpec{
-						Distribution:       testCase.distribution,
-						DistributionConfig: configPath,
+						Distribution: testCase.distribution,
 						Connection: v1alpha1.Connection{
 							Kubeconfig: "",
 						},
@@ -49,20 +93,23 @@ func TestCreateClusterProvisioner(t *testing.T) {
 				},
 			}
 
-			provisioner, distributionConfig, err := factory.Create(
+			provisioner, _, err := factory.Create(
 				context.Background(),
 				cluster,
 			)
 
-			var clusterName string
-			if err == nil {
-				clusterName, err = configmanager.GetClusterName(distributionConfig)
-				if err != nil {
-					t.Fatalf("failed to get cluster name from config: %v", err)
-				}
-			}
+			if testCase.expectError {
+				require.Error(t, err)
+				require.Nil(t, provisioner)
 
-			testCase.assertion(t, provisioner, clusterName, err)
+				if testCase.errorIs != nil {
+					require.ErrorIs(t, err, testCase.errorIs)
+				}
+			} else {
+				require.NoError(t, err)
+				require.NotNil(t, provisioner)
+				assert.IsType(t, testCase.expectedType, provisioner)
+			}
 		})
 	}
 }
@@ -70,7 +117,11 @@ func TestCreateClusterProvisioner(t *testing.T) {
 func TestCreateClusterProvisioner_NilCluster(t *testing.T) {
 	t.Parallel()
 
-	factory := clusterprovisioner.DefaultFactory{}
+	factory := clusterprovisioner.DefaultFactory{
+		DistributionConfig: &clusterprovisioner.DistributionConfig{
+			Kind: &v1alpha4.Cluster{},
+		},
+	}
 	provisioner, distributionConfig, err := factory.Create(
 		context.Background(),
 		nil,
@@ -82,146 +133,14 @@ func TestCreateClusterProvisioner_NilCluster(t *testing.T) {
 	assert.ErrorIs(t, err, clusterprovisioner.ErrUnsupportedDistribution)
 }
 
-func buildCreateClusterProvisionerCases(t *testing.T) []createClusterProvisionerCase {
-	t.Helper()
-
-	kindConfig := "kind: Cluster\napiVersion: kind.x-k8s.io/v1alpha4\nname: custom-kind\n"
-	invalidKindConfig := ": invalid\n"
-	k3dConfig := "apiVersion: k3d.io/v1alpha5\nkind: Simple\nmetadata:\n  name: custom-k3d\n"
-
-	return []createClusterProvisionerCase{
-		{
-			name:           "kind default config uses fallback name",
-			distribution:   v1alpha1.DistributionKind,
-			configProvider: staticPath("non-existent-kind.yaml"),
-			assertion:      expectSuccess("kind", &kindprovisioner.KindClusterProvisioner{}),
-		},
-		{
-			name:           "kind config file returns custom name",
-			distribution:   v1alpha1.DistributionKind,
-			configProvider: tempConfig("kind.yaml", kindConfig),
-			assertion:      expectSuccess("custom-kind", &kindprovisioner.KindClusterProvisioner{}),
-		},
-		{
-			name:           "kind invalid config returns load error",
-			distribution:   v1alpha1.DistributionKind,
-			configProvider: tempConfig("kind-invalid.yaml", invalidKindConfig),
-			assertion:      expectErrorContains("failed to load Kind configuration"),
-		},
-		{
-			name:           "k3d default config uses fallback name",
-			distribution:   v1alpha1.DistributionK3d,
-			configProvider: staticPath("non-existent-k3d.yaml"),
-			assertion:      expectSuccess("k3d-default", &k3dprovisioner.K3dClusterProvisioner{}),
-		},
-		{
-			name:           "k3d config file returns custom name",
-			distribution:   v1alpha1.DistributionK3d,
-			configProvider: tempConfig("k3d.yaml", k3dConfig),
-			assertion:      expectSuccess("custom-k3d", &k3dprovisioner.K3dClusterProvisioner{}),
-		},
-		{
-			name:           "talosindocker default config uses fallback name",
-			distribution:   v1alpha1.DistributionTalosInDocker,
-			configProvider: staticPath("non-existent-talos"),
-			assertion: expectSuccess(
-				"talos-default",
-				&talosindockerprovisioner.TalosInDockerProvisioner{},
-			),
-		},
-		{
-			name:           "unsupported distribution returns error",
-			distribution:   v1alpha1.Distribution("unknown"),
-			configProvider: staticPath("ignored.yaml"),
-			assertion:      expectErrorIs(clusterprovisioner.ErrUnsupportedDistribution),
-		},
-	}
-}
-
-func tempConfig(filename, content string) pathProvider {
-	return func(t *testing.T) string {
-		t.Helper()
-
-		return createConfigFile(t, filename, content)
-	}
-}
-
-func staticPath(path string) pathProvider {
-	return func(t *testing.T) string {
-		t.Helper()
-
-		return path
-	}
-}
-
-func expectSuccess(expectedName string, expectedType any) expectation {
-	return func(t *testing.T, provisioner clusterprovisioner.ClusterProvisioner, clusterName string, err error) {
-		t.Helper()
-
-		require.NoError(t, err)
-		require.NotNil(t, provisioner)
-		assert.Equal(t, expectedName, clusterName)
-		assert.IsType(t, expectedType, provisioner)
-	}
-}
-
-func expectFailure(assertion func(*testing.T, error)) expectation {
-	return func(t *testing.T, provisioner clusterprovisioner.ClusterProvisioner, clusterName string, err error) {
-		t.Helper()
-
-		require.Error(t, err)
-		assert.Nil(t, provisioner)
-		assert.Empty(t, clusterName)
-
-		assertion(t, err)
-	}
-}
-
-func expectErrorContains(message string) expectation {
-	return expectFailure(func(t *testing.T, err error) {
-		t.Helper()
-
-		assert.ErrorContains(t, err, message)
-	})
-}
-
-func expectErrorIs(target error) expectation {
-	return expectFailure(func(t *testing.T, err error) {
-		t.Helper()
-
-		assert.ErrorIs(t, err, target)
-	})
-}
-
-func createConfigFile(t *testing.T, filename, content string) string {
-	t.Helper()
-
-	dir := t.TempDir()
-	path := filepath.Join(dir, filename)
-
-	err := os.WriteFile(path, []byte(content), 0o600)
-	require.NoError(t, err, "writing config fixture should succeed")
-
-	return path
-}
-
-func assertInvalidClusterConfig(
-	t *testing.T,
-	distribution v1alpha1.Distribution,
-	configFile string,
-	configContent string,
-	expectedError string,
-) {
-	t.Helper()
-
-	configPath := createConfigFile(t, configFile, configContent)
+func TestCreateClusterProvisioner_MissingDistributionConfig(t *testing.T) {
+	t.Parallel()
 
 	factory := clusterprovisioner.DefaultFactory{}
 	cluster := &v1alpha1.Cluster{
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{
-				Distribution:       distribution,
-				DistributionConfig: configPath,
+				Distribution: v1alpha1.DistributionKind,
 				Connection: v1alpha1.Connection{
 					Kubeconfig: "",
 				},
@@ -229,42 +148,106 @@ func assertInvalidClusterConfig(
 		},
 	}
 
-	provisioner, clusterName, err := factory.Create(
+	provisioner, _, err := factory.Create(
+		context.Background(),
+		cluster,
+	)
+
+	require.Error(t, err)
+	require.Nil(t, provisioner)
+	assert.ErrorIs(t, err, clusterprovisioner.ErrMissingDistributionConfig)
+}
+
+func TestCreateClusterProvisioner_WrongDistributionConfig(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name               string
+		distribution       v1alpha1.Distribution
+		distributionConfig *clusterprovisioner.DistributionConfig
+	}{
+		{
+			name:         "kind requested but k3d config provided",
+			distribution: v1alpha1.DistributionKind,
+			distributionConfig: &clusterprovisioner.DistributionConfig{
+				K3d: &k3dv1alpha5.SimpleConfig{},
+			},
+		},
+		{
+			name:         "k3d requested but kind config provided",
+			distribution: v1alpha1.DistributionK3d,
+			distributionConfig: &clusterprovisioner.DistributionConfig{
+				Kind: &v1alpha4.Cluster{},
+			},
+		},
+		{
+			name:         "talos requested but kind config provided",
+			distribution: v1alpha1.DistributionTalos,
+			distributionConfig: &clusterprovisioner.DistributionConfig{
+				Kind: &v1alpha4.Cluster{},
+			},
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			factory := clusterprovisioner.DefaultFactory{
+				DistributionConfig: testCase.distributionConfig,
+			}
+			cluster := &v1alpha1.Cluster{
+				Spec: v1alpha1.Spec{
+					Cluster: v1alpha1.ClusterSpec{
+						Distribution: testCase.distribution,
+						Connection: v1alpha1.Connection{
+							Kubeconfig: "",
+						},
+					},
+				},
+			}
+
+			provisioner, _, err := factory.Create(
+				context.Background(),
+				cluster,
+			)
+
+			require.Error(t, err)
+			require.Nil(t, provisioner)
+			assert.ErrorIs(t, err, clusterprovisioner.ErrMissingDistributionConfig)
+		})
+	}
+}
+
+func TestCreateKindProvisioner_DockerClientError(t *testing.T) {
+	t.Setenv("DOCKER_HOST", "://")
+	t.Setenv("DOCKER_TLS_VERIFY", "")
+	t.Setenv("DOCKER_CERT_PATH", "")
+
+	factory := clusterprovisioner.DefaultFactory{
+		DistributionConfig: &clusterprovisioner.DistributionConfig{
+			Kind: &v1alpha4.Cluster{
+				Name: "test-kind",
+			},
+		},
+	}
+	cluster := &v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				Distribution: v1alpha1.DistributionKind,
+				Connection: v1alpha1.Connection{
+					Kubeconfig: "",
+				},
+			},
+		},
+	}
+
+	provisioner, _, err := factory.Create(
 		context.Background(),
 		cluster,
 	)
 
 	require.Error(t, err)
 	assert.Nil(t, provisioner)
-	assert.Empty(t, clusterName)
-	assert.Contains(t, err.Error(), expectedError)
-}
-
-func TestCreateKindProvisionerDockerClientError(t *testing.T) {
-	t.Helper()
-
-	t.Setenv("DOCKER_HOST", "://")
-	t.Setenv("DOCKER_TLS_VERIFY", "")
-	t.Setenv("DOCKER_CERT_PATH", "")
-
-	assertInvalidClusterConfig(
-		t,
-		v1alpha1.DistributionKind,
-		"kind.yaml",
-		"kind: Cluster\napiVersion: kind.x-k8s.io/v1alpha4\nname: custom-kind\n",
-		"failed to create Docker client",
-	)
-}
-
-func TestCreateK3dProvisionerInvalidConfig(t *testing.T) {
-	t.Helper()
-	t.Parallel()
-
-	assertInvalidClusterConfig(
-		t,
-		v1alpha1.DistributionK3d,
-		"k3d-invalid.yaml",
-		": invalid\n",
-		"failed to load K3d configuration",
-	)
+	assert.Contains(t, err.Error(), "failed to create Docker client")
 }

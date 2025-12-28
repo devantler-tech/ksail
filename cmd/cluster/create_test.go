@@ -34,7 +34,7 @@ func (*fakeProvisioner) Exists(context.Context, string) (bool, error) { return t
 
 type fakeFactory struct{}
 
-func (fakeFactory) Create( //nolint:ireturn // test double matches interface-based factory signature
+func (fakeFactory) Create(
 	_ context.Context,
 	_ *v1alpha1.Cluster,
 ) (clusterprovisioner.ClusterProvisioner, any, error) {
@@ -116,6 +116,10 @@ func TestCreate_EnabledCertManager_PrintsInstallStage(t *testing.T) {
 	t.Chdir(workingDir)
 	writeTestConfigFiles(t, workingDir)
 
+	// Override cluster provisioner factory to use fake provisioner
+	restoreFactory := clusterpkg.SetClusterProvisionerFactoryForTests(fakeFactory{})
+	defer restoreFactory()
+
 	fake := &fakeInstaller{}
 
 	restore := clusterpkg.SetCertManagerInstallerFactoryForTests(
@@ -154,6 +158,10 @@ func TestCreate_DefaultCertManager_DoesNotInstall(t *testing.T) {
 	t.Chdir(workingDir)
 	writeTestConfigFiles(t, workingDir)
 
+	// Override cluster provisioner factory to use fake provisioner
+	restoreFactory := clusterpkg.SetClusterProvisionerFactoryForTests(fakeFactory{})
+	defer restoreFactory()
+
 	factoryCalled := false
 
 	restore := clusterpkg.SetCertManagerInstallerFactoryForTests(
@@ -190,6 +198,10 @@ func setupArgoCDTestMocks(t *testing.T) (func() *fakeInstaller, *bool) {
 	var fake *fakeInstaller
 
 	ensureCalled := false
+
+	// Override cluster provisioner factory to use fake provisioner
+	restoreFactory := clusterpkg.SetClusterProvisionerFactoryForTests(fakeFactory{})
+	t.Cleanup(restoreFactory)
 
 	restoreInstaller := clusterpkg.SetArgoCDInstallerFactoryForTests(
 		func(_ *v1alpha1.Cluster) (installer.Installer, error) {
@@ -288,6 +300,10 @@ spec:
 		"apiVersion: v1\nkind: Config\nclusters: []\ncontexts: []\nusers: []\n",
 	)
 
+	// Override cluster provisioner factory to use fake provisioner
+	restoreFactory := clusterpkg.SetClusterProvisionerFactoryForTests(fakeFactory{})
+	defer restoreFactory()
+
 	fake := &fakeInstaller{}
 
 	restore := clusterpkg.SetCSIInstallerFactoryForTests(
@@ -321,6 +337,10 @@ func TestCreate_DefaultCSI_DoesNotInstall(t *testing.T) {
 	workingDir := t.TempDir()
 	t.Chdir(workingDir)
 	writeTestConfigFiles(t, workingDir)
+
+	// Override cluster provisioner factory to use fake provisioner
+	restoreFactory := clusterpkg.SetClusterProvisionerFactoryForTests(fakeFactory{})
+	defer restoreFactory()
 
 	cmd := clusterpkg.NewCreateCmd(newTestRuntimeContainer(t))
 

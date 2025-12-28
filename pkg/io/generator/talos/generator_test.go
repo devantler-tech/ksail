@@ -5,27 +5,27 @@ import (
 	"path/filepath"
 	"testing"
 
-	talosgenerator "github.com/devantler-tech/ksail/v5/pkg/io/generator/talosindocker"
+	talosgenerator "github.com/devantler-tech/ksail/v5/pkg/io/generator/talos"
 	yamlgenerator "github.com/devantler-tech/ksail/v5/pkg/io/generator/yaml"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestNewTalosInDockerGenerator(t *testing.T) {
+func TestNewTalosGenerator(t *testing.T) {
 	t.Parallel()
 
-	gen := talosgenerator.NewTalosInDockerGenerator()
+	gen := talosgenerator.NewTalosGenerator()
 	require.NotNil(t, gen)
 }
 
-func TestTalosInDockerGenerator_Generate_CreatesDirectoryStructure(t *testing.T) {
+func TestTalosGenerator_Generate_CreatesDirectoryStructure(t *testing.T) {
 	t.Parallel()
 
 	tempDir := t.TempDir()
-	gen := talosgenerator.NewTalosInDockerGenerator()
+	gen := talosgenerator.NewTalosGenerator()
 
 	// With workers > 0 and no other patches, all dirs should have .gitkeep
-	config := &talosgenerator.TalosInDockerConfig{
+	config := &talosgenerator.TalosConfig{
 		PatchesDir:  "talos",
 		WorkerNodes: 1, // Prevents allow-scheduling patch from being generated
 	}
@@ -51,10 +51,10 @@ func TestTalosInDockerGenerator_Generate_CreatesDirectoryStructure(t *testing.T)
 	}
 }
 
-func TestTalosInDockerGenerator_Generate_NilConfig(t *testing.T) {
+func TestTalosGenerator_Generate_NilConfig(t *testing.T) {
 	t.Parallel()
 
-	gen := talosgenerator.NewTalosInDockerGenerator()
+	gen := talosgenerator.NewTalosGenerator()
 	opts := yamlgenerator.Options{
 		Output: t.TempDir(),
 	}
@@ -65,13 +65,13 @@ func TestTalosInDockerGenerator_Generate_NilConfig(t *testing.T) {
 	assert.Contains(t, err.Error(), "config is required")
 }
 
-func TestTalosInDockerGenerator_Generate_DefaultPatchesDir(t *testing.T) {
+func TestTalosGenerator_Generate_DefaultPatchesDir(t *testing.T) {
 	t.Parallel()
 
 	tempDir := t.TempDir()
-	gen := talosgenerator.NewTalosInDockerGenerator()
+	gen := talosgenerator.NewTalosGenerator()
 
-	config := &talosgenerator.TalosInDockerConfig{
+	config := &talosgenerator.TalosConfig{
 		PatchesDir:  "", // Empty should default to "talos"
 		WorkerNodes: 1,  // Prevents allow-scheduling patch
 	}
@@ -88,13 +88,13 @@ func TestTalosInDockerGenerator_Generate_DefaultPatchesDir(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestTalosInDockerGenerator_Generate_CustomPatchesDir(t *testing.T) {
+func TestTalosGenerator_Generate_CustomPatchesDir(t *testing.T) {
 	t.Parallel()
 
 	tempDir := t.TempDir()
-	gen := talosgenerator.NewTalosInDockerGenerator()
+	gen := talosgenerator.NewTalosGenerator()
 
-	config := &talosgenerator.TalosInDockerConfig{
+	config := &talosgenerator.TalosConfig{
 		PatchesDir:  "custom-patches",
 		WorkerNodes: 1, // Prevents allow-scheduling patch
 	}
@@ -112,14 +112,14 @@ func TestTalosInDockerGenerator_Generate_CustomPatchesDir(t *testing.T) {
 }
 
 //nolint:paralleltest // t.Chdir cannot be used with t.Parallel
-func TestTalosInDockerGenerator_Generate_DefaultOutputDir(t *testing.T) {
+func TestTalosGenerator_Generate_DefaultOutputDir(t *testing.T) {
 	// Create a temporary directory and change to it
 	tempDir := t.TempDir()
 	t.Chdir(tempDir)
 
-	gen := talosgenerator.NewTalosInDockerGenerator()
+	gen := talosgenerator.NewTalosGenerator()
 
-	config := &talosgenerator.TalosInDockerConfig{
+	config := &talosgenerator.TalosConfig{
 		PatchesDir:  "talos",
 		WorkerNodes: 1, // Prevents allow-scheduling patch
 	}
@@ -136,11 +136,11 @@ func TestTalosInDockerGenerator_Generate_DefaultOutputDir(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestTalosInDockerGenerator_Generate_SkipsExistingWithoutForce(t *testing.T) {
+func TestTalosGenerator_Generate_SkipsExistingWithoutForce(t *testing.T) {
 	t.Parallel()
 
 	tempDir := t.TempDir()
-	gen := talosgenerator.NewTalosInDockerGenerator()
+	gen := talosgenerator.NewTalosGenerator()
 
 	// Create an existing .gitkeep with custom content
 	clusterDir := filepath.Join(tempDir, "talos", "cluster")
@@ -151,7 +151,7 @@ func TestTalosInDockerGenerator_Generate_SkipsExistingWithoutForce(t *testing.T)
 	err = os.WriteFile(gitkeepPath, []byte("existing content"), 0o600)
 	require.NoError(t, err)
 
-	config := &talosgenerator.TalosInDockerConfig{
+	config := &talosgenerator.TalosConfig{
 		PatchesDir:  "talos",
 		WorkerNodes: 1, // Prevents allow-scheduling patch, so .gitkeep should be preserved
 	}
@@ -170,11 +170,11 @@ func TestTalosInDockerGenerator_Generate_SkipsExistingWithoutForce(t *testing.T)
 	assert.Equal(t, "existing content", string(content))
 }
 
-func TestTalosInDockerGenerator_Generate_OverwritesWithForce(t *testing.T) {
+func TestTalosGenerator_Generate_OverwritesWithForce(t *testing.T) {
 	t.Parallel()
 
 	tempDir := t.TempDir()
-	gen := talosgenerator.NewTalosInDockerGenerator()
+	gen := talosgenerator.NewTalosGenerator()
 
 	// Create an existing .gitkeep with custom content
 	clusterDir := filepath.Join(tempDir, "talos", "cluster")
@@ -185,7 +185,7 @@ func TestTalosInDockerGenerator_Generate_OverwritesWithForce(t *testing.T) {
 	err = os.WriteFile(gitkeepPath, []byte("existing content"), 0o600)
 	require.NoError(t, err)
 
-	config := &talosgenerator.TalosInDockerConfig{
+	config := &talosgenerator.TalosConfig{
 		PatchesDir:  "talos",
 		WorkerNodes: 1, // Prevents allow-scheduling patch, so .gitkeep should be written
 	}
@@ -204,13 +204,13 @@ func TestTalosInDockerGenerator_Generate_OverwritesWithForce(t *testing.T) {
 	assert.Empty(t, string(content))
 }
 
-func TestTalosInDockerGenerator_Generate_DisableDefaultCNI(t *testing.T) {
+func TestTalosGenerator_Generate_DisableDefaultCNI(t *testing.T) {
 	t.Parallel()
 
 	tempDir := t.TempDir()
-	gen := talosgenerator.NewTalosInDockerGenerator()
+	gen := talosgenerator.NewTalosGenerator()
 
-	config := &talosgenerator.TalosInDockerConfig{
+	config := &talosgenerator.TalosConfig{
 		PatchesDir:        "talos",
 		DisableDefaultCNI: true,
 		WorkerNodes:       1, // Prevents allow-scheduling patch
@@ -244,13 +244,13 @@ func TestTalosInDockerGenerator_Generate_DisableDefaultCNI(t *testing.T) {
 	require.NoError(t, err, "expected .gitkeep in workers/")
 }
 
-func TestTalosInDockerGenerator_Generate_NoDisableCNIPatchWhenFalse(t *testing.T) {
+func TestTalosGenerator_Generate_NoDisableCNIPatchWhenFalse(t *testing.T) {
 	t.Parallel()
 
 	tempDir := t.TempDir()
-	gen := talosgenerator.NewTalosInDockerGenerator()
+	gen := talosgenerator.NewTalosGenerator()
 
-	config := &talosgenerator.TalosInDockerConfig{
+	config := &talosgenerator.TalosConfig{
 		PatchesDir:        "talos",
 		DisableDefaultCNI: false,
 		WorkerNodes:       1, // Prevents allow-scheduling patch

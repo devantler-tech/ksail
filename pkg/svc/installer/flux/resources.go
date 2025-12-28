@@ -129,12 +129,12 @@ func EnsureDefaultResources(
 
 //nolint:unparam // error return kept for consistency with resource building patterns
 func buildFluxInstance(clusterCfg *v1alpha1.Cluster) (*FluxInstance, error) {
-	interval := clusterCfg.Spec.Cluster.Options.Flux.Interval.Duration
+	interval := clusterCfg.Spec.Cluster.Flux.Interval.Duration
 	if interval <= 0 {
 		interval = fluxIntervalFallback
 	}
 
-	hostPort := clusterCfg.Spec.Cluster.Options.LocalRegistry.HostPort
+	hostPort := clusterCfg.Spec.Cluster.LocalRegistryOpts.HostPort
 	if hostPort == 0 {
 		hostPort = v1alpha1.DefaultLocalRegistryPort
 	}

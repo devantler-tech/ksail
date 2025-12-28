@@ -17,7 +17,7 @@ const (
 
 // GetInstallTimeout determines the timeout for component installation.
 // Uses cluster connection timeout if configured, otherwise defaults to:
-//   - TalosInstallTimeout (10m) for TalosInDocker distribution
+//   - TalosInstallTimeout (10m) for Talos distribution
 //   - DefaultInstallTimeout (5m) for all other distributions
 //
 // Returns DefaultInstallTimeout if clusterCfg is nil.
@@ -31,8 +31,8 @@ func GetInstallTimeout(clusterCfg *v1alpha1.Cluster) time.Duration {
 		return clusterCfg.Spec.Cluster.Connection.Timeout.Duration
 	}
 
-	// Use longer timeout for TalosInDocker
-	if clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionTalosInDocker {
+	// Use longer timeout for Talos
+	if clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionTalos {
 		return TalosInstallTimeout
 	}
 

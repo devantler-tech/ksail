@@ -12,6 +12,30 @@ concurrency:
 permissions: {}
 
 jobs:
+  build-artifact:
+    name: 🏗️ Build KSail Binary
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          persist-credentials: false
+
+      - name: ⚙️ Setup Go
+        id: setup-go
+        uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6.1.0
+        with:
+          go-version-file: go.mod
+
+      - name: 📦 Prepare ksail binary
+        uses: ./.github/actions/prepare-ksail-binary
+        with:
+          go-version: ${{ steps.setup-go.outputs.go-version }}
+          source-hash: ${{ hashFiles('go.mod', 'go.sum', '**/*.go') }}
+          output-path: /usr/local/bin/ksail
+
   generate-schema:
     name: 📝 Generate JSON Schema
     runs-on: ubuntu-latest
@@ -35,7 +59,6 @@ jobs:
         uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6.1.0
         with:
           go-version-file: go.mod
-          cache: true
 
       - name: 📝 Generate JSON schema
         run: .github/scripts/generate-schema.sh
@@ -50,6 +73,7 @@ jobs:
   generate-cli-flags-docs:
     name: 📚 Generate CLI Flags Docs
     runs-on: ubuntu-latest
+    needs: [build-artifact]
     permissions:
       contents: write
     steps:
@@ -67,13 +91,17 @@ jobs:
           token: ${{ steps.generate-token.outputs.token }}
 
       - name: ⚙️ Setup Go
+        id: setup-go
         uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6.1.0
         with:
           go-version-file: go.mod
-          cache: true
 
-      - name: 🏗️ Build KSail binary
-        run: go build -o ksail
+      - name: 📦 Prepare ksail binary
+        uses: ./.github/actions/prepare-ksail-binary
+        with:
+          go-version: ${{ steps.setup-go.outputs.go-version }}
+          source-hash: ${{ hashFiles('go.mod', 'go.sum', '**/*.go') }}
+          output-path: /usr/local/bin/ksail
 
       - name: 📚 Generate CLI flags documentation
         run: .github/scripts/generate-cli-flags-docs.sh
@@ -97,31 +125,6 @@ jobs:
       issues: write
       packages: read
       pull-requests: write
-
-  build-artifact:
-    name: 🏗️ Build KSail Binary
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - name: 📄 Checkout
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
-        with:
-          persist-credentials: false
-
-      - name: ⚙️ Setup Go
-        id: setup-go
-        uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6.1.0
-        with:
-          go-version-file: go.mod
-
-      - name: 📦 Prepare ksail binary
-        uses: ./.github/actions/prepare-ksail-binary
-        with:
-          go-version: ${{ steps.setup-go.outputs.go-version }}
-          source-hash: ${{ hashFiles('go.mod', 'go.sum', '**/*.go') }}
-          output-path: ksail
-          run-smoke-test: "true"
 
   system-test:
     runs-on: ubuntu-latest
@@ -149,16 +152,16 @@ jobs:
           - init-args: "--distribution K3d --mirror-registry docker.io=https://registry-1.docker.io"
           - init-args: "--distribution K3d --mirror-registry docker.io=https://registry-1.docker.io --mirror-registry ghcr.io=https://ghcr.io"
           - init-args: "--distribution K3d --metrics-server Disabled"
-          - init-args: "--distribution TalosInDocker"
-          - init-args: "--distribution TalosInDocker --cert-manager Enabled"
-          - init-args: "--distribution TalosInDocker --cni Cilium"
-          - init-args: "--distribution TalosInDocker --cni Calico"
-          - init-args: "--distribution TalosInDocker --csi LocalPathStorage"
-          - init-args: "--distribution TalosInDocker --gitops-engine Flux"
-          - init-args: "--distribution TalosInDocker --gitops-engine ArgoCD"
-          - init-args: "--distribution TalosInDocker --mirror-registry docker.io=https://registry-1.docker.io"
-          - init-args: "--distribution TalosInDocker --mirror-registry docker.io=https://registry-1.docker.io --mirror-registry ghcr.io=https://ghcr.io"
-          - init-args: "--distribution TalosInDocker --metrics-server Disabled"
+          - init-args: "--distribution Talos"
+          - init-args: "--distribution Talos --cert-manager Enabled"
+          - init-args: "--distribution Talos --cni Cilium"
+          - init-args: "--distribution Talos --cni Calico"
+          - init-args: "--distribution Talos --csi LocalPathStorage"
+          - init-args: "--distribution Talos --gitops-engine Flux"
+          - init-args: "--distribution Talos --gitops-engine ArgoCD"
+          - init-args: "--distribution Talos --mirror-registry docker.io=https://registry-1.docker.io"
+          - init-args: "--distribution Talos --mirror-registry docker.io=https://registry-1.docker.io --mirror-registry ghcr.io=https://ghcr.io"
+          - init-args: "--distribution Talos --metrics-server Disabled"
     steps:
       - name: 📄 Checkout
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
@@ -170,62 +173,59 @@ jobs:
         uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6.1.0
         with:
           go-version-file: go.mod
-          cache: true
-          cache-dependency-path: ./go.sum
 
       - name: 📦 Prepare ksail binary
         uses: ./.github/actions/prepare-ksail-binary
         with:
           go-version: ${{ steps.setup-go.outputs.go-version }}
           source-hash: ${{ hashFiles('go.mod', 'go.sum', '**/*.go') }}
-          output-path: bin/ksail
-          run-smoke-test: "false"
+          output-path: /usr/local/bin/ksail
 
       - name: 🧪 ksail cluster init
         run: |
-          ./bin/ksail cluster init ${{ matrix.init-args }}
+          ksail cluster init ${{ matrix.init-args }}
 
-      - name: 🔧 Load br_netfilter kernel module (required for TalosInDocker)
-        if: contains(matrix.init-args, 'TalosInDocker')
+      - name: 🔧 Load br_netfilter kernel module (required for Talos)
+        if: contains(matrix.init-args, 'Talos')
         run: |
           sudo modprobe br_netfilter
           echo "br_netfilter module loaded successfully"
 
       - name: 🧪 ksail cluster create
         run: |
-          ./bin/ksail cluster create
+          ksail cluster create
 
       - name: 🧪 ksail cluster list
         run: |
-          ./bin/ksail cluster list
+          ksail cluster list
 
       - name: 🧪 ksail workload create
         run: |
-          ./bin/ksail workload create deployment whoami --image=traefik/whoami:latest
-          ./bin/ksail workload wait --for=condition=Available deployment/whoami --timeout=300s
+          ksail workload create deployment whoami --image=traefik/whoami:latest
+          ksail workload wait --for=condition=Available deployment/whoami --timeout=300s
 
       - name: 🧪 ksail workload apply
         run: |
-          ./bin/ksail workload apply -k .github/fixtures/podinfo-overlay
-          ./bin/ksail workload wait --for=condition=Available deployment/podinfo --timeout=300s
+          ksail workload apply -k .github/fixtures/podinfo-overlay
+          ksail workload wait --for=condition=Available deployment/podinfo --timeout=300s
 
       - name: 🧪 ksail workload push and reconcile
         if: contains(matrix.init-args, '--gitops-engine')
         run: |
-          ./bin/ksail workload push .github/fixtures/reconcile-test
-          ./bin/ksail workload reconcile
+          ksail workload push .github/fixtures/reconcile-test
+          ksail workload reconcile
 
       - name: 🧪 ksail cluster stop
         run: |
-          ./bin/ksail cluster stop
+          ksail cluster stop
 
       - name: 🧪 ksail cluster start
         run: |
-          ./bin/ksail cluster start
+          ksail cluster start
 
       - name: 🧪 ksail cluster delete
         run: |
-          ./bin/ksail cluster delete
+          ksail cluster delete
 
       - name: 🧹 Cleanup
         run: |

@@ -67,9 +67,9 @@ func TestScaffoldAppliesDistributionDefaults(t *testing.T) {
 		},
 		{name: "K3d", distribution: v1alpha1.DistributionK3d, expected: scaffolder.K3dConfigFile},
 		{
-			name:         "TalosInDocker",
-			distribution: v1alpha1.DistributionTalosInDocker,
-			expected:     scaffolder.TalosInDockerConfigDir,
+			name:         "Talos",
+			distribution: v1alpha1.DistributionTalos,
+			expected:     scaffolder.TalosConfigDir,
 		},
 		{name: "Unknown", distribution: "unknown", expected: scaffolder.KindConfigFile},
 	}
@@ -486,10 +486,10 @@ func TestScaffoldAppliesContextDefaults(t *testing.T) {
 			},
 		},
 		{
-			name: "TalosInDockerDefaultContext",
+			name: "TalosDefaultContext",
 			scenario: scaffoldContextCase{
-				distribution: v1alpha1.DistributionTalosInDocker,
-				expected:     v1alpha1.ExpectedContextName(v1alpha1.DistributionTalosInDocker),
+				distribution: v1alpha1.DistributionTalos,
+				expected:     v1alpha1.ExpectedContextName(v1alpha1.DistributionTalos),
 			},
 		},
 		{
@@ -780,9 +780,9 @@ func getScaffoldTestCases() []scaffoldTestCase {
 			expectError: false,
 		},
 		{
-			name:        "TalosInDocker distribution",
-			setupFunc:   createTalosInDockerCluster,
-			outputPath:  "/tmp/test-talosindocker/",
+			name:        "Talos distribution",
+			setupFunc:   createTalosCluster,
+			outputPath:  "/tmp/test-talos/",
 			force:       true,
 			expectError: false,
 		},
@@ -839,8 +839,8 @@ func generateDistributionContent(
 		k3dContent := "apiVersion: k3d.io/v1alpha5\nkind: Simple\nmetadata:\n  name: ksail-default\n"
 		snaps.MatchSnapshot(t, k3dContent)
 
-	case v1alpha1.DistributionTalosInDocker:
-		// TalosInDocker doesn't have a separate distribution config file to snapshot
+	case v1alpha1.DistributionTalos:
+		// Talos doesn't have a separate distribution config file to snapshot
 	}
 }
 
@@ -872,11 +872,11 @@ func createMinimalClusterForSnapshot(
 		}
 
 		return minimalCluster
-	case v1alpha1.DistributionTalosInDocker:
-		// For TalosInDocker, include distribution and distributionConfig
+	case v1alpha1.DistributionTalos:
+		// For Talos, include distribution and distributionConfig
 		minimalCluster.Spec = v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{
-				Distribution:       v1alpha1.DistributionTalosInDocker,
+				Distribution:       v1alpha1.DistributionTalos,
 				DistributionConfig: "talos",
 			},
 		}
@@ -915,10 +915,10 @@ func createK3dCluster(name string) v1alpha1.Cluster {
 	return c
 }
 
-func createTalosInDockerCluster(name string) v1alpha1.Cluster {
+func createTalosCluster(name string) v1alpha1.Cluster {
 	c := createTestCluster(name)
-	c.Spec.Cluster.Distribution = v1alpha1.DistributionTalosInDocker
-	c.Spec.Cluster.DistributionConfig = scaffolder.TalosInDockerConfigDir
+	c.Spec.Cluster.Distribution = v1alpha1.DistributionTalos
+	c.Spec.Cluster.DistributionConfig = scaffolder.TalosConfigDir
 
 	return c
 }
@@ -1159,13 +1159,13 @@ func TestCreateK3dConfig_SetsDefaultImage(t *testing.T) {
 	assert.Equal(t, "rancher/k3s:v1.29.4-k3s1", config.Image)
 }
 
-func TestScaffoldTalosInDocker_CreatesDirectoryStructure(t *testing.T) {
+func TestScaffoldTalos_CreatesDirectoryStructure(t *testing.T) {
 	t.Parallel()
 
 	tempDir := t.TempDir()
-	cluster := createTalosInDockerCluster("talos-test")
+	cluster := createTalosCluster("talos-test")
 	// Set workers to 1 to avoid generating allow-scheduling patch (which would replace .gitkeep in cluster/)
-	cluster.Spec.Cluster.Options.TalosInDocker.Workers = 1
+	cluster.Spec.Cluster.Talos.Workers = 1
 	scaffolderInstance := scaffolder.NewScaffolder(cluster, io.Discard, nil)
 
 	err := scaffolderInstance.Scaffold(tempDir, false)
@@ -1173,9 +1173,9 @@ func TestScaffoldTalosInDocker_CreatesDirectoryStructure(t *testing.T) {
 
 	// Verify the directory structure was created
 	expectedPaths := []string{
-		filepath.Join(tempDir, scaffolder.TalosInDockerConfigDir, "cluster", ".gitkeep"),
-		filepath.Join(tempDir, scaffolder.TalosInDockerConfigDir, "control-planes", ".gitkeep"),
-		filepath.Join(tempDir, scaffolder.TalosInDockerConfigDir, "workers", ".gitkeep"),
+		filepath.Join(tempDir, scaffolder.TalosConfigDir, "cluster", ".gitkeep"),
+		filepath.Join(tempDir, scaffolder.TalosConfigDir, "control-planes", ".gitkeep"),
+		filepath.Join(tempDir, scaffolder.TalosConfigDir, "workers", ".gitkeep"),
 		filepath.Join(tempDir, "ksail.yaml"),
 		filepath.Join(tempDir, "k8s", "kustomization.yaml"),
 	}
@@ -1186,12 +1186,12 @@ func TestScaffoldTalosInDocker_CreatesDirectoryStructure(t *testing.T) {
 	}
 }
 
-func TestScaffoldTalosInDocker_SetsCorrectDistribution(t *testing.T) {
+func TestScaffoldTalos_SetsCorrectDistribution(t *testing.T) {
 	t.Parallel()
 
 	tempDir := t.TempDir()
 	buffer := &bytes.Buffer{}
-	cluster := createTalosInDockerCluster("talos-context-test")
+	cluster := createTalosCluster("talos-context-test")
 	scaffolderInstance := scaffolder.NewScaffolder(cluster, buffer, nil)
 
 	err := scaffolderInstance.Scaffold(tempDir, false)
@@ -1203,5 +1203,5 @@ func TestScaffoldTalosInDocker_SetsCorrectDistribution(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify the distribution is set correctly
-	assert.Contains(t, string(ksailContent), "distribution: TalosInDocker")
+	assert.Contains(t, string(ksailContent), "distribution: Talos")
 }

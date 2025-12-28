@@ -124,7 +124,7 @@ func newRegistryPortFieldTest() fieldTestCase {
 	return fieldTestCase{
 		name: "RegistryPort field",
 		fieldSelector: newFieldSelector(
-			func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.Options.LocalRegistry.HostPort },
+			func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.LocalRegistryOpts.HostPort },
 			int32(5000),
 			"Registry port",
 		),
@@ -137,7 +137,7 @@ func newFluxIntervalFieldTest() fieldTestCase {
 	return fieldTestCase{
 		name: "FluxInterval field",
 		fieldSelector: newFieldSelector(
-			func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.Options.Flux.Interval },
+			func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.Flux.Interval },
 			metav1.Duration{Duration: time.Minute},
 			"Flux interval",
 		),
@@ -348,12 +348,12 @@ func TestGenerateFlagName(t *testing.T) {
 		},
 		{
 			"RegistryPort field",
-			&manager.Config.Spec.Cluster.Options.LocalRegistry.HostPort,
+			&manager.Config.Spec.Cluster.LocalRegistryOpts.HostPort,
 			"local-registry-port",
 		},
 		{
 			"FluxInterval field",
-			&manager.Config.Spec.Cluster.Options.Flux.Interval,
+			&manager.Config.Spec.Cluster.Flux.Interval,
 			"flux-interval",
 		},
 	}

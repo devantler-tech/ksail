@@ -4,16 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	k3dconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/k3d"
-	kindconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/kind"
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
 	k3dprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/k3d"
 	kindprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/kind"
-	talosindickerprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/talosindocker"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
+	talosprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/talos"
 	k3dv1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
@@ -21,18 +17,38 @@ import (
 // ErrUnsupportedDistribution is returned when an unsupported distribution is specified.
 var ErrUnsupportedDistribution = errors.New("unsupported distribution")
 
-const defaultKubeconfigPath = "~/.kube/config"
+// ErrMissingDistributionConfig is returned when no pre-loaded distribution config is provided.
+var ErrMissingDistributionConfig = errors.New("missing distribution config")
+
+// DistributionConfig holds pre-loaded distribution-specific configuration.
+// This config is used directly by the factory, preserving any in-memory modifications
+// (e.g., mirror registries, metrics-server flags).
+type DistributionConfig struct {
+	// Kind holds the pre-loaded Kind cluster configuration.
+	Kind *v1alpha4.Cluster
+	// K3d holds the pre-loaded K3d cluster configuration.
+	K3d *k3dv1alpha5.SimpleConfig
+	// Talos holds the pre-loaded Talos machine configurations.
+	Talos *talosconfigmanager.Configs
+}
 
 // Factory creates distribution-specific cluster provisioners based on the KSail cluster configuration.
 type Factory interface {
 	Create(ctx context.Context, cluster *v1alpha1.Cluster) (ClusterProvisioner, any, error)
 }
 
-// DefaultFactory implements Factory using the existing CreateClusterProvisioner helper.
-type DefaultFactory struct{}
+// DefaultFactory implements Factory for creating cluster provisioners.
+// It requires pre-loaded distribution configs via DistributionConfig to preserve
+// any in-memory modifications made before cluster creation.
+type DefaultFactory struct {
+	// DistributionConfig holds pre-loaded distribution-specific configuration.
+	// This is required and must contain the appropriate config for the cluster's distribution.
+	DistributionConfig *DistributionConfig
+}
 
 // Create selects the correct distribution provisioner for the KSail cluster configuration.
-func (DefaultFactory) Create(
+// It requires DistributionConfig to be set with the appropriate pre-loaded config.
+func (f DefaultFactory) Create(
 	_ context.Context,
 	cluster *v1alpha1.Cluster,
 ) (ClusterProvisioner, any, error) {
@@ -43,31 +59,20 @@ func (DefaultFactory) Create(
 		)
 	}
 
+	if f.DistributionConfig == nil {
+		return nil, nil, fmt.Errorf(
+			"distribution config is required: %w",
+			ErrMissingDistributionConfig,
+		)
+	}
+
 	switch cluster.Spec.Cluster.Distribution {
 	case v1alpha1.DistributionKind:
-		return createKindProvisioner(
-			cluster.Spec.Cluster.DistributionConfig,
-			cluster.Spec.Cluster.Connection.Kubeconfig,
-		)
+		return f.createKindProvisioner(cluster)
 	case v1alpha1.DistributionK3d:
-		return createK3dProvisioner(
-			cluster.Spec.Cluster.DistributionConfig,
-		)
-	case v1alpha1.DistributionTalosInDocker:
-		// Derive cluster name from context or use default
-		clusterName := strings.TrimSpace(cluster.Spec.Cluster.Connection.Context)
-		if clusterName == "" {
-			clusterName = talosconfigmanager.DefaultClusterName
-		}
-
-		return createTalosInDockerProvisioner(
-			cluster.Spec.Cluster.DistributionConfig,
-			cluster.Spec.Cluster.Connection.Kubeconfig,
-			clusterName,
-			cluster.Spec.Cluster.Options.TalosInDocker,
-			cluster.Spec.Cluster.CNI,
-			nil, // Mirror registries from scaffolded patches; runtime mirrors not supported here
-		)
+		return f.createK3dProvisioner(cluster)
+	case v1alpha1.DistributionTalos:
+		return f.createTalosProvisioner(cluster)
 	default:
 		return nil, "", fmt.Errorf(
 			"%w: %s",
@@ -77,162 +82,126 @@ func (DefaultFactory) Create(
 	}
 }
 
-func createKindProvisioner(
-	distributionConfigPath string,
-	kubeconfigPath string,
-) (*kindprovisioner.KindClusterProvisioner, *v1alpha4.Cluster, error) {
-	kindConfigMgr := kindconfigmanager.NewConfigManager(distributionConfigPath)
-
-	kindConfig, err := kindConfigMgr.LoadConfig(nil)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to load Kind configuration: %w", err)
+func (f DefaultFactory) createKindProvisioner(
+	cluster *v1alpha1.Cluster,
+) (ClusterProvisioner, any, error) {
+	if f.DistributionConfig.Kind == nil {
+		return nil, nil, fmt.Errorf(
+			"kind config is required for Kind distribution: %w",
+			ErrMissingDistributionConfig,
+		)
 	}
 
-	provisioner, err := createKindProvisionerFromConfig(kindConfig, kubeconfigPath)
+	kindConfig := f.DistributionConfig.Kind
+
+	// Apply node count overrides from CLI flags (stored in Talos options)
+	applyKindNodeCounts(kindConfig, cluster.Spec.Cluster.Talos)
+
+	provisioner, err := kindprovisioner.CreateProvisioner(
+		kindConfig,
+		cluster.Spec.Cluster.Connection.Kubeconfig,
+	)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("failed to create Kind provisioner: %w", err)
 	}
 
 	return provisioner, kindConfig, nil
 }
 
-func createKindProvisionerFromConfig(
-	kindConfig *v1alpha4.Cluster,
-	kubeconfigPath string,
-) (*kindprovisioner.KindClusterProvisioner, error) {
-	provider := kindprovisioner.NewDefaultKindProviderAdapter()
-
-	dockerClient, err := kindprovisioner.NewDefaultDockerClient()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create Docker client: %w", err)
+// applyKindNodeCounts applies node count overrides from CLI flags to the Kind config.
+// This enables --control-planes and --workers CLI flags to override the kind.yaml at runtime.
+func applyKindNodeCounts(kindConfig *v1alpha4.Cluster, opts v1alpha1.OptionsTalos) {
+	// Only apply if explicitly set (non-zero values indicate override)
+	if opts.ControlPlanes <= 0 && opts.Workers <= 0 {
+		return
 	}
 
-	if kubeconfigPath == "" {
-		kubeconfigPath = defaultKubeconfigPath
+	// Calculate target node counts
+	targetCP := int(opts.ControlPlanes)
+	if targetCP <= 0 {
+		targetCP = 1 // default to 1 control-plane
 	}
 
-	return kindprovisioner.NewKindClusterProvisioner(
-		kindConfig,
-		kubeconfigPath,
-		provider,
-		dockerClient,
-	), nil
+	targetWorkers := int(opts.Workers)
+
+	// Build new nodes slice based on target counts
+	newNodes := make([]v1alpha4.Node, 0, targetCP+targetWorkers)
+
+	// Add control-plane nodes
+	for range targetCP {
+		newNodes = append(newNodes, v1alpha4.Node{Role: v1alpha4.ControlPlaneRole})
+	}
+
+	// Add worker nodes
+	for range targetWorkers {
+		newNodes = append(newNodes, v1alpha4.Node{Role: v1alpha4.WorkerRole})
+	}
+
+	kindConfig.Nodes = newNodes
 }
 
-func createK3dProvisioner(
-	distributionConfigPath string,
-) (*k3dprovisioner.K3dClusterProvisioner, *k3dv1alpha5.SimpleConfig, error) {
-	k3dConfigMgr := k3dconfigmanager.NewConfigManager(distributionConfigPath)
-
-	k3dConfig, err := k3dConfigMgr.LoadConfig(nil)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to load K3d configuration: %w", err)
+func (f DefaultFactory) createK3dProvisioner(
+	cluster *v1alpha1.Cluster,
+) (ClusterProvisioner, any, error) {
+	if f.DistributionConfig.K3d == nil {
+		return nil, nil, fmt.Errorf(
+			"k3d config is required for K3d distribution: %w",
+			ErrMissingDistributionConfig,
+		)
 	}
 
-	provisioner := k3dprovisioner.NewK3dClusterProvisioner(
+	k3dConfig := f.DistributionConfig.K3d
+
+	// Apply node count overrides from CLI flags (stored in Talos options)
+	applyK3dNodeCounts(k3dConfig, cluster.Spec.Cluster.Talos)
+
+	provisioner := k3dprovisioner.CreateProvisioner(
 		k3dConfig,
-		distributionConfigPath,
+		cluster.Spec.Cluster.DistributionConfig,
 	)
 
 	return provisioner, k3dConfig, nil
 }
 
-// buildTalosCNIPatches creates runtime patches for CNI configuration.
-func buildTalosCNIPatches(cni v1alpha1.CNI) []talosconfigmanager.Patch {
-	var runtimePatches []talosconfigmanager.Patch
-
-	// Add CNI disable patch if using any non-default CNI (e.g., Cilium, Calico, None)
-	// Empty string is treated as default CNI (for imperative mode without config file)
-	if cni != v1alpha1.CNIDefault && cni != "" {
-		runtimePatches = append(runtimePatches, talosconfigmanager.Patch{
-			Path:  "in-memory:disable-default-cni",
-			Scope: talosconfigmanager.PatchScopeCluster,
-			Content: []byte(`cluster:
-  network:
-    cni:
-      name: none
-`),
-		})
+// applyK3dNodeCounts applies node count overrides from CLI flags to the K3d config.
+// This enables --control-planes and --workers CLI flags to override the k3d.yaml at runtime.
+func applyK3dNodeCounts(k3dConfig *k3dv1alpha5.SimpleConfig, opts v1alpha1.OptionsTalos) {
+	// Only apply if explicitly set (non-zero values indicate override)
+	if opts.ControlPlanes <= 0 && opts.Workers <= 0 {
+		return
 	}
 
-	return runtimePatches
-}
-
-func applyMirrorRegistriesToTalosConfig(
-	talosConfigs *talosconfigmanager.Configs,
-	mirrorRegistries []string,
-) error {
-	if len(mirrorRegistries) == 0 {
-		return nil
-	}
-
-	mirrorSpecs := registry.ParseMirrorSpecs(mirrorRegistries)
-	mirrors := make([]talosconfigmanager.MirrorRegistry, 0, len(mirrorSpecs))
-
-	for _, spec := range mirrorSpecs {
-		if spec.Host == "" {
-			continue
-		}
-
-		mirrors = append(mirrors, talosconfigmanager.MirrorRegistry{
-			Host:      spec.Host,
-			Endpoints: []string{"http://" + spec.Host + ":5000"},
-		})
-	}
-
-	err := talosConfigs.ApplyMirrorRegistries(mirrors)
-	if err != nil {
-		return fmt.Errorf("failed to apply mirror registries to Talos config: %w", err)
-	}
-
-	return nil
-}
-
-func createTalosInDockerProvisioner(
-	distributionConfigPath string,
-	kubeconfigPath string,
-	clusterName string,
-	opts v1alpha1.OptionsTalosInDocker,
-	cni v1alpha1.CNI,
-	mirrorRegistries []string,
-) (*talosindickerprovisioner.TalosInDockerProvisioner, *talosconfigmanager.Configs, error) {
-	// Load talos config with CNI patches applied
-	manager := talosconfigmanager.NewConfigManager(
-		distributionConfigPath,
-		clusterName,
-		"", // Use default Kubernetes version
-		"", // Use default network CIDR
-	).WithAdditionalPatches(buildTalosCNIPatches(cni))
-
-	talosConfigs, err := manager.LoadConfig(nil)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to load Talos configuration: %w", err)
-	}
-
-	err = applyMirrorRegistriesToTalosConfig(talosConfigs, mirrorRegistries)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to apply mirror registries: %w", err)
-	}
-
-	// Create options and apply configured node counts
-	options := talosindickerprovisioner.NewOptions().WithKubeconfigPath(kubeconfigPath)
+	// Apply server (control-plane) count if explicitly set
 	if opts.ControlPlanes > 0 {
-		options.WithControlPlaneNodes(int(opts.ControlPlanes))
+		k3dConfig.Servers = int(opts.ControlPlanes)
 	}
 
-	if opts.Workers > 0 {
-		options.WithWorkerNodes(int(opts.Workers))
+	// Apply agent (worker) count - 0 is valid when control-planes is set
+	if opts.ControlPlanes > 0 {
+		k3dConfig.Agents = int(opts.Workers)
+	} else if opts.Workers > 0 {
+		k3dConfig.Agents = int(opts.Workers)
+	}
+}
+
+func (f DefaultFactory) createTalosProvisioner(
+	cluster *v1alpha1.Cluster,
+) (ClusterProvisioner, any, error) {
+	if f.DistributionConfig.Talos == nil {
+		return nil, nil, fmt.Errorf(
+			"talos config is required for Talos distribution: %w",
+			ErrMissingDistributionConfig,
+		)
 	}
 
-	// Create provisioner with loaded configs and options
-	provisioner := talosindickerprovisioner.NewTalosInDockerProvisioner(talosConfigs, options)
-
-	dockerClient, err := kindprovisioner.NewDefaultDockerClient()
+	provisioner, err := talosprovisioner.CreateProvisioner(
+		f.DistributionConfig.Talos,
+		cluster.Spec.Cluster.Connection.Kubeconfig,
+		cluster.Spec.Cluster.Talos,
+	)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create Docker client: %w", err)
+		return nil, nil, fmt.Errorf("failed to create Talos provisioner: %w", err)
 	}
 
-	provisioner.WithDockerClient(dockerClient)
-
-	return provisioner, talosConfigs, nil
+	return provisioner, f.DistributionConfig.Talos, nil
 }

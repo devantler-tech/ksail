@@ -36,6 +36,9 @@ linters:
         path: cmd/cluster/list_test.go
       - linters:
           - ireturn
+        path: cmd/cluster/create_test.go
+      - linters:
+          - ireturn
         path: pkg/cmd/lifecycle_helpers_test.go
       - linters:
           - ireturn

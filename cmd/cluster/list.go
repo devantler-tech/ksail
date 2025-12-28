@@ -1,7 +1,6 @@
 package cluster
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -12,13 +11,12 @@ import (
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v5/pkg/ui/notify"
-	"github.com/samber/do/v2"
+	k3dv1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/spf13/cobra"
+	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
 
 const allFlag = "all"
-
-var errDistributionFactoryUnset = errors.New("distribution factory dependency is not configured")
 
 // NewListCmd creates the list command for clusters.
 func NewListCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
@@ -37,16 +35,8 @@ func NewListCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
 	bindAllFlag(cmd, cfgManager)
 
 	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
-		return runtimeContainer.Invoke(func(injector runtime.Injector) error {
-			factory, err := do.Invoke[clusterprovisioner.Factory](injector)
-			if err != nil {
-				return fmt.Errorf("resolve provisioner factory dependency: %w", err)
-			}
-
-			deps := ListDeps{
-				Factory:             factory,
-				DistributionFactory: clusterprovisioner.DefaultFactory{},
-			}
+		return runtimeContainer.Invoke(func(_ runtime.Injector) error {
+			deps := ListDeps{}
 
 			return HandleListRunE(cmd, cfgManager, deps)
 		})
@@ -57,8 +47,10 @@ func NewListCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
 
 // ListDeps captures dependencies needed for the list command logic.
 type ListDeps struct {
-	Factory             clusterprovisioner.Factory
-	DistributionFactory clusterprovisioner.Factory
+	// DistributionFactoryCreator is an optional function that creates factories for distributions.
+	// If nil, real factories with empty configs are used.
+	// This is primarily for testing purposes.
+	DistributionFactoryCreator func(v1alpha1.Distribution) clusterprovisioner.Factory
 }
 
 // HandleListRunE handles the list command.
@@ -109,7 +101,18 @@ func listPrimaryClusters(
 	deps ListDeps,
 	includeDistribution bool,
 ) error {
-	provisioner, _, err := deps.Factory.Create(cmd.Context(), clusterCfg)
+	// Create a factory with an empty config for the distribution.
+	// For list operations, we only need the provisioner type, not specific config data.
+	var factory clusterprovisioner.Factory
+	if deps.DistributionFactoryCreator != nil {
+		factory = deps.DistributionFactoryCreator(clusterCfg.Spec.Cluster.Distribution)
+	} else {
+		factory = clusterprovisioner.DefaultFactory{
+			DistributionConfig: createEmptyDistributionConfig(clusterCfg.Spec.Cluster.Distribution),
+		}
+	}
+
+	provisioner, _, err := factory.Create(cmd.Context(), clusterCfg)
 	if err != nil {
 		return fmt.Errorf("failed to resolve cluster provisioner: %w", err)
 	}
@@ -132,7 +135,7 @@ func listAdditionalDistributionClusters(
 	for _, distribution := range []v1alpha1.Distribution{
 		v1alpha1.DistributionKind,
 		v1alpha1.DistributionK3d,
-		v1alpha1.DistributionTalosInDocker,
+		v1alpha1.DistributionTalos,
 	} {
 		if distribution == clusterCfg.Spec.Cluster.Distribution {
 			continue
@@ -158,12 +161,16 @@ func listDistributionClusters(
 		return nil
 	}
 
-	distributionFactory := deps.DistributionFactory
-	if distributionFactory == nil {
-		return fmt.Errorf(
-			"distribution factory dependency is not configured: %w",
-			errDistributionFactoryUnset,
-		)
+	// Use custom factory creator if provided (for testing), otherwise create real factory.
+	var distributionFactory clusterprovisioner.Factory
+	if deps.DistributionFactoryCreator != nil {
+		distributionFactory = deps.DistributionFactoryCreator(distribution)
+	} else {
+		// Create a factory with an empty config for the distribution.
+		// For list operations, we only need the provisioner type, not specific config data.
+		distributionFactory = clusterprovisioner.DefaultFactory{
+			DistributionConfig: createEmptyDistributionConfig(distribution),
+		}
 	}
 
 	otherProv, _, err := distributionFactory.Create(cmd.Context(), otherCluster)
@@ -214,10 +221,35 @@ func defaultDistributionConfigPath(distribution v1alpha1.Distribution) string {
 		return "kind.yaml"
 	case v1alpha1.DistributionK3d:
 		return "k3d.yaml"
-	case v1alpha1.DistributionTalosInDocker:
+	case v1alpha1.DistributionTalos:
 		return talosconfigmanager.DefaultPatchesDir
 	default:
 		return "kind.yaml"
+	}
+}
+
+// createEmptyDistributionConfig creates an empty distribution config for the given distribution.
+// This is used for list operations where we only need the provisioner type, not specific config data.
+func createEmptyDistributionConfig(
+	distribution v1alpha1.Distribution,
+) *clusterprovisioner.DistributionConfig {
+	switch distribution {
+	case v1alpha1.DistributionKind:
+		return &clusterprovisioner.DistributionConfig{
+			Kind: &v1alpha4.Cluster{},
+		}
+	case v1alpha1.DistributionK3d:
+		return &clusterprovisioner.DistributionConfig{
+			K3d: &k3dv1alpha5.SimpleConfig{},
+		}
+	case v1alpha1.DistributionTalos:
+		return &clusterprovisioner.DistributionConfig{
+			Talos: &talosconfigmanager.Configs{},
+		}
+	default:
+		return &clusterprovisioner.DistributionConfig{
+			Kind: &v1alpha4.Cluster{},
+		}
 	}
 }
 

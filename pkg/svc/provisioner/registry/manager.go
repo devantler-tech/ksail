@@ -12,6 +12,7 @@ import (
 	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
 	ksailio "github.com/devantler-tech/ksail/v5/pkg/io"
 	"github.com/devantler-tech/ksail/v5/pkg/ui/notify"
+	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
 )
 
@@ -370,6 +371,123 @@ func ConnectRegistriesToNetwork(
 	}
 
 	return nil
+}
+
+// ConnectRegistriesToNetworkWithStaticIPs attaches registry containers to a network using static IPs
+// from the high end of the subnet to avoid conflicts with Talos node IPs that start from .2.
+// For a /24 network, registries are assigned starting from .250 down (.250, .249, .248, etc.).
+//
+//nolint:funlen,varnamelen // Function handles multiple notification types; 'i' is clear for loop index
+func ConnectRegistriesToNetworkWithStaticIPs(
+	ctx context.Context,
+	dockerClient client.APIClient,
+	registries []Info,
+	networkName string,
+	networkCIDR string,
+	writer io.Writer,
+) error {
+	networkName, networkOK := ksailio.TrimNonEmpty(networkName)
+	if dockerClient == nil || len(registries) == 0 || !networkOK {
+		return nil
+	}
+
+	// Calculate static IPs for each registry from the high end of the subnet
+	// For 10.5.0.0/24: use 10.5.0.250, 10.5.0.249, etc.
+	staticIPs := calculateRegistryIPs(networkCIDR, len(registries))
+
+	for i, reg := range registries {
+		containerName, nameOK := ksailio.TrimNonEmpty(reg.Name)
+		if !nameOK {
+			continue
+		}
+
+		var endpointConfig *network.EndpointSettings
+		if i < len(staticIPs) && staticIPs[i] != "" {
+			endpointConfig = &network.EndpointSettings{
+				IPAMConfig: &network.EndpointIPAMConfig{
+					IPv4Address: staticIPs[i],
+				},
+			}
+
+			notify.WriteMessage(notify.Message{
+				Type:    notify.ActivityType,
+				Content: "connecting '%s' to '%s' with IP %s",
+				Writer:  writer,
+				Args: []any{
+					containerName,
+					networkName,
+					staticIPs[i],
+				},
+			})
+		} else {
+			notify.WriteMessage(notify.Message{
+				Type:    notify.ActivityType,
+				Content: "connecting '%s' to '%s'",
+				Writer:  writer,
+				Args: []any{
+					containerName,
+					networkName,
+				},
+			})
+		}
+
+		err := dockerClient.NetworkConnect(ctx, networkName, containerName, endpointConfig)
+		if err != nil {
+			notify.WriteMessage(notify.Message{
+				Type: notify.WarningType,
+				Content: fmt.Sprintf(
+					"failed to connect registry %s to %s network: %v",
+					containerName,
+					networkName,
+					err,
+				),
+				Writer: writer,
+			})
+		}
+	}
+
+	return nil
+}
+
+// calculateRegistryIPs computes static IPs for registries from the high end of the subnet.
+// For a /24 network like 10.5.0.0/24, it returns addresses like 10.5.0.250, 10.5.0.249, etc.
+// Returns empty strings if the CIDR is invalid or cannot be parsed.
+func calculateRegistryIPs(networkCIDR string, count int) []string {
+	// CIDR format constants
+	const (
+		cidrParts  = 2 // CIDR has format "IP/prefix"
+		ipv4Octets = 4 // IPv4 address has 4 octets
+		baseOffset = 250
+	)
+
+	result := make([]string, count)
+
+	if networkCIDR == "" || count == 0 {
+		return result
+	}
+
+	// Parse the CIDR to extract the base address
+	// Example: 10.5.0.0/24 -> base = 10.5.0, last usable = .254 (broadcast is .255)
+	parts := strings.Split(networkCIDR, "/")
+	if len(parts) != cidrParts {
+		return result
+	}
+
+	baseIP := parts[0]
+
+	ipParts := strings.Split(baseIP, ".")
+	if len(ipParts) != ipv4Octets {
+		return result
+	}
+
+	// For a /24 network, assign from .250 down to avoid node IPs starting at .2
+	// This gives space for ~248 nodes before we'd have a conflict
+
+	for i := 0; i < count && i < baseOffset-2; i++ {
+		result[i] = fmt.Sprintf("%s.%s.%s.%d", ipParts[0], ipParts[1], ipParts[2], baseOffset-i)
+	}
+
+	return result
 }
 
 // CleanupRegistries removes the provided registry. Errors are logged as warnings.

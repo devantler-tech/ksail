@@ -45,7 +45,7 @@
               "enum": [
                 "Kind",
                 "K3d",
-                "TalosInDocker"
+                "Talos"
               ]
             },
             "cni": {
@@ -92,84 +92,84 @@
                 "ArgoCD"
               ]
             },
-            "options": {
+            "kind": {
               "properties": {
-                "kind": {
-                  "properties": {},
-                  "additionalProperties": false,
-                  "type": "object",
-                  "description": "Alpha placeholder (currently unsupported)."
-                },
-                "k3d": {
-                  "properties": {},
-                  "additionalProperties": false,
-                  "type": "object",
-                  "description": "Alpha placeholder (currently unsupported)."
-                },
-                "talosInDocker": {
-                  "properties": {
-                    "controlPlanes": {
-                      "type": "integer"
-                    },
-                    "workers": {
-                      "type": "integer"
-                    }
-                  },
-                  "additionalProperties": false,
-                  "type": "object"
-                },
-                "cilium": {
-                  "properties": {},
-                  "additionalProperties": false,
-                  "type": "object",
-                  "description": "Alpha placeholder (currently unsupported)."
-                },
-                "calico": {
-                  "properties": {},
-                  "additionalProperties": false,
-                  "type": "object",
-                  "description": "Alpha placeholder (currently unsupported)."
-                },
-                "flux": {
-                  "properties": {
-                    "interval": {
-                      "type": "string",
-                      "pattern": "^[0-9]+(ns|us|µs|ms|s|m|h)$"
-                    }
-                  },
-                  "additionalProperties": false,
-                  "type": "object"
-                },
-                "argocd": {
-                  "properties": {},
-                  "additionalProperties": false,
-                  "type": "object",
-                  "description": "Alpha placeholder (currently unsupported)."
-                },
-                "localRegistry": {
-                  "properties": {
-                    "hostPort": {
-                      "type": "integer"
-                    }
-                  },
-                  "additionalProperties": false,
-                  "type": "object"
-                },
-                "helm": {
-                  "properties": {},
-                  "additionalProperties": false,
-                  "type": "object",
-                  "description": "Alpha placeholder (currently unsupported)."
-                },
-                "kustomize": {
-                  "properties": {},
-                  "additionalProperties": false,
-                  "type": "object",
-                  "description": "Alpha placeholder (currently unsupported)."
+                "mirrorsDir": {
+                  "type": "string"
                 }
               },
               "additionalProperties": false,
               "type": "object"
+            },
+            "k3d": {
+              "properties": {},
+              "additionalProperties": false,
+              "type": "object",
+              "description": "Alpha placeholder (currently unsupported)."
+            },
+            "talos": {
+              "properties": {
+                "provider": {
+                  "type": "string"
+                },
+                "controlPlanes": {
+                  "type": "integer"
+                },
+                "workers": {
+                  "type": "integer"
+                }
+              },
+              "additionalProperties": false,
+              "type": "object"
+            },
+            "cilium": {
+              "properties": {},
+              "additionalProperties": false,
+              "type": "object",
+              "description": "Alpha placeholder (currently unsupported)."
+            },
+            "calico": {
+              "properties": {},
+              "additionalProperties": false,
+              "type": "object",
+              "description": "Alpha placeholder (currently unsupported)."
+            },
+            "flux": {
+              "properties": {
+                "interval": {
+                  "type": "string",
+                  "pattern": "^[0-9]+(ns|us|µs|ms|s|m|h)$"
+                }
+              },
+              "additionalProperties": false,
+              "type": "object"
+            },
+            "argocd": {
+              "properties": {},
+              "additionalProperties": false,
+              "type": "object",
+              "description": "Alpha placeholder (currently unsupported)."
+            },
+            "localRegistryOptions": {
+              "properties": {
+                "hostPort": {
+                  "type": "integer"
+                }
+              },
+              "additionalProperties": false,
+              "type": "object"
+            },
+            "helm": {
+              "properties": {},
+              "additionalProperties": false,
+              "type": "object",
+              "description": "Alpha placeholder (currently unsupported)."
+            },
+            "kustomize": {
+              "properties": {},
+              "additionalProperties": false,
+              "type": "object",
+              "description": "Alpha placeholder (currently unsupported)."
             }
           },
           "additionalProperties": false,

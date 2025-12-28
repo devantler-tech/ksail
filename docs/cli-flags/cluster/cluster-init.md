@@ -18,7 +18,7 @@ Flags:
       --cert-manager CertManager       Cert-Manager configuration (Enabled: install, Disabled: skip) (default Disabled)
       --cni CNI                        Container Network Interface (CNI) to use (default Default)
   -c, --context string                 Kubernetes context of cluster
-      --control-planes int32           Number of control-planes for TalosInDocker cluster (default 1)
+      --control-planes int32           Number of control-plane nodes (default 1)
       --csi CSI                        Container Storage Interface (CSI) to use (default Default)
   -d, --distribution Distribution      Kubernetes distribution to use (default Kind)
       --distribution-config string     Configuration file for the distribution
@@ -33,7 +33,7 @@ Flags:
       --mirror-registry strings        Configure mirror registries with format 'host=upstream' (e.g., docker.io=https://registry-1.docker.io).
   -o, --output string                  Output directory for the project
   -s, --source-directory string        Directory containing workloads to deploy (default "k8s")
-      --workers int32                  Number of workers for TalosInDocker cluster
+      --workers int32                  Number of worker nodes
 
 Global Flags:
       --timing   Show per-activity timing output

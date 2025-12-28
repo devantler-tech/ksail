@@ -1,4 +1,4 @@
-package talosindockerprovisioner
+package talosprovisioner
 
 import (
 	"path/filepath"
@@ -16,8 +16,8 @@ const (
 	DefaultWorkerNodes = 0
 )
 
-// Options holds runtime options for a TalosInDocker provisioner.
-// Unlike TalosInDockerConfig which was also responsible for loading Talos patches,
+// Options holds runtime options for a Talos provisioner.
+// Unlike TalosConfig which was also responsible for loading Talos patches,
 // Options only contains provisioning settings. The Talos machine configuration
 // is now loaded separately via the talos config-manager.
 type Options struct {
