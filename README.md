@@ -108,7 +108,7 @@ KSail organizes commands around your development lifecycle:
 KSail is a powerful tool that can be used in many different ways. Here are some projects that use KSail in their setup:
 
 | Project                                                               | Description         | Type     |
-| --------------------------------------------------------------------- | ------------------- | -------- |
+|-----------------------------------------------------------------------|---------------------|----------|
 | [devantler-tech/platform](https://github.com/devantler-tech/platform) | My personal homelab | Platform |
 
 If you use KSail in your project, feel free to open a PR to add it to the list, so others can see how you use KSail.
