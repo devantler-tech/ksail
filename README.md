@@ -31,10 +31,11 @@ Setting up and operating Kubernetes clusters is a skill of its own, often requir
 
 ### Prerequisites
 
-- 🐧 Linux (amd64 and arm64)
--  MacOS (arm64)
-- ⊞ Windows (amd64 and arm64)
-- 🐳 Docker
+| OS | Arch |
+| --- | --- |
+| 🐧 Linux | amd64 and arm64 |
+|  MacOS | arm64 |
+| ⊞ Windows | amd64 and arm64 |
 
 ### Installation
 
