@@ -79,12 +79,11 @@ get_subcommands() {
 }
 
 # Helper function to generate docs for a command and its subcommands
-# Args: $1 = parent title, $2 = grand_parent title, $3 = great_grand_parent title, $4+ = command path components
+# Args: $1 = parent title, $2 = grand_parent title, $3+ = command path components
 generate_command_docs() {
 	local parent_title="$1"
 	local grand_parent_title="$2"
-	local great_grand_parent_title="$3"
-	shift 3
+	shift 2
 	local cmd_parts=("$@")
 
 	# Build paths and titles
@@ -124,7 +123,7 @@ generate_command_docs() {
 
 			if [ -n "$has_subcommands" ]; then
 				# This is a command group with subcommands - recurse
-				generate_command_docs "$full_cmd_title" "$parent_title" "$grand_parent_title" "${subcmd_parts[@]}"
+				generate_command_docs "$full_cmd_title" "$parent_title" "${subcmd_parts[@]}"
 			else
 				# This is a leaf command - create the doc page
 				create_doc_page \
@@ -163,7 +162,7 @@ top_level_commands=$(get_subcommands)
 # Generate docs for each top-level command and its subcommands
 while IFS= read -r cmd; do
 	[ -z "$cmd" ] && continue
-	generate_command_docs "CLI Flags" "Configuration" "" "$cmd"
+	generate_command_docs "CLI Flags" "Configuration" "$cmd"
 done <<<"$top_level_commands"
 
 echo "CLI flags documentation generation completed successfully"
