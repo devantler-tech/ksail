@@ -37,6 +37,16 @@ Setting up and operating Kubernetes clusters is a skill of its own, often requir
 |  MacOS | arm64 |
 | ⊞ Windows | amd64 and arm64 |
 
+| Distribution | Provider |
+| --- | --- |
+| Kind | Docker |
+| K3d | Docker |
+| Talos | Docker, Hetzner (🚧 next) |
+| EKS | Docker (🚧 next) |
+
+> [!NOTE]
+> Both Kind and K3d are built to run in container engines, so they will never run in cloud providers.
+
 ### Installation
 
 #### Homebrew
