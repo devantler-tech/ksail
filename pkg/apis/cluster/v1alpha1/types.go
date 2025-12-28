@@ -339,7 +339,7 @@ type OptionsCalico struct {
 
 // OptionsFlux defines options for the Flux deployment tool.
 type OptionsFlux struct {
-	Interval metav1.Duration `json:"interval,omitzero"`
+	// Add any specific fields for the Flux tool here.
 }
 
 // OptionsArgoCD defines options for the ArgoCD deployment tool.

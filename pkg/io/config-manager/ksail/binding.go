@@ -185,7 +185,7 @@ func (m *ConfigManager) getFieldMappings() map[any]string {
 		&m.Config.Spec.Cluster.CertManager:                "cert-manager",
 		&m.Config.Spec.Cluster.LocalRegistry:              "local-registry",
 		&m.Config.Spec.Cluster.LocalRegistryOpts.HostPort: "local-registry-port",
-		&m.Config.Spec.Cluster.Flux.Interval:              "flux-interval",
+
 		// Unified node counts for all distributions
 		&m.Config.Spec.Cluster.Talos.ControlPlanes: "control-planes",
 		&m.Config.Spec.Cluster.Talos.Workers:       "workers",

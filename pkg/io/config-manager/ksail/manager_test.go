@@ -385,49 +385,6 @@ func TestLoadConfigConfigReusedNotification(t *testing.T) {
 }
 
 //nolint:paralleltest // Uses t.Chdir for isolated filesystem state.
-func TestLoadConfigParsesFluxIntervalFromString(t *testing.T) {
-	tempDir := t.TempDir()
-	t.Chdir(tempDir)
-
-	writeKindConfigFile(t)
-	writeClusterConfigFile(
-		t,
-		"    gitOpsEngine: Flux\n",
-		"    flux:\n",
-		"      interval: 2m30s\n",
-	)
-
-	manager := configmanager.NewConfigManager(io.Discard)
-	manager.Viper.SetConfigFile("ksail.yaml")
-
-	_, err := manager.LoadConfig(nil)
-	require.NoError(t, err)
-
-	assert.Equal(t, 150*time.Second, manager.Config.Spec.Cluster.Flux.Interval.Duration)
-}
-
-//nolint:paralleltest // Uses t.Chdir for isolated filesystem state.
-func TestLoadConfigFailsOnInvalidFluxIntervalString(t *testing.T) {
-	tempDir := t.TempDir()
-	t.Chdir(tempDir)
-
-	writeKindConfigFile(t)
-	writeClusterConfigFile(
-		t,
-		"    gitOpsEngine: Flux\n",
-		"    flux:\n",
-		"      interval: not-a-duration\n",
-	)
-
-	manager := configmanager.NewConfigManager(io.Discard)
-	manager.Viper.SetConfigFile("ksail.yaml")
-
-	_, err := manager.LoadConfig(nil)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "parse duration")
-}
-
-//nolint:paralleltest // Uses t.Chdir for isolated filesystem state.
 func TestLoadConfigHonorsExplicitLocalRegistrySetting(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Chdir(tempDir)
