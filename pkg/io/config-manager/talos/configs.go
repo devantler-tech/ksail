@@ -219,27 +219,7 @@ func (c *Configs) ApplyMirrorRegistries(mirrors []MirrorRegistry) error {
 		return applyMirrorsToConfig(cfg, mirrors)
 	}
 
-	// Apply to control plane config
-	if c.bundle.ControlPlaneCfg != nil {
-		patched, err := c.bundle.ControlPlaneCfg.PatchV1Alpha1(patcher)
-		if err != nil {
-			return fmt.Errorf("failed to patch control plane config: %w", err)
-		}
-
-		c.bundle.ControlPlaneCfg = patched
-	}
-
-	// Apply to worker config
-	if c.bundle.WorkerCfg != nil {
-		patched, err := c.bundle.WorkerCfg.PatchV1Alpha1(patcher)
-		if err != nil {
-			return fmt.Errorf("failed to patch worker config: %w", err)
-		}
-
-		c.bundle.WorkerCfg = patched
-	}
-
-	return nil
+	return c.applyPatchToBothConfigs(patcher)
 }
 
 // applyMirrorsToConfig applies mirror configurations to a Talos v1alpha1 config.
@@ -274,6 +254,12 @@ func (c *Configs) ApplyKubeletCertRotation() error {
 		return applyKubeletCertRotationToConfig(cfg)
 	}
 
+	return c.applyPatchToBothConfigs(patcher)
+}
+
+// applyPatchToBothConfigs applies a patcher function to both control-plane and worker configs.
+// This is a helper to avoid code duplication in ApplyMirrorRegistries and ApplyKubeletCertRotation.
+func (c *Configs) applyPatchToBothConfigs(patcher func(*v1alpha1.Config) error) error {
 	// Apply to control plane config
 	if c.bundle.ControlPlaneCfg != nil {
 		patched, err := c.bundle.ControlPlaneCfg.PatchV1Alpha1(patcher)
