@@ -9,7 +9,7 @@ import (
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
 	k3dprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/k3d"
 	kindprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/kind"
-	talosindockerprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/talosindocker"
+	talosprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/talos"
 	k3dv1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
@@ -28,8 +28,8 @@ type DistributionConfig struct {
 	Kind *v1alpha4.Cluster
 	// K3d holds the pre-loaded K3d cluster configuration.
 	K3d *k3dv1alpha5.SimpleConfig
-	// TalosInDocker holds the pre-loaded Talos machine configurations.
-	TalosInDocker *talosconfigmanager.Configs
+	// Talos holds the pre-loaded Talos machine configurations.
+	Talos *talosconfigmanager.Configs
 }
 
 // Factory creates distribution-specific cluster provisioners based on the KSail cluster configuration.
@@ -71,8 +71,8 @@ func (f DefaultFactory) Create(
 		return f.createKindProvisioner(cluster)
 	case v1alpha1.DistributionK3d:
 		return f.createK3dProvisioner(cluster)
-	case v1alpha1.DistributionTalosInDocker:
-		return f.createTalosInDockerProvisioner(cluster)
+	case v1alpha1.DistributionTalos:
+		return f.createTalosProvisioner(cluster)
 	default:
 		return nil, "", fmt.Errorf(
 			"%w: %s",
@@ -94,7 +94,7 @@ func (f DefaultFactory) createKindProvisioner(
 
 	kindConfig := f.DistributionConfig.Kind
 
-	// Apply node count overrides from CLI flags (stored in TalosInDocker options)
+	// Apply node count overrides from CLI flags (stored in Talos options)
 	applyKindNodeCounts(kindConfig, cluster.Spec.Cluster.Talos)
 
 	provisioner, err := kindprovisioner.CreateProvisioner(
@@ -151,7 +151,7 @@ func (f DefaultFactory) createK3dProvisioner(
 
 	k3dConfig := f.DistributionConfig.K3d
 
-	// Apply node count overrides from CLI flags (stored in TalosInDocker options)
+	// Apply node count overrides from CLI flags (stored in Talos options)
 	applyK3dNodeCounts(k3dConfig, cluster.Spec.Cluster.Talos)
 
 	provisioner := k3dprovisioner.CreateProvisioner(
@@ -183,24 +183,24 @@ func applyK3dNodeCounts(k3dConfig *k3dv1alpha5.SimpleConfig, opts v1alpha1.Optio
 	}
 }
 
-func (f DefaultFactory) createTalosInDockerProvisioner(
+func (f DefaultFactory) createTalosProvisioner(
 	cluster *v1alpha1.Cluster,
 ) (ClusterProvisioner, any, error) {
-	if f.DistributionConfig.TalosInDocker == nil {
+	if f.DistributionConfig.Talos == nil {
 		return nil, nil, fmt.Errorf(
-			"TalosInDocker config is required for TalosInDocker distribution: %w",
+			"Talos config is required for Talos distribution: %w",
 			ErrMissingDistributionConfig,
 		)
 	}
 
-	provisioner, err := talosindockerprovisioner.CreateProvisioner(
-		f.DistributionConfig.TalosInDocker,
+	provisioner, err := talosprovisioner.CreateProvisioner(
+		f.DistributionConfig.Talos,
 		cluster.Spec.Cluster.Connection.Kubeconfig,
 		cluster.Spec.Cluster.Talos,
 	)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create TalosInDocker provisioner: %w", err)
+		return nil, nil, fmt.Errorf("failed to create Talos provisioner: %w", err)
 	}
 
-	return provisioner, f.DistributionConfig.TalosInDocker, nil
+	return provisioner, f.DistributionConfig.Talos, nil
 }

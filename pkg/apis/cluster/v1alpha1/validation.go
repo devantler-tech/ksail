@@ -2,7 +2,7 @@ package v1alpha1
 
 // ValidDistributions returns supported distribution values.
 func ValidDistributions() []Distribution {
-	return []Distribution{DistributionKind, DistributionK3d, DistributionTalosInDocker}
+	return []Distribution{DistributionKind, DistributionK3d, DistributionTalos}
 }
 
 // ValidGitOpsEngines enumerates supported GitOps engine values.

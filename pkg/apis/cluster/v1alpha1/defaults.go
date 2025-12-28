@@ -11,8 +11,8 @@ const (
 	DefaultDistributionConfig = "kind.yaml"
 	// DefaultK3dDistributionConfig is the default K3d cluster distribution configuration filename.
 	DefaultK3dDistributionConfig = "k3d.yaml"
-	// DefaultTalosInDockerDistributionConfig is the default TalosInDocker cluster distribution configuration directory.
-	DefaultTalosInDockerDistributionConfig = "talos"
+	// DefaultTalosDistributionConfig is the default Talos cluster distribution configuration directory.
+	DefaultTalosDistributionConfig = "talos"
 	// DefaultSourceDirectory is the default directory for Kubernetes manifests.
 	DefaultSourceDirectory = "k8s"
 	// DefaultKubeconfigPath is the default path to the kubeconfig file.
@@ -33,8 +33,8 @@ func ExpectedDistributionConfigName(distribution Distribution) string {
 		return DefaultDistributionConfig
 	case DistributionK3d:
 		return DefaultK3dDistributionConfig
-	case DistributionTalosInDocker:
-		return DefaultTalosInDockerDistributionConfig
+	case DistributionTalos:
+		return DefaultTalosDistributionConfig
 	default:
 		return DefaultDistributionConfig
 	}
@@ -47,7 +47,7 @@ func ExpectedContextName(distribution Distribution) string {
 		return "kind-kind"
 	case DistributionK3d:
 		return "k3d-k3d-default"
-	case DistributionTalosInDocker:
+	case DistributionTalos:
 		return "admin@talos-default"
 	default:
 		return ""

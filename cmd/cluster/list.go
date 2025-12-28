@@ -135,7 +135,7 @@ func listAdditionalDistributionClusters(
 	for _, distribution := range []v1alpha1.Distribution{
 		v1alpha1.DistributionKind,
 		v1alpha1.DistributionK3d,
-		v1alpha1.DistributionTalosInDocker,
+		v1alpha1.DistributionTalos,
 	} {
 		if distribution == clusterCfg.Spec.Cluster.Distribution {
 			continue
@@ -221,7 +221,7 @@ func defaultDistributionConfigPath(distribution v1alpha1.Distribution) string {
 		return "kind.yaml"
 	case v1alpha1.DistributionK3d:
 		return "k3d.yaml"
-	case v1alpha1.DistributionTalosInDocker:
+	case v1alpha1.DistributionTalos:
 		return talosconfigmanager.DefaultPatchesDir
 	default:
 		return "kind.yaml"
@@ -242,9 +242,9 @@ func createEmptyDistributionConfig(
 		return &clusterprovisioner.DistributionConfig{
 			K3d: &k3dv1alpha5.SimpleConfig{},
 		}
-	case v1alpha1.DistributionTalosInDocker:
+	case v1alpha1.DistributionTalos:
 		return &clusterprovisioner.DistributionConfig{
-			TalosInDocker: &talosconfigmanager.Configs{},
+			Talos: &talosconfigmanager.Configs{},
 		}
 	default:
 		return &clusterprovisioner.DistributionConfig{

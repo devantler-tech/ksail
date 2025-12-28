@@ -590,7 +590,7 @@ func expectedDistributionConfigName(distribution v1alpha1.Distribution) string {
 		return "kind.yaml"
 	case v1alpha1.DistributionK3d:
 		return "k3d.yaml"
-	case v1alpha1.DistributionTalosInDocker:
+	case v1alpha1.DistributionTalos:
 		return "talos"
 	default:
 		return ""
@@ -601,11 +601,11 @@ func distributionConfigIsOppositeDefault(current string, distribution v1alpha1.D
 	switch distribution {
 	case v1alpha1.DistributionKind:
 		return current == expectedDistributionConfigName(v1alpha1.DistributionK3d) ||
-			current == expectedDistributionConfigName(v1alpha1.DistributionTalosInDocker)
+			current == expectedDistributionConfigName(v1alpha1.DistributionTalos)
 	case v1alpha1.DistributionK3d:
 		return current == expectedDistributionConfigName(v1alpha1.DistributionKind) ||
-			current == expectedDistributionConfigName(v1alpha1.DistributionTalosInDocker)
-	case v1alpha1.DistributionTalosInDocker:
+			current == expectedDistributionConfigName(v1alpha1.DistributionTalos)
+	case v1alpha1.DistributionTalos:
 		return current == expectedDistributionConfigName(v1alpha1.DistributionKind) ||
 			current == expectedDistributionConfigName(v1alpha1.DistributionK3d)
 	default:
@@ -661,7 +661,7 @@ func (m *ConfigManager) createValidatorForDistribution() (*ksailvalidator.Valida
 		if k3dConfig != nil {
 			return ksailvalidator.NewValidatorForK3d(k3dConfig), nil
 		}
-	case v1alpha1.DistributionTalosInDocker:
+	case v1alpha1.DistributionTalos:
 		talosConfig, err := m.loadTalosConfig()
 		if err != nil && !errors.Is(err, ErrDistributionConfigNotFound) {
 			return nil, err
@@ -725,7 +725,7 @@ func (m *ConfigManager) loadK3dConfig() (*k3dv1alpha5.SimpleConfig, error) {
 // Returns ErrDistributionConfigNotFound if the directory doesn't exist.
 // Returns error if config loading or validation fails.
 func (m *ConfigManager) loadTalosConfig() (*talosconfigmanager.Configs, error) {
-	// For TalosInDocker, DistributionConfig points to the patches directory (e.g., "talos")
+	// For Talos, DistributionConfig points to the patches directory (e.g., "talos")
 	patchesDir := m.Config.Spec.Cluster.DistributionConfig
 	if patchesDir == "" {
 		patchesDir = talosconfigmanager.DefaultPatchesDir
@@ -778,7 +778,7 @@ func (m *ConfigManager) loadAndCacheDistributionConfig() error {
 		return m.cacheKindConfig()
 	case v1alpha1.DistributionK3d:
 		return m.cacheK3dConfig()
-	case v1alpha1.DistributionTalosInDocker:
+	case v1alpha1.DistributionTalos:
 		return m.cacheTalosConfig()
 	default:
 		return nil
@@ -818,14 +818,14 @@ func (m *ConfigManager) cacheK3dConfig() error {
 func (m *ConfigManager) cacheTalosConfig() error {
 	talosConfig, err := m.loadTalosConfig()
 	if err != nil && !errors.Is(err, ErrDistributionConfigNotFound) {
-		return fmt.Errorf("failed to load TalosInDocker distribution config: %w", err)
+		return fmt.Errorf("failed to load Talos distribution config: %w", err)
 	}
 
 	if talosConfig == nil {
 		talosConfig = &talosconfigmanager.Configs{}
 	}
 
-	m.DistributionConfig.TalosInDocker = talosConfig
+	m.DistributionConfig.Talos = talosConfig
 
 	return nil
 }

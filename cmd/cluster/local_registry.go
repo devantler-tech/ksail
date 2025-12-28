@@ -347,7 +347,7 @@ func cleanupLocalRegistryWithOptions(
 		deps,
 		distConfig.Kind,
 		distConfig.K3d,
-		distConfig.TalosInDocker,
+		distConfig.Talos,
 		localRegistryCleanupStageInfo(),
 		func(execCtx context.Context, svc registry.Service, ctx localRegistryContext) error {
 			registryName := buildLocalRegistryName()
@@ -407,8 +407,8 @@ func resolveLocalRegistryClusterName(
 		}
 	case v1alpha1.DistributionK3d:
 		return k3dconfigmanager.ResolveClusterName(clusterCfg, k3dConfig)
-	case v1alpha1.DistributionTalosInDocker:
-		// TalosInDocker uses talos config name if available, falls back to Connection.Context
+	case v1alpha1.DistributionTalos:
+		// Talos uses talos config name if available, falls back to Connection.Context
 		if talosConfig != nil && talosConfig.Name != "" {
 			return talosConfig.Name
 		}
@@ -441,8 +441,8 @@ func resolveLocalRegistryNetworkName(
 		}
 
 		return "k3d-" + trimmed
-	case v1alpha1.DistributionTalosInDocker:
-		// TalosInDocker uses cluster name as Docker network name
+	case v1alpha1.DistributionTalos:
+		// Talos uses cluster name as Docker network name
 		trimmed := strings.TrimSpace(clusterName)
 		if trimmed == "" {
 			trimmed = "talos-default"

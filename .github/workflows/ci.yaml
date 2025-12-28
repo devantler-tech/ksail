@@ -152,16 +152,16 @@ jobs:
           - init-args: "--distribution K3d --mirror-registry docker.io=https://registry-1.docker.io"
           - init-args: "--distribution K3d --mirror-registry docker.io=https://registry-1.docker.io --mirror-registry ghcr.io=https://ghcr.io"
           - init-args: "--distribution K3d --metrics-server Disabled"
-          - init-args: "--distribution TalosInDocker"
-          - init-args: "--distribution TalosInDocker --cert-manager Enabled"
-          - init-args: "--distribution TalosInDocker --cni Cilium"
-          - init-args: "--distribution TalosInDocker --cni Calico"
-          - init-args: "--distribution TalosInDocker --csi LocalPathStorage"
-          - init-args: "--distribution TalosInDocker --gitops-engine Flux"
-          - init-args: "--distribution TalosInDocker --gitops-engine ArgoCD"
-          - init-args: "--distribution TalosInDocker --mirror-registry docker.io=https://registry-1.docker.io"
-          - init-args: "--distribution TalosInDocker --mirror-registry docker.io=https://registry-1.docker.io --mirror-registry ghcr.io=https://ghcr.io"
-          - init-args: "--distribution TalosInDocker --metrics-server Disabled"
+          - init-args: "--distribution Talos"
+          - init-args: "--distribution Talos --cert-manager Enabled"
+          - init-args: "--distribution Talos --cni Cilium"
+          - init-args: "--distribution Talos --cni Calico"
+          - init-args: "--distribution Talos --csi LocalPathStorage"
+          - init-args: "--distribution Talos --gitops-engine Flux"
+          - init-args: "--distribution Talos --gitops-engine ArgoCD"
+          - init-args: "--distribution Talos --mirror-registry docker.io=https://registry-1.docker.io"
+          - init-args: "--distribution Talos --mirror-registry docker.io=https://registry-1.docker.io --mirror-registry ghcr.io=https://ghcr.io"
+          - init-args: "--distribution Talos --metrics-server Disabled"
     steps:
       - name: 📄 Checkout
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
@@ -185,8 +185,8 @@ jobs:
         run: |
           ksail cluster init ${{ matrix.init-args }}
 
-      - name: 🔧 Load br_netfilter kernel module (required for TalosInDocker)
-        if: contains(matrix.init-args, 'TalosInDocker')
+      - name: 🔧 Load br_netfilter kernel module (required for Talos)
+        if: contains(matrix.init-args, 'Talos')
         run: |
           sudo modprobe br_netfilter
           echo "br_netfilter module loaded successfully"

@@ -9,7 +9,7 @@ import (
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	k3dprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/k3d"
 	kindprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/kind"
-	talosindockerprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/talosindocker"
+	talosprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/talos"
 	k3dTypes "github.com/k3d-io/k3d/v5/pkg/config/types"
 	k3dv1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/stretchr/testify/assert"
@@ -54,14 +54,14 @@ func TestCreateClusterProvisioner_WithDistributionConfig(t *testing.T) {
 			expectError:  false,
 		},
 		{
-			name:         "talosindocker with pre-loaded config",
-			distribution: v1alpha1.DistributionTalosInDocker,
+			name:         "talos with pre-loaded config",
+			distribution: v1alpha1.DistributionTalos,
 			distributionConfig: &clusterprovisioner.DistributionConfig{
-				TalosInDocker: &talosconfigmanager.Configs{
+				Talos: &talosconfigmanager.Configs{
 					Name: "test-talos",
 				},
 			},
-			expectedType: &talosindockerprovisioner.TalosInDockerProvisioner{},
+			expectedType: &talosprovisioner.TalosProvisioner{},
 			expectError:  false,
 		},
 		{
@@ -181,8 +181,8 @@ func TestCreateClusterProvisioner_WrongDistributionConfig(t *testing.T) {
 			},
 		},
 		{
-			name:         "talosindocker requested but kind config provided",
-			distribution: v1alpha1.DistributionTalosInDocker,
+			name:         "talos requested but kind config provided",
+			distribution: v1alpha1.DistributionTalos,
 			distributionConfig: &clusterprovisioner.DistributionConfig{
 				Kind: &v1alpha4.Cluster{},
 			},

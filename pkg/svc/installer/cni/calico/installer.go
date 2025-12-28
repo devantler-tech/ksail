@@ -21,9 +21,9 @@ type Distribution string
 
 // Supported distribution types.
 const (
-	DistributionKind          Distribution = "kind"
-	DistributionK3d           Distribution = "k3d"
-	DistributionTalosInDocker Distribution = "talosindocker"
+	DistributionKind  Distribution = "kind"
+	DistributionK3d   Distribution = "k3d"
+	DistributionTalos Distribution = "talos"
 )
 
 // CalicoInstaller implements the installer.Installer interface for Calico.
@@ -69,7 +69,7 @@ func (c *CalicoInstaller) Install(ctx context.Context) error {
 	// because Talos has PSS enforcement enabled by default.
 	// We also need to wait for API server stability as the API server may be
 	// unstable immediately after bootstrap.
-	if c.distribution == DistributionTalosInDocker {
+	if c.distribution == DistributionTalos {
 		err := c.WaitForAPIServerStability(ctx)
 		if err != nil {
 			return fmt.Errorf("failed to wait for API server stability: %w", err)
@@ -146,7 +146,7 @@ func (c *CalicoInstaller) getCalicoValues() map[string]string {
 
 	// Add distribution-specific values
 	switch c.distribution {
-	case DistributionTalosInDocker:
+	case DistributionTalos:
 		// Talos-specific settings from https://docs.siderolabs.com/kubernetes-guides/cni/deploy-calico
 		maps.Copy(values, talosCalicoValues())
 	case DistributionKind, DistributionK3d:

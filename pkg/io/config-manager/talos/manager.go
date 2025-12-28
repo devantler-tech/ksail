@@ -127,7 +127,7 @@ func (m *ConfigManager) ValidatePatchDirectory() (string, error) {
 	_, statErr := os.Stat(m.patchesDir)
 	if os.IsNotExist(statErr) {
 		return "Patch directory '" + m.patchesDir + "/' not found. " +
-			"Create it or run 'ksail cluster init --distribution TalosInDocker'.", nil
+			"Create it or run 'ksail cluster init --distribution Talos'.", nil
 	}
 
 	// Validate YAML files in each subdirectory

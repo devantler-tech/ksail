@@ -1,4 +1,4 @@
-package talosindockerprovisioner
+package talosprovisioner
 
 import (
 	"fmt"
@@ -8,19 +8,19 @@ import (
 	kindprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/kind"
 )
 
-// CreateProvisioner creates a TalosInDockerProvisioner from a pre-loaded configuration.
+// CreateProvisioner creates a TalosProvisioner from a pre-loaded configuration.
 // The Talos config should be loaded via the config-manager before calling this function,
 // allowing any in-memory modifications (e.g., CNI patches, mirror registries) to be preserved.
 //
 // Parameters:
 //   - talosConfigs: Pre-loaded Talos machine configurations with all patches applied
 //   - kubeconfigPath: Path where the kubeconfig should be written
-//   - opts: TalosInDocker-specific options (node counts, etc.)
+//   - opts: Talos-specific options (node counts, etc.)
 func CreateProvisioner(
 	talosConfigs *talosconfigmanager.Configs,
 	kubeconfigPath string,
 	opts v1alpha1.OptionsTalos,
-) (*TalosInDockerProvisioner, error) {
+) (*TalosProvisioner, error) {
 	// Create options and apply configured node counts
 	options := NewOptions().WithKubeconfigPath(kubeconfigPath)
 	if opts.ControlPlanes > 0 {
@@ -32,7 +32,7 @@ func CreateProvisioner(
 	}
 
 	// Create provisioner with loaded configs and options
-	provisioner := NewTalosInDockerProvisioner(talosConfigs, options)
+	provisioner := NewTalosProvisioner(talosConfigs, options)
 
 	dockerClient, err := kindprovisioner.NewDefaultDockerClient()
 	if err != nil {

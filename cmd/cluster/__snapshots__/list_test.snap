@@ -20,7 +20,7 @@ kind: test-cluster
 ---|k3d|---
 No clusters found.
 
----|talosindocker|---
+---|talos|---
 No clusters found.
 
 

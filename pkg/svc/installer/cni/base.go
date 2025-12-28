@@ -106,7 +106,7 @@ func (b *InstallerBase) BuildRESTConfig() (*rest.Config, error) {
 }
 
 // WaitForAPIServerStability waits for the Kubernetes API server to be stable.
-// This is needed for distributions like TalosInDocker where the API server may be
+// This is needed for distributions like Talos where the API server may be
 // unstable immediately after bootstrap, causing transient connection errors.
 // This method should be called before Helm operations for such distributions.
 func (b *InstallerBase) WaitForAPIServerStability(ctx context.Context) error {

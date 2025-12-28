@@ -77,10 +77,10 @@ func handleDeleteRunE(
 		return fmt.Errorf("failed to get delete-volumes flag: %w", flagErr)
 	}
 
-	// For TalosInDocker, we must cleanup registries BEFORE deleting the cluster
+	// For Talos, we must cleanup registries BEFORE deleting the cluster
 	// because the registries are connected to the cluster network. If we delete
 	// the cluster first, the network removal fails with "has active endpoints".
-	if clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionTalosInDocker {
+	if clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionTalos {
 		cleanupRegistries(cmd, cfgManager, clusterCfg, deps, clusterName, deleteVolumes)
 	}
 
@@ -97,8 +97,8 @@ func handleDeleteRunE(
 		return fmt.Errorf("cluster deletion failed: %w", err)
 	}
 
-	// For non-TalosInDocker distributions, cleanup registries after cluster deletion
-	if clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionTalosInDocker {
+	// For non-Talos distributions, cleanup registries after cluster deletion
+	if clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionTalos {
 		cleanupRegistries(cmd, cfgManager, clusterCfg, deps, clusterName, deleteVolumes)
 	}
 
@@ -106,7 +106,7 @@ func handleDeleteRunE(
 }
 
 // cleanupRegistries cleans up mirror and local registries during cluster deletion.
-// For TalosInDocker, this must be called BEFORE cluster deletion because registries
+// For Talos, this must be called BEFORE cluster deletion because registries
 // are connected to the cluster network. For Kind and K3d, it's called after.
 func cleanupRegistries(
 	cmd *cobra.Command,
@@ -165,8 +165,8 @@ func cleanupMirrorRegistries(
 			clusterName,
 			deleteVolumes,
 		)
-	case v1alpha1.DistributionTalosInDocker:
-		return cleanupTalosInDockerMirrorRegistries(
+	case v1alpha1.DistributionTalos:
+		return cleanupTalosMirrorRegistries(
 			cmd,
 			cfgManager,
 			deps,
@@ -375,7 +375,7 @@ func notifyRegistryDeletions(
 	}
 }
 
-func cleanupTalosInDockerMirrorRegistries(
+func cleanupTalosMirrorRegistries(
 	cmd *cobra.Command,
 	cfgManager *ksailconfigmanager.ConfigManager,
 	deps cmdhelpers.LifecycleDeps,
@@ -392,7 +392,7 @@ func cleanupTalosInDockerMirrorRegistries(
 		return nil
 	}
 
-	// TalosInDocker uses the cluster name as the network name
+	// Talos uses the cluster name as the network name
 	networkName := clusterName
 
 	return runMirrorRegistryCleanup(
@@ -437,8 +437,8 @@ func collectTalosMirrorSpecs(
 
 	// Extract mirror hosts from the loaded Talos config
 	var talosSpecs []registry.MirrorSpec
-	if cfgManager.DistributionConfig != nil && cfgManager.DistributionConfig.TalosInDocker != nil {
-		talosHosts := cfgManager.DistributionConfig.TalosInDocker.ExtractMirrorHosts()
+	if cfgManager.DistributionConfig != nil && cfgManager.DistributionConfig.Talos != nil {
+		talosHosts := cfgManager.DistributionConfig.Talos.ExtractMirrorHosts()
 		for _, host := range talosHosts {
 			talosSpecs = append(talosSpecs, registry.MirrorSpec{
 				Host:   host,

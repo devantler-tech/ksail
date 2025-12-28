@@ -95,7 +95,7 @@ func TestGetInstallTimeoutDistributions(t *testing.T) {
 		t.Parallel()
 
 		assertTimeoutEqualsWithDistribution(
-			t, v1alpha1.DistributionTalosInDocker, 0, installer.TalosInstallTimeout,
+			t, v1alpha1.DistributionTalos, 0, installer.TalosInstallTimeout,
 		)
 	})
 
@@ -103,7 +103,7 @@ func TestGetInstallTimeoutDistributions(t *testing.T) {
 		t.Parallel()
 
 		assertTimeoutEqualsWithDistribution(
-			t, v1alpha1.DistributionTalosInDocker, 15*time.Minute, 15*time.Minute,
+			t, v1alpha1.DistributionTalos, 15*time.Minute, 15*time.Minute,
 		)
 	})
 

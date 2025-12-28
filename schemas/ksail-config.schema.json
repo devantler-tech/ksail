@@ -45,7 +45,7 @@
               "enum": [
                 "Kind",
                 "K3d",
-                "TalosInDocker"
+                "Talos"
               ]
             },
             "cni": {
@@ -106,8 +106,13 @@
                   "type": "object",
                   "description": "Alpha placeholder (currently unsupported)."
                 },
-                "talosInDocker": {
+                "talos": {
                   "properties": {
+                    "provider": {
+                      "type": "string",
+                      "enum": ["Docker"],
+                      "default": "Docker"
+                    },
                     "controlPlanes": {
                       "type": "integer"
                     },

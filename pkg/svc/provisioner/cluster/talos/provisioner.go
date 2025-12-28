@@ -1,4 +1,4 @@
-package talosindockerprovisioner
+package talosprovisioner
 
 import (
 	"context"
@@ -61,7 +61,7 @@ const (
 	byte2Shift = 8
 )
 
-// Common errors for the TalosInDocker provisioner.
+// Common errors for the Talos provisioner.
 var (
 	// ErrClusterNotFound is returned when a cluster is not found.
 	ErrClusterNotFound = errors.New("cluster not found")
@@ -85,8 +85,8 @@ var (
 	ErrMissingKubernetesEndpoint = errors.New("cluster info missing KubernetesEndpoint")
 )
 
-// TalosInDockerProvisioner implements ClusterProvisioner for Talos-in-Docker clusters.
-type TalosInDockerProvisioner struct {
+// TalosProvisioner implements ClusterProvisioner for Talos-in-Docker clusters.
+type TalosProvisioner struct {
 	// talosConfigs holds the loaded Talos machine configurations with all patches applied.
 	talosConfigs *talosconfigmanager.Configs
 	// options holds runtime configuration for provisioning.
@@ -96,19 +96,19 @@ type TalosInDockerProvisioner struct {
 	logWriter          io.Writer
 }
 
-// NewTalosInDockerProvisioner creates a new TalosInDockerProvisioner.
+// NewTalosProvisioner creates a new TalosProvisioner.
 // The talosConfigs parameter contains the pre-loaded Talos machine configurations
 // with all patches (file-based and runtime) already applied.
 // The options parameter contains runtime settings like node counts and output paths.
-func NewTalosInDockerProvisioner(
+func NewTalosProvisioner(
 	talosConfigs *talosconfigmanager.Configs,
 	options *Options,
-) *TalosInDockerProvisioner {
+) *TalosProvisioner {
 	if options == nil {
 		options = NewOptions()
 	}
 
-	return &TalosInDockerProvisioner{
+	return &TalosProvisioner{
 		talosConfigs: talosConfigs,
 		options:      options,
 		provisionerFactory: func(ctx context.Context) (provision.Provisioner, error) {
@@ -119,41 +119,41 @@ func NewTalosInDockerProvisioner(
 }
 
 // WithDockerClient sets the Docker client for container operations.
-func (p *TalosInDockerProvisioner) WithDockerClient(c client.APIClient) *TalosInDockerProvisioner {
+func (p *TalosProvisioner) WithDockerClient(c client.APIClient) *TalosProvisioner {
 	p.dockerClient = c
 
 	return p
 }
 
 // WithProvisionerFactory sets a custom provisioner factory for testing.
-func (p *TalosInDockerProvisioner) WithProvisionerFactory(
+func (p *TalosProvisioner) WithProvisionerFactory(
 	f func(ctx context.Context) (provision.Provisioner, error),
-) *TalosInDockerProvisioner {
+) *TalosProvisioner {
 	p.provisionerFactory = f
 
 	return p
 }
 
 // WithLogWriter sets the log writer for provisioning output.
-func (p *TalosInDockerProvisioner) WithLogWriter(w io.Writer) *TalosInDockerProvisioner {
+func (p *TalosProvisioner) WithLogWriter(w io.Writer) *TalosProvisioner {
 	p.logWriter = w
 
 	return p
 }
 
 // Options returns the current runtime options.
-func (p *TalosInDockerProvisioner) Options() *Options {
+func (p *TalosProvisioner) Options() *Options {
 	return p.options
 }
 
 // TalosConfigs returns the loaded Talos machine configurations.
-func (p *TalosInDockerProvisioner) TalosConfigs() *talosconfigmanager.Configs {
+func (p *TalosProvisioner) TalosConfigs() *talosconfigmanager.Configs {
 	return p.talosConfigs
 }
 
 // Create creates a Talos-in-Docker cluster.
 // If name is non-empty, it overrides the cluster name from talosConfigs.
-func (p *TalosInDockerProvisioner) Create(ctx context.Context, name string) error {
+func (p *TalosProvisioner) Create(ctx context.Context, name string) error {
 	// Verify Docker is available and running
 	err := p.checkDockerAvailable(ctx)
 	if err != nil {
@@ -186,7 +186,7 @@ func (p *TalosInDockerProvisioner) Create(ctx context.Context, name string) erro
 
 // Delete deletes a Talos-in-Docker cluster.
 // If name is non-empty, it overrides the configured cluster name.
-func (p *TalosInDockerProvisioner) Delete(ctx context.Context, name string) error {
+func (p *TalosProvisioner) Delete(ctx context.Context, name string) error {
 	clusterName, err := p.validateClusterOperation(ctx, name)
 	if err != nil {
 		return err
@@ -240,7 +240,7 @@ func (p *TalosInDockerProvisioner) Delete(ctx context.Context, name string) erro
 
 // Exists checks if a Talos-in-Docker cluster exists.
 // If name is non-empty, it overrides the configured cluster name.
-func (p *TalosInDockerProvisioner) Exists(ctx context.Context, name string) (bool, error) {
+func (p *TalosProvisioner) Exists(ctx context.Context, name string) (bool, error) {
 	if p.dockerClient == nil {
 		return false, ErrDockerNotAvailable
 	}
@@ -257,7 +257,7 @@ func (p *TalosInDockerProvisioner) Exists(ctx context.Context, name string) (boo
 
 // List lists all Talos-in-Docker clusters.
 // Returns unique cluster names from containers with Talos labels.
-func (p *TalosInDockerProvisioner) List(ctx context.Context) ([]string, error) {
+func (p *TalosProvisioner) List(ctx context.Context) ([]string, error) {
 	if p.dockerClient == nil {
 		return nil, ErrDockerNotAvailable
 	}
@@ -293,7 +293,7 @@ func (p *TalosInDockerProvisioner) List(ctx context.Context) ([]string, error) {
 
 // Start starts a stopped Talos-in-Docker cluster.
 // If name is non-empty, it overrides the configured cluster name.
-func (p *TalosInDockerProvisioner) Start(ctx context.Context, name string) error {
+func (p *TalosProvisioner) Start(ctx context.Context, name string) error {
 	clusterName, containers, err := p.getClusterContainers(ctx, name)
 	if err != nil {
 		return err
@@ -319,7 +319,7 @@ const containerStopTimeout = 30
 
 // Stop stops a running Talos-in-Docker cluster.
 // If name is non-empty, it overrides the configured cluster name.
-func (p *TalosInDockerProvisioner) Stop(ctx context.Context, name string) error {
+func (p *TalosProvisioner) Stop(ctx context.Context, name string) error {
 	clusterName, containers, err := p.getClusterContainers(ctx, name)
 	if err != nil {
 		return err
@@ -342,7 +342,7 @@ func (p *TalosInDockerProvisioner) Stop(ctx context.Context, name string) error 
 }
 
 // listTalosContainers lists all containers for a specific Talos cluster.
-func (p *TalosInDockerProvisioner) listTalosContainers(
+func (p *TalosProvisioner) listTalosContainers(
 	ctx context.Context,
 	clusterName string,
 ) ([]container.Summary, error) {
@@ -362,7 +362,7 @@ func (p *TalosInDockerProvisioner) listTalosContainers(
 
 // validateClusterOperation validates that Docker is available and the cluster exists.
 // Returns the resolved cluster name or an error.
-func (p *TalosInDockerProvisioner) validateClusterOperation(
+func (p *TalosProvisioner) validateClusterOperation(
 	ctx context.Context,
 	name string,
 ) (string, error) {
@@ -389,7 +389,7 @@ func (p *TalosInDockerProvisioner) validateClusterOperation(
 
 // getClusterContainers validates the operation and returns the cluster's containers.
 // This combines validation with container listing for Start/Stop operations.
-func (p *TalosInDockerProvisioner) getClusterContainers(
+func (p *TalosProvisioner) getClusterContainers(
 	ctx context.Context,
 	name string,
 ) (string, []container.Summary, error) {
@@ -409,7 +409,7 @@ func (p *TalosInDockerProvisioner) getClusterContainers(
 // bootstrapAndSaveKubeconfig bootstraps the cluster and saves the kubeconfig.
 //
 //nolint:cyclop,funlen // Bootstrap sequence is inherently complex but logically coherent
-func (p *TalosInDockerProvisioner) bootstrapAndSaveKubeconfig(
+func (p *TalosProvisioner) bootstrapAndSaveKubeconfig(
 	ctx context.Context,
 	cluster provision.Cluster,
 	configBundle *bundle.Bundle,
@@ -528,7 +528,7 @@ func (p *TalosInDockerProvisioner) bootstrapAndSaveKubeconfig(
 // provisionCluster creates the Talos cluster using the SDK.
 //
 //nolint:ireturn // provision.Cluster is the SDK's interface
-func (p *TalosInDockerProvisioner) provisionCluster(
+func (p *TalosProvisioner) provisionCluster(
 	ctx context.Context,
 	clusterName string,
 	configBundle *bundle.Bundle,
@@ -567,7 +567,7 @@ func (p *TalosInDockerProvisioner) provisionCluster(
 }
 
 // saveClusterConfigs saves talosconfig and kubeconfig if paths are configured.
-func (p *TalosInDockerProvisioner) saveClusterConfigs(
+func (p *TalosProvisioner) saveClusterConfigs(
 	ctx context.Context,
 	cluster provision.Cluster,
 	configBundle *bundle.Bundle,
@@ -594,7 +594,7 @@ func (p *TalosInDockerProvisioner) saveClusterConfigs(
 }
 
 // checkDockerAvailable verifies that Docker is configured and running.
-func (p *TalosInDockerProvisioner) checkDockerAvailable(ctx context.Context) error {
+func (p *TalosProvisioner) checkDockerAvailable(ctx context.Context) error {
 	if p.dockerClient == nil {
 		return ErrDockerNotAvailable
 	}
@@ -609,7 +609,7 @@ func (p *TalosInDockerProvisioner) checkDockerAvailable(ctx context.Context) err
 }
 
 // buildClusterRequest creates a provision.ClusterRequest from our config.
-func (p *TalosInDockerProvisioner) buildClusterRequest(
+func (p *TalosProvisioner) buildClusterRequest(
 	clusterName string,
 	configBundle *bundle.Bundle,
 ) (provision.ClusterRequest, error) {
@@ -652,7 +652,7 @@ func (p *TalosInDockerProvisioner) buildClusterRequest(
 }
 
 // buildNodeRequests creates node request configurations for control plane and worker nodes.
-func (p *TalosInDockerProvisioner) buildNodeRequests(
+func (p *TalosProvisioner) buildNodeRequests(
 	clusterName string,
 	cidr netip.Prefix,
 	configBundle *bundle.Bundle,
@@ -705,7 +705,7 @@ func (p *TalosInDockerProvisioner) buildNodeRequests(
 }
 
 // resolveClusterName returns the provided name if non-empty, otherwise the cluster name from configs.
-func (p *TalosInDockerProvisioner) resolveClusterName(name string) string {
+func (p *TalosProvisioner) resolveClusterName(name string) string {
 	if name != "" {
 		return name
 	}
@@ -772,7 +772,7 @@ const talosAPIPort = 50000
 // getMappedTalosAPIEndpoint finds the control plane container and returns the mapped Talos API endpoint.
 // On macOS and other non-Linux systems, Docker runs in a VM, so we need to use the mapped port
 // via 127.0.0.1 instead of the container's internal IP.
-func (p *TalosInDockerProvisioner) getMappedTalosAPIEndpoint(
+func (p *TalosProvisioner) getMappedTalosAPIEndpoint(
 	ctx context.Context,
 	clusterName string,
 ) (string, error) {
@@ -851,7 +851,7 @@ func rewriteKubeconfigEndpoint(kubeconfigBytes []byte, endpoint string) ([]byte,
 // cleanupKubeconfig removes the cluster, context, and user entries for the deleted cluster
 // from the kubeconfig file. This only removes entries matching the cluster name,
 // leaving other cluster configurations intact.
-func (p *TalosInDockerProvisioner) cleanupKubeconfig(clusterName string) error {
+func (p *TalosProvisioner) cleanupKubeconfig(clusterName string) error {
 	// Expand tilde in kubeconfig path
 	kubeconfigPath, err := iopath.ExpandHomePath(p.options.KubeconfigPath)
 	if err != nil {

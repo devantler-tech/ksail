@@ -61,7 +61,7 @@ spec:
     cni: Cilium
     # CSI "Default" uses the distribution's built-in storage behavior:
     # - K3d: includes local-path-provisioner by default
-    # - Kind and TalosInDocker: no CSI installed; use LocalPathStorage if needed
+    # - Kind and Talos: no CSI installed; use LocalPathStorage if needed
     csi: Default
     metricsServer: Enabled
     certManager: Enabled
@@ -82,7 +82,7 @@ spec:
 ### Top-Level Fields
 
 | Field        | Type   | Required | Description                                    |
-|--------------|--------|----------|------------------------------------------------|
+| ------------ | ------ | -------- | ---------------------------------------------- |
 | `apiVersion` | string | Yes      | Must be `ksail.dev/v1alpha1`                   |
 | `kind`       | string | Yes      | Must be `Cluster`                              |
 | `spec`       | object | Yes      | Cluster and workload specification (see below) |
@@ -92,7 +92,7 @@ spec:
 The `spec` field is a `Spec` object that defines editor, cluster, and workload configuration.
 
 | Field      | Type         | Default | Description                                      |
-|------------|--------------|---------|--------------------------------------------------|
+| ---------- | ------------ | ------- | ------------------------------------------------ |
 | `editor`   | string       | –       | Editor command for interactive workflows         |
 | `cluster`  | ClusterSpec  | –       | Cluster configuration (distribution, components) |
 | `workload` | WorkloadSpec | –       | Workload manifest configuration                  |
@@ -108,7 +108,7 @@ If not specified, KSail falls back to standard editor environment variables (`SO
 ### spec.cluster (ClusterSpec)
 
 | Field                | Type       | Default     | Description                                  |
-|----------------------|------------|-------------|----------------------------------------------|
+| -------------------- | ---------- | ----------- | -------------------------------------------- |
 | `distribution`       | enum       | `Kind`      | Kubernetes distribution to use               |
 | `distributionConfig` | string     | (see below) | Path to distribution-specific configuration  |
 | `connection`         | Connection | –           | Cluster connection settings                  |
@@ -128,7 +128,7 @@ Kubernetes distribution to use for the local cluster.
 
 - `Kind` (default) – Uses [Kind](https://kind.sigs.k8s.io/) to run Kubernetes in Docker
 - `K3d` – Uses [K3d](https://k3d.io/) to run lightweight K3s in Docker
-- `TalosInDocker` – Uses [Talos Linux](https://www.talos.dev/) in Docker containers
+- `Talos` – Uses [Talos Linux](https://www.talos.dev/) in Docker containers
 
 #### distributionConfig
 
@@ -138,14 +138,14 @@ Path to the distribution-specific configuration file or directory. This tells KS
 
 - `Kind` → `kind.yaml`
 - `K3d` → `k3d.yaml`
-- `TalosInDocker` → `talos/` (directory)
+- `Talos` → `talos/` (directory)
 
 See [Distribution Configuration](#distribution-configuration) below for details on each format.
 
 #### connection (Connection)
 
 | Field        | Type     | Default          | Description                    |
-|--------------|----------|------------------|--------------------------------|
+| ------------ | -------- | ---------------- | ------------------------------ |
 | `kubeconfig` | string   | `~/.kube/config` | Path to kubeconfig file        |
 | `context`    | string   | (derived)        | Kubeconfig context name        |
 | `timeout`    | duration | –                | Timeout for cluster operations |
@@ -154,7 +154,7 @@ See [Distribution Configuration](#distribution-configuration) below for details 
 
 - `Kind` → `kind-kind`
 - `K3d` → `k3d-k3d-default`
-- `TalosInDocker` → `admin@talos-default`
+- `Talos` → `admin@talos-default`
 
 **Timeout format:** Go duration string (e.g., `30s`, `5m`, `1h`)
 
@@ -226,13 +226,13 @@ Advanced configuration options for specific distributions, networking, and deplo
 
 - `options.localRegistry.hostPort` – Host port for local registry (default: `5111`)
 - `options.flux.interval` – Flux reconciliation interval (default: `1m`)
-- `options.talosInDocker.controlPlanes` – Number of control-plane nodes (default: `1`).
-- `options.talosInDocker.workers` – Number of worker nodes (default: `0`).
+- `options.talos.controlPlanes` – Number of control-plane nodes (default: `1`).
+- `options.talos.workers` – Number of worker nodes (default: `0`).
 
 ### spec.workload (WorkloadSpec)
 
 | Field             | Type    | Default | Description                                   |
-|-------------------|---------|---------|-----------------------------------------------|
+| ----------------- | ------- | ------- | --------------------------------------------- |
 | `sourceDirectory` | string  | `k8s`   | Directory containing Kubernetes manifests     |
 | `validateOnPush`  | boolean | `false` | Validate manifests before pushing to registry |
 
@@ -293,11 +293,11 @@ ports:
       - loadbalancer
 ```
 
-### TalosInDocker Configuration
+### Talos Configuration
 
 **Default:** `talos/` directory
 
-TalosInDocker uses a directory structure for [Talos machine configuration patches](https://www.talos.dev/latest/reference/configuration/). Each directory contains YAML patch files that modify the Talos machine configuration.
+Talos uses a directory structure for [Talos machine configuration patches](https://www.talos.dev/latest/reference/configuration/). Each directory contains YAML patch files that modify the Talos machine configuration.
 
 **Documentation:** [Talos Configuration Reference](https://www.talos.dev/latest/reference/configuration/)
 
@@ -334,7 +334,7 @@ Use `spec.cluster.talos` to configure node counts:
 ```yaml
 spec:
   cluster:
-    distribution: TalosInDocker
+    distribution: Talos
     distributionConfig: talos
     talos:
       controlPlanes: 3

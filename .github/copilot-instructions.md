@@ -223,9 +223,9 @@ bundle exec jekyll serve --host 0.0.0.0  # Test locally (if needed)
 
 ## Active Technologies
 
-- Go 1.21+ (001-talosindocker-distribution)
-- Local filesystem for Talos patches (`talos/` folder structure), cluster state directory (001-talosindocker-distribution)
+- Go 1.21+ (001-talos-distribution)
+- Local filesystem for Talos patches (`talos/` folder structure), cluster state directory (001-talos-distribution)
 
 ## Recent Changes
 
-- 001-talosindocker-distribution: Added Go 1.21+, renamed Tind to TalosInDocker
+- 001-talos-distribution: Added Go 1.21+, renamed Tind to Talos

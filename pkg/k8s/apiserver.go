@@ -44,7 +44,7 @@ func WaitForAPIServerReady(
 //
 // Unlike WaitForAPIServerReady which returns on the first successful response,
 // this function requires multiple consecutive successful responses to ensure
-// the API server is truly stable. This is particularly useful for TalosInDocker
+// the API server is truly stable. This is particularly useful for Talos
 // where the API server may respond once but then fail with connection resets.
 //
 // Parameters:

@@ -158,7 +158,7 @@ func DefaultClusterFieldSelectors() []FieldSelector[v1alpha1.Cluster] {
 }
 
 // ControlPlanesFieldSelector returns a field selector for control-plane node count.
-// This option works for all distributions: Kind, K3d, and TalosInDocker.
+// This option works for all distributions: Kind, K3d, and Talos.
 // For Kind/K3d, the value is applied to their native config (kind.yaml/k3d.yaml).
 func ControlPlanesFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	return FieldSelector[v1alpha1.Cluster]{
@@ -171,7 +171,7 @@ func ControlPlanesFieldSelector() FieldSelector[v1alpha1.Cluster] {
 }
 
 // WorkersFieldSelector returns a field selector for worker node count.
-// This option works for all distributions: Kind, K3d, and TalosInDocker.
+// This option works for all distributions: Kind, K3d, and Talos.
 // For Kind/K3d, the value is applied to their native config (kind.yaml/k3d.yaml).
 func WorkersFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	return FieldSelector[v1alpha1.Cluster]{

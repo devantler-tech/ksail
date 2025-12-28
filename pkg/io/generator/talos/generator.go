@@ -25,10 +25,10 @@ const (
 )
 
 // ErrConfigRequired is returned when a nil config is provided.
-var ErrConfigRequired = errors.New("talosindocker config is required")
+var ErrConfigRequired = errors.New("talos config is required")
 
-// TalosInDockerConfig represents the TalosInDocker scaffolding configuration.
-type TalosInDockerConfig struct {
+// TalosConfig represents the Talos scaffolding configuration.
+type TalosConfig struct {
 	// PatchesDir is the root directory for Talos patches.
 	PatchesDir string
 	// MirrorRegistries contains mirror registry specifications in "host=upstream" format.
@@ -43,19 +43,19 @@ type TalosInDockerConfig struct {
 	DisableDefaultCNI bool
 }
 
-// TalosInDockerGenerator generates the TalosInDocker directory structure.
-type TalosInDockerGenerator struct{}
+// TalosGenerator generates the Talos directory structure.
+type TalosGenerator struct{}
 
-// NewTalosInDockerGenerator creates a new TalosInDockerGenerator.
-func NewTalosInDockerGenerator() *TalosInDockerGenerator {
-	return &TalosInDockerGenerator{}
+// NewTalosGenerator creates a new TalosGenerator.
+func NewTalosGenerator() *TalosGenerator {
+	return &TalosGenerator{}
 }
 
-// Generate creates the TalosInDocker patches directory structure.
+// Generate creates the Talos patches directory structure.
 // The model parameter contains the patches directory path.
 // Returns the generated directory path and any error encountered.
-func (g *TalosInDockerGenerator) Generate(
-	model *TalosInDockerConfig,
+func (g *TalosGenerator) Generate(
+	model *TalosConfig,
 	opts yamlgenerator.Options,
 ) (string, error) {
 	if model == nil {
@@ -93,8 +93,8 @@ func (g *TalosInDockerGenerator) Generate(
 }
 
 // getDirectoriesWithPatches returns a set of subdirectory names that will have patches generated.
-func (g *TalosInDockerGenerator) getDirectoriesWithPatches(
-	model *TalosInDockerConfig,
+func (g *TalosGenerator) getDirectoriesWithPatches(
+	model *TalosConfig,
 ) map[string]bool {
 	dirs := make(map[string]bool)
 
@@ -117,9 +117,9 @@ func (g *TalosInDockerGenerator) getDirectoriesWithPatches(
 }
 
 // generateConditionalPatches generates optional patches based on the configuration.
-func (g *TalosInDockerGenerator) generateConditionalPatches(
+func (g *TalosGenerator) generateConditionalPatches(
 	rootPath string,
-	model *TalosInDockerConfig,
+	model *TalosConfig,
 	force bool,
 ) error {
 	// Generate mirror registries patch if configured
@@ -151,7 +151,7 @@ func (g *TalosInDockerGenerator) generateConditionalPatches(
 
 // createSubdirectories creates the Talos patches subdirectories.
 // Only creates .gitkeep files in directories that won't have patches generated.
-func (g *TalosInDockerGenerator) createSubdirectories(
+func (g *TalosGenerator) createSubdirectories(
 	rootPath string,
 	dirsWithPatches map[string]bool,
 	force bool,
@@ -193,7 +193,7 @@ func (g *TalosInDockerGenerator) createSubdirectories(
 }
 
 // generateMirrorRegistriesPatch creates a Talos patch file for registry mirrors.
-func (g *TalosInDockerGenerator) generateMirrorRegistriesPatch(
+func (g *TalosGenerator) generateMirrorRegistriesPatch(
 	rootPath string,
 	mirrorRegistries []string,
 	force bool,
@@ -265,7 +265,7 @@ func generateMirrorPatchYAML(specs []registry.MirrorSpec) string {
 
 // generateAllowSchedulingPatch creates a Talos patch file to allow scheduling on control-plane nodes.
 // This is required for single-node clusters or clusters with only control-plane nodes.
-func (g *TalosInDockerGenerator) generateAllowSchedulingPatch(
+func (g *TalosGenerator) generateAllowSchedulingPatch(
 	rootPath string,
 	force bool,
 ) error {
@@ -293,7 +293,7 @@ func (g *TalosInDockerGenerator) generateAllowSchedulingPatch(
 // This is required when using an alternative CNI like Cilium.
 // The patch sets cluster.network.cni.name to "none" as per Talos documentation:
 // https://docs.siderolabs.com/kubernetes-guides/cni/deploying-cilium
-func (g *TalosInDockerGenerator) generateDisableCNIPatch(
+func (g *TalosGenerator) generateDisableCNIPatch(
 	rootPath string,
 	force bool,
 ) error {

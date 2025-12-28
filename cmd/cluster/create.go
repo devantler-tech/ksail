@@ -166,7 +166,7 @@ func handleCreateRunE(
 			DistributionConfig: &clusterprovisioner.DistributionConfig{
 				Kind:          kindConfig,
 				K3d:           k3dConfig,
-				TalosInDocker: talosConfig,
+				Talos: talosConfig,
 			},
 		}
 	}
@@ -217,7 +217,7 @@ func loadClusterConfiguration(
 	// These are pointers so in-memory modifications will be preserved
 	distConfig := cfgManager.DistributionConfig
 
-	return clusterCfg, distConfig.Kind, distConfig.K3d, distConfig.TalosInDocker, nil
+	return clusterCfg, distConfig.Kind, distConfig.K3d, distConfig.Talos, nil
 }
 
 func ensureLocalRegistriesReady(
@@ -966,7 +966,7 @@ func runTalosMirrorAction(
 	}
 
 	clusterName := resolveTalosClusterName(ctx.talosConfig)
-	networkName := clusterName // TalosInDocker uses cluster name as network name
+	networkName := clusterName // Talos uses cluster name as network name
 	networkCIDR := resolveTalosNetworkCIDR(ctx.talosConfig)
 	writer := ctx.cmd.OutOrStdout()
 
@@ -1000,7 +1000,7 @@ func resolveTalosClusterName(talosConfig *talosconfigmanager.Configs) string {
 	return talosconfigmanager.DefaultClusterName
 }
 
-// resolveTalosNetworkCIDR returns the Docker network CIDR for TalosInDocker.
+// resolveTalosNetworkCIDR returns the Docker network CIDR for Talos.
 // This is always DefaultNetworkCIDR (10.5.0.0/24) - NOT the pod CIDR from cluster config.
 // The Talos SDK uses this CIDR for the Docker bridge network that nodes connect to.
 func resolveTalosNetworkCIDR(_ *talosconfigmanager.Configs) string {
@@ -1064,7 +1064,7 @@ func runTalosConnectAction(
 	_ *registryStageContext,
 	_ client.APIClient,
 ) error {
-	// For TalosInDocker, registries are already connected to the network in runTalosMirrorAction.
+	// For Talos, registries are already connected to the network in runTalosMirrorAction.
 	// This function is a no-op but kept for consistency with the Kind/K3d flow.
 	// The early connection in runTalosMirrorAction ensures registries are available
 	// when Talos nodes start pulling images during boot.
@@ -1072,7 +1072,7 @@ func runTalosConnectAction(
 }
 
 // ensureDockerNetworkExists creates a Docker network if it doesn't already exist.
-// This is used by TalosInDocker to pre-create the cluster network before registry setup,
+// This is used by Talos to pre-create the cluster network before registry setup,
 // allowing registry containers to be connected and accessible via Docker DNS when
 // Talos nodes start pulling images during boot.
 //
@@ -1176,7 +1176,7 @@ func newRegistryHandlers(
 			prepare: func() bool { return prepareK3dConfigWithMirrors(clusterCfg, k3dConfig, mirrorSpecs) },
 			action:  k3dAction,
 		},
-		v1alpha1.DistributionTalosInDocker: {
+		v1alpha1.DistributionTalos: {
 			prepare: func() bool { return prepareTalosConfigWithMirrors(clusterCfg, talosConfig, mirrorSpecs) },
 			action:  talosAction,
 		},
@@ -1248,7 +1248,7 @@ func runRegistryStageWithRole(
 		return fmt.Errorf("failed to read existing hosts configuration: %w", err)
 	}
 
-	// For TalosInDocker, also extract mirror hosts from the loaded Talos config.
+	// For Talos, also extract mirror hosts from the loaded Talos config.
 	// The Talos config includes any mirror-registries.yaml patches that were applied.
 	if talosConfig != nil {
 		talosHosts := talosConfig.ExtractMirrorHosts()
@@ -1442,8 +1442,8 @@ func newCiliumInstaller(
 	var distribution ciliuminstaller.Distribution
 
 	switch clusterCfg.Spec.Cluster.Distribution {
-	case v1alpha1.DistributionTalosInDocker:
-		distribution = ciliuminstaller.DistributionTalosInDocker
+	case v1alpha1.DistributionTalos:
+		distribution = ciliuminstaller.DistributionTalos
 	case v1alpha1.DistributionKind:
 		distribution = ciliuminstaller.DistributionKind
 	case v1alpha1.DistributionK3d:
@@ -1503,8 +1503,8 @@ func newCalicoInstaller(
 	var distribution calicoinstaller.Distribution
 
 	switch clusterCfg.Spec.Cluster.Distribution {
-	case v1alpha1.DistributionTalosInDocker:
-		distribution = calicoinstaller.DistributionTalosInDocker
+	case v1alpha1.DistributionTalos:
+		distribution = calicoinstaller.DistributionTalos
 	case v1alpha1.DistributionKind:
 		distribution = calicoinstaller.DistributionKind
 	case v1alpha1.DistributionK3d:
@@ -1639,7 +1639,7 @@ func prepareTalosConfigWithMirrors(
 	talosConfig *talosconfigmanager.Configs,
 	mirrorSpecs []registry.MirrorSpec,
 ) bool {
-	if clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionTalosInDocker {
+	if clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionTalos {
 		return false
 	}
 

@@ -74,7 +74,7 @@ func handleStartRunE(
 		deps,
 		distConfig.Kind,
 		distConfig.K3d,
-		distConfig.TalosInDocker,
+		distConfig.Talos,
 		localRegistryStageConnect,
 		&dummyTracker,
 	)

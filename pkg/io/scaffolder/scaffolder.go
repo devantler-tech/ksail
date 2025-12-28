@@ -14,7 +14,7 @@ import (
 	k3dgenerator "github.com/devantler-tech/ksail/v5/pkg/io/generator/k3d"
 	kindgenerator "github.com/devantler-tech/ksail/v5/pkg/io/generator/kind"
 	kustomizationgenerator "github.com/devantler-tech/ksail/v5/pkg/io/generator/kustomization"
-	talosgenerator "github.com/devantler-tech/ksail/v5/pkg/io/generator/talosindocker"
+	talosgenerator "github.com/devantler-tech/ksail/v5/pkg/io/generator/talos"
 	yamlgenerator "github.com/devantler-tech/ksail/v5/pkg/io/generator/yaml"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	"github.com/devantler-tech/ksail/v5/pkg/ui/notify"
@@ -33,8 +33,8 @@ const (
 	// K3dConfigFile is the default filename for K3d distribution configuration.
 	K3dConfigFile = "k3d.yaml"
 
-	// TalosInDockerConfigDir is the default directory for TalosInDocker distribution configuration (Talos patches).
-	TalosInDockerConfigDir = "talos"
+	// TalosConfigDir is the default directory for Talos distribution configuration (Talos patches).
+	TalosConfigDir = "talos"
 )
 
 const (
@@ -65,8 +65,8 @@ var (
 	// ErrK3dConfigGeneration wraps failures when creating K3d configuration.
 	ErrK3dConfigGeneration = errors.New("failed to generate k3d configuration")
 
-	// ErrTalosInDockerConfigGeneration wraps failures when creating TalosInDocker configuration.
-	ErrTalosInDockerConfigGeneration = errors.New("failed to generate talosindocker configuration")
+	// ErrTalosConfigGeneration wraps failures when creating Talos configuration.
+	ErrTalosConfigGeneration = errors.New("failed to generate talos configuration")
 
 	// ErrKustomizationGeneration wraps failures when creating kustomization.yaml.
 	ErrKustomizationGeneration = errors.New("failed to generate kustomization configuration")
@@ -78,7 +78,7 @@ type Scaffolder struct {
 	KSailYAMLGenerator     generator.Generator[v1alpha1.Cluster, yamlgenerator.Options]
 	KindGenerator          generator.Generator[*v1alpha4.Cluster, yamlgenerator.Options]
 	K3dGenerator           generator.Generator[*k3dv1alpha5.SimpleConfig, yamlgenerator.Options]
-	TalosInDockerGenerator *talosgenerator.TalosInDockerGenerator
+	TalosGenerator *talosgenerator.TalosGenerator
 	KustomizationGenerator generator.Generator[*ktypes.Kustomization, yamlgenerator.Options]
 	Writer                 io.Writer
 	MirrorRegistries       []string // Format: "name=upstream" (e.g., "docker.io=https://registry-1.docker.io")
@@ -89,7 +89,7 @@ func NewScaffolder(cfg v1alpha1.Cluster, writer io.Writer, mirrorRegistries []st
 	ksailGenerator := yamlgenerator.NewYAMLGenerator[v1alpha1.Cluster]()
 	kindGenerator := kindgenerator.NewKindGenerator()
 	k3dGenerator := k3dgenerator.NewK3dGenerator()
-	talosGen := talosgenerator.NewTalosInDockerGenerator()
+	talosGen := talosgenerator.NewTalosGenerator()
 	kustomizationGenerator := kustomizationgenerator.NewKustomizationGenerator()
 
 	return &Scaffolder{
@@ -97,7 +97,7 @@ func NewScaffolder(cfg v1alpha1.Cluster, writer io.Writer, mirrorRegistries []st
 		KSailYAMLGenerator:     ksailGenerator,
 		KindGenerator:          kindGenerator,
 		K3dGenerator:           k3dGenerator,
-		TalosInDockerGenerator: talosGen,
+		TalosGenerator: talosGen,
 		KustomizationGenerator: kustomizationGenerator,
 		Writer:                 writer,
 		MirrorRegistries:       mirrorRegistries,
@@ -186,7 +186,7 @@ func (s *Scaffolder) CreateK3dConfig() k3dv1alpha5.SimpleConfig {
 		Image: defaultK3sImage,
 	}
 
-	// Apply node counts from CLI flags (stored in TalosInDocker options)
+	// Apply node counts from CLI flags (stored in Talos options)
 	// These values are used across all distributions for consistency
 	controlPlanes := int(s.KSailConfig.Spec.Cluster.Talos.ControlPlanes)
 	workers := int(s.KSailConfig.Spec.Cluster.Talos.Workers)
@@ -427,8 +427,8 @@ func (s *Scaffolder) generateDistributionConfig(output string, force bool) error
 		return s.generateKindConfig(output, force)
 	case v1alpha1.DistributionK3d:
 		return s.generateK3dConfig(output, force)
-	case v1alpha1.DistributionTalosInDocker:
-		return s.generateTalosInDockerConfig(output, force)
+	case v1alpha1.DistributionTalos:
+		return s.generateTalosConfig(output, force)
 	default:
 		return ErrUnknownDistribution
 	}
@@ -522,7 +522,7 @@ func (s *Scaffolder) buildKindConfig(output string) *v1alpha4.Cluster {
 		kindConfig.Networking.DisableDefaultCNI = true
 	}
 
-	// Apply node counts from CLI flags (stored in TalosInDocker options)
+	// Apply node counts from CLI flags (stored in Talos options)
 	s.applyKindNodeCounts(kindConfig)
 
 	s.addMirrorMountsToKindConfig(kindConfig, output)
@@ -618,9 +618,9 @@ func (s *Scaffolder) generateK3dConfig(output string, force bool) error {
 	)
 }
 
-// generateTalosInDockerConfig generates the TalosInDocker patches directory structure.
-func (s *Scaffolder) generateTalosInDockerConfig(output string, force bool) error {
-	// Get worker count from TalosInDocker options (default 0)
+// generateTalosConfig generates the Talos patches directory structure.
+func (s *Scaffolder) generateTalosConfig(output string, force bool) error {
+	// Get worker count from Talos options (default 0)
 	workers := int(s.KSailConfig.Spec.Cluster.Talos.Workers)
 
 	// Disable default CNI (Flannel) if using any non-default CNI (e.g., Cilium, Calico, None)
@@ -628,8 +628,8 @@ func (s *Scaffolder) generateTalosInDockerConfig(output string, force bool) erro
 	disableDefaultCNI := s.KSailConfig.Spec.Cluster.CNI != v1alpha1.CNIDefault &&
 		s.KSailConfig.Spec.Cluster.CNI != ""
 
-	config := &talosgenerator.TalosInDockerConfig{
-		PatchesDir:        TalosInDockerConfigDir,
+	config := &talosgenerator.TalosConfig{
+		PatchesDir:        TalosConfigDir,
 		MirrorRegistries:  s.MirrorRegistries,
 		WorkerNodes:       workers,
 		DisableDefaultCNI: disableDefaultCNI,
@@ -640,18 +640,18 @@ func (s *Scaffolder) generateTalosInDockerConfig(output string, force bool) erro
 		Force:  force,
 	}
 
-	_, err := s.TalosInDockerGenerator.Generate(config, opts)
+	_, err := s.TalosGenerator.Generate(config, opts)
 	if err != nil {
-		return fmt.Errorf("%w: %w", ErrTalosInDockerConfigGeneration, err)
+		return fmt.Errorf("%w: %w", ErrTalosConfigGeneration, err)
 	}
 
-	s.notifyTalosInDockerGenerated(workers, disableDefaultCNI)
+	s.notifyTalosGenerated(workers, disableDefaultCNI)
 
 	return nil
 }
 
-// notifyTalosInDockerGenerated sends notifications about generated TalosInDocker files.
-func (s *Scaffolder) notifyTalosInDockerGenerated(workers int, disableDefaultCNI bool) {
+// notifyTalosGenerated sends notifications about generated Talos files.
+func (s *Scaffolder) notifyTalosGenerated(workers int, disableDefaultCNI bool) {
 	// Determine which directories have patches (no .gitkeep generated there)
 	clusterHasPatches := workers == 0 || len(s.MirrorRegistries) > 0 || disableDefaultCNI
 
@@ -663,7 +663,7 @@ func (s *Scaffolder) notifyTalosInDockerGenerated(workers int, disableDefaultCNI
 			continue
 		}
 
-		displayPath := filepath.Join(TalosInDockerConfigDir, subdir, ".gitkeep")
+		displayPath := filepath.Join(TalosConfigDir, subdir, ".gitkeep")
 		notify.WriteMessage(notify.Message{
 			Type:    notify.GenerateType,
 			Content: "created '%s'",
@@ -675,7 +675,7 @@ func (s *Scaffolder) notifyTalosInDockerGenerated(workers int, disableDefaultCNI
 	// Notify about allow-scheduling-on-control-planes patch (only created when no workers)
 	if workers == 0 {
 		displayPath := filepath.Join(
-			TalosInDockerConfigDir,
+			TalosConfigDir,
 			"cluster",
 			"allow-scheduling-on-control-planes.yaml",
 		)
@@ -689,7 +689,7 @@ func (s *Scaffolder) notifyTalosInDockerGenerated(workers int, disableDefaultCNI
 
 	// Notify about mirror registries patch if created
 	if len(s.MirrorRegistries) > 0 {
-		displayPath := filepath.Join(TalosInDockerConfigDir, "cluster", "mirror-registries.yaml")
+		displayPath := filepath.Join(TalosConfigDir, "cluster", "mirror-registries.yaml")
 		notify.WriteMessage(notify.Message{
 			Type:    notify.GenerateType,
 			Content: "created '%s'",
@@ -700,7 +700,7 @@ func (s *Scaffolder) notifyTalosInDockerGenerated(workers int, disableDefaultCNI
 
 	// Notify about disable-default-cni patch if created
 	if disableDefaultCNI {
-		displayPath := filepath.Join(TalosInDockerConfigDir, "cluster", "disable-default-cni.yaml")
+		displayPath := filepath.Join(TalosConfigDir, "cluster", "disable-default-cni.yaml")
 		notify.WriteMessage(notify.Message{
 			Type:    notify.GenerateType,
 			Content: "created '%s'",
