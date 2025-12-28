@@ -1,6 +1,6 @@
 ---
 title: "Declarative Configuration"
-nav_order: 3
+parent: Configuration
 ---
 
 # Declarative Configuration
@@ -17,17 +17,6 @@ The configuration file uses the `ksail.dev/v1alpha1` API version and follows the
 - **Connection details**: kubeconfig path, context, timeouts
 - **Workload configuration**: manifest directory, validation preferences
 - **Editor preferences**: for interactive workflows
-
-## Configuration Precedence
-
-KSail resolves configuration from multiple sources in this order (highest to lowest priority):
-
-1. CLI flags (e.g., `--metrics-server Disabled`)
-2. Environment variables with `KSAIL_` prefix (e.g., `KSAIL_SPEC_DISTRIBUTION=K3d`)
-3. Nearest `ksail.yaml` in current or parent directories
-4. Built-in defaults
-
-This means you can commit sensible defaults in `ksail.yaml` while still allowing temporary overrides via CLI flags or environment variables.
 
 ## Minimal Example
 
@@ -79,7 +68,7 @@ spec:
 ### Top-Level Fields
 
 | Field        | Type   | Required | Description                                    |
-|--------------|--------|----------|------------------------------------------------|
+| ------------ | ------ | -------- | ---------------------------------------------- |
 | `apiVersion` | string | Yes      | Must be `ksail.dev/v1alpha1`                   |
 | `kind`       | string | Yes      | Must be `Cluster`                              |
 | `spec`       | object | Yes      | Cluster and workload specification (see below) |
@@ -89,7 +78,7 @@ spec:
 The `spec` field is a `Spec` object that defines editor, cluster, and workload configuration.
 
 | Field      | Type         | Default | Description                                      |
-|------------|--------------|---------|--------------------------------------------------|
+| ---------- | ------------ | ------- | ------------------------------------------------ |
 | `editor`   | string       | –       | Editor command for interactive workflows         |
 | `cluster`  | ClusterSpec  | –       | Cluster configuration (distribution, components) |
 | `workload` | WorkloadSpec | –       | Workload manifest configuration                  |
@@ -105,7 +94,7 @@ If not specified, KSail falls back to standard editor environment variables (`SO
 ### spec.cluster (ClusterSpec)
 
 | Field                | Type       | Default     | Description                                  |
-|----------------------|------------|-------------|----------------------------------------------|
+| -------------------- | ---------- | ----------- | -------------------------------------------- |
 | `distribution`       | enum       | `Kind`      | Kubernetes distribution to use               |
 | `distributionConfig` | string     | (see below) | Path to distribution-specific configuration  |
 | `connection`         | Connection | –           | Cluster connection settings                  |
@@ -142,7 +131,7 @@ See [Distribution Configuration](#distribution-configuration) below for details 
 #### connection (Connection)
 
 | Field        | Type     | Default          | Description                    |
-|--------------|----------|------------------|--------------------------------|
+| ------------ | -------- | ---------------- | ------------------------------ |
 | `kubeconfig` | string   | `~/.kube/config` | Path to kubeconfig file        |
 | `context`    | string   | (derived)        | Kubeconfig context name        |
 | `timeout`    | duration | –                | Timeout for cluster operations |
@@ -228,7 +217,7 @@ Advanced configuration options for specific distributions, networking, and deplo
 ### spec.workload (WorkloadSpec)
 
 | Field             | Type    | Default | Description                                   |
-|-------------------|---------|---------|-----------------------------------------------|
+| ----------------- | ------- | ------- | --------------------------------------------- |
 | `sourceDirectory` | string  | `k8s`   | Directory containing Kubernetes manifests     |
 | `validateOnPush`  | boolean | `false` | Validate manifests before pushing to registry |
 
@@ -355,51 +344,3 @@ IDEs with YAML language support (like VS Code with the Red Hat YAML extension) w
 - Inline documentation
 - Validation errors for invalid values
 - Enum suggestions for fields like `distribution`, `cni`, etc.
-
-## CLI Flags
-
-All `ksail.yaml` fields can be overridden via CLI flags. This is useful for:
-
-- Temporary testing with different settings
-- CI/CD pipelines that need environment-specific overrides
-- Quick experiments without modifying committed configuration
-
-To see available flags for each command, run:
-
-```bash
-ksail <command> --help
-```
-
-**Examples:**
-
-- `ksail cluster init --help` – Project scaffolding flags
-- `ksail cluster create --help` – Cluster creation options
-- `ksail workload push --help` – Workload push flags
-
-For detailed CLI reference, see the command-specific help pages (run `ksail --help` for a list of all commands).
-
-## When to Use What
-
-**Use `ksail.yaml` for:**
-
-- Project-wide defaults that should be version-controlled
-- Configuration that should be consistent across team members
-- Settings that define your cluster's identity (distribution, CNI, etc.)
-
-**Use CLI flags for:**
-
-- Temporary overrides during development
-- Testing different configurations without editing files
-- CI/CD environment-specific settings
-
-**Use environment variables for:**
-
-- Machine-specific settings (e.g., different kubeconfig paths)
-- CI/CD secrets and credentials
-- Global preferences that apply to all projects
-
-**Use distribution config files for:**
-
-- Distribution-specific features (node counts, port mappings)
-- Advanced customization (kernel parameters for Talos, extra mounts for Kind)
-- Settings not exposed through KSail's configuration schema

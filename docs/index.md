@@ -11,8 +11,9 @@ KSail is a CLI tool for managing Kubernetes clusters and workloads. Built in Go,
 
 ## Documentation
 
-- **[Declarative Configuration](declarative-configuration.md)** – Declarative config
-- **[CLI Flags](cli-flags/root.md)** – Complete CLI flags documentation for all commands
+- **[Configuration](configuration/index.md)** – Configuration sources, precedence, and when to use each
+  - **[Declarative Configuration](configuration/declarative-configuration.md)** – `ksail.yaml` reference
+  - **[CLI Flags](configuration/cli-flags/root.md)** – Complete CLI flags for all commands
 - **[Use Cases](use-cases.md)** – Workflows for learning, development, and CI/CD
 - **[Core Concepts](core-concepts.md)** – CNI, CSI, registries, and components
 

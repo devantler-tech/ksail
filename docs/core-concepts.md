@@ -5,7 +5,7 @@ nav_order: 5
 
 # Core Concepts
 
-Key building blocks of KSail mapped to configuration values in `ksail.yaml` and CLI flags.
+Key building blocks of KSail mapped to configuration values in [`ksail.yaml`](configuration/declarative-configuration.md) and [CLI flags](configuration/cli-flags/root.md).
 
 ## Distributions
 
