@@ -17,7 +17,6 @@ import (
 	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
 	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
 	cmdhelpers "github.com/devantler-tech/ksail/v5/pkg/cmd"
-	"github.com/devantler-tech/ksail/v5/pkg/cmd/parallel"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	k3dconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/k3d"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
@@ -416,41 +415,17 @@ func installPostCNIComponentsParallel(
 			needsMetricsServer, needsCSI, needsCertManager, needsArgoCD, needsFlux)
 	}
 
-	// Multiple components - run in parallel
+	// Multiple components - run in parallel with live progress
 	if *firstActivityShown {
 		_, _ = fmt.Fprintln(cmd.OutOrStdout())
 	}
 
 	*firstActivityShown = true
 
-	// Show a unified title for all components being installed
-	componentList := buildComponentList(
-		needsMetricsServer,
-		needsCSI,
-		needsCertManager,
-		needsArgoCD,
-		needsFlux,
-	)
-
-	notify.WriteMessage(notify.Message{
-		Type:    notify.TitleType,
-		Content: "Install " + componentList + "...",
-		Emoji:   "📦",
-		Writer:  cmd.OutOrStdout(),
-	})
-
-	syncWriter := parallel.NewSyncWriter(cmd.OutOrStdout())
-	executor := parallel.NewExecutor(0) // Use default concurrency (2-8 based on CPU)
-
 	ctx := cmd.Context()
 	if ctx == nil {
 		ctx = context.Background()
 	}
-
-	tmr.NewStage()
-
-	// Build the task list
-	var tasks []parallel.Task
 
 	// Track if we need post-install GitOps configuration
 	var gitOpsKubeconfig string
@@ -464,39 +439,59 @@ func installPostCNIComponentsParallel(
 		}
 	}
 
+	// Build the progress tasks
+	var tasks []notify.ProgressTask
+
 	if needsMetricsServer {
-		tasks = append(tasks, func(taskCtx context.Context) error {
-			return installMetricsServerWithWriter(taskCtx, syncWriter, clusterCfg)
+		tasks = append(tasks, notify.ProgressTask{
+			Name: "metrics-server",
+			Fn: func(taskCtx context.Context) error {
+				return installMetricsServerSilent(taskCtx, clusterCfg)
+			},
 		})
 	}
 
 	if needsCSI {
-		tasks = append(tasks, func(taskCtx context.Context) error {
-			return installCSIWithWriter(taskCtx, syncWriter, clusterCfg)
+		tasks = append(tasks, notify.ProgressTask{
+			Name: "csi",
+			Fn: func(taskCtx context.Context) error {
+				return installCSISilent(taskCtx, clusterCfg)
+			},
 		})
 	}
 
 	if needsCertManager {
-		tasks = append(tasks, func(taskCtx context.Context) error {
-			return installCertManagerWithWriter(taskCtx, syncWriter, clusterCfg)
+		tasks = append(tasks, notify.ProgressTask{
+			Name: "cert-manager",
+			Fn: func(taskCtx context.Context) error {
+				return installCertManagerSilent(taskCtx, clusterCfg)
+			},
 		})
 	}
 
 	if needsArgoCD {
-		tasks = append(tasks, func(taskCtx context.Context) error {
-			return installArgoCDWithWriter(taskCtx, syncWriter, clusterCfg)
+		tasks = append(tasks, notify.ProgressTask{
+			Name: "argocd",
+			Fn: func(taskCtx context.Context) error {
+				return installArgoCDSilent(taskCtx, clusterCfg)
+			},
 		})
 	}
 
 	if needsFlux {
-		tasks = append(tasks, func(taskCtx context.Context) error {
-			return installFluxWithWriter(taskCtx, syncWriter, clusterCfg)
+		tasks = append(tasks, notify.ProgressTask{
+			Name: "flux",
+			Fn: func(taskCtx context.Context) error {
+				return installFluxSilent(taskCtx, clusterCfg)
+			},
 		})
 	}
 
-	executeErr := executor.Execute(ctx, tasks...)
-	if executeErr != nil {
-		return fmt.Errorf("parallel component installation failed: %w", executeErr)
+	// Run with live progress display
+	pg := notify.NewProgressGroup("Installing", "📦", cmd.OutOrStdout(), tmr)
+
+	if executeErr := pg.Run(ctx, tasks...); executeErr != nil {
+		return executeErr
 	}
 
 	// Post-install GitOps configuration (must run after installation completes)
@@ -538,21 +533,6 @@ func installPostCNIComponentsParallel(
 			return fmt.Errorf("failed to configure Flux resources: %w", err)
 		}
 	}
-
-	outputTimer := cmdhelpers.MaybeTimer(cmd, tmr)
-
-	notify.WriteMessage(notify.Message{
-		Type: notify.SuccessType,
-		Content: buildSuccessMessage(
-			needsMetricsServer,
-			needsCSI,
-			needsCertManager,
-			needsArgoCD,
-			needsFlux,
-		),
-		Timer:  outputTimer,
-		Writer: cmd.OutOrStdout(),
-	})
 
 	return nil
 }
@@ -598,52 +578,9 @@ func installSingleComponent(
 	return nil
 }
 
-// buildSuccessMessage builds a success message listing installed components.
-func buildSuccessMessage(
-	needsMetricsServer, needsCSI, needsCertManager, needsArgoCD, needsFlux bool,
-) string {
-	return buildComponentList(
-		needsMetricsServer,
-		needsCSI,
-		needsCertManager,
-		needsArgoCD,
-		needsFlux,
-	) + " installed"
-}
-
-// buildComponentList builds a comma-separated list of component names.
-func buildComponentList(
-	needsMetricsServer, needsCSI, needsCertManager, needsArgoCD, needsFlux bool,
-) string {
-	var components []string
-
-	if needsMetricsServer {
-		components = append(components, "metrics-server")
-	}
-
-	if needsCSI {
-		components = append(components, "csi")
-	}
-
-	if needsCertManager {
-		components = append(components, "cert-manager")
-	}
-
-	if needsArgoCD {
-		components = append(components, "argocd")
-	}
-
-	if needsFlux {
-		components = append(components, "flux")
-	}
-
-	return strings.Join(components, ", ")
-}
-
-// installMetricsServerWithWriter installs metrics-server silently for parallel execution.
-func installMetricsServerWithWriter(
+// installMetricsServerSilent installs metrics-server silently for parallel execution.
+func installMetricsServerSilent(
 	ctx context.Context,
-	_ io.Writer,
 	clusterCfg *v1alpha1.Cluster,
 ) error {
 	helmClient, kubeconfig, err := createHelmClientForCluster(clusterCfg)
@@ -667,10 +604,9 @@ func installMetricsServerWithWriter(
 	return nil
 }
 
-// installArgoCDWithWriter installs ArgoCD silently for parallel execution.
-func installArgoCDWithWriter(
+// installArgoCDSilent installs ArgoCD silently for parallel execution.
+func installArgoCDSilent(
 	ctx context.Context,
-	_ io.Writer,
 	clusterCfg *v1alpha1.Cluster,
 ) error {
 	argoInstaller, err := newArgoCDInstallerForCluster(clusterCfg)
@@ -686,10 +622,9 @@ func installArgoCDWithWriter(
 	return nil
 }
 
-// installFluxWithWriter installs Flux silently for parallel execution.
-func installFluxWithWriter(
+// installFluxSilent installs Flux silently for parallel execution.
+func installFluxSilent(
 	ctx context.Context,
-	_ io.Writer,
 	clusterCfg *v1alpha1.Cluster,
 ) error {
 	helmClient, _, err := createHelmClientForCluster(clusterCfg)
@@ -707,10 +642,9 @@ func installFluxWithWriter(
 	return nil
 }
 
-// installCSIWithWriter installs CSI silently for parallel execution.
-func installCSIWithWriter(
+// installCSISilent installs CSI silently for parallel execution.
+func installCSISilent(
 	ctx context.Context,
-	_ io.Writer,
 	clusterCfg *v1alpha1.Cluster,
 ) error {
 	csiInstallerFactoryMu.RLock()
@@ -731,10 +665,9 @@ func installCSIWithWriter(
 	return nil
 }
 
-// installCertManagerWithWriter installs cert-manager silently for parallel execution.
-func installCertManagerWithWriter(
+// installCertManagerSilent installs cert-manager silently for parallel execution.
+func installCertManagerSilent(
 	ctx context.Context,
-	_ io.Writer,
 	clusterCfg *v1alpha1.Cluster,
 ) error {
 	installer, err := newCertManagerInstallerForCluster(clusterCfg)

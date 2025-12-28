@@ -1,0 +1,213 @@
+package notify_test
+
+import (
+	"bytes"
+	"context"
+	"errors"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/devantler-tech/ksail/v5/pkg/ui/notify"
+)
+
+func TestProgressGroup_EmptyTasks(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	pg := notify.NewProgressGroup("Installing", "📦", &buf, nil)
+
+	err := pg.Run(context.Background())
+	if err != nil {
+		t.Errorf("expected no error, got: %v", err)
+	}
+
+	if buf.Len() != 0 {
+		t.Errorf("expected no output for empty tasks, got: %q", buf.String())
+	}
+}
+
+func TestProgressGroup_SingleTaskSuccess(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	pg := notify.NewProgressGroup("Installing", "📦", &buf, nil)
+
+	tasks := []notify.ProgressTask{
+		{
+			Name: "test-component",
+			Fn: func(_ context.Context) error {
+				return nil
+			},
+		},
+	}
+
+	err := pg.Run(context.Background(), tasks...)
+	if err != nil {
+		t.Errorf("expected no error, got: %v", err)
+	}
+
+	output := buf.String()
+	if !strings.Contains(output, "test-component") {
+		t.Errorf("expected output to contain 'test-component', got: %q", output)
+	}
+
+	if !strings.Contains(output, "installed") {
+		t.Errorf("expected output to contain 'installed', got: %q", output)
+	}
+}
+
+func TestProgressGroup_SingleTaskFailure(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	pg := notify.NewProgressGroup("Installing", "📦", &buf, nil)
+
+	expectedErr := errors.New("installation failed")
+	tasks := []notify.ProgressTask{
+		{
+			Name: "failing-component",
+			Fn: func(_ context.Context) error {
+				return expectedErr
+			},
+		},
+	}
+
+	err := pg.Run(context.Background(), tasks...)
+	if err == nil {
+		t.Error("expected error, got nil")
+	}
+
+	if !strings.Contains(err.Error(), "failing-component") {
+		t.Errorf("expected error to contain task name, got: %v", err)
+	}
+
+	output := buf.String()
+	if !strings.Contains(output, "failed") {
+		t.Errorf("expected output to contain 'failed', got: %q", output)
+	}
+}
+
+func TestProgressGroup_MultipleTasksSuccess(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	pg := notify.NewProgressGroup("Installing", "📦", &buf, nil)
+
+	tasks := []notify.ProgressTask{
+		{
+			Name: "component-a",
+			Fn: func(_ context.Context) error {
+				time.Sleep(10 * time.Millisecond)
+				return nil
+			},
+		},
+		{
+			Name: "component-b",
+			Fn: func(_ context.Context) error {
+				time.Sleep(10 * time.Millisecond)
+				return nil
+			},
+		},
+	}
+
+	err := pg.Run(context.Background(), tasks...)
+	if err != nil {
+		t.Errorf("expected no error, got: %v", err)
+	}
+
+	output := buf.String()
+	if !strings.Contains(output, "component-a") {
+		t.Errorf("expected output to contain 'component-a', got: %q", output)
+	}
+
+	if !strings.Contains(output, "component-b") {
+		t.Errorf("expected output to contain 'component-b', got: %q", output)
+	}
+
+	if !strings.Contains(output, "installed") {
+		t.Errorf("expected output to contain 'installed', got: %q", output)
+	}
+}
+
+func TestProgressGroup_PartialFailure(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	pg := notify.NewProgressGroup("Installing", "📦", &buf, nil)
+
+	tasks := []notify.ProgressTask{
+		{
+			Name: "good-component",
+			Fn: func(_ context.Context) error {
+				return nil
+			},
+		},
+		{
+			Name: "bad-component",
+			Fn: func(_ context.Context) error {
+				return errors.New("failed")
+			},
+		},
+	}
+
+	err := pg.Run(context.Background(), tasks...)
+	if err == nil {
+		t.Error("expected error, got nil")
+	}
+
+	if !strings.Contains(err.Error(), "bad-component") {
+		t.Errorf("expected error to contain 'bad-component', got: %v", err)
+	}
+}
+
+func TestProgressGroup_ContextCancellation(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	pg := notify.NewProgressGroup("Installing", "📦", &buf, nil)
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	tasks := []notify.ProgressTask{
+		{
+			Name: "long-running",
+			Fn: func(taskCtx context.Context) error {
+				select {
+				case <-taskCtx.Done():
+					return taskCtx.Err()
+				case <-time.After(10 * time.Second):
+					return nil
+				}
+			},
+		},
+	}
+
+	// Cancel after a short delay
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		cancel()
+	}()
+
+	err := pg.Run(ctx, tasks...)
+	if err == nil {
+		t.Error("expected error due to cancellation, got nil")
+	}
+
+	if !errors.Is(err, context.Canceled) && !strings.Contains(err.Error(), "canceled") {
+		t.Errorf("expected context canceled error, got: %v", err)
+	}
+}
+
+func TestProgressGroup_DefaultWriter(t *testing.T) {
+	t.Parallel()
+
+	// Test that nil writer defaults to os.Stdout (just ensure no panic)
+	pg := notify.NewProgressGroup("Installing", "", nil, nil)
+
+	// Run with empty tasks to verify no panic
+	err := pg.Run(context.Background())
+	if err != nil {
+		t.Errorf("expected no error, got: %v", err)
+	}
+}
