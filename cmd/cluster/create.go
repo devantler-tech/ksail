@@ -425,9 +425,9 @@ func setupK3dMetricsServer(clusterCfg *v1alpha1.Cluster, k3dConfig *v1alpha5.Sim
 // When metrics-server is enabled on a Talos cluster, the kubelet needs to rotate its serving
 // certificates so that metrics-server can verify them against the cluster's CA.
 // This function is called during cluster creation to:
-// 1. Respect any overrides to the --metrics-server flag at create time (different from init-time config).
-// 2. Programmatically apply kubelet cert rotation on the in-memory Talos configuration used for cluster creation,
-//    ensuring consistent metrics-server support regardless of any Talos patches that may or may not exist on disk.
+//  1. Respect any overrides to the --metrics-server flag at create time (different from init-time config).
+//  2. Programmatically apply kubelet cert rotation on the in-memory Talos configuration used for cluster creation,
+//     ensuring consistent metrics-server support regardless of any Talos patches that may or may not exist on disk.
 func setupTalosKubeletCertRotation(
 	writer io.Writer,
 	clusterCfg *v1alpha1.Cluster,
