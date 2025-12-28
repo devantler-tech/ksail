@@ -7,23 +7,20 @@
 
 ![ksail-cli-dark](./docs/images/ksail-cli-dark.png)
 
-KSail is a CLI tool for creating, maintaining and operating Kubernetes clusters and cloud-native workloads. It provides a unified CLI interface that works across different distributions, tools and ways-of-working.
+KSail is a CLI tool that bundles common Kubernetes tooling into a single binary. It provides one consistent workflow for creating clusters, deploying workloads, and managing GitOps across different distributions.
 
 ## Why?
 
-Setting up and operating Kubernetes clusters is a skill of its own, often requiring juggling multiple CLI tools, writing bespoke scripts, and dealing with inconsistent developer workflows, all determined by the specific project. This complexity and inconsistency slow down development, make Kubernetes hard for newcomers, and make it difficult to maintain reproducible environments and ways of working. With KSail, you create and operate clusters and cloud-native workloads with one unified interface.
+Setting up and operating Kubernetes clusters is a skill of its own, often requiring juggling multiple CLI tools, writing bespoke scripts, and dealing with inconsistent developer workflows, all determined by the specific project. This complexity and inconsistency slow down development, make Kubernetes hard for newcomers, and make it difficult to maintain reproducible environments and ways of working. KSail removes the tooling overhead so you can focus on your workloads.
 
 ## Key Features
 
-- ☝🏻 **Single Binary** - One binary with no external dependencies
-- 🎯 **Unified CLI** — One interface for cluster and workload management
-- 🚀 **Fast Setup** — Spin up local clusters in seconds
-- ⚡ **GitOps Ready** — Built-in Flux and ArgoCD support for reconciliation via local registry and OCI artifacts
-- 📄 **Declarative Configuration** — Configuration as code for reproducible clusters
-- 🔧 **Flexible Configuration** — Configure your cluster with your preferred distribution, CNI, CSI, service mesh and more.
-- 🟰 **Native** — Stay true to best practices, tooling configurations and industry ways-of-working. KSail is a superset on the tools and practices you love today.
-- 🪞 **Mirror Registries** — Cache images locally to avoid rate limits
-- 🔐 **Secrets Management** — SOPS integration for encrypting manifests at rest
+- 📦 **One Binary** — Embeds cluster provisioning, GitOps engines, and deployment tooling. No tool sprawl.
+- 🚀 **Simple Clusters** — Spin up Kind, K3d, or Talos with one command. Same workflow, for supported distributions and providers.
+- 📄 **Everything as Code** — Cluster settings, distribution configs, and workloads all live in version-controlled files.
+- 🔄 **GitOps Native** — Opt into Flux or ArgoCD. KSail handles the bootstrap and gives you push and reconcile commands.
+- ⚙️ **Customizable Stack** — Select your CNI, CSI, enable cert-manager, add mirror registries to match your setup.
+- 🔐 **SOPS Built In** — Encrypt, decrypt, and edit secrets with integrated cipher commands.
 
 ## Getting Started
 
@@ -111,7 +108,7 @@ KSail organizes commands around your development lifecycle:
 KSail is a powerful tool that can be used in many different ways. Here are some projects that use KSail in their setup:
 
 | Project                                                               | Description         | Type     |
-|-----------------------------------------------------------------------|---------------------|----------|
+| --------------------------------------------------------------------- | ------------------- | -------- |
 | [devantler-tech/platform](https://github.com/devantler-tech/platform) | My personal homelab | Platform |
 
 If you use KSail in your project, feel free to open a PR to add it to the list, so others can see how you use KSail.
