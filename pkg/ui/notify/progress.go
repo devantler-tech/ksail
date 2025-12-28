@@ -14,6 +14,44 @@ import (
 	"golang.org/x/term"
 )
 
+// ProgressLabels defines the text labels for each task state.
+// Use this to customize the status text for different contexts.
+type ProgressLabels struct {
+	// Pending is shown for tasks that haven't started yet (default: "pending").
+	Pending string
+	// Running is shown for tasks currently executing (default: "running").
+	Running string
+	// Completed is shown for tasks that finished successfully (default: "completed").
+	Completed string
+}
+
+// DefaultLabels returns the default progress labels.
+func DefaultLabels() ProgressLabels {
+	return ProgressLabels{
+		Pending:   "pending",
+		Running:   "running",
+		Completed: "completed",
+	}
+}
+
+// InstallingLabels returns labels suitable for installation tasks.
+func InstallingLabels() ProgressLabels {
+	return ProgressLabels{
+		Pending:   "pending",
+		Running:   "installing",
+		Completed: "installed",
+	}
+}
+
+// ValidatingLabels returns labels suitable for validation tasks.
+func ValidatingLabels() ProgressLabels {
+	return ProgressLabels{
+		Pending:   "pending",
+		Running:   "validating",
+		Completed: "validated",
+	}
+}
+
 // ProgressTask represents a named task to be executed with progress tracking.
 type ProgressTask struct {
 	// Name is the display name of the task (e.g., "metrics-server", "argocd").
@@ -32,16 +70,23 @@ type ProgressTask struct {
 // In non-TTY environments (CI, pipes), it uses a simpler output that only
 // prints state changes (started, completed, failed) to avoid log spam.
 //
-// Example TTY output during execution:
+// Example TTY output during execution (with InstallingLabels):
 //
-//	📦 Install components...
+//	📦 Installing components...
 //	⠦ metrics-server installing
 //	⠦ flux installing
 //	○ argocd pending
 //
+// Example TTY output during validation (with ValidatingLabels):
+//
+//	✅ Validating kustomizations...
+//	⠦ apps validating
+//	✔ base validated
+//	○ cluster pending
+//
 // Example CI output:
 //
-//	📦 Install components...
+//	📦 Installing components...
 //	► metrics-server started
 //	► flux started
 //	✔ flux installed
@@ -49,6 +94,7 @@ type ProgressTask struct {
 type ProgressGroup struct {
 	title  string
 	emoji  string
+	labels ProgressLabels
 	writer io.Writer
 	timer  timer.Timer
 	isTTY  bool // Whether output is a TTY (interactive terminal)
@@ -84,18 +130,39 @@ func getSpinnerFrames() []string {
 	return []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
 }
 
+// ProgressOption is a functional option for configuring a ProgressGroup.
+type ProgressOption func(*ProgressGroup)
+
+// WithLabels sets custom labels for task states.
+func WithLabels(labels ProgressLabels) ProgressOption {
+	return func(pg *ProgressGroup) {
+		pg.labels = labels
+	}
+}
+
+// WithTimer sets the timer for duration tracking.
+func WithTimer(tmr timer.Timer) ProgressOption {
+	return func(pg *ProgressGroup) {
+		pg.timer = tmr
+	}
+}
+
 // NewProgressGroup creates a new ProgressGroup for parallel task execution.
-// title: The title shown during execution (e.g., "Install components")
-// emoji: Optional emoji for the title (defaults to 📦)
+// title: The title shown during execution (e.g., "Installing components")
+// emoji: Optional emoji for the title (defaults to ►)
 // writer: Output writer (defaults to os.Stdout if nil)
-// tmr: Optional timer for duration tracking.
-func NewProgressGroup(title, emoji string, writer io.Writer, tmr timer.Timer) *ProgressGroup {
+// opts: Optional configuration options (WithLabels, WithTimer).
+func NewProgressGroup(
+	title, emoji string,
+	writer io.Writer,
+	opts ...ProgressOption,
+) *ProgressGroup {
 	if writer == nil {
 		writer = os.Stdout
 	}
 
 	if emoji == "" {
-		emoji = "📦"
+		emoji = "►"
 	}
 
 	// Detect if we're outputting to a TTY
@@ -104,11 +171,11 @@ func NewProgressGroup(title, emoji string, writer io.Writer, tmr timer.Timer) *P
 		isTTY = term.IsTerminal(int(file.Fd()))
 	}
 
-	return &ProgressGroup{
+	progressGroup := &ProgressGroup{
 		title:          title,
 		emoji:          emoji,
+		labels:         DefaultLabels(),
 		writer:         writer,
-		timer:          tmr,
 		isTTY:          isTTY,
 		taskStatus:     make(map[string]taskState),
 		taskOrder:      make([]string, 0),
@@ -116,6 +183,13 @@ func NewProgressGroup(title, emoji string, writer io.Writer, tmr timer.Timer) *P
 		stopSpinner:    make(chan struct{}),
 		spinnerDone:    make(chan struct{}),
 	}
+
+	// Apply options
+	for _, opt := range opts {
+		opt(progressGroup)
+	}
+
+	return progressGroup
 }
 
 // Run executes all tasks in parallel with live progress updates.
@@ -207,7 +281,7 @@ func (pg *ProgressGroup) runCI(ctx context.Context, tasks []ProgressTask) error 
 			// Print start message
 			pg.mu.Lock()
 			pg.taskStatus[task.Name] = taskRunning
-			_, _ = fmt.Fprintf(pg.writer, "► %s started\n", task.Name)
+			_, _ = fmt.Fprintf(pg.writer, "► %s %s\n", task.Name, pg.labels.Running)
 			pg.mu.Unlock()
 
 			taskErr := task.Fn(groupCtx)
@@ -219,7 +293,7 @@ func (pg *ProgressGroup) runCI(ctx context.Context, tasks []ProgressTask) error 
 				_, _ = fcolor.New(fcolor.FgRed).Fprintf(pg.writer, "✗ %s failed\n", task.Name)
 			} else {
 				pg.taskStatus[task.Name] = taskComplete
-				_, _ = fcolor.New(fcolor.FgGreen).Fprintf(pg.writer, "✔ %s installed\n", task.Name)
+				_, _ = fcolor.New(fcolor.FgGreen).Fprintf(pg.writer, "✔ %s %s\n", task.Name, pg.labels.Completed)
 			}
 
 			pg.mu.Unlock()
@@ -358,13 +432,13 @@ func (pg *ProgressGroup) formatTaskLine(name string, state taskState) string {
 
 	switch state {
 	case taskPending:
-		return fcolor.New(fcolor.FgHiBlack).Sprintf("○ %s pending", name)
+		return fcolor.New(fcolor.FgHiBlack).Sprintf("○ %s %s", name, pg.labels.Pending)
 	case taskRunning:
 		spinner := frames[pg.spinnerIdx]
 
-		return fcolor.New(fcolor.FgCyan).Sprintf("%s %s installing", spinner, name)
+		return fcolor.New(fcolor.FgCyan).Sprintf("%s %s %s", spinner, name, pg.labels.Running)
 	case taskComplete:
-		return fcolor.New(fcolor.FgGreen).Sprintf("✔ %s installed", name)
+		return fcolor.New(fcolor.FgGreen).Sprintf("✔ %s %s", name, pg.labels.Completed)
 	case taskFailed:
 		return fcolor.New(fcolor.FgRed).Sprintf("✗ %s failed", name)
 	default:

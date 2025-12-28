@@ -204,9 +204,14 @@ func validateDirectory(
 			}
 		}
 
-		pg := notify.NewProgressGroup("Validating kustomizations", "📦", cmd.OutOrStdout(), nil)
+		progressGroup := notify.NewProgressGroup(
+			"Validating kustomizations",
+			"✅",
+			cmd.OutOrStdout(),
+			notify.WithLabels(notify.ValidatingLabels()),
+		)
 
-		pgErr := pg.Run(ctx, tasks...)
+		pgErr := progressGroup.Run(ctx, tasks...)
 		if pgErr != nil {
 			return fmt.Errorf("kustomization validation failed: %w", pgErr)
 		}
@@ -224,9 +229,14 @@ func validateDirectory(
 			}
 		}
 
-		pg := notify.NewProgressGroup("Validating YAML files", "📄", cmd.OutOrStdout(), nil)
+		progressGroup := notify.NewProgressGroup(
+			"Validating YAML files",
+			"📄",
+			cmd.OutOrStdout(),
+			notify.WithLabels(notify.ValidatingLabels()),
+		)
 
-		pgErr := pg.Run(ctx, tasks...)
+		pgErr := progressGroup.Run(ctx, tasks...)
 		if pgErr != nil {
 			return fmt.Errorf("YAML validation failed: %w", pgErr)
 		}

@@ -22,7 +22,7 @@ func TestProgressGroup_EmptyTasks(t *testing.T) {
 
 	var buf bytes.Buffer
 
-	progressGroup := notify.NewProgressGroup("Installing", "📦", &buf, nil)
+	progressGroup := notify.NewProgressGroup("Installing", "📦", &buf)
 
 	err := progressGroup.Run(context.Background())
 	if err != nil {
@@ -39,7 +39,12 @@ func TestProgressGroup_SingleTaskSuccess(t *testing.T) {
 
 	var buf bytes.Buffer
 
-	progressGroup := notify.NewProgressGroup("Installing", "📦", &buf, nil)
+	progressGroup := notify.NewProgressGroup(
+		"Installing",
+		"📦",
+		&buf,
+		notify.WithLabels(notify.InstallingLabels()),
+	)
 
 	tasks := []notify.ProgressTask{
 		{
@@ -70,7 +75,7 @@ func TestProgressGroup_SingleTaskFailure(t *testing.T) {
 
 	var buf bytes.Buffer
 
-	progressGroup := notify.NewProgressGroup("Installing", "📦", &buf, nil)
+	progressGroup := notify.NewProgressGroup("Installing", "📦", &buf)
 
 	tasks := []notify.ProgressTask{
 		{
@@ -101,7 +106,12 @@ func TestProgressGroup_MultipleTasksSuccess(t *testing.T) {
 
 	var buf bytes.Buffer
 
-	progressGroup := notify.NewProgressGroup("Installing", "📦", &buf, nil)
+	progressGroup := notify.NewProgressGroup(
+		"Installing",
+		"📦",
+		&buf,
+		notify.WithLabels(notify.InstallingLabels()),
+	)
 
 	tasks := []notify.ProgressTask{
 		{
@@ -146,7 +156,7 @@ func TestProgressGroup_PartialFailure(t *testing.T) {
 
 	var buf bytes.Buffer
 
-	progressGroup := notify.NewProgressGroup("Installing", "📦", &buf, nil)
+	progressGroup := notify.NewProgressGroup("Installing", "📦", &buf)
 
 	tasks := []notify.ProgressTask{
 		{
@@ -178,7 +188,7 @@ func TestProgressGroup_ContextCancellation(t *testing.T) {
 
 	var buf bytes.Buffer
 
-	progressGroup := notify.NewProgressGroup("Installing", "📦", &buf, nil)
+	progressGroup := notify.NewProgressGroup("Installing", "📦", &buf)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -216,11 +226,71 @@ func TestProgressGroup_DefaultWriter(t *testing.T) {
 	t.Parallel()
 
 	// Test that nil writer defaults to os.Stdout (just ensure no panic)
-	progressGroup := notify.NewProgressGroup("Installing", "", nil, nil)
+	progressGroup := notify.NewProgressGroup("Installing", "", nil)
 
 	// Run with empty tasks to verify no panic
 	err := progressGroup.Run(context.Background())
 	if err != nil {
 		t.Errorf("expected no error, got: %v", err)
+	}
+}
+
+func TestProgressGroup_DefaultLabels(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+
+	// Use default labels (pending, running, completed)
+	progressGroup := notify.NewProgressGroup("Processing", "►", &buf)
+
+	tasks := []notify.ProgressTask{
+		{
+			Name: "task-1",
+			Fn: func(_ context.Context) error {
+				return nil
+			},
+		},
+	}
+
+	err := progressGroup.Run(context.Background(), tasks...)
+	if err != nil {
+		t.Errorf("expected no error, got: %v", err)
+	}
+
+	output := buf.String()
+	if !strings.Contains(output, "completed") {
+		t.Errorf("expected output to contain 'completed' (default label), got: %q", output)
+	}
+}
+
+func TestProgressGroup_ValidatingLabels(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+
+	progressGroup := notify.NewProgressGroup(
+		"Validating",
+		"✅",
+		&buf,
+		notify.WithLabels(notify.ValidatingLabels()),
+	)
+
+	tasks := []notify.ProgressTask{
+		{
+			Name: "schema",
+			Fn: func(_ context.Context) error {
+				return nil
+			},
+		},
+	}
+
+	err := progressGroup.Run(context.Background(), tasks...)
+	if err != nil {
+		t.Errorf("expected no error, got: %v", err)
+	}
+
+	output := buf.String()
+	if !strings.Contains(output, "validated") {
+		t.Errorf("expected output to contain 'validated', got: %q", output)
 	}
 }
