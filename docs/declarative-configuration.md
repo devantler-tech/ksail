@@ -67,11 +67,10 @@ spec:
     certManager: Enabled
     localRegistry: Enabled
     gitOpsEngine: Flux
-    options:
-      localRegistry:
-        hostPort: 5111
-      flux:
-        interval: 1m
+    localRegistryOptions:
+      hostPort: 5111
+    flux:
+      interval: 1m
   workload:
     sourceDirectory: k8s
     validateOnPush: true
@@ -224,10 +223,10 @@ Advanced configuration options for specific distributions, networking, and deplo
 
 **Common options:**
 
-- `options.localRegistry.hostPort` – Host port for local registry (default: `5111`)
-- `options.flux.interval` – Flux reconciliation interval (default: `1m`)
-- `options.talos.controlPlanes` – Number of control-plane nodes (default: `1`).
-- `options.talos.workers` – Number of worker nodes (default: `0`).
+- `spec.cluster.localRegistryOptions.hostPort` – Host port for local registry (default: `5111`)
+- `spec.cluster.flux.interval` – Flux reconciliation interval (default: `1m`)
+- `spec.cluster.talos.controlPlanes` – Number of control-plane nodes (default: `1`)
+- `spec.cluster.talos.workers` – Number of worker nodes (default: `0`)
 
 ### spec.workload (WorkloadSpec)
 

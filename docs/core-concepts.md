@@ -19,6 +19,10 @@ Select with `--distribution` or `spec.cluster.distribution` in `ksail.yaml`.
 
 [K3d](https://k3d.io/) wraps lightweight [K3s](https://k3s.io/) in containers, using fewer resources. Configure via `k3d.yaml`.
 
+### Talos
+
+[Talos Linux](https://www.talos.dev/) is a minimal, immutable OS designed for Kubernetes. KSail runs Talos nodes in Docker containers. Configure via `talos/` directory with machine configuration patches.
+
 ## Cluster Components
 
 ### Container Network Interface (CNI)
@@ -49,7 +53,7 @@ ksail cluster init --csi LocalPathStorage
 
 Configure via `spec.cluster.metricsServer` or `--metrics-server` flag.
 
-**Enable for:** HPA testing, dashboards with resource usage, CPU/memory-based alerts  
+**Enable for:** HPA testing, dashboards with resource usage, CPU/memory-based alerts
 **Disable for:** Minimal resource usage, simple testing
 
 ```bash
