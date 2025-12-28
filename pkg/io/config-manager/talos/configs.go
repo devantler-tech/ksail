@@ -252,8 +252,12 @@ func (c *Configs) ApplyKubeletCertRotation() error {
 	return c.applyPatchToBothConfigs(applyKubeletCertRotationToConfig)
 }
 
-// applyPatchToBothConfigs applies a patcher function to both control-plane and worker configs.
-// This is a helper to avoid code duplication in ApplyMirrorRegistries and ApplyKubeletCertRotation.
+// applyPatchToBothConfigs applies the provided patcher function to both the control-plane and
+// worker machine configurations in the Talos bundle, if they are present. It delegates the
+// actual mutation to the Talos v1alpha1 PatchV1Alpha1 method on each config and updates the
+// bundle with the patched results. This shared helper centralizes the patching mechanism and
+// avoids code duplication in higher-level helpers such as ApplyMirrorRegistries and
+// ApplyKubeletCertRotation.
 func (c *Configs) applyPatchToBothConfigs(patcher func(*v1alpha1.Config) error) error {
 	// Apply to control plane config
 	if c.bundle.ControlPlaneCfg != nil {

@@ -230,10 +230,29 @@ func TestConfigs_ApplyKubeletCertRotation_Idempotent(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, configs)
 
-	// Apply kubelet cert rotation twice - should not error
+	// Apply kubelet cert rotation first time
 	err = configs.ApplyKubeletCertRotation()
 	require.NoError(t, err)
 
+	// Verify state after first call
+	cpKubelet := configs.ControlPlane().Machine().Kubelet()
+	require.NotNil(t, cpKubelet)
+	assert.Equal(t, "true", cpKubelet.ExtraArgs()["rotate-server-certificates"])
+
+	workerKubelet := configs.Worker().Machine().Kubelet()
+	require.NotNil(t, workerKubelet)
+	assert.Equal(t, "true", workerKubelet.ExtraArgs()["rotate-server-certificates"])
+
+	// Apply kubelet cert rotation second time - should not error and state should remain consistent
 	err = configs.ApplyKubeletCertRotation()
 	require.NoError(t, err)
+
+	// Verify state after second call is the same (no duplicates or conflicts)
+	cpKubeletAfter := configs.ControlPlane().Machine().Kubelet()
+	require.NotNil(t, cpKubeletAfter)
+	assert.Equal(t, "true", cpKubeletAfter.ExtraArgs()["rotate-server-certificates"])
+
+	workerKubeletAfter := configs.Worker().Machine().Kubelet()
+	require.NotNil(t, workerKubeletAfter)
+	assert.Equal(t, "true", workerKubeletAfter.ExtraArgs()["rotate-server-certificates"])
 }
