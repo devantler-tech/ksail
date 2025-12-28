@@ -31,11 +31,15 @@ Setting up and operating Kubernetes clusters is a skill of its own, often requir
 
 ### Prerequisites
 
+The binary works on all major operating systems and modern CPU archectures:
+
 | OS | Arch |
 | --- | --- |
 | 🐧 Linux | amd64 and arm64 |
 |  MacOS | arm64 |
-| ⊞ Windows | amd64 and arm64 |
+| ⊞ Windows (untested) | amd64 and arm64 |
+
+The supported distributions depend on different local and cloud providers:
 
 | Distribution | Provider |
 | --- | --- |
@@ -43,9 +47,6 @@ Setting up and operating Kubernetes clusters is a skill of its own, often requir
 | K3d | Docker |
 | Talos | Docker, Hetzner (🚧 next) |
 | EKS | Docker (🚧 next) |
-
-> [!NOTE]
-> Both Kind and K3d are built to run in container engines, so they will never run in cloud providers.
 
 ### Installation
 
