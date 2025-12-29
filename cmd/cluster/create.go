@@ -97,6 +97,7 @@ var (
 //nolint:gochecknoglobals // Shared state for installer factories
 var installerFactories *create.InstallerFactories
 
+//nolint:gochecknoinits // Package-level initialization for installer factory wiring.
 func init() {
 	installerFactories = create.DefaultInstallerFactories()
 
@@ -149,7 +150,7 @@ func NewCreateCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
 
 // handleCreateRunE executes cluster creation with mirror registry setup and CNI installation.
 //
-
+//nolint:funlen // Orchestrates full cluster creation lifecycle with multiple stages.
 func handleCreateRunE(
 	cmd *cobra.Command,
 	cfgManager *ksailconfigmanager.ConfigManager,
@@ -403,7 +404,7 @@ func installCNIOnly(
 
 // installPostCNIComponentsParallel installs all post-CNI components in parallel.
 //
-//nolint:funlen,cyclop // Orchestrates multiple parallel installations with proper error handling
+//nolint:funlen,cyclop,gocognit // Orchestrates multiple parallel installations with proper error handling
 func installPostCNIComponentsParallel(
 	cmd *cobra.Command,
 	clusterCfg *v1alpha1.Cluster,
@@ -460,7 +461,7 @@ func installPostCNIComponentsParallel(
 	if needsArgoCD || needsFlux {
 		_, gitOpsKubeconfig, gitOpsKubeconfigErr = installerFactories.HelmClientFactory(clusterCfg)
 		if gitOpsKubeconfigErr != nil {
-			return gitOpsKubeconfigErr
+			return fmt.Errorf("failed to create helm client for gitops: %w", gitOpsKubeconfigErr)
 		}
 	}
 
@@ -566,7 +567,7 @@ func installPostCNIComponentsParallel(
 
 	executeErr := progressGroup.Run(ctx, tasks...)
 	if executeErr != nil {
-		return executeErr
+		return fmt.Errorf("failed to execute parallel component installation: %w", executeErr)
 	}
 
 	// Post-install GitOps configuration
@@ -762,8 +763,9 @@ func createHelmClientForCluster(clusterCfg *v1alpha1.Cluster) (*helm.Client, str
 		return nil, "", fmt.Errorf("failed to get kubeconfig path: %w", err)
 	}
 
-	if _, err = os.Stat(kubeconfig); err != nil {
-		return nil, "", fmt.Errorf("failed to access kubeconfig file: %w", err)
+	_, statErr := os.Stat(kubeconfig)
+	if statErr != nil {
+		return nil, "", fmt.Errorf("failed to access kubeconfig file: %w", statErr)
 	}
 
 	helmClient, err := helm.NewClient(kubeconfig, clusterCfg.Spec.Cluster.Connection.Context)

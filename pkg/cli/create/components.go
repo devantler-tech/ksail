@@ -50,7 +50,7 @@ func DefaultInstallerFactories() *InstallerFactories {
 	factories := &InstallerFactories{}
 
 	// Set HelmClientFactory first as other factories depend on it
-	factories.HelmClientFactory = CreateHelmClientForCluster
+	factories.HelmClientFactory = HelmClientForCluster
 
 	factories.Flux = func(client helm.Interface, timeout time.Duration) installer.Installer {
 		return fluxinstaller.NewFluxInstaller(client, timeout)
@@ -100,8 +100,8 @@ func DefaultInstallerFactories() *InstallerFactories {
 	return factories
 }
 
-// CreateHelmClientForCluster creates a Helm client configured for the cluster.
-func CreateHelmClientForCluster(clusterCfg *v1alpha1.Cluster) (*helm.Client, string, error) {
+// HelmClientForCluster creates a Helm client configured for the cluster.
+func HelmClientForCluster(clusterCfg *v1alpha1.Cluster) (*helm.Client, string, error) {
 	kubeconfig, err := kubeconfig.GetPathFromConfig(clusterCfg)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to get kubeconfig path: %w", err)

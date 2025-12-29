@@ -19,6 +19,8 @@ import (
 )
 
 // StageDefinitions maps stage roles to their definitions.
+//
+//nolint:gochecknoglobals // Registry stage definitions are constant configuration.
 var StageDefinitions = map[Role]Definition{
 	RoleMirror: {
 		Info:        MirrorInfo,
@@ -39,9 +41,13 @@ var StageDefinitions = map[Role]Definition{
 type DockerClientInvoker func(*cobra.Command, func(client.APIClient) error) error
 
 // DefaultDockerClientInvoker is the default Docker client invoker.
+//
+//nolint:gochecknoglobals // Provides default implementation with test override capability.
 var DefaultDockerClientInvoker DockerClientInvoker = docker.WithClient
 
 // RunStage executes the registry stage for the given role.
+//
+//nolint:funlen // Orchestrates multi-step registry operations with proper error handling.
 func RunStage(
 	cmd *cobra.Command,
 	clusterCfg *v1alpha1.Cluster,
@@ -94,8 +100,8 @@ func RunStage(
 	// Merge specs: flag specs override existing specs for the same host
 	mirrorSpecs := registry.MergeSpecs(existingSpecs, flagSpecs)
 
-	definition, ok := StageDefinitions[role]
-	if !ok {
+	definition, definitionExists := StageDefinitions[role]
+	if !definitionExists {
 		return nil
 	}
 

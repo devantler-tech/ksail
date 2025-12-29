@@ -71,6 +71,8 @@ type Definition struct {
 }
 
 // MirrorInfo returns the stage info for mirror registry creation.
+//
+//nolint:gochecknoglobals // Constant configuration for mirror registry stage.
 var MirrorInfo = Info{
 	Title:         MirrorStageTitle,
 	Emoji:         MirrorStageEmoji,
@@ -80,6 +82,8 @@ var MirrorInfo = Info{
 }
 
 // ConnectInfo returns the stage info for registry connection.
+//
+//nolint:gochecknoglobals // Constant configuration for registry connection stage.
 var ConnectInfo = Info{
 	Title:         ConnectStageTitle,
 	Emoji:         ConnectStageEmoji,

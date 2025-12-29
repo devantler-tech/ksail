@@ -184,6 +184,8 @@ func (t *TestOverrides) SetDockerClientInvoker(
 }
 
 // GetClusterProvisionerFactory returns the cluster provisioner factory override.
+//
+//nolint:ireturn // Returns interface to maintain API compatibility with clusterprovisioner.Factory.
 func (t *TestOverrides) GetClusterProvisionerFactory() clusterprovisioner.Factory {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
