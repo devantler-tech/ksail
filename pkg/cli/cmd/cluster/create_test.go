@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	clusterpkg "github.com/devantler-tech/ksail/v5/cmd/cluster"
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	clusterpkg "github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/timer"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/installer"

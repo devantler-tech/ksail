@@ -75,16 +75,6 @@ jobs:
           source-hash: ${{ hashFiles('go.mod', 'go.sum', '**/*.go') }}
           output-path: /usr/local/bin/ksail
 
-  # Fallback for build-artifact when skipped (satisfies required status check)
-  build-artifact-skip:
-    name: 🏗️ Build KSail Binary
-    runs-on: ubuntu-latest
-    needs: [changes]
-    if: needs.changes.outputs.code != 'true' && needs.changes.outputs.cli != 'true' && github.event_name != 'push'
-    steps:
-      - name: ⏭️ Skip build (no code changes)
-        run: echo "Build skipped - no code changes detected"
-
   generate-schema:
     name: 📝 Generate JSON Schema
     runs-on: ubuntu-latest
@@ -120,16 +110,6 @@ jobs:
           commit_message: "chore: update generated JSON schema"
           commit_user_name: generator-bot
           commit_user_email: generator-bot@users.noreply.github.com
-
-  # Fallback for generate-schema when skipped
-  generate-schema-skip:
-    name: 📝 Generate JSON Schema
-    runs-on: ubuntu-latest
-    needs: [changes]
-    if: needs.changes.outputs.schema != 'true' && github.event_name != 'push'
-    steps:
-      - name: ⏭️ Skip schema generation (no API changes)
-        run: echo "Schema generation skipped - no API type changes detected"
 
   generate-cli-flags-docs:
     name: 📚 Generate CLI Flags Docs
@@ -174,16 +154,6 @@ jobs:
           commit_message: "chore: update generated CLI flags docs"
           commit_user_name: generator-bot
           commit_user_email: generator-bot@users.noreply.github.com
-
-  # Fallback for generate-cli-flags-docs when skipped
-  generate-cli-flags-docs-skip:
-    name: 📚 Generate CLI Flags Docs
-    runs-on: ubuntu-latest
-    needs: [changes]
-    if: needs.changes.outputs.cli != 'true' && github.event_name != 'push'
-    steps:
-      - name: ⏭️ Skip CLI docs generation (no CLI changes)
-        run: echo "CLI docs generation skipped - no CLI/pkg code changes detected"
 
   ci:
     name: 🔄 CI - Go
@@ -307,16 +277,6 @@ jobs:
           if [ -f "kind.yaml" ]; then rm "kind.yaml"; fi
           if [ -f "k3d.yaml" ]; then rm "k3d.yaml"; fi
           if [ -f "ksail.yaml" ]; then rm "ksail.yaml"; fi
-
-  # Fallback for system-test when skipped (satisfies required status check)
-  system-test-skip:
-    name: 🧪 System Test
-    runs-on: ubuntu-latest
-    needs: [changes]
-    if: needs.changes.outputs.code != 'true' && github.event_name != 'push'
-    steps:
-      - name: ⏭️ Skip system tests (no code changes)
-        run: echo "System tests skipped - no code changes detected"
 
   system-test-status:
     runs-on: ubuntu-latest

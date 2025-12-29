@@ -3,9 +3,9 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/devantler-tech/ksail/v5/cmd/cipher"
-	cluster "github.com/devantler-tech/ksail/v5/cmd/cluster"
-	"github.com/devantler-tech/ksail/v5/cmd/workload"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cipher"
+	cluster "github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/cmd/workload"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/flags"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/asciiart"
 	errorhandler "github.com/devantler-tech/ksail/v5/pkg/cli/ui/error-handler"

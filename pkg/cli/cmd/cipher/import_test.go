@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/devantler-tech/ksail/v5/cmd/cipher"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cipher"
 	rtruntime "github.com/devantler-tech/ksail/v5/pkg/di"
 )
 

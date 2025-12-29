@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	clusterpkg "github.com/devantler-tech/ksail/v5/cmd/cluster"
+	clusterpkg "github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster"
 	timermocks "github.com/devantler-tech/ksail/v5/pkg/cli/ui/timer"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
 	"github.com/gkampitakis/go-snaps/snaps"

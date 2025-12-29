@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 	"sync"
 
@@ -13,7 +12,6 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/cli/create/registrystage"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/docker"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/flags"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/kubeconfig"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/notify"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/timer"
@@ -651,9 +649,9 @@ func installCiliumCNI(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster, tmr time
 		Writer:  cmd.OutOrStdout(),
 	})
 
-	helmClient, kubeconfig, err := createHelmClientForCluster(clusterCfg)
+	helmClient, kubeconfig, err := create.HelmClientForCluster(clusterCfg)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create helm client for Cilium: %w", err)
 	}
 
 	err = helmClient.AddRepository(cmd.Context(), &helm.RepositoryEntry{
@@ -692,9 +690,9 @@ func installCalicoCNI(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster, tmr time
 		Writer:  cmd.OutOrStdout(),
 	})
 
-	helmClient, kubeconfig, err := createHelmClientForCluster(clusterCfg)
+	helmClient, kubeconfig, err := create.HelmClientForCluster(clusterCfg)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create helm client for Calico: %w", err)
 	}
 
 	timeout := installer.GetInstallTimeout(clusterCfg)
@@ -753,27 +751,6 @@ func runCNIInstallation(
 	})
 
 	return nil
-}
-
-// Helper functions
-
-func createHelmClientForCluster(clusterCfg *v1alpha1.Cluster) (*helm.Client, string, error) {
-	kubeconfig, err := kubeconfig.GetPathFromConfig(clusterCfg)
-	if err != nil {
-		return nil, "", fmt.Errorf("failed to get kubeconfig path: %w", err)
-	}
-
-	_, statErr := os.Stat(kubeconfig)
-	if statErr != nil {
-		return nil, "", fmt.Errorf("failed to access kubeconfig file: %w", statErr)
-	}
-
-	helmClient, err := helm.NewClient(kubeconfig, clusterCfg.Spec.Cluster.Connection.Context)
-	if err != nil {
-		return nil, "", fmt.Errorf("failed to create Helm client: %w", err)
-	}
-
-	return helmClient, kubeconfig, nil
 }
 
 // Test injection functions

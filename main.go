@@ -8,7 +8,7 @@ import (
 	"os"
 	"runtime/debug"
 
-	"github.com/devantler-tech/ksail/v5/cmd"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/cmd"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/notify"
 )
 

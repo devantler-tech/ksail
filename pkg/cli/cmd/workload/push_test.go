@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/devantler-tech/ksail/v5/cmd/workload"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/cmd/workload"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 )
 

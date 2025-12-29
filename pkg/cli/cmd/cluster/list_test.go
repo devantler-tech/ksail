@@ -10,8 +10,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	clusterpkg "github.com/devantler-tech/ksail/v5/cmd/cluster"
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	clusterpkg "github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	"github.com/gkampitakis/go-snaps/snaps"
