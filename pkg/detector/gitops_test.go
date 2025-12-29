@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/devantler-tech/ksail/v5/pkg/io/detector"
+	"github.com/devantler-tech/ksail/v5/pkg/detector"
 	"github.com/stretchr/testify/require"
 )
 

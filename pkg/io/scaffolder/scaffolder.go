@@ -11,7 +11,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
-	"github.com/devantler-tech/ksail/v5/pkg/io/detector"
+	"github.com/devantler-tech/ksail/v5/pkg/detector"
 	"github.com/devantler-tech/ksail/v5/pkg/io/generator"
 	argocdgenerator "github.com/devantler-tech/ksail/v5/pkg/io/generator/argocd"
 	fluxgenerator "github.com/devantler-tech/ksail/v5/pkg/io/generator/flux"

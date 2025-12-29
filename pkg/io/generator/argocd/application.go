@@ -4,7 +4,7 @@ package argocd
 import (
 	"fmt"
 
-	"github.com/devantler-tech/ksail/v5/pkg/io/detector"
+	"github.com/devantler-tech/ksail/v5/pkg/detector"
 	"github.com/devantler-tech/ksail/v5/pkg/io/generator"
 	yamlgenerator "github.com/devantler-tech/ksail/v5/pkg/io/generator/yaml"
 )

@@ -13,7 +13,7 @@ import (
 
 	runner "github.com/devantler-tech/ksail/v5/pkg/utils/runner"
 	"github.com/devantler-tech/ksail/v5/pkg/fileutil"
-	"github.com/devantler-tech/ksail/v5/pkg/io/marshaller"
+	"github.com/devantler-tech/ksail/v5/pkg/marshaller"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
