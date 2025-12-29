@@ -1,199 +1,21 @@
 package components
 
 import (
-	"context"
-	"fmt"
-	"strings"
-	"time"
-
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/create"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/flags"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/notify"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/timer"
-	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/installer"
-	calicoinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/cni/calico"
-	ciliuminstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/cni/cilium"
 	"github.com/spf13/cobra"
 )
 
-// cniInstaller provides methods for installing and waiting for CNI readiness.
-type cniInstaller interface {
-	Install(ctx context.Context) error
-	WaitForReadiness(ctx context.Context) error
-}
-
-// cniSetupResult contains common resources prepared for CNI installation.
-type cniSetupResult struct {
-	helmClient helm.Interface
-	kubeconfig string
-	timeout    time.Duration
-}
-
-// InstallCNI installs the configured CNI for the cluster.
+// InstallCNI delegates to the create package for CNI installation.
 // Returns true if a CNI was installed, false if using default/none.
+//
+// Deprecated: Use create.InstallCNI directly. This wrapper exists for backward compatibility.
 func InstallCNI(
 	cmd *cobra.Command,
 	clusterCfg *v1alpha1.Cluster,
 	tmr timer.Timer,
 	firstActivityShown *bool,
 ) (bool, error) {
-	switch clusterCfg.Spec.Cluster.CNI {
-	case v1alpha1.CNICilium:
-		err := installCNIOnly(cmd, clusterCfg, tmr, installCiliumCNI, firstActivityShown)
-		return true, err
-	case v1alpha1.CNICalico:
-		err := installCNIOnly(cmd, clusterCfg, tmr, installCalicoCNI, firstActivityShown)
-		return true, err
-	case v1alpha1.CNIDefault, "":
-		return false, nil
-	default:
-		return false, fmt.Errorf("unsupported CNI type: %s", clusterCfg.Spec.Cluster.CNI)
-	}
-}
-
-func installCNIOnly(
-	cmd *cobra.Command,
-	clusterCfg *v1alpha1.Cluster,
-	tmr timer.Timer,
-	installFunc func(*cobra.Command, *v1alpha1.Cluster, timer.Timer) error,
-	firstActivityShown *bool,
-) error {
-	if *firstActivityShown {
-		_, _ = fmt.Fprintln(cmd.OutOrStdout())
-	}
-
-	*firstActivityShown = true
-
-	tmr.NewStage()
-
-	return installFunc(cmd, clusterCfg, tmr)
-}
-
-// prepareCNISetup shows the CNI title and prepares common resources for installation.
-func prepareCNISetup(
-	cmd *cobra.Command,
-	clusterCfg *v1alpha1.Cluster,
-	cniName string,
-) (*cniSetupResult, error) {
-	notify.WriteMessage(notify.Message{
-		Type:    notify.TitleType,
-		Content: "Install CNI...",
-		Emoji:   "🌐",
-		Writer:  cmd.OutOrStdout(),
-	})
-
-	helmClient, kubeconfig, err := create.HelmClientForCluster(clusterCfg)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create helm client for %s: %w", cniName, err)
-	}
-
-	return &cniSetupResult{
-		helmClient: helmClient,
-		kubeconfig: kubeconfig,
-		timeout:    installer.GetInstallTimeout(clusterCfg),
-	}, nil
-}
-
-func installCiliumCNI(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster, tmr timer.Timer) error {
-	setup, err := prepareCNISetup(cmd, clusterCfg, "Cilium")
-	if err != nil {
-		return err
-	}
-
-	err = setup.helmClient.AddRepository(cmd.Context(), &helm.RepositoryEntry{
-		Name: "cilium",
-		URL:  "https://helm.cilium.io/",
-	})
-	if err != nil {
-		return fmt.Errorf("failed to add Cilium Helm repository: %w", err)
-	}
-
-	var distribution ciliuminstaller.Distribution
-
-	switch clusterCfg.Spec.Cluster.Distribution {
-	case v1alpha1.DistributionTalos:
-		distribution = ciliuminstaller.DistributionTalos
-	case v1alpha1.DistributionKind:
-		distribution = ciliuminstaller.DistributionKind
-	case v1alpha1.DistributionK3d:
-		distribution = ciliuminstaller.DistributionK3d
-	}
-
-	ciliumInst := ciliuminstaller.NewCiliumInstallerWithDistribution(
-		setup.helmClient,
-		setup.kubeconfig,
-		clusterCfg.Spec.Cluster.Connection.Context,
-		setup.timeout,
-		distribution,
-	)
-
-	return runCNIInstallation(cmd, ciliumInst, "cilium", tmr)
-}
-
-func installCalicoCNI(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster, tmr timer.Timer) error {
-	setup, err := prepareCNISetup(cmd, clusterCfg, "Calico")
-	if err != nil {
-		return err
-	}
-
-	var distribution calicoinstaller.Distribution
-
-	switch clusterCfg.Spec.Cluster.Distribution {
-	case v1alpha1.DistributionTalos:
-		distribution = calicoinstaller.DistributionTalos
-	case v1alpha1.DistributionKind:
-		distribution = calicoinstaller.DistributionKind
-	case v1alpha1.DistributionK3d:
-		distribution = calicoinstaller.DistributionK3d
-	}
-
-	calicoInst := calicoinstaller.NewCalicoInstallerWithDistribution(
-		setup.helmClient,
-		setup.kubeconfig,
-		clusterCfg.Spec.Cluster.Connection.Context,
-		setup.timeout,
-		distribution,
-	)
-
-	return runCNIInstallation(cmd, calicoInst, "calico", tmr)
-}
-
-func runCNIInstallation(
-	cmd *cobra.Command,
-	inst cniInstaller,
-	cniName string,
-	tmr timer.Timer,
-) error {
-	notify.WriteMessage(notify.Message{
-		Type:    notify.ActivityType,
-		Content: "installing " + strings.ToLower(cniName),
-		Writer:  cmd.OutOrStdout(),
-	})
-
-	err := inst.Install(cmd.Context())
-	if err != nil {
-		return fmt.Errorf("%s installation failed: %w", cniName, err)
-	}
-
-	notify.WriteMessage(notify.Message{
-		Type:    notify.ActivityType,
-		Content: "awaiting " + strings.ToLower(cniName) + " to be ready",
-		Writer:  cmd.OutOrStdout(),
-	})
-
-	err = inst.WaitForReadiness(cmd.Context())
-	if err != nil {
-		return fmt.Errorf("%s readiness check failed: %w", cniName, err)
-	}
-
-	notify.WriteMessage(notify.Message{
-		Type:    notify.SuccessType,
-		Content: "cni installed",
-		Timer:   flags.MaybeTimer(cmd, tmr),
-		Writer:  cmd.OutOrStdout(),
-	})
-
-	return nil
+	return create.InstallCNI(cmd, clusterCfg, tmr, firstActivityShown)
 }

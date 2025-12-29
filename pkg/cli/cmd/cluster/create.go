@@ -2,12 +2,10 @@ package cluster
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sync"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster/components"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/create"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/create/registrystage"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/docker"
@@ -325,7 +323,7 @@ func handlePostCreationSetup(
 	tmr timer.Timer,
 	firstActivityShown *bool,
 ) error {
-	_, err := components.InstallCNI(cmd, clusterCfg, tmr, firstActivityShown)
+	_, err := create.InstallCNI(cmd, clusterCfg, tmr, firstActivityShown)
 	if err != nil {
 		return fmt.Errorf("failed to install CNI: %w", err)
 	}
@@ -333,7 +331,7 @@ func handlePostCreationSetup(
 	factories := getInstallerFactories()
 	outputTimer := flags.MaybeTimer(cmd, tmr)
 
-	return components.InstallPostCNIComponents(cmd, clusterCfg, factories, outputTimer, firstActivityShown)
+	return create.InstallPostCNIComponents(cmd, clusterCfg, factories, outputTimer, firstActivityShown)
 }
 
 func setupK3dMetricsServer(clusterCfg *v1alpha1.Cluster, k3dConfig *v1alpha5.SimpleConfig) {
