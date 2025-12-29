@@ -36,21 +36,21 @@ func TestYAMLMarshaller_Marshal(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			m := marshaller.NewYAMLMarshaller[TestModel]()
-			got, err := m.Marshal(tt.model)
+			got, err := m.Marshal(testCase.model)
 
-			if tt.wantErr {
+			if testCase.wantErr {
 				require.Error(t, err)
 
 				return
 			}
 
 			require.NoError(t, err)
-			assert.Equal(t, tt.expected, got)
+			assert.Equal(t, testCase.expected, got)
 		})
 	}
 }
@@ -84,22 +84,24 @@ func TestYAMLMarshaller_Unmarshal(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			m := marshaller.NewYAMLMarshaller[TestModel]()
-			var got TestModel
-			err := m.Unmarshal(tt.data, &got)
 
-			if tt.wantErr {
+			var got TestModel
+
+			err := m.Unmarshal(testCase.data, &got)
+
+			if testCase.wantErr {
 				require.Error(t, err)
 
 				return
 			}
 
 			require.NoError(t, err)
-			assert.Equal(t, tt.expected, got)
+			assert.Equal(t, testCase.expected, got)
 		})
 	}
 }
@@ -133,22 +135,24 @@ func TestYAMLMarshaller_UnmarshalString(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			m := marshaller.NewYAMLMarshaller[TestModel]()
-			var got TestModel
-			err := m.UnmarshalString(tt.data, &got)
 
-			if tt.wantErr {
+			var got TestModel
+
+			err := m.UnmarshalString(testCase.data, &got)
+
+			if testCase.wantErr {
 				require.Error(t, err)
 
 				return
 			}
 
 			require.NoError(t, err)
-			assert.Equal(t, tt.expected, got)
+			assert.Equal(t, testCase.expected, got)
 		})
 	}
 }
