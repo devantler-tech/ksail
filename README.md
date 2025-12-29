@@ -7,7 +7,7 @@
 
 ![ksail-cli-dark](./docs/images/ksail-cli-dark.png)
 
-KSail is a CLI tool that bundles common Kubernetes tooling into a single binary. It provides one consistent workflow for creating clusters, deploying workloads, and managing workloads across different distributions.
+KSail is a CLI tool that bundles common Kubernetes tooling into a single binary. It provides one consistent interface to create clusters, deploy workloads, and operate cloud-native stacks across different distributions.
 
 ## Why?
 
@@ -15,21 +15,38 @@ Setting up and operating Kubernetes clusters is a skill of its own, often requir
 
 ## Key Features
 
-- 📦 **One Binary** — Embeds cluster provisioning, GitOps engines, and deployment tooling. No tool sprawl.
-- 🚀 **Simple Clusters** — Spin up Kind, K3d, or Talos with one command. Same workflow across supported distributions and providers.
-- 📄 **Everything as Code** — Cluster settings, distribution configs, and workloads all live in version-controlled files.
-- 🔄 **GitOps Native** — Opt into Flux or ArgoCD. KSail handles the bootstrap and gives you push and reconcile commands.
-- ⚙️ **Customizable Stack** — Select your CNI, CSI, enable cert-manager, add mirror registries to match your setup.
-- 🔐 **SOPS Built In** — Encrypt, decrypt, and edit secrets with integrated cipher commands.
+📦 **One Binary** — Embeds cluster provisioning, GitOps engines, and deployment tooling. No tool sprawl.
+
+☸️ **Simple Clusters** — Spin up Kind, K3d, or Talos clusters with one command. Same workflow across supported distributions and providers.
+
+📄 **Everything as Code** — Cluster settings, distribution configs, and workloads all live in version-controlled files.
+
+🔄 **GitOps Native** — Opt into Flux or ArgoCD. KSail handles the bootstrap and gives you push and reconcile commands.
+
+⚙️ **Customizable Stack** — Select your CNI, CSI, enable cert-manager, add mirror registries to match your setup.
+
+🔐 **SOPS Built In** — Encrypt, decrypt, and edit secrets with integrated cipher commands.
 
 ## Getting Started
 
 ### Prerequisites
 
-- 🐧 Linux (amd64 and arm64)
--  MacOS (arm64)
-- ⊞ Windows (amd64 and arm64)
-- 🐳 Docker
+The binary works on all major operating systems and modern CPU archectures:
+
+| OS | Arch |
+| --- | --- |
+| 🐧 Linux | amd64 and arm64 |
+|  MacOS | arm64 |
+| ⊞ Windows (untested) | amd64 and arm64 |
+
+The supported distributions depend on different local and cloud providers:
+
+| Distribution | Provider |
+| --- | --- |
+| Kind | Docker |
+| K3d | Docker |
+| Talos | Docker, Hetzner (🚧 next) |
+| EKS | Docker (🚧 next) |
 
 ### Installation
 
@@ -47,50 +64,23 @@ go install github.com/devantler-tech/ksail/v5@latest
 
 ## Usage
 
-### Quick Start
-
-Get up and running with a local Kubernetes cluster in three steps:
+Get up and running with a simple kind cluster in four steps:
 
 ```bash
 # 1. Initialize a new project with your preferred stack
-ksail cluster init --distribution Kind --cni Cilium
+ksail cluster init
 
 # 2. Create and start the cluster
 ksail cluster create
 
+# Add your manifests to the k8s/kustomization.yaml file
+
 # 3. Deploy your workloads
 ksail workload apply -k ./k8s
+
+# 4. Connect to the cluster with k9s
+ksail cluster connect
 ```
-
-### Development Workflow
-
-KSail organizes commands around your development lifecycle:
-
-#### Cluster Lifecycle
-
-- `ksail cluster init` — Scaffold a new project with declarative configuration
-- `ksail cluster create` — Provision a new cluster (Kind or K3d)
-- `ksail cluster start` — Resume a stopped cluster
-- `ksail cluster stop` — Pause a running cluster without losing state
-- `ksail cluster connect` — Open k9s for interactive debugging
-- `ksail cluster delete` — Clean up resources
-
-#### Workload Management
-
-- `ksail workload apply` — Deploy manifests with kubectl or Kustomize
-- `ksail workload validate` — Validate Kubernetes manifests and kustomizations
-- `ksail workload push` — Package and push an OCI artifact to the local registry
-- `ksail workload reconcile` — Trigger GitOps reconciliation (Flux or ArgoCD)
-- `ksail workload logs` — View logs from running pods
-- `ksail workload exec` — Execute commands in running pods
-- `ksail workload gen` — Generate resource templates
-
-#### Secrets & Security
-
-- `ksail cipher encrypt` — Encrypt manifests with SOPS
-- `ksail cipher decrypt` — Decrypt manifests with SOPS
-- `ksail cipher edit` — Edit encrypted files in place
-- `ksail cipher import` — Import age keys for SOPS encryption
 
 ## Documentation
 
