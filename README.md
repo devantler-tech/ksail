@@ -33,20 +33,20 @@ Setting up and operating Kubernetes clusters is a skill of its own, often requir
 
 The binary works on all major operating systems and modern CPU archectures:
 
-| OS | Arch |
-| --- | --- |
-| 🐧 Linux | amd64 and arm64 |
-|  MacOS | arm64 |
+| OS                   | Arch            |
+|----------------------|-----------------|
+| 🐧 Linux             | amd64 and arm64 |
+|  MacOS              | arm64           |
 | ⊞ Windows (untested) | amd64 and arm64 |
 
 The supported distributions depend on different local and cloud providers:
 
-| Distribution | Provider |
-| --- | --- |
-| Kind | Docker |
-| K3d | Docker |
-| Talos | Docker, Hetzner (🚧 next) |
-| EKS | Docker (🚧 next) |
+| Distribution | Provider                  |
+|--------------|---------------------------|
+| Kind         | Docker                    |
+| K3d          | Docker                    |
+| Talos        | Docker, Hetzner (🚧 next) |
+| EKS          | Docker (🚧 next)          |
 
 ### Installation
 
