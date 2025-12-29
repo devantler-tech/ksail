@@ -13,7 +13,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
 	"github.com/devantler-tech/ksail/v5/pkg/client/argocd"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
-	iopath "github.com/devantler-tech/ksail/v5/pkg/io"
+	"github.com/devantler-tech/ksail/v5/pkg/fileutil"
 	"github.com/devantler-tech/ksail/v5/pkg/k8s"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	"github.com/spf13/cobra"
@@ -96,7 +96,7 @@ func getKubeconfigPath(clusterCfg *v1alpha1.Cluster) (string, error) {
 		kubeconfigPath = v1alpha1.DefaultKubeconfigPath
 	}
 
-	expanded, err := iopath.ExpandHomePath(kubeconfigPath)
+	expanded, err := fileutil.ExpandHomePath(kubeconfigPath)
 	if err != nil {
 		return "", fmt.Errorf("expand kubeconfig path: %w", err)
 	}

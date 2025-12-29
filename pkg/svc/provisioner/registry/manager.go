@@ -11,7 +11,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
 	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
-	ksailio "github.com/devantler-tech/ksail/v5/pkg/io"
+	"github.com/devantler-tech/ksail/v5/pkg/fileutil"
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
 )
@@ -183,7 +183,7 @@ func collectExistingRegistryNames(
 	}
 
 	for _, name := range current {
-		trimmed, ok := ksailio.TrimNonEmpty(name)
+		trimmed, ok := fileutil.TrimNonEmpty(name)
 		if !ok {
 			continue
 		}
@@ -334,13 +334,13 @@ func ConnectRegistriesToNetwork(
 	networkName string,
 	writer io.Writer,
 ) error {
-	networkName, networkOK := ksailio.TrimNonEmpty(networkName)
+	networkName, networkOK := fileutil.TrimNonEmpty(networkName)
 	if dockerClient == nil || len(registries) == 0 || !networkOK {
 		return nil
 	}
 
 	for _, reg := range registries {
-		containerName, nameOK := ksailio.TrimNonEmpty(reg.Name)
+		containerName, nameOK := fileutil.TrimNonEmpty(reg.Name)
 		if !nameOK {
 			continue
 		}
@@ -386,7 +386,7 @@ func ConnectRegistriesToNetworkWithStaticIPs(
 	networkCIDR string,
 	writer io.Writer,
 ) error {
-	networkName, networkOK := ksailio.TrimNonEmpty(networkName)
+	networkName, networkOK := fileutil.TrimNonEmpty(networkName)
 	if dockerClient == nil || len(registries) == 0 || !networkOK {
 		return nil
 	}
@@ -396,7 +396,7 @@ func ConnectRegistriesToNetworkWithStaticIPs(
 	staticIPs := calculateRegistryIPs(networkCIDR, len(registries))
 
 	for i, reg := range registries {
-		containerName, nameOK := ksailio.TrimNonEmpty(reg.Name)
+		containerName, nameOK := fileutil.TrimNonEmpty(reg.Name)
 		if !nameOK {
 			continue
 		}

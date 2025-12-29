@@ -1,11 +1,11 @@
-package io_test
+package fileutil_test
 
 import (
 	"os/user"
 	"path/filepath"
 	"testing"
 
-	iopath "github.com/devantler-tech/ksail/v5/pkg/io"
+	"github.com/devantler-tech/ksail/v5/pkg/fileutil"
 )
 
 func TestExpandHomePath(t *testing.T) {
@@ -48,7 +48,7 @@ func TestExpandHomePath(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			got, err := iopath.ExpandHomePath(testCase.input)
+			got, err := fileutil.ExpandHomePath(testCase.input)
 			if err != nil {
 				t.Fatalf("ExpandHomePath returned error: %v", err)
 			}

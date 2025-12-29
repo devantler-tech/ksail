@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/devantler-tech/ksail/v5/pkg/io"
+	"github.com/devantler-tech/ksail/v5/pkg/fileutil"
 	yamlgenerator "github.com/devantler-tech/ksail/v5/pkg/io/generator/yaml"
 	"github.com/devantler-tech/ksail/v5/pkg/io/marshaller"
 	ktypes "sigs.k8s.io/kustomize/api/types"
@@ -54,7 +54,7 @@ func (g *KustomizationGenerator) Generate(
 		return out, nil
 	}
 
-	result, err := io.TryWriteFile(out, opts.Output, opts.Force)
+	result, err := fileutil.TryWriteFile(out, opts.Output, opts.Force)
 	if err != nil {
 		return "", fmt.Errorf("write kustomization: %w", err)
 	}

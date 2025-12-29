@@ -1,9 +1,9 @@
-package io_test
+package fileutil_test
 
 import (
 	"testing"
 
-	io "github.com/devantler-tech/ksail/v5/pkg/io"
+	"github.com/devantler-tech/ksail/v5/pkg/fileutil"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -34,7 +34,7 @@ func TestTrimNonEmpty(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
-			str, valid := io.TrimNonEmpty(test.input)
+			str, valid := fileutil.TrimNonEmpty(test.input)
 
 			assert.Equal(t, test.expectedStr, str, "trimmed string should match")
 			assert.Equal(t, test.expectedValid, valid, "validity should match")

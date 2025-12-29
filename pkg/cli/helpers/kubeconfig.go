@@ -8,7 +8,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
-	iopath "github.com/devantler-tech/ksail/v5/pkg/io"
+	"github.com/devantler-tech/ksail/v5/pkg/fileutil"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
 )
 
@@ -34,7 +34,7 @@ func GetKubeconfigPathFromConfig(cfg *v1alpha1.Cluster) (string, error) {
 	}
 
 	// Always expand tilde in kubeconfig path, regardless of source
-	expandedPath, err := iopath.ExpandHomePath(kubeconfigPath)
+	expandedPath, err := fileutil.ExpandHomePath(kubeconfigPath)
 	if err != nil {
 		return "", fmt.Errorf("failed to expand home path: %w", err)
 	}

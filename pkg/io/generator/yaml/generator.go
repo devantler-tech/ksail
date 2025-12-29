@@ -3,7 +3,7 @@ package yamlgenerator
 import (
 	"fmt"
 
-	"github.com/devantler-tech/ksail/v5/pkg/io"
+	"github.com/devantler-tech/ksail/v5/pkg/fileutil"
 	"github.com/devantler-tech/ksail/v5/pkg/io/marshaller"
 )
 
@@ -37,7 +37,7 @@ func (g *YAMLGenerator[T]) Generate(model T, opts Options) (string, error) {
 
 	// write to file if output path is specified
 	if opts.Output != "" {
-		result, err := io.TryWriteFile(modelYAML, opts.Output, opts.Force)
+		result, err := fileutil.TryWriteFile(modelYAML, opts.Output, opts.Force)
 		if err != nil {
 			return "", fmt.Errorf("failed to write YAML to file: %w", err)
 		}

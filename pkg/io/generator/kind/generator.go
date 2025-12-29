@@ -3,7 +3,7 @@ package kindgenerator
 import (
 	"fmt"
 
-	"github.com/devantler-tech/ksail/v5/pkg/io"
+	"github.com/devantler-tech/ksail/v5/pkg/fileutil"
 	yamlgenerator "github.com/devantler-tech/ksail/v5/pkg/io/generator/yaml"
 	"github.com/devantler-tech/ksail/v5/pkg/io/marshaller"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
@@ -39,7 +39,7 @@ func (g *KindGenerator) Generate(
 
 	// write to file if output path is specified
 	if opts.Output != "" {
-		result, err := io.TryWriteFile(out, opts.Output, opts.Force)
+		result, err := fileutil.TryWriteFile(out, opts.Output, opts.Force)
 		if err != nil {
 			return "", fmt.Errorf("write kind config: %w", err)
 		}

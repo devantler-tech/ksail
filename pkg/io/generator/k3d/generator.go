@@ -3,7 +3,7 @@ package k3dgenerator
 import (
 	"fmt"
 
-	"github.com/devantler-tech/ksail/v5/pkg/io"
+	"github.com/devantler-tech/ksail/v5/pkg/fileutil"
 	yamlgenerator "github.com/devantler-tech/ksail/v5/pkg/io/generator/yaml"
 	"github.com/devantler-tech/ksail/v5/pkg/io/marshaller"
 	v1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
@@ -38,7 +38,7 @@ func (g *K3dGenerator) Generate(
 
 	// write to file if output path is specified
 	if opts.Output != "" {
-		result, err := io.TryWriteFile(out, opts.Output, opts.Force)
+		result, err := fileutil.TryWriteFile(out, opts.Output, opts.Force)
 		if err != nil {
 			return "", fmt.Errorf("write k3d config: %w", err)
 		}

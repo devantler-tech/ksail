@@ -1,11 +1,11 @@
-package io_test
+package fileutil_test
 
 import (
 	"os"
 	"path/filepath"
 	"testing"
 
-	ioutils "github.com/devantler-tech/ksail/v5/pkg/io"
+	"github.com/devantler-tech/ksail/v5/pkg/fileutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -55,7 +55,7 @@ func runTryWriteFileValidationTests(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
-			result, err := ioutils.TryWriteFile(test.content, test.outputPath, test.force)
+			result, err := fileutil.TryWriteFile(test.content, test.outputPath, test.force)
 
 			require.Error(t, err, "TryWriteFile()")
 			assert.Empty(t, result, "TryWriteFile() result on error")
@@ -93,7 +93,7 @@ func runTryWriteFileSuccessTests(t *testing.T) {
 			t.Parallel()
 
 			content, outputPath, force := test.setupTest(t)
-			result, err := ioutils.TryWriteFile(content, outputPath, force)
+			result, err := fileutil.TryWriteFile(content, outputPath, force)
 
 			require.NoError(t, err, "TryWriteFile()")
 			assert.Equal(t, content, result, "TryWriteFile()")
@@ -145,7 +145,7 @@ func setupTryWriteFileExistingForce(t *testing.T) (string, string, bool) {
 func verifyTryWriteFileContentsEqual(t *testing.T, tempDir, outputPath, content, _ string) {
 	t.Helper()
 
-	writtenContent, err := ioutils.ReadFileSafe(tempDir, outputPath)
+	writtenContent, err := fileutil.ReadFileSafe(tempDir, outputPath)
 	require.NoError(t, err, "ReadFile()")
 	assert.Equal(t, content, string(writtenContent), "written file content")
 }
@@ -153,7 +153,7 @@ func verifyTryWriteFileContentsEqual(t *testing.T, tempDir, outputPath, content,
 func verifyTryWriteFileContentsPreserved(t *testing.T, tempDir, outputPath, _, _ string) {
 	t.Helper()
 
-	writtenContent, err := ioutils.ReadFileSafe(tempDir, outputPath)
+	writtenContent, err := fileutil.ReadFileSafe(tempDir, outputPath)
 	require.NoError(t, err, "ReadFile()")
 
 	assert.Equal(t, originalContent, string(writtenContent),
@@ -185,7 +185,7 @@ func runTryWriteFileErrorTests(t *testing.T) {
 		},
 	}
 
-	runErrorTestsWithTwoParams(t, tests, ioutils.TryWriteFile, "TryWriteFile")
+	runErrorTestsWithTwoParams(t, tests, fileutil.TryWriteFile, "TryWriteFile")
 }
 
 func setupTryWriteFileStatError(t *testing.T) (string, string, bool) {

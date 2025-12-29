@@ -1,11 +1,11 @@
-package io_test
+package fileutil_test
 
 import (
 	"os"
 	"path/filepath"
 	"testing"
 
-	ioutils "github.com/devantler-tech/ksail/v5/pkg/io"
+	"github.com/devantler-tech/ksail/v5/pkg/fileutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -23,7 +23,7 @@ func TestReadFileSafe(t *testing.T) {
 		err := os.WriteFile(filePath, []byte(want), 0o600)
 		require.NoError(t, err, "WriteFile setup")
 
-		got, err := ioutils.ReadFileSafe(base, filePath)
+		got, err := fileutil.ReadFileSafe(base, filePath)
 
 		require.NoError(t, err, "ReadFileSafe")
 		assert.Equal(t, want, string(got), "content")
@@ -37,8 +37,8 @@ func TestReadFileSafe(t *testing.T) {
 		err := os.WriteFile(outside, []byte("nope"), 0o600)
 		require.NoError(t, err, "WriteFile setup")
 
-		_, err = ioutils.ReadFileSafe(base, outside)
-		require.ErrorIs(t, err, ioutils.ErrPathOutsideBase, "ReadFileSafe")
+		_, err = fileutil.ReadFileSafe(base, outside)
+		require.ErrorIs(t, err, fileutil.ErrPathOutsideBase, "ReadFileSafe")
 	})
 
 	t.Run("traversal attempt", func(t *testing.T) {
@@ -52,8 +52,8 @@ func TestReadFileSafe(t *testing.T) {
 
 		attempt := filepath.Join(base, "..", "traversal.txt")
 
-		_, err = ioutils.ReadFileSafe(base, attempt)
-		require.ErrorIs(t, err, ioutils.ErrPathOutsideBase, "ReadFileSafe")
+		_, err = fileutil.ReadFileSafe(base, attempt)
+		require.ErrorIs(t, err, fileutil.ErrPathOutsideBase, "ReadFileSafe")
 	})
 
 	t.Run("missing file inside base", func(t *testing.T) {
@@ -62,7 +62,7 @@ func TestReadFileSafe(t *testing.T) {
 		base := t.TempDir()
 		missing := filepath.Join(base, "missing.txt")
 
-		_, err := ioutils.ReadFileSafe(base, missing)
+		_, err := fileutil.ReadFileSafe(base, missing)
 		assert.ErrorContains(t, err, "failed to read file", "ReadFileSafe")
 	})
 }
@@ -88,7 +88,7 @@ func testFindFileAbsolutePath(t *testing.T) {
 	err := os.WriteFile(absolutePath, []byte("test"), 0o600)
 	require.NoError(t, err)
 
-	resolved, err := ioutils.FindFile(absolutePath)
+	resolved, err := fileutil.FindFile(absolutePath)
 
 	require.NoError(t, err)
 	assert.Equal(t, absolutePath, resolved)
@@ -105,7 +105,7 @@ func testFindFileRelativePathCurrent(t *testing.T) {
 	err := os.WriteFile(configFile, []byte("test"), 0o600)
 	require.NoError(t, err)
 
-	resolved, err := ioutils.FindFile(configFile)
+	resolved, err := fileutil.FindFile(configFile)
 
 	require.NoError(t, err)
 
@@ -130,7 +130,7 @@ func testFindFileRelativePathParent(t *testing.T) {
 
 	t.Chdir(subDir)
 
-	resolved, err := ioutils.FindFile(configFile)
+	resolved, err := fileutil.FindFile(configFile)
 
 	require.NoError(t, err)
 	assert.Equal(t, configPath, resolved)
@@ -143,7 +143,7 @@ func testFindFileRelativePathNotFound(t *testing.T) {
 
 	configFile := "non-existent-config.yaml"
 
-	resolved, err := ioutils.FindFile(configFile)
+	resolved, err := fileutil.FindFile(configFile)
 
 	require.NoError(t, err)
 	// Should return original path when not found
@@ -167,7 +167,7 @@ func testFindFileRelativePathMultipleLevels(t *testing.T) {
 
 	t.Chdir(deepDir)
 
-	resolved, err := ioutils.FindFile(configFile)
+	resolved, err := fileutil.FindFile(configFile)
 
 	require.NoError(t, err)
 	assert.Equal(t, configPath, resolved)

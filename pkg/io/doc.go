@@ -1,14 +1,7 @@
-// Package io provides utilities for input and output operations.
+// Package io provides utilities for input and output operations related to configuration management.
 //
-// This package contains utilities for reading from and writing to files,
-// along with various I/O helper functions for file operations, including
-// configuration validation utilities.
-//
-// Key functionality:
-//   - File reading: ReadFileSafe, FindFile
-//   - File writing: TryWriteFile
-//   - Path operations: ExpandHomePath
-//   - String utilities: TrimNonEmpty
+// This package contains domain-specific I/O utilities focused on configuration
+// management, generation, validation, and scaffolding operations.
 //
 // Subpackages:
 //   - config-manager: Configuration loading and management
@@ -16,4 +9,8 @@
 //   - marshaller: Serialization and deserialization
 //   - scaffolder: Project scaffolding and file generation
 //   - validator: Configuration validation
+//   - detector: GitOps engine detection
+//
+// For low-level file I/O operations (reading, writing, path manipulation),
+// see the fileutil package.
 package io

@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	ksailio "github.com/devantler-tech/ksail/v5/pkg/io"
+	"github.com/devantler-tech/ksail/v5/pkg/fileutil"
 	helmv4action "helm.sh/helm/v4/pkg/action"
 	helmv4loader "helm.sh/helm/v4/pkg/chart/loader"
 	chartv2 "helm.sh/helm/v4/pkg/chart/v2"
@@ -773,7 +773,7 @@ func readFileFromPath(chartPath, filePath string) ([]byte, error) {
 		return data, nil
 	}
 
-	data, err := ksailio.ReadFileSafe(filepath.Dir(chartPath), filePath)
+	data, err := fileutil.ReadFileSafe(filepath.Dir(chartPath), filePath)
 	if err != nil {
 		return nil, fmt.Errorf("read file safe %s: %w", filePath, err)
 	}

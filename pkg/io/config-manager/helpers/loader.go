@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/devantler-tech/ksail/v5/pkg/io"
+	"github.com/devantler-tech/ksail/v5/pkg/fileutil"
 	"github.com/devantler-tech/ksail/v5/pkg/io/marshaller"
 	"github.com/devantler-tech/ksail/v5/pkg/io/validator"
 )
@@ -62,7 +62,7 @@ func LoadConfigFromFile[T any](
 	createDefault func() T,
 ) (T, error) {
 	// Resolve the config path (traverse up from current dir if relative)
-	resolvedPath, err := io.FindFile(configPath)
+	resolvedPath, err := fileutil.FindFile(configPath)
 	if err != nil {
 		var zero T
 
@@ -81,7 +81,7 @@ func LoadConfigFromFile[T any](
 	cleaned := filepath.Clean(resolvedPath)
 	baseDir := filepath.Dir(cleaned)
 
-	data, err := io.ReadFileSafe(baseDir, cleaned)
+	data, err := fileutil.ReadFileSafe(baseDir, cleaned)
 	if err != nil {
 		var zero T
 

@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"time"
 
-	iopath "github.com/devantler-tech/ksail/v5/pkg/io"
+	"github.com/devantler-tech/ksail/v5/pkg/fileutil"
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
 	"github.com/devantler-tech/ksail/v5/pkg/k8s"
 	"github.com/docker/docker/api/types/container"
@@ -500,7 +500,7 @@ func (p *TalosProvisioner) bootstrapAndSaveKubeconfig(
 	}
 
 	// Expand tilde in kubeconfig path (e.g., ~/.kube/config -> /home/user/.kube/config)
-	kubeconfigPath, err := iopath.ExpandHomePath(p.options.KubeconfigPath)
+	kubeconfigPath, err := fileutil.ExpandHomePath(p.options.KubeconfigPath)
 	if err != nil {
 		return fmt.Errorf("failed to expand kubeconfig path: %w", err)
 	}
@@ -853,7 +853,7 @@ func rewriteKubeconfigEndpoint(kubeconfigBytes []byte, endpoint string) ([]byte,
 // leaving other cluster configurations intact.
 func (p *TalosProvisioner) cleanupKubeconfig(clusterName string) error {
 	// Expand tilde in kubeconfig path
-	kubeconfigPath, err := iopath.ExpandHomePath(p.options.KubeconfigPath)
+	kubeconfigPath, err := fileutil.ExpandHomePath(p.options.KubeconfigPath)
 	if err != nil {
 		return fmt.Errorf("failed to expand kubeconfig path: %w", err)
 	}

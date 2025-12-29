@@ -12,7 +12,7 @@ import (
 	"time"
 
 	runner "github.com/devantler-tech/ksail/v5/pkg/utils/runner"
-	iopath "github.com/devantler-tech/ksail/v5/pkg/io"
+	"github.com/devantler-tech/ksail/v5/pkg/fileutil"
 	"github.com/devantler-tech/ksail/v5/pkg/io/marshaller"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
@@ -206,7 +206,7 @@ func (k *KindClusterProvisioner) Create(ctx context.Context, name string) error 
 func (k *KindClusterProvisioner) Delete(ctx context.Context, name string) error {
 	target := setName(name, k.kindConfig.Name)
 
-	kubeconfigPath, err := iopath.ExpandHomePath(k.kubeConfig)
+	kubeconfigPath, err := fileutil.ExpandHomePath(k.kubeConfig)
 	if err != nil {
 		return fmt.Errorf("failed to expand kubeconfig path: %w", err)
 	}

@@ -1,4 +1,4 @@
-package io
+package fileutil
 
 // File permissions.
 const (
