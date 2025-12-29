@@ -2,7 +2,6 @@ package kind
 
 import (
 	"github.com/devantler-tech/ksail/v5/pkg/io/validator"
-	"github.com/devantler-tech/ksail/v5/pkg/io/validator/metadata"
 	kindapi "sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
 
@@ -30,7 +29,7 @@ func (v *Validator) Validate(config *kindapi.Cluster) *validator.ValidationResul
 	}
 
 	// Validate required metadata fields
-	metadata.ValidateMetadata(
+	validator.ValidateMetadata(
 		config.Kind,
 		config.APIVersion,
 		"Cluster",

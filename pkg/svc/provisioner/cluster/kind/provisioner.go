@@ -13,7 +13,7 @@ import (
 
 	runner "github.com/devantler-tech/ksail/v5/pkg/cli/runner"
 	iopath "github.com/devantler-tech/ksail/v5/pkg/io"
-	yamlmarshaller "github.com/devantler-tech/ksail/v5/pkg/io/marshaller/yaml"
+	"github.com/devantler-tech/ksail/v5/pkg/io/marshaller"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
@@ -167,7 +167,7 @@ func (k *KindClusterProvisioner) Create(ctx context.Context, name string) error 
 	defer func() { _ = tmpFile.Close() }()
 	defer func() { _ = os.Remove(tmpFile.Name()) }()
 
-	marshaller := yamlmarshaller.NewMarshaller[*v1alpha4.Cluster]()
+	marshaller := marshaller.NewYAMLMarshaller[*v1alpha4.Cluster]()
 
 	configYAML, err := marshaller.Marshal(k.kindConfig)
 	if err != nil {

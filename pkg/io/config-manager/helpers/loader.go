@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/devantler-tech/ksail/v5/pkg/io"
-	yamlmarshaller "github.com/devantler-tech/ksail/v5/pkg/io/marshaller/yaml"
+	"github.com/devantler-tech/ksail/v5/pkg/io/marshaller"
 	"github.com/devantler-tech/ksail/v5/pkg/io/validator"
 )
 
@@ -90,9 +90,9 @@ func LoadConfigFromFile[T any](
 
 	// Parse YAML into the default config (which will overwrite defaults with file values)
 	config := createDefault()
-	marshaller := yamlmarshaller.YAMLMarshaller[T]{}
+	yamlMarshaller := marshaller.YAMLMarshaller[T]{}
 
-	err = marshaller.Unmarshal(data, &config)
+	err = yamlMarshaller.Unmarshal(data, &config)
 	if err != nil {
 		var zero T
 

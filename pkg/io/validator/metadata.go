@@ -1,22 +1,23 @@
-package metadata
-
-import "github.com/devantler-tech/ksail/v5/pkg/io/validator"
+package validator
 
 // ValidateMetadata validates Kind and APIVersion fields using provided expected values.
+//
+// This helper function validates Kubernetes-style metadata fields that are common
+// across different configuration types (Kind, K3d, Ksail).
 func ValidateMetadata(
 	kind, apiVersion, expectedKind, expectedAPIVersion string,
-	result *validator.ValidationResult,
+	result *ValidationResult,
 ) {
 	// Validate Kind field
 	if kind == "" {
-		result.AddError(validator.ValidationError{
+		result.AddError(ValidationError{
 			Field:         "kind",
 			Message:       "kind is required",
 			ExpectedValue: expectedKind,
 			FixSuggestion: "Set kind to '" + expectedKind + "'",
 		})
 	} else if kind != expectedKind {
-		result.AddError(validator.ValidationError{
+		result.AddError(ValidationError{
 			Field:         "kind",
 			Message:       "kind does not match expected value",
 			CurrentValue:  kind,
@@ -27,14 +28,14 @@ func ValidateMetadata(
 
 	// Validate APIVersion field
 	if apiVersion == "" {
-		result.AddError(validator.ValidationError{
+		result.AddError(ValidationError{
 			Field:         "apiVersion",
 			Message:       "apiVersion is required",
 			ExpectedValue: expectedAPIVersion,
 			FixSuggestion: "Set apiVersion to '" + expectedAPIVersion + "'",
 		})
 	} else if apiVersion != expectedAPIVersion {
-		result.AddError(validator.ValidationError{
+		result.AddError(ValidationError{
 			Field:         "apiVersion",
 			Message:       "apiVersion does not match expected value",
 			CurrentValue:  apiVersion,

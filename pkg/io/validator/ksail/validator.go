@@ -7,7 +7,6 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
 	"github.com/devantler-tech/ksail/v5/pkg/io/validator"
-	"github.com/devantler-tech/ksail/v5/pkg/io/validator/metadata"
 	k3dapi "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	kindv1alpha4 "sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
@@ -67,7 +66,7 @@ func (v *Validator) Validate(config *v1alpha1.Cluster) *validator.ValidationResu
 	}
 
 	// Validate required metadata fields
-	metadata.ValidateMetadata(
+	validator.ValidateMetadata(
 		config.Kind,
 		config.APIVersion,
 		"Cluster",
