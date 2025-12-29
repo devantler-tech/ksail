@@ -1,6 +1,7 @@
 package kindprovisioner_test
 
 import (
+registryutil "github.com/devantler-tech/ksail/v5/pkg/registry"
 	"bytes"
 	"context"
 	"errors"
@@ -12,7 +13,6 @@ import (
 
 	docker "github.com/devantler-tech/ksail/v5/pkg/client/docker"
 	kindprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/kind"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/network"
@@ -219,15 +219,15 @@ func newTwoMirrorKindConfig() *v1alpha4.Cluster {
 	return &v1alpha4.Cluster{ContainerdConfigPatches: []string{patch}}
 }
 
-func newTwoMirrorSpecs() []registry.MirrorSpec {
-	return []registry.MirrorSpec{
+func newTwoMirrorSpecs() []registryutil.MirrorSpec {
+	return []registryutil.MirrorSpec{
 		{Host: "docker.io", Remote: "https://registry-1.docker.io"},
 		{Host: "ghcr.io", Remote: "https://ghcr.io"},
 	}
 }
 
-func newSingleMirrorSpec() []registry.MirrorSpec {
-	return []registry.MirrorSpec{
+func newSingleMirrorSpec() []registryutil.MirrorSpec {
+	return []registryutil.MirrorSpec{
 		{Host: "docker.io", Remote: "https://registry-1.docker.io"},
 	}
 }
@@ -382,7 +382,7 @@ func TestConnectRegistriesToNetwork_NoRegistries(t *testing.T) {
 
 	mockClient, ctx, buf := setupTestEnvironment(t)
 
-	emptySpecs := []registry.MirrorSpec{}
+	emptySpecs := []registryutil.MirrorSpec{}
 
 	err := kindprovisioner.ConnectRegistriesToNetwork(ctx, emptySpecs, mockClient, buf)
 	assert.NoError(t, err)
@@ -404,7 +404,7 @@ func TestCleanupRegistries_NoRegistries(t *testing.T) {
 	mockClient := docker.NewMockAPIClient(t)
 	ctx := context.Background()
 
-	emptySpecs := []registry.MirrorSpec{}
+	emptySpecs := []registryutil.MirrorSpec{}
 
 	err := kindprovisioner.CleanupRegistries(ctx, emptySpecs, "test-cluster", mockClient, false)
 	assert.NoError(t, err)

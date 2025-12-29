@@ -1,6 +1,7 @@
 package kindprovisioner_test
 
 import (
+registryutil "github.com/devantler-tech/ksail/v5/pkg/registry"
 	"bufio"
 	"context"
 	"errors"
@@ -12,7 +13,6 @@ import (
 
 	docker "github.com/devantler-tech/ksail/v5/pkg/client/docker"
 	kindprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/kind"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/stretchr/testify/assert"
@@ -142,7 +142,7 @@ func TestConfigureContainerdRegistryMirrors_EmptyMirrorSpecs(t *testing.T) {
 	err := kindprovisioner.ConfigureContainerdRegistryMirrors(
 		ctx,
 		kindConfig,
-		[]registry.MirrorSpec{},
+		[]registryutil.MirrorSpec{},
 		mockClient,
 		io.Discard,
 	)
@@ -160,7 +160,7 @@ func TestConfigureContainerdRegistryMirrors_NoKindNodes(t *testing.T) {
 		Name: "test-cluster",
 	}
 
-	mirrorSpecs := []registry.MirrorSpec{
+	mirrorSpecs := []registryutil.MirrorSpec{
 		{Host: "docker.io", Remote: "https://registry-1.docker.io"},
 	}
 
@@ -192,7 +192,7 @@ func TestConfigureContainerdRegistryMirrors_ContainerListError(t *testing.T) {
 		Name: "test-cluster",
 	}
 
-	mirrorSpecs := []registry.MirrorSpec{
+	mirrorSpecs := []registryutil.MirrorSpec{
 		{Host: "docker.io", Remote: "https://registry-1.docker.io"},
 	}
 
@@ -235,7 +235,7 @@ func TestConfigureContainerdRegistryMirrors_WithExtraMounts(t *testing.T) {
 		},
 	}
 
-	mirrorSpecs := []registry.MirrorSpec{
+	mirrorSpecs := []registryutil.MirrorSpec{
 		{Host: "docker.io", Remote: "https://registry-1.docker.io"},
 	}
 
@@ -263,7 +263,7 @@ func TestConfigureContainerdRegistryMirrors_SuccessfulInjection(t *testing.T) {
 		Name: "test-cluster",
 	}
 
-	mirrorSpecs := []registry.MirrorSpec{
+	mirrorSpecs := []registryutil.MirrorSpec{
 		{Host: "docker.io", Remote: "https://registry-1.docker.io"},
 	}
 
@@ -320,7 +320,7 @@ func TestConfigureContainerdRegistryMirrors_ExecCreateFailure(t *testing.T) {
 		Name: "test-cluster",
 	}
 
-	mirrorSpecs := []registry.MirrorSpec{
+	mirrorSpecs := []registryutil.MirrorSpec{
 		{Host: "docker.io", Remote: "https://registry-1.docker.io"},
 	}
 
@@ -365,7 +365,7 @@ func TestConfigureContainerdRegistryMirrors_NonZeroExitCode(t *testing.T) {
 		Name: "test-cluster",
 	}
 
-	mirrorSpecs := []registry.MirrorSpec{
+	mirrorSpecs := []registryutil.MirrorSpec{
 		{Host: "docker.io", Remote: "https://registry-1.docker.io"},
 	}
 
