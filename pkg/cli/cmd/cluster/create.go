@@ -4,11 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"sync"
-	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster/components"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/create"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/create/registrystage"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/docker"
@@ -16,14 +15,10 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/notify"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/timer"
-	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/installer"
-	calicoinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/cni/calico"
-	ciliuminstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/cni/cilium"
-	fluxinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/flux"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	"github.com/docker/docker/client"
 	"github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
@@ -33,8 +28,6 @@ import (
 
 const (
 	k3sDisableMetricsServerFlag = "--disable=metrics-server"
-	fluxResourcesActivity       = "applying custom resources"
-	argoCDResourcesActivity     = "configuring argocd resources"
 )
 
 // registryStageInfo contains display information for a registry stage.
@@ -46,9 +39,6 @@ type registryStageInfo struct {
 	success       string
 	failurePrefix string
 }
-
-// ErrUnsupportedCNI is returned when an unsupported CNI type is encountered.
-var ErrUnsupportedCNI = errors.New("unsupported CNI type")
 
 // Test injection for installer factories, docker client invoker, and cluster provisioner factory.
 var (
@@ -335,203 +325,15 @@ func handlePostCreationSetup(
 	tmr timer.Timer,
 	firstActivityShown *bool,
 ) error {
-	switch clusterCfg.Spec.Cluster.CNI {
-	case v1alpha1.CNICilium:
-		err := installCNIOnly(cmd, clusterCfg, tmr, installCiliumCNI, firstActivityShown)
-		if err != nil {
-			return err
-		}
-	case v1alpha1.CNICalico:
-		err := installCNIOnly(cmd, clusterCfg, tmr, installCalicoCNI, firstActivityShown)
-		if err != nil {
-			return err
-		}
-	case v1alpha1.CNIDefault, "":
-		// No custom CNI to install
-	default:
-		return fmt.Errorf("%w: %s", ErrUnsupportedCNI, clusterCfg.Spec.Cluster.CNI)
+	_, err := components.InstallCNI(cmd, clusterCfg, tmr, firstActivityShown)
+	if err != nil {
+		return fmt.Errorf("failed to install CNI: %w", err)
 	}
-
-	return installPostCNIComponentsParallel(cmd, clusterCfg, tmr, firstActivityShown)
-}
-
-func installCNIOnly(
-	cmd *cobra.Command,
-	clusterCfg *v1alpha1.Cluster,
-	tmr timer.Timer,
-	installFunc func(*cobra.Command, *v1alpha1.Cluster, timer.Timer) error,
-	firstActivityShown *bool,
-) error {
-	if *firstActivityShown {
-		_, _ = fmt.Fprintln(cmd.OutOrStdout())
-	}
-
-	*firstActivityShown = true
-
-	tmr.NewStage()
-
-	return installFunc(cmd, clusterCfg, tmr)
-}
-
-// installPostCNIComponentsParallel installs all post-CNI components in parallel.
-//
-//nolint:funlen,cyclop,gocognit // Orchestrates multiple parallel installations with proper error handling
-func installPostCNIComponentsParallel(
-	cmd *cobra.Command,
-	clusterCfg *v1alpha1.Cluster,
-	tmr timer.Timer,
-	firstActivityShown *bool,
-) error {
-	needsMetricsServer := create.NeedsMetricsServerInstall(clusterCfg)
-	needsCSI := clusterCfg.Spec.Cluster.CSI == v1alpha1.CSILocalPathStorage
-	needsCertManager := clusterCfg.Spec.Cluster.CertManager == v1alpha1.CertManagerEnabled
-	needsArgoCD := clusterCfg.Spec.Cluster.GitOpsEngine == v1alpha1.GitOpsEngineArgoCD
-	needsFlux := clusterCfg.Spec.Cluster.GitOpsEngine == v1alpha1.GitOpsEngineFlux
-
-	componentCount := 0
-	if needsMetricsServer {
-		componentCount++
-	}
-
-	if needsCSI {
-		componentCount++
-	}
-
-	if needsCertManager {
-		componentCount++
-	}
-
-	if needsArgoCD {
-		componentCount++
-	}
-
-	if needsFlux {
-		componentCount++
-	}
-
-	if componentCount == 0 {
-		return nil
-	}
-
-	if *firstActivityShown {
-		_, _ = fmt.Fprintln(cmd.OutOrStdout())
-	}
-
-	*firstActivityShown = true
-
-	ctx := cmd.Context()
-	if ctx == nil {
-		ctx = context.Background()
-	}
-
-	var (
-		gitOpsKubeconfig    string
-		gitOpsKubeconfigErr error
-	)
 
 	factories := getInstallerFactories()
+	outputTimer := flags.MaybeTimer(cmd, tmr)
 
-	if needsArgoCD || needsFlux {
-		_, gitOpsKubeconfig, gitOpsKubeconfigErr = factories.HelmClientFactory(clusterCfg)
-		if gitOpsKubeconfigErr != nil {
-			return fmt.Errorf("failed to create helm client for gitops: %w", gitOpsKubeconfigErr)
-		}
-	}
-
-	var tasks []notify.ProgressTask
-
-	if needsMetricsServer {
-		tasks = append(tasks, notify.ProgressTask{
-			Name: "metrics-server",
-			Fn: func(taskCtx context.Context) error {
-				return create.InstallMetricsServerSilent(taskCtx, clusterCfg, factories)
-			},
-		})
-	}
-
-	if needsCSI {
-		tasks = append(tasks, notify.ProgressTask{
-			Name: "csi",
-			Fn: func(taskCtx context.Context) error {
-				return create.InstallCSISilent(taskCtx, clusterCfg, factories)
-			},
-		})
-	}
-
-	if needsCertManager {
-		tasks = append(tasks, notify.ProgressTask{
-			Name: "cert-manager",
-			Fn: func(taskCtx context.Context) error {
-				return create.InstallCertManagerSilent(taskCtx, clusterCfg, factories)
-			},
-		})
-	}
-
-	if needsArgoCD {
-		tasks = append(tasks, notify.ProgressTask{
-			Name: "argocd",
-			Fn: func(taskCtx context.Context) error {
-				return create.InstallArgoCDSilent(taskCtx, clusterCfg, factories)
-			},
-		})
-	}
-
-	if needsFlux {
-		tasks = append(tasks, notify.ProgressTask{
-			Name: "flux",
-			Fn: func(taskCtx context.Context) error {
-				return create.InstallFluxSilent(taskCtx, clusterCfg, factories)
-			},
-		})
-	}
-
-	progressGroup := notify.NewProgressGroup(
-		"Installing components",
-		"📦",
-		cmd.OutOrStdout(),
-		notify.WithLabels(notify.InstallingLabels()),
-		notify.WithTimer(flags.MaybeTimer(cmd, tmr)),
-	)
-
-	executeErr := progressGroup.Run(ctx, tasks...)
-	if executeErr != nil {
-		return fmt.Errorf("failed to execute parallel component installation: %w", executeErr)
-	}
-
-	// Post-install GitOps configuration
-	if needsArgoCD {
-		notify.WriteMessage(notify.Message{
-			Type:    notify.ActivityType,
-			Content: argoCDResourcesActivity,
-			Writer:  cmd.OutOrStdout(),
-		})
-
-		err := factories.EnsureArgoCDResources(ctx, gitOpsKubeconfig, clusterCfg)
-		if err != nil {
-			return fmt.Errorf("failed to configure Argo CD resources: %w", err)
-		}
-
-		notify.WriteMessage(notify.Message{
-			Type:    notify.InfoType,
-			Content: "Access ArgoCD UI at https://localhost:8080 via: kubectl port-forward svc/argocd-server -n argocd 8080:443",
-			Writer:  cmd.OutOrStdout(),
-		})
-	}
-
-	if needsFlux {
-		notify.WriteMessage(notify.Message{
-			Type:    notify.ActivityType,
-			Content: fluxResourcesActivity,
-			Writer:  cmd.OutOrStdout(),
-		})
-
-		err := factories.EnsureFluxResources(ctx, gitOpsKubeconfig, clusterCfg)
-		if err != nil {
-			return fmt.Errorf("failed to configure Flux resources: %w", err)
-		}
-	}
-
-	return nil
+	return components.InstallPostCNIComponents(cmd, clusterCfg, factories, outputTimer, firstActivityShown)
 }
 
 func setupK3dMetricsServer(clusterCfg *v1alpha1.Cluster, k3dConfig *v1alpha5.SimpleConfig) {
@@ -558,146 +360,6 @@ func setupK3dMetricsServer(clusterCfg *v1alpha1.Cluster, k3dConfig *v1alpha5.Sim
 	)
 }
 
-// CNI installation functions
-
-type cniInstaller interface {
-	Install(ctx context.Context) error
-	WaitForReadiness(ctx context.Context) error
-}
-
-// cniSetupResult contains common resources prepared for CNI installation.
-type cniSetupResult struct {
-	helmClient helm.Interface
-	kubeconfig string
-	timeout    time.Duration
-}
-
-// prepareCNISetup shows the CNI title and prepares common resources for installation.
-func prepareCNISetup(
-	cmd *cobra.Command,
-	clusterCfg *v1alpha1.Cluster,
-	cniName string,
-) (*cniSetupResult, error) {
-	notify.WriteMessage(notify.Message{
-		Type:    notify.TitleType,
-		Content: "Install CNI...",
-		Emoji:   "🌐",
-		Writer:  cmd.OutOrStdout(),
-	})
-
-	helmClient, kubeconfig, err := create.HelmClientForCluster(clusterCfg)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create helm client for %s: %w", cniName, err)
-	}
-
-	return &cniSetupResult{
-		helmClient: helmClient,
-		kubeconfig: kubeconfig,
-		timeout:    installer.GetInstallTimeout(clusterCfg),
-	}, nil
-}
-
-func installCiliumCNI(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster, tmr timer.Timer) error {
-	setup, err := prepareCNISetup(cmd, clusterCfg, "Cilium")
-	if err != nil {
-		return err
-	}
-
-	err = setup.helmClient.AddRepository(cmd.Context(), &helm.RepositoryEntry{
-		Name: "cilium",
-		URL:  "https://helm.cilium.io/",
-	})
-	if err != nil {
-		return fmt.Errorf("failed to add Cilium Helm repository: %w", err)
-	}
-
-	var distribution ciliuminstaller.Distribution
-
-	switch clusterCfg.Spec.Cluster.Distribution {
-	case v1alpha1.DistributionTalos:
-		distribution = ciliuminstaller.DistributionTalos
-	case v1alpha1.DistributionKind:
-		distribution = ciliuminstaller.DistributionKind
-	case v1alpha1.DistributionK3d:
-		distribution = ciliuminstaller.DistributionK3d
-	}
-
-	ciliumInst := ciliuminstaller.NewCiliumInstallerWithDistribution(
-		setup.helmClient,
-		setup.kubeconfig,
-		clusterCfg.Spec.Cluster.Connection.Context,
-		setup.timeout,
-		distribution,
-	)
-
-	return runCNIInstallation(cmd, ciliumInst, "cilium", tmr)
-}
-
-func installCalicoCNI(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster, tmr timer.Timer) error {
-	setup, err := prepareCNISetup(cmd, clusterCfg, "Calico")
-	if err != nil {
-		return err
-	}
-
-	var distribution calicoinstaller.Distribution
-
-	switch clusterCfg.Spec.Cluster.Distribution {
-	case v1alpha1.DistributionTalos:
-		distribution = calicoinstaller.DistributionTalos
-	case v1alpha1.DistributionKind:
-		distribution = calicoinstaller.DistributionKind
-	case v1alpha1.DistributionK3d:
-		distribution = calicoinstaller.DistributionK3d
-	}
-
-	calicoInst := calicoinstaller.NewCalicoInstallerWithDistribution(
-		setup.helmClient,
-		setup.kubeconfig,
-		clusterCfg.Spec.Cluster.Connection.Context,
-		setup.timeout,
-		distribution,
-	)
-
-	return runCNIInstallation(cmd, calicoInst, "calico", tmr)
-}
-
-func runCNIInstallation(
-	cmd *cobra.Command,
-	inst cniInstaller,
-	cniName string,
-	tmr timer.Timer,
-) error {
-	notify.WriteMessage(notify.Message{
-		Type:    notify.ActivityType,
-		Content: "installing " + strings.ToLower(cniName),
-		Writer:  cmd.OutOrStdout(),
-	})
-
-	err := inst.Install(cmd.Context())
-	if err != nil {
-		return fmt.Errorf("%s installation failed: %w", cniName, err)
-	}
-
-	notify.WriteMessage(notify.Message{
-		Type:    notify.ActivityType,
-		Content: "awaiting " + strings.ToLower(cniName) + " to be ready",
-		Writer:  cmd.OutOrStdout(),
-	})
-
-	err = inst.WaitForReadiness(cmd.Context())
-	if err != nil {
-		return fmt.Errorf("%s readiness check failed: %w", cniName, err)
-	}
-
-	notify.WriteMessage(notify.Message{
-		Type:    notify.SuccessType,
-		Content: "cni installed",
-		Timer:   flags.MaybeTimer(cmd, tmr),
-		Writer:  cmd.OutOrStdout(),
-	})
-
-	return nil
-}
 
 // Test injection functions
 
