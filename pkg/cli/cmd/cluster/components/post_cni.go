@@ -6,8 +6,8 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/create"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/flags"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/notify"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/timer"
 	"github.com/spf13/cobra"
 )
 
@@ -22,7 +22,7 @@ func InstallPostCNIComponents(
 	cmd *cobra.Command,
 	clusterCfg *v1alpha1.Cluster,
 	factories *create.InstallerFactories,
-	tmr interface{},
+	tmr timer.Timer,
 	firstActivityShown *bool,
 ) error {
 	needsMetricsServer := create.NeedsMetricsServerInstall(clusterCfg)
@@ -92,7 +92,7 @@ func installComponentsInParallel(
 	cmd *cobra.Command,
 	clusterCfg *v1alpha1.Cluster,
 	factories *create.InstallerFactories,
-	tmr interface{},
+	tmr timer.Timer,
 	needsMetricsServer, needsCSI, needsCertManager, needsArgoCD, needsFlux bool,
 ) error {
 	var tasks []notify.ProgressTask
