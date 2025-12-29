@@ -1,0 +1,32 @@
+
+[TestCreate_ArgoCD_PrintsInstallStage - 1]
+🗄️ Create local registry...
+► creating local registry
+
+
+🚀 Create cluster...
+► creating cluster
+✔ cluster created
+
+🔌 Attach local registry...
+► attaching local registry to cluster
+
+📦 Installing components...
+► argocd installing
+✔ argocd installed
+► configuring argocd resources
+ℹ Access ArgoCD UI at https://localhost:8080 via: kubectl port-forward svc/argocd-server -n argocd 8080:443
+
+---
+
+[TestCreate_EnabledCertManager_PrintsInstallStage - 1]
+
+🚀 Create cluster...
+► creating cluster
+✔ cluster created
+
+📦 Installing components...
+► cert-manager installing
+✔ cert-manager installed
+
+---

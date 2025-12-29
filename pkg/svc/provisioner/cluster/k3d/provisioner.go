@@ -11,7 +11,7 @@ import (
 	"strings"
 	"sync"
 
-	runner "github.com/devantler-tech/ksail/v5/pkg/cmd/runner"
+	runner "github.com/devantler-tech/ksail/v5/pkg/cli/runner"
 	clustercommand "github.com/k3d-io/k3d/v5/cmd/cluster"
 	v1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/sirupsen/logrus"

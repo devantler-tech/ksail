@@ -5,7 +5,7 @@
 package configmanager
 
 import (
-	"github.com/devantler-tech/ksail/v5/pkg/ui/timer"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/timer"
 	mock "github.com/stretchr/testify/mock"
 )
 
