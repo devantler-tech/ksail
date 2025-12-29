@@ -50,23 +50,12 @@ type registryStageInfo struct {
 // ErrUnsupportedCNI is returned when an unsupported CNI type is encountered.
 var ErrUnsupportedCNI = errors.New("unsupported CNI type")
 
-// Error variables for factory nil checks.
-var (
-	errCSIInstallerFactoryNil         = errors.New("CSI installer factory is nil")
-	errCertManagerInstallerFactoryNil = errors.New("cert-manager installer factory is nil")
-	errArgoCDInstallerFactoryNil      = errors.New("ArgoCD installer factory is nil")
-)
-
-// Test injection variables and mutexes.
+// Test injection for installer factories, docker client invoker, and cluster provisioner factory.
 var (
 	//nolint:gochecknoglobals // dependency injection for tests
-	certManagerInstallerFactoryMu sync.RWMutex
+	installerFactoriesOverrideMu sync.RWMutex
 	//nolint:gochecknoglobals // dependency injection for tests
-	csiInstallerFactoryMu sync.RWMutex
-	//nolint:gochecknoglobals // dependency injection for tests
-	argocdInstallerFactoryMu sync.RWMutex
-	//nolint:gochecknoglobals // dependency injection for tests
-	ensureArgoCDResourcesMu sync.RWMutex
+	installerFactoriesOverride *create.InstallerFactories
 	//nolint:gochecknoglobals // dependency injection for tests
 	dockerClientInvokerMu sync.RWMutex
 	//nolint:gochecknoglobals // dependency injection for tests
@@ -77,33 +66,16 @@ var (
 	dockerClientInvoker = docker.WithClient
 )
 
-// Installer factory functions that can be overridden in tests.
-var (
-	//nolint:gochecknoglobals // dependency injection for tests
-	certManagerInstallerFactory func(*v1alpha1.Cluster) (installer.Installer, error)
-	//nolint:gochecknoglobals // dependency injection for tests
-	csiInstallerFactory func(*v1alpha1.Cluster) (installer.Installer, error)
-	//nolint:gochecknoglobals // dependency injection for tests
-	argocdInstallerFactory func(*v1alpha1.Cluster) (installer.Installer, error)
-	//nolint:gochecknoglobals // dependency injection for tests
-	ensureArgoCDResourcesFunc = create.EnsureArgoCDResources
-	//nolint:gochecknoglobals // dependency injection for tests
-	ensureFluxResourcesFunc = fluxinstaller.EnsureDefaultResources
-)
+// getInstallerFactories returns the installer factories to use, allowing test override.
+func getInstallerFactories() *create.InstallerFactories {
+	installerFactoriesOverrideMu.RLock()
+	defer installerFactoriesOverrideMu.RUnlock()
 
-// installerFactories holds the shared installer factories for component installation.
-//
-//nolint:gochecknoglobals // Shared state for installer factories
-var installerFactories *create.InstallerFactories
+	if installerFactoriesOverride != nil {
+		return installerFactoriesOverride
+	}
 
-//nolint:gochecknoinits // Package-level initialization for installer factory wiring.
-func init() {
-	installerFactories = create.DefaultInstallerFactories()
-
-	// Wire up the factory functions for backward compatibility
-	certManagerInstallerFactory = installerFactories.CertManager
-	csiInstallerFactory = installerFactories.CSI
-	argocdInstallerFactory = installerFactories.ArgoCD
+	return create.DefaultInstallerFactories()
 }
 
 // newCreateLifecycleConfig creates the lifecycle configuration for cluster creation.
@@ -457,8 +429,10 @@ func installPostCNIComponentsParallel(
 		gitOpsKubeconfigErr error
 	)
 
+	factories := getInstallerFactories()
+
 	if needsArgoCD || needsFlux {
-		_, gitOpsKubeconfig, gitOpsKubeconfigErr = installerFactories.HelmClientFactory(clusterCfg)
+		_, gitOpsKubeconfig, gitOpsKubeconfigErr = factories.HelmClientFactory(clusterCfg)
 		if gitOpsKubeconfigErr != nil {
 			return fmt.Errorf("failed to create helm client for gitops: %w", gitOpsKubeconfigErr)
 		}
@@ -470,7 +444,7 @@ func installPostCNIComponentsParallel(
 		tasks = append(tasks, notify.ProgressTask{
 			Name: "metrics-server",
 			Fn: func(taskCtx context.Context) error {
-				return create.InstallMetricsServerSilent(taskCtx, clusterCfg, installerFactories)
+				return create.InstallMetricsServerSilent(taskCtx, clusterCfg, factories)
 			},
 		})
 	}
@@ -479,22 +453,7 @@ func installPostCNIComponentsParallel(
 		tasks = append(tasks, notify.ProgressTask{
 			Name: "csi",
 			Fn: func(taskCtx context.Context) error {
-				csiInstallerFactoryMu.RLock()
-
-				factory := csiInstallerFactory
-
-				csiInstallerFactoryMu.RUnlock()
-
-				if factory == nil {
-					return errCSIInstallerFactoryNil
-				}
-
-				csiInstaller, err := factory(clusterCfg)
-				if err != nil {
-					return fmt.Errorf("failed to create CSI installer: %w", err)
-				}
-
-				return csiInstaller.Install(taskCtx)
+				return create.InstallCSISilent(taskCtx, clusterCfg, factories)
 			},
 		})
 	}
@@ -503,22 +462,7 @@ func installPostCNIComponentsParallel(
 		tasks = append(tasks, notify.ProgressTask{
 			Name: "cert-manager",
 			Fn: func(taskCtx context.Context) error {
-				certManagerInstallerFactoryMu.RLock()
-
-				factory := certManagerInstallerFactory
-
-				certManagerInstallerFactoryMu.RUnlock()
-
-				if factory == nil {
-					return errCertManagerInstallerFactoryNil
-				}
-
-				cmInstaller, err := factory(clusterCfg)
-				if err != nil {
-					return fmt.Errorf("failed to create cert-manager installer: %w", err)
-				}
-
-				return cmInstaller.Install(taskCtx)
+				return create.InstallCertManagerSilent(taskCtx, clusterCfg, factories)
 			},
 		})
 	}
@@ -527,22 +471,7 @@ func installPostCNIComponentsParallel(
 		tasks = append(tasks, notify.ProgressTask{
 			Name: "argocd",
 			Fn: func(taskCtx context.Context) error {
-				argocdInstallerFactoryMu.RLock()
-
-				factory := argocdInstallerFactory
-
-				argocdInstallerFactoryMu.RUnlock()
-
-				if factory == nil {
-					return errArgoCDInstallerFactoryNil
-				}
-
-				argoInstaller, err := factory(clusterCfg)
-				if err != nil {
-					return fmt.Errorf("failed to create argocd installer: %w", err)
-				}
-
-				return argoInstaller.Install(taskCtx)
+				return create.InstallArgoCDSilent(taskCtx, clusterCfg, factories)
 			},
 		})
 	}
@@ -551,7 +480,7 @@ func installPostCNIComponentsParallel(
 		tasks = append(tasks, notify.ProgressTask{
 			Name: "flux",
 			Fn: func(taskCtx context.Context) error {
-				return create.InstallFluxSilent(taskCtx, clusterCfg, installerFactories)
+				return create.InstallFluxSilent(taskCtx, clusterCfg, factories)
 			},
 		})
 	}
@@ -577,13 +506,7 @@ func installPostCNIComponentsParallel(
 			Writer:  cmd.OutOrStdout(),
 		})
 
-		ensureArgoCDResourcesMu.RLock()
-
-		ensureFn := ensureArgoCDResourcesFunc
-
-		ensureArgoCDResourcesMu.RUnlock()
-
-		err := ensureFn(ctx, gitOpsKubeconfig, clusterCfg)
+		err := factories.EnsureArgoCDResources(ctx, gitOpsKubeconfig, clusterCfg)
 		if err != nil {
 			return fmt.Errorf("failed to configure Argo CD resources: %w", err)
 		}
@@ -602,7 +525,7 @@ func installPostCNIComponentsParallel(
 			Writer:  cmd.OutOrStdout(),
 		})
 
-		err := ensureFluxResourcesFunc(ctx, gitOpsKubeconfig, clusterCfg)
+		err := factories.EnsureFluxResources(ctx, gitOpsKubeconfig, clusterCfg)
 		if err != nil {
 			return fmt.Errorf("failed to configure Flux resources: %w", err)
 		}
@@ -782,19 +705,24 @@ func runCNIInstallation(
 func SetCertManagerInstallerFactoryForTests(
 	factory func(*v1alpha1.Cluster) (installer.Installer, error),
 ) func() {
-	certManagerInstallerFactoryMu.Lock()
+	installerFactoriesOverrideMu.Lock()
 
-	previous := certManagerInstallerFactory
-	certManagerInstallerFactory = factory
+	previous := installerFactoriesOverride
+	override := create.DefaultInstallerFactories()
 
-	certManagerInstallerFactoryMu.Unlock()
+	if previous != nil {
+		*override = *previous
+	}
+
+	override.CertManager = factory
+	installerFactoriesOverride = override
+
+	installerFactoriesOverrideMu.Unlock()
 
 	return func() {
-		certManagerInstallerFactoryMu.Lock()
-
-		certManagerInstallerFactory = previous
-
-		certManagerInstallerFactoryMu.Unlock()
+		installerFactoriesOverrideMu.Lock()
+		installerFactoriesOverride = previous
+		installerFactoriesOverrideMu.Unlock()
 	}
 }
 
@@ -802,19 +730,24 @@ func SetCertManagerInstallerFactoryForTests(
 func SetCSIInstallerFactoryForTests(
 	factory func(*v1alpha1.Cluster) (installer.Installer, error),
 ) func() {
-	csiInstallerFactoryMu.Lock()
+	installerFactoriesOverrideMu.Lock()
 
-	previous := csiInstallerFactory
-	csiInstallerFactory = factory
+	previous := installerFactoriesOverride
+	override := create.DefaultInstallerFactories()
 
-	csiInstallerFactoryMu.Unlock()
+	if previous != nil {
+		*override = *previous
+	}
+
+	override.CSI = factory
+	installerFactoriesOverride = override
+
+	installerFactoriesOverrideMu.Unlock()
 
 	return func() {
-		csiInstallerFactoryMu.Lock()
-
-		csiInstallerFactory = previous
-
-		csiInstallerFactoryMu.Unlock()
+		installerFactoriesOverrideMu.Lock()
+		installerFactoriesOverride = previous
+		installerFactoriesOverrideMu.Unlock()
 	}
 }
 
@@ -822,19 +755,24 @@ func SetCSIInstallerFactoryForTests(
 func SetArgoCDInstallerFactoryForTests(
 	factory func(*v1alpha1.Cluster) (installer.Installer, error),
 ) func() {
-	argocdInstallerFactoryMu.Lock()
+	installerFactoriesOverrideMu.Lock()
 
-	previous := argocdInstallerFactory
-	argocdInstallerFactory = factory
+	previous := installerFactoriesOverride
+	override := create.DefaultInstallerFactories()
 
-	argocdInstallerFactoryMu.Unlock()
+	if previous != nil {
+		*override = *previous
+	}
+
+	override.ArgoCD = factory
+	installerFactoriesOverride = override
+
+	installerFactoriesOverrideMu.Unlock()
 
 	return func() {
-		argocdInstallerFactoryMu.Lock()
-
-		argocdInstallerFactory = previous
-
-		argocdInstallerFactoryMu.Unlock()
+		installerFactoriesOverrideMu.Lock()
+		installerFactoriesOverride = previous
+		installerFactoriesOverrideMu.Unlock()
 	}
 }
 
@@ -842,19 +780,24 @@ func SetArgoCDInstallerFactoryForTests(
 func SetEnsureArgoCDResourcesForTests(
 	fn func(context.Context, string, *v1alpha1.Cluster) error,
 ) func() {
-	ensureArgoCDResourcesMu.Lock()
+	installerFactoriesOverrideMu.Lock()
 
-	previous := ensureArgoCDResourcesFunc
-	ensureArgoCDResourcesFunc = fn
+	previous := installerFactoriesOverride
+	override := create.DefaultInstallerFactories()
 
-	ensureArgoCDResourcesMu.Unlock()
+	if previous != nil {
+		*override = *previous
+	}
+
+	override.EnsureArgoCDResources = fn
+	installerFactoriesOverride = override
+
+	installerFactoriesOverrideMu.Unlock()
 
 	return func() {
-		ensureArgoCDResourcesMu.Lock()
-
-		ensureArgoCDResourcesFunc = previous
-
-		ensureArgoCDResourcesMu.Unlock()
+		installerFactoriesOverrideMu.Lock()
+		installerFactoriesOverride = previous
+		installerFactoriesOverrideMu.Unlock()
 	}
 }
 
