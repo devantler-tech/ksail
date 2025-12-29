@@ -63,8 +63,6 @@ func IsTimingEnabled(cmd *cobra.Command) (bool, error) {
 // MaybeTimer returns the provided timer when timing output is enabled.
 //
 // When timing is disabled (or the flag is unavailable), it returns nil.
-//
-//nolint:ireturn // Returns Timer interface to allow nil return for disabled timing.
 func MaybeTimer(cmd *cobra.Command, tmr timer.Timer) timer.Timer {
 	if cmd == nil || tmr == nil {
 		return nil

@@ -30,7 +30,7 @@ linters:
         path: pkg/client/docker/engine.go
       - linters:
           - ireturn
-        path: pkg/cmd/flags.go
+        path: pkg/cli/helpers/flags.go
       - linters:
           - ireturn
         path: cmd/cluster/list_test.go
