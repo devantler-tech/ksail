@@ -15,7 +15,6 @@ import (
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
-	"github.com/docker/docker/client"
 	"github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/spf13/cobra"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
@@ -24,16 +23,6 @@ import (
 const (
 	k3sDisableMetricsServerFlag = "--disable=metrics-server"
 )
-
-// registryStageInfo contains display information for a registry stage.
-// Used by both local registry and mirror registry stages.
-type registryStageInfo struct {
-	title         string
-	emoji         string
-	activity      string
-	success       string
-	failurePrefix string
-}
 
 // newCreateLifecycleConfig creates the lifecycle configuration for cluster creation.
 func newCreateLifecycleConfig() lifecycle.Config {
@@ -325,68 +314,4 @@ func setupK3dMetricsServer(clusterCfg *v1alpha1.Cluster, k3dConfig *v1alpha5.Sim
 			NodeFilters: []string{"server:*"},
 		},
 	)
-}
-
-// Test injection functions are now in test_injection.go
-
-// runRegistryStage executes a registry stage with proper lifecycle management.
-// Used by local registry and mirror registry stages.
-func runRegistryStage(
-	cmd *cobra.Command,
-	deps lifecycle.Deps,
-	info registryStageInfo,
-	action func(context.Context, client.APIClient) error,
-	firstActivityShown *bool,
-) error {
-	deps.Timer.NewStage()
-
-	if *firstActivityShown {
-		cmd.Println()
-	}
-
-	*firstActivityShown = true
-
-	notify.WriteMessage(notify.Message{
-		Type:    notify.TitleType,
-		Content: info.title,
-		Emoji:   info.emoji,
-		Writer:  cmd.OutOrStdout(),
-	})
-
-	if info.activity != "" {
-		notify.WriteMessage(notify.Message{
-			Type:    notify.ActivityType,
-			Content: info.activity,
-			Writer:  cmd.OutOrStdout(),
-		})
-	}
-
-	dockerClientInvokerMu.RLock()
-
-	invoker := dockerClientInvoker
-
-	dockerClientInvokerMu.RUnlock()
-
-	err := invoker(cmd, func(dockerClient client.APIClient) error {
-		err := action(cmd.Context(), dockerClient)
-		if err != nil {
-			return fmt.Errorf("%s: %w", info.failurePrefix, err)
-		}
-
-		outputTimer := flags.MaybeTimer(cmd, deps.Timer)
-
-		notify.WriteMessage(notify.Message{
-			Type:    notify.SuccessType,
-			Content: info.success,
-			Timer:   outputTimer,
-			Writer:  cmd.OutOrStdout(),
-		})
-
-		return nil
-	})
-	if err != nil {
-		return fmt.Errorf("failed to execute registry stage: %w", err)
-	}
-
-	return nil
 }
