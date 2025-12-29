@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"testing"
 
-	cmdrunner "github.com/devantler-tech/ksail/v5/pkg/cli/runner"
+	cmdrunner "github.com/devantler-tech/ksail/v5/pkg/utils/runner"
 	"github.com/devantler-tech/ksail/v5/pkg/client/docker"
 	kindprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/kind"
 	"github.com/spf13/cobra"

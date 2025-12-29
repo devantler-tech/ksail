@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/notify"
+	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
 )
 
 // Static errors for testing.

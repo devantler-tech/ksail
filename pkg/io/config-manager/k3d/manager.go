@@ -3,7 +3,7 @@ package k3d
 import (
 	"fmt"
 
-	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/timer"
+	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
 	configmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager"
 	"github.com/devantler-tech/ksail/v5/pkg/io/config-manager/helpers"
 	k3dvalidator "github.com/devantler-tech/ksail/v5/pkg/io/validator/k3d"
