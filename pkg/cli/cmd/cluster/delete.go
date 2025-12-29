@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/flags"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/notify"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/timer"
@@ -330,7 +330,7 @@ func executeRegistryCleanup(
 
 	notifyRegistryDeletions(ctx, cmd, registryNames, registryMgr)
 
-	outputTimer := flags.MaybeTimer(cmd, tmr)
+	outputTimer := helpers.MaybeTimer(cmd, tmr)
 
 	notify.WriteMessage(notify.Message{
 		Type:    notify.SuccessType,

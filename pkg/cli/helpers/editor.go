@@ -1,4 +1,4 @@
-package editor
+package helpers
 
 import (
 	"os"
@@ -8,20 +8,20 @@ import (
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
 )
 
-// Resolver handles editor configuration resolution with proper precedence.
-type Resolver struct {
+// EditorResolver handles editor configuration resolution with proper precedence.
+type EditorResolver struct {
 	flagEditor   string
 	configEditor string
 }
 
-// NewResolver creates a new editor resolver.
-func NewResolver(flagEditor string, cfg *v1alpha1.Cluster) *Resolver {
+// NewEditorResolver creates a new editor resolver.
+func NewEditorResolver(flagEditor string, cfg *v1alpha1.Cluster) *EditorResolver {
 	configEditor := ""
 	if cfg != nil {
 		configEditor = cfg.Spec.Editor
 	}
 
-	return &Resolver{
+	return &EditorResolver{
 		flagEditor:   flagEditor,
 		configEditor: configEditor,
 	}
@@ -32,7 +32,7 @@ func NewResolver(flagEditor string, cfg *v1alpha1.Cluster) *Resolver {
 // 2. spec.editor from config
 // 3. Environment variables (SOPS_EDITOR, KUBE_EDITOR, EDITOR, VISUAL)
 // 4. Fallback to vim, nano, vi.
-func (r *Resolver) Resolve() string {
+func (r *EditorResolver) Resolve() string {
 	// Priority 1: --editor flag
 	if r.flagEditor != "" {
 		return r.flagEditor
@@ -77,7 +77,7 @@ func (r *Resolver) Resolve() string {
 
 // SetEnvVars sets the appropriate environment variables for the resolved editor.
 // It returns a cleanup function that restores the original environment.
-func (r *Resolver) SetEnvVars(editorCmd string, forCommand string) func() {
+func (r *EditorResolver) SetEnvVars(editorCmd string, forCommand string) func() {
 	if editorCmd == "" {
 		return func() {}
 	}
@@ -135,9 +135,9 @@ func (r *Resolver) SetEnvVars(editorCmd string, forCommand string) func() {
 	}
 }
 
-// SetupEnv sets up the editor environment variables based on flag and config.
+// SetupEditorEnv sets up the editor environment variables based on flag and config.
 // It returns a cleanup function that should be called to restore the original environment.
-func SetupEnv(editorFlag, forCommand string) func() {
+func SetupEditorEnv(editorFlag, forCommand string) func() {
 	// Try to load config silently (don't error if it fails)
 	var cfg *v1alpha1.Cluster
 
@@ -150,7 +150,7 @@ func SetupEnv(editorFlag, forCommand string) func() {
 	}
 
 	// Create editor resolver
-	resolver := NewResolver(editorFlag, cfg)
+	resolver := NewEditorResolver(editorFlag, cfg)
 
 	// Resolve the editor
 	editorCmd := resolver.Resolve()

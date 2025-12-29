@@ -1,4 +1,4 @@
-package docker
+package helpers
 
 import (
 	"fmt"
@@ -8,13 +8,13 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// WithClient creates a Docker client, executes the given operation function, and ensures cleanup.
+// WithDockerClient creates a Docker client, executes the given operation function, and ensures cleanup.
 // The Docker client is automatically closed after the operation completes, regardless of success or failure.
 //
-// This function is suitable for production use. For testing with mock clients, use WithClientInstance instead.
+// This function is suitable for production use. For testing with mock clients, use WithDockerClientInstance instead.
 //
 // Returns an error if client creation fails or if the operation function returns an error.
-func WithClient(cmd *cobra.Command, operation func(client.APIClient) error) error {
+func WithDockerClient(cmd *cobra.Command, operation func(client.APIClient) error) error {
 	dockerClient, err := client.NewClientWithOpts(
 		client.FromEnv,
 		client.WithAPIVersionNegotiation(),
@@ -23,16 +23,16 @@ func WithClient(cmd *cobra.Command, operation func(client.APIClient) error) erro
 		return fmt.Errorf("failed to create docker client: %w", err)
 	}
 
-	return WithClientInstance(cmd, dockerClient, operation)
+	return WithDockerClientInstance(cmd, dockerClient, operation)
 }
 
-// WithClientInstance executes an operation with a provided Docker client and handles cleanup.
+// WithDockerClientInstance executes an operation with a provided Docker client and handles cleanup.
 // The client will be closed after the operation completes, even if the operation returns an error.
 //
 // This function is particularly useful for testing with mock clients, as it allows you to provide
 // a pre-configured client instance. Any error during client cleanup is logged but does not cause
 // the function to return an error if the operation itself succeeded.
-func WithClientInstance(
+func WithDockerClientInstance(
 	cmd *cobra.Command,
 	dockerClient client.APIClient,
 	operation func(client.APIClient) error,

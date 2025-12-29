@@ -3,7 +3,7 @@ package workload
 import (
 	"os"
 
-	"github.com/devantler-tech/ksail/v5/pkg/cli/kubeconfig"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
 	"github.com/devantler-tech/ksail/v5/pkg/client/kubectl"
 	"github.com/spf13/cobra"
 	"k8s.io/cli-runtime/pkg/genericiooptions"
@@ -12,7 +12,7 @@ import (
 // NewExecCmd creates the workload exec command.
 func NewExecCmd() *cobra.Command {
 	// Try to load config silently to get kubeconfig path
-	kubeconfigPath := kubeconfig.GetPathSilently()
+	kubeconfigPath := helpers.GetKubeconfigPathSilently()
 
 	// Create IO streams for kubectl
 	ioStreams := genericiooptions.IOStreams{
