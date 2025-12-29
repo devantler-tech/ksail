@@ -245,54 +245,42 @@ func runRegistryStage(
 	return nil
 }
 
+// StageParams bundles all parameters needed for registry stage execution.
+// This reduces code duplication between SetupMirrorRegistries and ConnectRegistriesToClusterNetwork.
+type StageParams struct {
+	Cmd                *cobra.Command
+	ClusterCfg         *v1alpha1.Cluster
+	Deps               lifecycle.Deps
+	CfgManager         *ksailconfigmanager.ConfigManager
+	KindConfig         *v1alpha4.Cluster
+	K3dConfig          *v1alpha5.SimpleConfig
+	TalosConfig        *talosconfigmanager.Configs
+	FirstActivityShown *bool
+	DockerInvoker      DockerClientInvoker
+}
+
 // SetupMirrorRegistries configures mirror registries before cluster creation.
-func SetupMirrorRegistries(
-	cmd *cobra.Command,
-	clusterCfg *v1alpha1.Cluster,
-	deps lifecycle.Deps,
-	cfgManager *ksailconfigmanager.ConfigManager,
-	kindConfig *v1alpha4.Cluster,
-	k3dConfig *v1alpha5.SimpleConfig,
-	talosConfig *talosconfigmanager.Configs,
-	firstActivityShown *bool,
-	dockerInvoker DockerClientInvoker,
-) error {
-	return RunStage(
-		cmd,
-		clusterCfg,
-		deps,
-		cfgManager,
-		kindConfig,
-		k3dConfig,
-		talosConfig,
-		RoleMirror,
-		firstActivityShown,
-		dockerInvoker,
-	)
+func SetupMirrorRegistries(params StageParams) error {
+	return runStageWithParams(params, RoleMirror)
 }
 
 // ConnectRegistriesToClusterNetwork attaches mirror registries to the cluster network after creation.
-func ConnectRegistriesToClusterNetwork(
-	cmd *cobra.Command,
-	clusterCfg *v1alpha1.Cluster,
-	deps lifecycle.Deps,
-	cfgManager *ksailconfigmanager.ConfigManager,
-	kindConfig *v1alpha4.Cluster,
-	k3dConfig *v1alpha5.SimpleConfig,
-	talosConfig *talosconfigmanager.Configs,
-	firstActivityShown *bool,
-	dockerInvoker DockerClientInvoker,
-) error {
+func ConnectRegistriesToClusterNetwork(params StageParams) error {
+	return runStageWithParams(params, RoleConnect)
+}
+
+// runStageWithParams is the shared implementation for registry stage execution.
+func runStageWithParams(params StageParams, role Role) error {
 	return RunStage(
-		cmd,
-		clusterCfg,
-		deps,
-		cfgManager,
-		kindConfig,
-		k3dConfig,
-		talosConfig,
-		RoleConnect,
-		firstActivityShown,
-		dockerInvoker,
+		params.Cmd,
+		params.ClusterCfg,
+		params.Deps,
+		params.CfgManager,
+		params.KindConfig,
+		params.K3dConfig,
+		params.TalosConfig,
+		role,
+		params.FirstActivityShown,
+		params.DockerInvoker,
 	)
 }

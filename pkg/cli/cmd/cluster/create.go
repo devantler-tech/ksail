@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/create"
@@ -279,17 +280,17 @@ func ensureLocalRegistriesReady(
 
 	dockerClientInvokerMu.RUnlock()
 
-	err = registrystage.SetupMirrorRegistries(
-		cmd,
-		clusterCfg,
-		deps,
-		cfgManager,
-		kindConfig,
-		k3dConfig,
-		talosConfig,
-		firstActivityShown,
-		invoker,
-	)
+	err = registrystage.SetupMirrorRegistries(registrystage.StageParams{
+		Cmd:                cmd,
+		ClusterCfg:         clusterCfg,
+		Deps:               deps,
+		CfgManager:         cfgManager,
+		KindConfig:         kindConfig,
+		K3dConfig:          k3dConfig,
+		TalosConfig:        talosConfig,
+		FirstActivityShown: firstActivityShown,
+		DockerInvoker:      invoker,
+	})
 	if err != nil {
 		return fmt.Errorf("failed to setup mirror registries: %w", err)
 	}
@@ -335,17 +336,17 @@ func connectMirrorRegistriesWithWarning(
 
 	dockerClientInvokerMu.RUnlock()
 
-	err := registrystage.ConnectRegistriesToClusterNetwork(
-		cmd,
-		clusterCfg,
-		deps,
-		cfgManager,
-		kindConfig,
-		k3dConfig,
-		talosConfig,
-		firstActivityShown,
-		invoker,
-	)
+	err := registrystage.ConnectRegistriesToClusterNetwork(registrystage.StageParams{
+		Cmd:                cmd,
+		ClusterCfg:         clusterCfg,
+		Deps:               deps,
+		CfgManager:         cfgManager,
+		KindConfig:         kindConfig,
+		K3dConfig:          k3dConfig,
+		TalosConfig:        talosConfig,
+		FirstActivityShown: firstActivityShown,
+		DockerInvoker:      invoker,
+	})
 	if err != nil {
 		notify.WriteMessage(notify.Message{
 			Type:    notify.WarningType,
@@ -641,7 +642,19 @@ type cniInstaller interface {
 	WaitForReadiness(ctx context.Context) error
 }
 
-func installCiliumCNI(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster, tmr timer.Timer) error {
+// cniSetupResult contains common resources prepared for CNI installation.
+type cniSetupResult struct {
+	helmClient helm.Interface
+	kubeconfig string
+	timeout    time.Duration
+}
+
+// prepareCNISetup shows the CNI title and prepares common resources for installation.
+func prepareCNISetup(
+	cmd *cobra.Command,
+	clusterCfg *v1alpha1.Cluster,
+	cniName string,
+) (*cniSetupResult, error) {
 	notify.WriteMessage(notify.Message{
 		Type:    notify.TitleType,
 		Content: "Install CNI...",
@@ -651,18 +664,29 @@ func installCiliumCNI(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster, tmr time
 
 	helmClient, kubeconfig, err := create.HelmClientForCluster(clusterCfg)
 	if err != nil {
-		return fmt.Errorf("failed to create helm client for Cilium: %w", err)
+		return nil, fmt.Errorf("failed to create helm client for %s: %w", cniName, err)
 	}
 
-	err = helmClient.AddRepository(cmd.Context(), &helm.RepositoryEntry{
+	return &cniSetupResult{
+		helmClient: helmClient,
+		kubeconfig: kubeconfig,
+		timeout:    installer.GetInstallTimeout(clusterCfg),
+	}, nil
+}
+
+func installCiliumCNI(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster, tmr timer.Timer) error {
+	setup, err := prepareCNISetup(cmd, clusterCfg, "Cilium")
+	if err != nil {
+		return err
+	}
+
+	err = setup.helmClient.AddRepository(cmd.Context(), &helm.RepositoryEntry{
 		Name: "cilium",
 		URL:  "https://helm.cilium.io/",
 	})
 	if err != nil {
 		return fmt.Errorf("failed to add Cilium Helm repository: %w", err)
 	}
-
-	timeout := installer.GetInstallTimeout(clusterCfg)
 
 	var distribution ciliuminstaller.Distribution
 
@@ -676,26 +700,21 @@ func installCiliumCNI(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster, tmr time
 	}
 
 	ciliumInst := ciliuminstaller.NewCiliumInstallerWithDistribution(
-		helmClient, kubeconfig, clusterCfg.Spec.Cluster.Connection.Context, timeout, distribution,
+		setup.helmClient,
+		setup.kubeconfig,
+		clusterCfg.Spec.Cluster.Connection.Context,
+		setup.timeout,
+		distribution,
 	)
 
 	return runCNIInstallation(cmd, ciliumInst, "cilium", tmr)
 }
 
 func installCalicoCNI(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster, tmr timer.Timer) error {
-	notify.WriteMessage(notify.Message{
-		Type:    notify.TitleType,
-		Content: "Install CNI...",
-		Emoji:   "🌐",
-		Writer:  cmd.OutOrStdout(),
-	})
-
-	helmClient, kubeconfig, err := create.HelmClientForCluster(clusterCfg)
+	setup, err := prepareCNISetup(cmd, clusterCfg, "Calico")
 	if err != nil {
-		return fmt.Errorf("failed to create helm client for Calico: %w", err)
+		return err
 	}
-
-	timeout := installer.GetInstallTimeout(clusterCfg)
 
 	var distribution calicoinstaller.Distribution
 
@@ -709,7 +728,11 @@ func installCalicoCNI(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster, tmr time
 	}
 
 	calicoInst := calicoinstaller.NewCalicoInstallerWithDistribution(
-		helmClient, kubeconfig, clusterCfg.Spec.Cluster.Connection.Context, timeout, distribution,
+		setup.helmClient,
+		setup.kubeconfig,
+		clusterCfg.Spec.Cluster.Connection.Context,
+		setup.timeout,
+		distribution,
 	)
 
 	return runCNIInstallation(cmd, calicoInst, "calico", tmr)
