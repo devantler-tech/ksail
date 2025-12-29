@@ -360,13 +360,10 @@ func setupK3dMetricsServer(clusterCfg *v1alpha1.Cluster, k3dConfig *v1alpha5.Sim
 	)
 }
 
-
 // Test injection functions
 
-// SetCertManagerInstallerFactoryForTests overrides the cert-manager installer factory.
-func SetCertManagerInstallerFactoryForTests(
-	factory func(*v1alpha1.Cluster) (installer.Installer, error),
-) func() {
+// overrideInstallerFactory is a helper that applies a factory override and returns a restore function.
+func overrideInstallerFactory(apply func(*create.InstallerFactories)) func() {
 	installerFactoriesOverrideMu.Lock()
 
 	previous := installerFactoriesOverride
@@ -376,7 +373,7 @@ func SetCertManagerInstallerFactoryForTests(
 		*override = *previous
 	}
 
-	override.CertManager = factory
+	apply(override)
 	installerFactoriesOverride = override
 
 	installerFactoriesOverrideMu.Unlock()
@@ -386,81 +383,42 @@ func SetCertManagerInstallerFactoryForTests(
 		installerFactoriesOverride = previous
 		installerFactoriesOverrideMu.Unlock()
 	}
+}
+
+// SetCertManagerInstallerFactoryForTests overrides the cert-manager installer factory.
+func SetCertManagerInstallerFactoryForTests(
+	factory func(*v1alpha1.Cluster) (installer.Installer, error),
+) func() {
+	return overrideInstallerFactory(func(f *create.InstallerFactories) {
+		f.CertManager = factory
+	})
 }
 
 // SetCSIInstallerFactoryForTests overrides the CSI installer factory.
 func SetCSIInstallerFactoryForTests(
 	factory func(*v1alpha1.Cluster) (installer.Installer, error),
 ) func() {
-	installerFactoriesOverrideMu.Lock()
-
-	previous := installerFactoriesOverride
-	override := create.DefaultInstallerFactories()
-
-	if previous != nil {
-		*override = *previous
-	}
-
-	override.CSI = factory
-	installerFactoriesOverride = override
-
-	installerFactoriesOverrideMu.Unlock()
-
-	return func() {
-		installerFactoriesOverrideMu.Lock()
-		installerFactoriesOverride = previous
-		installerFactoriesOverrideMu.Unlock()
-	}
+	return overrideInstallerFactory(func(f *create.InstallerFactories) {
+		f.CSI = factory
+	})
 }
 
 // SetArgoCDInstallerFactoryForTests overrides the Argo CD installer factory.
 func SetArgoCDInstallerFactoryForTests(
 	factory func(*v1alpha1.Cluster) (installer.Installer, error),
 ) func() {
-	installerFactoriesOverrideMu.Lock()
-
-	previous := installerFactoriesOverride
-	override := create.DefaultInstallerFactories()
-
-	if previous != nil {
-		*override = *previous
-	}
-
-	override.ArgoCD = factory
-	installerFactoriesOverride = override
-
-	installerFactoriesOverrideMu.Unlock()
-
-	return func() {
-		installerFactoriesOverrideMu.Lock()
-		installerFactoriesOverride = previous
-		installerFactoriesOverrideMu.Unlock()
-	}
+	return overrideInstallerFactory(func(f *create.InstallerFactories) {
+		f.ArgoCD = factory
+	})
 }
 
 // SetEnsureArgoCDResourcesForTests overrides the Argo CD resource ensure function.
 func SetEnsureArgoCDResourcesForTests(
 	fn func(context.Context, string, *v1alpha1.Cluster) error,
 ) func() {
-	installerFactoriesOverrideMu.Lock()
-
-	previous := installerFactoriesOverride
-	override := create.DefaultInstallerFactories()
-
-	if previous != nil {
-		*override = *previous
-	}
-
-	override.EnsureArgoCDResources = fn
-	installerFactoriesOverride = override
-
-	installerFactoriesOverrideMu.Unlock()
-
-	return func() {
-		installerFactoriesOverrideMu.Lock()
-		installerFactoriesOverride = previous
-		installerFactoriesOverrideMu.Unlock()
-	}
+	return overrideInstallerFactory(func(f *create.InstallerFactories) {
+		f.EnsureArgoCDResources = fn
+	})
 }
 
 // SetDockerClientInvokerForTests overrides the Docker client invoker for testing.
