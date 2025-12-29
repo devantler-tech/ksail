@@ -8,8 +8,8 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/notify"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/timer"
+	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
+	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	configmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"

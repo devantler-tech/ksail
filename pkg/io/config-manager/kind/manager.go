@@ -3,7 +3,7 @@ package kind
 import (
 	"fmt"
 
-	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/timer"
+	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
 	configmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager"
 	"github.com/devantler-tech/ksail/v5/pkg/io/config-manager/helpers"
 	kindvalidator "github.com/devantler-tech/ksail/v5/pkg/io/validator/kind"

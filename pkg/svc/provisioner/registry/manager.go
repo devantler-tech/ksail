@@ -9,7 +9,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/notify"
+	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
 	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
 	ksailio "github.com/devantler-tech/ksail/v5/pkg/io"
 	"github.com/docker/docker/api/types/network"

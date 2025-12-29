@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/notify"
+	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
 	"github.com/devantler-tech/ksail/v5/pkg/io/detector"
 	"github.com/devantler-tech/ksail/v5/pkg/io/generator"
 	argocdgenerator "github.com/devantler-tech/ksail/v5/pkg/io/generator/argocd"

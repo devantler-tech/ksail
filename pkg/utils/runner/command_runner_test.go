@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/devantler-tech/ksail/v5/pkg/cli/runner"
+	"github.com/devantler-tech/ksail/v5/pkg/utils/runner"
 	"github.com/spf13/cobra"
 )
 

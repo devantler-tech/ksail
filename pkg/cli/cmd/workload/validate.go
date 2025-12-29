@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/notify"
+	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
 	"github.com/devantler-tech/ksail/v5/pkg/client/kubeconform"
 	"github.com/devantler-tech/ksail/v5/pkg/client/kustomize"
 	"github.com/spf13/cobra"
