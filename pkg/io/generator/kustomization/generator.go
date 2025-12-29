@@ -7,7 +7,6 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/io"
 	yamlgenerator "github.com/devantler-tech/ksail/v5/pkg/io/generator/yaml"
 	"github.com/devantler-tech/ksail/v5/pkg/io/marshaller"
-	yamlmarshaller "github.com/devantler-tech/ksail/v5/pkg/io/marshaller/yaml"
 	ktypes "sigs.k8s.io/kustomize/api/types"
 )
 
