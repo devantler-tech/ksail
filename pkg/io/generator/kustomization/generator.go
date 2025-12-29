@@ -18,7 +18,7 @@ type KustomizationGenerator struct {
 
 // NewKustomizationGenerator creates and returns a new KustomizationGenerator instance.
 func NewKustomizationGenerator() *KustomizationGenerator {
-	m := yamlmarshaller.NewMarshaller[*ktypes.Kustomization]()
+	m := marshaller.NewYAMLMarshaller[*ktypes.Kustomization]()
 
 	return &KustomizationGenerator{
 		Marshaller: m,

@@ -1,17 +1,16 @@
-package yamlmarshaller
+package marshaller
 
 import (
 	"fmt"
 
-	"github.com/devantler-tech/ksail/v5/pkg/io/marshaller"
 	"sigs.k8s.io/yaml"
 )
 
 // YAMLMarshaller marshals/unmarshals YAML documents for a model type.
 type YAMLMarshaller[T any] struct{}
 
-// NewMarshaller creates a new YAMLMarshaller instance implementing Marshaller.
-func NewMarshaller[T any]() marshaller.Marshaller[T] {
+// NewYAMLMarshaller creates a new YAMLMarshaller instance implementing Marshaller.
+func NewYAMLMarshaller[T any]() Marshaller[T] {
 	return &YAMLMarshaller[T]{}
 }
 

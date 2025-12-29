@@ -6,7 +6,6 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/io"
 	yamlgenerator "github.com/devantler-tech/ksail/v5/pkg/io/generator/yaml"
 	"github.com/devantler-tech/ksail/v5/pkg/io/marshaller"
-	yamlmarshaller "github.com/devantler-tech/ksail/v5/pkg/io/marshaller/yaml"
 	v1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 )
 
@@ -17,7 +16,7 @@ type K3dGenerator struct {
 
 // NewK3dGenerator creates and returns a new K3dGenerator instance.
 func NewK3dGenerator() *K3dGenerator {
-	m := yamlmarshaller.NewMarshaller[*v1alpha5.SimpleConfig]()
+	m := marshaller.NewYAMLMarshaller[*v1alpha5.SimpleConfig]()
 
 	return &K3dGenerator{
 		Marshaller: m,

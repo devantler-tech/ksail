@@ -8,7 +8,6 @@
 //   - Marshal: Serialize model to string
 //   - Unmarshal: Deserialize from bytes to model
 //   - UnmarshalString: Deserialize from string to model
-//
-// Subpackages:
-//   - yaml: YAML marshaller implementation
+//   - YAMLMarshaller[T]: YAML marshaller implementation
+//   - NewYAMLMarshaller[T]: Factory for creating YAML marshallers
 package marshaller

@@ -6,7 +6,6 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/io"
 	yamlgenerator "github.com/devantler-tech/ksail/v5/pkg/io/generator/yaml"
 	"github.com/devantler-tech/ksail/v5/pkg/io/marshaller"
-	yamlmarshaller "github.com/devantler-tech/ksail/v5/pkg/io/marshaller/yaml"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
 
@@ -17,7 +16,7 @@ type KindGenerator struct {
 
 // NewKindGenerator creates and returns a new KindGenerator instance.
 func NewKindGenerator() *KindGenerator {
-	m := yamlmarshaller.NewMarshaller[*v1alpha4.Cluster]()
+	m := marshaller.NewYAMLMarshaller[*v1alpha4.Cluster]()
 
 	return &KindGenerator{
 		Marshaller: m,

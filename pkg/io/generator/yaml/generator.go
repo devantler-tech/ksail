@@ -5,7 +5,6 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/io"
 	"github.com/devantler-tech/ksail/v5/pkg/io/marshaller"
-	yamlmarshaller "github.com/devantler-tech/ksail/v5/pkg/io/marshaller/yaml"
 )
 
 // Options defines options for YAML generators when emitting files.
@@ -21,7 +20,7 @@ type YAMLGenerator[T any] struct {
 
 // NewYAMLGenerator creates a new YAMLGenerator instance.
 func NewYAMLGenerator[T any]() *YAMLGenerator[T] {
-	m := yamlmarshaller.NewMarshaller[T]()
+	m := marshaller.NewYAMLMarshaller[T]()
 
 	return &YAMLGenerator[T]{
 		Marshaller: m,
