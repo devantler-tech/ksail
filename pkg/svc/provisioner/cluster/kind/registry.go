@@ -9,6 +9,8 @@ import (
 	"io"
 	"strings"
 
+	registryutil "github.com/devantler-tech/ksail/v5/pkg/registry"
+
 	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	"github.com/docker/docker/api/types/container"
@@ -35,7 +37,7 @@ const randomDelimiterBytes = 8
 func ConfigureContainerdRegistryMirrors(
 	ctx context.Context,
 	kindConfig *v1alpha4.Cluster,
-	mirrorSpecs []registry.MirrorSpec,
+	mirrorSpecs []registryutil.MirrorSpec,
 	dockerClient client.APIClient,
 	_ io.Writer,
 ) error {
@@ -56,16 +58,16 @@ func ConfigureContainerdRegistryMirrors(
 // It filters out entries that already have extraMounts configured in the Kind config.
 func getEntriesToInject(
 	kindConfig *v1alpha4.Cluster,
-	mirrorSpecs []registry.MirrorSpec,
-) []registry.MirrorEntry {
+	mirrorSpecs []registryutil.MirrorSpec,
+) []registryutil.MirrorEntry {
 	if len(mirrorSpecs) == 0 {
 		return nil
 	}
 
 	mountedHosts := buildMountedHostsSet(kindConfig)
-	entries := registry.BuildMirrorEntries(mirrorSpecs, "", nil, nil, nil)
+	entries := registryutil.BuildMirrorEntries(mirrorSpecs, "", nil, nil, nil)
 
-	var entriesToInject []registry.MirrorEntry
+	var entriesToInject []registryutil.MirrorEntry
 
 	for _, entry := range entries {
 		if !mountedHosts[entry.Host] {
@@ -104,10 +106,10 @@ func injectHostsTomlIntoNodes(
 	ctx context.Context,
 	dockerClient client.APIClient,
 	nodes []string,
-	entries []registry.MirrorEntry,
+	entries []registryutil.MirrorEntry,
 ) error {
 	for _, entry := range entries {
-		hostsTomlContent := registry.GenerateHostsToml(entry)
+		hostsTomlContent := registryutil.GenerateHostsToml(entry)
 
 		for _, node := range nodes {
 			err := injectHostsToml(ctx, dockerClient, node, entry.Host, hostsTomlContent)
@@ -282,14 +284,14 @@ func EscapeShellArg(arg string) string {
 // for Kind registry operations. Returns nil manager if mirrorSpecs is empty.
 func prepareKindRegistryManager(
 	ctx context.Context,
-	mirrorSpecs []registry.MirrorSpec,
+	mirrorSpecs []registryutil.MirrorSpec,
 	dockerClient client.APIClient,
 ) (*dockerclient.RegistryManager, []registry.Info, error) {
 	if len(mirrorSpecs) == 0 {
 		return nil, nil, nil
 	}
 
-	upstreams := registry.BuildUpstreamLookup(mirrorSpecs)
+	upstreams := registryutil.BuildUpstreamLookup(mirrorSpecs)
 
 	registryMgr, infos, err := registry.PrepareRegistryManager(
 		ctx,
@@ -315,7 +317,7 @@ func SetupRegistries(
 	_ *v1alpha4.Cluster,
 	clusterName string,
 	dockerClient client.APIClient,
-	mirrorSpecs []registry.MirrorSpec,
+	mirrorSpecs []registryutil.MirrorSpec,
 	writer io.Writer,
 ) error {
 	registryMgr, registriesInfo, err := prepareKindRegistryManager(ctx, mirrorSpecs, dockerClient)
@@ -346,7 +348,7 @@ func SetupRegistries(
 // This should be called after the Kind cluster is created and the "kind" network exists.
 func ConnectRegistriesToNetwork(
 	ctx context.Context,
-	mirrorSpecs []registry.MirrorSpec,
+	mirrorSpecs []registryutil.MirrorSpec,
 	dockerClient client.APIClient,
 	writer io.Writer,
 ) error {
@@ -376,7 +378,7 @@ func ConnectRegistriesToNetwork(
 // CleanupRegistries removes registries that are no longer in use.
 func CleanupRegistries(
 	ctx context.Context,
-	mirrorSpecs []registry.MirrorSpec,
+	mirrorSpecs []registryutil.MirrorSpec,
 	clusterName string,
 	dockerClient client.APIClient,
 	deleteVolumes bool,

@@ -4,13 +4,15 @@ import (
 	"context"
 	"fmt"
 
+	registryutil "github.com/devantler-tech/ksail/v5/pkg/registry"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
+
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
+	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
 	"github.com/docker/docker/client"
 	"github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/spf13/cobra"
@@ -60,7 +62,7 @@ func RunStage(
 	dockerInvoker DockerClientInvoker,
 ) error {
 	// Get mirror specs from --mirror-registry flag
-	flagSpecs := registry.ParseMirrorSpecs(
+	flagSpecs := registryutil.ParseMirrorSpecs(
 		cfgManager.Viper.GetStringSlice("mirror-registry"),
 	)
 
@@ -88,7 +90,7 @@ func RunStage(
 			}
 
 			if !found {
-				existingSpecs = append(existingSpecs, registry.MirrorSpec{
+				existingSpecs = append(existingSpecs, registryutil.MirrorSpec{
 					Host:   host,
 					Remote: registry.GenerateUpstreamURL(host),
 				})
@@ -97,7 +99,7 @@ func RunStage(
 	}
 
 	// Merge specs: flag specs override existing specs for the same host
-	mirrorSpecs := registry.MergeSpecs(existingSpecs, flagSpecs)
+	mirrorSpecs := registryutil.MergeSpecs(existingSpecs, flagSpecs)
 
 	definition, definitionExists := StageDefinitions[role]
 	if !definitionExists {
@@ -147,7 +149,7 @@ func newRegistryHandlers(
 	kindConfig *v1alpha4.Cluster,
 	k3dConfig *v1alpha5.SimpleConfig,
 	talosConfig *talosconfigmanager.Configs,
-	mirrorSpecs []registry.MirrorSpec,
+	mirrorSpecs []registryutil.MirrorSpec,
 	kindAction func(context.Context, client.APIClient) error,
 	k3dAction func(context.Context, client.APIClient) error,
 	talosAction func(context.Context, client.APIClient) error,

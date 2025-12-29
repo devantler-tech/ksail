@@ -366,45 +366,6 @@ func AllocatePort(nextPort *int, usedPorts map[int]struct{}) int {
 	}
 }
 
-// BuildRegistryInfosFromSpecs builds registry Info structs from mirror specs directly.
-// This is used when provisioners need Info structs for SetupRegistries/CleanupRegistries.
-// The upstreams map provides optional overrides for upstream URLs per host.
-func BuildRegistryInfosFromSpecs(
-	mirrorSpecs []MirrorSpec,
-	upstreams map[string]string,
-	baseUsedPorts map[int]struct{},
-) []Info {
-	registryInfos := make([]Info, 0, len(mirrorSpecs))
-
-	usedPorts, nextPort := InitPortAllocation(baseUsedPorts)
-
-	for _, spec := range mirrorSpecs {
-		host := strings.TrimSpace(spec.Host)
-		if host == "" {
-			continue
-		}
-
-		// Build endpoint for this host
-		port := AllocatePort(&nextPort, usedPorts)
-		endpoint := "http://" + net.JoinHostPort(host, strconv.Itoa(port))
-
-		// Get upstream URL
-		upstream := spec.Remote
-		if upstream == "" {
-			upstream = GenerateUpstreamURL(host)
-		}
-
-		if upstreams != nil && upstreams[host] != "" {
-			upstream = upstreams[host]
-		}
-
-		info := BuildRegistryInfo(host, []string{endpoint}, port, "", upstream)
-		registryInfos = append(registryInfos, info)
-	}
-
-	return registryInfos
-}
-
 // GenerateHostsToml generates a hosts.toml file content for containerd registry configuration.
 // This uses the modern hosts directory pattern as documented at:
 // https://gardener.cloud/docs/gardener/advanced/containerd-registry-configuration/#hosts-directory-pattern

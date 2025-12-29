@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"io"
 
+	registryutil "github.com/devantler-tech/ksail/v5/pkg/registry"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
+
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	"github.com/docker/docker/client"
 )
 
@@ -45,7 +47,7 @@ func runTalosMirrorAction(
 	writer := ctx.Cmd.OutOrStdout()
 
 	// Build registry infos from mirror specs
-	upstreams := registry.BuildUpstreamLookup(ctx.MirrorSpecs)
+	upstreams := registryutil.BuildUpstreamLookup(ctx.MirrorSpecs)
 	registryInfos := registry.BuildRegistryInfosFromSpecs(ctx.MirrorSpecs, upstreams, nil)
 
 	if len(registryInfos) == 0 {
@@ -138,7 +140,7 @@ func SetupTalosMirrorRegistries(
 func PrepareTalosConfigWithMirrors(
 	clusterCfg *v1alpha1.Cluster,
 	talosConfig *talosconfigmanager.Configs,
-	mirrorSpecs []registry.MirrorSpec,
+	mirrorSpecs []registryutil.MirrorSpec,
 ) bool {
 	if clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionTalos {
 		return false

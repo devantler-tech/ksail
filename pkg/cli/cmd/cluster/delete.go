@@ -1,14 +1,13 @@
 package cluster
 
 import (
+registryutil "github.com/devantler-tech/ksail/v5/pkg/registry"
 	"context"
 	"fmt"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
 	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
@@ -17,6 +16,8 @@ import (
 	k3dprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/k3d"
 	kindprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/kind"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
+	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
+	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
 	"github.com/docker/docker/client"
 	"github.com/spf13/cobra"
 )
@@ -184,9 +185,9 @@ func cleanupMirrorRegistries(
 func collectMirrorSpecs(
 	cfgManager *ksailconfigmanager.ConfigManager,
 	mirrorsDir string,
-) ([]registry.MirrorSpec, []string, error) {
+) ([]registryutil.MirrorSpec, []string, error) {
 	// Get mirror registry specs from command line flag
-	flagSpecs := registry.ParseMirrorSpecs(cfgManager.Viper.GetStringSlice("mirror-registry"))
+	flagSpecs := registryutil.ParseMirrorSpecs(cfgManager.Viper.GetStringSlice("mirror-registry"))
 
 	// Try to read existing hosts.toml files.
 	existingSpecs, err := registry.ReadExistingHostsToml(mirrorsDir)
@@ -195,7 +196,7 @@ func collectMirrorSpecs(
 	}
 
 	// Merge specs: flag specs override existing specs
-	mirrorSpecs := registry.MergeSpecs(existingSpecs, flagSpecs)
+	mirrorSpecs := registryutil.MergeSpecs(existingSpecs, flagSpecs)
 
 	return buildMirrorSpecsResult(mirrorSpecs)
 }
@@ -420,17 +421,17 @@ func cleanupTalosMirrorRegistries(
 // mirror-registries.yaml patches that were applied during cluster creation.
 func collectTalosMirrorSpecs(
 	cfgManager *ksailconfigmanager.ConfigManager,
-) ([]registry.MirrorSpec, []string) {
+) ([]registryutil.MirrorSpec, []string) {
 	// Get mirror registry specs from command line flag
-	flagSpecs := registry.ParseMirrorSpecs(cfgManager.Viper.GetStringSlice("mirror-registry"))
+	flagSpecs := registryutil.ParseMirrorSpecs(cfgManager.Viper.GetStringSlice("mirror-registry"))
 
 	// Extract mirror hosts from the loaded Talos config
-	var talosSpecs []registry.MirrorSpec
+	var talosSpecs []registryutil.MirrorSpec
 
 	if cfgManager.DistributionConfig != nil && cfgManager.DistributionConfig.Talos != nil {
 		talosHosts := cfgManager.DistributionConfig.Talos.ExtractMirrorHosts()
 		for _, host := range talosHosts {
-			talosSpecs = append(talosSpecs, registry.MirrorSpec{
+			talosSpecs = append(talosSpecs, registryutil.MirrorSpec{
 				Host:   host,
 				Remote: registry.GenerateUpstreamURL(host),
 			})
@@ -438,7 +439,7 @@ func collectTalosMirrorSpecs(
 	}
 
 	// Merge specs: flag specs override Talos config specs for the same host
-	mirrorSpecs := registry.MergeSpecs(talosSpecs, flagSpecs)
+	mirrorSpecs := registryutil.MergeSpecs(talosSpecs, flagSpecs)
 
 	specs, names, _ := buildMirrorSpecsResult(mirrorSpecs)
 
@@ -448,14 +449,14 @@ func collectTalosMirrorSpecs(
 // buildMirrorSpecsResult builds the registry names from mirror specs.
 // This is a shared helper used by collectMirrorSpecs.
 func buildMirrorSpecsResult(
-	mirrorSpecs []registry.MirrorSpec,
-) ([]registry.MirrorSpec, []string, error) {
+	mirrorSpecs []registryutil.MirrorSpec,
+) ([]registryutil.MirrorSpec, []string, error) {
 	if len(mirrorSpecs) == 0 {
 		return nil, nil, nil
 	}
 
 	// Build registry info to get container names
-	entries := registry.BuildMirrorEntries(mirrorSpecs, "", nil, nil, nil)
+	entries := registryutil.BuildMirrorEntries(mirrorSpecs, "", nil, nil, nil)
 
 	registryNames := make([]string, 0, len(entries))
 	for _, entry := range entries {

@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	registryutil "github.com/devantler-tech/ksail/v5/pkg/registry"
 )
 
 // File permission constants.
@@ -41,7 +43,7 @@ func NewHostsDirectoryManager(baseDir string) (*HostsDirectoryManager, error) {
 
 // WriteHostsToml creates a hosts.toml file for the specified registry mirror.
 // Returns the path to the created directory (parent of hosts.toml).
-func (m *HostsDirectoryManager) WriteHostsToml(entry MirrorEntry) (string, error) {
+func (m *HostsDirectoryManager) WriteHostsToml(entry registryutil.MirrorEntry) (string, error) {
 	// Create directory for this registry host
 	registryDir := filepath.Join(m.baseDir, entry.Host)
 
@@ -51,7 +53,7 @@ func (m *HostsDirectoryManager) WriteHostsToml(entry MirrorEntry) (string, error
 	}
 
 	// Generate hosts.toml content
-	content := GenerateHostsToml(entry)
+	content := registryutil.GenerateHostsToml(entry)
 
 	// Write hosts.toml file
 	hostsPath := filepath.Join(registryDir, "hosts.toml")
@@ -67,7 +69,7 @@ func (m *HostsDirectoryManager) WriteHostsToml(entry MirrorEntry) (string, error
 // WriteAllHostsToml creates hosts.toml files for all provided mirror entries.
 // Returns a map of registry host to directory path.
 func (m *HostsDirectoryManager) WriteAllHostsToml(
-	entries []MirrorEntry,
+	entries []registryutil.MirrorEntry,
 ) (map[string]string, error) {
 	result := make(map[string]string, len(entries))
 
@@ -103,9 +105,9 @@ func (m *HostsDirectoryManager) GetBaseDir() string {
 }
 
 // ReadExistingHostsToml reads existing hosts.toml files from the Kind mirrors directory
-// (typically kind/mirrors) and returns MirrorSpec entries. This allows inferring mirror
+// (typically kind/mirrors) and returns registryutil.MirrorSpec entries. This allows inferring mirror
 // registry configuration from previously scaffolded hosts files.
-func ReadExistingHostsToml(baseDir string) ([]MirrorSpec, error) {
+func ReadExistingHostsToml(baseDir string) ([]registryutil.MirrorSpec, error) {
 	// Check if directory exists
 	_, err := os.Stat(baseDir)
 	if os.IsNotExist(err) {
@@ -118,7 +120,7 @@ func ReadExistingHostsToml(baseDir string) ([]MirrorSpec, error) {
 		return nil, fmt.Errorf("failed to read directory %s: %w", baseDir, err)
 	}
 
-	specs := make([]MirrorSpec, 0, len(entries))
+	specs := make([]registryutil.MirrorSpec, 0, len(entries))
 
 	for _, entry := range entries {
 		if !entry.IsDir() {
@@ -148,7 +150,7 @@ func ReadExistingHostsToml(baseDir string) ([]MirrorSpec, error) {
 			continue
 		}
 
-		specs = append(specs, MirrorSpec{
+		specs = append(specs, registryutil.MirrorSpec{
 			Host:   host,
 			Remote: remote,
 		})

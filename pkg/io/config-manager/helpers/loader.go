@@ -9,8 +9,8 @@ import (
 	"strings"
 
 	"github.com/devantler-tech/ksail/v5/pkg/fileutil"
-	"github.com/devantler-tech/ksail/v5/pkg/marshaller"
 	"github.com/devantler-tech/ksail/v5/pkg/io/validator"
+	"github.com/devantler-tech/ksail/v5/pkg/marshaller"
 )
 
 // Configuration validation errors.

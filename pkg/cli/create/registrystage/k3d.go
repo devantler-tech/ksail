@@ -6,10 +6,11 @@ import (
 	"io"
 	"strings"
 
+	registryutil "github.com/devantler-tech/ksail/v5/pkg/registry"
+
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	k3dconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/k3d"
 	k3dprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/k3d"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	"github.com/docker/docker/client"
 	"github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 )
@@ -102,7 +103,7 @@ func runK3DRegistryAction(
 func PrepareK3dConfigWithMirrors(
 	clusterCfg *v1alpha1.Cluster,
 	k3dConfig *v1alpha5.SimpleConfig,
-	mirrorSpecs []registry.MirrorSpec,
+	mirrorSpecs []registryutil.MirrorSpec,
 ) bool {
 	if clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionK3d || k3dConfig == nil {
 		return false
@@ -112,12 +113,12 @@ func PrepareK3dConfigWithMirrors(
 
 	hostEndpoints := k3dconfigmanager.ParseRegistryConfig(original)
 
-	updatedMap, _ := registry.BuildHostEndpointMap(mirrorSpecs, "", hostEndpoints)
+	updatedMap, _ := registryutil.BuildHostEndpointMap(mirrorSpecs, "", hostEndpoints)
 	if len(updatedMap) == 0 {
 		return false
 	}
 
-	rendered := registry.RenderK3dMirrorConfig(updatedMap)
+	rendered := registryutil.RenderK3dMirrorConfig(updatedMap)
 
 	if strings.TrimSpace(rendered) == strings.TrimSpace(original) {
 		return strings.TrimSpace(original) != ""

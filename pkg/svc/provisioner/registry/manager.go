@@ -9,9 +9,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
 	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
 	"github.com/devantler-tech/ksail/v5/pkg/fileutil"
+	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
 )

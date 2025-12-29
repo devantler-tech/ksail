@@ -6,6 +6,8 @@ import (
 	"io"
 	"strings"
 
+	registryutil "github.com/devantler-tech/ksail/v5/pkg/registry"
+
 	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	"github.com/docker/docker/client"
@@ -187,7 +189,7 @@ func extractRegistriesFromConfig(
 
 	registry.SortHosts(hosts)
 
-	usedPorts, nextPort := registry.InitPortAllocation(baseUsedPorts)
+	usedPorts, nextPort := registryutil.InitPortAllocation(baseUsedPorts)
 
 	registryInfos := make([]registry.Info, 0, len(hosts))
 

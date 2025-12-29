@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	yamlgenerator "github.com/devantler-tech/ksail/v5/pkg/io/generator/yaml"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
+	registryutil "github.com/devantler-tech/ksail/v5/pkg/registry"
 )
 
 const (
@@ -199,7 +199,7 @@ func (g *TalosGenerator) generateMirrorRegistriesPatch(
 	force bool,
 ) error {
 	// Parse mirror specs
-	specs := registry.ParseMirrorSpecs(mirrorRegistries)
+	specs := registryutil.ParseMirrorSpecs(mirrorRegistries)
 	if len(specs) == 0 {
 		return nil
 	}
@@ -230,7 +230,7 @@ func (g *TalosGenerator) generateMirrorRegistriesPatch(
 // generateMirrorPatchYAML generates Talos machine config patch YAML for mirror registries.
 // The patch includes the mirrors section with HTTP endpoints.
 // No TLS config is needed for HTTP endpoints as containerd will use plain HTTP automatically.
-func generateMirrorPatchYAML(specs []registry.MirrorSpec) string {
+func generateMirrorPatchYAML(specs []registryutil.MirrorSpec) string {
 	if len(specs) == 0 {
 		return ""
 	}

@@ -3,9 +3,10 @@ package registrystage
 import (
 	"context"
 
+	registryutil "github.com/devantler-tech/ksail/v5/pkg/registry"
+
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	"github.com/docker/docker/client"
 	"github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/spf13/cobra"
@@ -59,7 +60,7 @@ type Context struct {
 	KindConfig  *v1alpha4.Cluster
 	K3dConfig   *v1alpha5.SimpleConfig
 	TalosConfig *talosconfigmanager.Configs
-	MirrorSpecs []registry.MirrorSpec
+	MirrorSpecs []registryutil.MirrorSpec
 }
 
 // Definition maps a stage role to its info and distribution-specific actions.

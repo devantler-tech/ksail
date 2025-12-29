@@ -11,8 +11,8 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/cli/cmd"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/cmd/workload"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
+	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
 	"github.com/gkampitakis/go-snaps/snaps"
 	"github.com/samber/do/v2"
 	"github.com/stretchr/testify/require"

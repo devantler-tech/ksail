@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
 	"github.com/devantler-tech/ksail/v5/pkg/detector"
 	"github.com/devantler-tech/ksail/v5/pkg/io/generator"
 	argocdgenerator "github.com/devantler-tech/ksail/v5/pkg/io/generator/argocd"
@@ -20,7 +19,8 @@ import (
 	kustomizationgenerator "github.com/devantler-tech/ksail/v5/pkg/io/generator/kustomization"
 	talosgenerator "github.com/devantler-tech/ksail/v5/pkg/io/generator/talos"
 	yamlgenerator "github.com/devantler-tech/ksail/v5/pkg/io/generator/yaml"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
+	"github.com/devantler-tech/ksail/v5/pkg/registry"
+	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
 	"github.com/k3d-io/k3d/v5/pkg/config/types"
 	k3dv1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	v1alpha4 "sigs.k8s.io/kind/pkg/apis/config/v1alpha4"

@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	registryutil "github.com/devantler-tech/ksail/v5/pkg/registry"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -29,12 +30,12 @@ func TestGenerateHostsToml(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		entry    registry.MirrorEntry
+		entry    registryutil.MirrorEntry
 		expected string
 	}{
 		{
 			name: "docker.io with custom remote",
-			entry: registry.MirrorEntry{
+			entry: registryutil.MirrorEntry{
 				Host:     "docker.io",
 				Endpoint: "http://docker.io:5000",
 				Remote:   "https://registry-1.docker.io",
@@ -47,7 +48,7 @@ func TestGenerateHostsToml(t *testing.T) {
 		},
 		{
 			name: "ghcr.io without custom remote",
-			entry: registry.MirrorEntry{
+			entry: registryutil.MirrorEntry{
 				Host:     "ghcr.io",
 				Endpoint: "http://ghcr.io:5001",
 				Remote:   "",
@@ -60,7 +61,7 @@ func TestGenerateHostsToml(t *testing.T) {
 		},
 		{
 			name: "custom registry with port",
-			entry: registry.MirrorEntry{
+			entry: registryutil.MirrorEntry{
 				Host:     "registry.example.com:443",
 				Endpoint: "http://registry.example.com-443:5002",
 				Remote:   "https://registry.example.com:443",
@@ -77,7 +78,7 @@ func TestGenerateHostsToml(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			result := registry.GenerateHostsToml(tc.entry)
+			result := registryutil.GenerateHostsToml(tc.entry)
 			assert.Equal(t, tc.expected, result)
 		})
 	}
@@ -93,7 +94,7 @@ func TestHostsDirectoryManager_WriteHostsToml(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, mgr)
 
-	entry := registry.MirrorEntry{
+	entry := registryutil.MirrorEntry{
 		Host:     "docker.io",
 		Endpoint: "http://docker.io:5000",
 		Remote:   "https://registry-1.docker.io",
@@ -127,7 +128,7 @@ func TestHostsDirectoryManager_WriteAllHostsToml(t *testing.T) {
 	mgr, err := registry.NewHostsDirectoryManager(tempDir)
 	require.NoError(t, err)
 
-	entries := []registry.MirrorEntry{
+	entries := []registryutil.MirrorEntry{
 		{
 			Host:     "docker.io",
 			Endpoint: "http://docker.io:5000",
@@ -173,7 +174,7 @@ func TestHostsDirectoryManager_Cleanup(t *testing.T) {
 	mgr, err := registry.NewHostsDirectoryManager(hostsDir)
 	require.NoError(t, err)
 
-	entry := registry.MirrorEntry{
+	entry := registryutil.MirrorEntry{
 		Host:     "docker.io",
 		Endpoint: "http://docker.io:5000",
 		Remote:   "https://registry-1.docker.io",
@@ -199,13 +200,13 @@ func TestReadExistingHostsToml(t *testing.T) {
 	tests := []struct {
 		name          string
 		setupFunc     func(t *testing.T) string
-		expectedSpecs []registry.MirrorSpec
+		expectedSpecs []registryutil.MirrorSpec
 		expectedError bool
 	}{
 		{
 			name:      "reads existing hosts.toml files",
 			setupFunc: setupMultipleHosts,
-			expectedSpecs: []registry.MirrorSpec{
+			expectedSpecs: []registryutil.MirrorSpec{
 				{Host: "docker.io", Remote: "https://registry-1.docker.io"},
 				{Host: "ghcr.io", Remote: "https://ghcr.io"},
 			},
@@ -224,7 +225,7 @@ func TestReadExistingHostsToml(t *testing.T) {
 		{
 			name:      "skips directories without hosts.toml",
 			setupFunc: setupWithEmptyDir,
-			expectedSpecs: []registry.MirrorSpec{
+			expectedSpecs: []registryutil.MirrorSpec{
 				{Host: "docker.io", Remote: "https://registry-1.docker.io"},
 			},
 			expectedError: false,
@@ -281,9 +282,9 @@ func setupWithEmptyDir(t *testing.T) string {
 
 func assertSpecs(
 	t *testing.T,
-	expectedSpecs []registry.MirrorSpec,
+	expectedSpecs []registryutil.MirrorSpec,
 	expectedError bool,
-	specs []registry.MirrorSpec,
+	specs []registryutil.MirrorSpec,
 	err error,
 ) {
 	t.Helper()
