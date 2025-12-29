@@ -5,12 +5,12 @@ import (
 	"os"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	cmdhelpers "github.com/devantler-tech/ksail/v5/pkg/cmd"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/flags"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/notify"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/timer"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
 	"github.com/devantler-tech/ksail/v5/pkg/io/scaffolder"
-	"github.com/devantler-tech/ksail/v5/pkg/ui/notify"
-	"github.com/devantler-tech/ksail/v5/pkg/ui/timer"
 	"github.com/spf13/cobra"
 )
 
@@ -122,7 +122,7 @@ func HandleInitRunE(
 		return fmt.Errorf("failed to scaffold project files: %w", err)
 	}
 
-	outputTimer := cmdhelpers.MaybeTimer(cmd, deps.Timer)
+	outputTimer := flags.MaybeTimer(cmd, deps.Timer)
 
 	notify.WriteMessage(notify.Message{
 		Type:    notify.SuccessType,

@@ -5,8 +5,11 @@ import (
 	"fmt"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/flags"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/notify"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/timer"
 	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
-	cmdhelpers "github.com/devantler-tech/ksail/v5/pkg/cmd"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
 	"github.com/devantler-tech/ksail/v5/pkg/io/scaffolder"
@@ -14,15 +17,13 @@ import (
 	k3dprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/k3d"
 	kindprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/kind"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
-	"github.com/devantler-tech/ksail/v5/pkg/ui/notify"
-	"github.com/devantler-tech/ksail/v5/pkg/ui/timer"
 	"github.com/docker/docker/client"
 	"github.com/spf13/cobra"
 )
 
 // newDeleteLifecycleConfig creates the lifecycle configuration for cluster deletion.
-func newDeleteLifecycleConfig() cmdhelpers.LifecycleConfig {
-	return cmdhelpers.LifecycleConfig{
+func newDeleteLifecycleConfig() lifecycle.Config {
+	return lifecycle.Config{
 		TitleEmoji:         "🗑️",
 		TitleContent:       "Delete cluster...",
 		ActivityContent:    "deleting cluster",
@@ -52,7 +53,7 @@ func NewDeleteCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
 	cmd.Flags().
 		Bool("delete-volumes", false, "Delete registry volumes when cleaning up registries")
 
-	cmd.RunE = cmdhelpers.WrapLifecycleHandler(runtimeContainer, cfgManager, handleDeleteRunE)
+	cmd.RunE = lifecycle.WrapHandler(runtimeContainer, cfgManager, handleDeleteRunE)
 
 	return cmd
 }
@@ -61,13 +62,13 @@ func NewDeleteCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
 func handleDeleteRunE(
 	cmd *cobra.Command,
 	cfgManager *ksailconfigmanager.ConfigManager,
-	deps cmdhelpers.LifecycleDeps,
+	deps lifecycle.Deps,
 ) error {
 	// Config is already loaded by WrapLifecycleHandler, so use the cached config
 	clusterCfg := cfgManager.Config
 
 	// Get cluster name respecting the --context flag
-	clusterName, err := cmdhelpers.GetClusterNameFromConfig(clusterCfg, deps.Factory)
+	clusterName, err := lifecycle.GetClusterNameFromConfig(clusterCfg, deps.Factory)
 	if err != nil {
 		return fmt.Errorf("failed to get cluster name: %w", err)
 	}
@@ -92,7 +93,7 @@ func handleDeleteRunE(
 	config := newDeleteLifecycleConfig()
 
 	// Execute cluster deletion using the already-loaded config
-	err = cmdhelpers.RunLifecycleWithConfig(cmd, deps, config, clusterCfg)
+	err = lifecycle.RunWithConfig(cmd, deps, config, clusterCfg)
 	if err != nil {
 		return fmt.Errorf("cluster deletion failed: %w", err)
 	}
@@ -112,7 +113,7 @@ func cleanupRegistries(
 	cmd *cobra.Command,
 	cfgManager *ksailconfigmanager.ConfigManager,
 	clusterCfg *v1alpha1.Cluster,
-	deps cmdhelpers.LifecycleDeps,
+	deps lifecycle.Deps,
 	clusterName string,
 	deleteVolumes bool,
 ) {
@@ -143,7 +144,7 @@ func cleanupMirrorRegistries(
 	cmd *cobra.Command,
 	cfgManager *ksailconfigmanager.ConfigManager,
 	clusterCfg *v1alpha1.Cluster,
-	deps cmdhelpers.LifecycleDeps,
+	deps lifecycle.Deps,
 	clusterName string,
 	deleteVolumes bool,
 ) error {
@@ -203,7 +204,7 @@ func cleanupKindMirrorRegistries(
 	cmd *cobra.Command,
 	cfgManager *ksailconfigmanager.ConfigManager,
 	clusterCfg *v1alpha1.Cluster,
-	deps cmdhelpers.LifecycleDeps,
+	deps lifecycle.Deps,
 	clusterName string,
 	deleteVolumes bool,
 ) error {
@@ -238,7 +239,7 @@ func cleanupKindMirrorRegistries(
 func cleanupK3dMirrorRegistries(
 	cmd *cobra.Command,
 	cfgManager *ksailconfigmanager.ConfigManager,
-	deps cmdhelpers.LifecycleDeps,
+	deps lifecycle.Deps,
 	clusterName string,
 	deleteVolumes bool,
 ) error {
@@ -274,7 +275,7 @@ func cleanupK3dMirrorRegistries(
 
 func runMirrorRegistryCleanup(
 	cmd *cobra.Command,
-	deps cmdhelpers.LifecycleDeps,
+	deps lifecycle.Deps,
 	registryNames []string,
 	cleanup func(client.APIClient) error,
 ) error {
@@ -329,7 +330,7 @@ func executeRegistryCleanup(
 
 	notifyRegistryDeletions(ctx, cmd, registryNames, registryMgr)
 
-	outputTimer := cmdhelpers.MaybeTimer(cmd, tmr)
+	outputTimer := flags.MaybeTimer(cmd, tmr)
 
 	notify.WriteMessage(notify.Message{
 		Type:    notify.SuccessType,
@@ -369,7 +370,7 @@ func notifyRegistryDeletions(
 func cleanupTalosMirrorRegistries(
 	cmd *cobra.Command,
 	cfgManager *ksailconfigmanager.ConfigManager,
-	deps cmdhelpers.LifecycleDeps,
+	deps lifecycle.Deps,
 	clusterName string,
 	deleteVolumes bool,
 ) error {

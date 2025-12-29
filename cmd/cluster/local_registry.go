@@ -7,8 +7,8 @@ import (
 	"strings"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
 	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
-	cmdhelpers "github.com/devantler-tech/ksail/v5/pkg/cmd"
 	k3dconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/k3d"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
@@ -93,7 +93,7 @@ const (
 type localRegistryStageRequest struct {
 	cmd         *cobra.Command
 	clusterCfg  *v1alpha1.Cluster
-	deps        cmdhelpers.LifecycleDeps
+	deps        lifecycle.Deps
 	kindConfig  *kindv1alpha4.Cluster
 	k3dConfig   *k3dv1alpha5.SimpleConfig
 	talosConfig *talosconfigmanager.Configs
@@ -103,7 +103,7 @@ type localRegistryStageRequest struct {
 func newLocalRegistryStageRequest(
 	cmd *cobra.Command,
 	clusterCfg *v1alpha1.Cluster,
-	deps cmdhelpers.LifecycleDeps,
+	deps lifecycle.Deps,
 	kindConfig *kindv1alpha4.Cluster,
 	k3dConfig *k3dv1alpha5.SimpleConfig,
 	talosConfig *talosconfigmanager.Configs,
@@ -142,7 +142,7 @@ func (r localRegistryStageRequest) run(
 func runLocalRegistryAction(
 	cmd *cobra.Command,
 	clusterCfg *v1alpha1.Cluster,
-	deps cmdhelpers.LifecycleDeps,
+	deps lifecycle.Deps,
 	kindConfig *kindv1alpha4.Cluster,
 	k3dConfig *k3dv1alpha5.SimpleConfig,
 	talosConfig *talosconfigmanager.Configs,
@@ -172,7 +172,7 @@ func runLocalRegistryAction(
 func executeLocalRegistryStage(
 	cmd *cobra.Command,
 	clusterCfg *v1alpha1.Cluster,
-	deps cmdhelpers.LifecycleDeps,
+	deps lifecycle.Deps,
 	kindConfig *kindv1alpha4.Cluster,
 	k3dConfig *k3dv1alpha5.SimpleConfig,
 	talosConfig *talosconfigmanager.Configs,
@@ -202,7 +202,7 @@ func executeLocalRegistryStage(
 func newLocalRegistryStageExecutor(
 	cmd *cobra.Command,
 	clusterCfg *v1alpha1.Cluster,
-	deps cmdhelpers.LifecycleDeps,
+	deps lifecycle.Deps,
 	kindConfig *kindv1alpha4.Cluster,
 	k3dConfig *k3dv1alpha5.SimpleConfig,
 	talosConfig *talosconfigmanager.Configs,
@@ -227,7 +227,7 @@ func newLocalRegistryStageExecutor(
 func runLocalRegistryStageFromBuilder(
 	cmd *cobra.Command,
 	clusterCfg *v1alpha1.Cluster,
-	deps cmdhelpers.LifecycleDeps,
+	deps lifecycle.Deps,
 	kindConfig *kindv1alpha4.Cluster,
 	k3dConfig *k3dv1alpha5.SimpleConfig,
 	talosConfig *talosconfigmanager.Configs,
@@ -309,7 +309,7 @@ func cleanupLocalRegistry(
 	cmd *cobra.Command,
 	cfgManager *ksailconfigmanager.ConfigManager,
 	clusterCfg *v1alpha1.Cluster,
-	deps cmdhelpers.LifecycleDeps,
+	deps lifecycle.Deps,
 	deleteVolumes bool,
 	options ...localRegistryOption,
 ) error {
@@ -327,7 +327,7 @@ func cleanupLocalRegistryWithOptions(
 	cmd *cobra.Command,
 	cfgManager *ksailconfigmanager.ConfigManager,
 	clusterCfg *v1alpha1.Cluster,
-	deps cmdhelpers.LifecycleDeps,
+	deps lifecycle.Deps,
 	deleteVolumes bool,
 	options ...localRegistryOption,
 ) error {
@@ -481,7 +481,7 @@ func resolveLocalRegistryPort(clusterCfg *v1alpha1.Cluster) int {
 
 func runLocalRegistryStage(
 	cmd *cobra.Command,
-	deps cmdhelpers.LifecycleDeps,
+	deps lifecycle.Deps,
 	info registryStageInfo,
 	handler func(context.Context, registry.Service) error,
 	firstActivityShown *bool,

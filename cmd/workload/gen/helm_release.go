@@ -10,11 +10,11 @@ import (
 	"strings"
 	"time"
 
-	cmdhelpers "github.com/devantler-tech/ksail/v5/pkg/cmd"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/flags"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/notify"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/timer"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	yamlgenerator "github.com/devantler-tech/ksail/v5/pkg/io/generator/yaml"
-	"github.com/devantler-tech/ksail/v5/pkg/ui/notify"
-	"github.com/devantler-tech/ksail/v5/pkg/ui/timer"
 	helmv2 "github.com/fluxcd/helm-controller/api/v2"
 	"github.com/fluxcd/pkg/apis/meta"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
@@ -279,7 +279,7 @@ func outputHelmRelease(cmd *cobra.Command, yaml string, tmr timer.Timer) error {
 		return errNotImplemented
 	}
 
-	outputTimer := cmdhelpers.MaybeTimer(cmd, tmr)
+	outputTimer := flags.MaybeTimer(cmd, tmr)
 
 	notify.WriteMessage(notify.Message{
 		Type:    notify.SuccessType,

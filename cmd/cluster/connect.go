@@ -4,8 +4,9 @@ import (
 	"fmt"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/editor"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/kubeconfig"
 	"github.com/devantler-tech/ksail/v5/pkg/client/k9s"
-	pkgcmd "github.com/devantler-tech/ksail/v5/pkg/cmd"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
 	"github.com/spf13/cobra"
@@ -13,7 +14,7 @@ import (
 
 // NewConnectCmd creates the connect command for clusters.
 func NewConnectCmd(_ *runtime.Runtime) *cobra.Command {
-	var editor string
+	var editorFlag string
 
 	cmd := &cobra.Command{
 		Use:   "connect",
@@ -43,11 +44,11 @@ any k9s functionality. Examples:
 	)
 
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
-		return HandleConnectRunE(cmd, cfgManager, args, editor)
+		return HandleConnectRunE(cmd, cfgManager, args, editorFlag)
 	}
 
 	cmd.Flags().StringVar(
-		&editor,
+		&editorFlag,
 		"editor",
 		"",
 		"editor command to use for k9s edit actions (e.g., 'code --wait', 'vim', 'nano')",
@@ -75,7 +76,7 @@ func HandleConnectRunE(
 	defer cleanup()
 
 	// Get kubeconfig path with tilde expansion
-	kubeConfigPath, err := pkgcmd.GetKubeconfigPathFromConfig(cfg)
+	kubeConfigPath, err := kubeconfig.GetPathFromConfig(cfg)
 	if err != nil {
 		return fmt.Errorf("get kubeconfig path: %w", err)
 	}
@@ -106,11 +107,11 @@ func HandleConnectRunE(
 // It returns a cleanup function that should be called to restore the original environment.
 func setupEditorEnv(editorFlag string, cfg *v1alpha1.Cluster) func() {
 	// Create editor resolver
-	resolver := pkgcmd.NewEditorResolver(editorFlag, cfg)
+	resolver := editor.NewResolver(editorFlag, cfg)
 
 	// Resolve the editor
-	editor := resolver.ResolveEditor()
+	editorCmd := resolver.Resolve()
 
 	// Set environment variables for connect command
-	return resolver.SetEditorEnvVars(editor, "connect")
+	return resolver.SetEnvVars(editorCmd, "connect")
 }

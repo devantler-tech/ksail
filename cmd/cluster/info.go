@@ -3,8 +3,8 @@ package cluster
 import (
 	"os"
 
+	"github.com/devantler-tech/ksail/v5/pkg/cli/kubeconfig"
 	"github.com/devantler-tech/ksail/v5/pkg/client/kubectl"
-	cmdhelpers "github.com/devantler-tech/ksail/v5/pkg/cmd"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	"github.com/spf13/cobra"
 	"k8s.io/cli-runtime/pkg/genericiooptions"
@@ -13,7 +13,7 @@ import (
 // NewInfoCmd creates the cluster info command.
 func NewInfoCmd(_ *runtime.Runtime) *cobra.Command {
 	// Try to load config silently to get kubeconfig path
-	kubeconfigPath := cmdhelpers.GetKubeconfigPathSilently()
+	kubeconfigPath := kubeconfig.GetPathSilently()
 
 	// Create IO streams for kubectl
 	ioStreams := genericiooptions.IOStreams{

@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"filippo.io/age"
-	"github.com/devantler-tech/ksail/v5/pkg/ui/notify"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/notify"
 	"github.com/spf13/cobra"
 )
 

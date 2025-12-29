@@ -3,7 +3,7 @@ package cluster
 import (
 	"context"
 
-	cmdhelpers "github.com/devantler-tech/ksail/v5/pkg/cmd"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
@@ -11,8 +11,8 @@ import (
 )
 
 // newStopLifecycleConfig creates the lifecycle configuration for cluster stop.
-func newStopLifecycleConfig() cmdhelpers.LifecycleConfig {
-	return cmdhelpers.LifecycleConfig{
+func newStopLifecycleConfig() lifecycle.Config {
+	return lifecycle.Config{
 		TitleEmoji:         "🛑",
 		TitleContent:       "Stop cluster...",
 		ActivityContent:    "stopping cluster",
@@ -38,7 +38,7 @@ func NewStopCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
 		ksailconfigmanager.DefaultClusterFieldSelectors(),
 	)
 
-	cmd.RunE = cmdhelpers.NewStandardLifecycleRunE(
+	cmd.RunE = lifecycle.NewStandardRunE(
 		runtimeContainer,
 		cfgManager,
 		newStopLifecycleConfig(),

@@ -12,8 +12,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	pkgcmd "github.com/devantler-tech/ksail/v5/pkg/cmd"
-	"github.com/devantler-tech/ksail/v5/pkg/ui/notify"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/editor"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/notify"
 	"github.com/getsops/sops/v3"
 	"github.com/getsops/sops/v3/aes"
 	"github.com/getsops/sops/v3/cmd/sops/codes"
@@ -599,7 +599,7 @@ func handleEditRunE(
 	}
 
 	// Set up editor environment variables before edit
-	cleanup := pkgcmd.SetupEditorEnv(editorFlag, "cipher")
+	cleanup := editor.SetupEnv(editorFlag, "cipher")
 	defer cleanup()
 
 	var output []byte

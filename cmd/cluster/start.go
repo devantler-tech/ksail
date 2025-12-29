@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	cmdhelpers "github.com/devantler-tech/ksail/v5/pkg/cmd"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
@@ -13,8 +13,8 @@ import (
 )
 
 // newStartLifecycleConfig creates the lifecycle configuration for cluster start.
-func newStartLifecycleConfig() cmdhelpers.LifecycleConfig {
-	return cmdhelpers.LifecycleConfig{
+func newStartLifecycleConfig() lifecycle.Config {
+	return lifecycle.Config{
 		TitleEmoji:         "▶️",
 		TitleContent:       "Start cluster...",
 		ActivityContent:    "starting cluster",
@@ -40,7 +40,7 @@ func NewStartCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
 		ksailconfigmanager.DefaultClusterFieldSelectors(),
 	)
 
-	cmd.RunE = cmdhelpers.WrapLifecycleHandler(runtimeContainer, cfgManager, handleStartRunE)
+	cmd.RunE = lifecycle.WrapHandler(runtimeContainer, cfgManager, handleStartRunE)
 
 	return cmd
 }
@@ -48,11 +48,11 @@ func NewStartCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
 func handleStartRunE(
 	cmd *cobra.Command,
 	cfgManager *ksailconfigmanager.ConfigManager,
-	deps cmdhelpers.LifecycleDeps,
+	deps lifecycle.Deps,
 ) error {
 	config := newStartLifecycleConfig()
 
-	err := cmdhelpers.HandleLifecycleRunE(cmd, cfgManager, deps, config)
+	err := lifecycle.HandleRunE(cmd, cfgManager, deps, config)
 	if err != nil {
 		return fmt.Errorf("start cluster lifecycle: %w", err)
 	}

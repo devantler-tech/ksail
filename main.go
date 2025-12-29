@@ -9,7 +9,7 @@ import (
 	"runtime/debug"
 
 	"github.com/devantler-tech/ksail/v5/cmd"
-	"github.com/devantler-tech/ksail/v5/pkg/ui/notify"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/notify"
 )
 
 //nolint:gochecknoglobals

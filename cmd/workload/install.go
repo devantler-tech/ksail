@@ -3,8 +3,8 @@ package workload
 import (
 	"fmt"
 
+	"github.com/devantler-tech/ksail/v5/pkg/cli/kubeconfig"
 	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
-	cmdhelpers "github.com/devantler-tech/ksail/v5/pkg/cmd"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	"github.com/spf13/cobra"
 )
@@ -14,7 +14,7 @@ const requiredInstallArgs = 2
 // NewInstallCmd creates the workload install command.
 func NewInstallCmd(_ *runtime.Runtime) *cobra.Command {
 	// Try to load config silently to get kubeconfig path
-	kubeconfigPath := cmdhelpers.GetKubeconfigPathSilently()
+	kubeconfigPath := kubeconfig.GetPathSilently()
 
 	cmd := &cobra.Command{
 		Use:   "install [NAME] [CHART]",

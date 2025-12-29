@@ -1,0 +1,292 @@
+package registrystage
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/docker"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/flags"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/notify"
+	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
+	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
+	"github.com/docker/docker/client"
+	"github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
+	"github.com/spf13/cobra"
+	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
+)
+
+// StageDefinitions maps stage roles to their definitions.
+var StageDefinitions = map[Role]Definition{
+	RoleMirror: {
+		Info:        MirrorInfo,
+		KindAction:  KindMirrorAction,
+		K3dAction:   K3dMirrorAction,
+		TalosAction: TalosMirrorAction,
+	},
+	RoleConnect: {
+		Info:        ConnectInfo,
+		KindAction:  KindConnectAction,
+		K3dAction:   K3dConnectAction,
+		TalosAction: TalosConnectAction,
+	},
+}
+
+// DockerClientInvoker is a function that invokes Docker client operations.
+// Can be overridden in tests to avoid real Docker connections.
+type DockerClientInvoker func(*cobra.Command, func(client.APIClient) error) error
+
+// DefaultDockerClientInvoker is the default Docker client invoker.
+var DefaultDockerClientInvoker DockerClientInvoker = docker.WithClient
+
+// RunStage executes the registry stage for the given role.
+func RunStage(
+	cmd *cobra.Command,
+	clusterCfg *v1alpha1.Cluster,
+	deps lifecycle.Deps,
+	cfgManager *ksailconfigmanager.ConfigManager,
+	kindConfig *v1alpha4.Cluster,
+	k3dConfig *v1alpha5.SimpleConfig,
+	talosConfig *talosconfigmanager.Configs,
+	role Role,
+	firstActivityShown *bool,
+	dockerInvoker DockerClientInvoker,
+) error {
+	// Get mirror specs from --mirror-registry flag
+	flagSpecs := registry.ParseMirrorSpecs(
+		cfgManager.Viper.GetStringSlice("mirror-registry"),
+	)
+
+	// Try to read existing hosts.toml files from the configured mirrors directory.
+	// ReadExistingHostsToml returns (nil, nil) for missing directories, and an error for actual I/O issues.
+	existingSpecs, err := registry.ReadExistingHostsToml(GetKindMirrorsDir(clusterCfg))
+	if err != nil {
+		return fmt.Errorf("failed to read existing hosts configuration: %w", err)
+	}
+
+	// For Talos, also extract mirror hosts from the loaded Talos config.
+	// The Talos config includes any mirror-registries.yaml patches that were applied.
+	if talosConfig != nil {
+		talosHosts := talosConfig.ExtractMirrorHosts()
+		for _, host := range talosHosts {
+			// Only add if not already present in existingSpecs
+			found := false
+
+			for _, spec := range existingSpecs {
+				if spec.Host == host {
+					found = true
+
+					break
+				}
+			}
+
+			if !found {
+				existingSpecs = append(existingSpecs, registry.MirrorSpec{
+					Host:   host,
+					Remote: registry.GenerateUpstreamURL(host),
+				})
+			}
+		}
+	}
+
+	// Merge specs: flag specs override existing specs for the same host
+	mirrorSpecs := registry.MergeSpecs(existingSpecs, flagSpecs)
+
+	definition, ok := StageDefinitions[role]
+	if !ok {
+		return nil
+	}
+
+	stageCtx := &Context{
+		Cmd:         cmd,
+		ClusterCfg:  clusterCfg,
+		KindConfig:  kindConfig,
+		K3dConfig:   k3dConfig,
+		TalosConfig: talosConfig,
+		MirrorSpecs: mirrorSpecs,
+	}
+
+	handlers := newRegistryHandlers(
+		clusterCfg,
+		cfgManager,
+		kindConfig,
+		k3dConfig,
+		talosConfig,
+		mirrorSpecs,
+		definition.KindAction(stageCtx),
+		definition.K3dAction(stageCtx),
+		definition.TalosAction(stageCtx),
+	)
+
+	handler, ok := handlers[clusterCfg.Spec.Cluster.Distribution]
+	if !ok {
+		return nil
+	}
+
+	return executeRegistryStage(
+		cmd,
+		deps,
+		definition.Info,
+		handler.Prepare,
+		handler.Action,
+		firstActivityShown,
+		dockerInvoker,
+	)
+}
+
+func newRegistryHandlers(
+	clusterCfg *v1alpha1.Cluster,
+	cfgManager *ksailconfigmanager.ConfigManager,
+	kindConfig *v1alpha4.Cluster,
+	k3dConfig *v1alpha5.SimpleConfig,
+	talosConfig *talosconfigmanager.Configs,
+	mirrorSpecs []registry.MirrorSpec,
+	kindAction func(context.Context, client.APIClient) error,
+	k3dAction func(context.Context, client.APIClient) error,
+	talosAction func(context.Context, client.APIClient) error,
+) map[v1alpha1.Distribution]Handler {
+	return map[v1alpha1.Distribution]Handler{
+		v1alpha1.DistributionKind: {
+			Prepare: func() bool { return PrepareKindConfigWithMirrors(clusterCfg, cfgManager, kindConfig) },
+			Action:  kindAction,
+		},
+		v1alpha1.DistributionK3d: {
+			Prepare: func() bool { return PrepareK3dConfigWithMirrors(clusterCfg, k3dConfig, mirrorSpecs) },
+			Action:  k3dAction,
+		},
+		v1alpha1.DistributionTalos: {
+			Prepare: func() bool { return PrepareTalosConfigWithMirrors(clusterCfg, talosConfig, mirrorSpecs) },
+			Action:  talosAction,
+		},
+	}
+}
+
+func executeRegistryStage(
+	cmd *cobra.Command,
+	deps lifecycle.Deps,
+	info Info,
+	shouldPrepare func() bool,
+	action func(context.Context, client.APIClient) error,
+	firstActivityShown *bool,
+	dockerInvoker DockerClientInvoker,
+) error {
+	if !shouldPrepare() {
+		return nil
+	}
+
+	return runRegistryStage(cmd, deps, info, action, firstActivityShown, dockerInvoker)
+}
+
+func runRegistryStage(
+	cmd *cobra.Command,
+	deps lifecycle.Deps,
+	info Info,
+	action func(context.Context, client.APIClient) error,
+	firstActivityShown *bool,
+	dockerInvoker DockerClientInvoker,
+) error {
+	deps.Timer.NewStage()
+
+	if *firstActivityShown {
+		cmd.Println()
+	}
+
+	*firstActivityShown = true
+
+	notify.WriteMessage(notify.Message{
+		Type:    notify.TitleType,
+		Content: info.Title,
+		Emoji:   info.Emoji,
+		Writer:  cmd.OutOrStdout(),
+	})
+
+	if info.Activity != "" {
+		notify.WriteMessage(notify.Message{
+			Type:    notify.ActivityType,
+			Content: info.Activity,
+			Writer:  cmd.OutOrStdout(),
+		})
+	}
+
+	invoker := dockerInvoker
+	if invoker == nil {
+		invoker = DefaultDockerClientInvoker
+	}
+
+	err := invoker(cmd, func(dockerClient client.APIClient) error {
+		err := action(cmd.Context(), dockerClient)
+		if err != nil {
+			return fmt.Errorf("%s: %w", info.FailurePrefix, err)
+		}
+
+		outputTimer := flags.MaybeTimer(cmd, deps.Timer)
+
+		notify.WriteMessage(notify.Message{
+			Type:    notify.SuccessType,
+			Content: info.Success,
+			Timer:   outputTimer,
+			Writer:  cmd.OutOrStdout(),
+		})
+
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("failed to execute registry stage: %w", err)
+	}
+
+	return nil
+}
+
+// SetupMirrorRegistries configures mirror registries before cluster creation.
+func SetupMirrorRegistries(
+	cmd *cobra.Command,
+	clusterCfg *v1alpha1.Cluster,
+	deps lifecycle.Deps,
+	cfgManager *ksailconfigmanager.ConfigManager,
+	kindConfig *v1alpha4.Cluster,
+	k3dConfig *v1alpha5.SimpleConfig,
+	talosConfig *talosconfigmanager.Configs,
+	firstActivityShown *bool,
+	dockerInvoker DockerClientInvoker,
+) error {
+	return RunStage(
+		cmd,
+		clusterCfg,
+		deps,
+		cfgManager,
+		kindConfig,
+		k3dConfig,
+		talosConfig,
+		RoleMirror,
+		firstActivityShown,
+		dockerInvoker,
+	)
+}
+
+// ConnectRegistriesToClusterNetwork attaches mirror registries to the cluster network after creation.
+func ConnectRegistriesToClusterNetwork(
+	cmd *cobra.Command,
+	clusterCfg *v1alpha1.Cluster,
+	deps lifecycle.Deps,
+	cfgManager *ksailconfigmanager.ConfigManager,
+	kindConfig *v1alpha4.Cluster,
+	k3dConfig *v1alpha5.SimpleConfig,
+	talosConfig *talosconfigmanager.Configs,
+	firstActivityShown *bool,
+	dockerInvoker DockerClientInvoker,
+) error {
+	return RunStage(
+		cmd,
+		clusterCfg,
+		deps,
+		cfgManager,
+		kindConfig,
+		k3dConfig,
+		talosConfig,
+		RoleConnect,
+		firstActivityShown,
+		dockerInvoker,
+	)
+}

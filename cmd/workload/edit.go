@@ -3,15 +3,16 @@ package workload
 import (
 	"os"
 
+	"github.com/devantler-tech/ksail/v5/pkg/cli/editor"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/kubeconfig"
 	"github.com/devantler-tech/ksail/v5/pkg/client/kubectl"
-	pkgcmd "github.com/devantler-tech/ksail/v5/pkg/cmd"
 	"github.com/spf13/cobra"
 	"k8s.io/cli-runtime/pkg/genericiooptions"
 )
 
 // NewEditCmd creates the workload edit command.
 func NewEditCmd() *cobra.Command {
-	var editor string
+	var editorFlag string
 
 	cmd := &cobra.Command{
 		Use:   "edit",
@@ -30,11 +31,11 @@ Example:
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Set up editor environment variables before edit
-			cleanup := pkgcmd.SetupEditorEnv(editor, "workload")
+			cleanup := editor.SetupEnv(editorFlag, "workload")
 			defer cleanup()
 
 			// Try to load config silently to get kubeconfig path
-			kubeconfigPath := pkgcmd.GetKubeconfigPathSilently()
+			kubeconfigPath := kubeconfig.GetPathSilently()
 
 			// Create IO streams for kubectl
 			ioStreams := genericiooptions.IOStreams{
@@ -59,7 +60,7 @@ Example:
 	}
 
 	cmd.Flags().StringVar(
-		&editor,
+		&editorFlag,
 		"editor",
 		"",
 		"editor command to use (e.g., 'code --wait', 'vim', 'nano')",
