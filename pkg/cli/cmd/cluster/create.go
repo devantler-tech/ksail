@@ -332,7 +332,12 @@ func handlePostCreationSetup(
 	factories := getInstallerFactories()
 	outputTimer := flags.MaybeTimer(cmd, tmr)
 
-	return components.InstallPostCNIComponents(cmd, clusterCfg, factories, outputTimer, firstActivityShown)
+	err = components.InstallPostCNIComponents(cmd, clusterCfg, factories, outputTimer, firstActivityShown)
+	if err != nil {
+		return fmt.Errorf("failed to install post-CNI components: %w", err)
+	}
+
+	return nil
 }
 
 func setupK3dMetricsServer(clusterCfg *v1alpha1.Cluster, k3dConfig *v1alpha5.SimpleConfig) {
