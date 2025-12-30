@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/notify"
+	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"

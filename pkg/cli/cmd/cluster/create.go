@@ -7,13 +7,13 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/create"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/create/registrystage"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/flags"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/notify"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/timer"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
+	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
+	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	"github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/spf13/cobra"
@@ -75,7 +75,7 @@ func handleCreateRunE(
 ) error {
 	deps.Timer.Start()
 
-	outputTimer := flags.MaybeTimer(cmd, deps.Timer)
+	outputTimer := helpers.MaybeTimer(cmd, deps.Timer)
 
 	clusterCfg, kindConfig, k3dConfig, talosConfig, err := loadClusterConfiguration(
 		cfgManager,
@@ -287,7 +287,7 @@ func handlePostCreationSetup(
 	}
 
 	factories := getInstallerFactories()
-	outputTimer := flags.MaybeTimer(cmd, tmr)
+	outputTimer := helpers.MaybeTimer(cmd, tmr)
 
 	return create.InstallPostCNIComponents(cmd, clusterCfg, factories, outputTimer, firstActivityShown)
 }

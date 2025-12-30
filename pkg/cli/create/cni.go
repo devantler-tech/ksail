@@ -7,13 +7,13 @@ import (
 	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/flags"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/notify"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/timer"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
 	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/installer"
 	calicoinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/cni/calico"
 	ciliuminstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/cni/cilium"
+	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
+	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
 	"github.com/spf13/cobra"
 )
 
@@ -190,7 +190,7 @@ func runCNIInstallation(
 	notify.WriteMessage(notify.Message{
 		Type:    notify.SuccessType,
 		Content: "cni installed",
-		Timer:   flags.MaybeTimer(cmd, tmr),
+		Timer:   helpers.MaybeTimer(cmd, tmr),
 		Writer:  cmd.OutOrStdout(),
 	})
 

@@ -6,7 +6,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/create"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/docker"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/installer"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	"github.com/docker/docker/client"
@@ -26,7 +26,7 @@ var (
 	//nolint:gochecknoglobals // dependency injection for tests
 	clusterProvisionerFactoryOverride clusterprovisioner.Factory
 	//nolint:gochecknoglobals // dependency injection for tests
-	dockerClientInvoker = docker.WithClient
+	dockerClientInvoker = helpers.WithDockerClient
 )
 
 // getInstallerFactories returns the installer factories to use, allowing test override.
