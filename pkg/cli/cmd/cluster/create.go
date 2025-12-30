@@ -332,7 +332,13 @@ func handlePostCreationSetup(
 	factories := getInstallerFactories()
 	outputTimer := flags.MaybeTimer(cmd, tmr)
 
-	err = components.InstallPostCNIComponents(cmd, clusterCfg, factories, outputTimer, firstActivityShown)
+	err = components.InstallPostCNIComponents(
+		cmd,
+		clusterCfg,
+		factories,
+		outputTimer,
+		firstActivityShown,
+	)
 	if err != nil {
 		return fmt.Errorf("failed to install post-CNI components: %w", err)
 	}
@@ -384,7 +390,9 @@ func overrideInstallerFactory(apply func(*create.InstallerFactories)) func() {
 
 	return func() {
 		installerFactoriesOverrideMu.Lock()
+
 		installerFactoriesOverride = previous
+
 		installerFactoriesOverrideMu.Unlock()
 	}
 }
