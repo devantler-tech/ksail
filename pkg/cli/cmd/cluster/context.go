@@ -20,7 +20,7 @@ type ClusterCommandContext struct {
 // NewClusterCommandContext creates a new cluster command context from a config manager.
 func NewClusterCommandContext(cfgManager *ksailconfigmanager.ConfigManager) *ClusterCommandContext {
 	distConfig := cfgManager.DistributionConfig
-	
+
 	return &ClusterCommandContext{
 		ClusterCfg:  cfgManager.Config,
 		KindConfig:  distConfig.Kind,
