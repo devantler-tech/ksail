@@ -6,7 +6,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cipher"
 	cluster "github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/cmd/workload"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/flags"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/asciiart"
 	errorhandler "github.com/devantler-tech/ksail/v5/pkg/cli/ui/error-handler"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
@@ -30,7 +30,7 @@ func NewRootCmd(version, commit, date string) *cobra.Command {
 	cmd.Version = fmt.Sprintf("%s (Built on %s from Git SHA %s)", version, date, commit)
 
 	cmd.PersistentFlags().Bool(
-		flags.TimingFlagName,
+		helpers.TimingFlagName,
 		false,
 		"Show per-activity timing output",
 	)

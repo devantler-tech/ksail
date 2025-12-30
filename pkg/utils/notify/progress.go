@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/timer"
+	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
 	fcolor "github.com/fatih/color"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/term"

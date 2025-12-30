@@ -11,11 +11,8 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/create"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/create/registrystage"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/docker"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/flags"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/notify"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/timer"
 	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
@@ -25,6 +22,8 @@ import (
 	ciliuminstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/cni/cilium"
 	fluxinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/flux"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
+	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
+	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
 	"github.com/docker/docker/client"
 	"github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/spf13/cobra"
@@ -74,7 +73,7 @@ var (
 	//nolint:gochecknoglobals // dependency injection for tests
 	clusterProvisionerFactoryOverride clusterprovisioner.Factory
 	//nolint:gochecknoglobals // dependency injection for tests
-	dockerClientInvoker = docker.WithClient
+	dockerClientInvoker = helpers.WithDockerClient
 )
 
 // Installer factory functions that can be overridden in tests.
@@ -157,7 +156,7 @@ func handleCreateRunE(
 ) error {
 	deps.Timer.Start()
 
-	outputTimer := flags.MaybeTimer(cmd, deps.Timer)
+	outputTimer := helpers.MaybeTimer(cmd, deps.Timer)
 
 	clusterCfg, kindConfig, k3dConfig, talosConfig, err := loadClusterConfiguration(
 		cfgManager,
@@ -561,7 +560,7 @@ func installPostCNIComponentsParallel(
 		"📦",
 		cmd.OutOrStdout(),
 		notify.WithLabels(notify.InstallingLabels()),
-		notify.WithTimer(flags.MaybeTimer(cmd, tmr)),
+		notify.WithTimer(helpers.MaybeTimer(cmd, tmr)),
 	)
 
 	executeErr := progressGroup.Run(ctx, tasks...)
@@ -769,7 +768,7 @@ func runCNIInstallation(
 	notify.WriteMessage(notify.Message{
 		Type:    notify.SuccessType,
 		Content: "cni installed",
-		Timer:   flags.MaybeTimer(cmd, tmr),
+		Timer:   helpers.MaybeTimer(cmd, tmr),
 		Writer:  cmd.OutOrStdout(),
 	})
 
@@ -940,7 +939,7 @@ func runRegistryStage(
 			return fmt.Errorf("%s: %w", info.failurePrefix, err)
 		}
 
-		outputTimer := flags.MaybeTimer(cmd, deps.Timer)
+		outputTimer := helpers.MaybeTimer(cmd, deps.Timer)
 
 		notify.WriteMessage(notify.Message{
 			Type:    notify.SuccessType,

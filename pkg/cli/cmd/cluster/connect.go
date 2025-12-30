@@ -4,8 +4,7 @@ import (
 	"fmt"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/editor"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/kubeconfig"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
 	"github.com/devantler-tech/ksail/v5/pkg/client/k9s"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
@@ -76,7 +75,7 @@ func HandleConnectRunE(
 	defer cleanup()
 
 	// Get kubeconfig path with tilde expansion
-	kubeConfigPath, err := kubeconfig.GetPathFromConfig(cfg)
+	kubeConfigPath, err := helpers.GetKubeconfigPathFromConfig(cfg)
 	if err != nil {
 		return fmt.Errorf("get kubeconfig path: %w", err)
 	}
@@ -107,7 +106,7 @@ func HandleConnectRunE(
 // It returns a cleanup function that should be called to restore the original environment.
 func setupEditorEnv(editorFlag string, cfg *v1alpha1.Cluster) func() {
 	// Create editor resolver
-	resolver := editor.NewResolver(editorFlag, cfg)
+	resolver := helpers.NewEditorResolver(editorFlag, cfg)
 
 	// Resolve the editor
 	editorCmd := resolver.Resolve()
