@@ -16,13 +16,11 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/timer"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
-	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/installer"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	"github.com/docker/docker/client"
 	"github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/spf13/cobra"
-	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
 
 const (
@@ -120,10 +118,7 @@ func handleCreateRunE(
 
 	outputTimer := flags.MaybeTimer(cmd, deps.Timer)
 
-	clusterCfg, kindConfig, k3dConfig, talosConfig, err := loadClusterConfiguration(
-		cfgManager,
-		outputTimer,
-	)
+	ctx, err := loadClusterConfiguration(cfgManager, outputTimer)
 	if err != nil {
 		return err
 	}
@@ -132,19 +127,16 @@ func handleCreateRunE(
 
 	err = ensureLocalRegistriesReady(
 		cmd,
-		clusterCfg,
+		ctx,
 		deps,
 		cfgManager,
-		kindConfig,
-		k3dConfig,
-		talosConfig,
 		&firstActivityShown,
 	)
 	if err != nil {
 		return err
 	}
 
-	setupK3dMetricsServer(clusterCfg, k3dConfig)
+	setupK3dMetricsServer(ctx.ClusterCfg, ctx.K3dConfig)
 
 	clusterProvisionerFactoryMu.RLock()
 
@@ -157,36 +149,30 @@ func handleCreateRunE(
 	} else {
 		deps.Factory = clusterprovisioner.DefaultFactory{
 			DistributionConfig: &clusterprovisioner.DistributionConfig{
-				Kind:  kindConfig,
-				K3d:   k3dConfig,
-				Talos: talosConfig,
+				Kind:  ctx.KindConfig,
+				K3d:   ctx.K3dConfig,
+				Talos: ctx.TalosConfig,
 			},
 		}
 	}
 
-	err = executeClusterLifecycle(cmd, clusterCfg, deps, &firstActivityShown)
+	err = executeClusterLifecycle(cmd, ctx.ClusterCfg, deps, &firstActivityShown)
 	if err != nil {
 		return err
 	}
 
 	connectMirrorRegistriesWithWarning(
 		cmd,
-		clusterCfg,
+		ctx,
 		deps,
 		cfgManager,
-		kindConfig,
-		k3dConfig,
-		talosConfig,
 		&firstActivityShown,
 	)
 
 	err = executeLocalRegistryStage(
 		cmd,
-		clusterCfg,
+		ctx,
 		deps,
-		kindConfig,
-		k3dConfig,
-		talosConfig,
 		localRegistryStageConnect,
 		&firstActivityShown,
 	)
@@ -194,40 +180,32 @@ func handleCreateRunE(
 		return fmt.Errorf("failed to connect local registry: %w", err)
 	}
 
-	return handlePostCreationSetup(cmd, clusterCfg, deps.Timer, &firstActivityShown)
+	return handlePostCreationSetup(cmd, ctx.ClusterCfg, deps.Timer, &firstActivityShown)
 }
 
 func loadClusterConfiguration(
 	cfgManager *ksailconfigmanager.ConfigManager,
 	tmr timer.Timer,
-) (*v1alpha1.Cluster, *v1alpha4.Cluster, *v1alpha5.SimpleConfig, *talosconfigmanager.Configs, error) {
-	clusterCfg, err := cfgManager.LoadConfig(tmr)
+) (*ClusterCommandContext, error) {
+	_, err := cfgManager.LoadConfig(tmr)
 	if err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("failed to load cluster configuration: %w", err)
+		return nil, fmt.Errorf("failed to load cluster configuration: %w", err)
 	}
 
-	distConfig := cfgManager.DistributionConfig
-
-	return clusterCfg, distConfig.Kind, distConfig.K3d, distConfig.Talos, nil
+	return NewClusterCommandContext(cfgManager), nil
 }
 
 func ensureLocalRegistriesReady(
 	cmd *cobra.Command,
-	clusterCfg *v1alpha1.Cluster,
+	ctx *ClusterCommandContext,
 	deps lifecycle.Deps,
 	cfgManager *ksailconfigmanager.ConfigManager,
-	kindConfig *v1alpha4.Cluster,
-	k3dConfig *v1alpha5.SimpleConfig,
-	talosConfig *talosconfigmanager.Configs,
 	firstActivityShown *bool,
 ) error {
 	err := executeLocalRegistryStage(
 		cmd,
-		clusterCfg,
+		ctx,
 		deps,
-		kindConfig,
-		k3dConfig,
-		talosConfig,
 		localRegistryStageProvision,
 		firstActivityShown,
 	)
@@ -243,12 +221,12 @@ func ensureLocalRegistriesReady(
 
 	err = registrystage.SetupMirrorRegistries(registrystage.StageParams{
 		Cmd:                cmd,
-		ClusterCfg:         clusterCfg,
+		ClusterCfg:         ctx.ClusterCfg,
 		Deps:               deps,
 		CfgManager:         cfgManager,
-		KindConfig:         kindConfig,
-		K3dConfig:          k3dConfig,
-		TalosConfig:        talosConfig,
+		KindConfig:         ctx.KindConfig,
+		K3dConfig:          ctx.K3dConfig,
+		TalosConfig:        ctx.TalosConfig,
 		FirstActivityShown: firstActivityShown,
 		DockerInvoker:      invoker,
 	})
@@ -283,12 +261,9 @@ func executeClusterLifecycle(
 
 func connectMirrorRegistriesWithWarning(
 	cmd *cobra.Command,
-	clusterCfg *v1alpha1.Cluster,
+	ctx *ClusterCommandContext,
 	deps lifecycle.Deps,
 	cfgManager *ksailconfigmanager.ConfigManager,
-	kindConfig *v1alpha4.Cluster,
-	k3dConfig *v1alpha5.SimpleConfig,
-	talosConfig *talosconfigmanager.Configs,
 	firstActivityShown *bool,
 ) {
 	dockerClientInvokerMu.RLock()
@@ -299,12 +274,12 @@ func connectMirrorRegistriesWithWarning(
 
 	err := registrystage.ConnectRegistriesToClusterNetwork(registrystage.StageParams{
 		Cmd:                cmd,
-		ClusterCfg:         clusterCfg,
+		ClusterCfg:         ctx.ClusterCfg,
 		Deps:               deps,
 		CfgManager:         cfgManager,
-		KindConfig:         kindConfig,
-		K3dConfig:          k3dConfig,
-		TalosConfig:        talosConfig,
+		KindConfig:         ctx.KindConfig,
+		K3dConfig:          ctx.K3dConfig,
+		TalosConfig:        ctx.TalosConfig,
 		FirstActivityShown: firstActivityShown,
 		DockerInvoker:      invoker,
 	})
