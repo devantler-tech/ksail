@@ -1,12 +1,9 @@
 # Use distroless static image for minimal attack surface
 FROM gcr.io/distroless/static:nonroot
 
-# GoReleaser v2 provides TARGETPLATFORM (e.g., linux/amd64, linux/arm64)
-ARG TARGETPLATFORM
-
-# Copy the binary from the platform-specific subdirectory
-# GoReleaser v2 places binaries in ${TARGETPLATFORM}/ subdirectories
-COPY ${TARGETPLATFORM}/ksail /ksail
+# Copy the binary
+# GoReleaser automatically copies the correct binary for each platform
+COPY ksail /ksail
 
 # Use nonroot user from distroless
 USER nonroot:nonroot

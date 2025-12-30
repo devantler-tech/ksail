@@ -26,33 +26,61 @@ archives:
       - goos: windows
         formats: ["zip"]
 
-homebrew_casks:
+brews:
   - name: ksail
     repository:
       owner: devantler-tech
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_GITHUB_API_TOKEN }}"
-    hooks:
-      post:
-        install: |
-          if OS.mac?
-            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/ksail"]
-          end
+    description: "KSail is a CLI tool to manage clusters and workloads."
+    homepage: "https://github.com/devantler-tech/ksail"
+    license: "Apache-2.0"
+    install: |
+      bin.install "ksail"
 
-dockers_v2:
-  - images:
-      - "ghcr.io/devantler-tech/ksail"
-    tags:
-      - "{{ .Tag }}"
-      - "latest"
-    labels:
-      "org.opencontainers.image.description": "KSail is a CLI tool to manage clusters and workloads."
-      "org.opencontainers.image.created": "{{.Date}}"
-      "org.opencontainers.image.name": "{{.ProjectName}}"
-      "org.opencontainers.image.revision": "{{.FullCommit}}"
-      "org.opencontainers.image.version": "{{.Version}}"
-      "org.opencontainers.image.source": "{{.GitURL}}"
-      "org.opencontainers.image.licenses": "Apache-2.0"
+dockers:
+  - image_templates:
+      - "ghcr.io/devantler-tech/ksail:{{ .Tag }}-amd64"
+      - "ghcr.io/devantler-tech/ksail:latest-amd64"
+    use: buildx
+    dockerfile: Dockerfile
+    build_flag_templates:
+      - "--platform=linux/amd64"
+      - "--label=org.opencontainers.image.description=KSail is a CLI tool to manage clusters and workloads."
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.name={{.ProjectName}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+      - "--label=org.opencontainers.image.source={{.GitURL}}"
+      - "--label=org.opencontainers.image.licenses=Apache-2.0"
+    goos: linux
+    goarch: amd64
+  - image_templates:
+      - "ghcr.io/devantler-tech/ksail:{{ .Tag }}-arm64"
+      - "ghcr.io/devantler-tech/ksail:latest-arm64"
+    use: buildx
+    dockerfile: Dockerfile
+    build_flag_templates:
+      - "--platform=linux/arm64"
+      - "--label=org.opencontainers.image.description=KSail is a CLI tool to manage clusters and workloads."
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.name={{.ProjectName}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+      - "--label=org.opencontainers.image.source={{.GitURL}}"
+      - "--label=org.opencontainers.image.licenses=Apache-2.0"
+    goos: linux
+    goarch: arm64
+
+docker_manifests:
+  - name_template: "ghcr.io/devantler-tech/ksail:{{ .Tag }}"
+    image_templates:
+      - "ghcr.io/devantler-tech/ksail:{{ .Tag }}-amd64"
+      - "ghcr.io/devantler-tech/ksail:{{ .Tag }}-arm64"
+  - name_template: "ghcr.io/devantler-tech/ksail:latest"
+    image_templates:
+      - "ghcr.io/devantler-tech/ksail:latest-amd64"
+      - "ghcr.io/devantler-tech/ksail:latest-arm64"
 
 changelog:
   sort: asc
@@ -83,17 +111,10 @@ release:
   footer: |
     ## Quick Start
 
-    **Homebrew Cask** (macOS):
-
-    > [!NOTE]
-    > Since the binary is not signed/notarized, you may need to add the `--no-quarantine` flag on some macOS systems.
+    **Homebrew** (macOS and Linux):
 
     ```bash
-    # Standard installation:
-    brew install --cask devantler-tech/tap/ksail
-
-    # If you encounter macOS quarantine issues:
-    brew install --cask --no-quarantine devantler-tech/tap/ksail
+    brew install devantler-tech/tap/ksail
     ```
 
     **Go Install**:
