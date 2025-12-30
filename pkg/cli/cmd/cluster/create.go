@@ -187,11 +187,13 @@ func loadClusterConfiguration(
 	cfgManager *ksailconfigmanager.ConfigManager,
 	tmr timer.Timer,
 ) (*ClusterCommandContext, error) {
-	_, err := cfgManager.LoadConfig(tmr)
-	if err != nil {
+	// Load config to populate cfgManager.Config and cfgManager.DistributionConfig
+	// The returned config is cached in cfgManager.Config, which is used by NewClusterCommandContext
+	if _, err := cfgManager.LoadConfig(tmr); err != nil {
 		return nil, fmt.Errorf("failed to load cluster configuration: %w", err)
 	}
 
+	// Create context from the now-populated config manager
 	return NewClusterCommandContext(cfgManager), nil
 }
 
