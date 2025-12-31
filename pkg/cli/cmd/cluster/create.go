@@ -2,25 +2,19 @@ package cluster
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"strings"
 	"sync"
-	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster/components"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/create"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/create/registrystage"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
-	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/installer"
-	calicoinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/cni/calico"
-	ciliuminstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/cni/cilium"
-	fluxinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/flux"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
 	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
@@ -32,8 +26,6 @@ import (
 
 const (
 	k3sDisableMetricsServerFlag = "--disable=metrics-server"
-	fluxResourcesActivity       = "applying custom resources"
-	argoCDResourcesActivity     = "configuring argocd resources"
 )
 
 // registryStageInfo contains display information for a registry stage.
@@ -46,26 +38,12 @@ type registryStageInfo struct {
 	failurePrefix string
 }
 
-// ErrUnsupportedCNI is returned when an unsupported CNI type is encountered.
-var ErrUnsupportedCNI = errors.New("unsupported CNI type")
-
-// Error variables for factory nil checks.
-var (
-	errCSIInstallerFactoryNil         = errors.New("CSI installer factory is nil")
-	errCertManagerInstallerFactoryNil = errors.New("cert-manager installer factory is nil")
-	errArgoCDInstallerFactoryNil      = errors.New("ArgoCD installer factory is nil")
-)
-
-// Test injection variables and mutexes.
+// Test injection for installer factories, docker client invoker, and cluster provisioner factory.
 var (
 	//nolint:gochecknoglobals // dependency injection for tests
-	certManagerInstallerFactoryMu sync.RWMutex
+	installerFactoriesOverrideMu sync.RWMutex
 	//nolint:gochecknoglobals // dependency injection for tests
-	csiInstallerFactoryMu sync.RWMutex
-	//nolint:gochecknoglobals // dependency injection for tests
-	argocdInstallerFactoryMu sync.RWMutex
-	//nolint:gochecknoglobals // dependency injection for tests
-	ensureArgoCDResourcesMu sync.RWMutex
+	installerFactoriesOverride *create.InstallerFactories
 	//nolint:gochecknoglobals // dependency injection for tests
 	dockerClientInvokerMu sync.RWMutex
 	//nolint:gochecknoglobals // dependency injection for tests
@@ -76,33 +54,16 @@ var (
 	dockerClientInvoker = helpers.WithDockerClient
 )
 
-// Installer factory functions that can be overridden in tests.
-var (
-	//nolint:gochecknoglobals // dependency injection for tests
-	certManagerInstallerFactory func(*v1alpha1.Cluster) (installer.Installer, error)
-	//nolint:gochecknoglobals // dependency injection for tests
-	csiInstallerFactory func(*v1alpha1.Cluster) (installer.Installer, error)
-	//nolint:gochecknoglobals // dependency injection for tests
-	argocdInstallerFactory func(*v1alpha1.Cluster) (installer.Installer, error)
-	//nolint:gochecknoglobals // dependency injection for tests
-	ensureArgoCDResourcesFunc = create.EnsureArgoCDResources
-	//nolint:gochecknoglobals // dependency injection for tests
-	ensureFluxResourcesFunc = fluxinstaller.EnsureDefaultResources
-)
+// getInstallerFactories returns the installer factories to use, allowing test override.
+func getInstallerFactories() *create.InstallerFactories {
+	installerFactoriesOverrideMu.RLock()
+	defer installerFactoriesOverrideMu.RUnlock()
 
-// installerFactories holds the shared installer factories for component installation.
-//
-//nolint:gochecknoglobals // Shared state for installer factories
-var installerFactories *create.InstallerFactories
+	if installerFactoriesOverride != nil {
+		return installerFactoriesOverride
+	}
 
-//nolint:gochecknoinits // Package-level initialization for installer factory wiring.
-func init() {
-	installerFactories = create.DefaultInstallerFactories()
-
-	// Wire up the factory functions for backward compatibility
-	certManagerInstallerFactory = installerFactories.CertManager
-	csiInstallerFactory = installerFactories.CSI
-	argocdInstallerFactory = installerFactories.ArgoCD
+	return create.DefaultInstallerFactories()
 }
 
 // newCreateLifecycleConfig creates the lifecycle configuration for cluster creation.
@@ -362,249 +323,23 @@ func handlePostCreationSetup(
 	tmr timer.Timer,
 	firstActivityShown *bool,
 ) error {
-	switch clusterCfg.Spec.Cluster.CNI {
-	case v1alpha1.CNICilium:
-		err := installCNIOnly(cmd, clusterCfg, tmr, installCiliumCNI, firstActivityShown)
-		if err != nil {
-			return err
-		}
-	case v1alpha1.CNICalico:
-		err := installCNIOnly(cmd, clusterCfg, tmr, installCalicoCNI, firstActivityShown)
-		if err != nil {
-			return err
-		}
-	case v1alpha1.CNIDefault, "":
-		// No custom CNI to install
-	default:
-		return fmt.Errorf("%w: %s", ErrUnsupportedCNI, clusterCfg.Spec.Cluster.CNI)
+	_, err := components.InstallCNI(cmd, clusterCfg, tmr, firstActivityShown)
+	if err != nil {
+		return fmt.Errorf("failed to install CNI: %w", err)
 	}
 
-	return installPostCNIComponentsParallel(cmd, clusterCfg, tmr, firstActivityShown)
-}
+	factories := getInstallerFactories()
+	outputTimer := helpers.MaybeTimer(cmd, tmr)
 
-func installCNIOnly(
-	cmd *cobra.Command,
-	clusterCfg *v1alpha1.Cluster,
-	tmr timer.Timer,
-	installFunc func(*cobra.Command, *v1alpha1.Cluster, timer.Timer) error,
-	firstActivityShown *bool,
-) error {
-	if *firstActivityShown {
-		_, _ = fmt.Fprintln(cmd.OutOrStdout())
-	}
-
-	*firstActivityShown = true
-
-	tmr.NewStage()
-
-	return installFunc(cmd, clusterCfg, tmr)
-}
-
-// installPostCNIComponentsParallel installs all post-CNI components in parallel.
-//
-//nolint:funlen,cyclop,gocognit // Orchestrates multiple parallel installations with proper error handling
-func installPostCNIComponentsParallel(
-	cmd *cobra.Command,
-	clusterCfg *v1alpha1.Cluster,
-	tmr timer.Timer,
-	firstActivityShown *bool,
-) error {
-	needsMetricsServer := create.NeedsMetricsServerInstall(clusterCfg)
-	needsCSI := clusterCfg.Spec.Cluster.CSI == v1alpha1.CSILocalPathStorage
-	needsCertManager := clusterCfg.Spec.Cluster.CertManager == v1alpha1.CertManagerEnabled
-	needsArgoCD := clusterCfg.Spec.Cluster.GitOpsEngine == v1alpha1.GitOpsEngineArgoCD
-	needsFlux := clusterCfg.Spec.Cluster.GitOpsEngine == v1alpha1.GitOpsEngineFlux
-
-	componentCount := 0
-	if needsMetricsServer {
-		componentCount++
-	}
-
-	if needsCSI {
-		componentCount++
-	}
-
-	if needsCertManager {
-		componentCount++
-	}
-
-	if needsArgoCD {
-		componentCount++
-	}
-
-	if needsFlux {
-		componentCount++
-	}
-
-	if componentCount == 0 {
-		return nil
-	}
-
-	if *firstActivityShown {
-		_, _ = fmt.Fprintln(cmd.OutOrStdout())
-	}
-
-	*firstActivityShown = true
-
-	ctx := cmd.Context()
-	if ctx == nil {
-		ctx = context.Background()
-	}
-
-	var (
-		gitOpsKubeconfig    string
-		gitOpsKubeconfigErr error
+	err = components.InstallPostCNIComponents(
+		cmd,
+		clusterCfg,
+		factories,
+		outputTimer,
+		firstActivityShown,
 	)
-
-	if needsArgoCD || needsFlux {
-		_, gitOpsKubeconfig, gitOpsKubeconfigErr = installerFactories.HelmClientFactory(clusterCfg)
-		if gitOpsKubeconfigErr != nil {
-			return fmt.Errorf("failed to create helm client for gitops: %w", gitOpsKubeconfigErr)
-		}
-	}
-
-	var tasks []notify.ProgressTask
-
-	if needsMetricsServer {
-		tasks = append(tasks, notify.ProgressTask{
-			Name: "metrics-server",
-			Fn: func(taskCtx context.Context) error {
-				return create.InstallMetricsServerSilent(taskCtx, clusterCfg, installerFactories)
-			},
-		})
-	}
-
-	if needsCSI {
-		tasks = append(tasks, notify.ProgressTask{
-			Name: "csi",
-			Fn: func(taskCtx context.Context) error {
-				csiInstallerFactoryMu.RLock()
-
-				factory := csiInstallerFactory
-
-				csiInstallerFactoryMu.RUnlock()
-
-				if factory == nil {
-					return errCSIInstallerFactoryNil
-				}
-
-				csiInstaller, err := factory(clusterCfg)
-				if err != nil {
-					return fmt.Errorf("failed to create CSI installer: %w", err)
-				}
-
-				return csiInstaller.Install(taskCtx)
-			},
-		})
-	}
-
-	if needsCertManager {
-		tasks = append(tasks, notify.ProgressTask{
-			Name: "cert-manager",
-			Fn: func(taskCtx context.Context) error {
-				certManagerInstallerFactoryMu.RLock()
-
-				factory := certManagerInstallerFactory
-
-				certManagerInstallerFactoryMu.RUnlock()
-
-				if factory == nil {
-					return errCertManagerInstallerFactoryNil
-				}
-
-				cmInstaller, err := factory(clusterCfg)
-				if err != nil {
-					return fmt.Errorf("failed to create cert-manager installer: %w", err)
-				}
-
-				return cmInstaller.Install(taskCtx)
-			},
-		})
-	}
-
-	if needsArgoCD {
-		tasks = append(tasks, notify.ProgressTask{
-			Name: "argocd",
-			Fn: func(taskCtx context.Context) error {
-				argocdInstallerFactoryMu.RLock()
-
-				factory := argocdInstallerFactory
-
-				argocdInstallerFactoryMu.RUnlock()
-
-				if factory == nil {
-					return errArgoCDInstallerFactoryNil
-				}
-
-				argoInstaller, err := factory(clusterCfg)
-				if err != nil {
-					return fmt.Errorf("failed to create argocd installer: %w", err)
-				}
-
-				return argoInstaller.Install(taskCtx)
-			},
-		})
-	}
-
-	if needsFlux {
-		tasks = append(tasks, notify.ProgressTask{
-			Name: "flux",
-			Fn: func(taskCtx context.Context) error {
-				return create.InstallFluxSilent(taskCtx, clusterCfg, installerFactories)
-			},
-		})
-	}
-
-	progressGroup := notify.NewProgressGroup(
-		"Installing components",
-		"📦",
-		cmd.OutOrStdout(),
-		notify.WithLabels(notify.InstallingLabels()),
-		notify.WithTimer(helpers.MaybeTimer(cmd, tmr)),
-	)
-
-	executeErr := progressGroup.Run(ctx, tasks...)
-	if executeErr != nil {
-		return fmt.Errorf("failed to execute parallel component installation: %w", executeErr)
-	}
-
-	// Post-install GitOps configuration
-	if needsArgoCD {
-		notify.WriteMessage(notify.Message{
-			Type:    notify.ActivityType,
-			Content: argoCDResourcesActivity,
-			Writer:  cmd.OutOrStdout(),
-		})
-
-		ensureArgoCDResourcesMu.RLock()
-
-		ensureFn := ensureArgoCDResourcesFunc
-
-		ensureArgoCDResourcesMu.RUnlock()
-
-		err := ensureFn(ctx, gitOpsKubeconfig, clusterCfg)
-		if err != nil {
-			return fmt.Errorf("failed to configure Argo CD resources: %w", err)
-		}
-
-		notify.WriteMessage(notify.Message{
-			Type:    notify.InfoType,
-			Content: "Access ArgoCD UI at https://localhost:8080 via: kubectl port-forward svc/argocd-server -n argocd 8080:443",
-			Writer:  cmd.OutOrStdout(),
-		})
-	}
-
-	if needsFlux {
-		notify.WriteMessage(notify.Message{
-			Type:    notify.ActivityType,
-			Content: fluxResourcesActivity,
-			Writer:  cmd.OutOrStdout(),
-		})
-
-		err := ensureFluxResourcesFunc(ctx, gitOpsKubeconfig, clusterCfg)
-		if err != nil {
-			return fmt.Errorf("failed to configure Flux resources: %w", err)
-		}
+	if err != nil {
+		return fmt.Errorf("failed to install post-CNI components: %w", err)
 	}
 
 	return nil
@@ -634,227 +369,67 @@ func setupK3dMetricsServer(clusterCfg *v1alpha1.Cluster, k3dConfig *v1alpha5.Sim
 	)
 }
 
-// CNI installation functions
-
-type cniInstaller interface {
-	Install(ctx context.Context) error
-	WaitForReadiness(ctx context.Context) error
-}
-
-// cniSetupResult contains common resources prepared for CNI installation.
-type cniSetupResult struct {
-	helmClient helm.Interface
-	kubeconfig string
-	timeout    time.Duration
-}
-
-// prepareCNISetup shows the CNI title and prepares common resources for installation.
-func prepareCNISetup(
-	cmd *cobra.Command,
-	clusterCfg *v1alpha1.Cluster,
-	cniName string,
-) (*cniSetupResult, error) {
-	notify.WriteMessage(notify.Message{
-		Type:    notify.TitleType,
-		Content: "Install CNI...",
-		Emoji:   "🌐",
-		Writer:  cmd.OutOrStdout(),
-	})
-
-	helmClient, kubeconfig, err := create.HelmClientForCluster(clusterCfg)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create helm client for %s: %w", cniName, err)
-	}
-
-	return &cniSetupResult{
-		helmClient: helmClient,
-		kubeconfig: kubeconfig,
-		timeout:    installer.GetInstallTimeout(clusterCfg),
-	}, nil
-}
-
-func installCiliumCNI(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster, tmr timer.Timer) error {
-	setup, err := prepareCNISetup(cmd, clusterCfg, "Cilium")
-	if err != nil {
-		return err
-	}
-
-	err = setup.helmClient.AddRepository(cmd.Context(), &helm.RepositoryEntry{
-		Name: "cilium",
-		URL:  "https://helm.cilium.io/",
-	})
-	if err != nil {
-		return fmt.Errorf("failed to add Cilium Helm repository: %w", err)
-	}
-
-	var distribution ciliuminstaller.Distribution
-
-	switch clusterCfg.Spec.Cluster.Distribution {
-	case v1alpha1.DistributionTalos:
-		distribution = ciliuminstaller.DistributionTalos
-	case v1alpha1.DistributionKind:
-		distribution = ciliuminstaller.DistributionKind
-	case v1alpha1.DistributionK3d:
-		distribution = ciliuminstaller.DistributionK3d
-	}
-
-	ciliumInst := ciliuminstaller.NewCiliumInstallerWithDistribution(
-		setup.helmClient,
-		setup.kubeconfig,
-		clusterCfg.Spec.Cluster.Connection.Context,
-		setup.timeout,
-		distribution,
-	)
-
-	return runCNIInstallation(cmd, ciliumInst, "cilium", tmr)
-}
-
-func installCalicoCNI(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster, tmr timer.Timer) error {
-	setup, err := prepareCNISetup(cmd, clusterCfg, "Calico")
-	if err != nil {
-		return err
-	}
-
-	var distribution calicoinstaller.Distribution
-
-	switch clusterCfg.Spec.Cluster.Distribution {
-	case v1alpha1.DistributionTalos:
-		distribution = calicoinstaller.DistributionTalos
-	case v1alpha1.DistributionKind:
-		distribution = calicoinstaller.DistributionKind
-	case v1alpha1.DistributionK3d:
-		distribution = calicoinstaller.DistributionK3d
-	}
-
-	calicoInst := calicoinstaller.NewCalicoInstallerWithDistribution(
-		setup.helmClient,
-		setup.kubeconfig,
-		clusterCfg.Spec.Cluster.Connection.Context,
-		setup.timeout,
-		distribution,
-	)
-
-	return runCNIInstallation(cmd, calicoInst, "calico", tmr)
-}
-
-func runCNIInstallation(
-	cmd *cobra.Command,
-	inst cniInstaller,
-	cniName string,
-	tmr timer.Timer,
-) error {
-	notify.WriteMessage(notify.Message{
-		Type:    notify.ActivityType,
-		Content: "installing " + strings.ToLower(cniName),
-		Writer:  cmd.OutOrStdout(),
-	})
-
-	err := inst.Install(cmd.Context())
-	if err != nil {
-		return fmt.Errorf("%s installation failed: %w", cniName, err)
-	}
-
-	notify.WriteMessage(notify.Message{
-		Type:    notify.ActivityType,
-		Content: "awaiting " + strings.ToLower(cniName) + " to be ready",
-		Writer:  cmd.OutOrStdout(),
-	})
-
-	err = inst.WaitForReadiness(cmd.Context())
-	if err != nil {
-		return fmt.Errorf("%s readiness check failed: %w", cniName, err)
-	}
-
-	notify.WriteMessage(notify.Message{
-		Type:    notify.SuccessType,
-		Content: "cni installed",
-		Timer:   helpers.MaybeTimer(cmd, tmr),
-		Writer:  cmd.OutOrStdout(),
-	})
-
-	return nil
-}
-
 // Test injection functions
+
+// overrideInstallerFactory is a helper that applies a factory override and returns a restore function.
+func overrideInstallerFactory(apply func(*create.InstallerFactories)) func() {
+	installerFactoriesOverrideMu.Lock()
+
+	previous := installerFactoriesOverride
+	override := create.DefaultInstallerFactories()
+
+	if previous != nil {
+		*override = *previous
+	}
+
+	apply(override)
+	installerFactoriesOverride = override
+
+	installerFactoriesOverrideMu.Unlock()
+
+	return func() {
+		installerFactoriesOverrideMu.Lock()
+
+		installerFactoriesOverride = previous
+
+		installerFactoriesOverrideMu.Unlock()
+	}
+}
 
 // SetCertManagerInstallerFactoryForTests overrides the cert-manager installer factory.
 func SetCertManagerInstallerFactoryForTests(
 	factory func(*v1alpha1.Cluster) (installer.Installer, error),
 ) func() {
-	certManagerInstallerFactoryMu.Lock()
-
-	previous := certManagerInstallerFactory
-	certManagerInstallerFactory = factory
-
-	certManagerInstallerFactoryMu.Unlock()
-
-	return func() {
-		certManagerInstallerFactoryMu.Lock()
-
-		certManagerInstallerFactory = previous
-
-		certManagerInstallerFactoryMu.Unlock()
-	}
+	return overrideInstallerFactory(func(f *create.InstallerFactories) {
+		f.CertManager = factory
+	})
 }
 
 // SetCSIInstallerFactoryForTests overrides the CSI installer factory.
 func SetCSIInstallerFactoryForTests(
 	factory func(*v1alpha1.Cluster) (installer.Installer, error),
 ) func() {
-	csiInstallerFactoryMu.Lock()
-
-	previous := csiInstallerFactory
-	csiInstallerFactory = factory
-
-	csiInstallerFactoryMu.Unlock()
-
-	return func() {
-		csiInstallerFactoryMu.Lock()
-
-		csiInstallerFactory = previous
-
-		csiInstallerFactoryMu.Unlock()
-	}
+	return overrideInstallerFactory(func(f *create.InstallerFactories) {
+		f.CSI = factory
+	})
 }
 
 // SetArgoCDInstallerFactoryForTests overrides the Argo CD installer factory.
 func SetArgoCDInstallerFactoryForTests(
 	factory func(*v1alpha1.Cluster) (installer.Installer, error),
 ) func() {
-	argocdInstallerFactoryMu.Lock()
-
-	previous := argocdInstallerFactory
-	argocdInstallerFactory = factory
-
-	argocdInstallerFactoryMu.Unlock()
-
-	return func() {
-		argocdInstallerFactoryMu.Lock()
-
-		argocdInstallerFactory = previous
-
-		argocdInstallerFactoryMu.Unlock()
-	}
+	return overrideInstallerFactory(func(f *create.InstallerFactories) {
+		f.ArgoCD = factory
+	})
 }
 
 // SetEnsureArgoCDResourcesForTests overrides the Argo CD resource ensure function.
 func SetEnsureArgoCDResourcesForTests(
 	fn func(context.Context, string, *v1alpha1.Cluster) error,
 ) func() {
-	ensureArgoCDResourcesMu.Lock()
-
-	previous := ensureArgoCDResourcesFunc
-	ensureArgoCDResourcesFunc = fn
-
-	ensureArgoCDResourcesMu.Unlock()
-
-	return func() {
-		ensureArgoCDResourcesMu.Lock()
-
-		ensureArgoCDResourcesFunc = previous
-
-		ensureArgoCDResourcesMu.Unlock()
-	}
+	return overrideInstallerFactory(func(f *create.InstallerFactories) {
+		f.EnsureArgoCDResources = fn
+	})
 }
 
 // SetDockerClientInvokerForTests overrides the Docker client invoker for testing.
