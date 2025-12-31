@@ -5,10 +5,10 @@ import (
 	"io"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/flags"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/notify"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/timer"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
+	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
+	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
 	"github.com/spf13/cobra"
 )
 
@@ -26,7 +26,7 @@ func initCommandContext(cmd *cobra.Command) (*commandContext, error) {
 
 	fieldSelectors := ksailconfigmanager.DefaultClusterFieldSelectors()
 	cfgManager := ksailconfigmanager.NewCommandConfigManager(cmd, fieldSelectors)
-	outputTimer := flags.MaybeTimer(cmd, tmr)
+	outputTimer := helpers.MaybeTimer(cmd, tmr)
 
 	clusterCfg, err := cfgManager.LoadConfig(outputTimer)
 	if err != nil {

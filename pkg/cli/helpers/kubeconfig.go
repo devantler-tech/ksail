@@ -1,4 +1,4 @@
-package kubeconfig
+package helpers
 
 import (
 	"fmt"
@@ -7,30 +7,30 @@ import (
 	"path/filepath"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/timer"
 	iopath "github.com/devantler-tech/ksail/v5/pkg/io"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
+	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
 )
 
-// GetDefaultPath returns the default kubeconfig path for the current user.
+// GetDefaultKubeconfigPath returns the default kubeconfig path for the current user.
 // The path is constructed as ~/.kube/config using the user's home directory.
-func GetDefaultPath() string {
+func GetDefaultKubeconfigPath() string {
 	homeDir, _ := os.UserHomeDir()
 
 	return filepath.Join(homeDir, ".kube", "config")
 }
 
-// GetPathFromConfig extracts and expands the kubeconfig path from a loaded cluster config.
-// If the config doesn't specify a kubeconfig path, it returns the default path from GetDefaultPath.
+// GetKubeconfigPathFromConfig extracts and expands the kubeconfig path from a loaded cluster config.
+// If the config doesn't specify a kubeconfig path, it returns the default path from GetDefaultKubeconfigPath.
 //
 // The function always expands tilde (~) characters in the path to the user's home directory,
 // regardless of whether the path came from the config or is the default.
 //
 // Returns an error if path expansion fails.
-func GetPathFromConfig(cfg *v1alpha1.Cluster) (string, error) {
+func GetKubeconfigPathFromConfig(cfg *v1alpha1.Cluster) (string, error) {
 	kubeconfigPath := cfg.Spec.Cluster.Connection.Kubeconfig
 	if kubeconfigPath == "" {
-		kubeconfigPath = GetDefaultPath()
+		kubeconfigPath = GetDefaultKubeconfigPath()
 	}
 
 	// Always expand tilde in kubeconfig path, regardless of source
@@ -42,32 +42,32 @@ func GetPathFromConfig(cfg *v1alpha1.Cluster) (string, error) {
 	return expandedPath, nil
 }
 
-// GetPathSilently attempts to load the KSail config and extract the kubeconfig path
+// GetKubeconfigPathSilently attempts to load the KSail config and extract the kubeconfig path
 // without producing any output. All config loading output is suppressed using io.Discard.
 //
 // If config loading fails for any reason, this function returns the default kubeconfig path
 // rather than propagating the error. This makes it suitable for scenarios where a best-effort
 // path is acceptable.
-func GetPathSilently() string {
+func GetKubeconfigPathSilently() string {
 	// Use io.Discard to suppress all output
 	cfgManager := ksailconfigmanager.NewConfigManager(io.Discard)
 
-	kubeconfigPath, err := getPath(cfgManager)
+	kubeconfigPath, err := getKubeconfigPath(cfgManager)
 	if err != nil {
 		// If we can't load config, use default kubeconfig
-		return GetDefaultPath()
+		return GetDefaultKubeconfigPath()
 	}
 
 	return kubeconfigPath
 }
 
-// getPath loads the KSail configuration using the provided manager
+// getKubeconfigPath loads the KSail configuration using the provided manager
 // and extracts the kubeconfig path from the loaded cluster configuration.
 //
-// This is an internal helper function used by GetPathSilently.
-// It creates a minimal timer for config loading and delegates to GetPathFromConfig
+// This is an internal helper function used by GetKubeconfigPathSilently.
+// It creates a minimal timer for config loading and delegates to GetKubeconfigPathFromConfig
 // for path extraction and expansion.
-func getPath(cfgManager *ksailconfigmanager.ConfigManager) (string, error) {
+func getKubeconfigPath(cfgManager *ksailconfigmanager.ConfigManager) (string, error) {
 	// Create a minimal timer for config loading
 	tmr := timer.New()
 	tmr.Start()
@@ -77,5 +77,5 @@ func getPath(cfgManager *ksailconfigmanager.ConfigManager) (string, error) {
 		return "", fmt.Errorf("failed to load cluster configuration: %w", err)
 	}
 
-	return GetPathFromConfig(clusterCfg)
+	return GetKubeconfigPathFromConfig(clusterCfg)
 }

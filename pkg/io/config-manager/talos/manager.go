@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/timer"
 	configmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager"
+	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
 	"sigs.k8s.io/yaml"
 )
 
