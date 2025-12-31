@@ -2,10 +2,8 @@
 //
 // This package is organized into subpackages for different functionality:
 //
-//   - cli/docker: Docker client lifecycle management with automatic cleanup
-//   - cli/editor: Editor configuration resolution with proper precedence
-//   - cli/flags: Flag handling utilities including timing detection
-//   - cli/kubeconfig: Kubeconfig path resolution with home directory expansion
+//   - cli/helpers: Common CLI utilities (Docker client lifecycle, editor resolution,
+//     flag handling, kubeconfig path resolution)
 //   - cli/lifecycle: Cluster lifecycle command helpers (start, stop, delete, etc.)
 //   - cli/create: Cluster create command helpers and installer factories
 //   - cli/parallel: Parallel task execution with controlled concurrency

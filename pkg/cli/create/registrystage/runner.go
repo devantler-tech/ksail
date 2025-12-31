@@ -5,13 +5,12 @@ import (
 	"fmt"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/docker"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/flags"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/notify"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
+	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
 	"github.com/docker/docker/client"
 	"github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/spf13/cobra"
@@ -43,7 +42,7 @@ type DockerClientInvoker func(*cobra.Command, func(client.APIClient) error) erro
 // DefaultDockerClientInvoker is the default Docker client invoker.
 //
 //nolint:gochecknoglobals // Provides default implementation with test override capability.
-var DefaultDockerClientInvoker DockerClientInvoker = docker.WithClient
+var DefaultDockerClientInvoker DockerClientInvoker = helpers.WithDockerClient
 
 // RunStage executes the registry stage for the given role.
 //
@@ -227,7 +226,7 @@ func runRegistryStage(
 			return fmt.Errorf("%s: %w", info.FailurePrefix, err)
 		}
 
-		outputTimer := flags.MaybeTimer(cmd, deps.Timer)
+		outputTimer := helpers.MaybeTimer(cmd, deps.Timer)
 
 		notify.WriteMessage(notify.Message{
 			Type:    notify.SuccessType,

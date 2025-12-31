@@ -3,7 +3,7 @@ package workload
 import (
 	"os"
 
-	"github.com/devantler-tech/ksail/v5/pkg/cli/kubeconfig"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
 	"github.com/devantler-tech/ksail/v5/pkg/client/flux"
 	"github.com/devantler-tech/ksail/v5/pkg/client/kubectl"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
@@ -16,7 +16,7 @@ import (
 // though it's currently unused as this command wraps kubectl and flux directly.
 func NewCreateCmd(_ *runtime.Runtime) *cobra.Command {
 	// Try to load config silently to get kubeconfig path
-	kubeconfigPath := kubeconfig.GetPathSilently()
+	kubeconfigPath := helpers.GetKubeconfigPathSilently()
 
 	// Create IO streams for kubectl and flux
 	ioStreams := genericiooptions.IOStreams{

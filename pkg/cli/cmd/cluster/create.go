@@ -9,8 +9,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster/components"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/create"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/create/registrystage"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/docker"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/flags"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/notify"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/timer"
@@ -18,6 +17,8 @@ import (
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/installer"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
+	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
+	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
 	"github.com/docker/docker/client"
 	"github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/spf13/cobra"
@@ -50,7 +51,7 @@ var (
 	//nolint:gochecknoglobals // dependency injection for tests
 	clusterProvisionerFactoryOverride clusterprovisioner.Factory
 	//nolint:gochecknoglobals // dependency injection for tests
-	dockerClientInvoker = docker.WithClient
+	dockerClientInvoker = helpers.WithDockerClient
 )
 
 // getInstallerFactories returns the installer factories to use, allowing test override.
@@ -116,7 +117,7 @@ func handleCreateRunE(
 ) error {
 	deps.Timer.Start()
 
-	outputTimer := flags.MaybeTimer(cmd, deps.Timer)
+	outputTimer := helpers.MaybeTimer(cmd, deps.Timer)
 
 	ctx, err := loadClusterConfiguration(cfgManager, outputTimer)
 	if err != nil {
@@ -309,7 +310,13 @@ func handlePostCreationSetup(
 	factories := getInstallerFactories()
 	outputTimer := flags.MaybeTimer(cmd, tmr)
 
-	err = components.InstallPostCNIComponents(cmd, clusterCfg, factories, outputTimer, firstActivityShown)
+	err = components.InstallPostCNIComponents(
+		cmd,
+		clusterCfg,
+		factories,
+		outputTimer,
+		firstActivityShown,
+	)
 	if err != nil {
 		return fmt.Errorf("failed to install post-CNI components: %w", err)
 	}
@@ -361,7 +368,9 @@ func overrideInstallerFactory(apply func(*create.InstallerFactories)) func() {
 
 	return func() {
 		installerFactoriesOverrideMu.Lock()
+
 		installerFactoriesOverride = previous
+
 		installerFactoriesOverrideMu.Unlock()
 	}
 }
@@ -484,7 +493,7 @@ func runRegistryStage(
 			return fmt.Errorf("%s: %w", info.failurePrefix, err)
 		}
 
-		outputTimer := flags.MaybeTimer(cmd, deps.Timer)
+		outputTimer := helpers.MaybeTimer(cmd, deps.Timer)
 
 		notify.WriteMessage(notify.Message{
 			Type:    notify.SuccessType,

@@ -196,16 +196,16 @@ docker ps  # Should list running containers
 **Always build and test after making changes**:
 
 ```bash
-cd src/KSail
-export PATH="$HOME/.dotnet:$PATH"
-dotnet build                           # Verify builds
-dotnet test ../../tests/KSail.Tests.Unit/  # Run unit tests
-dotnet run -- init                    # Test CLI functionality
+cd /path/to/repo
+go build -o ksail                      # Verify builds
+go test ./...                          # Run unit tests
+./ksail --help                         # Test CLI functionality
 ```
 
 **For documentation changes**:
 
 ```bash
+cd /path/to/repo/docs
 export PATH="$HOME/.local/share/gem/ruby/3.2.0/bin:$PATH"
 bundle exec jekyll build               # Verify docs build
 bundle exec jekyll serve --host 0.0.0.0  # Test locally (if needed)
@@ -213,19 +213,21 @@ bundle exec jekyll serve --host 0.0.0.0  # Test locally (if needed)
 
 ### Important Notes
 
-- The project targets **.NET 9.0** but many environments have .NET 8.0 by default
-- Unit tests may fail if external Kubernetes tools are missing - this is expected behavior
-- The CLI warns about missing external tools but basic functionality works without them
+- The project uses **Go 1.23.9+** (currently requires Go 1.21 or later)
+- All Kubernetes tools are embedded as Go libraries - only Docker is required externally
+- Unit tests run quickly and should generally pass
 - System tests in CI cover extensive scenarios with multiple tool combinations
 - Documentation is built with Jekyll and uses the "just-the-docs" theme
-- Build times: ~40s for initial build, ~18s for tests, ~2s for docs
+- Build times: ~2-3 minutes for initial build (downloads dependencies), faster on subsequent builds
 - **NEVER CANCEL** long-running builds - they need time to download packages and compile
 
 ## Active Technologies
 
-- Go 1.21+ (001-talos-distribution)
-- Local filesystem for Talos patches (`talos/` folder structure), cluster state directory (001-talos-distribution)
+- Go 1.23.9+ (currently using Go 1.25.4)
+- Embedded Kubernetes tools (kubectl, helm, kind, k3d, flux, argocd) as Go libraries
+- Docker as the only external dependency
+- Jekyll for documentation (Ruby-based)
 
 ## Recent Changes
 
-- 001-talos-distribution: Added Go 1.21+, renamed Tind to Talos
+- Flattened package structure: moved from nested to flat organization in `pkg/`
