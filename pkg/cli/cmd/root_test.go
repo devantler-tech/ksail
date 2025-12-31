@@ -8,9 +8,9 @@ import (
 	"testing"
 
 	"github.com/devantler-tech/ksail/v5/pkg/cli/cmd"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/flags"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/notify"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/timer"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
+	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
+	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
 	"github.com/gkampitakis/go-snaps/snaps"
 	"github.com/spf13/cobra"
 )
@@ -91,18 +91,18 @@ func TestNewRootCmdTimingFlagDefaultFalse(t *testing.T) {
 
 	root := cmd.NewRootCmd("test", "test", "test")
 
-	flag := root.PersistentFlags().Lookup(flags.TimingFlagName)
+	flag := root.PersistentFlags().Lookup(helpers.TimingFlagName)
 	if flag == nil {
-		t.Fatalf("expected persistent flag %q to exist", flags.TimingFlagName)
+		t.Fatalf("expected persistent flag %q to exist", helpers.TimingFlagName)
 	}
 
-	got, err := root.PersistentFlags().GetBool(flags.TimingFlagName)
+	got, err := root.PersistentFlags().GetBool(helpers.TimingFlagName)
 	if err != nil {
-		t.Fatalf("expected to read %q flag: %v", flags.TimingFlagName, err)
+		t.Fatalf("expected to read %q flag: %v", helpers.TimingFlagName, err)
 	}
 
 	if got {
-		t.Fatalf("expected %q to default to false", flags.TimingFlagName)
+		t.Fatalf("expected %q to default to false", helpers.TimingFlagName)
 	}
 }
 
@@ -213,7 +213,7 @@ func timingProbeRunE(
 		tmr := timer.New()
 		tmr.Start()
 
-		outputTimer := flags.MaybeTimer(cmd, tmr)
+		outputTimer := helpers.MaybeTimer(cmd, tmr)
 
 		notify.WriteMessage(notify.Message{
 			Type:    msgType,
