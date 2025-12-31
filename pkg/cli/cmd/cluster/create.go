@@ -11,8 +11,6 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/cli/create/registrystage"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/notify"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/timer"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
@@ -331,7 +329,7 @@ func handlePostCreationSetup(
 	}
 
 	factories := getInstallerFactories()
-	outputTimer := flags.MaybeTimer(cmd, tmr)
+	outputTimer := helpers.MaybeTimer(cmd, tmr)
 
 	err = components.InstallPostCNIComponents(
 		cmd,
