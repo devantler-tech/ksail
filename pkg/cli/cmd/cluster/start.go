@@ -62,19 +62,16 @@ func handleStartRunE(
 		return nil
 	}
 
-	// Use cached distribution config from ConfigManager
-	distConfig := cfgManager.DistributionConfig
+	// Create cluster command context
+	ctx := NewClusterCommandContext(cfgManager)
 
 	// Start command's registry connection happens after cluster start, so use a dummy tracker
 	dummyTracker := true
 
 	connectErr := executeLocalRegistryStage(
 		cmd,
-		clusterCfg,
+		ctx,
 		deps,
-		distConfig.Kind,
-		distConfig.K3d,
-		distConfig.Talos,
 		localRegistryStageConnect,
 		&dummyTracker,
 	)

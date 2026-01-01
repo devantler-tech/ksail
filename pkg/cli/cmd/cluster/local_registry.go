@@ -183,11 +183,8 @@ func runLocalRegistryAction(
 
 func executeLocalRegistryStage(
 	cmd *cobra.Command,
-	clusterCfg *v1alpha1.Cluster,
+	ctx *CommandContext,
 	deps lifecycle.Deps,
-	kindConfig *kindv1alpha4.Cluster,
-	k3dConfig *k3dv1alpha5.SimpleConfig,
-	talosConfig *talosconfigmanager.Configs,
 	stage localRegistryStageType,
 	firstActivityShown *bool,
 	options ...localRegistryOption,
@@ -199,11 +196,8 @@ func executeLocalRegistryStage(
 
 	return runLocalRegistryStageFromBuilder(
 		cmd,
-		clusterCfg,
+		ctx,
 		deps,
-		kindConfig,
-		k3dConfig,
-		talosConfig,
 		info,
 		builder,
 		firstActivityShown,
@@ -213,21 +207,18 @@ func executeLocalRegistryStage(
 
 func newLocalRegistryStageExecutor(
 	cmd *cobra.Command,
-	clusterCfg *v1alpha1.Cluster,
+	ctx *CommandContext,
 	deps lifecycle.Deps,
-	kindConfig *kindv1alpha4.Cluster,
-	k3dConfig *k3dv1alpha5.SimpleConfig,
-	talosConfig *talosconfigmanager.Configs,
 	firstActivityShown *bool,
 	options ...localRegistryOption,
 ) localRegistryStageExecutor {
 	stage := newLocalRegistryStageRequest(
 		cmd,
-		clusterCfg,
+		ctx.ClusterCfg,
 		deps,
-		kindConfig,
-		k3dConfig,
-		talosConfig,
+		ctx.KindConfig,
+		ctx.K3dConfig,
+		ctx.TalosConfig,
 		options...,
 	)
 
@@ -238,11 +229,8 @@ func newLocalRegistryStageExecutor(
 
 func runLocalRegistryStageFromBuilder(
 	cmd *cobra.Command,
-	clusterCfg *v1alpha1.Cluster,
+	ctx *CommandContext,
 	deps lifecycle.Deps,
-	kindConfig *kindv1alpha4.Cluster,
-	k3dConfig *k3dv1alpha5.SimpleConfig,
-	talosConfig *talosconfigmanager.Configs,
 	info registryStageInfo,
 	buildAction func(*v1alpha1.Cluster) localRegistryStageAction,
 	firstActivityShown *bool,
@@ -250,16 +238,13 @@ func runLocalRegistryStageFromBuilder(
 ) error {
 	executor := newLocalRegistryStageExecutor(
 		cmd,
-		clusterCfg,
+		ctx,
 		deps,
-		kindConfig,
-		k3dConfig,
-		talosConfig,
 		firstActivityShown,
 		options...,
 	)
 
-	return executor(info, buildAction(clusterCfg))
+	return executor(info, buildAction(ctx.ClusterCfg))
 }
 
 func resolveLocalRegistryStage(

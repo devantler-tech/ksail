@@ -17,7 +17,6 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
 	"github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/spf13/cobra"
-	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
 
 const (
@@ -77,10 +76,7 @@ func handleCreateRunE(
 
 	outputTimer := helpers.MaybeTimer(cmd, deps.Timer)
 
-	clusterCfg, kindConfig, k3dConfig, talosConfig, err := loadClusterConfiguration(
-		cfgManager,
-		outputTimer,
-	)
+	ctx, err := loadClusterConfiguration(cfgManager, outputTimer)
 	if err != nil {
 		return err
 	}
@@ -89,19 +85,16 @@ func handleCreateRunE(
 
 	err = ensureLocalRegistriesReady(
 		cmd,
-		clusterCfg,
+		ctx,
 		deps,
 		cfgManager,
-		kindConfig,
-		k3dConfig,
-		talosConfig,
 		&firstActivityShown,
 	)
 	if err != nil {
 		return err
 	}
 
-	setupK3dMetricsServer(clusterCfg, k3dConfig)
+	setupK3dMetricsServer(ctx.ClusterCfg, ctx.K3dConfig)
 
 	clusterProvisionerFactoryMu.RLock()
 
@@ -114,36 +107,30 @@ func handleCreateRunE(
 	} else {
 		deps.Factory = clusterprovisioner.DefaultFactory{
 			DistributionConfig: &clusterprovisioner.DistributionConfig{
-				Kind:  kindConfig,
-				K3d:   k3dConfig,
-				Talos: talosConfig,
+				Kind:  ctx.KindConfig,
+				K3d:   ctx.K3dConfig,
+				Talos: ctx.TalosConfig,
 			},
 		}
 	}
 
-	err = executeClusterLifecycle(cmd, clusterCfg, deps, &firstActivityShown)
+	err = executeClusterLifecycle(cmd, ctx.ClusterCfg, deps, &firstActivityShown)
 	if err != nil {
 		return err
 	}
 
 	connectMirrorRegistriesWithWarning(
 		cmd,
-		clusterCfg,
+		ctx,
 		deps,
 		cfgManager,
-		kindConfig,
-		k3dConfig,
-		talosConfig,
 		&firstActivityShown,
 	)
 
 	err = executeLocalRegistryStage(
 		cmd,
-		clusterCfg,
+		ctx,
 		deps,
-		kindConfig,
-		k3dConfig,
-		talosConfig,
 		localRegistryStageConnect,
 		&firstActivityShown,
 	)
@@ -151,40 +138,63 @@ func handleCreateRunE(
 		return fmt.Errorf("failed to connect local registry: %w", err)
 	}
 
-	return handlePostCreationSetup(cmd, clusterCfg, deps.Timer, &firstActivityShown)
+	return handlePostCreationSetup(cmd, ctx.ClusterCfg, deps.Timer, &firstActivityShown)
 }
 
 func loadClusterConfiguration(
 	cfgManager *ksailconfigmanager.ConfigManager,
 	tmr timer.Timer,
-) (*v1alpha1.Cluster, *v1alpha4.Cluster, *v1alpha5.SimpleConfig, *talosconfigmanager.Configs, error) {
-	clusterCfg, err := cfgManager.LoadConfig(tmr)
+) (*CommandContext, error) {
+	// Load config to populate cfgManager.Config and cfgManager.DistributionConfig
+	// The returned config is cached in cfgManager.Config, which is used by NewClusterCommandContext
+	_, err := cfgManager.LoadConfig(tmr)
 	if err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("failed to load cluster configuration: %w", err)
+		return nil, fmt.Errorf("failed to load cluster configuration: %w", err)
 	}
 
-	distConfig := cfgManager.DistributionConfig
+	// Create context from the now-populated config manager
+	return NewClusterCommandContext(cfgManager), nil
+}
 
-	return clusterCfg, distConfig.Kind, distConfig.K3d, distConfig.Talos, nil
+// buildRegistryStageParams creates a StageParams struct for registry operations.
+// This helper reduces code duplication when calling registry stage functions.
+func buildRegistryStageParams(
+	cmd *cobra.Command,
+	ctx *CommandContext,
+	deps lifecycle.Deps,
+	cfgManager *ksailconfigmanager.ConfigManager,
+	firstActivityShown *bool,
+) registrystage.StageParams {
+	dockerClientInvokerMu.RLock()
+
+	invoker := dockerClientInvoker
+
+	dockerClientInvokerMu.RUnlock()
+
+	return registrystage.StageParams{
+		Cmd:                cmd,
+		ClusterCfg:         ctx.ClusterCfg,
+		Deps:               deps,
+		CfgManager:         cfgManager,
+		KindConfig:         ctx.KindConfig,
+		K3dConfig:          ctx.K3dConfig,
+		TalosConfig:        ctx.TalosConfig,
+		FirstActivityShown: firstActivityShown,
+		DockerInvoker:      invoker,
+	}
 }
 
 func ensureLocalRegistriesReady(
 	cmd *cobra.Command,
-	clusterCfg *v1alpha1.Cluster,
+	ctx *CommandContext,
 	deps lifecycle.Deps,
 	cfgManager *ksailconfigmanager.ConfigManager,
-	kindConfig *v1alpha4.Cluster,
-	k3dConfig *v1alpha5.SimpleConfig,
-	talosConfig *talosconfigmanager.Configs,
 	firstActivityShown *bool,
 ) error {
 	err := executeLocalRegistryStage(
 		cmd,
-		clusterCfg,
+		ctx,
 		deps,
-		kindConfig,
-		k3dConfig,
-		talosConfig,
 		localRegistryStageProvision,
 		firstActivityShown,
 	)
@@ -192,23 +202,9 @@ func ensureLocalRegistriesReady(
 		return fmt.Errorf("failed to provision local registry: %w", err)
 	}
 
-	dockerClientInvokerMu.RLock()
+	params := buildRegistryStageParams(cmd, ctx, deps, cfgManager, firstActivityShown)
 
-	invoker := dockerClientInvoker
-
-	dockerClientInvokerMu.RUnlock()
-
-	err = registrystage.SetupMirrorRegistries(registrystage.StageParams{
-		Cmd:                cmd,
-		ClusterCfg:         clusterCfg,
-		Deps:               deps,
-		CfgManager:         cfgManager,
-		KindConfig:         kindConfig,
-		K3dConfig:          k3dConfig,
-		TalosConfig:        talosConfig,
-		FirstActivityShown: firstActivityShown,
-		DockerInvoker:      invoker,
-	})
+	err = registrystage.SetupMirrorRegistries(params)
 	if err != nil {
 		return fmt.Errorf("failed to setup mirror registries: %w", err)
 	}
@@ -240,31 +236,14 @@ func executeClusterLifecycle(
 
 func connectMirrorRegistriesWithWarning(
 	cmd *cobra.Command,
-	clusterCfg *v1alpha1.Cluster,
+	ctx *CommandContext,
 	deps lifecycle.Deps,
 	cfgManager *ksailconfigmanager.ConfigManager,
-	kindConfig *v1alpha4.Cluster,
-	k3dConfig *v1alpha5.SimpleConfig,
-	talosConfig *talosconfigmanager.Configs,
 	firstActivityShown *bool,
 ) {
-	dockerClientInvokerMu.RLock()
+	params := buildRegistryStageParams(cmd, ctx, deps, cfgManager, firstActivityShown)
 
-	invoker := dockerClientInvoker
-
-	dockerClientInvokerMu.RUnlock()
-
-	err := registrystage.ConnectRegistriesToClusterNetwork(registrystage.StageParams{
-		Cmd:                cmd,
-		ClusterCfg:         clusterCfg,
-		Deps:               deps,
-		CfgManager:         cfgManager,
-		KindConfig:         kindConfig,
-		K3dConfig:          k3dConfig,
-		TalosConfig:        talosConfig,
-		FirstActivityShown: firstActivityShown,
-		DockerInvoker:      invoker,
-	})
+	err := registrystage.ConnectRegistriesToClusterNetwork(params)
 	if err != nil {
 		notify.WriteMessage(notify.Message{
 			Type:    notify.WarningType,
