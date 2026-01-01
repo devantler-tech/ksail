@@ -3,21 +3,17 @@ package cluster
 import (
 	"context"
 	"fmt"
-	"sync"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster/components"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/create"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/create/registrystage"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/installer"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
 	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
-	"github.com/docker/docker/client"
 	"github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/spf13/cobra"
 )
@@ -25,44 +21,6 @@ import (
 const (
 	k3sDisableMetricsServerFlag = "--disable=metrics-server"
 )
-
-// registryStageInfo contains display information for a registry stage.
-// Used by both local registry and mirror registry stages.
-type registryStageInfo struct {
-	title         string
-	emoji         string
-	activity      string
-	success       string
-	failurePrefix string
-}
-
-// Test injection for installer factories, docker client invoker, and cluster provisioner factory.
-var (
-	//nolint:gochecknoglobals // dependency injection for tests
-	installerFactoriesOverrideMu sync.RWMutex
-	//nolint:gochecknoglobals // dependency injection for tests
-	installerFactoriesOverride *create.InstallerFactories
-	//nolint:gochecknoglobals // dependency injection for tests
-	dockerClientInvokerMu sync.RWMutex
-	//nolint:gochecknoglobals // dependency injection for tests
-	clusterProvisionerFactoryMu sync.RWMutex
-	//nolint:gochecknoglobals // dependency injection for tests
-	clusterProvisionerFactoryOverride clusterprovisioner.Factory
-	//nolint:gochecknoglobals // dependency injection for tests
-	dockerClientInvoker = helpers.WithDockerClient
-)
-
-// getInstallerFactories returns the installer factories to use, allowing test override.
-func getInstallerFactories() *create.InstallerFactories {
-	installerFactoriesOverrideMu.RLock()
-	defer installerFactoriesOverrideMu.RUnlock()
-
-	if installerFactoriesOverride != nil {
-		return installerFactoriesOverride
-	}
-
-	return create.DefaultInstallerFactories()
-}
 
 // newCreateLifecycleConfig creates the lifecycle configuration for cluster creation.
 func newCreateLifecycleConfig() lifecycle.Config {
@@ -301,7 +259,7 @@ func handlePostCreationSetup(
 	tmr timer.Timer,
 	firstActivityShown *bool,
 ) error {
-	_, err := components.InstallCNI(cmd, clusterCfg, tmr, firstActivityShown)
+	_, err := create.InstallCNI(cmd, clusterCfg, tmr, firstActivityShown)
 	if err != nil {
 		return fmt.Errorf("failed to install CNI: %w", err)
 	}
@@ -309,7 +267,7 @@ func handlePostCreationSetup(
 	factories := getInstallerFactories()
 	outputTimer := helpers.MaybeTimer(cmd, tmr)
 
-	err = components.InstallPostCNIComponents(
+	err = create.InstallPostCNIComponents(
 		cmd,
 		clusterCfg,
 		factories,
@@ -345,167 +303,4 @@ func setupK3dMetricsServer(clusterCfg *v1alpha1.Cluster, k3dConfig *v1alpha5.Sim
 			NodeFilters: []string{"server:*"},
 		},
 	)
-}
-
-// Test injection functions
-
-// overrideInstallerFactory is a helper that applies a factory override and returns a restore function.
-func overrideInstallerFactory(apply func(*create.InstallerFactories)) func() {
-	installerFactoriesOverrideMu.Lock()
-
-	previous := installerFactoriesOverride
-	override := create.DefaultInstallerFactories()
-
-	if previous != nil {
-		*override = *previous
-	}
-
-	apply(override)
-	installerFactoriesOverride = override
-
-	installerFactoriesOverrideMu.Unlock()
-
-	return func() {
-		installerFactoriesOverrideMu.Lock()
-
-		installerFactoriesOverride = previous
-
-		installerFactoriesOverrideMu.Unlock()
-	}
-}
-
-// SetCertManagerInstallerFactoryForTests overrides the cert-manager installer factory.
-func SetCertManagerInstallerFactoryForTests(
-	factory func(*v1alpha1.Cluster) (installer.Installer, error),
-) func() {
-	return overrideInstallerFactory(func(f *create.InstallerFactories) {
-		f.CertManager = factory
-	})
-}
-
-// SetCSIInstallerFactoryForTests overrides the CSI installer factory.
-func SetCSIInstallerFactoryForTests(
-	factory func(*v1alpha1.Cluster) (installer.Installer, error),
-) func() {
-	return overrideInstallerFactory(func(f *create.InstallerFactories) {
-		f.CSI = factory
-	})
-}
-
-// SetArgoCDInstallerFactoryForTests overrides the Argo CD installer factory.
-func SetArgoCDInstallerFactoryForTests(
-	factory func(*v1alpha1.Cluster) (installer.Installer, error),
-) func() {
-	return overrideInstallerFactory(func(f *create.InstallerFactories) {
-		f.ArgoCD = factory
-	})
-}
-
-// SetEnsureArgoCDResourcesForTests overrides the Argo CD resource ensure function.
-func SetEnsureArgoCDResourcesForTests(
-	fn func(context.Context, string, *v1alpha1.Cluster) error,
-) func() {
-	return overrideInstallerFactory(func(f *create.InstallerFactories) {
-		f.EnsureArgoCDResources = fn
-	})
-}
-
-// SetDockerClientInvokerForTests overrides the Docker client invoker for testing.
-func SetDockerClientInvokerForTests(
-	invoker func(*cobra.Command, func(client.APIClient) error) error,
-) func() {
-	dockerClientInvokerMu.Lock()
-
-	previous := dockerClientInvoker
-	dockerClientInvoker = invoker
-
-	dockerClientInvokerMu.Unlock()
-
-	return func() {
-		dockerClientInvokerMu.Lock()
-
-		dockerClientInvoker = previous
-
-		dockerClientInvokerMu.Unlock()
-	}
-}
-
-// SetClusterProvisionerFactoryForTests overrides the cluster provisioner factory for testing.
-func SetClusterProvisionerFactoryForTests(factory clusterprovisioner.Factory) func() {
-	clusterProvisionerFactoryMu.Lock()
-
-	previous := clusterProvisionerFactoryOverride
-	clusterProvisionerFactoryOverride = factory
-
-	clusterProvisionerFactoryMu.Unlock()
-
-	return func() {
-		clusterProvisionerFactoryMu.Lock()
-
-		clusterProvisionerFactoryOverride = previous
-
-		clusterProvisionerFactoryMu.Unlock()
-	}
-}
-
-// runRegistryStage executes a registry stage with proper lifecycle management.
-// Used by local registry and mirror registry stages.
-func runRegistryStage(
-	cmd *cobra.Command,
-	deps lifecycle.Deps,
-	info registryStageInfo,
-	action func(context.Context, client.APIClient) error,
-	firstActivityShown *bool,
-) error {
-	deps.Timer.NewStage()
-
-	if *firstActivityShown {
-		cmd.Println()
-	}
-
-	*firstActivityShown = true
-
-	notify.WriteMessage(notify.Message{
-		Type:    notify.TitleType,
-		Content: info.title,
-		Emoji:   info.emoji,
-		Writer:  cmd.OutOrStdout(),
-	})
-
-	if info.activity != "" {
-		notify.WriteMessage(notify.Message{
-			Type:    notify.ActivityType,
-			Content: info.activity,
-			Writer:  cmd.OutOrStdout(),
-		})
-	}
-
-	dockerClientInvokerMu.RLock()
-
-	invoker := dockerClientInvoker
-
-	dockerClientInvokerMu.RUnlock()
-
-	err := invoker(cmd, func(dockerClient client.APIClient) error {
-		err := action(cmd.Context(), dockerClient)
-		if err != nil {
-			return fmt.Errorf("%s: %w", info.failurePrefix, err)
-		}
-
-		outputTimer := helpers.MaybeTimer(cmd, deps.Timer)
-
-		notify.WriteMessage(notify.Message{
-			Type:    notify.SuccessType,
-			Content: info.success,
-			Timer:   outputTimer,
-			Writer:  cmd.OutOrStdout(),
-		})
-
-		return nil
-	})
-	if err != nil {
-		return fmt.Errorf("failed to execute registry stage: %w", err)
-	}
-
-	return nil
 }
