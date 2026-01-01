@@ -188,6 +188,9 @@ func TestMetricsServerSet(t *testing.T) {
 	t.Parallel()
 
 	validCases := []struct{ input, expected string }{
+		{"Default", "Default"},
+		{"default", "Default"},
+		{"DEFAULT", "Default"},
 		{"Enabled", "Enabled"},
 		{"enabled", "Enabled"},
 		{"ENABLED", "Enabled"},
@@ -213,20 +216,6 @@ func TestMetricsServerSet(t *testing.T) {
 		v1alpha1.ErrInvalidMetricsServer,
 		"invalid",
 		"Set(invalid)",
-	)
-
-	// Test that Default is no longer valid
-	err = func() error {
-		var ms v1alpha1.MetricsServer
-
-		return ms.Set("Default")
-	}()
-	assertErrWrappedContains(
-		t,
-		err,
-		v1alpha1.ErrInvalidMetricsServer,
-		"Default",
-		"Set(Default)",
 	)
 }
 

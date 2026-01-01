@@ -1,4 +1,4 @@
-name: CI - Go (Repo)
+name: CI - KSail
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
   pull_request:
 
 concurrency:
-  group: "ci-go-repo-${{ github.ref }}"
+  group: "ci-ksail-${{ github.ref }}"
   cancel-in-progress: true
 
 permissions: {}
@@ -175,37 +175,20 @@ jobs:
     if: needs.changes.outputs.code == 'true' || github.event_name == 'push'
     strategy:
       matrix:
-        include:
-          - ksail-args: "--distribution Kind"
-          - ksail-args: "--distribution Kind --cert-manager Enabled"
-          - ksail-args: "--distribution Kind --cni Cilium"
-          - ksail-args: "--distribution Kind --cni Calico"
-          - ksail-args: "--distribution Kind --csi LocalPathStorage"
-          - ksail-args: "--distribution Kind --gitops-engine Flux"
-          - ksail-args: "--distribution Kind --gitops-engine ArgoCD"
-          - ksail-args: "--distribution Kind --mirror-registry docker.io=https://registry-1.docker.io"
-          - ksail-args: "--distribution Kind --mirror-registry docker.io=https://registry-1.docker.io --mirror-registry ghcr.io=https://ghcr.io"
-          - ksail-args: "--distribution Kind --metrics-server Disabled"
-          - ksail-args: "--distribution K3d"
-          - ksail-args: "--distribution K3d --cert-manager Enabled"
-          - ksail-args: "--distribution K3d --cni Cilium"
-          - ksail-args: "--distribution K3d --cni Calico"
-          - ksail-args: "--distribution K3d --csi LocalPathStorage"
-          - ksail-args: "--distribution K3d --gitops-engine Flux"
-          - ksail-args: "--distribution K3d --gitops-engine ArgoCD"
-          - ksail-args: "--distribution K3d --mirror-registry docker.io=https://registry-1.docker.io"
-          - ksail-args: "--distribution K3d --mirror-registry docker.io=https://registry-1.docker.io --mirror-registry ghcr.io=https://ghcr.io"
-          - ksail-args: "--distribution K3d --metrics-server Disabled"
-          - ksail-args: "--distribution Talos"
-          - ksail-args: "--distribution Talos --cert-manager Enabled"
-          - ksail-args: "--distribution Talos --cni Cilium"
-          - ksail-args: "--distribution Talos --cni Calico"
-          - ksail-args: "--distribution Talos --csi LocalPathStorage"
-          - ksail-args: "--distribution Talos --gitops-engine Flux"
-          - ksail-args: "--distribution Talos --gitops-engine ArgoCD"
-          - ksail-args: "--distribution Talos --mirror-registry docker.io=https://registry-1.docker.io"
-          - ksail-args: "--distribution Talos --mirror-registry docker.io=https://registry-1.docker.io --mirror-registry ghcr.io=https://ghcr.io"
-          - ksail-args: "--distribution Talos --metrics-server Disabled"
+        init: [true, false]
+        distribution: [Kind, K3d, Talos]
+        args:
+          - ""
+          - "--cert-manager Enabled"
+          - "--cni Cilium"
+          - "--cni Calico"
+          - "--csi LocalPathStorage"
+          - "--gitops-engine Flux"
+          - "--gitops-engine ArgoCD"
+          - "--mirror-registry ghcr.io=https://ghcr.io"
+          - "--mirror-registry ghcr.io=https://ghcr.io --mirror-registry docker.io=https://registry-1.docker.io"
+          - "--metrics-server Enabled"
+          - "--metrics-server Disabled"
     steps:
       - name: 📄 Checkout
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
@@ -226,18 +209,17 @@ jobs:
           output-path: /usr/local/bin/ksail
 
       - name: 🧪 ksail cluster init
+        if: matrix.init == true
         run: |
-          ksail cluster init ${{ matrix.ksail-args }}
-
-      - name: 🔧 Load br_netfilter kernel module (required for Talos)
-        if: contains(matrix.ksail-args, 'Talos')
-        run: |
-          sudo modprobe br_netfilter
-          echo "br_netfilter module loaded successfully"
+          ksail cluster init --distribution ${{ matrix.distribution }} ${{ matrix.args }}
 
       - name: 🧪 ksail cluster create
         run: |
-          ksail cluster create
+          if [ "${{ matrix.init }}" = true ]; then
+            ksail cluster create
+          else
+            ksail cluster create --distribution ${{ matrix.distribution }} ${{ matrix.args }}
+          fi
 
       - name: 🧪 ksail cluster list
         run: |
@@ -254,7 +236,7 @@ jobs:
           ksail workload wait --for=condition=Available deployment/podinfo --timeout=300s
 
       - name: 🧪 ksail workload push and reconcile
-        if: contains(matrix.ksail-args, '--gitops-engine')
+        if: contains(matrix.args, '--gitops-engine')
         run: |
           ksail workload push .github/fixtures/reconcile-test
           ksail workload reconcile
@@ -273,10 +255,12 @@ jobs:
 
       - name: 🧹 Cleanup
         run: |
-          if [ -d "k8s" ]; then rm -rf "k8s"; fi
-          if [ -f "kind.yaml" ]; then rm "kind.yaml"; fi
-          if [ -f "k3d.yaml" ]; then rm "k3d.yaml"; fi
           if [ -f "ksail.yaml" ]; then rm "ksail.yaml"; fi
+          if [ -f "kind.yaml" ]; then rm "kind.yaml"; fi
+          if [ -d "kind" ]; then rm -rf "kind"; fi
+          if [ -f "k3d.yaml" ]; then rm "k3d.yaml"; fi
+          if [ -d "talos" ]; then rm -rf "talos"; fi
+          if [ -d "k8s" ]; then rm -rf "k8s"; fi
 
   system-test-status:
     runs-on: ubuntu-latest

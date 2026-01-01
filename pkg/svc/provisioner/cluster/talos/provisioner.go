@@ -8,7 +8,9 @@ import (
 	"net"
 	"net/netip"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"time"
 
 	iopath "github.com/devantler-tech/ksail/v5/pkg/io"
@@ -83,6 +85,8 @@ var (
 	ErrNoPortMapping = errors.New("no port mapping found")
 	// ErrMissingKubernetesEndpoint is returned when the cluster info is missing the Kubernetes endpoint.
 	ErrMissingKubernetesEndpoint = errors.New("cluster info missing KubernetesEndpoint")
+	// ErrKernelModuleLoadFailed is returned when loading a required kernel module fails.
+	ErrKernelModuleLoadFailed = errors.New("failed to load kernel module")
 )
 
 // TalosProvisioner implements ClusterProvisioner for Talos-in-Docker clusters.
@@ -154,8 +158,14 @@ func (p *TalosProvisioner) TalosConfigs() *talosconfigmanager.Configs {
 // Create creates a Talos-in-Docker cluster.
 // If name is non-empty, it overrides the cluster name from talosConfigs.
 func (p *TalosProvisioner) Create(ctx context.Context, name string) error {
+	// Ensure required kernel modules are loaded (Linux only)
+	err := p.ensureKernelModules(ctx)
+	if err != nil {
+		return err
+	}
+
 	// Verify Docker is available and running
-	err := p.checkDockerAvailable(ctx)
+	err = p.checkDockerAvailable(ctx)
 	if err != nil {
 		return err
 	}
@@ -874,4 +884,111 @@ func (p *TalosProvisioner) cleanupKubeconfig(clusterName string) error {
 	}
 
 	return nil
+}
+
+// ensureKernelModules loads required kernel modules for Talos networking.
+// On Linux, this loads the br_netfilter module which is required for bridge networking.
+// On macOS and Windows, Docker Desktop handles this automatically via its Linux VM.
+func (p *TalosProvisioner) ensureKernelModules(ctx context.Context) error {
+	// Only needed on Linux - Docker Desktop on macOS/Windows handles this in its VM
+	if runtime.GOOS != "linux" {
+		return nil
+	}
+
+	// Check if br_netfilter is already loaded by reading /proc/modules
+	data, err := os.ReadFile("/proc/modules")
+	if err == nil {
+		// Check if br_netfilter is in the loaded modules list
+		if containsModule(string(data), "br_netfilter") {
+			return nil // Already loaded
+		}
+	}
+
+	// Try to load the module using modprobe
+	_, _ = fmt.Fprintf(p.logWriter, "Loading br_netfilter kernel module...\n")
+
+	cmd := exec.CommandContext(ctx, "modprobe", "br_netfilter")
+
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		// Try with sudo if direct modprobe fails (user may not have CAP_SYS_MODULE)
+		sudoCmd := exec.CommandContext(ctx, "sudo", "modprobe", "br_netfilter")
+
+		sudoOutput, sudoErr := sudoCmd.CombinedOutput()
+		if sudoErr != nil {
+			return fmt.Errorf(
+				"%w: br_netfilter (modprobe failed: %w, sudo modprobe failed: %w, output: %s)",
+				ErrKernelModuleLoadFailed,
+				err,
+				sudoErr,
+				string(append(output, sudoOutput...)),
+			)
+		}
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "Successfully loaded br_netfilter kernel module\n")
+
+	return nil
+}
+
+// containsModule checks if a module name appears in /proc/modules output.
+func containsModule(modulesContent, moduleName string) bool {
+	// /proc/modules format: "module_name size refcount deps state offset"
+	// Each module is on its own line, and the name is the first field
+	lines := splitLines(modulesContent)
+	for _, line := range lines {
+		if len(line) == 0 {
+			continue
+		}
+		// Get the first field (module name)
+		fields := splitFields(line)
+		if len(fields) > 0 && fields[0] == moduleName {
+			return true
+		}
+	}
+
+	return false
+}
+
+// splitLines splits a string into lines.
+func splitLines(content string) []string {
+	var lines []string
+
+	start := 0
+
+	for i := range len(content) {
+		if content[i] == '\n' {
+			lines = append(lines, content[start:i])
+			start = i + 1
+		}
+	}
+
+	if start < len(content) {
+		lines = append(lines, content[start:])
+	}
+
+	return lines
+}
+
+// splitFields splits a string by whitespace.
+func splitFields(content string) []string {
+	var fields []string
+
+	start := -1
+
+	for i := range len(content) {
+		isSpace := content[i] == ' ' || content[i] == '\t'
+		if !isSpace && start == -1 {
+			start = i
+		} else if isSpace && start != -1 {
+			fields = append(fields, content[start:i])
+			start = -1
+		}
+	}
+
+	if start != -1 {
+		fields = append(fields, content[start:])
+	}
+
+	return fields
 }

@@ -122,6 +122,8 @@ func HelmClientForCluster(clusterCfg *v1alpha1.Cluster) (*helm.Client, string, e
 }
 
 // NeedsMetricsServerInstall determines if metrics-server needs to be installed.
+// Returns true only when MetricsServer is Enabled AND the distribution doesn't provide it by default.
+// When MetricsServer is Default, we don't install (rely on distribution's default behavior).
 func NeedsMetricsServerInstall(clusterCfg *v1alpha1.Cluster) bool {
 	if clusterCfg.Spec.Cluster.MetricsServer != v1alpha1.MetricsServerEnabled {
 		return false

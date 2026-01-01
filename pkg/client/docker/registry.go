@@ -326,7 +326,7 @@ func (rm *RegistryManager) WaitForRegistryReadyWithTimeout(
 		case <-ticker.C:
 			if time.Now().After(deadline) {
 				if lastErr != nil {
-					return fmt.Errorf("%w: %s (last error: %v)", ErrRegistryNotReady, name, lastErr)
+					return fmt.Errorf("%w: %s (last error: %w)", ErrRegistryNotReady, name, lastErr)
 				}
 
 				return fmt.Errorf("%w: %s", ErrRegistryNotReady, name)
@@ -374,7 +374,8 @@ func (rm *RegistryManager) WaitForRegistriesReadyWithTimeout(
 	timeout time.Duration,
 ) error {
 	for name := range registryIPs {
-		if err := rm.WaitForRegistryReadyWithTimeout(ctx, name, timeout); err != nil {
+		err := rm.WaitForRegistryReadyWithTimeout(ctx, name, timeout)
+		if err != nil {
 			return fmt.Errorf("registry %s failed health check: %w", name, err)
 		}
 	}

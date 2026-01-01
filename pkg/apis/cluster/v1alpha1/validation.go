@@ -27,6 +27,7 @@ func ValidCSIs() []CSI {
 // ValidMetricsServers returns supported metrics server values.
 func ValidMetricsServers() []MetricsServer {
 	return []MetricsServer{
+		MetricsServerDefault,
 		MetricsServerEnabled,
 		MetricsServerDisabled,
 	}
