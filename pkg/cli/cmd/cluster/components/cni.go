@@ -1,6 +1,8 @@
 package components
 
 import (
+	"fmt"
+
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/create"
 	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
@@ -17,5 +19,10 @@ func InstallCNI(
 	tmr timer.Timer,
 	firstActivityShown *bool,
 ) (bool, error) {
-	return create.InstallCNI(cmd, clusterCfg, tmr, firstActivityShown)
+	installed, err := create.InstallCNI(cmd, clusterCfg, tmr, firstActivityShown)
+	if err != nil {
+		return false, fmt.Errorf("failed to install CNI: %w", err)
+	}
+
+	return installed, nil
 }

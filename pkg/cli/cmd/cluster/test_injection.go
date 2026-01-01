@@ -59,7 +59,9 @@ func overrideInstallerFactory(apply func(*create.InstallerFactories)) func() {
 
 	return func() {
 		installerFactoriesOverrideMu.Lock()
+
 		installerFactoriesOverride = previous
+
 		installerFactoriesOverrideMu.Unlock()
 	}
 }

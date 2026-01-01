@@ -2,6 +2,7 @@ package create
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -16,6 +17,9 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
 	"github.com/spf13/cobra"
 )
+
+// ErrUnsupportedCNI is returned when an unsupported CNI type is encountered.
+var ErrUnsupportedCNI = errors.New("unsupported CNI type")
 
 // cniInstaller provides methods for installing and waiting for CNI readiness.
 type cniInstaller interface {
@@ -41,14 +45,16 @@ func InstallCNI(
 	switch clusterCfg.Spec.Cluster.CNI {
 	case v1alpha1.CNICilium:
 		err := installCNIOnly(cmd, clusterCfg, tmr, installCiliumCNI, firstActivityShown)
+
 		return true, err
 	case v1alpha1.CNICalico:
 		err := installCNIOnly(cmd, clusterCfg, tmr, installCalicoCNI, firstActivityShown)
+
 		return true, err
 	case v1alpha1.CNIDefault, "":
 		return false, nil
 	default:
-		return false, fmt.Errorf("unsupported CNI type: %s", clusterCfg.Spec.Cluster.CNI)
+		return false, fmt.Errorf("%w: %s", ErrUnsupportedCNI, clusterCfg.Spec.Cluster.CNI)
 	}
 }
 
