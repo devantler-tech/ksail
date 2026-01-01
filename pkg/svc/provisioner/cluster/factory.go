@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
@@ -155,9 +156,16 @@ func (f DefaultFactory) createK3dProvisioner(
 	// Apply node count overrides from CLI flags (stored in Talos options)
 	applyK3dNodeCounts(k3dConfig, cluster.Spec.Cluster.Talos)
 
+	// Only pass config path if the file actually exists
+	// When no project is scaffolded, we use the in-memory config defaults
+	configPath := cluster.Spec.Cluster.DistributionConfig
+	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+		configPath = "" // Don't pass --config flag; use k3d defaults + in-memory config
+	}
+
 	provisioner := k3dprovisioner.CreateProvisioner(
 		k3dConfig,
-		cluster.Spec.Cluster.DistributionConfig,
+		configPath,
 	)
 
 	return provisioner, k3dConfig, nil
