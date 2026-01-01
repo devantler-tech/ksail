@@ -175,7 +175,6 @@ jobs:
     if: needs.changes.outputs.code == 'true' || github.event_name == 'push'
     strategy:
       matrix:
-        init: [true, false]
         distribution: [Kind, K3d, Talos]
         args:
           - ""
@@ -189,6 +188,7 @@ jobs:
           - "--mirror-registry ghcr.io=https://ghcr.io --mirror-registry docker.io=https://registry-1.docker.io"
           - "--metrics-server Enabled"
           - "--metrics-server Disabled"
+        init: [true, false]
     steps:
       - name: 📄 Checkout
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
