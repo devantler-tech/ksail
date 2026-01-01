@@ -171,7 +171,7 @@ func runLocalRegistryAction(
 
 func executeLocalRegistryStage(
 	cmd *cobra.Command,
-	ctx *ClusterCommandContext,
+	ctx *CommandContext,
 	deps lifecycle.Deps,
 	stage localRegistryStageType,
 	firstActivityShown *bool,
@@ -195,7 +195,7 @@ func executeLocalRegistryStage(
 
 func newLocalRegistryStageExecutor(
 	cmd *cobra.Command,
-	ctx *ClusterCommandContext,
+	ctx *CommandContext,
 	deps lifecycle.Deps,
 	firstActivityShown *bool,
 	options ...localRegistryOption,
@@ -217,7 +217,7 @@ func newLocalRegistryStageExecutor(
 
 func runLocalRegistryStageFromBuilder(
 	cmd *cobra.Command,
-	ctx *ClusterCommandContext,
+	ctx *CommandContext,
 	deps lifecycle.Deps,
 	info registryStageInfo,
 	buildAction func(*v1alpha1.Cluster) localRegistryStageAction,
