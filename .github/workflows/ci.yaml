@@ -280,19 +280,6 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          echo "=== Job Results ==="
-          echo "changes: $CHANGES_RESULT"
-          echo "build-artifact: $BUILD_RESULT"
-          echo "generate-schema: $SCHEMA_RESULT"
-          echo "generate-cli-flags-docs: $CLI_DOCS_RESULT"
-          echo "ci: $CI_RESULT"
-          echo "system-test: $SYSTEM_TEST_RESULT"
-          echo ""
-          echo "code changes: $CODE_CHANGES"
-          echo "event name: $EVENT_NAME"
-          echo ""
-
-          # Check if any job failed
           failed=false
           for result in "$CHANGES_RESULT" "$BUILD_RESULT" "$SCHEMA_RESULT" "$CLI_DOCS_RESULT" "$CI_RESULT" "$SYSTEM_TEST_RESULT"; do
             case "$result" in
