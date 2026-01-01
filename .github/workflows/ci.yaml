@@ -155,19 +155,6 @@ jobs:
           commit_user_name: generator-bot
           commit_user_email: generator-bot@users.noreply.github.com
 
-  ci:
-    name: 🔄 CI - Go
-    if: github.event_name != 'pull_request'
-    uses: devantler-tech/reusable-workflows/.github/workflows/ci-go.yaml@55d62d99f199c9c325d1862773659e5a51b9acd2 # v1.27.0
-    secrets:
-      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
-      APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
-    permissions:
-      contents: write
-      issues: write
-      packages: read
-      pull-requests: write
-
   system-test:
     name: 🧪 System Test
     runs-on: ubuntu-latest
@@ -271,7 +258,6 @@ jobs:
         build-artifact,
         generate-schema,
         generate-cli-flags-docs,
-        ci,
         system-test,
       ]
     if: ${{ always() }}
@@ -281,7 +267,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           failed=false
-          for result in "$CHANGES_RESULT" "$BUILD_RESULT" "$SCHEMA_RESULT" "$CLI_DOCS_RESULT" "$CI_RESULT" "$SYSTEM_TEST_RESULT"; do
+          for result in "$CHANGES_RESULT" "$BUILD_RESULT" "$SCHEMA_RESULT" "$CLI_DOCS_RESULT" "$SYSTEM_TEST_RESULT"; do
             case "$result" in
               success|skipped)
                 ;;
@@ -302,7 +288,6 @@ jobs:
           BUILD_RESULT: ${{ needs.build-artifact.result }}
           SCHEMA_RESULT: ${{ needs.generate-schema.result }}
           CLI_DOCS_RESULT: ${{ needs.generate-cli-flags-docs.result }}
-          CI_RESULT: ${{ needs.ci.result }}
           SYSTEM_TEST_RESULT: ${{ needs.system-test.result }}
           CODE_CHANGES: ${{ needs.changes.outputs.code }}
           EVENT_NAME: ${{ github.event_name }}
