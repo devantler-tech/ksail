@@ -197,6 +197,34 @@ func loadClusterConfiguration(
 	return NewClusterCommandContext(cfgManager), nil
 }
 
+// buildRegistryStageParams creates a StageParams struct for registry operations.
+// This helper reduces code duplication when calling registry stage functions.
+func buildRegistryStageParams(
+	cmd *cobra.Command,
+	ctx *CommandContext,
+	deps lifecycle.Deps,
+	cfgManager *ksailconfigmanager.ConfigManager,
+	firstActivityShown *bool,
+) registrystage.StageParams {
+	dockerClientInvokerMu.RLock()
+
+	invoker := dockerClientInvoker
+
+	dockerClientInvokerMu.RUnlock()
+
+	return registrystage.StageParams{
+		Cmd:                cmd,
+		ClusterCfg:         ctx.ClusterCfg,
+		Deps:               deps,
+		CfgManager:         cfgManager,
+		KindConfig:         ctx.KindConfig,
+		K3dConfig:          ctx.K3dConfig,
+		TalosConfig:        ctx.TalosConfig,
+		FirstActivityShown: firstActivityShown,
+		DockerInvoker:      invoker,
+	}
+}
+
 func ensureLocalRegistriesReady(
 	cmd *cobra.Command,
 	ctx *CommandContext,
@@ -215,23 +243,9 @@ func ensureLocalRegistriesReady(
 		return fmt.Errorf("failed to provision local registry: %w", err)
 	}
 
-	dockerClientInvokerMu.RLock()
+	params := buildRegistryStageParams(cmd, ctx, deps, cfgManager, firstActivityShown)
 
-	invoker := dockerClientInvoker
-
-	dockerClientInvokerMu.RUnlock()
-
-	err = registrystage.SetupMirrorRegistries(registrystage.StageParams{
-		Cmd:                cmd,
-		ClusterCfg:         ctx.ClusterCfg,
-		Deps:               deps,
-		CfgManager:         cfgManager,
-		KindConfig:         ctx.KindConfig,
-		K3dConfig:          ctx.K3dConfig,
-		TalosConfig:        ctx.TalosConfig,
-		FirstActivityShown: firstActivityShown,
-		DockerInvoker:      invoker,
-	})
+	err = registrystage.SetupMirrorRegistries(params)
 	if err != nil {
 		return fmt.Errorf("failed to setup mirror registries: %w", err)
 	}
@@ -268,23 +282,9 @@ func connectMirrorRegistriesWithWarning(
 	cfgManager *ksailconfigmanager.ConfigManager,
 	firstActivityShown *bool,
 ) {
-	dockerClientInvokerMu.RLock()
+	params := buildRegistryStageParams(cmd, ctx, deps, cfgManager, firstActivityShown)
 
-	invoker := dockerClientInvoker
-
-	dockerClientInvokerMu.RUnlock()
-
-	err := registrystage.ConnectRegistriesToClusterNetwork(registrystage.StageParams{
-		Cmd:                cmd,
-		ClusterCfg:         ctx.ClusterCfg,
-		Deps:               deps,
-		CfgManager:         cfgManager,
-		KindConfig:         ctx.KindConfig,
-		K3dConfig:          ctx.K3dConfig,
-		TalosConfig:        ctx.TalosConfig,
-		FirstActivityShown: firstActivityShown,
-		DockerInvoker:      invoker,
-	})
+	err := registrystage.ConnectRegistriesToClusterNetwork(params)
 	if err != nil {
 		notify.WriteMessage(notify.Message{
 			Type:    notify.WarningType,
