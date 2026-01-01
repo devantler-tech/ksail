@@ -95,6 +95,7 @@ jobs:
         with:
           persist-credentials: true
           token: ${{ steps.generate-token.outputs.token }}
+          ref: ${{ github.head_ref || github.ref }}
 
       - name: ⚙️ Setup Go
         uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6.1.0
@@ -131,6 +132,7 @@ jobs:
         with:
           persist-credentials: true
           token: ${{ steps.generate-token.outputs.token }}
+          ref: ${{ github.head_ref || github.ref }}
 
       - name: ⚙️ Setup Go
         id: setup-go
@@ -252,14 +254,7 @@ jobs:
   status:
     name: CI - KSail
     runs-on: ubuntu-latest
-    needs:
-      [
-        changes,
-        build-artifact,
-        generate-schema,
-        generate-cli-flags-docs,
-        system-test,
-      ]
+    needs: [changes, build-artifact, generate-schema, generate-cli-flags-docs, system-test]
     if: ${{ always() }}
     steps:
       - name: Summarize workflow result
