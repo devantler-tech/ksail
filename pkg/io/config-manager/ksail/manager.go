@@ -792,7 +792,13 @@ func (m *ConfigManager) cacheKindConfig() error {
 	}
 
 	if kindConfig == nil {
-		kindConfig = &kindv1alpha4.Cluster{}
+		// Create a valid default Kind config with required TypeMeta fields
+		kindConfig = &kindv1alpha4.Cluster{
+			TypeMeta: kindv1alpha4.TypeMeta{
+				Kind:       "Cluster",
+				APIVersion: "kind.x-k8s.io/v1alpha4",
+			},
+		}
 	}
 
 	m.DistributionConfig.Kind = kindConfig
@@ -807,7 +813,8 @@ func (m *ConfigManager) cacheK3dConfig() error {
 	}
 
 	if k3dConfig == nil {
-		k3dConfig = &k3dv1alpha5.SimpleConfig{}
+		// Create a valid default K3d config with required TypeMeta fields
+		k3dConfig = k3dconfigmanager.NewK3dSimpleConfig("", "", "")
 	}
 
 	m.DistributionConfig.K3d = k3dConfig
