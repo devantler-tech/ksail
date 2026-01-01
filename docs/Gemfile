@@ -10,4 +10,4 @@ group :jekyll_plugins do
   gem "jekyll-relative-links", "~> 0.7.0"
 end
 
-gem "just-the-docs", "~> 0.10.1"
+gem "just-the-docs", "~> 0.11.0"

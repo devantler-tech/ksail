@@ -91,7 +91,7 @@ GEM
     jekyll-watch (2.2.1)
       listen (~> 3.0)
     json (2.18.0)
-    just-the-docs (0.10.2)
+    just-the-docs (0.11.0)
       jekyll (>= 3.8.5)
       jekyll-include-cache
       jekyll-seo-tag (>= 2.0)
@@ -114,7 +114,7 @@ GEM
     rb-inotify (0.11.1)
       ffi (~> 1.0)
     rexml (3.4.4)
-    rouge (4.6.1)
+    rouge (4.7.0)
     safe_yaml (1.0.5)
     sass-embedded (1.97.1)
       google-protobuf (~> 4.31)
@@ -179,7 +179,7 @@ DEPENDENCIES
   jekyll-gfm-admonitions (~> 1.2.0)
   jekyll-optional-front-matter (~> 0.3.2)
   jekyll-relative-links (~> 0.7.0)
-  just-the-docs (~> 0.10.1)
+  just-the-docs (~> 0.11.0)
   webrick (~> 1.9)
 
 CHECKSUMS
@@ -224,7 +224,7 @@ CHECKSUMS
   jekyll-seo-tag (2.8.0) sha256=3f2ed1916d56f14ebfa38e24acde9b7c946df70cb183af2cb5f0598f21ae6818
   jekyll-watch (2.2.1) sha256=bc44ed43f5e0a552836245a54dbff3ea7421ecc2856707e8a1ee203a8387a7e1
   json (2.18.0) sha256=b10506aee4183f5cf49e0efc48073d7b75843ce3782c68dbeb763351c08fd505
-  just-the-docs (0.10.2) sha256=63b295492906cc6b3e4ab10ceed19a4afea833b11ac06e0af28969058e15e5fe
+  just-the-docs (0.11.0) sha256=356856554358df03f1785d217c69bef7d5c3126da93aceb6c165662b8815e842
   kramdown (2.5.1) sha256=87bbb6abd9d3cebe4fc1f33e367c392b4500e6f8fa19dd61c0972cf4afe7368c
   kramdown-parser-gfm (1.1.0) sha256=fb39745516427d2988543bf01fc4cf0ab1149476382393e0e9c48592f6581729
   liquid (4.0.4) sha256=4fcfebb1a045e47918388dbb7a0925e7c3893e58d2bd6c3b3c73ec17a2d8fdb3
@@ -237,7 +237,7 @@ CHECKSUMS
   rb-fsevent (0.11.2) sha256=43900b972e7301d6570f64b850a5aa67833ee7d87b458ee92805d56b7318aefe
   rb-inotify (0.11.1) sha256=a0a700441239b0ff18eb65e3866236cd78613d6b9f78fea1f9ac47a85e47be6e
   rexml (3.4.4) sha256=19e0a2c3425dfbf2d4fc1189747bdb2f849b6c5e74180401b15734bc97b5d142
-  rouge (4.6.1) sha256=5075346d5797d6864be93f7adc75a16047a7dbfa572c63c502419ffa582c77de
+  rouge (4.7.0) sha256=dba5896715c0325c362e895460a6d350803dbf6427454f49a47500f3193ea739
   safe_yaml (1.0.5) sha256=a6ac2d64b7eb027bdeeca1851fe7e7af0d668e133e8a88066a0c6f7087d9f848
   sass-embedded (1.97.1) sha256=112ee8895854e7a8ea985937f7458f649fed8df255ed61e189f8a4b185e768d9
   sass-embedded (1.97.1-aarch64-linux-android) sha256=f1801c8f5ac05ff0161fb9792259069239c2d4e497d2eca51a21c9ee2fa5e648
