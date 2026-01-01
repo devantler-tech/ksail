@@ -11,18 +11,18 @@ grand_parent: "CLI Flags"
 ```text
 Stop a running Kubernetes cluster.
 
+The cluster is detected from the provided context or the current kubeconfig context.
+Supported distributions are automatically detected:
+  - Kind clusters (context pattern: kind-<cluster-name>)
+  - K3d clusters (context pattern: k3d-<cluster-name>)
+  - Talos clusters (context pattern: admin@<cluster-name>)
+
 Usage:
   ksail cluster stop [flags]
 
 Flags:
-  -c, --context string                 Kubernetes context of cluster
-  -d, --distribution Distribution      Kubernetes distribution to use (default Kind)
-      --distribution-config string     Configuration file for the distribution
-  -g, --gitops-engine GitOpsEngine     GitOps engine to use (None disables GitOps, Flux installs Flux controllers, ArgoCD installs Argo CD) (default None)
-  -h, --help                           help for stop
-  -k, --kubeconfig string              Path to kubeconfig file (default "~/.kube/config")
-      --local-registry LocalRegistry   Local registry behavior (Enabled provisions a registry; Disabled skips provisioning. Defaults to Enabled when a GitOps engine is configured) (default Disabled)
-      --local-registry-port int32      Host port to expose the local OCI registry on (default 5111)
+  -c, --context string   Kubernetes context to target (defaults to current context)
+  -h, --help             help for stop
 
 Global Flags:
       --timing   Show per-activity timing output
