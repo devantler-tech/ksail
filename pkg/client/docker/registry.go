@@ -5,8 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
+	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	cerrdefs "github.com/containerd/errdefs"
 	"github.com/docker/docker/api/types/container"
@@ -27,6 +30,8 @@ var (
 	ErrRegistryAlreadyExists = errors.New("registry already exists")
 	// ErrRegistryPortNotFound is returned when the registry port cannot be determined.
 	ErrRegistryPortNotFound = errors.New("registry port not found")
+	// ErrRegistryNotReady is returned when a registry fails to become ready within the timeout.
+	ErrRegistryNotReady = errors.New("registry not ready within timeout")
 )
 
 const (
@@ -59,6 +64,15 @@ const (
 	RegistryDataPath = "/var/lib/registry"
 	// RegistryRestartPolicy defines the container restart policy.
 	RegistryRestartPolicy = "unless-stopped"
+
+	// Registry health check configuration.
+
+	// RegistryReadyTimeout is the maximum time to wait for a registry to become ready.
+	RegistryReadyTimeout = 30 * time.Second
+	// RegistryReadyPollInterval is the interval between registry health checks.
+	RegistryReadyPollInterval = 500 * time.Millisecond
+	// RegistryHTTPTimeout is the timeout for individual HTTP health check requests.
+	RegistryHTTPTimeout = 2 * time.Second
 )
 
 // RegistryManager manages Docker registry containers for mirror/pull-through caching.
@@ -254,6 +268,129 @@ func (rm *RegistryManager) GetRegistryPort(ctx context.Context, name string) (in
 	}
 
 	return 0, ErrRegistryPortNotFound
+}
+
+// WaitForRegistryReady waits for a registry to become ready by polling its health endpoint.
+// It checks both the container's internal port (5000) using the container's IP address.
+// The containerIP parameter is the IP address assigned to the registry container in the network.
+// If containerIP is empty, it will attempt to get the host port and check via localhost.
+func (rm *RegistryManager) WaitForRegistryReady(
+	ctx context.Context,
+	name string,
+	containerIP string,
+) error {
+	return rm.WaitForRegistryReadyWithTimeout(ctx, name, containerIP, RegistryReadyTimeout)
+}
+
+// WaitForRegistryReadyWithTimeout waits for a registry with a custom timeout.
+func (rm *RegistryManager) WaitForRegistryReadyWithTimeout(
+	ctx context.Context,
+	name string,
+	containerIP string,
+	timeout time.Duration,
+) error {
+	// First ensure the container is running
+	inUse, err := rm.IsRegistryInUse(ctx, name)
+	if err != nil {
+		return fmt.Errorf("failed to check if registry %s is running: %w", name, err)
+	}
+
+	if !inUse {
+		return fmt.Errorf("registry %s is not running: %w", name, ErrRegistryNotFound)
+	}
+
+	// Determine the address to check
+	var checkAddr string
+	if containerIP != "" {
+		// Use container IP directly (for Talos clusters using static IPs)
+		checkAddr = net.JoinHostPort(containerIP, strconv.Itoa(DefaultRegistryPort))
+	} else {
+		// Fall back to host port
+		port, portErr := rm.GetRegistryPort(ctx, name)
+		if portErr != nil {
+			return fmt.Errorf("failed to get registry port: %w", portErr)
+		}
+
+		checkAddr = net.JoinHostPort(RegistryHostIP, strconv.Itoa(port))
+	}
+
+	checkURL := fmt.Sprintf("http://%s/v2/", checkAddr)
+
+	// Create HTTP client with timeout
+	httpClient := &http.Client{
+		Timeout: RegistryHTTPTimeout,
+	}
+
+	// Poll until ready or timeout
+	deadline := time.Now().Add(timeout)
+	ticker := time.NewTicker(RegistryReadyPollInterval)
+
+	defer ticker.Stop()
+
+	var lastErr error
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+			if time.Now().After(deadline) {
+				if lastErr != nil {
+					return fmt.Errorf("%w: %s (last error: %v)", ErrRegistryNotReady, name, lastErr)
+				}
+
+				return fmt.Errorf("%w: %s", ErrRegistryNotReady, name)
+			}
+
+			req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, checkURL, nil)
+			if reqErr != nil {
+				lastErr = reqErr
+
+				continue
+			}
+
+			resp, respErr := httpClient.Do(req)
+			if respErr != nil {
+				lastErr = respErr
+
+				continue
+			}
+
+			_ = resp.Body.Close()
+
+			// Registry v2 API returns 200 or 401 (if auth required) on /v2/
+			if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusUnauthorized {
+				return nil
+			}
+
+			lastErr = fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		}
+	}
+}
+
+// WaitForRegistriesReady waits for multiple registries to become ready.
+// The registryIPs map contains registry names as keys and their container IPs as values.
+// If a registry IP is empty, it will attempt to check via the host port.
+func (rm *RegistryManager) WaitForRegistriesReady(
+	ctx context.Context,
+	registryIPs map[string]string,
+) error {
+	return rm.WaitForRegistriesReadyWithTimeout(ctx, registryIPs, RegistryReadyTimeout)
+}
+
+// WaitForRegistriesReadyWithTimeout waits for multiple registries with a custom timeout.
+func (rm *RegistryManager) WaitForRegistriesReadyWithTimeout(
+	ctx context.Context,
+	registryIPs map[string]string,
+	timeout time.Duration,
+) error {
+	for name, ip := range registryIPs {
+		if err := rm.WaitForRegistryReadyWithTimeout(ctx, name, ip, timeout); err != nil {
+			return fmt.Errorf("registry %s failed health check: %w", name, err)
+		}
+	}
+
+	return nil
 }
 
 // prepareRegistryResources creates the volume for a registry.

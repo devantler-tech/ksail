@@ -9,6 +9,7 @@ import (
 	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
+	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
 	"github.com/docker/docker/client"
 )
 
@@ -82,6 +83,8 @@ func ResolveTalosNetworkCIDR(_ *talosconfigmanager.Configs) string {
 }
 
 // SetupTalosMirrorRegistries creates network, registry containers, and connects them.
+// It also waits for registries to become ready before returning to ensure
+// Talos nodes can pull images when they boot.
 func SetupTalosMirrorRegistries(
 	ctx context.Context,
 	dockerAPIClient client.APIClient,
@@ -118,7 +121,7 @@ func SetupTalosMirrorRegistries(
 
 	// Connect registries to the network with static IPs from the high end of the subnet
 	// to avoid conflicts with Talos node IPs that start from .2
-	err = registry.ConnectRegistriesToNetworkWithStaticIPs(
+	registryIPs, err := registry.ConnectRegistriesToNetworkWithStaticIPs(
 		ctx,
 		dockerAPIClient,
 		registryInfos,
@@ -128,6 +131,27 @@ func SetupTalosMirrorRegistries(
 	)
 	if err != nil {
 		return fmt.Errorf("failed to connect talos registries to network: %w", err)
+	}
+
+	// Wait for registries to become ready before returning.
+	// This ensures Talos nodes can pull images when they boot.
+	if len(registryIPs) > 0 {
+		notify.WriteMessage(notify.Message{
+			Type:    notify.ActivityType,
+			Content: "waiting for mirror registries to become ready",
+			Writer:  writer,
+		})
+
+		err = registryMgr.WaitForRegistriesReady(ctx, registryIPs)
+		if err != nil {
+			return fmt.Errorf("failed waiting for registries to become ready: %w", err)
+		}
+
+		notify.WriteMessage(notify.Message{
+			Type:    notify.SuccessType,
+			Content: "all mirror registries are ready",
+			Writer:  writer,
+		})
 	}
 
 	return nil

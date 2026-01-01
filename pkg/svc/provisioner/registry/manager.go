@@ -376,6 +376,7 @@ func ConnectRegistriesToNetwork(
 // ConnectRegistriesToNetworkWithStaticIPs attaches registry containers to a network using static IPs
 // from the high end of the subnet to avoid conflicts with Talos node IPs that start from .2.
 // For a /24 network, registries are assigned starting from .250 down (.250, .249, .248, etc.).
+// Returns a map of registry names to their assigned static IPs.
 //
 //nolint:funlen,varnamelen // Function handles multiple notification types; 'i' is clear for loop index
 func ConnectRegistriesToNetworkWithStaticIPs(
@@ -385,15 +386,16 @@ func ConnectRegistriesToNetworkWithStaticIPs(
 	networkName string,
 	networkCIDR string,
 	writer io.Writer,
-) error {
+) (map[string]string, error) {
 	networkName, networkOK := ksailio.TrimNonEmpty(networkName)
 	if dockerClient == nil || len(registries) == 0 || !networkOK {
-		return nil
+		return nil, nil
 	}
 
 	// Calculate static IPs for each registry from the high end of the subnet
 	// For 10.5.0.0/24: use 10.5.0.250, 10.5.0.249, etc.
 	staticIPs := calculateRegistryIPs(networkCIDR, len(registries))
+	registryIPs := make(map[string]string, len(registries))
 
 	for i, reg := range registries {
 		containerName, nameOK := ksailio.TrimNonEmpty(reg.Name)
@@ -408,6 +410,7 @@ func ConnectRegistriesToNetworkWithStaticIPs(
 					IPv4Address: staticIPs[i],
 				},
 			}
+			registryIPs[containerName] = staticIPs[i]
 
 			notify.WriteMessage(notify.Message{
 				Type:    notify.ActivityType,
@@ -446,7 +449,7 @@ func ConnectRegistriesToNetworkWithStaticIPs(
 		}
 	}
 
-	return nil
+	return registryIPs, nil
 }
 
 // calculateRegistryIPs computes static IPs for registries from the high end of the subnet.
