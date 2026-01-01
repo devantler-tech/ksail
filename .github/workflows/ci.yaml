@@ -249,8 +249,8 @@ jobs:
           if [ -d "talos" ]; then rm -rf "talos"; fi
           if [ -d "k8s" ]; then rm -rf "k8s"; fi
 
-  ci-status:
-    name: ✅ CI - KSail Status
+  status:
+    name: CI - KSail
     runs-on: ubuntu-latest
     needs:
       [
