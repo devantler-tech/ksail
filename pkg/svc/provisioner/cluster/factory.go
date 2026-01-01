@@ -159,7 +159,9 @@ func (f DefaultFactory) createK3dProvisioner(
 	// Only pass config path if the file actually exists
 	// When no project is scaffolded, we use the in-memory config defaults
 	configPath := cluster.Spec.Cluster.DistributionConfig
-	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+
+	_, err := os.Stat(configPath)
+	if os.IsNotExist(err) {
 		configPath = "" // Don't pass --config flag; use k3d defaults + in-memory config
 	}
 
