@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/create/registrystage"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
 	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
@@ -127,7 +128,14 @@ func cleanupRegistries(
 	}
 
 	if clusterCfg.Spec.Cluster.LocalRegistry == v1alpha1.LocalRegistryEnabled {
-		err = cleanupLocalRegistry(cmd, cfgManager, clusterCfg, deps, deleteVolumes)
+		err = registrystage.CleanupLocalRegistry(
+			cmd,
+			cfgManager,
+			clusterCfg,
+			deps,
+			deleteVolumes,
+			registrystage.DefaultLocalRegistryDependencies(),
+		)
 		if err != nil {
 			notify.WriteMessage(notify.Message{
 				Type:    notify.WarningType,

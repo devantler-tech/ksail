@@ -1,4 +1,4 @@
-// Package registrystage provides registry setup and connection stages for cluster creation.
-// It handles mirror registry provisioning, network creation, and containerd configuration
+// Package registrystage provides registry-related stages for cluster lifecycle operations.
+// This includes local registry management, mirror registry setup, and registry connection stages
 // for Kind, K3d, and Talos distributions.
 package registrystage

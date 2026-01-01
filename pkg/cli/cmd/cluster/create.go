@@ -126,12 +126,16 @@ func handleCreateRunE(
 		&firstActivityShown,
 	)
 
-	err = executeLocalRegistryStage(
+	err = registrystage.RunLocalRegistryStage(
 		cmd,
-		ctx,
+		ctx.ClusterCfg,
 		deps,
-		localRegistryStageConnect,
+		ctx.KindConfig,
+		ctx.K3dConfig,
+		ctx.TalosConfig,
+		registrystage.LocalRegistryConnect,
 		&firstActivityShown,
+		registrystage.DefaultLocalRegistryDependencies(),
 	)
 	if err != nil {
 		return fmt.Errorf("failed to connect local registry: %w", err)
@@ -190,12 +194,16 @@ func ensureLocalRegistriesReady(
 	cfgManager *ksailconfigmanager.ConfigManager,
 	firstActivityShown *bool,
 ) error {
-	err := executeLocalRegistryStage(
+	err := registrystage.RunLocalRegistryStage(
 		cmd,
-		ctx,
+		ctx.ClusterCfg,
 		deps,
-		localRegistryStageProvision,
+		ctx.KindConfig,
+		ctx.K3dConfig,
+		ctx.TalosConfig,
+		registrystage.LocalRegistryProvision,
 		firstActivityShown,
+		registrystage.DefaultLocalRegistryDependencies(),
 	)
 	if err != nil {
 		return fmt.Errorf("failed to provision local registry: %w", err)

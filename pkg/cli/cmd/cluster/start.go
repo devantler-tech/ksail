@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/create/registrystage"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
@@ -68,12 +69,16 @@ func handleStartRunE(
 	// Start command's registry connection happens after cluster start, so use a dummy tracker
 	dummyTracker := true
 
-	connectErr := executeLocalRegistryStage(
+	connectErr := registrystage.RunLocalRegistryStage(
 		cmd,
-		ctx,
+		ctx.ClusterCfg,
 		deps,
-		localRegistryStageConnect,
+		ctx.KindConfig,
+		ctx.K3dConfig,
+		ctx.TalosConfig,
+		registrystage.LocalRegistryConnect,
 		&dummyTracker,
+		registrystage.DefaultLocalRegistryDependencies(),
 	)
 	if connectErr != nil {
 		return fmt.Errorf("connect local registry: %w", connectErr)
