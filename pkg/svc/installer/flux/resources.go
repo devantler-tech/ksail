@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
 	fluxclient "github.com/devantler-tech/ksail/v5/pkg/client/flux"
 	registry "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
@@ -145,7 +146,7 @@ func buildFluxInstance(clusterCfg *v1alpha1.Cluster) (*FluxInstance, error) {
 
 	projectName := registry.SanitizeRepoName(sourceDir)
 	repoHost := registry.LocalRegistryClusterHost
-	repoPort := registry.DefaultRegistryPort
+	repoPort := dockerclient.DefaultRegistryPort
 
 	if clusterCfg.Spec.Cluster.LocalRegistry != v1alpha1.LocalRegistryEnabled {
 		repoHost = registry.DefaultEndpointHost

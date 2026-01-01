@@ -3,6 +3,7 @@ package registry_test
 import (
 	"testing"
 
+	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -78,7 +79,7 @@ func TestExtractRegistryPort_UsesEndpointPortWhenAvailable(t *testing.T) {
 	t.Parallel()
 
 	usedPorts := map[int]struct{}{}
-	next := registry.DefaultRegistryPort
+	next := dockerclient.DefaultRegistryPort
 
 	port := registry.ExtractRegistryPort([]string{"http://ghcr.io:5050"}, usedPorts, &next)
 	require.Equal(t, 5050, port)
@@ -95,19 +96,19 @@ func TestExtractRegistryPort_UsesEndpointPortWhenAvailable(t *testing.T) {
 func TestExtractRegistryPort_FallsBackToDefaultWhenNoEndpoint(t *testing.T) {
 	t.Parallel()
 
-	usedPorts := map[int]struct{}{registry.DefaultRegistryPort: {}}
-	next := registry.DefaultRegistryPort
+	usedPorts := map[int]struct{}{dockerclient.DefaultRegistryPort: {}}
+	next := dockerclient.DefaultRegistryPort
 
 	port := registry.ExtractRegistryPort(nil, usedPorts, &next)
-	require.Equal(t, registry.DefaultRegistryPort+1, port)
-	assert.Contains(t, usedPorts, registry.DefaultRegistryPort+1)
-	assert.Equal(t, registry.DefaultRegistryPort+2, next)
+	require.Equal(t, dockerclient.DefaultRegistryPort+1, port)
+	assert.Contains(t, usedPorts, dockerclient.DefaultRegistryPort+1)
+	assert.Equal(t, dockerclient.DefaultRegistryPort+2, next)
 
 	// Nil next pointer should still allocate the default port when map is empty.
 	newMap := map[int]struct{}{}
 	port = registry.ExtractRegistryPort(nil, newMap, nil)
-	require.Equal(t, registry.DefaultRegistryPort, port)
-	assert.Contains(t, newMap, registry.DefaultRegistryPort)
+	require.Equal(t, dockerclient.DefaultRegistryPort, port)
+	assert.Contains(t, newMap, dockerclient.DefaultRegistryPort)
 }
 
 func TestExtractNameFromEndpoint(t *testing.T) {
@@ -174,7 +175,7 @@ func TestBuildRegistryInfo(t *testing.T) {
 	info := registry.BuildRegistryInfo(
 		"docker.io",
 		[]string{"http://docker.io:5000"},
-		registry.DefaultRegistryPort,
+		dockerclient.DefaultRegistryPort,
 		"",
 		"",
 	)
@@ -182,7 +183,7 @@ func TestBuildRegistryInfo(t *testing.T) {
 	require.Equal(t, "docker.io", info.Host)
 	assert.Equal(t, "docker.io", info.Name)
 	assert.Equal(t, "https://registry-1.docker.io", info.Upstream)
-	assert.Equal(t, registry.DefaultRegistryPort, info.Port)
+	assert.Equal(t, dockerclient.DefaultRegistryPort, info.Port)
 	assert.Equal(t, "docker.io", info.Volume)
 }
 
@@ -192,7 +193,7 @@ func TestBuildRegistryInfo_UsesOverride(t *testing.T) {
 	info := registry.BuildRegistryInfo(
 		"docker.io",
 		[]string{"http://docker.io:5000"},
-		registry.DefaultRegistryPort,
+		dockerclient.DefaultRegistryPort,
 		"",
 		"https://mirror.example.com",
 	)

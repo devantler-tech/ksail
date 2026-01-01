@@ -6,6 +6,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
 )
 
 // MirrorSpec represents a parsed mirror registry specification entry.
@@ -127,9 +129,10 @@ func BuildMirrorEntries(
 			containerName = fmt.Sprintf("%s-%s", trimmed, sanitized)
 		}
 
-		// Use DefaultRegistryPort for the endpoint since all registry containers
+		// Use dockerclient.DefaultRegistryPort for the endpoint since all registry containers
 		// listen on port 5000 internally (port is the host-mapped port)
-		endpoint := "http://" + net.JoinHostPort(containerName, strconv.Itoa(DefaultRegistryPort))
+		portStr := strconv.Itoa(dockerclient.DefaultRegistryPort)
+		endpoint := "http://" + net.JoinHostPort(containerName, portStr)
 
 		entries = append(entries, MirrorEntry{
 			Host:          host,
@@ -210,7 +213,7 @@ func cloneEndpointMap(source map[string][]string) map[string][]string {
 
 func collectUsedPorts(hostEndpoints map[string][]string) (map[int]struct{}, int) {
 	used := make(map[int]struct{})
-	next := DefaultRegistryPort
+	next := dockerclient.DefaultRegistryPort
 
 	for _, endpoints := range hostEndpoints {
 		for _, endpoint := range endpoints {
@@ -232,7 +235,7 @@ func collectUsedPorts(hostEndpoints map[string][]string) (map[int]struct{}, int)
 // InitPortAllocation prepares the used ports set and the next available port based on provided base mapping.
 func InitPortAllocation(baseUsedPorts map[int]struct{}) (map[int]struct{}, int) {
 	usedPorts := make(map[int]struct{}, len(baseUsedPorts))
-	nextPort := DefaultRegistryPort
+	nextPort := dockerclient.DefaultRegistryPort
 
 	for port := range baseUsedPorts {
 		usedPorts[port] = struct{}{}
@@ -341,7 +344,7 @@ func BuildUpstreamLookup(specs []MirrorSpec) map[string]string {
 // AllocatePort returns the next available port and updates the tracking map.
 func AllocatePort(nextPort *int, usedPorts map[int]struct{}) int {
 	if nextPort == nil {
-		value := DefaultRegistryPort
+		value := dockerclient.DefaultRegistryPort
 		nextPort = &value
 	}
 
@@ -351,7 +354,7 @@ func AllocatePort(nextPort *int, usedPorts map[int]struct{}) int {
 
 	port := *nextPort
 	if port <= 0 {
-		port = DefaultRegistryPort
+		port = dockerclient.DefaultRegistryPort
 	}
 
 	for {

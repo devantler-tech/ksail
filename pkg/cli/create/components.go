@@ -13,6 +13,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
 	argocdgitops "github.com/devantler-tech/ksail/v5/pkg/client/argocd"
+	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
 	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/installer"
 	argocdinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/argocd"
@@ -284,7 +285,7 @@ func EnsureArgoCDResources(
 	repoName := registry.SanitizeRepoName(sourceDir)
 	hostPort := net.JoinHostPort(
 		registry.LocalRegistryClusterHost,
-		strconv.Itoa(registry.DefaultRegistryPort),
+		strconv.Itoa(dockerclient.DefaultRegistryPort),
 	)
 	repoURL := fmt.Sprintf("oci://%s/%s", hostPort, repoName)
 

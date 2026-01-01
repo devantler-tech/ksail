@@ -25,9 +25,6 @@ type Info struct {
 	Volume   string
 }
 
-// DefaultRegistryPort defines the default container registry port inside the container.
-const DefaultRegistryPort = 5000
-
 const expectedEndpointParts = 2
 
 // Registry Lifecycle Management
@@ -567,7 +564,7 @@ func GenerateUpstreamURL(host string) string {
 // ExtractRegistryPort determines a unique host port to expose for the given endpoints.
 func ExtractRegistryPort(endpoints []string, usedPorts map[int]struct{}, nextPort *int) int {
 	if nextPort == nil {
-		defaultPort := DefaultRegistryPort
+		defaultPort := dockerclient.DefaultRegistryPort
 		nextPort = &defaultPort
 	}
 
@@ -578,7 +575,7 @@ func ExtractRegistryPort(endpoints []string, usedPorts map[int]struct{}, nextPor
 	port := *nextPort
 	for {
 		if port <= 0 {
-			port = DefaultRegistryPort
+			port = dockerclient.DefaultRegistryPort
 		}
 
 		if _, exists := usedPorts[port]; !exists {
