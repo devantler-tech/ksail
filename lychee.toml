@@ -1,5 +1,6 @@
-# 100..=103 - because it is default
-# 200..=299 - because it is default
-# 403 - because some websites return 403 Forbidden when we scan from GHA's IP range
-# 429 - because some websites have low rate limits
-accept = ["100..=103", "200..=299", "403", "429"]
+# 100..=103 - because it is default.
+# 200..=299 - because it is default.
+# 403 - because some websites return 403 Forbidden when we scan from GHA's IP range.
+# 415 - because some websites have unsupported Media Types.
+# 429 - because some websites have low rate limits.
+accept = ["100..=103", "200..=299", "403", "415", "429"]
