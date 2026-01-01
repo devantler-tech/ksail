@@ -17,7 +17,7 @@ Supported distributions are automatically detected:
 
 // NewStartCmd creates and returns the start command.
 func NewStartCmd(_ any) *cobra.Command {
-	return NewLifecycleCmd(LifecycleConfig{
+	return NewSimpleLifecycleCmd(SimpleLifecycleConfig{
 		Use:          "start",
 		Short:        "Start a stopped cluster",
 		Long:         startLongDesc,

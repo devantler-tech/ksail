@@ -32,8 +32,10 @@ var (
 	)
 )
 
-// LifecycleConfig defines the configuration for a lifecycle command.
-type LifecycleConfig struct {
+// SimpleLifecycleConfig defines the configuration for a simple lifecycle command.
+// Simple lifecycle commands auto-detect the cluster from the kubeconfig context
+// and don't require a ksail.yaml configuration file.
+type SimpleLifecycleConfig struct {
 	Use          string
 	Short        string
 	Long         string
@@ -48,8 +50,10 @@ type LifecycleConfig struct {
 	) error
 }
 
-// NewLifecycleCmd creates a lifecycle command (start/stop) with auto-detection.
-func NewLifecycleCmd(config LifecycleConfig) *cobra.Command {
+// NewSimpleLifecycleCmd creates a simple lifecycle command (start/stop) with context auto-detection.
+// Unlike config-based lifecycle commands, these commands don't require a ksail.yaml file
+// and instead detect the cluster from the kubeconfig context pattern.
+func NewSimpleLifecycleCmd(config SimpleLifecycleConfig) *cobra.Command {
 	var contextFlag string
 
 	cmd := &cobra.Command{
@@ -58,7 +62,7 @@ func NewLifecycleCmd(config LifecycleConfig) *cobra.Command {
 		Long:         config.Long,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runLifecycleAction(cmd, contextFlag, config)
+			return runSimpleLifecycleAction(cmd, contextFlag, config)
 		},
 	}
 
@@ -73,7 +77,11 @@ func NewLifecycleCmd(config LifecycleConfig) *cobra.Command {
 	return cmd
 }
 
-func runLifecycleAction(cmd *cobra.Command, contextFlag string, config LifecycleConfig) error {
+func runSimpleLifecycleAction(
+	cmd *cobra.Command,
+	contextFlag string,
+	config SimpleLifecycleConfig,
+) error {
 	ctx, err := ResolveContext(contextFlag)
 	if err != nil {
 		return err

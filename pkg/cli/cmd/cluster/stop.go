@@ -17,7 +17,7 @@ Supported distributions are automatically detected:
 
 // NewStopCmd creates and returns the stop command.
 func NewStopCmd(_ any) *cobra.Command {
-	return NewLifecycleCmd(LifecycleConfig{
+	return NewSimpleLifecycleCmd(SimpleLifecycleConfig{
 		Use:          "stop",
 		Short:        "Stop a running cluster",
 		Long:         stopLongDesc,
