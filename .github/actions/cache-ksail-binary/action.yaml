@@ -1,4 +1,4 @@
-name: Prepare KSail Binary
+name: Cache KSail Binary
 description: Restore or build the KSail binary from cache, handling path variations for different jobs.
 author: Devantler Tech Platform Team
 
@@ -45,7 +45,7 @@ runs:
         path: ./.cache/ksail
         key: ${{ steps.ksail-cache-key.outputs.value }}
 
-    - name: 📦 Prepare ksail binary
+    - name: 📦 Cache KSail Binary
       id: prepare
       shell: bash
       env:
