@@ -36,6 +36,22 @@ type Configs struct {
 	bundle *bundle.Bundle
 }
 
+// NewDefaultConfigs creates a new Talos Configs with default settings.
+// This is used when no scaffolded project exists and default configurations are needed.
+// It creates a valid config bundle with:
+//   - Cluster name: DefaultClusterName ("talos-default")
+//   - Kubernetes version: DefaultKubernetesVersion ("1.32.0")
+//   - Network CIDR: DefaultNetworkCIDR ("10.5.0.0/24")
+//   - No additional patches
+func NewDefaultConfigs() (*Configs, error) {
+	return newConfigs(
+		DefaultClusterName,
+		DefaultKubernetesVersion,
+		DefaultNetworkCIDR,
+		nil, // no patches
+	)
+}
+
 // Bundle returns the underlying Talos config bundle.
 // This provides full access to all bundle functionality.
 func (c *Configs) Bundle() *bundle.Bundle {

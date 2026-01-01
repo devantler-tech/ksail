@@ -829,7 +829,11 @@ func (m *ConfigManager) cacheTalosConfig() error {
 	}
 
 	if talosConfig == nil {
-		talosConfig = &talosconfigmanager.Configs{}
+		// Create a valid default Talos config with required bundle
+		talosConfig, err = talosconfigmanager.NewDefaultConfigs()
+		if err != nil {
+			return fmt.Errorf("failed to create default Talos config: %w", err)
+		}
 	}
 
 	m.DistributionConfig.Talos = talosConfig
