@@ -163,7 +163,12 @@ func newRegistryHandlers(
 		},
 		v1alpha1.DistributionTalos: {
 			Prepare: func() bool {
-				return PrepareTalosConfigWithMirrors(clusterCfg, talosConfig, mirrorSpecs, ResolveTalosClusterName(talosConfig))
+				return PrepareTalosConfigWithMirrors(
+					clusterCfg,
+					talosConfig,
+					mirrorSpecs,
+					ResolveTalosClusterName(talosConfig),
+				)
 			},
 			Action: talosAction,
 		},

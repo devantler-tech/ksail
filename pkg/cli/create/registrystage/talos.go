@@ -47,7 +47,12 @@ func runTalosMirrorAction(
 
 	// Build registry infos from mirror specs
 	upstreams := registry.BuildUpstreamLookup(ctx.MirrorSpecs)
-	registryInfos := registry.BuildRegistryInfosFromSpecs(ctx.MirrorSpecs, upstreams, nil, clusterName)
+	registryInfos := registry.BuildRegistryInfosFromSpecs(
+		ctx.MirrorSpecs,
+		upstreams,
+		nil,
+		clusterName,
+	)
 
 	if len(registryInfos) == 0 {
 		return nil

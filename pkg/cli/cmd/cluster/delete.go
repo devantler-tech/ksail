@@ -390,7 +390,12 @@ func cleanupTalosMirrorRegistries(
 		registryNames,
 		func(dockerAPIClient client.APIClient) error {
 			// Build registry infos from mirror specs
-			registryInfos := registry.BuildRegistryInfosFromSpecs(mirrorSpecs, nil, nil, clusterName)
+			registryInfos := registry.BuildRegistryInfosFromSpecs(
+				mirrorSpecs,
+				nil,
+				nil,
+				clusterName,
+			)
 
 			if len(registryInfos) == 0 {
 				return nil
