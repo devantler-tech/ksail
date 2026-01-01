@@ -65,6 +65,7 @@ func NewK3dClusterProvisioner(
 // Create provisions a k3d cluster using the native Cobra command.
 func (k *K3dClusterProvisioner) Create(ctx context.Context, name string) error {
 	args := k.appendConfigFlag(nil)
+	args = k.appendImageFlag(args)
 
 	return k.runLifecycleCommand(
 		ctx,
@@ -241,6 +242,24 @@ func (k *K3dClusterProvisioner) appendConfigFlag(args []string) []string {
 	}
 
 	return append(args, "--config", k.configPath)
+}
+
+// appendImageFlag adds the --image flag when no config file is used.
+// This ensures the k3d CLI uses the image from our in-memory config
+// instead of its internal default (which may be an older version).
+func (k *K3dClusterProvisioner) appendImageFlag(args []string) []string {
+	// Only add --image flag when no config file is used
+	// When a config file exists, the image is read from the config file
+	if k.configPath != "" {
+		return args
+	}
+
+	// Get image from in-memory config, or use empty to let k3d decide
+	if k.simpleCfg != nil && k.simpleCfg.Image != "" {
+		return append(args, "--image", k.simpleCfg.Image)
+	}
+
+	return args
 }
 
 func (k *K3dClusterProvisioner) resolveName(name string) string {
