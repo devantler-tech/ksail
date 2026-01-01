@@ -642,6 +642,7 @@ func ExtractPortFromEndpoint(endpoint string) int {
 // ResolveRegistryName determines the registry container name from endpoints or falls back to prefix + host.
 func ResolveRegistryName(host string, endpoints []string, prefix string) string {
 	expected := SanitizeHostIdentifier(host)
+	expectedWithPrefix := BuildRegistryName(prefix, host)
 
 	for _, endpoint := range endpoints {
 		name := ExtractNameFromEndpoint(endpoint)
@@ -649,7 +650,12 @@ func ResolveRegistryName(host string, endpoints []string, prefix string) string 
 			continue
 		}
 
+		// Check if the endpoint name matches either the unprefixed or prefixed expected name
 		if expected != "" && strings.EqualFold(name, expected) {
+			return name
+		}
+
+		if expectedWithPrefix != "" && strings.EqualFold(name, expectedWithPrefix) {
 			return name
 		}
 	}
@@ -675,8 +681,14 @@ func ExtractNameFromEndpoint(endpoint string) string {
 // BuildRegistryName constructs a registry container name from prefix and host.
 func BuildRegistryName(prefix, host string) string {
 	sanitized := SanitizeHostIdentifier(host)
+	// Trim spaces and trailing hyphens from prefix to avoid double hyphens
+	trimmedPrefix := strings.TrimRight(strings.TrimSpace(prefix), "-")
 
-	return prefix + sanitized
+	if trimmedPrefix == "" {
+		return sanitized
+	}
+
+	return trimmedPrefix + "-" + sanitized
 }
 
 // Registry Configuration Builders

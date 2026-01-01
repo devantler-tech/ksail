@@ -295,7 +295,7 @@ func prepareKindRegistryManager(
 		ctx,
 		dockerClient,
 		func(usedPorts map[int]struct{}) []registry.Info {
-			return registry.BuildRegistryInfosFromSpecs(mirrorSpecs, upstreams, usedPorts)
+			return registry.BuildRegistryInfosFromSpecs(mirrorSpecs, upstreams, usedPorts, "")
 		},
 	)
 	if err != nil {
@@ -354,7 +354,7 @@ func ConnectRegistriesToNetwork(
 		return nil
 	}
 
-	registriesInfo := registry.BuildRegistryInfosFromSpecs(mirrorSpecs, nil, nil)
+	registriesInfo := registry.BuildRegistryInfosFromSpecs(mirrorSpecs, nil, nil, "")
 	if len(registriesInfo) == 0 {
 		return nil
 	}

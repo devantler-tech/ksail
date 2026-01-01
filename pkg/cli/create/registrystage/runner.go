@@ -162,8 +162,10 @@ func newRegistryHandlers(
 			Action:  k3dAction,
 		},
 		v1alpha1.DistributionTalos: {
-			Prepare: func() bool { return PrepareTalosConfigWithMirrors(clusterCfg, talosConfig, mirrorSpecs) },
-			Action:  talosAction,
+			Prepare: func() bool {
+				return PrepareTalosConfigWithMirrors(clusterCfg, talosConfig, mirrorSpecs, ResolveTalosClusterName(talosConfig))
+			},
+			Action: talosAction,
 		},
 	}
 }

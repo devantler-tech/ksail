@@ -47,7 +47,7 @@ func runTalosMirrorAction(
 
 	// Build registry infos from mirror specs
 	upstreams := registry.BuildUpstreamLookup(ctx.MirrorSpecs)
-	registryInfos := registry.BuildRegistryInfosFromSpecs(ctx.MirrorSpecs, upstreams, nil)
+	registryInfos := registry.BuildRegistryInfosFromSpecs(ctx.MirrorSpecs, upstreams, nil, clusterName)
 
 	if len(registryInfos) == 0 {
 		return nil
@@ -161,6 +161,7 @@ func PrepareTalosConfigWithMirrors(
 	clusterCfg *v1alpha1.Cluster,
 	talosConfig *talosconfigmanager.Configs,
 	mirrorSpecs []registry.MirrorSpec,
+	clusterName string,
 ) bool {
 	if clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionTalos {
 		return false
@@ -177,9 +178,12 @@ func PrepareTalosConfigWithMirrors(
 	if talosConfig != nil {
 		mirrors := make([]talosconfigmanager.MirrorRegistry, 0, len(mirrorSpecs))
 		for _, spec := range mirrorSpecs {
+			// Use cluster name prefix for container name to avoid Docker DNS collisions
+			// e.g., for cluster "talos-default", ghcr.io becomes "talos-default-ghcr.io"
+			containerName := registry.BuildRegistryName(clusterName, spec.Host)
 			mirrors = append(mirrors, talosconfigmanager.MirrorRegistry{
 				Host:      spec.Host,
-				Endpoints: []string{"http://" + spec.Host + ":5000"},
+				Endpoints: []string{"http://" + containerName + ":5000"},
 			})
 		}
 
