@@ -262,38 +262,52 @@ jobs:
           if [ -d "talos" ]; then rm -rf "talos"; fi
           if [ -d "k8s" ]; then rm -rf "k8s"; fi
 
-  system-test-status:
+  ci-status:
+    name: ✅ CI - KSail Status
     runs-on: ubuntu-latest
-    needs: [changes, system-test, build-artifact]
+    needs: [changes, build-artifact, generate-schema, generate-cli-flags-docs, ci, system-test]
     if: ${{ always() }}
     steps:
-      - name: Summarize matrix result
+      - name: Summarize workflow result
         shell: bash
         run: |
           set -Eeuo pipefail
-          echo "system-test result: $MATRIX_RESULT"
-          echo "build-artifact result: $BUILD_RESULT"
+          echo "=== Job Results ==="
+          echo "changes: $CHANGES_RESULT"
+          echo "build-artifact: $BUILD_RESULT"
+          echo "generate-schema: $SCHEMA_RESULT"
+          echo "generate-cli-flags-docs: $CLI_DOCS_RESULT"
+          echo "ci: $CI_RESULT"
+          echo "system-test: $SYSTEM_TEST_RESULT"
+          echo ""
           echo "code changes: $CODE_CHANGES"
           echo "event name: $EVENT_NAME"
+          echo ""
 
-          # If no code changes and not a push, skip is expected
-          if [[ "$CODE_CHANGES" != "true" && "$EVENT_NAME" != "push" ]]; then
-            echo "✅ System tests skipped - no code changes detected"
-            exit 0
+          # Check if any job failed
+          failed=false
+          for result in "$CHANGES_RESULT" "$BUILD_RESULT" "$SCHEMA_RESULT" "$CLI_DOCS_RESULT" "$CI_RESULT" "$SYSTEM_TEST_RESULT"; do
+            case "$result" in
+              success|skipped)
+                ;;
+              *)
+                failed=true
+                ;;
+            esac
+          done
+
+          if [ "$failed" = true ]; then
+            echo "❌ At least one job failed."
+            exit 1
           fi
 
-          # Check matrix result
-          case "$MATRIX_RESULT" in
-            success|skipped)
-              echo "✅ All matrix runs succeeded or were skipped."
-              ;;
-            *)
-              echo "❌ At least one matrix run failed."
-              exit 1
-              ;;
-          esac
+          echo "✅ All jobs succeeded or were skipped."
         env:
-          MATRIX_RESULT: ${{ needs.system-test.result }}
+          CHANGES_RESULT: ${{ needs.changes.result }}
           BUILD_RESULT: ${{ needs.build-artifact.result }}
+          SCHEMA_RESULT: ${{ needs.generate-schema.result }}
+          CLI_DOCS_RESULT: ${{ needs.generate-cli-flags-docs.result }}
+          CI_RESULT: ${{ needs.ci.result }}
+          SYSTEM_TEST_RESULT: ${{ needs.system-test.result }}
           CODE_CHANGES: ${{ needs.changes.outputs.code }}
           EVENT_NAME: ${{ github.event_name }}
