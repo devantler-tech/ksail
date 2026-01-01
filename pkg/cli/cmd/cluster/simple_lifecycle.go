@@ -2,12 +2,12 @@ package cluster
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"strings"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	k3dprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/k3d"
@@ -19,17 +19,6 @@ import (
 	"github.com/spf13/cobra"
 	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
-)
-
-// Context detection errors.
-var (
-	// ErrNoCurrentContext is returned when no current context is set in kubeconfig.
-	ErrNoCurrentContext = errors.New("no current context set in kubeconfig")
-
-	// ErrUnknownDistribution is returned when the context doesn't match a known distribution pattern.
-	ErrUnknownDistribution = errors.New(
-		"unknown distribution: context does not match kind-, k3d-, or admin@ pattern",
-	)
 )
 
 // SimpleLifecycleConfig defines the configuration for a simple lifecycle command.
@@ -82,14 +71,14 @@ func runSimpleLifecycleAction(
 	contextFlag string,
 	config SimpleLifecycleConfig,
 ) error {
-	ctx, err := ResolveContext(contextFlag)
+	ctx, err := resolveContext(contextFlag)
 	if err != nil {
 		return err
 	}
 
-	distribution, clusterName, err := DetectDistributionFromContext(ctx)
+	distribution, clusterName, err := lifecycle.DetectDistributionFromContext(ctx)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to detect distribution: %w", err)
 	}
 
 	_, _ = fmt.Fprintln(cmd.OutOrStdout())
@@ -125,8 +114,8 @@ func runSimpleLifecycleAction(
 	return nil
 }
 
-// GetCurrentContext reads the current context from the default kubeconfig.
-func GetCurrentContext() (string, error) {
+// getCurrentContext reads the current context from the default kubeconfig.
+func getCurrentContext() (string, error) {
 	kubeconfigPath := clientcmd.RecommendedHomeFile
 
 	// Check if KUBECONFIG env var is set
@@ -150,39 +139,19 @@ func GetCurrentContext() (string, error) {
 	}
 
 	if config.CurrentContext == "" {
-		return "", ErrNoCurrentContext
+		return "", lifecycle.ErrNoCurrentContext
 	}
 
 	return config.CurrentContext, nil
 }
 
-// DetectDistributionFromContext detects the distribution and cluster name from a context string.
-func DetectDistributionFromContext(ctx string) (v1alpha1.Distribution, string, error) {
-	// Kind: kind-<cluster-name>
-	if clusterName, ok := strings.CutPrefix(ctx, "kind-"); ok {
-		return v1alpha1.DistributionKind, clusterName, nil
-	}
-
-	// K3d: k3d-<cluster-name>
-	if clusterName, ok := strings.CutPrefix(ctx, "k3d-"); ok {
-		return v1alpha1.DistributionK3d, clusterName, nil
-	}
-
-	// Talos: admin@<cluster-name>
-	if clusterName, ok := strings.CutPrefix(ctx, "admin@"); ok {
-		return v1alpha1.DistributionTalos, clusterName, nil
-	}
-
-	return "", "", fmt.Errorf("%w: %s", ErrUnknownDistribution, ctx)
-}
-
-// ResolveContext returns the provided context if non-empty, otherwise reads from kubeconfig.
-func ResolveContext(contextFlag string) (string, error) {
+// resolveContext returns the provided context if non-empty, otherwise reads from kubeconfig.
+func resolveContext(contextFlag string) (string, error) {
 	if contextFlag != "" {
 		return contextFlag, nil
 	}
 
-	return GetCurrentContext()
+	return getCurrentContext()
 }
 
 // CreateMinimalProvisioner creates a minimal provisioner for lifecycle operations.
