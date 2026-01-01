@@ -389,7 +389,7 @@ func ConnectRegistriesToNetworkWithStaticIPs(
 ) (map[string]string, error) {
 	networkName, networkOK := ksailio.TrimNonEmpty(networkName)
 	if dockerClient == nil || len(registries) == 0 || !networkOK {
-		return nil, nil
+		return make(map[string]string), nil
 	}
 
 	// Calculate static IPs for each registry from the high end of the subnet

@@ -32,6 +32,10 @@ var (
 	ErrRegistryPortNotFound = errors.New("registry port not found")
 	// ErrRegistryNotReady is returned when a registry fails to become ready within the timeout.
 	ErrRegistryNotReady = errors.New("registry not ready within timeout")
+	// ErrRegistryUnexpectedStatus is returned when the registry returns an unexpected HTTP status.
+	ErrRegistryUnexpectedStatus = errors.New("registry returned unexpected status")
+	// ErrRegistryHealthCheckCancelled is returned when the health check is cancelled via context.
+	ErrRegistryHealthCheckCancelled = errors.New("registry health check cancelled")
 )
 
 const (
@@ -287,75 +291,12 @@ func (rm *RegistryManager) WaitForRegistryReadyWithTimeout(
 	name string,
 	timeout time.Duration,
 ) error {
-	// First ensure the container is running
-	inUse, err := rm.IsRegistryInUse(ctx, name)
+	checkURL, err := rm.prepareHealthCheck(ctx, name)
 	if err != nil {
-		return fmt.Errorf("failed to check if registry %s is running: %w", name, err)
+		return err
 	}
 
-	if !inUse {
-		return fmt.Errorf("registry %s is not running: %w", name, ErrRegistryNotFound)
-	}
-
-	// Get the host port to check - this is the only reliable way to check from the host
-	port, portErr := rm.GetRegistryPort(ctx, name)
-	if portErr != nil {
-		return fmt.Errorf("failed to get registry port: %w", portErr)
-	}
-
-	checkAddr := net.JoinHostPort(RegistryHostIP, strconv.Itoa(port))
-	checkURL := fmt.Sprintf("http://%s/v2/", checkAddr)
-
-	// Create HTTP client with timeout
-	httpClient := &http.Client{
-		Timeout: RegistryHTTPTimeout,
-	}
-
-	// Poll until ready or timeout
-	deadline := time.Now().Add(timeout)
-	ticker := time.NewTicker(RegistryReadyPollInterval)
-
-	defer ticker.Stop()
-
-	var lastErr error
-
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-ticker.C:
-			if time.Now().After(deadline) {
-				if lastErr != nil {
-					return fmt.Errorf("%w: %s (last error: %w)", ErrRegistryNotReady, name, lastErr)
-				}
-
-				return fmt.Errorf("%w: %s", ErrRegistryNotReady, name)
-			}
-
-			req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, checkURL, nil)
-			if reqErr != nil {
-				lastErr = reqErr
-
-				continue
-			}
-
-			resp, respErr := httpClient.Do(req)
-			if respErr != nil {
-				lastErr = respErr
-
-				continue
-			}
-
-			_ = resp.Body.Close()
-
-			// Registry v2 API returns 200 or 401 (if auth required) on /v2/
-			if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusUnauthorized {
-				return nil
-			}
-
-			lastErr = fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-		}
-	}
+	return rm.pollUntilReady(ctx, name, checkURL, timeout)
 }
 
 // WaitForRegistriesReady waits for multiple registries to become ready.
@@ -381,6 +322,106 @@ func (rm *RegistryManager) WaitForRegistriesReadyWithTimeout(
 	}
 
 	return nil
+}
+
+// prepareHealthCheck validates the registry and returns the health check URL.
+func (rm *RegistryManager) prepareHealthCheck(
+	ctx context.Context,
+	name string,
+) (string, error) {
+	// First ensure the container is running
+	inUse, err := rm.IsRegistryInUse(ctx, name)
+	if err != nil {
+		return "", fmt.Errorf("failed to check if registry %s is running: %w", name, err)
+	}
+
+	if !inUse {
+		return "", fmt.Errorf("registry %s is not running: %w", name, ErrRegistryNotFound)
+	}
+
+	// Get the host port to check - this is the only reliable way to check from the host
+	port, portErr := rm.GetRegistryPort(ctx, name)
+	if portErr != nil {
+		return "", fmt.Errorf("failed to get registry port: %w", portErr)
+	}
+
+	checkAddr := net.JoinHostPort(RegistryHostIP, strconv.Itoa(port))
+
+	return fmt.Sprintf("http://%s/v2/", checkAddr), nil
+}
+
+// pollUntilReady polls the registry health endpoint until it responds or timeout.
+func (rm *RegistryManager) pollUntilReady(
+	ctx context.Context,
+	name string,
+	checkURL string,
+	timeout time.Duration,
+) error {
+	httpClient := &http.Client{Timeout: RegistryHTTPTimeout}
+	deadline := time.Now().Add(timeout)
+	ticker := time.NewTicker(RegistryReadyPollInterval)
+
+	defer ticker.Stop()
+
+	var lastErr error
+
+	for {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("%w: %w", ErrRegistryHealthCheckCancelled, ctx.Err())
+		case <-ticker.C:
+			if time.Now().After(deadline) {
+				return rm.buildTimeoutError(name, lastErr)
+			}
+
+			ready, err := rm.checkRegistryHealth(ctx, httpClient, checkURL)
+			if err != nil {
+				lastErr = err
+
+				continue
+			}
+
+			if ready {
+				return nil
+			}
+		}
+	}
+}
+
+// checkRegistryHealth performs a single health check request.
+// Returns (true, nil) if ready, (false, error) if not ready yet.
+func (rm *RegistryManager) checkRegistryHealth(
+	ctx context.Context,
+	httpClient *http.Client,
+	checkURL string,
+) (bool, error) {
+	req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, checkURL, nil)
+	if reqErr != nil {
+		return false, fmt.Errorf("failed to create health check request: %w", reqErr)
+	}
+
+	resp, respErr := httpClient.Do(req)
+	if respErr != nil {
+		return false, fmt.Errorf("health check request failed: %w", respErr)
+	}
+
+	_ = resp.Body.Close()
+
+	// Registry v2 API returns 200 or 401 (if auth required) on /v2/
+	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusUnauthorized {
+		return true, nil
+	}
+
+	return false, fmt.Errorf("%w: %d", ErrRegistryUnexpectedStatus, resp.StatusCode)
+}
+
+// buildTimeoutError creates the appropriate timeout error with optional last error context.
+func (rm *RegistryManager) buildTimeoutError(name string, lastErr error) error {
+	if lastErr != nil {
+		return fmt.Errorf("%w: %s (last error: %w)", ErrRegistryNotReady, name, lastErr)
+	}
+
+	return fmt.Errorf("%w: %s", ErrRegistryNotReady, name)
 }
 
 // prepareRegistryResources creates the volume for a registry.

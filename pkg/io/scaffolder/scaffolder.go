@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	k3dconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/k3d"
 	"github.com/devantler-tech/ksail/v5/pkg/io/detector"
 	"github.com/devantler-tech/ksail/v5/pkg/io/generator"
 	argocdgenerator "github.com/devantler-tech/ksail/v5/pkg/io/generator/argocd"
@@ -44,13 +45,6 @@ const (
 	// File permission constants.
 	dirPerm  = 0o750
 	filePerm = 0o600
-)
-
-const (
-	// Default images.
-
-	// defaultK3sImage pins K3d clusters to a Flux-compatible Kubernetes version.
-	defaultK3sImage = "rancher/k3s:v1.29.4-k3s1"
 )
 
 var (
@@ -201,7 +195,7 @@ func (s *Scaffolder) CreateK3dConfig() k3dv1alpha5.SimpleConfig {
 			APIVersion: "k3d.io/v1alpha5",
 			Kind:       "Simple",
 		},
-		Image: defaultK3sImage,
+		Image: k3dconfigmanager.DefaultK3sImage,
 	}
 
 	// Apply node counts from CLI flags (stored in Talos options)

@@ -95,7 +95,6 @@ func SetupTalosMirrorRegistries(
 	writer io.Writer,
 ) error {
 	// Pre-create the Docker network with Talos-compatible labels and CIDR.
-	// This allows the Talos SDK to recognize and reuse the network when creating the cluster.
 	err := EnsureDockerNetworkExists(ctx, dockerAPIClient, networkName, networkCIDR, writer)
 	if err != nil {
 		return fmt.Errorf("failed to create docker network: %w", err)
@@ -108,51 +107,50 @@ func SetupTalosMirrorRegistries(
 	}
 
 	err = registry.SetupRegistries(
-		ctx,
-		registryMgr,
-		registryInfos,
-		clusterName,
-		networkName,
-		writer,
+		ctx, registryMgr, registryInfos, clusterName, networkName, writer,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to setup talos registries: %w", err)
 	}
 
-	// Connect registries to the network with static IPs from the high end of the subnet
-	// to avoid conflicts with Talos node IPs that start from .2
+	// Connect registries to the network with static IPs
 	registryIPs, err := registry.ConnectRegistriesToNetworkWithStaticIPs(
-		ctx,
-		dockerAPIClient,
-		registryInfos,
-		networkName,
-		networkCIDR,
-		writer,
+		ctx, dockerAPIClient, registryInfos, networkName, networkCIDR, writer,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to connect talos registries to network: %w", err)
 	}
 
-	// Wait for registries to become ready before returning.
-	// This ensures Talos nodes can pull images when they boot.
-	if len(registryIPs) > 0 {
-		notify.WriteMessage(notify.Message{
-			Type:    notify.ActivityType,
-			Content: "waiting for mirror registries to become ready",
-			Writer:  writer,
-		})
+	return waitForTalosRegistries(ctx, registryMgr, registryIPs, writer)
+}
 
-		err = registryMgr.WaitForRegistriesReady(ctx, registryIPs)
-		if err != nil {
-			return fmt.Errorf("failed waiting for registries to become ready: %w", err)
-		}
-
-		notify.WriteMessage(notify.Message{
-			Type:    notify.SuccessType,
-			Content: "all mirror registries are ready",
-			Writer:  writer,
-		})
+// waitForTalosRegistries waits for registries to become ready.
+func waitForTalosRegistries(
+	ctx context.Context,
+	registryMgr *dockerclient.RegistryManager,
+	registryIPs map[string]string,
+	writer io.Writer,
+) error {
+	if len(registryIPs) == 0 {
+		return nil
 	}
+
+	notify.WriteMessage(notify.Message{
+		Type:    notify.ActivityType,
+		Content: "waiting for mirror registries to become ready",
+		Writer:  writer,
+	})
+
+	err := registryMgr.WaitForRegistriesReady(ctx, registryIPs)
+	if err != nil {
+		return fmt.Errorf("failed waiting for registries to become ready: %w", err)
+	}
+
+	notify.WriteMessage(notify.Message{
+		Type:    notify.SuccessType,
+		Content: "all mirror registries are ready",
+		Writer:  writer,
+	})
 
 	return nil
 }

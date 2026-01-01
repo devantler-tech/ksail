@@ -251,6 +251,7 @@ func TestCertManagerSet(t *testing.T) {
 	)
 }
 
+//nolint:unparam // contains always receives "invalid" which is intentional for Set() error tests
 func assertErrWrappedContains(t *testing.T, got error, want error, contains string, ctx string) {
 	t.Helper()
 
