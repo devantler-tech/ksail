@@ -265,7 +265,15 @@ jobs:
   ci-status:
     name: ✅ CI - KSail Status
     runs-on: ubuntu-latest
-    needs: [changes, build-artifact, generate-schema, generate-cli-flags-docs, ci, system-test]
+    needs:
+      [
+        changes,
+        build-artifact,
+        generate-schema,
+        generate-cli-flags-docs,
+        ci,
+        system-test,
+      ]
     if: ${{ always() }}
     steps:
       - name: Summarize workflow result
