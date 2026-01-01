@@ -29,6 +29,14 @@ var (
 	dockerClientInvoker = helpers.WithDockerClient
 )
 
+// getDockerClientInvoker returns the Docker client invoker to use, allowing test override.
+func getDockerClientInvoker() func(*cobra.Command, func(client.APIClient) error) error {
+	dockerClientInvokerMu.RLock()
+	defer dockerClientInvokerMu.RUnlock()
+
+	return dockerClientInvoker
+}
+
 // getInstallerFactories returns the installer factories to use, allowing test override.
 func getInstallerFactories() *create.InstallerFactories {
 	installerFactoriesOverrideMu.RLock()

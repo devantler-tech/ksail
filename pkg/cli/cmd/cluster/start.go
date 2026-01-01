@@ -79,6 +79,7 @@ func handleStartRunE(
 		registrystage.LocalRegistryConnect,
 		&dummyTracker,
 		registrystage.DefaultLocalRegistryDependencies(),
+		getDockerClientInvoker(),
 	)
 	if connectErr != nil {
 		return fmt.Errorf("connect local registry: %w", connectErr)

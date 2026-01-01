@@ -136,6 +136,7 @@ func handleCreateRunE(
 		registrystage.LocalRegistryConnect,
 		&firstActivityShown,
 		registrystage.DefaultLocalRegistryDependencies(),
+		getDockerClientInvoker(),
 	)
 	if err != nil {
 		return fmt.Errorf("failed to connect local registry: %w", err)
@@ -204,6 +205,7 @@ func ensureLocalRegistriesReady(
 		registrystage.LocalRegistryProvision,
 		firstActivityShown,
 		registrystage.DefaultLocalRegistryDependencies(),
+		getDockerClientInvoker(),
 	)
 	if err != nil {
 		return fmt.Errorf("failed to provision local registry: %w", err)

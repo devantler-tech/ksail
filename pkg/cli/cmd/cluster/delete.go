@@ -135,6 +135,7 @@ func cleanupRegistries(
 			deps,
 			deleteVolumes,
 			registrystage.DefaultLocalRegistryDependencies(),
+			getDockerClientInvoker(),
 		)
 		if err != nil {
 			notify.WriteMessage(notify.Message{

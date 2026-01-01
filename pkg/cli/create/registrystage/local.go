@@ -223,6 +223,7 @@ func CleanupLocalRegistry(
 	deps lifecycle.Deps,
 	deleteVolumes bool,
 	dependencies LocalRegistryDependencies,
+	dockerInvoker DockerClientInvoker,
 ) error {
 	if clusterCfg.Spec.Cluster.LocalRegistry != v1alpha1.LocalRegistryEnabled {
 		return nil
@@ -268,6 +269,7 @@ func CleanupLocalRegistry(
 		},
 		&dummyTracker,
 		dependencies,
+		dockerInvoker,
 	)
 }
 
@@ -283,6 +285,7 @@ func RunLocalRegistryAction(
 	action LocalRegistryAction,
 	firstActivityShown *bool,
 	dependencies LocalRegistryDependencies,
+	dockerInvoker DockerClientInvoker,
 ) error {
 	if clusterCfg.Spec.Cluster.LocalRegistry != v1alpha1.LocalRegistryEnabled {
 		return nil
@@ -299,6 +302,7 @@ func RunLocalRegistryAction(
 		},
 		firstActivityShown,
 		dependencies,
+		dockerInvoker,
 	)
 }
 
@@ -313,6 +317,7 @@ func RunLocalRegistryStage(
 	role LocalRegistryRole,
 	firstActivityShown *bool,
 	dependencies LocalRegistryDependencies,
+	dockerInvoker DockerClientInvoker,
 ) error {
 	info, actionBuilder := resolveLocalRegistryStage(role)
 
@@ -327,6 +332,7 @@ func RunLocalRegistryStage(
 		actionBuilder(clusterCfg),
 		firstActivityShown,
 		dependencies,
+		dockerInvoker,
 	)
 }
 
@@ -378,6 +384,7 @@ func runLocalRegistryStage(
 	handler func(context.Context, registry.Service) error,
 	firstActivityShown *bool,
 	dependencies LocalRegistryDependencies,
+	dockerInvoker DockerClientInvoker,
 ) error {
 	return runRegistryStage(
 		cmd,
@@ -392,6 +399,6 @@ func runLocalRegistryStage(
 			return handler(ctx, service)
 		},
 		firstActivityShown,
-		nil, // Use default Docker client invoker
+		dockerInvoker,
 	)
 }
