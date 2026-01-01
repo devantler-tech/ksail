@@ -271,22 +271,20 @@ func (rm *RegistryManager) GetRegistryPort(ctx context.Context, name string) (in
 }
 
 // WaitForRegistryReady waits for a registry to become ready by polling its health endpoint.
-// It checks both the container's internal port (5000) using the container's IP address.
-// The containerIP parameter is the IP address assigned to the registry container in the network.
-// If containerIP is empty, it will attempt to get the host port and check via localhost.
+// It checks the registry's host port (mapped to localhost) to verify the registry is responding.
+// The containerIP parameter is currently unused but kept for API compatibility and future use.
 func (rm *RegistryManager) WaitForRegistryReady(
 	ctx context.Context,
 	name string,
-	containerIP string,
+	_ string, // containerIP - unused, we always check via host port
 ) error {
-	return rm.WaitForRegistryReadyWithTimeout(ctx, name, containerIP, RegistryReadyTimeout)
+	return rm.WaitForRegistryReadyWithTimeout(ctx, name, RegistryReadyTimeout)
 }
 
 // WaitForRegistryReadyWithTimeout waits for a registry with a custom timeout.
 func (rm *RegistryManager) WaitForRegistryReadyWithTimeout(
 	ctx context.Context,
 	name string,
-	containerIP string,
 	timeout time.Duration,
 ) error {
 	// First ensure the container is running
@@ -299,21 +297,13 @@ func (rm *RegistryManager) WaitForRegistryReadyWithTimeout(
 		return fmt.Errorf("registry %s is not running: %w", name, ErrRegistryNotFound)
 	}
 
-	// Determine the address to check
-	var checkAddr string
-	if containerIP != "" {
-		// Use container IP directly (for Talos clusters using static IPs)
-		checkAddr = net.JoinHostPort(containerIP, strconv.Itoa(DefaultRegistryPort))
-	} else {
-		// Fall back to host port
-		port, portErr := rm.GetRegistryPort(ctx, name)
-		if portErr != nil {
-			return fmt.Errorf("failed to get registry port: %w", portErr)
-		}
-
-		checkAddr = net.JoinHostPort(RegistryHostIP, strconv.Itoa(port))
+	// Get the host port to check - this is the only reliable way to check from the host
+	port, portErr := rm.GetRegistryPort(ctx, name)
+	if portErr != nil {
+		return fmt.Errorf("failed to get registry port: %w", portErr)
 	}
 
+	checkAddr := net.JoinHostPort(RegistryHostIP, strconv.Itoa(port))
 	checkURL := fmt.Sprintf("http://%s/v2/", checkAddr)
 
 	// Create HTTP client with timeout
@@ -369,8 +359,7 @@ func (rm *RegistryManager) WaitForRegistryReadyWithTimeout(
 }
 
 // WaitForRegistriesReady waits for multiple registries to become ready.
-// The registryIPs map contains registry names as keys and their container IPs as values.
-// If a registry IP is empty, it will attempt to check via the host port.
+// The registryIPs map contains registry names as keys (IP values are ignored).
 func (rm *RegistryManager) WaitForRegistriesReady(
 	ctx context.Context,
 	registryIPs map[string]string,
@@ -384,8 +373,8 @@ func (rm *RegistryManager) WaitForRegistriesReadyWithTimeout(
 	registryIPs map[string]string,
 	timeout time.Duration,
 ) error {
-	for name, ip := range registryIPs {
-		if err := rm.WaitForRegistryReadyWithTimeout(ctx, name, ip, timeout); err != nil {
+	for name := range registryIPs {
+		if err := rm.WaitForRegistryReadyWithTimeout(ctx, name, timeout); err != nil {
 			return fmt.Errorf("registry %s failed health check: %w", name, err)
 		}
 	}

@@ -176,36 +176,36 @@ jobs:
     strategy:
       matrix:
         include:
-          - init-args: "--distribution Kind"
-          - init-args: "--distribution Kind --cert-manager Enabled"
-          - init-args: "--distribution Kind --cni Cilium"
-          - init-args: "--distribution Kind --cni Calico"
-          - init-args: "--distribution Kind --csi LocalPathStorage"
-          - init-args: "--distribution Kind --gitops-engine Flux"
-          - init-args: "--distribution Kind --gitops-engine ArgoCD"
-          - init-args: "--distribution Kind --mirror-registry docker.io=https://registry-1.docker.io"
-          - init-args: "--distribution Kind --mirror-registry docker.io=https://registry-1.docker.io --mirror-registry ghcr.io=https://ghcr.io"
-          - init-args: "--distribution Kind --metrics-server Disabled"
-          - init-args: "--distribution K3d"
-          - init-args: "--distribution K3d --cert-manager Enabled"
-          - init-args: "--distribution K3d --cni Cilium"
-          - init-args: "--distribution K3d --cni Calico"
-          - init-args: "--distribution K3d --csi LocalPathStorage"
-          - init-args: "--distribution K3d --gitops-engine Flux"
-          - init-args: "--distribution K3d --gitops-engine ArgoCD"
-          - init-args: "--distribution K3d --mirror-registry docker.io=https://registry-1.docker.io"
-          - init-args: "--distribution K3d --mirror-registry docker.io=https://registry-1.docker.io --mirror-registry ghcr.io=https://ghcr.io"
-          - init-args: "--distribution K3d --metrics-server Disabled"
-          - init-args: "--distribution Talos"
-          - init-args: "--distribution Talos --cert-manager Enabled"
-          - init-args: "--distribution Talos --cni Cilium"
-          - init-args: "--distribution Talos --cni Calico"
-          - init-args: "--distribution Talos --csi LocalPathStorage"
-          - init-args: "--distribution Talos --gitops-engine Flux"
-          - init-args: "--distribution Talos --gitops-engine ArgoCD"
-          - init-args: "--distribution Talos --mirror-registry docker.io=https://registry-1.docker.io"
-          - init-args: "--distribution Talos --mirror-registry docker.io=https://registry-1.docker.io --mirror-registry ghcr.io=https://ghcr.io"
-          - init-args: "--distribution Talos --metrics-server Disabled"
+          - ksail-args: "--distribution Kind"
+          - ksail-args: "--distribution Kind --cert-manager Enabled"
+          - ksail-args: "--distribution Kind --cni Cilium"
+          - ksail-args: "--distribution Kind --cni Calico"
+          - ksail-args: "--distribution Kind --csi LocalPathStorage"
+          - ksail-args: "--distribution Kind --gitops-engine Flux"
+          - ksail-args: "--distribution Kind --gitops-engine ArgoCD"
+          - ksail-args: "--distribution Kind --mirror-registry docker.io=https://registry-1.docker.io"
+          - ksail-args: "--distribution Kind --mirror-registry docker.io=https://registry-1.docker.io --mirror-registry ghcr.io=https://ghcr.io"
+          - ksail-args: "--distribution Kind --metrics-server Disabled"
+          - ksail-args: "--distribution K3d"
+          - ksail-args: "--distribution K3d --cert-manager Enabled"
+          - ksail-args: "--distribution K3d --cni Cilium"
+          - ksail-args: "--distribution K3d --cni Calico"
+          - ksail-args: "--distribution K3d --csi LocalPathStorage"
+          - ksail-args: "--distribution K3d --gitops-engine Flux"
+          - ksail-args: "--distribution K3d --gitops-engine ArgoCD"
+          - ksail-args: "--distribution K3d --mirror-registry docker.io=https://registry-1.docker.io"
+          - ksail-args: "--distribution K3d --mirror-registry docker.io=https://registry-1.docker.io --mirror-registry ghcr.io=https://ghcr.io"
+          - ksail-args: "--distribution K3d --metrics-server Disabled"
+          - ksail-args: "--distribution Talos"
+          - ksail-args: "--distribution Talos --cert-manager Enabled"
+          - ksail-args: "--distribution Talos --cni Cilium"
+          - ksail-args: "--distribution Talos --cni Calico"
+          - ksail-args: "--distribution Talos --csi LocalPathStorage"
+          - ksail-args: "--distribution Talos --gitops-engine Flux"
+          - ksail-args: "--distribution Talos --gitops-engine ArgoCD"
+          - ksail-args: "--distribution Talos --mirror-registry docker.io=https://registry-1.docker.io"
+          - ksail-args: "--distribution Talos --mirror-registry docker.io=https://registry-1.docker.io --mirror-registry ghcr.io=https://ghcr.io"
+          - ksail-args: "--distribution Talos --metrics-server Disabled"
     steps:
       - name: 📄 Checkout
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
@@ -227,10 +227,10 @@ jobs:
 
       - name: 🧪 ksail cluster init
         run: |
-          ksail cluster init ${{ matrix.init-args }}
+          ksail cluster init ${{ matrix.ksail-args }}
 
       - name: 🔧 Load br_netfilter kernel module (required for Talos)
-        if: contains(matrix.init-args, 'Talos')
+        if: contains(matrix.ksail-args, 'Talos')
         run: |
           sudo modprobe br_netfilter
           echo "br_netfilter module loaded successfully"
@@ -254,7 +254,7 @@ jobs:
           ksail workload wait --for=condition=Available deployment/podinfo --timeout=300s
 
       - name: 🧪 ksail workload push and reconcile
-        if: contains(matrix.init-args, '--gitops-engine')
+        if: contains(matrix.ksail-args, '--gitops-engine')
         run: |
           ksail workload push .github/fixtures/reconcile-test
           ksail workload reconcile

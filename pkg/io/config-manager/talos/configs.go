@@ -49,8 +49,14 @@ func (c *Configs) Bundle() *bundle.Bundle {
 //   - Machine() - machine-specific settings (network, kubelet, files, etc.)
 //   - Cluster() - cluster-wide settings (CNI, API server, etcd, etc.)
 //
+// Returns nil if the bundle is not loaded.
+//
 //nolint:ireturn // Returns interface type from upstream SDK
 func (c *Configs) ControlPlane() talosconfig.Provider {
+	if c.bundle == nil {
+		return nil
+	}
+
 	return c.bundle.ControlPlane()
 }
 
@@ -61,8 +67,14 @@ func (c *Configs) ControlPlane() talosconfig.Provider {
 //   - Machine() - machine-specific settings (network, kubelet, files, etc.)
 //   - Cluster() - cluster-wide settings (CNI, API server, etcd, etc.)
 //
+// Returns nil if the bundle is not loaded.
+//
 //nolint:ireturn // Returns interface type from upstream SDK
 func (c *Configs) Worker() talosconfig.Provider {
+	if c.bundle == nil {
+		return nil
+	}
+
 	return c.bundle.Worker()
 }
 
@@ -210,7 +222,7 @@ type MirrorRegistry struct {
 // It adds both the mirror endpoints and the registry config with insecureSkipVerify: true
 // to allow HTTP connections to local registry containers.
 func (c *Configs) ApplyMirrorRegistries(mirrors []MirrorRegistry) error {
-	if len(mirrors) == 0 {
+	if len(mirrors) == 0 || c.bundle == nil {
 		return nil
 	}
 
