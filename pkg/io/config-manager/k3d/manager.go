@@ -11,6 +11,10 @@ import (
 	v1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 )
 
+// Default K3s image version for K3d clusters.
+// This should be kept in sync with the scaffolder's default.
+const defaultK3sImage = "rancher/k3s:v1.29.4-k3s1"
+
 // ConfigManager implements configuration management for K3d v1alpha5.SimpleConfig configurations.
 // It provides file-based configuration loading without Viper dependency.
 type ConfigManager struct {
@@ -48,6 +52,7 @@ func NewK3dSimpleConfig(name, apiVersion, kind string) *v1alpha5.SimpleConfig {
 		ObjectMeta: types.ObjectMeta{
 			Name: name,
 		},
+		Image: defaultK3sImage,
 	}
 }
 
