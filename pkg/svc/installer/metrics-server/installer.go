@@ -48,7 +48,7 @@ func (m *MetricsServerInstaller) helmInstallOrUpgradeMetricsServer(ctx context.C
 		URL:  "https://kubernetes-sigs.github.io/metrics-server/",
 	}
 
-	addRepoErr := m.client.AddRepository(ctx, repoEntry)
+	addRepoErr := m.client.AddRepository(ctx, repoEntry, m.timeout)
 	if addRepoErr != nil {
 		return fmt.Errorf("failed to add metrics-server repository: %w", addRepoErr)
 	}

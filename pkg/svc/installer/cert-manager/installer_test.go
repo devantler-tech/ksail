@@ -36,7 +36,9 @@ func TestCertManagerInstallerInstallRepoError(t *testing.T) {
 	t.Parallel()
 
 	installer, client := newCertManagerInstallerWithDefaults(t)
-	client.EXPECT().AddRepository(mock.Anything, mock.Anything).Return(assert.AnError)
+	client.EXPECT().
+		AddRepository(mock.Anything, mock.Anything, mock.Anything).
+		Return(assert.AnError)
 
 	err := installer.Install(context.Background())
 
@@ -102,6 +104,7 @@ func expectCertManagerInstall(t *testing.T, client *helm.MockInterface, installE
 				return entry != nil && entry.Name == "jetstack" &&
 					entry.URL == "https://charts.jetstack.io"
 			}),
+			mock.Anything,
 		).
 		Return(nil)
 

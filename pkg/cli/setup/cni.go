@@ -110,7 +110,7 @@ func installCiliumCNI(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster, tmr time
 	err = setup.helmClient.AddRepository(cmd.Context(), &helm.RepositoryEntry{
 		Name: "cilium",
 		URL:  "https://helm.cilium.io/",
-	})
+	}, setup.timeout)
 	if err != nil {
 		return fmt.Errorf("failed to add Cilium Helm repository: %w", err)
 	}

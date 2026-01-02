@@ -156,7 +156,7 @@ type Interface interface {
 	InstallChart(ctx context.Context, spec *ChartSpec) (*ReleaseInfo, error)
 	InstallOrUpgradeChart(ctx context.Context, spec *ChartSpec) (*ReleaseInfo, error)
 	UninstallRelease(ctx context.Context, releaseName, namespace string) error
-	AddRepository(ctx context.Context, entry *RepositoryEntry) error
+	AddRepository(ctx context.Context, entry *RepositoryEntry, timeout time.Duration) error
 }
 
 // Client represents the default helm implementation used by KSail.
@@ -255,7 +255,12 @@ func (c *Client) UninstallRelease(ctx context.Context, releaseName, namespace st
 }
 
 // AddRepository registers a Helm repository for the current client instance.
-func (c *Client) AddRepository(ctx context.Context, entry *RepositoryEntry) error {
+// The timeout parameter controls how long HTTP requests for downloading the repository index can take.
+func (c *Client) AddRepository(
+	ctx context.Context,
+	entry *RepositoryEntry,
+	timeout time.Duration,
+) error {
 	requestErr := validateRepositoryRequest(ctx, entry)
 	if requestErr != nil {
 		return requestErr
@@ -276,7 +281,7 @@ func (c *Client) AddRepository(ctx context.Context, entry *RepositoryEntry) erro
 		return err
 	}
 
-	chartRepository, err := newChartRepository(settings, repoEntry, repoCache)
+	chartRepository, err := newChartRepository(settings, repoEntry, repoCache, timeout)
 	if err != nil {
 		return err
 	}
@@ -382,8 +387,19 @@ func newChartRepository(
 	settings *helmv4cli.EnvSettings,
 	repoEntry *repov1.Entry,
 	repoCache string,
+	timeout time.Duration,
 ) (*repov1.ChartRepository, error) {
-	chartRepository, err := repov1.NewChartRepository(repoEntry, helmv4getter.All(settings))
+	// Use getter.WithTimeout to configure HTTP timeout for repository index downloads.
+	// This prevents hangs when the repository server is slow to respond.
+	getterOpts := []helmv4getter.Option{}
+	if timeout > 0 {
+		getterOpts = append(getterOpts, helmv4getter.WithTimeout(timeout))
+	}
+
+	chartRepository, err := repov1.NewChartRepository(
+		repoEntry,
+		helmv4getter.All(settings, getterOpts...),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("create chart repository: %w", err)
 	}
