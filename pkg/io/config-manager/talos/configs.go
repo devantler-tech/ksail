@@ -42,13 +42,21 @@ type Configs struct {
 //   - Cluster name: DefaultClusterName ("talos-default")
 //   - Kubernetes version: DefaultKubernetesVersion ("1.32.0")
 //   - Network CIDR: DefaultNetworkCIDR ("10.5.0.0/24")
-//   - No additional patches
+//   - allowSchedulingOnControlPlanes: true (for single-node/control-plane-only clusters)
 func NewDefaultConfigs() (*Configs, error) {
+	// Default configs are used for control-plane-only clusters (no workers),
+	// so we need to allow scheduling on control-plane nodes.
+	allowSchedulingPatch := Patch{
+		Path:    "allow-scheduling-on-control-planes",
+		Scope:   PatchScopeCluster,
+		Content: []byte("cluster:\n  allowSchedulingOnControlPlanes: true\n"),
+	}
+
 	return newConfigs(
 		DefaultClusterName,
 		DefaultKubernetesVersion,
 		DefaultNetworkCIDR,
-		nil, // no patches
+		[]Patch{allowSchedulingPatch},
 	)
 }
 
