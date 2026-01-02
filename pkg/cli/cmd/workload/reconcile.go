@@ -45,13 +45,13 @@ var (
 )
 
 const (
-	fluxNamespace                = "flux-system"
-	fluxRootKustomizationName    = "flux-system"
-	fluxRootOCIRepositoryName    = "flux-system"
-	argoCDNamespace              = "argocd"
-	argoCDRootApplicationName    = "ksail"
-	defaultReconcileTimeout      = 5 * time.Minute
-	reconcilePollInterval        = 2 * time.Second
+	fluxNamespace                 = "flux-system"
+	fluxRootKustomizationName     = "flux-system"
+	fluxRootOCIRepositoryName     = "flux-system"
+	argoCDNamespace               = "argocd"
+	argoCDRootApplicationName     = "ksail"
+	defaultReconcileTimeout       = 5 * time.Minute
+	reconcilePollInterval         = 2 * time.Second
 	ociRepositoryReadinessTimeout = 2 * time.Minute
 )
 
