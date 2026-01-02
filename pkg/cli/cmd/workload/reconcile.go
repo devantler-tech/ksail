@@ -68,44 +68,61 @@ func reconcileFluxKustomization(
 		return err
 	}
 
-	// Wait for OCIRepository to be ready - it needs time to fetch the artifact after push
-	writeActivityNotification(
-		"waiting for flux oci repository to be ready",
-		outputTimer,
-		writer,
-	)
+	// First reconcile the OCIRepository to fetch the latest artifact
+	err = reconcileFluxOCIRepository(ctx, kubeconfigPath, outputTimer, writer)
+	if err != nil {
+		return err
+	}
 
+	// Then reconcile the Kustomization to apply the changes
+	return reconcileFluxKustomizationResource(ctx, kubeconfigPath, timeout, outputTimer, writer)
+}
+
+// reconcileFluxOCIRepository triggers and waits for the OCIRepository to be ready.
+func reconcileFluxOCIRepository(
+	ctx context.Context,
+	kubeconfigPath string,
+	outputTimer timer.Timer,
+	writer io.Writer,
+) error {
 	ociRepoClient, err := getFluxOCIRepositoryClient(kubeconfigPath)
 	if err != nil {
 		return err
 	}
 
-	err = waitForFluxOCIRepositoryReady(ctx, ociRepoClient)
+	writeActivityNotification("triggering flux oci repository reconciliation", outputTimer, writer)
+
+	err = triggerFluxOCIRepositoryReconciliation(ctx, ociRepoClient)
 	if err != nil {
 		return err
 	}
 
-	writeActivityNotification(
-		"triggering flux kustomization reconciliation",
-		outputTimer,
-		writer,
-	)
+	writeActivityNotification("waiting for flux oci repository to be ready", outputTimer, writer)
 
+	return waitForFluxOCIRepositoryReady(ctx, ociRepoClient)
+}
+
+// reconcileFluxKustomizationResource triggers and waits for the Kustomization to be ready.
+func reconcileFluxKustomizationResource(
+	ctx context.Context,
+	kubeconfigPath string,
+	timeout time.Duration,
+	outputTimer timer.Timer,
+	writer io.Writer,
+) error {
 	kustomizationClient, err := getFluxKustomizationClient(kubeconfigPath)
 	if err != nil {
 		return err
 	}
+
+	writeActivityNotification("triggering flux kustomization reconciliation", outputTimer, writer)
 
 	err = triggerFluxReconciliation(ctx, kustomizationClient)
 	if err != nil {
 		return err
 	}
 
-	writeActivityNotification(
-		"waiting for flux kustomization to reconcile",
-		outputTimer,
-		writer,
-	)
+	writeActivityNotification("waiting for flux kustomization to reconcile", outputTimer, writer)
 
 	return waitForFluxReconciliation(ctx, kustomizationClient, timeout)
 }
@@ -136,6 +153,32 @@ func getFluxOCIRepositoryClient(
 	}
 
 	return getDynamicResourceClient(kubeconfigPath, ociRepositoryGVR, fluxNamespace)
+}
+
+// triggerFluxOCIRepositoryReconciliation annotates the OCIRepository to trigger reconciliation.
+func triggerFluxOCIRepositoryReconciliation(
+	ctx context.Context,
+	ociRepoClient dynamic.ResourceInterface,
+) error {
+	ociRepo, err := ociRepoClient.Get(ctx, fluxRootOCIRepositoryName, metav1.GetOptions{})
+	if err != nil {
+		return fmt.Errorf("get flux oci repository: %w", err)
+	}
+
+	annotations := ociRepo.GetAnnotations()
+	if annotations == nil {
+		annotations = make(map[string]string)
+	}
+
+	annotations["reconcile.fluxcd.io/requestedAt"] = time.Now().Format(time.RFC3339Nano)
+	ociRepo.SetAnnotations(annotations)
+
+	_, err = ociRepoClient.Update(ctx, ociRepo, metav1.UpdateOptions{})
+	if err != nil {
+		return fmt.Errorf("trigger flux oci repository reconciliation: %w", err)
+	}
+
+	return nil
 }
 
 // waitForFluxOCIRepositoryReady waits for the OCIRepository to be ready with a timeout.
@@ -191,8 +234,8 @@ func checkFluxOCIRepositoryStatus(
 		return false, fmt.Errorf("get flux oci repository: %w", err)
 	}
 
-	conditions, found, err := unstructured.NestedSlice(ociRepo.Object, "status", "conditions")
-	if err != nil || !found || len(conditions) == 0 {
+	conditions, found, _ := unstructured.NestedSlice(ociRepo.Object, "status", "conditions")
+	if !found || len(conditions) == 0 {
 		return false, nil // Still progressing, no conditions yet
 	}
 
