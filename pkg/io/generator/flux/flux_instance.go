@@ -61,6 +61,8 @@ type InstanceGeneratorOptions struct {
 	RegistryHost string
 	// RegistryPort is the port of the local OCI registry.
 	RegistryPort int32
+	// Ref is the OCI artifact tag/reference (defaults to "dev").
+	Ref string
 	// Interval is the reconciliation interval.
 	Interval time.Duration
 }
@@ -82,6 +84,11 @@ func (g *InstanceGenerator) Generate(opts InstanceGeneratorOptions) (string, err
 	interval := opts.Interval
 	if interval == 0 {
 		interval = DefaultInterval
+	}
+
+	ref := opts.Ref
+	if ref == "" {
+		ref = "dev"
 	}
 
 	instance := Instance{
@@ -106,7 +113,7 @@ func (g *InstanceGenerator) Generate(opts InstanceGeneratorOptions) (string, err
 					opts.RegistryPort,
 					opts.ProjectName,
 				),
-				Ref:      "latest",
+				Ref:      ref,
 				Path:     ".",
 				Interval: &metav1.Duration{Duration: interval},
 			},

@@ -834,14 +834,23 @@ func (s *Scaffolder) buildFluxInstanceOptions(
 		port = 5000
 	}
 
+	// Use sanitized source directory name to match what the push command uses
+	sourceDir := s.KSailConfig.Spec.Workload.SourceDirectory
+	if sourceDir == "" {
+		sourceDir = v1alpha1.DefaultSourceDirectory
+	}
+
+	repoName := registry.SanitizeRepoName(sourceDir)
+
 	return fluxgenerator.InstanceGeneratorOptions{
 		Options: yamlgenerator.Options{
 			Output: outputPath,
 			Force:  force,
 		},
-		ProjectName:  s.getProjectName(),
+		ProjectName:  repoName,
 		RegistryHost: "ksail-registry.localhost",
 		RegistryPort: port,
+		Ref:          registry.DefaultLocalArtifactTag,
 		Interval:     fluxgenerator.DefaultInterval,
 	}
 }
