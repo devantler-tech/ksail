@@ -1,7 +1,6 @@
 package workload
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -9,17 +8,13 @@ import (
 
 	v1alpha1 "github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
+	"github.com/devantler-tech/ksail/v5/pkg/client/argocd"
+	"github.com/devantler-tech/ksail/v5/pkg/client/flux"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	iopath "github.com/devantler-tech/ksail/v5/pkg/io"
-	"github.com/devantler-tech/ksail/v5/pkg/k8s"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
 	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
 	"github.com/spf13/cobra"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/client-go/dynamic"
 )
 
 // Shared errors.
@@ -32,10 +27,7 @@ var errGitOpsEngineRequired = errors.New(
 )
 
 // Shared constants for reconciliation.
-const (
-	defaultReconcileTimeout = 5 * time.Minute
-	reconcilePollInterval   = 2 * time.Second
-)
+const defaultReconcileTimeout = 5 * time.Minute
 
 // getKubeconfigPath returns the kubeconfig path from config or default.
 func getKubeconfigPath(clusterCfg *v1alpha1.Cluster) (string, error) {
@@ -50,58 +42,6 @@ func getKubeconfigPath(clusterCfg *v1alpha1.Cluster) (string, error) {
 	}
 
 	return expanded, nil
-}
-
-// getDynamicResourceClient creates a dynamic Kubernetes client for a specific resource.
-func getDynamicResourceClient(
-	kubeconfigPath string,
-	gvr schema.GroupVersionResource,
-	namespace string,
-) (dynamic.ResourceInterface, error) {
-	restConfig, err := k8s.BuildRESTConfig(kubeconfigPath, "")
-	if err != nil {
-		return nil, fmt.Errorf("build rest config: %w", err)
-	}
-
-	dynamicClient, err := dynamic.NewForConfig(restConfig)
-	if err != nil {
-		return nil, fmt.Errorf("create dynamic client: %w", err)
-	}
-
-	return dynamicClient.Resource(gvr).Namespace(namespace), nil
-}
-
-// waitForResourceCondition is a generic function to wait for a resource to meet a condition.
-func waitForResourceCondition(
-	ctx context.Context,
-	client dynamic.ResourceInterface,
-	resourceName string,
-	timeout time.Duration,
-	checkCondition func(*unstructured.Unstructured) bool,
-	timeoutErr error,
-	errorMsg string,
-) error {
-	timeoutCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-
-	ticker := time.NewTicker(reconcilePollInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-timeoutCtx.Done():
-			return timeoutErr
-		case <-ticker.C:
-			resource, err := client.Get(timeoutCtx, resourceName, metav1.GetOptions{})
-			if err != nil {
-				return fmt.Errorf("%s: %w", errorMsg, err)
-			}
-
-			if checkCondition(resource) {
-				return nil
-			}
-		}
-	}
 }
 
 // NewReconcileCmd creates the workload reconcile command.
@@ -243,29 +183,115 @@ func executeReconciliation(
 	timeout time.Duration,
 	outputTimer timer.Timer,
 ) error {
-	artifactVersion := registry.DefaultLocalArtifactTag
+	kubeconfigPath, err := getKubeconfigPath(clusterCfg)
+	if err != nil {
+		return err
+	}
 
 	switch gitOpsEngine {
 	case v1alpha1.GitOpsEngineArgoCD:
-		return reconcileArgoCDApplication(
-			cmd.Context(),
-			clusterCfg,
-			artifactVersion,
-			timeout,
-			outputTimer,
-			cmd.OutOrStdout(),
-		)
+		return reconcileArgoCD(cmd, kubeconfigPath, timeout, outputTimer)
 	case v1alpha1.GitOpsEngineFlux:
-		return reconcileFluxKustomization(
-			cmd.Context(),
-			clusterCfg,
-			timeout,
-			outputTimer,
-			cmd.OutOrStdout(),
-		)
+		return reconcileFlux(cmd, kubeconfigPath, timeout, outputTimer)
 	case v1alpha1.GitOpsEngineNone:
 		return errGitOpsEngineRequired
 	default:
 		return errGitOpsEngineRequired
 	}
+}
+
+// reconcileFlux triggers and waits for Flux reconciliation using the client reconciler.
+func reconcileFlux(
+	cmd *cobra.Command,
+	kubeconfigPath string,
+	timeout time.Duration,
+	outputTimer timer.Timer,
+) error {
+	reconciler, err := flux.NewReconciler(kubeconfigPath)
+	if err != nil {
+		return fmt.Errorf("create flux reconciler: %w", err)
+	}
+
+	writeActivityNotification(
+		"triggering flux oci repository reconciliation",
+		outputTimer,
+		cmd.OutOrStdout(),
+	)
+
+	err = reconciler.TriggerOCIRepositoryReconciliation(cmd.Context())
+	if err != nil {
+		return fmt.Errorf("trigger oci repository reconciliation: %w", err)
+	}
+
+	writeActivityNotification(
+		"waiting for flux oci repository to be ready",
+		outputTimer,
+		cmd.OutOrStdout(),
+	)
+
+	err = reconciler.WaitForOCIRepositoryReady(cmd.Context())
+	if err != nil {
+		return fmt.Errorf("wait for oci repository ready: %w", err)
+	}
+
+	writeActivityNotification(
+		"triggering flux kustomization reconciliation",
+		outputTimer,
+		cmd.OutOrStdout(),
+	)
+
+	err = reconciler.TriggerKustomizationReconciliation(cmd.Context())
+	if err != nil {
+		return fmt.Errorf("trigger kustomization reconciliation: %w", err)
+	}
+
+	writeActivityNotification(
+		"waiting for flux kustomization to reconcile",
+		outputTimer,
+		cmd.OutOrStdout(),
+	)
+
+	err = reconciler.WaitForKustomizationReady(cmd.Context(), timeout)
+	if err != nil {
+		return fmt.Errorf("wait for kustomization ready: %w", err)
+	}
+
+	return nil
+}
+
+// reconcileArgoCD triggers and waits for ArgoCD application sync using the client reconciler.
+func reconcileArgoCD(
+	cmd *cobra.Command,
+	kubeconfigPath string,
+	timeout time.Duration,
+	outputTimer timer.Timer,
+) error {
+	reconciler, err := argocd.NewReconciler(kubeconfigPath)
+	if err != nil {
+		return fmt.Errorf("create argocd reconciler: %w", err)
+	}
+
+	writeActivityNotification(
+		"triggering argocd application refresh",
+		outputTimer,
+		cmd.OutOrStdout(),
+	)
+
+	err = reconciler.TriggerRefresh(cmd.Context(), true) // Always hard refresh
+	if err != nil {
+		return fmt.Errorf("trigger argocd refresh: %w", err)
+	}
+
+	writeActivityNotification(
+		"waiting for argocd application to sync",
+		outputTimer,
+		cmd.OutOrStdout(),
+	)
+
+	err = reconciler.WaitForApplicationReady(cmd.Context(), timeout)
+	if err != nil {
+		return fmt.Errorf("wait for argocd application ready: %w", err)
+	}
+
+	return nil
 }
