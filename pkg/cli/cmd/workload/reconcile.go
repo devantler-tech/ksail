@@ -32,13 +32,22 @@ var errGitOpsEngineRequired = errors.New(
 )
 
 var (
-	errFluxReconcileTimeout   = errors.New("timeout waiting for flux kustomization reconciliation")
-	errArgoCDReconcileTimeout = errors.New("timeout waiting for argocd application sync")
+	errFluxReconcileTimeout = errors.New(
+		"timeout waiting for flux kustomization reconciliation",
+	)
+	errArgoCDReconcileTimeout    = errors.New("timeout waiting for argocd application sync")
+	errFluxOCIRepositoryNotReady = errors.New(
+		"flux OCIRepository is not ready - ensure you have pushed an artifact with 'ksail workload push'",
+	)
+	errArgoCDSourceNotAvailable = errors.New(
+		"argocd application source is not available - ensure you have pushed an artifact with 'ksail workload push'",
+	)
 )
 
 const (
 	fluxNamespace             = "flux-system"
 	fluxRootKustomizationName = "flux-system"
+	fluxRootOCIRepositoryName = "flux-system"
 	argoCDNamespace           = "argocd"
 	argoCDRootApplicationName = "ksail"
 	defaultReconcileTimeout   = 5 * time.Minute
@@ -54,6 +63,23 @@ func reconcileFluxKustomization(
 	writer io.Writer,
 ) error {
 	kubeconfigPath, err := getKubeconfigPath(clusterCfg)
+	if err != nil {
+		return err
+	}
+
+	// Check OCIRepository status first to fail early if no artifact is available
+	writeActivityNotification(
+		"checking flux oci repository status",
+		outputTimer,
+		writer,
+	)
+
+	ociRepoClient, err := getFluxOCIRepositoryClient(kubeconfigPath)
+	if err != nil {
+		return err
+	}
+
+	err = checkFluxOCIRepositoryReady(ctx, ociRepoClient)
 	if err != nil {
 		return err
 	}
@@ -96,6 +122,74 @@ func getKubeconfigPath(clusterCfg *v1alpha1.Cluster) (string, error) {
 	}
 
 	return expanded, nil
+}
+
+// getFluxOCIRepositoryClient creates a dynamic client for Flux OCIRepositories.
+func getFluxOCIRepositoryClient(
+	kubeconfigPath string,
+) (dynamic.ResourceInterface, error) {
+	ociRepositoryGVR := schema.GroupVersionResource{
+		Group:    "source.toolkit.fluxcd.io",
+		Version:  "v1",
+		Resource: "ocirepositories",
+	}
+
+	return getDynamicResourceClient(kubeconfigPath, ociRepositoryGVR, fluxNamespace)
+}
+
+// checkFluxOCIRepositoryReady checks if the OCIRepository has successfully fetched an artifact.
+// Returns an error immediately if the OCIRepository shows a failure condition.
+func checkFluxOCIRepositoryReady(
+	ctx context.Context,
+	ociRepoClient dynamic.ResourceInterface,
+) error {
+	ociRepo, err := ociRepoClient.Get(ctx, fluxRootOCIRepositoryName, metav1.GetOptions{})
+	if err != nil {
+		return fmt.Errorf("get flux oci repository: %w", err)
+	}
+
+	conditions, found, err := unstructured.NestedSlice(ociRepo.Object, "status", "conditions")
+	if err != nil || !found || len(conditions) == 0 {
+		return errFluxOCIRepositoryNotReady
+	}
+
+	return checkFluxOCIRepositoryConditions(conditions)
+}
+
+// checkFluxOCIRepositoryConditions checks the Ready condition from OCIRepository status.
+func checkFluxOCIRepositoryConditions(conditions []any) error {
+	for _, condition := range conditions {
+		condMap, ok := condition.(map[string]any)
+		if !ok {
+			continue
+		}
+
+		condType, _, _ := unstructured.NestedString(condMap, "type")
+		if condType != "Ready" {
+			continue
+		}
+
+		return evaluateFluxReadyCondition(condMap)
+	}
+
+	return errFluxOCIRepositoryNotReady
+}
+
+// evaluateFluxReadyCondition evaluates a Ready condition and returns appropriate error.
+func evaluateFluxReadyCondition(condMap map[string]any) error {
+	condStatus, _, _ := unstructured.NestedString(condMap, "status")
+	if condStatus == "True" {
+		return nil
+	}
+
+	condReason, _, _ := unstructured.NestedString(condMap, "reason")
+	condMessage, _, _ := unstructured.NestedString(condMap, "message")
+
+	if condReason == "OCIPullFailed" || condReason == "OCIArtifactPullFailed" {
+		return fmt.Errorf("%w: %s", errFluxOCIRepositoryNotReady, condMessage)
+	}
+
+	return fmt.Errorf("%w: %s - %s", errFluxOCIRepositoryNotReady, condReason, condMessage)
 }
 
 // getFluxKustomizationClient creates a dynamic client for Flux kustomizations.
@@ -196,6 +290,23 @@ func reconcileArgoCDApplication(
 		return err
 	}
 
+	applicationClient, err := getArgoCDApplicationClient(kubeconfigPath)
+	if err != nil {
+		return err
+	}
+
+	// Check Application status first to fail early if source is not available
+	writeActivityNotification(
+		"checking argocd application status",
+		outputTimer,
+		writer,
+	)
+
+	err = checkArgoCDApplicationSourceAvailable(ctx, applicationClient)
+	if err != nil {
+		return err
+	}
+
 	writeActivityNotification(
 		"triggering argocd application refresh",
 		outputTimer,
@@ -212,11 +323,6 @@ func reconcileArgoCDApplication(
 		outputTimer,
 		writer,
 	)
-
-	applicationClient, err := getArgoCDApplicationClient(kubeconfigPath)
-	if err != nil {
-		return err
-	}
 
 	return waitForArgoCDSync(ctx, applicationClient, timeout)
 }
@@ -271,6 +377,82 @@ func getDynamicResourceClient(
 	}
 
 	return dynamicClient.Resource(gvr).Namespace(namespace), nil
+}
+
+// checkArgoCDApplicationSourceAvailable checks if the ArgoCD Application source is available.
+// Returns an error immediately if the Application shows a source fetch failure.
+func checkArgoCDApplicationSourceAvailable(
+	ctx context.Context,
+	applicationClient dynamic.ResourceInterface,
+) error {
+	app, err := applicationClient.Get(ctx, argoCDRootApplicationName, metav1.GetOptions{})
+	if err != nil {
+		return fmt.Errorf("get argocd application: %w", err)
+	}
+
+	// Check operationState for source fetch errors
+	err = checkArgoCDOperationState(app)
+	if err != nil {
+		return err
+	}
+
+	// Check conditions for repository errors
+	return checkArgoCDConditions(app)
+}
+
+// checkArgoCDOperationState checks the operationState for source fetch errors.
+func checkArgoCDOperationState(app *unstructured.Unstructured) error {
+	operationState, found, _ := unstructured.NestedMap(app.Object, "status", "operationState")
+	if !found {
+		return nil
+	}
+
+	phase, _, _ := unstructured.NestedString(operationState, "phase")
+	if phase != "Error" && phase != "Failed" {
+		return nil
+	}
+
+	message, _, _ := unstructured.NestedString(operationState, "message")
+	if isSourceRelatedError(message) {
+		return fmt.Errorf("%w: %s", errArgoCDSourceNotAvailable, message)
+	}
+
+	return nil
+}
+
+// checkArgoCDConditions checks the conditions for repository errors.
+func checkArgoCDConditions(app *unstructured.Unstructured) error {
+	conditions, found, _ := unstructured.NestedSlice(app.Object, "status", "conditions")
+	if !found {
+		return nil
+	}
+
+	for _, condition := range conditions {
+		condMap, ok := condition.(map[string]any)
+		if !ok {
+			continue
+		}
+
+		condType, _, _ := unstructured.NestedString(condMap, "type")
+		if condType != "ComparisonError" && condType != "InvalidSpecError" {
+			continue
+		}
+
+		condMessage, _, _ := unstructured.NestedString(condMap, "message")
+		if isSourceRelatedError(condMessage) {
+			return fmt.Errorf("%w: %s", errArgoCDSourceNotAvailable, condMessage)
+		}
+	}
+
+	return nil
+}
+
+// isSourceRelatedError checks if an error message indicates a source/repository issue.
+func isSourceRelatedError(message string) bool {
+	return strings.Contains(message, "OCI") ||
+		strings.Contains(message, "repository") ||
+		strings.Contains(message, "manifest") ||
+		strings.Contains(message, "not found")
 }
 
 // waitForArgoCDSync waits for the application to sync and become healthy.
