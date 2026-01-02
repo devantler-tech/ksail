@@ -878,32 +878,34 @@ func (s *Scaffolder) checkExistingArgoCDApplication(sourceDir string) (string, e
 	return existingPath, nil
 }
 
-// createArgoCDApplicationManifest generates the ArgoCD Application CR file.
+// createArgoCDApplicationManifest generates the ArgoCD Application CR file directly in the source directory.
 func (s *Scaffolder) createArgoCDApplicationManifest(sourceDir string, force bool) error {
-	gitOpsDir := filepath.Join(sourceDir, "gitops", "argocd")
-	outputPath := filepath.Join(gitOpsDir, "application.yaml")
+	outputPath := filepath.Join(sourceDir, "argocd-application.yaml")
 	displayName := filepath.Join(
 		s.KSailConfig.Spec.Workload.SourceDirectory,
-		"gitops", "argocd", "application.yaml",
+		"argocd-application.yaml",
 	)
-
-	err := os.MkdirAll(gitOpsDir, dirPerm)
-	if err != nil {
-		return fmt.Errorf(
-			"%w: failed to create gitops directory: %w",
-			ErrGitOpsConfigGeneration,
-			err,
-		)
-	}
 
 	opts := s.buildArgoCDApplicationOptions(outputPath, force)
 
-	_, err = s.ArgoCDAppGenerator.Generate(opts)
+	skip, existed, previousModTime := s.checkFileExistsAndSkip(outputPath, displayName, force)
+	if skip {
+		return nil
+	}
+
+	_, err := s.ArgoCDAppGenerator.Generate(opts)
 	if err != nil {
 		return fmt.Errorf("%w: %w", ErrGitOpsConfigGeneration, err)
 	}
 
-	s.notifyCreated(displayName)
+	if force && existed {
+		err = ensureOverwriteModTime(outputPath, previousModTime)
+		if err != nil {
+			return fmt.Errorf("failed to update mod time for %s: %w", displayName, err)
+		}
+	}
+
+	s.notifyFileAction(displayName, existed)
 
 	return nil
 }
@@ -935,16 +937,6 @@ func (s *Scaffolder) notifySkip(resourceType, path string) {
 		Type:    notify.InfoType,
 		Content: "skipping %s scaffolding: existing found at '%s'",
 		Args:    []any{resourceType, path},
-		Writer:  s.Writer,
-	})
-}
-
-// notifyCreated sends a notification about a created file.
-func (s *Scaffolder) notifyCreated(displayName string) {
-	notify.WriteMessage(notify.Message{
-		Type:    notify.GenerateType,
-		Content: "created '%s'",
-		Args:    []any{displayName},
 		Writer:  s.Writer,
 	})
 }
@@ -1003,7 +995,7 @@ func (s *Scaffolder) getKustomizationResources() []string {
 	case v1alpha1.GitOpsEngineFlux:
 		resources = append(resources, "flux-instance.yaml")
 	case v1alpha1.GitOpsEngineArgoCD:
-		resources = append(resources, "gitops/argocd")
+		resources = append(resources, "argocd-application.yaml")
 	case v1alpha1.GitOpsEngineNone:
 		// No GitOps resources to add
 	}

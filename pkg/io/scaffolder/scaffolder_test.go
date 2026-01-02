@@ -1242,8 +1242,8 @@ func TestScaffoldArgoCDGitOps_CreatesApplicationManifest(t *testing.T) {
 	err := scaffolderInstance.Scaffold(tempDir, false)
 	require.NoError(t, err)
 
-	// Verify ArgoCD Application manifest was created
-	applicationPath := filepath.Join(tempDir, "k8s", "gitops", "argocd", "application.yaml")
+	// Verify ArgoCD Application manifest was created directly in k8s/
+	applicationPath := filepath.Join(tempDir, "k8s", "argocd-application.yaml")
 	content, err := os.ReadFile(applicationPath) //nolint:gosec // Test file path is safe
 	require.NoError(t, err)
 
@@ -1267,13 +1267,13 @@ func TestScaffoldGitOps_SkipsWhenGitOpsEngineIsNone(t *testing.T) {
 
 	// Verify no GitOps manifests were created
 	fluxInstancePath := filepath.Join(tempDir, "k8s", "flux-instance.yaml")
-	argocdDir := filepath.Join(tempDir, "k8s", "gitops", "argocd")
+	argocdAppPath := filepath.Join(tempDir, "k8s", "argocd-application.yaml")
 
 	_, fluxErr := os.Stat(fluxInstancePath)
-	_, argocdErr := os.Stat(argocdDir)
+	_, argocdErr := os.Stat(argocdAppPath)
 
 	assert.True(t, os.IsNotExist(fluxErr), "flux-instance.yaml should not exist")
-	assert.True(t, os.IsNotExist(argocdErr), "argocd gitops dir should not exist")
+	assert.True(t, os.IsNotExist(argocdErr), "argocd-application.yaml should not exist")
 }
 
 type skipExistingCRTestCase struct {
@@ -1308,9 +1308,9 @@ spec:
 		{
 			name:         "skips existing ArgoCD Application",
 			gitOpsEngine: v1alpha1.GitOpsEngineArgoCD,
-			subDir:       filepath.Join("gitops", "argocd"),
+			subDir:       "",
 			existingFile: "existing-app.yaml",
-			outputFile:   "application.yaml",
+			outputFile:   "argocd-application.yaml",
 			existingContent: `apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
