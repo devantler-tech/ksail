@@ -225,9 +225,9 @@ jobs:
           ksail workload wait --for=condition=Available deployment/podinfo --timeout=300s
 
       - name: 🧪 ksail workload push and reconcile
-        if: contains(matrix.args, '--gitops-engine')
+        if: contains(matrix.args, '--gitops-engine') && matrix.init == true
         run: |
-          ksail workload push --path=k8s
+          ksail workload push
           ksail workload reconcile
 
       - name: 🧪 ksail cluster stop
@@ -254,14 +254,7 @@ jobs:
   status:
     name: CI - KSail
     runs-on: ubuntu-latest
-    needs:
-      [
-        changes,
-        build-artifact,
-        generate-schema,
-        generate-cli-flags-docs,
-        system-test,
-      ]
+    needs: [changes, build-artifact, generate-schema, generate-cli-flags-docs, system-test]
     if: ${{ always() }}
     steps:
       - name: Summarize workflow result
