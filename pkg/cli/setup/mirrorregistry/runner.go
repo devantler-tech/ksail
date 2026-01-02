@@ -201,7 +201,7 @@ func newRegistryHandlers(
 func executeRegistryStage(
 	cmd *cobra.Command,
 	deps lifecycle.Deps,
-	info Info,
+	info setup.StageInfo,
 	shouldPrepare func() bool,
 	action func(context.Context, client.APIClient) error,
 	firstActivityShown *bool,
@@ -217,20 +217,11 @@ func executeRegistryStage(
 func runRegistryStage(
 	cmd *cobra.Command,
 	deps lifecycle.Deps,
-	info Info,
+	info setup.StageInfo,
 	action func(context.Context, client.APIClient) error,
 	firstActivityShown *bool,
 	dockerInvoker DockerClientInvoker,
 ) error {
-	// Convert local Info to shared setup.StageInfo
-	sharedInfo := setup.StageInfo{
-		Title:         info.Title,
-		Emoji:         info.Emoji,
-		Activity:      info.Activity,
-		Success:       info.Success,
-		FailurePrefix: info.FailurePrefix,
-	}
-
 	invoker := dockerInvoker
 	if invoker == nil {
 		invoker = DefaultDockerClientInvoker
@@ -239,7 +230,7 @@ func runRegistryStage(
 	err := setup.RunDockerStage(
 		cmd,
 		deps.Timer,
-		sharedInfo,
+		info,
 		action,
 		firstActivityShown,
 		invoker,

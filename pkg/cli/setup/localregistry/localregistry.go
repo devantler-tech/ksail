@@ -69,15 +69,6 @@ var (
 	ErrUnsupportedStage   = errors.New("unsupported local registry stage")
 )
 
-// StageInfo contains display information for a registry stage.
-type StageInfo struct {
-	Title         string
-	Emoji         string
-	Activity      string
-	Success       string
-	FailurePrefix string
-}
-
 // StageType represents the type of local registry stage operation.
 type StageType int
 
@@ -115,8 +106,8 @@ type registryContext struct {
 }
 
 // ProvisionStageInfo returns the stage info for provisioning.
-func ProvisionStageInfo() StageInfo {
-	return StageInfo{
+func ProvisionStageInfo() setup.StageInfo {
+	return setup.StageInfo{
 		Title:         "Create local registry...",
 		Emoji:         "🗄️",
 		Activity:      "creating local registry",
@@ -126,8 +117,8 @@ func ProvisionStageInfo() StageInfo {
 }
 
 // ConnectStageInfo returns the stage info for connecting.
-func ConnectStageInfo() StageInfo {
-	return StageInfo{
+func ConnectStageInfo() setup.StageInfo {
+	return setup.StageInfo{
 		Title:         "Attach local registry...",
 		Emoji:         "🔌",
 		Activity:      "attaching local registry to cluster",
@@ -137,8 +128,8 @@ func ConnectStageInfo() StageInfo {
 }
 
 // CleanupStageInfo returns the stage info for cleanup.
-func CleanupStageInfo() StageInfo {
-	return StageInfo{
+func CleanupStageInfo() setup.StageInfo {
+	return setup.StageInfo{
 		Title:         "Delete local registry...",
 		Emoji:         "🧹",
 		Activity:      "deleting local registry",
@@ -233,14 +224,14 @@ func Cleanup(
 // resolveStage returns the stage info and action builder for the given stage type.
 func resolveStage(
 	stage StageType,
-) (StageInfo, func(*v1alpha1.Cluster) stageAction, error) {
+) (setup.StageInfo, func(*v1alpha1.Cluster) stageAction, error) {
 	switch stage {
 	case StageProvision:
 		return ProvisionStageInfo(), provisionAction, nil
 	case StageConnect:
 		return ConnectStageInfo(), connectActionBuilder, nil
 	default:
-		return StageInfo{}, nil, fmt.Errorf("%w: %d", ErrUnsupportedStage, stage)
+		return setup.StageInfo{}, nil, fmt.Errorf("%w: %d", ErrUnsupportedStage, stage)
 	}
 }
 
@@ -288,7 +279,7 @@ func runStageFromBuilder(
 	cmd *cobra.Command,
 	ctx *Context,
 	deps lifecycle.Deps,
-	info StageInfo,
+	info setup.StageInfo,
 	buildAction func(*v1alpha1.Cluster) stageAction,
 	firstActivityShown *bool,
 	localDeps Dependencies,
@@ -314,7 +305,7 @@ func runAction(
 	kindConfig *kindv1alpha4.Cluster,
 	k3dConfig *k3dv1alpha5.SimpleConfig,
 	talosConfig *talosconfigmanager.Configs,
-	info StageInfo,
+	info setup.StageInfo,
 	action func(context.Context, registry.Service, registryContext) error,
 	firstActivityShown *bool,
 	localDeps Dependencies,
@@ -340,7 +331,7 @@ func runAction(
 func runStage(
 	cmd *cobra.Command,
 	deps lifecycle.Deps,
-	info StageInfo,
+	info setup.StageInfo,
 	handler func(context.Context, registry.Service) error,
 	firstActivityShown *bool,
 	localDeps Dependencies,
@@ -369,24 +360,15 @@ func runStage(
 func runDockerStage(
 	cmd *cobra.Command,
 	deps lifecycle.Deps,
-	info StageInfo,
+	info setup.StageInfo,
 	action func(context.Context, client.APIClient) error,
 	firstActivityShown *bool,
 	localDeps Dependencies,
 ) error {
-	// Convert local StageInfo to shared setup.StageInfo
-	sharedInfo := setup.StageInfo{
-		Title:         info.Title,
-		Emoji:         info.Emoji,
-		Activity:      info.Activity,
-		Success:       info.Success,
-		FailurePrefix: info.FailurePrefix,
-	}
-
 	err := setup.RunDockerStage(
 		cmd,
 		deps.Timer,
-		sharedInfo,
+		info,
 		action,
 		firstActivityShown,
 		localDeps.DockerInvoker,

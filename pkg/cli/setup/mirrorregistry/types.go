@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/setup"
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	"github.com/docker/docker/client"
@@ -57,15 +58,6 @@ const (
 	RolePostClusterConnect
 )
 
-// Info contains display information for a registry stage.
-type Info struct {
-	Title         string
-	Emoji         string
-	Activity      string
-	Success       string
-	FailurePrefix string
-}
-
 // Handler contains the prepare and action functions for a registry stage.
 type Handler struct {
 	Prepare func() bool
@@ -84,7 +76,7 @@ type Context struct {
 
 // Definition maps a stage role to its info and distribution-specific actions.
 type Definition struct {
-	Info        Info
+	Info        setup.StageInfo
 	KindAction  func(*Context) func(context.Context, client.APIClient) error
 	K3dAction   func(*Context) func(context.Context, client.APIClient) error
 	TalosAction func(*Context) func(context.Context, client.APIClient) error
@@ -93,7 +85,7 @@ type Definition struct {
 // RegistryInfo returns the stage info for registry creation.
 //
 //nolint:gochecknoglobals // Constant configuration for registry stage.
-var RegistryInfo = Info{
+var RegistryInfo = setup.StageInfo{
 	Title:         RegistryStageTitle,
 	Emoji:         RegistryStageEmoji,
 	Activity:      RegistryStageActivity,
@@ -104,7 +96,7 @@ var RegistryInfo = Info{
 // NetworkInfo returns the stage info for network creation.
 //
 //nolint:gochecknoglobals // Constant configuration for network stage.
-var NetworkInfo = Info{
+var NetworkInfo = setup.StageInfo{
 	Title:         NetworkStageTitle,
 	Emoji:         NetworkStageEmoji,
 	Activity:      NetworkStageActivity,
@@ -115,7 +107,7 @@ var NetworkInfo = Info{
 // ConnectInfo returns the stage info for registry connection.
 //
 //nolint:gochecknoglobals // Constant configuration for registry connection stage.
-var ConnectInfo = Info{
+var ConnectInfo = setup.StageInfo{
 	Title:         ConnectStageTitle,
 	Emoji:         ConnectStageEmoji,
 	Activity:      ConnectStageActivity,
@@ -126,7 +118,7 @@ var ConnectInfo = Info{
 // PostClusterConnectInfo returns the stage info for post-cluster registry configuration.
 //
 //nolint:gochecknoglobals // Constant configuration for post-cluster registry connection stage.
-var PostClusterConnectInfo = Info{
+var PostClusterConnectInfo = setup.StageInfo{
 	Title:         PostClusterConnectStageTitle,
 	Emoji:         PostClusterConnectStageEmoji,
 	Activity:      PostClusterConnectStageActivity,
