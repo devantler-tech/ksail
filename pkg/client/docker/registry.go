@@ -77,6 +77,9 @@ const (
 	RegistryReadyPollInterval = 500 * time.Millisecond
 	// RegistryHTTPTimeout is the timeout for individual HTTP health check requests.
 	RegistryHTTPTimeout = 2 * time.Second
+	// ConnectionRefusedCheckThreshold is the number of consecutive connection refused errors
+	// before checking if the container has crashed.
+	ConnectionRefusedCheckThreshold = 5
 )
 
 // RegistryManager manages Docker registry containers for mirror/pull-through caching.
@@ -364,6 +367,7 @@ func (rm *RegistryManager) pollUntilReady(
 	defer ticker.Stop()
 
 	var lastErr error
+	connectionRefusedCount := 0
 
 	for {
 		select {
@@ -378,6 +382,23 @@ func (rm *RegistryManager) pollUntilReady(
 			if err != nil {
 				lastErr = err
 
+				// If we get repeated connection refused errors, check if container crashed.
+				// This avoids waiting the full timeout when the container has already exited.
+				if rm.isConnectionRefused(err) {
+					connectionRefusedCount++
+					// Check container state after several consecutive connection refused errors
+					if connectionRefusedCount >= ConnectionRefusedCheckThreshold {
+						running, checkErr := rm.IsRegistryInUse(ctx, name)
+						if checkErr == nil && !running {
+							return fmt.Errorf("%w: %s (container is not running)", ErrRegistryNotReady, name)
+						}
+						// Reset counter to avoid checking too frequently
+						connectionRefusedCount = 0
+					}
+				} else {
+					connectionRefusedCount = 0
+				}
+
 				continue
 			}
 
@@ -386,6 +407,18 @@ func (rm *RegistryManager) pollUntilReady(
 			}
 		}
 	}
+}
+
+// isConnectionRefused checks if the error indicates a connection refused.
+func (rm *RegistryManager) isConnectionRefused(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	errStr := err.Error()
+
+	return strings.Contains(errStr, "connection refused") ||
+		strings.Contains(errStr, "connect: connection refused")
 }
 
 // checkRegistryHealth performs a single health check request.

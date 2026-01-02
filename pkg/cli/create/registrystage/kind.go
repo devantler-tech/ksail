@@ -48,7 +48,7 @@ func runKindMirrorAction(
 		return fmt.Errorf("failed to create docker network: %w", err)
 	}
 
-	// Setup registry containers
+	// Setup registry containers (without network attachment yet)
 	err = kindprovisioner.SetupRegistries(
 		execCtx,
 		ctx.KindConfig,
@@ -61,7 +61,19 @@ func runKindMirrorAction(
 		return fmt.Errorf("failed to setup kind registries: %w", err)
 	}
 
-	// Connect registries to the network immediately for Docker DNS resolution
+	// Wait for registries to become ready BEFORE connecting to network.
+	// This is critical: registry v3 panics if it can't reach the upstream during startup.
+	// If we connect to network first, Docker DNS will resolve the upstream hostname
+	// (e.g., ghcr.io) to the container's own IP (since container is named ghcr.io),
+	// causing the registry to connect to itself and fail.
+	registryInfos := registry.BuildRegistryInfosFromSpecs(ctx.MirrorSpecs, nil, nil, "")
+	err = WaitForRegistriesReady(execCtx, dockerClient, registryInfos, writer)
+	if err != nil {
+		return fmt.Errorf("failed waiting for registries: %w", err)
+	}
+
+	// Now connect registries to the network for Docker DNS resolution by Kind nodes.
+	// The registries are already running and healthy at this point.
 	err = kindprovisioner.ConnectRegistriesToNetwork(
 		execCtx,
 		ctx.MirrorSpecs,
@@ -72,11 +84,7 @@ func runKindMirrorAction(
 		return fmt.Errorf("failed to connect kind registries to network: %w", err)
 	}
 
-	// Wait for registries to become ready before proceeding.
-	// This prevents intermittent image pull failures due to race conditions.
-	registryInfos := registry.BuildRegistryInfosFromSpecs(ctx.MirrorSpecs, nil, nil, "")
-
-	return WaitForRegistriesReady(execCtx, dockerClient, registryInfos, writer)
+	return nil
 }
 
 func runKindConnectAction(
