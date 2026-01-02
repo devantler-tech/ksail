@@ -21,17 +21,29 @@ import (
 //
 //nolint:gochecknoglobals // Registry stage definitions are constant configuration.
 var StageDefinitions = map[Role]Definition{
-	RoleMirror: {
-		Info:        MirrorInfo,
-		KindAction:  KindMirrorAction,
-		K3dAction:   K3dMirrorAction,
-		TalosAction: TalosMirrorAction,
+	RoleRegistry: {
+		Info:        RegistryInfo,
+		KindAction:  KindRegistryAction,
+		K3dAction:   K3dRegistryAction,
+		TalosAction: TalosRegistryAction,
+	},
+	RoleNetwork: {
+		Info:        NetworkInfo,
+		KindAction:  KindNetworkAction,
+		K3dAction:   K3dNetworkAction,
+		TalosAction: TalosNetworkAction,
 	},
 	RoleConnect: {
 		Info:        ConnectInfo,
 		KindAction:  KindConnectAction,
 		K3dAction:   K3dConnectAction,
 		TalosAction: TalosConnectAction,
+	},
+	RolePostClusterConnect: {
+		Info:        PostClusterConnectInfo,
+		KindAction:  KindPostClusterConnectAction,
+		K3dAction:   K3dPostClusterConnectAction,
+		TalosAction: TalosPostClusterConnectAction,
 	},
 }
 
@@ -252,7 +264,7 @@ func runRegistryStage(
 }
 
 // StageParams bundles all parameters needed for registry stage execution.
-// This reduces code duplication between SetupMirrorRegistries and ConnectRegistriesToClusterNetwork.
+// This reduces code duplication across registry stage functions.
 type StageParams struct {
 	Cmd                *cobra.Command
 	ClusterCfg         *v1alpha1.Cluster
@@ -265,14 +277,24 @@ type StageParams struct {
 	DockerInvoker      DockerClientInvoker
 }
 
-// SetupMirrorRegistries configures mirror registries before cluster creation.
-func SetupMirrorRegistries(params StageParams) error {
-	return runStageWithParams(params, RoleMirror)
+// SetupRegistries creates and configures registry containers before cluster creation.
+func SetupRegistries(params StageParams) error {
+	return runStageWithParams(params, RoleRegistry)
 }
 
-// ConnectRegistriesToClusterNetwork attaches mirror registries to the cluster network after creation.
-func ConnectRegistriesToClusterNetwork(params StageParams) error {
+// CreateNetwork creates the Docker network for the cluster.
+func CreateNetwork(params StageParams) error {
+	return runStageWithParams(params, RoleNetwork)
+}
+
+// ConnectRegistriesToNetwork connects registries to the Docker network before cluster creation.
+func ConnectRegistriesToNetwork(params StageParams) error {
 	return runStageWithParams(params, RoleConnect)
+}
+
+// ConfigureRegistryMirrorsInCluster configures containerd inside cluster nodes after cluster creation.
+func ConfigureRegistryMirrorsInCluster(params StageParams) error {
+	return runStageWithParams(params, RolePostClusterConnect)
 }
 
 // runStageWithParams is the shared implementation for registry stage execution.

@@ -14,8 +14,8 @@ import (
 	"github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 )
 
-// K3dRegistryAction is the function signature for K3d registry actions.
-type K3dRegistryAction func(
+// k3dRegistryActionFn is the function signature for K3d registry actions.
+type k3dRegistryActionFn func(
 	context.Context,
 	*v1alpha5.SimpleConfig,
 	string,
@@ -23,74 +23,95 @@ type K3dRegistryAction func(
 	io.Writer,
 ) error
 
-// K3dMirrorAction returns the action function for K3d mirror registry setup.
-func K3dMirrorAction(ctx *Context) func(context.Context, client.APIClient) error {
+// K3dRegistryAction returns the action function for K3d registry creation.
+func K3dRegistryAction(ctx *Context) func(context.Context, client.APIClient) error {
 	return func(execCtx context.Context, dockerClient client.APIClient) error {
-		// Setup registries first
-		err := runK3DRegistryAction(
-			execCtx,
-			ctx,
-			dockerClient,
-			"setup k3d registries",
-			k3dprovisioner.SetupRegistries,
-		)
-		if err != nil {
-			return err
-		}
+		return runK3dRegistryAction(execCtx, ctx, dockerClient)
+	}
+}
 
-		// Pre-create Docker network and connect registries before cluster creation.
-		// This ensures registries are reachable via Docker DNS when K3d nodes pull images.
-		clusterName := k3dconfigmanager.ResolveClusterName(ctx.ClusterCfg, ctx.K3dConfig)
-		networkName := "k3d-" + clusterName
-		writer := ctx.Cmd.OutOrStdout()
-
-		// For K3d, we don't need to specify a CIDR as K3d manages its own network settings.
-		errNetwork := EnsureDockerNetworkExists(
-			execCtx,
-			dockerClient,
-			networkName,
-			"",
-			writer,
-		)
-		if errNetwork != nil {
-			return fmt.Errorf("failed to create k3d network: %w", errNetwork)
-		}
-
-		// Connect registries to network
-		errConnect := runK3DRegistryAction(
-			execCtx,
-			ctx,
-			dockerClient,
-			"connect k3d registries to network",
-			k3dprovisioner.ConnectRegistriesToNetwork,
-		)
-		if errConnect != nil {
-			return errConnect
-		}
-
-		// Wait for registries to become ready before proceeding.
-		// This prevents intermittent image pull failures due to race conditions.
-		registryInfos := k3dprovisioner.ExtractRegistriesFromConfigForTesting(ctx.K3dConfig)
-
-		return WaitForRegistriesReady(execCtx, dockerClient, registryInfos, writer)
+// K3dNetworkAction returns the action function for K3d network creation.
+func K3dNetworkAction(ctx *Context) func(context.Context, client.APIClient) error {
+	return func(execCtx context.Context, dockerClient client.APIClient) error {
+		return runK3dNetworkAction(execCtx, ctx, dockerClient)
 	}
 }
 
 // K3dConnectAction returns the action function for K3d registry connection.
-func K3dConnectAction(_ *Context) func(context.Context, client.APIClient) error {
-	// Registries are already connected to the network in the mirror action.
-	// No additional work needed after cluster creation.
+func K3dConnectAction(ctx *Context) func(context.Context, client.APIClient) error {
+	return func(execCtx context.Context, dockerClient client.APIClient) error {
+		return runK3dConnectAction(execCtx, ctx, dockerClient)
+	}
+}
+
+// K3dPostClusterConnectAction returns the action function for post-cluster registry configuration.
+// For K3d, this is a no-op since registry mirrors are configured via k3d config before cluster creation.
+func K3dPostClusterConnectAction(_ *Context) func(context.Context, client.APIClient) error {
 	return func(_ context.Context, _ client.APIClient) error {
 		return nil
 	}
 }
 
-func runK3DRegistryAction(
+// runK3dRegistryAction creates and configures registry containers.
+func runK3dRegistryAction(
+	execCtx context.Context,
+	ctx *Context,
+	dockerClient client.APIClient,
+) error {
+	// Setup registries
+	err := runK3DRegistrySetup(
+		execCtx,
+		ctx,
+		dockerClient,
+		"setup k3d registries",
+		k3dprovisioner.SetupRegistries,
+	)
+	if err != nil {
+		return err
+	}
+
+	// Wait for registries to become ready before network connection.
+	registryInfos := k3dprovisioner.ExtractRegistriesFromConfigForTesting(ctx.K3dConfig)
+	writer := ctx.Cmd.OutOrStdout()
+
+	return WaitForRegistriesReady(execCtx, dockerClient, registryInfos, writer)
+}
+
+// runK3dNetworkAction creates the Docker network for K3d.
+func runK3dNetworkAction(
+	execCtx context.Context,
+	ctx *Context,
+	dockerClient client.APIClient,
+) error {
+	clusterName := k3dconfigmanager.ResolveClusterName(ctx.ClusterCfg, ctx.K3dConfig)
+	networkName := "k3d-" + clusterName
+	writer := ctx.Cmd.OutOrStdout()
+
+	// For K3d, we don't need to specify a CIDR as K3d manages its own network settings.
+	return EnsureDockerNetworkExists(execCtx, dockerClient, networkName, "", writer)
+}
+
+// runK3dConnectAction connects registries to the Docker network.
+func runK3dConnectAction(
+	execCtx context.Context,
+	ctx *Context,
+	dockerClient client.APIClient,
+) error {
+	return runK3DRegistrySetup(
+		execCtx,
+		ctx,
+		dockerClient,
+		"connect k3d registries to network",
+		k3dprovisioner.ConnectRegistriesToNetwork,
+	)
+}
+
+func runK3DRegistrySetup(
 	execCtx context.Context,
 	ctx *Context,
 	dockerClient client.APIClient,
 	description string,
-	action K3dRegistryAction,
+	action k3dRegistryActionFn,
 ) error {
 	if action == nil {
 		return nil

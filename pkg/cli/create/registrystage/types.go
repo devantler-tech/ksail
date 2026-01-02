@@ -14,27 +14,47 @@ import (
 
 // Stage message constants for registry operations.
 const (
-	MirrorStageTitle    = "Create mirror registry..."
-	MirrorStageEmoji    = "🪞"
-	MirrorStageActivity = "creating mirror registries"
-	MirrorStageSuccess  = "mirror registries created"
-	MirrorStageFailure  = "failed to setup registries"
+	// Registry stage - creates and configures registries (local + mirrors).
+	RegistryStageTitle    = "Create registries..."
+	RegistryStageEmoji    = "📦"
+	RegistryStageActivity = "creating and configuring registries"
+	RegistryStageSuccess  = "registries created"
+	RegistryStageFailure  = "failed to create registries"
 
-	ConnectStageTitle    = "Connect registry..."
+	// Network stage - creates Docker network.
+	NetworkStageTitle    = "Create network..."
+	NetworkStageEmoji    = "🌐"
+	NetworkStageActivity = "creating docker network"
+	NetworkStageSuccess  = "docker network created"
+	NetworkStageFailure  = "failed to create docker network"
+
+	// Connect stage - connects registries to Docker network.
+	ConnectStageTitle    = "Connect registries..."
 	ConnectStageEmoji    = "🔗"
-	ConnectStageActivity = "connecting registries"
-	ConnectStageSuccess  = "registries connected"
-	ConnectStageFailure  = "failed to connect registries"
+	ConnectStageActivity = "connecting registries to docker network"
+	ConnectStageSuccess  = "registries connected to docker network"
+	ConnectStageFailure  = "failed to connect registries to docker network"
+
+	// Post-cluster connect stage - configures containerd inside cluster nodes.
+	PostClusterConnectStageTitle    = "Configure registry mirrors..."
+	PostClusterConnectStageEmoji    = "⚙️"
+	PostClusterConnectStageActivity = "configuring registry mirrors in cluster"
+	PostClusterConnectStageSuccess  = "registry mirrors configured"
+	PostClusterConnectStageFailure  = "failed to configure registry mirrors"
 )
 
 // Role represents the type of registry stage operation.
 type Role int
 
 const (
-	// RoleMirror is the stage that creates mirror registries before cluster creation.
-	RoleMirror Role = iota
-	// RoleConnect is the stage that connects registries after cluster creation.
+	// RoleRegistry is the stage that creates registries before network creation.
+	RoleRegistry Role = iota
+	// RoleNetwork is the stage that creates the Docker network.
+	RoleNetwork
+	// RoleConnect is the stage that connects registries to the Docker network.
 	RoleConnect
+	// RolePostClusterConnect is the stage that configures containerd inside cluster nodes.
+	RolePostClusterConnect
 )
 
 // Info contains display information for a registry stage.
@@ -70,15 +90,26 @@ type Definition struct {
 	TalosAction func(*Context) func(context.Context, client.APIClient) error
 }
 
-// MirrorInfo returns the stage info for mirror registry creation.
+// RegistryInfo returns the stage info for registry creation.
 //
-//nolint:gochecknoglobals // Constant configuration for mirror registry stage.
-var MirrorInfo = Info{
-	Title:         MirrorStageTitle,
-	Emoji:         MirrorStageEmoji,
-	Activity:      MirrorStageActivity,
-	Success:       MirrorStageSuccess,
-	FailurePrefix: MirrorStageFailure,
+//nolint:gochecknoglobals // Constant configuration for registry stage.
+var RegistryInfo = Info{
+	Title:         RegistryStageTitle,
+	Emoji:         RegistryStageEmoji,
+	Activity:      RegistryStageActivity,
+	Success:       RegistryStageSuccess,
+	FailurePrefix: RegistryStageFailure,
+}
+
+// NetworkInfo returns the stage info for network creation.
+//
+//nolint:gochecknoglobals // Constant configuration for network stage.
+var NetworkInfo = Info{
+	Title:         NetworkStageTitle,
+	Emoji:         NetworkStageEmoji,
+	Activity:      NetworkStageActivity,
+	Success:       NetworkStageSuccess,
+	FailurePrefix: NetworkStageFailure,
 }
 
 // ConnectInfo returns the stage info for registry connection.
@@ -90,4 +121,15 @@ var ConnectInfo = Info{
 	Activity:      ConnectStageActivity,
 	Success:       ConnectStageSuccess,
 	FailurePrefix: ConnectStageFailure,
+}
+
+// PostClusterConnectInfo returns the stage info for post-cluster registry configuration.
+//
+//nolint:gochecknoglobals // Constant configuration for post-cluster registry connection stage.
+var PostClusterConnectInfo = Info{
+	Title:         PostClusterConnectStageTitle,
+	Emoji:         PostClusterConnectStageEmoji,
+	Activity:      PostClusterConnectStageActivity,
+	Success:       PostClusterConnectStageSuccess,
+	FailurePrefix: PostClusterConnectStageFailure,
 }

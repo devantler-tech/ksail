@@ -15,10 +15,20 @@ import (
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
 
-// KindMirrorAction returns the action function for Kind mirror registry setup.
-func KindMirrorAction(ctx *Context) func(context.Context, client.APIClient) error {
+// Kind network name constant.
+const kindNetworkName = "kind"
+
+// KindRegistryAction returns the action function for Kind registry creation.
+func KindRegistryAction(ctx *Context) func(context.Context, client.APIClient) error {
 	return func(execCtx context.Context, dockerClient client.APIClient) error {
-		return runKindMirrorAction(execCtx, ctx, dockerClient)
+		return runKindRegistryAction(execCtx, ctx, dockerClient)
+	}
+}
+
+// KindNetworkAction returns the action function for Kind network creation.
+func KindNetworkAction(ctx *Context) func(context.Context, client.APIClient) error {
+	return func(execCtx context.Context, dockerClient client.APIClient) error {
+		return runKindNetworkAction(execCtx, ctx, dockerClient)
 	}
 }
 
@@ -29,7 +39,15 @@ func KindConnectAction(ctx *Context) func(context.Context, client.APIClient) err
 	}
 }
 
-func runKindMirrorAction(
+// KindPostClusterConnectAction returns the action function for post-cluster registry configuration.
+func KindPostClusterConnectAction(ctx *Context) func(context.Context, client.APIClient) error {
+	return func(execCtx context.Context, dockerClient client.APIClient) error {
+		return runKindPostClusterConnectAction(execCtx, ctx, dockerClient)
+	}
+}
+
+// runKindRegistryAction creates and configures registry containers (without network attachment).
+func runKindRegistryAction(
 	execCtx context.Context,
 	ctx *Context,
 	dockerClient client.APIClient,
@@ -37,19 +55,8 @@ func runKindMirrorAction(
 	writer := ctx.Cmd.OutOrStdout()
 	clusterName := ctx.KindConfig.Name
 
-	// Kind always uses a network named "kind"
-	networkName := "kind"
-
-	// Pre-create the Docker network so registries can be connected before Kind nodes start.
-	// This ensures registry containers are reachable via Docker DNS when nodes pull images.
-	// For Kind, we don't need to specify a CIDR as Kind manages its own network settings.
-	err := EnsureDockerNetworkExists(execCtx, dockerClient, networkName, "", writer)
-	if err != nil {
-		return fmt.Errorf("failed to create docker network: %w", err)
-	}
-
 	// Setup registry containers (without network attachment yet)
-	err = kindprovisioner.SetupRegistries(
+	err := kindprovisioner.SetupRegistries(
 		execCtx,
 		ctx.KindConfig,
 		clusterName,
@@ -67,32 +74,47 @@ func runKindMirrorAction(
 	// (e.g., ghcr.io) to the container's own IP (since container is named ghcr.io),
 	// causing the registry to connect to itself and fail.
 	registryInfos := registry.BuildRegistryInfosFromSpecs(ctx.MirrorSpecs, nil, nil, "")
-	err = WaitForRegistriesReady(execCtx, dockerClient, registryInfos, writer)
-	if err != nil {
-		return fmt.Errorf("failed waiting for registries: %w", err)
-	}
 
-	// Now connect registries to the network for Docker DNS resolution by Kind nodes.
-	// The registries are already running and healthy at this point.
-	err = kindprovisioner.ConnectRegistriesToNetwork(
-		execCtx,
-		ctx.MirrorSpecs,
-		dockerClient,
-		writer,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to connect kind registries to network: %w", err)
-	}
-
-	return nil
+	return WaitForRegistriesReady(execCtx, dockerClient, registryInfos, writer)
 }
 
+// runKindNetworkAction creates the Docker network for Kind.
+func runKindNetworkAction(
+	execCtx context.Context,
+	ctx *Context,
+	dockerClient client.APIClient,
+) error {
+	writer := ctx.Cmd.OutOrStdout()
+
+	// Create the Docker network. For Kind, we don't need to specify a CIDR
+	// as Kind manages its own network settings.
+	return EnsureDockerNetworkExists(execCtx, dockerClient, kindNetworkName, "", writer)
+}
+
+// runKindConnectAction connects registries to the Docker network.
 func runKindConnectAction(
 	execCtx context.Context,
 	ctx *Context,
 	dockerClient client.APIClient,
 ) error {
-	// Registries are already connected to the network in runKindMirrorAction.
+	writer := ctx.Cmd.OutOrStdout()
+
+	// Connect registries to the network for Docker DNS resolution by Kind nodes.
+	// The registries are already running and healthy at this point.
+	return kindprovisioner.ConnectRegistriesToNetwork(
+		execCtx,
+		ctx.MirrorSpecs,
+		dockerClient,
+		writer,
+	)
+}
+
+// runKindPostClusterConnectAction configures containerd inside Kind nodes to use registry mirrors.
+func runKindPostClusterConnectAction(
+	execCtx context.Context,
+	ctx *Context,
+	dockerClient client.APIClient,
+) error {
 	// This function only configures containerd inside Kind nodes to use the registry mirrors.
 	// This injects hosts.toml files directly into the running nodes.
 	err := kindprovisioner.ConfigureContainerdRegistryMirrors(

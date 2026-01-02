@@ -13,25 +13,37 @@ import (
 	"github.com/docker/docker/client"
 )
 
-// TalosMirrorAction returns the action function for Talos mirror registry setup.
-func TalosMirrorAction(ctx *Context) func(context.Context, client.APIClient) error {
+// TalosRegistryAction returns the action function for Talos registry creation.
+func TalosRegistryAction(ctx *Context) func(context.Context, client.APIClient) error {
 	return func(execCtx context.Context, dockerClient client.APIClient) error {
-		return runTalosMirrorAction(execCtx, ctx, dockerClient)
+		return runTalosRegistryAction(execCtx, ctx, dockerClient)
+	}
+}
+
+// TalosNetworkAction returns the action function for Talos network creation.
+func TalosNetworkAction(ctx *Context) func(context.Context, client.APIClient) error {
+	return func(execCtx context.Context, dockerClient client.APIClient) error {
+		return runTalosNetworkAction(execCtx, ctx, dockerClient)
 	}
 }
 
 // TalosConnectAction returns the action function for Talos registry connection.
-func TalosConnectAction(_ *Context) func(context.Context, client.APIClient) error {
-	// For Talos, registries are already connected to the network in runTalosMirrorAction.
-	// This function is a no-op but kept for consistency with the Kind/K3d flow.
-	// The early connection in runTalosMirrorAction ensures registries are available
-	// when Talos nodes start pulling images during boot.
+func TalosConnectAction(ctx *Context) func(context.Context, client.APIClient) error {
+	return func(execCtx context.Context, dockerClient client.APIClient) error {
+		return runTalosConnectAction(execCtx, ctx, dockerClient)
+	}
+}
+
+// TalosPostClusterConnectAction returns the action function for post-cluster registry configuration.
+// For Talos, this is a no-op since registry mirrors are configured via machine config before boot.
+func TalosPostClusterConnectAction(_ *Context) func(context.Context, client.APIClient) error {
 	return func(_ context.Context, _ client.APIClient) error {
 		return nil
 	}
 }
 
-func runTalosMirrorAction(
+// runTalosRegistryAction creates and configures registry containers.
+func runTalosRegistryAction(
 	execCtx context.Context,
 	ctx *Context,
 	dockerAPIClient client.APIClient,
@@ -41,7 +53,73 @@ func runTalosMirrorAction(
 	}
 
 	clusterName := ResolveTalosClusterName(ctx.TalosConfig)
+	writer := ctx.Cmd.OutOrStdout()
+
+	// Build registry infos from mirror specs
+	upstreams := registry.BuildUpstreamLookup(ctx.MirrorSpecs)
+	registryInfos := registry.BuildRegistryInfosFromSpecs(
+		ctx.MirrorSpecs,
+		upstreams,
+		nil,
+		clusterName,
+	)
+
+	if len(registryInfos) == 0 {
+		return nil
+	}
+
+	// Create registry manager and setup containers
+	registryMgr, err := dockerclient.NewRegistryManager(dockerAPIClient)
+	if err != nil {
+		return fmt.Errorf("failed to create registry manager: %w", err)
+	}
+
+	err = registry.SetupRegistries(
+		execCtx, registryMgr, registryInfos, clusterName, "", writer,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to setup talos registries: %w", err)
+	}
+
+	// Build registry IPs map for health check (empty IPs since we don't have network yet)
+	registryIPs := make(map[string]string, len(registryInfos))
+	for _, info := range registryInfos {
+		registryIPs[info.Name] = ""
+	}
+
+	return waitForTalosRegistries(execCtx, registryMgr, registryIPs, writer)
+}
+
+// runTalosNetworkAction creates the Docker network for Talos.
+func runTalosNetworkAction(
+	execCtx context.Context,
+	ctx *Context,
+	dockerClient client.APIClient,
+) error {
+	if len(ctx.MirrorSpecs) == 0 {
+		return nil
+	}
+
+	clusterName := ResolveTalosClusterName(ctx.TalosConfig)
 	networkName := clusterName // Talos uses cluster name as network name
+	networkCIDR := ResolveTalosNetworkCIDR(ctx.TalosConfig)
+	writer := ctx.Cmd.OutOrStdout()
+
+	return EnsureDockerNetworkExists(execCtx, dockerClient, networkName, networkCIDR, writer)
+}
+
+// runTalosConnectAction connects registries to the Docker network with static IPs.
+func runTalosConnectAction(
+	execCtx context.Context,
+	ctx *Context,
+	dockerAPIClient client.APIClient,
+) error {
+	if len(ctx.MirrorSpecs) == 0 {
+		return nil
+	}
+
+	clusterName := ResolveTalosClusterName(ctx.TalosConfig)
+	networkName := clusterName
 	networkCIDR := ResolveTalosNetworkCIDR(ctx.TalosConfig)
 	writer := ctx.Cmd.OutOrStdout()
 
@@ -58,17 +136,15 @@ func runTalosMirrorAction(
 		return nil
 	}
 
-	// Pre-create Docker network and setup registries before Talos nodes boot.
-	// This ensures registries are reachable via Docker DNS when nodes pull images.
-	return SetupTalosMirrorRegistries(
-		execCtx,
-		dockerAPIClient,
-		clusterName,
-		networkName,
-		networkCIDR,
-		registryInfos,
-		writer,
+	// Connect registries to the network with static IPs
+	_, err := registry.ConnectRegistriesToNetworkWithStaticIPs(
+		execCtx, dockerAPIClient, registryInfos, networkName, networkCIDR, writer,
 	)
+	if err != nil {
+		return fmt.Errorf("failed to connect talos registries to network: %w", err)
+	}
+
+	return nil
 }
 
 // ResolveTalosClusterName extracts the cluster name from Talos config or returns the default.
@@ -87,48 +163,6 @@ func ResolveTalosNetworkCIDR(_ *talosconfigmanager.Configs) string {
 	return talosconfigmanager.DefaultNetworkCIDR
 }
 
-// SetupTalosMirrorRegistries creates network, registry containers, and connects them.
-// It also waits for registries to become ready before returning to ensure
-// Talos nodes can pull images when they boot.
-func SetupTalosMirrorRegistries(
-	ctx context.Context,
-	dockerAPIClient client.APIClient,
-	clusterName string,
-	networkName string,
-	networkCIDR string,
-	registryInfos []registry.Info,
-	writer io.Writer,
-) error {
-	// Pre-create the Docker network with Talos-compatible labels and CIDR.
-	err := EnsureDockerNetworkExists(ctx, dockerAPIClient, networkName, networkCIDR, writer)
-	if err != nil {
-		return fmt.Errorf("failed to create docker network: %w", err)
-	}
-
-	// Create registry manager and setup containers
-	registryMgr, err := dockerclient.NewRegistryManager(dockerAPIClient)
-	if err != nil {
-		return fmt.Errorf("failed to create registry manager: %w", err)
-	}
-
-	err = registry.SetupRegistries(
-		ctx, registryMgr, registryInfos, clusterName, networkName, writer,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to setup talos registries: %w", err)
-	}
-
-	// Connect registries to the network with static IPs
-	registryIPs, err := registry.ConnectRegistriesToNetworkWithStaticIPs(
-		ctx, dockerAPIClient, registryInfos, networkName, networkCIDR, writer,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to connect talos registries to network: %w", err)
-	}
-
-	return waitForTalosRegistries(ctx, registryMgr, registryIPs, writer)
-}
-
 // waitForTalosRegistries waits for registries to become ready.
 func waitForTalosRegistries(
 	ctx context.Context,
@@ -142,7 +176,7 @@ func waitForTalosRegistries(
 
 	notify.WriteMessage(notify.Message{
 		Type:    notify.ActivityType,
-		Content: "waiting for mirror registries to become ready",
+		Content: "waiting for registries to become ready",
 		Writer:  writer,
 	})
 
@@ -153,7 +187,7 @@ func waitForTalosRegistries(
 
 	notify.WriteMessage(notify.Message{
 		Type:    notify.SuccessType,
-		Content: "all mirror registries are ready",
+		Content: "all registries are ready",
 		Writer:  writer,
 	})
 

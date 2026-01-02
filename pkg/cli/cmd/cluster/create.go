@@ -119,7 +119,7 @@ func handleCreateRunE(
 		return err
 	}
 
-	connectMirrorRegistriesWithWarning(
+	configureRegistryMirrorsInClusterWithWarning(
 		cmd,
 		ctx,
 		deps,
@@ -191,6 +191,7 @@ func ensureLocalRegistriesReady(
 	cfgManager *ksailconfigmanager.ConfigManager,
 	firstActivityShown *bool,
 ) error {
+	// Stage 1: Provision local registry
 	err := executeLocalRegistryStage(
 		cmd,
 		ctx,
@@ -204,9 +205,22 @@ func ensureLocalRegistriesReady(
 
 	params := buildRegistryStageParams(cmd, ctx, deps, cfgManager, firstActivityShown)
 
-	err = registrystage.SetupMirrorRegistries(params)
+	// Stage 2: Create and configure registry containers (local + mirrors)
+	err = registrystage.SetupRegistries(params)
 	if err != nil {
-		return fmt.Errorf("failed to setup mirror registries: %w", err)
+		return fmt.Errorf("failed to setup registries: %w", err)
+	}
+
+	// Stage 3: Create Docker network
+	err = registrystage.CreateNetwork(params)
+	if err != nil {
+		return fmt.Errorf("failed to create docker network: %w", err)
+	}
+
+	// Stage 4: Connect registries to network (before cluster creation)
+	err = registrystage.ConnectRegistriesToNetwork(params)
+	if err != nil {
+		return fmt.Errorf("failed to connect registries to network: %w", err)
 	}
 
 	return nil
@@ -234,7 +248,7 @@ func executeClusterLifecycle(
 	return nil
 }
 
-func connectMirrorRegistriesWithWarning(
+func configureRegistryMirrorsInClusterWithWarning(
 	cmd *cobra.Command,
 	ctx *CommandContext,
 	deps lifecycle.Deps,
@@ -243,11 +257,12 @@ func connectMirrorRegistriesWithWarning(
 ) {
 	params := buildRegistryStageParams(cmd, ctx, deps, cfgManager, firstActivityShown)
 
-	err := registrystage.ConnectRegistriesToClusterNetwork(params)
+	// Configure containerd inside cluster nodes to use registry mirrors (Kind only)
+	err := registrystage.ConfigureRegistryMirrorsInCluster(params)
 	if err != nil {
 		notify.WriteMessage(notify.Message{
 			Type:    notify.WarningType,
-			Content: fmt.Sprintf("failed to connect registries to cluster network: %v", err),
+			Content: fmt.Sprintf("failed to configure registry mirrors in cluster: %v", err),
 			Writer:  cmd.OutOrStdout(),
 		})
 	}
