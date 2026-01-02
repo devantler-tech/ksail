@@ -5,20 +5,22 @@ import (
 	"sync"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/create"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/setup"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/installer"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	"github.com/docker/docker/client"
 	"github.com/spf13/cobra"
 )
 
-// Test injection for installer factories, docker client invoker, and cluster provisioner factory.
+// Package-level dependencies for cluster commands.
+// These variables support dependency injection for testing while providing production defaults.
+// Use the Set*ForTests functions to override these values in tests.
 var (
 	//nolint:gochecknoglobals // dependency injection for tests
 	installerFactoriesOverrideMu sync.RWMutex
 	//nolint:gochecknoglobals // dependency injection for tests
-	installerFactoriesOverride *create.InstallerFactories
+	installerFactoriesOverride *setup.InstallerFactories
 	//nolint:gochecknoglobals // dependency injection for tests
 	dockerClientInvokerMu sync.RWMutex
 	//nolint:gochecknoglobals // dependency injection for tests
@@ -30,7 +32,7 @@ var (
 )
 
 // getInstallerFactories returns the installer factories to use, allowing test override.
-func getInstallerFactories() *create.InstallerFactories {
+func getInstallerFactories() *setup.InstallerFactories {
 	installerFactoriesOverrideMu.RLock()
 	defer installerFactoriesOverrideMu.RUnlock()
 
@@ -38,15 +40,15 @@ func getInstallerFactories() *create.InstallerFactories {
 		return installerFactoriesOverride
 	}
 
-	return create.DefaultInstallerFactories()
+	return setup.DefaultInstallerFactories()
 }
 
 // overrideInstallerFactory is a helper that applies a factory override and returns a restore function.
-func overrideInstallerFactory(apply func(*create.InstallerFactories)) func() {
+func overrideInstallerFactory(apply func(*setup.InstallerFactories)) func() {
 	installerFactoriesOverrideMu.Lock()
 
 	previous := installerFactoriesOverride
-	override := create.DefaultInstallerFactories()
+	override := setup.DefaultInstallerFactories()
 
 	if previous != nil {
 		*override = *previous
@@ -70,7 +72,7 @@ func overrideInstallerFactory(apply func(*create.InstallerFactories)) func() {
 func SetCertManagerInstallerFactoryForTests(
 	factory func(*v1alpha1.Cluster) (installer.Installer, error),
 ) func() {
-	return overrideInstallerFactory(func(f *create.InstallerFactories) {
+	return overrideInstallerFactory(func(f *setup.InstallerFactories) {
 		f.CertManager = factory
 	})
 }
@@ -79,7 +81,7 @@ func SetCertManagerInstallerFactoryForTests(
 func SetCSIInstallerFactoryForTests(
 	factory func(*v1alpha1.Cluster) (installer.Installer, error),
 ) func() {
-	return overrideInstallerFactory(func(f *create.InstallerFactories) {
+	return overrideInstallerFactory(func(f *setup.InstallerFactories) {
 		f.CSI = factory
 	})
 }
@@ -88,7 +90,7 @@ func SetCSIInstallerFactoryForTests(
 func SetArgoCDInstallerFactoryForTests(
 	factory func(*v1alpha1.Cluster) (installer.Installer, error),
 ) func() {
-	return overrideInstallerFactory(func(f *create.InstallerFactories) {
+	return overrideInstallerFactory(func(f *setup.InstallerFactories) {
 		f.ArgoCD = factory
 	})
 }
@@ -97,7 +99,7 @@ func SetArgoCDInstallerFactoryForTests(
 func SetEnsureArgoCDResourcesForTests(
 	fn func(context.Context, string, *v1alpha1.Cluster) error,
 ) func() {
-	return overrideInstallerFactory(func(f *create.InstallerFactories) {
+	return overrideInstallerFactory(func(f *setup.InstallerFactories) {
 		f.EnsureArgoCDResources = fn
 	})
 }

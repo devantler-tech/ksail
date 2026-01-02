@@ -1,4 +1,4 @@
-package cluster
+package lifecycle
 
 import (
 	"context"
@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	k3dprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/k3d"
@@ -76,7 +75,7 @@ func runSimpleLifecycleAction(
 		return err
 	}
 
-	distribution, clusterName, err := lifecycle.DetectDistributionFromContext(ctx)
+	distribution, clusterName, err := DetectDistributionFromContext(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to detect distribution: %w", err)
 	}
@@ -139,7 +138,7 @@ func getCurrentContext() (string, error) {
 	}
 
 	if config.CurrentContext == "" {
-		return "", lifecycle.ErrNoCurrentContext
+		return "", ErrNoCurrentContext
 	}
 
 	return config.CurrentContext, nil

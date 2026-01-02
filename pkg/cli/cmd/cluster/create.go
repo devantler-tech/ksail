@@ -5,10 +5,10 @@ import (
 	"fmt"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/create"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/create/registrystage"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/setup"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/setup/registry"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
@@ -164,14 +164,14 @@ func buildRegistryStageParams(
 	deps lifecycle.Deps,
 	cfgManager *ksailconfigmanager.ConfigManager,
 	firstActivityShown *bool,
-) registrystage.StageParams {
+) registry.StageParams {
 	dockerClientInvokerMu.RLock()
 
 	invoker := dockerClientInvoker
 
 	dockerClientInvokerMu.RUnlock()
 
-	return registrystage.StageParams{
+	return registry.StageParams{
 		Cmd:                cmd,
 		ClusterCfg:         ctx.ClusterCfg,
 		Deps:               deps,
@@ -206,19 +206,19 @@ func ensureLocalRegistriesReady(
 	params := buildRegistryStageParams(cmd, ctx, deps, cfgManager, firstActivityShown)
 
 	// Stage 2: Create and configure registry containers (local + mirrors)
-	err = registrystage.SetupRegistries(params)
+	err = registry.SetupRegistries(params)
 	if err != nil {
 		return fmt.Errorf("failed to setup registries: %w", err)
 	}
 
 	// Stage 3: Create Docker network
-	err = registrystage.CreateNetwork(params)
+	err = registry.CreateNetwork(params)
 	if err != nil {
 		return fmt.Errorf("failed to create docker network: %w", err)
 	}
 
 	// Stage 4: Connect registries to network (before cluster creation)
-	err = registrystage.ConnectRegistriesToNetwork(params)
+	err = registry.ConnectRegistriesToNetwork(params)
 	if err != nil {
 		return fmt.Errorf("failed to connect registries to network: %w", err)
 	}
@@ -258,7 +258,7 @@ func configureRegistryMirrorsInClusterWithWarning(
 	params := buildRegistryStageParams(cmd, ctx, deps, cfgManager, firstActivityShown)
 
 	// Configure containerd inside cluster nodes to use registry mirrors (Kind only)
-	err := registrystage.ConfigureRegistryMirrorsInCluster(params)
+	err := registry.ConfigureRegistryMirrorsInCluster(params)
 	if err != nil {
 		notify.WriteMessage(notify.Message{
 			Type:    notify.WarningType,
@@ -275,7 +275,7 @@ func handlePostCreationSetup(
 	tmr timer.Timer,
 	firstActivityShown *bool,
 ) error {
-	_, err := create.InstallCNI(cmd, clusterCfg, tmr, firstActivityShown)
+	_, err := setup.InstallCNI(cmd, clusterCfg, tmr, firstActivityShown)
 	if err != nil {
 		return fmt.Errorf("failed to install CNI: %w", err)
 	}
@@ -283,7 +283,7 @@ func handlePostCreationSetup(
 	factories := getInstallerFactories()
 	outputTimer := helpers.MaybeTimer(cmd, tmr)
 
-	err = create.InstallPostCNIComponents(
+	err = setup.InstallPostCNIComponents(
 		cmd,
 		clusterCfg,
 		factories,

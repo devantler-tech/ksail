@@ -1,4 +1,4 @@
-package registrystage
+package registry
 
 import (
 	"context"

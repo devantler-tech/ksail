@@ -3,6 +3,7 @@ package cluster
 import (
 	"context"
 
+	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	"github.com/spf13/cobra"
 )
@@ -17,7 +18,7 @@ Supported distributions are automatically detected:
 
 // NewStartCmd creates and returns the start command.
 func NewStartCmd(_ any) *cobra.Command {
-	return NewSimpleLifecycleCmd(SimpleLifecycleConfig{
+	return lifecycle.NewSimpleLifecycleCmd(lifecycle.SimpleLifecycleConfig{
 		Use:          "start",
 		Short:        "Start a stopped cluster",
 		Long:         startLongDesc,

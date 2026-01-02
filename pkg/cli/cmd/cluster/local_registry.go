@@ -21,6 +21,27 @@ import (
 	kindv1alpha4 "sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
 
+// CommandContext groups all configuration objects needed by cluster commands.
+// This reduces coupling by consolidating related parameters into a single cohesive structure.
+type CommandContext struct {
+	ClusterCfg  *v1alpha1.Cluster
+	KindConfig  *kindv1alpha4.Cluster
+	K3dConfig   *k3dv1alpha5.SimpleConfig
+	TalosConfig *talosconfigmanager.Configs
+}
+
+// NewClusterCommandContext creates a new cluster command context from a config manager.
+func NewClusterCommandContext(cfgManager *ksailconfigmanager.ConfigManager) *CommandContext {
+	distConfig := cfgManager.DistributionConfig
+
+	return &CommandContext{
+		ClusterCfg:  cfgManager.Config,
+		KindConfig:  distConfig.Kind,
+		K3dConfig:   distConfig.K3d,
+		TalosConfig: distConfig.Talos,
+	}
+}
+
 type localRegistryOption func(*localRegistryDependencies)
 
 var (

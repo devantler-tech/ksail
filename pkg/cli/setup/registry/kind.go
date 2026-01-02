@@ -1,4 +1,4 @@
-package registrystage
+package registry
 
 import (
 	"context"
@@ -101,12 +101,17 @@ func runKindConnectAction(
 
 	// Connect registries to the network for Docker DNS resolution by Kind nodes.
 	// The registries are already running and healthy at this point.
-	return kindprovisioner.ConnectRegistriesToNetwork(
+	err := kindprovisioner.ConnectRegistriesToNetwork(
 		execCtx,
 		ctx.MirrorSpecs,
 		dockerClient,
 		writer,
 	)
+	if err != nil {
+		return fmt.Errorf("connect registries to network: %w", err)
+	}
+
+	return nil
 }
 
 // runKindPostClusterConnectAction configures containerd inside Kind nodes to use registry mirrors.

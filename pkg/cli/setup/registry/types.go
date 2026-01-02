@@ -1,4 +1,4 @@
-package registrystage
+package registry
 
 import (
 	"context"
@@ -14,28 +14,28 @@ import (
 
 // Stage message constants for registry operations.
 const (
-	// Registry stage - creates and configures registries (local + mirrors).
+	// RegistryStageTitle is the title for the registry stage that creates and configures registries.
 	RegistryStageTitle    = "Create registries..."
 	RegistryStageEmoji    = "📦"
 	RegistryStageActivity = "creating and configuring registries"
 	RegistryStageSuccess  = "registries created"
 	RegistryStageFailure  = "failed to create registries"
 
-	// Network stage - creates Docker network.
+	// NetworkStageTitle is the title for the network stage that creates Docker network.
 	NetworkStageTitle    = "Create network..."
 	NetworkStageEmoji    = "🌐"
 	NetworkStageActivity = "creating docker network"
 	NetworkStageSuccess  = "docker network created"
 	NetworkStageFailure  = "failed to create docker network"
 
-	// Connect stage - connects registries to Docker network.
+	// ConnectStageTitle is the title for the stage that connects registries to Docker network.
 	ConnectStageTitle    = "Connect registries..."
 	ConnectStageEmoji    = "🔗"
 	ConnectStageActivity = "connecting registries to docker network"
 	ConnectStageSuccess  = "registries connected to docker network"
 	ConnectStageFailure  = "failed to connect registries to docker network"
 
-	// Post-cluster connect stage - configures containerd inside cluster nodes.
+	// PostClusterConnectStageTitle is the title for the stage that configures containerd inside cluster nodes.
 	PostClusterConnectStageTitle    = "Configure registry mirrors..."
 	PostClusterConnectStageEmoji    = "⚙️"
 	PostClusterConnectStageActivity = "configuring registry mirrors in cluster"

@@ -366,8 +366,7 @@ func (rm *RegistryManager) pollUntilReady(
 
 	defer ticker.Stop()
 
-	var lastErr error
-	connectionRefusedCount := 0
+	state := &pollState{}
 
 	for {
 		select {
@@ -375,38 +374,86 @@ func (rm *RegistryManager) pollUntilReady(
 			return fmt.Errorf("%w: %w", ErrRegistryHealthCheckCancelled, ctx.Err())
 		case <-ticker.C:
 			if time.Now().After(deadline) {
-				return rm.buildTimeoutError(name, lastErr)
+				return rm.buildTimeoutError(name, state.lastErr)
 			}
 
-			ready, err := rm.checkRegistryHealth(ctx, httpClient, checkURL)
+			done, err := rm.pollOnce(ctx, name, checkURL, httpClient, state)
 			if err != nil {
-				lastErr = err
-
-				// If we get repeated connection refused errors, check if container crashed.
-				// This avoids waiting the full timeout when the container has already exited.
-				if rm.isConnectionRefused(err) {
-					connectionRefusedCount++
-					// Check container state after several consecutive connection refused errors
-					if connectionRefusedCount >= ConnectionRefusedCheckThreshold {
-						running, checkErr := rm.IsRegistryInUse(ctx, name)
-						if checkErr == nil && !running {
-							return fmt.Errorf("%w: %s (container is not running)", ErrRegistryNotReady, name)
-						}
-						// Reset counter to avoid checking too frequently
-						connectionRefusedCount = 0
-					}
-				} else {
-					connectionRefusedCount = 0
-				}
-
-				continue
+				return err
 			}
 
-			if ready {
+			if done {
 				return nil
 			}
 		}
 	}
+}
+
+// pollState tracks state across poll iterations.
+type pollState struct {
+	lastErr                error
+	connectionRefusedCount int
+}
+
+// pollOnce performs a single poll iteration.
+// Returns (true, nil) if ready, (false, nil) to continue polling, or (false, err) to stop with error.
+func (rm *RegistryManager) pollOnce(
+	ctx context.Context,
+	name, checkURL string,
+	httpClient *http.Client,
+	state *pollState,
+) (bool, error) {
+	ready, err := rm.checkRegistryHealth(ctx, httpClient, checkURL)
+	if err == nil && ready {
+		return true, nil
+	}
+
+	if err != nil {
+		state.lastErr = err
+
+		crashErr := rm.handleConnectionRefused(ctx, name, err, state)
+		if crashErr != nil {
+			return false, crashErr
+		}
+	}
+
+	return false, nil
+}
+
+// handleConnectionRefused checks if the container crashed after repeated connection refused errors.
+// Returns an error if the container is not running, nil otherwise.
+func (rm *RegistryManager) handleConnectionRefused(
+	ctx context.Context,
+	name string,
+	err error,
+	state *pollState,
+) error {
+	if !rm.isConnectionRefused(err) {
+		state.connectionRefusedCount = 0
+
+		return nil
+	}
+
+	state.connectionRefusedCount++
+
+	if state.connectionRefusedCount < ConnectionRefusedCheckThreshold {
+		return nil
+	}
+
+	// Check container state after several consecutive connection refused errors
+	running, checkErr := rm.IsRegistryInUse(ctx, name)
+	if checkErr == nil && !running {
+		return fmt.Errorf(
+			"%w: %s (container is not running)",
+			ErrRegistryNotReady,
+			name,
+		)
+	}
+
+	// Reset counter to avoid checking too frequently
+	state.connectionRefusedCount = 0
+
+	return nil
 }
 
 // isConnectionRefused checks if the error indicates a connection refused.
