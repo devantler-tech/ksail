@@ -387,41 +387,23 @@ func reconcileArgoCDApplication(
 		return err
 	}
 
-	applicationClient, err := getArgoCDApplicationClient(kubeconfigPath)
-	if err != nil {
-		return err
-	}
-
-	// Check Application status first to fail early if source is not available
-	writeActivityNotification(
-		"checking argocd application status",
-		outputTimer,
-		writer,
-	)
-
-	err = checkArgoCDApplicationSourceAvailable(ctx, applicationClient)
-	if err != nil {
-		return err
-	}
-
-	writeActivityNotification(
-		"triggering argocd application refresh",
-		outputTimer,
-		writer,
-	)
+	// Trigger hard refresh to fetch the latest artifact
+	writeActivityNotification("triggering argocd application refresh", outputTimer, writer)
 
 	err = triggerArgoCDRefresh(ctx, kubeconfigPath, artifactVersion)
 	if err != nil {
 		return err
 	}
 
-	writeActivityNotification(
-		"waiting for argocd application to sync",
-		outputTimer,
-		writer,
-	)
+	applicationClient, err := getArgoCDApplicationClient(kubeconfigPath)
+	if err != nil {
+		return err
+	}
 
-	return waitForArgoCDSync(ctx, applicationClient, timeout)
+	// Wait for application to sync - fails early if source is not available
+	writeActivityNotification("waiting for argocd application to sync", outputTimer, writer)
+
+	return waitForArgoCDApplicationReady(ctx, applicationClient, timeout)
 }
 
 // triggerArgoCDRefresh triggers a hard refresh of the ArgoCD application.
@@ -474,27 +456,6 @@ func getDynamicResourceClient(
 	}
 
 	return dynamicClient.Resource(gvr).Namespace(namespace), nil
-}
-
-// checkArgoCDApplicationSourceAvailable checks if the ArgoCD Application source is available.
-// Returns an error immediately if the Application shows a source fetch failure.
-func checkArgoCDApplicationSourceAvailable(
-	ctx context.Context,
-	applicationClient dynamic.ResourceInterface,
-) error {
-	app, err := applicationClient.Get(ctx, argoCDRootApplicationName, metav1.GetOptions{})
-	if err != nil {
-		return fmt.Errorf("get argocd application: %w", err)
-	}
-
-	// Check operationState for source fetch errors
-	err = checkArgoCDOperationState(app)
-	if err != nil {
-		return err
-	}
-
-	// Check conditions for repository errors
-	return checkArgoCDConditions(app)
 }
 
 // checkArgoCDOperationState checks the operationState for source fetch errors.
@@ -552,21 +513,60 @@ func isSourceRelatedError(message string) bool {
 		strings.Contains(message, "not found")
 }
 
-// waitForArgoCDSync waits for the application to sync and become healthy.
-func waitForArgoCDSync(
+// waitForArgoCDApplicationReady waits for the application to sync, failing early on source errors.
+func waitForArgoCDApplicationReady(
 	ctx context.Context,
 	applicationClient dynamic.ResourceInterface,
 	timeout time.Duration,
 ) error {
-	return waitForResourceCondition(
-		ctx,
-		applicationClient,
-		argoCDRootApplicationName,
-		timeout,
-		isArgoCDApplicationSynced,
-		errArgoCDReconcileTimeout,
-		"get argocd application status",
-	)
+	timeoutCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	ticker := time.NewTicker(reconcilePollInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-timeoutCtx.Done():
+			return errArgoCDReconcileTimeout
+		case <-ticker.C:
+			ready, err := checkArgoCDApplicationStatus(timeoutCtx, applicationClient)
+			if err != nil {
+				return err
+			}
+
+			if ready {
+				return nil
+			}
+		}
+	}
+}
+
+// checkArgoCDApplicationStatus checks if the ArgoCD application is ready or has errors.
+// Returns (true, nil) if synced and healthy, (false, nil) if still progressing,
+// or (false, error) if there's a source-related error.
+func checkArgoCDApplicationStatus(
+	ctx context.Context,
+	applicationClient dynamic.ResourceInterface,
+) (bool, error) {
+	app, err := applicationClient.Get(ctx, argoCDRootApplicationName, metav1.GetOptions{})
+	if err != nil {
+		return false, fmt.Errorf("get argocd application status: %w", err)
+	}
+
+	// Check for source errors - fail early if artifact doesn't exist
+	sourceErr := checkArgoCDOperationState(app)
+	if sourceErr != nil {
+		return false, sourceErr
+	}
+
+	sourceErr = checkArgoCDConditions(app)
+	if sourceErr != nil {
+		return false, sourceErr
+	}
+
+	// Check if synced and healthy
+	return isArgoCDApplicationSynced(app), nil
 }
 
 // waitForResourceCondition is a generic function to wait for a resource to meet a condition.
