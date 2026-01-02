@@ -40,15 +40,10 @@ const (
 
 var errCRDNotEstablished = errors.New("CRD is not yet established")
 
-// errFluxInstanceNotReady is returned when the FluxInstance has not reached Ready status.
-var errFluxInstanceNotReady = errors.New("FluxInstance is not yet ready")
-
 //nolint:gochecknoglobals // package-level timeout constants
 var (
 	fluxAPIAvailabilityTimeout      = 2 * time.Minute
 	fluxAPIAvailabilityPollInterval = 2 * time.Second
-	// fluxInstanceReconcileTimeout is longer to allow for operator bootstrap and controller deployment.
-	fluxInstanceReconcileTimeout = 5 * time.Minute
 )
 
 var (
@@ -124,45 +119,64 @@ func EnsureDefaultResources(
 		return err
 	}
 
-	// Wait for FluxInstance API to be fully ready
-	err = waitForAPIReady(ctx, restConfig, fluxInstanceGroupVersion, fluxInstanceCRDName)
+	fluxClient, err := setupFluxInstance(ctx, restConfig, clusterCfg)
 	if err != nil {
 		return err
 	}
 
-	fluxInstance, err := buildFluxInstance(clusterCfg)
-	if err != nil {
-		return err
-	}
-
-	fluxClient, err := newFluxResourcesClient(restConfig)
-	if err != nil {
-		return err
-	}
-
-	err = upsertFluxResource(ctx, fluxClient, fluxInstance)
-	if err != nil {
-		return err
-	}
-
-	// Wait for FluxInstance to be reconciled and Ready before accessing CRDs it installs.
-	// The operator needs time to bootstrap Flux controllers which register the source CRDs.
-	err = waitForFluxInstanceReady(ctx, fluxClient)
-	if err != nil {
-		return err
-	}
-
-	// Wait for OCIRepository API to be fully ready
+	// Wait for OCIRepository API to be available before patching the local registry.
+	// The FluxInstance reconciliation will create the OCIRepository CRD and resources,
+	// but the FluxInstance won't become Ready until the OCIRepository can sync.
+	// For local registries, we need to patch the OCIRepository to use insecure HTTP
+	// before the sync can succeed.
 	err = waitForAPIReady(ctx, restConfig, sourcev1.GroupVersion, ociRepositoriesCRDName)
 	if err != nil {
 		return err
 	}
 
 	if clusterCfg.Spec.Cluster.LocalRegistry == v1alpha1.LocalRegistryEnabled {
-		return ensureLocalOCIRepositoryInsecure(ctx, fluxClient)
+		err = ensureLocalOCIRepositoryInsecure(ctx, fluxClient)
+		if err != nil {
+			return err
+		}
 	}
 
+	// Note: We don't wait for FluxInstance to be Ready here because it depends on
+	// the OCIRepository sync, which requires the workload to be pushed first.
+	// The workload push happens after cluster creation via 'ksail workload push'.
 	return nil
+}
+
+// setupFluxInstance waits for the FluxInstance CRD, creates the client, and upserts the FluxInstance.
+//
+//nolint:ireturn // Returns client.Client interface which is required for subsequent flux operations
+func setupFluxInstance(
+	ctx context.Context,
+	restConfig *rest.Config,
+	clusterCfg *v1alpha1.Cluster,
+) (client.Client, error) {
+	// Wait for FluxInstance API to be fully ready
+	err := waitForAPIReady(ctx, restConfig, fluxInstanceGroupVersion, fluxInstanceCRDName)
+	if err != nil {
+		return nil, err
+	}
+
+	fluxInstance, err := buildFluxInstance(clusterCfg)
+	if err != nil {
+		return nil, err
+	}
+
+	fluxClient, err := newFluxResourcesClient(restConfig)
+	if err != nil {
+		return nil, err
+	}
+
+	err = upsertFluxResource(ctx, fluxClient, fluxInstance)
+	if err != nil {
+		return nil, err
+	}
+
+	return fluxClient, nil
 }
 
 // waitForAPIReady waits for both the API to be discoverable and the CRD to be established.
@@ -511,53 +525,6 @@ func waitForCRDEstablished(
 			return fmt.Errorf(
 				"timed out waiting for CRD %s to be established: %w",
 				crdName,
-				lastErr,
-			)
-		case <-ticker.C:
-		}
-	}
-}
-
-// waitForFluxInstanceReady waits for the FluxInstance to be reconciled and have Ready=True.
-// This ensures the Flux controllers are deployed and their CRDs are registered before
-// attempting to create resources that depend on them (e.g., OCIRepository).
-func waitForFluxInstanceReady(ctx context.Context, fluxClient client.Client) error {
-	waitCtx, cancel := context.WithTimeout(ctx, fluxInstanceReconcileTimeout)
-	defer cancel()
-
-	ticker := time.NewTicker(fluxAPIAvailabilityPollInterval)
-	defer ticker.Stop()
-
-	key := client.ObjectKey{Name: fluxInstanceDefaultName, Namespace: fluxclient.DefaultNamespace}
-	var lastErr error
-
-	for {
-		instance := &FluxInstance{}
-
-		err := fluxClient.Get(waitCtx, key, instance)
-		if err != nil {
-			lastErr = fmt.Errorf("failed to get FluxInstance: %w", err)
-		} else {
-			// Check for Ready condition with status True
-			for _, condition := range instance.Status.Conditions {
-				if condition.Type == "Ready" && condition.Status == metav1.ConditionTrue {
-					return nil
-				}
-			}
-
-			lastErr = errFluxInstanceNotReady
-		}
-
-		select {
-		case <-waitCtx.Done():
-			if lastErr == nil {
-				lastErr = waitCtx.Err()
-			}
-
-			return fmt.Errorf(
-				"timed out waiting for FluxInstance %s/%s to be ready: %w",
-				key.Namespace,
-				key.Name,
 				lastErr,
 			)
 		case <-ticker.C:
