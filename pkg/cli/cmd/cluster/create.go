@@ -9,7 +9,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup/localregistry"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/setup/registry"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/setup/mirrorregistry"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
@@ -168,10 +168,10 @@ func buildRegistryStageParams(
 	deps lifecycle.Deps,
 	cfgManager *ksailconfigmanager.ConfigManager,
 	firstActivityShown *bool,
-) registry.StageParams {
+) mirrorregistry.StageParams {
 	localDeps := getLocalRegistryDeps()
 
-	return registry.StageParams{
+	return mirrorregistry.StageParams{
 		Cmd:                cmd,
 		ClusterCfg:         ctx.ClusterCfg,
 		Deps:               deps,
@@ -208,19 +208,19 @@ func ensureLocalRegistriesReady(
 	params := buildRegistryStageParams(cmd, ctx, deps, cfgManager, firstActivityShown)
 
 	// Stage 2: Create and configure registry containers (local + mirrors)
-	err = registry.SetupRegistries(params)
+	err = mirrorregistry.SetupRegistries(params)
 	if err != nil {
 		return fmt.Errorf("failed to setup registries: %w", err)
 	}
 
 	// Stage 3: Create Docker network
-	err = registry.CreateNetwork(params)
+	err = mirrorregistry.CreateNetwork(params)
 	if err != nil {
 		return fmt.Errorf("failed to create docker network: %w", err)
 	}
 
 	// Stage 4: Connect registries to network (before cluster creation)
-	err = registry.ConnectRegistriesToNetwork(params)
+	err = mirrorregistry.ConnectRegistriesToNetwork(params)
 	if err != nil {
 		return fmt.Errorf("failed to connect registries to network: %w", err)
 	}
@@ -260,7 +260,7 @@ func configureRegistryMirrorsInClusterWithWarning(
 	params := buildRegistryStageParams(cmd, ctx, deps, cfgManager, firstActivityShown)
 
 	// Configure containerd inside cluster nodes to use registry mirrors (Kind only)
-	err := registry.ConfigureRegistryMirrorsInCluster(params)
+	err := mirrorregistry.ConfigureRegistryMirrorsInCluster(params)
 	if err != nil {
 		notify.WriteMessage(notify.Message{
 			Type:    notify.WarningType,

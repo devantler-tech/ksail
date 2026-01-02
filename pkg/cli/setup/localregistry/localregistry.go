@@ -9,12 +9,12 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/setup"
 	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
 	k3dconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/k3d"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
 	"github.com/docker/docker/client"
 	k3dv1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/spf13/cobra"
@@ -374,48 +374,25 @@ func runDockerStage(
 	firstActivityShown *bool,
 	localDeps Dependencies,
 ) error {
-	deps.Timer.NewStage()
-
-	if *firstActivityShown {
-		cmd.Println()
+	// Convert local StageInfo to shared setup.StageInfo
+	sharedInfo := setup.StageInfo{
+		Title:         info.Title,
+		Emoji:         info.Emoji,
+		Activity:      info.Activity,
+		Success:       info.Success,
+		FailurePrefix: info.FailurePrefix,
 	}
 
-	*firstActivityShown = true
-
-	notify.WriteMessage(notify.Message{
-		Type:    notify.TitleType,
-		Content: info.Title,
-		Emoji:   info.Emoji,
-		Writer:  cmd.OutOrStdout(),
-	})
-
-	if info.Activity != "" {
-		notify.WriteMessage(notify.Message{
-			Type:    notify.ActivityType,
-			Content: info.Activity,
-			Writer:  cmd.OutOrStdout(),
-		})
-	}
-
-	err := localDeps.DockerInvoker(cmd, func(dockerClient client.APIClient) error {
-		err := action(cmd.Context(), dockerClient)
-		if err != nil {
-			return fmt.Errorf("%s: %w", info.FailurePrefix, err)
-		}
-
-		outputTimer := helpers.MaybeTimer(cmd, deps.Timer)
-
-		notify.WriteMessage(notify.Message{
-			Type:    notify.SuccessType,
-			Content: info.Success,
-			Timer:   outputTimer,
-			Writer:  cmd.OutOrStdout(),
-		})
-
-		return nil
-	})
+	err := setup.RunDockerStage(
+		cmd,
+		deps.Timer,
+		sharedInfo,
+		action,
+		firstActivityShown,
+		localDeps.DockerInvoker,
+	)
 	if err != nil {
-		return fmt.Errorf("failed to execute registry stage: %w", err)
+		return fmt.Errorf("run docker stage: %w", err)
 	}
 
 	return nil

@@ -1,4 +1,4 @@
-package registry
+package mirrorregistry
 
 import (
 	"context"
@@ -48,25 +48,14 @@ func runTalosRegistryAction(
 	ctx *Context,
 	dockerAPIClient client.APIClient,
 ) error {
-	if len(ctx.MirrorSpecs) == 0 {
-		return nil
-	}
-
 	clusterName := ResolveTalosClusterName(ctx.TalosConfig)
-	writer := ctx.Cmd.OutOrStdout()
-
-	// Build registry infos from mirror specs
-	upstreams := registry.BuildUpstreamLookup(ctx.MirrorSpecs)
-	registryInfos := registry.BuildRegistryInfosFromSpecs(
-		ctx.MirrorSpecs,
-		upstreams,
-		nil,
-		clusterName,
-	)
+	registryInfos := buildTalosRegistryInfos(ctx.MirrorSpecs, clusterName)
 
 	if len(registryInfos) == 0 {
 		return nil
 	}
+
+	writer := ctx.Cmd.OutOrStdout()
 
 	// Create registry manager and setup containers
 	registryMgr, err := dockerclient.NewRegistryManager(dockerAPIClient)
@@ -114,27 +103,16 @@ func runTalosConnectAction(
 	ctx *Context,
 	dockerAPIClient client.APIClient,
 ) error {
-	if len(ctx.MirrorSpecs) == 0 {
-		return nil
-	}
-
 	clusterName := ResolveTalosClusterName(ctx.TalosConfig)
-	networkName := clusterName
-	networkCIDR := ResolveTalosNetworkCIDR(ctx.TalosConfig)
-	writer := ctx.Cmd.OutOrStdout()
-
-	// Build registry infos from mirror specs
-	upstreams := registry.BuildUpstreamLookup(ctx.MirrorSpecs)
-	registryInfos := registry.BuildRegistryInfosFromSpecs(
-		ctx.MirrorSpecs,
-		upstreams,
-		nil,
-		clusterName,
-	)
+	registryInfos := buildTalosRegistryInfos(ctx.MirrorSpecs, clusterName)
 
 	if len(registryInfos) == 0 {
 		return nil
 	}
+
+	networkName := clusterName
+	networkCIDR := ResolveTalosNetworkCIDR(ctx.TalosConfig)
+	writer := ctx.Cmd.OutOrStdout()
 
 	// Connect registries to the network with static IPs
 	_, err := registry.ConnectRegistriesToNetworkWithStaticIPs(
@@ -161,6 +139,26 @@ func ResolveTalosClusterName(talosConfig *talosconfigmanager.Configs) string {
 // The Talos SDK uses this CIDR for the Docker bridge network that nodes connect to.
 func ResolveTalosNetworkCIDR(_ *talosconfigmanager.Configs) string {
 	return talosconfigmanager.DefaultNetworkCIDR
+}
+
+// buildTalosRegistryInfos builds registry infos from mirror specs for Talos.
+// Returns nil if no mirror specs are provided.
+func buildTalosRegistryInfos(
+	mirrorSpecs []registry.MirrorSpec,
+	clusterName string,
+) []registry.Info {
+	if len(mirrorSpecs) == 0 {
+		return nil
+	}
+
+	upstreams := registry.BuildUpstreamLookup(mirrorSpecs)
+
+	return registry.BuildRegistryInfosFromSpecs(
+		mirrorSpecs,
+		upstreams,
+		nil,
+		clusterName,
+	)
 }
 
 // waitForTalosRegistries waits for registries to become ready.

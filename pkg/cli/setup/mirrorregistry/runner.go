@@ -1,4 +1,4 @@
-package registry
+package mirrorregistry
 
 import (
 	"context"
@@ -7,10 +7,10 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/setup"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
 	"github.com/docker/docker/client"
 	"github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/spf13/cobra"
@@ -49,7 +49,8 @@ var StageDefinitions = map[Role]Definition{
 
 // DockerClientInvoker is a function that invokes Docker client operations.
 // Can be overridden in tests to avoid real Docker connections.
-type DockerClientInvoker func(*cobra.Command, func(client.APIClient) error) error
+// This is an alias to the shared setup.DockerClientInvoker type.
+type DockerClientInvoker = setup.DockerClientInvoker
 
 // DefaultDockerClientInvoker is the default Docker client invoker.
 //
@@ -211,27 +212,13 @@ func runRegistryStage(
 	firstActivityShown *bool,
 	dockerInvoker DockerClientInvoker,
 ) error {
-	deps.Timer.NewStage()
-
-	if *firstActivityShown {
-		cmd.Println()
-	}
-
-	*firstActivityShown = true
-
-	notify.WriteMessage(notify.Message{
-		Type:    notify.TitleType,
-		Content: info.Title,
-		Emoji:   info.Emoji,
-		Writer:  cmd.OutOrStdout(),
-	})
-
-	if info.Activity != "" {
-		notify.WriteMessage(notify.Message{
-			Type:    notify.ActivityType,
-			Content: info.Activity,
-			Writer:  cmd.OutOrStdout(),
-		})
+	// Convert local Info to shared setup.StageInfo
+	sharedInfo := setup.StageInfo{
+		Title:         info.Title,
+		Emoji:         info.Emoji,
+		Activity:      info.Activity,
+		Success:       info.Success,
+		FailurePrefix: info.FailurePrefix,
 	}
 
 	invoker := dockerInvoker
@@ -239,25 +226,16 @@ func runRegistryStage(
 		invoker = DefaultDockerClientInvoker
 	}
 
-	err := invoker(cmd, func(dockerClient client.APIClient) error {
-		err := action(cmd.Context(), dockerClient)
-		if err != nil {
-			return fmt.Errorf("%s: %w", info.FailurePrefix, err)
-		}
-
-		outputTimer := helpers.MaybeTimer(cmd, deps.Timer)
-
-		notify.WriteMessage(notify.Message{
-			Type:    notify.SuccessType,
-			Content: info.Success,
-			Timer:   outputTimer,
-			Writer:  cmd.OutOrStdout(),
-		})
-
-		return nil
-	})
+	err := setup.RunDockerStage(
+		cmd,
+		deps.Timer,
+		sharedInfo,
+		action,
+		firstActivityShown,
+		invoker,
+	)
 	if err != nil {
-		return fmt.Errorf("failed to execute registry stage: %w", err)
+		return fmt.Errorf("run registry stage: %w", err)
 	}
 
 	return nil
