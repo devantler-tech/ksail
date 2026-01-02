@@ -38,3 +38,26 @@ func NewBase(kubeconfigPath string) (*Base, error) {
 func NewBaseWithClient(dynamicClient dynamic.Interface) *Base {
 	return &Base{Dynamic: dynamicClient}
 }
+
+// New creates a reconciler of type T that embeds Base from a kubeconfig path.
+// The constructor function should create the concrete reconciler type with the provided base.
+//
+//nolint:ireturn // Generic factory function must return type parameter T
+func New[T any](kubeconfigPath string, constructor func(*Base) T) (T, error) {
+	var zero T
+
+	base, err := NewBase(kubeconfigPath)
+	if err != nil {
+		return zero, fmt.Errorf("create reconciler base: %w", err)
+	}
+
+	return constructor(base), nil
+}
+
+// NewWithClient creates a reconciler of type T with a provided dynamic client (for testing).
+// The constructor function should create the concrete reconciler type with the provided base.
+//
+//nolint:ireturn // Generic factory function must return type parameter T
+func NewWithClient[T any](dynamicClient dynamic.Interface, constructor func(*Base) T) T {
+	return constructor(NewBaseWithClient(dynamicClient))
+}

@@ -38,19 +38,24 @@ type Reconciler struct {
 	*reconciler.Base
 }
 
+// newFromBase creates a Reconciler from a base reconciler.
+func newFromBase(base *reconciler.Base) *Reconciler {
+	return &Reconciler{Base: base}
+}
+
 // NewReconciler creates a new Flux reconciler from kubeconfig path.
 func NewReconciler(kubeconfigPath string) (*Reconciler, error) {
-	base, err := reconciler.NewBase(kubeconfigPath)
+	r, err := reconciler.New(kubeconfigPath, newFromBase)
 	if err != nil {
-		return nil, fmt.Errorf("create reconciler base: %w", err)
+		return nil, fmt.Errorf("create flux reconciler: %w", err)
 	}
 
-	return &Reconciler{Base: base}, nil
+	return r, nil
 }
 
 // NewReconcilerWithClient creates a Reconciler with a provided dynamic client (for testing).
 func NewReconcilerWithClient(dynamicClient dynamic.Interface) *Reconciler {
-	return &Reconciler{Base: reconciler.NewBaseWithClient(dynamicClient)}
+	return reconciler.NewWithClient(dynamicClient, newFromBase)
 }
 
 // ReconcileOptions configures the reconciliation behavior.
