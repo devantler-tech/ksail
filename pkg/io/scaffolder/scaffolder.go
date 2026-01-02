@@ -792,32 +792,34 @@ func (s *Scaffolder) checkExistingFluxInstance(sourceDir string) (string, error)
 	return existingPath, nil
 }
 
-// createFluxInstanceManifest generates the FluxInstance CR file.
+// createFluxInstanceManifest generates the FluxInstance CR file directly in the source directory.
 func (s *Scaffolder) createFluxInstanceManifest(sourceDir string, force bool) error {
-	gitOpsDir := filepath.Join(sourceDir, "gitops", "flux")
-	outputPath := filepath.Join(gitOpsDir, "flux-instance.yaml")
+	outputPath := filepath.Join(sourceDir, "flux-instance.yaml")
 	displayName := filepath.Join(
 		s.KSailConfig.Spec.Workload.SourceDirectory,
-		"gitops", "flux", "flux-instance.yaml",
+		"flux-instance.yaml",
 	)
-
-	err := os.MkdirAll(gitOpsDir, dirPerm)
-	if err != nil {
-		return fmt.Errorf(
-			"%w: failed to create gitops directory: %w",
-			ErrGitOpsConfigGeneration,
-			err,
-		)
-	}
 
 	opts := s.buildFluxInstanceOptions(outputPath, force)
 
-	_, err = s.FluxInstanceGenerator.Generate(opts)
+	skip, existed, previousModTime := s.checkFileExistsAndSkip(outputPath, displayName, force)
+	if skip {
+		return nil
+	}
+
+	_, err := s.FluxInstanceGenerator.Generate(opts)
 	if err != nil {
 		return fmt.Errorf("%w: %w", ErrGitOpsConfigGeneration, err)
 	}
 
-	s.notifyCreated(displayName)
+	if force && existed {
+		err = ensureOverwriteModTime(outputPath, previousModTime)
+		if err != nil {
+			return fmt.Errorf("failed to update mod time for %s: %w", displayName, err)
+		}
+	}
+
+	s.notifyFileAction(displayName, existed)
 
 	return nil
 }
@@ -999,7 +1001,7 @@ func (s *Scaffolder) getKustomizationResources() []string {
 
 	switch gitOpsEngine {
 	case v1alpha1.GitOpsEngineFlux:
-		resources = append(resources, "gitops/flux")
+		resources = append(resources, "flux-instance.yaml")
 	case v1alpha1.GitOpsEngineArgoCD:
 		resources = append(resources, "gitops/argocd")
 	case v1alpha1.GitOpsEngineNone:

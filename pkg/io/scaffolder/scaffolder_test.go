@@ -1219,8 +1219,8 @@ func TestScaffoldFluxGitOps_CreatesFluxInstanceManifest(t *testing.T) {
 	err := scaffolderInstance.Scaffold(tempDir, false)
 	require.NoError(t, err)
 
-	// Verify FluxInstance manifest was created
-	fluxInstancePath := filepath.Join(tempDir, "k8s", "gitops", "flux", "flux-instance.yaml")
+	// Verify FluxInstance manifest was created directly in k8s/
+	fluxInstancePath := filepath.Join(tempDir, "k8s", "flux-instance.yaml")
 	content, err := os.ReadFile(fluxInstancePath) //nolint:gosec // Test file path is safe
 	require.NoError(t, err)
 
@@ -1266,13 +1266,13 @@ func TestScaffoldGitOps_SkipsWhenGitOpsEngineIsNone(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify no GitOps manifests were created
-	fluxDir := filepath.Join(tempDir, "k8s", "gitops", "flux")
+	fluxInstancePath := filepath.Join(tempDir, "k8s", "flux-instance.yaml")
 	argocdDir := filepath.Join(tempDir, "k8s", "gitops", "argocd")
 
-	_, fluxErr := os.Stat(fluxDir)
+	_, fluxErr := os.Stat(fluxInstancePath)
 	_, argocdErr := os.Stat(argocdDir)
 
-	assert.True(t, os.IsNotExist(fluxErr), "flux gitops dir should not exist")
+	assert.True(t, os.IsNotExist(fluxErr), "flux-instance.yaml should not exist")
 	assert.True(t, os.IsNotExist(argocdErr), "argocd gitops dir should not exist")
 }
 
@@ -1291,7 +1291,7 @@ func getSkipExistingCRTestCases() []skipExistingCRTestCase {
 		{
 			name:         "skips existing FluxInstance",
 			gitOpsEngine: v1alpha1.GitOpsEngineFlux,
-			subDir:       filepath.Join("gitops", "flux"),
+			subDir:       "",
 			existingFile: "existing-flux.yaml",
 			outputFile:   "flux-instance.yaml",
 			existingContent: `apiVersion: fluxcd.controlplane.io/v1
@@ -1379,7 +1379,7 @@ func TestScaffoldGitOps_OverwritesWithForce(t *testing.T) {
 	err := scaffolderInstance.Scaffold(tempDir, false)
 	require.NoError(t, err)
 
-	fluxInstancePath := filepath.Join(tempDir, "k8s", "gitops", "flux", "flux-instance.yaml")
+	fluxInstancePath := filepath.Join(tempDir, "k8s", "flux-instance.yaml")
 
 	// Verify file was created
 	_, err = os.Stat(fluxInstancePath)
