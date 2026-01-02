@@ -14,6 +14,7 @@ import (
 	fluxclient "github.com/devantler-tech/ksail/v5/pkg/client/flux"
 	registry "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -32,9 +33,14 @@ const (
 	fluxDistributionVersion  = "2.x"
 	fluxDistributionRegistry = "ghcr.io/fluxcd"
 	fluxDistributionArtifact = "oci://ghcr.io/controlplaneio-fluxcd/flux-operator-manifests:latest"
+	// CRD names for waiting on establishment.
+	fluxInstanceCRDName    = "fluxinstances.fluxcd.controlplane.io"
+	ociRepositoriesCRDName = "ocirepositories.source.toolkit.fluxcd.io"
 )
 
 var errKubeconfigRequired = errors.New("kubeconfig path is required")
+
+var errCRDNotEstablished = errors.New("CRD is not yet established")
 
 //nolint:gochecknoglobals // package-level timeout constants
 var (
@@ -72,6 +78,23 @@ var (
 	newDiscoveryClient = func(restConfig *rest.Config) (discovery.DiscoveryInterface, error) {
 		return discovery.NewDiscoveryClientForConfig(restConfig)
 	}
+
+	//nolint:gochecknoglobals // Allows mocking for tests
+	newAPIExtensionsClient = func(restConfig *rest.Config) (client.Client, error) {
+		scheme := runtime.NewScheme()
+
+		err := apiextensionsv1.AddToScheme(scheme)
+		if err != nil {
+			return nil, fmt.Errorf("failed to add apiextensions scheme: %w", err)
+		}
+
+		apiextClient, err := client.New(restConfig, client.Options{Scheme: scheme})
+		if err != nil {
+			return nil, fmt.Errorf("failed to create apiextensions client: %w", err)
+		}
+
+		return apiextClient, nil
+	}
 )
 
 // EnsureDefaultResources configures a default FluxInstance so the operator can
@@ -96,7 +119,8 @@ func EnsureDefaultResources(
 		return err
 	}
 
-	err = waitForGroupVersion(ctx, restConfig, fluxInstanceGroupVersion)
+	// Wait for FluxInstance API to be fully ready
+	err = waitForAPIReady(ctx, restConfig, fluxInstanceGroupVersion, fluxInstanceCRDName)
 	if err != nil {
 		return err
 	}
@@ -116,7 +140,8 @@ func EnsureDefaultResources(
 		return err
 	}
 
-	err = waitForGroupVersion(ctx, restConfig, sourcev1.GroupVersion)
+	// Wait for OCIRepository API to be fully ready
+	err = waitForAPIReady(ctx, restConfig, sourcev1.GroupVersion, ociRepositoriesCRDName)
 	if err != nil {
 		return err
 	}
@@ -126,6 +151,24 @@ func EnsureDefaultResources(
 	}
 
 	return nil
+}
+
+// waitForAPIReady waits for both the API to be discoverable and the CRD to be established.
+func waitForAPIReady(
+	ctx context.Context,
+	restConfig *rest.Config,
+	groupVersion schema.GroupVersion,
+	crdName string,
+) error {
+	// Wait for API to be discoverable
+	err := waitForGroupVersion(ctx, restConfig, groupVersion)
+	if err != nil {
+		return err
+	}
+
+	// Wait for CRD to be fully established (not just discoverable)
+	// This ensures the API server is ready to accept requests for the resources
+	return waitForCRDEstablished(ctx, restConfig, crdName)
 }
 
 //nolint:unparam // error return kept for consistency with resource building patterns
@@ -404,6 +447,60 @@ func waitForGroupVersion(
 			}
 
 			return fmt.Errorf("timed out waiting for API %s: %w", groupVersion.String(), lastErr)
+		case <-ticker.C:
+		}
+	}
+}
+
+// waitForCRDEstablished waits for the CRD to be fully established (not just discoverable).
+// This ensures the API server is ready to accept requests for the custom resource.
+func waitForCRDEstablished(
+	ctx context.Context,
+	restConfig *rest.Config,
+	crdName string,
+) error {
+	waitCtx, cancel := context.WithTimeout(ctx, fluxAPIAvailabilityTimeout)
+	defer cancel()
+
+	ticker := time.NewTicker(fluxAPIAvailabilityPollInterval)
+	defer ticker.Stop()
+
+	apiextClient, err := newAPIExtensionsClient(restConfig)
+	if err != nil {
+		return fmt.Errorf("failed to create apiextensions client: %w", err)
+	}
+
+	var lastErr error
+
+	for {
+		crd := &apiextensionsv1.CustomResourceDefinition{}
+
+		err := apiextClient.Get(waitCtx, client.ObjectKey{Name: crdName}, crd)
+		if err != nil {
+			lastErr = err
+		} else {
+			// Check if the CRD has the Established condition set to True
+			for _, condition := range crd.Status.Conditions {
+				if condition.Type == apiextensionsv1.Established &&
+					condition.Status == apiextensionsv1.ConditionTrue {
+					return nil
+				}
+			}
+
+			lastErr = fmt.Errorf("%w: %s", errCRDNotEstablished, crdName)
+		}
+
+		select {
+		case <-waitCtx.Done():
+			if lastErr == nil {
+				lastErr = waitCtx.Err()
+			}
+
+			return fmt.Errorf(
+				"timed out waiting for CRD %s to be established: %w",
+				crdName,
+				lastErr,
+			)
 		case <-ticker.C:
 		}
 	}
