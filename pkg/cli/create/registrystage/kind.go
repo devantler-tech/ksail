@@ -3,9 +3,11 @@ package registrystage
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
 	"github.com/devantler-tech/ksail/v5/pkg/io/scaffolder"
 	kindprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/kind"
@@ -72,7 +74,11 @@ func runKindMirrorAction(
 		return fmt.Errorf("failed to connect kind registries to network: %w", err)
 	}
 
-	return nil
+	// Wait for registries to become ready before proceeding.
+	// This prevents intermittent image pull failures due to race conditions.
+	registryInfos := registry.BuildRegistryInfosFromSpecs(ctx.MirrorSpecs, nil, nil, "")
+
+	return waitForKindRegistries(execCtx, dockerClient, registryInfos, writer)
 }
 
 func runKindConnectAction(
@@ -140,4 +146,46 @@ func GetKindMirrorsDir(clusterCfg *v1alpha1.Cluster) string {
 	}
 
 	return scaffolder.DefaultKindMirrorsDir
+}
+
+// waitForKindRegistries waits for Kind mirror registries to become ready.
+func waitForKindRegistries(
+	ctx context.Context,
+	dockerAPIClient client.APIClient,
+	registryInfos []registry.Info,
+	writer io.Writer,
+) error {
+	if len(registryInfos) == 0 {
+		return nil
+	}
+
+	registryMgr, err := dockerclient.NewRegistryManager(dockerAPIClient)
+	if err != nil {
+		return fmt.Errorf("failed to create registry manager: %w", err)
+	}
+
+	// Build registry name map for health check
+	registryIPs := make(map[string]string, len(registryInfos))
+	for _, info := range registryInfos {
+		registryIPs[info.Name] = ""
+	}
+
+	notify.WriteMessage(notify.Message{
+		Type:    notify.ActivityType,
+		Content: "waiting for mirror registries to become ready",
+		Writer:  writer,
+	})
+
+	err = registryMgr.WaitForRegistriesReady(ctx, registryIPs)
+	if err != nil {
+		return fmt.Errorf("failed waiting for registries to become ready: %w", err)
+	}
+
+	notify.WriteMessage(notify.Message{
+		Type:    notify.SuccessType,
+		Content: "all mirror registries are ready",
+		Writer:  writer,
+	})
+
+	return nil
 }
