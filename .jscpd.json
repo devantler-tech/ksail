@@ -22,6 +22,7 @@
     "**/*.bin",
     "**/*_mocks.go",
     "**/mocks.go",
+    "**/*mocks*.go",
     "**/*_test.go"
   ],
   "reporters": ["html", "markdown"],

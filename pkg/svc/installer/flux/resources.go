@@ -12,6 +12,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
 	fluxclient "github.com/devantler-tech/ksail/v5/pkg/client/flux"
+	"github.com/devantler-tech/ksail/v5/pkg/k8s"
 	registry "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -21,7 +22,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -38,8 +38,6 @@ const (
 	ociRepositoriesCRDName = "ocirepositories.source.toolkit.fluxcd.io"
 )
 
-var errKubeconfigRequired = errors.New("kubeconfig path is required")
-
 var errCRDNotEstablished = errors.New("CRD is not yet established")
 
 //nolint:gochecknoglobals // package-level timeout constants
@@ -52,7 +50,9 @@ var (
 	errInvalidClusterConfig = errors.New("cluster configuration is required")
 
 	//nolint:gochecknoglobals // Allows mocking REST config for tests
-	loadRESTConfig = buildRESTConfig
+	loadRESTConfig = func(kubeconfig string) (*rest.Config, error) {
+		return k8s.BuildRESTConfig(kubeconfig, "")
+	}
 
 	//nolint:noinlineerr,gochecknoglobals // error handling in scheme registration, allows mocking for tests
 	newFluxResourcesClient = func(restConfig *rest.Config) (client.Client, error) {
@@ -504,17 +504,4 @@ func waitForCRDEstablished(
 		case <-ticker.C:
 		}
 	}
-}
-
-func buildRESTConfig(kubeconfig string) (*rest.Config, error) {
-	if strings.TrimSpace(kubeconfig) == "" {
-		return nil, errKubeconfigRequired
-	}
-
-	restConfig, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load kubeconfig %s: %w", kubeconfig, err)
-	}
-
-	return restConfig, nil
 }

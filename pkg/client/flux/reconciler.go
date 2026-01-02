@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/devantler-tech/ksail/v5/pkg/k8s"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/reconciler"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -35,31 +35,22 @@ const (
 
 // Reconciler handles Flux reconciliation operations.
 type Reconciler struct {
-	dynamic        dynamic.Interface
-	kubeconfigPath string
+	*reconciler.Base
 }
 
 // NewReconciler creates a new Flux reconciler from kubeconfig path.
 func NewReconciler(kubeconfigPath string) (*Reconciler, error) {
-	restConfig, err := k8s.BuildRESTConfig(kubeconfigPath, "")
+	base, err := reconciler.NewBase(kubeconfigPath)
 	if err != nil {
-		return nil, fmt.Errorf("build rest config: %w", err)
+		return nil, fmt.Errorf("create reconciler base: %w", err)
 	}
 
-	dynamicClient, err := dynamic.NewForConfig(restConfig)
-	if err != nil {
-		return nil, fmt.Errorf("create dynamic client: %w", err)
-	}
-
-	return &Reconciler{
-		dynamic:        dynamicClient,
-		kubeconfigPath: kubeconfigPath,
-	}, nil
+	return &Reconciler{Base: base}, nil
 }
 
 // NewReconcilerWithClient creates a Reconciler with a provided dynamic client (for testing).
 func NewReconcilerWithClient(dynamicClient dynamic.Interface) *Reconciler {
-	return &Reconciler{dynamic: dynamicClient}
+	return &Reconciler{Base: reconciler.NewBaseWithClient(dynamicClient)}
 }
 
 // ReconcileOptions configures the reconciliation behavior.
@@ -232,7 +223,7 @@ func (r *Reconciler) ociRepositoryClient() dynamic.ResourceInterface {
 		Resource: "ocirepositories",
 	}
 
-	return r.dynamic.Resource(gvr).Namespace(DefaultNamespace)
+	return r.Dynamic.Resource(gvr).Namespace(DefaultNamespace)
 }
 
 // kustomizationClient returns a dynamic client for Flux Kustomizations.
@@ -245,7 +236,7 @@ func (r *Reconciler) kustomizationClient() dynamic.ResourceInterface {
 		Resource: "kustomizations",
 	}
 
-	return r.dynamic.Resource(gvr).Namespace(DefaultNamespace)
+	return r.Dynamic.Resource(gvr).Namespace(DefaultNamespace)
 }
 
 // checkOCIRepositoryStatus checks if the OCIRepository has successfully fetched an artifact.
