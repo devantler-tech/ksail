@@ -179,6 +179,7 @@ func newRegistryHandlers(
 				if role == RolePostClusterConnect {
 					return false
 				}
+
 				return PrepareK3dConfigWithMirrors(clusterCfg, k3dConfig, mirrorSpecs)
 			},
 			Action: k3dAction,
