@@ -91,3 +91,4 @@ var ConnectInfo = Info{
 	Success:       ConnectStageSuccess,
 	FailurePrefix: ConnectStageFailure,
 }
+

@@ -7,11 +7,9 @@ import (
 	"strings"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
 	k3dconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/k3d"
 	k3dprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/k3d"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
 	"github.com/docker/docker/client"
 	"github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 )
@@ -74,7 +72,7 @@ func K3dMirrorAction(ctx *Context) func(context.Context, client.APIClient) error
 		// This prevents intermittent image pull failures due to race conditions.
 		registryInfos := k3dprovisioner.ExtractRegistriesFromConfigForTesting(ctx.K3dConfig)
 
-		return waitForK3dRegistries(execCtx, dockerClient, registryInfos, writer)
+		return WaitForRegistriesReady(execCtx, dockerClient, registryInfos, writer)
 	}
 }
 
@@ -138,46 +136,4 @@ func PrepareK3dConfigWithMirrors(
 	k3dConfig.Registries.Config = rendered
 
 	return true
-}
-
-// waitForK3dRegistries waits for K3d mirror registries to become ready.
-func waitForK3dRegistries(
-	ctx context.Context,
-	dockerAPIClient client.APIClient,
-	registryInfos []registry.Info,
-	writer io.Writer,
-) error {
-	if len(registryInfos) == 0 {
-		return nil
-	}
-
-	registryMgr, err := dockerclient.NewRegistryManager(dockerAPIClient)
-	if err != nil {
-		return fmt.Errorf("failed to create registry manager: %w", err)
-	}
-
-	// Build registry name map for health check
-	registryIPs := make(map[string]string, len(registryInfos))
-	for _, info := range registryInfos {
-		registryIPs[info.Name] = ""
-	}
-
-	notify.WriteMessage(notify.Message{
-		Type:    notify.ActivityType,
-		Content: "waiting for mirror registries to become ready",
-		Writer:  writer,
-	})
-
-	err = registryMgr.WaitForRegistriesReady(ctx, registryIPs)
-	if err != nil {
-		return fmt.Errorf("failed waiting for registries to become ready: %w", err)
-	}
-
-	notify.WriteMessage(notify.Message{
-		Type:    notify.SuccessType,
-		Content: "all mirror registries are ready",
-		Writer:  writer,
-	})
-
-	return nil
 }
