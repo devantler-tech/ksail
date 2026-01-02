@@ -7,6 +7,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/setup/localregistry"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/installer"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	"github.com/docker/docker/client"
@@ -41,6 +42,19 @@ func getInstallerFactories() *setup.InstallerFactories {
 	}
 
 	return setup.DefaultInstallerFactories()
+}
+
+// getLocalRegistryDeps returns the local registry dependencies, respecting any test overrides.
+func getLocalRegistryDeps() localregistry.Dependencies {
+	dockerClientInvokerMu.RLock()
+
+	invoker := dockerClientInvoker
+
+	dockerClientInvokerMu.RUnlock()
+
+	return localregistry.NewDependencies(
+		localregistry.WithDockerInvoker(invoker),
+	)
 }
 
 // overrideInstallerFactory is a helper that applies a factory override and returns a restore function.

@@ -8,6 +8,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/setup/localregistry"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup/registry"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
@@ -82,6 +83,7 @@ func handleCreateRunE(
 	}
 
 	firstActivityShown := false
+	localDeps := getLocalRegistryDeps()
 
 	err = ensureLocalRegistriesReady(
 		cmd,
@@ -89,6 +91,7 @@ func handleCreateRunE(
 		deps,
 		cfgManager,
 		&firstActivityShown,
+		localDeps,
 	)
 	if err != nil {
 		return err
@@ -127,12 +130,13 @@ func handleCreateRunE(
 		&firstActivityShown,
 	)
 
-	err = executeLocalRegistryStage(
+	err = localregistry.ExecuteStage(
 		cmd,
 		ctx,
 		deps,
-		localRegistryStageConnect,
+		localregistry.StageConnect,
 		&firstActivityShown,
+		localDeps,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to connect local registry: %w", err)
@@ -144,32 +148,28 @@ func handleCreateRunE(
 func loadClusterConfiguration(
 	cfgManager *ksailconfigmanager.ConfigManager,
 	tmr timer.Timer,
-) (*CommandContext, error) {
+) (*localregistry.Context, error) {
 	// Load config to populate cfgManager.Config and cfgManager.DistributionConfig
-	// The returned config is cached in cfgManager.Config, which is used by NewClusterCommandContext
+	// The returned config is cached in cfgManager.Config, which is used by NewContextFromConfigManager
 	_, err := cfgManager.LoadConfig(tmr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load cluster configuration: %w", err)
 	}
 
 	// Create context from the now-populated config manager
-	return NewClusterCommandContext(cfgManager), nil
+	return localregistry.NewContextFromConfigManager(cfgManager), nil
 }
 
 // buildRegistryStageParams creates a StageParams struct for registry operations.
 // This helper reduces code duplication when calling registry stage functions.
 func buildRegistryStageParams(
 	cmd *cobra.Command,
-	ctx *CommandContext,
+	ctx *localregistry.Context,
 	deps lifecycle.Deps,
 	cfgManager *ksailconfigmanager.ConfigManager,
 	firstActivityShown *bool,
 ) registry.StageParams {
-	dockerClientInvokerMu.RLock()
-
-	invoker := dockerClientInvoker
-
-	dockerClientInvokerMu.RUnlock()
+	localDeps := getLocalRegistryDeps()
 
 	return registry.StageParams{
 		Cmd:                cmd,
@@ -180,24 +180,26 @@ func buildRegistryStageParams(
 		K3dConfig:          ctx.K3dConfig,
 		TalosConfig:        ctx.TalosConfig,
 		FirstActivityShown: firstActivityShown,
-		DockerInvoker:      invoker,
+		DockerInvoker:      localDeps.DockerInvoker,
 	}
 }
 
 func ensureLocalRegistriesReady(
 	cmd *cobra.Command,
-	ctx *CommandContext,
+	ctx *localregistry.Context,
 	deps lifecycle.Deps,
 	cfgManager *ksailconfigmanager.ConfigManager,
 	firstActivityShown *bool,
+	localDeps localregistry.Dependencies,
 ) error {
 	// Stage 1: Provision local registry
-	err := executeLocalRegistryStage(
+	err := localregistry.ExecuteStage(
 		cmd,
 		ctx,
 		deps,
-		localRegistryStageProvision,
+		localregistry.StageProvision,
 		firstActivityShown,
+		localDeps,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to provision local registry: %w", err)
@@ -250,7 +252,7 @@ func executeClusterLifecycle(
 
 func configureRegistryMirrorsInClusterWithWarning(
 	cmd *cobra.Command,
-	ctx *CommandContext,
+	ctx *localregistry.Context,
 	deps lifecycle.Deps,
 	cfgManager *ksailconfigmanager.ConfigManager,
 	firstActivityShown *bool,
