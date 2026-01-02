@@ -1,4 +1,4 @@
-package workload
+package io
 
 import (
 	"errors"
@@ -7,9 +7,9 @@ import (
 	"strings"
 )
 
-// ociReference represents a parsed OCI artifact reference.
+// OCIReference represents a parsed OCI artifact reference.
 // Format: oci://<host>:<port>/<repository>/<optional-variant>:<ref>
-type ociReference struct {
+type OCIReference struct {
 	Host       string
 	Port       int32
 	Repository string
@@ -29,14 +29,17 @@ const (
 
 // OCI reference parsing errors.
 var (
-	errInvalidOCIScheme = errors.New("OCI reference must start with 'oci://'")
-	errInvalidOCIFormat = errors.New(
+	// ErrInvalidOCIScheme is returned when an OCI reference doesn't start with 'oci://'.
+	ErrInvalidOCIScheme = errors.New("OCI reference must start with 'oci://'")
+	// ErrInvalidOCIFormat is returned when the OCI reference format is invalid.
+	ErrInvalidOCIFormat = errors.New(
 		"invalid OCI reference format; expected oci://<host>:<port>/<repository>[/<variant>]:<ref>",
 	)
-	errInvalidPort = errors.New("invalid port number in OCI reference")
+	// ErrInvalidPort is returned when the port in an OCI reference is invalid.
+	ErrInvalidPort = errors.New("invalid port number in OCI reference")
 )
 
-// parseOCIReference parses an OCI reference string into its components.
+// ParseOCIReference parses an OCI reference string into its components.
 // Format: oci://<host>:<port>/<repository>/<optional-variant>:<ref>
 // Returns nil (not an error) when ref is empty, indicating defaults should be used.
 // Examples:
@@ -45,25 +48,25 @@ var (
 //   - oci://registry.example.com:443/workloads:latest
 //
 //nolint:nilnil // Returning nil,nil is intentional to indicate "use defaults"
-func parseOCIReference(ref string) (*ociReference, error) {
+func ParseOCIReference(ref string) (*OCIReference, error) {
 	if ref == "" {
 		return nil, nil
 	}
 
 	if !strings.HasPrefix(ref, ociScheme) {
-		return nil, errInvalidOCIScheme
+		return nil, ErrInvalidOCIScheme
 	}
 
 	remainder := strings.TrimPrefix(ref, ociScheme)
 	if remainder == "" {
-		return nil, errInvalidOCIFormat
+		return nil, ErrInvalidOCIFormat
 	}
 
-	result := &ociReference{}
+	result := &OCIReference{}
 
 	parts := strings.SplitN(remainder, "/", minPathParts)
 	if len(parts) < minPathParts {
-		return nil, errInvalidOCIFormat
+		return nil, ErrInvalidOCIFormat
 	}
 
 	hostPort := parts[0]
@@ -80,7 +83,7 @@ func parseOCIReference(ref string) (*ociReference, error) {
 }
 
 // parseHostPort extracts host and port from a "host:port" string.
-func parseHostPort(result *ociReference, hostPort string) error {
+func parseHostPort(result *OCIReference, hostPort string) error {
 	colonIdx := strings.LastIndex(hostPort, ":")
 	if colonIdx == -1 {
 		result.Host = hostPort
@@ -94,7 +97,7 @@ func parseHostPort(result *ociReference, hostPort string) error {
 
 	port, err := strconv.ParseInt(portStr, parseIntBase, parseIntBitSize)
 	if err != nil || port < minPort || port > maxPort {
-		return fmt.Errorf("%w: %s", errInvalidPort, portStr)
+		return fmt.Errorf("%w: %s", ErrInvalidPort, portStr)
 	}
 
 	result.Port = int32(port)
@@ -103,7 +106,7 @@ func parseHostPort(result *ociReference, hostPort string) error {
 }
 
 // parsePathAndRef extracts repository, variant, and ref from the path portion.
-func parsePathAndRef(result *ociReference, pathAndRef string) {
+func parsePathAndRef(result *OCIReference, pathAndRef string) {
 	colonIdx := strings.LastIndex(pathAndRef, ":")
 	if colonIdx == -1 {
 		result.Repository, result.Variant = splitRepositoryPath(pathAndRef)
@@ -131,7 +134,7 @@ func splitRepositoryPath(path string) (string, string) {
 }
 
 // String returns the full OCI reference string.
-func (r *ociReference) String() string {
+func (r *OCIReference) String() string {
 	var builder strings.Builder
 
 	builder.WriteString("oci://")
@@ -159,7 +162,7 @@ func (r *ociReference) String() string {
 }
 
 // FullRepository returns the complete repository path including variant.
-func (r *ociReference) FullRepository() string {
+func (r *OCIReference) FullRepository() string {
 	if r.Variant != "" {
 		return r.Repository + "/" + r.Variant
 	}

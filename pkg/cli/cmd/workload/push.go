@@ -5,8 +5,10 @@ import (
 	"strings"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
 	"github.com/devantler-tech/ksail/v5/pkg/client/oci"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
+	iopkg "github.com/devantler-tech/ksail/v5/pkg/io"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
 	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
@@ -72,11 +74,11 @@ func runPushCommand(cmd *cobra.Command, args []string, pathFlag string, validate
 	tmr := cmdCtx.Timer
 
 	// Parse OCI reference if provided
-	var ociRef *ociReference
+	var ociRef *iopkg.OCIReference
 	if len(args) > 0 {
-		ociRef, err = parseOCIReference(args[0])
+		ociRef, err = iopkg.ParseOCIReference(args[0])
 		if err != nil {
-			return err
+			return fmt.Errorf("parse OCI reference: %w", err)
 		}
 	}
 
@@ -179,7 +181,7 @@ type pushParams struct {
 func resolvePushParams(
 	cmd *cobra.Command,
 	cfg *v1alpha1.Cluster,
-	ociRef *ociReference,
+	ociRef *iopkg.OCIReference,
 	pathFlag string,
 	outputTimer timer.Timer,
 ) (*pushParams, error) {
@@ -199,7 +201,7 @@ func resolvePushParams(
 // newPushParamsFromSources creates push params from OCI ref, config, and path flag.
 func newPushParamsFromSources(
 	cfg *v1alpha1.Cluster,
-	ociRef *ociReference,
+	ociRef *iopkg.OCIReference,
 	pathFlag string,
 ) *pushParams {
 	params := &pushParams{Host: "localhost"}
@@ -228,7 +230,7 @@ func resolveSourceDir(cfg *v1alpha1.Cluster, pathFlag string) string {
 }
 
 // resolveHost extracts host from OCI ref or returns default.
-func resolveHost(ociRef *ociReference) string {
+func resolveHost(ociRef *iopkg.OCIReference) string {
 	if ociRef != nil && ociRef.Host != "" {
 		return ociRef.Host
 	}
@@ -237,7 +239,7 @@ func resolveHost(ociRef *ociReference) string {
 }
 
 // resolvePort determines port from OCI ref, config, or returns 0 for auto-detection.
-func resolvePort(cfg *v1alpha1.Cluster, ociRef *ociReference) int32 {
+func resolvePort(cfg *v1alpha1.Cluster, ociRef *iopkg.OCIReference) int32 {
 	if ociRef != nil && ociRef.Port > 0 {
 		return ociRef.Port
 	}
@@ -255,7 +257,7 @@ func resolvePort(cfg *v1alpha1.Cluster, ociRef *ociReference) int32 {
 }
 
 // resolveRepository determines repository name from OCI ref or source directory.
-func resolveRepository(ociRef *ociReference, sourceDir string) string {
+func resolveRepository(ociRef *iopkg.OCIReference, sourceDir string) string {
 	if ociRef != nil && ociRef.FullRepository() != "" {
 		return ociRef.FullRepository()
 	}
@@ -264,7 +266,7 @@ func resolveRepository(ociRef *ociReference, sourceDir string) string {
 }
 
 // resolveRef determines the artifact ref/tag from OCI ref or default.
-func resolveRef(ociRef *ociReference) string {
+func resolveRef(ociRef *iopkg.OCIReference) string {
 	if ociRef != nil && ociRef.Ref != "" {
 		return ociRef.Ref
 	}
@@ -294,9 +296,9 @@ func autoDetectMissingParams(
 		Writer:  cmd.OutOrStdout(),
 	})
 
-	env, err := detectPushEnvironment(cmd.Context())
+	env, err := helpers.DetectClusterEnvironment(cmd.Context())
 	if err != nil {
-		return err
+		return fmt.Errorf("detect cluster environment: %w", err)
 	}
 
 	if params.Port == 0 {

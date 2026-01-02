@@ -1,4 +1,4 @@
-package workload
+package helpers
 
 import (
 	"context"
@@ -14,31 +14,31 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
-// pushEnvironment holds auto-detected push configuration from the running environment.
-type pushEnvironment struct {
+// ClusterEnvironment holds auto-detected cluster configuration from the running environment.
+type ClusterEnvironment struct {
 	RegistryPort int32
 	GitOpsEngine v1alpha1.GitOpsEngine
 }
 
-// errNoLocalRegistry is returned when no local registry container is found.
-var errNoLocalRegistry = errors.New(
+// ErrNoLocalRegistry is returned when no local registry container is found.
+var ErrNoLocalRegistry = errors.New(
 	"no running local registry found; " +
 		"create a cluster with '--local-registry Enabled' during cluster init",
 )
 
-// errNoGitOpsEngine is returned when no GitOps engine is detected.
-var errNoGitOpsEngine = errors.New(
+// ErrNoGitOpsEngine is returned when no GitOps engine is detected.
+var ErrNoGitOpsEngine = errors.New(
 	"no GitOps engine detected in cluster; " +
 		"create a cluster with '--gitops-engine Flux|ArgoCD' during cluster init",
 )
 
-// detectPushEnvironment auto-detects the registry port and GitOps engine
+// DetectClusterEnvironment auto-detects the registry port and GitOps engine
 // from the running Docker containers and Kubernetes cluster.
-func detectPushEnvironment(ctx context.Context) (*pushEnvironment, error) {
-	env := &pushEnvironment{}
+func DetectClusterEnvironment(ctx context.Context) (*ClusterEnvironment, error) {
+	env := &ClusterEnvironment{}
 
 	// Detect local registry
-	port, err := detectLocalRegistryPort(ctx)
+	port, err := DetectLocalRegistryPort(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -46,7 +46,7 @@ func detectPushEnvironment(ctx context.Context) (*pushEnvironment, error) {
 	env.RegistryPort = port
 
 	// Detect GitOps engine from cluster
-	engine, err := detectGitOpsEngine(ctx)
+	engine, err := DetectGitOpsEngine(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -56,8 +56,8 @@ func detectPushEnvironment(ctx context.Context) (*pushEnvironment, error) {
 	return env, nil
 }
 
-// detectLocalRegistryPort finds the host port of the running local-registry container.
-func detectLocalRegistryPort(ctx context.Context) (int32, error) {
+// DetectLocalRegistryPort finds the host port of the running local-registry container.
+func DetectLocalRegistryPort(ctx context.Context) (int32, error) {
 	dockerClient, err := client.NewClientWithOpts(
 		client.FromEnv,
 		client.WithAPIVersionNegotiation(),
@@ -80,7 +80,7 @@ func detectLocalRegistryPort(ctx context.Context) (int32, error) {
 	}
 
 	if !inUse {
-		return 0, errNoLocalRegistry
+		return 0, ErrNoLocalRegistry
 	}
 
 	port, err := registryManager.GetRegistryPort(ctx, registrypkg.LocalRegistryContainerName)
@@ -91,8 +91,8 @@ func detectLocalRegistryPort(ctx context.Context) (int32, error) {
 	return int32(port), nil //nolint:gosec // port is validated by Docker API
 }
 
-// detectGitOpsEngine checks if Flux or ArgoCD is deployed in the cluster.
-func detectGitOpsEngine(ctx context.Context) (v1alpha1.GitOpsEngine, error) {
+// DetectGitOpsEngine checks if Flux or ArgoCD is deployed in the cluster.
+func DetectGitOpsEngine(ctx context.Context) (v1alpha1.GitOpsEngine, error) {
 	// Build kubeconfig from default location
 	loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
 	configOverrides := &clientcmd.ConfigOverrides{}
@@ -104,8 +104,8 @@ func detectGitOpsEngine(ctx context.Context) (v1alpha1.GitOpsEngine, error) {
 	restConfig, err := kubeConfig.ClientConfig()
 	if err != nil {
 		// If we can't get cluster config, we can't detect GitOps engine.
-		// Return errNoGitOpsEngine so the user knows detection failed.
-		return v1alpha1.GitOpsEngineNone, errNoGitOpsEngine
+		// Return ErrNoGitOpsEngine so the user knows detection failed.
+		return v1alpha1.GitOpsEngineNone, ErrNoGitOpsEngine
 	}
 
 	clientset, err := kubernetes.NewForConfig(restConfig)
@@ -125,5 +125,5 @@ func detectGitOpsEngine(ctx context.Context) (v1alpha1.GitOpsEngine, error) {
 		return v1alpha1.GitOpsEngineArgoCD, nil
 	}
 
-	return v1alpha1.GitOpsEngineNone, errNoGitOpsEngine
+	return v1alpha1.GitOpsEngineNone, ErrNoGitOpsEngine
 }
