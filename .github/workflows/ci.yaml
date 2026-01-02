@@ -225,9 +225,15 @@ jobs:
           ksail workload wait --for=condition=Available deployment/podinfo --timeout=300s
 
       - name: 🧪 ksail workload push and reconcile
-        if: contains(matrix.args, '--gitops-engine') && matrix.init == true
+        if: contains(matrix.args, '--gitops-engine')
         run: |
-          ksail workload push
+          mkdir -p k8s
+          if [ ! -f "k8s/kustomization.yaml" ]; then
+            echo "apiVersion: kustomize.config.k8s.io/v1beta1" > k8s/kustomization.yaml
+            echo "kind: Kustomization" >> k8s/kustomization.yaml
+            echo "resources: []" >> k8s/kustomization.yaml
+          fi
+          ksail workload push --path k8s/
           ksail workload reconcile
 
       - name: 🧪 ksail cluster stop
