@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
@@ -13,7 +14,11 @@ import (
 	talosprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/talos"
 	k3dv1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
+	"sigs.k8s.io/yaml"
 )
+
+// configFilePermissions is the file permission mode used when writing configuration files.
+const configFilePermissions fs.FileMode = 0o644
 
 // ErrUnsupportedDistribution is returned when an unsupported distribution is specified.
 var ErrUnsupportedDistribution = errors.New("unsupported distribution")
@@ -163,6 +168,14 @@ func (f DefaultFactory) createK3dProvisioner(
 	_, err := os.Stat(configPath)
 	if os.IsNotExist(err) {
 		configPath = "" // Don't pass --config flag; use k3d defaults + in-memory config
+	} else if configPath != "" {
+		// Write the in-memory config back to the file so k3d picks up any
+		// modifications (e.g., registry mirrors configured via --mirror-registry).
+		// The k3d CLI reads from the file, not from our in-memory config.
+		saveErr := saveK3dConfig(k3dConfig, configPath)
+		if saveErr != nil {
+			return nil, nil, fmt.Errorf("failed to save k3d config: %w", saveErr)
+		}
 	}
 
 	provisioner := k3dprovisioner.CreateProvisioner(
@@ -214,4 +227,23 @@ func (f DefaultFactory) createTalosProvisioner(
 	}
 
 	return provisioner, f.DistributionConfig.Talos, nil
+}
+
+// saveK3dConfig writes the in-memory k3d config to the specified file path.
+// This is necessary because the k3d CLI reads configuration from file when
+// --config is passed, not from our in-memory representation.
+// Any in-memory modifications (e.g., registry mirrors) must be persisted
+// before cluster creation for k3d to pick them up.
+func saveK3dConfig(config *k3dv1alpha5.SimpleConfig, configPath string) error {
+	data, err := yaml.Marshal(config)
+	if err != nil {
+		return fmt.Errorf("marshal k3d config: %w", err)
+	}
+
+	err = os.WriteFile(configPath, data, configFilePermissions)
+	if err != nil {
+		return fmt.Errorf("write k3d config to %s: %w", configPath, err)
+	}
+
+	return nil
 }
