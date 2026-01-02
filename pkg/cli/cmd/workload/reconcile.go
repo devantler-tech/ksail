@@ -45,13 +45,14 @@ var (
 )
 
 const (
-	fluxNamespace             = "flux-system"
-	fluxRootKustomizationName = "flux-system"
-	fluxRootOCIRepositoryName = "flux-system"
-	argoCDNamespace           = "argocd"
-	argoCDRootApplicationName = "ksail"
-	defaultReconcileTimeout   = 5 * time.Minute
-	reconcilePollInterval     = 2 * time.Second
+	fluxNamespace                = "flux-system"
+	fluxRootKustomizationName    = "flux-system"
+	fluxRootOCIRepositoryName    = "flux-system"
+	argoCDNamespace              = "argocd"
+	argoCDRootApplicationName    = "ksail"
+	defaultReconcileTimeout      = 5 * time.Minute
+	reconcilePollInterval        = 2 * time.Second
+	ociRepositoryReadinessTimeout = 2 * time.Minute
 )
 
 // reconcileFluxKustomization triggers and waits for Flux kustomization reconciliation.
@@ -67,9 +68,9 @@ func reconcileFluxKustomization(
 		return err
 	}
 
-	// Check OCIRepository status first to fail early if no artifact is available
+	// Wait for OCIRepository to be ready - it needs time to fetch the artifact after push
 	writeActivityNotification(
-		"checking flux oci repository status",
+		"waiting for flux oci repository to be ready",
 		outputTimer,
 		writer,
 	)
@@ -79,7 +80,7 @@ func reconcileFluxKustomization(
 		return err
 	}
 
-	err = checkFluxOCIRepositoryReady(ctx, ociRepoClient)
+	err = waitForFluxOCIRepositoryReady(ctx, ociRepoClient)
 	if err != nil {
 		return err
 	}
@@ -137,27 +138,70 @@ func getFluxOCIRepositoryClient(
 	return getDynamicResourceClient(kubeconfigPath, ociRepositoryGVR, fluxNamespace)
 }
 
-// checkFluxOCIRepositoryReady checks if the OCIRepository has successfully fetched an artifact.
-// Returns an error immediately if the OCIRepository shows a failure condition.
-func checkFluxOCIRepositoryReady(
+// waitForFluxOCIRepositoryReady waits for the OCIRepository to be ready with a timeout.
+// This is needed because after pushing an artifact, the OCIRepository needs time to fetch it.
+func waitForFluxOCIRepositoryReady(
 	ctx context.Context,
 	ociRepoClient dynamic.ResourceInterface,
 ) error {
+	timeoutCtx, cancel := context.WithTimeout(ctx, ociRepositoryReadinessTimeout)
+	defer cancel()
+
+	ticker := time.NewTicker(reconcilePollInterval)
+	defer ticker.Stop()
+
+	var lastErr error
+
+	for {
+		select {
+		case <-timeoutCtx.Done():
+			if lastErr != nil {
+				return lastErr
+			}
+
+			return errFluxOCIRepositoryNotReady
+		case <-ticker.C:
+			ready, err := checkFluxOCIRepositoryStatus(timeoutCtx, ociRepoClient)
+			if err != nil {
+				// If it's a permanent error (like manifest not found), return immediately
+				if isPermanentOCIError(err) {
+					return err
+				}
+
+				lastErr = err
+
+				continue
+			}
+
+			if ready {
+				return nil
+			}
+		}
+	}
+}
+
+// checkFluxOCIRepositoryStatus checks if the OCIRepository has successfully fetched an artifact.
+// Returns (true, nil) if ready, (false, nil) if still progressing, or (false, error) on failure.
+func checkFluxOCIRepositoryStatus(
+	ctx context.Context,
+	ociRepoClient dynamic.ResourceInterface,
+) (bool, error) {
 	ociRepo, err := ociRepoClient.Get(ctx, fluxRootOCIRepositoryName, metav1.GetOptions{})
 	if err != nil {
-		return fmt.Errorf("get flux oci repository: %w", err)
+		return false, fmt.Errorf("get flux oci repository: %w", err)
 	}
 
 	conditions, found, err := unstructured.NestedSlice(ociRepo.Object, "status", "conditions")
 	if err != nil || !found || len(conditions) == 0 {
-		return errFluxOCIRepositoryNotReady
+		return false, nil // Still progressing, no conditions yet
 	}
 
-	return checkFluxOCIRepositoryConditions(conditions)
+	return evaluateFluxOCIRepositoryConditions(conditions)
 }
 
-// checkFluxOCIRepositoryConditions checks the Ready condition from OCIRepository status.
-func checkFluxOCIRepositoryConditions(conditions []any) error {
+// evaluateFluxOCIRepositoryConditions evaluates conditions to determine readiness.
+// Returns (true, nil) if ready, (false, nil) if progressing, or (false, error) on failure.
+func evaluateFluxOCIRepositoryConditions(conditions []any) (bool, error) {
 	for _, condition := range conditions {
 		condMap, ok := condition.(map[string]any)
 		if !ok {
@@ -169,27 +213,37 @@ func checkFluxOCIRepositoryConditions(conditions []any) error {
 			continue
 		}
 
-		return evaluateFluxReadyCondition(condMap)
+		condStatus, _, _ := unstructured.NestedString(condMap, "status")
+		if condStatus == "True" {
+			return true, nil
+		}
+
+		condReason, _, _ := unstructured.NestedString(condMap, "reason")
+		condMessage, _, _ := unstructured.NestedString(condMap, "message")
+
+		// Check for permanent failures that indicate the artifact doesn't exist
+		if condReason == "OCIPullFailed" || condReason == "OCIArtifactPullFailed" {
+			return false, fmt.Errorf("%w: %s", errFluxOCIRepositoryNotReady, condMessage)
+		}
+
+		// For other non-ready states, keep waiting
+		return false, nil
 	}
 
-	return errFluxOCIRepositoryNotReady
+	return false, nil // No Ready condition found, still progressing
 }
 
-// evaluateFluxReadyCondition evaluates a Ready condition and returns appropriate error.
-func evaluateFluxReadyCondition(condMap map[string]any) error {
-	condStatus, _, _ := unstructured.NestedString(condMap, "status")
-	if condStatus == "True" {
-		return nil
+// isPermanentOCIError checks if an error indicates a permanent failure.
+func isPermanentOCIError(err error) bool {
+	if err == nil {
+		return false
 	}
 
-	condReason, _, _ := unstructured.NestedString(condMap, "reason")
-	condMessage, _, _ := unstructured.NestedString(condMap, "message")
+	errMsg := err.Error()
 
-	if condReason == "OCIPullFailed" || condReason == "OCIArtifactPullFailed" {
-		return fmt.Errorf("%w: %s", errFluxOCIRepositoryNotReady, condMessage)
-	}
-
-	return fmt.Errorf("%w: %s - %s", errFluxOCIRepositoryNotReady, condReason, condMessage)
+	return strings.Contains(errMsg, "manifest unknown") ||
+		strings.Contains(errMsg, "not found") ||
+		strings.Contains(errMsg, "does not exist")
 }
 
 // getFluxKustomizationClient creates a dynamic client for Flux kustomizations.
