@@ -193,34 +193,110 @@ func upsertFluxResource(
 
 	switch desired := obj.(type) {
 	case *FluxInstance:
-		existing := &FluxInstance{}
-
-		err := fluxClient.Get(ctx, key, existing)
-		if err != nil {
-			if apierrors.IsNotFound(err) {
-				createErr := fluxClient.Create(ctx, desired)
-				if createErr != nil {
-					return fmt.Errorf("create FluxInstance %s/%s: %w", key.Namespace, key.Name, createErr)
-				}
-
-				return nil
-			}
-
-			return fmt.Errorf("failed to get FluxInstance %s/%s: %w", key.Namespace, key.Name, err)
-		}
-
-		existing.Spec = desired.Spec
-
-		err = fluxClient.Update(ctx, existing)
-		if err != nil {
-			return fmt.Errorf("failed to update FluxInstance %s/%s: %w", key.Namespace, key.Name, err)
-		}
-
-		return nil
+		return upsertFluxInstanceWithRetry(ctx, fluxClient, key, desired)
 	default:
 		//nolint:err113 // type information is dynamic and necessary for debugging
 		return fmt.Errorf("unsupported Flux resource type %T", obj)
 	}
+}
+
+// upsertFluxInstanceWithRetry creates or updates a FluxInstance with retry logic
+// to handle transient API errors during CRD initialization.
+//
+//nolint:cyclop // polling loop requires multiple conditional branches for different error types
+func upsertFluxInstanceWithRetry(
+	ctx context.Context,
+	fluxClient client.Client,
+	key client.ObjectKey,
+	desired *FluxInstance,
+) error {
+	waitCtx, cancel := context.WithTimeout(ctx, fluxAPIAvailabilityTimeout)
+	defer cancel()
+
+	ticker := time.NewTicker(fluxAPIAvailabilityPollInterval)
+	defer ticker.Stop()
+
+	var lastErr error
+
+	for {
+		err := tryUpsertFluxInstance(waitCtx, fluxClient, key, desired)
+		if err == nil {
+			return nil
+		}
+
+		// If the error is a transient API error (like "resource not found" during CRD init),
+		// retry. Otherwise, return the error immediately.
+		if !isTransientAPIError(err) {
+			return err
+		}
+
+		lastErr = err
+
+		select {
+		case <-waitCtx.Done():
+			if lastErr == nil {
+				lastErr = waitCtx.Err()
+			}
+
+			return fmt.Errorf("timed out upserting FluxInstance %s/%s: %w", key.Namespace, key.Name, lastErr)
+		case <-ticker.C:
+			// Retry
+		}
+	}
+}
+
+// tryUpsertFluxInstance attempts to create or update a FluxInstance once.
+func tryUpsertFluxInstance(
+	ctx context.Context,
+	fluxClient client.Client,
+	key client.ObjectKey,
+	desired *FluxInstance,
+) error {
+	existing := &FluxInstance{}
+
+	err := fluxClient.Get(ctx, key, existing)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			createErr := fluxClient.Create(ctx, desired)
+			if createErr != nil {
+				return fmt.Errorf("create FluxInstance %s/%s: %w", key.Namespace, key.Name, createErr)
+			}
+
+			return nil
+		}
+
+		return fmt.Errorf("failed to get FluxInstance %s/%s: %w", key.Namespace, key.Name, err)
+	}
+
+	existing.Spec = desired.Spec
+
+	err = fluxClient.Update(ctx, existing)
+	if err != nil {
+		return fmt.Errorf("failed to update FluxInstance %s/%s: %w", key.Namespace, key.Name, err)
+	}
+
+	return nil
+}
+
+// isTransientAPIError checks if the error is a transient API error that should be retried.
+// This includes errors like "the server could not find the requested resource" which can
+// occur when a CRD is registered but not fully ready to accept requests.
+func isTransientAPIError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	// Check for specific status errors that indicate the API isn't ready
+	if apierrors.IsServiceUnavailable(err) {
+		return true
+	}
+
+	// "the server could not find the requested resource" is typically an IsNotFound
+	// error at the API level (not the same as a resource not existing)
+	errMsg := err.Error()
+
+	return strings.Contains(errMsg, "the server could not find the requested resource") ||
+		strings.Contains(errMsg, "no matches for kind")
 }
 
 //nolint:cyclop // polling loop requires multiple conditional branches for different error types
