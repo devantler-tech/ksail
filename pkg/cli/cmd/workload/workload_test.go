@@ -121,7 +121,7 @@ func TestWorkloadCommandsLoadConfigOnly(t *testing.T) {
 	}{
 		{
 			name:          "reconcile",
-			expectedError: "GitOps engine must be enabled",
+			expectedError: "no GitOps engine detected", // Reconcile now auto-detects; fails if no engine in cluster
 		},
 		{
 			name:          "push",

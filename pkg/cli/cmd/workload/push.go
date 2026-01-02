@@ -83,7 +83,7 @@ func runPushCommand(cmd *cobra.Command, args []string, pathFlag string, validate
 	}
 
 	// Resolve all parameters: host, port, repository, ref, source directory
-	params, err := resolvePushParams(cmd, clusterCfg, ociRef, pathFlag, outputTimer)
+	params, err := resolvePushParams(cmd, clusterCfg, ociRef, pathFlag, tmr, outputTimer)
 	if err != nil {
 		return err
 	}
@@ -183,13 +183,14 @@ func resolvePushParams(
 	cfg *v1alpha1.Cluster,
 	ociRef *iopkg.OCIReference,
 	pathFlag string,
+	tmr timer.Timer,
 	outputTimer timer.Timer,
 ) (*pushParams, error) {
 	params := newPushParamsFromSources(cfg, ociRef, pathFlag)
 
 	needsDetection := ociRef == nil || ociRef.Port == 0
 	if needsDetection && params.Port == 0 {
-		err := autoDetectMissingParams(cmd, params, outputTimer)
+		err := autoDetectMissingParams(cmd, params, tmr, outputTimer)
 		if err != nil {
 			return nil, err
 		}
@@ -287,11 +288,22 @@ func resolveGitOpsEngine(cfg *v1alpha1.Cluster) v1alpha1.GitOpsEngine {
 func autoDetectMissingParams(
 	cmd *cobra.Command,
 	params *pushParams,
+	tmr timer.Timer,
 	outputTimer timer.Timer,
 ) error {
+	cmd.Println()
+	notify.WriteMessage(notify.Message{
+		Type:    notify.TitleType,
+		Emoji:   "🔎",
+		Content: "Auto-detect registry...",
+		Writer:  cmd.OutOrStdout(),
+	})
+
+	tmr.NewStage()
+
 	notify.WriteMessage(notify.Message{
 		Type:    notify.ActivityType,
-		Content: "detecting push environment",
+		Content: "detecting oci registry to push to",
 		Timer:   outputTimer,
 		Writer:  cmd.OutOrStdout(),
 	})
@@ -311,8 +323,8 @@ func autoDetectMissingParams(
 
 	notify.WriteMessage(notify.Message{
 		Type:    notify.SuccessType,
-		Content: "detected registry port %d, GitOps engine %s",
-		Args:    []any{params.Port, params.GitOpsEngine},
+		Content: "oci://%s:%d detected",
+		Args:    []any{params.Host, params.Port},
 		Timer:   outputTimer,
 		Writer:  cmd.OutOrStdout(),
 	})

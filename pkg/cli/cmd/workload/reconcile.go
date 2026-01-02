@@ -9,6 +9,7 @@ import (
 	"time"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
 	"github.com/devantler-tech/ksail/v5/pkg/client/argocd"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	iopath "github.com/devantler-tech/ksail/v5/pkg/io"
@@ -370,8 +371,15 @@ func runReconcile(cmd *cobra.Command) error {
 	outputTimer := ctx.OutputTimer
 	tmr := ctx.Timer
 
-	if clusterCfg.Spec.Cluster.GitOpsEngine == v1alpha1.GitOpsEngineNone {
-		return errGitOpsEngineRequired
+	// Determine GitOps engine - use config if set, otherwise auto-detect
+	gitOpsEngine := clusterCfg.Spec.Cluster.GitOpsEngine
+	if gitOpsEngine == v1alpha1.GitOpsEngineNone || gitOpsEngine == "" {
+		detected, detectErr := autoDetectGitOpsEngine(cmd, tmr, outputTimer)
+		if detectErr != nil {
+			return detectErr
+		}
+
+		gitOpsEngine = detected
 	}
 
 	timeout, err := getReconcileTimeout(cmd, clusterCfg)
@@ -389,7 +397,7 @@ func runReconcile(cmd *cobra.Command) error {
 
 	tmr.NewStage()
 
-	err = executeReconciliation(cmd, clusterCfg, timeout, outputTimer)
+	err = executeReconciliation(cmd, clusterCfg, gitOpsEngine, timeout, outputTimer)
 	if err != nil {
 		return err
 	}
@@ -402,6 +410,45 @@ func runReconcile(cmd *cobra.Command) error {
 	})
 
 	return nil
+}
+
+// autoDetectGitOpsEngine detects the GitOps engine from the cluster.
+func autoDetectGitOpsEngine(
+	cmd *cobra.Command,
+	tmr timer.Timer,
+	outputTimer timer.Timer,
+) (v1alpha1.GitOpsEngine, error) {
+	cmd.Println()
+	notify.WriteMessage(notify.Message{
+		Type:    notify.TitleType,
+		Emoji:   "🔎",
+		Content: "Auto-detect GitOps engine...",
+		Writer:  cmd.OutOrStdout(),
+	})
+
+	tmr.NewStage()
+
+	notify.WriteMessage(notify.Message{
+		Type:    notify.ActivityType,
+		Content: "detecting gitops engine in cluster",
+		Timer:   outputTimer,
+		Writer:  cmd.OutOrStdout(),
+	})
+
+	engine, err := helpers.DetectGitOpsEngine(cmd.Context())
+	if err != nil {
+		return v1alpha1.GitOpsEngineNone, fmt.Errorf("detect gitops engine: %w", err)
+	}
+
+	notify.WriteMessage(notify.Message{
+		Type:    notify.SuccessType,
+		Content: "%s detected",
+		Args:    []any{engine},
+		Timer:   outputTimer,
+		Writer:  cmd.OutOrStdout(),
+	})
+
+	return engine, nil
 }
 
 // getReconcileTimeout determines the timeout from flag, config, or default.
@@ -426,12 +473,13 @@ func getReconcileTimeout(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster) (time
 func executeReconciliation(
 	cmd *cobra.Command,
 	clusterCfg *v1alpha1.Cluster,
+	gitOpsEngine v1alpha1.GitOpsEngine,
 	timeout time.Duration,
 	outputTimer timer.Timer,
 ) error {
 	artifactVersion := registry.DefaultLocalArtifactTag
 
-	switch clusterCfg.Spec.Cluster.GitOpsEngine {
+	switch gitOpsEngine {
 	case v1alpha1.GitOpsEngineArgoCD:
 		return reconcileArgoCDApplication(
 			cmd.Context(),
