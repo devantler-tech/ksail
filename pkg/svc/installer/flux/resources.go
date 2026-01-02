@@ -203,7 +203,7 @@ func upsertFluxResource(
 // upsertFluxInstanceWithRetry creates or updates a FluxInstance with retry logic
 // to handle transient API errors during CRD initialization.
 //
-//nolint:cyclop // polling loop requires multiple conditional branches for different error types
+
 func upsertFluxInstanceWithRetry(
 	ctx context.Context,
 	fluxClient client.Client,
@@ -238,7 +238,12 @@ func upsertFluxInstanceWithRetry(
 				lastErr = waitCtx.Err()
 			}
 
-			return fmt.Errorf("timed out upserting FluxInstance %s/%s: %w", key.Namespace, key.Name, lastErr)
+			return fmt.Errorf(
+				"timed out upserting FluxInstance %s/%s: %w",
+				key.Namespace,
+				key.Name,
+				lastErr,
+			)
 		case <-ticker.C:
 			// Retry
 		}
@@ -259,7 +264,12 @@ func tryUpsertFluxInstance(
 		if apierrors.IsNotFound(err) {
 			createErr := fluxClient.Create(ctx, desired)
 			if createErr != nil {
-				return fmt.Errorf("create FluxInstance %s/%s: %w", key.Namespace, key.Name, createErr)
+				return fmt.Errorf(
+					"create FluxInstance %s/%s: %w",
+					key.Namespace,
+					key.Name,
+					createErr,
+				)
 			}
 
 			return nil
