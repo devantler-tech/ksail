@@ -148,15 +148,18 @@ func (k *K3dClusterProvisioner) List(ctx context.Context) ([]string, error) {
 	// Run the command in a goroutine since we need to read from the pipe
 	// while the command is running (otherwise it may block on a full pipe buffer)
 	errChan := make(chan error, 1)
+
 	go func() {
 		_, runErr := k.runListCommand(ctx)
 		// Close write end to signal EOF to the reader
 		_ = pipeWriter.Close()
+
 		errChan <- runErr
 	}()
 
 	// Read all output from the pipe (this is the JSON from k3d)
 	var outputBuf bytes.Buffer
+
 	_, copyErr := io.Copy(&outputBuf, pipeReader)
 	_ = pipeReader.Close()
 
