@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/fs"
 	"os"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
@@ -16,9 +15,6 @@ import (
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 	"sigs.k8s.io/yaml"
 )
-
-// configFilePermissions is the file permission mode used when writing configuration files.
-const configFilePermissions fs.FileMode = 0o644
 
 // ErrUnsupportedDistribution is returned when an unsupported distribution is specified.
 var ErrUnsupportedDistribution = errors.New("unsupported distribution")
@@ -161,26 +157,18 @@ func (f DefaultFactory) createK3dProvisioner(
 	// Apply node count overrides from CLI flags (stored in Talos options)
 	applyK3dNodeCounts(k3dConfig, cluster.Spec.Cluster.Talos)
 
-	// Only pass config path if the file actually exists
-	// When no project is scaffolded, we use the in-memory config defaults
-	configPath := cluster.Spec.Cluster.DistributionConfig
-
-	_, err := os.Stat(configPath)
-	if os.IsNotExist(err) {
-		configPath = "" // Don't pass --config flag; use k3d defaults + in-memory config
-	} else if configPath != "" {
-		// Write the in-memory config back to the file so k3d picks up any
-		// modifications (e.g., registry mirrors configured via --mirror-registry).
-		// The k3d CLI reads from the file, not from our in-memory config.
-		saveErr := saveK3dConfig(k3dConfig, configPath)
-		if saveErr != nil {
-			return nil, nil, fmt.Errorf("failed to save k3d config: %w", saveErr)
-		}
+	// Write the in-memory config to a temp file so k3d picks up any modifications
+	// (e.g., registry mirrors configured via --mirror-registry, node counts).
+	// We always use a temp file to avoid modifying the user's k3d.yaml.
+	// The k3d CLI reads configuration from file, not from our in-memory config.
+	tempConfigPath, err := writeK3dConfigToTempFile(k3dConfig)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to write k3d config to temp file: %w", err)
 	}
 
 	provisioner := k3dprovisioner.CreateProvisioner(
 		k3dConfig,
-		configPath,
+		tempConfigPath,
 	)
 
 	return provisioner, k3dConfig, nil
@@ -229,21 +217,36 @@ func (f DefaultFactory) createTalosProvisioner(
 	return provisioner, f.DistributionConfig.Talos, nil
 }
 
-// saveK3dConfig writes the in-memory k3d config to the specified file path.
-// This is necessary because the k3d CLI reads configuration from file when
-// --config is passed, not from our in-memory representation.
-// Any in-memory modifications (e.g., registry mirrors) must be persisted
-// before cluster creation for k3d to pick them up.
-func saveK3dConfig(config *k3dv1alpha5.SimpleConfig, configPath string) error {
+// writeK3dConfigToTempFile writes the in-memory k3d config to a temporary file.
+// This approach avoids modifying the user's k3d.yaml while ensuring k3d picks up
+// all in-memory modifications (registry mirrors, node counts, etc.).
+// The temp file persists until system cleanup - this is intentional since k3d
+// may reference the config path during cluster operations.
+func writeK3dConfigToTempFile(config *k3dv1alpha5.SimpleConfig) (string, error) {
 	data, err := yaml.Marshal(config)
 	if err != nil {
-		return fmt.Errorf("marshal k3d config: %w", err)
+		return "", fmt.Errorf("marshal k3d config: %w", err)
 	}
 
-	err = os.WriteFile(configPath, data, configFilePermissions)
+	// Create temp file with k3d prefix for easy identification
+	tempFile, err := os.CreateTemp("", "ksail-k3d-*.yaml")
 	if err != nil {
-		return fmt.Errorf("write k3d config to %s: %w", configPath, err)
+		return "", fmt.Errorf("create temp file: %w", err)
 	}
 
-	return nil
+	filePath := tempFile.Name()
+
+	_, writeErr := tempFile.Write(data)
+
+	closeErr := tempFile.Close()
+
+	if writeErr != nil {
+		return "", fmt.Errorf("write to temp file: %w", writeErr)
+	}
+
+	if closeErr != nil {
+		return "", fmt.Errorf("close temp file: %w", closeErr)
+	}
+
+	return filePath, nil
 }
