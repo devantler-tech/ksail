@@ -133,6 +133,7 @@ func RunStage(
 		k3dConfig,
 		talosConfig,
 		mirrorSpecs,
+		role,
 		definition.KindAction(stageCtx),
 		definition.K3dAction(stageCtx),
 		definition.TalosAction(stageCtx),
@@ -161,6 +162,7 @@ func newRegistryHandlers(
 	k3dConfig *v1alpha5.SimpleConfig,
 	talosConfig *talosconfigmanager.Configs,
 	mirrorSpecs []registry.MirrorSpec,
+	role Role,
 	kindAction func(context.Context, client.APIClient) error,
 	k3dAction func(context.Context, client.APIClient) error,
 	talosAction func(context.Context, client.APIClient) error,
@@ -171,8 +173,15 @@ func newRegistryHandlers(
 			Action:  kindAction,
 		},
 		v1alpha1.DistributionK3d: {
-			Prepare: func() bool { return PrepareK3dConfigWithMirrors(clusterCfg, k3dConfig, mirrorSpecs) },
-			Action:  k3dAction,
+			// K3d configures registry mirrors BEFORE cluster creation via k3d config,
+			// so the PostClusterConnect stage is not needed.
+			Prepare: func() bool {
+				if role == RolePostClusterConnect {
+					return false
+				}
+				return PrepareK3dConfigWithMirrors(clusterCfg, k3dConfig, mirrorSpecs)
+			},
+			Action: k3dAction,
 		},
 		v1alpha1.DistributionTalos: {
 			Prepare: func() bool {
