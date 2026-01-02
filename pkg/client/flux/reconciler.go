@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -22,6 +23,8 @@ var (
 	ErrOCIRepositoryNotReady = errors.New(
 		"flux OCIRepository is not ready - ensure you have pushed an artifact with 'ksail workload push'",
 	)
+	// ErrKustomizationFailed is returned when the Kustomization reconciliation fails.
+	ErrKustomizationFailed = errors.New("flux kustomization reconciliation failed")
 )
 
 // Reconciler constants.
@@ -31,6 +34,12 @@ const (
 	ociRepositoryReadyTimeout = 2 * time.Minute
 	pollInterval              = 2 * time.Second
 	reconcileAnnotationKey    = "reconcile.fluxcd.io/requestedAt"
+
+	// Condition type and status constants.
+	conditionTypeReady   = "Ready"
+	conditionTypeStalled = "Stalled"
+	conditionStatusTrue  = "True"
+	conditionStatusFalse = "False"
 )
 
 // Reconciler handles Flux reconciliation operations.
@@ -177,9 +186,15 @@ func (r *Reconciler) WaitForKustomizationReady(ctx context.Context, timeout time
 
 	kustomizationClient := r.kustomizationClient()
 
+	var lastStatus string
+
 	for {
 		select {
 		case <-timeoutCtx.Done():
+			if lastStatus != "" {
+				return fmt.Errorf("%w: last status: %s", ErrReconcileTimeout, lastStatus)
+			}
+
 			return ErrReconcileTimeout
 		case <-ticker.C:
 			kustomization, err := kustomizationClient.Get(
@@ -191,7 +206,14 @@ func (r *Reconciler) WaitForKustomizationReady(ctx context.Context, timeout time
 				return fmt.Errorf("get flux kustomization status: %w", err)
 			}
 
-			if isKustomizationReady(kustomization) {
+			ready, status, err := checkKustomizationStatus(kustomization)
+			if err != nil {
+				return err
+			}
+
+			lastStatus = status
+
+			if ready {
 				return nil
 			}
 		}
@@ -271,12 +293,12 @@ func evaluateOCIRepositoryConditions(conditions []any) (bool, error) {
 		}
 
 		condType, _, _ := unstructured.NestedString(condMap, "type")
-		if condType != "Ready" {
+		if condType != conditionTypeReady {
 			continue
 		}
 
 		condStatus, _, _ := unstructured.NestedString(condMap, "status")
-		if condStatus == "True" {
+		if condStatus == conditionStatusTrue {
 			return true, nil
 		}
 
@@ -308,12 +330,51 @@ func isPermanentOCIError(err error) bool {
 		strings.Contains(errMsg, "does not exist")
 }
 
-// isKustomizationReady checks if the kustomization has Ready=True condition.
-func isKustomizationReady(kustomization *unstructured.Unstructured) bool {
-	conditions, found, err := unstructured.NestedSlice(kustomization.Object, "status", "conditions")
-	if err != nil || !found {
-		return false
+// checkKustomizationStatus checks the kustomization status and returns ready state,
+// a human-readable status string for debugging, and any permanent failure errors.
+func checkKustomizationStatus(
+	kustomization *unstructured.Unstructured,
+) (bool, string, error) {
+	conditions, found, _ := unstructured.NestedSlice(kustomization.Object, "status", "conditions")
+	if !found || len(conditions) == 0 {
+		return false, "no conditions yet", nil
 	}
+
+	// Check if the status is stale (observedGeneration < generation)
+	if isStatusStale(kustomization) {
+		generation, _, _ := unstructured.NestedInt64(kustomization.Object, "metadata", "generation")
+		observed, _, _ := unstructured.NestedInt64(
+			kustomization.Object, "status", "observedGeneration",
+		)
+
+		return false, fmt.Sprintf("waiting for controller (generation %d, observed %d)",
+			generation, observed), nil
+	}
+
+	return evaluateKustomizationConditions(conditions)
+}
+
+// isStatusStale checks if the observed generation is behind the current generation.
+func isStatusStale(kustomization *unstructured.Unstructured) bool {
+	generation, _, _ := unstructured.NestedInt64(kustomization.Object, "metadata", "generation")
+	observedGeneration, _, _ := unstructured.NestedInt64(
+		kustomization.Object, "status", "observedGeneration",
+	)
+
+	return observedGeneration < generation
+}
+
+// evaluateKustomizationConditions processes conditions and returns readiness status.
+func evaluateKustomizationConditions(conditions []any) (bool, string, error) {
+	// Permanent failure reasons for Flux Kustomization.
+	permanentFailureReasons := []string{
+		"ReconciliationFailed",
+		"ValidationFailed",
+		"DependencyNotReady",
+		"ArtifactFailed",
+	}
+
+	var readyStatus, readyReason, readyMessage string
 
 	for _, condition := range conditions {
 		condMap, ok := condition.(map[string]any)
@@ -323,11 +384,37 @@ func isKustomizationReady(kustomization *unstructured.Unstructured) bool {
 
 		condType, _, _ := unstructured.NestedString(condMap, "type")
 		condStatus, _, _ := unstructured.NestedString(condMap, "status")
+		condReason, _, _ := unstructured.NestedString(condMap, "reason")
+		condMessage, _, _ := unstructured.NestedString(condMap, "message")
 
-		if condType == "Ready" && condStatus == "True" {
-			return true
+		if condType == conditionTypeReady {
+			readyStatus = condStatus
+			readyReason = condReason
+			readyMessage = condMessage
+
+			if condStatus == conditionStatusTrue {
+				return true, conditionTypeReady, nil
+			}
+		}
+
+		// Check for Stalled condition which indicates a permanent failure.
+		if condType == conditionTypeStalled && condStatus == conditionStatusTrue {
+			return false, "", fmt.Errorf("%w: stalled - %s", ErrKustomizationFailed, condMessage)
 		}
 	}
 
-	return false
+	// If Ready=False, check for permanent failures vs transient states.
+	if readyStatus == conditionStatusFalse {
+		if slices.Contains(permanentFailureReasons, readyReason) {
+			return false, "", fmt.Errorf(
+				"%w: %s - %s",
+				ErrKustomizationFailed, readyReason, readyMessage,
+			)
+		}
+
+		// Other Ready=False states are transient, keep polling.
+		return false, fmt.Sprintf("%s: %s", readyReason, readyMessage), nil
+	}
+
+	return false, "waiting for Ready condition", nil
 }
