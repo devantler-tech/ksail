@@ -40,10 +40,15 @@ const (
 
 var errCRDNotEstablished = errors.New("CRD is not yet established")
 
+// errFluxInstanceNotReady is returned when the FluxInstance has not reached Ready status.
+var errFluxInstanceNotReady = errors.New("FluxInstance is not yet ready")
+
 //nolint:gochecknoglobals // package-level timeout constants
 var (
 	fluxAPIAvailabilityTimeout      = 2 * time.Minute
 	fluxAPIAvailabilityPollInterval = 2 * time.Second
+	// fluxInstanceReconcileTimeout is longer to allow for operator bootstrap and controller deployment.
+	fluxInstanceReconcileTimeout = 5 * time.Minute
 )
 
 var (
@@ -136,6 +141,13 @@ func EnsureDefaultResources(
 	}
 
 	err = upsertFluxResource(ctx, fluxClient, fluxInstance)
+	if err != nil {
+		return err
+	}
+
+	// Wait for FluxInstance to be reconciled and Ready before accessing CRDs it installs.
+	// The operator needs time to bootstrap Flux controllers which register the source CRDs.
+	err = waitForFluxInstanceReady(ctx, fluxClient)
 	if err != nil {
 		return err
 	}
@@ -499,6 +511,53 @@ func waitForCRDEstablished(
 			return fmt.Errorf(
 				"timed out waiting for CRD %s to be established: %w",
 				crdName,
+				lastErr,
+			)
+		case <-ticker.C:
+		}
+	}
+}
+
+// waitForFluxInstanceReady waits for the FluxInstance to be reconciled and have Ready=True.
+// This ensures the Flux controllers are deployed and their CRDs are registered before
+// attempting to create resources that depend on them (e.g., OCIRepository).
+func waitForFluxInstanceReady(ctx context.Context, fluxClient client.Client) error {
+	waitCtx, cancel := context.WithTimeout(ctx, fluxInstanceReconcileTimeout)
+	defer cancel()
+
+	ticker := time.NewTicker(fluxAPIAvailabilityPollInterval)
+	defer ticker.Stop()
+
+	key := client.ObjectKey{Name: fluxInstanceDefaultName, Namespace: fluxclient.DefaultNamespace}
+	var lastErr error
+
+	for {
+		instance := &FluxInstance{}
+
+		err := fluxClient.Get(waitCtx, key, instance)
+		if err != nil {
+			lastErr = fmt.Errorf("failed to get FluxInstance: %w", err)
+		} else {
+			// Check for Ready condition with status True
+			for _, condition := range instance.Status.Conditions {
+				if condition.Type == "Ready" && condition.Status == metav1.ConditionTrue {
+					return nil
+				}
+			}
+
+			lastErr = errFluxInstanceNotReady
+		}
+
+		select {
+		case <-waitCtx.Done():
+			if lastErr == nil {
+				lastErr = waitCtx.Err()
+			}
+
+			return fmt.Errorf(
+				"timed out waiting for FluxInstance %s/%s to be ready: %w",
+				key.Namespace,
+				key.Name,
 				lastErr,
 			)
 		case <-ticker.C:
