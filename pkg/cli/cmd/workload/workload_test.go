@@ -115,10 +115,22 @@ func TestWorkloadHelpSnapshots(t *testing.T) {
 //nolint:paralleltest // Uses t.Chdir which is incompatible with parallel tests.
 func TestWorkloadCommandsLoadConfigOnly(t *testing.T) {
 	// Note: "apply" and "install" are excluded as they are full implementations with kubectl/helm wrappers
-	commands := []string{"reconcile", "push"}
+	testCases := []struct {
+		name          string
+		expectedError string
+	}{
+		{
+			name:          "reconcile",
+			expectedError: "GitOps engine must be enabled",
+		},
+		{
+			name:          "push",
+			expectedError: "no running local registry found", // Push auto-detects; fails if no registry running
+		},
+	}
 
-	for _, commandName := range commands {
-		t.Run(commandName, func(t *testing.T) {
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
 			var out bytes.Buffer
 
 			tempDir := t.TempDir()
@@ -129,15 +141,15 @@ func TestWorkloadCommandsLoadConfigOnly(t *testing.T) {
 			root := cmd.NewRootCmd("test", "test", "test")
 			root.SetOut(&out)
 			root.SetErr(&out)
-			root.SetArgs([]string{"workload", commandName})
+			root.SetArgs([]string{"workload", testCase.name})
 
 			err := root.Execute()
 			require.ErrorContains(
 				t,
 				err,
-				"GitOps engine must be enabled",
-				"expected workload %s handler to require GitOps engine (push also requires local registry)",
-				commandName,
+				testCase.expectedError,
+				"expected workload %s handler to return proper error",
+				testCase.name,
 			)
 
 			actual := out.String()

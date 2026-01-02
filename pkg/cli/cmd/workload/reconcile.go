@@ -30,13 +30,6 @@ var errGitOpsEngineRequired = errors.New(
 		"set 'spec.gitOpsEngine: Flux|ArgoCD' in ksail.yaml",
 )
 
-var errLocalRegistryRequired = errors.New(
-	"local registry and a GitOps engine must be enabled to push workloads; " +
-		"enable it with '--local-registry Enabled' and '--gitops-engine Flux|ArgoCD' " +
-		"during cluster init or set 'spec.localRegistry: Enabled' and " +
-		"'spec.gitOpsEngine: Flux|ArgoCD' in ksail.yaml",
-)
-
 var (
 	errFluxReconcileTimeout   = errors.New("timeout waiting for flux kustomization reconciliation")
 	errArgoCDReconcileTimeout = errors.New("timeout waiting for argocd application sync")
