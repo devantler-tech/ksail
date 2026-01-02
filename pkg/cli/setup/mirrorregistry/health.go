@@ -45,11 +45,5 @@ func WaitForRegistriesReady(
 		return fmt.Errorf("failed waiting for registries to become ready: %w", err)
 	}
 
-	notify.WriteMessage(notify.Message{
-		Type:    notify.SuccessType,
-		Content: "all mirror registries are ready",
-		Writer:  writer,
-	})
-
 	return nil
 }
