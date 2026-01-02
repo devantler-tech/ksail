@@ -16,4 +16,4 @@ jobs:
         with:
           persist-credentials: false
       - name: 🔄 Sync labels
-        uses: devantler-tech/composite-actions/sync-labels-action@6d18f29330dd5818cf03c8508fb125cc05441fad # v1.9.2
+        uses: devantler-tech/actions/sync-labels-action@6d18f29330dd5818cf03c8508fb125cc05441fad # v1.9.2
