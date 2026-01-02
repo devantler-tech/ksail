@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	errorhandler "github.com/devantler-tech/ksail/v5/pkg/cli/ui/error-handler"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/errorhandler"
 	"github.com/spf13/cobra"
 )
 
