@@ -12,6 +12,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup"
 	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
 	k3dconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/k3d"
+	kindconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/kind"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
@@ -400,30 +401,18 @@ func resolveClusterName(
 ) string {
 	switch clusterCfg.Spec.Cluster.Distribution {
 	case v1alpha1.DistributionKind:
-		if kindConfig != nil {
-			if name := strings.TrimSpace(kindConfig.Name); name != "" {
-				return name
-			}
-		}
+		return kindconfigmanager.ResolveClusterName(clusterCfg, kindConfig)
 	case v1alpha1.DistributionK3d:
 		return k3dconfigmanager.ResolveClusterName(clusterCfg, k3dConfig)
 	case v1alpha1.DistributionTalos:
-		if talosConfig != nil && talosConfig.Name != "" {
-			return talosConfig.Name
-		}
-
+		return talosconfigmanager.ResolveClusterName(clusterCfg, talosConfig)
+	default:
 		if name := strings.TrimSpace(clusterCfg.Spec.Cluster.Connection.Context); name != "" {
 			return name
 		}
 
-		return "talos-default"
+		return "ksail"
 	}
-
-	if name := strings.TrimSpace(clusterCfg.Spec.Cluster.Connection.Context); name != "" {
-		return name
-	}
-
-	return "ksail"
 }
 
 func resolveNetworkName(
