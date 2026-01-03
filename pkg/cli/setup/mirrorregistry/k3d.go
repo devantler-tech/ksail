@@ -74,7 +74,10 @@ func runK3dRegistryAction(
 	}
 
 	// Wait for registries to become ready before network connection.
-	registryInfos := k3dprovisioner.ExtractRegistriesFromConfigForTesting(ctx.K3dConfig)
+	// Filter out the local registry since it's managed separately and has a different container name.
+	registryInfos := filterOutLocalRegistry(
+		k3dprovisioner.ExtractRegistriesFromConfigForTesting(ctx.K3dConfig),
+	)
 	writer := ctx.Cmd.OutOrStdout()
 
 	return WaitForRegistriesReady(execCtx, dockerClient, registryInfos, writer)
@@ -179,4 +182,31 @@ func PrepareK3dConfigWithMirrors(
 	k3dConfig.Registries.Config = rendered
 
 	return true
+}
+
+// filterOutLocalRegistry removes entries for the local registry from the registry list.
+// The local registry is managed separately and has a different container name than what
+// the mirror config parsing generates (e.g., "local-registry" vs "local-registry-5000").
+func filterOutLocalRegistry(registries []registry.Info) []registry.Info {
+	if len(registries) == 0 {
+		return registries
+	}
+
+	// The local registry host as it appears in the K3d mirrors config
+	localRegistryHost := net.JoinHostPort(
+		registry.LocalRegistryClusterHost,
+		strconv.Itoa(dockerclient.DefaultRegistryPort),
+	)
+
+	filtered := make([]registry.Info, 0, len(registries))
+
+	for _, reg := range registries {
+		if reg.Host == localRegistryHost {
+			continue
+		}
+
+		filtered = append(filtered, reg)
+	}
+
+	return filtered
 }
