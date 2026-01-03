@@ -231,6 +231,7 @@ func configureK3dNativeLocalRegistry(
 		Name:     registryName,
 		Host:     dockerclient.RegistryHostIP,
 		HostPort: strconv.Itoa(hostPort),
+		Image:    dockerclient.RegistryImageName,
 	}
 
 	// Also configure the containerd mirror so nodes can pull images.
