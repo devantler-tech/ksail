@@ -153,7 +153,7 @@ func PrepareK3dConfigWithMirrors(
 
 	updatedMap, _ := registry.BuildHostEndpointMap(mirrorSpecs, "", hostEndpoints)
 
-	// Add local registry endpoint when local registry is enabled.
+	// Add local registry when local registry is enabled.
 	// This is required for Flux to access OCI artifacts pushed to the local registry.
 	// The cluster uses "local-registry:5000" as the hostname (container name + internal port).
 	if clusterCfg.Spec.Cluster.LocalRegistry == v1alpha1.LocalRegistryEnabled {
@@ -163,9 +163,17 @@ func PrepareK3dConfigWithMirrors(
 		)
 		localRegistryEndpoint := "http://" + localRegistryHost
 
-		// Only add if not already configured
+		// Only add mirror config if not already configured
 		if _, exists := updatedMap[localRegistryHost]; !exists {
 			updatedMap[localRegistryHost] = []string{localRegistryEndpoint}
+		}
+
+		// Use K3d's native registry integration via Registries.Use.
+		// This ensures K3d properly sets up DNS resolution so that workloads
+		// (including Flux source controller) can resolve and access the registry.
+		// Without this, pods cannot resolve "local-registry" to the container IP.
+		if !containsRegistry(k3dConfig.Registries.Use, localRegistryHost) {
+			k3dConfig.Registries.Use = append(k3dConfig.Registries.Use, localRegistryHost)
 		}
 	}
 
@@ -182,6 +190,17 @@ func PrepareK3dConfigWithMirrors(
 	k3dConfig.Registries.Config = rendered
 
 	return true
+}
+
+// containsRegistry checks if a registry host is already in the list.
+func containsRegistry(registries []string, host string) bool {
+	for _, reg := range registries {
+		if strings.EqualFold(reg, host) {
+			return true
+		}
+	}
+
+	return false
 }
 
 // filterOutLocalRegistry removes entries for the local registry from the registry list.
