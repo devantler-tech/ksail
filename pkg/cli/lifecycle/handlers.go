@@ -158,14 +158,8 @@ func getClusterNameFromConfigOrContext(
 	clusterCfg *v1alpha1.Cluster,
 ) (string, error) {
 	// If context is explicitly set, derive cluster name from it
-	if clusterCfg != nil && clusterCfg.Spec.Cluster.Connection.Context != "" {
-		clusterName := ExtractClusterNameFromContext(
-			clusterCfg.Spec.Cluster.Connection.Context,
-			clusterCfg.Spec.Cluster.Distribution,
-		)
-		if clusterName != "" {
-			return clusterName, nil
-		}
+	if clusterName := extractClusterNameFromContext(clusterCfg); clusterName != "" {
+		return clusterName, nil
 	}
 
 	// Fall back to distribution config name
@@ -175,6 +169,19 @@ func getClusterNameFromConfigOrContext(
 	}
 
 	return clusterName, nil
+}
+
+// extractClusterNameFromContext extracts cluster name from context if set.
+// Returns empty string if no context is set or extraction fails.
+func extractClusterNameFromContext(clusterCfg *v1alpha1.Cluster) string {
+	if clusterCfg == nil || clusterCfg.Spec.Cluster.Connection.Context == "" {
+		return ""
+	}
+
+	return ExtractClusterNameFromContext(
+		clusterCfg.Spec.Cluster.Connection.Context,
+		clusterCfg.Spec.Cluster.Distribution,
+	)
 }
 
 // Context detection errors.
@@ -252,14 +259,8 @@ func GetClusterNameFromConfig(
 	}
 
 	// If context is explicitly set, derive cluster name from it
-	if clusterCfg.Spec.Cluster.Connection.Context != "" {
-		clusterName := ExtractClusterNameFromContext(
-			clusterCfg.Spec.Cluster.Connection.Context,
-			clusterCfg.Spec.Cluster.Distribution,
-		)
-		if clusterName != "" {
-			return clusterName, nil
-		}
+	if clusterName := extractClusterNameFromContext(clusterCfg); clusterName != "" {
+		return clusterName, nil
 	}
 
 	// Fall back to distribution config name

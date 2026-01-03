@@ -586,15 +586,10 @@ func (c *Client) locateAndLoadChart(
 	return chartPath, chart, nil
 }
 
-func (c *Client) locateOCIChart(spec *ChartSpec, client any) (string, error) {
-	// Create a registry client for OCI operations
-	registryClient, err := helmv4registry.NewClient()
-	if err != nil {
-		return "", fmt.Errorf("failed to create registry client: %w", err)
-	}
-
-	// Set ChartPathOptions for the action client with registry client
-	opts := helmv4action.ChartPathOptions{
+// buildChartPathOptions creates common ChartPathOptions from a ChartSpec.
+func buildChartPathOptions(spec *ChartSpec, repoURL string) helmv4action.ChartPathOptions {
+	return helmv4action.ChartPathOptions{
+		RepoURL:               repoURL,
 		Version:               spec.Version,
 		Username:              spec.Username,
 		Password:              spec.Password,
@@ -603,6 +598,26 @@ func (c *Client) locateOCIChart(spec *ChartSpec, client any) (string, error) {
 		CaFile:                spec.CaFile,
 		InsecureSkipTLSverify: spec.InsecureSkipTLSverify,
 	}
+}
+
+// applyChartPathOptions applies ChartPathOptions to an Install or Upgrade client.
+func applyChartPathOptions(client any, opts helmv4action.ChartPathOptions) {
+	switch cl := client.(type) {
+	case *helmv4action.Install:
+		cl.ChartPathOptions = opts
+	case *helmv4action.Upgrade:
+		cl.ChartPathOptions = opts
+	}
+}
+
+func (c *Client) locateOCIChart(spec *ChartSpec, client any) (string, error) {
+	// Create a registry client for OCI operations
+	registryClient, err := helmv4registry.NewClient()
+	if err != nil {
+		return "", fmt.Errorf("failed to create registry client: %w", err)
+	}
+
+	opts := buildChartPathOptions(spec, "")
 
 	// Apply options and registry client, then locate chart
 	var chartPath string
@@ -633,25 +648,8 @@ func (c *Client) locateChartFromRepo(spec *ChartSpec, client any) (string, error
 		chartName = spec.ChartName
 	}
 
-	// Set ChartPathOptions for the action client and use LocateChart to download
-	opts := helmv4action.ChartPathOptions{
-		RepoURL:               spec.RepoURL,
-		Version:               spec.Version,
-		Username:              spec.Username,
-		Password:              spec.Password,
-		CertFile:              spec.CertFile,
-		KeyFile:               spec.KeyFile,
-		CaFile:                spec.CaFile,
-		InsecureSkipTLSverify: spec.InsecureSkipTLSverify,
-	}
-
-	// Apply options to action client as well
-	switch cl := client.(type) {
-	case *helmv4action.Install:
-		cl.ChartPathOptions = opts
-	case *helmv4action.Upgrade:
-		cl.ChartPathOptions = opts
-	}
+	opts := buildChartPathOptions(spec, spec.RepoURL)
+	applyChartPathOptions(client, opts)
 
 	// Use LocateChart to download the chart to cache and return the local path
 	chartPath, err := opts.LocateChart(chartName, c.settings)

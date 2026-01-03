@@ -209,9 +209,9 @@ func (c *CalicoInstaller) waitForReadiness(ctx context.Context) error {
 // Talos has PodSecurity Standard enforcement enabled by default, so we need to label
 // the namespaces as "privileged" to allow the CNI pods to run.
 func (c *CalicoInstaller) ensurePrivilegedNamespaces(ctx context.Context) error {
-	clientset, err := c.createClientset()
+	clientset, err := k8s.NewClientset(c.GetKubeconfig(), c.GetContext())
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create kubernetes client: %w", err)
 	}
 
 	namespaces := []string{"tigera-operator", "calico-system"}
@@ -281,19 +281,4 @@ func (c *CalicoInstaller) ensurePrivilegedNamespace(
 	}
 
 	return nil
-}
-
-// createClientset creates a Kubernetes clientset for the configured cluster.
-func (c *CalicoInstaller) createClientset() (*kubernetes.Clientset, error) {
-	restConfig, err := k8s.BuildRESTConfig(c.GetKubeconfig(), c.GetContext())
-	if err != nil {
-		return nil, fmt.Errorf("failed to build rest config: %w", err)
-	}
-
-	clientset, err := kubernetes.NewForConfig(restConfig)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create kubernetes client: %w", err)
-	}
-
-	return clientset, nil
 }

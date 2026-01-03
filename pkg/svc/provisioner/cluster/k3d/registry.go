@@ -23,16 +23,12 @@ func SetupRegistries(
 	dockerClient client.APIClient,
 	writer io.Writer,
 ) error {
-	registryMgr, registryInfos, err := setupRegistryManager(ctx, simpleCfg, dockerClient)
-	if err != nil {
+	registryMgr, registryInfos, networkName, err := prepareRegistryContext(
+		ctx, simpleCfg, clusterName, dockerClient,
+	)
+	if err != nil || registryMgr == nil {
 		return err
 	}
-
-	if registryMgr == nil {
-		return nil
-	}
-
-	networkName := k3dconfigmanager.ResolveNetworkName(clusterName)
 
 	errRegistry := registry.SetupRegistries(
 		ctx,
@@ -91,16 +87,12 @@ func CleanupRegistries(
 	deleteVolumes bool,
 	writer io.Writer,
 ) error {
-	registryMgr, registryInfos, err := setupRegistryManager(ctx, simpleCfg, dockerClient)
-	if err != nil {
+	registryMgr, registryInfos, networkName, err := prepareRegistryContext(
+		ctx, simpleCfg, clusterName, dockerClient,
+	)
+	if err != nil || registryMgr == nil {
 		return err
 	}
-
-	if registryMgr == nil {
-		return nil
-	}
-
-	networkName := k3dconfigmanager.ResolveNetworkName(clusterName)
 
 	errCleanup := registry.CleanupRegistries(
 		ctx,
@@ -116,6 +108,28 @@ func CleanupRegistries(
 	}
 
 	return nil
+}
+
+// prepareRegistryContext sets up the registry manager and resolves the network name.
+// Returns nil manager if no registries are configured.
+func prepareRegistryContext(
+	ctx context.Context,
+	simpleCfg *k3dv1alpha5.SimpleConfig,
+	clusterName string,
+	dockerClient client.APIClient,
+) (*dockerclient.RegistryManager, []registry.Info, string, error) {
+	registryMgr, registryInfos, err := setupRegistryManager(ctx, simpleCfg, dockerClient)
+	if err != nil {
+		return nil, nil, "", err
+	}
+
+	if registryMgr == nil {
+		return nil, nil, "", nil
+	}
+
+	networkName := k3dconfigmanager.ResolveNetworkName(clusterName)
+
+	return registryMgr, registryInfos, networkName, nil
 }
 
 func setupRegistryManager(

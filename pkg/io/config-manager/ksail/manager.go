@@ -17,6 +17,7 @@ import (
 	k3dconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/k3d"
 	kindconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/kind"
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
+	"github.com/devantler-tech/ksail/v5/pkg/io/validator"
 	ksailvalidator "github.com/devantler-tech/ksail/v5/pkg/io/validator/ksail"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
@@ -542,19 +543,19 @@ func (m *ConfigManager) validateConfig() error {
 			Writer:  m.Writer,
 		})
 
-		warnings := helpers.FormatValidationWarnings(result)
-		for _, warning := range warnings {
-			notify.WriteMessage(notify.Message{
-				Type:    notify.WarningType,
-				Content: warning,
-				Writer:  m.Writer,
-			})
-		}
+		m.writeValidationWarnings(result)
 
 		// Return validation summary error instead of full error stack
 		return helpers.NewValidationSummaryError(len(result.Errors), len(result.Warnings))
 	}
 
+	m.writeValidationWarnings(result)
+
+	return nil
+}
+
+// writeValidationWarnings outputs all validation warnings to the configured writer.
+func (m *ConfigManager) writeValidationWarnings(result *validator.ValidationResult) {
 	warnings := helpers.FormatValidationWarnings(result)
 	for _, warning := range warnings {
 		notify.WriteMessage(notify.Message{
@@ -563,8 +564,6 @@ func (m *ConfigManager) validateConfig() error {
 			Writer:  m.Writer,
 		})
 	}
-
-	return nil
 }
 
 func (m *ConfigManager) applyDistributionConfigDefaults() {
