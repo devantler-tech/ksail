@@ -57,6 +57,8 @@ func DetectClusterEnvironment(ctx context.Context) (*ClusterEnvironment, error) 
 }
 
 // DetectLocalRegistryPort finds the host port of the running local-registry container.
+// It checks for both KSail-managed registries (local-registry) and K3d-managed registries
+// (k3d-local-registry) to support both distribution types.
 func DetectLocalRegistryPort(ctx context.Context) (int32, error) {
 	dockerClient, err := client.NewClientWithOpts(
 		client.FromEnv,
@@ -73,22 +75,48 @@ func DetectLocalRegistryPort(ctx context.Context) (int32, error) {
 		return 0, fmt.Errorf("create registry manager: %w", err)
 	}
 
-	// Check if local-registry container exists and is running
+	// First, check for KSail-managed local-registry (Kind/Talos clusters)
 	inUse, err := registryManager.IsRegistryInUse(ctx, registrypkg.LocalRegistryContainerName)
 	if err != nil {
 		return 0, fmt.Errorf("check registry status: %w", err)
 	}
 
-	if !inUse {
-		return 0, ErrNoLocalRegistry
+	if inUse {
+		port, portErr := registryManager.GetRegistryPort(
+			ctx,
+			registrypkg.LocalRegistryContainerName,
+		)
+		if portErr != nil {
+			return 0, fmt.Errorf("get registry port: %w", portErr)
+		}
+
+		return int32(port), nil //nolint:gosec // port is validated by Docker API
 	}
 
-	port, err := registryManager.GetRegistryPort(ctx, registrypkg.LocalRegistryContainerName)
-	if err != nil {
-		return 0, fmt.Errorf("get registry port: %w", err)
+	// Second, check for K3d-managed local-registry (k3d-local-registry)
+	// K3d creates registries via Registries.Create without KSail labels
+	k3dRunning, k3dErr := registryManager.IsContainerRunning(
+		ctx,
+		registrypkg.K3dLocalRegistryContainerName,
+	)
+	if k3dErr != nil {
+		return 0, fmt.Errorf("check k3d registry status: %w", k3dErr)
 	}
 
-	return int32(port), nil //nolint:gosec // port is validated by Docker API
+	if k3dRunning {
+		port, portErr := registryManager.GetContainerPort(
+			ctx,
+			registrypkg.K3dLocalRegistryContainerName,
+			dockerclient.DefaultRegistryPort,
+		)
+		if portErr != nil {
+			return 0, fmt.Errorf("get k3d registry port: %w", portErr)
+		}
+
+		return int32(port), nil //nolint:gosec // port is validated by Docker API
+	}
+
+	return 0, ErrNoLocalRegistry
 }
 
 // DetectGitOpsEngine checks if Flux or ArgoCD is deployed in the cluster.

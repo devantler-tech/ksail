@@ -277,6 +277,48 @@ func (rm *RegistryManager) GetRegistryPort(ctx context.Context, name string) (in
 	return 0, ErrRegistryPortNotFound
 }
 
+// IsContainerRunning checks if a container with the given exact name is running.
+// Unlike IsRegistryInUse, this method does not require KSail labels, making it
+// suitable for detecting K3d-managed registries.
+func (rm *RegistryManager) IsContainerRunning(ctx context.Context, name string) (bool, error) {
+	containers, err := rm.listContainersByNameOnly(ctx, name)
+	if err != nil {
+		return false, fmt.Errorf("failed to list containers: %w", err)
+	}
+
+	if len(containers) == 0 {
+		return false, nil
+	}
+
+	return containers[0].State == "running", nil
+}
+
+// GetContainerPort returns the host port for a container with the given exact name.
+// Unlike GetRegistryPort, this method does not require KSail labels, making it
+// suitable for detecting K3d-managed registries.
+func (rm *RegistryManager) GetContainerPort(
+	ctx context.Context,
+	name string,
+	privatePort uint16,
+) (int, error) {
+	containers, err := rm.listContainersByNameOnly(ctx, name)
+	if err != nil {
+		return 0, fmt.Errorf("failed to list containers: %w", err)
+	}
+
+	if len(containers) == 0 {
+		return 0, ErrRegistryNotFound
+	}
+
+	for _, port := range containers[0].Ports {
+		if port.PrivatePort == privatePort {
+			return int(port.PublicPort), nil
+		}
+	}
+
+	return 0, ErrRegistryPortNotFound
+}
+
 // WaitForRegistryReady waits for a registry to become ready by polling its health endpoint.
 // It checks the registry's host port (mapped to localhost) to verify the registry is responding.
 // The containerIP parameter is currently unused but kept for API compatibility and future use.
@@ -577,6 +619,27 @@ func (rm *RegistryManager) listRegistryContainers(
 	filterArgs.Add("name", name)
 	filterArgs.Add("ancestor", RegistryImageName)
 	filterArgs.Add("label", fmt.Sprintf("%s=%s", RegistryLabelKey, name))
+
+	containers, err := rm.client.ContainerList(ctx, container.ListOptions{
+		All:     true,
+		Filters: filterArgs,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list registry containers: %w", err)
+	}
+
+	return containers, nil
+}
+
+// listContainersByNameOnly lists containers matching the given name without requiring KSail labels.
+// This is used for detecting K3d-managed registries which don't have KSail labels.
+func (rm *RegistryManager) listContainersByNameOnly(
+	ctx context.Context,
+	name string,
+) ([]container.Summary, error) {
+	filterArgs := filters.NewArgs()
+	// Use exact name match with regex anchor to avoid partial matches
+	filterArgs.Add("name", "^/"+name+"$")
 
 	containers, err := rm.client.ContainerList(ctx, container.ListOptions{
 		All:     true,

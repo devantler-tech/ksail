@@ -10,6 +10,9 @@ import (
 const (
 	// LocalRegistryContainerName is the docker container name for the developer registry.
 	LocalRegistryContainerName = "local-registry"
+	// K3dLocalRegistryContainerName is the container name for K3d-managed local registries.
+	// K3d prefixes registry names with "k3d-" when creating them via Registries.Create.
+	K3dLocalRegistryContainerName = "k3d-" + LocalRegistryContainerName
 	// LocalRegistryClusterHost is the hostname clusters use to reach the local registry.
 	LocalRegistryClusterHost = LocalRegistryContainerName
 	// DefaultLocalArtifactTag is used when no explicit tag is provided for a workload
