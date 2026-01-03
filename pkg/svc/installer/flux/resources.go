@@ -39,7 +39,10 @@ const (
 	ociRepositoriesCRDName = "ocirepositories.source.toolkit.fluxcd.io"
 )
 
-var errCRDNotEstablished = errors.New("CRD is not yet established")
+var (
+	errCRDNotEstablished = errors.New("CRD is not yet established")
+	errAPINotServable    = errors.New("API returned no resources")
+)
 
 //nolint:gochecknoglobals // package-level timeout constants
 var (
@@ -201,6 +204,7 @@ func setupFluxInstance(
 }
 
 // waitForAPIReady waits for both the API to be discoverable and the CRD to be established.
+// It also verifies that the resource API is actually servable by attempting to list resources.
 func waitForAPIReady(
 	ctx context.Context,
 	restConfig *rest.Config,
@@ -215,7 +219,15 @@ func waitForAPIReady(
 
 	// Wait for CRD to be fully established (not just discoverable)
 	// This ensures the API server is ready to accept requests for the resources
-	return waitForCRDEstablished(ctx, restConfig, crdName)
+	err = waitForCRDEstablished(ctx, restConfig, crdName)
+	if err != nil {
+		return err
+	}
+
+	// Wait for the resource API to be actually servable by the API server.
+	// There can be a delay between CRD establishment and the API server
+	// discovery endpoint being updated to serve the new resource type.
+	return waitForResourceAPIServable(ctx, restConfig, groupVersion)
 }
 
 //nolint:unparam // error return kept for consistency with resource building patterns
@@ -561,4 +573,70 @@ func waitForCRDEstablished(
 		case <-ticker.C:
 		}
 	}
+}
+
+// waitForResourceAPIServable waits for the resource API to be actually servable.
+// This is necessary because there can be a delay between when the CRD controller
+// marks a CRD as Established and when the API server's aggregated discovery
+// updates to include the new resource type. During this window, requests to the
+// resource API will fail with "the server could not find the requested resource".
+func waitForResourceAPIServable(
+	ctx context.Context,
+	restConfig *rest.Config,
+	groupVersion schema.GroupVersion,
+) error {
+	waitCtx, cancel := context.WithTimeout(ctx, fluxAPIAvailabilityTimeout)
+	defer cancel()
+
+	ticker := time.NewTicker(fluxAPIAvailabilityPollInterval)
+	defer ticker.Stop()
+
+	var lastErr error
+
+	for {
+		resources, err := tryDiscoverResources(restConfig, groupVersion)
+
+		switch {
+		case err != nil:
+			lastErr = err
+		case resources != nil && len(resources.APIResources) > 0:
+			return nil
+		default:
+			lastErr = fmt.Errorf("%w: %s", errAPINotServable, groupVersion.String())
+		}
+
+		select {
+		case <-waitCtx.Done():
+			return fmt.Errorf(
+				"timed out waiting for API %s to be servable: %w",
+				groupVersion.String(),
+				lastErr,
+			)
+		case <-ticker.C:
+		}
+	}
+}
+
+// tryDiscoverResources attempts to discover resources for a group version.
+// Returns the resources list or an error if discovery fails.
+func tryDiscoverResources(
+	restConfig *rest.Config,
+	groupVersion schema.GroupVersion,
+) (*metav1.APIResourceList, error) {
+	// Create a new discovery client on each call to avoid caching issues.
+	// The discovery client caches API group information, and a stale cache
+	// might not reflect newly-registered resources.
+	discoveryClient, err := newDiscoveryClient(restConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create discovery client: %w", err)
+	}
+
+	// Attempt to get the API resources for the group version.
+	// This forces a fresh discovery request and verifies the API is actually servable.
+	resources, err := discoveryClient.ServerResourcesForGroupVersion(groupVersion.String())
+	if err != nil {
+		return nil, fmt.Errorf("failed to get API resources for %s: %w", groupVersion.String(), err)
+	}
+
+	return resources, nil
 }
