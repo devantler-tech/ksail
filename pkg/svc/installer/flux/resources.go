@@ -67,29 +67,7 @@ var (
 			return nil, fmt.Errorf("failed to add flux source scheme: %w", err)
 		}
 
-		// Use a dynamic REST mapper that re-discovers resources on cache misses.
-		// This is critical for newly-registered CRDs where the static mapper
-		// might have stale cached data, causing "the server could not find the
-		// requested resource" errors even after the CRD is established.
-		httpClient, err := rest.HTTPClientFor(restConfig)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create HTTP client: %w", err)
-		}
-
-		mapper, err := apiutil.NewDynamicRESTMapper(restConfig, httpClient)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create dynamic REST mapper: %w", err)
-		}
-
-		fluxClient, err := client.New(restConfig, client.Options{
-			Scheme: scheme,
-			Mapper: mapper,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("failed to create flux resource client: %w", err)
-		}
-
-		return fluxClient, nil
+		return newDynamicClient(restConfig, scheme)
 	}
 
 	//nolint:gochecknoglobals // Allows mocking discovery client for tests
@@ -106,28 +84,36 @@ var (
 			return nil, fmt.Errorf("failed to add apiextensions scheme: %w", err)
 		}
 
-		// Use a dynamic REST mapper for consistency with other clients
-		httpClient, err := rest.HTTPClientFor(restConfig)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create HTTP client: %w", err)
-		}
-
-		mapper, err := apiutil.NewDynamicRESTMapper(restConfig, httpClient)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create dynamic REST mapper: %w", err)
-		}
-
-		apiextClient, err := client.New(restConfig, client.Options{
-			Scheme: scheme,
-			Mapper: mapper,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("failed to create apiextensions client: %w", err)
-		}
-
-		return apiextClient, nil
+		return newDynamicClient(restConfig, scheme)
 	}
 )
+
+// newDynamicClient creates a controller-runtime client with a dynamic REST mapper.
+// The dynamic mapper re-discovers resources on cache misses, which is critical for
+// newly-registered CRDs where a static mapper might have stale cached data.
+//
+//nolint:ireturn // Returns client.Client interface required by controller-runtime
+func newDynamicClient(restConfig *rest.Config, scheme *runtime.Scheme) (client.Client, error) {
+	httpClient, err := rest.HTTPClientFor(restConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create HTTP client: %w", err)
+	}
+
+	mapper, err := apiutil.NewDynamicRESTMapper(restConfig, httpClient)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create dynamic REST mapper: %w", err)
+	}
+
+	k8sClient, err := client.New(restConfig, client.Options{
+		Scheme: scheme,
+		Mapper: mapper,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create kubernetes client: %w", err)
+	}
+
+	return k8sClient, nil
+}
 
 // EnsureDefaultResources configures a default FluxInstance so the operator can
 // bootstrap controllers and sync from the local OCI registry.
