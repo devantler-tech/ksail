@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	kindconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/kind"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
 	"github.com/devantler-tech/ksail/v5/pkg/io/scaffolder"
 	kindprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/kind"
@@ -14,9 +15,6 @@ import (
 	"github.com/docker/docker/client"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
-
-// Kind network name constant.
-const kindNetworkName = "kind"
 
 // KindRegistryAction returns the action function for Kind registry creation.
 func KindRegistryAction(ctx *Context) func(context.Context, client.APIClient) error {
@@ -88,7 +86,13 @@ func runKindNetworkAction(
 
 	// Create the Docker network. For Kind, we don't need to specify a CIDR
 	// as Kind manages its own network settings.
-	return EnsureDockerNetworkExists(execCtx, dockerClient, kindNetworkName, "", writer)
+	return EnsureDockerNetworkExists(
+		execCtx,
+		dockerClient,
+		kindconfigmanager.DefaultNetworkName,
+		"",
+		writer,
+	)
 }
 
 // runKindConnectAction connects registries to the Docker network.

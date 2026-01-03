@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
+	k3dconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/k3d"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	"github.com/docker/docker/client"
 	k3dv1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
@@ -30,7 +31,7 @@ func SetupRegistries(
 		return nil
 	}
 
-	networkName := resolveK3dNetworkName(clusterName)
+	networkName := k3dconfigmanager.ResolveNetworkName(clusterName)
 
 	errRegistry := registry.SetupRegistries(
 		ctx,
@@ -64,7 +65,7 @@ func ConnectRegistriesToNetwork(
 		return nil
 	}
 
-	networkName := resolveK3dNetworkName(clusterName)
+	networkName := k3dconfigmanager.ResolveNetworkName(clusterName)
 
 	errConnect := registry.ConnectRegistriesToNetwork(
 		ctx,
@@ -98,7 +99,7 @@ func CleanupRegistries(
 		return nil
 	}
 
-	networkName := resolveK3dNetworkName(clusterName)
+	networkName := k3dconfigmanager.ResolveNetworkName(clusterName)
 
 	errCleanup := registry.CleanupRegistries(
 		ctx,
@@ -137,15 +138,6 @@ func setupRegistryManager(
 	}
 
 	return registryMgr, infos, nil
-}
-
-func resolveK3dNetworkName(clusterName string) string {
-	trimmed := strings.TrimSpace(clusterName)
-	if trimmed == "" {
-		return "k3d"
-	}
-
-	return "k3d-" + trimmed
 }
 
 type mirrorConfig struct {

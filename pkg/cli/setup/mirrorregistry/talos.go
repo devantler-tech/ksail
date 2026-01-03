@@ -42,14 +42,22 @@ func TalosPostClusterConnectAction(_ *Context) func(context.Context, client.APIC
 	}
 }
 
+// resolveTalosRegistries resolves the cluster name and builds registry infos from the context.
+// Returns empty slice if no mirror specs are provided.
+func resolveTalosRegistries(ctx *Context) (string, []registry.Info) {
+	clusterName := talosconfigmanager.ResolveClusterName(ctx.ClusterCfg, ctx.TalosConfig)
+	registryInfos := buildTalosRegistryInfos(ctx.MirrorSpecs, clusterName)
+
+	return clusterName, registryInfos
+}
+
 // runTalosRegistryAction creates and configures registry containers.
 func runTalosRegistryAction(
 	execCtx context.Context,
 	ctx *Context,
 	dockerAPIClient client.APIClient,
 ) error {
-	clusterName := ResolveTalosClusterName(ctx.TalosConfig)
-	registryInfos := buildTalosRegistryInfos(ctx.MirrorSpecs, clusterName)
+	clusterName, registryInfos := resolveTalosRegistries(ctx)
 
 	if len(registryInfos) == 0 {
 		return nil
@@ -89,9 +97,11 @@ func runTalosNetworkAction(
 		return nil
 	}
 
-	clusterName := ResolveTalosClusterName(ctx.TalosConfig)
+	clusterName := talosconfigmanager.ResolveClusterName(ctx.ClusterCfg, ctx.TalosConfig)
 	networkName := clusterName // Talos uses cluster name as network name
-	networkCIDR := ResolveTalosNetworkCIDR(ctx.TalosConfig)
+	// Use DefaultNetworkCIDR (10.5.0.0/24) for the Docker bridge network.
+	// This is the CIDR the Talos SDK uses for the Docker bridge network, NOT the pod CIDR.
+	networkCIDR := talosconfigmanager.DefaultNetworkCIDR
 	writer := ctx.Cmd.OutOrStdout()
 
 	return EnsureDockerNetworkExists(execCtx, dockerClient, networkName, networkCIDR, writer)
@@ -103,15 +113,14 @@ func runTalosConnectAction(
 	ctx *Context,
 	dockerAPIClient client.APIClient,
 ) error {
-	clusterName := ResolveTalosClusterName(ctx.TalosConfig)
-	registryInfos := buildTalosRegistryInfos(ctx.MirrorSpecs, clusterName)
+	clusterName, registryInfos := resolveTalosRegistries(ctx)
 
 	if len(registryInfos) == 0 {
 		return nil
 	}
 
 	networkName := clusterName
-	networkCIDR := ResolveTalosNetworkCIDR(ctx.TalosConfig)
+	networkCIDR := talosconfigmanager.DefaultNetworkCIDR
 	writer := ctx.Cmd.OutOrStdout()
 
 	// Connect registries to the network with static IPs
@@ -123,22 +132,6 @@ func runTalosConnectAction(
 	}
 
 	return nil
-}
-
-// ResolveTalosClusterName extracts the cluster name from Talos config or returns the default.
-func ResolveTalosClusterName(talosConfig *talosconfigmanager.Configs) string {
-	if talosConfig != nil && talosConfig.Name != "" {
-		return talosConfig.Name
-	}
-
-	return talosconfigmanager.DefaultClusterName
-}
-
-// ResolveTalosNetworkCIDR returns the Docker network CIDR for Talos.
-// This is always DefaultNetworkCIDR (10.5.0.0/24) - NOT the pod CIDR from cluster config.
-// The Talos SDK uses this CIDR for the Docker bridge network that nodes connect to.
-func ResolveTalosNetworkCIDR(_ *talosconfigmanager.Configs) string {
-	return talosconfigmanager.DefaultNetworkCIDR
 }
 
 // buildTalosRegistryInfos builds registry infos from mirror specs for Talos.

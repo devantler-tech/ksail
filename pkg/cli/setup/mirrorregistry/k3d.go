@@ -90,7 +90,7 @@ func runK3dNetworkAction(
 	dockerClient client.APIClient,
 ) error {
 	clusterName := k3dconfigmanager.ResolveClusterName(ctx.ClusterCfg, ctx.K3dConfig)
-	networkName := "k3d-" + clusterName
+	networkName := k3dconfigmanager.ResolveNetworkName(clusterName)
 	writer := ctx.Cmd.OutOrStdout()
 
 	// For K3d, we don't need to specify a CIDR as K3d manages its own network settings.

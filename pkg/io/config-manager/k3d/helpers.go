@@ -83,3 +83,14 @@ func ResolveClusterName(
 
 	return "k3d"
 }
+
+// ResolveNetworkName returns the Docker network name for a K3d cluster.
+// K3d uses "k3d-<clustername>" as the network naming convention.
+func ResolveNetworkName(clusterName string) string {
+	trimmed := strings.TrimSpace(clusterName)
+	if trimmed == "" {
+		return "k3d"
+	}
+
+	return "k3d-" + trimmed
+}

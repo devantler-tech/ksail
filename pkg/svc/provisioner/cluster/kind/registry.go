@@ -10,14 +10,13 @@ import (
 	"strings"
 
 	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
+	kindconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/kind"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
-
-const kindNetworkName = "kind"
 
 // randomDelimiterBytes is the number of random bytes used to generate heredoc delimiters.
 // 8 bytes produces 16 hex characters, making collisions with user content extremely unlikely.
@@ -332,7 +331,7 @@ func SetupRegistries(
 		registryMgr,
 		registriesInfo,
 		clusterName,
-		kindNetworkName,
+		kindconfigmanager.DefaultNetworkName,
 		writer,
 	)
 	if errSetup != nil {
@@ -363,7 +362,7 @@ func ConnectRegistriesToNetwork(
 		ctx,
 		dockerClient,
 		registriesInfo,
-		kindNetworkName,
+		kindconfigmanager.DefaultNetworkName,
 		writer,
 	)
 	if errConnect != nil {
@@ -396,7 +395,7 @@ func CleanupRegistries(
 		registriesInfo,
 		clusterName,
 		deleteVolumes,
-		kindNetworkName,
+		kindconfigmanager.DefaultNetworkName,
 		nil,
 	)
 	if errCleanup != nil {

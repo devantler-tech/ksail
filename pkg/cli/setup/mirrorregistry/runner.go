@@ -190,7 +190,7 @@ func newRegistryHandlers(
 					clusterCfg,
 					talosConfig,
 					mirrorSpecs,
-					ResolveTalosClusterName(talosConfig),
+					talosconfigmanager.ResolveClusterName(clusterCfg, talosConfig),
 				)
 			},
 			Action: talosAction,
