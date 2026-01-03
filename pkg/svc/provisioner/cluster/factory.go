@@ -207,7 +207,8 @@ func (f DefaultFactory) createTalosProvisioner(
 
 	// Skip CNI-dependent checks (CoreDNS, kube-proxy) when KSail will install a custom CNI.
 	// Pods cannot start until the CNI is installed, so these checks would timeout.
-	skipCNIChecks := cluster.Spec.Cluster.CNI != "" && cluster.Spec.Cluster.CNI != v1alpha1.CNIDefault
+	skipCNIChecks := cluster.Spec.Cluster.CNI != "" &&
+		cluster.Spec.Cluster.CNI != v1alpha1.CNIDefault
 
 	provisioner, err := talosprovisioner.CreateProvisioner(
 		f.DistributionConfig.Talos,
