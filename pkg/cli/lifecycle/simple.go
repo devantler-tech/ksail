@@ -182,10 +182,13 @@ func CreateMinimalProvisioner(
 	case v1alpha1.DistributionTalos:
 		talosConfig := &talosconfigmanager.Configs{Name: clusterName}
 
+		// Simple lifecycle is for start/stop/delete - not cluster creation.
+		// skipCNIChecks doesn't matter here since we're not running bootstrap checks.
 		provisioner, err := talosprovisioner.CreateProvisioner(
 			talosConfig,
 			"",
 			v1alpha1.OptionsTalos{},
+			false, // skipCNIChecks - not relevant for simple lifecycle operations
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create talos provisioner: %w", err)

@@ -483,7 +483,11 @@ func (p *TalosProvisioner) bootstrapAndSaveKubeconfig(
 	// because pods cannot start until the CNI is installed.
 	// See: https://pkg.go.dev/github.com/siderolabs/talos/pkg/cluster/check#K8sComponentsReadinessChecks
 	clusterChecks := check.DefaultClusterChecks()
-	if p.talosConfigs != nil && p.talosConfigs.IsCNIDisabled() {
+
+	// Skip CNI-dependent checks if:
+	// 1. The Talos config has CNI disabled (scaffolded project with disable-default-cni.yaml patch), OR
+	// 2. KSail will install a custom CNI after cluster creation (options.SkipCNIChecks)
+	if (p.talosConfigs != nil && p.talosConfigs.IsCNIDisabled()) || p.options.SkipCNIChecks {
 		clusterChecks = check.PreBootSequenceChecks()
 	}
 
