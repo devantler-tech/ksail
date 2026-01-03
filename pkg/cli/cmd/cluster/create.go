@@ -142,6 +142,14 @@ func handleCreateRunE(
 		return fmt.Errorf("failed to connect local registry: %w", err)
 	}
 
+	// Wait for K3d local registry to be ready before installing components.
+	// K3d creates the registry during cluster creation, so we need to wait
+	// for it to be ready before Flux can sync from it.
+	err = localregistry.WaitForK3dLocalRegistryReady(cmd, ctx.ClusterCfg, localDeps.DockerInvoker)
+	if err != nil {
+		return fmt.Errorf("failed to wait for local registry: %w", err)
+	}
+
 	return handlePostCreationSetup(cmd, ctx.ClusterCfg, deps.Timer, &firstActivityShown)
 }
 

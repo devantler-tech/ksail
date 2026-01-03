@@ -472,3 +472,44 @@ func resolvePort(clusterCfg *v1alpha1.Cluster) int {
 
 	return dockerclient.DefaultRegistryPort
 }
+
+// WaitForK3dLocalRegistryReady waits for the K3d-managed local registry to be ready.
+// This should be called after K3d cluster creation when local registry is enabled,
+// to ensure the registry is accepting connections before installing Flux or other
+// components that depend on it.
+//
+// For K3d, the local registry is created during cluster creation via Registries.Create,
+// so we need to wait for it to be ready after the cluster is created.
+// For Kind and Talos, this is a no-op since they use KSail-managed registries
+// which are created and waited for before cluster creation.
+func WaitForK3dLocalRegistryReady(
+	cmd *cobra.Command,
+	clusterCfg *v1alpha1.Cluster,
+	dockerInvoker func(*cobra.Command, func(client.APIClient) error) error,
+) error {
+	// Only wait for K3d with local registry enabled
+	if clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionK3d {
+		return nil
+	}
+
+	if clusterCfg.Spec.Cluster.LocalRegistry != v1alpha1.LocalRegistryEnabled {
+		return nil
+	}
+
+	registryName := registry.LocalRegistryContainerName
+
+	return dockerInvoker(cmd, func(dockerClient client.APIClient) error {
+		registryMgr, err := dockerclient.NewRegistryManager(dockerClient)
+		if err != nil {
+			return fmt.Errorf("failed to create registry manager: %w", err)
+		}
+
+		// Wait for the local registry to be ready
+		err = registryMgr.WaitForRegistryReady(cmd.Context(), registryName, "")
+		if err != nil {
+			return fmt.Errorf("local registry not ready: %w", err)
+		}
+
+		return nil
+	})
+}
