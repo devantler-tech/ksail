@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 
 	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
@@ -156,38 +157,77 @@ func extractRegistriesFromConfig(
 		return nil
 	}
 
-	configStr := strings.TrimSpace(simpleCfg.Registries.Config)
-	if configStr == "" {
+	mirrorCfg := parseMirrorConfig(simpleCfg.Registries.Config)
+	if mirrorCfg == nil || len(mirrorCfg.Mirrors) == 0 {
+		return nil
+	}
+
+	nativeRegistryHost := resolveNativeRegistryHost(simpleCfg)
+	hosts := filterMirrorHosts(mirrorCfg.Mirrors, nativeRegistryHost)
+
+	if len(hosts) == 0 {
+		return nil
+	}
+
+	return buildRegistryInfos(hosts, mirrorCfg.Mirrors, baseUsedPorts)
+}
+
+// parseMirrorConfig parses the K3d registries.config YAML string.
+func parseMirrorConfig(configStr string) *k3dMirrorConfig {
+	trimmed := strings.TrimSpace(configStr)
+	if trimmed == "" {
 		return nil
 	}
 
 	var mirrorCfg k3dMirrorConfig
 
-	err := yaml.Unmarshal([]byte(configStr), &mirrorCfg)
+	err := yaml.Unmarshal([]byte(trimmed), &mirrorCfg)
 	if err != nil {
 		return nil
 	}
 
-	if len(mirrorCfg.Mirrors) == 0 {
-		return nil
+	return &mirrorCfg
+}
+
+// resolveNativeRegistryHost returns the host:port for K3d-native registry, or empty string.
+func resolveNativeRegistryHost(simpleCfg *k3dv1alpha5.SimpleConfig) string {
+	if simpleCfg.Registries.Create == nil || simpleCfg.Registries.Create.Name == "" {
+		return ""
 	}
 
-	hosts := make([]string, 0, len(mirrorCfg.Mirrors))
-	for host := range mirrorCfg.Mirrors {
+	return simpleCfg.Registries.Create.Name + ":" + strconv.Itoa(dockerclient.DefaultRegistryPort)
+}
+
+// filterMirrorHosts returns sorted hosts excluding the native registry.
+func filterMirrorHosts(mirrors map[string]mirrorConfig, nativeHost string) []string {
+	hosts := make([]string, 0, len(mirrors))
+
+	for host := range mirrors {
+		if nativeHost != "" && host == nativeHost {
+			continue
+		}
+
 		hosts = append(hosts, host)
 	}
 
 	registry.SortHosts(hosts)
 
-	usedPorts, nextPort := registry.InitPortAllocation(baseUsedPorts)
+	return hosts
+}
 
+// buildRegistryInfos creates registry.Info slices from mirror config.
+func buildRegistryInfos(
+	hosts []string,
+	mirrors map[string]mirrorConfig,
+	baseUsedPorts map[int]struct{},
+) []registry.Info {
+	usedPorts, nextPort := registry.InitPortAllocation(baseUsedPorts)
 	registryInfos := make([]registry.Info, 0, len(hosts))
 
 	for _, host := range hosts {
-		endpoints := mirrorCfg.Mirrors[host].Endpoint
+		endpoints := mirrors[host].Endpoint
 		port := registry.ExtractRegistryPort(endpoints, usedPorts, &nextPort)
 		upstream := upstreamFromEndpoints(host, endpoints)
-
 		info := registry.BuildRegistryInfo(host, endpoints, port, "", upstream)
 		registryInfos = append(registryInfos, info)
 	}

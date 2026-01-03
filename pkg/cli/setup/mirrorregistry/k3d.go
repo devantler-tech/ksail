@@ -181,34 +181,24 @@ func PrepareK3dConfigWithMirrors(
 
 // filterOutLocalRegistry removes entries for the local registry from the registry list.
 // The local registry is managed separately by K3d's native registry management.
-// This filters out both the standard local registry host (local-registry:5000) and
-// the K3d-prefixed host (k3d-local-registry:5000) since both refer to the same
-// K3d-managed registry container.
+// K3d Registries.Create uses the registry name directly (without k3d- prefix),
+// so the mirror config uses "local-registry:5000".
 func filterOutLocalRegistry(registries []registry.Info) []registry.Info {
 	if len(registries) == 0 {
 		return registries
 	}
 
-	port := strconv.Itoa(dockerclient.DefaultRegistryPort)
-
-	// The local registry host as it appears in standard configs
+	// The local registry host as it appears in the K3d mirrors config.
+	// K3d Registries.Create uses the name directly without prefix.
 	localRegistryHost := net.JoinHostPort(
 		registry.LocalRegistryClusterHost,
-		port,
-	)
-
-	// The local registry host as it appears in K3d native registry configs.
-	// When K3d creates a registry via Registries.Create with name "local-registry",
-	// the container is named "k3d-local-registry" and the mirror config uses this name.
-	k3dLocalRegistryHost := net.JoinHostPort(
-		"k3d-"+registry.LocalRegistryClusterHost,
-		port,
+		strconv.Itoa(dockerclient.DefaultRegistryPort),
 	)
 
 	filtered := make([]registry.Info, 0, len(registries))
 
 	for _, reg := range registries {
-		if reg.Host == localRegistryHost || reg.Host == k3dLocalRegistryHost {
+		if reg.Host == localRegistryHost {
 			continue
 		}
 
@@ -220,7 +210,7 @@ func filterOutLocalRegistry(registries []registry.Info) []registry.Info {
 
 // configureK3dNativeLocalRegistry sets up K3d's native local registry support.
 // This configures Registries.Create so K3d automatically manages the registry container.
-// The registry name follows K3d's convention: the container will be named "k3d-<name>".
+// K3d Registries.Create uses the name directly (without any prefix).
 func configureK3dNativeLocalRegistry(
 	clusterCfg *v1alpha1.Cluster,
 	k3dConfig *v1alpha5.SimpleConfig,
@@ -236,11 +226,7 @@ func configureK3dNativeLocalRegistry(
 	}
 
 	// Configure K3d to create and manage the local registry.
-	// K3d will:
-	// - Create a registry container named "k3d-<registryName>"
-	// - Automatically connect it to the cluster network
-	// - Set up DNS so pods can resolve the registry name
-	// - Include it in cluster lifecycle (start/stop/delete)
+	// K3d Registries.Create uses the name directly (container named "local-registry").
 	k3dConfig.Registries.Create = &v1alpha5.SimpleConfigRegistryCreateConfig{
 		Name:     registryName,
 		Host:     dockerclient.RegistryHostIP,
@@ -248,10 +234,9 @@ func configureK3dNativeLocalRegistry(
 	}
 
 	// Also configure the containerd mirror so nodes can pull images.
-	// K3d-created registries use the name directly (without port in the name).
-	// The endpoint uses the internal port (5000) since K3d handles networking.
+	// K3d Registries.Create uses the name directly without any prefix.
 	registryHost := net.JoinHostPort(
-		"k3d-"+registryName,
+		registryName,
 		strconv.Itoa(dockerclient.DefaultRegistryPort),
 	)
 	registryEndpoint := "http://" + registryHost

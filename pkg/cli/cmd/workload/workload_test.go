@@ -120,12 +120,14 @@ func TestWorkloadCommandsLoadConfigOnly(t *testing.T) {
 		expectedError string
 	}{
 		{
-			name:          "reconcile",
-			expectedError: "no GitOps engine detected", // Reconcile now auto-detects; fails if no engine in cluster
+			name: "reconcile",
+			// Reconcile auto-detects GitOps engine; fails if no engine in cluster or on OCI repo timeout
+			expectedError: "wait for oci repository ready",
 		},
 		{
-			name:          "push",
-			expectedError: "no running local registry found", // Push auto-detects; fails if no registry running
+			name: "push",
+			// Push auto-detects registry; fails on build if registry found but no manifests in source dir
+			expectedError: "no manifest files found",
 		},
 	}
 

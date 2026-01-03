@@ -298,12 +298,12 @@ func (s *Scaffolder) addK3dLocalRegistryConfig(
 	}
 
 	// Also configure the containerd mirror so nodes can pull images.
-	// K3d-created registries use the name "k3d-<name>" with internal port.
-	k3dRegistryHost := net.JoinHostPort(
-		"k3d-"+registryName,
+	// K3d Registries.Create uses the name directly (without k3d- prefix).
+	registryHost := net.JoinHostPort(
+		registryName,
 		strconv.Itoa(dockerclient.DefaultRegistryPort),
 	)
-	registryEndpoint := "http://" + k3dRegistryHost
+	registryEndpoint := "http://" + registryHost
 
 	// Parse existing config and add local registry endpoint
 	hostEndpoints := k3dconfigmanager.ParseRegistryConfig(registryConfig.Config)
@@ -311,7 +311,7 @@ func (s *Scaffolder) addK3dLocalRegistryConfig(
 		hostEndpoints = make(map[string][]string)
 	}
 
-	hostEndpoints[k3dRegistryHost] = []string{registryEndpoint}
+	hostEndpoints[registryHost] = []string{registryEndpoint}
 
 	registryConfig.Config = registry.RenderK3dMirrorConfig(hostEndpoints)
 

@@ -235,11 +235,8 @@ func buildFluxInstance(clusterCfg *v1alpha1.Cluster) (*FluxInstance, error) {
 	repoHost := registry.LocalRegistryClusterHost
 	repoPort := dockerclient.DefaultRegistryPort
 
-	// K3d prefixes registry names with "k3d-" when using native registry management.
-	// The registry container will be named "k3d-local-registry" instead of "local-registry".
-	if clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionK3d {
-		repoHost = "k3d-" + registry.LocalRegistryClusterHost
-	}
+	// K3d Registries.Create uses the registry name directly (without k3d- prefix).
+	// Both Kind and K3d clusters use the same registry name "local-registry".
 
 	if clusterCfg.Spec.Cluster.LocalRegistry != v1alpha1.LocalRegistryEnabled {
 		repoHost = registry.DefaultEndpointHost
