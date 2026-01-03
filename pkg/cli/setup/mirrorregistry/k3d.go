@@ -4,9 +4,12 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
+	"strconv"
 	"strings"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
 	k3dconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/k3d"
 	k3dprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/k3d"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
@@ -129,7 +132,9 @@ func runK3DRegistrySetup(
 }
 
 // PrepareK3dConfigWithMirrors prepares the K3d config by setting up mirror registries.
-// Returns true if mirror configuration is needed, false otherwise.
+// When local registry is enabled, it also adds the local registry endpoint so that
+// containerd inside K3d nodes can access it for Flux OCI reconciliation.
+// Returns true if registry configuration is needed, false otherwise.
 func PrepareK3dConfigWithMirrors(
 	clusterCfg *v1alpha1.Cluster,
 	k3dConfig *v1alpha5.SimpleConfig,
@@ -144,6 +149,23 @@ func PrepareK3dConfigWithMirrors(
 	hostEndpoints := k3dconfigmanager.ParseRegistryConfig(original)
 
 	updatedMap, _ := registry.BuildHostEndpointMap(mirrorSpecs, "", hostEndpoints)
+
+	// Add local registry endpoint when local registry is enabled.
+	// This is required for Flux to access OCI artifacts pushed to the local registry.
+	// The cluster uses "local-registry:5000" as the hostname (container name + internal port).
+	if clusterCfg.Spec.Cluster.LocalRegistry == v1alpha1.LocalRegistryEnabled {
+		localRegistryHost := net.JoinHostPort(
+			registry.LocalRegistryClusterHost,
+			strconv.Itoa(dockerclient.DefaultRegistryPort),
+		)
+		localRegistryEndpoint := "http://" + localRegistryHost
+
+		// Only add if not already configured
+		if _, exists := updatedMap[localRegistryHost]; !exists {
+			updatedMap[localRegistryHost] = []string{localRegistryEndpoint}
+		}
+	}
+
 	if len(updatedMap) == 0 {
 		return false
 	}
