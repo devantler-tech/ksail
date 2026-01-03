@@ -165,6 +165,9 @@ func ExecuteStage(
 }
 
 // Cleanup cleans up the local registry during cluster deletion.
+// This function checks if the local registry container exists and removes it if present,
+// regardless of the config setting. This ensures orphaned containers are cleaned up
+// even when the config file is missing or has default values.
 func Cleanup(
 	cmd *cobra.Command,
 	cfgManager *ksailconfigmanager.ConfigManager,
@@ -173,7 +176,10 @@ func Cleanup(
 	deleteVolumes bool,
 	localDeps Dependencies,
 ) error {
-	if clusterCfg.Spec.Cluster.LocalRegistry != v1alpha1.LocalRegistryEnabled {
+	// K3d uses native registry management via Registries.Create.
+	// K3d automatically creates, connects, and manages the registry container
+	// as part of cluster creation, so we skip KSail's manual registry handling.
+	if clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionK3d {
 		return nil
 	}
 
@@ -183,7 +189,7 @@ func Cleanup(
 	// Cleanup doesn't show title activity messages, so use a dummy tracker
 	dummyTracker := true
 
-	return runAction(
+	return runCleanupAction(
 		cmd,
 		clusterCfg,
 		deps,
@@ -330,6 +336,83 @@ func runAction(
 		info,
 		func(execCtx context.Context, svc registry.Service) error {
 			return action(execCtx, svc, ctx)
+		},
+		firstActivityShown,
+		localDeps,
+	)
+}
+
+// runCleanupAction runs the cleanup action for local registry.
+// Unlike runAction, this function does NOT check the LocalRegistry config setting.
+// It checks for container existence instead, ensuring orphaned containers are cleaned up.
+func runCleanupAction(
+	cmd *cobra.Command,
+	clusterCfg *v1alpha1.Cluster,
+	deps lifecycle.Deps,
+	kindConfig *kindv1alpha4.Cluster,
+	k3dConfig *k3dv1alpha5.SimpleConfig,
+	talosConfig *talosconfigmanager.Configs,
+	info setup.StageInfo,
+	action func(context.Context, registry.Service, registryContext) error,
+	firstActivityShown *bool,
+	localDeps Dependencies,
+) error {
+	// K3d uses native registry management - skip cleanup here
+	if clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionK3d {
+		return nil
+	}
+
+	ctx := newRegistryContext(clusterCfg, kindConfig, k3dConfig, talosConfig)
+
+	return runCleanupStage(
+		cmd,
+		deps,
+		info,
+		func(execCtx context.Context, svc registry.Service) error {
+			return action(execCtx, svc, ctx)
+		},
+		firstActivityShown,
+		localDeps,
+	)
+}
+
+// runCleanupStage runs a cleanup stage, checking for container existence first.
+func runCleanupStage(
+	cmd *cobra.Command,
+	deps lifecycle.Deps,
+	info setup.StageInfo,
+	handler func(context.Context, registry.Service) error,
+	firstActivityShown *bool,
+	localDeps Dependencies,
+) error {
+	return runDockerStage(
+		cmd,
+		deps,
+		info,
+		func(ctx context.Context, dockerClient client.APIClient) error {
+			service, err := localDeps.ServiceFactory(registry.Config{DockerClient: dockerClient})
+			if err != nil {
+				return fmt.Errorf("create registry service: %w", err)
+			}
+
+			if ctx == nil {
+				return ErrNilRegistryContext
+			}
+
+			// Check if the local registry container exists before attempting cleanup
+			registryName := buildRegistryName()
+
+			status, statusErr := service.Status(ctx, registry.StatusOptions{Name: registryName})
+			if statusErr != nil {
+				return fmt.Errorf("check registry status: %w", statusErr)
+			}
+
+			// If container is not provisioned, nothing to clean up
+			if status.Status == v1alpha1.OCIRegistryStatusNotProvisioned {
+				return nil
+			}
+
+			return handler(ctx, service)
 		},
 		firstActivityShown,
 		localDeps,

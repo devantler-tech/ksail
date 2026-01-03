@@ -127,17 +127,18 @@ func cleanupRegistries(
 		})
 	}
 
-	if clusterCfg.Spec.Cluster.LocalRegistry == v1alpha1.LocalRegistryEnabled {
-		localDeps := getLocalRegistryDeps()
+	// Always attempt local registry cleanup for Kind/Talos distributions.
+	// The Cleanup function checks for container existence and skips if not provisioned.
+	// This ensures orphaned containers are cleaned up even when config is missing.
+	localDeps := getLocalRegistryDeps()
 
-		err = localregistry.Cleanup(cmd, cfgManager, clusterCfg, deps, deleteVolumes, localDeps)
-		if err != nil {
-			notify.WriteMessage(notify.Message{
-				Type:    notify.WarningType,
-				Content: fmt.Sprintf("failed to cleanup local registry: %v", err),
-				Writer:  cmd.OutOrStdout(),
-			})
-		}
+	err = localregistry.Cleanup(cmd, cfgManager, clusterCfg, deps, deleteVolumes, localDeps)
+	if err != nil {
+		notify.WriteMessage(notify.Message{
+			Type:    notify.WarningType,
+			Content: fmt.Sprintf("failed to cleanup local registry: %v", err),
+			Writer:  cmd.OutOrStdout(),
+		})
 	}
 }
 
