@@ -450,7 +450,23 @@ func GenerateHostsToml(entry MirrorEntry) string {
 
 func splitMirrorSpec(spec string) (string, string, bool) {
 	idx := strings.Index(spec, "=")
-	if idx <= 0 || idx == len(spec)-1 {
+	if idx == 0 {
+		// Empty host (starts with =)
+		return "", "", false
+	}
+
+	if idx == -1 {
+		// No '=' found - treat the whole spec as host and auto-generate the remote URL
+		host := strings.TrimSpace(spec)
+		if host == "" {
+			return "", "", false
+		}
+
+		return host, GenerateUpstreamURL(host), true
+	}
+
+	if idx == len(spec)-1 {
+		// Ends with '=' but no remote value
 		return "", "", false
 	}
 

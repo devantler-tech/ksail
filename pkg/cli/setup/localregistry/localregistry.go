@@ -559,7 +559,7 @@ func resolvePort(clusterCfg *v1alpha1.Cluster) int {
 		return int(clusterCfg.Spec.Cluster.LocalRegistryOpts.HostPort)
 	}
 
-	return dockerclient.DefaultRegistryPort
+	return int(v1alpha1.DefaultLocalRegistryPort)
 }
 
 // WaitForK3dLocalRegistryReady waits for the K3d-managed local registry to be ready.

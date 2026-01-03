@@ -219,6 +219,14 @@ func (m *ConfigManager) unmarshalAndApplyDefaults() error {
 	// Do NOT restore defaults for TypeMeta fields - they should be validated as-is.
 	// This ensures validation will catch incorrect/missing apiVersion and kind values.
 
+	// Handle nested options path for local registry host port.
+	// The YAML output uses `spec.cluster.options.localRegistry.hostPort` but the struct
+	// expects `spec.cluster.localRegistryOptions.hostPort`. We manually extract this
+	// to handle the path mismatch between custom marshal output and unmarshal expectations.
+	if nestedHostPort := m.Viper.GetInt32("spec.cluster.options.localRegistry.hostPort"); nestedHostPort > 0 {
+		m.Config.Spec.Cluster.LocalRegistryOpts.HostPort = nestedHostPort
+	}
+
 	m.localRegistryExplicit = m.Config.Spec.Cluster.LocalRegistry != ""
 	m.localRegistryHostPortExplicit = m.Config.Spec.Cluster.LocalRegistryOpts.HostPort != 0
 

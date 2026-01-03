@@ -418,3 +418,26 @@ func (rm *RegistryManager) resolveVolumeName(config RegistryConfig) string {
 
 	return NormalizeVolumeName(config.Name)
 }
+
+// GetUsedHostPorts returns a map of all host ports currently in use by running containers.
+// This is useful for avoiding port conflicts when creating new registry containers.
+func (rm *RegistryManager) GetUsedHostPorts(ctx context.Context) (map[int]struct{}, error) {
+	containers, err := rm.client.ContainerList(ctx, container.ListOptions{
+		All: false, // Only running containers
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list containers: %w", err)
+	}
+
+	usedPorts := make(map[int]struct{})
+
+	for _, c := range containers {
+		for _, port := range c.Ports {
+			if port.PublicPort > 0 {
+				usedPorts[int(port.PublicPort)] = struct{}{}
+			}
+		}
+	}
+
+	return usedPorts, nil
+}

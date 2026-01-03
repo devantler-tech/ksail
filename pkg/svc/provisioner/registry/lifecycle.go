@@ -32,6 +32,8 @@ const expectedEndpointParts = 2
 
 // PrepareRegistryManager builds a registry manager and extracts registry info via the provided extractor.
 // The extractor receives the set of already used ports (if any) and should return the registries that need work.
+// This function collects ports from ALL running containers (not just ksail-managed registries) to avoid
+// port conflicts with registries created by other cluster distributions (e.g., K3d's native registries).
 func PrepareRegistryManager(
 	ctx context.Context,
 	dockerClient client.APIClient,
@@ -47,13 +49,15 @@ func PrepareRegistryManager(
 		return nil, nil, nil
 	}
 
-	existingPorts, err := CollectExistingRegistryPorts(ctx, regManager)
+	// Get used ports from ALL running containers to avoid conflicts with registries
+	// created by other cluster distributions (e.g., K3d's native registries).
+	usedPorts, err := regManager.GetUsedHostPorts(ctx)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to collect existing registry ports: %w", err)
+		return nil, nil, fmt.Errorf("failed to get used host ports: %w", err)
 	}
 
-	if len(existingPorts) != 0 {
-		registryInfos = extractor(existingPorts)
+	if len(usedPorts) != 0 {
+		registryInfos = extractor(usedPorts)
 	}
 
 	return regManager, registryInfos, nil

@@ -44,9 +44,10 @@ func TalosPostClusterConnectAction(_ *Context) func(context.Context, client.APIC
 
 // resolveTalosRegistries resolves the cluster name and builds registry infos from the context.
 // Returns empty slice if no mirror specs are provided.
-func resolveTalosRegistries(ctx *Context) (string, []registry.Info) {
+// The usedPorts parameter allows avoiding port conflicts with existing containers.
+func resolveTalosRegistries(ctx *Context, usedPorts map[int]struct{}) (string, []registry.Info) {
 	clusterName := talosconfigmanager.ResolveClusterName(ctx.ClusterCfg, ctx.TalosConfig)
-	registryInfos := buildTalosRegistryInfos(ctx.MirrorSpecs, clusterName)
+	registryInfos := buildTalosRegistryInfos(ctx.MirrorSpecs, clusterName, usedPorts)
 
 	return clusterName, registryInfos
 }
@@ -57,19 +58,25 @@ func runTalosRegistryAction(
 	ctx *Context,
 	dockerAPIClient client.APIClient,
 ) error {
-	clusterName, registryInfos := resolveTalosRegistries(ctx)
+	// Create registry manager first to get used ports
+	registryMgr, err := dockerclient.NewRegistryManager(dockerAPIClient)
+	if err != nil {
+		return fmt.Errorf("failed to create registry manager: %w", err)
+	}
+
+	// Get used ports from running containers to avoid conflicts
+	usedPorts, err := registryMgr.GetUsedHostPorts(execCtx)
+	if err != nil {
+		return fmt.Errorf("failed to get used ports: %w", err)
+	}
+
+	clusterName, registryInfos := resolveTalosRegistries(ctx, usedPorts)
 
 	if len(registryInfos) == 0 {
 		return nil
 	}
 
 	writer := ctx.Cmd.OutOrStdout()
-
-	// Create registry manager and setup containers
-	registryMgr, err := dockerclient.NewRegistryManager(dockerAPIClient)
-	if err != nil {
-		return fmt.Errorf("failed to create registry manager: %w", err)
-	}
 
 	err = registry.SetupRegistries(
 		execCtx, registryMgr, registryInfos, clusterName, "", writer,
@@ -113,7 +120,19 @@ func runTalosConnectAction(
 	ctx *Context,
 	dockerAPIClient client.APIClient,
 ) error {
-	clusterName, registryInfos := resolveTalosRegistries(ctx)
+	// Create registry manager to get used ports
+	registryMgr, err := dockerclient.NewRegistryManager(dockerAPIClient)
+	if err != nil {
+		return fmt.Errorf("failed to create registry manager: %w", err)
+	}
+
+	// Get used ports from running containers (for consistent registry info building)
+	usedPorts, err := registryMgr.GetUsedHostPorts(execCtx)
+	if err != nil {
+		return fmt.Errorf("failed to get used ports: %w", err)
+	}
+
+	clusterName, registryInfos := resolveTalosRegistries(ctx, usedPorts)
 
 	if len(registryInfos) == 0 {
 		return nil
@@ -124,7 +143,7 @@ func runTalosConnectAction(
 	writer := ctx.Cmd.OutOrStdout()
 
 	// Connect registries to the network with static IPs
-	_, err := registry.ConnectRegistriesToNetworkWithStaticIPs(
+	_, err = registry.ConnectRegistriesToNetworkWithStaticIPs(
 		execCtx, dockerAPIClient, registryInfos, networkName, networkCIDR, writer,
 	)
 	if err != nil {
@@ -136,9 +155,11 @@ func runTalosConnectAction(
 
 // buildTalosRegistryInfos builds registry infos from mirror specs for Talos.
 // Returns nil if no mirror specs are provided.
+// The usedPorts parameter allows avoiding port conflicts with existing containers.
 func buildTalosRegistryInfos(
 	mirrorSpecs []registry.MirrorSpec,
 	clusterName string,
+	usedPorts map[int]struct{},
 ) []registry.Info {
 	if len(mirrorSpecs) == 0 {
 		return nil
@@ -149,7 +170,7 @@ func buildTalosRegistryInfos(
 	return registry.BuildRegistryInfosFromSpecs(
 		mirrorSpecs,
 		upstreams,
-		nil,
+		usedPorts,
 		clusterName,
 	)
 }

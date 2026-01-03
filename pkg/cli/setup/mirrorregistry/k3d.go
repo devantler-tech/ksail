@@ -218,9 +218,16 @@ func configureK3dNativeLocalRegistry(
 	// Use cluster-prefixed registry name for uniqueness
 	registryName := registry.BuildLocalRegistryName(clusterName)
 
-	// Determine the host port from config or use default
-	hostPort := dockerclient.DefaultRegistryPort
-	if clusterCfg.Spec.Cluster.LocalRegistryOpts.HostPort > 0 {
+	// Determine the host port from config or use default.
+	// Priority: existing k3d config > ksail config > default
+	// Note: k3d.yaml hostPort is checked first because ksail's LocalRegistryOpts
+	// may not be properly populated due to YAML marshal/unmarshal asymmetry.
+	hostPort := int(v1alpha1.DefaultLocalRegistryPort)
+	if k3dConfig.Registries.Create != nil && k3dConfig.Registries.Create.HostPort != "" {
+		if existingPort, err := strconv.Atoi(k3dConfig.Registries.Create.HostPort); err == nil && existingPort > 0 {
+			hostPort = existingPort
+		}
+	} else if clusterCfg.Spec.Cluster.LocalRegistryOpts.HostPort > 0 {
 		hostPort = int(clusterCfg.Spec.Cluster.LocalRegistryOpts.HostPort)
 	}
 
