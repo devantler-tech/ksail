@@ -369,6 +369,146 @@ func (rm *RegistryManager) WaitForRegistriesReadyWithTimeout(
 	return nil
 }
 
+// WaitForContainerRegistryReady waits for a registry container to become ready without
+// requiring KSail labels. This is designed for K3d-managed registries that are created
+// by K3d rather than KSail.
+func (rm *RegistryManager) WaitForContainerRegistryReady(
+	ctx context.Context,
+	name string,
+	timeout time.Duration,
+) error {
+	checkURL, err := rm.prepareContainerHealthCheck(ctx, name)
+	if err != nil {
+		return err
+	}
+
+	return rm.pollContainerUntilReady(ctx, name, checkURL, timeout)
+}
+
+// prepareContainerHealthCheck validates the container and returns the health check URL.
+// Unlike prepareHealthCheck, this method does not require KSail labels.
+func (rm *RegistryManager) prepareContainerHealthCheck(
+	ctx context.Context,
+	name string,
+) (string, error) {
+	// Check if container is running (without requiring KSail labels)
+	running, err := rm.IsContainerRunning(ctx, name)
+	if err != nil {
+		return "", fmt.Errorf("failed to check if container %s is running: %w", name, err)
+	}
+
+	if !running {
+		return "", fmt.Errorf("container %s is not running: %w", name, ErrRegistryNotFound)
+	}
+
+	// Get the host port (without requiring KSail labels)
+	port, portErr := rm.GetContainerPort(ctx, name, DefaultRegistryPort)
+	if portErr != nil {
+		return "", fmt.Errorf("failed to get container port: %w", portErr)
+	}
+
+	checkAddr := net.JoinHostPort(RegistryHostIP, strconv.Itoa(port))
+
+	return fmt.Sprintf("http://%s/v2/", checkAddr), nil
+}
+
+// pollContainerUntilReady polls the container health endpoint until it responds or timeout.
+// Unlike pollUntilReady, this method uses IsContainerRunning for crash detection.
+func (rm *RegistryManager) pollContainerUntilReady(
+	ctx context.Context,
+	name string,
+	checkURL string,
+	timeout time.Duration,
+) error {
+	httpClient := &http.Client{Timeout: RegistryHTTPTimeout}
+	deadline := time.Now().Add(timeout)
+	ticker := time.NewTicker(RegistryReadyPollInterval)
+
+	defer ticker.Stop()
+
+	state := &pollState{}
+
+	for {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("%w: %w", ErrRegistryHealthCheckCancelled, ctx.Err())
+		case <-ticker.C:
+			if time.Now().After(deadline) {
+				return rm.buildTimeoutError(name, state.lastErr)
+			}
+
+			done, err := rm.pollContainerOnce(ctx, name, checkURL, httpClient, state)
+			if err != nil {
+				return err
+			}
+
+			if done {
+				return nil
+			}
+		}
+	}
+}
+
+// pollContainerOnce performs a single poll iteration for a container without KSail labels.
+func (rm *RegistryManager) pollContainerOnce(
+	ctx context.Context,
+	name, checkURL string,
+	httpClient *http.Client,
+	state *pollState,
+) (bool, error) {
+	ready, err := rm.checkRegistryHealth(ctx, httpClient, checkURL)
+	if err == nil && ready {
+		return true, nil
+	}
+
+	if err != nil {
+		state.lastErr = err
+
+		crashErr := rm.handleContainerConnectionRefused(ctx, name, err, state)
+		if crashErr != nil {
+			return false, crashErr
+		}
+	}
+
+	return false, nil
+}
+
+// handleContainerConnectionRefused checks if the container crashed after repeated connection refused errors.
+// Unlike handleConnectionRefused, this uses IsContainerRunning which doesn't require KSail labels.
+func (rm *RegistryManager) handleContainerConnectionRefused(
+	ctx context.Context,
+	name string,
+	err error,
+	state *pollState,
+) error {
+	if !rm.isConnectionRefused(err) {
+		state.connectionRefusedCount = 0
+
+		return nil
+	}
+
+	state.connectionRefusedCount++
+
+	if state.connectionRefusedCount < ConnectionRefusedCheckThreshold {
+		return nil
+	}
+
+	// Check container state after several consecutive connection refused errors
+	running, checkErr := rm.IsContainerRunning(ctx, name)
+	if checkErr == nil && !running {
+		return fmt.Errorf(
+			"%w: %s (container is not running)",
+			ErrRegistryNotReady,
+			name,
+		)
+	}
+
+	// Reset counter to avoid checking too frequently
+	state.connectionRefusedCount = 0
+
+	return nil
+}
+
 // prepareHealthCheck validates the registry and returns the health check URL.
 func (rm *RegistryManager) prepareHealthCheck(
 	ctx context.Context,

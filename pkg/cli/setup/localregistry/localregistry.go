@@ -504,8 +504,14 @@ func WaitForK3dLocalRegistryReady(
 			return fmt.Errorf("failed to create registry manager: %w", err)
 		}
 
-		// Wait for the local registry to be ready
-		err = registryMgr.WaitForRegistryReady(cmd.Context(), registryName, "")
+		// Wait for the K3d-managed local registry to be ready.
+		// Use WaitForContainerRegistryReady which doesn't require KSail labels,
+		// since K3d creates the registry container without KSail labels.
+		err = registryMgr.WaitForContainerRegistryReady(
+			cmd.Context(),
+			registryName,
+			dockerclient.RegistryReadyTimeout,
+		)
 		if err != nil {
 			return fmt.Errorf("local registry not ready: %w", err)
 		}
