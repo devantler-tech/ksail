@@ -315,6 +315,13 @@ func runAction(
 		return nil
 	}
 
+	// K3d uses native registry management via Registries.Create.
+	// K3d automatically creates, connects, and manages the registry container
+	// as part of cluster creation, so we skip KSail's manual registry handling.
+	if clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionK3d {
+		return nil
+	}
+
 	ctx := newRegistryContext(clusterCfg, kindConfig, k3dConfig, talosConfig)
 
 	return runStage(

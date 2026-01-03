@@ -135,8 +135,9 @@ func runK3DRegistrySetup(
 }
 
 // PrepareK3dConfigWithMirrors prepares the K3d config by setting up mirror registries.
-// When local registry is enabled, it also adds the local registry endpoint so that
-// containerd inside K3d nodes can access it for Flux OCI reconciliation.
+// When local registry is enabled, it configures K3d's native registry support via
+// Registries.Create, which automatically handles DNS resolution, network connectivity,
+// and cluster lifecycle integration.
 // Returns true if registry configuration is needed, false otherwise.
 func PrepareK3dConfigWithMirrors(
 	clusterCfg *v1alpha1.Cluster,
@@ -153,28 +154,14 @@ func PrepareK3dConfigWithMirrors(
 
 	updatedMap, _ := registry.BuildHostEndpointMap(mirrorSpecs, "", hostEndpoints)
 
-	// Add local registry when local registry is enabled.
-	// This is required for Flux to access OCI artifacts pushed to the local registry.
-	// The cluster uses "local-registry:5000" as the hostname (container name + internal port).
+	// Configure K3d-native local registry when local registry is enabled.
+	// K3d's Registries.Create automatically:
+	// - Creates the registry container with proper K3d labels
+	// - Sets up DNS resolution so workloads can access the registry by name
+	// - Connects the registry to the cluster network
+	// - Manages the registry lifecycle with the cluster
 	if clusterCfg.Spec.Cluster.LocalRegistry == v1alpha1.LocalRegistryEnabled {
-		localRegistryHost := net.JoinHostPort(
-			registry.LocalRegistryClusterHost,
-			strconv.Itoa(dockerclient.DefaultRegistryPort),
-		)
-		localRegistryEndpoint := "http://" + localRegistryHost
-
-		// Only add mirror config if not already configured
-		if _, exists := updatedMap[localRegistryHost]; !exists {
-			updatedMap[localRegistryHost] = []string{localRegistryEndpoint}
-		}
-
-		// Use K3d's native registry integration via Registries.Use.
-		// This ensures K3d properly sets up DNS resolution so that workloads
-		// (including Flux source controller) can resolve and access the registry.
-		// Without this, pods cannot resolve "local-registry" to the container IP.
-		if !containsRegistry(k3dConfig.Registries.Use, localRegistryHost) {
-			k3dConfig.Registries.Use = append(k3dConfig.Registries.Use, localRegistryHost)
-		}
+		configureK3dNativeLocalRegistry(clusterCfg, k3dConfig, updatedMap)
 	}
 
 	if len(updatedMap) == 0 {
@@ -190,17 +177,6 @@ func PrepareK3dConfigWithMirrors(
 	k3dConfig.Registries.Config = rendered
 
 	return true
-}
-
-// containsRegistry checks if a registry host is already in the list.
-func containsRegistry(registries []string, host string) bool {
-	for _, reg := range registries {
-		if strings.EqualFold(reg, host) {
-			return true
-		}
-	}
-
-	return false
 }
 
 // filterOutLocalRegistry removes entries for the local registry from the registry list.
@@ -228,4 +204,47 @@ func filterOutLocalRegistry(registries []registry.Info) []registry.Info {
 	}
 
 	return filtered
+}
+
+// configureK3dNativeLocalRegistry sets up K3d's native local registry support.
+// This configures Registries.Create so K3d automatically manages the registry container.
+// The registry name follows K3d's convention: the container will be named "k3d-<name>".
+func configureK3dNativeLocalRegistry(
+	clusterCfg *v1alpha1.Cluster,
+	k3dConfig *v1alpha5.SimpleConfig,
+	hostEndpoints map[string][]string,
+) {
+	// Use the KSail local registry container name for consistency
+	registryName := registry.LocalRegistryContainerName
+
+	// Determine the host port from config or use default
+	hostPort := dockerclient.DefaultRegistryPort
+	if clusterCfg.Spec.Cluster.LocalRegistryOpts.HostPort > 0 {
+		hostPort = int(clusterCfg.Spec.Cluster.LocalRegistryOpts.HostPort)
+	}
+
+	// Configure K3d to create and manage the local registry.
+	// K3d will:
+	// - Create a registry container named "k3d-<registryName>"
+	// - Automatically connect it to the cluster network
+	// - Set up DNS so pods can resolve the registry name
+	// - Include it in cluster lifecycle (start/stop/delete)
+	k3dConfig.Registries.Create = &v1alpha5.SimpleConfigRegistryCreateConfig{
+		Name:     registryName,
+		Host:     dockerclient.RegistryHostIP,
+		HostPort: strconv.Itoa(hostPort),
+	}
+
+	// Also configure the containerd mirror so nodes can pull images.
+	// K3d-created registries use the name directly (without port in the name).
+	// The endpoint uses the internal port (5000) since K3d handles networking.
+	registryHost := net.JoinHostPort(
+		"k3d-"+registryName,
+		strconv.Itoa(dockerclient.DefaultRegistryPort),
+	)
+	registryEndpoint := "http://" + registryHost
+
+	if _, exists := hostEndpoints[registryHost]; !exists {
+		hostEndpoints[registryHost] = []string{registryEndpoint}
+	}
 }
