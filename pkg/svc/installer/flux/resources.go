@@ -23,6 +23,7 @@ import (
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 )
 
 const (
@@ -66,7 +67,24 @@ var (
 			return nil, fmt.Errorf("failed to add flux source scheme: %w", err)
 		}
 
-		fluxClient, err := client.New(restConfig, client.Options{Scheme: scheme})
+		// Use a dynamic REST mapper that re-discovers resources on cache misses.
+		// This is critical for newly-registered CRDs where the static mapper
+		// might have stale cached data, causing "the server could not find the
+		// requested resource" errors even after the CRD is established.
+		httpClient, err := rest.HTTPClientFor(restConfig)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create HTTP client: %w", err)
+		}
+
+		mapper, err := apiutil.NewDynamicRESTMapper(restConfig, httpClient)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create dynamic REST mapper: %w", err)
+		}
+
+		fluxClient, err := client.New(restConfig, client.Options{
+			Scheme: scheme,
+			Mapper: mapper,
+		})
 		if err != nil {
 			return nil, fmt.Errorf("failed to create flux resource client: %w", err)
 		}
@@ -88,7 +106,21 @@ var (
 			return nil, fmt.Errorf("failed to add apiextensions scheme: %w", err)
 		}
 
-		apiextClient, err := client.New(restConfig, client.Options{Scheme: scheme})
+		// Use a dynamic REST mapper for consistency with other clients
+		httpClient, err := rest.HTTPClientFor(restConfig)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create HTTP client: %w", err)
+		}
+
+		mapper, err := apiutil.NewDynamicRESTMapper(restConfig, httpClient)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create dynamic REST mapper: %w", err)
+		}
+
+		apiextClient, err := client.New(restConfig, client.Options{
+			Scheme: scheme,
+			Mapper: mapper,
+		})
 		if err != nil {
 			return nil, fmt.Errorf("failed to create apiextensions client: %w", err)
 		}
