@@ -8,11 +8,9 @@ import (
 
 // Shared registry constants used across services and CLI layers.
 const (
-	// LocalRegistryContainerName is the docker container name for the developer registry.
-	// K3d's Registries.Create also uses this name directly (without any prefix).
-	LocalRegistryContainerName = "local-registry"
-	// LocalRegistryClusterHost is the hostname clusters use to reach the local registry.
-	LocalRegistryClusterHost = LocalRegistryContainerName
+	// LocalRegistryBaseName is the base name for the local registry container.
+	// The actual container name includes the cluster name prefix: <cluster>-local-registry
+	LocalRegistryBaseName = "local-registry"
 	// DefaultLocalArtifactTag is used when no explicit tag is provided for a workload
 	// artifact. The "dev" tag is intended only for local development and will
 	// typically point to the most recently built image, which is convenient but
@@ -85,4 +83,11 @@ func SanitizeRepoName(value string) string {
 	}
 
 	return DefaultRepoName
+}
+
+// BuildLocalRegistryName constructs the local registry container name with cluster prefix.
+// The container name follows the pattern: <cluster>-local-registry
+// For example: kind-default-local-registry, talos-default-local-registry
+func BuildLocalRegistryName(clusterName string) string {
+	return BuildRegistryName(clusterName, LocalRegistryBaseName)
 }

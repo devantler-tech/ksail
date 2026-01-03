@@ -56,9 +56,10 @@ func DetectClusterEnvironment(ctx context.Context) (*ClusterEnvironment, error) 
 	return env, nil
 }
 
-// DetectLocalRegistryPort finds the host port of the running local-registry container.
-// It checks for both KSail-managed registries (with KSail labels) and K3d-managed
-// registries (without KSail labels). Both use the same container name "local-registry".
+// DetectLocalRegistryPort finds the host port of a running local-registry container.
+// It checks for cluster-prefixed registries (e.g., "kind-local-registry", "k3d-default-local-registry")
+// by searching for containers matching the "*-local-registry" pattern.
+// Both KSail-managed registries (with labels) and K3d-managed registries are detected.
 func DetectLocalRegistryPort(ctx context.Context) (int32, error) {
 	dockerClient, err := client.NewClientWithOpts(
 		client.FromEnv,
@@ -75,9 +76,19 @@ func DetectLocalRegistryPort(ctx context.Context) (int32, error) {
 		return 0, fmt.Errorf("create registry manager: %w", err)
 	}
 
-	registryName := registrypkg.LocalRegistryContainerName
+	// Search for any running container ending with "-local-registry" suffix
+	registrySuffix := "-" + registrypkg.LocalRegistryBaseName
+	registryName, err := registryManager.FindContainerBySuffix(ctx, registrySuffix)
 
-	// First, check for KSail-managed local-registry (Kind/Talos clusters with KSail labels)
+	if err != nil {
+		return 0, fmt.Errorf("find local registry: %w", err)
+	}
+
+	if registryName == "" {
+		return 0, ErrNoLocalRegistry
+	}
+
+	// First, check for KSail-managed local-registry (with KSail labels)
 	inUse, err := registryManager.IsRegistryInUse(ctx, registryName)
 	if err != nil {
 		return 0, fmt.Errorf("check registry status: %w", err)
@@ -92,9 +103,7 @@ func DetectLocalRegistryPort(ctx context.Context) (int32, error) {
 		return int32(port), nil //nolint:gosec // port is validated by Docker API
 	}
 
-	// Second, check for K3d-managed local-registry (same name, but without KSail labels).
-	// K3d's Registries.Create creates a container with the exact name specified,
-	// but doesn't add KSail labels.
+	// Second, check if it's a K3d-managed local-registry (without KSail labels).
 	k3dRunning, k3dErr := registryManager.IsContainerRunning(ctx, registryName)
 	if k3dErr != nil {
 		return 0, fmt.Errorf("check k3d registry status: %w", k3dErr)

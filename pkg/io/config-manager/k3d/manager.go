@@ -15,6 +15,10 @@ import (
 // This pins K3d clusters to a known Kubernetes version compatible with Flux and other tools.
 const DefaultK3sImage = "rancher/k3s:v1.29.4-k3s1"
 
+// DefaultClusterName is the default K3d cluster name when none is specified.
+// This matches K3d's internal default naming convention.
+const DefaultClusterName = "k3d-default"
+
 // ConfigManager implements configuration management for K3d v1alpha5.SimpleConfig configurations.
 // It provides file-based configuration loading without Viper dependency.
 type ConfigManager struct {

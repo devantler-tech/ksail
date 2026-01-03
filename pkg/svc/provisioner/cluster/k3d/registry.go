@@ -57,7 +57,7 @@ func ConnectRegistriesToNetwork(
 		return nil
 	}
 
-	registryInfos := extractRegistriesFromConfig(simpleCfg, nil)
+	registryInfos := extractRegistriesFromConfig(simpleCfg, nil, clusterName)
 	if len(registryInfos) == 0 {
 		return nil
 	}
@@ -118,7 +118,7 @@ func prepareRegistryContext(
 	clusterName string,
 	dockerClient client.APIClient,
 ) (*dockerclient.RegistryManager, []registry.Info, string, error) {
-	registryMgr, registryInfos, err := setupRegistryManager(ctx, simpleCfg, dockerClient)
+	registryMgr, registryInfos, err := setupRegistryManager(ctx, simpleCfg, clusterName, dockerClient)
 	if err != nil {
 		return nil, nil, "", err
 	}
@@ -135,6 +135,7 @@ func prepareRegistryContext(
 func setupRegistryManager(
 	ctx context.Context,
 	simpleCfg *k3dv1alpha5.SimpleConfig,
+	clusterName string,
 	dockerClient client.APIClient,
 ) (*dockerclient.RegistryManager, []registry.Info, error) {
 	if simpleCfg == nil {
@@ -145,7 +146,7 @@ func setupRegistryManager(
 		ctx,
 		dockerClient,
 		func(usedPorts map[int]struct{}) []registry.Info {
-			return extractRegistriesFromConfig(simpleCfg, usedPorts)
+			return extractRegistriesFromConfig(simpleCfg, usedPorts, clusterName)
 		},
 	)
 	if err != nil {
@@ -166,6 +167,7 @@ type k3dMirrorConfig struct {
 func extractRegistriesFromConfig(
 	simpleCfg *k3dv1alpha5.SimpleConfig,
 	baseUsedPorts map[int]struct{},
+	clusterName string,
 ) []registry.Info {
 	if simpleCfg == nil {
 		return nil
@@ -183,7 +185,7 @@ func extractRegistriesFromConfig(
 		return nil
 	}
 
-	return buildRegistryInfos(hosts, mirrorCfg.Mirrors, baseUsedPorts)
+	return buildRegistryInfos(hosts, mirrorCfg.Mirrors, baseUsedPorts, clusterName)
 }
 
 // parseMirrorConfig parses the K3d registries.config YAML string.
@@ -230,10 +232,12 @@ func filterMirrorHosts(mirrors map[string]mirrorConfig, nativeHost string) []str
 }
 
 // buildRegistryInfos creates registry.Info slices from mirror config.
+// The clusterName is used as a prefix for container names to avoid Docker DNS collisions.
 func buildRegistryInfos(
 	hosts []string,
 	mirrors map[string]mirrorConfig,
 	baseUsedPorts map[int]struct{},
+	clusterName string,
 ) []registry.Info {
 	usedPorts, nextPort := registry.InitPortAllocation(baseUsedPorts)
 	registryInfos := make([]registry.Info, 0, len(hosts))
@@ -241,8 +245,8 @@ func buildRegistryInfos(
 	for _, host := range hosts {
 		endpoints := mirrors[host].Endpoint
 		port := registry.ExtractRegistryPort(endpoints, usedPorts, &nextPort)
-		upstream := upstreamFromEndpoints(host, endpoints)
-		info := registry.BuildRegistryInfo(host, endpoints, port, "", upstream)
+		upstream := upstreamFromEndpoints(host, endpoints, clusterName)
+		info := registry.BuildRegistryInfo(host, endpoints, port, clusterName, upstream)
 		registryInfos = append(registryInfos, info)
 	}
 
@@ -250,16 +254,36 @@ func buildRegistryInfos(
 }
 
 // ExtractRegistriesFromConfigForTesting exposes registry extraction for testing and callers that need inspection.
-func ExtractRegistriesFromConfigForTesting(simpleCfg *k3dv1alpha5.SimpleConfig) []registry.Info {
-	return extractRegistriesFromConfig(simpleCfg, nil)
+// The clusterName is used as a prefix for container names.
+func ExtractRegistriesFromConfigForTesting(simpleCfg *k3dv1alpha5.SimpleConfig, clusterName string) []registry.Info {
+	return extractRegistriesFromConfig(simpleCfg, nil, clusterName)
 }
 
-func upstreamFromEndpoints(host string, endpoints []string) string {
+// upstreamFromEndpoints finds the upstream URL from the endpoint list.
+// The upstream is identified as an HTTPS endpoint (external registry) rather than
+// an HTTP endpoint (local mirror container). Local mirrors use HTTP, while
+// external registries like ghcr.io, docker.io use HTTPS.
+func upstreamFromEndpoints(host string, endpoints []string, clusterName string) string {
 	if len(endpoints) == 0 {
 		return ""
 	}
 
+	// Look for HTTPS endpoints - these are the external upstreams
+	for _, endpoint := range endpoints {
+		endpoint = strings.TrimSpace(endpoint)
+		if endpoint == "" {
+			continue
+		}
+
+		// HTTPS endpoints are external upstreams (e.g., https://ghcr.io)
+		if strings.HasPrefix(endpoint, "https://") {
+			return endpoint
+		}
+	}
+
+	// Fallback: find any endpoint that doesn't match local registry patterns
 	expectedLocal := registry.BuildRegistryName("", host)
+	expectedLocalPrefixed := registry.BuildRegistryName(clusterName, host)
 
 	for idx := len(endpoints) - 1; idx >= 0; idx-- {
 		candidate := strings.TrimSpace(endpoints[idx])
@@ -267,10 +291,13 @@ func upstreamFromEndpoints(host string, endpoints []string) string {
 			continue
 		}
 
-		switch extracted := registry.ExtractNameFromEndpoint(candidate); {
-		case extracted == "":
+		extracted := registry.ExtractNameFromEndpoint(candidate)
+		if extracted == "" {
 			return candidate
-		case extracted != expectedLocal:
+		}
+
+		// If extracted name matches neither local variant, it's the upstream
+		if extracted != expectedLocal && extracted != expectedLocalPrefixed {
 			return candidate
 		}
 	}

@@ -169,6 +169,7 @@ func (s *Scaffolder) Scaffold(output string, force bool) error {
 // GenerateK3dRegistryConfig generates K3d registry configuration for mirror registry.
 // Input format: "name=upstream" (e.g., "docker.io=https://registry-1.docker.io")
 // K3d requires one registry per proxy, so we generate multiple create configs.
+// Registry containers are prefixed with the cluster name to avoid Docker DNS collisions.
 func (s *Scaffolder) GenerateK3dRegistryConfig() k3dv1alpha5.SimpleConfigRegistries {
 	registryConfig := k3dv1alpha5.SimpleConfigRegistries{}
 
@@ -178,7 +179,12 @@ func (s *Scaffolder) GenerateK3dRegistryConfig() k3dv1alpha5.SimpleConfigRegistr
 
 	specs := registry.ParseMirrorSpecs(s.MirrorRegistries)
 
-	hostEndpoints, updated := registry.BuildHostEndpointMap(specs, "", nil)
+	// Resolve cluster name for registry container prefixing.
+	// This ensures registry containers are named like "k3d-ghcr.io" instead of "ghcr.io"
+	// to avoid Docker DNS collisions when running multiple clusters.
+	clusterName := k3dconfigmanager.ResolveClusterName(&s.KSailConfig, nil)
+
+	hostEndpoints, updated := registry.BuildHostEndpointMap(specs, clusterName, nil)
 	if len(hostEndpoints) == 0 || !updated {
 		return registryConfig
 	}
@@ -193,10 +199,16 @@ func (s *Scaffolder) GenerateK3dRegistryConfig() k3dv1alpha5.SimpleConfigRegistr
 // CreateK3dConfig creates a K3d configuration with distribution-specific settings.
 // Node counts can be set via --control-planes and --workers CLI flags.
 func (s *Scaffolder) CreateK3dConfig() k3dv1alpha5.SimpleConfig {
+	// Resolve cluster name - use context from ksail config or default
+	clusterName := k3dconfigmanager.ResolveClusterName(&s.KSailConfig, nil)
+
 	config := k3dv1alpha5.SimpleConfig{
 		TypeMeta: types.TypeMeta{
 			APIVersion: "k3d.io/v1alpha5",
 			Kind:       "Simple",
+		},
+		ObjectMeta: types.ObjectMeta{
+			Name: clusterName,
 		},
 		Image: k3dconfigmanager.DefaultK3sImage,
 	}
@@ -280,8 +292,10 @@ func (s *Scaffolder) GetKindMirrorsDir() string {
 func (s *Scaffolder) addK3dLocalRegistryConfig(
 	registryConfig k3dv1alpha5.SimpleConfigRegistries,
 ) k3dv1alpha5.SimpleConfigRegistries {
-	// Use the KSail local registry container name for consistency
-	registryName := registry.LocalRegistryContainerName
+	// Resolve cluster name to build the registry container name.
+	// K3d creates the registry with the exact name specified.
+	clusterName := k3dconfigmanager.ResolveClusterName(&s.KSailConfig, nil)
+	registryName := registry.BuildLocalRegistryName(clusterName)
 
 	// Determine the host port from config or use default
 	hostPort := v1alpha1.DefaultLocalRegistryPort

@@ -51,7 +51,7 @@ func runKindRegistryAction(
 	dockerClient client.APIClient,
 ) error {
 	writer := ctx.Cmd.OutOrStdout()
-	clusterName := ctx.KindConfig.Name
+	clusterName := kindconfigmanager.ResolveClusterName(ctx.ClusterCfg, ctx.KindConfig)
 
 	// Setup registry containers (without network attachment yet)
 	err := kindprovisioner.SetupRegistries(
@@ -71,7 +71,7 @@ func runKindRegistryAction(
 	// If we connect to network first, Docker DNS will resolve the upstream hostname
 	// (e.g., ghcr.io) to the container's own IP (since container is named ghcr.io),
 	// causing the registry to connect to itself and fail.
-	registryInfos := registry.BuildRegistryInfosFromSpecs(ctx.MirrorSpecs, nil, nil, "")
+	registryInfos := registry.BuildRegistryInfosFromSpecs(ctx.MirrorSpecs, nil, nil, clusterName)
 
 	return WaitForRegistriesReady(execCtx, dockerClient, registryInfos, writer)
 }
@@ -102,12 +102,14 @@ func runKindConnectAction(
 	dockerClient client.APIClient,
 ) error {
 	writer := ctx.Cmd.OutOrStdout()
+	clusterName := kindconfigmanager.ResolveClusterName(ctx.ClusterCfg, ctx.KindConfig)
 
 	// Connect registries to the network for Docker DNS resolution by Kind nodes.
 	// The registries are already running and healthy at this point.
 	err := kindprovisioner.ConnectRegistriesToNetwork(
 		execCtx,
 		ctx.MirrorSpecs,
+		clusterName,
 		dockerClient,
 		writer,
 	)

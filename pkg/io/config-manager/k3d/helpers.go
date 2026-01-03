@@ -63,8 +63,8 @@ func ParseRegistryConfig(raw string) map[string][]string {
 }
 
 // ResolveClusterName returns the effective cluster name from K3d config or cluster config.
-// Priority: k3dConfig.Name > clusterCfg.Spec.Cluster.Connection.Context > "k3d" (default).
-// Returns "k3d" if both configs are nil or have empty names.
+// Priority: k3dConfig.Name > clusterCfg.Spec.Cluster.Connection.Context > DefaultClusterName.
+// Returns DefaultClusterName if both configs are nil or have empty names.
 func ResolveClusterName(
 	clusterCfg *v1alpha1.Cluster,
 	k3dConfig *v1alpha5.SimpleConfig,
@@ -81,7 +81,7 @@ func ResolveClusterName(
 		}
 	}
 
-	return "k3d"
+	return DefaultClusterName
 }
 
 // ResolveNetworkName returns the Docker network name for a K3d cluster.

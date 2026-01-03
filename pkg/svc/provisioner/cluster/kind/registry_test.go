@@ -155,12 +155,13 @@ func runSetupRegistriesPartialFailureScenario(t *testing.T) {
 	mockClient, ctx, buf := setupTestEnvironment(t)
 	kindConfig := newTwoMirrorKindConfig()
 	mirrorSpecs := newTwoMirrorSpecs()
-	firstRegistryID := "docker.io-id"
+	firstRegistryID := "test-docker.io-id"
 
 	expectInitialRegistryScan(mockClient)
-	expectMirrorProvisionSuccess(mockClient, "docker.io", firstRegistryID)
-	expectMirrorProvisionFailure(mockClient, "ghcr.io", errRegistryCreateFailed)
-	expectCleanupRunningRegistry(mockClient, firstRegistryID, "docker.io")
+	// Container name is prefixed (test-docker.io), volume name is not (docker.io)
+	expectMirrorProvisionSuccess(mockClient, "test-docker.io", "docker.io", firstRegistryID)
+	expectMirrorProvisionFailure(mockClient, "test-ghcr.io", "ghcr.io", errRegistryCreateFailed)
+	expectCleanupRunningRegistry(mockClient, firstRegistryID, "test-docker.io")
 
 	err := kindprovisioner.SetupRegistries(ctx, kindConfig, "test", mockClient, mirrorSpecs, buf)
 	require.Error(t, err)
@@ -176,18 +177,18 @@ func runSetupRegistriesExistingRegistryScenario(t *testing.T) {
 	mirrorSpecs := newTwoMirrorSpecs()
 
 	existing := container.Summary{
-		ID:    "docker.io-id",
+		ID:    "test-docker.io-id",
 		State: "running",
-		Names: []string{"/docker.io"},
+		Names: []string{"/test-docker.io"},
 		Labels: map[string]string{
-			docker.RegistryLabelKey: "docker.io",
+			docker.RegistryLabelKey: "test-docker.io",
 		},
 	}
 
 	// Existing registry is discovered before provisioning new mirrors.
 	expectRegistryPortScan(mockClient, []container.Summary{existing})
 	mockClient.EXPECT().
-		ContainerList(mock.Anything, matchListOptionsByName("docker.io")).
+		ContainerList(mock.Anything, matchListOptionsByName("test-docker.io")).
 		Return([]container.Summary{existing}, nil).
 		Once()
 	mockClient.EXPECT().
@@ -195,11 +196,11 @@ func runSetupRegistriesExistingRegistryScenario(t *testing.T) {
 		Return([]container.Summary{existing}, nil).
 		Once()
 	mockClient.EXPECT().
-		ContainerList(mock.Anything, matchListOptionsByName("docker.io")).
+		ContainerList(mock.Anything, matchListOptionsByName("test-docker.io")).
 		Return([]container.Summary{existing}, nil).
 		Once()
 
-	expectMirrorProvisionFailure(mockClient, "ghcr.io", errRegistryCreateFailed)
+	expectMirrorProvisionFailure(mockClient, "test-ghcr.io", "ghcr.io", errRegistryCreateFailed)
 
 	err := kindprovisioner.SetupRegistries(ctx, kindConfig, "test", mockClient, mirrorSpecs, buf)
 	require.Error(t, err)
@@ -242,10 +243,11 @@ func expectInitialRegistryScan(mockClient *docker.MockAPIClient) {
 
 func expectMirrorProvisionBase(
 	mockClient *docker.MockAPIClient,
-	sanitized string,
+	containerName string,
+	volumeName string,
 ) {
 	mockClient.EXPECT().
-		ContainerList(mock.Anything, matchListOptionsByName(sanitized)).
+		ContainerList(mock.Anything, matchListOptionsByName(containerName)).
 		Return([]container.Summary{}, nil).
 		Once()
 	mockClient.EXPECT().
@@ -253,7 +255,7 @@ func expectMirrorProvisionBase(
 		Return(image.InspectResponse{}, nil).
 		Once()
 	mockClient.EXPECT().
-		VolumeInspect(mock.Anything, sanitized).
+		VolumeInspect(mock.Anything, volumeName).
 		Return(volume.Volume{}, errRegistryNotFound).
 		Once()
 	mockClient.EXPECT().
@@ -264,14 +266,15 @@ func expectMirrorProvisionBase(
 
 func expectMirrorProvisionSuccess(
 	mockClient *docker.MockAPIClient,
-	sanitized string,
+	containerName string,
+	volumeName string,
 	containerID string,
 ) {
-	expectMirrorProvisionBase(mockClient, sanitized)
+	expectMirrorProvisionBase(mockClient, containerName, volumeName)
 
 	expectMirrorContainerCreate(
 		mockClient,
-		sanitized,
+		containerName,
 		container.CreateResponse{ID: containerID},
 		nil,
 	)
@@ -283,14 +286,15 @@ func expectMirrorProvisionSuccess(
 
 func expectMirrorProvisionFailure(
 	mockClient *docker.MockAPIClient,
-	sanitized string,
+	containerName string,
+	volumeName string,
 	createErr error,
 ) {
-	expectMirrorProvisionBase(mockClient, sanitized)
+	expectMirrorProvisionBase(mockClient, containerName, volumeName)
 
 	expectMirrorContainerCreate(
 		mockClient,
-		sanitized,
+		containerName,
 		container.CreateResponse{},
 		createErr,
 	)
@@ -373,7 +377,7 @@ func TestConnectRegistriesToNetwork_NilMirrorSpecs(t *testing.T) {
 
 	var buf bytes.Buffer
 
-	err := kindprovisioner.ConnectRegistriesToNetwork(ctx, nil, mockClient, &buf)
+	err := kindprovisioner.ConnectRegistriesToNetwork(ctx, nil, "kind", mockClient, &buf)
 	assert.NoError(t, err)
 }
 
@@ -384,7 +388,7 @@ func TestConnectRegistriesToNetwork_NoRegistries(t *testing.T) {
 
 	emptySpecs := []registry.MirrorSpec{}
 
-	err := kindprovisioner.ConnectRegistriesToNetwork(ctx, emptySpecs, mockClient, buf)
+	err := kindprovisioner.ConnectRegistriesToNetwork(ctx, emptySpecs, "kind", mockClient, buf)
 	assert.NoError(t, err)
 }
 

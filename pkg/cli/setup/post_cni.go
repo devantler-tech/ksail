@@ -3,6 +3,7 @@ package setup
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
@@ -13,7 +14,20 @@ import (
 const (
 	fluxResourcesActivity   = "applying custom resources"
 	argoCDResourcesActivity = "configuring argocd resources"
+	defaultClusterName      = "ksail"
 )
+
+// resolveClusterNameFromContext resolves the cluster name from the cluster config context.
+// This is a simplified resolver when distribution-specific configs are not available.
+func resolveClusterNameFromContext(clusterCfg *v1alpha1.Cluster) string {
+	if clusterCfg != nil {
+		if name := strings.TrimSpace(clusterCfg.Spec.Cluster.Connection.Context); name != "" {
+			return name
+		}
+	}
+
+	return defaultClusterName
+}
 
 type componentRequirements struct {
 	needsMetricsServer bool
@@ -193,6 +207,9 @@ func configureGitOpsResources(
 	reqs componentRequirements,
 	gitOpsKubeconfig string,
 ) error {
+	// Resolve cluster name for registry naming
+	clusterName := resolveClusterNameFromContext(clusterCfg)
+
 	// Post-install GitOps configuration
 	if reqs.needsArgoCD {
 		notify.WriteMessage(notify.Message{
@@ -201,7 +218,7 @@ func configureGitOpsResources(
 			Writer:  cmd.OutOrStdout(),
 		})
 
-		err := factories.EnsureArgoCDResources(ctx, gitOpsKubeconfig, clusterCfg)
+		err := factories.EnsureArgoCDResources(ctx, gitOpsKubeconfig, clusterCfg, clusterName)
 		if err != nil {
 			return fmt.Errorf("failed to configure Argo CD resources: %w", err)
 		}
@@ -220,7 +237,7 @@ func configureGitOpsResources(
 			Writer:  cmd.OutOrStdout(),
 		})
 
-		err := factories.EnsureFluxResources(ctx, gitOpsKubeconfig, clusterCfg)
+		err := factories.EnsureFluxResources(ctx, gitOpsKubeconfig, clusterCfg, clusterName)
 		if err != nil {
 			return fmt.Errorf("failed to configure Flux resources: %w", err)
 		}

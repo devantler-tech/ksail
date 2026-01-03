@@ -130,7 +130,7 @@ func k3dRegistryConfigCases() []k3dRegistryConfigCase {
 			expected: k3dRegistryExpectation{
 				contains: []string{
 					"\"docker.io\":",
-					"http://docker.io:5000",
+					"http://k3d-default-docker.io:5000",
 					"https://registry-1.docker.io",
 				},
 			},
@@ -159,8 +159,8 @@ func k3dRegistryConfigCases() []k3dRegistryConfigCase {
 				contains: []string{
 					"\"docker.io\":",
 					"\"ghcr.io\":",
-					"http://docker.io:5000",
-					"http://ghcr.io:5000",
+					"http://k3d-default-docker.io:5000",
+					"http://k3d-default-ghcr.io:5000",
 					"https://registry-1.docker.io",
 					"https://ghcr.io",
 				},

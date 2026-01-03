@@ -111,7 +111,7 @@ func SetArgoCDInstallerFactoryForTests(
 
 // SetEnsureArgoCDResourcesForTests overrides the Argo CD resource ensure function.
 func SetEnsureArgoCDResourcesForTests(
-	fn func(context.Context, string, *v1alpha1.Cluster) error,
+	fn func(context.Context, string, *v1alpha1.Cluster, string) error,
 ) func() {
 	return overrideInstallerFactory(func(f *setup.InstallerFactories) {
 		f.EnsureArgoCDResources = fn

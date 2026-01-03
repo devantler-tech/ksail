@@ -75,8 +75,9 @@ func runK3dRegistryAction(
 
 	// Wait for registries to become ready before network connection.
 	// Filter out the local registry since it's managed separately and has a different container name.
+	clusterName := k3dconfigmanager.ResolveClusterName(ctx.ClusterCfg, ctx.K3dConfig)
 	registryInfos := filterOutLocalRegistry(
-		k3dprovisioner.ExtractRegistriesFromConfigForTesting(ctx.K3dConfig),
+		k3dprovisioner.ExtractRegistriesFromConfigForTesting(ctx.K3dConfig, clusterName),
 	)
 	writer := ctx.Cmd.OutOrStdout()
 
@@ -148,11 +149,13 @@ func PrepareK3dConfigWithMirrors(
 		return false
 	}
 
+	clusterName := k3dconfigmanager.ResolveClusterName(clusterCfg, k3dConfig)
 	original := k3dConfig.Registries.Config
 
 	hostEndpoints := k3dconfigmanager.ParseRegistryConfig(original)
 
-	updatedMap, _ := registry.BuildHostEndpointMap(mirrorSpecs, "", hostEndpoints)
+	// Use cluster name as prefix for mirror registries
+	updatedMap, _ := registry.BuildHostEndpointMap(mirrorSpecs, clusterName, hostEndpoints)
 
 	// Configure K3d-native local registry when local registry is enabled.
 	// K3d's Registries.Create automatically:
@@ -161,7 +164,7 @@ func PrepareK3dConfigWithMirrors(
 	// - Connects the registry to the cluster network
 	// - Manages the registry lifecycle with the cluster
 	if clusterCfg.Spec.Cluster.LocalRegistry == v1alpha1.LocalRegistryEnabled {
-		configureK3dNativeLocalRegistry(clusterCfg, k3dConfig, updatedMap)
+		configureK3dNativeLocalRegistry(clusterCfg, k3dConfig, clusterName, updatedMap)
 	}
 
 	if len(updatedMap) == 0 {
@@ -181,24 +184,19 @@ func PrepareK3dConfigWithMirrors(
 
 // filterOutLocalRegistry removes entries for the local registry from the registry list.
 // The local registry is managed separately by K3d's native registry management.
-// K3d Registries.Create uses the registry name directly (without k3d- prefix),
-// so the mirror config uses "local-registry:5000".
+// Checks for both cluster-prefixed names (e.g., k3d-default-local-registry) and
+// entries containing "local-registry" in their name.
 func filterOutLocalRegistry(registries []registry.Info) []registry.Info {
 	if len(registries) == 0 {
 		return registries
 	}
 
-	// The local registry host as it appears in the K3d mirrors config.
-	// K3d Registries.Create uses the name directly without prefix.
-	localRegistryHost := net.JoinHostPort(
-		registry.LocalRegistryClusterHost,
-		strconv.Itoa(dockerclient.DefaultRegistryPort),
-	)
-
 	filtered := make([]registry.Info, 0, len(registries))
 
 	for _, reg := range registries {
-		if reg.Host == localRegistryHost {
+		// Skip any registry that contains the local registry base name
+		if strings.Contains(reg.Host, registry.LocalRegistryBaseName) ||
+			strings.Contains(reg.Name, registry.LocalRegistryBaseName) {
 			continue
 		}
 
@@ -210,14 +208,15 @@ func filterOutLocalRegistry(registries []registry.Info) []registry.Info {
 
 // configureK3dNativeLocalRegistry sets up K3d's native local registry support.
 // This configures Registries.Create so K3d automatically manages the registry container.
-// K3d Registries.Create uses the name directly (without any prefix).
+// The registry container name is prefixed with the cluster name for uniqueness.
 func configureK3dNativeLocalRegistry(
 	clusterCfg *v1alpha1.Cluster,
 	k3dConfig *v1alpha5.SimpleConfig,
+	clusterName string,
 	hostEndpoints map[string][]string,
 ) {
-	// Use the KSail local registry container name for consistency
-	registryName := registry.LocalRegistryContainerName
+	// Use cluster-prefixed registry name for uniqueness
+	registryName := registry.BuildLocalRegistryName(clusterName)
 
 	// Determine the host port from config or use default
 	hostPort := dockerclient.DefaultRegistryPort
@@ -226,7 +225,7 @@ func configureK3dNativeLocalRegistry(
 	}
 
 	// Configure K3d to create and manage the local registry.
-	// K3d Registries.Create uses the name directly (container named "local-registry").
+	// Container is named with cluster prefix (e.g., "k3d-default-local-registry").
 	k3dConfig.Registries.Create = &v1alpha5.SimpleConfigRegistryCreateConfig{
 		Name:     registryName,
 		Host:     dockerclient.RegistryHostIP,

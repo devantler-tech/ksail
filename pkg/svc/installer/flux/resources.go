@@ -126,6 +126,7 @@ func EnsureDefaultResources(
 	ctx context.Context,
 	kubeconfig string,
 	clusterCfg *v1alpha1.Cluster,
+	clusterName string,
 ) error {
 	if clusterCfg == nil {
 		return errInvalidClusterConfig
@@ -140,7 +141,7 @@ func EnsureDefaultResources(
 		return err
 	}
 
-	fluxClient, err := setupFluxInstance(ctx, restConfig, clusterCfg)
+	fluxClient, err := setupFluxInstance(ctx, restConfig, clusterCfg, clusterName)
 	if err != nil {
 		return err
 	}
@@ -175,6 +176,7 @@ func setupFluxInstance(
 	ctx context.Context,
 	restConfig *rest.Config,
 	clusterCfg *v1alpha1.Cluster,
+	clusterName string,
 ) (client.Client, error) {
 	// Wait for FluxInstance API to be fully ready
 	err := waitForAPIReady(ctx, restConfig, fluxInstanceGroupVersion, fluxInstanceCRDName)
@@ -182,7 +184,7 @@ func setupFluxInstance(
 		return nil, err
 	}
 
-	fluxInstance, err := buildFluxInstance(clusterCfg)
+	fluxInstance, err := buildFluxInstance(clusterCfg, clusterName)
 	if err != nil {
 		return nil, err
 	}
@@ -231,7 +233,7 @@ func waitForAPIReady(
 }
 
 //nolint:unparam // error return kept for consistency with resource building patterns
-func buildFluxInstance(clusterCfg *v1alpha1.Cluster) (*FluxInstance, error) {
+func buildFluxInstance(clusterCfg *v1alpha1.Cluster, clusterName string) (*FluxInstance, error) {
 	// Use the fallback interval value. Interval configuration is now managed
 	// via the FluxInstance CR in the source directory, not in the KSail config.
 	interval := fluxIntervalFallback
@@ -247,11 +249,9 @@ func buildFluxInstance(clusterCfg *v1alpha1.Cluster) (*FluxInstance, error) {
 	}
 
 	projectName := registry.SanitizeRepoName(sourceDir)
-	repoHost := registry.LocalRegistryClusterHost
+	// Build the cluster-prefixed local registry name for in-cluster DNS resolution
+	repoHost := registry.BuildLocalRegistryName(clusterName)
 	repoPort := dockerclient.DefaultRegistryPort
-
-	// K3d Registries.Create uses the registry name directly (without k3d- prefix).
-	// Both Kind and K3d clusters use the same registry name "local-registry".
 
 	if clusterCfg.Spec.Cluster.LocalRegistry != v1alpha1.LocalRegistryEnabled {
 		repoHost = registry.DefaultEndpointHost

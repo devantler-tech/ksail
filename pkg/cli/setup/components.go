@@ -39,9 +39,9 @@ type InstallerFactories struct {
 	CSI         func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error)
 	ArgoCD      func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error)
 	// EnsureArgoCDResources configures default Argo CD resources post-install.
-	EnsureArgoCDResources func(ctx context.Context, kubeconfig string, clusterCfg *v1alpha1.Cluster) error
+	EnsureArgoCDResources func(ctx context.Context, kubeconfig string, clusterCfg *v1alpha1.Cluster, clusterName string) error
 	// EnsureFluxResources enforces default Flux resources post-install.
-	EnsureFluxResources func(ctx context.Context, kubeconfig string, clusterCfg *v1alpha1.Cluster) error
+	EnsureFluxResources func(ctx context.Context, kubeconfig string, clusterCfg *v1alpha1.Cluster, clusterName string) error
 	// HelmClientFactory creates a Helm client for the cluster.
 	HelmClientFactory func(clusterCfg *v1alpha1.Cluster) (*helm.Client, string, error)
 }
@@ -260,6 +260,7 @@ func EnsureArgoCDResources(
 	ctx context.Context,
 	kubeconfig string,
 	clusterCfg *v1alpha1.Cluster,
+	clusterName string,
 ) error {
 	if clusterCfg == nil {
 		return ErrClusterConfigNil
@@ -283,8 +284,10 @@ func EnsureArgoCDResources(
 	}
 
 	repoName := registry.SanitizeRepoName(sourceDir)
+	// Use cluster-prefixed local registry name for in-cluster DNS resolution
+	registryHost := registry.BuildLocalRegistryName(clusterName)
 	hostPort := net.JoinHostPort(
-		registry.LocalRegistryClusterHost,
+		registryHost,
 		strconv.Itoa(dockerclient.DefaultRegistryPort),
 	)
 	repoURL := fmt.Sprintf("oci://%s/%s", hostPort, repoName)

@@ -151,6 +151,35 @@ func (rm *RegistryManager) listContainersByNameOnly(
 	return containers, nil
 }
 
+// FindContainerBySuffix finds a running container whose name ends with the given suffix.
+// Returns the container name if found, or empty string if not found.
+// This is used to detect cluster-prefixed registries (e.g., "*-local-registry").
+func (rm *RegistryManager) FindContainerBySuffix(
+	ctx context.Context,
+	suffix string,
+) (string, error) {
+	// List all containers
+	containers, err := rm.client.ContainerList(ctx, container.ListOptions{
+		All: false, // Only running containers
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to list containers: %w", err)
+	}
+
+	// Find first container matching the suffix
+	for _, c := range containers {
+		for _, name := range c.Names {
+			// Container names are prefixed with "/"
+			containerName := strings.TrimPrefix(name, "/")
+			if strings.HasSuffix(containerName, suffix) {
+				return containerName, nil
+			}
+		}
+	}
+
+	return "", nil
+}
+
 // listAllRegistryContainers lists all ksail-managed registry containers.
 func (rm *RegistryManager) listAllRegistryContainers(
 	ctx context.Context,
