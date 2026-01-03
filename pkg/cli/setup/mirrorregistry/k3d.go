@@ -180,23 +180,35 @@ func PrepareK3dConfigWithMirrors(
 }
 
 // filterOutLocalRegistry removes entries for the local registry from the registry list.
-// The local registry is managed separately and has a different container name than what
-// the mirror config parsing generates (e.g., "local-registry" vs "local-registry-5000").
+// The local registry is managed separately by K3d's native registry management.
+// This filters out both the standard local registry host (local-registry:5000) and
+// the K3d-prefixed host (k3d-local-registry:5000) since both refer to the same
+// K3d-managed registry container.
 func filterOutLocalRegistry(registries []registry.Info) []registry.Info {
 	if len(registries) == 0 {
 		return registries
 	}
 
-	// The local registry host as it appears in the K3d mirrors config
+	port := strconv.Itoa(dockerclient.DefaultRegistryPort)
+
+	// The local registry host as it appears in standard configs
 	localRegistryHost := net.JoinHostPort(
 		registry.LocalRegistryClusterHost,
-		strconv.Itoa(dockerclient.DefaultRegistryPort),
+		port,
+	)
+
+	// The local registry host as it appears in K3d native registry configs.
+	// When K3d creates a registry via Registries.Create with name "local-registry",
+	// the container is named "k3d-local-registry" and the mirror config uses this name.
+	k3dLocalRegistryHost := net.JoinHostPort(
+		"k3d-"+registry.LocalRegistryClusterHost,
+		port,
 	)
 
 	filtered := make([]registry.Info, 0, len(registries))
 
 	for _, reg := range registries {
-		if reg.Host == localRegistryHost {
+		if reg.Host == localRegistryHost || reg.Host == k3dLocalRegistryHost {
 			continue
 		}
 
