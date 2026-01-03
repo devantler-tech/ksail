@@ -184,12 +184,15 @@ func setupFluxInstance(
 		return nil, err
 	}
 
-	fluxClient, err := newFluxResourcesClient(restConfig)
-	if err != nil {
-		return nil, err
+	// Create a client factory that creates a fresh client on each retry.
+	// This is necessary because the dynamic REST mapper caches discovery results,
+	// and if the initial discovery happens before the API server fully propagates
+	// the CRD, subsequent requests will fail until the cache expires.
+	clientFactory := func() (client.Client, error) {
+		return newFluxResourcesClient(restConfig)
 	}
 
-	err = upsertFluxResource(ctx, fluxClient, fluxInstance)
+	fluxClient, err := upsertFluxInstanceWithRetry(ctx, clientFactory, fluxInstance)
 	if err != nil {
 		return nil, err
 	}
@@ -274,50 +277,57 @@ func buildFluxInstance(clusterCfg *v1alpha1.Cluster) (*FluxInstance, error) {
 	}, nil
 }
 
-func upsertFluxResource(
-	ctx context.Context,
-	fluxClient client.Client,
-	obj client.Object,
-) error {
-	key := client.ObjectKeyFromObject(obj)
-
-	switch desired := obj.(type) {
-	case *FluxInstance:
-		return upsertFluxInstanceWithRetry(ctx, fluxClient, key, desired)
-	default:
-		//nolint:err113 // type information is dynamic and necessary for debugging
-		return fmt.Errorf("unsupported Flux resource type %T", obj)
-	}
-}
-
 // upsertFluxInstanceWithRetry creates or updates a FluxInstance with retry logic
 // to handle transient API errors during CRD initialization.
+// It accepts a client factory to create a fresh client on each retry, which is
+// necessary because the dynamic REST mapper caches discovery results.
 //
-
+//nolint:ireturn // Returns client.Client interface for subsequent operations
 func upsertFluxInstanceWithRetry(
 	ctx context.Context,
-	fluxClient client.Client,
-	key client.ObjectKey,
+	clientFactory func() (client.Client, error),
 	desired *FluxInstance,
-) error {
+) (client.Client, error) {
 	waitCtx, cancel := context.WithTimeout(ctx, fluxAPIAvailabilityTimeout)
 	defer cancel()
 
 	ticker := time.NewTicker(fluxAPIAvailabilityPollInterval)
 	defer ticker.Stop()
 
+	key := client.ObjectKeyFromObject(desired)
+
 	var lastErr error
 
 	for {
+		// Create a fresh client on each retry to ensure the dynamic REST mapper
+		// picks up newly-registered CRDs that might not have been discoverable
+		// in previous attempts.
+		fluxClient, clientErr := clientFactory()
+		if clientErr != nil {
+			lastErr = clientErr
+
+			select {
+			case <-waitCtx.Done():
+				return nil, fmt.Errorf(
+					"timed out creating client for FluxInstance %s/%s: %w",
+					key.Namespace,
+					key.Name,
+					lastErr,
+				)
+			case <-ticker.C:
+				continue
+			}
+		}
+
 		err := tryUpsertFluxInstance(waitCtx, fluxClient, key, desired)
 		if err == nil {
-			return nil
+			return fluxClient, nil
 		}
 
 		// If the error is a transient API error (like "resource not found" during CRD init),
 		// retry. Otherwise, return the error immediately.
 		if !isTransientAPIError(err) {
-			return err
+			return nil, err
 		}
 
 		lastErr = err
@@ -328,14 +338,14 @@ func upsertFluxInstanceWithRetry(
 				lastErr = waitCtx.Err()
 			}
 
-			return fmt.Errorf(
+			return nil, fmt.Errorf(
 				"timed out upserting FluxInstance %s/%s: %w",
 				key.Namespace,
 				key.Name,
 				lastErr,
 			)
 		case <-ticker.C:
-			// Retry
+			// Retry with a fresh client
 		}
 	}
 }
