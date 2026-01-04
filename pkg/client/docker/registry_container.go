@@ -35,6 +35,7 @@ func (rm *RegistryManager) IsRegistryInUse(ctx context.Context, name string) (bo
 }
 
 // GetRegistryPort returns the host port for a registry.
+// Returns ErrRegistryPortNotFound if the registry has no host port binding (e.g., mirror registries).
 func (rm *RegistryManager) GetRegistryPort(ctx context.Context, name string) (int, error) {
 	containers, err := rm.listRegistryContainers(ctx, name)
 	if err != nil {
@@ -45,9 +46,9 @@ func (rm *RegistryManager) GetRegistryPort(ctx context.Context, name string) (in
 		return 0, ErrRegistryNotFound
 	}
 
-	// Get port from container ports
+	// Get port from container ports - look for a valid host port binding
 	for _, port := range containers[0].Ports {
-		if port.PrivatePort == DefaultRegistryPort {
+		if port.PrivatePort == DefaultRegistryPort && port.PublicPort > 0 {
 			return int(port.PublicPort), nil
 		}
 	}
@@ -366,12 +367,16 @@ func (rm *RegistryManager) buildContainerConfig(
 }
 
 // buildHostConfig builds the host configuration including port bindings and mounts.
+// Mirror registries (those with UpstreamURL set) do not need host port bindings
+// since they are accessed via Docker network by cluster nodes, not from the host.
 func (rm *RegistryManager) buildHostConfig(
 	config RegistryConfig,
 	volumeName string,
 ) *container.HostConfig {
 	portBindings := nat.PortMap{}
-	if config.Port > 0 {
+	// Only bind to host port for local registries (not mirrors)
+	// Mirrors are accessed via Docker network, not from the host
+	if config.Port > 0 && config.UpstreamURL == "" {
 		portBindings[RegistryContainerPort] = []nat.PortBinding{
 			{
 				HostIP:   RegistryHostIP,

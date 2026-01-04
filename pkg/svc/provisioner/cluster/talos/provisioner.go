@@ -202,6 +202,23 @@ func (p *TalosProvisioner) Delete(ctx context.Context, name string) error {
 		return err
 	}
 
+	// Collect volumes used by Talos containers BEFORE destroying the cluster
+	// These are anonymous volumes that the Talos SDK doesn't clean up
+	containers, err := p.listTalosContainers(ctx, clusterName)
+	if err != nil {
+		return fmt.Errorf("failed to list Talos containers: %w", err)
+	}
+
+	volumes, err := p.collectContainerVolumes(ctx, containers)
+	if err != nil {
+		// Log warning but continue with deletion
+		_, _ = fmt.Fprintf(
+			p.logWriter,
+			"Warning: failed to collect container volumes: %v\n",
+			err,
+		)
+	}
+
 	// Get state directory for cluster state
 	stateDir, err := getStateDirectory()
 	if err != nil {
@@ -228,6 +245,13 @@ func (p *TalosProvisioner) Delete(ctx context.Context, name string) error {
 	err = talosProvisioner.Destroy(ctx, cluster, provision.WithLogWriter(p.logWriter))
 	if err != nil {
 		return fmt.Errorf("failed to destroy cluster: %w", err)
+	}
+
+	// Clean up the anonymous volumes used by Talos containers
+	// These are created by Docker for Talos node data and are not cleaned up by the Talos SDK
+	if len(volumes) > 0 {
+		_, _ = fmt.Fprintf(p.logWriter, "Cleaning up %d Talos node volumes...\n", len(volumes))
+		p.removeVolumes(ctx, volumes)
 	}
 
 	// Clean up kubeconfig - remove only the context for this cluster
@@ -368,6 +392,60 @@ func (p *TalosProvisioner) listTalosContainers(
 	}
 
 	return containers, nil
+}
+
+// collectContainerVolumes collects all volume names used by the given containers.
+// It inspects each container to find mounted volumes (anonymous volumes used by Talos).
+func (p *TalosProvisioner) collectContainerVolumes(
+	ctx context.Context,
+	containers []container.Summary,
+) ([]string, error) {
+	volumeSet := make(map[string]struct{})
+
+	for _, c := range containers {
+		inspect, err := p.dockerClient.ContainerInspect(ctx, c.ID)
+		if err != nil {
+			// Log warning but continue with other containers
+			_, _ = fmt.Fprintf(
+				p.logWriter,
+				"Warning: failed to inspect container %s: %v\n",
+				c.ID[:12],
+				err,
+			)
+
+			continue
+		}
+
+		for _, mount := range inspect.Mounts {
+			// Only collect volume mounts (not bind mounts or tmpfs)
+			if mount.Type == "volume" && mount.Name != "" {
+				volumeSet[mount.Name] = struct{}{}
+			}
+		}
+	}
+
+	volumes := make([]string, 0, len(volumeSet))
+	for vol := range volumeSet {
+		volumes = append(volumes, vol)
+	}
+
+	return volumes, nil
+}
+
+// removeVolumes removes the specified volumes.
+// Errors are logged but do not cause the operation to fail.
+func (p *TalosProvisioner) removeVolumes(ctx context.Context, volumes []string) {
+	for _, vol := range volumes {
+		err := p.dockerClient.VolumeRemove(ctx, vol, true) // force=true
+		if err != nil {
+			_, _ = fmt.Fprintf(
+				p.logWriter,
+				"Warning: failed to remove volume %s: %v\n",
+				vol,
+				err,
+			)
+		}
+	}
 }
 
 // validateClusterOperation validates that Docker is available and the cluster exists.

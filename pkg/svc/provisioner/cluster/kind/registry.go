@@ -61,8 +61,14 @@ func getEntriesToInject(
 		return nil
 	}
 
+	// Get cluster name to use as container prefix (must match how registries were created)
+	clusterName := "kind"
+	if kindConfig != nil && kindConfig.Name != "" {
+		clusterName = kindConfig.Name
+	}
+
 	mountedHosts := buildMountedHostsSet(kindConfig)
-	entries := registry.BuildMirrorEntries(mirrorSpecs, "", nil, nil, nil)
+	entries := registry.BuildMirrorEntries(mirrorSpecs, clusterName, nil, nil, nil)
 
 	var entriesToInject []registry.MirrorEntry
 

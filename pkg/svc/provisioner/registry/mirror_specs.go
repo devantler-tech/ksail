@@ -373,15 +373,15 @@ func AllocatePort(nextPort *int, usedPorts map[int]struct{}) int {
 // This is used when provisioners need Info structs for SetupRegistries/CleanupRegistries.
 // The prefix is prepended to container names to avoid Docker DNS collisions.
 // The upstreams map provides optional overrides for upstream URLs per host.
+// Mirror registries do not need host port allocation since they are accessed
+// via Docker network by cluster nodes, not from the host.
 func BuildRegistryInfosFromSpecs(
 	mirrorSpecs []MirrorSpec,
 	upstreams map[string]string,
-	baseUsedPorts map[int]struct{},
+	_ map[int]struct{}, // baseUsedPorts - kept for API compatibility but unused for mirrors
 	prefix string,
 ) []Info {
 	registryInfos := make([]Info, 0, len(mirrorSpecs))
-
-	usedPorts, nextPort := InitPortAllocation(baseUsedPorts)
 
 	for _, spec := range mirrorSpecs {
 		host := strings.TrimSpace(spec.Host)
@@ -395,9 +395,10 @@ func BuildRegistryInfosFromSpecs(
 			containerName = fmt.Sprintf("%s-%s", trimmed, containerName)
 		}
 
-		// Build endpoint for this host
-		port := AllocatePort(&nextPort, usedPorts)
-		endpoint := "http://" + net.JoinHostPort(containerName, strconv.Itoa(port))
+		// Use container port 5000 for the endpoint since mirrors are accessed
+		// via Docker network, not from the host
+		portStr := strconv.Itoa(dockerclient.DefaultRegistryPort)
+		endpoint := "http://" + net.JoinHostPort(containerName, portStr)
 
 		// Get upstream URL
 		upstream := spec.Remote
@@ -409,7 +410,8 @@ func BuildRegistryInfosFromSpecs(
 			upstream = upstreams[host]
 		}
 
-		info := BuildRegistryInfo(host, []string{endpoint}, port, prefix, upstream)
+		// Port 0 indicates no host port binding needed (mirrors use Docker network)
+		info := BuildRegistryInfo(host, []string{endpoint}, 0, prefix, upstream)
 		registryInfos = append(registryInfos, info)
 	}
 

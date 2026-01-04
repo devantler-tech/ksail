@@ -2,6 +2,7 @@ package docker
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -26,6 +27,7 @@ func (rm *RegistryManager) WaitForRegistryReady(
 }
 
 // WaitForRegistryReadyWithTimeout waits for a registry with a custom timeout.
+// For mirror registries without host port bindings, this only verifies the container is running.
 func (rm *RegistryManager) WaitForRegistryReadyWithTimeout(
 	ctx context.Context,
 	name string,
@@ -33,6 +35,21 @@ func (rm *RegistryManager) WaitForRegistryReadyWithTimeout(
 ) error {
 	checkURL, err := rm.prepareHealthCheck(ctx, name)
 	if err != nil {
+		// If the registry has no host port (mirror registry), just verify it's running
+		if errors.Is(err, ErrRegistryPortNotFound) {
+			inUse, statusErr := rm.IsRegistryInUse(ctx, name)
+			if statusErr != nil {
+				return fmt.Errorf("failed to check if registry %s is running: %w", name, statusErr)
+			}
+
+			if !inUse {
+				return fmt.Errorf("registry %s is not running: %w", name, ErrRegistryNotFound)
+			}
+
+			// Mirror registry is running - no further health check needed
+			return nil
+		}
+
 		return err
 	}
 

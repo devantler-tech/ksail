@@ -570,6 +570,8 @@ func TestTalosProvisioner_Delete_ClusterNotFound(t *testing.T) {
 func TestTalosProvisioner_Delete_Success(t *testing.T) {
 	t.Parallel()
 
+	containerID := "test-container-id"
+
 	// Mock Docker client - cluster exists
 	mockClient := docker.NewMockAPIClient(t)
 	mockClient.EXPECT().
@@ -579,12 +581,29 @@ func TestTalosProvisioner_Delete_Success(t *testing.T) {
 		ContainerList(mock.Anything, mock.Anything).
 		Return([]container.Summary{
 			{
+				ID: containerID,
 				Labels: map[string]string{
 					talosprovisioner.LabelTalosOwned:       "true",
 					talosprovisioner.LabelTalosClusterName: "test-cluster-delete",
 				},
 			},
 		}, nil)
+	// Mock ContainerInspect for volume collection
+	mockClient.EXPECT().
+		ContainerInspect(mock.Anything, containerID).
+		Return(types.ContainerJSON{
+			Mounts: []types.MountPoint{
+				{Type: "volume", Name: "test-volume-1"},
+				{Type: "volume", Name: "test-volume-2"},
+			},
+		}, nil)
+	// Mock VolumeRemove for volume cleanup
+	mockClient.EXPECT().
+		VolumeRemove(mock.Anything, "test-volume-1", true).
+		Return(nil)
+	mockClient.EXPECT().
+		VolumeRemove(mock.Anything, "test-volume-2", true).
+		Return(nil)
 
 	// Mock Cluster to return from Reflect
 	mockCluster := NewMockCluster()
