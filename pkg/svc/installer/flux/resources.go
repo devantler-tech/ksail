@@ -41,8 +41,8 @@ const (
 	// allowing the API server to fully propagate the CRD to all endpoints.
 	// This addresses race conditions observed in slower CI environments (e.g., Talos on GitHub Actions)
 	// where discovery reports the API as ready slightly before Create operations can succeed.
-	// 5 seconds has been empirically determined to be sufficient for GitHub Actions runners.
-	apiStabilizationDelay = 5 * time.Second
+	// 10 seconds has been empirically determined to provide sufficient margin for GitHub Actions runners.
+	apiStabilizationDelay = 10 * time.Second
 )
 
 var (
@@ -477,6 +477,8 @@ func ensureLocalOCIRepositoryInsecure(ctx context.Context, fluxClient client.Cli
 	ticker := time.NewTicker(fluxAPIAvailabilityPollInterval)
 	defer ticker.Stop()
 
+	var lastErr error
+
 	for {
 		repo := &sourcev1.OCIRepository{}
 
@@ -490,17 +492,36 @@ func ensureLocalOCIRepositoryInsecure(ctx context.Context, fluxClient client.Cli
 			repo.Spec.Insecure = true
 
 			updateErr := fluxClient.Update(ctx, repo)
-			if updateErr != nil {
-				return fmt.Errorf(
-					"failed to update OCIRepository %s/%s: %w",
-					key.Namespace,
-					key.Name,
-					updateErr,
-				)
+			if updateErr == nil {
+				return nil
 			}
 
-			return nil
+			// If the update fails with a transient API error, retry
+			if isTransientAPIError(updateErr) {
+				lastErr = updateErr
+
+				select {
+				case <-waitCtx.Done():
+					return fmt.Errorf(
+						"timed out updating OCIRepository %s/%s: %w",
+						key.Namespace,
+						key.Name,
+						lastErr,
+					)
+				case <-ticker.C:
+					continue
+				}
+			}
+
+			return fmt.Errorf(
+				"failed to update OCIRepository %s/%s: %w",
+				key.Namespace,
+				key.Name,
+				updateErr,
+			)
 		case apierrors.IsNotFound(err):
+			lastErr = err
+
 			select {
 			//nolint:err113 // dynamic resource key necessary for debugging timeout
 			case <-waitCtx.Done():
@@ -512,10 +533,12 @@ func ensureLocalOCIRepositoryInsecure(ctx context.Context, fluxClient client.Cli
 			case <-ticker.C:
 			}
 		default:
+			lastErr = err
+
 			// Handle "no matches for kind" errors and other API errors by retrying
 			select {
 			case <-waitCtx.Done():
-				return fmt.Errorf("timed out waiting for OCIRepository CRD to be ready: %w", err)
+				return fmt.Errorf("timed out waiting for OCIRepository CRD to be ready: %w", lastErr)
 			case <-ticker.C:
 				// Continue waiting - CRD might not be fully registered yet
 			}
