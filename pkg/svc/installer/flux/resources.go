@@ -54,7 +54,14 @@ var (
 
 //nolint:gochecknoglobals // package-level timeout constants
 var (
-	fluxAPIAvailabilityTimeout      = 2 * time.Minute
+	// fluxAPIAvailabilityTimeout is the maximum time to wait for Flux CRDs to become available.
+	// This timeout is intentionally long (5 minutes) to accommodate slower environments like
+	// Talos on GitHub Actions, where the FluxInstance operator needs to:
+	// 1. Pull controller images from ghcr.io/fluxcd
+	// 2. Deploy the source-controller
+	// 3. Wait for source-controller to register the OCIRepository CRD
+	// In fast environments (Kind), this typically completes in seconds.
+	fluxAPIAvailabilityTimeout      = 5 * time.Minute
 	fluxAPIAvailabilityPollInterval = 2 * time.Second
 )
 
