@@ -147,7 +147,7 @@ func EnsureDefaultResources(
 		return err
 	}
 
-	fluxClient, err := setupFluxInstance(ctx, restConfig, clusterCfg, clusterName)
+	_, err = setupFluxInstance(ctx, restConfig, clusterCfg, clusterName)
 	if err != nil {
 		return err
 	}
@@ -170,7 +170,15 @@ func EnsureDefaultResources(
 	}
 
 	if clusterCfg.Spec.Cluster.LocalRegistry == v1alpha1.LocalRegistryEnabled {
-		err = ensureLocalOCIRepositoryInsecure(ctx, fluxClient)
+		// Create a client factory for the OCIRepository operations.
+		// This is necessary because the dynamic REST mapper caches discovery results,
+		// and the fluxClient created earlier may have stale cache entries that don't
+		// include the OCIRepository CRD which is installed by the FluxInstance reconciler.
+		clientFactory := func() (client.Client, error) {
+			return newFluxResourcesClient(restConfig)
+		}
+
+		err = ensureLocalOCIRepositoryInsecure(ctx, clientFactory)
 		if err != nil {
 			return err
 		}
@@ -468,7 +476,10 @@ func isTransientAPIError(err error) bool {
 }
 
 //nolint:cyclop // polling loop requires multiple conditional branches for different error types
-func ensureLocalOCIRepositoryInsecure(ctx context.Context, fluxClient client.Client) error {
+func ensureLocalOCIRepositoryInsecure(
+	ctx context.Context,
+	clientFactory func() (client.Client, error),
+) error {
 	key := client.ObjectKey{Name: defaultOCIRepositoryName, Namespace: fluxclient.DefaultNamespace}
 
 	waitCtx, cancel := context.WithTimeout(ctx, fluxAPIAvailabilityTimeout)
@@ -480,6 +491,26 @@ func ensureLocalOCIRepositoryInsecure(ctx context.Context, fluxClient client.Cli
 	var lastErr error
 
 	for {
+		// Create a fresh client on each retry to ensure the dynamic REST mapper
+		// picks up newly-registered CRDs (like OCIRepository) that might not have
+		// been discoverable when the original client was created.
+		fluxClient, clientErr := clientFactory()
+		if clientErr != nil {
+			lastErr = clientErr
+
+			select {
+			case <-waitCtx.Done():
+				return fmt.Errorf(
+					"timed out creating client for OCIRepository %s/%s: %w",
+					key.Namespace,
+					key.Name,
+					lastErr,
+				)
+			case <-ticker.C:
+				continue
+			}
+		}
+
 		repo := &sourcev1.OCIRepository{}
 
 		err := fluxClient.Get(waitCtx, key, repo)
