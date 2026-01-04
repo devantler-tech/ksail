@@ -3,9 +3,10 @@ package setup
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	k3dconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/k3d"
+	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
 	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
 	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
 	"github.com/spf13/cobra"
@@ -14,19 +15,36 @@ import (
 const (
 	fluxResourcesActivity   = "applying custom resources"
 	argoCDResourcesActivity = "configuring argocd resources"
-	defaultClusterName      = "ksail"
+
+	// kindDefaultClusterName is the default cluster name for Kind clusters.
+	// Kind uses "kind" as the default cluster name when not specified.
+	kindDefaultClusterName = "kind"
 )
 
-// resolveClusterNameFromContext resolves the cluster name from the cluster config context.
-// This is a simplified resolver when distribution-specific configs are not available.
+// resolveClusterNameFromContext resolves the cluster name from the cluster config.
+// This uses the distribution's default cluster name for registry naming.
+// The cluster name is used for constructing registry container names (e.g., k3d-default-local-registry).
 func resolveClusterNameFromContext(clusterCfg *v1alpha1.Cluster) string {
-	if clusterCfg != nil {
-		if name := strings.TrimSpace(clusterCfg.Spec.Cluster.Connection.Context); name != "" {
-			return name
-		}
+	if clusterCfg == nil {
+		return kindDefaultClusterName
 	}
 
-	return defaultClusterName
+	return resolveDefaultClusterName(clusterCfg.Spec.Cluster.Distribution)
+}
+
+// resolveDefaultClusterName returns the default cluster name for a given distribution.
+// This matches the naming conventions used by each distribution's provisioner.
+func resolveDefaultClusterName(distribution v1alpha1.Distribution) string {
+	switch distribution {
+	case v1alpha1.DistributionK3d:
+		return k3dconfigmanager.DefaultClusterName
+	case v1alpha1.DistributionKind:
+		return kindDefaultClusterName
+	case v1alpha1.DistributionTalos:
+		return talosconfigmanager.DefaultClusterName
+	default:
+		return kindDefaultClusterName
+	}
 }
 
 type componentRequirements struct {

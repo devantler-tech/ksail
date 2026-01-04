@@ -14,6 +14,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
 	k3dconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/k3d"
+	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
 	"github.com/devantler-tech/ksail/v5/pkg/io/detector"
 	"github.com/devantler-tech/ksail/v5/pkg/io/generator"
 	argocdgenerator "github.com/devantler-tech/ksail/v5/pkg/io/generator/argocd"
@@ -897,11 +898,6 @@ func (s *Scaffolder) buildFluxInstanceOptions(
 	outputPath string,
 	force bool,
 ) fluxgenerator.InstanceGeneratorOptions {
-	port := s.KSailConfig.Spec.Cluster.LocalRegistryOpts.HostPort
-	if port == 0 {
-		port = 5000
-	}
-
 	// Use sanitized source directory name to match what the push command uses
 	sourceDir := s.KSailConfig.Spec.Workload.SourceDirectory
 	if sourceDir == "" {
@@ -910,18 +906,41 @@ func (s *Scaffolder) buildFluxInstanceOptions(
 
 	repoName := registry.SanitizeRepoName(sourceDir)
 
+	// Resolve cluster name to build the registry container name for in-cluster access.
+	// The registry name must match what the provisioner creates (e.g., k3d-default-local-registry).
+	clusterName := s.resolveClusterNameForDistribution()
+	registryName := registry.BuildLocalRegistryName(clusterName)
+
 	return fluxgenerator.InstanceGeneratorOptions{
 		Options: yamlgenerator.Options{
 			Output: outputPath,
 			Force:  force,
 		},
 		ProjectName:  repoName,
-		RegistryHost: "ksail-registry.localhost",
-		RegistryPort: port,
+		RegistryHost: registryName,
+		// In-cluster registry always uses the internal port (5000), not the host-mapped port
+		RegistryPort: int32(dockerclient.DefaultRegistryPort),
 		Ref:          registry.DefaultLocalArtifactTag,
 		Interval:     fluxgenerator.DefaultInterval,
 	}
 }
+
+// resolveClusterNameForDistribution returns the cluster name for the configured distribution.
+// This is used for in-cluster registry naming.
+func (s *Scaffolder) resolveClusterNameForDistribution() string {
+	switch s.KSailConfig.Spec.Cluster.Distribution {
+	case v1alpha1.DistributionK3d:
+		return k3dconfigmanager.ResolveClusterName(&s.KSailConfig, nil)
+	case v1alpha1.DistributionKind:
+		return kindDefaultClusterName
+	case v1alpha1.DistributionTalos:
+		return talosconfigmanager.DefaultClusterName
+	default:
+		return kindDefaultClusterName
+	}
+}
+
+const kindDefaultClusterName = "kind"
 
 // generateArgoCDApplicationConfig generates an ArgoCD Application CR manifest.
 func (s *Scaffolder) generateArgoCDApplicationConfig(sourceDir string, force bool) error {
