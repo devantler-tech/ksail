@@ -37,6 +37,11 @@ const (
 	// CRD names for waiting on establishment.
 	fluxInstanceCRDName    = "fluxinstances.fluxcd.controlplane.io"
 	ociRepositoriesCRDName = "ocirepositories.source.toolkit.fluxcd.io"
+	// apiStabilizationDelay is a brief pause after the API is reported ready,
+	// allowing the API server to fully propagate the CRD to all endpoints.
+	// This addresses race conditions observed in slower CI environments (e.g., Talos on GitHub Actions)
+	// where discovery reports the API as ready slightly before Create operations can succeed.
+	apiStabilizationDelay = 3 * time.Second
 )
 
 var (
@@ -156,6 +161,13 @@ func EnsureDefaultResources(
 		return err
 	}
 
+	// Brief stabilization delay for OCIRepository API as well
+	select {
+	case <-ctx.Done():
+		return fmt.Errorf("context cancelled during OCIRepository API stabilization: %w", ctx.Err())
+	case <-time.After(apiStabilizationDelay):
+	}
+
 	if clusterCfg.Spec.Cluster.LocalRegistry == v1alpha1.LocalRegistryEnabled {
 		err = ensureLocalOCIRepositoryInsecure(ctx, fluxClient)
 		if err != nil {
@@ -182,6 +194,19 @@ func setupFluxInstance(
 	err := waitForAPIReady(ctx, restConfig, fluxInstanceGroupVersion, fluxInstanceCRDName)
 	if err != nil {
 		return nil, err
+	}
+
+	// Brief stabilization delay to allow the API server to fully propagate the CRD
+	// across all its endpoints. This addresses race conditions observed in slower
+	// CI environments (e.g., Talos on GitHub Actions) where discovery reports the
+	// API as ready slightly before Create operations can succeed.
+	select {
+	case <-ctx.Done():
+		return nil, fmt.Errorf(
+			"context cancelled during FluxInstance API stabilization: %w",
+			ctx.Err(),
+		)
+	case <-time.After(apiStabilizationDelay):
 	}
 
 	fluxInstance, err := buildFluxInstance(clusterCfg, clusterName)
@@ -413,12 +438,32 @@ func isTransientAPIError(err error) bool {
 		return true
 	}
 
-	// "the server could not find the requested resource" is typically an IsNotFound
-	// error at the API level (not the same as a resource not existing)
+	// Check for connection-related errors that can occur during API server restarts
+	if apierrors.IsTimeout(err) || apierrors.IsTooManyRequests(err) {
+		return true
+	}
+
+	// String-based checks for errors that aren't properly typed
 	errMsg := err.Error()
 
-	return strings.Contains(errMsg, "the server could not find the requested resource") ||
-		strings.Contains(errMsg, "no matches for kind")
+	// "the server could not find the requested resource" indicates the CRD endpoint
+	// isn't fully registered yet
+	if strings.Contains(errMsg, "the server could not find the requested resource") {
+		return true
+	}
+
+	// "no matches for kind" is a REST mapper error when the CRD isn't known yet
+	if strings.Contains(errMsg, "no matches for kind") {
+		return true
+	}
+
+	// Connection refused/reset can happen during API server initialization
+	if strings.Contains(errMsg, "connection refused") ||
+		strings.Contains(errMsg, "connection reset") {
+		return true
+	}
+
+	return false
 }
 
 //nolint:cyclop // polling loop requires multiple conditional branches for different error types
