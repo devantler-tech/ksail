@@ -37,11 +37,12 @@ const (
 	// CRD names for waiting on establishment.
 	fluxInstanceCRDName    = "fluxinstances.fluxcd.controlplane.io"
 	ociRepositoriesCRDName = "ocirepositories.source.toolkit.fluxcd.io"
-	// apiStabilizationDelay is a brief pause after the API is reported ready,
+	// apiStabilizationDelay is a pause after the API is reported ready,
 	// allowing the API server to fully propagate the CRD to all endpoints.
 	// This addresses race conditions observed in slower CI environments (e.g., Talos on GitHub Actions)
 	// where discovery reports the API as ready slightly before Create operations can succeed.
-	apiStabilizationDelay = 3 * time.Second
+	// 5 seconds has been empirically determined to be sufficient for GitHub Actions runners.
+	apiStabilizationDelay = 5 * time.Second
 )
 
 var (
