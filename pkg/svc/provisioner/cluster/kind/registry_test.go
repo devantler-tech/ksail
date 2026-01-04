@@ -55,9 +55,32 @@ func expectRegistryPortScan(
 	mockClient *docker.MockAPIClient,
 	registries []container.Summary,
 ) {
+	// This matches listAllRegistryContainers which uses All: true with ksail label filter
+	// but WITHOUT a name filter. This distinguishes it from listRegistryContainers
+	// which uses a name filter for checking specific registry existence.
 	mockClient.EXPECT().
-		ContainerList(mock.Anything, mock.Anything).
+		ContainerList(mock.Anything, mock.MatchedBy(func(opts container.ListOptions) bool {
+			hasLabelFilter := len(opts.Filters.Get("label")) > 0
+			hasNameFilter := len(opts.Filters.Get("name")) > 0
+			// listAllRegistryContainers: All=true, has label filter, NO name filter
+			return opts.All && hasLabelFilter && !hasNameFilter
+		})).
 		Return(registries, nil).
+		Once()
+}
+
+// expectGetUsedHostPorts adds a mock expectation for GetUsedHostPorts call.
+// This should be called FIRST before expectRegistryPortScan when setting up mocks.
+func expectGetUsedHostPorts(
+	mockClient *docker.MockAPIClient,
+	containers []container.Summary,
+) {
+	mockClient.EXPECT().
+		ContainerList(mock.Anything, mock.MatchedBy(func(opts container.ListOptions) bool {
+			// GetUsedHostPorts uses All: false with no filters
+			return !opts.All && len(opts.Filters.Get("name")) == 0
+		})).
+		Return(containers, nil).
 		Once()
 }
 
@@ -185,21 +208,20 @@ func runSetupRegistriesExistingRegistryScenario(t *testing.T) {
 		},
 	}
 
+	// GetUsedHostPorts is called first to get all used ports from running containers
+	expectGetUsedHostPorts(mockClient, []container.Summary{existing})
+
 	// Existing registry is discovered before provisioning new mirrors.
 	expectRegistryPortScan(mockClient, []container.Summary{existing})
-	mockClient.EXPECT().
-		ContainerList(mock.Anything, matchListOptionsByName("test-docker.io")).
-		Return([]container.Summary{existing}, nil).
-		Once()
-	mockClient.EXPECT().
-		ContainerList(mock.Anything, mock.Anything).
-		Return([]container.Summary{existing}, nil).
-		Once()
+
+	// CreateRegistry for docker.io - check if exists (returns existing, so addClusterLabel is called as no-op)
 	mockClient.EXPECT().
 		ContainerList(mock.Anything, matchListOptionsByName("test-docker.io")).
 		Return([]container.Summary{existing}, nil).
 		Once()
 
+	// CreateRegistry for ghcr.io - check if exists (returns empty, so it will be created)
+	// This will trigger the provision flow which should fail
 	expectMirrorProvisionFailure(mockClient, "test-ghcr.io", "ghcr.io", errRegistryCreateFailed)
 
 	err := kindprovisioner.SetupRegistries(ctx, kindConfig, "test", mockClient, mirrorSpecs, buf)
@@ -234,11 +256,10 @@ func newSingleMirrorSpec() []registry.MirrorSpec {
 }
 
 func expectInitialRegistryScan(mockClient *docker.MockAPIClient) {
+	// GetUsedHostPorts is called first in PrepareRegistryManager
+	expectGetUsedHostPorts(mockClient, []container.Summary{})
+	// Then listAllRegistryContainers is called in collectExistingRegistryNames
 	expectRegistryPortScan(mockClient, []container.Summary{})
-	mockClient.EXPECT().
-		ContainerList(mock.Anything, mock.Anything).
-		Return([]container.Summary{}, nil).
-		Once()
 }
 
 func expectMirrorProvisionBase(

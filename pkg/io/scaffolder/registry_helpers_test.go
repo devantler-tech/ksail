@@ -143,10 +143,14 @@ func k3dRegistryConfigCases() []k3dRegistryConfigCase {
 			},
 		},
 		{
-			name:    "invalid mirror spec",
-			mirrors: []string{"invalid-no-equals"},
+			name:    "mirror spec with just host (auto-generate remote)",
+			mirrors: []string{"example.io"},
 			expected: k3dRegistryExpectation{
-				expectEmptyConfig: true,
+				contains: []string{
+					"\"example.io\":",
+					"http://k3d-default-example.io:5000",
+					"https://example.io",
+				},
 			},
 		},
 		{
