@@ -18,9 +18,11 @@ import (
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/discovery"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
@@ -170,15 +172,10 @@ func EnsureDefaultResources(
 	}
 
 	if clusterCfg.Spec.Cluster.LocalRegistry == v1alpha1.LocalRegistryEnabled {
-		// Create a client factory for the OCIRepository operations.
-		// This is necessary because the dynamic REST mapper caches discovery results,
-		// and the fluxClient created earlier may have stale cache entries that don't
-		// include the OCIRepository CRD which is installed by the FluxInstance reconciler.
-		clientFactory := func() (client.Client, error) {
-			return newFluxResourcesClient(restConfig)
-		}
-
-		err = ensureLocalOCIRepositoryInsecure(ctx, clientFactory)
+		// Use dynamic client approach for OCIRepository operations.
+		// This bypasses the controller-runtime REST mapper cache which can become
+		// stale in slow CI environments where CRD registration takes time to propagate.
+		err = ensureLocalOCIRepositoryInsecure(ctx, restConfig)
 		if err != nil {
 			return err
 		}
@@ -475,35 +472,43 @@ func isTransientAPIError(err error) bool {
 	return false
 }
 
-//nolint:cyclop // polling loop requires multiple conditional branches for different error types
+// ensureLocalOCIRepositoryInsecure uses a dynamic Kubernetes client to patch the OCIRepository
+// to enable insecure HTTP access for local registries. Using the dynamic client with
+// unstructured objects bypasses the controller-runtime REST mapper cache, which can become
+// stale in slow CI environments where CRD registration takes time to fully propagate.
+//
+//nolint:cyclop,funlen // polling loop with retry logic requires multiple conditional branches
 func ensureLocalOCIRepositoryInsecure(
 	ctx context.Context,
-	clientFactory func() (client.Client, error),
+	restConfig *rest.Config,
 ) error {
-	key := client.ObjectKey{Name: defaultOCIRepositoryName, Namespace: fluxclient.DefaultNamespace}
-
 	waitCtx, cancel := context.WithTimeout(ctx, fluxAPIAvailabilityTimeout)
 	defer cancel()
 
 	ticker := time.NewTicker(fluxAPIAvailabilityPollInterval)
 	defer ticker.Stop()
 
+	// Define the GVR for OCIRepository - this is the key to bypassing REST mapper cache.
+	// With dynamic client + GVR, we don't rely on discovery at all.
+	ociRepoGVR := schema.GroupVersionResource{
+		Group:    sourcev1.GroupVersion.Group,
+		Version:  sourcev1.GroupVersion.Version,
+		Resource: "ocirepositories",
+	}
+
 	var lastErr error
 
 	for {
-		// Create a fresh client on each retry to ensure the dynamic REST mapper
-		// picks up newly-registered CRDs (like OCIRepository) that might not have
-		// been discoverable when the original client was created.
-		fluxClient, clientErr := clientFactory()
+		// Create a fresh dynamic client on each retry.
+		// Unlike the typed client, this doesn't require REST mapper discovery.
+		dynamicClient, clientErr := dynamic.NewForConfig(restConfig)
 		if clientErr != nil {
 			lastErr = clientErr
 
 			select {
 			case <-waitCtx.Done():
 				return fmt.Errorf(
-					"timed out creating client for OCIRepository %s/%s: %w",
-					key.Namespace,
-					key.Name,
+					"timed out creating dynamic client for OCIRepository: %w",
 					lastErr,
 				)
 			case <-ticker.C:
@@ -511,18 +516,28 @@ func ensureLocalOCIRepositoryInsecure(
 			}
 		}
 
-		repo := &sourcev1.OCIRepository{}
+		// Get the OCIRepository using the dynamic client
+		unstructuredRepo, err := dynamicClient.Resource(ociRepoGVR).
+			Namespace(fluxclient.DefaultNamespace).
+			Get(waitCtx, defaultOCIRepositoryName, metav1.GetOptions{})
 
-		err := fluxClient.Get(waitCtx, key, repo)
 		switch {
 		case err == nil:
-			if repo.Spec.Insecure {
+			// Check if already insecure
+			insecure, found, _ := unstructured.NestedBool(unstructuredRepo.Object, "spec", "insecure")
+			if found && insecure {
 				return nil
 			}
 
-			repo.Spec.Insecure = true
+			// Patch to set insecure: true
+			err = unstructured.SetNestedField(unstructuredRepo.Object, true, "spec", "insecure")
+			if err != nil {
+				return fmt.Errorf("failed to set insecure field: %w", err)
+			}
 
-			updateErr := fluxClient.Update(ctx, repo)
+			_, updateErr := dynamicClient.Resource(ociRepoGVR).
+				Namespace(fluxclient.DefaultNamespace).
+				Update(ctx, unstructuredRepo, metav1.UpdateOptions{})
 			if updateErr == nil {
 				return nil
 			}
@@ -535,8 +550,8 @@ func ensureLocalOCIRepositoryInsecure(
 				case <-waitCtx.Done():
 					return fmt.Errorf(
 						"timed out updating OCIRepository %s/%s: %w",
-						key.Namespace,
-						key.Name,
+						fluxclient.DefaultNamespace,
+						defaultOCIRepositoryName,
 						lastErr,
 					)
 				case <-ticker.C:
@@ -546,20 +561,19 @@ func ensureLocalOCIRepositoryInsecure(
 
 			return fmt.Errorf(
 				"failed to update OCIRepository %s/%s: %w",
-				key.Namespace,
-				key.Name,
+				fluxclient.DefaultNamespace,
+				defaultOCIRepositoryName,
 				updateErr,
 			)
 		case apierrors.IsNotFound(err):
 			lastErr = err
 
 			select {
-			//nolint:err113 // dynamic resource key necessary for debugging timeout
 			case <-waitCtx.Done():
 				return fmt.Errorf(
 					"timed out waiting for OCIRepository %s/%s to be created by FluxInstance",
-					key.Namespace,
-					key.Name,
+					fluxclient.DefaultNamespace,
+					defaultOCIRepositoryName,
 				)
 			case <-ticker.C:
 			}
