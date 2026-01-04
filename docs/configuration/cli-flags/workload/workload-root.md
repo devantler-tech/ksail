@@ -28,7 +28,7 @@ Available Commands:
   get         Get resources
   install     Install Helm charts
   logs        Print container logs
-  push        Package and push an OCI artifact to the local registry
+  push        Package and push an OCI artifact to a registry
   reconcile   Trigger reconciliation for GitOps workloads
   rollout     Manage the rollout of a resource
   scale       Scale resources

@@ -9,7 +9,6 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/k8s"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
 )
 
 const (
@@ -107,26 +106,11 @@ func (l *LocalPathStorageInstaller) applyManifest(ctx context.Context) error {
 	return nil
 }
 
-// createClientset creates a Kubernetes clientset for the configured cluster.
-func (l *LocalPathStorageInstaller) createClientset() (*kubernetes.Clientset, error) {
-	restConfig, err := k8s.BuildRESTConfig(l.kubeconfig, l.context)
-	if err != nil {
-		return nil, fmt.Errorf("failed to build rest config: %w", err)
-	}
-
-	clientset, err := kubernetes.NewForConfig(restConfig)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create kubernetes client: %w", err)
-	}
-
-	return clientset, nil
-}
-
 // waitForReadiness waits for the local-path-provisioner deployment to become ready.
 func (l *LocalPathStorageInstaller) waitForReadiness(ctx context.Context) error {
-	clientset, err := l.createClientset()
+	clientset, err := k8s.NewClientset(l.kubeconfig, l.context)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create kubernetes client: %w", err)
 	}
 
 	checks := []k8s.ReadinessCheck{
@@ -143,9 +127,9 @@ func (l *LocalPathStorageInstaller) waitForReadiness(ctx context.Context) error 
 
 // setDefaultStorageClass marks the local-path storage class as the default.
 func (l *LocalPathStorageInstaller) setDefaultStorageClass(ctx context.Context) error {
-	clientset, err := l.createClientset()
+	clientset, err := k8s.NewClientset(l.kubeconfig, l.context)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create kubernetes client: %w", err)
 	}
 
 	// Get the storage class

@@ -114,10 +114,11 @@ func TestStandardFieldSelectors(t *testing.T) {
 			},
 		},
 		{
-			name:            "metrics server",
-			factory:         configmanager.DefaultMetricsServerFieldSelector,
-			expectedDesc:    "Metrics Server configuration (Enabled: install, Disabled: uninstall)",
-			expectedDefault: v1alpha1.MetricsServerEnabled,
+			name:    "metrics server",
+			factory: configmanager.DefaultMetricsServerFieldSelector,
+			expectedDesc: "Metrics Server " +
+				"(Default: use distribution, Enabled: install, Disabled: uninstall)",
+			expectedDefault: v1alpha1.MetricsServerDefault,
 			assertPointer: func(t *testing.T, cluster *v1alpha1.Cluster, ptr any) {
 				t.Helper()
 				assertPointerSame(t, ptr, &cluster.Spec.Cluster.MetricsServer)

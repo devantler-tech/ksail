@@ -239,7 +239,7 @@ func TestResolveClusterName(t *testing.T) {
 
 		name := k3d.ResolveClusterName(nil, nil)
 
-		assert.Equal(t, "k3d", name)
+		assert.Equal(t, k3d.DefaultClusterName, name)
 	})
 
 	t.Run("returns_k3d_config_name_when_present", func(t *testing.T) {
@@ -294,7 +294,7 @@ func TestResolveClusterName(t *testing.T) {
 
 		name := k3d.ResolveClusterName(clusterCfg, k3dConfig)
 
-		assert.Equal(t, "k3d", name)
+		assert.Equal(t, k3d.DefaultClusterName, name)
 	})
 
 	t.Run("trims_whitespace_from_k3d_name", func(t *testing.T) {
@@ -337,7 +337,7 @@ func TestResolveClusterName(t *testing.T) {
 
 		name := k3d.ResolveClusterName(clusterCfg, k3dConfig)
 
-		assert.Equal(t, "k3d", name)
+		assert.Equal(t, k3d.DefaultClusterName, name)
 	})
 
 	t.Run("returns_cluster_context_when_cluster_cfg_is_nil", func(t *testing.T) {
@@ -346,6 +346,6 @@ func TestResolveClusterName(t *testing.T) {
 		// When clusterCfg is nil, should fall through to default
 		name := k3d.ResolveClusterName(nil, nil)
 
-		assert.Equal(t, "k3d", name)
+		assert.Equal(t, k3d.DefaultClusterName, name)
 	})
 }

@@ -100,6 +100,7 @@ func expectMetricsServerAddRepository(
 
 				return true
 			}),
+			mock.Anything,
 		).
 		Return(err)
 }

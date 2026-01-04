@@ -6,6 +6,7 @@ package helm
 
 import (
 	"context"
+	"time"
 
 	mock "github.com/stretchr/testify/mock"
 )
@@ -38,16 +39,16 @@ func (_m *MockInterface) EXPECT() *MockInterface_Expecter {
 }
 
 // AddRepository provides a mock function for the type MockInterface
-func (_mock *MockInterface) AddRepository(ctx context.Context, entry *RepositoryEntry) error {
-	ret := _mock.Called(ctx, entry)
+func (_mock *MockInterface) AddRepository(ctx context.Context, entry *RepositoryEntry, timeout time.Duration) error {
+	ret := _mock.Called(ctx, entry, timeout)
 
 	if len(ret) == 0 {
 		panic("no return value specified for AddRepository")
 	}
 
 	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, *RepositoryEntry) error); ok {
-		r0 = returnFunc(ctx, entry)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *RepositoryEntry, time.Duration) error); ok {
+		r0 = returnFunc(ctx, entry, timeout)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -62,11 +63,12 @@ type MockInterface_AddRepository_Call struct {
 // AddRepository is a helper method to define mock.On call
 //   - ctx context.Context
 //   - entry *RepositoryEntry
-func (_e *MockInterface_Expecter) AddRepository(ctx interface{}, entry interface{}) *MockInterface_AddRepository_Call {
-	return &MockInterface_AddRepository_Call{Call: _e.mock.On("AddRepository", ctx, entry)}
+//   - timeout time.Duration
+func (_e *MockInterface_Expecter) AddRepository(ctx interface{}, entry interface{}, timeout interface{}) *MockInterface_AddRepository_Call {
+	return &MockInterface_AddRepository_Call{Call: _e.mock.On("AddRepository", ctx, entry, timeout)}
 }
 
-func (_c *MockInterface_AddRepository_Call) Run(run func(ctx context.Context, entry *RepositoryEntry)) *MockInterface_AddRepository_Call {
+func (_c *MockInterface_AddRepository_Call) Run(run func(ctx context.Context, entry *RepositoryEntry, timeout time.Duration)) *MockInterface_AddRepository_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -76,9 +78,14 @@ func (_c *MockInterface_AddRepository_Call) Run(run func(ctx context.Context, en
 		if args[1] != nil {
 			arg1 = args[1].(*RepositoryEntry)
 		}
+		var arg2 time.Duration
+		if args[2] != nil {
+			arg2 = args[2].(time.Duration)
+		}
 		run(
 			arg0,
 			arg1,
+			arg2,
 		)
 	})
 	return _c
@@ -89,7 +96,7 @@ func (_c *MockInterface_AddRepository_Call) Return(err error) *MockInterface_Add
 	return _c
 }
 
-func (_c *MockInterface_AddRepository_Call) RunAndReturn(run func(ctx context.Context, entry *RepositoryEntry) error) *MockInterface_AddRepository_Call {
+func (_c *MockInterface_AddRepository_Call) RunAndReturn(run func(ctx context.Context, entry *RepositoryEntry, timeout time.Duration) error) *MockInterface_AddRepository_Call {
 	_c.Call.Return(run)
 	return _c
 }

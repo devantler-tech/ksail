@@ -49,7 +49,7 @@ func (c *CertManagerInstaller) Uninstall(ctx context.Context) error {
 func (c *CertManagerInstaller) helmInstallOrUpgradeCertManager(ctx context.Context) error {
 	repoEntry := &helm.RepositoryEntry{Name: certManagerRepoName, URL: certManagerRepoURL}
 
-	err := c.client.AddRepository(ctx, repoEntry)
+	err := c.client.AddRepository(ctx, repoEntry, c.timeout)
 	if err != nil {
 		return fmt.Errorf("failed to add jetstack repository: %w", err)
 	}

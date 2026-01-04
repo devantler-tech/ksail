@@ -130,7 +130,7 @@ func k3dRegistryConfigCases() []k3dRegistryConfigCase {
 			expected: k3dRegistryExpectation{
 				contains: []string{
 					"\"docker.io\":",
-					"http://docker.io:5000",
+					"http://k3d-default-docker.io:5000",
 					"https://registry-1.docker.io",
 				},
 			},
@@ -143,10 +143,14 @@ func k3dRegistryConfigCases() []k3dRegistryConfigCase {
 			},
 		},
 		{
-			name:    "invalid mirror spec",
-			mirrors: []string{"invalid-no-equals"},
+			name:    "mirror spec with just host (auto-generate remote)",
+			mirrors: []string{"example.io"},
 			expected: k3dRegistryExpectation{
-				expectEmptyConfig: true,
+				contains: []string{
+					"\"example.io\":",
+					"http://k3d-default-example.io:5000",
+					"https://example.io",
+				},
 			},
 		},
 		{
@@ -159,8 +163,8 @@ func k3dRegistryConfigCases() []k3dRegistryConfigCase {
 				contains: []string{
 					"\"docker.io\":",
 					"\"ghcr.io\":",
-					"http://docker.io:5000",
-					"http://ghcr.io:5000",
+					"http://k3d-default-docker.io:5000",
+					"http://k3d-default-ghcr.io:5000",
 					"https://registry-1.docker.io",
 					"https://ghcr.io",
 				},

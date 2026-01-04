@@ -213,7 +213,7 @@ func setupArgoCDTestMocks(t *testing.T) (func() *fakeInstaller, *bool) {
 	t.Cleanup(restoreInstaller)
 
 	restoreEnsure := clusterpkg.SetEnsureArgoCDResourcesForTests(
-		func(_ context.Context, _ string, _ *v1alpha1.Cluster) error {
+		func(_ context.Context, _ string, _ *v1alpha1.Cluster, _ string) error {
 			ensureCalled = true
 
 			return nil

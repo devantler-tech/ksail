@@ -19,7 +19,7 @@ func InstallOrUpgradeChart(
 		URL:  repoConfig.URL,
 	}
 
-	addRepoErr := client.AddRepository(ctx, repoEntry)
+	addRepoErr := client.AddRepository(ctx, repoEntry, timeout)
 	if addRepoErr != nil {
 		return fmt.Errorf("failed to add %s repository: %w", repoConfig.RepoName, addRepoErr)
 	}

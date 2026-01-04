@@ -485,104 +485,81 @@ func (c *Client) createSubcommandWrapper(parentType string, subCmd *cobra.Comman
 	return wrapper
 }
 
+// createFreshClient creates a fresh client from the command's IO streams.
+func (c *Client) createFreshClient(cmd *cobra.Command) *Client {
+	return NewClient(genericiooptions.IOStreams{
+		In:     cmd.InOrStdin(),
+		Out:    cmd.OutOrStdout(),
+		ErrOut: cmd.ErrOrStderr(),
+	})
+}
+
+// prepareAndExecuteGen is a helper that handles the common pattern of:
+// 1. Finding the target command
+// 2. Setting forced flags
+// 3. Setting output streams
+// 4. Copying user flags
+// 5. Executing the command.
+func (c *Client) prepareAndExecuteGen(
+	targetCmd *cobra.Command,
+	wrapperCmd *cobra.Command,
+	args []string,
+) error {
+	// Force --dry-run=client and -o yaml
+	err := c.setForcedFlags(targetCmd)
+	if err != nil {
+		return err
+	}
+
+	// Ensure command output is captured by the wrapper command
+	targetCmd.SetOut(wrapperCmd.OutOrStdout())
+	targetCmd.SetErr(wrapperCmd.ErrOrStderr())
+
+	// Copy user flags
+	err = c.copyUserFlags(wrapperCmd, targetCmd)
+	if err != nil {
+		return err
+	}
+
+	// Execute
+	return c.executeCommand(targetCmd, args)
+}
+
 // executeSubcommandGen executes kubectl create with subcommand and forced flags.
 func (c *Client) executeSubcommandGen(
 	parentType, subType string,
 	cmd *cobra.Command,
 	args []string,
 ) error {
-	// Create a fresh client with the command's IO streams to ensure output goes to the right place
-	freshClient := NewClient(genericiooptions.IOStreams{
-		In:     cmd.InOrStdin(),
-		Out:    cmd.OutOrStdout(),
-		ErrOut: cmd.ErrOrStderr(),
-	})
-
-	// Create a fresh kubectl create command
+	freshClient := c.createFreshClient(cmd)
 	createCmd := freshClient.CreateCreateCommand("")
 
 	// Find the parent resource command
-	var parentCmd *cobra.Command
-
-	for _, subCmd := range createCmd.Commands() {
-		if subCmd.Name() == parentType {
-			parentCmd = subCmd
-
-			break
-		}
-	}
-
+	parentCmd := freshClient.findResourceCommand(createCmd, parentType)
 	if parentCmd == nil {
 		return fmt.Errorf("%w: %s", ErrResourceCommandNotFound, parentType)
 	}
 
 	// Find the subcommand
-	var freshSubCmd *cobra.Command
-
-	for _, sub := range parentCmd.Commands() {
-		if sub.Name() == subType {
-			freshSubCmd = sub
-
-			break
-		}
-	}
-
+	freshSubCmd := freshClient.findResourceCommand(parentCmd, subType)
 	if freshSubCmd == nil {
 		return fmt.Errorf("%w: %s %s", ErrResourceCommandNotFound, parentType, subType)
 	}
 
-	// Force --dry-run=client and -o yaml
-	err := freshClient.setForcedFlags(freshSubCmd)
-	if err != nil {
-		return err
-	}
-
-	// Ensure command output is captured by the wrapper command
-	freshSubCmd.SetOut(cmd.OutOrStdout())
-	freshSubCmd.SetErr(cmd.ErrOrStderr())
-
-	// Copy user flags
-	err = freshClient.copyUserFlags(cmd, freshSubCmd)
-	if err != nil {
-		return err
-	}
-
-	// Execute
-	return freshClient.executeCommand(freshSubCmd, args)
+	return freshClient.prepareAndExecuteGen(freshSubCmd, cmd, args)
 }
 
 // executeResourceGen executes kubectl create with forced --dry-run=client -o yaml flags.
 func (c *Client) executeResourceGen(resourceType string, cmd *cobra.Command, args []string) error {
-	// Create a fresh client with the command's IO streams to ensure output goes to the right place
-	freshClient := NewClient(genericiooptions.IOStreams{
-		In:     cmd.InOrStdin(),
-		Out:    cmd.OutOrStdout(),
-		ErrOut: cmd.ErrOrStderr(),
-	})
-
-	// Create a fresh kubectl create command
+	freshClient := c.createFreshClient(cmd)
 	createCmd := freshClient.CreateCreateCommand("")
 
-	// Find the resource command
 	freshResourceCmd := freshClient.findResourceCommand(createCmd, resourceType)
 	if freshResourceCmd == nil {
 		return fmt.Errorf("%w: %s", ErrResourceCommandNotFound, resourceType)
 	}
 
-	// Force --dry-run=client and -o yaml FIRST
-	err := freshClient.setForcedFlags(freshResourceCmd)
-	if err != nil {
-		return err
-	}
-
-	// Copy user flags
-	err = freshClient.copyUserFlags(cmd, freshResourceCmd)
-	if err != nil {
-		return err
-	}
-
-	// Execute
-	return freshClient.executeCommand(freshResourceCmd, args)
+	return freshClient.prepareAndExecuteGen(freshResourceCmd, cmd, args)
 }
 
 // findResourceCommand finds a kubectl create subcommand by resource type name.

@@ -7,7 +7,6 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
-	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
@@ -16,31 +15,39 @@ import (
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
 
-const allFlag = "all"
+// AllDistributions returns all supported distributions.
+func AllDistributions() []v1alpha1.Distribution {
+	return []v1alpha1.Distribution{
+		v1alpha1.DistributionKind,
+		v1alpha1.DistributionK3d,
+		v1alpha1.DistributionTalos,
+	}
+}
 
 // NewListCmd creates the list command for clusters.
 func NewListCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
+	var distributionFilter string
+
 	cmd := &cobra.Command{
 		Use:          "list",
 		Short:        "List clusters",
 		Long:         `List all Kubernetes clusters managed by KSail.`,
 		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return runtimeContainer.Invoke(func(_ runtime.Injector) error {
+				deps := ListDeps{}
+
+				return HandleListRunE(cmd, distributionFilter, deps)
+			})
+		},
 	}
 
-	cfgManager := ksailconfigmanager.NewCommandConfigManager(
-		cmd,
-		ksailconfigmanager.DefaultClusterFieldSelectors(),
+	// Add --distribution flag as optional filter (no default - lists all by default)
+	cmd.Flags().StringVarP(
+		&distributionFilter,
+		"distribution", "d", "",
+		"Filter by distribution (Kind, K3d, Talos). If not specified, lists all distributions.",
 	)
-
-	bindAllFlag(cmd, cfgManager)
-
-	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
-		return runtimeContainer.Invoke(func(_ runtime.Injector) error {
-			deps := ListDeps{}
-
-			return HandleListRunE(cmd, cfgManager, deps)
-		})
-	}
 
 	return cmd
 }
@@ -57,91 +64,20 @@ type ListDeps struct {
 // Exported for testing purposes.
 func HandleListRunE(
 	cmd *cobra.Command,
-	cfgManager *ksailconfigmanager.ConfigManager,
+	distributionFilter string,
 	deps ListDeps,
 ) error {
-	// Load cluster configuration
-	_, err := cfgManager.LoadConfigSilent()
+	// Determine which distributions to list
+	distributions, err := resolveDistributions(distributionFilter)
 	if err != nil {
-		return fmt.Errorf("failed to load configuration: %w", err)
+		return err
 	}
 
-	// List clusters
-	err = listClusters(cfgManager, deps, cmd)
-	if err != nil {
-		return fmt.Errorf("failed to list clusters: %w", err)
-	}
+	// List clusters for each distribution
+	showHeaders := len(distributions) > 1
 
-	return nil
-}
-
-func listClusters(
-	cfgManager *ksailconfigmanager.ConfigManager,
-	deps ListDeps,
-	cmd *cobra.Command,
-) error {
-	clusterCfg := cfgManager.Config
-	includeDistribution := cfgManager.Viper.GetBool(allFlag)
-
-	primaryErr := listPrimaryClusters(cmd, clusterCfg, deps, includeDistribution)
-	if primaryErr != nil {
-		return primaryErr
-	}
-
-	if !includeDistribution {
-		return nil
-	}
-
-	return listAdditionalDistributionClusters(cmd, clusterCfg, deps)
-}
-
-func listPrimaryClusters(
-	cmd *cobra.Command,
-	clusterCfg *v1alpha1.Cluster,
-	deps ListDeps,
-	includeDistribution bool,
-) error {
-	// Create a factory with an empty config for the distribution.
-	// For list operations, we only need the provisioner type, not specific config data.
-	var factory clusterprovisioner.Factory
-	if deps.DistributionFactoryCreator != nil {
-		factory = deps.DistributionFactoryCreator(clusterCfg.Spec.Cluster.Distribution)
-	} else {
-		factory = clusterprovisioner.DefaultFactory{
-			DistributionConfig: createEmptyDistributionConfig(clusterCfg.Spec.Cluster.Distribution),
-		}
-	}
-
-	provisioner, _, err := factory.Create(cmd.Context(), clusterCfg)
-	if err != nil {
-		return fmt.Errorf("failed to resolve cluster provisioner: %w", err)
-	}
-
-	clusters, err := provisioner.List(cmd.Context())
-	if err != nil {
-		return fmt.Errorf("failed to list clusters: %w", err)
-	}
-
-	displayClusterList(clusterCfg.Spec.Cluster.Distribution, clusters, cmd, includeDistribution)
-
-	return nil
-}
-
-func listAdditionalDistributionClusters(
-	cmd *cobra.Command,
-	clusterCfg *v1alpha1.Cluster,
-	deps ListDeps,
-) error {
-	for _, distribution := range []v1alpha1.Distribution{
-		v1alpha1.DistributionKind,
-		v1alpha1.DistributionK3d,
-		v1alpha1.DistributionTalos,
-	} {
-		if distribution == clusterCfg.Spec.Cluster.Distribution {
-			continue
-		}
-
-		listErr := listDistributionClusters(cmd, clusterCfg, deps, distribution)
+	for _, dist := range distributions {
+		listErr := listDistributionClusters(cmd, deps, dist, showHeaders)
 		if listErr != nil {
 			return listErr
 		}
@@ -150,82 +86,63 @@ func listAdditionalDistributionClusters(
 	return nil
 }
 
+// resolveDistributions returns the list of distributions to query based on the filter.
+func resolveDistributions(filter string) ([]v1alpha1.Distribution, error) {
+	if filter == "" {
+		return AllDistributions(), nil
+	}
+
+	// Parse and validate the distribution filter
+	var dist v1alpha1.Distribution
+
+	err := dist.Set(filter)
+	if err != nil {
+		return nil, fmt.Errorf("invalid distribution filter: %w", err)
+	}
+
+	return []v1alpha1.Distribution{dist}, nil
+}
+
 func listDistributionClusters(
 	cmd *cobra.Command,
-	clusterCfg *v1alpha1.Cluster,
 	deps ListDeps,
 	distribution v1alpha1.Distribution,
+	showHeaders bool,
 ) error {
-	otherCluster := cloneClusterForDistribution(clusterCfg, distribution)
-	if otherCluster == nil {
-		return nil
+	// Create a minimal cluster config for the factory
+	clusterCfg := &v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				Distribution: distribution,
+			},
+		},
 	}
 
 	// Use custom factory creator if provided (for testing), otherwise create real factory.
-	var distributionFactory clusterprovisioner.Factory
+	var factory clusterprovisioner.Factory
 	if deps.DistributionFactoryCreator != nil {
-		distributionFactory = deps.DistributionFactoryCreator(distribution)
+		factory = deps.DistributionFactoryCreator(distribution)
 	} else {
 		// Create a factory with an empty config for the distribution.
 		// For list operations, we only need the provisioner type, not specific config data.
-		distributionFactory = clusterprovisioner.DefaultFactory{
+		factory = clusterprovisioner.DefaultFactory{
 			DistributionConfig: createEmptyDistributionConfig(distribution),
 		}
 	}
 
-	otherProv, _, err := distributionFactory.Create(cmd.Context(), otherCluster)
+	provisioner, _, err := factory.Create(cmd.Context(), clusterCfg)
 	if err != nil {
-		return fmt.Errorf(
-			"failed to create provisioner for distribution %s: %w",
-			distribution,
-			err,
-		)
+		return fmt.Errorf("failed to create provisioner for %s: %w", distribution, err)
 	}
 
-	otherClusters, err := otherProv.List(cmd.Context())
+	clusters, err := provisioner.List(cmd.Context())
 	if err != nil {
-		return fmt.Errorf(
-			"failed to list clusters for distribution %s: %w",
-			distribution,
-			err,
-		)
+		return fmt.Errorf("failed to list %s clusters: %w", distribution, err)
 	}
 
-	displayClusterList(distribution, otherClusters, cmd, true)
+	displayClusterList(distribution, clusters, cmd.OutOrStdout(), showHeaders)
 
 	return nil
-}
-
-func cloneClusterForDistribution(
-	original *v1alpha1.Cluster,
-	distribution v1alpha1.Distribution,
-) *v1alpha1.Cluster {
-	if original == nil {
-		return nil
-	}
-
-	clone := *original
-	clone.Spec = original.Spec
-	clone.Spec.Cluster.Distribution = distribution
-
-	if distribution != original.Spec.Cluster.Distribution {
-		clone.Spec.Cluster.DistributionConfig = defaultDistributionConfigPath(distribution)
-	}
-
-	return &clone
-}
-
-func defaultDistributionConfigPath(distribution v1alpha1.Distribution) string {
-	switch distribution {
-	case v1alpha1.DistributionKind:
-		return "kind.yaml"
-	case v1alpha1.DistributionK3d:
-		return "k3d.yaml"
-	case v1alpha1.DistributionTalos:
-		return talosconfigmanager.DefaultPatchesDir
-	default:
-		return "kind.yaml"
-	}
 }
 
 // createEmptyDistributionConfig creates an empty distribution config for the given distribution.
@@ -256,49 +173,38 @@ func createEmptyDistributionConfig(
 func displayClusterList(
 	distribution v1alpha1.Distribution,
 	clusters []string,
-	cmd *cobra.Command,
-	includeDistribution bool,
+	writer io.Writer,
+	showHeaders bool,
 ) {
-	writer := cmd.OutOrStdout()
-
-	// Add distribution header when showing all distributions
-	if includeDistribution {
+	// Add distribution header when showing multiple distributions
+	if showHeaders {
 		_, _ = fmt.Fprintf(writer, "---|%s|---\n", strings.ToLower(string(distribution)))
 	}
 
 	if len(clusters) == 0 {
-		displayEmptyClusters(distribution, includeDistribution, writer)
+		if showHeaders {
+			_, _ = fmt.Fprintln(writer, "No clusters found.")
+		}
+		// When filtering by single distribution, no message for empty (user knows what they asked for)
 	} else {
-		displayClusterNames(distribution, clusters, includeDistribution, writer)
+		displayClusterNames(distribution, clusters, writer, showHeaders)
 	}
 
 	// Add blank line after each distribution section when showing all
-	if includeDistribution {
+	if showHeaders {
 		_, _ = fmt.Fprintln(writer)
 	}
-}
-
-func displayEmptyClusters(
-	_ v1alpha1.Distribution,
-	includeDistribution bool,
-	writer io.Writer,
-) {
-	// When showing all distributions, show distribution-specific empty messages
-	if includeDistribution {
-		_, _ = fmt.Fprintln(writer, "No clusters found.")
-	}
-	// When not showing all distributions, the provisioner already displays its own message
-	// (e.g., "No kind clusters found."), so we don't display an additional message here.
 }
 
 func displayClusterNames(
 	distribution v1alpha1.Distribution,
 	clusters []string,
-	includeDistribution bool,
 	writer io.Writer,
+	showHeaders bool,
 ) {
 	var builder strings.Builder
-	if includeDistribution {
+
+	if showHeaders {
 		builder.WriteString(strings.ToLower(string(distribution)))
 		builder.WriteString(": ")
 	}
@@ -314,11 +220,4 @@ func displayClusterNames(
 			Writer:  writer,
 		})
 	}
-}
-
-func bindAllFlag(cmd *cobra.Command, cfgManager *ksailconfigmanager.ConfigManager) {
-	cmd.Flags().
-		BoolP(allFlag, "a", false, "List all clusters, including those not defined in the configuration")
-	flag := cmd.Flags().Lookup(allFlag)
-	_ = cfgManager.Viper.BindPFlag(allFlag, flag)
 }

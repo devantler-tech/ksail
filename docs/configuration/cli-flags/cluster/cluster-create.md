@@ -16,6 +16,7 @@ Usage:
 
 Flags:
       --cert-manager CertManager       Cert-Manager configuration (Enabled: install, Disabled: skip) (default Disabled)
+      --cni CNI                        Container Network Interface (CNI) to use (default Default)
   -c, --context string                 Kubernetes context of cluster
       --control-planes int32           Number of control-plane nodes (default 1)
       --csi CSI                        Container Storage Interface (CSI) to use (default Default)
@@ -26,7 +27,7 @@ Flags:
   -k, --kubeconfig string              Path to kubeconfig file (default "~/.kube/config")
       --local-registry LocalRegistry   Local registry behavior (Enabled provisions a registry; Disabled skips provisioning. Defaults to Enabled when a GitOps engine is configured) (default Disabled)
       --local-registry-port int32      Host port to expose the local OCI registry on (default 5111)
-      --metrics-server MetricsServer   Metrics Server configuration (Enabled: install, Disabled: uninstall) (default Enabled)
+      --metrics-server MetricsServer   Metrics Server (Default: use distribution, Enabled: install, Disabled: uninstall) (default Default)
       --mirror-registry strings        Configure mirror registries with format 'host=upstream' (e.g., docker.io=https://registry-1.docker.io)
       --workers int32                  Number of worker nodes
 

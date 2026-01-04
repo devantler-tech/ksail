@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
@@ -12,6 +13,7 @@ import (
 	talosprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/talos"
 	k3dv1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
+	"sigs.k8s.io/yaml"
 )
 
 // ErrUnsupportedDistribution is returned when an unsupported distribution is specified.
@@ -155,9 +157,18 @@ func (f DefaultFactory) createK3dProvisioner(
 	// Apply node count overrides from CLI flags (stored in Talos options)
 	applyK3dNodeCounts(k3dConfig, cluster.Spec.Cluster.Talos)
 
+	// Write the in-memory config to a temp file so k3d picks up any modifications
+	// (e.g., registry mirrors configured via --mirror-registry, node counts).
+	// We always use a temp file to avoid modifying the user's k3d.yaml.
+	// The k3d CLI reads configuration from file, not from our in-memory config.
+	tempConfigPath, err := writeK3dConfigToTempFile(k3dConfig)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to write k3d config to temp file: %w", err)
+	}
+
 	provisioner := k3dprovisioner.CreateProvisioner(
 		k3dConfig,
-		cluster.Spec.Cluster.DistributionConfig,
+		tempConfigPath,
 	)
 
 	return provisioner, k3dConfig, nil
@@ -194,14 +205,62 @@ func (f DefaultFactory) createTalosProvisioner(
 		)
 	}
 
+	// Always skip CNI-dependent checks (CoreDNS, kube-proxy) for Talos Docker provisioner.
+	//
+	// Rationale:
+	// 1. Custom CNI (Cilium, Calico): Pods cannot start until CNI is installed post-bootstrap.
+	// 2. Default Flannel CNI: While Flannel is bundled with Talos, it can be slow or unreliable
+	//    in containerized environments (GitHub Actions, Docker-in-Docker). The checks for
+	//    kube-proxy and CoreDNS can timeout even when the cluster is fundamentally healthy.
+	//
+	// Since we've verified that etcd, kubelet, and the Kubernetes API are healthy via
+	// PreBootSequenceChecks, the cluster is functional. Application-level DNS/proxy
+	// services will become ready shortly after bootstrap completes.
+	skipCNIChecks := true
+
 	provisioner, err := talosprovisioner.CreateProvisioner(
 		f.DistributionConfig.Talos,
 		cluster.Spec.Cluster.Connection.Kubeconfig,
 		cluster.Spec.Cluster.Talos,
+		skipCNIChecks,
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create Talos provisioner: %w", err)
 	}
 
 	return provisioner, f.DistributionConfig.Talos, nil
+}
+
+// writeK3dConfigToTempFile writes the in-memory k3d config to a temporary file.
+// This approach avoids modifying the user's k3d.yaml while ensuring k3d picks up
+// all in-memory modifications (registry mirrors, node counts, etc.).
+// The temp file persists until system cleanup - this is intentional since k3d
+// may reference the config path during cluster operations.
+func writeK3dConfigToTempFile(config *k3dv1alpha5.SimpleConfig) (string, error) {
+	data, err := yaml.Marshal(config)
+	if err != nil {
+		return "", fmt.Errorf("marshal k3d config: %w", err)
+	}
+
+	// Create temp file with k3d prefix for easy identification
+	tempFile, err := os.CreateTemp("", "ksail-k3d-*.yaml")
+	if err != nil {
+		return "", fmt.Errorf("create temp file: %w", err)
+	}
+
+	filePath := tempFile.Name()
+
+	_, writeErr := tempFile.Write(data)
+
+	closeErr := tempFile.Close()
+
+	if writeErr != nil {
+		return "", fmt.Errorf("write to temp file: %w", writeErr)
+	}
+
+	if closeErr != nil {
+		return "", fmt.Errorf("close temp file: %w", closeErr)
+	}
+
+	return filePath, nil
 }

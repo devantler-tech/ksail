@@ -158,14 +158,8 @@ func getClusterNameFromConfigOrContext(
 	clusterCfg *v1alpha1.Cluster,
 ) (string, error) {
 	// If context is explicitly set, derive cluster name from it
-	if clusterCfg != nil && clusterCfg.Spec.Cluster.Connection.Context != "" {
-		clusterName := ExtractClusterNameFromContext(
-			clusterCfg.Spec.Cluster.Connection.Context,
-			clusterCfg.Spec.Cluster.Distribution,
-		)
-		if clusterName != "" {
-			return clusterName, nil
-		}
+	if clusterName := extractClusterNameFromContext(clusterCfg); clusterName != "" {
+		return clusterName, nil
 	}
 
 	// Fall back to distribution config name
@@ -175,6 +169,56 @@ func getClusterNameFromConfigOrContext(
 	}
 
 	return clusterName, nil
+}
+
+// extractClusterNameFromContext extracts cluster name from context if set.
+// Returns empty string if no context is set or extraction fails.
+func extractClusterNameFromContext(clusterCfg *v1alpha1.Cluster) string {
+	if clusterCfg == nil || clusterCfg.Spec.Cluster.Connection.Context == "" {
+		return ""
+	}
+
+	return ExtractClusterNameFromContext(
+		clusterCfg.Spec.Cluster.Connection.Context,
+		clusterCfg.Spec.Cluster.Distribution,
+	)
+}
+
+// Context detection errors.
+var (
+	// ErrNoCurrentContext is returned when no current context is set in kubeconfig.
+	ErrNoCurrentContext = errors.New("no current context set in kubeconfig")
+
+	// ErrUnknownContextPattern is returned when the context doesn't match a known distribution pattern.
+	ErrUnknownContextPattern = errors.New(
+		"unknown distribution: context does not match kind-, k3d-, or admin@ pattern",
+	)
+)
+
+// DetectDistributionFromContext detects the distribution and cluster name from a context string.
+// This auto-detects the distribution based on the context naming pattern:
+//   - Kind: kind-<cluster-name>
+//   - K3d: k3d-<cluster-name>
+//   - Talos: admin@<cluster-name>
+//
+// Returns the detected distribution, cluster name, and an error if the pattern is unrecognized.
+func DetectDistributionFromContext(ctx string) (v1alpha1.Distribution, string, error) {
+	// Kind: kind-<cluster-name>
+	if clusterName, ok := strings.CutPrefix(ctx, "kind-"); ok {
+		return v1alpha1.DistributionKind, clusterName, nil
+	}
+
+	// K3d: k3d-<cluster-name>
+	if clusterName, ok := strings.CutPrefix(ctx, "k3d-"); ok {
+		return v1alpha1.DistributionK3d, clusterName, nil
+	}
+
+	// Talos: admin@<cluster-name>
+	if clusterName, ok := strings.CutPrefix(ctx, "admin@"); ok {
+		return v1alpha1.DistributionTalos, clusterName, nil
+	}
+
+	return "", "", fmt.Errorf("%w: %s", ErrUnknownContextPattern, ctx)
 }
 
 // ExtractClusterNameFromContext extracts the cluster name from a context string.
@@ -215,14 +259,8 @@ func GetClusterNameFromConfig(
 	}
 
 	// If context is explicitly set, derive cluster name from it
-	if clusterCfg.Spec.Cluster.Connection.Context != "" {
-		clusterName := ExtractClusterNameFromContext(
-			clusterCfg.Spec.Cluster.Connection.Context,
-			clusterCfg.Spec.Cluster.Distribution,
-		)
-		if clusterName != "" {
-			return clusterName, nil
-		}
+	if clusterName := extractClusterNameFromContext(clusterCfg); clusterName != "" {
+		return clusterName, nil
 	}
 
 	// Fall back to distribution config name

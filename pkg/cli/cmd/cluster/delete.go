@@ -7,6 +7,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/setup/localregistry"
 	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
@@ -126,15 +127,18 @@ func cleanupRegistries(
 		})
 	}
 
-	if clusterCfg.Spec.Cluster.LocalRegistry == v1alpha1.LocalRegistryEnabled {
-		err = cleanupLocalRegistry(cmd, cfgManager, clusterCfg, deps, deleteVolumes)
-		if err != nil {
-			notify.WriteMessage(notify.Message{
-				Type:    notify.WarningType,
-				Content: fmt.Sprintf("failed to cleanup local registry: %v", err),
-				Writer:  cmd.OutOrStdout(),
-			})
-		}
+	// Always attempt local registry cleanup for Kind/Talos distributions.
+	// The Cleanup function checks for container existence and skips if not provisioned.
+	// This ensures orphaned containers are cleaned up even when config is missing.
+	localDeps := getLocalRegistryDeps()
+
+	err = localregistry.Cleanup(cmd, cfgManager, clusterCfg, deps, deleteVolumes, localDeps)
+	if err != nil {
+		notify.WriteMessage(notify.Message{
+			Type:    notify.WarningType,
+			Content: fmt.Sprintf("failed to cleanup local registry: %v", err),
+			Writer:  cmd.OutOrStdout(),
+		})
 	}
 }
 
@@ -233,6 +237,7 @@ func cleanupKindMirrorRegistries(
 				deleteVolumes,
 			)
 		},
+		getLocalRegistryDeps(),
 	)
 }
 
@@ -249,7 +254,7 @@ func cleanupK3dMirrorRegistries(
 		return nil
 	}
 
-	registriesInfo := k3dprovisioner.ExtractRegistriesFromConfigForTesting(k3dConfig)
+	registriesInfo := k3dprovisioner.ExtractRegistriesFromConfigForTesting(k3dConfig, clusterName)
 
 	registryNames := registry.CollectRegistryNames(registriesInfo)
 	if len(registryNames) == 0 {
@@ -270,6 +275,7 @@ func cleanupK3dMirrorRegistries(
 				cmd.ErrOrStderr(),
 			)
 		},
+		getLocalRegistryDeps(),
 	)
 }
 
@@ -278,6 +284,7 @@ func runMirrorRegistryCleanup(
 	deps lifecycle.Deps,
 	registryNames []string,
 	cleanup func(client.APIClient) error,
+	localDeps localregistry.Dependencies,
 ) error {
 	if len(registryNames) == 0 {
 		return nil
@@ -293,13 +300,7 @@ func runMirrorRegistryCleanup(
 		Writer:  cmd.OutOrStdout(),
 	})
 
-	dockerClientInvokerMu.RLock()
-
-	invoker := dockerClientInvoker
-
-	dockerClientInvokerMu.RUnlock()
-
-	err := invoker(cmd, func(dockerClient client.APIClient) error {
+	err := localDeps.DockerInvoker(cmd, func(dockerClient client.APIClient) error {
 		return executeRegistryCleanup(cmd, dockerClient, registryNames, cleanup, deps.Timer)
 	})
 	if err != nil {
@@ -390,7 +391,12 @@ func cleanupTalosMirrorRegistries(
 		registryNames,
 		func(dockerAPIClient client.APIClient) error {
 			// Build registry infos from mirror specs
-			registryInfos := registry.BuildRegistryInfosFromSpecs(mirrorSpecs, nil, nil)
+			registryInfos := registry.BuildRegistryInfosFromSpecs(
+				mirrorSpecs,
+				nil,
+				nil,
+				clusterName,
+			)
 
 			if len(registryInfos) == 0 {
 				return nil
@@ -412,6 +418,7 @@ func cleanupTalosMirrorRegistries(
 				nil,
 			)
 		},
+		getLocalRegistryDeps(),
 	)
 }
 
