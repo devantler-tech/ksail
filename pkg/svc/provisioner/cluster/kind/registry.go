@@ -302,7 +302,12 @@ func prepareKindRegistryManager(
 		ctx,
 		dockerClient,
 		func(usedPorts map[int]struct{}) []registry.Info {
-			return registry.BuildRegistryInfosFromSpecs(mirrorSpecs, upstreams, usedPorts, clusterName)
+			return registry.BuildRegistryInfosFromSpecs(
+				mirrorSpecs,
+				upstreams,
+				usedPorts,
+				clusterName,
+			)
 		},
 	)
 	if err != nil {
@@ -325,7 +330,12 @@ func SetupRegistries(
 	mirrorSpecs []registry.MirrorSpec,
 	writer io.Writer,
 ) error {
-	registryMgr, registriesInfo, err := prepareKindRegistryManager(ctx, mirrorSpecs, clusterName, dockerClient)
+	registryMgr, registriesInfo, err := prepareKindRegistryManager(
+		ctx,
+		mirrorSpecs,
+		clusterName,
+		dockerClient,
+	)
 	if err != nil {
 		return fmt.Errorf("failed to prepare kind registry manager: %w", err)
 	}
@@ -389,7 +399,12 @@ func CleanupRegistries(
 	dockerClient client.APIClient,
 	deleteVolumes bool,
 ) error {
-	registryMgr, registriesInfo, err := prepareKindRegistryManager(ctx, mirrorSpecs, clusterName, dockerClient)
+	registryMgr, registriesInfo, err := prepareKindRegistryManager(
+		ctx,
+		mirrorSpecs,
+		clusterName,
+		dockerClient,
+	)
 	if err != nil {
 		return fmt.Errorf("failed to prepare registry manager for cleanup: %w", err)
 	}

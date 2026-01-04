@@ -66,9 +66,9 @@ func WithDockerInvoker(invoker func(*cobra.Command, func(client.APIClient) error
 
 // Errors for local registry operations.
 var (
-	ErrNilRegistryContext     = errors.New("registry stage context is nil")
-	ErrUnsupportedStage       = errors.New("unsupported local registry stage")
-	ErrLocalRegistryNotFound  = errors.New("local registry not found")
+	ErrNilRegistryContext    = errors.New("registry stage context is nil")
+	ErrUnsupportedStage      = errors.New("unsupported local registry stage")
+	ErrLocalRegistryNotFound = errors.New("local registry not found")
 )
 
 // StageType represents the type of local registry stage operation.
@@ -545,7 +545,7 @@ func newCreateOptions(
 		Port:        resolvePort(clusterCfg),
 		ClusterName: ctx.clusterName,
 		// Use base name for volume to share across clusters
-		VolumeName:  registry.LocalRegistryBaseName,
+		VolumeName: registry.LocalRegistryBaseName,
 	}
 }
 

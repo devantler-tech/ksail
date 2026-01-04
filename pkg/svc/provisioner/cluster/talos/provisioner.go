@@ -575,7 +575,10 @@ func (p *TalosProvisioner) bootstrapAndSaveKubeconfig(
 	// - Control plane static pods are running
 	// This matches talosctl's SkipK8sNodeReadinessCheck behavior.
 	if (p.talosConfigs != nil && p.talosConfigs.IsCNIDisabled()) || p.options.SkipCNIChecks {
-		clusterChecks = slices.Concat(check.PreBootSequenceChecks(), check.K8sComponentsReadinessChecks())
+		clusterChecks = slices.Concat(
+			check.PreBootSequenceChecks(),
+			check.K8sComponentsReadinessChecks(),
+		)
 	}
 
 	err = check.Wait(checkCtx, clusterAccess, clusterChecks, check.StderrReporter())

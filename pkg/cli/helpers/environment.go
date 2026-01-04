@@ -78,8 +78,8 @@ func DetectLocalRegistryPort(ctx context.Context) (int32, error) {
 
 	// Search for any running container ending with "-local-registry" suffix
 	registrySuffix := "-" + registrypkg.LocalRegistryBaseName
-	registryName, err := registryManager.FindContainerBySuffix(ctx, registrySuffix)
 
+	registryName, err := registryManager.FindContainerBySuffix(ctx, registrySuffix)
 	if err != nil {
 		return 0, fmt.Errorf("find local registry: %w", err)
 	}

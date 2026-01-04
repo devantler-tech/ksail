@@ -118,7 +118,12 @@ func prepareRegistryContext(
 	clusterName string,
 	dockerClient client.APIClient,
 ) (*dockerclient.RegistryManager, []registry.Info, string, error) {
-	registryMgr, registryInfos, err := setupRegistryManager(ctx, simpleCfg, clusterName, dockerClient)
+	registryMgr, registryInfos, err := setupRegistryManager(
+		ctx,
+		simpleCfg,
+		clusterName,
+		dockerClient,
+	)
 	if err != nil {
 		return nil, nil, "", err
 	}
@@ -255,7 +260,10 @@ func buildRegistryInfos(
 
 // ExtractRegistriesFromConfigForTesting exposes registry extraction for testing and callers that need inspection.
 // The clusterName is used as a prefix for container names.
-func ExtractRegistriesFromConfigForTesting(simpleCfg *k3dv1alpha5.SimpleConfig, clusterName string) []registry.Info {
+func ExtractRegistriesFromConfigForTesting(
+	simpleCfg *k3dv1alpha5.SimpleConfig,
+	clusterName string,
+) []registry.Info {
 	return extractRegistriesFromConfig(simpleCfg, nil, clusterName)
 }
 

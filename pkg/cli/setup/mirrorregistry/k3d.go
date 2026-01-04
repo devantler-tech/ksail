@@ -223,8 +223,10 @@ func configureK3dNativeLocalRegistry(
 	// Note: k3d.yaml hostPort is checked first because ksail's LocalRegistryOpts
 	// may not be properly populated due to YAML marshal/unmarshal asymmetry.
 	hostPort := int(v1alpha1.DefaultLocalRegistryPort)
+
 	if k3dConfig.Registries.Create != nil && k3dConfig.Registries.Create.HostPort != "" {
-		if existingPort, err := strconv.Atoi(k3dConfig.Registries.Create.HostPort); err == nil && existingPort > 0 {
+		if existingPort, err := strconv.Atoi(k3dConfig.Registries.Create.HostPort); err == nil &&
+			existingPort > 0 {
 			hostPort = existingPort
 		}
 	} else if clusterCfg.Spec.Cluster.LocalRegistryOpts.HostPort > 0 {
