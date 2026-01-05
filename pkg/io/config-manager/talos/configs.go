@@ -36,6 +36,30 @@ type Configs struct {
 	bundle *bundle.Bundle
 }
 
+// NewDefaultConfigs creates a new Talos Configs with default settings.
+// This is used when no scaffolded project exists and default configurations are needed.
+// It creates a valid config bundle with:
+//   - Cluster name: DefaultClusterName ("talos-default")
+//   - Kubernetes version: DefaultKubernetesVersion ("1.32.0")
+//   - Network CIDR: DefaultNetworkCIDR ("10.5.0.0/24")
+//   - allowSchedulingOnControlPlanes: true (for single-node/control-plane-only clusters)
+func NewDefaultConfigs() (*Configs, error) {
+	// Default configs are used for control-plane-only clusters (no workers),
+	// so we need to allow scheduling on control-plane nodes.
+	allowSchedulingPatch := Patch{
+		Path:    "allow-scheduling-on-control-planes",
+		Scope:   PatchScopeCluster,
+		Content: []byte("cluster:\n  allowSchedulingOnControlPlanes: true\n"),
+	}
+
+	return newConfigs(
+		DefaultClusterName,
+		DefaultKubernetesVersion,
+		DefaultNetworkCIDR,
+		[]Patch{allowSchedulingPatch},
+	)
+}
+
 // Bundle returns the underlying Talos config bundle.
 // This provides full access to all bundle functionality.
 func (c *Configs) Bundle() *bundle.Bundle {
@@ -49,8 +73,16 @@ func (c *Configs) Bundle() *bundle.Bundle {
 //   - Machine() - machine-specific settings (network, kubelet, files, etc.)
 //   - Cluster() - cluster-wide settings (CNI, API server, etcd, etc.)
 //
+// Returns nil if the bundle is not loaded or if the control plane config is not set.
+// This prevents panics from the upstream Talos SDK's bundle.ControlPlane() method
+// which panics when ControlPlaneCfg is nil.
+//
 //nolint:ireturn // Returns interface type from upstream SDK
 func (c *Configs) ControlPlane() talosconfig.Provider {
+	if c.bundle == nil || c.bundle.ControlPlaneCfg == nil {
+		return nil
+	}
+
 	return c.bundle.ControlPlane()
 }
 
@@ -61,8 +93,16 @@ func (c *Configs) ControlPlane() talosconfig.Provider {
 //   - Machine() - machine-specific settings (network, kubelet, files, etc.)
 //   - Cluster() - cluster-wide settings (CNI, API server, etcd, etc.)
 //
+// Returns nil if the bundle is not loaded or if the worker config is not set.
+// This prevents panics from the upstream Talos SDK's bundle.Worker() method
+// which panics when WorkerCfg is nil.
+//
 //nolint:ireturn // Returns interface type from upstream SDK
 func (c *Configs) Worker() talosconfig.Provider {
+	if c.bundle == nil || c.bundle.WorkerCfg == nil {
+		return nil
+	}
+
 	return c.bundle.Worker()
 }
 
@@ -210,7 +250,7 @@ type MirrorRegistry struct {
 // It adds both the mirror endpoints and the registry config with insecureSkipVerify: true
 // to allow HTTP connections to local registry containers.
 func (c *Configs) ApplyMirrorRegistries(mirrors []MirrorRegistry) error {
-	if len(mirrors) == 0 {
+	if len(mirrors) == 0 || c.bundle == nil {
 		return nil
 	}
 

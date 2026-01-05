@@ -8,7 +8,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/cli/cmd/workload"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/asciiart"
-	errorhandler "github.com/devantler-tech/ksail/v5/pkg/cli/ui/error-handler"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/errorhandler"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	"github.com/spf13/cobra"
 )

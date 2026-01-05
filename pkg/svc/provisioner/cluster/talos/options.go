@@ -38,6 +38,12 @@ type Options struct {
 
 	// TalosconfigPath is the path to write the talosconfig.
 	TalosconfigPath string
+
+	// SkipCNIChecks indicates whether to skip CNI-dependent cluster checks
+	// (CoreDNS, kube-proxy) during bootstrap. This should be set to true when
+	// KSail will install a custom CNI (Cilium, Calico) after cluster creation,
+	// as pods cannot start until the CNI is installed.
+	SkipCNIChecks bool
 }
 
 // NewOptions creates new Options with default values.
@@ -100,6 +106,14 @@ func (o *Options) WithTalosconfigPath(path string) *Options {
 	if path != "" {
 		o.TalosconfigPath = path
 	}
+
+	return o
+}
+
+// WithSkipCNIChecks sets whether to skip CNI-dependent cluster checks.
+// This should be true when KSail will install a custom CNI after cluster creation.
+func (o *Options) WithSkipCNIChecks(skip bool) *Options {
+	o.SkipCNIChecks = skip
 
 	return o
 }

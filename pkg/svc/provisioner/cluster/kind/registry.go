@@ -10,14 +10,13 @@ import (
 	"strings"
 
 	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
+	kindconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/kind"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
-
-const kindNetworkName = "kind"
 
 // randomDelimiterBytes is the number of random bytes used to generate heredoc delimiters.
 // 8 bytes produces 16 hex characters, making collisions with user content extremely unlikely.
@@ -62,8 +61,14 @@ func getEntriesToInject(
 		return nil
 	}
 
+	// Get cluster name to use as container prefix (must match how registries were created)
+	clusterName := "kind"
+	if kindConfig != nil && kindConfig.Name != "" {
+		clusterName = kindConfig.Name
+	}
+
 	mountedHosts := buildMountedHostsSet(kindConfig)
-	entries := registry.BuildMirrorEntries(mirrorSpecs, "", nil, nil, nil)
+	entries := registry.BuildMirrorEntries(mirrorSpecs, clusterName, nil, nil, nil)
 
 	var entriesToInject []registry.MirrorEntry
 
@@ -280,9 +285,11 @@ func EscapeShellArg(arg string) string {
 
 // prepareKindRegistryManager is a helper that prepares the registry manager and registry infos
 // for Kind registry operations. Returns nil manager if mirrorSpecs is empty.
+// The clusterName is used as prefix for container names to ensure uniqueness.
 func prepareKindRegistryManager(
 	ctx context.Context,
 	mirrorSpecs []registry.MirrorSpec,
+	clusterName string,
 	dockerClient client.APIClient,
 ) (*dockerclient.RegistryManager, []registry.Info, error) {
 	if len(mirrorSpecs) == 0 {
@@ -295,7 +302,12 @@ func prepareKindRegistryManager(
 		ctx,
 		dockerClient,
 		func(usedPorts map[int]struct{}) []registry.Info {
-			return registry.BuildRegistryInfosFromSpecs(mirrorSpecs, upstreams, usedPorts)
+			return registry.BuildRegistryInfosFromSpecs(
+				mirrorSpecs,
+				upstreams,
+				usedPorts,
+				clusterName,
+			)
 		},
 	)
 	if err != nil {
@@ -318,7 +330,12 @@ func SetupRegistries(
 	mirrorSpecs []registry.MirrorSpec,
 	writer io.Writer,
 ) error {
-	registryMgr, registriesInfo, err := prepareKindRegistryManager(ctx, mirrorSpecs, dockerClient)
+	registryMgr, registriesInfo, err := prepareKindRegistryManager(
+		ctx,
+		mirrorSpecs,
+		clusterName,
+		dockerClient,
+	)
 	if err != nil {
 		return fmt.Errorf("failed to prepare kind registry manager: %w", err)
 	}
@@ -332,7 +349,7 @@ func SetupRegistries(
 		registryMgr,
 		registriesInfo,
 		clusterName,
-		kindNetworkName,
+		kindconfigmanager.DefaultNetworkName,
 		writer,
 	)
 	if errSetup != nil {
@@ -347,6 +364,7 @@ func SetupRegistries(
 func ConnectRegistriesToNetwork(
 	ctx context.Context,
 	mirrorSpecs []registry.MirrorSpec,
+	clusterName string,
 	dockerClient client.APIClient,
 	writer io.Writer,
 ) error {
@@ -354,7 +372,7 @@ func ConnectRegistriesToNetwork(
 		return nil
 	}
 
-	registriesInfo := registry.BuildRegistryInfosFromSpecs(mirrorSpecs, nil, nil)
+	registriesInfo := registry.BuildRegistryInfosFromSpecs(mirrorSpecs, nil, nil, clusterName)
 	if len(registriesInfo) == 0 {
 		return nil
 	}
@@ -363,7 +381,7 @@ func ConnectRegistriesToNetwork(
 		ctx,
 		dockerClient,
 		registriesInfo,
-		kindNetworkName,
+		kindconfigmanager.DefaultNetworkName,
 		writer,
 	)
 	if errConnect != nil {
@@ -381,7 +399,12 @@ func CleanupRegistries(
 	dockerClient client.APIClient,
 	deleteVolumes bool,
 ) error {
-	registryMgr, registriesInfo, err := prepareKindRegistryManager(ctx, mirrorSpecs, dockerClient)
+	registryMgr, registriesInfo, err := prepareKindRegistryManager(
+		ctx,
+		mirrorSpecs,
+		clusterName,
+		dockerClient,
+	)
 	if err != nil {
 		return fmt.Errorf("failed to prepare registry manager for cleanup: %w", err)
 	}
@@ -396,7 +419,7 @@ func CleanupRegistries(
 		registriesInfo,
 		clusterName,
 		deleteVolumes,
-		kindNetworkName,
+		kindconfigmanager.DefaultNetworkName,
 		nil,
 	)
 	if errCleanup != nil {

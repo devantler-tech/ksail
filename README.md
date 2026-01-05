@@ -64,16 +64,21 @@ go install github.com/devantler-tech/ksail/v5@latest
 
 ## Usage
 
-Get up and running with a simple kind cluster in four steps:
-
 ```bash
 # 1. Initialize a new project with your preferred stack
-ksail cluster init
+ksail cluster init \
+  --distribution <Kind|K3d|Talos> \
+  --cni <Default|Cilium|Calico|None> \
+  --csi <Default|LocalPathStorage|None> \
+  --metrics-server <Default|Enabled|Disabled> \
+  --cert-manager <Enabled|Disabled> \
+  --gitops-engine <None|Flux|ArgoCD> \
+  --mirror-registry <host>=<upstream>
 
 # 2. Create and start the cluster
 ksail cluster create
 
-# Add your manifests to the k8s/kustomization.yaml file
+# Add your manifests to a k8s/kustomization.yaml file
 
 # 3. Deploy your workloads
 ksail workload apply -k ./k8s

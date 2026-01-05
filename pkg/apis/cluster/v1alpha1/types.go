@@ -247,6 +247,8 @@ const (
 type MetricsServer string
 
 const (
+	// MetricsServerDefault relies on the distribution's default behavior for metrics server.
+	MetricsServerDefault MetricsServer = "Default"
 	// MetricsServerEnabled ensures Metrics Server is installed.
 	MetricsServerEnabled MetricsServer = "Enabled"
 	// MetricsServerDisabled ensures Metrics Server is not installed.
@@ -442,9 +444,10 @@ func (m *MetricsServer) Set(value string) error {
 	}
 
 	return fmt.Errorf(
-		"%w: %s (valid options: %s, %s)",
+		"%w: %s (valid options: %s, %s, %s)",
 		ErrInvalidMetricsServer,
 		value,
+		MetricsServerDefault,
 		MetricsServerEnabled,
 		MetricsServerDisabled,
 	)
