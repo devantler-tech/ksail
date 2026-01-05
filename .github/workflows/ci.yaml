@@ -215,9 +215,25 @@ jobs:
           ksail cluster list
 
       - name: 🧪 ksail workload create
+        id: workload-create
         run: |
           ksail workload create deployment whoami --image=traefik/whoami:latest
           ksail workload wait --for=condition=Available deployment/whoami --timeout=300s
+
+      - name: 🐞 Debug workload failure
+        if: failure() && steps.workload-create.outcome == 'failure'
+        run: |
+          echo "=== Pod Status ==="
+          ksail workload get pods -o wide || true
+          echo ""
+          echo "=== Pod Events ==="
+          ksail workload get events --sort-by='.lastTimestamp' | tail -50 || true
+          echo ""
+          echo "=== Pod Describe ==="
+          ksail workload describe pods -l app=whoami || true
+          echo ""
+          echo "=== Node Status ==="
+          ksail workload get nodes -o wide || true
 
       - name: 🧪 ksail workload apply
         run: |
