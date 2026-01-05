@@ -189,7 +189,7 @@ func Cleanup(
 	// Cleanup doesn't show title activity messages, so use a dummy tracker
 	dummyTracker := true
 
-	return runCleanupAction(
+	return runRegistryAction(
 		cmd,
 		clusterCfg,
 		deps,
@@ -226,6 +226,7 @@ func Cleanup(
 		},
 		&dummyTracker,
 		localDeps,
+		false, true, // checkLocalRegistry=false, isCleanup=true
 	)
 }
 
@@ -292,7 +293,7 @@ func runStageFromBuilder(
 	firstActivityShown *bool,
 	localDeps Dependencies,
 ) error {
-	return runAction(
+	return runRegistryAction(
 		cmd,
 		ctx.ClusterCfg,
 		deps,
@@ -303,6 +304,7 @@ func runStageFromBuilder(
 		buildAction(ctx.ClusterCfg),
 		firstActivityShown,
 		localDeps,
+		true, false, // checkLocalRegistry=true, isCleanup=false
 	)
 }
 
@@ -353,43 +355,32 @@ func (r *actionRunner) prepareContext(checkLocalRegistry bool) *registryContext 
 	return &ctx
 }
 
-func runAction(
-	cmd *cobra.Command,
-	clusterCfg *v1alpha1.Cluster,
-	deps lifecycle.Deps,
-	kindConfig *kindv1alpha4.Cluster,
-	k3dConfig *k3dv1alpha5.SimpleConfig,
-	talosConfig *talosconfigmanager.Configs,
-	info setup.StageInfo,
-	action func(context.Context, registry.Service, registryContext) error,
-	firstActivityShown *bool,
-	localDeps Dependencies,
-) error {
-	runner := actionRunner{
-		cmd: cmd, clusterCfg: clusterCfg, deps: deps,
-		kindConfig: kindConfig, k3dConfig: k3dConfig, talosConfig: talosConfig,
-		info: info, action: action, firstActivityShown: firstActivityShown, localDeps: localDeps,
-	}
-
-	ctx := runner.prepareContext(true)
+// run executes the action with the given checkLocalRegistry flag.
+// If isCleanup is true, uses runCleanupStage; otherwise uses runStage.
+func (r *actionRunner) run(checkLocalRegistry, isCleanup bool) error {
+	ctx := r.prepareContext(checkLocalRegistry)
 	if ctx == nil {
 		return nil
+	}
+
+	wrappedAction := wrapActionWithContext(*ctx, r.action)
+
+	if isCleanup {
+		return runCleanupStage(
+			r.cmd, r.deps, r.info, ctx.clusterName,
+			wrappedAction, r.firstActivityShown, r.localDeps,
+		)
 	}
 
 	return runStage(
-		cmd,
-		deps,
-		info,
-		wrapActionWithContext(*ctx, action),
-		firstActivityShown,
-		localDeps,
+		r.cmd, r.deps, r.info, wrappedAction, r.firstActivityShown, r.localDeps,
 	)
 }
 
-// runCleanupAction runs the cleanup action for local registry.
-// Unlike runAction, this function does NOT check the LocalRegistry config setting.
-// It checks for container existence instead, ensuring orphaned containers are cleaned up.
-func runCleanupAction(
+// runRegistryAction runs a registry action with the given parameters.
+// checkLocalRegistry: if true, skips action when local registry is disabled in config.
+// isCleanup: if true, uses cleanup stage which checks container existence instead.
+func runRegistryAction(
 	cmd *cobra.Command,
 	clusterCfg *v1alpha1.Cluster,
 	deps lifecycle.Deps,
@@ -400,22 +391,22 @@ func runCleanupAction(
 	action func(context.Context, registry.Service, registryContext) error,
 	firstActivityShown *bool,
 	localDeps Dependencies,
+	checkLocalRegistry, isCleanup bool,
 ) error {
-	runner := actionRunner{
-		cmd: cmd, clusterCfg: clusterCfg, deps: deps,
-		kindConfig: kindConfig, k3dConfig: k3dConfig, talosConfig: talosConfig,
-		info: info, action: action, firstActivityShown: firstActivityShown, localDeps: localDeps,
+	runner := &actionRunner{
+		cmd:                cmd,
+		clusterCfg:         clusterCfg,
+		deps:               deps,
+		kindConfig:         kindConfig,
+		k3dConfig:          k3dConfig,
+		talosConfig:        talosConfig,
+		info:               info,
+		action:             action,
+		firstActivityShown: firstActivityShown,
+		localDeps:          localDeps,
 	}
 
-	ctx := runner.prepareContext(false)
-	if ctx == nil {
-		return nil
-	}
-
-	return runCleanupStage(
-		cmd, deps, info, ctx.clusterName,
-		wrapActionWithContext(*ctx, action), firstActivityShown, localDeps,
-	)
+	return runner.run(checkLocalRegistry, isCleanup)
 }
 
 // createServiceHandler creates a common handler that initializes the registry service
