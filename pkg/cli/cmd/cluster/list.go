@@ -9,7 +9,6 @@ import (
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
 	k3dv1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/spf13/cobra"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
@@ -73,15 +72,22 @@ func HandleListRunE(
 		return err
 	}
 
-	// List clusters for each distribution
-	showHeaders := len(distributions) > 1
+	// Collect clusters from all distributions
+	results := make(map[v1alpha1.Distribution][]string)
 
 	for _, dist := range distributions {
-		listErr := listDistributionClusters(cmd, deps, dist, showHeaders)
+		clusters, listErr := getDistributionClusters(cmd, deps, dist)
 		if listErr != nil {
 			return listErr
 		}
+
+		if len(clusters) > 0 {
+			results[dist] = clusters
+		}
 	}
+
+	// Display results
+	displayResults(cmd.OutOrStdout(), distributions, results)
 
 	return nil
 }
@@ -103,12 +109,11 @@ func resolveDistributions(filter string) ([]v1alpha1.Distribution, error) {
 	return []v1alpha1.Distribution{dist}, nil
 }
 
-func listDistributionClusters(
+func getDistributionClusters(
 	cmd *cobra.Command,
 	deps ListDeps,
 	distribution v1alpha1.Distribution,
-	showHeaders bool,
-) error {
+) ([]string, error) {
 	// Create a minimal cluster config for the factory
 	clusterCfg := &v1alpha1.Cluster{
 		Spec: v1alpha1.Spec{
@@ -132,17 +137,15 @@ func listDistributionClusters(
 
 	provisioner, _, err := factory.Create(cmd.Context(), clusterCfg)
 	if err != nil {
-		return fmt.Errorf("failed to create provisioner for %s: %w", distribution, err)
+		return nil, fmt.Errorf("failed to create provisioner for %s: %w", distribution, err)
 	}
 
 	clusters, err := provisioner.List(cmd.Context())
 	if err != nil {
-		return fmt.Errorf("failed to list %s clusters: %w", distribution, err)
+		return nil, fmt.Errorf("failed to list %s clusters: %w", distribution, err)
 	}
 
-	displayClusterList(distribution, clusters, cmd.OutOrStdout(), showHeaders)
-
-	return nil
+	return clusters, nil
 }
 
 // createEmptyDistributionConfig creates an empty distribution config for the given distribution.
@@ -170,54 +173,32 @@ func createEmptyDistributionConfig(
 	}
 }
 
-func displayClusterList(
-	distribution v1alpha1.Distribution,
-	clusters []string,
+// displayResults outputs the cluster list in a simplified format.
+// Only distributions with clusters are shown, formatted as "distribution: cluster1, cluster2".
+// If no clusters exist across all distributions, displays "No clusters found.".
+func displayResults(
 	writer io.Writer,
-	showHeaders bool,
+	distributions []v1alpha1.Distribution,
+	results map[v1alpha1.Distribution][]string,
 ) {
-	// Add distribution header when showing multiple distributions
-	if showHeaders {
-		_, _ = fmt.Fprintf(writer, "---|%s|---\n", strings.ToLower(string(distribution)))
+	if len(results) == 0 {
+		_, _ = fmt.Fprintln(writer, "No clusters found.")
+
+		return
 	}
 
-	if len(clusters) == 0 {
-		if showHeaders {
-			_, _ = fmt.Fprintln(writer, "No clusters found.")
+	// Output in distribution order for consistent output
+	for _, dist := range distributions {
+		clusters, exists := results[dist]
+		if !exists || len(clusters) == 0 {
+			continue
 		}
-		// When filtering by single distribution, no message for empty (user knows what they asked for)
-	} else {
-		displayClusterNames(distribution, clusters, writer, showHeaders)
-	}
 
-	// Add blank line after each distribution section when showing all
-	if showHeaders {
-		_, _ = fmt.Fprintln(writer)
-	}
-}
-
-func displayClusterNames(
-	distribution v1alpha1.Distribution,
-	clusters []string,
-	writer io.Writer,
-	showHeaders bool,
-) {
-	var builder strings.Builder
-
-	if showHeaders {
-		builder.WriteString(strings.ToLower(string(distribution)))
-		builder.WriteString(": ")
-	}
-
-	builder.WriteString(strings.Join(clusters, ", "))
-	builder.WriteString("\n")
-
-	_, err := fmt.Fprint(writer, builder.String())
-	if err != nil {
-		notify.WriteMessage(notify.Message{
-			Type:    notify.ErrorType,
-			Content: fmt.Sprintf("failed to display %s clusters", distribution),
-			Writer:  writer,
-		})
+		_, _ = fmt.Fprintf(
+			writer,
+			"%s: %s\n",
+			strings.ToLower(string(dist)),
+			strings.Join(clusters, ", "),
+		)
 	}
 }

@@ -1,27 +1,20 @@
 
 [TestListCmd_AllDistributions - 1]
----|kind|---
 kind: test-cluster
-
----|k3d|---
-No clusters found.
-
----|talos|---
-No clusters found.
-
 
 ---
 
 [TestListCmd_MultipleClustersFound_SingleDistribution - 1]
-cluster-1, cluster-2, cluster-3
+kind: cluster-1, cluster-2, cluster-3
 
 ---
 
 [TestListCmd_NoClusterFound_SingleDistribution - 1]
+No clusters found.
 
 ---
 
 [TestListCmd_SingleClusterFound_SingleDistribution - 1]
-test-cluster
+kind: test-cluster
 
 ---
