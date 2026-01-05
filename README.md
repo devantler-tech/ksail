@@ -81,7 +81,8 @@ ksail cluster create
 # Add your manifests to a k8s/kustomization.yaml file
 
 # 3. Deploy your workloads
-ksail workload apply -k ./k8s
+ksail workload apply -k ./k8s   # for kubectl workflows
+ksail workload reconcile        # for gitops workflows
 
 # 4. Connect to the cluster with k9s
 ksail cluster connect
