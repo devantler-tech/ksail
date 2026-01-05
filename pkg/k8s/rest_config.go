@@ -3,6 +3,7 @@ package k8s
 import (
 	"fmt"
 
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 )
@@ -35,4 +36,20 @@ func BuildRESTConfig(kubeconfig, context string) (*rest.Config, error) {
 	}
 
 	return restConfig, nil
+}
+
+// NewClientset creates a Kubernetes clientset from kubeconfig path and context.
+// This is a convenience function that combines BuildRESTConfig and client creation.
+func NewClientset(kubeconfig, context string) (*kubernetes.Clientset, error) {
+	restConfig, err := BuildRESTConfig(kubeconfig, context)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build rest config: %w", err)
+	}
+
+	clientset, err := kubernetes.NewForConfig(restConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create kubernetes client: %w", err)
+	}
+
+	return clientset, nil
 }

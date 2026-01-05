@@ -20,10 +20,13 @@ var ErrUnsupportedTalosProvider = errors.New("unsupported Talos provider")
 //   - talosConfigs: Pre-loaded Talos machine configurations with all patches applied
 //   - kubeconfigPath: Path where the kubeconfig should be written
 //   - opts: Talos-specific options (node counts, provider, etc.)
+//   - skipCNIChecks: Whether to skip CNI-dependent checks (CoreDNS, kube-proxy) during bootstrap.
+//     Set to true when KSail will install a custom CNI after cluster creation.
 func CreateProvisioner(
 	talosConfigs *talosconfigmanager.Configs,
 	kubeconfigPath string,
 	opts v1alpha1.OptionsTalos,
+	skipCNIChecks bool,
 ) (*TalosProvisioner, error) {
 	// Validate or default the provider
 	provider := opts.Provider
@@ -38,7 +41,7 @@ func CreateProvisioner(
 	}
 
 	// Create options and apply configured node counts
-	options := NewOptions().WithKubeconfigPath(kubeconfigPath)
+	options := NewOptions().WithKubeconfigPath(kubeconfigPath).WithSkipCNIChecks(skipCNIChecks)
 	if opts.ControlPlanes > 0 {
 		options.WithControlPlaneNodes(int(opts.ControlPlanes))
 	}

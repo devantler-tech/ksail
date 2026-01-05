@@ -4,12 +4,17 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
+	k3dconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/k3d"
+	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
 	"github.com/devantler-tech/ksail/v5/pkg/io/detector"
 	"github.com/devantler-tech/ksail/v5/pkg/io/generator"
 	argocdgenerator "github.com/devantler-tech/ksail/v5/pkg/io/generator/argocd"
@@ -44,13 +49,6 @@ const (
 	// File permission constants.
 	dirPerm  = 0o750
 	filePerm = 0o600
-)
-
-const (
-	// Default images.
-
-	// defaultK3sImage pins K3d clusters to a Flux-compatible Kubernetes version.
-	defaultK3sImage = "rancher/k3s:v1.29.4-k3s1"
 )
 
 var (
@@ -172,6 +170,7 @@ func (s *Scaffolder) Scaffold(output string, force bool) error {
 // GenerateK3dRegistryConfig generates K3d registry configuration for mirror registry.
 // Input format: "name=upstream" (e.g., "docker.io=https://registry-1.docker.io")
 // K3d requires one registry per proxy, so we generate multiple create configs.
+// Registry containers are prefixed with the cluster name to avoid Docker DNS collisions.
 func (s *Scaffolder) GenerateK3dRegistryConfig() k3dv1alpha5.SimpleConfigRegistries {
 	registryConfig := k3dv1alpha5.SimpleConfigRegistries{}
 
@@ -181,7 +180,12 @@ func (s *Scaffolder) GenerateK3dRegistryConfig() k3dv1alpha5.SimpleConfigRegistr
 
 	specs := registry.ParseMirrorSpecs(s.MirrorRegistries)
 
-	hostEndpoints, updated := registry.BuildHostEndpointMap(specs, "", nil)
+	// Resolve cluster name for registry container prefixing.
+	// This ensures registry containers are named like "k3d-ghcr.io" instead of "ghcr.io"
+	// to avoid Docker DNS collisions when running multiple clusters.
+	clusterName := k3dconfigmanager.ResolveClusterName(&s.KSailConfig, nil)
+
+	hostEndpoints, updated := registry.BuildHostEndpointMap(specs, clusterName, nil)
 	if len(hostEndpoints) == 0 || !updated {
 		return registryConfig
 	}
@@ -195,13 +199,21 @@ func (s *Scaffolder) GenerateK3dRegistryConfig() k3dv1alpha5.SimpleConfigRegistr
 
 // CreateK3dConfig creates a K3d configuration with distribution-specific settings.
 // Node counts can be set via --control-planes and --workers CLI flags.
+//
+//nolint:funlen // K3d config requires setting many fields; splitting would reduce readability
 func (s *Scaffolder) CreateK3dConfig() k3dv1alpha5.SimpleConfig {
+	// Resolve cluster name - use context from ksail config or default
+	clusterName := k3dconfigmanager.ResolveClusterName(&s.KSailConfig, nil)
+
 	config := k3dv1alpha5.SimpleConfig{
 		TypeMeta: types.TypeMeta{
 			APIVersion: "k3d.io/v1alpha5",
 			Kind:       "Simple",
 		},
-		Image: defaultK3sImage,
+		ObjectMeta: types.ObjectMeta{
+			Name: clusterName,
+		},
+		Image: k3dconfigmanager.DefaultK3sImage,
 	}
 
 	// Apply node counts from CLI flags (stored in Talos options)
@@ -255,6 +267,13 @@ func (s *Scaffolder) CreateK3dConfig() k3dv1alpha5.SimpleConfig {
 		config.Registries = s.GenerateK3dRegistryConfig()
 	}
 
+	// Configure K3d-native local registry when enabled.
+	// K3d's Registries.Create automatically manages the registry container,
+	// including DNS resolution, network connectivity, and lifecycle management.
+	if s.KSailConfig.Spec.Cluster.LocalRegistry == v1alpha1.LocalRegistryEnabled {
+		config.Registries = s.addK3dLocalRegistryConfig(config.Registries)
+	}
+
 	return config
 }
 
@@ -268,6 +287,52 @@ func (s *Scaffolder) GetKindMirrorsDir() string {
 	}
 
 	return DefaultKindMirrorsDir
+}
+
+// addK3dLocalRegistryConfig adds K3d-native local registry configuration.
+// K3d's Registries.Create automatically manages the registry container,
+// including DNS resolution, network connectivity, and lifecycle management.
+func (s *Scaffolder) addK3dLocalRegistryConfig(
+	registryConfig k3dv1alpha5.SimpleConfigRegistries,
+) k3dv1alpha5.SimpleConfigRegistries {
+	// Resolve cluster name to build the registry container name.
+	// K3d creates the registry with the exact name specified.
+	clusterName := k3dconfigmanager.ResolveClusterName(&s.KSailConfig, nil)
+	registryName := registry.BuildLocalRegistryName(clusterName)
+
+	// Determine the host port from config or use default
+	hostPort := v1alpha1.DefaultLocalRegistryPort
+	if s.KSailConfig.Spec.Cluster.LocalRegistryOpts.HostPort > 0 {
+		hostPort = s.KSailConfig.Spec.Cluster.LocalRegistryOpts.HostPort
+	}
+
+	// Configure K3d to create and manage the local registry.
+	// K3d will create a registry container named "k3d-<registryName>"
+	registryConfig.Create = &k3dv1alpha5.SimpleConfigRegistryCreateConfig{
+		Name:     registryName,
+		Host:     dockerclient.RegistryHostIP,
+		HostPort: strconv.FormatInt(int64(hostPort), 10),
+	}
+
+	// Also configure the containerd mirror so nodes can pull images.
+	// K3d Registries.Create uses the name directly (without k3d- prefix).
+	registryHost := net.JoinHostPort(
+		registryName,
+		strconv.Itoa(dockerclient.DefaultRegistryPort),
+	)
+	registryEndpoint := "http://" + registryHost
+
+	// Parse existing config and add local registry endpoint
+	hostEndpoints := k3dconfigmanager.ParseRegistryConfig(registryConfig.Config)
+	if hostEndpoints == nil {
+		hostEndpoints = make(map[string][]string)
+	}
+
+	hostEndpoints[registryHost] = []string{registryEndpoint}
+
+	registryConfig.Config = registry.RenderK3dMirrorConfig(hostEndpoints)
+
+	return registryConfig
 }
 
 // Configuration defaults and helpers.
@@ -798,32 +863,34 @@ func (s *Scaffolder) checkExistingFluxInstance(sourceDir string) (string, error)
 	return existingPath, nil
 }
 
-// createFluxInstanceManifest generates the FluxInstance CR file.
+// createFluxInstanceManifest generates the FluxInstance CR file directly in the source directory.
 func (s *Scaffolder) createFluxInstanceManifest(sourceDir string, force bool) error {
-	gitOpsDir := filepath.Join(sourceDir, "gitops", "flux")
-	outputPath := filepath.Join(gitOpsDir, "flux-instance.yaml")
+	outputPath := filepath.Join(sourceDir, "flux-instance.yaml")
 	displayName := filepath.Join(
 		s.KSailConfig.Spec.Workload.SourceDirectory,
-		"gitops", "flux", "flux-instance.yaml",
+		"flux-instance.yaml",
 	)
-
-	err := os.MkdirAll(gitOpsDir, dirPerm)
-	if err != nil {
-		return fmt.Errorf(
-			"%w: failed to create gitops directory: %w",
-			ErrGitOpsConfigGeneration,
-			err,
-		)
-	}
 
 	opts := s.buildFluxInstanceOptions(outputPath, force)
 
-	_, err = s.FluxInstanceGenerator.Generate(opts)
+	skip, existed, previousModTime := s.checkFileExistsAndSkip(outputPath, displayName, force)
+	if skip {
+		return nil
+	}
+
+	_, err := s.FluxInstanceGenerator.Generate(opts)
 	if err != nil {
 		return fmt.Errorf("%w: %w", ErrGitOpsConfigGeneration, err)
 	}
 
-	s.notifyCreated(displayName)
+	if force && existed {
+		err = ensureOverwriteModTime(outputPath, previousModTime)
+		if err != nil {
+			return fmt.Errorf("failed to update mod time for %s: %w", displayName, err)
+		}
+	}
+
+	s.notifyFileAction(displayName, existed)
 
 	return nil
 }
@@ -833,22 +900,49 @@ func (s *Scaffolder) buildFluxInstanceOptions(
 	outputPath string,
 	force bool,
 ) fluxgenerator.InstanceGeneratorOptions {
-	port := s.KSailConfig.Spec.Cluster.LocalRegistryOpts.HostPort
-	if port == 0 {
-		port = 5000
+	// Use sanitized source directory name to match what the push command uses
+	sourceDir := s.KSailConfig.Spec.Workload.SourceDirectory
+	if sourceDir == "" {
+		sourceDir = v1alpha1.DefaultSourceDirectory
 	}
+
+	repoName := registry.SanitizeRepoName(sourceDir)
+
+	// Resolve cluster name to build the registry container name for in-cluster access.
+	// The registry name must match what the provisioner creates (e.g., k3d-default-local-registry).
+	clusterName := s.resolveClusterNameForDistribution()
+	registryName := registry.BuildLocalRegistryName(clusterName)
 
 	return fluxgenerator.InstanceGeneratorOptions{
 		Options: yamlgenerator.Options{
 			Output: outputPath,
 			Force:  force,
 		},
-		ProjectName:  s.getProjectName(),
-		RegistryHost: "ksail-registry.localhost",
-		RegistryPort: port,
+		ProjectName:  repoName,
+		RegistryHost: registryName,
+		// In-cluster registry always uses the internal port (5000), not the host-mapped port
+		RegistryPort: int32(dockerclient.DefaultRegistryPort),
+		Ref:          registry.DefaultLocalArtifactTag,
 		Interval:     fluxgenerator.DefaultInterval,
 	}
 }
+
+// resolveClusterNameForDistribution returns the cluster name for the configured distribution.
+// This is used for in-cluster registry naming.
+func (s *Scaffolder) resolveClusterNameForDistribution() string {
+	switch s.KSailConfig.Spec.Cluster.Distribution {
+	case v1alpha1.DistributionK3d:
+		return k3dconfigmanager.ResolveClusterName(&s.KSailConfig, nil)
+	case v1alpha1.DistributionKind:
+		return kindDefaultClusterName
+	case v1alpha1.DistributionTalos:
+		return talosconfigmanager.DefaultClusterName
+	default:
+		return kindDefaultClusterName
+	}
+}
+
+const kindDefaultClusterName = "kind"
 
 // generateArgoCDApplicationConfig generates an ArgoCD Application CR manifest.
 func (s *Scaffolder) generateArgoCDApplicationConfig(sourceDir string, force bool) error {
@@ -882,32 +976,34 @@ func (s *Scaffolder) checkExistingArgoCDApplication(sourceDir string) (string, e
 	return existingPath, nil
 }
 
-// createArgoCDApplicationManifest generates the ArgoCD Application CR file.
+// createArgoCDApplicationManifest generates the ArgoCD Application CR file directly in the source directory.
 func (s *Scaffolder) createArgoCDApplicationManifest(sourceDir string, force bool) error {
-	gitOpsDir := filepath.Join(sourceDir, "gitops", "argocd")
-	outputPath := filepath.Join(gitOpsDir, "application.yaml")
+	outputPath := filepath.Join(sourceDir, "argocd-application.yaml")
 	displayName := filepath.Join(
 		s.KSailConfig.Spec.Workload.SourceDirectory,
-		"gitops", "argocd", "application.yaml",
+		"argocd-application.yaml",
 	)
-
-	err := os.MkdirAll(gitOpsDir, dirPerm)
-	if err != nil {
-		return fmt.Errorf(
-			"%w: failed to create gitops directory: %w",
-			ErrGitOpsConfigGeneration,
-			err,
-		)
-	}
 
 	opts := s.buildArgoCDApplicationOptions(outputPath, force)
 
-	_, err = s.ArgoCDAppGenerator.Generate(opts)
+	skip, existed, previousModTime := s.checkFileExistsAndSkip(outputPath, displayName, force)
+	if skip {
+		return nil
+	}
+
+	_, err := s.ArgoCDAppGenerator.Generate(opts)
 	if err != nil {
 		return fmt.Errorf("%w: %w", ErrGitOpsConfigGeneration, err)
 	}
 
-	s.notifyCreated(displayName)
+	if force && existed {
+		err = ensureOverwriteModTime(outputPath, previousModTime)
+		if err != nil {
+			return fmt.Errorf("failed to update mod time for %s: %w", displayName, err)
+		}
+	}
+
+	s.notifyFileAction(displayName, existed)
 
 	return nil
 }
@@ -939,16 +1035,6 @@ func (s *Scaffolder) notifySkip(resourceType, path string) {
 		Type:    notify.InfoType,
 		Content: "skipping %s scaffolding: existing found at '%s'",
 		Args:    []any{resourceType, path},
-		Writer:  s.Writer,
-	})
-}
-
-// notifyCreated sends a notification about a created file.
-func (s *Scaffolder) notifyCreated(displayName string) {
-	notify.WriteMessage(notify.Message{
-		Type:    notify.GenerateType,
-		Content: "created '%s'",
-		Args:    []any{displayName},
 		Writer:  s.Writer,
 	})
 }
@@ -1005,9 +1091,9 @@ func (s *Scaffolder) getKustomizationResources() []string {
 
 	switch gitOpsEngine {
 	case v1alpha1.GitOpsEngineFlux:
-		resources = append(resources, "gitops/flux")
+		resources = append(resources, "flux-instance.yaml")
 	case v1alpha1.GitOpsEngineArgoCD:
-		resources = append(resources, "gitops/argocd")
+		resources = append(resources, "argocd-application.yaml")
 	case v1alpha1.GitOpsEngineNone:
 		// No GitOps resources to add
 	}

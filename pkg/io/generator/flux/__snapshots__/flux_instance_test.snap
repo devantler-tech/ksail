@@ -15,7 +15,7 @@ spec:
     interval: 5m0s
     kind: OCIRepository
     path: .
-    ref: latest
+    ref: dev
     url: oci://registry.localhost:5000/test-project
 
 ---
@@ -36,7 +36,7 @@ spec:
     interval: 1m0s
     kind: OCIRepository
     path: .
-    ref: latest
+    ref: dev
     url: oci://custom-registry.localhost:8080/my-project
 
 ---
@@ -57,7 +57,7 @@ spec:
     interval: 1m0s
     kind: OCIRepository
     path: .
-    ref: latest
+    ref: dev
     url: oci://ksail-registry.localhost:5000/ksail
 
 ---
@@ -78,7 +78,7 @@ spec:
     interval: 1m0s
     kind: OCIRepository
     path: .
-    ref: latest
+    ref: dev
     url: oci://registry.localhost:5000/test-project
 
 ---

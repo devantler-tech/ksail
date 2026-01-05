@@ -65,6 +65,7 @@ func NewK3dClusterProvisioner(
 // Create provisions a k3d cluster using the native Cobra command.
 func (k *K3dClusterProvisioner) Create(ctx context.Context, name string) error {
 	args := k.appendConfigFlag(nil)
+	args = k.appendImageFlag(args)
 
 	return k.runLifecycleCommand(
 		ctx,
@@ -121,7 +122,7 @@ func (k *K3dClusterProvisioner) Stop(ctx context.Context, name string) error {
 // List returns cluster names reported by the Cobra command.
 func (k *K3dClusterProvisioner) List(ctx context.Context) ([]string, error) {
 	// Temporarily redirect logrus to discard output during list
-	// to prevent JSON output from appearing in console
+	// to prevent log messages from appearing in console
 	originalLogOutput := logrus.StandardLogger().Out
 
 	logrus.SetOutput(io.Discard)
@@ -130,7 +131,9 @@ func (k *K3dClusterProvisioner) List(ctx context.Context) ([]string, error) {
 	// Lock to prevent concurrent modifications of os.Stdout
 	listMutex.Lock()
 
-	// Setup stdout redirection
+	// Setup stdout redirection - k3d's PrintClusters writes directly to os.Stdout
+	// using fmt.Println, not through Cobra's cmd.OutOrStdout(), so we must
+	// capture from os.Stdout directly.
 	originalStdout := os.Stdout
 
 	pipeReader, pipeWriter, err := os.Pipe()
@@ -142,29 +145,42 @@ func (k *K3dClusterProvisioner) List(ctx context.Context) ([]string, error) {
 
 	os.Stdout = pipeWriter
 
-	// Run the command
-	output, runErr := k.runListCommand(ctx)
+	// Run the command in a goroutine since we need to read from the pipe
+	// while the command is running (otherwise it may block on a full pipe buffer)
+	errChan := make(chan error, 1)
 
-	// Close write end before reading and restore stdout while still holding the lock
-	_ = pipeWriter.Close()
-	os.Stdout = originalStdout
+	go func() {
+		_, runErr := k.runListCommand(ctx)
+		// Close write end to signal EOF to the reader
+		_ = pipeWriter.Close()
 
-	// Unlock mutex before potentially blocking I/O operations
-	listMutex.Unlock()
+		errChan <- runErr
+	}()
 
-	// Discard any output that was written to our pipe
-	copyErr := discardPipeOutput(pipeReader)
+	// Read all output from the pipe (this is the JSON from k3d)
+	var outputBuf bytes.Buffer
+
+	_, copyErr := io.Copy(&outputBuf, pipeReader)
 	_ = pipeReader.Close()
 
+	// Restore stdout while still holding the lock
+	os.Stdout = originalStdout
+
+	// Unlock mutex after restoring stdout
+	listMutex.Unlock()
+
+	// Wait for command to complete and get any error
+	runErr := <-errChan
+
 	if copyErr != nil {
-		logrus.WithError(copyErr).Debug("failed to drain stdout pipe when listing k3d clusters")
+		return nil, fmt.Errorf("cluster list: read stdout pipe: %w", copyErr)
 	}
 
 	if runErr != nil {
 		return nil, fmt.Errorf("cluster list: %w", runErr)
 	}
 
-	return parseClusterNames(output)
+	return parseClusterNames(strings.TrimSpace(outputBuf.String()))
 }
 
 // Exists returns whether the target cluster is present.
@@ -225,22 +241,30 @@ func parseClusterNames(output string) ([]string, error) {
 	return names, nil
 }
 
-// discardPipeOutput reads and discards all data from a pipe reader.
-func discardPipeOutput(pipeReader *os.File) error {
-	_, err := io.Copy(io.Discard, pipeReader)
-	if err != nil {
-		return fmt.Errorf("copy pipe output: %w", err)
-	}
-
-	return nil
-}
-
 func (k *K3dClusterProvisioner) appendConfigFlag(args []string) []string {
 	if k.configPath == "" {
 		return args
 	}
 
 	return append(args, "--config", k.configPath)
+}
+
+// appendImageFlag adds the --image flag when no config file is used.
+// This ensures the k3d CLI uses the image from our in-memory config
+// instead of its internal default (which may be an older version).
+func (k *K3dClusterProvisioner) appendImageFlag(args []string) []string {
+	// Only add --image flag when no config file is used
+	// When a config file exists, the image is read from the config file
+	if k.configPath != "" {
+		return args
+	}
+
+	// Get image from in-memory config, or use empty to let k3d decide
+	if k.simpleCfg != nil && k.simpleCfg.Image != "" {
+		return append(args, "--image", k.simpleCfg.Image)
+	}
+
+	return args
 }
 
 func (k *K3dClusterProvisioner) resolveName(name string) string {

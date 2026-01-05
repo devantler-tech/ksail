@@ -13,10 +13,11 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	configmanagerinterface "github.com/devantler-tech/ksail/v5/pkg/io/config-manager"
-	"github.com/devantler-tech/ksail/v5/pkg/io/config-manager/helpers"
 	k3dconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/k3d"
 	kindconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/kind"
+	"github.com/devantler-tech/ksail/v5/pkg/io/config-manager/loader"
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
+	"github.com/devantler-tech/ksail/v5/pkg/io/validator"
 	ksailvalidator "github.com/devantler-tech/ksail/v5/pkg/io/validator/ksail"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
@@ -217,6 +218,14 @@ func (m *ConfigManager) unmarshalAndApplyDefaults() error {
 
 	// Do NOT restore defaults for TypeMeta fields - they should be validated as-is.
 	// This ensures validation will catch incorrect/missing apiVersion and kind values.
+
+	// Handle nested options path for local registry host port.
+	// The YAML output uses `spec.cluster.options.localRegistry.hostPort` but the struct
+	// expects `spec.cluster.localRegistryOptions.hostPort`. We manually extract this
+	// to handle the path mismatch between custom marshal output and unmarshal expectations.
+	if nestedHostPort := m.Viper.GetInt32("spec.cluster.options.localRegistry.hostPort"); nestedHostPort > 0 {
+		m.Config.Spec.Cluster.LocalRegistryOpts.HostPort = nestedHostPort
+	}
 
 	m.localRegistryExplicit = m.Config.Spec.Cluster.LocalRegistry != ""
 	m.localRegistryHostPortExplicit = m.Config.Spec.Cluster.LocalRegistryOpts.HostPort != 0
@@ -534,7 +543,7 @@ func (m *ConfigManager) validateConfig() error {
 	result := validator.Validate(m.Config)
 
 	if !result.Valid {
-		errorMessages := helpers.FormatValidationErrorsMultiline(result)
+		errorMessages := loader.FormatValidationErrorsMultiline(result)
 		notify.WriteMessage(notify.Message{
 			Type:    notify.ErrorType,
 			Content: "%s",
@@ -542,20 +551,20 @@ func (m *ConfigManager) validateConfig() error {
 			Writer:  m.Writer,
 		})
 
-		warnings := helpers.FormatValidationWarnings(result)
-		for _, warning := range warnings {
-			notify.WriteMessage(notify.Message{
-				Type:    notify.WarningType,
-				Content: warning,
-				Writer:  m.Writer,
-			})
-		}
+		m.writeValidationWarnings(result)
 
 		// Return validation summary error instead of full error stack
-		return helpers.NewValidationSummaryError(len(result.Errors), len(result.Warnings))
+		return loader.NewValidationSummaryError(len(result.Errors), len(result.Warnings))
 	}
 
-	warnings := helpers.FormatValidationWarnings(result)
+	m.writeValidationWarnings(result)
+
+	return nil
+}
+
+// writeValidationWarnings outputs all validation warnings to the configured writer.
+func (m *ConfigManager) writeValidationWarnings(result *validator.ValidationResult) {
+	warnings := loader.FormatValidationWarnings(result)
 	for _, warning := range warnings {
 		notify.WriteMessage(notify.Message{
 			Type:    notify.WarningType,
@@ -563,8 +572,6 @@ func (m *ConfigManager) validateConfig() error {
 			Writer:  m.Writer,
 		})
 	}
-
-	return nil
 }
 
 func (m *ConfigManager) applyDistributionConfigDefaults() {
@@ -792,7 +799,13 @@ func (m *ConfigManager) cacheKindConfig() error {
 	}
 
 	if kindConfig == nil {
-		kindConfig = &kindv1alpha4.Cluster{}
+		// Create a valid default Kind config with required TypeMeta fields
+		kindConfig = &kindv1alpha4.Cluster{
+			TypeMeta: kindv1alpha4.TypeMeta{
+				Kind:       "Cluster",
+				APIVersion: "kind.x-k8s.io/v1alpha4",
+			},
+		}
 	}
 
 	m.DistributionConfig.Kind = kindConfig
@@ -807,7 +820,8 @@ func (m *ConfigManager) cacheK3dConfig() error {
 	}
 
 	if k3dConfig == nil {
-		k3dConfig = &k3dv1alpha5.SimpleConfig{}
+		// Create a valid default K3d config with required TypeMeta fields
+		k3dConfig = k3dconfigmanager.NewK3dSimpleConfig("", "", "")
 	}
 
 	m.DistributionConfig.K3d = k3dConfig
@@ -822,7 +836,11 @@ func (m *ConfigManager) cacheTalosConfig() error {
 	}
 
 	if talosConfig == nil {
-		talosConfig = &talosconfigmanager.Configs{}
+		// Create a valid default Talos config with required bundle
+		talosConfig, err = talosconfigmanager.NewDefaultConfigs()
+		if err != nil {
+			return fmt.Errorf("failed to create default Talos config: %w", err)
+		}
 	}
 
 	m.DistributionConfig.Talos = talosConfig

@@ -160,7 +160,7 @@ ksail cluster init \
   --distribution <Kind|K3d> \
   --cni <Default|Cilium|None> \
   --csi <Default|LocalPathStorage|None> \
-  --metrics-server <Enabled|Disabled> \
+  --metrics-server <Default|Enabled|Disabled> \
   --cert-manager <Enabled|Disabled> \
   --local-registry <Enabled|Disabled> \
   --local-registry-port <port> \

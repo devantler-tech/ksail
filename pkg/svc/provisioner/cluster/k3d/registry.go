@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 
 	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
+	k3dconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/k3d"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	"github.com/docker/docker/client"
 	k3dv1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
@@ -21,16 +23,12 @@ func SetupRegistries(
 	dockerClient client.APIClient,
 	writer io.Writer,
 ) error {
-	registryMgr, registryInfos, err := setupRegistryManager(ctx, simpleCfg, dockerClient)
-	if err != nil {
+	registryMgr, registryInfos, networkName, err := prepareRegistryContext(
+		ctx, simpleCfg, clusterName, dockerClient,
+	)
+	if err != nil || registryMgr == nil {
 		return err
 	}
-
-	if registryMgr == nil {
-		return nil
-	}
-
-	networkName := resolveK3dNetworkName(clusterName)
 
 	errRegistry := registry.SetupRegistries(
 		ctx,
@@ -59,12 +57,12 @@ func ConnectRegistriesToNetwork(
 		return nil
 	}
 
-	registryInfos := extractRegistriesFromConfig(simpleCfg, nil)
+	registryInfos := extractRegistriesFromConfig(simpleCfg, nil, clusterName)
 	if len(registryInfos) == 0 {
 		return nil
 	}
 
-	networkName := resolveK3dNetworkName(clusterName)
+	networkName := k3dconfigmanager.ResolveNetworkName(clusterName)
 
 	errConnect := registry.ConnectRegistriesToNetwork(
 		ctx,
@@ -89,16 +87,12 @@ func CleanupRegistries(
 	deleteVolumes bool,
 	writer io.Writer,
 ) error {
-	registryMgr, registryInfos, err := setupRegistryManager(ctx, simpleCfg, dockerClient)
-	if err != nil {
+	registryMgr, registryInfos, networkName, err := prepareRegistryContext(
+		ctx, simpleCfg, clusterName, dockerClient,
+	)
+	if err != nil || registryMgr == nil {
 		return err
 	}
-
-	if registryMgr == nil {
-		return nil
-	}
-
-	networkName := resolveK3dNetworkName(clusterName)
 
 	errCleanup := registry.CleanupRegistries(
 		ctx,
@@ -116,9 +110,37 @@ func CleanupRegistries(
 	return nil
 }
 
+// prepareRegistryContext sets up the registry manager and resolves the network name.
+// Returns nil manager if no registries are configured.
+func prepareRegistryContext(
+	ctx context.Context,
+	simpleCfg *k3dv1alpha5.SimpleConfig,
+	clusterName string,
+	dockerClient client.APIClient,
+) (*dockerclient.RegistryManager, []registry.Info, string, error) {
+	registryMgr, registryInfos, err := setupRegistryManager(
+		ctx,
+		simpleCfg,
+		clusterName,
+		dockerClient,
+	)
+	if err != nil {
+		return nil, nil, "", err
+	}
+
+	if registryMgr == nil {
+		return nil, nil, "", nil
+	}
+
+	networkName := k3dconfigmanager.ResolveNetworkName(clusterName)
+
+	return registryMgr, registryInfos, networkName, nil
+}
+
 func setupRegistryManager(
 	ctx context.Context,
 	simpleCfg *k3dv1alpha5.SimpleConfig,
+	clusterName string,
 	dockerClient client.APIClient,
 ) (*dockerclient.RegistryManager, []registry.Info, error) {
 	if simpleCfg == nil {
@@ -129,7 +151,7 @@ func setupRegistryManager(
 		ctx,
 		dockerClient,
 		func(usedPorts map[int]struct{}) []registry.Info {
-			return extractRegistriesFromConfig(simpleCfg, usedPorts)
+			return extractRegistriesFromConfig(simpleCfg, usedPorts, clusterName)
 		},
 	)
 	if err != nil {
@@ -137,15 +159,6 @@ func setupRegistryManager(
 	}
 
 	return registryMgr, infos, nil
-}
-
-func resolveK3dNetworkName(clusterName string) string {
-	trimmed := strings.TrimSpace(clusterName)
-	if trimmed == "" {
-		return "k3d"
-	}
-
-	return "k3d-" + trimmed
 }
 
 type mirrorConfig struct {
@@ -159,44 +172,86 @@ type k3dMirrorConfig struct {
 func extractRegistriesFromConfig(
 	simpleCfg *k3dv1alpha5.SimpleConfig,
 	baseUsedPorts map[int]struct{},
+	clusterName string,
 ) []registry.Info {
 	if simpleCfg == nil {
 		return nil
 	}
 
-	configStr := strings.TrimSpace(simpleCfg.Registries.Config)
-	if configStr == "" {
+	mirrorCfg := parseMirrorConfig(simpleCfg.Registries.Config)
+	if mirrorCfg == nil || len(mirrorCfg.Mirrors) == 0 {
+		return nil
+	}
+
+	nativeRegistryHost := resolveNativeRegistryHost(simpleCfg)
+	hosts := filterMirrorHosts(mirrorCfg.Mirrors, nativeRegistryHost)
+
+	if len(hosts) == 0 {
+		return nil
+	}
+
+	return buildRegistryInfos(hosts, mirrorCfg.Mirrors, baseUsedPorts, clusterName)
+}
+
+// parseMirrorConfig parses the K3d registries.config YAML string.
+func parseMirrorConfig(configStr string) *k3dMirrorConfig {
+	trimmed := strings.TrimSpace(configStr)
+	if trimmed == "" {
 		return nil
 	}
 
 	var mirrorCfg k3dMirrorConfig
 
-	err := yaml.Unmarshal([]byte(configStr), &mirrorCfg)
+	err := yaml.Unmarshal([]byte(trimmed), &mirrorCfg)
 	if err != nil {
 		return nil
 	}
 
-	if len(mirrorCfg.Mirrors) == 0 {
-		return nil
+	return &mirrorCfg
+}
+
+// resolveNativeRegistryHost returns the host:port for K3d-native registry, or empty string.
+func resolveNativeRegistryHost(simpleCfg *k3dv1alpha5.SimpleConfig) string {
+	if simpleCfg.Registries.Create == nil || simpleCfg.Registries.Create.Name == "" {
+		return ""
 	}
 
-	hosts := make([]string, 0, len(mirrorCfg.Mirrors))
-	for host := range mirrorCfg.Mirrors {
+	return simpleCfg.Registries.Create.Name + ":" + strconv.Itoa(dockerclient.DefaultRegistryPort)
+}
+
+// filterMirrorHosts returns sorted hosts excluding the native registry.
+func filterMirrorHosts(mirrors map[string]mirrorConfig, nativeHost string) []string {
+	hosts := make([]string, 0, len(mirrors))
+
+	for host := range mirrors {
+		if nativeHost != "" && host == nativeHost {
+			continue
+		}
+
 		hosts = append(hosts, host)
 	}
 
 	registry.SortHosts(hosts)
 
-	usedPorts, nextPort := registry.InitPortAllocation(baseUsedPorts)
+	return hosts
+}
 
+// buildRegistryInfos creates registry.Info slices from mirror config.
+// The clusterName is used as a prefix for container names to avoid Docker DNS collisions.
+func buildRegistryInfos(
+	hosts []string,
+	mirrors map[string]mirrorConfig,
+	baseUsedPorts map[int]struct{},
+	clusterName string,
+) []registry.Info {
+	usedPorts, nextPort := registry.InitPortAllocation(baseUsedPorts)
 	registryInfos := make([]registry.Info, 0, len(hosts))
 
 	for _, host := range hosts {
-		endpoints := mirrorCfg.Mirrors[host].Endpoint
+		endpoints := mirrors[host].Endpoint
 		port := registry.ExtractRegistryPort(endpoints, usedPorts, &nextPort)
-		upstream := upstreamFromEndpoints(host, endpoints)
-
-		info := registry.BuildRegistryInfo(host, endpoints, port, "", upstream)
+		upstream := upstreamFromEndpoints(host, endpoints, clusterName)
+		info := registry.BuildRegistryInfo(host, endpoints, port, clusterName, upstream)
 		registryInfos = append(registryInfos, info)
 	}
 
@@ -204,16 +259,39 @@ func extractRegistriesFromConfig(
 }
 
 // ExtractRegistriesFromConfigForTesting exposes registry extraction for testing and callers that need inspection.
-func ExtractRegistriesFromConfigForTesting(simpleCfg *k3dv1alpha5.SimpleConfig) []registry.Info {
-	return extractRegistriesFromConfig(simpleCfg, nil)
+// The clusterName is used as a prefix for container names.
+func ExtractRegistriesFromConfigForTesting(
+	simpleCfg *k3dv1alpha5.SimpleConfig,
+	clusterName string,
+) []registry.Info {
+	return extractRegistriesFromConfig(simpleCfg, nil, clusterName)
 }
 
-func upstreamFromEndpoints(host string, endpoints []string) string {
+// upstreamFromEndpoints finds the upstream URL from the endpoint list.
+// The upstream is identified as an HTTPS endpoint (external registry) rather than
+// an HTTP endpoint (local mirror container). Local mirrors use HTTP, while
+// external registries like ghcr.io, docker.io use HTTPS.
+func upstreamFromEndpoints(host string, endpoints []string, clusterName string) string {
 	if len(endpoints) == 0 {
 		return ""
 	}
 
+	// Look for HTTPS endpoints - these are the external upstreams
+	for _, endpoint := range endpoints {
+		endpoint = strings.TrimSpace(endpoint)
+		if endpoint == "" {
+			continue
+		}
+
+		// HTTPS endpoints are external upstreams (e.g., https://ghcr.io)
+		if strings.HasPrefix(endpoint, "https://") {
+			return endpoint
+		}
+	}
+
+	// Fallback: find any endpoint that doesn't match local registry patterns
 	expectedLocal := registry.BuildRegistryName("", host)
+	expectedLocalPrefixed := registry.BuildRegistryName(clusterName, host)
 
 	for idx := len(endpoints) - 1; idx >= 0; idx-- {
 		candidate := strings.TrimSpace(endpoints[idx])
@@ -221,10 +299,13 @@ func upstreamFromEndpoints(host string, endpoints []string) string {
 			continue
 		}
 
-		switch extracted := registry.ExtractNameFromEndpoint(candidate); {
-		case extracted == "":
+		extracted := registry.ExtractNameFromEndpoint(candidate)
+		if extracted == "" {
 			return candidate
-		case extracted != expectedLocal:
+		}
+
+		// If extracted name matches neither local variant, it's the upstream
+		if extracted != expectedLocal && extracted != expectedLocalPrefixed {
 			return candidate
 		}
 	}
