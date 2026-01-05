@@ -322,6 +322,37 @@ func wrapActionWithContext(
 	}
 }
 
+// actionRunner encapsulates shared parameters for runAction and runCleanupAction.
+type actionRunner struct {
+	cmd                *cobra.Command
+	clusterCfg         *v1alpha1.Cluster
+	deps               lifecycle.Deps
+	kindConfig         *kindv1alpha4.Cluster
+	k3dConfig          *k3dv1alpha5.SimpleConfig
+	talosConfig        *talosconfigmanager.Configs
+	info               setup.StageInfo
+	action             func(context.Context, registry.Service, registryContext) error
+	firstActivityShown *bool
+	localDeps          Dependencies
+}
+
+// prepareContext validates preconditions and creates the registry context.
+// Returns nil context if the action should be skipped.
+func (r *actionRunner) prepareContext(checkLocalRegistry bool) *registryContext {
+	localRegistryDisabled := r.clusterCfg.Spec.Cluster.LocalRegistry != v1alpha1.LocalRegistryEnabled
+	if checkLocalRegistry && localRegistryDisabled {
+		return nil
+	}
+
+	if shouldSkipK3d(r.clusterCfg) {
+		return nil
+	}
+
+	ctx := newRegistryContext(r.clusterCfg, r.kindConfig, r.k3dConfig, r.talosConfig)
+
+	return &ctx
+}
+
 func runAction(
 	cmd *cobra.Command,
 	clusterCfg *v1alpha1.Cluster,
@@ -334,21 +365,22 @@ func runAction(
 	firstActivityShown *bool,
 	localDeps Dependencies,
 ) error {
-	if clusterCfg.Spec.Cluster.LocalRegistry != v1alpha1.LocalRegistryEnabled {
-		return nil
+	runner := actionRunner{
+		cmd: cmd, clusterCfg: clusterCfg, deps: deps,
+		kindConfig: kindConfig, k3dConfig: k3dConfig, talosConfig: talosConfig,
+		info: info, action: action, firstActivityShown: firstActivityShown, localDeps: localDeps,
 	}
 
-	if shouldSkipK3d(clusterCfg) {
+	ctx := runner.prepareContext(true)
+	if ctx == nil {
 		return nil
 	}
-
-	ctx := newRegistryContext(clusterCfg, kindConfig, k3dConfig, talosConfig)
 
 	return runStage(
 		cmd,
 		deps,
 		info,
-		wrapActionWithContext(ctx, action),
+		wrapActionWithContext(*ctx, action),
 		firstActivityShown,
 		localDeps,
 	)
@@ -369,20 +401,20 @@ func runCleanupAction(
 	firstActivityShown *bool,
 	localDeps Dependencies,
 ) error {
-	if shouldSkipK3d(clusterCfg) {
+	runner := actionRunner{
+		cmd: cmd, clusterCfg: clusterCfg, deps: deps,
+		kindConfig: kindConfig, k3dConfig: k3dConfig, talosConfig: talosConfig,
+		info: info, action: action, firstActivityShown: firstActivityShown, localDeps: localDeps,
+	}
+
+	ctx := runner.prepareContext(false)
+	if ctx == nil {
 		return nil
 	}
 
-	ctx := newRegistryContext(clusterCfg, kindConfig, k3dConfig, talosConfig)
-
 	return runCleanupStage(
-		cmd,
-		deps,
-		info,
-		ctx.clusterName,
-		wrapActionWithContext(ctx, action),
-		firstActivityShown,
-		localDeps,
+		cmd, deps, info, ctx.clusterName,
+		wrapActionWithContext(*ctx, action), firstActivityShown, localDeps,
 	)
 }
 
