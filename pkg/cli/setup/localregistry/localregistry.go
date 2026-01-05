@@ -66,9 +66,8 @@ func WithDockerInvoker(invoker func(*cobra.Command, func(client.APIClient) error
 
 // Errors for local registry operations.
 var (
-	ErrNilRegistryContext    = errors.New("registry stage context is nil")
-	ErrUnsupportedStage      = errors.New("unsupported local registry stage")
-	ErrLocalRegistryNotFound = errors.New("local registry not found")
+	ErrNilRegistryContext = errors.New("registry stage context is nil")
+	ErrUnsupportedStage   = errors.New("unsupported local registry stage")
 )
 
 // StageType represents the type of local registry stage operation.
@@ -411,9 +410,9 @@ func runCleanupStage(
 				return fmt.Errorf("check registry status: %w", statusErr)
 			}
 
-			// If container is not provisioned, nothing to clean up
+			// If container is not provisioned, nothing to clean up - this is a success case
 			if status.Status == v1alpha1.OCIRegistryStatusNotProvisioned {
-				return ErrLocalRegistryNotFound
+				return nil
 			}
 
 			return handler(ctx, service)
