@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/svc/reconciler"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -40,6 +41,10 @@ const (
 	conditionTypeStalled = "Stalled"
 	conditionStatusTrue  = "True"
 	conditionStatusFalse = "False"
+
+	// Retry constants for handling optimistic concurrency conflicts.
+	conflictRetryAttempts = 5
+	conflictRetryDelay    = 500 * time.Millisecond
 )
 
 // Reconciler handles Flux reconciliation operations.
@@ -88,28 +93,46 @@ func (r *Reconciler) Reconcile(ctx context.Context, opts ReconcileOptions) error
 }
 
 // TriggerOCIRepositoryReconciliation triggers OCIRepository reconciliation without waiting.
+// It uses retry logic to handle optimistic concurrency conflicts that can occur when the
+// Flux controller updates the resource between our Get and Update calls.
 func (r *Reconciler) TriggerOCIRepositoryReconciliation(ctx context.Context) error {
 	ociRepoClient := r.ociRepositoryClient()
 
-	ociRepo, err := ociRepoClient.Get(ctx, rootOCIRepositoryName, metav1.GetOptions{})
-	if err != nil {
-		return fmt.Errorf("get flux oci repository: %w", err)
-	}
+	var lastErr error
+	for attempt := range conflictRetryAttempts {
+		ociRepo, err := ociRepoClient.Get(ctx, rootOCIRepositoryName, metav1.GetOptions{})
+		if err != nil {
+			return fmt.Errorf("get flux oci repository: %w", err)
+		}
 
-	annotations := ociRepo.GetAnnotations()
-	if annotations == nil {
-		annotations = make(map[string]string)
-	}
+		annotations := ociRepo.GetAnnotations()
+		if annotations == nil {
+			annotations = make(map[string]string)
+		}
 
-	annotations[reconcileAnnotationKey] = time.Now().Format(time.RFC3339Nano)
-	ociRepo.SetAnnotations(annotations)
+		annotations[reconcileAnnotationKey] = time.Now().Format(time.RFC3339Nano)
+		ociRepo.SetAnnotations(annotations)
 
-	_, err = ociRepoClient.Update(ctx, ociRepo, metav1.UpdateOptions{})
-	if err != nil {
+		_, err = ociRepoClient.Update(ctx, ociRepo, metav1.UpdateOptions{})
+		if err == nil {
+			return nil // Success
+		}
+
+		// Check if this is a conflict error (resource version mismatch)
+		if isConflictError(err) {
+			lastErr = err
+			if attempt < conflictRetryAttempts-1 {
+				time.Sleep(conflictRetryDelay)
+				continue
+			}
+		}
+
+		// Non-conflict error or final attempt
 		return fmt.Errorf("trigger flux oci repository reconciliation: %w", err)
 	}
 
-	return nil
+	return fmt.Errorf("trigger flux oci repository reconciliation after %d retries: %w",
+		conflictRetryAttempts, lastErr)
 }
 
 // WaitForOCIRepositoryReady waits for the OCIRepository to be ready.
@@ -152,28 +175,46 @@ func (r *Reconciler) WaitForOCIRepositoryReady(ctx context.Context) error {
 }
 
 // TriggerKustomizationReconciliation triggers Kustomization reconciliation without waiting.
+// It uses retry logic to handle optimistic concurrency conflicts that can occur when the
+// Flux controller updates the resource between our Get and Update calls.
 func (r *Reconciler) TriggerKustomizationReconciliation(ctx context.Context) error {
 	kustomizationClient := r.kustomizationClient()
 
-	kustomization, err := kustomizationClient.Get(ctx, rootKustomizationName, metav1.GetOptions{})
-	if err != nil {
-		return fmt.Errorf("get flux kustomization: %w", err)
-	}
+	var lastErr error
+	for attempt := range conflictRetryAttempts {
+		kustomization, err := kustomizationClient.Get(ctx, rootKustomizationName, metav1.GetOptions{})
+		if err != nil {
+			return fmt.Errorf("get flux kustomization: %w", err)
+		}
 
-	annotations := kustomization.GetAnnotations()
-	if annotations == nil {
-		annotations = make(map[string]string)
-	}
+		annotations := kustomization.GetAnnotations()
+		if annotations == nil {
+			annotations = make(map[string]string)
+		}
 
-	annotations[reconcileAnnotationKey] = time.Now().Format(time.RFC3339Nano)
-	kustomization.SetAnnotations(annotations)
+		annotations[reconcileAnnotationKey] = time.Now().Format(time.RFC3339Nano)
+		kustomization.SetAnnotations(annotations)
 
-	_, err = kustomizationClient.Update(ctx, kustomization, metav1.UpdateOptions{})
-	if err != nil {
+		_, err = kustomizationClient.Update(ctx, kustomization, metav1.UpdateOptions{})
+		if err == nil {
+			return nil // Success
+		}
+
+		// Check if this is a conflict error (resource version mismatch)
+		if isConflictError(err) {
+			lastErr = err
+			if attempt < conflictRetryAttempts-1 {
+				time.Sleep(conflictRetryDelay)
+				continue
+			}
+		}
+
+		// Non-conflict error or final attempt
 		return fmt.Errorf("trigger flux reconciliation: %w", err)
 	}
 
-	return nil
+	return fmt.Errorf("trigger flux reconciliation after %d retries: %w",
+		conflictRetryAttempts, lastErr)
 }
 
 // WaitForKustomizationReady waits for the Kustomization to be ready.
@@ -328,6 +369,12 @@ func isPermanentOCIError(err error) bool {
 	return strings.Contains(errMsg, "manifest unknown") ||
 		strings.Contains(errMsg, "not found") ||
 		strings.Contains(errMsg, "does not exist")
+}
+
+// isConflictError checks if an error is an optimistic concurrency conflict.
+// This happens when the resource was modified between our Get and Update calls.
+func isConflictError(err error) bool {
+	return apierrors.IsConflict(err)
 }
 
 // checkKustomizationStatus checks the kustomization status and returns ready state,
