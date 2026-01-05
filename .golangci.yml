@@ -24,7 +24,7 @@ linters:
     rules:
       - linters:
           - ireturn
-        path: pkg/io/config-manager/helpers/loader.go
+        path: pkg/io/config-manager/loader/loader.go
       - linters:
           - ireturn
         path: pkg/client/docker/engine.go
@@ -33,25 +33,10 @@ linters:
         path: pkg/cli/helpers/flags.go
       - linters:
           - ireturn
-        path: pkg/cli/flags/timing.go
-      - linters:
-          - ireturn
-        path: cmd/cluster/list_test.go
-      - linters:
-          - ireturn
-        path: cmd/cluster/create_test.go
-      - linters:
-          - ireturn
-        path: pkg/cmd/lifecycle_helpers_test.go
-      - linters:
-          - ireturn
         path: pkg/svc/provisioner/cluster/factory.go
       - linters:
           - ireturn
         path: pkg/svc/provisioner/registry/local_registry_service.go
-      - linters:
-          - ireturn
-        path: cmd/cipher/encrypt.go
       - linters:
           - ireturn
         path: pkg/svc/installer/cni/base.go
@@ -69,19 +54,25 @@ linters:
         path: pkg/svc/installer/flux/fluxinstance_types.go
       - linters:
           - ireturn
-        path: pkg/testutils/cni_helpers.go
-      - linters:
-          - ireturn
         path: pkg/client/oci/builder_impl.go
       - linters:
           - ireturn
         path: pkg/client/kubeconform/client.go
       - linters:
           - ireturn
-        path: cmd/workload/reconcile.go
+        path: pkg/svc/installer/flux/resources.go
       - linters:
-          - nlreturn
-        path: pkg/scaffolder/scaffolder_test.go
+          - ireturn
+        path: pkg/cli/cmd/cipher/encrypt.go
+      - linters:
+          - ireturn
+        path: pkg/cli/cmd/cluster/create_test.go
+      - linters:
+          - ireturn
+        path: pkg/cli/cmd/cluster/list_test.go
+      - linters:
+          - paralleltest
+        path: pkg/cli/cmd/cipher/import_test.go
       - linters:
           - funlen
         path: pkg/svc/provisioner/registry/local_registry_service_test.go
@@ -89,9 +80,6 @@ linters:
           - revive
         text: "var-naming: avoid package names that conflict with Go standard library package names"
         path: pkg/io/
-      - linters:
-          - paralleltest
-        path: cmd/cipher/import_test.go
   settings:
     wsl_v5:
       allow-first-in-block: true

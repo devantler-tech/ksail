@@ -111,8 +111,6 @@ var (
 // newDynamicClient creates a controller-runtime client with a dynamic REST mapper.
 // The dynamic mapper re-discovers resources on cache misses, which is critical for
 // newly-registered CRDs where a static mapper might have stale cached data.
-//
-//nolint:ireturn // Returns client.Client interface required by controller-runtime
 func newDynamicClient(restConfig *rest.Config, scheme *runtime.Scheme) (client.Client, error) {
 	httpClient, err := rest.HTTPClientFor(restConfig)
 	if err != nil {
@@ -197,8 +195,6 @@ func EnsureDefaultResources(
 }
 
 // setupFluxInstance waits for the FluxInstance CRD, creates the client, and upserts the FluxInstance.
-//
-//nolint:ireturn // Returns client.Client interface for flux operations
 func setupFluxInstance(
 	ctx context.Context,
 	restConfig *rest.Config,
@@ -333,8 +329,6 @@ func buildFluxInstance(clusterCfg *v1alpha1.Cluster, clusterName string) (*FluxI
 // to handle transient API errors during CRD initialization.
 // It accepts a client factory to create a fresh client on each retry, which is
 // necessary because the dynamic REST mapper caches discovery results.
-//
-//nolint:ireturn // Returns client.Client interface for subsequent operations
 func upsertFluxInstanceWithRetry(
 	ctx context.Context,
 	clientFactory func() (client.Client, error),

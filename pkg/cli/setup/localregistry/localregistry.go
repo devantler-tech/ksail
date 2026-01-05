@@ -198,7 +198,7 @@ func Cleanup(
 		distConfig.Talos,
 		CleanupStageInfo(),
 		func(execCtx context.Context, svc registry.Service, regCtx registryContext) error {
-			registryName := buildRegistryName(regCtx.clusterName)
+			registryName := registry.BuildLocalRegistryName(regCtx.clusterName)
 			// Use base name for volume to share across clusters
 			volumeName := registry.LocalRegistryBaseName
 
@@ -266,7 +266,7 @@ func provisionAction(clusterCfg *v1alpha1.Cluster) stageAction {
 func connectAction() stageAction {
 	return func(execCtx context.Context, svc registry.Service, ctx registryContext) error {
 		startOpts := registry.StartOptions{
-			Name:        buildRegistryName(ctx.clusterName),
+			Name:        registry.BuildLocalRegistryName(ctx.clusterName),
 			NetworkName: ctx.networkName,
 		}
 
@@ -403,7 +403,7 @@ func runCleanupStage(
 			}
 
 			// Check if the local registry container exists before attempting cleanup
-			registryName := buildRegistryName(clusterName)
+			registryName := registry.BuildLocalRegistryName(clusterName)
 
 			status, statusErr := service.Status(ctx, registry.StatusOptions{Name: registryName})
 			if statusErr != nil {
@@ -539,19 +539,13 @@ func newCreateOptions(
 	ctx registryContext,
 ) registry.CreateOptions {
 	return registry.CreateOptions{
-		Name:        buildRegistryName(ctx.clusterName),
+		Name:        registry.BuildLocalRegistryName(ctx.clusterName),
 		Host:        registry.DefaultEndpointHost,
 		Port:        resolvePort(clusterCfg),
 		ClusterName: ctx.clusterName,
 		// Use base name for volume to share across clusters
 		VolumeName: registry.LocalRegistryBaseName,
 	}
-}
-
-// buildRegistryName constructs the local registry container name with cluster prefix.
-// This allows each cluster to have its own registry container while sharing volumes.
-func buildRegistryName(clusterName string) string {
-	return registry.BuildLocalRegistryName(clusterName)
 }
 
 func resolvePort(clusterCfg *v1alpha1.Cluster) int {
@@ -587,7 +581,7 @@ func WaitForK3dLocalRegistryReady(
 	}
 
 	clusterName := k3dconfigmanager.ResolveClusterName(clusterCfg, k3dConfig)
-	registryName := buildRegistryName(clusterName)
+	registryName := registry.BuildLocalRegistryName(clusterName)
 
 	return dockerInvoker(cmd, func(dockerClient client.APIClient) error {
 		registryMgr, err := dockerclient.NewRegistryManager(dockerClient)
