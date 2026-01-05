@@ -179,8 +179,7 @@ jobs:
           - "--metrics-server Disabled"
         init: [true, false]
     steps:
-      - name: 🧹 Free disk space for Talos
-        if: matrix.distribution == 'Talos'
+      - name: 🧹 Free disk space
         run: |
           # Talos containers run inside Docker and need significant disk space.
           # GitHub runners have limited disk (~14GB free), which causes DiskPressure
@@ -188,16 +187,16 @@ jobs:
           # Free up space by removing unused tools and images.
           echo "Disk space before cleanup:"
           df -h /
-          
+
           # Remove large pre-installed tools we don't need
           sudo rm -rf /usr/share/dotnet
           sudo rm -rf /usr/local/lib/android
           sudo rm -rf /opt/ghc
           sudo rm -rf /opt/hostedtoolcache/CodeQL
-          
+
           # Clean Docker
           docker system prune -af --volumes || true
-          
+
           echo "Disk space after cleanup:"
           df -h /
 
@@ -304,14 +303,7 @@ jobs:
   status:
     name: CI - KSail
     runs-on: ubuntu-latest
-    needs:
-      [
-        changes,
-        build-artifact,
-        generate-schema,
-        generate-cli-flags-docs,
-        system-test,
-      ]
+    needs: [changes, build-artifact, generate-schema, generate-cli-flags-docs, system-test]
     if: ${{ always() }}
     steps:
       - name: Summarize workflow result
