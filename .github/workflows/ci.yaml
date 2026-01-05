@@ -158,7 +158,7 @@ jobs:
   ci:
     name: 🔄 CI - Go
     if: github.event_name != 'pull_request'
-    uses: devantler-tech/reusable-workflows/.github/workflows/ci-go.yaml@55d62d99f199c9c325d1862773659e5a51b9acd2 # v1.27.0
+    uses: devantler-tech/reusable-workflows/.github/workflows/ci-go.yaml@8cb40c51da663ff372855b3152ddcbbaf562f718 # v1.27.1
     secrets:
       CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
       APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
