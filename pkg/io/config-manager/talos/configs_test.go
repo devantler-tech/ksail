@@ -186,3 +186,30 @@ func TestMirrorRegistry_Structure(t *testing.T) {
 	assert.Equal(t, "docker.io", mirror.Host)
 	assert.Equal(t, []string{"http://localhost:5000", "http://localhost:5001"}, mirror.Endpoints)
 }
+
+// TestConfigs_HostDNS_Enabled verifies that hostDNS features are enabled by default.
+// This is critical for Talos-in-Docker (container mode) to work properly.
+// Without hostDNS.enabled and hostDNS.forwardKubeDNSToHost, DNS resolution
+// inside the Talos container will fail, preventing image pulls.
+func TestConfigs_HostDNS_Enabled(t *testing.T) {
+	t.Parallel()
+
+	manager := talos.NewConfigManager("", "hostdns-test", "1.32.0", "10.5.0.0/24")
+
+	configs, err := manager.LoadConfig(nil)
+	require.NoError(t, err)
+	require.NotNil(t, configs)
+
+	cp := configs.ControlPlane()
+	require.NotNil(t, cp)
+
+	features := cp.Machine().Features()
+	require.NotNil(t, features, "Machine features should not be nil")
+
+	hostDNS := features.HostDNS()
+	require.NotNil(t, hostDNS, "HostDNS config should not be nil")
+
+	// These are required for container mode to work properly
+	assert.True(t, hostDNS.Enabled(), "HostDNS should be enabled for container mode")
+	assert.True(t, hostDNS.ForwardKubeDNSToHost(), "HostDNS should forward kube-dns to host for container mode")
+}
