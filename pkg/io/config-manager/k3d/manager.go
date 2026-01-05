@@ -4,12 +4,20 @@ import (
 	"fmt"
 
 	configmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager"
-	"github.com/devantler-tech/ksail/v5/pkg/io/config-manager/helpers"
+	"github.com/devantler-tech/ksail/v5/pkg/io/config-manager/loader"
 	k3dvalidator "github.com/devantler-tech/ksail/v5/pkg/io/validator/k3d"
 	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
 	"github.com/k3d-io/k3d/v5/pkg/config/types"
 	v1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 )
+
+// DefaultK3sImage is the default K3s image version for K3d clusters.
+// This pins K3d clusters to a known Kubernetes version compatible with Flux and other tools.
+const DefaultK3sImage = "rancher/k3s:v1.29.4-k3s1"
+
+// DefaultClusterName is the default K3d cluster name when none is specified.
+// This matches K3d's internal default naming convention.
+const DefaultClusterName = "k3d-default"
 
 // ConfigManager implements configuration management for K3d v1alpha5.SimpleConfig configurations.
 // It provides file-based configuration loading without Viper dependency.
@@ -48,6 +56,7 @@ func NewK3dSimpleConfig(name, apiVersion, kind string) *v1alpha5.SimpleConfig {
 		ObjectMeta: types.ObjectMeta{
 			Name: name,
 		},
+		Image: DefaultK3sImage,
 	}
 }
 
@@ -72,7 +81,7 @@ func (m *ConfigManager) LoadConfig(_ timer.Timer) (*v1alpha5.SimpleConfig, error
 		return m.config, nil
 	}
 
-	config, err := helpers.LoadAndValidateConfig(
+	config, err := loader.LoadAndValidateConfig(
 		m.configPath,
 		func() *v1alpha5.SimpleConfig {
 			// Create default with proper APIVersion and Kind

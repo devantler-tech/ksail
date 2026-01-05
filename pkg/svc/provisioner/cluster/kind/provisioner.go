@@ -311,6 +311,8 @@ func (k *KindClusterProvisioner) List(ctx context.Context) ([]string, error) {
 	logger := &streamLogger{writer: &outBuf}
 
 	// Set up IOStreams - capture kind commands output to buffer
+	// Note: Kind's getclusters command writes to streams.Out directly (via fmt.Fprintln),
+	// not through cmd.SetOut(), so we read from outBuf primarily.
 	streams := kindcmd.IOStreams{
 		Out:    &outBuf,
 		ErrOut: io.Discard,
@@ -325,8 +327,15 @@ func (k *KindClusterProvisioner) List(ctx context.Context) ([]string, error) {
 
 	const noKindClustersMsg = "No kind clusters found."
 
-	// Parse stdout - each line is a cluster name
-	lines := bytes.Split([]byte(result.Stdout), []byte("\n"))
+	// Parse output - Kind writes cluster names via fmt.Fprintln(streams.Out, ...)
+	// which goes to outBuf. If outBuf is empty (e.g., in mocked tests), fall back
+	// to result.Stdout for compatibility.
+	output := outBuf.Bytes()
+	if len(output) == 0 {
+		output = []byte(result.Stdout)
+	}
+
+	lines := bytes.Split(output, []byte("\n"))
 
 	var clusters []string
 

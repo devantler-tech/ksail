@@ -8,7 +8,10 @@ import (
 	"net"
 	"net/netip"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
+	"slices"
 	"time"
 
 	iopath "github.com/devantler-tech/ksail/v5/pkg/io"
@@ -83,6 +86,8 @@ var (
 	ErrNoPortMapping = errors.New("no port mapping found")
 	// ErrMissingKubernetesEndpoint is returned when the cluster info is missing the Kubernetes endpoint.
 	ErrMissingKubernetesEndpoint = errors.New("cluster info missing KubernetesEndpoint")
+	// ErrKernelModuleLoadFailed is returned when loading a required kernel module fails.
+	ErrKernelModuleLoadFailed = errors.New("failed to load kernel module")
 )
 
 // TalosProvisioner implements ClusterProvisioner for Talos-in-Docker clusters.
@@ -154,8 +159,14 @@ func (p *TalosProvisioner) TalosConfigs() *talosconfigmanager.Configs {
 // Create creates a Talos-in-Docker cluster.
 // If name is non-empty, it overrides the cluster name from talosConfigs.
 func (p *TalosProvisioner) Create(ctx context.Context, name string) error {
+	// Ensure required kernel modules are loaded (Linux only)
+	err := p.ensureKernelModules(ctx)
+	if err != nil {
+		return err
+	}
+
 	// Verify Docker is available and running
-	err := p.checkDockerAvailable(ctx)
+	err = p.checkDockerAvailable(ctx)
 	if err != nil {
 		return err
 	}
@@ -192,6 +203,15 @@ func (p *TalosProvisioner) Delete(ctx context.Context, name string) error {
 		return err
 	}
 
+	// Collect volumes used by Talos containers BEFORE destroying the cluster
+	// These are anonymous volumes that the Talos SDK doesn't clean up
+	containers, err := p.listTalosContainers(ctx, clusterName)
+	if err != nil {
+		return fmt.Errorf("failed to list Talos containers: %w", err)
+	}
+
+	volumes := p.collectContainerVolumes(ctx, containers)
+
 	// Get state directory for cluster state
 	stateDir, err := getStateDirectory()
 	if err != nil {
@@ -218,6 +238,13 @@ func (p *TalosProvisioner) Delete(ctx context.Context, name string) error {
 	err = talosProvisioner.Destroy(ctx, cluster, provision.WithLogWriter(p.logWriter))
 	if err != nil {
 		return fmt.Errorf("failed to destroy cluster: %w", err)
+	}
+
+	// Clean up the anonymous volumes used by Talos containers
+	// These are created by Docker for Talos node data and are not cleaned up by the Talos SDK
+	if len(volumes) > 0 {
+		_, _ = fmt.Fprintf(p.logWriter, "Cleaning up %d Talos node volumes...\n", len(volumes))
+		p.removeVolumes(ctx, volumes)
 	}
 
 	// Clean up kubeconfig - remove only the context for this cluster
@@ -360,6 +387,60 @@ func (p *TalosProvisioner) listTalosContainers(
 	return containers, nil
 }
 
+// collectContainerVolumes collects all volume names used by the given containers.
+// It inspects each container to find mounted volumes (anonymous volumes used by Talos).
+func (p *TalosProvisioner) collectContainerVolumes(
+	ctx context.Context,
+	containers []container.Summary,
+) []string {
+	volumeSet := make(map[string]struct{})
+
+	for _, containerSummary := range containers {
+		inspect, err := p.dockerClient.ContainerInspect(ctx, containerSummary.ID)
+		if err != nil {
+			// Log warning but continue with other containers
+			_, _ = fmt.Fprintf(
+				p.logWriter,
+				"Warning: failed to inspect container %s: %v\n",
+				containerSummary.ID[:12],
+				err,
+			)
+
+			continue
+		}
+
+		for _, mount := range inspect.Mounts {
+			// Only collect volume mounts (not bind mounts or tmpfs)
+			if mount.Type == "volume" && mount.Name != "" {
+				volumeSet[mount.Name] = struct{}{}
+			}
+		}
+	}
+
+	volumes := make([]string, 0, len(volumeSet))
+	for vol := range volumeSet {
+		volumes = append(volumes, vol)
+	}
+
+	return volumes
+}
+
+// removeVolumes removes the specified volumes.
+// Errors are logged but do not cause the operation to fail.
+func (p *TalosProvisioner) removeVolumes(ctx context.Context, volumes []string) {
+	for _, vol := range volumes {
+		err := p.dockerClient.VolumeRemove(ctx, vol, true) // force=true
+		if err != nil {
+			_, _ = fmt.Fprintf(
+				p.logWriter,
+				"Warning: failed to remove volume %s: %v\n",
+				vol,
+				err,
+			)
+		}
+	}
+}
+
 // validateClusterOperation validates that Docker is available and the cluster exists.
 // Returns the resolved cluster name or an error.
 func (p *TalosProvisioner) validateClusterOperation(
@@ -469,12 +550,27 @@ func (p *TalosProvisioner) bootstrapAndSaveKubeconfig(
 	defer checkCancel()
 
 	// Select appropriate cluster checks based on CNI configuration.
-	// When using a custom CNI (e.g., Cilium), skip K8s component checks (CoreDNS, kube-proxy)
+	// When using a custom CNI (e.g., Cilium), skip CNI-dependent checks (CoreDNS, kube-proxy)
 	// because pods cannot start until the CNI is installed.
+	// However, we still need K8sComponentsReadinessChecks to ensure K8s API is ready.
 	// See: https://pkg.go.dev/github.com/siderolabs/talos/pkg/cluster/check#K8sComponentsReadinessChecks
 	clusterChecks := check.DefaultClusterChecks()
-	if p.talosConfigs != nil && p.talosConfigs.IsCNIDisabled() {
-		clusterChecks = check.PreBootSequenceChecks()
+
+	// Skip CNI-dependent checks if:
+	// 1. The Talos config has CNI disabled (scaffolded project with disable-default-cni.yaml patch), OR
+	// 2. KSail will install a custom CNI after cluster creation (options.SkipCNIChecks)
+	//
+	// We use PreBootSequenceChecks + K8sComponentsReadinessChecks (without the node ready checks)
+	// to ensure:
+	// - Talos services are healthy (etcd, apid, kubelet)
+	// - K8s nodes are reported (registered with API server)
+	// - Control plane static pods are running
+	// This matches talosctl's SkipK8sNodeReadinessCheck behavior.
+	if (p.talosConfigs != nil && p.talosConfigs.IsCNIDisabled()) || p.options.SkipCNIChecks {
+		clusterChecks = slices.Concat(
+			check.PreBootSequenceChecks(),
+			check.K8sComponentsReadinessChecks(),
+		)
 	}
 
 	err = check.Wait(checkCtx, clusterAccess, clusterChecks, check.StderrReporter())
@@ -874,4 +970,111 @@ func (p *TalosProvisioner) cleanupKubeconfig(clusterName string) error {
 	}
 
 	return nil
+}
+
+// ensureKernelModules loads required kernel modules for Talos networking.
+// On Linux, this loads the br_netfilter module which is required for bridge networking.
+// On macOS and Windows, Docker Desktop handles this automatically via its Linux VM.
+func (p *TalosProvisioner) ensureKernelModules(ctx context.Context) error {
+	// Only needed on Linux - Docker Desktop on macOS/Windows handles this in its VM
+	if runtime.GOOS != "linux" {
+		return nil
+	}
+
+	// Check if br_netfilter is already loaded by reading /proc/modules
+	data, err := os.ReadFile("/proc/modules")
+	if err == nil {
+		// Check if br_netfilter is in the loaded modules list
+		if containsModule(string(data), "br_netfilter") {
+			return nil // Already loaded
+		}
+	}
+
+	// Try to load the module using modprobe
+	_, _ = fmt.Fprintf(p.logWriter, "Loading br_netfilter kernel module...\n")
+
+	cmd := exec.CommandContext(ctx, "modprobe", "br_netfilter")
+
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		// Try with sudo if direct modprobe fails (user may not have CAP_SYS_MODULE)
+		sudoCmd := exec.CommandContext(ctx, "sudo", "modprobe", "br_netfilter")
+
+		sudoOutput, sudoErr := sudoCmd.CombinedOutput()
+		if sudoErr != nil {
+			return fmt.Errorf(
+				"%w: br_netfilter (modprobe failed: %w, sudo modprobe failed: %w, output: %s)",
+				ErrKernelModuleLoadFailed,
+				err,
+				sudoErr,
+				string(append(output, sudoOutput...)),
+			)
+		}
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "Successfully loaded br_netfilter kernel module\n")
+
+	return nil
+}
+
+// containsModule checks if a module name appears in /proc/modules output.
+func containsModule(modulesContent, moduleName string) bool {
+	// /proc/modules format: "module_name size refcount deps state offset"
+	// Each module is on its own line, and the name is the first field
+	lines := splitLines(modulesContent)
+	for _, line := range lines {
+		if len(line) == 0 {
+			continue
+		}
+		// Get the first field (module name)
+		fields := splitFields(line)
+		if len(fields) > 0 && fields[0] == moduleName {
+			return true
+		}
+	}
+
+	return false
+}
+
+// splitLines splits a string into lines.
+func splitLines(content string) []string {
+	var lines []string
+
+	start := 0
+
+	for i := range len(content) {
+		if content[i] == '\n' {
+			lines = append(lines, content[start:i])
+			start = i + 1
+		}
+	}
+
+	if start < len(content) {
+		lines = append(lines, content[start:])
+	}
+
+	return lines
+}
+
+// splitFields splits a string by whitespace.
+func splitFields(content string) []string {
+	var fields []string
+
+	start := -1
+
+	for i := range len(content) {
+		isSpace := content[i] == ' ' || content[i] == '\t'
+		if !isSpace && start == -1 {
+			start = i
+		} else if isSpace && start != -1 {
+			fields = append(fields, content[start:i])
+			start = -1
+		}
+	}
+
+	if start != -1 {
+		fields = append(fields, content[start:])
+	}
+
+	return fields
 }

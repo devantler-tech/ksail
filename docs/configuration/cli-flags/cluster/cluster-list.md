@@ -15,15 +15,8 @@ Usage:
   ksail cluster list [flags]
 
 Flags:
-  -a, --all                            List all clusters, including those not defined in the configuration
-  -c, --context string                 Kubernetes context of cluster
-  -d, --distribution Distribution      Kubernetes distribution to use (default Kind)
-      --distribution-config string     Configuration file for the distribution
-  -g, --gitops-engine GitOpsEngine     GitOps engine to use (None disables GitOps, Flux installs Flux controllers, ArgoCD installs Argo CD) (default None)
-  -h, --help                           help for list
-  -k, --kubeconfig string              Path to kubeconfig file (default "~/.kube/config")
-      --local-registry LocalRegistry   Local registry behavior (Enabled provisions a registry; Disabled skips provisioning. Defaults to Enabled when a GitOps engine is configured) (default Disabled)
-      --local-registry-port int32      Host port to expose the local OCI registry on (default 5111)
+  -d, --distribution string   Filter by distribution (Kind, K3d, Talos). If not specified, lists all distributions.
+  -h, --help                  help for list
 
 Global Flags:
       --timing   Show per-activity timing output

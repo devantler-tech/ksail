@@ -3,7 +3,7 @@
 // This package contains subpackages for terminal-based user interaction:
 //
 //   - asciiart: ASCII art rendering with color formatting for logos and graphics
-//   - error-handler: Cobra command execution with error formatting and normalization
+//   - errorhandler: Cobra command execution with error formatting and normalization
 //   - notify: Formatted message display with symbols, colors, and timing information
 //   - timer: Execution time tracking for single-stage and multi-stage operations
 //

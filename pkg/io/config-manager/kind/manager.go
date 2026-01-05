@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	configmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager"
-	"github.com/devantler-tech/ksail/v5/pkg/io/config-manager/helpers"
+	"github.com/devantler-tech/ksail/v5/pkg/io/config-manager/loader"
 	kindvalidator "github.com/devantler-tech/ksail/v5/pkg/io/validator/kind"
 	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
@@ -69,7 +69,7 @@ func (m *ConfigManager) LoadConfig(_ timer.Timer) (*v1alpha4.Cluster, error) {
 		return m.config, nil
 	}
 
-	config, err := helpers.LoadAndValidateConfig(
+	config, err := loader.LoadAndValidateConfig(
 		m.configPath,
 		func() *v1alpha4.Cluster {
 			// Create default with proper APIVersion and Kind

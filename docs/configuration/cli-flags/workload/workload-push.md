@@ -9,14 +9,35 @@ grand_parent: "CLI Flags"
 # ksail workload push
 
 ```text
-Build and push local workloads as an OCI artifact to the local registry.
+Build and push local workloads as an OCI artifact to a registry.
+
+The OCI reference format is: oci://<host>:<port>/<repository>[/<variant>]:<ref>
+
+Examples:
+  # Push to auto-detected local registry with defaults
+  ksail workload push
+
+  # Push specific directory to auto-detected registry
+  ksail workload push --path=./manifests
+
+  # Push to explicit registry endpoint
+  ksail workload push oci://localhost:5111/k8s:dev
+
+  # Push with variant (subdirectory in repository)
+  ksail workload push oci://localhost:5111/my-app/base:v1.0.0 --path=./k8s
+
+All parts of the OCI reference are optional and will be inferred:
+  - host:port: Auto-detected from running local-registry container
+  - repository: Derived from source directory name
+  - ref: Defaults to "dev"
 
 Usage:
-  ksail workload push [source-directory] [flags]
+  ksail workload push [oci://<host>:<port>/<repository>[/<variant>]:<ref>] [flags]
 
 Flags:
-  -h, --help       help for push
-      --validate   Validate manifests before pushing
+  -h, --help          help for push
+      --path string   Source directory containing manifests to push
+      --validate      Validate manifests before pushing
 
 Global Flags:
       --timing   Show per-activity timing output

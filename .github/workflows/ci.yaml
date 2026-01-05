@@ -1,4 +1,4 @@
-name: CI - Go (Repo)
+name: CI - KSail
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
   pull_request:
 
 concurrency:
-  group: "ci-go-repo-${{ github.ref }}"
+  group: "ci-ksail-${{ github.ref }}"
   cancel-in-progress: true
 
 permissions: {}
@@ -68,8 +68,8 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: 📦 Prepare ksail binary
-        uses: ./.github/actions/prepare-ksail-binary
+      - name: 📦 Cache KSail Binary
+        uses: ./.github/actions/cache-ksail-binary
         with:
           go-version: ${{ steps.setup-go.outputs.go-version }}
           source-hash: ${{ hashFiles('go.mod', 'go.sum', '**/*.go') }}
@@ -95,6 +95,7 @@ jobs:
         with:
           persist-credentials: true
           token: ${{ steps.generate-token.outputs.token }}
+          ref: ${{ github.head_ref || github.ref }}
 
       - name: ⚙️ Setup Go
         uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6.1.0
@@ -131,6 +132,7 @@ jobs:
         with:
           persist-credentials: true
           token: ${{ steps.generate-token.outputs.token }}
+          ref: ${{ github.head_ref || github.ref }}
 
       - name: ⚙️ Setup Go
         id: setup-go
@@ -138,8 +140,8 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: 📦 Prepare ksail binary
-        uses: ./.github/actions/prepare-ksail-binary
+      - name: 📦 Cache KSail Binary
+        uses: ./.github/actions/cache-ksail-binary
         with:
           go-version: ${{ steps.setup-go.outputs.go-version }}
           source-hash: ${{ hashFiles('go.mod', 'go.sum', '**/*.go') }}
@@ -155,19 +157,6 @@ jobs:
           commit_user_name: generator-bot
           commit_user_email: generator-bot@users.noreply.github.com
 
-  ci:
-    name: 🔄 CI - Go
-    if: github.event_name != 'pull_request'
-    uses: devantler-tech/reusable-workflows/.github/workflows/ci-go.yaml@55d62d99f199c9c325d1862773659e5a51b9acd2 # v1.27.0
-    secrets:
-      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
-      APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
-    permissions:
-      contents: write
-      issues: write
-      packages: read
-      pull-requests: write
-
   system-test:
     name: 🧪 System Test
     runs-on: ubuntu-latest
@@ -175,38 +164,42 @@ jobs:
     if: needs.changes.outputs.code == 'true' || github.event_name == 'push'
     strategy:
       matrix:
-        include:
-          - init-args: "--distribution Kind"
-          - init-args: "--distribution Kind --cert-manager Enabled"
-          - init-args: "--distribution Kind --cni Cilium"
-          - init-args: "--distribution Kind --cni Calico"
-          - init-args: "--distribution Kind --csi LocalPathStorage"
-          - init-args: "--distribution Kind --gitops-engine Flux"
-          - init-args: "--distribution Kind --gitops-engine ArgoCD"
-          - init-args: "--distribution Kind --mirror-registry docker.io=https://registry-1.docker.io"
-          - init-args: "--distribution Kind --mirror-registry docker.io=https://registry-1.docker.io --mirror-registry ghcr.io=https://ghcr.io"
-          - init-args: "--distribution Kind --metrics-server Disabled"
-          - init-args: "--distribution K3d"
-          - init-args: "--distribution K3d --cert-manager Enabled"
-          - init-args: "--distribution K3d --cni Cilium"
-          - init-args: "--distribution K3d --cni Calico"
-          - init-args: "--distribution K3d --csi LocalPathStorage"
-          - init-args: "--distribution K3d --gitops-engine Flux"
-          - init-args: "--distribution K3d --gitops-engine ArgoCD"
-          - init-args: "--distribution K3d --mirror-registry docker.io=https://registry-1.docker.io"
-          - init-args: "--distribution K3d --mirror-registry docker.io=https://registry-1.docker.io --mirror-registry ghcr.io=https://ghcr.io"
-          - init-args: "--distribution K3d --metrics-server Disabled"
-          - init-args: "--distribution Talos"
-          - init-args: "--distribution Talos --cert-manager Enabled"
-          - init-args: "--distribution Talos --cni Cilium"
-          - init-args: "--distribution Talos --cni Calico"
-          - init-args: "--distribution Talos --csi LocalPathStorage"
-          - init-args: "--distribution Talos --gitops-engine Flux"
-          - init-args: "--distribution Talos --gitops-engine ArgoCD"
-          - init-args: "--distribution Talos --mirror-registry docker.io=https://registry-1.docker.io"
-          - init-args: "--distribution Talos --mirror-registry docker.io=https://registry-1.docker.io --mirror-registry ghcr.io=https://ghcr.io"
-          - init-args: "--distribution Talos --metrics-server Disabled"
+        distribution: [Kind, K3d, Talos]
+        args:
+          - ""
+          - "--cert-manager Enabled"
+          - "--cni Cilium"
+          - "--cni Calico"
+          - "--csi LocalPathStorage"
+          - "--gitops-engine Flux"
+          - "--gitops-engine ArgoCD"
+          - "--mirror-registry ghcr.io=https://ghcr.io"
+          - "--mirror-registry ghcr.io=https://ghcr.io --mirror-registry docker.io=https://registry-1.docker.io"
+          - "--metrics-server Enabled"
+          - "--metrics-server Disabled"
+        init: [true, false]
     steps:
+      - name: 🧹 Free disk space
+        run: |
+          # Talos containers run inside Docker and need significant disk space.
+          # GitHub runners have limited disk (~14GB free), which causes DiskPressure
+          # when Talos pulls CNI images (Cilium/Calico) and runs workloads.
+          # Free up space by removing unused tools and images.
+          echo "Disk space before cleanup:"
+          df -h /
+
+          # Remove large pre-installed tools we don't need
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+
+          # Clean Docker
+          docker system prune -af --volumes || true
+
+          echo "Disk space after cleanup:"
+          df -h /
+
       - name: 📄 Checkout
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
@@ -218,46 +211,75 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: 📦 Prepare ksail binary
-        uses: ./.github/actions/prepare-ksail-binary
+      - name: 📦 Cache KSail Binary
+        uses: ./.github/actions/cache-ksail-binary
         with:
           go-version: ${{ steps.setup-go.outputs.go-version }}
           source-hash: ${{ hashFiles('go.mod', 'go.sum', '**/*.go') }}
           output-path: /usr/local/bin/ksail
 
       - name: 🧪 ksail cluster init
+        if: matrix.init == true
         run: |
-          ksail cluster init ${{ matrix.init-args }}
-
-      - name: 🔧 Load br_netfilter kernel module (required for Talos)
-        if: contains(matrix.init-args, 'Talos')
-        run: |
-          sudo modprobe br_netfilter
-          echo "br_netfilter module loaded successfully"
+          ksail cluster init --distribution ${{ matrix.distribution }} ${{ matrix.args }}
 
       - name: 🧪 ksail cluster create
         run: |
-          ksail cluster create
+          if [ "${{ matrix.init }}" = true ]; then
+            ksail cluster create
+          else
+            ksail cluster create --distribution ${{ matrix.distribution }} ${{ matrix.args }}
+          fi
 
       - name: 🧪 ksail cluster list
         run: |
           ksail cluster list
 
       - name: 🧪 ksail workload create
+        id: workload-create
         run: |
           ksail workload create deployment whoami --image=traefik/whoami:latest
           ksail workload wait --for=condition=Available deployment/whoami --timeout=300s
 
       - name: 🧪 ksail workload apply
+        id: workload-apply
         run: |
           ksail workload apply -k .github/fixtures/podinfo-overlay
           ksail workload wait --for=condition=Available deployment/podinfo --timeout=300s
 
       - name: 🧪 ksail workload push and reconcile
-        if: contains(matrix.init-args, '--gitops-engine')
+        id: workload-push-reconcile
+        if: contains(matrix.args, '--gitops-engine')
         run: |
-          ksail workload push .github/fixtures/reconcile-test
+          mkdir -p k8s
+          if [ ! -f "k8s/kustomization.yaml" ]; then
+            echo "apiVersion: kustomize.config.k8s.io/v1beta1" > k8s/kustomization.yaml
+            echo "kind: Kustomization" >> k8s/kustomization.yaml
+            echo "resources: []" >> k8s/kustomization.yaml
+          fi
+          ksail workload push --path k8s/
           ksail workload reconcile
+
+      - name: 🐞 Debug workload failure
+        if: failure() && (steps.workload-create.outcome == 'failure' || steps.workload-apply.outcome == 'failure' || steps.workload-push-reconcile.outcome == 'failure')
+        run: |
+          echo "=== Disk Usage ==="
+          df -h /
+          echo ""
+          echo "=== Docker Disk Usage ==="
+          docker system df || true
+          echo ""
+          echo "=== Node Status ==="
+          ksail workload get nodes -o wide || true
+          echo ""
+          echo "=== Node Describe (conditions) ==="
+          ksail workload describe nodes | grep -A 20 "Conditions:" || true
+          echo ""
+          echo "=== Pod Status ==="
+          ksail workload get pods -o wide || true
+          echo ""
+          echo "=== Pod Events ==="
+          ksail workload get events --sort-by='.lastTimestamp' | tail -50 || true
 
       - name: 🧪 ksail cluster stop
         run: |
@@ -273,43 +295,45 @@ jobs:
 
       - name: 🧹 Cleanup
         run: |
-          if [ -d "k8s" ]; then rm -rf "k8s"; fi
-          if [ -f "kind.yaml" ]; then rm "kind.yaml"; fi
-          if [ -f "k3d.yaml" ]; then rm "k3d.yaml"; fi
           if [ -f "ksail.yaml" ]; then rm "ksail.yaml"; fi
+          if [ -f "kind.yaml" ]; then rm "kind.yaml"; fi
+          if [ -d "kind" ]; then rm -rf "kind"; fi
+          if [ -f "k3d.yaml" ]; then rm "k3d.yaml"; fi
+          if [ -d "talos" ]; then rm -rf "talos"; fi
+          if [ -d "k8s" ]; then rm -rf "k8s"; fi
 
-  system-test-status:
+  status:
+    name: CI - KSail
     runs-on: ubuntu-latest
-    needs: [changes, system-test, build-artifact]
+    needs: [changes, build-artifact, generate-schema, generate-cli-flags-docs, system-test]
     if: ${{ always() }}
     steps:
-      - name: Summarize matrix result
+      - name: Summarize workflow result
         shell: bash
         run: |
           set -Eeuo pipefail
-          echo "system-test result: $MATRIX_RESULT"
-          echo "build-artifact result: $BUILD_RESULT"
-          echo "code changes: $CODE_CHANGES"
-          echo "event name: $EVENT_NAME"
+          failed=false
+          for result in "$CHANGES_RESULT" "$BUILD_RESULT" "$SCHEMA_RESULT" "$CLI_DOCS_RESULT" "$SYSTEM_TEST_RESULT"; do
+            case "$result" in
+              success|skipped)
+                ;;
+              *)
+                failed=true
+                ;;
+            esac
+          done
 
-          # If no code changes and not a push, skip is expected
-          if [[ "$CODE_CHANGES" != "true" && "$EVENT_NAME" != "push" ]]; then
-            echo "✅ System tests skipped - no code changes detected"
-            exit 0
+          if [ "$failed" = true ]; then
+            echo "❌ At least one job failed."
+            exit 1
           fi
 
-          # Check matrix result
-          case "$MATRIX_RESULT" in
-            success|skipped)
-              echo "✅ All matrix runs succeeded or were skipped."
-              ;;
-            *)
-              echo "❌ At least one matrix run failed."
-              exit 1
-              ;;
-          esac
+          echo "✅ All jobs succeeded or were skipped."
         env:
-          MATRIX_RESULT: ${{ needs.system-test.result }}
+          CHANGES_RESULT: ${{ needs.changes.result }}
           BUILD_RESULT: ${{ needs.build-artifact.result }}
+          SCHEMA_RESULT: ${{ needs.generate-schema.result }}
+          CLI_DOCS_RESULT: ${{ needs.generate-cli-flags-docs.result }}
+          SYSTEM_TEST_RESULT: ${{ needs.system-test.result }}
           CODE_CHANGES: ${{ needs.changes.outputs.code }}
           EVENT_NAME: ${{ github.event_name }}

@@ -5,10 +5,11 @@ import (
 	"fmt"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/create"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/create/registrystage"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/setup"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/setup/localregistry"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/setup/mirrorregistry"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
@@ -46,6 +47,7 @@ func NewCreateCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
 	}
 
 	fieldSelectors := ksailconfigmanager.DefaultClusterFieldSelectors()
+	fieldSelectors = append(fieldSelectors, ksailconfigmanager.DefaultCNIFieldSelector())
 	fieldSelectors = append(fieldSelectors, ksailconfigmanager.DefaultMetricsServerFieldSelector())
 	fieldSelectors = append(fieldSelectors, ksailconfigmanager.DefaultCertManagerFieldSelector())
 	fieldSelectors = append(fieldSelectors, ksailconfigmanager.DefaultCSIFieldSelector())
@@ -81,6 +83,7 @@ func handleCreateRunE(
 	}
 
 	firstActivityShown := false
+	localDeps := getLocalRegistryDeps()
 
 	err = ensureLocalRegistriesReady(
 		cmd,
@@ -88,6 +91,7 @@ func handleCreateRunE(
 		deps,
 		cfgManager,
 		&firstActivityShown,
+		localDeps,
 	)
 	if err != nil {
 		return err
@@ -118,7 +122,7 @@ func handleCreateRunE(
 		return err
 	}
 
-	connectMirrorRegistriesWithWarning(
+	configureRegistryMirrorsInClusterWithWarning(
 		cmd,
 		ctx,
 		deps,
@@ -126,15 +130,29 @@ func handleCreateRunE(
 		&firstActivityShown,
 	)
 
-	err = executeLocalRegistryStage(
+	err = localregistry.ExecuteStage(
 		cmd,
 		ctx,
 		deps,
-		localRegistryStageConnect,
+		localregistry.StageConnect,
 		&firstActivityShown,
+		localDeps,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to connect local registry: %w", err)
+	}
+
+	// Wait for K3d local registry to be ready before installing components.
+	// K3d creates the registry during cluster creation, so we need to wait
+	// for it to be ready before Flux can sync from it.
+	err = localregistry.WaitForK3dLocalRegistryReady(
+		cmd,
+		ctx.ClusterCfg,
+		ctx.K3dConfig,
+		localDeps.DockerInvoker,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to wait for local registry: %w", err)
 	}
 
 	return handlePostCreationSetup(cmd, ctx.ClusterCfg, deps.Timer, &firstActivityShown)
@@ -143,34 +161,30 @@ func handleCreateRunE(
 func loadClusterConfiguration(
 	cfgManager *ksailconfigmanager.ConfigManager,
 	tmr timer.Timer,
-) (*CommandContext, error) {
+) (*localregistry.Context, error) {
 	// Load config to populate cfgManager.Config and cfgManager.DistributionConfig
-	// The returned config is cached in cfgManager.Config, which is used by NewClusterCommandContext
+	// The returned config is cached in cfgManager.Config, which is used by NewContextFromConfigManager
 	_, err := cfgManager.LoadConfig(tmr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load cluster configuration: %w", err)
 	}
 
 	// Create context from the now-populated config manager
-	return NewClusterCommandContext(cfgManager), nil
+	return localregistry.NewContextFromConfigManager(cfgManager), nil
 }
 
 // buildRegistryStageParams creates a StageParams struct for registry operations.
 // This helper reduces code duplication when calling registry stage functions.
 func buildRegistryStageParams(
 	cmd *cobra.Command,
-	ctx *CommandContext,
+	ctx *localregistry.Context,
 	deps lifecycle.Deps,
 	cfgManager *ksailconfigmanager.ConfigManager,
 	firstActivityShown *bool,
-) registrystage.StageParams {
-	dockerClientInvokerMu.RLock()
+) mirrorregistry.StageParams {
+	localDeps := getLocalRegistryDeps()
 
-	invoker := dockerClientInvoker
-
-	dockerClientInvokerMu.RUnlock()
-
-	return registrystage.StageParams{
+	return mirrorregistry.StageParams{
 		Cmd:                cmd,
 		ClusterCfg:         ctx.ClusterCfg,
 		Deps:               deps,
@@ -179,23 +193,26 @@ func buildRegistryStageParams(
 		K3dConfig:          ctx.K3dConfig,
 		TalosConfig:        ctx.TalosConfig,
 		FirstActivityShown: firstActivityShown,
-		DockerInvoker:      invoker,
+		DockerInvoker:      localDeps.DockerInvoker,
 	}
 }
 
 func ensureLocalRegistriesReady(
 	cmd *cobra.Command,
-	ctx *CommandContext,
+	ctx *localregistry.Context,
 	deps lifecycle.Deps,
 	cfgManager *ksailconfigmanager.ConfigManager,
 	firstActivityShown *bool,
+	localDeps localregistry.Dependencies,
 ) error {
-	err := executeLocalRegistryStage(
+	// Stage 1: Provision local registry
+	err := localregistry.ExecuteStage(
 		cmd,
 		ctx,
 		deps,
-		localRegistryStageProvision,
+		localregistry.StageProvision,
 		firstActivityShown,
+		localDeps,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to provision local registry: %w", err)
@@ -203,9 +220,22 @@ func ensureLocalRegistriesReady(
 
 	params := buildRegistryStageParams(cmd, ctx, deps, cfgManager, firstActivityShown)
 
-	err = registrystage.SetupMirrorRegistries(params)
+	// Stage 2: Create and configure registry containers (local + mirrors)
+	err = mirrorregistry.SetupRegistries(params)
 	if err != nil {
-		return fmt.Errorf("failed to setup mirror registries: %w", err)
+		return fmt.Errorf("failed to setup registries: %w", err)
+	}
+
+	// Stage 3: Create Docker network
+	err = mirrorregistry.CreateNetwork(params)
+	if err != nil {
+		return fmt.Errorf("failed to create docker network: %w", err)
+	}
+
+	// Stage 4: Connect registries to network (before cluster creation)
+	err = mirrorregistry.ConnectRegistriesToNetwork(params)
+	if err != nil {
+		return fmt.Errorf("failed to connect registries to network: %w", err)
 	}
 
 	return nil
@@ -233,20 +263,21 @@ func executeClusterLifecycle(
 	return nil
 }
 
-func connectMirrorRegistriesWithWarning(
+func configureRegistryMirrorsInClusterWithWarning(
 	cmd *cobra.Command,
-	ctx *CommandContext,
+	ctx *localregistry.Context,
 	deps lifecycle.Deps,
 	cfgManager *ksailconfigmanager.ConfigManager,
 	firstActivityShown *bool,
 ) {
 	params := buildRegistryStageParams(cmd, ctx, deps, cfgManager, firstActivityShown)
 
-	err := registrystage.ConnectRegistriesToClusterNetwork(params)
+	// Configure containerd inside cluster nodes to use registry mirrors (Kind only)
+	err := mirrorregistry.ConfigureRegistryMirrorsInCluster(params)
 	if err != nil {
 		notify.WriteMessage(notify.Message{
 			Type:    notify.WarningType,
-			Content: fmt.Sprintf("failed to connect registries to cluster network: %v", err),
+			Content: fmt.Sprintf("failed to configure registry mirrors in cluster: %v", err),
 			Writer:  cmd.OutOrStdout(),
 		})
 	}
@@ -259,7 +290,7 @@ func handlePostCreationSetup(
 	tmr timer.Timer,
 	firstActivityShown *bool,
 ) error {
-	_, err := create.InstallCNI(cmd, clusterCfg, tmr, firstActivityShown)
+	_, err := setup.InstallCNI(cmd, clusterCfg, tmr, firstActivityShown)
 	if err != nil {
 		return fmt.Errorf("failed to install CNI: %w", err)
 	}
@@ -267,7 +298,7 @@ func handlePostCreationSetup(
 	factories := getInstallerFactories()
 	outputTimer := helpers.MaybeTimer(cmd, tmr)
 
-	err = create.InstallPostCNIComponents(
+	err = setup.InstallPostCNIComponents(
 		cmd,
 		clusterCfg,
 		factories,

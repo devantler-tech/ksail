@@ -4,45 +4,34 @@ import (
 	"context"
 
 	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
-	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
-	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	"github.com/spf13/cobra"
 )
 
-// newStopLifecycleConfig creates the lifecycle configuration for cluster stop.
-func newStopLifecycleConfig() lifecycle.Config {
-	return lifecycle.Config{
-		TitleEmoji:         "🛑",
-		TitleContent:       "Stop cluster...",
-		ActivityContent:    "stopping cluster",
-		SuccessContent:     "cluster stopped",
-		ErrorMessagePrefix: "failed to stop cluster",
-		Action: func(ctx context.Context, provisioner clusterprovisioner.ClusterProvisioner, clusterName string) error {
-			return provisioner.Stop(ctx, clusterName)
-		},
-	}
-}
+const stopLongDesc = `Stop a running Kubernetes cluster.
+
+The cluster is detected from the provided context or the current kubeconfig context.
+Supported distributions are automatically detected:
+  - Kind clusters (context pattern: kind-<cluster-name>)
+  - K3d clusters (context pattern: k3d-<cluster-name>)
+  - Talos clusters (context pattern: admin@<cluster-name>)`
 
 // NewStopCmd creates and returns the stop command.
-func NewStopCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
-	cmd := &cobra.Command{
+func NewStopCmd(_ any) *cobra.Command {
+	return lifecycle.NewSimpleLifecycleCmd(lifecycle.SimpleLifecycleConfig{
 		Use:          "stop",
 		Short:        "Stop a running cluster",
-		Long:         `Stop a running Kubernetes cluster.`,
-		SilenceUsage: true,
-	}
-
-	cfgManager := ksailconfigmanager.NewCommandConfigManager(
-		cmd,
-		ksailconfigmanager.DefaultClusterFieldSelectors(),
-	)
-
-	cmd.RunE = lifecycle.NewStandardRunE(
-		runtimeContainer,
-		cfgManager,
-		newStopLifecycleConfig(),
-	)
-
-	return cmd
+		Long:         stopLongDesc,
+		TitleEmoji:   "🛑",
+		TitleContent: "Stop cluster...",
+		Activity:     "stopping",
+		Success:      "cluster stopped",
+		Action: func(
+			ctx context.Context,
+			provisioner clusterprovisioner.ClusterProvisioner,
+			clusterName string,
+		) error {
+			return provisioner.Stop(ctx, clusterName)
+		},
+	})
 }

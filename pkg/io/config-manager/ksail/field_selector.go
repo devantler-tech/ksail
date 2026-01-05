@@ -97,8 +97,8 @@ func DefaultRegistryPortFieldSelector() FieldSelector[v1alpha1.Cluster] {
 func DefaultMetricsServerFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	return FieldSelector[v1alpha1.Cluster]{
 		Selector:     func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.MetricsServer },
-		Description:  "Metrics Server configuration (Enabled: install, Disabled: uninstall)",
-		DefaultValue: v1alpha1.MetricsServerEnabled,
+		Description:  "Metrics Server (Default: use distribution, Enabled: install, Disabled: uninstall)",
+		DefaultValue: v1alpha1.MetricsServerDefault,
 	}
 }
 
