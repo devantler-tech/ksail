@@ -179,6 +179,28 @@ jobs:
           - "--metrics-server Disabled"
         init: [true, false]
     steps:
+      - name: 🧹 Free disk space for Talos
+        if: matrix.distribution == 'Talos'
+        run: |
+          # Talos containers run inside Docker and need significant disk space.
+          # GitHub runners have limited disk (~14GB free), which causes DiskPressure
+          # when Talos pulls CNI images (Cilium/Calico) and runs workloads.
+          # Free up space by removing unused tools and images.
+          echo "Disk space before cleanup:"
+          df -h /
+          
+          # Remove large pre-installed tools we don't need
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          
+          # Clean Docker
+          docker system prune -af --volumes || true
+          
+          echo "Disk space after cleanup:"
+          df -h /
+
       - name: 📄 Checkout
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
@@ -223,17 +245,23 @@ jobs:
       - name: 🐞 Debug workload failure
         if: failure() && steps.workload-create.outcome == 'failure'
         run: |
+          echo "=== Disk Usage ==="
+          df -h /
+          echo ""
+          echo "=== Docker Disk Usage ==="
+          docker system df || true
+          echo ""
+          echo "=== Node Status ==="
+          ksail workload get nodes -o wide || true
+          echo ""
+          echo "=== Node Describe (conditions) ==="
+          ksail workload describe nodes | grep -A 20 "Conditions:" || true
+          echo ""
           echo "=== Pod Status ==="
           ksail workload get pods -o wide || true
           echo ""
           echo "=== Pod Events ==="
           ksail workload get events --sort-by='.lastTimestamp' | tail -50 || true
-          echo ""
-          echo "=== Pod Describe ==="
-          ksail workload describe pods -l app=whoami || true
-          echo ""
-          echo "=== Node Status ==="
-          ksail workload get nodes -o wide || true
 
       - name: 🧪 ksail workload apply
         run: |
