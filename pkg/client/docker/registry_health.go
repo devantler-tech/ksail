@@ -36,21 +36,21 @@ func (rm *RegistryManager) WaitForRegistryReadyWithTimeout(
 	checkURL, err := rm.prepareHealthCheck(ctx, name)
 	if err != nil {
 		// If the registry has no host port (mirror registry), just verify it's running
-		if errors.Is(err, ErrRegistryPortNotFound) {
-			inUse, statusErr := rm.IsRegistryInUse(ctx, name)
-			if statusErr != nil {
-				return fmt.Errorf("failed to check if registry %s is running: %w", name, statusErr)
-			}
-
-			if !inUse {
-				return fmt.Errorf("registry %s is not running: %w", name, ErrRegistryNotFound)
-			}
-
-			// Mirror registry is running - no further health check needed
-			return nil
+		if !errors.Is(err, ErrRegistryPortNotFound) {
+			return err
 		}
 
-		return err
+		inUse, statusErr := rm.IsRegistryInUse(ctx, name)
+		if statusErr != nil {
+			return fmt.Errorf("failed to check if registry %s is running: %w", name, statusErr)
+		}
+
+		if !inUse {
+			return fmt.Errorf("registry %s is not running: %w", name, ErrRegistryNotFound)
+		}
+
+		// Mirror registry is running - no further health check needed
+		return nil
 	}
 
 	return rm.pollUntilReady(ctx, name, checkURL, timeout, rm.IsRegistryInUse)

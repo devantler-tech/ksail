@@ -48,8 +48,9 @@ const (
 )
 
 var (
-	errCRDNotEstablished = errors.New("CRD is not yet established")
-	errAPINotServable    = errors.New("API returned no resources")
+	errCRDNotEstablished         = errors.New("CRD is not yet established")
+	errAPINotServable            = errors.New("API returned no resources")
+	errOCIRepositoryCreateTimout = errors.New("timed out waiting for OCIRepository to be created")
 )
 
 //nolint:gochecknoglobals // package-level timeout constants
@@ -485,7 +486,7 @@ func isTransientAPIError(err error) bool {
 // unstructured objects bypasses the controller-runtime REST mapper cache, which can become
 // stale in slow CI environments where CRD registration takes time to fully propagate.
 //
-//nolint:cyclop,funlen // polling loop with retry logic requires multiple conditional branches
+//nolint:cyclop,funlen,gocognit // polling loop with retry logic requires multiple conditional branches
 func ensureLocalOCIRepositoryInsecure(
 	ctx context.Context,
 	restConfig *rest.Config,
@@ -532,7 +533,11 @@ func ensureLocalOCIRepositoryInsecure(
 		switch {
 		case err == nil:
 			// Check if already insecure
-			insecure, found, _ := unstructured.NestedBool(unstructuredRepo.Object, "spec", "insecure")
+			insecure, found, _ := unstructured.NestedBool(
+				unstructuredRepo.Object,
+				"spec",
+				"insecure",
+			)
 			if found && insecure {
 				return nil
 			}
@@ -574,15 +579,9 @@ func ensureLocalOCIRepositoryInsecure(
 				updateErr,
 			)
 		case apierrors.IsNotFound(err):
-			lastErr = err
-
 			select {
 			case <-waitCtx.Done():
-				return fmt.Errorf(
-					"timed out waiting for OCIRepository %s/%s to be created by FluxInstance",
-					fluxclient.DefaultNamespace,
-					defaultOCIRepositoryName,
-				)
+				return errOCIRepositoryCreateTimout
 			case <-ticker.C:
 			}
 		default:
@@ -591,7 +590,10 @@ func ensureLocalOCIRepositoryInsecure(
 			// Handle "no matches for kind" errors and other API errors by retrying
 			select {
 			case <-waitCtx.Done():
-				return fmt.Errorf("timed out waiting for OCIRepository CRD to be ready: %w", lastErr)
+				return fmt.Errorf(
+					"timed out waiting for OCIRepository CRD to be ready: %w",
+					lastErr,
+				)
 			case <-ticker.C:
 				// Continue waiting - CRD might not be fully registered yet
 			}

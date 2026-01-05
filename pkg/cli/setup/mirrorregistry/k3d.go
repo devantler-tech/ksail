@@ -225,8 +225,8 @@ func configureK3dNativeLocalRegistry(
 	hostPort := int(v1alpha1.DefaultLocalRegistryPort)
 
 	if k3dConfig.Registries.Create != nil && k3dConfig.Registries.Create.HostPort != "" {
-		if existingPort, err := strconv.Atoi(k3dConfig.Registries.Create.HostPort); err == nil &&
-			existingPort > 0 {
+		existingPort, err := strconv.Atoi(k3dConfig.Registries.Create.HostPort)
+		if err == nil && existingPort > 0 {
 			hostPort = existingPort
 		}
 	} else if clusterCfg.Spec.Cluster.LocalRegistryOpts.HostPort > 0 {

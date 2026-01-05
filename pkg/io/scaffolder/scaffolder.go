@@ -199,6 +199,8 @@ func (s *Scaffolder) GenerateK3dRegistryConfig() k3dv1alpha5.SimpleConfigRegistr
 
 // CreateK3dConfig creates a K3d configuration with distribution-specific settings.
 // Node counts can be set via --control-planes and --workers CLI flags.
+//
+//nolint:funlen // K3d config requires setting many fields; splitting would reduce readability
 func (s *Scaffolder) CreateK3dConfig() k3dv1alpha5.SimpleConfig {
 	// Resolve cluster name - use context from ksail config or default
 	clusterName := k3dconfigmanager.ResolveClusterName(&s.KSailConfig, nil)

@@ -211,5 +211,9 @@ func TestConfigs_HostDNS_Enabled(t *testing.T) {
 
 	// These are required for container mode to work properly
 	assert.True(t, hostDNS.Enabled(), "HostDNS should be enabled for container mode")
-	assert.True(t, hostDNS.ForwardKubeDNSToHost(), "HostDNS should forward kube-dns to host for container mode")
+	assert.True(
+		t,
+		hostDNS.ForwardKubeDNSToHost(),
+		"HostDNS should forward kube-dns to host for container mode",
+	)
 }

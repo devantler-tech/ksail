@@ -39,9 +39,13 @@ type InstallerFactories struct {
 	CSI         func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error)
 	ArgoCD      func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error)
 	// EnsureArgoCDResources configures default Argo CD resources post-install.
-	EnsureArgoCDResources func(ctx context.Context, kubeconfig string, clusterCfg *v1alpha1.Cluster, clusterName string) error
+	EnsureArgoCDResources func(
+		ctx context.Context, kubeconfig string, clusterCfg *v1alpha1.Cluster, clusterName string,
+	) error
 	// EnsureFluxResources enforces default Flux resources post-install.
-	EnsureFluxResources func(ctx context.Context, kubeconfig string, clusterCfg *v1alpha1.Cluster, clusterName string) error
+	EnsureFluxResources func(
+		ctx context.Context, kubeconfig string, clusterCfg *v1alpha1.Cluster, clusterName string,
+	) error
 	// HelmClientFactory creates a Helm client for the cluster.
 	HelmClientFactory func(clusterCfg *v1alpha1.Cluster) (*helm.Client, string, error)
 }

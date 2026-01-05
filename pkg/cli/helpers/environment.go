@@ -60,6 +60,8 @@ func DetectClusterEnvironment(ctx context.Context) (*ClusterEnvironment, error) 
 // It checks for cluster-prefixed registries (e.g., "kind-local-registry", "k3d-default-local-registry")
 // by searching for containers matching the "*-local-registry" pattern.
 // Both KSail-managed registries (with labels) and K3d-managed registries are detected.
+//
+//nolint:cyclop // Port detection requires multiple conditions for different registry types
 func DetectLocalRegistryPort(ctx context.Context) (int32, error) {
 	dockerClient, err := client.NewClientWithOpts(
 		client.FromEnv,

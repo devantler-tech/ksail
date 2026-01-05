@@ -210,15 +210,7 @@ func (p *TalosProvisioner) Delete(ctx context.Context, name string) error {
 		return fmt.Errorf("failed to list Talos containers: %w", err)
 	}
 
-	volumes, err := p.collectContainerVolumes(ctx, containers)
-	if err != nil {
-		// Log warning but continue with deletion
-		_, _ = fmt.Fprintf(
-			p.logWriter,
-			"Warning: failed to collect container volumes: %v\n",
-			err,
-		)
-	}
+	volumes := p.collectContainerVolumes(ctx, containers)
 
 	// Get state directory for cluster state
 	stateDir, err := getStateDirectory()
@@ -400,17 +392,17 @@ func (p *TalosProvisioner) listTalosContainers(
 func (p *TalosProvisioner) collectContainerVolumes(
 	ctx context.Context,
 	containers []container.Summary,
-) ([]string, error) {
+) []string {
 	volumeSet := make(map[string]struct{})
 
-	for _, c := range containers {
-		inspect, err := p.dockerClient.ContainerInspect(ctx, c.ID)
+	for _, containerSummary := range containers {
+		inspect, err := p.dockerClient.ContainerInspect(ctx, containerSummary.ID)
 		if err != nil {
 			// Log warning but continue with other containers
 			_, _ = fmt.Fprintf(
 				p.logWriter,
 				"Warning: failed to inspect container %s: %v\n",
-				c.ID[:12],
+				containerSummary.ID[:12],
 				err,
 			)
 
@@ -430,7 +422,7 @@ func (p *TalosProvisioner) collectContainerVolumes(
 		volumes = append(volumes, vol)
 	}
 
-	return volumes, nil
+	return volumes
 }
 
 // removeVolumes removes the specified volumes.

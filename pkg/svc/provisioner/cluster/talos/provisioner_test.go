@@ -591,8 +591,8 @@ func TestTalosProvisioner_Delete_Success(t *testing.T) {
 	// Mock ContainerInspect for volume collection
 	mockClient.EXPECT().
 		ContainerInspect(mock.Anything, containerID).
-		Return(types.ContainerJSON{
-			Mounts: []types.MountPoint{
+		Return(container.InspectResponse{
+			Mounts: []container.MountPoint{
 				{Type: "volume", Name: "test-volume-1"},
 				{Type: "volume", Name: "test-volume-2"},
 			},
