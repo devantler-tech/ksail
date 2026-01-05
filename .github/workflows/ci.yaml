@@ -241,8 +241,27 @@ jobs:
           ksail workload create deployment whoami --image=traefik/whoami:latest
           ksail workload wait --for=condition=Available deployment/whoami --timeout=300s
 
+      - name: 🧪 ksail workload apply
+        id: workload-apply
+        run: |
+          ksail workload apply -k .github/fixtures/podinfo-overlay
+          ksail workload wait --for=condition=Available deployment/podinfo --timeout=300s
+
+      - name: 🧪 ksail workload push and reconcile
+        id: workload-push-reconcile
+        if: contains(matrix.args, '--gitops-engine')
+        run: |
+          mkdir -p k8s
+          if [ ! -f "k8s/kustomization.yaml" ]; then
+            echo "apiVersion: kustomize.config.k8s.io/v1beta1" > k8s/kustomization.yaml
+            echo "kind: Kustomization" >> k8s/kustomization.yaml
+            echo "resources: []" >> k8s/kustomization.yaml
+          fi
+          ksail workload push --path k8s/
+          ksail workload reconcile
+
       - name: 🐞 Debug workload failure
-        if: failure() && steps.workload-create.outcome == 'failure'
+        if: failure() && (steps.workload-create.outcome == 'failure' || steps.workload-apply.outcome == 'failure' || steps.workload-push-reconcile.outcome == 'failure')
         run: |
           echo "=== Disk Usage ==="
           df -h /
@@ -261,23 +280,6 @@ jobs:
           echo ""
           echo "=== Pod Events ==="
           ksail workload get events --sort-by='.lastTimestamp' | tail -50 || true
-
-      - name: 🧪 ksail workload apply
-        run: |
-          ksail workload apply -k .github/fixtures/podinfo-overlay
-          ksail workload wait --for=condition=Available deployment/podinfo --timeout=300s
-
-      - name: 🧪 ksail workload push and reconcile
-        if: contains(matrix.args, '--gitops-engine')
-        run: |
-          mkdir -p k8s
-          if [ ! -f "k8s/kustomization.yaml" ]; then
-            echo "apiVersion: kustomize.config.k8s.io/v1beta1" > k8s/kustomization.yaml
-            echo "kind: Kustomization" >> k8s/kustomization.yaml
-            echo "resources: []" >> k8s/kustomization.yaml
-          fi
-          ksail workload push --path k8s/
-          ksail workload reconcile
 
       - name: 🧪 ksail cluster stop
         run: |
@@ -303,14 +305,7 @@ jobs:
   status:
     name: CI - KSail
     runs-on: ubuntu-latest
-    needs:
-      [
-        changes,
-        build-artifact,
-        generate-schema,
-        generate-cli-flags-docs,
-        system-test,
-      ]
+    needs: [changes, build-artifact, generate-schema, generate-cli-flags-docs, system-test]
     if: ${{ always() }}
     steps:
       - name: Summarize workflow result
