@@ -3,11 +3,11 @@ package cipher_test
 import (
 	"bytes"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cipher"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
+	"github.com/gkampitakis/go-snaps/snaps"
 )
 
 func TestNewEditCmd(t *testing.T) {
@@ -43,15 +43,7 @@ func TestEditCommandHelp(t *testing.T) {
 		t.Errorf("expected no error executing --help, got: %v", err)
 	}
 
-	output := out.String()
-	if output == "" {
-		t.Error("expected help output to not be empty")
-	}
-
-	// Verify help mentions key concepts
-	if !strings.Contains(output, "encrypted file") {
-		t.Error("expected help to mention 'encrypted file'")
-	}
+	snaps.MatchSnapshot(t, out.String())
 }
 
 func TestEditCommandRequiresFile(t *testing.T) {

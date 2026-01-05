@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/devantler-tech/ksail/v5/pkg/cli/cmd/workload"
+	"github.com/gkampitakis/go-snaps/snaps"
 )
 
 const validNamespaceManifest = `apiVersion: v1
@@ -69,30 +70,7 @@ func TestValidateCmdShowsHelp(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	helpText := output.String()
-	if !strings.Contains(helpText, "Validate Kubernetes manifest") {
-		t.Fatal("expected help text to contain 'Validate Kubernetes manifest'")
-	}
-
-	if !strings.Contains(helpText, "kubeconform") {
-		t.Fatal("expected help text to mention kubeconform")
-	}
-
-	if !strings.Contains(helpText, "--skip-secrets") {
-		t.Fatal("expected help text to include --skip-secrets flag")
-	}
-
-	if !strings.Contains(helpText, "--strict") {
-		t.Fatal("expected help text to include --strict flag")
-	}
-
-	if !strings.Contains(helpText, "--ignore-missing-schemas") {
-		t.Fatal("expected help text to include --ignore-missing-schemas flag")
-	}
-
-	if !strings.Contains(helpText, "--verbose") {
-		t.Fatal("expected help text to include --verbose flag")
-	}
+	snaps.MatchSnapshot(t, output.String())
 }
 
 func TestValidateCmdRejectsMultiplePaths(t *testing.T) {

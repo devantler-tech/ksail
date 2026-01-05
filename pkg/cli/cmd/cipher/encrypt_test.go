@@ -6,6 +6,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cipher"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
+	"github.com/gkampitakis/go-snaps/snaps"
 )
 
 func TestNewEncryptCmd(t *testing.T) {
@@ -41,10 +42,7 @@ func TestEncryptCommandHelp(t *testing.T) {
 		t.Errorf("expected no error executing --help, got: %v", err)
 	}
 
-	output := out.String()
-	if output == "" {
-		t.Error("expected help output to not be empty")
-	}
+	snaps.MatchSnapshot(t, out.String())
 }
 
 func TestEncryptCommandRequiresFile(t *testing.T) {

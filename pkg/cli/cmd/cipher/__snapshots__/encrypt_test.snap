@@ -1,0 +1,22 @@
+
+[TestEncryptCommandHelp - 1]
+Encrypt a file using SOPS (Secrets OPerationS).
+
+SOPS supports multiple key management systems:
+  - age recipients
+  - PGP fingerprints
+  - AWS KMS
+  - GCP KMS
+  - Azure Key Vault
+  - HashiCorp Vault
+
+Example:
+  ksail cipher encrypt secrets.yaml
+
+Usage:
+  cipher encrypt <file> [flags]
+
+Flags:
+  -h, --help   help for encrypt
+
+---

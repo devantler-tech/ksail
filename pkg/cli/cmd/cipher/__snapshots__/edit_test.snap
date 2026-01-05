@@ -1,0 +1,36 @@
+
+[TestEditCommandHelp - 1]
+Edit an encrypted file using SOPS (Secrets OPerationS).
+
+If the file exists and is encrypted, it will be decrypted for editing.
+If the file does not exist, an example file will be created.
+
+The editor is determined by (in order of precedence):
+  1. --editor flag
+  2. spec.editor from ksail.yaml config
+  3. SOPS_EDITOR or EDITOR environment variables
+  4. Fallback to vim, nano, or vi
+
+SOPS supports multiple key management systems:
+  - age recipients
+  - PGP fingerprints
+  - AWS KMS
+  - GCP KMS
+  - Azure Key Vault
+  - HashiCorp Vault
+
+Example:
+  ksail cipher edit secrets.yaml
+  ksail cipher edit --editor "code --wait" secrets.yaml
+  SOPS_EDITOR="code --wait" ksail cipher edit secrets.yaml
+
+Usage:
+  cipher edit <file> [flags]
+
+Flags:
+      --editor string      editor command to use (e.g., 'code --wait', 'vim', 'nano')
+  -h, --help               help for edit
+      --ignore-mac         ignore Message Authentication Code during decryption
+      --show-master-keys   show master keys in the editor
+
+---

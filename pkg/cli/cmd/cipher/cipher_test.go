@@ -8,8 +8,22 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cipher"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
+	"github.com/gkampitakis/go-snaps/snaps"
 	"github.com/spf13/cobra"
 )
+
+func TestMain(m *testing.M) {
+	exitCode := m.Run()
+
+	_, err := snaps.Clean(m, snaps.CleanOpts{Sort: true})
+	if err != nil {
+		_, _ = os.Stderr.WriteString("failed to clean snapshots: " + err.Error() + "\n")
+
+		os.Exit(1)
+	}
+
+	os.Exit(exitCode)
+}
 
 func TestNewCipherCmd(t *testing.T) {
 	t.Parallel()
@@ -58,10 +72,7 @@ func TestCipherCommandHelp(t *testing.T) {
 		t.Errorf("expected no error executing --help, got: %v", err)
 	}
 
-	// Verify help output contains information about cipher
-	if out.Len() == 0 {
-		t.Error("expected help output to not be empty")
-	}
+	snaps.MatchSnapshot(t, out.String())
 }
 
 // findSubcommand searches for a subcommand by name.

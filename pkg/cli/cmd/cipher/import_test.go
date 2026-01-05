@@ -10,6 +10,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cipher"
 	rtruntime "github.com/devantler-tech/ksail/v5/pkg/di"
+	"github.com/gkampitakis/go-snaps/snaps"
 )
 
 const (
@@ -145,24 +146,7 @@ func TestImportCommandHelp(t *testing.T) {
 		t.Errorf("expected no error executing --help, got: %v", err)
 	}
 
-	output := out.String()
-	if output == "" {
-		t.Error("expected help output to not be empty")
-	}
-
-	// Verify help output mentions key features
-	if !strings.Contains(output, "import") {
-		t.Error("expected help output to mention import")
-	}
-
-	if !strings.Contains(output, "age") {
-		t.Error("expected help output to mention age")
-	}
-
-	// Verify help output mentions automatic public key derivation
-	if !strings.Contains(output, "derived") {
-		t.Error("expected help output to mention public key derivation")
-	}
+	snaps.MatchSnapshot(t, out.String())
 }
 
 func TestImportKeyBasic(t *testing.T) {

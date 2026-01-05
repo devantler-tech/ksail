@@ -2,11 +2,11 @@ package workload_test
 
 import (
 	"bytes"
-	"strings"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v5/pkg/cli/cmd/workload"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
+	"github.com/gkampitakis/go-snaps/snaps"
 )
 
 func TestNewPushCmdHasValidateFlag(t *testing.T) {
@@ -54,16 +54,7 @@ func TestPushCmdShowsValidateFlagInHelp(t *testing.T) {
 		t.Fatalf("expected no error executing push --help, got %v", err)
 	}
 
-	helpText := output.String()
-
-	// Check that --validate flag is documented in help
-	if !strings.Contains(helpText, "--validate") {
-		t.Fatal("expected help text to include --validate flag")
-	}
-
-	if !strings.Contains(helpText, "Validate manifests before pushing") {
-		t.Fatal("expected help text to include validate flag description")
-	}
+	snaps.MatchSnapshot(t, output.String())
 }
 
 func TestPushCmdAcceptsValidateFlag(t *testing.T) {
