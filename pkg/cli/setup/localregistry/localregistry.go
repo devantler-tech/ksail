@@ -306,6 +306,22 @@ func runStageFromBuilder(
 	)
 }
 
+// shouldSkipK3d returns true if the action should be skipped for K3d distribution.
+// K3d uses native registry management via Registries.Create.
+func shouldSkipK3d(clusterCfg *v1alpha1.Cluster) bool {
+	return clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionK3d
+}
+
+// wrapActionWithContext wraps an action that requires registryContext into a simpler handler.
+func wrapActionWithContext(
+	ctx registryContext,
+	action func(context.Context, registry.Service, registryContext) error,
+) func(context.Context, registry.Service) error {
+	return func(execCtx context.Context, svc registry.Service) error {
+		return action(execCtx, svc, ctx)
+	}
+}
+
 func runAction(
 	cmd *cobra.Command,
 	clusterCfg *v1alpha1.Cluster,
@@ -322,10 +338,7 @@ func runAction(
 		return nil
 	}
 
-	// K3d uses native registry management via Registries.Create.
-	// K3d automatically creates, connects, and manages the registry container
-	// as part of cluster creation, so we skip KSail's manual registry handling.
-	if clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionK3d {
+	if shouldSkipK3d(clusterCfg) {
 		return nil
 	}
 
@@ -335,9 +348,7 @@ func runAction(
 		cmd,
 		deps,
 		info,
-		func(execCtx context.Context, svc registry.Service) error {
-			return action(execCtx, svc, ctx)
-		},
+		wrapActionWithContext(ctx, action),
 		firstActivityShown,
 		localDeps,
 	)
@@ -358,8 +369,7 @@ func runCleanupAction(
 	firstActivityShown *bool,
 	localDeps Dependencies,
 ) error {
-	// K3d uses native registry management - skip cleanup here
-	if clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionK3d {
+	if shouldSkipK3d(clusterCfg) {
 		return nil
 	}
 
@@ -370,12 +380,30 @@ func runCleanupAction(
 		deps,
 		info,
 		ctx.clusterName,
-		func(execCtx context.Context, svc registry.Service) error {
-			return action(execCtx, svc, ctx)
-		},
+		wrapActionWithContext(ctx, action),
 		firstActivityShown,
 		localDeps,
 	)
+}
+
+// createServiceHandler creates a common handler that initializes the registry service
+// and validates the context before delegating to the actual handler.
+func createServiceHandler(
+	localDeps Dependencies,
+	handler func(context.Context, registry.Service) error,
+) func(context.Context, client.APIClient) error {
+	return func(ctx context.Context, dockerClient client.APIClient) error {
+		service, err := localDeps.ServiceFactory(registry.Config{DockerClient: dockerClient})
+		if err != nil {
+			return fmt.Errorf("create registry service: %w", err)
+		}
+
+		if ctx == nil {
+			return ErrNilRegistryContext
+		}
+
+		return handler(ctx, service)
+	}
 }
 
 // runCleanupStage runs a cleanup stage, checking for container existence first.
@@ -388,35 +416,28 @@ func runCleanupStage(
 	firstActivityShown *bool,
 	localDeps Dependencies,
 ) error {
+	cleanupHandler := func(ctx context.Context, svc registry.Service) error {
+		// Check if the local registry container exists before attempting cleanup
+		registryName := registry.BuildLocalRegistryName(clusterName)
+
+		status, statusErr := svc.Status(ctx, registry.StatusOptions{Name: registryName})
+		if statusErr != nil {
+			return fmt.Errorf("check registry status: %w", statusErr)
+		}
+
+		// If container is not provisioned, nothing to clean up - this is a success case
+		if status.Status == v1alpha1.OCIRegistryStatusNotProvisioned {
+			return nil
+		}
+
+		return handler(ctx, svc)
+	}
+
 	return runDockerStage(
 		cmd,
 		deps,
 		info,
-		func(ctx context.Context, dockerClient client.APIClient) error {
-			service, err := localDeps.ServiceFactory(registry.Config{DockerClient: dockerClient})
-			if err != nil {
-				return fmt.Errorf("create registry service: %w", err)
-			}
-
-			if ctx == nil {
-				return ErrNilRegistryContext
-			}
-
-			// Check if the local registry container exists before attempting cleanup
-			registryName := registry.BuildLocalRegistryName(clusterName)
-
-			status, statusErr := service.Status(ctx, registry.StatusOptions{Name: registryName})
-			if statusErr != nil {
-				return fmt.Errorf("check registry status: %w", statusErr)
-			}
-
-			// If container is not provisioned, nothing to clean up - this is a success case
-			if status.Status == v1alpha1.OCIRegistryStatusNotProvisioned {
-				return nil
-			}
-
-			return handler(ctx, service)
-		},
+		createServiceHandler(localDeps, cleanupHandler),
 		firstActivityShown,
 		localDeps,
 	)
@@ -434,18 +455,7 @@ func runStage(
 		cmd,
 		deps,
 		info,
-		func(ctx context.Context, dockerClient client.APIClient) error {
-			service, err := localDeps.ServiceFactory(registry.Config{DockerClient: dockerClient})
-			if err != nil {
-				return fmt.Errorf("create registry service: %w", err)
-			}
-
-			if ctx == nil {
-				return ErrNilRegistryContext
-			}
-
-			return handler(ctx, service)
-		},
+		createServiceHandler(localDeps, handler),
 		firstActivityShown,
 		localDeps,
 	)

@@ -600,32 +600,33 @@ func normalizeFluxPath() string {
 	return "./"
 }
 
-func waitForGroupVersion(
+// pollUntilReady implements a generic polling pattern for waiting on async conditions.
+// It repeatedly calls checkFn until it returns true (success) or the context expires.
+// Returns the last error encountered if the wait times out.
+func pollUntilReady(
 	ctx context.Context,
-	restConfig *rest.Config,
-	groupVersion schema.GroupVersion,
+	timeout time.Duration,
+	interval time.Duration,
+	resourceDesc string,
+	checkFn func() (bool, error),
 ) error {
-	waitCtx, cancel := context.WithTimeout(ctx, fluxAPIAvailabilityTimeout)
+	waitCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	ticker := time.NewTicker(fluxAPIAvailabilityPollInterval)
+	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
 	var lastErr error
 
 	for {
-		// Create a new discovery client on each iteration to avoid caching issues
-		discoveryClient, err := newDiscoveryClient(restConfig)
+		ready, err := checkFn()
 		if err != nil {
-			return fmt.Errorf("failed to create discovery client: %w", err)
+			lastErr = err
 		}
 
-		_, err = discoveryClient.ServerResourcesForGroupVersion(groupVersion.String())
-		if err == nil {
+		if ready {
 			return nil
 		}
-
-		lastErr = err
 
 		select {
 		case <-waitCtx.Done():
@@ -633,10 +634,36 @@ func waitForGroupVersion(
 				lastErr = waitCtx.Err()
 			}
 
-			return fmt.Errorf("timed out waiting for API %s: %w", groupVersion.String(), lastErr)
+			return fmt.Errorf("timed out waiting for %s: %w", resourceDesc, lastErr)
 		case <-ticker.C:
 		}
 	}
+}
+
+func waitForGroupVersion(
+	ctx context.Context,
+	restConfig *rest.Config,
+	groupVersion schema.GroupVersion,
+) error {
+	return pollUntilReady(
+		ctx,
+		fluxAPIAvailabilityTimeout,
+		fluxAPIAvailabilityPollInterval,
+		"API "+groupVersion.String(),
+		func() (bool, error) {
+			discoveryClient, err := newDiscoveryClient(restConfig)
+			if err != nil {
+				return false, fmt.Errorf("failed to create discovery client: %w", err)
+			}
+
+			_, err = discoveryClient.ServerResourcesForGroupVersion(groupVersion.String())
+			if err != nil {
+				return false, fmt.Errorf("API not ready: %w", err)
+			}
+
+			return true, nil
+		},
+	)
 }
 
 // waitForCRDEstablished waits for the CRD to be fully established (not just discoverable).
@@ -703,36 +730,24 @@ func waitForResourceAPIServable(
 	restConfig *rest.Config,
 	groupVersion schema.GroupVersion,
 ) error {
-	waitCtx, cancel := context.WithTimeout(ctx, fluxAPIAvailabilityTimeout)
-	defer cancel()
+	return pollUntilReady(
+		ctx,
+		fluxAPIAvailabilityTimeout,
+		fluxAPIAvailabilityPollInterval,
+		fmt.Sprintf("API %s to be servable", groupVersion.String()),
+		func() (bool, error) {
+			resources, err := tryDiscoverResources(restConfig, groupVersion)
+			if err != nil {
+				return false, err
+			}
 
-	ticker := time.NewTicker(fluxAPIAvailabilityPollInterval)
-	defer ticker.Stop()
+			if resources != nil && len(resources.APIResources) > 0 {
+				return true, nil
+			}
 
-	var lastErr error
-
-	for {
-		resources, err := tryDiscoverResources(restConfig, groupVersion)
-
-		switch {
-		case err != nil:
-			lastErr = err
-		case resources != nil && len(resources.APIResources) > 0:
-			return nil
-		default:
-			lastErr = fmt.Errorf("%w: %s", errAPINotServable, groupVersion.String())
-		}
-
-		select {
-		case <-waitCtx.Done():
-			return fmt.Errorf(
-				"timed out waiting for API %s to be servable: %w",
-				groupVersion.String(),
-				lastErr,
-			)
-		case <-ticker.C:
-		}
-	}
+			return false, fmt.Errorf("%w: %s", errAPINotServable, groupVersion.String())
+		},
+	)
 }
 
 // tryDiscoverResources attempts to discover resources for a group version.
