@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	configmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager"
-	"github.com/devantler-tech/ksail/v5/pkg/io/config-manager/helpers"
+	"github.com/devantler-tech/ksail/v5/pkg/io/config-manager/loader"
 	k3dvalidator "github.com/devantler-tech/ksail/v5/pkg/io/validator/k3d"
 	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
 	"github.com/k3d-io/k3d/v5/pkg/config/types"
@@ -81,7 +81,7 @@ func (m *ConfigManager) LoadConfig(_ timer.Timer) (*v1alpha5.SimpleConfig, error
 		return m.config, nil
 	}
 
-	config, err := helpers.LoadAndValidateConfig(
+	config, err := loader.LoadAndValidateConfig(
 		m.configPath,
 		func() *v1alpha5.SimpleConfig {
 			// Create default with proper APIVersion and Kind

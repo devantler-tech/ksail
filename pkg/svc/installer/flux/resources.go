@@ -198,7 +198,7 @@ func EnsureDefaultResources(
 
 // setupFluxInstance waits for the FluxInstance CRD, creates the client, and upserts the FluxInstance.
 //
-//nolint:ireturn // Returns client.Client interface which is required for subsequent flux operations
+//nolint:ireturn // Returns client.Client interface for flux operations
 func setupFluxInstance(
 	ctx context.Context,
 	restConfig *rest.Config,

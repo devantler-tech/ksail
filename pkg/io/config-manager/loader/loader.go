@@ -1,4 +1,4 @@
-package helpers
+package loader
 
 import (
 	"errors"
@@ -57,6 +57,8 @@ func (e *ValidationSummaryError) Error() string {
 //   - createDefault: Function to create a default configuration
 //
 // Returns the loaded configuration or an error.
+//
+//nolint:ireturn // Generic function returns type parameter T
 func LoadConfigFromFile[T any](
 	configPath string,
 	createDefault func() T,
@@ -199,6 +201,8 @@ func ValidateConfig[T any](config T, validatorInstance validator.Validator[T]) e
 // LoadAndValidateConfig loads a configuration from disk and validates it using the provided validator.
 // This helper combines LoadConfigFromFile and ValidateConfig to reduce duplication across config managers.
 // It returns the loaded configuration or an error if loading or validation fails.
+//
+//nolint:ireturn // Generic function returns type parameter T
 func LoadAndValidateConfig[T any](
 	configPath string,
 	createDefault func() T,

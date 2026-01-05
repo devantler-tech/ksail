@@ -13,9 +13,9 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	configmanagerinterface "github.com/devantler-tech/ksail/v5/pkg/io/config-manager"
-	"github.com/devantler-tech/ksail/v5/pkg/io/config-manager/helpers"
 	k3dconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/k3d"
 	kindconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/kind"
+	"github.com/devantler-tech/ksail/v5/pkg/io/config-manager/loader"
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
 	"github.com/devantler-tech/ksail/v5/pkg/io/validator"
 	ksailvalidator "github.com/devantler-tech/ksail/v5/pkg/io/validator/ksail"
@@ -543,7 +543,7 @@ func (m *ConfigManager) validateConfig() error {
 	result := validator.Validate(m.Config)
 
 	if !result.Valid {
-		errorMessages := helpers.FormatValidationErrorsMultiline(result)
+		errorMessages := loader.FormatValidationErrorsMultiline(result)
 		notify.WriteMessage(notify.Message{
 			Type:    notify.ErrorType,
 			Content: "%s",
@@ -554,7 +554,7 @@ func (m *ConfigManager) validateConfig() error {
 		m.writeValidationWarnings(result)
 
 		// Return validation summary error instead of full error stack
-		return helpers.NewValidationSummaryError(len(result.Errors), len(result.Warnings))
+		return loader.NewValidationSummaryError(len(result.Errors), len(result.Warnings))
 	}
 
 	m.writeValidationWarnings(result)
@@ -564,7 +564,7 @@ func (m *ConfigManager) validateConfig() error {
 
 // writeValidationWarnings outputs all validation warnings to the configured writer.
 func (m *ConfigManager) writeValidationWarnings(result *validator.ValidationResult) {
-	warnings := helpers.FormatValidationWarnings(result)
+	warnings := loader.FormatValidationWarnings(result)
 	for _, warning := range warnings {
 		notify.WriteMessage(notify.Message{
 			Type:    notify.WarningType,

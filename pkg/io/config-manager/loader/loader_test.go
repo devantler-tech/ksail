@@ -1,11 +1,11 @@
-package helpers_test
+package loader_test
 
 import (
 	"os"
 	"path/filepath"
 	"testing"
 
-	"github.com/devantler-tech/ksail/v5/pkg/io/config-manager/helpers"
+	"github.com/devantler-tech/ksail/v5/pkg/io/config-manager/loader"
 	"github.com/devantler-tech/ksail/v5/pkg/io/validator"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -47,7 +47,7 @@ func testLoadConfigFileExists(t *testing.T) {
 	err := os.WriteFile(configPath, []byte(configContent), 0o600)
 	require.NoError(t, err)
 
-	config, err := helpers.LoadConfigFromFile(
+	config, err := loader.LoadConfigFromFile(
 		configPath,
 		createDefaultConfig,
 	)
@@ -64,7 +64,7 @@ func testLoadConfigFileNotExists(t *testing.T) {
 	tempDir := t.TempDir()
 	configPath := filepath.Join(tempDir, "non-existent.yaml")
 
-	config, err := helpers.LoadConfigFromFile(
+	config, err := loader.LoadConfigFromFile(
 		configPath,
 		createDefaultConfig,
 	)
@@ -83,7 +83,7 @@ func testLoadConfigInvalidYAML(t *testing.T) {
 	err := os.WriteFile(configPath, []byte("invalid: yaml: content: ["), 0o600)
 	require.NoError(t, err)
 
-	_, err = helpers.LoadConfigFromFile(
+	_, err = loader.LoadConfigFromFile(
 		configPath,
 		createDefaultConfig,
 	)
@@ -120,7 +120,7 @@ func TestFormatValidationErrors(t *testing.T) {
 		},
 	}
 
-	runFormattingTest(t, tests, helpers.FormatValidationErrors)
+	runFormattingTest(t, tests, loader.FormatValidationErrors)
 }
 
 // ---- Test helpers (reintroduced after refactor) ----
@@ -246,7 +246,7 @@ func TestFormatValidationErrorsMultiline(t *testing.T) {
 		},
 	}
 
-	runFormattingTest(t, tests, helpers.FormatValidationErrorsMultiline)
+	runFormattingTest(t, tests, loader.FormatValidationErrorsMultiline)
 }
 
 func TestFormatValidationWarnings(t *testing.T) {
@@ -305,7 +305,7 @@ func TestFormatValidationWarnings(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			result := helpers.FormatValidationWarnings(tt.result)
+			result := loader.FormatValidationWarnings(tt.result)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -332,7 +332,7 @@ func testValidateConfigValid(t *testing.T) {
 	mockVal := validator.NewMockValidator[*testConfig](t)
 	mockVal.EXPECT().Validate(config).Return(validationResult)
 
-	err := helpers.ValidateConfig(config, mockVal)
+	err := loader.ValidateConfig(config, mockVal)
 	assert.NoError(t, err)
 }
 
@@ -355,7 +355,7 @@ func testValidateConfigInvalid(t *testing.T) {
 	mockVal := validator.NewMockValidator[*testConfig](t)
 	mockVal.EXPECT().Validate(config).Return(validationResult)
 
-	err := helpers.ValidateConfig(config, mockVal)
+	err := loader.ValidateConfig(config, mockVal)
 	assertValidationError(t, err, "name is required")
 }
 
@@ -383,7 +383,7 @@ func testValidateConfigMultipleErrors(t *testing.T) {
 	mockVal := validator.NewMockValidator[*testConfig](t)
 	mockVal.EXPECT().Validate(config).Return(validationResult)
 
-	err := helpers.ValidateConfig(config, mockVal)
+	err := loader.ValidateConfig(config, mockVal)
 	assertValidationError(t, err, "name is required", "apiVersion is required")
 }
 
@@ -401,7 +401,7 @@ func TestLoadConfigFromFilePermissionError(t *testing.T) {
 		_ = os.Chmod(path, 0o600)
 	})
 
-	_, err := helpers.LoadConfigFromFile(path, createDefaultConfig)
+	_, err := loader.LoadConfigFromFile(path, createDefaultConfig)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to read config file")
 }
@@ -420,7 +420,7 @@ func TestLoadAndValidateConfigErrors(t *testing.T) {
 		Errors: []validator.ValidationError{{Field: "name"}},
 	}
 
-	_, err := helpers.LoadAndValidateConfig(
+	_, err := loader.LoadAndValidateConfig(
 		path,
 		createDefaultConfig,
 		stubValidator[*testConfig]{result: invalid},
@@ -435,28 +435,28 @@ func TestValidationSummaryError(t *testing.T) {
 	t.Run("formats error with errors only", func(t *testing.T) {
 		t.Parallel()
 
-		err := helpers.NewValidationSummaryError(1, 0)
+		err := loader.NewValidationSummaryError(1, 0)
 		assert.Equal(t, "validation reported 1 error(s)", err.Error())
 	})
 
 	t.Run("formats error with errors and warnings", func(t *testing.T) {
 		t.Parallel()
 
-		err := helpers.NewValidationSummaryError(2, 3)
+		err := loader.NewValidationSummaryError(2, 3)
 		assert.Equal(t, "validation reported 2 error(s) and 3 warning(s)", err.Error())
 	})
 
 	t.Run("formats error with multiple errors", func(t *testing.T) {
 		t.Parallel()
 
-		err := helpers.NewValidationSummaryError(5, 0)
+		err := loader.NewValidationSummaryError(5, 0)
 		assert.Equal(t, "validation reported 5 error(s)", err.Error())
 	})
 
 	t.Run("formats error with warnings only", func(t *testing.T) {
 		t.Parallel()
 
-		err := helpers.NewValidationSummaryError(0, 2)
+		err := loader.NewValidationSummaryError(0, 2)
 		assert.Equal(t, "validation reported 2 warning(s)", err.Error())
 	})
 }
