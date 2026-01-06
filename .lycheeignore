@@ -14,7 +14,9 @@ https://kubernetes.default.svc/
 https://github.com/devantler-tech/ksail/releases/download/
 
 # Intermittent Network Errors
+https://fluxcd.io/flux/concepts/
+https://gateway-api.sigs.k8s.io/
+https://helm.sh/
+https://helm.sh/docs/
 https://kind.sigs.k8s.io/
 https://www.talos.dev/
-https://gateway-api.sigs.k8s.io/
-https://helm.sh/docs/
