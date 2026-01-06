@@ -68,7 +68,7 @@ spec:
 ### Top-Level Fields
 
 | Field        | Type   | Required | Description                                    |
-|--------------|--------|----------|------------------------------------------------|
+| ------------ | ------ | -------- | ---------------------------------------------- |
 | `apiVersion` | string | Yes      | Must be `ksail.dev/v1alpha1`                   |
 | `kind`       | string | Yes      | Must be `Cluster`                              |
 | `spec`       | object | Yes      | Cluster and workload specification (see below) |
@@ -78,7 +78,7 @@ spec:
 The `spec` field is a `Spec` object that defines editor, cluster, and workload configuration.
 
 | Field      | Type         | Default | Description                                      |
-|------------|--------------|---------|--------------------------------------------------|
+| ---------- | ------------ | ------- | ------------------------------------------------ |
 | `editor`   | string       | –       | Editor command for interactive workflows         |
 | `cluster`  | ClusterSpec  | –       | Cluster configuration (distribution, components) |
 | `workload` | WorkloadSpec | –       | Workload manifest configuration                  |
@@ -93,18 +93,25 @@ If not specified, KSail falls back to standard editor environment variables (`SO
 
 ### spec.cluster (ClusterSpec)
 
-| Field                | Type       | Default     | Description                                  |
-|----------------------|------------|-------------|----------------------------------------------|
-| `distribution`       | enum       | `Kind`      | Kubernetes distribution to use               |
-| `distributionConfig` | string     | (see below) | Path to distribution-specific configuration  |
-| `connection`         | Connection | –           | Cluster connection settings                  |
-| `cni`                | enum       | `Default`   | Container Network Interface                  |
-| `csi`                | enum       | `Default`   | Container Storage Interface                  |
-| `metricsServer`      | enum       | `Enabled`   | Install metrics-server                       |
-| `certManager`        | enum       | `Disabled`  | Install cert-manager                         |
-| `localRegistry`      | enum       | `Disabled`  | Provision local OCI registry                 |
-| `gitOpsEngine`       | enum       | `None`      | GitOps engine to install                     |
-| `options`            | Options    | –           | Advanced options for distributions and tools |
+| Field                  | Type       | Default     | Description                                 |
+| ---------------------- | ---------- | ----------- | ------------------------------------------- |
+| `distribution`         | enum       | `Kind`      | Kubernetes distribution to use              |
+| `distributionConfig`   | string     | (see below) | Path to distribution-specific configuration |
+| `connection`           | Connection | –           | Cluster connection settings                 |
+| `cni`                  | enum       | `Default`   | Container Network Interface                 |
+| `csi`                  | enum       | `Default`   | Container Storage Interface                 |
+| `metricsServer`        | enum       | `Default`   | Install metrics-server                      |
+| `certManager`          | enum       | `Disabled`  | Install cert-manager                        |
+| `localRegistry`        | enum       | `Disabled`  | Provision local OCI registry                |
+| `gitOpsEngine`         | enum       | `None`      | GitOps engine to install                    |
+| `localRegistryOptions` | object     | –           | Local registry configuration options        |
+| `kind`                 | object     | –           | Kind-specific options                       |
+| `k3d`                  | object     | –           | K3d-specific options                        |
+| `talos`                | object     | –           | Talos-specific options                      |
+| `cilium`               | object     | –           | Cilium CNI options                          |
+| `calico`               | object     | –           | Calico CNI options                          |
+| `flux`                 | object     | –           | Flux GitOps options                         |
+| `argocd`               | object     | –           | ArgoCD GitOps options                       |
 
 #### distribution
 
@@ -131,7 +138,7 @@ See [Distribution Configuration](#distribution-configuration) below for details 
 #### connection (Connection)
 
 | Field        | Type     | Default          | Description                    |
-|--------------|----------|------------------|--------------------------------|
+| ------------ | -------- | ---------------- | ------------------------------ |
 | `kubeconfig` | string   | `~/.kube/config` | Path to kubeconfig file        |
 | `context`    | string   | (derived)        | Kubeconfig context name        |
 | `timeout`    | duration | –                | Timeout for cluster operations |
@@ -169,7 +176,8 @@ Whether to install [metrics-server](https://github.com/kubernetes-sigs/metrics-s
 
 **Valid values:**
 
-- `Enabled` (default) – Install metrics-server
+- `Default` (default) – Uses distribution's default behavior (K3d includes metrics-server; Kind and Talos do not)
+- `Enabled` – Install metrics-server
 - `Disabled` – Skip installation
 
 Note: K3d includes metrics-server by default, so this setting has no effect on K3d.
@@ -192,7 +200,7 @@ Whether to provision a local OCI registry container for image storage.
 - `Enabled` – Provision local registry
 - `Disabled` (default) – Skip registry
 
-See [options](#options-options) for configuration details including `hostPort` (default: `5111`).
+See [Distribution and Tool Options](#distribution-and-tool-options) for configuration details including `hostPort` (default: `5111`).
 
 #### gitOpsEngine
 
@@ -204,20 +212,21 @@ GitOps engine to install for continuous deployment workflows. When set to `Flux`
 - `Flux` – Install [Flux CD](https://fluxcd.io/) and scaffold FluxInstance CR
 - `ArgoCD` – Install [Argo CD](https://argo-cd.readthedocs.io/) and scaffold Application CR
 
-#### options (Options)
+#### Distribution and Tool Options
 
-Advanced configuration options for specific distributions, networking, and deployment tools. See [Schema Support](#schema-support) for the complete structure.
+Advanced configuration options are now direct fields under `spec.cluster` instead of nested under `options`. See [Schema Support](#schema-support) for the complete structure.
 
 **Common options:**
 
 - `spec.cluster.localRegistryOptions.hostPort` – Host port for local registry (default: `5111`)
 - `spec.cluster.talos.controlPlanes` – Number of control-plane nodes (default: `1`)
 - `spec.cluster.talos.workers` – Number of worker nodes (default: `0`)
+- `spec.cluster.kind.mirrorsDir` – Directory for containerd host mirror configuration
 
 ### spec.workload (WorkloadSpec)
 
 | Field             | Type    | Default | Description                                   |
-|-------------------|---------|---------|-----------------------------------------------|
+| ----------------- | ------- | ------- | --------------------------------------------- |
 | `sourceDirectory` | string  | `k8s`   | Directory containing Kubernetes manifests     |
 | `validateOnPush`  | boolean | `false` | Validate manifests before pushing to registry |
 
