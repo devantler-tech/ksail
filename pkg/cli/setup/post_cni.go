@@ -225,8 +225,22 @@ func configureGitOpsResources(
 	reqs componentRequirements,
 	gitOpsKubeconfig string,
 ) error {
+	// Only show configure stage if there are GitOps resources to configure
+	if !reqs.needsArgoCD && !reqs.needsFlux {
+		return nil
+	}
+
 	// Resolve cluster name for registry naming
 	clusterName := resolveClusterNameFromContext(clusterCfg)
+
+	// Show title for configure stage
+	_, _ = fmt.Fprintln(cmd.OutOrStdout())
+	notify.WriteMessage(notify.Message{
+		Type:    notify.TitleType,
+		Content: "Configuring components...",
+		Emoji:   "⚙️",
+		Writer:  cmd.OutOrStdout(),
+	})
 
 	// Post-install GitOps configuration
 	if reqs.needsArgoCD {
@@ -260,6 +274,13 @@ func configureGitOpsResources(
 			return fmt.Errorf("failed to configure Flux resources: %w", err)
 		}
 	}
+
+	// Show success message for configure stage
+	notify.WriteMessage(notify.Message{
+		Type:    notify.SuccessType,
+		Content: "components configured",
+		Writer:  cmd.OutOrStdout(),
+	})
 
 	return nil
 }

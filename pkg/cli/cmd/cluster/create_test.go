@@ -12,6 +12,7 @@ import (
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/installer"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
 	"github.com/docker/docker/client"
 	"github.com/gkampitakis/go-snaps/snaps"
@@ -52,6 +53,38 @@ func (f *fakeInstaller) Install(context.Context) error {
 }
 
 func (*fakeInstaller) Uninstall(context.Context) error { return nil }
+
+// fakeRegistryService is a mock registry service for testing.
+type fakeRegistryService struct{}
+
+func (*fakeRegistryService) Create(
+	_ context.Context,
+	_ registry.CreateOptions,
+) (v1alpha1.OCIRegistry, error) {
+	return v1alpha1.NewOCIRegistry(), nil
+}
+
+func (*fakeRegistryService) Start(
+	_ context.Context,
+	_ registry.StartOptions,
+) (v1alpha1.OCIRegistry, error) {
+	return v1alpha1.NewOCIRegistry(), nil
+}
+
+func (*fakeRegistryService) Stop(_ context.Context, _ registry.StopOptions) error {
+	return nil
+}
+
+func (*fakeRegistryService) Status(
+	_ context.Context,
+	_ registry.StatusOptions,
+) (v1alpha1.OCIRegistry, error) {
+	return v1alpha1.NewOCIRegistry(), nil
+}
+
+func fakeRegistryServiceFactory(_ registry.Config) (registry.Service, error) {
+	return &fakeRegistryService{}, nil
+}
 
 func writeFile(t *testing.T, dir, name, content string) {
 	t.Helper()
@@ -221,9 +254,13 @@ func setupArgoCDTestMocks(t *testing.T) (func() *fakeInstaller, *bool) {
 	)
 	t.Cleanup(restoreEnsure)
 
+	// Mock registry service factory to avoid needing a real Docker client
+	restoreRegistry := clusterpkg.SetLocalRegistryServiceFactoryForTests(fakeRegistryServiceFactory)
+	t.Cleanup(restoreRegistry)
+
 	restoreDocker := clusterpkg.SetDockerClientInvokerForTests(
-		func(_ *cobra.Command, _ func(client.APIClient) error) error {
-			return nil
+		func(_ *cobra.Command, fn func(client.APIClient) error) error {
+			return fn(nil) // Call the callback to trigger success messages
 		},
 	)
 	t.Cleanup(restoreDocker)
@@ -265,6 +302,85 @@ func TestCreate_ArgoCD_PrintsInstallStage(t *testing.T) {
 
 	if installer := fake(); installer == nil || !installer.called {
 		t.Fatalf("expected Argo CD installer to be invoked")
+	}
+
+	snaps.MatchSnapshot(t, buf.String())
+}
+
+func setupFluxTestMocks(t *testing.T) (func() *fakeInstaller, *bool) {
+	t.Helper()
+
+	var fake *fakeInstaller
+
+	ensureCalled := false
+
+	// Override cluster provisioner factory to use fake provisioner
+	restoreFactory := clusterpkg.SetClusterProvisionerFactoryForTests(fakeFactory{})
+	t.Cleanup(restoreFactory)
+
+	restoreInstaller := clusterpkg.SetFluxInstallerFactoryForTests(
+		func(_ *v1alpha1.Cluster) (installer.Installer, error) {
+			fake = &fakeInstaller{}
+
+			return fake, nil
+		},
+	)
+	t.Cleanup(restoreInstaller)
+
+	restoreEnsure := clusterpkg.SetEnsureFluxResourcesForTests(
+		func(_ context.Context, _ string, _ *v1alpha1.Cluster, _ string) error {
+			ensureCalled = true
+
+			return nil
+		},
+	)
+	t.Cleanup(restoreEnsure)
+
+	// Mock registry service factory to avoid needing a real Docker client
+	restoreRegistry := clusterpkg.SetLocalRegistryServiceFactoryForTests(fakeRegistryServiceFactory)
+	t.Cleanup(restoreRegistry)
+
+	restoreDocker := clusterpkg.SetDockerClientInvokerForTests(
+		func(_ *cobra.Command, fn func(client.APIClient) error) error {
+			return fn(nil) // Call the callback to trigger success messages
+		},
+	)
+	t.Cleanup(restoreDocker)
+
+	return func() *fakeInstaller { return fake }, &ensureCalled
+}
+
+func TestCreate_Flux_PrintsInstallStage(t *testing.T) {
+	tmpRoot := t.TempDir()
+	t.Setenv("TMPDIR", tmpRoot)
+
+	workingDir := t.TempDir()
+	t.Chdir(workingDir)
+	writeTestConfigFiles(t, workingDir)
+
+	fake, ensureCalled := setupFluxTestMocks(t)
+
+	testRuntime := newTestRuntimeContainer(t)
+
+	cmd := clusterpkg.NewCreateCmd(testRuntime)
+
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+	cmd.SetContext(context.Background())
+	cmd.SetArgs([]string{"--gitops-engine", "Flux"})
+
+	err := cmd.Execute()
+	if err != nil {
+		t.Fatalf("create command failed: %v\noutput:\n%s", err, buf.String())
+	}
+
+	if !*ensureCalled {
+		t.Fatalf("expected Flux resources ensure hook to be invoked")
+	}
+
+	if installer := fake(); installer == nil || !installer.called {
+		t.Fatalf("expected Flux installer to be invoked")
 	}
 
 	snaps.MatchSnapshot(t, buf.String())
@@ -355,6 +471,99 @@ func TestCreate_DefaultCSI_DoesNotInstall(t *testing.T) {
 	}
 
 	require.NotContains(t, buf.String(), "csi installing")
+}
+
+// TestCreate_Minimal_PrintsOnlyClusterLifecycle tests cluster creation with no extras.
+// This verifies the minimal output when all optional components are disabled.
+//
+//nolint:paralleltest // uses t.Chdir and mutates shared test hooks
+func TestCreate_Minimal_PrintsOnlyClusterLifecycle(t *testing.T) {
+	workingDir := t.TempDir()
+	t.Chdir(workingDir)
+	writeTestConfigFiles(t, workingDir)
+
+	// Override cluster provisioner factory to use fake provisioner
+	restoreFactory := clusterpkg.SetClusterProvisionerFactoryForTests(fakeFactory{})
+	defer restoreFactory()
+
+	// Override Docker client to call the callback for success messages
+	restoreDocker := clusterpkg.SetDockerClientInvokerForTests(
+		func(_ *cobra.Command, fn func(client.APIClient) error) error {
+			return fn(nil) // Call the callback to trigger success messages
+		},
+	)
+	defer restoreDocker()
+
+	cmd := clusterpkg.NewCreateCmd(newTestRuntimeContainer(t))
+
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+	cmd.SetContext(context.Background())
+
+	err := cmd.Execute()
+	if err != nil {
+		t.Fatalf("create command failed: %v\noutput:\n%s", err, buf.String())
+	}
+
+	// Verify only cluster lifecycle output, no component installation
+	require.NotContains(t, buf.String(), "Installing components")
+	require.NotContains(t, buf.String(), "Install CNI")
+	snaps.MatchSnapshot(t, buf.String())
+}
+
+// TestCreate_LocalRegistryDisabled_SkipsRegistryStages tests cluster creation with local registry disabled.
+//
+//nolint:paralleltest // uses t.Chdir and mutates shared test hooks
+func TestCreate_LocalRegistryDisabled_SkipsRegistryStages(t *testing.T) {
+	workingDir := t.TempDir()
+	t.Chdir(workingDir)
+
+	ksailYAML := `apiVersion: ksail.dev/v1alpha1
+kind: Cluster
+spec:
+  cluster:
+    distribution: Kind
+    distributionConfig: kind.yaml
+    localRegistry: Disabled
+    metricsServer: Disabled
+    connection:
+      kubeconfig: ./kubeconfig
+`
+	writeFile(t, workingDir, "ksail.yaml", ksailYAML)
+	writeFile(
+		t,
+		workingDir,
+		"kind.yaml",
+		"kind: Cluster\napiVersion: kind.x-k8s.io/v1alpha4\nname: test\nnodes: []\n",
+	)
+	writeFile(
+		t,
+		workingDir,
+		"kubeconfig",
+		"apiVersion: v1\nkind: Config\nclusters: []\ncontexts: []\nusers: []\n",
+	)
+
+	// Override cluster provisioner factory to use fake provisioner
+	restoreFactory := clusterpkg.SetClusterProvisionerFactoryForTests(fakeFactory{})
+	defer restoreFactory()
+
+	cmd := clusterpkg.NewCreateCmd(newTestRuntimeContainer(t))
+
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+	cmd.SetContext(context.Background())
+
+	err := cmd.Execute()
+	if err != nil {
+		t.Fatalf("create command failed: %v\noutput:\n%s", err, buf.String())
+	}
+
+	// Verify local registry stages are not present
+	require.NotContains(t, buf.String(), "Create local registry")
+	require.NotContains(t, buf.String(), "Attach local registry")
+	snaps.MatchSnapshot(t, buf.String())
 }
 
 // Ensure fake types satisfy interfaces at compile time.

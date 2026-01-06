@@ -138,8 +138,8 @@ func HandleRunE(
 }
 
 // showTitle displays the title message for a lifecycle operation.
+// Note: Callers are responsible for adding leading newlines via the firstActivityShown pattern.
 func showTitle(cmd *cobra.Command, emoji, content string) {
-	_, _ = fmt.Fprintln(cmd.OutOrStdout()) // Add newline before title for visual separation
 	notify.WriteMessage(
 		notify.Message{
 			Type:    notify.TitleType,

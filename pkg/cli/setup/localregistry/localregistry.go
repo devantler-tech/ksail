@@ -25,9 +25,12 @@ import (
 // Option configures local registry dependencies.
 type Option func(*Dependencies)
 
+// ServiceFactoryFunc is a function type for creating registry services.
+type ServiceFactoryFunc func(cfg registry.Config) (registry.Service, error)
+
 // Dependencies holds injectable dependencies for local registry operations.
 type Dependencies struct {
-	ServiceFactory func(cfg registry.Config) (registry.Service, error)
+	ServiceFactory ServiceFactoryFunc
 	DockerInvoker  func(*cobra.Command, func(client.APIClient) error) error
 }
 
