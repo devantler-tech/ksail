@@ -158,7 +158,7 @@ Kubernetes distributions package the Kubernetes components with additional tooli
 SOPS supports multiple key management backends:
 
 | Provider        | Documentation                                                                |
-| --------------- | ---------------------------------------------------------------------------- |
+|-----------------|------------------------------------------------------------------------------|
 | age             | [age-encryption.org](https://age-encryption.org/)                            |
 | PGP             | [GnuPG](https://gnupg.org/)                                                  |
 | AWS KMS         | [AWS KMS Documentation](https://docs.aws.amazon.com/kms/)                    |

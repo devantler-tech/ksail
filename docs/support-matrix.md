@@ -7,9 +7,9 @@ nav_order: 7
 
 Overview of KSail's supported platforms, distributions, and components. See [Concepts](concepts.md) for detailed information about each technology, or [Configuration](configuration/index.md) for setup instructions.
 
-| Category            | Supported Options                                           | Status/Notes                                                |
-| ------------------- | ----------------------------------------------------------- | ----------------------------------------------------------- |
-| Platforms           | Linux (amd64, arm64), macOS (arm64), Windows (amd64, arm64) | ⚠️ Windows support is untested.                             |
+| Category            | Supported Options                                           | Status/Notes                                               |
+|---------------------|-------------------------------------------------------------|------------------------------------------------------------|
+| Platforms           | Linux (amd64, arm64), macOS (arm64), Windows (amd64, arm64) | ⚠️ Windows support is untested.                            |
 | Distributions       | Kind, K3d, Talos                                            | ✅ All three distributions fully supported.                 |
 | Workload Management | kubectl, Helm, Kustomize                                    | ✅ Commands wrapped via `ksail workload`.                   |
 | GitOps Engines      | Flux, ArgoCD                                                | ✅ Both engines fully supported.                            |
