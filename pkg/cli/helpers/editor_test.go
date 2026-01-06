@@ -212,9 +212,8 @@ func TestEditorResolver_SetEnvVars_RestoresOriginal(t *testing.T) {
 	assert.Equal(t, originalEditor, os.Getenv("EDITOR"))
 }
 
+//nolint:paralleltest // t.Setenv is incompatible with t.Parallel
 func TestEditorResolver_Resolve_FallbackSnapshot(t *testing.T) {
-	t.Parallel() // Safe with t.Setenv as it handles cleanup automatically
-
 	// Clear all editor environment variables
 	envsToClear := []string{"SOPS_EDITOR", "KUBE_EDITOR", "EDITOR", "VISUAL"}
 	for _, env := range envsToClear {
