@@ -5,6 +5,8 @@ nav_order: 7
 
 # Support Matrix
 
+Overview of KSail's supported platforms, distributions, and components. See [Concepts](concepts.md) for detailed information about each technology, or [Configuration](configuration/index.md) for setup instructions.
+
 | Category            | Supported Options                                           | Status/Notes                                                |
 | ------------------- | ----------------------------------------------------------- | ----------------------------------------------------------- |
 | Platforms           | Linux (amd64, arm64), macOS (arm64), Windows (amd64, arm64) | ⚠️ Windows support is untested.                             |

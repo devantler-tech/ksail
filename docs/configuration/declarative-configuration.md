@@ -115,7 +115,7 @@ If not specified, KSail falls back to standard editor environment variables (`SO
 
 #### distribution
 
-Kubernetes distribution to use for the local cluster.
+Kubernetes distribution to use for the local cluster. See [Distributions](../concepts.md#distributions) for detailed information about each distribution.
 
 **Valid values:**
 
@@ -153,7 +153,7 @@ See [Distribution Configuration](#distribution-configuration) below for details 
 
 #### cni
 
-Container Network Interface to install.
+Container Network Interface to install. See [CNI](../concepts.md#container-network-interface-cni) for more details.
 
 **Valid values:**
 
@@ -163,7 +163,7 @@ Container Network Interface to install.
 
 #### csi
 
-Container Storage Interface to install.
+Container Storage Interface to install. See [CSI](../concepts.md#container-storage-interface-csi) for more details.
 
 **Valid values:**
 
@@ -172,7 +172,7 @@ Container Storage Interface to install.
 
 #### metricsServer
 
-Whether to install [metrics-server](https://github.com/kubernetes-sigs/metrics-server) for resource metrics.
+Whether to install [metrics-server](../concepts.md#metrics-server) for resource metrics.
 
 **Valid values:**
 
@@ -184,7 +184,7 @@ Note: K3d includes metrics-server by default, so this setting has no effect on K
 
 #### certManager
 
-Whether to install [cert-manager](https://cert-manager.io/) for TLS certificate management.
+Whether to install [cert-manager](../concepts.md#cert-manager) for TLS certificate management.
 
 **Valid values:**
 
@@ -193,7 +193,7 @@ Whether to install [cert-manager](https://cert-manager.io/) for TLS certificate 
 
 #### localRegistry
 
-Whether to provision a local OCI registry container for image storage.
+Whether to provision a local [OCI registry](../concepts.md#oci-registries) container for image storage.
 
 **Valid values:**
 
@@ -204,7 +204,7 @@ See [Distribution and Tool Options](#distribution-and-tool-options) for configur
 
 #### gitOpsEngine
 
-GitOps engine to install for continuous deployment workflows. When set to `Flux` or `ArgoCD`, KSail scaffolds a GitOps CR (FluxInstance or ArgoCD Application) into your source directory at `gitops/flux/flux-instance.yaml` or `gitops/argocd/application.yaml`.
+GitOps engine to install for continuous deployment workflows. See [GitOps](../concepts.md#gitops) for more details about Flux and ArgoCD. When set to `Flux` or `ArgoCD`, KSail scaffolds a GitOps CR (FluxInstance or ArgoCD Application) into your source directory at `gitops/flux/flux-instance.yaml` or `gitops/argocd/application.yaml`.
 
 **Valid values:**
 

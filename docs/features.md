@@ -18,8 +18,8 @@ ksail cluster create
 
 **Capabilities:**
 
-- **Multi-distribution support** – Kind, K3d, and Talos distributions
-- **Component installation** – CNI (Cilium, Calico), CSI, metrics-server, cert-manager
+- **Multi-distribution support** – [Kind, K3d, and Talos](concepts.md#distributions) distributions
+- **Component installation** – [CNI](concepts.md#container-network-interface-cni) (Cilium, Calico), [CSI](concepts.md#container-storage-interface-csi), [metrics-server](concepts.md#metrics-server), [cert-manager](concepts.md#cert-manager)
 - **Node configuration** – Control-plane and worker node counts via `--control-planes` and `--workers`
 - **Connection management** – Automatic kubeconfig and context configuration
 
@@ -69,7 +69,7 @@ ksail workload logs deployment/my-app
 
 ## GitOps Workflows
 
-Enable GitOps with Flux or ArgoCD for declarative, Git-driven deployments. KSail scaffolds the required CRs and provides commands for pushing and reconciling workloads.
+Enable GitOps with [Flux or ArgoCD](concepts.md#gitops) for declarative, Git-driven deployments. KSail scaffolds the required CRs and provides commands for pushing and reconciling workloads.
 
 ```bash
 ksail cluster init --gitops-engine Flux --local-registry Enabled
@@ -102,7 +102,7 @@ ksail workload reconcile
 
 ## Registry Management
 
-Run local OCI registries for faster development cycles and configure mirror registries to avoid rate limits.
+Run local [OCI registries](concepts.md#oci-registries) for faster development cycles and configure mirror registries to avoid rate limits.
 
 ### Local Registry
 
@@ -128,7 +128,7 @@ ksail cluster init \
 
 ## Secret Management
 
-Encrypt and decrypt secrets using SOPS with support for age, PGP, and cloud KMS providers.
+Encrypt and decrypt secrets using [SOPS](concepts.md#sops) with support for age, PGP, and cloud KMS providers.
 
 ```bash
 ksail cipher encrypt secret.yaml
@@ -146,7 +146,7 @@ ksail cipher import AGE-SECRET-KEY-1...
 | `ksail cipher edit`    | Edit encrypted file in-place  |
 | `ksail cipher import`  | Import age private key        |
 
-**Supported KMS:** age, PGP, AWS KMS, GCP KMS, Azure Key Vault, HashiCorp Vault
+**Supported KMS:** See [Key Management Systems](concepts.md#key-management-systems) for supported providers and documentation links.
 
 ## Code Generation
 
@@ -161,7 +161,7 @@ ksail workload gen helmrelease my-chart --source=oci://registry/chart
 **Capabilities:**
 
 - **Kubernetes resources** – Deployments, services, configmaps, secrets, ingress, and more
-- **Helm releases** – HelmRelease CRs for Flux
+- **[Helm](concepts.md#helm) releases** – HelmRelease CRs for Flux
 - **Source resources** – OCIRepository, GitRepository, HelmRepository
 
 **Commands:** [`ksail workload gen`](configuration/cli-flags/workload/gen/workload-gen-root.md), [`ksail workload create`](configuration/cli-flags/workload/create/workload-create-root.md)
