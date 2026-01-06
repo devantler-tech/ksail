@@ -148,7 +148,6 @@ func ExecuteStage(
 	ctx *Context,
 	deps lifecycle.Deps,
 	stage StageType,
-	firstActivityShown *bool,
 	localDeps Dependencies,
 ) error {
 	info, actionBuilder, err := resolveStage(stage)
@@ -162,7 +161,6 @@ func ExecuteStage(
 		deps,
 		info,
 		actionBuilder,
-		firstActivityShown,
 		localDeps,
 	)
 }
@@ -188,9 +186,6 @@ func Cleanup(
 
 	// Use cached distribution config from ConfigManager
 	distConfig := cfgManager.DistributionConfig
-
-	// Cleanup doesn't show title activity messages, so use a dummy tracker
-	dummyTracker := true
 
 	return runRegistryAction(
 		cmd,
@@ -227,7 +222,6 @@ func Cleanup(
 
 			return nil
 		},
-		&dummyTracker,
 		localDeps,
 		false, true, // checkLocalRegistry=false, isCleanup=true
 	)
@@ -293,7 +287,6 @@ func runStageFromBuilder(
 	deps lifecycle.Deps,
 	info setup.StageInfo,
 	buildAction func(*v1alpha1.Cluster) stageAction,
-	firstActivityShown *bool,
 	localDeps Dependencies,
 ) error {
 	return runRegistryAction(
@@ -305,7 +298,6 @@ func runStageFromBuilder(
 		ctx.TalosConfig,
 		info,
 		buildAction(ctx.ClusterCfg),
-		firstActivityShown,
 		localDeps,
 		true, false, // checkLocalRegistry=true, isCleanup=false
 	)
@@ -329,16 +321,15 @@ func wrapActionWithContext(
 
 // actionRunner encapsulates shared parameters for runAction and runCleanupAction.
 type actionRunner struct {
-	cmd                *cobra.Command
-	clusterCfg         *v1alpha1.Cluster
-	deps               lifecycle.Deps
-	kindConfig         *kindv1alpha4.Cluster
-	k3dConfig          *k3dv1alpha5.SimpleConfig
-	talosConfig        *talosconfigmanager.Configs
-	info               setup.StageInfo
-	action             func(context.Context, registry.Service, registryContext) error
-	firstActivityShown *bool
-	localDeps          Dependencies
+	cmd         *cobra.Command
+	clusterCfg  *v1alpha1.Cluster
+	deps        lifecycle.Deps
+	kindConfig  *kindv1alpha4.Cluster
+	k3dConfig   *k3dv1alpha5.SimpleConfig
+	talosConfig *talosconfigmanager.Configs
+	info        setup.StageInfo
+	action      func(context.Context, registry.Service, registryContext) error
+	localDeps   Dependencies
 }
 
 // prepareContext validates preconditions and creates the registry context.
@@ -371,12 +362,12 @@ func (r *actionRunner) run(checkLocalRegistry, isCleanup bool) error {
 	if isCleanup {
 		return runCleanupStage(
 			r.cmd, r.deps, r.info, ctx.clusterName,
-			wrappedAction, r.firstActivityShown, r.localDeps,
+			wrappedAction, r.localDeps,
 		)
 	}
 
 	return runStage(
-		r.cmd, r.deps, r.info, wrappedAction, r.firstActivityShown, r.localDeps,
+		r.cmd, r.deps, r.info, wrappedAction, r.localDeps,
 	)
 }
 
@@ -392,21 +383,19 @@ func runRegistryAction(
 	talosConfig *talosconfigmanager.Configs,
 	info setup.StageInfo,
 	action func(context.Context, registry.Service, registryContext) error,
-	firstActivityShown *bool,
 	localDeps Dependencies,
 	checkLocalRegistry, isCleanup bool,
 ) error {
 	runner := &actionRunner{
-		cmd:                cmd,
-		clusterCfg:         clusterCfg,
-		deps:               deps,
-		kindConfig:         kindConfig,
-		k3dConfig:          k3dConfig,
-		talosConfig:        talosConfig,
-		info:               info,
-		action:             action,
-		firstActivityShown: firstActivityShown,
-		localDeps:          localDeps,
+		cmd:         cmd,
+		clusterCfg:  clusterCfg,
+		deps:        deps,
+		kindConfig:  kindConfig,
+		k3dConfig:   k3dConfig,
+		talosConfig: talosConfig,
+		info:        info,
+		action:      action,
+		localDeps:   localDeps,
 	}
 
 	return runner.run(checkLocalRegistry, isCleanup)
@@ -439,7 +428,6 @@ func runCleanupStage(
 	info setup.StageInfo,
 	clusterName string,
 	handler func(context.Context, registry.Service) error,
-	firstActivityShown *bool,
 	localDeps Dependencies,
 ) error {
 	cleanupHandler := func(ctx context.Context, svc registry.Service) error {
@@ -464,7 +452,6 @@ func runCleanupStage(
 		deps,
 		info,
 		createServiceHandler(localDeps, cleanupHandler),
-		firstActivityShown,
 		localDeps,
 	)
 }
@@ -474,7 +461,6 @@ func runStage(
 	deps lifecycle.Deps,
 	info setup.StageInfo,
 	handler func(context.Context, registry.Service) error,
-	firstActivityShown *bool,
 	localDeps Dependencies,
 ) error {
 	return runDockerStage(
@@ -482,7 +468,6 @@ func runStage(
 		deps,
 		info,
 		createServiceHandler(localDeps, handler),
-		firstActivityShown,
 		localDeps,
 	)
 }
@@ -492,7 +477,6 @@ func runDockerStage(
 	deps lifecycle.Deps,
 	info setup.StageInfo,
 	action func(context.Context, client.APIClient) error,
-	firstActivityShown *bool,
 	localDeps Dependencies,
 ) error {
 	err := setup.RunDockerStage(
@@ -500,7 +484,6 @@ func runDockerStage(
 		deps.Timer,
 		info,
 		action,
-		firstActivityShown,
 		localDeps.DockerInvoker,
 	)
 	if err != nil {

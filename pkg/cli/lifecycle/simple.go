@@ -70,6 +70,10 @@ func runSimpleLifecycleAction(
 	contextFlag string,
 	config SimpleLifecycleConfig,
 ) error {
+	// Wrap output with StageSeparatingWriter for automatic stage separation
+	stageWriter := notify.NewStageSeparatingWriter(cmd.OutOrStdout())
+	cmd.SetOut(stageWriter)
+
 	ctx, err := resolveContext(contextFlag)
 	if err != nil {
 		return err
@@ -80,7 +84,6 @@ func runSimpleLifecycleAction(
 		return fmt.Errorf("failed to detect distribution: %w", err)
 	}
 
-	_, _ = fmt.Fprintln(cmd.OutOrStdout())
 	notify.WriteMessage(notify.Message{
 		Type:    notify.TitleType,
 		Content: config.TitleContent,

@@ -210,7 +210,7 @@ func (pg *ProgressGroup) Run(ctx context.Context, tasks ...ProgressTask) error {
 		pg.timer.NewStage()
 	}
 
-	// Print title
+	// Print title (StageSeparatingWriter handles leading newlines automatically)
 	_, _ = fmt.Fprintf(pg.writer, "%s %s...\n", pg.emoji, pg.title)
 
 	// Use different modes for TTY vs non-TTY

@@ -12,6 +12,7 @@ import (
 )
 
 // StageInfo contains display information for a setup stage.
+// Note: Leading newlines between stages are handled automatically by StageSeparatingWriter.
 type StageInfo struct {
 	Title         string
 	Emoji         string
@@ -41,23 +42,15 @@ func DefaultDockerClientInvoker() DockerClientInvoker {
 //   - tmr: Timer for stage timing
 //   - info: Stage display information
 //   - action: The Docker action to execute
-//   - firstActivityShown: Tracks whether to print a leading newline
 //   - dockerInvoker: Function to create/invoke Docker client (use nil for default)
 func RunDockerStage(
 	cmd *cobra.Command,
 	tmr timer.Timer,
 	info StageInfo,
 	action func(context.Context, client.APIClient) error,
-	firstActivityShown *bool,
 	dockerInvoker DockerClientInvoker,
 ) error {
 	tmr.NewStage()
-
-	if *firstActivityShown {
-		cmd.Println()
-	}
-
-	*firstActivityShown = true
 
 	notify.WriteMessage(notify.Message{
 		Type:    notify.TitleType,

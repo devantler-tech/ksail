@@ -5,6 +5,12 @@
 ✔ cluster created
 ---
 
+[TestCreate_DefaultCertManager_DoesNotInstall - 1]
+🚀 Create cluster...
+► creating cluster
+✔ cluster created
+---
+
 [TestCreate_EnabledCertManager_PrintsInstallStage - 1]
 🚀 Create cluster...
 ► creating cluster
@@ -77,12 +83,6 @@
 ---
 
 [TestCreate_Minimal_PrintsOnlyClusterLifecycle - 1]
-🚀 Create cluster...
-► creating cluster
-✔ cluster created
----
-
-[TestCreate_DefaultCertManager_DoesNotInstall - 1]
 🚀 Create cluster...
 ► creating cluster
 ✔ cluster created

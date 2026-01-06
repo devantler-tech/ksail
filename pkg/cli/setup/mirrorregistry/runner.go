@@ -69,7 +69,6 @@ func RunStage(
 	k3dConfig *v1alpha5.SimpleConfig,
 	talosConfig *talosconfigmanager.Configs,
 	role Role,
-	firstActivityShown *bool,
 	dockerInvoker DockerClientInvoker,
 ) error {
 	// Get mirror specs from --mirror-registry flag
@@ -150,7 +149,6 @@ func RunStage(
 		definition.Info,
 		handler.Prepare,
 		handler.Action,
-		firstActivityShown,
 		dockerInvoker,
 	)
 }
@@ -204,14 +202,13 @@ func executeRegistryStage(
 	info setup.StageInfo,
 	shouldPrepare func() bool,
 	action func(context.Context, client.APIClient) error,
-	firstActivityShown *bool,
 	dockerInvoker DockerClientInvoker,
 ) error {
 	if !shouldPrepare() {
 		return nil
 	}
 
-	return runRegistryStage(cmd, deps, info, action, firstActivityShown, dockerInvoker)
+	return runRegistryStage(cmd, deps, info, action, dockerInvoker)
 }
 
 func runRegistryStage(
@@ -219,7 +216,6 @@ func runRegistryStage(
 	deps lifecycle.Deps,
 	info setup.StageInfo,
 	action func(context.Context, client.APIClient) error,
-	firstActivityShown *bool,
 	dockerInvoker DockerClientInvoker,
 ) error {
 	invoker := dockerInvoker
@@ -232,7 +228,6 @@ func runRegistryStage(
 		deps.Timer,
 		info,
 		action,
-		firstActivityShown,
 		invoker,
 	)
 	if err != nil {
@@ -245,15 +240,14 @@ func runRegistryStage(
 // StageParams bundles all parameters needed for registry stage execution.
 // This reduces code duplication across registry stage functions.
 type StageParams struct {
-	Cmd                *cobra.Command
-	ClusterCfg         *v1alpha1.Cluster
-	Deps               lifecycle.Deps
-	CfgManager         *ksailconfigmanager.ConfigManager
-	KindConfig         *v1alpha4.Cluster
-	K3dConfig          *v1alpha5.SimpleConfig
-	TalosConfig        *talosconfigmanager.Configs
-	FirstActivityShown *bool
-	DockerInvoker      DockerClientInvoker
+	Cmd           *cobra.Command
+	ClusterCfg    *v1alpha1.Cluster
+	Deps          lifecycle.Deps
+	CfgManager    *ksailconfigmanager.ConfigManager
+	KindConfig    *v1alpha4.Cluster
+	K3dConfig     *v1alpha5.SimpleConfig
+	TalosConfig   *talosconfigmanager.Configs
+	DockerInvoker DockerClientInvoker
 }
 
 // SetupRegistries creates and configures registry containers before cluster creation.
@@ -287,7 +281,6 @@ func runStageWithParams(params StageParams, role Role) error {
 		params.K3dConfig,
 		params.TalosConfig,
 		role,
-		params.FirstActivityShown,
 		params.DockerInvoker,
 	)
 }

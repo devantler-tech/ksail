@@ -97,19 +97,12 @@ func InstallPostCNIComponents(
 	clusterCfg *v1alpha1.Cluster,
 	factories *InstallerFactories,
 	tmr timer.Timer,
-	firstActivityShown *bool,
 ) error {
 	reqs := getComponentRequirements(clusterCfg)
 
 	if reqs.count() == 0 {
 		return nil
 	}
-
-	if *firstActivityShown {
-		_, _ = fmt.Fprintln(cmd.OutOrStdout())
-	}
-
-	*firstActivityShown = true
 
 	ctx := cmd.Context()
 	if ctx == nil {
@@ -234,7 +227,6 @@ func configureGitOpsResources(
 	clusterName := resolveClusterNameFromContext(clusterCfg)
 
 	// Show title for configure stage
-	_, _ = fmt.Fprintln(cmd.OutOrStdout())
 	notify.WriteMessage(notify.Message{
 		Type:    notify.TitleType,
 		Content: "Configuring components...",
