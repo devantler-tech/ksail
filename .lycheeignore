@@ -13,7 +13,8 @@ https://kubernetes.default.svc/
 # GoReleaser template URL (not a real URL)
 https://github.com/devantler-tech/ksail/releases/download/
 
-# Certificate issues
+# Intermittent Network Errors
 https://kind.sigs.k8s.io/
 https://www.talos.dev/
 https://gateway-api.sigs.k8s.io/
+https://helm.sh/docs/
