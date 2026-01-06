@@ -47,6 +47,7 @@ type fakeDeleteFactory struct {
 	deleteErr    error
 }
 
+//nolint:ireturn // Factory interface requires returning interface type
 func (f fakeDeleteFactory) Create(
 	_ context.Context,
 	_ *v1alpha1.Cluster,
@@ -73,7 +74,18 @@ func writeDeleteTestConfigFiles(t *testing.T, workingDir string, distribution st
 
 	switch distribution {
 	case "Kind":
-		ksailYAML := `apiVersion: ksail.dev/v1alpha1
+		writeKindTestConfig(t, workingDir)
+	case "K3d":
+		writeK3dTestConfig(t, workingDir)
+	case "Talos":
+		writeTalosTestConfig(t, workingDir)
+	}
+}
+
+func writeKindTestConfig(t *testing.T, workingDir string) {
+	t.Helper()
+
+	ksailYAML := `apiVersion: ksail.dev/v1alpha1
 kind: Cluster
 spec:
   cluster:
@@ -84,18 +96,22 @@ spec:
     connection:
       kubeconfig: ./kubeconfig
 `
-		require.NoError(t, os.WriteFile(
-			filepath.Join(workingDir, "ksail.yaml"),
-			[]byte(ksailYAML),
-			0o600,
-		))
-		require.NoError(t, os.WriteFile(
-			filepath.Join(workingDir, "kind.yaml"),
-			[]byte("kind: Cluster\napiVersion: kind.x-k8s.io/v1alpha4\nname: test\nnodes: []\n"),
-			0o600,
-		))
-	case "K3d":
-		ksailYAML := `apiVersion: ksail.dev/v1alpha1
+	require.NoError(t, os.WriteFile(
+		filepath.Join(workingDir, "ksail.yaml"),
+		[]byte(ksailYAML),
+		0o600,
+	))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(workingDir, "kind.yaml"),
+		[]byte("kind: Cluster\napiVersion: kind.x-k8s.io/v1alpha4\nname: test\nnodes: []\n"),
+		0o600,
+	))
+}
+
+func writeK3dTestConfig(t *testing.T, workingDir string) {
+	t.Helper()
+
+	ksailYAML := `apiVersion: ksail.dev/v1alpha1
 kind: Cluster
 spec:
   cluster:
@@ -106,18 +122,22 @@ spec:
     connection:
       kubeconfig: ./kubeconfig
 `
-		require.NoError(t, os.WriteFile(
-			filepath.Join(workingDir, "ksail.yaml"),
-			[]byte(ksailYAML),
-			0o600,
-		))
-		require.NoError(t, os.WriteFile(
-			filepath.Join(workingDir, "k3d.yaml"),
-			[]byte("apiVersion: k3d.io/v1alpha5\nkind: Simple\nmetadata:\n  name: test\n"),
-			0o600,
-		))
-	case "Talos":
-		ksailYAML := `apiVersion: ksail.dev/v1alpha1
+	require.NoError(t, os.WriteFile(
+		filepath.Join(workingDir, "ksail.yaml"),
+		[]byte(ksailYAML),
+		0o600,
+	))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(workingDir, "k3d.yaml"),
+		[]byte("apiVersion: k3d.io/v1alpha5\nkind: Simple\nmetadata:\n  name: test\n"),
+		0o600,
+	))
+}
+
+func writeTalosTestConfig(t *testing.T, workingDir string) {
+	t.Helper()
+
+	ksailYAML := `apiVersion: ksail.dev/v1alpha1
 kind: Cluster
 spec:
   cluster:
@@ -128,17 +148,16 @@ spec:
     connection:
       kubeconfig: ./kubeconfig
 `
-		require.NoError(t, os.WriteFile(
-			filepath.Join(workingDir, "ksail.yaml"),
-			[]byte(ksailYAML),
-			0o600,
-		))
-		require.NoError(t, os.WriteFile(
-			filepath.Join(workingDir, "talos.yaml"),
-			[]byte("clusterName: test\n"),
-			0o600,
-		))
-	}
+	require.NoError(t, os.WriteFile(
+		filepath.Join(workingDir, "ksail.yaml"),
+		[]byte(ksailYAML),
+		0o600,
+	))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(workingDir, "talos.yaml"),
+		[]byte("clusterName: test\n"),
+		0o600,
+	))
 }
 
 func newDeleteTestRuntimeContainer(t *testing.T) *runtime.Runtime {
@@ -172,6 +191,8 @@ func trimTrailingNewlineDelete(s string) string {
 }
 
 // TestDelete_ClusterExists_PrintsDeleteSuccess tests successful cluster deletion for all distributions.
+//
+//nolint:paralleltest // Cannot use t.Parallel() with t.Chdir()
 func TestDelete_ClusterExists_PrintsDeleteSuccess(t *testing.T) {
 	testCases := []struct {
 		name         string
@@ -182,11 +203,13 @@ func TestDelete_ClusterExists_PrintsDeleteSuccess(t *testing.T) {
 		{name: "Talos", distribution: "Talos"},
 	}
 
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range testCases {
+		//nolint:paralleltest // Cannot use t.Parallel() with t.Chdir()
+		t.Run(testCase.name, func(t *testing.T) {
 			workingDir := t.TempDir()
 			t.Chdir(workingDir)
-			writeDeleteTestConfigFiles(t, workingDir, tc.distribution)
+
+			writeDeleteTestConfigFiles(t, workingDir, testCase.distribution)
 
 			// Override cluster provisioner factory to use fake provisioner that returns success
 			restoreFactory := clusterpkg.SetClusterProvisionerFactoryForTests(
@@ -220,6 +243,8 @@ func TestDelete_ClusterExists_PrintsDeleteSuccess(t *testing.T) {
 }
 
 // TestDelete_ClusterNotFound_PrintsWarning tests deletion when cluster doesn't exist for all distributions.
+//
+//nolint:paralleltest // Cannot use t.Parallel() with t.Chdir()
 func TestDelete_ClusterNotFound_PrintsWarning(t *testing.T) {
 	testCases := []struct {
 		name         string
@@ -230,11 +255,13 @@ func TestDelete_ClusterNotFound_PrintsWarning(t *testing.T) {
 		{name: "Talos", distribution: "Talos"},
 	}
 
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range testCases {
+		//nolint:paralleltest // Cannot use t.Parallel() with t.Chdir()
+		t.Run(testCase.name, func(t *testing.T) {
 			workingDir := t.TempDir()
 			t.Chdir(workingDir)
-			writeDeleteTestConfigFiles(t, workingDir, tc.distribution)
+
+			writeDeleteTestConfigFiles(t, workingDir, testCase.distribution)
 
 			// Override cluster provisioner factory to use fake provisioner that returns ErrClusterNotFound
 			restoreFactory := clusterpkg.SetClusterProvisionerFactoryForTests(

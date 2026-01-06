@@ -72,7 +72,9 @@ func handleDeleteRunE(
 
 	// Check for test factory override
 	clusterProvisionerFactoryMu.RLock()
+
 	factoryOverride := clusterProvisionerFactoryOverride
+
 	clusterProvisionerFactoryMu.RUnlock()
 
 	if factoryOverride != nil {
@@ -95,7 +97,14 @@ func handleDeleteRunE(
 	// the cluster first, the network removal fails with "has active endpoints".
 	// Note: Local registry cleanup still happens after cluster deletion for all distributions.
 	if clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionTalos {
-		cleanupMirrorRegistriesWithWarning(cmd, cfgManager, clusterCfg, deps, clusterName, deleteVolumes)
+		cleanupMirrorRegistriesWithWarning(
+			cmd,
+			cfgManager,
+			clusterCfg,
+			deps,
+			clusterName,
+			deleteVolumes,
+		)
 	}
 
 	// Start a new timer stage for the cluster deletion
@@ -164,7 +173,14 @@ func cleanupRegistries(
 ) {
 	// Skip mirror registry cleanup for Talos - it's already done before cluster deletion
 	if clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionTalos {
-		err := cleanupMirrorRegistries(cmd, cfgManager, clusterCfg, deps, clusterName, deleteVolumes)
+		err := cleanupMirrorRegistries(
+			cmd,
+			cfgManager,
+			clusterCfg,
+			deps,
+			clusterName,
+			deleteVolumes,
+		)
 		if err != nil {
 			notify.WriteMessage(notify.Message{
 				Type:    notify.WarningType,
