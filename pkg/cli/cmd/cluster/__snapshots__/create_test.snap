@@ -81,3 +81,9 @@
 ► creating cluster
 ✔ cluster created
 ---
+
+[TestCreate_DefaultCertManager_DoesNotInstall - 1]
+🚀 Create cluster...
+► creating cluster
+✔ cluster created
+---

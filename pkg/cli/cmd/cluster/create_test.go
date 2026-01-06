@@ -222,7 +222,7 @@ func TestCreate_DefaultCertManager_DoesNotInstall(t *testing.T) {
 		t.Fatalf("expected cert-manager installer factory not to be invoked")
 	}
 
-	require.NotContains(t, out.String(), "Install Cert-Manager...")
+	snaps.MatchSnapshot(t, out.String())
 }
 
 //nolint:nlreturn // keep inline returns in short closures for function length
@@ -452,9 +452,6 @@ func TestCreate_Minimal_PrintsOnlyClusterLifecycle(t *testing.T) {
 		t.Fatalf("create command failed: %v\noutput:\n%s", err, out.String())
 	}
 
-	// Verify only cluster lifecycle output, no component installation
-	require.NotContains(t, out.String(), "Installing components")
-	require.NotContains(t, out.String(), "Install CNI")
 	snaps.MatchSnapshot(t, out.String())
 }
 
@@ -506,9 +503,6 @@ spec:
 		t.Fatalf("create command failed: %v\noutput:\n%s", err, out.String())
 	}
 
-	// Verify local registry stages are not present
-	require.NotContains(t, out.String(), "Create local registry")
-	require.NotContains(t, out.String(), "Attach local registry")
 	snaps.MatchSnapshot(t, out.String())
 }
 
