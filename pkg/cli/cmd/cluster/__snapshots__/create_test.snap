@@ -1,4 +1,10 @@
 
+[TestCreate_DefaultCSI_DoesNotInstall - 1]
+🚀 Create cluster...
+► creating cluster
+✔ cluster created
+---
+
 [TestCreate_EnabledCertManager_PrintsInstallStage - 1]
 🚀 Create cluster...
 ► creating cluster
@@ -52,6 +58,16 @@
 ⚙️ Configuring components...
 ► applying custom resources
 ✔ components configured
+---
+
+[TestCreate_LocalPathStorageCSI_InstallsOnKind - 1]
+🚀 Create cluster...
+► creating cluster
+✔ cluster created
+
+📦 Installing components...
+► csi installing
+✔ csi installed
 ---
 
 [TestCreate_LocalRegistryDisabled_SkipsRegistryStages - 1]

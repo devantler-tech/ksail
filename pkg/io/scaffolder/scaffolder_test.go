@@ -234,7 +234,7 @@ func TestScaffoldSkipsExistingFileWithoutForce(t *testing.T) {
 
 	// Verify ksail generator was not called (file exists without force)
 	mocks.ksail.AssertNotCalled(t, "Generate")
-	require.Contains(t, buffer.String(), "skipped 'ksail.yaml'")
+	snaps.MatchSnapshot(t, buffer.String())
 }
 
 func TestScaffoldOverwritesFilesWhenForceEnabled(t *testing.T) {
@@ -247,7 +247,7 @@ func TestScaffoldOverwritesFilesWhenForceEnabled(t *testing.T) {
 
 	// Verify ksail generator was called (force enabled)
 	mocks.ksail.AssertNumberOfCalls(t, "Generate", 1)
-	require.Contains(t, buffer.String(), "overwrote 'ksail.yaml'")
+	snaps.MatchSnapshot(t, buffer.String())
 }
 
 func TestScaffoldOverwritesKindConfigWhenForceEnabled(t *testing.T) {
@@ -270,7 +270,7 @@ func TestScaffoldOverwritesKindConfigWhenForceEnabled(t *testing.T) {
 	err := instance.Scaffold(tempDir, true)
 	require.NoError(t, err)
 
-	require.Contains(t, buffer.String(), "overwrote 'kind.yaml'")
+	snaps.MatchSnapshot(t, buffer.String())
 
 	info, statErr := os.Stat(kindPath)
 	require.NoError(t, statErr)
@@ -1356,8 +1356,8 @@ func TestScaffoldGitOps_SkipsExistingCR(t *testing.T) {
 			err = scaffolderInstance.Scaffold(tempDir, false)
 			require.NoError(t, err)
 
-			// Verify the skip message was printed
-			assert.Contains(t, buffer.String(), testCase.expectSkipMsg)
+			// Verify the skip message was printed (contains dynamic path)
+			require.Contains(t, buffer.String(), testCase.expectSkipMsg)
 
 			// Verify no new output file was created
 			_, err = os.Stat(filepath.Join(crDir, testCase.outputFile))
@@ -1401,8 +1401,8 @@ func TestScaffoldGitOps_OverwritesWithForce(t *testing.T) {
 	err = scaffolderInstance.Scaffold(tempDir, true)
 	require.NoError(t, err)
 
-	// Since existing FluxInstance is detected, it should be skipped
-	assert.Contains(t, buffer.String(), "skipping FluxInstance scaffolding: existing found at")
+	// Verify skip message was printed (contains dynamic path, so use Contains)
+	require.Contains(t, buffer.String(), "skipping FluxInstance scaffolding: existing found at")
 
 	// Verify file mod time is unchanged (was not regenerated)
 	newInfo, err := os.Stat(fluxInstancePath)

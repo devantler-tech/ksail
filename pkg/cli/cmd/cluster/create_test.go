@@ -391,7 +391,7 @@ spec:
 		t.Fatalf("expected CSI installer to be invoked")
 	}
 
-	require.Contains(t, out.String(), "csi installing")
+	snaps.MatchSnapshot(t, out.String())
 }
 
 //nolint:paralleltest // uses t.Chdir and mutates shared test hooks
@@ -416,7 +416,7 @@ func TestCreate_DefaultCSI_DoesNotInstall(t *testing.T) {
 		t.Fatalf("create command failed: %v\noutput:\n%s", err, out.String())
 	}
 
-	require.NotContains(t, out.String(), "csi installing")
+	snaps.MatchSnapshot(t, out.String())
 }
 
 // TestCreate_Minimal_PrintsOnlyClusterLifecycle tests cluster creation with no extras.
