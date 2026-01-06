@@ -31,15 +31,14 @@ Configure via `spec.cluster.cni` or `--cni` flag.
 
 - **`Default`** – Distribution's built-in networking (`kindnetd` for Kind, `flannel` for K3d)
 - **`Cilium`** – [Cilium](https://cilium.io/) via Helm for advanced observability and eBPF policies
-- **`None`** – Skip CNI for manual installation
+- **`Calico`** – [Calico](https://www.tigera.io/project-calico/) for network policies and security
 
 ### Container Storage Interface (CSI)
 
 Configure via `spec.cluster.csi` or `--csi` flag.
 
 - **`Default`** – Distribution's built-in storage. K3d includes local-path-provisioner; Kind does not
-- **`LocalPathStorage`** – Explicitly install [local-path-provisioner](https://github.com/rancher/local-path-provisioner) v0.0.32. On Kind, creates default `StorageClass` in `local-path-storage` namespace. No action on K3d (already included)
-- **`None`** – Skip CSI for custom controllers
+- **`LocalPathStorage`** – Explicitly install [local-path-provisioner](https://github.com/rancher/local-path-provisioner). On Kind, creates default `StorageClass` in `local-path-storage` namespace. No action on K3d (already included)
 
 **Example:**
 
