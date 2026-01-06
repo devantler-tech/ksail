@@ -50,7 +50,7 @@ ksail workload logs deployment/my-app
 
 **Capabilities:**
 
-- **Apply manifests** – Kustomize directories, Helm charts, or raw YAML
+- **Apply manifests** – [Kustomize](concepts.md#kustomize) directories, [Helm](concepts.md#helm) charts, or raw YAML
 - **Generate resources** – Create deployments, services, secrets, and more
 - **Debug workloads** – Logs, exec, describe, and explain commands
 - **Validate manifests** – Schema validation before applying
@@ -66,6 +66,10 @@ ksail workload logs deployment/my-app
 | `ksail workload exec`     | Execute command in container       |
 | `ksail workload gen`      | Generate Kubernetes manifests      |
 | `ksail workload validate` | Validate manifests against schemas |
+| `ksail workload install`  | Install Helm charts                |
+| `ksail workload scale`    | Scale deployments                  |
+| `ksail workload rollout`  | Manage rollouts                    |
+| `ksail workload wait`     | Wait for conditions                |
 
 ## GitOps Workflows
 
