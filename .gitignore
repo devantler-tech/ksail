@@ -40,9 +40,6 @@ LICENSE.md
 # megalinter reports
 megalinter-reports/
 
-# spec-kit
-specs/
-
 # jscpd (copy-paste detector) reports
 report/
 *.zip

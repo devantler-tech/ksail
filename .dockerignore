@@ -1,7 +1,6 @@
 # Exclude repository metadata and tooling configs
 .git
 .github
-.specify
 .serena
 .vscode
 
