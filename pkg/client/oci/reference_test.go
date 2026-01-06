@@ -1,15 +1,15 @@
-package io_test
+package oci_test
 
 import (
 	"testing"
 
-	iopkg "github.com/devantler-tech/ksail/v5/pkg/io"
+	"github.com/devantler-tech/ksail/v5/pkg/client/oci"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 //nolint:funlen // Table-driven test with comprehensive cases
-func TestParseOCIReference(t *testing.T) {
+func TestParseReference(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -92,7 +92,7 @@ func TestParseOCIReference(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			got, err := iopkg.ParseOCIReference(testCase.input)
+			got, err := oci.ParseReference(testCase.input)
 
 			if testCase.wantErr {
 				require.Error(t, err)
@@ -119,17 +119,17 @@ func TestParseOCIReference(t *testing.T) {
 	}
 }
 
-func TestOCIReferenceString(t *testing.T) {
+func TestReferenceString(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
 		name string
-		ref  iopkg.OCIReference
+		ref  oci.Reference
 		want string
 	}{
 		{
 			name: "full reference",
-			ref: iopkg.OCIReference{
+			ref: oci.Reference{
 				Host:       "localhost",
 				Port:       5111,
 				Repository: "k8s",
@@ -139,7 +139,7 @@ func TestOCIReferenceString(t *testing.T) {
 		},
 		{
 			name: "with variant",
-			ref: iopkg.OCIReference{
+			ref: oci.Reference{
 				Host:       "localhost",
 				Port:       5111,
 				Repository: "my-app",
@@ -150,7 +150,7 @@ func TestOCIReferenceString(t *testing.T) {
 		},
 		{
 			name: "no port",
-			ref: iopkg.OCIReference{
+			ref: oci.Reference{
 				Host:       "registry.example.com",
 				Repository: "repo",
 				Ref:        "latest",
@@ -159,7 +159,7 @@ func TestOCIReferenceString(t *testing.T) {
 		},
 		{
 			name: "no ref",
-			ref: iopkg.OCIReference{
+			ref: oci.Reference{
 				Host:       "localhost",
 				Port:       5000,
 				Repository: "workloads",
@@ -178,24 +178,24 @@ func TestOCIReferenceString(t *testing.T) {
 	}
 }
 
-func TestOCIReferenceFullRepository(t *testing.T) {
+func TestReferenceFullRepository(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
 		name string
-		ref  iopkg.OCIReference
+		ref  oci.Reference
 		want string
 	}{
 		{
 			name: "without variant",
-			ref: iopkg.OCIReference{
+			ref: oci.Reference{
 				Repository: "k8s",
 			},
 			want: "k8s",
 		},
 		{
 			name: "with variant",
-			ref: iopkg.OCIReference{
+			ref: oci.Reference{
 				Repository: "my-app",
 				Variant:    "base",
 			},

@@ -6,6 +6,7 @@
 // pushing the resulting artifact to a registry endpoint.
 //
 // Key functionality:
+//   - Reference parsing: ParseReference for OCI URIs (oci://host:port/repo:tag)
 //   - Manifest collection from directories (.yaml, .yml, .json files)
 //   - OCI artifact packaging using go-containerregistry
 //   - Registry push operations with validation
