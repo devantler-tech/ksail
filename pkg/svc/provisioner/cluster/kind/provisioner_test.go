@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/devantler-tech/ksail/v5/pkg/client/docker"
+	clustererrors "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/errors"
 	kindprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/kind"
 	cmdrunner "github.com/devantler-tech/ksail/v5/pkg/utils/runner"
 	"github.com/spf13/cobra"
@@ -87,20 +88,51 @@ func TestCreateErrorCreateFailed(t *testing.T) {
 func TestDeleteSuccess(t *testing.T) {
 	t.Parallel()
 
-	runProvisionerRunnerSuccessTest(
-		t,
-		"Delete",
-		func(ctx context.Context, provisioner *kindprovisioner.KindClusterProvisioner, name string) error {
-			return provisioner.Delete(ctx, name)
+	testCases := []struct {
+		name        string
+		inputName   string
+		clusterName string
+	}{
+		{
+			name:        "without_name_uses_cfg",
+			inputName:   "",
+			clusterName: "cfg-name", // from newProvisionerForTest cfg.Name
 		},
-	)
+		{
+			name:        "with_name",
+			inputName:   "my-cluster",
+			clusterName: "my-cluster",
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			provisioner, _, _, runner := newProvisionerForTest(t)
+
+			// First call: List (via Exists) - return cluster name so cluster exists
+			runner.On("Run").Return(cmdrunner.CommandResult{
+				Stdout: testCase.clusterName + "\n",
+			}, nil).Once()
+			// Second call: Delete
+			runner.On("Run").Return(cmdrunner.CommandResult{}, nil).Once()
+
+			err := provisioner.Delete(context.Background(), testCase.inputName)
+			require.NoError(t, err, "Delete()")
+		})
+	}
 }
 
 func TestDeleteIncludesKubeconfigFlag(t *testing.T) {
 	t.Parallel()
 
 	provisioner, _, _, runner := newProvisionerForTest(t)
-	runner.On("Run").Return(cmdrunner.CommandResult{}, nil)
+	// First call: List (via Exists) - return cluster name so cluster exists
+	runner.On("Run").Return(cmdrunner.CommandResult{
+		Stdout: "cfg-name\n",
+	}, nil).Once()
+	// Second call: Delete
+	runner.On("Run").Return(cmdrunner.CommandResult{}, nil).Once()
 
 	err := provisioner.Delete(context.Background(), "")
 
@@ -127,22 +159,49 @@ func TestCreateUsesConfigNameWhenEmpty(t *testing.T) {
 func TestDeleteUsesProvidedName(t *testing.T) {
 	t.Parallel()
 
-	assertNameFlagPropagation(t, func(p *kindprovisioner.KindClusterProvisioner) error {
-		return p.Delete(context.Background(), "delete-me")
-	}, "delete-me")
+	provisioner, _, _, runner := newProvisionerForTest(t)
+	// First call: List (via Exists) - return cluster name so cluster exists
+	runner.On("Run").Return(cmdrunner.CommandResult{
+		Stdout: "delete-me\n",
+	}, nil).Once()
+	// Second call: Delete
+	runner.On("Run").Return(cmdrunner.CommandResult{}, nil).Once()
+
+	err := provisioner.Delete(context.Background(), "delete-me")
+
+	require.NoError(t, err)
+	assertFlagValue(t, runner.lastArgs, "--name", "delete-me")
 }
 
 func TestDeleteErrorDeleteFailed(t *testing.T) {
 	t.Parallel()
 	provisioner, _, _, runner := newProvisionerForTest(t)
 
-	// Mock command runner to return error
+	// First call: List (via Exists) - return cluster name so cluster exists
+	runner.On("Run").Return(cmdrunner.CommandResult{
+		Stdout: "bad\n",
+	}, nil).Once()
+	// Second call: Delete - returns error
 	runner.On("Run").
-		Return(cmdrunner.CommandResult{}, errDeleteClusterFailed)
+		Return(cmdrunner.CommandResult{}, errDeleteClusterFailed).Once()
 
 	err := provisioner.Delete(context.Background(), "bad")
 
 	require.ErrorIs(t, err, errDeleteClusterFailed, "Delete()")
+}
+
+func TestDeleteErrorClusterNotFound(t *testing.T) {
+	t.Parallel()
+	provisioner, _, _, runner := newProvisionerForTest(t)
+
+	// Mock List to return no clusters
+	runner.On("Run").Return(cmdrunner.CommandResult{
+		Stdout: "",
+	}, nil).Once()
+
+	err := provisioner.Delete(context.Background(), "nonexistent")
+
+	require.ErrorIs(t, err, clustererrors.ErrClusterNotFound, "Delete()")
 }
 
 func TestExistsSuccessFalse(t *testing.T) {
@@ -380,7 +439,7 @@ func runClusterNotFoundTest(
 		t.Fatalf("%s() expected error, got nil", actionName)
 	}
 
-	if !errors.Is(err, kindprovisioner.ErrClusterNotFound) {
+	if !errors.Is(err, clustererrors.ErrClusterNotFound) {
 		t.Fatalf("%s() error = %v, want ErrClusterNotFound", actionName, err)
 	}
 }

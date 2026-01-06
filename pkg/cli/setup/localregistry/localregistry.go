@@ -422,6 +422,7 @@ func createServiceHandler(
 }
 
 // runCleanupStage runs a cleanup stage, checking for container existence first.
+// If the container doesn't exist, the stage is silently skipped (no output shown).
 func runCleanupStage(
 	cmd *cobra.Command,
 	deps lifecycle.Deps,
@@ -430,28 +431,42 @@ func runCleanupStage(
 	handler func(context.Context, registry.Service) error,
 	localDeps Dependencies,
 ) error {
-	cleanupHandler := func(ctx context.Context, svc registry.Service) error {
-		// Check if the local registry container exists before attempting cleanup
+	// First, check if the local registry container exists before showing any output
+	var containerExists bool
+
+	checkErr := localDeps.DockerInvoker(cmd, func(dockerClient client.APIClient) error {
+		svc, err := localDeps.ServiceFactory(registry.Config{DockerClient: dockerClient})
+		if err != nil {
+			return fmt.Errorf("create registry service: %w", err)
+		}
+
 		registryName := registry.BuildLocalRegistryName(clusterName)
 
-		status, statusErr := svc.Status(ctx, registry.StatusOptions{Name: registryName})
+		status, statusErr := svc.Status(cmd.Context(), registry.StatusOptions{Name: registryName})
 		if statusErr != nil {
 			return fmt.Errorf("check registry status: %w", statusErr)
 		}
 
-		// If container is not provisioned, nothing to clean up - this is a success case
-		if status.Status == v1alpha1.OCIRegistryStatusNotProvisioned {
-			return nil
-		}
+		// Container exists if status is not "not provisioned"
+		containerExists = status.Status != v1alpha1.OCIRegistryStatusNotProvisioned
 
-		return handler(ctx, svc)
+		return nil
+	})
+	if checkErr != nil {
+		return fmt.Errorf("check registry existence: %w", checkErr)
 	}
 
+	// If container doesn't exist, silently skip the cleanup stage
+	if !containerExists {
+		return nil
+	}
+
+	// Container exists, proceed with cleanup stage (which will show output)
 	return runDockerStage(
 		cmd,
 		deps,
 		info,
-		createServiceHandler(localDeps, cleanupHandler),
+		createServiceHandler(localDeps, handler),
 		localDeps,
 	)
 }

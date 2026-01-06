@@ -2,6 +2,7 @@ package cluster
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
@@ -13,6 +14,7 @@ import (
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
 	"github.com/devantler-tech/ksail/v5/pkg/io/scaffolder"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
+	clustererrors "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/errors"
 	k3dprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/k3d"
 	kindprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/kind"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
@@ -68,6 +70,15 @@ func handleDeleteRunE(
 	// Config is already loaded by WrapLifecycleHandler, so use the cached config
 	clusterCfg := cfgManager.Config
 
+	// Check for test factory override
+	clusterProvisionerFactoryMu.RLock()
+	factoryOverride := clusterProvisionerFactoryOverride
+	clusterProvisionerFactoryMu.RUnlock()
+
+	if factoryOverride != nil {
+		deps.Factory = factoryOverride
+	}
+
 	// Get cluster name respecting the --context flag
 	clusterName, err := lifecycle.GetClusterNameFromConfig(clusterCfg, deps.Factory)
 	if err != nil {
@@ -79,11 +90,12 @@ func handleDeleteRunE(
 		return fmt.Errorf("failed to get delete-volumes flag: %w", flagErr)
 	}
 
-	// For Talos, we must cleanup registries BEFORE deleting the cluster
+	// For Talos, we must cleanup mirror registries BEFORE deleting the cluster
 	// because the registries are connected to the cluster network. If we delete
 	// the cluster first, the network removal fails with "has active endpoints".
+	// Note: Local registry cleanup still happens after cluster deletion for all distributions.
 	if clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionTalos {
-		cleanupRegistries(cmd, cfgManager, clusterCfg, deps, clusterName, deleteVolumes)
+		cleanupMirrorRegistriesWithWarning(cmd, cfgManager, clusterCfg, deps, clusterName, deleteVolumes)
 	}
 
 	// Start a new timer stage for the cluster deletion
@@ -96,21 +108,32 @@ func handleDeleteRunE(
 	// Execute cluster deletion using the already-loaded config
 	err = lifecycle.RunWithConfig(cmd, deps, config, clusterCfg)
 	if err != nil {
-		return fmt.Errorf("cluster deletion failed: %w", err)
+		// Handle "cluster not found" gracefully - deletion is idempotent
+		if errors.Is(err, clustererrors.ErrClusterNotFound) {
+			notify.WriteMessage(notify.Message{
+				Type:    notify.WarningType,
+				Content: "cluster does not exist, nothing to delete",
+				Timer:   helpers.MaybeTimer(cmd, deps.Timer),
+				Writer:  cmd.OutOrStdout(),
+			})
+			// Still cleanup registries as they may exist even if cluster doesn't
+		} else {
+			return fmt.Errorf("cluster deletion failed: %w", err)
+		}
 	}
 
-	// For non-Talos distributions, cleanup registries after cluster deletion
-	if clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionTalos {
-		cleanupRegistries(cmd, cfgManager, clusterCfg, deps, clusterName, deleteVolumes)
-	}
+	// Cleanup registries after cluster deletion for all distributions
+	// For Talos, mirror registries were already cleaned up before deletion,
+	// but local registry cleanup happens here along with other distributions.
+	cleanupRegistries(cmd, cfgManager, clusterCfg, deps, clusterName, deleteVolumes)
 
 	return nil
 }
 
-// cleanupRegistries cleans up mirror and local registries during cluster deletion.
-// For Talos, this must be called BEFORE cluster deletion because registries
-// are connected to the cluster network. For Kind and K3d, it's called after.
-func cleanupRegistries(
+// cleanupMirrorRegistriesWithWarning cleans up only mirror registries (not local registry).
+// This is used for Talos which needs mirror registries cleaned up BEFORE cluster deletion
+// due to network dependencies, while local registry cleanup happens after deletion.
+func cleanupMirrorRegistriesWithWarning(
 	cmd *cobra.Command,
 	cfgManager *ksailconfigmanager.ConfigManager,
 	clusterCfg *v1alpha1.Cluster,
@@ -122,9 +145,33 @@ func cleanupRegistries(
 	if err != nil {
 		notify.WriteMessage(notify.Message{
 			Type:    notify.WarningType,
-			Content: fmt.Sprintf("failed to cleanup registries: %v", err),
+			Content: fmt.Sprintf("failed to cleanup mirror registries: %v", err),
 			Writer:  cmd.OutOrStdout(),
 		})
+	}
+}
+
+// cleanupRegistries cleans up mirror and local registries during cluster deletion.
+// For Talos, mirror registries are cleaned up before deletion (via cleanupMirrorRegistriesWithWarning),
+// but local registry cleanup happens here after deletion along with other distributions.
+func cleanupRegistries(
+	cmd *cobra.Command,
+	cfgManager *ksailconfigmanager.ConfigManager,
+	clusterCfg *v1alpha1.Cluster,
+	deps lifecycle.Deps,
+	clusterName string,
+	deleteVolumes bool,
+) {
+	// Skip mirror registry cleanup for Talos - it's already done before cluster deletion
+	if clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionTalos {
+		err := cleanupMirrorRegistries(cmd, cfgManager, clusterCfg, deps, clusterName, deleteVolumes)
+		if err != nil {
+			notify.WriteMessage(notify.Message{
+				Type:    notify.WarningType,
+				Content: fmt.Sprintf("failed to cleanup registries: %v", err),
+				Writer:  cmd.OutOrStdout(),
+			})
+		}
 	}
 
 	// Always attempt local registry cleanup for Kind/Talos distributions.
@@ -132,7 +179,7 @@ func cleanupRegistries(
 	// This ensures orphaned containers are cleaned up even when config is missing.
 	localDeps := getLocalRegistryDeps()
 
-	err = localregistry.Cleanup(cmd, cfgManager, clusterCfg, deps, deleteVolumes, localDeps)
+	err := localregistry.Cleanup(cmd, cfgManager, clusterCfg, deps, deleteVolumes, localDeps)
 	if err != nil {
 		notify.WriteMessage(notify.Message{
 			Type:    notify.WarningType,

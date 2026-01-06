@@ -17,6 +17,7 @@ import (
 	iopath "github.com/devantler-tech/ksail/v5/pkg/io"
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
 	"github.com/devantler-tech/ksail/v5/pkg/k8s"
+	clustererrors "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/errors"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/client"
@@ -66,8 +67,6 @@ const (
 
 // Common errors for the Talos provisioner.
 var (
-	// ErrClusterNotFound is returned when a cluster is not found.
-	ErrClusterNotFound = errors.New("cluster not found")
 	// ErrDockerNotAvailable is returned when Docker is not available.
 	ErrDockerNotAvailable = errors.New("docker is not available: ensure Docker is running")
 	// ErrClusterAlreadyExists is returned when attempting to create a cluster that already exists.
@@ -462,7 +461,7 @@ func (p *TalosProvisioner) validateClusterOperation(
 	}
 
 	if !exists {
-		return "", fmt.Errorf("%w: %s", ErrClusterNotFound, clusterName)
+		return "", fmt.Errorf("%w: %s", clustererrors.ErrClusterNotFound, clusterName)
 	}
 
 	return clusterName, nil
