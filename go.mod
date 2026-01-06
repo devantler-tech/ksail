@@ -21,6 +21,7 @@ require (
 	github.com/k3d-io/k3d/v5 v5.8.3
 	github.com/mitchellh/go-wordwrap v1.0.1
 	github.com/opencontainers/image-spec v1.1.1
+	github.com/opencontainers/runc v1.2.8 // indirect; CVE-2025-27612, CVE-2025-21613, CVE-2025-21613 fix
 	github.com/samber/do/v2 v2.0.0
 	github.com/siderolabs/talos v1.11.6
 	github.com/siderolabs/talos/pkg/machinery v1.12.1

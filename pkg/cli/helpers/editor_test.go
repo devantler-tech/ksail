@@ -49,120 +49,91 @@ func TestNewEditorResolver(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			resolver := helpers.NewEditorResolver(tt.flagEditor, tt.cfg)
+			resolver := helpers.NewEditorResolver(testCase.flagEditor, testCase.cfg)
 			assert.NotNil(t, resolver)
 		})
 	}
 }
 
 func TestEditorResolver_Resolve(t *testing.T) {
-	// Not parallel due to environment variable manipulation
-	tests := []struct {
-		name       string
-		flagEditor string
-		cfg        *v1alpha1.Cluster
-		envVars    map[string]string
-		want       string
-	}{
-		{
-			name:       "flag takes priority over config",
-			flagEditor: "code",
-			cfg: &v1alpha1.Cluster{
-				Spec: v1alpha1.Spec{
-					Editor: "vim",
-				},
-			},
-			want: "code",
-		},
-		{
-			name:       "config takes priority over env",
-			flagEditor: "",
-			cfg: &v1alpha1.Cluster{
-				Spec: v1alpha1.Spec{
-					Editor: "vim",
-				},
-			},
-			envVars: map[string]string{"EDITOR": "nano"},
-			want:    "vim",
-		},
-		{
-			name:       "SOPS_EDITOR takes priority over KUBE_EDITOR",
-			flagEditor: "",
-			cfg:        nil,
-			envVars: map[string]string{
-				"SOPS_EDITOR": "sops-editor",
-				"KUBE_EDITOR": "kube-editor",
-			},
-			want: "sops-editor",
-		},
-		{
-			name:       "KUBE_EDITOR takes priority over EDITOR",
-			flagEditor: "",
-			cfg:        nil,
-			envVars: map[string]string{
-				"KUBE_EDITOR": "kube-editor",
-				"EDITOR":      "default-editor",
-			},
-			want: "kube-editor",
-		},
-		{
-			name:       "EDITOR takes priority over VISUAL",
-			flagEditor: "",
-			cfg:        nil,
-			envVars: map[string]string{
-				"EDITOR": "default-editor",
-				"VISUAL": "visual-editor",
-			},
-			want: "default-editor",
-		},
-		{
-			name:       "VISUAL is used when no other env vars",
-			flagEditor: "",
-			cfg:        nil,
-			envVars: map[string]string{
-				"VISUAL": "visual-editor",
-			},
-			want: "visual-editor",
-		},
-	}
+	// Not parallel because subtests use t.Setenv
+	t.Run("flag takes priority over config", func(t *testing.T) {
+		t.Setenv("EDITOR", "")
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Clear all editor environment variables first
-			envsToClear := []string{"SOPS_EDITOR", "KUBE_EDITOR", "EDITOR", "VISUAL"}
-			origEnvs := make(map[string]string)
-
-			for _, env := range envsToClear {
-				origEnvs[env] = os.Getenv(env)
-				_ = os.Unsetenv(env)
-			}
-
-			// Set test-specific env vars
-			for k, v := range tt.envVars {
-				t.Setenv(k, v)
-			}
-
-			resolver := helpers.NewEditorResolver(tt.flagEditor, tt.cfg)
-			got := resolver.Resolve()
-
-			// Restore original env vars
-			for env, val := range origEnvs {
-				if val != "" {
-					_ = os.Setenv(env, val)
-				}
-			}
-
-			assert.Equal(t, tt.want, got)
+		resolver := helpers.NewEditorResolver("code", &v1alpha1.Cluster{
+			Spec: v1alpha1.Spec{Editor: "vim"},
 		})
-	}
+		assert.Equal(t, "code", resolver.Resolve())
+	})
+
+	t.Run("config takes priority over env", func(t *testing.T) {
+		t.Setenv("EDITOR", "nano")
+
+		resolver := helpers.NewEditorResolver("", &v1alpha1.Cluster{
+			Spec: v1alpha1.Spec{Editor: "vim"},
+		})
+		assert.Equal(t, "vim", resolver.Resolve())
+	})
+}
+
+func TestEditorResolver_Resolve_EnvPriority(t *testing.T) {
+	// Not parallel because subtests use t.Setenv
+	envsToClear := []string{"SOPS_EDITOR", "KUBE_EDITOR", "EDITOR", "VISUAL"}
+
+	t.Run("SOPS_EDITOR takes priority over KUBE_EDITOR", func(t *testing.T) {
+		for _, env := range envsToClear {
+			t.Setenv(env, "")
+		}
+
+		t.Setenv("SOPS_EDITOR", "sops-editor")
+		t.Setenv("KUBE_EDITOR", "kube-editor")
+
+		resolver := helpers.NewEditorResolver("", nil)
+		assert.Equal(t, "sops-editor", resolver.Resolve())
+	})
+
+	t.Run("KUBE_EDITOR takes priority over EDITOR", func(t *testing.T) {
+		for _, env := range envsToClear {
+			t.Setenv(env, "")
+		}
+
+		t.Setenv("KUBE_EDITOR", "kube-editor")
+		t.Setenv("EDITOR", "default-editor")
+
+		resolver := helpers.NewEditorResolver("", nil)
+		assert.Equal(t, "kube-editor", resolver.Resolve())
+	})
+
+	t.Run("EDITOR takes priority over VISUAL", func(t *testing.T) {
+		for _, env := range envsToClear {
+			t.Setenv(env, "")
+		}
+
+		t.Setenv("EDITOR", "default-editor")
+		t.Setenv("VISUAL", "visual-editor")
+
+		resolver := helpers.NewEditorResolver("", nil)
+		assert.Equal(t, "default-editor", resolver.Resolve())
+	})
+
+	t.Run("VISUAL is used when no other env vars", func(t *testing.T) {
+		for _, env := range envsToClear {
+			t.Setenv(env, "")
+		}
+
+		t.Setenv("VISUAL", "visual-editor")
+
+		resolver := helpers.NewEditorResolver("", nil)
+		assert.Equal(t, "visual-editor", resolver.Resolve())
+	})
 }
 
 func TestEditorResolver_SetEnvVars(t *testing.T) {
-	// Not parallel due to environment variable manipulation
+	// Not parallel because subtests use t.Setenv
 	tests := []struct {
 		name       string
 		editorCmd  string
@@ -195,41 +166,35 @@ func TestEditorResolver_SetEnvVars(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			// Not parallel because t.Setenv is used
+
 			// Clear all editor environment variables first
 			envsToClear := []string{"SOPS_EDITOR", "KUBE_EDITOR", "EDITOR", "VISUAL"}
-			origEnvs := make(map[string]string)
-
 			for _, env := range envsToClear {
-				origEnvs[env] = os.Getenv(env)
-				_ = os.Unsetenv(env)
+				t.Setenv(env, "")
 			}
 
 			resolver := helpers.NewEditorResolver("", nil)
-			cleanup := resolver.SetEnvVars(tt.editorCmd, tt.forCommand)
+			cleanup := resolver.SetEnvVars(testCase.editorCmd, testCase.forCommand)
 
 			// Check that expected env vars are set
-			if tt.editorCmd != "" && tt.checkEnvs != nil {
-				for _, env := range tt.checkEnvs {
-					assert.Equal(t, tt.editorCmd, os.Getenv(env), "env %s should be set", env)
+			if testCase.editorCmd != "" && testCase.checkEnvs != nil {
+				for _, env := range testCase.checkEnvs {
+					assert.Equal(t, testCase.editorCmd, os.Getenv(env), "env %s should be set", env)
 				}
 			}
 
 			// Call cleanup and verify env vars are restored
 			cleanup()
-
-			// Restore original env vars
-			for env, val := range origEnvs {
-				if val != "" {
-					_ = os.Setenv(env, val)
-				}
-			}
 		})
 	}
 }
 
 func TestEditorResolver_SetEnvVars_RestoresOriginal(t *testing.T) {
+	// Not parallel because it uses t.Setenv which is incompatible with t.Parallel()
+
 	// Set original values
 	originalEditor := "original-editor"
 	t.Setenv("EDITOR", originalEditor)
@@ -248,12 +213,12 @@ func TestEditorResolver_SetEnvVars_RestoresOriginal(t *testing.T) {
 }
 
 func TestEditorResolver_Resolve_FallbackSnapshot(t *testing.T) {
-	// Not parallel due to environment variable manipulation
+	t.Parallel() // Safe with t.Setenv as it handles cleanup automatically
+
 	// Clear all editor environment variables
 	envsToClear := []string{"SOPS_EDITOR", "KUBE_EDITOR", "EDITOR", "VISUAL"}
 	for _, env := range envsToClear {
 		t.Setenv(env, "")
-		_ = os.Unsetenv(env)
 	}
 
 	resolver := helpers.NewEditorResolver("", nil)

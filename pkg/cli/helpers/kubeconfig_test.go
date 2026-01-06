@@ -30,83 +30,72 @@ func TestGetDefaultKubeconfigPath(t *testing.T) {
 	snaps.MatchSnapshot(t, relativePath)
 }
 
-func TestGetKubeconfigPathFromConfig(t *testing.T) {
+func TestGetKubeconfigPathFromConfig_SpecifiedPath(t *testing.T) {
+	t.Parallel()
+
+	cfg := &v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				Connection: v1alpha1.Connection{
+					Kubeconfig: "/custom/kubeconfig",
+				},
+			},
+		},
+	}
+
+	got, err := helpers.GetKubeconfigPathFromConfig(cfg)
+	require.NoError(t, err)
+	assert.Equal(t, "/custom/kubeconfig", got)
+}
+
+func TestGetKubeconfigPathFromConfig_TildeExpansion(t *testing.T) {
 	t.Parallel()
 
 	homeDir, err := os.UserHomeDir()
 	require.NoError(t, err)
 
-	tests := []struct {
-		name    string
-		cfg     *v1alpha1.Cluster
-		wantErr bool
-	}{
-		{
-			name: "returns config path when specified",
-			cfg: &v1alpha1.Cluster{
-				Spec: v1alpha1.Spec{
-					Cluster: v1alpha1.ClusterSpec{
-						Connection: v1alpha1.Connection{
-							Kubeconfig: "/custom/kubeconfig",
-						},
-					},
-				},
-			},
-		},
-		{
-			name: "expands tilde in config path",
-			cfg: &v1alpha1.Cluster{
-				Spec: v1alpha1.Spec{
-					Cluster: v1alpha1.ClusterSpec{
-						Connection: v1alpha1.Connection{
-							Kubeconfig: "~/.kube/my-config",
-						},
-					},
-				},
-			},
-		},
-		{
-			name: "returns default when config path is empty",
-			cfg: &v1alpha1.Cluster{
-				Spec: v1alpha1.Spec{
-					Cluster: v1alpha1.ClusterSpec{
-						Connection: v1alpha1.Connection{
-							Kubeconfig: "",
-						},
-					},
+	cfg := &v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				Connection: v1alpha1.Connection{
+					Kubeconfig: "~/.kube/my-config",
 				},
 			},
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
+	got, err := helpers.GetKubeconfigPathFromConfig(cfg)
+	require.NoError(t, err)
+	assert.NotContains(t, got, "~")
+	assert.True(t, filepath.IsAbs(got))
 
-			got, err := helpers.GetKubeconfigPathFromConfig(tt.cfg)
+	snapshotPath := "HOME" + got[len(homeDir):]
+	snaps.MatchSnapshot(t, snapshotPath)
+}
 
-			if tt.wantErr {
-				require.Error(t, err)
+func TestGetKubeconfigPathFromConfig_EmptyReturnsDefault(t *testing.T) {
+	t.Parallel()
 
-				return
-			}
+	homeDir, err := os.UserHomeDir()
+	require.NoError(t, err)
 
-			require.NoError(t, err)
-			assert.NotEmpty(t, got)
-			assert.True(t, filepath.IsAbs(got), "path should be absolute")
-
-			// Verify tilde is expanded
-			assert.NotContains(t, got, "~")
-
-			// Snapshot with home directory replaced
-			snapshotPath := got
-			if len(got) > len(homeDir) && got[:len(homeDir)] == homeDir {
-				snapshotPath = "HOME" + got[len(homeDir):]
-			}
-
-			snaps.MatchSnapshot(t, snapshotPath)
-		})
+	cfg := &v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				Connection: v1alpha1.Connection{
+					Kubeconfig: "",
+				},
+			},
+		},
 	}
+
+	got, err := helpers.GetKubeconfigPathFromConfig(cfg)
+	require.NoError(t, err)
+	assert.NotEmpty(t, got)
+	assert.True(t, filepath.IsAbs(got))
+
+	snapshotPath := "HOME" + got[len(homeDir):]
+	snaps.MatchSnapshot(t, snapshotPath)
 }
 
 func TestGetKubeconfigPathSilently(t *testing.T) {

@@ -12,6 +12,8 @@ import (
 
 // TestNewBaseWithClient tests that NewBaseWithClient creates a Base with the provided client.
 func TestNewBaseWithClient(t *testing.T) {
+	t.Parallel()
+
 	scheme := runtime.NewScheme()
 	fakeClient := fake.NewSimpleDynamicClient(scheme)
 
@@ -24,6 +26,8 @@ func TestNewBaseWithClient(t *testing.T) {
 
 // TestNewBaseWithClient_NilClient tests that NewBaseWithClient handles nil client gracefully.
 func TestNewBaseWithClient_NilClient(t *testing.T) {
+	t.Parallel()
+
 	base := reconciler.NewBaseWithClient(nil)
 
 	require.NotNil(t, base)
@@ -32,6 +36,8 @@ func TestNewBaseWithClient_NilClient(t *testing.T) {
 
 // TestNewBase_InvalidPath tests NewBase with an invalid kubeconfig path.
 func TestNewBase_InvalidPath(t *testing.T) {
+	t.Parallel()
+
 	_, err := reconciler.NewBase("/nonexistent/path/to/kubeconfig")
 
 	require.Error(t, err)
@@ -47,6 +53,8 @@ type SampleReconciler struct {
 
 // TestNewWithClient tests the generic NewWithClient function.
 func TestNewWithClient(t *testing.T) {
+	t.Parallel()
+
 	scheme := runtime.NewScheme()
 	fakeClient := fake.NewSimpleDynamicClient(scheme)
 
@@ -66,6 +74,8 @@ func TestNewWithClient(t *testing.T) {
 
 // TestNewWithClient_DifferentTypes tests NewWithClient with different custom types.
 func TestNewWithClient_DifferentTypes(t *testing.T) {
+	t.Parallel()
+
 	scheme := runtime.NewScheme()
 	fakeClient := fake.NewSimpleDynamicClient(scheme)
 
@@ -90,6 +100,8 @@ func TestNewWithClient_DifferentTypes(t *testing.T) {
 
 // TestNew_InvalidKubeconfig tests New with an invalid kubeconfig path.
 func TestNew_InvalidKubeconfig(t *testing.T) {
+	t.Parallel()
+
 	constructor := func(base *reconciler.Base) *SampleReconciler {
 		return &SampleReconciler{Base: base, Name: "test"}
 	}
@@ -103,6 +115,8 @@ func TestNew_InvalidKubeconfig(t *testing.T) {
 
 // TestBaseStruct tests that Base struct fields are properly accessible.
 func TestBaseStruct(t *testing.T) {
+	t.Parallel()
+
 	scheme := runtime.NewScheme()
 	fakeClient := fake.NewSimpleDynamicClient(scheme)
 

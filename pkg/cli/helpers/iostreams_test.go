@@ -6,6 +6,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNewStandardIOStreams(t *testing.T) {
@@ -32,14 +33,20 @@ func TestNewStandardIOStreams_StreamsAreWritable(t *testing.T) {
 	var outBuf bytes.Buffer
 
 	_, err := outBuf.WriteString("test")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// streams.Out is io.Writer
-	assert.Implements(t, (*interface{ Write([]byte) (int, error) })(nil), streams.Out)
+	assert.Implements(t, (*interface {
+		Write(data []byte) (int, error)
+	})(nil), streams.Out)
 
 	// streams.ErrOut is io.Writer
-	assert.Implements(t, (*interface{ Write([]byte) (int, error) })(nil), streams.ErrOut)
+	assert.Implements(t, (*interface {
+		Write(data []byte) (int, error)
+	})(nil), streams.ErrOut)
 
 	// streams.In is io.Reader
-	assert.Implements(t, (*interface{ Read([]byte) (int, error) })(nil), streams.In)
+	assert.Implements(t, (*interface {
+		Read(data []byte) (int, error)
+	})(nil), streams.In)
 }

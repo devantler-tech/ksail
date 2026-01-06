@@ -11,6 +11,8 @@ import (
 
 // TestCreateMinimalProvisioner_Kind tests creation of a minimal Kind provisioner.
 func TestCreateMinimalProvisioner_Kind(t *testing.T) {
+	t.Parallel()
+
 	provisioner, err := lifecycle.CreateMinimalProvisioner(
 		v1alpha1.DistributionKind,
 		"test-cluster",
@@ -22,6 +24,8 @@ func TestCreateMinimalProvisioner_Kind(t *testing.T) {
 
 // TestCreateMinimalProvisioner_K3d tests creation of a minimal K3d provisioner.
 func TestCreateMinimalProvisioner_K3d(t *testing.T) {
+	t.Parallel()
+
 	provisioner, err := lifecycle.CreateMinimalProvisioner(v1alpha1.DistributionK3d, "dev-cluster")
 
 	require.NoError(t, err)
@@ -30,6 +34,8 @@ func TestCreateMinimalProvisioner_K3d(t *testing.T) {
 
 // TestCreateMinimalProvisioner_Talos tests creation of a minimal Talos provisioner.
 func TestCreateMinimalProvisioner_Talos(t *testing.T) {
+	t.Parallel()
+
 	provisioner, err := lifecycle.CreateMinimalProvisioner(
 		v1alpha1.DistributionTalos,
 		"prod-cluster",
@@ -41,6 +47,8 @@ func TestCreateMinimalProvisioner_Talos(t *testing.T) {
 
 // TestCreateMinimalProvisioner_UnsupportedDistribution tests handling of unsupported distributions.
 func TestCreateMinimalProvisioner_UnsupportedDistribution(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name         string
 		distribution v1alpha1.Distribution
@@ -50,9 +58,11 @@ func TestCreateMinimalProvisioner_UnsupportedDistribution(t *testing.T) {
 		{name: "invalid_distribution", distribution: "invalid"},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			provisioner, err := lifecycle.CreateMinimalProvisioner(tt.distribution, "cluster")
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			provisioner, err := lifecycle.CreateMinimalProvisioner(testCase.distribution, "cluster")
 
 			require.Error(t, err)
 			assert.Nil(t, provisioner)
@@ -63,6 +73,8 @@ func TestCreateMinimalProvisioner_UnsupportedDistribution(t *testing.T) {
 
 // TestCreateMinimalProvisioner_ClusterNames tests that cluster names are correctly passed through.
 func TestCreateMinimalProvisioner_ClusterNames(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name        string
 		clusterName string
@@ -72,11 +84,13 @@ func TestCreateMinimalProvisioner_ClusterNames(t *testing.T) {
 		{name: "numeric_suffix", clusterName: "cluster-123"},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
 			provisioner, err := lifecycle.CreateMinimalProvisioner(
 				v1alpha1.DistributionKind,
-				tt.clusterName,
+				testCase.clusterName,
 			)
 
 			require.NoError(t, err)
