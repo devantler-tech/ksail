@@ -11,7 +11,7 @@ require (
 	github.com/fatih/color v1.18.0
 	github.com/fluxcd/helm-controller/api v1.4.5
 	github.com/fluxcd/kustomize-controller/api v1.7.3
-	github.com/fluxcd/pkg/apis/meta v1.23.0
+	github.com/fluxcd/pkg/apis/meta v1.24.0
 	github.com/fluxcd/source-controller/api v1.7.4
 	github.com/getsops/sops/v3 v3.11.0
 	github.com/gkampitakis/go-snaps v0.5.19
