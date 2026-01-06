@@ -48,9 +48,13 @@ ksail cluster init --csi LocalPathStorage
 
 ### Metrics Server
 
-[Metrics Server](https://github.com/kubernetes-sigs/metrics-server) aggregates CPU and memory usage. **Enabled by default.**
+[Metrics Server](https://github.com/kubernetes-sigs/metrics-server) aggregates CPU and memory usage.
 
 Configure via `spec.cluster.metricsServer` or `--metrics-server` flag.
+
+- **`Default`** (default) – Uses distribution's default behavior (K3d includes metrics-server; Kind and Talos do not)
+- **`Enabled`** – Install metrics-server
+- **`Disabled`** – Skip installation
 
 **Enable for:** HPA testing, dashboards with resource usage, CPU/memory-based alerts
 **Disable for:** Minimal resource usage, simple testing
