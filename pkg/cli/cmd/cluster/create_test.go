@@ -1,9 +1,11 @@
 package cluster_test
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
@@ -12,7 +14,6 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/svc/installer"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
 	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
 	"github.com/docker/docker/client"
 	"github.com/gkampitakis/go-snaps/snaps"
@@ -143,6 +144,12 @@ func newTestRuntimeContainer(t *testing.T) *runtime.Runtime {
 	)
 }
 
+// trimTrailingNewline removes a single trailing newline from snapshot output.
+// This produces cleaner snapshot comparisons.
+func trimTrailingNewline(s string) string {
+	return strings.TrimSuffix(s, "\n")
+}
+
 //nolint:paralleltest // uses t.Chdir and mutates shared test hooks
 func TestCreate_EnabledCertManager_PrintsInstallStage(t *testing.T) {
 	workingDir := t.TempDir()
@@ -166,9 +173,9 @@ func TestCreate_EnabledCertManager_PrintsInstallStage(t *testing.T) {
 
 	cmd := clusterpkg.NewCreateCmd(testRuntime)
 
-	out := notify.NewDeferredNewlineWriter(nil)
-	cmd.SetOut(out)
-	cmd.SetErr(out)
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
 	cmd.SetContext(context.Background())
 	cmd.SetArgs([]string{"--cert-manager", "Enabled"})
 
@@ -182,7 +189,7 @@ func TestCreate_EnabledCertManager_PrintsInstallStage(t *testing.T) {
 	}
 
 	// Normalize timing variance: keep --timing disabled in this test.
-	snaps.MatchSnapshot(t, out.String())
+	snaps.MatchSnapshot(t, trimTrailingNewline(out.String()))
 }
 
 //nolint:paralleltest // uses t.Chdir and mutates shared test hooks
@@ -208,9 +215,9 @@ func TestCreate_DefaultCertManager_DoesNotInstall(t *testing.T) {
 
 	cmd := clusterpkg.NewCreateCmd(newTestRuntimeContainer(t))
 
-	out := notify.NewDeferredNewlineWriter(nil)
-	cmd.SetOut(out)
-	cmd.SetErr(out)
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
 	cmd.SetContext(context.Background())
 
 	err := cmd.Execute()
@@ -222,7 +229,7 @@ func TestCreate_DefaultCertManager_DoesNotInstall(t *testing.T) {
 		t.Fatalf("expected cert-manager installer factory not to be invoked")
 	}
 
-	snaps.MatchSnapshot(t, out.String())
+	snaps.MatchSnapshot(t, trimTrailingNewline(out.String()))
 }
 
 //nolint:nlreturn // keep inline returns in short closures for function length
@@ -308,9 +315,9 @@ func TestCreate_GitOps_PrintsInstallStage(t *testing.T) {
 
 			cmd := clusterpkg.NewCreateCmd(testRuntime)
 
-			out := notify.NewDeferredNewlineWriter(nil)
-			cmd.SetOut(out)
-			cmd.SetErr(out)
+			var out bytes.Buffer
+			cmd.SetOut(&out)
+			cmd.SetErr(&out)
 			cmd.SetContext(context.Background())
 			cmd.SetArgs([]string{"--gitops-engine", testCase.arg})
 
@@ -327,7 +334,7 @@ func TestCreate_GitOps_PrintsInstallStage(t *testing.T) {
 				t.Fatalf("expected %s installer to be invoked", testCase.name)
 			}
 
-			snaps.MatchSnapshot(t, out.String())
+			snaps.MatchSnapshot(t, trimTrailingNewline(out.String()))
 		})
 	}
 }
@@ -377,9 +384,9 @@ spec:
 
 	cmd := clusterpkg.NewCreateCmd(newTestRuntimeContainer(t))
 
-	out := notify.NewDeferredNewlineWriter(nil)
-	cmd.SetOut(out)
-	cmd.SetErr(out)
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
 	cmd.SetContext(context.Background())
 
 	err := cmd.Execute()
@@ -391,7 +398,7 @@ spec:
 		t.Fatalf("expected CSI installer to be invoked")
 	}
 
-	snaps.MatchSnapshot(t, out.String())
+	snaps.MatchSnapshot(t, trimTrailingNewline(out.String()))
 }
 
 //nolint:paralleltest // uses t.Chdir and mutates shared test hooks
@@ -406,9 +413,9 @@ func TestCreate_DefaultCSI_DoesNotInstall(t *testing.T) {
 
 	cmd := clusterpkg.NewCreateCmd(newTestRuntimeContainer(t))
 
-	out := notify.NewDeferredNewlineWriter(nil)
-	cmd.SetOut(out)
-	cmd.SetErr(out)
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
 	cmd.SetContext(context.Background())
 
 	err := cmd.Execute()
@@ -416,7 +423,7 @@ func TestCreate_DefaultCSI_DoesNotInstall(t *testing.T) {
 		t.Fatalf("create command failed: %v\noutput:\n%s", err, out.String())
 	}
 
-	snaps.MatchSnapshot(t, out.String())
+	snaps.MatchSnapshot(t, trimTrailingNewline(out.String()))
 }
 
 // TestCreate_Minimal_PrintsOnlyClusterLifecycle tests cluster creation with no extras.
@@ -442,9 +449,9 @@ func TestCreate_Minimal_PrintsOnlyClusterLifecycle(t *testing.T) {
 
 	cmd := clusterpkg.NewCreateCmd(newTestRuntimeContainer(t))
 
-	out := notify.NewDeferredNewlineWriter(nil)
-	cmd.SetOut(out)
-	cmd.SetErr(out)
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
 	cmd.SetContext(context.Background())
 
 	err := cmd.Execute()
@@ -452,7 +459,7 @@ func TestCreate_Minimal_PrintsOnlyClusterLifecycle(t *testing.T) {
 		t.Fatalf("create command failed: %v\noutput:\n%s", err, out.String())
 	}
 
-	snaps.MatchSnapshot(t, out.String())
+	snaps.MatchSnapshot(t, trimTrailingNewline(out.String()))
 }
 
 // TestCreate_LocalRegistryDisabled_SkipsRegistryStages tests cluster creation with local registry disabled.
@@ -493,9 +500,9 @@ spec:
 
 	cmd := clusterpkg.NewCreateCmd(newTestRuntimeContainer(t))
 
-	out := notify.NewDeferredNewlineWriter(nil)
-	cmd.SetOut(out)
-	cmd.SetErr(out)
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
 	cmd.SetContext(context.Background())
 
 	err := cmd.Execute()
@@ -503,7 +510,7 @@ spec:
 		t.Fatalf("create command failed: %v\noutput:\n%s", err, out.String())
 	}
 
-	snaps.MatchSnapshot(t, out.String())
+	snaps.MatchSnapshot(t, trimTrailingNewline(out.String()))
 }
 
 // Ensure fake types satisfy interfaces at compile time.
