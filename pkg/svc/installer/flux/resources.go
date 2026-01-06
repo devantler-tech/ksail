@@ -452,6 +452,14 @@ func isTransientAPIError(err error) bool {
 		return true
 	}
 
+	// Check for conflict errors (optimistic concurrency conflicts).
+	// This occurs when the resource was modified between Get and Update.
+	// Common in slow CI environments where Flux operators may reconcile
+	// resources concurrently with ksail's updates.
+	if apierrors.IsConflict(err) {
+		return true
+	}
+
 	// String-based checks for errors that aren't properly typed
 	errMsg := err.Error()
 
