@@ -112,6 +112,8 @@ If not specified, KSail falls back to standard editor environment variables (`SO
 | `calico`               | object     | –           | Calico CNI options                          |
 | `flux`                 | object     | –           | Flux GitOps options                         |
 | `argocd`               | object     | –           | ArgoCD GitOps options                       |
+| `helm`                 | object     | –           | Helm tool options (reserved)                |
+| `kustomize`            | object     | –           | Kustomize tool options (reserved)           |
 
 #### distribution
 
