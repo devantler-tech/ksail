@@ -1,0 +1,29 @@
+
+[TestCobraCommandRunner_DefaultsToOsStdout - 1]
+test
+
+---
+
+[TestCobraCommandRunner_RunPropagatesStdout - 1]
+hello world
+
+---
+
+[TestCobraCommandRunner_RunPropagatesStdout - 2]
+hello world
+
+---
+
+[TestCobraCommandRunner_RunReturnsError - 1]
+command execution failed: boom
+---
+
+[TestCobraCommandRunner_RunReturnsError - 2]
+info output
+
+---
+
+[TestCobraCommandRunner_RunReturnsError - 3]
+stderr detail
+
+---

@@ -1,0 +1,46 @@
+
+[TestProgressGroup_DefaultLabels - 1]
+► Processing...
+► task-1 running
+✔ task-1 completed
+
+---
+
+[TestProgressGroup_MultipleTasksSuccess - 1]
+📦 Installing...
+► component-b installing
+► component-a installing
+✔ component-a installed
+✔ component-b installed
+
+---
+
+[TestProgressGroup_PartialFailure - 1]
+📦 Installing...
+► bad-component running
+✗ bad-component failed
+► good-component running
+✔ good-component completed
+
+---
+
+[TestProgressGroup_SingleTaskFailure - 1]
+📦 Installing...
+► failing-component running
+✗ failing-component failed
+
+---
+
+[TestProgressGroup_SingleTaskSuccess - 1]
+📦 Installing...
+► test-component installing
+✔ test-component installed
+
+---
+
+[TestProgressGroup_ValidatingLabels - 1]
+✅ Validating...
+► schema validating
+✔ schema validated
+
+---

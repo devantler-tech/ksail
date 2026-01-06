@@ -4,12 +4,27 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
+	"github.com/gkampitakis/go-snaps/snaps"
 )
+
+func TestMain(m *testing.M) {
+	exitCode := m.Run()
+
+	_, err := snaps.Clean(m, snaps.CleanOpts{Sort: true})
+	if err != nil {
+		_, _ = os.Stderr.WriteString("failed to clean snapshots: " + err.Error() + "\n")
+
+		os.Exit(1)
+	}
+
+	os.Exit(exitCode)
+}
 
 // Static errors for testing.
 var (
@@ -60,14 +75,7 @@ func TestProgressGroup_SingleTaskSuccess(t *testing.T) {
 		t.Errorf("expected no error, got: %v", err)
 	}
 
-	output := buf.String()
-	if !strings.Contains(output, "test-component") {
-		t.Errorf("expected output to contain 'test-component', got: %q", output)
-	}
-
-	if !strings.Contains(output, "installed") {
-		t.Errorf("expected output to contain 'installed', got: %q", output)
-	}
+	snaps.MatchSnapshot(t, buf.String())
 }
 
 func TestProgressGroup_SingleTaskFailure(t *testing.T) {
@@ -91,14 +99,7 @@ func TestProgressGroup_SingleTaskFailure(t *testing.T) {
 		t.Error("expected error, got nil")
 	}
 
-	if !strings.Contains(err.Error(), "failing-component") {
-		t.Errorf("expected error to contain task name, got: %v", err)
-	}
-
-	output := buf.String()
-	if !strings.Contains(output, "failed") {
-		t.Errorf("expected output to contain 'failed', got: %q", output)
-	}
+	snaps.MatchSnapshot(t, buf.String())
 }
 
 func TestProgressGroup_MultipleTasksSuccess(t *testing.T) {
@@ -137,18 +138,7 @@ func TestProgressGroup_MultipleTasksSuccess(t *testing.T) {
 		t.Errorf("expected no error, got: %v", err)
 	}
 
-	output := buf.String()
-	if !strings.Contains(output, "component-a") {
-		t.Errorf("expected output to contain 'component-a', got: %q", output)
-	}
-
-	if !strings.Contains(output, "component-b") {
-		t.Errorf("expected output to contain 'component-b', got: %q", output)
-	}
-
-	if !strings.Contains(output, "installed") {
-		t.Errorf("expected output to contain 'installed', got: %q", output)
-	}
+	snaps.MatchSnapshot(t, buf.String())
 }
 
 func TestProgressGroup_PartialFailure(t *testing.T) {
@@ -178,9 +168,7 @@ func TestProgressGroup_PartialFailure(t *testing.T) {
 		t.Error("expected error, got nil")
 	}
 
-	if !strings.Contains(err.Error(), "bad-component") {
-		t.Errorf("expected error to contain 'bad-component', got: %v", err)
-	}
+	snaps.MatchSnapshot(t, buf.String())
 }
 
 func TestProgressGroup_ContextCancellation(t *testing.T) {
@@ -257,10 +245,7 @@ func TestProgressGroup_DefaultLabels(t *testing.T) {
 		t.Errorf("expected no error, got: %v", err)
 	}
 
-	output := buf.String()
-	if !strings.Contains(output, "completed") {
-		t.Errorf("expected output to contain 'completed' (default label), got: %q", output)
-	}
+	snaps.MatchSnapshot(t, buf.String())
 }
 
 func TestProgressGroup_ValidatingLabels(t *testing.T) {
@@ -289,8 +274,5 @@ func TestProgressGroup_ValidatingLabels(t *testing.T) {
 		t.Errorf("expected no error, got: %v", err)
 	}
 
-	output := buf.String()
-	if !strings.Contains(output, "validated") {
-		t.Errorf("expected output to contain 'validated', got: %q", output)
-	}
+	snaps.MatchSnapshot(t, buf.String())
 }

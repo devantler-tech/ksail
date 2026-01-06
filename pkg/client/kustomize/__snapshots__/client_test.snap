@@ -1,0 +1,59 @@
+
+[TestBuild_ComplexKustomization - 1]
+apiVersion: v1
+kind: Namespace
+metadata:
+  labels:
+    environment: test
+  name: test-namespace
+/-/-/-/
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    environment: test
+  name: test-deployment
+  namespace: test-namespace
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: test
+      environment: test
+  template:
+    metadata:
+      labels:
+        app: test
+        environment: test
+    spec:
+      containers:
+      - image: nginx:latest
+        name: test
+
+---
+
+[TestBuild_OutputIsValidYAML - 1]
+apiVersion: v1
+kind: Service
+metadata:
+  name: test-service
+  namespace: default
+spec:
+  ports:
+  - port: 80
+    targetPort: 8080
+  selector:
+    app: test
+
+---
+
+[TestBuild_ValidKustomization - 1]
+apiVersion: v1
+data:
+  key: value
+kind: ConfigMap
+metadata:
+  name: test-config
+  namespace: default
+
+---

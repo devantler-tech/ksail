@@ -1,7 +1,6 @@
 package cluster_test
 
 import (
-	"bytes"
 	"context"
 	"os"
 	"path/filepath"
@@ -13,6 +12,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/svc/installer"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
+	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
 	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
 	"github.com/docker/docker/client"
 	"github.com/gkampitakis/go-snaps/snaps"
@@ -166,15 +166,15 @@ func TestCreate_EnabledCertManager_PrintsInstallStage(t *testing.T) {
 
 	cmd := clusterpkg.NewCreateCmd(testRuntime)
 
-	var buf bytes.Buffer
-	cmd.SetOut(&buf)
-	cmd.SetErr(&buf)
+	out := notify.NewDeferredNewlineWriter(nil)
+	cmd.SetOut(out)
+	cmd.SetErr(out)
 	cmd.SetContext(context.Background())
 	cmd.SetArgs([]string{"--cert-manager", "Enabled"})
 
 	err := cmd.Execute()
 	if err != nil {
-		t.Fatalf("create command failed: %v\noutput:\n%s", err, buf.String())
+		t.Fatalf("create command failed: %v\noutput:\n%s", err, out.String())
 	}
 
 	if !fake.called {
@@ -182,7 +182,7 @@ func TestCreate_EnabledCertManager_PrintsInstallStage(t *testing.T) {
 	}
 
 	// Normalize timing variance: keep --timing disabled in this test.
-	snaps.MatchSnapshot(t, buf.String())
+	snaps.MatchSnapshot(t, out.String())
 }
 
 //nolint:paralleltest // uses t.Chdir and mutates shared test hooks
@@ -208,24 +208,28 @@ func TestCreate_DefaultCertManager_DoesNotInstall(t *testing.T) {
 
 	cmd := clusterpkg.NewCreateCmd(newTestRuntimeContainer(t))
 
-	var buf bytes.Buffer
-	cmd.SetOut(&buf)
-	cmd.SetErr(&buf)
+	out := notify.NewDeferredNewlineWriter(nil)
+	cmd.SetOut(out)
+	cmd.SetErr(out)
 	cmd.SetContext(context.Background())
 
 	err := cmd.Execute()
 	if err != nil {
-		t.Fatalf("create command failed: %v\noutput:\n%s", err, buf.String())
+		t.Fatalf("create command failed: %v\noutput:\n%s", err, out.String())
 	}
 
 	if factoryCalled {
 		t.Fatalf("expected cert-manager installer factory not to be invoked")
 	}
 
-	require.NotContains(t, buf.String(), "Install Cert-Manager...")
+	require.NotContains(t, out.String(), "Install Cert-Manager...")
 }
 
-func setupArgoCDTestMocks(t *testing.T) (func() *fakeInstaller, *bool) {
+//nolint:nlreturn // keep inline returns in short closures for function length
+func setupGitOpsTestMocks(
+	t *testing.T,
+	engine v1alpha1.GitOpsEngine,
+) (func() *fakeInstaller, *bool) {
 	t.Helper()
 
 	var fake *fakeInstaller
@@ -233,157 +237,99 @@ func setupArgoCDTestMocks(t *testing.T) (func() *fakeInstaller, *bool) {
 	ensureCalled := false
 
 	// Override cluster provisioner factory to use fake provisioner
-	restoreFactory := clusterpkg.SetClusterProvisionerFactoryForTests(fakeFactory{})
-	t.Cleanup(restoreFactory)
+	t.Cleanup(clusterpkg.SetClusterProvisionerFactoryForTests(fakeFactory{}))
 
-	restoreInstaller := clusterpkg.SetArgoCDInstallerFactoryForTests(
-		func(_ *v1alpha1.Cluster) (installer.Installer, error) {
-			fake = &fakeInstaller{}
-
-			return fake, nil
-		},
-	)
-	t.Cleanup(restoreInstaller)
-
-	restoreEnsure := clusterpkg.SetEnsureArgoCDResourcesForTests(
-		func(_ context.Context, _ string, _ *v1alpha1.Cluster, _ string) error {
-			ensureCalled = true
-
-			return nil
-		},
-	)
-	t.Cleanup(restoreEnsure)
+	// Set up the appropriate installer and ensure mocks based on the GitOps engine
+	switch engine {
+	case v1alpha1.GitOpsEngineArgoCD:
+		t.Cleanup(clusterpkg.SetArgoCDInstallerFactoryForTests(
+			func(_ *v1alpha1.Cluster) (installer.Installer, error) {
+				fake = &fakeInstaller{}
+				return fake, nil
+			},
+		))
+		t.Cleanup(clusterpkg.SetEnsureArgoCDResourcesForTests(
+			func(_ context.Context, _ string, _ *v1alpha1.Cluster, _ string) error {
+				ensureCalled = true
+				return nil
+			},
+		))
+	case v1alpha1.GitOpsEngineFlux:
+		t.Cleanup(clusterpkg.SetFluxInstallerFactoryForTests(
+			func(_ *v1alpha1.Cluster) (installer.Installer, error) {
+				fake = &fakeInstaller{}
+				return fake, nil
+			},
+		))
+		t.Cleanup(clusterpkg.SetEnsureFluxResourcesForTests(
+			func(_ context.Context, _ string, _ *v1alpha1.Cluster, _ string) error {
+				ensureCalled = true
+				return nil
+			},
+		))
+	case v1alpha1.GitOpsEngineNone:
+		t.Fatalf("GitOpsEngineNone is not supported in this test helper")
+	}
 
 	// Mock registry service factory to avoid needing a real Docker client
-	restoreRegistry := clusterpkg.SetLocalRegistryServiceFactoryForTests(fakeRegistryServiceFactory)
-	t.Cleanup(restoreRegistry)
+	t.Cleanup(clusterpkg.SetLocalRegistryServiceFactoryForTests(fakeRegistryServiceFactory))
 
-	restoreDocker := clusterpkg.SetDockerClientInvokerForTests(
+	t.Cleanup(clusterpkg.SetDockerClientInvokerForTests(
 		func(_ *cobra.Command, fn func(client.APIClient) error) error {
 			return fn(nil) // Call the callback to trigger success messages
 		},
-	)
-	t.Cleanup(restoreDocker)
+	))
 
 	return func() *fakeInstaller { return fake }, &ensureCalled
 }
 
-func TestCreate_ArgoCD_PrintsInstallStage(t *testing.T) {
-	tmpRoot := t.TempDir()
-	t.Setenv("TMPDIR", tmpRoot)
-
-	workingDir := t.TempDir()
-	t.Chdir(workingDir)
-	writeTestConfigFiles(t, workingDir)
-
-	fake, ensureCalled := setupArgoCDTestMocks(t)
-
-	testRuntime := newTestRuntimeContainer(t)
-
-	cmd := clusterpkg.NewCreateCmd(testRuntime)
-
-	var buf bytes.Buffer
-	cmd.SetOut(&buf)
-	cmd.SetErr(&buf)
-	cmd.SetContext(context.Background())
-	cmd.SetArgs([]string{"--gitops-engine", "ArgoCD"})
-
-	err := cmd.Execute()
-	if err != nil {
-		t.Fatalf("create command failed: %v\noutput:\n%s", err, buf.String())
+func TestCreate_GitOps_PrintsInstallStage(t *testing.T) {
+	testCases := []struct {
+		name   string
+		engine v1alpha1.GitOpsEngine
+		arg    string
+	}{
+		{name: "ArgoCD", engine: v1alpha1.GitOpsEngineArgoCD, arg: "ArgoCD"},
+		{name: "Flux", engine: v1alpha1.GitOpsEngineFlux, arg: "Flux"},
 	}
 
-	// We can only reliably assert the ensure hook was invoked directly.
-	// The installer invocation is verified indirectly via the overall command output snapshot below,
-	// not through a separate snapshot of the installer invocation itself.
-	if !*ensureCalled {
-		t.Fatalf("expected Argo CD resources ensure hook to be invoked")
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			tmpRoot := t.TempDir()
+			t.Setenv("TMPDIR", tmpRoot)
+
+			workingDir := t.TempDir()
+			t.Chdir(workingDir)
+			writeTestConfigFiles(t, workingDir)
+
+			fake, ensureCalled := setupGitOpsTestMocks(t, testCase.engine)
+
+			testRuntime := newTestRuntimeContainer(t)
+
+			cmd := clusterpkg.NewCreateCmd(testRuntime)
+
+			out := notify.NewDeferredNewlineWriter(nil)
+			cmd.SetOut(out)
+			cmd.SetErr(out)
+			cmd.SetContext(context.Background())
+			cmd.SetArgs([]string{"--gitops-engine", testCase.arg})
+
+			err := cmd.Execute()
+			if err != nil {
+				t.Fatalf("create command failed: %v\noutput:\n%s", err, out.String())
+			}
+
+			if !*ensureCalled {
+				t.Fatalf("expected %s resources ensure hook to be invoked", testCase.name)
+			}
+
+			if installer := fake(); installer == nil || !installer.called {
+				t.Fatalf("expected %s installer to be invoked", testCase.name)
+			}
+
+			snaps.MatchSnapshot(t, out.String())
+		})
 	}
-
-	if installer := fake(); installer == nil || !installer.called {
-		t.Fatalf("expected Argo CD installer to be invoked")
-	}
-
-	snaps.MatchSnapshot(t, buf.String())
-}
-
-func setupFluxTestMocks(t *testing.T) (func() *fakeInstaller, *bool) {
-	t.Helper()
-
-	var fake *fakeInstaller
-
-	ensureCalled := false
-
-	// Override cluster provisioner factory to use fake provisioner
-	restoreFactory := clusterpkg.SetClusterProvisionerFactoryForTests(fakeFactory{})
-	t.Cleanup(restoreFactory)
-
-	restoreInstaller := clusterpkg.SetFluxInstallerFactoryForTests(
-		func(_ *v1alpha1.Cluster) (installer.Installer, error) {
-			fake = &fakeInstaller{}
-
-			return fake, nil
-		},
-	)
-	t.Cleanup(restoreInstaller)
-
-	restoreEnsure := clusterpkg.SetEnsureFluxResourcesForTests(
-		func(_ context.Context, _ string, _ *v1alpha1.Cluster, _ string) error {
-			ensureCalled = true
-
-			return nil
-		},
-	)
-	t.Cleanup(restoreEnsure)
-
-	// Mock registry service factory to avoid needing a real Docker client
-	restoreRegistry := clusterpkg.SetLocalRegistryServiceFactoryForTests(fakeRegistryServiceFactory)
-	t.Cleanup(restoreRegistry)
-
-	restoreDocker := clusterpkg.SetDockerClientInvokerForTests(
-		func(_ *cobra.Command, fn func(client.APIClient) error) error {
-			return fn(nil) // Call the callback to trigger success messages
-		},
-	)
-	t.Cleanup(restoreDocker)
-
-	return func() *fakeInstaller { return fake }, &ensureCalled
-}
-
-func TestCreate_Flux_PrintsInstallStage(t *testing.T) {
-	tmpRoot := t.TempDir()
-	t.Setenv("TMPDIR", tmpRoot)
-
-	workingDir := t.TempDir()
-	t.Chdir(workingDir)
-	writeTestConfigFiles(t, workingDir)
-
-	fake, ensureCalled := setupFluxTestMocks(t)
-
-	testRuntime := newTestRuntimeContainer(t)
-
-	cmd := clusterpkg.NewCreateCmd(testRuntime)
-
-	var buf bytes.Buffer
-	cmd.SetOut(&buf)
-	cmd.SetErr(&buf)
-	cmd.SetContext(context.Background())
-	cmd.SetArgs([]string{"--gitops-engine", "Flux"})
-
-	err := cmd.Execute()
-	if err != nil {
-		t.Fatalf("create command failed: %v\noutput:\n%s", err, buf.String())
-	}
-
-	if !*ensureCalled {
-		t.Fatalf("expected Flux resources ensure hook to be invoked")
-	}
-
-	if installer := fake(); installer == nil || !installer.called {
-		t.Fatalf("expected Flux installer to be invoked")
-	}
-
-	snaps.MatchSnapshot(t, buf.String())
 }
 
 //nolint:paralleltest // uses t.Chdir and mutates shared test hooks
@@ -431,21 +377,21 @@ spec:
 
 	cmd := clusterpkg.NewCreateCmd(newTestRuntimeContainer(t))
 
-	var buf bytes.Buffer
-	cmd.SetOut(&buf)
-	cmd.SetErr(&buf)
+	out := notify.NewDeferredNewlineWriter(nil)
+	cmd.SetOut(out)
+	cmd.SetErr(out)
 	cmd.SetContext(context.Background())
 
 	err := cmd.Execute()
 	if err != nil {
-		t.Fatalf("create command failed: %v\noutput:\n%s", err, buf.String())
+		t.Fatalf("create command failed: %v\noutput:\n%s", err, out.String())
 	}
 
 	if !fake.called {
 		t.Fatalf("expected CSI installer to be invoked")
 	}
 
-	require.Contains(t, buf.String(), "csi installing")
+	require.Contains(t, out.String(), "csi installing")
 }
 
 //nolint:paralleltest // uses t.Chdir and mutates shared test hooks
@@ -460,17 +406,17 @@ func TestCreate_DefaultCSI_DoesNotInstall(t *testing.T) {
 
 	cmd := clusterpkg.NewCreateCmd(newTestRuntimeContainer(t))
 
-	var buf bytes.Buffer
-	cmd.SetOut(&buf)
-	cmd.SetErr(&buf)
+	out := notify.NewDeferredNewlineWriter(nil)
+	cmd.SetOut(out)
+	cmd.SetErr(out)
 	cmd.SetContext(context.Background())
 
 	err := cmd.Execute()
 	if err != nil {
-		t.Fatalf("create command failed: %v\noutput:\n%s", err, buf.String())
+		t.Fatalf("create command failed: %v\noutput:\n%s", err, out.String())
 	}
 
-	require.NotContains(t, buf.String(), "csi installing")
+	require.NotContains(t, out.String(), "csi installing")
 }
 
 // TestCreate_Minimal_PrintsOnlyClusterLifecycle tests cluster creation with no extras.
@@ -496,20 +442,20 @@ func TestCreate_Minimal_PrintsOnlyClusterLifecycle(t *testing.T) {
 
 	cmd := clusterpkg.NewCreateCmd(newTestRuntimeContainer(t))
 
-	var buf bytes.Buffer
-	cmd.SetOut(&buf)
-	cmd.SetErr(&buf)
+	out := notify.NewDeferredNewlineWriter(nil)
+	cmd.SetOut(out)
+	cmd.SetErr(out)
 	cmd.SetContext(context.Background())
 
 	err := cmd.Execute()
 	if err != nil {
-		t.Fatalf("create command failed: %v\noutput:\n%s", err, buf.String())
+		t.Fatalf("create command failed: %v\noutput:\n%s", err, out.String())
 	}
 
 	// Verify only cluster lifecycle output, no component installation
-	require.NotContains(t, buf.String(), "Installing components")
-	require.NotContains(t, buf.String(), "Install CNI")
-	snaps.MatchSnapshot(t, buf.String())
+	require.NotContains(t, out.String(), "Installing components")
+	require.NotContains(t, out.String(), "Install CNI")
+	snaps.MatchSnapshot(t, out.String())
 }
 
 // TestCreate_LocalRegistryDisabled_SkipsRegistryStages tests cluster creation with local registry disabled.
@@ -550,20 +496,20 @@ spec:
 
 	cmd := clusterpkg.NewCreateCmd(newTestRuntimeContainer(t))
 
-	var buf bytes.Buffer
-	cmd.SetOut(&buf)
-	cmd.SetErr(&buf)
+	out := notify.NewDeferredNewlineWriter(nil)
+	cmd.SetOut(out)
+	cmd.SetErr(out)
 	cmd.SetContext(context.Background())
 
 	err := cmd.Execute()
 	if err != nil {
-		t.Fatalf("create command failed: %v\noutput:\n%s", err, buf.String())
+		t.Fatalf("create command failed: %v\noutput:\n%s", err, out.String())
 	}
 
 	// Verify local registry stages are not present
-	require.NotContains(t, buf.String(), "Create local registry")
-	require.NotContains(t, buf.String(), "Attach local registry")
-	snaps.MatchSnapshot(t, buf.String())
+	require.NotContains(t, out.String(), "Create local registry")
+	require.NotContains(t, out.String(), "Attach local registry")
+	snaps.MatchSnapshot(t, out.String())
 }
 
 // Ensure fake types satisfy interfaces at compile time.

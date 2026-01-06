@@ -1,5 +1,15 @@
 
-[TestCreate_ArgoCD_PrintsInstallStage - 1]
+[TestCreate_EnabledCertManager_PrintsInstallStage - 1]
+🚀 Create cluster...
+► creating cluster
+✔ cluster created
+
+📦 Installing components...
+► cert-manager installing
+✔ cert-manager installed
+---
+
+[TestCreate_GitOps_PrintsInstallStage/ArgoCD - 1]
 🗄️ Create local registry...
 ► creating local registry
 ✔ local registry created
@@ -20,21 +30,9 @@
 ► configuring argocd resources
 ℹ Access ArgoCD UI at https://localhost:8080 via: kubectl port-forward svc/argocd-server -n argocd 8080:443
 ✔ components configured
-
 ---
 
-[TestCreate_EnabledCertManager_PrintsInstallStage - 1]
-🚀 Create cluster...
-► creating cluster
-✔ cluster created
-
-📦 Installing components...
-► cert-manager installing
-✔ cert-manager installed
-
----
-
-[TestCreate_Flux_PrintsInstallStage - 1]
+[TestCreate_GitOps_PrintsInstallStage/Flux - 1]
 🗄️ Create local registry...
 ► creating local registry
 ✔ local registry created
@@ -54,19 +52,16 @@
 ⚙️ Configuring components...
 ► applying custom resources
 ✔ components configured
-
 ---
 
 [TestCreate_LocalRegistryDisabled_SkipsRegistryStages - 1]
 🚀 Create cluster...
 ► creating cluster
 ✔ cluster created
-
 ---
 
 [TestCreate_Minimal_PrintsOnlyClusterLifecycle - 1]
 🚀 Create cluster...
 ► creating cluster
 ✔ cluster created
-
 ---

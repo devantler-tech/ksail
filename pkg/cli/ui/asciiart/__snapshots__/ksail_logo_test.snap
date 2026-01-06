@@ -13,3 +13,45 @@ _______/_____\_______\_____     ,'        `.    \  /
 
 
 ---
+
+[TestPrintKSailLogoEdgeCases/missing_coverage_edge_case - 1]
+y1
+y2
+y3
+y4
+blue
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+short7
+longer8
+end
+
+---
+
+[TestPrintKSailLogoEdgeCases/short_lines_for_green_blue_cyan - 1]
+line0
+line1
+line2
+line3
+line4
+short
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+line7
+line8
+final
+
+---
+
+[TestPrintKSailLogoEdgeCases/various_length_lines - 1]
+yellow1
+yellow2
+yellow3
+yellow4
+blue_line
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy
+zzzzzzzzzzzzzzzzzzzzzzzzzzzzzz
+wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww
+final_blue
+
+---

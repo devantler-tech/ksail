@@ -71,6 +71,15 @@ linters:
           - ireturn
         path: pkg/cli/cmd/cluster/list_test.go
       - linters:
+          - ireturn
+        path: pkg/client/argocd/reconciler.go
+      - linters:
+          - ireturn
+        path: pkg/client/flux/reconciler.go
+      - linters:
+          - ireturn
+        path: pkg/svc/reconciler/base.go
+      - linters:
           - paralleltest
         path: pkg/cli/cmd/cipher/import_test.go
       - linters:
