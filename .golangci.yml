@@ -89,6 +89,10 @@ linters:
           - revive
         text: "var-naming: avoid package names that conflict with Go standard library package names"
         path: pkg/io/
+      - linters:
+          - revive
+        text: "var-naming: avoid meaningless package names"
+        path: pkg/utils/doc.go
   settings:
     wsl_v5:
       allow-first-in-block: true
