@@ -16,9 +16,11 @@ https://github.com/devantler-tech/ksail/releases/download/
 # Intermittent Network Errors
 https://docs.tigera.io/calico/latest/getting-started/
 https://fluxcd.io/flux/concepts/
+https://fluxcd.io/flux/guides/mozilla-sops/
 https://gateway-api.sigs.k8s.io/
 https://helm.sh/
 https://helm.sh/docs/
 https://kind.sigs.k8s.io/
 https://kubernetes.io/docs/concepts/storage/storage-classes/
+https://kubernetes.io/docs/reference/kubectl/
 https://www.talos.dev/
