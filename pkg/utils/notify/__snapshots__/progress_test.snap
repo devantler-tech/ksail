@@ -6,24 +6,6 @@
 
 ---
 
-[TestProgressGroup_MultipleTasksSuccess - 1]
-📦 Installing...
-► component-b installing
-► component-a installing
-✔ component-a installed
-✔ component-b installed
-
----
-
-[TestProgressGroup_PartialFailure - 1]
-📦 Installing...
-► bad-component running
-✗ bad-component failed
-► good-component running
-✔ good-component completed
-
----
-
 [TestProgressGroup_SingleTaskFailure - 1]
 📦 Installing...
 ► failing-component running

@@ -138,7 +138,27 @@ func TestProgressGroup_MultipleTasksSuccess(t *testing.T) {
 		t.Errorf("expected no error, got: %v", err)
 	}
 
-	snaps.MatchSnapshot(t, buf.String())
+	// Since tasks run concurrently, verify content without depending on order.
+	output := buf.String()
+
+	// Verify title is first
+	if !strings.HasPrefix(output, "📦 Installing...\n") {
+		t.Errorf("expected output to start with title, got: %q", output)
+	}
+
+	// Verify both components are started and completed
+	expectedPatterns := []string{
+		"► component-a installing",
+		"✔ component-a installed",
+		"► component-b installing",
+		"✔ component-b installed",
+	}
+
+	for _, pattern := range expectedPatterns {
+		if !strings.Contains(output, pattern) {
+			t.Errorf("expected output to contain %q, got: %q", pattern, output)
+		}
+	}
 }
 
 func TestProgressGroup_PartialFailure(t *testing.T) {
@@ -152,12 +172,16 @@ func TestProgressGroup_PartialFailure(t *testing.T) {
 		{
 			Name: "good-component",
 			Fn: func(_ context.Context) error {
+				time.Sleep(10 * time.Millisecond)
+
 				return nil
 			},
 		},
 		{
 			Name: "bad-component",
 			Fn: func(_ context.Context) error {
+				time.Sleep(10 * time.Millisecond)
+
 				return errTestTaskFailed
 			},
 		},
@@ -168,7 +192,31 @@ func TestProgressGroup_PartialFailure(t *testing.T) {
 		t.Error("expected error, got nil")
 	}
 
-	snaps.MatchSnapshot(t, buf.String())
+	// Since tasks run concurrently, verify content without depending on order.
+	output := buf.String()
+
+	// Verify title is first
+	if !strings.HasPrefix(output, "📦 Installing...\n") {
+		t.Errorf("expected output to start with title, got: %q", output)
+	}
+
+	// Verify good component started and completed
+	if !strings.Contains(output, "► good-component running") {
+		t.Errorf("expected good-component running message, got: %q", output)
+	}
+
+	if !strings.Contains(output, "✔ good-component completed") {
+		t.Errorf("expected good-component completed message, got: %q", output)
+	}
+
+	// Verify bad component started and failed
+	if !strings.Contains(output, "► bad-component running") {
+		t.Errorf("expected bad-component running message, got: %q", output)
+	}
+
+	if !strings.Contains(output, "✗ bad-component failed") {
+		t.Errorf("expected bad-component failed message, got: %q", output)
+	}
 }
 
 func TestProgressGroup_ContextCancellation(t *testing.T) {
