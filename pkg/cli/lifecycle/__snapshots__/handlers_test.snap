@@ -1,0 +1,4 @@
+
+[TestDetectDistributionFromContext_AllPatterns_Snapshot - 1]
+map[string]string{"admin@homelab":"Talos:homelab", "admin@talos-prod":"Talos:talos-prod", "docker-desktop":"error: unknown distribution: context does not match kind-, k3d-, or admin@ pattern: docker-desktop", "k3d-dev":"K3d:dev", "k3d-staging":"K3d:staging", "kind-local":"Kind:local", "kind-production":"Kind:production", "minikube":"error: unknown distribution: context does not match kind-, k3d-, or admin@ pattern: minikube"}
+---
