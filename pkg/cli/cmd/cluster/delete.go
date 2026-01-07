@@ -116,9 +116,12 @@ func tryContextBasedDetection(
 	clusterCfg.Spec.Cluster.Distribution = distribution
 	clusterCfg.Spec.Cluster.Connection.Context = currentContext
 
-	// If a factory override exists (e.g., for testing), preserve it
-	// Otherwise, create a minimal provisioner for the detected distribution
-	if deps.Factory == nil {
+	// Only create contextBasedFactory if there's no test factory override.
+	// applyFactoryOverride sets a non-DefaultFactory when tests override the factory.
+	if _, isDefault := deps.Factory.(*clusterprovisioner.DefaultFactory); isDefault {
+		// Create a minimal provisioner for the detected distribution.
+		// Replace the DefaultFactory since it has nil DistributionConfig when no config file is found.
+		// We need a contextBasedFactory that can work without distribution config.
 		provisioner, provErr := lifecycle.CreateMinimalProvisioner(distribution, clusterName)
 		if provErr != nil {
 			return nil, deps, fmt.Errorf("failed to create provisioner: %w", provErr)
