@@ -411,10 +411,6 @@ func DisconnectMirrorRegistries(
 	// Collect mirror specs from Talos config
 	mirrorSpecs, registryNames := CollectTalosMirrorSpecs(cfgManager)
 
-	if len(registryNames) == 0 {
-		return nil
-	}
-
 	// Talos uses the cluster name as the network name
 	networkName := clusterName
 
@@ -422,6 +418,21 @@ func DisconnectMirrorRegistries(
 		registryMgr, mgrErr := dockerclient.NewRegistryManager(dockerAPIClient)
 		if mgrErr != nil {
 			return fmt.Errorf("failed to create registry manager: %w", mgrErr)
+		}
+
+		// If no registry names found from config (non-scaffolded cluster),
+		// fall back to discovering and disconnecting all registries from the network
+		if len(registryNames) == 0 {
+			_, disconnectErr := registryMgr.DisconnectAllFromNetwork(cmd.Context(), networkName)
+			if disconnectErr != nil {
+				return fmt.Errorf(
+					"failed to disconnect registries from network %s: %w",
+					networkName,
+					disconnectErr,
+				)
+			}
+
+			return nil
 		}
 
 		// Build registry infos from mirror specs to get container names

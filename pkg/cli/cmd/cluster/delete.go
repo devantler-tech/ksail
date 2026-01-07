@@ -112,6 +112,17 @@ func tryContextBasedDetection(
 		return nil, deps, fmt.Errorf("failed to detect distribution: %w", err)
 	}
 
+	// Notify user that we auto-detected the distribution
+	notify.WriteMessage(notify.Message{
+		Type: notify.InfoType,
+		Content: fmt.Sprintf(
+			"auto-detected %s cluster '%s' from kubeconfig context",
+			distribution,
+			clusterName,
+		),
+		Writer: cmd.OutOrStdout(),
+	})
+
 	// Update the config with detected values
 	clusterCfg.Spec.Cluster.Distribution = distribution
 	clusterCfg.Spec.Cluster.Connection.Context = currentContext

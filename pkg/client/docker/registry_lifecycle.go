@@ -180,3 +180,69 @@ func (rm *RegistryManager) DisconnectFromNetwork(
 
 	return err
 }
+
+// DisconnectAllFromNetwork disconnects all KSail registry containers from a specific network.
+// This is useful for cleaning up network connections before deleting a cluster network.
+// Returns the number of containers that were disconnected.
+func (rm *RegistryManager) DisconnectAllFromNetwork(
+	ctx context.Context,
+	networkName string,
+) (int, error) {
+	trimmedNetwork := strings.TrimSpace(networkName)
+	if trimmedNetwork == "" {
+		return 0, nil
+	}
+
+	// List all KSail registry containers
+	containers, err := rm.listAllRegistryContainers(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("failed to list registry containers: %w", err)
+	}
+
+	if len(containers) == 0 {
+		return 0, nil
+	}
+
+	disconnectedCount := 0
+
+	for _, registryContainer := range containers {
+		inspect, inspectErr := inspectContainer(ctx, rm.client, registryContainer.ID)
+		if inspectErr != nil {
+			// Container may have been removed, skip it
+			continue
+		}
+
+		// Check if container is connected to the target network
+		if _, connected := inspect.NetworkSettings.Networks[trimmedNetwork]; !connected {
+			continue
+		}
+
+		// Get container name for the disconnect operation
+		containerName := ""
+		if label, ok := registryContainer.Labels[RegistryLabelKey]; ok {
+			containerName = label
+		} else if len(registryContainer.Names) > 0 {
+			containerName = strings.TrimPrefix(registryContainer.Names[0], "/")
+		}
+
+		_, disconnectErr := disconnectRegistryNetwork(
+			ctx,
+			rm.client,
+			registryContainer.ID,
+			containerName,
+			trimmedNetwork,
+			inspect,
+		)
+		if disconnectErr != nil {
+			return disconnectedCount, fmt.Errorf(
+				"failed to disconnect container %s from network: %w",
+				containerName,
+				disconnectErr,
+			)
+		}
+
+		disconnectedCount++
+	}
+
+	return disconnectedCount, nil
+}
