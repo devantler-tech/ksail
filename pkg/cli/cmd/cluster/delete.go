@@ -115,6 +115,10 @@ func tryContextBasedDetection(
 		return nil, deps, fmt.Errorf("failed to detect distribution: %w", err)
 	}
 
+	if clusterName == "" {
+		return nil, deps, clustererrors.ErrEmptyClusterName
+	}
+
 	// Update the config with detected values
 	clusterCfg.Spec.Cluster.Distribution = distribution
 	clusterCfg.Spec.Cluster.Connection.Context = currentContext
