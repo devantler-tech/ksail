@@ -176,7 +176,7 @@ Define cluster configuration in `ksail.yaml` for reproducible, version-controlle
 
 ```yaml
 # ksail.yaml
-apiVersion: ksail.dev/v1alpha1
+apiVersion: ksail.io/v1alpha1
 kind: Cluster
 spec:
   cluster:

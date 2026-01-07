@@ -85,7 +85,7 @@ func writeDeleteTestConfigFiles(t *testing.T, workingDir string, distribution st
 func writeKindTestConfig(t *testing.T, workingDir string) {
 	t.Helper()
 
-	ksailYAML := `apiVersion: ksail.dev/v1alpha1
+	ksailYAML := `apiVersion: ksail.io/v1alpha1
 kind: Cluster
 spec:
   cluster:
@@ -111,7 +111,7 @@ spec:
 func writeK3dTestConfig(t *testing.T, workingDir string) {
 	t.Helper()
 
-	ksailYAML := `apiVersion: ksail.dev/v1alpha1
+	ksailYAML := `apiVersion: ksail.io/v1alpha1
 kind: Cluster
 spec:
   cluster:
@@ -137,7 +137,7 @@ spec:
 func writeTalosTestConfig(t *testing.T, workingDir string) {
 	t.Helper()
 
-	ksailYAML := `apiVersion: ksail.dev/v1alpha1
+	ksailYAML := `apiVersion: ksail.io/v1alpha1
 kind: Cluster
 spec:
   cluster:
@@ -217,10 +217,10 @@ func TestDelete_ClusterExists_PrintsDeleteSuccess(t *testing.T) {
 			)
 			defer restoreFactory()
 
-			// Override Docker client to call the callback for cleanup
+			// Override Docker client to skip cleanup (no Docker in tests)
 			restoreDocker := clusterpkg.SetDockerClientInvokerForTests(
-				func(_ *cobra.Command, fn func(client.APIClient) error) error {
-					return fn(nil)
+				func(_ *cobra.Command, _ func(client.APIClient) error) error {
+					return nil // Skip Docker operations in tests
 				},
 			)
 			defer restoreDocker()
@@ -242,10 +242,11 @@ func TestDelete_ClusterExists_PrintsDeleteSuccess(t *testing.T) {
 	}
 }
 
-// TestDelete_ClusterNotFound_PrintsWarning tests deletion when cluster doesn't exist for all distributions.
+// TestDelete_ClusterNotFound_ReturnsError tests that deletion returns an error when the cluster doesn't exist.
+// This reflects the current non-idempotent behavior (breaking change from previous idempotent delete semantics).
 //
 //nolint:paralleltest // Cannot use t.Parallel() with t.Chdir()
-func TestDelete_ClusterNotFound_PrintsWarning(t *testing.T) {
+func TestDelete_ClusterNotFound_ReturnsError(t *testing.T) {
 	testCases := []struct {
 		name         string
 		distribution string
@@ -269,10 +270,10 @@ func TestDelete_ClusterNotFound_PrintsWarning(t *testing.T) {
 			)
 			defer restoreFactory()
 
-			// Override Docker client to call the callback for cleanup
+			// Override Docker client to skip cleanup (no Docker in tests)
 			restoreDocker := clusterpkg.SetDockerClientInvokerForTests(
-				func(_ *cobra.Command, fn func(client.APIClient) error) error {
-					return fn(nil)
+				func(_ *cobra.Command, _ func(client.APIClient) error) error {
+					return nil // Skip Docker operations in tests
 				},
 			)
 			defer restoreDocker()
@@ -287,11 +288,173 @@ func TestDelete_ClusterNotFound_PrintsWarning(t *testing.T) {
 			cmd.SetContext(context.Background())
 
 			err := cmd.Execute()
-			require.NoError(t, err) // Should succeed even when cluster doesn't exist
+			require.Error(t, err)
 
 			snaps.MatchSnapshot(t, trimTrailingNewlineDelete(out.String()))
 		})
 	}
+}
+
+// writeKubeconfigWithContext creates a kubeconfig file with the given current context.
+func writeKubeconfigWithContext(t *testing.T, dir, currentContext string) string {
+	t.Helper()
+
+	kubeconfigContent := `apiVersion: v1
+kind: Config
+current-context: ` + currentContext + `
+clusters:
+- cluster:
+    server: https://127.0.0.1:6443
+  name: ` + currentContext + `
+contexts:
+- context:
+    cluster: ` + currentContext + `
+    user: ` + currentContext + `
+  name: ` + currentContext + `
+users:
+- name: ` + currentContext + `
+  user: {}
+`
+	kubeconfigPath := filepath.Join(dir, "kubeconfig")
+	require.NoError(t, os.WriteFile(kubeconfigPath, []byte(kubeconfigContent), 0o600))
+
+	return kubeconfigPath
+}
+
+// setupContextBasedTest sets up a test environment for context-based detection tests.
+// Returns a cleanup function that must be called with defer.
+func setupContextBasedTest(
+	t *testing.T,
+	context string,
+	existsResult bool,
+	deleteErr error,
+) (*runtime.Runtime, func()) {
+	t.Helper()
+
+	workingDir := t.TempDir()
+	t.Chdir(workingDir)
+
+	kubeconfigPath := writeKubeconfigWithContext(t, workingDir, context)
+	t.Setenv("KUBECONFIG", kubeconfigPath)
+
+	restoreFactory := clusterpkg.SetClusterProvisionerFactoryForTests(
+		fakeDeleteFactory{existsResult: existsResult, deleteErr: deleteErr},
+	)
+
+	// Override Docker client to skip cleanup (no Docker in tests)
+	restoreDocker := clusterpkg.SetDockerClientInvokerForTests(
+		func(_ *cobra.Command, _ func(client.APIClient) error) error {
+			return nil // Skip Docker operations in tests
+		},
+	)
+
+	testRuntime := newDeleteTestRuntimeContainer(t)
+
+	cleanup := func() {
+		restoreDocker()
+		restoreFactory()
+	}
+
+	return testRuntime, cleanup
+}
+
+// TestDelete_ContextBasedDetection_DeletesCluster tests that delete can detect
+// distribution from kubeconfig context when no ksail.yaml config file exists.
+//
+//nolint:paralleltest // Cannot use t.Parallel() with t.Chdir() and t.Setenv() in helper
+func TestDelete_ContextBasedDetection_DeletesCluster(t *testing.T) {
+	testCases := []struct {
+		name    string
+		context string
+	}{
+		{name: "Kind_context_pattern", context: "kind-my-cluster"},
+		{name: "K3d_context_pattern", context: "k3d-dev-cluster"},
+		{name: "Talos_context_pattern", context: "admin@talos-homelab"},
+	}
+
+	for _, testCase := range testCases {
+		//nolint:paralleltest // Cannot use t.Parallel() with t.Chdir()
+		t.Run(testCase.name, func(t *testing.T) {
+			testRuntime, cleanup := setupContextBasedTest(t, testCase.context, true, nil)
+			defer cleanup()
+
+			cmd := clusterpkg.NewDeleteCmd(testRuntime)
+
+			var out bytes.Buffer
+			cmd.SetOut(&out)
+			cmd.SetErr(&out)
+			cmd.SetContext(context.Background())
+
+			err := cmd.Execute()
+			require.NoError(t, err)
+
+			output := out.String()
+			require.Contains(t, output, "cluster deleted")
+
+			snaps.MatchSnapshot(t, trimTrailingNewlineDelete(output))
+		})
+	}
+}
+
+// TestDelete_ContextBasedDetection_ClusterNotFound tests that context-based detection
+// correctly returns an error when the detected cluster doesn't exist.
+//
+//nolint:paralleltest // Cannot use t.Parallel() with t.Chdir() and t.Setenv() in helper
+func TestDelete_ContextBasedDetection_ClusterNotFound(t *testing.T) {
+	testRuntime, cleanup := setupContextBasedTest(
+		t,
+		"kind-nonexistent",
+		false,
+		clustererrors.ErrClusterNotFound,
+	)
+	defer cleanup()
+
+	cmd := clusterpkg.NewDeleteCmd(testRuntime)
+
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetContext(context.Background())
+
+	err := cmd.Execute()
+	require.Error(t, err)
+	require.ErrorIs(t, err, clustererrors.ErrClusterNotFound)
+
+	snaps.MatchSnapshot(t, trimTrailingNewlineDelete(out.String()))
+}
+
+// TestDelete_ContextBasedDetection_UnknownContextPattern tests that delete falls back
+// gracefully when the context doesn't match a known distribution pattern.
+func TestDelete_ContextBasedDetection_UnknownContextPattern(t *testing.T) {
+	workingDir := t.TempDir()
+	t.Chdir(workingDir)
+
+	kubeconfigPath := writeKubeconfigWithContext(t, workingDir, "docker-desktop")
+	t.Setenv("KUBECONFIG", kubeconfigPath)
+
+	// Override Docker client to skip cleanup (no Docker in tests)
+	restoreDocker := clusterpkg.SetDockerClientInvokerForTests(
+		func(_ *cobra.Command, _ func(client.APIClient) error) error {
+			return nil // Skip Docker operations in tests
+		},
+	)
+	defer restoreDocker()
+
+	testRuntime := newDeleteTestRuntimeContainer(t)
+
+	cmd := clusterpkg.NewDeleteCmd(testRuntime)
+
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetContext(context.Background())
+
+	err := cmd.Execute()
+	require.Error(t, err)
+
+	// Output should not contain auto-detected message for unknown patterns
+	output := out.String()
+	require.NotContains(t, output, "auto-detected")
 }
 
 // Ensure fake types satisfy interfaces at compile time.

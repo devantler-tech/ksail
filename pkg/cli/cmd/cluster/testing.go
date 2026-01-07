@@ -9,6 +9,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup/localregistry"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/setup/mirrorregistry"
 	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/installer"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
@@ -73,6 +74,20 @@ func getLocalRegistryDeps() localregistry.Dependencies {
 	}
 
 	return localregistry.NewDependencies(opts...)
+}
+
+// getCleanupDeps returns the cleanup dependencies for mirror registry operations.
+func getCleanupDeps() mirrorregistry.CleanupDependencies {
+	dockerClientInvokerMu.RLock()
+
+	invoker := dockerClientInvoker
+
+	dockerClientInvokerMu.RUnlock()
+
+	return mirrorregistry.CleanupDependencies{
+		DockerInvoker:     invoker,
+		LocalRegistryDeps: getLocalRegistryDeps(),
+	}
 }
 
 // overrideInstallerFactory is a helper that applies a factory override and returns a restore function.

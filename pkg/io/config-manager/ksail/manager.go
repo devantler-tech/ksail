@@ -111,6 +111,12 @@ func (m *ConfigManager) LoadConfigFromFlagsOnly() (*v1alpha1.Cluster, error) {
 	return m.loadConfigWithOptions(nil, true, true)
 }
 
+// IsConfigFileFound returns true if a configuration file was found during LoadConfig.
+// This should only be called after LoadConfig has been called.
+func (m *ConfigManager) IsConfigFileFound() bool {
+	return m.configFileFound
+}
+
 // loadConfigWithOptions is the internal implementation with silent option.
 func (m *ConfigManager) loadConfigWithOptions(
 	tmr timer.Timer,
@@ -752,11 +758,9 @@ func (m *ConfigManager) loadTalosConfig() (*talosconfigmanager.Configs, error) {
 		return nil, ErrDistributionConfigNotFound
 	}
 
-	// Get cluster name from context or use default
-	clusterName := strings.TrimSpace(m.Config.Spec.Cluster.Connection.Context)
-	if clusterName == "" {
-		clusterName = talosconfigmanager.DefaultClusterName
-	}
+	// Get cluster name from context or use default.
+	// Uses ResolveClusterName helper which handles the "admin@<cluster-name>" pattern.
+	clusterName := talosconfigmanager.ResolveClusterName(m.Config, nil)
 
 	talosManager := talosconfigmanager.NewConfigManager(
 		patchesDir,

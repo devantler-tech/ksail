@@ -260,7 +260,7 @@ func configureRegistryMirrorsInClusterWithWarning(
 	err := mirrorregistry.ConfigureRegistryMirrorsInCluster(params)
 	if err != nil {
 		notify.WriteMessage(notify.Message{
-			Type:    notify.WarningType,
+			Type:    notify.ErrorType,
 			Content: fmt.Sprintf("failed to configure registry mirrors in cluster: %v", err),
 			Writer:  cmd.OutOrStdout(),
 		})

@@ -14,6 +14,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
 	k3dconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/k3d"
+	kindconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/kind"
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
 	"github.com/devantler-tech/ksail/v5/pkg/io/detector"
 	"github.com/devantler-tech/ksail/v5/pkg/io/generator"
@@ -278,15 +279,13 @@ func (s *Scaffolder) CreateK3dConfig() k3dv1alpha5.SimpleConfig {
 }
 
 // DefaultKindMirrorsDir is the default directory name for Kind containerd host mirror configuration.
-const DefaultKindMirrorsDir = "kind/mirrors"
+//
+// Deprecated: Use kindconfigmanager.DefaultMirrorsDir instead. This alias is kept for backwards compatibility.
+const DefaultKindMirrorsDir = kindconfigmanager.DefaultMirrorsDir
 
 // GetKindMirrorsDir returns the configured mirrors directory or the default.
 func (s *Scaffolder) GetKindMirrorsDir() string {
-	if s.KSailConfig.Spec.Cluster.Kind.MirrorsDir != "" {
-		return s.KSailConfig.Spec.Cluster.Kind.MirrorsDir
-	}
-
-	return DefaultKindMirrorsDir
+	return kindconfigmanager.ResolveMirrorsDir(&s.KSailConfig)
 }
 
 // addK3dLocalRegistryConfig adds K3d-native local registry configuration.
@@ -934,15 +933,13 @@ func (s *Scaffolder) resolveClusterNameForDistribution() string {
 	case v1alpha1.DistributionK3d:
 		return k3dconfigmanager.ResolveClusterName(&s.KSailConfig, nil)
 	case v1alpha1.DistributionKind:
-		return kindDefaultClusterName
+		return kindconfigmanager.DefaultClusterName
 	case v1alpha1.DistributionTalos:
 		return talosconfigmanager.DefaultClusterName
 	default:
-		return kindDefaultClusterName
+		return kindconfigmanager.DefaultClusterName
 	}
 }
-
-const kindDefaultClusterName = "kind"
 
 // generateArgoCDApplicationConfig generates an ArgoCD Application CR manifest.
 func (s *Scaffolder) generateArgoCDApplicationConfig(sourceDir string, force bool) error {

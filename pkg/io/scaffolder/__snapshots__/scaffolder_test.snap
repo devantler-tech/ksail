@@ -4,7 +4,7 @@ unknown distribution
 ---
 
 [TestScaffoldContentValidation/K3d_configuration_content - 1]
-apiVersion: ksail.dev/v1alpha1
+apiVersion: ksail.io/v1alpha1
 kind: Cluster
 spec:
   cluster:
@@ -28,7 +28,7 @@ resources: []
 ---
 
 [TestScaffoldContentValidation/Kind_configuration_content - 1]
-apiVersion: ksail.dev/v1alpha1
+apiVersion: ksail.io/v1alpha1
 kind: Cluster
 
 ---

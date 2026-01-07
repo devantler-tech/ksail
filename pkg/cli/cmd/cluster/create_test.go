@@ -96,7 +96,7 @@ func writeFile(t *testing.T, dir, name, content string) {
 func writeTestConfigFiles(t *testing.T, workingDir string) {
 	t.Helper()
 
-	ksailYAML := `apiVersion: ksail.dev/v1alpha1
+	ksailYAML := `apiVersion: ksail.io/v1alpha1
 kind: Cluster
 spec:
   cluster:
@@ -344,7 +344,7 @@ func TestCreate_LocalPathStorageCSI_InstallsOnKind(t *testing.T) {
 	workingDir := t.TempDir()
 	t.Chdir(workingDir)
 
-	ksailYAML := `apiVersion: ksail.dev/v1alpha1
+	ksailYAML := `apiVersion: ksail.io/v1alpha1
 kind: Cluster
 spec:
   cluster:
@@ -469,7 +469,7 @@ func TestCreate_LocalRegistryDisabled_SkipsRegistryStages(t *testing.T) {
 	workingDir := t.TempDir()
 	t.Chdir(workingDir)
 
-	ksailYAML := `apiVersion: ksail.dev/v1alpha1
+	ksailYAML := `apiVersion: ksail.io/v1alpha1
 kind: Cluster
 spec:
   cluster:

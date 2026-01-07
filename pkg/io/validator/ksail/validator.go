@@ -70,7 +70,7 @@ func (v *Validator) Validate(config *v1alpha1.Cluster) *validator.ValidationResu
 		config.Kind,
 		config.APIVersion,
 		"Cluster",
-		"ksail.dev/v1alpha1",
+		"ksail.io/v1alpha1",
 		result,
 	)
 
@@ -189,7 +189,7 @@ func (v *Validator) getDistributionConfigName(distribution v1alpha1.Distribution
 	case v1alpha1.DistributionK3d:
 		return v.getK3dConfigName()
 	case v1alpha1.DistributionTalos:
-		return "talos-default" // Talos uses a fixed cluster name pattern
+		return v.getTalosConfigName()
 	default:
 		return ""
 	}
@@ -214,6 +214,17 @@ func (v *Validator) getK3dConfigName() string {
 	}
 
 	// No K3d config provided, return empty to skip validation
+	return ""
+}
+
+// getTalosConfigName returns the Talos configuration cluster name if available.
+// Returns empty string if no Talos config is provided to the validator.
+func (v *Validator) getTalosConfigName() string {
+	if v.talosConfig != nil {
+		return v.talosConfig.GetClusterName()
+	}
+
+	// No Talos config provided, return empty to skip validation
 	return ""
 }
 

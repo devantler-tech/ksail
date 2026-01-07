@@ -116,8 +116,9 @@ func runSimpleLifecycleAction(
 	return nil
 }
 
-// getCurrentContext reads the current context from the default kubeconfig.
-func getCurrentContext() (string, error) {
+// GetCurrentKubeContext reads the current context from the default kubeconfig.
+// This is exported for use by other commands that need context-based auto-detection.
+func GetCurrentKubeContext() (string, error) {
 	kubeconfigPath := clientcmd.RecommendedHomeFile
 
 	// Check if KUBECONFIG env var is set
@@ -153,7 +154,7 @@ func resolveContext(contextFlag string) (string, error) {
 		return contextFlag, nil
 	}
 
-	return getCurrentContext()
+	return GetCurrentKubeContext()
 }
 
 // CreateMinimalProvisioner creates a minimal provisioner for lifecycle operations.

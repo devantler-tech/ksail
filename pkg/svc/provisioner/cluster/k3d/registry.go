@@ -258,9 +258,9 @@ func buildRegistryInfos(
 	return registryInfos
 }
 
-// ExtractRegistriesFromConfigForTesting exposes registry extraction for testing and callers that need inspection.
+// ExtractRegistriesFromConfig extracts registry information from the K3d config for inspection.
 // The clusterName is used as a prefix for container names.
-func ExtractRegistriesFromConfigForTesting(
+func ExtractRegistriesFromConfig(
 	simpleCfg *k3dv1alpha5.SimpleConfig,
 	clusterName string,
 ) []registry.Info {

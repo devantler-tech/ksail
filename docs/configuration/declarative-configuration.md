@@ -11,7 +11,7 @@ KSail uses declarative YAML configuration files for reproducible cluster setup. 
 
 Each KSail project includes a `ksail.yaml` file describing the cluster and workload configuration. Run `ksail cluster init` to generate this file, which can be committed to version control and shared with your team.
 
-The configuration file uses the `ksail.dev/v1alpha1` API version and follows the `Cluster` kind schema. It defines:
+The configuration file uses the `ksail.io/v1alpha1` API version and follows the `Cluster` kind schema. It defines:
 
 - **Cluster settings**: distribution, networking, components
 - **Connection details**: kubeconfig path, context, timeouts
@@ -22,7 +22,7 @@ The configuration file uses the `ksail.dev/v1alpha1` API version and follows the
 
 ```yaml
 # yaml-language-server: $schema=https://raw.githubusercontent.com/devantler-tech/ksail/main/schemas/ksail-config.schema.json
-apiVersion: ksail.dev/v1alpha1
+apiVersion: ksail.io/v1alpha1
 kind: Cluster
 spec:
   cluster:
@@ -36,7 +36,7 @@ This minimal configuration creates a Kind cluster using defaults for all other s
 
 ```yaml
 # yaml-language-server: $schema=https://raw.githubusercontent.com/devantler-tech/ksail/main/schemas/ksail-config.schema.json
-apiVersion: ksail.dev/v1alpha1
+apiVersion: ksail.io/v1alpha1
 kind: Cluster
 spec:
   editor: code --wait
@@ -69,7 +69,7 @@ spec:
 
 | Field        | Type   | Required | Description                                    |
 |--------------|--------|----------|------------------------------------------------|
-| `apiVersion` | string | Yes      | Must be `ksail.dev/v1alpha1`                   |
+| `apiVersion` | string | Yes      | Must be `ksail.io/v1alpha1`                    |
 | `kind`       | string | Yes      | Must be `Cluster`                              |
 | `spec`       | object | Yes      | Cluster and workload specification (see below) |
 
@@ -343,7 +343,7 @@ KSail provides a JSON Schema for IDE validation and autocompletion. Reference it
 
 ```yaml
 # yaml-language-server: $schema=https://raw.githubusercontent.com/devantler-tech/ksail/main/schemas/ksail-config.schema.json
-apiVersion: ksail.dev/v1alpha1
+apiVersion: ksail.io/v1alpha1
 kind: Cluster
 spec:
   # ...

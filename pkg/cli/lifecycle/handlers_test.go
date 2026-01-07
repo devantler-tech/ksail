@@ -70,6 +70,33 @@ func TestDetectDistributionFromContext_UnknownPattern(t *testing.T) {
 	}
 }
 
+// TestDetectDistributionFromContext_EmptyClusterName tests handling of contexts with empty cluster names.
+func TestDetectDistributionFromContext_EmptyClusterName(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		context string
+	}{
+		{name: "kind_prefix_only", context: "kind-"},
+		{name: "k3d_prefix_only", context: "k3d-"},
+		{name: "talos_prefix_only", context: "admin@"},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, _, err := lifecycle.DetectDistributionFromContext(testCase.context)
+
+			require.Error(t, err)
+			require.ErrorIs(t, err, lifecycle.ErrEmptyClusterName)
+			assert.Contains(t, err.Error(), "empty cluster name")
+			assert.Contains(t, err.Error(), testCase.context)
+		})
+	}
+}
+
 // TestDetectDistributionFromContext_AllPatterns_Snapshot uses snapshot testing
 // to verify all distribution detection patterns in a comprehensive format.
 func TestDetectDistributionFromContext_AllPatterns_Snapshot(t *testing.T) {
@@ -206,6 +233,13 @@ func TestErrorVariables(t *testing.T) {
 
 		require.Error(t, lifecycle.ErrUnknownContextPattern)
 		assert.Contains(t, lifecycle.ErrUnknownContextPattern.Error(), "unknown distribution")
+	})
+
+	t.Run("ErrEmptyClusterName", func(t *testing.T) {
+		t.Parallel()
+
+		require.Error(t, lifecycle.ErrEmptyClusterName)
+		assert.Contains(t, lifecycle.ErrEmptyClusterName.Error(), "empty cluster name")
 	})
 
 	t.Run("ErrMissingClusterProvisionerDependency", func(t *testing.T) {
