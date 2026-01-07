@@ -200,6 +200,10 @@ var (
 	ErrUnknownContextPattern = errors.New(
 		"unknown distribution: context does not match kind-, k3d-, or admin@ pattern",
 	)
+
+	// ErrEmptyClusterName is returned when cluster name detection results in an empty string.
+	// This happens with malformed contexts like "kind-", "k3d-", or "admin@".
+	ErrEmptyClusterName = errors.New("empty cluster name detected from context")
 )
 
 // DetectDistributionFromContext detects the distribution and cluster name from a context string.
@@ -208,20 +212,33 @@ var (
 //   - K3d: k3d-<cluster-name>
 //   - Talos: admin@<cluster-name>
 //
-// Returns the detected distribution, cluster name, and an error if the pattern is unrecognized.
+// Returns the detected distribution, cluster name, and an error if the pattern is unrecognized
+// or if the extracted cluster name is empty (e.g., "kind-", "k3d-", "admin@").
 func DetectDistributionFromContext(ctx string) (v1alpha1.Distribution, string, error) {
 	// Kind: kind-<cluster-name>
 	if clusterName, ok := strings.CutPrefix(ctx, "kind-"); ok {
+		if clusterName == "" {
+			return "", "", fmt.Errorf("%w: context %q has empty cluster name", ErrEmptyClusterName, ctx)
+		}
+
 		return v1alpha1.DistributionKind, clusterName, nil
 	}
 
 	// K3d: k3d-<cluster-name>
 	if clusterName, ok := strings.CutPrefix(ctx, "k3d-"); ok {
+		if clusterName == "" {
+			return "", "", fmt.Errorf("%w: context %q has empty cluster name", ErrEmptyClusterName, ctx)
+		}
+
 		return v1alpha1.DistributionK3d, clusterName, nil
 	}
 
 	// Talos: admin@<cluster-name>
 	if clusterName, ok := strings.CutPrefix(ctx, "admin@"); ok {
+		if clusterName == "" {
+			return "", "", fmt.Errorf("%w: context %q has empty cluster name", ErrEmptyClusterName, ctx)
+		}
+
 		return v1alpha1.DistributionTalos, clusterName, nil
 	}
 

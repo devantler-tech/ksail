@@ -109,14 +109,11 @@ func tryContextBasedDetection(
 		return nil, deps, fmt.Errorf("failed to get current context: %w", err)
 	}
 
-	// Detect distribution and cluster name from context pattern
+	// Detect distribution and cluster name from context pattern.
+	// This validates that the cluster name is non-empty (handles edge cases like "kind-", "k3d-", "admin@").
 	distribution, clusterName, err := lifecycle.DetectDistributionFromContext(currentContext)
 	if err != nil {
 		return nil, deps, fmt.Errorf("failed to detect distribution: %w", err)
-	}
-
-	if clusterName == "" {
-		return nil, deps, clustererrors.ErrEmptyClusterName
 	}
 
 	// Update the config with detected values

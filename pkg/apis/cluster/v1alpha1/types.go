@@ -10,7 +10,7 @@ import (
 
 const (
 	// Group is the API group for KSail.
-	Group = "ksail.dev"
+	Group = "ksail.io"
 	// Version is the API version for KSail.
 	Version = "v1alpha1"
 	// Kind is the kind for KSail clusters.
