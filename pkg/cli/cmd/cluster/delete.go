@@ -132,11 +132,10 @@ func tryContextBasedDetection(
 
 	// Only create contextBasedFactory if there's no test factory override.
 	// applyFactoryOverride sets a non-DefaultFactory when tests override the factory.
-	// Note: Check both value and pointer types since WrapHandler creates a value type.
-	_, isDefaultValue := deps.Factory.(clusterprovisioner.DefaultFactory)
-	_, isDefaultPointer := deps.Factory.(*clusterprovisioner.DefaultFactory)
+	// DefaultFactory is used as a value type, so we only check the value form here.
+	_, isDefaultFactory := deps.Factory.(clusterprovisioner.DefaultFactory)
 
-	if isDefaultValue || isDefaultPointer {
+	if isDefaultFactory {
 		// Create a minimal provisioner for the detected distribution.
 		// Replace the DefaultFactory since it has nil DistributionConfig when no config file is found.
 		// We need a contextBasedFactory that can work without distribution config.

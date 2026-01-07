@@ -11,7 +11,3 @@ import "errors"
 // This error is used by all provisioner implementations (Kind, K3d, Talos) when attempting
 // to delete, start, or stop a cluster that does not exist.
 var ErrClusterNotFound = errors.New("cluster not found")
-
-// ErrEmptyClusterName is returned when cluster name detection results in an empty string.
-// This can happen with malformed kubeconfig contexts like "kind-", "k3d-", or "admin@".
-var ErrEmptyClusterName = errors.New("empty cluster name detected from context")
