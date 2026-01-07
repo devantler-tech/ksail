@@ -57,7 +57,7 @@ func CleanupAll(
 	)
 	if err != nil {
 		notify.WriteMessage(notify.Message{
-			Type:    notify.WarningType,
+			Type:    notify.ErrorType,
 			Content: fmt.Sprintf("failed to cleanup registries: %v", err),
 			Writer:  cmd.OutOrStdout(),
 		})

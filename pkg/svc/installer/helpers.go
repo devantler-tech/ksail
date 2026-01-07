@@ -7,17 +7,17 @@ import (
 )
 
 const (
-	// DefaultInstallTimeout is the default timeout for component installation.
+	// DefaultInstallTimeout is the default timeout (3 minutes) for component installation.
 	DefaultInstallTimeout = 3 * time.Minute
-	// TalosInstallTimeout is the default timeout for Talos component installation.
+	// TalosInstallTimeout is the timeout (5 minutes) for Talos component installation.
 	// Talos clusters take longer to bootstrap due to the immutable OS design.
 	TalosInstallTimeout = 5 * time.Minute
 )
 
 // GetInstallTimeout determines the timeout for component installation.
 // Uses cluster connection timeout if configured, otherwise defaults to:
-//   - TalosInstallTimeout (10m) for Talos distribution
-//   - DefaultInstallTimeout (5m) for all other distributions
+//   - TalosInstallTimeout (5m) for Talos distribution
+//   - DefaultInstallTimeout (3m) for all other distributions
 //
 // Returns DefaultInstallTimeout if clusterCfg is nil.
 func GetInstallTimeout(clusterCfg *v1alpha1.Cluster) time.Duration {
