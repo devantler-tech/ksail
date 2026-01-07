@@ -1,6 +1,6 @@
 ---
 title: "Use Cases"
-nav_order: 4
+nav_order: 6
 ---
 
 # Use Cases
@@ -35,7 +35,7 @@ ksail cluster delete
 
 ## Local Development
 
-Run Kubernetes manifests locally with consistent workflow.
+Run Kubernetes manifests locally with consistent workflow. See [Workload Management](features.md#workload-management) for command details.
 
 ```bash
 # Scaffold project
@@ -60,7 +60,7 @@ ksail cluster delete
 
 ### Local Registry
 
-For local images:
+For local images (see [Registry Management](features.md#registry-management) for details):
 
 ```bash
 ksail cluster init --local-registry Enabled --local-registry-port 5111
@@ -137,7 +137,7 @@ jobs:
 
 ## GitOps Development Workflow
 
-Local GitOps workflows with Flux or ArgoCD.
+Local GitOps workflows with [Flux or ArgoCD](concepts.md#gitops). See [GitOps Workflows](features.md#gitops-workflows) for command reference.
 
 ### Flux
 
@@ -174,6 +174,8 @@ ksail workload reconcile --timeout 10m
 **Tips:** Push after every manifest change, `reconcile` waits for completion and triggers both Flux and ArgoCD, Flux auto-detects new artifacts from the OCI registry while ArgoCD relies on `ksail workload reconcile`, use `--timeout` for long deployments, test locally before production, commit `ksail.yaml`.
 
 ### Security
+
+Secure your GitOps workflow with [SOPS secret management](features.md#secret-management):
 
 - Encrypt secrets with SOPS: `ksail cipher encrypt`
 - Decrypt in pipeline: `ksail cipher decrypt`

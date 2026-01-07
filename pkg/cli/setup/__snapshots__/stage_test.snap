@@ -1,0 +1,26 @@
+
+[TestRunDockerStage_NoActivity - 1]
+📝 Title Only Stage
+✔ done
+
+---
+
+[TestRunDockerStage_Success - 1]
+🧪 Test Stage
+► doing test activity
+✔ test completed
+
+---
+
+[TestRunDockerStage_Success/executes_action_successfully_with_activity_message - 1]
+🧪 Test Stage
+► Testing...
+✔ Test passed
+
+---
+
+[TestRunDockerStage_NoActivity/executes_without_activity_message - 1]
+✅ Simple Stage
+✔ Completed
+
+---

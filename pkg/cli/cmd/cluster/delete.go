@@ -2,6 +2,7 @@ package cluster
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
@@ -13,6 +14,7 @@ import (
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
 	"github.com/devantler-tech/ksail/v5/pkg/io/scaffolder"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
+	clustererrors "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/errors"
 	k3dprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/k3d"
 	kindprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/kind"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
@@ -21,20 +23,6 @@ import (
 	"github.com/docker/docker/client"
 	"github.com/spf13/cobra"
 )
-
-// newDeleteLifecycleConfig creates the lifecycle configuration for cluster deletion.
-func newDeleteLifecycleConfig() lifecycle.Config {
-	return lifecycle.Config{
-		TitleEmoji:         "🗑️",
-		TitleContent:       "Delete cluster...",
-		ActivityContent:    "deleting cluster",
-		SuccessContent:     "cluster deleted",
-		ErrorMessagePrefix: "failed to delete cluster",
-		Action: func(ctx context.Context, provisioner clusterprovisioner.ClusterProvisioner, clusterName string) error {
-			return provisioner.Delete(ctx, clusterName)
-		},
-	}
-}
 
 // NewDeleteCmd creates and returns the delete command.
 func NewDeleteCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
@@ -65,10 +53,9 @@ func handleDeleteRunE(
 	cfgManager *ksailconfigmanager.ConfigManager,
 	deps lifecycle.Deps,
 ) error {
-	// Config is already loaded by WrapLifecycleHandler, so use the cached config
 	clusterCfg := cfgManager.Config
+	deps = applyFactoryOverride(deps)
 
-	// Get cluster name respecting the --context flag
 	clusterName, err := lifecycle.GetClusterNameFromConfig(clusterCfg, deps.Factory)
 	if err != nil {
 		return fmt.Errorf("failed to get cluster name: %w", err)
@@ -79,37 +66,154 @@ func handleDeleteRunE(
 		return fmt.Errorf("failed to get delete-volumes flag: %w", flagErr)
 	}
 
-	// For Talos, we must cleanup registries BEFORE deleting the cluster
-	// because the registries are connected to the cluster network. If we delete
-	// the cluster first, the network removal fails with "has active endpoints".
-	if clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionTalos {
-		cleanupRegistries(cmd, cfgManager, clusterCfg, deps, clusterName, deleteVolumes)
-	}
-
-	// Start a new timer stage for the cluster deletion
 	if deps.Timer != nil {
 		deps.Timer.NewStage()
 	}
 
-	config := newDeleteLifecycleConfig()
-
-	// Execute cluster deletion using the already-loaded config
-	err = lifecycle.RunWithConfig(cmd, deps, config, clusterCfg)
+	err = executeClusterDeletion(cmd, cfgManager, deps, clusterCfg)
 	if err != nil {
-		return fmt.Errorf("cluster deletion failed: %w", err)
+		return err
 	}
 
-	// For non-Talos distributions, cleanup registries after cluster deletion
+	cleanupRegistries(cmd, cfgManager, clusterCfg, deps, clusterName, deleteVolumes)
+
+	return nil
+}
+
+// applyFactoryOverride applies any test factory override to deps.
+func applyFactoryOverride(deps lifecycle.Deps) lifecycle.Deps {
+	clusterProvisionerFactoryMu.RLock()
+
+	factoryOverride := clusterProvisionerFactoryOverride
+
+	clusterProvisionerFactoryMu.RUnlock()
+
+	if factoryOverride != nil {
+		deps.Factory = factoryOverride
+	}
+
+	return deps
+}
+
+// disconnectTalosRegistriesWithContext disconnects registries from Talos network before deletion.
+func disconnectTalosRegistriesWithContext(
+	_ context.Context, // ctx is available via cmd.Context() in called functions
+	cmd *cobra.Command,
+	cfgManager *ksailconfigmanager.ConfigManager,
+	clusterCfg *v1alpha1.Cluster,
+	deps lifecycle.Deps,
+	clusterName string,
+) {
 	if clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionTalos {
-		cleanupRegistries(cmd, cfgManager, clusterCfg, deps, clusterName, deleteVolumes)
+		return
+	}
+
+	//nolint:contextcheck // Functions use cmd.Context() internally
+	disconnectMirrorRegistriesWithWarning(cmd, cfgManager, clusterCfg, deps, clusterName)
+	//nolint:contextcheck // Functions use cmd.Context() internally
+	disconnectLocalRegistryWithWarning(cmd, cfgManager, clusterCfg, deps, clusterName)
+}
+
+// executeClusterDeletion runs the cluster deletion and handles "not found" gracefully.
+func executeClusterDeletion(
+	cmd *cobra.Command,
+	cfgManager *ksailconfigmanager.ConfigManager,
+	deps lifecycle.Deps,
+	clusterCfg *v1alpha1.Cluster,
+) error {
+	config := lifecycle.Config{
+		TitleEmoji:         "🗑️",
+		TitleContent:       "Delete cluster...",
+		ActivityContent:    "deleting cluster",
+		SuccessContent:     "cluster deleted",
+		ErrorMessagePrefix: "failed to delete cluster",
+		Action: func(
+			ctx context.Context,
+			provisioner clusterprovisioner.ClusterProvisioner,
+			name string,
+		) error {
+			// Check if cluster exists first
+			exists, err := provisioner.Exists(ctx, name)
+			if err != nil {
+				return fmt.Errorf("check cluster existence: %w", err)
+			}
+
+			if !exists {
+				return clustererrors.ErrClusterNotFound
+			}
+
+			// Disconnect registries before Talos cluster deletion to avoid network conflicts
+			disconnectTalosRegistriesWithContext(ctx, cmd, cfgManager, clusterCfg, deps, name)
+
+			return provisioner.Delete(ctx, name)
+		},
+	}
+
+	err := lifecycle.RunWithConfig(cmd, deps, config, clusterCfg)
+	if err != nil {
+		if errors.Is(err, clustererrors.ErrClusterNotFound) {
+			notify.WriteMessage(notify.Message{
+				Type:    notify.WarningType,
+				Content: "cluster does not exist, nothing to delete",
+				Timer:   helpers.MaybeTimer(cmd, deps.Timer),
+				Writer:  cmd.OutOrStdout(),
+			})
+
+			return nil
+		}
+
+		return fmt.Errorf("cluster deletion failed: %w", err)
 	}
 
 	return nil
 }
 
+// disconnectMirrorRegistriesWithWarning disconnects mirror registries from the network.
+// This is used for Talos which needs registries disconnected BEFORE cluster deletion
+// due to network dependencies, while actual container cleanup happens after deletion.
+func disconnectMirrorRegistriesWithWarning(
+	cmd *cobra.Command,
+	cfgManager *ksailconfigmanager.ConfigManager,
+	_ *v1alpha1.Cluster,
+	_ lifecycle.Deps,
+	clusterName string,
+) {
+	err := disconnectMirrorRegistries(cmd, cfgManager, clusterName)
+	if err != nil {
+		notify.WriteMessage(notify.Message{
+			Type:    notify.WarningType,
+			Content: fmt.Sprintf("failed to disconnect mirror registries: %v", err),
+			Writer:  cmd.OutOrStdout(),
+		})
+	}
+}
+
+// disconnectLocalRegistryWithWarning disconnects the local registry from the cluster network.
+// This is used for Talos which needs registries disconnected BEFORE cluster deletion
+// because the registry is connected to the cluster network.
+func disconnectLocalRegistryWithWarning(
+	cmd *cobra.Command,
+	cfgManager *ksailconfigmanager.ConfigManager,
+	clusterCfg *v1alpha1.Cluster,
+	deps lifecycle.Deps,
+	clusterName string,
+) {
+	localDeps := getLocalRegistryDeps()
+
+	err := localregistry.Disconnect(cmd, cfgManager, clusterCfg, deps, clusterName, localDeps)
+	if err != nil {
+		notify.WriteMessage(notify.Message{
+			Type:    notify.WarningType,
+			Content: fmt.Sprintf("failed to disconnect local registry: %v", err),
+			Writer:  cmd.OutOrStdout(),
+		})
+	}
+}
+
 // cleanupRegistries cleans up mirror and local registries during cluster deletion.
-// For Talos, this must be called BEFORE cluster deletion because registries
-// are connected to the cluster network. For Kind and K3d, it's called after.
+// For Talos, registries are disconnected from the network before cluster deletion
+// (via disconnectMirrorRegistriesWithWarning and disconnectLocalRegistryWithWarning),
+// but the actual container cleanup happens here after deletion.
 func cleanupRegistries(
 	cmd *cobra.Command,
 	cfgManager *ksailconfigmanager.ConfigManager,
@@ -118,7 +222,14 @@ func cleanupRegistries(
 	clusterName string,
 	deleteVolumes bool,
 ) {
-	err := cleanupMirrorRegistries(cmd, cfgManager, clusterCfg, deps, clusterName, deleteVolumes)
+	err := cleanupMirrorRegistries(
+		cmd,
+		cfgManager,
+		clusterCfg,
+		deps,
+		clusterName,
+		deleteVolumes,
+	)
 	if err != nil {
 		notify.WriteMessage(notify.Message{
 			Type:    notify.WarningType,
@@ -127,7 +238,7 @@ func cleanupRegistries(
 		})
 	}
 
-	// Always attempt local registry cleanup for Kind/Talos distributions.
+	// Attempt local registry cleanup for Kind and Talos (K3d handles it natively).
 	// The Cleanup function checks for container existence and skips if not provisioned.
 	// This ensures orphaned containers are cleaned up even when config is missing.
 	localDeps := getLocalRegistryDeps()
@@ -450,6 +561,63 @@ func collectTalosMirrorSpecs(
 	specs, names, _ := buildMirrorSpecsResult(mirrorSpecs)
 
 	return specs, names
+}
+
+// disconnectMirrorRegistries disconnects mirror registries from the Talos network.
+// This allows the network to be removed during cluster deletion without "active endpoints" errors.
+func disconnectMirrorRegistries(
+	cmd *cobra.Command,
+	cfgManager *ksailconfigmanager.ConfigManager,
+	clusterName string,
+) error {
+	// Collect mirror specs from Talos config
+	mirrorSpecs, registryNames := collectTalosMirrorSpecs(cfgManager)
+
+	if len(registryNames) == 0 {
+		return nil
+	}
+
+	// Talos uses the cluster name as the network name
+	networkName := clusterName
+	localDeps := getLocalRegistryDeps()
+
+	err := localDeps.DockerInvoker(cmd, func(dockerAPIClient client.APIClient) error {
+		registryMgr, mgrErr := dockerclient.NewRegistryManager(dockerAPIClient)
+		if mgrErr != nil {
+			return fmt.Errorf("failed to create registry manager: %w", mgrErr)
+		}
+
+		// Build registry infos from mirror specs to get container names
+		registryInfos := registry.BuildRegistryInfosFromSpecs(
+			mirrorSpecs,
+			nil,
+			nil,
+			clusterName,
+		)
+
+		// Disconnect each registry from the network
+		for _, info := range registryInfos {
+			disconnectErr := registryMgr.DisconnectFromNetwork(
+				cmd.Context(),
+				info.Name,
+				networkName,
+			)
+			if disconnectErr != nil {
+				return fmt.Errorf(
+					"failed to disconnect registry %s from network: %w",
+					info.Name,
+					disconnectErr,
+				)
+			}
+		}
+
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("disconnect mirror registries: %w", err)
+	}
+
+	return nil
 }
 
 // buildMirrorSpecsResult builds the registry names from mirror specs.

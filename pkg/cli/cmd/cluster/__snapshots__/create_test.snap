@@ -1,26 +1,17 @@
 
-[TestCreate_ArgoCD_PrintsInstallStage - 1]
-🗄️ Create local registry...
-► creating local registry
-
-
+[TestCreate_DefaultCSI_DoesNotInstall - 1]
 🚀 Create cluster...
 ► creating cluster
 ✔ cluster created
+---
 
-🔌 Attach local registry...
-► attaching local registry to cluster
-
-📦 Installing components...
-► argocd installing
-✔ argocd installed
-► configuring argocd resources
-ℹ Access ArgoCD UI at https://localhost:8080 via: kubectl port-forward svc/argocd-server -n argocd 8080:443
-
+[TestCreate_DefaultCertManager_DoesNotInstall - 1]
+🚀 Create cluster...
+► creating cluster
+✔ cluster created
 ---
 
 [TestCreate_EnabledCertManager_PrintsInstallStage - 1]
-
 🚀 Create cluster...
 ► creating cluster
 ✔ cluster created
@@ -28,5 +19,71 @@
 📦 Installing components...
 ► cert-manager installing
 ✔ cert-manager installed
+---
 
+[TestCreate_GitOps_PrintsInstallStage/ArgoCD - 1]
+🗄️ Create local registry...
+► creating local registry
+✔ local registry created
+
+🚀 Create cluster...
+► creating cluster
+✔ cluster created
+
+🔌 Attach local registry...
+► attaching local registry to cluster
+✔ local registry attached to cluster
+
+📦 Installing components...
+► argocd installing
+✔ argocd installed
+
+⚙️ Configuring components...
+► configuring argocd resources
+ℹ Access ArgoCD UI at https://localhost:8080 via: kubectl port-forward svc/argocd-server -n argocd 8080:443
+✔ components configured
+---
+
+[TestCreate_GitOps_PrintsInstallStage/Flux - 1]
+🗄️ Create local registry...
+► creating local registry
+✔ local registry created
+
+🚀 Create cluster...
+► creating cluster
+✔ cluster created
+
+🔌 Attach local registry...
+► attaching local registry to cluster
+✔ local registry attached to cluster
+
+📦 Installing components...
+► flux installing
+✔ flux installed
+
+⚙️ Configuring components...
+► applying custom resources
+✔ components configured
+---
+
+[TestCreate_LocalPathStorageCSI_InstallsOnKind - 1]
+🚀 Create cluster...
+► creating cluster
+✔ cluster created
+
+📦 Installing components...
+► csi installing
+✔ csi installed
+---
+
+[TestCreate_LocalRegistryDisabled_SkipsRegistryStages - 1]
+🚀 Create cluster...
+► creating cluster
+✔ cluster created
+---
+
+[TestCreate_Minimal_PrintsOnlyClusterLifecycle - 1]
+🚀 Create cluster...
+► creating cluster
+✔ cluster created
 ---

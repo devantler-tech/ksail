@@ -1,0 +1,22 @@
+
+[TestWithDockerClientInstance/close_error_logs_warning - 1]
+⚠ cleanup warning: failed to close docker client: test: close failed
+
+---
+
+[TestWithDockerClientInstance/both_operation_and_close_error_-_operation_error_returned - 1]
+error: first: operation failed
+output: ⚠ cleanup warning: failed to close docker client: test: close failed
+
+---
+
+[TestWithDockerClientInstance_BothErrors - 1]
+error: first: operation failed
+output: ⚠ cleanup warning: failed to close docker client: test: close failed
+
+---
+
+[TestWithDockerClientInstance_CloseError - 1]
+⚠ cleanup warning: failed to close docker client: test: close failed
+
+---

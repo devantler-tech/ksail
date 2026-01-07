@@ -3,11 +3,13 @@ package cluster
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup/localregistry"
+	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/installer"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	"github.com/docker/docker/client"
@@ -30,6 +32,10 @@ var (
 	clusterProvisionerFactoryOverride clusterprovisioner.Factory
 	//nolint:gochecknoglobals // dependency injection for tests
 	dockerClientInvoker = helpers.WithDockerClient
+	//nolint:gochecknoglobals // dependency injection for tests
+	localRegistryServiceFactoryMu sync.RWMutex
+	//nolint:gochecknoglobals // dependency injection for tests
+	localRegistryServiceFactory localregistry.ServiceFactoryFunc
 )
 
 // getInstallerFactories returns the installer factories to use, allowing test override.
@@ -52,9 +58,21 @@ func getLocalRegistryDeps() localregistry.Dependencies {
 
 	dockerClientInvokerMu.RUnlock()
 
-	return localregistry.NewDependencies(
+	opts := []localregistry.Option{
 		localregistry.WithDockerInvoker(invoker),
-	)
+	}
+
+	localRegistryServiceFactoryMu.RLock()
+
+	factory := localRegistryServiceFactory
+
+	localRegistryServiceFactoryMu.RUnlock()
+
+	if factory != nil {
+		opts = append(opts, localregistry.WithServiceFactory(factory))
+	}
+
+	return localregistry.NewDependencies(opts...)
 }
 
 // overrideInstallerFactory is a helper that applies a factory override and returns a restore function.
@@ -118,6 +136,29 @@ func SetEnsureArgoCDResourcesForTests(
 	})
 }
 
+// SetFluxInstallerFactoryForTests overrides the Flux installer factory.
+func SetFluxInstallerFactoryForTests(
+	factory func(*v1alpha1.Cluster) (installer.Installer, error),
+) func() {
+	return overrideInstallerFactory(func(f *setup.InstallerFactories) {
+		// Wrap the simplified test factory to match the Flux factory signature
+		f.Flux = func(_ helm.Interface, _ time.Duration) installer.Installer {
+			inst, _ := factory(nil) // clusterCfg not used in test factory
+
+			return inst
+		}
+	})
+}
+
+// SetEnsureFluxResourcesForTests overrides the Flux resource ensure function.
+func SetEnsureFluxResourcesForTests(
+	fn func(context.Context, string, *v1alpha1.Cluster, string) error,
+) func() {
+	return overrideInstallerFactory(func(f *setup.InstallerFactories) {
+		f.EnsureFluxResources = fn
+	})
+}
+
 // SetDockerClientInvokerForTests overrides the Docker client invoker for testing.
 func SetDockerClientInvokerForTests(
 	invoker func(*cobra.Command, func(client.APIClient) error) error,
@@ -153,5 +194,23 @@ func SetClusterProvisionerFactoryForTests(factory clusterprovisioner.Factory) fu
 		clusterProvisionerFactoryOverride = previous
 
 		clusterProvisionerFactoryMu.Unlock()
+	}
+}
+
+// SetLocalRegistryServiceFactoryForTests overrides the local registry service factory for testing.
+func SetLocalRegistryServiceFactoryForTests(factory localregistry.ServiceFactoryFunc) func() {
+	localRegistryServiceFactoryMu.Lock()
+
+	previous := localRegistryServiceFactory
+	localRegistryServiceFactory = factory
+
+	localRegistryServiceFactoryMu.Unlock()
+
+	return func() {
+		localRegistryServiceFactoryMu.Lock()
+
+		localRegistryServiceFactory = previous
+
+		localRegistryServiceFactoryMu.Unlock()
 	}
 }

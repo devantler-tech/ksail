@@ -220,8 +220,6 @@ func (r *Reconciler) reconcileKustomization(ctx context.Context, timeout time.Du
 }
 
 // ociRepositoryClient returns a dynamic client for Flux OCIRepositories.
-//
-//nolint:ireturn // Returns k8s dynamic.ResourceInterface by design
 func (r *Reconciler) ociRepositoryClient() dynamic.ResourceInterface {
 	gvr := schema.GroupVersionResource{
 		Group:    "source.toolkit.fluxcd.io",
@@ -233,8 +231,6 @@ func (r *Reconciler) ociRepositoryClient() dynamic.ResourceInterface {
 }
 
 // kustomizationClient returns a dynamic client for Flux Kustomizations.
-//
-//nolint:ireturn // Returns k8s dynamic.ResourceInterface by design
 func (r *Reconciler) kustomizationClient() dynamic.ResourceInterface {
 	gvr := schema.GroupVersionResource{
 		Group:    "kustomize.toolkit.fluxcd.io",

@@ -40,15 +40,14 @@ func InstallCNI(
 	cmd *cobra.Command,
 	clusterCfg *v1alpha1.Cluster,
 	tmr timer.Timer,
-	firstActivityShown *bool,
 ) (bool, error) {
 	switch clusterCfg.Spec.Cluster.CNI {
 	case v1alpha1.CNICilium:
-		err := installCNIOnly(cmd, clusterCfg, tmr, installCiliumCNI, firstActivityShown)
+		err := installCNIOnly(cmd, clusterCfg, tmr, installCiliumCNI)
 
 		return true, err
 	case v1alpha1.CNICalico:
-		err := installCNIOnly(cmd, clusterCfg, tmr, installCalicoCNI, firstActivityShown)
+		err := installCNIOnly(cmd, clusterCfg, tmr, installCalicoCNI)
 
 		return true, err
 	case v1alpha1.CNIDefault, "":
@@ -63,14 +62,7 @@ func installCNIOnly(
 	clusterCfg *v1alpha1.Cluster,
 	tmr timer.Timer,
 	installFunc func(*cobra.Command, *v1alpha1.Cluster, timer.Timer) error,
-	firstActivityShown *bool,
 ) error {
-	if *firstActivityShown {
-		_, _ = fmt.Fprintln(cmd.OutOrStdout())
-	}
-
-	*firstActivityShown = true
-
 	tmr.NewStage()
 
 	return installFunc(cmd, clusterCfg, tmr)

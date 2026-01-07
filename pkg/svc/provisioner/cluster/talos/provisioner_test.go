@@ -8,6 +8,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/client/docker"
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
+	clustererrors "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/errors"
 	talosprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/talos"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
@@ -289,7 +290,7 @@ func TestTalosProvisioner_Start_ClusterNotFound(t *testing.T) {
 	err := provisioner.Start(ctx, "nonexistent")
 
 	require.Error(t, err)
-	assert.ErrorIs(t, err, talosprovisioner.ErrClusterNotFound)
+	assert.ErrorIs(t, err, clustererrors.ErrClusterNotFound)
 }
 
 func TestTalosProvisioner_Start_Success(t *testing.T) {
@@ -340,7 +341,7 @@ func TestTalosProvisioner_Stop_ClusterNotFound(t *testing.T) {
 	err := provisioner.Stop(ctx, "nonexistent")
 
 	require.Error(t, err)
-	assert.ErrorIs(t, err, talosprovisioner.ErrClusterNotFound)
+	assert.ErrorIs(t, err, clustererrors.ErrClusterNotFound)
 }
 
 func TestTalosProvisioner_Stop_Success(t *testing.T) {
@@ -564,7 +565,7 @@ func TestTalosProvisioner_Delete_ClusterNotFound(t *testing.T) {
 	err := provisioner.Delete(ctx, "")
 
 	require.Error(t, err)
-	require.ErrorIs(t, err, talosprovisioner.ErrClusterNotFound)
+	require.ErrorIs(t, err, clustererrors.ErrClusterNotFound)
 }
 
 func TestTalosProvisioner_Delete_Success(t *testing.T) {

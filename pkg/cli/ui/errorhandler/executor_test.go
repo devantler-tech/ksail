@@ -2,12 +2,26 @@ package errorhandler_test
 
 import (
 	"errors"
-	"strings"
+	"os"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/errorhandler"
+	"github.com/gkampitakis/go-snaps/snaps"
 	"github.com/spf13/cobra"
 )
+
+func TestMain(m *testing.M) {
+	exitCode := m.Run()
+
+	_, err := snaps.Clean(m, snaps.CleanOpts{Sort: true})
+	if err != nil {
+		_, _ = os.Stderr.WriteString("failed to clean snapshots: " + err.Error() + "\n")
+
+		os.Exit(1)
+	}
+
+	os.Exit(exitCode)
+}
 
 var (
 	errTestBoom        = errors.New("boom")
@@ -59,18 +73,7 @@ func TestExecutorExecuteInvalidSubcommand(t *testing.T) {
 		t.Fatal("expected error, got nil")
 	}
 
-	message := err.Error()
-	if !strings.Contains(message, "unknown command \"invalid\" for \"test\"") {
-		t.Fatalf("expected error message to contain unknown command text, got %q", message)
-	}
-
-	if strings.Contains(message, "Error: ") {
-		t.Fatalf("expected message to strip 'Error:' prefix, got %q", message)
-	}
-
-	if !strings.Contains(message, "Run 'test --help' for usage.") {
-		t.Fatalf("expected usage hint to be preserved, got %q", message)
-	}
+	snaps.MatchSnapshot(t, err.Error())
 }
 
 func TestCommandErrorErrorNilReceiver(t *testing.T) {
@@ -102,9 +105,7 @@ func TestCommandErrorErrorCauseOnlyWhenMessageEmpty(t *testing.T) {
 	}
 
 	err := executeAndRequireCommandError(t, cmd)
-	if err.Error() != "boom" {
-		t.Fatalf("expected %q, got %q", "boom", err.Error())
-	}
+	snaps.MatchSnapshot(t, err.Error())
 }
 
 func TestCommandErrorErrorMessageAndCauseConcatenatedWhenDistinct(t *testing.T) {
@@ -122,9 +123,7 @@ func TestCommandErrorErrorMessageAndCauseConcatenatedWhenDistinct(t *testing.T) 
 	}
 
 	err := executeAndRequireCommandError(t, cmd)
-	if err.Error() != "normalized: original failure" {
-		t.Fatalf("expected %q, got %q", "normalized: original failure", err.Error())
-	}
+	snaps.MatchSnapshot(t, err.Error())
 }
 
 func TestCommandErrorErrorMessageRetainedWhenAlreadyIncludesCause(t *testing.T) {
@@ -142,9 +141,7 @@ func TestCommandErrorErrorMessageRetainedWhenAlreadyIncludesCause(t *testing.T) 
 	}
 
 	err := executeAndRequireCommandError(t, cmd)
-	if err.Error() != "boom: original failure" {
-		t.Fatalf("expected %q, got %q", "boom: original failure", err.Error())
-	}
+	snaps.MatchSnapshot(t, err.Error())
 }
 
 func TestCommandErrorUnwrap(t *testing.T) {

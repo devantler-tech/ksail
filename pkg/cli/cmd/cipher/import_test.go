@@ -172,9 +172,10 @@ func TestImportKeyBasic(t *testing.T) {
 		t.Errorf("expected no error executing import, got: %v", err)
 	}
 
+	// Verify output contains key confirmation (path is dynamic, so we check for key parts)
 	output := out.String()
-	if !strings.Contains(output, "imported") {
-		t.Errorf("expected success message, got: %s", output)
+	if !strings.Contains(output, "imported age key to") || !strings.Contains(output, "keys.txt") {
+		t.Errorf("expected output to indicate key import, got: %s", output)
 	}
 
 	// Verify the key was written to the correct location

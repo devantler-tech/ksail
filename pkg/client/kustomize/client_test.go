@@ -4,11 +4,24 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v5/pkg/client/kustomize"
+	"github.com/gkampitakis/go-snaps/snaps"
 )
+
+func TestMain(m *testing.M) {
+	exitCode := m.Run()
+
+	_, err := snaps.Clean(m, snaps.CleanOpts{Sort: true})
+	if err != nil {
+		_, _ = os.Stderr.WriteString("failed to clean snapshots: " + err.Error() + "\n")
+
+		os.Exit(1)
+	}
+
+	os.Exit(exitCode)
+}
 
 func TestNewClient(t *testing.T) {
 	t.Parallel()
@@ -65,16 +78,8 @@ resources:
 		t.Fatalf("expected build to succeed, got error: %v", err)
 	}
 
-	// Verify output contains expected content
-	outputStr := output.String()
-
-	if !strings.Contains(outputStr, "kind: ConfigMap") {
-		t.Fatal("expected output to contain ConfigMap")
-	}
-
-	if !strings.Contains(outputStr, "name: test-config") {
-		t.Fatal("expected output to contain test-config name")
-	}
+	// Verify output using snapshot
+	snaps.MatchSnapshot(t, output.String())
 }
 
 func TestBuild_NonExistentDirectory(t *testing.T) {
@@ -214,20 +219,8 @@ func TestBuild_ComplexKustomization(t *testing.T) {
 		t.Fatalf("expected build to succeed, got error: %v", err)
 	}
 
-	// Verify output contains expected content
-	outputStr := output.String()
-
-	if !strings.Contains(outputStr, "kind: Namespace") {
-		t.Fatal("expected output to contain Namespace")
-	}
-
-	if !strings.Contains(outputStr, "kind: Deployment") {
-		t.Fatal("expected output to contain Deployment")
-	}
-
-	if !strings.Contains(outputStr, "environment: test") {
-		t.Fatal("expected output to contain commonLabels")
-	}
+	// Verify output using snapshot
+	snaps.MatchSnapshot(t, output.String())
 }
 
 func TestBuild_OutputIsValidYAML(t *testing.T) {
@@ -285,16 +278,8 @@ resources:
 		t.Fatal("expected non-empty output")
 	}
 
-	// Verify output contains YAML content
-	outputStr := output.String()
-
-	if !strings.Contains(outputStr, "apiVersion:") {
-		t.Fatal("expected output to contain apiVersion")
-	}
-
-	if !strings.Contains(outputStr, "kind:") {
-		t.Fatal("expected output to contain kind")
-	}
+	// Verify output using snapshot
+	snaps.MatchSnapshot(t, output.String())
 }
 
 func TestBuild_ReturnsBufferNotString(t *testing.T) {

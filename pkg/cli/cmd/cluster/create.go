@@ -82,7 +82,6 @@ func handleCreateRunE(
 		return err
 	}
 
-	firstActivityShown := false
 	localDeps := getLocalRegistryDeps()
 
 	err = ensureLocalRegistriesReady(
@@ -90,7 +89,6 @@ func handleCreateRunE(
 		ctx,
 		deps,
 		cfgManager,
-		&firstActivityShown,
 		localDeps,
 	)
 	if err != nil {
@@ -117,7 +115,7 @@ func handleCreateRunE(
 		}
 	}
 
-	err = executeClusterLifecycle(cmd, ctx.ClusterCfg, deps, &firstActivityShown)
+	err = executeClusterLifecycle(cmd, ctx.ClusterCfg, deps)
 	if err != nil {
 		return err
 	}
@@ -127,7 +125,6 @@ func handleCreateRunE(
 		ctx,
 		deps,
 		cfgManager,
-		&firstActivityShown,
 	)
 
 	err = localregistry.ExecuteStage(
@@ -135,7 +132,6 @@ func handleCreateRunE(
 		ctx,
 		deps,
 		localregistry.StageConnect,
-		&firstActivityShown,
 		localDeps,
 	)
 	if err != nil {
@@ -155,7 +151,7 @@ func handleCreateRunE(
 		return fmt.Errorf("failed to wait for local registry: %w", err)
 	}
 
-	return handlePostCreationSetup(cmd, ctx.ClusterCfg, deps.Timer, &firstActivityShown)
+	return handlePostCreationSetup(cmd, ctx.ClusterCfg, deps.Timer)
 }
 
 func loadClusterConfiguration(
@@ -180,20 +176,18 @@ func buildRegistryStageParams(
 	ctx *localregistry.Context,
 	deps lifecycle.Deps,
 	cfgManager *ksailconfigmanager.ConfigManager,
-	firstActivityShown *bool,
 ) mirrorregistry.StageParams {
 	localDeps := getLocalRegistryDeps()
 
 	return mirrorregistry.StageParams{
-		Cmd:                cmd,
-		ClusterCfg:         ctx.ClusterCfg,
-		Deps:               deps,
-		CfgManager:         cfgManager,
-		KindConfig:         ctx.KindConfig,
-		K3dConfig:          ctx.K3dConfig,
-		TalosConfig:        ctx.TalosConfig,
-		FirstActivityShown: firstActivityShown,
-		DockerInvoker:      localDeps.DockerInvoker,
+		Cmd:           cmd,
+		ClusterCfg:    ctx.ClusterCfg,
+		Deps:          deps,
+		CfgManager:    cfgManager,
+		KindConfig:    ctx.KindConfig,
+		K3dConfig:     ctx.K3dConfig,
+		TalosConfig:   ctx.TalosConfig,
+		DockerInvoker: localDeps.DockerInvoker,
 	}
 }
 
@@ -202,7 +196,6 @@ func ensureLocalRegistriesReady(
 	ctx *localregistry.Context,
 	deps lifecycle.Deps,
 	cfgManager *ksailconfigmanager.ConfigManager,
-	firstActivityShown *bool,
 	localDeps localregistry.Dependencies,
 ) error {
 	// Stage 1: Provision local registry
@@ -211,14 +204,13 @@ func ensureLocalRegistriesReady(
 		ctx,
 		deps,
 		localregistry.StageProvision,
-		firstActivityShown,
 		localDeps,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to provision local registry: %w", err)
 	}
 
-	params := buildRegistryStageParams(cmd, ctx, deps, cfgManager, firstActivityShown)
+	params := buildRegistryStageParams(cmd, ctx, deps, cfgManager)
 
 	// Stage 2: Create and configure registry containers (local + mirrors)
 	err = mirrorregistry.SetupRegistries(params)
@@ -245,15 +237,8 @@ func executeClusterLifecycle(
 	cmd *cobra.Command,
 	clusterCfg *v1alpha1.Cluster,
 	deps lifecycle.Deps,
-	firstActivityShown *bool,
 ) error {
 	deps.Timer.NewStage()
-
-	if *firstActivityShown {
-		cmd.Println()
-	}
-
-	*firstActivityShown = true
 
 	err := lifecycle.RunWithConfig(cmd, deps, newCreateLifecycleConfig(), clusterCfg)
 	if err != nil {
@@ -268,9 +253,8 @@ func configureRegistryMirrorsInClusterWithWarning(
 	ctx *localregistry.Context,
 	deps lifecycle.Deps,
 	cfgManager *ksailconfigmanager.ConfigManager,
-	firstActivityShown *bool,
 ) {
-	params := buildRegistryStageParams(cmd, ctx, deps, cfgManager, firstActivityShown)
+	params := buildRegistryStageParams(cmd, ctx, deps, cfgManager)
 
 	// Configure containerd inside cluster nodes to use registry mirrors (Kind only)
 	err := mirrorregistry.ConfigureRegistryMirrorsInCluster(params)
@@ -288,9 +272,8 @@ func handlePostCreationSetup(
 	cmd *cobra.Command,
 	clusterCfg *v1alpha1.Cluster,
 	tmr timer.Timer,
-	firstActivityShown *bool,
 ) error {
-	_, err := setup.InstallCNI(cmd, clusterCfg, tmr, firstActivityShown)
+	_, err := setup.InstallCNI(cmd, clusterCfg, tmr)
 	if err != nil {
 		return fmt.Errorf("failed to install CNI: %w", err)
 	}
@@ -303,7 +286,6 @@ func handlePostCreationSetup(
 		clusterCfg,
 		factories,
 		outputTimer,
-		firstActivityShown,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to install post-CNI components: %w", err)

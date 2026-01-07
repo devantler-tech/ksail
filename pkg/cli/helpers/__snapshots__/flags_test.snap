@@ -1,0 +1,16 @@
+
+[TestIsTimingEnabled/returns_error_for_nil_command - 1]
+nil command
+---
+
+[TestIsTimingEnabled/returns_error_when_flag_not_found - 1]
+flag not found: "timing"
+---
+
+[TestIsTimingEnabled_NilCommand - 1]
+nil command
+---
+
+[TestIsTimingEnabled_FlagNotFound - 1]
+flag not found: "timing"
+---

@@ -61,3 +61,24 @@ K3d error occurred: false
 [TestScaffoldGeneratorFailures/Kind_config_with_problematic_path - 1]
 Kind error occurred: false
 ---
+
+[TestScaffoldOverwritesFilesWhenForceEnabled - 1]
+✚ overwrote 'ksail.yaml'
+✚ created 'kind.yaml'
+✚ created 'k8s/kustomization.yaml'
+
+---
+
+[TestScaffoldOverwritesKindConfigWhenForceEnabled - 1]
+✚ created 'ksail.yaml'
+✚ overwrote 'kind.yaml'
+✚ created 'k8s/kustomization.yaml'
+
+---
+
+[TestScaffoldSkipsExistingFileWithoutForce - 1]
+⚠ skipped 'ksail.yaml', file exists use --force to overwrite
+✚ created 'kind.yaml'
+✚ created 'k8s/kustomization.yaml'
+
+---

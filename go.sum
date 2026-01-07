@@ -544,8 +544,6 @@ github.com/fluxcd/pkg/apis/acl v0.9.0 h1:wBpgsKT+jcyZEcM//OmZr9RiF8klL3ebrDp2u2T
 github.com/fluxcd/pkg/apis/acl v0.9.0/go.mod h1:TttNS+gocsGLwnvmgVi3/Yscwqrjc17+vhgYfqkfrV4=
 github.com/fluxcd/pkg/apis/kustomize v1.14.0 h1:PmWqMpRX0v7/aCAUNWfohe4o1qa9G3Cg/vVr5PCedI4=
 github.com/fluxcd/pkg/apis/kustomize v1.14.0/go.mod h1:CGRpU9Od4ht5+MHL6QlMfWaW87U9UTfGVM5CM4PZ28I=
-github.com/fluxcd/pkg/apis/meta v1.23.0 h1:fLis5YcHnOsyKYptzBtituBm5EWNx13I0bXQsy0FG4s=
-github.com/fluxcd/pkg/apis/meta v1.23.0/go.mod h1:UWsIbBPCxYvoVklr2mV2uLFBf/n17dNAmKFjRfApdDo=
 github.com/fluxcd/pkg/apis/meta v1.24.0 h1:+e33T4OL9oqMWZSltsgImvi+/Punx42X9NqFlPesH6o=
 github.com/fluxcd/pkg/apis/meta v1.24.0/go.mod h1:UWsIbBPCxYvoVklr2mV2uLFBf/n17dNAmKFjRfApdDo=
 github.com/fluxcd/source-controller/api v1.7.4 h1:+EOVnRA9LmLxOx7J273l7IOEU39m+Slt/nQGBy69ygs=
@@ -1137,8 +1135,8 @@ github.com/opencontainers/go-digest v1.0.0 h1:apOUWs51W5PlhuyGyz9FCeeBIOUDA/6nW8
 github.com/opencontainers/go-digest v1.0.0/go.mod h1:0JzlMkj0TRzQZfJkVvzbP0HBR3IKzErnv2BNG4W4MAM=
 github.com/opencontainers/image-spec v1.1.1 h1:y0fUlFfIZhPF1W537XOLg0/fcx6zcHCJwooC2xJA040=
 github.com/opencontainers/image-spec v1.1.1/go.mod h1:qpqAh3Dmcf36wStyyWU+kCeDgrGnAve2nCC8+7h8Q0M=
-github.com/opencontainers/runc v1.2.6 h1:P7Hqg40bsMvQGCS4S7DJYhUZOISMLJOB2iGX5COWiPk=
-github.com/opencontainers/runc v1.2.6/go.mod h1:dOQeFo29xZKBNeRBI0B19mJtfHv68YgCTh1X+YphA+4=
+github.com/opencontainers/runc v1.2.8 h1:RnEICeDReapbZ5lZEgHvj7E9Q3Eex9toYmaGBsbvU5Q=
+github.com/opencontainers/runc v1.2.8/go.mod h1:cC0YkmZcuvr+rtBZ6T7NBoVbMGNAdLa/21vIElJDOzI=
 github.com/opencontainers/runtime-spec v1.2.1 h1:S4k4ryNgEpxW1dzyqffOmhI1BHYcjzU8lpJfSlR0xww=
 github.com/opencontainers/runtime-spec v1.2.1/go.mod h1:jwyrGlmzljRJv/Fgzds9SsS/C5hL+LL3ko9hs6T5lQ0=
 github.com/opencontainers/selinux v1.13.0 h1:Zza88GWezyT7RLql12URvoxsbLfjFx988+LGaWfbL84=
@@ -1314,8 +1312,6 @@ github.com/siderolabs/protoenc v0.2.4 h1:D3Fpn2nQSQOhl8ZlAxijZAf7K6F8CM1uZq0afIG
 github.com/siderolabs/protoenc v0.2.4/go.mod h1:i5XLHjfv5vyi7LhQrSEo19HCA+lYtDd7CWxsoWp9XE8=
 github.com/siderolabs/talos v1.11.6 h1:CTthrTrPp95g3fuuQTI2r7cX8ZaJ3ap9kpWgFP5it4o=
 github.com/siderolabs/talos v1.11.6/go.mod h1:phhk/zBv54jeQLD3JLHy4T6o6fJLva0kONknz0qPBRw=
-github.com/siderolabs/talos/pkg/machinery v1.12.0 h1:SDXXCTEuPhaXIA84WuBeG8cxR71DkF8FhXXgb2S1048=
-github.com/siderolabs/talos/pkg/machinery v1.12.0/go.mod h1:dNc4lG9yb2CzCwnJbfSUO9ZmkXE6P3BnVo1UsCITr/U=
 github.com/siderolabs/talos/pkg/machinery v1.12.1 h1:MfAYsfaS4OekMU+fgQeCr/ZMDgr0kWE+iyUbB/CPNmI=
 github.com/siderolabs/talos/pkg/machinery v1.12.1/go.mod h1:dNc4lG9yb2CzCwnJbfSUO9ZmkXE6P3BnVo1UsCITr/U=
 github.com/sirupsen/logrus v1.2.0/go.mod h1:LxeOpSwHxABJmUn/MG1IvRgCAasNZTLOkJPxbbu5VWo=

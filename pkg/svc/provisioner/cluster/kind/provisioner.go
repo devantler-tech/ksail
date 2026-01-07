@@ -3,7 +3,6 @@ package kindprovisioner
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -13,6 +12,7 @@ import (
 
 	iopath "github.com/devantler-tech/ksail/v5/pkg/io"
 	"github.com/devantler-tech/ksail/v5/pkg/io/marshaller"
+	clustererrors "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/errors"
 	runner "github.com/devantler-tech/ksail/v5/pkg/utils/runner"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
@@ -24,9 +24,6 @@ import (
 	getclusters "sigs.k8s.io/kind/pkg/cmd/kind/get/clusters"
 	"sigs.k8s.io/kind/pkg/log"
 )
-
-// ErrClusterNotFound is returned when a cluster is not found.
-var ErrClusterNotFound = errors.New("cluster not found")
 
 // This allows kind's console output to be displayed in real-time.
 // Only info-level messages (V(0)) are enabled to avoid verbose debug output.
@@ -203,8 +200,19 @@ func (k *KindClusterProvisioner) Create(ctx context.Context, name string) error 
 }
 
 // Delete deletes a kind cluster using kind's Cobra command.
+// Returns clustererrors.ErrClusterNotFound if the cluster does not exist.
 func (k *KindClusterProvisioner) Delete(ctx context.Context, name string) error {
 	target := setName(name, k.kindConfig.Name)
+
+	// Check if cluster exists before attempting to delete
+	exists, err := k.Exists(ctx, target)
+	if err != nil {
+		return fmt.Errorf("failed to check cluster existence: %w", err)
+	}
+
+	if !exists {
+		return fmt.Errorf("%w: %s", clustererrors.ErrClusterNotFound, target)
+	}
 
 	kubeconfigPath, err := iopath.ExpandHomePath(k.kubeConfig)
 	if err != nil {
@@ -248,7 +256,7 @@ func (k *KindClusterProvisioner) Start(ctx context.Context, name string) error {
 	}
 
 	if len(nodes) == 0 {
-		return fmt.Errorf("%w", ErrClusterNotFound)
+		return fmt.Errorf("%w", clustererrors.ErrClusterNotFound)
 	}
 
 	timeoutCtx, cancel := context.WithTimeout(ctx, dockerStartTimeout)
@@ -281,7 +289,7 @@ func (k *KindClusterProvisioner) Stop(ctx context.Context, name string) error {
 	}
 
 	if len(nodes) == 0 {
-		return fmt.Errorf("%w", ErrClusterNotFound)
+		return fmt.Errorf("%w", clustererrors.ErrClusterNotFound)
 	}
 
 	timeoutCtx, cancel := context.WithTimeout(ctx, dockerStopTimeout)

@@ -80,16 +80,29 @@ func disconnectRegistryNetwork(
 	}
 
 	err := dockerClient.NetworkDisconnect(ctx, network, containerID, true)
-	if err != nil && !cerrdefs.IsNotFound(err) {
-		return container.InspectResponse{}, fmt.Errorf(
-			"failed to disconnect registry %s from network %s: %w",
-			name,
-			network,
-			err,
-		)
+	if err != nil {
+		// Ignore "not found" errors (network doesn't exist) and
+		// "not connected" errors (container already disconnected or never connected)
+		if !cerrdefs.IsNotFound(err) && !isNotConnectedError(err) {
+			return container.InspectResponse{}, fmt.Errorf(
+				"failed to disconnect registry %s from network %s: %w",
+				name,
+				network,
+				err,
+			)
+		}
 	}
 
 	return inspectContainer(ctx, dockerClient, containerID)
+}
+
+// isNotConnectedError checks if the error indicates a container is not connected to a network.
+func isNotConnectedError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	return strings.Contains(err.Error(), "is not connected to the network")
 }
 
 // Cleanup helpers.

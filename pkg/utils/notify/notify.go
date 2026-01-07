@@ -51,6 +51,10 @@ type Message struct {
 
 // WriteMessage writes a formatted message based on the message configuration.
 // It handles message styling, optional timing information, and proper output formatting.
+//
+// Note: Leading newlines between stages are handled automatically by StageSeparatingWriter.
+// Wrap the output writer with NewStageSeparatingWriter() in command handlers to enable
+// automatic stage separation.
 func WriteMessage(msg Message) {
 	// Default to stdout if no writer specified
 	if msg.Writer == nil {

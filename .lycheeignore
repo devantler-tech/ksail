@@ -13,7 +13,19 @@ https://kubernetes.default.svc/
 # GoReleaser template URL (not a real URL)
 https://github.com/devantler-tech/ksail/releases/download/
 
-# Certificate issues
-https://kind.sigs.k8s.io/
-https://www.talos.dev/
+# Intermittent Network Errors
+https://docs.tigera.io/calico/latest/getting-started/
+https://docs.tigera.io/calico/latest/network-policy/
+https://fluxcd.io/flux/concepts/
+https://fluxcd.io/flux/guides/mozilla-sops/
 https://gateway-api.sigs.k8s.io/
+https://helm.sh/
+https://helm.sh/docs/
+https://just-the-docs.com/
+https://kind.sigs.k8s.io/
+https://kubectl.docs.kubernetes.io/references/kustomize/
+https://kubernetes.io/docs/concepts/storage/persistent-volumes/
+https://kubernetes.io/docs/concepts/storage/storage-classes/
+https://kubernetes.io/docs/reference/kubectl/
+https://kubernetes.io/docs/tasks/debug/debug-cluster/resource-metrics-pipeline/
+https://www.talos.dev/

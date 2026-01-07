@@ -1,0 +1,41 @@
+
+[TestDelete_ClusterExists_PrintsDeleteSuccess/K3d - 1]
+🗑️ Delete cluster...
+► deleting cluster
+✔ cluster deleted
+---
+
+[TestDelete_ClusterExists_PrintsDeleteSuccess/Kind - 1]
+🗑️ Delete cluster...
+► deleting cluster
+✔ cluster deleted
+⚠ failed to cleanup local registry: check registry existence: create registry service: docker client is required
+---
+
+[TestDelete_ClusterExists_PrintsDeleteSuccess/Talos - 1]
+🗑️ Delete cluster...
+► deleting cluster
+⚠ failed to disconnect local registry: create registry manager: apiClient cannot be nil
+✔ cluster deleted
+⚠ failed to cleanup local registry: check registry existence: create registry service: docker client is required
+---
+
+[TestDelete_ClusterNotFound_PrintsWarning/K3d - 1]
+🗑️ Delete cluster...
+► deleting cluster
+⚠ cluster does not exist, nothing to delete
+---
+
+[TestDelete_ClusterNotFound_PrintsWarning/Kind - 1]
+🗑️ Delete cluster...
+► deleting cluster
+⚠ cluster does not exist, nothing to delete
+⚠ failed to cleanup local registry: check registry existence: create registry service: docker client is required
+---
+
+[TestDelete_ClusterNotFound_PrintsWarning/Talos - 1]
+🗑️ Delete cluster...
+► deleting cluster
+⚠ cluster does not exist, nothing to delete
+⚠ failed to cleanup local registry: check registry existence: create registry service: docker client is required
+---

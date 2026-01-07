@@ -93,22 +93,31 @@ If not specified, KSail falls back to standard editor environment variables (`SO
 
 ### spec.cluster (ClusterSpec)
 
-| Field                | Type       | Default     | Description                                  |
-|----------------------|------------|-------------|----------------------------------------------|
-| `distribution`       | enum       | `Kind`      | Kubernetes distribution to use               |
-| `distributionConfig` | string     | (see below) | Path to distribution-specific configuration  |
-| `connection`         | Connection | –           | Cluster connection settings                  |
-| `cni`                | enum       | `Default`   | Container Network Interface                  |
-| `csi`                | enum       | `Default`   | Container Storage Interface                  |
-| `metricsServer`      | enum       | `Enabled`   | Install metrics-server                       |
-| `certManager`        | enum       | `Disabled`  | Install cert-manager                         |
-| `localRegistry`      | enum       | `Disabled`  | Provision local OCI registry                 |
-| `gitOpsEngine`       | enum       | `None`      | GitOps engine to install                     |
-| `options`            | Options    | –           | Advanced options for distributions and tools |
+| Field                  | Type       | Default     | Description                                 |
+|------------------------|------------|-------------|---------------------------------------------|
+| `distribution`         | enum       | `Kind`      | Kubernetes distribution to use              |
+| `distributionConfig`   | string     | (see below) | Path to distribution-specific configuration |
+| `connection`           | Connection | –           | Cluster connection settings                 |
+| `cni`                  | enum       | `Default`   | Container Network Interface                 |
+| `csi`                  | enum       | `Default`   | Container Storage Interface                 |
+| `metricsServer`        | enum       | `Default`   | Install metrics-server                      |
+| `certManager`          | enum       | `Disabled`  | Install cert-manager                        |
+| `localRegistry`        | enum       | `Disabled`  | Provision local OCI registry                |
+| `gitOpsEngine`         | enum       | `None`      | GitOps engine to install                    |
+| `localRegistryOptions` | object     | –           | Local registry configuration options        |
+| `kind`                 | object     | –           | Kind-specific options                       |
+| `k3d`                  | object     | –           | K3d-specific options                        |
+| `talos`                | object     | –           | Talos-specific options                      |
+| `cilium`               | object     | –           | Cilium CNI options                          |
+| `calico`               | object     | –           | Calico CNI options                          |
+| `flux`                 | object     | –           | Flux GitOps options                         |
+| `argocd`               | object     | –           | ArgoCD GitOps options                       |
+| `helm`                 | object     | –           | Helm tool options (reserved)                |
+| `kustomize`            | object     | –           | Kustomize tool options (reserved)           |
 
 #### distribution
 
-Kubernetes distribution to use for the local cluster.
+Kubernetes distribution to use for the local cluster. See [Distributions](../concepts.md#distributions) for detailed information about each distribution.
 
 **Valid values:**
 
@@ -146,7 +155,7 @@ See [Distribution Configuration](#distribution-configuration) below for details 
 
 #### cni
 
-Container Network Interface to install.
+Container Network Interface to install. See [CNI](../concepts.md#container-network-interface-cni) for more details.
 
 **Valid values:**
 
@@ -156,7 +165,7 @@ Container Network Interface to install.
 
 #### csi
 
-Container Storage Interface to install.
+Container Storage Interface to install. See [CSI](../concepts.md#container-storage-interface-csi) for more details.
 
 **Valid values:**
 
@@ -165,18 +174,19 @@ Container Storage Interface to install.
 
 #### metricsServer
 
-Whether to install [metrics-server](https://github.com/kubernetes-sigs/metrics-server) for resource metrics.
+Whether to install [metrics-server](../concepts.md#metrics-server) for resource metrics.
 
 **Valid values:**
 
-- `Enabled` (default) – Install metrics-server
+- `Default` (default) – Uses distribution's default behavior (K3d includes metrics-server; Kind and Talos do not)
+- `Enabled` – Install metrics-server
 - `Disabled` – Skip installation
 
 Note: K3d includes metrics-server by default, so this setting has no effect on K3d.
 
 #### certManager
 
-Whether to install [cert-manager](https://cert-manager.io/) for TLS certificate management.
+Whether to install [cert-manager](../concepts.md#cert-manager) for TLS certificate management.
 
 **Valid values:**
 
@@ -185,18 +195,18 @@ Whether to install [cert-manager](https://cert-manager.io/) for TLS certificate 
 
 #### localRegistry
 
-Whether to provision a local OCI registry container for image storage.
+Whether to provision a local [OCI registry](../concepts.md#oci-registries) container for image storage.
 
 **Valid values:**
 
 - `Enabled` – Provision local registry
 - `Disabled` (default) – Skip registry
 
-See [options](#options-options) for configuration details including `hostPort` (default: `5111`).
+See [Distribution and Tool Options](#distribution-and-tool-options) for configuration details including `hostPort` (default: `5111`).
 
 #### gitOpsEngine
 
-GitOps engine to install for continuous deployment workflows. When set to `Flux` or `ArgoCD`, KSail scaffolds a GitOps CR (FluxInstance or ArgoCD Application) into your source directory at `gitops/flux/flux-instance.yaml` or `gitops/argocd/application.yaml`.
+GitOps engine to install for continuous deployment workflows. See [GitOps](../concepts.md#gitops) for more details about Flux and ArgoCD. When set to `Flux` or `ArgoCD`, KSail scaffolds a GitOps CR (FluxInstance or ArgoCD Application) into your source directory at `gitops/flux/flux-instance.yaml` or `gitops/argocd/application.yaml`.
 
 **Valid values:**
 
@@ -204,15 +214,16 @@ GitOps engine to install for continuous deployment workflows. When set to `Flux`
 - `Flux` – Install [Flux CD](https://fluxcd.io/) and scaffold FluxInstance CR
 - `ArgoCD` – Install [Argo CD](https://argo-cd.readthedocs.io/) and scaffold Application CR
 
-#### options (Options)
+#### Distribution and Tool Options
 
-Advanced configuration options for specific distributions, networking, and deployment tools. See [Schema Support](#schema-support) for the complete structure.
+Advanced configuration options are now direct fields under `spec.cluster` instead of nested under `options`. See [Schema Support](#schema-support) for the complete structure.
 
 **Common options:**
 
 - `spec.cluster.localRegistryOptions.hostPort` – Host port for local registry (default: `5111`)
 - `spec.cluster.talos.controlPlanes` – Number of control-plane nodes (default: `1`)
 - `spec.cluster.talos.workers` – Number of worker nodes (default: `0`)
+- `spec.cluster.kind.mirrorsDir` – Directory for containerd host mirror configuration
 
 ### spec.workload (WorkloadSpec)
 

@@ -77,6 +77,9 @@ func NewStandardRunE(
 // using the cached distribution config from the config manager. This ensures
 // the factory has the proper distribution-specific configuration.
 //
+// The output is wrapped with StageSeparatingWriter to automatically add
+// blank lines between CLI stages for better readability.
+//
 // This function is used internally by NewStandardRunE but can also be used
 // directly for custom lifecycle handlers that need dependency injection but require
 // custom logic beyond the standard HandleRunE flow.
@@ -89,6 +92,10 @@ func WrapHandler(
 		runtimeContainer,
 		runtime.WithTimer(
 			func(cmd *cobra.Command, _ runtime.Injector, tmr timer.Timer) error {
+				// Wrap output with StageSeparatingWriter for automatic stage separation
+				stageWriter := notify.NewStageSeparatingWriter(cmd.OutOrStdout())
+				cmd.SetOut(stageWriter)
+
 				// Start timer and load config first to get distribution config
 				if tmr != nil {
 					tmr.Start()
@@ -138,8 +145,8 @@ func HandleRunE(
 }
 
 // showTitle displays the title message for a lifecycle operation.
+// Note: Leading newlines between stages are handled automatically by StageSeparatingWriter.
 func showTitle(cmd *cobra.Command, emoji, content string) {
-	_, _ = fmt.Fprintln(cmd.OutOrStdout()) // Add newline before title for visual separation
 	notify.WriteMessage(
 		notify.Message{
 			Type:    notify.TitleType,

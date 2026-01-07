@@ -137,8 +137,6 @@ func (r *Reconciler) WaitForApplicationReady(ctx context.Context, timeout time.D
 }
 
 // applicationClient returns a dynamic client for ArgoCD Applications.
-//
-//nolint:ireturn // Returns k8s dynamic.ResourceInterface by design
 func (r *Reconciler) applicationClient() dynamic.ResourceInterface {
 	gvr := schema.GroupVersionResource{
 		Group:    "argoproj.io",

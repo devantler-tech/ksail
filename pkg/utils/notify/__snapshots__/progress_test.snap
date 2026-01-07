@@ -1,0 +1,28 @@
+
+[TestProgressGroup_DefaultLabels - 1]
+► Processing...
+► task-1 running
+✔ task-1 completed
+
+---
+
+[TestProgressGroup_SingleTaskFailure - 1]
+📦 Installing...
+► failing-component running
+✗ failing-component failed
+
+---
+
+[TestProgressGroup_SingleTaskSuccess - 1]
+📦 Installing...
+► test-component installing
+✔ test-component installed
+
+---
+
+[TestProgressGroup_ValidatingLabels - 1]
+✅ Validating...
+► schema validating
+✔ schema validated
+
+---

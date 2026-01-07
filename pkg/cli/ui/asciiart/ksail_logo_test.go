@@ -249,7 +249,7 @@ func TestPrintKSailLogoBoundsHandling(t *testing.T) {
 	}
 }
 
-// TestPrintKSailLogo_EdgeCases tests edge cases in the color processing functions
+// TestPrintKSailLogoEdgeCases tests edge cases in the color processing functions
 // by using specially crafted logo content that exercises all code paths.
 func TestPrintKSailLogoEdgeCases(t *testing.T) {
 	t.Parallel()
@@ -267,7 +267,13 @@ func TestPrintKSailLogoEdgeCases(t *testing.T) {
 			asciiart.PrintLogoFromString(&writer, testCase.logoContent)
 
 			output := writer.String()
-			testCase.expectFunc(t, output)
+
+			// Verify output is non-empty and snapshot it
+			if len(output) == 0 {
+				t.Error("Expected non-empty output")
+			}
+
+			snaps.MatchSnapshot(t, output)
 		})
 	}
 }
@@ -275,12 +281,10 @@ func TestPrintKSailLogoEdgeCases(t *testing.T) {
 func createEdgeCaseTestData() []struct {
 	name        string
 	logoContent string
-	expectFunc  func(t *testing.T, output string)
 } {
 	return []struct {
 		name        string
 		logoContent string
-		expectFunc  func(t *testing.T, output string)
 	}{
 		{
 			name: "short_lines_for_green_blue_cyan",
@@ -296,17 +300,6 @@ func createEdgeCaseTestData() []struct {
 				"line8",                 // index 8: printGreenCyanPart with line < 32 chars
 				"final",                 // default: blue
 			}, "\n"),
-			expectFunc: func(t *testing.T, output string) {
-				t.Helper()
-				// Verify output contains expected content without panicking
-				if len(output) == 0 {
-					t.Error("Expected non-empty output")
-				}
-				// Check that all lines are processed
-				if !strings.Contains(output, "short") {
-					t.Error("Expected short line to be included")
-				}
-			},
 		},
 		{
 			name: "various_length_lines",
@@ -322,18 +315,6 @@ func createEdgeCaseTestData() []struct {
 				strings.Repeat("w", 35), // index 8: 35 chars
 				"final_blue",            // default
 			}, "\n"),
-			expectFunc: func(t *testing.T, output string) {
-				t.Helper()
-				// Verify the function handles various line lengths correctly
-				if len(output) == 0 {
-					t.Error("Expected non-empty output for various length lines")
-				}
-
-				lines := strings.Split(output, "\n")
-				if len(lines) < 8 {
-					t.Errorf("Expected at least 8 lines, got %d", len(lines))
-				}
-			},
 		},
 		{
 			name: "missing_coverage_edge_case",
@@ -349,13 +330,6 @@ func createEdgeCaseTestData() []struct {
 				"longer8",               // index 8: normal line for printGreenCyanPart
 				"end",                   // final line
 			}, "\n"),
-			expectFunc: func(t *testing.T, output string) {
-				t.Helper()
-
-				if len(output) == 0 {
-					t.Error("Expected non-empty output for missing coverage test")
-				}
-			},
 		},
 	}
 }

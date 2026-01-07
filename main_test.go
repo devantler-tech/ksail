@@ -4,11 +4,25 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"os"
 	"testing"
 
+	"github.com/gkampitakis/go-snaps/snaps"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
+
+func TestMain(m *testing.M) {
+	exitCode := m.Run()
+
+	_, err := snaps.Clean(m, snaps.CleanOpts{Sort: true})
+	if err != nil {
+		_, _ = os.Stderr.WriteString("failed to clean snapshots: " + err.Error() + "\n")
+
+		os.Exit(1)
+	}
+
+	os.Exit(exitCode)
+}
 
 var (
 	errRootCause  = errors.New("root cause")
@@ -72,8 +86,12 @@ func TestRunSafelyRecoversFromPanic(t *testing.T) {
 	}, &output)
 
 	assert.Equal(t, 1, exitCode)
-	require.Contains(t, output.String(), "test panic")
-	require.Contains(t, output.String(), "TestRunSafelyRecoversFromPanic")
+
+	// Panic output contains stack traces which vary between runs,
+	// so we just verify the key message is present
+	outputStr := output.String()
+	assert.Contains(t, outputStr, "test panic")
+	assert.Contains(t, outputStr, "TestRunSafelyRecoversFromPanic")
 }
 
 func TestRunSafelyExecutesRunWithArgs(t *testing.T) {

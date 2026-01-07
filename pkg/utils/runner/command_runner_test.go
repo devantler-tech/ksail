@@ -4,12 +4,26 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"strings"
+	"os"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v5/pkg/utils/runner"
+	"github.com/gkampitakis/go-snaps/snaps"
 	"github.com/spf13/cobra"
 )
+
+func TestMain(m *testing.M) {
+	exitCode := m.Run()
+
+	_, err := snaps.Clean(m, snaps.CleanOpts{Sort: true})
+	if err != nil {
+		_, _ = os.Stderr.WriteString("failed to clean snapshots: " + err.Error() + "\n")
+
+		os.Exit(1)
+	}
+
+	os.Exit(exitCode)
+}
 
 var errCommandFailed = errors.New("boom")
 
@@ -31,13 +45,8 @@ func TestCobraCommandRunner_RunPropagatesStdout(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if !strings.Contains(res.Stdout, "hello world") {
-		t.Fatalf("expected stdout to contain greeting, got %q", res.Stdout)
-	}
-
-	if !strings.Contains(stdout.String(), "hello world") {
-		t.Fatalf("expected console output to contain greeting, got %q", stdout.String())
-	}
+	snaps.MatchSnapshot(t, res.Stdout)
+	snaps.MatchSnapshot(t, stdout.String())
 }
 
 func TestCobraCommandRunner_RunReturnsError(t *testing.T) {
@@ -61,17 +70,9 @@ func TestCobraCommandRunner_RunReturnsError(t *testing.T) {
 		t.Fatal("expected error when command fails")
 	}
 
-	if !strings.Contains(err.Error(), "command execution failed") {
-		t.Fatalf("expected wrapped error message, got %q", err.Error())
-	}
-
-	if !strings.Contains(res.Stdout, "info output") {
-		t.Fatalf("expected stdout capture, got %q", res.Stdout)
-	}
-
-	if !strings.Contains(res.Stderr, "stderr detail") {
-		t.Fatalf("expected stderr capture, got %q", res.Stderr)
-	}
+	snaps.MatchSnapshot(t, err.Error())
+	snaps.MatchSnapshot(t, res.Stdout)
+	snaps.MatchSnapshot(t, res.Stderr)
 }
 
 func TestCobraCommandRunner_DefaultsToOsStdout(t *testing.T) {
@@ -91,7 +92,5 @@ func TestCobraCommandRunner_DefaultsToOsStdout(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if !strings.Contains(res.Stdout, "test") {
-		t.Fatalf("expected stdout capture, got %q", res.Stdout)
-	}
+	snaps.MatchSnapshot(t, res.Stdout)
 }

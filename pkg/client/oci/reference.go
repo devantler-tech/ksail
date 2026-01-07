@@ -1,4 +1,4 @@
-package io
+package oci
 
 import (
 	"errors"
@@ -7,9 +7,9 @@ import (
 	"strings"
 )
 
-// OCIReference represents a parsed OCI artifact reference.
+// Reference represents a parsed OCI artifact reference.
 // Format: oci://<host>:<port>/<repository>/<optional-variant>:<ref>
-type OCIReference struct {
+type Reference struct {
 	Host       string
 	Port       int32
 	Repository string
@@ -39,7 +39,7 @@ var (
 	ErrInvalidPort = errors.New("invalid port number in OCI reference")
 )
 
-// ParseOCIReference parses an OCI reference string into its components.
+// ParseReference parses an OCI reference string into its components.
 // Format: oci://<host>:<port>/<repository>/<optional-variant>:<ref>
 // Returns nil (not an error) when ref is empty, indicating defaults should be used.
 // Examples:
@@ -48,7 +48,7 @@ var (
 //   - oci://registry.example.com:443/workloads:latest
 //
 //nolint:nilnil // Returning nil,nil is intentional to indicate "use defaults"
-func ParseOCIReference(ref string) (*OCIReference, error) {
+func ParseReference(ref string) (*Reference, error) {
 	if ref == "" {
 		return nil, nil
 	}
@@ -62,7 +62,7 @@ func ParseOCIReference(ref string) (*OCIReference, error) {
 		return nil, ErrInvalidOCIFormat
 	}
 
-	result := &OCIReference{}
+	result := &Reference{}
 
 	parts := strings.SplitN(remainder, "/", minPathParts)
 	if len(parts) < minPathParts {
@@ -83,7 +83,7 @@ func ParseOCIReference(ref string) (*OCIReference, error) {
 }
 
 // parseHostPort extracts host and port from a "host:port" string.
-func parseHostPort(result *OCIReference, hostPort string) error {
+func parseHostPort(result *Reference, hostPort string) error {
 	colonIdx := strings.LastIndex(hostPort, ":")
 	if colonIdx == -1 {
 		result.Host = hostPort
@@ -106,7 +106,7 @@ func parseHostPort(result *OCIReference, hostPort string) error {
 }
 
 // parsePathAndRef extracts repository, variant, and ref from the path portion.
-func parsePathAndRef(result *OCIReference, pathAndRef string) {
+func parsePathAndRef(result *Reference, pathAndRef string) {
 	colonIdx := strings.LastIndex(pathAndRef, ":")
 	if colonIdx == -1 {
 		result.Repository, result.Variant = splitRepositoryPath(pathAndRef)
@@ -134,7 +134,7 @@ func splitRepositoryPath(path string) (string, string) {
 }
 
 // String returns the full OCI reference string.
-func (r *OCIReference) String() string {
+func (r *Reference) String() string {
 	var builder strings.Builder
 
 	builder.WriteString("oci://")
@@ -162,7 +162,7 @@ func (r *OCIReference) String() string {
 }
 
 // FullRepository returns the complete repository path including variant.
-func (r *OCIReference) FullRepository() string {
+func (r *Reference) FullRepository() string {
 	if r.Variant != "" {
 		return r.Repository + "/" + r.Variant
 	}

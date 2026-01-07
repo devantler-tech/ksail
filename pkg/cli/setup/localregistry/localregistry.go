@@ -25,9 +25,12 @@ import (
 // Option configures local registry dependencies.
 type Option func(*Dependencies)
 
+// ServiceFactoryFunc is a function type for creating registry services.
+type ServiceFactoryFunc func(cfg registry.Config) (registry.Service, error)
+
 // Dependencies holds injectable dependencies for local registry operations.
 type Dependencies struct {
-	ServiceFactory func(cfg registry.Config) (registry.Service, error)
+	ServiceFactory ServiceFactoryFunc
 	DockerInvoker  func(*cobra.Command, func(client.APIClient) error) error
 }
 
@@ -145,7 +148,6 @@ func ExecuteStage(
 	ctx *Context,
 	deps lifecycle.Deps,
 	stage StageType,
-	firstActivityShown *bool,
 	localDeps Dependencies,
 ) error {
 	info, actionBuilder, err := resolveStage(stage)
@@ -159,7 +161,6 @@ func ExecuteStage(
 		deps,
 		info,
 		actionBuilder,
-		firstActivityShown,
 		localDeps,
 	)
 }
@@ -185,9 +186,6 @@ func Cleanup(
 
 	// Use cached distribution config from ConfigManager
 	distConfig := cfgManager.DistributionConfig
-
-	// Cleanup doesn't show title activity messages, so use a dummy tracker
-	dummyTracker := true
 
 	return runRegistryAction(
 		cmd,
@@ -224,10 +222,48 @@ func Cleanup(
 
 			return nil
 		},
-		&dummyTracker,
 		localDeps,
 		false, true, // checkLocalRegistry=false, isCleanup=true
 	)
+}
+
+// Disconnect disconnects the local registry from the cluster network without deleting it.
+// This is used for Talos to allow the cluster network to be removed during deletion
+// without "active endpoints" errors. The container cleanup happens after cluster deletion.
+func Disconnect(
+	cmd *cobra.Command,
+	cfgManager *ksailconfigmanager.ConfigManager,
+	clusterCfg *v1alpha1.Cluster,
+	_ lifecycle.Deps,
+	clusterName string,
+	localDeps Dependencies,
+) error {
+	// K3d uses native registry management, skip for K3d
+	if clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionK3d {
+		return nil
+	}
+
+	// Only disconnect for Talos - Kind uses a shared "kind" network
+	if clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionTalos {
+		return nil
+	}
+
+	distConfig := cfgManager.DistributionConfig
+
+	regCtx := newRegistryContext(clusterCfg, distConfig.Kind, distConfig.K3d, distConfig.Talos)
+	registryName := registry.BuildLocalRegistryName(regCtx.clusterName)
+
+	// Use the cluster name as the network name for Talos
+	networkName := clusterName
+
+	return localDeps.DockerInvoker(cmd, func(dockerClient client.APIClient) error {
+		registryMgr, err := dockerclient.NewRegistryManager(dockerClient)
+		if err != nil {
+			return fmt.Errorf("create registry manager: %w", err)
+		}
+
+		return registryMgr.DisconnectFromNetwork(cmd.Context(), registryName, networkName)
+	})
 }
 
 // resolveStage returns the stage info and action builder for the given stage type.
@@ -290,7 +326,6 @@ func runStageFromBuilder(
 	deps lifecycle.Deps,
 	info setup.StageInfo,
 	buildAction func(*v1alpha1.Cluster) stageAction,
-	firstActivityShown *bool,
 	localDeps Dependencies,
 ) error {
 	return runRegistryAction(
@@ -302,7 +337,6 @@ func runStageFromBuilder(
 		ctx.TalosConfig,
 		info,
 		buildAction(ctx.ClusterCfg),
-		firstActivityShown,
 		localDeps,
 		true, false, // checkLocalRegistry=true, isCleanup=false
 	)
@@ -326,16 +360,15 @@ func wrapActionWithContext(
 
 // actionRunner encapsulates shared parameters for runAction and runCleanupAction.
 type actionRunner struct {
-	cmd                *cobra.Command
-	clusterCfg         *v1alpha1.Cluster
-	deps               lifecycle.Deps
-	kindConfig         *kindv1alpha4.Cluster
-	k3dConfig          *k3dv1alpha5.SimpleConfig
-	talosConfig        *talosconfigmanager.Configs
-	info               setup.StageInfo
-	action             func(context.Context, registry.Service, registryContext) error
-	firstActivityShown *bool
-	localDeps          Dependencies
+	cmd         *cobra.Command
+	clusterCfg  *v1alpha1.Cluster
+	deps        lifecycle.Deps
+	kindConfig  *kindv1alpha4.Cluster
+	k3dConfig   *k3dv1alpha5.SimpleConfig
+	talosConfig *talosconfigmanager.Configs
+	info        setup.StageInfo
+	action      func(context.Context, registry.Service, registryContext) error
+	localDeps   Dependencies
 }
 
 // prepareContext validates preconditions and creates the registry context.
@@ -368,12 +401,12 @@ func (r *actionRunner) run(checkLocalRegistry, isCleanup bool) error {
 	if isCleanup {
 		return runCleanupStage(
 			r.cmd, r.deps, r.info, ctx.clusterName,
-			wrappedAction, r.firstActivityShown, r.localDeps,
+			wrappedAction, r.localDeps,
 		)
 	}
 
 	return runStage(
-		r.cmd, r.deps, r.info, wrappedAction, r.firstActivityShown, r.localDeps,
+		r.cmd, r.deps, r.info, wrappedAction, r.localDeps,
 	)
 }
 
@@ -389,21 +422,19 @@ func runRegistryAction(
 	talosConfig *talosconfigmanager.Configs,
 	info setup.StageInfo,
 	action func(context.Context, registry.Service, registryContext) error,
-	firstActivityShown *bool,
 	localDeps Dependencies,
 	checkLocalRegistry, isCleanup bool,
 ) error {
 	runner := &actionRunner{
-		cmd:                cmd,
-		clusterCfg:         clusterCfg,
-		deps:               deps,
-		kindConfig:         kindConfig,
-		k3dConfig:          k3dConfig,
-		talosConfig:        talosConfig,
-		info:               info,
-		action:             action,
-		firstActivityShown: firstActivityShown,
-		localDeps:          localDeps,
+		cmd:         cmd,
+		clusterCfg:  clusterCfg,
+		deps:        deps,
+		kindConfig:  kindConfig,
+		k3dConfig:   k3dConfig,
+		talosConfig: talosConfig,
+		info:        info,
+		action:      action,
+		localDeps:   localDeps,
 	}
 
 	return runner.run(checkLocalRegistry, isCleanup)
@@ -430,38 +461,51 @@ func createServiceHandler(
 }
 
 // runCleanupStage runs a cleanup stage, checking for container existence first.
+// If the container doesn't exist, the stage is silently skipped (no output shown).
 func runCleanupStage(
 	cmd *cobra.Command,
 	deps lifecycle.Deps,
 	info setup.StageInfo,
 	clusterName string,
 	handler func(context.Context, registry.Service) error,
-	firstActivityShown *bool,
 	localDeps Dependencies,
 ) error {
-	cleanupHandler := func(ctx context.Context, svc registry.Service) error {
-		// Check if the local registry container exists before attempting cleanup
+	// First, check if the local registry container exists before showing any output
+	var containerExists bool
+
+	checkErr := localDeps.DockerInvoker(cmd, func(dockerClient client.APIClient) error {
+		svc, err := localDeps.ServiceFactory(registry.Config{DockerClient: dockerClient})
+		if err != nil {
+			return fmt.Errorf("create registry service: %w", err)
+		}
+
 		registryName := registry.BuildLocalRegistryName(clusterName)
 
-		status, statusErr := svc.Status(ctx, registry.StatusOptions{Name: registryName})
+		status, statusErr := svc.Status(cmd.Context(), registry.StatusOptions{Name: registryName})
 		if statusErr != nil {
 			return fmt.Errorf("check registry status: %w", statusErr)
 		}
 
-		// If container is not provisioned, nothing to clean up - this is a success case
-		if status.Status == v1alpha1.OCIRegistryStatusNotProvisioned {
-			return nil
-		}
+		// Container exists if status is not "not provisioned"
+		containerExists = status.Status != v1alpha1.OCIRegistryStatusNotProvisioned
 
-		return handler(ctx, svc)
+		return nil
+	})
+	if checkErr != nil {
+		return fmt.Errorf("check registry existence: %w", checkErr)
 	}
 
+	// If container doesn't exist, silently skip the cleanup stage
+	if !containerExists {
+		return nil
+	}
+
+	// Container exists, proceed with cleanup stage (which will show output)
 	return runDockerStage(
 		cmd,
 		deps,
 		info,
-		createServiceHandler(localDeps, cleanupHandler),
-		firstActivityShown,
+		createServiceHandler(localDeps, handler),
 		localDeps,
 	)
 }
@@ -471,7 +515,6 @@ func runStage(
 	deps lifecycle.Deps,
 	info setup.StageInfo,
 	handler func(context.Context, registry.Service) error,
-	firstActivityShown *bool,
 	localDeps Dependencies,
 ) error {
 	return runDockerStage(
@@ -479,7 +522,6 @@ func runStage(
 		deps,
 		info,
 		createServiceHandler(localDeps, handler),
-		firstActivityShown,
 		localDeps,
 	)
 }
@@ -489,7 +531,6 @@ func runDockerStage(
 	deps lifecycle.Deps,
 	info setup.StageInfo,
 	action func(context.Context, client.APIClient) error,
-	firstActivityShown *bool,
 	localDeps Dependencies,
 ) error {
 	err := setup.RunDockerStage(
@@ -497,7 +538,6 @@ func runDockerStage(
 		deps.Timer,
 		info,
 		action,
-		firstActivityShown,
 		localDeps.DockerInvoker,
 	)
 	if err != nil {
