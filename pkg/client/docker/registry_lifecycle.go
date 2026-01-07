@@ -139,3 +139,44 @@ func (rm *RegistryManager) ListRegistries(ctx context.Context) ([]string, error)
 
 	return registries, nil
 }
+
+// DisconnectFromNetwork disconnects a registry container from a specific network.
+// This allows the network to be removed without affecting the registry container.
+// The registry will continue running and can be reconnected to a network later.
+func (rm *RegistryManager) DisconnectFromNetwork(
+	ctx context.Context,
+	name string,
+	networkName string,
+) error {
+	trimmedNetwork := strings.TrimSpace(networkName)
+	if trimmedNetwork == "" {
+		return nil // No network specified, nothing to disconnect
+	}
+
+	containers, err := rm.listRegistryContainers(ctx, name)
+	if err != nil {
+		return fmt.Errorf("failed to list registry containers: %w", err)
+	}
+
+	if len(containers) == 0 {
+		return nil // Registry doesn't exist, nothing to disconnect
+	}
+
+	registryContainer := containers[0]
+
+	inspect, err := inspectContainer(ctx, rm.client, registryContainer.ID)
+	if err != nil {
+		return err
+	}
+
+	_, err = disconnectRegistryNetwork(
+		ctx,
+		rm.client,
+		registryContainer.ID,
+		name,
+		trimmedNetwork,
+		inspect,
+	)
+
+	return err
+}

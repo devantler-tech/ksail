@@ -227,6 +227,45 @@ func Cleanup(
 	)
 }
 
+// Disconnect disconnects the local registry from the cluster network without deleting it.
+// This is used for Talos to allow the cluster network to be removed during deletion
+// without "active endpoints" errors. The container cleanup happens after cluster deletion.
+func Disconnect(
+	cmd *cobra.Command,
+	cfgManager *ksailconfigmanager.ConfigManager,
+	clusterCfg *v1alpha1.Cluster,
+	_ lifecycle.Deps,
+	clusterName string,
+	localDeps Dependencies,
+) error {
+	// K3d uses native registry management, skip for K3d
+	if clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionK3d {
+		return nil
+	}
+
+	// Only disconnect for Talos - Kind uses a shared "kind" network
+	if clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionTalos {
+		return nil
+	}
+
+	distConfig := cfgManager.DistributionConfig
+
+	regCtx := newRegistryContext(clusterCfg, distConfig.Kind, distConfig.K3d, distConfig.Talos)
+	registryName := registry.BuildLocalRegistryName(regCtx.clusterName)
+
+	// Use the cluster name as the network name for Talos
+	networkName := clusterName
+
+	return localDeps.DockerInvoker(cmd, func(dockerClient client.APIClient) error {
+		registryMgr, err := dockerclient.NewRegistryManager(dockerClient)
+		if err != nil {
+			return fmt.Errorf("create registry manager: %w", err)
+		}
+
+		return registryMgr.DisconnectFromNetwork(cmd.Context(), registryName, networkName)
+	})
+}
+
 // resolveStage returns the stage info and action builder for the given stage type.
 func resolveStage(
 	stage StageType,
