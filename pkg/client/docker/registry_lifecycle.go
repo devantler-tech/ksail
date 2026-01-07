@@ -336,6 +336,9 @@ func (rm *RegistryManager) DeleteRegistriesOnNetwork(
 		// Disconnect from network first
 		disconnectErr := rm.DisconnectFromNetwork(ctx, reg.Name, networkName)
 		if disconnectErr != nil {
+			// Log disconnect failure but continue - the registry may already be disconnected
+			// or we may still be able to delete it. This prevents cleanup from failing entirely
+			// when a single registry has network issues.
 			continue
 		}
 
