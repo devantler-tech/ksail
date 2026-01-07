@@ -90,7 +90,7 @@ func TestDetectDistributionFromContext_EmptyClusterName(t *testing.T) {
 			_, _, err := lifecycle.DetectDistributionFromContext(testCase.context)
 
 			require.Error(t, err)
-			assert.ErrorIs(t, err, lifecycle.ErrEmptyClusterName)
+			require.ErrorIs(t, err, lifecycle.ErrEmptyClusterName)
 			assert.Contains(t, err.Error(), "empty cluster name")
 			assert.Contains(t, err.Error(), testCase.context)
 		})

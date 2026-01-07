@@ -218,7 +218,9 @@ func DetectDistributionFromContext(ctx string) (v1alpha1.Distribution, string, e
 	// Kind: kind-<cluster-name>
 	if clusterName, ok := strings.CutPrefix(ctx, "kind-"); ok {
 		if clusterName == "" {
-			return "", "", fmt.Errorf("%w: context %q has empty cluster name", ErrEmptyClusterName, ctx)
+			return "", "", fmt.Errorf(
+				"%w: context %q has empty cluster name", ErrEmptyClusterName, ctx,
+			)
 		}
 
 		return v1alpha1.DistributionKind, clusterName, nil
@@ -227,7 +229,9 @@ func DetectDistributionFromContext(ctx string) (v1alpha1.Distribution, string, e
 	// K3d: k3d-<cluster-name>
 	if clusterName, ok := strings.CutPrefix(ctx, "k3d-"); ok {
 		if clusterName == "" {
-			return "", "", fmt.Errorf("%w: context %q has empty cluster name", ErrEmptyClusterName, ctx)
+			return "", "", fmt.Errorf(
+				"%w: context %q has empty cluster name", ErrEmptyClusterName, ctx,
+			)
 		}
 
 		return v1alpha1.DistributionK3d, clusterName, nil
@@ -236,7 +240,9 @@ func DetectDistributionFromContext(ctx string) (v1alpha1.Distribution, string, e
 	// Talos: admin@<cluster-name>
 	if clusterName, ok := strings.CutPrefix(ctx, "admin@"); ok {
 		if clusterName == "" {
-			return "", "", fmt.Errorf("%w: context %q has empty cluster name", ErrEmptyClusterName, ctx)
+			return "", "", fmt.Errorf(
+				"%w: context %q has empty cluster name", ErrEmptyClusterName, ctx,
+			)
 		}
 
 		return v1alpha1.DistributionTalos, clusterName, nil
