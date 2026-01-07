@@ -42,7 +42,7 @@ func WithDockerClientInstance(
 		if closeErr != nil {
 			// Log cleanup error but don't fail the operation
 			notify.WriteMessage(notify.Message{
-				Type: notify.WarningType,
+				Type: notify.ErrorType,
 				Content: fmt.Sprintf(
 					"cleanup warning: failed to close docker client: %v",
 					closeErr,

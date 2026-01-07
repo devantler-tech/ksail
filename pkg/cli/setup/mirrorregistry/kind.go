@@ -160,9 +160,8 @@ func PrepareKindConfigWithMirrors(
 	// Also check for existing hosts.toml files
 	existingSpecs, err := registry.ReadExistingHostsToml(GetKindMirrorsDir(clusterCfg))
 	if err != nil {
-		// Log error but don't fail - missing configuration is acceptable
 		notify.WriteMessage(notify.Message{
-			Type:    notify.WarningType,
+			Type:    notify.ErrorType,
 			Content: "failed to read existing hosts configuration: %v",
 			Args:    []any{err},
 			Writer:  os.Stderr,

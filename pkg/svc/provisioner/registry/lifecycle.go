@@ -311,9 +311,9 @@ func cleanupCreatedRegistries(
 		)
 		if err != nil {
 			notify.WriteMessage(notify.Message{
-				Type: notify.WarningType,
+				Type: notify.ErrorType,
 				Content: fmt.Sprintf(
-					"cleanup warning: failed to delete registry %s: %v",
+					"failed to delete registry %s: %v",
 					reg.Name,
 					err,
 				),
@@ -359,7 +359,7 @@ func ConnectRegistriesToNetwork(
 		err := dockerClient.NetworkConnect(ctx, networkName, containerName, nil)
 		if err != nil {
 			notify.WriteMessage(notify.Message{
-				Type: notify.WarningType,
+				Type: notify.ErrorType,
 				Content: fmt.Sprintf(
 					"failed to connect registry %s to %s network: %v",
 					containerName,
@@ -438,7 +438,7 @@ func ConnectRegistriesToNetworkWithStaticIPs(
 		err := dockerClient.NetworkConnect(ctx, networkName, containerName, endpointConfig)
 		if err != nil {
 			notify.WriteMessage(notify.Message{
-				Type: notify.WarningType,
+				Type: notify.ErrorType,
 				Content: fmt.Sprintf(
 					"failed to connect registry %s to %s network: %v",
 					containerName,
