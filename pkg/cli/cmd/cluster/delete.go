@@ -45,22 +45,9 @@ func handleDeleteRunE(
 	cfgManager *ksailconfigmanager.ConfigManager,
 	deps lifecycle.Deps,
 ) error {
-	clusterCfg := cfgManager.Config
-	deps = applyFactoryOverride(deps)
-
-	// If no config file was found, try to detect distribution from kubeconfig context
-	if !cfgManager.IsConfigFileFound() {
-		detectedCfg, detectedDeps, detectErr := tryContextBasedDetection(cmd, clusterCfg, deps)
-		if detectErr != nil {
-			// Cannot determine cluster to delete without config file or valid context pattern
-			return fmt.Errorf(
-				"no ksail.yaml config file found and %w",
-				detectErr,
-			)
-		}
-
-		clusterCfg = detectedCfg
-		deps = detectedDeps
+	clusterCfg, deps, err := resolveClusterConfig(cmd, cfgManager, deps)
+	if err != nil {
+		return err
 	}
 
 	clusterName, err := lifecycle.GetClusterNameFromConfig(clusterCfg, deps.Factory)
@@ -80,14 +67,10 @@ func handleDeleteRunE(
 	// For distributions that destroy the network during deletion (e.g., Talos),
 	// we need to discover registries BEFORE cluster deletion.
 	cleanupDeps := getCleanupDeps()
+
 	var preDiscovered *mirrorregistry.DiscoveredRegistries
 	if clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionTalos {
-		preDiscovered = mirrorregistry.DiscoverRegistries(
-			cmd,
-			clusterCfg,
-			clusterName,
-			cleanupDeps,
-		)
+		preDiscovered = mirrorregistry.DiscoverRegistries(cmd, clusterCfg, clusterName, cleanupDeps)
 	}
 
 	err = executeClusterDeletion(cmd, cfgManager, deps, clusterCfg)
@@ -96,17 +79,31 @@ func handleDeleteRunE(
 	}
 
 	mirrorregistry.CleanupAll(
-		cmd,
-		cfgManager,
-		clusterCfg,
-		deps,
-		clusterName,
-		deleteVolumes,
-		cleanupDeps,
-		preDiscovered,
+		cmd, cfgManager, clusterCfg, deps, clusterName, deleteVolumes, cleanupDeps, preDiscovered,
 	)
 
 	return nil
+}
+
+// resolveClusterConfig resolves the cluster configuration, using context-based detection if needed.
+func resolveClusterConfig(
+	cmd *cobra.Command,
+	cfgManager *ksailconfigmanager.ConfigManager,
+	deps lifecycle.Deps,
+) (*v1alpha1.Cluster, lifecycle.Deps, error) {
+	clusterCfg := cfgManager.Config
+	deps = applyFactoryOverride(deps)
+
+	if !cfgManager.IsConfigFileFound() {
+		detectedCfg, detectedDeps, detectErr := tryContextBasedDetection(cmd, clusterCfg, deps)
+		if detectErr != nil {
+			return nil, deps, fmt.Errorf("no ksail.yaml config file found and %w", detectErr)
+		}
+
+		return detectedCfg, detectedDeps, nil
+	}
+
+	return clusterCfg, deps, nil
 }
 
 // tryContextBasedDetection attempts to detect the distribution and cluster name from the kubeconfig context.

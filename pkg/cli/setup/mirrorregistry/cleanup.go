@@ -55,15 +55,16 @@ func DiscoverRegistries(
 	_ = cleanupDeps.DockerInvoker(cmd, func(dockerClient client.APIClient) error {
 		registryMgr, mgrErr := dockerclient.NewRegistryManager(dockerClient)
 		if mgrErr != nil {
-			return mgrErr
+			return fmt.Errorf("create registry manager: %w", mgrErr)
 		}
 
 		discovered, listErr := registryMgr.ListRegistriesOnNetwork(cmd.Context(), networkName)
 		if listErr != nil {
-			return listErr
+			return fmt.Errorf("list registries on network: %w", listErr)
 		}
 
 		registries = discovered
+
 		return nil
 	})
 
@@ -146,44 +147,51 @@ func cleanupPreDiscoveredRegistries(
 		}
 
 		deletedNames = names
+
 		return nil
 	})
 	if err != nil {
 		return err
 	}
 
-	// Show cleanup output
-	if len(deletedNames) > 0 {
-		deps.Timer.NewStage()
+	displayRegistryCleanupOutput(cmd, deps, deletedNames)
 
-		cmd.Println()
+	return nil
+}
+
+// displayRegistryCleanupOutput shows the cleanup stage output for deleted registries.
+func displayRegistryCleanupOutput(cmd *cobra.Command, deps lifecycle.Deps, deletedNames []string) {
+	if len(deletedNames) == 0 {
+		return
+	}
+
+	deps.Timer.NewStage()
+
+	cmd.Println()
+	notify.WriteMessage(notify.Message{
+		Type:    notify.TitleType,
+		Content: "Delete registries...",
+		Emoji:   "🗑️",
+		Writer:  cmd.OutOrStdout(),
+	})
+
+	for _, name := range deletedNames {
 		notify.WriteMessage(notify.Message{
-			Type:    notify.TitleType,
-			Content: "Delete registries...",
-			Emoji:   "🗑️",
+			Type:    notify.ActivityType,
+			Content: "deleting '%s'",
 			Writer:  cmd.OutOrStdout(),
-		})
-
-		for _, name := range deletedNames {
-			notify.WriteMessage(notify.Message{
-				Type:    notify.ActivityType,
-				Content: "deleting '%s'",
-				Writer:  cmd.OutOrStdout(),
-				Args:    []any{name},
-			})
-		}
-
-		outputTimer := helpers.MaybeTimer(cmd, deps.Timer)
-
-		notify.WriteMessage(notify.Message{
-			Type:    notify.SuccessType,
-			Content: "registries deleted",
-			Timer:   outputTimer,
-			Writer:  cmd.OutOrStdout(),
+			Args:    []any{name},
 		})
 	}
 
-	return nil
+	outputTimer := helpers.MaybeTimer(cmd, deps.Timer)
+
+	notify.WriteMessage(notify.Message{
+		Type:    notify.SuccessType,
+		Content: "registries deleted",
+		Timer:   outputTimer,
+		Writer:  cmd.OutOrStdout(),
+	})
 }
 
 // getNetworkNameForDistribution returns the Docker network name for a given distribution.
@@ -192,7 +200,7 @@ func getNetworkNameForDistribution(distribution v1alpha1.Distribution, clusterNa
 	case v1alpha1.DistributionKind:
 		return "kind"
 	case v1alpha1.DistributionK3d:
-		return fmt.Sprintf("k3d-%s", clusterName)
+		return "k3d-" + clusterName
 	case v1alpha1.DistributionTalos:
 		return clusterName
 	default:
@@ -324,7 +332,7 @@ func cleanupK3dMirrorRegistries(
 	cleanupDeps CleanupDependencies,
 ) error {
 	// K3d uses "k3d-{clusterName}" as the network name
-	networkName := fmt.Sprintf("k3d-%s", clusterName)
+	networkName := "k3d-" + clusterName
 
 	// Use cached distribution config from ConfigManager
 	k3dConfig := cfgManager.DistributionConfig.K3d
@@ -572,39 +580,10 @@ func cleanupRegistriesByNetwork(
 		return err
 	}
 
-	// If registries were found and deleted, show the cleanup stage output
-	if len(registryNames) > 0 {
-		deps.Timer.NewStage()
-
-		notify.WriteMessage(notify.Message{
-			Type:    notify.TitleType,
-			Content: "Delete registries...",
-			Emoji:   "🗑️",
-			Writer:  cmd.OutOrStdout(),
-		})
-
-		for _, name := range registryNames {
-			notify.WriteMessage(notify.Message{
-				Type:    notify.ActivityType,
-				Content: "deleting '%s'",
-				Writer:  cmd.OutOrStdout(),
-				Args:    []any{name},
-			})
-		}
-
-		outputTimer := helpers.MaybeTimer(cmd, deps.Timer)
-
-		notify.WriteMessage(notify.Message{
-			Type:    notify.SuccessType,
-			Content: "registries deleted",
-			Timer:   outputTimer,
-			Writer:  cmd.OutOrStdout(),
-		})
-	}
+	displayRegistryCleanupOutput(cmd, deps, registryNames)
 
 	return nil
 }
-
 
 // CollectTalosMirrorSpecs collects mirror specs from Talos config and command line flags.
 // This extracts mirror hosts from the loaded Talos config bundle which includes any

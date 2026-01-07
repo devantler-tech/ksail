@@ -250,8 +250,8 @@ func (rm *RegistryManager) DisconnectAllFromNetwork(
 
 // RegistryInfo contains basic information about a registry container.
 type RegistryInfo struct {
-	Name        string
-	ID          string
+	Name         string
+	ID           string
 	IsKSailOwned bool
 }
 
@@ -273,36 +273,48 @@ func (rm *RegistryManager) ListRegistriesOnNetwork(
 		return nil, fmt.Errorf("failed to list registry containers: %w", err)
 	}
 
-	var registries []RegistryInfo
+	registries := make([]RegistryInfo, 0, len(containers))
 
-	for _, c := range containers {
-		inspect, inspectErr := inspectContainer(ctx, rm.client, c.ID)
-		if inspectErr != nil {
-			continue
+	for _, containerInfo := range containers {
+		regInfo, ok := rm.extractRegistryInfoIfOnNetwork(ctx, containerInfo, trimmedNetwork)
+		if ok {
+			registries = append(registries, regInfo)
 		}
-
-		// Check if container is connected to the target network
-		if _, connected := inspect.NetworkSettings.Networks[trimmedNetwork]; !connected {
-			continue
-		}
-
-		// Get container name
-		containerName := ""
-		if len(c.Names) > 0 {
-			containerName = strings.TrimPrefix(c.Names[0], "/")
-		}
-
-		// Check if KSail-managed
-		_, isKSailOwned := c.Labels[RegistryLabelKey]
-
-		registries = append(registries, RegistryInfo{
-			Name:        containerName,
-			ID:          c.ID,
-			IsKSailOwned: isKSailOwned,
-		})
 	}
 
 	return registries, nil
+}
+
+// extractRegistryInfoIfOnNetwork checks if a container is on the target network and returns its info.
+func (rm *RegistryManager) extractRegistryInfoIfOnNetwork(
+	ctx context.Context,
+	containerSummary container.Summary,
+	networkName string,
+) (RegistryInfo, bool) {
+	inspect, inspectErr := inspectContainer(ctx, rm.client, containerSummary.ID)
+	if inspectErr != nil {
+		return RegistryInfo{}, false
+	}
+
+	// Check if container is connected to the target network
+	if _, connected := inspect.NetworkSettings.Networks[networkName]; !connected {
+		return RegistryInfo{}, false
+	}
+
+	// Get container name
+	containerName := ""
+	if len(containerSummary.Names) > 0 {
+		containerName = strings.TrimPrefix(containerSummary.Names[0], "/")
+	}
+
+	// Check if KSail-managed
+	_, isKSailOwned := containerSummary.Labels[RegistryLabelKey]
+
+	return RegistryInfo{
+		Name:         containerName,
+		ID:           containerSummary.ID,
+		IsKSailOwned: isKSailOwned,
+	}, true
 }
 
 // DeleteRegistriesOnNetwork deletes all registry containers connected to a specific network.
@@ -318,51 +330,75 @@ func (rm *RegistryManager) DeleteRegistriesOnNetwork(
 		return nil, err
 	}
 
-	var deletedNames []string
+	deletedNames := make([]string, 0, len(registries))
 
 	for _, reg := range registries {
 		// Disconnect from network first
 		disconnectErr := rm.DisconnectFromNetwork(ctx, reg.Name, networkName)
 		if disconnectErr != nil {
-			// Log but continue - container might not be connected anymore
 			continue
 		}
 
-		// Get volume name before deletion if we need to delete volumes
-		var volumeName string
-		if deleteVolumes {
-			inspect, inspectErr := inspectContainer(ctx, rm.client, reg.ID)
-			if inspectErr == nil {
-				for _, m := range inspect.Mounts {
-					if m.Destination == RegistryDataPath {
-						volumeName = m.Name
-						break
-					}
-				}
-			}
-		}
-
-		// Stop container
-		stopErr := rm.client.ContainerStop(ctx, reg.ID, container.StopOptions{})
-		if stopErr != nil {
-			continue
-		}
-
-		// Remove container
-		removeErr := rm.client.ContainerRemove(ctx, reg.ID, container.RemoveOptions{})
-		if removeErr != nil {
-			continue
-		}
-
-		deletedNames = append(deletedNames, reg.Name)
-
-		// Delete volume if requested
-		if deleteVolumes && volumeName != "" {
-			_ = rm.client.VolumeRemove(ctx, volumeName, false)
+		deleted := rm.deleteRegistryContainer(ctx, reg, deleteVolumes)
+		if deleted {
+			deletedNames = append(deletedNames, reg.Name)
 		}
 	}
 
 	return deletedNames, nil
+}
+
+// deleteRegistryContainer stops, removes a registry container, and optionally its volume.
+// Returns true if the container was successfully deleted.
+func (rm *RegistryManager) deleteRegistryContainer(
+	ctx context.Context,
+	reg RegistryInfo,
+	deleteVolumes bool,
+) bool {
+	volumeName := rm.getRegistryVolumeName(ctx, reg.ID, deleteVolumes)
+
+	// Stop container
+	stopErr := rm.client.ContainerStop(ctx, reg.ID, container.StopOptions{})
+	if stopErr != nil {
+		return false
+	}
+
+	// Remove container
+	removeErr := rm.client.ContainerRemove(ctx, reg.ID, container.RemoveOptions{})
+	if removeErr != nil {
+		return false
+	}
+
+	// Delete volume if requested
+	if deleteVolumes && volumeName != "" {
+		_ = rm.client.VolumeRemove(ctx, volumeName, false)
+	}
+
+	return true
+}
+
+// getRegistryVolumeName returns the volume name for a registry container if deleteVolumes is true.
+func (rm *RegistryManager) getRegistryVolumeName(
+	ctx context.Context,
+	containerID string,
+	deleteVolumes bool,
+) string {
+	if !deleteVolumes {
+		return ""
+	}
+
+	inspect, inspectErr := inspectContainer(ctx, rm.client, containerID)
+	if inspectErr != nil {
+		return ""
+	}
+
+	for _, mount := range inspect.Mounts {
+		if mount.Destination == RegistryDataPath {
+			return mount.Name
+		}
+	}
+
+	return ""
 }
 
 // listAllRegistryImageContainers lists all containers using the registry image (any registry).
@@ -391,40 +427,11 @@ func (rm *RegistryManager) DeleteRegistriesByInfo(
 	registries []RegistryInfo,
 	deleteVolumes bool,
 ) ([]string, error) {
-	var deletedNames []string
+	deletedNames := make([]string, 0, len(registries))
 
 	for _, reg := range registries {
-		// Get volume name before deletion if we need to delete volumes
-		var volumeName string
-		if deleteVolumes {
-			inspect, inspectErr := inspectContainer(ctx, rm.client, reg.ID)
-			if inspectErr == nil {
-				for _, m := range inspect.Mounts {
-					if m.Destination == RegistryDataPath {
-						volumeName = m.Name
-						break
-					}
-				}
-			}
-		}
-
-		// Stop container
-		stopErr := rm.client.ContainerStop(ctx, reg.ID, container.StopOptions{})
-		if stopErr != nil {
-			continue
-		}
-
-		// Remove container
-		removeErr := rm.client.ContainerRemove(ctx, reg.ID, container.RemoveOptions{})
-		if removeErr != nil {
-			continue
-		}
-
-		deletedNames = append(deletedNames, reg.Name)
-
-		// Delete volume if requested
-		if deleteVolumes && volumeName != "" {
-			_ = rm.client.VolumeRemove(ctx, volumeName, false)
+		if deleted := rm.deleteRegistryContainer(ctx, reg, deleteVolumes); deleted {
+			deletedNames = append(deletedNames, reg.Name)
 		}
 	}
 
