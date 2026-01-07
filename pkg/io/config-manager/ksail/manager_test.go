@@ -198,6 +198,82 @@ func TestLoadConfigLoadsK3dDistributionConfig(t *testing.T) {
 }
 
 //nolint:paralleltest // Uses t.Chdir to isolate file system state for config loading.
+func TestLoadConfigLoadsTalosDistributionConfig(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Chdir(tempDir)
+
+	// Create talos patches directory structure
+	talosPatchesDir := filepath.Join(tempDir, "talos")
+	require.NoError(t, os.MkdirAll(filepath.Join(talosPatchesDir, "cluster"), 0o750))
+
+	// Create a simple valid patch file
+	patchYAML := "machine:\n  network:\n    hostname: test-node\n"
+	require.NoError(
+		t,
+		os.WriteFile(
+			filepath.Join(talosPatchesDir, "cluster", "hostname.yaml"),
+			[]byte(patchYAML),
+			0o600,
+		),
+	)
+
+	// Create ksail.yaml with Talos distribution and admin@<cluster-name> context
+	ksailConfig := "apiVersion: ksail.dev/v1alpha1\n" +
+		"kind: Cluster\n" +
+		"spec:\n" +
+		"  cluster:\n" +
+		"    distribution: Talos\n" +
+		"    distributionConfig: " + talosPatchesDir + "\n" +
+		"    connection:\n" +
+		"      context: admin@my-talos-cluster\n"
+	require.NoError(t, os.WriteFile("ksail.yaml", []byte(ksailConfig), 0o600))
+
+	manager := configmanager.NewConfigManager(io.Discard)
+	manager.Viper.SetConfigFile("ksail.yaml")
+
+	_, err := manager.LoadConfig(nil)
+	require.NoError(t, err)
+
+	// Verify distribution config path is set correctly
+	assert.Equal(t, talosPatchesDir, manager.Config.Spec.Cluster.DistributionConfig)
+
+	// Verify the Talos config was loaded with the extracted cluster name
+	require.NotNil(t, manager.DistributionConfig)
+	require.NotNil(t, manager.DistributionConfig.Talos)
+	assert.Equal(t, "my-talos-cluster", manager.DistributionConfig.Talos.GetClusterName())
+}
+
+//nolint:paralleltest // Uses t.Chdir to isolate file system state for config loading.
+func TestLoadConfigLoadsTalosDistributionConfigWithDefaultClusterName(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Chdir(tempDir)
+
+	// Create talos patches directory structure
+	talosPatchesDir := filepath.Join(tempDir, "talos")
+	require.NoError(t, os.MkdirAll(talosPatchesDir, 0o750))
+
+	// Create ksail.yaml with Talos distribution but no context (uses default cluster name)
+	ksailConfig := "apiVersion: ksail.dev/v1alpha1\n" +
+		"kind: Cluster\n" +
+		"spec:\n" +
+		"  cluster:\n" +
+		"    distribution: Talos\n" +
+		"    distributionConfig: " + talosPatchesDir + "\n"
+	require.NoError(t, os.WriteFile("ksail.yaml", []byte(ksailConfig), 0o600))
+
+	manager := configmanager.NewConfigManager(io.Discard)
+	manager.Viper.SetConfigFile("ksail.yaml")
+
+	_, err := manager.LoadConfig(nil)
+	require.NoError(t, err)
+
+	// Verify the Talos config was loaded with the default cluster name
+	require.NotNil(t, manager.DistributionConfig)
+	require.NotNil(t, manager.DistributionConfig.Talos)
+	assert.Equal(t, "talos-default", manager.DistributionConfig.Talos.GetClusterName())
+}
+
+//nolint:paralleltest // Uses t.Chdir to isolate file system state for config loading.
 func TestLoadConfigFromFlagsOnlyIgnoresExistingConfig(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Chdir(tempDir)
@@ -1191,4 +1267,59 @@ func writeFile(t *testing.T, path, contents string) {
 	if err != nil {
 		t.Fatalf("failed to write %s: %v", path, err)
 	}
+}
+
+// TestIsConfigFileFoundReturnsTrueWhenConfigExists verifies that IsConfigFileFound
+// returns true after LoadConfig finds a config file.
+//
+//nolint:paralleltest // Uses t.Chdir for isolated filesystem state.
+func TestIsConfigFileFoundReturnsTrueWhenConfigExists(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Chdir(tempDir)
+
+	writeValidKsailConfig(t, tempDir)
+
+	manager := configmanager.NewConfigManager(io.Discard)
+	_, err := manager.LoadConfig(nil)
+	require.NoError(t, err)
+
+	assert.True(
+		t,
+		manager.IsConfigFileFound(),
+		"expected IsConfigFileFound to return true when config file exists",
+	)
+}
+
+// TestIsConfigFileFoundReturnsFalseWhenConfigMissing verifies that IsConfigFileFound
+// returns false after LoadConfig does not find a config file.
+//
+//nolint:paralleltest // Uses t.Chdir for isolated filesystem state.
+func TestIsConfigFileFoundReturnsFalseWhenConfigMissing(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Chdir(tempDir)
+
+	// Use standard field selectors to provide valid defaults, bypassing validation errors.
+	manager := configmanager.NewConfigManager(io.Discard, createStandardFieldSelectors()...)
+	_, err := manager.LoadConfig(nil)
+	require.NoError(t, err)
+
+	assert.False(
+		t,
+		manager.IsConfigFileFound(),
+		"expected IsConfigFileFound to return false when no config file exists",
+	)
+}
+
+// TestIsConfigFileFoundReturnsFalseBeforeLoadConfig verifies that IsConfigFileFound
+// returns false when called before LoadConfig.
+func TestIsConfigFileFoundReturnsFalseBeforeLoadConfig(t *testing.T) {
+	t.Parallel()
+
+	manager := configmanager.NewConfigManager(io.Discard)
+
+	assert.False(
+		t,
+		manager.IsConfigFileFound(),
+		"expected IsConfigFileFound to return false before LoadConfig is called",
+	)
 }

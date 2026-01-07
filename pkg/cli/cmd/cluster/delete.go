@@ -116,17 +116,19 @@ func tryContextBasedDetection(
 	clusterCfg.Spec.Cluster.Distribution = distribution
 	clusterCfg.Spec.Cluster.Connection.Context = currentContext
 
-	// Create a minimal provisioner for the detected distribution
-	provisioner, err := lifecycle.CreateMinimalProvisioner(distribution, clusterName)
-	if err != nil {
-		return nil, deps, fmt.Errorf("failed to create provisioner: %w", err)
-	}
+	// If a factory override exists (e.g., for testing), preserve it
+	// Otherwise, create a minimal provisioner for the detected distribution
+	if deps.Factory == nil {
+		provisioner, provErr := lifecycle.CreateMinimalProvisioner(distribution, clusterName)
+		if provErr != nil {
+			return nil, deps, fmt.Errorf("failed to create provisioner: %w", provErr)
+		}
 
-	// Create a factory that returns the minimal provisioner
-	deps.Factory = &contextBasedFactory{
-		distribution: distribution,
-		clusterName:  clusterName,
-		provisioner:  provisioner,
+		deps.Factory = &contextBasedFactory{
+			distribution: distribution,
+			clusterName:  clusterName,
+			provisioner:  provisioner,
+		}
 	}
 
 	notify.WriteMessage(notify.Message{
