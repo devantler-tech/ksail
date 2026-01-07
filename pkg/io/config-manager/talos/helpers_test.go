@@ -50,6 +50,18 @@ func TestResolveClusterName_ExtractsClusterNameFromAdminContext(t *testing.T) {
 	assert.Equal(t, "my-talos-cluster", name)
 }
 
+func TestResolveClusterName_AdminPrefixWithoutClusterName(t *testing.T) {
+	t.Parallel()
+
+	talosConfig := &talos.Configs{Name: ""}
+	clusterCfg := &v1alpha1.Cluster{}
+	clusterCfg.Spec.Cluster.Connection.Context = "admin@"
+
+	// Context "admin@" without cluster name should return DefaultClusterName
+	name := talos.ResolveClusterName(clusterCfg, talosConfig)
+	assert.Equal(t, talos.DefaultClusterName, name)
+}
+
 func TestResolveClusterName_NilTalosConfig(t *testing.T) {
 	t.Parallel()
 

@@ -758,16 +758,9 @@ func (m *ConfigManager) loadTalosConfig() (*talosconfigmanager.Configs, error) {
 		return nil, ErrDistributionConfigNotFound
 	}
 
-	// Get cluster name from context or use default
-	// For Talos, context is "admin@<cluster-name>", so we need to extract the cluster name
-	clusterName := talosconfigmanager.DefaultClusterName
-
-	if ctx := strings.TrimSpace(m.Config.Spec.Cluster.Connection.Context); ctx != "" {
-		// Talos uses admin@<cluster-name> context pattern
-		if extracted, ok := strings.CutPrefix(ctx, "admin@"); ok && extracted != "" {
-			clusterName = extracted
-		}
-	}
+	// Get cluster name from context or use default.
+	// Uses ResolveClusterName helper which handles the "admin@<cluster-name>" pattern.
+	clusterName := talosconfigmanager.ResolveClusterName(m.Config, nil)
 
 	talosManager := talosconfigmanager.NewConfigManager(
 		patchesDir,

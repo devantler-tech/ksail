@@ -20,16 +20,24 @@ func ResolveClusterName(
 		}
 	}
 
-	if clusterCfg != nil {
-		if ctx := strings.TrimSpace(clusterCfg.Spec.Cluster.Connection.Context); ctx != "" {
-			// Extract cluster name from "admin@<cluster-name>" pattern
-			if clusterName, ok := strings.CutPrefix(ctx, "admin@"); ok && clusterName != "" {
-				return clusterName
-			}
-			// Fall back to raw context if pattern doesn't match
-			return ctx
-		}
+	if clusterCfg == nil {
+		return DefaultClusterName
 	}
 
-	return DefaultClusterName
+	ctx := strings.TrimSpace(clusterCfg.Spec.Cluster.Connection.Context)
+	if ctx == "" {
+		return DefaultClusterName
+	}
+
+	// Extract cluster name from "admin@<cluster-name>" pattern
+	if clusterName, ok := strings.CutPrefix(ctx, "admin@"); ok {
+		if name := strings.TrimSpace(clusterName); name != "" {
+			return name
+		}
+		// Context matches "admin@" prefix but has no cluster name; use default
+		return DefaultClusterName
+	}
+
+	// Fall back to raw context if pattern doesn't match
+	return ctx
 }
