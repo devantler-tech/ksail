@@ -17,52 +17,40 @@
 ✔ cluster deleted
 ---
 
-[TestDelete_ClusterNotFound_SucceedsIdempotent/K3d - 1]
+[TestDelete_ClusterNotFound_ReturnsError/K3d - 1]
 🗑️ Delete cluster...
 ► deleting cluster
-✗ cluster does not exist
 ---
 
-[TestDelete_ClusterNotFound_SucceedsIdempotent/Kind - 1]
+[TestDelete_ClusterNotFound_ReturnsError/Kind - 1]
 🗑️ Delete cluster...
 ► deleting cluster
-✗ cluster does not exist
 ---
 
-[TestDelete_ClusterNotFound_SucceedsIdempotent/Talos - 1]
+[TestDelete_ClusterNotFound_ReturnsError/Talos - 1]
 🗑️ Delete cluster...
 ► deleting cluster
-✗ cluster does not exist
----
-
-[TestDelete_ContextBasedDetection_AutoDetectsDistribution/K3d_context_pattern - 1]
-ℹ auto-detected K3d cluster 'dev-cluster' from kubeconfig context
-
-🗑️ Delete cluster...
-► deleting cluster
-✔ cluster deleted
----
-
-[TestDelete_ContextBasedDetection_AutoDetectsDistribution/Kind_context_pattern - 1]
-ℹ auto-detected Kind cluster 'my-cluster' from kubeconfig context
-
-🗑️ Delete cluster...
-► deleting cluster
-✔ cluster deleted
----
-
-[TestDelete_ContextBasedDetection_AutoDetectsDistribution/Talos_context_pattern - 1]
-ℹ auto-detected Talos cluster 'talos-homelab' from kubeconfig context
-
-🗑️ Delete cluster...
-► deleting cluster
-✔ cluster deleted
 ---
 
 [TestDelete_ContextBasedDetection_ClusterNotFound - 1]
-ℹ auto-detected Kind cluster 'nonexistent' from kubeconfig context
-
 🗑️ Delete cluster...
 ► deleting cluster
-✗ cluster does not exist
+---
+
+[TestDelete_ContextBasedDetection_DeletesCluster/K3d_context_pattern - 1]
+🗑️ Delete cluster...
+► deleting cluster
+✔ cluster deleted
+---
+
+[TestDelete_ContextBasedDetection_DeletesCluster/Kind_context_pattern - 1]
+🗑️ Delete cluster...
+► deleting cluster
+✔ cluster deleted
+---
+
+[TestDelete_ContextBasedDetection_DeletesCluster/Talos_context_pattern - 1]
+🗑️ Delete cluster...
+► deleting cluster
+✔ cluster deleted
 ---

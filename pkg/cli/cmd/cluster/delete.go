@@ -6,24 +6,23 @@ import (
 	"fmt"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup/mirrorregistry"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	clustererrors "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/errors"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
 	"github.com/spf13/cobra"
 )
 
 // NewDeleteCmd creates and returns the delete command.
 func NewDeleteCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:          "delete",
-		Short:        "Destroy a cluster",
-		Long:         `Destroy a cluster.`,
-		SilenceUsage: true,
+		Use:           "delete",
+		Short:         "Destroy a cluster",
+		Long:          `Destroy a cluster.`,
+		SilenceUsage:  true,
+		SilenceErrors: true,
 	}
 
 	cfgManager := ksailconfigmanager.NewCommandConfigManager(
@@ -100,7 +99,7 @@ func handleDeleteRunE(
 // tryContextBasedDetection attempts to detect the distribution and cluster name from the kubeconfig context.
 // This is used when no ksail.yaml config file is found, allowing delete to work with non-scaffolded clusters.
 func tryContextBasedDetection(
-	cmd *cobra.Command,
+	_ *cobra.Command,
 	clusterCfg *v1alpha1.Cluster,
 	deps lifecycle.Deps,
 ) (*v1alpha1.Cluster, lifecycle.Deps, error) {
@@ -192,7 +191,9 @@ func disconnectTalosRegistriesWithContext(
 
 	cleanupDeps := getCleanupDeps()
 
+	//nolint:contextcheck // Functions use cmd.Context() internally
 	mirrorregistry.DisconnectMirrorRegistriesWithWarning(cmd, cfgManager, clusterName, cleanupDeps)
+	//nolint:contextcheck // Functions use cmd.Context() internally
 	mirrorregistry.DisconnectLocalRegistryWithWarning(
 		cmd,
 		cfgManager,
@@ -241,14 +242,7 @@ func executeClusterDeletion(
 	err := lifecycle.RunWithConfig(cmd, deps, config, clusterCfg)
 	if err != nil {
 		if errors.Is(err, clustererrors.ErrClusterNotFound) {
-			notify.WriteMessage(notify.Message{
-				Type:    notify.ErrorType,
-				Content: "cluster does not exist",
-				Timer:   helpers.MaybeTimer(cmd, deps.Timer),
-				Writer:  cmd.OutOrStdout(),
-			})
-
-			return nil
+			return clustererrors.ErrClusterNotFound
 		}
 
 		return fmt.Errorf("cluster deletion failed: %w", err)

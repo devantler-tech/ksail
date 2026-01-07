@@ -245,7 +245,7 @@ func TestDelete_ClusterExists_PrintsDeleteSuccess(t *testing.T) {
 // TestDelete_ClusterNotFound_SucceedsIdempotent tests deletion succeeds when cluster doesn't exist (idempotent delete).
 //
 //nolint:paralleltest // Cannot use t.Parallel() with t.Chdir()
-func TestDelete_ClusterNotFound_SucceedsIdempotent(t *testing.T) {
+func TestDelete_ClusterNotFound_ReturnsError(t *testing.T) {
 	testCases := []struct {
 		name         string
 		distribution string
@@ -287,7 +287,7 @@ func TestDelete_ClusterNotFound_SucceedsIdempotent(t *testing.T) {
 			cmd.SetContext(context.Background())
 
 			err := cmd.Execute()
-			require.NoError(t, err) // Idempotent delete: should succeed when cluster doesn't exist
+			require.Error(t, err)
 
 			snaps.MatchSnapshot(t, trimTrailingNewlineDelete(out.String()))
 		})
@@ -357,23 +357,18 @@ func setupContextBasedTest(
 	return testRuntime, cleanup
 }
 
-// TestDelete_ContextBasedDetection_AutoDetectsDistribution tests that delete can auto-detect
+// TestDelete_ContextBasedDetection_DeletesCluster tests that delete can detect
 // distribution from kubeconfig context when no ksail.yaml config file exists.
 //
 //nolint:paralleltest // Cannot use t.Parallel() with t.Chdir() and t.Setenv() in helper
-func TestDelete_ContextBasedDetection_AutoDetectsDistribution(t *testing.T) {
+func TestDelete_ContextBasedDetection_DeletesCluster(t *testing.T) {
 	testCases := []struct {
-		name            string
-		context         string
-		expectedCluster string
+		name    string
+		context string
 	}{
-		{name: "Kind_context_pattern", context: "kind-my-cluster", expectedCluster: "my-cluster"},
-		{name: "K3d_context_pattern", context: "k3d-dev-cluster", expectedCluster: "dev-cluster"},
-		{
-			name:            "Talos_context_pattern",
-			context:         "admin@talos-homelab",
-			expectedCluster: "talos-homelab",
-		},
+		{name: "Kind_context_pattern", context: "kind-my-cluster"},
+		{name: "K3d_context_pattern", context: "k3d-dev-cluster"},
+		{name: "Talos_context_pattern", context: "admin@talos-homelab"},
 	}
 
 	for _, testCase := range testCases {
@@ -393,8 +388,7 @@ func TestDelete_ContextBasedDetection_AutoDetectsDistribution(t *testing.T) {
 			require.NoError(t, err)
 
 			output := out.String()
-			require.Contains(t, output, "auto-detected")
-			require.Contains(t, output, testCase.expectedCluster)
+			require.Contains(t, output, "cluster deleted")
 
 			snaps.MatchSnapshot(t, trimTrailingNewlineDelete(output))
 		})
@@ -402,7 +396,7 @@ func TestDelete_ContextBasedDetection_AutoDetectsDistribution(t *testing.T) {
 }
 
 // TestDelete_ContextBasedDetection_ClusterNotFound tests that context-based detection
-// correctly succeeds when the auto-detected cluster doesn't exist (idempotent delete).
+// correctly returns an error when the detected cluster doesn't exist.
 //
 //nolint:paralleltest // Cannot use t.Parallel() with t.Chdir() and t.Setenv() in helper
 func TestDelete_ContextBasedDetection_ClusterNotFound(t *testing.T) {
@@ -422,13 +416,10 @@ func TestDelete_ContextBasedDetection_ClusterNotFound(t *testing.T) {
 	cmd.SetContext(context.Background())
 
 	err := cmd.Execute()
-	require.NoError(t, err) // Idempotent delete: should succeed
+	require.Error(t, err)
+	require.ErrorIs(t, err, clustererrors.ErrClusterNotFound)
 
-	output := out.String()
-	require.Contains(t, output, "auto-detected")
-	require.Contains(t, output, "cluster does not exist")
-
-	snaps.MatchSnapshot(t, trimTrailingNewlineDelete(output))
+	snaps.MatchSnapshot(t, trimTrailingNewlineDelete(out.String()))
 }
 
 // TestDelete_ContextBasedDetection_UnknownContextPattern tests that delete falls back
