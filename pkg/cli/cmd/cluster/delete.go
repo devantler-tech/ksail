@@ -138,16 +138,6 @@ func tryContextBasedDetection(
 		}
 	}
 
-	notify.WriteMessage(notify.Message{
-		Type: notify.InfoType,
-		Content: fmt.Sprintf(
-			"auto-detected %s cluster '%s' from context",
-			distribution,
-			clusterName,
-		),
-		Writer: cmd.OutOrStdout(),
-	})
-
 	return clusterCfg, deps, nil
 }
 
