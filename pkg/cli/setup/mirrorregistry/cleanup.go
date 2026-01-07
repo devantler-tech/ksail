@@ -347,7 +347,7 @@ func cleanupK3dMirrorRegistries(
 		)
 	}
 
-	registriesInfo := k3dprovisioner.ExtractRegistriesFromConfigForTesting(k3dConfig, clusterName)
+	registriesInfo := k3dprovisioner.ExtractRegistriesFromConfig(k3dConfig, clusterName)
 
 	registryNames := registry.CollectRegistryNames(registriesInfo)
 	if len(registryNames) == 0 {

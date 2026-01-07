@@ -77,7 +77,7 @@ func runK3dRegistryAction(
 	// Filter out the local registry since it's managed separately and has a different container name.
 	clusterName := k3dconfigmanager.ResolveClusterName(ctx.ClusterCfg, ctx.K3dConfig)
 	registryInfos := filterOutLocalRegistry(
-		k3dprovisioner.ExtractRegistriesFromConfigForTesting(ctx.K3dConfig, clusterName),
+		k3dprovisioner.ExtractRegistriesFromConfig(ctx.K3dConfig, clusterName),
 	)
 	writer := ctx.Cmd.OutOrStdout()
 
