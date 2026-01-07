@@ -242,7 +242,8 @@ func TestDelete_ClusterExists_PrintsDeleteSuccess(t *testing.T) {
 	}
 }
 
-// TestDelete_ClusterNotFound_SucceedsIdempotent tests deletion succeeds when cluster doesn't exist (idempotent delete).
+// TestDelete_ClusterNotFound_ReturnsError tests that deletion returns an error when the cluster doesn't exist.
+// This reflects the current non-idempotent behavior (breaking change from previous idempotent delete semantics).
 //
 //nolint:paralleltest // Cannot use t.Parallel() with t.Chdir()
 func TestDelete_ClusterNotFound_ReturnsError(t *testing.T) {
