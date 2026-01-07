@@ -7,8 +7,8 @@ import (
 )
 
 const (
-	// DefaultInstallTimeout is the default timeout (3 minutes) for component installation.
-	DefaultInstallTimeout = 3 * time.Minute
+	// DefaultInstallTimeout is the default timeout (5 minutes) for component installation.
+	DefaultInstallTimeout = 5 * time.Minute
 	// TalosInstallTimeout is the timeout (5 minutes) for Talos component installation.
 	// Talos clusters take longer to bootstrap due to the immutable OS design.
 	TalosInstallTimeout = 5 * time.Minute
