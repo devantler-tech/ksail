@@ -167,7 +167,6 @@ func displayRegistryCleanupOutput(cmd *cobra.Command, deps lifecycle.Deps, delet
 
 	deps.Timer.NewStage()
 
-	cmd.Println()
 	notify.WriteMessage(notify.Message{
 		Type:    notify.TitleType,
 		Content: "Delete registries...",
