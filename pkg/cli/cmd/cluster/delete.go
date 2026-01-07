@@ -20,11 +20,10 @@ import (
 // NewDeleteCmd creates and returns the delete command.
 func NewDeleteCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:           "delete",
-		Short:         "Destroy a cluster",
-		Long:          `Destroy a cluster.`,
-		SilenceUsage:  true,
-		SilenceErrors: true,
+		Use:          "delete",
+		Short:        "Destroy a cluster",
+		Long:         `Destroy a cluster.`,
+		SilenceUsage: true,
 	}
 
 	cfgManager := ksailconfigmanager.NewCommandConfigManager(
@@ -53,11 +52,16 @@ func handleDeleteRunE(
 	// If no config file was found, try to detect distribution from kubeconfig context
 	if !cfgManager.IsConfigFileFound() {
 		detectedCfg, detectedDeps, detectErr := tryContextBasedDetection(cmd, clusterCfg, deps)
-		if detectErr == nil {
-			clusterCfg = detectedCfg
-			deps = detectedDeps
+		if detectErr != nil {
+			// Cannot determine cluster to delete without config file or valid context pattern
+			return fmt.Errorf(
+				"no ksail.yaml config file found and %w",
+				detectErr,
+			)
 		}
-		// If detection fails, fall back to the default config-based approach
+
+		clusterCfg = detectedCfg
+		deps = detectedDeps
 	}
 
 	clusterName, err := lifecycle.GetClusterNameFromConfig(clusterCfg, deps.Factory)
@@ -111,17 +115,6 @@ func tryContextBasedDetection(
 	if err != nil {
 		return nil, deps, fmt.Errorf("failed to detect distribution: %w", err)
 	}
-
-	// Notify user that we auto-detected the distribution
-	notify.WriteMessage(notify.Message{
-		Type: notify.InfoType,
-		Content: fmt.Sprintf(
-			"auto-detected %s cluster '%s' from kubeconfig context",
-			distribution,
-			clusterName,
-		),
-		Writer: cmd.OutOrStdout(),
-	})
 
 	// Update the config with detected values
 	clusterCfg.Spec.Cluster.Distribution = distribution
@@ -252,12 +245,12 @@ func executeClusterDeletion(
 		if errors.Is(err, clustererrors.ErrClusterNotFound) {
 			notify.WriteMessage(notify.Message{
 				Type:    notify.ErrorType,
-				Content: "cluster does not exist, nothing to delete",
+				Content: "cluster does not exist",
 				Timer:   helpers.MaybeTimer(cmd, deps.Timer),
 				Writer:  cmd.OutOrStdout(),
 			})
 
-			return clustererrors.ErrClusterNotFound
+			return nil
 		}
 
 		return fmt.Errorf("cluster deletion failed: %w", err)

@@ -242,10 +242,10 @@ func TestDelete_ClusterExists_PrintsDeleteSuccess(t *testing.T) {
 	}
 }
 
-// TestDelete_ClusterNotFound_ReturnsError tests deletion returns an error when cluster doesn't exist.
+// TestDelete_ClusterNotFound_SucceedsIdempotent tests deletion succeeds when cluster doesn't exist (idempotent delete).
 //
 //nolint:paralleltest // Cannot use t.Parallel() with t.Chdir()
-func TestDelete_ClusterNotFound_ReturnsError(t *testing.T) {
+func TestDelete_ClusterNotFound_SucceedsIdempotent(t *testing.T) {
 	testCases := []struct {
 		name         string
 		distribution string
@@ -287,8 +287,7 @@ func TestDelete_ClusterNotFound_ReturnsError(t *testing.T) {
 			cmd.SetContext(context.Background())
 
 			err := cmd.Execute()
-			require.Error(t, err) // Should return error when cluster doesn't exist
-			require.ErrorIs(t, err, clustererrors.ErrClusterNotFound)
+			require.NoError(t, err) // Idempotent delete: should succeed when cluster doesn't exist
 
 			snaps.MatchSnapshot(t, trimTrailingNewlineDelete(out.String()))
 		})
@@ -402,7 +401,7 @@ func TestDelete_ContextBasedDetection_AutoDetectsDistribution(t *testing.T) {
 }
 
 // TestDelete_ContextBasedDetection_ClusterNotFound tests that context-based detection
-// correctly reports cluster not found when the auto-detected cluster doesn't exist.
+// correctly succeeds when the auto-detected cluster doesn't exist (idempotent delete).
 //
 //nolint:paralleltest // Cannot use t.Parallel() with t.Chdir() and t.Setenv() in helper
 func TestDelete_ContextBasedDetection_ClusterNotFound(t *testing.T) {
@@ -422,8 +421,7 @@ func TestDelete_ContextBasedDetection_ClusterNotFound(t *testing.T) {
 	cmd.SetContext(context.Background())
 
 	err := cmd.Execute()
-	require.Error(t, err)
-	require.ErrorIs(t, err, clustererrors.ErrClusterNotFound)
+	require.NoError(t, err) // Idempotent delete: should succeed
 
 	output := out.String()
 	require.Contains(t, output, "auto-detected")
