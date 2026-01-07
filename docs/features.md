@@ -26,7 +26,7 @@ ksail cluster create
 **Commands:** [`ksail cluster`](configuration/cli-flags/cluster/cluster-root.md)
 
 | Command                 | Description                 |
-|-------------------------|-----------------------------|
+| ----------------------- | --------------------------- |
 | `ksail cluster init`    | Initialize a new project    |
 | `ksail cluster create`  | Create a cluster            |
 | `ksail cluster delete`  | Delete a cluster            |
@@ -58,7 +58,7 @@ ksail workload logs deployment/my-app
 **Commands:** [`ksail workload`](configuration/cli-flags/workload/workload-root.md)
 
 | Command                   | Description                        |
-|---------------------------|------------------------------------|
+| ------------------------- | ---------------------------------- |
 | `ksail workload apply`    | Apply manifests to cluster         |
 | `ksail workload get`      | Get resources                      |
 | `ksail workload describe` | Describe resources                 |
@@ -100,7 +100,7 @@ ksail workload reconcile
 **Commands:**
 
 | Command                    | Description                            |
-|----------------------------|----------------------------------------|
+| -------------------------- | -------------------------------------- |
 | `ksail workload push`      | Package and push manifests to registry |
 | `ksail workload reconcile` | Trigger GitOps sync and wait           |
 
@@ -144,7 +144,7 @@ ksail cipher import AGE-SECRET-KEY-1...
 **Commands:** [`ksail cipher`](configuration/cli-flags/cipher/cipher-root.md)
 
 | Command                | Description                   |
-|------------------------|-------------------------------|
+| ---------------------- | ----------------------------- |
 | `ksail cipher encrypt` | Encrypt a file with SOPS      |
 | `ksail cipher decrypt` | Decrypt a SOPS-encrypted file |
 | `ksail cipher edit`    | Edit encrypted file in-place  |
@@ -176,7 +176,7 @@ Define cluster configuration in `ksail.yaml` for reproducible, version-controlle
 
 ```yaml
 # ksail.yaml
-apiVersion: ksail.dev/v1alpha1
+apiVersion: ksail.io/v1alpha1
 kind: Cluster
 spec:
   cluster:

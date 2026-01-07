@@ -70,7 +70,7 @@ func (v *Validator) Validate(config *v1alpha1.Cluster) *validator.ValidationResu
 		config.Kind,
 		config.APIVersion,
 		"Cluster",
-		"ksail.dev/v1alpha1",
+		"ksail.io/v1alpha1",
 		result,
 	)
 

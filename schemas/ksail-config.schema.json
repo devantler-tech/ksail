@@ -10,7 +10,7 @@
     "apiVersion": {
       "type": "string",
       "enum": [
-        "ksail.dev/v1alpha1"
+        "ksail.io/v1alpha1"
       ]
     },
     "spec": {

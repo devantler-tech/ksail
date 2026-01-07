@@ -22,7 +22,7 @@ import (
 
 const (
 	kindClusterConfigYAML = "apiVersion: kind.x-k8s.io/v1alpha4\nkind: Cluster\n"
-	ksailClusterBaseYAML  = "apiVersion: ksail.dev/v1alpha1\n" +
+	ksailClusterBaseYAML  = "apiVersion: ksail.io/v1alpha1\n" +
 		"kind: Cluster\n" +
 		"spec:\n" +
 		"  cluster:\n" +
@@ -36,7 +36,7 @@ func writeValidKsailConfig(t *testing.T, dir string) {
 	workloadDir := filepath.Join(dir, "k8s")
 	require.NoError(t, os.MkdirAll(workloadDir, 0o750))
 
-	ksailConfigContent := "apiVersion: ksail.dev/v1alpha1\n" +
+	ksailConfigContent := "apiVersion: ksail.io/v1alpha1\n" +
 		"kind: Cluster\n" +
 		"spec:\n" +
 		"  cluster:\n" +
@@ -146,7 +146,7 @@ func TestLoadConfigLoadsKindDistributionConfig(t *testing.T) {
 		"  disableDefaultCNI: true\n"
 	require.NoError(t, os.WriteFile(kindConfigPath, []byte(kindConfigYAML), 0o600))
 
-	ksailConfig := "apiVersion: ksail.dev/v1alpha1\n" +
+	ksailConfig := "apiVersion: ksail.io/v1alpha1\n" +
 		"kind: Cluster\n" +
 		"spec:\n" +
 		"  cluster:\n" +
@@ -177,7 +177,7 @@ func TestLoadConfigLoadsK3dDistributionConfig(t *testing.T) {
 		"  name: test\n"
 	require.NoError(t, os.WriteFile(k3dConfigPath, []byte(k3dConfigYAML), 0o600))
 
-	ksailConfig := "apiVersion: ksail.dev/v1alpha1\n" +
+	ksailConfig := "apiVersion: ksail.io/v1alpha1\n" +
 		"kind: Cluster\n" +
 		"spec:\n" +
 		"  cluster:\n" +
@@ -218,7 +218,7 @@ func TestLoadConfigLoadsTalosDistributionConfig(t *testing.T) {
 	)
 
 	// Create ksail.yaml with Talos distribution and admin@<cluster-name> context
-	ksailConfig := "apiVersion: ksail.dev/v1alpha1\n" +
+	ksailConfig := "apiVersion: ksail.io/v1alpha1\n" +
 		"kind: Cluster\n" +
 		"spec:\n" +
 		"  cluster:\n" +
@@ -253,7 +253,7 @@ func TestLoadConfigLoadsTalosDistributionConfigWithDefaultClusterName(t *testing
 	require.NoError(t, os.MkdirAll(talosPatchesDir, 0o750))
 
 	// Create ksail.yaml with Talos distribution but no context (uses default cluster name)
-	ksailConfig := "apiVersion: ksail.dev/v1alpha1\n" +
+	ksailConfig := "apiVersion: ksail.io/v1alpha1\n" +
 		"kind: Cluster\n" +
 		"spec:\n" +
 		"  cluster:\n" +
@@ -297,7 +297,7 @@ func TestLoadConfigAppliesFlagOverrides(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Chdir(tempDir)
 
-	ksailConfig := "apiVersion: ksail.dev/v1alpha1\n" +
+	ksailConfig := "apiVersion: ksail.io/v1alpha1\n" +
 		"kind: Cluster\n" +
 		"spec:\n" +
 		"  cluster:\n" +
@@ -426,7 +426,7 @@ func TestLoadConfigConfigFileNotifiesFound(t *testing.T) {
 
 	configPath := filepath.Join(tempDir, "ksail.yaml")
 	configContents := []byte(
-		"apiVersion: ksail.dev/v1alpha1\nkind: Cluster\nspec:\n  distribution: Kind\n  distributionConfig: kind.yaml\n",
+		"apiVersion: ksail.io/v1alpha1\nkind: Cluster\nspec:\n  distribution: Kind\n  distributionConfig: kind.yaml\n",
 	)
 
 	err := os.WriteFile(configPath, configContents, 0o600)
@@ -580,7 +580,7 @@ func TestLoadConfigSilentSkipsNotifications(t *testing.T) {
 	tempDir := t.TempDir()
 
 	configPath := filepath.Join(tempDir, "ksail.yaml")
-	configStub := "apiVersion: ksail.dev/v1alpha1\nkind: Cluster\n"
+	configStub := "apiVersion: ksail.io/v1alpha1\nkind: Cluster\n"
 	require.NoError(t, os.WriteFile(configPath, []byte(configStub), 0o600))
 
 	selectors := []configmanager.FieldSelector[v1alpha1.Cluster]{
@@ -750,7 +750,7 @@ func TestLoadConfigConfigProperty(t *testing.T) {
 	tempDir := t.TempDir()
 
 	configPath := filepath.Join(tempDir, "ksail.yaml")
-	configStub := "apiVersion: ksail.dev/v1alpha1\nkind: Cluster\n"
+	configStub := "apiVersion: ksail.io/v1alpha1\nkind: Cluster\n"
 	require.NoError(t, os.WriteFile(configPath, []byte(configStub), 0o600))
 
 	manager := configmanager.NewConfigManager(io.Discard, fieldSelectors...)
@@ -979,7 +979,7 @@ func TestManager_readConfigurationFile_ConfigFound(t *testing.T) {
 
 	// Create a valid config file to test the success path
 	configContent := `
-apiVersion: ksail.dev/v1alpha1
+apiVersion: ksail.io/v1alpha1
 kind: Cluster
 spec:
   cluster:
@@ -1137,7 +1137,7 @@ networking:
 `, scenario.configName, scenario.disableDefaultCNI)
 	writeFile(t, "kind.yaml", kindContents)
 
-	ksailContents := fmt.Sprintf(`apiVersion: ksail.dev/v1alpha1
+	ksailContents := fmt.Sprintf(`apiVersion: ksail.io/v1alpha1
 kind: Cluster
 spec:
   cluster:
@@ -1241,7 +1241,7 @@ func newK3dManagerForScenario(
 		writeFile(t, "k3d.yaml", scenario.distributionContents)
 	}
 
-	ksailContents := "apiVersion: ksail.dev/v1alpha1\n" +
+	ksailContents := "apiVersion: ksail.io/v1alpha1\n" +
 		"kind: Cluster\n" +
 		"spec:\n" +
 		"  cluster:\n" +

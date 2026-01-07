@@ -85,7 +85,7 @@ func writeDeleteTestConfigFiles(t *testing.T, workingDir string, distribution st
 func writeKindTestConfig(t *testing.T, workingDir string) {
 	t.Helper()
 
-	ksailYAML := `apiVersion: ksail.dev/v1alpha1
+	ksailYAML := `apiVersion: ksail.io/v1alpha1
 kind: Cluster
 spec:
   cluster:
@@ -111,7 +111,7 @@ spec:
 func writeK3dTestConfig(t *testing.T, workingDir string) {
 	t.Helper()
 
-	ksailYAML := `apiVersion: ksail.dev/v1alpha1
+	ksailYAML := `apiVersion: ksail.io/v1alpha1
 kind: Cluster
 spec:
   cluster:
@@ -137,7 +137,7 @@ spec:
 func writeTalosTestConfig(t *testing.T, workingDir string) {
 	t.Helper()
 
-	ksailYAML := `apiVersion: ksail.dev/v1alpha1
+	ksailYAML := `apiVersion: ksail.io/v1alpha1
 kind: Cluster
 spec:
   cluster:

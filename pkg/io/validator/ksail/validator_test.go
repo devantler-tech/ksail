@@ -74,7 +74,7 @@ func createInvalidDistributionKSailCase() ksailTestCase {
 		name: "invalid_distribution",
 		config: &v1alpha1.Cluster{
 			TypeMeta: metav1.TypeMeta{
-				APIVersion: "ksail.dev/v1alpha1",
+				APIVersion: "ksail.io/v1alpha1",
 				Kind:       "Cluster",
 			},
 			Spec: v1alpha1.Spec{
@@ -187,7 +187,7 @@ func testValidConfiguration(t *testing.T, validator *ksailvalidator.Validator) {
 
 	config := &v1alpha1.Cluster{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: "ksail.dev/v1alpha1",
+			APIVersion: "ksail.io/v1alpha1",
 			Kind:       "Cluster",
 		},
 		Spec: v1alpha1.Spec{
@@ -216,7 +216,7 @@ func testInvalidDistribution(t *testing.T, validator *ksailvalidator.Validator) 
 	// Test cross-configuration validation for invalid distribution
 	invalidConfig := &v1alpha1.Cluster{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: "ksail.dev/v1alpha1",
+			APIVersion: "ksail.io/v1alpha1",
 			Kind:       "Cluster",
 		},
 		Spec: v1alpha1.Spec{
@@ -272,7 +272,7 @@ func createValidKSailConfig(distribution v1alpha1.Distribution) *v1alpha1.Cluste
 
 	return &v1alpha1.Cluster{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: "ksail.dev/v1alpha1",
+			APIVersion: "ksail.io/v1alpha1",
 			Kind:       "Cluster",
 		},
 		Spec: v1alpha1.Spec{
@@ -806,7 +806,7 @@ func createTestClusterConfig(
 ) *v1alpha1.Cluster {
 	return &v1alpha1.Cluster{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: "ksail.dev/v1alpha1",
+			APIVersion: "ksail.io/v1alpha1",
 			Kind:       "Cluster",
 		},
 		Spec: v1alpha1.Spec{
@@ -943,7 +943,7 @@ func testEmptyContextValidationSkipped(t *testing.T) {
 
 		config := &v1alpha1.Cluster{
 			TypeMeta: metav1.TypeMeta{
-				APIVersion: "ksail.dev/v1alpha1",
+				APIVersion: "ksail.io/v1alpha1",
 				Kind:       "Cluster",
 			},
 			Spec: v1alpha1.Spec{
@@ -983,7 +983,7 @@ func testKindCrossValidationWithConfigName(t *testing.T) {
 		kindConfig := &kindv1alpha4.Cluster{Name: "custom-kind-cluster"}
 		config := &v1alpha1.Cluster{
 			TypeMeta: metav1.TypeMeta{
-				APIVersion: "ksail.dev/v1alpha1",
+				APIVersion: "ksail.io/v1alpha1",
 				Kind:       "Cluster",
 			},
 			Spec: v1alpha1.Spec{
@@ -1017,7 +1017,7 @@ func testK3dCrossValidationWithConfigName(t *testing.T) {
 		}
 		config := &v1alpha1.Cluster{
 			TypeMeta: metav1.TypeMeta{
-				APIVersion: "ksail.dev/v1alpha1",
+				APIVersion: "ksail.io/v1alpha1",
 				Kind:       "Cluster",
 			},
 			Spec: v1alpha1.Spec{
@@ -1057,7 +1057,7 @@ func testKindEmptyConfigName(t *testing.T) {
 		kindConfig := &kindv1alpha4.Cluster{Name: ""} // Empty name - validation should be skipped
 		config := &v1alpha1.Cluster{
 			TypeMeta: metav1.TypeMeta{
-				APIVersion: "ksail.dev/v1alpha1",
+				APIVersion: "ksail.io/v1alpha1",
 				Kind:       "Cluster",
 			},
 			Spec: v1alpha1.Spec{
@@ -1095,7 +1095,7 @@ func testK3dEmptyConfigName(t *testing.T) {
 		}
 		config := &v1alpha1.Cluster{
 			TypeMeta: metav1.TypeMeta{
-				APIVersion: "ksail.dev/v1alpha1",
+				APIVersion: "ksail.io/v1alpha1",
 				Kind:       "Cluster",
 			},
 			Spec: v1alpha1.Spec{
@@ -1137,7 +1137,7 @@ func testNoDistributionConfigProvided(t *testing.T) {
 
 		config := &v1alpha1.Cluster{
 			TypeMeta: metav1.TypeMeta{
-				APIVersion: "ksail.dev/v1alpha1",
+				APIVersion: "ksail.io/v1alpha1",
 				Kind:       "Cluster",
 			},
 			Spec: v1alpha1.Spec{
@@ -1181,7 +1181,7 @@ func testEmptyDistribution(t *testing.T) {
 
 		config := &v1alpha1.Cluster{
 			TypeMeta: metav1.TypeMeta{
-				APIVersion: "ksail.dev/v1alpha1",
+				APIVersion: "ksail.io/v1alpha1",
 				Kind:       "Cluster",
 			},
 			Spec: v1alpha1.Spec{
@@ -1225,7 +1225,7 @@ func testEmptyDistributionConfig(t *testing.T) {
 
 		config := &v1alpha1.Cluster{
 			TypeMeta: metav1.TypeMeta{
-				APIVersion: "ksail.dev/v1alpha1",
+				APIVersion: "ksail.io/v1alpha1",
 				Kind:       "Cluster",
 			},
 			Spec: v1alpha1.Spec{
@@ -1269,7 +1269,7 @@ func testInvalidDistributionValue(t *testing.T) {
 
 		config := &v1alpha1.Cluster{
 			TypeMeta: metav1.TypeMeta{
-				APIVersion: "ksail.dev/v1alpha1",
+				APIVersion: "ksail.io/v1alpha1",
 				Kind:       "Cluster",
 			},
 			Spec: v1alpha1.Spec{
@@ -1335,7 +1335,7 @@ func TestKSailValidatorKindConfigEdgeCases(t *testing.T) {
 			// Create a valid config to test cross-configuration validation
 			config := &v1alpha1.Cluster{
 				TypeMeta: metav1.TypeMeta{
-					APIVersion: "ksail.dev/v1alpha1",
+					APIVersion: "ksail.io/v1alpha1",
 					Kind:       "Cluster",
 				},
 				Spec: v1alpha1.Spec{
@@ -1399,7 +1399,7 @@ func TestKSailValidatorK3dConfigEdgeCases(t *testing.T) {
 			// Create a valid config to test cross-configuration validation
 			config := &v1alpha1.Cluster{
 				TypeMeta: metav1.TypeMeta{
-					APIVersion: "ksail.dev/v1alpha1",
+					APIVersion: "ksail.io/v1alpha1",
 					Kind:       "Cluster",
 				},
 				Spec: v1alpha1.Spec{
@@ -1490,7 +1490,7 @@ func runKindContextValidationTest(
 
 	config := &v1alpha1.Cluster{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: "ksail.dev/v1alpha1",
+			APIVersion: "ksail.io/v1alpha1",
 			Kind:       "Cluster",
 		},
 		Spec: v1alpha1.Spec{
@@ -1580,7 +1580,7 @@ func runK3dContextValidationTest(
 
 	config := &v1alpha1.Cluster{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: "ksail.dev/v1alpha1",
+			APIVersion: "ksail.io/v1alpha1",
 			Kind:       "Cluster",
 		},
 		Spec: v1alpha1.Spec{
@@ -1663,7 +1663,7 @@ func createMultiConfigTestCluster(
 ) *v1alpha1.Cluster {
 	return &v1alpha1.Cluster{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: "ksail.dev/v1alpha1",
+			APIVersion: "ksail.io/v1alpha1",
 			Kind:       "Cluster",
 		},
 		Spec: v1alpha1.Spec{

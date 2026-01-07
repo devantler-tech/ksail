@@ -332,7 +332,7 @@ func TestHandleInitRunE_IgnoresExistingConfigFile(t *testing.T) {
 	t.Parallel()
 
 	outDir := t.TempDir()
-	existing := "apiVersion: ksail.dev/v1alpha1\n" +
+	existing := "apiVersion: ksail.io/v1alpha1\n" +
 		"kind: Cluster\n" +
 		"spec:\n" +
 		"  distribution: K3d\n" +

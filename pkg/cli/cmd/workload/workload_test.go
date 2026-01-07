@@ -37,7 +37,7 @@ func writeValidKsailConfig(t *testing.T, dir string) {
 	workloadDir := filepath.Join(dir, "k8s")
 	require.NoError(t, os.MkdirAll(workloadDir, 0o750))
 
-	ksailConfigContent := "apiVersion: ksail.dev/v1alpha1\n" +
+	ksailConfigContent := "apiVersion: ksail.io/v1alpha1\n" +
 		"kind: Cluster\n" +
 		"spec:\n" +
 		"  distribution: Kind\n" +
