@@ -29,4 +29,5 @@ https://kubernetes.io/docs/concepts/storage/persistent-volumes/
 https://kubernetes.io/docs/concepts/storage/storage-classes/
 https://kubernetes.io/docs/reference/kubectl/
 https://kubernetes.io/docs/tasks/debug/debug-cluster/resource-metrics-pipeline/
+https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/
 https://www.talos.dev/
