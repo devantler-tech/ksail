@@ -755,6 +755,7 @@ func (m *ConfigManager) loadTalosConfig() (*talosconfigmanager.Configs, error) {
 	// Get cluster name from context or use default
 	// For Talos, context is "admin@<cluster-name>", so we need to extract the cluster name
 	clusterName := talosconfigmanager.DefaultClusterName
+
 	if ctx := strings.TrimSpace(m.Config.Spec.Cluster.Connection.Context); ctx != "" {
 		// Talos uses admin@<cluster-name> context pattern
 		if extracted, ok := strings.CutPrefix(ctx, "admin@"); ok && extracted != "" {
