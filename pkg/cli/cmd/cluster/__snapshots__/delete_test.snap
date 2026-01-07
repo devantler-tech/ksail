@@ -20,22 +20,20 @@
 ⚠ failed to cleanup local registry: check registry existence: create registry service: docker client is required
 ---
 
-[TestDelete_ClusterNotFound_PrintsWarning/K3d - 1]
+[TestDelete_ClusterNotFound_ReturnsError/K3d - 1]
 🗑️ Delete cluster...
 ► deleting cluster
-⚠ cluster does not exist, nothing to delete
+✗ cluster does not exist, nothing to delete
 ---
 
-[TestDelete_ClusterNotFound_PrintsWarning/Kind - 1]
+[TestDelete_ClusterNotFound_ReturnsError/Talos - 1]
 🗑️ Delete cluster...
 ► deleting cluster
-⚠ cluster does not exist, nothing to delete
-⚠ failed to cleanup local registry: check registry existence: create registry service: docker client is required
+✗ cluster does not exist, nothing to delete
 ---
 
-[TestDelete_ClusterNotFound_PrintsWarning/Talos - 1]
+[TestDelete_ClusterNotFound_ReturnsError/Kind - 1]
 🗑️ Delete cluster...
 ► deleting cluster
-⚠ cluster does not exist, nothing to delete
-⚠ failed to cleanup local registry: check registry existence: create registry service: docker client is required
+✗ cluster does not exist, nothing to delete
 ---

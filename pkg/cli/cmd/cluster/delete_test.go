@@ -17,6 +17,7 @@ import (
 	"github.com/gkampitakis/go-snaps/snaps"
 	"github.com/samber/do/v2"
 	"github.com/spf13/cobra"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
@@ -242,10 +243,10 @@ func TestDelete_ClusterExists_PrintsDeleteSuccess(t *testing.T) {
 	}
 }
 
-// TestDelete_ClusterNotFound_PrintsWarning tests deletion when cluster doesn't exist for all distributions.
+// TestDelete_ClusterNotFound_ReturnsError tests deletion returns an error when cluster doesn't exist.
 //
 //nolint:paralleltest // Cannot use t.Parallel() with t.Chdir()
-func TestDelete_ClusterNotFound_PrintsWarning(t *testing.T) {
+func TestDelete_ClusterNotFound_ReturnsError(t *testing.T) {
 	testCases := []struct {
 		name         string
 		distribution string
@@ -287,7 +288,8 @@ func TestDelete_ClusterNotFound_PrintsWarning(t *testing.T) {
 			cmd.SetContext(context.Background())
 
 			err := cmd.Execute()
-			require.NoError(t, err) // Should succeed even when cluster doesn't exist
+			require.Error(t, err) // Should return error when cluster doesn't exist
+			assert.ErrorIs(t, err, clustererrors.ErrClusterNotFound)
 
 			snaps.MatchSnapshot(t, trimTrailingNewlineDelete(out.String()))
 		})

@@ -111,6 +111,12 @@ func (m *ConfigManager) LoadConfigFromFlagsOnly() (*v1alpha1.Cluster, error) {
 	return m.loadConfigWithOptions(nil, true, true)
 }
 
+// IsConfigFileFound returns true if a configuration file was found during LoadConfig.
+// This should only be called after LoadConfig has been called.
+func (m *ConfigManager) IsConfigFileFound() bool {
+	return m.configFileFound
+}
+
 // loadConfigWithOptions is the internal implementation with silent option.
 func (m *ConfigManager) loadConfigWithOptions(
 	tmr timer.Timer,

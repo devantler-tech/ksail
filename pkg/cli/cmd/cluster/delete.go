@@ -27,10 +27,11 @@ import (
 // NewDeleteCmd creates and returns the delete command.
 func NewDeleteCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:          "delete",
-		Short:        "Destroy a cluster",
-		Long:         `Destroy a cluster.`,
-		SilenceUsage: true,
+		Use:           "delete",
+		Short:         "Destroy a cluster",
+		Long:          `Destroy a cluster.`,
+		SilenceUsage:  true,
+		SilenceErrors: true,
 	}
 
 	cfgManager := ksailconfigmanager.NewCommandConfigManager(
@@ -56,6 +57,16 @@ func handleDeleteRunE(
 	clusterCfg := cfgManager.Config
 	deps = applyFactoryOverride(deps)
 
+	// If no config file was found, try to detect distribution from kubeconfig context
+	if !cfgManager.IsConfigFileFound() {
+		detectedCfg, detectedDeps, detectErr := tryContextBasedDetection(cmd, clusterCfg, deps)
+		if detectErr == nil {
+			clusterCfg = detectedCfg
+			deps = detectedDeps
+		}
+		// If detection fails, fall back to the default config-based approach
+	}
+
 	clusterName, err := lifecycle.GetClusterNameFromConfig(clusterCfg, deps.Factory)
 	if err != nil {
 		return fmt.Errorf("failed to get cluster name: %w", err)
@@ -78,6 +89,66 @@ func handleDeleteRunE(
 	cleanupRegistries(cmd, cfgManager, clusterCfg, deps, clusterName, deleteVolumes)
 
 	return nil
+}
+
+// tryContextBasedDetection attempts to detect the distribution and cluster name from the kubeconfig context.
+// This is used when no ksail.yaml config file is found, allowing delete to work with non-scaffolded clusters.
+func tryContextBasedDetection(
+	cmd *cobra.Command,
+	clusterCfg *v1alpha1.Cluster,
+	deps lifecycle.Deps,
+) (*v1alpha1.Cluster, lifecycle.Deps, error) {
+	// Get current context from kubeconfig
+	currentContext, err := lifecycle.GetCurrentKubeContext()
+	if err != nil {
+		return nil, deps, fmt.Errorf("failed to get current context: %w", err)
+	}
+
+	// Detect distribution and cluster name from context pattern
+	distribution, clusterName, err := lifecycle.DetectDistributionFromContext(currentContext)
+	if err != nil {
+		return nil, deps, fmt.Errorf("failed to detect distribution: %w", err)
+	}
+
+	// Update the config with detected values
+	clusterCfg.Spec.Cluster.Distribution = distribution
+	clusterCfg.Spec.Cluster.Connection.Context = currentContext
+
+	// Create a minimal provisioner for the detected distribution
+	provisioner, err := lifecycle.CreateMinimalProvisioner(distribution, clusterName)
+	if err != nil {
+		return nil, deps, fmt.Errorf("failed to create provisioner: %w", err)
+	}
+
+	// Create a factory that returns the minimal provisioner
+	deps.Factory = &contextBasedFactory{
+		distribution: distribution,
+		clusterName:  clusterName,
+		provisioner:  provisioner,
+	}
+
+	notify.WriteMessage(notify.Message{
+		Type:    notify.InfoType,
+		Content: fmt.Sprintf("auto-detected %s cluster '%s' from context", distribution, clusterName),
+		Writer:  cmd.OutOrStdout(),
+	})
+
+	return clusterCfg, deps, nil
+}
+
+// contextBasedFactory is a factory that returns a pre-created provisioner for context-based detection.
+type contextBasedFactory struct {
+	distribution v1alpha1.Distribution
+	clusterName  string
+	provisioner  clusterprovisioner.ClusterProvisioner
+}
+
+// Create returns the pre-created provisioner.
+func (f *contextBasedFactory) Create(
+	_ context.Context,
+	_ *v1alpha1.Cluster,
+) (clusterprovisioner.ClusterProvisioner, any, error) {
+	return f.provisioner, nil, nil
 }
 
 // applyFactoryOverride applies any test factory override to deps.
@@ -149,17 +220,17 @@ func executeClusterDeletion(
 		},
 	}
 
-	err := lifecycle.RunWithConfig(cmd, deps, config, clusterCfg)
+err := lifecycle.RunWithConfig(cmd, deps, config, clusterCfg)
 	if err != nil {
 		if errors.Is(err, clustererrors.ErrClusterNotFound) {
 			notify.WriteMessage(notify.Message{
-				Type:    notify.WarningType,
+				Type:    notify.ErrorType,
 				Content: "cluster does not exist, nothing to delete",
 				Timer:   helpers.MaybeTimer(cmd, deps.Timer),
 				Writer:  cmd.OutOrStdout(),
 			})
 
-			return nil
+			return clustererrors.ErrClusterNotFound
 		}
 
 		return fmt.Errorf("cluster deletion failed: %w", err)
