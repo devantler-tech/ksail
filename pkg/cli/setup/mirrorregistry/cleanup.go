@@ -480,7 +480,7 @@ func DisconnectMirrorRegistriesWithWarning(
 	err := DisconnectMirrorRegistries(cmd, cfgManager, clusterName, cleanupDeps)
 	if err != nil {
 		notify.WriteMessage(notify.Message{
-			Type:    notify.WarningType,
+			Type:    notify.ErrorType,
 			Content: fmt.Sprintf("failed to disconnect mirror registries: %v", err),
 			Writer:  cmd.OutOrStdout(),
 		})
@@ -508,7 +508,7 @@ func DisconnectLocalRegistryWithWarning(
 	)
 	if err != nil {
 		notify.WriteMessage(notify.Message{
-			Type:    notify.WarningType,
+			Type:    notify.ErrorType,
 			Content: fmt.Sprintf("failed to disconnect local registry: %v", err),
 			Writer:  cmd.OutOrStdout(),
 		})
