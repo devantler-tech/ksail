@@ -17,7 +17,6 @@ import (
 	"github.com/gkampitakis/go-snaps/snaps"
 	"github.com/samber/do/v2"
 	"github.com/spf13/cobra"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
@@ -289,7 +288,7 @@ func TestDelete_ClusterNotFound_ReturnsError(t *testing.T) {
 
 			err := cmd.Execute()
 			require.Error(t, err) // Should return error when cluster doesn't exist
-			assert.ErrorIs(t, err, clustererrors.ErrClusterNotFound)
+			require.ErrorIs(t, err, clustererrors.ErrClusterNotFound)
 
 			snaps.MatchSnapshot(t, trimTrailingNewlineDelete(out.String()))
 		})
