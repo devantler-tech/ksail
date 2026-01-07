@@ -14,6 +14,7 @@ https://kubernetes.default.svc/
 https://github.com/devantler-tech/ksail/releases/download/
 
 # Intermittent Network Errors
+https://docs.tigera.io/calico/latest/about/
 https://docs.tigera.io/calico/latest/getting-started/
 https://docs.tigera.io/calico/latest/network-policy/
 https://fluxcd.io/flux/components/
@@ -25,6 +26,7 @@ https://helm.sh/docs/
 https://just-the-docs.com/
 https://kind.sigs.k8s.io/
 https://kubectl.docs.kubernetes.io/references/kustomize/
+https://kubernetes.io/docs/concepts/
 https://kubernetes.io/docs/concepts/storage/persistent-volumes/
 https://kubernetes.io/docs/concepts/storage/storage-classes/
 https://kubernetes.io/docs/reference/kubectl/
