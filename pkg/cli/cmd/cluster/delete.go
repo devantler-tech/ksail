@@ -8,6 +8,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/setup/mirrorregistry"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
@@ -78,7 +79,16 @@ func handleDeleteRunE(
 		return err
 	}
 
-	cleanupRegistries(cmd, cfgManager, clusterCfg, deps, clusterName, deleteVolumes)
+	cleanupDeps := getCleanupDeps()
+	mirrorregistry.CleanupAll(
+		cmd,
+		cfgManager,
+		clusterCfg,
+		deps,
+		clusterName,
+		deleteVolumes,
+		cleanupDeps,
+	)
 
 	return nil
 }
@@ -177,10 +187,19 @@ func disconnectTalosRegistriesWithContext(
 		return
 	}
 
+	cleanupDeps := getCleanupDeps()
+
 	//nolint:contextcheck // Functions use cmd.Context() internally
-	disconnectMirrorRegistriesWithWarning(cmd, cfgManager, clusterCfg, deps, clusterName)
+	mirrorregistry.DisconnectMirrorRegistriesWithWarning(cmd, cfgManager, clusterName, cleanupDeps)
 	//nolint:contextcheck // Functions use cmd.Context() internally
-	disconnectLocalRegistryWithWarning(cmd, cfgManager, clusterCfg, deps, clusterName)
+	mirrorregistry.DisconnectLocalRegistryWithWarning(
+		cmd,
+		cfgManager,
+		clusterCfg,
+		deps,
+		clusterName,
+		cleanupDeps,
+	)
 }
 
 // executeClusterDeletion runs the cluster deletion and handles "not found" gracefully.

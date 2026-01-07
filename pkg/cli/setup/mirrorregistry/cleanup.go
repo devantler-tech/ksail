@@ -1,4 +1,4 @@
-package cluster
+package mirrorregistry
 
 import (
 	"context"
@@ -8,7 +8,6 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup/localregistry"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/setup/mirrorregistry"
 	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
 	k3dprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/k3d"
@@ -20,25 +19,41 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// cleanupRegistries cleans up mirror and local registries during cluster deletion.
+// CleanupDependencies holds dependencies for mirror registry cleanup operations.
+type CleanupDependencies struct {
+	DockerInvoker     func(*cobra.Command, func(client.APIClient) error) error
+	LocalRegistryDeps localregistry.Dependencies
+}
+
+// DefaultCleanupDependencies returns the default cleanup dependencies.
+func DefaultCleanupDependencies() CleanupDependencies {
+	return CleanupDependencies{
+		DockerInvoker:     helpers.WithDockerClient,
+		LocalRegistryDeps: localregistry.DefaultDependencies(),
+	}
+}
+
+// CleanupAll cleans up mirror and local registries during cluster deletion.
 // For Talos, registries are disconnected from the network before cluster deletion
-// (via disconnectMirrorRegistriesWithWarning and disconnectLocalRegistryWithWarning),
+// (via DisconnectMirrorRegistriesWithWarning and DisconnectLocalRegistryWithWarning),
 // but the actual container cleanup happens here after deletion.
-func cleanupRegistries(
+func CleanupAll(
 	cmd *cobra.Command,
 	cfgManager *ksailconfigmanager.ConfigManager,
 	clusterCfg *v1alpha1.Cluster,
 	deps lifecycle.Deps,
 	clusterName string,
 	deleteVolumes bool,
+	cleanupDeps CleanupDependencies,
 ) {
-	err := cleanupMirrorRegistries(
+	err := CleanupMirrorRegistries(
 		cmd,
 		cfgManager,
 		clusterCfg,
 		deps,
 		clusterName,
 		deleteVolumes,
+		cleanupDeps,
 	)
 	if err != nil {
 		notify.WriteMessage(notify.Message{
@@ -51,9 +66,14 @@ func cleanupRegistries(
 	// Attempt local registry cleanup for Kind and Talos (K3d handles it natively).
 	// The Cleanup function checks for container existence and skips if not provisioned.
 	// This ensures orphaned containers are cleaned up even when config is missing.
-	localDeps := getLocalRegistryDeps()
-
-	err = localregistry.Cleanup(cmd, cfgManager, clusterCfg, deps, deleteVolumes, localDeps)
+	err = localregistry.Cleanup(
+		cmd,
+		cfgManager,
+		clusterCfg,
+		deps,
+		deleteVolumes,
+		cleanupDeps.LocalRegistryDeps,
+	)
 	if err != nil {
 		notify.WriteMessage(notify.Message{
 			Type:    notify.WarningType,
@@ -63,15 +83,16 @@ func cleanupRegistries(
 	}
 }
 
-// cleanupMirrorRegistries cleans up registries for Kind after cluster deletion.
+// CleanupMirrorRegistries cleans up registries for Kind after cluster deletion.
 // K3d handles registry cleanup natively through its own configuration.
-func cleanupMirrorRegistries(
+func CleanupMirrorRegistries(
 	cmd *cobra.Command,
 	cfgManager *ksailconfigmanager.ConfigManager,
 	clusterCfg *v1alpha1.Cluster,
 	deps lifecycle.Deps,
 	clusterName string,
 	deleteVolumes bool,
+	cleanupDeps CleanupDependencies,
 ) error {
 	switch clusterCfg.Spec.Cluster.Distribution {
 	case v1alpha1.DistributionKind:
@@ -82,6 +103,7 @@ func cleanupMirrorRegistries(
 			deps,
 			clusterName,
 			deleteVolumes,
+			cleanupDeps,
 		)
 	case v1alpha1.DistributionK3d:
 		return cleanupK3dMirrorRegistries(
@@ -90,6 +112,7 @@ func cleanupMirrorRegistries(
 			deps,
 			clusterName,
 			deleteVolumes,
+			cleanupDeps,
 		)
 	case v1alpha1.DistributionTalos:
 		return cleanupTalosMirrorRegistries(
@@ -98,15 +121,16 @@ func cleanupMirrorRegistries(
 			deps,
 			clusterName,
 			deleteVolumes,
+			cleanupDeps,
 		)
 	default:
 		return nil
 	}
 }
 
-// collectMirrorSpecs collects and merges mirror specs from flags and existing config.
+// CollectMirrorSpecs collects and merges mirror specs from flags and existing config.
 // Returns the merged specs, registry names, and any error.
-func collectMirrorSpecs(
+func CollectMirrorSpecs(
 	cfgManager *ksailconfigmanager.ConfigManager,
 	mirrorsDir string,
 ) ([]registry.MirrorSpec, []string, error) {
@@ -132,10 +156,11 @@ func cleanupKindMirrorRegistries(
 	deps lifecycle.Deps,
 	clusterName string,
 	deleteVolumes bool,
+	cleanupDeps CleanupDependencies,
 ) error {
-	mirrorSpecs, registryNames, err := collectMirrorSpecs(
+	mirrorSpecs, registryNames, err := CollectMirrorSpecs(
 		cfgManager,
-		mirrorregistry.GetKindMirrorsDir(clusterCfg),
+		GetKindMirrorsDir(clusterCfg),
 	)
 	if err != nil {
 		return err
@@ -158,7 +183,7 @@ func cleanupKindMirrorRegistries(
 				deleteVolumes,
 			)
 		},
-		getLocalRegistryDeps(),
+		cleanupDeps,
 	)
 }
 
@@ -168,6 +193,7 @@ func cleanupK3dMirrorRegistries(
 	deps lifecycle.Deps,
 	clusterName string,
 	deleteVolumes bool,
+	cleanupDeps CleanupDependencies,
 ) error {
 	// Use cached distribution config from ConfigManager
 	k3dConfig := cfgManager.DistributionConfig.K3d
@@ -196,7 +222,7 @@ func cleanupK3dMirrorRegistries(
 				cmd.ErrOrStderr(),
 			)
 		},
-		getLocalRegistryDeps(),
+		cleanupDeps,
 	)
 }
 
@@ -205,7 +231,7 @@ func runMirrorRegistryCleanup(
 	deps lifecycle.Deps,
 	registryNames []string,
 	cleanup func(client.APIClient) error,
-	localDeps localregistry.Dependencies,
+	cleanupDeps CleanupDependencies,
 ) error {
 	if len(registryNames) == 0 {
 		return nil
@@ -221,7 +247,7 @@ func runMirrorRegistryCleanup(
 		Writer:  cmd.OutOrStdout(),
 	})
 
-	err := localDeps.DockerInvoker(cmd, func(dockerClient client.APIClient) error {
+	err := cleanupDeps.DockerInvoker(cmd, func(dockerClient client.APIClient) error {
 		return executeRegistryCleanup(cmd, dockerClient, registryNames, cleanup, deps.Timer)
 	})
 	if err != nil {
@@ -295,9 +321,10 @@ func cleanupTalosMirrorRegistries(
 	deps lifecycle.Deps,
 	clusterName string,
 	deleteVolumes bool,
+	cleanupDeps CleanupDependencies,
 ) error {
 	// Collect mirror specs from Talos config (not kind/mirrors directory)
-	mirrorSpecs, registryNames := collectTalosMirrorSpecs(cfgManager)
+	mirrorSpecs, registryNames := CollectTalosMirrorSpecs(cfgManager)
 
 	if len(registryNames) == 0 {
 		return nil
@@ -339,14 +366,14 @@ func cleanupTalosMirrorRegistries(
 				nil,
 			)
 		},
-		getLocalRegistryDeps(),
+		cleanupDeps,
 	)
 }
 
-// collectTalosMirrorSpecs collects mirror specs from Talos config and command line flags.
+// CollectTalosMirrorSpecs collects mirror specs from Talos config and command line flags.
 // This extracts mirror hosts from the loaded Talos config bundle which includes any
 // mirror-registries.yaml patches that were applied during cluster creation.
-func collectTalosMirrorSpecs(
+func CollectTalosMirrorSpecs(
 	cfgManager *ksailconfigmanager.ConfigManager,
 ) ([]registry.MirrorSpec, []string) {
 	// Get mirror registry specs from command line flag
@@ -373,15 +400,16 @@ func collectTalosMirrorSpecs(
 	return specs, names
 }
 
-// disconnectMirrorRegistries disconnects mirror registries from the Talos network.
+// DisconnectMirrorRegistries disconnects mirror registries from the Talos network.
 // This allows the network to be removed during cluster deletion without "active endpoints" errors.
-func disconnectMirrorRegistries(
+func DisconnectMirrorRegistries(
 	cmd *cobra.Command,
 	cfgManager *ksailconfigmanager.ConfigManager,
 	clusterName string,
+	cleanupDeps CleanupDependencies,
 ) error {
 	// Collect mirror specs from Talos config
-	mirrorSpecs, registryNames := collectTalosMirrorSpecs(cfgManager)
+	mirrorSpecs, registryNames := CollectTalosMirrorSpecs(cfgManager)
 
 	if len(registryNames) == 0 {
 		return nil
@@ -389,9 +417,8 @@ func disconnectMirrorRegistries(
 
 	// Talos uses the cluster name as the network name
 	networkName := clusterName
-	localDeps := getLocalRegistryDeps()
 
-	err := localDeps.DockerInvoker(cmd, func(dockerAPIClient client.APIClient) error {
+	err := cleanupDeps.DockerInvoker(cmd, func(dockerAPIClient client.APIClient) error {
 		registryMgr, mgrErr := dockerclient.NewRegistryManager(dockerAPIClient)
 		if mgrErr != nil {
 			return fmt.Errorf("failed to create registry manager: %w", mgrErr)
@@ -430,17 +457,16 @@ func disconnectMirrorRegistries(
 	return nil
 }
 
-// disconnectMirrorRegistriesWithWarning disconnects mirror registries from the network.
+// DisconnectMirrorRegistriesWithWarning disconnects mirror registries from the network.
 // This is used for Talos which needs registries disconnected BEFORE cluster deletion
 // due to network dependencies, while actual container cleanup happens after deletion.
-func disconnectMirrorRegistriesWithWarning(
+func DisconnectMirrorRegistriesWithWarning(
 	cmd *cobra.Command,
 	cfgManager *ksailconfigmanager.ConfigManager,
-	_ *v1alpha1.Cluster,
-	_ lifecycle.Deps,
 	clusterName string,
+	cleanupDeps CleanupDependencies,
 ) {
-	err := disconnectMirrorRegistries(cmd, cfgManager, clusterName)
+	err := DisconnectMirrorRegistries(cmd, cfgManager, clusterName, cleanupDeps)
 	if err != nil {
 		notify.WriteMessage(notify.Message{
 			Type:    notify.WarningType,
@@ -450,19 +476,25 @@ func disconnectMirrorRegistriesWithWarning(
 	}
 }
 
-// disconnectLocalRegistryWithWarning disconnects the local registry from the cluster network.
+// DisconnectLocalRegistryWithWarning disconnects the local registry from the cluster network.
 // This is used for Talos which needs registries disconnected BEFORE cluster deletion
 // because the registry is connected to the cluster network.
-func disconnectLocalRegistryWithWarning(
+func DisconnectLocalRegistryWithWarning(
 	cmd *cobra.Command,
 	cfgManager *ksailconfigmanager.ConfigManager,
 	clusterCfg *v1alpha1.Cluster,
 	deps lifecycle.Deps,
 	clusterName string,
+	cleanupDeps CleanupDependencies,
 ) {
-	localDeps := getLocalRegistryDeps()
-
-	err := localregistry.Disconnect(cmd, cfgManager, clusterCfg, deps, clusterName, localDeps)
+	err := localregistry.Disconnect(
+		cmd,
+		cfgManager,
+		clusterCfg,
+		deps,
+		clusterName,
+		cleanupDeps.LocalRegistryDeps,
+	)
 	if err != nil {
 		notify.WriteMessage(notify.Message{
 			Type:    notify.WarningType,
@@ -473,7 +505,7 @@ func disconnectLocalRegistryWithWarning(
 }
 
 // buildMirrorSpecsResult builds the registry names from mirror specs.
-// This is a shared helper used by collectMirrorSpecs.
+// This is a shared helper used by CollectMirrorSpecs.
 func buildMirrorSpecsResult(
 	mirrorSpecs []registry.MirrorSpec,
 ) ([]registry.MirrorSpec, []string, error) {
