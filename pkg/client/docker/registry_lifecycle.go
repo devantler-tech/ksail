@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/filters"
 )
 
 // CreateRegistry creates a registry container with the given configuration.
@@ -245,4 +246,187 @@ func (rm *RegistryManager) DisconnectAllFromNetwork(
 	}
 
 	return disconnectedCount, nil
+}
+
+// RegistryInfo contains basic information about a registry container.
+type RegistryInfo struct {
+	Name        string
+	ID          string
+	IsKSailOwned bool
+}
+
+// ListRegistriesOnNetwork returns all registry containers connected to a specific network.
+// This includes both KSail-managed and non-KSail registries (like K3d-managed ones).
+// It identifies registries by the "registry" image ancestor.
+func (rm *RegistryManager) ListRegistriesOnNetwork(
+	ctx context.Context,
+	networkName string,
+) ([]RegistryInfo, error) {
+	trimmedNetwork := strings.TrimSpace(networkName)
+	if trimmedNetwork == "" {
+		return nil, nil
+	}
+
+	// List all containers with registry image (includes non-KSail registries)
+	containers, err := rm.listAllRegistryImageContainers(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list registry containers: %w", err)
+	}
+
+	var registries []RegistryInfo
+
+	for _, c := range containers {
+		inspect, inspectErr := inspectContainer(ctx, rm.client, c.ID)
+		if inspectErr != nil {
+			continue
+		}
+
+		// Check if container is connected to the target network
+		if _, connected := inspect.NetworkSettings.Networks[trimmedNetwork]; !connected {
+			continue
+		}
+
+		// Get container name
+		containerName := ""
+		if len(c.Names) > 0 {
+			containerName = strings.TrimPrefix(c.Names[0], "/")
+		}
+
+		// Check if KSail-managed
+		_, isKSailOwned := c.Labels[RegistryLabelKey]
+
+		registries = append(registries, RegistryInfo{
+			Name:        containerName,
+			ID:          c.ID,
+			IsKSailOwned: isKSailOwned,
+		})
+	}
+
+	return registries, nil
+}
+
+// DeleteRegistriesOnNetwork deletes all registry containers connected to a specific network.
+// This is used for cleaning up registries when deleting non-scaffolded clusters.
+// If deleteVolumes is true, associated volumes will also be deleted.
+func (rm *RegistryManager) DeleteRegistriesOnNetwork(
+	ctx context.Context,
+	networkName string,
+	deleteVolumes bool,
+) ([]string, error) {
+	registries, err := rm.ListRegistriesOnNetwork(ctx, networkName)
+	if err != nil {
+		return nil, err
+	}
+
+	var deletedNames []string
+
+	for _, reg := range registries {
+		// Disconnect from network first
+		disconnectErr := rm.DisconnectFromNetwork(ctx, reg.Name, networkName)
+		if disconnectErr != nil {
+			// Log but continue - container might not be connected anymore
+			continue
+		}
+
+		// Get volume name before deletion if we need to delete volumes
+		var volumeName string
+		if deleteVolumes {
+			inspect, inspectErr := inspectContainer(ctx, rm.client, reg.ID)
+			if inspectErr == nil {
+				for _, m := range inspect.Mounts {
+					if m.Destination == RegistryDataPath {
+						volumeName = m.Name
+						break
+					}
+				}
+			}
+		}
+
+		// Stop container
+		stopErr := rm.client.ContainerStop(ctx, reg.ID, container.StopOptions{})
+		if stopErr != nil {
+			continue
+		}
+
+		// Remove container
+		removeErr := rm.client.ContainerRemove(ctx, reg.ID, container.RemoveOptions{})
+		if removeErr != nil {
+			continue
+		}
+
+		deletedNames = append(deletedNames, reg.Name)
+
+		// Delete volume if requested
+		if deleteVolumes && volumeName != "" {
+			_ = rm.client.VolumeRemove(ctx, volumeName, false)
+		}
+	}
+
+	return deletedNames, nil
+}
+
+// listAllRegistryImageContainers lists all containers using the registry image (any registry).
+func (rm *RegistryManager) listAllRegistryImageContainers(
+	ctx context.Context,
+) ([]container.Summary, error) {
+	filterArgs := filters.NewArgs()
+	filterArgs.Add("ancestor", RegistryImageName)
+
+	containers, err := rm.client.ContainerList(ctx, container.ListOptions{
+		All:     true,
+		Filters: filterArgs,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list registry containers: %w", err)
+	}
+
+	return containers, nil
+}
+
+// DeleteRegistriesByInfo deletes registry containers using pre-discovered registry information.
+// This is used when registries need to be discovered before cluster deletion (e.g., Talos)
+// but deleted afterward, as the network may no longer exist.
+func (rm *RegistryManager) DeleteRegistriesByInfo(
+	ctx context.Context,
+	registries []RegistryInfo,
+	deleteVolumes bool,
+) ([]string, error) {
+	var deletedNames []string
+
+	for _, reg := range registries {
+		// Get volume name before deletion if we need to delete volumes
+		var volumeName string
+		if deleteVolumes {
+			inspect, inspectErr := inspectContainer(ctx, rm.client, reg.ID)
+			if inspectErr == nil {
+				for _, m := range inspect.Mounts {
+					if m.Destination == RegistryDataPath {
+						volumeName = m.Name
+						break
+					}
+				}
+			}
+		}
+
+		// Stop container
+		stopErr := rm.client.ContainerStop(ctx, reg.ID, container.StopOptions{})
+		if stopErr != nil {
+			continue
+		}
+
+		// Remove container
+		removeErr := rm.client.ContainerRemove(ctx, reg.ID, container.RemoveOptions{})
+		if removeErr != nil {
+			continue
+		}
+
+		deletedNames = append(deletedNames, reg.Name)
+
+		// Delete volume if requested
+		if deleteVolumes && volumeName != "" {
+			_ = rm.client.VolumeRemove(ctx, volumeName, false)
+		}
+	}
+
+	return deletedNames, nil
 }

@@ -77,12 +77,24 @@ func handleDeleteRunE(
 		deps.Timer.NewStage()
 	}
 
+	// For distributions that destroy the network during deletion (e.g., Talos),
+	// we need to discover registries BEFORE cluster deletion.
+	cleanupDeps := getCleanupDeps()
+	var preDiscovered *mirrorregistry.DiscoveredRegistries
+	if clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionTalos {
+		preDiscovered = mirrorregistry.DiscoverRegistries(
+			cmd,
+			clusterCfg,
+			clusterName,
+			cleanupDeps,
+		)
+	}
+
 	err = executeClusterDeletion(cmd, cfgManager, deps, clusterCfg)
 	if err != nil {
 		return err
 	}
 
-	cleanupDeps := getCleanupDeps()
 	mirrorregistry.CleanupAll(
 		cmd,
 		cfgManager,
@@ -91,6 +103,7 @@ func handleDeleteRunE(
 		clusterName,
 		deleteVolumes,
 		cleanupDeps,
+		preDiscovered,
 	)
 
 	return nil

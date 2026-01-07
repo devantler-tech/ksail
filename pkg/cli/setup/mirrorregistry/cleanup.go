@@ -33,28 +33,80 @@ func DefaultCleanupDependencies() CleanupDependencies {
 	}
 }
 
-// CleanupAll cleans up mirror and local registries during cluster deletion.
-// For Talos, registries are disconnected from the network before cluster deletion
-// (via DisconnectMirrorRegistriesWithWarning and DisconnectLocalRegistryWithWarning),
-// but the actual container cleanup happens here after deletion.
+// DiscoveredRegistries holds registry information discovered before cluster deletion.
+// This is used when the network will be destroyed during cluster deletion (e.g., Talos).
+type DiscoveredRegistries struct {
+	Registries []dockerclient.RegistryInfo
+}
+
+// DiscoverRegistries finds all registries connected to the cluster network.
+// This should be called BEFORE cluster deletion for distributions that destroy
+// the network during deletion (e.g., Talos).
+func DiscoverRegistries(
+	cmd *cobra.Command,
+	clusterCfg *v1alpha1.Cluster,
+	clusterName string,
+	cleanupDeps CleanupDependencies,
+) *DiscoveredRegistries {
+	networkName := getNetworkNameForDistribution(clusterCfg.Spec.Cluster.Distribution, clusterName)
+
+	var registries []dockerclient.RegistryInfo
+
+	_ = cleanupDeps.DockerInvoker(cmd, func(dockerClient client.APIClient) error {
+		registryMgr, mgrErr := dockerclient.NewRegistryManager(dockerClient)
+		if mgrErr != nil {
+			return mgrErr
+		}
+
+		discovered, listErr := registryMgr.ListRegistriesOnNetwork(cmd.Context(), networkName)
+		if listErr != nil {
+			return listErr
+		}
+
+		registries = discovered
+		return nil
+	})
+
+	return &DiscoveredRegistries{Registries: registries}
+}
+
+// CleanupAll cleans up all registries (both mirror and local) during cluster deletion.
+// If preDiscovered is provided, it uses that list instead of discovering registries.
+// This is necessary for distributions like Talos where the network is destroyed
+// during cluster deletion.
 func CleanupAll(
 	cmd *cobra.Command,
-	cfgManager *ksailconfigmanager.ConfigManager,
+	_ *ksailconfigmanager.ConfigManager,
 	clusterCfg *v1alpha1.Cluster,
 	deps lifecycle.Deps,
 	clusterName string,
 	deleteVolumes bool,
 	cleanupDeps CleanupDependencies,
+	preDiscovered *DiscoveredRegistries,
 ) {
-	err := CleanupMirrorRegistries(
-		cmd,
-		cfgManager,
-		clusterCfg,
-		deps,
-		clusterName,
-		deleteVolumes,
-		cleanupDeps,
-	)
+	var err error
+
+	if preDiscovered != nil && len(preDiscovered.Registries) > 0 {
+		// Use pre-discovered registries (for Talos where network is destroyed)
+		err = cleanupPreDiscoveredRegistries(
+			cmd,
+			deps,
+			preDiscovered.Registries,
+			deleteVolumes,
+			cleanupDeps,
+		)
+	} else {
+		// Discover and cleanup registries by network (for Kind, K3d)
+		networkName := getNetworkNameForDistribution(clusterCfg.Spec.Cluster.Distribution, clusterName)
+		err = cleanupRegistriesByNetwork(
+			cmd,
+			deps,
+			networkName,
+			deleteVolumes,
+			cleanupDeps,
+		)
+	}
+
 	if err != nil {
 		notify.WriteMessage(notify.Message{
 			Type:    notify.ErrorType,
@@ -62,24 +114,89 @@ func CleanupAll(
 			Writer:  cmd.OutOrStdout(),
 		})
 	}
+}
 
-	// Attempt local registry cleanup for Kind and Talos (K3d handles it natively).
-	// The Cleanup function checks for container existence and skips if not provisioned.
-	// This ensures orphaned containers are cleaned up even when config is missing.
-	err = localregistry.Cleanup(
-		cmd,
-		cfgManager,
-		clusterCfg,
-		deps,
-		deleteVolumes,
-		cleanupDeps.LocalRegistryDeps,
-	)
+// cleanupPreDiscoveredRegistries deletes registries that were discovered before cluster deletion.
+func cleanupPreDiscoveredRegistries(
+	cmd *cobra.Command,
+	deps lifecycle.Deps,
+	registries []dockerclient.RegistryInfo,
+	deleteVolumes bool,
+	cleanupDeps CleanupDependencies,
+) error {
+	if len(registries) == 0 {
+		return nil
+	}
+
+	var deletedNames []string
+
+	err := cleanupDeps.DockerInvoker(cmd, func(dockerClient client.APIClient) error {
+		registryMgr, mgrErr := dockerclient.NewRegistryManager(dockerClient)
+		if mgrErr != nil {
+			return fmt.Errorf("failed to create registry manager: %w", mgrErr)
+		}
+
+		names, deleteErr := registryMgr.DeleteRegistriesByInfo(
+			cmd.Context(),
+			registries,
+			deleteVolumes,
+		)
+		if deleteErr != nil {
+			return fmt.Errorf("failed to delete registries: %w", deleteErr)
+		}
+
+		deletedNames = names
+		return nil
+	})
 	if err != nil {
+		return err
+	}
+
+	// Show cleanup output
+	if len(deletedNames) > 0 {
+		deps.Timer.NewStage()
+
+		cmd.Println()
 		notify.WriteMessage(notify.Message{
-			Type:    notify.ErrorType,
-			Content: fmt.Sprintf("failed to cleanup local registry: %v", err),
+			Type:    notify.TitleType,
+			Content: "Delete registries...",
+			Emoji:   "🗑️",
 			Writer:  cmd.OutOrStdout(),
 		})
+
+		for _, name := range deletedNames {
+			notify.WriteMessage(notify.Message{
+				Type:    notify.ActivityType,
+				Content: "deleting '%s'",
+				Writer:  cmd.OutOrStdout(),
+				Args:    []any{name},
+			})
+		}
+
+		outputTimer := helpers.MaybeTimer(cmd, deps.Timer)
+
+		notify.WriteMessage(notify.Message{
+			Type:    notify.SuccessType,
+			Content: "registries deleted",
+			Timer:   outputTimer,
+			Writer:  cmd.OutOrStdout(),
+		})
+	}
+
+	return nil
+}
+
+// getNetworkNameForDistribution returns the Docker network name for a given distribution.
+func getNetworkNameForDistribution(distribution v1alpha1.Distribution, clusterName string) string {
+	switch distribution {
+	case v1alpha1.DistributionKind:
+		return "kind"
+	case v1alpha1.DistributionK3d:
+		return fmt.Sprintf("k3d-%s", clusterName)
+	case v1alpha1.DistributionTalos:
+		return clusterName
+	default:
+		return clusterName
 	}
 }
 
@@ -166,8 +283,19 @@ func cleanupKindMirrorRegistries(
 		return err
 	}
 
+	// Kind uses "kind" as the network name
+	networkName := "kind"
+
+	// If no registry specs found from config (non-scaffolded cluster),
+	// fall back to network-based discovery
 	if len(registryNames) == 0 {
-		return nil
+		return cleanupRegistriesByNetwork(
+			cmd,
+			deps,
+			networkName,
+			deleteVolumes,
+			cleanupDeps,
+		)
 	}
 
 	return runMirrorRegistryCleanup(
@@ -195,17 +323,34 @@ func cleanupK3dMirrorRegistries(
 	deleteVolumes bool,
 	cleanupDeps CleanupDependencies,
 ) error {
+	// K3d uses "k3d-{clusterName}" as the network name
+	networkName := fmt.Sprintf("k3d-%s", clusterName)
+
 	// Use cached distribution config from ConfigManager
 	k3dConfig := cfgManager.DistributionConfig.K3d
 	if k3dConfig == nil {
-		return nil
+		// No config found (non-scaffolded cluster), fall back to network-based discovery
+		return cleanupRegistriesByNetwork(
+			cmd,
+			deps,
+			networkName,
+			deleteVolumes,
+			cleanupDeps,
+		)
 	}
 
 	registriesInfo := k3dprovisioner.ExtractRegistriesFromConfigForTesting(k3dConfig, clusterName)
 
 	registryNames := registry.CollectRegistryNames(registriesInfo)
 	if len(registryNames) == 0 {
-		return nil
+		// No registries in config, fall back to network-based discovery
+		return cleanupRegistriesByNetwork(
+			cmd,
+			deps,
+			networkName,
+			deleteVolumes,
+			cleanupDeps,
+		)
 	}
 
 	return runMirrorRegistryCleanup(
@@ -326,12 +471,20 @@ func cleanupTalosMirrorRegistries(
 	// Collect mirror specs from Talos config (not kind/mirrors directory)
 	mirrorSpecs, registryNames := CollectTalosMirrorSpecs(cfgManager)
 
-	if len(registryNames) == 0 {
-		return nil
-	}
-
 	// Talos uses the cluster name as the network name
 	networkName := clusterName
+
+	// If no registry specs found from config (non-scaffolded cluster),
+	// fall back to network-based discovery
+	if len(registryNames) == 0 {
+		return cleanupRegistriesByNetwork(
+			cmd,
+			deps,
+			networkName,
+			deleteVolumes,
+			cleanupDeps,
+		)
+	}
 
 	return runMirrorRegistryCleanup(
 		cmd,
@@ -369,6 +522,89 @@ func cleanupTalosMirrorRegistries(
 		cleanupDeps,
 	)
 }
+
+// cleanupRegistriesByNetwork discovers and cleans up all registry containers
+// (both local and mirror registries) by inspecting the Docker network.
+// This unified approach works for both scaffolded and non-scaffolded clusters.
+func cleanupRegistriesByNetwork(
+	cmd *cobra.Command,
+	deps lifecycle.Deps,
+	networkName string,
+	deleteVolumes bool,
+	cleanupDeps CleanupDependencies,
+) error {
+	var registryNames []string
+
+	err := cleanupDeps.DockerInvoker(cmd, func(dockerClient client.APIClient) error {
+		registryMgr, mgrErr := dockerclient.NewRegistryManager(dockerClient)
+		if mgrErr != nil {
+			return fmt.Errorf("failed to create registry manager: %w", mgrErr)
+		}
+
+		// Discover registries connected to the network
+		registries, listErr := registryMgr.ListRegistriesOnNetwork(cmd.Context(), networkName)
+		if listErr != nil {
+			return fmt.Errorf("failed to list registries on network: %w", listErr)
+		}
+
+		if len(registries) == 0 {
+			return nil
+		}
+
+		// Extract names for notification
+		for _, reg := range registries {
+			registryNames = append(registryNames, reg.Name)
+		}
+
+		// Delete all registries on the network
+		_, deleteErr := registryMgr.DeleteRegistriesOnNetwork(
+			cmd.Context(),
+			networkName,
+			deleteVolumes,
+		)
+		if deleteErr != nil {
+			return fmt.Errorf("failed to delete registries: %w", deleteErr)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	// If registries were found and deleted, show the cleanup stage output
+	if len(registryNames) > 0 {
+		deps.Timer.NewStage()
+
+		notify.WriteMessage(notify.Message{
+			Type:    notify.TitleType,
+			Content: "Delete registries...",
+			Emoji:   "🗑️",
+			Writer:  cmd.OutOrStdout(),
+		})
+
+		for _, name := range registryNames {
+			notify.WriteMessage(notify.Message{
+				Type:    notify.ActivityType,
+				Content: "deleting '%s'",
+				Writer:  cmd.OutOrStdout(),
+				Args:    []any{name},
+			})
+		}
+
+		outputTimer := helpers.MaybeTimer(cmd, deps.Timer)
+
+		notify.WriteMessage(notify.Message{
+			Type:    notify.SuccessType,
+			Content: "registries deleted",
+			Timer:   outputTimer,
+			Writer:  cmd.OutOrStdout(),
+		})
+	}
+
+	return nil
+}
+
 
 // CollectTalosMirrorSpecs collects mirror specs from Talos config and command line flags.
 // This extracts mirror hosts from the loaded Talos config bundle which includes any
