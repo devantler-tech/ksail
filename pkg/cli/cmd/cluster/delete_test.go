@@ -217,10 +217,10 @@ func TestDelete_ClusterExists_PrintsDeleteSuccess(t *testing.T) {
 			)
 			defer restoreFactory()
 
-			// Override Docker client to call the callback for cleanup
+			// Override Docker client to skip cleanup (no Docker in tests)
 			restoreDocker := clusterpkg.SetDockerClientInvokerForTests(
-				func(_ *cobra.Command, fn func(client.APIClient) error) error {
-					return fn(nil)
+				func(_ *cobra.Command, _ func(client.APIClient) error) error {
+					return nil // Skip Docker operations in tests
 				},
 			)
 			defer restoreDocker()
@@ -269,10 +269,10 @@ func TestDelete_ClusterNotFound_SucceedsIdempotent(t *testing.T) {
 			)
 			defer restoreFactory()
 
-			// Override Docker client to call the callback for cleanup
+			// Override Docker client to skip cleanup (no Docker in tests)
 			restoreDocker := clusterpkg.SetDockerClientInvokerForTests(
-				func(_ *cobra.Command, fn func(client.APIClient) error) error {
-					return fn(nil)
+				func(_ *cobra.Command, _ func(client.APIClient) error) error {
+					return nil // Skip Docker operations in tests
 				},
 			)
 			defer restoreDocker()
@@ -340,9 +340,10 @@ func setupContextBasedTest(
 		fakeDeleteFactory{existsResult: existsResult, deleteErr: deleteErr},
 	)
 
+	// Override Docker client to skip cleanup (no Docker in tests)
 	restoreDocker := clusterpkg.SetDockerClientInvokerForTests(
-		func(_ *cobra.Command, fn func(client.APIClient) error) error {
-			return fn(nil)
+		func(_ *cobra.Command, _ func(client.APIClient) error) error {
+			return nil // Skip Docker operations in tests
 		},
 	)
 
@@ -439,9 +440,10 @@ func TestDelete_ContextBasedDetection_UnknownContextPattern(t *testing.T) {
 	kubeconfigPath := writeKubeconfigWithContext(t, workingDir, "docker-desktop")
 	t.Setenv("KUBECONFIG", kubeconfigPath)
 
+	// Override Docker client to skip cleanup (no Docker in tests)
 	restoreDocker := clusterpkg.SetDockerClientInvokerForTests(
-		func(_ *cobra.Command, fn func(client.APIClient) error) error {
-			return fn(nil)
+		func(_ *cobra.Command, _ func(client.APIClient) error) error {
+			return nil // Skip Docker operations in tests
 		},
 	)
 	defer restoreDocker()

@@ -9,16 +9,12 @@
 🗑️ Delete cluster...
 ► deleting cluster
 ✔ cluster deleted
-✗ failed to cleanup local registry: check registry existence: create registry service: docker client is required
 ---
 
 [TestDelete_ClusterExists_PrintsDeleteSuccess/Talos - 1]
 🗑️ Delete cluster...
 ► deleting cluster
-⚠ failed to disconnect mirror registries: disconnect mirror registries: failed to create registry manager: apiClient cannot be nil
-⚠ failed to disconnect local registry: create registry manager: apiClient cannot be nil
 ✔ cluster deleted
-✗ failed to cleanup local registry: check registry existence: create registry service: docker client is required
 ---
 
 [TestDelete_ClusterNotFound_SucceedsIdempotent/K3d - 1]
@@ -31,12 +27,42 @@
 🗑️ Delete cluster...
 ► deleting cluster
 ✗ cluster does not exist
-✗ failed to cleanup local registry: check registry existence: create registry service: docker client is required
 ---
 
 [TestDelete_ClusterNotFound_SucceedsIdempotent/Talos - 1]
 🗑️ Delete cluster...
 ► deleting cluster
 ✗ cluster does not exist
-✗ failed to cleanup local registry: check registry existence: create registry service: docker client is required
+---
+
+[TestDelete_ContextBasedDetection_AutoDetectsDistribution/K3d_context_pattern - 1]
+ℹ auto-detected K3d cluster 'dev-cluster' from kubeconfig context
+
+🗑️ Delete cluster...
+► deleting cluster
+✔ cluster deleted
+---
+
+[TestDelete_ContextBasedDetection_AutoDetectsDistribution/Kind_context_pattern - 1]
+ℹ auto-detected Kind cluster 'my-cluster' from kubeconfig context
+
+🗑️ Delete cluster...
+► deleting cluster
+✔ cluster deleted
+---
+
+[TestDelete_ContextBasedDetection_AutoDetectsDistribution/Talos_context_pattern - 1]
+ℹ auto-detected Talos cluster 'talos-homelab' from kubeconfig context
+
+🗑️ Delete cluster...
+► deleting cluster
+✔ cluster deleted
+---
+
+[TestDelete_ContextBasedDetection_ClusterNotFound - 1]
+ℹ auto-detected Kind cluster 'nonexistent' from kubeconfig context
+
+🗑️ Delete cluster...
+► deleting cluster
+✗ cluster does not exist
 ---
