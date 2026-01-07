@@ -192,9 +192,7 @@ func disconnectTalosRegistriesWithContext(
 
 	cleanupDeps := getCleanupDeps()
 
-	//nolint:contextcheck // Functions use cmd.Context() internally
 	mirrorregistry.DisconnectMirrorRegistriesWithWarning(cmd, cfgManager, clusterName, cleanupDeps)
-	//nolint:contextcheck // Functions use cmd.Context() internally
 	mirrorregistry.DisconnectLocalRegistryWithWarning(
 		cmd,
 		cfgManager,
