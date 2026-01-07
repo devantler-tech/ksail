@@ -198,8 +198,8 @@ func waitForTalosRegistries(
 	}
 
 	notify.WriteMessage(notify.Message{
-		Type:    notify.SuccessType,
-		Content: "all registries are ready",
+		Type:    notify.ActivityType,
+		Content: "registries are ready",
 		Writer:  writer,
 	})
 
