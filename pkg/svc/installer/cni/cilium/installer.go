@@ -166,6 +166,17 @@ func talosCiliumValues() map[string]string {
 	return map[string]string{
 		// IPAM mode set to kubernetes as recommended for Talos
 		"ipam.mode": `"kubernetes"`,
+		// Enable kube-proxy replacement mode for Talos.
+		// When kube-proxy is disabled in Talos (proxy.disabled: true), Cilium must
+		// replace kube-proxy functionality and connect directly to the API server.
+		"kubeProxyReplacement": "true",
+		// Connect to API server via KubePrism (Talos's local API proxy).
+		// This is required when kube-proxy is disabled because the Kubernetes service
+		// IP (10.96.0.1) is not routable until Cilium is running.
+		// KubePrism runs on localhost:7445 on all Talos nodes.
+		// See: https://docs.siderolabs.com/kubernetes-guides/advanced-guides/kubeprism
+		"k8sServiceHost": `"localhost"`,
+		"k8sServicePort": `"7445"`,
 		// Talos mounts cgroupv2 at /sys/fs/cgroup, disable auto-mount
 		"cgroup.autoMount.enabled":                      "false",
 		"cgroup.hostRoot":                               `"/sys/fs/cgroup"`,
