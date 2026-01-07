@@ -6,6 +6,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	k3dconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/k3d"
+	kindconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/kind"
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
 	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
 	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
@@ -15,10 +16,6 @@ import (
 const (
 	fluxResourcesActivity   = "applying custom resources"
 	argoCDResourcesActivity = "configuring argocd resources"
-
-	// kindDefaultClusterName is the default cluster name for Kind clusters.
-	// Kind uses "kind" as the default cluster name when not specified.
-	kindDefaultClusterName = "kind"
 )
 
 // resolveClusterNameFromContext resolves the cluster name from the cluster config.
@@ -26,7 +23,7 @@ const (
 // The cluster name is used for constructing registry container names (e.g., k3d-default-local-registry).
 func resolveClusterNameFromContext(clusterCfg *v1alpha1.Cluster) string {
 	if clusterCfg == nil {
-		return kindDefaultClusterName
+		return kindconfigmanager.DefaultClusterName
 	}
 
 	return resolveDefaultClusterName(clusterCfg.Spec.Cluster.Distribution)
@@ -39,11 +36,11 @@ func resolveDefaultClusterName(distribution v1alpha1.Distribution) string {
 	case v1alpha1.DistributionK3d:
 		return k3dconfigmanager.DefaultClusterName
 	case v1alpha1.DistributionKind:
-		return kindDefaultClusterName
+		return kindconfigmanager.DefaultClusterName
 	case v1alpha1.DistributionTalos:
 		return talosconfigmanager.DefaultClusterName
 	default:
-		return kindDefaultClusterName
+		return kindconfigmanager.DefaultClusterName
 	}
 }
 

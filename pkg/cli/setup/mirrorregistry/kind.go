@@ -8,7 +8,6 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	kindconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/kind"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
-	"github.com/devantler-tech/ksail/v5/pkg/io/scaffolder"
 	kindprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/kind"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
@@ -179,10 +178,8 @@ func PrepareKindConfigWithMirrors(
 }
 
 // GetKindMirrorsDir returns the configured Kind mirrors directory or the default.
+//
+// Deprecated: Use kindconfigmanager.ResolveMirrorsDir instead.
 func GetKindMirrorsDir(clusterCfg *v1alpha1.Cluster) string {
-	if clusterCfg != nil && clusterCfg.Spec.Cluster.Kind.MirrorsDir != "" {
-		return clusterCfg.Spec.Cluster.Kind.MirrorsDir
-	}
-
-	return scaffolder.DefaultKindMirrorsDir
+	return kindconfigmanager.ResolveMirrorsDir(clusterCfg)
 }
