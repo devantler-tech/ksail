@@ -335,39 +335,46 @@ func TestComponentRequirementsCount(t *testing.T) {
 func TestKubeletCSRApproverLinkedToMetricsServer(t *testing.T) {
 	t.Parallel()
 
-	// This test specifically verifies the key relationship:
-	// kubelet-csr-approver is only needed when metrics-server needs installation
-	// (i.e., NeedsKubeletCSRApprover == NeedsMetricsServer)
+	// This test verifies the kubelet-csr-approver installation logic:
+	// - For Kind: kubelet-csr-approver is installed via Helm when metrics-server needs installation
+	// - For Talos: kubelet-csr-approver is installed during bootstrap via extraManifests,
+	//   so Helm installation is skipped (NeedsKubeletCSRApprover = false)
+	// - For K3d: metrics-server is built-in, so neither is needed
 
 	tests := []struct {
-		name          string
-		distribution  v1alpha1.Distribution
-		metricsServer v1alpha1.MetricsServer
-		expectBoth    bool
+		name                     string
+		distribution             v1alpha1.Distribution
+		metricsServer            v1alpha1.MetricsServer
+		expectMetricsServer      bool
+		expectKubeletCSRApprover bool
 	}{
 		{
-			name:          "Kind with metrics-server enabled needs both",
-			distribution:  v1alpha1.DistributionKind,
-			metricsServer: v1alpha1.MetricsServerEnabled,
-			expectBoth:    true,
+			name:                     "Kind with metrics-server enabled needs both via Helm",
+			distribution:             v1alpha1.DistributionKind,
+			metricsServer:            v1alpha1.MetricsServerEnabled,
+			expectMetricsServer:      true,
+			expectKubeletCSRApprover: true, // Helm install needed
 		},
 		{
-			name:          "Kind with metrics-server disabled needs neither",
-			distribution:  v1alpha1.DistributionKind,
-			metricsServer: v1alpha1.MetricsServerDisabled,
-			expectBoth:    false,
+			name:                     "Kind with metrics-server disabled needs neither",
+			distribution:             v1alpha1.DistributionKind,
+			metricsServer:            v1alpha1.MetricsServerDisabled,
+			expectMetricsServer:      false,
+			expectKubeletCSRApprover: false,
 		},
 		{
-			name:          "K3d with metrics-server enabled needs neither (K3d provides by default)",
-			distribution:  v1alpha1.DistributionK3d,
-			metricsServer: v1alpha1.MetricsServerEnabled,
-			expectBoth:    false,
+			name:                     "K3d with metrics-server enabled needs neither (K3d provides by default)",
+			distribution:             v1alpha1.DistributionK3d,
+			metricsServer:            v1alpha1.MetricsServerEnabled,
+			expectMetricsServer:      false,
+			expectKubeletCSRApprover: false,
 		},
 		{
-			name:          "Talos with metrics-server enabled needs both",
-			distribution:  v1alpha1.DistributionTalos,
-			metricsServer: v1alpha1.MetricsServerEnabled,
-			expectBoth:    true,
+			name:                     "Talos with metrics-server enabled: metrics via Helm, CSR approver via extraManifests",
+			distribution:             v1alpha1.DistributionTalos,
+			metricsServer:            v1alpha1.MetricsServerEnabled,
+			expectMetricsServer:      true,
+			expectKubeletCSRApprover: false, // Installed during bootstrap via extraManifests
 		},
 	}
 
@@ -386,13 +393,9 @@ func TestKubeletCSRApproverLinkedToMetricsServer(t *testing.T) {
 
 			result := setup.GetComponentRequirements(clusterCfg)
 
-			// Key assertion: NeedsKubeletCSRApprover should always equal NeedsMetricsServer
-			assert.Equal(t, result.NeedsMetricsServer, result.NeedsKubeletCSRApprover,
-				"NeedsKubeletCSRApprover should match NeedsMetricsServer")
-
-			assert.Equal(t, testCase.expectBoth, result.NeedsMetricsServer,
+			assert.Equal(t, testCase.expectMetricsServer, result.NeedsMetricsServer,
 				"unexpected NeedsMetricsServer value")
-			assert.Equal(t, testCase.expectBoth, result.NeedsKubeletCSRApprover,
+			assert.Equal(t, testCase.expectKubeletCSRApprover, result.NeedsKubeletCSRApprover,
 				"unexpected NeedsKubeletCSRApprover value")
 		})
 	}

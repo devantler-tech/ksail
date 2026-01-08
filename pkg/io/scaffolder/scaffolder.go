@@ -788,6 +788,7 @@ func (s *Scaffolder) notifyTalosGenerated(
 		{len(s.MirrorRegistries) > 0, "mirror-registries.yaml"},
 		{disableDefaultCNI, "disable-default-cni.yaml"},
 		{enableKubeletCertRotation, "kubelet-cert-rotation.yaml"},
+		{enableKubeletCertRotation, "kubelet-csr-approver.yaml"},
 	}
 
 	for _, patch := range patches {
