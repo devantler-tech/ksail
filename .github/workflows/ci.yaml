@@ -53,7 +53,7 @@ jobs:
     name: 🏗️ Build KSail Binary
     runs-on: ubuntu-latest
     needs: [changes]
-    if: needs.changes.outputs.code == 'true' || needs.changes.outputs.cli == 'true' || github.event_name == 'push'
+    if: github.event_name == 'pull_request' && (needs.changes.outputs.code == 'true' || needs.changes.outputs.cli == 'true')
     permissions:
       contents: read
     steps:
@@ -79,7 +79,7 @@ jobs:
     name: 📝 Generate JSON Schema
     runs-on: ubuntu-latest
     needs: [changes]
-    if: needs.changes.outputs.schema == 'true' || github.event_name == 'push'
+    if: needs.changes.outputs.schema == 'true'
     permissions:
       contents: write
     steps:
@@ -116,7 +116,7 @@ jobs:
     name: 📚 Generate CLI Flags Docs
     runs-on: ubuntu-latest
     needs: [changes, build-artifact]
-    if: needs.changes.outputs.cli == 'true' || github.event_name == 'push'
+    if: needs.changes.outputs.cli == 'true'
     permissions:
       contents: write
     steps:
@@ -157,11 +157,45 @@ jobs:
           commit_user_name: generator-bot
           commit_user_email: generator-bot@users.noreply.github.com
 
+  coverage:
+    name: 📊 Code Coverage
+    runs-on: ubuntu-latest
+    needs: [changes]
+    # Only run on push to main, skip if no code files changed
+    if: |
+      github.event_name == 'push'
+      && github.ref == 'refs/heads/main'
+      && needs.changes.outputs.code == 'true'
+    permissions:
+      contents: write
+    steps:
+      - name: 📑 Checkout
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          persist-credentials: false
+
+      - name: ⚙️ Setup Go
+        uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6.1.0
+        with:
+          go-version-file: go.mod
+
+      - name: 👨🏻‍🔧 Enable covdata (temp) see https://github.com/golang/go/issues/75031
+        run: go env -w GOTOOLCHAIN=go1.25.0+auto
+
+      - name: 📄 Generate coverage
+        run: |
+          go test -race -coverprofile=coverage.txt -covermode=atomic ./...
+
+      - name: 📄 Upload coverage to Codecov
+        uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+
   system-test:
     name: 🧪 System Test
     runs-on: ubuntu-latest
     needs: [changes, build-artifact]
-    if: needs.changes.outputs.code == 'true' || github.event_name == 'push'
+    if: needs.changes.outputs.code == 'true'
     strategy:
       matrix:
         distribution: [Kind, K3d, Talos]
@@ -313,6 +347,7 @@ jobs:
         build-artifact,
         generate-schema,
         generate-cli-flags-docs,
+        coverage,
         system-test,
       ]
     if: ${{ always() }}
@@ -322,7 +357,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           failed=false
-          for result in "$CHANGES_RESULT" "$BUILD_RESULT" "$SCHEMA_RESULT" "$CLI_DOCS_RESULT" "$SYSTEM_TEST_RESULT"; do
+          for result in "$CHANGES_RESULT" "$BUILD_RESULT" "$SCHEMA_RESULT" "$CLI_DOCS_RESULT" "$COVERAGE_RESULT" "$SYSTEM_TEST_RESULT"; do
             case "$result" in
               success|skipped)
                 ;;
@@ -343,6 +378,7 @@ jobs:
           BUILD_RESULT: ${{ needs.build-artifact.result }}
           SCHEMA_RESULT: ${{ needs.generate-schema.result }}
           CLI_DOCS_RESULT: ${{ needs.generate-cli-flags-docs.result }}
+          COVERAGE_RESULT: ${{ needs.coverage.result }}
           SYSTEM_TEST_RESULT: ${{ needs.system-test.result }}
           CODE_CHANGES: ${{ needs.changes.outputs.code }}
           EVENT_NAME: ${{ github.event_name }}
