@@ -177,6 +177,8 @@ jobs:
           - "--mirror-registry ghcr.io=https://ghcr.io --mirror-registry docker.io=https://registry-1.docker.io"
           - "--metrics-server Enabled"
           - "--metrics-server Disabled"
+          - "--policy-engine Kyverno"
+          - "--policy-engine Gatekeeper"
         init: [true, false]
     steps:
       - name: 🧹 Free disk space
