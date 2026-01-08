@@ -31,6 +31,7 @@ Flags:
       --metrics-server MetricsServer   Metrics Server (Default: use distribution, Enabled: install, Disabled: uninstall) (default Default)
       --mirror-registry strings        Configure mirror registries with format 'host=upstream' (e.g., docker.io=https://registry-1.docker.io).
   -o, --output string                  Output directory for the project
+      --policy-engine PolicyEngine     Policy engine (None: skip, Kyverno: install Kyverno, Gatekeeper: install Gatekeeper)
   -s, --source-directory string        Directory containing workloads to deploy (default "k8s")
       --workers int32                  Number of worker nodes
 
