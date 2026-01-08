@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+//nolint:funlen // Table-driven test with comprehensive test cases
 func TestGetComponentRequirements(t *testing.T) {
 	t.Parallel()
 
