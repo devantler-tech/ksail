@@ -271,43 +271,43 @@
   </g>
 
   <!-- Project <-> KSail sync line -->
-  <line x1="380" y1="290" x2="445" y2="290" stroke="#8b5cf6" stroke-width="2" opacity="0.7" marker-end="url(#arrowProject)">
+  <line x1="380" y1="290" x2="445" y2="290" stroke="#8b5cf6" stroke-width="2.5" opacity="0.8" marker-end="url(#arrowProject)">
   </line>
-  <line x1="515" y1="290" x2="580" y2="290" stroke="#22c55e" stroke-width="2" opacity="0.8" marker-end="url(#arrowKSail)">
+  <line x1="515" y1="290" x2="580" y2="290" stroke="#22c55e" stroke-width="2.5" opacity="0.9" marker-end="url(#arrowKSail)">
   </line>
   <g transform="translate(480, 290)" filter="url(#pulseGlow)">
     <!-- Outer animated rings -->
-    <circle r="42" fill="none" stroke="url(#syncGrad)" stroke-width="0.8" opacity="0.2">
-      <animate attributeName="r" values="40;46;40" dur="4s" repeatCount="indefinite" />
-      <animate attributeName="opacity" values="0.2;0.1;0.2" dur="4s" repeatCount="indefinite" />
+    <circle r="38" fill="none" stroke="url(#syncGrad)" stroke-width="1" opacity="0.25">
+      <animate attributeName="r" values="36;42;36" dur="3s" repeatCount="indefinite" />
+      <animate attributeName="opacity" values="0.25;0.12;0.25" dur="3s" repeatCount="indefinite" />
     </circle>
 
     <!-- Main circle background -->
-    <circle r="32" fill="#0a0f1a" stroke="#4ade80" stroke-width="1.5" />
-    <circle r="26" fill="#1e293b" stroke="#475569" stroke-width="0.5" />
+    <circle r="28" fill="#0a0f1a" stroke="url(#syncGrad)" stroke-width="2" />
+    <circle r="22" fill="#1e293b" stroke="#475569" stroke-width="0.5" />
 
-    <!-- Config/YAML file icon -->
-    <g transform="translate(-14, -16)">
-      <!-- File background -->
-      <path d="M4 0 L20 0 L28 8 L28 32 Q28 34, 26 34 L4 34 Q2 34, 2 32 L2 2 Q2 0, 4 0 Z" fill="#0f172a" stroke="#64748b" stroke-width="1.2" />
-      <!-- Fold corner -->
-      <path d="M20 0 L20 8 L28 8" fill="#1e293b" stroke="#64748b" stroke-width="0.5" />
-      <!-- YAML/Config lines -->
-      <line x1="7" y1="14" x2="23" y2="14" stroke="#4ade80" stroke-width="2" stroke-linecap="round">
+    <!-- Sync arrows icon (cleaner than file) -->
+    <g transform="translate(-12, -12)">
+      <!-- Circular arrow 1 -->
+      <path d="M12 4 A8 8 0 0 1 20 12" fill="none" stroke="#4ade80" stroke-width="2.5" stroke-linecap="round">
         <animate attributeName="opacity" values="1;0.6;1" dur="2s" repeatCount="indefinite" />
-      </line>
-      <line x1="7" y1="20" x2="19" y2="20" stroke="#c084fc" stroke-width="2" stroke-linecap="round">
+      </path>
+      <polygon points="20,8 20,14 14,11" fill="#4ade80">
+        <animate attributeName="opacity" values="1;0.6;1" dur="2s" repeatCount="indefinite" />
+      </polygon>
+      <!-- Circular arrow 2 -->
+      <path d="M12 20 A8 8 0 0 1 4 12" fill="none" stroke="#c084fc" stroke-width="2.5" stroke-linecap="round">
         <animate attributeName="opacity" values="0.8;1;0.8" dur="2s" begin="0.5s" repeatCount="indefinite" />
-      </line>
-      <line x1="7" y1="26" x2="21" y2="26" stroke="#4ade80" stroke-width="2" stroke-linecap="round">
-        <animate attributeName="opacity" values="0.7;1;0.7" dur="2s" begin="1s" repeatCount="indefinite" />
-      </line>
+      </path>
+      <polygon points="4,16 4,10 10,13" fill="#c084fc">
+        <animate attributeName="opacity" values="0.8;1;0.8" dur="2s" begin="0.5s" repeatCount="indefinite" />
+      </polygon>
     </g>
   </g>
   <!-- Config sync label -->
-  <g transform="translate(480, 346)">
-    <rect x="-52" y="-12" width="104" height="22" rx="11" fill="#0a0f1a" stroke="url(#syncGrad)" stroke-width="1.2" />
-    <text x="0" y="5" text-anchor="middle" fill="#e2e8f0" font-size="10" font-weight="600" letter-spacing="0.3">ksail.yaml sync</text>
+  <g transform="translate(480, 340)">
+    <rect x="-42" y="-11" width="84" height="20" rx="10" fill="#0a0f1a" stroke="url(#syncGrad)" stroke-width="1.5" />
+    <text x="0" y="4" text-anchor="middle" fill="#e2e8f0" font-size="10" font-weight="700" letter-spacing="0.5">config sync</text>
   </g>
 
   <!-- KSail to Cluster - main provisioning path -->
@@ -335,14 +335,25 @@
     <!-- Subtle inner glow -->
     <rect x="2" y="2" width="196" height="81" rx="14" fill="none" stroke="#fcd34d" stroke-width="0.4" opacity="0.3" />
 
-    <!-- Icon Circle with glow -->
+    <!-- Icon Circle with glow - Modern Developer Icon -->
     <circle cx="42" cy="42" r="28" fill="#f59e0b" fill-opacity="0.1" />
     <circle cx="42" cy="42" r="24" fill="#f59e0b" fill-opacity="0.15" />
-    <g transform="translate(27, 24)">
-      <circle cx="15" cy="10" r="8" fill="#fbbf24" />
-      <circle cx="15" cy="10" r="6" fill="#fcd34d" opacity="0.5" />
-      <path d="M3 30 C3 21, 10 17, 15 17 C20 17, 27 21, 27 30" fill="#fbbf24" />
-      <path d="M6 30 C6 23, 11 19, 15 19 C19 19, 24 23, 24 30" fill="#fcd34d" opacity="0.4" />
+    <g transform="translate(24, 22)">
+      <!-- Laptop base -->
+      <rect x="0" y="24" width="36" height="3" rx="1.5" fill="#fbbf24" />
+      <rect x="2" y="25" width="32" height="1" rx="0.5" fill="#fcd34d" opacity="0.5" />
+      <!-- Laptop screen -->
+      <rect x="3" y="8" width="30" height="18" rx="2" fill="#451a03" stroke="#fbbf24" stroke-width="1.5" />
+      <!-- Code lines on screen -->
+      <line x1="7" y1="13" x2="16" y2="13" stroke="#4ade80" stroke-width="1.5" stroke-linecap="round" />
+      <line x1="18" y1="13" x2="24" y2="13" stroke="#c084fc" stroke-width="1.5" stroke-linecap="round" />
+      <line x1="7" y1="17" x2="12" y2="17" stroke="#60a5fa" stroke-width="1.5" stroke-linecap="round" />
+      <line x1="14" y1="17" x2="22" y2="17" stroke="#fbbf24" stroke-width="1.5" stroke-linecap="round" />
+      <line x1="7" y1="21" x2="19" y2="21" stroke="#4ade80" stroke-width="1.5" stroke-linecap="round" />
+      <!-- Cursor blink -->
+      <rect x="21" y="20" width="2" height="3" fill="#fbbf24">
+        <animate attributeName="opacity" values="1;0.3;1" dur="1s" repeatCount="indefinite" />
+      </rect>
     </g>
 
     <!-- Text -->
@@ -404,7 +415,7 @@
   <!-- ===== KSAIL CARD (Main Hero) ===== -->
   <g transform="translate(595, 210)" filter="url(#glowKSail)">
     <!-- Hero glow backdrop -->
-    <ellipse cx="130" cy="80" rx="150" ry="100" fill="url(#ksailHeroGlow)">
+    <ellipse cx="130" cy="80" rx="160" ry="110" fill="url(#ksailHeroGlow)">
       <animate attributeName="opacity" values="0.8;1;0.8" dur="4s" repeatCount="indefinite" />
     </ellipse>
 
@@ -417,57 +428,57 @@
       <animate attributeName="opacity" values="0.3;0.5;0.3" dur="3s" repeatCount="indefinite" />
     </rect>
 
-    <!-- Enhanced Sailboat Icon -->
-    <g transform="translate(16, 8)">
+    <!-- Enhanced Sailboat Icon - LARGER -->
+    <g transform="translate(12, 4) scale(1.15)">
       <!-- Water shimmer effect -->
-      <ellipse cx="26" cy="56" rx="26" ry="6" fill="#22c55e" opacity="0.15">
-        <animate attributeName="rx" values="24;28;24" dur="3s" repeatCount="indefinite" />
-        <animate attributeName="opacity" values="0.15;0.25;0.15" dur="3s" repeatCount="indefinite" />
+      <ellipse cx="26" cy="56" rx="28" ry="7" fill="#22c55e" opacity="0.18">
+        <animate attributeName="rx" values="26;30;26" dur="3s" repeatCount="indefinite" />
+        <animate attributeName="opacity" values="0.18;0.28;0.18" dur="3s" repeatCount="indefinite" />
       </ellipse>
-      <ellipse cx="26" cy="54" rx="20" ry="4" fill="#4ade80" opacity="0.1">
-        <animate attributeName="rx" values="18;22;18" dur="2.5s" begin="0.5s" repeatCount="indefinite" />
+      <ellipse cx="26" cy="54" rx="22" ry="5" fill="#4ade80" opacity="0.12">
+        <animate attributeName="rx" values="20;24;20" dur="2.5s" begin="0.5s" repeatCount="indefinite" />
       </ellipse>
 
       <!-- Hull with depth -->
       <path d="M4 45 Q4 54, 18 54 L34 54 Q48 54, 48 45 L42 37 L10 37 Z" fill="url(#hullGrad)" />
       <path d="M10 37 L42 37 L44 42 L8 42 Z" fill="#22c55e" opacity="0.4" />
       <!-- Hull highlight line -->
-      <path d="M12 40 L40 40" stroke="#4ade80" stroke-width="0.8" opacity="0.5" />
+      <path d="M12 40 L40 40" stroke="#4ade80" stroke-width="1" opacity="0.6" />
 
       <!-- Mast with gradient -->
-      <rect x="24" y="6" width="4" height="34" rx="1.5" fill="#14532d" />
-      <rect x="25" y="6" width="1.5" height="34" rx="0.5" fill="#166534" />
+      <rect x="24" y="4" width="4" height="36" rx="1.5" fill="#14532d" />
+      <rect x="25" y="4" width="1.5" height="36" rx="0.5" fill="#166534" />
 
       <!-- Main Sail with layered effect -->
-      <path d="M28 8 L28 36 L48 36 Q50 26, 47 20 L36 10 Q32 6, 28 8 Z" fill="url(#sailGrad)" opacity="0.95" />
+      <path d="M28 6 L28 36 L50 36 Q52 24, 49 18 L38 8 Q32 4, 28 6 Z" fill="url(#sailGrad)" opacity="0.95" />
       <!-- Sail shadow/fold -->
-      <path d="M28 12 L40 28 L28 30" fill="#16a34a" opacity="0.2" />
+      <path d="M28 10 L42 28 L28 30" fill="#16a34a" opacity="0.25" />
       <!-- Sail highlight -->
-      <path d="M30 10 L30 32 L40 32" fill="none" stroke="#bbf7d0" stroke-width="0.5" opacity="0.3" />
+      <path d="M30 8 L30 32 L42 32" fill="none" stroke="#bbf7d0" stroke-width="0.6" opacity="0.4" />
 
       <!-- Front Sail (jib) with depth -->
-      <path d="M24 8 L24 34 L6 34 Q4 26, 6 22 L18 10 Q22 6, 24 8 Z" fill="url(#sailGradSecondary)" opacity="0.8" />
+      <path d="M24 6 L24 34 L4 34 Q2 24, 4 20 L16 8 Q20 4, 24 6 Z" fill="url(#sailGradSecondary)" opacity="0.85" />
       <!-- Jib fold line -->
-      <path d="M22 12 L12 28" stroke="#16a34a" stroke-width="0.5" opacity="0.3" />
+      <path d="M22 10 L10 28" stroke="#16a34a" stroke-width="0.6" opacity="0.35" />
 
       <!-- Flag with animation -->
       <g>
-        <path d="M26 6 L26 -1 L36 3 L26 6" fill="#ef4444">
-          <animate attributeName="d" values="M26 6 L26 -1 L36 3 L26 6;M26 6 L26 -1 L35 2.5 L26 6;M26 6 L26 -1 L36 3 L26 6" dur="2s" repeatCount="indefinite" />
+        <path d="M26 4 L26 -3 L38 2 L26 4" fill="#ef4444">
+          <animate attributeName="d" values="M26 4 L26 -3 L38 2 L26 4;M26 4 L26 -3 L36 1.5 L26 4;M26 4 L26 -3 L38 2 L26 4" dur="2s" repeatCount="indefinite" />
         </path>
         <!-- Flag highlight -->
-        <path d="M26 0 L33 3" stroke="#fca5a5" stroke-width="0.5" opacity="0.6" />
+        <path d="M26 -1 L34 2" stroke="#fca5a5" stroke-width="0.6" opacity="0.7" />
       </g>
     </g>
 
     <!-- Text with enhanced styling and glow -->
-    <text x="72" y="34" fill="#4ade80" font-size="24" font-weight="800" letter-spacing="1.5" filter="url(#textGlow)">KSAIL</text>
+    <text x="78" y="34" fill="#4ade80" font-size="26" font-weight="800" letter-spacing="2" filter="url(#textGlow)">KSAIL</text>
     <!-- CLI badge -->
-    <g transform="translate(162, 22)">
-      <rect x="0" y="0" width="32" height="16" rx="4" fill="#0f172a" stroke="#22c55e" stroke-width="1" />
-      <text x="16" y="11" text-anchor="middle" fill="#4ade80" font-size="8" font-weight="700">CLI</text>
+    <g transform="translate(175, 18)">
+      <rect x="0" y="0" width="36" height="18" rx="5" fill="#0f172a" stroke="#22c55e" stroke-width="1.2" />
+      <text x="18" y="13" text-anchor="middle" fill="#4ade80" font-size="9" font-weight="700">CLI</text>
     </g>
-    <text x="72" y="52" fill="#86efac" font-size="10" font-weight="600" letter-spacing="0.8">One Binary • All Tools</text>
+    <text x="78" y="54" fill="#86efac" font-size="11" font-weight="600" letter-spacing="1">One Binary • All Tools</text>
 
     <!-- Terminal Window with enhanced styling -->
     <rect x="16" y="78" width="228" height="66" rx="10" fill="#020617" stroke="#16532d" stroke-width="1.5" />
@@ -627,46 +638,46 @@
   </g>
 
   <!-- Enhanced compass rose with nautical theme -->
-  <g transform="translate(890, 595)" opacity="0.25">
+  <g transform="translate(890, 595)" opacity="0.35">
     <!-- Outer ring -->
-    <circle r="22" fill="none" stroke="#4ade80" stroke-width="0.8" />
-    <circle r="18" fill="none" stroke="#4ade80" stroke-width="1.2" />
+    <circle r="24" fill="none" stroke="#4ade80" stroke-width="1" />
+    <circle r="20" fill="none" stroke="#4ade80" stroke-width="1.5" />
 
     <!-- Cardinal direction lines -->
-    <line x1="0" y1="-16" x2="0" y2="16" stroke="#4ade80" stroke-width="1" />
-    <line x1="-16" y1="0" x2="16" y2="0" stroke="#4ade80" stroke-width="1" />
+    <line x1="0" y1="-18" x2="0" y2="18" stroke="#4ade80" stroke-width="1.2" />
+    <line x1="-18" y1="0" x2="18" y2="0" stroke="#4ade80" stroke-width="1.2" />
 
     <!-- Intercardinal lines -->
-    <line x1="-11" y1="-11" x2="11" y2="11" stroke="#4ade80" stroke-width="0.5" opacity="0.6" />
-    <line x1="11" y1="-11" x2="-11" y2="11" stroke="#4ade80" stroke-width="0.5" opacity="0.6" />
+    <line x1="-12" y1="-12" x2="12" y2="12" stroke="#4ade80" stroke-width="0.7" opacity="0.7" />
+    <line x1="12" y1="-12" x2="-12" y2="12" stroke="#4ade80" stroke-width="0.7" opacity="0.7" />
 
     <!-- North pointer with gradient effect -->
-    <polygon points="0,-15 4,-6 -4,-6" fill="#4ade80" />
-    <polygon points="0,-15 2,-8 -2,-8" fill="#86efac" opacity="0.6" />
+    <polygon points="0,-17 5,-7 -5,-7" fill="#4ade80" />
+    <polygon points="0,-17 2.5,-9 -2.5,-9" fill="#86efac" opacity="0.7" />
 
     <!-- Cardinal markers -->
-    <text x="0" y="-25" text-anchor="middle" fill="#4ade80" font-size="7" font-weight="700">N</text>
-    <text x="0" y="30" text-anchor="middle" fill="#4ade80" font-size="6" font-weight="500" opacity="0.7">S</text>
-    <text x="28" y="3" text-anchor="middle" fill="#4ade80" font-size="6" font-weight="500" opacity="0.7">E</text>
-    <text x="-28" y="3" text-anchor="middle" fill="#4ade80" font-size="6" font-weight="500" opacity="0.7">W</text>
+    <text x="0" y="-28" text-anchor="middle" fill="#4ade80" font-size="8" font-weight="700">N</text>
+    <text x="0" y="33" text-anchor="middle" fill="#4ade80" font-size="7" font-weight="600" opacity="0.8">S</text>
+    <text x="30" y="4" text-anchor="middle" fill="#4ade80" font-size="7" font-weight="600" opacity="0.8">E</text>
+    <text x="-30" y="4" text-anchor="middle" fill="#4ade80" font-size="7" font-weight="600" opacity="0.8">W</text>
 
     <!-- Center dot -->
-    <circle r="2" fill="#4ade80" />
+    <circle r="3" fill="#4ade80" />
   </g>
 
   <!-- Subtle anchor watermark in bottom left -->
-  <g transform="translate(45, 600)" opacity="0.12">
+  <g transform="translate(50, 598)" opacity="0.2">
     <!-- Anchor ring -->
-    <circle cx="0" cy="-12" r="6" fill="none" stroke="#4ade80" stroke-width="2" />
+    <circle cx="0" cy="-14" r="7" fill="none" stroke="#4ade80" stroke-width="2.5" />
     <!-- Anchor shank -->
-    <line x1="0" y1="-6" x2="0" y2="14" stroke="#4ade80" stroke-width="2.5" stroke-linecap="round" />
+    <line x1="0" y1="-7" x2="0" y2="16" stroke="#4ade80" stroke-width="3" stroke-linecap="round" />
     <!-- Anchor stock (crossbar) -->
-    <line x1="-10" y1="-4" x2="10" y2="-4" stroke="#4ade80" stroke-width="2" stroke-linecap="round" />
+    <line x1="-12" y1="-5" x2="12" y2="-5" stroke="#4ade80" stroke-width="2.5" stroke-linecap="round" />
     <!-- Anchor arms/flukes -->
-    <path d="M-12 14 Q0 8, 12 14" fill="none" stroke="#4ade80" stroke-width="2.5" stroke-linecap="round" />
+    <path d="M-14 16 Q0 9, 14 16" fill="none" stroke="#4ade80" stroke-width="3" stroke-linecap="round" />
     <!-- Fluke tips -->
-    <line x1="-12" y1="14" x2="-14" y2="8" stroke="#4ade80" stroke-width="2" stroke-linecap="round" />
-    <line x1="12" y1="14" x2="14" y2="8" stroke="#4ade80" stroke-width="2" stroke-linecap="round" />
+    <line x1="-14" y1="16" x2="-17" y2="9" stroke="#4ade80" stroke-width="2.5" stroke-linecap="round" />
+    <line x1="14" y1="16" x2="17" y2="9" stroke="#4ade80" stroke-width="2.5" stroke-linecap="round" />
   </g>
 
 </svg>
