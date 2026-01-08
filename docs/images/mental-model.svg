@@ -581,98 +581,114 @@
     <text x="582" y="34" text-anchor="middle" fill="#94a3b8" font-size="11" font-weight="800" letter-spacing="2.5">WORKLOADS</text>
 
     <!-- Pod hexagons - Success, Reconciling, Pending states -->
-    <!-- Successfully deployed (green with checkmark) -->
-    <g transform="translate(480, 52)">
-      <polygon points="14,0 28,8 28,24 14,32 0,24 0,8" fill="#22c55e" stroke="#16a34a" stroke-width="1.5" />
-      <text x="14" y="20" text-anchor="middle" fill="#052e16" font-size="14" font-weight="800">✓</text>
-    </g>
-    <g transform="translate(515, 52)">
-      <polygon points="14,0 28,8 28,24 14,32 0,24 0,8" fill="#22c55e" stroke="#16a34a" stroke-width="1.5" />
-      <text x="14" y="20" text-anchor="middle" fill="#052e16" font-size="14" font-weight="800">✓</text>
-    </g>
-    <!-- Reconciling (yellow/orange with spinning sync) -->
-    <g transform="translate(550, 52)">
-      <polygon points="14,0 28,8 28,24 14,32 0,24 0,8" fill="#f59e0b" stroke="#d97706" stroke-width="1.5">
-        <animate attributeName="opacity" values="1;0.7;1" dur="1.5s" repeatCount="indefinite" />
-      </polygon>
-      <g transform="translate(14, 16)">
-        <g>
-          <animateTransform attributeName="transform" type="rotate" from="0" to="360" dur="2s" repeatCount="indefinite" />
-          <path d="M0 -5 A5 5 0 0 1 4.3 2.5" fill="none" stroke="#451a03" stroke-width="1.8" stroke-linecap="round" />
-          <polygon points="5.5,4 2.5,2 4,0" fill="#451a03" />
-          <path d="M0 5 A5 5 0 0 1 -4.3 -2.5" fill="none" stroke="#451a03" stroke-width="1.8" stroke-linecap="round" />
-          <polygon points="-5.5,-4 -2.5,-2 -4,0" fill="#451a03" />
+      <!-- Successfully deployed (green with checkmark) - subtle glow pulse -->
+      <g transform="translate(480, 52)">
+        <polygon points="14,0 28,8 28,24 14,32 0,24 0,8" fill="#22c55e" stroke="#16a34a" stroke-width="1.5">
+          <animate attributeName="opacity" values="1;0.85;1" dur="2.5s" repeatCount="indefinite" />
+        </polygon>
+        <text x="14" y="20" text-anchor="middle" fill="#052e16" font-size="14" font-weight="800">✓</text>
+      </g>
+      <g transform="translate(515, 52)">
+        <polygon points="14,0 28,8 28,24 14,32 0,24 0,8" fill="#22c55e" stroke="#16a34a" stroke-width="1.5">
+          <animate attributeName="opacity" values="1;0.85;1" dur="2.5s" begin="0.8s" repeatCount="indefinite" />
+        </polygon>
+        <text x="14" y="20" text-anchor="middle" fill="#052e16" font-size="14" font-weight="800">✓</text>
+      </g>
+      <!-- Reconciling (yellow/orange with spinning sync) -->
+      <g transform="translate(550, 52)">
+        <polygon points="14,0 28,8 28,24 14,32 0,24 0,8" fill="#f59e0b" stroke="#d97706" stroke-width="1.5">
+          <animate attributeName="opacity" values="1;0.7;1" dur="1.5s" repeatCount="indefinite" />
+        </polygon>
+        <g transform="translate(14, 16)">
+          <g>
+            <animateTransform attributeName="transform" type="rotate" from="0" to="360" dur="2s" repeatCount="indefinite" />
+            <path d="M0 -5 A5 5 0 0 1 4.3 2.5" fill="none" stroke="#451a03" stroke-width="1.8" stroke-linecap="round" />
+            <polygon points="5.5,4 2.5,2 4,0" fill="#451a03" />
+            <path d="M0 5 A5 5 0 0 1 -4.3 -2.5" fill="none" stroke="#451a03" stroke-width="1.8" stroke-linecap="round" />
+            <polygon points="-5.5,-4 -2.5,-2 -4,0" fill="#451a03" />
+          </g>
         </g>
       </g>
-    </g>
-    <g transform="translate(585, 52)">
-      <polygon points="14,0 28,8 28,24 14,32 0,24 0,8" fill="#f59e0b" stroke="#d97706" stroke-width="1.5">
-        <animate attributeName="opacity" values="1;0.7;1" dur="1.5s" begin="0.3s" repeatCount="indefinite" />
-      </polygon>
-      <g transform="translate(14, 16)">
-        <g>
-          <animateTransform attributeName="transform" type="rotate" from="0" to="360" dur="2s" begin="0.3s" repeatCount="indefinite" />
-          <path d="M0 -5 A5 5 0 0 1 4.3 2.5" fill="none" stroke="#451a03" stroke-width="1.8" stroke-linecap="round" />
-          <polygon points="5.5,4 2.5,2 4,0" fill="#451a03" />
-          <path d="M0 5 A5 5 0 0 1 -4.3 -2.5" fill="none" stroke="#451a03" stroke-width="1.8" stroke-linecap="round" />
-          <polygon points="-5.5,-4 -2.5,-2 -4,0" fill="#451a03" />
+      <g transform="translate(585, 52)">
+        <polygon points="14,0 28,8 28,24 14,32 0,24 0,8" fill="#f59e0b" stroke="#d97706" stroke-width="1.5">
+          <animate attributeName="opacity" values="1;0.7;1" dur="1.5s" begin="0.3s" repeatCount="indefinite" />
+        </polygon>
+        <g transform="translate(14, 16)">
+          <g>
+            <animateTransform attributeName="transform" type="rotate" from="0" to="360" dur="2s" begin="0.3s" repeatCount="indefinite" />
+            <path d="M0 -5 A5 5 0 0 1 4.3 2.5" fill="none" stroke="#451a03" stroke-width="1.8" stroke-linecap="round" />
+            <polygon points="5.5,4 2.5,2 4,0" fill="#451a03" />
+            <path d="M0 5 A5 5 0 0 1 -4.3 -2.5" fill="none" stroke="#451a03" stroke-width="1.8" stroke-linecap="round" />
+            <polygon points="-5.5,-4 -2.5,-2 -4,0" fill="#451a03" />
+          </g>
         </g>
       </g>
-    </g>
-    <!-- Pending (gray with clock icon) -->
+      <!-- Pending (gray with animated clock) -->
     <g transform="translate(620, 52)">
-      <polygon points="14,0 28,8 28,24 14,32 0,24 0,8" fill="#475569" stroke="#334155" stroke-width="1.5" />
+        <polygon points="14,0 28,8 28,24 14,32 0,24 0,8" fill="#475569" stroke="#334155" stroke-width="1.5">
+          <animate attributeName="opacity" values="0.6;0.9;0.6" dur="3s" repeatCount="indefinite" />
+        </polygon>
       <circle cx="14" cy="16" r="6" fill="none" stroke="#e2e8f0" stroke-width="1.5" />
       <line x1="14" y1="16" x2="14" y2="12" stroke="#e2e8f0" stroke-width="1.5" stroke-linecap="round" />
-      <line x1="14" y1="16" x2="17" y2="18" stroke="#e2e8f0" stroke-width="1.5" stroke-linecap="round" />
+        <g transform="translate(14, 16)">
+          <line x1="0" y1="0" x2="3" y2="2" stroke="#e2e8f0" stroke-width="1.5" stroke-linecap="round">
+            <animateTransform attributeName="transform" type="rotate" from="0 0 0" to="360 0 0" dur="4s" repeatCount="indefinite" />
+          </line>
+        </g>
     </g>
     <g transform="translate(655, 52)">
-      <polygon points="14,0 28,8 28,24 14,32 0,24 0,8" fill="#475569" stroke="#334155" stroke-width="1.5" />
+        <polygon points="14,0 28,8 28,24 14,32 0,24 0,8" fill="#475569" stroke="#334155" stroke-width="1.5">
+          <animate attributeName="opacity" values="0.6;0.9;0.6" dur="3s" begin="1s" repeatCount="indefinite" />
+        </polygon>
       <circle cx="14" cy="16" r="6" fill="none" stroke="#e2e8f0" stroke-width="1.5" />
       <line x1="14" y1="16" x2="14" y2="12" stroke="#e2e8f0" stroke-width="1.5" stroke-linecap="round" />
-      <line x1="14" y1="16" x2="17" y2="18" stroke="#e2e8f0" stroke-width="1.5" stroke-linecap="round" />
+        <g transform="translate(14, 16)">
+          <line x1="0" y1="0" x2="3" y2="2" stroke="#e2e8f0" stroke-width="1.5" stroke-linecap="round">
+            <animateTransform attributeName="transform" type="rotate" from="0 0 0" to="360 0 0" dur="4s" begin="1s" repeatCount="indefinite" />
+          </line>
+        </g>
     </g>
   </g>
 
-  <!-- Enhanced compass rose with nautical theme -->
+    <!-- Enhanced compass rose with nautical theme -->
   <g transform="translate(890, 595)" opacity="0.35">
-    <!-- Outer ring -->
+      <!-- Outer ring -->
     <circle r="24" fill="none" stroke="#4ade80" stroke-width="1" />
     <circle r="20" fill="none" stroke="#4ade80" stroke-width="1.5" />
 
-    <!-- Cardinal direction lines -->
+      <!-- Cardinal direction lines -->
     <line x1="0" y1="-18" x2="0" y2="18" stroke="#4ade80" stroke-width="1.2" />
     <line x1="-18" y1="0" x2="18" y2="0" stroke="#4ade80" stroke-width="1.2" />
 
-    <!-- Intercardinal lines -->
+      <!-- Intercardinal lines -->
     <line x1="-12" y1="-12" x2="12" y2="12" stroke="#4ade80" stroke-width="0.7" opacity="0.7" />
     <line x1="12" y1="-12" x2="-12" y2="12" stroke="#4ade80" stroke-width="0.7" opacity="0.7" />
 
-    <!-- North pointer with gradient effect -->
+      <!-- North pointer with gradient effect -->
     <polygon points="0,-17 5,-7 -5,-7" fill="#4ade80" />
     <polygon points="0,-17 2.5,-9 -2.5,-9" fill="#86efac" opacity="0.7" />
 
-    <!-- Cardinal markers -->
+      <!-- Cardinal markers -->
     <text x="0" y="-28" text-anchor="middle" fill="#4ade80" font-size="8" font-weight="700">N</text>
     <text x="0" y="33" text-anchor="middle" fill="#4ade80" font-size="7" font-weight="600" opacity="0.8">S</text>
     <text x="30" y="4" text-anchor="middle" fill="#4ade80" font-size="7" font-weight="600" opacity="0.8">E</text>
     <text x="-30" y="4" text-anchor="middle" fill="#4ade80" font-size="7" font-weight="600" opacity="0.8">W</text>
 
-    <!-- Center dot -->
+      <!-- Center dot -->
     <circle r="3" fill="#4ade80" />
   </g>
 
-  <!-- Subtle anchor watermark in bottom left -->
+    <!-- Subtle anchor watermark in bottom left -->
   <g transform="translate(50, 598)" opacity="0.2">
-    <!-- Anchor ring -->
+      <!-- Anchor ring -->
     <circle cx="0" cy="-14" r="7" fill="none" stroke="#4ade80" stroke-width="2.5" />
-    <!-- Anchor shank -->
+      <!-- Anchor shank -->
     <line x1="0" y1="-7" x2="0" y2="16" stroke="#4ade80" stroke-width="3" stroke-linecap="round" />
-    <!-- Anchor stock (crossbar) -->
+      <!-- Anchor stock (crossbar) -->
     <line x1="-12" y1="-5" x2="12" y2="-5" stroke="#4ade80" stroke-width="2.5" stroke-linecap="round" />
-    <!-- Anchor arms/flukes -->
+      <!-- Anchor arms/flukes -->
     <path d="M-14 16 Q0 9, 14 16" fill="none" stroke="#4ade80" stroke-width="3" stroke-linecap="round" />
-    <!-- Fluke tips -->
+      <!-- Fluke tips -->
     <line x1="-14" y1="16" x2="-17" y2="9" stroke="#4ade80" stroke-width="2.5" stroke-linecap="round" />
     <line x1="14" y1="16" x2="17" y2="9" stroke="#4ade80" stroke-width="2.5" stroke-linecap="round" />
   </g>
