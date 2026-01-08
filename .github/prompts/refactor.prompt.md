@@ -1,7 +1,3 @@
----
-agent: agent
----
-
 Refactor code files and modules in the codebase to enhance their cohesion, reduce their coupling, and ensure that naming and file structure is unambiguous, relevant to the content and well placed in the codebase.
 
 - Be thorough.
