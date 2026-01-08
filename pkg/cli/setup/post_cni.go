@@ -48,6 +48,7 @@ type componentRequirements struct {
 	needsMetricsServer bool
 	needsCSI           bool
 	needsCertManager   bool
+	needsPolicyEngine  bool
 	needsArgoCD        bool
 	needsFlux          bool
 }
@@ -63,6 +64,10 @@ func (r componentRequirements) count() int {
 	}
 
 	if r.needsCertManager {
+		count++
+	}
+
+	if r.needsPolicyEngine {
 		count++
 	}
 
@@ -82,6 +87,7 @@ func getComponentRequirements(clusterCfg *v1alpha1.Cluster) componentRequirement
 		needsMetricsServer: NeedsMetricsServerInstall(clusterCfg),
 		needsCSI:           clusterCfg.Spec.Cluster.CSI == v1alpha1.CSILocalPathStorage,
 		needsCertManager:   clusterCfg.Spec.Cluster.CertManager == v1alpha1.CertManagerEnabled,
+		needsPolicyEngine:  clusterCfg.Spec.Cluster.PolicyEngine != v1alpha1.PolicyEngineNone,
 		needsArgoCD:        clusterCfg.Spec.Cluster.GitOpsEngine == v1alpha1.GitOpsEngineArgoCD,
 		needsFlux:          clusterCfg.Spec.Cluster.GitOpsEngine == v1alpha1.GitOpsEngineFlux,
 	}
@@ -182,6 +188,15 @@ func buildComponentTasks(
 			Name: "cert-manager",
 			Fn: func(taskCtx context.Context) error {
 				return InstallCertManagerSilent(taskCtx, clusterCfg, factories)
+			},
+		})
+	}
+
+	if reqs.needsPolicyEngine {
+		tasks = append(tasks, notify.ProgressTask{
+			Name: "policy-engine",
+			Fn: func(taskCtx context.Context) error {
+				return InstallPolicyEngineSilent(taskCtx, clusterCfg, factories)
 			},
 		})
 	}

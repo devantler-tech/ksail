@@ -111,6 +111,15 @@ func DefaultCertManagerFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	}
 }
 
+// DefaultPolicyEngineFieldSelector creates a standard field selector for Policy Engine.
+func DefaultPolicyEngineFieldSelector() FieldSelector[v1alpha1.Cluster] {
+	return FieldSelector[v1alpha1.Cluster]{
+		Selector:     func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.PolicyEngine },
+		Description:  "Policy engine (None: skip, Kyverno: install Kyverno, Gatekeeper: install Gatekeeper)",
+		DefaultValue: v1alpha1.PolicyEngineNone,
+	}
+}
+
 // DefaultCSIFieldSelector creates a standard field selector for CSI.
 func DefaultCSIFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	return FieldSelector[v1alpha1.Cluster]{

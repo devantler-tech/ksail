@@ -41,6 +41,15 @@ func ValidCertManagers() []CertManager {
 	}
 }
 
+// ValidPolicyEngines returns supported policy engine values.
+func ValidPolicyEngines() []PolicyEngine {
+	return []PolicyEngine{
+		PolicyEngineNone,
+		PolicyEngineKyverno,
+		PolicyEngineGatekeeper,
+	}
+}
+
 // ValidLocalRegistryModes returns supported local registry configuration modes.
 func ValidLocalRegistryModes() []LocalRegistry {
 	return []LocalRegistry{LocalRegistryEnabled, LocalRegistryDisabled}

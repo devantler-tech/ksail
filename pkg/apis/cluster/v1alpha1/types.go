@@ -45,6 +45,7 @@ type ClusterSpec struct {
 	CSI                CSI           `json:"csi,omitzero"`
 	MetricsServer      MetricsServer `json:"metricsServer,omitzero"`
 	CertManager        CertManager   `json:"certManager,omitzero"`
+	PolicyEngine       PolicyEngine  `json:"policyEngine,omitzero"`
 	LocalRegistry      LocalRegistry `json:"localRegistry,omitzero"`
 	GitOpsEngine       GitOpsEngine  `json:"gitOpsEngine,omitzero"`
 
@@ -267,6 +268,20 @@ const (
 	CertManagerDisabled CertManager = "Disabled"
 )
 
+// --- Policy Engine Types ---
+
+// PolicyEngine defines the policy engine options for a KSail cluster.
+type PolicyEngine string
+
+const (
+	// PolicyEngineNone is the default and disables policy engine installation.
+	PolicyEngineNone PolicyEngine = "None"
+	// PolicyEngineKyverno installs Kyverno.
+	PolicyEngineKyverno PolicyEngine = "Kyverno"
+	// PolicyEngineGatekeeper installs OPA Gatekeeper.
+	PolicyEngineGatekeeper PolicyEngine = "Gatekeeper"
+)
+
 // --- Local Registry Types ---
 
 // LocalRegistry defines how the host-local OCI registry should behave.
@@ -337,6 +352,11 @@ type OptionsCilium struct {
 // OptionsCalico defines options for the Calico CNI.
 type OptionsCalico struct {
 	// Add any specific fields for the Calico CNI here.
+}
+
+// OptionsPolicyEngine defines options for policy engines.
+type OptionsPolicyEngine struct {
+	// Add any specific fields for policy engines here.
 }
 
 // OptionsFlux defines options for the Flux deployment tool.
@@ -473,6 +493,27 @@ func (c *CertManager) Set(value string) error {
 	)
 }
 
+// Set for PolicyEngine.
+func (p *PolicyEngine) Set(value string) error {
+	// Check against constant values with case-insensitive comparison
+	for _, pe := range ValidPolicyEngines() {
+		if strings.EqualFold(value, string(pe)) {
+			*p = pe
+
+			return nil
+		}
+	}
+
+	return fmt.Errorf(
+		"%w: %s (valid options: %s, %s, %s)",
+		ErrInvalidPolicyEngine,
+		value,
+		PolicyEngineNone,
+		PolicyEngineKyverno,
+		PolicyEngineGatekeeper,
+	)
+}
+
 // Set for LocalRegistry.
 func (l *LocalRegistry) Set(value string) error {
 	// Check against constant values with case-insensitive comparison
@@ -566,4 +607,14 @@ func (c *CertManager) String() string {
 // Type returns the type of the CertManager.
 func (c *CertManager) Type() string {
 	return "CertManager"
+}
+
+// String returns the string representation of the PolicyEngine.
+func (p *PolicyEngine) String() string {
+	return string(*p)
+}
+
+// Type returns the type of the PolicyEngine.
+func (p *PolicyEngine) Type() string {
+	return "PolicyEngine"
 }
