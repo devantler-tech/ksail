@@ -45,7 +45,7 @@ type ClusterSpec struct {
 	CSI                CSI           `json:"csi,omitzero"`
 	MetricsServer      MetricsServer `json:"metricsServer,omitzero"`
 	CertManager        CertManager   `json:"certManager,omitzero"`
-	PolicyEngine       PolicyEngine  `json:"policyEngine,omitzero"`
+	PolicyEngine       PolicyEngine  `json:"policyEngine"`
 	LocalRegistry      LocalRegistry `json:"localRegistry,omitzero"`
 	GitOpsEngine       GitOpsEngine  `json:"gitOpsEngine,omitzero"`
 
