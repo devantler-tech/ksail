@@ -618,12 +618,41 @@ func (s *Scaffolder) buildKindConfig(output string) *v1alpha4.Cluster {
 		kindConfig.Networking.DisableDefaultCNI = true
 	}
 
+	// Enable kubelet certificate rotation when metrics-server is explicitly enabled.
+	// This is required for secure TLS communication between metrics-server and kubelets.
+	if s.KSailConfig.Spec.Cluster.MetricsServer == v1alpha1.MetricsServerEnabled {
+		s.addKubeletCertRotationPatches(kindConfig)
+	}
+
 	// Apply node counts from CLI flags (stored in Talos options)
 	s.applyKindNodeCounts(kindConfig)
 
 	s.addMirrorMountsToKindConfig(kindConfig, output)
 
 	return kindConfig
+}
+
+// kubeletCertRotationPatch is a kubeadm patch to enable kubelet serving certificate rotation.
+// This allows the kubelet to request a proper TLS certificate via CSR, which kubelet-csr-approver
+// will then approve, enabling secure TLS communication with metrics-server.
+const kubeletCertRotationPatch = `kind: KubeletConfiguration
+apiVersion: kubelet.config.k8s.io/v1beta1
+serverTLSBootstrap: true`
+
+// addKubeletCertRotationPatches adds kubeadm patches to all nodes to enable kubelet cert rotation.
+func (s *Scaffolder) addKubeletCertRotationPatches(kindConfig *v1alpha4.Cluster) {
+	// Ensure at least one node exists
+	if len(kindConfig.Nodes) == 0 {
+		kindConfig.Nodes = []v1alpha4.Node{{Role: v1alpha4.ControlPlaneRole}}
+	}
+
+	// Add the kubelet cert rotation patch to all nodes
+	for i := range kindConfig.Nodes {
+		kindConfig.Nodes[i].KubeadmConfigPatches = append(
+			kindConfig.Nodes[i].KubeadmConfigPatches,
+			kubeletCertRotationPatch,
+		)
+	}
 }
 
 // applyKindNodeCounts sets up Kind nodes based on --control-planes and --workers CLI flags.

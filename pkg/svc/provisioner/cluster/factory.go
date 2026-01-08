@@ -99,6 +99,12 @@ func (f DefaultFactory) createKindProvisioner(
 	// Apply node count overrides from CLI flags (stored in Talos options)
 	applyKindNodeCounts(kindConfig, cluster.Spec.Cluster.Talos)
 
+	// Apply kubelet certificate rotation patches when metrics-server is enabled.
+	// This must happen AFTER applyKindNodeCounts since that function may replace the nodes slice.
+	if cluster.Spec.Cluster.MetricsServer == v1alpha1.MetricsServerEnabled {
+		applyKubeletCertRotationPatches(kindConfig)
+	}
+
 	provisioner, err := kindprovisioner.CreateProvisioner(
 		kindConfig,
 		cluster.Spec.Cluster.Connection.Kubeconfig,
@@ -140,6 +146,29 @@ func applyKindNodeCounts(kindConfig *v1alpha4.Cluster, opts v1alpha1.OptionsTalo
 	}
 
 	kindConfig.Nodes = newNodes
+}
+
+// kubeletCertRotationPatch is a kubeadm patch to enable kubelet serving certificate rotation.
+// This allows the kubelet to request a proper TLS certificate via CSR, which kubelet-csr-approver
+// will then approve, enabling secure TLS communication with metrics-server.
+const kubeletCertRotationPatch = `kind: KubeletConfiguration
+apiVersion: kubelet.config.k8s.io/v1beta1
+serverTLSBootstrap: true`
+
+// applyKubeletCertRotationPatches adds kubeadm patches to all nodes to enable kubelet cert rotation.
+func applyKubeletCertRotationPatches(kindConfig *v1alpha4.Cluster) {
+	// Ensure at least one node exists
+	if len(kindConfig.Nodes) == 0 {
+		kindConfig.Nodes = []v1alpha4.Node{{Role: v1alpha4.ControlPlaneRole}}
+	}
+
+	// Add the kubelet cert rotation patch to all nodes
+	for i := range kindConfig.Nodes {
+		kindConfig.Nodes[i].KubeadmConfigPatches = append(
+			kindConfig.Nodes[i].KubeadmConfigPatches,
+			kubeletCertRotationPatch,
+		)
+	}
 }
 
 func (f DefaultFactory) createK3dProvisioner(
