@@ -62,7 +62,7 @@ type ClusterSpec struct {
 
 // WorkloadSpec defines workload-related configuration.
 type WorkloadSpec struct {
-	SourceDirectory string `default:"k8s" json:"sourceDirectory,omitzero"` //nolint:tagalign
+	SourceDirectory string `default:"k8s" json:"sourceDirectory,omitzero"`
 	ValidateOnPush  bool   `              json:"validateOnPush,omitzero"`
 }
 
