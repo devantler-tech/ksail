@@ -183,6 +183,7 @@ func (m *ConfigManager) getFieldMappings() map[any]string {
 		&m.Config.Spec.Cluster.CSI:                        "csi",
 		&m.Config.Spec.Cluster.MetricsServer:              "metrics-server",
 		&m.Config.Spec.Cluster.CertManager:                "cert-manager",
+		&m.Config.Spec.Cluster.PolicyEngine:               "policy-engine",
 		&m.Config.Spec.Cluster.LocalRegistry:              "local-registry",
 		&m.Config.Spec.Cluster.LocalRegistryOpts.HostPort: "local-registry-port",
 
