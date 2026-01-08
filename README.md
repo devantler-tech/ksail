@@ -23,7 +23,7 @@ Setting up and operating Kubernetes clusters is a skill of its own, often requir
 
 🔄 **GitOps Native** — Opt into Flux or ArgoCD. KSail handles the bootstrap and gives you push and reconcile commands.
 
-⚙️ **Customizable Stack** — Select your CNI, CSI, enable cert-manager, add mirror registries to match your setup.
+⚙️ **Customizable Stack** — Select your CNI, CSI, policy engine, cert-manager, and mirror registries to match your setup.
 
 🔐 **SOPS Built In** — Encrypt, decrypt, and edit secrets with integrated cipher commands.
 
@@ -34,7 +34,7 @@ Setting up and operating Kubernetes clusters is a skill of its own, often requir
 The binary works on all major operating systems and modern CPU archectures:
 
 | OS                   | Arch            |
-|----------------------|-----------------|
+| -------------------- | --------------- |
 | 🐧 Linux             | amd64 and arm64 |
 |  MacOS              | arm64           |
 | ⊞ Windows (untested) | amd64 and arm64 |
@@ -42,7 +42,7 @@ The binary works on all major operating systems and modern CPU archectures:
 The supported distributions depend on different local and cloud providers:
 
 | Distribution | Provider                  |
-|--------------|---------------------------|
+| ------------ | ------------------------- |
 | Kind         | Docker                    |
 | K3d          | Docker                    |
 | Talos        | Docker, Hetzner (🚧 next) |
@@ -72,19 +72,20 @@ ksail cluster init \
   --csi <Default|LocalPathStorage|None> \
   --metrics-server <Default|Enabled|Disabled> \
   --cert-manager <Enabled|Disabled> \
+  --policy-engine <None|Kyverno|Gatekeeper> \
   --gitops-engine <None|Flux|ArgoCD> \
   --mirror-registry <host>=<upstream>
 
 # 2. Create and start the cluster
 ksail cluster create
 
-# Add your manifests to a k8s/kustomization.yaml file
+# 3. Add your manifests to the k8s/ directory
 
-# 3. Deploy your workloads
-ksail workload apply -k ./k8s   # for kubectl workflows
-ksail workload reconcile        # for gitops workflows
+# 4. Deploy your workloads
+ksail workload apply -k ./k8s   # kubectl workflow
+ksail workload reconcile        # gitops workflow
 
-# 4. Connect to the cluster with k9s
+# 5. Connect to the cluster with K9s
 ksail cluster connect
 ```
 
@@ -104,7 +105,7 @@ ksail cluster connect
 KSail is a powerful tool that can be used in many different ways. Here are some projects that use KSail in their setup:
 
 | Project                                                               | Description         | Type     |
-|-----------------------------------------------------------------------|---------------------|----------|
+| --------------------------------------------------------------------- | ------------------- | -------- |
 | [devantler-tech/platform](https://github.com/devantler-tech/platform) | My personal homelab | Platform |
 
 If you use KSail in your project, feel free to open a PR to add it to the list, so others can see how you use KSail.
