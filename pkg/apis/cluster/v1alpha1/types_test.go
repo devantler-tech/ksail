@@ -49,18 +49,19 @@ func TestPolicyEngineSet(t *testing.T) {
 		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			var pe v1alpha1.PolicyEngine
-			err := pe.Set(tc.input)
+			var policyEngine v1alpha1.PolicyEngine
 
-			if tc.wantError {
+			err := policyEngine.Set(testCase.input)
+
+			if testCase.wantError {
 				require.Error(t, err)
 			} else {
 				require.NoError(t, err)
-				assert.Equal(t, tc.wantValue, pe)
+				assert.Equal(t, testCase.wantValue, policyEngine)
 			}
 		})
 	}

@@ -54,6 +54,8 @@ type InstallerFactories struct {
 }
 
 // DefaultInstallerFactories returns the default installer factories.
+//
+//nolint:funlen // Factory function with multiple closures requires this length.
 func DefaultInstallerFactories() *InstallerFactories {
 	factories := &InstallerFactories{}
 
@@ -103,6 +105,13 @@ func DefaultInstallerFactories() *InstallerFactories {
 	}
 
 	factories.PolicyEngine = func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error) {
+		engine := clusterCfg.Spec.Cluster.PolicyEngine
+
+		// Early return for disabled policy engine
+		if engine == v1alpha1.PolicyEngineNone || engine == "" {
+			return nil, ErrPolicyEngineDisabled
+		}
+
 		helmClient, _, err := factories.HelmClientFactory(clusterCfg)
 		if err != nil {
 			return nil, err
@@ -110,13 +119,14 @@ func DefaultInstallerFactories() *InstallerFactories {
 
 		timeout := installer.GetInstallTimeout(clusterCfg)
 
-		switch clusterCfg.Spec.Cluster.PolicyEngine {
+		//nolint:exhaustive // PolicyEngineNone is handled above with early return
+		switch engine {
 		case v1alpha1.PolicyEngineKyverno:
 			return kyvernoinstaller.NewKyvernoInstaller(helmClient, timeout), nil
 		case v1alpha1.PolicyEngineGatekeeper:
 			return gatekeeperinstaller.NewGatekeeperInstaller(helmClient, timeout), nil
 		default:
-			return nil, nil
+			return nil, fmt.Errorf("%w: unknown engine %q", ErrPolicyEngineDisabled, engine)
 		}
 	}
 
@@ -282,6 +292,9 @@ func InstallCertManagerSilent(
 
 // ErrPolicyEngineInstallerFactoryNil is returned when the policy engine installer factory is nil.
 var ErrPolicyEngineInstallerFactoryNil = errors.New("policy engine installer factory is nil")
+
+// ErrPolicyEngineDisabled is returned when the policy engine is disabled.
+var ErrPolicyEngineDisabled = errors.New("policy engine is disabled")
 
 // InstallPolicyEngineSilent installs the policy engine silently for parallel execution.
 func InstallPolicyEngineSilent(

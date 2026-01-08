@@ -45,7 +45,7 @@ type ClusterSpec struct {
 	CSI                CSI           `json:"csi,omitzero"`
 	MetricsServer      MetricsServer `json:"metricsServer,omitzero"`
 	CertManager        CertManager   `json:"certManager,omitzero"`
-	PolicyEngine       PolicyEngine  `json:"policyEngine"`
+	PolicyEngine       PolicyEngine  `json:"policyEngine,omitzero"`
 	LocalRegistry      LocalRegistry `json:"localRegistry,omitzero"`
 	GitOpsEngine       GitOpsEngine  `json:"gitOpsEngine,omitzero"`
 
@@ -68,15 +68,15 @@ type ClusterSpec struct {
 
 // WorkloadSpec defines workload-related configuration.
 type WorkloadSpec struct {
-	SourceDirectory string `json:"sourceDirectory,omitzero"`
-	ValidateOnPush  bool   `json:"validateOnPush,omitzero"`
+	SourceDirectory string `default:"k8s" json:"sourceDirectory,omitzero"`
+	ValidateOnPush  bool   `              json:"validateOnPush,omitzero"`
 }
 
 // Connection defines connection options for a KSail cluster.
 type Connection struct {
-	Kubeconfig string          `json:"kubeconfig,omitzero"`
-	Context    string          `json:"context,omitzero"`
-	Timeout    metav1.Duration `json:"timeout,omitzero"`
+	Kubeconfig string          `default:"~/.kube/config" json:"kubeconfig,omitzero"`
+	Context    string          `                         json:"context,omitzero"`
+	Timeout    metav1.Duration `                         json:"timeout,omitzero"`
 }
 
 // --- OCI Registry Types ---
@@ -366,7 +366,7 @@ type OptionsArgoCD struct {
 
 // OptionsLocalRegistry defines options for the host-local OCI registry integration.
 type OptionsLocalRegistry struct {
-	HostPort int32 `json:"hostPort,omitzero"`
+	HostPort int32 `default:"5050" json:"hostPort,omitzero"`
 }
 
 // OptionsHelm defines options for the Helm tool.
@@ -539,6 +539,11 @@ func (l *LocalRegistry) Type() string {
 	return "LocalRegistry"
 }
 
+// Default returns the default value for LocalRegistry (Disabled).
+func (l *LocalRegistry) Default() any {
+	return LocalRegistryDisabled
+}
+
 // IsValid checks if the distribution value is supported.
 func (d *Distribution) IsValid() bool {
 	return slices.Contains(ValidDistributions(), *d)
@@ -554,6 +559,11 @@ func (d *Distribution) Type() string {
 	return "Distribution"
 }
 
+// Default returns the default value for Distribution (Kind).
+func (d *Distribution) Default() any {
+	return DistributionKind
+}
+
 // String returns the string representation of the GitOpsEngine.
 func (g *GitOpsEngine) String() string {
 	return string(*g)
@@ -562,6 +572,11 @@ func (g *GitOpsEngine) String() string {
 // Type returns the type of the GitOpsEngine.
 func (g *GitOpsEngine) Type() string {
 	return "GitOpsEngine"
+}
+
+// Default returns the default value for GitOpsEngine (None).
+func (g *GitOpsEngine) Default() any {
+	return GitOpsEngineNone
 }
 
 // String returns the string representation of the CNI.
@@ -574,6 +589,11 @@ func (c *CNI) Type() string {
 	return "CNI"
 }
 
+// Default returns the default value for CNI (Default).
+func (c *CNI) Default() any {
+	return CNIDefault
+}
+
 // String returns the string representation of the CSI.
 func (c *CSI) String() string {
 	return string(*c)
@@ -582,6 +602,11 @@ func (c *CSI) String() string {
 // Type returns the type of the CSI.
 func (c *CSI) Type() string {
 	return "CSI"
+}
+
+// Default returns the default value for CSI (Default).
+func (c *CSI) Default() any {
+	return CSIDefault
 }
 
 // String returns the string representation of the MetricsServer.
@@ -594,6 +619,11 @@ func (m *MetricsServer) Type() string {
 	return "MetricsServer"
 }
 
+// Default returns the default value for MetricsServer (Enabled).
+func (m *MetricsServer) Default() any {
+	return MetricsServerEnabled
+}
+
 // String returns the string representation of the CertManager.
 func (c *CertManager) String() string {
 	return string(*c)
@@ -604,6 +634,11 @@ func (c *CertManager) Type() string {
 	return "CertManager"
 }
 
+// Default returns the default value for CertManager (Disabled).
+func (c *CertManager) Default() any {
+	return CertManagerDisabled
+}
+
 // String returns the string representation of the PolicyEngine.
 func (p *PolicyEngine) String() string {
 	return string(*p)
@@ -612,4 +647,9 @@ func (p *PolicyEngine) String() string {
 // Type returns the type of the PolicyEngine.
 func (p *PolicyEngine) Type() string {
 	return "PolicyEngine"
+}
+
+// Default returns the default value for PolicyEngine (None).
+func (p *PolicyEngine) Default() any {
+	return PolicyEngineNone
 }

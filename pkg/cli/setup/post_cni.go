@@ -166,60 +166,53 @@ func buildComponentTasks(
 	var tasks []notify.ProgressTask
 
 	if reqs.needsMetricsServer {
-		tasks = append(tasks, notify.ProgressTask{
-			Name: "metrics-server",
-			Fn: func(taskCtx context.Context) error {
-				return InstallMetricsServerSilent(taskCtx, clusterCfg, factories)
-			},
-		})
+		tasks = append(
+			tasks,
+			newTask("metrics-server", clusterCfg, factories, InstallMetricsServerSilent),
+		)
 	}
 
 	if reqs.needsCSI {
-		tasks = append(tasks, notify.ProgressTask{
-			Name: "csi",
-			Fn: func(taskCtx context.Context) error {
-				return InstallCSISilent(taskCtx, clusterCfg, factories)
-			},
-		})
+		tasks = append(tasks, newTask("csi", clusterCfg, factories, InstallCSISilent))
 	}
 
 	if reqs.needsCertManager {
-		tasks = append(tasks, notify.ProgressTask{
-			Name: "cert-manager",
-			Fn: func(taskCtx context.Context) error {
-				return InstallCertManagerSilent(taskCtx, clusterCfg, factories)
-			},
-		})
+		tasks = append(
+			tasks,
+			newTask("cert-manager", clusterCfg, factories, InstallCertManagerSilent),
+		)
 	}
 
 	if reqs.needsPolicyEngine {
-		tasks = append(tasks, notify.ProgressTask{
-			Name: "policy-engine",
-			Fn: func(taskCtx context.Context) error {
-				return InstallPolicyEngineSilent(taskCtx, clusterCfg, factories)
-			},
-		})
+		tasks = append(
+			tasks,
+			newTask("policy-engine", clusterCfg, factories, InstallPolicyEngineSilent),
+		)
 	}
 
 	if reqs.needsArgoCD {
-		tasks = append(tasks, notify.ProgressTask{
-			Name: "argocd",
-			Fn: func(taskCtx context.Context) error {
-				return InstallArgoCDSilent(taskCtx, clusterCfg, factories)
-			},
-		})
+		tasks = append(tasks, newTask("argocd", clusterCfg, factories, InstallArgoCDSilent))
 	}
 
 	if reqs.needsFlux {
-		tasks = append(tasks, notify.ProgressTask{
-			Name: "flux",
-			Fn: func(taskCtx context.Context) error {
-				return InstallFluxSilent(taskCtx, clusterCfg, factories)
-			},
-		})
+		tasks = append(tasks, newTask("flux", clusterCfg, factories, InstallFluxSilent))
 	}
 
 	return tasks
+}
+
+type silentInstallFunc func(ctx context.Context, cfg *v1alpha1.Cluster, f *InstallerFactories) error
+
+func newTask(
+	name string,
+	cfg *v1alpha1.Cluster,
+	factories *InstallerFactories,
+	fn silentInstallFunc,
+) notify.ProgressTask {
+	return notify.ProgressTask{
+		Name: name,
+		Fn:   func(ctx context.Context) error { return fn(ctx, cfg, factories) },
+	}
 }
 
 func configureGitOpsResources(
