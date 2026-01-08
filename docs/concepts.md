@@ -109,6 +109,30 @@ Kubernetes distributions package the Kubernetes components with additional tooli
 - [cert-manager Concepts](https://cert-manager.io/docs/concepts/)
 - [Issuer Types](https://cert-manager.io/docs/configuration/)
 
+## Policy Engines
+
+Policy engines enforce security, compliance, and best practices in Kubernetes clusters through admission control and continuous validation.
+
+### Kyverno
+
+[Kyverno](https://kyverno.io/) is a Kubernetes-native policy engine designed for ease of use. Policies are written as Kubernetes resources using YAML, without requiring a new language.
+
+**Key resources:**
+
+- [Kyverno Documentation](https://kyverno.io/docs/)
+- [Kyverno Policies](https://kyverno.io/policies/)
+- [Policy Reports](https://kyverno.io/docs/policy-reports/)
+
+### Gatekeeper
+
+[OPA Gatekeeper](https://open-policy-agent.github.io/gatekeeper/) brings Open Policy Agent (OPA) to Kubernetes as an admission controller. Policies are written in Rego, a declarative policy language.
+
+**Key resources:**
+
+- [Gatekeeper Documentation](https://open-policy-agent.github.io/gatekeeper/website/docs/)
+- [OPA Documentation](https://www.openpolicyagent.org/docs/latest/)
+- [Gatekeeper Library](https://open-policy-agent.github.io/gatekeeper-library/website/)
+
 ## OCI Registries
 
 [OCI Distribution](https://github.com/opencontainers/distribution-spec) defines a standard for storing and distributing container images and other artifacts.

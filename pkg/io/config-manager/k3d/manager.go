@@ -12,8 +12,9 @@ import (
 )
 
 // DefaultK3sImage is the default K3s image version for K3d clusters.
-// This pins K3d clusters to a known Kubernetes version compatible with Flux and other tools.
-const DefaultK3sImage = "rancher/k3s:v1.29.4-k3s1"
+// This pins K3d clusters to a known Kubernetes version compatible with Flux, Kyverno, and other tools.
+// Kubernetes 1.30+ is required for CRD selectableFields support used by Kyverno 1.15+.
+const DefaultK3sImage = "rancher/k3s:v1.32.11-k3s1"
 
 // DefaultClusterName is the default K3d cluster name when none is specified.
 // This matches K3d's internal default naming convention.

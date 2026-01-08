@@ -1,6 +1,7 @@
 package configmanager
 
 import (
+	"fmt"
 	"reflect"
 	"time"
 
@@ -183,6 +184,7 @@ func (m *ConfigManager) getFieldMappings() map[any]string {
 		&m.Config.Spec.Cluster.CSI:                        "csi",
 		&m.Config.Spec.Cluster.MetricsServer:              "metrics-server",
 		&m.Config.Spec.Cluster.CertManager:                "cert-manager",
+		&m.Config.Spec.Cluster.PolicyEngine:               "policy-engine",
 		&m.Config.Spec.Cluster.LocalRegistry:              "local-registry",
 		&m.Config.Spec.Cluster.LocalRegistryOpts.HostPort: "local-registry-port",
 
@@ -253,25 +255,15 @@ func (m *ConfigManager) setPflagValueDefault(pflagValue interface {
 	Type() string
 }, defaultValue any,
 ) {
-	// Convert custom types to string for pflag.Value.Set()
-	switch val := defaultValue.(type) {
-	case v1alpha1.Distribution:
-		_ = pflagValue.Set(string(val))
-	case v1alpha1.GitOpsEngine:
-		_ = pflagValue.Set(string(val))
-	case v1alpha1.CNI:
-		_ = pflagValue.Set(string(val))
-	case v1alpha1.CSI:
-		_ = pflagValue.Set(string(val))
-	case v1alpha1.MetricsServer:
-		_ = pflagValue.Set(string(val))
-	case v1alpha1.CertManager:
-		_ = pflagValue.Set(string(val))
-	case v1alpha1.LocalRegistry:
-		_ = pflagValue.Set(string(val))
-	default:
-		if str, ok := val.(string); ok {
-			_ = pflagValue.Set(str)
-		}
+	// Try fmt.Stringer interface first (all our custom types implement this)
+	if stringer, ok := defaultValue.(fmt.Stringer); ok {
+		_ = pflagValue.Set(stringer.String())
+
+		return
+	}
+
+	// Fallback for plain strings
+	if str, ok := defaultValue.(string); ok {
+		_ = pflagValue.Set(str)
 	}
 }

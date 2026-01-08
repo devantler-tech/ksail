@@ -54,6 +54,7 @@ spec:
     csi: Default
     metricsServer: Enabled
     certManager: Enabled
+    policyEngine: Kyverno
     localRegistry: Enabled
     gitOpsEngine: Flux
     localRegistryOptions:
@@ -102,6 +103,7 @@ If not specified, KSail falls back to standard editor environment variables (`SO
 | `csi`                  | enum       | `Default`   | Container Storage Interface                 |
 | `metricsServer`        | enum       | `Default`   | Install metrics-server                      |
 | `certManager`          | enum       | `Disabled`  | Install cert-manager                        |
+| `policyEngine`         | enum       | `None`      | Policy engine to install                    |
 | `localRegistry`        | enum       | `Disabled`  | Provision local OCI registry                |
 | `gitOpsEngine`         | enum       | `None`      | GitOps engine to install                    |
 | `localRegistryOptions` | object     | –           | Local registry configuration options        |
@@ -192,6 +194,16 @@ Whether to install [cert-manager](../concepts.md#cert-manager) for TLS certifica
 
 - `Enabled` – Install cert-manager
 - `Disabled` (default) – Skip installation
+
+#### policyEngine
+
+Policy engine to install for enforcing security, compliance, and best practices. See [Policy Engines](../concepts.md#policy-engines) for more details about Kyverno and Gatekeeper.
+
+**Valid values:**
+
+- `None` (default) – No policy engine
+- `Kyverno` – Install [Kyverno](https://kyverno.io/) for Kubernetes-native policy management
+- `Gatekeeper` – Install [OPA Gatekeeper](https://open-policy-agent.github.io/gatekeeper/) for OPA-based policy enforcement
 
 #### localRegistry
 

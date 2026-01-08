@@ -31,7 +31,7 @@ Usage:
 
 Flags:
   -c, --context string                 Kubernetes context of cluster
-  -d, --distribution Distribution      Kubernetes distribution to use (default Kind)
+  -d, --distribution Distribution      Kubernetes distribution to use
       --distribution-config string     Configuration file for the distribution
       --editor string                  editor command to use for k9s edit actions (e.g., 'code --wait', 'vim', 'nano')
   -g, --gitops-engine GitOpsEngine     GitOps engine to use (None disables GitOps, Flux installs Flux controllers, ArgoCD installs Argo CD) (default None)

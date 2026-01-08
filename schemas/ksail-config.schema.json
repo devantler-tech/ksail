@@ -78,6 +78,14 @@
                 "Disabled"
               ]
             },
+            "policyEngine": {
+              "type": "string",
+              "enum": [
+                "None",
+                "Kyverno",
+                "Gatekeeper"
+              ]
+            },
             "localRegistry": {
               "type": "string",
               "enum": [

@@ -5,7 +5,67 @@ import (
 
 	v1alpha1 "github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
+
+func TestPolicyEngineSet(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		input     string
+		wantValue v1alpha1.PolicyEngine
+		wantError bool
+	}{
+		{
+			name:      "sets_kyverno",
+			input:     "Kyverno",
+			wantValue: v1alpha1.PolicyEngineKyverno,
+			wantError: false,
+		},
+		{
+			name:      "sets_gatekeeper",
+			input:     "Gatekeeper",
+			wantValue: v1alpha1.PolicyEngineGatekeeper,
+			wantError: false,
+		},
+		{
+			name:      "sets_none",
+			input:     "None",
+			wantValue: v1alpha1.PolicyEngineNone,
+			wantError: false,
+		},
+		{
+			name:      "case_insensitive_kyverno",
+			input:     "kyverno",
+			wantValue: v1alpha1.PolicyEngineKyverno,
+			wantError: false,
+		},
+		{
+			name:      "invalid_value",
+			input:     "invalid",
+			wantValue: "",
+			wantError: true,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			var policyEngine v1alpha1.PolicyEngine
+
+			err := policyEngine.Set(testCase.input)
+
+			if testCase.wantError {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, testCase.wantValue, policyEngine)
+			}
+		})
+	}
+}
 
 func TestDistribution_ProvidesMetricsServerByDefault(t *testing.T) {
 	t.Parallel()

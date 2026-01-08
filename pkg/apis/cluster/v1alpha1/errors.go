@@ -20,5 +20,8 @@ var ErrInvalidMetricsServer = errors.New("invalid metrics server")
 // ErrInvalidCertManager is returned when an invalid cert-manager option is specified.
 var ErrInvalidCertManager = errors.New("invalid cert-manager")
 
+// ErrInvalidPolicyEngine is returned when an invalid policy engine is specified.
+var ErrInvalidPolicyEngine = errors.New("invalid policy engine")
+
 // ErrInvalidLocalRegistry is returned when an invalid local registry mode is specified.
 var ErrInvalidLocalRegistry = errors.New("invalid local registry mode")

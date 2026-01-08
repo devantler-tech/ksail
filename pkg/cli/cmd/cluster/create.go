@@ -50,6 +50,7 @@ func NewCreateCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
 	fieldSelectors = append(fieldSelectors, ksailconfigmanager.DefaultCNIFieldSelector())
 	fieldSelectors = append(fieldSelectors, ksailconfigmanager.DefaultMetricsServerFieldSelector())
 	fieldSelectors = append(fieldSelectors, ksailconfigmanager.DefaultCertManagerFieldSelector())
+	fieldSelectors = append(fieldSelectors, ksailconfigmanager.DefaultPolicyEngineFieldSelector())
 	fieldSelectors = append(fieldSelectors, ksailconfigmanager.DefaultCSIFieldSelector())
 	fieldSelectors = append(fieldSelectors, ksailconfigmanager.ControlPlanesFieldSelector())
 	fieldSelectors = append(fieldSelectors, ksailconfigmanager.WorkersFieldSelector())

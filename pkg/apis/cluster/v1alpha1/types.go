@@ -45,6 +45,7 @@ type ClusterSpec struct {
 	CSI                CSI           `json:"csi,omitzero"`
 	MetricsServer      MetricsServer `json:"metricsServer,omitzero"`
 	CertManager        CertManager   `json:"certManager,omitzero"`
+	PolicyEngine       PolicyEngine  `json:"policyEngine,omitzero"`
 	LocalRegistry      LocalRegistry `json:"localRegistry,omitzero"`
 	GitOpsEngine       GitOpsEngine  `json:"gitOpsEngine,omitzero"`
 
@@ -67,15 +68,15 @@ type ClusterSpec struct {
 
 // WorkloadSpec defines workload-related configuration.
 type WorkloadSpec struct {
-	SourceDirectory string `json:"sourceDirectory,omitzero"`
-	ValidateOnPush  bool   `json:"validateOnPush,omitzero"`
+	SourceDirectory string `default:"k8s" json:"sourceDirectory,omitzero"`
+	ValidateOnPush  bool   `              json:"validateOnPush,omitzero"`
 }
 
 // Connection defines connection options for a KSail cluster.
 type Connection struct {
-	Kubeconfig string          `json:"kubeconfig,omitzero"`
-	Context    string          `json:"context,omitzero"`
-	Timeout    metav1.Duration `json:"timeout,omitzero"`
+	Kubeconfig string          `default:"~/.kube/config" json:"kubeconfig,omitzero"`
+	Context    string          `                         json:"context,omitzero"`
+	Timeout    metav1.Duration `                         json:"timeout,omitzero"`
 }
 
 // --- OCI Registry Types ---
@@ -175,6 +176,15 @@ type FluxKustomizationStatus struct {
 	Conditions []metav1.Condition `json:"conditions,omitzero"`
 }
 
+// --- Enum Interface ---
+
+// EnumValuer is implemented by string-based enum types to provide their valid values.
+// The schema generator uses this interface to automatically discover enum constraints.
+type EnumValuer interface {
+	// ValidValues returns all valid string values for this enum type.
+	ValidValues() []string
+}
+
 // --- Distribution Types ---
 
 // Distribution defines the distribution options for a KSail cluster.
@@ -267,6 +277,20 @@ const (
 	CertManagerDisabled CertManager = "Disabled"
 )
 
+// --- Policy Engine Types ---
+
+// PolicyEngine defines the policy engine options for a KSail cluster.
+type PolicyEngine string
+
+const (
+	// PolicyEngineNone is the default and disables policy engine installation.
+	PolicyEngineNone PolicyEngine = "None"
+	// PolicyEngineKyverno installs Kyverno.
+	PolicyEngineKyverno PolicyEngine = "Kyverno"
+	// PolicyEngineGatekeeper installs OPA Gatekeeper.
+	PolicyEngineGatekeeper PolicyEngine = "Gatekeeper"
+)
+
 // --- Local Registry Types ---
 
 // LocalRegistry defines how the host-local OCI registry should behave.
@@ -351,7 +375,7 @@ type OptionsArgoCD struct {
 
 // OptionsLocalRegistry defines options for the host-local OCI registry integration.
 type OptionsLocalRegistry struct {
-	HostPort int32 `json:"hostPort,omitzero"`
+	HostPort int32 `default:"5050" json:"hostPort,omitzero"`
 }
 
 // OptionsHelm defines options for the Helm tool.
@@ -473,6 +497,27 @@ func (c *CertManager) Set(value string) error {
 	)
 }
 
+// Set for PolicyEngine.
+func (p *PolicyEngine) Set(value string) error {
+	// Check against constant values with case-insensitive comparison
+	for _, pe := range ValidPolicyEngines() {
+		if strings.EqualFold(value, string(pe)) {
+			*p = pe
+
+			return nil
+		}
+	}
+
+	return fmt.Errorf(
+		"%w: %s (valid options: %s, %s, %s)",
+		ErrInvalidPolicyEngine,
+		value,
+		PolicyEngineNone,
+		PolicyEngineKyverno,
+		PolicyEngineGatekeeper,
+	)
+}
+
 // Set for LocalRegistry.
 func (l *LocalRegistry) Set(value string) error {
 	// Check against constant values with case-insensitive comparison
@@ -503,6 +548,16 @@ func (l *LocalRegistry) Type() string {
 	return "LocalRegistry"
 }
 
+// Default returns the default value for LocalRegistry (Disabled).
+func (l *LocalRegistry) Default() any {
+	return LocalRegistryDisabled
+}
+
+// ValidValues returns all valid LocalRegistry values as strings.
+func (l *LocalRegistry) ValidValues() []string {
+	return []string{string(LocalRegistryEnabled), string(LocalRegistryDisabled)}
+}
+
 // IsValid checks if the distribution value is supported.
 func (d *Distribution) IsValid() bool {
 	return slices.Contains(ValidDistributions(), *d)
@@ -518,6 +573,16 @@ func (d *Distribution) Type() string {
 	return "Distribution"
 }
 
+// Default returns the default value for Distribution (Kind).
+func (d *Distribution) Default() any {
+	return DistributionKind
+}
+
+// ValidValues returns all valid Distribution values as strings.
+func (d *Distribution) ValidValues() []string {
+	return []string{string(DistributionKind), string(DistributionK3d), string(DistributionTalos)}
+}
+
 // String returns the string representation of the GitOpsEngine.
 func (g *GitOpsEngine) String() string {
 	return string(*g)
@@ -526,6 +591,16 @@ func (g *GitOpsEngine) String() string {
 // Type returns the type of the GitOpsEngine.
 func (g *GitOpsEngine) Type() string {
 	return "GitOpsEngine"
+}
+
+// Default returns the default value for GitOpsEngine (None).
+func (g *GitOpsEngine) Default() any {
+	return GitOpsEngineNone
+}
+
+// ValidValues returns all valid GitOpsEngine values as strings.
+func (g *GitOpsEngine) ValidValues() []string {
+	return []string{string(GitOpsEngineNone), string(GitOpsEngineFlux), string(GitOpsEngineArgoCD)}
 }
 
 // String returns the string representation of the CNI.
@@ -538,6 +613,16 @@ func (c *CNI) Type() string {
 	return "CNI"
 }
 
+// Default returns the default value for CNI (Default).
+func (c *CNI) Default() any {
+	return CNIDefault
+}
+
+// ValidValues returns all valid CNI values as strings.
+func (c *CNI) ValidValues() []string {
+	return []string{string(CNIDefault), string(CNICilium), string(CNICalico)}
+}
+
 // String returns the string representation of the CSI.
 func (c *CSI) String() string {
 	return string(*c)
@@ -546,6 +631,16 @@ func (c *CSI) String() string {
 // Type returns the type of the CSI.
 func (c *CSI) Type() string {
 	return "CSI"
+}
+
+// Default returns the default value for CSI (Default).
+func (c *CSI) Default() any {
+	return CSIDefault
+}
+
+// ValidValues returns all valid CSI values as strings.
+func (c *CSI) ValidValues() []string {
+	return []string{string(CSIDefault), string(CSILocalPathStorage)}
 }
 
 // String returns the string representation of the MetricsServer.
@@ -558,6 +653,20 @@ func (m *MetricsServer) Type() string {
 	return "MetricsServer"
 }
 
+// Default returns the default value for MetricsServer (Enabled).
+func (m *MetricsServer) Default() any {
+	return MetricsServerEnabled
+}
+
+// ValidValues returns all valid MetricsServer values as strings.
+func (m *MetricsServer) ValidValues() []string {
+	return []string{
+		string(MetricsServerDefault),
+		string(MetricsServerEnabled),
+		string(MetricsServerDisabled),
+	}
+}
+
 // String returns the string representation of the CertManager.
 func (c *CertManager) String() string {
 	return string(*c)
@@ -566,4 +675,38 @@ func (c *CertManager) String() string {
 // Type returns the type of the CertManager.
 func (c *CertManager) Type() string {
 	return "CertManager"
+}
+
+// Default returns the default value for CertManager (Disabled).
+func (c *CertManager) Default() any {
+	return CertManagerDisabled
+}
+
+// ValidValues returns all valid CertManager values as strings.
+func (c *CertManager) ValidValues() []string {
+	return []string{string(CertManagerEnabled), string(CertManagerDisabled)}
+}
+
+// String returns the string representation of the PolicyEngine.
+func (p *PolicyEngine) String() string {
+	return string(*p)
+}
+
+// Type returns the type of the PolicyEngine.
+func (p *PolicyEngine) Type() string {
+	return "PolicyEngine"
+}
+
+// Default returns the default value for PolicyEngine (None).
+func (p *PolicyEngine) Default() any {
+	return PolicyEngineNone
+}
+
+// ValidValues returns all valid PolicyEngine values as strings.
+func (p *PolicyEngine) ValidValues() []string {
+	return []string{
+		string(PolicyEngineNone),
+		string(PolicyEngineKyverno),
+		string(PolicyEngineGatekeeper),
+	}
 }
