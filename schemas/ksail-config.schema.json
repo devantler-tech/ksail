@@ -78,6 +78,9 @@
                 "Disabled"
               ]
             },
+            "policyEngine": {
+              "type": "string"
+            },
             "localRegistry": {
               "type": "string",
               "enum": [
