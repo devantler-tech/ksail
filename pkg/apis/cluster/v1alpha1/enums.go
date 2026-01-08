@@ -1,0 +1,462 @@
+package v1alpha1
+
+import (
+	"fmt"
+	"slices"
+	"strings"
+)
+
+// --- Enum Interface ---
+
+// EnumValuer is implemented by string-based enum types to provide their valid values.
+// The schema generator uses this interface to automatically discover enum constraints.
+type EnumValuer interface {
+	// ValidValues returns all valid string values for this enum type.
+	ValidValues() []string
+}
+
+// --- Distribution Types ---
+
+// Distribution defines the distribution options for a KSail cluster.
+type Distribution string
+
+const (
+	// DistributionKind is the kind distribution.
+	DistributionKind Distribution = "Kind"
+	// DistributionK3d is the K3d distribution.
+	DistributionK3d Distribution = "K3d"
+	// DistributionTalos is the Talos distribution.
+	DistributionTalos Distribution = "Talos"
+)
+
+// ProvidesMetricsServerByDefault returns true if the distribution includes metrics-server by default.
+// K3d (based on K3s) includes metrics-server, Kind and Talos do not.
+func (d *Distribution) ProvidesMetricsServerByDefault() bool {
+	switch *d {
+	case DistributionK3d:
+		return true
+	case DistributionKind, DistributionTalos:
+		return false
+	default:
+		return false
+	}
+}
+
+// ProvidesStorageByDefault returns true if the distribution includes a storage provisioner by default.
+// K3d (based on K3s) includes local-path-provisioner, Kind and Talos do not have a default storage class.
+func (d *Distribution) ProvidesStorageByDefault() bool {
+	switch *d {
+	case DistributionK3d:
+		return true
+	case DistributionKind, DistributionTalos:
+		return false
+	default:
+		return false
+	}
+}
+
+// Set for Distribution (pflag.Value interface).
+func (d *Distribution) Set(value string) error {
+	for _, dist := range ValidDistributions() {
+		if strings.EqualFold(value, string(dist)) {
+			*d = dist
+
+			return nil
+		}
+	}
+
+	return fmt.Errorf("%w: %s (valid options: %s, %s, %s)",
+		ErrInvalidDistribution, value, DistributionKind, DistributionK3d, DistributionTalos)
+}
+
+// IsValid checks if the distribution value is supported.
+func (d *Distribution) IsValid() bool {
+	return slices.Contains(ValidDistributions(), *d)
+}
+
+// String returns the string representation of the Distribution.
+func (d *Distribution) String() string {
+	return string(*d)
+}
+
+// Type returns the type of the Distribution.
+func (d *Distribution) Type() string {
+	return "Distribution"
+}
+
+// Default returns the default value for Distribution (Kind).
+func (d *Distribution) Default() any {
+	return DistributionKind
+}
+
+// ValidValues returns all valid Distribution values as strings.
+func (d *Distribution) ValidValues() []string {
+	return []string{string(DistributionKind), string(DistributionK3d), string(DistributionTalos)}
+}
+
+// --- CNI Types ---
+
+// CNI defines the CNI options for a KSail cluster.
+type CNI string
+
+const (
+	// CNIDefault is the default CNI.
+	CNIDefault CNI = "Default"
+	// CNICilium is the Cilium CNI.
+	CNICilium CNI = "Cilium"
+	// CNICalico is the Calico CNI.
+	CNICalico CNI = "Calico"
+)
+
+// Set for CNI (pflag.Value interface).
+func (c *CNI) Set(value string) error {
+	for _, cni := range ValidCNIs() {
+		if strings.EqualFold(value, string(cni)) {
+			*c = cni
+
+			return nil
+		}
+	}
+
+	return fmt.Errorf("%w: %s (valid options: %s, %s, %s)",
+		ErrInvalidCNI, value, CNIDefault, CNICilium, CNICalico)
+}
+
+// String returns the string representation of the CNI.
+func (c *CNI) String() string {
+	return string(*c)
+}
+
+// Type returns the type of the CNI.
+func (c *CNI) Type() string {
+	return "CNI"
+}
+
+// Default returns the default value for CNI (Default).
+func (c *CNI) Default() any {
+	return CNIDefault
+}
+
+// ValidValues returns all valid CNI values as strings.
+func (c *CNI) ValidValues() []string {
+	return []string{string(CNIDefault), string(CNICilium), string(CNICalico)}
+}
+
+// --- CSI Types ---
+
+// CSI defines the CSI options for a KSail cluster.
+type CSI string
+
+const (
+	// CSIDefault is the default CSI.
+	CSIDefault CSI = "Default"
+	// CSILocalPathStorage is the LocalPathStorage CSI.
+	CSILocalPathStorage CSI = "LocalPathStorage"
+)
+
+// Set for CSI (pflag.Value interface).
+func (c *CSI) Set(value string) error {
+	for _, csi := range ValidCSIs() {
+		if strings.EqualFold(value, string(csi)) {
+			*c = csi
+
+			return nil
+		}
+	}
+
+	return fmt.Errorf("%w: %s (valid options: %s, %s)",
+		ErrInvalidCSI, value, CSIDefault, CSILocalPathStorage)
+}
+
+// String returns the string representation of the CSI.
+func (c *CSI) String() string {
+	return string(*c)
+}
+
+// Type returns the type of the CSI.
+func (c *CSI) Type() string {
+	return "CSI"
+}
+
+// Default returns the default value for CSI (Default).
+func (c *CSI) Default() any {
+	return CSIDefault
+}
+
+// ValidValues returns all valid CSI values as strings.
+func (c *CSI) ValidValues() []string {
+	return []string{string(CSIDefault), string(CSILocalPathStorage)}
+}
+
+// --- Metrics Server Types ---
+
+// MetricsServer defines the Metrics Server options for a KSail cluster.
+type MetricsServer string
+
+const (
+	// MetricsServerDefault relies on the distribution's default behavior for metrics server.
+	MetricsServerDefault MetricsServer = "Default"
+	// MetricsServerEnabled ensures Metrics Server is installed.
+	MetricsServerEnabled MetricsServer = "Enabled"
+	// MetricsServerDisabled ensures Metrics Server is not installed.
+	MetricsServerDisabled MetricsServer = "Disabled"
+)
+
+// Set for MetricsServer (pflag.Value interface).
+func (m *MetricsServer) Set(value string) error {
+	for _, ms := range ValidMetricsServers() {
+		if strings.EqualFold(value, string(ms)) {
+			*m = ms
+
+			return nil
+		}
+	}
+
+	return fmt.Errorf(
+		"%w: %s (valid options: %s, %s, %s)",
+		ErrInvalidMetricsServer,
+		value,
+		MetricsServerDefault,
+		MetricsServerEnabled,
+		MetricsServerDisabled,
+	)
+}
+
+// String returns the string representation of the MetricsServer.
+func (m *MetricsServer) String() string {
+	return string(*m)
+}
+
+// Type returns the type of the MetricsServer.
+func (m *MetricsServer) Type() string {
+	return "MetricsServer"
+}
+
+// Default returns the default value for MetricsServer (Default, which defers to the distribution).
+func (m *MetricsServer) Default() any {
+	return MetricsServerDefault
+}
+
+// ValidValues returns all valid MetricsServer values as strings.
+func (m *MetricsServer) ValidValues() []string {
+	return []string{
+		string(MetricsServerDefault),
+		string(MetricsServerEnabled),
+		string(MetricsServerDisabled),
+	}
+}
+
+// --- Cert-Manager Types ---
+
+// CertManager defines the cert-manager options for a KSail cluster.
+type CertManager string
+
+const (
+	// CertManagerEnabled ensures cert-manager is installed.
+	CertManagerEnabled CertManager = "Enabled"
+	// CertManagerDisabled ensures cert-manager is not installed.
+	CertManagerDisabled CertManager = "Disabled"
+)
+
+// Set for CertManager (pflag.Value interface).
+func (c *CertManager) Set(value string) error {
+	for _, cm := range ValidCertManagers() {
+		if strings.EqualFold(value, string(cm)) {
+			*c = cm
+
+			return nil
+		}
+	}
+
+	return fmt.Errorf(
+		"%w: %s (valid options: %s, %s)",
+		ErrInvalidCertManager,
+		value,
+		CertManagerEnabled,
+		CertManagerDisabled,
+	)
+}
+
+// String returns the string representation of the CertManager.
+func (c *CertManager) String() string {
+	return string(*c)
+}
+
+// Type returns the type of the CertManager.
+func (c *CertManager) Type() string {
+	return "CertManager"
+}
+
+// Default returns the default value for CertManager (Disabled).
+func (c *CertManager) Default() any {
+	return CertManagerDisabled
+}
+
+// ValidValues returns all valid CertManager values as strings.
+func (c *CertManager) ValidValues() []string {
+	return []string{string(CertManagerEnabled), string(CertManagerDisabled)}
+}
+
+// --- Policy Engine Types ---
+
+// PolicyEngine defines the policy engine options for a KSail cluster.
+type PolicyEngine string
+
+const (
+	// PolicyEngineNone is the default and disables policy engine installation.
+	PolicyEngineNone PolicyEngine = "None"
+	// PolicyEngineKyverno installs Kyverno.
+	PolicyEngineKyverno PolicyEngine = "Kyverno"
+	// PolicyEngineGatekeeper installs OPA Gatekeeper.
+	PolicyEngineGatekeeper PolicyEngine = "Gatekeeper"
+)
+
+// Set for PolicyEngine (pflag.Value interface).
+func (p *PolicyEngine) Set(value string) error {
+	for _, pe := range ValidPolicyEngines() {
+		if strings.EqualFold(value, string(pe)) {
+			*p = pe
+
+			return nil
+		}
+	}
+
+	return fmt.Errorf(
+		"%w: %s (valid options: %s, %s, %s)",
+		ErrInvalidPolicyEngine,
+		value,
+		PolicyEngineNone,
+		PolicyEngineKyverno,
+		PolicyEngineGatekeeper,
+	)
+}
+
+// String returns the string representation of the PolicyEngine.
+func (p *PolicyEngine) String() string {
+	return string(*p)
+}
+
+// Type returns the type of the PolicyEngine.
+func (p *PolicyEngine) Type() string {
+	return "PolicyEngine"
+}
+
+// Default returns the default value for PolicyEngine (None).
+func (p *PolicyEngine) Default() any {
+	return PolicyEngineNone
+}
+
+// ValidValues returns all valid PolicyEngine values as strings.
+func (p *PolicyEngine) ValidValues() []string {
+	return []string{
+		string(PolicyEngineNone),
+		string(PolicyEngineKyverno),
+		string(PolicyEngineGatekeeper),
+	}
+}
+
+// --- Local Registry Types ---
+
+// LocalRegistry defines how the host-local OCI registry should behave.
+type LocalRegistry string
+
+const (
+	// LocalRegistryEnabled provisions and manages the local registry lifecycle.
+	LocalRegistryEnabled LocalRegistry = "Enabled"
+	// LocalRegistryDisabled skips local registry provisioning.
+	LocalRegistryDisabled LocalRegistry = "Disabled"
+)
+
+// Set for LocalRegistry (pflag.Value interface).
+func (l *LocalRegistry) Set(value string) error {
+	for _, mode := range ValidLocalRegistryModes() {
+		if strings.EqualFold(value, string(mode)) {
+			*l = mode
+
+			return nil
+		}
+	}
+
+	return fmt.Errorf(
+		"%w: %s (valid options: %s, %s)",
+		ErrInvalidLocalRegistry,
+		value,
+		LocalRegistryEnabled,
+		LocalRegistryDisabled,
+	)
+}
+
+// String returns the string representation of the LocalRegistry.
+func (l *LocalRegistry) String() string {
+	return string(*l)
+}
+
+// Type returns the type of the LocalRegistry.
+func (l *LocalRegistry) Type() string {
+	return "LocalRegistry"
+}
+
+// Default returns the default value for LocalRegistry (Disabled).
+func (l *LocalRegistry) Default() any {
+	return LocalRegistryDisabled
+}
+
+// ValidValues returns all valid LocalRegistry values as strings.
+func (l *LocalRegistry) ValidValues() []string {
+	return []string{string(LocalRegistryEnabled), string(LocalRegistryDisabled)}
+}
+
+// --- GitOps Engine Types ---
+
+// GitOpsEngine defines the GitOps Engine options for a KSail cluster.
+type GitOpsEngine string
+
+const (
+	// GitOpsEngineNone is the default and disables managed GitOps integration.
+	// It means "no GitOps engine" is configured for the cluster.
+	GitOpsEngineNone GitOpsEngine = "None"
+	// GitOpsEngineFlux installs and manages Flux controllers.
+	GitOpsEngineFlux GitOpsEngine = "Flux"
+	// GitOpsEngineArgoCD installs and manages Argo CD.
+	GitOpsEngineArgoCD GitOpsEngine = "ArgoCD"
+)
+
+// Set for GitOpsEngine (pflag.Value interface).
+func (g *GitOpsEngine) Set(value string) error {
+	for _, tool := range ValidGitOpsEngines() {
+		if strings.EqualFold(value, string(tool)) {
+			*g = tool
+
+			return nil
+		}
+	}
+
+	return fmt.Errorf(
+		"%w: %s (valid options: %s, %s, %s)",
+		ErrInvalidGitOpsEngine,
+		value,
+		GitOpsEngineNone,
+		GitOpsEngineFlux,
+		GitOpsEngineArgoCD,
+	)
+}
+
+// String returns the string representation of the GitOpsEngine.
+func (g *GitOpsEngine) String() string {
+	return string(*g)
+}
+
+// Type returns the type of the GitOpsEngine.
+func (g *GitOpsEngine) Type() string {
+	return "GitOpsEngine"
+}
+
+// Default returns the default value for GitOpsEngine (None).
+func (g *GitOpsEngine) Default() any {
+	return GitOpsEngineNone
+}
+
+// ValidValues returns all valid GitOpsEngine values as strings.
+func (g *GitOpsEngine) ValidValues() []string {
+	return []string{string(GitOpsEngineNone), string(GitOpsEngineFlux), string(GitOpsEngineArgoCD)}
+}
