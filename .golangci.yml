@@ -86,6 +86,12 @@ linters:
           - funlen
         path: pkg/svc/provisioner/registry/local_registry_service_test.go
       - linters:
+          - tagalign
+        path: pkg/apis/cluster/v1alpha1/types.go
+      - linters:
+          - tagalign
+        path: pkg/apis/cluster/v1alpha1/options.go
+      - linters:
           - revive
         text: "var-naming: avoid package names that conflict with Go standard library package names"
         path: pkg/io/
