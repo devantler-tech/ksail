@@ -116,37 +116,32 @@ func walkSchema(schema *jsonschema.Schema, fn func(*jsonschema.Schema)) {
 }
 
 // customTypeMapper provides custom schema mappings for v1alpha1 types.
+// It automatically detects enum types that implement the EnumValuer interface.
 func customTypeMapper(t reflect.Type) *jsonschema.Schema {
-	switch t {
-	case reflect.TypeFor[metav1.Duration]():
+	// Check if this type implements EnumValuer (try pointer receiver first)
+	enumValuerType := reflect.TypeFor[v1alpha1.EnumValuer]()
+	ptrType := reflect.PointerTo(t)
+
+	if ptrType.Implements(enumValuerType) {
+		// Create a pointer to zero value and call ValidValues()
+		zero := reflect.New(t)
+		values := zero.Interface().(v1alpha1.EnumValuer).ValidValues()
+
+		enumVals := make([]any, len(values))
+		for i, v := range values {
+			enumVals[i] = v
+		}
+
+		return &jsonschema.Schema{Type: "string", Enum: enumVals}
+	}
+
+	// Special case for metav1.Duration
+	if t == reflect.TypeFor[metav1.Duration]() {
 		return &jsonschema.Schema{
 			Type:    "string",
 			Pattern: "^[0-9]+(ns|us|µs|ms|s|m|h)$",
 		}
-	case reflect.TypeFor[v1alpha1.Distribution]():
-		return enumSchema(v1alpha1.ValidDistributions())
-	case reflect.TypeFor[v1alpha1.CNI]():
-		return enumSchema(v1alpha1.ValidCNIs())
-	case reflect.TypeFor[v1alpha1.CSI]():
-		return enumSchema(v1alpha1.ValidCSIs())
-	case reflect.TypeFor[v1alpha1.MetricsServer]():
-		return enumSchema(v1alpha1.ValidMetricsServers())
-	case reflect.TypeFor[v1alpha1.CertManager]():
-		return enumSchema(v1alpha1.ValidCertManagers())
-	case reflect.TypeFor[v1alpha1.LocalRegistry]():
-		return enumSchema(v1alpha1.ValidLocalRegistryModes())
-	case reflect.TypeFor[v1alpha1.GitOpsEngine]():
-		return enumSchema(v1alpha1.ValidGitOpsEngines())
-	default:
-		return nil
 	}
-}
 
-// enumSchema creates a string enum schema from typed values.
-func enumSchema[T ~string](values []T) *jsonschema.Schema {
-	enums := make([]any, len(values))
-	for i, v := range values {
-		enums[i] = string(v)
-	}
-	return &jsonschema.Schema{Type: "string", Enum: enums}
+	return nil
 }

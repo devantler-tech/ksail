@@ -311,11 +311,6 @@ func InstallPolicyEngineSilent(
 		return fmt.Errorf("failed to create policy engine installer: %w", err)
 	}
 
-	// Skip installation if no policy engine is configured
-	if peInstaller == nil {
-		return nil
-	}
-
 	installErr := peInstaller.Install(ctx)
 	if installErr != nil {
 		return fmt.Errorf("failed to install policy engine: %w", installErr)

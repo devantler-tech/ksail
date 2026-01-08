@@ -176,6 +176,15 @@ type FluxKustomizationStatus struct {
 	Conditions []metav1.Condition `json:"conditions,omitzero"`
 }
 
+// --- Enum Interface ---
+
+// EnumValuer is implemented by string-based enum types to provide their valid values.
+// The schema generator uses this interface to automatically discover enum constraints.
+type EnumValuer interface {
+	// ValidValues returns all valid string values for this enum type.
+	ValidValues() []string
+}
+
 // --- Distribution Types ---
 
 // Distribution defines the distribution options for a KSail cluster.
@@ -544,6 +553,11 @@ func (l *LocalRegistry) Default() any {
 	return LocalRegistryDisabled
 }
 
+// ValidValues returns all valid LocalRegistry values as strings.
+func (l *LocalRegistry) ValidValues() []string {
+	return []string{string(LocalRegistryEnabled), string(LocalRegistryDisabled)}
+}
+
 // IsValid checks if the distribution value is supported.
 func (d *Distribution) IsValid() bool {
 	return slices.Contains(ValidDistributions(), *d)
@@ -564,6 +578,11 @@ func (d *Distribution) Default() any {
 	return DistributionKind
 }
 
+// ValidValues returns all valid Distribution values as strings.
+func (d *Distribution) ValidValues() []string {
+	return []string{string(DistributionKind), string(DistributionK3d), string(DistributionTalos)}
+}
+
 // String returns the string representation of the GitOpsEngine.
 func (g *GitOpsEngine) String() string {
 	return string(*g)
@@ -577,6 +596,11 @@ func (g *GitOpsEngine) Type() string {
 // Default returns the default value for GitOpsEngine (None).
 func (g *GitOpsEngine) Default() any {
 	return GitOpsEngineNone
+}
+
+// ValidValues returns all valid GitOpsEngine values as strings.
+func (g *GitOpsEngine) ValidValues() []string {
+	return []string{string(GitOpsEngineNone), string(GitOpsEngineFlux), string(GitOpsEngineArgoCD)}
 }
 
 // String returns the string representation of the CNI.
@@ -594,6 +618,11 @@ func (c *CNI) Default() any {
 	return CNIDefault
 }
 
+// ValidValues returns all valid CNI values as strings.
+func (c *CNI) ValidValues() []string {
+	return []string{string(CNIDefault), string(CNICilium), string(CNICalico)}
+}
+
 // String returns the string representation of the CSI.
 func (c *CSI) String() string {
 	return string(*c)
@@ -607,6 +636,11 @@ func (c *CSI) Type() string {
 // Default returns the default value for CSI (Default).
 func (c *CSI) Default() any {
 	return CSIDefault
+}
+
+// ValidValues returns all valid CSI values as strings.
+func (c *CSI) ValidValues() []string {
+	return []string{string(CSIDefault), string(CSILocalPathStorage)}
 }
 
 // String returns the string representation of the MetricsServer.
@@ -624,6 +658,15 @@ func (m *MetricsServer) Default() any {
 	return MetricsServerEnabled
 }
 
+// ValidValues returns all valid MetricsServer values as strings.
+func (m *MetricsServer) ValidValues() []string {
+	return []string{
+		string(MetricsServerDefault),
+		string(MetricsServerEnabled),
+		string(MetricsServerDisabled),
+	}
+}
+
 // String returns the string representation of the CertManager.
 func (c *CertManager) String() string {
 	return string(*c)
@@ -639,6 +682,11 @@ func (c *CertManager) Default() any {
 	return CertManagerDisabled
 }
 
+// ValidValues returns all valid CertManager values as strings.
+func (c *CertManager) ValidValues() []string {
+	return []string{string(CertManagerEnabled), string(CertManagerDisabled)}
+}
+
 // String returns the string representation of the PolicyEngine.
 func (p *PolicyEngine) String() string {
 	return string(*p)
@@ -652,4 +700,13 @@ func (p *PolicyEngine) Type() string {
 // Default returns the default value for PolicyEngine (None).
 func (p *PolicyEngine) Default() any {
 	return PolicyEngineNone
+}
+
+// ValidValues returns all valid PolicyEngine values as strings.
+func (p *PolicyEngine) ValidValues() []string {
+	return []string{
+		string(PolicyEngineNone),
+		string(PolicyEngineKyverno),
+		string(PolicyEngineGatekeeper),
+	}
 }
