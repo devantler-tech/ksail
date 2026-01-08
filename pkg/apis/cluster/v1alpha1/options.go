@@ -62,7 +62,7 @@ type OptionsArgoCD struct {
 
 // OptionsLocalRegistry defines options for the host-local OCI registry integration.
 type OptionsLocalRegistry struct {
-	HostPort int32 `default:"5111" json:"hostPort,omitzero"`
+	HostPort int32 `default:"5050" json:"hostPort,omitzero"`
 }
 
 // OptionsHelm defines options for the Helm tool.

@@ -23,7 +23,7 @@ Flags:
   -h, --help                           help for delete
   -k, --kubeconfig string              Path to kubeconfig file (default "~/.kube/config")
       --local-registry LocalRegistry   Local registry behavior (Enabled provisions a registry; Disabled skips provisioning. Defaults to Enabled when a GitOps engine is configured) (default Disabled)
-      --local-registry-port int32      Host port to expose the local OCI registry on (default 5111)
+      --local-registry-port int32      Host port to expose the local OCI registry on (default 5050)
 
 Global Flags:
       --timing   Show per-activity timing output

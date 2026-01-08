@@ -111,11 +111,11 @@ Run local [OCI registries](concepts.md#oci-registries) for faster development cy
 ### Local Registry
 
 ```bash
-ksail cluster init --local-registry Enabled --local-registry-port 5111
+ksail cluster init --local-registry Enabled --local-registry-port 5050
 ksail cluster create
 
-docker tag my-app localhost:5111/my-app
-docker push localhost:5111/my-app
+docker tag my-app localhost:5050/my-app
+docker push localhost:5050/my-app
 ```
 
 **Benefits:** Faster image pulls, GitOps integration, isolated development
