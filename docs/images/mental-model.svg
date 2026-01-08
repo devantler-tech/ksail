@@ -180,8 +180,8 @@
 
   <!-- Header Tagline - moved down slightly -->
   <g transform="translate(480, 28)">
-    <text x="0" y="0" text-anchor="middle" fill="#94a3b8" font-size="12" font-weight="600" letter-spacing="2.5" opacity="0.85">HOW IT WORKS</text>
-    <rect x="-42" y="6" width="84" height="2" rx="1" fill="url(#gradKSail)" opacity="0.6" />
+    <text x="0" y="0" text-anchor="middle" fill="#e2e8f0" font-size="13" font-weight="700" letter-spacing="3" opacity="0.95">HOW IT WORKS</text>
+    <rect x="-48" y="6" width="96" height="2.5" rx="1.25" fill="url(#gradKSail)" opacity="0.75" />
   </g>
 
   <!-- Subtle stars for atmosphere -->
@@ -235,22 +235,22 @@
 
   <!-- Step indicators with labels -->
   <g transform="translate(170, 165)">
-    <circle r="16" fill="#0a0f1a" stroke="url(#stepGrad)" stroke-width="2" />
-    <circle r="12" fill="url(#stepGrad)" opacity="0.9" />
-    <text x="0" y="5" text-anchor="middle" fill="#fff" font-size="12" font-weight="800">1</text>
-    <text x="0" y="30" text-anchor="middle" fill="#22d3ee" font-size="9" font-weight="600" opacity="0.8">Define</text>
+    <circle r="18" fill="#0a0f1a" stroke="url(#stepGrad)" stroke-width="2.5" />
+    <circle r="13" fill="url(#stepGrad)" opacity="0.95" />
+    <text x="0" y="5" text-anchor="middle" fill="#fff" font-size="13" font-weight="800">1</text>
+    <text x="0" y="32" text-anchor="middle" fill="#22d3ee" font-size="10" font-weight="700" opacity="0.95">Define</text>
   </g>
   <g transform="translate(790, 165)">
-    <circle r="16" fill="#0a0f1a" stroke="url(#stepGrad)" stroke-width="2" />
-    <circle r="12" fill="url(#stepGrad)" opacity="0.9" />
-    <text x="0" y="5" text-anchor="middle" fill="#fff" font-size="12" font-weight="800">2</text>
-    <text x="0" y="30" text-anchor="middle" fill="#22d3ee" font-size="9" font-weight="600" opacity="0.8">Execute</text>
+    <circle r="18" fill="#0a0f1a" stroke="url(#stepGrad)" stroke-width="2.5" />
+    <circle r="13" fill="url(#stepGrad)" opacity="0.95" />
+    <text x="0" y="5" text-anchor="middle" fill="#fff" font-size="13" font-weight="800">2</text>
+    <text x="0" y="32" text-anchor="middle" fill="#22d3ee" font-size="10" font-weight="700" opacity="0.95">Execute</text>
   </g>
-  <g transform="translate(480, 468)">
-    <circle r="16" fill="#0a0f1a" stroke="url(#stepGrad)" stroke-width="2" />
-    <circle r="12" fill="url(#stepGrad)" opacity="0.9" />
-    <text x="0" y="5" text-anchor="middle" fill="#fff" font-size="12" font-weight="800">3</text>
-    <text x="0" y="30" text-anchor="middle" fill="#22d3ee" font-size="9" font-weight="600" opacity="0.8">Deploy</text>
+  <g transform="translate(480, 438)">
+    <circle r="18" fill="#0a0f1a" stroke="url(#stepGrad)" stroke-width="2.5" />
+    <circle r="13" fill="url(#stepGrad)" opacity="0.95" />
+    <text x="0" y="5" text-anchor="middle" fill="#fff" font-size="13" font-weight="800">3</text>
+    <text x="0" y="32" text-anchor="middle" fill="#22d3ee" font-size="10" font-weight="700" opacity="0.95">Deploy</text>
   </g>
 
   <!-- Connection Lines with enhanced styling -->
@@ -259,15 +259,15 @@
     <animate attributeName="stroke-dashoffset" from="26" to="0" dur="2s" repeatCount="indefinite" />
   </path>
   <g transform="translate(305, 140)">
-    <rect x="-20" y="-11" width="40" height="18" rx="9" fill="#0f172a" stroke="#f59e0b" stroke-width="1.5" />
-    <text x="0" y="4" text-anchor="middle" fill="#fcd34d" font-size="9" font-weight="700" letter-spacing="0.5">edit</text>
+    <rect x="-24" y="-13" width="48" height="22" rx="11" fill="#0f172a" stroke="#f59e0b" stroke-width="1.8" />
+    <text x="0" y="5" text-anchor="middle" fill="#fcd34d" font-size="10" font-weight="700" letter-spacing="0.5">edit</text>
   </g>
 
   <!-- Developer to KSail -->
   <path d="M 560 115 Q 660 145, 710 205" fill="none" stroke="url(#gradDev)" stroke-width="2.5" marker-end="url(#arrowDev)" opacity="0.95" />
   <g transform="translate(650, 140)">
-    <rect x="-18" y="-11" width="36" height="18" rx="9" fill="#0f172a" stroke="#f59e0b" stroke-width="1.5" />
-    <text x="0" y="4" text-anchor="middle" fill="#fcd34d" font-size="9" font-weight="700" letter-spacing="0.5">run</text>
+    <rect x="-22" y="-13" width="44" height="22" rx="11" fill="#0f172a" stroke="#f59e0b" stroke-width="1.8" />
+    <text x="0" y="5" text-anchor="middle" fill="#fcd34d" font-size="10" font-weight="700" letter-spacing="0.5">run</text>
   </g>
 
   <!-- Project <-> KSail sync line -->
@@ -306,26 +306,26 @@
   </g>
   <!-- Config sync label -->
   <g transform="translate(480, 340)">
-    <rect x="-42" y="-11" width="84" height="20" rx="10" fill="#0a0f1a" stroke="url(#syncGrad)" stroke-width="1.5" />
-    <text x="0" y="4" text-anchor="middle" fill="#e2e8f0" font-size="10" font-weight="700" letter-spacing="0.5">config sync</text>
+    <rect x="-48" y="-12" width="96" height="22" rx="11" fill="#0a0f1a" stroke="url(#syncGrad)" stroke-width="1.8" />
+    <text x="0" y="5" text-anchor="middle" fill="#e2e8f0" font-size="11" font-weight="700" letter-spacing="0.5">config sync</text>
   </g>
 
   <!-- KSail to Cluster - main provisioning path -->
-  <path d="M 710 365 Q 680 425, 600 495" fill="none" stroke="url(#gradKSail)" stroke-width="3.5" marker-end="url(#arrowKSail)" />
+  <path d="M 710 365 Q 680 415, 600 500" fill="none" stroke="url(#gradKSail)" stroke-width="3.5" marker-end="url(#arrowKSail)" />
   <!-- Glow effect for the main action path -->
-  <path d="M 710 365 Q 680 425, 600 495" fill="none" stroke="#22c55e" stroke-width="6" opacity="0.15" />
-  <g transform="translate(668, 430)">
-    <rect x="-40" y="-12" width="80" height="20" rx="10" fill="#0a0f1a" stroke="#22c55e" stroke-width="1.5" />
-    <text x="0" y="5" text-anchor="middle" fill="#4ade80" font-size="10" font-weight="700" letter-spacing="0.5">provisions</text>
+  <path d="M 710 365 Q 680 415, 600 500" fill="none" stroke="#22c55e" stroke-width="6" opacity="0.15" />
+  <g transform="translate(672, 418)">
+    <rect x="-46" y="-13" width="92" height="24" rx="12" fill="#0a0f1a" stroke="#22c55e" stroke-width="1.8" />
+    <text x="0" y="6" text-anchor="middle" fill="#4ade80" font-size="11" font-weight="700" letter-spacing="0.5">provisions</text>
   </g>
 
   <!-- Project to Cluster (GitOps) - declarative path -->
-  <path d="M 250 365 Q 280 435, 360 495" fill="none" stroke="url(#gradProject)" stroke-width="2" stroke-dasharray="8,5" marker-end="url(#arrowProject)" opacity="0.7">
+  <path d="M 250 365 Q 280 425, 360 500" fill="none" stroke="url(#gradProject)" stroke-width="2" stroke-dasharray="8,5" marker-end="url(#arrowProject)" opacity="0.7">
     <animate attributeName="stroke-dashoffset" from="26" to="0" dur="2.5s" repeatCount="indefinite" />
   </path>
-  <g transform="translate(292, 432)">
-    <rect x="-36" y="-12" width="72" height="20" rx="10" fill="#0a0f1a" stroke="#8b5cf6" stroke-width="1.3" />
-    <text x="0" y="5" text-anchor="middle" fill="#c084fc" font-size="10" font-weight="600" letter-spacing="0.5">GitOps</text>
+  <g transform="translate(282, 412)">
+    <rect x="-42" y="-13" width="84" height="24" rx="12" fill="#0a0f1a" stroke="#8b5cf6" stroke-width="1.5" />
+    <text x="0" y="6" text-anchor="middle" fill="#c084fc" font-size="11" font-weight="700" letter-spacing="0.5">GitOps</text>
   </g>
 
   <!-- ===== DEVELOPER CARD ===== -->
@@ -357,8 +357,8 @@
     </g>
 
     <!-- Text -->
-    <text x="80" y="36" fill="#fcd34d" font-size="16" font-weight="700" letter-spacing="0.8">DEVELOPER</text>
-    <text x="80" y="54" fill="#cbd5e1" font-size="11" font-weight="500" opacity="0.9">Your local machine</text>
+    <text x="80" y="36" fill="#fcd34d" font-size="17" font-weight="700" letter-spacing="1">DEVELOPER</text>
+    <text x="80" y="55" fill="#e2e8f0" font-size="11" font-weight="500" opacity="0.95">Your local machine</text>
   </g>
 
   <!-- ===== PROJECT CARD ===== -->
@@ -381,8 +381,8 @@
     </g>
 
     <!-- Text -->
-    <text x="72" y="38" fill="#c084fc" font-size="16" font-weight="700" letter-spacing="0.8">PROJECT</text>
-    <text x="72" y="56" fill="#cbd5e1" font-size="11" font-weight="500" opacity="0.9">Git Repository</text>
+    <text x="72" y="38" fill="#c084fc" font-size="17" font-weight="700" letter-spacing="1">PROJECT</text>
+    <text x="72" y="57" fill="#e2e8f0" font-size="11" font-weight="500" opacity="0.95">Git Repository</text>
 
     <!-- File Browser with enhanced styling -->
     <rect x="16" y="78" width="228" height="66" rx="10" fill="#0a0f1a" stroke="#334155" stroke-width="1" />
@@ -472,13 +472,13 @@
     </g>
 
     <!-- Text with enhanced styling and glow -->
-    <text x="78" y="34" fill="#4ade80" font-size="26" font-weight="800" letter-spacing="2" filter="url(#textGlow)">KSAIL</text>
+    <text x="78" y="34" fill="#4ade80" font-size="28" font-weight="800" letter-spacing="2.5" filter="url(#textGlow)">KSAIL</text>
     <!-- CLI badge -->
-    <g transform="translate(175, 18)">
-      <rect x="0" y="0" width="36" height="18" rx="5" fill="#0f172a" stroke="#22c55e" stroke-width="1.2" />
-      <text x="18" y="13" text-anchor="middle" fill="#4ade80" font-size="9" font-weight="700">CLI</text>
+    <g transform="translate(182, 16)">
+      <rect x="0" y="0" width="40" height="20" rx="6" fill="#0f172a" stroke="#22c55e" stroke-width="1.5" />
+      <text x="20" y="14" text-anchor="middle" fill="#4ade80" font-size="10" font-weight="700">CLI</text>
     </g>
-    <text x="78" y="54" fill="#86efac" font-size="11" font-weight="600" letter-spacing="1">One Binary • All Tools</text>
+    <text x="78" y="55" fill="#86efac" font-size="12" font-weight="600" letter-spacing="1.2">One Binary • All Tools</text>
 
     <!-- Terminal Window with enhanced styling -->
     <rect x="16" y="78" width="228" height="66" rx="10" fill="#020617" stroke="#16532d" stroke-width="1.5" />
@@ -546,43 +546,43 @@
     </g>
 
     <!-- Text with enhanced styling -->
-    <text x="108" y="38" fill="#60a5fa" font-size="18" font-weight="700" letter-spacing="0.8">KUBERNETES CLUSTER</text>
-    <text x="108" y="56" fill="#94a3b8" font-size="11" font-weight="500" opacity="0.9">Kind • K3d • Talos</text>
+    <text x="108" y="38" fill="#60a5fa" font-size="19" font-weight="700" letter-spacing="1">KUBERNETES CLUSTER</text>
+    <text x="108" y="57" fill="#e2e8f0" font-size="12" font-weight="500" opacity="0.95">Kind • K3d • Talos</text>
 
     <!-- Feature Pills - Single row with key features -->
     <g transform="translate(108, 70)">
-      <rect x="0" y="0" width="38" height="20" rx="10" fill="#22c55e" fill-opacity="0.15" stroke="#22c55e" stroke-width="1.3" />
-      <text x="19" y="14" text-anchor="middle" fill="#4ade80" font-size="9" font-weight="700">Flux</text>
+      <rect x="0" y="0" width="40" height="22" rx="11" fill="#22c55e" fill-opacity="0.18" stroke="#22c55e" stroke-width="1.5" />
+      <text x="20" y="15" text-anchor="middle" fill="#4ade80" font-size="10" font-weight="700">Flux</text>
 
-      <rect x="44" y="0" width="52" height="20" rx="10" fill="#f59e0b" fill-opacity="0.15" stroke="#f59e0b" stroke-width="1.3" />
-      <text x="70" y="14" text-anchor="middle" fill="#fbbf24" font-size="9" font-weight="700">ArgoCD</text>
+      <rect x="46" y="0" width="56" height="22" rx="11" fill="#f59e0b" fill-opacity="0.18" stroke="#f59e0b" stroke-width="1.5" />
+      <text x="74" y="15" text-anchor="middle" fill="#fbbf24" font-size="10" font-weight="700">ArgoCD</text>
 
-      <rect x="102" y="0" width="42" height="20" rx="10" fill="#8b5cf6" fill-opacity="0.15" stroke="#8b5cf6" stroke-width="1.3" />
-      <text x="123" y="14" text-anchor="middle" fill="#c084fc" font-size="9" font-weight="700">SOPS</text>
+      <rect x="108" y="0" width="46" height="22" rx="11" fill="#8b5cf6" fill-opacity="0.18" stroke="#8b5cf6" stroke-width="1.5" />
+      <text x="131" y="15" text-anchor="middle" fill="#c084fc" font-size="10" font-weight="700">SOPS</text>
 
-      <rect x="150" y="0" width="46" height="20" rx="10" fill="#3b82f6" fill-opacity="0.15" stroke="#3b82f6" stroke-width="1.3" />
-      <text x="173" y="14" text-anchor="middle" fill="#60a5fa" font-size="9" font-weight="700">Cilium</text>
+      <rect x="160" y="0" width="50" height="22" rx="11" fill="#3b82f6" fill-opacity="0.18" stroke="#3b82f6" stroke-width="1.5" />
+      <text x="185" y="15" text-anchor="middle" fill="#60a5fa" font-size="10" font-weight="700">Cilium</text>
 
-      <rect x="202" y="0" width="54" height="20" rx="10" fill="#ec4899" fill-opacity="0.15" stroke="#ec4899" stroke-width="1.3" />
-      <text x="229" y="14" text-anchor="middle" fill="#f472b6" font-size="9" font-weight="700">Kyverno</text>
+      <rect x="216" y="0" width="58" height="22" rx="11" fill="#ec4899" fill-opacity="0.18" stroke="#ec4899" stroke-width="1.5" />
+      <text x="245" y="15" text-anchor="middle" fill="#f472b6" font-size="10" font-weight="700">Kyverno</text>
 
-      <rect x="262" y="0" width="62" height="20" rx="10" fill="#14b8a6" fill-opacity="0.15" stroke="#14b8a6" stroke-width="1.3" />
-      <text x="293" y="14" text-anchor="middle" fill="#2dd4bf" font-size="9" font-weight="700">Gatekeeper</text>
+      <rect x="280" y="0" width="40" height="22" rx="11" fill="#64748b" fill-opacity="0.18" stroke="#64748b" stroke-width="1.5" />
+      <text x="300" y="15" text-anchor="middle" fill="#94a3b8" font-size="10" font-weight="700">+4</text>
     </g>
 
     <!-- Secondary features row -->
-    <g transform="translate(108, 95)">
-      <rect x="0" y="0" width="70" height="18" rx="9" fill="#06b6d4" fill-opacity="0.12" stroke="#06b6d4" stroke-width="1" opacity="0.8" />
-      <text x="35" y="13" text-anchor="middle" fill="#22d3ee" font-size="8" font-weight="600">cert-manager</text>
+    <g transform="translate(108, 97)">
+      <rect x="0" y="0" width="78" height="20" rx="10" fill="#06b6d4" fill-opacity="0.15" stroke="#06b6d4" stroke-width="1.2" opacity="0.9" />
+      <text x="39" y="14" text-anchor="middle" fill="#22d3ee" font-size="9" font-weight="600">cert-manager</text>
 
-      <rect x="76" y="0" width="66" height="18" rx="9" fill="#10b981" fill-opacity="0.12" stroke="#10b981" stroke-width="1" opacity="0.8" />
-      <text x="109" y="13" text-anchor="middle" fill="#6ee7b7" font-size="8" font-weight="600">metrics-server</text>
+      <rect x="84" y="0" width="76" height="20" rx="10" fill="#10b981" fill-opacity="0.15" stroke="#10b981" stroke-width="1.2" opacity="0.9" />
+      <text x="122" y="14" text-anchor="middle" fill="#6ee7b7" font-size="9" font-weight="600">metrics-server</text>
 
-      <rect x="148" y="0" width="65" height="18" rx="9" fill="#f97316" fill-opacity="0.12" stroke="#f97316" stroke-width="1" opacity="0.8" />
-      <text x="180" y="13" text-anchor="middle" fill="#fdba74" font-size="8" font-weight="600">local-registry</text>
+      <rect x="166" y="0" width="72" height="20" rx="10" fill="#f97316" fill-opacity="0.15" stroke="#f97316" stroke-width="1.2" opacity="0.9" />
+      <text x="202" y="14" text-anchor="middle" fill="#fdba74" font-size="9" font-weight="600">local-registry</text>
 
-      <rect x="219" y="0" width="55" height="18" rx="9" fill="#64748b" fill-opacity="0.12" stroke="#64748b" stroke-width="1" opacity="0.8" />
-      <text x="246" y="13" text-anchor="middle" fill="#94a3b8" font-size="8" font-weight="600">+ more</text>
+      <rect x="244" y="0" width="76" height="20" rx="10" fill="#14b8a6" fill-opacity="0.15" stroke="#14b8a6" stroke-width="1.2" opacity="0.9" />
+      <text x="282" y="14" text-anchor="middle" fill="#2dd4bf" font-size="9" font-weight="600">Gatekeeper</text>
     </g>
 
     <!-- Workloads Panel with enhanced styling -->
