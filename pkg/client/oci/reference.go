@@ -43,8 +43,8 @@ var (
 // Format: oci://<host>:<port>/<repository>/<optional-variant>:<ref>
 // Returns nil (not an error) when ref is empty, indicating defaults should be used.
 // Examples:
-//   - oci://localhost:5111/k8s:dev
-//   - oci://localhost:5111/my-app/base:v1.0.0
+//   - oci://localhost:5050/k8s:dev
+//   - oci://localhost:5050/my-app/base:v1.0.0
 //   - oci://registry.example.com:443/workloads:latest
 //
 //nolint:nilnil // Returning nil,nil is intentional to indicate "use defaults"

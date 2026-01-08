@@ -12,10 +12,10 @@ Examples:
   ksail workload push --path=./manifests
 
   # Push to explicit registry endpoint
-  ksail workload push oci://localhost:5111/k8s:dev
+  ksail workload push oci://localhost:5050/k8s:dev
 
   # Push with variant (subdirectory in repository)
-  ksail workload push oci://localhost:5111/my-app/base:v1.0.0 --path=./k8s
+  ksail workload push oci://localhost:5050/my-app/base:v1.0.0 --path=./k8s
 
 All parts of the OCI reference are optional and will be inferred:
   - host:port: Auto-detected from running local-registry container

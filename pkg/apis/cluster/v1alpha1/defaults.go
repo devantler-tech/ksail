@@ -12,7 +12,7 @@ const (
 	// DefaultKubeconfigPath is the default path to the kubeconfig file.
 	DefaultKubeconfigPath = "~/.kube/config"
 	// DefaultLocalRegistryPort is the default port for the local registry.
-	DefaultLocalRegistryPort int32 = 5111
+	DefaultLocalRegistryPort int32 = 5050
 )
 
 // ExpectedDistributionConfigName returns the default config filename for a distribution.
