@@ -45,17 +45,22 @@ func resolveDefaultClusterName(distribution v1alpha1.Distribution) string {
 }
 
 type componentRequirements struct {
-	needsMetricsServer bool
-	needsCSI           bool
-	needsCertManager   bool
-	needsPolicyEngine  bool
-	needsArgoCD        bool
-	needsFlux          bool
+	needsMetricsServer      bool
+	needsKubeletCSRApprover bool
+	needsCSI                bool
+	needsCertManager        bool
+	needsPolicyEngine       bool
+	needsArgoCD             bool
+	needsFlux               bool
 }
 
 func (r componentRequirements) count() int {
 	count := 0
 	if r.needsMetricsServer {
+		count++
+	}
+
+	if r.needsKubeletCSRApprover {
 		count++
 	}
 
@@ -83,13 +88,16 @@ func (r componentRequirements) count() int {
 }
 
 func getComponentRequirements(clusterCfg *v1alpha1.Cluster) componentRequirements {
+	needsMetricsServer := NeedsMetricsServerInstall(clusterCfg)
+
 	return componentRequirements{
-		needsMetricsServer: NeedsMetricsServerInstall(clusterCfg),
-		needsCSI:           clusterCfg.Spec.Cluster.CSI == v1alpha1.CSILocalPathStorage,
-		needsCertManager:   clusterCfg.Spec.Cluster.CertManager == v1alpha1.CertManagerEnabled,
-		needsPolicyEngine:  clusterCfg.Spec.Cluster.PolicyEngine != v1alpha1.PolicyEngineNone,
-		needsArgoCD:        clusterCfg.Spec.Cluster.GitOpsEngine == v1alpha1.GitOpsEngineArgoCD,
-		needsFlux:          clusterCfg.Spec.Cluster.GitOpsEngine == v1alpha1.GitOpsEngineFlux,
+		needsMetricsServer:      needsMetricsServer,
+		needsKubeletCSRApprover: needsMetricsServer, // Required for secure metrics-server TLS
+		needsCSI:                clusterCfg.Spec.Cluster.CSI == v1alpha1.CSILocalPathStorage,
+		needsCertManager:        clusterCfg.Spec.Cluster.CertManager == v1alpha1.CertManagerEnabled,
+		needsPolicyEngine:       clusterCfg.Spec.Cluster.PolicyEngine != v1alpha1.PolicyEngineNone,
+		needsArgoCD:             clusterCfg.Spec.Cluster.GitOpsEngine == v1alpha1.GitOpsEngineArgoCD,
+		needsFlux:               clusterCfg.Spec.Cluster.GitOpsEngine == v1alpha1.GitOpsEngineFlux,
 	}
 }
 
@@ -169,6 +177,13 @@ func buildComponentTasks(
 		tasks = append(
 			tasks,
 			newTask("metrics-server", clusterCfg, factories, InstallMetricsServerSilent),
+		)
+	}
+
+	if reqs.needsKubeletCSRApprover {
+		tasks = append(
+			tasks,
+			newTask("kubelet-csr-approver", clusterCfg, factories, InstallKubeletCSRApproverSilent),
 		)
 	}
 

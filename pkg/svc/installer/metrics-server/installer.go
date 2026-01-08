@@ -62,10 +62,9 @@ func (m *MetricsServerInstaller) helmInstallOrUpgradeMetricsServer(ctx context.C
 		Wait:        true,
 		WaitForJobs: true,
 		Timeout:     m.timeout,
-		// Values for local development clusters (Kind, K3d) with self-signed certificates:
-		// metrics-server needs to skip TLS verification and use InternalIP for node communication.
+		// Use InternalIP for node communication in local development clusters.
+		// Secure TLS is enabled by default - kubelet-csr-approver handles certificate approval.
 		ValuesYaml: `args:
-  - --kubelet-insecure-tls
   - --kubelet-preferred-address-types=InternalIP`,
 	}
 

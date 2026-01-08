@@ -726,11 +726,16 @@ func (s *Scaffolder) generateTalosConfig(output string, force bool) error {
 	disableDefaultCNI := s.KSailConfig.Spec.Cluster.CNI != v1alpha1.CNIDefault &&
 		s.KSailConfig.Spec.Cluster.CNI != ""
 
+	// Enable kubelet certificate rotation when metrics-server is explicitly enabled.
+	// This is required for secure TLS communication between metrics-server and kubelets.
+	enableKubeletCertRotation := s.KSailConfig.Spec.Cluster.MetricsServer == v1alpha1.MetricsServerEnabled
+
 	config := &talosgenerator.TalosConfig{
-		PatchesDir:        TalosConfigDir,
-		MirrorRegistries:  s.MirrorRegistries,
-		WorkerNodes:       workers,
-		DisableDefaultCNI: disableDefaultCNI,
+		PatchesDir:                TalosConfigDir,
+		MirrorRegistries:          s.MirrorRegistries,
+		WorkerNodes:               workers,
+		DisableDefaultCNI:         disableDefaultCNI,
+		EnableKubeletCertRotation: enableKubeletCertRotation,
 	}
 
 	opts := yamlgenerator.Options{
@@ -743,15 +748,19 @@ func (s *Scaffolder) generateTalosConfig(output string, force bool) error {
 		return fmt.Errorf("%w: %w", ErrTalosConfigGeneration, err)
 	}
 
-	s.notifyTalosGenerated(workers, disableDefaultCNI)
+	s.notifyTalosGenerated(workers, disableDefaultCNI, enableKubeletCertRotation)
 
 	return nil
 }
 
 // notifyTalosGenerated sends notifications about generated Talos files.
-func (s *Scaffolder) notifyTalosGenerated(workers int, disableDefaultCNI bool) {
+func (s *Scaffolder) notifyTalosGenerated(
+	workers int,
+	disableDefaultCNI, enableKubeletCertRotation bool,
+) {
 	// Determine which directories have patches (no .gitkeep generated there)
-	clusterHasPatches := workers == 0 || len(s.MirrorRegistries) > 0 || disableDefaultCNI
+	clusterHasPatches := workers == 0 || len(s.MirrorRegistries) > 0 || disableDefaultCNI ||
+		enableKubeletCertRotation
 
 	// Notify about .gitkeep files only for directories without patches
 	subdirs := []string{"cluster", "control-planes", "workers"}
@@ -761,51 +770,36 @@ func (s *Scaffolder) notifyTalosGenerated(workers int, disableDefaultCNI bool) {
 			continue
 		}
 
-		displayPath := filepath.Join(TalosConfigDir, subdir, ".gitkeep")
-		notify.WriteMessage(notify.Message{
-			Type:    notify.GenerateType,
-			Content: "created '%s'",
-			Args:    []any{displayPath},
-			Writer:  s.Writer,
-		})
+		s.notifyTalosPatchCreated(subdir, ".gitkeep")
 	}
 
-	// Notify about allow-scheduling-on-control-planes patch (only created when no workers)
-	if workers == 0 {
-		displayPath := filepath.Join(
-			TalosConfigDir,
-			"cluster",
-			"allow-scheduling-on-control-planes.yaml",
-		)
-		notify.WriteMessage(notify.Message{
-			Type:    notify.GenerateType,
-			Content: "created '%s'",
-			Args:    []any{displayPath},
-			Writer:  s.Writer,
-		})
+	// Notify about conditional patches using a slice to reduce complexity
+	patches := []struct {
+		condition bool
+		filename  string
+	}{
+		{workers == 0, "allow-scheduling-on-control-planes.yaml"},
+		{len(s.MirrorRegistries) > 0, "mirror-registries.yaml"},
+		{disableDefaultCNI, "disable-default-cni.yaml"},
+		{enableKubeletCertRotation, "kubelet-cert-rotation.yaml"},
 	}
 
-	// Notify about mirror registries patch if created
-	if len(s.MirrorRegistries) > 0 {
-		displayPath := filepath.Join(TalosConfigDir, "cluster", "mirror-registries.yaml")
-		notify.WriteMessage(notify.Message{
-			Type:    notify.GenerateType,
-			Content: "created '%s'",
-			Args:    []any{displayPath},
-			Writer:  s.Writer,
-		})
+	for _, patch := range patches {
+		if patch.condition {
+			s.notifyTalosPatchCreated("cluster", patch.filename)
+		}
 	}
+}
 
-	// Notify about disable-default-cni patch if created
-	if disableDefaultCNI {
-		displayPath := filepath.Join(TalosConfigDir, "cluster", "disable-default-cni.yaml")
-		notify.WriteMessage(notify.Message{
-			Type:    notify.GenerateType,
-			Content: "created '%s'",
-			Args:    []any{displayPath},
-			Writer:  s.Writer,
-		})
-	}
+// notifyTalosPatchCreated sends a notification about a created Talos patch file.
+func (s *Scaffolder) notifyTalosPatchCreated(subdir, filename string) {
+	displayPath := filepath.Join(TalosConfigDir, subdir, filename)
+	notify.WriteMessage(notify.Message{
+		Type:    notify.GenerateType,
+		Content: "created '%s'",
+		Args:    []any{displayPath},
+		Writer:  s.Writer,
+	})
 }
 
 // generateGitOpsConfig generates GitOps CR manifests (FluxInstance or ArgoCD Application)
