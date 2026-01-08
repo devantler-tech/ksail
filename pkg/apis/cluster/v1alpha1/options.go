@@ -34,7 +34,7 @@ type OptionsTalos struct {
 	// Provider specifies the backend for running Talos nodes (default: Docker).
 	Provider TalosProvider `json:"provider,omitzero"`
 	// ControlPlanes is the number of control-plane nodes (default: 1).
-	ControlPlanes int32 `json:"controlPlanes,omitzero" default:"1"`
+	ControlPlanes int32 `json:"controlPlanes,omitzero" default:"1"` //nolint:tagalign
 	// Workers is the number of worker nodes (default: 0).
 	// When 0, scheduling is allowed on control-plane nodes.
 	Workers int32 `json:"workers,omitzero"`

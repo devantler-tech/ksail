@@ -62,13 +62,13 @@ type ClusterSpec struct {
 
 // WorkloadSpec defines workload-related configuration.
 type WorkloadSpec struct {
-	SourceDirectory string `default:"k8s" json:"sourceDirectory,omitzero"`
-	ValidateOnPush  bool   `              json:"validateOnPush,omitzero"`
+	SourceDirectory string `default:"k8s" json:"sourceDirectory,omitzero"` //nolint:tagalign
+	ValidateOnPush  bool   `json:"validateOnPush,omitzero"`
 }
 
 // Connection defines connection options for a KSail cluster.
 type Connection struct {
-	Kubeconfig string          `default:"~/.kube/config" json:"kubeconfig,omitzero"`
-	Context    string          `                         json:"context,omitzero"`
-	Timeout    metav1.Duration `                         json:"timeout,omitzero"`
+	Kubeconfig string          `default:"~/.kube/config" json:"kubeconfig,omitzero"` //nolint:tagalign
+	Context    string          `json:"context,omitzero"`
+	Timeout    metav1.Duration `json:"timeout,omitzero"`
 }
