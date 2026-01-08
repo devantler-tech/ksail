@@ -354,11 +354,6 @@ type OptionsCalico struct {
 	// Add any specific fields for the Calico CNI here.
 }
 
-// OptionsPolicyEngine defines options for policy engines.
-type OptionsPolicyEngine struct {
-	// Add any specific fields for policy engines here.
-}
-
 // OptionsFlux defines options for the Flux deployment tool.
 type OptionsFlux struct {
 	// Add any specific fields for the Flux tool here.
