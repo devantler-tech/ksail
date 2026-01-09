@@ -93,8 +93,8 @@ func (r ComponentRequirements) Count() int {
 func GetComponentRequirements(clusterCfg *v1alpha1.Cluster) ComponentRequirements {
 	needsMetricsServer := NeedsMetricsServerInstall(clusterCfg)
 
-	// For Talos, the kubelet-csr-approver is installed during bootstrap via extraManifests,
-	// so we skip the Helm-based installation. For other distributions, we install it via Helm.
+	// For Talos, the kubelet-serving-cert-approver is installed during bootstrap via extraManifests,
+	// so we skip the Helm-based installation. For other distributions, we use postfinance/kubelet-csr-approver via Helm.
 	needsKubeletCSRApprover := needsMetricsServer &&
 		clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionTalos
 

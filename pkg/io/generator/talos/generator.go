@@ -26,12 +26,17 @@ const (
 	kubeletCertRotationFileName = "kubelet-cert-rotation.yaml"
 	// kubeletCSRApproverFileName is the name of the kubelet CSR approver extraManifest patch file.
 	kubeletCSRApproverFileName = "kubelet-csr-approver.yaml"
-	// kubeletServingCertApproverManifestURL is the URL for the kubelet-serving-cert-approver manifest.
-	// This is installed during bootstrap to automatically approve kubelet serving certificate CSRs.
-	// See: https://docs.siderolabs.com/kubernetes-guides/monitoring-and-observability/deploy-metrics-server/
-	//nolint:lll // URL cannot be shortened
-	kubeletServingCertApproverManifestURL = "https://raw.githubusercontent.com/alex1989hu/kubelet-serving-cert-approver/main/deploy/standalone-install.yaml"
 )
+
+// KubeletServingCertApproverManifestURL is the URL for the kubelet-serving-cert-approver manifest.
+// This is installed during Talos bootstrap to automatically approve kubelet serving certificate CSRs.
+// Note: We use alex1989hu/kubelet-serving-cert-approver for Talos because it provides a single
+// manifest URL suitable for extraManifests. For non-Talos distributions, we use
+// postfinance/kubelet-csr-approver via Helm which offers more features and configurability.
+// See: https://docs.siderolabs.com/kubernetes-guides/monitoring-and-observability/deploy-metrics-server/
+//
+//nolint:lll // URL cannot be shortened
+const KubeletServingCertApproverManifestURL = "https://raw.githubusercontent.com/alex1989hu/kubelet-serving-cert-approver/main/deploy/standalone-install.yaml"
 
 // ErrConfigRequired is returned when a nil config is provided.
 var ErrConfigRequired = errors.New("talos config is required")
@@ -164,7 +169,8 @@ func (g *TalosGenerator) generateConditionalPatches(
 		}
 	}
 
-	// Generate kubelet-cert-rotation patch for secure metrics-server TLS
+	// Generate kubelet-cert-rotation patch for secure metrics-server TLS.
+	// The kubelet-csr-approver is installed via extraManifests during bootstrap.
 	if model.EnableKubeletCertRotation {
 		err := g.generateKubeletCertRotationPatch(rootPath, force)
 		if err != nil {
@@ -403,7 +409,7 @@ func (g *TalosGenerator) generateKubeletCSRApproverPatch(
 
 	patchContent := `cluster:
   extraManifests:
-    - ` + kubeletServingCertApproverManifestURL + `
+    - ` + KubeletServingCertApproverManifestURL + `
 `
 
 	err := os.WriteFile(patchPath, []byte(patchContent), filePerm)
