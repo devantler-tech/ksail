@@ -23,7 +23,7 @@ Setting up and operating Kubernetes clusters is a skill of its own, often requir
 
 🔄 **GitOps Native** — Opt into Flux or ArgoCD. KSail handles the bootstrap and gives you push and reconcile commands.
 
-⚙️ **Customizable Stack** — Select your CNI, CSI, enable cert-manager, add mirror registries to match your setup.
+⚙️ **Customizable Stack** — Select your CNI, CSI, policy engine, cert-manager, and mirror registries to match your setup.
 
 🔐 **SOPS Built In** — Encrypt, decrypt, and edit secrets with integrated cipher commands.
 
@@ -64,6 +64,8 @@ go install github.com/devantler-tech/ksail/v5@latest
 
 ## Usage
 
+![ksail-mental-model](./docs/images/mental-model.svg)
+
 ```bash
 # 1. Initialize a new project with your preferred stack
 ksail cluster init \
@@ -72,19 +74,20 @@ ksail cluster init \
   --csi <Default|LocalPathStorage|None> \
   --metrics-server <Default|Enabled|Disabled> \
   --cert-manager <Enabled|Disabled> \
+  --policy-engine <None|Kyverno|Gatekeeper> \
   --gitops-engine <None|Flux|ArgoCD> \
   --mirror-registry <host>=<upstream>
 
 # 2. Create and start the cluster
 ksail cluster create
 
-# Add your manifests to a k8s/kustomization.yaml file
+# 3. Add your manifests to the k8s/ directory
 
-# 3. Deploy your workloads
-ksail workload apply -k ./k8s   # for kubectl workflows
-ksail workload reconcile        # for gitops workflows
+# 4. Deploy your workloads
+ksail workload apply -k ./k8s   # kubectl workflow
+ksail workload reconcile        # gitops workflow
 
-# 4. Connect to the cluster with k9s
+# 5. Connect to the cluster with K9s
 ksail cluster connect
 ```
 

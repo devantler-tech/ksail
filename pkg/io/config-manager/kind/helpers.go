@@ -48,3 +48,27 @@ func ResolveClusterName(
 
 	return DefaultClusterName
 }
+
+// KubeletCertRotationPatch is a kubeadm patch to enable kubelet serving certificate rotation.
+// This allows the kubelet to request a proper TLS certificate via CSR, which kubelet-csr-approver
+// will then approve, enabling secure TLS communication with metrics-server.
+const KubeletCertRotationPatch = `kind: KubeletConfiguration
+apiVersion: kubelet.config.k8s.io/v1beta1
+serverTLSBootstrap: true`
+
+// ApplyKubeletCertRotationPatches adds kubeadm patches to all nodes to enable kubelet cert rotation.
+// This is required for secure TLS communication between metrics-server and kubelets.
+func ApplyKubeletCertRotationPatches(kindConfig *kindv1alpha4.Cluster) {
+	// Ensure at least one node exists
+	if len(kindConfig.Nodes) == 0 {
+		kindConfig.Nodes = []kindv1alpha4.Node{{Role: kindv1alpha4.ControlPlaneRole}}
+	}
+
+	// Add the kubelet cert rotation patch to all nodes
+	for i := range kindConfig.Nodes {
+		kindConfig.Nodes[i].KubeadmConfigPatches = append(
+			kindConfig.Nodes[i].KubeadmConfigPatches,
+			KubeletCertRotationPatch,
+		)
+	}
+}

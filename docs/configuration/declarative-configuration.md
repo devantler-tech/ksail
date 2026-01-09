@@ -58,7 +58,7 @@ spec:
     localRegistry: Enabled
     gitOpsEngine: Flux
     localRegistryOptions:
-      hostPort: 5111
+      hostPort: 5050
   workload:
     sourceDirectory: k8s
     validateOnPush: true
@@ -184,6 +184,12 @@ Whether to install [metrics-server](../concepts.md#metrics-server) for resource 
 - `Enabled` – Install metrics-server
 - `Disabled` – Skip installation
 
+When metrics-server is enabled on Kind or Talos, KSail automatically:
+
+1. Configures kubelet certificate rotation (`serverTLSBootstrap: true`)
+2. Installs [kubelet-csr-approver](../concepts.md#kubelet-csr-approver) to approve certificate requests
+3. Deploys metrics-server with secure TLS communication
+
 Note: K3d includes metrics-server by default, so this setting has no effect on K3d.
 
 #### certManager
@@ -214,7 +220,7 @@ Whether to provision a local [OCI registry](../concepts.md#oci-registries) conta
 - `Enabled` – Provision local registry
 - `Disabled` (default) – Skip registry
 
-See [Distribution and Tool Options](#distribution-and-tool-options) for configuration details including `hostPort` (default: `5111`).
+See [Distribution and Tool Options](#distribution-and-tool-options) for configuration details including `hostPort` (default: `5050`).
 
 #### gitOpsEngine
 
@@ -232,7 +238,7 @@ Advanced configuration options are now direct fields under `spec.cluster` instea
 
 **Common options:**
 
-- `spec.cluster.localRegistryOptions.hostPort` – Host port for local registry (default: `5111`)
+- `spec.cluster.localRegistryOptions.hostPort` – Host port for local registry (default: `5050`)
 - `spec.cluster.talos.controlPlanes` – Number of control-plane nodes (default: `1`)
 - `spec.cluster.talos.workers` – Number of worker nodes (default: `0`)
 - `spec.cluster.kind.mirrorsDir` – Directory for containerd host mirror configuration

@@ -63,14 +63,14 @@ ksail cluster delete
 For local images (see [Registry Management](features.md#registry-management) for details):
 
 ```bash
-ksail cluster init --local-registry Enabled --local-registry-port 5111
+ksail cluster init --local-registry Enabled --local-registry-port 5050
 ksail cluster create
 
 # Build and push
-docker build -t localhost:5111/my-app:dev .
-docker push localhost:5111/my-app:dev
+docker build -t localhost:5050/my-app:dev .
+docker push localhost:5050/my-app:dev
 
-# Reference in manifests: localhost:5111/my-app:dev
+# Reference in manifests: localhost:5050/my-app:dev
 ksail workload apply -k k8s/
 ```
 

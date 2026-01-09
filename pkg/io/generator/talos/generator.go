@@ -22,7 +22,21 @@ const (
 	allowSchedulingFileName = "allow-scheduling-on-control-planes.yaml"
 	// disableCNIFileName is the name of the CNI disable patch file.
 	disableCNIFileName = "disable-default-cni.yaml"
+	// kubeletCertRotationFileName is the name of the kubelet certificate rotation patch file.
+	kubeletCertRotationFileName = "kubelet-cert-rotation.yaml"
+	// kubeletCSRApproverFileName is the name of the kubelet CSR approver extraManifest patch file.
+	kubeletCSRApproverFileName = "kubelet-csr-approver.yaml"
 )
+
+// KubeletServingCertApproverManifestURL is the URL for the kubelet-serving-cert-approver manifest.
+// This is installed during Talos bootstrap to automatically approve kubelet serving certificate CSRs.
+// Note: We use alex1989hu/kubelet-serving-cert-approver for Talos because it provides a single
+// manifest URL suitable for extraManifests. For non-Talos distributions, we use
+// postfinance/kubelet-csr-approver via Helm which offers more features and configurability.
+// See: https://docs.siderolabs.com/kubernetes-guides/monitoring-and-observability/deploy-metrics-server/
+//
+//nolint:lll // URL cannot be shortened
+const KubeletServingCertApproverManifestURL = "https://raw.githubusercontent.com/alex1989hu/kubelet-serving-cert-approver/main/deploy/standalone-install.yaml"
 
 // ErrConfigRequired is returned when a nil config is provided.
 var ErrConfigRequired = errors.New("talos config is required")
@@ -41,6 +55,10 @@ type TalosConfig struct {
 	// When true, generates a disable-default-cni.yaml patch to set cluster.network.cni.name to "none".
 	// This is required when using an alternative CNI like Cilium.
 	DisableDefaultCNI bool
+	// EnableKubeletCertRotation indicates whether to enable kubelet serving certificate rotation.
+	// When true, generates a kubelet-cert-rotation.yaml patch with rotate-server-certificates: true.
+	// This is required for secure metrics-server communication using TLS.
+	EnableKubeletCertRotation bool
 }
 
 // TalosGenerator generates the Talos directory structure.
@@ -113,6 +131,11 @@ func (g *TalosGenerator) getDirectoriesWithPatches(
 		dirs["cluster"] = true
 	}
 
+	// Kubelet cert rotation patch goes to cluster/
+	if model.EnableKubeletCertRotation {
+		dirs["cluster"] = true
+	}
+
 	return dirs
 }
 
@@ -141,6 +164,21 @@ func (g *TalosGenerator) generateConditionalPatches(
 	// Generate disable-default-cni patch when alternative CNI is requested
 	if model.DisableDefaultCNI {
 		err := g.generateDisableCNIPatch(rootPath, force)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Generate kubelet-cert-rotation patch for secure metrics-server TLS.
+	// The kubelet-csr-approver is installed via extraManifests during bootstrap.
+	if model.EnableKubeletCertRotation {
+		err := g.generateKubeletCertRotationPatch(rootPath, force)
+		if err != nil {
+			return err
+		}
+
+		// Generate kubelet-csr-approver patch to install the CSR approver during bootstrap
+		err = g.generateKubeletCSRApproverPatch(rootPath, force)
 		if err != nil {
 			return err
 		}
@@ -314,6 +352,69 @@ func (g *TalosGenerator) generateDisableCNIPatch(
 	err := os.WriteFile(patchPath, []byte(patchContent), filePerm)
 	if err != nil {
 		return fmt.Errorf("failed to create disable-default-cni patch: %w", err)
+	}
+
+	return nil
+}
+
+// generateKubeletCertRotationPatch creates a Talos patch file to enable kubelet serving certificate rotation.
+// This is required for secure metrics-server communication using TLS.
+// The patch sets machine.kubelet.extraArgs.rotate-server-certificates to "true" as per Talos documentation:
+// https://www.talos.dev/v1.9/kubernetes-guides/configuration/deploy-metrics-server/
+func (g *TalosGenerator) generateKubeletCertRotationPatch(
+	rootPath string,
+	force bool,
+) error {
+	patchPath := filepath.Join(rootPath, "cluster", kubeletCertRotationFileName)
+
+	// Check if file already exists
+	_, statErr := os.Stat(patchPath)
+	if statErr == nil && !force {
+		return nil
+	}
+
+	patchContent := `machine:
+  kubelet:
+    extraArgs:
+      rotate-server-certificates: "true"
+`
+
+	err := os.WriteFile(patchPath, []byte(patchContent), filePerm)
+	if err != nil {
+		return fmt.Errorf("failed to create kubelet-cert-rotation patch: %w", err)
+	}
+
+	return nil
+}
+
+// generateKubeletCSRApproverPatch creates a Talos patch file to install the kubelet-serving-cert-approver
+// during cluster bootstrap. This is required when rotate-server-certificates is enabled because:
+// 1. The kubelet generates a CSR (Certificate Signing Request) for its serving certificate
+// 2. The CSR must be approved before the kubelet can serve its API (including to metrics-server)
+// 3. Without an approver, the cluster bootstrap times out waiting for static pods
+//
+// This patch adds cluster.extraManifests with the kubelet-serving-cert-approver manifest URL.
+// See: https://docs.siderolabs.com/kubernetes-guides/monitoring-and-observability/deploy-metrics-server/
+func (g *TalosGenerator) generateKubeletCSRApproverPatch(
+	rootPath string,
+	force bool,
+) error {
+	patchPath := filepath.Join(rootPath, "cluster", kubeletCSRApproverFileName)
+
+	// Check if file already exists
+	_, statErr := os.Stat(patchPath)
+	if statErr == nil && !force {
+		return nil
+	}
+
+	patchContent := `cluster:
+  extraManifests:
+    - ` + KubeletServingCertApproverManifestURL + `
+`
+
+	err := os.WriteFile(patchPath, []byte(patchContent), filePerm)
+	if err != nil {
+		return fmt.Errorf("failed to create kubelet-csr-approver patch: %w", err)
 	}
 
 	return nil

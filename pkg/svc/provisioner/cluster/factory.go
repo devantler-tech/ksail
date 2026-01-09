@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	kindconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/kind"
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
 	k3dprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/k3d"
 	kindprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/kind"
@@ -98,6 +99,12 @@ func (f DefaultFactory) createKindProvisioner(
 
 	// Apply node count overrides from CLI flags (stored in Talos options)
 	applyKindNodeCounts(kindConfig, cluster.Spec.Cluster.Talos)
+
+	// Apply kubelet certificate rotation patches when metrics-server is enabled.
+	// This must happen AFTER applyKindNodeCounts since that function may replace the nodes slice.
+	if cluster.Spec.Cluster.MetricsServer == v1alpha1.MetricsServerEnabled {
+		kindconfigmanager.ApplyKubeletCertRotationPatches(kindConfig)
+	}
 
 	provisioner, err := kindprovisioner.CreateProvisioner(
 		kindConfig,

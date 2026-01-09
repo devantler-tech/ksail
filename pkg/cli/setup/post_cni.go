@@ -44,52 +44,68 @@ func resolveDefaultClusterName(distribution v1alpha1.Distribution) string {
 	}
 }
 
-type componentRequirements struct {
-	needsMetricsServer bool
-	needsCSI           bool
-	needsCertManager   bool
-	needsPolicyEngine  bool
-	needsArgoCD        bool
-	needsFlux          bool
+// ComponentRequirements represents which components need to be installed.
+type ComponentRequirements struct {
+	NeedsMetricsServer      bool
+	NeedsKubeletCSRApprover bool
+	NeedsCSI                bool
+	NeedsCertManager        bool
+	NeedsPolicyEngine       bool
+	NeedsArgoCD             bool
+	NeedsFlux               bool
 }
 
-func (r componentRequirements) count() int {
+// Count returns the number of components that need to be installed.
+func (r ComponentRequirements) Count() int {
 	count := 0
-	if r.needsMetricsServer {
+	if r.NeedsMetricsServer {
 		count++
 	}
 
-	if r.needsCSI {
+	if r.NeedsKubeletCSRApprover {
 		count++
 	}
 
-	if r.needsCertManager {
+	if r.NeedsCSI {
 		count++
 	}
 
-	if r.needsPolicyEngine {
+	if r.NeedsCertManager {
 		count++
 	}
 
-	if r.needsArgoCD {
+	if r.NeedsPolicyEngine {
 		count++
 	}
 
-	if r.needsFlux {
+	if r.NeedsArgoCD {
+		count++
+	}
+
+	if r.NeedsFlux {
 		count++
 	}
 
 	return count
 }
 
-func getComponentRequirements(clusterCfg *v1alpha1.Cluster) componentRequirements {
-	return componentRequirements{
-		needsMetricsServer: NeedsMetricsServerInstall(clusterCfg),
-		needsCSI:           clusterCfg.Spec.Cluster.CSI == v1alpha1.CSILocalPathStorage,
-		needsCertManager:   clusterCfg.Spec.Cluster.CertManager == v1alpha1.CertManagerEnabled,
-		needsPolicyEngine:  clusterCfg.Spec.Cluster.PolicyEngine != v1alpha1.PolicyEngineNone,
-		needsArgoCD:        clusterCfg.Spec.Cluster.GitOpsEngine == v1alpha1.GitOpsEngineArgoCD,
-		needsFlux:          clusterCfg.Spec.Cluster.GitOpsEngine == v1alpha1.GitOpsEngineFlux,
+// GetComponentRequirements determines which components need to be installed based on cluster config.
+func GetComponentRequirements(clusterCfg *v1alpha1.Cluster) ComponentRequirements {
+	needsMetricsServer := NeedsMetricsServerInstall(clusterCfg)
+
+	// For Talos, the kubelet-serving-cert-approver is installed during bootstrap via extraManifests,
+	// so we skip the Helm-based installation. For other distributions, we use postfinance/kubelet-csr-approver via Helm.
+	needsKubeletCSRApprover := needsMetricsServer &&
+		clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionTalos
+
+	return ComponentRequirements{
+		NeedsMetricsServer:      needsMetricsServer,
+		NeedsKubeletCSRApprover: needsKubeletCSRApprover,
+		NeedsCSI:                clusterCfg.Spec.Cluster.CSI == v1alpha1.CSILocalPathStorage,
+		NeedsCertManager:        clusterCfg.Spec.Cluster.CertManager == v1alpha1.CertManagerEnabled,
+		NeedsPolicyEngine:       clusterCfg.Spec.Cluster.PolicyEngine != v1alpha1.PolicyEngineNone,
+		NeedsArgoCD:             clusterCfg.Spec.Cluster.GitOpsEngine == v1alpha1.GitOpsEngineArgoCD,
+		NeedsFlux:               clusterCfg.Spec.Cluster.GitOpsEngine == v1alpha1.GitOpsEngineFlux,
 	}
 }
 
@@ -101,9 +117,9 @@ func InstallPostCNIComponents(
 	factories *InstallerFactories,
 	tmr timer.Timer,
 ) error {
-	reqs := getComponentRequirements(clusterCfg)
+	reqs := GetComponentRequirements(clusterCfg)
 
-	if reqs.count() == 0 {
+	if reqs.Count() == 0 {
 		return nil
 	}
 
@@ -117,7 +133,7 @@ func InstallPostCNIComponents(
 		gitOpsKubeconfigErr error
 	)
 
-	if reqs.needsArgoCD || reqs.needsFlux {
+	if reqs.NeedsArgoCD || reqs.NeedsFlux {
 		_, gitOpsKubeconfig, gitOpsKubeconfigErr = factories.HelmClientFactory(clusterCfg)
 		if gitOpsKubeconfigErr != nil {
 			return fmt.Errorf("failed to create helm client for gitops: %w", gitOpsKubeconfigErr)
@@ -138,7 +154,7 @@ func installComponentsInParallel(
 	clusterCfg *v1alpha1.Cluster,
 	factories *InstallerFactories,
 	tmr timer.Timer,
-	reqs componentRequirements,
+	reqs ComponentRequirements,
 ) error {
 	tasks := buildComponentTasks(clusterCfg, factories, reqs)
 
@@ -161,40 +177,47 @@ func installComponentsInParallel(
 func buildComponentTasks(
 	clusterCfg *v1alpha1.Cluster,
 	factories *InstallerFactories,
-	reqs componentRequirements,
+	reqs ComponentRequirements,
 ) []notify.ProgressTask {
 	var tasks []notify.ProgressTask
 
-	if reqs.needsMetricsServer {
+	if reqs.NeedsMetricsServer {
 		tasks = append(
 			tasks,
 			newTask("metrics-server", clusterCfg, factories, InstallMetricsServerSilent),
 		)
 	}
 
-	if reqs.needsCSI {
+	if reqs.NeedsKubeletCSRApprover {
+		tasks = append(
+			tasks,
+			newTask("kubelet-csr-approver", clusterCfg, factories, InstallKubeletCSRApproverSilent),
+		)
+	}
+
+	if reqs.NeedsCSI {
 		tasks = append(tasks, newTask("csi", clusterCfg, factories, InstallCSISilent))
 	}
 
-	if reqs.needsCertManager {
+	if reqs.NeedsCertManager {
 		tasks = append(
 			tasks,
 			newTask("cert-manager", clusterCfg, factories, InstallCertManagerSilent),
 		)
 	}
 
-	if reqs.needsPolicyEngine {
+	if reqs.NeedsPolicyEngine {
 		tasks = append(
 			tasks,
 			newTask("policy-engine", clusterCfg, factories, InstallPolicyEngineSilent),
 		)
 	}
 
-	if reqs.needsArgoCD {
+	if reqs.NeedsArgoCD {
 		tasks = append(tasks, newTask("argocd", clusterCfg, factories, InstallArgoCDSilent))
 	}
 
-	if reqs.needsFlux {
+	if reqs.NeedsFlux {
 		tasks = append(tasks, newTask("flux", clusterCfg, factories, InstallFluxSilent))
 	}
 
@@ -220,11 +243,11 @@ func configureGitOpsResources(
 	cmd *cobra.Command,
 	clusterCfg *v1alpha1.Cluster,
 	factories *InstallerFactories,
-	reqs componentRequirements,
+	reqs ComponentRequirements,
 	gitOpsKubeconfig string,
 ) error {
 	// Only show configure stage if there are GitOps resources to configure
-	if !reqs.needsArgoCD && !reqs.needsFlux {
+	if !reqs.NeedsArgoCD && !reqs.NeedsFlux {
 		return nil
 	}
 
@@ -240,7 +263,7 @@ func configureGitOpsResources(
 	})
 
 	// Post-install GitOps configuration
-	if reqs.needsArgoCD {
+	if reqs.NeedsArgoCD {
 		notify.WriteMessage(notify.Message{
 			Type:    notify.ActivityType,
 			Content: argoCDResourcesActivity,
@@ -259,7 +282,7 @@ func configureGitOpsResources(
 		})
 	}
 
-	if reqs.needsFlux {
+	if reqs.NeedsFlux {
 		notify.WriteMessage(notify.Message{
 			Type:    notify.ActivityType,
 			Content: fluxResourcesActivity,

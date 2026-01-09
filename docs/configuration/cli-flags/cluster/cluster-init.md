@@ -27,7 +27,7 @@ Flags:
   -h, --help                           help for init
   -k, --kubeconfig string              Path to kubeconfig file (default "~/.kube/config")
       --local-registry LocalRegistry   Local registry behavior (Enabled provisions a registry; Disabled skips provisioning. Defaults to Enabled when a GitOps engine is configured) (default Disabled)
-      --local-registry-port int32      Host port to expose the local OCI registry on (default 5111)
+      --local-registry-port int32      Host port to expose the local OCI registry on (default 5050)
       --metrics-server MetricsServer   Metrics Server (Default: use distribution, Enabled: install, Disabled: uninstall)
       --mirror-registry strings        Configure mirror registries with format 'host=upstream' (e.g., docker.io=https://registry-1.docker.io).
   -o, --output string                  Output directory for the project

@@ -17,6 +17,7 @@ import (
 	kindconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/kind"
 	"github.com/devantler-tech/ksail/v5/pkg/io/config-manager/loader"
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
+	talosgenerator "github.com/devantler-tech/ksail/v5/pkg/io/generator/talos"
 	"github.com/devantler-tech/ksail/v5/pkg/io/validator"
 	ksailvalidator "github.com/devantler-tech/ksail/v5/pkg/io/validator/ksail"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
@@ -840,8 +841,13 @@ func (m *ConfigManager) cacheTalosConfig() error {
 	}
 
 	if talosConfig == nil {
-		// Create a valid default Talos config with required bundle
-		talosConfig, err = talosconfigmanager.NewDefaultConfigs()
+		// Create a valid default Talos config with required bundle.
+		// When metrics-server is enabled on Talos, we need to add the kubelet-csr-approver
+		// as an extraManifest so it's installed during bootstrap. Without this,
+		// metrics-server cannot validate kubelet TLS certificates (missing IP SANs).
+		patches := m.getDefaultTalosPatches()
+
+		talosConfig, err = talosconfigmanager.NewDefaultConfigsWithPatches(patches)
 		if err != nil {
 			return fmt.Errorf("failed to create default Talos config: %w", err)
 		}
@@ -850,4 +856,46 @@ func (m *ConfigManager) cacheTalosConfig() error {
 	m.DistributionConfig.Talos = talosConfig
 
 	return nil
+}
+
+// getDefaultTalosPatches returns patches that should be applied to the default Talos config
+// based on the current cluster configuration.
+func (m *ConfigManager) getDefaultTalosPatches() []talosconfigmanager.Patch {
+	var patches []talosconfigmanager.Patch
+
+	// When metrics-server is enabled on Talos, we need two patches:
+	// 1. Enable kubelet certificate rotation (rotate-server-certificates: true)
+	// 2. Install kubelet-serving-cert-approver via extraManifests to approve the CSRs
+	//
+	// Note: We use alex1989hu/kubelet-serving-cert-approver for Talos because it provides
+	// a single manifest URL suitable for extraManifests during bootstrap. For non-Talos
+	// distributions, postfinance/kubelet-csr-approver is used via Helm post-bootstrap.
+	//
+	// See: https://docs.siderolabs.com/kubernetes-guides/monitoring-and-observability/deploy-metrics-server/
+	if m.Config.Spec.Cluster.MetricsServer == v1alpha1.MetricsServerEnabled {
+		// Patch 1: Enable kubelet certificate rotation
+		kubeletCertRotationPatch := talosconfigmanager.Patch{
+			Path:  "kubelet-cert-rotation",
+			Scope: talosconfigmanager.PatchScopeCluster,
+			Content: []byte(`machine:
+  kubelet:
+    extraArgs:
+      rotate-server-certificates: "true"
+`),
+		}
+		patches = append(patches, kubeletCertRotationPatch)
+
+		// Patch 2: Install kubelet-serving-cert-approver during bootstrap
+		kubeletCSRApproverPatch := talosconfigmanager.Patch{
+			Path:  "kubelet-csr-approver-extramanifest",
+			Scope: talosconfigmanager.PatchScopeCluster,
+			Content: []byte(`cluster:
+  extraManifests:
+    - ` + talosgenerator.KubeletServingCertApproverManifestURL + `
+`),
+		}
+		patches = append(patches, kubeletCSRApproverPatch)
+	}
+
+	return patches
 }

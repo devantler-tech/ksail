@@ -99,6 +99,22 @@ Kubernetes distributions package the Kubernetes components with additional tooli
 - [Resource Metrics Pipeline](https://kubernetes.io/docs/tasks/debug/debug-cluster/resource-metrics-pipeline/)
 - [Horizontal Pod Autoscaler](https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/)
 
+## Kubelet CSR Approver
+
+[Kubelet CSR Approver](https://github.com/postfinance/kubelet-csr-approver) automatically approves Certificate Signing Requests (CSRs) for kubelet serving certificates. When `serverTLSBootstrap: true` is enabled on kubelets, they request proper TLS certificates via CSR instead of using self-signed certificates. This controller approves those requests, enabling secure TLS communication between components like metrics-server and kubelets.
+
+**Why it matters:**
+
+- Metrics-server requires secure TLS communication with kubelets
+- Without approved CSRs, kubelets use self-signed certificates that metrics-server rejects
+- KSail automatically installs kubelet-csr-approver when metrics-server is enabled on Kind or Talos
+
+**Key resources:**
+
+- [Kubelet CSR Approver GitHub](https://github.com/postfinance/kubelet-csr-approver)
+- [Kubernetes TLS Bootstrapping](https://kubernetes.io/docs/reference/access-authn-authz/kubelet-tls-bootstrapping/)
+- [Certificate Signing Requests](https://kubernetes.io/docs/reference/access-authn-authz/certificate-signing-requests/)
+
 ## cert-manager
 
 [cert-manager](https://cert-manager.io/) automates TLS certificate management in Kubernetes. Supports ACME (Let's Encrypt), self-signed, and external CA certificates.

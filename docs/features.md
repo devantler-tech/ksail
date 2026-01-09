@@ -19,7 +19,7 @@ ksail cluster create
 **Capabilities:**
 
 - **Multi-distribution support** – [Kind, K3d, and Talos](concepts.md#distributions) distributions
-- **Component installation** – [CNI](concepts.md#container-network-interface-cni) (Cilium, Calico), [CSI](concepts.md#container-storage-interface-csi), [metrics-server](concepts.md#metrics-server), [cert-manager](concepts.md#cert-manager)
+- **Component installation** – [CNI](concepts.md#container-network-interface-cni) (Cilium, Calico), [CSI](concepts.md#container-storage-interface-csi), [metrics-server](concepts.md#metrics-server) with [kubelet-csr-approver](concepts.md#kubelet-csr-approver), [cert-manager](concepts.md#cert-manager), and [policy engines](concepts.md#policy-engines)
 - **Node configuration** – Control-plane and worker node counts via `--control-planes` and `--workers`
 - **Connection management** – Automatic kubeconfig and context configuration
 
@@ -111,11 +111,11 @@ Run local [OCI registries](concepts.md#oci-registries) for faster development cy
 ### Local Registry
 
 ```bash
-ksail cluster init --local-registry Enabled --local-registry-port 5111
+ksail cluster init --local-registry Enabled --local-registry-port 5050
 ksail cluster create
 
-docker tag my-app localhost:5111/my-app
-docker push localhost:5111/my-app
+docker tag my-app localhost:5050/my-app
+docker push localhost:5050/my-app
 ```
 
 **Benefits:** Faster image pulls, GitOps integration, isolated development

@@ -5,20 +5,51 @@ nav_order: 7
 
 # Support Matrix
 
-Overview of KSail's supported platforms, distributions, and components. See [Concepts](concepts.md) for detailed information about each technology, or [Configuration](configuration/index.md) for setup instructions.
+Overview of KSail's supported platforms, distributions, and components.
+See [Concepts](concepts.md) for detailed information about each technology,
+or [Configuration](configuration/index.md) for setup instructions.
 
-| Category            | Supported Options                                           | Status/Notes                                               |
-|---------------------|-------------------------------------------------------------|------------------------------------------------------------|
-| Platforms           | Linux (amd64, arm64), macOS (arm64), Windows (amd64, arm64) | ⚠️ Windows support is untested.                            |
-| Distributions       | Kind, K3d, Talos                                            | ✅ All three distributions fully supported.                 |
-| Workload Management | kubectl, Helm, Kustomize                                    | ✅ Commands wrapped via `ksail workload`.                   |
-| GitOps Engines      | Flux, ArgoCD                                                | ✅ Both engines fully supported.                            |
-| CNI                 | Default, Cilium, Calico                                     | ✅ Choose via `spec.cluster.cni` or `--cni` flag.           |
-| CSI                 | Default, LocalPathStorage                                   | ✅ Choose via `spec.cluster.csi` or `--csi` flag.           |
-| Metrics Server      | Default, Enabled, Disabled                                  | ✅ Toggle with `--metrics-server` flag.                     |
-| Cert-Manager        | Enabled, Disabled                                           | ✅ Toggle with `--cert-manager` flag.                       |
-| Local Registry      | Enabled, Disabled                                           | ✅ OCI registry for local image storage.                    |
-| Mirror Registries   | Configurable                                                | ✅ Configure with `--mirror-registry` flags.                |
-| Secret Management   | SOPS via `ksail cipher`                                     | ✅ Encrypt/decrypt files with age, PGP, and cloud KMS keys. |
+## Platforms and Distributions
 
-> **Note:** Features marked with ⚠️ are in active development or being reimplemented. For up‑to‑date details, see the KSail [roadmap and issues](https://github.com/devantler-tech/ksail/issues).
+| Platform | Architectures | Status      |
+|----------|---------------|-------------|
+| Linux    | amd64, arm64  | ✅ Supported |
+| macOS    | arm64         | ✅ Supported |
+| Windows  | amd64, arm64  | ⚠️ Untested |
+
+| Distribution | Providers | Status      |
+|--------------|-----------|-------------|
+| Kind         | Docker    | ✅ Supported |
+| K3d          | Docker    | ✅ Supported |
+| Talos        | Docker    | ✅ Supported |
+
+## Cluster Components
+
+| Component            | Options                    | Configuration           |
+|----------------------|----------------------------|-------------------------|
+| CNI                  | Default, Cilium, Calico    | `--cni` flag            |
+| CSI                  | Default, LocalPathStorage  | `--csi` flag            |
+| Metrics Server       | Default, Enabled, Disabled | `--metrics-server` flag |
+| Kubelet CSR Approver | Auto-installed             | With metrics-server     |
+| cert-manager         | Enabled, Disabled          | `--cert-manager` flag   |
+| Policy Engine        | None, Kyverno, Gatekeeper  | `--policy-engine` flag  |
+
+## GitOps and Registries
+
+| Component         | Options            | Configuration            |
+|-------------------|--------------------|--------------------------|
+| GitOps Engine     | None, Flux, ArgoCD | `--gitops-engine` flag   |
+| Local Registry    | Enabled, Disabled  | `--local-registry` flag  |
+| Mirror Registries | Configurable       | `--mirror-registry` flag |
+
+## Workload Tools
+
+| Tool      | Commands                                   |
+|-----------|--------------------------------------------|
+| kubectl   | `apply`, `get`, `logs`, `exec`, `describe` |
+| Helm      | `install`                                  |
+| Kustomize | `apply -k`                                 |
+| SOPS      | `cipher encrypt`, `decrypt`, `edit`        |
+
+> **Note:** Features marked with ⚠️ are untested or in development.
+> See the [roadmap](https://github.com/devantler-tech/ksail/issues) for details.

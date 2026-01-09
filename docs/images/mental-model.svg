@@ -1,0 +1,697 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 960" width="1440" height="960" font-family="'Inter', 'SF Pro Display', 'Segoe UI', system-ui, -apple-system, sans-serif">
+  <!-- Scale wrapper: all content scaled 1.5x for high-DPI displays -->
+  <g transform="scale(1.5)">
+  <defs>
+    <!-- Premium Gradients -->
+    <linearGradient id="gradDev" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fcd34d" />
+      <stop offset="100%" stop-color="#f59e0b" />
+    </linearGradient>
+    <linearGradient id="gradProject" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#c084fc" />
+      <stop offset="100%" stop-color="#8b5cf6" />
+    </linearGradient>
+    <linearGradient id="gradKSail" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4ade80" />
+      <stop offset="30%" stop-color="#22c55e" />
+      <stop offset="70%" stop-color="#16a34a" />
+      <stop offset="100%" stop-color="#15803d" />
+    </linearGradient>
+    <linearGradient id="gradCluster" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#60a5fa" />
+      <stop offset="100%" stop-color="#3b82f6" />
+    </linearGradient>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a" />
+      <stop offset="30%" stop-color="#0a0f1a" />
+      <stop offset="70%" stop-color="#060912" />
+      <stop offset="100%" stop-color="#020617" />
+    </linearGradient>
+
+    <!-- Step number gradient -->
+    <linearGradient id="stepGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#22d3ee" />
+      <stop offset="100%" stop-color="#0891b2" />
+    </linearGradient>
+
+    <!-- Stars/Particle effect -->
+    <radialGradient id="starGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="1" />
+      <stop offset="50%" stop-color="#ffffff" stop-opacity="0.3" />
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0" />
+    </radialGradient>
+
+    <!-- Enhanced KSail glow for hero effect -->
+    <radialGradient id="ksailHeroGlow" cx="50%" cy="50%" r="60%">
+      <stop offset="0%" stop-color="#22c55e" stop-opacity="0.3" />
+      <stop offset="40%" stop-color="#22c55e" stop-opacity="0.1" />
+      <stop offset="100%" stop-color="#22c55e" stop-opacity="0" />
+    </radialGradient>
+    <linearGradient id="sailGrad" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#16a34a" />
+      <stop offset="30%" stop-color="#22c55e" />
+      <stop offset="60%" stop-color="#4ade80" />
+      <stop offset="100%" stop-color="#bbf7d0" />
+    </linearGradient>
+    <linearGradient id="sailGradSecondary" x1="100%" y1="100%" x2="0%" y2="0%">
+      <stop offset="0%" stop-color="#22c55e" />
+      <stop offset="50%" stop-color="#4ade80" />
+      <stop offset="100%" stop-color="#86efac" />
+    </linearGradient>
+    <linearGradient id="hullGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1e6c41" />
+      <stop offset="50%" stop-color="#166534" />
+      <stop offset="100%" stop-color="#0f4c2d" />
+    </linearGradient>
+    <linearGradient id="oceanGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#22c55e" stop-opacity="0.08" />
+      <stop offset="100%" stop-color="#0ea5e9" stop-opacity="0.03" />
+    </linearGradient>
+    <linearGradient id="centerGlowGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4ade80" stop-opacity="0.15" />
+      <stop offset="50%" stop-color="#22c55e" stop-opacity="0.08" />
+      <stop offset="100%" stop-color="#3b82f6" stop-opacity="0.12" />
+    </linearGradient>
+
+    <!-- Enhanced Glow Filters -->
+    <filter id="glowDev" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="10" result="blur" />
+      <feColorMatrix in="blur" type="matrix" values="1 0.8 0 0 0  0.6 0.4 0 0 0  0 0 0 0 0  0 0 0 0.4 0" />
+      <feMerge>
+        <feMergeNode />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+    <filter id="glowProject" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="8" result="blur" />
+      <feColorMatrix in="blur" type="matrix" values="0.6 0 0.8 0 0  0.2 0 0.6 0 0  0.8 0 1 0 0  0 0 0 0.35 0" />
+      <feMerge>
+        <feMergeNode />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+    <filter id="glowKSail" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="12" result="blur" />
+      <feColorMatrix in="blur" type="matrix" values="0.2 0 0 0 0  0.9 0.6 0.3 0 0  0.4 0.4 0.2 0 0  0 0 0 0.45 0" />
+      <feMerge>
+        <feMergeNode />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+    <filter id="glowCluster" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="8" result="blur" />
+      <feColorMatrix in="blur" type="matrix" values="0.3 0.3 1 0 0  0.3 0.5 1 0 0  0.6 0.8 1 0 0  0 0 0 0.35 0" />
+      <feMerge>
+        <feMergeNode />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="#000" flood-opacity="0.35" />
+    </filter>
+
+    <!-- Markers -->
+    <marker id="arrowDev" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
+      <path d="M0 0 L10 4 L0 8 L2 4 Z" fill="#f59e0b" />
+    </marker>
+    <marker id="arrowKSail" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
+      <path d="M0 0 L10 4 L0 8 L2 4 Z" fill="#22c55e" />
+    </marker>
+    <marker id="arrowGray" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
+      <path d="M0 0 L10 4 L0 8 L2 4 Z" fill="#64748b" />
+    </marker>
+    <marker id="arrowProject" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
+      <path d="M0 0 L10 4 L0 8 L2 4 Z" fill="#8b5cf6" />
+    </marker>
+
+    <!-- Grid Pattern -->
+    <pattern id="grid" x="0" y="0" width="50" height="50" patternUnits="userSpaceOnUse">
+      <circle cx="25" cy="25" r="0.5" fill="#334155" fill-opacity="0.25" />
+    </pattern>
+
+    <!-- Subtle wave accent -->
+    <pattern id="waves" x="0" y="0" width="180" height="16" patternUnits="userSpaceOnUse">
+      <path d="M0 8 Q22 3 45 8 T90 8 T135 8 T180 8" fill="none" stroke="#4ade80" stroke-width="0.6" stroke-opacity="0.18" />
+      <path d="M0 12 Q22 7 45 12 T90 12 T135 12 T180 12" fill="none" stroke="#22c55e" stroke-width="0.4" stroke-opacity="0.12" />
+    </pattern>
+
+    <!-- Radial center glow -->
+    <radialGradient id="centerGlow" cx="50%" cy="45%" r="50%">
+      <stop offset="0%" stop-color="#22c55e" stop-opacity="0.08" />
+      <stop offset="50%" stop-color="#3b82f6" stop-opacity="0.04" />
+      <stop offset="100%" stop-color="#020617" stop-opacity="0" />
+    </radialGradient>
+
+    <!-- Sync icon gradient -->
+    <linearGradient id="syncGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4ade80" />
+      <stop offset="100%" stop-color="#c084fc" />
+    </linearGradient>
+
+    <!-- Enhanced outer glow for cards -->
+    <filter id="glowSoft" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="20" result="blur" />
+      <feColorMatrix in="blur" type="matrix" values="0.2 0 0 0 0  0.9 0.6 0.3 0 0  0.4 0.4 0.2 0 0  0 0 0 0.2 0" />
+    </filter>
+
+    <!-- Animated pulse for sync center -->
+    <filter id="pulseGlow" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="6" result="blur" />
+      <feColorMatrix in="blur" type="matrix" values="0.4 0.8 0.5 0 0  0.2 0.6 0.3 0 0  0.8 0.4 1 0 0  0 0 0 0.6 0" />
+      <feMerge>
+        <feMergeNode />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+
+    <!-- Text glow for hero title -->
+    <filter id="textGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="2" result="blur" />
+      <feColorMatrix in="blur" type="matrix" values="0.2 0.8 0.4 0 0  0.6 0.9 0.6 0 0  0.2 0.6 0.3 0 0  0 0 0 0.5 0" />
+      <feMerge>
+        <feMergeNode />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="960" height="640" fill="url(#bgGrad)" />
+  <rect width="960" height="640" fill="url(#grid)" />
+  <rect width="960" height="640" fill="url(#centerGlow)" />
+
+  <!-- Header Tagline - Clean and Bold -->
+  <g transform="translate(480, 30)">
+    <text x="0" y="0" text-anchor="middle" fill="#f8fafc" font-size="15" font-weight="900" letter-spacing="5" opacity="0.95">HOW IT WORKS</text>
+    <rect x="-50" y="10" width="100" height="3" rx="1.5" fill="url(#gradKSail)" opacity="0.9" />
+  </g>
+
+  <!-- Subtle stars for atmosphere -->
+  <g opacity="0.6">
+    <circle cx="45" cy="35" r="1" fill="#fff">
+      <animate attributeName="opacity" values="0.3;0.8;0.3" dur="3s" repeatCount="indefinite" />
+    </circle>
+    <circle cx="120" cy="75" r="0.8" fill="#fff">
+      <animate attributeName="opacity" values="0.5;1;0.5" dur="2.5s" begin="0.5s" repeatCount="indefinite" />
+    </circle>
+    <circle cx="890" cy="40" r="1.2" fill="#fff">
+      <animate attributeName="opacity" values="0.4;0.9;0.4" dur="4s" begin="1s" repeatCount="indefinite" />
+    </circle>
+    <circle cx="920" cy="100" r="0.7" fill="#fff">
+      <animate attributeName="opacity" values="0.3;0.7;0.3" dur="2.8s" begin="0.3s" repeatCount="indefinite" />
+    </circle>
+    <circle cx="75" cy="420" r="0.9" fill="#fff">
+      <animate attributeName="opacity" values="0.4;0.8;0.4" dur="3.5s" begin="0.8s" repeatCount="indefinite" />
+    </circle>
+    <circle cx="30" cy="300" r="0.6" fill="#fff">
+      <animate attributeName="opacity" values="0.3;0.6;0.3" dur="2.2s" begin="1.5s" repeatCount="indefinite" />
+    </circle>
+    <circle cx="915" cy="380" r="1" fill="#fff">
+      <animate attributeName="opacity" values="0.5;0.9;0.5" dur="3.2s" begin="0.7s" repeatCount="indefinite" />
+    </circle>
+    <circle cx="850" cy="290" r="0.8" fill="#fff">
+      <animate attributeName="opacity" values="0.4;0.7;0.4" dur="2.6s" begin="1.2s" repeatCount="indefinite" />
+    </circle>
+  </g>
+
+  <!-- Subtle ocean accent at bottom with enhanced wave effect -->
+  <rect x="0" y="550" width="960" height="90" fill="url(#oceanGrad)" />
+
+  <!-- Wave layer 1 - closest/fastest -->
+  <rect x="0" y="585" width="960" height="55" fill="url(#waves)" opacity="0.8">
+    <animate attributeName="x" from="0" to="-180" dur="10s" repeatCount="indefinite" />
+  </rect>
+
+  <!-- Wave layer 2 - middle -->
+  <rect x="0" y="598" width="960" height="42" fill="url(#waves)" opacity="0.5">
+    <animate attributeName="x" from="-90" to="-270" dur="15s" repeatCount="indefinite" />
+  </rect>
+
+  <!-- Wave layer 3 - far/slowest -->
+  <rect x="0" y="610" width="960" height="30" fill="url(#waves)" opacity="0.25">
+    <animate attributeName="x" from="-45" to="-225" dur="22s" repeatCount="indefinite" />
+  </rect>
+
+  <!-- Horizon line - subtle -->
+  <line x1="0" y1="580" x2="960" y2="580" stroke="#22c55e" stroke-width="0.5" opacity="0.15" />
+
+  <!-- Step indicators with labels - More prominent -->
+  <g transform="translate(170, 165)">
+    <circle r="22" fill="#0f172a" stroke="url(#stepGrad)" stroke-width="3" />
+    <circle r="16" fill="url(#stepGrad)" />
+    <text x="0" y="6" text-anchor="middle" fill="#fff" font-size="16" font-weight="900">1</text>
+    <text x="0" y="36" text-anchor="middle" fill="#22d3ee" font-size="12" font-weight="800">Define</text>
+  </g>
+  <g transform="translate(790, 165)">
+    <circle r="22" fill="#0f172a" stroke="url(#stepGrad)" stroke-width="3" />
+    <circle r="16" fill="url(#stepGrad)" />
+    <text x="0" y="6" text-anchor="middle" fill="#fff" font-size="16" font-weight="900">2</text>
+    <text x="0" y="36" text-anchor="middle" fill="#22d3ee" font-size="12" font-weight="800">Execute</text>
+  </g>
+  <g transform="translate(480, 453)">
+    <circle r="22" fill="#0f172a" stroke="url(#stepGrad)" stroke-width="3" />
+    <circle r="16" fill="url(#stepGrad)" />
+    <text x="0" y="6" text-anchor="middle" fill="#fff" font-size="16" font-weight="900">3</text>
+    <text x="0" y="36" text-anchor="middle" fill="#22d3ee" font-size="12" font-weight="800">Deploy</text>
+  </g>
+
+  <!-- Connection Lines with enhanced styling -->
+  <!-- Developer to Project -->
+  <path d="M 400 115 Q 300 145, 250 205" fill="none" stroke="url(#gradDev)" stroke-width="3" stroke-dasharray="8,5" marker-end="url(#arrowDev)" opacity="0.92">
+    <animate attributeName="stroke-dashoffset" from="26" to="0" dur="2s" repeatCount="indefinite" />
+  </path>
+  <g transform="translate(305, 140)">
+    <rect x="-26" y="-14" width="52" height="24" rx="12" fill="#0f172a" stroke="#f59e0b" stroke-width="2" />
+    <text x="0" y="5" text-anchor="middle" fill="#fcd34d" font-size="11" font-weight="800" letter-spacing="0.5">edit</text>
+  </g>
+
+  <!-- Developer to KSail -->
+  <path d="M 560 115 Q 660 145, 710 205" fill="none" stroke="url(#gradDev)" stroke-width="3" marker-end="url(#arrowDev)" opacity="0.95" />
+  <g transform="translate(650, 140)">
+    <rect x="-24" y="-14" width="48" height="24" rx="12" fill="#0f172a" stroke="#f59e0b" stroke-width="2" />
+    <text x="0" y="5" text-anchor="middle" fill="#fcd34d" font-size="11" font-weight="800" letter-spacing="0.5">run</text>
+  </g>
+
+  <!-- Project <-> KSail sync line -->
+  <line x1="380" y1="290" x2="440" y2="290" stroke="#8b5cf6" stroke-width="2.5" opacity="0.85" marker-end="url(#arrowProject)">
+  </line>
+  <line x1="520" y1="290" x2="580" y2="290" stroke="#22c55e" stroke-width="2.5" opacity="0.9" marker-end="url(#arrowKSail)">
+  </line>
+  <g transform="translate(480, 290)" filter="url(#pulseGlow)">
+    <!-- Outer animated ring -->
+    <circle r="36" fill="none" stroke="url(#syncGrad)" stroke-width="1" opacity="0.25">
+      <animate attributeName="r" values="34;40;34" dur="3s" repeatCount="indefinite" />
+      <animate attributeName="opacity" values="0.25;0.12;0.25" dur="3s" repeatCount="indefinite" />
+    </circle>
+
+    <!-- Main circle background -->
+    <circle r="28" fill="#0f172a" stroke="url(#syncGrad)" stroke-width="2.5" />
+    <circle r="22" fill="#1e293b" />
+
+    <!-- Animated sync icon -->
+    <g transform="translate(0, 0)">
+      <g>
+        <animateTransform attributeName="transform" type="rotate" from="0" to="360" dur="4s" repeatCount="indefinite" />
+        <!-- Green arc (~160°) starting from top -->
+        <path d="M0 -9 A9 9 0 0 1 7.8 4.5" fill="none" stroke="#4ade80" stroke-width="2.5" stroke-linecap="round" />
+        <!-- Green triangle arrow head -->
+        <polygon points="10,7 4,7 7,1" fill="#4ade80" />
+        <!-- Purple arc (~160°) starting from bottom -->
+        <path d="M0 9 A9 9 0 0 1 -7.8 -4.5" fill="none" stroke="#c084fc" stroke-width="2.5" stroke-linecap="round" />
+        <!-- Purple triangle arrow head -->
+        <polygon points="-10,-7 -4,-7 -7,-1" fill="#c084fc" />
+      </g>
+    </g>
+  </g>
+  <!-- Config sync label -->
+  <g transform="translate(480, 338)">
+    <rect x="-48" y="-12" width="96" height="22" rx="11" fill="#0a0f1a" stroke="url(#syncGrad)" stroke-width="1.8" />
+    <text x="0" y="5" text-anchor="middle" fill="#e2e8f0" font-size="10" font-weight="700" letter-spacing="0.8">config sync</text>
+  </g>
+
+  <!-- KSail to Cluster - main provisioning path -->
+  <path d="M 710 365 Q 680 415, 600 490" fill="none" stroke="url(#gradKSail)" stroke-width="4" marker-end="url(#arrowKSail)" />
+  <!-- Glow effect for the main action path -->
+  <path d="M 710 365 Q 680 415, 600 490" fill="none" stroke="#22c55e" stroke-width="8" opacity="0.18" />
+  <g transform="translate(672, 418)">
+    <rect x="-50" y="-14" width="100" height="26" rx="13" fill="#0a0f1a" stroke="#22c55e" stroke-width="2" />
+    <text x="0" y="6" text-anchor="middle" fill="#4ade80" font-size="12" font-weight="800" letter-spacing="0.5">provisions</text>
+  </g>
+
+  <!-- Project to Cluster (GitOps) - declarative path -->
+  <path d="M 250 365 Q 280 425, 360 490" fill="none" stroke="url(#gradProject)" stroke-width="2.5" stroke-dasharray="8,5" marker-end="url(#arrowProject)" opacity="0.75">
+    <animate attributeName="stroke-dashoffset" from="26" to="0" dur="2.5s" repeatCount="indefinite" />
+  </path>
+  <g transform="translate(282, 412)">
+    <rect x="-44" y="-14" width="88" height="26" rx="13" fill="#0a0f1a" stroke="#8b5cf6" stroke-width="1.8" />
+    <text x="0" y="6" text-anchor="middle" fill="#c084fc" font-size="12" font-weight="800" letter-spacing="0.5">GitOps</text>
+  </g>
+
+  <!-- ===== DEVELOPER CARD ===== -->
+  <g transform="translate(375, 50)" filter="url(#glowDev)">
+    <rect width="210" height="80" rx="16" fill="#1e293b" filter="url(#softShadow)" />
+    <rect width="210" height="80" rx="16" fill="none" stroke="url(#gradDev)" stroke-width="2.5" />
+    <!-- Subtle inner glow -->
+    <rect x="2" y="2" width="206" height="76" rx="14" fill="none" stroke="#fcd34d" stroke-width="0.5" opacity="0.35" />
+
+    <!-- Icon Circle with glow - Modern Developer Icon -->
+    <circle cx="42" cy="42" r="26" fill="#f59e0b" fill-opacity="0.12" />
+    <g transform="translate(22, 22)">
+      <!-- Laptop base -->
+      <rect x="0" y="26" width="40" height="5" rx="2.5" fill="#fbbf24" />
+      <rect x="3" y="27" width="34" height="2" rx="1" fill="#fcd34d" opacity="0.5" />
+      <!-- Laptop screen bezel -->
+      <rect x="2" y="6" width="36" height="22" rx="3" fill="#292524" stroke="#fbbf24" stroke-width="2.5" />
+      <!-- Screen inner -->
+      <rect x="5" y="9" width="30" height="16" rx="1.5" fill="#0c0a09" />
+      <!-- Code lines - clean and vibrant -->
+      <line x1="8" y1="13" x2="18" y2="13" stroke="#4ade80" stroke-width="2.5" stroke-linecap="round" />
+      <line x1="20" y1="13" x2="28" y2="13" stroke="#c084fc" stroke-width="2.5" stroke-linecap="round" />
+      <line x1="8" y1="17" x2="14" y2="17" stroke="#60a5fa" stroke-width="2.5" stroke-linecap="round" />
+      <line x1="16" y1="17" x2="26" y2="17" stroke="#fbbf24" stroke-width="2.5" stroke-linecap="round" />
+      <line x1="8" y1="21" x2="22" y2="21" stroke="#4ade80" stroke-width="2.5" stroke-linecap="round" />
+      <!-- Blinking cursor -->
+      <rect x="24" y="19" width="3" height="5" rx="1" fill="#fcd34d">
+        <animate attributeName="opacity" values="1;0.2;1" dur="1s" repeatCount="indefinite" />
+      </rect>
+    </g>
+
+    <!-- Text -->
+    <text x="80" y="36" fill="#fcd34d" font-size="18" font-weight="800" letter-spacing="1.5">DEVELOPER</text>
+    <text x="80" y="56" fill="#f1f5f9" font-size="11" font-weight="500" opacity="0.95">Your local machine</text>
+  </g>
+
+  <!-- ===== PROJECT CARD ===== -->
+  <g transform="translate(105, 210)" filter="url(#glowProject)">
+    <rect width="260" height="160" rx="16" fill="#1e293b" filter="url(#softShadow)" />
+    <rect width="260" height="160" rx="16" fill="none" stroke="url(#gradProject)" stroke-width="2.5" />
+    <!-- Subtle inner glow -->
+    <rect x="2" y="2" width="256" height="156" rx="14" fill="none" stroke="#c084fc" stroke-width="0.5" opacity="0.35" />
+
+    <!-- Enhanced Folder Icon -->
+    <g transform="translate(18, 18)">
+      <!-- Folder back -->
+      <path d="M0 10 L0 38 Q0 42, 4 42 L38 42 Q42 42, 42 38 L42 14 Q42 10, 38 10 L24 10 L20 5 L4 5 Q0 5, 0 10 Z" fill="#7c3aed" />
+      <!-- Folder front -->
+      <path d="M0 14 L42 14 L42 38 Q42 42, 38 42 L4 42 Q0 42, 0 38 Z" fill="#9333ea" />
+      <!-- Folder shine -->
+      <path d="M0 14 L42 14 L42 20 L0 20 Z" fill="#a855f7" opacity="0.6" />
+      <!-- Top tab shine -->
+      <path d="M4 5 L18 5 L22 10 L4 10 Q2 10, 2 8 L2 7 Q2 5, 4 5 Z" fill="#c084fc" opacity="0.4" />
+    </g>
+
+    <!-- Text -->
+    <text x="72" y="38" fill="#c084fc" font-size="18" font-weight="800" letter-spacing="1.5">PROJECT</text>
+    <text x="72" y="58" fill="#f1f5f9" font-size="11" font-weight="500" opacity="0.95">Git Repository</text>
+
+    <!-- File Browser with enhanced styling -->
+    <rect x="16" y="78" width="228" height="66" rx="10" fill="#0a0f1a" stroke="#475569" stroke-width="1.2" />
+    <!-- Git branch visualization with better styling -->
+    <g transform="translate(30, 92)">
+      <!-- Main branch -->
+      <circle cx="0" cy="0" r="7" fill="#9333ea" stroke="#a855f7" stroke-width="1.2" />
+      <circle cx="0" cy="0" r="3.5" fill="#c084fc" opacity="0.6" />
+      <line x1="0" y1="8" x2="0" y2="34" stroke="#7c3aed" stroke-width="3.5" stroke-linecap="round" />
+      <circle cx="0" cy="40" r="6" fill="#8b5cf6" stroke="#a855f7" stroke-width="1.2" />
+      <!-- Feature branch -->
+      <circle cx="20" cy="20" r="6" fill="#a855f7" stroke="#c084fc" stroke-width="1.2" />
+      <line x1="5" y1="5" x2="16" y2="16" stroke="#9333ea" stroke-width="3" stroke-linecap="round" />
+    </g>
+    <!-- Folder icon -->
+    <g transform="translate(58, 92)">
+      <path d="M0 2 L0 14 Q0 15, 1.5 15 L15 15 Q16 15, 16 14 L16 5 Q16 4, 15 4 L9 4 L7.5 1.5 L1.5 1.5 Q0 1.5, 0 2 Z" fill="#9333ea" />
+      <path d="M0 5 L16 5 L16 14 Q16 15, 15 15 L1.5 15 Q0 15, 0 14 Z" fill="#a855f7" />
+    </g>
+    <text x="78" y="106" fill="#f1f5f9" font-size="13" font-family="'JetBrains Mono', 'SF Mono', 'Fira Code', monospace" font-weight="600">k8s/</text>
+    <!-- File icon -->
+    <g transform="translate(58, 117)">
+      <path d="M1 0 L9 0 L14 5 L14 17 Q14 18, 13 18 L1 18 Q0 18, 0 17 L0 1 Q0 0, 1 0 Z" fill="#64748b" />
+      <path d="M9 0 L9 5 L14 5" fill="none" stroke="#94a3b8" stroke-width="0.9" />
+      <path d="M9 0 L9 4 Q9 5, 10 5 L14 5" fill="#475569" />
+    </g>
+    <text x="78" y="133" fill="#94a3b8" font-size="13" font-family="'JetBrains Mono', 'SF Mono', 'Fira Code', monospace" font-weight="500">ksail.yaml</text>
+  </g>
+
+  <!-- ===== KSAIL CARD (Main Hero) ===== -->
+  <g transform="translate(595, 210)" filter="url(#glowKSail)">
+    <!-- Hero glow backdrop -->
+    <ellipse cx="130" cy="80" rx="160" ry="110" fill="url(#ksailHeroGlow)">
+      <animate attributeName="opacity" values="0.85;1;0.85" dur="4s" repeatCount="indefinite" />
+    </ellipse>
+
+    <rect width="260" height="160" rx="16" fill="#1e293b" filter="url(#softShadow)" />
+    <rect width="260" height="160" rx="16" fill="none" stroke="url(#gradKSail)" stroke-width="3">
+      <animate attributeName="stroke-width" values="3;3.5;3" dur="3s" repeatCount="indefinite" />
+    </rect>
+    <!-- Subtle inner glow with pulse -->
+    <rect x="2" y="2" width="256" height="156" rx="14" fill="none" stroke="#4ade80" stroke-width="0.6" opacity="0.35">
+      <animate attributeName="opacity" values="0.35;0.55;0.35" dur="3s" repeatCount="indefinite" />
+    </rect>
+
+    <!-- Enhanced Sailboat Icon - Cleaner Design -->
+    <g transform="translate(14, 6) scale(1.1)">
+      <!-- Water shimmer effect -->
+      <ellipse cx="26" cy="54" rx="26" ry="6" fill="#22c55e" opacity="0.15">
+        <animate attributeName="rx" values="24;28;24" dur="3s" repeatCount="indefinite" />
+        <animate attributeName="opacity" values="0.15;0.22;0.15" dur="3s" repeatCount="indefinite" />
+      </ellipse>
+
+      <!-- Hull - cleaner curved shape -->
+      <path d="M6 44 Q6 52, 20 52 L32 52 Q46 52, 46 44 L40 36 L12 36 Z" fill="url(#hullGrad)" />
+      <path d="M12 36 L40 36 L42 40 L10 40 Z" fill="#22c55e" opacity="0.35" />
+
+      <!-- Mast - centered and clean -->
+      <rect x="24" y="6" width="4" height="32" rx="2" fill="#14532d" />
+      <rect x="25" y="6" width="2" height="32" rx="1" fill="#166534" />
+
+      <!-- Main Sail - crisp triangle -->
+      <path d="M28 8 L28 35 L48 35 Q50 26, 46 20 L34 10 Q30 6, 28 8 Z" fill="url(#sailGrad)" />
+      <path d="M29 12 L29 33 L44 33" fill="none" stroke="#bbf7d0" stroke-width="0.8" opacity="0.3" />
+
+      <!-- Front Sail (jib) - balanced -->
+      <path d="M24 8 L24 33 L6 33 Q4 24, 6 19 L18 10 Q22 6, 24 8 Z" fill="url(#sailGradSecondary)" opacity="0.9" />
+
+      <!-- Flag - waving pennant -->
+      <g>
+        <path d="M26 6 L26 -2 L36 2 L26 6" fill="#ef4444">
+          <animate attributeName="d" values="M26 6 L26 -2 L36 2 L26 6;M26 6 L26 -2 L34 1 L26 6;M26 6 L26 -2 L36 2 L26 6" dur="2.5s" repeatCount="indefinite" />
+        </path>
+      </g>
+    </g>
+
+    <!-- Text with enhanced styling and glow -->
+    <text x="78" y="36" fill="#4ade80" font-size="28" font-weight="900" letter-spacing="4" filter="url(#textGlow)">KSAIL</text>
+    <!-- CLI badge -->
+    <g transform="translate(186, 16)">
+      <rect x="0" y="0" width="48" height="24" rx="8" fill="#0a0f1a" stroke="#22c55e" stroke-width="2" />
+      <text x="24" y="16" text-anchor="middle" fill="#4ade80" font-size="12" font-weight="800">CLI</text>
+    </g>
+    <text x="78" y="58" fill="#86efac" font-size="12" font-weight="700" letter-spacing="1">One Binary • All Tools</text>
+
+    <!-- Terminal Window with enhanced styling -->
+    <rect x="16" y="78" width="228" height="66" rx="10" fill="#020617" stroke="#166534" stroke-width="2" />
+    <!-- Window chrome gradient -->
+    <rect x="16" y="78" width="228" height="22" rx="10" fill="#0f172a" />
+    <rect x="16" y="90" width="228" height="10" fill="#0f172a" />
+    <!-- Window controls with glows -->
+    <circle cx="32" cy="92" r="5.5" fill="#ef4444">
+      <animate attributeName="fill-opacity" values="1;0.7;1" dur="4s" repeatCount="indefinite" />
+    </circle>
+    <circle cx="48" cy="92" r="5.5" fill="#eab308" />
+    <circle cx="64" cy="92" r="5.5" fill="#22c55e" />
+    <!-- Command prompt -->
+    <text x="28" y="127" fill="#22c55e" font-size="13" font-family="'JetBrains Mono', 'SF Mono', 'Fira Code', monospace" font-weight="600">$</text>
+    <text x="44" y="127" fill="#f1f5f9" font-size="13" font-family="'JetBrains Mono', 'SF Mono', 'Fira Code', monospace" font-weight="600">ksail cluster create</text>
+    <!-- Blinking cursor with glow -->
+    <rect x="202" y="114" width="10" height="16" rx="2" fill="#4ade80">
+      <animate attributeName="opacity" values="1;0.2;1" dur="1s" repeatCount="indefinite" />
+    </rect>
+  </g>
+
+  <!-- ===== KUBERNETES CLUSTER CARD ===== -->
+  <g transform="translate(120, 498)" filter="url(#glowCluster)">
+    <rect width="720" height="130" rx="20" fill="#1e293b" filter="url(#softShadow)" />
+    <rect width="720" height="130" rx="20" fill="none" stroke="url(#gradCluster)" stroke-width="2.5" />
+    <!-- Subtle inner border -->
+    <rect x="2" y="2" width="716" height="126" rx="18" fill="none" stroke="#60a5fa" stroke-width="0.5" opacity="0.35" />
+
+    <!-- Enhanced K8s Wheel Icon -->
+    <g transform="translate(26, 20)">
+      <!-- Outer glow rings -->
+      <circle cx="30" cy="30" r="34" fill="none" stroke="#3b82f6" stroke-width="0.5" opacity="0.2">
+        <animate attributeName="r" values="32;36;32" dur="4s" repeatCount="indefinite" />
+      </circle>
+      <circle cx="30" cy="30" r="28" fill="#1e40af" fill-opacity="0.25" />
+      <!-- Main wheel -->
+      <circle cx="30" cy="30" r="18" fill="url(#gradCluster)">
+        <animate attributeName="r" values="18;19;18" dur="3s" repeatCount="indefinite" />
+      </circle>
+      <!-- Center with depth -->
+      <circle cx="30" cy="30" r="6" fill="#0f172a" />
+      <circle cx="30" cy="30" r="4" fill="#1e293b" />
+      <!-- Enhanced spokes with gradient effect -->
+      <g stroke="#93c5fd" stroke-width="3.5" stroke-linecap="round">
+        <line x1="30" y1="2" x2="30" y2="13" />
+        <line x1="30" y1="47" x2="30" y2="58" />
+        <line x1="2" y1="30" x2="13" y2="30" />
+        <line x1="47" y1="30" x2="58" y2="30" />
+        <line x1="10" y1="10" x2="18" y2="18" />
+        <line x1="42" y1="42" x2="50" y2="50" />
+        <line x1="50" y1="10" x2="42" y2="18" />
+        <line x1="18" y1="42" x2="10" y2="50" />
+      </g>
+      <!-- Spoke tips -->
+      <g fill="#bfdbfe">
+        <circle cx="30" cy="0" r="2.5" />
+        <circle cx="30" cy="60" r="2.5" />
+        <circle cx="0" cy="30" r="2.5" />
+        <circle cx="60" cy="30" r="2.5" />
+        <circle cx="8" cy="8" r="2" />
+        <circle cx="52" cy="52" r="2" />
+        <circle cx="52" cy="8" r="2" />
+        <circle cx="8" cy="52" r="2" />
+      </g>
+    </g>
+
+    <!-- Text with enhanced styling -->
+    <text x="108" y="38" fill="#60a5fa" font-size="20" font-weight="800" letter-spacing="1.5">KUBERNETES CLUSTER</text>
+    <text x="108" y="58" fill="#f1f5f9" font-size="12" font-weight="500" opacity="0.95">Kind • K3d • Talos</text>
+
+    <!-- Feature Pills - Single row with key features -->
+    <g transform="translate(108, 70)">
+      <rect x="0" y="0" width="42" height="24" rx="12" fill="#22c55e" fill-opacity="0.2" stroke="#22c55e" stroke-width="1.8" />
+      <text x="21" y="16" text-anchor="middle" fill="#4ade80" font-size="11" font-weight="800">Flux</text>
+
+      <rect x="48" y="0" width="60" height="24" rx="12" fill="#f59e0b" fill-opacity="0.2" stroke="#f59e0b" stroke-width="1.8" />
+      <text x="78" y="16" text-anchor="middle" fill="#fbbf24" font-size="11" font-weight="800">ArgoCD</text>
+
+      <rect x="114" y="0" width="50" height="24" rx="12" fill="#8b5cf6" fill-opacity="0.2" stroke="#8b5cf6" stroke-width="1.8" />
+      <text x="139" y="16" text-anchor="middle" fill="#c084fc" font-size="11" font-weight="800">SOPS</text>
+
+      <rect x="170" y="0" width="54" height="24" rx="12" fill="#3b82f6" fill-opacity="0.2" stroke="#3b82f6" stroke-width="1.8" />
+      <text x="197" y="16" text-anchor="middle" fill="#60a5fa" font-size="11" font-weight="800">Cilium</text>
+
+      <rect x="230" y="0" width="64" height="24" rx="12" fill="#ec4899" fill-opacity="0.2" stroke="#ec4899" stroke-width="1.8" />
+      <text x="262" y="16" text-anchor="middle" fill="#f472b6" font-size="11" font-weight="800">Kyverno</text>
+
+      <rect x="300" y="0" width="38" height="24" rx="12" fill="#475569" fill-opacity="0.2" stroke="#475569" stroke-width="1.8" />
+      <text x="319" y="16" text-anchor="middle" fill="#94a3b8" font-size="11" font-weight="800">+4</text>
+    </g>
+
+    <!-- Secondary features row -->
+    <g transform="translate(108, 99)">
+      <rect x="0" y="0" width="82" height="22" rx="11" fill="#06b6d4" fill-opacity="0.18" stroke="#06b6d4" stroke-width="1.5" opacity="0.95" />
+      <text x="41" y="15" text-anchor="middle" fill="#22d3ee" font-size="10" font-weight="700">cert-manager</text>
+
+      <rect x="88" y="0" width="82" height="22" rx="11" fill="#10b981" fill-opacity="0.18" stroke="#10b981" stroke-width="1.5" opacity="0.95" />
+      <text x="129" y="15" text-anchor="middle" fill="#6ee7b7" font-size="10" font-weight="700">metrics-server</text>
+
+      <rect x="176" y="0" width="78" height="22" rx="11" fill="#f97316" fill-opacity="0.18" stroke="#f97316" stroke-width="1.5" opacity="0.95" />
+      <text x="215" y="15" text-anchor="middle" fill="#fdba74" font-size="10" font-weight="700">local-registry</text>
+
+      <rect x="260" y="0" width="78" height="22" rx="11" fill="#14b8a6" fill-opacity="0.18" stroke="#14b8a6" stroke-width="1.5" opacity="0.95" />
+      <text x="299" y="15" text-anchor="middle" fill="#2dd4bf" font-size="10" font-weight="700">Gatekeeper</text>
+    </g>
+
+    <!-- Workloads Panel with enhanced styling -->
+    <rect x="463" y="14" width="237" height="100" rx="14" fill="#0a0f1a" stroke="#475569" stroke-width="1.5" />
+    <!-- Panel header -->
+    <rect x="463" y="14" width="237" height="26" rx="14" fill="#0f172a" />
+    <rect x="463" y="30" width="237" height="10" fill="#0f172a" />
+    <text x="582" y="34" text-anchor="middle" fill="#94a3b8" font-size="11" font-weight="800" letter-spacing="2.5">WORKLOADS</text>
+
+    <!-- Pod hexagons - Success, Reconciling, Pending states -->
+      <!-- Successfully deployed (green with checkmark) - subtle glow pulse -->
+      <g transform="translate(480, 52)">
+        <polygon points="14,0 28,8 28,24 14,32 0,24 0,8" fill="#22c55e" stroke="#16a34a" stroke-width="1.5">
+          <animate attributeName="opacity" values="1;0.85;1" dur="2.5s" repeatCount="indefinite" />
+        </polygon>
+        <text x="14" y="20" text-anchor="middle" fill="#052e16" font-size="14" font-weight="800">✓</text>
+      </g>
+      <g transform="translate(515, 52)">
+        <polygon points="14,0 28,8 28,24 14,32 0,24 0,8" fill="#22c55e" stroke="#16a34a" stroke-width="1.5">
+          <animate attributeName="opacity" values="1;0.85;1" dur="2.5s" begin="0.8s" repeatCount="indefinite" />
+        </polygon>
+        <text x="14" y="20" text-anchor="middle" fill="#052e16" font-size="14" font-weight="800">✓</text>
+      </g>
+      <!-- Reconciling (yellow/orange with spinning sync) -->
+      <g transform="translate(550, 52)">
+        <polygon points="14,0 28,8 28,24 14,32 0,24 0,8" fill="#f59e0b" stroke="#d97706" stroke-width="1.5">
+          <animate attributeName="opacity" values="1;0.7;1" dur="1.5s" repeatCount="indefinite" />
+        </polygon>
+        <g transform="translate(14, 16)">
+          <g>
+            <animateTransform attributeName="transform" type="rotate" from="0" to="360" dur="2s" repeatCount="indefinite" />
+            <path d="M0 -5 A5 5 0 0 1 4.3 2.5" fill="none" stroke="#451a03" stroke-width="1.8" stroke-linecap="round" />
+            <polygon points="5.5,4 2.5,2 4,0" fill="#451a03" />
+            <path d="M0 5 A5 5 0 0 1 -4.3 -2.5" fill="none" stroke="#451a03" stroke-width="1.8" stroke-linecap="round" />
+            <polygon points="-5.5,-4 -2.5,-2 -4,0" fill="#451a03" />
+          </g>
+        </g>
+      </g>
+      <g transform="translate(585, 52)">
+        <polygon points="14,0 28,8 28,24 14,32 0,24 0,8" fill="#f59e0b" stroke="#d97706" stroke-width="1.5">
+          <animate attributeName="opacity" values="1;0.7;1" dur="1.5s" begin="0.3s" repeatCount="indefinite" />
+        </polygon>
+        <g transform="translate(14, 16)">
+          <g>
+            <animateTransform attributeName="transform" type="rotate" from="0" to="360" dur="2s" begin="0.3s" repeatCount="indefinite" />
+            <path d="M0 -5 A5 5 0 0 1 4.3 2.5" fill="none" stroke="#451a03" stroke-width="1.8" stroke-linecap="round" />
+            <polygon points="5.5,4 2.5,2 4,0" fill="#451a03" />
+            <path d="M0 5 A5 5 0 0 1 -4.3 -2.5" fill="none" stroke="#451a03" stroke-width="1.8" stroke-linecap="round" />
+            <polygon points="-5.5,-4 -2.5,-2 -4,0" fill="#451a03" />
+          </g>
+        </g>
+      </g>
+      <!-- Pending (gray with animated clock) -->
+    <g transform="translate(620, 52)">
+        <polygon points="14,0 28,8 28,24 14,32 0,24 0,8" fill="#475569" stroke="#334155" stroke-width="1.5">
+          <animate attributeName="opacity" values="0.6;0.9;0.6" dur="3s" repeatCount="indefinite" />
+        </polygon>
+      <circle cx="14" cy="16" r="6" fill="none" stroke="#e2e8f0" stroke-width="1.5" />
+      <line x1="14" y1="16" x2="14" y2="12" stroke="#e2e8f0" stroke-width="1.5" stroke-linecap="round" />
+        <g transform="translate(14, 16)">
+          <line x1="0" y1="0" x2="3" y2="2" stroke="#e2e8f0" stroke-width="1.5" stroke-linecap="round">
+            <animateTransform attributeName="transform" type="rotate" from="0 0 0" to="360 0 0" dur="4s" repeatCount="indefinite" />
+          </line>
+        </g>
+    </g>
+    <g transform="translate(655, 52)">
+        <polygon points="14,0 28,8 28,24 14,32 0,24 0,8" fill="#475569" stroke="#334155" stroke-width="1.5">
+          <animate attributeName="opacity" values="0.6;0.9;0.6" dur="3s" begin="1s" repeatCount="indefinite" />
+        </polygon>
+      <circle cx="14" cy="16" r="6" fill="none" stroke="#e2e8f0" stroke-width="1.5" />
+      <line x1="14" y1="16" x2="14" y2="12" stroke="#e2e8f0" stroke-width="1.5" stroke-linecap="round" />
+        <g transform="translate(14, 16)">
+          <line x1="0" y1="0" x2="3" y2="2" stroke="#e2e8f0" stroke-width="1.5" stroke-linecap="round">
+            <animateTransform attributeName="transform" type="rotate" from="0 0 0" to="360 0 0" dur="4s" begin="1s" repeatCount="indefinite" />
+          </line>
+        </g>
+    </g>
+  </g>
+
+    <!-- Enhanced compass rose with nautical theme -->
+  <g transform="translate(890, 595)" opacity="0.35">
+      <!-- Outer ring -->
+    <circle r="24" fill="none" stroke="#4ade80" stroke-width="1" />
+    <circle r="20" fill="none" stroke="#4ade80" stroke-width="1.5" />
+
+      <!-- Cardinal direction lines -->
+    <line x1="0" y1="-18" x2="0" y2="18" stroke="#4ade80" stroke-width="1.2" />
+    <line x1="-18" y1="0" x2="18" y2="0" stroke="#4ade80" stroke-width="1.2" />
+
+      <!-- Intercardinal lines -->
+    <line x1="-12" y1="-12" x2="12" y2="12" stroke="#4ade80" stroke-width="0.7" opacity="0.7" />
+    <line x1="12" y1="-12" x2="-12" y2="12" stroke="#4ade80" stroke-width="0.7" opacity="0.7" />
+
+      <!-- North pointer with gradient effect -->
+    <polygon points="0,-17 5,-7 -5,-7" fill="#4ade80" />
+    <polygon points="0,-17 2.5,-9 -2.5,-9" fill="#86efac" opacity="0.7" />
+
+      <!-- Cardinal markers -->
+    <text x="0" y="-28" text-anchor="middle" fill="#4ade80" font-size="8" font-weight="700">N</text>
+    <text x="0" y="33" text-anchor="middle" fill="#4ade80" font-size="7" font-weight="600" opacity="0.8">S</text>
+    <text x="30" y="4" text-anchor="middle" fill="#4ade80" font-size="7" font-weight="600" opacity="0.8">E</text>
+    <text x="-30" y="4" text-anchor="middle" fill="#4ade80" font-size="7" font-weight="600" opacity="0.8">W</text>
+
+      <!-- Center dot -->
+    <circle r="3" fill="#4ade80" />
+  </g>
+
+    <!-- Subtle anchor watermark in bottom left -->
+  <g transform="translate(50, 598)" opacity="0.2">
+      <!-- Anchor ring -->
+    <circle cx="0" cy="-14" r="7" fill="none" stroke="#4ade80" stroke-width="2.5" />
+      <!-- Anchor shank -->
+    <line x1="0" y1="-7" x2="0" y2="16" stroke="#4ade80" stroke-width="3" stroke-linecap="round" />
+      <!-- Anchor stock (crossbar) -->
+    <line x1="-12" y1="-5" x2="12" y2="-5" stroke="#4ade80" stroke-width="2.5" stroke-linecap="round" />
+      <!-- Anchor arms/flukes -->
+    <path d="M-14 16 Q0 9, 14 16" fill="none" stroke="#4ade80" stroke-width="3" stroke-linecap="round" />
+      <!-- Fluke tips -->
+    <line x1="-14" y1="16" x2="-17" y2="9" stroke="#4ade80" stroke-width="2.5" stroke-linecap="round" />
+    <line x1="14" y1="16" x2="17" y2="9" stroke="#4ade80" stroke-width="2.5" stroke-linecap="round" />
+  </g>
+
+  </g><!-- End scale wrapper -->
+</svg>

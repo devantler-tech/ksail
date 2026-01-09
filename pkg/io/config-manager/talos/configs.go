@@ -60,6 +60,31 @@ func NewDefaultConfigs() (*Configs, error) {
 	)
 }
 
+// NewDefaultConfigsWithPatches creates a new Talos Configs with default settings plus additional patches.
+// This is used when no scaffolded project exists but additional runtime patches are needed
+// (e.g., kubelet-csr-approver extraManifests when metrics-server is enabled).
+//
+// The additional patches are applied after the default allowSchedulingOnControlPlanes patch.
+func NewDefaultConfigsWithPatches(additionalPatches []Patch) (*Configs, error) {
+	// Default configs are used for control-plane-only clusters (no workers),
+	// so we need to allow scheduling on control-plane nodes.
+	allowSchedulingPatch := Patch{
+		Path:    "allow-scheduling-on-control-planes",
+		Scope:   PatchScopeCluster,
+		Content: []byte("cluster:\n  allowSchedulingOnControlPlanes: true\n"),
+	}
+
+	patches := []Patch{allowSchedulingPatch}
+	patches = append(patches, additionalPatches...)
+
+	return newConfigs(
+		DefaultClusterName,
+		DefaultKubernetesVersion,
+		DefaultNetworkCIDR,
+		patches,
+	)
+}
+
 // Bundle returns the underlying Talos config bundle.
 // This provides full access to all bundle functionality.
 func (c *Configs) Bundle() *bundle.Bundle {
