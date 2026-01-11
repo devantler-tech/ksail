@@ -26,5 +26,5 @@ type LocalRegistry struct {
 	Enabled bool `json:"enabled,omitzero"`
 	// HostPort is the port on the host machine to expose the registry on.
 	// Defaults to 5050.
-	HostPort int32 `default:"5050" json:"hostPort,omitzero"`
+	HostPort int32 `json:"hostPort,omitzero" default:"5050"`
 }
