@@ -121,6 +121,7 @@ func NewScaffolder(cfg v1alpha1.Cluster, writer io.Writer, mirrorRegistries []st
 // Talos cluster patches, and to derive the kubeconfig context in ksail.yaml.
 func (s *Scaffolder) WithClusterName(name string) *Scaffolder {
 	s.ClusterName = name
+
 	return s
 }
 
@@ -366,6 +367,7 @@ func (s *Scaffolder) applyKSailConfigDefaults() v1alpha1.Cluster {
 			// Use default context name
 			expectedContext = v1alpha1.ExpectedContextName(config.Spec.Cluster.Distribution)
 		}
+
 		if expectedContext != "" {
 			config.Spec.Cluster.Connection.Context = expectedContext
 		}
@@ -386,19 +388,7 @@ func (s *Scaffolder) applyKSailConfigDefaults() v1alpha1.Cluster {
 // contextNameForDistribution returns the kubeconfig context name for a given distribution
 // using the scaffolder's ClusterName. Returns empty string if ClusterName is not set.
 func (s *Scaffolder) contextNameForDistribution(distribution v1alpha1.Distribution) string {
-	if s.ClusterName == "" {
-		return ""
-	}
-	switch distribution {
-	case v1alpha1.DistributionVanilla:
-		return "kind-" + s.ClusterName
-	case v1alpha1.DistributionK3s:
-		return "k3d-" + s.ClusterName
-	case v1alpha1.DistributionTalos:
-		return "admin@" + s.ClusterName
-	default:
-		return ""
-	}
+	return distribution.ContextName(s.ClusterName)
 }
 
 // File handling helpers.

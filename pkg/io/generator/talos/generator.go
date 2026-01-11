@@ -455,11 +455,22 @@ func (g *TalosGenerator) generateClusterNamePatch(
 		return nil
 	}
 
-	patchContent := `cluster:
-  clusterName: ` + clusterName + `
-`
+	// Use typed struct for proper YAML marshaling to avoid injection issues
+	type clusterNamePatch struct {
+		Cluster struct {
+			ClusterName string `yaml:"clusterName"`
+		} `yaml:"cluster"`
+	}
 
-	err := os.WriteFile(patchPath, []byte(patchContent), filePerm)
+	patch := clusterNamePatch{}
+	patch.Cluster.ClusterName = clusterName
+
+	generator := yamlgenerator.NewYAMLGenerator[clusterNamePatch]()
+	_, err := generator.Generate(patch, yamlgenerator.Options{
+		Output: patchPath,
+		Force:  true, // Already checked force above
+	})
+
 	if err != nil {
 		return fmt.Errorf("failed to create cluster-name patch: %w", err)
 	}

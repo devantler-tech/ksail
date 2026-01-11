@@ -1,5 +1,47 @@
 package v1alpha1
 
+import (
+	"fmt"
+	"regexp"
+)
+
+// clusterNameRegex matches DNS-1123 subdomain names: lowercase alphanumeric with optional hyphens.
+// Must start with a letter, end with alphanumeric, and be at most 63 characters.
+// See: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#dns-subdomain-names
+var clusterNameRegex = regexp.MustCompile(`^[a-z][a-z0-9-]*[a-z0-9]$|^[a-z]$`)
+
+// ClusterNameMaxLength is the maximum length for a cluster name.
+const ClusterNameMaxLength = 63
+
+// ValidateClusterName validates that a cluster name is DNS-1123 compliant.
+// Cluster names are used in Docker container names, Kubernetes contexts, and YAML fields,
+// which require DNS-1123 subdomain names (lowercase alphanumeric and dashes only).
+//
+// Returns nil if the name is valid, or an error describing the validation failure.
+func ValidateClusterName(name string) error {
+	if name == "" {
+		return nil // Empty names are allowed (means use default)
+	}
+
+	if len(name) > ClusterNameMaxLength {
+		return fmt.Errorf(
+			"cluster name %q is too long: max %d characters, got %d",
+			name, ClusterNameMaxLength, len(name),
+		)
+	}
+
+	if !clusterNameRegex.MatchString(name) {
+		return fmt.Errorf(
+			"cluster name %q is invalid: must be DNS-1123 compliant "+
+				"(lowercase letters, numbers, and hyphens; must start with a letter; "+
+				"must not end with a hyphen)",
+			name,
+		)
+	}
+
+	return nil
+}
+
 // ValidDistributions returns supported distribution values.
 func ValidDistributions() []Distribution {
 	return []Distribution{DistributionVanilla, DistributionK3s, DistributionTalos}

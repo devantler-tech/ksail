@@ -217,3 +217,70 @@ func TestConfigs_HostDNS_Enabled(t *testing.T) {
 		"HostDNS should forward kube-dns to host for container mode",
 	)
 }
+
+func TestConfigs_WithName(t *testing.T) {
+	t.Parallel()
+
+	t.Run("changes cluster name and regenerates bundle", func(t *testing.T) {
+		t.Parallel()
+
+		manager := talos.NewConfigManager("", "original-cluster", "1.32.0", "10.5.0.0/24")
+
+		originalConfigs, err := manager.LoadConfig(nil)
+		require.NoError(t, err)
+		require.NotNil(t, originalConfigs)
+
+		assert.Equal(t, "original-cluster", originalConfigs.GetClusterName())
+
+		// Rename the cluster
+		renamedConfigs, err := originalConfigs.WithName("renamed-cluster")
+		require.NoError(t, err)
+		require.NotNil(t, renamedConfigs)
+
+		// Verify the new config has the new name
+		assert.Equal(t, "renamed-cluster", renamedConfigs.GetClusterName())
+
+		// Verify the bundle was regenerated (different PKI)
+		originalBundle := originalConfigs.Bundle()
+		renamedBundle := renamedConfigs.Bundle()
+		assert.NotSame(t, originalBundle, renamedBundle, "bundle should be regenerated, not reused")
+
+		// Verify the talosconfig context is updated
+		originalTalosConfig := originalBundle.TalosConfig()
+		renamedTalosConfig := renamedBundle.TalosConfig()
+
+		assert.Equal(t, "original-cluster", originalTalosConfig.Context)
+		assert.Equal(t, "renamed-cluster", renamedTalosConfig.Context)
+	})
+
+	t.Run("returns same config when name is empty", func(t *testing.T) {
+		t.Parallel()
+
+		manager := talos.NewConfigManager("", "my-cluster", "1.32.0", "10.5.0.0/24")
+
+		originalConfigs, err := manager.LoadConfig(nil)
+		require.NoError(t, err)
+
+		sameConfigs, err := originalConfigs.WithName("")
+		require.NoError(t, err)
+		assert.Same(t, originalConfigs, sameConfigs, "should return same config when name is empty")
+	})
+
+	t.Run("returns same config when name is unchanged", func(t *testing.T) {
+		t.Parallel()
+
+		manager := talos.NewConfigManager("", "my-cluster", "1.32.0", "10.5.0.0/24")
+
+		originalConfigs, err := manager.LoadConfig(nil)
+		require.NoError(t, err)
+
+		sameConfigs, err := originalConfigs.WithName("my-cluster")
+		require.NoError(t, err)
+		assert.Same(
+			t,
+			originalConfigs,
+			sameConfigs,
+			"should return same config when name is unchanged",
+		)
+	})
+}

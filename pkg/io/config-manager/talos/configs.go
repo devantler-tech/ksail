@@ -34,6 +34,12 @@ type Configs struct {
 	Name string
 	// bundle is the underlying Talos config bundle.
 	bundle *bundle.Bundle
+	// kubernetesVersion is stored for regeneration with a new name.
+	kubernetesVersion string
+	// networkCIDR is stored for regeneration with a new name.
+	networkCIDR string
+	// patches is stored for regeneration with a new name.
+	patches []Patch
 }
 
 // NewDefaultConfigs creates a new Talos Configs with default settings.
@@ -136,6 +142,33 @@ func (c *Configs) Worker() talosconfig.Provider {
 // This implements configmanager.ClusterNameProvider interface.
 func (c *Configs) GetClusterName() string {
 	return c.Name
+}
+
+// WithName creates a new Configs with a different cluster name.
+// This regenerates the underlying Talos bundle with the new cluster name,
+// which is necessary because the cluster name is embedded in PKI certificates
+// and the kubeconfig context name (admin@<cluster-name>).
+//
+// Returns a new Configs instance; the original is not modified.
+// Returns an error if bundle regeneration fails.
+func (c *Configs) WithName(name string) (*Configs, error) {
+	if name == "" || name == c.Name {
+		return c, nil
+	}
+
+	// Use stored values for regeneration, falling back to defaults
+	kubernetesVersion := c.kubernetesVersion
+	if kubernetesVersion == "" {
+		kubernetesVersion = DefaultKubernetesVersion
+	}
+
+	networkCIDR := c.networkCIDR
+	if networkCIDR == "" {
+		networkCIDR = DefaultNetworkCIDR
+	}
+
+	// Regenerate the bundle with the new cluster name
+	return newConfigs(name, kubernetesVersion, networkCIDR, c.patches)
 }
 
 // IsCNIDisabled returns true if the default CNI is disabled (set to "none").
@@ -260,7 +293,13 @@ func newConfigs(
 		return nil, fmt.Errorf("failed to create config bundle: %w", err)
 	}
 
-	return &Configs{Name: clusterName, bundle: configBundle}, nil
+	return &Configs{
+		Name:              clusterName,
+		bundle:            configBundle,
+		kubernetesVersion: kubernetesVersion,
+		networkCIDR:       networkCIDR,
+		patches:           patches,
+	}, nil
 }
 
 // MirrorRegistry represents a registry mirror configuration.

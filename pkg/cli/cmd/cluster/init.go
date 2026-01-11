@@ -118,6 +118,13 @@ func HandleInitRunE(
 	mirrorRegistries := cfgManager.Viper.GetStringSlice("mirror-registry")
 	clusterName := cfgManager.Viper.GetString("name")
 
+	// Validate cluster name is DNS-1123 compliant
+	if clusterName != "" {
+		if validationErr := v1alpha1.ValidateClusterName(clusterName); validationErr != nil {
+			return validationErr
+		}
+	}
+
 	scaffolderInstance := scaffolder.NewScaffolder(
 		*clusterCfg,
 		cmd.OutOrStdout(),

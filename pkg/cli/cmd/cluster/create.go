@@ -91,7 +91,15 @@ func handleCreateRunE(
 	// Apply cluster name override from --name flag if provided
 	nameOverride := cfgManager.Viper.GetString("name")
 	if nameOverride != "" {
-		applyClusterNameOverride(ctx, nameOverride)
+		// Validate cluster name is DNS-1123 compliant
+		if validationErr := v1alpha1.ValidateClusterName(nameOverride); validationErr != nil {
+			return validationErr
+		}
+
+		err = applyClusterNameOverride(ctx, nameOverride)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Early validation of distribution x provider combination
@@ -341,9 +349,12 @@ func setupK3dMetricsServer(clusterCfg *v1alpha1.Cluster, k3dConfig *v1alpha5.Sim
 // applyClusterNameOverride updates distribution configs with the cluster name override.
 // This function mutates the distribution config pointers in ctx to apply the --name flag value.
 // The name override takes highest priority over distribution config or context-derived names.
-func applyClusterNameOverride(ctx *localregistry.Context, name string) {
+//
+// For Talos, this regenerates the config bundle with the new cluster name because
+// the cluster name is embedded in PKI certificates and the kubeconfig context name.
+func applyClusterNameOverride(ctx *localregistry.Context, name string) error {
 	if name == "" {
-		return
+		return nil
 	}
 
 	// Update Kind config
@@ -356,20 +367,21 @@ func applyClusterNameOverride(ctx *localregistry.Context, name string) {
 		ctx.K3dConfig.Name = name
 	}
 
-	// Update Talos config
+	// Update Talos config - must regenerate bundle for new cluster name
+	// because cluster name is embedded in PKI and kubeconfig context
 	if ctx.TalosConfig != nil {
-		ctx.TalosConfig.Name = name
+		newConfig, err := ctx.TalosConfig.WithName(name)
+		if err != nil {
+			return fmt.Errorf("failed to apply cluster name override to Talos config: %w", err)
+		}
+
+		ctx.TalosConfig = newConfig
 	}
 
 	// Update the ksail.yaml context to match the distribution pattern
 	if ctx.ClusterCfg != nil {
-		switch ctx.ClusterCfg.Spec.Cluster.Distribution {
-		case v1alpha1.DistributionVanilla:
-			ctx.ClusterCfg.Spec.Cluster.Connection.Context = "kind-" + name
-		case v1alpha1.DistributionK3s:
-			ctx.ClusterCfg.Spec.Cluster.Connection.Context = "k3d-" + name
-		case v1alpha1.DistributionTalos:
-			ctx.ClusterCfg.Spec.Cluster.Connection.Context = "admin@" + name
-		}
+		ctx.ClusterCfg.Spec.Cluster.Connection.Context = ctx.ClusterCfg.Spec.Cluster.Distribution.ContextName(name)
 	}
+
+	return nil
 }
