@@ -131,7 +131,10 @@ func TestDetectDistributionFromContext_AllPatterns_Snapshot(t *testing.T) {
 func TestExtractClusterNameFromContext_Kind(t *testing.T) {
 	t.Parallel()
 
-	clusterName := lifecycle.ExtractClusterNameFromContext("kind-local", v1alpha1.DistributionVanilla)
+	clusterName := lifecycle.ExtractClusterNameFromContext(
+		"kind-local",
+		v1alpha1.DistributionVanilla,
+	)
 	assert.Equal(t, "local", clusterName)
 }
 

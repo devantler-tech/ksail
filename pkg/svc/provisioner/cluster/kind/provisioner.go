@@ -106,11 +106,11 @@ type KindProvider interface {
 // It uses kind's Cobra commands where available (create, delete, list) and delegates
 // infrastructure operations (start, stop) to the injected Provider.
 type KindClusterProvisioner struct {
-	kubeConfig       string
-	kindConfig       *v1alpha4.Cluster
-	kindSDKProvider  KindProvider
-	infraProvider    provider.Provider
-	runner           runner.CommandRunner
+	kubeConfig      string
+	kindConfig      *v1alpha4.Cluster
+	kindSDKProvider KindProvider
+	infraProvider   provider.Provider
+	runner          runner.CommandRunner
 }
 
 // NewKindClusterProvisioner constructs a KindClusterProvisioner with explicit dependencies

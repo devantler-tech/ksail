@@ -170,7 +170,7 @@ func FormatValidationErrorsMultiline(result *validator.ValidationResult) string 
 // FormatValidationWarnings formats validation warnings for CLI display.
 // This function provides a standardized way to format validation warnings.
 func FormatValidationWarnings(result *validator.ValidationResult) []string {
-	warnings := make([]string, 0)
+	warnings := make([]string, 0, len(result.Warnings))
 
 	for _, warning := range result.Warnings {
 		warnings = append(warnings, fmt.Sprintf("Warning - %s: %s", warning.Field, warning.Message))

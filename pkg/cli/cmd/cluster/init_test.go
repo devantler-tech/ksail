@@ -291,7 +291,8 @@ func TestHandleInitRunE_DefaultsLocalRegistryWithFlux(t *testing.T) {
 		t.Fatalf("expected ksail.yaml to be scaffolded: %v", err)
 	}
 
-	if !strings.Contains(string(content), "localRegistry:") || !strings.Contains(string(content), "enabled: true") {
+	if !strings.Contains(string(content), "localRegistry:") ||
+		!strings.Contains(string(content), "enabled: true") {
 		t.Fatalf("expected ksail.yaml to enable local registry when Flux is selected\n%s", content)
 	}
 }

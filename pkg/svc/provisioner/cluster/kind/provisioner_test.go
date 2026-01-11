@@ -74,7 +74,7 @@ func TestCreateSuccess(t *testing.T) {
 
 func TestCreateErrorCreateFailed(t *testing.T) {
 	t.Parallel()
-	provisioner, _, _, runner := newProvisionerForTest(t)
+	provisioner, _, runner := newProvisionerForTest(t)
 
 	// Mock command runner to return error
 	runner.On("Run").
@@ -108,7 +108,7 @@ func TestDeleteSuccess(t *testing.T) {
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
-			provisioner, _, _, runner := newProvisionerForTest(t)
+			provisioner, _, runner := newProvisionerForTest(t)
 
 			// First call: List (via Exists) - return cluster name so cluster exists
 			runner.On("Run").Return(cmdrunner.CommandResult{
@@ -126,7 +126,7 @@ func TestDeleteSuccess(t *testing.T) {
 func TestDeleteIncludesKubeconfigFlag(t *testing.T) {
 	t.Parallel()
 
-	provisioner, _, _, runner := newProvisionerForTest(t)
+	provisioner, _, runner := newProvisionerForTest(t)
 	// First call: List (via Exists) - return cluster name so cluster exists
 	runner.On("Run").Return(cmdrunner.CommandResult{
 		Stdout: "cfg-name\n",
@@ -159,7 +159,7 @@ func TestCreateUsesConfigNameWhenEmpty(t *testing.T) {
 func TestDeleteUsesProvidedName(t *testing.T) {
 	t.Parallel()
 
-	provisioner, _, _, runner := newProvisionerForTest(t)
+	provisioner, _, runner := newProvisionerForTest(t)
 	// First call: List (via Exists) - return cluster name so cluster exists
 	runner.On("Run").Return(cmdrunner.CommandResult{
 		Stdout: "delete-me\n",
@@ -175,7 +175,7 @@ func TestDeleteUsesProvidedName(t *testing.T) {
 
 func TestDeleteErrorDeleteFailed(t *testing.T) {
 	t.Parallel()
-	provisioner, _, _, runner := newProvisionerForTest(t)
+	provisioner, _, runner := newProvisionerForTest(t)
 
 	// First call: List (via Exists) - return cluster name so cluster exists
 	runner.On("Run").Return(cmdrunner.CommandResult{
@@ -192,7 +192,7 @@ func TestDeleteErrorDeleteFailed(t *testing.T) {
 
 func TestDeleteErrorClusterNotFound(t *testing.T) {
 	t.Parallel()
-	provisioner, _, _, runner := newProvisionerForTest(t)
+	provisioner, _, runner := newProvisionerForTest(t)
 
 	// Mock List to return no clusters
 	runner.On("Run").Return(cmdrunner.CommandResult{
@@ -206,7 +206,7 @@ func TestDeleteErrorClusterNotFound(t *testing.T) {
 
 func TestExistsSuccessFalse(t *testing.T) {
 	t.Parallel()
-	provisioner, _, _, runner := newProvisionerForTest(t)
+	provisioner, _, runner := newProvisionerForTest(t)
 
 	// Mock command runner to return cluster names that don't include "not-here"
 	runner.On("Run").
@@ -224,7 +224,7 @@ func TestExistsSuccessFalse(t *testing.T) {
 
 func TestExistsSuccessTrue(t *testing.T) {
 	t.Parallel()
-	provisioner, _, _, runner := newProvisionerForTest(t)
+	provisioner, _, runner := newProvisionerForTest(t)
 
 	// Mock command runner to return cluster names including cfg-name
 	runner.On("Run").
@@ -242,7 +242,7 @@ func TestExistsSuccessTrue(t *testing.T) {
 
 func TestExistsErrorListFailed(t *testing.T) {
 	t.Parallel()
-	provisioner, _, _, runner := newProvisionerForTest(t)
+	provisioner, _, runner := newProvisionerForTest(t)
 
 	// Mock command runner to return error
 	runner.On("Run").
@@ -260,7 +260,7 @@ func TestExistsErrorListFailed(t *testing.T) {
 
 func TestListSuccess(t *testing.T) {
 	t.Parallel()
-	provisioner, _, _, runner := newProvisionerForTest(t)
+	provisioner, _, runner := newProvisionerForTest(t)
 	// Mock command runner to return cluster names
 	runner.On("Run").
 		Return(cmdrunner.CommandResult{Stdout: "a\nb\n", Stderr: ""}, nil)
@@ -273,7 +273,7 @@ func TestListSuccess(t *testing.T) {
 
 func TestListErrorListFailed(t *testing.T) {
 	t.Parallel()
-	provisioner, _, _, runner := newProvisionerForTest(t)
+	provisioner, _, runner := newProvisionerForTest(t)
 	// Mock command runner to return error
 	runner.On("Run").
 		Return(cmdrunner.CommandResult{}, errListClustersFailed)
@@ -286,7 +286,7 @@ func TestListErrorListFailed(t *testing.T) {
 
 func TestListFiltersNoKindClustersMessage(t *testing.T) {
 	t.Parallel()
-	provisioner, _, _, runner := newProvisionerForTest(t)
+	provisioner, _, runner := newProvisionerForTest(t)
 
 	runner.On("Run").Return(cmdrunner.CommandResult{
 		Stdout: "No kind clusters found.\n",
@@ -308,7 +308,7 @@ func TestStartErrorClusterNotFound(t *testing.T) {
 
 func TestStartErrorProviderFailed(t *testing.T) {
 	t.Parallel()
-	provisioner, _, infraProvider, _ := newProvisionerForTest(t)
+	provisioner, infraProvider, _ := newProvisionerForTest(t)
 	infraProvider.On("StartNodes", mock.Anything, "cfg-name").Return(errStartClusterFailed)
 
 	err := provisioner.Start(context.Background(), "")
@@ -319,7 +319,7 @@ func TestStartErrorProviderFailed(t *testing.T) {
 
 func TestStartSuccess(t *testing.T) {
 	t.Parallel()
-	provisioner, _, infraProvider, _ := newProvisionerForTest(t)
+	provisioner, infraProvider, _ := newProvisionerForTest(t)
 
 	// Mock successful start
 	infraProvider.On("StartNodes", mock.Anything, "cfg-name").Return(nil)
@@ -352,7 +352,7 @@ func TestStopErrorClusterNotFound(t *testing.T) {
 
 func TestStopErrorProviderFailed(t *testing.T) {
 	t.Parallel()
-	provisioner, _, infraProvider, _ := newProvisionerForTest(t)
+	provisioner, infraProvider, _ := newProvisionerForTest(t)
 	infraProvider.On("StopNodes", mock.Anything, "cfg-name").Return(errStopClusterFailed)
 
 	err := provisioner.Stop(context.Background(), "")
@@ -376,7 +376,7 @@ func TestStopErrorDockerStopFailed(t *testing.T) {
 
 func TestStopSuccess(t *testing.T) {
 	t.Parallel()
-	provisioner, _, infraProvider, _ := newProvisionerForTest(t)
+	provisioner, infraProvider, _ := newProvisionerForTest(t)
 
 	// Mock successful stop
 	infraProvider.On("StopNodes", mock.Anything, "cfg-name").Return(nil)
@@ -393,7 +393,6 @@ func newProvisionerForTest(
 	t *testing.T,
 ) (
 	*kindprovisioner.KindClusterProvisioner,
-	*kindprovisioner.MockKindProvider,
 	*provider.MockProvider,
 	*mockCommandRunner,
 ) {
@@ -417,7 +416,7 @@ func newProvisionerForTest(
 		runner,
 	)
 
-	return provisioner, kindProvider, infraProvider, runner
+	return provisioner, infraProvider, runner
 }
 
 // helper to DRY up the repeated "cluster not found" error scenario for Start/Stop.
@@ -427,7 +426,7 @@ func runClusterNotFoundTest(
 	action func(*kindprovisioner.KindClusterProvisioner) error,
 ) {
 	t.Helper()
-	provisioner, _, infraProvider, _ := newProvisionerForTest(t)
+	provisioner, infraProvider, _ := newProvisionerForTest(t)
 	// Mock StartNodes/StopNodes to return ErrNoNodes
 	infraProvider.On("StartNodes", mock.Anything, "cfg-name").Return(provider.ErrNoNodes).Maybe()
 	infraProvider.On("StopNodes", mock.Anything, "cfg-name").Return(provider.ErrNoNodes).Maybe()
@@ -447,7 +446,7 @@ func runProviderOperationFailureTest(
 	expectedErrorMsg string,
 ) {
 	t.Helper()
-	provisioner, _, infraProvider, _ := newProvisionerForTest(t)
+	provisioner, infraProvider, _ := newProvisionerForTest(t)
 
 	expectProviderCall(infraProvider)
 
@@ -485,7 +484,7 @@ func runProvisionerRunnerSuccessTest(
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
-			provisioner, _, _, runner := newProvisionerForTest(t)
+			provisioner, _, runner := newProvisionerForTest(t)
 			runner.On("Run").Return(cmdrunner.CommandResult{}, nil)
 
 			err := action(context.Background(), provisioner, testCase.inputName)
@@ -519,7 +518,7 @@ func assertNameFlagPropagation(
 ) {
 	t.Helper()
 
-	provisioner, _, _, runner := newProvisionerForTest(t)
+	provisioner, _, runner := newProvisionerForTest(t)
 	runner.On("Run").Return(cmdrunner.CommandResult{}, nil)
 
 	err := action(provisioner)

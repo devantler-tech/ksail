@@ -288,7 +288,10 @@ func (p *Provider) listTalosContainers(
 }
 
 // containerToNodeInfo converts a Docker container to a NodeInfo.
-func (p *Provider) containerToNodeInfo(ctr container.Summary, clusterName string) provider.NodeInfo {
+func (p *Provider) containerToNodeInfo(
+	ctr container.Summary,
+	clusterName string,
+) provider.NodeInfo {
 	name := ""
 	if len(ctr.Names) > 0 {
 		name = strings.TrimPrefix(ctr.Names[0], "/")

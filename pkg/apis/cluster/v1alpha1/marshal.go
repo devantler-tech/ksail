@@ -278,7 +278,9 @@ func contextDependentPruneRules(distribution Distribution) []pruneRule {
 		},
 		// Connection.Context default depends on the distribution type
 		func(c *Cluster) {
-			if defaultCtx := ExpectedContextName(distribution); c.Spec.Cluster.Connection.Context == defaultCtx {
+			if defaultCtx := ExpectedContextName(
+				distribution,
+			); c.Spec.Cluster.Connection.Context == defaultCtx {
 				c.Spec.Cluster.Connection.Context = ""
 			}
 		},

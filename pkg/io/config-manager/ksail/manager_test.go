@@ -322,16 +322,16 @@ func TestLoadConfigAppliesFlagOverrides(t *testing.T) {
 
 // createFieldSelectorsWithName creates field selectors including name field.
 func createFieldSelectorsWithName() []configmanager.FieldSelector[v1alpha1.Cluster] {
-	selectors := []configmanager.FieldSelector[v1alpha1.Cluster]{
-		newFieldSelector(
-			func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.Distribution },
-			v1alpha1.Distribution(""), // Empty distribution for testing defaults
-			"Kubernetes distribution",
-		),
-	}
+	standardSelectors := createStandardFieldSelectors()
+	selectors := make([]configmanager.FieldSelector[v1alpha1.Cluster], 0, len(standardSelectors))
+	selectors = append(selectors, newFieldSelector(
+		func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.Distribution },
+		v1alpha1.Distribution(""), // Empty distribution for testing defaults
+		"Kubernetes distribution",
+	))
 	selectors = append(
 		selectors,
-		createStandardFieldSelectors()[1:]...) // Skip the first selector which is Distribution
+		standardSelectors[1:]...) // Skip the first selector which is Distribution
 
 	return selectors
 }
@@ -521,7 +521,11 @@ func TestLoadConfigAppliesLocalRegistryDefaults(t *testing.T) {
 			require.NoError(t, err)
 
 			require.Equal(t, testCase.gitOpsEngine, manager.Config.Spec.Cluster.GitOpsEngine)
-			assert.Equal(t, testCase.expectedEnabled, manager.Config.Spec.Cluster.LocalRegistry.Enabled)
+			assert.Equal(
+				t,
+				testCase.expectedEnabled,
+				manager.Config.Spec.Cluster.LocalRegistry.Enabled,
+			)
 			assert.Equal(
 				t,
 				testCase.expectedHostPort,
@@ -546,7 +550,11 @@ func TestLoadConfigDefaultsLocalRegistryDisabledWhenGitOpsEngineUnset(t *testing
 	require.NoError(t, err)
 
 	assert.False(t, manager.Config.Spec.Cluster.LocalRegistry.Enabled)
-	assert.Equal(t, v1alpha1.DefaultLocalRegistryPort, manager.Config.Spec.Cluster.LocalRegistry.HostPort)
+	assert.Equal(
+		t,
+		v1alpha1.DefaultLocalRegistryPort,
+		manager.Config.Spec.Cluster.LocalRegistry.HostPort,
+	)
 }
 
 func TestNewCommandConfigManagerBindsFlags(t *testing.T) {
@@ -786,18 +794,19 @@ func testFieldValueSetting(
 	tempDir := t.TempDir()
 	t.Chdir(tempDir)
 
-	fieldSelectors := []configmanager.FieldSelector[v1alpha1.Cluster]{
-		{
+	fieldSelectors := make([]configmanager.FieldSelector[v1alpha1.Cluster], 0, 2+len(additionalSelectors))
+	fieldSelectors = append(fieldSelectors,
+		configmanager.FieldSelector[v1alpha1.Cluster]{
 			Selector:     selector,
 			DefaultValue: defaultValue,
 			Description:  description,
 		},
-		{
+		configmanager.FieldSelector[v1alpha1.Cluster]{
 			Selector:     func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.DistributionConfig },
 			DefaultValue: "kind.yaml",
 			Description:  "Distribution config",
 		},
-	}
+	)
 	fieldSelectors = append(fieldSelectors, additionalSelectors...)
 
 	manager := configmanager.NewConfigManager(io.Discard, fieldSelectors...)

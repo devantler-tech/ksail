@@ -98,7 +98,10 @@ func CleanupAll(
 		)
 	} else {
 		// Discover and cleanup registries by network (for Kind, K3d)
-		networkName := getNetworkNameForDistribution(clusterCfg.Spec.Cluster.Distribution, clusterName)
+		networkName := getNetworkNameForDistribution(
+			clusterCfg.Spec.Cluster.Distribution,
+			clusterName,
+		)
 		err = cleanupRegistriesByNetwork(
 			cmd,
 			deps,

@@ -226,7 +226,9 @@ func (m *ConfigManager) unmarshalAndApplyDefaults() error {
 	// Handle nested options path for local registry host port.
 	// The YAML output uses `spec.cluster.localRegistry.hostPort` but viper may
 	// have it under a different path. We manually extract this to handle path mismatches.
-	if nestedHostPort := m.Viper.GetInt32("spec.cluster.localRegistry.hostPort"); nestedHostPort > 0 {
+	if nestedHostPort := m.Viper.GetInt32(
+		"spec.cluster.localRegistry.hostPort",
+	); nestedHostPort > 0 {
 		m.Config.Spec.Cluster.LocalRegistry.HostPort = nestedHostPort
 	}
 

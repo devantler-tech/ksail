@@ -27,4 +27,6 @@ var ErrInvalidPolicyEngine = errors.New("invalid policy engine")
 var ErrInvalidProvider = errors.New("invalid provider")
 
 // ErrInvalidDistributionProviderCombination is returned when the distribution and provider combination is invalid.
-var ErrInvalidDistributionProviderCombination = errors.New("invalid distribution and provider combination")
+var ErrInvalidDistributionProviderCombination = errors.New(
+	"invalid distribution and provider combination",
+)

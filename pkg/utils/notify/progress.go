@@ -293,7 +293,8 @@ func (pg *ProgressGroup) runCI(ctx context.Context, tasks []ProgressTask) error 
 				_, _ = fcolor.New(fcolor.FgRed).Fprintf(pg.writer, "✗ %s failed\n", task.Name)
 			} else {
 				pg.taskStatus[task.Name] = taskComplete
-				_, _ = fcolor.New(fcolor.FgGreen).Fprintf(pg.writer, "✔ %s %s\n", task.Name, pg.labels.Completed)
+				_, _ = fcolor.New(fcolor.FgGreen).
+					Fprintf(pg.writer, "✔ %s %s\n", task.Name, pg.labels.Completed)
 			}
 
 			pg.mu.Unlock()

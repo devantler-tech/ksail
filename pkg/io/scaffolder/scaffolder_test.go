@@ -203,7 +203,8 @@ func TestScaffoldGeneratorFailures(t *testing.T) {
 
 			// Test scenarios that might cause generator failures
 			// Use a deeply nested path to potentially trigger path length limits
-			longPathParts := []string{t.TempDir()}
+			longPathParts := make([]string, 0, 11)
+			longPathParts = append(longPathParts, t.TempDir())
 			for range 10 {
 				longPathParts = append(longPathParts, "very-long-directory-name")
 			}

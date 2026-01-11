@@ -74,7 +74,8 @@ func NewDefaultConfigsWithPatches(additionalPatches []Patch) (*Configs, error) {
 		Content: []byte("cluster:\n  allowSchedulingOnControlPlanes: true\n"),
 	}
 
-	patches := []Patch{allowSchedulingPatch}
+	patches := make([]Patch, 0, 1+len(additionalPatches))
+	patches = append(patches, allowSchedulingPatch)
 	patches = append(patches, additionalPatches...)
 
 	return newConfigs(
