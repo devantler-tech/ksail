@@ -57,6 +57,14 @@ Documentation‑as‑Code, transparency, single source of truth, continuous impr
 
 This project uses **Jekyll** with the **just-the-docs** theme. Documentation lives in the `docs/` directory.
 
+**KSail Architecture Overview:**
+- **Go-based CLI**: Main application in `cmd/` and `pkg/`
+- **Embedded tools**: kubectl, helm, kind, k3d, flux, argocd as Go libraries
+- **Distributions**: Vanilla (Kind), K3s (K3d), Talos (Talos SDK)
+- **Providers**: Docker (currently), Hetzner (planned for Talos)
+- **Provisioners**: Separate distribution provisioners in `pkg/svc/provisioner/`
+- **Services**: Installers, providers, and managers in `pkg/svc/`
+
 **Key configuration:**
 
 - Theme: `just-the-docs` (configured in `docs/_config.yml`)
