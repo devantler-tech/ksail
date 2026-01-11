@@ -81,7 +81,7 @@ runs:
         TIMEOUT: ${{ inputs.workload-timeout }}
       run: |
         ksail workload create deployment "$WORKLOAD_NAME" --image="$WORKLOAD_IMAGE"
-        ksail workload wait --for=condition=available --deployment="$WORKLOAD_NAME" --timeout="$TIMEOUT"
+        ksail workload wait --for=condition=Available deployment/"$WORKLOAD_NAME" --timeout="$TIMEOUT"
 
     - name: 🧪 ksail workload apply
       id: workload-apply
