@@ -45,7 +45,7 @@ func NewListCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
 	cmd.Flags().StringVarP(
 		&distributionFilter,
 		"distribution", "d", "",
-		"Filter by distribution (Kind, K3d, Talos). If not specified, lists all distributions.",
+		"Filter by distribution (Vanilla, K3s, Talos). If not specified, lists all distributions.",
 	)
 
 	return cmd

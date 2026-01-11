@@ -15,7 +15,7 @@ Usage:
   ksail cluster list [flags]
 
 Flags:
-  -d, --distribution string   Filter by distribution (Kind, K3d, Talos). If not specified, lists all distributions.
+  -d, --distribution string   Filter by distribution (Vanilla, K3s, Talos). If not specified, lists all distributions.
   -h, --help                  help for list
 
 Global Flags:
