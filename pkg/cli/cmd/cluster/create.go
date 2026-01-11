@@ -62,6 +62,10 @@ func NewCreateCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
 		"Configure mirror registries with format 'host=upstream' (e.g., docker.io=https://registry-1.docker.io)")
 	_ = cfgManager.Viper.BindPFlag("mirror-registry", cmd.Flags().Lookup("mirror-registry"))
 
+	cmd.Flags().StringP("name", "n", "",
+		"Cluster name used for container names, registry names, and kubeconfig context")
+	_ = cfgManager.Viper.BindPFlag("name", cmd.Flags().Lookup("name"))
+
 	cmd.RunE = lifecycle.WrapHandler(runtimeContainer, cfgManager, handleCreateRunE)
 
 	return cmd
@@ -82,6 +86,12 @@ func handleCreateRunE(
 	ctx, err := loadClusterConfiguration(cfgManager, outputTimer)
 	if err != nil {
 		return err
+	}
+
+	// Apply cluster name override from --name flag if provided
+	nameOverride := cfgManager.Viper.GetString("name")
+	if nameOverride != "" {
+		applyClusterNameOverride(ctx, nameOverride)
 	}
 
 	// Early validation of distribution x provider combination
@@ -326,4 +336,40 @@ func setupK3dMetricsServer(clusterCfg *v1alpha1.Cluster, k3dConfig *v1alpha5.Sim
 			NodeFilters: []string{"server:*"},
 		},
 	)
+}
+
+// applyClusterNameOverride updates distribution configs with the cluster name override.
+// This function mutates the distribution config pointers in ctx to apply the --name flag value.
+// The name override takes highest priority over distribution config or context-derived names.
+func applyClusterNameOverride(ctx *localregistry.Context, name string) {
+	if name == "" {
+		return
+	}
+
+	// Update Kind config
+	if ctx.KindConfig != nil {
+		ctx.KindConfig.Name = name
+	}
+
+	// Update K3d config
+	if ctx.K3dConfig != nil {
+		ctx.K3dConfig.Name = name
+	}
+
+	// Update Talos config
+	if ctx.TalosConfig != nil {
+		ctx.TalosConfig.Name = name
+	}
+
+	// Update the ksail.yaml context to match the distribution pattern
+	if ctx.ClusterCfg != nil {
+		switch ctx.ClusterCfg.Spec.Cluster.Distribution {
+		case v1alpha1.DistributionVanilla:
+			ctx.ClusterCfg.Spec.Cluster.Connection.Context = "kind-" + name
+		case v1alpha1.DistributionK3s:
+			ctx.ClusterCfg.Spec.Cluster.Connection.Context = "k3d-" + name
+		case v1alpha1.DistributionTalos:
+			ctx.ClusterCfg.Spec.Cluster.Connection.Context = "admin@" + name
+		}
+	}
 }

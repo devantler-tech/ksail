@@ -72,6 +72,13 @@ func bindInitLocalFlags(cmd *cobra.Command, cfgManager *ksailconfigmanager.Confi
 		"Configure mirror registries with format 'host=upstream' (e.g., docker.io=https://registry-1.docker.io).",
 	)
 	_ = cfgManager.Viper.BindPFlag("mirror-registry", cmd.Flags().Lookup("mirror-registry"))
+	cmd.Flags().StringP(
+		"name",
+		"n",
+		"",
+		"Cluster name used for container names, registry names, and kubeconfig context",
+	)
+	_ = cfgManager.Viper.BindPFlag("name", cmd.Flags().Lookup("name"))
 }
 
 // InitDeps captures dependencies required for the init command.
@@ -109,12 +116,18 @@ func HandleInitRunE(
 
 	force := cfgManager.Viper.GetBool("force")
 	mirrorRegistries := cfgManager.Viper.GetStringSlice("mirror-registry")
+	clusterName := cfgManager.Viper.GetString("name")
 
 	scaffolderInstance := scaffolder.NewScaffolder(
 		*clusterCfg,
 		cmd.OutOrStdout(),
 		mirrorRegistries,
 	)
+
+	// Apply cluster name override if provided
+	if clusterName != "" {
+		scaffolderInstance.WithClusterName(clusterName)
+	}
 
 	if deps.Timer != nil {
 		deps.Timer.NewStage()

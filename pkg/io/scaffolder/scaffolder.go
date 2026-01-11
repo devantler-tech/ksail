@@ -89,6 +89,7 @@ type Scaffolder struct {
 	ArgoCDAppGenerator     *argocdgenerator.ApplicationGenerator
 	Writer                 io.Writer
 	MirrorRegistries       []string // Format: "name=upstream" (e.g., "docker.io=https://registry-1.docker.io")
+	ClusterName            string   // Optional override for cluster name. If set, overrides distribution defaults.
 }
 
 // NewScaffolder creates a new Scaffolder instance with the provided KSail cluster configuration.
@@ -113,6 +114,14 @@ func NewScaffolder(cfg v1alpha1.Cluster, writer io.Writer, mirrorRegistries []st
 		Writer:                 writer,
 		MirrorRegistries:       mirrorRegistries,
 	}
+}
+
+// WithClusterName sets an explicit cluster name override for the scaffolder.
+// When set, this name is used for distribution configs (kind.yaml Name, k3d.yaml metadata.name),
+// Talos cluster patches, and to derive the kubeconfig context in ksail.yaml.
+func (s *Scaffolder) WithClusterName(name string) *Scaffolder {
+	s.ClusterName = name
+	return s
 }
 
 // Main scaffolding operations.
@@ -203,8 +212,13 @@ func (s *Scaffolder) GenerateK3dRegistryConfig() k3dv1alpha5.SimpleConfigRegistr
 //
 //nolint:funlen // K3d config requires setting many fields; splitting would reduce readability
 func (s *Scaffolder) CreateK3dConfig() k3dv1alpha5.SimpleConfig {
-	// Resolve cluster name - use context from ksail config or default
-	clusterName := k3dconfigmanager.ResolveClusterName(&s.KSailConfig, nil)
+	// Resolve cluster name - use explicit ClusterName if set, otherwise resolve from config
+	var clusterName string
+	if s.ClusterName != "" {
+		clusterName = s.ClusterName
+	} else {
+		clusterName = k3dconfigmanager.ResolveClusterName(&s.KSailConfig, nil)
+	}
 
 	config := k3dv1alpha5.SimpleConfig{
 		TypeMeta: types.TypeMeta{
@@ -342,9 +356,16 @@ func (s *Scaffolder) addK3dLocalRegistryConfig(
 func (s *Scaffolder) applyKSailConfigDefaults() v1alpha1.Cluster {
 	config := s.KSailConfig
 
-	// Set the expected context if it's empty, based on the distribution and default cluster names
+	// Set the expected context if it's empty, based on the distribution and cluster name
 	if config.Spec.Cluster.Connection.Context == "" {
-		expectedContext := v1alpha1.ExpectedContextName(config.Spec.Cluster.Distribution)
+		var expectedContext string
+		if s.ClusterName != "" {
+			// Use custom cluster name to derive context
+			expectedContext = s.contextNameForDistribution(config.Spec.Cluster.Distribution)
+		} else {
+			// Use default context name
+			expectedContext = v1alpha1.ExpectedContextName(config.Spec.Cluster.Distribution)
+		}
 		if expectedContext != "" {
 			config.Spec.Cluster.Connection.Context = expectedContext
 		}
@@ -360,6 +381,24 @@ func (s *Scaffolder) applyKSailConfigDefaults() v1alpha1.Cluster {
 	}
 
 	return config
+}
+
+// contextNameForDistribution returns the kubeconfig context name for a given distribution
+// using the scaffolder's ClusterName. Returns empty string if ClusterName is not set.
+func (s *Scaffolder) contextNameForDistribution(distribution v1alpha1.Distribution) string {
+	if s.ClusterName == "" {
+		return ""
+	}
+	switch distribution {
+	case v1alpha1.DistributionVanilla:
+		return "kind-" + s.ClusterName
+	case v1alpha1.DistributionK3s:
+		return "k3d-" + s.ClusterName
+	case v1alpha1.DistributionTalos:
+		return "admin@" + s.ClusterName
+	default:
+		return ""
+	}
 }
 
 // File handling helpers.
@@ -604,12 +643,18 @@ func (s *Scaffolder) generateKindConfig(output string, force bool) error {
 // buildKindConfig creates the Kind cluster configuration object.
 // Node counts can be set via --control-planes and --workers CLI flags.
 func (s *Scaffolder) buildKindConfig(output string) *v1alpha4.Cluster {
+	// Determine cluster name - use explicit ClusterName if set, otherwise default
+	clusterName := kindconfigmanager.DefaultClusterName
+	if s.ClusterName != "" {
+		clusterName = s.ClusterName
+	}
+
 	kindConfig := &v1alpha4.Cluster{
 		TypeMeta: v1alpha4.TypeMeta{
 			APIVersion: "kind.x-k8s.io/v1alpha4",
 			Kind:       "Cluster",
 		},
-		Name: "kind",
+		Name: clusterName,
 	}
 
 	// Disable default CNI if using a non-default CNI (Cilium or Calico)
@@ -742,6 +787,7 @@ func (s *Scaffolder) generateTalosConfig(output string, force bool) error {
 		WorkerNodes:               workers,
 		DisableDefaultCNI:         disableDefaultCNI,
 		EnableKubeletCertRotation: enableKubeletCertRotation,
+		ClusterName:               s.ClusterName,
 	}
 
 	opts := yamlgenerator.Options{
@@ -766,7 +812,7 @@ func (s *Scaffolder) notifyTalosGenerated(
 ) {
 	// Determine which directories have patches (no .gitkeep generated there)
 	clusterHasPatches := workers == 0 || len(s.MirrorRegistries) > 0 || disableDefaultCNI ||
-		enableKubeletCertRotation
+		enableKubeletCertRotation || s.ClusterName != ""
 
 	// Notify about .gitkeep files only for directories without patches
 	subdirs := []string{"cluster", "control-planes", "workers"}
@@ -789,6 +835,7 @@ func (s *Scaffolder) notifyTalosGenerated(
 		{disableDefaultCNI, "disable-default-cni.yaml"},
 		{enableKubeletCertRotation, "kubelet-cert-rotation.yaml"},
 		{enableKubeletCertRotation, "kubelet-csr-approver.yaml"},
+		{s.ClusterName != "", "cluster-name.yaml"},
 	}
 
 	for _, patch := range patches {

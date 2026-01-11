@@ -12,7 +12,7 @@ KSail provides a unified CLI for local Kubernetes development with built-in supp
 Create and manage local Kubernetes clusters with a single command. KSail supports multiple distributions and automatically configures networking, storage, and observability components.
 
 ```bash
-ksail cluster init --distribution Vanilla --cni Cilium
+ksail cluster init --name my-cluster --distribution Vanilla --cni Cilium
 ksail cluster create
 ```
 
@@ -20,13 +20,14 @@ ksail cluster create
 
 - **Multi-distribution support** – [Vanilla, K3s, and Talos](concepts.md#distributions) distributions
 - **Component installation** – [CNI](concepts.md#container-network-interface-cni) (Cilium, Calico), [CSI](concepts.md#container-storage-interface-csi), [metrics-server](concepts.md#metrics-server) with [kubelet-csr-approver](concepts.md#kubelet-csr-approver), [cert-manager](concepts.md#cert-manager), and [policy engines](concepts.md#policy-engines)
+- **Custom cluster naming** – Set container, registry, and context names via `--name`
 - **Node configuration** – Control-plane and worker node counts via `--control-planes` and `--workers`
 - **Connection management** – Automatic kubeconfig and context configuration
 
 **Commands:** [`ksail cluster`](configuration/cli-flags/cluster/cluster-root.md)
 
 | Command                 | Description                 |
-|-------------------------|-----------------------------|
+| ----------------------- | --------------------------- |
 | `ksail cluster init`    | Initialize a new project    |
 | `ksail cluster create`  | Create a cluster            |
 | `ksail cluster delete`  | Delete a cluster            |
@@ -58,7 +59,7 @@ ksail workload logs deployment/my-app
 **Commands:** [`ksail workload`](configuration/cli-flags/workload/workload-root.md)
 
 | Command                   | Description                        |
-|---------------------------|------------------------------------|
+| ------------------------- | ---------------------------------- |
 | `ksail workload apply`    | Apply manifests to cluster         |
 | `ksail workload get`      | Get resources                      |
 | `ksail workload describe` | Describe resources                 |
@@ -100,7 +101,7 @@ ksail workload reconcile
 **Commands:**
 
 | Command                    | Description                            |
-|----------------------------|----------------------------------------|
+| -------------------------- | -------------------------------------- |
 | `ksail workload push`      | Package and push manifests to registry |
 | `ksail workload reconcile` | Trigger GitOps sync and wait           |
 
@@ -144,7 +145,7 @@ ksail cipher import AGE-SECRET-KEY-1...
 **Commands:** [`ksail cipher`](configuration/cli-flags/cipher/cipher-root.md)
 
 | Command                | Description                   |
-|------------------------|-------------------------------|
+| ---------------------- | ----------------------------- |
 | `ksail cipher encrypt` | Encrypt a file with SOPS      |
 | `ksail cipher decrypt` | Decrypt a SOPS-encrypted file |
 | `ksail cipher edit`    | Edit encrypted file in-place  |

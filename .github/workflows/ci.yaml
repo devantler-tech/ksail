@@ -202,6 +202,7 @@ jobs:
         provider: [Docker]
         args:
           - ""
+          - "--name system-test-cluster"
           - "--cert-manager Enabled"
           - "--cni Cilium"
           - "--cni Calico"
@@ -342,15 +343,7 @@ jobs:
   status:
     name: CI - KSail
     runs-on: ubuntu-latest
-    needs:
-      [
-        changes,
-        build-artifact,
-        generate-schema,
-        generate-cli-flags-docs,
-        coverage,
-        system-test,
-      ]
+    needs: [changes, build-artifact, generate-schema, generate-cli-flags-docs, coverage, system-test]
     if: ${{ always() }}
     steps:
       - name: Summarize workflow result

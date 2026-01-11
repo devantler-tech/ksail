@@ -26,6 +26,8 @@ const (
 	kubeletCertRotationFileName = "kubelet-cert-rotation.yaml"
 	// kubeletCSRApproverFileName is the name of the kubelet CSR approver extraManifest patch file.
 	kubeletCSRApproverFileName = "kubelet-csr-approver.yaml"
+	// clusterNameFileName is the name of the cluster name patch file.
+	clusterNameFileName = "cluster-name.yaml"
 )
 
 // KubeletServingCertApproverManifestURL is the URL for the kubelet-serving-cert-approver manifest.
@@ -59,6 +61,10 @@ type TalosConfig struct {
 	// When true, generates a kubelet-cert-rotation.yaml patch with rotate-server-certificates: true.
 	// This is required for secure metrics-server communication using TLS.
 	EnableKubeletCertRotation bool
+	// ClusterName is an optional explicit cluster name override.
+	// When set, generates a cluster-name.yaml patch to set cluster.clusterName.
+	// This name is used for the kubeconfig context (admin@<name>).
+	ClusterName string
 }
 
 // TalosGenerator generates the Talos directory structure.
@@ -136,6 +142,11 @@ func (g *TalosGenerator) getDirectoriesWithPatches(
 		dirs["cluster"] = true
 	}
 
+	// Cluster name patch goes to cluster/
+	if model.ClusterName != "" {
+		dirs["cluster"] = true
+	}
+
 	return dirs
 }
 
@@ -179,6 +190,14 @@ func (g *TalosGenerator) generateConditionalPatches(
 
 		// Generate kubelet-csr-approver patch to install the CSR approver during bootstrap
 		err = g.generateKubeletCSRApproverPatch(rootPath, force)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Generate cluster-name patch when custom cluster name is specified
+	if model.ClusterName != "" {
+		err := g.generateClusterNamePatch(rootPath, model.ClusterName, force)
 		if err != nil {
 			return err
 		}
@@ -415,6 +434,34 @@ func (g *TalosGenerator) generateKubeletCSRApproverPatch(
 	err := os.WriteFile(patchPath, []byte(patchContent), filePerm)
 	if err != nil {
 		return fmt.Errorf("failed to create kubelet-csr-approver patch: %w", err)
+	}
+
+	return nil
+}
+
+// generateClusterNamePatch creates a Talos patch file to set a custom cluster name.
+// The cluster name is used in the kubeconfig context (admin@<name>) and for
+// container naming conventions.
+func (g *TalosGenerator) generateClusterNamePatch(
+	rootPath string,
+	clusterName string,
+	force bool,
+) error {
+	patchPath := filepath.Join(rootPath, "cluster", clusterNameFileName)
+
+	// Check if file already exists
+	_, statErr := os.Stat(patchPath)
+	if statErr == nil && !force {
+		return nil
+	}
+
+	patchContent := `cluster:
+  clusterName: ` + clusterName + `
+`
+
+	err := os.WriteFile(patchPath, []byte(patchContent), filePerm)
+	if err != nil {
+		return fmt.Errorf("failed to create cluster-name patch: %w", err)
 	}
 
 	return nil

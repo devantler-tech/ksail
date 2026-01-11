@@ -30,6 +30,7 @@ Flags:
       --local-registry-port int32      Host port to expose the local OCI registry on (default 5050)
       --metrics-server MetricsServer   Metrics Server (Default: use distribution, Enabled: install, Disabled: uninstall)
       --mirror-registry strings        Configure mirror registries with format 'host=upstream' (e.g., docker.io=https://registry-1.docker.io).
+  -n, --name string                    Cluster name used for container names, registry names, and kubeconfig context
   -o, --output string                  Output directory for the project
       --policy-engine PolicyEngine     Policy engine (None: skip, Kyverno: install Kyverno, Gatekeeper: install Gatekeeper)
       --provider Provider              Infrastructure provider backend (e.g., Docker)
