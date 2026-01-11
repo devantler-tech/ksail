@@ -46,7 +46,7 @@ The supported distributions depend on different local and cloud providers:
 | Kind         | Docker                    |
 | K3d          | Docker                    |
 | Talos        | Docker, Hetzner (🚧 next) |
-| EKS          | Docker (🚧 next)          |
+| EKS          | AWS (🚧 next)          |
 
 ### Installation
 
