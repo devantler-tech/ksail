@@ -200,6 +200,7 @@ jobs:
       matrix:
         distribution: [Vanilla, K3s, Talos]
         provider: [Docker]
+        init: [true, false]
         args:
           - ""
           - "--name system-test-cluster"
@@ -216,33 +217,14 @@ jobs:
           - "--metrics-server Disabled"
           - "--policy-engine Kyverno"
           - "--policy-engine Gatekeeper"
-        init: [true, false]
     steps:
-      - name: 🧹 Free disk space
-        run: |
-          # Talos containers run inside Docker and need significant disk space.
-          # GitHub runners have limited disk (~14GB free), which causes DiskPressure
-          # when Talos pulls CNI images (Cilium/Calico) and runs workloads.
-          # Free up space by removing unused tools and images.
-          echo "Disk space before cleanup:"
-          df -h /
-
-          # Remove large pre-installed tools we don't need
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /usr/local/lib/android
-          sudo rm -rf /opt/ghc
-          sudo rm -rf /opt/hostedtoolcache/CodeQL
-
-          # Clean Docker
-          docker system prune -af --volumes || true
-
-          echo "Disk space after cleanup:"
-          df -h /
-
       - name: 📄 Checkout
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
           persist-credentials: false
+
+      - name: 🧹 Free disk space
+        uses: ./.github/actions/free-disk-space
 
       - name: ⚙️ Setup Go
         id: setup-go
@@ -257,89 +239,15 @@ jobs:
           source-hash: ${{ hashFiles('go.mod', 'go.sum', '**/*.go') }}
           output-path: /usr/local/bin/ksail
 
-      - name: 🧪 ksail cluster init
-        if: matrix.init == true
-        run: |
-          ksail cluster init --distribution ${{ matrix.distribution }} --provider ${{ matrix.provider }} ${{ matrix.args }}
-
-      - name: 🧪 ksail cluster create
-        run: |
-          if [ "${{ matrix.init }}" = true ]; then
-            ksail cluster create
-          else
-            ksail cluster create --distribution ${{ matrix.distribution }} --provider ${{ matrix.provider }} ${{ matrix.args }}
-          fi
-
-      - name: 🧪 ksail cluster list
-        run: |
-          ksail cluster list
-
-      - name: 🧪 ksail workload create
-        id: workload-create
-        run: |
-          ksail workload create deployment whoami --image=traefik/whoami:latest
-          ksail workload wait --for=condition=Available deployment/whoami --timeout=300s
-
-      - name: 🧪 ksail workload apply
-        id: workload-apply
-        run: |
-          ksail workload apply -k .github/fixtures/podinfo-overlay
-          ksail workload wait --for=condition=Available deployment/podinfo --timeout=300s
-
-      - name: 🧪 ksail workload push and reconcile
-        id: workload-push-reconcile
-        if: contains(matrix.args, '--gitops-engine')
-        run: |
-          mkdir -p k8s
-          if [ ! -f "k8s/kustomization.yaml" ]; then
-            echo "apiVersion: kustomize.config.k8s.io/v1beta1" > k8s/kustomization.yaml
-            echo "kind: Kustomization" >> k8s/kustomization.yaml
-            echo "resources: []" >> k8s/kustomization.yaml
-          fi
-          ksail workload push --path k8s/
-          ksail workload reconcile
-
-      - name: 🐞 Debug workload failure
-        if: failure() && (steps.workload-create.outcome == 'failure' || steps.workload-apply.outcome == 'failure' || steps.workload-push-reconcile.outcome == 'failure')
-        run: |
-          echo "=== Disk Usage ==="
-          df -h /
-          echo ""
-          echo "=== Docker Disk Usage ==="
-          docker system df || true
-          echo ""
-          echo "=== Node Status ==="
-          ksail workload get nodes -o wide || true
-          echo ""
-          echo "=== Node Describe (conditions) ==="
-          ksail workload describe nodes | grep -A 20 "Conditions:" || true
-          echo ""
-          echo "=== Pod Status ==="
-          ksail workload get pods -o wide || true
-          echo ""
-          echo "=== Pod Events ==="
-          ksail workload get events --sort-by='.lastTimestamp' | tail -50 || true
-
-      - name: 🧪 ksail cluster stop
-        run: |
-          ksail cluster stop
-
-      - name: 🧪 ksail cluster start
-        run: |
-          ksail cluster start
-
-      - name: 🧪 ksail cluster delete
-        run: |
-          ksail cluster delete
-
-      - name: 🧹 Cleanup
-        run: |
-          if [ -f "ksail.yaml" ]; then rm "ksail.yaml"; fi
-          if [ -f "kind.yaml" ]; then rm "kind.yaml"; fi
-          if [ -d "kind" ]; then rm -rf "kind"; fi
-          if [ -f "k3d.yaml" ]; then rm "k3d.yaml"; fi
-          if [ -d "talos" ]; then rm -rf "talos"; fi
-          if [ -d "k8s" ]; then rm -rf "k8s"; fi
+      - name: 🧪 Run KSail System Test
+        uses: ./.github/actions/ksail-system-test
+        with:
+          distribution: ${{ matrix.distribution }}
+          provider: ${{ matrix.provider }}
+          init: ${{ matrix.init }}
+          args: ${{ matrix.args }}
+          apply-overlay-path: ".github/fixtures/podinfo-overlay"
+          apply-deployment-name: "podinfo"
 
   status:
     name: CI - KSail
@@ -347,33 +255,13 @@ jobs:
     needs: [changes, build-artifact, generate-schema, generate-cli-flags-docs, coverage, system-test]
     if: ${{ always() }}
     steps:
-      - name: Summarize workflow result
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-          failed=false
-          for result in "$CHANGES_RESULT" "$BUILD_RESULT" "$SCHEMA_RESULT" "$CLI_DOCS_RESULT" "$COVERAGE_RESULT" "$SYSTEM_TEST_RESULT"; do
-            case "$result" in
-              success|skipped)
-                ;;
-              *)
-                failed=true
-                ;;
-            esac
-          done
-
-          if [ "$failed" = true ]; then
-            echo "❌ At least one job failed."
-            exit 1
-          fi
-
-          echo "✅ All jobs succeeded or were skipped."
-        env:
-          CHANGES_RESULT: ${{ needs.changes.result }}
-          BUILD_RESULT: ${{ needs.build-artifact.result }}
-          SCHEMA_RESULT: ${{ needs.generate-schema.result }}
-          CLI_DOCS_RESULT: ${{ needs.generate-cli-flags-docs.result }}
-          COVERAGE_RESULT: ${{ needs.coverage.result }}
-          SYSTEM_TEST_RESULT: ${{ needs.system-test.result }}
-          CODE_CHANGES: ${{ needs.changes.outputs.code }}
-          EVENT_NAME: ${{ github.event_name }}
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/summarize-workflow
+        with:
+          job-results: >-
+            ${{ needs.changes.result }}
+            ${{ needs.build-artifact.result }}
+            ${{ needs.generate-schema.result }}
+            ${{ needs.generate-cli-flags-docs.result }}
+            ${{ needs.coverage.result }}
+            ${{ needs.system-test.result }}

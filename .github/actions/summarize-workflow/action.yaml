@@ -1,0 +1,50 @@
+name: Summarize Workflow Result
+description: |
+  Summarizes the results of multiple jobs and fails if any job failed.
+  Useful for status check jobs that aggregate results from matrix or parallel jobs.
+
+inputs:
+  job-results:
+    description: |
+      Space-separated list of job results to check.
+      Each result should be one of: success, failure, cancelled, skipped.
+      Example: "success success skipped failure"
+    required: true
+  success-message:
+    description: Message to display when all jobs succeeded or were skipped
+    required: false
+    default: "✅ All jobs succeeded or were skipped."
+  failure-message:
+    description: Message to display when at least one job failed
+    required: false
+    default: "❌ At least one job failed."
+
+runs:
+  using: composite
+  steps:
+    - name: 📊 Summarize workflow result
+      shell: bash
+      env:
+        JOB_RESULTS: ${{ inputs.job-results }}
+        SUCCESS_MESSAGE: ${{ inputs.success-message }}
+        FAILURE_MESSAGE: ${{ inputs.failure-message }}
+      run: |
+        set -Eeuo pipefail
+        failed=false
+
+        for result in $JOB_RESULTS; do
+          case "$result" in
+            success|skipped)
+              ;;
+            *)
+              failed=true
+              ;;
+          esac
+        done
+
+        if [ "$failed" = true ]; then
+          echo "$FAILURE_MESSAGE"
+          exit 1
+        fi
+
+        echo "$SUCCESS_MESSAGE"
