@@ -108,7 +108,7 @@ KSail separates infrastructure management from distribution configuration:
 - **Provisioners** configure and manage Kubernetes distributions
 
 | Distribution | Provisioner        | Tool  | Description                  |
-| ------------ | ------------------ | ----- | ---------------------------- |
+|--------------|--------------------|-------|------------------------------|
 | `Vanilla`    | VanillaProvisioner | Kind  | Standard upstream Kubernetes |
 | `K3s`        | K3sProvisioner     | K3d   | Lightweight K3s in Docker    |
 | `Talos`      | TalosProvisioner   | Talos | Immutable Talos Linux        |

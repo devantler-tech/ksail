@@ -235,7 +235,7 @@ bundle exec jekyll serve --host 0.0.0.0  # Test locally (if needed)
 **Distribution Names (user-facing):**
 
 | Distribution | Tool  | Description                  |
-| ------------ | ----- | ---------------------------- |
+|--------------|-------|------------------------------|
 | `Vanilla`    | Kind  | Standard upstream Kubernetes |
 | `K3s`        | K3d   | Lightweight K3s in Docker    |
 | `Talos`      | Talos | Immutable Talos Linux        |
