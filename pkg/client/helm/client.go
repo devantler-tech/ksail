@@ -601,16 +601,6 @@ func buildChartPathOptions(spec *ChartSpec, repoURL string) helmv4action.ChartPa
 	}
 }
 
-// applyChartPathOptions applies ChartPathOptions to an Install or Upgrade client.
-func applyChartPathOptions(client any, opts helmv4action.ChartPathOptions) {
-	switch cl := client.(type) {
-	case *helmv4action.Install:
-		cl.ChartPathOptions = opts
-	case *helmv4action.Upgrade:
-		cl.ChartPathOptions = opts
-	}
-}
-
 func (c *Client) locateOCIChart(spec *ChartSpec, client any) (string, error) {
 	// Create a registry client for OCI operations
 	registryClient, err := helmv4registry.NewClient()
@@ -643,7 +633,7 @@ func (c *Client) locateOCIChart(spec *ChartSpec, client any) (string, error) {
 	return chartPath, nil
 }
 
-func (c *Client) locateChartFromRepo(spec *ChartSpec, client any) (string, error) {
+func (c *Client) locateChartFromRepo(spec *ChartSpec, _ any) (string, error) {
 	_, chartName := parseChartRef(spec.ChartName)
 	if chartName == "" {
 		chartName = spec.ChartName
@@ -672,7 +662,11 @@ func (c *Client) locateChartFromRepo(spec *ChartSpec, client any) (string, error
 
 // downloadChartWithTimeout downloads a chart using a custom ChartDownloader with the specified timeout.
 // This bypasses Helm's LocateChart which has a hardcoded 120-second HTTP timeout.
-func (c *Client) downloadChartWithTimeout(spec *ChartSpec, chartName string, timeout time.Duration) (string, error) {
+func (c *Client) downloadChartWithTimeout(
+	spec *ChartSpec,
+	chartName string,
+	timeout time.Duration,
+) (string, error) {
 	// Create getter providers with custom timeout
 	getterOpts := []helmv4getter.Option{
 		helmv4getter.WithTimeout(timeout),
@@ -686,7 +680,7 @@ func (c *Client) downloadChartWithTimeout(spec *ChartSpec, chartName string, tim
 	}
 
 	// Create chart downloader with extended timeout
-	dl := helmv4downloader.ChartDownloader{
+	downloader := helmv4downloader.ChartDownloader{
 		Out:              os.Stdout,
 		Getters:          helmv4getter.All(c.settings, getterOpts...),
 		Options:          getterOpts,
@@ -696,8 +690,9 @@ func (c *Client) downloadChartWithTimeout(spec *ChartSpec, chartName string, tim
 	}
 
 	// Ensure cache directories exist
-	if err := os.MkdirAll(c.settings.RepositoryCache, repoDirMode); err != nil {
-		return "", fmt.Errorf("failed to create repository cache: %w", err)
+	mkdirErr := os.MkdirAll(c.settings.RepositoryCache, repoDirMode)
+	if mkdirErr != nil {
+		return "", fmt.Errorf("failed to create repository cache: %w", mkdirErr)
 	}
 
 	// Find the chart URL in the repository
@@ -715,9 +710,9 @@ func (c *Client) downloadChartWithTimeout(spec *ChartSpec, chartName string, tim
 	}
 
 	// Download the chart to cache
-	filename, _, err := dl.DownloadToCache(chartURL, spec.Version)
-	if err != nil {
-		return "", fmt.Errorf("failed to download chart: %w", err)
+	filename, _, downloadErr := downloader.DownloadToCache(chartURL, spec.Version)
+	if downloadErr != nil {
+		return "", fmt.Errorf("failed to download chart: %w", downloadErr)
 	}
 
 	return filename, nil
