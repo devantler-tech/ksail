@@ -249,35 +249,13 @@ func (k *KindClusterProvisioner) Delete(ctx context.Context, name string) error 
 // Start starts a kind cluster.
 // Delegates to the infrastructure provider for container operations.
 func (k *KindClusterProvisioner) Start(ctx context.Context, name string) error {
-	target := setName(name, k.kindConfig.Name)
-
-	if k.infraProvider == nil {
-		return fmt.Errorf("%w for cluster '%s'", clustererrors.ErrProviderNotSet, target)
-	}
-
-	err := k.infraProvider.StartNodes(ctx, target)
-	if err != nil {
-		return fmt.Errorf("failed to start cluster '%s': %w", target, err)
-	}
-
-	return nil
+	return k.withProvider(ctx, name, "start", k.infraProvider.StartNodes)
 }
 
 // Stop stops a kind cluster.
 // Delegates to the infrastructure provider for container operations.
 func (k *KindClusterProvisioner) Stop(ctx context.Context, name string) error {
-	target := setName(name, k.kindConfig.Name)
-
-	if k.infraProvider == nil {
-		return fmt.Errorf("%w for cluster '%s'", clustererrors.ErrProviderNotSet, target)
-	}
-
-	err := k.infraProvider.StopNodes(ctx, target)
-	if err != nil {
-		return fmt.Errorf("failed to stop cluster '%s': %w", target, err)
-	}
-
-	return nil
+	return k.withProvider(ctx, name, "stop", k.infraProvider.StopNodes)
 }
 
 // List returns all kind clusters using kind's Cobra command.
@@ -344,6 +322,27 @@ func (k *KindClusterProvisioner) Exists(ctx context.Context, name string) (bool,
 }
 
 // --- internals ---
+
+// withProvider executes a provider operation with proper nil check and error wrapping.
+func (k *KindClusterProvisioner) withProvider(
+	ctx context.Context,
+	name string,
+	operationName string,
+	providerFunc func(ctx context.Context, clusterName string) error,
+) error {
+	target := setName(name, k.kindConfig.Name)
+
+	if k.infraProvider == nil {
+		return fmt.Errorf("%w for cluster '%s'", clustererrors.ErrProviderNotSet, target)
+	}
+
+	err := providerFunc(ctx, target)
+	if err != nil {
+		return fmt.Errorf("failed to %s cluster '%s': %w", operationName, target, err)
+	}
+
+	return nil
+}
 
 func setName(name string, kindConfigName string) string {
 	target := name

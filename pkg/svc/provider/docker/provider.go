@@ -59,58 +59,12 @@ func NewProvider(cli client.APIClient, scheme LabelScheme) *Provider {
 
 // StartNodes starts all containers for the given cluster.
 func (p *Provider) StartNodes(ctx context.Context, clusterName string) error {
-	if p.client == nil {
-		return provider.ErrProviderUnavailable
-	}
-
-	nodes, err := p.ListNodes(ctx, clusterName)
-	if err != nil {
-		return fmt.Errorf("failed to list nodes: %w", err)
-	}
-
-	if len(nodes) == 0 {
-		return fmt.Errorf("%w: %s", provider.ErrNoNodes, clusterName)
-	}
-
-	timeoutCtx, cancel := context.WithTimeout(ctx, DefaultStartTimeout)
-	defer cancel()
-
-	for _, node := range nodes {
-		err := p.client.ContainerStart(timeoutCtx, node.Name, container.StartOptions{})
-		if err != nil {
-			return fmt.Errorf("failed to start container %s: %w", node.Name, err)
-		}
-	}
-
-	return nil
+	return p.forEachNode(ctx, clusterName, DefaultStartTimeout, p.startContainer)
 }
 
 // StopNodes stops all containers for the given cluster.
 func (p *Provider) StopNodes(ctx context.Context, clusterName string) error {
-	if p.client == nil {
-		return provider.ErrProviderUnavailable
-	}
-
-	nodes, err := p.ListNodes(ctx, clusterName)
-	if err != nil {
-		return fmt.Errorf("failed to list nodes: %w", err)
-	}
-
-	if len(nodes) == 0 {
-		return fmt.Errorf("%w: %s", provider.ErrNoNodes, clusterName)
-	}
-
-	timeoutCtx, cancel := context.WithTimeout(ctx, DefaultStopTimeout)
-	defer cancel()
-
-	for _, node := range nodes {
-		err := p.client.ContainerStop(timeoutCtx, node.Name, container.StopOptions{})
-		if err != nil {
-			return fmt.Errorf("failed to stop container %s: %w", node.Name, err)
-		}
-	}
-
-	return nil
+	return p.forEachNode(ctx, clusterName, DefaultStopTimeout, p.stopContainer)
 }
 
 // ListNodes returns all nodes for the given cluster based on the label scheme.
@@ -203,6 +157,63 @@ func (p *Provider) DeleteNodes(ctx context.Context, clusterName string) error {
 	return nil
 }
 
+// nodeOperation defines a function that operates on a single container.
+type nodeOperation func(ctx context.Context, containerName string) error
+
+// forEachNode executes an operation on each node in the cluster.
+// It handles common setup: client validation, node listing, empty check, and timeout.
+func (p *Provider) forEachNode(
+	ctx context.Context,
+	clusterName string,
+	timeout time.Duration,
+	operation nodeOperation,
+) error {
+	if p.client == nil {
+		return provider.ErrProviderUnavailable
+	}
+
+	nodes, err := p.ListNodes(ctx, clusterName)
+	if err != nil {
+		return fmt.Errorf("failed to list nodes: %w", err)
+	}
+
+	if len(nodes) == 0 {
+		return fmt.Errorf("%w: %s", provider.ErrNoNodes, clusterName)
+	}
+
+	timeoutCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	for _, node := range nodes {
+		err := operation(timeoutCtx, node.Name)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// startContainer starts a single container by name.
+func (p *Provider) startContainer(ctx context.Context, name string) error {
+	err := p.client.ContainerStart(ctx, name, container.StartOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to start container %s: %w", name, err)
+	}
+
+	return nil
+}
+
+// stopContainer stops a single container by name.
+func (p *Provider) stopContainer(ctx context.Context, name string) error {
+	err := p.client.ContainerStop(ctx, name, container.StopOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to stop container %s: %w", name, err)
+	}
+
+	return nil
+}
+
 // listContainers returns containers for the given cluster based on the label scheme.
 func (p *Provider) listContainers(
 	ctx context.Context,
@@ -250,16 +261,14 @@ func (p *Provider) listKindContainers(
 	return result, nil
 }
 
-// listK3dContainers lists containers by K3d labels.
-func (p *Provider) listK3dContainers(
+// listContainersByLabels lists containers matching the given label filters.
+func (p *Provider) listContainersByLabels(
 	ctx context.Context,
-	clusterName string,
+	labelFilters ...filters.KeyValuePair,
 ) ([]container.Summary, error) {
 	containers, err := p.client.ContainerList(ctx, container.ListOptions{
-		All: true,
-		Filters: filters.NewArgs(
-			filters.Arg("label", LabelK3dCluster+"="+clusterName),
-		),
+		All:     true,
+		Filters: filters.NewArgs(labelFilters...),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list containers: %w", err)
@@ -268,23 +277,25 @@ func (p *Provider) listK3dContainers(
 	return containers, nil
 }
 
+// listK3dContainers lists containers by K3d labels.
+func (p *Provider) listK3dContainers(
+	ctx context.Context,
+	clusterName string,
+) ([]container.Summary, error) {
+	return p.listContainersByLabels(ctx,
+		filters.Arg("label", LabelK3dCluster+"="+clusterName),
+	)
+}
+
 // listTalosContainers lists containers by Talos labels.
 func (p *Provider) listTalosContainers(
 	ctx context.Context,
 	clusterName string,
 ) ([]container.Summary, error) {
-	containers, err := p.client.ContainerList(ctx, container.ListOptions{
-		All: true,
-		Filters: filters.NewArgs(
-			filters.Arg("label", LabelTalosOwned+"=true"),
-			filters.Arg("label", LabelTalosClusterName+"="+clusterName),
-		),
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to list containers: %w", err)
-	}
-
-	return containers, nil
+	return p.listContainersByLabels(ctx,
+		filters.Arg("label", LabelTalosOwned+"=true"),
+		filters.Arg("label", LabelTalosClusterName+"="+clusterName),
+	)
 }
 
 // containerToNodeInfo converts a Docker container to a NodeInfo.
