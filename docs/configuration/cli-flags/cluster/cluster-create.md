@@ -30,6 +30,7 @@ Flags:
       --metrics-server MetricsServer   Metrics Server (Default: use distribution, Enabled: install, Disabled: uninstall)
       --mirror-registry strings        Configure mirror registries with format 'host=upstream' (e.g., docker.io=https://registry-1.docker.io)
       --policy-engine PolicyEngine     Policy engine (None: skip, Kyverno: install Kyverno, Gatekeeper: install Gatekeeper)
+      --provider Provider              Infrastructure provider backend (Docker) - only for Talos and EKS distributions (default Docker)
       --workers int32                  Number of worker nodes
 
 Global Flags:

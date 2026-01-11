@@ -32,6 +32,7 @@ Flags:
       --mirror-registry strings        Configure mirror registries with format 'host=upstream' (e.g., docker.io=https://registry-1.docker.io).
   -o, --output string                  Output directory for the project
       --policy-engine PolicyEngine     Policy engine (None: skip, Kyverno: install Kyverno, Gatekeeper: install Gatekeeper)
+      --provider Provider              Infrastructure provider backend (Docker) - only for Talos and EKS distributions (default Docker)
   -s, --source-directory string        Directory containing workloads to deploy (default "k8s")
       --workers int32                  Number of worker nodes
 
