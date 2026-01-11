@@ -13,6 +13,9 @@ https://kubernetes.default.svc/
 # GoReleaser template URL (not a real URL)
 https://github.com/devantler-tech/ksail/releases/download/
 
+# Part of templated code
+https://x-access-token/
+
 # Intermittent Network Errors
 https://docs.tigera.io/calico/latest/about/
 https://docs.tigera.io/calico/latest/getting-started/
@@ -35,4 +38,5 @@ https://kubernetes.io/docs/tasks/debug/debug-cluster/resource-metrics-pipeline/
 https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/
 https://kyverno.io/
 https://kyverno.io/docs/
+https://www.openpolicyagent.org/docs/latest/
 https://www.talos.dev/

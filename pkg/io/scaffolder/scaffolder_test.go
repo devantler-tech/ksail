@@ -1417,3 +1417,72 @@ func TestScaffoldGitOps_OverwritesWithForce(t *testing.T) {
 		"file should not be regenerated when existing CR detected",
 	)
 }
+
+func TestWithClusterName(t *testing.T) {
+	t.Parallel()
+
+	cluster := createTestCluster("test-cluster")
+	scaffolderInstance := scaffolder.NewScaffolder(cluster, io.Discard, nil)
+
+	// Use WithClusterName and verify it returns the same scaffolder (chaining)
+	result := scaffolderInstance.WithClusterName("custom-cluster")
+
+	require.Same(
+		t,
+		scaffolderInstance,
+		result,
+		"WithClusterName should return same scaffolder for chaining",
+	)
+	require.Equal(t, "custom-cluster", scaffolderInstance.ClusterName)
+}
+
+func TestWithClusterName_AppliesContextToKSailConfig(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name            string
+		distribution    v1alpha1.Distribution
+		clusterName     string
+		expectedContext string
+	}{
+		{
+			name:            "vanilla_sets_kind_context",
+			distribution:    v1alpha1.DistributionVanilla,
+			clusterName:     "my-cluster",
+			expectedContext: "kind-my-cluster",
+		},
+		{
+			name:            "k3s_sets_k3d_context",
+			distribution:    v1alpha1.DistributionK3s,
+			clusterName:     "test-cluster",
+			expectedContext: "k3d-test-cluster",
+		},
+		{
+			name:            "talos_sets_admin_context",
+			distribution:    v1alpha1.DistributionTalos,
+			clusterName:     "prod-cluster",
+			expectedContext: "admin@prod-cluster",
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			tempDir := t.TempDir()
+			cluster := createTestCluster("original-name")
+			cluster.Spec.Cluster.Distribution = testCase.distribution
+			scaffolderInstance := scaffolder.NewScaffolder(cluster, io.Discard, nil)
+			scaffolderInstance.WithClusterName(testCase.clusterName)
+
+			err := scaffolderInstance.Scaffold(tempDir, true)
+			require.NoError(t, err)
+
+			// Read and verify ksail.yaml has the correct context
+			ksailPath := filepath.Join(tempDir, "ksail.yaml")
+			content, err := os.ReadFile(ksailPath) //nolint:gosec // G304: Test file path is safe
+			require.NoError(t, err)
+			assert.Contains(t, string(content), testCase.expectedContext)
+		})
+	}
+}

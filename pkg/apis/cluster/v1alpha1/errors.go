@@ -30,3 +30,9 @@ var ErrInvalidProvider = errors.New("invalid provider")
 var ErrInvalidDistributionProviderCombination = errors.New(
 	"invalid distribution and provider combination",
 )
+
+// ErrClusterNameTooLong is returned when the cluster name exceeds the maximum length.
+var ErrClusterNameTooLong = errors.New("cluster name is too long")
+
+// ErrClusterNameInvalid is returned when the cluster name is not DNS-1123 compliant.
+var ErrClusterNameInvalid = errors.New("cluster name is invalid")

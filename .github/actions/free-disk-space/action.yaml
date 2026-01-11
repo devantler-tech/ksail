@@ -1,0 +1,70 @@
+name: Free Disk Space
+description: |
+  Frees up disk space on GitHub runners by removing unused pre-installed tools and cleaning Docker.
+  Useful for workflows that need significant disk space (e.g., container-heavy workloads).
+
+inputs:
+  remove-dotnet:
+    description: Remove .NET SDK (~1.5GB)
+    required: false
+    default: "true"
+  remove-android:
+    description: Remove Android SDK (~10GB)
+    required: false
+    default: "true"
+  remove-haskell:
+    description: Remove Haskell/GHC (~5GB)
+    required: false
+    default: "true"
+  remove-codeql:
+    description: Remove CodeQL (~1GB)
+    required: false
+    default: "true"
+  clean-docker:
+    description: Run docker system prune to remove unused images and volumes
+    required: false
+    default: "true"
+
+runs:
+  using: composite
+  steps:
+    - name: 🧹 Free disk space
+      shell: bash
+      env:
+        REMOVE_DOTNET: ${{ inputs.remove-dotnet }}
+        REMOVE_ANDROID: ${{ inputs.remove-android }}
+        REMOVE_HASKELL: ${{ inputs.remove-haskell }}
+        REMOVE_CODEQL: ${{ inputs.remove-codeql }}
+        CLEAN_DOCKER: ${{ inputs.clean-docker }}
+      run: |
+        echo "Disk space before cleanup:"
+        df -h /
+
+        # Remove large pre-installed tools based on inputs
+        if [ "$REMOVE_DOTNET" = "true" ]; then
+          echo "Removing .NET SDK..."
+          sudo rm -rf /usr/share/dotnet
+        fi
+
+        if [ "$REMOVE_ANDROID" = "true" ]; then
+          echo "Removing Android SDK..."
+          sudo rm -rf /usr/local/lib/android
+        fi
+
+        if [ "$REMOVE_HASKELL" = "true" ]; then
+          echo "Removing Haskell/GHC..."
+          sudo rm -rf /opt/ghc
+        fi
+
+        if [ "$REMOVE_CODEQL" = "true" ]; then
+          echo "Removing CodeQL..."
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+        fi
+
+        if [ "$CLEAN_DOCKER" = "true" ]; then
+          echo "Cleaning Docker..."
+          docker system prune -af --volumes || true
+        fi
+
+        echo "Disk space after cleanup:"
+        df -h /

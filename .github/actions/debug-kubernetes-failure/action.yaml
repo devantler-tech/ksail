@@ -1,0 +1,82 @@
+name: Debug Kubernetes Failure
+description: |
+  Outputs diagnostic information for debugging Kubernetes cluster failures.
+  Shows disk usage, node status, pod status, and recent events.
+
+inputs:
+  kubectl-command:
+    description: The kubectl command or wrapper to use (e.g., "kubectl", "ksail workload")
+    required: false
+    default: "kubectl"
+  show-disk-usage:
+    description: Show host and Docker disk usage
+    required: false
+    default: "true"
+  show-nodes:
+    description: Show node status and conditions
+    required: false
+    default: "true"
+  show-pods:
+    description: Show pod status
+    required: false
+    default: "true"
+  show-events:
+    description: Show recent cluster events
+    required: false
+    default: "true"
+  events-limit:
+    description: Number of recent events to show
+    required: false
+    default: "50"
+  namespace:
+    description: Namespace to query (empty for all namespaces)
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: 🐞 Debug Kubernetes failure
+      shell: bash
+      env:
+        KUBECTL_CMD: ${{ inputs.kubectl-command }}
+        NAMESPACE: ${{ inputs.namespace }}
+        SHOW_DISK_USAGE: ${{ inputs.show-disk-usage }}
+        SHOW_NODES: ${{ inputs.show-nodes }}
+        SHOW_PODS: ${{ inputs.show-pods }}
+        SHOW_EVENTS: ${{ inputs.show-events }}
+        EVENTS_LIMIT: ${{ inputs.events-limit }}
+      run: |
+        NS_FLAG=""
+        if [ -n "$NAMESPACE" ]; then
+          NS_FLAG="-n $NAMESPACE"
+        fi
+
+        if [ "$SHOW_DISK_USAGE" = "true" ]; then
+          echo "=== Disk Usage ==="
+          df -h /
+          echo ""
+          echo "=== Docker Disk Usage ==="
+          docker system df || true
+          echo ""
+        fi
+
+        if [ "$SHOW_NODES" = "true" ]; then
+          echo "=== Node Status ==="
+          $KUBECTL_CMD get nodes -o wide || true
+          echo ""
+          echo "=== Node Describe (conditions) ==="
+          $KUBECTL_CMD describe nodes | grep -A 20 "Conditions:" || true
+          echo ""
+        fi
+
+        if [ "$SHOW_PODS" = "true" ]; then
+          echo "=== Pod Status ==="
+          $KUBECTL_CMD get pods $NS_FLAG -o wide || true
+          echo ""
+        fi
+
+        if [ "$SHOW_EVENTS" = "true" ]; then
+          echo "=== Pod Events ==="
+          $KUBECTL_CMD get events $NS_FLAG --sort-by='.lastTimestamp' | tail -"$EVENTS_LIMIT" || true
+        fi

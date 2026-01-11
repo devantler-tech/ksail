@@ -94,6 +94,30 @@ func (d *Distribution) ValidValues() []string {
 	return []string{string(DistributionVanilla), string(DistributionK3s), string(DistributionTalos)}
 }
 
+// ContextName returns the kubeconfig context name for a given cluster name.
+// Each distribution has its own context naming convention:
+//   - Vanilla: kind-<name>
+//   - K3s: k3d-<name>
+//   - Talos: admin@<name>
+//
+// Returns empty string if name is empty.
+func (d *Distribution) ContextName(clusterName string) string {
+	if clusterName == "" {
+		return ""
+	}
+
+	switch *d {
+	case DistributionVanilla:
+		return "kind-" + clusterName
+	case DistributionK3s:
+		return "k3d-" + clusterName
+	case DistributionTalos:
+		return "admin@" + clusterName
+	default:
+		return ""
+	}
+}
+
 // --- CNI Types ---
 
 // CNI defines the CNI options for a KSail cluster.

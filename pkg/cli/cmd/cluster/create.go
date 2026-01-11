@@ -62,6 +62,10 @@ func NewCreateCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
 		"Configure mirror registries with format 'host=upstream' (e.g., docker.io=https://registry-1.docker.io)")
 	_ = cfgManager.Viper.BindPFlag("mirror-registry", cmd.Flags().Lookup("mirror-registry"))
 
+	cmd.Flags().StringP("name", "n", "",
+		"Cluster name used for container names, registry names, and kubeconfig context")
+	_ = cfgManager.Viper.BindPFlag("name", cmd.Flags().Lookup("name"))
+
 	cmd.RunE = lifecycle.WrapHandler(runtimeContainer, cfgManager, handleCreateRunE)
 
 	return cmd
@@ -69,7 +73,7 @@ func NewCreateCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
 
 // handleCreateRunE executes cluster creation with mirror registry setup and CNI installation.
 //
-//nolint:funlen // Orchestrates full cluster creation lifecycle with multiple stages.
+//nolint:funlen,cyclop // Orchestrates full cluster creation lifecycle with multiple stages.
 func handleCreateRunE(
 	cmd *cobra.Command,
 	cfgManager *ksailconfigmanager.ConfigManager,
@@ -82,6 +86,21 @@ func handleCreateRunE(
 	ctx, err := loadClusterConfiguration(cfgManager, outputTimer)
 	if err != nil {
 		return err
+	}
+
+	// Apply cluster name override from --name flag if provided
+	nameOverride := cfgManager.Viper.GetString("name")
+	if nameOverride != "" {
+		// Validate cluster name is DNS-1123 compliant
+		validationErr := v1alpha1.ValidateClusterName(nameOverride)
+		if validationErr != nil {
+			return fmt.Errorf("invalid --name flag: %w", validationErr)
+		}
+
+		err = applyClusterNameOverride(ctx, nameOverride)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Early validation of distribution x provider combination
@@ -326,4 +345,45 @@ func setupK3dMetricsServer(clusterCfg *v1alpha1.Cluster, k3dConfig *v1alpha5.Sim
 			NodeFilters: []string{"server:*"},
 		},
 	)
+}
+
+// applyClusterNameOverride updates distribution configs with the cluster name override.
+// This function mutates the distribution config pointers in ctx to apply the --name flag value.
+// The name override takes highest priority over distribution config or context-derived names.
+//
+// For Talos, this regenerates the config bundle with the new cluster name because
+// the cluster name is embedded in PKI certificates and the kubeconfig context name.
+func applyClusterNameOverride(ctx *localregistry.Context, name string) error {
+	if name == "" {
+		return nil
+	}
+
+	// Update Kind config
+	if ctx.KindConfig != nil {
+		ctx.KindConfig.Name = name
+	}
+
+	// Update K3d config
+	if ctx.K3dConfig != nil {
+		ctx.K3dConfig.Name = name
+	}
+
+	// Update Talos config - must regenerate bundle for new cluster name
+	// because cluster name is embedded in PKI and kubeconfig context
+	if ctx.TalosConfig != nil {
+		newConfig, err := ctx.TalosConfig.WithName(name)
+		if err != nil {
+			return fmt.Errorf("failed to apply cluster name override to Talos config: %w", err)
+		}
+
+		ctx.TalosConfig = newConfig
+	}
+
+	// Update the ksail.yaml context to match the distribution pattern
+	if ctx.ClusterCfg != nil {
+		dist := ctx.ClusterCfg.Spec.Cluster.Distribution
+		ctx.ClusterCfg.Spec.Cluster.Connection.Context = dist.ContextName(name)
+	}
+
+	return nil
 }

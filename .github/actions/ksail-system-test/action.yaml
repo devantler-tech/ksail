@@ -1,0 +1,130 @@
+name: KSail System Test
+description: |
+  Runs a full end-to-end system test of KSail, testing cluster lifecycle
+  and workload management capabilities.
+
+inputs:
+  distribution:
+    description: Kubernetes distribution (Vanilla, K3s, Talos)
+    required: true
+  provider:
+    description: Infrastructure provider (Docker)
+    required: false
+    default: "Docker"
+  args:
+    description: Additional arguments for cluster init/create
+    required: false
+    default: ""
+  init:
+    description: Whether to run ksail cluster init before create
+    required: false
+    default: "false"
+  test-workload-image:
+    description: Image to use for workload create test
+    required: false
+    default: "traefik/whoami:latest"
+  test-workload-name:
+    description: Name for the test workload deployment
+    required: false
+    default: "whoami"
+  apply-overlay-path:
+    description: Path to kustomize overlay for workload apply test
+    required: false
+    default: ""
+  gitops-path:
+    description: Path for GitOps push (only if --gitops-engine in args)
+    required: false
+    default: "k8s"
+  workload-timeout:
+    description: Timeout for workload wait operations
+    required: false
+    default: "300s"
+
+runs:
+  using: composite
+  steps:
+    - name: 🧪 ksail cluster init
+      if: inputs.init == 'true'
+      shell: bash
+      env:
+        DISTRIBUTION: ${{ inputs.distribution }}
+        PROVIDER: ${{ inputs.provider }}
+        ARGS: ${{ inputs.args }}
+      run: |
+        ksail cluster init --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS
+
+    - name: 🧪 ksail cluster create
+      shell: bash
+      env:
+        INIT: ${{ inputs.init }}
+        DISTRIBUTION: ${{ inputs.distribution }}
+        PROVIDER: ${{ inputs.provider }}
+        ARGS: ${{ inputs.args }}
+      run: |
+        if [ "$INIT" = "true" ]; then
+          ksail cluster create
+        else
+          ksail cluster create --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS
+        fi
+
+    - name: 🧪 ksail cluster list
+      shell: bash
+      run: |
+        ksail cluster list
+
+    - name: 🧪 ksail workload create
+      id: workload-create
+      shell: bash
+      env:
+        WORKLOAD_NAME: ${{ inputs.test-workload-name }}
+        WORKLOAD_IMAGE: ${{ inputs.test-workload-image }}
+        TIMEOUT: ${{ inputs.workload-timeout }}
+      run: |
+        ksail workload create deployment "$WORKLOAD_NAME" --image="$WORKLOAD_IMAGE"
+        ksail workload wait --for=condition=Available deployment/"$WORKLOAD_NAME" --timeout="$TIMEOUT"
+
+    - name: 🧪 ksail workload apply
+      id: workload-apply
+      if: inputs.apply-overlay-path != ''
+      shell: bash
+      env:
+        OVERLAY_PATH: ${{ inputs.apply-overlay-path }}
+        TIMEOUT: ${{ inputs.workload-timeout }}
+      run: ksail workload apply -k "$OVERLAY_PATH" --wait --timeout="$TIMEOUT"
+
+    - name: 🧪 ksail workload push and reconcile
+      id: workload-push-reconcile
+      if: contains(inputs.args, '--gitops-engine')
+      shell: bash
+      env:
+        GITOPS_PATH: ${{ inputs.gitops-path }}
+      run: |
+        mkdir -p "$GITOPS_PATH"
+        if [ ! -f "$GITOPS_PATH/kustomization.yaml" ]; then
+          echo "apiVersion: kustomize.config.k8s.io/v1beta1" > "$GITOPS_PATH/kustomization.yaml"
+          echo "kind: Kustomization" >> "$GITOPS_PATH/kustomization.yaml"
+          echo "resources: []" >> "$GITOPS_PATH/kustomization.yaml"
+        fi
+        ksail workload push --path "$GITOPS_PATH/"
+        ksail workload reconcile
+
+    - name: 🐞 Debug workload failure
+      if: failure() && (steps.workload-create.outcome == 'failure' || steps.workload-apply.outcome == 'failure' || steps.workload-push-reconcile.outcome == 'failure')
+      uses: ./.github/actions/debug-kubernetes-failure
+      with:
+        kubectl-command: "ksail workload"
+
+    - name: 🧪 ksail cluster stop
+      shell: bash
+      run: |
+        ksail cluster stop
+
+    - name: 🧪 ksail cluster start
+      shell: bash
+      run: |
+        ksail cluster start
+
+    - name: 🧪 ksail cluster delete
+      shell: bash
+      run: |
+        ksail cluster delete

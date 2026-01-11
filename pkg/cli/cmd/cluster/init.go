@@ -72,6 +72,13 @@ func bindInitLocalFlags(cmd *cobra.Command, cfgManager *ksailconfigmanager.Confi
 		"Configure mirror registries with format 'host=upstream' (e.g., docker.io=https://registry-1.docker.io).",
 	)
 	_ = cfgManager.Viper.BindPFlag("mirror-registry", cmd.Flags().Lookup("mirror-registry"))
+	cmd.Flags().StringP(
+		"name",
+		"n",
+		"",
+		"Cluster name used for container names, registry names, and kubeconfig context",
+	)
+	_ = cfgManager.Viper.BindPFlag("name", cmd.Flags().Lookup("name"))
 }
 
 // InitDeps captures dependencies required for the init command.
@@ -102,19 +109,10 @@ func HandleInitRunE(
 		return fmt.Errorf("invalid configuration: %w", err)
 	}
 
-	targetPath, err := resolveInitTargetPath(cfgManager)
+	scaffolderInstance, targetPath, force, err := prepareScaffolder(cmd, cfgManager, clusterCfg)
 	if err != nil {
 		return err
 	}
-
-	force := cfgManager.Viper.GetBool("force")
-	mirrorRegistries := cfgManager.Viper.GetStringSlice("mirror-registry")
-
-	scaffolderInstance := scaffolder.NewScaffolder(
-		*clusterCfg,
-		cmd.OutOrStdout(),
-		mirrorRegistries,
-	)
 
 	if deps.Timer != nil {
 		deps.Timer.NewStage()
@@ -142,6 +140,43 @@ func HandleInitRunE(
 	})
 
 	return nil
+}
+
+// prepareScaffolder sets up the scaffolder with configuration from flags.
+func prepareScaffolder(
+	cmd *cobra.Command,
+	cfgManager *ksailconfigmanager.ConfigManager,
+	clusterCfg *v1alpha1.Cluster,
+) (*scaffolder.Scaffolder, string, bool, error) {
+	targetPath, err := resolveInitTargetPath(cfgManager)
+	if err != nil {
+		return nil, "", false, err
+	}
+
+	force := cfgManager.Viper.GetBool("force")
+	mirrorRegistries := cfgManager.Viper.GetStringSlice("mirror-registry")
+	clusterName := cfgManager.Viper.GetString("name")
+
+	// Validate cluster name is DNS-1123 compliant
+	if clusterName != "" {
+		validationErr := v1alpha1.ValidateClusterName(clusterName)
+		if validationErr != nil {
+			return nil, "", false, fmt.Errorf("invalid --name flag: %w", validationErr)
+		}
+	}
+
+	scaffolderInstance := scaffolder.NewScaffolder(
+		*clusterCfg,
+		cmd.OutOrStdout(),
+		mirrorRegistries,
+	)
+
+	// Apply cluster name override if provided
+	if clusterName != "" {
+		scaffolderInstance.WithClusterName(clusterName)
+	}
+
+	return scaffolderInstance, targetPath, force, nil
 }
 
 func resolveInitTargetPath(cfgManager *ksailconfigmanager.ConfigManager) (string, error) {

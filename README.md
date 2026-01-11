@@ -72,6 +72,7 @@ go install github.com/devantler-tech/ksail/v5@latest
 ```bash
 # 1. Initialize a new project with your preferred stack
 ksail cluster init \
+  --name <cluster-name> \
   --distribution <Vanilla|K3s|Talos> \
   --cni <Default|Cilium|Calico|None> \
   --csi <Default|LocalPathStorage|None> \
