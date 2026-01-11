@@ -43,9 +43,15 @@
             "distribution": {
               "type": "string",
               "enum": [
-                "Kind",
-                "K3d",
+                "Vanilla",
+                "K3s",
                 "Talos"
+              ]
+            },
+            "provider": {
+              "type": "string",
+              "enum": [
+                "Docker"
               ]
             },
             "cni": {
@@ -87,11 +93,16 @@
               ]
             },
             "localRegistry": {
-              "type": "string",
-              "enum": [
-                "Enabled",
-                "Disabled"
-              ]
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "hostPort": {
+                  "type": "integer"
+                }
+              },
+              "additionalProperties": false,
+              "type": "object"
             },
             "gitOpsEngine": {
               "type": "string",
@@ -101,7 +112,7 @@
                 "ArgoCD"
               ]
             },
-            "kind": {
+            "vanilla": {
               "properties": {
                 "mirrorsDir": {
                   "type": "string"
@@ -110,17 +121,8 @@
               "additionalProperties": false,
               "type": "object"
             },
-            "k3d": {
-              "properties": {},
-              "additionalProperties": false,
-              "type": "object",
-              "description": "Alpha placeholder (currently unsupported)."
-            },
             "talos": {
               "properties": {
-                "provider": {
-                  "type": "string"
-                },
                 "controlPlanes": {
                   "type": "integer"
                 },
@@ -130,51 +132,6 @@
               },
               "additionalProperties": false,
               "type": "object"
-            },
-            "cilium": {
-              "properties": {},
-              "additionalProperties": false,
-              "type": "object",
-              "description": "Alpha placeholder (currently unsupported)."
-            },
-            "calico": {
-              "properties": {},
-              "additionalProperties": false,
-              "type": "object",
-              "description": "Alpha placeholder (currently unsupported)."
-            },
-            "flux": {
-              "properties": {},
-              "additionalProperties": false,
-              "type": "object",
-              "description": "Alpha placeholder (currently unsupported)."
-            },
-            "argocd": {
-              "properties": {},
-              "additionalProperties": false,
-              "type": "object",
-              "description": "Alpha placeholder (currently unsupported)."
-            },
-            "localRegistryOptions": {
-              "properties": {
-                "hostPort": {
-                  "type": "integer"
-                }
-              },
-              "additionalProperties": false,
-              "type": "object"
-            },
-            "helm": {
-              "properties": {},
-              "additionalProperties": false,
-              "type": "object",
-              "description": "Alpha placeholder (currently unsupported)."
-            },
-            "kustomize": {
-              "properties": {},
-              "additionalProperties": false,
-              "type": "object",
-              "description": "Alpha placeholder (currently unsupported)."
             }
           },
           "additionalProperties": false,
