@@ -116,8 +116,8 @@ Use distribution configuration files for:
 
 These files follow the native schema for each distribution:
 
-- **Vanilla (Kind):** `kind.yaml` – [Kind Configuration](https://kind.sigs.k8s.io/docs/user/configuration/)
-- **K3s (K3d):** `k3d.yaml` – [K3d Configuration](https://k3d.io/stable/usage/configfile/)
+- **Vanilla (implemented with Kind):** `kind.yaml` – [Kind Configuration](https://kind.sigs.k8s.io/docs/user/configuration/)
+- **K3s (implemented with K3d):** `k3d.yaml` – [K3d Configuration](https://k3d.io/stable/usage/configfile/)
 - **Talos:** `talos/` – [Talos Machine Config](https://www.talos.dev/latest/reference/configuration/)
 
 ## Next Steps
