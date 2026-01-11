@@ -381,7 +381,11 @@ func createK3dTestCases() []validatorTestCase[*k3dapi.SimpleConfig] {
 	invalidCases := createK3dInvalidTestCases()
 	nilCase := createNilConfigTestCase[*k3dapi.SimpleConfig]()
 
-	testCases := make([]validatorTestCase[*k3dapi.SimpleConfig], 0, len(validCases)+len(invalidCases)+1)
+	testCases := make(
+		[]validatorTestCase[*k3dapi.SimpleConfig],
+		0,
+		len(validCases)+len(invalidCases)+1,
+	)
 	testCases = append(testCases, validCases...)
 	testCases = append(testCases, invalidCases...)
 	testCases = append(testCases, nilCase)

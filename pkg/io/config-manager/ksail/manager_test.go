@@ -794,7 +794,11 @@ func testFieldValueSetting(
 	tempDir := t.TempDir()
 	t.Chdir(tempDir)
 
-	fieldSelectors := make([]configmanager.FieldSelector[v1alpha1.Cluster], 0, 2+len(additionalSelectors))
+	fieldSelectors := make(
+		[]configmanager.FieldSelector[v1alpha1.Cluster],
+		0,
+		2+len(additionalSelectors),
+	)
 	fieldSelectors = append(fieldSelectors,
 		configmanager.FieldSelector[v1alpha1.Cluster]{
 			Selector:     selector,
