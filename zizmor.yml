@@ -1,0 +1,8 @@
+rules:
+  impostor-commit:
+    ignore:
+      - .github/workflows/ci-doctor.lock.yml
+      - .github/workflows/daily-perf-improver.lock.yml
+      - .github/workflows/daily-qa.lock.yml
+      - .github/workflows/daily-test-improver.lock.yml
+      - .github/workflows/update-docs.lock.yml
