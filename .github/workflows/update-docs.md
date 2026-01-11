@@ -11,9 +11,7 @@ on:
     branches: [main]
   workflow_dispatch:
 
-permissions:
-  contents: read
-  actions: read
+permissions: read-all
 
 network: defaults
 
