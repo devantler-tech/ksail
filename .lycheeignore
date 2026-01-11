@@ -13,6 +13,9 @@ https://kubernetes.default.svc/
 # GoReleaser template URL (not a real URL)
 https://github.com/devantler-tech/ksail/releases/download/
 
+# Part of templated code
+https://x-access-token/
+
 # Intermittent Network Errors
 https://docs.tigera.io/calico/latest/about/
 https://docs.tigera.io/calico/latest/getting-started/
