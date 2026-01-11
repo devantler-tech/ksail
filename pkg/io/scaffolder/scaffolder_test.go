@@ -1427,7 +1427,12 @@ func TestWithClusterName(t *testing.T) {
 	// Use WithClusterName and verify it returns the same scaffolder (chaining)
 	result := scaffolderInstance.WithClusterName("custom-cluster")
 
-	require.Same(t, scaffolderInstance, result, "WithClusterName should return same scaffolder for chaining")
+	require.Same(
+		t,
+		scaffolderInstance,
+		result,
+		"WithClusterName should return same scaffolder for chaining",
+	)
 	require.Equal(t, "custom-cluster", scaffolderInstance.ClusterName)
 }
 

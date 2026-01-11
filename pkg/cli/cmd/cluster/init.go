@@ -109,32 +109,9 @@ func HandleInitRunE(
 		return fmt.Errorf("invalid configuration: %w", err)
 	}
 
-	targetPath, err := resolveInitTargetPath(cfgManager)
+	scaffolderInstance, targetPath, force, err := prepareScaffolder(cmd, cfgManager, clusterCfg)
 	if err != nil {
 		return err
-	}
-
-	force := cfgManager.Viper.GetBool("force")
-	mirrorRegistries := cfgManager.Viper.GetStringSlice("mirror-registry")
-	clusterName := cfgManager.Viper.GetString("name")
-
-	// Validate cluster name is DNS-1123 compliant
-	if clusterName != "" {
-		validationErr := v1alpha1.ValidateClusterName(clusterName)
-		if validationErr != nil {
-			return fmt.Errorf("invalid --name flag: %w", validationErr)
-		}
-	}
-
-	scaffolderInstance := scaffolder.NewScaffolder(
-		*clusterCfg,
-		cmd.OutOrStdout(),
-		mirrorRegistries,
-	)
-
-	// Apply cluster name override if provided
-	if clusterName != "" {
-		scaffolderInstance.WithClusterName(clusterName)
 	}
 
 	if deps.Timer != nil {
@@ -163,6 +140,43 @@ func HandleInitRunE(
 	})
 
 	return nil
+}
+
+// prepareScaffolder sets up the scaffolder with configuration from flags.
+func prepareScaffolder(
+	cmd *cobra.Command,
+	cfgManager *ksailconfigmanager.ConfigManager,
+	clusterCfg *v1alpha1.Cluster,
+) (*scaffolder.Scaffolder, string, bool, error) {
+	targetPath, err := resolveInitTargetPath(cfgManager)
+	if err != nil {
+		return nil, "", false, err
+	}
+
+	force := cfgManager.Viper.GetBool("force")
+	mirrorRegistries := cfgManager.Viper.GetStringSlice("mirror-registry")
+	clusterName := cfgManager.Viper.GetString("name")
+
+	// Validate cluster name is DNS-1123 compliant
+	if clusterName != "" {
+		validationErr := v1alpha1.ValidateClusterName(clusterName)
+		if validationErr != nil {
+			return nil, "", false, fmt.Errorf("invalid --name flag: %w", validationErr)
+		}
+	}
+
+	scaffolderInstance := scaffolder.NewScaffolder(
+		*clusterCfg,
+		cmd.OutOrStdout(),
+		mirrorRegistries,
+	)
+
+	// Apply cluster name override if provided
+	if clusterName != "" {
+		scaffolderInstance.WithClusterName(clusterName)
+	}
+
+	return scaffolderInstance, targetPath, force, nil
 }
 
 func resolveInitTargetPath(cfgManager *ksailconfigmanager.ConfigManager) (string, error) {

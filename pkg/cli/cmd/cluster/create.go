@@ -73,7 +73,7 @@ func NewCreateCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
 
 // handleCreateRunE executes cluster creation with mirror registry setup and CNI installation.
 //
-//nolint:funlen // Orchestrates full cluster creation lifecycle with multiple stages.
+//nolint:funlen,cyclop // Orchestrates full cluster creation lifecycle with multiple stages.
 func handleCreateRunE(
 	cmd *cobra.Command,
 	cfgManager *ksailconfigmanager.ConfigManager,

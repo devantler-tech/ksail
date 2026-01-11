@@ -147,6 +147,7 @@ func TestDistribution_ContextName(t *testing.T) {
 	}
 }
 
+//nolint:funlen // Table-driven test with comprehensive test cases.
 func TestValidateClusterName(t *testing.T) {
 	t.Parallel()
 

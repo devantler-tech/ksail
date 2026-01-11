@@ -151,6 +151,8 @@ func (g *TalosGenerator) getDirectoriesWithPatches(
 }
 
 // generateConditionalPatches generates optional patches based on the configuration.
+//
+//nolint:cyclop // Sequential conditional patch generation - each condition is independent and simple.
 func (g *TalosGenerator) generateConditionalPatches(
 	rootPath string,
 	model *TalosConfig,
