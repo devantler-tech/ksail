@@ -191,6 +191,7 @@ func CreateMinimalProvisioner(
 		provisioner, err := talosprovisioner.CreateProvisioner(
 			talosConfig,
 			"",
+			v1alpha1.ProviderDocker,
 			v1alpha1.OptionsTalos{},
 			false, // skipCNIChecks - not relevant for simple lifecycle operations
 		)

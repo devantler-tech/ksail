@@ -7,6 +7,8 @@ const (
 	DefaultK3dDistributionConfig = "k3d.yaml"
 	// DefaultTalosDistributionConfig is the default Talos cluster distribution configuration directory.
 	DefaultTalosDistributionConfig = "talos"
+	// DefaultEKSDistributionConfig is the default EKS Anywhere cluster distribution configuration filename.
+	DefaultEKSDistributionConfig = "eks.yaml"
 	// DefaultSourceDirectory is the default directory for Kubernetes manifests.
 	DefaultSourceDirectory = "k8s"
 	// DefaultKubeconfigPath is the default path to the kubeconfig file.
@@ -24,6 +26,8 @@ func ExpectedDistributionConfigName(distribution Distribution) string {
 		return DefaultK3dDistributionConfig
 	case DistributionTalos:
 		return DefaultTalosDistributionConfig
+	case DistributionEKS:
+		return DefaultEKSDistributionConfig
 	default:
 		return DefaultDistributionConfig
 	}
@@ -38,6 +42,8 @@ func ExpectedContextName(distribution Distribution) string {
 		return "k3d-k3d-default"
 	case DistributionTalos:
 		return "admin@talos-default"
+	case DistributionEKS:
+		return "eksa-eksa-local"
 	default:
 		return ""
 	}

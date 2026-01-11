@@ -17,7 +17,7 @@ Setting up and operating Kubernetes clusters is a skill of its own, often requir
 
 📦 **One Binary** — Embeds cluster provisioning, GitOps engines, and deployment tooling. No tool sprawl.
 
-☸️ **Simple Clusters** — Spin up Kind, K3d, or Talos clusters with one command. Same workflow across supported distributions and providers.
+☸️ **Simple Clusters** — Spin up Kind, K3d, Talos, or EKS Anywhere clusters with one command. Same workflow across supported distributions and providers.
 
 📄 **Everything as Code** — Cluster settings, distribution configs, and workloads all live in version-controlled files.
 
@@ -34,7 +34,7 @@ Setting up and operating Kubernetes clusters is a skill of its own, often requir
 The binary works on all major operating systems and modern CPU archectures:
 
 | OS                   | Arch            |
-|----------------------|-----------------|
+| -------------------- | --------------- |
 | 🐧 Linux             | amd64 and arm64 |
 |  MacOS              | arm64           |
 | ⊞ Windows (untested) | amd64 and arm64 |
@@ -42,7 +42,7 @@ The binary works on all major operating systems and modern CPU archectures:
 The supported distributions depend on different local and cloud providers:
 
 | Distribution | Provider                  |
-|--------------|---------------------------|
+| ------------ | ------------------------- |
 | Kind         | Docker                    |
 | K3d          | Docker                    |
 | Talos        | Docker, Hetzner (🚧 next) |
@@ -69,7 +69,7 @@ go install github.com/devantler-tech/ksail/v5@latest
 ```bash
 # 1. Initialize a new project with your preferred stack
 ksail cluster init \
-  --distribution <Kind|K3d|Talos> \
+  --distribution <Kind|K3d|Talos|EKS> \
   --cni <Default|Cilium|Calico|None> \
   --csi <Default|LocalPathStorage|None> \
   --metrics-server <Default|Enabled|Disabled> \
@@ -107,7 +107,7 @@ ksail cluster connect
 KSail is a powerful tool that can be used in many different ways. Here are some projects that use KSail in their setup:
 
 | Project                                                               | Description         | Type     |
-|-----------------------------------------------------------------------|---------------------|----------|
+| --------------------------------------------------------------------- | ------------------- | -------- |
 | [devantler-tech/platform](https://github.com/devantler-tech/platform) | My personal homelab | Platform |
 
 If you use KSail in your project, feel free to open a PR to add it to the list, so others can see how you use KSail.

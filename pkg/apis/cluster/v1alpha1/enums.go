@@ -27,15 +27,18 @@ const (
 	DistributionK3d Distribution = "K3d"
 	// DistributionTalos is the Talos distribution.
 	DistributionTalos Distribution = "Talos"
+	// DistributionEKS is the EKS Anywhere distribution.
+	DistributionEKS Distribution = "EKS"
 )
 
 // ProvidesMetricsServerByDefault returns true if the distribution includes metrics-server by default.
 // K3d (based on K3s) includes metrics-server, Kind and Talos do not.
+// EKS Anywhere does not include metrics-server by default.
 func (d *Distribution) ProvidesMetricsServerByDefault() bool {
 	switch *d {
 	case DistributionK3d:
 		return true
-	case DistributionKind, DistributionTalos:
+	case DistributionKind, DistributionTalos, DistributionEKS:
 		return false
 	default:
 		return false
@@ -43,12 +46,13 @@ func (d *Distribution) ProvidesMetricsServerByDefault() bool {
 }
 
 // ProvidesStorageByDefault returns true if the distribution includes a storage provisioner by default.
-// K3d (based on K3s) includes local-path-provisioner, Kind and Talos do not have a default storage class.
+// K3d (based on K3s) includes local-path-provisioner, Kind, Talos, and EKS Anywhere do not have
+// a default storage class.
 func (d *Distribution) ProvidesStorageByDefault() bool {
 	switch *d {
 	case DistributionK3d:
 		return true
-	case DistributionKind, DistributionTalos:
+	case DistributionKind, DistributionTalos, DistributionEKS:
 		return false
 	default:
 		return false
@@ -65,8 +69,8 @@ func (d *Distribution) Set(value string) error {
 		}
 	}
 
-	return fmt.Errorf("%w: %s (valid options: %s, %s, %s)",
-		ErrInvalidDistribution, value, DistributionKind, DistributionK3d, DistributionTalos)
+	return fmt.Errorf("%w: %s (valid options: %s, %s, %s, %s)",
+		ErrInvalidDistribution, value, DistributionKind, DistributionK3d, DistributionTalos, DistributionEKS)
 }
 
 // IsValid checks if the distribution value is supported.
@@ -91,7 +95,12 @@ func (d *Distribution) Default() any {
 
 // ValidValues returns all valid Distribution values as strings.
 func (d *Distribution) ValidValues() []string {
-	return []string{string(DistributionKind), string(DistributionK3d), string(DistributionTalos)}
+	return []string{
+		string(DistributionKind),
+		string(DistributionK3d),
+		string(DistributionTalos),
+		string(DistributionEKS),
+	}
 }
 
 // --- CNI Types ---
@@ -459,4 +468,76 @@ func (g *GitOpsEngine) Default() any {
 // ValidValues returns all valid GitOpsEngine values as strings.
 func (g *GitOpsEngine) ValidValues() []string {
 	return []string{string(GitOpsEngineNone), string(GitOpsEngineFlux), string(GitOpsEngineArgoCD)}
+}
+
+// --- Provider Types ---
+
+// Provider defines the infrastructure provider backend for running clusters.
+// Only applicable to Talos and EKS distributions.
+type Provider string
+
+const (
+	// ProviderDocker runs clusters using Docker containers.
+	ProviderDocker Provider = "Docker"
+)
+
+// ErrInvalidProvider is returned when an invalid provider is specified.
+var ErrInvalidProvider = fmt.Errorf("invalid provider")
+
+// ErrInvalidDistributionProviderCombination is returned when a distribution doesn't support a provider.
+var ErrInvalidDistributionProviderCombination = fmt.Errorf("invalid distribution/provider combination")
+
+// ValidProviders returns all valid Provider values.
+func ValidProviders() []Provider {
+	return []Provider{ProviderDocker}
+}
+
+// Set for Provider (pflag.Value interface).
+func (p *Provider) Set(value string) error {
+	for _, provider := range ValidProviders() {
+		if strings.EqualFold(value, string(provider)) {
+			*p = provider
+			return nil
+		}
+	}
+	return fmt.Errorf("%w: %s (valid options: %s)", ErrInvalidProvider, value, ProviderDocker)
+}
+
+// String returns the string representation of the Provider.
+func (p *Provider) String() string {
+	return string(*p)
+}
+
+// Type returns the type name for the Provider.
+func (p *Provider) Type() string {
+	return "Provider"
+}
+
+// Default returns the default value for Provider (Docker).
+func (p *Provider) Default() any {
+	return ProviderDocker
+}
+
+// ValidValues returns all valid Provider values as strings.
+func (p *Provider) ValidValues() []string {
+	return []string{string(ProviderDocker)}
+}
+
+// ValidateForDistribution checks if the provider is valid for the given distribution.
+// Returns an error if the combination is invalid.
+func (p *Provider) ValidateForDistribution(dist Distribution) error {
+	switch dist {
+	case DistributionKind, DistributionK3d:
+		// Kind and K3d don't use the provider setting - they always use Docker internally
+		return nil
+	case DistributionTalos, DistributionEKS:
+		// Talos and EKS currently only support Docker provider
+		if *p == "" || *p == ProviderDocker {
+			return nil
+		}
+		return fmt.Errorf("%w: %s distribution only supports Docker provider, got %s",
+			ErrInvalidDistributionProviderCombination, dist, *p)
+	default:
+		return fmt.Errorf("%w: unknown distribution %s", ErrInvalidDistributionProviderCombination, dist)
+	}
 }

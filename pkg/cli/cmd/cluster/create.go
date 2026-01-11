@@ -54,6 +54,7 @@ func NewCreateCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
 	fieldSelectors = append(fieldSelectors, ksailconfigmanager.DefaultCSIFieldSelector())
 	fieldSelectors = append(fieldSelectors, ksailconfigmanager.ControlPlanesFieldSelector())
 	fieldSelectors = append(fieldSelectors, ksailconfigmanager.WorkersFieldSelector())
+	fieldSelectors = append(fieldSelectors, ksailconfigmanager.ProviderFieldSelector())
 
 	cfgManager := ksailconfigmanager.NewCommandConfigManager(cmd, fieldSelectors)
 

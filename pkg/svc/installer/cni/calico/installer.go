@@ -24,6 +24,7 @@ const (
 	DistributionKind  Distribution = "kind"
 	DistributionK3d   Distribution = "k3d"
 	DistributionTalos Distribution = "talos"
+	DistributionEKS   Distribution = "eks"
 )
 
 // CalicoInstaller implements the installer.Installer interface for Calico.
@@ -149,8 +150,8 @@ func (c *CalicoInstaller) getCalicoValues() map[string]string {
 	case DistributionTalos:
 		// Talos-specific settings from https://docs.siderolabs.com/kubernetes-guides/cni/deploy-calico
 		maps.Copy(values, talosCalicoValues())
-	case DistributionKind, DistributionK3d:
-		// Kind and K3d use default values
+	case DistributionKind, DistributionK3d, DistributionEKS:
+		// Kind, K3d, and EKS Anywhere Docker use default values
 	}
 
 	return values

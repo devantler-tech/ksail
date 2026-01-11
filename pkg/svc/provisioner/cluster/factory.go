@@ -9,6 +9,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	kindconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/kind"
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
+	eksprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/eks"
 	k3dprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/k3d"
 	kindprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/kind"
 	talosprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/talos"
@@ -33,6 +34,8 @@ type DistributionConfig struct {
 	K3d *k3dv1alpha5.SimpleConfig
 	// Talos holds the pre-loaded Talos machine configurations.
 	Talos *talosconfigmanager.Configs
+	// EKS holds the pre-loaded EKS Anywhere cluster configuration.
+	EKS *eksprovisioner.EKSConfig
 }
 
 // Factory creates distribution-specific cluster provisioners based on the KSail cluster configuration.
@@ -76,6 +79,8 @@ func (f DefaultFactory) Create(
 		return f.createK3dProvisioner(cluster)
 	case v1alpha1.DistributionTalos:
 		return f.createTalosProvisioner(cluster)
+	case v1alpha1.DistributionEKS:
+		return f.createEKSProvisioner(cluster)
 	default:
 		return nil, "", fmt.Errorf(
 			"%w: %s",
@@ -228,6 +233,7 @@ func (f DefaultFactory) createTalosProvisioner(
 	provisioner, err := talosprovisioner.CreateProvisioner(
 		f.DistributionConfig.Talos,
 		cluster.Spec.Cluster.Connection.Kubeconfig,
+		cluster.Spec.Cluster.Provider,
 		cluster.Spec.Cluster.Talos,
 		skipCNIChecks,
 	)
@@ -236,6 +242,39 @@ func (f DefaultFactory) createTalosProvisioner(
 	}
 
 	return provisioner, f.DistributionConfig.Talos, nil
+}
+
+func (f DefaultFactory) createEKSProvisioner(
+	cluster *v1alpha1.Cluster,
+) (ClusterProvisioner, any, error) {
+	// Use pre-loaded config from distribution config file (eks.yaml)
+	eksConfig := f.DistributionConfig.EKS
+	if eksConfig == nil {
+		// Resolve cluster name from context or use default
+		clusterName := cluster.Spec.Cluster.Connection.Context
+		if clusterName == "" {
+			clusterName = "eksa-local" // Default EKS Anywhere cluster name
+		}
+
+		// Create default EKS config
+		eksConfig = &eksprovisioner.EKSConfig{
+			Name:              clusterName,
+			ControlPlanes:     1,
+			Workers:           0,
+			KubernetesVersion: "1.31",
+		}
+	}
+
+	provisioner, err := eksprovisioner.CreateProvisioner(
+		eksConfig,
+		cluster.Spec.Cluster.Connection.Kubeconfig,
+		cluster.Spec.Cluster.Provider,
+	)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create EKS provisioner: %w", err)
+	}
+
+	return provisioner, eksConfig, nil
 }
 
 // writeK3dConfigToTempFile writes the in-memory k3d config to a temporary file.

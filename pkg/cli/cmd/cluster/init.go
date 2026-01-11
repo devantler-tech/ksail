@@ -54,6 +54,8 @@ func InitFieldSelectors() []ksailconfigmanager.FieldSelector[v1alpha1.Cluster] {
 	// Unified node count selectors for all distributions
 	selectors = append(selectors, ksailconfigmanager.ControlPlanesFieldSelector())
 	selectors = append(selectors, ksailconfigmanager.WorkersFieldSelector())
+	// Provider selector for Talos and EKS distributions
+	selectors = append(selectors, ksailconfigmanager.ProviderFieldSelector())
 
 	return selectors
 }

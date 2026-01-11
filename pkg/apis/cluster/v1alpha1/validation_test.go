@@ -57,7 +57,7 @@ func TestValidDistributions_IncludesTalos(t *testing.T) {
 
 	distributions := v1alpha1.ValidDistributions()
 	assert.Contains(t, distributions, v1alpha1.DistributionTalos)
-	assert.Len(t, distributions, 3) // Kind, K3d, Talos
+	assert.Len(t, distributions, 4) // Kind, K3d, Talos, EKS
 }
 
 func TestTalosProvidesMetricsServerByDefault_ReturnsFalse(t *testing.T) {

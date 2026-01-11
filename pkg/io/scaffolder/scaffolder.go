@@ -44,6 +44,9 @@ const (
 
 	// TalosConfigDir is the default directory for Talos distribution configuration (Talos patches).
 	TalosConfigDir = "talos"
+
+	// EKSConfigFile is the default filename for EKS Anywhere distribution configuration.
+	EKSConfigFile = "eks.yaml"
 )
 
 const (
@@ -70,6 +73,9 @@ var (
 	// ErrTalosConfigGeneration wraps failures when creating Talos configuration.
 	ErrTalosConfigGeneration = errors.New("failed to generate talos configuration")
 
+	// ErrEKSConfigGeneration wraps failures when creating EKS Anywhere configuration.
+	ErrEKSConfigGeneration = errors.New("failed to generate eks configuration")
+
 	// ErrKustomizationGeneration wraps failures when creating kustomization.yaml.
 	ErrKustomizationGeneration = errors.New("failed to generate kustomization configuration")
 
@@ -84,6 +90,7 @@ type Scaffolder struct {
 	KindGenerator          generator.Generator[*v1alpha4.Cluster, yamlgenerator.Options]
 	K3dGenerator           generator.Generator[*k3dv1alpha5.SimpleConfig, yamlgenerator.Options]
 	TalosGenerator         *talosgenerator.TalosGenerator
+	EKSGenerator           generator.Generator[*EKSScaffoldConfig, yamlgenerator.Options]
 	KustomizationGenerator generator.Generator[*ktypes.Kustomization, yamlgenerator.Options]
 	FluxInstanceGenerator  *fluxgenerator.InstanceGenerator
 	ArgoCDAppGenerator     *argocdgenerator.ApplicationGenerator
@@ -97,6 +104,7 @@ func NewScaffolder(cfg v1alpha1.Cluster, writer io.Writer, mirrorRegistries []st
 	kindGenerator := kindgenerator.NewKindGenerator()
 	k3dGenerator := k3dgenerator.NewK3dGenerator()
 	talosGen := talosgenerator.NewTalosGenerator()
+	eksGenerator := yamlgenerator.NewYAMLGenerator[*EKSScaffoldConfig]()
 	kustomizationGenerator := kustomizationgenerator.NewKustomizationGenerator()
 	fluxInstanceGen := fluxgenerator.NewInstanceGenerator()
 	argocdAppGen := argocdgenerator.NewApplicationGenerator()
@@ -107,6 +115,7 @@ func NewScaffolder(cfg v1alpha1.Cluster, writer io.Writer, mirrorRegistries []st
 		KindGenerator:          kindGenerator,
 		K3dGenerator:           k3dGenerator,
 		TalosGenerator:         talosGen,
+		EKSGenerator:           eksGenerator,
 		KustomizationGenerator: kustomizationGenerator,
 		FluxInstanceGenerator:  fluxInstanceGen,
 		ArgoCDAppGenerator:     argocdAppGen,
@@ -525,6 +534,8 @@ func (s *Scaffolder) generateDistributionConfig(output string, force bool) error
 		return s.generateK3dConfig(output, force)
 	case v1alpha1.DistributionTalos:
 		return s.generateTalosConfig(output, force)
+	case v1alpha1.DistributionEKS:
+		return s.generateEKSConfig(output, force)
 	default:
 		return ErrUnknownDistribution
 	}
@@ -807,6 +818,56 @@ func (s *Scaffolder) notifyTalosPatchCreated(subdir, filename string) {
 		Args:    []any{displayPath},
 		Writer:  s.Writer,
 	})
+}
+
+// generateEKSConfig generates the eks.yaml configuration file.
+func (s *Scaffolder) generateEKSConfig(output string, force bool) error {
+	cfg := s.buildEKSConfig()
+
+	opts := yamlgenerator.Options{
+		Output: filepath.Join(output, EKSConfigFile),
+		Force:  force,
+	}
+
+	return generateWithFileHandling(
+		s,
+		GenerationParams[*EKSScaffoldConfig]{
+			Gen:         s.EKSGenerator,
+			Model:       cfg,
+			Opts:        opts,
+			DisplayName: "eks.yaml",
+			Force:       force,
+			WrapErr: func(err error) error {
+				return fmt.Errorf("%w: %w", ErrEKSConfigGeneration, err)
+			},
+		},
+	)
+}
+
+// EKSScaffoldConfig holds the EKS Anywhere cluster configuration for scaffolding.
+type EKSScaffoldConfig struct {
+	Name              string `json:"name"              yaml:"name"`
+	ControlPlanes     int32  `json:"controlPlanes"     yaml:"controlPlanes"`
+	Workers           int32  `json:"workers"           yaml:"workers"`
+	KubernetesVersion string `json:"kubernetesVersion" yaml:"kubernetesVersion"`
+}
+
+// buildEKSConfig creates the EKS cluster configuration object.
+// Node counts should be configured directly in the scaffolded eks.yaml file.
+func (s *Scaffolder) buildEKSConfig() *EKSScaffoldConfig {
+	config := &EKSScaffoldConfig{
+		Name:              "eksa-local",
+		ControlPlanes:     1,
+		Workers:           0,
+		KubernetesVersion: "1.31",
+	}
+
+	// Use context name if set
+	if s.KSailConfig.Spec.Cluster.Connection.Context != "" {
+		config.Name = s.KSailConfig.Spec.Cluster.Connection.Context
+	}
+
+	return config
 }
 
 // generateGitOpsConfig generates GitOps CR manifests (FluxInstance or ArgoCD Application)

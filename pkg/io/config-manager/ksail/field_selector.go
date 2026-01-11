@@ -152,7 +152,7 @@ func DefaultClusterFieldSelectors() []FieldSelector[v1alpha1.Cluster] {
 }
 
 // ControlPlanesFieldSelector returns a field selector for control-plane node count.
-// This option works for all distributions: Kind, K3d, and Talos.
+// This option works for all distributions: Kind, K3d, Talos, and EKS.
 // For Kind/K3d, the value is applied to their native config (kind.yaml/k3d.yaml).
 func ControlPlanesFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	return FieldSelector[v1alpha1.Cluster]{
@@ -165,7 +165,7 @@ func ControlPlanesFieldSelector() FieldSelector[v1alpha1.Cluster] {
 }
 
 // WorkersFieldSelector returns a field selector for worker node count.
-// This option works for all distributions: Kind, K3d, and Talos.
+// This option works for all distributions: Kind, K3d, Talos, and EKS.
 // For Kind/K3d, the value is applied to their native config (kind.yaml/k3d.yaml).
 func WorkersFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	return FieldSelector[v1alpha1.Cluster]{
@@ -174,5 +174,17 @@ func WorkersFieldSelector() FieldSelector[v1alpha1.Cluster] {
 		},
 		Description:  "Number of worker nodes",
 		DefaultValue: int32(0),
+	}
+}
+
+// ProviderFieldSelector returns a field selector for the infrastructure provider backend.
+// Only applicable to Talos and EKS distributions.
+func ProviderFieldSelector() FieldSelector[v1alpha1.Cluster] {
+	return FieldSelector[v1alpha1.Cluster]{
+		Selector: func(c *v1alpha1.Cluster) any {
+			return &c.Spec.Cluster.Provider
+		},
+		Description:  "Infrastructure provider backend (Docker) - only for Talos and EKS distributions",
+		DefaultValue: v1alpha1.ProviderDocker,
 	}
 }

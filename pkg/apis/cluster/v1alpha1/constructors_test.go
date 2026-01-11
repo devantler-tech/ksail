@@ -356,57 +356,12 @@ func TestNewClusterOptionsK3d(t *testing.T) {
 	assert.NotNil(t, options)
 }
 
-func TestNewClusterOptionsCilium(t *testing.T) {
-	t.Parallel()
-
-	options := v1alpha1.NewClusterOptionsCilium()
-
-	// OptionsCilium is an empty struct, just verify it's created
-	assert.NotNil(t, options)
-}
-
-func TestNewClusterOptionsFlux(t *testing.T) {
-	t.Parallel()
-
-	options := v1alpha1.NewClusterOptionsFlux()
-
-	// OptionsFlux is an empty struct, just verify it's created
-	assert.NotNil(t, options)
-}
-
 func TestNewClusterOptionsLocalRegistry(t *testing.T) {
 	t.Parallel()
 
 	options := v1alpha1.NewClusterOptionsLocalRegistry()
 
 	// OptionsLocalRegistry is an empty struct, just verify it's created
-	assert.NotNil(t, options)
-}
-
-func TestNewClusterOptionsArgoCD(t *testing.T) {
-	t.Parallel()
-
-	options := v1alpha1.NewClusterOptionsArgoCD()
-
-	// OptionsArgoCD is an empty struct, just verify it's created
-	assert.NotNil(t, options)
-}
-
-func TestNewClusterOptionsHelm(t *testing.T) {
-	t.Parallel()
-
-	options := v1alpha1.NewClusterOptionsHelm()
-
-	// OptionsHelm is an empty struct, just verify it's created
-	assert.NotNil(t, options)
-}
-
-func TestNewClusterOptionsKustomize(t *testing.T) {
-	t.Parallel()
-
-	options := v1alpha1.NewClusterOptionsKustomize()
-
-	// OptionsKustomize is an empty struct, just verify it's created
 	assert.NotNil(t, options)
 }
 

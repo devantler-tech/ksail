@@ -21,6 +21,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/io/validator"
 	ksailvalidator "github.com/devantler-tech/ksail/v5/pkg/io/validator/ksail"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
+	eksprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/eks"
 	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
 	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
 	mapstructure "github.com/go-viper/mapstructure/v2"
@@ -606,6 +607,8 @@ func expectedDistributionConfigName(distribution v1alpha1.Distribution) string {
 		return "k3d.yaml"
 	case v1alpha1.DistributionTalos:
 		return "talos"
+	case v1alpha1.DistributionEKS:
+		return "eks.yaml"
 	default:
 		return ""
 	}
@@ -615,13 +618,20 @@ func distributionConfigIsOppositeDefault(current string, distribution v1alpha1.D
 	switch distribution {
 	case v1alpha1.DistributionKind:
 		return current == expectedDistributionConfigName(v1alpha1.DistributionK3d) ||
-			current == expectedDistributionConfigName(v1alpha1.DistributionTalos)
+			current == expectedDistributionConfigName(v1alpha1.DistributionTalos) ||
+			current == expectedDistributionConfigName(v1alpha1.DistributionEKS)
 	case v1alpha1.DistributionK3d:
 		return current == expectedDistributionConfigName(v1alpha1.DistributionKind) ||
-			current == expectedDistributionConfigName(v1alpha1.DistributionTalos)
+			current == expectedDistributionConfigName(v1alpha1.DistributionTalos) ||
+			current == expectedDistributionConfigName(v1alpha1.DistributionEKS)
 	case v1alpha1.DistributionTalos:
 		return current == expectedDistributionConfigName(v1alpha1.DistributionKind) ||
-			current == expectedDistributionConfigName(v1alpha1.DistributionK3d)
+			current == expectedDistributionConfigName(v1alpha1.DistributionK3d) ||
+			current == expectedDistributionConfigName(v1alpha1.DistributionEKS)
+	case v1alpha1.DistributionEKS:
+		return current == expectedDistributionConfigName(v1alpha1.DistributionKind) ||
+			current == expectedDistributionConfigName(v1alpha1.DistributionK3d) ||
+			current == expectedDistributionConfigName(v1alpha1.DistributionTalos)
 	default:
 		return false
 	}
@@ -684,6 +694,9 @@ func (m *ConfigManager) createValidatorForDistribution() (*ksailvalidator.Valida
 		if talosConfig != nil {
 			return ksailvalidator.NewValidatorForTalos(talosConfig), nil
 		}
+	case v1alpha1.DistributionEKS:
+		// EKS Anywhere doesn't require special validation config
+		// since it uses Kind under the hood with default values
 	}
 
 	return ksailvalidator.NewValidator(), nil
@@ -778,6 +791,30 @@ func (m *ConfigManager) loadTalosConfig() (*talosconfigmanager.Configs, error) {
 	return config, nil
 }
 
+// loadEKSConfig loads the EKS Anywhere distribution configuration if it exists.
+// Returns ErrDistributionConfigNotFound if the file doesn't exist.
+// Returns error if config loading fails.
+func (m *ConfigManager) loadEKSConfig() (*eksprovisioner.EKSConfig, error) {
+	// Check if the file actually exists before trying to load it
+	_, err := os.Stat(m.Config.Spec.Cluster.DistributionConfig)
+	if os.IsNotExist(err) {
+		return nil, ErrDistributionConfigNotFound
+	}
+
+	// Load the EKS config from YAML file using the loader
+	eksConfig, err := loader.LoadConfigFromFile(
+		m.Config.Spec.Cluster.DistributionConfig,
+		func() *eksprovisioner.EKSConfig {
+			return &eksprovisioner.EKSConfig{}
+		},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load EKS config: %w", err)
+	}
+
+	return eksConfig, nil
+}
+
 // loadAndCacheDistributionConfig loads the distribution-specific configuration based on
 // the cluster's distribution type and caches it in the ConfigManager.
 // This allows commands to access the distribution config via cfgManager.DistributionConfig.
@@ -792,6 +829,8 @@ func (m *ConfigManager) loadAndCacheDistributionConfig() error {
 		return m.cacheK3dConfig()
 	case v1alpha1.DistributionTalos:
 		return m.cacheTalosConfig()
+	case v1alpha1.DistributionEKS:
+		return m.cacheEKSConfig()
 	default:
 		return nil
 	}
@@ -854,6 +893,34 @@ func (m *ConfigManager) cacheTalosConfig() error {
 	}
 
 	m.DistributionConfig.Talos = talosConfig
+
+	return nil
+}
+
+func (m *ConfigManager) cacheEKSConfig() error {
+	eksConfig, err := m.loadEKSConfig()
+	if err != nil && !errors.Is(err, ErrDistributionConfigNotFound) {
+		return fmt.Errorf("failed to load EKS distribution config: %w", err)
+	}
+
+	if eksConfig == nil {
+		// Resolve cluster name from context or use default
+		clusterName := m.Config.Spec.Cluster.Connection.Context
+		if clusterName == "" {
+			clusterName = "eksa-local" // Default EKS Anywhere cluster name
+		}
+
+		// Create a valid default EKS config
+		// Node counts should be configured in eks.yaml, not in ksail.yaml
+		eksConfig = &eksprovisioner.EKSConfig{
+			Name:              clusterName,
+			ControlPlanes:     1,
+			Workers:           0,
+			KubernetesVersion: "1.31",
+		}
+	}
+
+	m.DistributionConfig.EKS = eksConfig
 
 	return nil
 }

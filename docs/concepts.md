@@ -51,6 +51,16 @@ Kubernetes distributions package the Kubernetes components with additional tooli
 - [Talos Configuration Reference](https://www.talos.dev/latest/reference/configuration/)
 - [Talos Getting Started](https://www.talos.dev/latest/introduction/getting-started/)
 
+### EKS Anywhere
+
+[EKS Anywhere](https://anywhere.eks.amazonaws.com/) is an open-source deployment option for Amazon EKS that allows you to create and operate Kubernetes clusters on your own infrastructure. The Docker provider enables local development and testing.
+
+**Key resources:**
+
+- [EKS Anywhere Documentation](https://anywhere.eks.amazonaws.com/docs/)
+- [EKS Anywhere Docker Provider](https://anywhere.eks.amazonaws.com/docs/getting-started/docker/)
+- [EKS Anywhere GitHub](https://github.com/aws/eks-anywhere)
+
 ## Container Network Interface (CNI)
 
 [CNI](https://www.cni.dev/) is a specification for configuring network interfaces in Linux containers. CNI plugins provide pod networking, network policies, and observability.
@@ -198,7 +208,7 @@ Policy engines enforce security, compliance, and best practices in Kubernetes cl
 SOPS supports multiple key management backends:
 
 | Provider        | Documentation                                                                |
-|-----------------|------------------------------------------------------------------------------|
+| --------------- | ---------------------------------------------------------------------------- |
 | age             | [age-encryption.org](https://age-encryption.org/)                            |
 | PGP             | [GnuPG](https://gnupg.org/)                                                  |
 | AWS KMS         | [AWS KMS Documentation](https://docs.aws.amazon.com/kms/)                    |
