@@ -95,9 +95,10 @@ func HandleInitRunE(
 	}
 
 	// Early validation of distribution x provider combination
-	if err := clusterCfg.Spec.Cluster.Provider.ValidateForDistribution(
+	err = clusterCfg.Spec.Cluster.Provider.ValidateForDistribution(
 		clusterCfg.Spec.Cluster.Distribution,
-	); err != nil {
+	)
+	if err != nil {
 		return fmt.Errorf("invalid configuration: %w", err)
 	}
 

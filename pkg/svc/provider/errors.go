@@ -9,4 +9,7 @@ var (
 
 	// ErrProviderUnavailable is returned when the provider is not available.
 	ErrProviderUnavailable = errors.New("provider is not available")
+
+	// ErrUnknownLabelScheme is returned when an unknown label scheme is specified.
+	ErrUnknownLabelScheme = errors.New("unknown label scheme")
 )

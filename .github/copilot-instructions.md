@@ -226,7 +226,7 @@ bundle exec jekyll serve --host 0.0.0.0  # Test locally (if needed)
 **Providers vs Provisioners:**
 
 - **Providers** (`pkg/svc/provider/`) manage infrastructure lifecycle (start/stop containers)
-  - `DockerProvider`: Runs Kubernetes nodes as Docker containers
+  - `docker.Provider`: Runs Kubernetes nodes as Docker containers
 - **Provisioners** (`pkg/svc/provisioner/`) configure and manage Kubernetes distributions
   - `VanillaProvisioner`: Uses Kind SDK for standard upstream Kubernetes
   - `K3sProvisioner`: Uses K3d CLI for lightweight K3s clusters

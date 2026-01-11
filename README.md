@@ -48,6 +48,11 @@ The supported distributions run on different infrastructure providers:
 | Talos        | Immutable Talos Linux  | Docker, Hetzner (🚧 next) |
 | EKS          | Amazon EKS             | AWS (🚧 next)             |
 
+> [!NOTE]
+> If you want to see more providers supported, please consider sponsoring development via [GitHub Sponsors](https://github.com/sponsors/devantler). Testing and maintaining cloud provider support comes with a additional financial costs for me, so sponsorships help make that feasible.
+>
+> Hetzner is an exception to this, as I use Hetzner for my personal homelab, and so I need the support for my own use case.
+
 ### Installation
 
 #### Homebrew

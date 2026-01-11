@@ -95,7 +95,7 @@ The repository is organized into two main directories:
 
 - **apis/** - API types, schemas, and enums (distribution/provider values)
 - **client/** - Embedded tool clients (kubectl, helm, kind, k3d, flux, argocd)
-- **svc/provider/** - Infrastructure providers (e.g., DockerProvider for running nodes as containers)
+- **svc/provider/** - Infrastructure providers (e.g., `docker.Provider` for running nodes as containers)
 - **svc/provisioner/** - Distribution provisioners (Vanilla, K3s, Talos)
 - **svc/installer/** - Component installers (CNI, CSI, metrics-server, etc.)
 - **di/** - Dependency injection for wiring components

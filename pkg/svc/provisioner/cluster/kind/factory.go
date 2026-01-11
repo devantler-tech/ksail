@@ -33,7 +33,7 @@ func CreateProvisioner(
 	}
 
 	// Create Docker infrastructure provider for Kind clusters
-	infraProvider := dockerprovider.NewDockerProvider(dockerClient, dockerprovider.LabelSchemeKind)
+	infraProvider := dockerprovider.NewProvider(dockerClient, dockerprovider.LabelSchemeKind)
 
 	provisioner := NewKindClusterProvisioner(
 		kindConfig,

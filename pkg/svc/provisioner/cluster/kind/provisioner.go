@@ -252,7 +252,7 @@ func (k *KindClusterProvisioner) Start(ctx context.Context, name string) error {
 	target := setName(name, k.kindConfig.Name)
 
 	if k.infraProvider == nil {
-		return fmt.Errorf("infrastructure provider not set for cluster '%s'", target)
+		return fmt.Errorf("%w for cluster '%s'", clustererrors.ErrProviderNotSet, target)
 	}
 
 	err := k.infraProvider.StartNodes(ctx, target)
@@ -269,7 +269,7 @@ func (k *KindClusterProvisioner) Stop(ctx context.Context, name string) error {
 	target := setName(name, k.kindConfig.Name)
 
 	if k.infraProvider == nil {
-		return fmt.Errorf("infrastructure provider not set for cluster '%s'", target)
+		return fmt.Errorf("%w for cluster '%s'", clustererrors.ErrProviderNotSet, target)
 	}
 
 	err := k.infraProvider.StopNodes(ctx, target)

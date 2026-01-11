@@ -107,23 +107,12 @@ func installCiliumCNI(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster, tmr time
 		return fmt.Errorf("failed to add Cilium Helm repository: %w", err)
 	}
 
-	var distribution ciliuminstaller.Distribution
-
-	switch clusterCfg.Spec.Cluster.Distribution {
-	case v1alpha1.DistributionTalos:
-		distribution = ciliuminstaller.DistributionTalos
-	case v1alpha1.DistributionVanilla:
-		distribution = ciliuminstaller.DistributionVanilla
-	case v1alpha1.DistributionK3s:
-		distribution = ciliuminstaller.DistributionK3s
-	}
-
 	ciliumInst := ciliuminstaller.NewCiliumInstallerWithDistribution(
 		setup.helmClient,
 		setup.kubeconfig,
 		clusterCfg.Spec.Cluster.Connection.Context,
 		setup.timeout,
-		distribution,
+		clusterCfg.Spec.Cluster.Distribution,
 	)
 
 	return runCNIInstallation(cmd, ciliumInst, "cilium", tmr)
@@ -135,23 +124,12 @@ func installCalicoCNI(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster, tmr time
 		return err
 	}
 
-	var distribution calicoinstaller.Distribution
-
-	switch clusterCfg.Spec.Cluster.Distribution {
-	case v1alpha1.DistributionTalos:
-		distribution = calicoinstaller.DistributionTalos
-	case v1alpha1.DistributionVanilla:
-		distribution = calicoinstaller.DistributionVanilla
-	case v1alpha1.DistributionK3s:
-		distribution = calicoinstaller.DistributionK3s
-	}
-
 	calicoInst := calicoinstaller.NewCalicoInstallerWithDistribution(
 		setup.helmClient,
 		setup.kubeconfig,
 		clusterCfg.Spec.Cluster.Connection.Context,
 		setup.timeout,
-		distribution,
+		clusterCfg.Spec.Cluster.Distribution,
 	)
 
 	return runCNIInstallation(cmd, calicoInst, "calico", tmr)

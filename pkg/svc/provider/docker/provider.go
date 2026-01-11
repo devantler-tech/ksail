@@ -43,22 +43,22 @@ const (
 	DefaultStopTimeout  = 60 * time.Second
 )
 
-// DockerProvider implements provider.Provider for Docker-based clusters.
-type DockerProvider struct {
+// Provider implements provider.Provider for Docker-based clusters.
+type Provider struct {
 	client      client.APIClient
 	labelScheme LabelScheme
 }
 
-// NewDockerProvider creates a new Docker provider with the specified label scheme.
-func NewDockerProvider(cli client.APIClient, scheme LabelScheme) *DockerProvider {
-	return &DockerProvider{
+// NewProvider creates a new Docker provider with the specified label scheme.
+func NewProvider(cli client.APIClient, scheme LabelScheme) *Provider {
+	return &Provider{
 		client:      cli,
 		labelScheme: scheme,
 	}
 }
 
 // StartNodes starts all containers for the given cluster.
-func (p *DockerProvider) StartNodes(ctx context.Context, clusterName string) error {
+func (p *Provider) StartNodes(ctx context.Context, clusterName string) error {
 	if p.client == nil {
 		return provider.ErrProviderUnavailable
 	}
@@ -86,7 +86,7 @@ func (p *DockerProvider) StartNodes(ctx context.Context, clusterName string) err
 }
 
 // StopNodes stops all containers for the given cluster.
-func (p *DockerProvider) StopNodes(ctx context.Context, clusterName string) error {
+func (p *Provider) StopNodes(ctx context.Context, clusterName string) error {
 	if p.client == nil {
 		return provider.ErrProviderUnavailable
 	}
@@ -114,7 +114,7 @@ func (p *DockerProvider) StopNodes(ctx context.Context, clusterName string) erro
 }
 
 // ListNodes returns all nodes for the given cluster based on the label scheme.
-func (p *DockerProvider) ListNodes(ctx context.Context, clusterName string) ([]provider.NodeInfo, error) {
+func (p *Provider) ListNodes(ctx context.Context, clusterName string) ([]provider.NodeInfo, error) {
 	if p.client == nil {
 		return nil, provider.ErrProviderUnavailable
 	}
@@ -135,7 +135,7 @@ func (p *DockerProvider) ListNodes(ctx context.Context, clusterName string) ([]p
 }
 
 // ListAllClusters returns the names of all clusters managed by this provider.
-func (p *DockerProvider) ListAllClusters(ctx context.Context) ([]string, error) {
+func (p *Provider) ListAllClusters(ctx context.Context) ([]string, error) {
 	if p.client == nil {
 		return nil, provider.ErrProviderUnavailable
 	}
@@ -164,7 +164,7 @@ func (p *DockerProvider) ListAllClusters(ctx context.Context) ([]string, error) 
 }
 
 // NodesExist returns true if any nodes exist for the given cluster.
-func (p *DockerProvider) NodesExist(ctx context.Context, clusterName string) (bool, error) {
+func (p *Provider) NodesExist(ctx context.Context, clusterName string) (bool, error) {
 	if p.client == nil {
 		return false, provider.ErrProviderUnavailable
 	}
@@ -179,7 +179,7 @@ func (p *DockerProvider) NodesExist(ctx context.Context, clusterName string) (bo
 
 // DeleteNodes removes all containers for the given cluster.
 // This is a cleanup operation - most provisioners handle deletion through their SDK.
-func (p *DockerProvider) DeleteNodes(ctx context.Context, clusterName string) error {
+func (p *Provider) DeleteNodes(ctx context.Context, clusterName string) error {
 	if p.client == nil {
 		return provider.ErrProviderUnavailable
 	}
@@ -189,14 +189,14 @@ func (p *DockerProvider) DeleteNodes(ctx context.Context, clusterName string) er
 		return err
 	}
 
-	for _, c := range containers {
+	for _, ctr := range containers {
 		// Force remove containers
-		err := p.client.ContainerRemove(ctx, c.ID, container.RemoveOptions{
+		err := p.client.ContainerRemove(ctx, ctr.ID, container.RemoveOptions{
 			Force:         true,
 			RemoveVolumes: true,
 		})
 		if err != nil {
-			return fmt.Errorf("failed to remove container %s: %w", c.ID, err)
+			return fmt.Errorf("failed to remove container %s: %w", ctr.ID, err)
 		}
 	}
 
@@ -204,7 +204,7 @@ func (p *DockerProvider) DeleteNodes(ctx context.Context, clusterName string) er
 }
 
 // listContainers returns containers for the given cluster based on the label scheme.
-func (p *DockerProvider) listContainers(
+func (p *Provider) listContainers(
 	ctx context.Context,
 	clusterName string,
 ) ([]container.Summary, error) {
@@ -216,12 +216,12 @@ func (p *DockerProvider) listContainers(
 	case LabelSchemeTalos:
 		return p.listTalosContainers(ctx, clusterName)
 	default:
-		return nil, fmt.Errorf("unknown label scheme: %s", p.labelScheme)
+		return nil, fmt.Errorf("%w: %s", provider.ErrUnknownLabelScheme, p.labelScheme)
 	}
 }
 
 // listKindContainers lists containers by name prefix (Kind doesn't use labels).
-func (p *DockerProvider) listKindContainers(
+func (p *Provider) listKindContainers(
 	ctx context.Context,
 	clusterName string,
 ) ([]container.Summary, error) {
@@ -232,14 +232,15 @@ func (p *DockerProvider) listKindContainers(
 	}
 
 	prefix := clusterName + "-"
+
 	var result []container.Summary
 
-	for _, c := range containers {
-		for _, name := range c.Names {
+	for _, ctr := range containers {
+		for _, name := range ctr.Names {
 			// Container names have leading "/"
 			name = strings.TrimPrefix(name, "/")
 			if strings.HasPrefix(name, prefix) {
-				result = append(result, c)
+				result = append(result, ctr)
 
 				break
 			}
@@ -250,7 +251,7 @@ func (p *DockerProvider) listKindContainers(
 }
 
 // listK3dContainers lists containers by K3d labels.
-func (p *DockerProvider) listK3dContainers(
+func (p *Provider) listK3dContainers(
 	ctx context.Context,
 	clusterName string,
 ) ([]container.Summary, error) {
@@ -268,7 +269,7 @@ func (p *DockerProvider) listK3dContainers(
 }
 
 // listTalosContainers lists containers by Talos labels.
-func (p *DockerProvider) listTalosContainers(
+func (p *Provider) listTalosContainers(
 	ctx context.Context,
 	clusterName string,
 ) ([]container.Summary, error) {
@@ -287,29 +288,29 @@ func (p *DockerProvider) listTalosContainers(
 }
 
 // containerToNodeInfo converts a Docker container to a NodeInfo.
-func (p *DockerProvider) containerToNodeInfo(c container.Summary, clusterName string) provider.NodeInfo {
+func (p *Provider) containerToNodeInfo(ctr container.Summary, clusterName string) provider.NodeInfo {
 	name := ""
-	if len(c.Names) > 0 {
-		name = strings.TrimPrefix(c.Names[0], "/")
+	if len(ctr.Names) > 0 {
+		name = strings.TrimPrefix(ctr.Names[0], "/")
 	}
 
-	role := p.extractRole(c)
+	role := p.extractRole(ctr)
 
 	return provider.NodeInfo{
 		Name:        name,
 		ClusterName: clusterName,
 		Role:        role,
-		State:       c.State,
+		State:       ctr.State,
 	}
 }
 
 // extractClusterName extracts the cluster name from a container based on the label scheme.
-func (p *DockerProvider) extractClusterName(c container.Summary) string {
+func (p *Provider) extractClusterName(ctr container.Summary) string {
 	switch p.labelScheme {
 	case LabelSchemeKind:
 		// Extract from container name: <cluster>-control-plane or <cluster>-worker[N]
-		if len(c.Names) > 0 {
-			name := strings.TrimPrefix(c.Names[0], "/")
+		if len(ctr.Names) > 0 {
+			name := strings.TrimPrefix(ctr.Names[0], "/")
 			// Look for Kind-style suffixes
 			for _, suffix := range []string{"-control-plane", "-worker"} {
 				if idx := strings.Index(name, suffix); idx > 0 {
@@ -320,20 +321,20 @@ func (p *DockerProvider) extractClusterName(c container.Summary) string {
 
 		return ""
 	case LabelSchemeK3d:
-		return c.Labels[LabelK3dCluster]
+		return ctr.Labels[LabelK3dCluster]
 	case LabelSchemeTalos:
-		return c.Labels[LabelTalosClusterName]
+		return ctr.Labels[LabelTalosClusterName]
 	default:
 		return ""
 	}
 }
 
 // extractRole extracts the node role from a container based on the label scheme.
-func (p *DockerProvider) extractRole(c container.Summary) string {
+func (p *Provider) extractRole(ctr container.Summary) string {
 	switch p.labelScheme {
 	case LabelSchemeKind:
-		if len(c.Names) > 0 {
-			name := strings.TrimPrefix(c.Names[0], "/")
+		if len(ctr.Names) > 0 {
+			name := strings.TrimPrefix(ctr.Names[0], "/")
 			if strings.Contains(name, "control-plane") {
 				return "control-plane"
 			}
@@ -345,9 +346,9 @@ func (p *DockerProvider) extractRole(c container.Summary) string {
 
 		return ""
 	case LabelSchemeK3d:
-		return c.Labels[LabelK3dRole]
+		return ctr.Labels[LabelK3dRole]
 	case LabelSchemeTalos:
-		return c.Labels[LabelTalosType]
+		return ctr.Labels[LabelTalosType]
 	default:
 		return ""
 	}
