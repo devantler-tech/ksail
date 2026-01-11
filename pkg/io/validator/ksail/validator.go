@@ -102,7 +102,7 @@ func (v *Validator) validateContextName(
 
 	expectedContext := v.getExpectedContextName(config)
 	if expectedContext == "" {
-		// For EKS or unknown distributions, or when no distribution config is provided, skip context validation
+		// For unknown distributions, or when no distribution config is provided, skip context validation
 		return
 	}
 
