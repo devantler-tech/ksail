@@ -247,7 +247,6 @@ jobs:
           init: ${{ matrix.init }}
           args: ${{ matrix.args }}
           apply-overlay-path: ".github/fixtures/podinfo-overlay"
-          apply-deployment-name: "podinfo"
 
   status:
     name: CI - KSail
