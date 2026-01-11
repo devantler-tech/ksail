@@ -31,7 +31,7 @@ Setting up and operating Kubernetes clusters is a skill of its own, often requir
 
 ### Prerequisites
 
-The binary works on all major operating systems and modern CPU archectures:
+The binary works on all major operating systems and modern CPU architectures:
 
 | OS                   | Arch            |
 | -------------------- | --------------- |
