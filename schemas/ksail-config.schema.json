@@ -45,7 +45,14 @@
               "enum": [
                 "Kind",
                 "K3d",
-                "Talos"
+                "Talos",
+                "EKS"
+              ]
+            },
+            "provider": {
+              "type": "string",
+              "enum": [
+                "Docker"
               ]
             },
             "cni": {
@@ -118,9 +125,6 @@
             },
             "talos": {
               "properties": {
-                "provider": {
-                  "type": "string"
-                },
                 "controlPlanes": {
                   "type": "integer"
                 },
@@ -131,25 +135,7 @@
               "additionalProperties": false,
               "type": "object"
             },
-            "cilium": {
-              "properties": {},
-              "additionalProperties": false,
-              "type": "object",
-              "description": "Alpha placeholder (currently unsupported)."
-            },
-            "calico": {
-              "properties": {},
-              "additionalProperties": false,
-              "type": "object",
-              "description": "Alpha placeholder (currently unsupported)."
-            },
-            "flux": {
-              "properties": {},
-              "additionalProperties": false,
-              "type": "object",
-              "description": "Alpha placeholder (currently unsupported)."
-            },
-            "argocd": {
+            "eks": {
               "properties": {},
               "additionalProperties": false,
               "type": "object",
@@ -163,18 +149,6 @@
               },
               "additionalProperties": false,
               "type": "object"
-            },
-            "helm": {
-              "properties": {},
-              "additionalProperties": false,
-              "type": "object",
-              "description": "Alpha placeholder (currently unsupported)."
-            },
-            "kustomize": {
-              "properties": {},
-              "additionalProperties": false,
-              "type": "object",
-              "description": "Alpha placeholder (currently unsupported)."
             }
           },
           "additionalProperties": false,
