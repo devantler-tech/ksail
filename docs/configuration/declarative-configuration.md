@@ -30,7 +30,7 @@ spec:
     distributionConfig: kind.yaml
 ```
 
-This minimal configuration creates a Kind cluster using defaults for all other settings.
+This minimal configuration creates a Vanilla (Kind) cluster using defaults for all other settings.
 
 ## Complete Example
 

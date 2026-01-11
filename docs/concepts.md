@@ -122,7 +122,7 @@ The Docker provider runs Kubernetes nodes as Docker containers on your local mac
 
 - Metrics-server requires secure TLS communication with kubelets
 - Without approved CSRs, kubelets use self-signed certificates that metrics-server rejects
-- KSail automatically installs kubelet-csr-approver when metrics-server is enabled on Kind or Talos
+- KSail automatically installs kubelet-csr-approver when metrics-server is enabled on Vanilla or Talos
 
 **Key resources:**
 
