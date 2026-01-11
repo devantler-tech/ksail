@@ -9,8 +9,8 @@ import (
 	kindprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/kind"
 )
 
-// ErrUnsupportedTalosProvider is returned when an unsupported Talos provider is specified.
-var ErrUnsupportedTalosProvider = errors.New("unsupported Talos provider")
+// ErrUnsupportedProvider is returned when an unsupported provider is specified.
+var ErrUnsupportedProvider = errors.New("unsupported provider")
 
 // CreateProvisioner creates a TalosProvisioner from a pre-loaded configuration.
 // The Talos config should be loaded via the config-manager before calling this function,
@@ -19,25 +19,26 @@ var ErrUnsupportedTalosProvider = errors.New("unsupported Talos provider")
 // Parameters:
 //   - talosConfigs: Pre-loaded Talos machine configurations with all patches applied
 //   - kubeconfigPath: Path where the kubeconfig should be written
-//   - opts: Talos-specific options (node counts, provider, etc.)
+//   - provider: Infrastructure provider (e.g., Docker)
+//   - opts: Talos-specific options (node counts, etc.)
 //   - skipCNIChecks: Whether to skip CNI-dependent checks (CoreDNS, kube-proxy) during bootstrap.
 //     Set to true when KSail will install a custom CNI after cluster creation.
 func CreateProvisioner(
 	talosConfigs *talosconfigmanager.Configs,
 	kubeconfigPath string,
+	provider v1alpha1.Provider,
 	opts v1alpha1.OptionsTalos,
 	skipCNIChecks bool,
 ) (*TalosProvisioner, error) {
 	// Validate or default the provider
-	provider := opts.Provider
 	if provider == "" {
-		provider = v1alpha1.TalosProviderDocker
+		provider = v1alpha1.ProviderDocker
 	}
 
 	// Currently only Docker provider is supported
-	if provider != v1alpha1.TalosProviderDocker {
+	if provider != v1alpha1.ProviderDocker {
 		return nil, fmt.Errorf("%w: %s (supported: %s)",
-			ErrUnsupportedTalosProvider, provider, v1alpha1.TalosProviderDocker)
+			ErrUnsupportedProvider, provider, v1alpha1.ProviderDocker)
 	}
 
 	// Create options and apply configured node counts

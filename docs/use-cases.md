@@ -15,7 +15,7 @@ Experiment with Kubernetes without complex setup.
 
 ```bash
 # Create playground
-ksail cluster init --distribution Kind --cni Cilium
+ksail cluster init --distribution Vanilla --cni Cilium
 ksail cluster create
 
 # Try workloads
@@ -39,7 +39,7 @@ Run Kubernetes manifests locally with consistent workflow. See [Workload Managem
 
 ```bash
 # Scaffold project
-ksail cluster init --distribution Kind --cni Cilium --metrics-server Enabled
+ksail cluster init --distribution Vanilla --cni Cilium --metrics-server Enabled
 
 # Create cluster
 ksail cluster create
@@ -82,7 +82,7 @@ Disposable Kubernetes clusters for integration testing.
 
 ```bash
 # Initialize (commit config)
-ksail cluster init --distribution Kind --metrics-server Enabled
+ksail cluster init --distribution Vanilla --metrics-server Enabled
 
 # Create cluster in CI
 ksail cluster create

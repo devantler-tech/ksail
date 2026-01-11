@@ -180,7 +180,7 @@ func Cleanup(
 	// K3d uses native registry management via Registries.Create.
 	// K3d automatically creates, connects, and manages the registry container
 	// as part of cluster creation, so we skip KSail's manual registry handling.
-	if clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionK3d {
+	if clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionK3s {
 		return nil
 	}
 
@@ -239,7 +239,7 @@ func Disconnect(
 	localDeps Dependencies,
 ) error {
 	// K3d uses native registry management, skip for K3d
-	if clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionK3d {
+	if clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionK3s {
 		return nil
 	}
 
@@ -345,7 +345,7 @@ func runStageFromBuilder(
 // shouldSkipK3d returns true if the action should be skipped for K3d distribution.
 // K3d uses native registry management via Registries.Create.
 func shouldSkipK3d(clusterCfg *v1alpha1.Cluster) bool {
-	return clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionK3d
+	return clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionK3s
 }
 
 // wrapActionWithContext wraps an action that requires registryContext into a simpler handler.
@@ -374,7 +374,7 @@ type actionRunner struct {
 // prepareContext validates preconditions and creates the registry context.
 // Returns nil context if the action should be skipped.
 func (r *actionRunner) prepareContext(checkLocalRegistry bool) *registryContext {
-	localRegistryDisabled := r.clusterCfg.Spec.Cluster.LocalRegistry != v1alpha1.LocalRegistryEnabled
+	localRegistryDisabled := !r.clusterCfg.Spec.Cluster.LocalRegistry.Enabled
 	if checkLocalRegistry && localRegistryDisabled {
 		return nil
 	}
@@ -566,9 +566,9 @@ func resolveClusterName(
 	talosConfig *talosconfigmanager.Configs,
 ) string {
 	switch clusterCfg.Spec.Cluster.Distribution {
-	case v1alpha1.DistributionKind:
+	case v1alpha1.DistributionVanilla:
 		return kindconfigmanager.ResolveClusterName(clusterCfg, kindConfig)
-	case v1alpha1.DistributionK3d:
+	case v1alpha1.DistributionK3s:
 		return k3dconfigmanager.ResolveClusterName(clusterCfg, k3dConfig)
 	case v1alpha1.DistributionTalos:
 		return talosconfigmanager.ResolveClusterName(clusterCfg, talosConfig)
@@ -586,9 +586,9 @@ func resolveNetworkName(
 	clusterName string,
 ) string {
 	switch clusterCfg.Spec.Cluster.Distribution {
-	case v1alpha1.DistributionKind:
+	case v1alpha1.DistributionVanilla:
 		return "kind"
-	case v1alpha1.DistributionK3d:
+	case v1alpha1.DistributionK3s:
 		trimmed := strings.TrimSpace(clusterName)
 		if trimmed == "" {
 			trimmed = "k3d"
@@ -622,8 +622,8 @@ func newCreateOptions(
 }
 
 func resolvePort(clusterCfg *v1alpha1.Cluster) int {
-	if clusterCfg.Spec.Cluster.LocalRegistryOpts.HostPort > 0 {
-		return int(clusterCfg.Spec.Cluster.LocalRegistryOpts.HostPort)
+	if clusterCfg.Spec.Cluster.LocalRegistry.HostPort > 0 {
+		return int(clusterCfg.Spec.Cluster.LocalRegistry.HostPort)
 	}
 
 	return int(v1alpha1.DefaultLocalRegistryPort)
@@ -645,11 +645,11 @@ func WaitForK3dLocalRegistryReady(
 	dockerInvoker func(*cobra.Command, func(client.APIClient) error) error,
 ) error {
 	// Only wait for K3d with local registry enabled
-	if clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionK3d {
+	if clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionK3s {
 		return nil
 	}
 
-	if clusterCfg.Spec.Cluster.LocalRegistry != v1alpha1.LocalRegistryEnabled {
+	if !clusterCfg.Spec.Cluster.LocalRegistry.Enabled {
 		return nil
 	}
 

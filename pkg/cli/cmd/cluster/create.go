@@ -47,6 +47,7 @@ func NewCreateCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
 	}
 
 	fieldSelectors := ksailconfigmanager.DefaultClusterFieldSelectors()
+	fieldSelectors = append(fieldSelectors, ksailconfigmanager.DefaultProviderFieldSelector())
 	fieldSelectors = append(fieldSelectors, ksailconfigmanager.DefaultCNIFieldSelector())
 	fieldSelectors = append(fieldSelectors, ksailconfigmanager.DefaultMetricsServerFieldSelector())
 	fieldSelectors = append(fieldSelectors, ksailconfigmanager.DefaultCertManagerFieldSelector())
@@ -81,6 +82,13 @@ func handleCreateRunE(
 	ctx, err := loadClusterConfiguration(cfgManager, outputTimer)
 	if err != nil {
 		return err
+	}
+
+	// Early validation of distribution x provider combination
+	if err := ctx.ClusterCfg.Spec.Cluster.Provider.ValidateForDistribution(
+		ctx.ClusterCfg.Spec.Cluster.Distribution,
+	); err != nil {
+		return fmt.Errorf("invalid configuration: %w", err)
 	}
 
 	localDeps := getLocalRegistryDeps()
@@ -296,7 +304,7 @@ func handlePostCreationSetup(
 }
 
 func setupK3dMetricsServer(clusterCfg *v1alpha1.Cluster, k3dConfig *v1alpha5.SimpleConfig) {
-	if clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionK3d || k3dConfig == nil {
+	if clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionK3s || k3dConfig == nil {
 		return
 	}
 

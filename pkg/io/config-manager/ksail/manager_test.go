@@ -26,7 +26,7 @@ const (
 		"kind: Cluster\n" +
 		"spec:\n" +
 		"  cluster:\n" +
-		"    distribution: Kind\n" +
+		"    distribution: Vanilla\n" +
 		"    distributionConfig: kind.yaml\n"
 )
 
@@ -40,7 +40,7 @@ func writeValidKsailConfig(t *testing.T, dir string) {
 		"kind: Cluster\n" +
 		"spec:\n" +
 		"  cluster:\n" +
-		"    distribution: Kind\n" +
+		"    distribution: Vanilla\n" +
 		"    distributionConfig: kind.yaml\n" +
 		"  workload:\n" +
 		"    sourceDirectory: k8s\n"
@@ -108,7 +108,7 @@ func createStandardFieldSelectors() []configmanager.FieldSelector[v1alpha1.Clust
 	return []configmanager.FieldSelector[v1alpha1.Cluster]{
 		newFieldSelector(
 			func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.Distribution },
-			v1alpha1.DistributionKind,
+			v1alpha1.DistributionVanilla,
 			"Kubernetes distribution",
 		),
 		newFieldSelector(
@@ -150,7 +150,7 @@ func TestLoadConfigLoadsKindDistributionConfig(t *testing.T) {
 		"kind: Cluster\n" +
 		"spec:\n" +
 		"  cluster:\n" +
-		"    distribution: Kind\n" +
+		"    distribution: Vanilla\n" +
 		"    distributionConfig: " + kindConfigPath + "\n" +
 		"    cni: Cilium\n" +
 		"    connection:\n" +
@@ -181,7 +181,7 @@ func TestLoadConfigLoadsK3dDistributionConfig(t *testing.T) {
 		"kind: Cluster\n" +
 		"spec:\n" +
 		"  cluster:\n" +
-		"    distribution: K3d\n" +
+		"    distribution: K3s\n" +
 		"    distributionConfig: " + k3dConfigPath + "\n" +
 		"    cni: Cilium\n" +
 		"    connection:\n" +
@@ -288,7 +288,7 @@ func TestLoadConfigFromFlagsOnlyIgnoresExistingConfig(t *testing.T) {
 	config, err := manager.LoadConfigFromFlagsOnly()
 	require.NoError(t, err)
 
-	assert.Equal(t, v1alpha1.DistributionKind, config.Spec.Cluster.Distribution)
+	assert.Equal(t, v1alpha1.DistributionVanilla, config.Spec.Cluster.Distribution)
 	assert.Equal(t, "kind.yaml", config.Spec.Cluster.DistributionConfig)
 }
 
@@ -301,7 +301,7 @@ func TestLoadConfigAppliesFlagOverrides(t *testing.T) {
 		"kind: Cluster\n" +
 		"spec:\n" +
 		"  cluster:\n" +
-		"    distribution: Kind\n" +
+		"    distribution: Vanilla\n" +
 		"    distributionConfig: kind.yaml\n"
 	require.NoError(t, os.WriteFile("ksail.yaml", []byte(ksailConfig), 0o600))
 
@@ -310,13 +310,13 @@ func TestLoadConfigAppliesFlagOverrides(t *testing.T) {
 	manager := configmanager.NewCommandConfigManager(cmd, selectors)
 	manager.Viper.SetConfigFile("ksail.yaml")
 
-	require.NoError(t, cmd.Flags().Set("distribution", "K3d"))
+	require.NoError(t, cmd.Flags().Set("distribution", "K3s"))
 	require.NoError(t, cmd.Flags().Set("distribution-config", "k3d.yaml"))
 
 	_, err := manager.LoadConfig(nil)
 	require.NoError(t, err)
 
-	assert.Equal(t, v1alpha1.DistributionK3d, manager.Config.Spec.Cluster.Distribution)
+	assert.Equal(t, v1alpha1.DistributionK3s, manager.Config.Spec.Cluster.Distribution)
 	assert.Equal(t, "k3d.yaml", manager.Config.Spec.Cluster.DistributionConfig)
 }
 
@@ -381,19 +381,19 @@ func TestLoadConfig(t *testing.T) {
 		{
 			name: "LoadConfig with environment variables",
 			envVars: map[string]string{
-				"KSAIL_SPEC_DISTRIBUTION": "Kind",
+				"KSAIL_SPEC_DISTRIBUTION": "Vanilla",
 			},
-			expectedDistribution: v1alpha1.DistributionKind,
+			expectedDistribution: v1alpha1.DistributionVanilla,
 			shouldSucceed:        true,
 		},
 		{
 			name: "LoadConfig with multiple environment variables",
 			envVars: map[string]string{
-				"KSAIL_SPEC_DISTRIBUTION":       "K3d",
+				"KSAIL_SPEC_DISTRIBUTION":       "K3s",
 				"KSAIL_SPEC_SOURCEDIRECTORY":    "custom-k8s",
 				"KSAIL_SPEC_CONNECTION_CONTEXT": "k3d-k3d-default",
 			},
-			expectedDistribution: v1alpha1.DistributionK3d,
+			expectedDistribution: v1alpha1.DistributionK3s,
 			shouldSucceed:        true,
 		},
 	}
@@ -426,7 +426,7 @@ func TestLoadConfigConfigFileNotifiesFound(t *testing.T) {
 
 	configPath := filepath.Join(tempDir, "ksail.yaml")
 	configContents := []byte(
-		"apiVersion: ksail.io/v1alpha1\nkind: Cluster\nspec:\n  distribution: Kind\n  distributionConfig: kind.yaml\n",
+		"apiVersion: ksail.io/v1alpha1\nkind: Cluster\nspec:\n  distribution: Vanilla\n  distributionConfig: kind.yaml\n",
 	)
 
 	err := os.WriteFile(configPath, configContents, 0o600)
@@ -469,7 +469,8 @@ func TestLoadConfigHonorsExplicitLocalRegistrySetting(t *testing.T) {
 	writeClusterConfigFile(
 		t,
 		"    gitOpsEngine: Flux\n",
-		"    localRegistry: Disabled\n",
+		"    localRegistry:\n",
+		"      enabled: false\n",
 	)
 
 	manager := newManagerWithDefaultSelectors()
@@ -478,7 +479,7 @@ func TestLoadConfigHonorsExplicitLocalRegistrySetting(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, v1alpha1.GitOpsEngineFlux, manager.Config.Spec.Cluster.GitOpsEngine)
-	assert.Equal(t, v1alpha1.LocalRegistryDisabled, manager.Config.Spec.Cluster.LocalRegistry)
+	assert.False(t, manager.Config.Spec.Cluster.LocalRegistry.Enabled)
 }
 
 //nolint:paralleltest // Uses t.Chdir for isolated filesystem state.
@@ -486,20 +487,20 @@ func TestLoadConfigAppliesLocalRegistryDefaults(t *testing.T) {
 	testCases := []struct {
 		name             string
 		gitOpsEngine     v1alpha1.GitOpsEngine
-		expectedBehavior v1alpha1.LocalRegistry
+		expectedEnabled  bool
 		expectedHostPort int32
 	}{
 		{
 			name:             "enabled-when-flux-configured",
 			gitOpsEngine:     v1alpha1.GitOpsEngineFlux,
-			expectedBehavior: v1alpha1.LocalRegistryEnabled,
+			expectedEnabled:  true,
 			expectedHostPort: v1alpha1.DefaultLocalRegistryPort,
 		},
 		{
 			name:             "disabled-when-no-gitops",
 			gitOpsEngine:     v1alpha1.GitOpsEngineNone,
-			expectedBehavior: v1alpha1.LocalRegistryDisabled,
-			expectedHostPort: 0,
+			expectedEnabled:  false,
+			expectedHostPort: v1alpha1.DefaultLocalRegistryPort,
 		},
 	}
 
@@ -520,11 +521,11 @@ func TestLoadConfigAppliesLocalRegistryDefaults(t *testing.T) {
 			require.NoError(t, err)
 
 			require.Equal(t, testCase.gitOpsEngine, manager.Config.Spec.Cluster.GitOpsEngine)
-			assert.Equal(t, testCase.expectedBehavior, manager.Config.Spec.Cluster.LocalRegistry)
+			assert.Equal(t, testCase.expectedEnabled, manager.Config.Spec.Cluster.LocalRegistry.Enabled)
 			assert.Equal(
 				t,
 				testCase.expectedHostPort,
-				manager.Config.Spec.Cluster.LocalRegistryOpts.HostPort,
+				manager.Config.Spec.Cluster.LocalRegistry.HostPort,
 			)
 		})
 	}
@@ -544,8 +545,8 @@ func TestLoadConfigDefaultsLocalRegistryDisabledWhenGitOpsEngineUnset(t *testing
 	_, err := manager.LoadConfig(nil)
 	require.NoError(t, err)
 
-	assert.Equal(t, v1alpha1.LocalRegistryDisabled, manager.Config.Spec.Cluster.LocalRegistry)
-	assert.Equal(t, int32(0), manager.Config.Spec.Cluster.LocalRegistryOpts.HostPort)
+	assert.False(t, manager.Config.Spec.Cluster.LocalRegistry.Enabled)
+	assert.Equal(t, v1alpha1.DefaultLocalRegistryPort, manager.Config.Spec.Cluster.LocalRegistry.HostPort)
 }
 
 func TestNewCommandConfigManagerBindsFlags(t *testing.T) {
@@ -597,7 +598,7 @@ func TestLoadConfigSilentSkipsNotifications(t *testing.T) {
 	assert.Empty(t, output.String(), "silent load should not emit notifications")
 
 	require.NotNil(t, cluster)
-	assert.Equal(t, v1alpha1.DistributionKind, cluster.Spec.Cluster.Distribution)
+	assert.Equal(t, v1alpha1.DistributionVanilla, cluster.Spec.Cluster.Distribution)
 	assert.Equal(t, "kind.yaml", cluster.Spec.Cluster.DistributionConfig)
 }
 
@@ -695,7 +696,7 @@ func TestAddFlagsFromFields(t *testing.T) {
 			fieldSelectors: []configmanager.FieldSelector[v1alpha1.Cluster]{
 				newFieldSelector(
 					func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.Distribution },
-					v1alpha1.DistributionKind,
+					v1alpha1.DistributionVanilla,
 					"Kubernetes distribution",
 				),
 			},
@@ -766,7 +767,7 @@ func TestLoadConfigConfigProperty(t *testing.T) {
 
 	// After loading, Config property should be accessible and equal to returned cluster
 	assert.Equal(t, cluster, manager.Config)
-	assert.Equal(t, v1alpha1.DistributionKind, manager.Config.Spec.Cluster.Distribution)
+	assert.Equal(t, v1alpha1.DistributionVanilla, manager.Config.Spec.Cluster.Distribution)
 }
 
 // testFieldValueSetting is a helper function for testing field value setting scenarios.
@@ -861,12 +862,12 @@ func TestSetFieldValueWithDirectlyAssignableTypes(t *testing.T) {
 	testFieldValueSetting(
 		t,
 		func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.Distribution },
-		v1alpha1.DistributionK3d,
+		v1alpha1.DistributionK3s,
 		"Test direct assignment",
 		func(t *testing.T, cluster *v1alpha1.Cluster) {
 			t.Helper()
 			// Direct string assignment should work
-			assert.Equal(t, v1alpha1.DistributionK3d, cluster.Spec.Cluster.Distribution)
+			assert.Equal(t, v1alpha1.DistributionK3s, cluster.Spec.Cluster.Distribution)
 		},
 		false,
 	)
@@ -916,7 +917,7 @@ func TestSetFieldValueWithConvertibleTypes(t *testing.T) {
 		false,
 		configmanager.FieldSelector[v1alpha1.Cluster]{
 			Selector:     func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.Distribution },
-			DefaultValue: v1alpha1.DistributionKind,
+			DefaultValue: v1alpha1.DistributionVanilla,
 			Description:  "Distribution",
 		},
 	)
@@ -983,7 +984,7 @@ apiVersion: ksail.io/v1alpha1
 kind: Cluster
 spec:
   cluster:
-    distribution: Kind
+    distribution: Vanilla
   workload:
     sourceDirectory: test-config-found
 `
@@ -1008,7 +1009,7 @@ spec:
 	require.NotNil(t, cluster)
 
 	// Verify config was loaded properly (this exercises the "else" branch in readConfigurationFile)
-	assert.Equal(t, v1alpha1.DistributionKind, cluster.Spec.Cluster.Distribution)
+	assert.Equal(t, v1alpha1.DistributionVanilla, cluster.Spec.Cluster.Distribution)
 	assert.Equal(t, "test-config-found", cluster.Spec.Workload.SourceDirectory)
 }
 
@@ -1141,7 +1142,7 @@ networking:
 kind: Cluster
 spec:
   cluster:
-    distribution: Kind
+    distribution: Vanilla
     distributionConfig: kind.yaml
     cni: Cilium
   connection:
@@ -1223,8 +1224,8 @@ func runK3dDistributionScenario(t *testing.T, scenario k3dScenario) {
 		t.Fatalf("expected config to be loaded")
 	}
 
-	if config.Spec.Cluster.Distribution != v1alpha1.DistributionK3d {
-		t.Fatalf("expected distribution to be K3d, got %s", config.Spec.Cluster.Distribution)
+	if config.Spec.Cluster.Distribution != v1alpha1.DistributionK3s {
+		t.Fatalf("expected distribution to be K3s, got %s", config.Spec.Cluster.Distribution)
 	}
 }
 
@@ -1245,7 +1246,7 @@ func newK3dManagerForScenario(
 		"kind: Cluster\n" +
 		"spec:\n" +
 		"  cluster:\n" +
-		"    distribution: K3d\n" +
+		"    distribution: K3s\n" +
 		"    distributionConfig: k3d.yaml\n" +
 		"    cni: Cilium\n" +
 		"    connection:\n" +

@@ -14,7 +14,7 @@ func TestCreateMinimalProvisioner_Kind(t *testing.T) {
 	t.Parallel()
 
 	provisioner, err := lifecycle.CreateMinimalProvisioner(
-		v1alpha1.DistributionKind,
+		v1alpha1.DistributionVanilla,
 		"test-cluster",
 	)
 
@@ -26,7 +26,7 @@ func TestCreateMinimalProvisioner_Kind(t *testing.T) {
 func TestCreateMinimalProvisioner_K3d(t *testing.T) {
 	t.Parallel()
 
-	provisioner, err := lifecycle.CreateMinimalProvisioner(v1alpha1.DistributionK3d, "dev-cluster")
+	provisioner, err := lifecycle.CreateMinimalProvisioner(v1alpha1.DistributionK3s, "dev-cluster")
 
 	require.NoError(t, err)
 	assert.NotNil(t, provisioner)
@@ -89,7 +89,7 @@ func TestCreateMinimalProvisioner_ClusterNames(t *testing.T) {
 			t.Parallel()
 
 			provisioner, err := lifecycle.CreateMinimalProvisioner(
-				v1alpha1.DistributionKind,
+				v1alpha1.DistributionVanilla,
 				testCase.clusterName,
 			)
 

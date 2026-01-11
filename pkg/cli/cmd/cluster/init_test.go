@@ -134,7 +134,7 @@ func TestHandleInitRunE_RespectsDistributionFlag(t *testing.T) {
 
 	setFlags(t, cmd, map[string]string{
 		"output":              outDir,
-		"distribution":        "K3d",
+		"distribution":        "K3s",
 		"distribution-config": "k3d.yaml",
 		"force":               "true",
 	})
@@ -291,7 +291,7 @@ func TestHandleInitRunE_DefaultsLocalRegistryWithFlux(t *testing.T) {
 		t.Fatalf("expected ksail.yaml to be scaffolded: %v", err)
 	}
 
-	if !strings.Contains(string(content), "localRegistry: Enabled") {
+	if !strings.Contains(string(content), "localRegistry:") || !strings.Contains(string(content), "enabled: true") {
 		t.Fatalf("expected ksail.yaml to enable local registry when Flux is selected\n%s", content)
 	}
 }
@@ -335,7 +335,7 @@ func TestHandleInitRunE_IgnoresExistingConfigFile(t *testing.T) {
 	existing := "apiVersion: ksail.io/v1alpha1\n" +
 		"kind: Cluster\n" +
 		"spec:\n" +
-		"  distribution: K3d\n" +
+		"  distribution: K3s\n" +
 		"  distributionConfig: custom-k3d.yaml\n" +
 		"  sourceDirectory: legacy\n"
 
@@ -355,7 +355,7 @@ func TestHandleInitRunE_IgnoresExistingConfigFile(t *testing.T) {
 	require.NoError(t, readErr)
 
 	// Ensure defaults are applied instead of values from the existing file.
-	if strings.Contains(string(content), "distribution: K3d") {
+	if strings.Contains(string(content), "distribution: K3s") {
 		t.Fatalf("unexpected prior distribution carried over\n%s", string(content))
 	}
 

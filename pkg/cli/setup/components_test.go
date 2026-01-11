@@ -66,25 +66,25 @@ func TestNeedsMetricsServerInstall(t *testing.T) {
 		{
 			name:         "enabled with kind returns true",
 			metricsState: v1alpha1.MetricsServerEnabled,
-			distribution: v1alpha1.DistributionKind,
+			distribution: v1alpha1.DistributionVanilla,
 			expected:     true,
 		},
 		{
 			name:         "enabled with k3d returns false (k3d provides by default)",
 			metricsState: v1alpha1.MetricsServerEnabled,
-			distribution: v1alpha1.DistributionK3d,
+			distribution: v1alpha1.DistributionK3s,
 			expected:     false,
 		},
 		{
 			name:         "disabled returns false",
 			metricsState: v1alpha1.MetricsServerDisabled,
-			distribution: v1alpha1.DistributionKind,
+			distribution: v1alpha1.DistributionVanilla,
 			expected:     false,
 		},
 		{
 			name:         "default returns false",
 			metricsState: v1alpha1.MetricsServerDefault,
-			distribution: v1alpha1.DistributionKind,
+			distribution: v1alpha1.DistributionVanilla,
 			expected:     false,
 		},
 	}

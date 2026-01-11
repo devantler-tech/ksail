@@ -23,5 +23,8 @@ var ErrInvalidCertManager = errors.New("invalid cert-manager")
 // ErrInvalidPolicyEngine is returned when an invalid policy engine is specified.
 var ErrInvalidPolicyEngine = errors.New("invalid policy engine")
 
-// ErrInvalidLocalRegistry is returned when an invalid local registry mode is specified.
-var ErrInvalidLocalRegistry = errors.New("invalid local registry mode")
+// ErrInvalidProvider is returned when an invalid provider is specified.
+var ErrInvalidProvider = errors.New("invalid provider")
+
+// ErrInvalidDistributionProviderCombination is returned when the distribution and provider combination is invalid.
+var ErrInvalidDistributionProviderCombination = errors.New("invalid distribution and provider combination")

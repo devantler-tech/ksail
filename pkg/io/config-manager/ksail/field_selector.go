@@ -19,7 +19,16 @@ func DefaultDistributionFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	return FieldSelector[v1alpha1.Cluster]{
 		Selector:     func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.Distribution },
 		Description:  "Kubernetes distribution to use",
-		DefaultValue: v1alpha1.DistributionKind,
+		DefaultValue: v1alpha1.DistributionVanilla,
+	}
+}
+
+// DefaultProviderFieldSelector creates a standard field selector for infrastructure provider.
+func DefaultProviderFieldSelector() FieldSelector[v1alpha1.Cluster] {
+	return FieldSelector[v1alpha1.Cluster]{
+		Selector:     func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.Provider },
+		Description:  "Infrastructure provider backend (e.g., Docker)",
+		DefaultValue: v1alpha1.ProviderDocker,
 	}
 }
 
@@ -69,16 +78,15 @@ func DefaultGitOpsEngineFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	}
 }
 
-// DefaultLocalRegistryFieldSelector creates a selector for configuring the local OCI registry lifecycle.
+// DefaultLocalRegistryFieldSelector creates a selector for enabling/disabling the local OCI registry.
 func DefaultLocalRegistryFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	return FieldSelector[v1alpha1.Cluster]{
 		Selector: func(c *v1alpha1.Cluster) any {
-			return &c.Spec.Cluster.LocalRegistry
+			return &c.Spec.Cluster.LocalRegistry.Enabled
 		},
-		Description: "Local registry behavior (Enabled provisions a registry; " +
-			"Disabled skips provisioning. Defaults to Enabled when " +
+		Description: "Enable local registry provisioning (defaults to true when " +
 			"a GitOps engine is configured)",
-		DefaultValue: v1alpha1.LocalRegistryDisabled,
+		DefaultValue: false,
 	}
 }
 
@@ -86,7 +94,7 @@ func DefaultLocalRegistryFieldSelector() FieldSelector[v1alpha1.Cluster] {
 func DefaultRegistryPortFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	return FieldSelector[v1alpha1.Cluster]{
 		Selector: func(c *v1alpha1.Cluster) any {
-			return &c.Spec.Cluster.LocalRegistryOpts.HostPort
+			return &c.Spec.Cluster.LocalRegistry.HostPort
 		},
 		Description:  "Host port to expose the local OCI registry on",
 		DefaultValue: v1alpha1.DefaultLocalRegistryPort,

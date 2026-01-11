@@ -26,7 +26,7 @@ apiVersion: ksail.io/v1alpha1
 kind: Cluster
 spec:
   cluster:
-    distribution: Kind
+    distribution: Vanilla
     distributionConfig: kind.yaml
 ```
 
@@ -41,7 +41,7 @@ kind: Cluster
 spec:
   editor: code --wait
   cluster:
-    distribution: Kind
+    distribution: Vanilla
     distributionConfig: kind.yaml
     connection:
       kubeconfig: ~/.kube/config

@@ -70,9 +70,9 @@ func (f DefaultFactory) Create(
 	}
 
 	switch cluster.Spec.Cluster.Distribution {
-	case v1alpha1.DistributionKind:
+	case v1alpha1.DistributionVanilla:
 		return f.createKindProvisioner(cluster)
-	case v1alpha1.DistributionK3d:
+	case v1alpha1.DistributionK3s:
 		return f.createK3dProvisioner(cluster)
 	case v1alpha1.DistributionTalos:
 		return f.createTalosProvisioner(cluster)
@@ -90,7 +90,7 @@ func (f DefaultFactory) createKindProvisioner(
 ) (ClusterProvisioner, any, error) {
 	if f.DistributionConfig.Kind == nil {
 		return nil, nil, fmt.Errorf(
-			"kind config is required for Kind distribution: %w",
+			"kind config is required for Vanilla distribution: %w",
 			ErrMissingDistributionConfig,
 		)
 	}
@@ -228,6 +228,7 @@ func (f DefaultFactory) createTalosProvisioner(
 	provisioner, err := talosprovisioner.CreateProvisioner(
 		f.DistributionConfig.Talos,
 		cluster.Spec.Cluster.Connection.Kubeconfig,
+		cluster.Spec.Cluster.Provider,
 		cluster.Spec.Cluster.Talos,
 		skipCNIChecks,
 	)

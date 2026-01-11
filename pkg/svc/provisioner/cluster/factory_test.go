@@ -31,7 +31,7 @@ func TestCreateClusterProvisioner_WithDistributionConfig(t *testing.T) {
 	}{
 		{
 			name:         "kind with pre-loaded config",
-			distribution: v1alpha1.DistributionKind,
+			distribution: v1alpha1.DistributionVanilla,
 			distributionConfig: &clusterprovisioner.DistributionConfig{
 				Kind: &v1alpha4.Cluster{
 					Name: "test-kind",
@@ -42,7 +42,7 @@ func TestCreateClusterProvisioner_WithDistributionConfig(t *testing.T) {
 		},
 		{
 			name:         "k3d with pre-loaded config",
-			distribution: v1alpha1.DistributionK3d,
+			distribution: v1alpha1.DistributionK3s,
 			distributionConfig: &clusterprovisioner.DistributionConfig{
 				K3d: &k3dv1alpha5.SimpleConfig{
 					ObjectMeta: k3dTypes.ObjectMeta{
@@ -140,7 +140,7 @@ func TestCreateClusterProvisioner_MissingDistributionConfig(t *testing.T) {
 	cluster := &v1alpha1.Cluster{
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{
-				Distribution: v1alpha1.DistributionKind,
+				Distribution: v1alpha1.DistributionVanilla,
 				Connection: v1alpha1.Connection{
 					Kubeconfig: "",
 				},
@@ -168,14 +168,14 @@ func TestCreateClusterProvisioner_WrongDistributionConfig(t *testing.T) {
 	}{
 		{
 			name:         "kind requested but k3d config provided",
-			distribution: v1alpha1.DistributionKind,
+			distribution: v1alpha1.DistributionVanilla,
 			distributionConfig: &clusterprovisioner.DistributionConfig{
 				K3d: &k3dv1alpha5.SimpleConfig{},
 			},
 		},
 		{
 			name:         "k3d requested but kind config provided",
-			distribution: v1alpha1.DistributionK3d,
+			distribution: v1alpha1.DistributionK3s,
 			distributionConfig: &clusterprovisioner.DistributionConfig{
 				Kind: &v1alpha4.Cluster{},
 			},
@@ -234,7 +234,7 @@ func TestCreateKindProvisioner_DockerClientError(t *testing.T) {
 	cluster := &v1alpha1.Cluster{
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{
-				Distribution: v1alpha1.DistributionKind,
+				Distribution: v1alpha1.DistributionVanilla,
 				Connection: v1alpha1.Connection{
 					Kubeconfig: "",
 				},

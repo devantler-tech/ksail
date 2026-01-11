@@ -21,8 +21,8 @@ type Distribution string
 
 // Supported distribution types.
 const (
-	DistributionKind  Distribution = "kind"
-	DistributionK3d   Distribution = "k3d"
+	DistributionVanilla  Distribution = "kind"
+	DistributionK3s   Distribution = "k3d"
 	DistributionTalos Distribution = "talos"
 )
 
@@ -149,7 +149,7 @@ func (c *CalicoInstaller) getCalicoValues() map[string]string {
 	case DistributionTalos:
 		// Talos-specific settings from https://docs.siderolabs.com/kubernetes-guides/cni/deploy-calico
 		maps.Copy(values, talosCalicoValues())
-	case DistributionKind, DistributionK3d:
+	case DistributionVanilla, DistributionK3s:
 		// Kind and K3d use default values
 	}
 

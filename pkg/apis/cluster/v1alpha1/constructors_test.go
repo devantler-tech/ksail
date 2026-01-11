@@ -21,7 +21,7 @@ func TestClusterDirectCreation(t *testing.T) {
 		},
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{
-				Distribution: v1alpha1.DistributionK3d,
+				Distribution: v1alpha1.DistributionK3s,
 				Connection: v1alpha1.Connection{
 					Kubeconfig: "/test",
 					Context:    "test-ctx",
@@ -36,15 +36,15 @@ func TestClusterDirectCreation(t *testing.T) {
 
 	assert.Equal(t, v1alpha1.Kind, cluster.Kind)
 	assert.Equal(t, v1alpha1.APIVersion, cluster.APIVersion)
-	assert.Equal(t, v1alpha1.DistributionK3d, cluster.Spec.Cluster.Distribution)
+	assert.Equal(t, v1alpha1.DistributionK3s, cluster.Spec.Cluster.Distribution)
 }
 
 func TestDistributionSet(t *testing.T) {
 	t.Parallel()
 
 	validCases := []struct{ input, expected string }{
-		{"Kind", "Kind"},
-		{"k3d", "K3d"},
+		{"Vanilla", "Vanilla"},
+		{"k3s", "K3s"},
 	}
 	for _, validCase := range validCases {
 		var dist v1alpha1.Distribution
@@ -70,8 +70,8 @@ func TestDistributionIsValid(t *testing.T) {
 	t.Parallel()
 
 	validCases := []v1alpha1.Distribution{
-		v1alpha1.DistributionKind,
-		v1alpha1.DistributionK3d,
+		v1alpha1.DistributionVanilla,
+		v1alpha1.DistributionK3s,
 	}
 
 	for _, dist := range validCases {
@@ -270,8 +270,8 @@ func TestStringAndTypeMethods(t *testing.T) {
 	t.Parallel()
 
 	// Test String() and Type() methods for pflags interface
-	dist := v1alpha1.DistributionKind
-	assert.Equal(t, "Kind", dist.String())
+	dist := v1alpha1.DistributionVanilla
+	assert.Equal(t, "Vanilla", dist.String())
 	assert.Equal(t, "Distribution", dist.Type())
 
 	tool := v1alpha1.GitOpsEngineNone
@@ -338,75 +338,21 @@ func TestNewClusterConnection(t *testing.T) {
 
 // Tests for individual option constructors
 
-func TestNewClusterOptionsKind(t *testing.T) {
+func TestNewClusterOptionsVanilla(t *testing.T) {
 	t.Parallel()
 
-	options := v1alpha1.NewClusterOptionsKind()
+	options := v1alpha1.NewClusterOptionsVanilla()
 
-	// OptionsKind is an empty struct, just verify it's created
+	// OptionsVanilla is an empty struct, just verify it's created
 	assert.NotNil(t, options)
 }
 
-func TestNewClusterOptionsK3d(t *testing.T) {
+func TestNewLocalRegistry(t *testing.T) {
 	t.Parallel()
 
-	options := v1alpha1.NewClusterOptionsK3d()
+	options := v1alpha1.NewLocalRegistry()
 
-	// OptionsK3d is an empty struct, just verify it's created
-	assert.NotNil(t, options)
-}
-
-func TestNewClusterOptionsCilium(t *testing.T) {
-	t.Parallel()
-
-	options := v1alpha1.NewClusterOptionsCilium()
-
-	// OptionsCilium is an empty struct, just verify it's created
-	assert.NotNil(t, options)
-}
-
-func TestNewClusterOptionsFlux(t *testing.T) {
-	t.Parallel()
-
-	options := v1alpha1.NewClusterOptionsFlux()
-
-	// OptionsFlux is an empty struct, just verify it's created
-	assert.NotNil(t, options)
-}
-
-func TestNewClusterOptionsLocalRegistry(t *testing.T) {
-	t.Parallel()
-
-	options := v1alpha1.NewClusterOptionsLocalRegistry()
-
-	// OptionsLocalRegistry is an empty struct, just verify it's created
-	assert.NotNil(t, options)
-}
-
-func TestNewClusterOptionsArgoCD(t *testing.T) {
-	t.Parallel()
-
-	options := v1alpha1.NewClusterOptionsArgoCD()
-
-	// OptionsArgoCD is an empty struct, just verify it's created
-	assert.NotNil(t, options)
-}
-
-func TestNewClusterOptionsHelm(t *testing.T) {
-	t.Parallel()
-
-	options := v1alpha1.NewClusterOptionsHelm()
-
-	// OptionsHelm is an empty struct, just verify it's created
-	assert.NotNil(t, options)
-}
-
-func TestNewClusterOptionsKustomize(t *testing.T) {
-	t.Parallel()
-
-	options := v1alpha1.NewClusterOptionsKustomize()
-
-	// OptionsKustomize is an empty struct, just verify it's created
+	// LocalRegistry is an empty struct, just verify it's created
 	assert.NotNil(t, options)
 }
 

@@ -45,6 +45,7 @@ func NewInitCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
 // Kept local (rather than separate file) to keep init-specific wiring cohesive.
 func InitFieldSelectors() []ksailconfigmanager.FieldSelector[v1alpha1.Cluster] {
 	selectors := ksailconfigmanager.DefaultClusterFieldSelectors()
+	selectors = append(selectors, ksailconfigmanager.DefaultProviderFieldSelector())
 	selectors = append(selectors, ksailconfigmanager.StandardSourceDirectoryFieldSelector())
 	selectors = append(selectors, ksailconfigmanager.DefaultCNIFieldSelector())
 	selectors = append(selectors, ksailconfigmanager.DefaultCSIFieldSelector())
@@ -91,6 +92,13 @@ func HandleInitRunE(
 	clusterCfg, err := cfgManager.LoadConfigFromFlagsOnly()
 	if err != nil {
 		return fmt.Errorf("failed to resolve configuration for scaffolding: %w", err)
+	}
+
+	// Early validation of distribution x provider combination
+	if err := clusterCfg.Spec.Cluster.Provider.ValidateForDistribution(
+		clusterCfg.Spec.Cluster.Distribution,
+	); err != nil {
+		return fmt.Errorf("invalid configuration: %w", err)
 	}
 
 	targetPath, err := resolveInitTargetPath(cfgManager)

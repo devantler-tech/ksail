@@ -246,7 +246,7 @@ func pruneClusterDefaults(cluster Cluster) Cluster {
 	// Distribution defaults - needed for context derivation
 	distribution := cluster.Spec.Cluster.Distribution
 	if distribution == "" {
-		distribution = DistributionKind
+		distribution = DistributionVanilla
 	}
 
 	// Apply context-dependent pruning rules first

@@ -2,7 +2,7 @@ package v1alpha1
 
 // ValidDistributions returns supported distribution values.
 func ValidDistributions() []Distribution {
-	return []Distribution{DistributionKind, DistributionK3d, DistributionTalos}
+	return []Distribution{DistributionVanilla, DistributionK3s, DistributionTalos}
 }
 
 // ValidGitOpsEngines enumerates supported GitOps engine values.
@@ -50,7 +50,7 @@ func ValidPolicyEngines() []PolicyEngine {
 	}
 }
 
-// ValidLocalRegistryModes returns supported local registry configuration modes.
-func ValidLocalRegistryModes() []LocalRegistry {
-	return []LocalRegistry{LocalRegistryEnabled, LocalRegistryDisabled}
+// ValidProviders returns supported provider values.
+func ValidProviders() []Provider {
+	return []Provider{ProviderDocker}
 }

@@ -49,7 +49,7 @@ func (l *LocalPathStorageInstaller) Install(ctx context.Context) error {
 	}
 
 	// For Kind, install local-path-provisioner
-	if l.distribution == v1alpha1.DistributionKind {
+	if l.distribution == v1alpha1.DistributionVanilla {
 		return l.installLocalPathProvisioner(ctx)
 	}
 

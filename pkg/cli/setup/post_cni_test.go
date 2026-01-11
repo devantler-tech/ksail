@@ -23,7 +23,7 @@ func TestGetComponentRequirements(t *testing.T) {
 			clusterCfg: &v1alpha1.Cluster{
 				Spec: v1alpha1.Spec{
 					Cluster: v1alpha1.ClusterSpec{
-						Distribution:  v1alpha1.DistributionKind,
+						Distribution:  v1alpha1.DistributionVanilla,
 						MetricsServer: v1alpha1.MetricsServerDefault,
 						CSI:           v1alpha1.CSIDefault,
 						CertManager:   v1alpha1.CertManagerDisabled,
@@ -48,7 +48,7 @@ func TestGetComponentRequirements(t *testing.T) {
 			clusterCfg: &v1alpha1.Cluster{
 				Spec: v1alpha1.Spec{
 					Cluster: v1alpha1.ClusterSpec{
-						Distribution:  v1alpha1.DistributionKind,
+						Distribution:  v1alpha1.DistributionVanilla,
 						MetricsServer: v1alpha1.MetricsServerEnabled,
 						CSI:           v1alpha1.CSIDefault,
 						CertManager:   v1alpha1.CertManagerDisabled,
@@ -73,7 +73,7 @@ func TestGetComponentRequirements(t *testing.T) {
 			clusterCfg: &v1alpha1.Cluster{
 				Spec: v1alpha1.Spec{
 					Cluster: v1alpha1.ClusterSpec{
-						Distribution:  v1alpha1.DistributionK3d,
+						Distribution:  v1alpha1.DistributionK3s,
 						MetricsServer: v1alpha1.MetricsServerEnabled,
 						CSI:           v1alpha1.CSIDefault,
 						CertManager:   v1alpha1.CertManagerDisabled,
@@ -98,7 +98,7 @@ func TestGetComponentRequirements(t *testing.T) {
 			clusterCfg: &v1alpha1.Cluster{
 				Spec: v1alpha1.Spec{
 					Cluster: v1alpha1.ClusterSpec{
-						Distribution:  v1alpha1.DistributionKind,
+						Distribution:  v1alpha1.DistributionVanilla,
 						MetricsServer: v1alpha1.MetricsServerDefault,
 						CSI:           v1alpha1.CSILocalPathStorage,
 						CertManager:   v1alpha1.CertManagerDisabled,
@@ -123,7 +123,7 @@ func TestGetComponentRequirements(t *testing.T) {
 			clusterCfg: &v1alpha1.Cluster{
 				Spec: v1alpha1.Spec{
 					Cluster: v1alpha1.ClusterSpec{
-						Distribution:  v1alpha1.DistributionKind,
+						Distribution:  v1alpha1.DistributionVanilla,
 						MetricsServer: v1alpha1.MetricsServerDefault,
 						CSI:           v1alpha1.CSIDefault,
 						CertManager:   v1alpha1.CertManagerEnabled,
@@ -148,7 +148,7 @@ func TestGetComponentRequirements(t *testing.T) {
 			clusterCfg: &v1alpha1.Cluster{
 				Spec: v1alpha1.Spec{
 					Cluster: v1alpha1.ClusterSpec{
-						Distribution:  v1alpha1.DistributionKind,
+						Distribution:  v1alpha1.DistributionVanilla,
 						MetricsServer: v1alpha1.MetricsServerDefault,
 						CSI:           v1alpha1.CSIDefault,
 						CertManager:   v1alpha1.CertManagerDisabled,
@@ -173,7 +173,7 @@ func TestGetComponentRequirements(t *testing.T) {
 			clusterCfg: &v1alpha1.Cluster{
 				Spec: v1alpha1.Spec{
 					Cluster: v1alpha1.ClusterSpec{
-						Distribution:  v1alpha1.DistributionKind,
+						Distribution:  v1alpha1.DistributionVanilla,
 						MetricsServer: v1alpha1.MetricsServerDefault,
 						CSI:           v1alpha1.CSIDefault,
 						CertManager:   v1alpha1.CertManagerDisabled,
@@ -198,7 +198,7 @@ func TestGetComponentRequirements(t *testing.T) {
 			clusterCfg: &v1alpha1.Cluster{
 				Spec: v1alpha1.Spec{
 					Cluster: v1alpha1.ClusterSpec{
-						Distribution:  v1alpha1.DistributionKind,
+						Distribution:  v1alpha1.DistributionVanilla,
 						MetricsServer: v1alpha1.MetricsServerDefault,
 						CSI:           v1alpha1.CSIDefault,
 						CertManager:   v1alpha1.CertManagerDisabled,
@@ -223,7 +223,7 @@ func TestGetComponentRequirements(t *testing.T) {
 			clusterCfg: &v1alpha1.Cluster{
 				Spec: v1alpha1.Spec{
 					Cluster: v1alpha1.ClusterSpec{
-						Distribution:  v1alpha1.DistributionKind,
+						Distribution:  v1alpha1.DistributionVanilla,
 						MetricsServer: v1alpha1.MetricsServerEnabled,
 						CSI:           v1alpha1.CSILocalPathStorage,
 						CertManager:   v1alpha1.CertManagerEnabled,
@@ -351,21 +351,21 @@ func TestKubeletCSRApproverLinkedToMetricsServer(t *testing.T) {
 	}{
 		{
 			name:                     "Kind with metrics-server enabled needs both via Helm",
-			distribution:             v1alpha1.DistributionKind,
+			distribution:             v1alpha1.DistributionVanilla,
 			metricsServer:            v1alpha1.MetricsServerEnabled,
 			expectMetricsServer:      true,
 			expectKubeletCSRApprover: true, // Helm install needed
 		},
 		{
 			name:                     "Kind with metrics-server disabled needs neither",
-			distribution:             v1alpha1.DistributionKind,
+			distribution:             v1alpha1.DistributionVanilla,
 			metricsServer:            v1alpha1.MetricsServerDisabled,
 			expectMetricsServer:      false,
 			expectKubeletCSRApprover: false,
 		},
 		{
 			name:                     "K3d with metrics-server enabled needs neither (K3d provides by default)",
-			distribution:             v1alpha1.DistributionK3d,
+			distribution:             v1alpha1.DistributionK3s,
 			metricsServer:            v1alpha1.MetricsServerEnabled,
 			expectMetricsServer:      false,
 			expectKubeletCSRApprover: false,

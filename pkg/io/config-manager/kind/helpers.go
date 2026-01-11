@@ -20,8 +20,8 @@ const DefaultMirrorsDir = "kind/mirrors"
 // It extracts the mirrors directory from the cluster configuration if set,
 // otherwise returns DefaultMirrorsDir.
 func ResolveMirrorsDir(clusterCfg *v1alpha1.Cluster) string {
-	if clusterCfg != nil && clusterCfg.Spec.Cluster.Kind.MirrorsDir != "" {
-		return clusterCfg.Spec.Cluster.Kind.MirrorsDir
+	if clusterCfg != nil && clusterCfg.Spec.Cluster.Vanilla.MirrorsDir != "" {
+		return clusterCfg.Spec.Cluster.Vanilla.MirrorsDir
 	}
 
 	return DefaultMirrorsDir

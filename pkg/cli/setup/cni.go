@@ -112,10 +112,10 @@ func installCiliumCNI(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster, tmr time
 	switch clusterCfg.Spec.Cluster.Distribution {
 	case v1alpha1.DistributionTalos:
 		distribution = ciliuminstaller.DistributionTalos
-	case v1alpha1.DistributionKind:
-		distribution = ciliuminstaller.DistributionKind
-	case v1alpha1.DistributionK3d:
-		distribution = ciliuminstaller.DistributionK3d
+	case v1alpha1.DistributionVanilla:
+		distribution = ciliuminstaller.DistributionVanilla
+	case v1alpha1.DistributionK3s:
+		distribution = ciliuminstaller.DistributionK3s
 	}
 
 	ciliumInst := ciliuminstaller.NewCiliumInstallerWithDistribution(
@@ -140,10 +140,10 @@ func installCalicoCNI(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster, tmr time
 	switch clusterCfg.Spec.Cluster.Distribution {
 	case v1alpha1.DistributionTalos:
 		distribution = calicoinstaller.DistributionTalos
-	case v1alpha1.DistributionKind:
-		distribution = calicoinstaller.DistributionKind
-	case v1alpha1.DistributionK3d:
-		distribution = calicoinstaller.DistributionK3d
+	case v1alpha1.DistributionVanilla:
+		distribution = calicoinstaller.DistributionVanilla
+	case v1alpha1.DistributionK3s:
+		distribution = calicoinstaller.DistributionK3s
 	}
 
 	calicoInst := calicoinstaller.NewCalicoInstallerWithDistribution(

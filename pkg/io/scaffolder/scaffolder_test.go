@@ -61,11 +61,11 @@ func TestScaffoldAppliesDistributionDefaults(t *testing.T) {
 		expected     string
 	}{
 		{
-			name:         "Kind",
-			distribution: v1alpha1.DistributionKind,
+			name:         "Vanilla",
+			distribution: v1alpha1.DistributionVanilla,
 			expected:     scaffolder.KindConfigFile,
 		},
-		{name: "K3d", distribution: v1alpha1.DistributionK3d, expected: scaffolder.K3dConfigFile},
+		{name: "K3d", distribution: v1alpha1.DistributionK3s, expected: scaffolder.K3dConfigFile},
 		{
 			name:         "Talos",
 			distribution: v1alpha1.DistributionTalos,
@@ -193,7 +193,7 @@ func TestScaffoldGeneratorFailures(t *testing.T) {
 		distribution string
 		clusterFunc  func(string) v1alpha1.Cluster
 	}{
-		{"Kind", createKindCluster},
+		{"Vanilla", createKindCluster},
 		{"K3d", createK3dCluster},
 	}
 
@@ -299,7 +299,7 @@ func TestScaffoldWrapsDistributionGenerationErrors(t *testing.T) {
 
 	tests := []distributionErrorTestCase{
 		{
-			name: "Kind",
+			name: "Vanilla",
 			configure: func(mocks *generatorMocks) {
 				mocks.kind.ExpectedCalls = nil // Clear default expectations
 				mocks.kind.On(
@@ -308,7 +308,7 @@ func TestScaffoldWrapsDistributionGenerationErrors(t *testing.T) {
 					mock.Anything,
 				).Return("", errGenerateFailure).Once()
 			},
-			distribution: v1alpha1.DistributionKind,
+			distribution: v1alpha1.DistributionVanilla,
 			assertErr:    assertKindGenerationError,
 		},
 		{
@@ -321,7 +321,7 @@ func TestScaffoldWrapsDistributionGenerationErrors(t *testing.T) {
 					mock.Anything,
 				).Return("", errGenerateFailure).Once()
 			},
-			distribution: v1alpha1.DistributionK3d,
+			distribution: v1alpha1.DistributionK3s,
 			assertErr:    assertK3dGenerationError,
 		},
 	}
@@ -474,15 +474,15 @@ func TestScaffoldAppliesContextDefaults(t *testing.T) {
 		{
 			name: "KindDefaultContext",
 			scenario: scaffoldContextCase{
-				distribution: v1alpha1.DistributionKind,
-				expected:     v1alpha1.ExpectedContextName(v1alpha1.DistributionKind),
+				distribution: v1alpha1.DistributionVanilla,
+				expected:     v1alpha1.ExpectedContextName(v1alpha1.DistributionVanilla),
 			},
 		},
 		{
 			name: "K3dDefaultContext",
 			scenario: scaffoldContextCase{
-				distribution: v1alpha1.DistributionK3d,
-				expected:     v1alpha1.ExpectedContextName(v1alpha1.DistributionK3d),
+				distribution: v1alpha1.DistributionK3s,
+				expected:     v1alpha1.ExpectedContextName(v1alpha1.DistributionK3s),
 			},
 		},
 		{
@@ -495,7 +495,7 @@ func TestScaffoldAppliesContextDefaults(t *testing.T) {
 		{
 			name: "KeepExistingContext",
 			scenario: scaffoldContextCase{
-				distribution: v1alpha1.DistributionKind,
+				distribution: v1alpha1.DistributionVanilla,
 				initial:      "custom",
 				expected:     "custom",
 			},
@@ -643,7 +643,7 @@ func captureKindConfigForCNI(t *testing.T, cni v1alpha1.CNI) *v1alpha4.Cluster {
 
 	runCniCapture(
 		t,
-		v1alpha1.DistributionKind,
+		v1alpha1.DistributionVanilla,
 		cni,
 		func(m *generatorMocks) {
 			m.kind.ExpectedCalls = nil
@@ -671,7 +671,7 @@ func captureK3dConfigForCNI(t *testing.T, cni v1alpha1.CNI) *k3dv1alpha5.SimpleC
 
 	runCniCapture(
 		t,
-		v1alpha1.DistributionK3d,
+		v1alpha1.DistributionK3s,
 		cni,
 		func(m *generatorMocks) {
 			m.k3d.ExpectedCalls = nil
@@ -801,12 +801,12 @@ func getContentTestCases() []contentTestCase {
 		{
 			name:         "Kind configuration content",
 			setupFunc:    createKindCluster,
-			distribution: v1alpha1.DistributionKind,
+			distribution: v1alpha1.DistributionVanilla,
 		},
 		{
 			name:         "K3d configuration content",
 			setupFunc:    createK3dCluster,
-			distribution: v1alpha1.DistributionK3d,
+			distribution: v1alpha1.DistributionK3s,
 		},
 	}
 }
@@ -829,12 +829,12 @@ func generateDistributionContent(
 	snaps.MatchSnapshot(t, ksailContent)
 
 	switch distribution {
-	case v1alpha1.DistributionKind:
+	case v1alpha1.DistributionVanilla:
 		// Create minimal Kind configuration without name (Kind will use defaults)
 		kindContent := "apiVersion: kind.x-k8s.io/v1alpha4\nkind: Cluster\n"
 		snaps.MatchSnapshot(t, kindContent)
 
-	case v1alpha1.DistributionK3d:
+	case v1alpha1.DistributionK3s:
 		// Create minimal K3d configuration that matches the original hardcoded output
 		k3dContent := "apiVersion: k3d.io/v1alpha5\nkind: Simple\nmetadata:\n  name: ksail-default\n"
 		snaps.MatchSnapshot(t, k3dContent)
@@ -859,14 +859,14 @@ func createMinimalClusterForSnapshot(
 
 	// Only add spec fields if they differ from defaults to match original hardcoded output
 	switch distribution {
-	case v1alpha1.DistributionKind:
+	case v1alpha1.DistributionVanilla:
 		// For Kind, the original hardcoded output had no spec, so return minimal cluster
 		return minimalCluster
-	case v1alpha1.DistributionK3d:
+	case v1alpha1.DistributionK3s:
 		// For K3d, the original hardcoded output included distribution and distributionConfig
 		minimalCluster.Spec = v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{
-				Distribution:       v1alpha1.DistributionK3d,
+				Distribution:       v1alpha1.DistributionK3s,
 				DistributionConfig: "k3d.yaml",
 			},
 		}
@@ -896,7 +896,7 @@ func createTestCluster(_ string) v1alpha1.Cluster {
 		},
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{
-				Distribution:       v1alpha1.DistributionKind,
+				Distribution:       v1alpha1.DistributionVanilla,
 				DistributionConfig: "kind.yaml",
 			},
 			Workload: v1alpha1.WorkloadSpec{
@@ -909,7 +909,7 @@ func createTestCluster(_ string) v1alpha1.Cluster {
 func createKindCluster(name string) v1alpha1.Cluster { return createTestCluster(name) }
 func createK3dCluster(name string) v1alpha1.Cluster {
 	c := createTestCluster(name)
-	c.Spec.Cluster.Distribution = v1alpha1.DistributionK3d
+	c.Spec.Cluster.Distribution = v1alpha1.DistributionK3s
 	c.Spec.Cluster.DistributionConfig = "k3d.yaml"
 
 	return c
@@ -1020,7 +1020,7 @@ func newK3dScaffolder(t *testing.T, mirrors []string) *scaffolder.Scaffolder {
 	t.Helper()
 
 	cluster := v1alpha1.NewCluster()
-	cluster.Spec.Cluster.Distribution = v1alpha1.DistributionK3d
+	cluster.Spec.Cluster.Distribution = v1alpha1.DistributionK3s
 
 	return scaffolder.NewScaffolder(*cluster, &bytes.Buffer{}, mirrors)
 }
@@ -1065,7 +1065,7 @@ func TestCreateK3dConfig_MetricsServerDisabled(t *testing.T) {
 	cluster := v1alpha1.Cluster{
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{
-				Distribution:  v1alpha1.DistributionK3d,
+				Distribution:  v1alpha1.DistributionK3s,
 				MetricsServer: v1alpha1.MetricsServerDisabled,
 			},
 		},
@@ -1096,7 +1096,7 @@ func TestCreateK3dConfig_MetricsServerEnabled(t *testing.T) {
 	cluster := v1alpha1.Cluster{
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{
-				Distribution:  v1alpha1.DistributionK3d,
+				Distribution:  v1alpha1.DistributionK3s,
 				MetricsServer: v1alpha1.MetricsServerEnabled,
 			},
 		},
@@ -1122,7 +1122,7 @@ func TestCreateK3dConfig_MetricsServerDisabledWithCilium(t *testing.T) {
 	cluster := v1alpha1.Cluster{
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{
-				Distribution:  v1alpha1.DistributionK3d,
+				Distribution:  v1alpha1.DistributionK3s,
 				CNI:           v1alpha1.CNICilium,
 				MetricsServer: v1alpha1.MetricsServerDisabled,
 			},

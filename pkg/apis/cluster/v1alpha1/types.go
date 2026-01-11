@@ -35,6 +35,7 @@ type ClusterSpec struct {
 	DistributionConfig string        `json:"distributionConfig,omitzero"`
 	Connection         Connection    `json:"connection,omitzero"`
 	Distribution       Distribution  `json:"distribution,omitzero"`
+	Provider           Provider      `json:"provider,omitzero"`
 	CNI                CNI           `json:"cni,omitzero"`
 	CSI                CSI           `json:"csi,omitzero"`
 	MetricsServer      MetricsServer `json:"metricsServer,omitzero"`
@@ -43,21 +44,9 @@ type ClusterSpec struct {
 	LocalRegistry      LocalRegistry `json:"localRegistry,omitzero"`
 	GitOpsEngine       GitOpsEngine  `json:"gitOpsEngine,omitzero"`
 
-	// Distribution-specific options (previously under Options)
-	Kind  OptionsKind  `json:"kind,omitzero"`
-	K3d   OptionsK3d   `json:"k3d,omitzero"`
-	Talos OptionsTalos `json:"talos,omitzero"`
-
-	// CNI-specific options
-	Cilium OptionsCilium `json:"cilium,omitzero"`
-	Calico OptionsCalico `json:"calico,omitzero"`
-
-	// Tool-specific options
-	Flux              OptionsFlux          `json:"flux,omitzero"`
-	ArgoCD            OptionsArgoCD        `json:"argocd,omitzero"`
-	LocalRegistryOpts OptionsLocalRegistry `json:"localRegistryOptions,omitzero"`
-	Helm              OptionsHelm          `json:"helm,omitzero"`
-	Kustomize         OptionsKustomize     `json:"kustomize,omitzero"`
+	// Distribution-specific options
+	Vanilla OptionsVanilla `json:"vanilla,omitzero"`
+	Talos   OptionsTalos   `json:"talos,omitzero"`
 }
 
 // WorkloadSpec defines workload-related configuration.

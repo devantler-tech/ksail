@@ -41,7 +41,7 @@ When the same setting is specified in multiple sources, KSail uses this order (h
 4. Built-in defaults
 ```
 
-**Example:** If `ksail.yaml` sets `distribution: Kind` but you run `ksail cluster create --distribution K3d`, the CLI flag wins and K3d is used.
+**Example:** If `ksail.yaml` sets `distribution: Vanilla` but you run `ksail cluster create --distribution K3d`, the CLI flag wins and K3d is used.
 
 This precedence model means you can commit sensible defaults while still allowing temporary overrides without editing files.
 
@@ -62,7 +62,7 @@ apiVersion: ksail.io/v1alpha1
 kind: Cluster
 spec:
   cluster:
-    distribution: Kind
+    distribution: Vanilla
     cni: Cilium
     gitOpsEngine: Flux
 ```

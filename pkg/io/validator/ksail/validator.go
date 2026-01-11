@@ -137,14 +137,14 @@ func (v *Validator) validateDistribution(
 			fixSuggestion = "Set spec.cluster.distribution to a supported distribution type"
 		} else {
 			message = "invalid distribution value"
-			fixSuggestion = "Use a supported distribution: Kind, K3d, or EKS"
+			fixSuggestion = "Use a supported distribution: Vanilla, K3s, or Talos"
 		}
 
 		result.AddError(validator.ValidationError{
 			Field:         "spec.cluster.distribution",
 			Message:       message,
 			CurrentValue:  distribution,
-			ExpectedValue: "one of: Kind, K3d, EKS",
+			ExpectedValue: "one of: Vanilla, K3s, Talos",
 			FixSuggestion: fixSuggestion,
 		})
 	}
@@ -170,9 +170,9 @@ func (v *Validator) getExpectedContextName(config *v1alpha1.Cluster) string {
 	}
 
 	switch config.Spec.Cluster.Distribution {
-	case v1alpha1.DistributionKind:
+	case v1alpha1.DistributionVanilla:
 		return "kind-" + distributionName
-	case v1alpha1.DistributionK3d:
+	case v1alpha1.DistributionK3s:
 		return "k3d-" + distributionName
 	case v1alpha1.DistributionTalos:
 		return "admin@" + distributionName
@@ -184,9 +184,9 @@ func (v *Validator) getExpectedContextName(config *v1alpha1.Cluster) string {
 // getDistributionConfigName extracts the cluster name from the distribution configuration.
 func (v *Validator) getDistributionConfigName(distribution v1alpha1.Distribution) string {
 	switch distribution {
-	case v1alpha1.DistributionKind:
+	case v1alpha1.DistributionVanilla:
 		return v.getKindConfigName()
-	case v1alpha1.DistributionK3d:
+	case v1alpha1.DistributionK3s:
 		return v.getK3dConfigName()
 	case v1alpha1.DistributionTalos:
 		return v.getTalosConfigName()
@@ -238,9 +238,9 @@ func (v *Validator) validateCNIAlignment(
 	// Validate Cilium CNI alignment
 	if config.Spec.Cluster.CNI == v1alpha1.CNICilium {
 		switch config.Spec.Cluster.Distribution {
-		case v1alpha1.DistributionKind:
+		case v1alpha1.DistributionVanilla:
 			v.validateKindCiliumCNIAlignment(result)
-		case v1alpha1.DistributionK3d:
+		case v1alpha1.DistributionK3s:
 			v.validateK3dCiliumCNIAlignment(result)
 		case v1alpha1.DistributionTalos:
 			v.validateTalosCiliumCNIAlignment(result)
@@ -252,9 +252,9 @@ func (v *Validator) validateCNIAlignment(
 	// Validate Default CNI alignment (empty string or explicit "Default")
 	if config.Spec.Cluster.CNI == "" || config.Spec.Cluster.CNI == v1alpha1.CNIDefault {
 		switch config.Spec.Cluster.Distribution {
-		case v1alpha1.DistributionKind:
+		case v1alpha1.DistributionVanilla:
 			v.validateKindDefaultCNIAlignment(result)
-		case v1alpha1.DistributionK3d:
+		case v1alpha1.DistributionK3s:
 			v.validateK3dDefaultCNIAlignment(result)
 		case v1alpha1.DistributionTalos:
 			v.validateTalosDefaultCNIAlignment(result)
@@ -450,18 +450,18 @@ func (v *Validator) validateRegistry(
 	config *v1alpha1.Cluster,
 	result *validator.ValidationResult,
 ) {
-	port := config.Spec.Cluster.LocalRegistryOpts.HostPort
+	port := config.Spec.Cluster.LocalRegistry.HostPort
 
-	enabled := config.Spec.Cluster.LocalRegistry == v1alpha1.LocalRegistryEnabled
+	enabled := config.Spec.Cluster.LocalRegistry.Enabled
 
 	if enabled {
 		if port <= 0 || port > 65535 {
 			result.AddError(validator.ValidationError{
-				Field:         "spec.options.localRegistry.hostPort",
+				Field:         "spec.cluster.localRegistry.hostPort",
 				Message:       "localRegistry.hostPort must be between 1 and 65535 when the registry is enabled",
 				CurrentValue:  port,
 				ExpectedValue: "1-65535",
-				FixSuggestion: "Choose a valid TCP port (e.g., 5050) for spec.options.localRegistry.hostPort",
+				FixSuggestion: "Choose a valid TCP port (e.g., 5050) for spec.cluster.localRegistry.hostPort",
 			})
 		}
 

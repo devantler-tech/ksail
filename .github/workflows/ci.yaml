@@ -198,7 +198,8 @@ jobs:
     if: needs.changes.outputs.code == 'true'
     strategy:
       matrix:
-        distribution: [Kind, K3d, Talos]
+        distribution: [Vanilla, K3s, Talos]
+        provider: [Docker]
         args:
           - ""
           - "--cert-manager Enabled"
@@ -257,14 +258,14 @@ jobs:
       - name: 🧪 ksail cluster init
         if: matrix.init == true
         run: |
-          ksail cluster init --distribution ${{ matrix.distribution }} ${{ matrix.args }}
+          ksail cluster init --distribution ${{ matrix.distribution }} --provider ${{ matrix.provider }} ${{ matrix.args }}
 
       - name: 🧪 ksail cluster create
         run: |
           if [ "${{ matrix.init }}" = true ]; then
             ksail cluster create
           else
-            ksail cluster create --distribution ${{ matrix.distribution }} ${{ matrix.args }}
+            ksail cluster create --distribution ${{ matrix.distribution }} --provider ${{ matrix.provider }} ${{ matrix.args }}
           fi
 
       - name: 🧪 ksail cluster list
@@ -341,15 +342,7 @@ jobs:
   status:
     name: CI - KSail
     runs-on: ubuntu-latest
-    needs:
-      [
-        changes,
-        build-artifact,
-        generate-schema,
-        generate-cli-flags-docs,
-        coverage,
-        system-test,
-      ]
+    needs: [changes, build-artifact, generate-schema, generate-cli-flags-docs, coverage, system-test]
     if: ${{ always() }}
     steps:
       - name: Summarize workflow result

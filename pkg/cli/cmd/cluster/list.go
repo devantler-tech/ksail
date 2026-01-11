@@ -17,8 +17,8 @@ import (
 // AllDistributions returns all supported distributions.
 func AllDistributions() []v1alpha1.Distribution {
 	return []v1alpha1.Distribution{
-		v1alpha1.DistributionKind,
-		v1alpha1.DistributionK3d,
+		v1alpha1.DistributionVanilla,
+		v1alpha1.DistributionK3s,
 		v1alpha1.DistributionTalos,
 	}
 }
@@ -154,11 +154,11 @@ func createEmptyDistributionConfig(
 	distribution v1alpha1.Distribution,
 ) *clusterprovisioner.DistributionConfig {
 	switch distribution {
-	case v1alpha1.DistributionKind:
+	case v1alpha1.DistributionVanilla:
 		return &clusterprovisioner.DistributionConfig{
 			Kind: &v1alpha4.Cluster{},
 		}
-	case v1alpha1.DistributionK3d:
+	case v1alpha1.DistributionK3s:
 		return &clusterprovisioner.DistributionConfig{
 			K3d: &k3dv1alpha5.SimpleConfig{},
 		}

@@ -166,7 +166,7 @@ func CreateMinimalProvisioner(
 	clusterName string,
 ) (clusterprovisioner.ClusterProvisioner, error) {
 	switch distribution {
-	case v1alpha1.DistributionKind:
+	case v1alpha1.DistributionVanilla:
 		kindConfig := &v1alpha4.Cluster{Name: clusterName}
 
 		provisioner, err := kindprovisioner.CreateProvisioner(kindConfig, "")
@@ -176,7 +176,7 @@ func CreateMinimalProvisioner(
 
 		return provisioner, nil
 
-	case v1alpha1.DistributionK3d:
+	case v1alpha1.DistributionK3s:
 		k3dConfig := &k3dv1alpha5.SimpleConfig{
 			ObjectMeta: k3dtypes.ObjectMeta{Name: clusterName},
 		}
@@ -191,6 +191,7 @@ func CreateMinimalProvisioner(
 		provisioner, err := talosprovisioner.CreateProvisioner(
 			talosConfig,
 			"",
+			"", // provider not needed for simple lifecycle
 			v1alpha1.OptionsTalos{},
 			false, // skipCNIChecks - not relevant for simple lifecycle operations
 		)

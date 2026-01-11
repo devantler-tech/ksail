@@ -12,7 +12,7 @@ KSail provides a unified CLI for local Kubernetes development with built-in supp
 Create and manage local Kubernetes clusters with a single command. KSail supports multiple distributions and automatically configures networking, storage, and observability components.
 
 ```bash
-ksail cluster init --distribution Kind --cni Cilium
+ksail cluster init --distribution Vanilla --cni Cilium
 ksail cluster create
 ```
 
@@ -180,7 +180,7 @@ apiVersion: ksail.io/v1alpha1
 kind: Cluster
 spec:
   cluster:
-    distribution: Kind
+    distribution: Vanilla
     cni: Cilium
     gitOpsEngine: Flux
     localRegistry: Enabled

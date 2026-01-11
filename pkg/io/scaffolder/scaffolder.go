@@ -175,7 +175,7 @@ func (s *Scaffolder) Scaffold(output string, force bool) error {
 func (s *Scaffolder) GenerateK3dRegistryConfig() k3dv1alpha5.SimpleConfigRegistries {
 	registryConfig := k3dv1alpha5.SimpleConfigRegistries{}
 
-	if s.KSailConfig.Spec.Cluster.Distribution != v1alpha1.DistributionK3d {
+	if s.KSailConfig.Spec.Cluster.Distribution != v1alpha1.DistributionK3s {
 		return registryConfig
 	}
 
@@ -271,7 +271,7 @@ func (s *Scaffolder) CreateK3dConfig() k3dv1alpha5.SimpleConfig {
 	// Configure K3d-native local registry when enabled.
 	// K3d's Registries.Create automatically manages the registry container,
 	// including DNS resolution, network connectivity, and lifecycle management.
-	if s.KSailConfig.Spec.Cluster.LocalRegistry == v1alpha1.LocalRegistryEnabled {
+	if s.KSailConfig.Spec.Cluster.LocalRegistry.Enabled {
 		config.Registries = s.addK3dLocalRegistryConfig(config.Registries)
 	}
 
@@ -301,8 +301,8 @@ func (s *Scaffolder) addK3dLocalRegistryConfig(
 
 	// Determine the host port from config or use default
 	hostPort := v1alpha1.DefaultLocalRegistryPort
-	if s.KSailConfig.Spec.Cluster.LocalRegistryOpts.HostPort > 0 {
-		hostPort = s.KSailConfig.Spec.Cluster.LocalRegistryOpts.HostPort
+	if s.KSailConfig.Spec.Cluster.LocalRegistry.HostPort > 0 {
+		hostPort = s.KSailConfig.Spec.Cluster.LocalRegistry.HostPort
 	}
 
 	// Configure K3d to create and manage the local registry.
@@ -519,9 +519,9 @@ func (s *Scaffolder) generateKSailConfig(output string, force bool) error {
 // generateDistributionConfig generates the distribution-specific configuration file.
 func (s *Scaffolder) generateDistributionConfig(output string, force bool) error {
 	switch s.KSailConfig.Spec.Cluster.Distribution {
-	case v1alpha1.DistributionKind:
+	case v1alpha1.DistributionVanilla:
 		return s.generateKindConfig(output, force)
-	case v1alpha1.DistributionK3d:
+	case v1alpha1.DistributionK3s:
 		return s.generateK3dConfig(output, force)
 	case v1alpha1.DistributionTalos:
 		return s.generateTalosConfig(output, force)
@@ -931,9 +931,9 @@ func (s *Scaffolder) buildFluxInstanceOptions(
 // This is used for in-cluster registry naming.
 func (s *Scaffolder) resolveClusterNameForDistribution() string {
 	switch s.KSailConfig.Spec.Cluster.Distribution {
-	case v1alpha1.DistributionK3d:
+	case v1alpha1.DistributionK3s:
 		return k3dconfigmanager.ResolveClusterName(&s.KSailConfig, nil)
-	case v1alpha1.DistributionKind:
+	case v1alpha1.DistributionVanilla:
 		return kindconfigmanager.DefaultClusterName
 	case v1alpha1.DistributionTalos:
 		return talosconfigmanager.DefaultClusterName
@@ -1011,7 +1011,7 @@ func (s *Scaffolder) buildArgoCDApplicationOptions(
 	outputPath string,
 	force bool,
 ) argocdgenerator.ApplicationGeneratorOptions {
-	port := s.KSailConfig.Spec.Cluster.LocalRegistryOpts.HostPort
+	port := s.KSailConfig.Spec.Cluster.LocalRegistry.HostPort
 	if port == 0 {
 		port = 5000
 	}
@@ -1103,7 +1103,7 @@ func (s *Scaffolder) getKustomizationResources() []string {
 // Each mirror registry specification creates a subdirectory under the configured mirrors directory
 // (default: kind/mirrors) with a hosts.toml file that configures containerd to use the specified upstream.
 func (s *Scaffolder) generateKindMirrorsConfig(output string, force bool) error {
-	if s.KSailConfig.Spec.Cluster.Distribution != v1alpha1.DistributionKind {
+	if s.KSailConfig.Spec.Cluster.Distribution != v1alpha1.DistributionVanilla {
 		return nil
 	}
 

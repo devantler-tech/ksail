@@ -10,25 +10,25 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestDetectDistributionFromContext_Kind tests detection of Kind distribution.
-func TestDetectDistributionFromContext_Kind(t *testing.T) {
+// TestDetectDistributionFromContext_Vanilla tests detection of Vanilla distribution (via kind- prefix).
+func TestDetectDistributionFromContext_Vanilla(t *testing.T) {
 	t.Parallel()
 
 	distribution, clusterName, err := lifecycle.DetectDistributionFromContext("kind-my-cluster")
 
 	require.NoError(t, err)
-	assert.Equal(t, v1alpha1.DistributionKind, distribution)
+	assert.Equal(t, v1alpha1.DistributionVanilla, distribution)
 	assert.Equal(t, "my-cluster", clusterName)
 }
 
-// TestDetectDistributionFromContext_K3d tests detection of K3d distribution.
-func TestDetectDistributionFromContext_K3d(t *testing.T) {
+// TestDetectDistributionFromContext_K3s tests detection of K3s distribution (via k3d- prefix).
+func TestDetectDistributionFromContext_K3s(t *testing.T) {
 	t.Parallel()
 
 	distribution, clusterName, err := lifecycle.DetectDistributionFromContext("k3d-test-cluster")
 
 	require.NoError(t, err)
-	assert.Equal(t, v1alpha1.DistributionK3d, distribution)
+	assert.Equal(t, v1alpha1.DistributionK3s, distribution)
 	assert.Equal(t, "test-cluster", clusterName)
 }
 
@@ -131,7 +131,7 @@ func TestDetectDistributionFromContext_AllPatterns_Snapshot(t *testing.T) {
 func TestExtractClusterNameFromContext_Kind(t *testing.T) {
 	t.Parallel()
 
-	clusterName := lifecycle.ExtractClusterNameFromContext("kind-local", v1alpha1.DistributionKind)
+	clusterName := lifecycle.ExtractClusterNameFromContext("kind-local", v1alpha1.DistributionVanilla)
 	assert.Equal(t, "local", clusterName)
 }
 
@@ -139,7 +139,7 @@ func TestExtractClusterNameFromContext_Kind(t *testing.T) {
 func TestExtractClusterNameFromContext_K3d(t *testing.T) {
 	t.Parallel()
 
-	clusterName := lifecycle.ExtractClusterNameFromContext("k3d-my-app", v1alpha1.DistributionK3d)
+	clusterName := lifecycle.ExtractClusterNameFromContext("k3d-my-app", v1alpha1.DistributionK3s)
 	assert.Equal(t, "my-app", clusterName)
 }
 
@@ -166,22 +166,22 @@ func TestExtractClusterNameFromContext_WrongPrefix(t *testing.T) {
 		{
 			name:         "kind_context_with_k3d_distribution",
 			context:      "kind-cluster",
-			distribution: v1alpha1.DistributionK3d,
+			distribution: v1alpha1.DistributionK3s,
 		},
 		{
 			name:         "k3d_context_with_kind_distribution",
 			context:      "k3d-cluster",
-			distribution: v1alpha1.DistributionKind,
+			distribution: v1alpha1.DistributionVanilla,
 		},
 		{
 			name:         "talos_context_with_kind_distribution",
 			context:      "admin@cluster",
-			distribution: v1alpha1.DistributionKind,
+			distribution: v1alpha1.DistributionVanilla,
 		},
 		{
 			name:         "random_context_with_kind_distribution",
 			context:      "random-context",
-			distribution: v1alpha1.DistributionKind,
+			distribution: v1alpha1.DistributionVanilla,
 		},
 	}
 
@@ -205,7 +205,7 @@ func TestExtractClusterNameFromContext_EmptyInputs(t *testing.T) {
 	t.Run("empty_context", func(t *testing.T) {
 		t.Parallel()
 
-		clusterName := lifecycle.ExtractClusterNameFromContext("", v1alpha1.DistributionKind)
+		clusterName := lifecycle.ExtractClusterNameFromContext("", v1alpha1.DistributionVanilla)
 		assert.Empty(t, clusterName)
 	})
 
