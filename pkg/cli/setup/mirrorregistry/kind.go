@@ -150,7 +150,7 @@ func PrepareKindConfigWithMirrors(
 	kindConfig *v1alpha4.Cluster,
 ) bool {
 	// Only for Kind distribution
-	if clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionKind || kindConfig == nil {
+	if clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionVanilla || kindConfig == nil {
 		return false
 	}
 

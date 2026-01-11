@@ -19,11 +19,11 @@ KSail builds upon established Kubernetes technologies and patterns. This page pr
 
 ## Distributions
 
-Kubernetes distributions package the Kubernetes components with additional tooling for specific use cases.
+Kubernetes distributions package the Kubernetes components with additional tooling for specific use cases. KSail supports three distributions that can run on the Docker provider.
 
-### Kind
+### Vanilla (Kind)
 
-[Kind](https://kind.sigs.k8s.io/) (Kubernetes in Docker) runs Kubernetes clusters using Docker containers as nodes. Ideal for local development and CI/CD testing.
+[Kind](https://kind.sigs.k8s.io/) (Kubernetes in Docker) runs standard upstream Kubernetes clusters using Docker containers as nodes. This distribution provides vanilla Kubernetes without any modifications, making it ideal for testing against standard Kubernetes behavior.
 
 **Key resources:**
 
@@ -31,25 +31,40 @@ Kubernetes distributions package the Kubernetes components with additional tooli
 - [Kind Configuration](https://kind.sigs.k8s.io/docs/user/configuration/)
 - [Kind Quick Start](https://kind.sigs.k8s.io/docs/user/quick-start/)
 
-### K3d
+### K3s (K3d)
 
-[K3d](https://k3d.io/) wraps [K3s](https://k3s.io/) (lightweight Kubernetes) in Docker containers. Uses fewer resources than Kind while maintaining Kubernetes compatibility.
+[K3s](https://k3s.io/) is a lightweight, certified Kubernetes distribution built for resource-constrained environments. KSail uses [K3d](https://k3d.io/) to run K3s clusters in Docker containers. K3s includes sensible defaults like an embedded load balancer, local storage provisioner, and metrics server.
 
 **Key resources:**
 
+- [K3s Documentation](https://docs.k3s.io/)
 - [K3d Documentation](https://k3d.io/)
 - [K3d Configuration](https://k3d.io/stable/usage/configfile/)
-- [K3s Documentation](https://docs.k3s.io/)
 
 ### Talos
 
-[Talos Linux](https://www.talos.dev/) is a minimal, immutable operating system designed specifically for Kubernetes. Provides enhanced security through API-driven configuration.
+[Talos Linux](https://www.talos.dev/) is a minimal, immutable operating system designed specifically for Kubernetes. Provides enhanced security through API-driven configuration with no shell access.
 
 **Key resources:**
 
 - [Talos Documentation](https://www.talos.dev/latest/)
 - [Talos Configuration Reference](https://www.talos.dev/latest/reference/configuration/)
 - [Talos Getting Started](https://www.talos.dev/latest/introduction/getting-started/)
+
+## Providers
+
+Providers are the infrastructure backends that run cluster nodes. KSail abstracts provider-specific operations so you can use the same workflow regardless of where your cluster runs.
+
+### Docker
+
+The Docker provider runs Kubernetes nodes as Docker containers on your local machine. This is the default provider for all distributions and requires only Docker to be installed.
+
+**Supported distributions:** Vanilla, K3s, Talos
+
+**Key resources:**
+
+- [Docker Documentation](https://docs.docker.com/)
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/)
 
 ## Container Network Interface (CNI)
 

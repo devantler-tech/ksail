@@ -244,13 +244,13 @@ func resolvePort(cfg *v1alpha1.Cluster, ociRef *oci.Reference) int32 {
 		return ociRef.Port
 	}
 
-	localRegistryEnabled := cfg.Spec.Cluster.LocalRegistry == v1alpha1.LocalRegistryEnabled
+	localRegistryEnabled := cfg.Spec.Cluster.LocalRegistry.Enabled
 	if !localRegistryEnabled {
 		return 0 // Will trigger auto-detection
 	}
 
-	if cfg.Spec.Cluster.LocalRegistryOpts.HostPort > 0 {
-		return cfg.Spec.Cluster.LocalRegistryOpts.HostPort
+	if cfg.Spec.Cluster.LocalRegistry.HostPort > 0 {
+		return cfg.Spec.Cluster.LocalRegistry.HostPort
 	}
 
 	return v1alpha1.DefaultLocalRegistryPort

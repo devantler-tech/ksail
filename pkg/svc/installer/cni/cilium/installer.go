@@ -6,27 +6,18 @@ import (
 	"maps"
 	"time"
 
+	v1alpha1 "github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
 	"github.com/devantler-tech/ksail/v5/pkg/k8s"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/installer"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/installer/cni"
 )
 
-// Distribution represents the Kubernetes distribution type.
-type Distribution string
-
-// Supported distribution types.
-const (
-	DistributionKind  Distribution = "kind"
-	DistributionK3d   Distribution = "k3d"
-	DistributionTalos Distribution = "talos"
-)
-
 // CiliumInstaller implements the installer.Installer interface for Cilium.
 type CiliumInstaller struct {
 	*cni.InstallerBase
 
-	distribution Distribution
+	distribution v1alpha1.Distribution
 }
 
 // NewCiliumInstaller creates a new Cilium installer instance.
@@ -43,7 +34,7 @@ func NewCiliumInstallerWithDistribution(
 	client helm.Interface,
 	kubeconfig, context string,
 	timeout time.Duration,
-	distribution Distribution,
+	distribution v1alpha1.Distribution,
 ) *CiliumInstaller {
 	ciliumInstaller := &CiliumInstaller{
 		distribution: distribution,
@@ -63,7 +54,7 @@ func NewCiliumInstallerWithDistribution(
 func (c *CiliumInstaller) Install(ctx context.Context) error {
 	// For Talos, wait for API server to stabilize before CNI installation.
 	// The API server may be unstable immediately after bootstrap.
-	if c.distribution == DistributionTalos {
+	if c.distribution == v1alpha1.DistributionTalos {
 		err := c.WaitForAPIServerStability(ctx)
 		if err != nil {
 			return fmt.Errorf("failed to wait for API server stability: %w", err)
@@ -135,11 +126,11 @@ func (c *CiliumInstaller) getCiliumValues() map[string]string {
 
 	// Add distribution-specific values
 	switch c.distribution {
-	case DistributionTalos:
+	case v1alpha1.DistributionTalos:
 		// Talos-specific settings from https://docs.siderolabs.com/kubernetes-guides/cni/deploying-cilium
 		maps.Copy(values, talosCiliumValues())
-	case DistributionKind, DistributionK3d:
-		// Kind and K3d use default values
+	case v1alpha1.DistributionVanilla, v1alpha1.DistributionK3s:
+		// Vanilla and K3s use default values
 	}
 
 	return values

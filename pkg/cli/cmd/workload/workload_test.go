@@ -40,7 +40,7 @@ func writeValidKsailConfig(t *testing.T, dir string) {
 	ksailConfigContent := "apiVersion: ksail.io/v1alpha1\n" +
 		"kind: Cluster\n" +
 		"spec:\n" +
-		"  distribution: Kind\n" +
+		"  distribution: Vanilla\n" +
 		"  distributionConfig: kind.yaml\n" +
 		"  sourceDirectory: k8s\n"
 

@@ -377,11 +377,18 @@ func testK3dEmptyNameComplexConfig(t *testing.T) {
 }
 
 func createK3dTestCases() []validatorTestCase[*k3dapi.SimpleConfig] {
-	var testCases []validatorTestCase[*k3dapi.SimpleConfig]
+	validCases := createK3dValidTestCases()
+	invalidCases := createK3dInvalidTestCases()
+	nilCase := createNilConfigTestCase[*k3dapi.SimpleConfig]()
 
-	testCases = append(testCases, createK3dValidTestCases()...)
-	testCases = append(testCases, createK3dInvalidTestCases()...)
-	testCases = append(testCases, createNilConfigTestCase[*k3dapi.SimpleConfig]())
+	testCases := make(
+		[]validatorTestCase[*k3dapi.SimpleConfig],
+		0,
+		len(validCases)+len(invalidCases)+1,
+	)
+	testCases = append(testCases, validCases...)
+	testCases = append(testCases, invalidCases...)
+	testCases = append(testCases, nilCase)
 
 	return testCases
 }

@@ -17,6 +17,7 @@ import (
 	iopath "github.com/devantler-tech/ksail/v5/pkg/io"
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
 	"github.com/devantler-tech/ksail/v5/pkg/k8s"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/provider"
 	clustererrors "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/errors"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
@@ -94,8 +95,12 @@ type TalosProvisioner struct {
 	// talosConfigs holds the loaded Talos machine configurations with all patches applied.
 	talosConfigs *talosconfigmanager.Configs
 	// options holds runtime configuration for provisioning.
-	options            *Options
-	dockerClient       client.APIClient
+	options *Options
+	// dockerClient is used for Docker-specific operations (volume cleanup, port inspection).
+	dockerClient client.APIClient
+	// infraProvider is the infrastructure provider for node operations (start/stop).
+	// If nil, falls back to dockerClient for backwards compatibility.
+	infraProvider      provider.Provider
 	provisionerFactory func(ctx context.Context) (provision.Provisioner, error)
 	logWriter          io.Writer
 }
@@ -143,6 +148,19 @@ func (p *TalosProvisioner) WithLogWriter(w io.Writer) *TalosProvisioner {
 	p.logWriter = w
 
 	return p
+}
+
+// WithInfraProvider sets the infrastructure provider for node operations.
+func (p *TalosProvisioner) WithInfraProvider(prov provider.Provider) *TalosProvisioner {
+	p.infraProvider = prov
+
+	return p
+}
+
+// SetProvider sets the infrastructure provider for node operations.
+// This implements the ProviderAware interface.
+func (p *TalosProvisioner) SetProvider(prov provider.Provider) {
+	p.infraProvider = prov
 }
 
 // Options returns the current runtime options.
@@ -319,13 +337,31 @@ func (p *TalosProvisioner) List(ctx context.Context) ([]string, error) {
 
 // Start starts a stopped Talos-in-Docker cluster.
 // If name is non-empty, it overrides the configured cluster name.
+// Uses the infrastructure provider if set, otherwise falls back to Docker client.
 func (p *TalosProvisioner) Start(ctx context.Context, name string) error {
+	clusterName := p.resolveClusterName(name)
+
+	// Use infrastructure provider if available
+	if p.infraProvider != nil {
+		_, _ = fmt.Fprintf(p.logWriter, "Starting Talos cluster %q...\n", clusterName)
+
+		err := p.infraProvider.StartNodes(ctx, clusterName)
+		if err != nil {
+			return fmt.Errorf("failed to start cluster %q: %w", clusterName, err)
+		}
+
+		_, _ = fmt.Fprintf(p.logWriter, "Successfully started Talos cluster %q\n", clusterName)
+
+		return nil
+	}
+
+	// Fall back to Docker client for backwards compatibility
 	clusterName, containers, err := p.getClusterContainers(ctx, name)
 	if err != nil {
 		return err
 	}
 
-	_, _ = fmt.Fprintf(p.logWriter, "Starting Talos cluster %q...\\n", clusterName)
+	_, _ = fmt.Fprintf(p.logWriter, "Starting Talos cluster %q...\n", clusterName)
 
 	// Start each container
 	for _, c := range containers {
@@ -335,7 +371,7 @@ func (p *TalosProvisioner) Start(ctx context.Context, name string) error {
 		}
 	}
 
-	_, _ = fmt.Fprintf(p.logWriter, "Successfully started Talos cluster %q\\n", clusterName)
+	_, _ = fmt.Fprintf(p.logWriter, "Successfully started Talos cluster %q\n", clusterName)
 
 	return nil
 }
@@ -345,13 +381,31 @@ const containerStopTimeout = 30
 
 // Stop stops a running Talos-in-Docker cluster.
 // If name is non-empty, it overrides the configured cluster name.
+// Uses the infrastructure provider if set, otherwise falls back to Docker client.
 func (p *TalosProvisioner) Stop(ctx context.Context, name string) error {
+	clusterName := p.resolveClusterName(name)
+
+	// Use infrastructure provider if available
+	if p.infraProvider != nil {
+		_, _ = fmt.Fprintf(p.logWriter, "Stopping Talos cluster %q...\n", clusterName)
+
+		err := p.infraProvider.StopNodes(ctx, clusterName)
+		if err != nil {
+			return fmt.Errorf("failed to stop cluster %q: %w", clusterName, err)
+		}
+
+		_, _ = fmt.Fprintf(p.logWriter, "Successfully stopped Talos cluster %q\n", clusterName)
+
+		return nil
+	}
+
+	// Fall back to Docker client for backwards compatibility
 	clusterName, containers, err := p.getClusterContainers(ctx, name)
 	if err != nil {
 		return err
 	}
 
-	_, _ = fmt.Fprintf(p.logWriter, "Stopping Talos cluster %q...\\n", clusterName)
+	_, _ = fmt.Fprintf(p.logWriter, "Stopping Talos cluster %q...\n", clusterName)
 
 	// Stop each container with a graceful timeout
 	timeout := containerStopTimeout
@@ -362,7 +416,7 @@ func (p *TalosProvisioner) Stop(ctx context.Context, name string) error {
 		}
 	}
 
-	_, _ = fmt.Fprintf(p.logWriter, "Successfully stopped Talos cluster %q\\n", clusterName)
+	_, _ = fmt.Fprintf(p.logWriter, "Successfully stopped Talos cluster %q\n", clusterName)
 
 	return nil
 }

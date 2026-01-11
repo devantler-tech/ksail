@@ -17,7 +17,7 @@ func TestNewLocalPathStorageInstaller(t *testing.T) {
 		"/path/to/kubeconfig",
 		"test-context",
 		5*time.Minute,
-		v1alpha1.DistributionKind,
+		v1alpha1.DistributionVanilla,
 	)
 
 	assert.NotNil(t, installer)
@@ -31,7 +31,7 @@ func TestLocalPathStorageInstaller_Install_K3d(t *testing.T) {
 		"/path/to/kubeconfig",
 		"test-context",
 		5*time.Minute,
-		v1alpha1.DistributionK3d,
+		v1alpha1.DistributionK3s,
 	)
 
 	ctx := context.Background()
@@ -47,7 +47,7 @@ func TestLocalPathStorageInstaller_Uninstall(t *testing.T) {
 		"/path/to/kubeconfig",
 		"test-context",
 		5*time.Minute,
-		v1alpha1.DistributionKind,
+		v1alpha1.DistributionVanilla,
 	)
 
 	ctx := context.Background()

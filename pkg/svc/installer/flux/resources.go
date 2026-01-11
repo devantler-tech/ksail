@@ -173,7 +173,7 @@ func EnsureDefaultResources(
 	case <-time.After(apiStabilizationDelay):
 	}
 
-	if clusterCfg.Spec.Cluster.LocalRegistry == v1alpha1.LocalRegistryEnabled {
+	if clusterCfg.Spec.Cluster.LocalRegistry.Enabled {
 		// Use dynamic client approach for OCIRepository operations.
 		// This bypasses the controller-runtime REST mapper cache which can become
 		// stale in slow CI environments where CRD registration takes time to propagate.
@@ -269,7 +269,7 @@ func buildFluxInstance(clusterCfg *v1alpha1.Cluster, clusterName string) (*FluxI
 	// via the FluxInstance CR in the source directory, not in the KSail config.
 	interval := fluxIntervalFallback
 
-	hostPort := clusterCfg.Spec.Cluster.LocalRegistryOpts.HostPort
+	hostPort := clusterCfg.Spec.Cluster.LocalRegistry.HostPort
 	if hostPort == 0 {
 		hostPort = v1alpha1.DefaultLocalRegistryPort
 	}
@@ -284,7 +284,7 @@ func buildFluxInstance(clusterCfg *v1alpha1.Cluster, clusterName string) (*FluxI
 	repoHost := registry.BuildLocalRegistryName(clusterName)
 	repoPort := dockerclient.DefaultRegistryPort
 
-	if clusterCfg.Spec.Cluster.LocalRegistry != v1alpha1.LocalRegistryEnabled {
+	if !clusterCfg.Spec.Cluster.LocalRegistry.Enabled {
 		repoHost = registry.DefaultEndpointHost
 		repoPort = int(hostPort)
 	}

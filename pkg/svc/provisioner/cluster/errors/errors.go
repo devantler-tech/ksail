@@ -11,3 +11,6 @@ import "errors"
 // This error is used by all provisioner implementations (Kind, K3d, Talos) when attempting
 // to delete, start, or stop a cluster that does not exist.
 var ErrClusterNotFound = errors.New("cluster not found")
+
+// ErrProviderNotSet is returned when an infrastructure provider is required but not configured.
+var ErrProviderNotSet = errors.New("infrastructure provider not set")

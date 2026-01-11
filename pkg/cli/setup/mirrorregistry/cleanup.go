@@ -98,7 +98,10 @@ func CleanupAll(
 		)
 	} else {
 		// Discover and cleanup registries by network (for Kind, K3d)
-		networkName := getNetworkNameForDistribution(clusterCfg.Spec.Cluster.Distribution, clusterName)
+		networkName := getNetworkNameForDistribution(
+			clusterCfg.Spec.Cluster.Distribution,
+			clusterName,
+		)
 		err = cleanupRegistriesByNetwork(
 			cmd,
 			deps,
@@ -196,9 +199,9 @@ func displayRegistryCleanupOutput(cmd *cobra.Command, deps lifecycle.Deps, delet
 // getNetworkNameForDistribution returns the Docker network name for a given distribution.
 func getNetworkNameForDistribution(distribution v1alpha1.Distribution, clusterName string) string {
 	switch distribution {
-	case v1alpha1.DistributionKind:
+	case v1alpha1.DistributionVanilla:
 		return "kind"
-	case v1alpha1.DistributionK3d:
+	case v1alpha1.DistributionK3s:
 		return "k3d-" + clusterName
 	case v1alpha1.DistributionTalos:
 		return clusterName
@@ -219,7 +222,7 @@ func CleanupMirrorRegistries(
 	cleanupDeps CleanupDependencies,
 ) error {
 	switch clusterCfg.Spec.Cluster.Distribution {
-	case v1alpha1.DistributionKind:
+	case v1alpha1.DistributionVanilla:
 		return cleanupKindMirrorRegistries(
 			cmd,
 			cfgManager,
@@ -229,7 +232,7 @@ func CleanupMirrorRegistries(
 			deleteVolumes,
 			cleanupDeps,
 		)
-	case v1alpha1.DistributionK3d:
+	case v1alpha1.DistributionK3s:
 		return cleanupK3dMirrorRegistries(
 			cmd,
 			cfgManager,

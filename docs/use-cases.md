@@ -15,7 +15,7 @@ Experiment with Kubernetes without complex setup.
 
 ```bash
 # Create playground
-ksail cluster init --distribution Kind --cni Cilium
+ksail cluster init --distribution Vanilla --cni Cilium
 ksail cluster create
 
 # Try workloads
@@ -31,7 +31,7 @@ ksail cluster connect
 ksail cluster delete
 ```
 
-**Tips:** Switch distributions (`--distribution K3d`), try `--cni Cilium` or `--cert-manager Enabled`, commit config to track changes.
+**Tips:** Switch distributions (`--distribution K3s`), try `--cni Cilium` or `--cert-manager Enabled`, commit config to track changes.
 
 ## Local Development
 
@@ -39,7 +39,7 @@ Run Kubernetes manifests locally with consistent workflow. See [Workload Managem
 
 ```bash
 # Scaffold project
-ksail cluster init --distribution Kind --cni Cilium --metrics-server Enabled
+ksail cluster init --distribution Vanilla --cni Cilium --metrics-server Enabled
 
 # Create cluster
 ksail cluster create
@@ -82,7 +82,7 @@ Disposable Kubernetes clusters for integration testing.
 
 ```bash
 # Initialize (commit config)
-ksail cluster init --distribution Kind --metrics-server Enabled
+ksail cluster init --distribution Vanilla --metrics-server Enabled
 
 # Create cluster in CI
 ksail cluster create
@@ -133,7 +133,7 @@ jobs:
         run: ksail cluster delete
 ```
 
-**Tips:** Use Kind for speed, `--csi LocalPathStorage` for PVCs, set reasonable timeouts, cache images, use `--mirror-registry`, collect state before deletion.
+**Tips:** Use Vanilla for speed, `--csi LocalPathStorage` for PVCs, set reasonable timeouts, cache images, use `--mirror-registry`, collect state before deletion.
 
 ## GitOps Development Workflow
 

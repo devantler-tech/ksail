@@ -26,7 +26,7 @@ apiVersion: ksail.io/v1alpha1
 kind: Cluster
 spec:
   cluster:
-    distribution: Kind
+    distribution: Vanilla
     distributionConfig: kind.yaml
 ```
 
@@ -41,7 +41,7 @@ kind: Cluster
 spec:
   editor: code --wait
   cluster:
-    distribution: Kind
+    distribution: Vanilla
     distributionConfig: kind.yaml
     connection:
       kubeconfig: ~/.kube/config
@@ -49,8 +49,8 @@ spec:
       timeout: 5m
     cni: Cilium
     # CSI "Default" uses the distribution's built-in storage behavior:
-    # - K3d: includes local-path-provisioner by default
-    # - Kind and Talos: no CSI installed; use LocalPathStorage if needed
+    # - K3s: includes local-path-provisioner by default
+    # - Vanilla and Talos: no CSI installed; use LocalPathStorage if needed
     csi: Default
     metricsServer: Enabled
     certManager: Enabled
@@ -96,7 +96,7 @@ If not specified, KSail falls back to standard editor environment variables (`SO
 
 | Field                  | Type       | Default     | Description                                 |
 |------------------------|------------|-------------|---------------------------------------------|
-| `distribution`         | enum       | `Kind`      | Kubernetes distribution to use              |
+| `distribution`         | enum       | `Vanilla`   | Kubernetes distribution to use              |
 | `distributionConfig`   | string     | (see below) | Path to distribution-specific configuration |
 | `connection`           | Connection | –           | Cluster connection settings                 |
 | `cni`                  | enum       | `Default`   | Container Network Interface                 |
@@ -123,8 +123,8 @@ Kubernetes distribution to use for the local cluster. See [Distributions](../con
 
 **Valid values:**
 
-- `Kind` (default) – Uses [Kind](https://kind.sigs.k8s.io/) to run Kubernetes in Docker
-- `K3d` – Uses [K3d](https://k3d.io/) to run lightweight K3s in Docker
+- `Vanilla` (default) – Uses [Kind](https://kind.sigs.k8s.io/) to run standard upstream Kubernetes in Docker
+- `K3s` – Uses [K3d](https://k3d.io/) to run lightweight K3s in Docker
 - `Talos` – Uses [Talos Linux](https://www.talos.dev/) in Docker containers
 
 #### distributionConfig
@@ -133,8 +133,8 @@ Path to the distribution-specific configuration file or directory. This tells KS
 
 **Default values by distribution:**
 
-- `Kind` → `kind.yaml`
-- `K3d` → `k3d.yaml`
+- `Vanilla` → `kind.yaml`
+- `K3s` → `k3d.yaml`
 - `Talos` → `talos/` (directory)
 
 See [Distribution Configuration](#distribution-configuration) below for details on each format.
@@ -149,8 +149,8 @@ See [Distribution Configuration](#distribution-configuration) below for details 
 
 **Context defaults by distribution:**
 
-- `Kind` → `kind-kind`
-- `K3d` → `k3d-k3d-default`
+- `Vanilla` → `kind-kind`
+- `K3s` → `k3d-k3d-default`
 - `Talos` → `admin@talos-default`
 
 **Timeout format:** Go duration string (e.g., `30s`, `5m`, `1h`)
@@ -161,7 +161,7 @@ Container Network Interface to install. See [CNI](../concepts.md#container-netwo
 
 **Valid values:**
 
-- `Default` – Uses the distribution's built-in CNI (`kindnetd` for Kind, `flannel` for K3d)
+- `Default` – Uses the distribution's built-in CNI (`kindnetd` for Vanilla, `flannel` for K3s)
 - `Cilium` – Installs [Cilium](https://cilium.io/) for advanced networking and observability
 - `Calico` – Installs [Calico](https://www.tigera.io/project-calico/) for network policies
 
@@ -171,7 +171,7 @@ Container Storage Interface to install. See [CSI](../concepts.md#container-stora
 
 **Valid values:**
 
-- `Default` – Uses the distribution's built-in storage (K3d includes local-path-provisioner; Kind does not)
+- `Default` – Uses the distribution's built-in storage (K3s includes local-path-provisioner; Vanilla does not)
 - `LocalPathStorage` – Explicitly installs [local-path-provisioner](https://github.com/rancher/local-path-provisioner)
 
 #### metricsServer
@@ -180,17 +180,17 @@ Whether to install [metrics-server](../concepts.md#metrics-server) for resource 
 
 **Valid values:**
 
-- `Default` (default) – Uses distribution's default behavior (K3d includes metrics-server; Kind and Talos do not)
+- `Default` (default) – Uses distribution's default behavior (K3s includes metrics-server; Vanilla and Talos do not)
 - `Enabled` – Install metrics-server
 - `Disabled` – Skip installation
 
-When metrics-server is enabled on Kind or Talos, KSail automatically:
+When metrics-server is enabled on Vanilla or Talos, KSail automatically:
 
 1. Configures kubelet certificate rotation (`serverTLSBootstrap: true`)
 2. Installs [kubelet-csr-approver](../concepts.md#kubelet-csr-approver) to approve certificate requests
 3. Deploys metrics-server with secure TLS communication
 
-Note: K3d includes metrics-server by default, so this setting has no effect on K3d.
+Note: K3s includes metrics-server by default, so this setting has no effect on K3s.
 
 #### certManager
 
@@ -254,11 +254,11 @@ Advanced configuration options are now direct fields under `spec.cluster` instea
 
 KSail references distribution-specific configuration files to customize cluster behavior. The path to these files is set via `spec.cluster.distributionConfig`.
 
-### Kind Configuration
+### Vanilla (Kind) Configuration
 
 **Default:** `kind.yaml`
 
-Kind clusters are configured via a YAML file following the Kind configuration schema. This allows you to customize:
+Vanilla clusters are configured via a YAML file following the Kind configuration schema. This allows you to customize:
 
 - Node images and versions
 - Extra port mappings
@@ -280,11 +280,11 @@ nodes:
         hostPort: 30000
 ```
 
-### K3d Configuration
+### K3s (K3d) Configuration
 
 **Default:** `k3d.yaml`
 
-K3d clusters are configured via a YAML file following the K3d configuration schema. This allows you to customize:
+K3s clusters are configured via a YAML file following the K3d configuration schema. This allows you to customize:
 
 - Server and agent counts
 - Port mappings

@@ -54,3 +54,14 @@
 ► deleting cluster
 ✔ cluster deleted
 ---
+
+[TestDelete_ClusterExists_PrintsDeleteSuccess/Vanilla - 1]
+🗑️ Delete cluster...
+► deleting cluster
+✔ cluster deleted
+---
+
+[TestDelete_ClusterNotFound_ReturnsError/Vanilla - 1]
+🗑️ Delete cluster...
+► deleting cluster
+---

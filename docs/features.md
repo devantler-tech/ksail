@@ -12,13 +12,13 @@ KSail provides a unified CLI for local Kubernetes development with built-in supp
 Create and manage local Kubernetes clusters with a single command. KSail supports multiple distributions and automatically configures networking, storage, and observability components.
 
 ```bash
-ksail cluster init --distribution Kind --cni Cilium
+ksail cluster init --distribution Vanilla --cni Cilium
 ksail cluster create
 ```
 
 **Capabilities:**
 
-- **Multi-distribution support** – [Kind, K3d, and Talos](concepts.md#distributions) distributions
+- **Multi-distribution support** – [Vanilla, K3s, and Talos](concepts.md#distributions) distributions
 - **Component installation** – [CNI](concepts.md#container-network-interface-cni) (Cilium, Calico), [CSI](concepts.md#container-storage-interface-csi), [metrics-server](concepts.md#metrics-server) with [kubelet-csr-approver](concepts.md#kubelet-csr-approver), [cert-manager](concepts.md#cert-manager), and [policy engines](concepts.md#policy-engines)
 - **Node configuration** – Control-plane and worker node counts via `--control-planes` and `--workers`
 - **Connection management** – Automatic kubeconfig and context configuration
@@ -180,7 +180,7 @@ apiVersion: ksail.io/v1alpha1
 kind: Cluster
 spec:
   cluster:
-    distribution: Kind
+    distribution: Vanilla
     cni: Cilium
     gitOpsEngine: Flux
     localRegistry: Enabled

@@ -111,7 +111,7 @@ func TestGetInstallTimeoutDistributions(t *testing.T) {
 		t.Parallel()
 
 		assertTimeoutEqualsWithDistribution(
-			t, v1alpha1.DistributionKind, 0, installer.DefaultInstallTimeout,
+			t, v1alpha1.DistributionVanilla, 0, installer.DefaultInstallTimeout,
 		)
 	})
 
@@ -119,7 +119,7 @@ func TestGetInstallTimeoutDistributions(t *testing.T) {
 		t.Parallel()
 
 		assertTimeoutEqualsWithDistribution(
-			t, v1alpha1.DistributionK3d, 0, installer.DefaultInstallTimeout,
+			t, v1alpha1.DistributionK3s, 0, installer.DefaultInstallTimeout,
 		)
 	})
 }

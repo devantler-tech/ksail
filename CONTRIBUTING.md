@@ -91,6 +91,28 @@ The repository is organized into two main directories:
 - **cmd/** - CLI command implementations
 - **pkg/** - Public packages (importable by external projects)
 
+### Key Packages in pkg/
+
+- **apis/** - API types, schemas, and enums (distribution/provider values)
+- **client/** - Embedded tool clients (kubectl, helm, kind, k3d, flux, argocd)
+- **svc/provider/** - Infrastructure providers (e.g., `docker.Provider` for running nodes as containers)
+- **svc/provisioner/** - Distribution provisioners (Vanilla, K3s, Talos)
+- **svc/installer/** - Component installers (CNI, CSI, metrics-server, etc.)
+- **di/** - Dependency injection for wiring components
+
+### Architecture: Providers vs Provisioners
+
+KSail separates infrastructure management from distribution configuration:
+
+- **Providers** manage the infrastructure lifecycle (start/stop containers)
+- **Provisioners** configure and manage Kubernetes distributions
+
+| Distribution | Provisioner        | Tool  | Description                  |
+|--------------|--------------------|-------|------------------------------|
+| `Vanilla`    | VanillaProvisioner | Kind  | Standard upstream Kubernetes |
+| `K3s`        | K3sProvisioner     | K3d   | Lightweight K3s in Docker    |
+| `Talos`      | TalosProvisioner   | Talos | Immutable Talos Linux        |
+
 This project strives to be fully open-source friendly, and as such, all core functionality is implemented in the `pkg/` directory, and the `internal/` directory is not used. This allows external projects to import and use any part of the codebase.
 
 For detailed package and API documentation, refer to [pkg.go.dev/github.com/devantler-tech/ksail/v5](https://pkg.go.dev/github.com/devantler-tech/ksail/v5).

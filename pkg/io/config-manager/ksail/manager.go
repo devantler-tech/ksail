@@ -207,9 +207,6 @@ func (m *ConfigManager) unmarshalAndApplyDefaults() error {
 		)
 	}
 
-	// Reset derived defaults so we can detect whether users explicitly configured these values.
-	m.Config.Spec.Cluster.LocalRegistry = ""
-
 	// Reset TypeMeta fields only if a config file was found.
 	// This allows validation to catch incorrect values from config files
 	// while preserving defaults when loading from environment variables only.
@@ -227,15 +224,16 @@ func (m *ConfigManager) unmarshalAndApplyDefaults() error {
 	// This ensures validation will catch incorrect/missing apiVersion and kind values.
 
 	// Handle nested options path for local registry host port.
-	// The YAML output uses `spec.cluster.options.localRegistry.hostPort` but the struct
-	// expects `spec.cluster.localRegistryOptions.hostPort`. We manually extract this
-	// to handle the path mismatch between custom marshal output and unmarshal expectations.
-	if nestedHostPort := m.Viper.GetInt32("spec.cluster.options.localRegistry.hostPort"); nestedHostPort > 0 {
-		m.Config.Spec.Cluster.LocalRegistryOpts.HostPort = nestedHostPort
+	// The YAML output uses `spec.cluster.localRegistry.hostPort` but viper may
+	// have it under a different path. We manually extract this to handle path mismatches.
+	if nestedHostPort := m.Viper.GetInt32(
+		"spec.cluster.localRegistry.hostPort",
+	); nestedHostPort > 0 {
+		m.Config.Spec.Cluster.LocalRegistry.HostPort = nestedHostPort
 	}
 
-	m.localRegistryExplicit = m.Config.Spec.Cluster.LocalRegistry != ""
-	m.localRegistryHostPortExplicit = m.Config.Spec.Cluster.LocalRegistryOpts.HostPort != 0
+	m.localRegistryExplicit = m.Viper.IsSet("spec.cluster.localRegistry.enabled")
+	m.localRegistryHostPortExplicit = m.Config.Spec.Cluster.LocalRegistry.HostPort != 0
 
 	// Apply field selector defaults for empty fields
 	for _, fieldSelector := range m.fieldSelectors {
@@ -341,7 +339,7 @@ func (m *ConfigManager) applyGitOpsAwareDefaults(flagOverrides map[string]string
 	}
 
 	if !m.wasLocalRegistryExplicit(flagOverrides) {
-		m.Config.Spec.Cluster.LocalRegistry = m.defaultLocalRegistryBehavior()
+		m.Config.Spec.Cluster.LocalRegistry.Enabled = m.defaultLocalRegistryBehavior()
 	}
 
 	hostPortExplicit := m.wasLocalRegistryHostPortExplicit(flagOverrides)
@@ -376,25 +374,21 @@ func (m *ConfigManager) wasLocalRegistryHostPortExplicit(flagOverrides map[strin
 	return ok
 }
 
-func (m *ConfigManager) defaultLocalRegistryBehavior() v1alpha1.LocalRegistry {
-	if m.gitOpsEngineSelected() {
-		return v1alpha1.LocalRegistryEnabled
-	}
-
-	return v1alpha1.LocalRegistryDisabled
+func (m *ConfigManager) defaultLocalRegistryBehavior() bool {
+	return m.gitOpsEngineSelected()
 }
 
 func (m *ConfigManager) applyLocalRegistryPortDefaults(hostPortExplicit bool) {
-	if m.Config.Spec.Cluster.LocalRegistry == v1alpha1.LocalRegistryEnabled {
-		if !hostPortExplicit && m.Config.Spec.Cluster.LocalRegistryOpts.HostPort == 0 {
-			m.Config.Spec.Cluster.LocalRegistryOpts.HostPort = defaultLocalRegistryPort
+	if m.Config.Spec.Cluster.LocalRegistry.Enabled {
+		if !hostPortExplicit && m.Config.Spec.Cluster.LocalRegistry.HostPort == 0 {
+			m.Config.Spec.Cluster.LocalRegistry.HostPort = defaultLocalRegistryPort
 		}
 
 		return
 	}
 
 	if !hostPortExplicit {
-		m.Config.Spec.Cluster.LocalRegistryOpts.HostPort = 0
+		m.Config.Spec.Cluster.LocalRegistry.HostPort = 0
 	}
 }
 
@@ -600,9 +594,9 @@ func (m *ConfigManager) applyDistributionConfigDefaults() {
 
 func expectedDistributionConfigName(distribution v1alpha1.Distribution) string {
 	switch distribution {
-	case v1alpha1.DistributionKind:
+	case v1alpha1.DistributionVanilla:
 		return "kind.yaml"
-	case v1alpha1.DistributionK3d:
+	case v1alpha1.DistributionK3s:
 		return "k3d.yaml"
 	case v1alpha1.DistributionTalos:
 		return "talos"
@@ -613,15 +607,15 @@ func expectedDistributionConfigName(distribution v1alpha1.Distribution) string {
 
 func distributionConfigIsOppositeDefault(current string, distribution v1alpha1.Distribution) bool {
 	switch distribution {
-	case v1alpha1.DistributionKind:
-		return current == expectedDistributionConfigName(v1alpha1.DistributionK3d) ||
+	case v1alpha1.DistributionVanilla:
+		return current == expectedDistributionConfigName(v1alpha1.DistributionK3s) ||
 			current == expectedDistributionConfigName(v1alpha1.DistributionTalos)
-	case v1alpha1.DistributionK3d:
-		return current == expectedDistributionConfigName(v1alpha1.DistributionKind) ||
+	case v1alpha1.DistributionK3s:
+		return current == expectedDistributionConfigName(v1alpha1.DistributionVanilla) ||
 			current == expectedDistributionConfigName(v1alpha1.DistributionTalos)
 	case v1alpha1.DistributionTalos:
-		return current == expectedDistributionConfigName(v1alpha1.DistributionKind) ||
-			current == expectedDistributionConfigName(v1alpha1.DistributionK3d)
+		return current == expectedDistributionConfigName(v1alpha1.DistributionVanilla) ||
+			current == expectedDistributionConfigName(v1alpha1.DistributionK3s)
 	default:
 		return false
 	}
@@ -657,7 +651,7 @@ func (m *ConfigManager) createValidatorForDistribution() (*ksailvalidator.Valida
 
 	// Create distribution-specific validator based on configured distribution
 	switch m.Config.Spec.Cluster.Distribution {
-	case v1alpha1.DistributionKind:
+	case v1alpha1.DistributionVanilla:
 		kindConfig, err := m.loadKindConfig()
 		if err != nil && !errors.Is(err, ErrDistributionConfigNotFound) {
 			return nil, err
@@ -666,7 +660,7 @@ func (m *ConfigManager) createValidatorForDistribution() (*ksailvalidator.Valida
 		if kindConfig != nil {
 			return ksailvalidator.NewValidatorForKind(kindConfig), nil
 		}
-	case v1alpha1.DistributionK3d:
+	case v1alpha1.DistributionK3s:
 		k3dConfig, err := m.loadK3dConfig()
 		if err != nil && !errors.Is(err, ErrDistributionConfigNotFound) {
 			return nil, err
@@ -786,9 +780,9 @@ func (m *ConfigManager) loadAndCacheDistributionConfig() error {
 	m.DistributionConfig = &clusterprovisioner.DistributionConfig{}
 
 	switch m.Config.Spec.Cluster.Distribution {
-	case v1alpha1.DistributionKind:
+	case v1alpha1.DistributionVanilla:
 		return m.cacheKindConfig()
-	case v1alpha1.DistributionK3d:
+	case v1alpha1.DistributionK3s:
 		return m.cacheK3dConfig()
 	case v1alpha1.DistributionTalos:
 		return m.cacheTalosConfig()

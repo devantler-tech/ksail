@@ -124,7 +124,7 @@ func TestInitializeViperConfigFileReading(t *testing.T) {
 metadata:
   name: test-cluster-from-file
 spec:
-  distribution: K3d
+  distribution: K3s
   sourceDirectory: k8s-from-file
 `
 
@@ -158,7 +158,7 @@ spec:
 
 	// After ReadInConfig, config values should be available
 	assert.Equal(t, "test-cluster-from-file", viperInstance.GetString("metadata.name"))
-	assert.Equal(t, "K3d", viperInstance.GetString("spec.distribution"))
+	assert.Equal(t, "K3s", viperInstance.GetString("spec.distribution"))
 	assert.Equal(t, "k8s-from-file", viperInstance.GetString("spec.sourceDirectory"))
 }
 

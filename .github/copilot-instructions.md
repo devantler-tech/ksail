@@ -157,7 +157,7 @@ ksail cipher <command>                 # Manage secrets with SOPS
 
 ```bash
 ksail cluster init \
-  --distribution <Kind|K3d> \
+  --distribution <Vanilla|K3s|Talos> \
   --cni <Default|Cilium|None> \
   --csi <Default|LocalPathStorage|None> \
   --metrics-server <Default|Enabled|Disabled> \
@@ -221,6 +221,32 @@ bundle exec jekyll serve --host 0.0.0.0  # Test locally (if needed)
 - Build times: ~2-3 minutes for initial build (downloads dependencies), faster on subsequent builds
 - **NEVER CANCEL** long-running builds - they need time to download packages and compile
 
+## Architecture Overview
+
+**Providers vs Provisioners:**
+
+- **Providers** (`pkg/svc/provider/`) manage infrastructure lifecycle (start/stop containers)
+  - `docker.Provider`: Runs Kubernetes nodes as Docker containers
+- **Provisioners** (`pkg/svc/provisioner/`) configure and manage Kubernetes distributions
+  - `VanillaProvisioner`: Uses Kind SDK for standard upstream Kubernetes
+  - `K3sProvisioner`: Uses K3d CLI for lightweight K3s clusters
+  - `TalosProvisioner`: Uses Talos SDK for immutable Talos Linux clusters
+
+**Distribution Names (user-facing):**
+
+| Distribution | Tool  | Description                  |
+|--------------|-------|------------------------------|
+| `Vanilla`    | Kind  | Standard upstream Kubernetes |
+| `K3s`        | K3d   | Lightweight K3s in Docker    |
+| `Talos`      | Talos | Immutable Talos Linux        |
+
+**Key Packages:**
+
+- `pkg/apis/`: API types, schemas, and enums (`enums.go` defines Distribution/Provider values)
+- `pkg/client/`: Embedded tool clients (kubectl, helm, kind, k3d, flux, argocd)
+- `pkg/svc/`: Services including installers, providers, and provisioners
+- `pkg/di/`: Dependency injection for wiring components
+
 ## Active Technologies
 
 - Go 1.23.9+ (currently using Go 1.25.4)
@@ -231,3 +257,5 @@ bundle exec jekyll serve --host 0.0.0.0  # Test locally (if needed)
 ## Recent Changes
 
 - Flattened package structure: moved from nested to flat organization in `pkg/`
+- **Provider/Provisioner Architecture**: Separated infrastructure providers (Docker) from distribution provisioners (Vanilla, K3s, Talos)
+- **Distribution Naming**: Changed user-facing names from `Kind`/`K3d` to `Vanilla`/`K3s` to focus on the Kubernetes distribution rather than the underlying tool

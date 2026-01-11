@@ -33,9 +33,9 @@ func resolveClusterNameFromContext(clusterCfg *v1alpha1.Cluster) string {
 // This matches the naming conventions used by each distribution's provisioner.
 func resolveDefaultClusterName(distribution v1alpha1.Distribution) string {
 	switch distribution {
-	case v1alpha1.DistributionK3d:
+	case v1alpha1.DistributionK3s:
 		return k3dconfigmanager.DefaultClusterName
-	case v1alpha1.DistributionKind:
+	case v1alpha1.DistributionVanilla:
 		return kindconfigmanager.DefaultClusterName
 	case v1alpha1.DistributionTalos:
 		return talosconfigmanager.DefaultClusterName

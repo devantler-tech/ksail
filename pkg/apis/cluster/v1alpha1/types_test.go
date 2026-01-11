@@ -78,13 +78,13 @@ func TestDistribution_ProvidesMetricsServerByDefault(t *testing.T) {
 	}{
 		{
 			name:         "returns_true_for_k3d",
-			distribution: v1alpha1.DistributionK3d,
+			distribution: v1alpha1.DistributionK3s,
 			want:         true,
 			description:  "K3d should provide metrics-server by default",
 		},
 		{
 			name:         "returns_false_for_kind",
-			distribution: v1alpha1.DistributionKind,
+			distribution: v1alpha1.DistributionVanilla,
 			want:         false,
 			description:  "Kind should not provide metrics-server by default",
 		},
@@ -124,13 +124,13 @@ func TestDistribution_ProvidesStorageByDefault(t *testing.T) {
 	}{
 		{
 			name:         "returns_true_for_k3d",
-			distribution: v1alpha1.DistributionK3d,
+			distribution: v1alpha1.DistributionK3s,
 			want:         true,
 			description:  "K3d should provide storage by default",
 		},
 		{
 			name:         "returns_false_for_kind",
-			distribution: v1alpha1.DistributionKind,
+			distribution: v1alpha1.DistributionVanilla,
 			want:         false,
 			description:  "Kind should not provide storage by default",
 		},

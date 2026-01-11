@@ -73,7 +73,7 @@ func writeDeleteTestConfigFiles(t *testing.T, workingDir string, distribution st
 	))
 
 	switch distribution {
-	case "Kind":
+	case "Vanilla":
 		writeKindTestConfig(t, workingDir)
 	case "K3d":
 		writeK3dTestConfig(t, workingDir)
@@ -89,10 +89,11 @@ func writeKindTestConfig(t *testing.T, workingDir string) {
 kind: Cluster
 spec:
   cluster:
-    distribution: Kind
+    distribution: Vanilla
     distributionConfig: kind.yaml
     metricsServer: Disabled
-    localRegistry: Disabled
+    localRegistry:
+      enabled: false
     connection:
       kubeconfig: ./kubeconfig
 `
@@ -115,10 +116,11 @@ func writeK3dTestConfig(t *testing.T, workingDir string) {
 kind: Cluster
 spec:
   cluster:
-    distribution: K3d
+    distribution: K3s
     distributionConfig: k3d.yaml
     metricsServer: Disabled
-    localRegistry: Disabled
+    localRegistry:
+      enabled: false
     connection:
       kubeconfig: ./kubeconfig
 `
@@ -144,7 +146,8 @@ spec:
     distribution: Talos
     distributionConfig: talos.yaml
     metricsServer: Disabled
-    localRegistry: Disabled
+    localRegistry:
+      enabled: false
     connection:
       kubeconfig: ./kubeconfig
 `
@@ -198,7 +201,7 @@ func TestDelete_ClusterExists_PrintsDeleteSuccess(t *testing.T) {
 		name         string
 		distribution string
 	}{
-		{name: "Kind", distribution: "Kind"},
+		{name: "Vanilla", distribution: "Vanilla"},
 		{name: "K3d", distribution: "K3d"},
 		{name: "Talos", distribution: "Talos"},
 	}
@@ -251,7 +254,7 @@ func TestDelete_ClusterNotFound_ReturnsError(t *testing.T) {
 		name         string
 		distribution string
 	}{
-		{name: "Kind", distribution: "Kind"},
+		{name: "Vanilla", distribution: "Vanilla"},
 		{name: "K3d", distribution: "K3d"},
 		{name: "Talos", distribution: "Talos"},
 	}

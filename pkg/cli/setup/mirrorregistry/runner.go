@@ -166,11 +166,11 @@ func newRegistryHandlers(
 	talosAction func(context.Context, client.APIClient) error,
 ) map[v1alpha1.Distribution]Handler {
 	return map[v1alpha1.Distribution]Handler{
-		v1alpha1.DistributionKind: {
+		v1alpha1.DistributionVanilla: {
 			Prepare: func() bool { return PrepareKindConfigWithMirrors(clusterCfg, cfgManager, kindConfig) },
 			Action:  kindAction,
 		},
-		v1alpha1.DistributionK3d: {
+		v1alpha1.DistributionK3s: {
 			// K3d configures registry mirrors BEFORE cluster creation via k3d config,
 			// so the PostClusterConnect stage is not needed.
 			Prepare: func() bool {

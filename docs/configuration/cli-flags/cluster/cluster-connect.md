@@ -30,15 +30,15 @@ Usage:
   ksail cluster connect [flags]
 
 Flags:
-  -c, --context string                 Kubernetes context of cluster
-  -d, --distribution Distribution      Kubernetes distribution to use
-      --distribution-config string     Configuration file for the distribution
-      --editor string                  editor command to use for k9s edit actions (e.g., 'code --wait', 'vim', 'nano')
-  -g, --gitops-engine GitOpsEngine     GitOps engine to use (None disables GitOps, Flux installs Flux controllers, ArgoCD installs Argo CD) (default None)
-  -h, --help                           help for connect
-  -k, --kubeconfig string              Path to kubeconfig file (default "~/.kube/config")
-      --local-registry LocalRegistry   Local registry behavior (Enabled provisions a registry; Disabled skips provisioning. Defaults to Enabled when a GitOps engine is configured) (default Disabled)
-      --local-registry-port int32      Host port to expose the local OCI registry on (default 5050)
+  -c, --context string               Kubernetes context of cluster
+  -d, --distribution Distribution    Kubernetes distribution to use
+      --distribution-config string   Configuration file for the distribution
+      --editor string                editor command to use for k9s edit actions (e.g., 'code --wait', 'vim', 'nano')
+  -g, --gitops-engine GitOpsEngine   GitOps engine to use (None disables GitOps, Flux installs Flux controllers, ArgoCD installs Argo CD) (default None)
+  -h, --help                         help for connect
+  -k, --kubeconfig string            Path to kubeconfig file (default "~/.kube/config")
+      --local-registry               Enable local registry provisioning (defaults to true when a GitOps engine is configured)
+      --local-registry-port int32    Host port to expose the local OCI registry on (default 5050)
 
 Global Flags:
       --timing   Show per-activity timing output

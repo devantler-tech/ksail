@@ -1,11 +1,11 @@
 
 [TestListCmd_AllDistributions - 1]
-kind: test-cluster
+vanilla: test-cluster
 
 ---
 
 [TestListCmd_MultipleClustersFound_SingleDistribution - 1]
-kind: cluster-1, cluster-2, cluster-3
+vanilla: cluster-1, cluster-2, cluster-3
 
 ---
 
@@ -15,6 +15,6 @@ No clusters found.
 ---
 
 [TestListCmd_SingleClusterFound_SingleDistribution - 1]
-kind: test-cluster
+vanilla: test-cluster
 
 ---

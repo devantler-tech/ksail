@@ -648,6 +648,28 @@ func (c *Client) locateChartFromRepo(spec *ChartSpec, client any) (string, error
 		chartName = spec.ChartName
 	}
 
+	// Set HELM_HTTP_TIMEOUT to override the default 120-second timeout.
+	// Large charts (like Calico/Tigera) can take longer to download.
+	timeout := spec.Timeout
+	if timeout == 0 {
+		timeout = DefaultTimeout
+	}
+
+	originalTimeout := os.Getenv("HELM_HTTP_TIMEOUT")
+
+	err := os.Setenv("HELM_HTTP_TIMEOUT", timeout.String())
+	if err != nil {
+		return "", fmt.Errorf("failed to set HELM_HTTP_TIMEOUT: %w", err)
+	}
+
+	defer func() {
+		if originalTimeout != "" {
+			_ = os.Setenv("HELM_HTTP_TIMEOUT", originalTimeout)
+		} else {
+			_ = os.Unsetenv("HELM_HTTP_TIMEOUT")
+		}
+	}()
+
 	opts := buildChartPathOptions(spec, spec.RepoURL)
 	applyChartPathOptions(client, opts)
 

@@ -86,7 +86,7 @@ func TestListCmd_NoClusterFound_SingleDistribution(t *testing.T) {
 	}
 
 	// Filter to single distribution - no output for empty list
-	err := clusterpkg.HandleListRunE(cmd, "Kind", deps)
+	err := clusterpkg.HandleListRunE(cmd, "Vanilla", deps)
 	require.NoError(t, err)
 
 	snaps.MatchSnapshot(t, buf.String())
@@ -109,7 +109,7 @@ func TestListCmd_SingleClusterFound_SingleDistribution(t *testing.T) {
 	}
 
 	// Filter to single distribution
-	err := clusterpkg.HandleListRunE(cmd, "Kind", deps)
+	err := clusterpkg.HandleListRunE(cmd, "Vanilla", deps)
 	require.NoError(t, err)
 
 	snaps.MatchSnapshot(t, buf.String())
@@ -134,7 +134,7 @@ func TestListCmd_MultipleClustersFound_SingleDistribution(t *testing.T) {
 	}
 
 	// Filter to single distribution
-	err := clusterpkg.HandleListRunE(cmd, "Kind", deps)
+	err := clusterpkg.HandleListRunE(cmd, "Vanilla", deps)
 	require.NoError(t, err)
 
 	snaps.MatchSnapshot(t, buf.String())
@@ -154,7 +154,7 @@ func TestListCmd_AllDistributions(t *testing.T) {
 	// empty for others.
 	deps := clusterpkg.ListDeps{
 		DistributionFactoryCreator: func(dist v1alpha1.Distribution) clusterprovisioner.Factory {
-			if dist == v1alpha1.DistributionKind {
+			if dist == v1alpha1.DistributionVanilla {
 				return fakeFactoryWithClusters{clusters: []string{"test-cluster"}}
 			}
 
@@ -205,7 +205,7 @@ func TestHandleListRunE_Success(t *testing.T) {
 		},
 	}
 
-	err := clusterpkg.HandleListRunE(cmd, "Kind", deps)
+	err := clusterpkg.HandleListRunE(cmd, "Vanilla", deps)
 	require.NoError(t, err)
 }
 
@@ -225,7 +225,7 @@ func TestListCmd_FactoryError(t *testing.T) {
 		},
 	}
 
-	err := clusterpkg.HandleListRunE(cmd, "Kind", deps)
+	err := clusterpkg.HandleListRunE(cmd, "Vanilla", deps)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "failed to create provisioner")
 }

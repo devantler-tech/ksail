@@ -17,7 +17,7 @@ Setting up and operating Kubernetes clusters is a skill of its own, often requir
 
 📦 **One Binary** — Embeds cluster provisioning, GitOps engines, and deployment tooling. No tool sprawl.
 
-☸️ **Simple Clusters** — Spin up Kind, K3d, or Talos clusters with one command. Same workflow across supported distributions and providers.
+☸️ **Simple Clusters** — Spin up Vanilla, K3s, or Talos clusters with one command. Same workflow across supported distributions and providers.
 
 📄 **Everything as Code** — Cluster settings, distribution configs, and workloads all live in version-controlled files.
 
@@ -31,7 +31,7 @@ Setting up and operating Kubernetes clusters is a skill of its own, often requir
 
 ### Prerequisites
 
-The binary works on all major operating systems and modern CPU archectures:
+The binary works on all major operating systems and modern CPU architectures:
 
 | OS                   | Arch            |
 |----------------------|-----------------|
@@ -39,14 +39,17 @@ The binary works on all major operating systems and modern CPU archectures:
 |  MacOS              | arm64           |
 | ⊞ Windows (untested) | amd64 and arm64 |
 
-The supported distributions depend on different local and cloud providers:
+The supported distributions (x-axis) run on different infrastructure providers (y-axis). You need to have access to at least one provider for your chosen distribution for KSail to create and manage the cluster.
 
-| Distribution | Provider                  |
-|--------------|---------------------------|
-| Kind         | Docker                    |
-| K3d          | Docker                    |
-| Talos        | Docker, Hetzner (🚧 next) |
-| EKS          | AWS (🚧 next)          |
+|         | Vanilla | K3s | Talos     |
+|---------|---------|-----|-----------|
+| Docker  | Kind    | K3d | Talos SDK |
+| Hetzner | —       | —   | 🚧 next   |
+
+> [!NOTE]
+> If you want to see more distributions or providers supported, please consider sponsoring development via [GitHub Sponsors](https://github.com/sponsors/devantler). Testing and maintaining distribution x cloud provider support comes with a additional financial costs for me, so sponsorships help make that feasible.
+>
+> Talos on Hetzner is an exception to this, as I use Talos on Hetzner for my personal homelab, and so I need the support for my own platform to be fully maintained via KSail.
 
 ### Installation
 
@@ -69,7 +72,7 @@ go install github.com/devantler-tech/ksail/v5@latest
 ```bash
 # 1. Initialize a new project with your preferred stack
 ksail cluster init \
-  --distribution <Kind|K3d|Talos> \
+  --distribution <Vanilla|K3s|Talos> \
   --cni <Default|Cilium|Calico|None> \
   --csi <Default|LocalPathStorage|None> \
   --metrics-server <Default|Enabled|Disabled> \

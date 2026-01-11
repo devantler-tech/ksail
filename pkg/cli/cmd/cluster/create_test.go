@@ -100,7 +100,7 @@ func writeTestConfigFiles(t *testing.T, workingDir string) {
 kind: Cluster
 spec:
   cluster:
-    distribution: Kind
+    distribution: Vanilla
     distributionConfig: kind.yaml
     metricsServer: Disabled
     connection:
@@ -348,7 +348,7 @@ func TestCreate_LocalPathStorageCSI_InstallsOnKind(t *testing.T) {
 kind: Cluster
 spec:
   cluster:
-    distribution: Kind
+    distribution: Vanilla
     distributionConfig: kind.yaml
     csi: LocalPathStorage
     metricsServer: Disabled
@@ -473,9 +473,10 @@ func TestCreate_LocalRegistryDisabled_SkipsRegistryStages(t *testing.T) {
 kind: Cluster
 spec:
   cluster:
-    distribution: Kind
+    distribution: Vanilla
     distributionConfig: kind.yaml
-    localRegistry: Disabled
+    localRegistry:
+      enabled: false
     metricsServer: Disabled
     connection:
       kubeconfig: ./kubeconfig

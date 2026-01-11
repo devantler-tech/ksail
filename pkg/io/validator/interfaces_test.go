@@ -72,8 +72,8 @@ func TestValidationResult(t *testing.T) {
 			Field:         "spec.distribution",
 			Message:       "invalid distribution",
 			CurrentValue:  "invalid",
-			ExpectedValue: "Kind|K3d|EKS",
-			FixSuggestion: "Set distribution to one of: Kind, K3d, EKS",
+			ExpectedValue: "Kind|K3d",
+			FixSuggestion: "Set distribution to one of: Kind, K3d",
 		}
 
 		result.AddError(validationError)

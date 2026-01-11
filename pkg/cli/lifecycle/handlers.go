@@ -208,14 +208,14 @@ var (
 
 // DetectDistributionFromContext detects the distribution and cluster name from a context string.
 // This auto-detects the distribution based on the context naming pattern:
-//   - Kind: kind-<cluster-name>
-//   - K3d: k3d-<cluster-name>
+//   - Vanilla: kind-<cluster-name>
+//   - K3s: k3d-<cluster-name>
 //   - Talos: admin@<cluster-name>
 //
 // Returns the detected distribution, cluster name, and an error if the pattern is unrecognized
 // or if the extracted cluster name is empty (e.g., "kind-", "k3d-", "admin@").
 func DetectDistributionFromContext(ctx string) (v1alpha1.Distribution, string, error) {
-	// Kind: kind-<cluster-name>
+	// Vanilla: kind-<cluster-name>
 	if clusterName, ok := strings.CutPrefix(ctx, "kind-"); ok {
 		if clusterName == "" {
 			return "", "", fmt.Errorf(
@@ -223,10 +223,10 @@ func DetectDistributionFromContext(ctx string) (v1alpha1.Distribution, string, e
 			)
 		}
 
-		return v1alpha1.DistributionKind, clusterName, nil
+		return v1alpha1.DistributionVanilla, clusterName, nil
 	}
 
-	// K3d: k3d-<cluster-name>
+	// K3s: k3d-<cluster-name>
 	if clusterName, ok := strings.CutPrefix(ctx, "k3d-"); ok {
 		if clusterName == "" {
 			return "", "", fmt.Errorf(
@@ -234,7 +234,7 @@ func DetectDistributionFromContext(ctx string) (v1alpha1.Distribution, string, e
 			)
 		}
 
-		return v1alpha1.DistributionK3d, clusterName, nil
+		return v1alpha1.DistributionK3s, clusterName, nil
 	}
 
 	// Talos: admin@<cluster-name>
@@ -257,11 +257,11 @@ func DetectDistributionFromContext(ctx string) (v1alpha1.Distribution, string, e
 // Returns empty string if the context doesn't match the expected pattern.
 func ExtractClusterNameFromContext(context string, distribution v1alpha1.Distribution) string {
 	switch distribution {
-	case v1alpha1.DistributionKind:
+	case v1alpha1.DistributionVanilla:
 		if clusterName, ok := strings.CutPrefix(context, "kind-"); ok {
 			return clusterName
 		}
-	case v1alpha1.DistributionK3d:
+	case v1alpha1.DistributionK3s:
 		if clusterName, ok := strings.CutPrefix(context, "k3d-"); ok {
 			return clusterName
 		}

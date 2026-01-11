@@ -17,11 +17,11 @@ or [Configuration](configuration/index.md) for setup instructions.
 | macOS    | arm64         | ✅ Supported |
 | Windows  | amd64, arm64  | ⚠️ Untested |
 
-| Distribution | Providers | Status      |
-|--------------|-----------|-------------|
-| Kind         | Docker    | ✅ Supported |
-| K3d          | Docker    | ✅ Supported |
-| Talos        | Docker    | ✅ Supported |
+| Distribution | Description            | Provider | Status      |
+|--------------|------------------------|----------|-------------|
+| Vanilla      | Standard Kubernetes    | Docker   | ✅ Supported |
+| K3s          | Lightweight Kubernetes | Docker   | ✅ Supported |
+| Talos        | Immutable Talos Linux  | Docker   | ✅ Supported |
 
 ## Cluster Components
 

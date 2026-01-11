@@ -21,21 +21,21 @@ type EnumValuer interface {
 type Distribution string
 
 const (
-	// DistributionKind is the kind distribution.
-	DistributionKind Distribution = "Kind"
-	// DistributionK3d is the K3d distribution.
-	DistributionK3d Distribution = "K3d"
+	// DistributionVanilla is the vanilla Kubernetes distribution (uses Kind with Docker provider).
+	DistributionVanilla Distribution = "Vanilla"
+	// DistributionK3s is the K3s distribution.
+	DistributionK3s Distribution = "K3s"
 	// DistributionTalos is the Talos distribution.
 	DistributionTalos Distribution = "Talos"
 )
 
 // ProvidesMetricsServerByDefault returns true if the distribution includes metrics-server by default.
-// K3d (based on K3s) includes metrics-server, Kind and Talos do not.
+// K3s includes metrics-server, Vanilla and Talos do not.
 func (d *Distribution) ProvidesMetricsServerByDefault() bool {
 	switch *d {
-	case DistributionK3d:
+	case DistributionK3s:
 		return true
-	case DistributionKind, DistributionTalos:
+	case DistributionVanilla, DistributionTalos:
 		return false
 	default:
 		return false
@@ -43,12 +43,12 @@ func (d *Distribution) ProvidesMetricsServerByDefault() bool {
 }
 
 // ProvidesStorageByDefault returns true if the distribution includes a storage provisioner by default.
-// K3d (based on K3s) includes local-path-provisioner, Kind and Talos do not have a default storage class.
+// K3s includes local-path-provisioner, Vanilla and Talos do not have a default storage class.
 func (d *Distribution) ProvidesStorageByDefault() bool {
 	switch *d {
-	case DistributionK3d:
+	case DistributionK3s:
 		return true
-	case DistributionKind, DistributionTalos:
+	case DistributionVanilla, DistributionTalos:
 		return false
 	default:
 		return false
@@ -66,7 +66,7 @@ func (d *Distribution) Set(value string) error {
 	}
 
 	return fmt.Errorf("%w: %s (valid options: %s, %s, %s)",
-		ErrInvalidDistribution, value, DistributionKind, DistributionK3d, DistributionTalos)
+		ErrInvalidDistribution, value, DistributionVanilla, DistributionK3s, DistributionTalos)
 }
 
 // IsValid checks if the distribution value is supported.
@@ -84,14 +84,14 @@ func (d *Distribution) Type() string {
 	return "Distribution"
 }
 
-// Default returns the default value for Distribution (Kind).
+// Default returns the default value for Distribution (Vanilla).
 func (d *Distribution) Default() any {
-	return DistributionKind
+	return DistributionVanilla
 }
 
 // ValidValues returns all valid Distribution values as strings.
 func (d *Distribution) ValidValues() []string {
-	return []string{string(DistributionKind), string(DistributionK3d), string(DistributionTalos)}
+	return []string{string(DistributionVanilla), string(DistributionK3s), string(DistributionTalos)}
 }
 
 // --- CNI Types ---
@@ -355,57 +355,6 @@ func (p *PolicyEngine) ValidValues() []string {
 	}
 }
 
-// --- Local Registry Types ---
-
-// LocalRegistry defines how the host-local OCI registry should behave.
-type LocalRegistry string
-
-const (
-	// LocalRegistryEnabled provisions and manages the local registry lifecycle.
-	LocalRegistryEnabled LocalRegistry = "Enabled"
-	// LocalRegistryDisabled skips local registry provisioning.
-	LocalRegistryDisabled LocalRegistry = "Disabled"
-)
-
-// Set for LocalRegistry (pflag.Value interface).
-func (l *LocalRegistry) Set(value string) error {
-	for _, mode := range ValidLocalRegistryModes() {
-		if strings.EqualFold(value, string(mode)) {
-			*l = mode
-
-			return nil
-		}
-	}
-
-	return fmt.Errorf(
-		"%w: %s (valid options: %s, %s)",
-		ErrInvalidLocalRegistry,
-		value,
-		LocalRegistryEnabled,
-		LocalRegistryDisabled,
-	)
-}
-
-// String returns the string representation of the LocalRegistry.
-func (l *LocalRegistry) String() string {
-	return string(*l)
-}
-
-// Type returns the type of the LocalRegistry.
-func (l *LocalRegistry) Type() string {
-	return "LocalRegistry"
-}
-
-// Default returns the default value for LocalRegistry (Disabled).
-func (l *LocalRegistry) Default() any {
-	return LocalRegistryDisabled
-}
-
-// ValidValues returns all valid LocalRegistry values as strings.
-func (l *LocalRegistry) ValidValues() []string {
-	return []string{string(LocalRegistryEnabled), string(LocalRegistryDisabled)}
-}
-
 // --- GitOps Engine Types ---
 
 // GitOpsEngine defines the GitOps Engine options for a KSail cluster.
@@ -459,4 +408,97 @@ func (g *GitOpsEngine) Default() any {
 // ValidValues returns all valid GitOpsEngine values as strings.
 func (g *GitOpsEngine) ValidValues() []string {
 	return []string{string(GitOpsEngineNone), string(GitOpsEngineFlux), string(GitOpsEngineArgoCD)}
+}
+
+// --- Provider Types ---
+
+// Provider defines the infrastructure provider backend for running clusters.
+// This is a unified type used across distributions that support multiple providers.
+type Provider string
+
+const (
+	// ProviderDocker runs cluster nodes as Docker containers.
+	ProviderDocker Provider = "Docker"
+)
+
+// Set for Provider (pflag.Value interface).
+func (p *Provider) Set(value string) error {
+	for _, prov := range ValidProviders() {
+		if strings.EqualFold(value, string(prov)) {
+			*p = prov
+
+			return nil
+		}
+	}
+
+	return fmt.Errorf(
+		"%w: %s (valid options: %s)",
+		ErrInvalidProvider,
+		value,
+		ProviderDocker,
+	)
+}
+
+// String returns the string representation of the Provider.
+func (p *Provider) String() string {
+	return string(*p)
+}
+
+// Type returns the type of the Provider.
+func (p *Provider) Type() string {
+	return "Provider"
+}
+
+// Default returns the default value for Provider (Docker).
+func (p *Provider) Default() any {
+	return ProviderDocker
+}
+
+// ValidValues returns all valid Provider values as strings.
+func (p *Provider) ValidValues() []string {
+	return []string{string(ProviderDocker)}
+}
+
+// ValidateForDistribution validates that the provider is valid for the given distribution.
+// Returns nil if the combination is valid, or an error describing the invalid combination.
+func (p *Provider) ValidateForDistribution(distribution Distribution) error {
+	// Kind doesn't use the provider field - it always uses Docker internally
+	// K3s uses the provider field to select between Docker (K3d) and future cloud providers
+	switch distribution {
+	case DistributionVanilla:
+		// Kind ignores the provider field - it's Docker-only by design
+		return nil
+	case DistributionK3s:
+		// K3s supports the provider field, currently only Docker (via K3d)
+		if *p == "" || *p == ProviderDocker {
+			return nil
+		}
+
+		return fmt.Errorf(
+			"%w: distribution %s only supports provider %s, got %s",
+			ErrInvalidDistributionProviderCombination,
+			distribution,
+			ProviderDocker,
+			*p,
+		)
+	case DistributionTalos:
+		// Talos supports the provider field, currently only Docker
+		if *p == "" || *p == ProviderDocker {
+			return nil
+		}
+
+		return fmt.Errorf(
+			"%w: distribution %s only supports provider %s, got %s",
+			ErrInvalidDistributionProviderCombination,
+			distribution,
+			ProviderDocker,
+			*p,
+		)
+	default:
+		return fmt.Errorf(
+			"%w: %s",
+			ErrInvalidDistribution,
+			distribution,
+		)
+	}
 }

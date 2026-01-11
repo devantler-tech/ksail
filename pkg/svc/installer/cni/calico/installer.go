@@ -6,6 +6,7 @@ import (
 	"maps"
 	"time"
 
+	v1alpha1 "github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
 	"github.com/devantler-tech/ksail/v5/pkg/k8s"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/installer"
@@ -16,21 +17,11 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-// Distribution represents the Kubernetes distribution type.
-type Distribution string
-
-// Supported distribution types.
-const (
-	DistributionKind  Distribution = "kind"
-	DistributionK3d   Distribution = "k3d"
-	DistributionTalos Distribution = "talos"
-)
-
 // CalicoInstaller implements the installer.Installer interface for Calico.
 type CalicoInstaller struct {
 	*cni.InstallerBase
 
-	distribution Distribution
+	distribution v1alpha1.Distribution
 }
 
 // NewCalicoInstaller creates a new Calico installer instance.
@@ -47,7 +38,7 @@ func NewCalicoInstallerWithDistribution(
 	client helm.Interface,
 	kubeconfig, context string,
 	timeout time.Duration,
-	distribution Distribution,
+	distribution v1alpha1.Distribution,
 ) *CalicoInstaller {
 	calicoInstaller := &CalicoInstaller{
 		distribution: distribution,
@@ -69,7 +60,7 @@ func (c *CalicoInstaller) Install(ctx context.Context) error {
 	// because Talos has PSS enforcement enabled by default.
 	// We also need to wait for API server stability as the API server may be
 	// unstable immediately after bootstrap.
-	if c.distribution == DistributionTalos {
+	if c.distribution == v1alpha1.DistributionTalos {
 		err := c.WaitForAPIServerStability(ctx)
 		if err != nil {
 			return fmt.Errorf("failed to wait for API server stability: %w", err)
@@ -146,11 +137,11 @@ func (c *CalicoInstaller) getCalicoValues() map[string]string {
 
 	// Add distribution-specific values
 	switch c.distribution {
-	case DistributionTalos:
+	case v1alpha1.DistributionTalos:
 		// Talos-specific settings from https://docs.siderolabs.com/kubernetes-guides/cni/deploy-calico
 		maps.Copy(values, talosCalicoValues())
-	case DistributionKind, DistributionK3d:
-		// Kind and K3d use default values
+	case v1alpha1.DistributionVanilla, v1alpha1.DistributionK3s:
+		// Vanilla and K3s use default values
 	}
 
 	return values

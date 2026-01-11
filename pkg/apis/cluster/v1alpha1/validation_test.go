@@ -47,8 +47,8 @@ func TestDistributionSet_InvalidListsValidOptions(t *testing.T) {
 	require.Error(t, err)
 
 	require.ErrorIs(t, err, v1alpha1.ErrInvalidDistribution)
-	assert.Contains(t, err.Error(), "Kind")
-	assert.Contains(t, err.Error(), "K3d")
+	assert.Contains(t, err.Error(), "Vanilla")
+	assert.Contains(t, err.Error(), "K3s")
 	assert.Contains(t, err.Error(), "Talos")
 }
 
@@ -57,7 +57,7 @@ func TestValidDistributions_IncludesTalos(t *testing.T) {
 
 	distributions := v1alpha1.ValidDistributions()
 	assert.Contains(t, distributions, v1alpha1.DistributionTalos)
-	assert.Len(t, distributions, 3) // Kind, K3d, Talos
+	assert.Len(t, distributions, 3) // Kind, K3s, Talos
 }
 
 func TestTalosProvidesMetricsServerByDefault_ReturnsFalse(t *testing.T) {

@@ -26,12 +26,13 @@ Flags:
   -g, --gitops-engine GitOpsEngine     GitOps engine to use (None disables GitOps, Flux installs Flux controllers, ArgoCD installs Argo CD) (default None)
   -h, --help                           help for init
   -k, --kubeconfig string              Path to kubeconfig file (default "~/.kube/config")
-      --local-registry LocalRegistry   Local registry behavior (Enabled provisions a registry; Disabled skips provisioning. Defaults to Enabled when a GitOps engine is configured) (default Disabled)
+      --local-registry                 Enable local registry provisioning (defaults to true when a GitOps engine is configured)
       --local-registry-port int32      Host port to expose the local OCI registry on (default 5050)
       --metrics-server MetricsServer   Metrics Server (Default: use distribution, Enabled: install, Disabled: uninstall)
       --mirror-registry strings        Configure mirror registries with format 'host=upstream' (e.g., docker.io=https://registry-1.docker.io).
   -o, --output string                  Output directory for the project
       --policy-engine PolicyEngine     Policy engine (None: skip, Kyverno: install Kyverno, Gatekeeper: install Gatekeeper)
+      --provider Provider              Infrastructure provider backend (e.g., Docker)
   -s, --source-directory string        Directory containing workloads to deploy (default "k8s")
       --workers int32                  Number of worker nodes
 

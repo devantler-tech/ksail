@@ -31,21 +31,13 @@ func NewClusterSubSpec() ClusterSpec {
 		DistributionConfig: "",
 		Connection:         NewClusterConnection(),
 		Distribution:       "",
+		Provider:           "",
 		CNI:                "",
 		CSI:                "",
-		LocalRegistry:      LocalRegistryDisabled,
+		LocalRegistry:      NewLocalRegistry(),
 		GitOpsEngine:       GitOpsEngineNone,
-		// Flattened options (previously nested under Options)
-		Kind:              NewClusterOptionsKind(),
-		K3d:               NewClusterOptionsK3d(),
-		Talos:             NewClusterOptionsTalos(),
-		Cilium:            NewClusterOptionsCilium(),
-		Calico:            OptionsCalico{},
-		Flux:              NewClusterOptionsFlux(),
-		ArgoCD:            NewClusterOptionsArgoCD(),
-		LocalRegistryOpts: NewClusterOptionsLocalRegistry(),
-		Helm:              NewClusterOptionsHelm(),
-		Kustomize:         NewClusterOptionsKustomize(),
+		Vanilla:            NewClusterOptionsVanilla(),
+		Talos:              NewClusterOptionsTalos(),
 	}
 }
 
@@ -65,51 +57,22 @@ func NewClusterConnection() Connection {
 	}
 }
 
-// NewClusterOptionsKind creates a new OptionsKind with default values.
-func NewClusterOptionsKind() OptionsKind {
-	return OptionsKind{}
-}
-
-// NewClusterOptionsK3d creates a new OptionsK3d with default values.
-func NewClusterOptionsK3d() OptionsK3d {
-	return OptionsK3d{}
+// NewClusterOptionsVanilla creates a new OptionsVanilla with default values.
+func NewClusterOptionsVanilla() OptionsVanilla {
+	return OptionsVanilla{}
 }
 
 // NewClusterOptionsTalos creates a new OptionsTalos with default values.
 func NewClusterOptionsTalos() OptionsTalos {
-	return OptionsTalos{
-		Provider: TalosProviderDocker,
+	return OptionsTalos{}
+}
+
+// NewLocalRegistry creates a new LocalRegistry with default values.
+func NewLocalRegistry() LocalRegistry {
+	return LocalRegistry{
+		Enabled:  false,
+		HostPort: DefaultLocalRegistryPort,
 	}
-}
-
-// NewClusterOptionsCilium creates a new OptionsCilium with default values.
-func NewClusterOptionsCilium() OptionsCilium {
-	return OptionsCilium{}
-}
-
-// NewClusterOptionsFlux creates a new OptionsFlux with default values.
-func NewClusterOptionsFlux() OptionsFlux {
-	return OptionsFlux{}
-}
-
-// NewClusterOptionsArgoCD creates a new OptionsArgoCD with default values.
-func NewClusterOptionsArgoCD() OptionsArgoCD {
-	return OptionsArgoCD{}
-}
-
-// NewClusterOptionsLocalRegistry creates a new OptionsLocalRegistry with default values.
-func NewClusterOptionsLocalRegistry() OptionsLocalRegistry {
-	return OptionsLocalRegistry{}
-}
-
-// NewClusterOptionsHelm creates a new OptionsHelm with default values.
-func NewClusterOptionsHelm() OptionsHelm {
-	return OptionsHelm{}
-}
-
-// NewClusterOptionsKustomize creates a new OptionsKustomize with default values.
-func NewClusterOptionsKustomize() OptionsKustomize {
-	return OptionsKustomize{}
 }
 
 // NewOCIRegistry creates a new OCIRegistry with default lifecycle state.

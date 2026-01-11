@@ -72,7 +72,7 @@ func newDistributionFieldTest() fieldTestCase {
 		name: "Distribution field",
 		fieldSelector: newFieldSelector(
 			func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.Distribution },
-			v1alpha1.DistributionKind,
+			v1alpha1.DistributionVanilla,
 			"Kubernetes distribution",
 		),
 		expectedFlag: "distribution",
@@ -108,14 +108,14 @@ func newGitOpsEngineFieldTest() fieldTestCase {
 
 func newLocalRegistryFieldTest() fieldTestCase {
 	return fieldTestCase{
-		name: "LocalRegistry field",
+		name: "LocalRegistry.Enabled field",
 		fieldSelector: newFieldSelector(
-			func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.LocalRegistry },
-			v1alpha1.LocalRegistryDisabled,
-			"Local registry",
+			func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.LocalRegistry.Enabled },
+			false,
+			"Local registry enabled",
 		),
 		expectedFlag: "local-registry",
-		expectedType: "LocalRegistry",
+		expectedType: "bool",
 	}
 }
 
@@ -123,7 +123,7 @@ func newRegistryPortFieldTest() fieldTestCase {
 	return fieldTestCase{
 		name: "RegistryPort field",
 		fieldSelector: newFieldSelector(
-			func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.LocalRegistryOpts.HostPort },
+			func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.LocalRegistry.HostPort },
 			int32(5000),
 			"Registry port",
 		),
@@ -328,13 +328,13 @@ func TestGenerateFlagName(t *testing.T) {
 			"metrics-server",
 		},
 		{
-			"LocalRegistry field",
-			&manager.Config.Spec.Cluster.LocalRegistry,
+			"LocalRegistry.Enabled field",
+			&manager.Config.Spec.Cluster.LocalRegistry.Enabled,
 			"local-registry",
 		},
 		{
 			"RegistryPort field",
-			&manager.Config.Spec.Cluster.LocalRegistryOpts.HostPort,
+			&manager.Config.Spec.Cluster.LocalRegistry.HostPort,
 			"local-registry-port",
 		},
 	}

@@ -125,12 +125,12 @@ func parsePathAndRef(result *Reference, pathAndRef string) {
 //   - "k8s" -> "k8s", ""
 //   - "my-app/base" -> "my-app", "base"
 func splitRepositoryPath(path string) (string, string) {
-	slashIdx := strings.Index(path, "/")
-	if slashIdx == -1 {
+	before, after, found := strings.Cut(path, "/")
+	if !found {
 		return path, ""
 	}
 
-	return path[:slashIdx], path[slashIdx+1:]
+	return before, after
 }
 
 // String returns the full OCI reference string.

@@ -33,7 +33,7 @@ func TestStandardFieldSelectors(t *testing.T) {
 			name:            "distribution",
 			factory:         configmanager.DefaultDistributionFieldSelector,
 			expectedDesc:    "Kubernetes distribution to use",
-			expectedDefault: v1alpha1.DistributionKind,
+			expectedDefault: v1alpha1.DistributionVanilla,
 			assertPointer: func(t *testing.T, cluster *v1alpha1.Cluster, ptr any) {
 				t.Helper()
 				assertPointerSame(t, ptr, &cluster.Spec.Cluster.Distribution)
@@ -92,15 +92,14 @@ func TestStandardFieldSelectors(t *testing.T) {
 			},
 		},
 		{
-			name:    "local registry",
+			name:    "local registry enabled",
 			factory: configmanager.DefaultLocalRegistryFieldSelector,
-			expectedDesc: "Local registry behavior (Enabled provisions a registry; " +
-				"Disabled skips provisioning. Defaults to Enabled when " +
+			expectedDesc: "Enable local registry provisioning (defaults to true when " +
 				"a GitOps engine is configured)",
-			expectedDefault: v1alpha1.LocalRegistryDisabled,
+			expectedDefault: false,
 			assertPointer: func(t *testing.T, cluster *v1alpha1.Cluster, ptr any) {
 				t.Helper()
-				assertPointerSame(t, ptr, &cluster.Spec.Cluster.LocalRegistry)
+				assertPointerSame(t, ptr, &cluster.Spec.Cluster.LocalRegistry.Enabled)
 			},
 		},
 		{
@@ -110,7 +109,7 @@ func TestStandardFieldSelectors(t *testing.T) {
 			expectedDefault: v1alpha1.DefaultLocalRegistryPort,
 			assertPointer: func(t *testing.T, cluster *v1alpha1.Cluster, ptr any) {
 				t.Helper()
-				assertPointerSame(t, ptr, &cluster.Spec.Cluster.LocalRegistryOpts.HostPort)
+				assertPointerSame(t, ptr, &cluster.Spec.Cluster.LocalRegistry.HostPort)
 			},
 		},
 		{
@@ -202,7 +201,7 @@ func defaultClusterSelectorCases(
 		{
 			name:            "distribution",
 			selector:        selectors[0],
-			expectedDefault: v1alpha1.DistributionKind,
+			expectedDefault: v1alpha1.DistributionVanilla,
 			assertField: func(t *testing.T, field any) {
 				t.Helper()
 
@@ -256,11 +255,11 @@ func defaultClusterSelectorCases(
 		{
 			name:            "local registry",
 			selector:        selectors[5],
-			expectedDefault: v1alpha1.LocalRegistryDisabled,
+			expectedDefault: false,
 			assertField: func(t *testing.T, field any) {
 				t.Helper()
 
-				_, ok := field.(*v1alpha1.LocalRegistry)
+				_, ok := field.(*bool)
 				require.True(t, ok)
 			},
 		},
