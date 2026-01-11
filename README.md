@@ -39,7 +39,7 @@ The binary works on all major operating systems and modern CPU archectures:
 |  MacOS              | arm64           |
 | ⊞ Windows (untested) | amd64 and arm64 |
 
-The supported distributions (x-axis) run on different infrastructure providers (y-axis):
+The supported distributions (x-axis) run on different infrastructure providers (y-axis). You need to have access to at least one provider for your chosen distribution:
 
 |         | Vanilla | K3s | Talos     |
 | ------- | ------- | --- | --------- |
@@ -47,9 +47,9 @@ The supported distributions (x-axis) run on different infrastructure providers (
 | Hetzner | —       | —   | 🚧 next   |
 
 > [!NOTE]
-> If you want to see more providers supported, please consider sponsoring development via [GitHub Sponsors](https://github.com/sponsors/devantler). Testing and maintaining cloud provider support comes with a additional financial costs for me, so sponsorships help make that feasible.
+> If you want to see more distributions or providers supported, please consider sponsoring development via [GitHub Sponsors](https://github.com/sponsors/devantler). Testing and maintaining distribution x cloud provider support comes with a additional financial costs for me, so sponsorships help make that feasible.
 >
-> Talos on Hetzner is an exception to this, as I use Talos on Hetzner for my personal homelab, and so I need the support for my own use case.
+> Talos on Hetzner is an exception to this, as I use Talos on Hetzner for my personal homelab, and so I need the support for my own platform to be maintained via KSail.
 
 ### Installation
 
