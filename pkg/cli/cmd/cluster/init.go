@@ -120,8 +120,9 @@ func HandleInitRunE(
 
 	// Validate cluster name is DNS-1123 compliant
 	if clusterName != "" {
-		if validationErr := v1alpha1.ValidateClusterName(clusterName); validationErr != nil {
-			return validationErr
+		validationErr := v1alpha1.ValidateClusterName(clusterName)
+		if validationErr != nil {
+			return fmt.Errorf("invalid --name flag: %w", validationErr)
 		}
 	}
 

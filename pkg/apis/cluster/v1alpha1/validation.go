@@ -25,17 +25,17 @@ func ValidateClusterName(name string) error {
 
 	if len(name) > ClusterNameMaxLength {
 		return fmt.Errorf(
-			"cluster name %q is too long: max %d characters, got %d",
-			name, ClusterNameMaxLength, len(name),
+			"%w: %q exceeds max %d characters (got %d)",
+			ErrClusterNameTooLong, name, ClusterNameMaxLength, len(name),
 		)
 	}
 
 	if !clusterNameRegex.MatchString(name) {
 		return fmt.Errorf(
-			"cluster name %q is invalid: must be DNS-1123 compliant "+
+			"%w: %q must be DNS-1123 compliant "+
 				"(lowercase letters, numbers, and hyphens; must start with a letter; "+
 				"must not end with a hyphen)",
-			name,
+			ErrClusterNameInvalid, name,
 		)
 	}
 

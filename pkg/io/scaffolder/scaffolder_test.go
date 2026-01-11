@@ -1475,7 +1475,7 @@ func TestWithClusterName_AppliesContextToKSailConfig(t *testing.T) {
 
 			// Read and verify ksail.yaml has the correct context
 			ksailPath := filepath.Join(tempDir, "ksail.yaml")
-			content, err := os.ReadFile(ksailPath)
+			content, err := os.ReadFile(ksailPath) //nolint:gosec // G304: Test file path is safe
 			require.NoError(t, err)
 			assert.Contains(t, string(content), testCase.expectedContext)
 		})

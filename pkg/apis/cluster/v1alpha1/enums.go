@@ -101,12 +101,12 @@ func (d *Distribution) ValidValues() []string {
 //   - Talos: admin@<name>
 //
 // Returns empty string if name is empty.
-func (d Distribution) ContextName(clusterName string) string {
+func (d *Distribution) ContextName(clusterName string) string {
 	if clusterName == "" {
 		return ""
 	}
 
-	switch d {
+	switch *d {
 	case DistributionVanilla:
 		return "kind-" + clusterName
 	case DistributionK3s:

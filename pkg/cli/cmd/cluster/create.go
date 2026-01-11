@@ -92,8 +92,9 @@ func handleCreateRunE(
 	nameOverride := cfgManager.Viper.GetString("name")
 	if nameOverride != "" {
 		// Validate cluster name is DNS-1123 compliant
-		if validationErr := v1alpha1.ValidateClusterName(nameOverride); validationErr != nil {
-			return validationErr
+		validationErr := v1alpha1.ValidateClusterName(nameOverride)
+		if validationErr != nil {
+			return fmt.Errorf("invalid --name flag: %w", validationErr)
 		}
 
 		err = applyClusterNameOverride(ctx, nameOverride)
@@ -380,7 +381,8 @@ func applyClusterNameOverride(ctx *localregistry.Context, name string) error {
 
 	// Update the ksail.yaml context to match the distribution pattern
 	if ctx.ClusterCfg != nil {
-		ctx.ClusterCfg.Spec.Cluster.Connection.Context = ctx.ClusterCfg.Spec.Cluster.Distribution.ContextName(name)
+		dist := ctx.ClusterCfg.Spec.Cluster.Distribution
+		ctx.ClusterCfg.Spec.Cluster.Connection.Context = dist.ContextName(name)
 	}
 
 	return nil
