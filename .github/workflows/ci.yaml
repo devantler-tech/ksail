@@ -203,6 +203,7 @@ jobs:
         args:
           - ""
           - "--name system-test-cluster"
+          - "--name system-test-cluster --local-registry Enabled --mirror-registry ghcr.io=https://ghcr.io"
           - "--cert-manager Enabled"
           - "--cni Cilium"
           - "--cni Calico"
@@ -343,15 +344,7 @@ jobs:
   status:
     name: CI - KSail
     runs-on: ubuntu-latest
-    needs:
-      [
-        changes,
-        build-artifact,
-        generate-schema,
-        generate-cli-flags-docs,
-        coverage,
-        system-test,
-      ]
+    needs: [changes, build-artifact, generate-schema, generate-cli-flags-docs, coverage, system-test]
     if: ${{ always() }}
     steps:
       - name: Summarize workflow result
