@@ -36,12 +36,12 @@ When the same setting is specified in multiple sources, KSail uses this order (h
 
 ```text
 1. CLI flags          (e.g., --metrics-server Disabled)
-2. Environment vars   (e.g., KSAIL_SPEC_CLUSTER_DISTRIBUTION=K3d)
+2. Environment vars   (e.g., KSAIL_SPEC_CLUSTER_DISTRIBUTION=K3s)
 3. ksail.yaml         (nearest file in current or parent directories)
 4. Built-in defaults
 ```
 
-**Example:** If `ksail.yaml` sets `distribution: Vanilla` but you run `ksail cluster create --distribution K3d`, the CLI flag wins and K3d is used.
+**Example:** If `ksail.yaml` sets `distribution: Vanilla` but you run `ksail cluster create --distribution K3s`, the CLI flag wins and K3s is used.
 
 This precedence model means you can commit sensible defaults while still allowing temporary overrides without editing files.
 
@@ -77,8 +77,8 @@ Use command-line flags for:
 - **Quick experiments** before committing changes
 
 ```bash
-# Test with K3d instead of Kind (without changing ksail.yaml)
-ksail cluster create --distribution K3d
+# Test with K3s instead of Vanilla (without changing ksail.yaml)
+ksail cluster create --distribution K3s
 
 # Disable metrics server for a lightweight test
 ksail cluster create --metrics-server Disabled
@@ -94,7 +94,7 @@ Use environment variables for:
 
 ```bash
 # Set distribution for all ksail commands in this shell
-export KSAIL_SPEC_CLUSTER_DISTRIBUTION=K3d
+export KSAIL_SPEC_CLUSTER_DISTRIBUTION=K3s
 ksail cluster create
 ```
 
@@ -116,8 +116,8 @@ Use distribution configuration files for:
 
 These files follow the native schema for each distribution:
 
-- **Kind:** `kind.yaml` – [Kind Configuration](https://kind.sigs.k8s.io/docs/user/configuration/)
-- **K3d:** `k3d.yaml` – [K3d Configuration](https://k3d.io/stable/usage/configfile/)
+- **Vanilla (Kind):** `kind.yaml` – [Kind Configuration](https://kind.sigs.k8s.io/docs/user/configuration/)
+- **K3s (K3d):** `k3d.yaml` – [K3d Configuration](https://k3d.io/stable/usage/configfile/)
 - **Talos:** `talos/` – [Talos Machine Config](https://www.talos.dev/latest/reference/configuration/)
 
 ## Next Steps
