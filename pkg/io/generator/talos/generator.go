@@ -442,6 +442,9 @@ func (g *TalosGenerator) generateKubeletCSRApproverPatch(
 // generateClusterNamePatch creates a Talos patch file to set a custom cluster name.
 // The cluster name is used in the kubeconfig context (admin@<name>) and for
 // container naming conventions.
+// Note: The cluster name is expected to be pre-validated as DNS-1123 compliant
+// (lowercase alphanumeric and hyphens only), which makes direct template
+// construction safe from injection attacks.
 func (g *TalosGenerator) generateClusterNamePatch(
 	rootPath string,
 	clusterName string,
@@ -455,22 +458,14 @@ func (g *TalosGenerator) generateClusterNamePatch(
 		return nil
 	}
 
-	// Use typed struct for proper YAML marshaling to avoid injection issues
-	type clusterNamePatch struct {
-		Cluster struct {
-			ClusterName string `yaml:"clusterName"`
-		} `yaml:"cluster"`
-	}
+	// Use simple template format matching other Talos patches.
+	// The cluster name is validated as DNS-1123 before reaching this point,
+	// so it contains only [a-z0-9-] characters, making this safe.
+	patchContent := fmt.Sprintf(`cluster:
+  clusterName: %s
+`, clusterName)
 
-	patch := clusterNamePatch{}
-	patch.Cluster.ClusterName = clusterName
-
-	generator := yamlgenerator.NewYAMLGenerator[clusterNamePatch]()
-	_, err := generator.Generate(patch, yamlgenerator.Options{
-		Output: patchPath,
-		Force:  true, // Already checked force above
-	})
-
+	err := os.WriteFile(patchPath, []byte(patchContent), filePerm)
 	if err != nil {
 		return fmt.Errorf("failed to create cluster-name patch: %w", err)
 	}
