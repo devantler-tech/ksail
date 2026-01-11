@@ -13,8 +13,8 @@ Start a previously stopped Kubernetes cluster.
 
 The cluster is detected from the provided context or the current kubeconfig context.
 Supported distributions are automatically detected:
-  - Kind clusters (context pattern: kind-<cluster-name>)
-  - K3d clusters (context pattern: k3d-<cluster-name>)
+  - Vanilla (Kind) clusters (context pattern: kind-<cluster-name>)
+  - K3s (K3d) clusters (context pattern: k3d-<cluster-name>)
   - Talos clusters (context pattern: admin@<cluster-name>)
 
 Usage:
