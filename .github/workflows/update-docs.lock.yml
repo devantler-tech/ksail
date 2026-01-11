@@ -19,7 +19,7 @@
 #   gh aw compile
 # For more information: https://github.com/githubnext/gh-aw/blob/main/.github/aw/github-agentic-workflows.md
 #
-# THis workflow keeps docs synchronized with code changes.
+# This workflow keeps docs synchronized with code changes.
 # Triggered on every push to main, it analyzes diffs to identify changed entities and
 # updates corresponding documentation. Maintains consistent style (precise, active voice,
 # plain English), ensures single source of truth, and creates draft PRs with documentation
