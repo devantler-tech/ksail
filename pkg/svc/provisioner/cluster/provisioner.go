@@ -1,8 +1,14 @@
 package clusterprovisioner
 
-import "context"
+import (
+	"context"
+
+	"github.com/devantler-tech/ksail/v5/pkg/svc/provider"
+)
 
 // ClusterProvisioner defines methods for managing Kubernetes clusters.
+// Provisioners handle distribution-specific operations (bootstrapping, configuration)
+// while delegating infrastructure operations to a Provider.
 type ClusterProvisioner interface {
 	// Create creates a Kubernetes cluster. If name is non-empty, target that name; otherwise use config defaults.
 	Create(ctx context.Context, name string) error
@@ -21,4 +27,11 @@ type ClusterProvisioner interface {
 
 	// Exists checks if a Kubernetes cluster exists by name or config default when name is empty.
 	Exists(ctx context.Context, name string) (bool, error)
+}
+
+// ProviderAware is an optional interface for provisioners that can use a provider
+// for infrastructure operations (start/stop nodes).
+type ProviderAware interface {
+	// SetProvider sets the infrastructure provider for node operations.
+	SetProvider(p provider.Provider)
 }

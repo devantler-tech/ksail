@@ -8,14 +8,12 @@ import (
 	"os"
 	"slices"
 	"strings"
-	"time"
 
 	iopath "github.com/devantler-tech/ksail/v5/pkg/io"
 	"github.com/devantler-tech/ksail/v5/pkg/io/marshaller"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/provider"
 	clustererrors "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/errors"
 	runner "github.com/devantler-tech/ksail/v5/pkg/utils/runner"
-	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/client"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 	"sigs.k8s.io/kind/pkg/cluster"
 	kindcmd "sigs.k8s.io/kind/pkg/cmd"
@@ -105,30 +103,29 @@ type KindProvider interface {
 }
 
 // KindClusterProvisioner is an implementation of the ClusterProvisioner interface for provisioning kind clusters.
-// It uses kind's Cobra commands where available (create, delete, list) and falls back to
-// Docker client for operations not available as Cobra commands (start, stop).
+// It uses kind's Cobra commands where available (create, delete, list) and delegates
+// infrastructure operations (start, stop) to the injected Provider.
 type KindClusterProvisioner struct {
-	kubeConfig string
-	kindConfig *v1alpha4.Cluster
-	provider   KindProvider
-	client     client.ContainerAPIClient
-	runner     runner.CommandRunner
+	kubeConfig       string
+	kindConfig       *v1alpha4.Cluster
+	kindSDKProvider  KindProvider
+	infraProvider    provider.Provider
+	runner           runner.CommandRunner
 }
 
 // NewKindClusterProvisioner constructs a KindClusterProvisioner with explicit dependencies
-// for the kind provider and docker client. This supports both production wiring
-// and unit testing via mocks.
+// for the kind SDK provider and infrastructure provider.
 func NewKindClusterProvisioner(
 	kindConfig *v1alpha4.Cluster,
 	kubeConfig string,
-	provider KindProvider,
-	client client.ContainerAPIClient,
+	kindSDKProvider KindProvider,
+	infraProvider provider.Provider,
 ) *KindClusterProvisioner {
 	return NewKindClusterProvisionerWithRunner(
 		kindConfig,
 		kubeConfig,
-		provider,
-		client,
+		kindSDKProvider,
+		infraProvider,
 		runner.NewCobraCommandRunner(os.Stdout, os.Stderr),
 	)
 }
@@ -138,17 +135,23 @@ func NewKindClusterProvisioner(
 func NewKindClusterProvisionerWithRunner(
 	kindConfig *v1alpha4.Cluster,
 	kubeConfig string,
-	provider KindProvider,
-	client client.ContainerAPIClient,
+	kindSDKProvider KindProvider,
+	infraProvider provider.Provider,
 	runner runner.CommandRunner,
 ) *KindClusterProvisioner {
 	return &KindClusterProvisioner{
-		kubeConfig: kubeConfig,
-		kindConfig: kindConfig,
-		provider:   provider,
-		client:     client,
-		runner:     runner,
+		kubeConfig:      kubeConfig,
+		kindConfig:      kindConfig,
+		kindSDKProvider: kindSDKProvider,
+		infraProvider:   infraProvider,
+		runner:          runner,
 	}
+}
+
+// SetProvider sets the infrastructure provider for node operations.
+// This implements the ProviderAware interface.
+func (k *KindClusterProvisioner) SetProvider(p provider.Provider) {
+	k.infraProvider = p
 }
 
 // Create creates a kind cluster using kind's Cobra command.
@@ -244,67 +247,34 @@ func (k *KindClusterProvisioner) Delete(ctx context.Context, name string) error 
 }
 
 // Start starts a kind cluster.
-// Note: kind does not provide a Cobra command for start, so we use Docker client directly.
+// Delegates to the infrastructure provider for container operations.
 func (k *KindClusterProvisioner) Start(ctx context.Context, name string) error {
-	const dockerStartTimeout = 30 * time.Second
-
 	target := setName(name, k.kindConfig.Name)
 
-	nodes, err := k.provider.ListNodes(target)
+	if k.infraProvider == nil {
+		return fmt.Errorf("infrastructure provider not set for cluster '%s'", target)
+	}
+
+	err := k.infraProvider.StartNodes(ctx, target)
 	if err != nil {
-		return fmt.Errorf("cluster '%s': %w", target, err)
-	}
-
-	if len(nodes) == 0 {
-		return fmt.Errorf("%w", clustererrors.ErrClusterNotFound)
-	}
-
-	timeoutCtx, cancel := context.WithTimeout(ctx, dockerStartTimeout)
-	defer cancel()
-
-	for _, name := range nodes {
-		// Start each node container by name using Docker SDK
-		err := k.client.ContainerStart(timeoutCtx, name, container.StartOptions{
-			CheckpointID:  "",
-			CheckpointDir: "",
-		})
-		if err != nil {
-			return fmt.Errorf("docker start failed for %s: %w", name, err)
-		}
+		return fmt.Errorf("failed to start cluster '%s': %w", target, err)
 	}
 
 	return nil
 }
 
 // Stop stops a kind cluster.
-// Note: kind does not provide a Cobra command for stop, so we use Docker client directly.
+// Delegates to the infrastructure provider for container operations.
 func (k *KindClusterProvisioner) Stop(ctx context.Context, name string) error {
-	const dockerStopTimeout = 60 * time.Second
-
 	target := setName(name, k.kindConfig.Name)
 
-	nodes, err := k.provider.ListNodes(target)
+	if k.infraProvider == nil {
+		return fmt.Errorf("infrastructure provider not set for cluster '%s'", target)
+	}
+
+	err := k.infraProvider.StopNodes(ctx, target)
 	if err != nil {
-		return fmt.Errorf("failed to list nodes for cluster '%s': %w", target, err)
-	}
-
-	if len(nodes) == 0 {
-		return fmt.Errorf("%w", clustererrors.ErrClusterNotFound)
-	}
-
-	timeoutCtx, cancel := context.WithTimeout(ctx, dockerStopTimeout)
-	defer cancel()
-
-	for _, name := range nodes {
-		// Stop each node container by name using Docker SDK
-		// Graceful stop with default timeout
-		err := k.client.ContainerStop(timeoutCtx, name, container.StopOptions{
-			Signal:  "",
-			Timeout: nil,
-		})
-		if err != nil {
-			return fmt.Errorf("docker stop failed for %s: %w", name, err)
-		}
+		return fmt.Errorf("failed to stop cluster '%s': %w", target, err)
 	}
 
 	return nil

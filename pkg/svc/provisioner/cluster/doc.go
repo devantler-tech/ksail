@@ -1,7 +1,16 @@
-// Package clusterprovisioner provides implementations of the ClusterProvisioner interface
-// for provisioning clusters in different providers.
+// Package clusterprovisioner provides cluster provisioning for KSail distributions.
 //
-// This package contains the core provisioner interface, factory for creating
-// provider-specific provisioners, and implementations for Kind and K3d cluster
-// lifecycle management (create, delete, start, stop, list, exists).
+// # Architecture
+//
+// Provisioners handle distribution-specific Kubernetes configuration while
+// delegating infrastructure operations to Providers (pkg/svc/provider):
+//
+//   - Providers: Create/manage nodes (Docker containers, cloud VMs)
+//   - Provisioners: Configure distributions (Kind, K3s, Talos)
+//
+// # Supported Distributions
+//
+//   - Vanilla: Uses Kind SDK for vanilla Kubernetes on Docker
+//   - K3s: Uses K3d CLI for K3s on Docker
+//   - Talos: Uses Talos SDK for Talos on Docker
 package clusterprovisioner
