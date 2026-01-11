@@ -31,7 +31,7 @@ ksail cluster connect
 ksail cluster delete
 ```
 
-**Tips:** Switch distributions (`--distribution K3d`), try `--cni Cilium` or `--cert-manager Enabled`, commit config to track changes.
+**Tips:** Switch distributions (`--distribution K3s`), try `--cni Cilium` or `--cert-manager Enabled`, commit config to track changes.
 
 ## Local Development
 
@@ -133,7 +133,7 @@ jobs:
         run: ksail cluster delete
 ```
 
-**Tips:** Use Kind for speed, `--csi LocalPathStorage` for PVCs, set reasonable timeouts, cache images, use `--mirror-registry`, collect state before deletion.
+**Tips:** Use Vanilla for speed, `--csi LocalPathStorage` for PVCs, set reasonable timeouts, cache images, use `--mirror-registry`, collect state before deletion.
 
 ## GitOps Development Workflow
 
