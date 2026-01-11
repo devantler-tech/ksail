@@ -17,7 +17,6 @@ import (
 	helmv4loader "helm.sh/helm/v4/pkg/chart/loader"
 	chartv2 "helm.sh/helm/v4/pkg/chart/v2"
 	helmv4cli "helm.sh/helm/v4/pkg/cli"
-	helmv4downloader "helm.sh/helm/v4/pkg/downloader"
 	helmv4getter "helm.sh/helm/v4/pkg/getter"
 	helmv4kube "helm.sh/helm/v4/pkg/kube"
 	helmv4registry "helm.sh/helm/v4/pkg/registry"
@@ -601,6 +600,16 @@ func buildChartPathOptions(spec *ChartSpec, repoURL string) helmv4action.ChartPa
 	}
 }
 
+// applyChartPathOptions applies ChartPathOptions to an Install or Upgrade client.
+func applyChartPathOptions(client any, opts helmv4action.ChartPathOptions) {
+	switch cl := client.(type) {
+	case *helmv4action.Install:
+		cl.ChartPathOptions = opts
+	case *helmv4action.Upgrade:
+		cl.ChartPathOptions = opts
+	}
+}
+
 func (c *Client) locateOCIChart(spec *ChartSpec, client any) (string, error) {
 	// Create a registry client for OCI operations
 	registryClient, err := helmv4registry.NewClient()
@@ -633,21 +642,17 @@ func (c *Client) locateOCIChart(spec *ChartSpec, client any) (string, error) {
 	return chartPath, nil
 }
 
-func (c *Client) locateChartFromRepo(spec *ChartSpec, _ any) (string, error) {
+func (c *Client) locateChartFromRepo(spec *ChartSpec, client any) (string, error) {
 	_, chartName := parseChartRef(spec.ChartName)
 	if chartName == "" {
 		chartName = spec.ChartName
 	}
 
-	// Use custom chart downloader with configurable timeout instead of LocateChart
-	// which has a hardcoded 120-second HTTP timeout that can cause failures when
-	// downloading large charts (like Calico/Tigera).
-	timeout := spec.Timeout
-	if timeout == 0 {
-		timeout = DefaultTimeout
-	}
+	opts := buildChartPathOptions(spec, spec.RepoURL)
+	applyChartPathOptions(client, opts)
 
-	chartPath, err := c.downloadChartWithTimeout(spec, chartName, timeout)
+	// Use LocateChart to download the chart to cache and return the local path
+	chartPath, err := opts.LocateChart(chartName, c.settings)
 	if err != nil {
 		return "", fmt.Errorf(
 			"failed to locate chart %q in repository %s: %w",
@@ -658,64 +663,6 @@ func (c *Client) locateChartFromRepo(spec *ChartSpec, _ any) (string, error) {
 	}
 
 	return chartPath, nil
-}
-
-// downloadChartWithTimeout downloads a chart using a custom ChartDownloader with the specified timeout.
-// This bypasses Helm's LocateChart which has a hardcoded 120-second HTTP timeout.
-func (c *Client) downloadChartWithTimeout(
-	spec *ChartSpec,
-	chartName string,
-	timeout time.Duration,
-) (string, error) {
-	// Create getter providers with custom timeout
-	getterOpts := []helmv4getter.Option{
-		helmv4getter.WithTimeout(timeout),
-		helmv4getter.WithPassCredentialsAll(false),
-		helmv4getter.WithTLSClientConfig(spec.CertFile, spec.KeyFile, spec.CaFile),
-		helmv4getter.WithInsecureSkipVerifyTLS(spec.InsecureSkipTLSverify),
-	}
-
-	if spec.Username != "" && spec.Password != "" {
-		getterOpts = append(getterOpts, helmv4getter.WithBasicAuth(spec.Username, spec.Password))
-	}
-
-	// Create chart downloader with extended timeout
-	downloader := helmv4downloader.ChartDownloader{
-		Out:              os.Stdout,
-		Getters:          helmv4getter.All(c.settings, getterOpts...),
-		Options:          getterOpts,
-		RepositoryConfig: c.settings.RepositoryConfig,
-		RepositoryCache:  c.settings.RepositoryCache,
-		ContentCache:     c.settings.ContentCache,
-	}
-
-	// Ensure cache directories exist
-	mkdirErr := os.MkdirAll(c.settings.RepositoryCache, repoDirMode)
-	if mkdirErr != nil {
-		return "", fmt.Errorf("failed to create repository cache: %w", mkdirErr)
-	}
-
-	// Find the chart URL in the repository
-	chartURL, err := repov1.FindChartInRepoURL(
-		spec.RepoURL,
-		chartName,
-		helmv4getter.All(c.settings, getterOpts...),
-		repov1.WithChartVersion(spec.Version),
-		repov1.WithUsernamePassword(spec.Username, spec.Password),
-		repov1.WithClientTLS(spec.CertFile, spec.KeyFile, spec.CaFile),
-		repov1.WithInsecureSkipTLSverify(spec.InsecureSkipTLSverify),
-	)
-	if err != nil {
-		return "", fmt.Errorf("failed to find chart in repo: %w", err)
-	}
-
-	// Download the chart to cache
-	filename, _, downloadErr := downloader.DownloadToCache(chartURL, spec.Version)
-	if downloadErr != nil {
-		return "", fmt.Errorf("failed to download chart: %w", downloadErr)
-	}
-
-	return filename, nil
 }
 
 func (c *Client) mergeValues(spec *ChartSpec, chartPath string) (map[string]any, error) {
