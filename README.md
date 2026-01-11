@@ -39,7 +39,7 @@ The binary works on all major operating systems and modern CPU archectures:
 |  MacOS              | arm64           |
 | ⊞ Windows (untested) | amd64 and arm64 |
 
-The supported distributions (x-axis) run on different infrastructure providers (y-axis). You need to have access to at least one provider for your chosen distribution:
+The supported distributions (x-axis) run on different infrastructure providers (y-axis). You need to have access to at least one provider for your chosen distribution for KSail to create and manage the cluster.
 
 |         | Vanilla | K3s | Talos     |
 | ------- | ------- | --- | --------- |
