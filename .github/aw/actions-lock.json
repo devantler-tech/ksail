@@ -1,19 +1,44 @@
 {
   "entries": {
-    "actions/checkout@v5": {
+    "actions/cache/restore@v4.3.0": {
+      "repo": "actions/cache/restore",
+      "version": "v4.3.0",
+      "sha": "0057852bfaa89a56745cba8c7296529d2fc39830"
+    },
+    "actions/cache/save@v4.3.0": {
+      "repo": "actions/cache/save",
+      "version": "v4.3.0",
+      "sha": "0057852bfaa89a56745cba8c7296529d2fc39830"
+    },
+    "actions/checkout@v5.0.1": {
       "repo": "actions/checkout",
-      "version": "v5",
+      "version": "v5.0.1",
       "sha": "93cb6efe18208431cddfb8368fd83d5badbf9bfd"
     },
-    "actions/github-script@v8": {
+    "actions/download-artifact@v6.0.0": {
+      "repo": "actions/download-artifact",
+      "version": "v6.0.0",
+      "sha": "018cc2cf5baa6db3ef3c5f8a56943fffe632ef53"
+    },
+    "actions/github-script@v8.0.0": {
       "repo": "actions/github-script",
-      "version": "v8",
+      "version": "v8.0.0",
       "sha": "ed597411d8f924073f98dfc5c65a23a2325f34cd"
+    },
+    "actions/upload-artifact@v6.0.0": {
+      "repo": "actions/upload-artifact",
+      "version": "v6.0.0",
+      "sha": "b7c566a772e6b6bfb58ed0dc250532a479d7789f"
     },
     "githubnext/gh-aw/actions/setup@v0.35.1": {
       "repo": "githubnext/gh-aw/actions/setup",
       "version": "v0.35.1",
       "sha": "d76e21bcc92a3146d915794285b0b32f51d00072"
+    },
+    "githubnext/gh-aw/actions/setup@v0.36.0": {
+      "repo": "githubnext/gh-aw/actions/setup",
+      "version": "v0.36.0",
+      "sha": "a933c835b5e2d12ae4dead665a0fdba420a2d421"
     }
   }
 }

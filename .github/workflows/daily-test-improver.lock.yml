@@ -25,13 +25,14 @@
 # reports, identifies gaps, creates comprehensive test suites, and submits draft PRs.
 #
 # Source: githubnext/agentics/workflows/daily-test-improver.md@c5da0cdbfae2a3cba74f330ca34424a4aea929f5
+#
+# Effective stop-time: 2026-02-11 22:17:54
 
 name: "Daily Test Coverage Improver"
 "on":
   schedule:
   - cron: "32 7 * * *"
-    # Friendly format: daily (scattered)
-  workflow_dispatch:
+  workflow_dispatch: null
 
 permissions:
   actions: read
@@ -57,6 +58,8 @@ run-name: "Daily Test Coverage Improver"
 
 jobs:
   activation:
+    needs: pre_activation
+    if: needs.pre_activation.outputs.activated == 'true'
     runs-on: ubuntu-slim
     permissions:
       contents: read
@@ -118,7 +121,7 @@ jobs:
       - name: Create gh-aw temp directory
         run: bash /tmp/gh-aw/actions/create_gh_aw_tmp_dir.sh
       - name: Checkout repository
-        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
       - id: check_coverage_steps_file
         name: Check if action.yml exists
         run: |
@@ -186,7 +189,7 @@ jobs:
         env:
           TOKEN_CHECK: ${{ secrets.GH_AW_GITHUB_MCP_SERVER_TOKEN }}
         if: env.TOKEN_CHECK != ''
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         with:
           script: |
             const determineAutomaticLockdown = require('/tmp/gh-aw/actions/determine_automatic_lockdown.cjs');
@@ -652,32 +655,29 @@ jobs:
           1. Research the current state of test coverage in the repository. Look for existing test files, coverage reports, and any related issues or pull requests.
           
           2. Create a discussion with title "__GH_AW_GITHUB_WORKFLOW__ - Research and Plan" that includes:
+            - A summary of your findings about the repository, its testing strategies, its test coverage
+            - A plan for how you will approach improving test coverage, including specific areas to focus on and strategies to use
+            - Details of the commands needed to run to build the project, run tests, and generate coverage reports
+            - Details of how tests are organized in the repo, and how new tests should be organized
+            - Opportunities for new ways of greatly increasing test coverage
+            - Any questions or clarifications needed from maintainers
           
-          - A summary of your findings about the repository, its testing strategies, its test coverage
-          - A plan for how you will approach improving test coverage, including specific areas to focus on and strategies to use
-          - Details of the commands needed to run to build the project, run tests, and generate coverage reports
-          - Details of how tests are organized in the repo, and how new tests should be organized
-          - Opportunities for new ways of greatly increasing test coverage
-          - Any questions or clarifications needed from maintainers
+             **Include a "How to Control this Workflow" section at the end of the discussion that explains:**
+             - The user can add comments to the discussion to provide feedback or adjustments to the plan
+             - The user can use these commands:
           
-            **Include a "How to Control this Workflow" section at the end of the discussion that explains:**
+                gh aw disable daily-test-improver --repo __GH_AW_GITHUB_REPOSITORY__
+                gh aw enable daily-test-improver --repo __GH_AW_GITHUB_REPOSITORY__
+                gh aw run daily-test-improver --repo __GH_AW_GITHUB_REPOSITORY__ --repeat <number-of-repeats>
+                gh aw logs daily-test-improver --repo __GH_AW_GITHUB_REPOSITORY__
           
-          - The user can add comments to the discussion to provide feedback or adjustments to the plan
-          - The user can use these commands:
+             **Include a "What Happens Next" section at the end of the discussion that explains:**
+             - The next time this workflow runs, Phase 2 will be performed, which will analyze the codebase to create coverage steps configuration
+             - After Phase 2 completes, Phase 3 will begin on subsequent runs to implement actual test coverage improvements
+             - If running in "repeat" mode, the workflow will automatically run again to proceed to the next phase
+             - Humans can review this research and add comments before the workflow continues
           
-            gh aw disable daily-test-improver --repo __GH_AW_GITHUB_REPOSITORY__
-            gh aw enable daily-test-improver --repo __GH_AW_GITHUB_REPOSITORY__
-            gh aw run daily-test-improver --repo __GH_AW_GITHUB_REPOSITORY__ --repeat <number-of-repeats>
-            gh aw logs daily-test-improver --repo __GH_AW_GITHUB_REPOSITORY__
-          
-          **Include a "What Happens Next" section at the end of the discussion that explains:**
-          
-          - The next time this workflow runs, Phase 2 will be performed, which will analyze the codebase to create coverage steps configuration
-          - After Phase 2 completes, Phase 3 will begin on subsequent runs to implement actual test coverage improvements
-          - If running in "repeat" mode, the workflow will automatically run again to proceed to the next phase
-          - Humans can review this research and add comments before the workflow continues
-          
-          1. Exit this entire workflow, do not proceed to Phase 2 on this run. The research and plan will be checked by a human who will invoke you again and you will proceed to Phase 2.
+          3. Exit this entire workflow, do not proceed to Phase 2 on this run. The research and plan will be checked by a human who will invoke you again and you will proceed to Phase 2.
           
           ## Phase 2 - Coverage steps inference and configuration
           
@@ -685,7 +685,7 @@ jobs:
           
           2. Have a careful think about the CI commands needed to build the repository, run tests, produce a combined coverage report and upload it as an artifact. Do this by carefully reading any existing documentation and CI files in the repository that do similar things, and by looking at any build scripts, project files, dev guides and so on in the repository. If multiple projects are present, perform build and coverage testing on as many as possible, and where possible merge the coverage reports into one combined report. Work out the steps you worked out, in order, as a series of YAML steps suitable for inclusion in a GitHub Action.
           
-          3. Create the file `.github/actions/daily-test-improver/coverage-steps/action.yml` containing these steps, ensuring that the action.yml file is valid. Leave comments in the file to explain what the steps are doing, where the coverage report will be generated, and any other relevant information. Ensure that the steps include uploading the coverage report(s) as an artifact called "coverage". Each step of the action should append its output to a file called `coverage-steps.log` in the root of the repository. Ensure that the action.yml file is valid and correctly formatted.
+          3. Create the file `.github/actions/daily-test-improver/coverage-steps/action.yml` containing these steps, ensuring that the action.yml file is valid. Leave comments in the file to explain what the steps are doing, where the coverage report will be generated, and any other relevant information. Ensure that the steps include uploading the coverage report(s) as an artifact called "coverage".  Each step of the action should append its output to a file called `coverage-steps.log` in the root of the repository. Ensure that the action.yml file is valid and correctly formatted.
           
           4. Before running any of the steps, make a pull request for the addition of the `action.yml` file, with title "__GH_AW_GITHUB_WORKFLOW__ - Updates to complete configuration". Encourage the maintainer to review the files carefully to ensure they are appropriate for the project.
           
@@ -708,25 +708,25 @@ jobs:
              a. Repository is now test-ready. Review `coverage-steps/action.yml` and `coverage-steps.log` to understand setup. If coverage steps failed then create fix PR and exit.
           
              b. Locate and read the coverage report. Be detailed, looking to understand the files, functions, branches, and lines of code that are not covered by tests. Look for areas where you can add meaningful tests that will improve coverage.
-          
+             
              c. Read the plan in the discussion mentioned earlier, along with comments.
-          
+             
              d. Check the most recent pull request with title starting with "__GH_AW_GITHUB_WORKFLOW__" (it may have been closed) and see what the status of things was there. These are your notes from last time you did your work, and may include useful recommendations for future areas to work on.
           
              e. Check for existing open pull requests (especially yours with "__GH_AW_GITHUB_WORKFLOW__" prefix). Avoid duplicate work.
-          
+             
              f. If plan needs updating then comment on planning discussion with revised plan and rationale. Consider maintainer feedback.
-          
+            
              g. Based on all of the above, select an area of relatively low coverage to work on that appears tractable for further test additions. Ensure that you have a good understanding of the code and the testing requirements before proceeding.
           
           2. **Work towards your selected goal**. For the test coverage improvement goal you selected, do the following:
           
              a. Create a new branch starting with "test/".
-          
+             
              b. Write new tests to improve coverage. Ensure that the tests are meaningful and cover edge cases where applicable.
           
              c. Build the tests if necessary and remove any build errors.
-          
+             
              d. Run the new tests to ensure they pass.
           
              e. Re-run the test suite collecting coverage information. Check that overall coverage has improved. Document measurement attempts even if unsuccessful. If no improvement then iterate, revert, or try different approach.
@@ -734,30 +734,31 @@ jobs:
           3. **Finalizing changes**
           
              a. Apply any automatic code formatting used in the repo. If necessary check CI files to understand what code formatting is used.
-          
+             
              b. Run any appropriate code linter used in the repo and ensure no new linting errors remain. If necessary check CI files to understand what code linting is used.
           
           4. **Results and learnings**
           
              a. If you succeeded in writing useful code changes that improve test coverage, create a **draft** pull request with your changes.
           
-             **Critical:** Exclude coverage reports and tool-generated files from PR. Double-check added files and remove any that don't belong.
+                **Critical:** Exclude coverage reports and tool-generated files from PR. Double-check added files and remove any that don't belong.
           
-             Include a description of the improvements with evidence of impact. In the description, explain:
-             - **Goal and rationale:** Coverage area chosen and why it matters
-             - **Approach:** Testing strategy, methodology, and implementation steps
-             - **Impact measurement:** How coverage was tested and results achieved
-             - **Trade-offs:** What changed (complexity, test maintenance)
-             - **Validation:** Testing approach and success criteria met
-             - **Future work:** Additional coverage opportunities identified
+                Include a description of the improvements with evidence of impact. In the description, explain:
+                
+                - **Goal and rationale:** Coverage area chosen and why it matters
+                - **Approach:** Testing strategy, methodology, and implementation steps
+                - **Impact measurement:** How coverage was tested and results achieved
+                - **Trade-offs:** What changed (complexity, test maintenance)
+                - **Validation:** Testing approach and success criteria met
+                - **Future work:** Additional coverage opportunities identified
           
-             **Test coverage results section:**
-             Document coverage impact with exact coverage numbers before and after the changes, drawing from the coverage reports, in a table if possible. Include changes in numbers for overall coverage. Be transparent about measurement limitations and methodology. Mark estimates clearly.
+                **Test coverage results section:**
+                Document coverage impact with exact coverage numbers before and after the changes, drawing from the coverage reports, in a table if possible. Include changes in numbers for overall coverage. Be transparent about measurement limitations and methodology. Mark estimates clearly.
           
-             **Reproducibility section:**
-             Provide clear instructions to reproduce coverage testing, including setup commands (install dependencies, build code, run tests, generate coverage reports), measurement procedures, and expected results format.
+                **Reproducibility section:**
+                Provide clear instructions to reproduce coverage testing, including setup commands (install dependencies, build code, run tests, generate coverage reports), measurement procedures, and expected results format.
           
-             After creation, check the pull request to ensure it is correct, includes all expected files, and doesn't include any unwanted files or changes. Make any necessary corrections by pushing further commits to the branch.
+                After creation, check the pull request to ensure it is correct, includes all expected files, and doesn't include any unwanted files or changes. Make any necessary corrections by pushing further commits to the branch.
           
              b. If you think you found bugs in the code while adding tests, also create one single combined issue for all of them, starting the title of the issue with "__GH_AW_GITHUB_WORKFLOW__". Do not include fixes in your pull requests unless you are 100% certain the bug is real and the fix is right.
           
@@ -1270,6 +1271,28 @@ jobs:
           name: threat-detection.log
           path: /tmp/gh-aw/threat-detection/detection.log
           if-no-files-found: ignore
+
+  pre_activation:
+    runs-on: ubuntu-slim
+    outputs:
+      activated: ${{ steps.check_stop_time.outputs.stop_time_ok == 'true' }}
+    steps:
+      - name: Setup Scripts
+        uses: githubnext/gh-aw/actions/setup@d76e21bcc92a3146d915794285b0b32f51d00072 # v0.35.1
+        with:
+          destination: /tmp/gh-aw/actions
+      - name: Check stop-time limit
+        id: check_stop_time
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        env:
+          GH_AW_STOP_TIME: 2026-02-11 22:17:54
+          GH_AW_WORKFLOW_NAME: "Daily Test Coverage Improver"
+        with:
+          script: |
+            const { setupGlobals } = require('/tmp/gh-aw/actions/setup_globals.cjs');
+            setupGlobals(core, github, context, exec, io);
+            const { main } = require('/tmp/gh-aw/actions/check_stop_time.cjs');
+            await main();
 
   safe_outputs:
     needs:

@@ -8,6 +8,7 @@ description: |
 on:
   schedule: daily
   workflow_dispatch:
+  stop-after: +1mo # workflow will no longer trigger after 1 month
 
 timeout-minutes: 15
 
@@ -45,6 +46,7 @@ source: githubnext/agentics/workflows/daily-qa.md@c5da0cdbfae2a3cba74f330ca34424
 Your name is ${{ github.workflow }}. Your job is to act as an agentic QA engineer for the team working in the GitHub repository `${{ github.repository }}`.
 
 1. Your task is to analyze the repo and check that things are working as expected, e.g.
+
    - Check that the code builds and runs
    - Check that the tests pass
    - Check that instructions are clear and easy to follow
@@ -60,6 +62,7 @@ Your name is ${{ github.workflow }}. Your job is to act as an agentic QA enginee
 2. You have access to various tools. You can use these tools to perform your tasks. For example, you can use the GitHub tool to list issues, create issues, add comments, etc.
 
 3. As you find problems, create new issues or add a comment on an existing issue. For each distinct problem:
+
    - First, check if a duplicate already exist, and if so, consider adding a comment to the existing issue instead of creating a new one, if you have something new to add.
 
    - Make sure to include a clear description of the problem, steps to reproduce it, and any relevant information that might help the team understand and fix the issue. If you create a pull request, make sure to include a clear description of the changes you made and why they are necessary.
