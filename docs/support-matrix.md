@@ -39,7 +39,7 @@ or [Configuration](configuration/index.md) for setup instructions.
 | Component         | Options            | Configuration            |
 |-------------------|--------------------|--------------------------|
 | GitOps Engine     | None, Flux, ArgoCD | `--gitops-engine` flag   |
-| Local Registry    | Enabled, Disabled  | `--local-registry` flag  |
+| Local Registry    | true/false (bool)  | `--local-registry` flag  |
 | Mirror Registries | Configurable       | `--mirror-registry` flag |
 
 ## Workload Tools

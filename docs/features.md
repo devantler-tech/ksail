@@ -77,7 +77,7 @@ ksail workload logs deployment/my-app
 Enable GitOps with [Flux or ArgoCD](concepts.md#gitops) for declarative, Git-driven deployments. KSail scaffolds the required CRs and provides commands for pushing and reconciling workloads.
 
 ```bash
-ksail cluster init --gitops-engine Flux --local-registry Enabled
+ksail cluster init --gitops-engine Flux --local-registry
 ksail cluster create
 ksail workload push
 ksail workload reconcile
@@ -112,7 +112,7 @@ Run local [OCI registries](concepts.md#oci-registries) for faster development cy
 ### Local Registry
 
 ```bash
-ksail cluster init --local-registry Enabled --local-registry-port 5050
+ksail cluster init --local-registry --local-registry-port 5050
 ksail cluster create
 
 docker tag my-app localhost:5050/my-app

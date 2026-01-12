@@ -23,7 +23,7 @@ type ClusterEnvironment struct {
 // ErrNoLocalRegistry is returned when no local registry container is found.
 var ErrNoLocalRegistry = errors.New(
 	"no running local registry found; " +
-		"create a cluster with '--local-registry Enabled' during cluster init",
+		"create a cluster with '--local-registry' during cluster init",
 )
 
 // ErrNoGitOpsEngine is returned when no GitOps engine is detected.

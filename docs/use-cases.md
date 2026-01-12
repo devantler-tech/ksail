@@ -63,7 +63,7 @@ ksail cluster delete
 For local images (see [Registry Management](features.md#registry-management) for details):
 
 ```bash
-ksail cluster init --local-registry Enabled --local-registry-port 5050
+ksail cluster init --local-registry --local-registry-port 5050
 ksail cluster create
 
 # Build and push
@@ -143,7 +143,7 @@ Local GitOps workflows with [Flux or ArgoCD](concepts.md#gitops). See [GitOps Wo
 
 ```bash
 # Initialize
-ksail cluster init --gitops-engine Flux --local-registry Enabled
+ksail cluster init --gitops-engine Flux --local-registry
 ksail cluster create
 
 # Edit manifests in k8s/
@@ -161,7 +161,7 @@ ksail cluster connect
 
 ```bash
 # Initialize
-ksail cluster init --gitops-engine ArgoCD --local-registry Enabled
+ksail cluster init --gitops-engine ArgoCD --local-registry
 ksail cluster create
 
 # Edit manifests in k8s/
