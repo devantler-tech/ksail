@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"time"
 
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
 	"github.com/siderolabs/talos/pkg/machinery/config/bundle"
 	"github.com/siderolabs/talos/pkg/machinery/config/generate"
+	"github.com/siderolabs/talos/pkg/machinery/config/generate/secrets"
 	"github.com/siderolabs/talos/pkg/machinery/config/types/v1alpha1"
 )
 
@@ -182,6 +184,9 @@ func (c *Configs) WithName(name string) (*Configs, error) {
 // The endpoint should be the public IP address of the first control plane node.
 // Returns a new Configs instance; the original is not modified.
 // Returns an error if bundle regeneration fails.
+//
+// IMPORTANT: This preserves the existing PKI (CA, certificates) to ensure that configs
+// applied to servers and the talosconfig for authentication use the same CA.
 func (c *Configs) WithEndpoint(endpointIP string) (*Configs, error) {
 	if endpointIP == "" || endpointIP == c.endpoint {
 		return c, nil
@@ -198,8 +203,14 @@ func (c *Configs) WithEndpoint(endpointIP string) (*Configs, error) {
 		networkCIDR = DefaultNetworkCIDR
 	}
 
-	// Regenerate the bundle with the new endpoint
-	return newConfigsWithEndpoint(c.Name, kubernetesVersion, networkCIDR, endpointIP, c.patches)
+	// Extract existing secrets bundle to preserve PKI across endpoint changes
+	var existingSecrets *secrets.Bundle
+	if c.bundle != nil && c.bundle.ControlPlaneCfg != nil {
+		existingSecrets = secrets.NewBundleFromConfig(secrets.NewFixedClock(time.Now()), c.bundle.ControlPlaneCfg)
+	}
+
+	// Regenerate the bundle with the new endpoint but preserved secrets
+	return newConfigsWithEndpointAndSecrets(c.Name, kubernetesVersion, networkCIDR, endpointIP, c.patches, existingSecrets)
 }
 
 // IsCNIDisabled returns true if the default CNI is disabled (set to "none").
@@ -317,6 +328,98 @@ func newConfigsWithEndpoint(
 		generate.WithEndpointList([]string{controlPlaneIP}),
 		generate.WithAdditionalSubjectAltNames([]string{"127.0.0.1"}),
 		generate.WithVersionContract(talosconfig.TalosVersion1_11),
+	}
+
+	// Build bundle options
+	bundleOpts := []bundle.Option{
+		bundle.WithInputOptions(&bundle.InputOptions{
+			ClusterName: clusterName,
+			Endpoint:    controlPlaneEndpoint,
+			KubeVersion: kubernetesVersion,
+			GenOptions:  genOptions,
+		}),
+		bundle.WithVerbose(false), // Suppress "generating PKI and tokens" output
+	}
+
+	// Add patches by scope
+	if len(clusterPatches) > 0 {
+		bundleOpts = append(bundleOpts, bundle.WithPatch(clusterPatches))
+	}
+
+	if len(controlPlanePatches) > 0 {
+		bundleOpts = append(bundleOpts, bundle.WithPatchControlPlane(controlPlanePatches))
+	}
+
+	if len(workerPatches) > 0 {
+		bundleOpts = append(bundleOpts, bundle.WithPatchWorker(workerPatches))
+	}
+
+	// Create the bundle
+	configBundle, err := bundle.NewBundle(bundleOpts...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create config bundle: %w", err)
+	}
+
+	return &Configs{
+		Name:              clusterName,
+		bundle:            configBundle,
+		kubernetesVersion: kubernetesVersion,
+		networkCIDR:       networkCIDR,
+		endpoint:          endpointIP,
+		patches:           patches,
+	}, nil
+}
+
+// newConfigsWithEndpointAndSecrets creates Configs with an explicit endpoint IP while preserving
+// an existing secrets bundle. This is used by WithEndpoint to regenerate configs with a new
+// endpoint without regenerating the PKI (CA, keys, tokens), which would cause certificate mismatches.
+func newConfigsWithEndpointAndSecrets(
+	clusterName string,
+	kubernetesVersion string,
+	networkCIDR string,
+	endpointIP string,
+	patches []Patch,
+	existingSecrets *secrets.Bundle,
+) (*Configs, error) {
+	// Categorize patches by scope
+	clusterPatches, controlPlanePatches, workerPatches, err := categorizePatchesByScope(patches)
+	if err != nil {
+		return nil, err
+	}
+
+	// Determine endpoint IP - either explicit or calculated from network CIDR
+	var controlPlaneIP string
+	if endpointIP != "" {
+		controlPlaneIP = endpointIP
+	} else {
+		// Parse network CIDR for endpoint calculation
+		parsedCIDR, parseErr := netip.ParsePrefix(networkCIDR)
+		if parseErr != nil {
+			return nil, fmt.Errorf("invalid network CIDR: %w", parseErr)
+		}
+
+		// Calculate control plane IP for endpoint calculation
+		ipAddr, ipErr := nthIPInNetwork(parsedCIDR, ipv4Offset)
+		if ipErr != nil {
+			return nil, fmt.Errorf("failed to calculate control plane IP: %w", ipErr)
+		}
+
+		controlPlaneIP = ipAddr.String()
+	}
+
+	controlPlaneEndpoint := "https://" + net.JoinHostPort(controlPlaneIP, "6443")
+
+	// Build generate options with endpoint list and localhost SAN for Docker-in-VM environments
+	// Use TalosVersion1_11 contract for compatibility with Hetzner ISOs which are at 1.11.x
+	genOptions := []generate.Option{
+		generate.WithEndpointList([]string{controlPlaneIP}),
+		generate.WithAdditionalSubjectAltNames([]string{"127.0.0.1"}),
+		generate.WithVersionContract(talosconfig.TalosVersion1_11),
+	}
+
+	// If we have existing secrets, reuse them to preserve PKI across endpoint changes
+	if existingSecrets != nil {
+		genOptions = append(genOptions, generate.WithSecretsBundle(existingSecrets))
 	}
 
 	// Build bundle options

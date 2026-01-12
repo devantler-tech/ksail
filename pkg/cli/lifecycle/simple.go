@@ -96,9 +96,14 @@ func runSimpleLifecycleAction(
 	})
 
 	notify.WriteMessage(notify.Message{
-		Type:    notify.ActivityType,
-		Content: fmt.Sprintf("%s %s cluster '%s'", config.Activity, clusterInfo.Distribution, clusterInfo.ClusterName),
-		Writer:  cmd.OutOrStdout(),
+		Type: notify.ActivityType,
+		Content: fmt.Sprintf(
+			"%s %s cluster '%s'",
+			config.Activity,
+			clusterInfo.Distribution,
+			clusterInfo.ClusterName,
+		),
+		Writer: cmd.OutOrStdout(),
 	})
 
 	provisioner, err := CreateMinimalProvisioner(clusterInfo)

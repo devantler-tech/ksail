@@ -34,7 +34,13 @@ func NewDeleteCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runDeleteAction(cmd, runtimeContainer, kubeconfigFlag, contextFlag, deleteStorage)
+			return runDeleteAction(
+				cmd,
+				runtimeContainer,
+				kubeconfigFlag,
+				contextFlag,
+				deleteStorage,
+			)
 		},
 	}
 
@@ -131,7 +137,9 @@ func createDeleteProvisioner(
 ) (clusterprovisioner.ClusterProvisioner, error) {
 	// Check for test factory override
 	clusterProvisionerFactoryMu.RLock()
+
 	factoryOverride := clusterProvisionerFactoryOverride
+
 	clusterProvisionerFactoryMu.RUnlock()
 
 	if factoryOverride != nil {
@@ -181,9 +189,13 @@ func executeDelete(
 	})
 
 	notify.WriteMessage(notify.Message{
-		Type:    notify.ActivityType,
-		Content: fmt.Sprintf("deleting %s cluster '%s'", clusterInfo.Distribution, clusterInfo.ClusterName),
-		Writer:  cmd.OutOrStdout(),
+		Type: notify.ActivityType,
+		Content: fmt.Sprintf(
+			"deleting %s cluster '%s'",
+			clusterInfo.Distribution,
+			clusterInfo.ClusterName,
+		),
+		Writer: cmd.OutOrStdout(),
 	})
 
 	// Check if cluster exists

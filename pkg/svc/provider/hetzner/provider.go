@@ -227,7 +227,11 @@ func (p *Provider) CreateServer(
 }
 
 // attachISOAndReboot attaches an ISO to a server and reboots it to boot from the ISO.
-func (p *Provider) attachISOAndReboot(ctx context.Context, server *hcloud.Server, isoID int64) error {
+func (p *Provider) attachISOAndReboot(
+	ctx context.Context,
+	server *hcloud.Server,
+	isoID int64,
+) error {
 	// Attach the ISO
 	action, _, err := p.client.Server.AttachISO(ctx, server, &hcloud.ISO{ID: isoID})
 	if err != nil {
@@ -253,12 +257,54 @@ func (p *Provider) attachISOAndReboot(ctx context.Context, server *hcloud.Server
 	return nil
 }
 
+// DetachISO detaches any attached ISO from a server.
+// This is necessary after applying Talos config in maintenance mode so the server
+// boots from disk (with the installed Talos) instead of the ISO.
+func (p *Provider) DetachISO(ctx context.Context, server *hcloud.Server) error {
+	if p.client == nil {
+		return provider.ErrProviderUnavailable
+	}
+
+	// Detach the ISO
+	action, _, err := p.client.Server.DetachISO(ctx, server)
+	if err != nil {
+		return fmt.Errorf("failed to detach ISO: %w", err)
+	}
+
+	err = p.waitForAction(ctx, action)
+	if err != nil {
+		return fmt.Errorf("failed waiting for ISO detachment: %w", err)
+	}
+
+	return nil
+}
+
+// ResetServer performs a hard reset (reboot) on a server.
+// This is used after detaching the ISO to boot from disk.
+func (p *Provider) ResetServer(ctx context.Context, server *hcloud.Server) error {
+	if p.client == nil {
+		return provider.ErrProviderUnavailable
+	}
+
+	action, _, err := p.client.Server.Reset(ctx, server)
+	if err != nil {
+		return fmt.Errorf("failed to reset server: %w", err)
+	}
+
+	err = p.waitForAction(ctx, action)
+	if err != nil {
+		return fmt.Errorf("failed waiting for server reset: %w", err)
+	}
+
+	return nil
+}
+
 // CreateServerOpts contains options for creating a Hetzner server.
 type CreateServerOpts struct {
 	Name             string
 	ServerType       string
-	ImageID          int64  // Image ID (for snapshots) - mutually exclusive with ISOID
-	ISOID            int64  // ISO ID (for Talos public ISOs) - mutually exclusive with ImageID
+	ImageID          int64 // Image ID (for snapshots) - mutually exclusive with ISOID
+	ISOID            int64 // ISO ID (for Talos public ISOs) - mutually exclusive with ImageID
 	Location         string
 	Labels           map[string]string
 	UserData         string

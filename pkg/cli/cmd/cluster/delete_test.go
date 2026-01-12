@@ -265,7 +265,11 @@ func TestDelete_CommandFlags(t *testing.T) {
 	require.Nil(t, distributionFlag, "unexpected --distribution flag (should be removed)")
 
 	deleteVolumesFlag := cmd.Flags().Lookup("delete-volumes")
-	require.Nil(t, deleteVolumesFlag, "unexpected --delete-volumes flag (renamed to --delete-storage)")
+	require.Nil(
+		t,
+		deleteVolumesFlag,
+		"unexpected --delete-volumes flag (renamed to --delete-storage)",
+	)
 }
 
 // Ensure fake types satisfy interfaces at compile time.

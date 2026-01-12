@@ -255,7 +255,10 @@ func detectCloudProvider(ipAddress, clusterName string) (v1alpha1.Provider, erro
 
 // checkHetznerOwnership verifies if a server with the given IP exists in Hetzner
 // and belongs to the specified cluster (via KSail labels).
-func checkHetznerOwnership(ctx context.Context, token, ipAddress, clusterName string) (bool, error) {
+func checkHetznerOwnership(
+	ctx context.Context,
+	token, ipAddress, clusterName string,
+) (bool, error) {
 	client := hcloud.NewClient(hcloud.WithToken(token))
 	provider := hetzner.NewProvider(client)
 

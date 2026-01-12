@@ -220,7 +220,11 @@ func DisconnectRegistriesFromNetwork(
 
 		_, disconnectErr := registryMgr.DisconnectAllFromNetwork(cmd.Context(), networkName)
 		if disconnectErr != nil {
-			return fmt.Errorf("failed to disconnect registries from network %s: %w", networkName, disconnectErr)
+			return fmt.Errorf(
+				"failed to disconnect registries from network %s: %w",
+				networkName,
+				disconnectErr,
+			)
 		}
 
 		return nil
@@ -229,7 +233,11 @@ func DisconnectRegistriesFromNetwork(
 
 // displayRegistryCleanupOutputWithTimer shows the cleanup stage output for deleted registries.
 // This version uses timer.Timer directly instead of lifecycle.Deps.
-func displayRegistryCleanupOutputWithTimer(cmd *cobra.Command, tmr timer.Timer, deletedNames []string) {
+func displayRegistryCleanupOutputWithTimer(
+	cmd *cobra.Command,
+	tmr timer.Timer,
+	deletedNames []string,
+) {
 	if len(deletedNames) == 0 {
 		return
 	}
