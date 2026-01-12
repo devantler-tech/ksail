@@ -16,7 +16,7 @@ For detailed package and API documentation, refer to the Go documentation at [pk
 
 Before you begin, ensure you have the following installed:
 
-- [Go (v1.23.9+)](https://go.dev/doc/install)
+- [Go (v1.25.4+)](https://go.dev/doc/install)
 - [mockery](https://vektra.github.io/mockery/v3.5/installation/)
 - [golang-ci](https://golangci-lint.run/docs/welcome/install/)
 - [mega-linter](https://megalinter.io/latest/mega-linter-runner/#installation)
@@ -41,7 +41,7 @@ The same configuration is used in CI, so you can expect the same linting behavio
 ### Build
 
 ```sh
-# working-directory: ./src
+# working-directory: ./
 go build ./...
 ```
 
@@ -50,14 +50,14 @@ go build ./...
 #### Generating mocks
 
 ```sh
-# working-directory: ./src
+# working-directory: ./
 mockery
 ```
 
 #### Unit tests
 
 ```sh
-# working-directory: ./src
+# working-directory: ./
 go test ./...
 ```
 
@@ -124,7 +124,7 @@ For detailed package and API documentation, refer to [pkg.go.dev/github.com/deva
 #### Unit Tests
 
 ```sh
-# working-directory: ./src
+# working-directory: ./
 go test ./...
 ```
 
