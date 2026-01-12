@@ -47,7 +47,10 @@ require (
 	sigs.k8s.io/yaml v1.6.0
 )
 
-require github.com/hetznercloud/hcloud-go/v2 v2.34.0
+require (
+	github.com/hetznercloud/hcloud-go/v2 v2.34.0
+	github.com/siderolabs/go-retry v0.3.3
+)
 
 require (
 	al.essio.dev/pkg/shellescape v1.6.0 // indirect
@@ -424,7 +427,6 @@ require (
 	github.com/siderolabs/go-kubernetes v0.2.26 // indirect
 	github.com/siderolabs/go-pointer v1.0.1 // indirect
 	github.com/siderolabs/go-procfs v0.1.2 // indirect
-	github.com/siderolabs/go-retry v0.3.3 // indirect
 	github.com/siderolabs/go-talos-support v0.1.2 // indirect
 	github.com/siderolabs/net v0.4.0 // indirect
 	github.com/siderolabs/protoenc v0.2.4 // indirect
