@@ -14,10 +14,12 @@ import (
 	"slices"
 	"time"
 
+	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	iopath "github.com/devantler-tech/ksail/v5/pkg/io"
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
 	"github.com/devantler-tech/ksail/v5/pkg/k8s"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/provider/hetzner"
 	clustererrors "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/errors"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
@@ -100,7 +102,9 @@ type TalosProvisioner struct {
 	dockerClient client.APIClient
 	// infraProvider is the infrastructure provider for node operations (start/stop).
 	// If nil, falls back to dockerClient for backwards compatibility.
-	infraProvider      provider.Provider
+	infraProvider provider.Provider
+	// hetznerOpts holds Hetzner-specific options when using the Hetzner provider.
+	hetznerOpts        *v1alpha1.OptionsHetzner
 	provisionerFactory func(ctx context.Context) (provision.Provisioner, error)
 	logWriter          io.Writer
 }
@@ -157,6 +161,13 @@ func (p *TalosProvisioner) WithInfraProvider(prov provider.Provider) *TalosProvi
 	return p
 }
 
+// WithHetznerOptions sets the Hetzner-specific options for cloud provisioning.
+func (p *TalosProvisioner) WithHetznerOptions(opts v1alpha1.OptionsHetzner) *TalosProvisioner {
+	p.hetznerOpts = &opts
+
+	return p
+}
+
 // SetProvider sets the infrastructure provider for node operations.
 // This implements the ProviderAware interface.
 func (p *TalosProvisioner) SetProvider(prov provider.Provider) {
@@ -173,9 +184,23 @@ func (p *TalosProvisioner) TalosConfigs() *talosconfigmanager.Configs {
 	return p.talosConfigs
 }
 
-// Create creates a Talos-in-Docker cluster.
+// Create creates a Talos cluster.
 // If name is non-empty, it overrides the cluster name from talosConfigs.
+// Routes to Docker-based or Hetzner-based provisioning based on configuration.
 func (p *TalosProvisioner) Create(ctx context.Context, name string) error {
+	clusterName := p.resolveClusterName(name)
+
+	// Route to Hetzner-based provisioning if Hetzner options are set
+	if p.hetznerOpts != nil {
+		return p.createHetznerCluster(ctx, clusterName)
+	}
+
+	// Docker-based provisioning (default)
+	return p.createDockerCluster(ctx, clusterName)
+}
+
+// createDockerCluster creates a Talos-in-Docker cluster using the Talos SDK.
+func (p *TalosProvisioner) createDockerCluster(ctx context.Context, clusterName string) error {
 	// Ensure required kernel modules are loaded (Linux only)
 	err := p.ensureKernelModules(ctx)
 	if err != nil {
@@ -187,8 +212,6 @@ func (p *TalosProvisioner) Create(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
-
-	clusterName := p.resolveClusterName(name)
 
 	// Check if cluster already exists
 	exists, err := p.Exists(ctx, clusterName)
@@ -210,6 +233,127 @@ func (p *TalosProvisioner) Create(ctx context.Context, name string) error {
 	}
 
 	return p.saveClusterConfigs(ctx, cluster, configBundle)
+}
+
+// createHetznerCluster creates a Talos cluster on Hetzner Cloud infrastructure.
+func (p *TalosProvisioner) createHetznerCluster(ctx context.Context, clusterName string) error {
+	// Type assert to get Hetzner-specific provider
+	hetznerProv, ok := p.infraProvider.(*hetzner.Provider)
+	if !ok {
+		return fmt.Errorf("infrastructure provider is not a Hetzner provider")
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "Creating Talos cluster %q on Hetzner Cloud...\n", clusterName)
+
+	// Check if cluster already exists
+	exists, err := hetznerProv.NodesExist(ctx, clusterName)
+	if err != nil {
+		return fmt.Errorf("failed to check if cluster exists: %w", err)
+	}
+
+	if exists {
+		return fmt.Errorf("%w: %s", ErrClusterAlreadyExists, clusterName)
+	}
+
+	// Create infrastructure resources
+	_, _ = fmt.Fprintf(p.logWriter, "Creating infrastructure resources...\n")
+
+	network, err := hetznerProv.EnsureNetwork(ctx, clusterName, p.hetznerOpts.NetworkCIDR)
+	if err != nil {
+		return fmt.Errorf("failed to create network: %w", err)
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "  ✓ Network %s created\n", network.Name)
+
+	firewall, err := hetznerProv.EnsureFirewall(ctx, clusterName)
+	if err != nil {
+		return fmt.Errorf("failed to create firewall: %w", err)
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "  ✓ Firewall %s created\n", firewall.Name)
+
+	placementGroup, err := hetznerProv.EnsurePlacementGroup(ctx, clusterName)
+	if err != nil {
+		return fmt.Errorf("failed to create placement group: %w", err)
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "  ✓ Placement group %s created\n", placementGroup.Name)
+
+	// Get SSH key if configured
+	var sshKeyID int64
+
+	if p.hetznerOpts.SSHKeyName != "" {
+		sshKey, keyErr := hetznerProv.GetSSHKey(ctx, p.hetznerOpts.SSHKeyName)
+		if keyErr != nil {
+			return fmt.Errorf("failed to get SSH key: %w", keyErr)
+		}
+
+		if sshKey != nil {
+			sshKeyID = sshKey.ID
+		}
+	}
+
+	// Create control plane nodes
+	_, _ = fmt.Fprintf(
+		p.logWriter,
+		"Creating %d control-plane node(s)...\n",
+		p.options.ControlPlaneNodes,
+	)
+
+	for i := range p.options.ControlPlaneNodes {
+		nodeName := fmt.Sprintf("%s-control-plane-%d", clusterName, i+1)
+
+		server, serverErr := hetznerProv.CreateServer(ctx, hetzner.CreateServerOpts{
+			Name:             nodeName,
+			ServerType:       p.hetznerOpts.ControlPlaneServerType,
+			ImageID:          p.hetznerOpts.ImageID,
+			Location:         p.hetznerOpts.Location,
+			Labels:           hetzner.NodeLabels(clusterName, "control-plane", i+1),
+			NetworkID:        network.ID,
+			PlacementGroupID: placementGroup.ID,
+			SSHKeyID:         sshKeyID,
+			FirewallIDs:      []int64{firewall.ID},
+		})
+		if serverErr != nil {
+			return fmt.Errorf("failed to create control-plane node %s: %w", nodeName, serverErr)
+		}
+
+		_, _ = fmt.Fprintf(p.logWriter, "  ✓ Control-plane node %s created (IP: %s)\n",
+			server.Name, server.PublicNet.IPv4.IP.String())
+	}
+
+	// Create worker nodes
+	if p.options.WorkerNodes > 0 {
+		_, _ = fmt.Fprintf(p.logWriter, "Creating %d worker node(s)...\n", p.options.WorkerNodes)
+
+		for i := range p.options.WorkerNodes {
+			nodeName := fmt.Sprintf("%s-worker-%d", clusterName, i+1)
+
+			server, serverErr := hetznerProv.CreateServer(ctx, hetzner.CreateServerOpts{
+				Name:             nodeName,
+				ServerType:       p.hetznerOpts.WorkerServerType,
+				ImageID:          p.hetznerOpts.ImageID,
+				Location:         p.hetznerOpts.Location,
+				Labels:           hetzner.NodeLabels(clusterName, "worker", i+1),
+				NetworkID:        network.ID,
+				PlacementGroupID: placementGroup.ID,
+				SSHKeyID:         sshKeyID,
+				FirewallIDs:      []int64{firewall.ID},
+			})
+			if serverErr != nil {
+				return fmt.Errorf("failed to create worker node %s: %w", nodeName, serverErr)
+			}
+
+			_, _ = fmt.Fprintf(p.logWriter, "  ✓ Worker node %s created (IP: %s)\n",
+				server.Name, server.PublicNet.IPv4.IP.String())
+		}
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "\nSuccessfully created Talos cluster %q on Hetzner Cloud\n", clusterName)
+	_, _ = fmt.Fprintf(p.logWriter, "\nNote: Talos bootstrap requires additional configuration.\n")
+	_, _ = fmt.Fprintf(p.logWriter, "The servers are created from the Talos ISO and need to be configured via talosctl.\n")
+
+	return nil
 }
 
 // Delete deletes a Talos-in-Docker cluster.

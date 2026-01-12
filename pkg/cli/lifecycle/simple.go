@@ -193,7 +193,8 @@ func CreateMinimalProvisioner(
 			"",
 			"", // provider not needed for simple lifecycle
 			v1alpha1.OptionsTalos{},
-			false, // skipCNIChecks - not relevant for simple lifecycle operations
+			v1alpha1.OptionsHetzner{}, // Hetzner options not needed for simple lifecycle
+			false,                     // skipCNIChecks - not relevant for simple lifecycle operations
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create talos provisioner: %w", err)

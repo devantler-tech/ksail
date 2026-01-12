@@ -94,5 +94,5 @@ func ValidPolicyEngines() []PolicyEngine {
 
 // ValidProviders returns supported provider values.
 func ValidProviders() []Provider {
-	return []Provider{ProviderDocker}
+	return []Provider{ProviderDocker, ProviderHetzner}
 }

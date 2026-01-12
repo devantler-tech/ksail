@@ -28,3 +28,40 @@ type LocalRegistry struct {
 	// Defaults to 5050.
 	HostPort int32 `json:"hostPort,omitzero" default:"5050"`
 }
+
+// OptionsHetzner defines options specific to the Hetzner Cloud provider.
+// These options are used when Provider is set to "Hetzner" for the Talos distribution.
+type OptionsHetzner struct {
+	// ControlPlaneServerType is the Hetzner server type for control-plane nodes.
+	// Examples: "cax11" (ARM), "cx22" (x86), "cpx21" (AMD). Defaults to "cax11".
+	ControlPlaneServerType string `json:"controlPlaneServerType,omitzero" default:"cax11"`
+	// WorkerServerType is the Hetzner server type for worker nodes.
+	// Examples: "cax11" (ARM), "cx22" (x86), "cpx21" (AMD). Defaults to "cax11".
+	WorkerServerType string `json:"workerServerType,omitzero" default:"cax11"`
+	// Location is the Hetzner datacenter location.
+	// Examples: "fsn1" (Falkenstein), "nbg1" (Nuremberg), "hel1" (Helsinki).
+	// Defaults to "fsn1".
+	Location string `json:"location,omitzero" default:"fsn1"`
+	// NetworkName is the name of the private network to create or use.
+	// If empty, a network named "<cluster-name>-network" will be created.
+	NetworkName string `json:"networkName,omitzero"`
+	// NetworkCIDR is the CIDR block for the private network.
+	// Defaults to "10.0.0.0/16".
+	NetworkCIDR string `json:"networkCidr,omitzero" default:"10.0.0.0/16"`
+	// SSHKeyName is the name of the SSH key to use for server access.
+	// The key must already exist in the Hetzner Cloud project.
+	// If empty, no SSH key is attached (only Talos API access).
+	SSHKeyName string `json:"sshKeyName,omitzero"`
+	// TokenEnvVar is the environment variable containing the Hetzner API token.
+	// Defaults to "HCLOUD_TOKEN".
+	TokenEnvVar string `json:"tokenEnvVar,omitzero" default:"HCLOUD_TOKEN"`
+	// PlacementGroup is the name of the placement group for server distribution.
+	// If empty, a placement group named "<cluster-name>-placement" will be created
+	// with "spread" strategy for high availability.
+	PlacementGroup string `json:"placementGroup,omitzero"`
+	// ImageID is the Hetzner image ID for the Talos Linux ISO.
+	// Hetzner provides Talos Linux as a public ISO with qemu-guest-agent.
+	// See https://docs.hetzner.cloud/changelog for available versions.
+	// Defaults to 122629 (Talos Linux 1.11.2 ARM).
+	ImageID int64 `json:"imageId,omitzero" default:"122629"`
+}

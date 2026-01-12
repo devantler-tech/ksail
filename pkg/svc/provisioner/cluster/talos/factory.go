@@ -3,14 +3,22 @@ package talosprovisioner
 import (
 	"errors"
 	"fmt"
+	"os"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/provider"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/provider/docker"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/provider/hetzner"
 	kindprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/kind"
+	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 )
 
 // ErrUnsupportedProvider is returned when an unsupported provider is specified.
 var ErrUnsupportedProvider = errors.New("unsupported provider")
+
+// ErrMissingHetznerToken is returned when the Hetzner API token is not set.
+var ErrMissingHetznerToken = errors.New("hetzner API token not set")
 
 // CreateProvisioner creates a TalosProvisioner from a pre-loaded configuration.
 // The Talos config should be loaded via the config-manager before calling this function,
@@ -19,26 +27,22 @@ var ErrUnsupportedProvider = errors.New("unsupported provider")
 // Parameters:
 //   - talosConfigs: Pre-loaded Talos machine configurations with all patches applied
 //   - kubeconfigPath: Path where the kubeconfig should be written
-//   - provider: Infrastructure provider (e.g., Docker)
+//   - provider: Infrastructure provider (e.g., Docker, Hetzner)
 //   - opts: Talos-specific options (node counts, etc.)
+//   - hetznerOpts: Hetzner-specific options (required when provider is Hetzner)
 //   - skipCNIChecks: Whether to skip CNI-dependent checks (CoreDNS, kube-proxy) during bootstrap.
 //     Set to true when KSail will install a custom CNI after cluster creation.
 func CreateProvisioner(
 	talosConfigs *talosconfigmanager.Configs,
 	kubeconfigPath string,
-	provider v1alpha1.Provider,
+	providerType v1alpha1.Provider,
 	opts v1alpha1.OptionsTalos,
+	hetznerOpts v1alpha1.OptionsHetzner,
 	skipCNIChecks bool,
 ) (*TalosProvisioner, error) {
 	// Validate or default the provider
-	if provider == "" {
-		provider = v1alpha1.ProviderDocker
-	}
-
-	// Currently only Docker provider is supported
-	if provider != v1alpha1.ProviderDocker {
-		return nil, fmt.Errorf("%w: %s (supported: %s)",
-			ErrUnsupportedProvider, provider, v1alpha1.ProviderDocker)
+	if providerType == "" {
+		providerType = v1alpha1.ProviderDocker
 	}
 
 	// Create options and apply configured node counts
@@ -54,12 +58,97 @@ func CreateProvisioner(
 	// Create provisioner with loaded configs and options
 	provisioner := NewTalosProvisioner(talosConfigs, options)
 
-	dockerClient, err := kindprovisioner.NewDefaultDockerClient()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create Docker client: %w", err)
+	// Configure the infrastructure provider
+	var infraProvider provider.Provider
+
+	switch providerType {
+	case v1alpha1.ProviderDocker:
+		dockerClient, err := kindprovisioner.NewDefaultDockerClient()
+		if err != nil {
+			return nil, fmt.Errorf("failed to create Docker client: %w", err)
+		}
+
+		provisioner.WithDockerClient(dockerClient)
+		infraProvider = docker.NewProvider(dockerClient, docker.LabelSchemeTalos)
+
+	case v1alpha1.ProviderHetzner:
+		hetznerProvider, err := createHetznerProvider(hetznerOpts)
+		if err != nil {
+			return nil, err
+		}
+
+		infraProvider = hetznerProvider
+		// Store Hetzner options with defaults applied for cluster creation
+		provisioner.WithHetznerOptions(applyHetznerDefaults(hetznerOpts))
+
+	default:
+		return nil, fmt.Errorf("%w: %s (supported: %s, %s)",
+			ErrUnsupportedProvider, providerType, v1alpha1.ProviderDocker, v1alpha1.ProviderHetzner)
 	}
 
-	provisioner.WithDockerClient(dockerClient)
+	provisioner.WithInfraProvider(infraProvider)
 
 	return provisioner, nil
+}
+
+// createHetznerProvider creates a Hetzner provider from the given options.
+func createHetznerProvider(opts v1alpha1.OptionsHetzner) (*hetzner.Provider, error) {
+	// Determine the token environment variable name
+	tokenEnvVar := opts.TokenEnvVar
+	if tokenEnvVar == "" {
+		tokenEnvVar = "HCLOUD_TOKEN"
+	}
+
+	// Get the token from the environment
+	token := os.Getenv(tokenEnvVar)
+	if token == "" {
+		return nil, fmt.Errorf(
+			"%w: environment variable %s is not set",
+			ErrMissingHetznerToken,
+			tokenEnvVar,
+		)
+	}
+
+	// Create the Hetzner client and provider
+	client := hcloud.NewClient(hcloud.WithToken(token))
+
+	return hetzner.NewProvider(client), nil
+}
+
+// Hetzner default values - keep in sync with OptionsHetzner struct tags.
+const (
+	defaultHetznerServerType = "cax11"
+	defaultHetznerLocation   = "fsn1"
+	defaultHetznerNetworkCIDR = "10.0.0.0/16"
+	defaultHetznerTokenEnvVar = "HCLOUD_TOKEN"
+	defaultHetznerImageID     = 122629 // Talos Linux 1.11.2 ARM
+)
+
+// applyHetznerDefaults applies default values to Hetzner options.
+func applyHetznerDefaults(opts v1alpha1.OptionsHetzner) v1alpha1.OptionsHetzner {
+	if opts.ControlPlaneServerType == "" {
+		opts.ControlPlaneServerType = defaultHetznerServerType
+	}
+
+	if opts.WorkerServerType == "" {
+		opts.WorkerServerType = defaultHetznerServerType
+	}
+
+	if opts.Location == "" {
+		opts.Location = defaultHetznerLocation
+	}
+
+	if opts.NetworkCIDR == "" {
+		opts.NetworkCIDR = defaultHetznerNetworkCIDR
+	}
+
+	if opts.TokenEnvVar == "" {
+		opts.TokenEnvVar = defaultHetznerTokenEnvVar
+	}
+
+	if opts.ImageID == 0 {
+		opts.ImageID = defaultHetznerImageID
+	}
+
+	return opts
 }

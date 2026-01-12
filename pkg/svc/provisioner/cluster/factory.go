@@ -230,6 +230,7 @@ func (f DefaultFactory) createTalosProvisioner(
 		cluster.Spec.Cluster.Connection.Kubeconfig,
 		cluster.Spec.Cluster.Provider,
 		cluster.Spec.Cluster.Talos,
+		cluster.Spec.Cluster.Hetzner,
 		skipCNIChecks,
 	)
 	if err != nil {
