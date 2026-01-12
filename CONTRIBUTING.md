@@ -24,7 +24,7 @@ Before you begin, ensure you have the following installed:
 
 For building documentation:
 
-- [Ruby (v3.2+)](https://www.ruby-lang.org/en/documentation/installation/)
+- [Ruby (v3.3+)](https://www.ruby-lang.org/en/documentation/installation/) (matches CI)
 - [Bundler](https://bundler.io/)
 
 ### Lint
@@ -69,6 +69,10 @@ The project documentation is built using [Jekyll](https://jekyllrb.com/) with th
 
 ```sh
 # working-directory: ./docs
+
+# Install bundler (first time only)
+gem install --user-install bundler
+export PATH="$(ruby -e 'print Gem.user_dir')/bin:$PATH"
 
 # Install dependencies (first time only or when Gemfile changes)
 bundle config set --local path 'vendor/bundle'

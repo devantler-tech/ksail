@@ -18,8 +18,9 @@ KSail is a Go-based CLI application that provides a unified SDK for spinning up 
 
 ```bash
 # Ruby and Jekyll for documentation builds
+# CI uses Ruby 3.3 (see .github/workflows/test-pages.yaml)
 gem install --user-install bundler
-export PATH="$HOME/.local/share/gem/ruby/3.2.0/bin:$PATH"
+export PATH="$(ruby -e 'print Gem.user_dir')/bin:$PATH"
 cd /path/to/repo/docs
 bundle config set --local path 'vendor/bundle'
 bundle install
@@ -47,7 +48,7 @@ go test ./...
 
 ```bash
 cd /path/to/repo/docs
-export PATH="$HOME/.local/share/gem/ruby/3.2.0/bin:$PATH"
+export PATH="$(ruby -e 'print Gem.user_dir')/bin:$PATH"
 bundle exec jekyll build
 # Takes ~2 seconds. Documentation builds to _site/ directory
 ```
@@ -102,7 +103,7 @@ go run main.go --help
 
    ```bash
    cd /path/to/repo/docs
-   export PATH="$HOME/.local/share/gem/ruby/3.2.0/bin:$PATH"
+   export PATH="$(ruby -e 'print Gem.user_dir')/bin:$PATH"
    bundle exec jekyll build  # Must succeed
    ls _site/  # Should contain generated HTML files
    ```
@@ -202,7 +203,7 @@ go test ./...                          # Run unit tests
 
 ```bash
 cd /path/to/repo/docs
-export PATH="$HOME/.local/share/gem/ruby/3.2.0/bin:$PATH"
+export PATH="$(ruby -e 'print Gem.user_dir')/bin:$PATH"
 bundle exec jekyll build               # Verify docs build
 bundle exec jekyll serve --host 0.0.0.0  # Test locally (if needed)
 ```
