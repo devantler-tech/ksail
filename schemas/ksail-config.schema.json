@@ -160,7 +160,7 @@
                 "placementGroup": {
                   "type": "string"
                 },
-                "imageId": {
+                "isoId": {
                   "type": "integer"
                 }
               },
