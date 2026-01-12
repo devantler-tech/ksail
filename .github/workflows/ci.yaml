@@ -217,6 +217,12 @@ jobs:
           - "--metrics-server Disabled"
           - "--policy-engine Kyverno"
           - "--policy-engine Gatekeeper"
+        # Add Hetzner test explicitly (only Talos supports Hetzner)
+        include:
+          - distribution: Talos
+            provider: Hetzner
+            init: false
+            args: ""
     steps:
       - name: 📄 Checkout
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
@@ -247,6 +253,7 @@ jobs:
           init: ${{ matrix.init }}
           args: ${{ matrix.args }}
           apply-overlay-path: ".github/fixtures/podinfo-overlay"
+          hcloud-token: ${{ matrix.provider == 'Hetzner' && secrets.HCLOUD_TOKEN || '' }}
 
   status:
     name: CI - KSail
