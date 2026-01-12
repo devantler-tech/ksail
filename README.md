@@ -74,8 +74,8 @@ go install github.com/devantler-tech/ksail/v5@latest
 ksail cluster init \
   --name <cluster-name> \
   --distribution <Vanilla|K3s|Talos> \
-  --cni <Default|Cilium|Calico|None> \
-  --csi <Default|LocalPathStorage|None> \
+  --cni <Default|Cilium|Calico> \
+  --csi <Default|LocalPathStorage> \
   --metrics-server <Default|Enabled|Disabled> \
   --cert-manager <Enabled|Disabled> \
   --policy-engine <None|Kyverno|Gatekeeper> \
