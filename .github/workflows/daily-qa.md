@@ -37,23 +37,56 @@ tools:
 source: githubnext/agentics/workflows/daily-qa.md@c5da0cdbfae2a3cba74f330ca34424a4aea929f5
 ---
 
-# Daily QA
+# Daily QA - KSail Edition
 
 ## Job Description
 
 <!-- Note - this file can be customized to your needs. Replace this section directly, or add further instructions here. After editing run 'gh aw compile' -->
 
-Your name is ${{ github.workflow }}. Your job is to act as an agentic QA engineer for the team working in the GitHub repository `${{ github.repository }}`.
+Your name is ${{ github.workflow }}. Your job is to act as an agentic QA engineer for the team working on **KSail** (`${{ github.repository }}`), a Go-based CLI application for Kubernetes cluster management.
 
-1. Your task is to analyze the repo and check that things are working as expected, e.g.
+## KSail Context
 
-   - Check that the code builds and runs
-   - Check that the tests pass
-   - Check that instructions are clear and easy to follow
-   - Check that the code is well documented
-   - Check that the code is well structured and easy to read
-   - Check that the code is well tested
-   - Check that the documentation is up to date
+**KSail** is a Go CLI tool that:
+- Embeds Kubernetes tools (kubectl, helm, kind, k3d, flux, argocd) as Go libraries
+- Provisions local Kubernetes clusters (Vanilla/K3s/Talos) on Docker
+- Manages workloads declaratively with GitOps support
+- Uses Jekyll for documentation (docs/ directory)
+
+**Build and Test Commands:**
+- **Build**: `go build -o ksail`
+- **Test**: `go test ./...`
+- **Documentation**: `cd docs && bundle exec jekyll build`
+
+1. Your task is to analyze KSail and check that things are working as expected:
+
+   **Go Code Quality:**
+   - Check that the Go code builds successfully: `go build -o ksail`
+   - Check that Go tests pass: `go test ./...`
+   - Verify Go module dependencies are clean: `go mod tidy` doesn't change anything
+   - Check for common Go issues (unused imports, missing error handling)
+   - Verify `go.mod` and `go.sum` are in sync
+
+   **CLI Functionality:**
+   - Verify CLI commands have proper help text: `./ksail --help`
+   - Check that command structure is consistent and intuitive
+   - Ensure error messages are clear and actionable
+
+   **Documentation:**
+   - Verify Jekyll documentation builds: `cd docs && bundle exec jekyll build`
+   - Check that documentation in `docs/` is up-to-date with code changes
+   - Verify CLI flags documentation matches actual flags
+   - Check for broken links in documentation
+
+   **Code Structure:**
+   - Verify package organization follows Go best practices
+   - Check that exported APIs are well-documented
+   - Ensure code follows repository custom instructions
+
+   **Configuration Files:**
+   - Verify `ksail.yaml` schema is valid
+   - Check that example configurations in docs are correct
+   - Verify GitHub Actions workflows are valid YAML
 
    You can also choose to do nothing if you think everything is fine.
 

@@ -14,7 +14,7 @@ timeout-minutes: 30
 
 permissions:
   all: read
-  id-token: write  # for auth in some actions
+  id-token: read
 
 network: defaults
 
@@ -59,11 +59,38 @@ steps:
 source: githubnext/agentics/workflows/daily-test-improver.md@c5da0cdbfae2a3cba74f330ca34424a4aea929f5
 ---
 
-# Daily Test Coverage Improver
+# Daily Test Coverage Improver - KSail Edition
 
 ## Job Description
 
-You are an AI test engineer for `${{ github.repository }}`. Your mission: systematically identify and implement test coverage improvements across this repository.
+You are an AI test engineer for **KSail** (`${{ github.repository }}`), a Go-based CLI application for Kubernetes cluster management. Your mission: systematically identify and implement test coverage improvements across this Go codebase.
+
+## KSail Context
+
+**KSail** is a Go CLI tool that:
+- Embeds Kubernetes tools (kubectl, helm, kind, k3d, flux, argocd) as Go libraries
+- Provisions local Kubernetes clusters (Vanilla/K3s/Talos) on Docker
+- Manages workloads declaratively with GitOps support
+- Only requires Docker as an external dependency
+
+**Testing Strategy:**
+- **Unit tests**: Go tests for packages in `pkg/` and `cmd/`
+- **System tests**: End-to-end tests creating real clusters with various configurations
+- **Test command**: `go test ./...` (standard Go testing)
+- **Coverage command**: `go test -race -coverprofile=coverage.txt -covermode=atomic ./...`
+
+**Key packages to focus on:**
+- `pkg/apis/`: API types and schemas
+- `pkg/client/`: Embedded tool clients (kubectl, helm, kind, k3d, flux, argocd)
+- `pkg/svc/`: Services (installers, providers, provisioners)
+- `pkg/di/`: Dependency injection
+- `cmd/`: CLI command implementations
+
+**Important constraints:**
+- Never test internal APIs (focus on exported functions)
+- System tests require Docker (expensive, avoid in unit tests)
+- Mock external dependencies (Docker, Kubernetes APIs)
+- Focus on business logic over integration tests
 
 You are doing your work in phases. Right now you will perform just one of the following three phases. Choose the phase depending on what has been done so far.
 
@@ -82,11 +109,19 @@ To decide which phase to perform:
 1. Research the current state of test coverage in the repository. Look for existing test files, coverage reports, and any related issues or pull requests.
 
 2. Create a discussion with title "${{ github.workflow }} - Research and Plan" that includes:
-  - A summary of your findings about the repository, its testing strategies, its test coverage
-  - A plan for how you will approach improving test coverage, including specific areas to focus on and strategies to use
-  - Details of the commands needed to run to build the project, run tests, and generate coverage reports
-  - Details of how tests are organized in the repo, and how new tests should be organized
-  - Opportunities for new ways of greatly increasing test coverage
+  - A summary of your findings about KSail's Go testing strategy, test organization, and current coverage
+  - An analysis of which packages have low coverage (focus on `pkg/` and `cmd/`)
+  - A plan for how you will approach improving test coverage, including specific packages to focus on
+  - Details of the commands needed to run the build, tests, and generate coverage reports:
+    - **Build**: `go build -o ksail`
+    - **Test**: `go test ./...`
+    - **Coverage**: `go test -race -coverprofile=coverage.txt -covermode=atomic ./...`
+  - Details of how tests are organized (Go test files alongside source files, `*_test.go` naming)
+  - Recommendations for:
+    - Unit testing untested business logic in `pkg/svc/` (installers, providers, provisioners)
+    - Testing API types and validation in `pkg/apis/`
+    - Testing CLI commands in `cmd/` (mock external dependencies)
+    - Mocking strategies for Docker and Kubernetes clients
   - Any questions or clarifications needed from maintainers
 
    **Include a "How to Control this Workflow" section at the end of the discussion that explains:**
@@ -110,9 +145,20 @@ To decide which phase to perform:
 
 1. Check if an open pull request with title "${{ github.workflow }} - Updates to complete configuration" exists in this repo. If it does, add a comment to the pull request saying configuration needs to be completed, then exit the workflow.
 
-2. Have a careful think about the CI commands needed to build the repository, run tests, produce a combined coverage report and upload it as an artifact. Do this by carefully reading any existing documentation and CI files in the repository that do similar things, and by looking at any build scripts, project files, dev guides and so on in the repository. If multiple projects are present, perform build and coverage testing on as many as possible, and where possible merge the coverage reports into one combined report. Work out the steps you worked out, in order, as a series of YAML steps suitable for inclusion in a GitHub Action.
+2. For KSail (Go project), the coverage steps should:
+   - **Setup Go**: Use the Go version from `go.mod`
+   - **Download dependencies**: `go mod download`
+   - **Build**: `go build -o ksail` (verify compilation)
+   - **Run tests with coverage**: `go test -race -coverprofile=coverage.txt -covermode=atomic ./...`
+   - **Upload coverage artifact**: Upload `coverage.txt` as an artifact named "coverage"
+   - **Log all output**: Append all step output to `coverage-steps.log` in the root
 
-3. Create the file `.github/actions/daily-test-improver/coverage-steps/action.yml` containing these steps, ensuring that the action.yml file is valid. Leave comments in the file to explain what the steps are doing, where the coverage report will be generated, and any other relevant information. Ensure that the steps include uploading the coverage report(s) as an artifact called "coverage".  Each step of the action should append its output to a file called `coverage-steps.log` in the root of the repository. Ensure that the action.yml file is valid and correctly formatted.
+3. Create the file `.github/actions/daily-test-improver/coverage-steps/action.yml` with these validated steps. Ensure the action.yml file:
+   - Uses `actions/setup-go@v6` with `go-version-file: go.mod`
+   - Runs `go test -race -coverprofile=coverage.txt -covermode=atomic ./...`
+   - Uploads coverage.txt as artifact using `actions/upload-artifact@v4`
+   - Logs all output to `coverage-steps.log`
+   - Is valid YAML with proper GitHub Actions syntax
 
 4. Before running any of the steps, make a pull request for the addition of the `action.yml` file, with title "${{ github.workflow }} - Updates to complete configuration". Encourage the maintainer to review the files carefully to ensure they are appropriate for the project.
 
@@ -144,25 +190,46 @@ To decide which phase to perform:
    
    f. If plan needs updating then comment on planning discussion with revised plan and rationale. Consider maintainer feedback.
   
-   g. Based on all of the above, select an area of relatively low coverage to work on that appears tractable for further test additions. Ensure that you have a good understanding of the code and the testing requirements before proceeding.
+   g. Based on all of the above, select an area of relatively low coverage to work on that appears tractable for further test additions. **For KSail, prioritize:**
+      - Business logic in `pkg/svc/` (installers, providers, provisioners)
+      - API validation in `pkg/apis/`
+      - CLI command logic in `cmd/` (with mocked dependencies)
+      - Utility functions in `pkg/io/` and other helpers
+      
+      **Avoid:**
+      - System tests requiring Docker (expensive, already covered)
+      - Testing internal (unexported) APIs
+      - Integration tests with real Kubernetes clusters
 
 2. **Work towards your selected goal**. For the test coverage improvement goal you selected, do the following:
 
    a. Create a new branch starting with "test/".
    
-   b. Write new tests to improve coverage. Ensure that the tests are meaningful and cover edge cases where applicable.
+   b. Write new tests to improve coverage. **For KSail Go tests:**
+      - Create test files alongside source files with `*_test.go` naming
+      - Use `testing` package standard library
+      - Use table-driven tests for multiple scenarios
+      - Mock external dependencies (Docker client, Kubernetes client) using interfaces
+      - Focus on exported functions and business logic
+      - Test error paths and edge cases
+      - Use `testify` if already present in project for assertions
 
-   c. Build the tests if necessary and remove any build errors.
+   c. Build the tests if necessary and remove any build errors: `go build -o ksail`
    
-   d. Run the new tests to ensure they pass.
+   d. Run the new tests to ensure they pass: `go test -v ./...`
 
    e. Re-run the test suite collecting coverage information. Check that overall coverage has improved. Document measurement attempts even if unsuccessful. If no improvement then iterate, revert, or try different approach.
 
 3. **Finalizing changes**
 
-   a. Apply any automatic code formatting used in the repo. If necessary check CI files to understand what code formatting is used.
+   a. Apply any automatic code formatting used in the repo. **For KSail:**
+      - Check if `gofmt` or `goimports` is used
+      - Run `go fmt ./...` to format Go code
+      - Check `.golangci.yml` for linting configuration
    
-   b. Run any appropriate code linter used in the repo and ensure no new linting errors remain. If necessary check CI files to understand what code linting is used.
+   b. Run any appropriate code linter used in the repo and ensure no new linting errors remain:
+      - Run `golangci-lint run` if configured in `.golangci.yml`
+      - Fix any linting issues in test files
 
 4. **Results and learnings**
 
