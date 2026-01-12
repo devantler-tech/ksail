@@ -18,7 +18,7 @@ Before you begin, ensure you have the following installed:
 
 - [Go (v1.25.4+)](https://go.dev/doc/install)
 - [mockery](https://vektra.github.io/mockery/v3.5/installation/)
-- [golang-ci](https://golangci-lint.run/docs/welcome/install/)
+- [golangci-lint](https://golangci-lint.run/docs/welcome/install/)
 - [mega-linter](https://megalinter.io/latest/mega-linter-runner/#installation)
 - [Docker](https://www.docker.com/get-started/)
 
@@ -86,9 +86,10 @@ The built site will be available in `docs/_site/`. Note that `docs/_site/`, `doc
 
 ## Project Structure
 
-The repository is organized into two main directories:
+The repository is organized around the top-level CLI entry point (`main.go`) and the public packages in `pkg/`.
 
-- **cmd/** - CLI command implementations
+- **main.go** - CLI entry point
+- **pkg/cli/cmd/** - CLI command implementations
 - **pkg/** - Public packages (importable by external projects)
 
 ### Key Packages in pkg/

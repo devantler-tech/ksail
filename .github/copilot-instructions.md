@@ -20,7 +20,7 @@ KSail is a Go-based CLI application that provides a unified SDK for spinning up 
 # Ruby and Jekyll for documentation builds
 gem install --user-install bundler
 export PATH="$HOME/.local/share/gem/ruby/3.2.0/bin:$PATH"
-cd /path/to/repo
+cd /path/to/repo/docs
 bundle config set --local path 'vendor/bundle'
 bundle install
 ```
