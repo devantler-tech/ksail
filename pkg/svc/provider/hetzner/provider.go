@@ -215,14 +215,50 @@ func (p *Provider) CreateServer(
 		return nil, fmt.Errorf("failed waiting for server %s creation: %w", opts.Name, err)
 	}
 
+	// If using ISO, attach it and reboot the server to boot from ISO
+	if opts.ISOID > 0 {
+		err = p.attachISOAndReboot(ctx, result.Server, opts.ISOID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to attach ISO to server %s: %w", opts.Name, err)
+		}
+	}
+
 	return result.Server, nil
+}
+
+// attachISOAndReboot attaches an ISO to a server and reboots it to boot from the ISO.
+func (p *Provider) attachISOAndReboot(ctx context.Context, server *hcloud.Server, isoID int64) error {
+	// Attach the ISO
+	action, _, err := p.client.Server.AttachISO(ctx, server, &hcloud.ISO{ID: isoID})
+	if err != nil {
+		return fmt.Errorf("failed to attach ISO: %w", err)
+	}
+
+	err = p.waitForAction(ctx, action)
+	if err != nil {
+		return fmt.Errorf("failed waiting for ISO attachment: %w", err)
+	}
+
+	// Reset (hard reboot) the server to boot from the ISO
+	action, _, err = p.client.Server.Reset(ctx, server)
+	if err != nil {
+		return fmt.Errorf("failed to reset server: %w", err)
+	}
+
+	err = p.waitForAction(ctx, action)
+	if err != nil {
+		return fmt.Errorf("failed waiting for server reset: %w", err)
+	}
+
+	return nil
 }
 
 // CreateServerOpts contains options for creating a Hetzner server.
 type CreateServerOpts struct {
 	Name             string
 	ServerType       string
-	ImageID          int64
+	ImageID          int64  // Image ID (for snapshots) - mutually exclusive with ISOID
+	ISOID            int64  // ISO ID (for Talos public ISOs) - mutually exclusive with ImageID
 	Location         string
 	Labels           map[string]string
 	UserData         string
@@ -448,9 +484,6 @@ func (p *Provider) buildServerCreateOpts(opts CreateServerOpts) hcloud.ServerCre
 	createOpts := hcloud.ServerCreateOpts{
 		Name:   opts.Name,
 		Labels: opts.Labels,
-		Image: &hcloud.Image{
-			ID: opts.ImageID,
-		},
 		ServerType: &hcloud.ServerType{
 			Name: opts.ServerType,
 		},
@@ -458,6 +491,20 @@ func (p *Provider) buildServerCreateOpts(opts CreateServerOpts) hcloud.ServerCre
 			Name: opts.Location,
 		},
 		StartAfterCreate: hcloud.Ptr(true),
+	}
+
+	// Use either Image or ISO - ISOs are used for Talos public ISOs
+	if opts.ISOID > 0 {
+		// When using ISO, we need a placeholder image for the server disk
+		// The ISO will be mounted and booted from
+		createOpts.Image = &hcloud.Image{
+			Name: "debian-13",
+		}
+		// Note: ISO attachment happens after server creation via AttachISO action
+	} else if opts.ImageID > 0 {
+		createOpts.Image = &hcloud.Image{
+			ID: opts.ImageID,
+		}
 	}
 
 	if opts.UserData != "" {

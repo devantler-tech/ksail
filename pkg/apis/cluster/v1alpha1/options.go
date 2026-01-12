@@ -59,9 +59,10 @@ type OptionsHetzner struct {
 	// If empty, a placement group named "<cluster-name>-placement" will be created
 	// with "spread" strategy for high availability.
 	PlacementGroup string `json:"placementGroup,omitzero"`
-	// ImageID is the Hetzner image ID for the Talos Linux ISO.
+	// ISOID is the Hetzner ISO ID for the Talos Linux bootable ISO.
 	// Hetzner provides Talos Linux as a public ISO with qemu-guest-agent.
 	// See https://docs.hetzner.cloud/changelog for available versions.
 	// Defaults to 122629 (Talos Linux 1.11.2 ARM).
-	ImageID int64 `json:"imageId,omitzero" default:"122629"`
+	// Use 122630 for x86 architecture.
+	ISOID int64 `json:"isoId,omitzero" default:"122629"`
 }

@@ -121,7 +121,7 @@ const (
 	defaultHetznerLocation   = "fsn1"
 	defaultHetznerNetworkCIDR = "10.0.0.0/16"
 	defaultHetznerTokenEnvVar = "HCLOUD_TOKEN"
-	defaultHetznerImageID     = 122629 // Talos Linux 1.11.2 ARM
+	defaultHetznerISOID       = 122629 // Talos Linux 1.11.2 ARM (use 122630 for x86)
 )
 
 // applyHetznerDefaults applies default values to Hetzner options.
@@ -146,8 +146,8 @@ func applyHetznerDefaults(opts v1alpha1.OptionsHetzner) v1alpha1.OptionsHetzner 
 		opts.TokenEnvVar = defaultHetznerTokenEnvVar
 	}
 
-	if opts.ImageID == 0 {
-		opts.ImageID = defaultHetznerImageID
+	if opts.ISOID == 0 {
+		opts.ISOID = defaultHetznerISOID
 	}
 
 	return opts

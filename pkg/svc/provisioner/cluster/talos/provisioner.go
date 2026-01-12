@@ -306,7 +306,7 @@ func (p *TalosProvisioner) createHetznerCluster(ctx context.Context, clusterName
 		server, serverErr := hetznerProv.CreateServer(ctx, hetzner.CreateServerOpts{
 			Name:             nodeName,
 			ServerType:       p.hetznerOpts.ControlPlaneServerType,
-			ImageID:          p.hetznerOpts.ImageID,
+			ISOID:            p.hetznerOpts.ISOID,
 			Location:         p.hetznerOpts.Location,
 			Labels:           hetzner.NodeLabels(clusterName, "control-plane", i+1),
 			NetworkID:        network.ID,
@@ -332,7 +332,7 @@ func (p *TalosProvisioner) createHetznerCluster(ctx context.Context, clusterName
 			server, serverErr := hetznerProv.CreateServer(ctx, hetzner.CreateServerOpts{
 				Name:             nodeName,
 				ServerType:       p.hetznerOpts.WorkerServerType,
-				ImageID:          p.hetznerOpts.ImageID,
+				ISOID:            p.hetznerOpts.ISOID,
 				Location:         p.hetznerOpts.Location,
 				Labels:           hetzner.NodeLabels(clusterName, "worker", i+1),
 				NetworkID:        network.ID,
