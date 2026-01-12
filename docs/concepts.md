@@ -66,6 +66,18 @@ The Docker provider runs Kubernetes nodes as Docker containers on your local mac
 - [Docker Documentation](https://docs.docker.com/)
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/)
 
+## Provisioners
+
+Provisioners configure a specific Kubernetes distribution on top of a provider.
+
+In practice, this means you select a **provider** (where nodes run) and a **distribution** (what Kubernetes stack to run), and KSail picks the matching provisioner implementation.
+
+| Distribution (user-facing) | Provisioner (implementation) | Tool / SDK |
+|----------------------------|------------------------------|------------|
+| Vanilla                    | Vanilla provisioner          | Kind       |
+| K3s                        | K3s provisioner              | K3d        |
+| Talos                      | Talos provisioner            | Talos SDK  |
+
 ## Container Network Interface (CNI)
 
 [CNI](https://www.cni.dev/) is a specification for configuring network interfaces in Linux containers. CNI plugins provide pod networking, network policies, and observability.
