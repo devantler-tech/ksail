@@ -15,15 +15,10 @@ Usage:
   ksail cluster delete [flags]
 
 Flags:
-  -c, --context string               Kubernetes context of cluster
-      --delete-volumes               Delete registry volumes when cleaning up registries
-  -d, --distribution Distribution    Kubernetes distribution to use
-      --distribution-config string   Configuration file for the distribution
-  -g, --gitops-engine GitOpsEngine   GitOps engine to use (None disables GitOps, Flux installs Flux controllers, ArgoCD installs Argo CD) (default None)
-  -h, --help                         help for delete
-  -k, --kubeconfig string            Path to kubeconfig file (default "~/.kube/config")
-      --local-registry               Enable local registry provisioning (defaults to true when a GitOps engine is configured)
-      --local-registry-port int32    Host port to expose the local OCI registry on (default 5050)
+  -c, --context string      Kubernetes context to target (defaults to current context)
+      --delete-storage      Delete storage volumes when cleaning up (registry volumes for Docker, block storage for Hetzner)
+  -h, --help                help for delete
+      --kubeconfig string   Path to kubeconfig file (defaults to $KUBECONFIG or ~/.kube/config)
 
 Global Flags:
       --timing   Show per-activity timing output

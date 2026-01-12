@@ -21,8 +21,9 @@ Usage:
   ksail cluster stop [flags]
 
 Flags:
-  -c, --context string   Kubernetes context to target (defaults to current context)
-  -h, --help             help for stop
+  -c, --context string      Kubernetes context to target (defaults to current context)
+  -h, --help                help for stop
+      --kubeconfig string   Path to kubeconfig file (defaults to $KUBECONFIG or ~/.kube/config)
 
 Global Flags:
       --timing   Show per-activity timing output
