@@ -716,10 +716,24 @@ func (p *TalosProvisioner) saveHetznerKubeconfig(
 	return nil
 }
 
-// Delete deletes a Talos-in-Docker cluster.
+// Delete deletes a Talos cluster.
 // If name is non-empty, it overrides the configured cluster name.
+// Routes to Docker-based or Hetzner-based deletion based on configuration.
 func (p *TalosProvisioner) Delete(ctx context.Context, name string) error {
-	clusterName, err := p.validateClusterOperation(ctx, name)
+	clusterName := p.resolveClusterName(name)
+
+	// Route to Hetzner-based deletion if Hetzner options are set
+	if p.hetznerOpts != nil {
+		return p.deleteHetznerCluster(ctx, clusterName)
+	}
+
+	// Docker-based deletion (default)
+	return p.deleteDockerCluster(ctx, clusterName)
+}
+
+// deleteDockerCluster deletes a Talos-in-Docker cluster using the Talos SDK.
+func (p *TalosProvisioner) deleteDockerCluster(ctx context.Context, clusterName string) error {
+	_, err := p.validateClusterOperation(ctx, clusterName)
 	if err != nil {
 		return err
 	}
@@ -786,14 +800,69 @@ func (p *TalosProvisioner) Delete(ctx context.Context, name string) error {
 	return nil
 }
 
-// Exists checks if a Talos-in-Docker cluster exists.
+// deleteHetznerCluster deletes a Talos cluster on Hetzner Cloud infrastructure.
+func (p *TalosProvisioner) deleteHetznerCluster(ctx context.Context, clusterName string) error {
+	// Type assert to get Hetzner-specific provider
+	hetznerProv, ok := p.infraProvider.(*hetzner.Provider)
+	if !ok {
+		return fmt.Errorf("expected Hetzner provider for Hetzner cluster deletion, got %T", p.infraProvider)
+	}
+
+	// Check if cluster exists
+	exists, err := hetznerProv.NodesExist(ctx, clusterName)
+	if err != nil {
+		return fmt.Errorf("failed to check if cluster exists: %w", err)
+	}
+
+	if !exists {
+		return fmt.Errorf("%w: %s", clustererrors.ErrClusterNotFound, clusterName)
+	}
+
+	// Delete all nodes and infrastructure
+	_, _ = fmt.Fprintf(p.logWriter, "Deleting Talos cluster %q on Hetzner...\n", clusterName)
+
+	err = hetznerProv.DeleteNodes(ctx, clusterName)
+	if err != nil {
+		return fmt.Errorf("failed to delete Hetzner nodes: %w", err)
+	}
+
+	// Clean up kubeconfig
+	if p.options.KubeconfigPath != "" {
+		cleanupErr := p.cleanupKubeconfig(clusterName)
+		if cleanupErr != nil {
+			_, _ = fmt.Fprintf(
+				p.logWriter,
+				"Warning: failed to clean up kubeconfig: %v\n",
+				cleanupErr,
+			)
+		}
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "Successfully deleted Talos cluster %q\n", clusterName)
+
+	return nil
+}
+
+// Exists checks if a Talos cluster exists.
 // If name is non-empty, it overrides the configured cluster name.
+// Routes to Docker-based or Hetzner-based existence check based on configuration.
 func (p *TalosProvisioner) Exists(ctx context.Context, name string) (bool, error) {
+	clusterName := p.resolveClusterName(name)
+
+	// Route to Hetzner-based check if Hetzner options are set
+	if p.hetznerOpts != nil {
+		hetznerProv, ok := p.infraProvider.(*hetzner.Provider)
+		if !ok {
+			return false, fmt.Errorf("expected Hetzner provider for Hetzner cluster check, got %T", p.infraProvider)
+		}
+
+		return hetznerProv.NodesExist(ctx, clusterName)
+	}
+
+	// Docker-based check (default)
 	if p.dockerClient == nil {
 		return false, ErrDockerNotAvailable
 	}
-
-	clusterName := p.resolveClusterName(name)
 
 	containers, err := p.listTalosContainers(ctx, clusterName)
 	if err != nil {

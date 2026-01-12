@@ -44,10 +44,11 @@ var (
 
 // ClusterInfo contains the detected distribution and provider for a cluster.
 type ClusterInfo struct {
-	Distribution v1alpha1.Distribution
-	Provider     v1alpha1.Provider
-	ClusterName  string
-	ServerURL    string
+	Distribution   v1alpha1.Distribution
+	Provider       v1alpha1.Provider
+	ClusterName    string
+	ServerURL      string
+	KubeconfigPath string
 }
 
 // DetectClusterInfo detects the distribution and provider from the kubeconfig context.
@@ -102,10 +103,11 @@ func DetectClusterInfo(kubeconfigPath, contextName string) (*ClusterInfo, error)
 	}
 
 	return &ClusterInfo{
-		Distribution: distribution,
-		Provider:     provider,
-		ClusterName:  clusterName,
-		ServerURL:    cluster.Server,
+		Distribution:   distribution,
+		Provider:       provider,
+		ClusterName:    clusterName,
+		ServerURL:      cluster.Server,
+		KubeconfigPath: kubeconfigPath,
 	}, nil
 }
 

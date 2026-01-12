@@ -171,10 +171,10 @@ func CreateMinimalProvisioner(
 	case v1alpha1.DistributionTalos:
 		talosConfig := &talosconfigmanager.Configs{Name: info.ClusterName}
 
-		// Create provisioner with detected provider
+		// Create provisioner with detected provider and kubeconfig path
 		provisioner, err := talosprovisioner.CreateProvisioner(
 			talosConfig,
-			"",
+			info.KubeconfigPath,
 			info.Provider,
 			v1alpha1.OptionsTalos{},
 			v1alpha1.OptionsHetzner{},
