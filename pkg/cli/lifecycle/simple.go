@@ -3,8 +3,6 @@ package lifecycle
 import (
 	"context"
 	"fmt"
-	"os"
-	"strings"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
@@ -16,7 +14,6 @@ import (
 	k3dtypes "github.com/k3d-io/k3d/v5/pkg/config/types"
 	k3dv1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/spf13/cobra"
-	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
 
@@ -42,7 +39,10 @@ type SimpleLifecycleConfig struct {
 // Unlike config-based lifecycle commands, these commands don't require a ksail.yaml file
 // and instead detect the cluster from the kubeconfig context pattern.
 func NewSimpleLifecycleCmd(config SimpleLifecycleConfig) *cobra.Command {
-	var contextFlag string
+	var (
+		contextFlag    string
+		kubeconfigFlag string
+	)
 
 	cmd := &cobra.Command{
 		Use:          config.Use,
@@ -50,7 +50,7 @@ func NewSimpleLifecycleCmd(config SimpleLifecycleConfig) *cobra.Command {
 		Long:         config.Long,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runSimpleLifecycleAction(cmd, contextFlag, config)
+			return runSimpleLifecycleAction(cmd, kubeconfigFlag, contextFlag, config)
 		},
 	}
 
@@ -62,11 +62,19 @@ func NewSimpleLifecycleCmd(config SimpleLifecycleConfig) *cobra.Command {
 		"Kubernetes context to target (defaults to current context)",
 	)
 
+	cmd.Flags().StringVar(
+		&kubeconfigFlag,
+		"kubeconfig",
+		"",
+		"Path to kubeconfig file (defaults to $KUBECONFIG or ~/.kube/config)",
+	)
+
 	return cmd
 }
 
 func runSimpleLifecycleAction(
 	cmd *cobra.Command,
+	kubeconfigPath string,
 	contextFlag string,
 	config SimpleLifecycleConfig,
 ) error {
@@ -74,14 +82,10 @@ func runSimpleLifecycleAction(
 	stageWriter := notify.NewStageSeparatingWriter(cmd.OutOrStdout())
 	cmd.SetOut(stageWriter)
 
-	ctx, err := resolveContext(contextFlag)
+	// Detect cluster info from kubeconfig
+	clusterInfo, err := DetectClusterInfo(kubeconfigPath, contextFlag)
 	if err != nil {
-		return err
-	}
-
-	distribution, clusterName, err := DetectDistributionFromContext(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to detect distribution: %w", err)
+		return fmt.Errorf("failed to detect cluster: %w", err)
 	}
 
 	notify.WriteMessage(notify.Message{
@@ -93,16 +97,16 @@ func runSimpleLifecycleAction(
 
 	notify.WriteMessage(notify.Message{
 		Type:    notify.ActivityType,
-		Content: fmt.Sprintf("%s %s cluster '%s'", config.Activity, distribution, clusterName),
+		Content: fmt.Sprintf("%s %s cluster '%s'", config.Activity, clusterInfo.Distribution, clusterInfo.ClusterName),
 		Writer:  cmd.OutOrStdout(),
 	})
 
-	provisioner, err := CreateMinimalProvisioner(distribution, clusterName)
+	provisioner, err := CreateMinimalProvisioner(clusterInfo)
 	if err != nil {
 		return fmt.Errorf("failed to create provisioner: %w", err)
 	}
 
-	err = config.Action(cmd.Context(), provisioner, clusterName)
+	err = config.Action(cmd.Context(), provisioner, clusterInfo.ClusterName)
 	if err != nil {
 		return fmt.Errorf("failed to %s cluster: %w", config.Activity, err)
 	}
@@ -119,55 +123,36 @@ func runSimpleLifecycleAction(
 // GetCurrentKubeContext reads the current context from the default kubeconfig.
 // This is exported for use by other commands that need context-based auto-detection.
 func GetCurrentKubeContext() (string, error) {
-	kubeconfigPath := clientcmd.RecommendedHomeFile
-
-	// Check if KUBECONFIG env var is set
-	if envPath := os.Getenv("KUBECONFIG"); envPath != "" {
-		// Use first path if multiple are specified
-		paths := strings.Split(envPath, string(os.PathListSeparator))
-		if len(paths) > 0 && paths[0] != "" {
-			kubeconfigPath = paths[0]
-		}
-	}
-
-	//nolint:gosec // kubeconfigPath is validated from known sources
-	configBytes, err := os.ReadFile(kubeconfigPath)
+	clusterInfo, err := DetectClusterInfo("", "")
 	if err != nil {
-		return "", fmt.Errorf("failed to read kubeconfig: %w", err)
+		return "", err
 	}
 
-	config, err := clientcmd.Load(configBytes)
-	if err != nil {
-		return "", fmt.Errorf("failed to parse kubeconfig: %w", err)
+	// Reconstruct the context name from the cluster info
+	switch clusterInfo.Distribution {
+	case v1alpha1.DistributionVanilla:
+		return "kind-" + clusterInfo.ClusterName, nil
+	case v1alpha1.DistributionK3s:
+		return "k3d-" + clusterInfo.ClusterName, nil
+	case v1alpha1.DistributionTalos:
+		return "admin@" + clusterInfo.ClusterName, nil
+	default:
+		return "", fmt.Errorf("unknown distribution: %s", clusterInfo.Distribution)
 	}
-
-	if config.CurrentContext == "" {
-		return "", ErrNoCurrentContext
-	}
-
-	return config.CurrentContext, nil
-}
-
-// resolveContext returns the provided context if non-empty, otherwise reads from kubeconfig.
-func resolveContext(contextFlag string) (string, error) {
-	if contextFlag != "" {
-		return contextFlag, nil
-	}
-
-	return GetCurrentKubeContext()
 }
 
 // CreateMinimalProvisioner creates a minimal provisioner for lifecycle operations.
 // These provisioners only need enough configuration to identify containers.
+// It uses the detected ClusterInfo to create the appropriate provisioner
+// with the correct provider configuration.
 //
 //nolint:ireturn // Interface return is required for provisioner abstraction
 func CreateMinimalProvisioner(
-	distribution v1alpha1.Distribution,
-	clusterName string,
+	info *ClusterInfo,
 ) (clusterprovisioner.ClusterProvisioner, error) {
-	switch distribution {
+	switch info.Distribution {
 	case v1alpha1.DistributionVanilla:
-		kindConfig := &v1alpha4.Cluster{Name: clusterName}
+		kindConfig := &v1alpha4.Cluster{Name: info.ClusterName}
 
 		provisioner, err := kindprovisioner.CreateProvisioner(kindConfig, "")
 		if err != nil {
@@ -178,23 +163,22 @@ func CreateMinimalProvisioner(
 
 	case v1alpha1.DistributionK3s:
 		k3dConfig := &k3dv1alpha5.SimpleConfig{
-			ObjectMeta: k3dtypes.ObjectMeta{Name: clusterName},
+			ObjectMeta: k3dtypes.ObjectMeta{Name: info.ClusterName},
 		}
 
 		return k3dprovisioner.CreateProvisioner(k3dConfig, ""), nil
 
 	case v1alpha1.DistributionTalos:
-		talosConfig := &talosconfigmanager.Configs{Name: clusterName}
+		talosConfig := &talosconfigmanager.Configs{Name: info.ClusterName}
 
-		// Simple lifecycle is for start/stop/delete - not cluster creation.
-		// skipCNIChecks doesn't matter here since we're not running bootstrap checks.
+		// Create provisioner with detected provider
 		provisioner, err := talosprovisioner.CreateProvisioner(
 			talosConfig,
 			"",
-			"", // provider not needed for simple lifecycle
+			info.Provider,
 			v1alpha1.OptionsTalos{},
-			v1alpha1.OptionsHetzner{}, // Hetzner options not needed for simple lifecycle
-			false,                     // skipCNIChecks - not relevant for simple lifecycle operations
+			v1alpha1.OptionsHetzner{},
+			false, // skipCNIChecks - not relevant for simple lifecycle operations
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create talos provisioner: %w", err)
@@ -206,7 +190,7 @@ func CreateMinimalProvisioner(
 		return nil, fmt.Errorf(
 			"%w: %s",
 			clusterprovisioner.ErrUnsupportedDistribution,
-			distribution,
+			info.Distribution,
 		)
 	}
 }

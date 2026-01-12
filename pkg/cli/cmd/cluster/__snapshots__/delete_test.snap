@@ -1,67 +1,23 @@
 
-[TestDelete_ClusterExists_PrintsDeleteSuccess/K3d - 1]
-🗑️ Delete cluster...
-► deleting cluster
-✔ cluster deleted
----
-
-[TestDelete_ClusterExists_PrintsDeleteSuccess/Kind - 1]
-🗑️ Delete cluster...
-► deleting cluster
-✔ cluster deleted
----
-
-[TestDelete_ClusterExists_PrintsDeleteSuccess/Talos - 1]
-🗑️ Delete cluster...
-► deleting cluster
-✔ cluster deleted
----
-
-[TestDelete_ClusterNotFound_ReturnsError/K3d - 1]
-🗑️ Delete cluster...
-► deleting cluster
----
-
-[TestDelete_ClusterNotFound_ReturnsError/Kind - 1]
-🗑️ Delete cluster...
-► deleting cluster
----
-
-[TestDelete_ClusterNotFound_ReturnsError/Talos - 1]
-🗑️ Delete cluster...
-► deleting cluster
----
-
 [TestDelete_ContextBasedDetection_ClusterNotFound - 1]
 🗑️ Delete cluster...
-► deleting cluster
+► deleting Vanilla cluster 'nonexistent'
 ---
 
 [TestDelete_ContextBasedDetection_DeletesCluster/K3d_context_pattern - 1]
 🗑️ Delete cluster...
-► deleting cluster
+► deleting K3s cluster 'dev-cluster'
 ✔ cluster deleted
 ---
 
 [TestDelete_ContextBasedDetection_DeletesCluster/Kind_context_pattern - 1]
 🗑️ Delete cluster...
-► deleting cluster
+► deleting Vanilla cluster 'my-cluster'
 ✔ cluster deleted
 ---
 
 [TestDelete_ContextBasedDetection_DeletesCluster/Talos_context_pattern - 1]
 🗑️ Delete cluster...
-► deleting cluster
+► deleting Talos cluster 'talos-homelab'
 ✔ cluster deleted
----
-
-[TestDelete_ClusterExists_PrintsDeleteSuccess/Vanilla - 1]
-🗑️ Delete cluster...
-► deleting cluster
-✔ cluster deleted
----
-
-[TestDelete_ClusterNotFound_ReturnsError/Vanilla - 1]
-🗑️ Delete cluster...
-► deleting cluster
 ---
