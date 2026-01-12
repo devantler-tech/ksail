@@ -144,7 +144,7 @@ jobs:
         env:
           TOKEN_CHECK: ${{ secrets.GH_AW_GITHUB_MCP_SERVER_TOKEN }}
         if: env.TOKEN_CHECK != ''
-        uses: actions/github-script@v8
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         with:
           script: |
             const determineAutomaticLockdown = require('/opt/gh-aw/actions/determine_automatic_lockdown.cjs');
@@ -503,6 +503,7 @@ jobs:
              - Look for new APIs, functions, classes, configuration files, or significant code changes
              - Check existing documentation for accuracy and completeness
              - Identify documentation gaps like failing tests: a "red build" until fixed
+             - **Also check repo health files**: `.github/copilot-instructions.md`, `CONTRIBUTING.md`, and `SECURITY.md` (if it exists) for accuracy and synchronization with code changes
           
           2. **Documentation Assessment**
              - Review existing documentation structure in `docs/`
@@ -512,13 +513,21 @@ jobs:
                - Inclusive naming conventions
                - Microsoft Writing Style Guide standards
              - Identify missing or outdated documentation
+             - **Review Repository Health Files**:
+               - **`.github/copilot-instructions.md`**: Ensure it accurately reflects current project structure, build commands, architecture, and key workflows
+               - **`CONTRIBUTING.md`**: Verify contribution guidelines are up-to-date with current development practices, prerequisites, and processes
+               - **`SECURITY.md`**: If it exists, ensure security policies and reporting procedures are current
           
           3. **Create or Update Documentation**
-             - Use Markdown (.md) format with Jekyll front matter
+             - Use Markdown (.md) format with Jekyll front matter for Jekyll docs
              - Never use MDX - this project uses plain Jekyll Markdown
              - Follow progressive disclosure: high-level concepts first, detailed examples second
              - Ensure content is accessible and internationalization-ready
              - Create clear, actionable documentation that serves both newcomers and power users
+             - **Update Repository Health Files as Needed**:
+               - **`.github/copilot-instructions.md`**: Keep in sync with code architecture changes, new packages, build process updates, and CLI command changes
+               - **`CONTRIBUTING.md`**: Update with new prerequisites, testing procedures, or development workflow changes
+               - **`SECURITY.md`**: Create or update security documentation if security-related changes are made
           
           4. **Documentation Structure & Organization**
              - Organize content following Diátaxis methodology:
@@ -533,8 +542,12 @@ jobs:
           5. **Quality Assurance**
              - Check for broken links, missing images, or formatting issues
              - Ensure code examples are accurate and functional
-             - Verify Jekyll front matter is correctly formatted
+             - Verify Jekyll front matter is correctly formatted for Jekyll docs
              - Test that internal links use relative paths
+             - **Verify Repository Health Files**:
+               - Ensure `.github/copilot-instructions.md` examples and commands are accurate and testable
+               - Verify `CONTRIBUTING.md` instructions match actual CI/CD configuration
+               - Check that security documentation aligns with current security practices
           
           6. **Continuous Improvement**
              - Perform nightly sanity sweeps for documentation drift
@@ -563,6 +576,43 @@ jobs:
           - Exit if the repository has no implementation code yet (empty repository)
           - Exit if no code changes require documentation updates
           - Exit if all documentation is already up-to-date and comprehensive
+          
+          ### Repository Health Files to Maintain
+          
+          In addition to documentation in `docs/`, you are responsible for keeping these repository health files synchronized with code changes:
+          
+          1. **`.github/copilot-instructions.md`**
+             - **Purpose**: Provides Copilot agents with context about project structure, build commands, architecture, and workflows
+             - **Update triggers**: Package structure changes, new build commands, architecture changes, new CLI commands, dependency updates
+             - **Content to maintain**:
+               - Project structure and key directories
+               - Build, test, and documentation commands
+               - Architecture overview (providers, provisioners, distributions)
+               - Active technologies and versions
+               - Recent significant changes
+             - **Style**: Concise, imperative, command-focused - optimized for AI consumption
+          
+          2. **`CONTRIBUTING.md`**
+             - **Purpose**: Guidelines for contributors on how to work with the codebase
+             - **Update triggers**: New prerequisites, CI/CD changes, testing procedure updates, release process changes
+             - **Content to maintain**:
+               - Prerequisites and installation instructions
+               - Build, lint, and test commands
+               - Project structure and architecture
+               - CI/CD workflows and requirements
+               - Release process
+             - **Style**: Friendly, instructional, accessible to new contributors
+          
+          3. **`SECURITY.md`**
+             - **Purpose**: Security policy and vulnerability reporting procedures (create if needed)
+             - **Update triggers**: Security-related changes, new security practices, dependency updates
+             - **Content to include** (if creating):
+               - Supported versions
+               - Security vulnerability reporting process
+               - Security best practices for users
+             - **Style**: Clear, formal, action-oriented
+          
+          When code changes affect these areas, update the relevant health file(s) in the same PR as the documentation updates.
           
           > [!NOTE]
           >
