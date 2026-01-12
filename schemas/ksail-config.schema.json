@@ -51,7 +51,8 @@
             "provider": {
               "type": "string",
               "enum": [
-                "Docker"
+                "Docker",
+                "Hetzner"
               ]
             },
             "cni": {
@@ -127,6 +128,39 @@
                   "type": "integer"
                 },
                 "workers": {
+                  "type": "integer"
+                }
+              },
+              "additionalProperties": false,
+              "type": "object"
+            },
+            "hetzner": {
+              "properties": {
+                "controlPlaneServerType": {
+                  "type": "string"
+                },
+                "workerServerType": {
+                  "type": "string"
+                },
+                "location": {
+                  "type": "string"
+                },
+                "networkName": {
+                  "type": "string"
+                },
+                "networkCidr": {
+                  "type": "string"
+                },
+                "sshKeyName": {
+                  "type": "string"
+                },
+                "tokenEnvVar": {
+                  "type": "string"
+                },
+                "placementGroup": {
+                  "type": "string"
+                },
+                "imageId": {
                   "type": "integer"
                 }
               },
