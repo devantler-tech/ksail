@@ -21,9 +21,9 @@ KSail builds upon established Kubernetes technologies and patterns. This page pr
 
 Kubernetes distributions package the Kubernetes components with additional tooling for specific use cases. KSail supports three distributions that can run on the Docker provider.
 
-### Vanilla (Kind)
+### Vanilla (implemented with Kind)
 
-[Kind](https://kind.sigs.k8s.io/) (Kubernetes in Docker) runs standard upstream Kubernetes clusters using Docker containers as nodes. This distribution provides vanilla Kubernetes without any modifications, making it ideal for testing against standard Kubernetes behavior.
+Vanilla uses [Kind](https://kind.sigs.k8s.io/) (Kubernetes in Docker) to run standard upstream Kubernetes clusters using Docker containers as nodes. This distribution provides upstream Kubernetes without modifications, making it ideal for testing against standard Kubernetes behavior.
 
 **Key resources:**
 
@@ -31,7 +31,7 @@ Kubernetes distributions package the Kubernetes components with additional tooli
 - [Kind Configuration](https://kind.sigs.k8s.io/docs/user/configuration/)
 - [Kind Quick Start](https://kind.sigs.k8s.io/docs/user/quick-start/)
 
-### K3s (K3d)
+### K3s (implemented with K3d)
 
 [K3s](https://k3s.io/) is a lightweight, certified Kubernetes distribution built for resource-constrained environments. KSail uses [K3d](https://k3d.io/) to run K3s clusters in Docker containers. K3s includes sensible defaults like an embedded load balancer, local storage provisioner, and metrics server.
 

@@ -39,12 +39,16 @@ The binary works on all major operating systems and modern CPU architectures:
 |  MacOS              | arm64           |
 | ⊞ Windows (untested) | amd64 and arm64 |
 
+**Docker is required** to create local clusters (the Docker provider). Install Docker Desktop/Engine and ensure `docker ps` works.
+
 The supported distributions (x-axis) run on different infrastructure providers (y-axis). You need to have access to at least one provider for your chosen distribution for KSail to create and manage the cluster.
 
-|         | Vanilla | K3s | Talos     |
-|---------|---------|-----|-----------|
-| Docker  | Kind    | K3d | Talos SDK |
-| Hetzner | —       | —   | 🚧 next   |
+| Provider | Vanilla   | K3s      | Talos     |
+|----------|-----------|----------|-----------|
+| Docker   | ✅ (Kind)  | ✅ (K3d)  | ✅ (Talos) |
+| Hetzner  | —         | —        | 🚧 next    |
+
+Vanilla is implemented with Kind; K3s is implemented with K3d.
 
 > [!NOTE]
 > If you want to see more distributions or providers supported, please consider sponsoring development via [GitHub Sponsors](https://github.com/sponsors/devantler). Testing and maintaining distribution x cloud provider support comes with a additional financial costs for me, so sponsorships help make that feasible.
