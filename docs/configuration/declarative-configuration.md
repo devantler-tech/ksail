@@ -30,7 +30,7 @@ spec:
     distributionConfig: kind.yaml
 ```
 
-This minimal configuration creates a Vanilla (Kind) cluster using defaults for all other settings.
+This minimal configuration creates a Vanilla cluster (implemented with Kind) using defaults for all other settings.
 
 ## Complete Example
 
@@ -107,8 +107,8 @@ If not specified, KSail falls back to standard editor environment variables (`SO
 | `localRegistry`        | enum       | `Disabled`  | Provision local OCI registry                |
 | `gitOpsEngine`         | enum       | `None`      | GitOps engine to install                    |
 | `localRegistryOptions` | object     | –           | Local registry configuration options        |
-| `kind`                 | object     | –           | Kind-specific options                       |
-| `k3d`                  | object     | –           | K3d-specific options                        |
+| `kind`                 | object     | –           | Kind-specific options (Vanilla distribution) |
+| `k3d`                  | object     | –           | K3d-specific options (K3s distribution)      |
 | `talos`                | object     | –           | Talos-specific options                      |
 | `cilium`               | object     | –           | Cilium CNI options                          |
 | `calico`               | object     | –           | Calico CNI options                          |
@@ -123,9 +123,9 @@ Kubernetes distribution to use for the local cluster. See [Distributions](../con
 
 **Valid values:**
 
-- `Vanilla` (default) – Uses [Kind](https://kind.sigs.k8s.io/) to run standard upstream Kubernetes in Docker
-- `K3s` – Uses [K3d](https://k3d.io/) to run lightweight K3s in Docker
-- `Talos` – Uses [Talos Linux](https://www.talos.dev/) in Docker containers
+- `Vanilla` (default) – Standard upstream Kubernetes (implemented with [Kind](https://kind.sigs.k8s.io/))
+- `K3s` – Lightweight Kubernetes (implemented with [K3d](https://k3d.io/))
+- `Talos` – [Talos Linux](https://www.talos.dev/) in Docker containers
 
 #### distributionConfig
 
@@ -254,11 +254,11 @@ Advanced configuration options are now direct fields under `spec.cluster` instea
 
 KSail references distribution-specific configuration files to customize cluster behavior. The path to these files is set via `spec.cluster.distributionConfig`.
 
-### Vanilla (Kind) Configuration
+### Vanilla (implemented with Kind) Configuration
 
 **Default:** `kind.yaml`
 
-Vanilla clusters are configured via a YAML file following the Kind configuration schema. This allows you to customize:
+The Vanilla distribution is configured via a YAML file following the Kind configuration schema. This allows you to customize:
 
 - Node images and versions
 - Extra port mappings
@@ -280,11 +280,11 @@ nodes:
         hostPort: 30000
 ```
 
-### K3s (K3d) Configuration
+### K3s (implemented with K3d) Configuration
 
 **Default:** `k3d.yaml`
 
-K3s clusters are configured via a YAML file following the K3d configuration schema. This allows you to customize:
+The K3s distribution is configured via a YAML file following the K3d configuration schema. This allows you to customize:
 
 - Server and agent counts
 - Port mappings
