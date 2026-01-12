@@ -124,8 +124,8 @@ go run main.go --help
 │   ├── k8s/                # Kubernetes helpers/templates
 │   └── svc/                # Services (installers, managers, etc.)
 ├── docs/                   # Jekyll documentation source
-│   └── _site/              # Generated site (after jekyll build)
-├── docs/Gemfile            # Ruby dependencies for documentation
+│   ├── _site/              # Generated site (after jekyll build)
+│   └── Gemfile             # Ruby dependencies for documentation
 ├── go.mod                  # Go module file
 └── README.md               # Main repository documentation
 ```
