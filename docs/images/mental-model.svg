@@ -535,7 +535,7 @@
 
     <!-- Text with enhanced styling -->
     <text x="108" y="38" fill="#60a5fa" font-size="20" font-weight="800" letter-spacing="1.5">KUBERNETES CLUSTER</text>
-    <text x="108" y="58" fill="#f1f5f9" font-size="12" font-weight="500" opacity="0.95">Kind • K3d • Talos</text>
+    <text x="108" y="58" fill="#f1f5f9" font-size="12" font-weight="500" opacity="0.95">Vanilla • K3s • Talos</text>
 
     <!-- Feature Pills - Single row with key features -->
     <g transform="translate(108, 70)">
