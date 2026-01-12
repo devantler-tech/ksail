@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
@@ -109,6 +110,8 @@ type TalosProvisioner struct {
 	// infraProvider is the infrastructure provider for node operations (start/stop).
 	// If nil, falls back to dockerClient for backwards compatibility.
 	infraProvider provider.Provider
+	// talosOpts holds Talos-specific options (node counts, cloud ISO, etc.).
+	talosOpts *v1alpha1.OptionsTalos
 	// hetznerOpts holds Hetzner-specific options when using the Hetzner provider.
 	hetznerOpts        *v1alpha1.OptionsHetzner
 	provisionerFactory func(ctx context.Context) (provision.Provisioner, error)
@@ -170,6 +173,13 @@ func (p *TalosProvisioner) WithInfraProvider(prov provider.Provider) *TalosProvi
 // WithHetznerOptions sets the Hetzner-specific options for cloud provisioning.
 func (p *TalosProvisioner) WithHetznerOptions(opts v1alpha1.OptionsHetzner) *TalosProvisioner {
 	p.hetznerOpts = &opts
+
+	return p
+}
+
+// WithTalosOptions sets the Talos-specific options (node counts, cloud ISO, etc.).
+func (p *TalosProvisioner) WithTalosOptions(opts v1alpha1.OptionsTalos) *TalosProvisioner {
+	p.talosOpts = &opts
 
 	return p
 }
@@ -319,7 +329,7 @@ func (p *TalosProvisioner) createHetznerCluster(ctx context.Context, clusterName
 		server, serverErr := hetznerProv.CreateServer(ctx, hetzner.CreateServerOpts{
 			Name:             nodeName,
 			ServerType:       p.hetznerOpts.ControlPlaneServerType,
-			ISOID:            p.hetznerOpts.ISOID,
+			ISOID:            p.talosOpts.ISO,
 			Location:         p.hetznerOpts.Location,
 			Labels:           hetzner.NodeLabels(clusterName, "control-plane", i+1),
 			NetworkID:        network.ID,
@@ -347,7 +357,7 @@ func (p *TalosProvisioner) createHetznerCluster(ctx context.Context, clusterName
 			server, serverErr := hetznerProv.CreateServer(ctx, hetzner.CreateServerOpts{
 				Name:             nodeName,
 				ServerType:       p.hetznerOpts.WorkerServerType,
-				ISOID:            p.hetznerOpts.ISOID,
+				ISOID:            p.talosOpts.ISO,
 				Location:         p.hetznerOpts.Location,
 				Labels:           hetzner.NodeLabels(clusterName, "worker", i+1),
 				NetworkID:        network.ID,
@@ -368,8 +378,23 @@ func (p *TalosProvisioner) createHetznerCluster(ctx context.Context, clusterName
 
 	_, _ = fmt.Fprintf(p.logWriter, "\nInfrastructure created. Bootstrapping Talos cluster...\n")
 
-	// Get the config bundle - we need this for applying to nodes
-	configBundle := p.talosConfigs.Bundle()
+	// Regenerate configs with the first control-plane node's public IP as the endpoint.
+	// This is necessary because:
+	// 1. The original configs were generated with internal network IPs
+	// 2. Hetzner nodes are accessed via their public IPs
+	// 3. The endpoint IP is embedded in certificates and must match
+	firstCPIP := controlPlaneServers[0].PublicNet.IPv4.IP.String()
+
+	_, _ = fmt.Fprintf(p.logWriter, "Regenerating configs with endpoint IP %s...\n", firstCPIP)
+
+	updatedConfigs, err := p.talosConfigs.WithEndpoint(firstCPIP)
+	if err != nil {
+		return fmt.Errorf("failed to regenerate configs with endpoint: %w", err)
+	}
+
+	// Update the stored configs and get the bundle
+	p.talosConfigs = updatedConfigs
+	configBundle := updatedConfigs.Bundle()
 
 	// Build list of all node IPs for waiting
 	allServers := append(controlPlaneServers, workerServers...)
@@ -422,6 +447,8 @@ func (p *TalosProvisioner) waitForHetznerTalosAPI(ctx context.Context, servers [
 
 		err := retry.Constant(timeout, retry.WithUnits(5*time.Second)).RetryWithContext(ctx, func(ctx context.Context) error {
 			// Try to establish a TLS connection to verify the Talos API is responding
+			// In maintenance mode, we can only verify the connection works - most APIs
+			// return "not implemented in maintenance mode" which is expected
 			c, connErr := talosclient.New(ctx,
 				talosclient.WithEndpoints(ip),
 				talosclient.WithTLSConfig(&tls.Config{
@@ -434,9 +461,16 @@ func (p *TalosProvisioner) waitForHetznerTalosAPI(ctx context.Context, servers [
 
 			defer c.Close() //nolint:errcheck
 
-			// Try to get version to verify the API is working
+			// Try to get version - in maintenance mode this may return "not implemented"
+			// but that error indicates the API is reachable and responding
 			_, versionErr := c.Version(ctx)
 			if versionErr != nil {
+				// "Unimplemented" means the API is reachable but in maintenance mode
+				// This is actually a success - the node is ready for config application
+				if strings.Contains(versionErr.Error(), "Unimplemented") {
+					return nil
+				}
+
 				return retry.ExpectedError(versionErr)
 			}
 
@@ -1544,60 +1578,16 @@ func (p *TalosProvisioner) ensureKernelModules(ctx context.Context) error {
 func containsModule(modulesContent, moduleName string) bool {
 	// /proc/modules format: "module_name size refcount deps state offset"
 	// Each module is on its own line, and the name is the first field
-	lines := splitLines(modulesContent)
-	for _, line := range lines {
+	for _, line := range strings.Split(modulesContent, "\n") {
 		if len(line) == 0 {
 			continue
 		}
 		// Get the first field (module name)
-		fields := splitFields(line)
+		fields := strings.Fields(line)
 		if len(fields) > 0 && fields[0] == moduleName {
 			return true
 		}
 	}
 
 	return false
-}
-
-// splitLines splits a string into lines.
-func splitLines(content string) []string {
-	var lines []string
-
-	start := 0
-
-	for i := range len(content) {
-		if content[i] == '\n' {
-			lines = append(lines, content[start:i])
-			start = i + 1
-		}
-	}
-
-	if start < len(content) {
-		lines = append(lines, content[start:])
-	}
-
-	return lines
-}
-
-// splitFields splits a string by whitespace.
-func splitFields(content string) []string {
-	var fields []string
-
-	start := -1
-
-	for i := range len(content) {
-		isSpace := content[i] == ' ' || content[i] == '\t'
-		if !isSpace && start == -1 {
-			start = i
-		} else if isSpace && start != -1 {
-			fields = append(fields, content[start:i])
-			start = -1
-		}
-	}
-
-	if start != -1 {
-		fields = append(fields, content[start:])
-	}
-
-	return fields
 }

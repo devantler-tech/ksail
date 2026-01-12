@@ -17,6 +17,11 @@ type OptionsTalos struct {
 	// Workers is the number of worker nodes (default: 0).
 	// When 0, scheduling is allowed on control-plane nodes.
 	Workers int32 `json:"workers,omitzero"`
+	// ISO is the cloud provider's ISO/image ID for booting Talos Linux.
+	// Only used when targeting cloud providers (e.g., Hetzner Cloud).
+	// For Hetzner: See https://docs.hetzner.cloud/changelog for available Talos ISOs.
+	// Defaults to 122630 (Talos Linux 1.11.2 x86). Use 122629 for ARM.
+	ISO int64 `json:"iso,omitzero" default:"122630"`
 }
 
 // LocalRegistry defines options for the host-local OCI registry integration.
@@ -33,11 +38,11 @@ type LocalRegistry struct {
 // These options are used when Provider is set to "Hetzner" for the Talos distribution.
 type OptionsHetzner struct {
 	// ControlPlaneServerType is the Hetzner server type for control-plane nodes.
-	// Examples: "cax11" (ARM), "cx22" (x86), "cpx21" (AMD). Defaults to "cax11".
-	ControlPlaneServerType string `json:"controlPlaneServerType,omitzero" default:"cax11"`
+	// Examples: "cx23" (x86), "cax11" (ARM), "cpx21" (AMD). Defaults to "cx23".
+	ControlPlaneServerType string `json:"controlPlaneServerType,omitzero" default:"cx23"`
 	// WorkerServerType is the Hetzner server type for worker nodes.
-	// Examples: "cax11" (ARM), "cx22" (x86), "cpx21" (AMD). Defaults to "cax11".
-	WorkerServerType string `json:"workerServerType,omitzero" default:"cax11"`
+	// Examples: "cx23" (x86), "cax11" (ARM), "cpx21" (AMD). Defaults to "cx23".
+	WorkerServerType string `json:"workerServerType,omitzero" default:"cx23"`
 	// Location is the Hetzner datacenter location.
 	// Examples: "fsn1" (Falkenstein), "nbg1" (Nuremberg), "hel1" (Helsinki).
 	// Defaults to "fsn1".
@@ -59,10 +64,4 @@ type OptionsHetzner struct {
 	// If empty, a placement group named "<cluster-name>-placement" will be created
 	// with "spread" strategy for high availability.
 	PlacementGroup string `json:"placementGroup,omitzero"`
-	// ISOID is the Hetzner ISO ID for the Talos Linux bootable ISO.
-	// Hetzner provides Talos Linux as a public ISO with qemu-guest-agent.
-	// See https://docs.hetzner.cloud/changelog for available versions.
-	// Defaults to 122629 (Talos Linux 1.11.2 ARM).
-	// Use 122630 for x86 architecture.
-	ISOID int64 `json:"isoId,omitzero" default:"122629"`
 }

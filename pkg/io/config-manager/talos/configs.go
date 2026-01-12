@@ -38,6 +38,9 @@ type Configs struct {
 	kubernetesVersion string
 	// networkCIDR is stored for regeneration with a new name.
 	networkCIDR string
+	// endpoint is an optional override endpoint IP for cloud deployments (e.g., Hetzner public IP).
+	// When empty, the endpoint is calculated from networkCIDR.
+	endpoint string
 	// patches is stored for regeneration with a new name.
 	patches []Patch
 }
@@ -168,7 +171,35 @@ func (c *Configs) WithName(name string) (*Configs, error) {
 	}
 
 	// Regenerate the bundle with the new cluster name
-	return newConfigs(name, kubernetesVersion, networkCIDR, c.patches)
+	return newConfigsWithEndpoint(name, kubernetesVersion, networkCIDR, c.endpoint, c.patches)
+}
+
+// WithEndpoint creates a new Configs with a specific endpoint IP for the Talos API and Kubernetes API.
+// This is used for cloud deployments (e.g., Hetzner) where the public IP is different from
+// the internal network IP. The endpoint is embedded in certificates and must match the IP
+// that clients will use to connect.
+//
+// The endpoint should be the public IP address of the first control plane node.
+// Returns a new Configs instance; the original is not modified.
+// Returns an error if bundle regeneration fails.
+func (c *Configs) WithEndpoint(endpointIP string) (*Configs, error) {
+	if endpointIP == "" || endpointIP == c.endpoint {
+		return c, nil
+	}
+
+	// Use stored values for regeneration, falling back to defaults
+	kubernetesVersion := c.kubernetesVersion
+	if kubernetesVersion == "" {
+		kubernetesVersion = DefaultKubernetesVersion
+	}
+
+	networkCIDR := c.networkCIDR
+	if networkCIDR == "" {
+		networkCIDR = DefaultNetworkCIDR
+	}
+
+	// Regenerate the bundle with the new endpoint
+	return newConfigsWithEndpoint(c.Name, kubernetesVersion, networkCIDR, endpointIP, c.patches)
 }
 
 // IsCNIDisabled returns true if the default CNI is disabled (set to "none").
@@ -231,10 +262,24 @@ func (c *Configs) NetworkCIDR() string {
 }
 
 // newConfigs creates Configs from patches with the given cluster parameters.
+// The endpoint is calculated from the network CIDR.
 func newConfigs(
 	clusterName string,
 	kubernetesVersion string,
 	networkCIDR string,
+	patches []Patch,
+) (*Configs, error) {
+	return newConfigsWithEndpoint(clusterName, kubernetesVersion, networkCIDR, "", patches)
+}
+
+// newConfigsWithEndpoint creates Configs with an optional explicit endpoint IP.
+// If endpointIP is empty, the endpoint is calculated from the network CIDR.
+// If endpointIP is provided (e.g., for Hetzner public IPs), it is used as the endpoint.
+func newConfigsWithEndpoint(
+	clusterName string,
+	kubernetesVersion string,
+	networkCIDR string,
+	endpointIP string,
 	patches []Patch,
 ) (*Configs, error) {
 	// Categorize patches by scope
@@ -243,24 +288,35 @@ func newConfigs(
 		return nil, err
 	}
 
-	// Parse network CIDR for endpoint calculation
-	parsedCIDR, err := netip.ParsePrefix(networkCIDR)
-	if err != nil {
-		return nil, fmt.Errorf("invalid network CIDR: %w", err)
+	// Determine endpoint IP - either explicit or calculated from network CIDR
+	var controlPlaneIP string
+	if endpointIP != "" {
+		controlPlaneIP = endpointIP
+	} else {
+		// Parse network CIDR for endpoint calculation
+		parsedCIDR, parseErr := netip.ParsePrefix(networkCIDR)
+		if parseErr != nil {
+			return nil, fmt.Errorf("invalid network CIDR: %w", parseErr)
+		}
+
+		// Calculate control plane IP for endpoint
+		ipAddr, ipErr := nthIPInNetwork(parsedCIDR, ipv4Offset)
+		if ipErr != nil {
+			return nil, fmt.Errorf("failed to calculate control plane IP: %w", ipErr)
+		}
+
+		controlPlaneIP = ipAddr.String()
 	}
 
-	// Calculate control plane IP for endpoint
-	controlPlaneIP, err := nthIPInNetwork(parsedCIDR, ipv4Offset)
-	if err != nil {
-		return nil, fmt.Errorf("failed to calculate control plane IP: %w", err)
-	}
-
-	controlPlaneEndpoint := "https://" + net.JoinHostPort(controlPlaneIP.String(), "6443")
+	controlPlaneEndpoint := "https://" + net.JoinHostPort(controlPlaneIP, "6443")
 
 	// Build generate options with endpoint list and localhost SAN for Docker-in-VM environments
+	// Use TalosVersion1_11 contract for compatibility with Hetzner ISOs which are at 1.11.x
+	// This ensures the generated config doesn't include features unsupported by older Talos versions.
 	genOptions := []generate.Option{
-		generate.WithEndpointList([]string{controlPlaneIP.String()}),
+		generate.WithEndpointList([]string{controlPlaneIP}),
 		generate.WithAdditionalSubjectAltNames([]string{"127.0.0.1"}),
+		generate.WithVersionContract(talosconfig.TalosVersion1_11),
 	}
 
 	// Build bundle options
@@ -298,6 +354,7 @@ func newConfigs(
 		bundle:            configBundle,
 		kubernetesVersion: kubernetesVersion,
 		networkCIDR:       networkCIDR,
+		endpoint:          endpointIP,
 		patches:           patches,
 	}, nil
 }

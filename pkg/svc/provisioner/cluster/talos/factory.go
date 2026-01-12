@@ -80,6 +80,8 @@ func CreateProvisioner(
 		infraProvider = hetznerProvider
 		// Store Hetzner options with defaults applied for cluster creation
 		provisioner.WithHetznerOptions(applyHetznerDefaults(hetznerOpts))
+		// Store Talos options with defaults applied (includes ISO)
+		provisioner.WithTalosOptions(applyTalosDefaults(opts))
 
 	default:
 		return nil, fmt.Errorf("%w: %s (supported: %s, %s)",
@@ -117,12 +119,25 @@ func createHetznerProvider(opts v1alpha1.OptionsHetzner) (*hetzner.Provider, err
 
 // Hetzner default values - keep in sync with OptionsHetzner struct tags.
 const (
-	defaultHetznerServerType = "cax11"
-	defaultHetznerLocation   = "fsn1"
+	defaultHetznerServerType  = "cx23"
+	defaultHetznerLocation    = "fsn1"
 	defaultHetznerNetworkCIDR = "10.0.0.0/16"
 	defaultHetznerTokenEnvVar = "HCLOUD_TOKEN"
-	defaultHetznerISOID       = 122629 // Talos Linux 1.11.2 ARM (use 122630 for x86)
 )
+
+// Talos default values - keep in sync with OptionsTalos struct tags.
+const (
+	defaultTalosISO = 122630 // Talos Linux 1.11.2 x86 (use 122629 for ARM)
+)
+
+// applyTalosDefaults applies default values to Talos options.
+func applyTalosDefaults(opts v1alpha1.OptionsTalos) v1alpha1.OptionsTalos {
+	if opts.ISO == 0 {
+		opts.ISO = defaultTalosISO
+	}
+
+	return opts
+}
 
 // applyHetznerDefaults applies default values to Hetzner options.
 func applyHetznerDefaults(opts v1alpha1.OptionsHetzner) v1alpha1.OptionsHetzner {
@@ -144,10 +159,6 @@ func applyHetznerDefaults(opts v1alpha1.OptionsHetzner) v1alpha1.OptionsHetzner 
 
 	if opts.TokenEnvVar == "" {
 		opts.TokenEnvVar = defaultHetznerTokenEnvVar
-	}
-
-	if opts.ISOID == 0 {
-		opts.ISOID = defaultHetznerISOID
 	}
 
 	return opts
