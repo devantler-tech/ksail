@@ -18,9 +18,10 @@ KSail is a Go-based CLI application that provides a unified SDK for spinning up 
 
 ```bash
 # Ruby and Jekyll for documentation builds
+# CI uses Ruby 3.3 (see .github/workflows/test-pages.yaml)
 gem install --user-install bundler
-export PATH="$HOME/.local/share/gem/ruby/3.2.0/bin:$PATH"
-cd /path/to/repo
+export PATH="$(ruby -e 'print Gem.user_dir')/bin:$PATH"
+cd /path/to/repo/docs
 bundle config set --local path 'vendor/bundle'
 bundle install
 ```
@@ -47,7 +48,7 @@ go test ./...
 
 ```bash
 cd /path/to/repo/docs
-export PATH="$HOME/.local/share/gem/ruby/3.2.0/bin:$PATH"
+export PATH="$(ruby -e 'print Gem.user_dir')/bin:$PATH"
 bundle exec jekyll build
 # Takes ~2 seconds. Documentation builds to _site/ directory
 ```
@@ -102,7 +103,7 @@ go run main.go --help
 
    ```bash
    cd /path/to/repo/docs
-   export PATH="$HOME/.local/share/gem/ruby/3.2.0/bin:$PATH"
+   export PATH="$(ruby -e 'print Gem.user_dir')/bin:$PATH"
    bundle exec jekyll build  # Must succeed
    ls _site/  # Should contain generated HTML files
    ```
@@ -113,18 +114,20 @@ go run main.go --help
 
 ```text
 /
-├── cmd/                    # CLI command implementations
+├── main.go                 # Main entry point
 ├── pkg/                    # Core packages
 │   ├── apis/               # API types and schemas
+│   ├── cli/                # CLI wiring, UI, and Cobra commands
+│   │   └── cmd/            # CLI command implementations
 │   ├── client/             # Embedded tool clients (kubectl, helm, flux, etc.)
 │   ├── di/                 # Dependency injection
 │   ├── io/                 # I/O utilities
+│   ├── k8s/                # Kubernetes helpers/templates
 │   └── svc/                # Services (installers, managers, etc.)
 ├── docs/                   # Jekyll documentation source
-├── _site/                  # Generated documentation (after jekyll build)
+│   ├── _site/              # Generated site (after jekyll build)
+│   └── Gemfile             # Ruby dependencies for documentation
 ├── go.mod                  # Go module file
-├── main.go                 # Main entry point
-├── Gemfile                 # Ruby dependencies for documentation
 └── README.md               # Main repository documentation
 ```
 
@@ -155,17 +158,11 @@ ksail cipher <command>                 # Manage secrets with SOPS
 
 ### Init Command Options
 
+Use the CLI help output as the source of truth:
+
 ```bash
-ksail cluster init \
-  --distribution <Vanilla|K3s|Talos> \
-  --cni <Default|Cilium|None> \
-  --csi <Default|LocalPathStorage|None> \
-  --metrics-server <Default|Enabled|Disabled> \
-  --cert-manager <Enabled|Disabled> \
-  --local-registry <Enabled|Disabled> \
-  --local-registry-port <port> \
-  --gitops-engine <None|Flux|ArgoCD> \
-  --mirror-registry <host>=<upstream>
+ksail cluster init --help
+# See also: docs/configuration/cli-flags/cluster/cluster-init.md
 ```
 
 ### Troubleshooting Build Issues
@@ -173,7 +170,7 @@ ksail cluster init \
 **"Go version mismatch"**:
 
 ```bash
-go version  # Should show Go 1.21 or later
+go version  # Should match the version in go.mod (go 1.25.4)
 # If not, install/update Go from https://go.dev/dl/
 ```
 
@@ -206,14 +203,14 @@ go test ./...                          # Run unit tests
 
 ```bash
 cd /path/to/repo/docs
-export PATH="$HOME/.local/share/gem/ruby/3.2.0/bin:$PATH"
+export PATH="$(ruby -e 'print Gem.user_dir')/bin:$PATH"
 bundle exec jekyll build               # Verify docs build
 bundle exec jekyll serve --host 0.0.0.0  # Test locally (if needed)
 ```
 
 ### Important Notes
 
-- The project uses **Go 1.23.9+** (currently requires Go 1.21 or later)
+- The project uses **Go 1.25.4+** (see `go.mod`)
 - All Kubernetes tools are embedded as Go libraries - only Docker is required externally
 - Unit tests run quickly and should generally pass
 - System tests in CI cover extensive scenarios with multiple tool combinations
@@ -249,7 +246,7 @@ bundle exec jekyll serve --host 0.0.0.0  # Test locally (if needed)
 
 ## Active Technologies
 
-- Go 1.23.9+ (currently using Go 1.25.4)
+- Go 1.25.4+ (see `go.mod`)
 - Embedded Kubernetes tools (kubectl, helm, kind, k3d, flux, argocd) as Go libraries
 - Docker as the only external dependency
 - Jekyll for documentation (Ruby-based)

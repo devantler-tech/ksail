@@ -45,8 +45,8 @@ The supported distributions (x-axis) run on different infrastructure providers (
 
 | Provider | Vanilla   | K3s      | Talos     |
 |----------|-----------|----------|-----------|
-| Docker   | ✅ (Kind)  | ✅ (K3d)  | ✅ (Talos) |
-| Hetzner  | —         | —        | 🚧 next    |
+| Docker   | ✅ (Kind) | ✅ (K3d) | ✅       |
+| Hetzner  | —          | —        | 🚧 next  |
 
 Vanilla is implemented with Kind; K3s is implemented with K3d.
 

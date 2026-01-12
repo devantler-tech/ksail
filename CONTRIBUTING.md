@@ -16,15 +16,15 @@ For detailed package and API documentation, refer to the Go documentation at [pk
 
 Before you begin, ensure you have the following installed:
 
-- [Go (v1.23.9+)](https://go.dev/doc/install)
+- [Go (v1.25.4+)](https://go.dev/doc/install)
 - [mockery](https://vektra.github.io/mockery/v3.5/installation/)
-- [golang-ci](https://golangci-lint.run/docs/welcome/install/)
+- [golangci-lint](https://golangci-lint.run/docs/welcome/install/)
 - [mega-linter](https://megalinter.io/latest/mega-linter-runner/#installation)
 - [Docker](https://www.docker.com/get-started/)
 
 For building documentation:
 
-- [Ruby (v3.2+)](https://www.ruby-lang.org/en/documentation/installation/)
+- [Ruby (v3.3+)](https://www.ruby-lang.org/en/documentation/installation/) (matches CI)
 - [Bundler](https://bundler.io/)
 
 ### Lint
@@ -41,7 +41,7 @@ The same configuration is used in CI, so you can expect the same linting behavio
 ### Build
 
 ```sh
-# working-directory: ./src
+# working-directory: ./
 go build ./...
 ```
 
@@ -50,14 +50,14 @@ go build ./...
 #### Generating mocks
 
 ```sh
-# working-directory: ./src
+# working-directory: ./
 mockery
 ```
 
 #### Unit tests
 
 ```sh
-# working-directory: ./src
+# working-directory: ./
 go test ./...
 ```
 
@@ -69,6 +69,10 @@ The project documentation is built using [Jekyll](https://jekyllrb.com/) with th
 
 ```sh
 # working-directory: ./docs
+
+# Install bundler (first time only)
+gem install --user-install bundler
+export PATH="$(ruby -e 'print Gem.user_dir')/bin:$PATH"
 
 # Install dependencies (first time only or when Gemfile changes)
 bundle config set --local path 'vendor/bundle'
@@ -86,9 +90,10 @@ The built site will be available in `docs/_site/`. Note that `docs/_site/`, `doc
 
 ## Project Structure
 
-The repository is organized into two main directories:
+The repository is organized around the top-level CLI entry point (`main.go`) and the public packages in `pkg/`.
 
-- **cmd/** - CLI command implementations
+- **main.go** - CLI entry point
+- **pkg/cli/cmd/** - CLI command implementations
 - **pkg/** - Public packages (importable by external projects)
 
 ### Key Packages in pkg/
@@ -124,7 +129,7 @@ For detailed package and API documentation, refer to [pkg.go.dev/github.com/deva
 #### Unit Tests
 
 ```sh
-# working-directory: ./src
+# working-directory: ./
 go test ./...
 ```
 
