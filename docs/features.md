@@ -125,14 +125,12 @@ docker push localhost:5050/my-app
 
 ```bash
 ksail cluster init \
-  --local-registry \
-  --local-registry-host ghcr.io \
-  --local-registry-path myorg/myrepo \
-  --local-registry-username '${GITHUB_USER}' \
-  --local-registry-password '${GITHUB_TOKEN}'
+  --local-registry '${GITHUB_USER}:${GITHUB_TOKEN}@ghcr.io/myorg/myrepo'
 ```
 
-**Note:** Username and password support `${ENV_VAR}` placeholders for secure credential handling.
+**Format:** `[user:pass@]host[:port][/path]`
+
+**Note:** Credentials support `${ENV_VAR}` placeholders for secure handling.
 
 ### Mirror Registries
 
@@ -148,10 +146,12 @@ ksail cluster init \
 
 ```bash
 ksail cluster init \
-  --mirror-registry docker.io=https://registry-1.docker.io \
-  --mirror-registry-username docker.io='${DOCKER_USER}' \
-  --mirror-registry-password docker.io='${DOCKER_TOKEN}'
+  --mirror-registry '${DOCKER_USER}:${DOCKER_TOKEN}@docker.io=https://registry-1.docker.io'
 ```
+
+**Format:** `[user:pass@]host[=endpoint]`
+
+**Note:** Credentials support `${ENV_VAR}` placeholders for secure handling.
 
 ## Secret Management
 

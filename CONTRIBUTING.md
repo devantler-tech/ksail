@@ -141,6 +141,15 @@ go test ./...
 
 System tests are configured in a GitHub Actions workflow file located at `.github/workflows/ci.yaml`. These test e2e scenarios for various providers and configurations. You are unable to run these tests locally, but they are required in CI, so breaking changes will result in failed checks.
 
+#### Hetzner Provider Testing
+
+To test the Hetzner provider locally, you need:
+
+- **`HCLOUD_TOKEN`** – Hetzner Cloud API token with read/write permissions
+- **Talos ISO** – A Talos Linux ISO must be available in your Hetzner Cloud project (default ID: `122630`)
+
+**Note:** Hetzner tests incur cloud costs. Use `ksail cluster delete` to clean up resources.
+
 ## CD
 
 ### Release Process
