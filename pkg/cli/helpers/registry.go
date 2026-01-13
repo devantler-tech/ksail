@@ -371,12 +371,41 @@ func resolveFromConfig(cfg *v1alpha1.Cluster) (*RegistryInfo, error) {
 }
 
 func resolveFromGitOps(ctx context.Context, cfg *v1alpha1.Cluster) (*RegistryInfo, error) {
+	var info *RegistryInfo
+
+	var err error
+
 	if cfg != nil {
-		return resolveFromGitOpsWithEngine(ctx, cfg.Spec.Cluster.GitOpsEngine)
+		info, err = resolveFromGitOpsWithEngine(ctx, cfg.Spec.Cluster.GitOpsEngine)
+	} else {
+		// No config, try both GitOps engines
+		info, err = tryBothGitOpsEngines(ctx)
 	}
 
-	// No config, try both GitOps engines
-	return tryBothGitOpsEngines(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// Merge credentials from config if available and info has no credentials
+	if info != nil && info.Username == "" && cfg != nil {
+		mergeCredentialsFromConfig(info, cfg)
+	}
+
+	return info, nil
+}
+
+// mergeCredentialsFromConfig adds credentials from cluster config to registry info.
+// This is used when the registry URL is auto-discovered from GitOps resources
+// but credentials are configured in ksail.yaml.
+func mergeCredentialsFromConfig(info *RegistryInfo, cfg *v1alpha1.Cluster) {
+	reg := cfg.Spec.Cluster.LocalRegistry
+	if !reg.HasCredentials() {
+		return
+	}
+
+	username, password := reg.ResolveCredentials()
+	info.Username = username
+	info.Password = password
 }
 
 func resolveFromGitOpsWithEngine(
