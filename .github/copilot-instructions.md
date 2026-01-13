@@ -225,9 +225,9 @@ bundle exec jekyll serve --host 0.0.0.0  # Test locally (if needed)
 - **Providers** (`pkg/svc/provider/`) manage infrastructure lifecycle (start/stop containers)
   - `docker.Provider`: Runs Kubernetes nodes as Docker containers
 - **Provisioners** (`pkg/svc/provisioner/`) configure and manage Kubernetes distributions
-  - `VanillaProvisioner`: Uses Kind SDK for standard upstream Kubernetes
-  - `K3sProvisioner`: Uses K3d CLI for lightweight K3s clusters
-  - `TalosProvisioner`: Uses Talos SDK for immutable Talos Linux clusters
+  - `KindClusterProvisioner` (`pkg/svc/provisioner/cluster/kind/`): Uses Kind SDK for standard upstream Kubernetes
+  - `K3dClusterProvisioner` (`pkg/svc/provisioner/cluster/k3d/`): Uses K3d via Cobra/SDK for lightweight K3s clusters
+  - `TalosProvisioner` (`pkg/svc/provisioner/cluster/talos/`): Uses Talos SDK for immutable Talos Linux clusters
 
 **Distribution Names (user-facing):**
 
@@ -239,7 +239,7 @@ bundle exec jekyll serve --host 0.0.0.0  # Test locally (if needed)
 
 **Key Packages:**
 
-- `pkg/apis/`: API types, schemas, and enums (`enums.go` defines Distribution/Provider values)
+- `pkg/apis/`: API types, schemas, and enums (`pkg/apis/cluster/v1alpha1/enums.go` defines Distribution values)
 - `pkg/client/`: Embedded tool clients (kubectl, helm, kind, k3d, flux, argocd)
 - `pkg/svc/`: Services including installers, providers, and provisioners
 - `pkg/di/`: Dependency injection for wiring components
