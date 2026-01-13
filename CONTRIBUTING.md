@@ -42,6 +42,10 @@ The same configuration is used in CI, so you can expect the same linting behavio
 
 ```sh
 # working-directory: ./
+# Build the ksail binary
+go build -o ksail
+
+# Or: compile all packages (no binary output)
 go build ./...
 ```
 
@@ -112,11 +116,11 @@ KSail separates infrastructure management from distribution configuration:
 - **Providers** manage the infrastructure lifecycle (start/stop containers)
 - **Provisioners** configure and manage Kubernetes distributions
 
-| Distribution | Provisioner        | Tool  | Description                  |
-|--------------|--------------------|-------|------------------------------|
-| `Vanilla`    | VanillaProvisioner | Kind  | Standard upstream Kubernetes |
-| `K3s`        | K3sProvisioner     | K3d   | Lightweight K3s in Docker    |
-| `Talos`      | TalosProvisioner   | Talos | Immutable Talos Linux        |
+| Distribution | Provisioner            | Tool  | Description                  |
+|--------------|------------------------|-------|------------------------------|
+| `Vanilla`    | KindClusterProvisioner | Kind  | Standard upstream Kubernetes |
+| `K3s`        | K3dClusterProvisioner  | K3d   | Lightweight K3s in Docker    |
+| `Talos`      | TalosProvisioner       | Talos | Immutable Talos Linux        |
 
 This project strives to be fully open-source friendly, and as such, all core functionality is implemented in the `pkg/` directory, and the `internal/` directory is not used. This allows external projects to import and use any part of the codebase.
 
