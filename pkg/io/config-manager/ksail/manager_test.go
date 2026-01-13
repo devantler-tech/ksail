@@ -466,11 +466,12 @@ func TestLoadConfigHonorsExplicitLocalRegistrySetting(t *testing.T) {
 	t.Chdir(tempDir)
 
 	writeKindConfigFile(t)
+	// Set explicit empty local registry (disabled) even with GitOps enabled
 	writeClusterConfigFile(
 		t,
 		"    gitOpsEngine: Flux\n",
 		"    localRegistry:\n",
-		"      enabled: false\n",
+		"      registry: \"\"\n",
 	)
 
 	manager := newManagerWithDefaultSelectors()
@@ -479,7 +480,9 @@ func TestLoadConfigHonorsExplicitLocalRegistrySetting(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, v1alpha1.GitOpsEngineFlux, manager.Config.Spec.Cluster.GitOpsEngine)
-	assert.False(t, manager.Config.Spec.Cluster.LocalRegistry.Enabled)
+	// When explicitly set to empty, it should remain empty (disabled)
+	// despite GitOps being enabled
+	assert.False(t, manager.Config.Spec.Cluster.LocalRegistry.Enabled())
 }
 
 //nolint:paralleltest // Uses t.Chdir for isolated filesystem state.
@@ -488,19 +491,19 @@ func TestLoadConfigAppliesLocalRegistryDefaults(t *testing.T) {
 		name             string
 		gitOpsEngine     v1alpha1.GitOpsEngine
 		expectedEnabled  bool
-		expectedHostPort int32
+		expectedRegistry string
 	}{
 		{
 			name:             "enabled-when-flux-configured",
 			gitOpsEngine:     v1alpha1.GitOpsEngineFlux,
 			expectedEnabled:  true,
-			expectedHostPort: v1alpha1.DefaultLocalRegistryPort,
+			expectedRegistry: "localhost:5050",
 		},
 		{
 			name:             "disabled-when-no-gitops",
 			gitOpsEngine:     v1alpha1.GitOpsEngineNone,
 			expectedEnabled:  false,
-			expectedHostPort: v1alpha1.DefaultLocalRegistryPort,
+			expectedRegistry: "",
 		},
 	}
 
@@ -524,12 +527,12 @@ func TestLoadConfigAppliesLocalRegistryDefaults(t *testing.T) {
 			assert.Equal(
 				t,
 				testCase.expectedEnabled,
-				manager.Config.Spec.Cluster.LocalRegistry.Enabled,
+				manager.Config.Spec.Cluster.LocalRegistry.Enabled(),
 			)
 			assert.Equal(
 				t,
-				testCase.expectedHostPort,
-				manager.Config.Spec.Cluster.LocalRegistry.HostPort,
+				testCase.expectedRegistry,
+				manager.Config.Spec.Cluster.LocalRegistry.Registry,
 			)
 		})
 	}
@@ -549,12 +552,8 @@ func TestLoadConfigDefaultsLocalRegistryDisabledWhenGitOpsEngineUnset(t *testing
 	_, err := manager.LoadConfig(nil)
 	require.NoError(t, err)
 
-	assert.False(t, manager.Config.Spec.Cluster.LocalRegistry.Enabled)
-	assert.Equal(
-		t,
-		v1alpha1.DefaultLocalRegistryPort,
-		manager.Config.Spec.Cluster.LocalRegistry.HostPort,
-	)
+	assert.False(t, manager.Config.Spec.Cluster.LocalRegistry.Enabled())
+	assert.Empty(t, manager.Config.Spec.Cluster.LocalRegistry.Registry)
 }
 
 func TestNewCommandConfigManagerBindsFlags(t *testing.T) {

@@ -11,12 +11,25 @@ grand_parent: "CLI Flags"
 ```text
 List all Kubernetes clusters managed by KSail.
 
+By default, lists clusters from all distributions across all providers.
+Use --provider to filter results to a specific provider.
+
+Examples:
+  # List all clusters
+  ksail cluster list
+
+  # List only Docker-based clusters
+  ksail cluster list --provider Docker
+
+  # List only Hetzner clusters
+  ksail cluster list --provider Hetzner
+
 Usage:
   ksail cluster list [flags]
 
 Flags:
-  -d, --distribution string   Filter by distribution (Vanilla, K3s, Talos). If not specified, lists all distributions.
-  -h, --help                  help for list
+  -h, --help                help for list
+  -p, --provider Provider   Filter by provider (Docker, Hetzner). If not specified, lists all providers.
 
 Global Flags:
       --timing   Show per-activity timing output

@@ -43,6 +43,12 @@ type BuildOptions struct {
 	// When set to GitOpsEngineArgoCD, files are placed under a prefix directory.
 	// When empty or GitOpsEngineNone, files are placed at both locations for compatibility (default).
 	GitOpsEngine v1alpha1.GitOpsEngine
+	// Username is the optional username for registry authentication.
+	// When provided with Password, enables basic authentication for the registry push.
+	Username string
+	// Password is the optional password for registry authentication.
+	// When provided with Username, enables basic authentication for the registry push.
+	Password string
 }
 
 // ValidatedBuildOptions represents sanitized inputs ready for use by the builder implementation.
@@ -61,6 +67,10 @@ type ValidatedBuildOptions struct {
 	Version string
 	// GitOpsEngine specifies the target GitOps engine for artifact structure optimization.
 	GitOpsEngine v1alpha1.GitOpsEngine
+	// Username is the optional username for registry authentication.
+	Username string
+	// Password is the optional password for registry authentication.
+	Password string
 }
 
 // BuildResult describes the outcome of a successful artifact build.

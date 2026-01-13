@@ -60,244 +60,6 @@ func (f fakeDeleteFactory) Create(
 	}, cfg, nil
 }
 
-func writeDeleteTestConfigFiles(t *testing.T, workingDir string, distribution string) {
-	t.Helper()
-
-	require.NoError(t, os.MkdirAll(workingDir, 0o750))
-
-	// Write kubeconfig (common to all distributions)
-	require.NoError(t, os.WriteFile(
-		filepath.Join(workingDir, "kubeconfig"),
-		[]byte("apiVersion: v1\nkind: Config\nclusters: []\ncontexts: []\nusers: []\n"),
-		0o600,
-	))
-
-	switch distribution {
-	case "Vanilla":
-		writeKindTestConfig(t, workingDir)
-	case "K3d":
-		writeK3dTestConfig(t, workingDir)
-	case "Talos":
-		writeTalosTestConfig(t, workingDir)
-	}
-}
-
-func writeKindTestConfig(t *testing.T, workingDir string) {
-	t.Helper()
-
-	ksailYAML := `apiVersion: ksail.io/v1alpha1
-kind: Cluster
-spec:
-  cluster:
-    distribution: Vanilla
-    distributionConfig: kind.yaml
-    metricsServer: Disabled
-    localRegistry:
-      enabled: false
-    connection:
-      kubeconfig: ./kubeconfig
-`
-	require.NoError(t, os.WriteFile(
-		filepath.Join(workingDir, "ksail.yaml"),
-		[]byte(ksailYAML),
-		0o600,
-	))
-	require.NoError(t, os.WriteFile(
-		filepath.Join(workingDir, "kind.yaml"),
-		[]byte("kind: Cluster\napiVersion: kind.x-k8s.io/v1alpha4\nname: test\nnodes: []\n"),
-		0o600,
-	))
-}
-
-func writeK3dTestConfig(t *testing.T, workingDir string) {
-	t.Helper()
-
-	ksailYAML := `apiVersion: ksail.io/v1alpha1
-kind: Cluster
-spec:
-  cluster:
-    distribution: K3s
-    distributionConfig: k3d.yaml
-    metricsServer: Disabled
-    localRegistry:
-      enabled: false
-    connection:
-      kubeconfig: ./kubeconfig
-`
-	require.NoError(t, os.WriteFile(
-		filepath.Join(workingDir, "ksail.yaml"),
-		[]byte(ksailYAML),
-		0o600,
-	))
-	require.NoError(t, os.WriteFile(
-		filepath.Join(workingDir, "k3d.yaml"),
-		[]byte("apiVersion: k3d.io/v1alpha5\nkind: Simple\nmetadata:\n  name: test\n"),
-		0o600,
-	))
-}
-
-func writeTalosTestConfig(t *testing.T, workingDir string) {
-	t.Helper()
-
-	ksailYAML := `apiVersion: ksail.io/v1alpha1
-kind: Cluster
-spec:
-  cluster:
-    distribution: Talos
-    distributionConfig: talos.yaml
-    metricsServer: Disabled
-    localRegistry:
-      enabled: false
-    connection:
-      kubeconfig: ./kubeconfig
-`
-	require.NoError(t, os.WriteFile(
-		filepath.Join(workingDir, "ksail.yaml"),
-		[]byte(ksailYAML),
-		0o600,
-	))
-	require.NoError(t, os.WriteFile(
-		filepath.Join(workingDir, "talos.yaml"),
-		[]byte("clusterName: test\n"),
-		0o600,
-	))
-}
-
-func newDeleteTestRuntimeContainer(t *testing.T) *runtime.Runtime {
-	t.Helper()
-
-	return runtime.New(
-		func(i runtime.Injector) error {
-			do.Provide(i, func(runtime.Injector) (timer.Timer, error) {
-				return timer.New(), nil
-			})
-
-			return nil
-		},
-		func(i runtime.Injector) error {
-			do.Provide(i, func(runtime.Injector) (clusterprovisioner.Factory, error) {
-				return fakeDeleteFactory{existsResult: true}, nil
-			})
-
-			return nil
-		},
-	)
-}
-
-// trimTrailingNewlineDelete removes a single trailing newline from snapshot output.
-func trimTrailingNewlineDelete(s string) string {
-	if len(s) > 0 && s[len(s)-1] == '\n' {
-		return s[:len(s)-1]
-	}
-
-	return s
-}
-
-// TestDelete_ClusterExists_PrintsDeleteSuccess tests successful cluster deletion for all distributions.
-//
-//nolint:paralleltest // Cannot use t.Parallel() with t.Chdir()
-func TestDelete_ClusterExists_PrintsDeleteSuccess(t *testing.T) {
-	testCases := []struct {
-		name         string
-		distribution string
-	}{
-		{name: "Vanilla", distribution: "Vanilla"},
-		{name: "K3d", distribution: "K3d"},
-		{name: "Talos", distribution: "Talos"},
-	}
-
-	for _, testCase := range testCases {
-		//nolint:paralleltest // Cannot use t.Parallel() with t.Chdir()
-		t.Run(testCase.name, func(t *testing.T) {
-			workingDir := t.TempDir()
-			t.Chdir(workingDir)
-
-			writeDeleteTestConfigFiles(t, workingDir, testCase.distribution)
-
-			// Override cluster provisioner factory to use fake provisioner that returns success
-			restoreFactory := clusterpkg.SetClusterProvisionerFactoryForTests(
-				fakeDeleteFactory{existsResult: true, deleteErr: nil},
-			)
-			defer restoreFactory()
-
-			// Override Docker client to skip cleanup (no Docker in tests)
-			restoreDocker := clusterpkg.SetDockerClientInvokerForTests(
-				func(_ *cobra.Command, _ func(client.APIClient) error) error {
-					return nil // Skip Docker operations in tests
-				},
-			)
-			defer restoreDocker()
-
-			testRuntime := newDeleteTestRuntimeContainer(t)
-
-			cmd := clusterpkg.NewDeleteCmd(testRuntime)
-
-			var out bytes.Buffer
-			cmd.SetOut(&out)
-			cmd.SetErr(&out)
-			cmd.SetContext(context.Background())
-
-			err := cmd.Execute()
-			require.NoError(t, err)
-
-			snaps.MatchSnapshot(t, trimTrailingNewlineDelete(out.String()))
-		})
-	}
-}
-
-// TestDelete_ClusterNotFound_ReturnsError tests that deletion returns an error when the cluster doesn't exist.
-// This reflects the current non-idempotent behavior (breaking change from previous idempotent delete semantics).
-//
-//nolint:paralleltest // Cannot use t.Parallel() with t.Chdir()
-func TestDelete_ClusterNotFound_ReturnsError(t *testing.T) {
-	testCases := []struct {
-		name         string
-		distribution string
-	}{
-		{name: "Vanilla", distribution: "Vanilla"},
-		{name: "K3d", distribution: "K3d"},
-		{name: "Talos", distribution: "Talos"},
-	}
-
-	for _, testCase := range testCases {
-		//nolint:paralleltest // Cannot use t.Parallel() with t.Chdir()
-		t.Run(testCase.name, func(t *testing.T) {
-			workingDir := t.TempDir()
-			t.Chdir(workingDir)
-
-			writeDeleteTestConfigFiles(t, workingDir, testCase.distribution)
-
-			// Override cluster provisioner factory to use fake provisioner that returns ErrClusterNotFound
-			restoreFactory := clusterpkg.SetClusterProvisionerFactoryForTests(
-				fakeDeleteFactory{existsResult: false, deleteErr: clustererrors.ErrClusterNotFound},
-			)
-			defer restoreFactory()
-
-			// Override Docker client to skip cleanup (no Docker in tests)
-			restoreDocker := clusterpkg.SetDockerClientInvokerForTests(
-				func(_ *cobra.Command, _ func(client.APIClient) error) error {
-					return nil // Skip Docker operations in tests
-				},
-			)
-			defer restoreDocker()
-
-			testRuntime := newDeleteTestRuntimeContainer(t)
-
-			cmd := clusterpkg.NewDeleteCmd(testRuntime)
-
-			var out bytes.Buffer
-			cmd.SetOut(&out)
-			cmd.SetErr(&out)
-			cmd.SetContext(context.Background())
-
-			err := cmd.Execute()
-			require.Error(t, err)
-
-			snaps.MatchSnapshot(t, trimTrailingNewlineDelete(out.String()))
-		})
-	}
-}
-
 // writeKubeconfigWithContext creates a kubeconfig file with the given current context.
 func writeKubeconfigWithContext(t *testing.T, dir, currentContext string) string {
 	t.Helper()
@@ -324,11 +86,34 @@ users:
 	return kubeconfigPath
 }
 
+func newDeleteTestRuntimeContainer(t *testing.T) *runtime.Runtime {
+	t.Helper()
+
+	return runtime.New(
+		func(i runtime.Injector) error {
+			do.Provide(i, func(runtime.Injector) (timer.Timer, error) {
+				return timer.New(), nil
+			})
+
+			return nil
+		},
+	)
+}
+
+// trimTrailingNewlineDelete removes a single trailing newline from snapshot output.
+func trimTrailingNewlineDelete(s string) string {
+	if len(s) > 0 && s[len(s)-1] == '\n' {
+		return s[:len(s)-1]
+	}
+
+	return s
+}
+
 // setupContextBasedTest sets up a test environment for context-based detection tests.
 // Returns a cleanup function that must be called with defer.
 func setupContextBasedTest(
 	t *testing.T,
-	context string,
+	contextName string,
 	existsResult bool,
 	deleteErr error,
 ) (*runtime.Runtime, func()) {
@@ -337,7 +122,7 @@ func setupContextBasedTest(
 	workingDir := t.TempDir()
 	t.Chdir(workingDir)
 
-	kubeconfigPath := writeKubeconfigWithContext(t, workingDir, context)
+	kubeconfigPath := writeKubeconfigWithContext(t, workingDir, contextName)
 	t.Setenv("KUBECONFIG", kubeconfigPath)
 
 	restoreFactory := clusterpkg.SetClusterProvisionerFactoryForTests(
@@ -362,7 +147,7 @@ func setupContextBasedTest(
 }
 
 // TestDelete_ContextBasedDetection_DeletesCluster tests that delete can detect
-// distribution from kubeconfig context when no ksail.yaml config file exists.
+// cluster from kubeconfig context and delete the cluster successfully.
 //
 //nolint:paralleltest // Cannot use t.Parallel() with t.Chdir() and t.Setenv() in helper
 func TestDelete_ContextBasedDetection_DeletesCluster(t *testing.T) {
@@ -426,8 +211,8 @@ func TestDelete_ContextBasedDetection_ClusterNotFound(t *testing.T) {
 	snaps.MatchSnapshot(t, trimTrailingNewlineDelete(out.String()))
 }
 
-// TestDelete_ContextBasedDetection_UnknownContextPattern tests that delete falls back
-// gracefully when the context doesn't match a known distribution pattern.
+// TestDelete_ContextBasedDetection_UnknownContextPattern tests that delete returns
+// an error when the context doesn't match a known pattern.
 func TestDelete_ContextBasedDetection_UnknownContextPattern(t *testing.T) {
 	workingDir := t.TempDir()
 	t.Chdir(workingDir)
@@ -454,10 +239,39 @@ func TestDelete_ContextBasedDetection_UnknownContextPattern(t *testing.T) {
 
 	err := cmd.Execute()
 	require.Error(t, err)
+	// Error should indicate cluster name is required
+	require.Contains(t, err.Error(), "cluster name is required")
+}
 
-	// Output should not contain auto-detected message for unknown patterns
-	output := out.String()
-	require.NotContains(t, output, "auto-detected")
+// TestDelete_CommandFlags verifies that the delete command has the expected flags.
+func TestDelete_CommandFlags(t *testing.T) {
+	t.Parallel()
+
+	testRuntime := newDeleteTestRuntimeContainer(t)
+	cmd := clusterpkg.NewDeleteCmd(testRuntime)
+
+	// Verify expected new flags exist
+	nameFlag := cmd.Flags().Lookup("name")
+	require.NotNil(t, nameFlag, "expected --name flag")
+	require.Equal(t, "n", nameFlag.Shorthand)
+
+	providerFlag := cmd.Flags().Lookup("provider")
+	require.NotNil(t, providerFlag, "expected --provider flag")
+	require.Equal(t, "p", providerFlag.Shorthand)
+
+	kubeconfigFlag := cmd.Flags().Lookup("kubeconfig")
+	require.NotNil(t, kubeconfigFlag, "expected --kubeconfig flag")
+	require.Equal(t, "k", kubeconfigFlag.Shorthand)
+
+	deleteStorageFlag := cmd.Flags().Lookup("delete-storage")
+	require.NotNil(t, deleteStorageFlag, "expected --delete-storage flag")
+
+	// Verify old flags do NOT exist
+	contextFlag := cmd.Flags().Lookup("context")
+	require.Nil(t, contextFlag, "unexpected --context flag (should be removed)")
+
+	distributionFlag := cmd.Flags().Lookup("distribution")
+	require.Nil(t, distributionFlag, "unexpected --distribution flag (should be removed)")
 }
 
 // Ensure fake types satisfy interfaces at compile time.

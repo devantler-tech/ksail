@@ -70,24 +70,39 @@ jobs:
     apply-overlay-path: ".github/fixtures/podinfo-overlay"
 ```
 
+### With Hetzner Provider
+
+```yaml
+- uses: ./.github/actions/ksail-system-test
+  with:
+    distribution: Talos
+    provider: Hetzner
+    args: ""
+    hcloud-token: ${{ secrets.HCLOUD_TOKEN }}
+```
+
+> **Note:** Only Talos distribution supports Hetzner provider.
+
 ## Inputs
 
-| Input                 | Description                                   | Required | Default                 |
-| --------------------- | --------------------------------------------- | -------- | ----------------------- |
-| `distribution`        | Kubernetes distribution (Vanilla, K3s, Talos) | Yes      | -                       |
-| `provider`            | Infrastructure provider                       | No       | `Docker`                |
-| `args`                | Additional arguments for cluster init/create  | No       | `""`                    |
-| `init`                | Run `ksail cluster init` before create        | No       | `false`                 |
-| `test-workload-image` | Image for workload create test                | No       | `traefik/whoami:latest` |
-| `test-workload-name`  | Name for test workload deployment             | No       | `whoami`                |
-| `apply-overlay-path`  | Path to kustomize overlay for apply test      | No       | `""`                    |
-| `gitops-path`         | Path for GitOps push                          | No       | `k8s`                   |
-| `workload-timeout`    | Timeout for workload wait operations          | No       | `300s`                  |
+| Input                 | Description                                             | Required | Default                 |
+| --------------------- | ------------------------------------------------------- | -------- | ----------------------- |
+| `distribution`        | Kubernetes distribution (Vanilla, K3s, Talos)           | Yes      | -                       |
+| `provider`            | Infrastructure provider (Docker, Hetzner)               | No       | `Docker`                |
+| `args`                | Additional arguments for cluster init/create            | No       | `""`                    |
+| `init`                | Run `ksail cluster init` before create                  | No       | `false`                 |
+| `test-workload-image` | Image for workload create test                          | No       | `traefik/whoami:latest` |
+| `test-workload-name`  | Name for test workload deployment                       | No       | `whoami`                |
+| `apply-overlay-path`  | Path to kustomize overlay for apply test                | No       | `""`                    |
+| `gitops-path`         | Path for GitOps push                                    | No       | `k8s`                   |
+| `workload-timeout`    | Timeout for workload wait operations                    | No       | `300s`                  |
+| `hcloud-token`        | Hetzner Cloud API token (required for Hetzner provider) | No       | `""`                    |
 
 ## Prerequisites
 
 - **KSail binary** must be installed and in PATH
-- **Docker** must be running
+- **Docker** must be running (for Docker provider)
+- **HCLOUD_TOKEN** must be set (for Hetzner provider)
 - Sufficient disk space (use `free-disk-space` action for CI runners)
 
 ## Failure Debugging

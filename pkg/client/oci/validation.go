@@ -61,6 +61,8 @@ func (o BuildOptions) Validate() (ValidatedBuildOptions, error) {
 		Repository:       repository,
 		Version:          version,
 		GitOpsEngine:     o.GitOpsEngine,
+		Username:         o.Username,
+		Password:         o.Password,
 	}, nil
 }
 

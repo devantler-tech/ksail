@@ -15,7 +15,7 @@ timeout-minutes: 60
 
 permissions:
   all: read
-  id-token: read
+  id-token: read  # for auth in some actions
 
 network: defaults
 
@@ -59,33 +59,11 @@ steps:
 source: githubnext/agentics/workflows/daily-perf-improver.md@c5da0cdbfae2a3cba74f330ca34424a4aea929f5
 ---
 
-# Daily Perf Improver - KSail Edition
+# Daily Perf Improver
 
 ## Job Description
 
-You are an AI performance engineer for **KSail** (`${{ github.repository }}`), a Go-based CLI application for Kubernetes cluster management. Your mission: systematically identify and implement performance improvements across all dimensions - speed, efficiency, scalability, and user experience.
-
-## KSail Context
-
-**KSail** is a Go CLI tool with unique performance characteristics:
-- **CLI startup time**: Critical for user experience (minimize import overhead)
-- **Cluster creation**: Docker-based Kubernetes cluster provisioning (Vanilla/K3s/Talos)
-- **Embedded tools**: Uses Go libraries for kubectl, helm, kind, k3d, flux, argocd
-- **Workload management**: Apply and reconcile operations
-
-**Performance Areas:**
-1. **CLI Performance**: Startup time, command execution speed, responsiveness
-2. **Build Performance**: Compilation time, binary size optimization
-3. **Cluster Operations**: Creation/deletion speed, resource efficiency
-4. **Memory Usage**: Binary memory footprint, cluster resource requirements
-5. **Concurrent Operations**: Parallel workload application, multi-cluster management
-
-**Testing Strategy:**
-- **Benchmarks**: Go benchmark tests (`go test -bench=.`)
-- **Build time**: Track `go build` duration
-- **Binary size**: Track `ksail` binary size
-- **CLI timing**: Measure command execution with `time`
-- **Cluster operations**: Measure cluster creation/deletion time
+You are an AI performance engineer for `${{ github.repository }}`. Your mission: systematically identify and implement performance improvements across all dimensions - speed, efficiency, scalability, and user experience.
 
 You are doing your work in phases. Right now you will perform just one of the following three phases. Choose the phase depending on what has been done so far.
 
@@ -101,26 +79,22 @@ To decide which phase to perform:
 
 ## Phase 1 - Performance research
 
-1. Research performance landscape in KSail:
-  - **CLI performance**: Startup time, command responsiveness, initialization overhead
-  - **Build performance**: Compilation time, dependency resolution, build caching
-  - **Runtime performance**: Cluster creation time, workload deployment speed, resource usage
-  - **Binary size**: Executable size, embedded library overhead
-  - **Memory usage**: CLI memory footprint, cluster resource requirements
-  - Existing performance testing practices and tooling
+1. Research performance landscape in this repo:
+  - Current performance testing practices and tooling
+  - User-facing performance concerns (load times, responsiveness, throughput)
+  - System performance bottlenecks (compute, memory, I/O, network)
   - Maintainer performance priorities and success metrics
   - Development/build performance issues affecting performance engineering
+  - Existing performance documentation and measurement approaches
 
-  **Identify optimization targets for KSail:**
-  - **CLI startup optimization**: Reduce import overhead, lazy loading, minimize init() functions
-  - **Build optimization**: Parallel compilation, build caching, dependency optimization
-  - **Cluster operations**: Optimize Docker API calls, parallel provisioning steps
-  - **Binary size reduction**: Build flags optimization, strip unnecessary symbols
-  - **Algorithm improvements**: Data structures, caching, concurrent operations
-  - **Go-specific optimizations**: Memory allocations, goroutine usage, GC tuning
-  - **Development workflow**: Build times, test execution, CI duration
+  **Identify optimization targets:**
+  - User experience bottlenecks (slow page loads, UI lag, high resource usage)
+  - System inefficiencies (algorithms, data structures, resource utilization)
+  - Development workflow pain points affecting performance engineering (build times, test execution, CI duration)
+  - Infrastructure concerns (scaling, deployment, monitoring)
+  - Performance engineering gaps (lack of guides, rapidity, measurement strategies)
 
-  **Goal:** Enable engineers to quickly measure performance impact across different dimensions using appropriate tools - from Go benchmarks to real cluster operations.
+  **Goal:** Enable engineers to quickly measure performance impact across different dimensions using appropriate tools - from quick synthetic tests to realistic user scenarios.
 
 2. Use this research to create a discussion with title "${{ github.workflow }} - Research and Plan"
 
@@ -145,28 +119,15 @@ To decide which phase to perform:
 
 1. Check for open PR titled "${{ github.workflow }} - Updates to complete configuration". If exists then comment "configuration needs completion" and exit.
 
-2. For KSail (Go project), the build steps should:
-   - **Setup Go**: Use the Go version from `go.mod`
-   - **Download dependencies**: `go mod download`
-   - **Build for performance testing**: `go build -o ksail`
-   - **Setup benchmarking**: Prepare for `go test -bench=.` execution
-   - **Log all output**: Append all step output to `build-steps.log` in repo root
+2. Analyze existing CI files, build scripts, and documentation to determine build commands needed for performance development, testing tools (if any used in repo), linting tools (if any used in repo), code formatting tools (if any used in repo) and other environment setup.
 
-3. Create `.github/actions/daily-perf-improver/build-steps/action.yml` with validated build steps. Each step must log output to `build-steps.log` in repo root. Cross-check against existing CI configs in `.github/workflows/ci.yaml`.
+3. Create `.github/actions/daily-perf-improver/build-steps/action.yml` with validated build steps. Each step must log output to `build-steps.log` in repo root. Cross-check against existing CI/devcontainer configs.
 
-4. Create 1-3 performance engineering guides in `.github/copilot/instructions/` covering KSail-specific areas:
-   
-   **Suggested guides:**
-   - `go-performance-optimization.md`: Go-specific performance patterns (allocations, goroutines, benchmarking)
-   - `cli-startup-optimization.md`: Optimizing CLI startup time, lazy loading, import overhead
-   - `cluster-operation-performance.md`: Optimizing Kubernetes cluster operations, Docker API usage
-   
-   Each guide should document:
-   - Performance measurement strategies and tooling specific to Go
-   - Common bottlenecks and optimization techniques for Go CLI applications
-   - Success metrics and testing approaches (Go benchmarks, profiling)
-   - How to explore performance efficiently using focused measurements and rebuilds
-   - KSail-specific performance considerations (embedded libraries, Docker operations)
+4. Create 1-5 performance engineering guides in `.github/copilot/instructions/` covering relevant areas (e.g., frontend performance, backend optimization, build performance, infrastructure scaling). Each guide should document:
+  - Performance measurement strategies and tooling
+  - Common bottlenecks and optimization techniques
+  - Success metrics and testing approaches
+  - How to do explore performance efficiently using focused, maximally-efficient measurements and rebuilds
 
 5. Create PR with title "${{ github.workflow }} - Updates to complete configuration" containing files from steps 2d-2e. Request maintainer review. 
 
@@ -204,35 +165,25 @@ To decide which phase to perform:
 
    a. Create a new branch starting with "perf/".
    
-   b. Work towards the performance improvement goal you selected. **For KSail, consider approaches like:**
-     - **CLI optimization**: Reduce startup time, lazy loading, minimize imports
-     - **Build optimization**: Build caching, dependency optimization, parallel builds
-     - **Algorithm improvements**: Data structures, caching, concurrent operations
-     - **Memory optimization**: Reduce allocations, efficient data structures, memory pooling
-     - **Binary size reduction**: Build flags (`-ldflags="-s -w"`), remove unused code
-     - **Go-specific**: Goroutine management, channel usage, sync primitives, GC tuning
-     - **Docker API optimization**: Batch operations, efficient API usage
-     - **Cluster provisioning**: Parallel operations, optimized resource allocation
+   b. Work towards the performance improvement goal you selected. Consider approaches like:
+     - **Code optimization:** Algorithm improvements, data structure changes, caching
+     - **User experience:** Reducing load times, improving responsiveness, optimizing assets
+     - **System efficiency:** Resource utilization, concurrency, I/O optimization
+     - **Performance engineering workflow:** Build optimization, test performance, CI improvements for faster performance engineering
+     - **Infrastructure:** Scaling strategies, deployment efficiency, monitoring setup
 
      **Measurement strategy:**
-     - **CLI benchmarks**: Use `go test -bench=. -benchmem` for microbenchmarks
-     - **Build time**: Measure with `time go build -o ksail`
-     - **Binary size**: Compare `ls -lh ksail` before/after
-     - **Startup time**: Measure `time ./ksail --help`
-     - **Profiling**: Use `pprof` for CPU/memory profiling
-     - **Cluster operations**: Time cluster creation/deletion cycles
+     Plan before/after measurements using appropriate methods for your performance target - synthetic benchmarks for algorithms, user journey tests for UX, load tests for scalability, or build time comparisons for developer experience. Choose reliable measurement approaches that clearly demonstrate impact.
 
-   c. Ensure the code still works as expected and that any existing relevant tests pass: `go test ./...`
+   c. Ensure the code still works as expected and that any existing relevant tests pass. Add new tests if appropriate and make sure they pass too.
 
-   d. Measure performance impact using Go benchmarks and profiling tools. Document measurement attempts even if unsuccessful. If no improvement then iterate, revert, or try different approach.
+   d. Measure performance impact. Document measurement attempts even if unsuccessful. If no improvement then iterate, revert, or try different approach.
 
 3. **Finalizing changes**
 
-   a. Apply Go code formatting: `go fmt ./...`
+   1. Apply any automatic code formatting used in the repo. If necessary check CI files to understand what code formatting is used.
    
-   b. Run Go linter and ensure no new linting errors remain:
-      - Run `golangci-lint run` if configured in `.golangci.yml`
-      - Fix any linting issues introduced by performance changes
+   b. Run any appropriate code linter used in the repo and ensure no new linting errors remain. If necessary check CI files to understand what code linting is used.
 
 4. **Results and learnings**
 

@@ -94,5 +94,53 @@ func ValidPolicyEngines() []PolicyEngine {
 
 // ValidProviders returns supported provider values.
 func ValidProviders() []Provider {
-	return []Provider{ProviderDocker}
+	return []Provider{ProviderDocker, ProviderHetzner}
+}
+
+// ValidateMirrorRegistriesForProvider validates that mirror registries are compatible with the provider.
+// Cloud providers (like Hetzner) cannot access local Docker containers running as mirror registries.
+// For cloud providers, mirror registries must point to external, internet-accessible registries.
+//
+// Parameters:
+//   - provider: The infrastructure provider being used
+//   - mirrorRegistries: List of mirror registry specifications
+//
+// Returns nil if valid, or an error if local mirrors are configured for a cloud provider.
+func ValidateMirrorRegistriesForProvider(provider Provider, mirrorRegistries []string) error {
+	if len(mirrorRegistries) == 0 {
+		return nil
+	}
+
+	// Cloud providers cannot access local Docker containers as mirrors
+	if provider == ProviderHetzner {
+		return fmt.Errorf(
+			"%w: mirror registries cannot be used with provider %s; "+
+				"cloud-based clusters cannot access local Docker containers",
+			ErrMirrorRegistryNotSupported,
+			provider,
+		)
+	}
+
+	return nil
+}
+
+// ValidateLocalRegistryForProvider validates that local registry configuration is compatible with the provider.
+// Cloud providers (like Hetzner) cannot use local Docker registries and must use external registries.
+//
+// Parameters:
+//   - provider: The infrastructure provider being used
+//   - registry: The local registry configuration
+//
+// Returns nil if valid, or an error if local registry is enabled without external host for cloud provider.
+func ValidateLocalRegistryForProvider(provider Provider, registry LocalRegistry) error {
+	if !registry.Enabled() {
+		return nil
+	}
+
+	// Cloud providers require external registries with proper host configuration
+	if provider == ProviderHetzner && !registry.IsExternal() {
+		return ErrLocalRegistryNotSupported
+	}
+
+	return nil
 }

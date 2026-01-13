@@ -40,6 +40,15 @@ type EnsureOptions struct {
 
 	// TargetRevision is the initial revision (tag or digest).
 	TargetRevision string
+
+	// Username for OCI registry authentication (optional, for external registries).
+	Username string
+
+	// Password for OCI registry authentication (optional, for external registries).
+	Password string
+
+	// Insecure allows HTTP connections (for local registries). Default is false.
+	Insecure bool
 }
 
 // UpdateTargetRevisionOptions configures how KSail updates an Application to a new OCI revision.

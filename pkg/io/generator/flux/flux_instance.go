@@ -44,11 +44,12 @@ type Distribution struct {
 
 // Sync configures the OCI source that Flux will track and apply.
 type Sync struct {
-	Kind     string           `json:"kind"               yaml:"kind"`
-	URL      string           `json:"url"                yaml:"url"`
-	Ref      string           `json:"ref"                yaml:"ref"`
-	Path     string           `json:"path"               yaml:"path"`
-	Interval *metav1.Duration `json:"interval,omitempty" yaml:"interval,omitempty"`
+	Kind       string           `json:"kind"                 yaml:"kind"`
+	URL        string           `json:"url"                  yaml:"url"`
+	Ref        string           `json:"ref"                  yaml:"ref"`
+	Path       string           `json:"path"                 yaml:"path"`
+	Interval   *metav1.Duration `json:"interval,omitempty"   yaml:"interval,omitempty"`
+	PullSecret string           `json:"pullSecret,omitempty" yaml:"pullSecret,omitempty"`
 }
 
 // InstanceGeneratorOptions contains options for generating FluxInstance.
@@ -65,6 +66,9 @@ type InstanceGeneratorOptions struct {
 	Ref string
 	// Interval is the reconciliation interval.
 	Interval time.Duration
+	// SecretName is the name of the Kubernetes secret containing registry credentials.
+	// If set, a secretRef will be added to the sync configuration.
+	SecretName string
 }
 
 // InstanceGenerator generates FluxInstance CR manifests.
@@ -91,6 +95,19 @@ func (g *InstanceGenerator) Generate(opts InstanceGeneratorOptions) (string, err
 		ref = "dev"
 	}
 
+	sync := &Sync{
+		Kind: "OCIRepository",
+		URL: generator.BuildOCIURL(
+			opts.RegistryHost,
+			opts.RegistryPort,
+			opts.ProjectName,
+		),
+		Ref:        ref,
+		Path:       ".",
+		Interval:   &metav1.Duration{Duration: interval},
+		PullSecret: opts.SecretName,
+	}
+
 	instance := Instance{
 		APIVersion: detector.FluxInstanceAPIVersion,
 		Kind:       detector.FluxInstanceKind,
@@ -106,17 +123,7 @@ func (g *InstanceGenerator) Generate(opts InstanceGeneratorOptions) (string, err
 				Version:  "2.x",
 				Registry: "ghcr.io/fluxcd",
 			},
-			Sync: &Sync{
-				Kind: "OCIRepository",
-				URL: generator.BuildOCIURL(
-					opts.RegistryHost,
-					opts.RegistryPort,
-					opts.ProjectName,
-				),
-				Ref:      ref,
-				Path:     ".",
-				Interval: &metav1.Duration{Duration: interval},
-			},
+			Sync: sync,
 		},
 	}
 

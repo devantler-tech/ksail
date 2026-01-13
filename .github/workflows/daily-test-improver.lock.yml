@@ -26,9 +26,9 @@
 #
 # Source: githubnext/agentics/workflows/daily-test-improver.md@c5da0cdbfae2a3cba74f330ca34424a4aea929f5
 #
-# Effective stop-time: 2026-02-11 22:17:54
+# Effective stop-time: 2026-02-12 19:45:51
 
-name: "Daily Test Coverage Improver - KSail Edition"
+name: "Daily Test Coverage Improver"
 "on":
   schedule:
   - cron: "32 7 * * *"
@@ -54,7 +54,7 @@ permissions:
 concurrency:
   group: "gh-aw-${{ github.workflow }}"
 
-run-name: "Daily Test Coverage Improver - KSail Edition"
+run-name: "Daily Test Coverage Improver"
 
 jobs:
   activation:
@@ -68,7 +68,7 @@ jobs:
       comment_repo: ""
     steps:
       - name: Setup Scripts
-        uses: githubnext/gh-aw/actions/setup@547a146e95910805ca7136cedc9069497c14210d # v0.36.0
+        uses: githubnext/gh-aw/actions/setup@a933c835b5e2d12ae4dead665a0fdba420a2d421 # v0.36.0
         with:
           destination: /opt/gh-aw/actions
       - name: Check workflow file timestamps
@@ -115,13 +115,13 @@ jobs:
       output_types: ${{ steps.collect_output.outputs.output_types }}
     steps:
       - name: Setup Scripts
-        uses: githubnext/gh-aw/actions/setup@547a146e95910805ca7136cedc9069497c14210d # v0.36.0
+        uses: githubnext/gh-aw/actions/setup@a933c835b5e2d12ae4dead665a0fdba420a2d421 # v0.36.0
         with:
           destination: /opt/gh-aw/actions
       - name: Create gh-aw temp directory
         run: bash /opt/gh-aw/actions/create_gh_aw_tmp_dir.sh
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
       - id: check_coverage_steps_file
         name: Check if action.yml exists
         run: |
@@ -189,7 +189,7 @@ jobs:
         env:
           TOKEN_CHECK: ${{ secrets.GH_AW_GITHUB_MCP_SERVER_TOKEN }}
         if: env.TOKEN_CHECK != ''
-        uses: actions/github-script@v8
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         with:
           script: |
             const determineAutomaticLockdown = require('/opt/gh-aw/actions/determine_automatic_lockdown.cjs');
@@ -588,7 +588,7 @@ jobs:
               version: "",
               agent_version: "0.0.375",
               cli_version: "v0.36.0",
-              workflow_name: "Daily Test Coverage Improver - KSail Edition",
+              workflow_name: "Daily Test Coverage Improver",
               experimental: false,
               supports_tools_allowlist: true,
               supports_http_transport: true,
@@ -634,38 +634,11 @@ jobs:
         run: |
           bash /opt/gh-aw/actions/create_prompt_first.sh
           cat << 'PROMPT_EOF' > "$GH_AW_PROMPT"
-          # Daily Test Coverage Improver - KSail Edition
+          # Daily Test Coverage Improver
           
           ## Job Description
           
-          You are an AI test engineer for **KSail** (`__GH_AW_GITHUB_REPOSITORY__`), a Go-based CLI application for Kubernetes cluster management. Your mission: systematically identify and implement test coverage improvements across this Go codebase.
-          
-          ## KSail Context
-          
-          **KSail** is a Go CLI tool that:
-          - Embeds Kubernetes tools (kubectl, helm, kind, k3d, flux, argocd) as Go libraries
-          - Provisions local Kubernetes clusters (Vanilla/K3s/Talos) on Docker
-          - Manages workloads declaratively with GitOps support
-          - Only requires Docker as an external dependency
-          
-          **Testing Strategy:**
-          - **Unit tests**: Go tests for packages in `pkg/` and `cmd/`
-          - **System tests**: End-to-end tests creating real clusters with various configurations
-          - **Test command**: `go test ./...` (standard Go testing)
-          - **Coverage command**: `go test -race -coverprofile=coverage.txt -covermode=atomic ./...`
-          
-          **Key packages to focus on:**
-          - `pkg/apis/`: API types and schemas
-          - `pkg/client/`: Embedded tool clients (kubectl, helm, kind, k3d, flux, argocd)
-          - `pkg/svc/`: Services (installers, providers, provisioners)
-          - `pkg/di/`: Dependency injection
-          - `cmd/`: CLI command implementations
-          
-          **Important constraints:**
-          - Never test internal APIs (focus on exported functions)
-          - System tests require Docker (expensive, avoid in unit tests)
-          - Mock external dependencies (Docker, Kubernetes APIs)
-          - Focus on business logic over integration tests
+          You are an AI test engineer for `__GH_AW_GITHUB_REPOSITORY__`. Your mission: systematically identify and implement test coverage improvements across this repository.
           
           You are doing your work in phases. Right now you will perform just one of the following three phases. Choose the phase depending on what has been done so far.
           
@@ -684,19 +657,11 @@ jobs:
           1. Research the current state of test coverage in the repository. Look for existing test files, coverage reports, and any related issues or pull requests.
           
           2. Create a discussion with title "__GH_AW_GITHUB_WORKFLOW__ - Research and Plan" that includes:
-            - A summary of your findings about KSail's Go testing strategy, test organization, and current coverage
-            - An analysis of which packages have low coverage (focus on `pkg/` and `cmd/`)
-            - A plan for how you will approach improving test coverage, including specific packages to focus on
-            - Details of the commands needed to run the build, tests, and generate coverage reports:
-              - **Build**: `go build -o ksail`
-              - **Test**: `go test ./...`
-              - **Coverage**: `go test -race -coverprofile=coverage.txt -covermode=atomic ./...`
-            - Details of how tests are organized (Go test files alongside source files, `*_test.go` naming)
-            - Recommendations for:
-              - Unit testing untested business logic in `pkg/svc/` (installers, providers, provisioners)
-              - Testing API types and validation in `pkg/apis/`
-              - Testing CLI commands in `cmd/` (mock external dependencies)
-              - Mocking strategies for Docker and Kubernetes clients
+            - A summary of your findings about the repository, its testing strategies, its test coverage
+            - A plan for how you will approach improving test coverage, including specific areas to focus on and strategies to use
+            - Details of the commands needed to run to build the project, run tests, and generate coverage reports
+            - Details of how tests are organized in the repo, and how new tests should be organized
+            - Opportunities for new ways of greatly increasing test coverage
             - Any questions or clarifications needed from maintainers
           
              **Include a "How to Control this Workflow" section at the end of the discussion that explains:**
@@ -720,20 +685,9 @@ jobs:
           
           1. Check if an open pull request with title "__GH_AW_GITHUB_WORKFLOW__ - Updates to complete configuration" exists in this repo. If it does, add a comment to the pull request saying configuration needs to be completed, then exit the workflow.
           
-          2. For KSail (Go project), the coverage steps should:
-             - **Setup Go**: Use the Go version from `go.mod`
-             - **Download dependencies**: `go mod download`
-             - **Build**: `go build -o ksail` (verify compilation)
-             - **Run tests with coverage**: `go test -race -coverprofile=coverage.txt -covermode=atomic ./...`
-             - **Upload coverage artifact**: Upload `coverage.txt` as an artifact named "coverage"
-             - **Log all output**: Append all step output to `coverage-steps.log` in the root
+          2. Have a careful think about the CI commands needed to build the repository, run tests, produce a combined coverage report and upload it as an artifact. Do this by carefully reading any existing documentation and CI files in the repository that do similar things, and by looking at any build scripts, project files, dev guides and so on in the repository. If multiple projects are present, perform build and coverage testing on as many as possible, and where possible merge the coverage reports into one combined report. Work out the steps you worked out, in order, as a series of YAML steps suitable for inclusion in a GitHub Action.
           
-          3. Create the file `.github/actions/daily-test-improver/coverage-steps/action.yml` with these validated steps. Ensure the action.yml file:
-             - Uses `actions/setup-go@v6` with `go-version-file: go.mod`
-             - Runs `go test -race -coverprofile=coverage.txt -covermode=atomic ./...`
-             - Uploads coverage.txt as artifact using `actions/upload-artifact@v4`
-             - Logs all output to `coverage-steps.log`
-             - Is valid YAML with proper GitHub Actions syntax
+          3. Create the file `.github/actions/daily-test-improver/coverage-steps/action.yml` containing these steps, ensuring that the action.yml file is valid. Leave comments in the file to explain what the steps are doing, where the coverage report will be generated, and any other relevant information. Ensure that the steps include uploading the coverage report(s) as an artifact called "coverage".  Each step of the action should append its output to a file called `coverage-steps.log` in the root of the repository. Ensure that the action.yml file is valid and correctly formatted.
           
           4. Before running any of the steps, make a pull request for the addition of the `action.yml` file, with title "__GH_AW_GITHUB_WORKFLOW__ - Updates to complete configuration". Encourage the maintainer to review the files carefully to ensure they are appropriate for the project.
           
@@ -765,46 +719,25 @@ jobs:
              
              f. If plan needs updating then comment on planning discussion with revised plan and rationale. Consider maintainer feedback.
             
-             g. Based on all of the above, select an area of relatively low coverage to work on that appears tractable for further test additions. **For KSail, prioritize:**
-                - Business logic in `pkg/svc/` (installers, providers, provisioners)
-                - API validation in `pkg/apis/`
-                - CLI command logic in `cmd/` (with mocked dependencies)
-                - Utility functions in `pkg/io/` and other helpers
-                
-                **Avoid:**
-                - System tests requiring Docker (expensive, already covered)
-                - Testing internal (unexported) APIs
-                - Integration tests with real Kubernetes clusters
+             g. Based on all of the above, select an area of relatively low coverage to work on that appears tractable for further test additions. Ensure that you have a good understanding of the code and the testing requirements before proceeding.
           
           2. **Work towards your selected goal**. For the test coverage improvement goal you selected, do the following:
           
              a. Create a new branch starting with "test/".
              
-             b. Write new tests to improve coverage. **For KSail Go tests:**
-                - Create test files alongside source files with `*_test.go` naming
-                - Use `testing` package standard library
-                - Use table-driven tests for multiple scenarios
-                - Mock external dependencies (Docker client, Kubernetes client) using interfaces
-                - Focus on exported functions and business logic
-                - Test error paths and edge cases
-                - Use `testify` if already present in project for assertions
+             b. Write new tests to improve coverage. Ensure that the tests are meaningful and cover edge cases where applicable.
           
-             c. Build the tests if necessary and remove any build errors: `go build -o ksail`
+             c. Build the tests if necessary and remove any build errors.
              
-             d. Run the new tests to ensure they pass: `go test -v ./...`
+             d. Run the new tests to ensure they pass.
           
              e. Re-run the test suite collecting coverage information. Check that overall coverage has improved. Document measurement attempts even if unsuccessful. If no improvement then iterate, revert, or try different approach.
           
           3. **Finalizing changes**
           
-             a. Apply any automatic code formatting used in the repo. **For KSail:**
-                - Check if `gofmt` or `goimports` is used
-                - Run `go fmt ./...` to format Go code
-                - Check `.golangci.yml` for linting configuration
+             a. Apply any automatic code formatting used in the repo. If necessary check CI files to understand what code formatting is used.
              
-             b. Run any appropriate code linter used in the repo and ensure no new linting errors remain:
-                - Run `golangci-lint run` if configured in `.golangci.yml`
-                - Fix any linting issues in test files
+             b. Run any appropriate code linter used in the repo and ensure no new linting errors remain. If necessary check CI files to understand what code linting is used.
           
           4. **Results and learnings**
           
@@ -1115,7 +1048,7 @@ jobs:
       total_count: ${{ steps.missing_tool.outputs.total_count }}
     steps:
       - name: Setup Scripts
-        uses: githubnext/gh-aw/actions/setup@547a146e95910805ca7136cedc9069497c14210d # v0.36.0
+        uses: githubnext/gh-aw/actions/setup@a933c835b5e2d12ae4dead665a0fdba420a2d421 # v0.36.0
         with:
           destination: /opt/gh-aw/actions
       - name: Debug job inputs
@@ -1131,7 +1064,7 @@ jobs:
           echo "Agent Conclusion: $AGENT_CONCLUSION"
       - name: Download agent output artifact
         continue-on-error: true
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
         with:
           name: agent-output
           path: /tmp/gh-aw/safeoutputs/
@@ -1146,7 +1079,7 @@ jobs:
         env:
           GH_AW_AGENT_OUTPUT: ${{ env.GH_AW_AGENT_OUTPUT }}
           GH_AW_NOOP_MAX: 1
-          GH_AW_WORKFLOW_NAME: "Daily Test Coverage Improver - KSail Edition"
+          GH_AW_WORKFLOW_NAME: "Daily Test Coverage Improver"
           GH_AW_WORKFLOW_SOURCE: "githubnext/agentics/workflows/daily-test-improver.md@c5da0cdbfae2a3cba74f330ca34424a4aea929f5"
           GH_AW_WORKFLOW_SOURCE_URL: "${{ github.server_url }}/githubnext/agentics/tree/c5da0cdbfae2a3cba74f330ca34424a4aea929f5/workflows/daily-test-improver.md"
         with:
@@ -1161,7 +1094,7 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
           GH_AW_AGENT_OUTPUT: ${{ env.GH_AW_AGENT_OUTPUT }}
-          GH_AW_WORKFLOW_NAME: "Daily Test Coverage Improver - KSail Edition"
+          GH_AW_WORKFLOW_NAME: "Daily Test Coverage Improver"
           GH_AW_WORKFLOW_SOURCE: "githubnext/agentics/workflows/daily-test-improver.md@c5da0cdbfae2a3cba74f330ca34424a4aea929f5"
           GH_AW_WORKFLOW_SOURCE_URL: "${{ github.server_url }}/githubnext/agentics/tree/c5da0cdbfae2a3cba74f330ca34424a4aea929f5/workflows/daily-test-improver.md"
         with:
@@ -1179,7 +1112,7 @@ jobs:
           GH_AW_COMMENT_ID: ${{ needs.activation.outputs.comment_id }}
           GH_AW_COMMENT_REPO: ${{ needs.activation.outputs.comment_repo }}
           GH_AW_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          GH_AW_WORKFLOW_NAME: "Daily Test Coverage Improver - KSail Edition"
+          GH_AW_WORKFLOW_NAME: "Daily Test Coverage Improver"
           GH_AW_AGENT_CONCLUSION: ${{ needs.agent.result }}
           GH_AW_DETECTION_CONCLUSION: ${{ needs.detection.result }}
         with:
@@ -1202,18 +1135,18 @@ jobs:
       success: ${{ steps.parse_results.outputs.success }}
     steps:
       - name: Setup Scripts
-        uses: githubnext/gh-aw/actions/setup@547a146e95910805ca7136cedc9069497c14210d # v0.36.0
+        uses: githubnext/gh-aw/actions/setup@a933c835b5e2d12ae4dead665a0fdba420a2d421 # v0.36.0
         with:
           destination: /opt/gh-aw/actions
       - name: Download agent artifacts
         continue-on-error: true
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
         with:
           name: agent-artifacts
           path: /tmp/gh-aw/threat-detection/
       - name: Download agent output artifact
         continue-on-error: true
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
         with:
           name: agent-output
           path: /tmp/gh-aw/threat-detection/
@@ -1225,7 +1158,7 @@ jobs:
       - name: Setup threat detection
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
-          WORKFLOW_NAME: "Daily Test Coverage Improver - KSail Edition"
+          WORKFLOW_NAME: "Daily Test Coverage Improver"
           WORKFLOW_DESCRIPTION: "This workflow performs test enhancements by systematically improving test quality and coverage.\nOperates in three phases: research testing landscape and create coverage plan, infer build\nand coverage steps, then implement new tests targeting untested code. Generates coverage\nreports, identifies gaps, creates comprehensive test suites, and submits draft PRs."
           HAS_PATCH: ${{ needs.agent.outputs.has_patch }}
         with:
@@ -1349,15 +1282,15 @@ jobs:
       activated: ${{ steps.check_stop_time.outputs.stop_time_ok == 'true' }}
     steps:
       - name: Setup Scripts
-        uses: githubnext/gh-aw/actions/setup@547a146e95910805ca7136cedc9069497c14210d # v0.36.0
+        uses: githubnext/gh-aw/actions/setup@a933c835b5e2d12ae4dead665a0fdba420a2d421 # v0.36.0
         with:
           destination: /opt/gh-aw/actions
       - name: Check stop-time limit
         id: check_stop_time
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
-          GH_AW_STOP_TIME: 2026-02-11 22:17:54
-          GH_AW_WORKFLOW_NAME: "Daily Test Coverage Improver - KSail Edition"
+          GH_AW_STOP_TIME: 2026-02-12 19:45:51
+          GH_AW_WORKFLOW_NAME: "Daily Test Coverage Improver"
         with:
           script: |
             const { setupGlobals } = require('/opt/gh-aw/actions/setup_globals.cjs');
@@ -1381,7 +1314,7 @@ jobs:
     env:
       GH_AW_ENGINE_ID: "copilot"
       GH_AW_WORKFLOW_ID: "daily-test-improver"
-      GH_AW_WORKFLOW_NAME: "Daily Test Coverage Improver - KSail Edition"
+      GH_AW_WORKFLOW_NAME: "Daily Test Coverage Improver"
       GH_AW_WORKFLOW_SOURCE: "githubnext/agentics/workflows/daily-test-improver.md@c5da0cdbfae2a3cba74f330ca34424a4aea929f5"
       GH_AW_WORKFLOW_SOURCE_URL: "${{ github.server_url }}/githubnext/agentics/tree/c5da0cdbfae2a3cba74f330ca34424a4aea929f5/workflows/daily-test-improver.md"
     outputs:
@@ -1389,12 +1322,12 @@ jobs:
       process_safe_outputs_temporary_id_map: ${{ steps.process_safe_outputs.outputs.temporary_id_map }}
     steps:
       - name: Setup Scripts
-        uses: githubnext/gh-aw/actions/setup@547a146e95910805ca7136cedc9069497c14210d # v0.36.0
+        uses: githubnext/gh-aw/actions/setup@a933c835b5e2d12ae4dead665a0fdba420a2d421 # v0.36.0
         with:
           destination: /opt/gh-aw/actions
       - name: Download agent output artifact
         continue-on-error: true
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
         with:
           name: agent-output
           path: /tmp/gh-aw/safeoutputs/
@@ -1405,13 +1338,13 @@ jobs:
           echo "GH_AW_AGENT_OUTPUT=/tmp/gh-aw/safeoutputs/agent_output.json" >> "$GITHUB_ENV"
       - name: Download patch artifact
         continue-on-error: true
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
         with:
           name: agent-artifacts
           path: /tmp/gh-aw/
       - name: Checkout repository
         if: ((!cancelled()) && (needs.agent.result != 'skipped')) && (contains(needs.agent.outputs.output_types, 'create_pull_request'))
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
           token: ${{ github.token }}
           persist-credentials: false

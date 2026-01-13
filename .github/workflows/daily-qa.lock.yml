@@ -26,9 +26,9 @@
 #
 # Source: githubnext/agentics/workflows/daily-qa.md@c5da0cdbfae2a3cba74f330ca34424a4aea929f5
 #
-# Effective stop-time: 2026-02-11 22:17:53
+# Effective stop-time: 2026-02-12 19:41:01
 
-name: "Daily QA - KSail Edition"
+name: "Daily QA"
 "on":
   schedule:
   - cron: "5 19 * * *"
@@ -39,7 +39,7 @@ permissions: read-all
 concurrency:
   group: "gh-aw-${{ github.workflow }}"
 
-run-name: "Daily QA - KSail Edition"
+run-name: "Daily QA"
 
 jobs:
   activation:
@@ -53,7 +53,7 @@ jobs:
       comment_repo: ""
     steps:
       - name: Setup Scripts
-        uses: githubnext/gh-aw/actions/setup@547a146e95910805ca7136cedc9069497c14210d # v0.36.0
+        uses: githubnext/gh-aw/actions/setup@a933c835b5e2d12ae4dead665a0fdba420a2d421 # v0.36.0
         with:
           destination: /opt/gh-aw/actions
       - name: Check workflow file timestamps
@@ -85,11 +85,11 @@ jobs:
       output_types: ${{ steps.collect_output.outputs.output_types }}
     steps:
       - name: Setup Scripts
-        uses: githubnext/gh-aw/actions/setup@547a146e95910805ca7136cedc9069497c14210d # v0.36.0
+        uses: githubnext/gh-aw/actions/setup@a933c835b5e2d12ae4dead665a0fdba420a2d421 # v0.36.0
         with:
           destination: /opt/gh-aw/actions
       - name: Checkout repository
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
           persist-credentials: false
       - name: Create gh-aw temp directory
@@ -146,7 +146,7 @@ jobs:
         env:
           TOKEN_CHECK: ${{ secrets.GH_AW_GITHUB_MCP_SERVER_TOKEN }}
         if: env.TOKEN_CHECK != ''
-        uses: actions/github-script@v8
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         with:
           script: |
             const determineAutomaticLockdown = require('/opt/gh-aw/actions/determine_automatic_lockdown.cjs');
@@ -472,7 +472,7 @@ jobs:
               version: "",
               agent_version: "0.0.375",
               cli_version: "v0.36.0",
-              workflow_name: "Daily QA - KSail Edition",
+              workflow_name: "Daily QA",
               experimental: false,
               supports_tools_allowlist: true,
               supports_http_transport: true,
@@ -518,56 +518,23 @@ jobs:
         run: |
           bash /opt/gh-aw/actions/create_prompt_first.sh
           cat << 'PROMPT_EOF' > "$GH_AW_PROMPT"
-          # Daily QA - KSail Edition
+          # Daily QA
           
           ## Job Description
           
           
           
-          Your name is __GH_AW_GITHUB_WORKFLOW__. Your job is to act as an agentic QA engineer for the team working on **KSail** (`__GH_AW_GITHUB_REPOSITORY__`), a Go-based CLI application for Kubernetes cluster management.
+          Your name is __GH_AW_GITHUB_WORKFLOW__. Your job is to act as an agentic QA engineer for the team working in the GitHub repository `__GH_AW_GITHUB_REPOSITORY__`.
           
-          ## KSail Context
+          1. Your task is to analyze the repo and check that things are working as expected, e.g.
           
-          **KSail** is a Go CLI tool that:
-          - Embeds Kubernetes tools (kubectl, helm, kind, k3d, flux, argocd) as Go libraries
-          - Provisions local Kubernetes clusters (Vanilla/K3s/Talos) on Docker
-          - Manages workloads declaratively with GitOps support
-          - Uses Jekyll for documentation (docs/ directory)
-          
-          **Build and Test Commands:**
-          - **Build**: `go build -o ksail`
-          - **Test**: `go test ./...`
-          - **Documentation**: `cd docs && bundle exec jekyll build`
-          
-          1. Your task is to analyze KSail and check that things are working as expected:
-          
-             **Go Code Quality:**
-             - Check that the Go code builds successfully: `go build -o ksail`
-             - Check that Go tests pass: `go test ./...`
-             - Verify Go module dependencies are clean: `go mod tidy` doesn't change anything
-             - Check for common Go issues (unused imports, missing error handling)
-             - Verify `go.mod` and `go.sum` are in sync
-          
-             **CLI Functionality:**
-             - Verify CLI commands have proper help text: `./ksail --help`
-             - Check that command structure is consistent and intuitive
-             - Ensure error messages are clear and actionable
-          
-             **Documentation:**
-             - Verify Jekyll documentation builds: `cd docs && bundle exec jekyll build`
-             - Check that documentation in `docs/` is up-to-date with code changes
-             - Verify CLI flags documentation matches actual flags
-             - Check for broken links in documentation
-          
-             **Code Structure:**
-             - Verify package organization follows Go best practices
-             - Check that exported APIs are well-documented
-             - Ensure code follows repository custom instructions
-          
-             **Configuration Files:**
-             - Verify `ksail.yaml` schema is valid
-             - Check that example configurations in docs are correct
-             - Verify GitHub Actions workflows are valid YAML
+             - Check that the code builds and runs
+             - Check that the tests pass
+             - Check that instructions are clear and easy to follow
+             - Check that the code is well documented
+             - Check that the code is well structured and easy to read
+             - Check that the code is well tested
+             - Check that the documentation is up to date
           
              You can also choose to do nothing if you think everything is fine.
           
@@ -869,7 +836,7 @@ jobs:
       total_count: ${{ steps.missing_tool.outputs.total_count }}
     steps:
       - name: Setup Scripts
-        uses: githubnext/gh-aw/actions/setup@547a146e95910805ca7136cedc9069497c14210d # v0.36.0
+        uses: githubnext/gh-aw/actions/setup@a933c835b5e2d12ae4dead665a0fdba420a2d421 # v0.36.0
         with:
           destination: /opt/gh-aw/actions
       - name: Debug job inputs
@@ -885,7 +852,7 @@ jobs:
           echo "Agent Conclusion: $AGENT_CONCLUSION"
       - name: Download agent output artifact
         continue-on-error: true
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
         with:
           name: agent-output
           path: /tmp/gh-aw/safeoutputs/
@@ -900,7 +867,7 @@ jobs:
         env:
           GH_AW_AGENT_OUTPUT: ${{ env.GH_AW_AGENT_OUTPUT }}
           GH_AW_NOOP_MAX: 1
-          GH_AW_WORKFLOW_NAME: "Daily QA - KSail Edition"
+          GH_AW_WORKFLOW_NAME: "Daily QA"
           GH_AW_WORKFLOW_SOURCE: "githubnext/agentics/workflows/daily-qa.md@c5da0cdbfae2a3cba74f330ca34424a4aea929f5"
           GH_AW_WORKFLOW_SOURCE_URL: "${{ github.server_url }}/githubnext/agentics/tree/c5da0cdbfae2a3cba74f330ca34424a4aea929f5/workflows/daily-qa.md"
         with:
@@ -915,7 +882,7 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
           GH_AW_AGENT_OUTPUT: ${{ env.GH_AW_AGENT_OUTPUT }}
-          GH_AW_WORKFLOW_NAME: "Daily QA - KSail Edition"
+          GH_AW_WORKFLOW_NAME: "Daily QA"
           GH_AW_WORKFLOW_SOURCE: "githubnext/agentics/workflows/daily-qa.md@c5da0cdbfae2a3cba74f330ca34424a4aea929f5"
           GH_AW_WORKFLOW_SOURCE_URL: "${{ github.server_url }}/githubnext/agentics/tree/c5da0cdbfae2a3cba74f330ca34424a4aea929f5/workflows/daily-qa.md"
         with:
@@ -933,7 +900,7 @@ jobs:
           GH_AW_COMMENT_ID: ${{ needs.activation.outputs.comment_id }}
           GH_AW_COMMENT_REPO: ${{ needs.activation.outputs.comment_repo }}
           GH_AW_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          GH_AW_WORKFLOW_NAME: "Daily QA - KSail Edition"
+          GH_AW_WORKFLOW_NAME: "Daily QA"
           GH_AW_AGENT_CONCLUSION: ${{ needs.agent.result }}
           GH_AW_DETECTION_CONCLUSION: ${{ needs.detection.result }}
         with:
@@ -956,18 +923,18 @@ jobs:
       success: ${{ steps.parse_results.outputs.success }}
     steps:
       - name: Setup Scripts
-        uses: githubnext/gh-aw/actions/setup@547a146e95910805ca7136cedc9069497c14210d # v0.36.0
+        uses: githubnext/gh-aw/actions/setup@a933c835b5e2d12ae4dead665a0fdba420a2d421 # v0.36.0
         with:
           destination: /opt/gh-aw/actions
       - name: Download agent artifacts
         continue-on-error: true
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
         with:
           name: agent-artifacts
           path: /tmp/gh-aw/threat-detection/
       - name: Download agent output artifact
         continue-on-error: true
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
         with:
           name: agent-output
           path: /tmp/gh-aw/threat-detection/
@@ -979,7 +946,7 @@ jobs:
       - name: Setup threat detection
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
-          WORKFLOW_NAME: "Daily QA - KSail Edition"
+          WORKFLOW_NAME: "Daily QA"
           WORKFLOW_DESCRIPTION: "This workflow performs adhoc quality assurance by validating project health daily.\nChecks that code builds and runs, tests pass, documentation is clear, and code\nis well-structured. Creates discussions for findings and can submit draft PRs\nwith improvements. Provides continuous quality monitoring throughout development."
           HAS_PATCH: ${{ needs.agent.outputs.has_patch }}
         with:
@@ -1103,15 +1070,15 @@ jobs:
       activated: ${{ steps.check_stop_time.outputs.stop_time_ok == 'true' }}
     steps:
       - name: Setup Scripts
-        uses: githubnext/gh-aw/actions/setup@547a146e95910805ca7136cedc9069497c14210d # v0.36.0
+        uses: githubnext/gh-aw/actions/setup@a933c835b5e2d12ae4dead665a0fdba420a2d421 # v0.36.0
         with:
           destination: /opt/gh-aw/actions
       - name: Check stop-time limit
         id: check_stop_time
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
-          GH_AW_STOP_TIME: 2026-02-11 22:17:53
-          GH_AW_WORKFLOW_NAME: "Daily QA - KSail Edition"
+          GH_AW_STOP_TIME: 2026-02-12 19:41:01
+          GH_AW_WORKFLOW_NAME: "Daily QA"
         with:
           script: |
             const { setupGlobals } = require('/opt/gh-aw/actions/setup_globals.cjs');
@@ -1135,7 +1102,7 @@ jobs:
     env:
       GH_AW_ENGINE_ID: "copilot"
       GH_AW_WORKFLOW_ID: "daily-qa"
-      GH_AW_WORKFLOW_NAME: "Daily QA - KSail Edition"
+      GH_AW_WORKFLOW_NAME: "Daily QA"
       GH_AW_WORKFLOW_SOURCE: "githubnext/agentics/workflows/daily-qa.md@c5da0cdbfae2a3cba74f330ca34424a4aea929f5"
       GH_AW_WORKFLOW_SOURCE_URL: "${{ github.server_url }}/githubnext/agentics/tree/c5da0cdbfae2a3cba74f330ca34424a4aea929f5/workflows/daily-qa.md"
     outputs:
@@ -1143,12 +1110,12 @@ jobs:
       process_safe_outputs_temporary_id_map: ${{ steps.process_safe_outputs.outputs.temporary_id_map }}
     steps:
       - name: Setup Scripts
-        uses: githubnext/gh-aw/actions/setup@547a146e95910805ca7136cedc9069497c14210d # v0.36.0
+        uses: githubnext/gh-aw/actions/setup@a933c835b5e2d12ae4dead665a0fdba420a2d421 # v0.36.0
         with:
           destination: /opt/gh-aw/actions
       - name: Download agent output artifact
         continue-on-error: true
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
         with:
           name: agent-output
           path: /tmp/gh-aw/safeoutputs/
@@ -1159,13 +1126,13 @@ jobs:
           echo "GH_AW_AGENT_OUTPUT=/tmp/gh-aw/safeoutputs/agent_output.json" >> "$GITHUB_ENV"
       - name: Download patch artifact
         continue-on-error: true
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
         with:
           name: agent-artifacts
           path: /tmp/gh-aw/
       - name: Checkout repository
         if: ((!cancelled()) && (needs.agent.result != 'skipped')) && (contains(needs.agent.outputs.output_types, 'create_pull_request'))
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
           token: ${{ github.token }}
           persist-credentials: false

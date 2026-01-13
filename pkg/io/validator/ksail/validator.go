@@ -450,22 +450,37 @@ func (v *Validator) validateRegistry(
 	config *v1alpha1.Cluster,
 	result *validator.ValidationResult,
 ) {
-	port := config.Spec.Cluster.LocalRegistry.HostPort
+	if !config.Spec.Cluster.LocalRegistry.Enabled() {
+		return
+	}
 
-	enabled := config.Spec.Cluster.LocalRegistry.Enabled
-
-	if enabled {
-		if port <= 0 || port > 65535 {
+	// For external registries, port 0 is valid (HTTPS with implicit port 443)
+	if config.Spec.Cluster.LocalRegistry.IsExternal() {
+		port := config.Spec.Cluster.LocalRegistry.ResolvedPort()
+		// External registries can have port 0 (implicit HTTPS) or explicit port
+		if port < 0 || port > 65535 {
 			result.AddError(validator.ValidationError{
-				Field:         "spec.cluster.localRegistry.hostPort",
-				Message:       "localRegistry.hostPort must be between 1 and 65535 when the registry is enabled",
+				Field:         "spec.cluster.localRegistry.registry",
+				Message:       "registry port must be between 0 and 65535",
 				CurrentValue:  port,
-				ExpectedValue: "1-65535",
-				FixSuggestion: "Choose a valid TCP port (e.g., 5050) for spec.cluster.localRegistry.hostPort",
+				ExpectedValue: "0-65535 (0 for HTTPS with implicit port)",
+				FixSuggestion: "Use the registry host without port for HTTPS (e.g., ghcr.io/org/repo)",
 			})
 		}
 
 		return
+	}
+
+	// For local registries, port must be explicitly set (1-65535)
+	port := config.Spec.Cluster.LocalRegistry.ResolvedPort()
+	if port <= 0 || port > 65535 {
+		result.AddError(validator.ValidationError{
+			Field:         "spec.cluster.localRegistry.registry",
+			Message:       "registry port must be between 1 and 65535",
+			CurrentValue:  port,
+			ExpectedValue: "1-65535",
+			FixSuggestion: "Specify a valid port in the registry spec (e.g., localhost:5050)",
+		})
 	}
 }
 

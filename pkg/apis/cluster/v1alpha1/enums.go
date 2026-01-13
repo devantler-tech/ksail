@@ -443,6 +443,8 @@ type Provider string
 const (
 	// ProviderDocker runs cluster nodes as Docker containers.
 	ProviderDocker Provider = "Docker"
+	// ProviderHetzner runs cluster nodes as Hetzner Cloud servers.
+	ProviderHetzner Provider = "Hetzner"
 )
 
 // Set for Provider (pflag.Value interface).
@@ -456,10 +458,11 @@ func (p *Provider) Set(value string) error {
 	}
 
 	return fmt.Errorf(
-		"%w: %s (valid options: %s)",
+		"%w: %s (valid options: %s, %s)",
 		ErrInvalidProvider,
 		value,
 		ProviderDocker,
+		ProviderHetzner,
 	)
 }
 
@@ -480,7 +483,7 @@ func (p *Provider) Default() any {
 
 // ValidValues returns all valid Provider values as strings.
 func (p *Provider) ValidValues() []string {
-	return []string{string(ProviderDocker)}
+	return []string{string(ProviderDocker), string(ProviderHetzner)}
 }
 
 // ValidateForDistribution validates that the provider is valid for the given distribution.
@@ -506,16 +509,17 @@ func (p *Provider) ValidateForDistribution(distribution Distribution) error {
 			*p,
 		)
 	case DistributionTalos:
-		// Talos supports the provider field, currently only Docker
-		if *p == "" || *p == ProviderDocker {
+		// Talos supports Docker (local) and Hetzner (cloud) providers
+		if *p == "" || *p == ProviderDocker || *p == ProviderHetzner {
 			return nil
 		}
 
 		return fmt.Errorf(
-			"%w: distribution %s only supports provider %s, got %s",
+			"%w: distribution %s only supports providers %s and %s, got %s",
 			ErrInvalidDistributionProviderCombination,
 			distribution,
 			ProviderDocker,
+			ProviderHetzner,
 			*p,
 		)
 	default:

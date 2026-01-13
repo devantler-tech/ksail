@@ -11,18 +11,25 @@ grand_parent: "CLI Flags"
 ```text
 Start a previously stopped Kubernetes cluster.
 
-The cluster is detected from the provided context or the current kubeconfig context.
-Supported distributions are automatically detected:
-  - Vanilla (Kind) clusters (context pattern: kind-<cluster-name>)
-  - K3s (K3d) clusters (context pattern: k3d-<cluster-name>)
-  - Talos clusters (context pattern: admin@<cluster-name>)
+The cluster is resolved in the following priority order:
+  1. From --name flag
+  2. From ksail.yaml config file (if present)
+  3. From current kubeconfig context
+
+The provider is resolved in the following priority order:
+  1. From --provider flag
+  2. From ksail.yaml config file (if present)
+  3. Defaults to Docker
+
+Supported distributions are automatically detected from existing clusters.
 
 Usage:
   ksail cluster start [flags]
 
 Flags:
-  -c, --context string   Kubernetes context to target (defaults to current context)
-  -h, --help             help for start
+  -h, --help                help for start
+  -n, --name string         Name of the cluster to target
+  -p, --provider Provider   Provider to use ([Docker Hetzner])
 
 Global Flags:
       --timing   Show per-activity timing output

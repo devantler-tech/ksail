@@ -8,7 +8,7 @@ inputs:
     description: Kubernetes distribution (Vanilla, K3s, Talos)
     required: true
   provider:
-    description: Infrastructure provider (Docker)
+    description: Infrastructure provider (Docker, Hetzner)
     required: false
     default: "Docker"
   args:
@@ -39,17 +39,72 @@ inputs:
     description: Timeout for workload wait operations
     required: false
     default: "300s"
+  hcloud-token:
+    description: Hetzner Cloud API token (required when provider is Hetzner)
+    required: false
+    default: ""
+  ghcr-user:
+    description: GitHub Container Registry username (for external registry auth)
+    required: false
+    default: ""
+  ghcr-token:
+    description: GitHub Container Registry token (for external registry auth)
+    required: false
+    default: ""
 
 runs:
   using: composite
   steps:
+    - name: 🔧 Generate unique artifact tag
+      id: generate-tag
+      shell: bash
+      env:
+        DISTRIBUTION: ${{ inputs.distribution }}
+        PROVIDER: ${{ inputs.provider }}
+        ARGS: ${{ inputs.args }}
+      run: |
+        # Generate unique tag: distribution-provider-sanitized_args-shortsha
+        DIST_LOWER=$(echo "$DISTRIBUTION" | tr '[:upper:]' '[:lower:]')
+        PROVIDER_LOWER=$(echo "$PROVIDER" | tr '[:upper:]' '[:lower:]')
+        # Sanitize args: extract key values, remove special chars, lowercase
+        ARGS_SANITIZED=$(echo "$ARGS" | sed 's/--[a-z-]*=\?//g' | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '-' | sed 's/^-//;s/-$//' | cut -c1-30)
+        SHORT_SHA="${GITHUB_SHA:0:7}"
+        if [[ -n "$ARGS_SANITIZED" ]]; then
+          TAG="${DIST_LOWER}-${PROVIDER_LOWER}-${ARGS_SANITIZED}-${SHORT_SHA}"
+        else
+          TAG="${DIST_LOWER}-${PROVIDER_LOWER}-${SHORT_SHA}"
+        fi
+        echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+        echo "Generated unique artifact tag: $TAG"
+
+    - name: 🔧 Resolve GHCR credentials in args
+      id: resolve-args
+      shell: bash
+      env:
+        ARGS: ${{ inputs.args }}
+        GHCR_USER: ${{ inputs.ghcr-user }}
+        GHCR_TOKEN: ${{ inputs.ghcr-token }}
+        ARTIFACT_TAG: ${{ steps.generate-tag.outputs.tag }}
+      run: |
+        # Inject GHCR credentials into --local-registry if it contains ghcr.io
+        RESOLVED_ARGS="$ARGS"
+        if [[ "$ARGS" == *"--local-registry"* ]] && [[ "$ARGS" == *"ghcr.io"* ]] && [[ -n "$GHCR_USER" ]] && [[ -n "$GHCR_TOKEN" ]]; then
+          # Replace 'ghcr.io/' with 'user:token@ghcr.io/'
+          RESOLVED_ARGS="${ARGS//ghcr.io\//${GHCR_USER}:${GHCR_TOKEN}@ghcr.io/}"
+          # Append unique tag to avoid collisions between parallel CI runs
+          # Format: user:token@ghcr.io/org/repo/path -> user:token@ghcr.io/org/repo/path:tag
+          RESOLVED_ARGS="${RESOLVED_ARGS}:${ARTIFACT_TAG}"
+        fi
+        echo "args=$RESOLVED_ARGS" >> "$GITHUB_OUTPUT"
+
     - name: 🧪 ksail cluster init
       if: inputs.init == 'true'
       shell: bash
       env:
         DISTRIBUTION: ${{ inputs.distribution }}
         PROVIDER: ${{ inputs.provider }}
-        ARGS: ${{ inputs.args }}
+        ARGS: ${{ steps.resolve-args.outputs.args }}
+        HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
       run: |
         ksail cluster init --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS
 
@@ -59,7 +114,8 @@ runs:
         INIT: ${{ inputs.init }}
         DISTRIBUTION: ${{ inputs.distribution }}
         PROVIDER: ${{ inputs.provider }}
-        ARGS: ${{ inputs.args }}
+        ARGS: ${{ steps.resolve-args.outputs.args }}
+        HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
       run: |
         if [ "$INIT" = "true" ]; then
           ksail cluster create
@@ -69,6 +125,8 @@ runs:
 
     - name: 🧪 ksail cluster list
       shell: bash
+      env:
+        HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
       run: |
         ksail cluster list
 
@@ -79,6 +137,7 @@ runs:
         WORKLOAD_NAME: ${{ inputs.test-workload-name }}
         WORKLOAD_IMAGE: ${{ inputs.test-workload-image }}
         TIMEOUT: ${{ inputs.workload-timeout }}
+        HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
       run: |
         ksail workload create deployment "$WORKLOAD_NAME" --image="$WORKLOAD_IMAGE"
         ksail workload wait --for=condition=Available deployment/"$WORKLOAD_NAME" --timeout="$TIMEOUT"
@@ -90,6 +149,7 @@ runs:
       env:
         OVERLAY_PATH: ${{ inputs.apply-overlay-path }}
         TIMEOUT: ${{ inputs.workload-timeout }}
+        HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
       run: ksail workload apply -k "$OVERLAY_PATH" --wait --timeout="$TIMEOUT"
 
     - name: 🧪 ksail workload push and reconcile
@@ -98,6 +158,9 @@ runs:
       shell: bash
       env:
         GITOPS_PATH: ${{ inputs.gitops-path }}
+        HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
+        GHCR_USER: ${{ inputs.ghcr-user }}
+        GHCR_TOKEN: ${{ inputs.ghcr-token }}
       run: |
         mkdir -p "$GITOPS_PATH"
         if [ ! -f "$GITOPS_PATH/kustomization.yaml" ]; then
@@ -116,15 +179,22 @@ runs:
 
     - name: 🧪 ksail cluster stop
       shell: bash
+      env:
+        HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
       run: |
         ksail cluster stop
 
     - name: 🧪 ksail cluster start
       shell: bash
+      env:
+        HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
       run: |
         ksail cluster start
 
     - name: 🧪 ksail cluster delete
+      if: always()
       shell: bash
+      env:
+        HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
       run: |
         ksail cluster delete

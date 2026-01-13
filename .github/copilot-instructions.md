@@ -223,8 +223,9 @@ bundle exec jekyll serve --host 0.0.0.0  # Test locally (if needed)
 
 **Providers vs Provisioners:**
 
-- **Providers** (`pkg/svc/provider/`) manage infrastructure lifecycle (start/stop containers)
+- **Providers** (`pkg/svc/provider/`) manage infrastructure lifecycle (start/stop containers or cloud servers)
   - `docker.Provider`: Runs Kubernetes nodes as Docker containers
+  - `hetzner.Provider`: Runs Kubernetes nodes as Hetzner Cloud servers
 - **Provisioners** (`pkg/svc/provisioner/`) configure and manage Kubernetes distributions
   - `KindClusterProvisioner` (`pkg/svc/provisioner/cluster/kind/`): Uses Kind SDK for standard upstream Kubernetes
   - `K3dClusterProvisioner` (`pkg/svc/provisioner/cluster/k3d/`): Uses K3d via Cobra/SDK for lightweight K3s clusters
@@ -232,11 +233,11 @@ bundle exec jekyll serve --host 0.0.0.0  # Test locally (if needed)
 
 **Distribution Names (user-facing):**
 
-| Distribution | Tool  | Description                  |
-|--------------|-------|------------------------------|
-| `Vanilla`    | Kind  | Standard upstream Kubernetes |
-| `K3s`        | K3d   | Lightweight K3s in Docker    |
-| `Talos`      | Talos | Immutable Talos Linux        |
+| Distribution | Tool  | Provider        | Description                  |
+| ------------ | ----- | --------------- | ---------------------------- |
+| `Vanilla`    | Kind  | Docker          | Standard upstream Kubernetes |
+| `K3s`        | K3d   | Docker          | Lightweight K3s in Docker    |
+| `Talos`      | Talos | Docker, Hetzner | Immutable Talos Linux        |
 
 **Key Packages:**
 
@@ -255,5 +256,7 @@ bundle exec jekyll serve --host 0.0.0.0  # Test locally (if needed)
 ## Recent Changes
 
 - Flattened package structure: moved from nested to flat organization in `pkg/`
-- **Provider/Provisioner Architecture**: Separated infrastructure providers (Docker) from distribution provisioners (Vanilla, K3s, Talos)
+- **Provider/Provisioner Architecture**: Separated infrastructure providers (Docker, Hetzner) from distribution provisioners (Vanilla, K3s, Talos)
+- **Hetzner Provider**: Added support for running Talos clusters on Hetzner Cloud
+- **Registry Authentication**: Added support for external registries with username/password authentication
 - **Distribution Naming**: Changed user-facing names from `Kind`/`K3d` to `Vanilla`/`K3s` to focus on the Kubernetes distribution rather than the underlying tool

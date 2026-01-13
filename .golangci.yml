@@ -119,6 +119,7 @@ linters:
             - github.com/getsops/sops
             - github.com/go-viper/mapstructure/v2
             - github.com/google/go-containerregistry
+            - github.com/hetznercloud
             - github.com/invopop/jsonschema
             - github.com/Masterminds/semver
             - github.com/mitchellh

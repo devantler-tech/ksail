@@ -191,66 +191,6 @@ func extractClusterNameFromContext(clusterCfg *v1alpha1.Cluster) string {
 	)
 }
 
-// Context detection errors.
-var (
-	// ErrNoCurrentContext is returned when no current context is set in kubeconfig.
-	ErrNoCurrentContext = errors.New("no current context set in kubeconfig")
-
-	// ErrUnknownContextPattern is returned when the context doesn't match a known distribution pattern.
-	ErrUnknownContextPattern = errors.New(
-		"unknown distribution: context does not match kind-, k3d-, or admin@ pattern",
-	)
-
-	// ErrEmptyClusterName is returned when cluster name detection results in an empty string.
-	// This happens with malformed contexts like "kind-", "k3d-", or "admin@".
-	ErrEmptyClusterName = errors.New("empty cluster name detected from context")
-)
-
-// DetectDistributionFromContext detects the distribution and cluster name from a context string.
-// This auto-detects the distribution based on the context naming pattern:
-//   - Vanilla: kind-<cluster-name>
-//   - K3s: k3d-<cluster-name>
-//   - Talos: admin@<cluster-name>
-//
-// Returns the detected distribution, cluster name, and an error if the pattern is unrecognized
-// or if the extracted cluster name is empty (e.g., "kind-", "k3d-", "admin@").
-func DetectDistributionFromContext(ctx string) (v1alpha1.Distribution, string, error) {
-	// Vanilla: kind-<cluster-name>
-	if clusterName, ok := strings.CutPrefix(ctx, "kind-"); ok {
-		if clusterName == "" {
-			return "", "", fmt.Errorf(
-				"%w: context %q has empty cluster name", ErrEmptyClusterName, ctx,
-			)
-		}
-
-		return v1alpha1.DistributionVanilla, clusterName, nil
-	}
-
-	// K3s: k3d-<cluster-name>
-	if clusterName, ok := strings.CutPrefix(ctx, "k3d-"); ok {
-		if clusterName == "" {
-			return "", "", fmt.Errorf(
-				"%w: context %q has empty cluster name", ErrEmptyClusterName, ctx,
-			)
-		}
-
-		return v1alpha1.DistributionK3s, clusterName, nil
-	}
-
-	// Talos: admin@<cluster-name>
-	if clusterName, ok := strings.CutPrefix(ctx, "admin@"); ok {
-		if clusterName == "" {
-			return "", "", fmt.Errorf(
-				"%w: context %q has empty cluster name", ErrEmptyClusterName, ctx,
-			)
-		}
-
-		return v1alpha1.DistributionTalos, clusterName, nil
-	}
-
-	return "", "", fmt.Errorf("%w: %s", ErrUnknownContextPattern, ctx)
-}
-
 // ExtractClusterNameFromContext extracts the cluster name from a context string.
 // For kind clusters, contexts follow the pattern "kind-<cluster-name>".
 // For k3d clusters, contexts follow the pattern "k3d-<cluster-name>".

@@ -26,8 +26,7 @@ Flags:
   -g, --gitops-engine GitOpsEngine     GitOps engine to use (None disables GitOps, Flux installs Flux controllers, ArgoCD installs Argo CD) (default None)
   -h, --help                           help for init
   -k, --kubeconfig string              Path to kubeconfig file (default "~/.kube/config")
-      --local-registry                 Enable local registry provisioning (defaults to true when a GitOps engine is configured)
-      --local-registry-port int32      Host port to expose the local OCI registry on (default 5050)
+      --local-registry string          Local registry specification: [user:pass@]host[:port][/path] (e.g., localhost:5050, ghcr.io/myorg, ${USER}:${PASS}@ghcr.io:443/org)
       --metrics-server MetricsServer   Metrics Server (Default: use distribution, Enabled: install, Disabled: uninstall)
       --mirror-registry strings        Configure mirror registries with format 'host=upstream' (e.g., docker.io=https://registry-1.docker.io).
   -n, --name string                    Cluster name used for container names, registry names, and kubeconfig context

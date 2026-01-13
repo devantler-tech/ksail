@@ -194,6 +194,9 @@ jobs:
     runs-on: ubuntu-latest
     needs: [changes, build-artifact]
     if: needs.changes.outputs.code == 'true'
+    permissions:
+      contents: read
+      packages: write
     strategy:
       matrix:
         distribution: [Vanilla, K3s, Talos]
@@ -202,19 +205,30 @@ jobs:
         args:
           - ""
           - "--name system-test-cluster"
-          - "--name system-test-cluster --local-registry Enabled --mirror-registry ghcr.io=https://ghcr.io"
           - "--cert-manager Enabled"
           - "--cni Cilium"
           - "--cni Calico"
           - "--csi LocalPathStorage"
           - "--gitops-engine Flux"
           - "--gitops-engine ArgoCD"
+          - "--gitops-engine Flux --local-registry ghcr.io/devantler-tech/ksail/system-test-manifests"
+          - "--gitops-engine ArgoCD --local-registry ghcr.io/devantler-tech/ksail/system-test-manifests"
           - "--mirror-registry ghcr.io=https://ghcr.io"
           - "--mirror-registry ghcr.io=https://ghcr.io --mirror-registry docker.io=https://registry-1.docker.io"
           - "--metrics-server Enabled"
           - "--metrics-server Disabled"
           - "--policy-engine Kyverno"
           - "--policy-engine Gatekeeper"
+        # Add Talos x Hetzner combination
+        include:
+          - distribution: Talos
+            provider: Hetzner
+            init: true
+            args: "--name system-test-cluster-with-scaffolding"
+          - distribution: Talos
+            provider: Hetzner
+            init: false
+            args: "--name system-test-cluster-without-scaffolding"
     steps:
       - name: 📄 Checkout
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
@@ -245,6 +259,9 @@ jobs:
           init: ${{ matrix.init }}
           args: ${{ matrix.args }}
           apply-overlay-path: ".github/fixtures/podinfo-overlay"
+          hcloud-token: ${{ matrix.provider == 'Hetzner' && secrets.HCLOUD_TOKEN || '' }}
+          ghcr-user: ${{ github.actor }}
+          ghcr-token: ${{ secrets.GITHUB_TOKEN }}
 
   status:
     name: CI - KSail

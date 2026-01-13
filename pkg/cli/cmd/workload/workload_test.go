@@ -126,8 +126,8 @@ func TestWorkloadCommandsLoadConfigOnly(t *testing.T) {
 		},
 		{
 			name: "push",
-			// Push auto-detects registry; fails if no local registry is running
-			expectedError: "no running local registry found",
+			// Push auto-detects registry; fails if no registry can be detected
+			expectedError: "unable to detect registry",
 		},
 	}
 

@@ -78,26 +78,16 @@ func DefaultGitOpsEngineFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	}
 }
 
-// DefaultLocalRegistryFieldSelector creates a selector for enabling/disabling the local OCI registry.
+// DefaultLocalRegistryFieldSelector creates a selector for the local OCI registry specification.
+// Format: [user:pass@]host[:port][/path].
 func DefaultLocalRegistryFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	return FieldSelector[v1alpha1.Cluster]{
 		Selector: func(c *v1alpha1.Cluster) any {
-			return &c.Spec.Cluster.LocalRegistry.Enabled
+			return &c.Spec.Cluster.LocalRegistry.Registry
 		},
-		Description: "Enable local registry provisioning (defaults to true when " +
-			"a GitOps engine is configured)",
-		DefaultValue: false,
-	}
-}
-
-// DefaultRegistryPortFieldSelector creates a selector for the registry host port binding.
-func DefaultRegistryPortFieldSelector() FieldSelector[v1alpha1.Cluster] {
-	return FieldSelector[v1alpha1.Cluster]{
-		Selector: func(c *v1alpha1.Cluster) any {
-			return &c.Spec.Cluster.LocalRegistry.HostPort
-		},
-		Description:  "Host port to expose the local OCI registry on",
-		DefaultValue: v1alpha1.DefaultLocalRegistryPort,
+		Description: "Local registry specification: [user:pass@]host[:port][/path] " +
+			"(e.g., localhost:5050, ghcr.io/myorg, ${USER}:${PASS}@ghcr.io:443/org)",
+		DefaultValue: "",
 	}
 }
 
@@ -155,7 +145,6 @@ func DefaultClusterFieldSelectors() []FieldSelector[v1alpha1.Cluster] {
 		DefaultKubeconfigFieldSelector(),
 		DefaultGitOpsEngineFieldSelector(),
 		DefaultLocalRegistryFieldSelector(),
-		DefaultRegistryPortFieldSelector(),
 	}
 }
 
