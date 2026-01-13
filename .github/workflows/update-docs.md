@@ -68,7 +68,7 @@ This repository uses **Jekyll** with the **Just the Docs** theme for documentati
 
 ### Documentation Structure
 
-```
+```text
 Repository Root:
 ├── README.md                # Project overview, installation, quick start
 ├── CONTRIBUTING.md          # Contributor guide, development setup
@@ -147,16 +147,15 @@ graph TD
 ```
 ````
 
-````
-
 ### Build Validation
+
 Before submitting documentation changes, validate the Jekyll build:
 
 ```bash
 cd docs
 bundle install
 bundle exec jekyll build
-````
+```
 
 If the build fails, fix the errors before creating a PR.
 
@@ -205,5 +204,5 @@ If the build fails, fix the errors before creating a PR.
 - Exit if all documentation is already up-to-date and comprehensive
 
 > NOTE: Never make direct pushes to the main branch. Always create a pull request for documentation changes.
-
+>
 > NOTE: Treat documentation gaps like failing tests.

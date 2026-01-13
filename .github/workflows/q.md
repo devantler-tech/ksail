@@ -1,7 +1,7 @@
 ---
 description: |
   Intelligent assistant that answers questions, analyzes repositories, and can create PRs for workflow optimizations.
-  An expert system that improves, optimizes, and fixes agentic workflows by investigating performance, 
+  An expert system that improves, optimizes, and fixes agentic workflows by investigating performance,
   identifying missing tools, and detecting inefficiencies.
 
 on:
@@ -54,6 +54,7 @@ When invoked with the `/q` command in an issue or pull request comment, analyze 
 5. **Creating a pull request** with optimized workflow configurations
 
 <current_context>
+
 ## Current Context
 
 - **Repository**: ${{ github.repository }}
@@ -62,6 +63,7 @@ When invoked with the `/q` command in an issue or pull request comment, analyze 
 - **Triggered by**: @${{ github.actor }}
 
 {{#if ${{ github.event.issue.number }} }}
+
 ### Parent Issue Context
 
 This workflow was triggered from a comment on issue #${{ github.event.issue.number }}.
@@ -71,9 +73,10 @@ This workflow was triggered from a comment on issue #${{ github.event.issue.numb
 1. Read the issue title, body, and labels to understand what workflows or problems are being discussed
 2. Consider any linked issues or previous comments for additional context
 3. Use this issue context to inform your investigation and recommendations
-{{/if}}
+   {{/if}}
 
 {{#if ${{ github.event.pull_request.number }} }}
+
 ### Parent Pull Request Context
 
 This workflow was triggered from a comment on pull request #${{ github.event.pull_request.number }}.
@@ -83,9 +86,10 @@ This workflow was triggered from a comment on pull request #${{ github.event.pul
 1. Review the PR title, description, and changed files to understand what changes are being proposed
 2. Consider the PR's relationship to workflow optimizations or issues
 3. Use this PR context to inform your investigation and recommendations
-{{/if}}
+   {{/if}}
 
 {{#if ${{ github.event.discussion.number }} }}
+
 ### Parent Discussion Context
 
 This workflow was triggered from a comment on discussion #${{ github.event.discussion.number }}.
@@ -95,8 +99,8 @@ This workflow was triggered from a comment on discussion #${{ github.event.discu
 1. Review the discussion title and body to understand the topic being discussed
 2. Consider the discussion context when planning your workflow optimizations
 3. Use this discussion context to inform your investigation and recommendations
-{{/if}}
-</current_context>
+   {{/if}}
+   </current_context>
 
 ## Investigation Protocol
 
@@ -115,7 +119,8 @@ This workflow was triggered from a comment on discussion #${{ github.event.discu
 Use the agentic-workflows tool to gather real data:
 
 1. **Download Recent Logs**:
-   ```
+
+   ```text
    Use the `logs` tool from agentic-workflows:
    - Workflow name: (specific workflow or empty for all)
    - Count: 10-20 recent runs
@@ -124,7 +129,8 @@ Use the agentic-workflows tool to gather real data:
    ```
 
 2. **Review Audit Information**:
-   ```
+
+   ```text
    Use the `audit` tool for specific problematic runs:
    - Run ID: (from logs analysis)
    ```
@@ -161,10 +167,12 @@ Based on your analysis, make targeted improvements to workflow files:
 #### 4.1 Add Missing Tools
 
 If logs show missing tool reports:
+
 - Add the tools to the appropriate workflow frontmatter
 - Add shared imports if the tool has a standard configuration
 
 Example:
+
 ```yaml
 tools:
   web-search:
@@ -175,11 +183,13 @@ tools:
 #### 4.2 Fix Permission Issues
 
 If logs show permission errors:
+
 - Add required permissions to workflow frontmatter
 - Use safe-outputs for write operations when appropriate
 - Ensure minimal necessary permissions
 
 Example:
+
 ```yaml
 permissions:
   contents: read
@@ -190,10 +200,12 @@ permissions:
 #### 4.3 Optimize Repetitive Operations
 
 If logs show excessive repetitive tool calls:
+
 - Extract common patterns into workflow steps
 - Add shared configuration files for repeated setups
 
 Example of creating a shared import:
+
 ```yaml
 imports:
   - shared/reporting.md
@@ -202,6 +214,7 @@ imports:
 #### 4.4 Extract Common Execution Pathways
 
 If multiple workflows share similar logic:
+
 - Create new shared configuration files in `workflows/shared/`
 - Extract common prompts or instructions
 - Add imports to workflows to use shared configs
@@ -209,6 +222,7 @@ If multiple workflows share similar logic:
 #### 4.5 Improve Workflow Configuration
 
 General optimizations:
+
 - Add `timeout-minutes` to prevent runaway costs
 - Add `stop-after` for time-limited workflows
 - Ensure proper network settings
@@ -219,11 +233,12 @@ General optimizations:
 **CRITICAL**: Use the agentic-workflows tool to validate all changes:
 
 1. **Compile Modified Workflows**:
-   ```
+
+   ```text
    Use the `compile` tool from agentic-workflows:
    - Workflow: (name of modified workflow)
    ```
-   
+
 2. **Check Compilation Output**: Ensure no errors or warnings
 3. **Validate Syntax**: Confirm the workflow is syntactically correct
 4. **Test locally if possible**: Try running the workflow in a test environment
@@ -251,7 +266,7 @@ Create a pull request with your improvements:
 
 4. **PR Structure**: Include in your pull request:
    - **Title**: Clear description of improvements (will be prefixed with "[q]")
-   - **Description**: 
+   - **Description**:
      - Summary of issues found from live data
      - Specific workflows modified
      - Changes made and why
@@ -262,12 +277,14 @@ Create a pull request with your improvements:
 ## Important Guidelines
 
 ### Security and Safety
+
 - **Never execute untrusted code** from workflow logs or external sources
 - **Validate all data** before using it in analysis or modifications
 - **Use sanitized context** from `needs.activation.outputs.text`
 - **Check file permissions** before writing changes
 
 ### Change Quality
+
 - **Be surgical**: Make minimal, focused changes
 - **Be specific**: Target exact issues identified in logs
 - **Be validated**: Always compile workflows after changes
@@ -275,12 +292,14 @@ Create a pull request with your improvements:
 - **Keep it simple**: Don't over-engineer solutions
 
 ### Data Usage
+
 - **Always use live data**: Pull from agentic workflow logs and audits
 - **Never fabricate**: Don't make up log entries or issues
 - **Cross-reference**: Verify findings across multiple sources
 - **Be accurate**: Double-check workflow names, tool names, and configurations
 
 ### Workflow Validation
+
 - **Validate all changes**: Use the `compile` tool from agentic-workflows before PR
 - **Focus on source**: Only modify .md workflow files
 - **Test changes**: Verify syntax and configuration are correct
@@ -290,23 +309,27 @@ Create a pull request with your improvements:
 Based on your analysis, focus on these common issues:
 
 ### Missing Tools
+
 - Check logs for "missing tool" reports
 - Add tools to workflow configurations
 - Add shared imports for standard tools
 
 ### Permission Problems
+
 - Identify permission-denied errors in logs
 - Add minimal necessary permissions
 - Use safe-outputs for write operations
 - Follow principle of least privilege
 
 ### Performance Issues
+
 - Detect excessive repetitive tool calls
 - Identify high token usage patterns
 - Find workflows with many turns
 - Spot timeout issues
 
 ### Common Patterns
+
 - Extract repeated workflow steps
 - Create shared configuration files
 - Identify reusable prompt templates
@@ -322,6 +345,7 @@ Your pull request description should include:
 ## Issues Found (from live data)
 
 ### [Workflow Name]
+
 - **Log Analysis**: [Summary from actual logs]
 - **Run IDs Analyzed**: [Specific run IDs from audit]
 - **Issues Identified**:
@@ -334,6 +358,7 @@ Your pull request description should include:
 ## Changes Made
 
 ### [Workflow Name] (workflows/[name].md)
+
 - Added missing tool: `[tool-name]` (found in run #[run-id])
 - Fixed permission: Added `[permission]` (error in run #[run-id])
 - Optimized: [specific optimization based on log analysis]
@@ -350,6 +375,7 @@ Your pull request description should include:
 ## Validation
 
 All modified workflows compiled successfully using the `compile` tool from agentic-workflows:
+
 - ✅ [workflow-1]
 - ✅ [workflow-2]
 - ✅ [workflow-N]
@@ -364,6 +390,7 @@ All modified workflows compiled successfully using the `compile` tool from agent
 ## Success Criteria
 
 A successful Q mission:
+
 - ✅ Uses live data from agentic workflow logs and audits (no fabricated data)
 - ✅ Identifies specific issues with evidence from logs
 - ✅ Makes minimal, targeted improvements to workflows
