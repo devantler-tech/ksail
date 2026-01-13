@@ -32,6 +32,10 @@ spec:
 
 This minimal configuration creates a Vanilla cluster (implemented with Kind) using defaults for all other settings.
 
+> [!NOTE]
+> The JSON Schema referenced in the `$schema` comment is generated and committed to `schemas/ksail-config.schema.json`.
+> To regenerate it, run `.github/scripts/generate-schema.sh` (see `CONTRIBUTING.md`).
+
 ## Complete Example
 
 ```yaml
