@@ -2,6 +2,8 @@ package fluxinstaller
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -15,6 +17,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/k8s"
 	registry "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
+	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -45,6 +48,9 @@ const (
 	// where discovery reports the API as ready slightly before Create operations can succeed.
 	// 10 seconds has been empirically determined to provide sufficient margin for GitHub Actions runners.
 	apiStabilizationDelay = 10 * time.Second
+	// ExternalRegistrySecretName is the name of the Kubernetes secret used for external registry authentication.
+	// This secret is created by KSail during cluster creation when credentials are configured.
+	ExternalRegistrySecretName = "ksail-registry-credentials"
 )
 
 var (
@@ -151,6 +157,15 @@ func EnsureDefaultResources(
 		return err
 	}
 
+	// For external registries with credentials, create the pull secret before FluxInstance
+	localRegistry := clusterCfg.Spec.Cluster.LocalRegistry
+	if localRegistry.IsExternal() && localRegistry.HasCredentials() {
+		err = ensureRegistrySecret(ctx, restConfig, clusterCfg)
+		if err != nil {
+			return fmt.Errorf("failed to create registry secret: %w", err)
+		}
+	}
+
 	_, err = setupFluxInstance(ctx, restConfig, clusterCfg, clusterName)
 	if err != nil {
 		return err
@@ -187,6 +202,81 @@ func EnsureDefaultResources(
 	// the OCIRepository sync, which requires the workload to be pushed first.
 	// The workload push happens after cluster creation via 'ksail workload push'.
 	return nil
+}
+
+// ensureRegistrySecret creates or updates the docker-registry secret for OCI authentication.
+// This secret is used by Flux to pull artifacts from private external registries.
+func ensureRegistrySecret(
+	ctx context.Context,
+	restConfig *rest.Config,
+	clusterCfg *v1alpha1.Cluster,
+) error {
+	scheme := runtime.NewScheme()
+	if err := corev1.AddToScheme(scheme); err != nil {
+		return fmt.Errorf("failed to add core scheme: %w", err)
+	}
+
+	k8sClient, err := newDynamicClient(restConfig, scheme)
+	if err != nil {
+		return fmt.Errorf("failed to create kubernetes client: %w", err)
+	}
+
+	localRegistry := clusterCfg.Spec.Cluster.LocalRegistry
+	parsed := localRegistry.Parse()
+	username, password := localRegistry.ResolveCredentials()
+
+	// Build the docker config JSON for the registry
+	dockerConfig := buildDockerConfigJSON(parsed.Host, username, password)
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ExternalRegistrySecretName,
+			Namespace: fluxclient.DefaultNamespace,
+			Labels: map[string]string{
+				"app.kubernetes.io/managed-by": "ksail",
+			},
+		},
+		Type: corev1.SecretTypeDockerConfigJson,
+		Data: map[string][]byte{
+			corev1.DockerConfigJsonKey: dockerConfig,
+		},
+	}
+
+	// Create or update the secret
+	existing := &corev1.Secret{}
+	err = k8sClient.Get(ctx, client.ObjectKeyFromObject(secret), existing)
+
+	if apierrors.IsNotFound(err) {
+		return k8sClient.Create(ctx, secret)
+	}
+
+	if err != nil {
+		return fmt.Errorf("failed to check existing secret: %w", err)
+	}
+
+	// Update existing secret
+	existing.Data = secret.Data
+
+	return k8sClient.Update(ctx, existing)
+}
+
+// buildDockerConfigJSON creates the .dockerconfigjson format for registry authentication.
+func buildDockerConfigJSON(registry, username, password string) []byte {
+	auth := base64.StdEncoding.EncodeToString([]byte(username + ":" + password))
+
+	config := map[string]any{
+		"auths": map[string]any{
+			registry: map[string]string{
+				"username": username,
+				"password": password,
+				"auth":     auth,
+			},
+		},
+	}
+
+	data, _ := json.Marshal(config)
+
+	return data
 }
 
 // setupFluxInstance waits for the FluxInstance CRD, creates the client, and upserts the FluxInstance.
@@ -269,28 +359,48 @@ func buildFluxInstance(clusterCfg *v1alpha1.Cluster, clusterName string) (*FluxI
 	// via the FluxInstance CR in the source directory, not in the KSail config.
 	interval := fluxIntervalFallback
 
-	hostPort := clusterCfg.Spec.Cluster.LocalRegistry.ResolvedPort()
+	localRegistry := clusterCfg.Spec.Cluster.LocalRegistry
 
-	sourceDir := strings.TrimSpace(clusterCfg.Spec.Workload.SourceDirectory)
-	if sourceDir == "" {
-		sourceDir = defaultSourceDirectory
+	var repoURL string
+
+	var pullSecret string
+
+	// Check if using an external registry (e.g., ghcr.io, Docker Hub)
+	if localRegistry.IsExternal() {
+		parsed := localRegistry.Parse()
+		// For external registries, build URL without port (HTTPS 443 is implicit)
+		// e.g., oci://ghcr.io/devantler-tech/ksail/gitops-manifests
+		repoURL = fmt.Sprintf("oci://%s/%s", parsed.Host, parsed.Path)
+
+		// If credentials are configured, reference the secret that will be created
+		if localRegistry.HasCredentials() {
+			pullSecret = ExternalRegistrySecretName
+		}
+	} else {
+		// Local registry: use cluster-prefixed registry name with port
+		sourceDir := strings.TrimSpace(clusterCfg.Spec.Workload.SourceDirectory)
+		if sourceDir == "" {
+			sourceDir = defaultSourceDirectory
+		}
+
+		projectName := registry.SanitizeRepoName(sourceDir)
+		// Build the cluster-prefixed local registry name for in-cluster DNS resolution
+		repoHost := registry.BuildLocalRegistryName(clusterName)
+		repoPort := dockerclient.DefaultRegistryPort
+
+		if !localRegistry.Enabled() {
+			hostPort := localRegistry.ResolvedPort()
+			repoHost = registry.DefaultEndpointHost
+			repoPort = int(hostPort)
+		}
+
+		repoURL = fmt.Sprintf(
+			"oci://%s/%s",
+			net.JoinHostPort(repoHost, strconv.Itoa(repoPort)),
+			projectName,
+		)
 	}
 
-	projectName := registry.SanitizeRepoName(sourceDir)
-	// Build the cluster-prefixed local registry name for in-cluster DNS resolution
-	repoHost := registry.BuildLocalRegistryName(clusterName)
-	repoPort := dockerclient.DefaultRegistryPort
-
-	if !clusterCfg.Spec.Cluster.LocalRegistry.Enabled() {
-		repoHost = registry.DefaultEndpointHost
-		repoPort = int(hostPort)
-	}
-
-	repoURL := fmt.Sprintf(
-		"oci://%s/%s",
-		net.JoinHostPort(repoHost, strconv.Itoa(repoPort)),
-		projectName,
-	)
 	normalizedPath := normalizeFluxPath()
 	intervalPtr := &metav1.Duration{Duration: interval}
 
@@ -306,12 +416,13 @@ func buildFluxInstance(clusterCfg *v1alpha1.Cluster, clusterName string) (*FluxI
 				Artifact: fluxDistributionArtifact,
 			},
 			Sync: &Sync{
-				Kind:     fluxOCIRepositoryKind,
-				URL:      repoURL,
-				Ref:      defaultArtifactTag,
-				Path:     normalizedPath,
-				Provider: "generic",
-				Interval: intervalPtr,
+				Kind:       fluxOCIRepositoryKind,
+				URL:        repoURL,
+				Ref:        defaultArtifactTag,
+				Path:       normalizedPath,
+				Provider:   "generic",
+				Interval:   intervalPtr,
+				PullSecret: pullSecret,
 			},
 		},
 	}, nil

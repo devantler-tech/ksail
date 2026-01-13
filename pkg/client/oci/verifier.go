@@ -1,0 +1,190 @@
+package oci
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"net/http"
+	"strings"
+	"time"
+
+	"github.com/google/go-containerregistry/pkg/authn"
+	"github.com/google/go-containerregistry/pkg/name"
+	"github.com/google/go-containerregistry/pkg/v1/remote"
+	"github.com/google/go-containerregistry/pkg/v1/remote/transport"
+)
+
+// Registry verification errors.
+var (
+	// ErrRegistryUnreachable is returned when the registry cannot be reached.
+	ErrRegistryUnreachable = errors.New("registry is unreachable")
+	// ErrRegistryAuthRequired is returned when authentication is required but not provided.
+	ErrRegistryAuthRequired = errors.New(
+		"registry requires authentication\n" +
+			"  - configure credentials with --local-registry user:pass@host/repo",
+	)
+	// ErrRegistryPermissionDenied is returned when credentials are invalid or lack write access.
+	ErrRegistryPermissionDenied = errors.New(
+		"registry access denied\n" +
+			"  - check credentials have write permission to the repository",
+	)
+	// ErrRegistryNotFound is returned when the registry or repository doesn't exist.
+	ErrRegistryNotFound = errors.New(
+		"registry or repository not found\n" +
+			"  - verify the registry URL is correct",
+	)
+)
+
+// RegistryVerifier checks access to OCI registries.
+type RegistryVerifier interface {
+	// VerifyAccess checks if the registry is accessible and we have push permissions.
+	// Returns nil if access is verified, or an actionable error if not.
+	VerifyAccess(ctx context.Context, opts VerifyOptions) error
+}
+
+// VerifyOptions contains options for verifying registry access.
+type VerifyOptions struct {
+	// RegistryEndpoint is the registry host[:port] (e.g., "ghcr.io" or "localhost:5000").
+	RegistryEndpoint string
+	// Repository is the repository path to check access for.
+	Repository string
+	// Username is the optional username for authentication.
+	Username string
+	// Password is the optional password/token for authentication.
+	Password string
+	// Insecure allows HTTP connections (for local registries).
+	Insecure bool
+}
+
+// verifier implements RegistryVerifier.
+type verifier struct{}
+
+// NewRegistryVerifier creates a new registry verifier.
+func NewRegistryVerifier() RegistryVerifier {
+	return &verifier{}
+}
+
+// VerifyAccess checks if we can access the registry and have write permissions.
+// It attempts to check the repository catalog/tags to verify read access,
+// and the error response helps determine if auth is required.
+//
+//nolint:funlen // Sequential verification steps
+func (v *verifier) VerifyAccess(ctx context.Context, opts VerifyOptions) error {
+	if opts.RegistryEndpoint == "" {
+		return errors.New("registry endpoint is required")
+	}
+
+	// Build reference for the repository
+	refStr := fmt.Sprintf("%s/%s", opts.RegistryEndpoint, opts.Repository)
+
+	nameOpts := []name.Option{name.WeakValidation}
+	if opts.Insecure {
+		nameOpts = append(nameOpts, name.Insecure)
+	}
+
+	repo, err := name.NewRepository(refStr, nameOpts...)
+	if err != nil {
+		return fmt.Errorf("invalid registry reference: %w", err)
+	}
+
+	// Build remote options
+	remoteOpts := []remote.Option{
+		remote.WithContext(ctx),
+	}
+
+	if opts.Username != "" || opts.Password != "" {
+		auth := &authn.Basic{
+			Username: opts.Username,
+			Password: opts.Password,
+		}
+		remoteOpts = append(remoteOpts, remote.WithAuth(auth))
+	}
+
+	// Try to list tags in the repository.
+	// This will tell us if:
+	// - Registry is reachable
+	// - We have read access (for existing repos)
+	// - Auth is required
+	//
+	// Note: For push verification, we can't actually test push without pushing.
+	// But checking read access gives us good signal about auth issues.
+	_, err = remote.List(repo, remoteOpts...)
+	if err != nil {
+		return classifyRegistryError(err)
+	}
+
+	return nil
+}
+
+// classifyRegistryError converts low-level registry errors to actionable errors.
+func classifyRegistryError(err error) error {
+	if err == nil {
+		return nil
+	}
+
+	errStr := err.Error()
+
+	// Check for transport errors (includes HTTP status codes)
+	var transportErr *transport.Error
+	if errors.As(err, &transportErr) {
+		switch transportErr.StatusCode {
+		case http.StatusUnauthorized:
+			return ErrRegistryAuthRequired
+		case http.StatusForbidden:
+			return ErrRegistryPermissionDenied
+		case http.StatusNotFound:
+			// 404 for tags list is OK - repo might not exist yet
+			// This is fine for push operations
+			return nil
+		}
+	}
+
+	// Check for common error patterns in the message
+	lowerErr := strings.ToLower(errStr)
+
+	switch {
+	case strings.Contains(lowerErr, "unauthorized") ||
+		strings.Contains(lowerErr, "authentication required"):
+		return ErrRegistryAuthRequired
+
+	case strings.Contains(lowerErr, "denied") ||
+		strings.Contains(lowerErr, "forbidden"):
+		return ErrRegistryPermissionDenied
+
+	case strings.Contains(lowerErr, "no such host") ||
+		strings.Contains(lowerErr, "connection refused") ||
+		strings.Contains(lowerErr, "dial tcp"):
+		return fmt.Errorf("%w: %s", ErrRegistryUnreachable, opts(errStr))
+
+	case strings.Contains(lowerErr, "not found"):
+		// Not found is OK - we can still push to create it
+		return nil
+	}
+
+	// Return original error with context
+	return fmt.Errorf("registry access check failed: %w", err)
+}
+
+// opts extracts the most useful part of an error message.
+func opts(errStr string) string {
+	// Try to extract just the useful part
+	if idx := strings.Index(errStr, ": "); idx > 0 {
+		return errStr[idx+2:]
+	}
+
+	return errStr
+}
+
+// VerifyRegistryAccessWithTimeout verifies registry access with a timeout.
+func VerifyRegistryAccessWithTimeout(
+	ctx context.Context,
+	opts VerifyOptions,
+	timeout time.Duration,
+) error {
+	verifyCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	v := NewRegistryVerifier()
+
+	return v.VerifyAccess(verifyCtx, opts)
+}

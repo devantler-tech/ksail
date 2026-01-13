@@ -17,8 +17,9 @@ import (
 // NewPushCmd creates the workload push command.
 func NewPushCmd(_ *runtime.Runtime) *cobra.Command {
 	var (
-		validate bool
-		pathFlag string
+		validate     bool
+		pathFlag     string
+		registryFlag string
 	)
 
 	cmd := &cobra.Command{
@@ -38,6 +39,9 @@ Examples:
   # Push to explicit registry endpoint
   ksail workload push oci://localhost:5050/k8s:dev
 
+  # Push to external registry with credentials
+  ksail workload push --registry='$USER:$TOKEN@ghcr.io/org/repo'
+
   # Push with variant (subdirectory in repository)
   ksail workload push oci://localhost:5050/my-app/base:v1.0.0 --path=./k8s
 
@@ -50,11 +54,12 @@ All parts of the OCI reference are optional and will be inferred:
 	}
 
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
-		return runPushCommand(cmd, args, pathFlag, validate)
+		return runPushCommand(cmd, args, pathFlag, registryFlag, validate)
 	}
 
 	cmd.Flags().BoolVar(&validate, "validate", false, "Validate manifests before pushing")
 	cmd.Flags().StringVar(&pathFlag, "path", "", "Source directory containing manifests to push")
+	cmd.Flags().StringVar(&registryFlag, "registry", "", "Registry to push to (format: [user:pass@]host[:port][/path])")
 
 	return cmd
 }
@@ -62,7 +67,7 @@ All parts of the OCI reference are optional and will be inferred:
 // runPushCommand executes the push logic with the provided parameters.
 //
 //nolint:funlen // Command execution logic with multiple stages
-func runPushCommand(cmd *cobra.Command, args []string, pathFlag string, validate bool) error {
+func runPushCommand(cmd *cobra.Command, args []string, pathFlag, registryFlag string, validate bool) error {
 	cmdCtx, err := initCommandContext(cmd)
 	if err != nil {
 		return err
@@ -82,7 +87,7 @@ func runPushCommand(cmd *cobra.Command, args []string, pathFlag string, validate
 	}
 
 	// Resolve all parameters: host, port, repository, ref, source directory
-	params, err := resolvePushParams(cmd, clusterCfg, ociRef, pathFlag, tmr, outputTimer)
+	params, err := resolvePushParams(cmd, clusterCfg, ociRef, pathFlag, registryFlag, tmr, outputTimer)
 	if err != nil {
 		return err
 	}
@@ -134,10 +139,21 @@ func runPushCommand(cmd *cobra.Command, args []string, pathFlag string, validate
 		Writer:  cmd.OutOrStdout(),
 	})
 
+	// Format registry reference for display and endpoint
+	var registryDisplay, registryEndpoint string
+	if params.Port > 0 {
+		registryDisplay = fmt.Sprintf("%s:%d/%s:%s", params.Host, params.Port, params.Repository, params.Ref)
+		registryEndpoint = fmt.Sprintf("%s:%d", params.Host, params.Port)
+	} else {
+		// External registry - no port (HTTPS implicit)
+		registryDisplay = fmt.Sprintf("%s/%s:%s", params.Host, params.Repository, params.Ref)
+		registryEndpoint = params.Host
+	}
+
 	notify.WriteMessage(notify.Message{
 		Type:    notify.ActivityType,
-		Content: "pushing to %s:%d/%s:%s",
-		Args:    []any{params.Host, params.Port, params.Repository, params.Ref},
+		Content: "pushing to %s",
+		Args:    []any{registryDisplay},
 		Timer:   outputTimer,
 		Writer:  cmd.OutOrStdout(),
 	})
@@ -147,7 +163,7 @@ func runPushCommand(cmd *cobra.Command, args []string, pathFlag string, validate
 	_, err = builder.Build(cmd.Context(), oci.BuildOptions{
 		Name:             params.Repository,
 		SourcePath:       params.SourceDir,
-		RegistryEndpoint: fmt.Sprintf("%s:%d", params.Host, params.Port),
+		RegistryEndpoint: registryEndpoint,
 		Repository:       params.Repository,
 		Version:          params.Ref,
 		GitOpsEngine:     params.GitOpsEngine,
@@ -178,6 +194,7 @@ type pushParams struct {
 	GitOpsEngine v1alpha1.GitOpsEngine
 	Username     string
 	Password     string
+	IsExternal   bool // True if this is an external registry (no auto-detection needed)
 }
 
 // resolvePushParams resolves all push parameters from OCI reference, flags, config, or auto-detection.
@@ -186,13 +203,16 @@ func resolvePushParams(
 	cfg *v1alpha1.Cluster,
 	ociRef *oci.Reference,
 	pathFlag string,
+	registryFlag string,
 	tmr timer.Timer,
 	outputTimer timer.Timer,
 ) (*pushParams, error) {
-	params := newPushParamsFromSources(cfg, ociRef, pathFlag)
+	params := newPushParamsFromSources(cfg, ociRef, pathFlag, registryFlag)
 
+	// Only auto-detect for local registries without explicit port
+	// External registries with port 0 are valid (HTTPS implicit)
 	needsDetection := ociRef == nil || ociRef.Port == 0
-	if needsDetection && params.Port == 0 {
+	if needsDetection && params.Port == 0 && !params.IsExternal {
 		err := autoDetectMissingParams(cmd, params, tmr, outputTimer)
 		if err != nil {
 			return nil, err
@@ -203,22 +223,33 @@ func resolvePushParams(
 }
 
 // newPushParamsFromSources creates push params from OCI ref, config, and path flag.
+// Priority: OCI ref > --registry flag > config.
 func newPushParamsFromSources(
 	cfg *v1alpha1.Cluster,
 	ociRef *oci.Reference,
 	pathFlag string,
+	registryFlag string,
 ) *pushParams {
 	params := &pushParams{Host: "localhost"}
 
+	// If --registry flag is provided, use it to create a temporary LocalRegistry for parsing
+	var registrySpec v1alpha1.LocalRegistry
+	if strings.TrimSpace(registryFlag) != "" {
+		registrySpec = v1alpha1.LocalRegistry{Registry: registryFlag}
+	} else {
+		registrySpec = cfg.Spec.Cluster.LocalRegistry
+	}
+
 	params.SourceDir = resolveSourceDir(cfg, pathFlag)
-	params.Host = resolveHost(ociRef, cfg)
-	params.Port = resolvePort(cfg, ociRef)
-	params.Repository = resolveRepository(ociRef, params.SourceDir)
+	params.Host = resolveHostFromRegistry(ociRef, registrySpec)
+	params.Port = resolvePortFromRegistry(registrySpec, ociRef)
+	params.Repository = resolveRepositoryFromRegistry(registrySpec, ociRef, params.SourceDir)
 	params.Ref = resolveRef(ociRef)
 	params.GitOpsEngine = resolveGitOpsEngine(cfg)
+	params.IsExternal = registrySpec.IsExternal()
 
-	// Resolve credentials from config (with environment variable expansion)
-	username, password := cfg.Spec.Cluster.LocalRegistry.ResolveCredentials()
+	// Resolve credentials from registry spec (with environment variable expansion)
+	username, password := registrySpec.ResolveCredentials()
 	params.Username = username
 	params.Password = password
 
@@ -238,37 +269,52 @@ func resolveSourceDir(cfg *v1alpha1.Cluster, pathFlag string) string {
 	return v1alpha1.DefaultSourceDirectory
 }
 
-// resolveHost extracts host from OCI ref, config, or returns default.
-func resolveHost(ociRef *oci.Reference, cfg *v1alpha1.Cluster) string {
+// resolveHostFromRegistry extracts host from OCI ref, registry spec, or returns default.
+func resolveHostFromRegistry(ociRef *oci.Reference, reg v1alpha1.LocalRegistry) string {
 	if ociRef != nil && ociRef.Host != "" {
 		return ociRef.Host
 	}
 
-	// Check if config has a registry configured
-	if cfg.Spec.Cluster.LocalRegistry.Enabled() {
-		return cfg.Spec.Cluster.LocalRegistry.ResolvedHost()
+	// Check if registry is configured
+	if reg.Enabled() {
+		return reg.ResolvedHost()
 	}
 
 	return "localhost"
 }
 
-// resolvePort determines port from OCI ref, config, or returns 0 for auto-detection.
-func resolvePort(cfg *v1alpha1.Cluster, ociRef *oci.Reference) int32 {
+// resolvePortFromRegistry determines port from OCI ref, registry spec, or returns 0 for auto-detection.
+// For external registries (non-localhost), returns 0 to indicate HTTPS with implicit port.
+func resolvePortFromRegistry(reg v1alpha1.LocalRegistry, ociRef *oci.Reference) int32 {
 	if ociRef != nil && ociRef.Port > 0 {
 		return ociRef.Port
 	}
 
-	if !cfg.Spec.Cluster.LocalRegistry.Enabled() {
+	if !reg.Enabled() {
 		return 0 // Will trigger auto-detection
 	}
 
-	return cfg.Spec.Cluster.LocalRegistry.ResolvedPort()
+	// For external registries, return 0 (HTTPS with implicit port)
+	if reg.IsExternal() {
+		return reg.ResolvedPort() // Returns 0 for external without explicit port
+	}
+
+	return reg.ResolvedPort()
 }
 
-// resolveRepository determines repository name from OCI ref or source directory.
-func resolveRepository(ociRef *oci.Reference, sourceDir string) string {
+// resolveRepositoryFromRegistry determines repository name from OCI ref, registry path, or source directory.
+// For external registries, the registry path is used as the repository prefix.
+func resolveRepositoryFromRegistry(reg v1alpha1.LocalRegistry, ociRef *oci.Reference, sourceDir string) string {
 	if ociRef != nil && ociRef.FullRepository() != "" {
 		return ociRef.FullRepository()
+	}
+
+	// For external registries, use the path from registry spec as the repository
+	if reg.IsExternal() {
+		path := reg.ResolvedPath()
+		if path != "" {
+			return path
+		}
 	}
 
 	return registry.SanitizeRepoName(sourceDir)

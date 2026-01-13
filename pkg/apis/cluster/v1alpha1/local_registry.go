@@ -24,6 +24,11 @@ func (r LocalRegistry) Enabled() bool {
 // Parse parses the Registry string into its components.
 // Format: [user:pass@]host[:port][/path]
 // Credentials can use ${ENV_VAR} placeholders.
+//
+// Port handling:
+//   - If port is explicitly specified, it's used as-is
+//   - For localhost/127.0.0.1 without explicit port: defaults to DefaultLocalRegistryPort (5000)
+//   - For external hosts without explicit port: returns 0 (indicates HTTPS with implicit port)
 func (r LocalRegistry) Parse() ParsedRegistry {
 	spec := strings.TrimSpace(r.Registry)
 	if spec == "" {
@@ -58,7 +63,9 @@ func (r LocalRegistry) Parse() ParsedRegistry {
 	// Extract port if present (host:port)
 	var host string
 
-	port := DefaultLocalRegistryPort
+	var port int32
+
+	var hasExplicitPort bool
 
 	colonIdx := strings.LastIndex(spec, ":")
 	if colonIdx > 0 {
@@ -68,6 +75,7 @@ func (r LocalRegistry) Parse() ParsedRegistry {
 		p, parseErr := strconv.ParseInt(portStr, 10, 32)
 		if parseErr == nil && p > 0 {
 			port = int32(p)
+			hasExplicitPort = true
 		} else {
 			// Not a valid port, treat as part of host (e.g., IPv6)
 			host = spec
@@ -78,6 +86,14 @@ func (r LocalRegistry) Parse() ParsedRegistry {
 
 	if host == "" {
 		host = "localhost"
+	}
+
+	// Apply default port only for local registries when no explicit port was provided
+	if !hasExplicitPort {
+		if host == "localhost" || host == "127.0.0.1" {
+			port = DefaultLocalRegistryPort
+		}
+		// For external hosts, port stays 0 (meaning HTTPS with implicit port 443)
 	}
 
 	return ParsedRegistry{

@@ -43,6 +43,14 @@ inputs:
     description: Hetzner Cloud API token (required when provider is Hetzner)
     required: false
     default: ""
+  ghcr-user:
+    description: GitHub Container Registry username (for external registry auth)
+    required: false
+    default: ""
+  ghcr-token:
+    description: GitHub Container Registry token (for external registry auth)
+    required: false
+    default: ""
 
 runs:
   using: composite
@@ -55,6 +63,8 @@ runs:
         PROVIDER: ${{ inputs.provider }}
         ARGS: ${{ inputs.args }}
         HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
+        GHCR_USER: ${{ inputs.ghcr-user }}
+        GHCR_TOKEN: ${{ inputs.ghcr-token }}
       run: |
         ksail cluster init --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS
 
@@ -66,6 +76,8 @@ runs:
         PROVIDER: ${{ inputs.provider }}
         ARGS: ${{ inputs.args }}
         HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
+        GHCR_USER: ${{ inputs.ghcr-user }}
+        GHCR_TOKEN: ${{ inputs.ghcr-token }}
       run: |
         if [ "$INIT" = "true" ]; then
           ksail cluster create
@@ -109,6 +121,8 @@ runs:
       env:
         GITOPS_PATH: ${{ inputs.gitops-path }}
         HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
+        GHCR_USER: ${{ inputs.ghcr-user }}
+        GHCR_TOKEN: ${{ inputs.ghcr-token }}
       run: |
         mkdir -p "$GITOPS_PATH"
         if [ ! -f "$GITOPS_PATH/kustomization.yaml" ]; then
