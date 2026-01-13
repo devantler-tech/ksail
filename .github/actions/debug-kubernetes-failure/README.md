@@ -67,7 +67,7 @@ steps:
 
 ## Example Output
 
-```
+```text
 === Disk Usage ===
 Filesystem      Size  Used Avail Use% Mounted on
 /dev/root        84G   63G   21G  75% /

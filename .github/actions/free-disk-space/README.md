@@ -55,7 +55,7 @@ steps:
 
 ## Example Output
 
-```
+```text
 Disk space before cleanup:
 Filesystem      Size  Used Avail Use% Mounted on
 /dev/root        84G   63G   21G  75% /
