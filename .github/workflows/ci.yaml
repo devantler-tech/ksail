@@ -191,6 +191,9 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
 
+  # TODO: Make sure talos x hetzner tests work in CI, as they share the same cloud provider and hetzner cloud project
+  # there might be conflicts to resolve (primarily in .github/actions/ksail-system-test)
+  # excluding cases is not an option as we want to test all critical paths with talos x hetzner
   system-test:
     name: 🧪 System Test
     runs-on: ubuntu-latest
@@ -217,12 +220,10 @@ jobs:
           - "--metrics-server Disabled"
           - "--policy-engine Kyverno"
           - "--policy-engine Gatekeeper"
-        # Add Hetzner test explicitly (only Talos supports Hetzner)
+        # Add Talos x Hetzner combination
         include:
           - distribution: Talos
             provider: Hetzner
-            init: false
-            args: "--name github-actions-system-test"
     steps:
       - name: 📄 Checkout
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1

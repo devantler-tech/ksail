@@ -61,20 +61,96 @@ func (p *Provider) StartNodes(ctx context.Context, clusterName string) error {
 }
 
 // StopNodes stops all servers for the given cluster.
+// Uses graceful shutdown (ACPI signal) and waits for servers to be off.
 func (p *Provider) StopNodes(ctx context.Context, clusterName string) error {
-	return p.forEachServer(ctx, clusterName, func(server *hcloud.Server) (*hcloud.Action, error) {
+	if p.client == nil {
+		return provider.ErrProviderUnavailable
+	}
+
+	nodes, err := p.ListNodes(ctx, clusterName)
+	if err != nil {
+		return fmt.Errorf("failed to list nodes: %w", err)
+	}
+
+	if len(nodes) == 0 {
+		return provider.ErrNoNodes
+	}
+
+	// Shutdown all servers
+	for _, node := range nodes {
+		server, _, serverErr := p.client.Server.GetByName(ctx, node.Name)
+		if serverErr != nil {
+			return fmt.Errorf("failed to get server %s: %w", node.Name, serverErr)
+		}
+
+		if server == nil {
+			continue
+		}
+
 		// Skip if already off
 		if server.Status == hcloud.ServerStatusOff {
-			return nil, nil
+			continue
 		}
 
-		action, _, err := p.client.Server.Shutdown(ctx, server)
-		if err != nil {
-			return nil, fmt.Errorf("failed to shutdown server %s: %w", server.Name, err)
+		action, _, shutdownErr := p.client.Server.Shutdown(ctx, server)
+		if shutdownErr != nil {
+			return fmt.Errorf("failed to shutdown server %s: %w", node.Name, shutdownErr)
 		}
 
-		return action, nil
-	})
+		if action != nil {
+			waitErr := p.waitForAction(ctx, action)
+			if waitErr != nil {
+				return fmt.Errorf("failed waiting for shutdown action on %s: %w", node.Name, waitErr)
+			}
+		}
+	}
+
+	// Wait for all servers to be off
+	return p.waitForServersStatus(ctx, clusterName, hcloud.ServerStatusOff)
+}
+
+// waitForServersStatus polls until all servers in the cluster reach the desired status.
+func (p *Provider) waitForServersStatus(
+	ctx context.Context,
+	clusterName string,
+	desiredStatus hcloud.ServerStatus,
+) error {
+	ctx, cancel := context.WithTimeout(ctx, DefaultActionTimeout)
+	defer cancel()
+
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("timeout waiting for servers to reach status %s: %w", desiredStatus, ctx.Err())
+		case <-ticker.C:
+			allReady := true
+
+			nodes, err := p.ListNodes(ctx, clusterName)
+			if err != nil {
+				return fmt.Errorf("failed to list nodes: %w", err)
+			}
+
+			for _, node := range nodes {
+				server, _, err := p.client.Server.GetByName(ctx, node.Name)
+				if err != nil {
+					return fmt.Errorf("failed to get server %s: %w", node.Name, err)
+				}
+
+				if server != nil && server.Status != desiredStatus {
+					allReady = false
+
+					break
+				}
+			}
+
+			if allReady {
+				return nil
+			}
+		}
+	}
 }
 
 // ListNodes returns all nodes for the given cluster based on labels.
@@ -457,6 +533,20 @@ func (p *Provider) GetSSHKey(ctx context.Context, name string) (*hcloud.SSHKey, 
 	}
 
 	return sshKey, nil
+}
+
+// GetServerByName retrieves a server by name.
+func (p *Provider) GetServerByName(ctx context.Context, name string) (*hcloud.Server, error) {
+	if p.client == nil {
+		return nil, provider.ErrProviderUnavailable
+	}
+
+	server, _, err := p.client.Server.GetByName(ctx, name)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get server %s: %w", name, err)
+	}
+
+	return server, nil
 }
 
 // forEachServer executes an action on each server in the cluster.

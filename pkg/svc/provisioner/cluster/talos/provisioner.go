@@ -33,6 +33,7 @@ import (
 	"github.com/siderolabs/talos/pkg/conditions"
 	machineapi "github.com/siderolabs/talos/pkg/machinery/api/machine"
 	talosclient "github.com/siderolabs/talos/pkg/machinery/client"
+	clientconfig "github.com/siderolabs/talos/pkg/machinery/client/config"
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
 	"github.com/siderolabs/talos/pkg/machinery/config/bundle"
 	"github.com/siderolabs/talos/pkg/machinery/config/machine"
@@ -1066,6 +1067,12 @@ func (p *TalosProvisioner) Start(ctx context.Context, name string) error {
 			return fmt.Errorf("failed to start cluster %q: %w", clusterName, err)
 		}
 
+		// Wait for cluster to be ready (same checks as during creation)
+		err = p.waitForHetznerClusterReadyAfterStart(ctx, clusterName)
+		if err != nil {
+			return fmt.Errorf("cluster started but not ready: %w", err)
+		}
+
 		_, _ = fmt.Fprintf(p.logWriter, "Successfully started Talos cluster %q\n", clusterName)
 
 		return nil
@@ -1810,6 +1817,110 @@ func (p *TalosProvisioner) waitForHetznerClusterReady(
 	if err := check.Wait(checkCtx, clusterAccess, checks, reporter); err != nil {
 		return fmt.Errorf("cluster readiness checks failed: %w", err)
 	}
+
+	return nil
+}
+
+// waitForHetznerClusterReadyAfterStart waits for a Hetzner cluster to be ready after starting.
+// This is similar to waitForHetznerClusterReady but loads the TalosConfig from disk
+// instead of from the config bundle (which is not available during start operations).
+func (p *TalosProvisioner) waitForHetznerClusterReadyAfterStart(
+	ctx context.Context,
+	clusterName string,
+) error {
+	_, _ = fmt.Fprintf(p.logWriter, "Waiting for cluster to be ready...\n")
+
+	// Get nodes from the infrastructure provider
+	nodes, err := p.infraProvider.ListNodes(ctx, clusterName)
+	if err != nil {
+		return fmt.Errorf("failed to list nodes: %w", err)
+	}
+
+	if len(nodes) == 0 {
+		return fmt.Errorf("no nodes found for cluster %q", clusterName)
+	}
+
+	// Cast to Hetzner provider to get server details
+	hetznerProvider, ok := p.infraProvider.(*hetzner.Provider)
+	if !ok {
+		return fmt.Errorf("infrastructure provider is not a Hetzner provider")
+	}
+
+	// Get control-plane and worker servers
+	var controlPlaneServers, workerServers []*hcloud.Server
+
+	for _, node := range nodes {
+		server, err := hetznerProvider.GetServerByName(ctx, node.Name)
+		if err != nil {
+			return fmt.Errorf("failed to get server %s: %w", node.Name, err)
+		}
+
+		if server == nil {
+			continue
+		}
+
+		if node.Role == "control-plane" {
+			controlPlaneServers = append(controlPlaneServers, server)
+		} else {
+			workerServers = append(workerServers, server)
+		}
+	}
+
+	if len(controlPlaneServers) == 0 {
+		return fmt.Errorf("no control-plane nodes found for cluster %q", clusterName)
+	}
+
+	// Build the kubernetes endpoint from the first control-plane server
+	kubeEndpoint := fmt.Sprintf("https://%s:6443", controlPlaneServers[0].PublicNet.IPv4.IP.String())
+
+	// Create HetznerClusterResult which implements provision.Cluster
+	hetznerCluster, err := NewHetznerClusterResult(
+		clusterName,
+		controlPlaneServers,
+		workerServers,
+		kubeEndpoint,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create cluster result: %w", err)
+	}
+
+	// Load TalosConfig from disk (since we don't have the config bundle during start)
+	talosConfig, err := clientconfig.Open("")
+	if err != nil {
+		return fmt.Errorf("failed to load talosconfig: %w", err)
+	}
+
+	// Create ClusterAccess adapter using upstream SDK pattern
+	clusterAccess := access.NewAdapter(
+		hetznerCluster,
+		provision.WithTalosConfig(talosConfig),
+	)
+
+	defer clusterAccess.Close() //nolint:errcheck
+
+	// Determine which checks to run based on CNI configuration
+	skipNodeReadiness := (p.talosConfigs != nil && p.talosConfigs.IsCNIDisabled()) || p.options.SkipCNIChecks
+
+	var checks []check.ClusterCheck
+
+	if skipNodeReadiness {
+		_, _ = fmt.Fprintf(p.logWriter, "  Running pre-boot and K8s component checks (CNI not installed yet)...\n")
+		checks = slices.Concat(check.PreBootSequenceChecks(), check.K8sComponentsReadinessChecks())
+	} else {
+		_, _ = fmt.Fprintf(p.logWriter, "  Running full cluster readiness checks...\n")
+		checks = check.DefaultClusterChecks()
+	}
+
+	reporter := &hetznerCheckReporter{writer: p.logWriter}
+
+	checkCtx, cancel := context.WithTimeout(ctx, clusterReadinessTimeout)
+	defer cancel()
+
+	if err := check.Wait(checkCtx, clusterAccess, checks, reporter); err != nil {
+		return fmt.Errorf("cluster readiness checks failed: %w", err)
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "  ✓ Cluster is ready\n")
 
 	return nil
 }
