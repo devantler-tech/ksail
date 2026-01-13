@@ -9,7 +9,7 @@ Overview of KSail's supported platforms, distributions, and components.
 See [Concepts](concepts.md) for detailed information about each technology,
 or [Configuration](configuration/index.md) for setup instructions.
 
-## Platforms and Distributions
+## Platforms
 
 | Platform | Architectures | Status       |
 | -------- | ------------- | ------------ |

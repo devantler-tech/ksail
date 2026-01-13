@@ -229,7 +229,6 @@ func (s *Scaffolder) CreateK3dConfig() k3dv1alpha5.SimpleConfig {
 		ObjectMeta: types.ObjectMeta{
 			Name: clusterName,
 		},
-		Image: k3dconfigmanager.DefaultK3sImage,
 	}
 
 	// Apply node counts from CLI flags (stored in Talos options)
