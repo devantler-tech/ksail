@@ -968,6 +968,19 @@ func (p *TalosProvisioner) deleteDockerCluster(ctx context.Context, clusterName 
 		}
 	}
 
+	// Clean up talosconfig - remove only the context for this cluster
+	if p.options.TalosconfigPath != "" {
+		cleanupErr := p.cleanupTalosconfig(clusterName)
+		if cleanupErr != nil {
+			// Log warning but don't fail the delete operation
+			_, _ = fmt.Fprintf(
+				p.logWriter,
+				"Warning: failed to clean up talosconfig: %v\n",
+				cleanupErr,
+			)
+		}
+	}
+
 	_, _ = fmt.Fprintf(p.logWriter, "Successfully deleted Talos cluster %q\n", clusterName)
 
 	return nil
@@ -1006,6 +1019,18 @@ func (p *TalosProvisioner) deleteHetznerCluster(ctx context.Context, clusterName
 			_, _ = fmt.Fprintf(
 				p.logWriter,
 				"Warning: failed to clean up kubeconfig: %v\n",
+				cleanupErr,
+			)
+		}
+	}
+
+	// Clean up talosconfig
+	if p.options.TalosconfigPath != "" {
+		cleanupErr := p.cleanupTalosconfig(clusterName)
+		if cleanupErr != nil {
+			_, _ = fmt.Fprintf(
+				p.logWriter,
+				"Warning: failed to clean up talosconfig: %v\n",
 				cleanupErr,
 			)
 		}
@@ -1778,6 +1803,59 @@ func (p *TalosProvisioner) cleanupKubeconfig(clusterName string) error {
 	if err != nil {
 		return fmt.Errorf("failed to cleanup kubeconfig: %w", err)
 	}
+
+	return nil
+}
+
+// cleanupTalosconfig removes the context entry for the deleted cluster from the talosconfig file.
+// This cleans up stale configuration that would point to IPs that no longer exist.
+// If the current context is the deleted cluster, it sets the context to the first
+// remaining context, or leaves it empty if no contexts remain.
+func (p *TalosProvisioner) cleanupTalosconfig(clusterName string) error {
+	// Expand tilde in talosconfig path
+	talosconfigPath, err := iopath.ExpandHomePath(p.options.TalosconfigPath)
+	if err != nil {
+		return fmt.Errorf("failed to expand talosconfig path: %w", err)
+	}
+
+	// Open the talosconfig file
+	cfg, err := clientconfig.Open(talosconfigPath)
+	if err != nil {
+		// If the file doesn't exist, nothing to clean up
+		if os.IsNotExist(err) {
+			return nil
+		}
+
+		return fmt.Errorf("failed to open talosconfig: %w", err)
+	}
+
+	// Check if the context exists
+	if _, exists := cfg.Contexts[clusterName]; !exists {
+		// Context doesn't exist, nothing to clean up
+		return nil
+	}
+
+	// Remove the context
+	delete(cfg.Contexts, clusterName)
+
+	// If the current context was the deleted cluster, update it
+	if cfg.Context == clusterName {
+		// Set to first remaining context, or empty if none
+		cfg.Context = ""
+
+		for name := range cfg.Contexts {
+			cfg.Context = name
+
+			break
+		}
+	}
+
+	// Save the modified config
+	if err := cfg.Save(talosconfigPath); err != nil {
+		return fmt.Errorf("failed to save talosconfig: %w", err)
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "Cleaned up talosconfig entries for cluster %q\n", clusterName)
 
 	return nil
 }
