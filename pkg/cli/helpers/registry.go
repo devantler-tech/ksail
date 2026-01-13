@@ -179,6 +179,14 @@ func detectRegistryFromGitOps(ctx context.Context, spec gitOpsResourceSpec) (*Re
 		return nil, err
 	}
 
+	// Translate internal Docker hostnames to localhost with real port
+	// This handles cases where GitOps resources use internal Docker network names
+	// (e.g., "k3d-default-local-registry:5000") which aren't resolvable from the host
+	translateErr := translateInternalHostname(ctx, info)
+	if translateErr != nil {
+		return nil, translateErr
+	}
+
 	info.Source = "cluster:" + spec.sourceName
 
 	return info, nil
@@ -305,6 +313,67 @@ func parseOCIURL(url string) (*RegistryInfo, error) {
 		Repository: path,
 		IsExternal: isExternalHost(parsed.host),
 	}, nil
+}
+
+// isInternalDockerHostname checks if a hostname is an internal Docker network hostname
+// (e.g., "k3d-default-local-registry", "kind-local-registry").
+// These hostnames are only resolvable inside the Docker network, not from the host.
+func isInternalDockerHostname(host string) bool {
+	return strings.HasSuffix(host, "-"+registrypkg.LocalRegistryBaseName)
+}
+
+// translateInternalHostname translates an internal Docker hostname to localhost
+// by looking up the container's host port.
+// Returns the original info unchanged if:
+// - The host is not an internal Docker hostname
+// - The container cannot be found
+// - The container's port cannot be determined.
+func translateInternalHostname(ctx context.Context, info *RegistryInfo) error {
+	if !isInternalDockerHostname(info.Host) {
+		return nil
+	}
+
+	dockerClient, err := client.NewClientWithOpts(
+		client.FromEnv,
+		client.WithAPIVersionNegotiation(),
+	)
+	if err != nil {
+		// Can't connect to Docker, leave as-is and let caller handle
+		return nil
+	}
+
+	defer func() { _ = dockerClient.Close() }()
+
+	registryManager, err := dockerclient.NewRegistryManager(dockerClient)
+	if err != nil {
+		// Can't create manager, leave as-is
+		return nil
+	}
+
+	// The internal hostname IS the container name
+	containerName := info.Host
+
+	running, err := registryManager.IsContainerRunning(ctx, containerName)
+	if err != nil || !running {
+		return nil
+	}
+
+	port, err := registryManager.GetContainerPort(
+		ctx,
+		containerName,
+		dockerclient.DefaultRegistryPort,
+	)
+	if err != nil {
+		// Can't get port, leave as-is
+		return nil
+	}
+
+	// Successfully resolved - update info to use localhost
+	info.Host = "localhost"
+	info.Port = int32(port) //nolint:gosec // port validated by Docker API
+	info.IsExternal = false
+
+	return nil
 }
 
 // ResolveRegistryOptions contains configuration for registry resolution.
