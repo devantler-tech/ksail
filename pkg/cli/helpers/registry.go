@@ -160,12 +160,16 @@ type gitOpsResourceSpec struct {
 	namespace  string
 	name       string
 	urlPath    []string
+	refPath    []string // Optional: path to the ref/tag field
 	errNoURL   error
 	sourceName string
 }
 
-// detectRegistryFromGitOps fetches registry info from a GitOps resource.
-func detectRegistryFromGitOps(ctx context.Context, spec gitOpsResourceSpec) (*RegistryInfo, error) {
+// fetchGitOpsResource retrieves the unstructured object from the cluster.
+func fetchGitOpsResource(
+	ctx context.Context,
+	spec gitOpsResourceSpec,
+) (*unstructured.Unstructured, error) {
 	config, err := GetKubeconfigRESTConfig()
 	if err != nil {
 		return nil, err
@@ -183,6 +187,16 @@ func detectRegistryFromGitOps(ctx context.Context, spec gitOpsResourceSpec) (*Re
 		return nil, fmt.Errorf("get %s: %w", spec.sourceName, err)
 	}
 
+	return obj, nil
+}
+
+// detectRegistryFromGitOps fetches registry info from a GitOps resource.
+func detectRegistryFromGitOps(ctx context.Context, spec gitOpsResourceSpec) (*RegistryInfo, error) {
+	obj, err := fetchGitOpsResource(ctx, spec)
+	if err != nil {
+		return nil, err
+	}
+
 	url, found, err := unstructured.NestedString(obj.Object, spec.urlPath...)
 	if err != nil || !found || url == "" {
 		return nil, spec.errNoURL
@@ -193,9 +207,15 @@ func detectRegistryFromGitOps(ctx context.Context, spec gitOpsResourceSpec) (*Re
 		return nil, err
 	}
 
+	// Extract ref/tag if refPath is specified
+	if len(spec.refPath) > 0 {
+		ref, refFound, _ := unstructured.NestedString(obj.Object, spec.refPath...)
+		if refFound && ref != "" {
+			info.Tag = ref
+		}
+	}
+
 	// Translate internal Docker hostnames to localhost with real port
-	// This handles cases where GitOps resources use internal Docker network names
-	// (e.g., "k3d-default-local-registry:5000") which aren't resolvable from the host
 	translateErr := translateInternalHostname(ctx, info)
 	if translateErr != nil {
 		return nil, translateErr
@@ -217,6 +237,7 @@ func DetectRegistryFromFlux(ctx context.Context) (*RegistryInfo, error) {
 		namespace:  "flux-system",
 		name:       "flux",
 		urlPath:    []string{"spec", "sync", "url"},
+		refPath:    []string{"spec", "sync", "ref"},
 		errNoURL:   ErrFluxNoSyncURL,
 		sourceName: "FluxInstance",
 	})
