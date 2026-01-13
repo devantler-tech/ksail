@@ -316,9 +316,15 @@ func CreateMinimalProvisionerForProvider(
 		// Hetzner only supports Talos
 		talosConfig := &talosconfigmanager.Configs{Name: info.ClusterName}
 
+		// Use default kubeconfig path for cleanup operations
+		kubeconfigPath := info.KubeconfigPath
+		if kubeconfigPath == "" {
+			kubeconfigPath = "~/.kube/config"
+		}
+
 		provisioner, err := talosprovisioner.CreateProvisioner(
 			talosConfig,
-			"", // kubeconfig path not needed for lifecycle operations
+			kubeconfigPath,
 			info.Provider,
 			v1alpha1.OptionsTalos{},
 			v1alpha1.OptionsHetzner{},
