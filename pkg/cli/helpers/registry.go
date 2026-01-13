@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"os"
+	"strconv"
 	"strings"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
@@ -32,9 +34,24 @@ type RegistryInfo struct {
 	Source string
 }
 
-// ErrNoRegistryFound is returned when no registry can be detected from any source.
-var ErrNoRegistryFound = errors.New(
-	"unable to detect registry; provide --registry flag, set KSAIL_REGISTRY env, or configure local-registry in ksail.yaml",
+// Static errors for registry detection.
+var (
+	// ErrNoRegistryFound is returned when no registry can be detected from any source.
+	ErrNoRegistryFound = errors.New(
+		"unable to detect registry; provide --registry flag, set KSAIL_REGISTRY, or configure local-registry",
+	)
+	// ErrViperNil is returned when a nil viper instance is provided.
+	ErrViperNil = errors.New("viper instance is nil")
+	// ErrRegistryNotSet is returned when registry is not set via flag or environment.
+	ErrRegistryNotSet = errors.New("registry not set via flag or environment variable")
+	// ErrLocalRegistryNotConfigured is returned when local registry is not in config.
+	ErrLocalRegistryNotConfigured = errors.New("local registry not configured in ksail.yaml")
+	// ErrFluxNoSyncURL is returned when FluxInstance has no sync.url.
+	ErrFluxNoSyncURL = errors.New("FluxInstance has no sync.url configured")
+	// ErrArgoCDNoRepoURL is returned when ArgoCD Application has no source.repoURL.
+	ErrArgoCDNoRepoURL = errors.New("ArgoCD Application has no source.repoURL configured")
+	// ErrEmptyOCIURL is returned when an empty OCI URL is provided.
+	ErrEmptyOCIURL = errors.New("empty OCI URL")
 )
 
 // ViperRegistryKey is the viper key for the registry flag/env var.
@@ -45,21 +62,15 @@ const ViperRegistryKey = "registry"
 // Viper binds them together.
 func DetectRegistryFromViper(v *viper.Viper) (*RegistryInfo, error) {
 	if v == nil {
-		return nil, errors.New("viper instance is nil")
+		return nil, ErrViperNil
 	}
 
 	registry := v.GetString(ViperRegistryKey)
 	if registry == "" {
-		return nil, errors.New("registry not set via flag or environment variable")
+		return nil, ErrRegistryNotSet
 	}
 
-	info, err := parseRegistryFlag(registry)
-	if err != nil {
-		return nil, err
-	}
-
-	// Determine source based on whether it was from flag or env
-	// Viper doesn't expose which source was used, so we check if the flag was explicitly set
+	info := parseRegistryFlag(registry)
 	info.Source = "flag/env:registry"
 
 	return info, nil
@@ -69,7 +80,7 @@ func DetectRegistryFromViper(v *viper.Viper) (*RegistryInfo, error) {
 func DetectRegistryFromConfig(cfg *v1alpha1.Cluster) (*RegistryInfo, error) {
 	reg := cfg.Spec.Cluster.LocalRegistry
 	if !reg.Enabled() {
-		return nil, errors.New("local registry not configured in ksail.yaml")
+		return nil, ErrLocalRegistryNotConfigured
 	}
 
 	info := &RegistryInfo{
@@ -88,8 +99,18 @@ func DetectRegistryFromConfig(cfg *v1alpha1.Cluster) (*RegistryInfo, error) {
 	return info, nil
 }
 
-// DetectRegistryFromFlux tries to get registry URL from FluxInstance sync configuration.
-func DetectRegistryFromFlux(ctx context.Context) (*RegistryInfo, error) {
+// gitOpsResourceSpec defines how to fetch a GitOps resource URL.
+type gitOpsResourceSpec struct {
+	gvr        schema.GroupVersionResource
+	namespace  string
+	name       string
+	urlPath    []string
+	errNoURL   error
+	sourceName string
+}
+
+// detectRegistryFromGitOps fetches registry info from a GitOps resource.
+func detectRegistryFromGitOps(ctx context.Context, spec gitOpsResourceSpec) (*RegistryInfo, error) {
 	config, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
 		clientcmd.NewDefaultClientConfigLoadingRules(),
 		&clientcmd.ConfigOverrides{},
@@ -103,25 +124,16 @@ func DetectRegistryFromFlux(ctx context.Context) (*RegistryInfo, error) {
 		return nil, fmt.Errorf("create dynamic client: %w", err)
 	}
 
-	// FluxInstance GVR
-	gvr := schema.GroupVersionResource{
-		Group:    "fluxcd.controlplane.io",
-		Version:  "v1",
-		Resource: "fluxinstances",
-	}
-
-	// Try to get the "flux" FluxInstance in flux-system namespace
-	obj, err := dynClient.Resource(gvr).
-		Namespace("flux-system").
-		Get(ctx, "flux", metav1.GetOptions{})
+	obj, err := dynClient.Resource(spec.gvr).
+		Namespace(spec.namespace).
+		Get(ctx, spec.name, metav1.GetOptions{})
 	if err != nil {
-		return nil, fmt.Errorf("get FluxInstance: %w", err)
+		return nil, fmt.Errorf("get %s: %w", spec.sourceName, err)
 	}
 
-	// Extract sync.url from spec
-	url, found, err := unstructured.NestedString(obj.Object, "spec", "sync", "url")
+	url, found, err := unstructured.NestedString(obj.Object, spec.urlPath...)
 	if err != nil || !found || url == "" {
-		return nil, errors.New("FluxInstance has no sync.url configured")
+		return nil, spec.errNoURL
 	}
 
 	info, err := parseOCIURL(url)
@@ -129,56 +141,46 @@ func DetectRegistryFromFlux(ctx context.Context) (*RegistryInfo, error) {
 		return nil, err
 	}
 
-	info.Source = "cluster:FluxInstance"
+	info.Source = "cluster:" + spec.sourceName
 
 	return info, nil
+}
+
+// DetectRegistryFromFlux tries to get registry URL from FluxInstance sync configuration.
+func DetectRegistryFromFlux(ctx context.Context) (*RegistryInfo, error) {
+	return detectRegistryFromGitOps(ctx, gitOpsResourceSpec{
+		gvr: schema.GroupVersionResource{
+			Group:    "fluxcd.controlplane.io",
+			Version:  "v1",
+			Resource: "fluxinstances",
+		},
+		namespace:  "flux-system",
+		name:       "flux",
+		urlPath:    []string{"spec", "sync", "url"},
+		errNoURL:   ErrFluxNoSyncURL,
+		sourceName: "FluxInstance",
+	})
 }
 
 // DetectRegistryFromArgoCD tries to get registry URL from ArgoCD Application source.
 func DetectRegistryFromArgoCD(ctx context.Context) (*RegistryInfo, error) {
-	config, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
-		clientcmd.NewDefaultClientConfigLoadingRules(),
-		&clientcmd.ConfigOverrides{},
-	).ClientConfig()
-	if err != nil {
-		return nil, fmt.Errorf("build kubeconfig: %w", err)
-	}
-
-	dynClient, err := dynamic.NewForConfig(config)
-	if err != nil {
-		return nil, fmt.Errorf("create dynamic client: %w", err)
-	}
-
-	// ArgoCD Application GVR
-	gvr := schema.GroupVersionResource{
-		Group:    "argoproj.io",
-		Version:  "v1alpha1",
-		Resource: "applications",
-	}
-
-	// Try to get the "ksail" Application in argocd namespace
-	obj, err := dynClient.Resource(gvr).Namespace("argocd").Get(ctx, "ksail", metav1.GetOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("get ArgoCD Application: %w", err)
-	}
-
-	// Extract source.repoURL from spec
-	repoURL, found, err := unstructured.NestedString(obj.Object, "spec", "source", "repoURL")
-	if err != nil || !found || repoURL == "" {
-		return nil, errors.New("ArgoCD Application has no source.repoURL configured")
-	}
-
-	info, err := parseOCIURL(repoURL)
-	if err != nil {
-		return nil, err
-	}
-
-	info.Source = "cluster:ArgoCD"
-
-	return info, nil
+	return detectRegistryFromGitOps(ctx, gitOpsResourceSpec{
+		gvr: schema.GroupVersionResource{
+			Group:    "argoproj.io",
+			Version:  "v1alpha1",
+			Resource: "applications",
+		},
+		namespace:  "argocd",
+		name:       "ksail",
+		urlPath:    []string{"spec", "source", "repoURL"},
+		errNoURL:   ErrArgoCDNoRepoURL,
+		sourceName: "ArgoCD",
+	})
 }
 
 // DetectRegistryFromDocker tries to find a local registry Docker container.
+//
+//nolint:cyclop // Detection logic requires multiple fallback paths
 func DetectRegistryFromDocker(ctx context.Context, clusterName string) (*RegistryInfo, error) {
 	dockerClient, err := client.NewClientWithOpts(
 		client.FromEnv,
@@ -250,7 +252,7 @@ func parseOCIURL(url string) (*RegistryInfo, error) {
 	url = strings.TrimPrefix(url, "oci://")
 
 	if url == "" {
-		return nil, errors.New("empty OCI URL")
+		return nil, ErrEmptyOCIURL
 	}
 
 	info := &RegistryInfo{}
@@ -311,80 +313,110 @@ type ResolveRegistryOptions struct {
 
 // ResolveRegistry resolves registry configuration using a priority-based approach.
 // Priority order:
-// 1. CLI flag or env var via Viper (--registry / KSAIL_REGISTRY)
-// 2. Config file (ksail.yaml localRegistry)
-// 3. Cluster GitOps resources (FluxInstance or ArgoCD Application)
-// 4. Docker containers (matching cluster name)
-// 5. Error (no registry found)
-//
-//nolint:cyclop // Resolution requires checking multiple sources in priority order
+// 1. CLI flag or env var via Viper (--registry / KSAIL_REGISTRY).
+// 2. Config file (ksail.yaml localRegistry).
+// 3. Cluster GitOps resources (FluxInstance or ArgoCD Application).
+// 4. Docker containers (matching cluster name).
+// 5. Error (no registry found).
 func ResolveRegistry(ctx context.Context, opts ResolveRegistryOptions) (*RegistryInfo, error) {
 	// Priority 1: CLI flag or env var via Viper (--registry / KSAIL_REGISTRY)
-	if opts.Viper != nil {
-		if info, err := DetectRegistryFromViper(opts.Viper); err == nil {
-			return info, nil
-		}
+	info, err := resolveFromViper(opts.Viper)
+	if err == nil {
+		return info, nil
 	}
 
 	// Priority 2: Config file (ksail.yaml localRegistry)
-	if opts.ClusterConfig != nil {
-		if info, err := DetectRegistryFromConfig(opts.ClusterConfig); err == nil {
-			return info, nil
-		}
+	info, err = resolveFromConfig(opts.ClusterConfig)
+	if err == nil {
+		return info, nil
 	}
 
 	// Priority 3: Cluster GitOps resources (FluxInstance or ArgoCD Application)
-	// Try to detect GitOps engine first
-	if opts.ClusterConfig != nil {
-		switch opts.ClusterConfig.Spec.Cluster.GitOpsEngine {
-		case v1alpha1.GitOpsEngineFlux:
-			if info, err := DetectRegistryFromFlux(ctx); err == nil {
-				return info, nil
-			}
-		case v1alpha1.GitOpsEngineArgoCD:
-			if info, err := DetectRegistryFromArgoCD(ctx); err == nil {
-				return info, nil
-			}
-		default:
-			// Try both GitOps engines
-			if info, err := DetectRegistryFromFlux(ctx); err == nil {
-				return info, nil
-			}
-
-			if info, err := DetectRegistryFromArgoCD(ctx); err == nil {
-				return info, nil
-			}
-		}
-	} else {
-		// No config, try both GitOps engines
-		if info, err := DetectRegistryFromFlux(ctx); err == nil {
-			return info, nil
-		}
-
-		if info, err := DetectRegistryFromArgoCD(ctx); err == nil {
-			return info, nil
-		}
+	info, err = resolveFromGitOps(ctx, opts.ClusterConfig)
+	if err == nil {
+		return info, nil
 	}
 
 	// Priority 4: Docker containers (matching cluster name)
-	clusterName := opts.ClusterName
-	if clusterName == "" && opts.ClusterConfig != nil {
-		clusterName = opts.ClusterConfig.Spec.Cluster.Connection.Context
-	}
-
-	if clusterName != "" {
-		if info, err := DetectRegistryFromDocker(ctx, clusterName); err == nil {
-			return info, nil
-		}
+	info, err = resolveFromDocker(ctx, opts.ClusterName, opts.ClusterConfig)
+	if err == nil {
+		return info, nil
 	}
 
 	// Priority 5: Error (no registry found)
 	return nil, ErrNoRegistryFound
 }
 
+func resolveFromViper(v *viper.Viper) (*RegistryInfo, error) {
+	if v == nil {
+		return nil, ErrViperNil
+	}
+
+	return DetectRegistryFromViper(v)
+}
+
+func resolveFromConfig(cfg *v1alpha1.Cluster) (*RegistryInfo, error) {
+	if cfg == nil {
+		return nil, ErrLocalRegistryNotConfigured
+	}
+
+	return DetectRegistryFromConfig(cfg)
+}
+
+func resolveFromGitOps(ctx context.Context, cfg *v1alpha1.Cluster) (*RegistryInfo, error) {
+	if cfg != nil {
+		return resolveFromGitOpsWithEngine(ctx, cfg.Spec.Cluster.GitOpsEngine)
+	}
+
+	// No config, try both GitOps engines
+	return tryBothGitOpsEngines(ctx)
+}
+
+func resolveFromGitOpsWithEngine(
+	ctx context.Context,
+	engine v1alpha1.GitOpsEngine,
+) (*RegistryInfo, error) {
+	switch engine {
+	case v1alpha1.GitOpsEngineFlux:
+		return DetectRegistryFromFlux(ctx)
+	case v1alpha1.GitOpsEngineArgoCD:
+		return DetectRegistryFromArgoCD(ctx)
+	case v1alpha1.GitOpsEngineNone:
+		return tryBothGitOpsEngines(ctx)
+	default:
+		return tryBothGitOpsEngines(ctx)
+	}
+}
+
+func tryBothGitOpsEngines(ctx context.Context) (*RegistryInfo, error) {
+	info, err := DetectRegistryFromFlux(ctx)
+	if err == nil {
+		return info, nil
+	}
+
+	return DetectRegistryFromArgoCD(ctx)
+}
+
+func resolveFromDocker(
+	ctx context.Context,
+	clusterName string,
+	cfg *v1alpha1.Cluster,
+) (*RegistryInfo, error) {
+	name := clusterName
+	if name == "" && cfg != nil {
+		name = cfg.Spec.Cluster.Connection.Context
+	}
+
+	if name == "" {
+		return nil, ErrNoLocalRegistry
+	}
+
+	return DetectRegistryFromDocker(ctx, name)
+}
+
 // parseRegistryFlag parses the --registry flag value.
 // Format: [user:pass@]host[:port][/path].
-func parseRegistryFlag(registryFlag string) (*RegistryInfo, error) {
+func parseRegistryFlag(registryFlag string) *RegistryInfo {
 	info := &RegistryInfo{}
 
 	// Check for credentials (user:pass@)
@@ -426,7 +458,9 @@ func parseRegistryFlag(registryFlag string) (*RegistryInfo, error) {
 		portStr := hostPort[colonIdx+1:]
 
 		var port int
-		if _, err := fmt.Sscanf(portStr, "%d", &port); err == nil && port > 0 {
+
+		_, err := fmt.Sscanf(portStr, "%d", &port)
+		if err == nil && port > 0 {
 			info.Port = int32(port) //nolint:gosec // port is validated
 		} else {
 			info.Host = hostPort
@@ -440,5 +474,16 @@ func parseRegistryFlag(registryFlag string) (*RegistryInfo, error) {
 		!strings.HasPrefix(info.Host, "127.0.0.1") &&
 		!strings.HasSuffix(info.Host, ".localhost")
 
-	return info, nil
+	return info
+}
+
+// FormatRegistryURL formats a registry URL using net.JoinHostPort for proper host:port handling.
+func FormatRegistryURL(host string, port int32, repository string) string {
+	if port > 0 {
+		hostPort := net.JoinHostPort(host, strconv.Itoa(int(port)))
+
+		return fmt.Sprintf("oci://%s/%s", hostPort, repository)
+	}
+
+	return fmt.Sprintf("oci://%s/%s", host, repository)
 }

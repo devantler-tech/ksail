@@ -16,10 +16,6 @@ import (
 	"github.com/spf13/viper"
 )
 
-// pushViperInstance is the viper instance used for registry flag/env binding.
-// It's set during command creation and used during execution.
-var pushViperInstance *viper.Viper
-
 // NewPushCmd creates the workload push command.
 func NewPushCmd(_ *runtime.Runtime) *cobra.Command {
 	var (
@@ -27,10 +23,10 @@ func NewPushCmd(_ *runtime.Runtime) *cobra.Command {
 		pathFlag string
 	)
 
-	// Create viper instance for registry flag/env binding
-	pushViperInstance = viper.New()
-	pushViperInstance.SetEnvPrefix(configmanager.EnvPrefix)
-	pushViperInstance.AutomaticEnv()
+	// Create viper instance for registry flag/env binding (local to closure)
+	viperInstance := viper.New()
+	viperInstance.SetEnvPrefix(configmanager.EnvPrefix)
+	viperInstance.AutomaticEnv()
 
 	cmd := &cobra.Command{
 		Use:   "push [oci://<host>:<port>/<repository>[/<variant>]:<ref>]",
@@ -67,7 +63,7 @@ All parts of the OCI reference are optional and will be inferred:
 	}
 
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
-		return runPushCommand(cmd, args, pathFlag, validate, pushViperInstance)
+		return runPushCommand(cmd, args, pathFlag, validate, viperInstance)
 	}
 
 	cmd.Flags().BoolVar(&validate, "validate", false, "Validate manifests before pushing")
@@ -79,7 +75,7 @@ All parts of the OCI reference are optional and will be inferred:
 	)
 
 	// Bind registry flag to viper for env var support (KSAIL_REGISTRY)
-	_ = pushViperInstance.BindPFlag(helpers.ViperRegistryKey, cmd.Flags().Lookup("registry"))
+	_ = viperInstance.BindPFlag(helpers.ViperRegistryKey, cmd.Flags().Lookup("registry"))
 
 	return cmd
 }
@@ -276,7 +272,7 @@ func resolvePushParams(
 		ClusterName:   cfg.Spec.Cluster.Connection.Context,
 	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("resolve registry: %w", err)
 	}
 
 	// Build params from detected registry info
@@ -292,23 +288,7 @@ func resolvePushParams(
 	}
 
 	// Override with OCI reference values if provided
-	if ociRef != nil {
-		if ociRef.Host != "" {
-			params.Host = ociRef.Host
-		}
-
-		if ociRef.Port > 0 {
-			params.Port = ociRef.Port
-		}
-
-		if ociRef.FullRepository() != "" {
-			params.Repository = ociRef.FullRepository()
-		}
-
-		if ociRef.Ref != "" {
-			params.Ref = ociRef.Ref
-		}
-	}
+	applyOCIRefOverrides(params, ociRef)
 
 	// Fallback repository from source directory if not set
 	if params.Repository == "" {
@@ -318,13 +298,8 @@ func resolvePushParams(
 	// Resolve GitOps engine
 	params.GitOpsEngine = resolveGitOpsEngine(cfg)
 
-	// Show success message with source
-	var displayURL string
-	if params.Port > 0 {
-		displayURL = fmt.Sprintf("oci://%s:%d/%s", params.Host, params.Port, params.Repository)
-	} else {
-		displayURL = fmt.Sprintf("oci://%s/%s", params.Host, params.Repository)
-	}
+	// Show success message with source using proper host:port formatting
+	displayURL := helpers.FormatRegistryURL(params.Host, params.Port, params.Repository)
 
 	notify.WriteMessage(notify.Message{
 		Type:    notify.SuccessType,
@@ -335,6 +310,29 @@ func resolvePushParams(
 	})
 
 	return params, nil
+}
+
+// applyOCIRefOverrides applies OCI reference values to params if provided.
+func applyOCIRefOverrides(params *pushParams, ociRef *oci.Reference) {
+	if ociRef == nil {
+		return
+	}
+
+	if ociRef.Host != "" {
+		params.Host = ociRef.Host
+	}
+
+	if ociRef.Port > 0 {
+		params.Port = ociRef.Port
+	}
+
+	if ociRef.FullRepository() != "" {
+		params.Repository = ociRef.FullRepository()
+	}
+
+	if ociRef.Ref != "" {
+		params.Ref = ociRef.Ref
+	}
 }
 
 // newPushParamsFromOCIRef creates push params when a complete OCI reference is provided.
