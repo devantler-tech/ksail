@@ -59,7 +59,12 @@ All parts of the OCI reference are optional and will be inferred:
 
 	cmd.Flags().BoolVar(&validate, "validate", false, "Validate manifests before pushing")
 	cmd.Flags().StringVar(&pathFlag, "path", "", "Source directory containing manifests to push")
-	cmd.Flags().StringVar(&registryFlag, "registry", "", "Registry to push to (format: [user:pass@]host[:port][/path])")
+	cmd.Flags().StringVar(
+		&registryFlag,
+		"registry",
+		"",
+		"Registry to push to (format: [user:pass@]host[:port][/path])",
+	)
 
 	return cmd
 }
@@ -67,7 +72,12 @@ All parts of the OCI reference are optional and will be inferred:
 // runPushCommand executes the push logic with the provided parameters.
 //
 //nolint:funlen // Command execution logic with multiple stages
-func runPushCommand(cmd *cobra.Command, args []string, pathFlag, registryFlag string, validate bool) error {
+func runPushCommand(
+	cmd *cobra.Command,
+	args []string,
+	pathFlag, registryFlag string,
+	validate bool,
+) error {
 	cmdCtx, err := initCommandContext(cmd)
 	if err != nil {
 		return err
@@ -87,7 +97,9 @@ func runPushCommand(cmd *cobra.Command, args []string, pathFlag, registryFlag st
 	}
 
 	// Resolve all parameters: host, port, repository, ref, source directory
-	params, err := resolvePushParams(cmd, clusterCfg, ociRef, pathFlag, registryFlag, tmr, outputTimer)
+	params, err := resolvePushParams(
+		cmd, clusterCfg, ociRef, pathFlag, registryFlag, tmr, outputTimer,
+	)
 	if err != nil {
 		return err
 	}
@@ -142,7 +154,9 @@ func runPushCommand(cmd *cobra.Command, args []string, pathFlag, registryFlag st
 	// Format registry reference for display and endpoint
 	var registryDisplay, registryEndpoint string
 	if params.Port > 0 {
-		registryDisplay = fmt.Sprintf("%s:%d/%s:%s", params.Host, params.Port, params.Repository, params.Ref)
+		registryDisplay = fmt.Sprintf(
+			"%s:%d/%s:%s", params.Host, params.Port, params.Repository, params.Ref,
+		)
 		registryEndpoint = fmt.Sprintf("%s:%d", params.Host, params.Port)
 	} else {
 		// External registry - no port (HTTPS implicit)
@@ -304,7 +318,11 @@ func resolvePortFromRegistry(reg v1alpha1.LocalRegistry, ociRef *oci.Reference) 
 
 // resolveRepositoryFromRegistry determines repository name from OCI ref, registry path, or source directory.
 // For external registries, the registry path is used as the repository prefix.
-func resolveRepositoryFromRegistry(reg v1alpha1.LocalRegistry, ociRef *oci.Reference, sourceDir string) string {
+func resolveRepositoryFromRegistry(
+	reg v1alpha1.LocalRegistry,
+	ociRef *oci.Reference,
+	sourceDir string,
+) string {
 	if ociRef != nil && ociRef.FullRepository() != "" {
 		return ociRef.FullRepository()
 	}

@@ -66,7 +66,13 @@ runs:
         GHCR_USER: ${{ inputs.ghcr-user }}
         GHCR_TOKEN: ${{ inputs.ghcr-token }}
       run: |
-        ksail cluster init --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS
+        # Inject GHCR credentials into --local-registry if it contains ghcr.io
+        RESOLVED_ARGS="$ARGS"
+        if [[ "$ARGS" == *"--local-registry"* ]] && [[ "$ARGS" == *"ghcr.io"* ]] && [[ -n "$GHCR_USER" ]] && [[ -n "$GHCR_TOKEN" ]]; then
+          # Replace 'ghcr.io/' with 'user:token@ghcr.io/'
+          RESOLVED_ARGS="${ARGS//ghcr.io\//${GHCR_USER}:${GHCR_TOKEN}@ghcr.io/}"
+        fi
+        ksail cluster init --distribution "$DISTRIBUTION" --provider "$PROVIDER" $RESOLVED_ARGS
 
     - name: 🧪 ksail cluster create
       shell: bash
@@ -82,7 +88,13 @@ runs:
         if [ "$INIT" = "true" ]; then
           ksail cluster create
         else
-          ksail cluster create --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS
+          # Inject GHCR credentials into --local-registry if it contains ghcr.io
+          RESOLVED_ARGS="$ARGS"
+          if [[ "$ARGS" == *"--local-registry"* ]] && [[ "$ARGS" == *"ghcr.io"* ]] && [[ -n "$GHCR_USER" ]] && [[ -n "$GHCR_TOKEN" ]]; then
+            # Replace 'ghcr.io/' with 'user:token@ghcr.io/'
+            RESOLVED_ARGS="${ARGS//ghcr.io\//${GHCR_USER}:${GHCR_TOKEN}@ghcr.io/}"
+          fi
+          ksail cluster create --distribution "$DISTRIBUTION" --provider "$PROVIDER" $RESOLVED_ARGS
         fi
 
     - name: 🧪 ksail cluster list

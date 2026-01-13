@@ -21,6 +21,50 @@ func (r LocalRegistry) Enabled() bool {
 	return strings.TrimSpace(r.Registry) != ""
 }
 
+// extractCredentials extracts username and password from a credential string.
+func extractCredentials(credPart string) (string, string) {
+	if colonIdx := strings.Index(credPart, ":"); colonIdx > 0 {
+		return credPart[:colonIdx], credPart[colonIdx+1:]
+	}
+
+	return credPart, ""
+}
+
+// parseHostAndPort parses the host:port portion of a registry spec.
+// Returns host, port, and whether an explicit port was provided.
+func parseHostAndPort(spec string) (string, int32, bool) {
+	colonIdx := strings.LastIndex(spec, ":")
+	if colonIdx <= 0 {
+		return spec, 0, false
+	}
+
+	portStr := spec[colonIdx+1:]
+
+	p, parseErr := strconv.ParseInt(portStr, 10, 32)
+	if parseErr == nil && p > 0 {
+		return spec[:colonIdx], int32(p), true
+	}
+
+	// Not a valid port, treat as part of host (e.g., IPv6)
+	return spec, 0, false
+}
+
+const localhostHost = "localhost"
+
+// resolveDefaultPort returns the appropriate default port based on host.
+func resolveDefaultPort(host string, hasExplicitPort bool) int32 {
+	if hasExplicitPort {
+		return 0 // Will be set by caller
+	}
+
+	if host == localhostHost || host == "127.0.0.1" {
+		return DefaultLocalRegistryPort
+	}
+
+	// For external hosts, port stays 0 (meaning HTTPS with implicit port 443)
+	return 0
+}
+
 // Parse parses the Registry string into its components.
 // Format: [user:pass@]host[:port][/path]
 // Credentials can use ${ENV_VAR} placeholders.
@@ -33,7 +77,7 @@ func (r LocalRegistry) Parse() ParsedRegistry {
 	spec := strings.TrimSpace(r.Registry)
 	if spec == "" {
 		return ParsedRegistry{
-			Host: "localhost",
+			Host: localhostHost,
 			Port: DefaultLocalRegistryPort,
 		}
 	}
@@ -42,15 +86,8 @@ func (r LocalRegistry) Parse() ParsedRegistry {
 
 	// Extract credentials if present (user:pass@ prefix)
 	if atIdx := strings.Index(spec, "@"); atIdx > 0 {
-		credPart := spec[:atIdx]
+		username, password = extractCredentials(spec[:atIdx])
 		spec = spec[atIdx+1:]
-
-		if colonIdx := strings.Index(credPart, ":"); colonIdx > 0 {
-			username = credPart[:colonIdx]
-			password = credPart[colonIdx+1:]
-		} else {
-			username = credPart
-		}
 	}
 
 	// Extract path if present (everything after first /)
@@ -60,40 +97,15 @@ func (r LocalRegistry) Parse() ParsedRegistry {
 		spec = spec[:slashIdx]
 	}
 
-	// Extract port if present (host:port)
-	var host string
-
-	var port int32
-
-	var hasExplicitPort bool
-
-	colonIdx := strings.LastIndex(spec, ":")
-	if colonIdx > 0 {
-		host = spec[:colonIdx]
-		portStr := spec[colonIdx+1:]
-
-		p, parseErr := strconv.ParseInt(portStr, 10, 32)
-		if parseErr == nil && p > 0 {
-			port = int32(p)
-			hasExplicitPort = true
-		} else {
-			// Not a valid port, treat as part of host (e.g., IPv6)
-			host = spec
-		}
-	} else {
-		host = spec
-	}
+	host, port, hasExplicitPort := parseHostAndPort(spec)
 
 	if host == "" {
-		host = "localhost"
+		host = localhostHost
 	}
 
 	// Apply default port only for local registries when no explicit port was provided
 	if !hasExplicitPort {
-		if host == "localhost" || host == "127.0.0.1" {
-			port = DefaultLocalRegistryPort
-		}
-		// For external hosts, port stays 0 (meaning HTTPS with implicit port 443)
+		port = resolveDefaultPort(host, hasExplicitPort)
 	}
 
 	return ParsedRegistry{

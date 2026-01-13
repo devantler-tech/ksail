@@ -115,7 +115,8 @@ func HandleInitRunE(
 		clusterCfg.Spec.Cluster.LocalRegistry,
 	)
 	if err != nil {
-		return err // Return directly to preserve actionable error message
+		//nolint:wrapcheck // Return directly to preserve actionable error message
+		return err
 	}
 
 	scaffolderInstance, targetPath, force, err := prepareScaffolder(cmd, cfgManager, clusterCfg)

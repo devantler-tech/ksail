@@ -192,6 +192,30 @@ func ExecuteStage(
 	)
 }
 
+// buildVerifyOptions creates the OCI verify options from the cluster config.
+func buildVerifyOptions(clusterCfg *v1alpha1.Cluster) oci.VerifyOptions {
+	localRegistry := clusterCfg.Spec.Cluster.LocalRegistry
+	parsed := localRegistry.Parse()
+	username, password := localRegistry.ResolveCredentials()
+
+	// Use the path as the repository for external registries
+	repository := parsed.Path
+	if repository == "" {
+		repository = registry.SanitizeRepoName(clusterCfg.Spec.Workload.SourceDirectory)
+		if repository == "" {
+			repository = v1alpha1.DefaultSourceDirectory
+		}
+	}
+
+	return oci.VerifyOptions{
+		RegistryEndpoint: parsed.Host,
+		Repository:       repository,
+		Username:         username,
+		Password:         password,
+		Insecure:         false, // External registries use HTTPS
+	}
+}
+
 // VerifyRegistryAccess checks if we have write access to the configured registry.
 // For external registries, this verifies authentication and permissions.
 // For local Docker registries, this is skipped (no auth required).
@@ -202,12 +226,7 @@ func VerifyRegistryAccess(
 	deps lifecycle.Deps,
 ) error {
 	localRegistry := clusterCfg.Spec.Cluster.LocalRegistry
-	if !localRegistry.Enabled() {
-		return nil
-	}
-
-	// Only verify external registries - local Docker registries don't need auth
-	if !localRegistry.IsExternal() {
+	if !localRegistry.Enabled() || !localRegistry.IsExternal() {
 		return nil
 	}
 
@@ -228,33 +247,11 @@ func VerifyRegistryAccess(
 		Writer:  cmd.OutOrStdout(),
 	})
 
-	parsed := localRegistry.Parse()
-	username, password := localRegistry.ResolveCredentials()
+	verifyOpts := buildVerifyOptions(clusterCfg)
 
-	// Build the registry endpoint
-	registryEndpoint := parsed.Host
-
-	// Use the path as the repository for external registries
-	repository := parsed.Path
-	if repository == "" {
-		repository = registry.SanitizeRepoName(clusterCfg.Spec.Workload.SourceDirectory)
-		if repository == "" {
-			repository = v1alpha1.DefaultSourceDirectory
-		}
-	}
-
-	err := oci.VerifyRegistryAccessWithTimeout(
-		cmd.Context(),
-		oci.VerifyOptions{
-			RegistryEndpoint: registryEndpoint,
-			Repository:       repository,
-			Username:         username,
-			Password:         password,
-			Insecure:         false, // External registries use HTTPS
-		},
-		registryVerifyTimeout,
-	)
+	err := oci.VerifyRegistryAccessWithTimeout(cmd.Context(), verifyOpts, registryVerifyTimeout)
 	if err != nil {
+		//nolint:wrapcheck // Error from VerifyRegistryAccessWithTimeout is already well-formatted
 		return err
 	}
 
@@ -377,6 +374,12 @@ func resolveStage(
 		return ProvisionStageInfo(), provisionAction, nil
 	case StageConnect:
 		return ConnectStageInfo(), connectActionBuilder, nil
+	case StageVerify:
+		// StageVerify is handled separately in RunStage via runVerifyStage
+		return setup.StageInfo{}, nil, fmt.Errorf(
+			"%w: StageVerify should use runVerifyStage",
+			ErrUnsupportedStage,
+		)
 	default:
 		return setup.StageInfo{}, nil, fmt.Errorf("%w: %d", ErrUnsupportedStage, stage)
 	}
@@ -426,7 +429,7 @@ func connectAction() stageAction {
 	}
 }
 
-func connectActionBuilder(clusterCfg *v1alpha1.Cluster) stageAction {
+func connectActionBuilder(_ *v1alpha1.Cluster) stageAction {
 	return func(execCtx context.Context, svc registry.Service, ctx registryContext) error {
 		// Note: External registries are now skipped in prepareContext,
 		// so this function only handles Docker-based local registries.

@@ -60,6 +60,8 @@ type VerifyOptions struct {
 type verifier struct{}
 
 // NewRegistryVerifier creates a new registry verifier.
+//
+//nolint:ireturn // interface return is intentional for testability
 func NewRegistryVerifier() RegistryVerifier {
 	return &verifier{}
 }
@@ -67,38 +69,17 @@ func NewRegistryVerifier() RegistryVerifier {
 // VerifyAccess checks if we can access the registry and have write permissions.
 // It attempts to check the repository catalog/tags to verify read access,
 // and the error response helps determine if auth is required.
-//
-//nolint:funlen // Sequential verification steps
 func (v *verifier) VerifyAccess(ctx context.Context, opts VerifyOptions) error {
 	if opts.RegistryEndpoint == "" {
-		return errors.New("registry endpoint is required")
+		return ErrRegistryEndpointRequired
 	}
 
-	// Build reference for the repository
-	refStr := fmt.Sprintf("%s/%s", opts.RegistryEndpoint, opts.Repository)
-
-	nameOpts := []name.Option{name.WeakValidation}
-	if opts.Insecure {
-		nameOpts = append(nameOpts, name.Insecure)
-	}
-
-	repo, err := name.NewRepository(refStr, nameOpts...)
+	repo, err := v.buildRepository(opts)
 	if err != nil {
-		return fmt.Errorf("invalid registry reference: %w", err)
+		return err
 	}
 
-	// Build remote options
-	remoteOpts := []remote.Option{
-		remote.WithContext(ctx),
-	}
-
-	if opts.Username != "" || opts.Password != "" {
-		auth := &authn.Basic{
-			Username: opts.Username,
-			Password: opts.Password,
-		}
-		remoteOpts = append(remoteOpts, remote.WithAuth(auth))
-	}
+	remoteOpts := v.buildRemoteOptions(ctx, opts)
 
 	// Try to list tags in the repository.
 	// This will tell us if:
@@ -116,57 +97,110 @@ func (v *verifier) VerifyAccess(ctx context.Context, opts VerifyOptions) error {
 	return nil
 }
 
+// buildRepository creates a repository reference from the verify options.
+func (v *verifier) buildRepository(opts VerifyOptions) (name.Repository, error) {
+	refStr := fmt.Sprintf("%s/%s", opts.RegistryEndpoint, opts.Repository)
+
+	nameOpts := []name.Option{name.WeakValidation}
+	if opts.Insecure {
+		nameOpts = append(nameOpts, name.Insecure)
+	}
+
+	repo, err := name.NewRepository(refStr, nameOpts...)
+	if err != nil {
+		return name.Repository{}, fmt.Errorf("parse repository reference: %w", err)
+	}
+
+	return repo, nil
+}
+
+// buildRemoteOptions creates remote options for registry operations.
+func (v *verifier) buildRemoteOptions(ctx context.Context, opts VerifyOptions) []remote.Option {
+	remoteOpts := []remote.Option{
+		remote.WithContext(ctx),
+	}
+
+	if opts.Username != "" || opts.Password != "" {
+		auth := &authn.Basic{
+			Username: opts.Username,
+			Password: opts.Password,
+		}
+		remoteOpts = append(remoteOpts, remote.WithAuth(auth))
+	}
+
+	return remoteOpts
+}
+
+// classifyTransportError handles HTTP transport errors.
+func classifyTransportError(transportErr *transport.Error) error {
+	switch transportErr.StatusCode {
+	case http.StatusUnauthorized:
+		return ErrRegistryAuthRequired
+	case http.StatusForbidden:
+		return ErrRegistryPermissionDenied
+	case http.StatusNotFound:
+		// 404 for tags list is OK - repo might not exist yet
+		// This is fine for push operations
+		return nil
+	default:
+		return nil
+	}
+}
+
+// classifyErrorByMessage checks error message patterns.
+func classifyErrorByMessage(errStr string) error {
+	lowerErr := strings.ToLower(errStr)
+
+	switch {
+	case strings.Contains(lowerErr, "unauthorized"),
+		strings.Contains(lowerErr, "authentication required"):
+		return ErrRegistryAuthRequired
+
+	case strings.Contains(lowerErr, "denied"),
+		strings.Contains(lowerErr, "forbidden"):
+		return ErrRegistryPermissionDenied
+
+	case strings.Contains(lowerErr, "no such host"),
+		strings.Contains(lowerErr, "connection refused"),
+		strings.Contains(lowerErr, "dial tcp"):
+		return fmt.Errorf("%w: %s", ErrRegistryUnreachable, extractErrorDetail(errStr))
+
+	case strings.Contains(lowerErr, "not found"):
+		// Not found is OK - we can still push to create it
+		return nil
+
+	default:
+		return nil
+	}
+}
+
 // classifyRegistryError converts low-level registry errors to actionable errors.
 func classifyRegistryError(err error) error {
 	if err == nil {
 		return nil
 	}
 
-	errStr := err.Error()
-
 	// Check for transport errors (includes HTTP status codes)
 	var transportErr *transport.Error
 	if errors.As(err, &transportErr) {
-		switch transportErr.StatusCode {
-		case http.StatusUnauthorized:
-			return ErrRegistryAuthRequired
-		case http.StatusForbidden:
-			return ErrRegistryPermissionDenied
-		case http.StatusNotFound:
-			// 404 for tags list is OK - repo might not exist yet
-			// This is fine for push operations
-			return nil
+		classifiedErr := classifyTransportError(transportErr)
+		if classifiedErr != nil {
+			return classifiedErr
 		}
 	}
 
 	// Check for common error patterns in the message
-	lowerErr := strings.ToLower(errStr)
-
-	switch {
-	case strings.Contains(lowerErr, "unauthorized") ||
-		strings.Contains(lowerErr, "authentication required"):
-		return ErrRegistryAuthRequired
-
-	case strings.Contains(lowerErr, "denied") ||
-		strings.Contains(lowerErr, "forbidden"):
-		return ErrRegistryPermissionDenied
-
-	case strings.Contains(lowerErr, "no such host") ||
-		strings.Contains(lowerErr, "connection refused") ||
-		strings.Contains(lowerErr, "dial tcp"):
-		return fmt.Errorf("%w: %s", ErrRegistryUnreachable, opts(errStr))
-
-	case strings.Contains(lowerErr, "not found"):
-		// Not found is OK - we can still push to create it
-		return nil
+	classifiedErr := classifyErrorByMessage(err.Error())
+	if classifiedErr != nil {
+		return classifiedErr
 	}
 
 	// Return original error with context
 	return fmt.Errorf("registry access check failed: %w", err)
 }
 
-// opts extracts the most useful part of an error message.
-func opts(errStr string) string {
+// extractErrorDetail extracts the most useful part of an error message.
+func extractErrorDetail(errStr string) string {
 	// Try to extract just the useful part
 	if idx := strings.Index(errStr, ": "); idx > 0 {
 		return errStr[idx+2:]
@@ -186,5 +220,10 @@ func VerifyRegistryAccessWithTimeout(
 
 	v := NewRegistryVerifier()
 
-	return v.VerifyAccess(verifyCtx, opts)
+	err := v.VerifyAccess(verifyCtx, opts)
+	if err != nil {
+		return fmt.Errorf("registry access verification failed: %w", err)
+	}
+
+	return nil
 }
