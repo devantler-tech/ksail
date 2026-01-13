@@ -48,8 +48,6 @@ The supported distributions (x-axis) run on different infrastructure providers (
 | Docker   | ✅ (Kind) | ✅ (K3d) | ✅    |
 | Hetzner  | —         | —        | ✅    |
 
-Vanilla is implemented with Kind; K3s is implemented with K3d.
-
 > [!NOTE]
 > If you want to see more distributions or providers supported, please consider sponsoring development via [GitHub Sponsors](https://github.com/sponsors/devantler). Testing and maintaining distribution x cloud provider support comes with additional financial costs for me, so sponsorships help make that feasible.
 >
