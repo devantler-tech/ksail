@@ -10,10 +10,10 @@ KSail is a Go-based CLI application that provides a unified SDK for spinning up 
 
 **CRITICAL**: Install Docker before using KSail:
 
-- Docker is the only required external dependency for currently supported local clusters (the Docker provider)
+- Docker is the only required external dependency for local clusters (the Docker provider)
 - KSail embeds kubectl, helm, kind, k3d, flux, and argocd as Go libraries
 - No separate installation of these tools is needed
-- Cloud providers (e.g., Hetzner for Talos) are planned and will require cloud access/credentials
+- The Hetzner provider is supported for Talos clusters and requires cloud access/credentials (e.g., `HCLOUD_TOKEN`)
 
 **Required for Documentation**:
 
