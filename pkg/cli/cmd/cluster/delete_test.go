@@ -259,15 +259,16 @@ func TestDelete_CommandFlags(t *testing.T) {
 	require.NotNil(t, providerFlag, "expected --provider flag")
 	require.Equal(t, "p", providerFlag.Shorthand)
 
+	kubeconfigFlag := cmd.Flags().Lookup("kubeconfig")
+	require.NotNil(t, kubeconfigFlag, "expected --kubeconfig flag")
+	require.Equal(t, "k", kubeconfigFlag.Shorthand)
+
 	deleteStorageFlag := cmd.Flags().Lookup("delete-storage")
 	require.NotNil(t, deleteStorageFlag, "expected --delete-storage flag")
 
 	// Verify old flags do NOT exist
 	contextFlag := cmd.Flags().Lookup("context")
 	require.Nil(t, contextFlag, "unexpected --context flag (should be removed)")
-
-	kubeconfigFlag := cmd.Flags().Lookup("kubeconfig")
-	require.Nil(t, kubeconfigFlag, "unexpected --kubeconfig flag (should be removed)")
 
 	distributionFlag := cmd.Flags().Lookup("distribution")
 	require.Nil(t, distributionFlag, "unexpected --distribution flag (should be removed)")

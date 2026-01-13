@@ -443,6 +443,16 @@ func (p *TalosProvisioner) createHetznerCluster(ctx context.Context, clusterName
 		if err != nil {
 			return fmt.Errorf("failed to save kubeconfig: %w", err)
 		}
+
+		// Wait for Kubernetes API server to be stable before reporting success
+		// This ensures the cluster is actually usable when we return
+		_, _ = fmt.Fprintf(p.logWriter, "Waiting for Kubernetes API server to be stable...\n")
+
+		if waitErr := p.waitForKubernetesAPIStable(ctx); waitErr != nil {
+			return fmt.Errorf("failed waiting for Kubernetes API server: %w", waitErr)
+		}
+
+		_, _ = fmt.Fprintf(p.logWriter, "  ✓ Kubernetes API server is stable\n")
 	}
 
 	_, _ = fmt.Fprintf(
@@ -1719,6 +1729,32 @@ func (p *TalosProvisioner) cleanupKubeconfig(clusterName string) error {
 	)
 	if err != nil {
 		return fmt.Errorf("failed to cleanup kubeconfig: %w", err)
+	}
+
+	return nil
+}
+
+// waitForKubernetesAPIStable waits for the Kubernetes API server to be accessible and stable.
+// This is called after saving the kubeconfig to ensure the cluster is actually usable.
+func (p *TalosProvisioner) waitForKubernetesAPIStable(ctx context.Context) error {
+	timeout := 3 * time.Minute
+
+	// Expand kubeconfig path
+	kubeconfigPath, err := iopath.ExpandHomePath(p.options.KubeconfigPath)
+	if err != nil {
+		return fmt.Errorf("failed to expand kubeconfig path: %w", err)
+	}
+
+	// Create kubernetes clientset
+	clientset, err := k8s.NewClientset(kubeconfigPath, "")
+	if err != nil {
+		return fmt.Errorf("failed to create kubernetes client: %w", err)
+	}
+
+	// Wait for API server to be stable (3 consecutive successful responses)
+	err = k8s.WaitForAPIServerStable(ctx, clientset, timeout, 3)
+	if err != nil {
+		return fmt.Errorf("API server not stable: %w", err)
 	}
 
 	return nil

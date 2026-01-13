@@ -27,15 +27,22 @@ The cluster is resolved in the following priority order:
 The provider is resolved in the following priority order:
   1. From --provider flag
   2. From ksail.yaml config file (if present)
-  3. Defaults to Docker`
+  3. Defaults to Docker
+
+The kubeconfig is resolved in the following priority order:
+  1. From --kubeconfig flag
+  2. From KUBECONFIG environment variable
+  3. From ksail.yaml config file (if present)
+  4. Defaults to ~/.kube/config`
 
 // NewDeleteCmd creates and returns the delete command.
 // Delete uses --name and --provider flags to determine the cluster to delete.
 func NewDeleteCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
 	var (
-		nameFlag      string
-		providerFlag  v1alpha1.Provider
-		deleteStorage bool
+		nameFlag       string
+		providerFlag   v1alpha1.Provider
+		kubeconfigFlag string
+		deleteStorage  bool
 	)
 
 	cmd := &cobra.Command{
@@ -50,6 +57,7 @@ func NewDeleteCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
 				runtimeContainer,
 				nameFlag,
 				providerFlag,
+				kubeconfigFlag,
 				deleteStorage,
 			)
 		},
@@ -70,6 +78,14 @@ func NewDeleteCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
 		fmt.Sprintf("Provider to use (%s)", providerFlag.ValidValues()),
 	)
 
+	cmd.Flags().StringVarP(
+		&kubeconfigFlag,
+		"kubeconfig",
+		"k",
+		"",
+		"Path to kubeconfig file for context cleanup",
+	)
+
 	cmd.Flags().BoolVar(
 		&deleteStorage,
 		"delete-storage",
@@ -86,6 +102,7 @@ func runDeleteAction(
 	runtimeContainer *runtime.Runtime,
 	nameFlag string,
 	providerFlag v1alpha1.Provider,
+	kubeconfigFlag string,
 	deleteStorage bool,
 ) error {
 	// Wrap output with StageSeparatingWriter for automatic stage separation
@@ -110,15 +127,16 @@ func runDeleteAction(
 	}
 
 	// Resolve cluster info from flags, config, or kubeconfig
-	resolved, err := lifecycle.ResolveClusterInfo(nameFlag, providerFlag)
+	resolved, err := lifecycle.ResolveClusterInfo(nameFlag, providerFlag, kubeconfigFlag)
 	if err != nil {
 		return err
 	}
 
 	// Create cluster info for provisioner creation
 	clusterInfo := &lifecycle.ClusterInfo{
-		ClusterName: resolved.ClusterName,
-		Provider:    resolved.Provider,
+		ClusterName:    resolved.ClusterName,
+		Provider:       resolved.Provider,
+		KubeconfigPath: resolved.KubeconfigPath,
 	}
 
 	// Create provisioner for the provider

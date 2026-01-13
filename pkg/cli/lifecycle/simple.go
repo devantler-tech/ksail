@@ -86,19 +86,27 @@ func NewSimpleLifecycleCmd(config SimpleLifecycleConfig) *cobra.Command {
 	return cmd
 }
 
-// ResolvedClusterInfo contains the resolved cluster name and provider.
+// ResolvedClusterInfo contains the resolved cluster name, provider, and kubeconfig path.
 type ResolvedClusterInfo struct {
-	ClusterName string
-	Provider    v1alpha1.Provider
+	ClusterName    string
+	Provider       v1alpha1.Provider
+	KubeconfigPath string
 }
 
-// ResolveClusterInfo resolves the cluster name and provider from flags, config, or kubeconfig.
+// ResolveClusterInfo resolves the cluster name, provider, and kubeconfig from flags, config, or kubeconfig.
 // Priority for cluster name: flag > config > kubeconfig context
 // Priority for provider: flag > config > default (Docker)
-func ResolveClusterInfo(nameFlag string, providerFlag v1alpha1.Provider) (*ResolvedClusterInfo, error) {
+// Priority for kubeconfig: flag > env (KUBECONFIG) > config > default (~/.kube/config)
+func ResolveClusterInfo(
+	nameFlag string,
+	providerFlag v1alpha1.Provider,
+	kubeconfigFlag string,
+) (*ResolvedClusterInfo, error) {
 	var clusterName string
 
 	var provider v1alpha1.Provider
+
+	var kubeconfigPath string
 
 	// Try to get values from flags first
 	if nameFlag != "" {
@@ -107,6 +115,10 @@ func ResolveClusterInfo(nameFlag string, providerFlag v1alpha1.Provider) (*Resol
 
 	if providerFlag != "" {
 		provider = providerFlag
+	}
+
+	if kubeconfigFlag != "" {
+		kubeconfigPath = kubeconfigFlag
 	}
 
 	// If we don't have a cluster name yet, try loading from ksail.yaml config
@@ -132,12 +144,17 @@ func ResolveClusterInfo(nameFlag string, providerFlag v1alpha1.Provider) (*Resol
 			if provider == "" && cfg.Spec.Cluster.Provider != "" {
 				provider = cfg.Spec.Cluster.Provider
 			}
+
+			// Get kubeconfig from config if not set by flag
+			if kubeconfigPath == "" && cfg.Spec.Cluster.Connection.Kubeconfig != "" {
+				kubeconfigPath = cfg.Spec.Cluster.Connection.Kubeconfig
+			}
 		}
 	}
 
 	// If we still don't have a cluster name, try detecting from kubeconfig context
 	if clusterName == "" {
-		clusterInfo, err := DetectClusterInfo("", "")
+		clusterInfo, err := DetectClusterInfo(kubeconfigPath, "")
 		if err == nil && clusterInfo != nil {
 			clusterName = clusterInfo.ClusterName
 
@@ -158,9 +175,14 @@ func ResolveClusterInfo(nameFlag string, providerFlag v1alpha1.Provider) (*Resol
 		provider = v1alpha1.ProviderDocker
 	}
 
+	// Resolve kubeconfig path using the standard resolution
+	// This handles: flag > env > default
+	kubeconfigPath = resolveKubeconfigPath(kubeconfigPath)
+
 	return &ResolvedClusterInfo{
-		ClusterName: clusterName,
-		Provider:    provider,
+		ClusterName:    clusterName,
+		Provider:       provider,
+		KubeconfigPath: kubeconfigPath,
 	}, nil
 }
 
@@ -175,7 +197,8 @@ func runSimpleLifecycleAction(
 	cmd.SetOut(stageWriter)
 
 	// Resolve cluster info from flags, config, or kubeconfig
-	resolved, err := ResolveClusterInfo(nameFlag, providerFlag)
+	// Empty kubeconfig flag - simple lifecycle commands don't need kubeconfig cleanup
+	resolved, err := ResolveClusterInfo(nameFlag, providerFlag, "")
 	if err != nil {
 		return err
 	}
@@ -200,8 +223,9 @@ func runSimpleLifecycleAction(
 
 	// Create cluster info for provisioner creation
 	clusterInfo := &ClusterInfo{
-		ClusterName: resolved.ClusterName,
-		Provider:    resolved.Provider,
+		ClusterName:    resolved.ClusterName,
+		Provider:       resolved.Provider,
+		KubeconfigPath: resolved.KubeconfigPath,
 	}
 
 	provisioner, err := CreateMinimalProvisionerForProvider(clusterInfo)
