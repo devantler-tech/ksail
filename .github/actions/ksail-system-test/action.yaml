@@ -135,19 +135,12 @@ runs:
         HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
         GHCR_USER: ${{ inputs.ghcr-user }}
         GHCR_TOKEN: ${{ inputs.ghcr-token }}
-        ARGS: ${{ inputs.args }}
       run: |
         mkdir -p "$GITOPS_PATH"
         if [ ! -f "$GITOPS_PATH/kustomization.yaml" ]; then
           echo "apiVersion: kustomize.config.k8s.io/v1beta1" > "$GITOPS_PATH/kustomization.yaml"
           echo "kind: Kustomization" >> "$GITOPS_PATH/kustomization.yaml"
           echo "resources: []" >> "$GITOPS_PATH/kustomization.yaml"
-        fi
-        # Extract registry from args and inject credentials for push
-        if [[ "$ARGS" == *"--local-registry"* ]] && [[ "$ARGS" == *"ghcr.io"* ]] && [[ -n "$GHCR_USER" ]] && [[ -n "$GHCR_TOKEN" ]]; then
-          # Extract the registry path from args (e.g., ghcr.io/org/repo/path)
-          REGISTRY_PATH=$(echo "$ARGS" | grep -oP '(?<=--local-registry\s)[^\s]+' | sed 's/.*@//')
-          export KSAIL_REGISTRY="${GHCR_USER}:${GHCR_TOKEN}@${REGISTRY_PATH}"
         fi
         ksail workload push --path "$GITOPS_PATH/"
         ksail workload reconcile
