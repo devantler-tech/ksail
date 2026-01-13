@@ -70,7 +70,7 @@ func (f fakeFactoryWithClusters) Create(
 }
 
 //nolint:paralleltest // uses t.Chdir
-func TestListCmd_NoClusterFound_SingleDistribution(t *testing.T) {
+func TestListCmd_NoClusterFound_DockerProvider(t *testing.T) {
 	cmd := &cobra.Command{Use: "list"}
 
 	var buf bytes.Buffer
@@ -85,15 +85,15 @@ func TestListCmd_NoClusterFound_SingleDistribution(t *testing.T) {
 		},
 	}
 
-	// Filter to single distribution - no output for empty list
-	err := clusterpkg.HandleListRunE(cmd, "Vanilla", deps)
+	// Filter to Docker provider - no output for empty list
+	err := clusterpkg.HandleListRunE(cmd, v1alpha1.ProviderDocker, deps)
 	require.NoError(t, err)
 
 	snaps.MatchSnapshot(t, buf.String())
 }
 
 //nolint:paralleltest // uses t.Chdir
-func TestListCmd_SingleClusterFound_SingleDistribution(t *testing.T) {
+func TestListCmd_SingleClusterFound_DockerProvider(t *testing.T) {
 	cmd := &cobra.Command{Use: "list"}
 
 	var buf bytes.Buffer
@@ -108,15 +108,15 @@ func TestListCmd_SingleClusterFound_SingleDistribution(t *testing.T) {
 		},
 	}
 
-	// Filter to single distribution
-	err := clusterpkg.HandleListRunE(cmd, "Vanilla", deps)
+	// Filter to Docker provider
+	err := clusterpkg.HandleListRunE(cmd, v1alpha1.ProviderDocker, deps)
 	require.NoError(t, err)
 
 	snaps.MatchSnapshot(t, buf.String())
 }
 
 //nolint:paralleltest // uses t.Chdir
-func TestListCmd_MultipleClustersFound_SingleDistribution(t *testing.T) {
+func TestListCmd_MultipleClustersFound_DockerProvider(t *testing.T) {
 	cmd := &cobra.Command{Use: "list"}
 
 	var buf bytes.Buffer
@@ -133,15 +133,15 @@ func TestListCmd_MultipleClustersFound_SingleDistribution(t *testing.T) {
 		},
 	}
 
-	// Filter to single distribution
-	err := clusterpkg.HandleListRunE(cmd, "Vanilla", deps)
+	// Filter to Docker provider
+	err := clusterpkg.HandleListRunE(cmd, v1alpha1.ProviderDocker, deps)
 	require.NoError(t, err)
 
 	snaps.MatchSnapshot(t, buf.String())
 }
 
 //nolint:paralleltest // uses t.Chdir
-func TestListCmd_AllDistributions(t *testing.T) {
+func TestListCmd_AllProviders(t *testing.T) {
 	cmd := &cobra.Command{Use: "list"}
 
 	var buf bytes.Buffer
@@ -150,19 +150,15 @@ func TestListCmd_AllDistributions(t *testing.T) {
 	cmd.SetErr(&buf)
 	cmd.SetContext(context.Background())
 
-	// Create a mock factory that returns test-cluster for Kind,
-	// empty for others.
+	// Create a mock factory that returns test-cluster for all distributions
 	deps := clusterpkg.ListDeps{
-		DistributionFactoryCreator: func(dist v1alpha1.Distribution) clusterprovisioner.Factory {
-			if dist == v1alpha1.DistributionVanilla {
-				return fakeFactoryWithClusters{clusters: []string{"test-cluster"}}
-			}
-
-			return fakeFactoryWithClusters{clusters: []string{}}
+		DistributionFactoryCreator: func(_ v1alpha1.Distribution) clusterprovisioner.Factory {
+			return fakeFactoryWithClusters{clusters: []string{"test-cluster"}}
 		},
 	}
 
-	// No filter = list all distributions (default behavior)
+	// No filter = list all providers (default behavior)
+	// Note: Hetzner will be skipped since no HCLOUD_TOKEN is set
 	err := clusterpkg.HandleListRunE(cmd, "", deps)
 	require.NoError(t, err)
 
@@ -187,9 +183,12 @@ func TestListCmd_ListError(t *testing.T) {
 		},
 	}
 
-	err := clusterpkg.HandleListRunE(cmd, "", deps)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "failed to list")
+	// List errors are now logged as warnings and don't cause command failure
+	err := clusterpkg.HandleListRunE(cmd, v1alpha1.ProviderDocker, deps)
+	require.NoError(t, err) // No longer returns error - logs warning instead
+
+	// Verify warning was logged
+	require.Contains(t, buf.String(), "Warning")
 }
 
 //nolint:paralleltest // uses t.Chdir
@@ -205,7 +204,7 @@ func TestHandleListRunE_Success(t *testing.T) {
 		},
 	}
 
-	err := clusterpkg.HandleListRunE(cmd, "Vanilla", deps)
+	err := clusterpkg.HandleListRunE(cmd, v1alpha1.ProviderDocker, deps)
 	require.NoError(t, err)
 }
 
@@ -225,13 +224,16 @@ func TestListCmd_FactoryError(t *testing.T) {
 		},
 	}
 
-	err := clusterpkg.HandleListRunE(cmd, "Vanilla", deps)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "failed to create provisioner")
+	// Factory errors are now logged as warnings and don't cause command failure
+	err := clusterpkg.HandleListRunE(cmd, v1alpha1.ProviderDocker, deps)
+	require.NoError(t, err) // No longer returns error - logs warning instead
+
+	// Verify warning was logged
+	require.Contains(t, buf.String(), "Warning")
 }
 
 //nolint:paralleltest // uses t.Chdir
-func TestListCmd_InvalidDistributionFilter(t *testing.T) {
+func TestListCmd_InvalidProviderFilter(t *testing.T) {
 	cmd := &cobra.Command{Use: "list"}
 
 	var buf bytes.Buffer
@@ -242,9 +244,12 @@ func TestListCmd_InvalidDistributionFilter(t *testing.T) {
 
 	deps := clusterpkg.ListDeps{}
 
-	err := clusterpkg.HandleListRunE(cmd, "InvalidDistro", deps)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "invalid distribution filter")
+	// Invalid provider filter is logged as warning, command still succeeds
+	err := clusterpkg.HandleListRunE(cmd, "InvalidProvider", deps)
+	require.NoError(t, err)
+
+	// Output should show no clusters found since invalid provider returns nothing
+	require.Contains(t, buf.String(), "No clusters found")
 }
 
 // fakeFactoryWithErrors creates a provisioner that returns an error.

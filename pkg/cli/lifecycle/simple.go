@@ -115,21 +115,16 @@ func ResolveClusterInfo(nameFlag string, providerFlag v1alpha1.Provider) (*Resol
 		cfg, err := cfgManager.LoadConfigSilent()
 
 		if err == nil && cfg != nil {
-			// Get cluster name from config
+			// Get cluster name from distribution config
 			if cfgManager.DistributionConfig != nil {
-				switch distCfg := cfgManager.DistributionConfig.Active().(type) {
-				case *v1alpha4.Cluster:
-					if distCfg.Name != "" {
-						clusterName = distCfg.Name
-					}
-				case *k3dv1alpha5.SimpleConfig:
-					if distCfg.Name != "" {
-						clusterName = distCfg.Name
-					}
-				case *talosconfigmanager.Configs:
-					if distCfg.Name != "" {
-						clusterName = distCfg.Name
-					}
+				distCfg := cfgManager.DistributionConfig
+				switch {
+				case distCfg.Kind != nil && distCfg.Kind.Name != "":
+					clusterName = distCfg.Kind.Name
+				case distCfg.K3d != nil && distCfg.K3d.Name != "":
+					clusterName = distCfg.K3d.Name
+				case distCfg.Talos != nil && distCfg.Talos.GetClusterName() != "":
+					clusterName = distCfg.Talos.GetClusterName()
 				}
 			}
 

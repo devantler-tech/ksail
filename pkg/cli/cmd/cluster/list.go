@@ -35,6 +35,12 @@ func AllProviders() []v1alpha1.Provider {
 	}
 }
 
+// clusterResult holds a cluster name with its provider for display purposes.
+type clusterResult struct {
+	Provider    v1alpha1.Provider
+	ClusterName string
+}
+
 const listLongDesc = `List all Kubernetes clusters managed by KSail.
 
 By default, lists clusters from all distributions across all providers.
@@ -102,11 +108,6 @@ func HandleListRunE(
 	providers := resolveProviders(providerFilter)
 
 	// Collect clusters from all providers
-	type clusterResult struct {
-		Provider    v1alpha1.Provider
-		ClusterName string
-	}
-
 	var allResults []clusterResult
 
 	for _, prov := range providers {
@@ -264,10 +265,7 @@ func createEmptyDistributionConfig(
 func displayListResults(
 	writer io.Writer,
 	providers []v1alpha1.Provider,
-	results []struct {
-		Provider    v1alpha1.Provider
-		ClusterName string
-	},
+	results []clusterResult,
 ) {
 	if len(results) == 0 {
 		_, _ = fmt.Fprintln(writer, "No clusters found.")
