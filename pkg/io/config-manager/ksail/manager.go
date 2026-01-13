@@ -139,38 +139,20 @@ func (m *ConfigManager) loadConfigWithOptions(
 	}
 
 	// Unmarshal and apply defaults
-	flagOverrides := m.captureChangedFlagValues()
-
-	err := m.unmarshalAndApplyDefaults()
+	err := m.unmarshalWithFlagOverrides()
 	if err != nil {
 		return nil, err
 	}
 
-	err = m.applyFlagOverrides(flagOverrides)
-	if err != nil {
-		return nil, err
-	}
-
-	m.applyGitOpsAwareDefaults(flagOverrides)
-	m.applyDistributionConfigDefaults()
-
-	// Skip validation and distribution config loading when:
-	// 1. We're in silent mode (probing for config existence)
-	// 2. No config file was found (validation of defaults is meaningless)
-	// The caller can check IsConfigFileFound() to determine if config was loaded.
+	// Skip validation when probing for config existence (silent mode with no config file)
 	if silent && !m.configFileFound {
 		m.configLoaded = true
 
 		return m.Config, nil
 	}
 
-	err = m.validateConfig()
-	if err != nil {
-		return nil, err
-	}
-
-	// Load distribution config after validation (reuses cached configs from validation)
-	err = m.loadAndCacheDistributionConfig()
+	// Validate and finalize configuration
+	err = m.validateAndFinalizeConfig()
 	if err != nil {
 		return nil, err
 	}
@@ -182,6 +164,37 @@ func (m *ConfigManager) loadConfigWithOptions(
 	m.configLoaded = true
 
 	return m.Config, nil
+}
+
+// unmarshalWithFlagOverrides unmarshals config and applies all overrides and defaults.
+func (m *ConfigManager) unmarshalWithFlagOverrides() error {
+	flagOverrides := m.captureChangedFlagValues()
+
+	err := m.unmarshalAndApplyDefaults()
+	if err != nil {
+		return err
+	}
+
+	err = m.applyFlagOverrides(flagOverrides)
+	if err != nil {
+		return err
+	}
+
+	m.applyGitOpsAwareDefaults(flagOverrides)
+	m.applyDistributionConfigDefaults()
+
+	return nil
+}
+
+// validateAndFinalizeConfig validates the config and loads distribution-specific configuration.
+func (m *ConfigManager) validateAndFinalizeConfig() error {
+	err := m.validateConfig()
+	if err != nil {
+		return err
+	}
+
+	// Load distribution config after validation (reuses cached configs from validation)
+	return m.loadAndCacheDistributionConfig()
 }
 
 func (m *ConfigManager) readConfig(silent bool) error {
