@@ -143,7 +143,7 @@ func ResolveClusterInfo(
 		cfgManager := ksailconfigmanager.NewConfigManager(nil)
 		cfg, err := cfgManager.LoadConfigSilent()
 
-		if err == nil && cfg != nil {
+		if err == nil && cfg != nil && cfgManager.IsConfigFileFound() {
 			// Get cluster name from distribution config
 			if cfgManager.DistributionConfig != nil {
 				distCfg := cfgManager.DistributionConfig

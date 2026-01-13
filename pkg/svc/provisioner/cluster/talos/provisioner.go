@@ -21,6 +21,7 @@ import (
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
 	"github.com/devantler-tech/ksail/v5/pkg/k8s"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider"
+	dockerprovider "github.com/devantler-tech/ksail/v5/pkg/svc/provider/docker"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider/hetzner"
 	clustererrors "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/errors"
 	"github.com/docker/docker/api/types/container"
@@ -1190,10 +1191,18 @@ func (p *TalosProvisioner) Start(ctx context.Context, name string) error {
 			return fmt.Errorf("failed to start cluster %q: %w", clusterName, err)
 		}
 
-		// Wait for cluster to be ready (same checks as during creation)
-		err = p.waitForHetznerClusterReadyAfterStart(ctx, clusterName)
-		if err != nil {
-			return fmt.Errorf("cluster started but not ready: %w", err)
+		// Wait for cluster to be ready based on provider type
+		switch p.infraProvider.(type) {
+		case *hetzner.Provider:
+			// Hetzner requires special readiness checks with server discovery
+			err = p.waitForHetznerClusterReadyAfterStart(ctx, clusterName)
+			if err != nil {
+				return fmt.Errorf("cluster started but not ready: %w", err)
+			}
+		case *dockerprovider.Provider:
+			// Docker containers are immediately ready after start
+			// The Talos API may take a moment to respond, but we don't need special checks
+			// since the Docker provider's StartNodes already waited for containers to start
 		}
 
 		_, _ = fmt.Fprintf(p.logWriter, "Successfully started Talos cluster %q\n", clusterName)

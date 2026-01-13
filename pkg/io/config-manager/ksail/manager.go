@@ -154,6 +154,16 @@ func (m *ConfigManager) loadConfigWithOptions(
 	m.applyGitOpsAwareDefaults(flagOverrides)
 	m.applyDistributionConfigDefaults()
 
+	// Skip validation and distribution config loading when:
+	// 1. We're in silent mode (probing for config existence)
+	// 2. No config file was found (validation of defaults is meaningless)
+	// The caller can check IsConfigFileFound() to determine if config was loaded.
+	if silent && !m.configFileFound {
+		m.configLoaded = true
+
+		return m.Config, nil
+	}
+
 	err = m.validateConfig()
 	if err != nil {
 		return nil, err
