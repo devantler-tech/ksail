@@ -437,6 +437,13 @@ func (p *TalosProvisioner) createHetznerCluster(ctx context.Context, clusterName
 		return fmt.Errorf("failed to bootstrap cluster: %w", err)
 	}
 
+	// Save talosconfig
+	if p.options.TalosconfigPath != "" {
+		if err = p.saveHetznerTalosconfig(configBundle); err != nil {
+			return fmt.Errorf("failed to save talosconfig: %w", err)
+		}
+	}
+
 	// Save kubeconfig
 	if p.options.KubeconfigPath != "" {
 		_, _ = fmt.Fprintf(p.logWriter, "Fetching and saving kubeconfig...\n")
@@ -851,6 +858,33 @@ func (p *TalosProvisioner) saveHetznerKubeconfig(
 	}
 
 	_, _ = fmt.Fprintf(p.logWriter, "  ✓ Kubeconfig saved to %s\n", kubeconfigPath)
+
+	return nil
+}
+
+// saveHetznerTalosconfig saves the talosconfig for a Hetzner cluster.
+func (p *TalosProvisioner) saveHetznerTalosconfig(configBundle *bundle.Bundle) error {
+	// Expand tilde in talosconfig path
+	talosconfigPath, err := iopath.ExpandHomePath(p.options.TalosconfigPath)
+	if err != nil {
+		return fmt.Errorf("failed to expand talosconfig path: %w", err)
+	}
+
+	// Ensure talosconfig directory exists
+	talosconfigDir := filepath.Dir(talosconfigPath)
+	if talosconfigDir != "" && talosconfigDir != "." {
+		mkdirErr := os.MkdirAll(talosconfigDir, stateDirectoryPermissions)
+		if mkdirErr != nil {
+			return fmt.Errorf("failed to create talosconfig directory: %w", mkdirErr)
+		}
+	}
+
+	// Save the talosconfig
+	if saveErr := configBundle.TalosConfig().Save(talosconfigPath); saveErr != nil {
+		return fmt.Errorf("failed to save talosconfig: %w", saveErr)
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "Talosconfig saved to %s\n", talosconfigPath)
 
 	return nil
 }
