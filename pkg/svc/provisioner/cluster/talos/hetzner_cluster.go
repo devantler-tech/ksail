@@ -94,7 +94,7 @@ func hetznerServerToNodeInfo(
 	server *hcloud.Server,
 	nodeType machine.Type,
 ) (*provision.NodeInfo, error) {
-	ips := make([]netip.Addr, 0, 2)
+	ips := make([]netip.Addr, 0, initialIPCapacity)
 
 	// Add public IPv4
 	if server.PublicNet.IPv4.IP != nil {

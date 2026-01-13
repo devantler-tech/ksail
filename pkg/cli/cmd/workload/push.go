@@ -151,6 +151,8 @@ func runPushCommand(cmd *cobra.Command, args []string, pathFlag string, validate
 		Repository:       params.Repository,
 		Version:          params.Ref,
 		GitOpsEngine:     params.GitOpsEngine,
+		Username:         params.Username,
+		Password:         params.Password,
 	})
 	if err != nil {
 		return fmt.Errorf("build and push oci artifact: %w", err)
@@ -174,6 +176,8 @@ type pushParams struct {
 	Ref          string
 	SourceDir    string
 	GitOpsEngine v1alpha1.GitOpsEngine
+	Username     string
+	Password     string
 }
 
 // resolvePushParams resolves all push parameters from OCI reference, flags, config, or auto-detection.
@@ -207,11 +211,16 @@ func newPushParamsFromSources(
 	params := &pushParams{Host: "localhost"}
 
 	params.SourceDir = resolveSourceDir(cfg, pathFlag)
-	params.Host = resolveHost(ociRef)
+	params.Host = resolveHost(ociRef, cfg)
 	params.Port = resolvePort(cfg, ociRef)
 	params.Repository = resolveRepository(ociRef, params.SourceDir)
 	params.Ref = resolveRef(ociRef)
 	params.GitOpsEngine = resolveGitOpsEngine(cfg)
+
+	// Resolve credentials from config (with environment variable expansion)
+	username, password := cfg.Spec.Cluster.LocalRegistry.ResolveCredentials()
+	params.Username = username
+	params.Password = password
 
 	return params
 }
@@ -229,10 +238,15 @@ func resolveSourceDir(cfg *v1alpha1.Cluster, pathFlag string) string {
 	return v1alpha1.DefaultSourceDirectory
 }
 
-// resolveHost extracts host from OCI ref or returns default.
-func resolveHost(ociRef *oci.Reference) string {
+// resolveHost extracts host from OCI ref, config, or returns default.
+func resolveHost(ociRef *oci.Reference, cfg *v1alpha1.Cluster) string {
 	if ociRef != nil && ociRef.Host != "" {
 		return ociRef.Host
+	}
+
+	// Check if config has a registry configured
+	if cfg.Spec.Cluster.LocalRegistry.Enabled() {
+		return cfg.Spec.Cluster.LocalRegistry.ResolvedHost()
 	}
 
 	return "localhost"
@@ -244,16 +258,11 @@ func resolvePort(cfg *v1alpha1.Cluster, ociRef *oci.Reference) int32 {
 		return ociRef.Port
 	}
 
-	localRegistryEnabled := cfg.Spec.Cluster.LocalRegistry.Enabled
-	if !localRegistryEnabled {
+	if !cfg.Spec.Cluster.LocalRegistry.Enabled() {
 		return 0 // Will trigger auto-detection
 	}
 
-	if cfg.Spec.Cluster.LocalRegistry.HostPort > 0 {
-		return cfg.Spec.Cluster.LocalRegistry.HostPort
-	}
-
-	return v1alpha1.DefaultLocalRegistryPort
+	return cfg.Spec.Cluster.LocalRegistry.ResolvedPort()
 }
 
 // resolveRepository determines repository name from OCI ref or source directory.

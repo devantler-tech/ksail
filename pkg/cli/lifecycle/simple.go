@@ -19,9 +19,24 @@ import (
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
 
-// ErrClusterNameRequired indicates that a cluster name is required but was not provided.
-var ErrClusterNameRequired = errors.New(
-	"cluster name is required: use --name flag, create a ksail.yaml config, or set a kubeconfig context",
+// Lifecycle errors.
+var (
+	// ErrClusterNameRequired indicates that a cluster name is required but was not provided.
+	ErrClusterNameRequired = errors.New(
+		"cluster name is required: use --name flag, create a ksail.yaml config, or set a kubeconfig context",
+	)
+
+	// ErrClusterNotFoundInDistributions indicates the cluster was not found in any distribution.
+	ErrClusterNotFoundInDistributions = errors.New("cluster not found in any distribution")
+
+	// ErrCreateNotSupported indicates create is not supported without specifying distribution.
+	ErrCreateNotSupported = errors.New("create not supported without specifying distribution")
+
+	// ErrUnknownDistribution indicates an unknown distribution was specified.
+	ErrUnknownDistribution = errors.New("unknown distribution")
+
+	// ErrUnsupportedDistribution indicates an unsupported distribution was specified.
+	ErrUnsupportedDistribution = errors.New("unsupported distribution")
 )
 
 // SimpleLifecycleConfig defines the configuration for a simple lifecycle command.
@@ -94,9 +109,9 @@ type ResolvedClusterInfo struct {
 }
 
 // ResolveClusterInfo resolves the cluster name, provider, and kubeconfig from flags, config, or kubeconfig.
-// Priority for cluster name: flag > config > kubeconfig context
-// Priority for provider: flag > config > default (Docker)
-// Priority for kubeconfig: flag > env (KUBECONFIG) > config > default (~/.kube/config)
+// Priority for cluster name: flag > config > kubeconfig context.
+// Priority for provider: flag > config > default (Docker).
+// Priority for kubeconfig: flag > env (KUBECONFIG) > config > default (~/.kube/config).
 func ResolveClusterInfo(
 	nameFlag string,
 	providerFlag v1alpha1.Provider,
@@ -264,7 +279,7 @@ func GetCurrentKubeContext() (string, error) {
 	case v1alpha1.DistributionTalos:
 		return "admin@" + clusterInfo.ClusterName, nil
 	default:
-		return "", fmt.Errorf("unknown distribution: %s", clusterInfo.Distribution)
+		return "", fmt.Errorf("%w: %s", ErrUnknownDistribution, clusterInfo.Distribution)
 	}
 }
 
@@ -372,7 +387,9 @@ func CreateMinimalProvisionerForProvider(
 // createDockerMultiProvisioner creates a provisioner that tries multiple distributions.
 //
 //nolint:ireturn // Interface return is required for provisioner abstraction
-func createDockerMultiProvisioner(clusterName string) (clusterprovisioner.ClusterProvisioner, error) {
+func createDockerMultiProvisioner(
+	clusterName string,
+) (clusterprovisioner.ClusterProvisioner, error) {
 	return &multiDistributionProvisioner{
 		clusterName: clusterName,
 	}, nil
@@ -414,7 +431,7 @@ func (m *multiDistributionProvisioner) Start(ctx context.Context, name string) e
 		}
 	}
 
-	return fmt.Errorf("cluster %q not found in any distribution", clusterName)
+	return fmt.Errorf("%w: %s", ErrClusterNotFoundInDistributions, clusterName)
 }
 
 // Stop stops the cluster by trying each distribution's provisioner.
@@ -446,7 +463,7 @@ func (m *multiDistributionProvisioner) Stop(ctx context.Context, name string) er
 		}
 	}
 
-	return fmt.Errorf("cluster %q not found in any distribution", clusterName)
+	return fmt.Errorf("%w: %s", ErrClusterNotFoundInDistributions, clusterName)
 }
 
 // Delete deletes the cluster by trying each distribution's provisioner.
@@ -478,7 +495,7 @@ func (m *multiDistributionProvisioner) Delete(ctx context.Context, name string) 
 		}
 	}
 
-	return fmt.Errorf("cluster %q not found in any distribution", clusterName)
+	return fmt.Errorf("%w: %s", ErrClusterNotFoundInDistributions, clusterName)
 }
 
 // Exists checks if the cluster exists in any distribution.
@@ -542,7 +559,7 @@ func (m *multiDistributionProvisioner) List(ctx context.Context) ([]string, erro
 
 // Create is not supported by the multi-distribution provisioner.
 func (m *multiDistributionProvisioner) Create(_ context.Context, _ string) error {
-	return errors.New("create not supported without specifying distribution")
+	return ErrCreateNotSupported
 }
 
 // createProvisionerForDistribution creates a provisioner for a specific distribution.
@@ -578,6 +595,6 @@ func createProvisionerForDistribution(
 		)
 
 	default:
-		return nil, fmt.Errorf("unsupported distribution: %s", dist)
+		return nil, fmt.Errorf("%w: %s", ErrUnsupportedDistribution, dist)
 	}
 }

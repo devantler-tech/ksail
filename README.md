@@ -34,7 +34,7 @@ Setting up and operating Kubernetes clusters is a skill of its own, often requir
 The binary works on all major operating systems and modern CPU architectures:
 
 | OS                   | Arch            |
-|----------------------|-----------------|
+| -------------------- | --------------- |
 | 🐧 Linux             | amd64 and arm64 |
 |  MacOS              | arm64           |
 | ⊞ Windows (untested) | amd64 and arm64 |
@@ -43,10 +43,10 @@ The binary works on all major operating systems and modern CPU architectures:
 
 The supported distributions (x-axis) run on different infrastructure providers (y-axis). You need to have access to at least one provider for your chosen distribution for KSail to create and manage the cluster.
 
-| Provider | Vanilla   | K3s      | Talos     |
-|----------|-----------|----------|-----------|
-| Docker   | ✅ (Kind) | ✅ (K3d) | ✅       |
-| Hetzner  | —          | —        | 🚧 next  |
+| Provider | Vanilla   | K3s      | Talos   |
+| -------- | --------- | -------- | ------- |
+| Docker   | ✅ (Kind) | ✅ (K3d) | ✅      |
+| Hetzner  | —         | —        | 🚧 next |
 
 Vanilla is implemented with Kind; K3s is implemented with K3d.
 
@@ -115,7 +115,7 @@ ksail cluster connect
 KSail is a powerful tool that can be used in many different ways. Here are some projects that use KSail in their setup:
 
 | Project                                                               | Description         | Type     |
-|-----------------------------------------------------------------------|---------------------|----------|
+| --------------------------------------------------------------------- | ------------------- | -------- |
 | [devantler-tech/platform](https://github.com/devantler-tech/platform) | My personal homelab | Platform |
 
 If you use KSail in your project, feel free to open a PR to add it to the list, so others can see how you use KSail.
@@ -123,6 +123,13 @@ If you use KSail in your project, feel free to open a PR to add it to the list, 
 ## Presentations
 
 - **[KSail - a Kubernetes SDK for local GitOps development and CI](https://youtu.be/Q-Hfn_-B7p8?si=2Uec_kld--fNw3gm)** - A presentation on KSail at KCD2024 (Early version of KSail that was built in .NET).
+
+## Blog Posts
+
+- [Local Kubernetes Development with KSail and Kind](https://devantler.tech/local-kubernetes-development-with-ksail-and-kind/)
+- [Local Kubernetes Development with KSail and K3d](https://devantler.tech/local-kubernetes-development-with-ksail-and-k3d/)
+- [Local Kubernetes Development with KSail and Talos](https://devantler.tech/local-kubernetes-development-with-ksail-and-talos/)
+- [Creating Development Kubernetes Clusters on Hetzner with KSail and Talos](https://devantler.tech/creating-development-kubernetes-clusters-on-hetzner-with-ksail-and-talos/)
 
 ## Star History
 

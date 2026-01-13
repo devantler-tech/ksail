@@ -450,22 +450,19 @@ func (v *Validator) validateRegistry(
 	config *v1alpha1.Cluster,
 	result *validator.ValidationResult,
 ) {
-	port := config.Spec.Cluster.LocalRegistry.HostPort
-
-	enabled := config.Spec.Cluster.LocalRegistry.Enabled
-
-	if enabled {
-		if port <= 0 || port > 65535 {
-			result.AddError(validator.ValidationError{
-				Field:         "spec.cluster.localRegistry.hostPort",
-				Message:       "localRegistry.hostPort must be between 1 and 65535 when the registry is enabled",
-				CurrentValue:  port,
-				ExpectedValue: "1-65535",
-				FixSuggestion: "Choose a valid TCP port (e.g., 5050) for spec.cluster.localRegistry.hostPort",
-			})
-		}
-
+	if !config.Spec.Cluster.LocalRegistry.Enabled() {
 		return
+	}
+
+	port := config.Spec.Cluster.LocalRegistry.ResolvedPort()
+	if port <= 0 || port > 65535 {
+		result.AddError(validator.ValidationError{
+			Field:         "spec.cluster.localRegistry.registry",
+			Message:       "registry port must be between 1 and 65535",
+			CurrentValue:  port,
+			ExpectedValue: "1-65535",
+			FixSuggestion: "Specify a valid port in the registry spec (e.g., localhost:5050)",
+		})
 	}
 }
 

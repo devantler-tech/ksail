@@ -163,7 +163,7 @@ func PrepareK3dConfigWithMirrors(
 	// - Sets up DNS resolution so workloads can access the registry by name
 	// - Connects the registry to the cluster network
 	// - Manages the registry lifecycle with the cluster
-	if clusterCfg.Spec.Cluster.LocalRegistry.Enabled {
+	if clusterCfg.Spec.Cluster.LocalRegistry.Enabled() {
 		configureK3dNativeLocalRegistry(clusterCfg, k3dConfig, clusterName, updatedMap)
 	}
 
@@ -229,8 +229,8 @@ func configureK3dNativeLocalRegistry(
 		if err == nil && existingPort > 0 {
 			hostPort = existingPort
 		}
-	} else if clusterCfg.Spec.Cluster.LocalRegistry.HostPort > 0 {
-		hostPort = int(clusterCfg.Spec.Cluster.LocalRegistry.HostPort)
+	} else if clusterCfg.Spec.Cluster.LocalRegistry.Enabled() {
+		hostPort = int(clusterCfg.Spec.Cluster.LocalRegistry.ResolvedPort())
 	}
 
 	// Configure K3d to create and manage the local registry.

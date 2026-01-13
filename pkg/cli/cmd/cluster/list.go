@@ -2,6 +2,7 @@ package cluster
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -17,6 +18,9 @@ import (
 	"github.com/spf13/cobra"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
+
+// ErrUnsupportedProvider indicates an unsupported provider was specified.
+var ErrUnsupportedProvider = errors.New("unsupported provider")
 
 // AllDistributions returns all supported distributions.
 func AllDistributions() []v1alpha1.Distribution {
@@ -114,7 +118,12 @@ func HandleListRunE(
 		clusters, err := getProviderClusters(cmd.Context(), deps, prov)
 		if err != nil {
 			// Log warning but continue with other providers
-			_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Warning: failed to list %s clusters: %v\n", prov, err)
+			_, _ = fmt.Fprintf(
+				cmd.ErrOrStderr(),
+				"Warning: failed to list %s clusters: %v\n",
+				prov,
+				err,
+			)
 
 			continue
 		}
@@ -154,7 +163,7 @@ func getProviderClusters(
 	case v1alpha1.ProviderHetzner:
 		return getHetznerClusters(ctx, deps)
 	default:
-		return nil, fmt.Errorf("unsupported provider: %s", provider)
+		return nil, fmt.Errorf("%w: %s", ErrUnsupportedProvider, provider)
 	}
 }
 

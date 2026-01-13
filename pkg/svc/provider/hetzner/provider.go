@@ -17,6 +17,18 @@ const (
 	DefaultActionTimeout = 5 * time.Minute
 	// DefaultOperationTimeout is the timeout for individual operations.
 	DefaultOperationTimeout = 2 * time.Minute
+	// DefaultPollingInterval is the interval between status checks.
+	DefaultPollingInterval = 2 * time.Second
+	// DefaultDeleteRetryDelay is the delay between delete retry attempts.
+	DefaultDeleteRetryDelay = 2 * time.Second
+	// DefaultPreDeleteDelay is the delay before deleting infrastructure resources.
+	DefaultPreDeleteDelay = 5 * time.Second
+	// MaxDeleteRetries is the maximum number of retries for resource deletion.
+	MaxDeleteRetries = 5
+	// IPv4CIDRBits is the number of bits in an IPv4 CIDR mask for 0.0.0.0/0.
+	IPv4CIDRBits = 32
+	// IPv6CIDRBits is the number of bits in an IPv6 CIDR mask for ::/0.
+	IPv6CIDRBits = 128
 )
 
 // ErrHetznerActionFailed indicates that a Hetzner action failed.
@@ -100,7 +112,11 @@ func (p *Provider) StopNodes(ctx context.Context, clusterName string) error {
 		if action != nil {
 			waitErr := p.waitForAction(ctx, action)
 			if waitErr != nil {
-				return fmt.Errorf("failed waiting for shutdown action on %s: %w", node.Name, waitErr)
+				return fmt.Errorf(
+					"failed waiting for shutdown action on %s: %w",
+					node.Name,
+					waitErr,
+				)
 			}
 		}
 	}
@@ -118,13 +134,17 @@ func (p *Provider) waitForServersStatus(
 	ctx, cancel := context.WithTimeout(ctx, DefaultActionTimeout)
 	defer cancel()
 
-	ticker := time.NewTicker(2 * time.Second)
+	ticker := time.NewTicker(DefaultPollingInterval)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf("timeout waiting for servers to reach status %s: %w", desiredStatus, ctx.Err())
+			return fmt.Errorf(
+				"timeout waiting for servers to reach status %s: %w",
+				desiredStatus,
+				ctx.Err(),
+			)
 		case <-ticker.C:
 			allReady := true
 
@@ -605,6 +625,7 @@ func (p *Provider) waitForAction(ctx context.Context, action *hcloud.Action) err
 	defer cancel()
 
 	// Poll for action completion
+	//nolint:staticcheck // WatchProgress is deprecated but simpler than WaitForFunc
 	_, errChan := p.client.Action.WatchProgress(ctx, action)
 
 	err := <-errChan
@@ -682,8 +703,8 @@ func (p *Provider) buildServerCreateOpts(opts CreateServerOpts) hcloud.ServerCre
 // buildFirewallRules creates the firewall rules required for Talos.
 func buildFirewallRules() []hcloud.FirewallRule {
 	anyIP := []net.IPNet{
-		{IP: net.ParseIP("0.0.0.0"), Mask: net.CIDRMask(0, 32)},
-		{IP: net.ParseIP("::"), Mask: net.CIDRMask(0, 128)},
+		{IP: net.ParseIP("0.0.0.0"), Mask: net.CIDRMask(0, IPv4CIDRBits)},
+		{IP: net.ParseIP("::"), Mask: net.CIDRMask(0, IPv6CIDRBits)},
 	}
 
 	return []hcloud.FirewallRule{
@@ -740,7 +761,7 @@ func buildFirewallRules() []hcloud.FirewallRule {
 // deleteInfrastructure cleans up infrastructure resources for a cluster.
 func (p *Provider) deleteInfrastructure(ctx context.Context, clusterName string) error {
 	// Small delay to ensure server deletions are fully processed
-	time.Sleep(5 * time.Second)
+	time.Sleep(DefaultPreDeleteDelay)
 
 	// Delete placement group
 	placementGroupName := clusterName + PlacementGroupSuffix
@@ -755,7 +776,7 @@ func (p *Provider) deleteInfrastructure(ctx context.Context, clusterName string)
 	// Delete firewall with retry (may still be attached during server deletion)
 	firewallName := clusterName + FirewallSuffix
 
-	for i := range 5 {
+	for i := range MaxDeleteRetries {
 		firewall, _, err := p.client.Firewall.GetByName(ctx, firewallName)
 		if err != nil || firewall == nil {
 			break // Firewall doesn't exist, we're done
@@ -767,12 +788,17 @@ func (p *Provider) deleteInfrastructure(ctx context.Context, clusterName string)
 		}
 
 		// If this is the last attempt, return the error
-		if i == 4 {
-			return fmt.Errorf("failed to delete firewall %s after 5 attempts: %w", firewallName, err)
+		if i == MaxDeleteRetries-1 {
+			return fmt.Errorf(
+				"failed to delete firewall %s after %d attempts: %w",
+				firewallName,
+				MaxDeleteRetries,
+				err,
+			)
 		}
 
 		// Wait before retrying
-		time.Sleep(2 * time.Second)
+		time.Sleep(DefaultDeleteRetryDelay)
 	}
 
 	// Delete network

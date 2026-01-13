@@ -374,7 +374,7 @@ type actionRunner struct {
 // prepareContext validates preconditions and creates the registry context.
 // Returns nil context if the action should be skipped.
 func (r *actionRunner) prepareContext(checkLocalRegistry bool) *registryContext {
-	localRegistryDisabled := !r.clusterCfg.Spec.Cluster.LocalRegistry.Enabled
+	localRegistryDisabled := !r.clusterCfg.Spec.Cluster.LocalRegistry.Enabled()
 	if checkLocalRegistry && localRegistryDisabled {
 		return nil
 	}
@@ -622,11 +622,7 @@ func newCreateOptions(
 }
 
 func resolvePort(clusterCfg *v1alpha1.Cluster) int {
-	if clusterCfg.Spec.Cluster.LocalRegistry.HostPort > 0 {
-		return int(clusterCfg.Spec.Cluster.LocalRegistry.HostPort)
-	}
-
-	return int(v1alpha1.DefaultLocalRegistryPort)
+	return int(clusterCfg.Spec.Cluster.LocalRegistry.ResolvedPort())
 }
 
 // WaitForK3dLocalRegistryReady waits for the K3d-managed local registry to be ready.
@@ -649,7 +645,7 @@ func WaitForK3dLocalRegistryReady(
 		return nil
 	}
 
-	if !clusterCfg.Spec.Cluster.LocalRegistry.Enabled {
+	if !clusterCfg.Spec.Cluster.LocalRegistry.Enabled() {
 		return nil
 	}
 

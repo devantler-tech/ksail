@@ -40,6 +40,9 @@ var (
 
 	// ErrNoCloudCredentials indicates no cloud provider credentials were found for a public IP.
 	ErrNoCloudCredentials = errors.New("public IP detected but no cloud provider credentials found")
+
+	// ErrNoHostInURL indicates a URL was parsed but contained no host component.
+	ErrNoHostInURL = errors.New("no host found in URL")
 )
 
 // ClusterInfo contains the detected distribution and provider for a cluster.
@@ -195,7 +198,7 @@ func extractHostFromURL(serverURL string) (string, error) {
 
 	host := parsed.Hostname()
 	if host == "" {
-		return "", fmt.Errorf("no host found in URL: %s", serverURL)
+		return "", fmt.Errorf("%w: %s", ErrNoHostInURL, serverURL)
 	}
 
 	return host, nil
@@ -232,7 +235,7 @@ func detectCloudProvider(ipAddress, clusterName string) (v1alpha1.Provider, erro
 		// Continue checking other providers if not found
 	}
 
-	// TODO: Add more cloud providers here as they are implemented
+	// Add more cloud providers here as they are implemented.
 	// Example:
 	// if awsCredentialsAvailable() {
 	//     found, err := checkAWSOwnership(ctx, ipAddress, clusterName)

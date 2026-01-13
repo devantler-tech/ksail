@@ -286,7 +286,7 @@ func (s *Scaffolder) CreateK3dConfig() k3dv1alpha5.SimpleConfig {
 	// Configure K3d-native local registry when enabled.
 	// K3d's Registries.Create automatically manages the registry container,
 	// including DNS resolution, network connectivity, and lifecycle management.
-	if s.KSailConfig.Spec.Cluster.LocalRegistry.Enabled {
+	if s.KSailConfig.Spec.Cluster.LocalRegistry.Enabled() {
 		config.Registries = s.addK3dLocalRegistryConfig(config.Registries)
 	}
 
@@ -315,10 +315,7 @@ func (s *Scaffolder) addK3dLocalRegistryConfig(
 	registryName := registry.BuildLocalRegistryName(clusterName)
 
 	// Determine the host port from config or use default
-	hostPort := v1alpha1.DefaultLocalRegistryPort
-	if s.KSailConfig.Spec.Cluster.LocalRegistry.HostPort > 0 {
-		hostPort = s.KSailConfig.Spec.Cluster.LocalRegistry.HostPort
-	}
+	hostPort := s.KSailConfig.Spec.Cluster.LocalRegistry.ResolvedPort()
 
 	// Configure K3d to create and manage the local registry.
 	// K3d will create a registry container named "k3d-<registryName>"
@@ -1048,10 +1045,7 @@ func (s *Scaffolder) buildArgoCDApplicationOptions(
 	outputPath string,
 	force bool,
 ) argocdgenerator.ApplicationGeneratorOptions {
-	port := s.KSailConfig.Spec.Cluster.LocalRegistry.HostPort
-	if port == 0 {
-		port = 5000
-	}
+	port := s.KSailConfig.Spec.Cluster.LocalRegistry.ResolvedPort()
 
 	return argocdgenerator.ApplicationGeneratorOptions{
 		Options: yamlgenerator.Options{

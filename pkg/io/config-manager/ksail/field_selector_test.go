@@ -92,24 +92,14 @@ func TestStandardFieldSelectors(t *testing.T) {
 			},
 		},
 		{
-			name:    "local registry enabled",
+			name:    "local registry",
 			factory: configmanager.DefaultLocalRegistryFieldSelector,
-			expectedDesc: "Enable local registry provisioning (defaults to true when " +
-				"a GitOps engine is configured)",
-			expectedDefault: false,
+			expectedDesc: "Local registry specification: [user:pass@]host[:port][/path] " +
+				"(e.g., localhost:5050, ghcr.io/myorg, ${USER}:${PASS}@ghcr.io:443/org)",
+			expectedDefault: "",
 			assertPointer: func(t *testing.T, cluster *v1alpha1.Cluster, ptr any) {
 				t.Helper()
-				assertPointerSame(t, ptr, &cluster.Spec.Cluster.LocalRegistry.Enabled)
-			},
-		},
-		{
-			name:            "registry port",
-			factory:         configmanager.DefaultRegistryPortFieldSelector,
-			expectedDesc:    "Host port to expose the local OCI registry on",
-			expectedDefault: v1alpha1.DefaultLocalRegistryPort,
-			assertPointer: func(t *testing.T, cluster *v1alpha1.Cluster, ptr any) {
-				t.Helper()
-				assertPointerSame(t, ptr, &cluster.Spec.Cluster.LocalRegistry.HostPort)
+				assertPointerSame(t, ptr, &cluster.Spec.Cluster.LocalRegistry.Registry)
 			},
 		},
 		{
@@ -174,7 +164,7 @@ func TestDefaultClusterFieldSelectorsProvideDefaults(t *testing.T) {
 	t.Parallel()
 
 	selectors := configmanager.DefaultClusterFieldSelectors()
-	require.Len(t, selectors, 7)
+	require.Len(t, selectors, 6)
 
 	cluster := v1alpha1.NewCluster()
 
@@ -255,22 +245,11 @@ func defaultClusterSelectorCases(
 		{
 			name:            "local registry",
 			selector:        selectors[5],
-			expectedDefault: false,
+			expectedDefault: "",
 			assertField: func(t *testing.T, field any) {
 				t.Helper()
 
-				_, ok := field.(*bool)
-				require.True(t, ok)
-			},
-		},
-		{
-			name:            "registry port",
-			selector:        selectors[6],
-			expectedDefault: v1alpha1.DefaultLocalRegistryPort,
-			assertField: func(t *testing.T, field any) {
-				t.Helper()
-
-				_, ok := field.(*int32)
+				_, ok := field.(*string)
 				require.True(t, ok)
 			},
 		},

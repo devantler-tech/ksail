@@ -15,6 +15,7 @@ import (
 	"time"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/empty"
@@ -99,7 +100,18 @@ func (b *builder) Build(ctx context.Context, opts BuildOptions) (BuildResult, er
 		return BuildResult{}, fmt.Errorf("parse reference: %w", err)
 	}
 
-	err = remote.Write(ref, img, remote.WithContext(ctx))
+	// Build remote options with authentication if credentials are provided
+	remoteOpts := []remote.Option{remote.WithContext(ctx)}
+
+	if validated.Username != "" || validated.Password != "" {
+		auth := &authn.Basic{
+			Username: validated.Username,
+			Password: validated.Password,
+		}
+		remoteOpts = append(remoteOpts, remote.WithAuth(auth))
+	}
+
+	err = remote.Write(ref, img, remoteOpts...)
 	if err != nil {
 		return BuildResult{}, fmt.Errorf("push artifact: %w", err)
 	}

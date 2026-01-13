@@ -206,11 +206,21 @@ func (c *Configs) WithEndpoint(endpointIP string) (*Configs, error) {
 	// Extract existing secrets bundle to preserve PKI across endpoint changes
 	var existingSecrets *secrets.Bundle
 	if c.bundle != nil && c.bundle.ControlPlaneCfg != nil {
-		existingSecrets = secrets.NewBundleFromConfig(secrets.NewFixedClock(time.Now()), c.bundle.ControlPlaneCfg)
+		existingSecrets = secrets.NewBundleFromConfig(
+			secrets.NewFixedClock(time.Now()),
+			c.bundle.ControlPlaneCfg,
+		)
 	}
 
 	// Regenerate the bundle with the new endpoint but preserved secrets
-	return newConfigsWithEndpointAndSecrets(c.Name, kubernetesVersion, networkCIDR, endpointIP, c.patches, existingSecrets)
+	return newConfigsWithEndpointAndSecrets(
+		c.Name,
+		kubernetesVersion,
+		networkCIDR,
+		endpointIP,
+		c.patches,
+		existingSecrets,
+	)
 }
 
 // IsCNIDisabled returns true if the default CNI is disabled (set to "none").
@@ -476,6 +486,12 @@ type MirrorRegistry struct {
 	Host string
 	// Endpoints are the mirror endpoints to use (e.g., "http://docker.io:5000").
 	Endpoints []string
+	// Username is the optional username for registry authentication.
+	// Environment variable placeholders should be resolved before passing.
+	Username string
+	// Password is the optional password for registry authentication.
+	// Environment variable placeholders should be resolved before passing.
+	Password string
 }
 
 // ApplyMirrorRegistries modifies the configs to add registry mirror configurations.
@@ -529,6 +545,11 @@ func applyMirrorsToConfig(cfg *v1alpha1.Config, mirrors []MirrorRegistry) error 
 		}
 
 		addMirrorEndpoints(cfg, mirror)
+
+		// Add authentication if credentials are provided
+		if mirror.Username != "" || mirror.Password != "" {
+			addRegistryAuth(cfg, mirror)
+		}
 		// NOTE: We intentionally do NOT call addInsecureRegistryConfigs for HTTP endpoints.
 		// containerd will reject TLS configuration for non-HTTPS registries with the error:
 		// "TLS config specified for non-HTTPS registry"
@@ -561,5 +582,22 @@ func initRegistryMaps(cfg *v1alpha1.Config) {
 func addMirrorEndpoints(cfg *v1alpha1.Config, mirror MirrorRegistry) {
 	cfg.MachineConfig.MachineRegistries.RegistryMirrors[mirror.Host] = &v1alpha1.RegistryMirrorConfig{
 		MirrorEndpoints: mirror.Endpoints,
+	}
+}
+
+// addRegistryAuth adds authentication configuration for a registry host.
+// This configures machine.registries.config.<host>.auth with username and password.
+//
+//nolint:staticcheck // MachineRegistries is deprecated but still functional in Talos v1.x
+func addRegistryAuth(cfg *v1alpha1.Config, mirror MirrorRegistry) {
+	// Ensure the registry config exists for this host
+	if cfg.MachineConfig.MachineRegistries.RegistryConfig[mirror.Host] == nil {
+		cfg.MachineConfig.MachineRegistries.RegistryConfig[mirror.Host] = &v1alpha1.RegistryConfig{}
+	}
+
+	// Set the auth configuration
+	cfg.MachineConfig.MachineRegistries.RegistryConfig[mirror.Host].RegistryAuth = &v1alpha1.RegistryAuthConfig{
+		RegistryUsername: mirror.Username,
+		RegistryPassword: mirror.Password,
 	}
 }

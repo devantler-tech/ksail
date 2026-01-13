@@ -68,6 +68,18 @@ const (
 	// clusterReadinessTimeout is the timeout for waiting for the cluster to become ready.
 	// This matches the upstream talosctl default of 10 minutes.
 	clusterReadinessTimeout = 10 * time.Minute
+	// talosAPIWaitTimeout is the timeout for waiting for Talos API to be reachable.
+	talosAPIWaitTimeout = 5 * time.Minute
+	// bootstrapTimeout is the timeout for bootstrap operations.
+	bootstrapTimeout = 2 * time.Minute
+	// retryInterval is the default interval between retry attempts.
+	retryInterval = 5 * time.Second
+	// longRetryInterval is the interval for longer operations.
+	longRetryInterval = 10 * time.Second
+	// initialIPCapacity is the initial capacity for IP address slices.
+	initialIPCapacity = 2
+	// grpcFailedPrecondition is the gRPC status code for FailedPrecondition.
+	grpcFailedPrecondition = 9
 )
 
 // IP byte shift constants for IPv4 address manipulation.
@@ -401,7 +413,9 @@ func (p *TalosProvisioner) createHetznerCluster(ctx context.Context, clusterName
 	configBundle := updatedConfigs.Bundle()
 
 	// Build list of all node IPs for waiting
-	allServers := append(controlPlaneServers, workerServers...)
+	allServers := make([]*hcloud.Server, 0, len(controlPlaneServers)+len(workerServers))
+	allServers = append(allServers, controlPlaneServers...)
+	allServers = append(allServers, workerServers...)
 
 	// Wait for Talos API to be reachable on all nodes (maintenance mode)
 	_, _ = fmt.Fprintf(p.logWriter, "Waiting for Talos API on %d nodes...\n", len(allServers))
@@ -485,8 +499,6 @@ func (p *TalosProvisioner) waitForHetznerTalosAPI(
 	ctx context.Context,
 	servers []*hcloud.Server,
 ) error {
-	timeout := 5 * time.Minute
-
 	for _, server := range servers {
 		ip := server.PublicNet.IPv4.IP.String()
 		endpoint := fmt.Sprintf("%s:%d", ip, talosAPIPort)
@@ -498,7 +510,7 @@ func (p *TalosProvisioner) waitForHetznerTalosAPI(
 			endpoint,
 		)
 
-		err := retry.Constant(timeout, retry.WithUnits(5*time.Second)).
+		err := retry.Constant(talosAPIWaitTimeout, retry.WithUnits(retryInterval)).
 			RetryWithContext(ctx, func(ctx context.Context) error {
 				// Try to establish a TLS connection to verify the Talos API is responding
 				// In maintenance mode, we can only verify the connection works - most APIs
@@ -544,7 +556,7 @@ func (p *TalosProvisioner) waitForHetznerTalosAPI(
 // It uses the insecure Talos client to connect to nodes in maintenance mode.
 func (p *TalosProvisioner) applyHetznerConfigs(
 	ctx context.Context,
-	clusterName string,
+	_ string,
 	controlPlaneServers []*hcloud.Server,
 	workerServers []*hcloud.Server,
 	configBundle *bundle.Bundle,
@@ -593,8 +605,14 @@ func (p *TalosProvisioner) detachISOsAndReboot(
 	hetznerProv *hetzner.Provider,
 	servers []*hcloud.Server,
 ) error {
-	_, _ = fmt.Fprintf(p.logWriter, "  Waiting for installation and automatic reboot to complete...\n")
-	_, _ = fmt.Fprintf(p.logWriter, "  (Talos will install to disk and reboot automatically - this takes 3-5 minutes)\n")
+	_, _ = fmt.Fprintf(
+		p.logWriter,
+		"  Waiting for installation and automatic reboot to complete...\n",
+	)
+	_, _ = fmt.Fprintf(
+		p.logWriter,
+		"  (Talos will install to disk and reboot automatically - this takes 3-5 minutes)\n",
+	)
 
 	// Wait for all servers to complete installation and reboot
 	// During this time:
@@ -607,27 +625,40 @@ func (p *TalosProvisioner) detachISOsAndReboot(
 	for _, server := range servers {
 		ip := server.PublicNet.IPv4.IP.String()
 
-		_, _ = fmt.Fprintf(p.logWriter, "  Waiting for %s to install, reboot, and become reachable...\n", server.Name)
+		_, _ = fmt.Fprintf(
+			p.logWriter,
+			"  Waiting for %s to install, reboot, and become reachable...\n",
+			server.Name,
+		)
 
 		// Wait for server to become reachable after installation + reboot
 		// This waits through the entire install cycle:
 		// - Initial "connection refused" during install
 		// - Then more "connection refused" during reboot
 		// - Finally success when booted from disk
-		err := retry.Constant(10*time.Minute, retry.WithUnits(10*time.Second)).
+		err := retry.Constant(clusterReadinessTimeout, retry.WithUnits(longRetryInterval)).
 			RetryWithContext(ctx, func(ctx context.Context) error {
 				// Just check if we can establish a TCP connection
 				// We don't care about TLS here, just network reachability
-				conn, dialErr := net.DialTimeout("tcp", ip+":50000", 5*time.Second)
+				dialer := &net.Dialer{Timeout: retryInterval}
+
+				conn, dialErr := dialer.DialContext(ctx, "tcp", net.JoinHostPort(ip, "50000"))
 				if dialErr != nil {
-					return retry.ExpectedError(fmt.Errorf("waiting for server to become reachable: %w", dialErr))
+					return retry.ExpectedError(
+						fmt.Errorf("waiting for server to become reachable: %w", dialErr),
+					)
 				}
-				conn.Close()
+
+				_ = conn.Close()
 
 				return nil
 			})
 		if err != nil {
-			return fmt.Errorf("timeout waiting for %s to become reachable after install: %w", server.Name, err)
+			return fmt.Errorf(
+				"timeout waiting for %s to become reachable after install: %w",
+				server.Name,
+				err,
+			)
 		}
 
 		_, _ = fmt.Fprintf(p.logWriter, "  ✓ %s is reachable after install\n", server.Name)
@@ -642,7 +673,12 @@ func (p *TalosProvisioner) detachISOsAndReboot(
 		err := hetznerProv.DetachISO(ctx, server)
 		if err != nil {
 			// Log but don't fail - ISO detachment is not critical
-			_, _ = fmt.Fprintf(p.logWriter, "  Warning: Failed to detach ISO from %s: %v\n", server.Name, err)
+			_, _ = fmt.Fprintf(
+				p.logWriter,
+				"  Warning: Failed to detach ISO from %s: %v\n",
+				server.Name,
+				err,
+			)
 		} else {
 			_, _ = fmt.Fprintf(p.logWriter, "  ✓ ISO detached from %s\n", server.Name)
 		}
@@ -720,7 +756,7 @@ func (p *TalosProvisioner) bootstrapHetznerCluster(
 	// Wait for the node to come back after installation
 	timeout := clusterReadinessTimeout
 
-	err := retry.Constant(timeout, retry.WithUnits(10*time.Second)).
+	err := retry.Constant(timeout, retry.WithUnits(longRetryInterval)).
 		RetryWithContext(ctx, func(ctx context.Context) error {
 			// Create authenticated client using talosconfig
 			c, clientErr := talosclient.New(ctx,
@@ -761,12 +797,12 @@ func (p *TalosProvisioner) bootstrapHetznerCluster(
 	_, _ = fmt.Fprintf(p.logWriter, "  Bootstrapping etcd on %s...\n", bootstrapNode.Name)
 
 	// Bootstrap the cluster
-	err = retry.Constant(2*time.Minute, retry.WithUnits(5*time.Second)).
+	err = retry.Constant(bootstrapTimeout, retry.WithUnits(retryInterval)).
 		RetryWithContext(ctx, func(ctx context.Context) error {
 			bootstrapErr := c.Bootstrap(ctx, &machineapi.BootstrapRequest{})
 			if bootstrapErr != nil {
 				// FailedPrecondition means the node isn't ready yet
-				if talosclient.StatusCode(bootstrapErr) == 9 { // FailedPrecondition
+				if talosclient.StatusCode(bootstrapErr) == grpcFailedPrecondition {
 					return retry.ExpectedError(bootstrapErr)
 				}
 
@@ -784,7 +820,7 @@ func (p *TalosProvisioner) bootstrapHetznerCluster(
 	// Wait for cluster to be ready
 	_, _ = fmt.Fprintf(p.logWriter, "  Waiting for Kubernetes to be ready...\n")
 
-	err = retry.Constant(timeout, retry.WithUnits(10*time.Second)).
+	err = retry.Constant(timeout, retry.WithUnits(longRetryInterval)).
 		RetryWithContext(ctx, func(ctx context.Context) error {
 			// Try to fetch kubeconfig as an indicator that K8s is ready
 			_, kubeconfigErr := c.Kubeconfig(ctx)
@@ -831,7 +867,7 @@ func (p *TalosProvisioner) saveHetznerKubeconfig(
 
 	// The kubeconfig from Talos uses internal IPs. For Hetzner, we need to use the public IP.
 	// Rewrite the server endpoint to use the public IP.
-	kubeconfig, err = rewriteKubeconfigEndpoint(kubeconfig, fmt.Sprintf("https://%s:6443", ip))
+	kubeconfig, err = rewriteKubeconfigEndpoint(kubeconfig, "https://"+net.JoinHostPort(ip, "6443"))
 	if err != nil {
 		return fmt.Errorf("failed to rewrite kubeconfig endpoint: %w", err)
 	}
@@ -1877,7 +1913,10 @@ func (p *TalosProvisioner) waitForHetznerClusterReady(
 	configBundle *bundle.Bundle,
 ) error {
 	// Build the first control-plane endpoint for Kubernetes API access
-	kubeEndpoint := fmt.Sprintf("https://%s:6443", controlPlaneServers[0].PublicNet.IPv4.IP.String())
+	kubeEndpoint := "https://" + net.JoinHostPort(
+		controlPlaneServers[0].PublicNet.IPv4.IP.String(),
+		"6443",
+	)
 
 	// Create HetznerClusterResult which implements provision.Cluster
 	hetznerCluster, err := NewHetznerClusterResult(
@@ -1904,12 +1943,16 @@ func (p *TalosProvisioner) waitForHetznerClusterReady(
 
 	// Determine which checks to run based on CNI configuration
 	// When CNI is disabled, nodes won't become Ready until CNI is installed
-	skipNodeReadiness := (p.talosConfigs != nil && p.talosConfigs.IsCNIDisabled()) || p.options.SkipCNIChecks
+	skipNodeReadiness := (p.talosConfigs != nil && p.talosConfigs.IsCNIDisabled()) ||
+		p.options.SkipCNIChecks
 
 	var checks []check.ClusterCheck
 
 	if skipNodeReadiness {
-		_, _ = fmt.Fprintf(p.logWriter, "  Running pre-boot and K8s component checks (CNI not installed yet)...\n")
+		_, _ = fmt.Fprintf(
+			p.logWriter,
+			"  Running pre-boot and K8s component checks (CNI not installed yet)...\n",
+		)
 		// Use PreBootSequence + K8sComponentsReadiness checks (skips K8sAllNodesReady)
 		checks = slices.Concat(check.PreBootSequenceChecks(), check.K8sComponentsReadinessChecks())
 	} else {
@@ -1949,13 +1992,13 @@ func (p *TalosProvisioner) waitForHetznerClusterReadyAfterStart(
 	}
 
 	if len(nodes) == 0 {
-		return fmt.Errorf("no nodes found for cluster %q", clusterName)
+		return fmt.Errorf("%w: %s", clustererrors.ErrNoNodesFound, clusterName)
 	}
 
 	// Cast to Hetzner provider to get server details
 	hetznerProvider, ok := p.infraProvider.(*hetzner.Provider)
 	if !ok {
-		return fmt.Errorf("infrastructure provider is not a Hetzner provider")
+		return clustererrors.ErrNotHetznerProvider
 	}
 
 	// Get control-plane and worker servers
@@ -1979,11 +2022,14 @@ func (p *TalosProvisioner) waitForHetznerClusterReadyAfterStart(
 	}
 
 	if len(controlPlaneServers) == 0 {
-		return fmt.Errorf("no control-plane nodes found for cluster %q", clusterName)
+		return fmt.Errorf("%w: %s", clustererrors.ErrNoControlPlaneNodes, clusterName)
 	}
 
 	// Build the kubernetes endpoint from the first control-plane server
-	kubeEndpoint := fmt.Sprintf("https://%s:6443", controlPlaneServers[0].PublicNet.IPv4.IP.String())
+	kubeEndpoint := "https://" + net.JoinHostPort(
+		controlPlaneServers[0].PublicNet.IPv4.IP.String(),
+		"6443",
+	)
 
 	// Create HetznerClusterResult which implements provision.Cluster
 	hetznerCluster, err := NewHetznerClusterResult(
@@ -2011,12 +2057,16 @@ func (p *TalosProvisioner) waitForHetznerClusterReadyAfterStart(
 	defer clusterAccess.Close() //nolint:errcheck
 
 	// Determine which checks to run based on CNI configuration
-	skipNodeReadiness := (p.talosConfigs != nil && p.talosConfigs.IsCNIDisabled()) || p.options.SkipCNIChecks
+	skipNodeReadiness := (p.talosConfigs != nil && p.talosConfigs.IsCNIDisabled()) ||
+		p.options.SkipCNIChecks
 
 	var checks []check.ClusterCheck
 
 	if skipNodeReadiness {
-		_, _ = fmt.Fprintf(p.logWriter, "  Running pre-boot and K8s component checks (CNI not installed yet)...\n")
+		_, _ = fmt.Fprintf(
+			p.logWriter,
+			"  Running pre-boot and K8s component checks (CNI not installed yet)...\n",
+		)
 		checks = slices.Concat(check.PreBootSequenceChecks(), check.K8sComponentsReadinessChecks())
 	} else {
 		_, _ = fmt.Fprintf(p.logWriter, "  Running full cluster readiness checks...\n")

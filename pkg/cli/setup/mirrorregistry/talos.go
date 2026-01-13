@@ -232,9 +232,15 @@ func PrepareTalosConfigWithMirrors(
 			// Use cluster name prefix for container name to avoid Docker DNS collisions
 			// e.g., for cluster "talos-default", ghcr.io becomes "talos-default-ghcr.io"
 			containerName := registry.BuildRegistryName(clusterName, spec.Host)
+
+			// Resolve credentials (expands ${ENV_VAR} placeholders)
+			username, password := spec.ResolveCredentials()
+
 			mirrors = append(mirrors, talosconfigmanager.MirrorRegistry{
 				Host:      spec.Host,
 				Endpoints: []string{"http://" + containerName + ":5000"},
+				Username:  username,
+				Password:  password,
 			})
 		}
 

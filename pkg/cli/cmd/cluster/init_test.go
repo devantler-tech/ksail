@@ -291,8 +291,9 @@ func TestHandleInitRunE_DefaultsLocalRegistryWithFlux(t *testing.T) {
 		t.Fatalf("expected ksail.yaml to be scaffolded: %v", err)
 	}
 
+	// With the new single-field design, local registry is enabled when the registry field is populated
 	if !strings.Contains(string(content), "localRegistry:") ||
-		!strings.Contains(string(content), "enabled: true") {
+		!strings.Contains(string(content), "registry: localhost:5050") {
 		t.Fatalf("expected ksail.yaml to enable local registry when Flux is selected\n%s", content)
 	}
 }

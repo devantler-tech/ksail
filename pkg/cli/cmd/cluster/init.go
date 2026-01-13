@@ -109,6 +109,15 @@ func HandleInitRunE(
 		return fmt.Errorf("invalid configuration: %w", err)
 	}
 
+	// Validate local registry configuration for the provider
+	err = v1alpha1.ValidateLocalRegistryForProvider(
+		clusterCfg.Spec.Cluster.Provider,
+		clusterCfg.Spec.Cluster.LocalRegistry,
+	)
+	if err != nil {
+		return fmt.Errorf("invalid configuration: %w", err)
+	}
+
 	scaffolderInstance, targetPath, force, err := prepareScaffolder(cmd, cfgManager, clusterCfg)
 	if err != nil {
 		return err
@@ -156,6 +165,15 @@ func prepareScaffolder(
 	force := cfgManager.Viper.GetBool("force")
 	mirrorRegistries := cfgManager.Viper.GetStringSlice("mirror-registry")
 	clusterName := cfgManager.Viper.GetString("name")
+
+	// Validate mirror registries are compatible with the provider
+	err = v1alpha1.ValidateMirrorRegistriesForProvider(
+		clusterCfg.Spec.Cluster.Provider,
+		mirrorRegistries,
+	)
+	if err != nil {
+		return nil, "", false, fmt.Errorf("invalid configuration: %w", err)
+	}
 
 	// Validate cluster name is DNS-1123 compliant
 	if clusterName != "" {

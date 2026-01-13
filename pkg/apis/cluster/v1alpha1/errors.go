@@ -36,3 +36,13 @@ var ErrClusterNameTooLong = errors.New("cluster name is too long")
 
 // ErrClusterNameInvalid is returned when the cluster name is not DNS-1123 compliant.
 var ErrClusterNameInvalid = errors.New("cluster name is invalid")
+
+// ErrMirrorRegistryNotSupported is returned when mirror registries are used with an unsupported provider.
+var ErrMirrorRegistryNotSupported = errors.New(
+	"mirror registry configuration not supported for provider",
+)
+
+// ErrLocalRegistryNotSupported is returned when local registry is used with a cloud provider without external host.
+var ErrLocalRegistryNotSupported = errors.New(
+	"local registry configuration not supported for provider",
+)

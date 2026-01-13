@@ -28,13 +28,16 @@ type OptionsTalos struct {
 }
 
 // LocalRegistry defines options for the host-local OCI registry integration.
+// For cloud providers (e.g., Hetzner), this can be used to configure an external registry.
 type LocalRegistry struct {
-	// Enabled controls whether the local registry is provisioned and managed.
-	// Defaults to false (disabled).
-	Enabled bool `json:"enabled,omitzero"`
-	// HostPort is the port on the host machine to expose the registry on.
-	// Defaults to 5050.
-	HostPort int32 `json:"hostPort,omitzero" default:"5050"`
+	// Registry is the full registry specification in the format: [user:pass@]host[:port][/path]
+	// When populated, enables registry integration for GitOps workflows.
+	// Examples:
+	//   - "localhost:5050" (local Docker registry)
+	//   - "ghcr.io/myorg/myrepo" (GitHub Container Registry with path)
+	//   - "${USER}:${PASS}@ghcr.io:443/myorg" (with credentials from env vars)
+	// Credentials support ${ENV_VAR} placeholders for environment variable expansion.
+	Registry string `json:"registry,omitzero"`
 }
 
 // OptionsHetzner defines options specific to the Hetzner Cloud provider.
