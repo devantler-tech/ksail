@@ -52,27 +52,12 @@ func DiscoverRegistries(
 	clusterName string,
 	cleanupDeps CleanupDependencies,
 ) *DiscoveredRegistries {
-	networkName := getNetworkNameForDistribution(clusterCfg.Spec.Cluster.Distribution, clusterName)
-
-	var registries []dockerclient.RegistryInfo
-
-	_ = cleanupDeps.DockerInvoker(cmd, func(dockerClient client.APIClient) error {
-		registryMgr, mgrErr := dockerclient.NewRegistryManager(dockerClient)
-		if mgrErr != nil {
-			return fmt.Errorf("create registry manager: %w", mgrErr)
-		}
-
-		discovered, listErr := registryMgr.ListRegistriesOnNetwork(cmd.Context(), networkName)
-		if listErr != nil {
-			return fmt.Errorf("list registries on network: %w", listErr)
-		}
-
-		registries = discovered
-
-		return nil
-	})
-
-	return &DiscoveredRegistries{Registries: registries}
+	return DiscoverRegistriesByNetwork(
+		cmd,
+		clusterCfg.Spec.Cluster.Distribution,
+		clusterName,
+		cleanupDeps,
+	)
 }
 
 // DiscoverRegistriesByNetwork finds all registries connected to the cluster network.

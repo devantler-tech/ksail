@@ -8,6 +8,7 @@ import (
 
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
 	"github.com/siderolabs/talos/pkg/machinery/config/bundle"
+	"github.com/siderolabs/talos/pkg/machinery/config/configpatcher"
 	"github.com/siderolabs/talos/pkg/machinery/config/generate"
 	"github.com/siderolabs/talos/pkg/machinery/config/generate/secrets"
 	"github.com/siderolabs/talos/pkg/machinery/config/types/v1alpha1"
@@ -290,14 +291,19 @@ func newConfigs(
 	networkCIDR string,
 	patches []Patch,
 ) (*Configs, error) {
-	return newConfigsWithEndpoint(clusterName, kubernetesVersion, networkCIDR, "", patches)
+	return newConfigsWithEndpointAndSecrets(
+		clusterName,
+		kubernetesVersion,
+		networkCIDR,
+		"",
+		patches,
+		nil,
+	)
 }
 
 // newConfigsWithEndpoint creates Configs with an optional explicit endpoint IP.
 // If endpointIP is empty, the endpoint is calculated from the network CIDR.
 // If endpointIP is provided (e.g., for Hetzner public IPs), it is used as the endpoint.
-//
-//nolint:funlen // Single cohesive config generation with sequential setup steps
 func newConfigsWithEndpoint(
 	clusterName string,
 	kubernetesVersion string,
@@ -305,38 +311,40 @@ func newConfigsWithEndpoint(
 	endpointIP string,
 	patches []Patch,
 ) (*Configs, error) {
-	// Categorize patches by scope
-	clusterPatches, controlPlanePatches, workerPatches, err := categorizePatchesByScope(patches)
-	if err != nil {
-		return nil, err
-	}
+	return newConfigsWithEndpointAndSecrets(
+		clusterName,
+		kubernetesVersion,
+		networkCIDR,
+		endpointIP,
+		patches,
+		nil,
+	)
+}
 
-	// Determine endpoint IP - either explicit or calculated from network CIDR
-	var controlPlaneIP string
+// resolveControlPlaneIP determines the control plane IP from explicit endpoint or network CIDR.
+func resolveControlPlaneIP(endpointIP, networkCIDR string) (string, error) {
 	if endpointIP != "" {
-		controlPlaneIP = endpointIP
-	} else {
-		// Parse network CIDR for endpoint calculation
-		parsedCIDR, parseErr := netip.ParsePrefix(networkCIDR)
-		if parseErr != nil {
-			return nil, fmt.Errorf("invalid network CIDR: %w", parseErr)
-		}
-
-		// Calculate control plane IP for endpoint
-		ipAddr, ipErr := nthIPInNetwork(parsedCIDR, ipv4Offset)
-		if ipErr != nil {
-			return nil, fmt.Errorf("failed to calculate control plane IP: %w", ipErr)
-		}
-
-		controlPlaneIP = ipAddr.String()
+		return endpointIP, nil
 	}
 
-	controlPlaneEndpoint := "https://" + net.JoinHostPort(controlPlaneIP, "6443")
+	// Parse network CIDR for endpoint calculation
+	parsedCIDR, parseErr := netip.ParsePrefix(networkCIDR)
+	if parseErr != nil {
+		return "", fmt.Errorf("invalid network CIDR: %w", parseErr)
+	}
 
-	// Build generate options with endpoint list and localhost SAN for Docker-in-VM environments
-	// Use TalosVersion1_11 contract for compatibility with Hetzner ISOs which are at 1.11.x
-	// This ensures the generated config doesn't include features unsupported by older Talos versions.
-	genOptions := []generate.Option{
+	// Calculate control plane IP for endpoint
+	ipAddr, ipErr := nthIPInNetwork(parsedCIDR, ipv4Offset)
+	if ipErr != nil {
+		return "", fmt.Errorf("failed to calculate control plane IP: %w", ipErr)
+	}
+
+	return ipAddr.String(), nil
+}
+
+// buildBaseGenOptions creates the base generate options for Talos config generation.
+func buildBaseGenOptions(controlPlaneIP string) []generate.Option {
+	return []generate.Option{
 		generate.WithEndpointList([]string{controlPlaneIP}),
 		generate.WithAdditionalSubjectAltNames([]string{"127.0.0.1"}),
 		generate.WithVersionContract(talosconfig.TalosVersion1_11),
@@ -345,8 +353,16 @@ func newConfigsWithEndpoint(
 		// /dev/sda is the standard disk for Hetzner VPS and most cloud providers.
 		generate.WithInstallDisk("/dev/sda"),
 	}
+}
 
-	// Build bundle options
+// buildBundleOptions creates bundle options with patches applied.
+func buildBundleOptions(
+	clusterName string,
+	controlPlaneEndpoint string,
+	kubernetesVersion string,
+	genOptions []generate.Option,
+	clusterPatches, controlPlanePatches, workerPatches []configpatcher.Patch,
+) []bundle.Option {
 	bundleOpts := []bundle.Option{
 		bundle.WithInputOptions(&bundle.InputOptions{
 			ClusterName: clusterName,
@@ -370,27 +386,12 @@ func newConfigsWithEndpoint(
 		bundleOpts = append(bundleOpts, bundle.WithPatchWorker(workerPatches))
 	}
 
-	// Create the bundle
-	configBundle, err := bundle.NewBundle(bundleOpts...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create config bundle: %w", err)
-	}
-
-	return &Configs{
-		Name:              clusterName,
-		bundle:            configBundle,
-		kubernetesVersion: kubernetesVersion,
-		networkCIDR:       networkCIDR,
-		endpoint:          endpointIP,
-		patches:           patches,
-	}, nil
+	return bundleOpts
 }
 
 // newConfigsWithEndpointAndSecrets creates Configs with an explicit endpoint IP while preserving
 // an existing secrets bundle. This is used by WithEndpoint to regenerate configs with a new
 // endpoint without regenerating the PKI (CA, keys, tokens), which would cause certificate mismatches.
-//
-//nolint:funlen // Single cohesive config generation with secrets preservation
 func newConfigsWithEndpointAndSecrets(
 	clusterName string,
 	kubernetesVersion string,
@@ -405,68 +406,32 @@ func newConfigsWithEndpointAndSecrets(
 		return nil, err
 	}
 
-	// Determine endpoint IP - either explicit or calculated from network CIDR
-	var controlPlaneIP string
-	if endpointIP != "" {
-		controlPlaneIP = endpointIP
-	} else {
-		// Parse network CIDR for endpoint calculation
-		parsedCIDR, parseErr := netip.ParsePrefix(networkCIDR)
-		if parseErr != nil {
-			return nil, fmt.Errorf("invalid network CIDR: %w", parseErr)
-		}
-
-		// Calculate control plane IP for endpoint calculation
-		ipAddr, ipErr := nthIPInNetwork(parsedCIDR, ipv4Offset)
-		if ipErr != nil {
-			return nil, fmt.Errorf("failed to calculate control plane IP: %w", ipErr)
-		}
-
-		controlPlaneIP = ipAddr.String()
+	// Resolve the control plane IP
+	controlPlaneIP, err := resolveControlPlaneIP(endpointIP, networkCIDR)
+	if err != nil {
+		return nil, err
 	}
 
 	controlPlaneEndpoint := "https://" + net.JoinHostPort(controlPlaneIP, "6443")
 
-	// Build generate options with endpoint list and localhost SAN for Docker-in-VM environments
-	// Use TalosVersion1_11 contract for compatibility with Hetzner ISOs which are at 1.11.x
-	genOptions := []generate.Option{
-		generate.WithEndpointList([]string{controlPlaneIP}),
-		generate.WithAdditionalSubjectAltNames([]string{"127.0.0.1"}),
-		generate.WithVersionContract(talosconfig.TalosVersion1_11),
-		// Install disk is required for bare metal installations (Hetzner, etc.)
-		// For Docker-in-Docker, this setting is ignored as there's no actual disk.
-		// /dev/sda is the standard disk for Hetzner VPS and most cloud providers.
-		generate.WithInstallDisk("/dev/sda"),
-	}
+	// Build generate options
+	genOptions := buildBaseGenOptions(controlPlaneIP)
 
 	// If we have existing secrets, reuse them to preserve PKI across endpoint changes
 	if existingSecrets != nil {
 		genOptions = append(genOptions, generate.WithSecretsBundle(existingSecrets))
 	}
 
-	// Build bundle options
-	bundleOpts := []bundle.Option{
-		bundle.WithInputOptions(&bundle.InputOptions{
-			ClusterName: clusterName,
-			Endpoint:    controlPlaneEndpoint,
-			KubeVersion: kubernetesVersion,
-			GenOptions:  genOptions,
-		}),
-		bundle.WithVerbose(false), // Suppress "generating PKI and tokens" output
-	}
-
-	// Add patches by scope
-	if len(clusterPatches) > 0 {
-		bundleOpts = append(bundleOpts, bundle.WithPatch(clusterPatches))
-	}
-
-	if len(controlPlanePatches) > 0 {
-		bundleOpts = append(bundleOpts, bundle.WithPatchControlPlane(controlPlanePatches))
-	}
-
-	if len(workerPatches) > 0 {
-		bundleOpts = append(bundleOpts, bundle.WithPatchWorker(workerPatches))
-	}
+	// Build bundle options with patches
+	bundleOpts := buildBundleOptions(
+		clusterName,
+		controlPlaneEndpoint,
+		kubernetesVersion,
+		genOptions,
+		clusterPatches,
+		controlPlanePatches,
+		workerPatches,
+	)
 
 	// Create the bundle
 	configBundle, err := bundle.NewBundle(bundleOpts...)

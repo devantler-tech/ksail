@@ -1,14 +1,11 @@
 package v1alpha1
 
 import (
-	"os"
-	"regexp"
 	"strconv"
 	"strings"
-)
 
-// envVarPattern matches ${VAR_NAME} placeholders for environment variable expansion.
-var envVarPattern = regexp.MustCompile(`\$\{([a-zA-Z_][a-zA-Z0-9_]*)\}`)
+	"github.com/devantler-tech/ksail/v5/pkg/utils/envvar"
+)
 
 // ParsedRegistry contains the parsed components of a registry specification.
 type ParsedRegistry struct {
@@ -100,7 +97,7 @@ func (r LocalRegistry) Parse() ParsedRegistry {
 func (r LocalRegistry) ResolveCredentials() (username, password string) {
 	parsed := r.Parse()
 
-	return expandEnvVars(parsed.Username), expandEnvVars(parsed.Password)
+	return envvar.Expand(parsed.Username), envvar.Expand(parsed.Password)
 }
 
 // HasCredentials returns true if the registry has non-empty username or password configured.
@@ -131,18 +128,4 @@ func (r LocalRegistry) ResolvedPort() int32 {
 // ResolvedPath returns the registry path from the parsed spec.
 func (r LocalRegistry) ResolvedPath() string {
 	return r.Parse().Path
-}
-
-// expandEnvVars replaces ${VAR_NAME} placeholders with their environment variable values.
-func expandEnvVars(value string) string {
-	if value == "" {
-		return value
-	}
-
-	return envVarPattern.ReplaceAllStringFunc(value, func(match string) string {
-		// Extract variable name from ${VAR_NAME}
-		varName := match[2 : len(match)-1]
-
-		return os.Getenv(varName)
-	})
 }

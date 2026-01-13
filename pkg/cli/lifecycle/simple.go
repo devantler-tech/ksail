@@ -403,116 +403,64 @@ type multiDistributionProvisioner struct {
 	clusterName string
 }
 
-// Start starts the cluster by trying each distribution's provisioner.
-func (m *multiDistributionProvisioner) Start(ctx context.Context, name string) error {
-	clusterName := name
-	if clusterName == "" {
-		clusterName = m.clusterName
-	}
+// clusterOperation is a function that operates on a provisioner with a cluster name.
+type clusterOperation func(clusterprovisioner.ClusterProvisioner, string) error
 
-	// Try each distribution in order
-	distributions := []v1alpha1.Distribution{
+// getSupportedDistributions returns all supported distributions in priority order.
+func getSupportedDistributions() []v1alpha1.Distribution {
+	return []v1alpha1.Distribution{
 		v1alpha1.DistributionVanilla,
 		v1alpha1.DistributionK3s,
 		v1alpha1.DistributionTalos,
 	}
+}
 
-	for _, dist := range distributions {
-		provisioner, err := createProvisionerForDistribution(dist, clusterName)
-		if err != nil {
-			continue
-		}
-
-		exists, err := provisioner.Exists(ctx, clusterName)
-		if err != nil {
-			continue
-		}
-
-		if exists {
-			startErr := provisioner.Start(ctx, clusterName)
-			if startErr != nil {
-				return fmt.Errorf("failed to start cluster: %w", startErr)
+// Start starts the cluster by trying each distribution's provisioner.
+func (m *multiDistributionProvisioner) Start(ctx context.Context, name string) error {
+	return m.forExistingCluster(
+		ctx,
+		name,
+		func(p clusterprovisioner.ClusterProvisioner, n string) error {
+			err := p.Start(ctx, n)
+			if err != nil {
+				return fmt.Errorf("failed to start cluster: %w", err)
 			}
 
 			return nil
-		}
-	}
-
-	return fmt.Errorf("%w: %s", ErrClusterNotFoundInDistributions, clusterName)
+		},
+	)
 }
 
 // Stop stops the cluster by trying each distribution's provisioner.
 func (m *multiDistributionProvisioner) Stop(ctx context.Context, name string) error {
-	clusterName := name
-	if clusterName == "" {
-		clusterName = m.clusterName
-	}
-
-	distributions := []v1alpha1.Distribution{
-		v1alpha1.DistributionVanilla,
-		v1alpha1.DistributionK3s,
-		v1alpha1.DistributionTalos,
-	}
-
-	for _, dist := range distributions {
-		provisioner, err := createProvisionerForDistribution(dist, clusterName)
-		if err != nil {
-			continue
-		}
-
-		exists, err := provisioner.Exists(ctx, clusterName)
-		if err != nil {
-			continue
-		}
-
-		if exists {
-			stopErr := provisioner.Stop(ctx, clusterName)
-			if stopErr != nil {
-				return fmt.Errorf("failed to stop cluster: %w", stopErr)
+	return m.forExistingCluster(
+		ctx,
+		name,
+		func(p clusterprovisioner.ClusterProvisioner, n string) error {
+			err := p.Stop(ctx, n)
+			if err != nil {
+				return fmt.Errorf("failed to stop cluster: %w", err)
 			}
 
 			return nil
-		}
-	}
-
-	return fmt.Errorf("%w: %s", ErrClusterNotFoundInDistributions, clusterName)
+		},
+	)
 }
 
 // Delete deletes the cluster by trying each distribution's provisioner.
 func (m *multiDistributionProvisioner) Delete(ctx context.Context, name string) error {
-	clusterName := name
-	if clusterName == "" {
-		clusterName = m.clusterName
-	}
-
-	distributions := []v1alpha1.Distribution{
-		v1alpha1.DistributionVanilla,
-		v1alpha1.DistributionK3s,
-		v1alpha1.DistributionTalos,
-	}
-
-	for _, dist := range distributions {
-		provisioner, err := createProvisionerForDistribution(dist, clusterName)
-		if err != nil {
-			continue
-		}
-
-		exists, err := provisioner.Exists(ctx, clusterName)
-		if err != nil {
-			continue
-		}
-
-		if exists {
-			deleteErr := provisioner.Delete(ctx, clusterName)
-			if deleteErr != nil {
-				return fmt.Errorf("failed to delete cluster: %w", deleteErr)
+	return m.forExistingCluster(
+		ctx,
+		name,
+		func(p clusterprovisioner.ClusterProvisioner, n string) error {
+			err := p.Delete(ctx, n)
+			if err != nil {
+				return fmt.Errorf("failed to delete cluster: %w", err)
 			}
 
 			return nil
-		}
-	}
-
-	return fmt.Errorf("%w: %s", ErrClusterNotFoundInDistributions, clusterName)
+		},
+	)
 }
 
 // Exists checks if the cluster exists in any distribution.
@@ -522,13 +470,7 @@ func (m *multiDistributionProvisioner) Exists(ctx context.Context, name string) 
 		clusterName = m.clusterName
 	}
 
-	distributions := []v1alpha1.Distribution{
-		v1alpha1.DistributionVanilla,
-		v1alpha1.DistributionK3s,
-		v1alpha1.DistributionTalos,
-	}
-
-	for _, dist := range distributions {
+	for _, dist := range getSupportedDistributions() {
 		provisioner, err := createProvisionerForDistribution(dist, clusterName)
 		if err != nil {
 			continue
@@ -551,13 +493,7 @@ func (m *multiDistributionProvisioner) Exists(ctx context.Context, name string) 
 func (m *multiDistributionProvisioner) List(ctx context.Context) ([]string, error) {
 	var allClusters []string
 
-	distributions := []v1alpha1.Distribution{
-		v1alpha1.DistributionVanilla,
-		v1alpha1.DistributionK3s,
-		v1alpha1.DistributionTalos,
-	}
-
-	for _, dist := range distributions {
+	for _, dist := range getSupportedDistributions() {
 		provisioner, err := createProvisionerForDistribution(dist, m.clusterName)
 		if err != nil {
 			continue
@@ -577,6 +513,37 @@ func (m *multiDistributionProvisioner) List(ctx context.Context) ([]string, erro
 // Create is not supported by the multi-distribution provisioner.
 func (m *multiDistributionProvisioner) Create(_ context.Context, _ string) error {
 	return ErrCreateNotSupported
+}
+
+// forExistingCluster finds an existing cluster across all distributions and applies an operation.
+// Returns ErrClusterNotFoundInDistributions if the cluster doesn't exist in any distribution.
+func (m *multiDistributionProvisioner) forExistingCluster(
+	ctx context.Context,
+	name string,
+	operation clusterOperation,
+) error {
+	clusterName := name
+	if clusterName == "" {
+		clusterName = m.clusterName
+	}
+
+	for _, dist := range getSupportedDistributions() {
+		provisioner, err := createProvisionerForDistribution(dist, clusterName)
+		if err != nil {
+			continue
+		}
+
+		exists, err := provisioner.Exists(ctx, clusterName)
+		if err != nil {
+			continue
+		}
+
+		if exists {
+			return operation(provisioner, clusterName)
+		}
+	}
+
+	return fmt.Errorf("%w: %s", ErrClusterNotFoundInDistributions, clusterName)
 }
 
 // createProvisionerForDistribution creates a provisioner for a specific distribution.

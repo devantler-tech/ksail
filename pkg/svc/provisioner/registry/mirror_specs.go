@@ -3,17 +3,13 @@ package registry
 import (
 	"fmt"
 	"net"
-	"os"
-	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 
 	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
+	"github.com/devantler-tech/ksail/v5/pkg/utils/envvar"
 )
-
-// envVarPattern matches ${VAR_NAME} placeholders for environment variable expansion.
-var envVarPattern = regexp.MustCompile(`\$\{([a-zA-Z_][a-zA-Z0-9_]*)\}`)
 
 // MirrorSpec represents a parsed mirror registry specification entry.
 type MirrorSpec struct {
@@ -29,26 +25,12 @@ type MirrorSpec struct {
 //
 //nolint:nonamedreturns // Named returns document the returned values for clarity
 func (m MirrorSpec) ResolveCredentials() (username, password string) {
-	return expandEnvVars(m.Username), expandEnvVars(m.Password)
+	return envvar.Expand(m.Username), envvar.Expand(m.Password)
 }
 
 // HasCredentials returns true if the spec has non-empty username or password.
 func (m MirrorSpec) HasCredentials() bool {
 	return m.Username != "" || m.Password != ""
-}
-
-// expandEnvVars replaces ${VAR_NAME} placeholders with their environment variable values.
-func expandEnvVars(value string) string {
-	if value == "" {
-		return value
-	}
-
-	return envVarPattern.ReplaceAllStringFunc(value, func(match string) string {
-		// Extract variable name from ${VAR_NAME}
-		varName := match[2 : len(match)-1]
-
-		return os.Getenv(varName)
-	})
 }
 
 // MirrorEntry contains the normalized data required to create a registry mirror.
