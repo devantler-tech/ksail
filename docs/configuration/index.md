@@ -69,8 +69,6 @@ spec:
 
 ### CLI Flags
 
-The CLI flags reference in [`configuration/cli-flags/`](cli-flags/root.md) is **auto-generated** from `ksail --help` output. Do not edit files in `docs/configuration/cli-flags/` manually—run `.github/scripts/generate-cli-flags-docs.sh` instead.
-
 Use command-line flags for:
 
 - **Temporary overrides** during development
