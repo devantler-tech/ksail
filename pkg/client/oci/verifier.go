@@ -148,29 +148,35 @@ func classifyTransportError(transportErr *transport.Error) error {
 }
 
 // classifyErrorByMessage checks error message patterns.
-func classifyErrorByMessage(errStr string) error {
+// Returns:
+//   - error: if the error matches a known error pattern
+//   - nil, true: if the error matches an "acceptable" pattern (e.g., repo doesn't exist yet)
+//   - nil, false: if no pattern matched
+func classifyErrorByMessage(errStr string) (error, bool) {
 	lowerErr := strings.ToLower(errStr)
 
 	switch {
 	case strings.Contains(lowerErr, "unauthorized"),
 		strings.Contains(lowerErr, "authentication required"):
-		return ErrRegistryAuthRequired
+		return ErrRegistryAuthRequired, true
 
 	case strings.Contains(lowerErr, "denied"),
 		strings.Contains(lowerErr, "forbidden"):
-		return ErrRegistryPermissionDenied
+		return ErrRegistryPermissionDenied, true
 
 	case strings.Contains(lowerErr, "no such host"),
 		strings.Contains(lowerErr, "connection refused"),
 		strings.Contains(lowerErr, "dial tcp"):
-		return fmt.Errorf("%w: %s", ErrRegistryUnreachable, extractErrorDetail(errStr))
+		return fmt.Errorf("%w: %s", ErrRegistryUnreachable, extractErrorDetail(errStr)), true
 
-	case strings.Contains(lowerErr, "not found"):
-		// Not found is OK - we can still push to create it
-		return nil
+	case strings.Contains(lowerErr, "not found"),
+		strings.Contains(lowerErr, "name_unknown"),
+		strings.Contains(lowerErr, "name unknown"):
+		// Not found / NAME_UNKNOWN is OK - we can still push to create it
+		return nil, true
 
 	default:
-		return nil
+		return nil, false
 	}
 }
 
@@ -190,8 +196,9 @@ func classifyRegistryError(err error) error {
 	}
 
 	// Check for common error patterns in the message
-	classifiedErr := classifyErrorByMessage(err.Error())
-	if classifiedErr != nil {
+	classifiedErr, matched := classifyErrorByMessage(err.Error())
+	if matched {
+		// If matched, return the classified error (which may be nil for acceptable errors)
 		return classifiedErr
 	}
 
