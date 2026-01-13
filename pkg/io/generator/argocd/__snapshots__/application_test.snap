@@ -16,7 +16,7 @@ spec:
     directory:
       recurse: true
     path: .
-    repoUrl: oci://custom-registry.localhost:8080/my-project
+    repoURL: oci://custom-registry.localhost:8080/my-project
     targetRevision: latest
   syncPolicy:
     automated:
@@ -42,7 +42,7 @@ spec:
     directory:
       recurse: true
     path: .
-    repoUrl: oci://ksail-registry.localhost:5000/ksail
+    repoURL: oci://ksail-registry.localhost:5000/ksail
     targetRevision: latest
   syncPolicy:
     automated:
@@ -68,7 +68,7 @@ spec:
     directory:
       recurse: true
     path: .
-    repoUrl: oci://registry.localhost:5000/ksail
+    repoURL: oci://registry.localhost:5000/ksail
     targetRevision: latest
   syncPolicy:
     automated:
@@ -94,7 +94,7 @@ spec:
     directory:
       recurse: true
     path: .
-    repoUrl: oci://registry.localhost:5000/test-project
+    repoURL: oci://registry.localhost:5000/test-project
     targetRevision: latest
   syncPolicy:
     automated:

@@ -149,34 +149,34 @@ func classifyTransportError(transportErr *transport.Error) error {
 
 // classifyErrorByMessage checks error message patterns.
 // Returns:
-//   - error: if the error matches a known error pattern
-//   - nil, true: if the error matches an "acceptable" pattern (e.g., repo doesn't exist yet)
-//   - nil, false: if no pattern matched
-func classifyErrorByMessage(errStr string) (error, bool) {
+//   - matched=true, error: if the error matches a known error pattern
+//   - matched=true, nil: if the error matches an "acceptable" pattern (e.g., repo doesn't exist yet)
+//   - matched=false, nil: if no pattern matched
+func classifyErrorByMessage(errStr string) (bool, error) {
 	lowerErr := strings.ToLower(errStr)
 
 	switch {
 	case strings.Contains(lowerErr, "unauthorized"),
 		strings.Contains(lowerErr, "authentication required"):
-		return ErrRegistryAuthRequired, true
+		return true, ErrRegistryAuthRequired
 
 	case strings.Contains(lowerErr, "denied"),
 		strings.Contains(lowerErr, "forbidden"):
-		return ErrRegistryPermissionDenied, true
+		return true, ErrRegistryPermissionDenied
 
 	case strings.Contains(lowerErr, "no such host"),
 		strings.Contains(lowerErr, "connection refused"),
 		strings.Contains(lowerErr, "dial tcp"):
-		return fmt.Errorf("%w: %s", ErrRegistryUnreachable, extractErrorDetail(errStr)), true
+		return true, fmt.Errorf("%w: %s", ErrRegistryUnreachable, extractErrorDetail(errStr))
 
 	case strings.Contains(lowerErr, "not found"),
 		strings.Contains(lowerErr, "name_unknown"),
 		strings.Contains(lowerErr, "name unknown"):
 		// Not found / NAME_UNKNOWN is OK - we can still push to create it
-		return nil, true
+		return true, nil
 
 	default:
-		return nil, false
+		return false, nil
 	}
 }
 
@@ -196,7 +196,7 @@ func classifyRegistryError(err error) error {
 	}
 
 	// Check for common error patterns in the message
-	classifiedErr, matched := classifyErrorByMessage(err.Error())
+	matched, classifiedErr := classifyErrorByMessage(err.Error())
 	if matched {
 		// If matched, return the classified error (which may be nil for acceptable errors)
 		return classifiedErr

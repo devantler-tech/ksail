@@ -397,10 +397,7 @@ func EnsureArgoCDResources(
 	}
 
 	// Build repository URL and credentials based on registry configuration
-	opts, err := buildArgoCDEnsureOptions(clusterCfg, clusterName)
-	if err != nil {
-		return fmt.Errorf("build argocd options: %w", err)
-	}
+	opts := buildArgoCDEnsureOptions(clusterCfg, clusterName)
 
 	err = mgr.Ensure(ctx, opts)
 	if err != nil {
@@ -414,7 +411,7 @@ func EnsureArgoCDResources(
 func buildArgoCDEnsureOptions(
 	clusterCfg *v1alpha1.Cluster,
 	clusterName string,
-) (argocdgitops.EnsureOptions, error) {
+) argocdgitops.EnsureOptions {
 	localRegistry := clusterCfg.Spec.Cluster.LocalRegistry
 	opts := argocdgitops.EnsureOptions{
 		SourcePath:      ".",
@@ -430,7 +427,8 @@ func buildArgoCDEnsureOptions(
 		opts.Username = username
 		opts.Password = password
 		opts.Insecure = false
-		return opts, nil
+
+		return opts
 	}
 
 	// For local registries, use cluster-prefixed registry name for in-cluster DNS resolution
@@ -448,5 +446,5 @@ func buildArgoCDEnsureOptions(
 	opts.RepositoryURL = fmt.Sprintf("oci://%s/%s", hostPort, repoName)
 	opts.Insecure = true
 
-	return opts, nil
+	return opts
 }

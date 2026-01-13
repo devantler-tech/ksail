@@ -34,6 +34,7 @@ type ApplicationSpec struct {
 
 // ApplicationSource defines where ArgoCD should fetch manifests from.
 type ApplicationSource struct {
+	//nolint:tagliatelle // ArgoCD requires this exact casing
 	RepoURL        string         `json:"repoURL"             yaml:"repoURL"`
 	TargetRevision string         `json:"targetRevision"      yaml:"targetRevision"`
 	Path           string         `json:"path,omitempty"      yaml:"path,omitempty"`

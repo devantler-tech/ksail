@@ -159,7 +159,10 @@ func (m *ManagerImpl) ensureNamespace(ctx context.Context, name string) error {
 	return nil
 }
 
-func (m *ManagerImpl) upsertRepositorySecret(ctx context.Context, opts repositorySecretOptions) error {
+func (m *ManagerImpl) upsertRepositorySecret(
+	ctx context.Context,
+	opts repositorySecretOptions,
+) error {
 	desired := buildRepositorySecret(opts)
 	secrets := m.clientset.CoreV1().Secrets(argoCDNamespace)
 

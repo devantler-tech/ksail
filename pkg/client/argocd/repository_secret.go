@@ -29,6 +29,7 @@ func buildRepositorySecret(opts repositorySecretOptions) *corev1.Secret {
 	if opts.username != "" {
 		data["username"] = opts.username
 	}
+
 	if opts.password != "" {
 		data["password"] = opts.password
 	}
