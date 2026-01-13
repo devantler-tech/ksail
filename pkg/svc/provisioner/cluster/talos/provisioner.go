@@ -30,6 +30,7 @@ import (
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"github.com/siderolabs/go-retry/retry"
 	"github.com/siderolabs/talos/pkg/cluster/check"
+	"github.com/siderolabs/talos/pkg/conditions"
 	machineapi "github.com/siderolabs/talos/pkg/machinery/api/machine"
 	talosclient "github.com/siderolabs/talos/pkg/machinery/client"
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
@@ -38,9 +39,6 @@ import (
 	"github.com/siderolabs/talos/pkg/provision"
 	"github.com/siderolabs/talos/pkg/provision/access"
 	"github.com/siderolabs/talos/pkg/provision/providers"
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 )
 
@@ -448,12 +446,16 @@ func (p *TalosProvisioner) createHetznerCluster(ctx context.Context, clusterName
 		}
 
 		// Wait for cluster to be fully ready before reporting success
-		// This ensures the cluster is actually usable when we return
+		// This uses upstream Talos SDK check.Wait() pattern
 		_, _ = fmt.Fprintf(p.logWriter, "Waiting for cluster to be ready...\n")
 
-		expectedNodes := len(controlPlaneServers) + len(workerServers)
-
-		if waitErr := p.waitForHetznerClusterReady(ctx, expectedNodes); waitErr != nil {
+		if waitErr := p.waitForHetznerClusterReady(
+			ctx,
+			clusterName,
+			controlPlaneServers,
+			workerServers,
+			configBundle,
+		); waitErr != nil {
 			return fmt.Errorf("cluster readiness check failed: %w", waitErr)
 		}
 
@@ -1740,137 +1742,90 @@ func (p *TalosProvisioner) cleanupKubeconfig(clusterName string) error {
 }
 
 // waitForHetznerClusterReady waits for the Hetzner cluster to be fully ready.
-// This performs the same readiness checks as Docker-based clusters:
-// 1. Kubernetes API server is accessible and stable
-// 2. Expected number of nodes are registered with Kubernetes
-// 3. All nodes reach Ready status (or NotReady if CNI is disabled)
+// This uses the upstream Talos SDK's access.NewAdapter() and check.Wait() patterns
+// to perform the same readiness checks as Docker-based clusters.
+//
+// The checks performed depend on whether CNI is disabled:
+//   - With CNI: Full checks including node Ready status
+//   - Without CNI: PreBootSequence + K8sComponentsReadiness checks only
 //
 // This ensures the cluster is actually usable when creation returns.
-func (p *TalosProvisioner) waitForHetznerClusterReady(ctx context.Context, expectedNodes int) error {
-	timeout := clusterReadinessTimeout
+func (p *TalosProvisioner) waitForHetznerClusterReady(
+	ctx context.Context,
+	clusterName string,
+	controlPlaneServers []*hcloud.Server,
+	workerServers []*hcloud.Server,
+	configBundle *bundle.Bundle,
+) error {
+	// Build the first control-plane endpoint for Kubernetes API access
+	kubeEndpoint := fmt.Sprintf("https://%s:6443", controlPlaneServers[0].PublicNet.IPv4.IP.String())
 
-	// Expand kubeconfig path
-	kubeconfigPath, err := iopath.ExpandHomePath(p.options.KubeconfigPath)
+	// Create HetznerClusterResult which implements provision.Cluster
+	hetznerCluster, err := NewHetznerClusterResult(
+		clusterName,
+		controlPlaneServers,
+		workerServers,
+		kubeEndpoint,
+	)
 	if err != nil {
-		return fmt.Errorf("failed to expand kubeconfig path: %w", err)
+		return fmt.Errorf("failed to create cluster result: %w", err)
 	}
 
-	// Create kubernetes clientset
-	clientset, err := k8s.NewClientset(kubeconfigPath, "")
-	if err != nil {
-		return fmt.Errorf("failed to create kubernetes client: %w", err)
-	}
+	// Get Talos config for authenticated client access
+	talosConfig := configBundle.TalosConfig()
 
-	// Step 1: Wait for API server to be stable (3 consecutive successful responses)
-	_, _ = fmt.Fprintf(p.logWriter, "  Waiting for Kubernetes API server...\n")
+	// Create ClusterAccess adapter using upstream SDK pattern
+	// This provides the full ClusterInfo interface (ClientProvider, K8sProvider, Info)
+	clusterAccess := access.NewAdapter(
+		hetznerCluster,
+		provision.WithTalosConfig(talosConfig),
+	)
 
-	err = k8s.WaitForAPIServerStable(ctx, clientset, timeout, 3)
-	if err != nil {
-		return fmt.Errorf("API server not stable: %w", err)
-	}
+	defer clusterAccess.Close() //nolint:errcheck
 
-	_, _ = fmt.Fprintf(p.logWriter, "    ✓ API server is responding\n")
-
-	// Step 2: Wait for expected nodes to be registered
-	_, _ = fmt.Fprintf(p.logWriter, "  Waiting for %d node(s) to register...\n", expectedNodes)
-
-	err = p.waitForNodesRegistered(ctx, clientset, expectedNodes, timeout)
-	if err != nil {
-		return fmt.Errorf("nodes not registered: %w", err)
-	}
-
-	_, _ = fmt.Fprintf(p.logWriter, "    ✓ All nodes registered\n")
-
-	// Step 3: Wait for nodes to be Ready (or NotReady if CNI is disabled)
+	// Determine which checks to run based on CNI configuration
 	// When CNI is disabled, nodes won't become Ready until CNI is installed
 	skipNodeReadiness := (p.talosConfigs != nil && p.talosConfigs.IsCNIDisabled()) || p.options.SkipCNIChecks
 
+	var checks []check.ClusterCheck
+
 	if skipNodeReadiness {
-		_, _ = fmt.Fprintf(p.logWriter, "  Skipping node Ready check (CNI not installed yet)\n")
+		_, _ = fmt.Fprintf(p.logWriter, "  Running pre-boot and K8s component checks (CNI not installed yet)...\n")
+		// Use PreBootSequence + K8sComponentsReadiness checks (skips K8sAllNodesReady)
+		checks = slices.Concat(check.PreBootSequenceChecks(), check.K8sComponentsReadinessChecks())
 	} else {
-		_, _ = fmt.Fprintf(p.logWriter, "  Waiting for nodes to be Ready...\n")
+		_, _ = fmt.Fprintf(p.logWriter, "  Running full cluster readiness checks...\n")
+		// Use full DefaultClusterChecks which includes all readiness checks
+		checks = check.DefaultClusterChecks()
+	}
 
-		err = p.waitForNodesReady(ctx, clientset, expectedNodes, timeout)
-		if err != nil {
-			return fmt.Errorf("nodes not ready: %w", err)
-		}
+	// Create a reporter that logs to our log writer
+	reporter := &hetznerCheckReporter{writer: p.logWriter}
 
-		_, _ = fmt.Fprintf(p.logWriter, "    ✓ All nodes are Ready\n")
+	// Run the checks using upstream check.Wait()
+	// This is the same pattern used by talosctl and Docker provisioner
+	checkCtx, cancel := context.WithTimeout(ctx, clusterReadinessTimeout)
+	defer cancel()
+
+	if err := check.Wait(checkCtx, clusterAccess, checks, reporter); err != nil {
+		return fmt.Errorf("cluster readiness checks failed: %w", err)
 	}
 
 	return nil
 }
 
-// waitForNodesRegistered waits for the expected number of nodes to be registered with the API server.
-func (p *TalosProvisioner) waitForNodesRegistered(
-	ctx context.Context,
-	clientset *kubernetes.Clientset,
-	expectedNodes int,
-	timeout time.Duration,
-) error {
-	return retry.Constant(timeout, retry.WithUnits(5*time.Second)).
-		RetryWithContext(ctx, func(ctx context.Context) error {
-			nodes, listErr := clientset.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
-			if listErr != nil {
-				return retry.ExpectedError(listErr)
-			}
-
-			if len(nodes.Items) < expectedNodes {
-				return retry.ExpectedErrorf(
-					"waiting for nodes: got %d, expected %d",
-					len(nodes.Items),
-					expectedNodes,
-				)
-			}
-
-			return nil
-		})
+// hetznerCheckReporter implements check.Reporter to log check progress.
+type hetznerCheckReporter struct {
+	writer   io.Writer
+	lastLine string
 }
 
-// waitForNodesReady waits for all nodes to reach Ready status.
-func (p *TalosProvisioner) waitForNodesReady(
-	ctx context.Context,
-	clientset *kubernetes.Clientset,
-	expectedNodes int,
-	timeout time.Duration,
-) error {
-	return retry.Constant(timeout, retry.WithUnits(5*time.Second)).
-		RetryWithContext(ctx, func(ctx context.Context) error {
-			nodes, listErr := clientset.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
-			if listErr != nil {
-				return retry.ExpectedError(listErr)
-			}
-
-			if len(nodes.Items) < expectedNodes {
-				return retry.ExpectedErrorf(
-					"waiting for nodes: got %d, expected %d",
-					len(nodes.Items),
-					expectedNodes,
-				)
-			}
-
-			readyCount := 0
-
-			for _, node := range nodes.Items {
-				for _, condition := range node.Status.Conditions {
-					if condition.Type == corev1.NodeReady && condition.Status == corev1.ConditionTrue {
-						readyCount++
-
-						break
-					}
-				}
-			}
-
-			if readyCount < expectedNodes {
-				return retry.ExpectedErrorf(
-					"waiting for nodes to be ready: %d/%d ready",
-					readyCount,
-					expectedNodes,
-				)
-			}
-
-			return nil
-		})
+func (r *hetznerCheckReporter) Update(condition conditions.Condition) {
+	line := fmt.Sprintf("    %s", condition)
+	if line != r.lastLine {
+		_, _ = fmt.Fprintf(r.writer, "%s\n", line)
+		r.lastLine = line
+	}
 }
 
 // ensureKernelModules loads required kernel modules for Talos networking.
