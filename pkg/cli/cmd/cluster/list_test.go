@@ -142,6 +142,9 @@ func TestListCmd_MultipleClustersFound_DockerProvider(t *testing.T) {
 
 //nolint:paralleltest // uses t.Chdir
 func TestListCmd_AllProviders(t *testing.T) {
+	// Clear HCLOUD_TOKEN to ensure Hetzner provider is skipped
+	t.Setenv("HCLOUD_TOKEN", "")
+
 	cmd := &cobra.Command{Use: "list"}
 
 	var buf bytes.Buffer
@@ -158,7 +161,7 @@ func TestListCmd_AllProviders(t *testing.T) {
 	}
 
 	// No filter = list all providers (default behavior)
-	// Note: Hetzner will be skipped since no HCLOUD_TOKEN is set
+	// Hetzner will be skipped since HCLOUD_TOKEN is cleared
 	err := clusterpkg.HandleListRunE(cmd, "", deps)
 	require.NoError(t, err)
 

@@ -331,9 +331,8 @@ func (p *TalosProvisioner) createHetznerCluster(ctx context.Context, clusterName
 	}
 
 	// Track created servers for bootstrap
-	var controlPlaneServers []*hcloud.Server
-
-	var workerServers []*hcloud.Server
+	controlPlaneServers := make([]*hcloud.Server, 0, p.options.ControlPlaneNodes)
+	workerServers := make([]*hcloud.Server, 0, p.options.WorkerNodes)
 
 	// Create control plane nodes
 	_, _ = fmt.Fprintf(
