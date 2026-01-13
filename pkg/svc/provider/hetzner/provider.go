@@ -78,7 +78,7 @@ func (p *Provider) StopNodes(ctx context.Context, clusterName string) error {
 	err := p.forEachServer(ctx, clusterName, func(server *hcloud.Server) (*hcloud.Action, error) {
 		// Skip if already off
 		if server.Status == hcloud.ServerStatusOff {
-			return nil, nil
+			return nil, provider.ErrSkipAction
 		}
 
 		action, _, shutdownErr := p.client.Server.Shutdown(ctx, server)
@@ -242,7 +242,7 @@ func (p *Provider) DeleteNodes(ctx context.Context, clusterName string) error {
 				return nil, fmt.Errorf("failed to delete server %s: %w", server.Name, err)
 			}
 			// Delete doesn't return an action we need to wait for
-			return nil, nil
+			return nil, provider.ErrSkipAction
 		},
 	)
 	if deleteErr != nil {
@@ -576,26 +576,42 @@ func (p *Provider) forEachServerWithOptions(
 	}
 
 	for _, node := range nodes {
-		server, _, serverErr := p.client.Server.GetByName(ctx, node.Name)
-		if serverErr != nil {
-			return fmt.Errorf("failed to get server %s: %w", node.Name, serverErr)
+		err := p.executeServerAction(ctx, node.Name, action)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// executeServerAction executes an action on a single server by name.
+func (p *Provider) executeServerAction(
+	ctx context.Context,
+	nodeName string,
+	action func(*hcloud.Server) (*hcloud.Action, error),
+) error {
+	server, _, serverErr := p.client.Server.GetByName(ctx, nodeName)
+	if serverErr != nil {
+		return fmt.Errorf("failed to get server %s: %w", nodeName, serverErr)
+	}
+
+	if server == nil {
+		return nil
+	}
+
+	hcloudAction, actionErr := action(server)
+	if actionErr != nil {
+		// ErrSkipAction signals no action is needed
+		if errors.Is(actionErr, provider.ErrSkipAction) {
+			return nil
 		}
 
-		if server == nil {
-			continue
-		}
+		return actionErr
+	}
 
-		hcloudAction, actionErr := action(server)
-		if actionErr != nil {
-			return actionErr
-		}
-
-		if hcloudAction != nil {
-			waitErr := p.waitForAction(ctx, hcloudAction)
-			if waitErr != nil {
-				return waitErr
-			}
-		}
+	if hcloudAction != nil {
+		return p.waitForAction(ctx, hcloudAction)
 	}
 
 	return nil
