@@ -17,6 +17,9 @@ type OptionsTalos struct {
 	// Workers is the number of worker nodes (default: 0).
 	// When 0, scheduling is allowed on control-plane nodes.
 	Workers int32 `json:"workers,omitzero"`
+	// Config is the path to the talosconfig file.
+	// Defaults to "~/.talos/config".
+	Config string `json:"config,omitzero" default:"~/.talos/config"`
 	// ISO is the cloud provider's ISO/image ID for booting Talos Linux.
 	// Only used when targeting cloud providers (e.g., Hetzner Cloud).
 	// For Hetzner: See https://docs.hetzner.cloud/changelog for available Talos ISOs.

@@ -46,9 +46,14 @@ func CreateProvisioner(
 	}
 
 	// Create options and apply configured node counts
+	talosconfigPath := opts.Config
+	if talosconfigPath == "" {
+		talosconfigPath = "~/.talos/config"
+	}
+
 	options := NewOptions().
 		WithKubeconfigPath(kubeconfigPath).
-		WithTalosconfigPath("~/.talos/config").
+		WithTalosconfigPath(talosconfigPath).
 		WithSkipCNIChecks(skipCNIChecks)
 	if opts.ControlPlanes > 0 {
 		options.WithControlPlaneNodes(int(opts.ControlPlanes))
