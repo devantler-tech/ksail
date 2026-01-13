@@ -139,12 +139,7 @@ func ValidateLocalRegistryForProvider(provider Provider, registry LocalRegistry)
 
 	// Cloud providers require external registries with proper host configuration
 	if provider == ProviderHetzner && !registry.IsExternal() {
-		return fmt.Errorf(
-			"%w: provider %s requires an external registry; "+
-				"configure --local-registry with an internet-accessible registry (e.g., ghcr.io/myorg)",
-			ErrLocalRegistryNotSupported,
-			provider,
-		)
+		return ErrLocalRegistryNotSupported
 	}
 
 	return nil

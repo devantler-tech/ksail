@@ -115,7 +115,7 @@ func HandleInitRunE(
 		clusterCfg.Spec.Cluster.LocalRegistry,
 	)
 	if err != nil {
-		return fmt.Errorf("invalid configuration: %w", err)
+		return err // Return directly to preserve actionable error message
 	}
 
 	scaffolderInstance, targetPath, force, err := prepareScaffolder(cmd, cfgManager, clusterCfg)

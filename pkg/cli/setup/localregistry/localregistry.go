@@ -71,6 +71,12 @@ func WithDockerInvoker(invoker func(*cobra.Command, func(client.APIClient) error
 var (
 	ErrNilRegistryContext = errors.New("registry stage context is nil")
 	ErrUnsupportedStage   = errors.New("unsupported local registry stage")
+	// ErrCloudProviderRequiresExternalRegistry is returned when a cloud provider
+	// is used with a Docker-based local registry instead of an external one.
+	ErrCloudProviderRequiresExternalRegistry = errors.New(
+		"cloud provider requires an external registry\n" +
+			"- use --local-registry with an internet-accessible registry (e.g., ghcr.io/myorg)",
+	)
 )
 
 // StageType represents the type of local registry stage operation.
@@ -284,6 +290,17 @@ type stageAction func(context.Context, registry.Service, registryContext) error
 
 func provisionAction(clusterCfg *v1alpha1.Cluster) stageAction {
 	return func(execCtx context.Context, svc registry.Service, ctx registryContext) error {
+		// Cloud providers cannot use Docker-based local registries - they require
+		// an external registry that the cloud nodes can reach over the internet.
+		if isCloudProvider(clusterCfg) && !clusterCfg.Spec.Cluster.LocalRegistry.IsExternal() {
+			return ErrCloudProviderRequiresExternalRegistry
+		}
+
+		// External registries don't need provisioning - they already exist
+		if clusterCfg.Spec.Cluster.LocalRegistry.IsExternal() {
+			return nil
+		}
+
 		createOpts := newCreateOptions(clusterCfg, ctx)
 
 		_, createErr := svc.Create(execCtx, createOpts)
@@ -316,8 +333,16 @@ func connectAction() stageAction {
 	}
 }
 
-func connectActionBuilder(_ *v1alpha1.Cluster) stageAction {
-	return connectAction()
+func connectActionBuilder(clusterCfg *v1alpha1.Cluster) stageAction {
+	return func(execCtx context.Context, svc registry.Service, ctx registryContext) error {
+		// External registries don't need to be connected to Docker networks
+		// They're already accessible over the internet
+		if clusterCfg.Spec.Cluster.LocalRegistry.IsExternal() {
+			return nil
+		}
+
+		return connectAction()(execCtx, svc, ctx)
+	}
 }
 
 func runStageFromBuilder(
@@ -346,6 +371,12 @@ func runStageFromBuilder(
 // K3d uses native registry management via Registries.Create.
 func shouldSkipK3d(clusterCfg *v1alpha1.Cluster) bool {
 	return clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionK3s
+}
+
+// isCloudProvider returns true if the cluster is using a cloud provider (not Docker).
+// Cloud providers run nodes on remote servers, not local Docker containers.
+func isCloudProvider(clusterCfg *v1alpha1.Cluster) bool {
+	return clusterCfg.Spec.Cluster.Provider == v1alpha1.ProviderHetzner
 }
 
 // wrapActionWithContext wraps an action that requires registryContext into a simpler handler.

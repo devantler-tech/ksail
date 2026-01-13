@@ -44,5 +44,6 @@ var ErrMirrorRegistryNotSupported = errors.New(
 
 // ErrLocalRegistryNotSupported is returned when local registry is used with a cloud provider without external host.
 var ErrLocalRegistryNotSupported = errors.New(
-	"local registry configuration not supported for provider",
+	"cloud provider requires an external registry\n" +
+		"- use --local-registry with an internet-accessible registry (e.g., ghcr.io/myorg)",
 )
