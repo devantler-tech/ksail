@@ -158,3 +158,94 @@ func TestDistribution_ProvidesStorageByDefault(t *testing.T) {
 		})
 	}
 }
+
+func TestLocalRegistry_Parse_ExtractsTag(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		registry string
+		wantHost string
+		wantPath string
+		wantTag  string
+	}{
+		{
+			name:     "external_registry_with_tag",
+			registry: "ghcr.io/org/repo:v1.0.0",
+			wantHost: "ghcr.io",
+			wantPath: "org/repo",
+			wantTag:  "v1.0.0",
+		},
+		{
+			name:     "external_registry_with_complex_tag",
+			registry: "ghcr.io/devantler-tech/ksail/manifests:k3s-docker-abc1234",
+			wantHost: "ghcr.io",
+			wantPath: "devantler-tech/ksail/manifests",
+			wantTag:  "k3s-docker-abc1234",
+		},
+		{
+			name:     "external_registry_without_tag",
+			registry: "ghcr.io/org/repo",
+			wantHost: "ghcr.io",
+			wantPath: "org/repo",
+			wantTag:  "",
+		},
+		{
+			name:     "external_registry_with_credentials_and_tag",
+			registry: "user:pass@ghcr.io/org/repo:dev",
+			wantHost: "ghcr.io",
+			wantPath: "org/repo",
+			wantTag:  "dev",
+		},
+		{
+			name:     "local_registry_no_tag",
+			registry: "localhost:5000",
+			wantHost: "localhost",
+			wantPath: "",
+			wantTag:  "",
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			reg := v1alpha1.LocalRegistry{Registry: testCase.registry}
+			parsed := reg.Parse()
+
+			assert.Equal(t, testCase.wantHost, parsed.Host)
+			assert.Equal(t, testCase.wantPath, parsed.Path)
+			assert.Equal(t, testCase.wantTag, parsed.Tag)
+		})
+	}
+}
+
+func TestLocalRegistry_ResolvedTag(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		registry string
+		wantTag  string
+	}{
+		{
+			name:     "returns_tag_when_present",
+			registry: "ghcr.io/org/repo:mytag",
+			wantTag:  "mytag",
+		},
+		{
+			name:     "returns_empty_when_no_tag",
+			registry: "ghcr.io/org/repo",
+			wantTag:  "",
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			reg := v1alpha1.LocalRegistry{Registry: testCase.registry}
+			assert.Equal(t, testCase.wantTag, reg.ResolvedTag())
+		})
+	}
+}

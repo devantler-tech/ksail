@@ -12,6 +12,7 @@ type ParsedRegistry struct {
 	Host     string
 	Port     int32
 	Path     string
+	Tag      string
 	Username string
 	Password string
 }
@@ -66,13 +67,17 @@ func resolveDefaultPort(host string, hasExplicitPort bool) int32 {
 }
 
 // Parse parses the Registry string into its components.
-// Format: [user:pass@]host[:port][/path]
+// Format: [user:pass@]host[:port][/path[:tag]]
 // Credentials can use ${ENV_VAR} placeholders.
 //
 // Port handling:
 //   - If port is explicitly specified, it's used as-is
 //   - For localhost/127.0.0.1 without explicit port: defaults to DefaultLocalRegistryPort (5000)
 //   - For external hosts without explicit port: returns 0 (indicates HTTPS with implicit port)
+//
+// Tag handling:
+//   - If path ends with :tag, the tag is extracted and stored separately
+//   - Example: ghcr.io/org/repo:mytag -> Path="org/repo", Tag="mytag"
 func (r LocalRegistry) Parse() ParsedRegistry {
 	spec := strings.TrimSpace(r.Registry)
 	if spec == "" {
@@ -91,10 +96,16 @@ func (r LocalRegistry) Parse() ParsedRegistry {
 	}
 
 	// Extract path if present (everything after first /)
-	var path string
+	var path, tag string
 	if slashIdx := strings.Index(spec, "/"); slashIdx > 0 {
 		path = spec[slashIdx+1:]
 		spec = spec[:slashIdx]
+
+		// Extract tag from path if present (path:tag format)
+		if colonIdx := strings.LastIndex(path, ":"); colonIdx > 0 {
+			tag = path[colonIdx+1:]
+			path = path[:colonIdx]
+		}
 	}
 
 	host, port, hasExplicitPort := parseHostAndPort(spec)
@@ -112,6 +123,7 @@ func (r LocalRegistry) Parse() ParsedRegistry {
 		Host:     host,
 		Port:     port,
 		Path:     path,
+		Tag:      tag,
 		Username: username,
 		Password: password,
 	}
@@ -156,4 +168,9 @@ func (r LocalRegistry) ResolvedPort() int32 {
 // ResolvedPath returns the registry path from the parsed spec.
 func (r LocalRegistry) ResolvedPath() string {
 	return r.Parse().Path
+}
+
+// ResolvedTag returns the registry tag from the parsed spec, or empty if not specified.
+func (r LocalRegistry) ResolvedTag() string {
+	return r.Parse().Tag
 }

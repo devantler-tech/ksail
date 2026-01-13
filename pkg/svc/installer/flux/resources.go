@@ -405,7 +405,8 @@ func waitForAPIReady(
 }
 
 // buildExternalRegistryURL builds the OCI URL for an external registry.
-func buildExternalRegistryURL(localRegistry v1alpha1.LocalRegistry) (string, string) {
+// Returns the URL, pull secret name, and optional tag override.
+func buildExternalRegistryURL(localRegistry v1alpha1.LocalRegistry) (string, string, string) {
 	parsed := localRegistry.Parse()
 	// For external registries, build URL without port (HTTPS 443 is implicit)
 	// e.g., oci://ghcr.io/devantler-tech/ksail/gitops-manifests
@@ -418,7 +419,7 @@ func buildExternalRegistryURL(localRegistry v1alpha1.LocalRegistry) (string, str
 		pullSecret = ExternalRegistrySecretName
 	}
 
-	return repoURL, pullSecret
+	return repoURL, pullSecret, parsed.Tag
 }
 
 // buildLocalRegistryURL builds the OCI URL for a local registry.
@@ -454,12 +455,17 @@ func buildLocalRegistryURL(
 func buildFluxInstance(clusterCfg *v1alpha1.Cluster, clusterName string) (*FluxInstance, error) {
 	localRegistry := clusterCfg.Spec.Cluster.LocalRegistry
 
-	var repoURL, pullSecret string
+	var repoURL, pullSecret, tag string
 
 	if localRegistry.IsExternal() {
-		repoURL, pullSecret = buildExternalRegistryURL(localRegistry)
+		repoURL, pullSecret, tag = buildExternalRegistryURL(localRegistry)
 	} else {
 		repoURL = buildLocalRegistryURL(localRegistry, clusterCfg, clusterName)
+	}
+
+	// Use configured tag if provided, otherwise default
+	if tag == "" {
+		tag = defaultArtifactTag
 	}
 
 	intervalPtr := &metav1.Duration{Duration: fluxIntervalFallback}
@@ -478,7 +484,7 @@ func buildFluxInstance(clusterCfg *v1alpha1.Cluster, clusterName string) (*FluxI
 			Sync: &Sync{
 				Kind:       fluxOCIRepositoryKind,
 				URL:        repoURL,
-				Ref:        defaultArtifactTag,
+				Ref:        tag,
 				Path:       normalizeFluxPath(),
 				Provider:   "generic",
 				Interval:   intervalPtr,

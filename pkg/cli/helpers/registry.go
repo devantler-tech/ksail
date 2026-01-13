@@ -28,6 +28,7 @@ type RegistryInfo struct {
 	Host       string
 	Port       int32
 	Repository string
+	Tag        string
 	Username   string
 	Password   string
 	// IsExternal is true if the registry is external (e.g., ghcr.io) vs local Docker registry
@@ -140,6 +141,7 @@ func DetectRegistryFromConfig(cfg *v1alpha1.Cluster) (*RegistryInfo, error) {
 		Host:       reg.ResolvedHost(),
 		Port:       reg.ResolvedPort(),
 		Repository: reg.ResolvedPath(),
+		Tag:        reg.ResolvedTag(),
 		IsExternal: reg.IsExternal(),
 		Source:     "config:ksail.yaml",
 	}

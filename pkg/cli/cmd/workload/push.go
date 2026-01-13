@@ -284,7 +284,7 @@ func resolvePushParams(
 		Password:   registryInfo.Password,
 		IsExternal: registryInfo.IsExternal,
 		SourceDir:  resolveSourceDir(cfg, pathFlag),
-		Ref:        resolveRef(ociRef),
+		Ref:        resolveRef(ociRef, registryInfo.Tag),
 	}
 
 	// Override with OCI reference values if provided
@@ -365,10 +365,15 @@ func resolveSourceDir(cfg *v1alpha1.Cluster, pathFlag string) string {
 	return v1alpha1.DefaultSourceDirectory
 }
 
-// resolveRef determines the artifact ref/tag from OCI ref or default.
-func resolveRef(ociRef *oci.Reference) string {
+// resolveRef determines the artifact ref/tag from OCI ref, config tag, or default.
+// Priority: OCI ref > config tag > default.
+func resolveRef(ociRef *oci.Reference, configTag string) string {
 	if ociRef != nil && ociRef.Ref != "" {
 		return ociRef.Ref
+	}
+
+	if configTag != "" {
+		return configTag
 	}
 
 	return registry.DefaultLocalArtifactTag

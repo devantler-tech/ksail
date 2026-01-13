@@ -55,6 +55,28 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: 🔧 Generate unique artifact tag
+      id: generate-tag
+      shell: bash
+      env:
+        DISTRIBUTION: ${{ inputs.distribution }}
+        PROVIDER: ${{ inputs.provider }}
+        ARGS: ${{ inputs.args }}
+      run: |
+        # Generate unique tag: distribution-provider-sanitized_args-shortsha
+        DIST_LOWER=$(echo "$DISTRIBUTION" | tr '[:upper:]' '[:lower:]')
+        PROVIDER_LOWER=$(echo "$PROVIDER" | tr '[:upper:]' '[:lower:]')
+        # Sanitize args: extract key values, remove special chars, lowercase
+        ARGS_SANITIZED=$(echo "$ARGS" | sed 's/--[a-z-]*=\?//g' | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '-' | sed 's/^-//;s/-$//' | cut -c1-30)
+        SHORT_SHA="${GITHUB_SHA:0:7}"
+        if [[ -n "$ARGS_SANITIZED" ]]; then
+          TAG="${DIST_LOWER}-${PROVIDER_LOWER}-${ARGS_SANITIZED}-${SHORT_SHA}"
+        else
+          TAG="${DIST_LOWER}-${PROVIDER_LOWER}-${SHORT_SHA}"
+        fi
+        echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+        echo "Generated unique artifact tag: $TAG"
+
     - name: 🔧 Resolve GHCR credentials in args
       id: resolve-args
       shell: bash
@@ -62,12 +84,16 @@ runs:
         ARGS: ${{ inputs.args }}
         GHCR_USER: ${{ inputs.ghcr-user }}
         GHCR_TOKEN: ${{ inputs.ghcr-token }}
+        ARTIFACT_TAG: ${{ steps.generate-tag.outputs.tag }}
       run: |
         # Inject GHCR credentials into --local-registry if it contains ghcr.io
         RESOLVED_ARGS="$ARGS"
         if [[ "$ARGS" == *"--local-registry"* ]] && [[ "$ARGS" == *"ghcr.io"* ]] && [[ -n "$GHCR_USER" ]] && [[ -n "$GHCR_TOKEN" ]]; then
           # Replace 'ghcr.io/' with 'user:token@ghcr.io/'
           RESOLVED_ARGS="${ARGS//ghcr.io\//${GHCR_USER}:${GHCR_TOKEN}@ghcr.io/}"
+          # Append unique tag to avoid collisions between parallel CI runs
+          # Format: user:token@ghcr.io/org/repo/path -> user:token@ghcr.io/org/repo/path:tag
+          RESOLVED_ARGS="${RESOLVED_ARGS}:${ARTIFACT_TAG}"
         fi
         echo "args=$RESOLVED_ARGS" >> "$GITHUB_OUTPUT"
 
