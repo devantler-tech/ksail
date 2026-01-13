@@ -12,6 +12,8 @@ import (
 )
 
 // TestDetectDistributionFromContext tests the distribution detection from context patterns.
+//
+//nolint:funlen // Test function with comprehensive test cases
 func TestDetectDistributionFromContext(t *testing.T) {
 	t.Parallel()
 

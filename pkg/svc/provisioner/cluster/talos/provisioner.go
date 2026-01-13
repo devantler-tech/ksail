@@ -232,6 +232,8 @@ func (p *TalosProvisioner) Create(ctx context.Context, name string) error {
 }
 
 // createDockerCluster creates a Talos-in-Docker cluster using the Talos SDK.
+//
+//nolint:funcorder // Grouped with Create for logical code organization
 func (p *TalosProvisioner) createDockerCluster(ctx context.Context, clusterName string) error {
 	// Ensure required kernel modules are loaded (Linux only)
 	err := p.ensureKernelModules(ctx)
@@ -269,7 +271,7 @@ func (p *TalosProvisioner) createDockerCluster(ctx context.Context, clusterName 
 
 // createHetznerCluster creates a Talos cluster on Hetzner Cloud infrastructure.
 //
-//nolint:cyclop,funlen // Complex function with sequential steps for cloud provisioning
+//nolint:cyclop,funcorder,funlen,gocognit,maintidx // Complex function with sequential steps for cloud provisioning
 func (p *TalosProvisioner) createHetznerCluster(ctx context.Context, clusterName string) error {
 	// Type assert to get Hetzner-specific provider
 	hetznerProv, ok := p.infraProvider.(*hetzner.Provider)
@@ -420,41 +422,46 @@ func (p *TalosProvisioner) createHetznerCluster(ctx context.Context, clusterName
 	// Wait for Talos API to be reachable on all nodes (maintenance mode)
 	_, _ = fmt.Fprintf(p.logWriter, "Waiting for Talos API on %d nodes...\n", len(allServers))
 
-	if err = p.waitForHetznerTalosAPI(ctx, allServers); err != nil {
+	err = p.waitForHetznerTalosAPI(ctx, allServers)
+	if err != nil {
 		return fmt.Errorf("failed waiting for Talos API: %w", err)
 	}
 
 	// Apply machine configuration to all nodes
 	_, _ = fmt.Fprintf(p.logWriter, "Applying machine configuration to nodes...\n")
 
-	if err = p.applyHetznerConfigs(
+	err = p.applyHetznerConfigs(
 		ctx,
 		clusterName,
 		controlPlaneServers,
 		workerServers,
 		configBundle,
-	); err != nil {
+	)
+	if err != nil {
 		return fmt.Errorf("failed to apply machine configuration: %w", err)
 	}
 
 	// Detach ISOs from all servers so they boot from disk instead of ISO
 	_, _ = fmt.Fprintf(p.logWriter, "Detaching ISOs and rebooting nodes...\n")
 
-	if err = p.detachISOsAndReboot(ctx, hetznerProv, allServers); err != nil {
+	err = p.detachISOsAndReboot(ctx, hetznerProv, allServers)
+	if err != nil {
 		return fmt.Errorf("failed to detach ISOs: %w", err)
 	}
 
 	// Bootstrap the cluster on the first control-plane node
 	_, _ = fmt.Fprintf(p.logWriter, "Bootstrapping etcd cluster...\n")
 
-	if err = p.bootstrapHetznerCluster(ctx, controlPlaneServers[0], configBundle); err != nil {
+	err = p.bootstrapHetznerCluster(ctx, controlPlaneServers[0], configBundle)
+	if err != nil {
 		return fmt.Errorf("failed to bootstrap cluster: %w", err)
 	}
 
 	// Save talosconfig
 	if p.options.TalosconfigPath != "" {
-		if err = p.saveHetznerTalosconfig(configBundle); err != nil {
-			return fmt.Errorf("failed to save talosconfig: %w", err)
+		saveErr := p.saveHetznerTalosconfig(configBundle)
+		if saveErr != nil {
+			return fmt.Errorf("failed to save talosconfig: %w", saveErr)
 		}
 	}
 
@@ -471,13 +478,14 @@ func (p *TalosProvisioner) createHetznerCluster(ctx context.Context, clusterName
 		// This uses upstream Talos SDK check.Wait() pattern
 		_, _ = fmt.Fprintf(p.logWriter, "Waiting for cluster to be ready...\n")
 
-		if waitErr := p.waitForHetznerClusterReady(
+		waitErr := p.waitForHetznerClusterReady(
 			ctx,
 			clusterName,
 			controlPlaneServers,
 			workerServers,
 			configBundle,
-		); waitErr != nil {
+		)
+		if waitErr != nil {
 			return fmt.Errorf("cluster readiness check failed: %w", waitErr)
 		}
 
@@ -495,6 +503,8 @@ func (p *TalosProvisioner) createHetznerCluster(ctx context.Context, clusterName
 
 // waitForHetznerTalosAPI waits for the Talos API to be reachable on all Hetzner servers.
 // Nodes booted from ISO are in maintenance mode and expose the Talos API on port 50000.
+//
+//nolint:funcorder // Grouped with Hetzner cluster methods for logical code organization
 func (p *TalosProvisioner) waitForHetznerTalosAPI(
 	ctx context.Context,
 	servers []*hcloud.Server,
@@ -554,6 +564,8 @@ func (p *TalosProvisioner) waitForHetznerTalosAPI(
 
 // applyHetznerConfigs applies machine configuration to all Hetzner nodes.
 // It uses the insecure Talos client to connect to nodes in maintenance mode.
+//
+//nolint:funcorder // Grouped with Hetzner cluster methods for logical code organization
 func (p *TalosProvisioner) applyHetznerConfigs(
 	ctx context.Context,
 	_ string,
@@ -600,6 +612,8 @@ func (p *TalosProvisioner) applyHetznerConfigs(
 //
 // Note: We cannot reliably poll STATE partition because the server reboots automatically
 // during install, which breaks our insecure TLS connection.
+//
+//nolint:funcorder,funlen // Grouped with Hetzner cluster methods for logical code organization
 func (p *TalosProvisioner) detachISOsAndReboot(
 	ctx context.Context,
 	hetznerProv *hetzner.Provider,
@@ -689,7 +703,7 @@ func (p *TalosProvisioner) detachISOsAndReboot(
 
 // applyConfigToNode applies machine configuration to a single Hetzner node.
 //
-
+//nolint:funcorder // Grouped with Hetzner cluster methods for logical code organization
 func (p *TalosProvisioner) applyConfigToNode(
 	ctx context.Context,
 	server *hcloud.Server,
@@ -736,6 +750,8 @@ func (p *TalosProvisioner) applyConfigToNode(
 }
 
 // bootstrapHetznerCluster bootstraps the etcd cluster on the first control-plane node.
+//
+//nolint:funcorder,funlen // Grouped with Hetzner cluster methods for logical code organization
 func (p *TalosProvisioner) bootstrapHetznerCluster(
 	ctx context.Context,
 	bootstrapNode *hcloud.Server,
@@ -840,6 +856,8 @@ func (p *TalosProvisioner) bootstrapHetznerCluster(
 }
 
 // saveHetznerKubeconfig fetches and saves the kubeconfig from a Hetzner control-plane node.
+//
+//nolint:funcorder // Grouped with Hetzner cluster methods for logical code organization
 func (p *TalosProvisioner) saveHetznerKubeconfig(
 	ctx context.Context,
 	controlPlaneNode *hcloud.Server,
@@ -902,6 +920,8 @@ func (p *TalosProvisioner) saveHetznerKubeconfig(
 }
 
 // saveHetznerTalosconfig saves the talosconfig for a Hetzner cluster.
+//
+//nolint:funcorder // Grouped with Hetzner cluster methods for logical code organization
 func (p *TalosProvisioner) saveHetznerTalosconfig(configBundle *bundle.Bundle) error {
 	// Expand tilde in talosconfig path
 	talosconfigPath, err := iopath.ExpandHomePath(p.options.TalosconfigPath)
@@ -919,7 +939,8 @@ func (p *TalosProvisioner) saveHetznerTalosconfig(configBundle *bundle.Bundle) e
 	}
 
 	// Save the talosconfig
-	if saveErr := configBundle.TalosConfig().Save(talosconfigPath); saveErr != nil {
+	saveErr := configBundle.TalosConfig().Save(talosconfigPath)
+	if saveErr != nil {
 		return fmt.Errorf("failed to save talosconfig: %w", saveErr)
 	}
 
@@ -944,6 +965,8 @@ func (p *TalosProvisioner) Delete(ctx context.Context, name string) error {
 }
 
 // deleteDockerCluster deletes a Talos-in-Docker cluster using the Talos SDK.
+//
+//nolint:cyclop,funcorder,funlen // Inherent complexity from cluster cleanup with volume collection and config cleanup
 func (p *TalosProvisioner) deleteDockerCluster(ctx context.Context, clusterName string) error {
 	_, err := p.validateClusterOperation(ctx, clusterName)
 	if err != nil {
@@ -1026,6 +1049,8 @@ func (p *TalosProvisioner) deleteDockerCluster(ctx context.Context, clusterName 
 }
 
 // deleteHetznerCluster deletes a Talos cluster on Hetzner Cloud infrastructure.
+//
+//nolint:funcorder // Grouped with Hetzner cluster methods for logical code organization
 func (p *TalosProvisioner) deleteHetznerCluster(ctx context.Context, clusterName string) error {
 	// Type assert to get Hetzner-specific provider
 	hetznerProv, ok := p.infraProvider.(*hetzner.Provider)
@@ -1890,8 +1915,9 @@ func (p *TalosProvisioner) cleanupTalosconfig(clusterName string) error {
 	}
 
 	// Save the modified config
-	if err := cfg.Save(talosconfigPath); err != nil {
-		return fmt.Errorf("failed to save talosconfig: %w", err)
+	saveErr := cfg.Save(talosconfigPath)
+	if saveErr != nil {
+		return fmt.Errorf("failed to save talosconfig: %w", saveErr)
 	}
 
 	_, _ = fmt.Fprintf(p.logWriter, "Cleaned up talosconfig entries for cluster %q\n", clusterName)
@@ -1972,8 +1998,9 @@ func (p *TalosProvisioner) waitForHetznerClusterReady(
 	checkCtx, cancel := context.WithTimeout(ctx, clusterReadinessTimeout)
 	defer cancel()
 
-	if err := check.Wait(checkCtx, clusterAccess, checks, reporter); err != nil {
-		return fmt.Errorf("cluster readiness checks failed: %w", err)
+	checkErr := check.Wait(checkCtx, clusterAccess, checks, reporter)
+	if checkErr != nil {
+		return fmt.Errorf("cluster readiness checks failed: %w", checkErr)
 	}
 
 	return nil
@@ -1982,6 +2009,8 @@ func (p *TalosProvisioner) waitForHetznerClusterReady(
 // waitForHetznerClusterReadyAfterStart waits for a Hetzner cluster to be ready after starting.
 // This is similar to waitForHetznerClusterReady but loads the TalosConfig from disk
 // instead of from the config bundle (which is not available during start operations).
+//
+//nolint:cyclop,funlen // Inherent complexity from cluster readiness checks with multiple node types
 func (p *TalosProvisioner) waitForHetznerClusterReadyAfterStart(
 	ctx context.Context,
 	clusterName string,
@@ -2081,8 +2110,9 @@ func (p *TalosProvisioner) waitForHetznerClusterReadyAfterStart(
 	checkCtx, cancel := context.WithTimeout(ctx, clusterReadinessTimeout)
 	defer cancel()
 
-	if err := check.Wait(checkCtx, clusterAccess, checks, reporter); err != nil {
-		return fmt.Errorf("cluster readiness checks failed: %w", err)
+	checkErr := check.Wait(checkCtx, clusterAccess, checks, reporter)
+	if checkErr != nil {
+		return fmt.Errorf("cluster readiness checks failed: %w", checkErr)
 	}
 
 	_, _ = fmt.Fprintf(p.logWriter, "  ✓ Cluster is ready\n")

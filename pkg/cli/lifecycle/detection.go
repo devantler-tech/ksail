@@ -62,6 +62,7 @@ func DetectClusterInfo(kubeconfigPath, contextName string) (*ClusterInfo, error)
 	kubeconfigPath = resolveKubeconfigPath(kubeconfigPath)
 
 	// Load kubeconfig
+	//nolint:gosec // G304: Intentional file reading from user-provided kubeconfig path
 	configBytes, err := os.ReadFile(kubeconfigPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read kubeconfig: %w", err)

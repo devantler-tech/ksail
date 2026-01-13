@@ -296,6 +296,8 @@ func newConfigs(
 // newConfigsWithEndpoint creates Configs with an optional explicit endpoint IP.
 // If endpointIP is empty, the endpoint is calculated from the network CIDR.
 // If endpointIP is provided (e.g., for Hetzner public IPs), it is used as the endpoint.
+//
+//nolint:funlen // Single cohesive config generation with sequential setup steps
 func newConfigsWithEndpoint(
 	clusterName string,
 	kubernetesVersion string,
@@ -387,6 +389,8 @@ func newConfigsWithEndpoint(
 // newConfigsWithEndpointAndSecrets creates Configs with an explicit endpoint IP while preserving
 // an existing secrets bundle. This is used by WithEndpoint to regenerate configs with a new
 // endpoint without regenerating the PKI (CA, keys, tokens), which would cause certificate mismatches.
+//
+//nolint:funlen // Single cohesive config generation with secrets preservation
 func newConfigsWithEndpointAndSecrets(
 	clusterName string,
 	kubernetesVersion string,

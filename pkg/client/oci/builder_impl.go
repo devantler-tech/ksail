@@ -61,6 +61,8 @@ type builder struct{}
 //  7. Returns artifact metadata on success
 //
 // Returns BuildResult with complete artifact metadata, or an error if any step fails.
+//
+//nolint:funlen // Single cohesive build pipeline with sequential steps
 func (b *builder) Build(ctx context.Context, opts BuildOptions) (BuildResult, error) {
 	validated, err := opts.Validate()
 	if err != nil {

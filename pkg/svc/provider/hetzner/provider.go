@@ -74,6 +74,8 @@ func (p *Provider) StartNodes(ctx context.Context, clusterName string) error {
 
 // StopNodes stops all servers for the given cluster.
 // Uses graceful shutdown (ACPI signal) and waits for servers to be off.
+//
+//nolint:cyclop // Inherent complexity from iterating servers with error handling and status polling
 func (p *Provider) StopNodes(ctx context.Context, clusterName string) error {
 	if p.client == nil {
 		return provider.ErrProviderUnavailable
@@ -126,6 +128,8 @@ func (p *Provider) StopNodes(ctx context.Context, clusterName string) error {
 }
 
 // waitForServersStatus polls until all servers in the cluster reach the desired status.
+//
+//nolint:funcorder // Grouped with StopNodes for logical code organization
 func (p *Provider) waitForServersStatus(
 	ctx context.Context,
 	clusterName string,
@@ -323,6 +327,8 @@ func (p *Provider) CreateServer(
 }
 
 // attachISOAndReboot attaches an ISO to a server and reboots it to boot from the ISO.
+//
+//nolint:funcorder // Grouped with CreateServer for logical code organization
 func (p *Provider) attachISOAndReboot(
 	ctx context.Context,
 	server *hcloud.Server,
@@ -759,6 +765,8 @@ func buildFirewallRules() []hcloud.FirewallRule {
 }
 
 // deleteInfrastructure cleans up infrastructure resources for a cluster.
+//
+//nolint:cyclop // Inherent complexity from deleting multiple resource types with retry logic
 func (p *Provider) deleteInfrastructure(ctx context.Context, clusterName string) error {
 	// Small delay to ensure server deletions are fully processed
 	time.Sleep(DefaultPreDeleteDelay)
@@ -768,8 +776,13 @@ func (p *Provider) deleteInfrastructure(ctx context.Context, clusterName string)
 
 	placementGroup, _, err := p.client.PlacementGroup.GetByName(ctx, placementGroupName)
 	if err == nil && placementGroup != nil {
-		if _, err := p.client.PlacementGroup.Delete(ctx, placementGroup); err != nil {
-			return fmt.Errorf("failed to delete placement group %s: %w", placementGroupName, err)
+		_, deleteErr := p.client.PlacementGroup.Delete(ctx, placementGroup)
+		if deleteErr != nil {
+			return fmt.Errorf(
+				"failed to delete placement group %s: %w",
+				placementGroupName,
+				deleteErr,
+			)
 		}
 	}
 
@@ -806,8 +819,9 @@ func (p *Provider) deleteInfrastructure(ctx context.Context, clusterName string)
 
 	network, _, err := p.client.Network.GetByName(ctx, networkName)
 	if err == nil && network != nil {
-		if _, err := p.client.Network.Delete(ctx, network); err != nil {
-			return fmt.Errorf("failed to delete network %s: %w", networkName, err)
+		_, deleteErr := p.client.Network.Delete(ctx, network)
+		if deleteErr != nil {
+			return fmt.Errorf("failed to delete network %s: %w", networkName, deleteErr)
 		}
 	}
 

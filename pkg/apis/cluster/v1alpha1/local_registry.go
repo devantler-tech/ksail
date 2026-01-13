@@ -63,11 +63,13 @@ func (r LocalRegistry) Parse() ParsedRegistry {
 
 	port := DefaultLocalRegistryPort
 
-	if colonIdx := strings.LastIndex(spec, ":"); colonIdx > 0 {
+	colonIdx := strings.LastIndex(spec, ":")
+	if colonIdx > 0 {
 		host = spec[:colonIdx]
 		portStr := spec[colonIdx+1:]
 
-		if p, err := strconv.ParseInt(portStr, 10, 32); err == nil && p > 0 {
+		p, parseErr := strconv.ParseInt(portStr, 10, 32)
+		if parseErr == nil && p > 0 {
 			port = int32(p)
 		} else {
 			// Not a valid port, treat as part of host (e.g., IPv6)
@@ -93,6 +95,8 @@ func (r LocalRegistry) Parse() ParsedRegistry {
 // ResolveCredentials returns the username and password with environment variable placeholders expanded.
 // Placeholders use the format ${VAR_NAME}. If a referenced environment variable is not set,
 // the placeholder is replaced with an empty string.
+//
+//nolint:nonamedreturns // Named returns document the returned values for clarity
 func (r LocalRegistry) ResolveCredentials() (username, password string) {
 	parsed := r.Parse()
 

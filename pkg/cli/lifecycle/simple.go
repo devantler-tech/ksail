@@ -112,6 +112,8 @@ type ResolvedClusterInfo struct {
 // Priority for cluster name: flag > config > kubeconfig context.
 // Priority for provider: flag > config > default (Docker).
 // Priority for kubeconfig: flag > env (KUBECONFIG) > config > default (~/.kube/config).
+//
+//nolint:cyclop,funlen,gocognit,nestif // Inherent complexity from multi-source resolution with fallback logic
 func ResolveClusterInfo(
 	nameFlag string,
 	providerFlag v1alpha1.Provider,

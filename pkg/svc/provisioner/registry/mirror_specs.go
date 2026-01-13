@@ -26,6 +26,8 @@ type MirrorSpec struct {
 // ResolveCredentials returns the username and password with environment variable placeholders expanded.
 // Placeholders use the format ${VAR_NAME}. If a referenced environment variable is not set,
 // the placeholder is replaced with an empty string.
+//
+//nolint:nonamedreturns // Named returns document the returned values for clarity
 func (m MirrorSpec) ResolveCredentials() (username, password string) {
 	return expandEnvVars(m.Username), expandEnvVars(m.Password)
 }
@@ -489,6 +491,8 @@ func GenerateHostsToml(entry MirrorEntry) string {
 
 // splitMirrorSpec extracts components from a mirror specification string.
 // Format: [user:pass@]host[=endpoint].
+//
+//nolint:nonamedreturns // Named returns document the 5 returned components for clarity
 func splitMirrorSpec(spec string) (host, remote, username, password string, ok bool) {
 	// Examples:
 	//   docker.io
