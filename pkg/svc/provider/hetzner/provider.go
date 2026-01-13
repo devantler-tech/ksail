@@ -649,20 +649,40 @@ func buildFirewallRules() []hcloud.FirewallRule {
 
 // deleteInfrastructure cleans up infrastructure resources for a cluster.
 func (p *Provider) deleteInfrastructure(ctx context.Context, clusterName string) error {
+	// Small delay to ensure server deletions are fully processed
+	time.Sleep(5 * time.Second)
+
 	// Delete placement group
 	placementGroupName := clusterName + PlacementGroupSuffix
 
 	placementGroup, _, err := p.client.PlacementGroup.GetByName(ctx, placementGroupName)
 	if err == nil && placementGroup != nil {
-		_, _ = p.client.PlacementGroup.Delete(ctx, placementGroup)
+		if _, err := p.client.PlacementGroup.Delete(ctx, placementGroup); err != nil {
+			return fmt.Errorf("failed to delete placement group %s: %w", placementGroupName, err)
+		}
 	}
 
-	// Delete firewall
+	// Delete firewall with retry (may still be attached during server deletion)
 	firewallName := clusterName + FirewallSuffix
 
-	firewall, _, err := p.client.Firewall.GetByName(ctx, firewallName)
-	if err == nil && firewall != nil {
-		_, _ = p.client.Firewall.Delete(ctx, firewall)
+	for i := range 5 {
+		firewall, _, err := p.client.Firewall.GetByName(ctx, firewallName)
+		if err != nil || firewall == nil {
+			break // Firewall doesn't exist, we're done
+		}
+
+		_, err = p.client.Firewall.Delete(ctx, firewall)
+		if err == nil {
+			break // Successfully deleted
+		}
+
+		// If this is the last attempt, return the error
+		if i == 4 {
+			return fmt.Errorf("failed to delete firewall %s after 5 attempts: %w", firewallName, err)
+		}
+
+		// Wait before retrying
+		time.Sleep(2 * time.Second)
 	}
 
 	// Delete network
@@ -670,7 +690,9 @@ func (p *Provider) deleteInfrastructure(ctx context.Context, clusterName string)
 
 	network, _, err := p.client.Network.GetByName(ctx, networkName)
 	if err == nil && network != nil {
-		_, _ = p.client.Network.Delete(ctx, network)
+		if _, err := p.client.Network.Delete(ctx, network); err != nil {
+			return fmt.Errorf("failed to delete network %s: %w", networkName, err)
+		}
 	}
 
 	return nil

@@ -20,6 +20,9 @@ import (
 // ErrUnsupportedDistribution is returned when an unsupported distribution is specified.
 var ErrUnsupportedDistribution = errors.New("unsupported distribution")
 
+// ErrUnsupportedProvider is returned when an unsupported provider is specified.
+var ErrUnsupportedProvider = errors.New("unsupported provider")
+
 // ErrMissingDistributionConfig is returned when no pre-loaded distribution config is provided.
 var ErrMissingDistributionConfig = errors.New("missing distribution config")
 

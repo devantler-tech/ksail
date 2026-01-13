@@ -1,14 +1,18 @@
 package cluster
 
 import (
+	"context"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/provider/hetzner"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
+	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	k3dv1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/spf13/cobra"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
@@ -23,29 +27,53 @@ func AllDistributions() []v1alpha1.Distribution {
 	}
 }
 
+// AllProviders returns all supported providers.
+func AllProviders() []v1alpha1.Provider {
+	return []v1alpha1.Provider{
+		v1alpha1.ProviderDocker,
+		v1alpha1.ProviderHetzner,
+	}
+}
+
+const listLongDesc = `List all Kubernetes clusters managed by KSail.
+
+By default, lists clusters from all distributions across all providers.
+Use --provider to filter results to a specific provider.
+
+Examples:
+  # List all clusters
+  ksail cluster list
+
+  # List only Docker-based clusters
+  ksail cluster list --provider Docker
+
+  # List only Hetzner clusters
+  ksail cluster list --provider Hetzner`
+
 // NewListCmd creates the list command for clusters.
 func NewListCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
-	var distributionFilter string
+	var providerFilter v1alpha1.Provider
 
 	cmd := &cobra.Command{
 		Use:          "list",
 		Short:        "List clusters",
-		Long:         `List all Kubernetes clusters managed by KSail.`,
+		Long:         listLongDesc,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return runtimeContainer.Invoke(func(_ runtime.Injector) error {
 				deps := ListDeps{}
 
-				return HandleListRunE(cmd, distributionFilter, deps)
+				return HandleListRunE(cmd, providerFilter, deps)
 			})
 		},
 	}
 
-	// Add --distribution flag as optional filter (no default - lists all by default)
-	cmd.Flags().StringVarP(
-		&distributionFilter,
-		"distribution", "d", "",
-		"Filter by distribution (Vanilla, K3s, Talos). If not specified, lists all distributions.",
+	// Add --provider flag as optional filter (no default - lists all by default)
+	cmd.Flags().VarP(
+		&providerFilter,
+		"provider", "p",
+		fmt.Sprintf("Filter by provider (%s). If not specified, lists all providers.",
+			strings.Join(providerFilter.ValidValues(), ", ")),
 	)
 
 	return cmd
@@ -57,60 +85,117 @@ type ListDeps struct {
 	// If nil, real factories with empty configs are used.
 	// This is primarily for testing purposes.
 	DistributionFactoryCreator func(v1alpha1.Distribution) clusterprovisioner.Factory
+
+	// HetznerProvider is an optional Hetzner provider for listing Hetzner clusters.
+	// If nil, a real provider will be created if HCLOUD_TOKEN is set.
+	HetznerProvider *hetzner.Provider
 }
 
 // HandleListRunE handles the list command.
 // Exported for testing purposes.
 func HandleListRunE(
 	cmd *cobra.Command,
-	distributionFilter string,
+	providerFilter v1alpha1.Provider,
 	deps ListDeps,
 ) error {
-	// Determine which distributions to list
-	distributions, err := resolveDistributions(distributionFilter)
-	if err != nil {
-		return err
+	// Determine which providers to query
+	providers := resolveProviders(providerFilter)
+
+	// Collect clusters from all providers
+	type clusterResult struct {
+		Provider    v1alpha1.Provider
+		ClusterName string
 	}
 
-	// Collect clusters from all distributions
-	results := make(map[v1alpha1.Distribution][]string)
+	var allResults []clusterResult
 
-	for _, dist := range distributions {
-		clusters, listErr := getDistributionClusters(cmd, deps, dist)
-		if listErr != nil {
-			return listErr
+	for _, prov := range providers {
+		clusters, err := getProviderClusters(cmd.Context(), deps, prov)
+		if err != nil {
+			// Log warning but continue with other providers
+			_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Warning: failed to list %s clusters: %v\n", prov, err)
+
+			continue
 		}
 
-		if len(clusters) > 0 {
-			results[dist] = clusters
+		for _, cluster := range clusters {
+			allResults = append(allResults, clusterResult{
+				Provider:    prov,
+				ClusterName: cluster,
+			})
 		}
 	}
 
 	// Display results
-	displayResults(cmd.OutOrStdout(), distributions, results)
+	displayListResults(cmd.OutOrStdout(), providers, allResults)
 
 	return nil
 }
 
-// resolveDistributions returns the list of distributions to query based on the filter.
-func resolveDistributions(filter string) ([]v1alpha1.Distribution, error) {
+// resolveProviders returns the list of providers to query based on the filter.
+func resolveProviders(filter v1alpha1.Provider) []v1alpha1.Provider {
 	if filter == "" {
-		return AllDistributions(), nil
+		return AllProviders()
 	}
 
-	// Parse and validate the distribution filter
-	var dist v1alpha1.Distribution
+	return []v1alpha1.Provider{filter}
+}
 
-	err := dist.Set(filter)
-	if err != nil {
-		return nil, fmt.Errorf("invalid distribution filter: %w", err)
+// getProviderClusters returns all clusters for a given provider.
+func getProviderClusters(
+	ctx context.Context,
+	deps ListDeps,
+	provider v1alpha1.Provider,
+) ([]string, error) {
+	switch provider {
+	case v1alpha1.ProviderDocker:
+		return getDockerClusters(ctx, deps)
+	case v1alpha1.ProviderHetzner:
+		return getHetznerClusters(ctx, deps)
+	default:
+		return nil, fmt.Errorf("unsupported provider: %s", provider)
+	}
+}
+
+// getDockerClusters returns all Docker-based clusters across all distributions.
+func getDockerClusters(ctx context.Context, deps ListDeps) ([]string, error) {
+	var allClusters []string
+
+	for _, dist := range AllDistributions() {
+		clusters, err := getDistributionClusters(ctx, deps, dist)
+		if err != nil {
+			// Log and continue - don't fail on one distribution
+			continue
+		}
+
+		allClusters = append(allClusters, clusters...)
 	}
 
-	return []v1alpha1.Distribution{dist}, nil
+	return allClusters, nil
+}
+
+// getHetznerClusters returns all Hetzner-based clusters.
+func getHetznerClusters(ctx context.Context, deps ListDeps) ([]string, error) {
+	// Use injected provider if available (for testing)
+	if deps.HetznerProvider != nil {
+		return deps.HetznerProvider.ListAllClusters(ctx)
+	}
+
+	// Check for HCLOUD_TOKEN
+	token := os.Getenv("HCLOUD_TOKEN")
+	if token == "" {
+		// No token, skip Hetzner silently
+		return nil, nil
+	}
+
+	client := hcloud.NewClient(hcloud.WithToken(token))
+	provider := hetzner.NewProvider(client)
+
+	return provider.ListAllClusters(ctx)
 }
 
 func getDistributionClusters(
-	cmd *cobra.Command,
+	ctx context.Context,
 	deps ListDeps,
 	distribution v1alpha1.Distribution,
 ) ([]string, error) {
@@ -135,12 +220,12 @@ func getDistributionClusters(
 		}
 	}
 
-	provisioner, _, err := factory.Create(cmd.Context(), clusterCfg)
+	provisioner, _, err := factory.Create(ctx, clusterCfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create provisioner for %s: %w", distribution, err)
 	}
 
-	clusters, err := provisioner.List(cmd.Context())
+	clusters, err := provisioner.List(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list %s clusters: %w", distribution, err)
 	}
@@ -173,13 +258,16 @@ func createEmptyDistributionConfig(
 	}
 }
 
-// displayResults outputs the cluster list in a simplified format.
-// Only distributions with clusters are shown, formatted as "distribution: cluster1, cluster2".
-// If no clusters exist across all distributions, displays "No clusters found.".
-func displayResults(
+// displayListResults outputs the cluster list grouped by provider.
+// Only providers with clusters are shown, formatted as "provider: cluster1, cluster2".
+// If no clusters exist, displays "No clusters found.".
+func displayListResults(
 	writer io.Writer,
-	distributions []v1alpha1.Distribution,
-	results map[v1alpha1.Distribution][]string,
+	providers []v1alpha1.Provider,
+	results []struct {
+		Provider    v1alpha1.Provider
+		ClusterName string
+	},
 ) {
 	if len(results) == 0 {
 		_, _ = fmt.Fprintln(writer, "No clusters found.")
@@ -187,9 +275,15 @@ func displayResults(
 		return
 	}
 
-	// Output in distribution order for consistent output
-	for _, dist := range distributions {
-		clusters, exists := results[dist]
+	// Group clusters by provider
+	providerClusters := make(map[v1alpha1.Provider][]string)
+	for _, r := range results {
+		providerClusters[r.Provider] = append(providerClusters[r.Provider], r.ClusterName)
+	}
+
+	// Output in provider order for consistent output
+	for _, prov := range providers {
+		clusters, exists := providerClusters[prov]
 		if !exists || len(clusters) == 0 {
 			continue
 		}
@@ -197,7 +291,7 @@ func displayResults(
 		_, _ = fmt.Fprintf(
 			writer,
 			"%s: %s\n",
-			strings.ToLower(string(dist)),
+			strings.ToLower(string(prov)),
 			strings.Join(clusters, ", "),
 		)
 	}

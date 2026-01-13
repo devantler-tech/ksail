@@ -328,6 +328,10 @@ func newConfigsWithEndpoint(
 		generate.WithEndpointList([]string{controlPlaneIP}),
 		generate.WithAdditionalSubjectAltNames([]string{"127.0.0.1"}),
 		generate.WithVersionContract(talosconfig.TalosVersion1_11),
+		// Install disk is required for bare metal installations (Hetzner, etc.)
+		// For Docker-in-Docker, this setting is ignored as there's no actual disk.
+		// /dev/sda is the standard disk for Hetzner VPS and most cloud providers.
+		generate.WithInstallDisk("/dev/sda"),
 	}
 
 	// Build bundle options
@@ -415,6 +419,10 @@ func newConfigsWithEndpointAndSecrets(
 		generate.WithEndpointList([]string{controlPlaneIP}),
 		generate.WithAdditionalSubjectAltNames([]string{"127.0.0.1"}),
 		generate.WithVersionContract(talosconfig.TalosVersion1_11),
+		// Install disk is required for bare metal installations (Hetzner, etc.)
+		// For Docker-in-Docker, this setting is ignored as there's no actual disk.
+		// /dev/sda is the standard disk for Hetzner VPS and most cloud providers.
+		generate.WithInstallDisk("/dev/sda"),
 	}
 
 	// If we have existing secrets, reuse them to preserve PKI across endpoint changes

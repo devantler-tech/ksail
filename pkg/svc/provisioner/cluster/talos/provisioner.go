@@ -547,63 +547,81 @@ func (p *TalosProvisioner) applyHetznerConfigs(
 	return nil
 }
 
-// detachISOsAndReboot detaches the ISO from all servers after installation completes.
-// Flow:
-// 1. After applying config, Talos installs to disk (takes 2-3 minutes)
-// 2. After installation, Talos reboots automatically
-// 3. We wait for the node to become unreachable (installation done, rebooting)
-// 4. We detach the ISO while it's rebooting
-// 5. We wait for the node to boot from disk (Talos API reachable with auth)
+// detachISOsAndReboot handles the post-config-apply phase of Hetzner Talos installation.
+//
+// After ApplyConfiguration, Talos runs the install sequence which:
+// 1. Installs Talos to disk (creates STATE, EPHEMERAL partitions)
+// 2. Automatically reboots the server
+//
+// On Hetzner, after reboot with an installed disk, the server typically boots from disk
+// even with ISO still attached (disk gets higher boot priority after install).
+//
+// This function:
+// 1. Waits for the installation + automatic reboot to complete
+// 2. Waits for servers to become reachable (connection refused during reboot)
+// 3. Detaches ISOs for cleanliness (not strictly required but good practice)
+//
+// Note: We cannot reliably poll STATE partition because the server reboots automatically
+// during install, which breaks our insecure TLS connection.
 func (p *TalosProvisioner) detachISOsAndReboot(
 	ctx context.Context,
 	hetznerProv *hetzner.Provider,
 	servers []*hcloud.Server,
 ) error {
-	// Wait for installation to complete - node becomes unreachable during reboot
-	_, _ = fmt.Fprintf(p.logWriter, "  Waiting for installation to complete (this may take 2-3 minutes)...\n")
+	_, _ = fmt.Fprintf(p.logWriter, "  Waiting for installation and automatic reboot to complete...\n")
+	_, _ = fmt.Fprintf(p.logWriter, "  (Talos will install to disk and reboot automatically - this takes 3-5 minutes)\n")
 
-	// Give Talos some time to start installation before checking connectivity
-	time.Sleep(30 * time.Second)
-
+	// Wait for all servers to complete installation and reboot
+	// During this time:
+	// - Nodes install Talos to disk (1-2 minutes)
+	// - Nodes automatically reboot (from install sequence)
+	// - Nodes boot from disk and come up with authenticated TLS
+	//
+	// We detect completion by waiting for a TCP connection to succeed on port 50000
+	// (the server will be unreachable during reboot, then come back)
 	for _, server := range servers {
 		ip := server.PublicNet.IPv4.IP.String()
-		endpoint := fmt.Sprintf("%s:%d", ip, talosAPIPort)
 
-		_, _ = fmt.Fprintf(p.logWriter, "  Waiting for %s to reboot after installation...\n", server.Name)
+		_, _ = fmt.Fprintf(p.logWriter, "  Waiting for %s to install, reboot, and become reachable...\n", server.Name)
 
-		// Wait for the maintenance API to become unreachable (node is rebooting after install)
-		err := retry.Constant(5*time.Minute, retry.WithUnits(10*time.Second)).
+		// Wait for server to become reachable after installation + reboot
+		// This waits through the entire install cycle:
+		// - Initial "connection refused" during install
+		// - Then more "connection refused" during reboot
+		// - Finally success when booted from disk
+		err := retry.Constant(10*time.Minute, retry.WithUnits(10*time.Second)).
 			RetryWithContext(ctx, func(ctx context.Context) error {
-				conn, dialErr := net.DialTimeout("tcp", endpoint, 5*time.Second)
+				// Just check if we can establish a TCP connection
+				// We don't care about TLS here, just network reachability
+				conn, dialErr := net.DialTimeout("tcp", ip+":50000", 5*time.Second)
 				if dialErr != nil {
-					// Connection failed - node is rebooting, this is what we want
-					return nil
+					return retry.ExpectedError(fmt.Errorf("waiting for server to become reachable: %w", dialErr))
 				}
-				// Still reachable - installation not done yet
 				conn.Close()
-				return retry.ExpectedError(fmt.Errorf("node still reachable, waiting for installation to complete"))
+
+				return nil
 			})
 		if err != nil {
-			return fmt.Errorf("timeout waiting for %s to start rebooting: %w", server.Name, err)
+			return fmt.Errorf("timeout waiting for %s to become reachable after install: %w", server.Name, err)
 		}
 
-		_, _ = fmt.Fprintf(p.logWriter, "  ✓ %s is rebooting after installation\n", server.Name)
+		_, _ = fmt.Fprintf(p.logWriter, "  ✓ %s is reachable after install\n", server.Name)
 	}
 
-	// Now detach ISOs while nodes are rebooting
+	// Now detach ISOs for cleanliness
+	// This isn't strictly required (disk has boot priority after install)
+	// but it's good practice to clean up
 	for _, server := range servers {
 		_, _ = fmt.Fprintf(p.logWriter, "  Detaching ISO from %s...\n", server.Name)
 
 		err := hetznerProv.DetachISO(ctx, server)
 		if err != nil {
-			return fmt.Errorf("failed to detach ISO from %s: %w", server.Name, err)
+			// Log but don't fail - ISO detachment is not critical
+			_, _ = fmt.Fprintf(p.logWriter, "  Warning: Failed to detach ISO from %s: %v\n", server.Name, err)
+		} else {
+			_, _ = fmt.Fprintf(p.logWriter, "  ✓ ISO detached from %s\n", server.Name)
 		}
-
-		_, _ = fmt.Fprintf(p.logWriter, "  ✓ ISO detached from %s\n", server.Name)
 	}
-
-	// Nodes will now boot from disk instead of ISO
-	_, _ = fmt.Fprintf(p.logWriter, "  Nodes will boot from disk on next boot cycle\n")
 
 	return nil
 }

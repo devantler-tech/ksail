@@ -10,11 +10,17 @@ import (
 
 const stopLongDesc = `Stop a running Kubernetes cluster.
 
-The cluster is detected from the provided context or the current kubeconfig context.
-Supported distributions are automatically detected:
-  - Vanilla (Kind) clusters (context pattern: kind-<cluster-name>)
-  - K3s (K3d) clusters (context pattern: k3d-<cluster-name>)
-  - Talos clusters (context pattern: admin@<cluster-name>)`
+The cluster is resolved in the following priority order:
+  1. From --name flag
+  2. From ksail.yaml config file (if present)
+  3. From current kubeconfig context
+
+The provider is resolved in the following priority order:
+  1. From --provider flag
+  2. From ksail.yaml config file (if present)
+  3. Defaults to Docker
+
+Supported distributions are automatically detected from existing clusters.`
 
 // NewStopCmd creates and returns the stop command.
 func NewStopCmd(_ any) *cobra.Command {

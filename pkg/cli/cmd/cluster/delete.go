@@ -17,46 +17,57 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const deleteLongDesc = `Destroy a cluster.
+
+The cluster is resolved in the following priority order:
+  1. From --name flag
+  2. From ksail.yaml config file (if present)
+  3. From current kubeconfig context
+
+The provider is resolved in the following priority order:
+  1. From --provider flag
+  2. From ksail.yaml config file (if present)
+  3. Defaults to Docker`
+
 // NewDeleteCmd creates and returns the delete command.
-// Delete uses context-based detection to determine the cluster distribution and provider,
-// requiring only --kubeconfig, --context, and --delete-storage flags.
+// Delete uses --name and --provider flags to determine the cluster to delete.
 func NewDeleteCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
 	var (
-		contextFlag    string
-		kubeconfigFlag string
-		deleteStorage  bool
+		nameFlag      string
+		providerFlag  v1alpha1.Provider
+		deleteStorage bool
 	)
 
 	cmd := &cobra.Command{
 		Use:           "delete",
 		Short:         "Destroy a cluster",
-		Long:          `Destroy a cluster.`,
+		Long:          deleteLongDesc,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return runDeleteAction(
 				cmd,
 				runtimeContainer,
-				kubeconfigFlag,
-				contextFlag,
+				nameFlag,
+				providerFlag,
 				deleteStorage,
 			)
 		},
 	}
 
 	cmd.Flags().StringVarP(
-		&contextFlag,
-		"context",
-		"c",
+		&nameFlag,
+		"name",
+		"n",
 		"",
-		"Kubernetes context to target (defaults to current context)",
+		"Name of the cluster to delete",
 	)
 
-	cmd.Flags().StringVar(
-		&kubeconfigFlag,
-		"kubeconfig",
-		"",
-		"Path to kubeconfig file (defaults to $KUBECONFIG or ~/.kube/config)",
+	cmd.Flags().VarP(
+		&providerFlag,
+		"provider",
+		"p",
+		fmt.Sprintf("Provider to use (%s)", providerFlag.ValidValues()),
 	)
 
 	cmd.Flags().BoolVar(
@@ -73,8 +84,8 @@ func NewDeleteCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
 func runDeleteAction(
 	cmd *cobra.Command,
 	runtimeContainer *runtime.Runtime,
-	kubeconfigPath string,
-	contextFlag string,
+	nameFlag string,
+	providerFlag v1alpha1.Provider,
 	deleteStorage bool,
 ) error {
 	// Wrap output with StageSeparatingWriter for automatic stage separation
@@ -98,32 +109,40 @@ func runDeleteAction(
 		tmr.Start()
 	}
 
-	// Detect cluster info from kubeconfig
-	clusterInfo, err := lifecycle.DetectClusterInfo(kubeconfigPath, contextFlag)
+	// Resolve cluster info from flags, config, or kubeconfig
+	resolved, err := lifecycle.ResolveClusterInfo(nameFlag, providerFlag)
 	if err != nil {
-		return fmt.Errorf("failed to detect cluster: %w", err)
+		return err
 	}
 
-	// Create provisioner for the detected distribution
+	// Create cluster info for provisioner creation
+	clusterInfo := &lifecycle.ClusterInfo{
+		ClusterName: resolved.ClusterName,
+		Provider:    resolved.Provider,
+	}
+
+	// Create provisioner for the provider
 	provisioner, err := createDeleteProvisioner(clusterInfo)
 	if err != nil {
 		return fmt.Errorf("failed to create provisioner: %w", err)
 	}
 
-	// For Talos, pre-discover registries before deletion (network is destroyed during delete)
+	// Pre-discover registries before deletion for Docker provider
 	var preDiscovered *mirrorregistry.DiscoveredRegistries
-	if clusterInfo.Distribution == v1alpha1.DistributionTalos {
+	if resolved.Provider == v1alpha1.ProviderDocker {
 		preDiscovered = discoverRegistriesBeforeDelete(cmd, clusterInfo)
 	}
 
 	// Delete the cluster
-	err = executeDelete(cmd, tmr, provisioner, clusterInfo)
+	err = executeDelete(cmd, tmr, provisioner, resolved)
 	if err != nil {
 		return err
 	}
 
-	// Cleanup registries after cluster deletion
-	cleanupRegistriesAfterDelete(cmd, tmr, clusterInfo, deleteStorage, preDiscovered)
+	// Cleanup registries after cluster deletion (only for Docker provider)
+	if resolved.Provider == v1alpha1.ProviderDocker {
+		cleanupRegistriesAfterDelete(cmd, tmr, resolved, deleteStorage, preDiscovered)
+	}
 
 	return nil
 }
@@ -151,20 +170,22 @@ func createDeleteProvisioner(
 		return provisioner, nil
 	}
 
-	return lifecycle.CreateMinimalProvisioner(clusterInfo)
+	return lifecycle.CreateMinimalProvisionerForProvider(clusterInfo)
 }
 
 // discoverRegistriesBeforeDelete discovers registries connected to the cluster network.
-// This must be called BEFORE cluster deletion for Talos, as the network is destroyed during delete.
+// This must be called BEFORE cluster deletion for Docker-based clusters.
 func discoverRegistriesBeforeDelete(
 	cmd *cobra.Command,
 	clusterInfo *lifecycle.ClusterInfo,
 ) *mirrorregistry.DiscoveredRegistries {
 	cleanupDeps := getCleanupDeps()
 
+	// For Docker provider, we need to try all distributions
+	// Use Talos as the distribution hint since registry cleanup uses cluster name as network name
 	return mirrorregistry.DiscoverRegistriesByNetwork(
 		cmd,
-		clusterInfo.Distribution,
+		v1alpha1.DistributionTalos, // Distribution hint for network naming
 		clusterInfo.ClusterName,
 		cleanupDeps,
 	)
@@ -175,7 +196,7 @@ func executeDelete(
 	cmd *cobra.Command,
 	tmr timer.Timer,
 	provisioner clusterprovisioner.ClusterProvisioner,
-	clusterInfo *lifecycle.ClusterInfo,
+	resolved *lifecycle.ResolvedClusterInfo,
 ) error {
 	if tmr != nil {
 		tmr.NewStage()
@@ -191,15 +212,15 @@ func executeDelete(
 	notify.WriteMessage(notify.Message{
 		Type: notify.ActivityType,
 		Content: fmt.Sprintf(
-			"deleting %s cluster '%s'",
-			clusterInfo.Distribution,
-			clusterInfo.ClusterName,
+			"deleting cluster '%s' on %s",
+			resolved.ClusterName,
+			resolved.Provider,
 		),
 		Writer: cmd.OutOrStdout(),
 	})
 
 	// Check if cluster exists
-	exists, err := provisioner.Exists(cmd.Context(), clusterInfo.ClusterName)
+	exists, err := provisioner.Exists(cmd.Context(), resolved.ClusterName)
 	if err != nil {
 		return fmt.Errorf("check cluster existence: %w", err)
 	}
@@ -208,13 +229,8 @@ func executeDelete(
 		return clustererrors.ErrClusterNotFound
 	}
 
-	// Disconnect registries before Talos cluster deletion to avoid network conflicts
-	if clusterInfo.Distribution == v1alpha1.DistributionTalos {
-		disconnectRegistriesBeforeTalosDelete(cmd, clusterInfo)
-	}
-
 	// Delete the cluster
-	err = provisioner.Delete(cmd.Context(), clusterInfo.ClusterName)
+	err = provisioner.Delete(cmd.Context(), resolved.ClusterName)
 	if err != nil {
 		return fmt.Errorf("cluster deletion failed: %w", err)
 	}
@@ -231,34 +247,11 @@ func executeDelete(
 	return nil
 }
 
-// disconnectRegistriesBeforeTalosDelete disconnects registries from the Talos network
-// before cluster deletion. This is necessary because Talos deletes the network as part
-// of cluster deletion, and connected containers prevent network removal.
-func disconnectRegistriesBeforeTalosDelete(
-	cmd *cobra.Command,
-	clusterInfo *lifecycle.ClusterInfo,
-) {
-	cleanupDeps := getCleanupDeps()
-
-	err := mirrorregistry.DisconnectRegistriesFromNetwork(
-		cmd,
-		clusterInfo.ClusterName, // Talos uses cluster name as network name
-		cleanupDeps,
-	)
-	if err != nil {
-		notify.WriteMessage(notify.Message{
-			Type:    notify.ErrorType,
-			Content: fmt.Sprintf("failed to disconnect registries: %v", err),
-			Writer:  cmd.OutOrStdout(),
-		})
-	}
-}
-
 // cleanupRegistriesAfterDelete cleans up registries after cluster deletion.
 func cleanupRegistriesAfterDelete(
 	cmd *cobra.Command,
 	tmr timer.Timer,
-	clusterInfo *lifecycle.ClusterInfo,
+	resolved *lifecycle.ResolvedClusterInfo,
 	deleteStorage bool,
 	preDiscovered *mirrorregistry.DiscoveredRegistries,
 ) {
@@ -266,7 +259,7 @@ func cleanupRegistriesAfterDelete(
 
 	var err error
 	if preDiscovered != nil && len(preDiscovered.Registries) > 0 {
-		// Use pre-discovered registries (for Talos where network is destroyed)
+		// Use pre-discovered registries
 		err = mirrorregistry.CleanupPreDiscoveredRegistries(
 			cmd,
 			tmr,
@@ -275,12 +268,13 @@ func cleanupRegistriesAfterDelete(
 			cleanupDeps,
 		)
 	} else {
-		// Discover and cleanup registries by network (for Kind, K3d)
+		// Discover and cleanup registries by network
+		// Use Talos as distribution hint since registry cleanup uses cluster name as network name
 		err = mirrorregistry.CleanupRegistriesByNetwork(
 			cmd,
 			tmr,
-			clusterInfo.Distribution,
-			clusterInfo.ClusterName,
+			v1alpha1.DistributionTalos,
+			resolved.ClusterName,
 			deleteStorage,
 			cleanupDeps,
 		)
