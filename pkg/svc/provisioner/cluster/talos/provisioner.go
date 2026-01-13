@@ -38,6 +38,9 @@ import (
 	"github.com/siderolabs/talos/pkg/provision"
 	"github.com/siderolabs/talos/pkg/provision/access"
 	"github.com/siderolabs/talos/pkg/provision/providers"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 )
 
@@ -444,15 +447,17 @@ func (p *TalosProvisioner) createHetznerCluster(ctx context.Context, clusterName
 			return fmt.Errorf("failed to save kubeconfig: %w", err)
 		}
 
-		// Wait for Kubernetes API server to be stable before reporting success
+		// Wait for cluster to be fully ready before reporting success
 		// This ensures the cluster is actually usable when we return
-		_, _ = fmt.Fprintf(p.logWriter, "Waiting for Kubernetes API server to be stable...\n")
+		_, _ = fmt.Fprintf(p.logWriter, "Waiting for cluster to be ready...\n")
 
-		if waitErr := p.waitForKubernetesAPIStable(ctx); waitErr != nil {
-			return fmt.Errorf("failed waiting for Kubernetes API server: %w", waitErr)
+		expectedNodes := len(controlPlaneServers) + len(workerServers)
+
+		if waitErr := p.waitForHetznerClusterReady(ctx, expectedNodes); waitErr != nil {
+			return fmt.Errorf("cluster readiness check failed: %w", waitErr)
 		}
 
-		_, _ = fmt.Fprintf(p.logWriter, "  ✓ Kubernetes API server is stable\n")
+		_, _ = fmt.Fprintf(p.logWriter, "  ✓ Cluster is ready\n")
 	}
 
 	_, _ = fmt.Fprintf(
@@ -1734,10 +1739,15 @@ func (p *TalosProvisioner) cleanupKubeconfig(clusterName string) error {
 	return nil
 }
 
-// waitForKubernetesAPIStable waits for the Kubernetes API server to be accessible and stable.
-// This is called after saving the kubeconfig to ensure the cluster is actually usable.
-func (p *TalosProvisioner) waitForKubernetesAPIStable(ctx context.Context) error {
-	timeout := 3 * time.Minute
+// waitForHetznerClusterReady waits for the Hetzner cluster to be fully ready.
+// This performs the same readiness checks as Docker-based clusters:
+// 1. Kubernetes API server is accessible and stable
+// 2. Expected number of nodes are registered with Kubernetes
+// 3. All nodes reach Ready status (or NotReady if CNI is disabled)
+//
+// This ensures the cluster is actually usable when creation returns.
+func (p *TalosProvisioner) waitForHetznerClusterReady(ctx context.Context, expectedNodes int) error {
+	timeout := clusterReadinessTimeout
 
 	// Expand kubeconfig path
 	kubeconfigPath, err := iopath.ExpandHomePath(p.options.KubeconfigPath)
@@ -1751,13 +1761,116 @@ func (p *TalosProvisioner) waitForKubernetesAPIStable(ctx context.Context) error
 		return fmt.Errorf("failed to create kubernetes client: %w", err)
 	}
 
-	// Wait for API server to be stable (3 consecutive successful responses)
+	// Step 1: Wait for API server to be stable (3 consecutive successful responses)
+	_, _ = fmt.Fprintf(p.logWriter, "  Waiting for Kubernetes API server...\n")
+
 	err = k8s.WaitForAPIServerStable(ctx, clientset, timeout, 3)
 	if err != nil {
 		return fmt.Errorf("API server not stable: %w", err)
 	}
 
+	_, _ = fmt.Fprintf(p.logWriter, "    ✓ API server is responding\n")
+
+	// Step 2: Wait for expected nodes to be registered
+	_, _ = fmt.Fprintf(p.logWriter, "  Waiting for %d node(s) to register...\n", expectedNodes)
+
+	err = p.waitForNodesRegistered(ctx, clientset, expectedNodes, timeout)
+	if err != nil {
+		return fmt.Errorf("nodes not registered: %w", err)
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "    ✓ All nodes registered\n")
+
+	// Step 3: Wait for nodes to be Ready (or NotReady if CNI is disabled)
+	// When CNI is disabled, nodes won't become Ready until CNI is installed
+	skipNodeReadiness := (p.talosConfigs != nil && p.talosConfigs.IsCNIDisabled()) || p.options.SkipCNIChecks
+
+	if skipNodeReadiness {
+		_, _ = fmt.Fprintf(p.logWriter, "  Skipping node Ready check (CNI not installed yet)\n")
+	} else {
+		_, _ = fmt.Fprintf(p.logWriter, "  Waiting for nodes to be Ready...\n")
+
+		err = p.waitForNodesReady(ctx, clientset, expectedNodes, timeout)
+		if err != nil {
+			return fmt.Errorf("nodes not ready: %w", err)
+		}
+
+		_, _ = fmt.Fprintf(p.logWriter, "    ✓ All nodes are Ready\n")
+	}
+
 	return nil
+}
+
+// waitForNodesRegistered waits for the expected number of nodes to be registered with the API server.
+func (p *TalosProvisioner) waitForNodesRegistered(
+	ctx context.Context,
+	clientset *kubernetes.Clientset,
+	expectedNodes int,
+	timeout time.Duration,
+) error {
+	return retry.Constant(timeout, retry.WithUnits(5*time.Second)).
+		RetryWithContext(ctx, func(ctx context.Context) error {
+			nodes, listErr := clientset.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+			if listErr != nil {
+				return retry.ExpectedError(listErr)
+			}
+
+			if len(nodes.Items) < expectedNodes {
+				return retry.ExpectedErrorf(
+					"waiting for nodes: got %d, expected %d",
+					len(nodes.Items),
+					expectedNodes,
+				)
+			}
+
+			return nil
+		})
+}
+
+// waitForNodesReady waits for all nodes to reach Ready status.
+func (p *TalosProvisioner) waitForNodesReady(
+	ctx context.Context,
+	clientset *kubernetes.Clientset,
+	expectedNodes int,
+	timeout time.Duration,
+) error {
+	return retry.Constant(timeout, retry.WithUnits(5*time.Second)).
+		RetryWithContext(ctx, func(ctx context.Context) error {
+			nodes, listErr := clientset.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+			if listErr != nil {
+				return retry.ExpectedError(listErr)
+			}
+
+			if len(nodes.Items) < expectedNodes {
+				return retry.ExpectedErrorf(
+					"waiting for nodes: got %d, expected %d",
+					len(nodes.Items),
+					expectedNodes,
+				)
+			}
+
+			readyCount := 0
+
+			for _, node := range nodes.Items {
+				for _, condition := range node.Status.Conditions {
+					if condition.Type == corev1.NodeReady && condition.Status == corev1.ConditionTrue {
+						readyCount++
+
+						break
+					}
+				}
+			}
+
+			if readyCount < expectedNodes {
+				return retry.ExpectedErrorf(
+					"waiting for nodes to be ready: %d/%d ready",
+					readyCount,
+					expectedNodes,
+				)
+			}
+
+			return nil
+		})
 }
 
 // ensureKernelModules loads required kernel modules for Talos networking.
