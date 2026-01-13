@@ -42,6 +42,10 @@ The same configuration is used in CI, so you can expect the same linting behavio
 
 ```sh
 # working-directory: ./
+# Build the ksail binary
+go build -o ksail
+
+# Or: compile all packages (no binary output)
 go build ./...
 ```
 
