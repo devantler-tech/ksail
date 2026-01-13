@@ -254,6 +254,7 @@ func DetectRegistryFromArgoCD(ctx context.Context) (*RegistryInfo, error) {
 		namespace:  "argocd",
 		name:       "ksail",
 		urlPath:    []string{"spec", "source", "repoURL"},
+		refPath:    []string{"spec", "source", "targetRevision"},
 		errNoURL:   ErrArgoCDNoRepoURL,
 		sourceName: "ArgoCD",
 	})
