@@ -224,12 +224,12 @@ func TestListCmd_FactoryError(t *testing.T) {
 		},
 	}
 
-	// Factory errors are now logged as warnings and don't cause command failure
+	// Factory errors per distribution are silently skipped - command succeeds with no clusters found
 	err := clusterpkg.HandleListRunE(cmd, v1alpha1.ProviderDocker, deps)
-	require.NoError(t, err) // No longer returns error - logs warning instead
+	require.NoError(t, err)
 
-	// Verify warning was logged to stderr
-	require.Contains(t, errBuf.String(), "Warning")
+	// Since all distributions fail, no clusters found
+	require.Contains(t, outBuf.String(), "No clusters found")
 }
 
 //nolint:paralleltest // uses t.Chdir

@@ -147,7 +147,7 @@ func setupContextBasedTest(
 }
 
 // TestDelete_ContextBasedDetection_DeletesCluster tests that delete can detect
-// distribution from kubeconfig context and delete the cluster successfully.
+// cluster from kubeconfig context and delete the cluster successfully.
 //
 //nolint:paralleltest // Cannot use t.Parallel() with t.Chdir() and t.Setenv() in helper
 func TestDelete_ContextBasedDetection_DeletesCluster(t *testing.T) {
@@ -212,7 +212,7 @@ func TestDelete_ContextBasedDetection_ClusterNotFound(t *testing.T) {
 }
 
 // TestDelete_ContextBasedDetection_UnknownContextPattern tests that delete returns
-// an error when the context doesn't match a known distribution pattern.
+// an error when the context doesn't match a known pattern.
 func TestDelete_ContextBasedDetection_UnknownContextPattern(t *testing.T) {
 	workingDir := t.TempDir()
 	t.Chdir(workingDir)
@@ -239,37 +239,38 @@ func TestDelete_ContextBasedDetection_UnknownContextPattern(t *testing.T) {
 
 	err := cmd.Execute()
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "failed to detect cluster")
+	// Error should indicate cluster name is required
+	require.Contains(t, err.Error(), "cluster name is required")
 }
 
-// TestDelete_CommandFlags verifies that the delete command has only the expected flags.
+// TestDelete_CommandFlags verifies that the delete command has the expected flags.
 func TestDelete_CommandFlags(t *testing.T) {
 	t.Parallel()
 
 	testRuntime := newDeleteTestRuntimeContainer(t)
 	cmd := clusterpkg.NewDeleteCmd(testRuntime)
 
-	// Verify expected flags exist
-	contextFlag := cmd.Flags().Lookup("context")
-	require.NotNil(t, contextFlag, "expected --context flag")
-	require.Equal(t, "c", contextFlag.Shorthand)
+	// Verify expected new flags exist
+	nameFlag := cmd.Flags().Lookup("name")
+	require.NotNil(t, nameFlag, "expected --name flag")
+	require.Equal(t, "n", nameFlag.Shorthand)
 
-	kubeconfigFlag := cmd.Flags().Lookup("kubeconfig")
-	require.NotNil(t, kubeconfigFlag, "expected --kubeconfig flag")
+	providerFlag := cmd.Flags().Lookup("provider")
+	require.NotNil(t, providerFlag, "expected --provider flag")
+	require.Equal(t, "p", providerFlag.Shorthand)
 
 	deleteStorageFlag := cmd.Flags().Lookup("delete-storage")
 	require.NotNil(t, deleteStorageFlag, "expected --delete-storage flag")
 
 	// Verify old flags do NOT exist
+	contextFlag := cmd.Flags().Lookup("context")
+	require.Nil(t, contextFlag, "unexpected --context flag (should be removed)")
+
+	kubeconfigFlag := cmd.Flags().Lookup("kubeconfig")
+	require.Nil(t, kubeconfigFlag, "unexpected --kubeconfig flag (should be removed)")
+
 	distributionFlag := cmd.Flags().Lookup("distribution")
 	require.Nil(t, distributionFlag, "unexpected --distribution flag (should be removed)")
-
-	deleteVolumesFlag := cmd.Flags().Lookup("delete-volumes")
-	require.Nil(
-		t,
-		deleteVolumesFlag,
-		"unexpected --delete-volumes flag (renamed to --delete-storage)",
-	)
 }
 
 // Ensure fake types satisfy interfaces at compile time.

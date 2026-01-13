@@ -1,23 +1,23 @@
 
 [TestDelete_ContextBasedDetection_ClusterNotFound - 1]
 🗑️ Delete cluster...
-► deleting Vanilla cluster 'nonexistent'
+► deleting cluster 'nonexistent' on Docker
 ---
 
 [TestDelete_ContextBasedDetection_DeletesCluster/K3d_context_pattern - 1]
 🗑️ Delete cluster...
-► deleting K3s cluster 'dev-cluster'
+► deleting cluster 'dev-cluster' on Docker
 ✔ cluster deleted
 ---
 
 [TestDelete_ContextBasedDetection_DeletesCluster/Kind_context_pattern - 1]
 🗑️ Delete cluster...
-► deleting Vanilla cluster 'my-cluster'
+► deleting cluster 'my-cluster' on Docker
 ✔ cluster deleted
 ---
 
 [TestDelete_ContextBasedDetection_DeletesCluster/Talos_context_pattern - 1]
 🗑️ Delete cluster...
-► deleting Talos cluster 'talos-homelab'
+► deleting cluster 'talos-homelab' on Docker
 ✔ cluster deleted
 ---
