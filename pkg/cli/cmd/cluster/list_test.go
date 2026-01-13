@@ -169,10 +169,10 @@ func TestListCmd_AllProviders(t *testing.T) {
 func TestListCmd_ListError(t *testing.T) {
 	cmd := &cobra.Command{Use: "list"}
 
-	var buf bytes.Buffer
+	var outBuf, errBuf bytes.Buffer
 
-	cmd.SetOut(&buf)
-	cmd.SetErr(&buf)
+	cmd.SetOut(&outBuf)
+	cmd.SetErr(&errBuf)
 	cmd.SetContext(context.Background())
 
 	deps := clusterpkg.ListDeps{
@@ -183,12 +183,12 @@ func TestListCmd_ListError(t *testing.T) {
 		},
 	}
 
-	// List errors are now logged as warnings and don't cause command failure
+	// List errors per distribution are silently skipped - command succeeds with no clusters found
 	err := clusterpkg.HandleListRunE(cmd, v1alpha1.ProviderDocker, deps)
-	require.NoError(t, err) // No longer returns error - logs warning instead
+	require.NoError(t, err)
 
-	// Verify warning was logged
-	require.Contains(t, buf.String(), "Warning")
+	// Since all distributions fail, no clusters found
+	require.Contains(t, outBuf.String(), "No clusters found")
 }
 
 //nolint:paralleltest // uses t.Chdir
@@ -212,10 +212,10 @@ func TestHandleListRunE_Success(t *testing.T) {
 func TestListCmd_FactoryError(t *testing.T) {
 	cmd := &cobra.Command{Use: "list"}
 
-	var buf bytes.Buffer
+	var outBuf, errBuf bytes.Buffer
 
-	cmd.SetOut(&buf)
-	cmd.SetErr(&buf)
+	cmd.SetOut(&outBuf)
+	cmd.SetErr(&errBuf)
 	cmd.SetContext(context.Background())
 
 	deps := clusterpkg.ListDeps{
@@ -228,8 +228,8 @@ func TestListCmd_FactoryError(t *testing.T) {
 	err := clusterpkg.HandleListRunE(cmd, v1alpha1.ProviderDocker, deps)
 	require.NoError(t, err) // No longer returns error - logs warning instead
 
-	// Verify warning was logged
-	require.Contains(t, buf.String(), "Warning")
+	// Verify warning was logged to stderr
+	require.Contains(t, errBuf.String(), "Warning")
 }
 
 //nolint:paralleltest // uses t.Chdir
