@@ -57,6 +57,44 @@ var (
 // ViperRegistryKey is the viper key for the registry flag/env var.
 const ViperRegistryKey = "registry"
 
+// hostPortInfo holds parsed host and port information.
+type hostPortInfo struct {
+	host string
+	port int32
+}
+
+// parseHostPort parses a host:port string into separate host and port values.
+// If the port is not a valid number, it's treated as part of the host (e.g., ghcr.io).
+func parseHostPort(hostPort string) hostPortInfo {
+	colonIdx := strings.LastIndex(hostPort, ":")
+	if colonIdx == -1 {
+		return hostPortInfo{host: hostPort}
+	}
+
+	host := hostPort[:colonIdx]
+	portStr := hostPort[colonIdx+1:]
+
+	var port int
+
+	_, err := fmt.Sscanf(portStr, "%d", &port)
+	if err == nil && port > 0 {
+		return hostPortInfo{
+			host: host,
+			port: int32(port), //nolint:gosec // port is validated
+		}
+	}
+
+	// Not a valid port number, treat entire string as host (e.g., ghcr.io)
+	return hostPortInfo{host: hostPort}
+}
+
+// isExternalHost checks if a host is external (not localhost).
+func isExternalHost(host string) bool {
+	return !strings.HasPrefix(host, "localhost") &&
+		!strings.HasPrefix(host, "127.0.0.1") &&
+		!strings.HasSuffix(host, ".localhost")
+}
+
 // DetectRegistryFromViper checks for registry configuration from a Viper instance.
 // This handles both --registry flag and KSAIL_REGISTRY environment variable since
 // Viper binds them together.
@@ -255,49 +293,18 @@ func parseOCIURL(url string) (*RegistryInfo, error) {
 		return nil, ErrEmptyOCIURL
 	}
 
-	info := &RegistryInfo{}
-
 	// Split host:port from path
-	before, after, ok := strings.Cut(url, "/")
+	hostPort, path, _ := strings.Cut(url, "/")
 
-	var hostPort, path string
+	// Parse host and port using shared helper
+	parsed := parseHostPort(hostPort)
 
-	if !ok {
-		hostPort = url
-		path = ""
-	} else {
-		hostPort = before
-		path = after
-	}
-
-	// Parse host and port
-	colonIdx := strings.LastIndex(hostPort, ":")
-	if colonIdx != -1 {
-		info.Host = hostPort[:colonIdx]
-		portStr := hostPort[colonIdx+1:]
-
-		var port int
-
-		_, err := fmt.Sscanf(portStr, "%d", &port)
-
-		if err == nil && port > 0 {
-			info.Port = int32(port) //nolint:gosec // port is validated
-		} else {
-			// Not a port number, likely part of the host (e.g., ghcr.io)
-			info.Host = hostPort
-		}
-	} else {
-		info.Host = hostPort
-	}
-
-	info.Repository = path
-
-	// Determine if external (not localhost/127.0.0.1)
-	info.IsExternal = !strings.HasPrefix(info.Host, "localhost") &&
-		!strings.HasPrefix(info.Host, "127.0.0.1") &&
-		!strings.HasSuffix(info.Host, ".localhost")
-
-	return info, nil
+	return &RegistryInfo{
+		Host:       parsed.host,
+		Port:       parsed.port,
+		Repository: path,
+		IsExternal: isExternalHost(parsed.host),
+	}, nil
 }
 
 // ResolveRegistryOptions contains configuration for registry resolution.
@@ -439,40 +446,14 @@ func parseRegistryFlag(registryFlag string) *RegistryInfo {
 		hostAndPath = registryFlag
 	}
 
-	// Now parse host[:port][/path]
-	before, after, ok := strings.Cut(hostAndPath, "/")
+	// Parse host[:port][/path] using shared helper
+	hostPort, path, _ := strings.Cut(hostAndPath, "/")
+	parsed := parseHostPort(hostPort)
 
-	var hostPort, path string
-
-	if ok {
-		hostPort = before
-		path = after
-	} else {
-		hostPort = hostAndPath
-	}
-
-	// Parse host and port
-	colonIdx := strings.LastIndex(hostPort, ":")
-	if colonIdx != -1 {
-		info.Host = hostPort[:colonIdx]
-		portStr := hostPort[colonIdx+1:]
-
-		var port int
-
-		_, err := fmt.Sscanf(portStr, "%d", &port)
-		if err == nil && port > 0 {
-			info.Port = int32(port) //nolint:gosec // port is validated
-		} else {
-			info.Host = hostPort
-		}
-	} else {
-		info.Host = hostPort
-	}
-
+	info.Host = parsed.host
+	info.Port = parsed.port
 	info.Repository = path
-	info.IsExternal = !strings.HasPrefix(info.Host, "localhost") &&
-		!strings.HasPrefix(info.Host, "127.0.0.1") &&
-		!strings.HasSuffix(info.Host, ".localhost")
+	info.IsExternal = isExternalHost(parsed.host)
 
 	return info
 }
