@@ -9,7 +9,7 @@ Overview of KSail's supported platforms, distributions, and components.
 See [Concepts](concepts.md) for detailed information about each technology,
 or [Configuration](configuration/index.md) for setup instructions.
 
-## Platforms and Distributions
+## Platforms
 
 | Platform | Architectures | Status      |
 |----------|---------------|-------------|
@@ -17,11 +17,14 @@ or [Configuration](configuration/index.md) for setup instructions.
 | macOS    | arm64         | ✅ Supported |
 | Windows  | amd64, arm64  | ⚠️ Untested |
 
-| Distribution | Description            | Provider | Status      |
-|--------------|------------------------|----------|-------------|
-| Vanilla      | Standard Kubernetes    | Docker   | ✅ Supported |
-| K3s          | Lightweight Kubernetes | Docker   | ✅ Supported |
-| Talos        | Immutable Talos Linux  | Docker   | ✅ Supported |
+## Providers and Distributions
+
+| Provider | Vanilla   | K3s      | Talos | Status      |
+|----------|-----------|----------|-------|-------------|
+| Docker   | ✅ (Kind) | ✅ (K3d) | ✅    | ✅ Supported |
+| Hetzner  | —         | —        | 🚧    | 🚧 Planned  |
+
+> Docker is the only supported provider today; Hetzner support is planned for Talos.
 
 ## Cluster Components
 

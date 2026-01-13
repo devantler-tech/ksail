@@ -66,6 +66,12 @@ The Docker provider runs Kubernetes nodes as Docker containers on your local mac
 - [Docker Documentation](https://docs.docker.com/)
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/)
 
+### Hetzner (planned)
+
+KSail aims to support provisioning **Talos** clusters on **Hetzner** in the future.
+
+See the [roadmap](https://github.com/devantler-tech/ksail/issues) for current status.
+
 ## Container Network Interface (CNI)
 
 [CNI](https://www.cni.dev/) is a specification for configuring network interfaces in Linux containers. CNI plugins provide pod networking, network policies, and observability.
