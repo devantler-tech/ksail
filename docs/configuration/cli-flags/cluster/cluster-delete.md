@@ -11,14 +11,24 @@ grand_parent: "CLI Flags"
 ```text
 Destroy a cluster.
 
+The cluster is resolved in the following priority order:
+  1. From --name flag
+  2. From ksail.yaml config file (if present)
+  3. From current kubeconfig context
+
+The provider is resolved in the following priority order:
+  1. From --provider flag
+  2. From ksail.yaml config file (if present)
+  3. Defaults to Docker
+
 Usage:
   ksail cluster delete [flags]
 
 Flags:
-  -c, --context string      Kubernetes context to target (defaults to current context)
       --delete-storage      Delete storage volumes when cleaning up (registry volumes for Docker, block storage for Hetzner)
   -h, --help                help for delete
-      --kubeconfig string   Path to kubeconfig file (defaults to $KUBECONFIG or ~/.kube/config)
+  -n, --name string         Name of the cluster to delete
+  -p, --provider Provider   Provider to use ([Docker Hetzner])
 
 Global Flags:
       --timing   Show per-activity timing output
