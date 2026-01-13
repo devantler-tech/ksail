@@ -2,6 +2,8 @@ package helpers
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -14,10 +16,12 @@ import (
 	registrypkg "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	"github.com/docker/docker/client"
 	"github.com/spf13/viper"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 )
 
@@ -54,8 +58,21 @@ var (
 	ErrEmptyOCIURL = errors.New("empty OCI URL")
 )
 
-// ViperRegistryKey is the viper key for the registry flag/env var.
-const ViperRegistryKey = "registry"
+// Registry secret constants for GitOps engines.
+const (
+	// ViperRegistryKey is the viper key for the registry flag/env var.
+	ViperRegistryKey = "registry"
+	// credentialParts is the expected number of parts when splitting username:password.
+	credentialParts = 2
+
+	// Flux stores registry credentials as a Docker config secret.
+	fluxSecretNamespace = "flux-system"
+	fluxSecretName      = "ksail-registry-credentials" //nolint:gosec // Not a credential, just a secret name
+
+	// ArgoCD stores registry credentials in a repository secret with plain username/password fields.
+	argoCDSecretNamespace = "argocd"
+	argoCDSecretName      = "ksail-local-registry-repo" //nolint:gosec // Not a credential, just a secret name
+)
 
 // hostPortInfo holds parsed host and port information.
 type hostPortInfo struct {
@@ -455,26 +472,153 @@ func resolveFromGitOps(ctx context.Context, cfg *v1alpha1.Cluster) (*RegistryInf
 		return nil, err
 	}
 
-	// Merge credentials from config if available and info has no credentials
-	if info != nil && info.Username == "" && cfg != nil {
-		mergeCredentialsFromConfig(info, cfg)
+	// Merge credentials from cluster secrets if needed
+	if info != nil && info.Username == "" && info.IsExternal {
+		mergeCredentialsFromClusterSecrets(ctx, info)
 	}
 
 	return info, nil
 }
 
-// mergeCredentialsFromConfig adds credentials from cluster config to registry info.
-// This is used when the registry URL is auto-discovered from GitOps resources
-// but credentials are configured in ksail.yaml.
-func mergeCredentialsFromConfig(info *RegistryInfo, cfg *v1alpha1.Cluster) {
-	reg := cfg.Spec.Cluster.LocalRegistry
-	if !reg.HasCredentials() {
+// mergeCredentialsFromClusterSecrets retrieves credentials from GitOps engine secrets.
+// It checks both Flux and ArgoCD secret locations since the registry URL was auto-discovered
+// from GitOps resources but credentials may be stored in the cluster.
+//
+// Flux stores credentials in: flux-system/ksail-registry-credentials (Docker config JSON format).
+// ArgoCD stores credentials in: argocd/ksail-local-registry-repo (plain username/password fields).
+func mergeCredentialsFromClusterSecrets(ctx context.Context, info *RegistryInfo) {
+	clientset, err := getKubernetesClient()
+	if err != nil {
 		return
 	}
 
-	username, password := reg.ResolveCredentials()
-	info.Username = username
-	info.Password = password
+	// Try Flux secret first (Docker config JSON format)
+	if tryFluxSecret(ctx, clientset, info) {
+		return
+	}
+
+	// Try ArgoCD secret (plain username/password format)
+	tryArgoCDSecret(ctx, clientset, info)
+}
+
+// getKubernetesClient creates a Kubernetes clientset from the default kubeconfig.
+func getKubernetesClient() (*kubernetes.Clientset, error) {
+	config, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
+		clientcmd.NewDefaultClientConfigLoadingRules(),
+		&clientcmd.ConfigOverrides{},
+	).ClientConfig()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load kubeconfig: %w", err)
+	}
+
+	clientset, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create kubernetes client: %w", err)
+	}
+
+	return clientset, nil
+}
+
+// tryFluxSecret attempts to retrieve credentials from the Flux registry secret.
+// Returns true if credentials were found and set.
+func tryFluxSecret(ctx context.Context, clientset *kubernetes.Clientset, info *RegistryInfo) bool {
+	secret, err := clientset.CoreV1().Secrets(fluxSecretNamespace).Get(
+		ctx,
+		fluxSecretName,
+		metav1.GetOptions{},
+	)
+	if err != nil {
+		return false
+	}
+
+	// Parse Docker config JSON to extract credentials
+	dockerConfigData, ok := secret.Data[corev1.DockerConfigJsonKey]
+	if !ok {
+		return false
+	}
+
+	username, password := parseDockerConfigCredentials(dockerConfigData, info.Host)
+	if username != "" {
+		info.Username = username
+		info.Password = password
+
+		return true
+	}
+
+	return false
+}
+
+// tryArgoCDSecret attempts to retrieve credentials from the ArgoCD repository secret.
+// Returns true if credentials were found and set.
+func tryArgoCDSecret(
+	ctx context.Context,
+	clientset *kubernetes.Clientset,
+	info *RegistryInfo,
+) bool {
+	secret, err := clientset.CoreV1().Secrets(argoCDSecretNamespace).Get(
+		ctx,
+		argoCDSecretName,
+		metav1.GetOptions{},
+	)
+	if err != nil {
+		return false
+	}
+
+	// ArgoCD stores credentials as plain username/password in StringData/Data
+	username := string(secret.Data["username"])
+	password := string(secret.Data["password"])
+
+	if username != "" {
+		info.Username = username
+		info.Password = password
+
+		return true
+	}
+
+	return false
+}
+
+// dockerConfig represents the Docker config.json structure.
+type dockerConfig struct {
+	Auths map[string]dockerAuthConfig `json:"auths"`
+}
+
+// dockerAuthConfig represents auth config for a single registry.
+type dockerAuthConfig struct {
+	Auth string `json:"auth"`
+}
+
+// parseDockerConfigCredentials extracts username and password from Docker config JSON.
+func parseDockerConfigCredentials(configData []byte, host string) (string, string) {
+	var config dockerConfig
+
+	err := json.Unmarshal(configData, &config)
+	if err != nil {
+		return "", ""
+	}
+
+	// Try exact host match first, then try with https:// prefix
+	authConfig, ok := config.Auths[host]
+	if !ok {
+		authConfig, ok = config.Auths["https://"+host]
+	}
+
+	if !ok {
+		return "", ""
+	}
+
+	// Decode base64 auth (format: "username:password")
+	decoded, err := base64.StdEncoding.DecodeString(authConfig.Auth)
+	if err != nil {
+		return "", ""
+	}
+
+	parts := strings.SplitN(string(decoded), ":", credentialParts)
+	if len(parts) != credentialParts {
+		return "", ""
+	}
+
+	return parts[0], parts[1]
 }
 
 func resolveFromGitOpsWithEngine(
