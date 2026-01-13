@@ -188,7 +188,12 @@ func getDockerClusters(ctx context.Context, deps ListDeps) ([]string, error) {
 func getHetznerClusters(ctx context.Context, deps ListDeps) ([]string, error) {
 	// Use injected provider if available (for testing)
 	if deps.HetznerProvider != nil {
-		return deps.HetznerProvider.ListAllClusters(ctx)
+		clusters, err := deps.HetznerProvider.ListAllClusters(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to list Hetzner clusters: %w", err)
+		}
+
+		return clusters, nil
 	}
 
 	// Check for HCLOUD_TOKEN
@@ -201,7 +206,12 @@ func getHetznerClusters(ctx context.Context, deps ListDeps) ([]string, error) {
 	client := hcloud.NewClient(hcloud.WithToken(token))
 	provider := hetzner.NewProvider(client)
 
-	return provider.ListAllClusters(ctx)
+	clusters, err := provider.ListAllClusters(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list Hetzner clusters: %w", err)
+	}
+
+	return clusters, nil
 }
 
 func getDistributionClusters(

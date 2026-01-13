@@ -776,7 +776,7 @@ func (p *Provider) deleteInfrastructure(ctx context.Context, clusterName string)
 	// Delete firewall with retry (may still be attached during server deletion)
 	firewallName := clusterName + FirewallSuffix
 
-	for i := range MaxDeleteRetries {
+	for attempt := range MaxDeleteRetries {
 		firewall, _, err := p.client.Firewall.GetByName(ctx, firewallName)
 		if err != nil || firewall == nil {
 			break // Firewall doesn't exist, we're done
@@ -788,7 +788,7 @@ func (p *Provider) deleteInfrastructure(ctx context.Context, clusterName string)
 		}
 
 		// If this is the last attempt, return the error
-		if i == MaxDeleteRetries-1 {
+		if attempt == MaxDeleteRetries-1 {
 			return fmt.Errorf(
 				"failed to delete firewall %s after %d attempts: %w",
 				firewallName,

@@ -339,15 +339,15 @@ func (p *TalosProvisioner) createHetznerCluster(ctx context.Context, clusterName
 		p.options.ControlPlaneNodes,
 	)
 
-	for i := range p.options.ControlPlaneNodes {
-		nodeName := fmt.Sprintf("%s-control-plane-%d", clusterName, i+1)
+	for nodeIndex := range p.options.ControlPlaneNodes {
+		nodeName := fmt.Sprintf("%s-control-plane-%d", clusterName, nodeIndex+1)
 
 		server, serverErr := hetznerProv.CreateServer(ctx, hetzner.CreateServerOpts{
 			Name:             nodeName,
 			ServerType:       p.hetznerOpts.ControlPlaneServerType,
 			ISOID:            p.talosOpts.ISO,
 			Location:         p.hetznerOpts.Location,
-			Labels:           hetzner.NodeLabels(clusterName, "control-plane", i+1),
+			Labels:           hetzner.NodeLabels(clusterName, "control-plane", nodeIndex+1),
 			NetworkID:        network.ID,
 			PlacementGroupID: placementGroup.ID,
 			SSHKeyID:         sshKeyID,
@@ -367,15 +367,15 @@ func (p *TalosProvisioner) createHetznerCluster(ctx context.Context, clusterName
 	if p.options.WorkerNodes > 0 {
 		_, _ = fmt.Fprintf(p.logWriter, "Creating %d worker node(s)...\n", p.options.WorkerNodes)
 
-		for i := range p.options.WorkerNodes {
-			nodeName := fmt.Sprintf("%s-worker-%d", clusterName, i+1)
+		for nodeIndex := range p.options.WorkerNodes {
+			nodeName := fmt.Sprintf("%s-worker-%d", clusterName, nodeIndex+1)
 
 			server, serverErr := hetznerProv.CreateServer(ctx, hetzner.CreateServerOpts{
 				Name:             nodeName,
 				ServerType:       p.hetznerOpts.WorkerServerType,
 				ISOID:            p.talosOpts.ISO,
 				Location:         p.hetznerOpts.Location,
-				Labels:           hetzner.NodeLabels(clusterName, "worker", i+1),
+				Labels:           hetzner.NodeLabels(clusterName, "worker", nodeIndex+1),
 				NetworkID:        network.ID,
 				PlacementGroupID: placementGroup.ID,
 				SSHKeyID:         sshKeyID,
@@ -500,8 +500,8 @@ func (p *TalosProvisioner) waitForHetznerTalosAPI(
 	servers []*hcloud.Server,
 ) error {
 	for _, server := range servers {
-		ip := server.PublicNet.IPv4.IP.String()
-		endpoint := fmt.Sprintf("%s:%d", ip, talosAPIPort)
+		serverIP := server.PublicNet.IPv4.IP.String()
+		endpoint := fmt.Sprintf("%s:%d", serverIP, talosAPIPort)
 
 		_, _ = fmt.Fprintf(
 			p.logWriter,
@@ -515,8 +515,8 @@ func (p *TalosProvisioner) waitForHetznerTalosAPI(
 				// Try to establish a TLS connection to verify the Talos API is responding
 				// In maintenance mode, we can only verify the connection works - most APIs
 				// return "not implemented in maintenance mode" which is expected
-				c, connErr := talosclient.New(ctx,
-					talosclient.WithEndpoints(ip),
+				retryClient, connErr := talosclient.New(ctx,
+					talosclient.WithEndpoints(serverIP),
 					talosclient.WithTLSConfig(&tls.Config{
 						InsecureSkipVerify: true, //nolint:gosec // Maintenance mode requires insecure connection
 					}),
@@ -525,11 +525,11 @@ func (p *TalosProvisioner) waitForHetznerTalosAPI(
 					return retry.ExpectedError(connErr)
 				}
 
-				defer c.Close() //nolint:errcheck
+				defer retryClient.Close() //nolint:errcheck
 
 				// Try to get version - in maintenance mode this may return "not implemented"
 				// but that error indicates the API is reachable and responding
-				_, versionErr := c.Version(ctx)
+				_, versionErr := retryClient.Version(ctx)
 				if versionErr != nil {
 					// "Unimplemented" means the API is reachable but in maintenance mode
 					// This is actually a success - the node is ready for config application
@@ -623,7 +623,7 @@ func (p *TalosProvisioner) detachISOsAndReboot(
 	// We detect completion by waiting for a TCP connection to succeed on port 50000
 	// (the server will be unreachable during reboot, then come back)
 	for _, server := range servers {
-		ip := server.PublicNet.IPv4.IP.String()
+		serverIP := server.PublicNet.IPv4.IP.String()
 
 		_, _ = fmt.Fprintf(
 			p.logWriter,
@@ -642,7 +642,7 @@ func (p *TalosProvisioner) detachISOsAndReboot(
 				// We don't care about TLS here, just network reachability
 				dialer := &net.Dialer{Timeout: retryInterval}
 
-				conn, dialErr := dialer.DialContext(ctx, "tcp", net.JoinHostPort(ip, "50000"))
+				conn, dialErr := dialer.DialContext(ctx, "tcp", net.JoinHostPort(serverIP, "50000"))
 				if dialErr != nil {
 					return retry.ExpectedError(
 						fmt.Errorf("waiting for server to become reachable: %w", dialErr),
@@ -695,9 +695,9 @@ func (p *TalosProvisioner) applyConfigToNode(
 	server *hcloud.Server,
 	config talosconfig.Provider,
 ) error {
-	ip := server.PublicNet.IPv4.IP.String()
+	serverIP := server.PublicNet.IPv4.IP.String()
 
-	_, _ = fmt.Fprintf(p.logWriter, "  Applying config to %s (%s)...\n", server.Name, ip)
+	_, _ = fmt.Fprintf(p.logWriter, "  Applying config to %s (%s)...\n", server.Name, serverIP)
 
 	// Get config bytes
 	cfgBytes, err := config.Bytes()
@@ -706,8 +706,8 @@ func (p *TalosProvisioner) applyConfigToNode(
 	}
 
 	// Create insecure client for maintenance mode
-	c, err := talosclient.New(ctx,
-		talosclient.WithEndpoints(ip),
+	talosClient, err := talosclient.New(ctx,
+		talosclient.WithEndpoints(serverIP),
 		talosclient.WithTLSConfig(&tls.Config{
 			InsecureSkipVerify: true, //nolint:gosec // Maintenance mode requires insecure connection
 		}),
@@ -716,10 +716,10 @@ func (p *TalosProvisioner) applyConfigToNode(
 		return fmt.Errorf("failed to create Talos client: %w", err)
 	}
 
-	defer c.Close() //nolint:errcheck
+	defer talosClient.Close() //nolint:errcheck
 
 	// Apply configuration - the node will install and reboot
-	_, err = c.ApplyConfiguration(ctx, &machineapi.ApplyConfigurationRequest{
+	_, err = talosClient.ApplyConfiguration(ctx, &machineapi.ApplyConfigurationRequest{
 		Data: cfgBytes,
 	})
 	if err != nil {
@@ -741,7 +741,7 @@ func (p *TalosProvisioner) bootstrapHetznerCluster(
 	bootstrapNode *hcloud.Server,
 	configBundle *bundle.Bundle,
 ) error {
-	ip := bootstrapNode.PublicNet.IPv4.IP.String()
+	nodeIP := bootstrapNode.PublicNet.IPv4.IP.String()
 
 	_, _ = fmt.Fprintf(
 		p.logWriter,
@@ -759,18 +759,18 @@ func (p *TalosProvisioner) bootstrapHetznerCluster(
 	err := retry.Constant(timeout, retry.WithUnits(longRetryInterval)).
 		RetryWithContext(ctx, func(ctx context.Context) error {
 			// Create authenticated client using talosconfig
-			c, clientErr := talosclient.New(ctx,
-				talosclient.WithEndpoints(ip),
+			retryClient, clientErr := talosclient.New(ctx,
+				talosclient.WithEndpoints(nodeIP),
 				talosclient.WithConfig(talosConfig),
 			)
 			if clientErr != nil {
 				return retry.ExpectedError(clientErr)
 			}
 
-			defer c.Close() //nolint:errcheck
+			defer retryClient.Close() //nolint:errcheck
 
 			// Try to get version to verify the node is ready
-			_, versionErr := c.Version(ctx)
+			_, versionErr := retryClient.Version(ctx)
 			if versionErr != nil {
 				return retry.ExpectedError(versionErr)
 			}
@@ -784,29 +784,29 @@ func (p *TalosProvisioner) bootstrapHetznerCluster(
 	_, _ = fmt.Fprintf(p.logWriter, "  ✓ Node %s is ready\n", bootstrapNode.Name)
 
 	// Create authenticated client for bootstrap
-	c, err := talosclient.New(ctx,
-		talosclient.WithEndpoints(ip),
+	talosClient, err := talosclient.New(ctx,
+		talosclient.WithEndpoints(nodeIP),
 		talosclient.WithConfig(talosConfig),
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create Talos client: %w", err)
 	}
 
-	defer c.Close() //nolint:errcheck
+	defer talosClient.Close() //nolint:errcheck
 
 	_, _ = fmt.Fprintf(p.logWriter, "  Bootstrapping etcd on %s...\n", bootstrapNode.Name)
 
 	// Bootstrap the cluster
 	err = retry.Constant(bootstrapTimeout, retry.WithUnits(retryInterval)).
 		RetryWithContext(ctx, func(ctx context.Context) error {
-			bootstrapErr := c.Bootstrap(ctx, &machineapi.BootstrapRequest{})
+			bootstrapErr := talosClient.Bootstrap(ctx, &machineapi.BootstrapRequest{})
 			if bootstrapErr != nil {
 				// FailedPrecondition means the node isn't ready yet
 				if talosclient.StatusCode(bootstrapErr) == grpcFailedPrecondition {
 					return retry.ExpectedError(bootstrapErr)
 				}
 
-				return bootstrapErr
+				return fmt.Errorf("bootstrap failed: %w", bootstrapErr)
 			}
 
 			return nil
@@ -823,7 +823,7 @@ func (p *TalosProvisioner) bootstrapHetznerCluster(
 	err = retry.Constant(timeout, retry.WithUnits(longRetryInterval)).
 		RetryWithContext(ctx, func(ctx context.Context) error {
 			// Try to fetch kubeconfig as an indicator that K8s is ready
-			_, kubeconfigErr := c.Kubeconfig(ctx)
+			_, kubeconfigErr := talosClient.Kubeconfig(ctx)
 			if kubeconfigErr != nil {
 				return retry.ExpectedError(kubeconfigErr)
 			}
@@ -845,29 +845,32 @@ func (p *TalosProvisioner) saveHetznerKubeconfig(
 	controlPlaneNode *hcloud.Server,
 	configBundle *bundle.Bundle,
 ) error {
-	ip := controlPlaneNode.PublicNet.IPv4.IP.String()
+	nodeIP := controlPlaneNode.PublicNet.IPv4.IP.String()
 	talosConfig := configBundle.TalosConfig()
 
 	// Create authenticated client
-	c, err := talosclient.New(ctx,
-		talosclient.WithEndpoints(ip),
+	talosClient, err := talosclient.New(ctx,
+		talosclient.WithEndpoints(nodeIP),
 		talosclient.WithConfig(talosConfig),
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create Talos client: %w", err)
 	}
 
-	defer c.Close() //nolint:errcheck
+	defer talosClient.Close() //nolint:errcheck
 
 	// Fetch kubeconfig
-	kubeconfig, err := c.Kubeconfig(ctx)
+	kubeconfig, err := talosClient.Kubeconfig(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to fetch kubeconfig: %w", err)
 	}
 
 	// The kubeconfig from Talos uses internal IPs. For Hetzner, we need to use the public IP.
 	// Rewrite the server endpoint to use the public IP.
-	kubeconfig, err = rewriteKubeconfigEndpoint(kubeconfig, "https://"+net.JoinHostPort(ip, "6443"))
+	kubeconfig, err = rewriteKubeconfigEndpoint(
+		kubeconfig,
+		"https://"+net.JoinHostPort(nodeIP, "6443"),
+	)
 	if err != nil {
 		return fmt.Errorf("failed to rewrite kubeconfig endpoint: %w", err)
 	}

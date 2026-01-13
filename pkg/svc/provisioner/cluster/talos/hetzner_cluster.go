@@ -2,6 +2,7 @@ package talosprovisioner
 
 import (
 	"errors"
+	"fmt"
 	"net/netip"
 
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
@@ -100,7 +101,7 @@ func hetznerServerToNodeInfo(
 	if server.PublicNet.IPv4.IP != nil {
 		ip, err := netip.ParseAddr(server.PublicNet.IPv4.IP.String())
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to parse public IPv4 address: %w", err)
 		}
 
 		ips = append(ips, ip)
@@ -111,7 +112,7 @@ func hetznerServerToNodeInfo(
 		if privateNet.IP != nil {
 			ip, err := netip.ParseAddr(privateNet.IP.String())
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("failed to parse private network IP: %w", err)
 			}
 
 			ips = append(ips, ip)

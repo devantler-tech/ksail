@@ -70,19 +70,19 @@ func TestDetectDistributionFromContext(t *testing.T) {
 		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			dist, clusterName, err := lifecycle.DetectDistributionFromContext(tc.contextName)
+			dist, clusterName, err := lifecycle.DetectDistributionFromContext(testCase.contextName)
 
-			if tc.wantError {
+			if testCase.wantError {
 				require.Error(t, err)
-				assert.Contains(t, err.Error(), tc.errorContains)
+				assert.Contains(t, err.Error(), testCase.errorContains)
 			} else {
 				require.NoError(t, err)
-				assert.Equal(t, tc.wantDistribution, dist)
-				assert.Equal(t, tc.wantClusterName, clusterName)
+				assert.Equal(t, testCase.wantDistribution, dist)
+				assert.Equal(t, testCase.wantClusterName, clusterName)
 			}
 		})
 	}

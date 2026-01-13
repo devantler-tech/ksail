@@ -113,6 +113,7 @@ func runDeleteAction(
 	var tmr timer.Timer
 
 	if runtimeContainer != nil {
+		//nolint:wrapcheck // Error is captured to outer scope, not returned
 		_ = runtimeContainer.Invoke(func(injector runtime.Injector) error {
 			var err error
 
@@ -129,7 +130,7 @@ func runDeleteAction(
 	// Resolve cluster info from flags, config, or kubeconfig
 	resolved, err := lifecycle.ResolveClusterInfo(nameFlag, providerFlag, kubeconfigFlag)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to resolve cluster info: %w", err)
 	}
 
 	// Create cluster info for provisioner creation
@@ -188,7 +189,12 @@ func createDeleteProvisioner(
 		return provisioner, nil
 	}
 
-	return lifecycle.CreateMinimalProvisionerForProvider(clusterInfo)
+	provisioner, err := lifecycle.CreateMinimalProvisionerForProvider(clusterInfo)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create provisioner for provider: %w", err)
+	}
+
+	return provisioner, nil
 }
 
 // discoverRegistriesBeforeDelete discovers registries connected to the cluster network.

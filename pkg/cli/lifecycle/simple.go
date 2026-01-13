@@ -427,7 +427,12 @@ func (m *multiDistributionProvisioner) Start(ctx context.Context, name string) e
 		}
 
 		if exists {
-			return provisioner.Start(ctx, clusterName)
+			startErr := provisioner.Start(ctx, clusterName)
+			if startErr != nil {
+				return fmt.Errorf("failed to start cluster: %w", startErr)
+			}
+
+			return nil
 		}
 	}
 
@@ -459,7 +464,12 @@ func (m *multiDistributionProvisioner) Stop(ctx context.Context, name string) er
 		}
 
 		if exists {
-			return provisioner.Stop(ctx, clusterName)
+			stopErr := provisioner.Stop(ctx, clusterName)
+			if stopErr != nil {
+				return fmt.Errorf("failed to stop cluster: %w", stopErr)
+			}
+
+			return nil
 		}
 	}
 
@@ -491,7 +501,12 @@ func (m *multiDistributionProvisioner) Delete(ctx context.Context, name string) 
 		}
 
 		if exists {
-			return provisioner.Delete(ctx, clusterName)
+			deleteErr := provisioner.Delete(ctx, clusterName)
+			if deleteErr != nil {
+				return fmt.Errorf("failed to delete cluster: %w", deleteErr)
+			}
+
+			return nil
 		}
 	}
 
@@ -573,7 +588,12 @@ func createProvisionerForDistribution(
 	case v1alpha1.DistributionVanilla:
 		kindConfig := &v1alpha4.Cluster{Name: clusterName}
 
-		return kindprovisioner.CreateProvisioner(kindConfig, "")
+		provisioner, err := kindprovisioner.CreateProvisioner(kindConfig, "")
+		if err != nil {
+			return nil, fmt.Errorf("failed to create Kind provisioner: %w", err)
+		}
+
+		return provisioner, nil
 
 	case v1alpha1.DistributionK3s:
 		k3dConfig := &k3dv1alpha5.SimpleConfig{
@@ -585,7 +605,7 @@ func createProvisionerForDistribution(
 	case v1alpha1.DistributionTalos:
 		talosConfig := &talosconfigmanager.Configs{Name: clusterName}
 
-		return talosprovisioner.CreateProvisioner(
+		provisioner, err := talosprovisioner.CreateProvisioner(
 			talosConfig,
 			"",
 			v1alpha1.ProviderDocker,
@@ -593,6 +613,11 @@ func createProvisionerForDistribution(
 			v1alpha1.OptionsHetzner{},
 			false,
 		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create Talos provisioner: %w", err)
+		}
+
+		return provisioner, nil
 
 	default:
 		return nil, fmt.Errorf("%w: %s", ErrUnsupportedDistribution, dist)

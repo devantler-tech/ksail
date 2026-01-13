@@ -193,7 +193,7 @@ func detectProviderFromEndpoint(
 func extractHostFromURL(serverURL string) (string, error) {
 	parsed, err := url.Parse(serverURL)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to parse server URL: %w", err)
 	}
 
 	host := parsed.Hostname()
@@ -268,7 +268,7 @@ func checkHetznerOwnership(
 	// List all nodes for the cluster
 	nodes, err := provider.ListNodes(ctx, clusterName)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("failed to list nodes for cluster %s: %w", clusterName, err)
 	}
 
 	// Check if any node has the matching IP
