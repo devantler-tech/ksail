@@ -1160,7 +1160,7 @@ func TestCreateK3dConfig_SetsDefaultImage(t *testing.T) {
 	config := scaffolderInstance.CreateK3dConfig()
 
 	// Verify that image is empty, allowing k3d to use its built-in default
-	assert.Equal(t, "", config.Image)
+	assert.Empty(t, config.Image)
 }
 
 func TestScaffoldTalos_CreatesDirectoryStructure(t *testing.T) {
