@@ -6,7 +6,7 @@ require (
 	filippo.io/age v1.3.1
 	github.com/containerd/errdefs v1.0.0
 	github.com/derailed/k9s v0.50.9
-	github.com/docker/docker v28.3.1+incompatible
+	github.com/docker/docker v28.3.3+incompatible
 	github.com/docker/go-connections v0.6.0
 	github.com/fatih/color v1.18.0
 	github.com/fluxcd/helm-controller/api v1.4.5
