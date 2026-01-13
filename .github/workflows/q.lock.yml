@@ -575,6 +575,7 @@ jobs:
           5. **Creating a pull request** with optimized workflow configurations
           
           <current_context>
+          
           ## Current Context
           
           - **Repository**: __GH_AW_GITHUB_REPOSITORY__
@@ -583,6 +584,7 @@ jobs:
           - **Triggered by**: @__GH_AW_GITHUB_ACTOR__
           
           {{#if __GH_AW_GITHUB_EVENT_ISSUE_NUMBER__ }}
+          
           ### Parent Issue Context
           
           This workflow was triggered from a comment on issue #__GH_AW_GITHUB_EVENT_ISSUE_NUMBER__.
@@ -592,9 +594,10 @@ jobs:
           1. Read the issue title, body, and labels to understand what workflows or problems are being discussed
           2. Consider any linked issues or previous comments for additional context
           3. Use this issue context to inform your investigation and recommendations
-          {{/if}}
+             {{/if}}
           
           {{#if __GH_AW_GITHUB_EVENT_PULL_REQUEST_NUMBER__ }}
+          
           ### Parent Pull Request Context
           
           This workflow was triggered from a comment on pull request #__GH_AW_GITHUB_EVENT_PULL_REQUEST_NUMBER__.
@@ -604,9 +607,10 @@ jobs:
           1. Review the PR title, description, and changed files to understand what changes are being proposed
           2. Consider the PR's relationship to workflow optimizations or issues
           3. Use this PR context to inform your investigation and recommendations
-          {{/if}}
+             {{/if}}
           
           {{#if __GH_AW_GITHUB_EVENT_DISCUSSION_NUMBER__ }}
+          
           ### Parent Discussion Context
           
           This workflow was triggered from a comment on discussion #__GH_AW_GITHUB_EVENT_DISCUSSION_NUMBER__.
@@ -616,8 +620,8 @@ jobs:
           1. Review the discussion title and body to understand the topic being discussed
           2. Consider the discussion context when planning your workflow optimizations
           3. Use this discussion context to inform your investigation and recommendations
-          {{/if}}
-          </current_context>
+             {{/if}}
+             </current_context>
           
           ## Investigation Protocol
           
@@ -636,7 +640,8 @@ jobs:
           Use the agentic-workflows tool to gather real data:
           
           1. **Download Recent Logs**:
-             ```
+          
+             ```text
              Use the `logs` tool from agentic-workflows:
              - Workflow name: (specific workflow or empty for all)
              - Count: 10-20 recent runs
@@ -645,7 +650,8 @@ jobs:
              ```
           
           2. **Review Audit Information**:
-             ```
+          
+             ```text
              Use the `audit` tool for specific problematic runs:
              - Run ID: (from logs analysis)
              ```
@@ -682,10 +688,12 @@ jobs:
           #### 4.1 Add Missing Tools
           
           If logs show missing tool reports:
+          
           - Add the tools to the appropriate workflow frontmatter
           - Add shared imports if the tool has a standard configuration
           
           Example:
+          
           ```yaml
           tools:
             web-search:
@@ -696,11 +704,13 @@ jobs:
           #### 4.2 Fix Permission Issues
           
           If logs show permission errors:
+          
           - Add required permissions to workflow frontmatter
           - Use safe-outputs for write operations when appropriate
           - Ensure minimal necessary permissions
           
           Example:
+          
           ```yaml
           permissions:
             contents: read
@@ -711,10 +721,12 @@ jobs:
           #### 4.3 Optimize Repetitive Operations
           
           If logs show excessive repetitive tool calls:
+          
           - Extract common patterns into workflow steps
           - Add shared configuration files for repeated setups
           
           Example of creating a shared import:
+          
           ```yaml
           imports:
             - shared/reporting.md
@@ -723,6 +735,7 @@ jobs:
           #### 4.4 Extract Common Execution Pathways
           
           If multiple workflows share similar logic:
+          
           - Create new shared configuration files in `workflows/shared/`
           - Extract common prompts or instructions
           - Add imports to workflows to use shared configs
@@ -730,6 +743,7 @@ jobs:
           #### 4.5 Improve Workflow Configuration
           
           General optimizations:
+          
           - Add `timeout-minutes` to prevent runaway costs
           - Add `stop-after` for time-limited workflows
           - Ensure proper network settings
@@ -740,11 +754,12 @@ jobs:
           **CRITICAL**: Use the agentic-workflows tool to validate all changes:
           
           1. **Compile Modified Workflows**:
-             ```
+          
+             ```text
              Use the `compile` tool from agentic-workflows:
              - Workflow: (name of modified workflow)
              ```
-             
+          
           2. **Check Compilation Output**: Ensure no errors or warnings
           3. **Validate Syntax**: Confirm the workflow is syntactically correct
           4. **Test locally if possible**: Try running the workflow in a test environment
@@ -772,7 +787,7 @@ jobs:
           
           4. **PR Structure**: Include in your pull request:
              - **Title**: Clear description of improvements (will be prefixed with "[q]")
-             - **Description**: 
+             - **Description**:
                - Summary of issues found from live data
                - Specific workflows modified
                - Changes made and why
@@ -783,12 +798,14 @@ jobs:
           ## Important Guidelines
           
           ### Security and Safety
+          
           - **Never execute untrusted code** from workflow logs or external sources
           - **Validate all data** before using it in analysis or modifications
           - **Use sanitized context** from `needs.activation.outputs.text`
           - **Check file permissions** before writing changes
           
           ### Change Quality
+          
           - **Be surgical**: Make minimal, focused changes
           - **Be specific**: Target exact issues identified in logs
           - **Be validated**: Always compile workflows after changes
@@ -796,12 +813,14 @@ jobs:
           - **Keep it simple**: Don't over-engineer solutions
           
           ### Data Usage
+          
           - **Always use live data**: Pull from agentic workflow logs and audits
           - **Never fabricate**: Don't make up log entries or issues
           - **Cross-reference**: Verify findings across multiple sources
           - **Be accurate**: Double-check workflow names, tool names, and configurations
           
           ### Workflow Validation
+          
           - **Validate all changes**: Use the `compile` tool from agentic-workflows before PR
           - **Focus on source**: Only modify .md workflow files
           - **Test changes**: Verify syntax and configuration are correct
@@ -811,23 +830,27 @@ jobs:
           Based on your analysis, focus on these common issues:
           
           ### Missing Tools
+          
           - Check logs for "missing tool" reports
           - Add tools to workflow configurations
           - Add shared imports for standard tools
           
           ### Permission Problems
+          
           - Identify permission-denied errors in logs
           - Add minimal necessary permissions
           - Use safe-outputs for write operations
           - Follow principle of least privilege
           
           ### Performance Issues
+          
           - Detect excessive repetitive tool calls
           - Identify high token usage patterns
           - Find workflows with many turns
           - Spot timeout issues
           
           ### Common Patterns
+          
           - Extract repeated workflow steps
           - Create shared configuration files
           - Identify reusable prompt templates
@@ -843,6 +866,7 @@ jobs:
           ## Issues Found (from live data)
           
           ### [Workflow Name]
+          
           - **Log Analysis**: [Summary from actual logs]
           - **Run IDs Analyzed**: [Specific run IDs from audit]
           - **Issues Identified**:
@@ -855,6 +879,7 @@ jobs:
           ## Changes Made
           
           ### [Workflow Name] (workflows/[name].md)
+          
           - Added missing tool: `[tool-name]` (found in run #[run-id])
           - Fixed permission: Added `[permission]` (error in run #[run-id])
           - Optimized: [specific optimization based on log analysis]
@@ -871,6 +896,7 @@ jobs:
           ## Validation
           
           All modified workflows compiled successfully using the `compile` tool from agentic-workflows:
+          
           - ✅ [workflow-1]
           - ✅ [workflow-2]
           - ✅ [workflow-N]
@@ -885,6 +911,7 @@ jobs:
           ## Success Criteria
           
           A successful Q mission:
+          
           - ✅ Uses live data from agentic workflow logs and audits (no fabricated data)
           - ✅ Identifies specific issues with evidence from logs
           - ✅ Makes minimal, targeted improvements to workflows
@@ -1312,7 +1339,7 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
           WORKFLOW_NAME: "Q - Agentic Workflow Optimizer"
-          WORKFLOW_DESCRIPTION: "Intelligent assistant that answers questions, analyzes repositories, and can create PRs for workflow optimizations.\nAn expert system that improves, optimizes, and fixes agentic workflows by investigating performance, \nidentifying missing tools, and detecting inefficiencies."
+          WORKFLOW_DESCRIPTION: "Intelligent assistant that answers questions, analyzes repositories, and can create PRs for workflow optimizations.\nAn expert system that improves, optimizes, and fixes agentic workflows by investigating performance,\nidentifying missing tools, and detecting inefficiencies."
           HAS_PATCH: ${{ needs.agent.outputs.has_patch }}
         with:
           script: |
