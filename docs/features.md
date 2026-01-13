@@ -27,7 +27,7 @@ ksail cluster create
 **Commands:** [`ksail cluster`](configuration/cli-flags/cluster/cluster-root.md)
 
 | Command                 | Description                 |
-|-------------------------|-----------------------------|
+| ----------------------- | --------------------------- |
 | `ksail cluster init`    | Initialize a new project    |
 | `ksail cluster create`  | Create a cluster            |
 | `ksail cluster delete`  | Delete a cluster            |
@@ -59,7 +59,7 @@ ksail workload logs deployment/my-app
 **Commands:** [`ksail workload`](configuration/cli-flags/workload/workload-root.md)
 
 | Command                   | Description                        |
-|---------------------------|------------------------------------|
+| ------------------------- | ---------------------------------- |
 | `ksail workload apply`    | Apply manifests to cluster         |
 | `ksail workload get`      | Get resources                      |
 | `ksail workload describe` | Describe resources                 |
@@ -101,13 +101,13 @@ ksail workload reconcile
 **Commands:**
 
 | Command                    | Description                            |
-|----------------------------|----------------------------------------|
+| -------------------------- | -------------------------------------- |
 | `ksail workload push`      | Package and push manifests to registry |
 | `ksail workload reconcile` | Trigger GitOps sync and wait           |
 
 ## Registry Management
 
-Run local [OCI registries](concepts.md#oci-registries) for faster development cycles and configure mirror registries to avoid rate limits.
+Run local [OCI registries](concepts.md#oci-registries) for faster development cycles, configure mirror registries to avoid rate limits, or use external registries with authentication.
 
 ### Local Registry
 
@@ -121,6 +121,19 @@ docker push localhost:5050/my-app
 
 **Benefits:** Faster image pulls, GitOps integration, isolated development
 
+**With authentication (for external registries):**
+
+```bash
+ksail cluster init \
+  --local-registry \
+  --local-registry-host ghcr.io \
+  --local-registry-path myorg/myrepo \
+  --local-registry-username '${GITHUB_USER}' \
+  --local-registry-password '${GITHUB_TOKEN}'
+```
+
+**Note:** Username and password support `${ENV_VAR}` placeholders for secure credential handling.
+
 ### Mirror Registries
 
 ```bash
@@ -130,6 +143,15 @@ ksail cluster init \
 ```
 
 **Benefits:** Avoid Docker Hub rate limits, offline development, faster CI/CD
+
+**With authentication:**
+
+```bash
+ksail cluster init \
+  --mirror-registry docker.io=https://registry-1.docker.io \
+  --mirror-registry-username docker.io='${DOCKER_USER}' \
+  --mirror-registry-password docker.io='${DOCKER_TOKEN}'
+```
 
 ## Secret Management
 
@@ -145,7 +167,7 @@ ksail cipher import AGE-SECRET-KEY-1...
 **Commands:** [`ksail cipher`](configuration/cli-flags/cipher/cipher-root.md)
 
 | Command                | Description                   |
-|------------------------|-------------------------------|
+| ---------------------- | ----------------------------- |
 | `ksail cipher encrypt` | Encrypt a file with SOPS      |
 | `ksail cipher decrypt` | Decrypt a SOPS-encrypted file |
 | `ksail cipher edit`    | Edit encrypted file in-place  |

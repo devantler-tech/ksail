@@ -43,17 +43,17 @@ The binary works on all major operating systems and modern CPU architectures:
 
 The supported distributions (x-axis) run on different infrastructure providers (y-axis). You need to have access to at least one provider for your chosen distribution for KSail to create and manage the cluster.
 
-| Provider | Vanilla   | K3s      | Talos   |
-| -------- | --------- | -------- | ------- |
-| Docker   | ✅ (Kind) | ✅ (K3d) | ✅      |
-| Hetzner  | —         | —        | 🚧 next |
+| Provider | Vanilla   | K3s      | Talos |
+| -------- | --------- | -------- | ----- |
+| Docker   | ✅ (Kind) | ✅ (K3d) | ✅    |
+| Hetzner  | —         | —        | ✅    |
 
 Vanilla is implemented with Kind; K3s is implemented with K3d.
 
 > [!NOTE]
-> If you want to see more distributions or providers supported, please consider sponsoring development via [GitHub Sponsors](https://github.com/sponsors/devantler). Testing and maintaining distribution x cloud provider support comes with a additional financial costs for me, so sponsorships help make that feasible.
+> If you want to see more distributions or providers supported, please consider sponsoring development via [GitHub Sponsors](https://github.com/sponsors/devantler). Testing and maintaining distribution x cloud provider support comes with additional financial costs for me, so sponsorships help make that feasible.
 >
-> Talos on Hetzner is an exception to this, as I use Talos on Hetzner for my personal homelab, and so I need the support for my own platform to be fully maintained via KSail.
+> Talos on Hetzner is supported because I use it for my personal homelab, and so the support is maintained as part of my own platform work.
 
 ### Installation
 

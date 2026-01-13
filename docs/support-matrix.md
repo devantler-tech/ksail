@@ -11,22 +11,22 @@ or [Configuration](configuration/index.md) for setup instructions.
 
 ## Platforms and Distributions
 
-| Platform | Architectures | Status      |
-|----------|---------------|-------------|
+| Platform | Architectures | Status       |
+| -------- | ------------- | ------------ |
 | Linux    | amd64, arm64  | ✅ Supported |
 | macOS    | arm64         | ✅ Supported |
-| Windows  | amd64, arm64  | ⚠️ Untested |
+| Windows  | amd64, arm64  | ⚠️ Untested  |
 
-| Distribution | Description            | Provider | Status      |
-|--------------|------------------------|----------|-------------|
-| Vanilla      | Standard Kubernetes    | Docker   | ✅ Supported |
-| K3s          | Lightweight Kubernetes | Docker   | ✅ Supported |
-| Talos        | Immutable Talos Linux  | Docker   | ✅ Supported |
+| Distribution | Description            | Provider        | Status       |
+| ------------ | ---------------------- | --------------- | ------------ |
+| Vanilla      | Standard Kubernetes    | Docker          | ✅ Supported |
+| K3s          | Lightweight Kubernetes | Docker          | ✅ Supported |
+| Talos        | Immutable Talos Linux  | Docker, Hetzner | ✅ Supported |
 
 ## Cluster Components
 
 | Component            | Options                    | Configuration           |
-|----------------------|----------------------------|-------------------------|
+| -------------------- | -------------------------- | ----------------------- |
 | CNI                  | Default, Cilium, Calico    | `--cni` flag            |
 | CSI                  | Default, LocalPathStorage  | `--csi` flag            |
 | Metrics Server       | Default, Enabled, Disabled | `--metrics-server` flag |
@@ -36,16 +36,16 @@ or [Configuration](configuration/index.md) for setup instructions.
 
 ## GitOps and Registries
 
-| Component         | Options            | Configuration            |
-|-------------------|--------------------|--------------------------|
-| GitOps Engine     | None, Flux, ArgoCD | `--gitops-engine` flag   |
-| Local Registry    | true/false (bool)  | `--local-registry` flag  |
-| Mirror Registries | Configurable       | `--mirror-registry` flag |
+| Component         | Options            | Configuration               |
+| ----------------- | ------------------ | --------------------------- |
+| GitOps Engine     | None, Flux, ArgoCD | `--gitops-engine` flag      |
+| Local Registry    | Configurable       | `--local-registry-*` flags  |
+| Mirror Registries | Configurable       | `--mirror-registry-*` flags |
 
 ## Workload Tools
 
 | Tool      | Commands                                   |
-|-----------|--------------------------------------------|
+| --------- | ------------------------------------------ |
 | kubectl   | `apply`, `get`, `logs`, `exec`, `describe` |
 | Helm      | `install`                                  |
 | Kustomize | `apply -k`                                 |

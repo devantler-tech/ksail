@@ -66,6 +66,23 @@ The Docker provider runs Kubernetes nodes as Docker containers on your local mac
 - [Docker Documentation](https://docs.docker.com/)
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/)
 
+### Hetzner
+
+The Hetzner provider creates Kubernetes nodes as Hetzner Cloud servers. This provider enables running production-grade clusters on Hetzner's infrastructure with full lifecycle management.
+
+**Supported distributions:** Talos
+
+**Requirements:**
+
+- Hetzner Cloud API token (set via `HCLOUD_TOKEN` environment variable)
+- Talos ISO available in your Hetzner account
+
+**Key resources:**
+
+- [Hetzner Cloud Documentation](https://docs.hetzner.com/cloud/)
+- [Hetzner Cloud API](https://docs.hetzner.cloud/)
+- [Talos on Hetzner](https://www.talos.dev/latest/talos-guides/install/cloud-platforms/hetzner/)
+
 ## Container Network Interface (CNI)
 
 [CNI](https://www.cni.dev/) is a specification for configuring network interfaces in Linux containers. CNI plugins provide pod networking, network policies, and observability.
@@ -213,7 +230,7 @@ Policy engines enforce security, compliance, and best practices in Kubernetes cl
 SOPS supports multiple key management backends:
 
 | Provider        | Documentation                                                                |
-|-----------------|------------------------------------------------------------------------------|
+| --------------- | ---------------------------------------------------------------------------- |
 | age             | [age-encryption.org](https://age-encryption.org/)                            |
 | PGP             | [GnuPG](https://gnupg.org/)                                                  |
 | AWS KMS         | [AWS KMS Documentation](https://docs.aws.amazon.com/kms/)                    |
