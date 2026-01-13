@@ -14,7 +14,6 @@ import (
 	v1alpha1 "github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
 	registrypkg "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
-	"github.com/docker/docker/client"
 	"github.com/spf13/viper"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -22,7 +21,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/tools/clientcmd"
 )
 
 // RegistryInfo contains detected registry information.
@@ -166,12 +164,9 @@ type gitOpsResourceSpec struct {
 
 // detectRegistryFromGitOps fetches registry info from a GitOps resource.
 func detectRegistryFromGitOps(ctx context.Context, spec gitOpsResourceSpec) (*RegistryInfo, error) {
-	config, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
-		clientcmd.NewDefaultClientConfigLoadingRules(),
-		&clientcmd.ConfigOverrides{},
-	).ClientConfig()
+	config, err := GetKubeconfigRESTConfig()
 	if err != nil {
-		return nil, fmt.Errorf("build kubeconfig: %w", err)
+		return nil, err
 	}
 
 	dynClient, err := dynamic.NewForConfig(config)
@@ -242,23 +237,15 @@ func DetectRegistryFromArgoCD(ctx context.Context) (*RegistryInfo, error) {
 }
 
 // DetectRegistryFromDocker tries to find a local registry Docker container.
-//
-//nolint:cyclop // Detection logic requires multiple fallback paths
 func DetectRegistryFromDocker(ctx context.Context, clusterName string) (*RegistryInfo, error) {
-	dockerClient, err := client.NewClientWithOpts(
-		client.FromEnv,
-		client.WithAPIVersionNegotiation(),
-	)
+	resources, err := NewDockerRegistryManager()
 	if err != nil {
-		return nil, fmt.Errorf("create docker client: %w", err)
+		return nil, err
 	}
 
-	defer func() { _ = dockerClient.Close() }()
+	defer resources.Close()
 
-	registryManager, err := dockerclient.NewRegistryManager(dockerClient)
-	if err != nil {
-		return nil, fmt.Errorf("create registry manager: %w", err)
-	}
+	registryManager := resources.RegistryManager
 
 	// Try cluster-specific registry first (e.g., "mycluster-local-registry")
 	registryName := clusterName + "-" + registrypkg.LocalRegistryBaseName
@@ -350,22 +337,15 @@ func translateInternalHostname(ctx context.Context, info *RegistryInfo) error {
 		return nil
 	}
 
-	dockerClient, err := client.NewClientWithOpts(
-		client.FromEnv,
-		client.WithAPIVersionNegotiation(),
-	)
+	resources, err := NewDockerRegistryManager()
 	if err != nil {
 		// Can't connect to Docker, leave as-is and let caller handle
 		return nil
 	}
 
-	defer func() { _ = dockerClient.Close() }()
+	defer resources.Close()
 
-	registryManager, err := dockerclient.NewRegistryManager(dockerClient)
-	if err != nil {
-		// Can't create manager, leave as-is
-		return nil
-	}
+	registryManager := resources.RegistryManager
 
 	// The internal hostname IS the container name
 	containerName := info.Host
@@ -503,17 +483,14 @@ func mergeCredentialsFromClusterSecrets(ctx context.Context, info *RegistryInfo)
 
 // getKubernetesClient creates a Kubernetes clientset from the default kubeconfig.
 func getKubernetesClient() (*kubernetes.Clientset, error) {
-	config, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
-		clientcmd.NewDefaultClientConfigLoadingRules(),
-		&clientcmd.ConfigOverrides{},
-	).ClientConfig()
+	config, err := GetKubeconfigRESTConfig()
 	if err != nil {
-		return nil, fmt.Errorf("failed to load kubeconfig: %w", err)
+		return nil, err
 	}
 
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create kubernetes client: %w", err)
+		return nil, fmt.Errorf("create kubernetes client: %w", err)
 	}
 
 	return clientset, nil
