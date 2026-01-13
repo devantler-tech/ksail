@@ -91,19 +91,14 @@ func DiscoverRegistriesByNetwork(
 	return &DiscoveredRegistries{Registries: registries}
 }
 
-// CleanupPreDiscoveredRegistries deletes registries that were discovered before cluster deletion.
-// This is the exported version for use by the simplified delete command.
-func CleanupPreDiscoveredRegistries(
+// deleteRegistriesByInfoCore performs the core deletion of registries by their info.
+// Returns the list of deleted registry names.
+func deleteRegistriesByInfoCore(
 	cmd *cobra.Command,
-	tmr timer.Timer,
 	registries []dockerclient.RegistryInfo,
 	deleteVolumes bool,
 	cleanupDeps CleanupDependencies,
-) error {
-	if len(registries) == 0 {
-		return ErrNoRegistriesFound
-	}
-
+) ([]string, error) {
 	var deletedNames []string
 
 	err := cleanupDeps.DockerInvoker(cmd, func(dockerClient client.APIClient) error {
@@ -125,6 +120,24 @@ func CleanupPreDiscoveredRegistries(
 
 		return nil
 	})
+
+	return deletedNames, err
+}
+
+// CleanupPreDiscoveredRegistries deletes registries that were discovered before cluster deletion.
+// This is the exported version for use by the simplified delete command.
+func CleanupPreDiscoveredRegistries(
+	cmd *cobra.Command,
+	tmr timer.Timer,
+	registries []dockerclient.RegistryInfo,
+	deleteVolumes bool,
+	cleanupDeps CleanupDependencies,
+) error {
+	if len(registries) == 0 {
+		return ErrNoRegistriesFound
+	}
+
+	deletedNames, err := deleteRegistriesByInfoCore(cmd, registries, deleteVolumes, cleanupDeps)
 	if err != nil {
 		return err
 	}
@@ -134,19 +147,17 @@ func CleanupPreDiscoveredRegistries(
 	return nil
 }
 
-// CleanupRegistriesByNetwork discovers and cleans up all registry containers by network.
-// This is the exported version for use by the simplified delete command.
-func CleanupRegistriesByNetwork(
+// deleteRegistriesOnNetworkCore performs the core deletion of registries on a network.
+// Returns the list of deleted registry names and true if registries were found.
+func deleteRegistriesOnNetworkCore(
 	cmd *cobra.Command,
-	tmr timer.Timer,
-	distribution v1alpha1.Distribution,
-	clusterName string,
+	networkName string,
 	deleteVolumes bool,
 	cleanupDeps CleanupDependencies,
-) error {
-	networkName := getNetworkNameForDistribution(distribution, clusterName)
-
+) ([]string, bool, error) {
 	var registryNames []string
+
+	found := false
 
 	err := cleanupDeps.DockerInvoker(cmd, func(dockerClient client.APIClient) error {
 		registryMgr, mgrErr := dockerclient.NewRegistryManager(dockerClient)
@@ -161,8 +172,10 @@ func CleanupRegistriesByNetwork(
 		}
 
 		if len(registries) == 0 {
-			return ErrNoRegistriesFound
+			return nil
 		}
+
+		found = true
 
 		// Extract names for notification
 		for _, reg := range registries {
@@ -181,8 +194,34 @@ func CleanupRegistriesByNetwork(
 
 		return nil
 	})
+
+	return registryNames, found, err
+}
+
+// CleanupRegistriesByNetwork discovers and cleans up all registry containers by network.
+// This is the exported version for use by the simplified delete command.
+func CleanupRegistriesByNetwork(
+	cmd *cobra.Command,
+	tmr timer.Timer,
+	distribution v1alpha1.Distribution,
+	clusterName string,
+	deleteVolumes bool,
+	cleanupDeps CleanupDependencies,
+) error {
+	networkName := getNetworkNameForDistribution(distribution, clusterName)
+
+	registryNames, found, err := deleteRegistriesOnNetworkCore(
+		cmd,
+		networkName,
+		deleteVolumes,
+		cleanupDeps,
+	)
 	if err != nil {
 		return err
+	}
+
+	if !found {
+		return ErrNoRegistriesFound
 	}
 
 	displayRegistryCleanupOutputWithTimer(cmd, tmr, registryNames)
@@ -318,27 +357,7 @@ func cleanupPreDiscoveredRegistries(
 		return nil
 	}
 
-	var deletedNames []string
-
-	err := cleanupDeps.DockerInvoker(cmd, func(dockerClient client.APIClient) error {
-		registryMgr, mgrErr := dockerclient.NewRegistryManager(dockerClient)
-		if mgrErr != nil {
-			return fmt.Errorf("failed to create registry manager: %w", mgrErr)
-		}
-
-		names, deleteErr := registryMgr.DeleteRegistriesByInfo(
-			cmd.Context(),
-			registries,
-			deleteVolumes,
-		)
-		if deleteErr != nil {
-			return fmt.Errorf("failed to delete registries: %w", deleteErr)
-		}
-
-		deletedNames = names
-
-		return nil
-	})
+	deletedNames, err := deleteRegistriesByInfoCore(cmd, registries, deleteVolumes, cleanupDeps)
 	if err != nil {
 		return err
 	}
@@ -350,36 +369,7 @@ func cleanupPreDiscoveredRegistries(
 
 // displayRegistryCleanupOutput shows the cleanup stage output for deleted registries.
 func displayRegistryCleanupOutput(cmd *cobra.Command, deps lifecycle.Deps, deletedNames []string) {
-	if len(deletedNames) == 0 {
-		return
-	}
-
-	deps.Timer.NewStage()
-
-	notify.WriteMessage(notify.Message{
-		Type:    notify.TitleType,
-		Content: "Delete registries...",
-		Emoji:   "🗑️",
-		Writer:  cmd.OutOrStdout(),
-	})
-
-	for _, name := range deletedNames {
-		notify.WriteMessage(notify.Message{
-			Type:    notify.ActivityType,
-			Content: "deleting '%s'",
-			Writer:  cmd.OutOrStdout(),
-			Args:    []any{name},
-		})
-	}
-
-	outputTimer := helpers.MaybeTimer(cmd, deps.Timer)
-
-	notify.WriteMessage(notify.Message{
-		Type:    notify.SuccessType,
-		Content: "registries deleted",
-		Timer:   outputTimer,
-		Writer:  cmd.OutOrStdout(),
-	})
+	displayRegistryCleanupOutputWithTimer(cmd, deps.Timer, deletedNames)
 }
 
 // getNetworkNameForDistribution returns the Docker network name for a given distribution.
@@ -729,41 +719,12 @@ func cleanupRegistriesByNetwork(
 	deleteVolumes bool,
 	cleanupDeps CleanupDependencies,
 ) error {
-	var registryNames []string
-
-	err := cleanupDeps.DockerInvoker(cmd, func(dockerClient client.APIClient) error {
-		registryMgr, mgrErr := dockerclient.NewRegistryManager(dockerClient)
-		if mgrErr != nil {
-			return fmt.Errorf("failed to create registry manager: %w", mgrErr)
-		}
-
-		// Discover registries connected to the network
-		registries, listErr := registryMgr.ListRegistriesOnNetwork(cmd.Context(), networkName)
-		if listErr != nil {
-			return fmt.Errorf("failed to list registries on network: %w", listErr)
-		}
-
-		if len(registries) == 0 {
-			return nil
-		}
-
-		// Extract names for notification
-		for _, reg := range registries {
-			registryNames = append(registryNames, reg.Name)
-		}
-
-		// Delete all registries on the network
-		_, deleteErr := registryMgr.DeleteRegistriesOnNetwork(
-			cmd.Context(),
-			networkName,
-			deleteVolumes,
-		)
-		if deleteErr != nil {
-			return fmt.Errorf("failed to delete registries: %w", deleteErr)
-		}
-
-		return nil
-	})
+	registryNames, _, err := deleteRegistriesOnNetworkCore(
+		cmd,
+		networkName,
+		deleteVolumes,
+		cleanupDeps,
+	)
 	if err != nil {
 		return err
 	}

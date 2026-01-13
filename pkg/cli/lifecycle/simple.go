@@ -465,28 +465,24 @@ func (m *multiDistributionProvisioner) Delete(ctx context.Context, name string) 
 
 // Exists checks if the cluster exists in any distribution.
 func (m *multiDistributionProvisioner) Exists(ctx context.Context, name string) (bool, error) {
-	clusterName := name
-	if clusterName == "" {
-		clusterName = m.clusterName
+	found := false
+	err := m.forExistingCluster(
+		ctx,
+		name,
+		func(_ clusterprovisioner.ClusterProvisioner, _ string) error {
+			found = true
+
+			return nil
+		},
+	)
+
+	// forExistingCluster returns ErrClusterNotFoundInDistributions if not found,
+	// which is expected - we just return false in that case
+	if err != nil && !errors.Is(err, ErrClusterNotFoundInDistributions) {
+		return false, err
 	}
 
-	for _, dist := range getSupportedDistributions() {
-		provisioner, err := createProvisionerForDistribution(dist, clusterName)
-		if err != nil {
-			continue
-		}
-
-		exists, err := provisioner.Exists(ctx, clusterName)
-		if err != nil {
-			continue
-		}
-
-		if exists {
-			return true, nil
-		}
-	}
-
-	return false, nil
+	return found, nil
 }
 
 // List lists all clusters across all distributions.

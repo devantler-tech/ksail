@@ -160,6 +160,11 @@ func (p *Provider) DeleteNodes(ctx context.Context, clusterName string) error {
 // nodeOperation defines a function that operates on a single container.
 type nodeOperation func(ctx context.Context, containerName string) error
 
+// IsAvailable returns true if the provider is ready for use.
+func (p *Provider) IsAvailable() bool {
+	return p.client != nil
+}
+
 // forEachNode executes an operation on each node in the cluster.
 // It handles common setup: client validation, node listing, empty check, and timeout.
 func (p *Provider) forEachNode(
@@ -168,13 +173,9 @@ func (p *Provider) forEachNode(
 	timeout time.Duration,
 	operation nodeOperation,
 ) error {
-	if p.client == nil {
-		return provider.ErrProviderUnavailable
-	}
-
-	nodes, err := p.ListNodes(ctx, clusterName)
+	nodes, err := provider.EnsureAvailableAndListNodes(ctx, p, clusterName)
 	if err != nil {
-		return fmt.Errorf("failed to list nodes: %w", err)
+		return fmt.Errorf("failed to prepare node operation: %w", err)
 	}
 
 	if len(nodes) == 0 {

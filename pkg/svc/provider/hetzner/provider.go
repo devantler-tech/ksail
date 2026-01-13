@@ -74,53 +74,22 @@ func (p *Provider) StartNodes(ctx context.Context, clusterName string) error {
 
 // StopNodes stops all servers for the given cluster.
 // Uses graceful shutdown (ACPI signal) and waits for servers to be off.
-//
-//nolint:cyclop // Inherent complexity from iterating servers with error handling and status polling
 func (p *Provider) StopNodes(ctx context.Context, clusterName string) error {
-	if p.client == nil {
-		return provider.ErrProviderUnavailable
-	}
-
-	nodes, err := p.ListNodes(ctx, clusterName)
-	if err != nil {
-		return fmt.Errorf("failed to list nodes: %w", err)
-	}
-
-	if len(nodes) == 0 {
-		return provider.ErrNoNodes
-	}
-
-	// Shutdown all servers
-	for _, node := range nodes {
-		server, _, serverErr := p.client.Server.GetByName(ctx, node.Name)
-		if serverErr != nil {
-			return fmt.Errorf("failed to get server %s: %w", node.Name, serverErr)
-		}
-
-		if server == nil {
-			continue
-		}
-
+	err := p.forEachServer(ctx, clusterName, func(server *hcloud.Server) (*hcloud.Action, error) {
 		// Skip if already off
 		if server.Status == hcloud.ServerStatusOff {
-			continue
+			return nil, nil
 		}
 
 		action, _, shutdownErr := p.client.Server.Shutdown(ctx, server)
 		if shutdownErr != nil {
-			return fmt.Errorf("failed to shutdown server %s: %w", node.Name, shutdownErr)
+			return nil, fmt.Errorf("failed to shutdown server %s: %w", server.Name, shutdownErr)
 		}
 
-		if action != nil {
-			waitErr := p.waitForAction(ctx, action)
-			if waitErr != nil {
-				return fmt.Errorf(
-					"failed waiting for shutdown action on %s: %w",
-					node.Name,
-					waitErr,
-				)
-			}
-		}
+		return action, nil
+	})
+	if err != nil {
+		return err
 	}
 
 	// Wait for all servers to be off
@@ -263,29 +232,25 @@ func (p *Provider) DeleteNodes(ctx context.Context, clusterName string) error {
 		return provider.ErrProviderUnavailable
 	}
 
-	nodes, err := p.ListNodes(ctx, clusterName)
-	if err != nil {
-		return fmt.Errorf("failed to list nodes: %w", err)
-	}
-
-	for _, node := range nodes {
-		server, _, err := p.client.Server.GetByName(ctx, node.Name)
-		if err != nil {
-			return fmt.Errorf("failed to get server %s: %w", node.Name, err)
-		}
-
-		if server == nil {
-			continue
-		}
-
-		_, _, err = p.client.Server.DeleteWithResult(ctx, server)
-		if err != nil {
-			return fmt.Errorf("failed to delete server %s: %w", node.Name, err)
-		}
+	// Delete all servers - use forEachServerOptional since having no nodes is OK for delete
+	deleteErr := p.forEachServerOptional(
+		ctx,
+		clusterName,
+		func(server *hcloud.Server) (*hcloud.Action, error) {
+			_, _, err := p.client.Server.DeleteWithResult(ctx, server)
+			if err != nil {
+				return nil, fmt.Errorf("failed to delete server %s: %w", server.Name, err)
+			}
+			// Delete doesn't return an action we need to wait for
+			return nil, nil
+		},
+	)
+	if deleteErr != nil {
+		return deleteErr
 	}
 
 	// Clean up infrastructure resources
-	err = p.deleteInfrastructure(ctx, clusterName)
+	err := p.deleteInfrastructure(ctx, clusterName)
 	if err != nil {
 		return fmt.Errorf("failed to delete infrastructure: %w", err)
 	}
@@ -346,17 +311,7 @@ func (p *Provider) attachISOAndReboot(
 	}
 
 	// Reset (hard reboot) the server to boot from the ISO
-	action, _, err = p.client.Server.Reset(ctx, server)
-	if err != nil {
-		return fmt.Errorf("failed to reset server: %w", err)
-	}
-
-	err = p.waitForAction(ctx, action)
-	if err != nil {
-		return fmt.Errorf("failed waiting for server reset: %w", err)
-	}
-
-	return nil
+	return p.ResetServer(ctx, server)
 }
 
 // DetachISO detaches any attached ISO from a server.
@@ -575,23 +530,49 @@ func (p *Provider) GetServerByName(ctx context.Context, name string) (*hcloud.Se
 	return server, nil
 }
 
+// IsAvailable returns true if the provider is ready for use.
+func (p *Provider) IsAvailable() bool {
+	return p.client != nil
+}
+
 // forEachServer executes an action on each server in the cluster.
+// Returns ErrNoNodes if no nodes exist.
 func (p *Provider) forEachServer(
 	ctx context.Context,
 	clusterName string,
 	action func(*hcloud.Server) (*hcloud.Action, error),
 ) error {
-	if p.client == nil {
-		return provider.ErrProviderUnavailable
-	}
+	return p.forEachServerWithOptions(ctx, clusterName, action, true)
+}
 
-	nodes, err := p.ListNodes(ctx, clusterName)
+// forEachServerOptional executes an action on each server in the cluster.
+// Does not error if no nodes exist (useful for delete operations).
+func (p *Provider) forEachServerOptional(
+	ctx context.Context,
+	clusterName string,
+	action func(*hcloud.Server) (*hcloud.Action, error),
+) error {
+	return p.forEachServerWithOptions(ctx, clusterName, action, false)
+}
+
+// forEachServerWithOptions is the core implementation for iterating servers.
+func (p *Provider) forEachServerWithOptions(
+	ctx context.Context,
+	clusterName string,
+	action func(*hcloud.Server) (*hcloud.Action, error),
+	requireNodes bool,
+) error {
+	nodes, err := provider.EnsureAvailableAndListNodes(ctx, p, clusterName)
 	if err != nil {
-		return fmt.Errorf("failed to list nodes: %w", err)
+		return fmt.Errorf("failed to prepare server operation: %w", err)
 	}
 
 	if len(nodes) == 0 {
-		return provider.ErrNoNodes
+		if requireNodes {
+			return provider.ErrNoNodes
+		}
+
+		return nil
 	}
 
 	for _, node := range nodes {
