@@ -42,9 +42,6 @@ const (
 	conditionStatusTrue  = "True"
 	conditionStatusFalse = "False"
 
-	// Retry constants for handling optimistic concurrency conflicts and transient API errors.
-	conflictRetryAttempts = 5
-	conflictRetryDelay    = 500 * time.Millisecond
 	// API availability timeout for reconciliation operations - should be long enough
 	// for the Flux controllers to become ready in slow CI environments.
 	apiAvailabilityTimeout      = 2 * time.Minute
@@ -352,15 +349,27 @@ func isTransientAPIError(err error) bool {
 		return true
 	}
 
-	// NotFound errors on the resource itself (not the API) can occur when
-	// the Flux controllers are still bootstrapping
-	if apierrors.IsNotFound(err) {
-		return true
+	// NotFound errors are only transient when they're related to API discovery issues,
+	// not when the resource genuinely doesn't exist. We can distinguish by checking
+	// if the error is a StatusError with specific reasons that indicate API issues.
+	if statusErr, ok := err.(*apierrors.StatusError); ok {
+		if statusErr.ErrStatus.Code == 404 {
+			// Check if the reason indicates an API discovery issue rather than a missing resource
+			reason := statusErr.ErrStatus.Reason
+			// "NotFound" with message containing "could not find" typically means API not ready
+			if reason == metav1.StatusReasonNotFound &&
+				strings.Contains(statusErr.ErrStatus.Message, "could not find") {
+				return true
+			}
+		}
 	}
 
-	// Connection refused/reset can happen during controller initialization
+	// Connection errors - check for common network error patterns
+	// This is more robust than string matching as it catches various connection issues
 	if strings.Contains(errMsg, "connection refused") ||
-		strings.Contains(errMsg, "connection reset") {
+		strings.Contains(errMsg, "connection reset") ||
+		strings.Contains(errMsg, "i/o timeout") ||
+		strings.Contains(errMsg, "EOF") {
 		return true
 	}
 
