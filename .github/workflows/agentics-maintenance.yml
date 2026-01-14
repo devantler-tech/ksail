@@ -88,6 +88,8 @@ jobs:
         with:
           sparse-checkout: |
             .github
+            go.mod
+            go.sum
           persist-credentials: false
 
       - name: Setup Go
