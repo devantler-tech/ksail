@@ -157,7 +157,7 @@ go test ./...
 
 #### System Tests
 
-System tests are configured in a GitHub Actions workflow file located at `.github/workflows/ci.yaml`. These test e2e scenarios for various providers and configurations. You are unable to run these tests locally, but they are required in CI, so breaking changes will result in failed checks.
+System tests are configured in `.github/workflows/ci.yaml` and run in GitHub’s **merge queue** (the `merge_group` event). They do **not** run on regular `pull_request` checks; instead they gate the final merge to `main` when a PR enters the merge queue.
 
 #### Hetzner Provider Testing
 
