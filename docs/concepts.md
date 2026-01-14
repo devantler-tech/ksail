@@ -77,6 +77,9 @@ The Hetzner provider creates Kubernetes nodes as Hetzner Cloud servers. This pro
 - Hetzner Cloud API token (set via `HCLOUD_TOKEN` environment variable)
 - Talos ISO available in your Hetzner account
 
+> [!NOTE]
+> KSail only enables Hetzner-backed operations when `HCLOUD_TOKEN` is set; if it’s unset, Hetzner is skipped.
+
 **Key resources:**
 
 - [Hetzner Cloud Documentation](https://docs.hetzner.com/cloud/)
