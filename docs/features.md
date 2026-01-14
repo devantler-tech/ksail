@@ -5,7 +5,7 @@ nav_order: 4
 
 # Features
 
-KSail provides a unified CLI for local Kubernetes development with built-in support for cluster provisioning, workload management, GitOps workflows, and secret encryption.
+KSail provides a unified CLI for Kubernetes development with built-in support for cluster provisioning (local Docker or Talos on Hetzner), workload management, GitOps workflows, and secret encryption.
 
 ## Cluster Provisioning
 

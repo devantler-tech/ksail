@@ -19,7 +19,7 @@ KSail builds upon established Kubernetes technologies and patterns. This page pr
 
 ## Distributions
 
-Kubernetes distributions package the Kubernetes components with additional tooling for specific use cases. KSail supports three distributions that can run on the Docker provider.
+Kubernetes distributions package the Kubernetes components with additional tooling for specific use cases. KSail supports three distributions: Vanilla, K3s, and Talos. All distributions can run on the Docker provider; Talos can also run on the Hetzner provider.
 
 ### Vanilla (implemented with Kind)
 
