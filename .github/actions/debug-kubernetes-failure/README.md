@@ -56,7 +56,7 @@ steps:
 ## Inputs
 
 | Input             | Description                           | Default   |
-| ----------------- | ------------------------------------- | --------- |
+|-------------------|---------------------------------------|-----------|
 | `kubectl-command` | The kubectl command or wrapper to use | `kubectl` |
 | `show-disk-usage` | Show host and Docker disk usage       | `true`    |
 | `show-nodes`      | Show node status and conditions       | `true`    |
@@ -105,7 +105,7 @@ default     2m          Normal    Pulled      pod/my-app-abc123   Container imag
 ## Common Failure Patterns
 
 | Symptom                    | Likely Cause                                            |
-| -------------------------- | ------------------------------------------------------- |
+|----------------------------|---------------------------------------------------------|
 | `DiskPressure: True`       | Runner out of disk space - use `free-disk-space` action |
 | `MemoryPressure: True`     | Not enough RAM for workloads                            |
 | Pods in `Pending`          | Insufficient resources or node selector issues          |
