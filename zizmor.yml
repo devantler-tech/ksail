@@ -34,3 +34,6 @@ rules:
       - daily-qa.lock.yml
       - daily-test-improver.lock.yml
       - update-docs.lock.yml
+  known-vulnerable-actions:
+    ignore:
+      - actions/cache-ksail-binary/action.yaml
