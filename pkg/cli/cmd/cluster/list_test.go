@@ -140,7 +140,6 @@ func TestListCmd_MultipleClustersFound_DockerProvider(t *testing.T) {
 	snaps.MatchSnapshot(t, buf.String())
 }
 
-//nolint:paralleltest // uses t.Chdir
 func TestListCmd_AllProviders(t *testing.T) {
 	// Clear HCLOUD_TOKEN to ensure Hetzner provider is skipped
 	t.Setenv("HCLOUD_TOKEN", "")
