@@ -20,7 +20,6 @@ if ! command -v hcloud &>/dev/null; then
 	HCLOUD_VERSION="v1.49.1"
 	curl -sL "https://github.com/hetznercloud/cli/releases/download/${HCLOUD_VERSION}/hcloud-linux-amd64.tar.gz" | tar -xz -C /tmp
 	sudo mv /tmp/hcloud /usr/local/bin/hcloud
-	chmod +x /usr/local/bin/hcloud
 fi
 
 # Configure hcloud context
