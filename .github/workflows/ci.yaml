@@ -270,7 +270,7 @@ jobs:
     name: 🧹 Cleanup Hetzner Resources
     runs-on: ubuntu-latest
     needs: [system-test]
-    if: ${{ always() && github.event_name == 'merge_group' }}
+    if: ${{ always() && github.event_name == 'merge_group' && needs.system-test.result != 'skipped' }}
     permissions:
       contents: read
     steps:
