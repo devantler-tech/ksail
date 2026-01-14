@@ -5,7 +5,7 @@ nav_order: 1
 
 # KSail Documentation
 
-KSail is a CLI tool for managing Kubernetes clusters and workloads. Built in Go, it provides a unified interface for cluster lifecycle management and wraps common Kubernetes tools behind consistent commands.
+KSail bundles common Kubernetes tooling into a single CLI. It provides a consistent interface to create clusters, deploy workloads, and operate cloud-native stacks across different Kubernetes distributions and infrastructure providers.
 
 ![KSail Mental Model](images/mental-model.svg)
 
