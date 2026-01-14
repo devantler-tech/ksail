@@ -38,6 +38,8 @@ mega-linter-runner -f go
 
 The same configuration is used in CI, so you can expect the same linting behavior in your local environment as in the CI pipeline.
 
+MegaLinter also checks Markdown files. Markdown lint rules are configured in `.markdownlint.json` (some rules are relaxed to accommodate Jekyll/Just the Docs front matter and documentation formatting).
+
 ### Build
 
 ```sh
@@ -157,7 +159,7 @@ go test ./...
 
 #### System Tests
 
-System tests are configured in a GitHub Actions workflow file located at `.github/workflows/ci.yaml`. These test e2e scenarios for various providers and configurations. You are unable to run these tests locally, but they are required in CI, so breaking changes will result in failed checks.
+System tests are configured in `.github/workflows/ci.yaml` and run in GitHub’s **merge queue** (the `merge_group` event). They do **not** run on regular `pull_request` checks; instead they gate the final merge to `main` when a PR enters the merge queue.
 
 #### Hetzner Provider Testing
 
@@ -169,6 +171,16 @@ To test the Hetzner provider locally, you need:
 **Note:** Some unit tests and CLI code paths enable Hetzner functionality when `HCLOUD_TOKEN` is set. If you’re not intentionally testing Hetzner, unset `HCLOUD_TOKEN` (or set it to an empty value) before running `go test ./...` to keep tests hermetic.
 
 **Note:** Hetzner tests incur cloud costs. Use `ksail cluster delete` to clean up resources.
+
+**Note:** CI includes a safety-net cleanup job (`cleanup-hetzner`) that runs after system tests and deletes any Hetzner resources labeled `ksail.owned=true` via `.github/scripts/cleanup-hetzner.sh`.
+
+If a local run is interrupted and you need to remove leftover CI-labeled resources, you can run:
+
+```sh
+HCLOUD_TOKEN=... .github/scripts/cleanup-hetzner.sh
+```
+
+**Warning:** The cleanup script is destructive and will delete *all* resources in your Hetzner project matching `ksail.owned=true`. Only run it if you understand the scope.
 
 ## CD
 
