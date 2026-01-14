@@ -5,6 +5,7 @@ rules:
       - .github/workflows/daily-perf-improver.lock.yml
       - .github/workflows/daily-qa.lock.yml
       - .github/workflows/daily-test-improver.lock.yml
+      - .github/workflows/q.lock.yml
       - .github/workflows/update-docs.lock.yml
   template-injection:
     ignore:
@@ -12,6 +13,7 @@ rules:
       - .github/workflows/daily-perf-improver.lock.yml
       - .github/workflows/daily-qa.lock.yml
       - .github/workflows/daily-test-improver.lock.yml
+      - .github/workflows/q.lock.yml
       - .github/workflows/update-docs.lock.yml
   ref-version-mismatch:
     ignore:
@@ -19,6 +21,7 @@ rules:
       - .github/workflows/daily-perf-improver.lock.yml
       - .github/workflows/daily-qa.lock.yml
       - .github/workflows/daily-test-improver.lock.yml
+      - .github/workflows/q.lock.yml
       - .github/workflows/update-docs.lock.yml
   excessive-permissions:
     ignore:
@@ -26,6 +29,7 @@ rules:
       - .github/workflows/daily-perf-improver.lock.yml
       - .github/workflows/daily-qa.lock.yml
       - .github/workflows/daily-test-improver.lock.yml
+      - .github/workflows/q.lock.yml
       - .github/workflows/update-docs.lock.yml
   artipacked:
     ignore:
@@ -33,4 +37,5 @@ rules:
       - .github/workflows/daily-perf-improver.lock.yml
       - .github/workflows/daily-qa.lock.yml
       - .github/workflows/daily-test-improver.lock.yml
+      - .github/workflows/q.lock.yml
       - .github/workflows/update-docs.lock.yml

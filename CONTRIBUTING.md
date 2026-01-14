@@ -134,11 +134,11 @@ KSail separates infrastructure management from distribution configuration:
 - **Providers** manage the infrastructure lifecycle (start/stop containers)
 - **Provisioners** configure and manage Kubernetes distributions
 
-| Distribution | Provisioner            | Tool  | Description                  |
-|--------------|------------------------|-------|------------------------------|
-| `Vanilla`    | KindClusterProvisioner | Kind  | Standard upstream Kubernetes |
-| `K3s`        | K3dClusterProvisioner  | K3d   | Lightweight K3s in Docker    |
-| `Talos`      | TalosProvisioner       | Talos | Immutable Talos Linux        |
+| Distribution | Provisioner            | Tool  | Provider        | Description                  |
+| ------------ | ---------------------- | ----- | --------------- | ---------------------------- |
+| `Vanilla`    | KindClusterProvisioner | Kind  | Docker          | Standard upstream Kubernetes |
+| `K3s`        | K3dClusterProvisioner  | K3d   | Docker          | Lightweight K3s in Docker    |
+| `Talos`      | TalosProvisioner       | Talos | Docker, Hetzner | Immutable Talos Linux        |
 
 This project strives to be fully open-source friendly, and as such, all core functionality is implemented in the `pkg/` directory, and the `internal/` directory is not used. This allows external projects to import and use any part of the codebase.
 
@@ -158,6 +158,17 @@ go test ./...
 #### System Tests
 
 System tests are configured in a GitHub Actions workflow file located at `.github/workflows/ci.yaml`. These test e2e scenarios for various providers and configurations. You are unable to run these tests locally, but they are required in CI, so breaking changes will result in failed checks.
+
+#### Hetzner Provider Testing
+
+To test the Hetzner provider locally, you need:
+
+- **`HCLOUD_TOKEN`** – Hetzner Cloud API token with read/write permissions
+- **Talos ISO** – A Talos Linux ISO must be available in your Hetzner Cloud project (default ID: `122630`)
+
+**Note:** Some unit tests and CLI code paths enable Hetzner functionality when `HCLOUD_TOKEN` is set. If you’re not intentionally testing Hetzner, unset `HCLOUD_TOKEN` (or set it to an empty value) before running `go test ./...` to keep tests hermetic.
+
+**Note:** Hetzner tests incur cloud costs. Use `ksail cluster delete` to clean up resources.
 
 ## CD
 

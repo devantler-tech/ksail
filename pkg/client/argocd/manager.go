@@ -72,7 +72,12 @@ func (m *ManagerImpl) Ensure(ctx context.Context, opts EnsureOptions) error {
 		return err
 	}
 
-	err = m.upsertRepositorySecret(ctx, opts.RepositoryURL)
+	err = m.upsertRepositorySecret(ctx, repositorySecretOptions{
+		repositoryURL: opts.RepositoryURL,
+		username:      opts.Username,
+		password:      opts.Password,
+		insecure:      opts.Insecure,
+	})
 	if err != nil {
 		return err
 	}
@@ -154,8 +159,11 @@ func (m *ManagerImpl) ensureNamespace(ctx context.Context, name string) error {
 	return nil
 }
 
-func (m *ManagerImpl) upsertRepositorySecret(ctx context.Context, repositoryURL string) error {
-	desired := buildRepositorySecret(repositoryURL)
+func (m *ManagerImpl) upsertRepositorySecret(
+	ctx context.Context,
+	opts repositorySecretOptions,
+) error {
+	desired := buildRepositorySecret(opts)
 	secrets := m.clientset.CoreV1().Secrets(argoCDNamespace)
 
 	existing, err := secrets.Get(ctx, repositorySecretName, metav1.GetOptions{})

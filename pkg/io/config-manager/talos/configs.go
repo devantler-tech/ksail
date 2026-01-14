@@ -4,10 +4,13 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"time"
 
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
 	"github.com/siderolabs/talos/pkg/machinery/config/bundle"
+	"github.com/siderolabs/talos/pkg/machinery/config/configpatcher"
 	"github.com/siderolabs/talos/pkg/machinery/config/generate"
+	"github.com/siderolabs/talos/pkg/machinery/config/generate/secrets"
 	"github.com/siderolabs/talos/pkg/machinery/config/types/v1alpha1"
 )
 
@@ -38,6 +41,9 @@ type Configs struct {
 	kubernetesVersion string
 	// networkCIDR is stored for regeneration with a new name.
 	networkCIDR string
+	// endpoint is an optional override endpoint IP for cloud deployments (e.g., Hetzner public IP).
+	// When empty, the endpoint is calculated from networkCIDR.
+	endpoint string
 	// patches is stored for regeneration with a new name.
 	patches []Patch
 }
@@ -168,7 +174,54 @@ func (c *Configs) WithName(name string) (*Configs, error) {
 	}
 
 	// Regenerate the bundle with the new cluster name
-	return newConfigs(name, kubernetesVersion, networkCIDR, c.patches)
+	return newConfigsWithEndpoint(name, kubernetesVersion, networkCIDR, c.endpoint, c.patches)
+}
+
+// WithEndpoint creates a new Configs with a specific endpoint IP for the Talos API and Kubernetes API.
+// This is used for cloud deployments (e.g., Hetzner) where the public IP is different from
+// the internal network IP. The endpoint is embedded in certificates and must match the IP
+// that clients will use to connect.
+//
+// The endpoint should be the public IP address of the first control plane node.
+// Returns a new Configs instance; the original is not modified.
+// Returns an error if bundle regeneration fails.
+//
+// IMPORTANT: This preserves the existing PKI (CA, certificates) to ensure that configs
+// applied to servers and the talosconfig for authentication use the same CA.
+func (c *Configs) WithEndpoint(endpointIP string) (*Configs, error) {
+	if endpointIP == "" || endpointIP == c.endpoint {
+		return c, nil
+	}
+
+	// Use stored values for regeneration, falling back to defaults
+	kubernetesVersion := c.kubernetesVersion
+	if kubernetesVersion == "" {
+		kubernetesVersion = DefaultKubernetesVersion
+	}
+
+	networkCIDR := c.networkCIDR
+	if networkCIDR == "" {
+		networkCIDR = DefaultNetworkCIDR
+	}
+
+	// Extract existing secrets bundle to preserve PKI across endpoint changes
+	var existingSecrets *secrets.Bundle
+	if c.bundle != nil && c.bundle.ControlPlaneCfg != nil {
+		existingSecrets = secrets.NewBundleFromConfig(
+			secrets.NewFixedClock(time.Now()),
+			c.bundle.ControlPlaneCfg,
+		)
+	}
+
+	// Regenerate the bundle with the new endpoint but preserved secrets
+	return newConfigsWithEndpointAndSecrets(
+		c.Name,
+		kubernetesVersion,
+		networkCIDR,
+		endpointIP,
+		c.patches,
+		existingSecrets,
+	)
 }
 
 // IsCNIDisabled returns true if the default CNI is disabled (set to "none").
@@ -231,39 +284,85 @@ func (c *Configs) NetworkCIDR() string {
 }
 
 // newConfigs creates Configs from patches with the given cluster parameters.
+// The endpoint is calculated from the network CIDR.
 func newConfigs(
 	clusterName string,
 	kubernetesVersion string,
 	networkCIDR string,
 	patches []Patch,
 ) (*Configs, error) {
-	// Categorize patches by scope
-	clusterPatches, controlPlanePatches, workerPatches, err := categorizePatchesByScope(patches)
-	if err != nil {
-		return nil, err
+	return newConfigsWithEndpointAndSecrets(
+		clusterName,
+		kubernetesVersion,
+		networkCIDR,
+		"",
+		patches,
+		nil,
+	)
+}
+
+// newConfigsWithEndpoint creates Configs with an optional explicit endpoint IP.
+// If endpointIP is empty, the endpoint is calculated from the network CIDR.
+// If endpointIP is provided (e.g., for Hetzner public IPs), it is used as the endpoint.
+func newConfigsWithEndpoint(
+	clusterName string,
+	kubernetesVersion string,
+	networkCIDR string,
+	endpointIP string,
+	patches []Patch,
+) (*Configs, error) {
+	return newConfigsWithEndpointAndSecrets(
+		clusterName,
+		kubernetesVersion,
+		networkCIDR,
+		endpointIP,
+		patches,
+		nil,
+	)
+}
+
+// resolveControlPlaneIP determines the control plane IP from explicit endpoint or network CIDR.
+func resolveControlPlaneIP(endpointIP, networkCIDR string) (string, error) {
+	if endpointIP != "" {
+		return endpointIP, nil
 	}
 
 	// Parse network CIDR for endpoint calculation
-	parsedCIDR, err := netip.ParsePrefix(networkCIDR)
-	if err != nil {
-		return nil, fmt.Errorf("invalid network CIDR: %w", err)
+	parsedCIDR, parseErr := netip.ParsePrefix(networkCIDR)
+	if parseErr != nil {
+		return "", fmt.Errorf("invalid network CIDR: %w", parseErr)
 	}
 
 	// Calculate control plane IP for endpoint
-	controlPlaneIP, err := nthIPInNetwork(parsedCIDR, ipv4Offset)
-	if err != nil {
-		return nil, fmt.Errorf("failed to calculate control plane IP: %w", err)
+	ipAddr, ipErr := nthIPInNetwork(parsedCIDR, ipv4Offset)
+	if ipErr != nil {
+		return "", fmt.Errorf("failed to calculate control plane IP: %w", ipErr)
 	}
 
-	controlPlaneEndpoint := "https://" + net.JoinHostPort(controlPlaneIP.String(), "6443")
+	return ipAddr.String(), nil
+}
 
-	// Build generate options with endpoint list and localhost SAN for Docker-in-VM environments
-	genOptions := []generate.Option{
-		generate.WithEndpointList([]string{controlPlaneIP.String()}),
+// buildBaseGenOptions creates the base generate options for Talos config generation.
+func buildBaseGenOptions(controlPlaneIP string) []generate.Option {
+	return []generate.Option{
+		generate.WithEndpointList([]string{controlPlaneIP}),
 		generate.WithAdditionalSubjectAltNames([]string{"127.0.0.1"}),
+		generate.WithVersionContract(talosconfig.TalosVersion1_11),
+		// Install disk is required for bare metal installations (Hetzner, etc.)
+		// For Docker-in-Docker, this setting is ignored as there's no actual disk.
+		// /dev/sda is the standard disk for Hetzner VPS and most cloud providers.
+		generate.WithInstallDisk("/dev/sda"),
 	}
+}
 
-	// Build bundle options
+// buildBundleOptions creates bundle options with patches applied.
+func buildBundleOptions(
+	clusterName string,
+	controlPlaneEndpoint string,
+	kubernetesVersion string,
+	genOptions []generate.Option,
+	clusterPatches, controlPlanePatches, workerPatches []configpatcher.Patch,
+) []bundle.Option {
 	bundleOpts := []bundle.Option{
 		bundle.WithInputOptions(&bundle.InputOptions{
 			ClusterName: clusterName,
@@ -287,6 +386,53 @@ func newConfigs(
 		bundleOpts = append(bundleOpts, bundle.WithPatchWorker(workerPatches))
 	}
 
+	return bundleOpts
+}
+
+// newConfigsWithEndpointAndSecrets creates Configs with an explicit endpoint IP while preserving
+// an existing secrets bundle. This is used by WithEndpoint to regenerate configs with a new
+// endpoint without regenerating the PKI (CA, keys, tokens), which would cause certificate mismatches.
+func newConfigsWithEndpointAndSecrets(
+	clusterName string,
+	kubernetesVersion string,
+	networkCIDR string,
+	endpointIP string,
+	patches []Patch,
+	existingSecrets *secrets.Bundle,
+) (*Configs, error) {
+	// Categorize patches by scope
+	clusterPatches, controlPlanePatches, workerPatches, err := categorizePatchesByScope(patches)
+	if err != nil {
+		return nil, err
+	}
+
+	// Resolve the control plane IP
+	controlPlaneIP, err := resolveControlPlaneIP(endpointIP, networkCIDR)
+	if err != nil {
+		return nil, err
+	}
+
+	controlPlaneEndpoint := "https://" + net.JoinHostPort(controlPlaneIP, "6443")
+
+	// Build generate options
+	genOptions := buildBaseGenOptions(controlPlaneIP)
+
+	// If we have existing secrets, reuse them to preserve PKI across endpoint changes
+	if existingSecrets != nil {
+		genOptions = append(genOptions, generate.WithSecretsBundle(existingSecrets))
+	}
+
+	// Build bundle options with patches
+	bundleOpts := buildBundleOptions(
+		clusterName,
+		controlPlaneEndpoint,
+		kubernetesVersion,
+		genOptions,
+		clusterPatches,
+		controlPlanePatches,
+		workerPatches,
+	)
+
 	// Create the bundle
 	configBundle, err := bundle.NewBundle(bundleOpts...)
 	if err != nil {
@@ -298,6 +444,7 @@ func newConfigs(
 		bundle:            configBundle,
 		kubernetesVersion: kubernetesVersion,
 		networkCIDR:       networkCIDR,
+		endpoint:          endpointIP,
 		patches:           patches,
 	}, nil
 }
@@ -308,6 +455,12 @@ type MirrorRegistry struct {
 	Host string
 	// Endpoints are the mirror endpoints to use (e.g., "http://docker.io:5000").
 	Endpoints []string
+	// Username is the optional username for registry authentication.
+	// Environment variable placeholders should be resolved before passing.
+	Username string
+	// Password is the optional password for registry authentication.
+	// Environment variable placeholders should be resolved before passing.
+	Password string
 }
 
 // ApplyMirrorRegistries modifies the configs to add registry mirror configurations.
@@ -361,6 +514,11 @@ func applyMirrorsToConfig(cfg *v1alpha1.Config, mirrors []MirrorRegistry) error 
 		}
 
 		addMirrorEndpoints(cfg, mirror)
+
+		// Add authentication if credentials are provided
+		if mirror.Username != "" || mirror.Password != "" {
+			addRegistryAuth(cfg, mirror)
+		}
 		// NOTE: We intentionally do NOT call addInsecureRegistryConfigs for HTTP endpoints.
 		// containerd will reject TLS configuration for non-HTTPS registries with the error:
 		// "TLS config specified for non-HTTPS registry"
@@ -393,5 +551,22 @@ func initRegistryMaps(cfg *v1alpha1.Config) {
 func addMirrorEndpoints(cfg *v1alpha1.Config, mirror MirrorRegistry) {
 	cfg.MachineConfig.MachineRegistries.RegistryMirrors[mirror.Host] = &v1alpha1.RegistryMirrorConfig{
 		MirrorEndpoints: mirror.Endpoints,
+	}
+}
+
+// addRegistryAuth adds authentication configuration for a registry host.
+// This configures machine.registries.config.<host>.auth with username and password.
+//
+//nolint:staticcheck // MachineRegistries is deprecated but still functional in Talos v1.x
+func addRegistryAuth(cfg *v1alpha1.Config, mirror MirrorRegistry) {
+	// Ensure the registry config exists for this host
+	if cfg.MachineConfig.MachineRegistries.RegistryConfig[mirror.Host] == nil {
+		cfg.MachineConfig.MachineRegistries.RegistryConfig[mirror.Host] = &v1alpha1.RegistryConfig{}
+	}
+
+	// Set the auth configuration
+	cfg.MachineConfig.MachineRegistries.RegistryConfig[mirror.Host].RegistryAuth = &v1alpha1.RegistryAuthConfig{
+		RegistryUsername: mirror.Username,
+		RegistryPassword: mirror.Password,
 	}
 }

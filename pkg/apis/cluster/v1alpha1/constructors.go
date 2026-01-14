@@ -69,10 +69,7 @@ func NewClusterOptionsTalos() OptionsTalos {
 
 // NewLocalRegistry creates a new LocalRegistry with default values.
 func NewLocalRegistry() LocalRegistry {
-	return LocalRegistry{
-		Enabled:  false,
-		HostPort: DefaultLocalRegistryPort,
-	}
+	return LocalRegistry{}
 }
 
 // NewOCIRegistry creates a new OCIRegistry with default lifecycle state.

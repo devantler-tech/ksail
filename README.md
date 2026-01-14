@@ -34,7 +34,7 @@ Setting up and operating Kubernetes clusters is a skill of its own, often requir
 The binary works on all major operating systems and modern CPU architectures:
 
 | OS                   | Arch            |
-|----------------------|-----------------|
+| -------------------- | --------------- |
 | 🐧 Linux             | amd64 and arm64 |
 |  MacOS              | arm64           |
 | ⊞ Windows (untested) | amd64 and arm64 |
@@ -43,17 +43,15 @@ The binary works on all major operating systems and modern CPU architectures:
 
 The supported distributions (x-axis) run on different infrastructure providers (y-axis). You need to have access to at least one provider for your chosen distribution for KSail to create and manage the cluster.
 
-| Provider | Vanilla   | K3s      | Talos     |
-|----------|-----------|----------|-----------|
-| Docker   | ✅ (Kind) | ✅ (K3d) | ✅       |
-| Hetzner  | —          | —        | 🚧 next  |
-
-Vanilla is implemented with Kind; K3s is implemented with K3d.
+| Provider | Vanilla   | K3s      | Talos |
+| -------- | --------- | -------- | ----- |
+| Docker   | ✅ (Kind) | ✅ (K3d) | ✅    |
+| Hetzner  | —         | —        | ✅    |
 
 > [!NOTE]
-> If you want to see more distributions or providers supported, please consider sponsoring development via [GitHub Sponsors](https://github.com/sponsors/devantler). Testing and maintaining distribution x cloud provider support comes with a additional financial costs for me, so sponsorships help make that feasible.
+> If you want to see more distributions or providers supported, please consider sponsoring development via [GitHub Sponsors](https://github.com/sponsors/devantler). Testing and maintaining distribution x cloud provider support comes with additional financial costs for me, so sponsorships help make that feasible.
 >
-> Talos on Hetzner is an exception to this, as I use Talos on Hetzner for my personal homelab, and so I need the support for my own platform to be fully maintained via KSail.
+> Talos on Hetzner is supported because I use it for my personal homelab, and so the support is maintained as part of my own platform work.
 
 ### Installation
 
@@ -115,7 +113,7 @@ ksail cluster connect
 KSail is a powerful tool that can be used in many different ways. Here are some projects that use KSail in their setup:
 
 | Project                                                               | Description         | Type     |
-|-----------------------------------------------------------------------|---------------------|----------|
+| --------------------------------------------------------------------- | ------------------- | -------- |
 | [devantler-tech/platform](https://github.com/devantler-tech/platform) | My personal homelab | Platform |
 
 If you use KSail in your project, feel free to open a PR to add it to the list, so others can see how you use KSail.
@@ -123,6 +121,13 @@ If you use KSail in your project, feel free to open a PR to add it to the list, 
 ## Presentations
 
 - **[KSail - a Kubernetes SDK for local GitOps development and CI](https://youtu.be/Q-Hfn_-B7p8?si=2Uec_kld--fNw3gm)** - A presentation on KSail at KCD2024 (Early version of KSail that was built in .NET).
+
+## Blog Posts
+
+- [Local Kubernetes Development with KSail and Kind](https://devantler.tech/local-kubernetes-development-with-ksail-and-kind)
+- [Local Kubernetes Development with KSail and K3d](https://devantler.tech/local-kubernetes-development-with-ksail-and-k3d)
+- [Local Kubernetes Development with KSail and Talos](https://devantler.tech/local-kubernetes-development-with-ksail-and-talos)
+- [Creating Development Kubernetes Clusters on Hetzner with KSail and Talos](https://devantler.tech/creating-development-kubernetes-clusters-on-hetzner-with-ksail-and-talos)
 
 ## Star History
 

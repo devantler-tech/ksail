@@ -66,11 +66,25 @@ The Docker provider runs Kubernetes nodes as Docker containers on your local mac
 - [Docker Documentation](https://docs.docker.com/)
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/)
 
-### Hetzner (planned)
+### Hetzner
 
-KSail aims to support provisioning **Talos** clusters on **Hetzner** in the future.
+The Hetzner provider creates Kubernetes nodes as Hetzner Cloud servers. This provider enables running production-grade clusters on Hetzner's infrastructure with full lifecycle management.
 
-See the [roadmap](https://github.com/devantler-tech/ksail/issues) for current status.
+**Supported distributions:** Talos
+
+**Requirements:**
+
+- Hetzner Cloud API token (set via `HCLOUD_TOKEN` environment variable)
+- Talos ISO available in your Hetzner account
+
+> [!NOTE]
+> KSail only enables Hetzner-backed operations when `HCLOUD_TOKEN` is set; if it’s unset, Hetzner is skipped.
+
+**Key resources:**
+
+- [Hetzner Cloud Documentation](https://docs.hetzner.com/cloud/)
+- [Hetzner Cloud API](https://docs.hetzner.cloud/)
+- [Talos on Hetzner](https://www.talos.dev/latest/talos-guides/install/cloud-platforms/hetzner/)
 
 ## Container Network Interface (CNI)
 
@@ -219,7 +233,7 @@ Policy engines enforce security, compliance, and best practices in Kubernetes cl
 SOPS supports multiple key management backends:
 
 | Provider        | Documentation                                                                |
-|-----------------|------------------------------------------------------------------------------|
+| --------------- | ---------------------------------------------------------------------------- |
 | age             | [age-encryption.org](https://age-encryption.org/)                            |
 | PGP             | [GnuPG](https://gnupg.org/)                                                  |
 | AWS KMS         | [AWS KMS Documentation](https://docs.aws.amazon.com/kms/)                    |

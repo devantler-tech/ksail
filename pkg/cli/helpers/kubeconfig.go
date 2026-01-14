@@ -10,6 +10,8 @@ import (
 	iopath "github.com/devantler-tech/ksail/v5/pkg/io"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
 	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 )
 
 // GetDefaultKubeconfigPath returns the default kubeconfig path for the current user.
@@ -18,6 +20,20 @@ func GetDefaultKubeconfigPath() string {
 	homeDir, _ := os.UserHomeDir()
 
 	return filepath.Join(homeDir, ".kube", "config")
+}
+
+// GetKubeconfigRESTConfig loads the kubeconfig and returns a REST config for Kubernetes clients.
+// This is used by both kubernetes.Clientset and dynamic.Client creation.
+func GetKubeconfigRESTConfig() (*rest.Config, error) {
+	config, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
+		clientcmd.NewDefaultClientConfigLoadingRules(),
+		&clientcmd.ConfigOverrides{},
+	).ClientConfig()
+	if err != nil {
+		return nil, fmt.Errorf("load kubeconfig: %w", err)
+	}
+
+	return config, nil
 }
 
 // GetKubeconfigPathFromConfig extracts and expands the kubeconfig path from a loaded cluster config.

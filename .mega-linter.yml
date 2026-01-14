@@ -18,6 +18,8 @@ EXCLUDED_DIRECTORIES:
   - .github/prompts
   - .jscpd
   - schemas
+YAML_V8R_FILTER_REGEX_EXCLUDE: .github/workflows/.*\.lock\.yml
+JSON_V8R_FILTER_REGEX_EXCLUDE: .github/workflows/.*\.lock\.yml
 FILTER_REGEX_EXCLUDE: megalinter-reports/.*
 ACTION_ACTIONLINT_FILTER_REGEX_EXCLUDE: .github/workflows/.*\.lock\.yml
 MARKDOWN_MARKDOWNLINT_FILTER_REGEX_EXCLUDE: .github/(agents|prompts)

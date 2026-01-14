@@ -56,6 +56,7 @@ func TestManagerEnsure_CreatesRepositorySecret(t *testing.T) {
 		RepositoryURL:   "oci://local-registry:5000/demo",
 		ApplicationName: "ksail",
 		TargetRevision:  "v1",
+		Insecure:        true,
 	}
 
 	err := testMgr.mgr.Ensure(context.Background(), opts)

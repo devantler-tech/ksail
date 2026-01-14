@@ -92,12 +92,12 @@ status:
 
 On success:
 
-```
+```text
 ✅ All jobs succeeded or were skipped.
 ```
 
 On failure:
 
-```
+```text
 ❌ At least one job failed.
 ```

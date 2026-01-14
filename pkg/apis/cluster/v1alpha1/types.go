@@ -47,6 +47,9 @@ type ClusterSpec struct {
 	// Distribution-specific options
 	Vanilla OptionsVanilla `json:"vanilla,omitzero"`
 	Talos   OptionsTalos   `json:"talos,omitzero"`
+
+	// Provider-specific options
+	Hetzner OptionsHetzner `json:"hetzner,omitzero"`
 }
 
 // WorkloadSpec defines workload-related configuration.

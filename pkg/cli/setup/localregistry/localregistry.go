@@ -5,21 +5,29 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup"
 	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
+	"github.com/devantler-tech/ksail/v5/pkg/client/oci"
 	k3dconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/k3d"
 	kindconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/kind"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
+	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
 	"github.com/docker/docker/client"
 	k3dv1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/spf13/cobra"
 	kindv1alpha4 "sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
+)
+
+// Registry verification constants.
+const (
+	registryVerifyTimeout = 10 * time.Second
 )
 
 // Option configures local registry dependencies.
@@ -71,6 +79,12 @@ func WithDockerInvoker(invoker func(*cobra.Command, func(client.APIClient) error
 var (
 	ErrNilRegistryContext = errors.New("registry stage context is nil")
 	ErrUnsupportedStage   = errors.New("unsupported local registry stage")
+	// ErrCloudProviderRequiresExternalRegistry is returned when a cloud provider
+	// is used with a Docker-based local registry instead of an external one.
+	ErrCloudProviderRequiresExternalRegistry = errors.New(
+		"cloud provider requires an external registry\n" +
+			"- use --local-registry with an internet-accessible registry (e.g., ghcr.io/myorg)",
+	)
 )
 
 // StageType represents the type of local registry stage operation.
@@ -81,6 +95,8 @@ const (
 	StageProvision StageType = iota
 	// StageConnect attaches the local registry to the cluster network.
 	StageConnect
+	// StageVerify checks write access to the registry.
+	StageVerify
 )
 
 // Context holds cluster configuration for local registry operations.
@@ -131,6 +147,17 @@ func ConnectStageInfo() setup.StageInfo {
 	}
 }
 
+// VerifyStageInfo returns the stage info for verifying registry access.
+func VerifyStageInfo() setup.StageInfo {
+	return setup.StageInfo{
+		Title:         "Verify registry access...",
+		Emoji:         "🔐",
+		Activity:      "verifying registry write access",
+		Success:       "registry access verified",
+		FailurePrefix: "registry access check failed",
+	}
+}
+
 // CleanupStageInfo returns the stage info for cleanup.
 func CleanupStageInfo() setup.StageInfo {
 	return setup.StageInfo{
@@ -163,6 +190,78 @@ func ExecuteStage(
 		actionBuilder,
 		localDeps,
 	)
+}
+
+// buildVerifyOptions creates the OCI verify options from the cluster config.
+func buildVerifyOptions(clusterCfg *v1alpha1.Cluster) oci.VerifyOptions {
+	localRegistry := clusterCfg.Spec.Cluster.LocalRegistry
+	parsed := localRegistry.Parse()
+	username, password := localRegistry.ResolveCredentials()
+
+	// Use the path as the repository for external registries
+	repository := parsed.Path
+	if repository == "" {
+		repository = registry.SanitizeRepoName(clusterCfg.Spec.Workload.SourceDirectory)
+		if repository == "" {
+			repository = v1alpha1.DefaultSourceDirectory
+		}
+	}
+
+	return oci.VerifyOptions{
+		RegistryEndpoint: parsed.Host,
+		Repository:       repository,
+		Username:         username,
+		Password:         password,
+		Insecure:         false, // External registries use HTTPS
+	}
+}
+
+// VerifyRegistryAccess checks if we have write access to the configured registry.
+// For external registries, this verifies authentication and permissions.
+// For local Docker registries, this is skipped (no auth required).
+// This should be called after the provision stage to give early feedback about auth issues.
+func VerifyRegistryAccess(
+	cmd *cobra.Command,
+	clusterCfg *v1alpha1.Cluster,
+	deps lifecycle.Deps,
+) error {
+	localRegistry := clusterCfg.Spec.Cluster.LocalRegistry
+	if !localRegistry.Enabled() || !localRegistry.IsExternal() {
+		return nil
+	}
+
+	// Show verification stage
+	info := VerifyStageInfo()
+	notify.WriteMessage(notify.Message{
+		Type:    notify.TitleType,
+		Content: info.Title,
+		Emoji:   info.Emoji,
+		Writer:  cmd.OutOrStdout(),
+	})
+
+	deps.Timer.NewStage()
+
+	notify.WriteMessage(notify.Message{
+		Type:    notify.ActivityType,
+		Content: info.Activity,
+		Writer:  cmd.OutOrStdout(),
+	})
+
+	verifyOpts := buildVerifyOptions(clusterCfg)
+
+	err := oci.VerifyRegistryAccessWithTimeout(cmd.Context(), verifyOpts, registryVerifyTimeout)
+	if err != nil {
+		//nolint:wrapcheck // Error from VerifyRegistryAccessWithTimeout is already well-formatted
+		return err
+	}
+
+	notify.WriteMessage(notify.Message{
+		Type:    notify.SuccessType,
+		Content: info.Success,
+		Writer:  cmd.OutOrStdout(),
+	})
+
+	return nil
 }
 
 // Cleanup cleans up the local registry during cluster deletion.
@@ -275,6 +374,12 @@ func resolveStage(
 		return ProvisionStageInfo(), provisionAction, nil
 	case StageConnect:
 		return ConnectStageInfo(), connectActionBuilder, nil
+	case StageVerify:
+		// StageVerify is handled separately in RunStage via runVerifyStage
+		return setup.StageInfo{}, nil, fmt.Errorf(
+			"%w: StageVerify should use runVerifyStage",
+			ErrUnsupportedStage,
+		)
 	default:
 		return setup.StageInfo{}, nil, fmt.Errorf("%w: %d", ErrUnsupportedStage, stage)
 	}
@@ -284,6 +389,14 @@ type stageAction func(context.Context, registry.Service, registryContext) error
 
 func provisionAction(clusterCfg *v1alpha1.Cluster) stageAction {
 	return func(execCtx context.Context, svc registry.Service, ctx registryContext) error {
+		// Cloud providers cannot use Docker-based local registries - they require
+		// an external registry that the cloud nodes can reach over the internet.
+		// Note: External registries are now skipped in prepareContext, so this check
+		// only catches the case where a cloud provider is used without external registry.
+		if isCloudProvider(clusterCfg) && !clusterCfg.Spec.Cluster.LocalRegistry.IsExternal() {
+			return ErrCloudProviderRequiresExternalRegistry
+		}
+
 		createOpts := newCreateOptions(clusterCfg, ctx)
 
 		_, createErr := svc.Create(execCtx, createOpts)
@@ -317,7 +430,11 @@ func connectAction() stageAction {
 }
 
 func connectActionBuilder(_ *v1alpha1.Cluster) stageAction {
-	return connectAction()
+	return func(execCtx context.Context, svc registry.Service, ctx registryContext) error {
+		// Note: External registries are now skipped in prepareContext,
+		// so this function only handles Docker-based local registries.
+		return connectAction()(execCtx, svc, ctx)
+	}
 }
 
 func runStageFromBuilder(
@@ -348,6 +465,12 @@ func shouldSkipK3d(clusterCfg *v1alpha1.Cluster) bool {
 	return clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionK3s
 }
 
+// isCloudProvider returns true if the cluster is using a cloud provider (not Docker).
+// Cloud providers run nodes on remote servers, not local Docker containers.
+func isCloudProvider(clusterCfg *v1alpha1.Cluster) bool {
+	return clusterCfg.Spec.Cluster.Provider == v1alpha1.ProviderHetzner
+}
+
 // wrapActionWithContext wraps an action that requires registryContext into a simpler handler.
 func wrapActionWithContext(
 	ctx registryContext,
@@ -374,12 +497,18 @@ type actionRunner struct {
 // prepareContext validates preconditions and creates the registry context.
 // Returns nil context if the action should be skipped.
 func (r *actionRunner) prepareContext(checkLocalRegistry bool) *registryContext {
-	localRegistryDisabled := !r.clusterCfg.Spec.Cluster.LocalRegistry.Enabled
+	localRegistryDisabled := !r.clusterCfg.Spec.Cluster.LocalRegistry.Enabled()
 	if checkLocalRegistry && localRegistryDisabled {
 		return nil
 	}
 
 	if shouldSkipK3d(r.clusterCfg) {
+		return nil
+	}
+
+	// External registries don't need Docker-based provisioning or connection.
+	// They're already running and accessible over the internet.
+	if r.clusterCfg.Spec.Cluster.LocalRegistry.IsExternal() {
 		return nil
 	}
 
@@ -622,11 +751,7 @@ func newCreateOptions(
 }
 
 func resolvePort(clusterCfg *v1alpha1.Cluster) int {
-	if clusterCfg.Spec.Cluster.LocalRegistry.HostPort > 0 {
-		return int(clusterCfg.Spec.Cluster.LocalRegistry.HostPort)
-	}
-
-	return int(v1alpha1.DefaultLocalRegistryPort)
+	return int(clusterCfg.Spec.Cluster.LocalRegistry.ResolvedPort())
 }
 
 // WaitForK3dLocalRegistryReady waits for the K3d-managed local registry to be ready.
@@ -649,7 +774,7 @@ func WaitForK3dLocalRegistryReady(
 		return nil
 	}
 
-	if !clusterCfg.Spec.Cluster.LocalRegistry.Enabled {
+	if !clusterCfg.Spec.Cluster.LocalRegistry.Enabled() {
 		return nil
 	}
 

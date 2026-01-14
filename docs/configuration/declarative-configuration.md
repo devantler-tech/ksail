@@ -69,7 +69,7 @@ spec:
 ### Top-Level Fields
 
 | Field        | Type   | Required | Description                                    |
-|--------------|--------|----------|------------------------------------------------|
+| ------------ | ------ | -------- | ---------------------------------------------- |
 | `apiVersion` | string | Yes      | Must be `ksail.io/v1alpha1`                    |
 | `kind`       | string | Yes      | Must be `Cluster`                              |
 | `spec`       | object | Yes      | Cluster and workload specification (see below) |
@@ -79,7 +79,7 @@ spec:
 The `spec` field is a `Spec` object that defines editor, cluster, and workload configuration.
 
 | Field      | Type         | Default | Description                                      |
-|------------|--------------|---------|--------------------------------------------------|
+| ---------- | ------------ | ------- | ------------------------------------------------ |
 | `editor`   | string       | –       | Editor command for interactive workflows         |
 | `cluster`  | ClusterSpec  | –       | Cluster configuration (distribution, components) |
 | `workload` | WorkloadSpec | –       | Workload manifest configuration                  |
@@ -94,28 +94,30 @@ If not specified, KSail falls back to standard editor environment variables (`SO
 
 ### spec.cluster (ClusterSpec)
 
-| Field                  | Type       | Default     | Description                                 |
-|------------------------|------------|-------------|---------------------------------------------|
-| `distribution`         | enum       | `Vanilla`   | Kubernetes distribution to use              |
-| `distributionConfig`   | string     | (see below) | Path to distribution-specific configuration |
-| `connection`           | Connection | –           | Cluster connection settings                 |
-| `cni`                  | enum       | `Default`   | Container Network Interface                 |
-| `csi`                  | enum       | `Default`   | Container Storage Interface                 |
-| `metricsServer`        | enum       | `Default`   | Install metrics-server                      |
-| `certManager`          | enum       | `Disabled`  | Install cert-manager                        |
-| `policyEngine`         | enum       | `None`      | Policy engine to install                    |
-| `localRegistry`        | enum       | `Disabled`  | Provision local OCI registry                |
-| `gitOpsEngine`         | enum       | `None`      | GitOps engine to install                    |
-| `localRegistryOptions` | object     | –           | Local registry configuration options        |
-| `kind`                 | object     | –           | Kind-specific options (Vanilla distribution) |
-| `k3d`                  | object     | –           | K3d-specific options (K3s distribution)      |
-| `talos`                | object     | –           | Talos-specific options                      |
-| `cilium`               | object     | –           | Cilium CNI options                          |
-| `calico`               | object     | –           | Calico CNI options                          |
-| `flux`                 | object     | –           | Flux GitOps options                         |
-| `argocd`               | object     | –           | ArgoCD GitOps options                       |
-| `helm`                 | object     | –           | Helm tool options (reserved)                |
-| `kustomize`            | object     | –           | Kustomize tool options (reserved)           |
+| Field                | Type          | Default     | Description                                  |
+| -------------------- | ------------- | ----------- | -------------------------------------------- |
+| `distribution`       | enum          | `Vanilla`   | Kubernetes distribution to use               |
+| `provider`           | enum          | `Docker`    | Infrastructure provider (Docker, Hetzner)    |
+| `distributionConfig` | string        | (see below) | Path to distribution-specific configuration  |
+| `connection`         | Connection    | –           | Cluster connection settings                  |
+| `cni`                | enum          | `Default`   | Container Network Interface                  |
+| `csi`                | enum          | `Default`   | Container Storage Interface                  |
+| `metricsServer`      | enum          | `Default`   | Install metrics-server                       |
+| `certManager`        | enum          | `Disabled`  | Install cert-manager                         |
+| `policyEngine`       | enum          | `None`      | Policy engine to install                     |
+| `localRegistry`      | LocalRegistry | –           | Registry configuration (see below)           |
+| `gitOpsEngine`       | enum          | `None`      | GitOps engine to install                     |
+| `mirrorRegistries`   | []string      | –           | Mirror registry specifications               |
+| `kind`               | object        | –           | Kind-specific options (Vanilla distribution) |
+| `k3d`                | object        | –           | K3d-specific options (K3s distribution)      |
+| `talos`              | object        | –           | Talos-specific options                       |
+| `hetzner`            | object        | –           | Hetzner Cloud provider options               |
+| `cilium`             | object        | –           | Cilium CNI options                           |
+| `calico`             | object        | –           | Calico CNI options                           |
+| `flux`               | object        | –           | Flux GitOps options                          |
+| `argocd`             | object        | –           | ArgoCD GitOps options                        |
+| `helm`               | object        | –           | Helm tool options (reserved)                 |
+| `kustomize`          | object        | –           | Kustomize tool options (reserved)            |
 
 #### distribution
 
@@ -125,7 +127,18 @@ Kubernetes distribution to use for the local cluster. See [Distributions](../con
 
 - `Vanilla` (default) – Standard upstream Kubernetes (implemented with [Kind](https://kind.sigs.k8s.io/))
 - `K3s` – Lightweight Kubernetes (implemented with [K3d](https://k3d.io/))
-- `Talos` – [Talos Linux](https://www.talos.dev/) in Docker containers
+- `Talos` – [Talos Linux](https://www.talos.dev/) in Docker containers or Hetzner Cloud servers
+
+#### provider
+
+Infrastructure provider for running cluster nodes. See [Providers](../concepts.md#providers) for more details.
+
+**Valid values:**
+
+- `Docker` (default) – Run nodes as Docker containers (local development)
+- `Hetzner` – Run nodes on Hetzner Cloud servers (requires `HCLOUD_TOKEN`)
+
+**Note:** Hetzner provider is only supported with the `Talos` distribution.
 
 #### distributionConfig
 
@@ -142,7 +155,7 @@ See [Distribution Configuration](#distribution-configuration) below for details 
 #### connection (Connection)
 
 | Field        | Type     | Default          | Description                    |
-|--------------|----------|------------------|--------------------------------|
+| ------------ | -------- | ---------------- | ------------------------------ |
 | `kubeconfig` | string   | `~/.kube/config` | Path to kubeconfig file        |
 | `context`    | string   | (derived)        | Kubeconfig context name        |
 | `timeout`    | duration | –                | Timeout for cluster operations |
@@ -213,14 +226,17 @@ Policy engine to install for enforcing security, compliance, and best practices.
 
 #### localRegistry
 
-Whether to provision a local [OCI registry](../concepts.md#oci-registries) container for image storage.
+Registry configuration for GitOps workflows. Supports local Docker registries or external registries with authentication.
 
-**Valid values:**
+**Format:** `[user:pass@]host[:port][/path]`
 
-- `Enabled` – Provision local registry
-- `Disabled` (default) – Skip registry
+**Examples:**
 
-See [Distribution and Tool Options](#distribution-and-tool-options) for configuration details including `hostPort` (default: `5050`).
+- `localhost:5050` – Local Docker registry
+- `ghcr.io/myorg/myrepo` – GitHub Container Registry
+- `${USER}:${PASS}@ghcr.io:443/myorg` – With credentials from environment variables
+
+**Note:** Credentials support `${ENV_VAR}` placeholders for secure handling.
 
 #### gitOpsEngine
 
@@ -234,19 +250,33 @@ GitOps engine to install for continuous deployment workflows. See [GitOps](../co
 
 #### Distribution and Tool Options
 
-Advanced configuration options are now direct fields under `spec.cluster` instead of nested under `options`. See [Schema Support](#schema-support) for the complete structure.
+Advanced configuration options are direct fields under `spec.cluster`. See [Schema Support](#schema-support) for the complete structure.
 
-**Common options:**
+**Talos options (`spec.cluster.talos`):**
 
-- `spec.cluster.localRegistryOptions.hostPort` – Host port for local registry (default: `5050`)
-- `spec.cluster.talos.controlPlanes` – Number of control-plane nodes (default: `1`)
-- `spec.cluster.talos.workers` – Number of worker nodes (default: `0`)
-- `spec.cluster.kind.mirrorsDir` – Directory for containerd host mirror configuration
+- `controlPlanes` – Number of control-plane nodes (default: `1`)
+- `workers` – Number of worker nodes (default: `0`)
+- `config` – Path to talosconfig file (default: `~/.talos/config`)
+- `iso` – Cloud provider ISO/image ID for Talos Linux (default: `122630` for x86)
+
+**Hetzner options (`spec.cluster.hetzner`):**
+
+- `controlPlaneServerType` – Server type for control-plane nodes (default: `cx23`)
+- `workerServerType` – Server type for worker nodes (default: `cx23`)
+- `location` – Datacenter location: `fsn1`, `nbg1`, `hel1` (default: `fsn1`)
+- `networkName` – Private network name (default: `<cluster>-network`)
+- `networkCidr` – Network CIDR block (default: `10.0.0.0/16`)
+- `sshKeyName` – SSH key name for server access (optional)
+- `tokenEnvVar` – Environment variable for API token (default: `HCLOUD_TOKEN`)
+
+**Kind options (`spec.cluster.kind`):**
+
+- `mirrorsDir` – Directory for containerd host mirror configuration
 
 ### spec.workload (WorkloadSpec)
 
 | Field             | Type    | Default | Description                                   |
-|-------------------|---------|---------|-----------------------------------------------|
+| ----------------- | ------- | ------- | --------------------------------------------- |
 | `sourceDirectory` | string  | `k8s`   | Directory containing Kubernetes manifests     |
 | `validateOnPush`  | boolean | `false` | Validate manifests before pushing to registry |
 

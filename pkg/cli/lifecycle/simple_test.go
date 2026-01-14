@@ -13,10 +13,11 @@ import (
 func TestCreateMinimalProvisioner_Kind(t *testing.T) {
 	t.Parallel()
 
-	provisioner, err := lifecycle.CreateMinimalProvisioner(
-		v1alpha1.DistributionVanilla,
-		"test-cluster",
-	)
+	provisioner, err := lifecycle.CreateMinimalProvisioner(&lifecycle.ClusterInfo{
+		Distribution: v1alpha1.DistributionVanilla,
+		Provider:     v1alpha1.ProviderDocker,
+		ClusterName:  "test-cluster",
+	})
 
 	require.NoError(t, err)
 	assert.NotNil(t, provisioner)
@@ -26,7 +27,11 @@ func TestCreateMinimalProvisioner_Kind(t *testing.T) {
 func TestCreateMinimalProvisioner_K3d(t *testing.T) {
 	t.Parallel()
 
-	provisioner, err := lifecycle.CreateMinimalProvisioner(v1alpha1.DistributionK3s, "dev-cluster")
+	provisioner, err := lifecycle.CreateMinimalProvisioner(&lifecycle.ClusterInfo{
+		Distribution: v1alpha1.DistributionK3s,
+		Provider:     v1alpha1.ProviderDocker,
+		ClusterName:  "dev-cluster",
+	})
 
 	require.NoError(t, err)
 	assert.NotNil(t, provisioner)
@@ -36,10 +41,28 @@ func TestCreateMinimalProvisioner_K3d(t *testing.T) {
 func TestCreateMinimalProvisioner_Talos(t *testing.T) {
 	t.Parallel()
 
-	provisioner, err := lifecycle.CreateMinimalProvisioner(
-		v1alpha1.DistributionTalos,
-		"prod-cluster",
-	)
+	provisioner, err := lifecycle.CreateMinimalProvisioner(&lifecycle.ClusterInfo{
+		Distribution: v1alpha1.DistributionTalos,
+		Provider:     v1alpha1.ProviderDocker,
+		ClusterName:  "prod-cluster",
+	})
+
+	require.NoError(t, err)
+	assert.NotNil(t, provisioner)
+}
+
+// TestCreateMinimalProvisioner_TalosHetzner tests creation of a minimal Talos provisioner with Hetzner provider.
+//
+//nolint:paralleltest // uses t.Setenv
+func TestCreateMinimalProvisioner_TalosHetzner(t *testing.T) {
+	// Set required environment variable for Hetzner provider
+	t.Setenv("HCLOUD_TOKEN", "test-token")
+
+	provisioner, err := lifecycle.CreateMinimalProvisioner(&lifecycle.ClusterInfo{
+		Distribution: v1alpha1.DistributionTalos,
+		Provider:     v1alpha1.ProviderHetzner,
+		ClusterName:  "hetzner-cluster",
+	})
 
 	require.NoError(t, err)
 	assert.NotNil(t, provisioner)
@@ -62,7 +85,11 @@ func TestCreateMinimalProvisioner_UnsupportedDistribution(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			provisioner, err := lifecycle.CreateMinimalProvisioner(testCase.distribution, "cluster")
+			provisioner, err := lifecycle.CreateMinimalProvisioner(&lifecycle.ClusterInfo{
+				Distribution: testCase.distribution,
+				Provider:     v1alpha1.ProviderDocker,
+				ClusterName:  "cluster",
+			})
 
 			require.Error(t, err)
 			assert.Nil(t, provisioner)
@@ -88,10 +115,11 @@ func TestCreateMinimalProvisioner_ClusterNames(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			provisioner, err := lifecycle.CreateMinimalProvisioner(
-				v1alpha1.DistributionVanilla,
-				testCase.clusterName,
-			)
+			provisioner, err := lifecycle.CreateMinimalProvisioner(&lifecycle.ClusterInfo{
+				Distribution: v1alpha1.DistributionVanilla,
+				Provider:     v1alpha1.ProviderDocker,
+				ClusterName:  testCase.clusterName,
+			})
 
 			require.NoError(t, err)
 			assert.NotNil(t, provisioner)

@@ -11,19 +11,31 @@ grand_parent: "CLI Flags"
 ```text
 Destroy a cluster.
 
+The cluster is resolved in the following priority order:
+  1. From --name flag
+  2. From ksail.yaml config file (if present)
+  3. From current kubeconfig context
+
+The provider is resolved in the following priority order:
+  1. From --provider flag
+  2. From ksail.yaml config file (if present)
+  3. Defaults to Docker
+
+The kubeconfig is resolved in the following priority order:
+  1. From --kubeconfig flag
+  2. From KUBECONFIG environment variable
+  3. From ksail.yaml config file (if present)
+  4. Defaults to ~/.kube/config
+
 Usage:
   ksail cluster delete [flags]
 
 Flags:
-  -c, --context string               Kubernetes context of cluster
-      --delete-volumes               Delete registry volumes when cleaning up registries
-  -d, --distribution Distribution    Kubernetes distribution to use
-      --distribution-config string   Configuration file for the distribution
-  -g, --gitops-engine GitOpsEngine   GitOps engine to use (None disables GitOps, Flux installs Flux controllers, ArgoCD installs Argo CD) (default None)
-  -h, --help                         help for delete
-  -k, --kubeconfig string            Path to kubeconfig file (default "~/.kube/config")
-      --local-registry               Enable local registry provisioning (defaults to true when a GitOps engine is configured)
-      --local-registry-port int32    Host port to expose the local OCI registry on (default 5050)
+      --delete-storage      Delete storage volumes when cleaning up (registry volumes for Docker, block storage for Hetzner)
+  -h, --help                help for delete
+  -k, --kubeconfig string   Path to kubeconfig file for context cleanup
+  -n, --name string         Name of the cluster to delete
+  -p, --provider Provider   Provider to use ([Docker Hetzner])
 
 Global Flags:
       --timing   Show per-activity timing output

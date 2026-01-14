@@ -14,3 +14,12 @@ var ErrClusterNotFound = errors.New("cluster not found")
 
 // ErrProviderNotSet is returned when an infrastructure provider is required but not configured.
 var ErrProviderNotSet = errors.New("infrastructure provider not set")
+
+// ErrNoNodesFound is returned when a cluster has no nodes.
+var ErrNoNodesFound = errors.New("no nodes found for cluster")
+
+// ErrNotHetznerProvider is returned when an operation requires a Hetzner provider but a different provider is set.
+var ErrNotHetznerProvider = errors.New("infrastructure provider is not a Hetzner provider")
+
+// ErrNoControlPlaneNodes is returned when no control-plane nodes are found.
+var ErrNoControlPlaneNodes = errors.New("no control-plane nodes found for cluster")

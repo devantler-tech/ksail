@@ -14,6 +14,12 @@ Examples:
   # Push to explicit registry endpoint
   ksail workload push oci://localhost:5050/k8s:dev
 
+  # Push to external registry with credentials
+  ksail workload push --registry='$USER:$TOKEN@ghcr.io/org/repo'
+
+  # Push using KSAIL_REGISTRY environment variable
+  KSAIL_REGISTRY='ghcr.io/org/repo' ksail workload push
+
   # Push with variant (subdirectory in repository)
   ksail workload push oci://localhost:5050/my-app/base:v1.0.0 --path=./k8s
 
@@ -26,8 +32,9 @@ Usage:
   push [oci://<host>:<port>/<repository>[/<variant>]:<ref>] [flags]
 
 Flags:
-  -h, --help          help for push
-      --path string   Source directory containing manifests to push
-      --validate      Validate manifests before pushing
+  -h, --help              help for push
+      --path string       Source directory containing manifests to push
+      --registry string   Registry to push to (format: [user:pass@]host[:port][/path]), can also be set via KSAIL_REGISTRY env var
+      --validate          Validate manifests before pushing
 
 ---

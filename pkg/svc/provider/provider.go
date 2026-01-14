@@ -1,6 +1,9 @@
 package provider
 
-import "context"
+import (
+	"context"
+	"fmt"
+)
 
 // NodeInfo contains information about a node managed by a provider.
 type NodeInfo struct {
@@ -41,4 +44,31 @@ type Provider interface {
 	// Note: Most provisioners handle node deletion through their SDK,
 	// so this is primarily used for cleanup scenarios.
 	DeleteNodes(ctx context.Context, clusterName string) error
+}
+
+// AvailableProvider is a provider that can report whether it's available.
+type AvailableProvider interface {
+	// IsAvailable returns true if the provider is ready for use.
+	IsAvailable() bool
+	// ListNodes returns all nodes for a specific cluster.
+	ListNodes(ctx context.Context, clusterName string) ([]NodeInfo, error)
+}
+
+// EnsureAvailableAndListNodes validates provider availability and returns node list.
+// This is a shared helper for provider implementations.
+func EnsureAvailableAndListNodes(
+	ctx context.Context,
+	prov AvailableProvider,
+	clusterName string,
+) ([]NodeInfo, error) {
+	if !prov.IsAvailable() {
+		return nil, ErrProviderUnavailable
+	}
+
+	nodes, err := prov.ListNodes(ctx, clusterName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list nodes: %w", err)
+	}
+
+	return nodes, nil
 }

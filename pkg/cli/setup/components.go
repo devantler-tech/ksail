@@ -396,31 +396,55 @@ func EnsureArgoCDResources(
 		return fmt.Errorf("create argocd manager: %w", err)
 	}
 
+	// Build repository URL and credentials based on registry configuration
+	opts := buildArgoCDEnsureOptions(clusterCfg, clusterName)
+
+	err = mgr.Ensure(ctx, opts)
+	if err != nil {
+		return fmt.Errorf("ensure argocd resources: %w", err)
+	}
+
+	return nil
+}
+
+// buildArgoCDEnsureOptions constructs ArgoCD ensure options based on registry config.
+func buildArgoCDEnsureOptions(
+	clusterCfg *v1alpha1.Cluster,
+	clusterName string,
+) argocdgitops.EnsureOptions {
+	localRegistry := clusterCfg.Spec.Cluster.LocalRegistry
+	opts := argocdgitops.EnsureOptions{
+		SourcePath:      ".",
+		ApplicationName: "ksail",
+		TargetRevision:  "dev",
+	}
+
+	// For external registries, use the configured host, path, and credentials
+	if localRegistry.IsExternal() {
+		parsed := localRegistry.Parse()
+		opts.RepositoryURL = fmt.Sprintf("oci://%s/%s", parsed.Host, parsed.Path)
+		username, password := localRegistry.ResolveCredentials()
+		opts.Username = username
+		opts.Password = password
+		opts.Insecure = false
+
+		return opts
+	}
+
+	// For local registries, use cluster-prefixed registry name for in-cluster DNS resolution
 	sourceDir := strings.TrimSpace(clusterCfg.Spec.Workload.SourceDirectory)
 	if sourceDir == "" {
 		sourceDir = v1alpha1.DefaultSourceDirectory
 	}
 
 	repoName := registry.SanitizeRepoName(sourceDir)
-	// Use cluster-prefixed local registry name for in-cluster DNS resolution
 	registryHost := registry.BuildLocalRegistryName(clusterName)
 	hostPort := net.JoinHostPort(
 		registryHost,
 		strconv.Itoa(dockerclient.DefaultRegistryPort),
 	)
-	repoURL := fmt.Sprintf("oci://%s/%s", hostPort, repoName)
+	opts.RepositoryURL = fmt.Sprintf("oci://%s/%s", hostPort, repoName)
+	opts.Insecure = true
 
-	// SourcePath is "." because the OCI artifact contains the source directory contents
-	// at the root level, not in a subdirectory.
-	err = mgr.Ensure(ctx, argocdgitops.EnsureOptions{
-		RepositoryURL:   repoURL,
-		SourcePath:      ".",
-		ApplicationName: "ksail",
-		TargetRevision:  "dev",
-	})
-	if err != nil {
-		return fmt.Errorf("ensure argocd resources: %w", err)
-	}
-
-	return nil
+	return opts
 }

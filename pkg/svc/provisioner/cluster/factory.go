@@ -20,6 +20,9 @@ import (
 // ErrUnsupportedDistribution is returned when an unsupported distribution is specified.
 var ErrUnsupportedDistribution = errors.New("unsupported distribution")
 
+// ErrUnsupportedProvider is returned when an unsupported provider is specified.
+var ErrUnsupportedProvider = errors.New("unsupported provider")
+
 // ErrMissingDistributionConfig is returned when no pre-loaded distribution config is provided.
 var ErrMissingDistributionConfig = errors.New("missing distribution config")
 
@@ -230,6 +233,7 @@ func (f DefaultFactory) createTalosProvisioner(
 		cluster.Spec.Cluster.Connection.Kubeconfig,
 		cluster.Spec.Cluster.Provider,
 		cluster.Spec.Cluster.Talos,
+		cluster.Spec.Cluster.Hetzner,
 		skipCNIChecks,
 	)
 	if err != nil {

@@ -8,12 +8,29 @@ import (
 	"strings"
 
 	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
+	"github.com/devantler-tech/ksail/v5/pkg/utils/envvar"
 )
 
 // MirrorSpec represents a parsed mirror registry specification entry.
 type MirrorSpec struct {
-	Host   string
-	Remote string
+	Host     string
+	Remote   string
+	Username string // Optional: username for registry authentication (supports ${ENV_VAR} placeholders)
+	Password string // Optional: password for registry authentication (supports ${ENV_VAR} placeholders)
+}
+
+// ResolveCredentials returns the username and password with environment variable placeholders expanded.
+// Placeholders use the format ${VAR_NAME}. If a referenced environment variable is not set,
+// the placeholder is replaced with an empty string.
+//
+//nolint:nonamedreturns // Named returns document the returned values for clarity
+func (m MirrorSpec) ResolveCredentials() (username, password string) {
+	return envvar.Expand(m.Username), envvar.Expand(m.Password)
+}
+
+// HasCredentials returns true if the spec has non-empty username or password.
+func (m MirrorSpec) HasCredentials() bool {
+	return m.Username != "" || m.Password != ""
 }
 
 // MirrorEntry contains the normalized data required to create a registry mirror.
@@ -28,11 +45,13 @@ type MirrorEntry struct {
 
 // ParseMirrorSpecs converts raw mirror specification strings into structured specs.
 // Invalid entries (missing host or remote) are ignored.
+// Format: [user:pass@]host[=endpoint]
+// Credentials can use ${ENV_VAR} placeholders for environment variable expansion.
 func ParseMirrorSpecs(specs []string) []MirrorSpec {
 	parsed := make([]MirrorSpec, 0, len(specs))
 
 	for _, raw := range specs {
-		host, remote, ok := splitMirrorSpec(raw)
+		host, remote, username, password, ok := splitMirrorSpec(raw)
 		if !ok {
 			continue
 		}
@@ -45,8 +64,10 @@ func ParseMirrorSpecs(specs []string) []MirrorSpec {
 		}
 
 		parsed = append(parsed, MirrorSpec{
-			Host:   host,
-			Remote: remote,
+			Host:     host,
+			Remote:   remote,
+			Username: strings.TrimSpace(username),
+			Password: strings.TrimSpace(password),
 		})
 	}
 
@@ -450,29 +471,58 @@ func GenerateHostsToml(entry MirrorEntry) string {
 	return builder.String()
 }
 
-func splitMirrorSpec(spec string) (string, string, bool) {
-	idx := strings.Index(spec, "=")
-	if idx == 0 {
-		// Empty host (starts with =)
-		return "", "", false
+// splitMirrorSpec extracts components from a mirror specification string.
+// Format: [user:pass@]host[=endpoint].
+//
+//nolint:nonamedreturns // Named returns document the 5 returned components for clarity
+func splitMirrorSpec(spec string) (host, remote, username, password string, ok bool) {
+	// Examples:
+	//   docker.io
+	//   docker.io=https://registry-1.docker.io
+	//   user:pass@ghcr.io
+	//   ${USER}:${PASS}@ghcr.io=https://ghcr.io
+	workingSpec := spec
+
+	// Extract credentials if present (user:pass@ prefix)
+	if atIdx := strings.Index(workingSpec, "@"); atIdx > 0 {
+		credPart := workingSpec[:atIdx]
+		workingSpec = workingSpec[atIdx+1:]
+
+		// Parse user:pass from credPart
+		if colonIdx := strings.Index(credPart, ":"); colonIdx > 0 {
+			username = credPart[:colonIdx]
+			password = credPart[colonIdx+1:]
+		} else {
+			// Only username, no password
+			username = credPart
+		}
 	}
 
-	if idx == -1 {
+	// Now parse host=endpoint from the remaining part
+	host, remote, found := strings.Cut(workingSpec, "=")
+	if !found {
 		// No '=' found - treat the whole spec as host and auto-generate the remote URL
-		host := strings.TrimSpace(spec)
+		host = strings.TrimSpace(workingSpec)
 		if host == "" {
-			return "", "", false
+			return "", "", "", "", false
 		}
 
-		return host, GenerateUpstreamURL(host), true
+		return host, GenerateUpstreamURL(host), username, password, true
 	}
 
-	if idx == len(spec)-1 {
+	host = strings.TrimSpace(host)
+	if host == "" {
+		// Empty host (starts with =)
+		return "", "", "", "", false
+	}
+
+	remote = strings.TrimSpace(remote)
+	if remote == "" {
 		// Ends with '=' but no remote value
-		return "", "", false
+		return "", "", "", "", false
 	}
 
-	return spec[:idx], spec[idx+1:], true
+	return host, remote, username, password, true
 }
 
 // GenerateScaffoldedHostsToml generates a hosts.toml file content for scaffolded registry mirrors.

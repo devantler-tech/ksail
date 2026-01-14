@@ -3,10 +3,48 @@ package helpers
 import (
 	"fmt"
 
+	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
 	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
 	"github.com/docker/docker/client"
 	"github.com/spf13/cobra"
 )
+
+// DockerResources holds Docker client and registry manager for cleanup.
+type DockerResources struct {
+	Client          client.APIClient
+	RegistryManager *dockerclient.RegistryManager
+}
+
+// NewDockerRegistryManager creates a Docker client and registry manager.
+// The caller is responsible for calling Close() on the returned resources.
+func NewDockerRegistryManager() (*DockerResources, error) {
+	dockerClient, err := client.NewClientWithOpts(
+		client.FromEnv,
+		client.WithAPIVersionNegotiation(),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create docker client: %w", err)
+	}
+
+	registryManager, err := dockerclient.NewRegistryManager(dockerClient)
+	if err != nil {
+		_ = dockerClient.Close()
+
+		return nil, fmt.Errorf("create registry manager: %w", err)
+	}
+
+	return &DockerResources{
+		Client:          dockerClient,
+		RegistryManager: registryManager,
+	}, nil
+}
+
+// Close releases the Docker client resources.
+func (r *DockerResources) Close() {
+	if r.Client != nil {
+		_ = r.Client.Close()
+	}
+}
 
 // WithDockerClient creates a Docker client, executes the given operation function, and ensures cleanup.
 // The Docker client is automatically closed after the operation completes, regardless of success or failure.

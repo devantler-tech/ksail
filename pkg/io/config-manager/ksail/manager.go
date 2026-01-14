@@ -32,8 +32,6 @@ import (
 	kindv1alpha4 "sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
 
-const defaultLocalRegistryPort int32 = v1alpha1.DefaultLocalRegistryPort
-
 // ErrDistributionConfigNotFound is returned when a distribution config file is not found.
 var ErrDistributionConfigNotFound = errors.New("distribution config file not found")
 
@@ -49,8 +47,6 @@ type ConfigManager struct {
 	command            *cobra.Command
 	// localRegistryExplicit tracks if config explicitly set the local registry behavior
 	localRegistryExplicit bool
-	// localRegistryHostPortExplicit tracks if config explicitly set the registry host port
-	localRegistryHostPortExplicit bool
 }
 
 // Compile-time interface compliance verification.
@@ -143,28 +139,20 @@ func (m *ConfigManager) loadConfigWithOptions(
 	}
 
 	// Unmarshal and apply defaults
-	flagOverrides := m.captureChangedFlagValues()
-
-	err := m.unmarshalAndApplyDefaults()
+	err := m.unmarshalWithFlagOverrides()
 	if err != nil {
 		return nil, err
 	}
 
-	err = m.applyFlagOverrides(flagOverrides)
-	if err != nil {
-		return nil, err
+	// Skip validation when probing for config existence (silent mode with no config file)
+	if silent && !m.configFileFound {
+		m.configLoaded = true
+
+		return m.Config, nil
 	}
 
-	m.applyGitOpsAwareDefaults(flagOverrides)
-	m.applyDistributionConfigDefaults()
-
-	err = m.validateConfig()
-	if err != nil {
-		return nil, err
-	}
-
-	// Load distribution config after validation (reuses cached configs from validation)
-	err = m.loadAndCacheDistributionConfig()
+	// Validate and finalize configuration
+	err = m.validateAndFinalizeConfig()
 	if err != nil {
 		return nil, err
 	}
@@ -176,6 +164,37 @@ func (m *ConfigManager) loadConfigWithOptions(
 	m.configLoaded = true
 
 	return m.Config, nil
+}
+
+// unmarshalWithFlagOverrides unmarshals config and applies all overrides and defaults.
+func (m *ConfigManager) unmarshalWithFlagOverrides() error {
+	flagOverrides := m.captureChangedFlagValues()
+
+	err := m.unmarshalAndApplyDefaults()
+	if err != nil {
+		return err
+	}
+
+	err = m.applyFlagOverrides(flagOverrides)
+	if err != nil {
+		return err
+	}
+
+	m.applyGitOpsAwareDefaults(flagOverrides)
+	m.applyDistributionConfigDefaults()
+
+	return nil
+}
+
+// validateAndFinalizeConfig validates the config and loads distribution-specific configuration.
+func (m *ConfigManager) validateAndFinalizeConfig() error {
+	err := m.validateConfig()
+	if err != nil {
+		return err
+	}
+
+	// Load distribution config after validation (reuses cached configs from validation)
+	return m.loadAndCacheDistributionConfig()
 }
 
 func (m *ConfigManager) readConfig(silent bool) error {
@@ -223,17 +242,9 @@ func (m *ConfigManager) unmarshalAndApplyDefaults() error {
 	// Do NOT restore defaults for TypeMeta fields - they should be validated as-is.
 	// This ensures validation will catch incorrect/missing apiVersion and kind values.
 
-	// Handle nested options path for local registry host port.
-	// The YAML output uses `spec.cluster.localRegistry.hostPort` but viper may
-	// have it under a different path. We manually extract this to handle path mismatches.
-	if nestedHostPort := m.Viper.GetInt32(
-		"spec.cluster.localRegistry.hostPort",
-	); nestedHostPort > 0 {
-		m.Config.Spec.Cluster.LocalRegistry.HostPort = nestedHostPort
-	}
-
-	m.localRegistryExplicit = m.Viper.IsSet("spec.cluster.localRegistry.enabled")
-	m.localRegistryHostPortExplicit = m.Config.Spec.Cluster.LocalRegistry.HostPort != 0
+	// Track whether local-registry was explicitly set in config
+	m.localRegistryExplicit = m.Viper.IsSet("spec.cluster.localRegistry.registry") ||
+		m.Viper.IsSet("local-registry")
 
 	// Apply field selector defaults for empty fields
 	for _, fieldSelector := range m.fieldSelectors {
@@ -338,12 +349,13 @@ func (m *ConfigManager) applyGitOpsAwareDefaults(flagOverrides map[string]string
 		return
 	}
 
-	if !m.wasLocalRegistryExplicit(flagOverrides) {
-		m.Config.Spec.Cluster.LocalRegistry.Enabled = m.defaultLocalRegistryBehavior()
+	// Apply default local registry when GitOps engine is configured and no explicit registry was set
+	if !m.wasLocalRegistryExplicit(flagOverrides) && m.gitOpsEngineSelected() {
+		// Default to localhost:5050 when GitOps is enabled but no registry specified
+		if m.Config.Spec.Cluster.LocalRegistry.Registry == "" {
+			m.Config.Spec.Cluster.LocalRegistry.Registry = "localhost:5050"
+		}
 	}
-
-	hostPortExplicit := m.wasLocalRegistryHostPortExplicit(flagOverrides)
-	m.applyLocalRegistryPortDefaults(hostPortExplicit)
 }
 
 func (m *ConfigManager) wasLocalRegistryExplicit(flagOverrides map[string]string) bool {
@@ -358,38 +370,6 @@ func (m *ConfigManager) wasLocalRegistryExplicit(flagOverrides map[string]string
 	_, ok := flagOverrides["local-registry"]
 
 	return ok
-}
-
-func (m *ConfigManager) wasLocalRegistryHostPortExplicit(flagOverrides map[string]string) bool {
-	if m.localRegistryHostPortExplicit {
-		return true
-	}
-
-	if flagOverrides == nil {
-		return false
-	}
-
-	_, ok := flagOverrides["local-registry-port"]
-
-	return ok
-}
-
-func (m *ConfigManager) defaultLocalRegistryBehavior() bool {
-	return m.gitOpsEngineSelected()
-}
-
-func (m *ConfigManager) applyLocalRegistryPortDefaults(hostPortExplicit bool) {
-	if m.Config.Spec.Cluster.LocalRegistry.Enabled {
-		if !hostPortExplicit && m.Config.Spec.Cluster.LocalRegistry.HostPort == 0 {
-			m.Config.Spec.Cluster.LocalRegistry.HostPort = defaultLocalRegistryPort
-		}
-
-		return
-	}
-
-	if !hostPortExplicit {
-		m.Config.Spec.Cluster.LocalRegistry.HostPort = 0
-	}
 }
 
 func (m *ConfigManager) gitOpsEngineSelected() bool {

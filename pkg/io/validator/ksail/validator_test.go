@@ -395,12 +395,10 @@ func validateRegistryPortRequiredCase(t *testing.T) {
 
 	validator := ksailvalidator.NewValidator()
 	config := createValidKSailConfig(v1alpha1.DistributionVanilla)
-	config.Spec.Cluster.LocalRegistry.Enabled = true
-	config.Spec.Cluster.LocalRegistry.HostPort = 0
+	config.Spec.Cluster.LocalRegistry.Registry = "localhost"
 
 	result := validator.Validate(config)
-	assert.False(t, result.Valid)
-	validateExpectedErrors(t, []string{"spec.cluster.localRegistry.hostPort"}, result.Errors)
+	assert.True(t, result.Valid)
 }
 
 func validateRegistryPortRangeCase(t *testing.T) {
@@ -408,12 +406,11 @@ func validateRegistryPortRangeCase(t *testing.T) {
 
 	validator := ksailvalidator.NewValidator()
 	config := createValidKSailConfig(v1alpha1.DistributionVanilla)
-	config.Spec.Cluster.LocalRegistry.Enabled = true
-	config.Spec.Cluster.LocalRegistry.HostPort = 70000
+	config.Spec.Cluster.LocalRegistry.Registry = "localhost:70000"
 
 	result := validator.Validate(config)
 	assert.False(t, result.Valid)
-	validateExpectedErrors(t, []string{"spec.cluster.localRegistry.hostPort"}, result.Errors)
+	validateExpectedErrors(t, []string{"spec.cluster.localRegistry.registry"}, result.Errors)
 }
 
 func validateRegistryPortWarningCase(t *testing.T) {
@@ -421,8 +418,7 @@ func validateRegistryPortWarningCase(t *testing.T) {
 
 	validator := ksailvalidator.NewValidator()
 	config := createValidKSailConfig(v1alpha1.DistributionVanilla)
-	config.Spec.Cluster.LocalRegistry.Enabled = false
-	config.Spec.Cluster.LocalRegistry.HostPort = 5001
+	config.Spec.Cluster.LocalRegistry.Registry = ""
 
 	result := validator.Validate(config)
 	assert.True(t, result.Valid)

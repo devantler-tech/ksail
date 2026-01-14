@@ -25,6 +25,7 @@ import (
 	kustomizationgenerator "github.com/devantler-tech/ksail/v5/pkg/io/generator/kustomization"
 	talosgenerator "github.com/devantler-tech/ksail/v5/pkg/io/generator/talos"
 	yamlgenerator "github.com/devantler-tech/ksail/v5/pkg/io/generator/yaml"
+	fluxinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/flux"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
 	"github.com/k3d-io/k3d/v5/pkg/config/types"
@@ -285,7 +286,7 @@ func (s *Scaffolder) CreateK3dConfig() k3dv1alpha5.SimpleConfig {
 	// Configure K3d-native local registry when enabled.
 	// K3d's Registries.Create automatically manages the registry container,
 	// including DNS resolution, network connectivity, and lifecycle management.
-	if s.KSailConfig.Spec.Cluster.LocalRegistry.Enabled {
+	if s.KSailConfig.Spec.Cluster.LocalRegistry.Enabled() {
 		config.Registries = s.addK3dLocalRegistryConfig(config.Registries)
 	}
 
@@ -314,10 +315,7 @@ func (s *Scaffolder) addK3dLocalRegistryConfig(
 	registryName := registry.BuildLocalRegistryName(clusterName)
 
 	// Determine the host port from config or use default
-	hostPort := v1alpha1.DefaultLocalRegistryPort
-	if s.KSailConfig.Spec.Cluster.LocalRegistry.HostPort > 0 {
-		hostPort = s.KSailConfig.Spec.Cluster.LocalRegistry.HostPort
-	}
+	hostPort := s.KSailConfig.Spec.Cluster.LocalRegistry.ResolvedPort()
 
 	// Configure K3d to create and manage the local registry.
 	// K3d will create a registry container named "k3d-<registryName>"
@@ -936,6 +934,33 @@ func (s *Scaffolder) buildFluxInstanceOptions(
 	outputPath string,
 	force bool,
 ) fluxgenerator.InstanceGeneratorOptions {
+	localRegistry := s.KSailConfig.Spec.Cluster.LocalRegistry
+
+	// Check if using an external registry (e.g., ghcr.io, Docker Hub)
+	if localRegistry.IsExternal() {
+		parsed := localRegistry.Parse()
+
+		opts := fluxgenerator.InstanceGeneratorOptions{
+			Options: yamlgenerator.Options{
+				Output: outputPath,
+				Force:  force,
+			},
+			ProjectName:  parsed.Path,
+			RegistryHost: parsed.Host,
+			// External registries: use -1 to signal no port (HTTPS 443 is implicit)
+			RegistryPort: -1,
+			Ref:          registry.DefaultLocalArtifactTag,
+			Interval:     fluxgenerator.DefaultInterval,
+		}
+
+		// For external registries with credentials, reference the secret
+		if localRegistry.HasCredentials() {
+			opts.SecretName = fluxinstaller.ExternalRegistrySecretName
+		}
+
+		return opts
+	}
+
 	// Use sanitized source directory name to match what the push command uses
 	sourceDir := s.KSailConfig.Spec.Workload.SourceDirectory
 	if sourceDir == "" {
@@ -1047,9 +1072,23 @@ func (s *Scaffolder) buildArgoCDApplicationOptions(
 	outputPath string,
 	force bool,
 ) argocdgenerator.ApplicationGeneratorOptions {
-	port := s.KSailConfig.Spec.Cluster.LocalRegistry.HostPort
-	if port == 0 {
-		port = 5000
+	localRegistry := s.KSailConfig.Spec.Cluster.LocalRegistry
+
+	// Check if using an external registry (e.g., ghcr.io, Docker Hub)
+	if localRegistry.IsExternal() {
+		parsed := localRegistry.Parse()
+
+		// For external registries, the path from the registry spec is the full repository path
+		return argocdgenerator.ApplicationGeneratorOptions{
+			Options: yamlgenerator.Options{
+				Output: outputPath,
+				Force:  force,
+			},
+			ProjectName:  parsed.Path,
+			RegistryHost: parsed.Host,
+			// External registries: use -1 to signal no port (HTTPS 443 is implicit)
+			RegistryPort: -1,
+		}
 	}
 
 	return argocdgenerator.ApplicationGeneratorOptions{
@@ -1059,7 +1098,7 @@ func (s *Scaffolder) buildArgoCDApplicationOptions(
 		},
 		ProjectName:  s.getProjectName(),
 		RegistryHost: "ksail-registry.localhost",
-		RegistryPort: port,
+		RegistryPort: localRegistry.ResolvedPort(),
 	}
 }
 
