@@ -142,5 +142,5 @@ jobs:
 
       - name: Run zizmor security scanner
         run: |
-          gh-aw compile --zizmor --verbose
+          gh aw compile --zizmor --verbose
           echo "✓ Zizmor security scan completed"
