@@ -170,6 +170,16 @@ To test the Hetzner provider locally, you need:
 
 **Note:** Hetzner tests incur cloud costs. Use `ksail cluster delete` to clean up resources.
 
+**Note:** CI includes a safety-net cleanup job (`cleanup-hetzner`) that runs after system tests and deletes any Hetzner resources labeled `ksail.owned=true` via `.github/scripts/cleanup-hetzner.sh`.
+
+If a local run is interrupted and you need to remove leftover CI-labeled resources, you can run:
+
+```sh
+HCLOUD_TOKEN=... .github/scripts/cleanup-hetzner.sh
+```
+
+**Warning:** The cleanup script is destructive and will delete *all* resources in your Hetzner project matching `ksail.owned=true`. Only run it if you understand the scope.
+
 ## CD
 
 ### Release Process
