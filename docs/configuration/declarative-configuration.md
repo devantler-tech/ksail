@@ -69,7 +69,7 @@ spec:
 ### Top-Level Fields
 
 | Field        | Type   | Required | Description                                    |
-| ------------ | ------ | -------- | ---------------------------------------------- |
+|--------------|--------|----------|------------------------------------------------|
 | `apiVersion` | string | Yes      | Must be `ksail.io/v1alpha1`                    |
 | `kind`       | string | Yes      | Must be `Cluster`                              |
 | `spec`       | object | Yes      | Cluster and workload specification (see below) |
@@ -79,7 +79,7 @@ spec:
 The `spec` field is a `Spec` object that defines editor, cluster, and workload configuration.
 
 | Field      | Type         | Default | Description                                      |
-| ---------- | ------------ | ------- | ------------------------------------------------ |
+|------------|--------------|---------|--------------------------------------------------|
 | `editor`   | string       | –       | Editor command for interactive workflows         |
 | `cluster`  | ClusterSpec  | –       | Cluster configuration (distribution, components) |
 | `workload` | WorkloadSpec | –       | Workload manifest configuration                  |
@@ -95,7 +95,7 @@ If not specified, KSail falls back to standard editor environment variables (`SO
 ### spec.cluster (ClusterSpec)
 
 | Field                | Type          | Default     | Description                                  |
-| -------------------- | ------------- | ----------- | -------------------------------------------- |
+|----------------------|---------------|-------------|----------------------------------------------|
 | `distribution`       | enum          | `Vanilla`   | Kubernetes distribution to use               |
 | `provider`           | enum          | `Docker`    | Infrastructure provider (Docker, Hetzner)    |
 | `distributionConfig` | string        | (see below) | Path to distribution-specific configuration  |
@@ -155,7 +155,7 @@ See [Distribution Configuration](#distribution-configuration) below for details 
 #### connection (Connection)
 
 | Field        | Type     | Default          | Description                    |
-| ------------ | -------- | ---------------- | ------------------------------ |
+|--------------|----------|------------------|--------------------------------|
 | `kubeconfig` | string   | `~/.kube/config` | Path to kubeconfig file        |
 | `context`    | string   | (derived)        | Kubeconfig context name        |
 | `timeout`    | duration | –                | Timeout for cluster operations |
@@ -276,7 +276,7 @@ Advanced configuration options are direct fields under `spec.cluster`. See [Sche
 ### spec.workload (WorkloadSpec)
 
 | Field             | Type    | Default | Description                                   |
-| ----------------- | ------- | ------- | --------------------------------------------- |
+|-------------------|---------|---------|-----------------------------------------------|
 | `sourceDirectory` | string  | `k8s`   | Directory containing Kubernetes manifests     |
 | `validateOnPush`  | boolean | `false` | Validate manifests before pushing to registry |
 

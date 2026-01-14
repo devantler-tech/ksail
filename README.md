@@ -34,7 +34,7 @@ Setting up and operating Kubernetes clusters is a skill of its own, often requir
 The binary works on all major operating systems and modern CPU architectures:
 
 | OS                   | Arch            |
-| -------------------- | --------------- |
+|----------------------|-----------------|
 | 🐧 Linux             | amd64 and arm64 |
 |  MacOS              | arm64           |
 | ⊞ Windows (untested) | amd64 and arm64 |
@@ -43,10 +43,10 @@ The binary works on all major operating systems and modern CPU architectures:
 
 The supported distributions (x-axis) run on different infrastructure providers (y-axis). You need to have access to at least one provider for your chosen distribution for KSail to create and manage the cluster.
 
-| Provider | Vanilla   | K3s      | Talos |
-| -------- | --------- | -------- | ----- |
-| Docker   | ✅ (Kind) | ✅ (K3d) | ✅    |
-| Hetzner  | —         | —        | ✅    |
+| Provider | Vanilla  | K3s     | Talos |
+|----------|----------|---------|-------|
+| Docker   | ✅ (Kind) | ✅ (K3d) | ✅     |
+| Hetzner  | —        | —       | ✅     |
 
 > [!NOTE]
 > If you want to see more distributions or providers supported, please consider sponsoring development via [GitHub Sponsors](https://github.com/sponsors/devantler). Testing and maintaining distribution x cloud provider support comes with additional financial costs for me, so sponsorships help make that feasible.
@@ -113,7 +113,7 @@ ksail cluster connect
 KSail is a powerful tool that can be used in many different ways. Here are some projects that use KSail in their setup:
 
 | Project                                                               | Description         | Type     |
-| --------------------------------------------------------------------- | ------------------- | -------- |
+|-----------------------------------------------------------------------|---------------------|----------|
 | [devantler-tech/platform](https://github.com/devantler-tech/platform) | My personal homelab | Platform |
 
 If you use KSail in your project, feel free to open a PR to add it to the list, so others can see how you use KSail.

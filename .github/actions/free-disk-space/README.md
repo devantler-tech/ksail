@@ -36,7 +36,7 @@ steps:
 ## Inputs
 
 | Input            | Description                                                   | Default |
-| ---------------- | ------------------------------------------------------------- | ------- |
+|------------------|---------------------------------------------------------------|---------|
 | `remove-dotnet`  | Remove .NET SDK (~1.5GB)                                      | `true`  |
 | `remove-android` | Remove Android SDK (~10GB)                                    | `true`  |
 | `remove-haskell` | Remove Haskell/GHC (~5GB)                                     | `true`  |
@@ -46,7 +46,7 @@ steps:
 ## What Gets Removed
 
 | Path                          | Size   | Description                            |
-| ----------------------------- | ------ | -------------------------------------- |
+|-------------------------------|--------|----------------------------------------|
 | `/usr/share/dotnet`           | ~1.5GB | .NET SDK and runtimes                  |
 | `/usr/local/lib/android`      | ~10GB  | Android SDK                            |
 | `/opt/ghc`                    | ~5GB   | Haskell GHC compiler                   |
