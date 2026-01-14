@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  merge_group:
 
 concurrency:
   group: "ci-ksail-${{ github.ref }}"
@@ -53,7 +54,7 @@ jobs:
     name: 🏗️ Build KSail Binary
     runs-on: ubuntu-latest
     needs: [changes]
-    if: github.event_name == 'pull_request' && (needs.changes.outputs.code == 'true' || needs.changes.outputs.cli == 'true')
+    if: (github.event_name == 'pull_request' || github.event_name == 'merge_group') && (needs.changes.outputs.code == 'true' || needs.changes.outputs.cli == 'true')
     permissions:
       contents: read
     steps:
