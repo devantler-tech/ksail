@@ -46,6 +46,9 @@ const (
 	// for the Flux controllers to become ready in slow CI environments.
 	apiAvailabilityTimeout      = 2 * time.Minute
 	apiAvailabilityPollInterval = 2 * time.Second
+
+	// HTTP status code for NotFound.
+	httpStatusNotFound = 404
 )
 
 // Reconciler handles Flux reconciliation operations.
@@ -306,10 +309,42 @@ func isPermanentOCIError(err error) bool {
 		strings.Contains(errMsg, "does not exist")
 }
 
-// isConflictError checks if an error is an optimistic concurrency conflict.
-// This happens when the resource was modified between our Get and Update calls.
-func isConflictError(err error) bool {
-	return apierrors.IsConflict(err)
+// isAPIDiscoveryError checks if the error indicates the API discovery is incomplete.
+func isAPIDiscoveryError(errMsg string) bool {
+	// "the server could not find the requested resource" indicates the CRD endpoint
+	// isn't fully registered yet or the Flux controllers haven't started
+	if strings.Contains(errMsg, "the server could not find the requested resource") {
+		return true
+	}
+
+	// "no matches for kind" is a REST mapper error when the CRD isn't known yet
+	return strings.Contains(errMsg, "no matches for kind")
+}
+
+// isNotFoundAPIIssue checks if a NotFound error is due to API issues rather than a missing resource.
+func isNotFoundAPIIssue(err error) bool {
+	var statusErr *apierrors.StatusError
+	if !errors.As(err, &statusErr) {
+		return false
+	}
+
+	if statusErr.ErrStatus.Code != httpStatusNotFound {
+		return false
+	}
+
+	// Check if the reason indicates an API discovery issue rather than a missing resource
+	reason := statusErr.ErrStatus.Reason
+	// "NotFound" with message containing "could not find" typically means API not ready
+	return reason == metav1.StatusReasonNotFound &&
+		strings.Contains(statusErr.ErrStatus.Message, "could not find")
+}
+
+// isConnectionError checks if the error is a network connection error.
+func isConnectionError(errMsg string) bool {
+	return strings.Contains(errMsg, "connection refused") ||
+		strings.Contains(errMsg, "connection reset") ||
+		strings.Contains(errMsg, "i/o timeout") ||
+		strings.Contains(errMsg, "EOF")
 }
 
 // isTransientAPIError checks if the error is a transient API error that should be retried.
@@ -321,59 +356,46 @@ func isTransientAPIError(err error) bool {
 	}
 
 	// Check for specific status errors that indicate the API isn't ready
-	if apierrors.IsServiceUnavailable(err) {
+	if apierrors.IsServiceUnavailable(err) ||
+		apierrors.IsTimeout(err) ||
+		apierrors.IsTooManyRequests(err) ||
+		apierrors.IsConflict(err) {
 		return true
 	}
 
-	// Check for connection-related errors that can occur during API server or controller initialization
-	if apierrors.IsTimeout(err) || apierrors.IsTooManyRequests(err) {
-		return true
-	}
-
-	// Check for conflict errors (optimistic concurrency conflicts)
-	if apierrors.IsConflict(err) {
-		return true
-	}
-
-	// String-based checks for errors that aren't properly typed
 	errMsg := err.Error()
 
-	// "the server could not find the requested resource" indicates the CRD endpoint
-	// isn't fully registered yet or the Flux controllers haven't started
-	if strings.Contains(errMsg, "the server could not find the requested resource") {
+	// Check for API discovery errors
+	if isAPIDiscoveryError(errMsg) {
 		return true
 	}
 
-	// "no matches for kind" is a REST mapper error when the CRD isn't known yet
-	if strings.Contains(errMsg, "no matches for kind") {
+	// Check for NotFound errors that are actually API issues
+	if isNotFoundAPIIssue(err) {
 		return true
 	}
 
-	// NotFound errors are only transient when they're related to API discovery issues,
-	// not when the resource genuinely doesn't exist. We can distinguish by checking
-	// if the error is a StatusError with specific reasons that indicate API issues.
-	if statusErr, ok := err.(*apierrors.StatusError); ok {
-		if statusErr.ErrStatus.Code == 404 {
-			// Check if the reason indicates an API discovery issue rather than a missing resource
-			reason := statusErr.ErrStatus.Reason
-			// "NotFound" with message containing "could not find" typically means API not ready
-			if reason == metav1.StatusReasonNotFound &&
-				strings.Contains(statusErr.ErrStatus.Message, "could not find") {
-				return true
-			}
-		}
-	}
+	// Check for connection errors
+	return isConnectionError(errMsg)
+}
 
-	// Connection errors - check for common network error patterns
-	// This is more robust than string matching as it catches various connection issues
-	if strings.Contains(errMsg, "connection refused") ||
-		strings.Contains(errMsg, "connection reset") ||
-		strings.Contains(errMsg, "i/o timeout") ||
-		strings.Contains(errMsg, "EOF") {
-		return true
+// handleTransientError waits for the next retry or returns a timeout error.
+func handleTransientError(
+	waitCtx context.Context,
+	ticker *time.Ticker,
+	resourceDescription string,
+	err error,
+) error {
+	select {
+	case <-waitCtx.Done():
+		return fmt.Errorf(
+			"timed out waiting for %s to be available: %w",
+			resourceDescription,
+			err,
+		)
+	case <-ticker.C:
+		return nil // Continue retry loop
 	}
-
-	return false
 }
 
 // triggerReconciliationWithRetry triggers reconciliation on a Flux resource with retry logic
@@ -402,16 +424,12 @@ func triggerReconciliationWithRetry(
 			if isTransientAPIError(err) {
 				lastErr = err
 
-				select {
-				case <-waitCtx.Done():
-					return fmt.Errorf(
-						"timed out waiting for %s to be available: %w",
-						resourceDescription,
-						lastErr,
-					)
-				case <-ticker.C:
-					continue
+				retryErr := handleTransientError(waitCtx, ticker, resourceDescription, lastErr)
+				if retryErr != nil {
+					return retryErr
 				}
+
+				continue
 			}
 
 			// Non-transient error, fail immediately
