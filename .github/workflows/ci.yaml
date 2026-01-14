@@ -106,6 +106,7 @@ jobs:
         run: .github/scripts/generate-schema.sh
 
       - name: 📤 Commit and push schema changes
+        if: github.event_name != 'merge_group'
         uses: stefanzweifel/git-auto-commit-action@04702edda442b2e678b25b537cec683a1493fcb9 # v7.1.0
         with:
           commit_message: "chore: update generated JSON schema"
@@ -150,6 +151,7 @@ jobs:
         run: .github/scripts/generate-cli-flags-docs.sh
 
       - name: 📤 Commit and push CLI flags docs
+        if: github.event_name != 'merge_group'
         uses: stefanzweifel/git-auto-commit-action@04702edda442b2e678b25b537cec683a1493fcb9 # v7.1.0
         with:
           commit_message: "chore: update generated CLI flags docs"
