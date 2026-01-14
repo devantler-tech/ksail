@@ -38,6 +38,8 @@ mega-linter-runner -f go
 
 The same configuration is used in CI, so you can expect the same linting behavior in your local environment as in the CI pipeline.
 
+MegaLinter also checks Markdown files. Markdown lint rules are configured in `.markdownlint.json` (some rules are relaxed to accommodate Jekyll/Just the Docs front matter and documentation formatting).
+
 ### Build
 
 ```sh
