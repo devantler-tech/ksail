@@ -233,7 +233,7 @@ Policy engines enforce security, compliance, and best practices in Kubernetes cl
 SOPS supports multiple key management backends:
 
 | Provider        | Documentation                                                                |
-| --------------- | ---------------------------------------------------------------------------- |
+|-----------------|------------------------------------------------------------------------------|
 | age             | [age-encryption.org](https://age-encryption.org/)                            |
 | PGP             | [GnuPG](https://gnupg.org/)                                                  |
 | AWS KMS         | [AWS KMS Documentation](https://docs.aws.amazon.com/kms/)                    |
