@@ -194,7 +194,7 @@ jobs:
     name: 🧪 System Test
     runs-on: ubuntu-latest
     needs: [changes, build-artifact]
-    if: needs.changes.outputs.code == 'true'
+    if: github.event_name == 'merge_group' && needs.changes.outputs.code == 'true'
     permissions:
       contents: read
       packages: write
