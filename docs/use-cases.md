@@ -118,7 +118,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - run: go install github.com/devantler-tech/ksail@latest
+      - run: go install github.com/devantler-tech/ksail/v5@latest
       - run: ksail cluster create
       - run: |
           ksail workload validate k8s/
