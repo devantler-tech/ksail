@@ -80,23 +80,25 @@ To decide which phase to perform:
 ## Phase 1 - Performance research
 
 1. Research performance landscape in this repo:
-  - Current performance testing practices and tooling
-  - User-facing performance concerns (load times, responsiveness, throughput)
-  - System performance bottlenecks (compute, memory, I/O, network)
-  - Maintainer performance priorities and success metrics
-  - Development/build performance issues affecting performance engineering
-  - Existing performance documentation and measurement approaches
+
+- Current performance testing practices and tooling
+- User-facing performance concerns (load times, responsiveness, throughput)
+- System performance bottlenecks (compute, memory, I/O, network)
+- Maintainer performance priorities and success metrics
+- Development/build performance issues affecting performance engineering
+- Existing performance documentation and measurement approaches
 
   **Identify optimization targets:**
-  - User experience bottlenecks (slow page loads, UI lag, high resource usage)
-  - System inefficiencies (algorithms, data structures, resource utilization)
-  - Development workflow pain points affecting performance engineering (build times, test execution, CI duration)
-  - Infrastructure concerns (scaling, deployment, monitoring)
-  - Performance engineering gaps (lack of guides, rapidity, measurement strategies)
+
+- User experience bottlenecks (slow page loads, UI lag, high resource usage)
+- System inefficiencies (algorithms, data structures, resource utilization)
+- Development workflow pain points affecting performance engineering (build times, test execution, CI duration)
+- Infrastructure concerns (scaling, deployment, monitoring)
+- Performance engineering gaps (lack of guides, rapidity, measurement strategies)
 
   **Goal:** Enable engineers to quickly measure performance impact across different dimensions using appropriate tools - from quick synthetic tests to realistic user scenarios.
 
-2. Use this research to create a discussion with title "${{ github.workflow }} - Research and Plan"
+1. Use this research to create a discussion with title "${{ github.workflow }} - Research and Plan"
 
    **Include a "How to Control this Workflow" section at the end of the discussion that explains:**
    - The user can add comments to the discussion to provide feedback or adjustments to the plan
@@ -113,7 +115,7 @@ To decide which phase to perform:
    - If running in "repeat" mode, the workflow will automatically run again to proceed to the next phase
    - Humans can review this research and add comments before the workflow continues
 
-3. Exit this entire workflow, do not proceed to Phase 2 on this run. The research and plan will be checked by a human who will invoke you again and you will proceed to Phase 2.
+2. Exit this entire workflow, do not proceed to Phase 2 on this run. The research and plan will be checked by a human who will invoke you again and you will proceed to Phase 2.
 
 ## Phase 2 - Build steps inference and configuration and perf engineering guides
 
@@ -124,12 +126,13 @@ To decide which phase to perform:
 3. Create `.github/actions/daily-perf-improver/build-steps/action.yml` with validated build steps. Each step must log output to `build-steps.log` in repo root. Cross-check against existing CI/devcontainer configs.
 
 4. Create 1-5 performance engineering guides in `.github/copilot/instructions/` covering relevant areas (e.g., frontend performance, backend optimization, build performance, infrastructure scaling). Each guide should document:
-  - Performance measurement strategies and tooling
-  - Common bottlenecks and optimization techniques
-  - Success metrics and testing approaches
-  - How to do explore performance efficiently using focused, maximally-efficient measurements and rebuilds
 
-5. Create PR with title "${{ github.workflow }} - Updates to complete configuration" containing files from steps 2d-2e. Request maintainer review. 
+- Performance measurement strategies and tooling
+- Common bottlenecks and optimization techniques
+- Success metrics and testing approaches
+- How to do explore performance efficiently using focused, maximally-efficient measurements and rebuilds
+
+1. Create PR with title "${{ github.workflow }} - Updates to complete configuration" containing files from steps 2d-2e. Request maintainer review.
 
    **Include a "What Happens Next" section in the PR description that explains:**
    - Once this PR is merged, the next workflow run will proceed to Phase 3, where actual performance improvements will be implemented
@@ -139,22 +142,22 @@ To decide which phase to perform:
 
    Exit workflow.
 
-6. Test build steps manually. If fixes needed then update the PR branch. If unable to resolve then create issue and exit.
+2. Test build steps manually. If fixes needed then update the PR branch. If unable to resolve then create issue and exit.
 
-7. Add brief comment (1 or 2 sentences) to the discussion identified at the start of the workflow stating progress made and giving links to the PR created.
+3. Add brief comment (1 or 2 sentences) to the discussion identified at the start of the workflow stating progress made and giving links to the PR created.
 
-8. Exit this entire workflow, do not proceed to Phase 3 on this run. The build steps will now be checked by a human who will invoke you again and you will proceed to Phase 3.
+4. Exit this entire workflow, do not proceed to Phase 3 on this run. The build steps will now be checked by a human who will invoke you again and you will proceed to Phase 3.
 
 ## Phase 3 - Goal selection, work and results
 
 1. **Goal selection**. Build an understanding of what to work on and select a part of the performance plan to pursue
 
    a. Repository is now performance-ready. Review `build-steps/action.yml` and `build-steps.log` to understand setup. If build failed then create fix PR and exit.
-   
+
    b. Read the plan in the discussion mentioned earlier, along with comments.
 
    c. Check for existing performance PRs (especially yours with "${{ github.workflow }}" prefix). Avoid duplicate work.
-   
+
    d. If plan needs updating then comment on planning discussion with revised plan and rationale. Consider maintainer feedback.
   
    e. Select a performance improvement goal to pursue from the plan. Ensure that you have a good understanding of the code and the performance issues before proceeding.
@@ -164,7 +167,7 @@ To decide which phase to perform:
 2. **Work towards your selected goal**. For the performance improvement goal you selected, do the following:
 
    a. Create a new branch starting with "perf/".
-   
+
    b. Work towards the performance improvement goal you selected. Consider approaches like:
      - **Code optimization:** Algorithm improvements, data structure changes, caching
      - **User experience:** Reducing load times, improving responsiveness, optimizing assets
@@ -182,17 +185,17 @@ To decide which phase to perform:
 3. **Finalizing changes**
 
    1. Apply any automatic code formatting used in the repo. If necessary check CI files to understand what code formatting is used.
-   
+
    b. Run any appropriate code linter used in the repo and ensure no new linting errors remain. If necessary check CI files to understand what code linting is used.
 
 4. **Results and learnings**
 
-   a. If you succeeded in writing useful code changes that improve performance, create a draft pull request with your changes. 
+   a. If you succeeded in writing useful code changes that improve performance, create a draft pull request with your changes.
 
       **Critical:** Exclude performance reports and tool-generated files from PR. Double-check added files and remove any that don't belong.
 
       Include a description of the improvements with evidence of impact. In the description, explain:
-      
+
       - **Goal and rationale:** Performance target chosen and why it matters
       - **Approach:** Strategy, methodology, and implementation steps
       - **Impact measurement:** How performance was tested and results achieved

@@ -1,12 +1,12 @@
 #
-#    ___                   _   _      
-#   / _ \                 | | (_)     
-#  | |_| | __ _  ___ _ __ | |_ _  ___ 
+#    ___                   _   _
+#   / _ \                 | | (_)
+#  | |_| | __ _  ___ _ __ | |_ _  ___
 #  |  _  |/ _` |/ _ \ '_ \| __| |/ __|
-#  | | | | (_| |  __/ | | | |_| | (__ 
+#  | | | | (_| |  __/ | | | |_| | (__
 #  \_| |_/\__, |\___|_| |_|\__|_|\___|
 #          __/ |
-#  _    _ |___/ 
+#  _    _ |___/
 # | |  | |                / _| |
 # | |  | | ___ _ __ _  __| |_| | _____      ____
 # | |/\| |/ _ \ '__| |/ /|  _| |/ _ \ \ /\ / / ___|
@@ -33,7 +33,7 @@ name: "Update Docs"
 "on":
   push:
     branches:
-    - main
+      - main
   workflow_dispatch: null
 
 permissions: read-all
@@ -126,13 +126,13 @@ jobs:
         run: |
           # Download official Copilot CLI installer script
           curl -fsSL https://raw.githubusercontent.com/github/copilot-cli/main/install.sh -o /tmp/copilot-install.sh
-          
+
           # Execute the installer with the specified version
           export VERSION=0.0.375 && sudo bash /tmp/copilot-install.sh
-          
+
           # Cleanup
           rm -f /tmp/copilot-install.sh
-          
+
           # Verify installation
           copilot --version
       - name: Install awf binary
@@ -376,7 +376,7 @@ jobs:
         with:
           script: |
             const fs = require('fs');
-            
+
             const awInfo = {
               engine_id: "copilot",
               engine_name: "GitHub Copilot CLI",
@@ -406,13 +406,13 @@ jobs:
               },
               created_at: new Date().toISOString()
             };
-            
+
             // Write to /tmp/gh-aw directory to avoid inclusion in PR
             const tmpPath = '/tmp/gh-aw/aw_info.json';
             fs.writeFileSync(tmpPath, JSON.stringify(awInfo, null, 2));
             console.log('Generated aw_info.json at:', tmpPath);
             console.log(JSON.stringify(awInfo, null, 2));
-            
+
             // Set model as output for reuse in other steps/jobs
             core.setOutput('model', awInfo.model);
       - name: Generate workflow overview
@@ -431,31 +431,31 @@ jobs:
           bash /opt/gh-aw/actions/create_prompt_first.sh
           cat << 'PROMPT_EOF' > "$GH_AW_PROMPT"
           # Update Docs
-          
+
           ## Job Description
-          
+
           Your name is __GH_AW_GITHUB_WORKFLOW__. You are an **Autonomous Technical Writer & Documentation Steward** for the GitHub repository `__GH_AW_GITHUB_REPOSITORY__`.
-          
+
           ### Mission
-          
+
           Ensure every code‑level change is mirrored by clear, accurate, and stylistically consistent documentation.
-          
+
           ### Voice & Tone
-          
+
           - Precise, concise, and developer‑friendly
           - Active voice, plain English, progressive disclosure (high‑level first, drill‑down examples next)
           - Empathetic toward both newcomers and power users
-          
+
           ### Key Values
-          
+
           Documentation‑as‑Code, transparency, single source of truth, continuous improvement, accessibility, internationalization‑readiness
-          
+
           ## KSail Documentation Stack
-          
+
           This repository uses **Jekyll** with the **Just the Docs** theme for documentation. The docs are located in the `docs/` directory and published to GitHub Pages at `https://ksail.devantler.tech`.
-          
+
           ### Technical Stack
-          
+
           - **Static Site Generator**: Jekyll 4.4.1
           - **Theme**: just-the-docs (~> 0.11.0)
           - **Plugins**:
@@ -463,16 +463,16 @@ jobs:
             - `jekyll-optional-front-matter` - Pages without frontmatter
             - `jekyll-relative-links` - Relative link support
           - **Features**: Dark mode, Mermaid diagrams, callouts, search
-          
+
           ### Documentation Structure
-          
+
           ```text
           Repository Root:
           ├── README.md                # Project overview, installation, quick start
           ├── CONTRIBUTING.md          # Contributor guide, development setup
           └── .github/
               └── copilot-instructions.md  # AI assistant context for the codebase
-          
+
           docs/                        # Jekyll site (published to GitHub Pages)
           ├── _config.yml              # Jekyll configuration
           ├── Gemfile                  # Ruby dependencies
@@ -487,20 +487,20 @@ jobs:
           │   └── cli-flags/           # Auto-generated CLI docs
           └── images/                  # Documentation images
           ```
-          
+
           ### Documentation Files to Track
-          
+
           | File                              | Purpose                                           | Update When                                                 |
           | --------------------------------- | ------------------------------------------------- | ----------------------------------------------------------- |
           | `README.md`                       | Project overview, installation, quick start guide | Features change, installation changes, API changes          |
           | `CONTRIBUTING.md`                 | Development setup, build commands, architecture   | Build process changes, new prerequisites, structure changes |
           | `.github/copilot-instructions.md` | AI coding assistant context                       | Architecture changes, new patterns, important conventions   |
           | `docs/**/*.md`                    | Detailed user documentation                       | Any user-facing changes                                     |
-          
+
           ### Just the Docs Frontmatter
-          
+
           All documentation pages should include appropriate frontmatter:
-          
+
           ```yaml
           ---
           title: "Page Title" # Required: displayed in nav and page
@@ -510,55 +510,55 @@ jobs:
           permalink: /custom-path/ # Optional: custom URL path
           ---
           ```
-          
+
           ### Using Admonitions
-          
+
           The `jekyll-gfm-admonitions` plugin enables GitHub-flavored admonitions. Use them for important information:
-          
+
           ```markdown
           > [!NOTE]
           > Useful information that users should know, even when skimming content.
-          
+
           > [!TIP]
           > Helpful advice for doing things better or more easily.
-          
+
           > [!IMPORTANT]
           > Key information users need to know to achieve their goal.
-          
+
           > [!WARNING]
           > Urgent info that needs immediate user attention to avoid problems.
-          
+
           > [!CAUTION]
           > Advises about risks or negative outcomes of certain actions.
           ```
-          
+
           These render as styled callout boxes in the documentation.
-          
+
           ### Using Mermaid Diagrams
-          
+
           Mermaid diagrams are supported. Wrap diagrams in a mermaid code block:
-          
+
           ````markdown
           ```mermaid
           graph TD
               A[Start] --> B[End]
           ```
           ````
-          
+
           ### Build Validation
-          
+
           Before submitting documentation changes, validate the Jekyll build:
-          
+
           ```bash
           cd docs
           bundle install
           bundle exec jekyll build
           ```
-          
+
           If the build fails, fix the errors before creating a PR.
-          
+
           ## Your Workflow
-          
+
           1. **Analyze Repository Changes**
              - On every push to main branch, examine the diff to identify changed/added/removed entities
              - Look for new APIs, functions, classes, configuration files, or significant code changes
@@ -568,7 +568,7 @@ jobs:
                - `.github/copilot-instructions.md` - AI assistant context
                - `docs/**/*.md` - Detailed user documentation
              - Identify documentation gaps like failing tests: a "red build" until fixed
-          
+
           2. **Documentation Assessment**
              - Review the existing docs structure following the hierarchy above
              - Ensure `README.md` reflects current features, installation, and usage
@@ -577,34 +577,34 @@ jobs:
              - Ensure new pages in `docs/` have proper Just the Docs frontmatter (`title`, `nav_order`, `parent`)
              - Verify navigation order makes sense
              - Check that relative links work correctly
-          
+
           3. **Create or Update Documentation**
              - Use Markdown (.md) format
              - Include proper Just the Docs frontmatter on all pages
              - Use GitHub-flavored admonitions (`> [!NOTE]`, `> [!WARNING]`, etc.) for callouts
              - Use Mermaid for diagrams where helpful
              - Follow progressive disclosure: high-level concepts first, detailed examples second
-          
+
           4. **Quality Assurance**
              - Check for broken links and missing images
              - Ensure code examples are accurate and functional
              - Validate the Jekyll build succeeds: `cd docs && bundle exec jekyll build`
              - Verify navigation order and parent/child relationships
-          
+
           ### Output Requirements
-          
+
           - **Create Draft Pull Requests**: When documentation needs updates, create focused draft pull requests with clear descriptions
-          
+
           ### Exit Conditions
-          
+
           - Exit if the repository has no implementation code yet (empty repository)
           - Exit if no code changes require documentation updates
           - Exit if all documentation is already up-to-date and comprehensive
-          
+
           > NOTE: Never make direct pushes to the main branch. Always create a pull request for documentation changes.
           >
           > NOTE: Treat documentation gaps like failing tests.
-          
+
           PROMPT_EOF
       - name: Substitute placeholders
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
@@ -615,7 +615,7 @@ jobs:
         with:
           script: |
             const substitutePlaceholders = require('/opt/gh-aw/actions/substitute_placeholders.cjs');
-            
+
             // Call the substitution function
             return await substitutePlaceholders({
               file: process.env.GH_AW_PROMPT,
@@ -646,9 +646,9 @@ jobs:
           </important>
           <instructions>
           To create or modify GitHub resources (issues, discussions, pull requests, etc.), you MUST call the appropriate safe output tool. Simply writing content will NOT work - the workflow requires actual tool calls.
-          
+
           **Available tools**: create_pull_request, missing_tool, noop
-          
+
           **Critical**: Tool calls write structured data that downstream jobs process. Without tool calls, follow-up actions will be skipped.
           </instructions>
           </safe-outputs>
@@ -693,7 +693,7 @@ jobs:
           - **workflow-run-id**: __GH_AW_GITHUB_RUN_ID__
           {{/if}}
           </github-context>
-          
+
           PROMPT_EOF
       - name: Substitute placeholders
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
@@ -710,7 +710,7 @@ jobs:
         with:
           script: |
             const substitutePlaceholders = require('/opt/gh-aw/actions/substitute_placeholders.cjs');
-            
+
             // Call the substitution function
             return await substitutePlaceholders({
               file: process.env.GH_AW_PROMPT,
@@ -771,7 +771,7 @@ jobs:
           # This ensures they are in /tmp/gh-aw/ where secret redaction can scan them
           SESSION_STATE_DIR="$HOME/.copilot/session-state"
           LOGS_DIR="/tmp/gh-aw/sandbox/agent/logs"
-          
+
           if [ -d "$SESSION_STATE_DIR" ]; then
             echo "Copying Copilot session state files from $SESSION_STATE_DIR to $LOGS_DIR"
             mkdir -p "$LOGS_DIR"
@@ -790,7 +790,7 @@ jobs:
             const { main } = require('/opt/gh-aw/actions/redact_secrets.cjs');
             await main();
         env:
-          GH_AW_SECRET_NAMES: 'COPILOT_GITHUB_TOKEN,GH_AW_GITHUB_MCP_SERVER_TOKEN,GH_AW_GITHUB_TOKEN,GITHUB_TOKEN'
+          GH_AW_SECRET_NAMES: "COPILOT_GITHUB_TOKEN,GH_AW_GITHUB_MCP_SERVER_TOKEN,GH_AW_GITHUB_TOKEN,GITHUB_TOKEN"
           SECRET_COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
           SECRET_GH_AW_GITHUB_MCP_SERVER_TOKEN: ${{ secrets.GH_AW_GITHUB_MCP_SERVER_TOKEN }}
           SECRET_GH_AW_GITHUB_TOKEN: ${{ secrets.GH_AW_GITHUB_TOKEN }}
@@ -1053,13 +1053,13 @@ jobs:
         run: |
           # Download official Copilot CLI installer script
           curl -fsSL https://raw.githubusercontent.com/github/copilot-cli/main/install.sh -o /tmp/copilot-install.sh
-          
+
           # Execute the installer with the specified version
           export VERSION=0.0.375 && sudo bash /tmp/copilot-install.sh
-          
+
           # Cleanup
           rm -f /tmp/copilot-install.sh
-          
+
           # Verify installation
           copilot --version
       - name: Execute GitHub Copilot CLI
@@ -1209,7 +1209,7 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
           GH_AW_AGENT_OUTPUT: ${{ env.GH_AW_AGENT_OUTPUT }}
-          GH_AW_SAFE_OUTPUTS_HANDLER_CONFIG: "{\"create_pull_request\":{\"base_branch\":\"${{ github.ref_name }}\",\"draft\":true,\"max\":1,\"max_patch_size\":1024}}"
+          GH_AW_SAFE_OUTPUTS_HANDLER_CONFIG: '{"create_pull_request":{"base_branch":"${{ github.ref_name }}","draft":true,"max":1,"max_patch_size":1024}}'
         with:
           github-token: ${{ secrets.GH_AW_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
           script: |
@@ -1217,4 +1217,3 @@ jobs:
             setupGlobals(core, github, context, exec, io);
             const { main } = require('/opt/gh-aw/actions/safe_output_handler_manager.cjs');
             await main();
-

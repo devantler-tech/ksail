@@ -93,7 +93,7 @@ docs/                        # Jekyll site (published to GitHub Pages)
 ### Documentation Files to Track
 
 | File                              | Purpose                                           | Update When                                                 |
-| --------------------------------- | ------------------------------------------------- | ----------------------------------------------------------- |
+|-----------------------------------|---------------------------------------------------|-------------------------------------------------------------|
 | `README.md`                       | Project overview, installation, quick start guide | Features change, installation changes, API changes          |
 | `CONTRIBUTING.md`                 | Development setup, build commands, architecture   | Build process changes, new prerequisites, structure changes |
 | `.github/copilot-instructions.md` | AI coding assistant context                       | Architecture changes, new patterns, important conventions   |

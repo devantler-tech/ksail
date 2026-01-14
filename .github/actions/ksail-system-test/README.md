@@ -86,7 +86,7 @@ jobs:
 ## Inputs
 
 | Input                 | Description                                             | Required | Default                 |
-| --------------------- | ------------------------------------------------------- | -------- | ----------------------- |
+|-----------------------|---------------------------------------------------------|----------|-------------------------|
 | `distribution`        | Kubernetes distribution (Vanilla, K3s, Talos)           | Yes      | -                       |
 | `provider`            | Infrastructure provider (Docker, Hetzner)               | No       | `Docker`                |
 | `args`                | Additional arguments for cluster init/create            | No       | `""`                    |
