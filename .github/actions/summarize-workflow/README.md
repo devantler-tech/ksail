@@ -39,9 +39,9 @@ jobs:
 
 ## Inputs
 
-| Input             | Description                                  | Required | Default                                  |
-| ----------------- | -------------------------------------------- | -------- | ---------------------------------------- |
-| `job-results`     | Space-separated list of job results to check | Yes      | -                                        |
+| Input             | Description                                  | Required | Default                                 |
+|-------------------|----------------------------------------------|----------|-----------------------------------------|
+| `job-results`     | Space-separated list of job results to check | Yes      | -                                       |
 | `success-message` | Message when all jobs passed                 | No       | `✅ All jobs succeeded or were skipped.` |
 | `failure-message` | Message when a job failed                    | No       | `❌ At least one job failed.`            |
 
@@ -50,11 +50,11 @@ jobs:
 GitHub provides these result values for jobs:
 
 | Result      | Description                         | Treated as |
-| ----------- | ----------------------------------- | ---------- |
-| `success`   | Job completed successfully          | ✅ Pass    |
-| `skipped`   | Job was skipped (condition not met) | ✅ Pass    |
-| `failure`   | Job failed                          | ❌ Fail    |
-| `cancelled` | Job was cancelled                   | ❌ Fail    |
+|-------------|-------------------------------------|------------|
+| `success`   | Job completed successfully          | ✅ Pass     |
+| `skipped`   | Job was skipped (condition not met) | ✅ Pass     |
+| `failure`   | Job failed                          | ❌ Fail     |
+| `cancelled` | Job was cancelled                   | ❌ Fail     |
 
 ## Example with Custom Messages
 
