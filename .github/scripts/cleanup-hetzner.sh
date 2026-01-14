@@ -22,8 +22,14 @@ if ! command -v hcloud &> /dev/null; then
 fi
 
 # Configure hcloud context
-hcloud context create cleanup-context --token="${HCLOUD_TOKEN}" || true
-hcloud context use cleanup-context
+if ! hcloud context create cleanup-context --token="${HCLOUD_TOKEN}" 2>/dev/null; then
+  # Context might already exist, try to use it
+  echo "Context already exists or creation failed, attempting to use existing context..."
+fi
+if ! hcloud context use cleanup-context; then
+  echo "❌ Failed to configure hcloud context"
+  exit 1
+fi
 
 LABEL_SELECTOR="ksail.owned=true"
 
@@ -31,7 +37,7 @@ echo "🔍 Finding KSail-owned resources with label: ${LABEL_SELECTOR}"
 
 # Delete all KSail-owned servers
 echo "🗑️  Deleting servers..."
-SERVER_IDS=$(hcloud server list -o noheader -o columns=id -l "${LABEL_SELECTOR}" || true)
+SERVER_IDS=$(hcloud server list -o noheader -o columns=id -l "${LABEL_SELECTOR}" 2>/dev/null || true)
 if [[ -n "${SERVER_IDS}" ]]; then
   echo "Found servers to delete:"
   hcloud server list -l "${LABEL_SELECTOR}"
@@ -48,7 +54,7 @@ sleep 5
 
 # Delete all KSail-owned placement groups
 echo "🗑️  Deleting placement groups..."
-PG_IDS=$(hcloud placement-group list -o noheader -o columns=id -l "${LABEL_SELECTOR}" || true)
+PG_IDS=$(hcloud placement-group list -o noheader -o columns=id -l "${LABEL_SELECTOR}" 2>/dev/null || true)
 if [[ -n "${PG_IDS}" ]]; then
   echo "Found placement groups to delete:"
   hcloud placement-group list -l "${LABEL_SELECTOR}"
@@ -63,7 +69,7 @@ fi
 # Delete all KSail-owned firewalls (with retry for detachment delays)
 echo "🗑️  Deleting firewalls..."
 for ATTEMPT in {1..5}; do
-  FW_IDS=$(hcloud firewall list -o noheader -o columns=id -l "${LABEL_SELECTOR}" || true)
+  FW_IDS=$(hcloud firewall list -o noheader -o columns=id -l "${LABEL_SELECTOR}" 2>/dev/null || true)
   if [[ -z "${FW_IDS}" ]]; then
     echo "  No firewalls found"
     break
@@ -84,7 +90,7 @@ for ATTEMPT in {1..5}; do
   done
   
   # Check if any firewalls remain
-  REMAINING=$(hcloud firewall list -o noheader -o columns=id -l "${LABEL_SELECTOR}" || true)
+  REMAINING=$(hcloud firewall list -o noheader -o columns=id -l "${LABEL_SELECTOR}" 2>/dev/null || true)
   if [[ -z "${REMAINING}" ]]; then
     break
   fi
@@ -98,7 +104,7 @@ done
 
 # Delete all KSail-owned networks
 echo "🗑️  Deleting networks..."
-NET_IDS=$(hcloud network list -o noheader -o columns=id -l "${LABEL_SELECTOR}" || true)
+NET_IDS=$(hcloud network list -o noheader -o columns=id -l "${LABEL_SELECTOR}" 2>/dev/null || true)
 if [[ -n "${NET_IDS}" ]]; then
   echo "Found networks to delete:"
   hcloud network list -l "${LABEL_SELECTOR}"
