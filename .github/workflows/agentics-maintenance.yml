@@ -97,8 +97,10 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Build gh-aw
-        run: make build
+      - name: Install gh-aw extension
+        run: curl -fsSL https://raw.githubusercontent.com/githubnext/gh-aw/refs/heads/main/install-gh-aw.sh | bash
+      - name: Verify gh-aw installation
+        run: gh aw version
 
       - name: Compile workflows
         run: |
