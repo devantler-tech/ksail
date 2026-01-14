@@ -90,7 +90,6 @@ jobs:
             .github
           persist-credentials: false
 
-
       - name: Setup Go
         uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
         with:
@@ -104,7 +103,7 @@ jobs:
 
       - name: Compile workflows
         run: |
-          ./gh-aw compile --validate --verbose
+          gh-aw compile --validate --verbose
           echo "✓ All workflows compiled successfully"
 
       - name: Setup Scripts
@@ -136,10 +135,12 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Build gh-aw
-        run: make build
+      - name: Install gh-aw extension
+        run: curl -fsSL https://raw.githubusercontent.com/githubnext/gh-aw/refs/heads/main/install-gh-aw.sh | bash
+      - name: Verify gh-aw installation
+        run: gh aw version
 
       - name: Run zizmor security scanner
         run: |
-          ./gh-aw compile --zizmor --verbose
+          gh-aw compile --zizmor --verbose
           echo "✓ Zizmor security scan completed"
