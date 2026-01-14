@@ -16,18 +16,25 @@ fi
 # Install hcloud CLI if not already available
 if ! command -v hcloud &> /dev/null; then
   echo "📦 Installing hcloud CLI..."
-  curl -sL https://github.com/hetznercloud/cli/releases/download/v1.49.0/hcloud-linux-amd64.tar.gz | tar -xz -C /tmp
+  # Using latest stable version as of January 2026
+  HCLOUD_VERSION="v1.49.1"
+  curl -sL "https://github.com/hetznercloud/cli/releases/download/${HCLOUD_VERSION}/hcloud-linux-amd64.tar.gz" | tar -xz -C /tmp
   sudo mv /tmp/hcloud /usr/local/bin/hcloud
   chmod +x /usr/local/bin/hcloud
 fi
 
 # Configure hcloud context
-if ! hcloud context create cleanup-context --token="${HCLOUD_TOKEN}" 2>/dev/null; then
-  # Context might already exist, try to use it
-  echo "Context already exists or creation failed, attempting to use existing context..."
+# First, try to delete any existing cleanup context to start fresh
+hcloud context delete cleanup-context 2>/dev/null || true
+
+# Create new context with the provided token
+if ! hcloud context create cleanup-context --token="${HCLOUD_TOKEN}"; then
+  echo "❌ Failed to create hcloud context - invalid token?"
+  exit 1
 fi
+
 if ! hcloud context use cleanup-context; then
-  echo "❌ Failed to configure hcloud context"
+  echo "❌ Failed to use hcloud context"
   exit 1
 fi
 
