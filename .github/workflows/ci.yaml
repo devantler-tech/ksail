@@ -270,7 +270,7 @@ jobs:
     needs: [changes, build-artifact, generate-schema, generate-cli-flags-docs, coverage, system-test]
     if: ${{ always() }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v6.0.1
       - uses: ./.github/actions/summarize-workflow
         with:
           job-results: >-
