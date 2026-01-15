@@ -42,9 +42,13 @@ const (
 	conditionStatusTrue  = "True"
 	conditionStatusFalse = "False"
 
-	// Retry constants for handling optimistic concurrency conflicts.
-	conflictRetryAttempts = 5
-	conflictRetryDelay    = 500 * time.Millisecond
+	// API availability timeout for reconciliation operations - should be long enough
+	// for the Flux controllers to become ready in slow CI environments.
+	apiAvailabilityTimeout      = 2 * time.Minute
+	apiAvailabilityPollInterval = 2 * time.Second
+
+	// HTTP status code for NotFound.
+	httpStatusNotFound = 404
 )
 
 // Reconciler handles Flux reconciliation operations.
@@ -305,28 +309,134 @@ func isPermanentOCIError(err error) bool {
 		strings.Contains(errMsg, "does not exist")
 }
 
-// isConflictError checks if an error is an optimistic concurrency conflict.
-// This happens when the resource was modified between our Get and Update calls.
-func isConflictError(err error) bool {
-	return apierrors.IsConflict(err)
+// isAPIDiscoveryError checks if the error indicates the API discovery is incomplete.
+func isAPIDiscoveryError(errMsg string) bool {
+	// "the server could not find the requested resource" indicates the CRD endpoint
+	// isn't fully registered yet or the Flux controllers haven't started
+	if strings.Contains(errMsg, "the server could not find the requested resource") {
+		return true
+	}
+
+	// "no matches for kind" is a REST mapper error when the CRD isn't known yet
+	return strings.Contains(errMsg, "no matches for kind")
+}
+
+// isNotFoundAPIIssue checks if a NotFound error is due to API issues rather than a missing resource.
+func isNotFoundAPIIssue(err error) bool {
+	var statusErr *apierrors.StatusError
+	if !errors.As(err, &statusErr) {
+		return false
+	}
+
+	if statusErr.ErrStatus.Code != httpStatusNotFound {
+		return false
+	}
+
+	// Check if the reason indicates an API discovery issue rather than a missing resource
+	reason := statusErr.ErrStatus.Reason
+	// "NotFound" with message containing "could not find" typically means API not ready
+	return reason == metav1.StatusReasonNotFound &&
+		strings.Contains(statusErr.ErrStatus.Message, "could not find")
+}
+
+// isConnectionError checks if the error is a network connection error.
+func isConnectionError(errMsg string) bool {
+	return strings.Contains(errMsg, "connection refused") ||
+		strings.Contains(errMsg, "connection reset") ||
+		strings.Contains(errMsg, "i/o timeout") ||
+		strings.Contains(errMsg, "EOF")
+}
+
+// isTransientAPIError checks if the error is a transient API error that should be retried.
+// This includes errors that occur when the Flux CRDs or controllers aren't fully ready yet,
+// which can happen in slow CI environments or shortly after cluster creation.
+func isTransientAPIError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	// Check for specific status errors that indicate the API isn't ready
+	if apierrors.IsServiceUnavailable(err) ||
+		apierrors.IsTimeout(err) ||
+		apierrors.IsTooManyRequests(err) ||
+		apierrors.IsConflict(err) {
+		return true
+	}
+
+	errMsg := err.Error()
+
+	// Check for API discovery errors
+	if isAPIDiscoveryError(errMsg) {
+		return true
+	}
+
+	// Check for NotFound errors that are actually API issues
+	if isNotFoundAPIIssue(err) {
+		return true
+	}
+
+	// Check for connection errors
+	return isConnectionError(errMsg)
+}
+
+// handleTransientError waits for the next retry or returns a timeout error.
+func handleTransientError(
+	waitCtx context.Context,
+	ticker *time.Ticker,
+	resourceDescription string,
+	err error,
+) error {
+	select {
+	case <-waitCtx.Done():
+		return fmt.Errorf(
+			"timed out waiting for %s to be available: %w",
+			resourceDescription,
+			err,
+		)
+	case <-ticker.C:
+		return nil // Continue retry loop
+	}
 }
 
 // triggerReconciliationWithRetry triggers reconciliation on a Flux resource with retry logic
-// for handling optimistic concurrency conflicts.
+// for handling optimistic concurrency conflicts and transient API errors.
+// This is necessary because Flux controllers may not be fully ready immediately after
+// cluster creation, especially in slow CI environments.
 func triggerReconciliationWithRetry(
 	ctx context.Context,
 	client dynamic.ResourceInterface,
 	resourceName string,
 	resourceDescription string,
 ) error {
+	// Create a timeout context for the entire retry operation
+	waitCtx, cancel := context.WithTimeout(ctx, apiAvailabilityTimeout)
+	defer cancel()
+
+	ticker := time.NewTicker(apiAvailabilityPollInterval)
+	defer ticker.Stop()
+
 	var lastErr error
 
-	for attempt := range conflictRetryAttempts {
-		resource, err := client.Get(ctx, resourceName, metav1.GetOptions{})
+	for {
+		resource, err := client.Get(waitCtx, resourceName, metav1.GetOptions{})
 		if err != nil {
+			// Check if this is a transient API error that should be retried
+			if isTransientAPIError(err) {
+				lastErr = err
+
+				retryErr := handleTransientError(waitCtx, ticker, resourceDescription, lastErr)
+				if retryErr != nil {
+					return retryErr
+				}
+
+				continue
+			}
+
+			// Non-transient error, fail immediately
 			return fmt.Errorf("get %s: %w", resourceDescription, err)
 		}
 
+		// Resource found, try to update it
 		annotations := resource.GetAnnotations()
 		if annotations == nil {
 			annotations = make(map[string]string)
@@ -335,32 +445,30 @@ func triggerReconciliationWithRetry(
 		annotations[reconcileAnnotationKey] = time.Now().Format(time.RFC3339Nano)
 		resource.SetAnnotations(annotations)
 
-		_, err = client.Update(ctx, resource, metav1.UpdateOptions{})
+		_, err = client.Update(waitCtx, resource, metav1.UpdateOptions{})
 		if err == nil {
 			return nil // Success
 		}
 
-		// Check if this is a conflict error (resource version mismatch)
-		if isConflictError(err) {
+		// Check if this is a transient error (conflict or API not ready)
+		if isTransientAPIError(err) {
 			lastErr = err
 
-			if attempt < conflictRetryAttempts-1 {
-				time.Sleep(conflictRetryDelay)
-
+			select {
+			case <-waitCtx.Done():
+				return fmt.Errorf(
+					"timed out updating %s: %w",
+					resourceDescription,
+					lastErr,
+				)
+			case <-ticker.C:
 				continue
 			}
 		}
 
-		// Non-conflict error or final attempt
+		// Non-transient error on update, fail immediately
 		return fmt.Errorf("trigger %s reconciliation: %w", resourceDescription, err)
 	}
-
-	return fmt.Errorf(
-		"trigger %s reconciliation after %d retries: %w",
-		resourceDescription,
-		conflictRetryAttempts,
-		lastErr,
-	)
 }
 
 // checkKustomizationStatus checks the kustomization status and returns ready state,

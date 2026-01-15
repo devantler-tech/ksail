@@ -52,8 +52,6 @@ func TestCreateMinimalProvisioner_Talos(t *testing.T) {
 }
 
 // TestCreateMinimalProvisioner_TalosHetzner tests creation of a minimal Talos provisioner with Hetzner provider.
-//
-//nolint:paralleltest // uses t.Setenv
 func TestCreateMinimalProvisioner_TalosHetzner(t *testing.T) {
 	// Set required environment variable for Hetzner provider
 	t.Setenv("HCLOUD_TOKEN", "test-token")

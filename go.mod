@@ -33,7 +33,7 @@ require (
 	github.com/yannh/kubeconform v0.7.0
 	golang.org/x/sync v0.19.0
 	golang.org/x/term v0.39.0
-	helm.sh/helm/v4 v4.0.4
+	helm.sh/helm/v4 v4.0.5
 	k8s.io/api v0.35.0
 	k8s.io/apiextensions-apiserver v0.35.0
 	k8s.io/apimachinery v0.35.0
