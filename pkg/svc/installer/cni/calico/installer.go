@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"strings"
 	"time"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
@@ -12,6 +13,8 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/svc/installer"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/installer/cni"
 	corev1 "k8s.io/api/core/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	apiextensionsclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -125,6 +128,15 @@ func (c *CalicoInstaller) helmInstallOrUpgradeCalico(ctx context.Context) error 
 	}
 
 	err = helm.InstallOrUpgradeChart(ctx, client, repoConfig, chartConfig, c.GetTimeout())
+	if err != nil && isAPIDiscoveryError(err) {
+		waitErr := c.waitForCalicoCRDs(ctx)
+		if waitErr != nil {
+			return fmt.Errorf("wait for calico CRDs: %w", waitErr)
+		}
+
+		err = helm.InstallOrUpgradeChart(ctx, client, repoConfig, chartConfig, c.GetTimeout())
+	}
+
 	if err != nil {
 		return fmt.Errorf("install or upgrade calico: %w", err)
 	}
@@ -197,6 +209,81 @@ func (c *CalicoInstaller) waitForReadiness(ctx context.Context) error {
 	return nil
 }
 
+func (c *CalicoInstaller) waitForCalicoCRDs(ctx context.Context) error {
+	restConfig, err := k8s.BuildRESTConfig(c.GetKubeconfig(), c.GetContext())
+	if err != nil {
+		return fmt.Errorf("build REST config: %w", err)
+	}
+
+	client, err := apiextensionsclient.NewForConfig(restConfig)
+	if err != nil {
+		return fmt.Errorf("create apiextensions client: %w", err)
+	}
+
+	for _, name := range calicoCRDNames() {
+		pollErr := k8s.PollForReadiness(
+			ctx,
+			c.GetTimeout(),
+			func(ctx context.Context) (bool, error) {
+				crd, getErr := client.
+					ApiextensionsV1().
+					CustomResourceDefinitions().
+					Get(ctx, name, metav1.GetOptions{})
+				if errors.IsNotFound(getErr) {
+					return false, nil
+				}
+
+				if getErr != nil {
+					return false, fmt.Errorf("get CRD %s: %w", name, getErr)
+				}
+
+				return isCRDEstablished(crd), nil
+			},
+		)
+		if pollErr != nil {
+			return fmt.Errorf("wait for CRD %s: %w", name, pollErr)
+		}
+	}
+
+	return nil
+}
+
+func isAPIDiscoveryError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	errMsg := err.Error()
+
+	return strings.Contains(errMsg, "no matches for kind") ||
+		strings.Contains(errMsg, "could not find the requested resource")
+}
+
+func isCRDEstablished(crd *apiextensionsv1.CustomResourceDefinition) bool {
+	for _, cond := range crd.Status.Conditions {
+		if cond.Type == "Established" && cond.Status == "True" {
+			return true
+		}
+	}
+
+	return false
+}
+
+func calicoCRDNames() []string {
+	return []string{
+		"goldmanes.operator.tigera.io",
+		"imagesets.operator.tigera.io",
+		"installations.operator.tigera.io",
+		"managementclusterconnections.operator.tigera.io",
+		"tigerastatuses.operator.tigera.io",
+		"whiskers.operator.tigera.io",
+	}
+}
+
+func calicoNamespaces() []string {
+	return []string{"tigera-operator", "calico-system"}
+}
+
 // ensurePrivilegedNamespaces creates the required namespaces with PSS labels for Talos.
 // Talos has PodSecurity Standard enforcement enabled by default, so we need to label
 // the namespaces as "privileged" to allow the CNI pods to run.
@@ -206,8 +293,7 @@ func (c *CalicoInstaller) ensurePrivilegedNamespaces(ctx context.Context) error 
 		return fmt.Errorf("failed to create kubernetes client: %w", err)
 	}
 
-	namespaces := []string{"tigera-operator", "calico-system"}
-	for _, ns := range namespaces {
+	for _, ns := range calicoNamespaces() {
 		err := c.ensurePrivilegedNamespace(ctx, clientset, ns)
 		if err != nil {
 			return fmt.Errorf("ensure namespace %s: %w", ns, err)
