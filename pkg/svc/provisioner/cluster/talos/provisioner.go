@@ -353,7 +353,7 @@ func (p *TalosProvisioner) createHetznerCluster(ctx context.Context, clusterName
 		hzProvider,
 		clusterName,
 		"worker",
-		"Worker",
+		"worker",
 		p.options.WorkerNodes,
 		p.hetznerOpts.WorkerServerType,
 		p.talosOpts.ISO,
