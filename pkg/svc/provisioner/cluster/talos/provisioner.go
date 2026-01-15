@@ -334,7 +334,7 @@ func (p *TalosProvisioner) createHetznerCluster(ctx context.Context, clusterName
 		hzProvider,
 		clusterName,
 		"control-plane",
-		"Control-plane",
+		"control-plane",
 		p.options.ControlPlaneNodes,
 		p.hetznerOpts.ControlPlaneServerType,
 		p.talosOpts.ISO,
