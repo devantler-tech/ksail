@@ -26,18 +26,9 @@ runs:
       run: |
         echo "🧹 Starting Hetzner Cloud cleanup for KSail-owned resources..."
 
-        # Configure hcloud context
-        # First, try to delete any existing cleanup context to start fresh
-        hcloud context delete cleanup-context 2>/dev/null || true
-
-        # Create new context with the provided token
-        if ! hcloud context create cleanup-context --token="${HCLOUD_TOKEN}"; then
-          echo "❌ Failed to create hcloud context - invalid token?"
-          exit 1
-        fi
-
-        if ! hcloud context use cleanup-context; then
-          echo "❌ Failed to use hcloud context"
+        # Validate token access using the environment token
+        if ! hcloud datacenter list >/dev/null 2>&1; then
+          echo "❌ Failed to access Hetzner Cloud - invalid token?"
           exit 1
         fi
 
