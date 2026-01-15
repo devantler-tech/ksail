@@ -486,47 +486,35 @@ func (p *Provider) ValidValues() []string {
 	return []string{string(ProviderDocker), string(ProviderHetzner)}
 }
 
+// supportedProviders returns the valid providers for a given distribution.
+func supportedProviders(distribution Distribution) []Provider {
+	switch distribution {
+	case DistributionVanilla, DistributionK3s:
+		return []Provider{ProviderDocker}
+	case DistributionTalos:
+		return []Provider{ProviderDocker, ProviderHetzner}
+	default:
+		return nil
+	}
+}
+
 // ValidateForDistribution validates that the provider is valid for the given distribution.
 // Returns nil if the combination is valid, or an error describing the invalid combination.
 func (p *Provider) ValidateForDistribution(distribution Distribution) error {
-	// Kind doesn't use the provider field - it always uses Docker internally
-	// K3s uses the provider field to select between Docker (K3d) and future cloud providers
-	switch distribution {
-	case DistributionVanilla:
-		// Kind ignores the provider field - it's Docker-only by design
-		return nil
-	case DistributionK3s:
-		// K3s supports the provider field, currently only Docker (via K3d)
-		if *p == "" || *p == ProviderDocker {
-			return nil
-		}
-
-		return fmt.Errorf(
-			"%w: distribution %s only supports provider %s, got %s",
-			ErrInvalidDistributionProviderCombination,
-			distribution,
-			ProviderDocker,
-			*p,
-		)
-	case DistributionTalos:
-		// Talos supports Docker (local) and Hetzner (cloud) providers
-		if *p == "" || *p == ProviderDocker || *p == ProviderHetzner {
-			return nil
-		}
-
-		return fmt.Errorf(
-			"%w: distribution %s only supports providers %s and %s, got %s",
-			ErrInvalidDistributionProviderCombination,
-			distribution,
-			ProviderDocker,
-			ProviderHetzner,
-			*p,
-		)
-	default:
-		return fmt.Errorf(
-			"%w: %s",
-			ErrInvalidDistribution,
-			distribution,
-		)
+	supported := supportedProviders(distribution)
+	if supported == nil {
+		return fmt.Errorf("%w: %s", ErrInvalidDistribution, distribution)
 	}
+
+	// Empty provider defaults to Docker which is always supported
+	if *p == "" || slices.Contains(supported, *p) {
+		return nil
+	}
+
+	return fmt.Errorf(
+		"%w: distribution %s does not support provider %s",
+		ErrInvalidDistributionProviderCombination,
+		distribution,
+		*p,
+	)
 }
