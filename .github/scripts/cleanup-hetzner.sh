@@ -17,7 +17,7 @@ fi
 if ! command -v hcloud &>/dev/null; then
 	echo "📦 Installing hcloud CLI..."
 	# Using latest stable version as of January 2026
-	HCLOUD_VERSION="v1.49.1"
+	HCLOUD_VERSION="v1.59.0"
 	curl -sL "https://github.com/hetznercloud/cli/releases/download/${HCLOUD_VERSION}/hcloud-linux-amd64.tar.gz" | tar -xz -C /tmp
 	sudo mv /tmp/hcloud /usr/local/bin/hcloud
 fi
