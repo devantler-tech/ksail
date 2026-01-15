@@ -261,7 +261,8 @@ func isAPIDiscoveryError(err error) bool {
 
 func isCRDEstablished(crd *apiextensionsv1.CustomResourceDefinition) bool {
 	for _, cond := range crd.Status.Conditions {
-		if cond.Type == apiextensionsv1.Established && cond.Status == apiextensionsv1.ConditionTrue {
+		if cond.Type == apiextensionsv1.Established &&
+			cond.Status == apiextensionsv1.ConditionTrue {
 			return true
 		}
 	}
