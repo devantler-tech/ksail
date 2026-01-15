@@ -1248,7 +1248,27 @@ func (p *TalosProvisioner) Stop(ctx context.Context, name string) error {
 	return nil
 }
 
-// createHetznerNodes provisions Hetzner servers for a given role.
+// createHetznerNodes provisions a set of Hetzner Cloud servers for a specific node role.
+// It is a helper used by createHetznerCluster to create control-plane and worker nodes.
+//
+// Parameters:
+//   - ctx: request-scoped context for cancellation and timeouts.
+//   - provider: Hetzner infrastructure provider used to create the servers.
+//   - clusterName: logical name of the Talos cluster; used as a prefix for node names and labels.
+//   - role: internal node role identifier (e.g., "control-plane", "worker") used for naming and labeling.
+//   - roleLabel: human-readable label for the node role used in log output (e.g., "control plane", "worker").
+//   - count: number of servers to create for this role; if count <= 0, no servers are created.
+//   - serverType: Hetzner server type (size/flavor) to use for each node.
+//   - isoID: identifier of the Talos ISO image to attach to each server.
+//   - location: Hetzner location (datacenter/region) where servers should be created.
+//   - networkID: identifier of the Hetzner private network to attach to the servers.
+//   - placementGroupID: identifier of the Hetzner placement group used for spreading servers.
+//   - sshKeyID: identifier of the SSH key to associate with the servers.
+//   - firewallIDs: list of firewall identifiers to apply to the servers.
+//
+// Returns:
+//   - []*hcloud.Server: slice of successfully created servers (empty if count <= 0).
+//   - error: non-nil if any server creation fails.
 func (p *TalosProvisioner) createHetznerNodes(
 	ctx context.Context,
 	provider *hetzner.Provider,
