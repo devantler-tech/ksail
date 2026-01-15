@@ -280,9 +280,9 @@ jobs:
           persist-credentials: false
 
       - name: 🧹 Cleanup all KSail-owned Hetzner resources
-        env:
-          HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
-        run: .github/scripts/cleanup-hetzner.sh
+        uses: ./.github/actions/cleanup-hetzner
+        with:
+          hcloud-token: ${{ secrets.HCLOUD_TOKEN }}
 
   status:
     name: CI - KSail
@@ -299,7 +299,9 @@ jobs:
       ]
     if: ${{ always() }}
     steps:
-      - uses: actions/checkout@v6.0.1
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          persist-credentials: false
       - uses: ./.github/actions/summarize-workflow
         with:
           job-results: >-
