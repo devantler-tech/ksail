@@ -24,6 +24,7 @@ type ChartConfig struct {
 	CreateNamespace bool
 	// SetJSONVals contains JSON values to set during installation.
 	SetJSONVals map[string]string
-	// SkipWait disables Helm wait logic; readiness checks should be handled externally.
+	// SkipWait disables Helm's wait logic; readiness checks should be handled externally when this is true.
+	// When false (the default), Helm will wait for resources to be ready using its standard wait behavior.
 	SkipWait bool
 }
