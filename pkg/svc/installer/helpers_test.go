@@ -123,3 +123,25 @@ func TestGetInstallTimeoutDistributions(t *testing.T) {
 		)
 	})
 }
+
+func TestMaxTimeout(t *testing.T) {
+	t.Parallel()
+
+	t.Run("left_greater", func(t *testing.T) {
+		t.Parallel()
+
+		assert.Equal(t, 10*time.Minute, installer.MaxTimeout(10*time.Minute, 5*time.Minute))
+	})
+
+	t.Run("right_greater", func(t *testing.T) {
+		t.Parallel()
+
+		assert.Equal(t, 10*time.Minute, installer.MaxTimeout(5*time.Minute, 10*time.Minute))
+	})
+
+	t.Run("equal", func(t *testing.T) {
+		t.Parallel()
+
+		assert.Equal(t, 5*time.Minute, installer.MaxTimeout(5*time.Minute, 5*time.Minute))
+	})
+}
