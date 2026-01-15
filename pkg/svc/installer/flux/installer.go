@@ -56,6 +56,8 @@ func (b *FluxInstaller) helmInstallOrUpgradeFluxOperator(ctx context.Context) er
 		Atomic:          true,
 		UpgradeCRDs:     true,
 		Timeout:         b.timeout,
+		Wait:            true,
+		WaitForJobs:     true,
 		// Silence Helm stderr because the Flux operator CRDs emit harmless
 		// "unrecognized format" warnings that confuse users if printed.
 		Silent: true,

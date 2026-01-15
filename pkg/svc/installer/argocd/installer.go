@@ -59,6 +59,8 @@ func (a *ArgoCDInstaller) helmInstallOrUpgradeArgoCD(ctx context.Context) error 
 		Atomic:          true,
 		UpgradeCRDs:     true,
 		Timeout:         a.timeout,
+		Wait:            true,
+		WaitForJobs:     true,
 	}
 
 	timeoutCtx, cancel := context.WithTimeout(ctx, a.timeout)
