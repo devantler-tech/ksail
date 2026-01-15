@@ -12,7 +12,9 @@ const (
 	// TalosInstallTimeout is the timeout (5 minutes) for Talos component installation.
 	// Talos clusters take longer to bootstrap due to the immutable OS design.
 	TalosInstallTimeout = 5 * time.Minute
-	// CalicoInstallTimeout is the timeout for Calico CNI installs which often take longer.
+	// CalicoInstallTimeout is the timeout for Calico CNI installs, which often take longer
+	// due to multiple components needing to become ready (tigera-operator, calico-node
+	// DaemonSet, and calico-kube-controllers Deployment).
 	CalicoInstallTimeout = 10 * time.Minute
 )
 
