@@ -74,6 +74,15 @@ func (a upgradeActionAdapter) setTimeout(t time.Duration)                { a.Tim
 func (a upgradeActionAdapter) setVersion(v string)                       { a.Version = v }
 
 // applyCommonActionConfig applies shared configuration from spec to action.
+//
+// When spec.Wait is true, this function configures the action to use
+// StatusWatcherStrategy, which leverages kstatus (HIP-0022) for enhanced
+// resource waiting. kstatus provides:
+//   - Support for custom resources (via the ready condition)
+//   - Full reconciliation monitoring (including cleanup of old pods)
+//   - Consistent status checking across all resource types
+//
+// See: https://helm.sh/community/hips/hip-0022/
 func applyCommonActionConfig(action helmActionConfig, spec *ChartSpec) {
 	if spec.Wait {
 		action.setWaitStrategy(helmv4kube.StatusWatcherStrategy)
@@ -102,11 +111,15 @@ type ChartSpec struct {
 
 	CreateNamespace bool
 	Atomic          bool
-	Wait            bool
-	WaitForJobs     bool
-	Timeout         time.Duration
-	Silent          bool
-	UpgradeCRDs     bool
+	// Wait enables kstatus-based waiting for resources to be ready (HIP-0022).
+	// When true, Helm uses StatusWatcherStrategy which supports custom resources
+	// and ensures full reconciliation of all resources.
+	Wait bool
+	// WaitForJobs extends Wait to also wait for Job completion.
+	WaitForJobs bool
+	Timeout     time.Duration
+	Silent      bool
+	UpgradeCRDs bool
 
 	ValuesYaml  string
 	ValueFiles  []string
