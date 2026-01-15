@@ -1256,7 +1256,7 @@ func (p *TalosProvisioner) Stop(ctx context.Context, name string) error {
 //   - provider: Hetzner infrastructure provider used to create the servers.
 //   - clusterName: logical name of the Talos cluster; used as a prefix for node names and labels.
 //   - role: internal node role identifier (e.g., "control-plane", "worker") used for naming and labeling.
-//   - roleLabel: human-readable label for the node role used in log output (e.g., "control plane", "worker").
+//   - roleLabel: human-readable label for the node role used in log output (e.g., "control-plane", "worker").
 //   - count: number of servers to create for this role; if count <= 0, no servers are created.
 //   - serverType: Hetzner server type (size/flavor) to use for each node.
 //   - isoID: identifier of the Talos ISO image to attach to each server.
