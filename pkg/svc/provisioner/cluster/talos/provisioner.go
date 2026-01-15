@@ -1288,7 +1288,7 @@ func (p *TalosProvisioner) createHetznerNodes(
 		return []*hcloud.Server{}, nil
 	}
 
-	_, _ = fmt.Fprintf(p.logWriter, "Creating %d %s node(s)...\n", count, role)
+	_, _ = fmt.Fprintf(p.logWriter, "Creating %d %s node(s)...\n", count, roleLabel)
 
 	servers := make([]*hcloud.Server, 0, count)
 	for nodeIndex := range count {
