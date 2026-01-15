@@ -158,6 +158,7 @@ func TestChartConfig_Fields(t *testing.T) {
 		RepoURL:         "https://url",
 		CreateNamespace: true,
 		SetJSONVals:     map[string]string{"key": "val"},
+		SkipWait:        true,
 	}
 
 	require.Equal(t, "release", config.ReleaseName)
@@ -166,4 +167,5 @@ func TestChartConfig_Fields(t *testing.T) {
 	require.Equal(t, "https://url", config.RepoURL)
 	require.True(t, config.CreateNamespace)
 	require.Equal(t, map[string]string{"key": "val"}, config.SetJSONVals)
+	require.True(t, config.SkipWait)
 }
