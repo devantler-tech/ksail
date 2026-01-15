@@ -25,7 +25,7 @@ require (
 	github.com/samber/do/v2 v2.0.0
 	github.com/siderolabs/talos v1.11.0-alpha.3
 	github.com/siderolabs/talos/pkg/machinery v1.12.1
-	github.com/sirupsen/logrus v1.9.4-0.20251023124752-b61f268f75b6
+	github.com/sirupsen/logrus v1.9.4
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
 	github.com/spf13/viper v1.21.0
