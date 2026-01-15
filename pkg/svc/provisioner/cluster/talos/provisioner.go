@@ -272,10 +272,9 @@ func (p *TalosProvisioner) createDockerCluster(ctx context.Context, clusterName 
 
 // createHetznerCluster creates a Talos cluster on Hetzner Cloud infrastructure.
 //
-//nolint:cyclop,funcorder,funlen,gocognit,maintidx // Complex function with sequential steps for cloud provisioning
+//nolint:cyclop,funcorder,funlen // Complex function with sequential steps for cloud provisioning
 func (p *TalosProvisioner) createHetznerCluster(ctx context.Context, clusterName string) error {
-	// Type assert to get Hetzner-specific provider
-	hetznerProv, ok := p.infraProvider.(*hetzner.Provider)
+	hzProvider, ok := p.infraProvider.(*hetzner.Provider)
 	if !ok {
 		return fmt.Errorf("%w: got %T", ErrHetznerProviderRequired, p.infraProvider)
 	}
@@ -283,7 +282,7 @@ func (p *TalosProvisioner) createHetznerCluster(ctx context.Context, clusterName
 	_, _ = fmt.Fprintf(p.logWriter, "Creating Talos cluster %q on Hetzner Cloud...\n", clusterName)
 
 	// Check if cluster already exists
-	exists, err := hetznerProv.NodesExist(ctx, clusterName)
+	exists, err := hzProvider.NodesExist(ctx, clusterName)
 	if err != nil {
 		return fmt.Errorf("failed to check if cluster exists: %w", err)
 	}
@@ -295,21 +294,21 @@ func (p *TalosProvisioner) createHetznerCluster(ctx context.Context, clusterName
 	// Create infrastructure resources
 	_, _ = fmt.Fprintf(p.logWriter, "Creating infrastructure resources...\n")
 
-	network, err := hetznerProv.EnsureNetwork(ctx, clusterName, p.hetznerOpts.NetworkCIDR)
+	network, err := hzProvider.EnsureNetwork(ctx, clusterName, p.hetznerOpts.NetworkCIDR)
 	if err != nil {
 		return fmt.Errorf("failed to create network: %w", err)
 	}
 
 	_, _ = fmt.Fprintf(p.logWriter, "  ✓ Network %s created\n", network.Name)
 
-	firewall, err := hetznerProv.EnsureFirewall(ctx, clusterName)
+	firewall, err := hzProvider.EnsureFirewall(ctx, clusterName)
 	if err != nil {
 		return fmt.Errorf("failed to create firewall: %w", err)
 	}
 
 	_, _ = fmt.Fprintf(p.logWriter, "  ✓ Firewall %s created\n", firewall.Name)
 
-	placementGroup, err := hetznerProv.EnsurePlacementGroup(ctx, clusterName)
+	placementGroup, err := hzProvider.EnsurePlacementGroup(ctx, clusterName)
 	if err != nil {
 		return fmt.Errorf("failed to create placement group: %w", err)
 	}
@@ -320,7 +319,7 @@ func (p *TalosProvisioner) createHetznerCluster(ctx context.Context, clusterName
 	var sshKeyID int64
 
 	if p.hetznerOpts.SSHKeyName != "" {
-		sshKey, keyErr := hetznerProv.GetSSHKey(ctx, p.hetznerOpts.SSHKeyName)
+		sshKey, keyErr := hzProvider.GetSSHKey(ctx, p.hetznerOpts.SSHKeyName)
 		if keyErr != nil {
 			return fmt.Errorf("failed to get SSH key: %w", keyErr)
 		}
@@ -330,68 +329,42 @@ func (p *TalosProvisioner) createHetznerCluster(ctx context.Context, clusterName
 		}
 	}
 
-	// Track created servers for bootstrap
-	controlPlaneServers := make([]*hcloud.Server, 0, p.options.ControlPlaneNodes)
-	workerServers := make([]*hcloud.Server, 0, p.options.WorkerNodes)
-
-	// Create control plane nodes
-	_, _ = fmt.Fprintf(
-		p.logWriter,
-		"Creating %d control-plane node(s)...\n",
+	controlPlaneServers, err := p.createHetznerNodes(
+		ctx,
+		hzProvider,
+		clusterName,
+		"control-plane",
+		"Control-plane",
 		p.options.ControlPlaneNodes,
+		p.hetznerOpts.ControlPlaneServerType,
+		p.talosOpts.ISO,
+		p.hetznerOpts.Location,
+		network.ID,
+		placementGroup.ID,
+		sshKeyID,
+		[]int64{firewall.ID},
 	)
-
-	for nodeIndex := range p.options.ControlPlaneNodes {
-		nodeName := fmt.Sprintf("%s-control-plane-%d", clusterName, nodeIndex+1)
-
-		server, serverErr := hetznerProv.CreateServer(ctx, hetzner.CreateServerOpts{
-			Name:             nodeName,
-			ServerType:       p.hetznerOpts.ControlPlaneServerType,
-			ISOID:            p.talosOpts.ISO,
-			Location:         p.hetznerOpts.Location,
-			Labels:           hetzner.NodeLabels(clusterName, "control-plane", nodeIndex+1),
-			NetworkID:        network.ID,
-			PlacementGroupID: placementGroup.ID,
-			SSHKeyID:         sshKeyID,
-			FirewallIDs:      []int64{firewall.ID},
-		})
-		if serverErr != nil {
-			return fmt.Errorf("failed to create control-plane node %s: %w", nodeName, serverErr)
-		}
-
-		controlPlaneServers = append(controlPlaneServers, server)
-
-		_, _ = fmt.Fprintf(p.logWriter, "  ✓ Control-plane node %s created (IP: %s)\n",
-			server.Name, server.PublicNet.IPv4.IP.String())
+	if err != nil {
+		return err
 	}
 
-	// Create worker nodes
-	if p.options.WorkerNodes > 0 {
-		_, _ = fmt.Fprintf(p.logWriter, "Creating %d worker node(s)...\n", p.options.WorkerNodes)
-
-		for nodeIndex := range p.options.WorkerNodes {
-			nodeName := fmt.Sprintf("%s-worker-%d", clusterName, nodeIndex+1)
-
-			server, serverErr := hetznerProv.CreateServer(ctx, hetzner.CreateServerOpts{
-				Name:             nodeName,
-				ServerType:       p.hetznerOpts.WorkerServerType,
-				ISOID:            p.talosOpts.ISO,
-				Location:         p.hetznerOpts.Location,
-				Labels:           hetzner.NodeLabels(clusterName, "worker", nodeIndex+1),
-				NetworkID:        network.ID,
-				PlacementGroupID: placementGroup.ID,
-				SSHKeyID:         sshKeyID,
-				FirewallIDs:      []int64{firewall.ID},
-			})
-			if serverErr != nil {
-				return fmt.Errorf("failed to create worker node %s: %w", nodeName, serverErr)
-			}
-
-			workerServers = append(workerServers, server)
-
-			_, _ = fmt.Fprintf(p.logWriter, "  ✓ Worker node %s created (IP: %s)\n",
-				server.Name, server.PublicNet.IPv4.IP.String())
-		}
+	workerServers, err := p.createHetznerNodes(
+		ctx,
+		hzProvider,
+		clusterName,
+		"worker",
+		"Worker",
+		p.options.WorkerNodes,
+		p.hetznerOpts.WorkerServerType,
+		p.talosOpts.ISO,
+		p.hetznerOpts.Location,
+		network.ID,
+		placementGroup.ID,
+		sshKeyID,
+		[]int64{firewall.ID},
+	)
+	if err != nil {
+		return err
 	}
 
 	_, _ = fmt.Fprintf(p.logWriter, "\nInfrastructure created. Bootstrapping Talos cluster...\n")
@@ -444,7 +417,7 @@ func (p *TalosProvisioner) createHetznerCluster(ctx context.Context, clusterName
 	// Detach ISOs from all servers so they boot from disk instead of ISO
 	_, _ = fmt.Fprintf(p.logWriter, "Detaching ISOs and rebooting nodes...\n")
 
-	err = p.detachISOsAndReboot(ctx, hetznerProv, allServers)
+	err = p.detachISOsAndReboot(ctx, hzProvider, allServers)
 	if err != nil {
 		return fmt.Errorf("failed to detach ISOs: %w", err)
 	}
@@ -1273,6 +1246,61 @@ func (p *TalosProvisioner) Stop(ctx context.Context, name string) error {
 	_, _ = fmt.Fprintf(p.logWriter, "Successfully stopped Talos cluster %q\n", clusterName)
 
 	return nil
+}
+
+// createHetznerNodes provisions Hetzner servers for a given role.
+func (p *TalosProvisioner) createHetznerNodes(
+	ctx context.Context,
+	provider *hetzner.Provider,
+	clusterName string,
+	role string,
+	roleLabel string,
+	count int,
+	serverType string,
+	isoID int64,
+	location string,
+	networkID int64,
+	placementGroupID int64,
+	sshKeyID int64,
+	firewallIDs []int64,
+) ([]*hcloud.Server, error) {
+	if count <= 0 {
+		return []*hcloud.Server{}, nil
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "Creating %d %s node(s)...\n", count, role)
+
+	servers := make([]*hcloud.Server, 0, count)
+	for nodeIndex := range count {
+		nodeName := fmt.Sprintf("%s-%s-%d", clusterName, role, nodeIndex+1)
+
+		server, err := provider.CreateServer(ctx, hetzner.CreateServerOpts{
+			Name:             nodeName,
+			ServerType:       serverType,
+			ISOID:            isoID,
+			Location:         location,
+			Labels:           hetzner.NodeLabels(clusterName, role, nodeIndex+1),
+			NetworkID:        networkID,
+			PlacementGroupID: placementGroupID,
+			SSHKeyID:         sshKeyID,
+			FirewallIDs:      firewallIDs,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to create %s node %s: %w", role, nodeName, err)
+		}
+
+		servers = append(servers, server)
+
+		_, _ = fmt.Fprintf(
+			p.logWriter,
+			"  ✓ %s node %s created (IP: %s)\n",
+			roleLabel,
+			server.Name,
+			server.PublicNet.IPv4.IP.String(),
+		)
+	}
+
+	return servers, nil
 }
 
 // listTalosContainers lists all containers for a specific Talos cluster.
