@@ -61,18 +61,20 @@ runs:
       env:
         DISTRIBUTION: ${{ inputs.distribution }}
         PROVIDER: ${{ inputs.provider }}
+        INIT: ${{ inputs.init }}
         ARGS: ${{ inputs.args }}
       run: |
-        # Generate unique tag: distribution-provider-sanitized_args-shortsha
+        # Generate unique tag: distribution-provider-init-sanitized_args-shortsha
         DIST_LOWER=$(echo "$DISTRIBUTION" | tr '[:upper:]' '[:lower:]')
         PROVIDER_LOWER=$(echo "$PROVIDER" | tr '[:upper:]' '[:lower:]')
+        INIT_SUFFIX=$([ "$INIT" = "true" ] && echo "init" || echo "no-init")
         # Sanitize args: extract key values, remove special chars, lowercase
         ARGS_SANITIZED=$(echo "$ARGS" | sed 's/--[a-z-]*=\?//g' | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '-' | sed 's/^-//;s/-$//' | cut -c1-30)
         SHORT_SHA="${GITHUB_SHA:0:7}"
         if [[ -n "$ARGS_SANITIZED" ]]; then
-          TAG="${DIST_LOWER}-${PROVIDER_LOWER}-${ARGS_SANITIZED}-${SHORT_SHA}"
+          TAG="${DIST_LOWER}-${PROVIDER_LOWER}-${INIT_SUFFIX}-${ARGS_SANITIZED}-${SHORT_SHA}"
         else
-          TAG="${DIST_LOWER}-${PROVIDER_LOWER}-${SHORT_SHA}"
+          TAG="${DIST_LOWER}-${PROVIDER_LOWER}-${INIT_SUFFIX}-${SHORT_SHA}"
         fi
         echo "tag=$TAG" >> "$GITHUB_OUTPUT"
         echo "Generated unique artifact tag: $TAG"
