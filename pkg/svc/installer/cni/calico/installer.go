@@ -121,6 +121,7 @@ func (c *CalicoInstaller) helmInstallOrUpgradeCalico(ctx context.Context) error 
 		RepoURL:         "https://docs.tigera.io/calico/charts",
 		CreateNamespace: true,
 		SetJSONVals:     c.getCalicoValues(),
+		SkipWait:        true,
 	}
 
 	err = helm.InstallOrUpgradeChart(ctx, client, repoConfig, chartConfig, c.GetTimeout())

@@ -12,6 +12,8 @@ const (
 	// TalosInstallTimeout is the timeout (5 minutes) for Talos component installation.
 	// Talos clusters take longer to bootstrap due to the immutable OS design.
 	TalosInstallTimeout = 5 * time.Minute
+	// CalicoInstallTimeout is the timeout for Calico CNI installs which often take longer.
+	CalicoInstallTimeout = 10 * time.Minute
 )
 
 // GetInstallTimeout determines the timeout for component installation.
@@ -36,4 +38,13 @@ func GetInstallTimeout(clusterCfg *v1alpha1.Cluster) time.Duration {
 	}
 
 	return DefaultInstallTimeout
+}
+
+// MaxTimeout returns the larger of the two durations.
+func MaxTimeout(a, b time.Duration) time.Duration {
+	if a >= b {
+		return a
+	}
+
+	return b
 }

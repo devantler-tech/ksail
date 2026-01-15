@@ -34,8 +34,8 @@ func InstallOrUpgradeChart(
 		Silent:          true,
 		UpgradeCRDs:     true,
 		Timeout:         timeout,
-		Wait:            true,
-		WaitForJobs:     true,
+		Wait:            !chartConfig.SkipWait,
+		WaitForJobs:     !chartConfig.SkipWait,
 		SetJSONVals:     chartConfig.SetJSONVals,
 	}
 
