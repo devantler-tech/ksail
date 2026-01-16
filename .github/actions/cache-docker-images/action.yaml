@@ -220,13 +220,15 @@ runs:
           
           # Export images one by one, skipping failures
           EXPORT_COUNT=0
+          TAR_CREATED=false
           while IFS= read -r image; do
             if [ -n "$image" ]; then
-              if [ $EXPORT_COUNT -eq 0 ]; then
-                # First image: create new tar
+              if [ "$TAR_CREATED" = "false" ]; then
+                # First successful image: create new tar
                 if docker exec "$CONTAINER_NAME" ctr -n k8s.io images export /tmp/images.tar "$image" 2>/dev/null; then
                   echo "✓ Exported: $image"
                   EXPORT_COUNT=$((EXPORT_COUNT + 1))
+                  TAR_CREATED=true
                 else
                   echo "✗ Skipped (corrupted): $image"
                 fi
@@ -238,7 +240,7 @@ runs:
                     EXPORT_COUNT=$((EXPORT_COUNT + 1))
                   } || {
                     echo "✗ Skipped (append failed): $image"
-                    docker exec "$CONTAINER_NAME" rm -f /tmp/image-temp.tar
+                    docker exec "$CONTAINER_NAME" rm -f /tmp/image-temp.tar 2>/dev/null || true
                   }
                 else
                   echo "✗ Skipped (corrupted): $image"
@@ -251,6 +253,7 @@ runs:
             echo "Successfully exported $EXPORT_COUNT images"
           else
             echo "Warning: No images could be exported"
+            exit 0
           fi
         fi
 
