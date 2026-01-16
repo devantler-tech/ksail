@@ -124,7 +124,7 @@ runs:
               CLUSTER_NAME="kind"
               ;;
             k3s)
-              CLUSTER_NAME="k3d-default"
+              CLUSTER_NAME="default"
               ;;
             talos)
               CLUSTER_NAME="talos-default"
