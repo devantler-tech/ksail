@@ -155,14 +155,18 @@ runs:
         echo "Exporting images to tar archive..."
         docker exec "$CONTAINER_NAME" sh -c "ctr -n k8s.io images export /tmp/images.tar \$(ctr -n k8s.io images ls -q) || true"
 
-        # Copy tar file from container to host
-        docker cp "$CONTAINER_NAME":/tmp/images.tar /tmp/containerd-cache/images.tar
+        # Copy tar file from container to host if it was created
+        if docker exec "$CONTAINER_NAME" test -f /tmp/images.tar; then
+          docker cp "$CONTAINER_NAME":/tmp/images.tar /tmp/containerd-cache/images.tar
 
-        # Clean up inside container
-        docker exec "$CONTAINER_NAME" rm -f /tmp/images.tar
+          # Clean up inside container
+          docker exec "$CONTAINER_NAME" rm -f /tmp/images.tar
 
-        echo "Images exported successfully"
-        ls -lh /tmp/containerd-cache/
+          echo "Images exported successfully"
+          ls -lh /tmp/containerd-cache/
+        else
+          echo "Warning: /tmp/images.tar not found in container ${CONTAINER_NAME}. Skipping containerd image cache export."
+        fi
 
     - name: 💾 Save containerd images to cache
       if: inputs.operation == 'save' && inputs.provider == 'Docker'
