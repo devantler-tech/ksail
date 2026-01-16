@@ -232,14 +232,30 @@ runs:
         # First, try to export all at once (faster if all images are healthy)
         echo "Attempting bulk export..."
         BULK_EXPORT_SUCCESS=false
-        if docker exec "$CONTAINER_NAME" sh -c "${CTR_CMD} -n k8s.io images export /tmp/images.tar \$(${CTR_CMD} -n k8s.io images ls -q)" 2>&1 | grep -v "failed to get reader"; then
+        
+        # Capture stderr to check for errors
+        BULK_EXPORT_OUTPUT=$(docker exec "$CONTAINER_NAME" sh -c "${CTR_CMD} -n k8s.io images export /tmp/images.tar \$(${CTR_CMD} -n k8s.io images ls -q)" 2>&1)
+        BULK_EXPORT_EXIT=$?
+        
+        # Check if export succeeded: exit code 0 AND no "failed to get reader" errors AND tar exists
+        if [ $BULK_EXPORT_EXIT -eq 0 ] && ! echo "$BULK_EXPORT_OUTPUT" | grep -q "failed to get reader"; then
           # Verify the tar was actually created and has content
           if docker exec "$CONTAINER_NAME" test -f /tmp/images.tar; then
             TAR_SIZE=$(docker exec "$CONTAINER_NAME" stat -c%s /tmp/images.tar 2>/dev/null || echo "0")
             if [ "$TAR_SIZE" -gt 0 ]; then
               echo "Bulk export succeeded (${TAR_SIZE} bytes)"
               BULK_EXPORT_SUCCESS=true
+            else
+              echo "Bulk export produced empty tar file"
             fi
+          else
+            echo "Bulk export did not create tar file"
+          fi
+        else
+          if [ $BULK_EXPORT_EXIT -ne 0 ]; then
+            echo "Bulk export failed with exit code: $BULK_EXPORT_EXIT"
+          else
+            echo "Bulk export encountered corrupted images"
           fi
         fi
 
