@@ -170,7 +170,6 @@ runs:
       with:
         cluster-name: ${{ steps.cluster-name.outputs.name }}
         distribution: ${{ inputs.distribution }}
-        provider: ${{ inputs.provider }}
         operation: restore
 
     - name: 🧪 ksail cluster list
@@ -247,7 +246,6 @@ runs:
       with:
         cluster-name: ${{ steps.cluster-name.outputs.name }}
         distribution: ${{ inputs.distribution }}
-        provider: ${{ inputs.provider }}
         operation: save
 
     - name: 🧪 ksail cluster delete

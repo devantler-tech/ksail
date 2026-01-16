@@ -48,12 +48,6 @@ Kubernetes distribution type. Determines the container naming pattern:
 - **K3s**: K3d containers (pattern: `k3d-<cluster-name>-server-0`)
 - **Talos**: Talos containers (pattern: `talos-<cluster-name>-controlplane-1`)
 
-### `provider` (required)
-
-Infrastructure provider. Currently only `Docker` is supported (Hetzner clusters don't use local containers).
-
-- Default: `"Docker"`
-
 ### `operation` (required)
 
 Operation to perform:
@@ -77,7 +71,6 @@ Whether the cache was hit during restore operation (`'true'` or `'false'`).
   with:
     cluster-name: my-cluster
     distribution: Vanilla
-    provider: Docker
     operation: restore
 ```
 
@@ -89,7 +82,6 @@ Whether the cache was hit during restore operation (`'true'` or `'false'`).
   with:
     cluster-name: my-cluster
     distribution: Vanilla
-    provider: Docker
     operation: save
 ```
 
@@ -108,7 +100,6 @@ jobs:
         with:
           cluster-name: test-cluster
           distribution: ${{ matrix.distribution }}
-          provider: Docker
           operation: restore
       
       - name: 🧪 Create cluster
@@ -124,7 +115,6 @@ jobs:
         with:
           cluster-name: test-cluster
           distribution: ${{ matrix.distribution }}
-          provider: Docker
           operation: save
       
       - name: 🧹 Delete cluster
@@ -151,7 +141,7 @@ To invalidate the cache and force fresh image pulls:
 
 ## Limitations
 
-- Only works with Docker provider (not Hetzner cloud clusters)
+- Only works with local Docker-based clusters (Kind, K3d, Talos on Docker). Does not work with cloud-based clusters like Talos on Hetzner.
 - Cache size is limited by GitHub Actions cache limits (10GB per repository)
 - Images are shared across all test configurations for the same distribution
 - Requires the cluster to be running when saving/restoring images

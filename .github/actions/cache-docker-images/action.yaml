@@ -9,10 +9,6 @@ inputs:
   distribution:
     description: Kubernetes distribution (Vanilla, K3s, Talos)
     required: true
-  provider:
-    description: Infrastructure provider (Docker, Hetzner)
-    required: true
-    default: "Docker"
   operation:
     description: Operation to perform (restore, save)
     required: true
@@ -40,7 +36,7 @@ runs:
         echo "Generated cache key: $CACHE_KEY"
 
     - name: ♻️ Restore cached containerd images
-      if: inputs.operation == 'restore' && inputs.provider == 'Docker'
+      if: inputs.operation == 'restore'
       id: restore-cache
       uses: actions/cache/restore@9255dc7a253b0ccc959486e2bca901246202afeb # v5.0.1
       with:
@@ -48,7 +44,7 @@ runs:
         key: ${{ steps.cache-key.outputs.key }}
 
     - name: 📦 Load cached images into cluster
-      if: inputs.operation == 'restore' && inputs.provider == 'Docker' && steps.restore-cache.outputs.cache-hit == 'true'
+      if: inputs.operation == 'restore' && steps.restore-cache.outputs.cache-hit == 'true'
       shell: bash
       env:
         CLUSTER_NAME: ${{ inputs.cluster-name }}
@@ -130,7 +126,7 @@ runs:
         fi
 
     - name: 💾 Export containerd images from cluster
-      if: inputs.operation == 'save' && inputs.provider == 'Docker'
+      if: inputs.operation == 'save'
       shell: bash
       env:
         CLUSTER_NAME: ${{ inputs.cluster-name }}
@@ -217,7 +213,7 @@ runs:
         fi
 
     - name: 💾 Save containerd images to cache
-      if: inputs.operation == 'save' && inputs.provider == 'Docker'
+      if: inputs.operation == 'save'
       uses: actions/cache/save@9255dc7a253b0ccc959486e2bca901246202afeb # v5.0.1
       with:
         path: /tmp/containerd-cache
