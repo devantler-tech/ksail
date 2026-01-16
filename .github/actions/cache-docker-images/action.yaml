@@ -114,9 +114,9 @@ runs:
         else
           CTR_CMD="ctr"
         fi
-        
+
         echo "Using ctr command: $CTR_CMD"
-        
+
         # Check if cache exists and load images
         if [ -f "/tmp/containerd-cache/images.tar" ]; then
           echo "Importing cached images into containerd..."
@@ -199,7 +199,7 @@ runs:
         fi
 
         echo "Using container: $CONTAINER_NAME"
-        
+
         # Determine ctr command path based on distribution
         DIST_LOWER=$(echo "$DISTRIBUTION" | tr '[:upper:]' '[:lower:]')
         if [ "$DIST_LOWER" = "talos" ]; then
@@ -207,7 +207,7 @@ runs:
         else
           CTR_CMD="ctr"
         fi
-        
+
         echo "Using ctr command: $CTR_CMD"
 
         # Create cache directory
