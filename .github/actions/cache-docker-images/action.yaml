@@ -1,0 +1,158 @@
+name: Cache Docker Images
+description: Cache Docker images to avoid rate limiting when pulling images for kind, k3d, and talos clusters
+author: Devantler Tech Platform Team
+
+inputs:
+  distribution:
+    description: Kubernetes distribution (Vanilla, K3s, Talos)
+    required: true
+  cache-key-suffix:
+    description: Optional suffix for cache key (useful for versioning)
+    required: false
+    default: ""
+
+outputs:
+  cache-hit:
+    description: Whether the cache was hit ('true' or 'false')
+    value: ${{ steps.restore-cache.outputs.cache-hit }}
+
+runs:
+  using: composite
+  steps:
+    - name: 🔑 Generate cache key
+      id: cache-key
+      shell: bash
+      env:
+        DISTRIBUTION: ${{ inputs.distribution }}
+        CACHE_KEY_SUFFIX: ${{ inputs.cache-key-suffix }}
+      run: |
+        # Generate cache key based on distribution
+        DIST_LOWER=$(echo "$DISTRIBUTION" | tr '[:upper:]' '[:lower:]')
+        
+        # Set default images based on distribution
+        case "$DIST_LOWER" in
+          vanilla)
+            # Kind uses kindest/node images - we'll cache common versions
+            CACHE_KEY="docker-images-kind-v1"
+            ;;
+          k3s)
+            # K3d uses rancher/k3s images
+            CACHE_KEY="docker-images-k3s-v1"
+            ;;
+          talos)
+            # Talos uses ghcr.io/siderolabs/talos images
+            CACHE_KEY="docker-images-talos-v1"
+            ;;
+          *)
+            echo "Unknown distribution: $DISTRIBUTION"
+            CACHE_KEY="docker-images-unknown-v1"
+            ;;
+        esac
+        
+        if [ -n "$CACHE_KEY_SUFFIX" ]; then
+          CACHE_KEY="${CACHE_KEY}-${CACHE_KEY_SUFFIX}"
+        fi
+        
+        echo "key=$CACHE_KEY" >> "$GITHUB_OUTPUT"
+        echo "Generated cache key: $CACHE_KEY"
+
+    - name: 🔍 Determine images to cache
+      id: images
+      shell: bash
+      env:
+        DISTRIBUTION: ${{ inputs.distribution }}
+      run: |
+        DIST_LOWER=$(echo "$DISTRIBUTION" | tr '[:upper:]' '[:lower:]')
+        
+        case "$DIST_LOWER" in
+          vanilla)
+            # Kind commonly uses these kindest/node images
+            # We cache multiple versions to cover different Kubernetes versions
+            IMAGES="kindest/node:v1.31.0
+        kindest/node:v1.30.0
+        kindest/node:v1.29.0"
+            ;;
+          k3s)
+            # K3d commonly uses these rancher/k3s images
+            IMAGES="rancher/k3s:v1.31.0-k3s1
+        rancher/k3s:v1.30.0-k3s1
+        rancher/k3s:v1.29.0-k3s1"
+            ;;
+          talos)
+            # Talos uses these images
+            IMAGES="ghcr.io/siderolabs/talos:v1.12.0
+        ghcr.io/siderolabs/installer:v1.12.0"
+            ;;
+          *)
+            echo "Unknown distribution: $DISTRIBUTION"
+            IMAGES=""
+            ;;
+        esac
+        
+        # Export images as multiline output
+        {
+          echo "list<<EOF"
+          echo "$IMAGES"
+          echo "EOF"
+        } >> "$GITHUB_OUTPUT"
+        
+        echo "Images to cache for $DISTRIBUTION:"
+        echo "$IMAGES"
+
+    - name: ♻️ Restore cached Docker images
+      id: restore-cache
+      uses: actions/cache/restore@9255dc7a253b0ccc959486e2bca901246202afeb # v5.0.1
+      with:
+        path: /tmp/docker-images
+        key: ${{ steps.cache-key.outputs.key }}
+
+    - name: 📦 Load cached images
+      if: steps.restore-cache.outputs.cache-hit == 'true'
+      shell: bash
+      run: |
+        echo "Loading cached Docker images..."
+        if [ -d "/tmp/docker-images" ]; then
+          for tarfile in /tmp/docker-images/*.tar; do
+            if [ -f "$tarfile" ]; then
+              echo "Loading $(basename "$tarfile")..."
+              docker load -i "$tarfile" || echo "Warning: Failed to load $tarfile"
+            fi
+          done
+          echo "Cached images loaded successfully"
+          docker images
+        else
+          echo "No cached images directory found"
+        fi
+
+    - name: 🔽 Pull images if not cached
+      if: steps.restore-cache.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        IMAGES: ${{ steps.images.outputs.list }}
+      run: |
+        echo "Pulling Docker images (not in cache)..."
+        mkdir -p /tmp/docker-images
+        
+        echo "$IMAGES" | while IFS= read -r image; do
+          if [ -n "$image" ]; then
+            echo "Pulling $image..."
+            if docker pull "$image" 2>&1; then
+              # Save each image to a separate tar file
+              safe_name=$(echo "$image" | tr '/:' '_')
+              echo "Saving $image to /tmp/docker-images/${safe_name}.tar"
+              docker save -o "/tmp/docker-images/${safe_name}.tar" "$image"
+            else
+              echo "Warning: Failed to pull $image - continuing anyway"
+            fi
+          fi
+        done
+        
+        echo "Images pulled and saved"
+        ls -lh /tmp/docker-images/
+
+    - name: 💾 Save Docker images to cache
+      if: steps.restore-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@9255dc7a253b0ccc959486e2bca901246202afeb # v5.0.1
+      with:
+        path: /tmp/docker-images
+        key: ${{ steps.cache-key.outputs.key }}

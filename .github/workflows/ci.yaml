@@ -254,6 +254,12 @@ jobs:
           source-hash: ${{ hashFiles('go.mod', 'go.sum', '**/*.go') }}
           output-path: /usr/local/bin/ksail
 
+      - name: 📦 Cache Docker Images
+        if: matrix.provider == 'Docker'
+        uses: ./.github/actions/cache-docker-images
+        with:
+          distribution: ${{ matrix.distribution }}
+
       - name: 🧪 Run KSail System Test
         uses: ./.github/actions/ksail-system-test
         with:
