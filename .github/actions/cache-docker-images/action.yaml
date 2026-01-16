@@ -231,7 +231,7 @@ runs:
         # Export images one by one to handle corrupted manifests gracefully
         # First, try to export all at once (faster if all images are healthy)
         echo "Attempting bulk export..."
-        if docker exec "$CONTAINER_NAME" sh -c "$CTR_CMD -n k8s.io images export /tmp/images.tar \$($CTR_CMD -n k8s.io images ls -q)" 2>&1; then
+        if docker exec "$CONTAINER_NAME" sh -c "${CTR_CMD} -n k8s.io images export /tmp/images.tar \$(${CTR_CMD} -n k8s.io images ls -q)" 2>&1; then
           echo "Bulk export succeeded"
         else
           echo "Bulk export failed, falling back to individual image export..."
