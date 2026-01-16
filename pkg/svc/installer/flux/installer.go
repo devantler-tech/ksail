@@ -70,7 +70,8 @@ func (b *FluxInstaller) helmInstallOrUpgradeFluxOperator(ctx context.Context) er
 	// Note: This installer calls client.InstallOrUpgradeChart directly (not the
 	// helm.InstallOrUpgradeChart helper) because OCI charts don't require repository
 	// registration. Therefore, we must apply the context timeout buffer here.
-	contextTimeout := b.timeout + (5 * time.Minute)
+	contextTimeout := b.timeout + helm.ContextTimeoutBuffer
+
 	timeoutCtx, cancel := context.WithTimeout(ctx, contextTimeout)
 	defer cancel()
 

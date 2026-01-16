@@ -10,7 +10,6 @@ import (
 	v1alpha1 "github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
 	"github.com/devantler-tech/ksail/v5/pkg/k8s"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/installer"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/installer/cni"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -179,28 +178,6 @@ func talosCalicoValues() map[string]string {
 		"installation.calicoNetwork.ipPools[0].natOutgoing":   `"Enabled"`,
 		"installation.calicoNetwork.ipPools[0].nodeSelector":  `"all()"`,
 	}
-}
-
-func (c *CalicoInstaller) waitForReadiness(ctx context.Context) error {
-	checks := []k8s.ReadinessCheck{
-		{Type: "deployment", Namespace: "tigera-operator", Name: "tigera-operator"},
-		{Type: "daemonset", Namespace: "calico-system", Name: "calico-node"},
-		{Type: "deployment", Namespace: "calico-system", Name: "calico-kube-controllers"},
-	}
-
-	err := installer.WaitForResourceReadiness(
-		ctx,
-		c.GetKubeconfig(),
-		c.GetContext(),
-		checks,
-		c.GetTimeout(),
-		"calico",
-	)
-	if err != nil {
-		return fmt.Errorf("wait for calico readiness: %w", err)
-	}
-
-	return nil
 }
 
 func (c *CalicoInstaller) waitForCalicoCRDs(ctx context.Context) error {

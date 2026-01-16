@@ -65,7 +65,7 @@ func NewInstallerBase(
 // WaitForReadiness is a no-op since Helm v4 kstatus wait (Wait: true) already
 // ensures all resources are fully reconciled during installation.
 // This method exists for interface compatibility with legacy code.
-func (b *InstallerBase) WaitForReadiness(ctx context.Context) error {
+func (b *InstallerBase) WaitForReadiness(_ context.Context) error {
 	return nil
 }
 

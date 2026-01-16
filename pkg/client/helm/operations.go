@@ -6,6 +6,12 @@ import (
 	"time"
 )
 
+const (
+	// ContextTimeoutBuffer is the additional time added to the Helm timeout to ensure
+	// the Go context doesn't cancel prematurely while Helm's kstatus wait is running.
+	ContextTimeoutBuffer = 5 * time.Minute
+)
+
 // InstallOrUpgradeChart performs a Helm install or upgrade operation.
 func InstallOrUpgradeChart(
 	ctx context.Context,
@@ -42,7 +48,8 @@ func InstallOrUpgradeChart(
 	// Set context deadline longer than Helm timeout to ensure Helm has
 	// sufficient time to complete its kstatus-based wait operation.
 	// Add 5 minutes buffer to the Helm timeout.
-	contextTimeout := timeout + (5 * time.Minute)
+	contextTimeout := timeout + ContextTimeoutBuffer
+
 	timeoutCtx, cancel := context.WithTimeout(ctx, contextTimeout)
 	defer cancel()
 
