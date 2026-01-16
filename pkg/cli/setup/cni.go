@@ -21,10 +21,9 @@ import (
 // ErrUnsupportedCNI is returned when an unsupported CNI type is encountered.
 var ErrUnsupportedCNI = errors.New("unsupported CNI type")
 
-// cniInstaller provides methods for installing and waiting for CNI readiness.
+// cniInstaller provides methods for installing CNI components.
 type cniInstaller interface {
 	Install(ctx context.Context) error
-	WaitForReadiness(ctx context.Context) error
 }
 
 // cniSetupResult contains common resources prepared for CNI installation.
@@ -150,17 +149,6 @@ func runCNIInstallation(
 	err := inst.Install(cmd.Context())
 	if err != nil {
 		return fmt.Errorf("%s installation failed: %w", cniName, err)
-	}
-
-	notify.WriteMessage(notify.Message{
-		Type:    notify.ActivityType,
-		Content: "awaiting " + strings.ToLower(cniName) + " to be ready",
-		Writer:  cmd.OutOrStdout(),
-	})
-
-	err = inst.WaitForReadiness(cmd.Context())
-	if err != nil {
-		return fmt.Errorf("%s readiness check failed: %w", cniName, err)
 	}
 
 	notify.WriteMessage(notify.Message{

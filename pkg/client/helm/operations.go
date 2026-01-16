@@ -41,8 +41,8 @@ func InstallOrUpgradeChart(
 
 	// Set context deadline longer than Helm timeout to ensure Helm has
 	// sufficient time to complete its kstatus-based wait operation.
-	// Add 30 seconds buffer to the Helm timeout.
-	contextTimeout := timeout + (30 * time.Second)
+	// Add 5 minutes buffer to the Helm timeout.
+	contextTimeout := timeout + (5 * time.Minute)
 	timeoutCtx, cancel := context.WithTimeout(ctx, contextTimeout)
 	defer cancel()
 

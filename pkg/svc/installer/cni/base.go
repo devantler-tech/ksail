@@ -67,23 +67,10 @@ func NewInstallerBase(
 	}
 }
 
-// WaitForReadiness waits for the CNI components to become ready.
-//
-// Note: With Helm v4 kstatus wait enabled (Wait: true in ChartSpec),
-// Helm already waits for all resources to be fully reconciled during installation.
-// This additional wait is primarily for backward compatibility and edge cases
-// where Helm installation completes but custom validation is needed.
-// In most cases, this will return immediately as resources are already ready.
+// WaitForReadiness is a no-op since Helm v4 kstatus wait (Wait: true) already
+// ensures all resources are fully reconciled during installation.
+// This method is kept for interface compatibility but does nothing.
 func (b *InstallerBase) WaitForReadiness(ctx context.Context) error {
-	if b.waitFn == nil {
-		return nil
-	}
-
-	err := b.waitFn(ctx)
-	if err != nil {
-		return fmt.Errorf("wait for readiness: %w", err)
-	}
-
 	return nil
 }
 
