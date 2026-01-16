@@ -23,13 +23,13 @@ const (
 
 // InstallerBase provides common fields and methods for CNI installers.
 // It encapsulates shared functionality like Helm client management, kubeconfig handling,
-// timeout management, and readiness checks. CNI implementations should embed this type
-// as a pointer (*cni.InstallerBase) to inherit these capabilities.
+// and timeout management. CNI implementations should embed this type as a pointer
+// (*cni.InstallerBase) to inherit these capabilities.
 //
 // Note: Helm chart installation utilities have been moved to pkg/client/helm package
-// (helm.InstallOrUpgradeChart, helm.RepoConfig, helm.ChartConfig). Readiness checking
-// utilities are available via installer.WaitForResourceReadiness (pkg/svc/installer/readiness.go)
-// which wraps the lower-level k8s.WaitForMultipleResources from pkg/k8s package.
+// (helm.InstallOrUpgradeChart, helm.RepoConfig, helm.ChartConfig). With Helm v4 kstatus
+// wait enabled, all resource readiness checking is handled by Helm's StatusWatcher during
+// installation, eliminating the need for custom wait functions.
 //
 // Example usage:
 //
@@ -39,60 +39,34 @@ const (
 //
 //	installer := &MyCNIInstaller{}
 //	installer.InstallerBase = cni.NewInstallerBase(
-//	    helmClient, kubeconfig, context, timeout, installer.waitForReadiness,
+//	    helmClient, kubeconfig, context, timeout,
 //	)
 type InstallerBase struct {
 	kubeconfig string
 	context    string
 	timeout    time.Duration
 	client     helm.Interface
-	waitFn     func(context.Context) error
 }
 
 // NewInstallerBase creates a new base installer instance with the provided configuration.
-// The waitFn parameter allows CNI implementations to provide custom readiness checking logic.
-// If waitFn is nil, readiness checks are skipped.
 func NewInstallerBase(
 	client helm.Interface,
 	kubeconfig, context string,
 	timeout time.Duration,
-	waitFn func(context.Context) error,
 ) *InstallerBase {
 	return &InstallerBase{
 		client:     client,
 		kubeconfig: kubeconfig,
 		context:    context,
 		timeout:    timeout,
-		waitFn:     waitFn,
 	}
 }
 
-// WaitForReadiness waits for the CNI components to become ready.
-func (b *InstallerBase) WaitForReadiness(ctx context.Context) error {
-	if b.waitFn == nil {
-		return nil
-	}
-
-	err := b.waitFn(ctx)
-	if err != nil {
-		return fmt.Errorf("wait for readiness: %w", err)
-	}
-
+// WaitForReadiness is a no-op since Helm v4 kstatus wait (Wait: true) already
+// ensures all resources are fully reconciled during installation.
+// This method exists for interface compatibility with legacy code.
+func (b *InstallerBase) WaitForReadiness(_ context.Context) error {
 	return nil
-}
-
-// SetWaitForReadinessFunc overrides the readiness wait function. Primarily used for testing.
-func (b *InstallerBase) SetWaitForReadinessFunc(
-	waitFunc func(context.Context) error,
-	defaultWaitFn func(context.Context) error,
-) {
-	if waitFunc == nil {
-		b.waitFn = defaultWaitFn
-
-		return
-	}
-
-	b.waitFn = waitFunc
 }
 
 // BuildRESTConfig builds a Kubernetes REST configuration.
@@ -157,16 +131,4 @@ func (b *InstallerBase) GetKubeconfig() string {
 // GetContext returns the kubeconfig context.
 func (b *InstallerBase) GetContext() string {
 	return b.context
-}
-
-// GetWaitFn returns the wait function for testing purposes.
-// This method is primarily used in tests to verify wait function behavior.
-func (b *InstallerBase) GetWaitFn() func(context.Context) error {
-	return b.waitFn
-}
-
-// SetWaitFn sets the wait function directly for testing purposes.
-// This is a low-level method used primarily in tests. Prefer using SetWaitForReadinessFunc for production code.
-func (b *InstallerBase) SetWaitFn(fn func(context.Context) error) {
-	b.waitFn = fn
 }

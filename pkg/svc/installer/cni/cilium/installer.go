@@ -8,8 +8,6 @@ import (
 
 	v1alpha1 "github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
-	"github.com/devantler-tech/ksail/v5/pkg/k8s"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/installer"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/installer/cni"
 )
 
@@ -44,7 +42,6 @@ func NewCiliumInstallerWithDistribution(
 		kubeconfig,
 		context,
 		timeout,
-		ciliumInstaller.waitForReadiness,
 	)
 
 	return ciliumInstaller
@@ -67,11 +64,6 @@ func (c *CiliumInstaller) Install(ctx context.Context) error {
 	}
 
 	return nil
-}
-
-// SetWaitForReadinessFunc overrides the readiness wait function. Primarily used for testing.
-func (c *CiliumInstaller) SetWaitForReadinessFunc(waitFunc func(context.Context) error) {
-	c.InstallerBase.SetWaitForReadinessFunc(waitFunc, c.waitForReadiness)
 }
 
 // Uninstall removes the Helm release for Cilium.
@@ -174,25 +166,4 @@ func talosCiliumValues() map[string]string {
 		"securityContext.capabilities.ciliumAgent":      ciliumAgentCaps,
 		"securityContext.capabilities.cleanCiliumState": cleanCiliumStateCaps,
 	}
-}
-
-func (c *CiliumInstaller) waitForReadiness(ctx context.Context) error {
-	checks := []k8s.ReadinessCheck{
-		{Type: "daemonset", Namespace: "kube-system", Name: "cilium"},
-		{Type: "deployment", Namespace: "kube-system", Name: "cilium-operator"},
-	}
-
-	err := installer.WaitForResourceReadiness(
-		ctx,
-		c.GetKubeconfig(),
-		c.GetContext(),
-		checks,
-		c.GetTimeout(),
-		"cilium",
-	)
-	if err != nil {
-		return fmt.Errorf("wait for cilium readiness: %w", err)
-	}
-
-	return nil
 }

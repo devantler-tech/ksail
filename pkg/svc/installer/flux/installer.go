@@ -56,12 +56,23 @@ func (b *FluxInstaller) helmInstallOrUpgradeFluxOperator(ctx context.Context) er
 		Atomic:          true,
 		UpgradeCRDs:     true,
 		Timeout:         b.timeout,
+		Wait:            true,
+		WaitForJobs:     true,
 		// Silence Helm stderr because the Flux operator CRDs emit harmless
 		// "unrecognized format" warnings that confuse users if printed.
 		Silent: true,
 	}
 
-	timeoutCtx, cancel := context.WithTimeout(ctx, b.timeout)
+	// Set context deadline longer than Helm timeout to ensure Helm has
+	// sufficient time to complete its kstatus-based wait operation.
+	// Add 5 minutes buffer to the Helm timeout.
+	//
+	// Note: This installer calls client.InstallOrUpgradeChart directly (not the
+	// helm.InstallOrUpgradeChart helper) because OCI charts don't require repository
+	// registration. Therefore, we must apply the context timeout buffer here.
+	contextTimeout := b.timeout + helm.ContextTimeoutBuffer
+
+	timeoutCtx, cancel := context.WithTimeout(ctx, contextTimeout)
 	defer cancel()
 
 	_, err := b.client.InstallOrUpgradeChart(timeoutCtx, spec)

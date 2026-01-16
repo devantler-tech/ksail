@@ -255,10 +255,22 @@ SOPS supports multiple key management backends:
 
 [Helm](https://helm.sh/) is the package manager for Kubernetes. It uses charts to define, install, and upgrade applications.
 
+### kstatus Wait Support
+
+KSail uses Helm v4 which includes support for [HIP-0022](https://helm.sh/community/hips/hip-0022/) – enhanced resource waiting using [kstatus](https://github.com/kubernetes-sigs/cli-utils/blob/master/pkg/kstatus/README.md). When `Wait: true` is enabled in chart installations, Helm leverages kstatus to:
+
+- **Wait for custom resources** to be ready (not just built-in resources)
+- **Ensure full reconciliation** of all resources (including cleanup of old pods in deployments)
+- **Monitor status conditions** using the standard Kubernetes ready condition
+
+All KSail component installers use kstatus-based waiting to ensure reliable deployments.
+
 **Key resources:**
 
 - [Helm Documentation](https://helm.sh/docs/)
 - [Helm Charts](https://helm.sh/docs/topics/charts/)
+- [HIP-0022: Wait With kstatus](https://helm.sh/community/hips/hip-0022/)
+- [kstatus Documentation](https://github.com/kubernetes-sigs/cli-utils/blob/master/pkg/kstatus/README.md)
 - [Artifact Hub](https://artifacthub.io/) – Find and publish Helm charts
 
 ## Next Steps
