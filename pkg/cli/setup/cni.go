@@ -98,14 +98,6 @@ func installCiliumCNI(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster, tmr time
 		return err
 	}
 
-	err = setup.helmClient.AddRepository(cmd.Context(), &helm.RepositoryEntry{
-		Name: "cilium",
-		URL:  "https://helm.cilium.io/",
-	}, setup.timeout)
-	if err != nil {
-		return fmt.Errorf("failed to add Cilium Helm repository: %w", err)
-	}
-
 	ciliumInst := ciliuminstaller.NewCiliumInstallerWithDistribution(
 		setup.helmClient,
 		setup.kubeconfig,
@@ -122,6 +114,8 @@ func installCalicoCNI(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster, tmr time
 	if err != nil {
 		return err
 	}
+
+	setup.timeout = installer.MaxTimeout(setup.timeout, installer.CalicoInstallTimeout)
 
 	calicoInst := calicoinstaller.NewCalicoInstallerWithDistribution(
 		setup.helmClient,
