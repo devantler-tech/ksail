@@ -220,6 +220,14 @@ runs:
         ksail workload push --path "$GITOPS_PATH/"
         ksail workload reconcile
 
+    - name: 💾 Save containerd image cache
+      if: always() && inputs.provider == 'Docker'
+      uses: ./.github/actions/cache-docker-images
+      with:
+        cluster-name: ${{ steps.cluster-name.outputs.name }}
+        distribution: ${{ inputs.distribution }}
+        operation: save
+
     - name: 🐞 Debug workload failure
       if: failure() && (steps.workload-create.outcome == 'failure' || steps.workload-apply.outcome == 'failure' || steps.workload-push-reconcile.outcome == 'failure')
       uses: ./.github/actions/debug-kubernetes-failure
@@ -239,14 +247,6 @@ runs:
         HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
       run: |
         ksail cluster start
-
-    - name: 💾 Save containerd image cache
-      if: always() && inputs.provider == 'Docker'
-      uses: ./.github/actions/cache-docker-images
-      with:
-        cluster-name: ${{ steps.cluster-name.outputs.name }}
-        distribution: ${{ inputs.distribution }}
-        operation: save
 
     - name: 🧪 ksail cluster delete
       if: always()
