@@ -69,8 +69,9 @@ runs:
                 container_name=$(docker ps -a --filter "name=${CLUSTER_NAME}-control-plane" --format "{{.Names}}" | head -1)
                 ;;
               k3s)
-                # K3d uses pattern: k3d-<cluster-name>-server-*
-                container_name=$(docker ps -a --filter "name=k3d-${CLUSTER_NAME}-server" --format "{{.Names}}" | head -1)
+                # K3d uses pattern: k3d-<cluster-name>-server-N (excluding serverlb)
+                # We need to specifically match server-N pattern and exclude serverlb
+                container_name=$(docker ps -a --filter "name=k3d-${CLUSTER_NAME}-server-" --format "{{.Names}}" | grep -v "serverlb" | head -1)
                 ;;
               talos)
                 # Talos uses labels, find by label
@@ -151,8 +152,9 @@ runs:
                 container_name=$(docker ps -a --filter "name=${CLUSTER_NAME}-control-plane" --format "{{.Names}}" | head -1)
                 ;;
               k3s)
-                # K3d uses pattern: k3d-<cluster-name>-server-*
-                container_name=$(docker ps -a --filter "name=k3d-${CLUSTER_NAME}-server" --format "{{.Names}}" | head -1)
+                # K3d uses pattern: k3d-<cluster-name>-server-N (excluding serverlb)
+                # We need to specifically match server-N pattern and exclude serverlb
+                container_name=$(docker ps -a --filter "name=k3d-${CLUSTER_NAME}-server-" --format "{{.Names}}" | grep -v "serverlb" | head -1)
                 ;;
               talos)
                 # Talos uses labels, find by label
