@@ -108,8 +108,11 @@ runs:
       run: |
         # Extract cluster name from --name arg if present, otherwise use default
         CLUSTER_NAME=""
-        if [[ "$ARGS" == *"--name "* ]]; then
-          # Extract name after --name flag
+        if [[ "$ARGS" == *"--name="* ]]; then
+          # Extract name from --name=VALUE form
+          CLUSTER_NAME=$(echo "$ARGS" | sed -n 's/.*--name=\([^ ]*\).*/\1/p')
+        elif [[ "$ARGS" == *"--name "* ]]; then
+          # Extract name from --name VALUE form
           CLUSTER_NAME=$(echo "$ARGS" | sed -n 's/.*--name \([^ ]*\).*/\1/p')
         fi
 
