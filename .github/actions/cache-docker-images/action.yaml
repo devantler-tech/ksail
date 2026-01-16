@@ -1,15 +1,21 @@
-name: Cache Docker Images
-description: Cache Docker images to avoid rate limiting when pulling images for kind, k3d, and talos clusters
+name: Cache Containerd Images
+description: Cache containerd images from inside Kubernetes clusters to avoid rate limiting when pulling deployment images
 author: Devantler Tech Platform Team
 
 inputs:
+  cluster-name:
+    description: Name of the cluster to cache images from
+    required: true
   distribution:
     description: Kubernetes distribution (Vanilla, K3s, Talos)
     required: true
-  cache-key-suffix:
-    description: Optional suffix for cache key (useful for versioning)
-    required: false
-    default: ""
+  provider:
+    description: Infrastructure provider (Docker, Hetzner)
+    required: true
+    default: "Docker"
+  operation:
+    description: Operation to perform (restore, save)
+    required: true
 
 outputs:
   cache-hit:
@@ -24,135 +30,128 @@ runs:
       shell: bash
       env:
         DISTRIBUTION: ${{ inputs.distribution }}
-        CACHE_KEY_SUFFIX: ${{ inputs.cache-key-suffix }}
       run: |
         # Generate cache key based on distribution
+        # This caches containerd images from deployment manifests (cert-manager, flux, argocd, etc.)
         DIST_LOWER=$(echo "$DISTRIBUTION" | tr '[:upper:]' '[:lower:]')
-        
-        # Set default images based on distribution
-        case "$DIST_LOWER" in
-          vanilla)
-            # Kind uses kindest/node images - we'll cache common versions
-            CACHE_KEY="docker-images-kind-v1"
-            ;;
-          k3s)
-            # K3d uses rancher/k3s images
-            CACHE_KEY="docker-images-k3s-v1"
-            ;;
-          talos)
-            # Talos uses ghcr.io/siderolabs/talos images
-            CACHE_KEY="docker-images-talos-v1"
-            ;;
-          *)
-            echo "Unknown distribution: $DISTRIBUTION"
-            CACHE_KEY="docker-images-unknown-v1"
-            ;;
-        esac
-        
-        if [ -n "$CACHE_KEY_SUFFIX" ]; then
-          CACHE_KEY="${CACHE_KEY}-${CACHE_KEY_SUFFIX}"
-        fi
+        CACHE_KEY="containerd-images-${DIST_LOWER}-v1"
         
         echo "key=$CACHE_KEY" >> "$GITHUB_OUTPUT"
         echo "Generated cache key: $CACHE_KEY"
 
-    - name: 🔍 Determine images to cache
-      id: images
+    - name: ♻️ Restore cached containerd images
+      if: inputs.operation == 'restore' && inputs.provider == 'Docker'
+      id: restore-cache
+      uses: actions/cache/restore@9255dc7a253b0ccc959486e2bca901246202afeb # v5.0.1
+      with:
+        path: /tmp/containerd-cache
+        key: ${{ steps.cache-key.outputs.key }}
+
+    - name: 📦 Load cached images into cluster
+      if: inputs.operation == 'restore' && inputs.provider == 'Docker' && steps.restore-cache.outputs.cache-hit == 'true'
       shell: bash
       env:
+        CLUSTER_NAME: ${{ inputs.cluster-name }}
         DISTRIBUTION: ${{ inputs.distribution }}
       run: |
+        echo "Loading cached containerd images into cluster..."
+        
+        # Determine container name based on distribution
         DIST_LOWER=$(echo "$DISTRIBUTION" | tr '[:upper:]' '[:lower:]')
         
         case "$DIST_LOWER" in
           vanilla)
-            # Kind commonly uses these kindest/node images
-            # We cache multiple versions to cover different Kubernetes versions
-            IMAGES="kindest/node:v1.31.0
-        kindest/node:v1.30.0
-        kindest/node:v1.29.0"
+            # Kind uses pattern: <cluster-name>-control-plane
+            CONTAINER_NAME="${CLUSTER_NAME}-control-plane"
             ;;
           k3s)
-            # K3d commonly uses these rancher/k3s images
-            IMAGES="rancher/k3s:v1.31.0-k3s1
-        rancher/k3s:v1.30.0-k3s1
-        rancher/k3s:v1.29.0-k3s1"
+            # K3d uses pattern: k3d-<cluster-name>-server-0
+            CONTAINER_NAME="k3d-${CLUSTER_NAME}-server-0"
             ;;
           talos)
-            # Talos uses these images
-            IMAGES="ghcr.io/siderolabs/talos:v1.12.0
-        ghcr.io/siderolabs/installer:v1.12.0"
+            # Talos uses pattern: talos-<cluster-name>-controlplane-1
+            CONTAINER_NAME="talos-${CLUSTER_NAME}-controlplane-1"
             ;;
           *)
             echo "Unknown distribution: $DISTRIBUTION"
-            IMAGES=""
+            exit 1
             ;;
         esac
         
-        # Export images as multiline output
-        {
-          echo "list<<EOF"
-          echo "$IMAGES"
-          echo "EOF"
-        } >> "$GITHUB_OUTPUT"
+        echo "Using container: $CONTAINER_NAME"
         
-        echo "Images to cache for $DISTRIBUTION:"
-        echo "$IMAGES"
-
-    - name: ♻️ Restore cached Docker images
-      id: restore-cache
-      uses: actions/cache/restore@9255dc7a253b0ccc959486e2bca901246202afeb # v5.0.1
-      with:
-        path: /tmp/docker-images
-        key: ${{ steps.cache-key.outputs.key }}
-
-    - name: 📦 Load cached images
-      if: steps.restore-cache.outputs.cache-hit == 'true'
-      shell: bash
-      run: |
-        echo "Loading cached Docker images..."
-        if [ -d "/tmp/docker-images" ]; then
-          for tarfile in /tmp/docker-images/*.tar; do
-            if [ -f "$tarfile" ]; then
-              echo "Loading $(basename "$tarfile")..."
-              docker load -i "$tarfile" || echo "Warning: Failed to load $tarfile"
-            fi
-          done
+        # Check if cache exists and load images
+        if [ -f "/tmp/containerd-cache/images.tar" ]; then
+          echo "Importing cached images into containerd..."
+          
+          # Copy tar file into container
+          docker cp /tmp/containerd-cache/images.tar "$CONTAINER_NAME":/tmp/images.tar
+          
+          # Import images into containerd
+          # Use ctr (containerd CLI) to import images
+          docker exec "$CONTAINER_NAME" sh -c "ctr -n k8s.io images import /tmp/images.tar || true"
+          
+          # Clean up
+          docker exec "$CONTAINER_NAME" rm -f /tmp/images.tar
+          
           echo "Cached images loaded successfully"
-          docker images
         else
-          echo "No cached images directory found"
+          echo "No cached images found"
         fi
 
-    - name: 🔽 Pull images if not cached
-      if: steps.restore-cache.outputs.cache-hit != 'true'
+    - name: 💾 Export containerd images from cluster
+      if: inputs.operation == 'save' && inputs.provider == 'Docker'
       shell: bash
       env:
-        IMAGES: ${{ steps.images.outputs.list }}
+        CLUSTER_NAME: ${{ inputs.cluster-name }}
+        DISTRIBUTION: ${{ inputs.distribution }}
       run: |
-        echo "Pulling Docker images (not in cache)..."
-        mkdir -p /tmp/docker-images
+        echo "Exporting containerd images from cluster..."
         
-        echo "$IMAGES" | while IFS= read -r image; do
-          if [ -n "$image" ]; then
-            echo "Pulling $image..."
-            if docker pull "$image" 2>&1; then
-              # Save each image to a separate tar file
-              safe_name=$(echo "$image" | tr '/:' '_')
-              echo "Saving $image to /tmp/docker-images/${safe_name}.tar"
-              docker save -o "/tmp/docker-images/${safe_name}.tar" "$image"
-            else
-              echo "Warning: Failed to pull $image - continuing anyway"
-            fi
-          fi
-        done
+        # Determine container name based on distribution
+        DIST_LOWER=$(echo "$DISTRIBUTION" | tr '[:upper:]' '[:lower:]')
         
-        echo "Images pulled and saved"
-        ls -lh /tmp/docker-images/
+        case "$DIST_LOWER" in
+          vanilla)
+            CONTAINER_NAME="${CLUSTER_NAME}-control-plane"
+            ;;
+          k3s)
+            CONTAINER_NAME="k3d-${CLUSTER_NAME}-server-0"
+            ;;
+          talos)
+            CONTAINER_NAME="talos-${CLUSTER_NAME}-controlplane-1"
+            ;;
+          *)
+            echo "Unknown distribution: $DISTRIBUTION"
+            exit 1
+            ;;
+        esac
+        
+        echo "Using container: $CONTAINER_NAME"
+        
+        # Create cache directory
+        mkdir -p /tmp/containerd-cache
+        
+        # Export all images from containerd
+        # Use ctr to export images
+        echo "Listing images in containerd..."
+        docker exec "$CONTAINER_NAME" ctr -n k8s.io images ls
+        
+        echo "Exporting images to tar archive..."
+        docker exec "$CONTAINER_NAME" sh -c "ctr -n k8s.io images export /tmp/images.tar \$(ctr -n k8s.io images ls -q) || true"
+        
+        # Copy tar file from container to host
+        docker cp "$CONTAINER_NAME":/tmp/images.tar /tmp/containerd-cache/images.tar
+        
+        # Clean up inside container
+        docker exec "$CONTAINER_NAME" rm -f /tmp/images.tar
+        
+        echo "Images exported successfully"
+        ls -lh /tmp/containerd-cache/
 
-    - name: 💾 Save Docker images to cache
-      if: steps.restore-cache.outputs.cache-hit != 'true'
+    - name: 💾 Save containerd images to cache
+      if: inputs.operation == 'save' && inputs.provider == 'Docker'
       uses: actions/cache/save@9255dc7a253b0ccc959486e2bca901246202afeb # v5.0.1
       with:
-        path: /tmp/docker-images
+        path: /tmp/containerd-cache
         key: ${{ steps.cache-key.outputs.key }}

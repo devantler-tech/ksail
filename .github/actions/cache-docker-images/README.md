@@ -1,51 +1,87 @@
-# Cache Docker Images
+# Cache Containerd Images
 
-This composite action caches Docker images used by Kind, K3d, and Talos to avoid rate limiting errors when pulling images during CI workflows.
+This composite action caches containerd images from inside Kubernetes clusters to avoid rate limiting errors when pulling deployment images during CI workflows.
 
 ## Purpose
 
-The system tests in the CI workflow frequently pull Docker images for different Kubernetes distributions:
-- **Vanilla (Kind)**: Uses `kindest/node` images from Docker Hub
-- **K3s (K3d)**: Uses `rancher/k3s` images from Docker Hub  
-- **Talos**: Uses `ghcr.io/siderolabs/talos` and `ghcr.io/siderolabs/installer` images from GHCR
+The system tests in the CI workflow deploy various applications (cert-manager, flux, argocd, cilium, calico, etc.) into Kubernetes clusters. These deployments pull images from container registries using **containerd inside the cluster containers** (Kind, K3d, or Talos nodes).
 
-Without caching, each workflow run pulls these images fresh, which can lead to:
-- Rate limiting errors (429 responses) from container registries
+Without caching, each workflow run pulls these deployment images fresh from registries, which can lead to:
+- **Rate limiting errors (429 responses)** from Docker Hub, GHCR, and other registries
 - Slower workflow execution times
 - Unreliable CI runs
 
 This action solves these issues by:
-1. Saving pulled images to tar archives
-2. Caching the archives using GitHub Actions cache
-3. Restoring and loading images on subsequent runs
+1. Exporting containerd images from the cluster after deployments are applied
+2. Caching the exported images using GitHub Actions cache
+3. Restoring and importing images into containerd on subsequent runs
+
+## How It Works
+
+### Restore Operation
+1. Attempts to restore cached containerd images from previous workflow runs
+2. If cache hit, copies the image archive into the cluster container
+3. Uses `ctr` (containerd CLI) to import images into containerd's image store
+4. Subsequent deployments use the cached images instead of pulling from registries
+
+### Save Operation
+1. After deployments complete, lists all images in containerd
+2. Uses `ctr` to export all images to a tar archive
+3. Copies the archive from the cluster container to the host
+4. Saves the archive to GitHub Actions cache for future runs
 
 ## Inputs
 
-### `distribution` (required)
-Kubernetes distribution type. Determines which images to cache.
-- **Vanilla**: Caches Kind images (`kindest/node`)
-- **K3s**: Caches K3d images (`rancher/k3s`)
-- **Talos**: Caches Talos images (`ghcr.io/siderolabs/talos`, `ghcr.io/siderolabs/installer`)
+### `cluster-name` (required)
+Name of the cluster to cache images from/to.
 
-### `cache-key-suffix` (optional)
-Optional suffix for the cache key. Useful for versioning or invalidating the cache.
-- Default: `""`
+### `distribution` (required)
+Kubernetes distribution type. Determines the container naming pattern:
+- **Vanilla**: Kind containers (pattern: `<cluster-name>-control-plane`)
+- **K3s**: K3d containers (pattern: `k3d-<cluster-name>-server-0`)
+- **Talos**: Talos containers (pattern: `talos-<cluster-name>-controlplane-1`)
+
+### `provider` (required)
+Infrastructure provider. Currently only `Docker` is supported (Hetzner clusters don't use local containers).
+- Default: `"Docker"`
+
+### `operation` (required)
+Operation to perform:
+- **`restore`**: Restore and import cached images before deployments
+- **`save`**: Export and save images after deployments
 
 ## Outputs
 
 ### `cache-hit`
-Whether the cache was hit (`'true'` or `'false'`).
+Whether the cache was hit during restore operation (`'true'` or `'false'`).
 
 ## Usage
 
+### Restore Images Before Deployments
+
 ```yaml
-- name: 📦 Cache Docker Images
+- name: 📦 Restore Containerd Cache
   uses: ./.github/actions/cache-docker-images
   with:
+    cluster-name: my-cluster
     distribution: Vanilla
+    provider: Docker
+    operation: restore
 ```
 
-## Example Integration
+### Save Images After Deployments
+
+```yaml
+- name: 💾 Save Containerd Cache
+  uses: ./.github/actions/cache-docker-images
+  with:
+    cluster-name: my-cluster
+    distribution: Vanilla
+    provider: Docker
+    operation: save
+```
+
+## Complete Example
 
 ```yaml
 jobs:
@@ -55,33 +91,69 @@ jobs:
       - name: 📄 Checkout
         uses: actions/checkout@v6
       
-      - name: 📦 Cache Docker Images
+      - name: 📦 Restore Containerd Cache
         uses: ./.github/actions/cache-docker-images
         with:
+          cluster-name: test-cluster
           distribution: ${{ matrix.distribution }}
+          provider: Docker
+          operation: restore
       
-      - name: 🧪 Run system tests
-        run: ksail cluster create --distribution ${{ matrix.distribution }}
+      - name: 🧪 Create cluster
+        run: ksail cluster create --name test-cluster
+      
+      - name: 🚀 Deploy applications
+        run: |
+          ksail workload apply -k manifests/
+      
+      - name: 💾 Save Containerd Cache
+        if: always()
+        uses: ./.github/actions/cache-docker-images
+        with:
+          cluster-name: test-cluster
+          distribution: ${{ matrix.distribution }}
+          provider: Docker
+          operation: save
+      
+      - name: 🧹 Delete cluster
+        if: always()
+        run: ksail cluster delete
 ```
 
-## How It Works
+## Cache Key Strategy
 
-1. **Generate cache key**: Creates a unique key based on distribution type (e.g., `docker-images-kind-v1`)
-2. **Determine images**: Identifies which images to cache based on the distribution
-3. **Restore cache**: Attempts to restore cached images from previous runs
-4. **Load or pull**: 
-   - If cache hit: Loads images from tar archives
-   - If cache miss: Pulls images from registries and saves to tar archives
-5. **Save cache**: Saves the tar archives for future runs (only on cache miss)
+The cache key is based on the distribution type:
+- `containerd-images-vanilla-v1` for Kind clusters
+- `containerd-images-k3s-v1` for K3d clusters
+- `containerd-images-talos-v1` for Talos clusters
+
+This means all test runs for the same distribution share the same cache, maximizing reuse across different test configurations.
 
 ## Cache Invalidation
 
-To invalidate the cache and force a fresh pull of images:
-1. Increment the version in the cache key (e.g., `v1` → `v2`)
-2. Or provide a different `cache-key-suffix`
+To invalidate the cache and force fresh image pulls:
+1. Increment the version suffix in the cache key (e.g., `v1` → `v2`)
+2. Edit the action's cache key generation logic
 
 ## Limitations
 
+- Only works with Docker provider (not Hetzner cloud clusters)
 - Cache size is limited by GitHub Actions cache limits (10GB per repository)
-- Only caches a predefined set of common image versions
-- Images must be publicly accessible (or credentials must be configured separately)
+- Images are shared across all test configurations for the same distribution
+- Requires the cluster to be running when saving/restoring images
+- Uses `ctr` CLI which must be available in the cluster containers
+
+## Technical Details
+
+### Containerd Namespace
+The action uses the `k8s.io` namespace in containerd, which is where Kubernetes stores container images.
+
+### Container Name Detection
+The action automatically detects the correct container name based on the distribution:
+- Kind: `<cluster-name>-control-plane`
+- K3d: `k3d-<cluster-name>-server-0`
+- Talos: `talos-<cluster-name>-controlplane-1`
+
+### Error Handling
+- Failed imports/exports are logged but don't fail the workflow
+- Allows graceful degradation when cache is corrupted or incompatible

@@ -99,6 +99,42 @@ runs:
         fi
         echo "args=$RESOLVED_ARGS" >> "$GITHUB_OUTPUT"
 
+    - name: 🔧 Determine cluster name
+      id: cluster-name
+      shell: bash
+      env:
+        ARGS: ${{ steps.resolve-args.outputs.args }}
+        DISTRIBUTION: ${{ inputs.distribution }}
+      run: |
+        # Extract cluster name from --name arg if present, otherwise use default
+        CLUSTER_NAME=""
+        if [[ "$ARGS" == *"--name "* ]]; then
+          # Extract name after --name flag
+          CLUSTER_NAME=$(echo "$ARGS" | sed -n 's/.*--name \([^ ]*\).*/\1/p')
+        fi
+        
+        # Use distribution-specific defaults if no name provided
+        if [ -z "$CLUSTER_NAME" ]; then
+          DIST_LOWER=$(echo "$DISTRIBUTION" | tr '[:upper:]' '[:lower:]')
+          case "$DIST_LOWER" in
+            vanilla)
+              CLUSTER_NAME="kind"
+              ;;
+            k3s)
+              CLUSTER_NAME="k3d-default"
+              ;;
+            talos)
+              CLUSTER_NAME="talos-default"
+              ;;
+            *)
+              CLUSTER_NAME="ksail-cluster"
+              ;;
+          esac
+        fi
+        
+        echo "name=$CLUSTER_NAME" >> "$GITHUB_OUTPUT"
+        echo "Cluster name: $CLUSTER_NAME"
+
     - name: 🧪 ksail cluster init
       if: inputs.init == 'true'
       shell: bash
@@ -124,6 +160,15 @@ runs:
         else
           ksail cluster create --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS
         fi
+
+    - name: 📦 Restore containerd image cache
+      if: inputs.provider == 'Docker'
+      uses: ./.github/actions/cache-docker-images
+      with:
+        cluster-name: ${{ steps.cluster-name.outputs.name }}
+        distribution: ${{ inputs.distribution }}
+        provider: ${{ inputs.provider }}
+        operation: restore
 
     - name: 🧪 ksail cluster list
       shell: bash
@@ -192,6 +237,15 @@ runs:
         HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
       run: |
         ksail cluster start
+
+    - name: 💾 Save containerd image cache
+      if: always() && inputs.provider == 'Docker'
+      uses: ./.github/actions/cache-docker-images
+      with:
+        cluster-name: ${{ steps.cluster-name.outputs.name }}
+        distribution: ${{ inputs.distribution }}
+        provider: ${{ inputs.provider }}
+        operation: save
 
     - name: 🧪 ksail cluster delete
       if: always()
