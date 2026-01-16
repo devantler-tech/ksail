@@ -249,15 +249,20 @@ runs:
             fi
           done <<< "$IMAGE_LIST"
           
+          echo "Export summary: $EXPORT_COUNT images exported, TAR_CREATED=$TAR_CREATED"
+          
+          if [ "$TAR_CREATED" = "false" ]; then
+            echo "Warning: No images could be exported (tar file was never created)"
+            exit 0
+          fi
+          
           if [ $EXPORT_COUNT -gt 0 ]; then
             echo "Successfully exported $EXPORT_COUNT images"
-          else
-            echo "Warning: No images could be exported"
-            exit 0
           fi
         fi
 
         # Copy tar file from container to host if it was created
+        echo "Checking if tar file exists in container..."
         if docker exec "$CONTAINER_NAME" test -f /tmp/images.tar; then
           # Check if the tar file has content
           TAR_SIZE=$(docker exec "$CONTAINER_NAME" stat -c%s /tmp/images.tar 2>/dev/null || echo "0")
