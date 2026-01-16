@@ -63,7 +63,11 @@ func (a *ArgoCDInstaller) helmInstallOrUpgradeArgoCD(ctx context.Context) error 
 		WaitForJobs:     true,
 	}
 
-	timeoutCtx, cancel := context.WithTimeout(ctx, a.timeout)
+	// Set context deadline longer than Helm timeout to ensure Helm has
+	// sufficient time to complete its kstatus-based wait operation.
+	// Add 30 seconds buffer to the Helm timeout.
+	contextTimeout := a.timeout + (30 * time.Second)
+	timeoutCtx, cancel := context.WithTimeout(ctx, contextTimeout)
 	defer cancel()
 
 	_, err := a.client.InstallOrUpgradeChart(timeoutCtx, spec)
