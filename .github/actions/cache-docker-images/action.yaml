@@ -196,18 +196,39 @@ runs:
         echo "Listing images in containerd..."
         docker exec "$CONTAINER_NAME" ctr -n k8s.io images ls
 
+        # Get list of images to export
+        echo "Getting list of images to export..."
+        IMAGE_LIST=$(docker exec "$CONTAINER_NAME" ctr -n k8s.io images ls -q 2>/dev/null || true)
+        
+        if [ -z "$IMAGE_LIST" ]; then
+          echo "No images found in containerd. Skipping cache save."
+          exit 0
+        fi
+
         echo "Exporting images to tar archive..."
-        docker exec "$CONTAINER_NAME" sh -c "ctr -n k8s.io images export /tmp/images.tar \$(ctr -n k8s.io images ls -q) || true"
+        # Export images, but handle potential failures gracefully
+        if docker exec "$CONTAINER_NAME" sh -c "ctr -n k8s.io images export /tmp/images.tar $IMAGE_LIST" 2>&1; then
+          echo "Images export command completed"
+        else
+          echo "Warning: Image export encountered errors, but may have partially succeeded"
+        fi
 
         # Copy tar file from container to host if it was created
         if docker exec "$CONTAINER_NAME" test -f /tmp/images.tar; then
-          docker cp "$CONTAINER_NAME":/tmp/images.tar /tmp/containerd-cache/images.tar
+          # Check if the tar file has content
+          TAR_SIZE=$(docker exec "$CONTAINER_NAME" stat -c%s /tmp/images.tar 2>/dev/null || echo "0")
+          if [ "$TAR_SIZE" -gt 0 ]; then
+            docker cp "$CONTAINER_NAME":/tmp/images.tar /tmp/containerd-cache/images.tar
 
-          # Clean up inside container
-          docker exec "$CONTAINER_NAME" rm -f /tmp/images.tar
+            # Clean up inside container
+            docker exec "$CONTAINER_NAME" rm -f /tmp/images.tar
 
-          echo "Images exported successfully"
-          ls -lh /tmp/containerd-cache/
+            echo "Images exported successfully"
+            ls -lh /tmp/containerd-cache/
+          else
+            echo "Warning: /tmp/images.tar is empty. Skipping containerd image cache export."
+            docker exec "$CONTAINER_NAME" rm -f /tmp/images.tar
+          fi
         else
           echo "Warning: /tmp/images.tar not found in container ${CONTAINER_NAME}. Skipping containerd image cache export."
         fi
