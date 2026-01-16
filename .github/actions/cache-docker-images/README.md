@@ -167,9 +167,11 @@ The action uses the `k8s.io` namespace in containerd, which is where Kubernetes 
 
 The action automatically detects the correct container name based on the distribution:
 
-- Kind: `<cluster-name>-control-plane`
-- K3d: `k3d-<cluster-name>-server-0`
-- Talos: `talos-<cluster-name>-controlplane-1`
+- **Kind (Vanilla)**: Uses name pattern `<cluster-name>-control-plane` (e.g., `kind-control-plane` for default cluster)
+- **K3d (K3s)**: Uses name pattern `k3d-<cluster-name>-server-*` to find server containers. Note: K3d prefixes cluster names with `k3d-`, so a cluster named "k3d-default" will have containers like `k3d-k3d-default-server-0`.
+- **Talos**: Uses label-based filtering with `talos.owned=true`, `talos.cluster.name=<cluster-name>`, and `talos.type=controlplane`. The resulting container names vary but typically follow patterns like `talos-<cluster-name>-controlplane-<number>`.
+
+The action includes retry logic (up to 5 attempts with 2-second delays) to handle timing issues where containers may not be immediately discoverable after cluster creation.
 
 ### Error Handling
 

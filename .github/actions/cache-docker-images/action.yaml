@@ -56,32 +56,56 @@ runs:
       run: |
         echo "Loading cached containerd images into cluster..."
 
-        # Determine container name based on distribution
-        DIST_LOWER=$(echo "$DISTRIBUTION" | tr '[:upper:]' '[:lower:]')
+        # Function to get container name based on distribution
+        get_container_name() {
+          local dist_lower
+          dist_lower=$(echo "$DISTRIBUTION" | tr '[:upper:]' '[:lower:]')
 
-        # Find the first control-plane/server container for the cluster
-        case "$DIST_LOWER" in
-          vanilla)
-            # Kind uses pattern: <cluster-name>-control-plane
-            CONTAINER_NAME=$(docker ps -a --filter "name=${CLUSTER_NAME}-control-plane" --format "{{.Names}}" | head -1)
-            ;;
-          k3s)
-            # K3d uses pattern: k3d-<cluster-name>-server-*
-            CONTAINER_NAME=$(docker ps -a --filter "name=k3d-${CLUSTER_NAME}-server" --format "{{.Names}}" | head -1)
-            ;;
-          talos)
-            # Talos uses labels, find by label
-            CONTAINER_NAME=$(docker ps -a --filter "label=talos.owned=true" --filter "label=talos.cluster.name=${CLUSTER_NAME}" --filter "label=talos.type=controlplane" --format "{{.Names}}" | head -1)
-            ;;
-          *)
-            echo "Unknown distribution: $DISTRIBUTION"
-            exit 1
-            ;;
-        esac
+          local container_name=""
+          local max_retries=5
+          local sleep_seconds=2
 
+          # Find the first control-plane/server container for the cluster, with retries
+          for i in $(seq 1 "$max_retries"); do
+            case "$dist_lower" in
+              vanilla)
+                # Kind uses pattern: <cluster-name>-control-plane
+                container_name=$(docker ps -a --filter "name=${CLUSTER_NAME}-control-plane" --format "{{.Names}}" | head -1)
+                ;;
+              k3s)
+                # K3d uses pattern: k3d-<cluster-name>-server-*
+                container_name=$(docker ps -a --filter "name=k3d-${CLUSTER_NAME}-server" --format "{{.Names}}" | head -1)
+                ;;
+              talos)
+                # Talos uses labels, find by label
+                container_name=$(docker ps -a --filter "label=talos.owned=true" --filter "label=talos.cluster.name=${CLUSTER_NAME}" --filter "label=talos.type=controlplane" --format "{{.Names}}" | head -1)
+                ;;
+              *)
+                echo "Unknown distribution: $DISTRIBUTION" >&2
+                return 1
+                ;;
+            esac
+
+            if [ -n "$container_name" ]; then
+              echo "$container_name"
+              return 0
+            fi
+
+            if [ "$i" -lt "$max_retries" ]; then
+              echo "Container for cluster ${CLUSTER_NAME} not found (attempt ${i}/${max_retries}). Retrying in ${sleep_seconds}s..." >&2
+              sleep "$sleep_seconds"
+            fi
+          done
+
+          echo "Warning: Could not find container for cluster ${CLUSTER_NAME} after ${max_retries} attempts." >&2
+          return 1
+        }
+
+        # Get container name with retries
+        CONTAINER_NAME=$(get_container_name)
         if [ -z "$CONTAINER_NAME" ]; then
-          echo "Error: Could not find container for cluster ${CLUSTER_NAME}"
-          exit 1
+          echo "Skipping cache restore - no container found."
+          exit 0
         fi
 
         echo "Using container: $CONTAINER_NAME"
@@ -114,32 +138,56 @@ runs:
       run: |
         echo "Exporting containerd images from cluster..."
 
-        # Determine container name based on distribution
-        DIST_LOWER=$(echo "$DISTRIBUTION" | tr '[:upper:]' '[:lower:]')
+        # Function to get container name based on distribution
+        get_container_name() {
+          local dist_lower
+          dist_lower=$(echo "$DISTRIBUTION" | tr '[:upper:]' '[:lower:]')
 
-        # Find the first control-plane/server container for the cluster
-        case "$DIST_LOWER" in
-          vanilla)
-            # Kind uses pattern: <cluster-name>-control-plane
-            CONTAINER_NAME=$(docker ps -a --filter "name=${CLUSTER_NAME}-control-plane" --format "{{.Names}}" | head -1)
-            ;;
-          k3s)
-            # K3d uses pattern: k3d-<cluster-name>-server-*
-            CONTAINER_NAME=$(docker ps -a --filter "name=k3d-${CLUSTER_NAME}-server" --format "{{.Names}}" | head -1)
-            ;;
-          talos)
-            # Talos uses labels, find by label
-            CONTAINER_NAME=$(docker ps -a --filter "label=talos.owned=true" --filter "label=talos.cluster.name=${CLUSTER_NAME}" --filter "label=talos.type=controlplane" --format "{{.Names}}" | head -1)
-            ;;
-          *)
-            echo "Unknown distribution: $DISTRIBUTION"
-            exit 1
-            ;;
-        esac
+          local container_name=""
+          local max_retries=5
+          local sleep_seconds=2
 
+          # Find the first control-plane/server container for the cluster, with retries
+          for i in $(seq 1 "$max_retries"); do
+            case "$dist_lower" in
+              vanilla)
+                # Kind uses pattern: <cluster-name>-control-plane
+                container_name=$(docker ps -a --filter "name=${CLUSTER_NAME}-control-plane" --format "{{.Names}}" | head -1)
+                ;;
+              k3s)
+                # K3d uses pattern: k3d-<cluster-name>-server-*
+                container_name=$(docker ps -a --filter "name=k3d-${CLUSTER_NAME}-server" --format "{{.Names}}" | head -1)
+                ;;
+              talos)
+                # Talos uses labels, find by label
+                container_name=$(docker ps -a --filter "label=talos.owned=true" --filter "label=talos.cluster.name=${CLUSTER_NAME}" --filter "label=talos.type=controlplane" --format "{{.Names}}" | head -1)
+                ;;
+              *)
+                echo "Unknown distribution: $DISTRIBUTION" >&2
+                return 1
+                ;;
+            esac
+
+            if [ -n "$container_name" ]; then
+              echo "$container_name"
+              return 0
+            fi
+
+            if [ "$i" -lt "$max_retries" ]; then
+              echo "Container for cluster ${CLUSTER_NAME} not found (attempt ${i}/${max_retries}). Retrying in ${sleep_seconds}s..." >&2
+              sleep "$sleep_seconds"
+            fi
+          done
+
+          echo "Warning: Could not find container for cluster ${CLUSTER_NAME} after ${max_retries} attempts." >&2
+          return 1
+        }
+
+        # Get container name with retries
+        CONTAINER_NAME=$(get_container_name)
         if [ -z "$CONTAINER_NAME" ]; then
-          echo "Error: Could not find container for cluster ${CLUSTER_NAME}"
-          exit 1
+          echo "Skipping cache save - no container found."
+          exit 0
         fi
 
         echo "Using container: $CONTAINER_NAME"
