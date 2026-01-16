@@ -127,7 +127,7 @@ If you use KSail in your project, feel free to open a PR to add it to the list, 
 - [Local Kubernetes Development with KSail and Kind](https://devantler.tech/local-kubernetes-development-with-ksail-and-kind)
 - [Local Kubernetes Development with KSail and K3d](https://devantler.tech/local-kubernetes-development-with-ksail-and-k3d)
 - [Local Kubernetes Development with KSail and Talos](https://devantler.tech/local-kubernetes-development-with-ksail-and-talos)
-- [Creating Development Kubernetes Clusters on Hetzner with KSail and Talos](https://devantler.tech/creating-development-kubernetes-clusters-on-hetzner-with-ksail-and-talos)
+- [Creating Kubernetes Clusters on Hetzner with KSail and Talos](https://devantler.tech/creating-development-kubernetes-clusters-on-hetzner-with-ksail-and-talos)
 
 ## Star History
 
