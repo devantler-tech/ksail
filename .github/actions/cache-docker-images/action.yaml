@@ -199,7 +199,7 @@ runs:
         # Get list of images to export
         echo "Getting list of images to export..."
         IMAGE_LIST=$(docker exec "$CONTAINER_NAME" ctr -n k8s.io images ls -q 2>/dev/null || true)
-        
+
         if [ -z "$IMAGE_LIST" ]; then
           echo "No images found in containerd. Skipping cache save."
           exit 0
