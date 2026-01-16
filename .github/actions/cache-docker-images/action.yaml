@@ -35,7 +35,7 @@ runs:
         # This caches containerd images from deployment manifests (cert-manager, flux, argocd, etc.)
         DIST_LOWER=$(echo "$DISTRIBUTION" | tr '[:upper:]' '[:lower:]')
         CACHE_KEY="containerd-images-${DIST_LOWER}-v1"
-        
+
         echo "key=$CACHE_KEY" >> "$GITHUB_OUTPUT"
         echo "Generated cache key: $CACHE_KEY"
 
@@ -55,10 +55,10 @@ runs:
         DISTRIBUTION: ${{ inputs.distribution }}
       run: |
         echo "Loading cached containerd images into cluster..."
-        
+
         # Determine container name based on distribution
         DIST_LOWER=$(echo "$DISTRIBUTION" | tr '[:upper:]' '[:lower:]')
-        
+
         # Find the first control-plane/server container for the cluster
         case "$DIST_LOWER" in
           vanilla)
@@ -78,14 +78,14 @@ runs:
             exit 1
             ;;
         esac
-        
+
         if [ -z "$CONTAINER_NAME" ]; then
           echo "Error: Could not find container for cluster ${CLUSTER_NAME}"
           exit 1
         fi
-        
+
         echo "Using container: $CONTAINER_NAME"
-        
+
         # Check if cache exists and load images
         if [ -f "/tmp/containerd-cache/images.tar" ]; then
           echo "Importing cached images into containerd..."
@@ -113,10 +113,10 @@ runs:
         DISTRIBUTION: ${{ inputs.distribution }}
       run: |
         echo "Exporting containerd images from cluster..."
-        
+
         # Determine container name based on distribution
         DIST_LOWER=$(echo "$DISTRIBUTION" | tr '[:upper:]' '[:lower:]')
-        
+
         # Find the first control-plane/server container for the cluster
         case "$DIST_LOWER" in
           vanilla)
@@ -136,31 +136,31 @@ runs:
             exit 1
             ;;
         esac
-        
+
         if [ -z "$CONTAINER_NAME" ]; then
           echo "Error: Could not find container for cluster ${CLUSTER_NAME}"
           exit 1
         fi
-        
+
         echo "Using container: $CONTAINER_NAME"
-        
+
         # Create cache directory
         mkdir -p /tmp/containerd-cache
-        
+
         # Export all images from containerd
         # Use ctr to export images
         echo "Listing images in containerd..."
         docker exec "$CONTAINER_NAME" ctr -n k8s.io images ls
-        
+
         echo "Exporting images to tar archive..."
         docker exec "$CONTAINER_NAME" sh -c "ctr -n k8s.io images export /tmp/images.tar \$(ctr -n k8s.io images ls -q) || true"
-        
+
         # Copy tar file from container to host
         docker cp "$CONTAINER_NAME":/tmp/images.tar /tmp/containerd-cache/images.tar
-        
+
         # Clean up inside container
         docker exec "$CONTAINER_NAME" rm -f /tmp/images.tar
-        
+
         echo "Images exported successfully"
         ls -lh /tmp/containerd-cache/
 

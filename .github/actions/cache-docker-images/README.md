@@ -7,11 +7,13 @@ This composite action caches containerd images from inside Kubernetes clusters t
 The system tests in the CI workflow deploy various applications (cert-manager, flux, argocd, cilium, calico, etc.) into Kubernetes clusters. These deployments pull images from container registries using **containerd inside the cluster containers** (Kind, K3d, or Talos nodes).
 
 Without caching, each workflow run pulls these deployment images fresh from registries, which can lead to:
+
 - **Rate limiting errors (429 responses)** from Docker Hub, GHCR, and other registries
 - Slower workflow execution times
 - Unreliable CI runs
 
 This action solves these issues by:
+
 1. Exporting containerd images from the cluster after deployments are applied
 2. Caching the exported images using GitHub Actions cache
 3. Restoring and importing images into containerd on subsequent runs
@@ -19,12 +21,14 @@ This action solves these issues by:
 ## How It Works
 
 ### Restore Operation
+
 1. Attempts to restore cached containerd images from previous workflow runs
 2. If cache hit, copies the image archive into the cluster container
 3. Uses `ctr` (containerd CLI) to import images into containerd's image store
 4. Subsequent deployments use the cached images instead of pulling from registries
 
 ### Save Operation
+
 1. After deployments complete, lists all images in containerd
 2. Uses `ctr` to export all images to a tar archive
 3. Copies the archive from the cluster container to the host
@@ -33,26 +37,34 @@ This action solves these issues by:
 ## Inputs
 
 ### `cluster-name` (required)
+
 Name of the cluster to cache images from/to.
 
 ### `distribution` (required)
+
 Kubernetes distribution type. Determines the container naming pattern:
+
 - **Vanilla**: Kind containers (pattern: `<cluster-name>-control-plane`)
 - **K3s**: K3d containers (pattern: `k3d-<cluster-name>-server-0`)
 - **Talos**: Talos containers (pattern: `talos-<cluster-name>-controlplane-1`)
 
 ### `provider` (required)
+
 Infrastructure provider. Currently only `Docker` is supported (Hetzner clusters don't use local containers).
+
 - Default: `"Docker"`
 
 ### `operation` (required)
+
 Operation to perform:
+
 - **`restore`**: Restore and import cached images before deployments
 - **`save`**: Export and save images after deployments
 
 ## Outputs
 
 ### `cache-hit`
+
 Whether the cache was hit during restore operation (`'true'` or `'false'`).
 
 ## Usage
@@ -123,6 +135,7 @@ jobs:
 ## Cache Key Strategy
 
 The cache key is based on the distribution type:
+
 - `containerd-images-vanilla-v1` for Kind clusters
 - `containerd-images-k3s-v1` for K3d clusters
 - `containerd-images-talos-v1` for Talos clusters
@@ -132,6 +145,7 @@ This means all test runs for the same distribution share the same cache, maximiz
 ## Cache Invalidation
 
 To invalidate the cache and force fresh image pulls:
+
 1. Increment the version suffix in the cache key (e.g., `v1` → `v2`)
 2. Edit the action's cache key generation logic
 
@@ -146,14 +160,18 @@ To invalidate the cache and force fresh image pulls:
 ## Technical Details
 
 ### Containerd Namespace
+
 The action uses the `k8s.io` namespace in containerd, which is where Kubernetes stores container images.
 
 ### Container Name Detection
+
 The action automatically detects the correct container name based on the distribution:
+
 - Kind: `<cluster-name>-control-plane`
 - K3d: `k3d-<cluster-name>-server-0`
 - Talos: `talos-<cluster-name>-controlplane-1`
 
 ### Error Handling
+
 - Failed imports/exports are logged but don't fail the workflow
 - Allows graceful degradation when cache is corrupted or incompatible

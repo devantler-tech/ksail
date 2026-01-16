@@ -14,6 +14,7 @@ The key insight: Images are stored in containerd inside the cluster containers, 
 ## Solution
 
 A composite GitHub Action that:
+
 1. **Exports** containerd images from the cluster after deployments complete
 2. **Caches** the exported images using GitHub Actions cache
 3. **Restores** and imports images into containerd on subsequent runs
@@ -27,12 +28,14 @@ This avoids repeated image pulls from public registries, preventing rate limitin
 A composite action with two operations:
 
 #### `restore` Operation
+
 - Runs after cluster creation but before deployments
 - Restores cached image tar from GitHub Actions cache
 - Imports images into containerd using `ctr` CLI
 - Deployments use cached images instead of pulling from registries
 
 #### `save` Operation  
+
 - Runs after deployments complete but before cluster deletion
 - Exports all images from containerd to a tar archive
 - Saves the tar to GitHub Actions cache for future runs
@@ -40,6 +43,7 @@ A composite action with two operations:
 ### Integration with System Tests
 
 Modified `.github/actions/ksail-system-test` to:
+
 1. Determine cluster name from arguments
 2. Restore cache after cluster creation
 3. Save cache before cluster deletion
@@ -48,6 +52,7 @@ Modified `.github/actions/ksail-system-test` to:
 ### Container Name Detection
 
 The action dynamically finds the correct container based on distribution:
+
 - **Vanilla (Kind)**: Uses name filter `<cluster-name>-control-plane`
 - **K3s (K3d)**: Uses name filter `k3d-<cluster-name>-server-*`
 - **Talos**: Uses label filters `talos.cluster.name=<cluster-name>` and `talos.type=controlplane`
@@ -55,16 +60,19 @@ The action dynamically finds the correct container based on distribution:
 ## Benefits
 
 ### Rate Limiting Prevention
+
 - Eliminates repeated pulls of the same images
 - Dramatically reduces registry API calls
 - Prevents 429 errors from Docker Hub, GHCR, etc.
 
 ### Performance Improvements
+
 - **First run**: Adds ~30s overhead for cache export
 - **Subsequent runs**: Saves 2-5 minutes by avoiding image pulls
 - Network traffic reduced by 2-4 GB per test run
 
 ### Cost Savings
+
 - Reduces load on public registries
 - Lower data transfer costs
 - More reliable CI runs
@@ -72,6 +80,7 @@ The action dynamically finds the correct container based on distribution:
 ## Cache Strategy
 
 ### Cache Keys
+
 - `containerd-images-vanilla-v1` for Kind clusters
 - `containerd-images-k3s-v1` for K3d clusters
 - `containerd-images-talos-v1` for Talos clusters
@@ -79,11 +88,13 @@ The action dynamically finds the correct container based on distribution:
 All tests for the same distribution share the same cache, maximizing reuse.
 
 ### Cache Lifecycle
+
 1. First run: Cache miss → pull images → save cache
 2. Subsequent runs: Cache hit → import images → update cache if needed
 3. Cache invalidation: Increment version suffix (v1 → v2)
 
 ### Storage
+
 - Cached in GitHub Actions cache (10GB limit per repository)
 - Typical size: 2-4 GB per distribution
 - Cached images persist for 7 days or until evicted
@@ -98,6 +109,7 @@ All tests for the same distribution share the same cache, maximizing reuse.
 ## Testing
 
 See `.github/actions/cache-docker-images/TESTING.md` for:
+
 - Local testing instructions
 - CI verification steps
 - Troubleshooting guide
@@ -106,17 +118,20 @@ See `.github/actions/cache-docker-images/TESTING.md` for:
 ## Files Changed
 
 ### New Files
+
 - `.github/actions/cache-docker-images/action.yaml` - Main cache action
 - `.github/actions/cache-docker-images/README.md` - Action documentation
 - `.github/actions/cache-docker-images/TESTING.md` - Testing guide
 
 ### Modified Files
+
 - `.github/actions/ksail-system-test/action.yaml` - Integrated cache restore/save steps
 - `.github/workflows/ci.yaml` - Removed inline cache step (now in system-test action)
 
 ## Future Enhancements
 
 Potential improvements:
+
 1. Cache optimization: Only cache deployment images, exclude base images
 2. Parallel cache loading: Import images during cluster startup
 3. Cache pre-warming: Separate job to populate cache before tests

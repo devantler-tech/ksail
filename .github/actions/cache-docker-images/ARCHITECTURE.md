@@ -114,6 +114,7 @@
 ## Cache Lifecycle
 
 ### First Run (Cache Miss)
+
 ```
 ┌───────────────┐
 │ Start Test    │
@@ -155,6 +156,7 @@ Network: 2-4 GB downloaded
 ```
 
 ### Subsequent Runs (Cache Hit)
+
 ```
 ┌───────────────┐
 │ Start Test    │
@@ -198,12 +200,14 @@ Network: 0 bytes downloaded from registries
 ## Performance Impact
 
 ### Before Caching
+
 - **Time**: Variable (depends on registry speed)
 - **Network**: 2-4 GB per test × N tests = high bandwidth
 - **Reliability**: ❌ Subject to rate limits
 - **Cost**: High (registry API calls, bandwidth)
 
 ### After Caching
+
 - **First Run**: +30s (one-time export cost)
 - **Subsequent Runs**: -2 to -5 min (no image pulls)
 - **Network**: ~0 GB from registries (cached)

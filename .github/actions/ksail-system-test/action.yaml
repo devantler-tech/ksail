@@ -112,7 +112,7 @@ runs:
           # Extract name after --name flag
           CLUSTER_NAME=$(echo "$ARGS" | sed -n 's/.*--name \([^ ]*\).*/\1/p')
         fi
-        
+
         # Use distribution-specific defaults if no name provided
         if [ -z "$CLUSTER_NAME" ]; then
           DIST_LOWER=$(echo "$DISTRIBUTION" | tr '[:upper:]' '[:lower:]')
@@ -131,7 +131,7 @@ runs:
               ;;
           esac
         fi
-        
+
         echo "name=$CLUSTER_NAME" >> "$GITHUB_OUTPUT"
         echo "Cluster name: $CLUSTER_NAME"
 
