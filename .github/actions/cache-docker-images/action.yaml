@@ -242,7 +242,7 @@ runs:
             fi
           fi
         fi
-        
+
         if [ "$BULK_EXPORT_SUCCESS" = "false" ]; then
           echo "Bulk export failed, falling back to individual image export..."
           # Remove any partial tar file
