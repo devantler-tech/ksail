@@ -48,7 +48,6 @@ func NewCalicoInstallerWithDistribution(
 		kubeconfig,
 		context,
 		timeout,
-		calicoInstaller.waitForReadiness,
 	)
 
 	return calicoInstaller
@@ -78,11 +77,6 @@ func (c *CalicoInstaller) Install(ctx context.Context) error {
 	}
 
 	return nil
-}
-
-// SetWaitForReadinessFunc overrides the readiness wait function. Primarily used for testing.
-func (c *CalicoInstaller) SetWaitForReadinessFunc(waitFunc func(context.Context) error) {
-	c.InstallerBase.SetWaitForReadinessFunc(waitFunc, c.waitForReadiness)
 }
 
 // Uninstall removes the Helm release for Calico.

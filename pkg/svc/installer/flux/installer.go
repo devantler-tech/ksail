@@ -66,6 +66,10 @@ func (b *FluxInstaller) helmInstallOrUpgradeFluxOperator(ctx context.Context) er
 	// Set context deadline longer than Helm timeout to ensure Helm has
 	// sufficient time to complete its kstatus-based wait operation.
 	// Add 5 minutes buffer to the Helm timeout.
+	//
+	// Note: This installer calls client.InstallOrUpgradeChart directly (not the
+	// helm.InstallOrUpgradeChart helper) because OCI charts don't require repository
+	// registration. Therefore, we must apply the context timeout buffer here.
 	contextTimeout := b.timeout + (5 * time.Minute)
 	timeoutCtx, cancel := context.WithTimeout(ctx, contextTimeout)
 	defer cancel()

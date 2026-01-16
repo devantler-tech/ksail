@@ -44,7 +44,6 @@ func NewCiliumInstallerWithDistribution(
 		kubeconfig,
 		context,
 		timeout,
-		ciliumInstaller.waitForReadiness,
 	)
 
 	return ciliumInstaller
@@ -67,11 +66,6 @@ func (c *CiliumInstaller) Install(ctx context.Context) error {
 	}
 
 	return nil
-}
-
-// SetWaitForReadinessFunc overrides the readiness wait function. Primarily used for testing.
-func (c *CiliumInstaller) SetWaitForReadinessFunc(waitFunc func(context.Context) error) {
-	c.InstallerBase.SetWaitForReadinessFunc(waitFunc, c.waitForReadiness)
 }
 
 // Uninstall removes the Helm release for Cilium.
