@@ -232,11 +232,11 @@ runs:
         # First, try to export all at once (faster if all images are healthy)
         echo "Attempting bulk export..."
         BULK_EXPORT_SUCCESS=false
-        
+
         # Capture stderr to check for errors
         BULK_EXPORT_OUTPUT=$(docker exec "$CONTAINER_NAME" sh -c "${CTR_CMD} -n k8s.io images export /tmp/images.tar \$(${CTR_CMD} -n k8s.io images ls -q)" 2>&1)
         BULK_EXPORT_EXIT=$?
-        
+
         # Check if export succeeded: exit code 0 AND no "failed to get reader" errors AND tar exists
         if [ $BULK_EXPORT_EXIT -eq 0 ] && ! echo "$BULK_EXPORT_OUTPUT" | grep -q "failed to get reader"; then
           # Verify the tar was actually created and has content
