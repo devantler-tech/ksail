@@ -59,24 +59,30 @@ runs:
         # Determine container name based on distribution
         DIST_LOWER=$(echo "$DISTRIBUTION" | tr '[:upper:]' '[:lower:]')
         
+        # Find the first control-plane/server container for the cluster
         case "$DIST_LOWER" in
           vanilla)
             # Kind uses pattern: <cluster-name>-control-plane
-            CONTAINER_NAME="${CLUSTER_NAME}-control-plane"
+            CONTAINER_NAME=$(docker ps -a --filter "name=${CLUSTER_NAME}-control-plane" --format "{{.Names}}" | head -1)
             ;;
           k3s)
-            # K3d uses pattern: k3d-<cluster-name>-server-0
-            CONTAINER_NAME="k3d-${CLUSTER_NAME}-server-0"
+            # K3d uses pattern: k3d-<cluster-name>-server-*
+            CONTAINER_NAME=$(docker ps -a --filter "name=k3d-${CLUSTER_NAME}-server" --format "{{.Names}}" | head -1)
             ;;
           talos)
-            # Talos uses pattern: talos-<cluster-name>-controlplane-1
-            CONTAINER_NAME="talos-${CLUSTER_NAME}-controlplane-1"
+            # Talos uses labels, find by label
+            CONTAINER_NAME=$(docker ps -a --filter "label=talos.owned=true" --filter "label=talos.cluster.name=${CLUSTER_NAME}" --filter "label=talos.type=controlplane" --format "{{.Names}}" | head -1)
             ;;
           *)
             echo "Unknown distribution: $DISTRIBUTION"
             exit 1
             ;;
         esac
+        
+        if [ -z "$CONTAINER_NAME" ]; then
+          echo "Error: Could not find container for cluster ${CLUSTER_NAME}"
+          exit 1
+        fi
         
         echo "Using container: $CONTAINER_NAME"
         
@@ -111,21 +117,30 @@ runs:
         # Determine container name based on distribution
         DIST_LOWER=$(echo "$DISTRIBUTION" | tr '[:upper:]' '[:lower:]')
         
+        # Find the first control-plane/server container for the cluster
         case "$DIST_LOWER" in
           vanilla)
-            CONTAINER_NAME="${CLUSTER_NAME}-control-plane"
+            # Kind uses pattern: <cluster-name>-control-plane
+            CONTAINER_NAME=$(docker ps -a --filter "name=${CLUSTER_NAME}-control-plane" --format "{{.Names}}" | head -1)
             ;;
           k3s)
-            CONTAINER_NAME="k3d-${CLUSTER_NAME}-server-0"
+            # K3d uses pattern: k3d-<cluster-name>-server-*
+            CONTAINER_NAME=$(docker ps -a --filter "name=k3d-${CLUSTER_NAME}-server" --format "{{.Names}}" | head -1)
             ;;
           talos)
-            CONTAINER_NAME="talos-${CLUSTER_NAME}-controlplane-1"
+            # Talos uses labels, find by label
+            CONTAINER_NAME=$(docker ps -a --filter "label=talos.owned=true" --filter "label=talos.cluster.name=${CLUSTER_NAME}" --filter "label=talos.type=controlplane" --format "{{.Names}}" | head -1)
             ;;
           *)
             echo "Unknown distribution: $DISTRIBUTION"
             exit 1
             ;;
         esac
+        
+        if [ -z "$CONTAINER_NAME" ]; then
+          echo "Error: Could not find container for cluster ${CLUSTER_NAME}"
+          exit 1
+        fi
         
         echo "Using container: $CONTAINER_NAME"
         
