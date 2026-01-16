@@ -208,8 +208,9 @@ runs:
         fi
 
         echo "Exporting images to tar archive..."
-        # Export images, but handle potential failures gracefully
-        if docker exec "$CONTAINER_NAME" sh -c "ctr -n k8s.io images export /tmp/images.tar $IMAGE_LIST" 2>&1; then
+        # Export all images at once using command substitution within the container
+        # This avoids command-line length issues and ensures proper quoting
+        if docker exec "$CONTAINER_NAME" sh -c 'ctr -n k8s.io images export /tmp/images.tar $(ctr -n k8s.io images ls -q)' 2>&1; then
           echo "Images export command completed"
         else
           echo "Warning: Image export encountered errors, but may have partially succeeded"
