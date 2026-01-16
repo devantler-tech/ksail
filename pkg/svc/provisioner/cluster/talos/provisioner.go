@@ -334,7 +334,6 @@ func (p *TalosProvisioner) createHetznerCluster(ctx context.Context, clusterName
 		hzProvider,
 		clusterName,
 		"control-plane",
-		"control-plane",
 		p.options.ControlPlaneNodes,
 		p.hetznerOpts.ControlPlaneServerType,
 		p.talosOpts.ISO,
@@ -352,7 +351,6 @@ func (p *TalosProvisioner) createHetznerCluster(ctx context.Context, clusterName
 		ctx,
 		hzProvider,
 		clusterName,
-		"worker",
 		"worker",
 		p.options.WorkerNodes,
 		p.hetznerOpts.WorkerServerType,
@@ -1255,8 +1253,7 @@ func (p *TalosProvisioner) Stop(ctx context.Context, name string) error {
 //   - ctx: request-scoped context for cancellation and timeouts.
 //   - provider: Hetzner infrastructure provider used to create the servers.
 //   - clusterName: logical name of the Talos cluster; used as a prefix for node names and labels.
-//   - role: internal node role identifier (e.g., "control-plane", "worker") used for naming and labeling.
-//   - roleLabel: human-readable label for the node role used in log output (e.g., "control-plane", "worker").
+//   - role: node role identifier (e.g., "control-plane", "worker") used for naming, labeling, and log output.
 //   - count: number of servers to create for this role; if count <= 0, no servers are created.
 //   - serverType: Hetzner server type (size/flavor) to use for each node.
 //   - isoID: identifier of the Talos ISO image to attach to each server.
@@ -1274,7 +1271,6 @@ func (p *TalosProvisioner) createHetznerNodes(
 	provider *hetzner.Provider,
 	clusterName string,
 	role string,
-	roleLabel string,
 	count int,
 	serverType string,
 	isoID int64,
@@ -1288,7 +1284,7 @@ func (p *TalosProvisioner) createHetznerNodes(
 		return []*hcloud.Server{}, nil
 	}
 
-	_, _ = fmt.Fprintf(p.logWriter, "Creating %d %s node(s)...\n", count, roleLabel)
+	_, _ = fmt.Fprintf(p.logWriter, "Creating %d %s node(s)...\n", count, role)
 
 	servers := make([]*hcloud.Server, 0, count)
 	for nodeIndex := range count {
@@ -1314,7 +1310,7 @@ func (p *TalosProvisioner) createHetznerNodes(
 		_, _ = fmt.Fprintf(
 			p.logWriter,
 			"  ✓ %s node %s created (IP: %s)\n",
-			roleLabel,
+			role,
 			server.Name,
 			server.PublicNet.IPv4.IP.String(),
 		)
