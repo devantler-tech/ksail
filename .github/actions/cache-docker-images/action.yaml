@@ -231,9 +231,19 @@ runs:
         # Export images one by one to handle corrupted manifests gracefully
         # First, try to export all at once (faster if all images are healthy)
         echo "Attempting bulk export..."
-        if docker exec "$CONTAINER_NAME" sh -c "${CTR_CMD} -n k8s.io images export /tmp/images.tar \$(${CTR_CMD} -n k8s.io images ls -q)" 2>&1; then
-          echo "Bulk export succeeded"
-        else
+        BULK_EXPORT_SUCCESS=false
+        if docker exec "$CONTAINER_NAME" sh -c "${CTR_CMD} -n k8s.io images export /tmp/images.tar \$(${CTR_CMD} -n k8s.io images ls -q)" 2>&1 | grep -v "failed to get reader"; then
+          # Verify the tar was actually created and has content
+          if docker exec "$CONTAINER_NAME" test -f /tmp/images.tar; then
+            TAR_SIZE=$(docker exec "$CONTAINER_NAME" stat -c%s /tmp/images.tar 2>/dev/null || echo "0")
+            if [ "$TAR_SIZE" -gt 0 ]; then
+              echo "Bulk export succeeded (${TAR_SIZE} bytes)"
+              BULK_EXPORT_SUCCESS=true
+            fi
+          fi
+        fi
+        
+        if [ "$BULK_EXPORT_SUCCESS" = "false" ]; then
           echo "Bulk export failed, falling back to individual image export..."
           # Remove any partial tar file
           docker exec "$CONTAINER_NAME" rm -f /tmp/images.tar
