@@ -19,6 +19,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+var (
+	errExecCreateFailed  = errors.New("exec create failed")
+	errExecAttachFailed  = errors.New("exec attach failed")
+	errExecInspectFailed = errors.New("exec inspect failed")
+)
+
 // mockConn is a minimal net.Conn implementation for testing.
 type mockConn struct{}
 
@@ -79,197 +85,176 @@ func TestNewContainerExecutor(t *testing.T) {
 	assert.NotNil(t, executor, "NewContainerExecutor should return a non-nil executor")
 }
 
-func TestExecInContainer(t *testing.T) {
+func TestExecInContainerSuccessfulCommand(t *testing.T) {
 	t.Parallel()
 
-	errExecCreateFailed := errors.New("exec create failed")
-	errExecAttachFailed := errors.New("exec attach failed")
-	errExecInspectFailed := errors.New("exec inspect failed")
+	ctx := context.Background()
+	mockClient := docker.NewMockAPIClient(t)
 
-	tests := []struct {
-		name          string
-		containerName string
-		cmd           []string
-		setupMocks    func(t *testing.T, mockClient *docker.MockAPIClient, ctx context.Context)
-		want          string
-		wantErr       bool
-		wantErrMsg    string
-	}{
-		{
-			name:          "successful command execution",
-			containerName: "test-container",
-			cmd:           []string{"echo", "hello"},
-			setupMocks: func(t *testing.T, mockClient *docker.MockAPIClient, ctx context.Context) {
-				t.Helper()
+	mockClient.EXPECT().
+		ContainerExecCreate(ctx, "test-container", mock.MatchedBy(func(opts container.ExecOptions) bool {
+			return opts.AttachStdout && opts.AttachStderr &&
+				len(opts.Cmd) == 2 && opts.Cmd[0] == "echo" && opts.Cmd[1] == "hello"
+		})).
+		Return(container.ExecCreateResponse{ID: "exec-id-123"}, nil)
 
-				mockClient.EXPECT().
-					ContainerExecCreate(ctx, "test-container", mock.MatchedBy(func(opts container.ExecOptions) bool {
-						return opts.AttachStdout && opts.AttachStderr &&
-							len(opts.Cmd) == 2 && opts.Cmd[0] == "echo" && opts.Cmd[1] == "hello"
-					})).
-					Return(container.ExecCreateResponse{ID: "exec-id-123"}, nil)
+	mockClient.EXPECT().
+		ContainerExecAttach(ctx, "exec-id-123", container.ExecStartOptions{}).
+		Return(mockDockerStreamResponse("hello\n", ""), nil)
 
-				mockClient.EXPECT().
-					ContainerExecAttach(ctx, "exec-id-123", container.ExecStartOptions{}).
-					Return(mockDockerStreamResponse("hello\n", ""), nil)
+	mockClient.EXPECT().
+		ContainerExecInspect(ctx, "exec-id-123").
+		Return(container.ExecInspect{ExitCode: 0}, nil)
 
-				mockClient.EXPECT().
-					ContainerExecInspect(ctx, "exec-id-123").
-					Return(container.ExecInspect{ExitCode: 0}, nil)
-			},
-			want:    "hello\n",
-			wantErr: false,
-		},
-		{
-			name:          "empty command output",
-			containerName: "test-container",
-			cmd:           []string{"true"},
-			setupMocks: func(t *testing.T, mockClient *docker.MockAPIClient, ctx context.Context) {
-				t.Helper()
+	executor := image.NewContainerExecutor(mockClient)
+	got, err := executor.ExecInContainer(ctx, "test-container", []string{"echo", "hello"})
 
-				mockClient.EXPECT().
-					ContainerExecCreate(ctx, "test-container", mock.Anything).
-					Return(container.ExecCreateResponse{ID: "exec-id-456"}, nil)
+	require.NoError(t, err)
+	assert.Equal(t, "hello\n", got)
+}
 
-				mockClient.EXPECT().
-					ContainerExecAttach(ctx, "exec-id-456", container.ExecStartOptions{}).
-					Return(mockDockerStreamResponse("", ""), nil)
+func TestExecInContainerEmptyOutput(t *testing.T) {
+	t.Parallel()
 
-				mockClient.EXPECT().
-					ContainerExecInspect(ctx, "exec-id-456").
-					Return(container.ExecInspect{ExitCode: 0}, nil)
-			},
-			want:    "",
-			wantErr: false,
-		},
-		{
-			name:          "exec create fails",
-			containerName: "test-container",
-			cmd:           []string{"echo", "fail"},
-			setupMocks: func(t *testing.T, mockClient *docker.MockAPIClient, ctx context.Context) {
-				t.Helper()
+	ctx := context.Background()
+	mockClient := docker.NewMockAPIClient(t)
 
-				mockClient.EXPECT().
-					ContainerExecCreate(ctx, "test-container", mock.Anything).
-					Return(container.ExecCreateResponse{}, errExecCreateFailed)
-			},
-			wantErr:    true,
-			wantErrMsg: "failed to create exec",
-		},
-		{
-			name:          "exec attach fails",
-			containerName: "test-container",
-			cmd:           []string{"echo", "fail"},
-			setupMocks: func(t *testing.T, mockClient *docker.MockAPIClient, ctx context.Context) {
-				t.Helper()
+	mockClient.EXPECT().
+		ContainerExecCreate(ctx, "test-container", mock.Anything).
+		Return(container.ExecCreateResponse{ID: "exec-id-456"}, nil)
 
-				mockClient.EXPECT().
-					ContainerExecCreate(ctx, "test-container", mock.Anything).
-					Return(container.ExecCreateResponse{ID: "exec-id-789"}, nil)
+	mockClient.EXPECT().
+		ContainerExecAttach(ctx, "exec-id-456", container.ExecStartOptions{}).
+		Return(mockDockerStreamResponse("", ""), nil)
 
-				mockClient.EXPECT().
-					ContainerExecAttach(ctx, "exec-id-789", container.ExecStartOptions{}).
-					Return(dockertypes.HijackedResponse{}, errExecAttachFailed)
-			},
-			wantErr:    true,
-			wantErrMsg: "failed to attach to exec",
-		},
-		{
-			name:          "exec inspect fails",
-			containerName: "test-container",
-			cmd:           []string{"echo", "fail"},
-			setupMocks: func(t *testing.T, mockClient *docker.MockAPIClient, ctx context.Context) {
-				t.Helper()
+	mockClient.EXPECT().
+		ContainerExecInspect(ctx, "exec-id-456").
+		Return(container.ExecInspect{ExitCode: 0}, nil)
 
-				mockClient.EXPECT().
-					ContainerExecCreate(ctx, "test-container", mock.Anything).
-					Return(container.ExecCreateResponse{ID: "exec-id-abc"}, nil)
+	executor := image.NewContainerExecutor(mockClient)
+	got, err := executor.ExecInContainer(ctx, "test-container", []string{"true"})
 
-				mockClient.EXPECT().
-					ContainerExecAttach(ctx, "exec-id-abc", container.ExecStartOptions{}).
-					Return(mockDockerStreamResponse("", ""), nil)
+	require.NoError(t, err)
+	assert.Empty(t, got)
+}
 
-				mockClient.EXPECT().
-					ContainerExecInspect(ctx, "exec-id-abc").
-					Return(container.ExecInspect{}, errExecInspectFailed)
-			},
-			wantErr:    true,
-			wantErrMsg: "failed to inspect exec",
-		},
-		{
-			name:          "non-zero exit code",
-			containerName: "test-container",
-			cmd:           []string{"false"},
-			setupMocks: func(t *testing.T, mockClient *docker.MockAPIClient, ctx context.Context) {
-				t.Helper()
+func TestExecInContainerCreateFails(t *testing.T) {
+	t.Parallel()
 
-				mockClient.EXPECT().
-					ContainerExecCreate(ctx, "test-container", mock.Anything).
-					Return(container.ExecCreateResponse{ID: "exec-id-def"}, nil)
+	ctx := context.Background()
+	mockClient := docker.NewMockAPIClient(t)
 
-				mockClient.EXPECT().
-					ContainerExecAttach(ctx, "exec-id-def", container.ExecStartOptions{}).
-					Return(mockDockerStreamResponse("", "command failed\n"), nil)
+	mockClient.EXPECT().
+		ContainerExecCreate(ctx, "test-container", mock.Anything).
+		Return(container.ExecCreateResponse{}, errExecCreateFailed)
 
-				mockClient.EXPECT().
-					ContainerExecInspect(ctx, "exec-id-def").
-					Return(container.ExecInspect{ExitCode: 1}, nil)
-			},
-			wantErr:    true,
-			wantErrMsg: "container exec failed",
-		},
-		{
-			name:          "command with multiple arguments",
-			containerName: "my-node",
-			cmd:           []string{"ctr", "--namespace=k8s.io", "images", "list", "-q"},
-			setupMocks: func(t *testing.T, mockClient *docker.MockAPIClient, ctx context.Context) {
-				t.Helper()
+	executor := image.NewContainerExecutor(mockClient)
+	_, err := executor.ExecInContainer(ctx, "test-container", []string{"echo", "fail"})
 
-				mockClient.EXPECT().
-					ContainerExecCreate(ctx, "my-node", mock.MatchedBy(func(opts container.ExecOptions) bool {
-						return len(opts.Cmd) == 5 &&
-							opts.Cmd[0] == "ctr" &&
-							opts.Cmd[1] == "--namespace=k8s.io" &&
-							opts.Cmd[2] == "images" &&
-							opts.Cmd[3] == "list" &&
-							opts.Cmd[4] == "-q"
-					})).
-					Return(container.ExecCreateResponse{ID: "exec-id-ghi"}, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to create exec")
+}
 
-				mockClient.EXPECT().
-					ContainerExecAttach(ctx, "exec-id-ghi", container.ExecStartOptions{}).
-					Return(mockDockerStreamResponse("nginx:latest\nredis:alpine\n", ""), nil)
+func TestExecInContainerAttachFails(t *testing.T) {
+	t.Parallel()
 
-				mockClient.EXPECT().
-					ContainerExecInspect(ctx, "exec-id-ghi").
-					Return(container.ExecInspect{ExitCode: 0}, nil)
-			},
-			want:    "nginx:latest\nredis:alpine\n",
-			wantErr: false,
-		},
-	}
+	ctx := context.Background()
+	mockClient := docker.NewMockAPIClient(t)
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
+	mockClient.EXPECT().
+		ContainerExecCreate(ctx, "test-container", mock.Anything).
+		Return(container.ExecCreateResponse{ID: "exec-id-789"}, nil)
 
-			ctx := context.Background()
-			mockClient := docker.NewMockAPIClient(t)
+	mockClient.EXPECT().
+		ContainerExecAttach(ctx, "exec-id-789", container.ExecStartOptions{}).
+		Return(dockertypes.HijackedResponse{}, errExecAttachFailed)
 
-			tt.setupMocks(t, mockClient, ctx)
+	executor := image.NewContainerExecutor(mockClient)
+	_, err := executor.ExecInContainer(ctx, "test-container", []string{"echo", "fail"})
 
-			executor := image.NewContainerExecutor(mockClient)
-			got, err := executor.ExecInContainer(ctx, tt.containerName, tt.cmd)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to attach to exec")
+}
 
-			if tt.wantErr {
-				require.Error(t, err)
-				assert.Contains(t, err.Error(), tt.wantErrMsg)
+func TestExecInContainerInspectFails(t *testing.T) {
+	t.Parallel()
 
-				return
-			}
+	ctx := context.Background()
+	mockClient := docker.NewMockAPIClient(t)
 
-			require.NoError(t, err)
-			assert.Equal(t, tt.want, got)
-		})
-	}
+	mockClient.EXPECT().
+		ContainerExecCreate(ctx, "test-container", mock.Anything).
+		Return(container.ExecCreateResponse{ID: "exec-id-abc"}, nil)
+
+	mockClient.EXPECT().
+		ContainerExecAttach(ctx, "exec-id-abc", container.ExecStartOptions{}).
+		Return(mockDockerStreamResponse("", ""), nil)
+
+	mockClient.EXPECT().
+		ContainerExecInspect(ctx, "exec-id-abc").
+		Return(container.ExecInspect{}, errExecInspectFailed)
+
+	executor := image.NewContainerExecutor(mockClient)
+	_, err := executor.ExecInContainer(ctx, "test-container", []string{"echo", "fail"})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to inspect exec")
+}
+
+func TestExecInContainerNonZeroExitCode(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	mockClient := docker.NewMockAPIClient(t)
+
+	mockClient.EXPECT().
+		ContainerExecCreate(ctx, "test-container", mock.Anything).
+		Return(container.ExecCreateResponse{ID: "exec-id-def"}, nil)
+
+	mockClient.EXPECT().
+		ContainerExecAttach(ctx, "exec-id-def", container.ExecStartOptions{}).
+		Return(mockDockerStreamResponse("", "command failed\n"), nil)
+
+	mockClient.EXPECT().
+		ContainerExecInspect(ctx, "exec-id-def").
+		Return(container.ExecInspect{ExitCode: 1}, nil)
+
+	executor := image.NewContainerExecutor(mockClient)
+	_, err := executor.ExecInContainer(ctx, "test-container", []string{"false"})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "container exec failed")
+}
+
+func TestExecInContainerMultipleArguments(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	mockClient := docker.NewMockAPIClient(t)
+
+	mockClient.EXPECT().
+		ContainerExecCreate(ctx, "my-node", mock.MatchedBy(func(opts container.ExecOptions) bool {
+			return len(opts.Cmd) == 5 &&
+				opts.Cmd[0] == "ctr" &&
+				opts.Cmd[1] == "--namespace=k8s.io" &&
+				opts.Cmd[2] == "images" &&
+				opts.Cmd[3] == "list" &&
+				opts.Cmd[4] == "-q"
+		})).
+		Return(container.ExecCreateResponse{ID: "exec-id-ghi"}, nil)
+
+	mockClient.EXPECT().
+		ContainerExecAttach(ctx, "exec-id-ghi", container.ExecStartOptions{}).
+		Return(mockDockerStreamResponse("nginx:latest\nredis:alpine\n", ""), nil)
+
+	mockClient.EXPECT().
+		ContainerExecInspect(ctx, "exec-id-ghi").
+		Return(container.ExecInspect{ExitCode: 0}, nil)
+
+	executor := image.NewContainerExecutor(mockClient)
+	cmd := []string{"ctr", "--namespace=k8s.io", "images", "list", "-q"}
+	got, err := executor.ExecInContainer(ctx, "my-node", cmd)
+
+	require.NoError(t, err)
+	assert.Equal(t, "nginx:latest\nredis:alpine\n", got)
 }

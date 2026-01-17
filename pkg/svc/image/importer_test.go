@@ -18,6 +18,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// Package-level error definitions for linting compliance.
+var (
+	errImportListFailed = errors.New("list nodes failed")
+	errImportCopyFailed = errors.New("copy to container failed")
+)
+
 func TestNewImporter(t *testing.T) {
 	t.Parallel()
 
@@ -27,200 +33,184 @@ func TestNewImporter(t *testing.T) {
 	assert.NotNil(t, importer, "NewImporter should return a non-nil importer")
 }
 
-func TestImport(t *testing.T) {
+func TestImportUnsupportedDistribution(t *testing.T) {
 	t.Parallel()
 
-	errListFailed := errors.New("list nodes failed")
+	ctx := context.Background()
+	mockClient := docker.NewMockAPIClient(t)
+	tmpDir := t.TempDir()
 
-	tests := []struct {
-		name         string
-		clusterName  string
-		distribution v1alpha1.Distribution
-		provider     v1alpha1.Provider
-		opts         image.ImportOptions
-		setupMocks   func(t *testing.T, mockClient *docker.MockAPIClient, ctx context.Context)
-		setupFiles   func(t *testing.T, tmpDir string) string
-		wantErr      bool
-		wantErrMsg   string
-	}{
-		{
-			name:         "unsupported Talos distribution",
-			clusterName:  "my-cluster",
-			distribution: v1alpha1.DistributionTalos,
-			provider:     v1alpha1.ProviderDocker,
-			opts:         image.ImportOptions{InputPath: "/tmp/images.tar"},
-			setupMocks:   func(t *testing.T, mockClient *docker.MockAPIClient, ctx context.Context) {},
-			setupFiles: func(t *testing.T, tmpDir string) string {
-				t.Helper()
-				// Create a dummy input file
-				inputPath := filepath.Join(tmpDir, "images.tar")
-				err := os.WriteFile(inputPath, []byte("fake tar content"), 0o644)
-				require.NoError(t, err)
+	inputPath := filepath.Join(tmpDir, "images.tar")
+	err := os.WriteFile(inputPath, []byte("fake tar content"), 0o600)
+	require.NoError(t, err)
 
-				return inputPath
+	importer := image.NewImporter(mockClient)
+	err = importer.Import(
+		ctx,
+		"my-cluster",
+		v1alpha1.DistributionTalos,
+		v1alpha1.ProviderDocker,
+		image.ImportOptions{InputPath: inputPath},
+	)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "distribution does not support image export/import")
+}
+
+func TestImportUnsupportedProvider(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	mockClient := docker.NewMockAPIClient(t)
+	tmpDir := t.TempDir()
+
+	inputPath := filepath.Join(tmpDir, "images.tar")
+	err := os.WriteFile(inputPath, []byte("fake tar content"), 0o600)
+	require.NoError(t, err)
+
+	importer := image.NewImporter(mockClient)
+	err = importer.Import(
+		ctx,
+		"my-cluster",
+		v1alpha1.DistributionVanilla,
+		v1alpha1.ProviderHetzner,
+		image.ImportOptions{InputPath: inputPath},
+	)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unsupported provider for image operations")
+}
+
+func TestImportInputFileNotFound(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	mockClient := docker.NewMockAPIClient(t)
+
+	importer := image.NewImporter(mockClient)
+	err := importer.Import(
+		ctx,
+		"my-cluster",
+		v1alpha1.DistributionVanilla,
+		v1alpha1.ProviderDocker,
+		image.ImportOptions{InputPath: "/nonexistent/images.tar"},
+	)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "input file does not exist")
+}
+
+func TestImportDefaultInputPathNotFound(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	mockClient := docker.NewMockAPIClient(t)
+
+	importer := image.NewImporter(mockClient)
+	err := importer.Import(
+		ctx,
+		"my-cluster",
+		v1alpha1.DistributionVanilla,
+		v1alpha1.ProviderDocker,
+		image.ImportOptions{},
+	)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "input file does not exist")
+}
+
+func TestImportListNodesFails(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	mockClient := docker.NewMockAPIClient(t)
+	tmpDir := t.TempDir()
+
+	inputPath := filepath.Join(tmpDir, "images.tar")
+	err := os.WriteFile(inputPath, []byte("fake tar content"), 0o600)
+	require.NoError(t, err)
+
+	mockClient.EXPECT().
+		ContainerList(ctx, mock.Anything).
+		Return(nil, errImportListFailed)
+
+	importer := image.NewImporter(mockClient)
+	err = importer.Import(
+		ctx,
+		"my-cluster",
+		v1alpha1.DistributionVanilla,
+		v1alpha1.ProviderDocker,
+		image.ImportOptions{InputPath: inputPath},
+	)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to list nodes")
+}
+
+func TestImportNoNodesFound(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	mockClient := docker.NewMockAPIClient(t)
+	tmpDir := t.TempDir()
+
+	inputPath := filepath.Join(tmpDir, "images.tar")
+	err := os.WriteFile(inputPath, []byte("fake tar content"), 0o600)
+	require.NoError(t, err)
+
+	mockClient.EXPECT().
+		ContainerList(ctx, mock.Anything).
+		Return([]container.Summary{}, nil)
+
+	importer := image.NewImporter(mockClient)
+	err = importer.Import(
+		ctx,
+		"my-cluster",
+		v1alpha1.DistributionVanilla,
+		v1alpha1.ProviderDocker,
+		image.ImportOptions{InputPath: inputPath},
+	)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no cluster nodes found")
+}
+
+func TestImportOnlyHelperContainers(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	mockClient := docker.NewMockAPIClient(t)
+	tmpDir := t.TempDir()
+
+	inputPath := filepath.Join(tmpDir, "images.tar")
+	err := os.WriteFile(inputPath, []byte("fake tar content"), 0o600)
+	require.NoError(t, err)
+
+	// Return only helper containers that should be filtered out
+	mockClient.EXPECT().
+		ContainerList(ctx, mock.Anything).
+		Return([]container.Summary{
+			{
+				Names:  []string{"/k3d-my-cluster-serverlb"},
+				Labels: map[string]string{"k3d.role": "loadbalancer"},
 			},
-			wantErr:    true,
-			wantErrMsg: "distribution does not support image export/import",
-		},
-		{
-			name:         "unsupported provider (Hetzner)",
-			clusterName:  "my-cluster",
-			distribution: v1alpha1.DistributionVanilla,
-			provider:     v1alpha1.ProviderHetzner,
-			opts:         image.ImportOptions{},
-			setupMocks:   func(t *testing.T, mockClient *docker.MockAPIClient, ctx context.Context) {},
-			setupFiles: func(t *testing.T, tmpDir string) string {
-				t.Helper()
-
-				inputPath := filepath.Join(tmpDir, "images.tar")
-				err := os.WriteFile(inputPath, []byte("fake tar content"), 0o644)
-				require.NoError(t, err)
-
-				return inputPath
+			{
+				Names:  []string{"/k3d-my-cluster-tools"},
+				Labels: map[string]string{"k3d.role": "noRole"},
 			},
-			wantErr:    true,
-			wantErrMsg: "unsupported provider for image operations",
-		},
-		{
-			name:         "input file not found",
-			clusterName:  "my-cluster",
-			distribution: v1alpha1.DistributionVanilla,
-			provider:     v1alpha1.ProviderDocker,
-			opts:         image.ImportOptions{InputPath: "/nonexistent/images.tar"},
-			setupMocks:   func(t *testing.T, mockClient *docker.MockAPIClient, ctx context.Context) {},
-			setupFiles:   nil,
-			wantErr:      true,
-			wantErrMsg:   "input file does not exist",
-		},
-		{
-			name:         "default input path not found",
-			clusterName:  "my-cluster",
-			distribution: v1alpha1.DistributionVanilla,
-			provider:     v1alpha1.ProviderDocker,
-			opts:         image.ImportOptions{}, // Uses default "images.tar"
-			setupMocks:   func(t *testing.T, mockClient *docker.MockAPIClient, ctx context.Context) {},
-			setupFiles:   nil,
-			wantErr:      true,
-			wantErrMsg:   "input file does not exist",
-		},
-		{
-			name:         "list nodes fails",
-			clusterName:  "my-cluster",
-			distribution: v1alpha1.DistributionVanilla,
-			provider:     v1alpha1.ProviderDocker,
-			opts:         image.ImportOptions{},
-			setupMocks: func(t *testing.T, mockClient *docker.MockAPIClient, ctx context.Context) {
-				t.Helper()
+		}, nil)
 
-				mockClient.EXPECT().
-					ContainerList(ctx, mock.Anything).
-					Return(nil, errListFailed)
-			},
-			setupFiles: func(t *testing.T, tmpDir string) string {
-				t.Helper()
+	importer := image.NewImporter(mockClient)
+	err = importer.Import(
+		ctx,
+		"my-cluster",
+		v1alpha1.DistributionK3s,
+		v1alpha1.ProviderDocker,
+		image.ImportOptions{InputPath: inputPath},
+	)
 
-				inputPath := filepath.Join(tmpDir, "images.tar")
-				err := os.WriteFile(inputPath, []byte("fake tar content"), 0o644)
-				require.NoError(t, err)
-
-				return inputPath
-			},
-			wantErr:    true,
-			wantErrMsg: "failed to list nodes",
-		},
-		{
-			name:         "no nodes found",
-			clusterName:  "my-cluster",
-			distribution: v1alpha1.DistributionVanilla,
-			provider:     v1alpha1.ProviderDocker,
-			opts:         image.ImportOptions{},
-			setupMocks: func(t *testing.T, mockClient *docker.MockAPIClient, ctx context.Context) {
-				t.Helper()
-
-				mockClient.EXPECT().
-					ContainerList(ctx, mock.Anything).
-					Return([]container.Summary{}, nil)
-			},
-			setupFiles: func(t *testing.T, tmpDir string) string {
-				t.Helper()
-
-				inputPath := filepath.Join(tmpDir, "images.tar")
-				err := os.WriteFile(inputPath, []byte("fake tar content"), 0o644)
-				require.NoError(t, err)
-
-				return inputPath
-			},
-			wantErr:    true,
-			wantErrMsg: "no cluster nodes found",
-		},
-		{
-			name:         "only helper containers (no K8s nodes)",
-			clusterName:  "my-cluster",
-			distribution: v1alpha1.DistributionK3s,
-			provider:     v1alpha1.ProviderDocker,
-			opts:         image.ImportOptions{},
-			setupMocks: func(t *testing.T, mockClient *docker.MockAPIClient, ctx context.Context) {
-				t.Helper()
-
-				// Return only helper containers that should be filtered out
-				mockClient.EXPECT().
-					ContainerList(ctx, mock.Anything).
-					Return([]container.Summary{
-						{
-							Names:  []string{"/k3d-my-cluster-serverlb"},
-							Labels: map[string]string{"k3d.role": "loadbalancer"},
-						},
-						{
-							Names:  []string{"/k3d-my-cluster-tools"},
-							Labels: map[string]string{"k3d.role": "noRole"},
-						},
-					}, nil)
-			},
-			setupFiles: func(t *testing.T, tmpDir string) string {
-				t.Helper()
-
-				inputPath := filepath.Join(tmpDir, "images.tar")
-				err := os.WriteFile(inputPath, []byte("fake tar content"), 0o644)
-				require.NoError(t, err)
-
-				return inputPath
-			},
-			wantErr:    true,
-			wantErrMsg: "no valid kubernetes nodes found",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			ctx := context.Background()
-			mockClient := docker.NewMockAPIClient(t)
-
-			tmpDir := t.TempDir()
-
-			if tt.setupFiles != nil {
-				inputPath := tt.setupFiles(t, tmpDir)
-				if tt.opts.InputPath == "" {
-					tt.opts.InputPath = inputPath
-				}
-			}
-
-			tt.setupMocks(t, mockClient, ctx)
-
-			importer := image.NewImporter(mockClient)
-			err := importer.Import(ctx, tt.clusterName, tt.distribution, tt.provider, tt.opts)
-
-			if tt.wantErr {
-				require.Error(t, err)
-				assert.Contains(t, err.Error(), tt.wantErrMsg)
-
-				return
-			}
-
-			require.NoError(t, err)
-		})
-	}
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no valid kubernetes nodes found")
 }
 
 func TestImportSuccessVanilla(t *testing.T) {
@@ -232,7 +222,7 @@ func TestImportSuccessVanilla(t *testing.T) {
 
 	// Create input file
 	inputPath := filepath.Join(tmpDir, "images.tar")
-	err := os.WriteFile(inputPath, []byte("fake tar content"), 0o644)
+	err := os.WriteFile(inputPath, []byte("fake tar content"), 0o600)
 	require.NoError(t, err)
 
 	// Mock ContainerList - returns both control-plane and worker
@@ -257,10 +247,11 @@ func TestImportSuccessVanilla(t *testing.T) {
 			Return(nil).Once()
 
 		// Mock exec for import command - Kind uses /root path
-		setupImportExecMock(t, mockClient, ctx, nodeName, "/root/ksail-images-import.tar")
+		importPath := "/root/ksail-images-import.tar"
+		setupImportExecMockForImporter(ctx, t, mockClient, nodeName, importPath)
 
 		// Mock exec for cleanup
-		setupExecMock(t, mockClient, ctx, nodeName, "", 0)
+		setupExecMockForImporter(ctx, t, mockClient, nodeName)
 	}
 
 	importer := image.NewImporter(mockClient)
@@ -286,7 +277,7 @@ func TestImportSuccessK3s(t *testing.T) {
 
 	// Create input file
 	inputPath := filepath.Join(tmpDir, "images.tar")
-	err := os.WriteFile(inputPath, []byte("fake tar content"), 0o644)
+	err := os.WriteFile(inputPath, []byte("fake tar content"), 0o600)
 	require.NoError(t, err)
 
 	// Mock ContainerList - K3d nodes with helper containers mixed in
@@ -304,11 +295,11 @@ func TestImportSuccessK3s(t *testing.T) {
 			{
 				Names:  []string{"/k3d-my-cluster-serverlb"},
 				Labels: map[string]string{"k3d.role": "loadbalancer"},
-			}, // Should be filtered
+			},
 			{
 				Names:  []string{"/k3d-my-cluster-registry"},
 				Labels: map[string]string{"k3d.role": "registry"},
-			}, // Should be filtered
+			},
 		}, nil)
 
 	// Import happens only to server and agent nodes (not loadbalancer or registry)
@@ -319,10 +310,10 @@ func TestImportSuccessK3s(t *testing.T) {
 			Return(nil).Once()
 
 		// Mock exec for import command - K3d uses /tmp path
-		setupImportExecMock(t, mockClient, ctx, nodeName, "/tmp/ksail-images-import.tar")
+		setupImportExecMockForImporter(ctx, t, mockClient, nodeName, "/tmp/ksail-images-import.tar")
 
 		// Mock exec for cleanup
-		setupExecMock(t, mockClient, ctx, nodeName, "", 0)
+		setupExecMockForImporter(ctx, t, mockClient, nodeName)
 	}
 
 	importer := image.NewImporter(mockClient)
@@ -346,11 +337,9 @@ func TestImportCopyToContainerFails(t *testing.T) {
 	mockClient := docker.NewMockAPIClient(t)
 	tmpDir := t.TempDir()
 
-	errCopyFailed := errors.New("copy to container failed")
-
 	// Create input file
 	inputPath := filepath.Join(tmpDir, "images.tar")
-	err := os.WriteFile(inputPath, []byte("fake tar content"), 0o644)
+	err := os.WriteFile(inputPath, []byte("fake tar content"), 0o600)
 	require.NoError(t, err)
 
 	mockClient.EXPECT().
@@ -365,7 +354,7 @@ func TestImportCopyToContainerFails(t *testing.T) {
 	// Mock CopyToContainer - fails
 	mockClient.EXPECT().
 		CopyToContainer(ctx, "my-cluster-control-plane", "/root", mock.Anything, container.CopyToContainerOptions{}).
-		Return(errCopyFailed)
+		Return(errImportCopyFailed)
 
 	importer := image.NewImporter(mockClient)
 	err = importer.Import(
@@ -391,7 +380,7 @@ func TestImportExecFails(t *testing.T) {
 
 	// Create input file
 	inputPath := filepath.Join(tmpDir, "images.tar")
-	err := os.WriteFile(inputPath, []byte("fake tar content"), 0o644)
+	err := os.WriteFile(inputPath, []byte("fake tar content"), 0o600)
 	require.NoError(t, err)
 
 	mockClient.EXPECT().
@@ -446,7 +435,7 @@ func TestImportEmptyProvider(t *testing.T) {
 
 	// Create input file
 	inputPath := filepath.Join(tmpDir, "images.tar")
-	err := os.WriteFile(inputPath, []byte("fake tar content"), 0o644)
+	err := os.WriteFile(inputPath, []byte("fake tar content"), 0o600)
 	require.NoError(t, err)
 
 	// Empty provider should default to Docker behavior
@@ -465,16 +454,16 @@ func TestImportEmptyProvider(t *testing.T) {
 		Return(nil)
 
 	// Mock exec for import
-	setupImportExecMock(
+	setupImportExecMockForImporter(
+		ctx,
 		t,
 		mockClient,
-		ctx,
 		"my-cluster-control-plane",
 		"/root/ksail-images-import.tar",
 	)
 
 	// Mock exec for cleanup
-	setupExecMock(t, mockClient, ctx, "my-cluster-control-plane", "", 0)
+	setupExecMockForImporter(ctx, t, mockClient, "my-cluster-control-plane")
 
 	importer := image.NewImporter(mockClient)
 	err = importer.Import(ctx, "my-cluster", v1alpha1.DistributionVanilla, "", image.ImportOptions{
@@ -491,11 +480,9 @@ func TestImportMultipleNodesPartialFailure(t *testing.T) {
 	mockClient := docker.NewMockAPIClient(t)
 	tmpDir := t.TempDir()
 
-	errCopyFailed := errors.New("copy to container failed")
-
 	// Create input file
 	inputPath := filepath.Join(tmpDir, "images.tar")
-	err := os.WriteFile(inputPath, []byte("fake tar content"), 0o644)
+	err := os.WriteFile(inputPath, []byte("fake tar content"), 0o600)
 	require.NoError(t, err)
 
 	// Return multiple nodes
@@ -517,19 +504,19 @@ func TestImportMultipleNodesPartialFailure(t *testing.T) {
 		CopyToContainer(ctx, "my-cluster-control-plane", "/root", mock.Anything, container.CopyToContainerOptions{}).
 		Return(nil).Once()
 
-	setupImportExecMock(
+	setupImportExecMockForImporter(
+		ctx,
 		t,
 		mockClient,
-		ctx,
 		"my-cluster-control-plane",
 		"/root/ksail-images-import.tar",
 	)
-	setupExecMock(t, mockClient, ctx, "my-cluster-control-plane", "", 0)
+	setupExecMockForImporter(ctx, t, mockClient, "my-cluster-control-plane")
 
 	// Second node fails during copy
 	mockClient.EXPECT().
 		CopyToContainer(ctx, "my-cluster-worker", "/root", mock.Anything, container.CopyToContainerOptions{}).
-		Return(errCopyFailed).Once()
+		Return(errImportCopyFailed).Once()
 
 	importer := image.NewImporter(mockClient)
 	err = importer.Import(
@@ -546,11 +533,88 @@ func TestImportMultipleNodesPartialFailure(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to import images to node my-cluster-worker")
 }
 
-// setupImportExecMock sets up exec mocks for the ctr import command.
-func setupImportExecMock(
+func TestImportLargeFile(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	mockClient := docker.NewMockAPIClient(t)
+	tmpDir := t.TempDir()
+
+	// Create a larger input file to test tar creation
+	inputPath := filepath.Join(tmpDir, "images.tar")
+	largeContent := bytes.Repeat([]byte("image-data"), 1000) // 10KB
+	err := os.WriteFile(inputPath, largeContent, 0o600)
+	require.NoError(t, err)
+
+	mockClient.EXPECT().
+		ContainerList(ctx, mock.Anything).
+		Return([]container.Summary{
+			{
+				Names:  []string{"/my-cluster-control-plane"},
+				Labels: map[string]string{"io.x-k8s.kind.role": "control-plane"},
+			},
+		}, nil)
+
+	// Verify the tar archive sent to container has correct structure
+	mockClient.EXPECT().
+		CopyToContainer(ctx, "my-cluster-control-plane", "/root", mock.MatchedBy(func(reader io.Reader) bool {
+			// Read the tar data and verify it's valid
+			return reader != nil
+		}), container.CopyToContainerOptions{}).
+		Return(nil)
+
+	setupImportExecMockForImporter(
+		ctx,
+		t,
+		mockClient,
+		"my-cluster-control-plane",
+		"/root/ksail-images-import.tar",
+	)
+	setupExecMockForImporter(ctx, t, mockClient, "my-cluster-control-plane")
+
+	importer := image.NewImporter(mockClient)
+	err = importer.Import(
+		ctx,
+		"my-cluster",
+		v1alpha1.DistributionVanilla,
+		v1alpha1.ProviderDocker,
+		image.ImportOptions{
+			InputPath: inputPath,
+		},
+	)
+
+	require.NoError(t, err)
+}
+
+// setupExecMockForImporter is a helper to set up ContainerExec* mocks for simple cases.
+func setupExecMockForImporter(
+	ctx context.Context,
 	t *testing.T,
 	mockClient *docker.MockAPIClient,
+	containerName string,
+) {
+	t.Helper()
+
+	execID := "exec-" + containerName
+
+	mockClient.EXPECT().
+		ContainerExecCreate(ctx, containerName, mock.Anything).
+		Return(container.ExecCreateResponse{ID: execID}, nil).Once()
+
+	mockClient.EXPECT().
+		ContainerExecAttach(ctx, execID, container.ExecStartOptions{}).
+		Return(mockDockerStreamResponse("", ""), nil).Once()
+
+	mockClient.EXPECT().
+		ContainerExecInspect(ctx, execID).
+		Return(container.ExecInspect{ExitCode: 0}, nil).Once()
+}
+
+// setupImportExecMockForImporter sets up exec mocks for the ctr import command.
+func setupImportExecMockForImporter(
 	ctx context.Context,
+	t *testing.T,
+	mockClient *docker.MockAPIClient,
 	containerName string,
 	importPath string,
 ) {
@@ -578,57 +642,4 @@ func setupImportExecMock(
 	mockClient.EXPECT().
 		ContainerExecInspect(ctx, execID).
 		Return(container.ExecInspect{ExitCode: 0}, nil).Once()
-}
-
-func TestImportLargeFile(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	mockClient := docker.NewMockAPIClient(t)
-	tmpDir := t.TempDir()
-
-	// Create a larger input file to test tar creation
-	inputPath := filepath.Join(tmpDir, "images.tar")
-	largeContent := bytes.Repeat([]byte("image-data"), 1000) // 10KB
-	err := os.WriteFile(inputPath, largeContent, 0o644)
-	require.NoError(t, err)
-
-	mockClient.EXPECT().
-		ContainerList(ctx, mock.Anything).
-		Return([]container.Summary{
-			{
-				Names:  []string{"/my-cluster-control-plane"},
-				Labels: map[string]string{"io.x-k8s.kind.role": "control-plane"},
-			},
-		}, nil)
-
-	// Verify the tar archive sent to container has correct structure
-	mockClient.EXPECT().
-		CopyToContainer(ctx, "my-cluster-control-plane", "/root", mock.MatchedBy(func(r io.Reader) bool {
-			// Read the tar data and verify it's valid
-			return r != nil
-		}), container.CopyToContainerOptions{}).
-		Return(nil)
-
-	setupImportExecMock(
-		t,
-		mockClient,
-		ctx,
-		"my-cluster-control-plane",
-		"/root/ksail-images-import.tar",
-	)
-	setupExecMock(t, mockClient, ctx, "my-cluster-control-plane", "", 0)
-
-	importer := image.NewImporter(mockClient)
-	err = importer.Import(
-		ctx,
-		"my-cluster",
-		v1alpha1.DistributionVanilla,
-		v1alpha1.ProviderDocker,
-		image.ImportOptions{
-			InputPath: inputPath,
-		},
-	)
-
-	require.NoError(t, err)
 }

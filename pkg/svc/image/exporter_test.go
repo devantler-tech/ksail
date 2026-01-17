@@ -8,17 +8,21 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/client/docker"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/image"
 	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/filters"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+)
+
+// Package-level error definitions for linting compliance.
+var (
+	errExportListFailed = errors.New("list nodes failed")
+	errExportCopyFailed = errors.New("copy from container failed")
 )
 
 func TestNewExporter(t *testing.T) {
@@ -30,142 +34,131 @@ func TestNewExporter(t *testing.T) {
 	assert.NotNil(t, exporter, "NewExporter should return a non-nil exporter")
 }
 
-func TestExport(t *testing.T) {
+func TestExportUnsupportedDistribution(t *testing.T) {
 	t.Parallel()
 
-	errListFailed := errors.New("list nodes failed")
+	ctx := context.Background()
+	mockClient := docker.NewMockAPIClient(t)
+	tmpDir := t.TempDir()
+	outputPath := filepath.Join(tmpDir, "images.tar")
 
-	tests := []struct {
-		name         string
-		clusterName  string
-		distribution v1alpha1.Distribution
-		provider     v1alpha1.Provider
-		opts         image.ExportOptions
-		setupMocks   func(t *testing.T, mockClient *docker.MockAPIClient, ctx context.Context, tmpDir string)
-		setupFiles   func(t *testing.T, tmpDir string)
-		wantErr      bool
-		wantErrMsg   string
-		checkResult  func(t *testing.T, tmpDir string)
-	}{
-		{
-			name:         "unsupported Talos distribution",
-			clusterName:  "my-cluster",
-			distribution: v1alpha1.DistributionTalos,
-			provider:     v1alpha1.ProviderDocker,
-			opts:         image.ExportOptions{},
-			setupMocks:   func(t *testing.T, mockClient *docker.MockAPIClient, ctx context.Context, tmpDir string) {},
-			wantErr:      true,
-			wantErrMsg:   "distribution does not support image export/import",
-		},
-		{
-			name:         "unsupported provider (Hetzner)",
-			clusterName:  "my-cluster",
-			distribution: v1alpha1.DistributionVanilla,
-			provider:     v1alpha1.ProviderHetzner,
-			opts:         image.ExportOptions{},
-			setupMocks: func(t *testing.T, mockClient *docker.MockAPIClient, ctx context.Context, tmpDir string) {
-				t.Helper()
-				// No mocks needed - should fail before listing nodes
+	exporter := image.NewExporter(mockClient)
+	err := exporter.Export(
+		ctx,
+		"my-cluster",
+		v1alpha1.DistributionTalos,
+		v1alpha1.ProviderDocker,
+		image.ExportOptions{OutputPath: outputPath},
+	)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "distribution does not support image export/import")
+}
+
+func TestExportUnsupportedProvider(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	mockClient := docker.NewMockAPIClient(t)
+	tmpDir := t.TempDir()
+	outputPath := filepath.Join(tmpDir, "images.tar")
+
+	exporter := image.NewExporter(mockClient)
+	err := exporter.Export(
+		ctx,
+		"my-cluster",
+		v1alpha1.DistributionVanilla,
+		v1alpha1.ProviderHetzner,
+		image.ExportOptions{OutputPath: outputPath},
+	)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unsupported provider for image operations")
+}
+
+func TestExportListNodesFails(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	mockClient := docker.NewMockAPIClient(t)
+	tmpDir := t.TempDir()
+	outputPath := filepath.Join(tmpDir, "images.tar")
+
+	mockClient.EXPECT().
+		ContainerList(ctx, mock.MatchedBy(func(opts container.ListOptions) bool {
+			return opts.Filters.Get("label") != nil
+		})).
+		Return(nil, errExportListFailed)
+
+	exporter := image.NewExporter(mockClient)
+	err := exporter.Export(
+		ctx,
+		"my-cluster",
+		v1alpha1.DistributionVanilla,
+		v1alpha1.ProviderDocker,
+		image.ExportOptions{OutputPath: outputPath},
+	)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to list nodes")
+}
+
+func TestExportNoNodesFound(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	mockClient := docker.NewMockAPIClient(t)
+	tmpDir := t.TempDir()
+	outputPath := filepath.Join(tmpDir, "images.tar")
+
+	mockClient.EXPECT().
+		ContainerList(ctx, mock.Anything).
+		Return([]container.Summary{}, nil)
+
+	exporter := image.NewExporter(mockClient)
+	err := exporter.Export(
+		ctx,
+		"my-cluster",
+		v1alpha1.DistributionVanilla,
+		v1alpha1.ProviderDocker,
+		image.ExportOptions{OutputPath: outputPath},
+	)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no cluster nodes found")
+}
+
+func TestExportNoImagesFound(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	mockClient := docker.NewMockAPIClient(t)
+	tmpDir := t.TempDir()
+	outputPath := filepath.Join(tmpDir, "images.tar")
+
+	mockClient.EXPECT().
+		ContainerList(ctx, mock.Anything).
+		Return([]container.Summary{
+			{
+				Names:  []string{"/my-cluster-control-plane"},
+				Labels: map[string]string{"io.x-k8s.kind.role": "control-plane"},
 			},
-			wantErr:    true,
-			wantErrMsg: "unsupported provider for image operations",
-		},
-		{
-			name:         "list nodes fails",
-			clusterName:  "my-cluster",
-			distribution: v1alpha1.DistributionVanilla,
-			provider:     v1alpha1.ProviderDocker,
-			opts:         image.ExportOptions{},
-			setupMocks: func(t *testing.T, mockClient *docker.MockAPIClient, ctx context.Context, tmpDir string) {
-				t.Helper()
+		}, nil)
 
-				mockClient.EXPECT().
-					ContainerList(ctx, mock.MatchedBy(func(opts container.ListOptions) bool {
-						return opts.Filters.Get("label") != nil
-					})).
-					Return(nil, errListFailed)
-			},
-			wantErr:    true,
-			wantErrMsg: "failed to list nodes",
-		},
-		{
-			name:         "no nodes found",
-			clusterName:  "my-cluster",
-			distribution: v1alpha1.DistributionVanilla,
-			provider:     v1alpha1.ProviderDocker,
-			opts:         image.ExportOptions{},
-			setupMocks: func(t *testing.T, mockClient *docker.MockAPIClient, ctx context.Context, tmpDir string) {
-				t.Helper()
+	// Mock exec for listing images - returns empty
+	setupExecMockForExporter(ctx, t, mockClient, "my-cluster-control-plane")
 
-				mockClient.EXPECT().
-					ContainerList(ctx, mock.Anything).
-					Return([]container.Summary{}, nil)
-			},
-			wantErr:    true,
-			wantErrMsg: "no cluster nodes found",
-		},
-		{
-			name:         "no images found in cluster",
-			clusterName:  "my-cluster",
-			distribution: v1alpha1.DistributionVanilla,
-			provider:     v1alpha1.ProviderDocker,
-			opts:         image.ExportOptions{},
-			setupMocks: func(t *testing.T, mockClient *docker.MockAPIClient, ctx context.Context, tmpDir string) {
-				t.Helper()
+	exporter := image.NewExporter(mockClient)
+	err := exporter.Export(
+		ctx,
+		"my-cluster",
+		v1alpha1.DistributionVanilla,
+		v1alpha1.ProviderDocker,
+		image.ExportOptions{OutputPath: outputPath},
+	)
 
-				// Mock ContainerList for listing nodes
-				mockClient.EXPECT().
-					ContainerList(ctx, mock.Anything).
-					Return([]container.Summary{
-						{
-							Names:  []string{"/my-cluster-control-plane"},
-							Labels: map[string]string{"io.x-k8s.kind.role": "control-plane"},
-						},
-					}, nil)
-
-				// Mock exec for listing images - returns empty
-				setupExecMock(t, mockClient, ctx, "my-cluster-control-plane", "", 0)
-			},
-			wantErr:    true,
-			wantErrMsg: "no images found in cluster",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			ctx := context.Background()
-			mockClient := docker.NewMockAPIClient(t)
-
-			tmpDir := t.TempDir()
-			if tt.opts.OutputPath == "" {
-				tt.opts.OutputPath = filepath.Join(tmpDir, "images.tar")
-			}
-
-			if tt.setupFiles != nil {
-				tt.setupFiles(t, tmpDir)
-			}
-
-			tt.setupMocks(t, mockClient, ctx, tmpDir)
-
-			exporter := image.NewExporter(mockClient)
-			err := exporter.Export(ctx, tt.clusterName, tt.distribution, tt.provider, tt.opts)
-
-			if tt.wantErr {
-				require.Error(t, err)
-				assert.Contains(t, err.Error(), tt.wantErrMsg)
-
-				return
-			}
-
-			require.NoError(t, err)
-
-			if tt.checkResult != nil {
-				tt.checkResult(t, tmpDir)
-			}
-		})
-	}
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no images found in cluster")
 }
 
 func TestExportWithSpecificImages(t *testing.T) {
@@ -187,31 +180,22 @@ func TestExportWithSpecificImages(t *testing.T) {
 		}, nil)
 
 	// Mock exec for export command
-	setupExecMockWithCmd(
-		t,
-		mockClient,
-		ctx,
-		"my-cluster-control-plane",
-		[]string{
-			"ctr",
-			"--namespace=k8s.io",
-			"images",
-			"export",
-			"/root/ksail-images-export.tar",
-			"nginx:latest",
-		},
-		"",
-		0,
+	exportCmd := []string{
+		"ctr", "--namespace=k8s.io", "images", "export",
+		"/root/ksail-images-export.tar", "nginx:latest",
+	}
+	setupExecMockWithCmdForExporter(
+		ctx, t, mockClient, "my-cluster-control-plane", exportCmd,
 	)
 
 	// Mock CopyFromContainer - create a valid tar archive
-	tarContent := createTarWithFile(t, "ksail-images-export.tar", []byte("fake image data"))
+	tarContent := createExportTar(t, []byte("fake image data"))
 	mockClient.EXPECT().
 		CopyFromContainer(ctx, "my-cluster-control-plane", "/root/ksail-images-export.tar").
 		Return(io.NopCloser(bytes.NewReader(tarContent)), container.PathStat{}, nil)
 
 	// Mock exec for cleanup
-	setupExecMock(t, mockClient, ctx, "my-cluster-control-plane", "", 0)
+	setupExecMockForExporter(ctx, t, mockClient, "my-cluster-control-plane")
 
 	exporter := image.NewExporter(mockClient)
 	err := exporter.Export(
@@ -254,31 +238,22 @@ func TestExportK3sDistribution(t *testing.T) {
 		}, nil)
 
 	// Mock exec for export - K3d uses /tmp path
-	setupExecMockWithCmd(
-		t,
-		mockClient,
-		ctx,
-		"k3d-my-cluster-server-0",
-		[]string{
-			"ctr",
-			"--namespace=k8s.io",
-			"images",
-			"export",
-			"/tmp/ksail-images-export.tar",
-			"nginx:latest",
-		},
-		"",
-		0,
+	k3dExportCmd := []string{
+		"ctr", "--namespace=k8s.io", "images", "export",
+		"/tmp/ksail-images-export.tar", "nginx:latest",
+	}
+	setupExecMockWithCmdForExporter(
+		ctx, t, mockClient, "k3d-my-cluster-server-0", k3dExportCmd,
 	)
 
 	// Mock CopyFromContainer
-	tarContent := createTarWithFile(t, "ksail-images-export.tar", []byte("fake image data"))
+	tarContent := createExportTar(t, []byte("fake image data"))
 	mockClient.EXPECT().
 		CopyFromContainer(ctx, "k3d-my-cluster-server-0", "/tmp/ksail-images-export.tar").
 		Return(io.NopCloser(bytes.NewReader(tarContent)), container.PathStat{}, nil)
 
 	// Mock exec for cleanup
-	setupExecMock(t, mockClient, ctx, "k3d-my-cluster-server-0", "", 0)
+	setupExecMockForExporter(ctx, t, mockClient, "k3d-my-cluster-server-0")
 
 	exporter := image.NewExporter(mockClient)
 	err := exporter.Export(
@@ -293,98 +268,6 @@ func TestExportK3sDistribution(t *testing.T) {
 	)
 
 	require.NoError(t, err)
-}
-
-// setupExecMock is a helper to set up ContainerExec* mocks for simple cases.
-func setupExecMock(
-	t *testing.T,
-	mockClient *docker.MockAPIClient,
-	ctx context.Context,
-	containerName string,
-	stdout string,
-	exitCode int,
-) {
-	t.Helper()
-
-	execID := "exec-" + containerName
-
-	mockClient.EXPECT().
-		ContainerExecCreate(ctx, containerName, mock.Anything).
-		Return(container.ExecCreateResponse{ID: execID}, nil).Once()
-
-	mockClient.EXPECT().
-		ContainerExecAttach(ctx, execID, container.ExecStartOptions{}).
-		Return(mockDockerStreamResponse(stdout, ""), nil).Once()
-
-	mockClient.EXPECT().
-		ContainerExecInspect(ctx, execID).
-		Return(container.ExecInspect{ExitCode: exitCode}, nil).Once()
-}
-
-// setupExecMockWithCmd sets up exec mocks with specific command matching.
-func setupExecMockWithCmd(
-	t *testing.T,
-	mockClient *docker.MockAPIClient,
-	ctx context.Context,
-	containerName string,
-	expectedCmd []string,
-	stdout string,
-	exitCode int,
-) {
-	t.Helper()
-
-	execID := "exec-" + containerName + "-cmd"
-
-	mockClient.EXPECT().
-		ContainerExecCreate(ctx, containerName, mock.MatchedBy(func(opts container.ExecOptions) bool {
-			if len(opts.Cmd) != len(expectedCmd) {
-				return false
-			}
-
-			for i := range opts.Cmd {
-				if opts.Cmd[i] != expectedCmd[i] {
-					return false
-				}
-			}
-
-			return true
-		})).
-		Return(container.ExecCreateResponse{ID: execID}, nil).Once()
-
-	mockClient.EXPECT().
-		ContainerExecAttach(ctx, execID, container.ExecStartOptions{}).
-		Return(mockDockerStreamResponse(stdout, ""), nil).Once()
-
-	mockClient.EXPECT().
-		ContainerExecInspect(ctx, execID).
-		Return(container.ExecInspect{ExitCode: exitCode}, nil).Once()
-}
-
-// createTarWithFile creates a tar archive containing a single file.
-func createTarWithFile(t *testing.T, filename string, content []byte) []byte {
-	t.Helper()
-
-	var buf bytes.Buffer
-
-	tw := tar.NewWriter(&buf)
-
-	header := &tar.Header{
-		Name:     filename,
-		Mode:     0o644,
-		Size:     int64(len(content)),
-		Typeflag: tar.TypeReg,
-	}
-
-	err := tw.WriteHeader(header)
-	require.NoError(t, err)
-
-	_, err = tw.Write(content)
-	require.NoError(t, err)
-
-	err = tw.Close()
-	require.NoError(t, err)
-
-	return buf.Bytes()
 }
 
 func TestExportEmptyProvider(t *testing.T) {
@@ -406,10 +289,10 @@ func TestExportEmptyProvider(t *testing.T) {
 		}, nil)
 
 	// Mock exec for export
-	setupExecMockWithCmd(
+	setupExecMockWithCmdForExporter(
+		ctx,
 		t,
 		mockClient,
-		ctx,
 		"my-cluster-control-plane",
 		[]string{
 			"ctr",
@@ -419,18 +302,16 @@ func TestExportEmptyProvider(t *testing.T) {
 			"/root/ksail-images-export.tar",
 			"nginx:latest",
 		},
-		"",
-		0,
 	)
 
 	// Mock CopyFromContainer
-	tarContent := createTarWithFile(t, "ksail-images-export.tar", []byte("fake image data"))
+	tarContent := createExportTar(t, []byte("fake image data"))
 	mockClient.EXPECT().
 		CopyFromContainer(ctx, "my-cluster-control-plane", "/root/ksail-images-export.tar").
 		Return(io.NopCloser(bytes.NewReader(tarContent)), container.PathStat{}, nil)
 
 	// Mock exec for cleanup
-	setupExecMock(t, mockClient, ctx, "my-cluster-control-plane", "", 0)
+	setupExecMockForExporter(ctx, t, mockClient, "my-cluster-control-plane")
 
 	exporter := image.NewExporter(mockClient)
 	err := exporter.Export(ctx, "my-cluster", v1alpha1.DistributionVanilla, "", image.ExportOptions{
@@ -449,8 +330,6 @@ func TestExportCopyFromContainerFails(t *testing.T) {
 	tmpDir := t.TempDir()
 	outputPath := filepath.Join(tmpDir, "images.tar")
 
-	errCopyFailed := errors.New("copy from container failed")
-
 	mockClient.EXPECT().
 		ContainerList(ctx, mock.Anything).
 		Return([]container.Summary{
@@ -461,10 +340,10 @@ func TestExportCopyFromContainerFails(t *testing.T) {
 		}, nil)
 
 	// Mock exec for export
-	setupExecMockWithCmd(
+	setupExecMockWithCmdForExporter(
+		ctx,
 		t,
 		mockClient,
-		ctx,
 		"my-cluster-control-plane",
 		[]string{
 			"ctr",
@@ -474,14 +353,12 @@ func TestExportCopyFromContainerFails(t *testing.T) {
 			"/root/ksail-images-export.tar",
 			"nginx:latest",
 		},
-		"",
-		0,
 	)
 
 	// Mock CopyFromContainer - fails
 	mockClient.EXPECT().
 		CopyFromContainer(ctx, "my-cluster-control-plane", "/root/ksail-images-export.tar").
-		Return(nil, container.PathStat{}, errCopyFailed)
+		Return(nil, container.PathStat{}, errExportCopyFailed)
 
 	exporter := image.NewExporter(mockClient)
 	err := exporter.Export(
@@ -565,37 +442,24 @@ func TestExportListImagesFiltersDigests(t *testing.T) {
 
 	// First exec is for listing images - includes both named images and digest-only refs
 	imageList := "nginx:latest\nsha256:abc123\nredis:alpine\nsha256:def456\n"
-	setupExecMockWithCmd(t, mockClient, ctx, "my-cluster-control-plane",
-		[]string{"ctr", "--namespace=k8s.io", "images", "list", "-q"},
-		imageList, 0)
+	setupExecMockWithStdoutForExporter(ctx, t, mockClient, "my-cluster-control-plane",
+		[]string{"ctr", "--namespace=k8s.io", "images", "list", "-q"}, imageList)
 
 	// Second exec is for exporting - only named images
-	setupExecMockWithCmd(
-		t,
-		mockClient,
-		ctx,
-		"my-cluster-control-plane",
-		[]string{
-			"ctr",
-			"--namespace=k8s.io",
-			"images",
-			"export",
-			"/root/ksail-images-export.tar",
-			"nginx:latest",
-			"redis:alpine",
-		},
-		"",
-		0,
-	)
+	exportCmd := []string{
+		"ctr", "--namespace=k8s.io", "images", "export",
+		"/root/ksail-images-export.tar", "nginx:latest", "redis:alpine",
+	}
+	setupExecMockWithCmdForExporter(ctx, t, mockClient, "my-cluster-control-plane", exportCmd)
 
 	// Mock CopyFromContainer
-	tarContent := createTarWithFile(t, "ksail-images-export.tar", []byte("fake image data"))
+	tarContent := createExportTar(t, []byte("fake image data"))
 	mockClient.EXPECT().
 		CopyFromContainer(ctx, "my-cluster-control-plane", "/root/ksail-images-export.tar").
 		Return(io.NopCloser(bytes.NewReader(tarContent)), container.PathStat{}, nil)
 
 	// Mock exec for cleanup
-	setupExecMock(t, mockClient, ctx, "my-cluster-control-plane", "", 0)
+	setupExecMockForExporter(ctx, t, mockClient, "my-cluster-control-plane")
 
 	exporter := image.NewExporter(mockClient)
 	err := exporter.Export(
@@ -611,119 +475,205 @@ func TestExportListImagesFiltersDigests(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestExportNodeSelectionPriority(t *testing.T) {
+func TestExportPrefersControlPlaneOverWorker(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name             string
-		distribution     v1alpha1.Distribution
-		nodes            []container.Summary
-		expectedNodeName string
-	}{
+	nodes := []container.Summary{
 		{
-			name:         "prefers control-plane over worker",
-			distribution: v1alpha1.DistributionVanilla,
-			nodes: []container.Summary{
-				{
-					Names:  []string{"/my-cluster-worker"},
-					Labels: map[string]string{"io.x-k8s.kind.role": "worker"},
-				},
-				{
-					Names:  []string{"/my-cluster-control-plane"},
-					Labels: map[string]string{"io.x-k8s.kind.role": "control-plane"},
-				},
-			},
-			expectedNodeName: "my-cluster-control-plane",
+			Names:  []string{"/my-cluster-worker"},
+			Labels: map[string]string{"io.x-k8s.kind.role": "worker"},
 		},
 		{
-			name:         "K3d prefers server over agent",
-			distribution: v1alpha1.DistributionK3s,
-			nodes: []container.Summary{
-				{
-					Names:  []string{"/k3d-my-cluster-agent-0"},
-					Labels: map[string]string{"k3d.role": "agent"},
-				},
-				{
-					Names:  []string{"/k3d-my-cluster-server-0"},
-					Labels: map[string]string{"k3d.role": "server"},
-				},
-			},
-			expectedNodeName: "k3d-my-cluster-server-0",
-		},
-		{
-			name:         "excludes loadbalancer",
-			distribution: v1alpha1.DistributionK3s,
-			nodes: []container.Summary{
-				{
-					Names:  []string{"/k3d-my-cluster-serverlb"},
-					Labels: map[string]string{"k3d.role": "loadbalancer"},
-				},
-				{
-					Names:  []string{"/k3d-my-cluster-server-0"},
-					Labels: map[string]string{"k3d.role": "server"},
-				},
-			},
-			expectedNodeName: "k3d-my-cluster-server-0",
+			Names:  []string{"/my-cluster-control-plane"},
+			Labels: map[string]string{"io.x-k8s.kind.role": "control-plane"},
 		},
 	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			ctx := context.Background()
-			mockClient := docker.NewMockAPIClient(t)
-			tmpDir := t.TempDir()
-			outputPath := filepath.Join(tmpDir, "images.tar")
-
-			mockClient.EXPECT().
-				ContainerList(ctx, mock.Anything).
-				Return(tt.nodes, nil)
-
-			// The expected node should be selected - use setupExecMock which accepts any command
-			setupExecMock(t, mockClient, ctx, tt.expectedNodeName, "", 0)
-
-			// Mock CopyFromContainer
-			tarContent := createTarWithFile(t, "ksail-images-export.tar", []byte("fake image data"))
-			mockClient.EXPECT().
-				CopyFromContainer(ctx, tt.expectedNodeName, mock.AnythingOfType("string")).
-				Return(io.NopCloser(bytes.NewReader(tarContent)), container.PathStat{}, nil)
-
-			// Mock exec for cleanup
-			setupExecMock(t, mockClient, ctx, tt.expectedNodeName, "", 0)
-
-			exporter := image.NewExporter(mockClient)
-			err := exporter.Export(
-				ctx,
-				"my-cluster",
-				tt.distribution,
-				v1alpha1.ProviderDocker,
-				image.ExportOptions{
-					OutputPath: outputPath,
-					Images:     []string{"nginx:latest"},
-				},
-			)
-
-			require.NoError(t, err)
-		})
-	}
+	runNodeSelectionTest(t, v1alpha1.DistributionVanilla, nodes, "my-cluster-control-plane")
 }
 
-// Helper to match container list filters.
-func matchContainerListFilters(labelKey, labelValue string) func(container.ListOptions) bool {
-	return func(opts container.ListOptions) bool {
-		f := opts.Filters
+func TestExportK3dPrefersServerOverAgent(t *testing.T) {
+	t.Parallel()
 
-		// Get the filter values for the label key
-		for _, v := range f.Get("label") {
-			if strings.Contains(v, labelKey) && strings.Contains(v, labelValue) {
-				return true
+	nodes := []container.Summary{
+		{
+			Names:  []string{"/k3d-my-cluster-agent-0"},
+			Labels: map[string]string{"k3d.role": "agent"},
+		},
+		{
+			Names:  []string{"/k3d-my-cluster-server-0"},
+			Labels: map[string]string{"k3d.role": "server"},
+		},
+	}
+	runNodeSelectionTest(t, v1alpha1.DistributionK3s, nodes, "k3d-my-cluster-server-0")
+}
+
+func TestExportExcludesLoadbalancer(t *testing.T) {
+	t.Parallel()
+
+	nodes := []container.Summary{
+		{
+			Names:  []string{"/k3d-my-cluster-serverlb"},
+			Labels: map[string]string{"k3d.role": "loadbalancer"},
+		},
+		{
+			Names:  []string{"/k3d-my-cluster-server-0"},
+			Labels: map[string]string{"k3d.role": "server"},
+		},
+	}
+	runNodeSelectionTest(t, v1alpha1.DistributionK3s, nodes, "k3d-my-cluster-server-0")
+}
+
+func runNodeSelectionTest(
+	t *testing.T,
+	distribution v1alpha1.Distribution,
+	nodes []container.Summary,
+	expectedNodeName string,
+) {
+	t.Helper()
+
+	ctx := context.Background()
+	mockClient := docker.NewMockAPIClient(t)
+	outputPath := filepath.Join(t.TempDir(), "images.tar")
+
+	mockClient.EXPECT().ContainerList(ctx, mock.Anything).Return(nodes, nil)
+	setupExecMockForExporter(ctx, t, mockClient, expectedNodeName)
+
+	tarContent := createExportTar(t, []byte("fake image data"))
+	mockClient.EXPECT().
+		CopyFromContainer(ctx, expectedNodeName, mock.AnythingOfType("string")).
+		Return(io.NopCloser(bytes.NewReader(tarContent)), container.PathStat{}, nil)
+
+	setupExecMockForExporter(ctx, t, mockClient, expectedNodeName)
+
+	exporter := image.NewExporter(mockClient)
+	err := exporter.Export(ctx, "my-cluster", distribution, v1alpha1.ProviderDocker,
+		image.ExportOptions{OutputPath: outputPath, Images: []string{"nginx:latest"}})
+
+	require.NoError(t, err)
+}
+
+// setupExecMockForExporter is a helper to set up ContainerExec* mocks for simple cases.
+func setupExecMockForExporter(
+	ctx context.Context,
+	t *testing.T,
+	mockClient *docker.MockAPIClient,
+	containerName string,
+) {
+	t.Helper()
+
+	execID := "exec-" + containerName
+
+	mockClient.EXPECT().
+		ContainerExecCreate(ctx, containerName, mock.Anything).
+		Return(container.ExecCreateResponse{ID: execID}, nil).Once()
+
+	mockClient.EXPECT().
+		ContainerExecAttach(ctx, execID, container.ExecStartOptions{}).
+		Return(mockDockerStreamResponse("", ""), nil).Once()
+
+	mockClient.EXPECT().
+		ContainerExecInspect(ctx, execID).
+		Return(container.ExecInspect{ExitCode: 0}, nil).Once()
+}
+
+// setupExecMockWithCmdForExporter sets up exec mocks with specific command matching.
+func setupExecMockWithCmdForExporter(
+	ctx context.Context,
+	t *testing.T,
+	mockClient *docker.MockAPIClient,
+	containerName string,
+	expectedCmd []string,
+) {
+	t.Helper()
+
+	execID := "exec-" + containerName + "-cmd"
+
+	mockClient.EXPECT().
+		ContainerExecCreate(ctx, containerName, mock.MatchedBy(func(opts container.ExecOptions) bool {
+			if len(opts.Cmd) != len(expectedCmd) {
+				return false
 			}
-		}
 
-		return len(f.Get("label")) > 0
-	}
+			for index := range opts.Cmd {
+				if opts.Cmd[index] != expectedCmd[index] {
+					return false
+				}
+			}
+
+			return true
+		})).
+		Return(container.ExecCreateResponse{ID: execID}, nil).Once()
+
+	mockClient.EXPECT().
+		ContainerExecAttach(ctx, execID, container.ExecStartOptions{}).
+		Return(mockDockerStreamResponse("", ""), nil).Once()
+
+	mockClient.EXPECT().
+		ContainerExecInspect(ctx, execID).
+		Return(container.ExecInspect{ExitCode: 0}, nil).Once()
 }
 
-// Reuse filter helper across tests.
-var _ = filters.Args{}
+// setupExecMockWithStdoutForExporter sets up exec mocks with stdout output.
+func setupExecMockWithStdoutForExporter(
+	ctx context.Context,
+	t *testing.T,
+	mockClient *docker.MockAPIClient,
+	containerName string,
+	expectedCmd []string,
+	stdout string,
+) {
+	t.Helper()
+
+	execID := "exec-" + containerName + "-stdout"
+
+	mockClient.EXPECT().
+		ContainerExecCreate(ctx, containerName, mock.MatchedBy(func(opts container.ExecOptions) bool {
+			if len(opts.Cmd) != len(expectedCmd) {
+				return false
+			}
+
+			for index := range opts.Cmd {
+				if opts.Cmd[index] != expectedCmd[index] {
+					return false
+				}
+			}
+
+			return true
+		})).
+		Return(container.ExecCreateResponse{ID: execID}, nil).Once()
+
+	mockClient.EXPECT().
+		ContainerExecAttach(ctx, execID, container.ExecStartOptions{}).
+		Return(mockDockerStreamResponse(stdout, ""), nil).Once()
+
+	mockClient.EXPECT().
+		ContainerExecInspect(ctx, execID).
+		Return(container.ExecInspect{ExitCode: 0}, nil).Once()
+}
+
+// createExportTar creates a tar archive containing the export file.
+func createExportTar(t *testing.T, content []byte) []byte {
+	t.Helper()
+
+	var buf bytes.Buffer
+
+	tarWriter := tar.NewWriter(&buf)
+
+	header := &tar.Header{
+		Name:     "ksail-images-export.tar",
+		Mode:     0o644,
+		Size:     int64(len(content)),
+		Typeflag: tar.TypeReg,
+	}
+
+	err := tarWriter.WriteHeader(header)
+	require.NoError(t, err)
+
+	_, err = tarWriter.Write(content)
+	require.NoError(t, err)
+
+	err = tarWriter.Close()
+	require.NoError(t, err)
+
+	return buf.Bytes()
+}
