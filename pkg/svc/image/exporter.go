@@ -37,9 +37,6 @@ type ExportOptions struct {
 	// Images is an optional list of specific images to export.
 	// If empty, all images in the cluster will be exported.
 	Images []string
-	// Platform filters images by OS/architecture (e.g., "linux/amd64").
-	// If empty, all platforms are included.
-	Platform string
 }
 
 // Exporter handles exporting container images from cluster containerd.
@@ -95,7 +92,7 @@ func (e *Exporter) Export(
 	}
 
 	// Export images using ctr inside the node container
-	return e.exportImagesFromNode(ctx, nodeName, opts.OutputPath, images, opts.Platform, tmpPath)
+	return e.exportImagesFromNode(ctx, nodeName, opts.OutputPath, images, tmpPath)
 }
 
 // findExportNode finds a suitable node for export operations.
@@ -148,7 +145,7 @@ func (e *Exporter) resolveImages(
 		return opts.Images, nil
 	}
 
-	images, err := e.listImagesInNode(ctx, nodeName, opts.Platform)
+	images, err := e.listImagesInNode(ctx, nodeName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list images: %w", err)
 	}
@@ -164,7 +161,6 @@ func (e *Exporter) resolveImages(
 func (e *Exporter) listImagesInNode(
 	ctx context.Context,
 	nodeName string,
-	platform string,
 ) ([]string, error) {
 	// Build ctr command to list images
 	cmd := []string{"ctr", "--namespace=k8s.io", "images", "list", "-q"}
@@ -186,11 +182,6 @@ func (e *Exporter) listImagesInNode(
 		}
 	}
 
-	// Filter by platform if specified
-	if platform != "" {
-		images = filterImagesByPlatform(images, platform)
-	}
-
 	return images, nil
 }
 
@@ -200,7 +191,6 @@ func (e *Exporter) exportImagesFromNode(
 	nodeName string,
 	outputPath string,
 	images []string,
-	platform string,
 	tmpBasePath string,
 ) error {
 	// Create a temporary file path inside the container
@@ -209,16 +199,8 @@ func (e *Exporter) exportImagesFromNode(
 	// Build ctr export command
 	// Note: We don't use --all-platforms because multi-platform images may have
 	// manifests for platforms whose layers aren't present locally, causing export to fail.
-	cmd := []string{
-		"ctr", "--namespace=k8s.io", "images", "export",
-	}
-
-	// Add platform filter if specified
-	if platform != "" {
-		cmd = append(cmd, "--platform="+platform)
-	}
-
-	cmd = append(cmd, tmpPath)
+	cmd := make([]string, 0, 5+len(images)) //nolint:mnd // fixed args + images
+	cmd = append(cmd, "ctr", "--namespace=k8s.io", "images", "export", tmpPath)
 	cmd = append(cmd, images...)
 
 	// Execute export command
@@ -392,12 +374,4 @@ func getTempPath(distribution v1alpha1.Distribution) string {
 	}
 
 	return tmpPathTmp
-}
-
-// filterImagesByPlatform filters images by platform (placeholder - actual filtering
-// would require inspecting each image manifest).
-func filterImagesByPlatform(images []string, _ string) []string {
-	// Platform filtering happens at ctr export time via --platform flag
-	// This function is a no-op as filtering is done during export
-	return images
 }
