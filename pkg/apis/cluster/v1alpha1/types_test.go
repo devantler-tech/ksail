@@ -249,3 +249,175 @@ func TestLocalRegistry_ResolvedTag(t *testing.T) {
 		})
 	}
 }
+
+func TestLocalRegistry_Enabled(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		registry string
+		want     bool
+	}{
+		{
+			name:     "returns_true_for_non_empty",
+			registry: "localhost:5000",
+			want:     true,
+		},
+		{
+			name:     "returns_true_for_external_registry",
+			registry: "ghcr.io/org/repo",
+			want:     true,
+		},
+		{
+			name:     "returns_false_for_empty",
+			registry: "",
+			want:     false,
+		},
+		{
+			name:     "returns_false_for_whitespace_only",
+			registry: "   ",
+			want:     false,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			reg := v1alpha1.LocalRegistry{Registry: testCase.registry}
+			assert.Equal(t, testCase.want, reg.Enabled())
+		})
+	}
+}
+
+func TestLocalRegistry_IsExternal(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		registry string
+		want     bool
+	}{
+		{
+			name:     "localhost_is_not_external",
+			registry: "localhost:5000",
+			want:     false,
+		},
+		{
+			name:     "127_0_0_1_is_not_external",
+			registry: "127.0.0.1:5000",
+			want:     false,
+		},
+		{
+			name:     "ghcr_io_is_external",
+			registry: "ghcr.io/org/repo",
+			want:     true,
+		},
+		{
+			name:     "docker_io_is_external",
+			registry: "docker.io/library/nginx",
+			want:     true,
+		},
+		{
+			name:     "empty_defaults_to_localhost_not_external",
+			registry: "",
+			want:     false,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			reg := v1alpha1.LocalRegistry{Registry: testCase.registry}
+			assert.Equal(t, testCase.want, reg.IsExternal())
+		})
+	}
+}
+
+func TestLocalRegistry_HasCredentials(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		registry string
+		want     bool
+	}{
+		{
+			name:     "no_credentials",
+			registry: "ghcr.io/org/repo",
+			want:     false,
+		},
+		{
+			name:     "username_and_password",
+			registry: "user:pass@ghcr.io/org/repo",
+			want:     true,
+		},
+		{
+			name:     "username_only",
+			registry: "user@ghcr.io/org/repo",
+			want:     true,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			reg := v1alpha1.LocalRegistry{Registry: testCase.registry}
+			assert.Equal(t, testCase.want, reg.HasCredentials())
+		})
+	}
+}
+
+func TestLocalRegistry_ResolvedHostPortPath(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		registry string
+		wantHost string
+		wantPort int32
+		wantPath string
+	}{
+		{
+			name:     "localhost_with_port",
+			registry: "localhost:5000",
+			wantHost: "localhost",
+			wantPort: 5000,
+			wantPath: "",
+		},
+		{
+			name:     "localhost_without_port_uses_default",
+			registry: "localhost",
+			wantHost: "localhost",
+			wantPort: v1alpha1.DefaultLocalRegistryPort,
+			wantPath: "",
+		},
+		{
+			name:     "external_registry_with_path",
+			registry: "ghcr.io/org/repo",
+			wantHost: "ghcr.io",
+			wantPort: 0, // No port for external registries
+			wantPath: "org/repo",
+		},
+		{
+			name:     "empty_registry_defaults",
+			registry: "",
+			wantHost: "localhost",
+			wantPort: v1alpha1.DefaultLocalRegistryPort,
+			wantPath: "",
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			reg := v1alpha1.LocalRegistry{Registry: testCase.registry}
+			assert.Equal(t, testCase.wantHost, reg.ResolvedHost())
+			assert.Equal(t, testCase.wantPort, reg.ResolvedPort())
+			assert.Equal(t, testCase.wantPath, reg.ResolvedPath())
+		})
+	}
+}
