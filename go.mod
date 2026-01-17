@@ -48,7 +48,7 @@ require (
 )
 
 require (
-	github.com/hetznercloud/hcloud-go/v2 v2.34.0
+	github.com/hetznercloud/hcloud-go/v2 v2.35.0
 	github.com/siderolabs/go-retry v0.3.3
 )
 
