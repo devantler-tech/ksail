@@ -51,6 +51,18 @@ inputs:
     description: GitHub Container Registry token (for external registry auth)
     required: false
     default: ""
+  enable-image-cache:
+    description: |
+      Enable container image caching using ksail workload image export/import.
+      This can speed up cluster startup by pre-loading cached images.
+      Note: Only works for Vanilla (Kind) and K3s (K3d) distributions.
+    required: false
+    default: "true"
+  image-cache-version:
+    description: |
+      Version salt for image cache key. Bump this to invalidate all image caches.
+    required: false
+    default: "v1"
 
 runs:
   using: composite
@@ -125,6 +137,15 @@ runs:
           ksail cluster create --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS
         fi
 
+    - name: 📥 Restore cached cluster images
+      id: restore-image-cache
+      if: inputs.enable-image-cache == 'true'
+      uses: ./.github/actions/cache-cluster-images
+      with:
+        distribution: ${{ inputs.distribution }}
+        operation: restore
+        cache-version: ${{ inputs.image-cache-version }}
+
     - name: 🧪 ksail cluster list
       shell: bash
       env:
@@ -178,6 +199,14 @@ runs:
       uses: ./.github/actions/debug-kubernetes-failure
       with:
         kubectl-command: "ksail workload"
+
+    - name: 💾 Save cluster images to cache
+      if: inputs.enable-image-cache == 'true' && steps.restore-image-cache.outputs.cache-hit != 'true' && steps.restore-image-cache.outputs.skipped != 'true'
+      uses: ./.github/actions/cache-cluster-images
+      with:
+        distribution: ${{ inputs.distribution }}
+        operation: save
+        cache-version: ${{ inputs.image-cache-version }}
 
     - name: 🧪 ksail cluster stop
       shell: bash

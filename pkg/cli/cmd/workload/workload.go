@@ -2,6 +2,7 @@ package workload
 
 import (
 	"github.com/devantler-tech/ksail/v5/pkg/cli/cmd/workload/gen"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/cmd/workload/image"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	"github.com/spf13/cobra"
 )
@@ -32,6 +33,7 @@ func NewWorkloadCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
 	cmd.AddCommand(NewExposeCmd())
 	cmd.AddCommand(NewGetCmd())
 	cmd.AddCommand(gen.NewGenCmd(runtimeContainer))
+	cmd.AddCommand(image.NewImageCmd(runtimeContainer))
 	cmd.AddCommand(NewInstallCmd(runtimeContainer))
 	cmd.AddCommand(NewLogsCmd())
 	cmd.AddCommand(NewRolloutCmd())
