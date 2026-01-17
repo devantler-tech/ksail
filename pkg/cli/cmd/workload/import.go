@@ -62,7 +62,6 @@ func runImportCommand(
 		inputPath = args[0]
 	}
 
-	cmd.Println()
 	notify.WriteMessage(notify.Message{
 		Type:    notify.TitleType,
 		Emoji:   "📥",

@@ -65,6 +65,11 @@ func runExportCommand(
 	cfgManager *configmanager.ConfigManager,
 	images []string,
 ) error {
+	ctx, err := initImageCommandContext(cmd, cfgManager)
+	if err != nil {
+		return err
+	}
+
 	outputPath := "images.tar"
 	if len(args) > 0 {
 		outputPath = args[0]
@@ -72,21 +77,6 @@ func runExportCommand(
 
 	if len(images) == 0 {
 		images = cfgManager.Viper.GetStringSlice("image")
-	}
-
-	return runClusterExport(cmd, cfgManager, images, outputPath)
-}
-
-// runClusterExport exports images from the cluster's containerd runtime.
-func runClusterExport(
-	cmd *cobra.Command,
-	cfgManager *configmanager.ConfigManager,
-	images []string,
-	outputPath string,
-) error {
-	ctx, err := initImageCommandContext(cmd, cfgManager)
-	if err != nil {
-		return err
 	}
 
 	notify.WriteMessage(notify.Message{
