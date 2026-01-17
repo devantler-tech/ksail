@@ -32,7 +32,8 @@ func createImageConfigManager(cmd *cobra.Command) *configmanager.ConfigManager {
 }
 
 // initImageCommandContext initializes the shared context for image commands.
-// It loads the config using the provided config manager.
+// It loads the config using the provided config manager, skipping validation
+// since image commands detect cluster info from the running cluster.
 func initImageCommandContext(
 	cmd *cobra.Command,
 	cfgManager *configmanager.ConfigManager,
@@ -42,7 +43,7 @@ func initImageCommandContext(
 
 	outputTimer := helpers.MaybeTimer(cmd, tmr)
 
-	clusterCfg, err := cfgManager.LoadConfig(outputTimer)
+	clusterCfg, err := cfgManager.LoadConfigSkipValidation(outputTimer)
 	if err != nil {
 		return nil, fmt.Errorf("load config: %w", err)
 	}

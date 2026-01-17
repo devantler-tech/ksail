@@ -89,7 +89,6 @@ func runClusterExport(
 		return err
 	}
 
-	cmd.Println()
 	notify.WriteMessage(notify.Message{
 		Type:    notify.TitleType,
 		Emoji:   "📤",
