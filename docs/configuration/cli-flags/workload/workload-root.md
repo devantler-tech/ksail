@@ -26,6 +26,7 @@ Available Commands:
   expose      Expose a resource as a service
   gen         Generate Kubernetes resource manifests
   get         Get resources
+  image       Manage container images in the cluster
   install     Install Helm charts
   logs        Print container logs
   push        Package and push an OCI artifact to a registry
