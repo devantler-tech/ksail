@@ -249,19 +249,12 @@ runs:
                 echo "✗ Skipped (corrupted): $image"
               fi
             else
-              # Subsequent images: export to temp and append
-              if docker exec "$CONTAINER_NAME" $CTR_CMD -n k8s.io images export /tmp/image-temp.tar "$image" 2>/dev/null; then
-                # Append the temp tar to the main tar file using cat
-                # Note: cat works with compressed tar files (tar -Af does not)
-                # This creates a multi-stream tar that ctr can import
-                if docker exec "$CONTAINER_NAME" sh -c 'cat /tmp/image-temp.tar >> /tmp/images.tar' 2>&1; then
-                  docker exec "$CONTAINER_NAME" rm -f /tmp/image-temp.tar 2>/dev/null || true
-                  echo "✓ Exported: $image"
-                  EXPORT_COUNT=$((EXPORT_COUNT + 1))
-                else
-                  echo "✗ Skipped (append failed): $image"
-                  docker exec "$CONTAINER_NAME" rm -f /tmp/image-temp.tar 2>/dev/null || true
-                fi
+              # Subsequent images: export directly appending to main tar
+              # ctr supports appending by exporting to the same file multiple times
+              # This creates a multi-stream tar that ctr can import
+              if docker exec "$CONTAINER_NAME" sh -c "$CTR_CMD -n k8s.io images export - \"$image\" >> /tmp/images.tar" 2>/dev/null; then
+                echo "✓ Exported: $image"
+                EXPORT_COUNT=$((EXPORT_COUNT + 1))
               else
                 echo "✗ Skipped (corrupted): $image"
               fi
