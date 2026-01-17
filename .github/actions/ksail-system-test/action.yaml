@@ -194,12 +194,6 @@ runs:
         ksail workload push --path "$GITOPS_PATH/"
         ksail workload reconcile
 
-    - name: 🐞 Debug workload failure
-      if: failure() && (steps.workload-create.outcome == 'failure' || steps.workload-apply.outcome == 'failure' || steps.workload-push-reconcile.outcome == 'failure')
-      uses: ./.github/actions/debug-kubernetes-failure
-      with:
-        kubectl-command: "ksail workload"
-
     - name: 💾 Save cluster images to cache
       if: inputs.enable-image-cache == 'true' && steps.restore-image-cache.outputs.cache-hit != 'true' && steps.restore-image-cache.outputs.skipped != 'true'
       uses: ./.github/actions/cache-cluster-images
@@ -207,6 +201,12 @@ runs:
         distribution: ${{ inputs.distribution }}
         operation: save
         cache-version: ${{ inputs.image-cache-version }}
+
+    - name: 🐞 Debug workload failure
+      if: failure() && (steps.workload-create.outcome == 'failure' || steps.workload-apply.outcome == 'failure' || steps.workload-push-reconcile.outcome == 'failure')
+      uses: ./.github/actions/debug-kubernetes-failure
+      with:
+        kubectl-command: "ksail workload"
 
     - name: 🧪 ksail cluster stop
       shell: bash
