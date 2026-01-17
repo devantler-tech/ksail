@@ -52,7 +52,7 @@ func TestExportUnsupportedDistribution(t *testing.T) {
 	)
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "distribution does not support image export/import")
+	assert.Contains(t, err.Error(), "talos does not support image export/import")
 }
 
 func TestExportUnsupportedProvider(t *testing.T) {
