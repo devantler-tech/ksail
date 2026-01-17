@@ -85,7 +85,7 @@ func (m *ConfigManager) WithAdditionalPatches(patches []Patch) *ConfigManager {
 
 // Load loads Talos patches from directories and creates the config bundle.
 // Returns the loaded Configs, either freshly loaded or previously cached.
-// The opts parameter is accepted for interface compliance but not currently used.
+// Timer, Silent, IgnoreConfigFile, and SkipValidation options are not currently used.
 func (m *ConfigManager) Load(_ configmanager.LoadOptions) (*Configs, error) {
 	// Return cached config if already loaded
 	if m.configLoaded {
