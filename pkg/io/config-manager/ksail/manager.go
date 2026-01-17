@@ -108,13 +108,6 @@ func (m *ConfigManager) LoadConfigFromFlagsOnly() (*v1alpha1.Cluster, error) {
 	return m.loadConfigWithOptions(nil, true, true, false)
 }
 
-// LoadConfigSkipValidation loads configuration from files and flags without running validation.
-// This is useful for commands that detect cluster info from the running cluster (like image export/import)
-// and don't require distribution/distributionConfig to be set.
-func (m *ConfigManager) LoadConfigSkipValidation(tmr timer.Timer) (*v1alpha1.Cluster, error) {
-	return m.loadConfigWithOptions(tmr, false, false, true)
-}
-
 // IsConfigFileFound returns true if a configuration file was found during LoadConfig.
 // This should only be called after LoadConfig has been called.
 func (m *ConfigManager) IsConfigFileFound() bool {

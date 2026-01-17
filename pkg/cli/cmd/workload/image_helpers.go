@@ -43,7 +43,7 @@ func initImageCommandContext(
 
 	outputTimer := helpers.MaybeTimer(cmd, tmr)
 
-	clusterCfg, err := cfgManager.LoadConfigSkipValidation(outputTimer)
+	clusterCfg, err := cfgManager.LoadConfigSilent()
 	if err != nil {
 		return nil, fmt.Errorf("load config: %w", err)
 	}
