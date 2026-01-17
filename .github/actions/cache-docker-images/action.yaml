@@ -230,10 +230,10 @@ runs:
         echo "Exporting images to tar archive..."
         # Export images one by one to handle corrupted manifests gracefully
         echo "Exporting images individually..."
-        
+
         # Remove any existing tar file
         docker exec "$CONTAINER_NAME" rm -f /tmp/images.tar
-        
+
         # Export images one by one, skipping failures
         EXPORT_COUNT=0
         TAR_CREATED=false
@@ -274,14 +274,14 @@ runs:
             fi
           fi
         done <<< "$IMAGE_LIST"
-        
+
         echo "Export summary: $EXPORT_COUNT images exported, TAR_CREATED=$TAR_CREATED"
-        
+
         if [ "$TAR_CREATED" = "false" ]; then
           echo "Warning: No images could be exported (tar file was never created)"
           exit 0
         fi
-        
+
         if [ $EXPORT_COUNT -gt 0 ]; then
           echo "Successfully exported $EXPORT_COUNT images"
         fi
