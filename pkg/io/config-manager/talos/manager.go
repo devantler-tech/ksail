@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	configmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
 	"sigs.k8s.io/yaml"
 )
 
@@ -84,10 +83,10 @@ func (m *ConfigManager) WithAdditionalPatches(patches []Patch) *ConfigManager {
 	return m
 }
 
-// LoadConfig loads Talos patches from directories and creates the config bundle.
+// Load loads Talos patches from directories and creates the config bundle.
 // Returns the loaded Configs, either freshly loaded or previously cached.
-// The timer parameter is accepted for interface compliance but not currently used.
-func (m *ConfigManager) LoadConfig(_ timer.Timer) (*Configs, error) {
+// The opts parameter is accepted for interface compliance but not currently used.
+func (m *ConfigManager) Load(_ configmanager.LoadOptions) (*Configs, error) {
 	// Return cached config if already loaded
 	if m.configLoaded {
 		return m.config, nil
@@ -164,11 +163,11 @@ func (m *ConfigManager) ValidateConfigs() (*Configs, error) {
 	// If patches directory doesn't exist, that's just a warning
 	if warning != "" {
 		// Still try to create base config
-		return m.LoadConfig(nil)
+		return m.Load(configmanager.LoadOptions{})
 	}
 
 	// Actually load and apply patches
-	configs, err := m.LoadConfig(nil)
+	configs, err := m.Load(configmanager.LoadOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to validate Talos configuration: %w", err)
 	}

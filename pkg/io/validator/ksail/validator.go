@@ -129,11 +129,16 @@ func (v *Validator) validateDistribution(
 	distribution := config.Spec.Cluster.Distribution
 
 	// Check if distribution is empty or invalid
-	if !distribution.IsValid() {
+	if distribution == "" || !distribution.IsValid() {
 		var message, fixSuggestion string
 
-		message = "invalid distribution value"
-		fixSuggestion = "Use a supported distribution: Vanilla, K3s, or Talos"
+		if distribution == "" {
+			message = "distribution is required"
+			fixSuggestion = "Set spec.cluster.distribution to a supported distribution type"
+		} else {
+			message = "invalid distribution value"
+			fixSuggestion = "Use a supported distribution: Vanilla, K3s, or Talos"
+		}
 
 		result.AddError(validator.ValidationError{
 			Field:         "spec.cluster.distribution",

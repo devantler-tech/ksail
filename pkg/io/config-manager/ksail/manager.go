@@ -87,25 +87,17 @@ func NewCommandConfigManager(
 	return manager
 }
 
-// LoadConfig loads the configuration from files and environment variables.
+// Load loads the configuration with the specified options.
 // Returns the loaded config (either freshly loaded or previously cached) and an error if loading failed.
 // Returns nil config on error.
 // Configuration priority: defaults < config files < environment variables < flags.
-// If timer is provided, timing information will be included in the success notification.
-func (m *ConfigManager) LoadConfig(tmr timer.Timer) (*v1alpha1.Cluster, error) {
-	return m.loadConfigWithOptions(tmr, false, false, false)
-}
-
-// LoadConfigSilent loads the configuration without outputting notifications.
-// Returns the loaded config, either freshly loaded or previously cached.
-func (m *ConfigManager) LoadConfigSilent() (*v1alpha1.Cluster, error) {
-	return m.loadConfigWithOptions(nil, true, false, false)
-}
-
-// LoadConfigFromFlagsOnly loads configuration from flags and defaults only, ignoring on-disk config files.
-// No notifications are emitted during the loading process.
-func (m *ConfigManager) LoadConfigFromFlagsOnly() (*v1alpha1.Cluster, error) {
-	return m.loadConfigWithOptions(nil, true, true, false)
+func (m *ConfigManager) Load(opts configmanagerinterface.LoadOptions) (*v1alpha1.Cluster, error) {
+	return m.loadConfigWithOptions(
+		opts.Timer,
+		opts.Silent,
+		opts.IgnoreConfigFile,
+		opts.SkipValidation,
+	)
 }
 
 // IsConfigFileFound returns true if a configuration file was found during LoadConfig.
@@ -623,9 +615,6 @@ func isFieldEmpty(fieldPtr any) bool {
 
 // createValidatorForDistribution creates a validator with the appropriate distribution config.
 // Only loads distribution config when Cilium CNI is requested for validation.
-// Returns error if distribution config loading fails.
-//
-//nolint:cyclop // Switch statement with error handling requires multiple branches
 func (m *ConfigManager) createValidatorForDistribution() (*ksailvalidator.Validator, error) {
 	// Only load distribution config for Cilium CNI validation
 	if m.Config.Spec.Cluster.DistributionConfig == "" ||
@@ -633,35 +622,60 @@ func (m *ConfigManager) createValidatorForDistribution() (*ksailvalidator.Valida
 		return ksailvalidator.NewValidator(), nil
 	}
 
-	// Create distribution-specific validator based on configured distribution
+	return m.createDistributionValidator()
+}
+
+// createDistributionValidator creates a validator based on the configured distribution.
+func (m *ConfigManager) createDistributionValidator() (*ksailvalidator.Validator, error) {
 	switch m.Config.Spec.Cluster.Distribution {
 	case v1alpha1.DistributionVanilla:
-		kindConfig, err := m.loadKindConfig()
-		if err != nil && !errors.Is(err, ErrDistributionConfigNotFound) {
-			return nil, err
-		}
-
-		if kindConfig != nil {
-			return ksailvalidator.NewValidatorForKind(kindConfig), nil
-		}
+		return m.createKindValidator()
 	case v1alpha1.DistributionK3s:
-		k3dConfig, err := m.loadK3dConfig()
-		if err != nil && !errors.Is(err, ErrDistributionConfigNotFound) {
-			return nil, err
-		}
-
-		if k3dConfig != nil {
-			return ksailvalidator.NewValidatorForK3d(k3dConfig), nil
-		}
+		return m.createK3dValidator()
 	case v1alpha1.DistributionTalos:
-		talosConfig, err := m.loadTalosConfig()
-		if err != nil && !errors.Is(err, ErrDistributionConfigNotFound) {
-			return nil, err
-		}
+		return m.createTalosValidator()
+	default:
+		return ksailvalidator.NewValidator(), nil
+	}
+}
 
-		if talosConfig != nil {
-			return ksailvalidator.NewValidatorForTalos(talosConfig), nil
-		}
+// createKindValidator loads Kind config and returns a validator.
+func (m *ConfigManager) createKindValidator() (*ksailvalidator.Validator, error) {
+	kindConfig, err := m.loadKindConfig()
+	if err != nil && !errors.Is(err, ErrDistributionConfigNotFound) {
+		return nil, err
+	}
+
+	if kindConfig != nil {
+		return ksailvalidator.NewValidatorForKind(kindConfig), nil
+	}
+
+	return ksailvalidator.NewValidator(), nil
+}
+
+// createK3dValidator loads K3d config and returns a validator.
+func (m *ConfigManager) createK3dValidator() (*ksailvalidator.Validator, error) {
+	k3dConfig, err := m.loadK3dConfig()
+	if err != nil && !errors.Is(err, ErrDistributionConfigNotFound) {
+		return nil, err
+	}
+
+	if k3dConfig != nil {
+		return ksailvalidator.NewValidatorForK3d(k3dConfig), nil
+	}
+
+	return ksailvalidator.NewValidator(), nil
+}
+
+// createTalosValidator loads Talos config and returns a validator.
+func (m *ConfigManager) createTalosValidator() (*ksailvalidator.Validator, error) {
+	talosConfig, err := m.loadTalosConfig()
+	if err != nil && !errors.Is(err, ErrDistributionConfigNotFound) {
+		return nil, err
+	}
+
+	if talosConfig != nil {
+		return ksailvalidator.NewValidatorForTalos(talosConfig), nil
 	}
 
 	return ksailvalidator.NewValidator(), nil
@@ -681,7 +695,7 @@ func (m *ConfigManager) loadKindConfig() (*kindv1alpha4.Cluster, error) {
 
 	kindManager := kindconfigmanager.NewConfigManager(m.Config.Spec.Cluster.DistributionConfig)
 
-	config, err := kindManager.LoadConfig(nil)
+	config, err := kindManager.Load(configmanagerinterface.LoadOptions{})
 	if err != nil {
 		// Propagate validation errors
 		return nil, fmt.Errorf("failed to load Kind config: %w", err)
@@ -704,7 +718,7 @@ func (m *ConfigManager) loadK3dConfig() (*k3dv1alpha5.SimpleConfig, error) {
 
 	k3dManager := k3dconfigmanager.NewConfigManager(m.Config.Spec.Cluster.DistributionConfig)
 
-	config, err := k3dManager.LoadConfig(nil)
+	config, err := k3dManager.Load(configmanagerinterface.LoadOptions{})
 	if err != nil {
 		// Propagate validation errors
 		return nil, fmt.Errorf("failed to load K3d config: %w", err)
@@ -748,7 +762,7 @@ func (m *ConfigManager) loadTalosConfig() (*talosconfigmanager.Configs, error) {
 		"", // Use default network CIDR
 	)
 
-	config, err := talosManager.LoadConfig(nil)
+	config, err := talosManager.Load(configmanagerinterface.LoadOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to load Talos config: %w", err)
 	}

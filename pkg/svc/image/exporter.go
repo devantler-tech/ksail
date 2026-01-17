@@ -64,11 +64,7 @@ func (e *Exporter) Export(
 	// Talos is not supported - it's an immutable OS without shell access
 	// and its Machine API doesn't expose image export functionality
 	if distribution == v1alpha1.DistributionTalos {
-		return fmt.Errorf(
-			"%w: Talos is an immutable OS without shell access; "+
-				"its Machine API only supports ImageList and ImagePull, not export",
-			ErrUnsupportedDistribution,
-		)
+		return ErrUnsupportedDistribution
 	}
 
 	// Set default output path

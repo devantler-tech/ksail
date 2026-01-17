@@ -5,6 +5,7 @@ import (
 	"os/exec"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	configmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
 )
 
@@ -144,7 +145,7 @@ func SetupEditorEnv(editorFlag, forCommand string) func() {
 	fieldSelectors := ksailconfigmanager.DefaultClusterFieldSelectors()
 	cfgManager := ksailconfigmanager.NewConfigManager(nil, fieldSelectors...)
 
-	loadedCfg, err := cfgManager.LoadConfigSilent()
+	loadedCfg, err := cfgManager.Load(configmanager.LoadOptions{Silent: true})
 	if err == nil {
 		cfg = loadedCfg
 	}

@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	configmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
@@ -141,7 +142,7 @@ func ResolveClusterInfo(
 	// If we don't have a cluster name yet, try loading from ksail.yaml config
 	if clusterName == "" {
 		cfgManager := ksailconfigmanager.NewConfigManager(nil)
-		cfg, err := cfgManager.LoadConfigSilent()
+		cfg, err := cfgManager.Load(configmanager.LoadOptions{Silent: true})
 
 		if err == nil && cfg != nil && cfgManager.IsConfigFileFound() {
 			// Get cluster name from distribution config
