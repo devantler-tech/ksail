@@ -56,6 +56,7 @@ Create a new GitHub discussion with title starting with "${{ github.workflow }}"
 Only a new discussion should be created, no existing discussions should be adjusted.
 
 At the end of the report list write a collapsed section with the following:
+
 - All search queries (web, issues, pulls, content) you used
 - All bash commands you executed
 - All MCP tools you used
