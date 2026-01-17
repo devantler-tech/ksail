@@ -1,4 +1,4 @@
-package image
+package workload
 
 import (
 	"fmt"
@@ -18,13 +18,13 @@ pod scheduling without requiring registry pulls.
 
 Examples:
   # Import images from images.tar (default)
-  ksail workload image import
+  ksail workload import
 
   # Import images from a specific file
-  ksail workload image import ./backups/my-images.tar
+  ksail workload import ./backups/my-images.tar
 
   # Import to a specific kubeconfig context
-  ksail workload image import --context=kind-dev --kubeconfig=~/.kube/config`
+  ksail workload import --context=kind-dev --kubeconfig=~/.kube/config`
 
 // NewImportCmd creates the image import command.
 func NewImportCmd(_ *runtime.Runtime) *cobra.Command {

@@ -1,7 +1,7 @@
 name: Cache Cluster Images
 description: |
   Caches container images from a KSail cluster's containerd runtime using
-  ksail workload image export/import commands. This reduces image pull times
+  ksail workload export/import commands. This reduces image pull times
   and avoids flaky pulls in CI.
 
   Note: This action only supports Vanilla (Kind) and K3s (K3d) distributions.
@@ -84,7 +84,7 @@ runs:
         ARCHIVE="/tmp/ksail-image-cache/images.tar"
         if [[ -f "$ARCHIVE" ]]; then
           echo "📦 Importing cached images from $ARCHIVE"
-          ksail workload image import "$ARCHIVE" || {
+          ksail workload import "$ARCHIVE" || {
             echo "⚠️ Image import failed (non-fatal), cluster will pull images normally"
           }
         else
@@ -104,7 +104,7 @@ runs:
         ARCHIVE="/tmp/ksail-image-cache/images.tar"
 
         echo "📦 Exporting cluster images to $ARCHIVE"
-        ksail workload image export "$ARCHIVE" || {
+        ksail workload export "$ARCHIVE" || {
           echo "⚠️ Image export failed (non-fatal)"
           echo "export-failed=true" >> "$GITHUB_OUTPUT"
           exit 0

@@ -53,7 +53,7 @@ inputs:
     default: ""
   enable-image-cache:
     description: |
-      Enable container image caching using ksail workload image export/import.
+      Enable container image caching using ksail workload export/import.
       This can speed up cluster startup by pre-loading cached images.
       Note: Only works for Vanilla (Kind) and K3s (K3d) distributions.
     required: false

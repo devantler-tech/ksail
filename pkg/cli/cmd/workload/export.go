@@ -1,5 +1,4 @@
-// Package image provides CLI commands for exporting and importing container images.
-package image
+package workload
 
 import (
 	"fmt"
@@ -21,36 +20,16 @@ The exported archive can be used to:
 
 Examples:
   # Export all images from cluster to images.tar (default)
-  ksail workload image export
+  ksail workload export
 
   # Export all images to a specific file
-  ksail workload image export ./backups/my-images.tar
+  ksail workload export ./backups/my-images.tar
 
   # Export specific images from cluster
-  ksail workload image export --image=nginx:latest --image=redis:7
+  ksail workload export --image=nginx:latest --image=redis:7
 
   # Export from a specific kubeconfig context
-  ksail workload image export --context=kind-dev --kubeconfig=~/.kube/config`
-
-// NewImageCmd creates and returns the image command group namespace.
-func NewImageCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "image",
-		Short: "Manage container images in the cluster",
-		Long: "Export and import container images directly to/from the cluster's containerd runtime. " +
-			"This enables offline development, sharing image sets, and faster cluster recreation.",
-		Args: cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			return cmd.Help()
-		},
-		SilenceUsage: true,
-	}
-
-	cmd.AddCommand(NewExportCmd(runtimeContainer))
-	cmd.AddCommand(NewImportCmd(runtimeContainer))
-
-	return cmd
-}
+  ksail workload export --context=kind-dev --kubeconfig=~/.kube/config`
 
 // NewExportCmd creates the image export command.
 func NewExportCmd(_ *runtime.Runtime) *cobra.Command {
