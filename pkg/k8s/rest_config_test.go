@@ -10,6 +10,24 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const testKubeconfigYAML = `apiVersion: v1
+kind: Config
+clusters:
+- cluster:
+    server: https://127.0.0.1:6443
+  name: test-cluster
+contexts:
+- context:
+    cluster: test-cluster
+    user: test-user
+  name: test-context
+current-context: test-context
+users:
+- name: test-user
+  user:
+    token: test-token
+`
+
 // TestBuildRESTConfig_EmptyKubeconfig tests that empty kubeconfig path returns ErrKubeconfigPathEmpty.
 func TestBuildRESTConfig_EmptyKubeconfig(t *testing.T) {
 	t.Parallel()
@@ -58,25 +76,7 @@ func TestBuildRESTConfig_ValidKubeconfig(t *testing.T) {
 	tmpDir := t.TempDir()
 	kubeconfigPath := filepath.Join(tmpDir, "kubeconfig")
 
-	validKubeconfig := `apiVersion: v1
-kind: Config
-clusters:
-- cluster:
-    server: https://127.0.0.1:6443
-  name: test-cluster
-contexts:
-- context:
-    cluster: test-cluster
-    user: test-user
-  name: test-context
-current-context: test-context
-users:
-- name: test-user
-  user:
-    token: fake-token
-`
-
-	err := os.WriteFile(kubeconfigPath, []byte(validKubeconfig), 0o600)
+	err := os.WriteFile(kubeconfigPath, []byte(testKubeconfigYAML), 0o600)
 	require.NoError(t, err)
 
 	config, err := k8s.BuildRESTConfig(kubeconfigPath, "")
@@ -140,25 +140,7 @@ func TestBuildRESTConfig_NonExistentContext(t *testing.T) {
 	tmpDir := t.TempDir()
 	kubeconfigPath := filepath.Join(tmpDir, "kubeconfig")
 
-	validKubeconfig := `apiVersion: v1
-kind: Config
-clusters:
-- cluster:
-    server: https://127.0.0.1:6443
-  name: test-cluster
-contexts:
-- context:
-    cluster: test-cluster
-    user: test-user
-  name: test-context
-current-context: test-context
-users:
-- name: test-user
-  user:
-    token: fake-token
-`
-
-	err := os.WriteFile(kubeconfigPath, []byte(validKubeconfig), 0o600)
+	err := os.WriteFile(kubeconfigPath, []byte(testKubeconfigYAML), 0o600)
 	require.NoError(t, err)
 
 	config, err := k8s.BuildRESTConfig(kubeconfigPath, "nonexistent-context")
@@ -187,25 +169,7 @@ func TestNewClientset_ValidKubeconfig(t *testing.T) {
 	tmpDir := t.TempDir()
 	kubeconfigPath := filepath.Join(tmpDir, "kubeconfig")
 
-	validKubeconfig := `apiVersion: v1
-kind: Config
-clusters:
-- cluster:
-    server: https://127.0.0.1:6443
-  name: test-cluster
-contexts:
-- context:
-    cluster: test-cluster
-    user: test-user
-  name: test-context
-current-context: test-context
-users:
-- name: test-user
-  user:
-    token: fake-token
-`
-
-	err := os.WriteFile(kubeconfigPath, []byte(validKubeconfig), 0o600)
+	err := os.WriteFile(kubeconfigPath, []byte(testKubeconfigYAML), 0o600)
 	require.NoError(t, err)
 
 	clientset, err := k8s.NewClientset(kubeconfigPath, "")

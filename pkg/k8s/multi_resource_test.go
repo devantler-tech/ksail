@@ -2,7 +2,6 @@ package k8s_test
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
@@ -13,8 +12,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 )
-
-var errMultiResourceBoom = errors.New("boom")
 
 // TestWaitForMultipleResources_EmptyChecks tests handling of empty checks slice.
 func TestWaitForMultipleResources_EmptyChecks(t *testing.T) {

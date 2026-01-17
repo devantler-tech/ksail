@@ -57,7 +57,7 @@ func getExpandTestCasesWithNoEnvVars() []expandTestCase {
 	}
 }
 
-func getExpandTestCasesWithEnvVars() []expandTestCase {
+func getExpandTestCasesWithEnvVarsBasic() []expandTestCase {
 	return []expandTestCase{
 		{
 			name:     "single placeholder with value",
@@ -93,6 +93,11 @@ func getExpandTestCasesWithEnvVars() []expandTestCase {
 			envVars:  map[string]string{"TEST_VAR123": "numeric"},
 			expected: "numeric",
 		},
+	}
+}
+
+func getExpandTestCasesWithEnvVarsAdvanced() []expandTestCase {
+	return []expandTestCase{
 		{
 			name:     "variable starting with underscore",
 			input:    "${_TEST_PRIVATE}",
@@ -130,6 +135,10 @@ func getExpandTestCasesWithEnvVars() []expandTestCase {
 			expected: "${nested}",
 		},
 	}
+}
+
+func getExpandTestCasesWithEnvVars() []expandTestCase {
+	return append(getExpandTestCasesWithEnvVarsBasic(), getExpandTestCasesWithEnvVarsAdvanced()...)
 }
 
 func TestExpand_NoEnvVars(t *testing.T) {

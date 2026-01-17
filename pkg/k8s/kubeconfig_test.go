@@ -13,6 +13,35 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
+// kubeconfigWithTargetAndOther is a kubeconfig with both target and other entries for cleanup tests.
+const kubeconfigWithTargetAndOther = `apiVersion: v1
+kind: Config
+clusters:
+- cluster:
+    server: https://target.server:6443
+  name: target-cluster
+- cluster:
+    server: https://other.server:6443
+  name: other-cluster
+contexts:
+- context:
+    cluster: target-cluster
+    user: target-user
+  name: target-context
+- context:
+    cluster: other-cluster
+    user: other-user
+  name: other-context
+current-context: other-context
+users:
+- name: target-user
+  user:
+    token: target-token
+- name: other-user
+  user:
+    token: other-token
+`
+
 // TestCleanupKubeconfig_NonExistentFile tests cleanup when kubeconfig doesn't exist.
 func TestCleanupKubeconfig_NonExistentFile(t *testing.T) {
 	t.Parallel()
@@ -68,6 +97,7 @@ users:
 	require.NoError(t, err)
 
 	// Verify original content is unchanged
+	//nolint:gosec // G304: Safe in test context with controlled paths
 	content, err := os.ReadFile(kubeconfigPath)
 	require.NoError(t, err)
 	assert.Contains(t, string(content), "other-cluster")
@@ -82,35 +112,7 @@ func TestCleanupKubeconfig_RemovesMatchingEntries(t *testing.T) {
 	tmpDir := t.TempDir()
 	kubeconfigPath := filepath.Join(tmpDir, "kubeconfig")
 
-	validKubeconfig := `apiVersion: v1
-kind: Config
-clusters:
-- cluster:
-    server: https://target.server:6443
-  name: target-cluster
-- cluster:
-    server: https://other.server:6443
-  name: other-cluster
-contexts:
-- context:
-    cluster: target-cluster
-    user: target-user
-  name: target-context
-- context:
-    cluster: other-cluster
-    user: other-user
-  name: other-context
-current-context: other-context
-users:
-- name: target-user
-  user:
-    token: target-token
-- name: other-user
-  user:
-    token: other-token
-`
-
-	err := os.WriteFile(kubeconfigPath, []byte(validKubeconfig), 0o600)
+	err := os.WriteFile(kubeconfigPath, []byte(kubeconfigWithTargetAndOther), 0o600)
 	require.NoError(t, err)
 
 	// Cleanup target entries
@@ -121,10 +123,9 @@ users:
 		"target-user",
 		io.Discard,
 	)
-
 	require.NoError(t, err)
 
-	// Verify target entries are removed
+	// Verify target entries are removed and other entries remain
 	config, err := clientcmd.LoadFromFile(kubeconfigPath)
 	require.NoError(t, err)
 
@@ -136,7 +137,6 @@ users:
 	assert.False(t, hasTargetContext, "target context should be removed")
 	assert.False(t, hasTargetUser, "target user should be removed")
 
-	// Verify other entries remain
 	_, hasOtherCluster := config.Clusters["other-cluster"]
 	_, hasOtherContext := config.Contexts["other-context"]
 	_, hasOtherUser := config.AuthInfos["other-user"]

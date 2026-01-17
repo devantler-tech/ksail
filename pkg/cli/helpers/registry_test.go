@@ -8,76 +8,50 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type formatRegistryURLTestCase struct {
+	name       string
+	host       string
+	port       int32
+	repository string
+	expected   string
+}
+
+func getFormatRegistryURLTestCases() []formatRegistryURLTestCase {
+	return []formatRegistryURLTestCase{
+		{"localhost with port", "localhost", 5000, "myproject", "oci://localhost:5000/myproject"},
+		{
+			"custom host with port",
+			"registry.example.com",
+			8080,
+			"app",
+			"oci://registry.example.com:8080/app",
+		},
+		{"IPv4 with port", "192.168.1.100", 5000, "images", "oci://192.168.1.100:5000/images"},
+		{"IPv6 with port", "::1", 5000, "project", "oci://[::1]:5000/project"},
+		{"external registry without port", "ghcr.io", 0, "org/repo", "oci://ghcr.io/org/repo"},
+		{
+			"docker hub without port",
+			"docker.io",
+			0,
+			"library/nginx",
+			"oci://docker.io/library/nginx",
+		},
+		{"empty repository", "localhost", 5000, "", "oci://localhost:5000/"},
+		{
+			"nested repository path",
+			"ghcr.io",
+			0,
+			"org/project/subdir",
+			"oci://ghcr.io/org/project/subdir",
+		},
+	}
+}
+
 // TestFormatRegistryURL tests the FormatRegistryURL function.
 func TestFormatRegistryURL(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name       string
-		host       string
-		port       int32
-		repository string
-		expected   string
-	}{
-		{
-			name:       "localhost with port",
-			host:       "localhost",
-			port:       5000,
-			repository: "myproject",
-			expected:   "oci://localhost:5000/myproject",
-		},
-		{
-			name:       "custom host with port",
-			host:       "registry.example.com",
-			port:       8080,
-			repository: "app",
-			expected:   "oci://registry.example.com:8080/app",
-		},
-		{
-			name:       "IPv4 with port",
-			host:       "192.168.1.100",
-			port:       5000,
-			repository: "images",
-			expected:   "oci://192.168.1.100:5000/images",
-		},
-		{
-			name:       "IPv6 with port",
-			host:       "::1",
-			port:       5000,
-			repository: "project",
-			expected:   "oci://[::1]:5000/project",
-		},
-		{
-			name:       "external registry without port",
-			host:       "ghcr.io",
-			port:       0,
-			repository: "org/repo",
-			expected:   "oci://ghcr.io/org/repo",
-		},
-		{
-			name:       "docker hub without port",
-			host:       "docker.io",
-			port:       0,
-			repository: "library/nginx",
-			expected:   "oci://docker.io/library/nginx",
-		},
-		{
-			name:       "empty repository",
-			host:       "localhost",
-			port:       5000,
-			repository: "",
-			expected:   "oci://localhost:5000/",
-		},
-		{
-			name:       "nested repository path",
-			host:       "ghcr.io",
-			port:       0,
-			repository: "org/project/subdir",
-			expected:   "oci://ghcr.io/org/project/subdir",
-		},
-	}
-
-	for _, testCase := range tests {
+	for _, testCase := range getFormatRegistryURLTestCases() {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -94,7 +68,7 @@ func TestDetectRegistryFromViper_NilViper(t *testing.T) {
 	info, err := helpers.DetectRegistryFromViper(nil)
 
 	require.Error(t, err)
-	assert.ErrorIs(t, err, helpers.ErrViperNil)
+	require.ErrorIs(t, err, helpers.ErrViperNil)
 	assert.Nil(t, info)
 }
 
@@ -138,43 +112,43 @@ func TestRegistryErrors(t *testing.T) {
 
 	t.Run("ErrNoRegistryFound", func(t *testing.T) {
 		t.Parallel()
-		assert.Error(t, helpers.ErrNoRegistryFound)
+		require.Error(t, helpers.ErrNoRegistryFound)
 		assert.Contains(t, helpers.ErrNoRegistryFound.Error(), "unable to detect registry")
 	})
 
 	t.Run("ErrViperNil", func(t *testing.T) {
 		t.Parallel()
-		assert.Error(t, helpers.ErrViperNil)
+		require.Error(t, helpers.ErrViperNil)
 		assert.Contains(t, helpers.ErrViperNil.Error(), "nil")
 	})
 
 	t.Run("ErrRegistryNotSet", func(t *testing.T) {
 		t.Parallel()
-		assert.Error(t, helpers.ErrRegistryNotSet)
+		require.Error(t, helpers.ErrRegistryNotSet)
 		assert.Contains(t, helpers.ErrRegistryNotSet.Error(), "not set")
 	})
 
 	t.Run("ErrLocalRegistryNotConfigured", func(t *testing.T) {
 		t.Parallel()
-		assert.Error(t, helpers.ErrLocalRegistryNotConfigured)
+		require.Error(t, helpers.ErrLocalRegistryNotConfigured)
 		assert.Contains(t, helpers.ErrLocalRegistryNotConfigured.Error(), "not configured")
 	})
 
 	t.Run("ErrFluxNoSyncURL", func(t *testing.T) {
 		t.Parallel()
-		assert.Error(t, helpers.ErrFluxNoSyncURL)
+		require.Error(t, helpers.ErrFluxNoSyncURL)
 		assert.Contains(t, helpers.ErrFluxNoSyncURL.Error(), "sync.url")
 	})
 
 	t.Run("ErrArgoCDNoRepoURL", func(t *testing.T) {
 		t.Parallel()
-		assert.Error(t, helpers.ErrArgoCDNoRepoURL)
+		require.Error(t, helpers.ErrArgoCDNoRepoURL)
 		assert.Contains(t, helpers.ErrArgoCDNoRepoURL.Error(), "repoURL")
 	})
 
 	t.Run("ErrEmptyOCIURL", func(t *testing.T) {
 		t.Parallel()
-		assert.Error(t, helpers.ErrEmptyOCIURL)
+		require.Error(t, helpers.ErrEmptyOCIURL)
 		assert.Contains(t, helpers.ErrEmptyOCIURL.Error(), "empty")
 	})
 }
