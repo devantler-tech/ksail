@@ -47,6 +47,7 @@ type fakeDeleteFactory struct {
 	deleteErr    error
 }
 
+//nolint:ireturn // test fake must return interface to satisfy Factory contract
 func (f fakeDeleteFactory) Create(
 	_ context.Context,
 	_ *v1alpha1.Cluster,
