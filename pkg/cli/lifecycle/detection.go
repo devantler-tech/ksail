@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	iopath "github.com/devantler-tech/ksail/v5/pkg/io"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider/hetzner"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"k8s.io/client-go/tools/clientcmd"
@@ -58,8 +59,13 @@ type ClusterInfo struct {
 // It reads the kubeconfig, determines the distribution from the context name pattern,
 // and detects the provider by analyzing the server endpoint.
 func DetectClusterInfo(kubeconfigPath, contextName string) (*ClusterInfo, error) {
-	// Resolve kubeconfig path
-	kubeconfigPath = resolveKubeconfigPath(kubeconfigPath)
+	// Resolve kubeconfig path (handles empty path, ~ expansion, and relative paths)
+	resolvedPath, err := resolveKubeconfigPath(kubeconfigPath)
+	if err != nil {
+		return nil, err
+	}
+
+	kubeconfigPath = resolvedPath
 
 	// Load kubeconfig
 	//nolint:gosec // G304: Intentional file reading from user-provided kubeconfig path
@@ -298,10 +304,17 @@ func checkHetznerOwnership(
 	return false, nil
 }
 
-// resolveKubeconfigPath returns the kubeconfig path, resolving defaults if empty.
-func resolveKubeconfigPath(kubeconfigPath string) string {
+// resolveKubeconfigPath returns the kubeconfig path, resolving defaults if empty
+// and expanding ~ to the home directory.
+func resolveKubeconfigPath(kubeconfigPath string) (string, error) {
+	// If path is provided, expand ~ and return it
 	if kubeconfigPath != "" {
-		return kubeconfigPath
+		expanded, err := iopath.ExpandHomePath(kubeconfigPath)
+		if err != nil {
+			return "", fmt.Errorf("expand kubeconfig path: %w", err)
+		}
+
+		return expanded, nil
 	}
 
 	// Check KUBECONFIG env var
@@ -309,10 +322,15 @@ func resolveKubeconfigPath(kubeconfigPath string) string {
 		// Use first path if multiple are specified
 		paths := strings.Split(envPath, string(os.PathListSeparator))
 		if len(paths) > 0 && paths[0] != "" {
-			return paths[0]
+			expanded, err := iopath.ExpandHomePath(paths[0])
+			if err != nil {
+				return "", fmt.Errorf("expand kubeconfig path from env: %w", err)
+			}
+
+			return expanded, nil
 		}
 	}
 
 	// Default to ~/.kube/config
-	return clientcmd.RecommendedHomeFile
+	return clientcmd.RecommendedHomeFile, nil
 }

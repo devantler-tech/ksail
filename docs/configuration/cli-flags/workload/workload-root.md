@@ -9,7 +9,7 @@ grand_parent: "Configuration"
 # ksail workload
 
 ```text
-Group workload commands under a single namespace to reconcile, apply, create, delete, describe, edit, exec, explain, expose, get, gen, install, logs, push, rollout, scale, validate, or wait for workloads.
+Group workload commands under a single namespace to reconcile, apply, create, delete, describe, edit, exec, explain, export, expose, gen, get, import, install, logs, push, rollout, scale, validate, or wait for workloads.
 
 Usage:
   ksail workload [flags]
@@ -23,9 +23,11 @@ Available Commands:
   edit        Edit a resource
   exec        Execute a command in a container
   explain     Get documentation for a resource
+  export      Export container images from the cluster
   expose      Expose a resource as a service
   gen         Generate Kubernetes resource manifests
   get         Get resources
+  import      Import container images to the cluster
   install     Install Helm charts
   logs        Print container logs
   push        Package and push an OCI artifact to a registry
