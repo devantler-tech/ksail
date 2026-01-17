@@ -19,14 +19,27 @@ type imageCommandContext struct {
 	ClusterInfo *lifecycle.ClusterInfo
 }
 
+// createImageConfigManager creates a config manager for image commands.
+// Only includes --context and --kubeconfig flags since image commands
+// detect the distribution from the running cluster.
+func createImageConfigManager(cmd *cobra.Command) *configmanager.ConfigManager {
+	fieldSelectors := []configmanager.FieldSelector[v1alpha1.Cluster]{
+		configmanager.DefaultContextFieldSelector(),
+		configmanager.DefaultKubeconfigFieldSelector(),
+	}
+
+	return configmanager.NewCommandConfigManager(cmd, fieldSelectors)
+}
+
 // initImageCommandContext initializes the shared context for image commands.
-// It loads the config and detects cluster information.
-func initImageCommandContext(cmd *cobra.Command) (*imageCommandContext, error) {
+// It loads the config using the provided config manager.
+func initImageCommandContext(
+	cmd *cobra.Command,
+	cfgManager *configmanager.ConfigManager,
+) (*imageCommandContext, error) {
 	tmr := timer.New()
 	tmr.Start()
 
-	fieldSelectors := configmanager.DefaultClusterFieldSelectors()
-	cfgManager := configmanager.NewCommandConfigManager(cmd, fieldSelectors)
 	outputTimer := helpers.MaybeTimer(cmd, tmr)
 
 	clusterCfg, err := cfgManager.LoadConfig(outputTimer)

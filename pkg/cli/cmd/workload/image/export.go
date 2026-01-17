@@ -10,7 +10,6 @@ import (
 	imagesvc "github.com/devantler-tech/ksail/v5/pkg/svc/image"
 	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 const exportCmdLong = `Export container images from the cluster's containerd runtime to a tar archive.
@@ -28,7 +27,10 @@ Examples:
   ksail workload image export ./backups/my-images.tar
 
   # Export specific images from cluster
-  ksail workload image export --image=nginx:latest --image=redis:7`
+  ksail workload image export --image=nginx:latest --image=redis:7
+
+  # Export from a specific kubeconfig context
+  ksail workload image export --context=kind-dev --kubeconfig=~/.kube/config`
 
 // NewImageCmd creates and returns the image command group namespace.
 func NewImageCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
@@ -54,10 +56,6 @@ func NewImageCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
 func NewExportCmd(_ *runtime.Runtime) *cobra.Command {
 	var images []string
 
-	viperInstance := viper.New()
-	viperInstance.SetEnvPrefix(configmanager.EnvPrefix)
-	viperInstance.AutomaticEnv()
-
 	cmd := &cobra.Command{
 		Use:          "export [<output>]",
 		Short:        "Export container images from the cluster",
@@ -66,14 +64,18 @@ func NewExportCmd(_ *runtime.Runtime) *cobra.Command {
 		SilenceUsage: true,
 	}
 
-	cmd.RunE = func(cmd *cobra.Command, args []string) error {
-		return runExportCommand(cmd, args, viperInstance, images)
-	}
+	// Create config manager during command setup to register flags
+	// This enables --context, --kubeconfig, and other standard flags
+	cfgManager := createImageConfigManager(cmd)
 
 	cmd.Flags().StringArrayVar(&images, "image", nil,
 		"Image(s) to export (repeatable); if not specified, all images are exported")
 
-	_ = viperInstance.BindPFlag("image", cmd.Flags().Lookup("image"))
+	_ = cfgManager.Viper.BindPFlag("image", cmd.Flags().Lookup("image"))
+
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		return runExportCommand(cmd, args, cfgManager, images)
+	}
 
 	return cmd
 }
@@ -81,7 +83,7 @@ func NewExportCmd(_ *runtime.Runtime) *cobra.Command {
 func runExportCommand(
 	cmd *cobra.Command,
 	args []string,
-	viperInstance *viper.Viper,
+	cfgManager *configmanager.ConfigManager,
 	images []string,
 ) error {
 	outputPath := "images.tar"
@@ -90,7 +92,22 @@ func runExportCommand(
 	}
 
 	if len(images) == 0 {
-		images = viperInstance.GetStringSlice("image")
+		images = cfgManager.Viper.GetStringSlice("image")
+	}
+
+	return runClusterExport(cmd, cfgManager, images, outputPath)
+}
+
+// runClusterExport exports images from the cluster's containerd runtime.
+func runClusterExport(
+	cmd *cobra.Command,
+	cfgManager *configmanager.ConfigManager,
+	images []string,
+	outputPath string,
+) error {
+	ctx, err := initImageCommandContext(cmd, cfgManager)
+	if err != nil {
+		return err
 	}
 
 	cmd.Println()
@@ -101,25 +118,20 @@ func runExportCommand(
 		Writer:  cmd.OutOrStdout(),
 	})
 
-	return runClusterExport(cmd, images, outputPath)
-}
-
-// runClusterExport exports images from the cluster's containerd runtime.
-func runClusterExport(
-	cmd *cobra.Command,
-	images []string,
-	outputPath string,
-) error {
-	ctx, err := initImageCommandContext(cmd)
-	if err != nil {
-		return err
-	}
-
 	err = ctx.detectClusterInfo()
 	if err != nil {
 		return err
 	}
 
+	return executeExport(cmd, ctx, images, outputPath)
+}
+
+func executeExport(
+	cmd *cobra.Command,
+	ctx *imageCommandContext,
+	images []string,
+	outputPath string,
+) error {
 	dockerClient, err := docker.GetDockerClient()
 	if err != nil {
 		return fmt.Errorf("failed to create Docker client: %w", err)

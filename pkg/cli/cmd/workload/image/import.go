@@ -5,17 +5,13 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/client/docker"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
+	configmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
 	imagesvc "github.com/devantler-tech/ksail/v5/pkg/svc/image"
 	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
 	"github.com/spf13/cobra"
 )
 
-// NewImportCmd creates the image import command.
-func NewImportCmd(_ *runtime.Runtime) *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "import [<input>]",
-		Short: "Import container images to the cluster",
-		Long: `Import container images from a tar archive to the cluster's containerd runtime.
+const importCmdLong = `Import container images from a tar archive to the cluster's containerd runtime.
 
 Images are imported to all nodes in the cluster, making them available for
 pod scheduling without requiring registry pulls.
@@ -25,18 +21,38 @@ Examples:
   ksail workload image import
 
   # Import images from a specific file
-  ksail workload image import ./backups/my-images.tar`,
+  ksail workload image import ./backups/my-images.tar
+
+  # Import to a specific kubeconfig context
+  ksail workload image import --context=kind-dev --kubeconfig=~/.kube/config`
+
+// NewImportCmd creates the image import command.
+func NewImportCmd(_ *runtime.Runtime) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:          "import [<input>]",
+		Short:        "Import container images to the cluster",
+		Long:         importCmdLong,
 		Args:         cobra.MaximumNArgs(1),
 		SilenceUsage: true,
 	}
 
-	cmd.RunE = runImportCommand
+	// Create config manager during command setup to register flags
+	// This enables --context, --kubeconfig, and other standard flags
+	cfgManager := createImageConfigManager(cmd)
+
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		return runImportCommand(cmd, args, cfgManager)
+	}
 
 	return cmd
 }
 
-func runImportCommand(cmd *cobra.Command, args []string) error {
-	ctx, err := initImageCommandContext(cmd)
+func runImportCommand(
+	cmd *cobra.Command,
+	args []string,
+	cfgManager *configmanager.ConfigManager,
+) error {
+	ctx, err := initImageCommandContext(cmd, cfgManager)
 	if err != nil {
 		return err
 	}
