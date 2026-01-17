@@ -1,4 +1,3 @@
-````markdown
 ---
 title: "ksail workload export"
 parent: "ksail workload"
@@ -41,9 +40,4 @@ Flags:
 
 Global Flags:
       --timing   Show per-activity timing output
-```
-````
-
-```
-
 ```
