@@ -42,6 +42,9 @@ runs:
       shell: bash
       env:
         DISTRIBUTION: ${{ inputs.distribution }}
+        CACHE_VERSION: ${{ inputs.cache-version }}
+        RUNNER_OS: ${{ runner.os }}
+        RUNNER_ARCH: ${{ runner.arch }}
       run: |
         DIST_LOWER=$(echo "$DISTRIBUTION" | tr '[:upper:]' '[:lower:]')
 
@@ -56,7 +59,7 @@ runs:
 
         # Generate cache key based on distribution
         # Using distribution-only key allows sharing across providers
-        CACHE_KEY="cluster-images-${{ inputs.cache-version }}-${DIST_LOWER}-${{ runner.os }}-${{ runner.arch }}"
+        CACHE_KEY="cluster-images-${CACHE_VERSION}-${DIST_LOWER}-${RUNNER_OS}-${RUNNER_ARCH}"
         echo "cache-key=$CACHE_KEY" >> "$GITHUB_OUTPUT"
         echo "📦 Cache key: $CACHE_KEY"
 
