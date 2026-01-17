@@ -17,28 +17,26 @@ The exported archive can be used to:
   - Speed up cluster recreation by avoiding registry pulls
 
 Examples:
-  # Export all images to images.tar (default)
+  # Export all images from cluster to images.tar (default)
   ksail workload image export
 
   # Export all images to a specific file
   ksail workload image export ./backups/my-images.tar
 
-  # Export specific images only
+  # Export specific images from cluster
   ksail workload image export --image=nginx:latest --image=redis:7
 
-  # Export images for a specific platform
-  ksail workload image export --platform=linux/amd64
-
-  # Using environment variables
-  KSAIL_IMAGE=nginx:latest ksail workload image export
+  # Export from a specific kubeconfig context
+  ksail workload image export --context=kind-dev --kubeconfig=~/.kube/config
 
 Usage:
   ksail workload image export [<output>] [flags]
 
 Flags:
+  -c, --context string      Kubernetes context of cluster
   -h, --help                help for export
-      --image stringArray   Specific image(s) to export (repeatable); if omitted, exports all images
-      --platform string     Filter images by platform (e.g., linux/amd64)
+      --image stringArray   Image(s) to export (repeatable); if not specified, all images are exported
+  -k, --kubeconfig string   Path to kubeconfig file (default "~/.kube/config")
 
 Global Flags:
       --timing   Show per-activity timing output

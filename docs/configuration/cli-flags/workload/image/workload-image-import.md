@@ -21,11 +21,16 @@ Examples:
   # Import images from a specific file
   ksail workload image import ./backups/my-images.tar
 
+  # Import to a specific kubeconfig context
+  ksail workload image import --context=kind-dev --kubeconfig=~/.kube/config
+
 Usage:
   ksail workload image import [<input>] [flags]
 
 Flags:
-  -h, --help   help for import
+  -c, --context string      Kubernetes context of cluster
+  -h, --help                help for import
+  -k, --kubeconfig string   Path to kubeconfig file (default "~/.kube/config")
 
 Global Flags:
       --timing   Show per-activity timing output
