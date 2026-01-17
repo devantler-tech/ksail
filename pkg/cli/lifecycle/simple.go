@@ -193,8 +193,13 @@ func ResolveClusterInfo(
 	}
 
 	// Resolve kubeconfig path using the standard resolution
-	// This handles: flag > env > default
-	kubeconfigPath = resolveKubeconfigPath(kubeconfigPath)
+	// This handles: flag > env > default, and expands ~ to home directory
+	resolvedPath, err := resolveKubeconfigPath(kubeconfigPath)
+	if err != nil {
+		return nil, fmt.Errorf("resolve kubeconfig path: %w", err)
+	}
+
+	kubeconfigPath = resolvedPath
 
 	return &ResolvedClusterInfo{
 		ClusterName:    clusterName,
@@ -543,9 +548,7 @@ func (m *multiDistributionProvisioner) forExistingCluster(
 }
 
 // createProvisionerForDistribution creates a provisioner for a specific distribution.
-//
-//nolint:ireturn // Interface return is required for provisioner abstraction
-func createProvisionerForDistribution(
+func createProvisionerForDistribution( //nolint:ireturn // Interface return is required for provisioner abstraction
 	dist v1alpha1.Distribution,
 	clusterName string,
 ) (clusterprovisioner.ClusterProvisioner, error) {

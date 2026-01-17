@@ -93,19 +93,26 @@ func NewCommandConfigManager(
 // Configuration priority: defaults < config files < environment variables < flags.
 // If timer is provided, timing information will be included in the success notification.
 func (m *ConfigManager) LoadConfig(tmr timer.Timer) (*v1alpha1.Cluster, error) {
-	return m.loadConfigWithOptions(tmr, false, false)
+	return m.loadConfigWithOptions(tmr, false, false, false)
 }
 
 // LoadConfigSilent loads the configuration without outputting notifications.
 // Returns the loaded config, either freshly loaded or previously cached.
 func (m *ConfigManager) LoadConfigSilent() (*v1alpha1.Cluster, error) {
-	return m.loadConfigWithOptions(nil, true, false)
+	return m.loadConfigWithOptions(nil, true, false, false)
 }
 
 // LoadConfigFromFlagsOnly loads configuration from flags and defaults only, ignoring on-disk config files.
 // No notifications are emitted during the loading process.
 func (m *ConfigManager) LoadConfigFromFlagsOnly() (*v1alpha1.Cluster, error) {
-	return m.loadConfigWithOptions(nil, true, true)
+	return m.loadConfigWithOptions(nil, true, true, false)
+}
+
+// LoadConfigSkipValidation loads configuration from files and flags without running validation.
+// This is useful for commands that detect cluster info from the running cluster (like image export/import)
+// and don't require distribution/distributionConfig to be set.
+func (m *ConfigManager) LoadConfigSkipValidation(tmr timer.Timer) (*v1alpha1.Cluster, error) {
+	return m.loadConfigWithOptions(tmr, false, false, true)
 }
 
 // IsConfigFileFound returns true if a configuration file was found during LoadConfig.
@@ -114,11 +121,20 @@ func (m *ConfigManager) IsConfigFileFound() bool {
 	return m.configFileFound
 }
 
-// loadConfigWithOptions is the internal implementation with silent option.
+// shouldSkipValidation determines if validation should be skipped.
+// Validation is skipped when:
+//   - Explicitly requested via skipValidation parameter.
+//   - In silent mode with no config file found (probing for config existence).
+func (m *ConfigManager) shouldSkipValidation(silent, skipValidation bool) bool {
+	return skipValidation || (silent && !m.configFileFound)
+}
+
+// loadConfigWithOptions is the internal implementation with silent and skip validation options.
 func (m *ConfigManager) loadConfigWithOptions(
 	tmr timer.Timer,
 	silent bool,
 	ignoreConfigFile bool,
+	skipValidation bool,
 ) (*v1alpha1.Cluster, error) {
 	// Check if config was already loaded before outputting any messages
 	if m.configLoaded {
@@ -144,17 +160,12 @@ func (m *ConfigManager) loadConfigWithOptions(
 		return nil, err
 	}
 
-	// Skip validation when probing for config existence (silent mode with no config file)
-	if silent && !m.configFileFound {
-		m.configLoaded = true
-
-		return m.Config, nil
-	}
-
-	// Validate and finalize configuration
-	err = m.validateAndFinalizeConfig()
-	if err != nil {
-		return nil, err
+	// Run validation unless skipped
+	if !m.shouldSkipValidation(silent, skipValidation) {
+		err = m.validateAndFinalizeConfig()
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	if !silent {

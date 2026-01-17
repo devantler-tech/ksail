@@ -1,0 +1,127 @@
+name: Cache Cluster Images
+description: |
+  Caches container images from a KSail cluster's containerd runtime using
+  ksail workload export/import commands. This reduces image pull times
+  and avoids flaky pulls in CI.
+
+  Note: This action only supports Vanilla (Kind) and K3s (K3d) distributions.
+  Talos clusters are not supported because the Talos Machine API does not
+  expose image export functionality.
+
+inputs:
+  distribution:
+    description: |
+      Kubernetes distribution (Vanilla, K3s, Talos).
+      Talos is silently skipped since it doesn't support image export/import.
+    required: true
+  operation:
+    description: |
+      Cache operation to perform:
+      - 'restore': Restore cached images and import to cluster
+      - 'save': Export images from cluster and save to cache
+    required: true
+  cache-version:
+    description: |
+      Version salt for cache key. Bump this to invalidate all caches.
+    required: false
+    default: "v1"
+
+outputs:
+  cache-hit:
+    description: Whether the cache was restored successfully
+    value: ${{ steps.restore-cache.outputs.cache-hit || 'false' }}
+  skipped:
+    description: Whether the operation was skipped (e.g., Talos distribution)
+    value: ${{ steps.check-support.outputs.skipped || 'false' }}
+
+runs:
+  using: composite
+  steps:
+    - name: 🔍 Check distribution support
+      id: check-support
+      shell: bash
+      env:
+        DISTRIBUTION: ${{ inputs.distribution }}
+        CACHE_VERSION: ${{ inputs.cache-version }}
+        RUNNER_OS: ${{ runner.os }}
+        RUNNER_ARCH: ${{ runner.arch }}
+      run: |
+        DIST_LOWER=$(echo "$DISTRIBUTION" | tr '[:upper:]' '[:lower:]')
+
+        # Talos doesn't support image export/import via its Machine API
+        if [[ "$DIST_LOWER" == "talos" ]]; then
+          echo "⏭️ Skipping image cache for Talos (not supported by Talos API)"
+          echo "skipped=true" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        echo "skipped=false" >> "$GITHUB_OUTPUT"
+
+        # Generate cache key based on distribution
+        # Using distribution-only key allows sharing across providers
+        CACHE_KEY="cluster-images-${CACHE_VERSION}-${DIST_LOWER}-${RUNNER_OS}-${RUNNER_ARCH}"
+        echo "cache-key=$CACHE_KEY" >> "$GITHUB_OUTPUT"
+        echo "📦 Cache key: $CACHE_KEY"
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # RESTORE operation: Download cached images and import to cluster
+    # ─────────────────────────────────────────────────────────────────────────
+
+    - name: 📥 Restore image cache
+      if: inputs.operation == 'restore' && steps.check-support.outputs.skipped != 'true'
+      id: restore-cache
+      uses: actions/cache/restore@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+      with:
+        path: /tmp/ksail-image-cache
+        key: ${{ steps.check-support.outputs.cache-key }}
+        restore-keys: |
+          cluster-images-${{ inputs.cache-version }}-${{ inputs.distribution }}-${{ runner.os }}-
+
+    - name: 📥 Import cached images to cluster
+      if: inputs.operation == 'restore' && steps.check-support.outputs.skipped != 'true' && steps.restore-cache.outputs.cache-hit == 'true'
+      shell: bash
+      run: |
+        ARCHIVE="/tmp/ksail-image-cache/images.tar"
+        if [[ -f "$ARCHIVE" ]]; then
+          echo "📦 Importing cached images from $ARCHIVE"
+          ksail workload import "$ARCHIVE" || {
+            echo "⚠️ Image import failed (non-fatal), cluster will pull images normally"
+          }
+        else
+          echo "⚠️ Cache archive not found at $ARCHIVE"
+        fi
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # SAVE operation: Export images from cluster and save to cache
+    # ─────────────────────────────────────────────────────────────────────────
+
+    - name: 📤 Export images from cluster
+      if: inputs.operation == 'save' && steps.check-support.outputs.skipped != 'true'
+      id: export-images
+      shell: bash
+      run: |
+        mkdir -p /tmp/ksail-image-cache
+        ARCHIVE="/tmp/ksail-image-cache/images.tar"
+
+        echo "📦 Exporting cluster images to $ARCHIVE"
+        ksail workload export "$ARCHIVE" || {
+          echo "⚠️ Image export failed (non-fatal)"
+          echo "export-failed=true" >> "$GITHUB_OUTPUT"
+          exit 0
+        }
+
+        if [[ -f "$ARCHIVE" ]]; then
+          SIZE=$(du -h "$ARCHIVE" | cut -f1)
+          echo "✅ Exported images archive: $SIZE"
+          echo "export-failed=false" >> "$GITHUB_OUTPUT"
+        else
+          echo "⚠️ Export completed but archive not found"
+          echo "export-failed=true" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: 💾 Save image cache
+      if: inputs.operation == 'save' && steps.check-support.outputs.skipped != 'true' && steps.export-images.outputs.export-failed != 'true'
+      uses: actions/cache/save@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+      with:
+        path: /tmp/ksail-image-cache
+        key: ${{ steps.check-support.outputs.cache-key }}
