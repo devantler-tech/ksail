@@ -55,10 +55,21 @@ updates:
   # Docker base images
   # Note: cooldown not supported for docker ecosystem
   - package-ecosystem: docker
-    directories:
-      - / # Dockerfile (build image)
-      - /.github/fixtures/reconcile-test # Kubernetes deployment manifest
-      - /pkg/io/config-manager/talos # Talos image (embedded in Go via go:embed)
+    directory: / # Dockerfile (build image)
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: docker
+    directory: /.github/fixtures/reconcile-test # Kubernetes deployment manifest
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: docker
+    directory: /pkg/io/config-manager/talos # Talos image (embedded in Go via go:embed)
     schedule:
       interval: weekly
       day: monday
