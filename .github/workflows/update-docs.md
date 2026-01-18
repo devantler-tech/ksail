@@ -1,8 +1,9 @@
 ---
 description: |
-  THis workflow keeps docs synchronized with code changes.
+  This workflow keeps docs synchronized with code changes and root-level documentation files.
   Triggered on every push to main, it analyzes diffs to identify changed entities and
-  updates corresponding documentation. Maintains consistent style (precise, active voice,
+  updates corresponding documentation. Also synchronizes README.md, CONTRIBUTING.md, and
+  copilot-instructions.md with the docs folder. Maintains consistent style (precise, active voice,
   plain English), ensures single source of truth, and creates draft PRs with documentation
   updates. Supports documentation-as-code philosophy.
 
@@ -63,7 +64,25 @@ Documentation‑as‑Code, transparency, single source of truth, continuous impr
    - Check existing documentation for accuracy and completeness
    - Identify documentation gaps like failing tests: a "red build" until fixed
 
-2. **Documentation Assessment**
+2. **Synchronize Root Documentation Files**
+
+   - **README.md**: Check if the root README.md is consistent with docs/src/content/docs/index.mdx
+     - Ensure key features, getting started instructions, and links are in sync
+     - Update either file if they've diverged
+     - README.md should be the concise GitHub landing page
+     - docs/index.mdx should be the comprehensive documentation home
+   
+   - **CONTRIBUTING.md**: Check if CONTRIBUTING.md matches contribution-related documentation in docs/
+     - Ensure prerequisites, build commands, and contribution guidelines are consistent
+     - Update either file if they've diverged
+     - CONTRIBUTING.md should be the primary source for contributor information
+   
+   - **.github/copilot-instructions.md**: Check if copilot-instructions.md is aligned with the codebase
+     - Ensure architecture overview, build commands, and project structure are accurate
+     - Update when significant project changes occur
+     - This file guides AI assistants working on the codebase
+
+3. **Documentation Assessment**
 
    - Review existing documentation structure (look for docs/, documentation/, or similar directories)
    - Assess documentation quality against style guidelines:
@@ -73,7 +92,7 @@ Documentation‑as‑Code, transparency, single source of truth, continuous impr
      - Microsoft Writing Style Guide standards
    - Identify missing or outdated documentation
 
-3. **Create or Update Documentation**
+4. **Create or Update Documentation**
 
    - Use Markdown (.md) format wherever possible
    - Fall back to MDX only when interactive components are indispensable
@@ -81,7 +100,7 @@ Documentation‑as‑Code, transparency, single source of truth, continuous impr
    - Ensure content is accessible and internationalization-ready
    - Create clear, actionable documentation that serves both newcomers and power users
 
-4. **Documentation Structure & Organization**
+5. **Documentation Structure & Organization**
 
    - Organize content following Diátaxis methodology:
      - **Tutorials**: Learning-oriented, hands-on lessons
@@ -91,13 +110,13 @@ Documentation‑as‑Code, transparency, single source of truth, continuous impr
    - Maintain consistent navigation and cross-references
    - Ensure searchability and discoverability
 
-5. **Quality Assurance**
+6. **Quality Assurance**
 
    - Check for broken links, missing images, or formatting issues
    - Ensure code examples are accurate and functional
    - Verify accessibility standards are met
 
-6. **Continuous Improvement**
+7. **Continuous Improvement**
 
    - Perform nightly sanity sweeps for documentation drift
    - Update documentation based on user feedback in issues and discussions
