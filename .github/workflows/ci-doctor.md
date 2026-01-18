@@ -10,10 +10,8 @@ on:
     workflows: ["CI - KSail"] # Monitor the main CI workflow
     types:
       - completed
-    branches:
-      - main
-    # This will trigger only when the CI workflow completes with failure
-    # The condition is handled in the workflow body
+    # Trigger for all branches (main, PRs, merge groups) to catch all CI failures
+    # The failure condition is handled in the workflow body via the if: condition
   stop-after: +1mo
 
 # Only trigger for failures - check in the workflow body
