@@ -1,0 +1,25 @@
+/* Custom styles for KSail documentation */
+
+/* Force dark mode as default */
+:root {
+  --sl-color-accent-low: #1a365d;
+  --sl-color-accent: #3182ce;
+  --sl-color-accent-high: #63b3ed;
+}
+
+/* Improve code block styling */
+pre {
+  border-radius: 0.5rem;
+}
+
+/* Better table styling */
+table {
+  display: block;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+/* Footer attribution */
+footer {
+  text-align: center;
+}
