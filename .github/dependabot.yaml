@@ -12,12 +12,9 @@ updates:
       default-days: 7
       semver-major-days: 14
     groups:
-      go-dependencies:
+      talos:
         patterns:
-          - "*"
-        exclude-patterns:
-          - "k8s.io/*"
-          - "sigs.k8s.io/*"
+          - "siderolabs/*"
       kubernetes:
         patterns:
           - "k8s.io/*"
@@ -30,11 +27,7 @@ updates:
     schedule:
       interval: weekly
       day: monday
-    open-pull-requests-limit: 5
-    groups:
-      github-actions:
-        patterns:
-          - "*"
+    open-pull-requests-limit: 
 
   # npm (documentation site)
   - package-ecosystem: npm
