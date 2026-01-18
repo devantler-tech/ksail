@@ -549,10 +549,7 @@ func upsertFluxInstanceWithRetry(
 
 		select {
 		case <-waitCtx.Done():
-			if lastErr == nil {
-				lastErr = waitCtx.Err()
-			}
-
+			// lastErr is guaranteed non-nil here since we just set it above
 			return nil, fmt.Errorf(
 				"timed out upserting FluxInstance %s/%s: %w",
 				key.Namespace,

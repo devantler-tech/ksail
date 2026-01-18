@@ -6,7 +6,6 @@ import (
 	configmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager"
 	"github.com/devantler-tech/ksail/v5/pkg/io/config-manager/loader"
 	k3dvalidator "github.com/devantler-tech/ksail/v5/pkg/io/validator/k3d"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
 	"github.com/k3d-io/k3d/v5/pkg/config/types"
 	v1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 )
@@ -65,12 +64,12 @@ func NewConfigManager(configPath string) *ConfigManager {
 	}
 }
 
-// LoadConfig loads the K3d configuration from the specified file.
+// Load loads the K3d configuration from the specified file.
 // Returns the loaded config, either freshly loaded or previously cached.
 // If the file doesn't exist, returns a default K3d cluster configuration.
 // Validates the configuration after loading and returns an error if validation fails.
-// The timer parameter is accepted for interface compliance but not currently used.
-func (m *ConfigManager) LoadConfig(_ timer.Timer) (*v1alpha5.SimpleConfig, error) {
+// The opts parameter is accepted for interface compliance but not currently used.
+func (m *ConfigManager) Load(_ configmanager.LoadOptions) (*v1alpha5.SimpleConfig, error) {
 	// If config is already loaded, return it
 	if m.configLoaded {
 		return m.config, nil

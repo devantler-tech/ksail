@@ -6,6 +6,7 @@ import (
 	v1alpha1 "github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
+	configmanagerinterface "github.com/devantler-tech/ksail/v5/pkg/io/config-manager"
 	configmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
 	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
 	"github.com/spf13/cobra"
@@ -43,7 +44,9 @@ func initImageCommandContext(
 
 	outputTimer := helpers.MaybeTimer(cmd, tmr)
 
-	clusterCfg, err := cfgManager.LoadConfigSkipValidation(outputTimer)
+	clusterCfg, err := cfgManager.Load(
+		configmanagerinterface.LoadOptions{Silent: true, SkipValidation: true},
+	)
 	if err != nil {
 		return nil, fmt.Errorf("load config: %w", err)
 	}

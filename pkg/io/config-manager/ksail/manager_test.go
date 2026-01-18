@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	configmanagerinterface "github.com/devantler-tech/ksail/v5/pkg/io/config-manager"
 	configmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -160,7 +161,7 @@ func TestLoadConfigLoadsKindDistributionConfig(t *testing.T) {
 	manager := configmanager.NewConfigManager(io.Discard)
 	manager.Viper.SetConfigFile("ksail.yaml")
 
-	_, err := manager.LoadConfig(nil)
+	_, err := manager.Load(configmanagerinterface.LoadOptions{})
 	require.NoError(t, err)
 	assert.Equal(t, kindConfigPath, manager.Config.Spec.Cluster.DistributionConfig)
 }
@@ -191,7 +192,7 @@ func TestLoadConfigLoadsK3dDistributionConfig(t *testing.T) {
 	manager := configmanager.NewConfigManager(io.Discard)
 	manager.Viper.SetConfigFile("ksail.yaml")
 
-	_, err := manager.LoadConfig(nil)
+	_, err := manager.Load(configmanagerinterface.LoadOptions{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "validation reported")
 	assert.Equal(t, k3dConfigPath, manager.Config.Spec.Cluster.DistributionConfig)
@@ -231,7 +232,7 @@ func TestLoadConfigLoadsTalosDistributionConfig(t *testing.T) {
 	manager := configmanager.NewConfigManager(io.Discard)
 	manager.Viper.SetConfigFile("ksail.yaml")
 
-	_, err := manager.LoadConfig(nil)
+	_, err := manager.Load(configmanagerinterface.LoadOptions{})
 	require.NoError(t, err)
 
 	// Verify distribution config path is set correctly
@@ -264,7 +265,7 @@ func TestLoadConfigLoadsTalosDistributionConfigWithDefaultClusterName(t *testing
 	manager := configmanager.NewConfigManager(io.Discard)
 	manager.Viper.SetConfigFile("ksail.yaml")
 
-	_, err := manager.LoadConfig(nil)
+	_, err := manager.Load(configmanagerinterface.LoadOptions{})
 	require.NoError(t, err)
 
 	// Verify the Talos config was loaded with the default cluster name
@@ -274,7 +275,7 @@ func TestLoadConfigLoadsTalosDistributionConfigWithDefaultClusterName(t *testing
 }
 
 //nolint:paralleltest // Uses t.Chdir to isolate file system state for config loading.
-func TestLoadConfigFromFlagsOnlyIgnoresExistingConfig(t *testing.T) {
+func TestLoadIgnoresConfigFileWhenOptionSet(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Chdir(tempDir)
 
@@ -285,7 +286,9 @@ func TestLoadConfigFromFlagsOnlyIgnoresExistingConfig(t *testing.T) {
 		configmanager.DefaultClusterFieldSelectors()...)
 	manager.Viper.SetConfigFile("ksail.yaml")
 
-	config, err := manager.LoadConfigFromFlagsOnly()
+	config, err := manager.Load(
+		configmanagerinterface.LoadOptions{Silent: true, IgnoreConfigFile: true},
+	)
 	require.NoError(t, err)
 
 	assert.Equal(t, v1alpha1.DistributionVanilla, config.Spec.Cluster.Distribution)
@@ -313,7 +316,7 @@ func TestLoadConfigAppliesFlagOverrides(t *testing.T) {
 	require.NoError(t, cmd.Flags().Set("distribution", "K3s"))
 	require.NoError(t, cmd.Flags().Set("distribution-config", "k3d.yaml"))
 
-	_, err := manager.LoadConfig(nil)
+	_, err := manager.Load(configmanagerinterface.LoadOptions{})
 	require.NoError(t, err)
 
 	assert.Equal(t, v1alpha1.DistributionK3s, manager.Config.Spec.Cluster.Distribution)
@@ -452,7 +455,7 @@ func TestLoadConfigConfigReusedNotification(t *testing.T) {
 	manager, output, _ := loadConfigAndCaptureOutput(t, createStandardFieldSelectors()...)
 	output.Reset()
 
-	cfg, err := manager.LoadConfig(nil)
+	cfg, err := manager.Load(configmanagerinterface.LoadOptions{})
 	require.NoError(t, err)
 	require.NotNil(t, cfg)
 
@@ -476,7 +479,7 @@ func TestLoadConfigHonorsExplicitLocalRegistrySetting(t *testing.T) {
 
 	manager := newManagerWithDefaultSelectors()
 
-	_, err := manager.LoadConfig(nil)
+	_, err := manager.Load(configmanagerinterface.LoadOptions{})
 	require.NoError(t, err)
 
 	require.Equal(t, v1alpha1.GitOpsEngineFlux, manager.Config.Spec.Cluster.GitOpsEngine)
@@ -520,7 +523,7 @@ func TestLoadConfigAppliesLocalRegistryDefaults(t *testing.T) {
 
 			manager := newManagerWithDefaultSelectors()
 
-			_, err := manager.LoadConfig(nil)
+			_, err := manager.Load(configmanagerinterface.LoadOptions{})
 			require.NoError(t, err)
 
 			require.Equal(t, testCase.gitOpsEngine, manager.Config.Spec.Cluster.GitOpsEngine)
@@ -549,7 +552,7 @@ func TestLoadConfigDefaultsLocalRegistryDisabledWhenGitOpsEngineUnset(t *testing
 		configmanager.DefaultClusterFieldSelectors()...)
 	manager.Viper.SetConfigFile(filepath.Join(tempDir, "ksail.yaml"))
 
-	_, err := manager.LoadConfig(nil)
+	_, err := manager.Load(configmanagerinterface.LoadOptions{})
 	require.NoError(t, err)
 
 	assert.False(t, manager.Config.Spec.Cluster.LocalRegistry.Enabled())
@@ -580,7 +583,7 @@ func TestNewCommandConfigManagerBindsFlags(t *testing.T) {
 	}
 }
 
-func TestLoadConfigSilentSkipsNotifications(t *testing.T) {
+func TestLoadSilentSkipsNotifications(t *testing.T) {
 	t.Parallel()
 
 	var output bytes.Buffer
@@ -600,7 +603,7 @@ func TestLoadConfigSilentSkipsNotifications(t *testing.T) {
 	manager := configmanager.NewConfigManager(&output, selectors...)
 	manager.Viper.SetConfigFile(configPath)
 
-	cluster, err := manager.LoadConfigSilent()
+	cluster, err := manager.Load(configmanagerinterface.LoadOptions{Silent: true})
 	require.NoError(t, err)
 	assert.Empty(t, output.String(), "silent load should not emit notifications")
 
@@ -628,7 +631,7 @@ func TestLoadConfigValidationFailureMessages(t *testing.T) {
 	manager.Config.Spec.Cluster.Distribution = ""
 	manager.Config.Spec.Cluster.DistributionConfig = ""
 
-	_, err := manager.LoadConfig(nil)
+	_, err := manager.Load(configmanagerinterface.LoadOptions{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "validation reported")
 	assert.Contains(t, err.Error(), "4 error(s)")
@@ -666,7 +669,7 @@ func testLoadConfigCase(
 
 	manager := configmanager.NewConfigManager(io.Discard, fieldSelectors...)
 
-	cluster, err := manager.LoadConfig(nil)
+	cluster, err := manager.Load(configmanagerinterface.LoadOptions{})
 
 	if testCase.shouldSucceed {
 		require.NoError(t, err)
@@ -675,7 +678,7 @@ func testLoadConfigCase(
 		assert.Equal(t, testCase.expectedDistribution, cluster.Spec.Cluster.Distribution)
 
 		// Test that subsequent calls return the same config
-		cluster2, err := manager.LoadConfig(nil)
+		cluster2, err := manager.Load(configmanagerinterface.LoadOptions{})
 		require.NoError(t, err)
 		assert.Same(t, cluster, cluster2)
 	} else {
@@ -769,7 +772,7 @@ func TestLoadConfigConfigProperty(t *testing.T) {
 	assert.Equal(t, expectedEmpty, manager.Config)
 
 	// Load config
-	cluster, err := manager.LoadConfig(nil)
+	cluster, err := manager.Load(configmanagerinterface.LoadOptions{})
 	require.NoError(t, err)
 
 	// After loading, Config property should be accessible and equal to returned cluster
@@ -814,7 +817,7 @@ func testFieldValueSetting(
 
 	manager := configmanager.NewConfigManager(io.Discard, fieldSelectors...)
 
-	cluster, err := manager.LoadConfig(nil)
+	cluster, err := manager.Load(configmanagerinterface.LoadOptions{})
 
 	if expectValidationError {
 		require.Error(t, err)
@@ -966,7 +969,7 @@ invalid yaml content
 	manager := configmanager.NewConfigManager(io.Discard, fieldSelectors...)
 
 	// Try to load config - this should trigger the error path in readConfigurationFile
-	_, err = manager.LoadConfig(nil)
+	_, err = manager.Load(configmanagerinterface.LoadOptions{})
 
 	// We expect this to fail with a config reading error (not ConfigFileNotFoundError)
 	if err != nil {
@@ -1015,7 +1018,7 @@ spec:
 	fieldSelectors := createFieldSelectorsWithName()
 	manager := configmanager.NewConfigManager(io.Discard, fieldSelectors...)
 
-	cluster, err := manager.LoadConfig(nil)
+	cluster, err := manager.Load(configmanagerinterface.LoadOptions{})
 	require.NoError(t, err)
 
 	require.NotNil(t, cluster)
@@ -1057,7 +1060,7 @@ func TestLoadConfig_ValidationFailureOutputs(t *testing.T) {
 		},
 	)
 
-	_, err := manager.LoadConfig(nil)
+	_, err := manager.Load(configmanagerinterface.LoadOptions{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "validation reported")
 
@@ -1066,7 +1069,7 @@ func TestLoadConfig_ValidationFailureOutputs(t *testing.T) {
 	assert.Contains(t, output, "distribution is required")
 }
 
-//nolint:paralleltest // Uses t.Chdir for isolated filesystem state per scenario.
+//nolint:paralleltest // Uses t.Chdir for isolated filesystem state.
 func TestLoadConfigKindCiliumValidation(t *testing.T) {
 	tests := []kindCiliumScenario{
 		{
@@ -1122,7 +1125,7 @@ func loadConfigAndCaptureOutput(
 	output := &bytes.Buffer{}
 	manager := configmanager.NewConfigManager(output, fieldSelectors...)
 
-	cluster, err := manager.LoadConfig(nil)
+	cluster, err := manager.Load(configmanagerinterface.LoadOptions{})
 	require.NoError(t, err)
 	require.NotNil(t, cluster)
 
@@ -1167,7 +1170,7 @@ spec:
 		manager = configmanager.NewConfigManager(&output)
 	)
 
-	_, err := manager.LoadConfig(nil)
+	_, err := manager.Load(configmanagerinterface.LoadOptions{})
 	logOutput := output.String()
 
 	if scenario.expectValidationErr {
@@ -1199,7 +1202,7 @@ func runK3dDistributionScenario(t *testing.T, scenario k3dScenario) {
 
 	manager, output := newK3dManagerForScenario(t, scenario)
 
-	_, err := manager.LoadConfig(nil)
+	_, err := manager.Load(configmanagerinterface.LoadOptions{})
 	logOutput := output.String()
 
 	if scenario.expectErr {
@@ -1293,7 +1296,7 @@ func TestIsConfigFileFoundReturnsTrueWhenConfigExists(t *testing.T) {
 	writeValidKsailConfig(t, tempDir)
 
 	manager := configmanager.NewConfigManager(io.Discard)
-	_, err := manager.LoadConfig(nil)
+	_, err := manager.Load(configmanagerinterface.LoadOptions{})
 	require.NoError(t, err)
 
 	assert.True(
@@ -1313,7 +1316,7 @@ func TestIsConfigFileFoundReturnsFalseWhenConfigMissing(t *testing.T) {
 
 	// Use standard field selectors to provide valid defaults, bypassing validation errors.
 	manager := configmanager.NewConfigManager(io.Discard, createStandardFieldSelectors()...)
-	_, err := manager.LoadConfig(nil)
+	_, err := manager.Load(configmanagerinterface.LoadOptions{})
 	require.NoError(t, err)
 
 	assert.False(

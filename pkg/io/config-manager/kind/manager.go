@@ -6,7 +6,6 @@ import (
 	configmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager"
 	"github.com/devantler-tech/ksail/v5/pkg/io/config-manager/loader"
 	kindvalidator "github.com/devantler-tech/ksail/v5/pkg/io/validator/kind"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
 
@@ -58,12 +57,12 @@ func NewConfigManager(configPath string) *ConfigManager {
 	}
 }
 
-// LoadConfig loads the Kind configuration from the specified file.
+// Load loads the Kind configuration from the specified file.
 // Returns the loaded config, either freshly loaded or previously cached.
 // If the file doesn't exist, returns a default Kind cluster configuration.
 // Validates the configuration after loading and returns an error if validation fails.
-// The timer parameter is accepted for interface compliance but not currently used.
-func (m *ConfigManager) LoadConfig(_ timer.Timer) (*v1alpha4.Cluster, error) {
+// The opts parameter is accepted for interface compliance but not currently used.
+func (m *ConfigManager) Load(_ configmanager.LoadOptions) (*v1alpha4.Cluster, error) {
 	// If config is already loaded, return it
 	if m.configLoaded {
 		return m.config, nil

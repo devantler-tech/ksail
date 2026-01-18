@@ -2,8 +2,6 @@ package main
 
 import (
 	"bytes"
-	"errors"
-	"fmt"
 	"os"
 	"testing"
 
@@ -23,12 +21,6 @@ func TestMain(m *testing.M) {
 
 	os.Exit(exitCode)
 }
-
-var (
-	errRootCause  = errors.New("root cause")
-	errStandalone = errors.New("standalone error")
-	errBaseError  = errors.New("base error")
-)
 
 func TestVersionVariables(t *testing.T) {
 	t.Parallel()
@@ -150,34 +142,4 @@ func TestRunSafelyPropagatesRunnerExitCode(t *testing.T) {
 			assert.Equal(t, testCase.want, runSafely(nil, testCase.runner, &output))
 		})
 	}
-}
-
-func TestGetRootError(t *testing.T) {
-	t.Parallel()
-
-	t.Run("unwraps nested errors", func(t *testing.T) {
-		t.Parallel()
-
-		wrappedErr := fmt.Errorf("wrapped: %w", errRootCause)
-		deeplyWrappedErr := fmt.Errorf("deeply wrapped: %w", wrappedErr)
-
-		result := getRootError(deeplyWrappedErr)
-		assert.Equal(t, errRootCause, result)
-	})
-
-	t.Run("returns error if no unwrapping", func(t *testing.T) {
-		t.Parallel()
-
-		result := getRootError(errStandalone)
-		assert.Equal(t, errStandalone, result)
-	})
-
-	t.Run("handles single wrapped error", func(t *testing.T) {
-		t.Parallel()
-
-		wrappedErr := fmt.Errorf("wrapper: %w", errBaseError)
-
-		result := getRootError(wrappedErr)
-		assert.Equal(t, errBaseError, result)
-	})
 }

@@ -414,7 +414,9 @@ func (s *Scaffolder) checkFileExistsAndSkip(
 		return false, true, info.ModTime()
 	}
 
-	if statErr != nil && !errors.Is(statErr, os.ErrNotExist) {
+	// statErr is non-nil here (since statErr == nil was handled above)
+	// If it's not ErrNotExist, return without file info
+	if !errors.Is(statErr, os.ErrNotExist) {
 		return false, false, time.Time{}
 	}
 
