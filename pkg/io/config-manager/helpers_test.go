@@ -10,6 +10,15 @@ import (
 	v1alpha4 "sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
 
+// mockClusterNameProvider is a mock implementation of ClusterNameProvider for testing.
+type mockClusterNameProvider struct {
+	name string
+}
+
+func (m *mockClusterNameProvider) GetClusterName() string {
+	return m.name
+}
+
 func TestGetClusterName(t *testing.T) {
 	t.Parallel()
 
@@ -30,8 +39,20 @@ func TestGetClusterName(t *testing.T) {
 			},
 			wantName: "k3d-custom",
 		},
+		"cluster name provider interface": {
+			config:   &mockClusterNameProvider{name: "talos-custom"},
+			wantName: "talos-custom",
+		},
+		"cluster name provider with empty name": {
+			config:   &mockClusterNameProvider{name: ""},
+			wantName: "",
+		},
 		"unsupported type": {
 			config:  123,
+			wantErr: true,
+		},
+		"nil config": {
+			config:  nil,
 			wantErr: true,
 		},
 	}

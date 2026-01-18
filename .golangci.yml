@@ -78,6 +78,9 @@ linters:
         path: pkg/client/flux/reconciler.go
       - linters:
           - ireturn
+        path: pkg/k8s/apiserver_test.go
+      - linters:
+          - ireturn
         path: pkg/svc/reconciler/base.go
       - linters:
           - paralleltest

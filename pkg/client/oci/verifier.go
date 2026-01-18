@@ -61,7 +61,7 @@ type verifier struct{}
 
 // NewRegistryVerifier creates a new registry verifier.
 //
-//nolint:ireturn // interface return is intentional for testability
+//nolint:ireturn // Interface return is intentional for dependency injection
 func NewRegistryVerifier() RegistryVerifier {
 	return &verifier{}
 }

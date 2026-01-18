@@ -15,7 +15,7 @@ type buildOCIURLTestCase struct {
 	expected    string
 }
 
-func getBuildOCIURLTestCases() []buildOCIURLTestCase {
+func getDefaultAndCustomValueTestCases() []buildOCIURLTestCase {
 	return []buildOCIURLTestCase{
 		{
 			name:        "with all default values",
@@ -52,6 +52,11 @@ func getBuildOCIURLTestCases() []buildOCIURLTestCase {
 			projectName: "test-app",
 			expected:    "oci://registry.example.com:9000/test-app",
 		},
+	}
+}
+
+func getIPAndEdgeCaseTestCases() []buildOCIURLTestCase {
+	return []buildOCIURLTestCase{
 		{
 			name:        "with IPv4 host",
 			host:        "192.168.1.100",
@@ -73,7 +78,28 @@ func getBuildOCIURLTestCases() []buildOCIURLTestCase {
 			projectName: "my-awesome-project",
 			expected:    "oci://registry.localhost:5000/my-awesome-project",
 		},
+		{
+			name:        "with negative port for external HTTPS registry",
+			host:        "ghcr.io",
+			port:        -1,
+			projectName: "org/repo",
+			expected:    "oci://ghcr.io/org/repo",
+		},
+		{
+			name:        "with negative port and default host",
+			host:        "",
+			port:        -1,
+			projectName: "my-project",
+			expected:    "oci://ksail-registry.localhost/my-project",
+		},
 	}
+}
+
+func getBuildOCIURLTestCases() []buildOCIURLTestCase {
+	tests := getDefaultAndCustomValueTestCases()
+	tests = append(tests, getIPAndEdgeCaseTestCases()...)
+
+	return tests
 }
 
 func TestBuildOCIURL(t *testing.T) {

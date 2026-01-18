@@ -1,12 +1,32 @@
 package ciliuminstaller_test
 
 import (
+	"context"
+	"os"
 	"testing"
 	"time"
 
+	v1alpha1 "github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
 	ciliuminstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/cni/cilium"
+	"github.com/gkampitakis/go-snaps/snaps"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
+
+func TestMain(m *testing.M) {
+	exitCode := m.Run()
+
+	_, err := snaps.Clean(m, snaps.CleanOpts{Sort: true})
+	if err != nil {
+		_, _ = os.Stderr.WriteString("failed to clean snapshots: " + err.Error() + "\n")
+
+		os.Exit(1)
+	}
+
+	os.Exit(exitCode)
+}
 
 func TestNewCiliumInstaller(t *testing.T) {
 	t.Parallel()
@@ -19,6 +39,49 @@ func TestNewCiliumInstaller(t *testing.T) {
 	)
 
 	require.NotNil(t, installer, "expected installer to be created")
+}
+
+func TestNewCiliumInstallerWithDistribution(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name         string
+		distribution v1alpha1.Distribution
+	}{
+		{
+			name:         "vanilla distribution",
+			distribution: v1alpha1.DistributionVanilla,
+		},
+		{
+			name:         "k3s distribution",
+			distribution: v1alpha1.DistributionK3s,
+		},
+		{
+			name:         "talos distribution",
+			distribution: v1alpha1.DistributionTalos,
+		},
+		{
+			name:         "empty distribution",
+			distribution: "",
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			client := helm.NewMockInterface(t)
+			installer := ciliuminstaller.NewCiliumInstallerWithDistribution(
+				client,
+				"/path/to/kubeconfig",
+				"test-context",
+				5*time.Minute,
+				testCase.distribution,
+			)
+
+			require.NotNil(t, installer, "expected installer to be created")
+		})
+	}
 }
 
 func TestNewCiliumInstaller_WithDifferentTimeout(t *testing.T) {
@@ -69,4 +132,173 @@ func TestNewCiliumInstaller_WithEmptyParams(t *testing.T) {
 	)
 
 	require.NotNil(t, installer, "expected installer to be created even with empty params")
+}
+
+func TestCiliumInstaller_Install_VanillaDistribution(t *testing.T) {
+	t.Parallel()
+
+	installer, client := newCiliumInstallerWithDistribution(t, v1alpha1.DistributionVanilla)
+	expectCiliumInstall(t, client, nil)
+
+	err := installer.Install(context.Background())
+
+	require.NoError(t, err)
+}
+
+func TestCiliumInstaller_Install_K3sDistribution(t *testing.T) {
+	t.Parallel()
+
+	installer, client := newCiliumInstallerWithDistribution(t, v1alpha1.DistributionK3s)
+	expectCiliumInstall(t, client, nil)
+
+	err := installer.Install(context.Background())
+
+	require.NoError(t, err)
+}
+
+func TestCiliumInstaller_Install_RepoError(t *testing.T) {
+	t.Parallel()
+
+	installer, client := newCiliumInstallerWithDistribution(t, v1alpha1.DistributionVanilla)
+	client.EXPECT().
+		AddRepository(mock.Anything, mock.Anything, mock.Anything).
+		Return(assert.AnError)
+
+	err := installer.Install(context.Background())
+
+	require.Error(t, err)
+	snaps.MatchSnapshot(t, err.Error())
+}
+
+func TestCiliumInstaller_Install_ChartError(t *testing.T) {
+	t.Parallel()
+
+	installer, client := newCiliumInstallerWithDistribution(t, v1alpha1.DistributionVanilla)
+	expectCiliumInstall(t, client, assert.AnError)
+
+	err := installer.Install(context.Background())
+
+	require.Error(t, err)
+	snaps.MatchSnapshot(t, err.Error())
+}
+
+func TestCiliumInstaller_Install_NilClient(t *testing.T) {
+	t.Parallel()
+
+	installer := ciliuminstaller.NewCiliumInstallerWithDistribution(
+		nil, // nil client
+		"/path/to/kubeconfig",
+		"test-context",
+		5*time.Minute,
+		v1alpha1.DistributionVanilla,
+	)
+
+	err := installer.Install(context.Background())
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "helm client is nil")
+}
+
+func TestCiliumInstaller_Uninstall_Success(t *testing.T) {
+	t.Parallel()
+
+	installer, client := newCiliumInstallerWithDistribution(t, v1alpha1.DistributionVanilla)
+	client.EXPECT().
+		UninstallRelease(mock.Anything, "cilium", "kube-system").
+		Return(nil)
+
+	err := installer.Uninstall(context.Background())
+
+	require.NoError(t, err)
+}
+
+func TestCiliumInstaller_Uninstall_Error(t *testing.T) {
+	t.Parallel()
+
+	installer, client := newCiliumInstallerWithDistribution(t, v1alpha1.DistributionVanilla)
+	client.EXPECT().
+		UninstallRelease(mock.Anything, "cilium", "kube-system").
+		Return(assert.AnError)
+
+	err := installer.Uninstall(context.Background())
+
+	require.Error(t, err)
+	snaps.MatchSnapshot(t, err.Error())
+}
+
+func TestCiliumInstaller_Uninstall_NilClient(t *testing.T) {
+	t.Parallel()
+
+	installer := ciliuminstaller.NewCiliumInstallerWithDistribution(
+		nil, // nil client
+		"/path/to/kubeconfig",
+		"test-context",
+		5*time.Minute,
+		v1alpha1.DistributionVanilla,
+	)
+
+	err := installer.Uninstall(context.Background())
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "helm client is nil")
+}
+
+// --- test helpers ---
+
+func newCiliumInstallerWithDistribution(
+	t *testing.T,
+	distribution v1alpha1.Distribution,
+) (*ciliuminstaller.CiliumInstaller, *helm.MockInterface) {
+	t.Helper()
+
+	client := helm.NewMockInterface(t)
+	installer := ciliuminstaller.NewCiliumInstallerWithDistribution(
+		client,
+		"/path/to/kubeconfig",
+		"test-context",
+		2*time.Minute,
+		distribution,
+	)
+
+	return installer, client
+}
+
+func expectCiliumInstall(t *testing.T, client *helm.MockInterface, installErr error) {
+	t.Helper()
+
+	client.EXPECT().
+		AddRepository(
+			mock.Anything,
+			mock.MatchedBy(func(entry *helm.RepositoryEntry) bool {
+				return entry != nil && entry.Name == "cilium" &&
+					entry.URL == "https://helm.cilium.io"
+			}),
+			mock.Anything,
+		).
+		Return(nil)
+
+	client.EXPECT().
+		InstallOrUpgradeChart(
+			mock.Anything,
+			mock.MatchedBy(func(spec *helm.ChartSpec) bool {
+				if spec == nil {
+					return false
+				}
+
+				assert.Equal(t, "cilium", spec.ReleaseName)
+				assert.Equal(t, "cilium/cilium", spec.ChartName)
+				assert.Equal(t, "kube-system", spec.Namespace)
+				assert.Equal(t, "https://helm.cilium.io", spec.RepoURL)
+				assert.False(t, spec.CreateNamespace)
+				assert.True(t, spec.Atomic)
+				assert.True(t, spec.Silent)
+				assert.True(t, spec.UpgradeCRDs)
+				assert.True(t, spec.Wait)
+				assert.True(t, spec.WaitForJobs)
+				assert.Equal(t, 2*time.Minute, spec.Timeout)
+
+				return true
+			}),
+		).
+		Return(nil, installErr)
 }
