@@ -626,7 +626,7 @@ func setupImportExecMockForImporter(
 		ContainerExecCreate(ctx, containerName, mock.MatchedBy(func(opts container.ExecOptions) bool {
 			// Verify the import command structure
 			return len(opts.Cmd) >= 5 &&
-				opts.Cmd[0] == "ctr" &&
+				opts.Cmd[0] == ctrCommand &&
 				opts.Cmd[1] == "--namespace=k8s.io" &&
 				opts.Cmd[2] == "images" &&
 				opts.Cmd[3] == "import" &&

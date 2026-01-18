@@ -25,6 +25,11 @@ var (
 	errExecInspectFailed = errors.New("exec inspect failed")
 )
 
+// Test constants.
+const (
+	ctrCommand = "ctr"
+)
+
 // mockConn is a minimal net.Conn implementation for testing.
 type mockConn struct{}
 
@@ -235,7 +240,7 @@ func TestExecInContainerMultipleArguments(t *testing.T) {
 	mockClient.EXPECT().
 		ContainerExecCreate(ctx, "my-node", mock.MatchedBy(func(opts container.ExecOptions) bool {
 			return len(opts.Cmd) == 5 &&
-				opts.Cmd[0] == "ctr" &&
+				opts.Cmd[0] == ctrCommand &&
 				opts.Cmd[1] == "--namespace=k8s.io" &&
 				opts.Cmd[2] == "images" &&
 				opts.Cmd[3] == "list" &&
@@ -252,7 +257,7 @@ func TestExecInContainerMultipleArguments(t *testing.T) {
 		Return(container.ExecInspect{ExitCode: 0}, nil)
 
 	executor := image.NewContainerExecutor(mockClient)
-	cmd := []string{"ctr", "--namespace=k8s.io", "images", "list", "-q"}
+	cmd := []string{ctrCommand, "--namespace=k8s.io", "images", "list", "-q"}
 	got, err := executor.ExecInContainer(ctx, "my-node", cmd)
 
 	require.NoError(t, err)

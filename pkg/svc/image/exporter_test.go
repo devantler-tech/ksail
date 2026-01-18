@@ -184,7 +184,7 @@ func TestExportWithSpecificImages(t *testing.T) {
 
 	// Mock exec for export command
 	exportCmd := []string{
-		"ctr", "--namespace=k8s.io", "images", "export",
+		ctrCommand, "--namespace=k8s.io", "images", "export",
 		"--platform", "linux/amd64",
 		"/root/ksail-images-export.tar", "nginx:latest",
 	}
@@ -246,7 +246,7 @@ func TestExportK3sDistribution(t *testing.T) {
 
 	// Mock exec for export - K3d uses /tmp path
 	k3dExportCmd := []string{
-		"ctr", "--namespace=k8s.io", "images", "export",
+		ctrCommand, "--namespace=k8s.io", "images", "export",
 		"--platform", "linux/amd64",
 		"/tmp/ksail-images-export.tar", "nginx:latest",
 	}
@@ -306,7 +306,7 @@ func TestExportEmptyProvider(t *testing.T) {
 		mockClient,
 		"my-cluster-control-plane",
 		[]string{
-			"ctr",
+			ctrCommand,
 			"--namespace=k8s.io",
 			"images",
 			"export",
@@ -362,7 +362,7 @@ func TestExportCopyFromContainerFails(t *testing.T) {
 		mockClient,
 		"my-cluster-control-plane",
 		[]string{
-			"ctr",
+			ctrCommand,
 			"--namespace=k8s.io",
 			"images",
 			"export",
@@ -444,6 +444,72 @@ func TestExportExecFails(t *testing.T) {
 	assert.Contains(t, err.Error(), "ctr export failed")
 }
 
+func TestExportFallbackReportsFailedImages(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	mockClient := docker.NewMockAPIClient(t)
+	tmpDir := t.TempDir()
+	outputPath := filepath.Join(tmpDir, "images.tar")
+
+	// Capture stderr output
+	oldStderr := os.Stderr
+	stderrReader, stderrWriter, _ := os.Pipe()
+	os.Stderr = stderrWriter
+
+	defer func() {
+		os.Stderr = oldStderr
+	}()
+
+	mockClient.EXPECT().
+		ContainerList(ctx, mock.Anything).
+		Return([]container.Summary{
+			{
+				Names:  []string{"/my-cluster-control-plane"},
+				Labels: map[string]string{"io.x-k8s.kind.role": "control-plane"},
+			},
+		}, nil)
+
+	setupPlatformDetectMockForExporter(ctx, t, mockClient, "my-cluster-control-plane")
+	setupFallbackExportMocks(ctx, t, mockClient, "my-cluster-control-plane")
+
+	// Mock CopyFromContainer
+	tarContent := createExportTar(t, []byte("fake image data"))
+	mockClient.EXPECT().
+		CopyFromContainer(ctx, "my-cluster-control-plane", "/root/ksail-images-export.tar").
+		Return(io.NopCloser(bytes.NewReader(tarContent)), container.PathStat{}, nil)
+
+	// Final cleanup
+	setupExecMockForExporter(ctx, t, mockClient, "my-cluster-control-plane")
+
+	exporter := image.NewExporter(mockClient)
+	exportErr := exporter.Export(
+		ctx,
+		"my-cluster",
+		v1alpha1.DistributionVanilla,
+		v1alpha1.ProviderDocker,
+		image.ExportOptions{
+			OutputPath: outputPath,
+			Images:     []string{"nginx:latest", "redis:alpine"},
+		},
+	)
+
+	// Close write end and read stderr
+	closeErr := stderrWriter.Close()
+	require.NoError(t, closeErr)
+
+	var stderrBuf bytes.Buffer
+
+	_, _ = io.Copy(&stderrBuf, stderrReader)
+
+	require.NoError(t, exportErr)
+
+	// Verify stderr contains warning about failed image
+	stderrOutput := stderrBuf.String()
+	assert.Contains(t, stderrOutput, "warning: failed to export 1 image(s)")
+	assert.Contains(t, stderrOutput, "redis:alpine")
+}
+
 func TestExportListImagesFiltersDigests(t *testing.T) {
 	t.Parallel()
 
@@ -464,14 +530,14 @@ func TestExportListImagesFiltersDigests(t *testing.T) {
 	// First exec is for listing images - includes both named images and digest-only refs
 	imageList := "nginx:latest\nsha256:abc123\nredis:alpine\nsha256:def456\n"
 	setupExecMockWithStdoutForExporter(ctx, t, mockClient, "my-cluster-control-plane",
-		[]string{"ctr", "--namespace=k8s.io", "images", "list", "-q"}, imageList)
+		[]string{ctrCommand, "--namespace=k8s.io", "images", "list", "-q"}, imageList)
 
 	// Mock platform detection (uname -m)
 	setupPlatformDetectMockForExporter(ctx, t, mockClient, "my-cluster-control-plane")
 
 	// Second exec is for exporting - only named images
 	exportCmd := []string{
-		"ctr", "--namespace=k8s.io", "images", "export",
+		ctrCommand, "--namespace=k8s.io", "images", "export",
 		"--platform", "linux/amd64",
 		"/root/ksail-images-export.tar", "nginx:latest", "redis:alpine",
 	}
@@ -719,4 +785,111 @@ func createExportTar(t *testing.T, content []byte) []byte {
 	require.NoError(t, err)
 
 	return buf.Bytes()
+}
+
+// setupFallbackExportMocks sets up mocks for testing the fallback export mechanism.
+func setupFallbackExportMocks(
+	ctx context.Context,
+	t *testing.T,
+	mockClient *docker.MockAPIClient,
+	nodeName string,
+) {
+	t.Helper()
+
+	setupBulkExportFailMock(ctx, t, mockClient, nodeName)
+	setupIndividualImageExportMocks(ctx, t, mockClient, nodeName)
+	setupExecMockForExporter(ctx, t, mockClient, nodeName)
+	setupReexportSuccessfulImageMock(ctx, t, mockClient, nodeName)
+}
+
+// setupBulkExportFailMock sets up the mock for the initial bulk export that fails.
+func setupBulkExportFailMock(
+	ctx context.Context,
+	t *testing.T,
+	mockClient *docker.MockAPIClient,
+	nodeName string,
+) {
+	t.Helper()
+
+	execID := "exec-bulk-fail"
+	mockClient.EXPECT().
+		ContainerExecCreate(ctx, nodeName, mock.MatchedBy(func(opts container.ExecOptions) bool {
+			return len(opts.Cmd) > 5 && opts.Cmd[0] == ctrCommand && opts.Cmd[3] == "export"
+		})).
+		Return(container.ExecCreateResponse{ID: execID}, nil).Once()
+
+	mockClient.EXPECT().
+		ContainerExecAttach(ctx, execID, container.ExecStartOptions{}).
+		Return(mockDockerStreamResponse("", "bulk export failed"), nil).Once()
+
+	mockClient.EXPECT().
+		ContainerExecInspect(ctx, execID).
+		Return(container.ExecInspect{ExitCode: 1}, nil).Once()
+}
+
+// setupIndividualImageExportMocks sets up mocks for individual image export attempts.
+func setupIndividualImageExportMocks(
+	ctx context.Context,
+	t *testing.T,
+	mockClient *docker.MockAPIClient,
+	nodeName string,
+) {
+	t.Helper()
+
+	// First image succeeds
+	execID2 := "exec-image1-success"
+	mockClient.EXPECT().
+		ContainerExecCreate(ctx, nodeName, mock.MatchedBy(func(opts container.ExecOptions) bool {
+			return len(opts.Cmd) == 8 && opts.Cmd[len(opts.Cmd)-1] == "nginx:latest"
+		})).
+		Return(container.ExecCreateResponse{ID: execID2}, nil).Once()
+
+	mockClient.EXPECT().
+		ContainerExecAttach(ctx, execID2, container.ExecStartOptions{}).
+		Return(mockDockerStreamResponse("", ""), nil).Once()
+
+	mockClient.EXPECT().
+		ContainerExecInspect(ctx, execID2).
+		Return(container.ExecInspect{ExitCode: 0}, nil).Once()
+
+	// Second image fails
+	execID3 := "exec-image2-fail"
+	mockClient.EXPECT().
+		ContainerExecCreate(ctx, nodeName, mock.MatchedBy(func(opts container.ExecOptions) bool {
+			return len(opts.Cmd) == 8 && opts.Cmd[len(opts.Cmd)-1] == "redis:alpine"
+		})).
+		Return(container.ExecCreateResponse{ID: execID3}, nil).Once()
+
+	mockClient.EXPECT().
+		ContainerExecAttach(ctx, execID3, container.ExecStartOptions{}).
+		Return(mockDockerStreamResponse("", "export failed"), nil).Once()
+
+	mockClient.EXPECT().
+		ContainerExecInspect(ctx, execID3).
+		Return(container.ExecInspect{ExitCode: 1}, nil).Once()
+}
+
+// setupReexportSuccessfulImageMock sets up the mock for re-exporting only successful images.
+func setupReexportSuccessfulImageMock(
+	ctx context.Context,
+	t *testing.T,
+	mockClient *docker.MockAPIClient,
+	nodeName string,
+) {
+	t.Helper()
+
+	execID := "exec-reexport"
+	mockClient.EXPECT().
+		ContainerExecCreate(ctx, nodeName, mock.MatchedBy(func(opts container.ExecOptions) bool {
+			return len(opts.Cmd) == 8 && opts.Cmd[len(opts.Cmd)-1] == "nginx:latest"
+		})).
+		Return(container.ExecCreateResponse{ID: execID}, nil).Once()
+
+	mockClient.EXPECT().
+		ContainerExecAttach(ctx, execID, container.ExecStartOptions{}).
+		Return(mockDockerStreamResponse("", ""), nil).Once()
+
+	mockClient.EXPECT().
+		ContainerExecInspect(ctx, execID).
+		Return(container.ExecInspect{ExitCode: 0}, nil).Once()
 }
