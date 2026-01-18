@@ -214,9 +214,6 @@ func (e *Exporter) exportImagesFromNode(
 			fmt.Fprintf(os.Stderr, "warning: failed to export %d image(s): %s\n", len(failedImages), strings.Join(failedImages, ", "))
 		}
 
-		// Clean up any intermediate test files before re-export
-		_, _ = e.executor.ExecInContainer(ctx, nodeName, []string{"rm", "-f", tmpPath})
-
 		// Re-export only the successful images together
 		err = e.tryExportImages(ctx, nodeName, tmpPath, platform, successfulImages)
 		if err != nil {
@@ -278,7 +275,7 @@ func (e *Exporter) exportImagesOneByOne(
 	images []string,
 ) ([]string, []string) {
 	successful := make([]string, 0, len(images))
-	failed := make([]string, 0)
+	failed := make([]string, 0, len(images))
 
 	for _, image := range images {
 		err := e.tryExportImages(ctx, nodeName, tmpPath, platform, []string{image})
