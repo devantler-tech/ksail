@@ -204,7 +204,13 @@ func (e *Exporter) exportImagesFromNode(
 		// Fall back to exporting images one-by-one, skipping failures
 		// This handles cases where some images have incomplete manifests
 		// (e.g., multi-arch images where not all platform layers were pulled)
-		successfulImages, failedImages := e.exportImagesOneByOne(ctx, nodeName, tmpPath, platform, images)
+		successfulImages, failedImages := e.exportImagesOneByOne(
+			ctx,
+			nodeName,
+			tmpPath,
+			platform,
+			images,
+		)
 		if len(successfulImages) == 0 {
 			return fmt.Errorf(
 				"ctr export failed for all images during individual export attempts (initial bulk export error: %w)",

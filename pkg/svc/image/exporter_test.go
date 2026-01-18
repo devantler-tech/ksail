@@ -499,6 +499,7 @@ func TestExportFallbackReportsFailedImages(t *testing.T) {
 	require.NoError(t, closeErr)
 
 	var stderrBuf bytes.Buffer
+
 	_, _ = io.Copy(&stderrBuf, stderrReader)
 
 	require.NoError(t, exportErr)
