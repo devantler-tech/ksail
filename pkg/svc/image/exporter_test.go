@@ -179,9 +179,13 @@ func TestExportWithSpecificImages(t *testing.T) {
 			},
 		}, nil)
 
+	// Mock platform detection (uname -m)
+	setupPlatformDetectMockForExporter(ctx, t, mockClient, "my-cluster-control-plane")
+
 	// Mock exec for export command
 	exportCmd := []string{
 		"ctr", "--namespace=k8s.io", "images", "export",
+		"--platform", "linux/amd64",
 		"/root/ksail-images-export.tar", "nginx:latest",
 	}
 	setupExecMockWithCmdForExporter(
@@ -237,9 +241,13 @@ func TestExportK3sDistribution(t *testing.T) {
 			},
 		}, nil)
 
+	// Mock platform detection (uname -m)
+	setupPlatformDetectMockForExporter(ctx, t, mockClient, "k3d-my-cluster-server-0")
+
 	// Mock exec for export - K3d uses /tmp path
 	k3dExportCmd := []string{
 		"ctr", "--namespace=k8s.io", "images", "export",
+		"--platform", "linux/amd64",
 		"/tmp/ksail-images-export.tar", "nginx:latest",
 	}
 	setupExecMockWithCmdForExporter(
@@ -288,6 +296,9 @@ func TestExportEmptyProvider(t *testing.T) {
 			},
 		}, nil)
 
+	// Mock platform detection (uname -m)
+	setupPlatformDetectMockForExporter(ctx, t, mockClient, "my-cluster-control-plane")
+
 	// Mock exec for export
 	setupExecMockWithCmdForExporter(
 		ctx,
@@ -299,6 +310,8 @@ func TestExportEmptyProvider(t *testing.T) {
 			"--namespace=k8s.io",
 			"images",
 			"export",
+			"--platform",
+			"linux/amd64",
 			"/root/ksail-images-export.tar",
 			"nginx:latest",
 		},
@@ -339,6 +352,9 @@ func TestExportCopyFromContainerFails(t *testing.T) {
 			},
 		}, nil)
 
+	// Mock platform detection (uname -m)
+	setupPlatformDetectMockForExporter(ctx, t, mockClient, "my-cluster-control-plane")
+
 	// Mock exec for export
 	setupExecMockWithCmdForExporter(
 		ctx,
@@ -350,6 +366,8 @@ func TestExportCopyFromContainerFails(t *testing.T) {
 			"--namespace=k8s.io",
 			"images",
 			"export",
+			"--platform",
+			"linux/amd64",
 			"/root/ksail-images-export.tar",
 			"nginx:latest",
 		},
@@ -392,6 +410,9 @@ func TestExportExecFails(t *testing.T) {
 				Labels: map[string]string{"io.x-k8s.kind.role": "control-plane"},
 			},
 		}, nil)
+
+	// Mock platform detection (uname -m)
+	setupPlatformDetectMockForExporter(ctx, t, mockClient, "my-cluster-control-plane")
 
 	// Mock exec for export - fails with non-zero exit code
 	execID := "exec-fail"
@@ -445,9 +466,13 @@ func TestExportListImagesFiltersDigests(t *testing.T) {
 	setupExecMockWithStdoutForExporter(ctx, t, mockClient, "my-cluster-control-plane",
 		[]string{"ctr", "--namespace=k8s.io", "images", "list", "-q"}, imageList)
 
+	// Mock platform detection (uname -m)
+	setupPlatformDetectMockForExporter(ctx, t, mockClient, "my-cluster-control-plane")
+
 	// Second exec is for exporting - only named images
 	exportCmd := []string{
 		"ctr", "--namespace=k8s.io", "images", "export",
+		"--platform", "linux/amd64",
 		"/root/ksail-images-export.tar", "nginx:latest", "redis:alpine",
 	}
 	setupExecMockWithCmdForExporter(ctx, t, mockClient, "my-cluster-control-plane", exportCmd)
@@ -536,6 +561,11 @@ func runNodeSelectionTest(
 	outputPath := filepath.Join(t.TempDir(), "images.tar")
 
 	mockClient.EXPECT().ContainerList(ctx, mock.Anything).Return(nodes, nil)
+
+	// Mock platform detection (uname -m)
+	setupPlatformDetectMockForExporter(ctx, t, mockClient, expectedNodeName)
+
+	// Mock export command
 	setupExecMockForExporter(ctx, t, mockClient, expectedNodeName)
 
 	tarContent := createExportTar(t, []byte("fake image data"))
@@ -550,6 +580,19 @@ func runNodeSelectionTest(
 		image.ExportOptions{OutputPath: outputPath, Images: []string{"nginx:latest"}})
 
 	require.NoError(t, err)
+}
+
+// setupPlatformDetectMockForExporter sets up mock for uname -m platform detection.
+func setupPlatformDetectMockForExporter(
+	ctx context.Context,
+	t *testing.T,
+	mockClient *docker.MockAPIClient,
+	containerName string,
+) {
+	t.Helper()
+
+	setupExecMockWithStdoutForExporter(ctx, t, mockClient, containerName,
+		[]string{"uname", "-m"}, "x86_64\n")
 }
 
 // setupExecMockForExporter is a helper to set up ContainerExec* mocks for simple cases.
