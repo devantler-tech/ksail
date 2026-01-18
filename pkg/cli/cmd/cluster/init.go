@@ -7,6 +7,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
+	configmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
 	"github.com/devantler-tech/ksail/v5/pkg/io/scaffolder"
 	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
@@ -86,23 +87,10 @@ type InitDeps struct {
 	Timer timer.Timer
 }
 
-// HandleInitRunE handles the init command.
-func HandleInitRunE(
-	cmd *cobra.Command,
-	cfgManager *ksailconfigmanager.ConfigManager,
-	deps InitDeps,
-) error {
-	if deps.Timer != nil {
-		deps.Timer.Start()
-	}
-
-	clusterCfg, err := cfgManager.LoadConfigFromFlagsOnly()
-	if err != nil {
-		return fmt.Errorf("failed to resolve configuration for scaffolding: %w", err)
-	}
-
+// validateInitConfig validates the cluster configuration for the init command.
+func validateInitConfig(clusterCfg *v1alpha1.Cluster) error {
 	// Early validation of distribution x provider combination
-	err = clusterCfg.Spec.Cluster.Provider.ValidateForDistribution(
+	err := clusterCfg.Spec.Cluster.Provider.ValidateForDistribution(
 		clusterCfg.Spec.Cluster.Distribution,
 	)
 	if err != nil {
@@ -115,7 +103,31 @@ func HandleInitRunE(
 		clusterCfg.Spec.Cluster.LocalRegistry,
 	)
 	if err != nil {
-		//nolint:wrapcheck // Return directly to preserve actionable error message
+		return fmt.Errorf("local registry validation: %w", err)
+	}
+
+	return nil
+}
+
+// HandleInitRunE handles the init command.
+func HandleInitRunE(
+	cmd *cobra.Command,
+	cfgManager *ksailconfigmanager.ConfigManager,
+	deps InitDeps,
+) error {
+	if deps.Timer != nil {
+		deps.Timer.Start()
+	}
+
+	clusterCfg, err := cfgManager.Load(
+		configmanager.LoadOptions{Silent: true, IgnoreConfigFile: true},
+	)
+	if err != nil {
+		return fmt.Errorf("failed to resolve configuration for scaffolding: %w", err)
+	}
+
+	err = validateInitConfig(clusterCfg)
+	if err != nil {
 		return err
 	}
 
@@ -140,12 +152,10 @@ func HandleInitRunE(
 		return fmt.Errorf("failed to scaffold project files: %w", err)
 	}
 
-	outputTimer := helpers.MaybeTimer(cmd, deps.Timer)
-
 	notify.WriteMessage(notify.Message{
 		Type:    notify.SuccessType,
 		Content: "initialized project",
-		Timer:   outputTimer,
+		Timer:   helpers.MaybeTimer(cmd, deps.Timer),
 		Writer:  cmd.OutOrStdout(),
 	})
 

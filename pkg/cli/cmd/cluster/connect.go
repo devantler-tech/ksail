@@ -7,6 +7,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
 	"github.com/devantler-tech/ksail/v5/pkg/client/k9s"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
+	configmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
 	"github.com/spf13/cobra"
 )
@@ -65,7 +66,7 @@ func HandleConnectRunE(
 	editorFlag string,
 ) error {
 	// Load configuration
-	cfg, err := cfgManager.LoadConfigSilent()
+	cfg, err := cfgManager.Load(configmanager.LoadOptions{Silent: true})
 	if err != nil {
 		return fmt.Errorf("load configuration: %w", err)
 	}

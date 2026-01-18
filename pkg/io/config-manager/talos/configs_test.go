@@ -3,6 +3,7 @@ package talos_test
 import (
 	"testing"
 
+	configmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager"
 	"github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -13,7 +14,7 @@ func TestConfigs_GetClusterName(t *testing.T) {
 
 	manager := talos.NewConfigManager("", "my-test-cluster", "1.32.0", "10.5.0.0/24")
 
-	configs, err := manager.LoadConfig(nil)
+	configs, err := manager.Load(configmanager.LoadOptions{})
 	require.NoError(t, err)
 	require.NotNil(t, configs)
 
@@ -25,7 +26,7 @@ func TestConfigs_Bundle(t *testing.T) {
 
 	manager := talos.NewConfigManager("", "bundle-test", "1.32.0", "10.5.0.0/24")
 
-	configs, err := manager.LoadConfig(nil)
+	configs, err := manager.Load(configmanager.LoadOptions{})
 	require.NoError(t, err)
 	require.NotNil(t, configs)
 
@@ -38,7 +39,7 @@ func TestConfigs_ControlPlane(t *testing.T) {
 
 	manager := talos.NewConfigManager("", "cp-test", "1.32.0", "10.5.0.0/24")
 
-	configs, err := manager.LoadConfig(nil)
+	configs, err := manager.Load(configmanager.LoadOptions{})
 	require.NoError(t, err)
 	require.NotNil(t, configs)
 
@@ -53,7 +54,7 @@ func TestConfigs_Worker(t *testing.T) {
 
 	manager := talos.NewConfigManager("", "worker-test", "1.32.0", "10.5.0.0/24")
 
-	configs, err := manager.LoadConfig(nil)
+	configs, err := manager.Load(configmanager.LoadOptions{})
 	require.NoError(t, err)
 	require.NotNil(t, configs)
 
@@ -68,7 +69,7 @@ func TestConfigs_IsCNIDisabled_DefaultCNI(t *testing.T) {
 
 	manager := talos.NewConfigManager("", "cni-default", "1.32.0", "10.5.0.0/24")
 
-	configs, err := manager.LoadConfig(nil)
+	configs, err := manager.Load(configmanager.LoadOptions{})
 	require.NoError(t, err)
 	require.NotNil(t, configs)
 
@@ -104,7 +105,7 @@ func TestConfigs_NetworkCIDR(t *testing.T) {
 
 			manager := talos.NewConfigManager("", "network-test", "1.32.0", testCase.networkCIDR)
 
-			configs, err := manager.LoadConfig(nil)
+			configs, err := manager.Load(configmanager.LoadOptions{})
 			require.NoError(t, err)
 			require.NotNil(t, configs)
 
@@ -119,7 +120,7 @@ func TestConfigs_ApplyMirrorRegistries_EmptyMirrors(t *testing.T) {
 
 	manager := talos.NewConfigManager("", "mirror-empty", "1.32.0", "10.5.0.0/24")
 
-	configs, err := manager.LoadConfig(nil)
+	configs, err := manager.Load(configmanager.LoadOptions{})
 	require.NoError(t, err)
 	require.NotNil(t, configs)
 
@@ -135,7 +136,7 @@ func TestConfigs_ApplyMirrorRegistries_WithMirrors(t *testing.T) {
 
 	manager := talos.NewConfigManager("", "mirror-test", "1.32.0", "10.5.0.0/24")
 
-	configs, err := manager.LoadConfig(nil)
+	configs, err := manager.Load(configmanager.LoadOptions{})
 	require.NoError(t, err)
 	require.NotNil(t, configs)
 
@@ -159,7 +160,7 @@ func TestConfigs_ApplyMirrorRegistries_EmptyHost(t *testing.T) {
 
 	manager := talos.NewConfigManager("", "mirror-empty-host", "1.32.0", "10.5.0.0/24")
 
-	configs, err := manager.LoadConfig(nil)
+	configs, err := manager.Load(configmanager.LoadOptions{})
 	require.NoError(t, err)
 	require.NotNil(t, configs)
 
@@ -196,7 +197,7 @@ func TestConfigs_HostDNS_Enabled(t *testing.T) {
 
 	manager := talos.NewConfigManager("", "hostdns-test", "1.32.0", "10.5.0.0/24")
 
-	configs, err := manager.LoadConfig(nil)
+	configs, err := manager.Load(configmanager.LoadOptions{})
 	require.NoError(t, err)
 	require.NotNil(t, configs)
 
@@ -226,7 +227,7 @@ func TestConfigs_WithName(t *testing.T) {
 
 		manager := talos.NewConfigManager("", "original-cluster", "1.32.0", "10.5.0.0/24")
 
-		originalConfigs, err := manager.LoadConfig(nil)
+		originalConfigs, err := manager.Load(configmanager.LoadOptions{})
 		require.NoError(t, err)
 		require.NotNil(t, originalConfigs)
 
@@ -258,7 +259,7 @@ func TestConfigs_WithName(t *testing.T) {
 
 		manager := talos.NewConfigManager("", "my-cluster", "1.32.0", "10.5.0.0/24")
 
-		originalConfigs, err := manager.LoadConfig(nil)
+		originalConfigs, err := manager.Load(configmanager.LoadOptions{})
 		require.NoError(t, err)
 
 		sameConfigs, err := originalConfigs.WithName("")
@@ -271,7 +272,7 @@ func TestConfigs_WithName(t *testing.T) {
 
 		manager := talos.NewConfigManager("", "my-cluster", "1.32.0", "10.5.0.0/24")
 
-		originalConfigs, err := manager.LoadConfig(nil)
+		originalConfigs, err := manager.Load(configmanager.LoadOptions{})
 		require.NoError(t, err)
 
 		sameConfigs, err := originalConfigs.WithName("my-cluster")

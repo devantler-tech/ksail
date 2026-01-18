@@ -2,7 +2,6 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -53,30 +52,10 @@ func runWithArgs(args []string) int {
 
 	err := cmd.Execute(rootCmd)
 	if err != nil {
-		// Extract the root cause error (last error in the chain)
-		rootErr := getRootError(err)
-
-		notify.WriteMessage(notify.Message{
-			Type:    notify.ErrorType,
-			Content: "%v",
-			Args:    []any{rootErr},
-			Writer:  rootCmd.ErrOrStderr(),
-		})
+		notify.Errorf(rootCmd.ErrOrStderr(), "%v", err)
 
 		return 1
 	}
 
 	return 0
-}
-
-// getRootError extracts the root cause error by unwrapping the error chain.
-func getRootError(err error) error {
-	for {
-		unwrapped := errors.Unwrap(err)
-		if unwrapped == nil {
-			return err
-		}
-
-		err = unwrapped
-	}
 }

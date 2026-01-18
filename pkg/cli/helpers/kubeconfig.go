@@ -8,6 +8,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	iopath "github.com/devantler-tech/ksail/v5/pkg/io"
+	configmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
 	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
 	"k8s.io/client-go/rest"
@@ -88,7 +89,7 @@ func getKubeconfigPath(cfgManager *ksailconfigmanager.ConfigManager) (string, er
 	tmr := timer.New()
 	tmr.Start()
 
-	clusterCfg, err := cfgManager.LoadConfig(tmr)
+	clusterCfg, err := cfgManager.Load(configmanager.LoadOptions{Timer: tmr})
 	if err != nil {
 		return "", fmt.Errorf("failed to load cluster configuration: %w", err)
 	}

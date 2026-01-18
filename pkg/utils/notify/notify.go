@@ -29,6 +29,10 @@ const (
 	TitleType
 )
 
+// =============================================================================
+// Message Types and Configuration
+// =============================================================================
+
 // MessageType defines the type of notification message.
 type MessageType int
 
@@ -49,8 +53,100 @@ type Message struct {
 	Args []any
 }
 
+// =============================================================================
+// Convenience Functions
+// =============================================================================
+
+// Errorf writes an error message to the writer.
+func Errorf(writer io.Writer, format string, args ...any) {
+	WriteMessage(Message{
+		Type:    ErrorType,
+		Content: format,
+		Args:    args,
+		Writer:  writer,
+	})
+}
+
+// Warningf writes a warning message to the writer.
+func Warningf(writer io.Writer, format string, args ...any) {
+	WriteMessage(Message{
+		Type:    WarningType,
+		Content: format,
+		Args:    args,
+		Writer:  writer,
+	})
+}
+
+// Activityf writes an activity/progress message to the writer.
+func Activityf(writer io.Writer, format string, args ...any) {
+	WriteMessage(Message{
+		Type:    ActivityType,
+		Content: format,
+		Args:    args,
+		Writer:  writer,
+	})
+}
+
+// Generatef writes a file generation message to the writer.
+func Generatef(writer io.Writer, format string, args ...any) {
+	WriteMessage(Message{
+		Type:    GenerateType,
+		Content: format,
+		Args:    args,
+		Writer:  writer,
+	})
+}
+
+// Successf writes a success message to the writer.
+func Successf(writer io.Writer, format string, args ...any) {
+	WriteMessage(Message{
+		Type:    SuccessType,
+		Content: format,
+		Args:    args,
+		Writer:  writer,
+	})
+}
+
+// SuccessWithTimerf writes a success message with timing information to the writer.
+func SuccessWithTimerf(writer io.Writer, tmr timer.Timer, format string, args ...any) {
+	WriteMessage(Message{
+		Type:    SuccessType,
+		Content: format,
+		Args:    args,
+		Timer:   tmr,
+		Writer:  writer,
+	})
+}
+
+// Infof writes an informational message to the writer.
+func Infof(writer io.Writer, format string, args ...any) {
+	WriteMessage(Message{
+		Type:    InfoType,
+		Content: format,
+		Args:    args,
+		Writer:  writer,
+	})
+}
+
+// Titlef writes a title/header message with an emoji to the writer.
+func Titlef(writer io.Writer, emoji, format string, args ...any) {
+	WriteMessage(Message{
+		Type:    TitleType,
+		Content: fmt.Sprintf(format, args...),
+		Emoji:   emoji,
+		Writer:  writer,
+	})
+}
+
+// =============================================================================
+// Core WriteMessage Function
+// =============================================================================
+
 // WriteMessage writes a formatted message based on the message configuration.
 // It handles message styling, optional timing information, and proper output formatting.
+//
+// For simpler use cases, prefer the convenience functions: Errorf(), Warningf(),
+// Successf(), Infof(), Activityf(), Generatef(), and Titlef().
 //
 // Note: Leading newlines between stages are handled automatically by StageSeparatingWriter.
 // Wrap the output writer with NewStageSeparatingWriter() in command handlers to enable

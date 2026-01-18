@@ -64,11 +64,7 @@ func (e *Exporter) Export(
 	// Talos is not supported - it's an immutable OS without shell access
 	// and its Machine API doesn't expose image export functionality
 	if distribution == v1alpha1.DistributionTalos {
-		return fmt.Errorf(
-			"%w: Talos is an immutable OS without shell access; "+
-				"its Machine API only supports ImageList and ImagePull, not export",
-			ErrUnsupportedDistribution,
-		)
+		return ErrUnsupportedDistribution
 	}
 
 	// Set default output path
@@ -196,15 +192,33 @@ func (e *Exporter) exportImagesFromNode(
 	// Create a temporary file path inside the container
 	tmpPath := tmpBasePath + "/ksail-images-export.tar"
 
-	// Build ctr export command
-	// Note: We don't use --all-platforms because multi-platform images may have
-	// manifests for platforms whose layers aren't present locally, causing export to fail.
-	cmd := make([]string, 0, 5+len(images)) //nolint:mnd // fixed args + images
-	cmd = append(cmd, "ctr", "--namespace=k8s.io", "images", "export", tmpPath)
+	// Detect the node's platform (OS/architecture)
+	platform, err := e.detectNodePlatform(ctx, nodeName)
+	if err != nil {
+		return fmt.Errorf("failed to detect node platform: %w", err)
+	}
+
+	// Build ctr export command with platform flag
+	// The --platform flag is critical for multi-arch images: containerd may have
+	// image manifests listing multiple platforms (e.g., linux/amd64, linux/arm64),
+	// but only the layers for the running platform are actually downloaded.
+	// Without --platform, ctr tries to export all platforms and fails with
+	// "content digest not found" for missing platform layers.
+	cmd := make([]string, 0, 7+len(images)) //nolint:mnd // fixed args + images
+	cmd = append(
+		cmd,
+		"ctr",
+		"--namespace=k8s.io",
+		"images",
+		"export",
+		"--platform",
+		platform,
+		tmpPath,
+	)
 	cmd = append(cmd, images...)
 
 	// Execute export command
-	_, err := e.executor.ExecInContainer(ctx, nodeName, cmd)
+	_, err = e.executor.ExecInContainer(ctx, nodeName, cmd)
 	if err != nil {
 		return fmt.Errorf("ctr export failed: %w", err)
 	}
@@ -219,6 +233,31 @@ func (e *Exporter) exportImagesFromNode(
 	_, _ = e.executor.ExecInContainer(ctx, nodeName, []string{"rm", "-f", tmpPath})
 
 	return nil
+}
+
+// detectNodePlatform detects the OS/architecture of the node container.
+// Returns a platform string in the format "os/arch" (e.g., "linux/amd64", "linux/arm64").
+func (e *Exporter) detectNodePlatform(ctx context.Context, nodeName string) (string, error) {
+	// Use uname to detect architecture
+	output, err := e.executor.ExecInContainer(ctx, nodeName, []string{"uname", "-m"})
+	if err != nil {
+		return "", fmt.Errorf("failed to detect architecture: %w", err)
+	}
+
+	arch := strings.TrimSpace(output)
+
+	// Convert uname output to Go/OCI architecture names
+	switch arch {
+	case "x86_64":
+		arch = "amd64"
+	case "aarch64":
+		arch = "arm64"
+	case "armv7l":
+		arch = "arm"
+	}
+
+	// Always linux for Kubernetes nodes
+	return "linux/" + arch, nil
 }
 
 // copyFromContainer copies a file from a container to the host.

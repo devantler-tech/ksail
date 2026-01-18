@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	configmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager"
 	"github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -160,7 +161,7 @@ func TestConfigManager_LoadConfig_BasicLoad(t *testing.T) {
 
 	manager := talos.NewConfigManager(tmpDir, "test-cluster", "1.32.0", "10.5.0.0/24")
 
-	configs, err := manager.LoadConfig(nil)
+	configs, err := manager.Load(configmanager.LoadOptions{})
 
 	require.NoError(t, err)
 	require.NotNil(t, configs)
@@ -175,12 +176,12 @@ func TestConfigManager_LoadConfig_Caching(t *testing.T) {
 	manager := talos.NewConfigManager(tmpDir, "cached-cluster", "1.32.0", "10.5.0.0/24")
 
 	// First load
-	configs1, err1 := manager.LoadConfig(nil)
+	configs1, err1 := manager.Load(configmanager.LoadOptions{})
 	require.NoError(t, err1)
 	require.NotNil(t, configs1)
 
 	// Second load should return cached result
-	configs2, err2 := manager.LoadConfig(nil)
+	configs2, err2 := manager.Load(configmanager.LoadOptions{})
 	require.NoError(t, err2)
 	require.NotNil(t, configs2)
 
@@ -201,7 +202,7 @@ func TestConfigManager_LoadConfig_WithPatches(t *testing.T) {
 
 	manager := talos.NewConfigManager(tmpDir, "patched-cluster", "1.32.0", "10.5.0.0/24")
 
-	configs, err := manager.LoadConfig(nil)
+	configs, err := manager.Load(configmanager.LoadOptions{})
 
 	require.NoError(t, err)
 	require.NotNil(t, configs)
