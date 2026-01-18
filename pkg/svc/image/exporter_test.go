@@ -795,23 +795,47 @@ func setupFallbackExportMocks(
 ) {
 	t.Helper()
 
-	// First exec: bulk export fails (triggers fallback)
-	execID1 := "exec-bulk-fail"
+	setupBulkExportFailMock(ctx, t, mockClient, nodeName)
+	setupIndividualImageExportMocks(ctx, t, mockClient, nodeName)
+	setupExecMockForExporter(ctx, t, mockClient, nodeName)
+	setupReexportSuccessfulImageMock(ctx, t, mockClient, nodeName)
+}
+
+// setupBulkExportFailMock sets up the mock for the initial bulk export that fails.
+func setupBulkExportFailMock(
+	ctx context.Context,
+	t *testing.T,
+	mockClient *docker.MockAPIClient,
+	nodeName string,
+) {
+	t.Helper()
+
+	execID := "exec-bulk-fail"
 	mockClient.EXPECT().
 		ContainerExecCreate(ctx, nodeName, mock.MatchedBy(func(opts container.ExecOptions) bool {
 			return len(opts.Cmd) > 5 && opts.Cmd[0] == ctrCommand && opts.Cmd[3] == "export"
 		})).
-		Return(container.ExecCreateResponse{ID: execID1}, nil).Once()
+		Return(container.ExecCreateResponse{ID: execID}, nil).Once()
 
 	mockClient.EXPECT().
-		ContainerExecAttach(ctx, execID1, container.ExecStartOptions{}).
+		ContainerExecAttach(ctx, execID, container.ExecStartOptions{}).
 		Return(mockDockerStreamResponse("", "bulk export failed"), nil).Once()
 
 	mockClient.EXPECT().
-		ContainerExecInspect(ctx, execID1).
+		ContainerExecInspect(ctx, execID).
 		Return(container.ExecInspect{ExitCode: 1}, nil).Once()
+}
 
-	// Second exec: first image succeeds
+// setupIndividualImageExportMocks sets up mocks for individual image export attempts.
+func setupIndividualImageExportMocks(
+	ctx context.Context,
+	t *testing.T,
+	mockClient *docker.MockAPIClient,
+	nodeName string,
+) {
+	t.Helper()
+
+	// First image succeeds
 	execID2 := "exec-image1-success"
 	mockClient.EXPECT().
 		ContainerExecCreate(ctx, nodeName, mock.MatchedBy(func(opts container.ExecOptions) bool {
@@ -827,7 +851,7 @@ func setupFallbackExportMocks(
 		ContainerExecInspect(ctx, execID2).
 		Return(container.ExecInspect{ExitCode: 0}, nil).Once()
 
-	// Third exec: second image fails
+	// Second image fails
 	execID3 := "exec-image2-fail"
 	mockClient.EXPECT().
 		ContainerExecCreate(ctx, nodeName, mock.MatchedBy(func(opts container.ExecOptions) bool {
@@ -842,23 +866,29 @@ func setupFallbackExportMocks(
 	mockClient.EXPECT().
 		ContainerExecInspect(ctx, execID3).
 		Return(container.ExecInspect{ExitCode: 1}, nil).Once()
+}
 
-	// Fourth exec: cleanup after individual tests
-	setupExecMockForExporter(ctx, t, mockClient, nodeName)
+// setupReexportSuccessfulImageMock sets up the mock for re-exporting only successful images.
+func setupReexportSuccessfulImageMock(
+	ctx context.Context,
+	t *testing.T,
+	mockClient *docker.MockAPIClient,
+	nodeName string,
+) {
+	t.Helper()
 
-	// Fifth exec: re-export only successful image
-	execID5 := "exec-reexport"
+	execID := "exec-reexport"
 	mockClient.EXPECT().
 		ContainerExecCreate(ctx, nodeName, mock.MatchedBy(func(opts container.ExecOptions) bool {
 			return len(opts.Cmd) == 8 && opts.Cmd[len(opts.Cmd)-1] == "nginx:latest"
 		})).
-		Return(container.ExecCreateResponse{ID: execID5}, nil).Once()
+		Return(container.ExecCreateResponse{ID: execID}, nil).Once()
 
 	mockClient.EXPECT().
-		ContainerExecAttach(ctx, execID5, container.ExecStartOptions{}).
+		ContainerExecAttach(ctx, execID, container.ExecStartOptions{}).
 		Return(mockDockerStreamResponse("", ""), nil).Once()
 
 	mockClient.EXPECT().
-		ContainerExecInspect(ctx, execID5).
+		ContainerExecInspect(ctx, execID).
 		Return(container.ExecInspect{ExitCode: 0}, nil).Once()
 }
