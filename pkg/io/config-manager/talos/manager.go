@@ -17,6 +17,8 @@ var _ configmanager.ConfigManager[Configs] = (*ConfigManager)(nil)
 // This value is read from the Dockerfile in this package which is updated by Dependabot.
 // NOTE: This MUST match the Talos pkg/machinery version to ensure
 // generated machine configs are compatible with the running container.
+//
+//nolint:gochecknoglobals // Exported constant initialized from embedded Dockerfile
 var DefaultTalosImage = talosImage()
 
 // Default configuration values for Talos clusters.

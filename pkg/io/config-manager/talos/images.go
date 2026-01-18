@@ -5,6 +5,9 @@ import (
 	"regexp"
 )
 
+// minMatchCount is the minimum number of regex matches required to extract the image reference.
+const minMatchCount = 2
+
 // Embedded Dockerfile containing image references (updated by Dependabot).
 //
 //go:embed Dockerfile
@@ -17,8 +20,11 @@ func talosImage() string {
 	re := regexp.MustCompile(`FROM\s+(ghcr\.io/siderolabs/talos:[^\s]+)`)
 	matches := re.FindStringSubmatch(dockerfile)
 
-	if len(matches) < 2 {
-		panic("failed to parse Talos image from embedded Dockerfile - check that the Dockerfile exists and contains a valid FROM directive")
+	if len(matches) < minMatchCount {
+		panic(
+			"failed to parse Talos image from embedded Dockerfile - " +
+				"check that the Dockerfile exists and contains a valid FROM directive",
+		)
 	}
 
 	return matches[1]
