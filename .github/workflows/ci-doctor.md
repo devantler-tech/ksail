@@ -10,10 +10,12 @@ on:
     workflows: ["CI - KSail"] # Monitor the main CI workflow
     types:
       - completed
-    branches:
-      - main
-    # This will trigger only when the CI workflow completes with failure
-    # The condition is handled in the workflow body
+    # NOTE: No branch restrictions - intentionally monitors ALL branches (main, PRs, merge groups)
+    # This is required to catch CI failures on pull requests, which is where most failures occur.
+    # Security is maintained via:
+    # 1. Fork validation (workflow_run.repository.fork check)
+    # 2. Role-based access control (requires admin/maintainer/write permissions)
+    # 3. Failure-only filtering (if: conclusion == 'failure' condition)
   stop-after: +1mo
 
 # Only trigger for failures - check in the workflow body
