@@ -206,12 +206,20 @@ func (e *Exporter) exportImagesFromNode(
 		// (e.g., multi-arch images where not all platform layers were pulled)
 		successfulImages, failedImages := e.exportImagesOneByOne(ctx, nodeName, tmpPath, platform, images)
 		if len(successfulImages) == 0 {
-			return fmt.Errorf("ctr export failed for all images during individual export attempts (initial bulk export error: %w)", err)
+			return fmt.Errorf(
+				"ctr export failed for all images during individual export attempts (initial bulk export error: %w)",
+				err,
+			)
 		}
 
 		// Report failed images to stderr
 		if len(failedImages) > 0 {
-			fmt.Fprintf(os.Stderr, "warning: failed to export %d image(s): %s\n", len(failedImages), strings.Join(failedImages, ", "))
+			fmt.Fprintf(
+				os.Stderr,
+				"warning: failed to export %d image(s): %s\n",
+				len(failedImages),
+				strings.Join(failedImages, ", "),
+			)
 		}
 
 		// Re-export only the successful images together
