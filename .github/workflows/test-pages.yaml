@@ -16,13 +16,15 @@ jobs:
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
           persist-credentials: false
-      - name: Setup Ruby
-        uses: ruby/setup-ruby@708024e6c902387ab41de36e1669e43b5ee7085e # v1.283.0
+      - name: Setup Node.js
+        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
         with:
-          ruby-version: "3.3" # Not needed with a .ruby-version file
-          bundler-cache: true # runs 'bundle install' and caches installed gems automatically
-          cache-version: 0 # Increment this number if you need to re-download cached gems
-          working-directory: docs
-      - name: Build with Jekyll
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: docs/package-lock.json
+      - name: Install dependencies
         working-directory: docs
-        run: bundle exec jekyll build
+        run: npm ci
+      - name: Build with Astro
+        working-directory: docs
+        run: npm run build

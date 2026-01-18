@@ -28,4 +28,4 @@ FILTER_REGEX_EXCLUDE: megalinter-reports/.*
 ACTION_ACTIONLINT_FILTER_REGEX_EXCLUDE: .github/workflows/.*\.lock\.yml
 MARKDOWN_MARKDOWNLINT_FILTER_REGEX_EXCLUDE: .github/(agents|prompts)
 MARKDOWN_MARKDOWN_TABLE_FORMATTER_FILTER_REGEX_EXCLUDE: .github/(agents|prompts)
-SPELL_LYCHEE_FILTER_REGEX_EXCLUDE: .github/copilot-instructions\.md
+SPELL_LYCHEE_FILTER_REGEX_EXCLUDE: (.github/copilot-instructions\.md|.*\.mdx)

@@ -5,7 +5,7 @@
 
 # 🛥️🐳 KSail
 
-![ksail-cli-dark](./docs/images/ksail-cli-dark.png)
+![ksail-cli-dark](./docs/src/assets/ksail-cli-dark.png)
 
 KSail is a CLI tool that bundles common Kubernetes tooling into a single binary. It provides one consistent interface to create clusters, deploy workloads, and operate cloud-native stacks across different distributions and providers.
 
@@ -69,7 +69,7 @@ go install github.com/devantler-tech/ksail/v5@latest
 
 ## Usage
 
-![ksail-mental-model](./docs/images/mental-model.svg)
+![ksail-mental-model](./docs/src/assets//mental-model.svg)
 
 ```bash
 # 1. Initialize a new project with your preferred stack
@@ -101,7 +101,7 @@ ksail cluster connect
 
 ### For users
 
-- Browse the documentation in [`docs/`](./docs/index.md) (Markdown) or on <https://ksail.devantler.tech> (GitHub Pages).
+- Browse the documentation in [`docs/`](./docs/src/content/docs/index.mdx) (Markdown) or on <https://ksail.devantler.tech> (GitHub Pages).
 
 ### For contributors
 
