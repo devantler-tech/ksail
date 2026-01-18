@@ -67,7 +67,7 @@ Perform a comprehensive audit of all agentic workflows in the `.github/workflows
 
 For each workflow, review and flag:
 
-1. **Permissions**: 
+1. **Permissions**:
    - Are permissions minimal (start with `read-all`)?
    - Are write permissions justified and documented?
    - Are dangerous permissions avoided (e.g., `contents: write`, `actions: write`)?
@@ -148,7 +148,7 @@ For each workflow, review and flag:
 
 ## Investigation and Reporting
 
-### For Each Finding:
+### For Each Finding
 
 1. **Categorize**: Security Issue, Best Practice Violation, Performance Opportunity, Compliance Issue
 2. **Assess Severity**: Critical, High, Medium, Low, Info
@@ -174,6 +174,7 @@ For each workflow, review and flag:
 ### Create Issues for Critical/High Severity Findings
 
 For critical or high-severity security issues or compliance violations:
+
 - Create a separate issue with detailed remediation steps
 - Link the issue in the audit discussion
 - Apply appropriate labels (`security`, `agentic-workflow`, `bug`)
