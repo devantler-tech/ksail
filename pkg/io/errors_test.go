@@ -1,7 +1,7 @@
 package io_test
 
 import (
-	"errors"
+	"fmt"
 	"testing"
 
 	io "github.com/devantler-tech/ksail/v5/pkg/io"
@@ -38,7 +38,7 @@ func TestErrorVariables(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			require.NotNil(t, testCase.err)
+			require.Error(t, testCase.err)
 			assert.Equal(t, testCase.expectedMsg, testCase.err.Error())
 		})
 	}
@@ -54,14 +54,14 @@ func TestErrorsAreDistinct(t *testing.T) {
 	}
 
 	// Verify all errors are distinct from each other
-	for i := 0; i < len(allErrors); i++ {
-		for j := i + 1; j < len(allErrors); j++ {
-			assert.False(
+	for index := range allErrors {
+		for innerIndex := index + 1; innerIndex < len(allErrors); innerIndex++ {
+			assert.NotErrorIs(
 				t,
-				errors.Is(allErrors[i], allErrors[j]),
+				allErrors[index], allErrors[innerIndex],
 				"errors at index %d and %d should be distinct",
-				i,
-				j,
+				index,
+				innerIndex,
 			)
 		}
 	}
@@ -83,11 +83,11 @@ func TestErrorsCanBeWrapped(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			// Wrap the error
-			wrapped := errors.New("context: " + testCase.sentinel.Error())
+			// Wrap the error using fmt.Errorf with %w
+			wrapped := fmt.Errorf("context: %w", testCase.sentinel)
 
-			// The wrapped error message should contain the sentinel message
-			assert.Contains(t, wrapped.Error(), testCase.sentinel.Error())
+			// Verify error wrapping works correctly with errors.Is
+			assert.ErrorIs(t, wrapped, testCase.sentinel)
 		})
 	}
 }

@@ -22,14 +22,21 @@ var errAPIServerUnavailable = errors.New("connection refused")
 // controllableDiscoveryClient allows tests to control when API calls succeed or fail.
 type controllableDiscoveryClient struct {
 	*fakediscovery.FakeDiscovery
+
 	shouldSucceed atomic.Bool
 	callCount     atomic.Int32
 }
 
 func newControllableClient() (*fake.Clientset, *controllableDiscoveryClient) {
 	clientset := fake.NewClientset()
+
+	fakeDiscovery, ok := clientset.Discovery().(*fakediscovery.FakeDiscovery)
+	if !ok {
+		panic("expected Discovery() to return *fakediscovery.FakeDiscovery")
+	}
+
 	controllable := &controllableDiscoveryClient{
-		FakeDiscovery: clientset.Discovery().(*fakediscovery.FakeDiscovery),
+		FakeDiscovery: fakeDiscovery,
 	}
 
 	return clientset, controllable
@@ -48,6 +55,7 @@ func (c *controllableDiscoveryClient) ServerVersion() (*version.Info, error) {
 // stubClientset wraps a fake clientset but returns our controllable discovery client.
 type stubClientset struct {
 	kubernetes.Interface
+
 	discovery *controllableDiscoveryClient
 }
 
@@ -92,20 +100,23 @@ func TestWaitForAPIServerReady(t *testing.T) {
 		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			client := tc.setupClient()
+			client := testCase.setupClient()
 
-			ctx, cancel := context.WithTimeout(context.Background(), tc.timeout+100*time.Millisecond)
+			ctx, cancel := context.WithTimeout(
+				context.Background(),
+				testCase.timeout+100*time.Millisecond,
+			)
 			defer cancel()
 
-			err := k8s.WaitForAPIServerReady(ctx, client, tc.timeout)
+			err := k8s.WaitForAPIServerReady(ctx, client, testCase.timeout)
 
-			if tc.wantErr {
+			if testCase.wantErr {
 				require.Error(t, err)
-				require.Contains(t, err.Error(), tc.errContains)
+				require.Contains(t, err.Error(), testCase.errContains)
 			} else {
 				require.NoError(t, err)
 			}
@@ -113,6 +124,7 @@ func TestWaitForAPIServerReady(t *testing.T) {
 	}
 }
 
+//nolint:funlen // Table-driven test with multiple cases naturally exceeds limit
 func TestWaitForAPIServerStable(t *testing.T) {
 	t.Parallel()
 
@@ -165,20 +177,28 @@ func TestWaitForAPIServerStable(t *testing.T) {
 		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			client := tc.setupClient()
+			client := testCase.setupClient()
 
-			ctx, cancel := context.WithTimeout(context.Background(), tc.timeout+100*time.Millisecond)
+			ctx, cancel := context.WithTimeout(
+				context.Background(),
+				testCase.timeout+100*time.Millisecond,
+			)
 			defer cancel()
 
-			err := k8s.WaitForAPIServerStable(ctx, client, tc.timeout, tc.requiredSuccesses)
+			err := k8s.WaitForAPIServerStable(
+				ctx,
+				client,
+				testCase.timeout,
+				testCase.requiredSuccesses,
+			)
 
-			if tc.wantErr {
+			if testCase.wantErr {
 				require.Error(t, err)
-				require.Contains(t, err.Error(), tc.errContains)
+				require.Contains(t, err.Error(), testCase.errContains)
 			} else {
 				require.NoError(t, err)
 			}
@@ -217,16 +237,16 @@ func TestCheckAPIServerConnectivity(t *testing.T) {
 		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			client := tc.setupClient()
+			client := testCase.setupClient()
 			err := k8s.CheckAPIServerConnectivity(client)
 
-			if tc.wantErr {
+			if testCase.wantErr {
 				require.Error(t, err)
-				require.Contains(t, err.Error(), tc.errContains)
+				require.Contains(t, err.Error(), testCase.errContains)
 			} else {
 				require.NoError(t, err)
 			}

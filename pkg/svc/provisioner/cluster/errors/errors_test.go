@@ -1,11 +1,11 @@
 package clustererrors_test
 
 import (
-	"errors"
 	"testing"
 
 	clustererrors "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/errors"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestErrorVariables(t *testing.T) {
@@ -49,7 +49,7 @@ func TestErrorVariables(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			assert.NotNil(t, tc.err)
+			require.Error(t, tc.err)
 			assert.Contains(t, tc.err.Error(), tc.contains)
 		})
 	}
@@ -70,7 +70,7 @@ func TestErrorsAreDistinct(t *testing.T) {
 	for i, err1 := range errs {
 		for j, err2 := range errs {
 			if i != j {
-				assert.False(t, errors.Is(err1, err2),
+				assert.NotErrorIs(t, err1, err2,
 					"error %q should not match %q", err1, err2)
 			}
 		}

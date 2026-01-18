@@ -223,6 +223,7 @@ func TestCluster_MarshalJSON(t *testing.T) {
 
 			// Verify it's valid JSON by unmarshaling
 			var result map[string]any
+
 			err = json.Unmarshal(got, &result)
 			require.NoError(t, err)
 
@@ -268,6 +269,7 @@ func TestCluster_MarshalRoundTrip(t *testing.T) {
 
 	// Unmarshal back
 	var restored v1alpha1.Cluster
+
 	err = yaml.Unmarshal(yamlData, &restored)
 	require.NoError(t, err)
 
@@ -279,8 +281,16 @@ func TestCluster_MarshalRoundTrip(t *testing.T) {
 	assert.Equal(t, original.Spec.Cluster.CNI, restored.Spec.Cluster.CNI)
 	assert.Equal(t, original.Spec.Cluster.CSI, restored.Spec.Cluster.CSI)
 	assert.Equal(t, original.Spec.Cluster.GitOpsEngine, restored.Spec.Cluster.GitOpsEngine)
-	assert.Equal(t, original.Spec.Cluster.Connection.Kubeconfig, restored.Spec.Cluster.Connection.Kubeconfig)
-	assert.Equal(t, original.Spec.Cluster.Connection.Context, restored.Spec.Cluster.Connection.Context)
+	assert.Equal(
+		t,
+		original.Spec.Cluster.Connection.Kubeconfig,
+		restored.Spec.Cluster.Connection.Kubeconfig,
+	)
+	assert.Equal(
+		t,
+		original.Spec.Cluster.Connection.Context,
+		restored.Spec.Cluster.Connection.Context,
+	)
 	assert.Equal(t, original.Spec.Workload.SourceDirectory, restored.Spec.Workload.SourceDirectory)
 	assert.Equal(t, original.Spec.Workload.ValidateOnPush, restored.Spec.Workload.ValidateOnPush)
 }
@@ -290,11 +300,11 @@ func TestCluster_DefaultDistributionConfigPruning(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name              string
-		distribution      v1alpha1.Distribution
-		distributionCfg   string
-		wantInYAML        bool
-		description       string
+		name            string
+		distribution    v1alpha1.Distribution
+		distributionCfg string
+		wantInYAML      bool
+		description     string
 	}{
 		{
 			name:            "Vanilla with kind.yaml is pruned",

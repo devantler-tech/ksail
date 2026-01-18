@@ -1,7 +1,6 @@
 package k8s_test
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v5/pkg/k8s"
@@ -33,7 +32,7 @@ func TestErrorVariables(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			require.NotNil(t, testCase.err)
+			require.Error(t, testCase.err)
 			assert.Equal(t, testCase.expectedMsg, testCase.err.Error())
 		})
 	}
@@ -48,14 +47,14 @@ func TestErrorsAreDistinct(t *testing.T) {
 	}
 
 	// Verify all errors are distinct from each other
-	for i := 0; i < len(allErrors); i++ {
-		for j := i + 1; j < len(allErrors); j++ {
-			assert.False(
+	for index := range allErrors {
+		for innerIndex := index + 1; innerIndex < len(allErrors); innerIndex++ {
+			assert.NotErrorIs(
 				t,
-				errors.Is(allErrors[i], allErrors[j]),
+				allErrors[index], allErrors[innerIndex],
 				"errors at index %d and %d should be distinct",
-				i,
-				j,
+				index,
+				innerIndex,
 			)
 		}
 	}

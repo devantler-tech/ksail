@@ -2,7 +2,6 @@ package oci_test
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v5/pkg/client/oci"
@@ -40,6 +39,7 @@ func TestVerifyRegistryAccessWithTimeout_EmptyEndpoint(t *testing.T) {
 	assert.Contains(t, err.Error(), "registry endpoint is required")
 }
 
+//nolint:funlen // Table-driven test with many cases naturally exceeds limit
 func TestErrorVariables(t *testing.T) {
 	t.Parallel()
 
@@ -106,7 +106,7 @@ func TestErrorVariables(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			assert.NotNil(t, tc.err)
+			require.Error(t, tc.err)
 			assert.Contains(t, tc.err.Error(), tc.contains)
 		})
 	}
@@ -132,7 +132,7 @@ func TestErrorsAreDistinct(t *testing.T) {
 	for i, err1 := range errs {
 		for j, err2 := range errs {
 			if i != j {
-				assert.False(t, errors.Is(err1, err2),
+				assert.NotErrorIs(t, err1, err2,
 					"error %q should not match %q", err1, err2)
 			}
 		}
