@@ -184,7 +184,7 @@ func TestExportWithSpecificImages(t *testing.T) {
 
 	// Mock exec for export command
 	exportCmd := []string{
-		"ctr", "--namespace=k8s.io", "images", "export",
+		ctrCommand, "--namespace=k8s.io", "images", "export",
 		"--platform", "linux/amd64",
 		"/root/ksail-images-export.tar", "nginx:latest",
 	}
@@ -246,7 +246,7 @@ func TestExportK3sDistribution(t *testing.T) {
 
 	// Mock exec for export - K3d uses /tmp path
 	k3dExportCmd := []string{
-		"ctr", "--namespace=k8s.io", "images", "export",
+		ctrCommand, "--namespace=k8s.io", "images", "export",
 		"--platform", "linux/amd64",
 		"/tmp/ksail-images-export.tar", "nginx:latest",
 	}
@@ -306,7 +306,7 @@ func TestExportEmptyProvider(t *testing.T) {
 		mockClient,
 		"my-cluster-control-plane",
 		[]string{
-			"ctr",
+			ctrCommand,
 			"--namespace=k8s.io",
 			"images",
 			"export",
@@ -362,7 +362,7 @@ func TestExportCopyFromContainerFails(t *testing.T) {
 		mockClient,
 		"my-cluster-control-plane",
 		[]string{
-			"ctr",
+			ctrCommand,
 			"--namespace=k8s.io",
 			"images",
 			"export",
@@ -529,14 +529,14 @@ func TestExportListImagesFiltersDigests(t *testing.T) {
 	// First exec is for listing images - includes both named images and digest-only refs
 	imageList := "nginx:latest\nsha256:abc123\nredis:alpine\nsha256:def456\n"
 	setupExecMockWithStdoutForExporter(ctx, t, mockClient, "my-cluster-control-plane",
-		[]string{"ctr", "--namespace=k8s.io", "images", "list", "-q"}, imageList)
+		[]string{ctrCommand, "--namespace=k8s.io", "images", "list", "-q"}, imageList)
 
 	// Mock platform detection (uname -m)
 	setupPlatformDetectMockForExporter(ctx, t, mockClient, "my-cluster-control-plane")
 
 	// Second exec is for exporting - only named images
 	exportCmd := []string{
-		"ctr", "--namespace=k8s.io", "images", "export",
+		ctrCommand, "--namespace=k8s.io", "images", "export",
 		"--platform", "linux/amd64",
 		"/root/ksail-images-export.tar", "nginx:latest", "redis:alpine",
 	}
@@ -799,7 +799,7 @@ func setupFallbackExportMocks(
 	execID1 := "exec-bulk-fail"
 	mockClient.EXPECT().
 		ContainerExecCreate(ctx, nodeName, mock.MatchedBy(func(opts container.ExecOptions) bool {
-			return len(opts.Cmd) > 5 && opts.Cmd[0] == "ctr" && opts.Cmd[3] == "export"
+			return len(opts.Cmd) > 5 && opts.Cmd[0] == ctrCommand && opts.Cmd[3] == "export"
 		})).
 		Return(container.ExecCreateResponse{ID: execID1}, nil).Once()
 
