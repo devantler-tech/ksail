@@ -34,6 +34,16 @@ name: "Update Docs"
   push:
     branches:
     - main
+    paths:
+    - README.md
+    - CONTRIBUTING.md
+    - SECURITY.md
+    - docs/**
+    - "**.go"
+    - go.mod
+    - go.sum
+    - pkg/**
+    - schemas/**
   workflow_dispatch: null
 
 permissions: read-all
