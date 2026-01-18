@@ -103,7 +103,7 @@ func WrapHandler(
 
 				outputTimer := helpers.MaybeTimer(cmd, tmr)
 
-				_, err := cfgManager.LoadConfig(outputTimer)
+				_, err := cfgManager.Load(configmanager.LoadOptions{Timer: outputTimer})
 				if err != nil {
 					return fmt.Errorf("failed to load cluster configuration: %w", err)
 				}

@@ -28,5 +28,7 @@ var (
 	// ErrInputFileNotFound is returned when the input file does not exist.
 	ErrInputFileNotFound = errors.New("input file does not exist")
 	// ErrUnsupportedDistribution is returned when the distribution does not support image operations.
-	ErrUnsupportedDistribution = errors.New("distribution does not support image export/import")
+	ErrUnsupportedDistribution = errors.New(
+		"talos does not support image export/import (immutable OS without shell access)",
+	)
 )

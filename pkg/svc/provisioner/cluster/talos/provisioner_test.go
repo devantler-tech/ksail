@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/devantler-tech/ksail/v5/pkg/client/docker"
+	configmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager"
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
 	clustererrors "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/errors"
 	talosprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/talos"
@@ -29,7 +30,7 @@ func createTestTalosConfigs(t *testing.T, clusterName string) *talosconfigmanage
 	require.NoError(t, os.MkdirAll(tempDir+"/workers", 0o750))
 
 	manager := talosconfigmanager.NewConfigManager(tempDir, clusterName, "", "")
-	configs, err := manager.LoadConfig(nil)
+	configs, err := manager.Load(configmanager.LoadOptions{})
 	require.NoError(t, err)
 
 	return configs
@@ -45,7 +46,7 @@ func createTestTalosConfigsWithPatches(
 	tempDir := setupPatchDirectories(t)
 
 	manager := talosconfigmanager.NewConfigManager(tempDir, clusterName, "", "")
-	configs, err := manager.LoadConfig(nil)
+	configs, err := manager.Load(configmanager.LoadOptions{})
 	require.NoError(t, err)
 
 	return configs

@@ -90,11 +90,7 @@ func (i *Importer) validateImportParams(
 	// Talos is not supported - it's an immutable OS without shell access
 	// and its Machine API doesn't expose image import functionality
 	if distribution == v1alpha1.DistributionTalos {
-		return fmt.Errorf(
-			"%w: Talos is an immutable OS without shell access; "+
-				"use talosctl image pull or configure registries in machine config instead",
-			ErrUnsupportedDistribution,
-		)
+		return ErrUnsupportedDistribution
 	}
 
 	// Only Docker provider is supported via Docker SDK
