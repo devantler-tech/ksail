@@ -12,7 +12,7 @@ updates:
     groups:
       talos:
         patterns:
-          - "siderolabs/*"
+          - "github.com/siderolabs/*"
       kubernetes:
         patterns:
           - "k8s.io/*"
