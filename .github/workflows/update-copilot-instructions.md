@@ -22,6 +22,7 @@ tools:
   github:
     toolsets: [all]
   web-fetch:
+  web-search:
   bash: [":*"]
 
 timeout-minutes: 15
