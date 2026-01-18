@@ -1,12 +1,12 @@
 #
-#    ___                   _   _      
-#   / _ \                 | | (_)     
-#  | |_| | __ _  ___ _ __ | |_ _  ___ 
+#    ___                   _   _
+#   / _ \                 | | (_)
+#  | |_| | __ _  ___ _ __ | |_ _  ___
 #  |  _  |/ _` |/ _ \ '_ \| __| |/ __|
-#  | | | | (_| |  __/ | | | |_| | (__ 
+#  | | | | (_| |  __/ | | | |_| | (__
 #  \_| |_/\__, |\___|_| |_|\__|_|\___|
 #          __/ |
-#  _    _ |___/ 
+#  _    _ |___/
 # | |  | |                / _| |
 # | |  | | ___ _ __ _  __| |_| | _____      ____
 # | |/\| |/ _ \ '__| |/ /|  _| |/ _ \ \ /\ / / ___|
@@ -33,30 +33,30 @@ name: "PR Fix"
 "on":
   discussion:
     types:
-    - created
-    - edited
+      - created
+      - edited
   discussion_comment:
     types:
-    - created
-    - edited
+      - created
+      - edited
   issue_comment:
     types:
-    - created
-    - edited
+      - created
+      - edited
   issues:
     types:
-    - opened
-    - edited
-    - reopened
+      - opened
+      - edited
+      - reopened
   pull_request:
     types:
-    - opened
-    - edited
-    - reopened
+      - opened
+      - edited
+      - reopened
   pull_request_review_comment:
     types:
-    - created
-    - edited
+      - created
+      - edited
 
 permissions: read-all
 
@@ -186,13 +186,13 @@ jobs:
         run: |
           # Download official Copilot CLI installer script
           curl -fsSL https://raw.githubusercontent.com/github/copilot-cli/main/install.sh -o /tmp/copilot-install.sh
-          
+
           # Execute the installer with the specified version
           export VERSION=0.0.375 && sudo bash /tmp/copilot-install.sh
-          
+
           # Cleanup
           rm -f /tmp/copilot-install.sh
-          
+
           # Verify installation
           copilot --version
       - name: Install awf binary
@@ -531,7 +531,7 @@ jobs:
         with:
           script: |
             const fs = require('fs');
-            
+
             const awInfo = {
               engine_id: "copilot",
               engine_name: "GitHub Copilot CLI",
@@ -561,13 +561,13 @@ jobs:
               },
               created_at: new Date().toISOString()
             };
-            
+
             // Write to /tmp/gh-aw directory to avoid inclusion in PR
             const tmpPath = '/tmp/gh-aw/aw_info.json';
             fs.writeFileSync(tmpPath, JSON.stringify(awInfo, null, 2));
             console.log('Generated aw_info.json at:', tmpPath);
             console.log(JSON.stringify(awInfo, null, 2));
-            
+
             // Set model as output for reuse in other steps/jobs
             core.setOutput('model', awInfo.model);
       - name: Generate workflow overview
@@ -587,29 +587,29 @@ jobs:
           bash /opt/gh-aw/actions/create_prompt_first.sh
           cat << 'PROMPT_EOF' > "$GH_AW_PROMPT"
           # PR Fix
-          
+
           You are an AI assistant specialized in fixing pull requests with failing CI checks. Your job is to analyze the failure logs, identify the root cause of the failure, and push a fix to the pull request branch for pull request #__GH_AW_GITHUB_EVENT_ISSUE_NUMBER__ in the repository __GH_AW_GITHUB_REPOSITORY__.
-          
+
           1. Read the pull request and the comments
-          
+
           2. Take heed of these instructions: "__GH_AW_NEEDS_ACTIVATION_OUTPUTS_TEXT__"
-          
+
             - (If there are no particular instructions there, your instructions are to fix the PR based on CI failures. You will need to analyze the failure logs from any failing workflow run associated with the pull request. Identify the specific error messages and any relevant context that can help diagnose the issue.  Based on your analysis, determine the root cause of the failure. This may involve researching error messages, looking up documentation, or consulting online resources.)
-          
+
           3. Check out the branch for pull request #__GH_AW_GITHUB_EVENT_ISSUE_NUMBER__ and set up the development environment as needed.
-          
+
           4. Formulate a plan to follow the instructions. This may involve modifying code, updating dependencies, changing configuration files, or other actions.
-          
+
           4. Implement the changes needed to follow the instructions.
-          
+
           5. Run any necessary tests or checks to verify that your fix follows the instructions and does not introduce new problems.
-          
+
           6. Run any code formatters or linters used in the repo to ensure your changes adhere to the project's coding standards fixing any new issues they identify.
-          
+
           7. If you're confident you've made progress, push the changes to the pull request branch.
-          
+
           8. Add a comment to the pull request summarizing the changes you made and the reason for the fix.
-          
+
           PROMPT_EOF
       - name: Substitute placeholders
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
@@ -621,7 +621,7 @@ jobs:
         with:
           script: |
             const substitutePlaceholders = require('/opt/gh-aw/actions/substitute_placeholders.cjs');
-            
+
             // Call the substitution function
             return await substitutePlaceholders({
               file: process.env.GH_AW_PROMPT,
@@ -653,9 +653,9 @@ jobs:
           </important>
           <instructions>
           To create or modify GitHub resources (issues, discussions, pull requests, etc.), you MUST call the appropriate safe output tool. Simply writing content will NOT work - the workflow requires actual tool calls.
-          
+
           **Available tools**: add_comment, create_issue, missing_tool, noop, push_to_pull_request_branch
-          
+
           **Critical**: Tool calls write structured data that downstream jobs process. Without tool calls, follow-up actions will be skipped.
           </instructions>
           </safe-outputs>
@@ -700,7 +700,7 @@ jobs:
           - **workflow-run-id**: __GH_AW_GITHUB_RUN_ID__
           {{/if}}
           </github-context>
-          
+
           PROMPT_EOF
       - name: Substitute placeholders
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
@@ -717,7 +717,7 @@ jobs:
         with:
           script: |
             const substitutePlaceholders = require('/opt/gh-aw/actions/substitute_placeholders.cjs');
-            
+
             // Call the substitution function
             return await substitutePlaceholders({
               file: process.env.GH_AW_PROMPT,
@@ -791,7 +791,7 @@ jobs:
           # This ensures they are in /tmp/gh-aw/ where secret redaction can scan them
           SESSION_STATE_DIR="$HOME/.copilot/session-state"
           LOGS_DIR="/tmp/gh-aw/sandbox/agent/logs"
-          
+
           if [ -d "$SESSION_STATE_DIR" ]; then
             echo "Copying Copilot session state files from $SESSION_STATE_DIR to $LOGS_DIR"
             mkdir -p "$LOGS_DIR"
@@ -810,7 +810,7 @@ jobs:
             const { main } = require('/opt/gh-aw/actions/redact_secrets.cjs');
             await main();
         env:
-          GH_AW_SECRET_NAMES: 'COPILOT_GITHUB_TOKEN,GH_AW_GITHUB_MCP_SERVER_TOKEN,GH_AW_GITHUB_TOKEN,GITHUB_TOKEN'
+          GH_AW_SECRET_NAMES: "COPILOT_GITHUB_TOKEN,GH_AW_GITHUB_MCP_SERVER_TOKEN,GH_AW_GITHUB_TOKEN,GITHUB_TOKEN"
           SECRET_COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
           SECRET_GH_AW_GITHUB_MCP_SERVER_TOKEN: ${{ secrets.GH_AW_GITHUB_MCP_SERVER_TOKEN }}
           SECRET_GH_AW_GITHUB_TOKEN: ${{ secrets.GH_AW_GITHUB_TOKEN }}
@@ -1074,13 +1074,13 @@ jobs:
         run: |
           # Download official Copilot CLI installer script
           curl -fsSL https://raw.githubusercontent.com/github/copilot-cli/main/install.sh -o /tmp/copilot-install.sh
-          
+
           # Execute the installer with the specified version
           export VERSION=0.0.375 && sudo bash /tmp/copilot-install.sh
-          
+
           # Cleanup
           rm -f /tmp/copilot-install.sh
-          
+
           # Verify installation
           copilot --version
       - name: Execute GitHub Copilot CLI
@@ -1179,7 +1179,7 @@ jobs:
         id: check_command_position
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
-          GH_AW_COMMANDS: "[\"pr-fix\"]"
+          GH_AW_COMMANDS: '["pr-fix"]'
         with:
           script: |
             const { setupGlobals } = require('/opt/gh-aw/actions/setup_globals.cjs');
@@ -1255,7 +1255,7 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
           GH_AW_AGENT_OUTPUT: ${{ env.GH_AW_AGENT_OUTPUT }}
-          GH_AW_SAFE_OUTPUTS_HANDLER_CONFIG: "{\"add_comment\":{\"max\":1},\"create_issue\":{\"max\":1,\"title_prefix\":\"${{ github.workflow }}\"},\"push_to_pull_request_branch\":{\"base_branch\":\"${{ github.ref_name }}\",\"if_no_changes\":\"warn\",\"max_patch_size\":1024}}"
+          GH_AW_SAFE_OUTPUTS_HANDLER_CONFIG: '{"add_comment":{"max":1},"create_issue":{"max":1,"title_prefix":"${{ github.workflow }}"},"push_to_pull_request_branch":{"base_branch":"${{ github.ref_name }}","if_no_changes":"warn","max_patch_size":1024}}'
         with:
           github-token: ${{ secrets.GH_AW_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
           script: |
@@ -1263,4 +1263,3 @@ jobs:
             setupGlobals(core, github, context, exec, io);
             const { main } = require('/opt/gh-aw/actions/safe_output_handler_manager.cjs');
             await main();
-
