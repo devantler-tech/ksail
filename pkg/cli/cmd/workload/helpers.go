@@ -6,6 +6,7 @@ import (
 
 	v1alpha1 "github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
+	configmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
 	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
 	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
@@ -28,7 +29,7 @@ func initCommandContext(cmd *cobra.Command) (*commandContext, error) {
 	cfgManager := ksailconfigmanager.NewCommandConfigManager(cmd, fieldSelectors)
 	outputTimer := helpers.MaybeTimer(cmd, tmr)
 
-	clusterCfg, err := cfgManager.LoadConfig(outputTimer)
+	clusterCfg, err := cfgManager.Load(configmanager.LoadOptions{Timer: outputTimer})
 	if err != nil {
 		return nil, fmt.Errorf("load config: %w", err)
 	}

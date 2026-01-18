@@ -14,7 +14,7 @@
 // Usage:
 //
 //	manager := talos.NewConfigManager("talos", "my-cluster", "1.32.0", "10.5.0.0/24")
-//	configs, err := manager.LoadConfig(nil)
+//	configs, err := manager.Load(configmanager.LoadOptions{})
 //	if err != nil {
 //	    return err
 //	}

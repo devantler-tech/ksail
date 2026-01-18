@@ -91,14 +91,14 @@ func assertConfigManagerCaches(
 
 	manager := newManager(configPath)
 
-	first, err := manager.LoadConfig(nil)
+	first, err := manager.Load(configmanager.LoadOptions{})
 	require.NoError(t, err, "initial LoadConfig failed")
 	require.NotNil(t, first, "expected config to be loaded")
 
 	err = os.WriteFile(configPath, []byte("invalid: yaml: ["), testFilePermissions)
 	require.NoError(t, err, "failed to overwrite config")
 
-	second, err := manager.LoadConfig(nil)
+	second, err := manager.Load(configmanager.LoadOptions{})
 	require.NoError(t, err, "expected cached load to succeed")
 
 	require.Same(t, first, second, "expected cached configuration to be reused")
@@ -210,7 +210,7 @@ servers: 3`,
 
 			configPath := setupTestConfigPath(t, scenario)
 			manager := k3d.NewConfigManager(configPath)
-			config, err := manager.LoadConfig(nil)
+			config, err := manager.Load(configmanager.LoadOptions{})
 
 			if scenario.ShouldError {
 				require.Error(t, err)

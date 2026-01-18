@@ -11,6 +11,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup/localregistry"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup/mirrorregistry"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
+	configmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
@@ -189,7 +190,7 @@ func loadClusterConfiguration(
 ) (*localregistry.Context, error) {
 	// Load config to populate cfgManager.Config and cfgManager.DistributionConfig
 	// The returned config is cached in cfgManager.Config, which is used by NewContextFromConfigManager
-	_, err := cfgManager.LoadConfig(tmr)
+	_, err := cfgManager.Load(configmanager.LoadOptions{Timer: tmr})
 	if err != nil {
 		return nil, fmt.Errorf("failed to load cluster configuration: %w", err)
 	}
