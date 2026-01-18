@@ -1,12 +1,12 @@
 #
-#    ___                   _   _
-#   / _ \                 | | (_)
-#  | |_| | __ _  ___ _ __ | |_ _  ___
+#    ___                   _   _      
+#   / _ \                 | | (_)     
+#  | |_| | __ _  ___ _ __ | |_ _  ___ 
 #  |  _  |/ _` |/ _ \ '_ \| __| |/ __|
-#  | | | | (_| |  __/ | | | |_| | (__
+#  | | | | (_| |  __/ | | | |_| | (__ 
 #  \_| |_/\__, |\___|_| |_|\__|_|\___|
 #          __/ |
-#  _    _ |___/
+#  _    _ |___/ 
 # | |  | |                / _| |
 # | |  | | ___ _ __ _  __| |_| | _____      ____
 # | |/\| |/ _ \ '__| |/ /|  _| |/ _ \ \ /\ / / ___|
@@ -33,7 +33,7 @@ name: "Update Docs"
 "on":
   push:
     branches:
-      - main
+    - main
   workflow_dispatch: null
 
 permissions: read-all
@@ -54,14 +54,8 @@ jobs:
       comment_id: ""
       comment_repo: ""
     steps:
-      - name: Checkout actions folder
-        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
-        with:
-          sparse-checkout: |
-            actions
-          persist-credentials: false
       - name: Setup Scripts
-        uses: ./actions/setup
+        uses: githubnext/gh-aw/actions/setup@a933c835b5e2d12ae4dead665a0fdba420a2d421 # v0.36.0
         with:
           destination: /opt/gh-aw/actions
       - name: Check workflow file timestamps
@@ -90,14 +84,8 @@ jobs:
       output: ${{ steps.collect_output.outputs.output }}
       output_types: ${{ steps.collect_output.outputs.output_types }}
     steps:
-      - name: Checkout actions folder
-        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
-        with:
-          sparse-checkout: |
-            actions
-          persist-credentials: false
       - name: Setup Scripts
-        uses: ./actions/setup
+        uses: githubnext/gh-aw/actions/setup@a933c835b5e2d12ae4dead665a0fdba420a2d421 # v0.36.0
         with:
           destination: /opt/gh-aw/actions
       - name: Checkout repository
@@ -138,13 +126,13 @@ jobs:
         run: |
           # Download official Copilot CLI installer script
           curl -fsSL https://raw.githubusercontent.com/github/copilot-cli/main/install.sh -o /tmp/copilot-install.sh
-
+          
           # Execute the installer with the specified version
           export VERSION=0.0.375 && sudo bash /tmp/copilot-install.sh
-
+          
           # Cleanup
           rm -f /tmp/copilot-install.sh
-
+          
           # Verify installation
           copilot --version
       - name: Install awf binary
@@ -388,7 +376,7 @@ jobs:
         with:
           script: |
             const fs = require('fs');
-
+            
             const awInfo = {
               engine_id: "copilot",
               engine_name: "GitHub Copilot CLI",
@@ -418,13 +406,13 @@ jobs:
               },
               created_at: new Date().toISOString()
             };
-
+            
             // Write to /tmp/gh-aw directory to avoid inclusion in PR
             const tmpPath = '/tmp/gh-aw/aw_info.json';
             fs.writeFileSync(tmpPath, JSON.stringify(awInfo, null, 2));
             console.log('Generated aw_info.json at:', tmpPath);
             console.log(JSON.stringify(awInfo, null, 2));
-
+            
             // Set model as output for reuse in other steps/jobs
             core.setOutput('model', awInfo.model);
       - name: Generate workflow overview
@@ -443,35 +431,38 @@ jobs:
           bash /opt/gh-aw/actions/create_prompt_first.sh
           cat << 'PROMPT_EOF' > "$GH_AW_PROMPT"
           # Update Docs
-
+          
           ## Job Description
-
-
-
+          
+          
+          
           Your name is __GH_AW_GITHUB_WORKFLOW__. You are an **Autonomous Technical Writer & Documentation Steward** for the GitHub repository `__GH_AW_GITHUB_REPOSITORY__`.
-
+          
           ### Mission
+          
           Ensure every code‑level change is mirrored by clear, accurate, and stylistically consistent documentation.
-
+          
           ### Voice & Tone
+          
           - Precise, concise, and developer‑friendly
           - Active voice, plain English, progressive disclosure (high‑level first, drill‑down examples next)
           - Empathetic toward both newcomers and power users
-
+          
           ### Key Values
+          
           Documentation‑as‑Code, transparency, single source of truth, continuous improvement, accessibility, internationalization‑readiness
-
+          
           ### Your Workflow
-
+          
           1. **Analyze Repository Changes**
-             
+          
              - On every push to main branch, examine the diff to identify changed/added/removed entities
              - Look for new APIs, functions, classes, configuration files, or significant code changes
              - Check existing documentation for accuracy and completeness
              - Identify documentation gaps like failing tests: a "red build" until fixed
-
+          
           2. **Documentation Assessment**
-             
+          
              - Review existing documentation structure (look for docs/, documentation/, or similar directories)
              - Assess documentation quality against style guidelines:
                - Diátaxis framework (tutorials, how-to guides, technical reference, explanation)
@@ -479,17 +470,17 @@ jobs:
                - Inclusive naming conventions
                - Microsoft Writing Style Guide standards
              - Identify missing or outdated documentation
-
+          
           3. **Create or Update Documentation**
-             
+          
              - Use Markdown (.md) format wherever possible
              - Fall back to MDX only when interactive components are indispensable
              - Follow progressive disclosure: high-level concepts first, detailed examples second
              - Ensure content is accessible and internationalization-ready
              - Create clear, actionable documentation that serves both newcomers and power users
-
+          
           4. **Documentation Structure & Organization**
-             
+          
              - Organize content following Diátaxis methodology:
                - **Tutorials**: Learning-oriented, hands-on lessons
                - **How-to guides**: Problem-oriented, practical steps
@@ -497,43 +488,43 @@ jobs:
                - **Explanation**: Understanding-oriented, clarification and discussion
              - Maintain consistent navigation and cross-references
              - Ensure searchability and discoverability
-
+          
           5. **Quality Assurance**
-             
+          
              - Check for broken links, missing images, or formatting issues
              - Ensure code examples are accurate and functional
              - Verify accessibility standards are met
-
+          
           6. **Continuous Improvement**
-             
+          
              - Perform nightly sanity sweeps for documentation drift
              - Update documentation based on user feedback in issues and discussions
              - Maintain and improve documentation toolchain and automation
-
+          
           ### Output Requirements
-
+          
           - **Create Draft Pull Requests**: When documentation needs updates, create focused draft pull requests with clear descriptions
-
+          
           ### Technical Implementation
-
+          
           - **Hosting**: Prepare documentation for GitHub Pages deployment with branch-based workflows
           - **Automation**: Implement linting and style checking for documentation consistency
-
+          
           ### Error Handling
-
+          
           - If documentation directories don't exist, suggest appropriate structure
           - If build tools are missing, recommend necessary packages or configuration
-
+          
           ### Exit Conditions
-
+          
           - Exit if the repository has no implementation code yet (empty repository)
           - Exit if no code changes require documentation updates
           - Exit if all documentation is already up-to-date and comprehensive
-
+          
           > NOTE: Never make direct pushes to the main branch. Always create a pull request for documentation changes.
-
+          
           > NOTE: Treat documentation gaps like failing tests.
-
+          
           PROMPT_EOF
       - name: Substitute placeholders
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
@@ -544,7 +535,7 @@ jobs:
         with:
           script: |
             const substitutePlaceholders = require('/opt/gh-aw/actions/substitute_placeholders.cjs');
-
+            
             // Call the substitution function
             return await substitutePlaceholders({
               file: process.env.GH_AW_PROMPT,
@@ -575,9 +566,9 @@ jobs:
           </important>
           <instructions>
           To create or modify GitHub resources (issues, discussions, pull requests, etc.), you MUST call the appropriate safe output tool. Simply writing content will NOT work - the workflow requires actual tool calls.
-
+          
           **Available tools**: create_pull_request, missing_tool, noop
-
+          
           **Critical**: Tool calls write structured data that downstream jobs process. Without tool calls, follow-up actions will be skipped.
           </instructions>
           </safe-outputs>
@@ -622,7 +613,7 @@ jobs:
           - **workflow-run-id**: __GH_AW_GITHUB_RUN_ID__
           {{/if}}
           </github-context>
-
+          
           PROMPT_EOF
       - name: Substitute placeholders
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
@@ -639,7 +630,7 @@ jobs:
         with:
           script: |
             const substitutePlaceholders = require('/opt/gh-aw/actions/substitute_placeholders.cjs');
-
+            
             // Call the substitution function
             return await substitutePlaceholders({
               file: process.env.GH_AW_PROMPT,
@@ -700,7 +691,7 @@ jobs:
           # This ensures they are in /tmp/gh-aw/ where secret redaction can scan them
           SESSION_STATE_DIR="$HOME/.copilot/session-state"
           LOGS_DIR="/tmp/gh-aw/sandbox/agent/logs"
-
+          
           if [ -d "$SESSION_STATE_DIR" ]; then
             echo "Copying Copilot session state files from $SESSION_STATE_DIR to $LOGS_DIR"
             mkdir -p "$LOGS_DIR"
@@ -719,7 +710,7 @@ jobs:
             const { main } = require('/opt/gh-aw/actions/redact_secrets.cjs');
             await main();
         env:
-          GH_AW_SECRET_NAMES: "COPILOT_GITHUB_TOKEN,GH_AW_GITHUB_MCP_SERVER_TOKEN,GH_AW_GITHUB_TOKEN,GITHUB_TOKEN"
+          GH_AW_SECRET_NAMES: 'COPILOT_GITHUB_TOKEN,GH_AW_GITHUB_MCP_SERVER_TOKEN,GH_AW_GITHUB_TOKEN,GITHUB_TOKEN'
           SECRET_COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
           SECRET_GH_AW_GITHUB_MCP_SERVER_TOKEN: ${{ secrets.GH_AW_GITHUB_MCP_SERVER_TOKEN }}
           SECRET_GH_AW_GITHUB_TOKEN: ${{ secrets.GH_AW_GITHUB_TOKEN }}
@@ -810,14 +801,8 @@ jobs:
       tools_reported: ${{ steps.missing_tool.outputs.tools_reported }}
       total_count: ${{ steps.missing_tool.outputs.total_count }}
     steps:
-      - name: Checkout actions folder
-        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
-        with:
-          sparse-checkout: |
-            actions
-          persist-credentials: false
       - name: Setup Scripts
-        uses: ./actions/setup
+        uses: githubnext/gh-aw/actions/setup@a933c835b5e2d12ae4dead665a0fdba420a2d421 # v0.36.0
         with:
           destination: /opt/gh-aw/actions
       - name: Debug job inputs
@@ -901,14 +886,8 @@ jobs:
     outputs:
       success: ${{ steps.parse_results.outputs.success }}
     steps:
-      - name: Checkout actions folder
-        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
-        with:
-          sparse-checkout: |
-            actions
-          persist-credentials: false
       - name: Setup Scripts
-        uses: ./actions/setup
+        uses: githubnext/gh-aw/actions/setup@a933c835b5e2d12ae4dead665a0fdba420a2d421 # v0.36.0
         with:
           destination: /opt/gh-aw/actions
       - name: Download agent artifacts
@@ -994,13 +973,13 @@ jobs:
         run: |
           # Download official Copilot CLI installer script
           curl -fsSL https://raw.githubusercontent.com/github/copilot-cli/main/install.sh -o /tmp/copilot-install.sh
-
+          
           # Execute the installer with the specified version
           export VERSION=0.0.375 && sudo bash /tmp/copilot-install.sh
-
+          
           # Cleanup
           rm -f /tmp/copilot-install.sh
-
+          
           # Verify installation
           copilot --version
       - name: Execute GitHub Copilot CLI
@@ -1051,19 +1030,11 @@ jobs:
 
   pre_activation:
     runs-on: ubuntu-slim
-    permissions:
-      contents: read
     outputs:
       activated: ${{ (steps.check_membership.outputs.is_team_member == 'true') && (steps.check_stop_time.outputs.stop_time_ok == 'true') }}
     steps:
-      - name: Checkout actions folder
-        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
-        with:
-          sparse-checkout: |
-            actions
-          persist-credentials: false
       - name: Setup Scripts
-        uses: ./actions/setup
+        uses: githubnext/gh-aw/actions/setup@a933c835b5e2d12ae4dead665a0fdba420a2d421 # v0.36.0
         with:
           destination: /opt/gh-aw/actions
       - name: Check team membership for workflow
@@ -1113,14 +1084,8 @@ jobs:
       process_safe_outputs_processed_count: ${{ steps.process_safe_outputs.outputs.processed_count }}
       process_safe_outputs_temporary_id_map: ${{ steps.process_safe_outputs.outputs.temporary_id_map }}
     steps:
-      - name: Checkout actions folder
-        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
-        with:
-          sparse-checkout: |
-            actions
-          persist-credentials: false
       - name: Setup Scripts
-        uses: ./actions/setup
+        uses: githubnext/gh-aw/actions/setup@a933c835b5e2d12ae4dead665a0fdba420a2d421 # v0.36.0
         with:
           destination: /opt/gh-aw/actions
       - name: Download agent output artifact
@@ -1164,7 +1129,7 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
           GH_AW_AGENT_OUTPUT: ${{ env.GH_AW_AGENT_OUTPUT }}
-          GH_AW_SAFE_OUTPUTS_HANDLER_CONFIG: '{"create_pull_request":{"base_branch":"${{ github.ref_name }}","draft":true,"max":1,"max_patch_size":1024}}'
+          GH_AW_SAFE_OUTPUTS_HANDLER_CONFIG: "{\"create_pull_request\":{\"base_branch\":\"${{ github.ref_name }}\",\"draft\":true,\"max\":1,\"max_patch_size\":1024}}"
         with:
           github-token: ${{ secrets.GH_AW_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
           script: |
@@ -1172,3 +1137,4 @@ jobs:
             setupGlobals(core, github, context, exec, io);
             const { main } = require('/opt/gh-aw/actions/safe_output_handler_manager.cjs');
             await main();
+
