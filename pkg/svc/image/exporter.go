@@ -204,10 +204,18 @@ func (e *Exporter) exportImagesFromNode(
 		// Fall back to exporting images one-by-one, skipping failures
 		// This handles cases where some images have incomplete manifests
 		// (e.g., multi-arch images where not all platform layers were pulled)
-		successfulImages := e.exportImagesOneByOne(ctx, nodeName, tmpPath, platform, images)
+		successfulImages, failedImages := e.exportImagesOneByOne(ctx, nodeName, tmpPath, platform, images)
 		if len(successfulImages) == 0 {
-			return fmt.Errorf("ctr export failed for all images: %w", err)
+			return fmt.Errorf("ctr export failed for all images during individual export attempts (initial bulk export error: %w)", err)
 		}
+
+		// Report failed images to stderr
+		if len(failedImages) > 0 {
+			fmt.Fprintf(os.Stderr, "warning: failed to export %d image(s): %s\n", len(failedImages), strings.Join(failedImages, ", "))
+		}
+
+		// Clean up any intermediate test files before re-export
+		_, _ = e.executor.ExecInContainer(ctx, nodeName, []string{"rm", "-f", tmpPath})
 
 		// Re-export only the successful images together
 		err = e.tryExportImages(ctx, nodeName, tmpPath, platform, successfulImages)
@@ -261,28 +269,30 @@ func (e *Exporter) tryExportImages(
 }
 
 // exportImagesOneByOne tests each image individually and returns the list of
-// images that can be successfully exported.
+// images that can be successfully exported, along with the list of failed images.
 func (e *Exporter) exportImagesOneByOne(
 	ctx context.Context,
 	nodeName string,
 	tmpPath string,
 	platform string,
 	images []string,
-) []string {
+) ([]string, []string) {
 	successful := make([]string, 0, len(images))
+	failed := make([]string, 0)
 
 	for _, image := range images {
 		err := e.tryExportImages(ctx, nodeName, tmpPath, platform, []string{image})
 		if err == nil {
 			successful = append(successful, image)
+		} else {
+			failed = append(failed, image)
 		}
-		// Skip failed images silently - they likely have incomplete manifests
 	}
 
 	// Clean up test export file
 	_, _ = e.executor.ExecInContainer(ctx, nodeName, []string{"rm", "-f", tmpPath})
 
-	return successful
+	return successful, failed
 }
 
 // detectNodePlatform detects the OS/architecture of the node container.
