@@ -142,7 +142,7 @@ func ResolveClusterInfo(
 	// If we don't have a cluster name yet, try loading from ksail.yaml config
 	if clusterName == "" {
 		cfgManager := ksailconfigmanager.NewConfigManager(nil)
-		cfg, err := cfgManager.Load(configmanager.LoadOptions{Silent: true})
+		cfg, err := cfgManager.Load(configmanager.LoadOptions{Silent: true, SkipValidation: true})
 
 		if err == nil && cfg != nil && cfgManager.IsConfigFileFound() {
 			// Get cluster name from distribution config
