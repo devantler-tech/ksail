@@ -22,7 +22,7 @@ network:
 safe-outputs:
   create-discussion:
     title-prefix: "${{ github.workflow }}"
-    category: "ideas"
+    category: "agentic-workflows"
     max: 5
   add-comment:
     discussion: true

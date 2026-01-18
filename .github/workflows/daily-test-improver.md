@@ -21,7 +21,7 @@ network:
 safe-outputs:
   create-discussion: # needed to create planning discussion
     title-prefix: "${{ github.workflow }}"
-    category: "ideas"
+    category: "agentic-workflows"
   create-issue: # can create an issue if it thinks it found bugs
     max: 1
   add-comment:
