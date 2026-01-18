@@ -460,6 +460,7 @@ jobs:
              - Look for new APIs, functions, classes, configuration files, or significant code changes
              - Check existing documentation for accuracy and completeness
              - Identify documentation gaps like failing tests: a "red build" until fixed
+             - **Identify changes that affect the README.md**: When product features, capabilities, or user-facing changes occur, ensure they're reflected in README.md
           
           2. **Documentation Assessment**
           
@@ -470,6 +471,7 @@ jobs:
                - Inclusive naming conventions
                - Microsoft Writing Style Guide standards
              - Identify missing or outdated documentation
+             - **Assess README.md synchronization needs**: Check if product changes in docs/ should be reflected in README.md sections like "Key Features", "Usage", or "Getting Started"
           
           3. **Create or Update Documentation**
           
@@ -478,6 +480,7 @@ jobs:
              - Follow progressive disclosure: high-level concepts first, detailed examples second
              - Ensure content is accessible and internationalization-ready
              - Create clear, actionable documentation that serves both newcomers and power users
+             - **Synchronize README.md when relevant**: Update README.md sections to reflect product changes, ensuring consistency between detailed docs/ and the repository landing page
           
           4. **Documentation Structure & Organization**
           
@@ -488,6 +491,12 @@ jobs:
                - **Explanation**: Understanding-oriented, clarification and discussion
              - Maintain consistent navigation and cross-references
              - Ensure searchability and discoverability
+             - **README.md Synchronization Guidelines**:
+               - **When to update README.md**: When changes affect user-facing features, capabilities, installation steps, prerequisites, or getting started workflows
+               - **What to synchronize**: Key features, usage examples, prerequisites, provider support matrix, installation methods
+               - **What NOT to synchronize**: Detailed API docs, in-depth guides, or content better suited for docs/ subdirectories
+               - **Style**: README.md should be concise and high-level; docs/ can be detailed and comprehensive
+               - **Consistency**: Ensure terminology and examples in README.md align with docs/ but in a condensed format
           
           5. **Quality Assurance**
           
@@ -504,6 +513,36 @@ jobs:
           ### Output Requirements
           
           - **Create Draft Pull Requests**: When documentation needs updates, create focused draft pull requests with clear descriptions
+          - **README.md Updates**: Include README.md changes in the same PR when product changes affect user-facing features, getting started workflows, or key capabilities
+          
+          ### README.md Synchronization
+          
+          The README.md serves as the repository landing page and should provide a high-level overview that stays synchronized with product changes:
+          
+          **Priority Sections for Synchronization:**
+          
+          1. **Key Features** - When new features are added or existing features change in docs/features.mdx, update the "Key Features" section in README.md to reflect the changes concisely
+          2. **Getting Started / Usage** - When CLI commands, workflows, or initialization steps change, update the usage examples
+          3. **Prerequisites / Provider Matrix** - When supported platforms, distributions, or requirements change (docs/support-matrix.mdx), update the provider/platform matrices
+          4. **Installation** - When new installation methods become available or existing ones change
+          
+          **Synchronization Rules:**
+          
+          - README.md content should be **concise and high-level** (2-3 sentences per feature)
+          - docs/ content should be **detailed and comprehensive** (full explanations, examples, edge cases)
+          - Keep terminology and command examples **consistent** between README.md and docs/
+          - When docs/ receives major feature documentation, add a **brief summary** to README.md
+          - Avoid duplicating full guides - README.md should **link to docs/** for details
+          
+          **Example Changes That Require README.md Updates:**
+          
+          - ✅ New distribution support (Vanilla, K3s, Talos) → Update provider matrix
+          - ✅ New CLI command or command group → Update usage examples  
+          - ✅ New major feature (GitOps engine, registry management) → Add to "Key Features"
+          - ✅ Changed prerequisites or installation methods → Update "Getting Started"
+          - ❌ Internal API changes without user-facing impact → No README.md update
+          - ❌ Detailed how-to guides or troubleshooting → Keep in docs/ only
+          - ❌ Minor documentation fixes or clarifications → No README.md update
           
           ### Technical Implementation
           
