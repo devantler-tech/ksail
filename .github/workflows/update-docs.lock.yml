@@ -42,7 +42,6 @@ name: "Update Docs"
     - "**.go"
     - go.mod
     - go.sum
-    - pkg/**
     - schemas/**
   workflow_dispatch: null
 
