@@ -11,10 +11,10 @@ export default defineConfig({
       title: "🛥️🐳 KSail",
       description: "Documentation for KSail - CLI tool for creating, maintaining and operating Kubernetes clusters. ☸️",
       logo: {
-        src: "./src/assets/ksail-logo.png",
+        src: "./src/assets/logo.png",
         replacesTitle: false,
       },
-      favicon: "/images/ksail-logo.png",
+      favicon: "/images/logo.png",
       social: [
         {
           icon: "github",
