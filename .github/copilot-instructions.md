@@ -18,13 +18,10 @@ KSail is a Go-based CLI application that provides a unified SDK for spinning up 
 **Required for Documentation**:
 
 ```bash
-# Ruby and Jekyll for documentation builds
-# CI uses Ruby 3.3 (see .github/workflows/test-pages.yaml)
-gem install --user-install bundler
-export PATH="$(ruby -e 'print Gem.user_dir')/bin:$PATH"
+# Node.js for documentation builds
+# CI uses Node.js 22 (see .github/workflows/test-pages.yaml)
 cd /path/to/repo/docs
-bundle config set --local path 'vendor/bundle'
-bundle install
+npm ci
 ```
 
 ### Build Commands
@@ -49,9 +46,8 @@ go test ./...
 
 ```bash
 cd /path/to/repo/docs
-export PATH="$(ruby -e 'print Gem.user_dir')/bin:$PATH"
-bundle exec jekyll build
-# Takes ~2 seconds. Documentation builds to _site/ directory
+npm run build
+# Takes ~2-3 seconds. Documentation builds to dist/ directory
 ```
 
 ### Running the Application
@@ -104,9 +100,9 @@ go run main.go --help
 
    ```bash
    cd /path/to/repo/docs
-   export PATH="$(ruby -e 'print Gem.user_dir')/bin:$PATH"
-   bundle exec jekyll build  # Must succeed
-   ls _site/  # Should contain generated HTML files
+   npm ci
+   npm run build  # Must succeed
+   ls dist/  # Should contain generated HTML files
    ```
 
 ## Common Tasks
@@ -125,9 +121,9 @@ go run main.go --help
 │   ├── io/                 # I/O utilities
 │   ├── k8s/                # Kubernetes helpers/templates
 │   └── svc/                # Services (installers, managers, etc.)
-├── docs/                   # Jekyll documentation source
-│   ├── _site/              # Generated site (after jekyll build)
-│   └── Gemfile             # Ruby dependencies for documentation
+├── docs/                   # Astro documentation source
+│   ├── dist/               # Generated site (after npm run build)
+│   └── package.json        # Node.js dependencies for documentation
 ├── go.mod                  # Go module file
 └── README.md               # Main repository documentation
 ```
@@ -135,8 +131,7 @@ go run main.go --help
 ### Key Configuration Files
 
 - **go.mod**: Go module dependencies (includes embedded kubectl, helm, kind, k3d, flux, argocd)
-- **Gemfile**: Jekyll documentation dependencies
-- **\_config.yml**: Jekyll site configuration in docs/
+- **package.json**: Node.js dependencies for Astro documentation
 - **.github/workflows/\*.yaml**: CI/CD pipelines
 
 ### CLI Commands Reference
@@ -175,13 +170,6 @@ go version  # Should match the version in go.mod (go 1.25.4)
 # If not, install/update Go from https://go.dev/dl/
 ```
 
-**Jekyll Permission Errors**:
-
-```bash
-bundle config set --local path 'vendor/bundle'
-bundle install
-```
-
 **Docker Connection Issues**:
 
 ```bash
@@ -204,9 +192,9 @@ go test ./...                          # Run unit tests
 
 ```bash
 cd /path/to/repo/docs
-export PATH="$(ruby -e 'print Gem.user_dir')/bin:$PATH"
-bundle exec jekyll build               # Verify docs build
-bundle exec jekyll serve --host 0.0.0.0  # Test locally (if needed)
+npm ci                                 # Install dependencies
+npm run build                          # Verify docs build
+npm run dev                            # Test locally (if needed)
 ```
 
 ### Important Notes
@@ -251,7 +239,7 @@ bundle exec jekyll serve --host 0.0.0.0  # Test locally (if needed)
 - Go 1.25.4+ (see `go.mod`)
 - Embedded Kubernetes tools (kubectl, helm, kind, k3d, flux, argocd) as Go libraries
 - Docker as the only external dependency
-- Jekyll for documentation (Ruby-based)
+- Astro with Starlight for documentation (Node.js-based)
 
 ## Recent Changes
 

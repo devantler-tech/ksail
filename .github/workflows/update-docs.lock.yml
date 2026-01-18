@@ -469,12 +469,12 @@ jobs:
                - Update either file if they've diverged
                - README.md should be the concise GitHub landing page
                - docs/index.mdx should be the comprehensive documentation home
-          
+
              - **CONTRIBUTING.md**: Check if CONTRIBUTING.md matches contribution-related documentation in docs/
                - Ensure prerequisites, build commands, and contribution guidelines are consistent
                - Update either file if they've diverged
                - CONTRIBUTING.md should be the primary source for contributor information
-          
+
              - **.github/copilot-instructions.md**: Check if copilot-instructions.md is aligned with the codebase
                - Ensure architecture overview, build commands, and project structure are accurate
                - Update when significant project changes occur

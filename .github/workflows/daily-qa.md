@@ -20,7 +20,7 @@ network:
 safe-outputs:
   create-discussion:
     title-prefix: "${{ github.workflow }}"
-    category: "q-a"
+    category: "agentic-workflows"
   add-comment:
     discussion: true
     target: "*" # all issues and PRs
