@@ -36,6 +36,9 @@ name: "CI Failure Doctor"
     - completed
     workflows:
     - "CI - KSail"
+    - "CD - Go"
+    - "Test - Pages"
+    - "Publish - Pages"
 
 permissions: read-all
 

@@ -4,9 +4,7 @@ updates:
   - package-ecosystem: gomod
     directory: /
     schedule:
-      interval: weekly
-      day: monday
-    open-pull-requests-limit: 10
+      interval: daily
     # Wait for releases to stabilize before updating
     cooldown:
       default-days: 7
@@ -25,17 +23,13 @@ updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly
-      day: monday
-    open-pull-requests-limit: 
+      interval: daily
 
   # npm (documentation site)
   - package-ecosystem: npm
     directory: /docs
     schedule:
-      interval: weekly
-      day: monday
-    open-pull-requests-limit: 5
+      interval: daily
     # Wait for releases to stabilize before updating
     cooldown:
       default-days: 7
@@ -50,20 +44,14 @@ updates:
   - package-ecosystem: docker
     directory: / # Dockerfile (build image)
     schedule:
-      interval: weekly
-      day: monday
-    open-pull-requests-limit: 5
+      interval: daily
 
   - package-ecosystem: docker
     directory: /.github/fixtures/reconcile-test # Kubernetes deployment manifest
     schedule:
-      interval: weekly
-      day: monday
-    open-pull-requests-limit: 5
+      interval: daily
 
   - package-ecosystem: docker
     directory: /pkg/io/config-manager/talos # Talos image (embedded in Go via go:embed)
     schedule:
-      interval: weekly
-      day: monday
-    open-pull-requests-limit: 5
+      interval: daily

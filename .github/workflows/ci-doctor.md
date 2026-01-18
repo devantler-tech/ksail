@@ -7,7 +7,11 @@ description: |
 
 on:
   workflow_run:
-    workflows: ["CI - KSail"] # Monitor the main CI workflow
+    workflows: 
+      - "CI - KSail"
+      - "CD - Go"
+      - "Test - Pages"
+      - "Publish - Pages"
     types:
       - completed
     # NOTE: No branch restrictions - intentionally monitors ALL branches (main, PRs, merge groups)
