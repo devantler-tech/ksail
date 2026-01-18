@@ -451,7 +451,6 @@ func buildLocalRegistryURL(
 	)
 }
 
-//nolint:unparam // error return kept for consistency with resource building patterns
 func buildFluxInstance(clusterCfg *v1alpha1.Cluster, clusterName string) (*FluxInstance, error) {
 	localRegistry := clusterCfg.Spec.Cluster.LocalRegistry
 

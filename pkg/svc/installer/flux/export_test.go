@@ -1,0 +1,62 @@
+package fluxinstaller
+
+import (
+	"context"
+	"time"
+
+	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	corev1 "k8s.io/api/core/v1"
+)
+
+// Exported functions for testing purposes.
+// These wrappers allow the _test package to access internal functions.
+
+// BuildDockerConfigJSON exports buildDockerConfigJSON for testing.
+func BuildDockerConfigJSON(registry, username, password string) ([]byte, error) {
+	return buildDockerConfigJSON(registry, username, password)
+}
+
+// BuildExternalRegistryURL exports buildExternalRegistryURL for testing.
+func BuildExternalRegistryURL(localRegistry v1alpha1.LocalRegistry) (string, string, string) {
+	return buildExternalRegistryURL(localRegistry)
+}
+
+// BuildLocalRegistryURL exports buildLocalRegistryURL for testing.
+func BuildLocalRegistryURL(
+	localRegistry v1alpha1.LocalRegistry,
+	clusterCfg *v1alpha1.Cluster,
+	clusterName string,
+) string {
+	return buildLocalRegistryURL(localRegistry, clusterCfg, clusterName)
+}
+
+// BuildFluxInstance exports buildFluxInstance for testing.
+func BuildFluxInstance(clusterCfg *v1alpha1.Cluster, clusterName string) (*FluxInstance, error) {
+	return buildFluxInstance(clusterCfg, clusterName)
+}
+
+// BuildRegistrySecret exports buildRegistrySecret for testing.
+func BuildRegistrySecret(clusterCfg *v1alpha1.Cluster) (*corev1.Secret, error) {
+	return buildRegistrySecret(clusterCfg)
+}
+
+// IsTransientAPIError exports isTransientAPIError for testing.
+func IsTransientAPIError(err error) bool {
+	return isTransientAPIError(err)
+}
+
+// NormalizeFluxPath exports normalizeFluxPath for testing.
+func NormalizeFluxPath() string {
+	return normalizeFluxPath()
+}
+
+// PollUntilReady exports pollUntilReady for testing.
+func PollUntilReady(
+	ctx context.Context,
+	timeout time.Duration,
+	interval time.Duration,
+	resourceDesc string,
+	checkFn func() (bool, error),
+) error {
+	return pollUntilReady(ctx, timeout, interval, resourceDesc, checkFn)
+}
