@@ -15,7 +15,6 @@ timeout-minutes: 60
 
 permissions:
   all: read
-  id-token: read  # for auth in some actions
 
 network:
   allowed: [defaults, go]

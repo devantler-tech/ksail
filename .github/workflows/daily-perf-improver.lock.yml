@@ -42,7 +42,6 @@ permissions:
   contents: read
   deployments: read
   discussions: read
-  id-token: read
   issues: read
   models: read
   packages: read
@@ -93,7 +92,6 @@ jobs:
       contents: read
       deployments: read
       discussions: read
-      id-token: read
       issues: read
       models: read
       packages: read
