@@ -14,7 +14,8 @@ timeout-minutes: 15
 
 permissions: read-all
 
-network: defaults
+network:
+  allowed: [defaults, go]
 
 safe-outputs:
   create-discussion:

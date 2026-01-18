@@ -16,7 +16,8 @@ permissions:
   all: read
   id-token: read  # for auth in some actions
 
-network: defaults
+network:
+  allowed: [defaults, go]
 
 safe-outputs:
   create-discussion: # needed to create planning discussion
