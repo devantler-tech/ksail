@@ -24,8 +24,7 @@ Before you begin, ensure you have the following installed:
 
 For building documentation:
 
-- [Ruby (v3.3+)](https://www.ruby-lang.org/en/documentation/installation/) (matches CI)
-- [Bundler](https://bundler.io/)
+- [Node.js (v22+)](https://nodejs.org/en/download/) (matches CI)
 
 ### Lint
 
