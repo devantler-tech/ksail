@@ -21,7 +21,7 @@ network: defaults
 safe-outputs:
   create-discussion:
     title-prefix: "${{ github.workflow }}"
-    category: "ideas"
+    category: "agentic-workflows"
 
 tools:
   github:
