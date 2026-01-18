@@ -1,12 +1,24 @@
-# Jekyll build artifacts
-_site/
-.jekyll-cache/
-.jekyll-metadata
+# Astro build artifacts
+dist/
+.astro/
 
-# Ruby/Bundler
-.bundle/
-vendor/bundle/
-Gemfile.lock
+# Node.js
+node_modules/
+package-lock.json
+npm-debug.log*
+yarn-error.log*
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Editor/IDE
+.vscode/
+.idea/
+*.swp
+*.swo
 
 # OS files
 .DS_Store
+Thumbs.db

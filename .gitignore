@@ -10,6 +10,12 @@
 *.log
 
 # ==============================================================================
+# Node.js (root level - created by npx)
+# ==============================================================================
+node_modules/
+.astro/
+
+# ==============================================================================
 # KSail Application Files
 # ==============================================================================
 
@@ -70,17 +76,17 @@ coverage_summary.txt
 vendor/
 
 # ==============================================================================
-# Jekyll / Documentation
+# Astro / Documentation
 # ==============================================================================
 
-# Jekyll build artifacts
-docs/_site/
-docs/.jekyll-cache/
+# Astro build artifacts
+docs/dist/
+docs/.astro/
 
-# Ruby/Bundler artifacts
-docs/vendor/bundle/
-docs/.bundle/
-.bundle/
+# Node.js
+docs/node_modules/
+docs/package-lock.json
+docs/npm-debug.log*
 
 # ==============================================================================
 # Testing Tools
