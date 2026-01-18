@@ -14,6 +14,12 @@ import (
 // Compile-time interface compliance check.
 var _ configmanager.ConfigManager[Configs] = (*ConfigManager)(nil)
 
+// DefaultTalosImage is the default Talos container image.
+// This value is read from the Dockerfile in this package which is updated by Dependabot.
+// NOTE: This MUST match the Talos pkg/machinery version to ensure
+// generated machine configs are compatible with the running container.
+var DefaultTalosImage = talosImage()
+
 // Default configuration values for Talos clusters.
 const (
 	// DefaultPatchesDir is the default directory for Talos patches.
@@ -24,10 +30,6 @@ const (
 	DefaultKubernetesVersion = "1.32.0"
 	// DefaultClusterName is the default cluster name for Talos clusters.
 	DefaultClusterName = "talos-default"
-	// DefaultTalosImage is the default Talos container image.
-	// NOTE: This MUST match the Talos pkg/machinery version (v1.12.0) to ensure
-	// generated machine configs are compatible with the running container.
-	DefaultTalosImage = "ghcr.io/siderolabs/talos:v1.12.0"
 )
 
 // ConfigManager implements configuration management for Talos cluster patches.

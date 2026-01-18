@@ -1,12 +1,65 @@
 version: 2
 updates:
-  - package-ecosystem: "github-actions"
-    directory: "/"
-    schedule:
-      interval: "daily"
-  - package-ecosystem: bundler
+  # Go modules (main application)
+  - package-ecosystem: gomod
     directory: /
     schedule:
-      interval: daily
-    allow:
-      - dependency-type: direct
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 10
+    # Wait for releases to stabilize before updating
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
+    groups:
+      go-dependencies:
+        patterns:
+          - "*"
+        exclude-patterns:
+          - "k8s.io/*"
+          - "sigs.k8s.io/*"
+      kubernetes:
+        patterns:
+          - "k8s.io/*"
+          - "sigs.k8s.io/*"
+
+  # GitHub Actions workflows
+  # Note: cooldown not supported for github-actions ecosystem
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+
+  # npm (documentation site)
+  - package-ecosystem: npm
+    directory: /docs
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    # Wait for releases to stabilize before updating
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
+    groups:
+      npm-dependencies:
+        patterns:
+          - "*"
+
+  # Docker base images
+  # Note: cooldown not supported for docker ecosystem
+  - package-ecosystem: docker
+    directories:
+      - / # Dockerfile (build image)
+      - /.github/fixtures/reconcile-test # Kubernetes deployment manifest
+      - /pkg/io/config-manager/talos # Talos image (embedded in Go via go:embed)
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
