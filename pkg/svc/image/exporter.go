@@ -198,6 +198,44 @@ func (e *Exporter) exportImagesFromNode(
 		return fmt.Errorf("failed to detect node platform: %w", err)
 	}
 
+	// Try exporting all images at once first (most efficient if it works)
+	err = e.tryExportImages(ctx, nodeName, tmpPath, platform, images)
+	if err != nil {
+		// Fall back to exporting images one-by-one, skipping failures
+		// This handles cases where some images have incomplete manifests
+		// (e.g., multi-arch images where not all platform layers were pulled)
+		successfulImages := e.exportImagesOneByOne(ctx, nodeName, tmpPath, platform, images)
+		if len(successfulImages) == 0 {
+			return fmt.Errorf("ctr export failed for all images: %w", err)
+		}
+
+		// Re-export only the successful images together
+		err = e.tryExportImages(ctx, nodeName, tmpPath, platform, successfulImages)
+		if err != nil {
+			return fmt.Errorf("ctr export failed: %w", err)
+		}
+	}
+
+	// Copy the tar file from container to host
+	err = e.copyFromContainer(ctx, nodeName, tmpPath, outputPath)
+	if err != nil {
+		return fmt.Errorf("failed to copy export file from container: %w", err)
+	}
+
+	// Clean up temporary file in container
+	_, _ = e.executor.ExecInContainer(ctx, nodeName, []string{"rm", "-f", tmpPath})
+
+	return nil
+}
+
+// tryExportImages attempts to export a set of images using ctr.
+func (e *Exporter) tryExportImages(
+	ctx context.Context,
+	nodeName string,
+	tmpPath string,
+	platform string,
+	images []string,
+) error {
 	// Build ctr export command with platform flag
 	// The --platform flag is critical for multi-arch images: containerd may have
 	// image manifests listing multiple platforms (e.g., linux/amd64, linux/arm64),
@@ -217,22 +255,34 @@ func (e *Exporter) exportImagesFromNode(
 	)
 	cmd = append(cmd, images...)
 
-	// Execute export command
-	_, err = e.executor.ExecInContainer(ctx, nodeName, cmd)
-	if err != nil {
-		return fmt.Errorf("ctr export failed: %w", err)
+	_, err := e.executor.ExecInContainer(ctx, nodeName, cmd)
+
+	return err
+}
+
+// exportImagesOneByOne tests each image individually and returns the list of
+// images that can be successfully exported.
+func (e *Exporter) exportImagesOneByOne(
+	ctx context.Context,
+	nodeName string,
+	tmpPath string,
+	platform string,
+	images []string,
+) []string {
+	successful := make([]string, 0, len(images))
+
+	for _, image := range images {
+		err := e.tryExportImages(ctx, nodeName, tmpPath, platform, []string{image})
+		if err == nil {
+			successful = append(successful, image)
+		}
+		// Skip failed images silently - they likely have incomplete manifests
 	}
 
-	// Copy the tar file from container to host
-	err = e.copyFromContainer(ctx, nodeName, tmpPath, outputPath)
-	if err != nil {
-		return fmt.Errorf("failed to copy export file from container: %w", err)
-	}
-
-	// Clean up temporary file in container
+	// Clean up test export file
 	_, _ = e.executor.ExecInContainer(ctx, nodeName, []string{"rm", "-f", tmpPath})
 
-	return nil
+	return successful
 }
 
 // detectNodePlatform detects the OS/architecture of the node container.
