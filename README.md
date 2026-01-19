@@ -101,7 +101,7 @@ ksail cluster connect
 
 ### For users
 
-- Browse the documentation in [`docs/`](./docs/src/content/docs/index.mdx) (Markdown) or on <https://ksail.devantler.tech> (GitHub Pages).
+Browse the documentation at <https://ksail.devantler.tech> (GitHub Pages).
 
 ### For contributors
 
