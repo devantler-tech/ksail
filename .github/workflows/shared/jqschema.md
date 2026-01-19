@@ -33,6 +33,7 @@ A utility script is available at `/tmp/gh-aw/jqschema.sh` to help you discover t
 ### Purpose
 
 Generate a compact structural schema (keys + types) from JSON input. This is particularly useful when:
+
 - Analyzing tool outputs from GitHub search (search_code, search_issues, search_repositories)
 - Exploring API responses with large payloads
 - Understanding the structure of unfamiliar data without verbose output
@@ -54,6 +55,7 @@ gh api search/repositories?q=language:go | /tmp/gh-aw/jqschema.sh
 ### How It Works
 
 The script transforms JSON data by:
+
 1. Replacing object values with their type names ("string", "number", "boolean", "null")
 2. Reducing arrays to their first element's structure (or empty array if empty)
 3. Recursively processing nested structures
@@ -62,6 +64,7 @@ The script transforms JSON data by:
 ### Example
 
 **Input:**
+
 ```json
 {
   "total_count": 1000,
@@ -73,6 +76,7 @@ The script transforms JSON data by:
 ```
 
 **Output:**
+
 ```json
 {"total_count":"number","items":[{"login":"string","id":"number","verified":"boolean"}]}
 ```
@@ -80,12 +84,14 @@ The script transforms JSON data by:
 ### Best Practices
 
 **Use this script when:**
+
 - You need to understand the structure of tool outputs before requesting full data
 - GitHub search tools return large datasets (use `perPage: 1` and pipe through schema minifier first)
 - Exploring unfamiliar APIs or data structures
 - Planning data extraction strategies
 
 **Example workflow for GitHub search tools:**
+
 ```bash
 # Step 1: Get schema with minimal data (fetch just 1 result)
 # This helps understand the structure before requesting large datasets
@@ -102,6 +108,7 @@ echo '{}' | gh api search/repositories -f q="language:go" -f per_page=1 | /tmp/g
 
 **Using with GitHub MCP tools:**
 When using tools like `search_code`, `search_issues`, or `search_repositories`, pipe the output through jqschema to discover available fields:
+
 ```bash
 # Save a minimal search result to a file
 gh api search/code -f q="jq in:file language:bash" -f per_page=1 > /tmp/sample.json

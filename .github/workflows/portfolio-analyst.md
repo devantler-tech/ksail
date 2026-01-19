@@ -128,6 +128,7 @@ daily_costs.to_csv('/tmp/gh-aw/python/data/daily_costs.csv')
 **DO NOT CALL `gh aw logs` OR ANY `gh` COMMANDS** - These commands will not work in your environment and will fail.
 
 The workflow logs have already been downloaded for you in the previous step. The data is available at:
+
 - **JSON Summary File**: `/tmp/portfolio-logs/summary.json` (contains all metrics and run data)
 - **Individual Run Logs Directory**: `/tmp/portfolio-logs/run-{database-id}/` (detailed logs for each workflow run)
 
@@ -160,6 +161,7 @@ find /tmp/portfolio-logs -type d -name "run-*"
 ```
 
 **Key Metrics to Extract (from summary.json .runs array):**
+
 - `database_id` - Unique run identifier
 - `workflow_name` - Name of the workflow
 - `estimated_cost` - **Real cost per run calculated from actual token usage** (field name says "estimated" but contains calculated cost from actual usage)
@@ -171,6 +173,7 @@ find /tmp/portfolio-logs -type d -name "run-*"
 - `warning_count` - Number of warnings in the run
 
 **Calculate from real data:**
+
 - Total runs in last 30 days: Use `.summary.total_runs` or count `.runs` array
 - Success/failure counts: Count runs where `.conclusion` == "success" or "failure"
 - Last run date: Find latest `.created_at` timestamp
@@ -178,10 +181,12 @@ find /tmp/portfolio-logs -type d -name "run-*"
 - Average cost per run: `.summary.total_cost / .summary.total_runs`
 
 **Triage Early:**
+
 - Skip workflows with 100% success rate, normal frequency, and last run < 7 days
 - Focus 80% of analysis time on top 20% of issues
 
 **Handling Limited Data:**
+
 - If limited data (< 10 workflow runs), acknowledge this upfront in the report
 - Provide what insights are possible based on available data
 - Be transparent about limitations and caveats
@@ -192,27 +197,32 @@ find /tmp/portfolio-logs -type d -name "run-*"
 Analyze each workflow across five dimensions:
 
 #### 1. Overlap Risk
+
 - Identify workflows with similar triggers
 - Detect duplicate functionality
 - Find workflows that could be consolidated
 
 #### 2. Business Value
+
 - Check last run date (flag if >60 days)
 - Review trigger patterns (flag if never triggered)
 - Assess actual usage vs. configured schedule
 
 #### 3. Cost Efficiency
+
 - Use **ACTUAL cost data** from downloaded JSON files
 - Sum `estimated_cost` from all runs in the last 30 days for real monthly cost
 - **Flag workflows costing >$10/month** (based on actual spend, not estimates)
 - Identify over-scheduled workflows (daily when weekly would suffice)
 
 #### 4. Operational Health
+
 - Calculate failure rate
 - **Flag workflows with >30% failure rate**
 - Identify patterns in failures
 
 #### 5. Security Posture
+
 - Review permissions (flag excessive permissions)
 - Check network allowlists
 - Assess safe-output usage
@@ -222,6 +232,7 @@ Analyze each workflow across five dimensions:
 Sort workflows into three categories:
 
 **Healthy (Skip):**
+
 - <30% failure rate
 - Last run <60 days
 - Cost <$10/month
@@ -229,11 +240,13 @@ Sort workflows into three categories:
 - ~60-70% of workflows should be in this category
 
 **Removal Candidates:**
+
 - No runs in 60+ days
 - Zero triggers in last 30 days
 - Replaced by other workflows
 
 **Problematic (Requires Analysis):**
+>
 - >30% failure rate
 - Cost >$10/month
 - Clear duplicates
@@ -255,6 +268,7 @@ Skip everything else to stay within time budget.
 Calculate specific dollar amounts using **ACTUAL cost data from downloaded files**:
 
 #### Strategy 1: Remove Unused Workflows
+
 ```bash
 # Read cost data from the JSON summary for specific workflows
 cat /tmp/portfolio-logs/summary.json | jq '.runs[] | select(.workflow_name == "workflow-name") | .estimated_cost' | jq -s 'add'
@@ -266,6 +280,7 @@ For each workflow with no runs in 60+ days:
 ```
 
 #### Strategy 2: Reduce Schedule Frequency
+
 ```bash
 # Get actual runs and cost from the JSON summary
 cat /tmp/portfolio-logs/summary.json | jq '[.runs[] | select(.workflow_name == "workflow-name")] | {runs: length, cost: map(.estimated_cost) | add}'
@@ -278,6 +293,7 @@ For each over-scheduled workflow:
 ```
 
 #### Strategy 3: Consolidate Duplicates
+
 ```bash
 # Get cost for each duplicate workflow from the JSON summary
 cat /tmp/portfolio-logs/summary.json | jq '[.runs[] | select(.workflow_name == "workflow-1")] | map(.estimated_cost) | add'
@@ -290,6 +306,7 @@ For each duplicate set:
 ```
 
 #### Strategy 4: Fix High-Failure Workflows
+
 ```bash
 # Get failure rate and cost from the JSON summary
 cat /tmp/portfolio-logs/summary.json | jq '[.runs[] | select(.workflow_name == "workflow-name" and .conclusion == "failure")] | map(.estimated_cost) | add'
@@ -451,6 +468,7 @@ List workflows with no runs in 60+ days.
 **ALWAYS generate a report**, regardless of data availability. Never refuse or fail due to insufficient data.
 
 When data is limited (examples: only today's runs, < 10 total runs, < 7 days of history):
+
 1. **Acknowledge limitations upfront** in the "Data Availability" section
 2. **Document the actual period covered** (e.g., "Last 24 hours" vs "Last 30 days")
 3. **State confidence level** (Low/Medium/High based on data volume)
@@ -460,6 +478,7 @@ When data is limited (examples: only today's runs, < 10 total runs, < 7 days of 
 7. **Still deliver value**: Even limited data can identify clear problems
 
 Example minimal data report format:
+
 ```markdown
 ## Data Availability
 
@@ -470,6 +489,7 @@ Example minimal data report format:
 ```
 
 ### Use Real Data, Not Guesswork
+
 - **DO NOT call `gh aw logs` or any `gh` commands** - they will not work in your environment
 - **Read from the pre-downloaded JSON file `/tmp/portfolio-logs/summary.json`** - all workflow data is in this single file
 - **Use calculated costs** - the `estimated_cost` field in each run contains costs calculated from actual token usage
@@ -478,12 +498,14 @@ Example minimal data report format:
 - **Calculate from actuals** - failure rates, run frequency, cost per run all from real workflow execution data in summary.json
 
 ### Speed Optimization
+
 - **Skip healthy workflows** - Don't waste time analyzing what works
 - **Focus on high-impact only** - Workflows >$10/month or >30% failure (from actual data)
 - **Read from summary.json** - All data is in a single pre-downloaded JSON file at `/tmp/portfolio-logs/summary.json`
 - **Use templates** - Pre-format output structure
 
 ### Precision Requirements
+
 - **Exact filenames** - Include `.md` extension
 - **Exact line numbers** - Specify which lines to modify
 - **Copy-paste snippets** - Show before/after for each fix
@@ -491,6 +513,7 @@ Example minimal data report format:
 - **Show calculations** - Display how you calculated savings from actual data
 
 ### Quality Standards
+
 - **<1500 words** - Be very concise, let charts tell the story
 - **Visual first** - Generate all 4 charts before writing report
 - **Dashboard style** - Scannable, consistent format week-over-week
@@ -522,6 +545,7 @@ Example minimal data report format:
    - Use collapsible details sections for lengthy content
 
 **Example Python Script Structure**:
+
 ```python
 #!/usr/bin/env python3
 import pandas as pd
@@ -551,6 +575,7 @@ print("✅ All charts generated")
 ```
 
 ### Triage Rules
+
 - **60-70% should be skipped** - Most workflows should be healthy (when sufficient data available)
 - **Focus 80% of content on 20% of issues** - High-impact problems only
 - **Clear categories** - Remove, Reduce, Consolidate, or Fix
