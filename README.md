@@ -99,14 +99,7 @@ ksail cluster connect
 
 ## Documentation
 
-### For users
-
-Browse the documentation at <https://ksail.devantler.tech> (GitHub Pages).
-
-### For contributors
-
-- [CONTRIBUTING.md](./CONTRIBUTING.md) — Contribution guide, development prerequisites, and workflows
-- [API Documentation](https://pkg.go.dev/github.com/devantler-tech/ksail/v5) — Go package documentation
+Browse the documentation at <https://ksail.devantler.tech> (GitHub Pages)
 
 ## Related Projects
 
