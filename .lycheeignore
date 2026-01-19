@@ -17,6 +17,8 @@ https://github.com/devantler-tech/ksail/releases/download/
 https://x-access-token/
 
 # Intermittent Network Errors
+http://host.docker.internal:8765/
+http://localhost:8765/
 https://docs.tigera.io/calico/latest/about/
 https://docs.tigera.io/calico/latest/getting-started/
 https://docs.tigera.io/calico/latest/network-policy/
@@ -24,6 +26,7 @@ https://fluxcd.io/flux/components/
 https://fluxcd.io/flux/concepts/
 https://fluxcd.io/flux/guides/mozilla-sops/
 https://gateway-api.sigs.k8s.io/
+https://github.com/owner/repo/actions/runs/12345
 https://helm.sh/
 https://helm.sh/docs/
 https://just-the-docs.com/
