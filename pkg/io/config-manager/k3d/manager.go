@@ -57,6 +57,7 @@ func NewK3dSimpleConfig(name, apiVersion, kind string) *v1alpha5.SimpleConfig {
 		ObjectMeta: types.ObjectMeta{
 			Name: name,
 		},
+		Image: DefaultK3sImage,
 	}
 }
 

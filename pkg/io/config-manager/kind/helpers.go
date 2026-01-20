@@ -61,7 +61,10 @@ serverTLSBootstrap: true`
 func ApplyKubeletCertRotationPatches(kindConfig *kindv1alpha4.Cluster) {
 	// Ensure at least one node exists
 	if len(kindConfig.Nodes) == 0 {
-		kindConfig.Nodes = []kindv1alpha4.Node{{Role: kindv1alpha4.ControlPlaneRole}}
+		kindConfig.Nodes = []kindv1alpha4.Node{{
+			Role:  kindv1alpha4.ControlPlaneRole,
+			Image: DefaultKindNodeImage,
+		}}
 	}
 
 	// Add the kubelet cert rotation patch to all nodes
