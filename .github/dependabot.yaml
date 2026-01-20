@@ -5,7 +5,6 @@ updates:
     directory: /
     schedule:
       interval: daily
-    # Wait for releases to stabilize before updating
     cooldown:
       default-days: 7
       semver-major-days: 14
@@ -40,25 +39,40 @@ updates:
   # Note: cooldown not supported for docker ecosystem
   - package-ecosystem: docker
     directory: / # Dockerfile (build image)
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
     schedule:
       interval: daily
 
   - package-ecosystem: docker
     directory: /.github/fixtures/reconcile-test # Kubernetes deployment manifest
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
     schedule:
       interval: daily
 
   - package-ecosystem: docker
     directory: /pkg/io/config-manager/talos # Talos image (embedded in Go via go:embed)
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
     schedule:
       interval: daily
 
   - package-ecosystem: docker
     directory: /pkg/io/config-manager/k3d # K3s image (embedded in Go via go:embed)
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
     schedule:
       interval: daily
 
   - package-ecosystem: docker
     directory: /pkg/io/config-manager/kind # Kind node image (embedded in Go via go:embed)
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
     schedule:
       interval: daily
