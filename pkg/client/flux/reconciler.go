@@ -46,9 +46,6 @@ const (
 	// for the Flux controllers to become ready in slow CI environments.
 	apiAvailabilityTimeout      = 2 * time.Minute
 	apiAvailabilityPollInterval = 2 * time.Second
-
-	// HTTP status code for NotFound.
-	httpStatusNotFound = 404
 )
 
 // Reconciler handles Flux reconciliation operations.
@@ -297,15 +294,23 @@ func evaluateOCIRepositoryConditions(conditions []any) (bool, error) {
 }
 
 // isPermanentOCIError checks if an error indicates a permanent failure.
+// This distinguishes between OCI/artifact errors (permanent) and Kubernetes
+// resource NotFound errors (transient - the resource may not exist yet).
 func isPermanentOCIError(err error) bool {
 	if err == nil {
 		return false
 	}
 
+	// Kubernetes NotFound errors are transient - the OCIRepository may not
+	// have been created yet by the FluxInstance controller.
+	if apierrors.IsNotFound(err) {
+		return false
+	}
+
 	errMsg := err.Error()
 
+	// OCI-specific errors that indicate the artifact doesn't exist
 	return strings.Contains(errMsg, "manifest unknown") ||
-		strings.Contains(errMsg, "not found") ||
 		strings.Contains(errMsg, "does not exist")
 }
 
@@ -319,24 +324,6 @@ func isAPIDiscoveryError(errMsg string) bool {
 
 	// "no matches for kind" is a REST mapper error when the CRD isn't known yet
 	return strings.Contains(errMsg, "no matches for kind")
-}
-
-// isNotFoundAPIIssue checks if a NotFound error is due to API issues rather than a missing resource.
-func isNotFoundAPIIssue(err error) bool {
-	var statusErr *apierrors.StatusError
-	if !errors.As(err, &statusErr) {
-		return false
-	}
-
-	if statusErr.ErrStatus.Code != httpStatusNotFound {
-		return false
-	}
-
-	// Check if the reason indicates an API discovery issue rather than a missing resource
-	reason := statusErr.ErrStatus.Reason
-	// "NotFound" with message containing "could not find" typically means API not ready
-	return reason == metav1.StatusReasonNotFound &&
-		strings.Contains(statusErr.ErrStatus.Message, "could not find")
 }
 
 // isConnectionError checks if the error is a network connection error.
@@ -363,15 +350,18 @@ func isTransientAPIError(err error) bool {
 		return true
 	}
 
+	// NotFound is transient because the resource may not exist yet.
+	// The FluxInstance controller creates OCIRepository and Kustomization resources
+	// asynchronously, so they might not exist immediately after FluxInstance creation.
+	// The retry loop has a timeout, so if the resource truly doesn't exist, it will fail.
+	if apierrors.IsNotFound(err) {
+		return true
+	}
+
 	errMsg := err.Error()
 
 	// Check for API discovery errors
 	if isAPIDiscoveryError(errMsg) {
-		return true
-	}
-
-	// Check for NotFound errors that are actually API issues
-	if isNotFoundAPIIssue(err) {
 		return true
 	}
 
