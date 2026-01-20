@@ -254,6 +254,11 @@ The YAML frontmatter supports these fields:
       allowed:
         - "example.com"
         - "*.trusted-domain.com"
+        - "https://api.secure.com"        # Optional: protocol-specific filtering
+      blocked:
+        - "blocked-domain.com"
+        - "*.untrusted.com"
+        - python                          # Block ecosystem identifiers
       firewall: true                      # Optional: Enable AWF (Agent Workflow Firewall) for Copilot engine
     ```
 
@@ -1160,6 +1165,11 @@ network:
     - node            # Node.js/NPM ecosystem
     - containers      # Container registries
     - "api.custom.com" # Custom domain
+    - "https://secure.api.com" # Protocol-specific domain
+  blocked:
+    - "tracking.com"   # Block specific domains
+    - "*.ads.com"      # Block domain patterns
+    - ruby             # Block ecosystem identifiers
   firewall: true      # Enable AWF (Copilot engine only)
 
 # Or allow specific domains only
@@ -1181,6 +1191,8 @@ network: {}
 - Use ecosystem identifiers (`python`, `node`, `java`, etc.) for language-specific tools
 - When custom permissions are specified with `allowed:` list, deny-by-default policy is enforced
 - Supports exact domain matches and wildcard patterns (where `*` matches any characters, including nested subdomains)
+- **Protocol-specific filtering**: Prefix domains with `http://` or `https://` for protocol restrictions
+- **Domain blocklist**: Use `blocked:` field to explicitly deny domains or ecosystem identifiers
 - **Firewall support**: Copilot engine supports AWF (Agent Workflow Firewall) for domain-based access control
 - Claude engine uses hooks for enforcement; Codex support planned
 
@@ -1190,6 +1202,7 @@ network: {}
 2. **Ecosystem access**: `network: { allowed: [defaults, python, node, ...] }` (development tool ecosystems)
 3. **No network access**: `network: {}` (deny all)
 4. **Specific domains**: `network: { allowed: ["api.example.com", ...] }` (granular access control)
+5. **Block specific domains**: `network: { blocked: ["tracking.com", "*.ads.com", ...] }` (deny-list)
 
 **Available Ecosystem Identifiers:**
 
