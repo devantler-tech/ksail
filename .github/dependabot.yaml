@@ -52,3 +52,13 @@ updates:
     directory: /pkg/io/config-manager/talos # Talos image (embedded in Go via go:embed)
     schedule:
       interval: daily
+
+  - package-ecosystem: docker
+    directory: /pkg/io/config-manager/k3d # K3s image (embedded in Go via go:embed)
+    schedule:
+      interval: daily
+
+  - package-ecosystem: docker
+    directory: /pkg/io/config-manager/kind # Kind node image (embedded in Go via go:embed)
+    schedule:
+      interval: daily

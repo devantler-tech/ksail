@@ -10,6 +10,12 @@ import (
 	v1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 )
 
+// DefaultK3sImage is the default K3s container image.
+// This value is read from the Dockerfile in this package which is updated by Dependabot.
+//
+//nolint:gochecknoglobals // Exported constant initialized from embedded Dockerfile
+var DefaultK3sImage = k3sImage()
+
 // DefaultClusterName is the default K3d cluster name when none is specified.
 // This matches K3d's internal default naming convention.
 const DefaultClusterName = "k3d-default"
