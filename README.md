@@ -67,7 +67,7 @@ ksail cluster init \
   --name <cluster-name> \
   --distribution <Vanilla|K3s|Talos> \
   --cni <Default|Cilium|Calico> \
-  --csi <Default|LocalPathStorage> \
+  --csi <Default|Enabled|Disabled> \
   --metrics-server <Default|Enabled|Disabled> \
   --cert-manager <Enabled|Disabled> \
   --policy-engine <None|Kyverno|Gatekeeper> \

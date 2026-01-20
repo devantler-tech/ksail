@@ -46,9 +46,10 @@ spec:
       context: kind-kind
       timeout: 5m
     cni: Cilium
-    # CSI "Default" uses the distribution's built-in storage behavior:
+    # CSI "Default" uses the distribution × provider's default behavior:
     # - K3s: includes local-path-provisioner by default
-    # - Vanilla and Talos: no CSI installed; use LocalPathStorage if needed
+    # - Vanilla and Talos × Docker: no CSI installed; use Enabled if needed
+    # - Talos × Hetzner: Hetzner CSI driver by default
     csi: Default
     metricsServer: Enabled
     certManager: Enabled
@@ -183,8 +184,12 @@ Container Storage Interface to install. See [CSI](/concepts/#container-storage-i
 
 **Valid values:**
 
-- `Default` – Uses the distribution's built-in storage (K3s includes local-path-provisioner; Vanilla does not)
-- `LocalPathStorage` – Explicitly installs [local-path-provisioner](https://github.com/rancher/local-path-provisioner)
+- `Default` – Uses the distribution × provider's default behavior:
+  - K3s: includes local-path-provisioner
+  - Vanilla/Talos × Docker: no CSI
+  - Talos × Hetzner: Hetzner CSI driver
+- `Enabled` – Explicitly installs CSI driver (local-path-provisioner for local clusters, Hetzner CSI for Talos × Hetzner)
+- `Disabled` – Disables CSI installation (for K3s, this disables the default local-storage)
 
 #### metricsServer
 
