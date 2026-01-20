@@ -225,9 +225,27 @@ func BenchmarkClusterCreate(b *testing.B) {
     
     for _, dist := range distributions {
         b.Run(dist, func(b *testing.B) {
+            // Setup (outside the timer)
+            cfg := &ClusterConfig{
+                Distribution: dist,
+                Name:        "bench-cluster",
+            }
+            
             b.ResetTimer()
             for i := 0; i < b.N; i++ {
+                b.StopTimer()
+                // Per-iteration setup if needed
+                b.StartTimer()
+                
                 // Create cluster...
+                if err := createCluster(cfg); err != nil {
+                    b.Fatal(err)
+                }
+                
+                b.StopTimer()
+                // Cleanup after each iteration
+                _ = deleteCluster(cfg.Name)
+                b.StartTimer()
             }
         })
     }

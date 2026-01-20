@@ -1,5 +1,10 @@
 name: Daily Perf Improver Build Steps
-description: Validated build, test, and lint steps for performance engineering workflow
+description: |
+  Validated build, test, and lint steps for performance engineering workflow.
+  
+  Note: Test and lint steps log warnings if they fail but do not fail the action.
+  This allows the workflow to capture diagnostic output for analysis. Check the
+  build-steps.log file for detailed results.
 author: Daily Perf Improver
 
 runs:
@@ -43,7 +48,7 @@ runs:
         echo "=== Running Unit Tests ===" | tee -a build-steps.log
         test_start=$(date +%s)
         # Enable covdata (temp) see https://github.com/golang/go/issues/75031
-        go env -w GOTOOLCHAIN=go1.25.0+auto
+        go env -w GOTOOLCHAIN=go1.25.4+auto
         if go test -race -coverprofile=coverage.txt -covermode=atomic ./... 2>&1 | tee -a build-steps.log; then
           test_end=$(date +%s)
           test_duration=$((test_end - test_start))
@@ -64,11 +69,20 @@ runs:
         # Install golangci-lint if not available
         if ! command -v golangci-lint &> /dev/null; then
           echo "Installing golangci-lint..." | tee -a build-steps.log
-          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin
-          export PATH=$PATH:$(go env GOPATH)/bin
+          GOBIN="$(go env GOPATH)/bin"
+          mkdir -p "${GOBIN}"
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b "${GOBIN}"
+          export PATH="${PATH}:${GOBIN}"
         fi
 
-        if golangci-lint run --timeout=5m 2>&1 | tee -a build-steps.log; then
+        # Resolve golangci-lint binary path explicitly to avoid relying solely on PATH
+        if command -v golangci-lint &> /dev/null; then
+          LINT_BIN="$(command -v golangci-lint)"
+        else
+          LINT_BIN="$(go env GOPATH)/bin/golangci-lint"
+        fi
+        
+        if "${LINT_BIN}" run --timeout=5m 2>&1 | tee -a build-steps.log; then
           lint_end=$(date +%s)
           lint_duration=$((lint_end - lint_start))
           echo "✅ Linting passed in ${lint_duration}s" | tee -a build-steps.log
