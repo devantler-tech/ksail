@@ -16,6 +16,9 @@ https://github.com/devantler-tech/ksail/releases/download/
 # Part of templated code
 https://x-access-token/
 
+# GitHub Agentic Workflows documentation (LLM-optimized format)
+https://githubnext.github.io/gh-aw/llms-create-agentic-workflows.txt
+
 # Intermittent Network Errors
 http://host.docker.internal:8765/
 http://localhost:8765/
