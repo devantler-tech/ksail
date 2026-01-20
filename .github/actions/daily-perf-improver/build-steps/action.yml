@@ -1,12 +1,11 @@
 name: Daily Perf Improver Build Steps
 description: |
   Validated build, test, and lint steps for performance engineering workflow.
-  
+
   Note: Test and lint steps log warnings if they fail but do not fail the action.
   This allows the workflow to capture diagnostic output for analysis. Check the
   build-steps.log file for detailed results.
 author: Daily Perf Improver
-
 runs:
   using: composite
   steps:
@@ -81,7 +80,7 @@ runs:
         else
           LINT_BIN="$(go env GOPATH)/bin/golangci-lint"
         fi
-        
+
         if "${LINT_BIN}" run --timeout=5m 2>&1 | tee -a build-steps.log; then
           lint_end=$(date +%s)
           lint_duration=$((lint_end - lint_start))
