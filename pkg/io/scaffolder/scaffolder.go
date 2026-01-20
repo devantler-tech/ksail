@@ -685,11 +685,17 @@ func (s *Scaffolder) applyKindNodeCounts(kindConfig *v1alpha4.Cluster) {
 	nodes := make([]v1alpha4.Node, 0, controlPlanes+workers)
 
 	for range controlPlanes {
-		nodes = append(nodes, v1alpha4.Node{Role: v1alpha4.ControlPlaneRole})
+		nodes = append(nodes, v1alpha4.Node{
+			Role:  v1alpha4.ControlPlaneRole,
+			Image: kindconfigmanager.DefaultKindNodeImage,
+		})
 	}
 
 	for range workers {
-		nodes = append(nodes, v1alpha4.Node{Role: v1alpha4.WorkerRole})
+		nodes = append(nodes, v1alpha4.Node{
+			Role:  v1alpha4.WorkerRole,
+			Image: kindconfigmanager.DefaultKindNodeImage,
+		})
 	}
 
 	kindConfig.Nodes = nodes
@@ -711,7 +717,10 @@ func (s *Scaffolder) addMirrorMountsToKindConfig(kindConfig *v1alpha4.Cluster, o
 	}
 
 	if len(kindConfig.Nodes) == 0 {
-		kindConfig.Nodes = []v1alpha4.Node{{Role: v1alpha4.ControlPlaneRole}}
+		kindConfig.Nodes = []v1alpha4.Node{{
+			Role:  v1alpha4.ControlPlaneRole,
+			Image: kindconfigmanager.DefaultKindNodeImage,
+		}}
 	}
 
 	for _, spec := range specs {

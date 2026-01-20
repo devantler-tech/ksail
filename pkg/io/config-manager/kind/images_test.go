@@ -31,12 +31,3 @@ func TestKindNodeImage(t *testing.T) {
 		t.Errorf("DefaultKindNodeImage should be kindest/node image, got: %s", image)
 	}
 }
-
-func TestDefaultKindNodeImage_NotEmpty(t *testing.T) {
-	t.Parallel()
-
-	// Verify the image is set (proves Dockerfile embedding works)
-	if kind.DefaultKindNodeImage == "" {
-		t.Error("DefaultKindNodeImage was not set - Dockerfile may not be embedded")
-	}
-}
