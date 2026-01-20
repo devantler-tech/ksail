@@ -25,9 +25,9 @@ Available Commands:
   workload    Manage workload operations
 
 Flags:
-  -h, --help      help for ksail
-      --timing    Show per-activity timing output
-  -v, --version   version for ksail
+      --benchmark   Show per-activity benchmark output
+  -h, --help        help for ksail
+  -v, --version     version for ksail
 
 Use "ksail [command] --help" for more information about a command.
 
@@ -48,9 +48,9 @@ Available Commands:
   workload    Manage workload operations
 
 Flags:
-  -h, --help      help for ksail
-      --timing    Show per-activity timing output
-  -v, --version   version for ksail
+      --benchmark   Show per-activity benchmark output
+  -h, --help        help for ksail
+  -v, --version     version for ksail
 
 Use "ksail [command] --help" for more information about a command.
 

@@ -86,27 +86,27 @@ func TestExecuteShowsVersion(t *testing.T) {
 	snaps.MatchSnapshot(t, out.String())
 }
 
-func TestNewRootCmdTimingFlagDefaultFalse(t *testing.T) {
+func TestNewRootCmdBenchmarkFlagDefaultFalse(t *testing.T) {
 	t.Parallel()
 
 	root := cmd.NewRootCmd("test", "test", "test")
 
-	flag := root.PersistentFlags().Lookup(helpers.TimingFlagName)
+	flag := root.PersistentFlags().Lookup(helpers.BenchmarkFlagName)
 	if flag == nil {
-		t.Fatalf("expected persistent flag %q to exist", helpers.TimingFlagName)
+		t.Fatalf("expected persistent flag %q to exist", helpers.BenchmarkFlagName)
 	}
 
-	got, err := root.PersistentFlags().GetBool(helpers.TimingFlagName)
+	got, err := root.PersistentFlags().GetBool(helpers.BenchmarkFlagName)
 	if err != nil {
-		t.Fatalf("expected to read %q flag: %v", helpers.TimingFlagName, err)
+		t.Fatalf("expected to read %q flag: %v", helpers.BenchmarkFlagName, err)
 	}
 
 	if got {
-		t.Fatalf("expected %q to default to false", helpers.TimingFlagName)
+		t.Fatalf("expected %q to default to false", helpers.BenchmarkFlagName)
 	}
 }
 
-func TestDefaultRunDoesNotPrintTimingOutput(t *testing.T) {
+func TestDefaultRunDoesNotPrintBenchmarkOutput(t *testing.T) {
 	t.Parallel()
 
 	var out bytes.Buffer
@@ -114,26 +114,26 @@ func TestDefaultRunDoesNotPrintTimingOutput(t *testing.T) {
 	root := setupRootWithBuffer(&out)
 
 	probe := &cobra.Command{
-		Use:  "timing-probe",
-		RunE: timingProbeRunE(notify.SuccessType, "probe complete"),
+		Use:  "benchmark-probe",
+		RunE: benchmarkProbeRunE(notify.SuccessType, "probe complete"),
 	}
 
 	root.AddCommand(probe)
-	root.SetArgs([]string{"timing-probe"})
+	root.SetArgs([]string{"benchmark-probe"})
 
 	_ = root.Execute()
 
 	got := out.String()
 	if strings.Contains(got, "⏲") {
-		t.Fatalf("expected no timing glyph in default output, got %q", got)
+		t.Fatalf("expected no benchmark glyph in default output, got %q", got)
 	}
 
 	if strings.Contains(got, "[stage:") {
-		t.Fatalf("expected no timing bracket output in default output, got %q", got)
+		t.Fatalf("expected no benchmark bracket output in default output, got %q", got)
 	}
 }
 
-func TestTimingFlagEnablesTimingOutput(t *testing.T) {
+func TestBenchmarkFlagEnablesBenchmarkOutput(t *testing.T) {
 	t.Parallel()
 
 	var out bytes.Buffer
@@ -141,27 +141,27 @@ func TestTimingFlagEnablesTimingOutput(t *testing.T) {
 	root := setupRootWithBuffer(&out)
 
 	probe := &cobra.Command{
-		Use:          "timing-probe",
+		Use:          "benchmark-probe",
 		SilenceUsage: true,
-		RunE:         timingProbeRunE(notify.SuccessType, "probe complete"),
+		RunE:         benchmarkProbeRunE(notify.SuccessType, "probe complete"),
 	}
 
 	root.AddCommand(probe)
-	root.SetArgs([]string{"--timing", "timing-probe"})
+	root.SetArgs([]string{"--benchmark", "benchmark-probe"})
 
 	_ = root.Execute()
 
 	got := out.String()
 	if !strings.Contains(got, "⏲ current:") {
-		t.Fatalf("expected timing block when --timing enabled, got %q", got)
+		t.Fatalf("expected benchmark block when --benchmark enabled, got %q", got)
 	}
 
 	if !strings.Contains(got, "total:") {
-		t.Fatalf("expected total timing line when --timing enabled, got %q", got)
+		t.Fatalf("expected total benchmark line when --benchmark enabled, got %q", got)
 	}
 }
 
-func TestTimingDoesNotPrintOnError(t *testing.T) {
+func TestBenchmarkDoesNotPrintOnError(t *testing.T) {
 	t.Parallel()
 
 	var out bytes.Buffer
@@ -169,19 +169,19 @@ func TestTimingDoesNotPrintOnError(t *testing.T) {
 	root := setupRootWithBuffer(&out)
 
 	failing := &cobra.Command{
-		Use:          "timing-fail",
+		Use:          "benchmark-fail",
 		SilenceUsage: true,
-		RunE:         timingProbeRunE(notify.ErrorType, "boom"),
+		RunE:         benchmarkProbeRunE(notify.ErrorType, "boom"),
 	}
 
 	root.AddCommand(failing)
-	root.SetArgs([]string{"--timing", "timing-fail"})
+	root.SetArgs([]string{"--benchmark", "benchmark-fail"})
 
 	_ = root.Execute()
 
 	got := out.String()
 	if strings.Contains(got, "⏲") {
-		t.Fatalf("expected no timing output on errors, got %q", got)
+		t.Fatalf("expected no benchmark output on errors, got %q", got)
 	}
 }
 
@@ -202,10 +202,10 @@ func setupRootWithBuffer(out *bytes.Buffer) *cobra.Command {
 	return root
 }
 
-// timingProbeRunE creates a RunE function that simulates timing operations for testing.
+// benchmarkProbeRunE creates a RunE function that simulates benchmark operations for testing.
 // It takes a message type and content, and returns a function that can be used as a Cobra RunE.
 // When msgType is notify.ErrorType, the returned function will return errRootTest.
-func timingProbeRunE(
+func benchmarkProbeRunE(
 	msgType notify.MessageType,
 	content string,
 ) func(*cobra.Command, []string) error {
