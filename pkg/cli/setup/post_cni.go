@@ -101,12 +101,24 @@ func GetComponentRequirements(clusterCfg *v1alpha1.Cluster) ComponentRequirement
 	return ComponentRequirements{
 		NeedsMetricsServer:      needsMetricsServer,
 		NeedsKubeletCSRApprover: needsKubeletCSRApprover,
-		NeedsCSI:                clusterCfg.Spec.Cluster.CSI == v1alpha1.CSILocalPathStorage,
+		NeedsCSI:                NeedsCSIInstall(clusterCfg),
 		NeedsCertManager:        clusterCfg.Spec.Cluster.CertManager == v1alpha1.CertManagerEnabled,
 		NeedsPolicyEngine:       clusterCfg.Spec.Cluster.PolicyEngine != v1alpha1.PolicyEngineNone,
 		NeedsArgoCD:             clusterCfg.Spec.Cluster.GitOpsEngine == v1alpha1.GitOpsEngineArgoCD,
 		NeedsFlux:               clusterCfg.Spec.Cluster.GitOpsEngine == v1alpha1.GitOpsEngineFlux,
 	}
+}
+
+// NeedsCSIInstall determines if CSI needs to be installed.
+// Returns true only when CSI is Enabled AND the distribution doesn't provide it by default.
+// When CSI is Default, we don't install (rely on distribution's default behavior).
+func NeedsCSIInstall(clusterCfg *v1alpha1.Cluster) bool {
+	if clusterCfg.Spec.Cluster.CSI != v1alpha1.CSIEnabled {
+		return false
+	}
+
+	// Don't install if distribution × provider provides it by default
+	return !clusterCfg.Spec.Cluster.Distribution.ProvidesCSIByDefault(clusterCfg.Spec.Cluster.Provider)
 }
 
 // InstallPostCNIComponents installs all post-CNI components in parallel.

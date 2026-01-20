@@ -21,7 +21,8 @@ import (
 )
 
 const (
-	k3sDisableMetricsServerFlag = "--disable=metrics-server"
+	k3sDisableMetricsServerFlag  = "--disable=metrics-server"
+	k3sDisableLocalStorageFlag   = "--disable=local-storage"
 )
 
 // newCreateLifecycleConfig creates the lifecycle configuration for cluster creation.
@@ -126,6 +127,7 @@ func handleCreateRunE(
 	}
 
 	setupK3dMetricsServer(ctx.ClusterCfg, ctx.K3dConfig)
+	setupK3dCSI(ctx.ClusterCfg, ctx.K3dConfig)
 
 	clusterProvisionerFactoryMu.RLock()
 
@@ -350,6 +352,30 @@ func setupK3dMetricsServer(clusterCfg *v1alpha1.Cluster, k3dConfig *v1alpha5.Sim
 		k3dConfig.Options.K3sOptions.ExtraArgs,
 		v1alpha5.K3sArgWithNodeFilters{
 			Arg:         k3sDisableMetricsServerFlag,
+			NodeFilters: []string{"server:*"},
+		},
+	)
+}
+
+func setupK3dCSI(clusterCfg *v1alpha1.Cluster, k3dConfig *v1alpha5.SimpleConfig) {
+	if clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionK3s || k3dConfig == nil {
+		return
+	}
+
+	if clusterCfg.Spec.Cluster.CSI != v1alpha1.CSIDisabled {
+		return
+	}
+
+	for _, arg := range k3dConfig.Options.K3sOptions.ExtraArgs {
+		if arg.Arg == k3sDisableLocalStorageFlag {
+			return
+		}
+	}
+
+	k3dConfig.Options.K3sOptions.ExtraArgs = append(
+		k3dConfig.Options.K3sOptions.ExtraArgs,
+		v1alpha5.K3sArgWithNodeFilters{
+			Arg:         k3sDisableLocalStorageFlag,
 			NodeFilters: []string{"server:*"},
 		},
 	)

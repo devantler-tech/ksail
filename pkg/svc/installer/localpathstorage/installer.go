@@ -19,7 +19,7 @@ const (
 		localPathProvisionerVersion + "/deploy/local-path-storage.yaml"
 )
 
-// LocalPathStorageInstaller installs local-path-provisioner on Kind clusters.
+// LocalPathStorageInstaller installs local-path-provisioner on Kind and Talos clusters.
 type LocalPathStorageInstaller struct {
 	kubeconfig   string
 	context      string
@@ -48,8 +48,8 @@ func (l *LocalPathStorageInstaller) Install(ctx context.Context) error {
 		return nil
 	}
 
-	// For Kind, install local-path-provisioner
-	if l.distribution == v1alpha1.DistributionVanilla {
+	// For Kind and Talos, install local-path-provisioner
+	if l.distribution == v1alpha1.DistributionVanilla || l.distribution == v1alpha1.DistributionTalos {
 		return l.installLocalPathProvisioner(ctx)
 	}
 
