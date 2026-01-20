@@ -282,18 +282,18 @@ func deleteCluster(name string) error {
 
 ```go
 // ❌ Multiple API calls
-func getServerInfo(serverID int) (*ServerInfo, error) {
-    server, _ := hcloud.Server.GetByID(ctx, serverID)
-    ip, _ := hcloud.FloatingIP.GetByID(ctx, server.PrimaryIP.ID)
-    network, _ := hcloud.Network.GetByID(ctx, server.PrivateNet[0].Network.ID)
+func getServerInfo(client *hcloud.Client, serverID int64) (*ServerInfo, error) {
+    server, _, _ := client.Server.GetByID(ctx, serverID)
+    ip, _, _ := client.FloatingIP.GetByID(ctx, server.PrimaryIP.ID)
+    network, _, _ := client.Network.GetByID(ctx, server.PrivateNet[0].Network.ID)
     // Multiple round trips to API
 }
 
 // ✅ Batch with ListOpts
-func getAllServerInfo() ([]*ServerInfo, error) {
-    servers, _ := hcloud.Server.All(ctx)
+func getAllServerInfo(client *hcloud.Client) ([]*hcloud.Server, error) {
+    servers, err := client.Server.All(ctx)
     // Single API call returns all data
-    return servers, nil
+    return servers, err
 }
 ```
 
@@ -335,7 +335,7 @@ func createHetznerCluster(cfg *ClusterConfig) error {
 
 ```go
 // Batch cleanup to minimize API calls
-func cleanupHetznerResources(prefix string) error {
+func cleanupHetznerResources(client *hcloud.Client, prefix string) error {
     // Get all resources in parallel
     var wg sync.WaitGroup
     var servers []*hcloud.Server
@@ -345,20 +345,26 @@ func cleanupHetznerResources(prefix string) error {
     wg.Add(3)
     go func() {
         defer wg.Done()
-        servers, _ = hcloud.Server.AllWithOpts(ctx, hcloud.ServerListOpts{
-            LabelSelector: fmt.Sprintf("ksail.cluster=%s", prefix),
+        servers, _ = client.Server.AllWithOpts(ctx, hcloud.ServerListOpts{
+            ListOpts: hcloud.ListOpts{
+                LabelSelector: fmt.Sprintf("ksail.cluster=%s", prefix),
+            },
         })
     }()
     go func() {
         defer wg.Done()
-        volumes, _ = hcloud.Volume.AllWithOpts(ctx, hcloud.VolumeListOpts{
-            LabelSelector: fmt.Sprintf("ksail.cluster=%s", prefix),
+        volumes, _ = client.Volume.AllWithOpts(ctx, hcloud.VolumeListOpts{
+            ListOpts: hcloud.ListOpts{
+                LabelSelector: fmt.Sprintf("ksail.cluster=%s", prefix),
+            },
         })
     }()
     go func() {
         defer wg.Done()
-        networks, _ = hcloud.Network.AllWithOpts(ctx, hcloud.NetworkListOpts{
-            LabelSelector: fmt.Sprintf("ksail.cluster=%s", prefix),
+        networks, _ = client.Network.AllWithOpts(ctx, hcloud.NetworkListOpts{
+            ListOpts: hcloud.ListOpts{
+                LabelSelector: fmt.Sprintf("ksail.cluster=%s", prefix),
+            },
         })
     }()
     wg.Wait()

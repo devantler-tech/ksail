@@ -103,7 +103,7 @@ go mod why -m github.com/heavy/dependency
 
 ```dockerfile
 # Multi-stage build with cache mounts
-FROM golang:1.25 AS builder
+FROM golang:1.25.4 AS builder
 
 WORKDIR /build
 COPY go.mod go.sum ./
