@@ -294,15 +294,23 @@ func evaluateOCIRepositoryConditions(conditions []any) (bool, error) {
 }
 
 // isPermanentOCIError checks if an error indicates a permanent failure.
+// This distinguishes between OCI/artifact errors (permanent) and Kubernetes
+// resource NotFound errors (transient - the resource may not exist yet).
 func isPermanentOCIError(err error) bool {
 	if err == nil {
 		return false
 	}
 
+	// Kubernetes NotFound errors are transient - the OCIRepository may not
+	// have been created yet by the FluxInstance controller.
+	if apierrors.IsNotFound(err) {
+		return false
+	}
+
 	errMsg := err.Error()
 
+	// OCI-specific errors that indicate the artifact doesn't exist
 	return strings.Contains(errMsg, "manifest unknown") ||
-		strings.Contains(errMsg, "not found") ||
 		strings.Contains(errMsg, "does not exist")
 }
 
