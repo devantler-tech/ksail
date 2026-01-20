@@ -46,9 +46,6 @@ const (
 	// for the Flux controllers to become ready in slow CI environments.
 	apiAvailabilityTimeout      = 2 * time.Minute
 	apiAvailabilityPollInterval = 2 * time.Second
-
-	// HTTP status code for NotFound.
-	httpStatusNotFound = 404
 )
 
 // Reconciler handles Flux reconciliation operations.
@@ -321,24 +318,6 @@ func isAPIDiscoveryError(errMsg string) bool {
 	return strings.Contains(errMsg, "no matches for kind")
 }
 
-// isNotFoundAPIIssue checks if a NotFound error is due to API issues rather than a missing resource.
-func isNotFoundAPIIssue(err error) bool {
-	var statusErr *apierrors.StatusError
-	if !errors.As(err, &statusErr) {
-		return false
-	}
-
-	if statusErr.ErrStatus.Code != httpStatusNotFound {
-		return false
-	}
-
-	// Check if the reason indicates an API discovery issue rather than a missing resource
-	reason := statusErr.ErrStatus.Reason
-	// "NotFound" with message containing "could not find" typically means API not ready
-	return reason == metav1.StatusReasonNotFound &&
-		strings.Contains(statusErr.ErrStatus.Message, "could not find")
-}
-
 // isConnectionError checks if the error is a network connection error.
 func isConnectionError(errMsg string) bool {
 	return strings.Contains(errMsg, "connection refused") ||
@@ -363,15 +342,18 @@ func isTransientAPIError(err error) bool {
 		return true
 	}
 
+	// NotFound is transient because the resource may not exist yet.
+	// The FluxInstance controller creates OCIRepository and Kustomization resources
+	// asynchronously, so they might not exist immediately after FluxInstance creation.
+	// The retry loop has a timeout, so if the resource truly doesn't exist, it will fail.
+	if apierrors.IsNotFound(err) {
+		return true
+	}
+
 	errMsg := err.Error()
 
 	// Check for API discovery errors
 	if isAPIDiscoveryError(errMsg) {
-		return true
-	}
-
-	// Check for NotFound errors that are actually API issues
-	if isNotFoundAPIIssue(err) {
 		return true
 	}
 
