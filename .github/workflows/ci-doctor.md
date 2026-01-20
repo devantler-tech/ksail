@@ -7,7 +7,7 @@ description: |
 
 on:
   workflow_run:
-    workflows: 
+    workflows:
       - "CI - KSail"
       - "CD - Go"
       - "Test - Pages"
@@ -40,7 +40,7 @@ tools:
   web-fetch:
   web-search:
 
-timeout-minutes: 10
+timeout-minutes: 60
 
 source: githubnext/agentics/workflows/ci-doctor.md@c5da0cdbfae2a3cba74f330ca34424a4aea929f5
 ---
