@@ -97,7 +97,7 @@ Flags:
       --wait                            If true, wait for resources to be gone before returning. This waits for finalizers.
 
 Global Flags:
-      --timing   Show per-activity timing output
+      --benchmark   Show per-activity benchmark output
 
 Use "ksail workload apply [command] --help" for more information about a command.
 
@@ -161,7 +161,7 @@ Flags:
       --windows-line-endings           Only relevant if --edit=true. Defaults to the line ending native to your platform.
 
 Global Flags:
-      --timing   Show per-activity timing output
+      --benchmark   Show per-activity benchmark output
 
 Use "ksail workload create [command] --help" for more information about a command.
 
@@ -201,7 +201,7 @@ Flags:
       --wait                      enable health checking
 
 Global Flags:
-      --timing   Show per-activity timing output
+      --benchmark   Show per-activity benchmark output
 
 ---
 
@@ -220,7 +220,7 @@ Flags:
   -h, --help   help for source
 
 Global Flags:
-      --timing   Show per-activity timing output
+      --benchmark   Show per-activity benchmark output
 
 Use "ksail workload create source [command] --help" for more information about a command.
 
@@ -285,7 +285,7 @@ Flags:
       --wait                            If true, wait for resources to be gone before returning. This waits for finalizers. (default true)
 
 Global Flags:
-      --timing   Show per-activity timing output
+      --benchmark   Show per-activity benchmark output
 
 ---
 
@@ -326,7 +326,7 @@ Flags:
       --show-events        If true, display events related to the described object. (default true)
 
 Global Flags:
-      --timing   Show per-activity timing output
+      --benchmark   Show per-activity benchmark output
 
 ---
 
@@ -351,7 +351,7 @@ Flags:
   -h, --help            help for edit
 
 Global Flags:
-      --timing   Show per-activity timing output
+      --benchmark   Show per-activity benchmark output
 
 ---
 
@@ -395,7 +395,7 @@ Flags:
   -t, --tty                            Stdin is a TTY
 
 Global Flags:
-      --timing   Show per-activity timing output
+      --benchmark   Show per-activity benchmark output
 
 ---
 
@@ -428,7 +428,7 @@ Flags:
       --recursive            Print the fields of fields (Currently only 1 level deep)
 
 Global Flags:
-      --timing   Show per-activity timing output
+      --benchmark   Show per-activity benchmark output
 
 ---
 
@@ -487,7 +487,7 @@ Flags:
       --type string                    Type for this service: ClusterIP, NodePort, LoadBalancer, or ExternalName. Default is 'ClusterIP'.
 
 Global Flags:
-      --timing   Show per-activity timing output
+      --benchmark   Show per-activity benchmark output
 
 ---
 
@@ -567,7 +567,7 @@ Flags:
       --watch-only                    Watch for changes to the requested object(s), without listing/getting first.
 
 Global Flags:
-      --timing   Show per-activity timing output
+      --benchmark   Show per-activity benchmark output
 
 ---
 
@@ -585,7 +585,7 @@ Flags:
       --wait               wait until resources are ready
 
 Global Flags:
-      --timing   Show per-activity timing output
+      --benchmark   Show per-activity benchmark output
 
 ---
 
@@ -670,7 +670,7 @@ Flags:
       --timestamps                         Include timestamps on each line in the log output
 
 Global Flags:
-      --timing   Show per-activity timing output
+      --benchmark   Show per-activity benchmark output
 
 ---
 
@@ -707,7 +707,7 @@ Flags:
   -h, --help   help for workload
 
 Global Flags:
-      --timing   Show per-activity timing output
+      --benchmark   Show per-activity benchmark output
 
 Use "ksail workload [command] --help" for more information about a command.
 
@@ -752,7 +752,7 @@ Flags:
       --validate          Validate manifests before pushing
 
 Global Flags:
-      --timing   Show per-activity timing output
+      --benchmark   Show per-activity benchmark output
 
 ---
 
@@ -767,7 +767,7 @@ Flags:
       --timeout duration   timeout for waiting for reconciliation to complete (overrides config timeout)
 
 Global Flags:
-      --timing   Show per-activity timing output
+      --benchmark   Show per-activity benchmark output
 
 ---
 
@@ -803,7 +803,7 @@ Flags:
   -h, --help   help for rollout
 
 Global Flags:
-      --timing   Show per-activity timing output
+      --benchmark   Show per-activity benchmark output
 
 Use "ksail workload rollout [command] --help" for more information about a command.
 
@@ -849,7 +849,7 @@ Flags:
       --timeout duration               The length of time to wait before giving up on a scale operation, zero means don't wait. Any other values should contain a corresponding time unit (e.g. 1s, 2m, 3h).
 
 Global Flags:
-      --timing   Show per-activity timing output
+      --benchmark   Show per-activity benchmark output
 
 ---
 
@@ -900,6 +900,6 @@ Flags:
       --timeout duration              The length of time to wait before giving up. Zero means check once and don't wait, negative means wait for a week. (default 30s)
 
 Global Flags:
-      --timing   Show per-activity timing output
+      --benchmark   Show per-activity benchmark output
 
 ---
