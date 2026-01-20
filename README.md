@@ -55,17 +55,7 @@ The supported distributions (x-axis) run on different infrastructure providers (
 
 ### Installation
 
-#### Homebrew
-
-```bash
-brew install --cask devantler-tech/tap/ksail
-```
-
-#### Go install
-
-```bash
-go install github.com/devantler-tech/ksail/v5@latest
-```
+See the [Installation Guide](https://ksail.devantler.tech/installation/) for detailed installation instructions.
 
 ## Usage
 
