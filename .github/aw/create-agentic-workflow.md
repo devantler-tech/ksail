@@ -67,7 +67,7 @@ You love to use emojis to make the conversation more engaging.
 ## Learning from Reference Materials
 
 Before creating workflows, read the Peli's Agent Factory documentation:
-- Fetch: https://githubnext.github.io/gh-aw/llms-create-agentic-workflows.txt
+- Fetch: https://raw.githubusercontent.com/githubnext/gh-aw/refs/heads/main/.github/aw/create-agentic-workflow.md
 
 This llms.txt file contains workflow patterns, best practices, safe outputs, and permissions models.
 
@@ -116,21 +116,21 @@ DO NOT ask all these questions at once; instead, engage in a back-and-forth conv
      - `gh aw mcp inspect` (and flags like `--server`, `--tool`) to analyze configured MCP servers and tool availability.
 
    ### Custom Safe Output Jobs (for new safe outputs)
-   
+
    ⚠️ **IMPORTANT**: When the task requires a **new safe output** (e.g., sending email via custom service, posting to Slack/Discord, calling custom APIs), you **MUST** guide the user to create a **custom safe output job** under `safe-outputs.jobs:` instead of using `post-steps:`.
-   
+
    **When to use custom safe output jobs:**
    - Sending notifications to external services (email, Slack, Discord, Teams, PagerDuty)
    - Creating/updating records in third-party systems (Notion, Jira, databases)
    - Triggering deployments or webhooks
    - Any write operation to external services based on AI agent output
-   
+
    **How to guide the user:**
    1. Explain that custom safe output jobs execute AFTER the AI agent completes and can access the agent's output
    2. Show them the structure under `safe-outputs.jobs:`
    3. Reference the custom safe outputs documentation at `.github/aw/github-agentic-workflows.md` or the guide
    4. Provide example configuration for their specific use case (e.g., email, Slack)
-   
+
    **DO NOT use `post-steps:` for these scenarios.** `post-steps:` are for cleanup/logging tasks only, NOT for custom write operations triggered by the agent.
 
    ### Correct tool snippets (reference)
@@ -141,8 +141,8 @@ DO NOT ask all these questions at once; instead, engage in a back-and-forth conv
      github:
        toolsets: [default]
    ```
-   
-   ⚠️ **IMPORTANT**: 
+
+   ⚠️ **IMPORTANT**:
    - **Always use `toolsets:` for GitHub tools** - Use `toolsets: [default]` instead of manually listing individual tools.
    - **Never recommend GitHub mutation tools** like `create_issue`, `add_issue_comment`, `update_issue`, etc.
    - **Always use `safe-outputs` instead** for any GitHub write operations (creating issues, adding comments, etc.)
@@ -153,8 +153,8 @@ DO NOT ask all these questions at once; instead, engage in a back-and-forth conv
    tools:
      serena: ["go"]  # Update with your programming language (detect from repo)
    ```
-   
-   ⚠️ **IMPORTANT - Default Tools**: 
+
+   ⚠️ **IMPORTANT - Default Tools**:
    - **`edit` and `bash` are enabled by default** when sandboxing is active (no need to add explicitly)
    - `bash` defaults to `*` (all commands) when sandboxing is active
    - Only specify `bash:` with specific patterns if you need to restrict commands beyond the secure defaults
