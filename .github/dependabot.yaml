@@ -10,9 +10,6 @@ updates:
       default-days: 7
       semver-major-days: 14
     groups:
-      talos:
-        patterns:
-          - "github.com/siderolabs/*"
       kubernetes:
         patterns:
           - "k8s.io/*"
