@@ -354,13 +354,17 @@ func cleanupHetznerResources(client *hcloud.Client, prefix string) error {
     go func() {
         defer wg.Done()
         volumes, _ = client.Volume.AllWithOpts(ctx, hcloud.VolumeListOpts{
-            LabelSelector: fmt.Sprintf("ksail.cluster=%s", prefix),
+            ListOpts: hcloud.ListOpts{
+                LabelSelector: fmt.Sprintf("ksail.cluster=%s", prefix),
+            },
         })
     }()
     go func() {
         defer wg.Done()
-        networks, _ = hcloud.Network.AllWithOpts(ctx, hcloud.NetworkListOpts{
-            LabelSelector: fmt.Sprintf("ksail.cluster=%s", prefix),
+        networks, _ = client.Network.AllWithOpts(ctx, hcloud.NetworkListOpts{
+            ListOpts: hcloud.ListOpts{
+                LabelSelector: fmt.Sprintf("ksail.cluster=%s", prefix),
+            },
         })
     }()
     wg.Wait()

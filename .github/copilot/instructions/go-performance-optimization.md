@@ -245,7 +245,6 @@ func BenchmarkClusterCreate(b *testing.B) {
                 b.StopTimer()
                 // Cleanup after each iteration
                 _ = deleteCluster(cfg.Name)
-                b.StartTimer()
             }
         })
     }
