@@ -30,6 +30,11 @@
       "version": "v8.0.0",
       "sha": "ed597411d8f924073f98dfc5c65a23a2325f34cd"
     },
+    "actions/setup-go@v6": {
+      "repo": "actions/setup-go",
+      "version": "v6",
+      "sha": "7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5"
+    },
     "actions/upload-artifact@v6.0.0": {
       "repo": "actions/upload-artifact",
       "version": "v6.0.0",
