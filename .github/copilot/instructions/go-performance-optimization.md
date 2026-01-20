@@ -5,6 +5,7 @@ This guide covers performance optimization techniques for KSail's Go codebase, f
 ## Quick Reference
 
 ### Benchmarking
+
 ```bash
 # Run all benchmarks
 go test -bench=. -benchmem ./...
@@ -26,6 +27,7 @@ benchstat before.txt after.txt
 ```
 
 ### Profiling
+
 ```bash
 # CPU profiling
 go test -cpuprofile=cpu.prof ./...
@@ -48,6 +50,7 @@ go tool pprof cpu.prof
 ### 1. Algorithm and Data Structure Optimization
 
 **Hot Paths to Profile:**
+
 - Cluster provisioning (Kind, K3d, Talos)
 - YAML parsing and validation
 - Kubectl/Helm operations
@@ -55,6 +58,7 @@ go tool pprof cpu.prof
 - Manifest processing pipelines
 
 **Common Patterns:**
+
 ```go
 // ❌ Inefficient: Multiple allocations
 func processManifests(files []string) []Manifest {
@@ -82,6 +86,7 @@ func processManifests(files []string) []Manifest {
 ### 2. Memory Optimization
 
 **Allocation Reduction:**
+
 ```go
 // Use sync.Pool for frequently allocated objects
 var bufferPool = sync.Pool{
@@ -101,6 +106,7 @@ func processLargeData() {
 ```
 
 **String Optimization:**
+
 ```go
 // ❌ Inefficient: Multiple string concatenations
 func buildCommand(parts []string) string {
@@ -128,6 +134,7 @@ func buildCommand(parts []string) string {
 ### 3. Concurrency Optimization
 
 **Parallel Processing:**
+
 ```go
 // Process multiple clusters/workloads in parallel
 func applyWorkloads(workloads []Workload) error {
@@ -165,6 +172,7 @@ func applyWorkloads(workloads []Workload) error {
 ### 4. I/O Optimization
 
 **Docker API Optimization:**
+
 ```go
 // Batch Docker API calls where possible
 // Use connection pooling
@@ -187,6 +195,7 @@ list, _ := dockerClient.ContainerList(ctx, container.ListOptions{
 ## Writing Benchmarks
 
 ### Basic Benchmark
+
 ```go
 func BenchmarkYAMLParse(b *testing.B) {
     data := []byte(`apiVersion: v1
@@ -209,6 +218,7 @@ spec:
 ```
 
 ### Benchmark with Sub-benchmarks
+
 ```go
 func BenchmarkClusterCreate(b *testing.B) {
     distributions := []string{"Vanilla", "K3s", "Talos"}
@@ -227,6 +237,7 @@ func BenchmarkClusterCreate(b *testing.B) {
 ## Measurement Strategy
 
 ### 1. Establish Baselines
+
 ```bash
 # Create baseline file
 go test -bench=. -benchmem ./... > baseline.txt
@@ -239,6 +250,7 @@ benchstat baseline.txt optimized.txt
 ```
 
 ### 2. Profile Before Optimizing
+
 ```bash
 # Always profile to identify real bottlenecks
 go test -bench=BenchmarkSlow -cpuprofile=cpu.prof
@@ -246,6 +258,7 @@ go tool pprof cpu.prof
 ```
 
 ### 3. Test with Realistic Data
+
 - Use real-world cluster sizes
 - Test with typical manifest counts
 - Simulate network latency for remote APIs
@@ -254,15 +267,19 @@ go tool pprof cpu.prof
 ## Common Anti-Patterns to Avoid
 
 ### ❌ Premature Optimization
+
 Don't optimize without measurement. Profile first, then optimize hot paths.
 
 ### ❌ Over-Optimization
+
 Don't sacrifice readability for micro-optimizations unless profiling shows significant impact.
 
 ### ❌ Ignoring GC Pressure
+
 Watch allocation rates. High allocation = more GC pauses.
 
 ### ❌ Unbounded Concurrency
+
 Always limit concurrent operations to prevent resource exhaustion.
 
 ## Performance Checklist
@@ -281,12 +298,14 @@ Always limit concurrent operations to prevent resource exhaustion.
 ## Success Metrics
 
 **Target Improvements:**
+
 - Cluster creation time: -20% from baseline
 - Memory allocations in hot paths: -30% from baseline
 - Unit test suite: <30s total runtime
 - Binary startup time: <100ms
 
 **Measurement:**
+
 - Use `benchstat` for statistical comparison
 - Run benchmarks 5+ times for reliability
 - Report both time and memory metrics

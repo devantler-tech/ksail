@@ -60,14 +60,14 @@ runs:
       run: |
         echo "=== Running golangci-lint ===" | tee -a build-steps.log
         lint_start=$(date +%s)
-        
+
         # Install golangci-lint if not available
         if ! command -v golangci-lint &> /dev/null; then
           echo "Installing golangci-lint..." | tee -a build-steps.log
           curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin
           export PATH=$PATH:$(go env GOPATH)/bin
         fi
-        
+
         if golangci-lint run --timeout=5m 2>&1 | tee -a build-steps.log; then
           lint_end=$(date +%s)
           lint_duration=$((lint_end - lint_start))
@@ -82,7 +82,7 @@ runs:
       run: |
         echo "=== Building Documentation ===" | tee -a build-steps.log
         docs_start=$(date +%s)
-        
+
         # Check if Node.js is available
         if ! command -v node &> /dev/null; then
           echo "⚠️ Node.js not found - skipping documentation build" | tee -a build-steps.log
@@ -113,7 +113,7 @@ runs:
         echo "Completed: $(date -u +"%Y-%m-%d %H:%M:%S UTC")" | tee -a build-steps.log
         echo "" | tee -a build-steps.log
         echo "Build log saved to: build-steps.log" | tee -a build-steps.log
-        
+
         # Show file tree of key directories for reference
         echo "" | tee -a build-steps.log
         echo "Key directories:" | tee -a build-steps.log

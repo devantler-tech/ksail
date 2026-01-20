@@ -5,6 +5,7 @@ This guide covers performance optimization for cluster provisioning, workload ma
 ## Quick Performance Testing
 
 ### Cluster Creation Benchmarking
+
 ```bash
 # Benchmark different distributions
 for dist in Vanilla K3s Talos; do
@@ -18,6 +19,7 @@ grep "Elapsed" *-perf.log
 ```
 
 ### Provider Performance Comparison
+
 ```bash
 # Docker provider (local)
 time ./ksail cluster create --provider Docker --distribution Talos
@@ -27,6 +29,7 @@ time ./ksail cluster create --provider Hetzner --distribution Talos
 ```
 
 ### Workload Application Performance
+
 ```bash
 # Single workload
 time ./ksail workload apply
@@ -43,6 +46,7 @@ time kubectl apply -k ./k8s
 ### 1. Image Pre-pulling
 
 **Container Image Caching:**
+
 ```go
 // Pre-pull images in parallel before cluster creation
 func prepullImages(images []string) error {
@@ -75,6 +79,7 @@ func prepullImages(images []string) error {
 ```
 
 **Smart Image Selection:**
+
 ```go
 // Use specific image versions to enable caching
 const (
@@ -89,6 +94,7 @@ const (
 ### 2. Parallel Node Creation
 
 **Concurrent Node Provisioning:**
+
 ```go
 // Create control plane and workers in parallel
 func createClusterNodes(cfg *ClusterConfig) error {
@@ -127,6 +133,7 @@ func createClusterNodes(cfg *ClusterConfig) error {
 ### 3. Optimized Cluster Initialization
 
 **Fast CNI Installation:**
+
 ```go
 // Install CNI before cluster is fully ready
 func installCNI(cluster *Cluster) error {
@@ -166,6 +173,7 @@ func createCluster(cfg *ClusterConfig) error {
 ### 4. State Detection Optimization
 
 **Efficient Cluster State Checks:**
+
 ```go
 // ❌ Slow: Multiple separate API calls
 func isClusterReady(name string) bool {
@@ -192,6 +200,7 @@ func isClusterReady(name string) bool {
 ```
 
 **Polling Optimization:**
+
 ```go
 // Use exponential backoff for polling
 func waitForClusterReady(cluster *Cluster, timeout time.Duration) error {
@@ -224,6 +233,7 @@ func waitForClusterReady(cluster *Cluster, timeout time.Duration) error {
 ### 1. Docker Provider
 
 **Connection Pooling:**
+
 ```go
 // Reuse Docker client connections
 var (
@@ -244,6 +254,7 @@ func getDockerClient() (*client.Client, error) {
 ```
 
 **Batch Operations:**
+
 ```go
 // Delete multiple containers in parallel
 func deleteCluster(name string) error {
@@ -268,6 +279,7 @@ func deleteCluster(name string) error {
 ### 2. Hetzner Provider
 
 **API Call Minimization:**
+
 ```go
 // ❌ Multiple API calls
 func getServerInfo(serverID int) (*ServerInfo, error) {
@@ -286,6 +298,7 @@ func getAllServerInfo() ([]*ServerInfo, error) {
 ```
 
 **Parallel Resource Creation:**
+
 ```go
 func createHetznerCluster(cfg *ClusterConfig) error {
     var wg sync.WaitGroup
@@ -319,6 +332,7 @@ func createHetznerCluster(cfg *ClusterConfig) error {
 ```
 
 **Cleanup Efficiency:**
+
 ```go
 // Batch cleanup to minimize API calls
 func cleanupHetznerResources(prefix string) error {
@@ -359,6 +373,7 @@ func cleanupHetznerResources(prefix string) error {
 ### 1. Manifest Processing
 
 **Efficient YAML Parsing:**
+
 ```go
 // Use streaming parser for large files
 func parseManifests(reader io.Reader) ([]Manifest, error) {
@@ -380,6 +395,7 @@ func parseManifests(reader io.Reader) ([]Manifest, error) {
 ```
 
 **Parallel Application:**
+
 ```go
 // Apply independent resources in parallel
 func applyManifests(manifests []Manifest) error {
@@ -418,6 +434,7 @@ func applyGroup(manifests []Manifest) error {
 ### 2. GitOps Optimization
 
 **Flux Reconciliation:**
+
 ```go
 // Trigger reconciliation without waiting
 func triggerFluxReconcile(namespace, name string) error {
@@ -431,6 +448,7 @@ func triggerFluxReconcile(namespace, name string) error {
 ```
 
 **ArgoCD Sync:**
+
 ```go
 // Parallel app sync
 func syncArgoApps(apps []string) error {
@@ -456,6 +474,7 @@ func syncArgoApps(apps []string) error {
 ## Performance Monitoring
 
 ### Cluster Operation Metrics
+
 ```bash
 # Track operation times
 export KSAIL_TIMING_LOG=timing.log
@@ -468,6 +487,7 @@ grep "Vanilla" timing.log | awk '{sum+=$NF; count++} END {print sum/count}'
 ```
 
 ### Resource Usage Tracking
+
 ```bash
 # Monitor during cluster creation
 docker stats --format "table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}" &
@@ -481,17 +501,20 @@ kill $STATS_PID
 ## Success Metrics
 
 **Cluster Creation Targets:**
+
 - Vanilla (Docker, cached images): <60s
 - K3s (Docker, cached images): <45s
 - Talos (Docker, cached images): <90s
 - Talos (Hetzner, cold): <3m
 
 **Workload Application:**
+
 - 10 resources: <10s
 - 100 resources: <30s
 - GitOps reconciliation: <1m
 
 **State Detection:**
+
 - Cluster ready check: <100ms
 - Node health check: <500ms
 

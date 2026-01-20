@@ -5,6 +5,7 @@ This guide focuses on optimizing the end-user experience of the KSail CLI, cover
 ## Quick Performance Testing
 
 ### CLI Startup Time
+
 ```bash
 # Measure startup time
 time ./ksail --version
@@ -18,6 +19,7 @@ time ./ksail --help
 ```
 
 ### Operation Timing
+
 ```bash
 # Measure cluster creation
 time ./ksail cluster create
@@ -33,6 +35,7 @@ done
 ```
 
 ### Resource Usage Monitoring
+
 ```bash
 # Monitor CPU/memory during operations
 /usr/bin/time -v ./ksail cluster create
@@ -46,6 +49,7 @@ docker stats
 ### 1. Startup Time Optimization
 
 **Lazy Initialization:**
+
 ```go
 // ❌ Initialize everything at startup
 func init() {
@@ -69,6 +73,7 @@ func getDockerClient() *docker.Client {
 ```
 
 **Command Organization:**
+
 ```go
 // Keep cobra command initialization lightweight
 // Defer heavy operations to Run functions
@@ -85,6 +90,7 @@ var clusterCreateCmd = &cobra.Command{
 ### 2. Progress Indication
 
 **Essential for Long Operations:**
+
 ```go
 import "github.com/schollz/progressbar/v3"
 
@@ -114,6 +120,7 @@ func createCluster(ctx context.Context) error {
 ```
 
 **Spinner for Indeterminate Operations:**
+
 ```go
 import "github.com/briandowns/spinner"
 
@@ -131,6 +138,7 @@ func pullImage(image string) error {
 ### 3. Parallel Operations
 
 **Concurrent Image Pulling:**
+
 ```go
 func pullImages(images []string) error {
     var wg sync.WaitGroup
@@ -164,6 +172,7 @@ func pullImages(images []string) error {
 ```
 
 **Parallel Workload Application:**
+
 ```go
 // Apply independent workloads concurrently
 func applyWorkloads(workloads []Workload) error {
@@ -183,6 +192,7 @@ func applyWorkloads(workloads []Workload) error {
 ### 4. Caching Strategies
 
 **Cache Expensive Operations:**
+
 ```go
 type ClusterInfoCache struct {
     mu    sync.RWMutex
@@ -215,6 +225,7 @@ func (c *ClusterInfoCache) Get(name string) (*ClusterInfo, error) {
 ```
 
 **Cache Docker Images:**
+
 - Use `.github/actions/cache-cluster-images` pattern
 - Pre-pull common images
 - Share image cache across clusters
@@ -222,6 +233,7 @@ func (c *ClusterInfoCache) Get(name string) (*ClusterInfo, error) {
 ### 5. Efficient API Usage
 
 **Docker API Optimization:**
+
 ```go
 // ❌ Multiple calls for same data
 func getClusterInfo(name string) (*Info, error) {
@@ -245,6 +257,7 @@ func getClusterInfo(name string) (*Info, error) {
 ```
 
 **Kubernetes API Optimization:**
+
 ```go
 // Use cached discovery client
 discoveryClient := cached.NewMemCacheClient(discovery.NewDiscoveryClient(restConfig))
@@ -262,6 +275,7 @@ for _, pod := range pods {
 ### 1. Informative Output
 
 **Show Timing Information:**
+
 ```go
 func runClusterCreate(ctx context.Context) error {
     start := time.Now()
@@ -275,6 +289,7 @@ func runClusterCreate(ctx context.Context) error {
 ```
 
 **Helpful Error Messages:**
+
 ```go
 // ❌ Cryptic error
 return fmt.Errorf("failed to create cluster")
@@ -286,6 +301,7 @@ return fmt.Errorf("failed to create cluster: Docker daemon not running. Start Do
 ### 2. Smart Defaults
 
 **Optimize Default Configurations:**
+
 ```go
 // Choose sensible defaults based on system resources
 func defaultWorkerNodes() int {
@@ -304,6 +320,7 @@ func defaultWorkerNodes() int {
 ### 3. Cancellation Support
 
 **Respect Context Cancellation:**
+
 ```go
 func createCluster(ctx context.Context) error {
     steps := []func(context.Context) error{
@@ -329,6 +346,7 @@ func createCluster(ctx context.Context) error {
 ## Performance Testing Scenarios
 
 ### 1. Cold Start (First Run)
+
 ```bash
 # Clear all caches
 docker system prune -af
@@ -340,6 +358,7 @@ time ./ksail cluster create
 ```
 
 ### 2. Warm Start (Cached Images)
+
 ```bash
 # Measure with cached images
 time ./ksail cluster delete
@@ -347,6 +366,7 @@ time ./ksail cluster create
 ```
 
 ### 3. Multi-Cluster Operations
+
 ```bash
 # Test cluster list performance
 for i in {1..10}; do
@@ -358,6 +378,7 @@ time ./ksail cluster list
 ```
 
 ### 4. Large Workload Application
+
 ```bash
 # Generate large kustomization
 for i in {1..100}; do
@@ -374,6 +395,7 @@ time ./ksail workload apply
 ## Performance Benchmarks
 
 **Create Baseline:**
+
 ```bash
 # Measure key operations
 {
@@ -397,6 +419,7 @@ time ./ksail workload apply
 ## Success Metrics
 
 **CLI Performance Targets:**
+
 - Startup time (--version): <100ms
 - Cluster info: <500ms
 - Cluster create (Vanilla, cached): <60s
@@ -404,6 +427,7 @@ time ./ksail workload apply
 - Workload apply (10 resources): <10s
 
 **User Experience Indicators:**
+
 - Progress shown for operations >5s
 - Estimated time remaining for operations >30s
 - Cancellable with Ctrl+C

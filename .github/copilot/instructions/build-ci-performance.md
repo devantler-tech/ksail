@@ -5,6 +5,7 @@ This guide focuses on optimizing build times, test execution, CI/CD pipelines, a
 ## Quick Performance Checks
 
 ### Build Time Measurement
+
 ```bash
 # Clean build (no cache)
 go clean -cache -modcache
@@ -19,6 +20,7 @@ time go build -p 4 -o ksail .
 ```
 
 ### Test Performance
+
 ```bash
 # Measure test suite time
 time go test ./...
@@ -34,6 +36,7 @@ time go test ./pkg/svc/provisioner/cluster/...
 ```
 
 ### CI Pipeline Analysis
+
 ```bash
 # View workflow run times
 gh run list --workflow=ci.yaml --limit 10
@@ -50,6 +53,7 @@ gh run list --workflow=ci.yaml --limit 50 --json conclusion,createdAt,updatedAt 
 ### 1. Dependency Management
 
 **Module Cache Optimization:**
+
 ```bash
 # Use Go module cache in CI
 - uses: actions/setup-go@v5
@@ -66,6 +70,7 @@ go mod verify
 ```
 
 **Reduce Dependency Bloat:**
+
 ```bash
 # Analyze dependencies
 go mod graph | grep -v "std" | head -20
@@ -80,6 +85,7 @@ go mod why -m github.com/heavy/dependency
 ### 2. Build Cache Optimization
 
 **Effective Caching Strategy:**
+
 ```yaml
 # GitHub Actions cache configuration
 - name: Cache Go modules
@@ -94,6 +100,7 @@ go mod why -m github.com/heavy/dependency
 ```
 
 **Build Cache in Docker:**
+
 ```dockerfile
 # Multi-stage build with cache mounts
 FROM golang:1.25 AS builder
@@ -112,6 +119,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 ### 3. Compilation Optimization
 
 **Build Flags:**
+
 ```bash
 # Faster compilation (less optimization)
 go build -gcflags=-G=3 -o ksail .
@@ -131,6 +139,7 @@ go build -trimpath -ldflags="-s -w -X main.version=$(git describe --tags)" -o ks
 ### 1. Parallel Test Execution
 
 **Package-Level Parallelism:**
+
 ```bash
 # Run packages in parallel (default)
 go test ./...
@@ -143,6 +152,7 @@ go test -parallel 16 ./...
 ```
 
 **Smart Test Organization:**
+
 ```go
 // Mark independent tests as parallel
 func TestClusterCreate(t *testing.T) {
@@ -159,6 +169,7 @@ func TestDockerCleanup(t *testing.T) {
 ### 2. Test Caching
 
 **Leverage Test Cache:**
+
 ```bash
 # Go caches test results automatically
 go test ./...  # Initial run
@@ -172,6 +183,7 @@ go clean -testcache
 ```
 
 **Write Deterministic Tests:**
+
 ```go
 // ❌ Non-deterministic - cache disabled
 func TestRandom(t *testing.T) {
@@ -191,6 +203,7 @@ func TestParsing(t *testing.T) {
 ### 3. Fast vs. Slow Test Separation
 
 **Build Tags for Slow Tests:**
+
 ```go
 //go:build integration
 
@@ -215,6 +228,7 @@ go test -tags=integration ./...
 ### 4. Skip Expensive Operations in Tests
 
 **Use Mocks and Fakes:**
+
 ```go
 // ❌ Slow: real Docker operations
 func TestClusterInfo(t *testing.T) {
@@ -238,6 +252,7 @@ func TestClusterInfo(t *testing.T) {
 ### 1. Conditional Workflow Execution
 
 **Path Filtering (Already Implemented):**
+
 ```yaml
 # Only run tests when code changes
 - uses: dorny/paths-filter@v3
@@ -256,6 +271,7 @@ if: needs.changes.outputs.code == 'true'
 ### 2. Matrix Strategy Optimization
 
 **Reduce Matrix Combinations:**
+
 ```yaml
 # ❌ Too many combinations (slow, expensive)
 matrix:
@@ -282,6 +298,7 @@ matrix:
 ### 3. Artifact Caching
 
 **Binary Caching (Already Implemented):**
+
 ```yaml
 - name: Cache KSail Binary
   uses: ./.github/actions/cache-ksail-binary
@@ -291,6 +308,7 @@ matrix:
 ```
 
 **Image Caching (Already Implemented):**
+
 ```yaml
 - name: Cache Cluster Images
   uses: ./.github/actions/cache-cluster-images
@@ -300,6 +318,7 @@ matrix:
 ### 4. Concurrent Workflow Jobs
 
 **Maximize Parallelism:**
+
 ```yaml
 jobs:
   # These can run in parallel
@@ -321,6 +340,7 @@ jobs:
 ### 5. Runner Optimization
 
 **Choose Appropriate Runners:**
+
 ```yaml
 # Standard 2-core runner for most jobs
 runs-on: ubuntu-latest
@@ -337,6 +357,7 @@ runs-on: [self-hosted, linux, x64]
 ### 1. Local Development Setup
 
 **Fast Iteration Loop:**
+
 ```bash
 # Use air for auto-reload during development
 go install github.com/cosmtrek/air@latest
@@ -354,6 +375,7 @@ golangci-lint run --fast
 ### 2. Incremental Builds
 
 **Optimize for Quick Rebuilds:**
+
 ```bash
 # Only rebuild changed packages
 go install ./cmd/ksail  # Faster than go build
@@ -371,6 +393,7 @@ time go build .  # Incremental build
 ### 3. Documentation Build Optimization
 
 **Astro Build Performance:**
+
 ```bash
 # Development mode (fast, no optimization)
 cd docs
@@ -391,6 +414,7 @@ NODE_OPTIONS="--max-old-space-size=4096" npm run build
 ### 1. Track Build Times Over Time
 
 **CI Time Series:**
+
 ```bash
 # Export CI run times
 gh api repos/devantler-tech/ksail/actions/workflows/ci.yaml/runs \
@@ -404,6 +428,7 @@ gh api repos/devantler-tech/ksail/actions/workflows/ci.yaml/runs \
 ### 2. Test Performance Regression Detection
 
 **Automated Checks:**
+
 ```yaml
 # Add to CI
 - name: Run benchmarks
@@ -419,6 +444,7 @@ gh api repos/devantler-tech/ksail/actions/workflows/ci.yaml/runs \
 ### 3. Profile Build Process
 
 **Detailed Build Analysis:**
+
 ```bash
 # Trace build execution
 go build -x -o ksail . 2>&1 | tee build-trace.log
@@ -444,6 +470,7 @@ grep "link" build-trace.log
 ## Success Metrics
 
 **Build Performance Targets:**
+
 - Go build (cold cache): <2m
 - Go build (warm cache): <30s
 - Unit test suite: <30s
@@ -451,12 +478,14 @@ grep "link" build-trace.log
 - Documentation build: <10s
 
 **CI Performance Targets:**
+
 - Unit test job: <2m
 - System test job: <5m per matrix entry
 - Total CI time (PR): <15m
 - Cache hit rate: >80% for binary, >60% for images
 
 **Developer Experience:**
+
 - Local build iteration: <5s
 - Pre-commit hooks: <10s
 - Test feedback: <30s for relevant tests
