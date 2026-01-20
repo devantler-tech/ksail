@@ -36,7 +36,6 @@ updates:
           - "*"
 
   # Docker base images
-  # Note: cooldown not supported for docker ecosystem
   - package-ecosystem: docker
     directory: / # Dockerfile (build image)
     cooldown:
