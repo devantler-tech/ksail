@@ -134,7 +134,7 @@ func convertValue(val reflect.Value) any {
 
 // convertByKind handles the actual type conversion.
 //
-//nolint:exhaustive // we only handle the types we care about, default returns nil
+
 func convertByKind(val reflect.Value) any {
 	switch val.Kind() {
 	case reflect.String:
@@ -380,7 +380,7 @@ func pruneField(fieldVal reflect.Value, fieldPath string, field reflect.StructFi
 // pruneByDefaultTag prunes a field if it matches the default value specified in the struct tag.
 // Returns true if the field was handled (regardless of whether it was pruned).
 //
-//nolint:exhaustive // we only handle primitive types that can have defaults in tags
+
 func pruneByDefaultTag(fieldVal reflect.Value, defaultTag string) bool {
 	switch fieldVal.Kind() {
 	case reflect.String:
