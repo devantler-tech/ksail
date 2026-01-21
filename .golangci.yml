@@ -102,6 +102,10 @@ linters:
           - revive
         text: "var-naming: avoid meaningless package names"
         path: pkg/utils/doc.go
+      - linters:
+          - nolintlint
+        text: "directive `//nolint:staticcheck // WatchProgress is deprecated but simpler than WaitForFunc` is unused"
+        path: pkg/svc/provider/hetzner/provider.go
   settings:
     wsl_v5:
       allow-first-in-block: true
