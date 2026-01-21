@@ -221,8 +221,15 @@ func EnsureDefaultResources(
 		}
 	}
 
-	// Note: We don't wait for FluxInstance to be Ready here because it depends on
-	// the OCIRepository sync, which requires the workload to be pushed first.
+	// Wait for the FluxInstance to become ready.
+	// The FluxInstance controller manages the OCIRepository, so waiting for
+	// FluxInstance.Ready ensures that the OCIRepository is also ready.
+	// See: https://github.com/controlplaneio-fluxcd/flux-operator#monitor-the-flux-installation
+	err = waitForFluxInstanceReady(ctx, restConfig)
+	if err != nil {
+		return fmt.Errorf("failed waiting for FluxInstance to be ready: %w", err)
+	}
+
 	return nil
 }
 
@@ -771,6 +778,53 @@ func ensureLocalOCIRepositoryInsecure(
 func normalizeFluxPath() string {
 	// Flux expects paths to be relative to the root of the unpacked artifact.
 	return "./"
+}
+
+// waitForFluxInstanceReady waits for the FluxInstance to report a Ready condition.
+// The FluxInstance controller sets this condition when Flux controllers are installed
+// and the sync source (OCIRepository) is ready.
+func waitForFluxInstanceReady(ctx context.Context, restConfig *rest.Config) error {
+	return pollUntilReady(
+		ctx,
+		fluxAPIAvailabilityTimeout,
+		fluxAPIAvailabilityPollInterval,
+		"FluxInstance to be ready",
+		func() (bool, error) {
+			// Create a fresh client on each retry to avoid caching issues
+			fluxClient, err := newFluxResourcesClient(restConfig)
+			if err != nil {
+				// Client creation errors are transient during CRD initialization
+				return false, nil
+			}
+
+			instance := &FluxInstance{}
+			key := client.ObjectKey{
+				Name:      fluxInstanceDefaultName,
+				Namespace: fluxclient.DefaultNamespace,
+			}
+
+			err = fluxClient.Get(ctx, key, instance)
+			if err != nil {
+				if apierrors.IsNotFound(err) {
+					// FluxInstance not yet created by operator
+					return false, nil
+				}
+
+				// Other errors might be transient
+				return false, nil
+			}
+
+			// Check for Ready condition
+			for _, condition := range instance.Status.Conditions {
+				if condition.Type == "Ready" && condition.Status == metav1.ConditionTrue {
+					return true, nil
+				}
+			}
+
+			// Not ready yet, keep waiting
+			return false, nil
+		},
+	)
 }
 
 // pollUntilReady implements a generic polling pattern for waiting on async conditions.
