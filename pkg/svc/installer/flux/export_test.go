@@ -6,6 +6,8 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/client-go/rest"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // Exported functions for testing purposes.
@@ -59,4 +61,31 @@ func PollUntilReady(
 	checkFn func() (bool, error),
 ) error {
 	return pollUntilReady(ctx, timeout, interval, resourceDesc, checkFn)
+}
+
+// WaitForFluxInstanceReady exports waitForFluxInstanceReady for testing.
+func WaitForFluxInstanceReady(ctx context.Context, restConfig interface{}) error {
+	return waitForFluxInstanceReady(ctx, restConfig.(*rest.Config))
+}
+
+// ExportNewFluxResourcesClient returns the current newFluxResourcesClient function for testing.
+func ExportNewFluxResourcesClient() func(*rest.Config) (interface{}, error) {
+	return func(rc *rest.Config) (interface{}, error) {
+		return newFluxResourcesClient(rc)
+	}
+}
+
+// SetNewFluxResourcesClient allows tests to replace newFluxResourcesClient with a mock.
+func SetNewFluxResourcesClient(fn func(*rest.Config) (interface{}, error)) func() {
+	original := newFluxResourcesClient
+	newFluxResourcesClient = func(rc *rest.Config) (client.Client, error) {
+		c, err := fn(rc)
+		if err != nil {
+			return nil, err
+		}
+		return c.(client.Client), nil
+	}
+	return func() {
+		newFluxResourcesClient = original
+	}
 }

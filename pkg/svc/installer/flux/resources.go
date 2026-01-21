@@ -794,8 +794,8 @@ func waitForFluxInstanceReady(ctx context.Context, restConfig *rest.Config) erro
 			fluxClient, err := newFluxResourcesClient(restConfig)
 			if err != nil {
 				// Client creation errors are transient during CRD initialization.
-				// Return the error so pollUntilReady can track it for timeout messages.
-				return false, fmt.Errorf("create flux client: %w", err)
+				// Don't return error, just keep polling.
+				return false, nil
 			}
 
 			instance := &FluxInstance{}
@@ -806,13 +806,9 @@ func waitForFluxInstanceReady(ctx context.Context, restConfig *rest.Config) erro
 
 			err = fluxClient.Get(ctx, key, instance)
 			if err != nil {
-				if apierrors.IsNotFound(err) {
-					// FluxInstance not yet created by operator
-					return false, nil
-				}
-
-				// Other errors might be transient
-				return false, fmt.Errorf("get FluxInstance: %w", err)
+				// All Get errors are transient (NotFound, API not ready, etc)
+				// Don't return error, just keep polling.
+				return false, nil
 			}
 
 			// Check for Ready condition
@@ -823,7 +819,7 @@ func waitForFluxInstanceReady(ctx context.Context, restConfig *rest.Config) erro
 					}
 
 					if condition.Status == metav1.ConditionFalse {
-						// Ready=False indicates a failure state - return error immediately
+						// Ready=False indicates a permanent failure - return error immediately
 						return false, fmt.Errorf(
 							"FluxInstance is not ready: %s - %s",
 							condition.Reason,
@@ -840,8 +836,8 @@ func waitForFluxInstanceReady(ctx context.Context, restConfig *rest.Config) erro
 }
 
 // pollUntilReady implements a generic polling pattern for waiting on async conditions.
-// It repeatedly calls checkFn until it returns true (success) or the context expires.
-// Returns the last error encountered if the wait times out.
+// It repeatedly calls checkFn until it returns true (success) or an error (failure).
+// Returns the error encountered if the check function fails or if the wait times out.
 func pollUntilReady(
 	ctx context.Context,
 	timeout time.Duration,
@@ -855,12 +851,11 @@ func pollUntilReady(
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
-	var lastErr error
-
 	for {
 		ready, err := checkFn()
 		if err != nil {
-			lastErr = err
+			// Return immediately on error (permanent failure)
+			return err
 		}
 
 		if ready {
@@ -869,11 +864,7 @@ func pollUntilReady(
 
 		select {
 		case <-waitCtx.Done():
-			if lastErr == nil {
-				lastErr = waitCtx.Err()
-			}
-
-			return fmt.Errorf("timed out waiting for %s: %w", resourceDesc, lastErr)
+			return fmt.Errorf("timed out waiting for %s", resourceDesc)
 		case <-ticker.C:
 		}
 	}
