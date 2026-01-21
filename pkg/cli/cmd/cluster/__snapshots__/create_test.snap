@@ -57,6 +57,10 @@
 ► attaching local registry to cluster
 ✔ local registry attached to cluster
 
+📦 Push OCI Artifact...
+► pushing workload to local registry
+✔ oci artifact pushed
+
 📦 Installing components...
 ► flux installing
 ✔ flux installed

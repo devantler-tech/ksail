@@ -18,10 +18,10 @@ const (
 	argoCDResourcesActivity = "configuring argocd resources"
 )
 
-// resolveClusterNameFromContext resolves the cluster name from the cluster config.
+// ResolveClusterNameFromContext resolves the cluster name from the cluster config.
 // This uses the distribution's default cluster name for registry naming.
 // The cluster name is used for constructing registry container names (e.g., k3d-default-local-registry).
-func resolveClusterNameFromContext(clusterCfg *v1alpha1.Cluster) string {
+func ResolveClusterNameFromContext(clusterCfg *v1alpha1.Cluster) string {
 	if clusterCfg == nil {
 		return kindconfigmanager.DefaultClusterName
 	}
@@ -252,7 +252,7 @@ func configureGitOpsResources(
 	}
 
 	// Resolve cluster name for registry naming
-	clusterName := resolveClusterNameFromContext(clusterCfg)
+	clusterName := ResolveClusterNameFromContext(clusterCfg)
 
 	// Show title for configure stage
 	notify.WriteMessage(notify.Message{
