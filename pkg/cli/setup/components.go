@@ -20,6 +20,7 @@ import (
 	certmanagerinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/cert-manager"
 	fluxinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/flux"
 	gatekeeperinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/gatekeeper"
+	hetznercsiinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/hetzner-csi"
 	kubeletcsrapproverinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/kubelet-csr-approver"
 	kyvernoinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/kyverno"
 	localpathstorageinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/localpathstorage"
@@ -94,13 +95,20 @@ func csiFactory(
 	factories *InstallerFactories,
 ) func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error) {
 	return func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error) {
-		_, kubeconfig, err := factories.HelmClientFactory(clusterCfg)
+		helmClient, kubeconfig, err := factories.HelmClientFactory(clusterCfg)
 		if err != nil {
 			return nil, err
 		}
 
 		timeout := installer.GetInstallTimeout(clusterCfg)
 
+		// For Talos × Hetzner, use the Hetzner CSI driver
+		if clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionTalos &&
+			clusterCfg.Spec.Cluster.Provider == v1alpha1.ProviderHetzner {
+			return hetznercsiinstaller.NewHetznerCSIInstaller(helmClient, timeout), nil
+		}
+
+		// For other distributions, use local-path-provisioner
 		return localpathstorageinstaller.NewLocalPathStorageInstaller(
 			kubeconfig,
 			clusterCfg.Spec.Cluster.Connection.Context,
