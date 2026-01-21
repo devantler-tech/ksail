@@ -15,7 +15,6 @@ import (
 	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
 	k3dconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/k3d"
 	kindconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/kind"
-	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
 	"github.com/devantler-tech/ksail/v5/pkg/io/generator"
 	k3dgenerator "github.com/devantler-tech/ksail/v5/pkg/io/generator/k3d"
 	kindgenerator "github.com/devantler-tech/ksail/v5/pkg/io/generator/kind"
@@ -841,33 +840,6 @@ func (s *Scaffolder) generateGitOpsConfig(output string, force bool) error {
 	// GitOps resources (FluxInstance, ArgoCD Application) are now installed server-side
 	// and are no longer scaffolded to maintain simplicity.
 	return nil
-}
-
-
-
-// resolveClusterNameForDistribution returns the cluster name for the configured distribution.
-// This is used for in-cluster registry naming.
-func (s *Scaffolder) resolveClusterNameForDistribution() string {
-	switch s.KSailConfig.Spec.Cluster.Distribution {
-	case v1alpha1.DistributionK3s:
-		return k3dconfigmanager.ResolveClusterName(&s.KSailConfig, nil)
-	case v1alpha1.DistributionVanilla:
-		return kindconfigmanager.DefaultClusterName
-	case v1alpha1.DistributionTalos:
-		return talosconfigmanager.DefaultClusterName
-	default:
-		return kindconfigmanager.DefaultClusterName
-	}
-}
-
-// notifySkip sends a notification about skipping an existing resource.
-func (s *Scaffolder) notifySkip(resourceType, path string) {
-	notify.WriteMessage(notify.Message{
-		Type:    notify.InfoType,
-		Content: "skipping %s scaffolding: existing found at '%s'",
-		Args:    []any{resourceType, path},
-		Writer:  s.Writer,
-	})
 }
 
 // getProjectName derives the project name from the current directory.

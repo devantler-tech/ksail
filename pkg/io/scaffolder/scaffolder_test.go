@@ -1338,10 +1338,10 @@ spec:
 			// Verify no new GitOps files were created
 			fluxPath := filepath.Join(crDir, "flux-instance.yaml")
 			argoPath := filepath.Join(crDir, "argocd-application.yaml")
-			
+
 			_, fluxErr := os.Stat(fluxPath)
 			_, argoErr := os.Stat(argoPath)
-			
+
 			assert.True(t, os.IsNotExist(fluxErr), "flux-instance.yaml should not be created")
 			assert.True(t, os.IsNotExist(argoErr), "argocd-application.yaml should not be created")
 		})
