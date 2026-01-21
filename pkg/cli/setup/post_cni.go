@@ -110,15 +110,32 @@ func GetComponentRequirements(clusterCfg *v1alpha1.Cluster) ComponentRequirement
 }
 
 // NeedsCSIInstall determines if CSI needs to be installed.
-// Returns true only when CSI is Enabled AND the distribution doesn't provide it by default.
-// When CSI is Default, we don't install (rely on distribution's default behavior).
+//
+// In general, we install CSI only when it is explicitly Enabled AND the
+// distribution × provider combination does not provide it by default.
+//
+// Special case:
+// - Talos × Hetzner: Hetzner CSI is not pre-installed and must be installed
+//   by KSail when CSI is either Default or Enabled.
 func NeedsCSIInstall(clusterCfg *v1alpha1.Cluster) bool {
-	if clusterCfg.Spec.Cluster.CSI != v1alpha1.CSIEnabled {
+	dist := clusterCfg.Spec.Cluster.Distribution
+	provider := clusterCfg.Spec.Cluster.Provider
+	csiSetting := clusterCfg.Spec.Cluster.CSI
+
+	// Special handling for Talos clusters on Hetzner:
+	// According to the distribution × provider matrix, Hetzner CSI must be
+	// installed by KSail for both Default and Enabled CSI settings.
+	if dist == v1alpha1.DistributionTalos && provider == v1alpha1.ProviderHetzner {
+		return csiSetting == v1alpha1.CSIDefault || csiSetting == v1alpha1.CSIEnabled
+	}
+
+	// Generic behavior for all other distribution × provider combinations.
+	if csiSetting != v1alpha1.CSIEnabled {
 		return false
 	}
 
-	// Don't install if distribution × provider provides it by default
-	return !clusterCfg.Spec.Cluster.Distribution.ProvidesCSIByDefault(clusterCfg.Spec.Cluster.Provider)
+	// Don't install if distribution × provider provides it by default.
+	return !dist.ProvidesCSIByDefault(provider)
 }
 
 // InstallPostCNIComponents installs all post-CNI components in parallel.

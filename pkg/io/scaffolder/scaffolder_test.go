@@ -1153,6 +1153,97 @@ func TestCreateK3dConfig_MetricsServerDisabledWithCilium(t *testing.T) {
 	assert.True(t, hasMetricsFlag, "metrics-server flag should be present")
 }
 
+func TestCreateK3dConfig_CSIDisabled(t *testing.T) {
+t.Parallel()
+
+cluster := v1alpha1.Cluster{
+Spec: v1alpha1.Spec{
+Cluster: v1alpha1.ClusterSpec{
+Distribution: v1alpha1.DistributionK3s,
+CSI:          v1alpha1.CSIDisabled,
+},
+},
+}
+
+scaffolderInstance := scaffolder.NewScaffolder(cluster, &bytes.Buffer{}, nil)
+config := scaffolderInstance.CreateK3dConfig()
+
+// Check that --disable=local-storage flag is present
+found := false
+
+for _, arg := range config.Options.K3sOptions.ExtraArgs {
+if arg.Arg == "--disable=local-storage" {
+found = true
+
+assert.Equal(t, []string{"server:*"}, arg.NodeFilters)
+
+break
+}
+}
+
+assert.True(t, found, "--disable=local-storage flag should be present")
+}
+
+func TestCreateK3dConfig_CSIEnabled(t *testing.T) {
+t.Parallel()
+
+cluster := v1alpha1.Cluster{
+Spec: v1alpha1.Spec{
+Cluster: v1alpha1.ClusterSpec{
+Distribution: v1alpha1.DistributionK3s,
+CSI:          v1alpha1.CSIEnabled,
+},
+},
+}
+
+scaffolderInstance := scaffolder.NewScaffolder(cluster, &bytes.Buffer{}, nil)
+config := scaffolderInstance.CreateK3dConfig()
+
+// Check that --disable=local-storage flag is NOT present
+for _, arg := range config.Options.K3sOptions.ExtraArgs {
+assert.NotEqual(
+t,
+"--disable=local-storage",
+arg.Arg,
+"flag should not be present when enabled",
+)
+}
+}
+
+func TestCreateK3dConfig_CSIDisabledWithCilium(t *testing.T) {
+t.Parallel()
+
+cluster := v1alpha1.Cluster{
+Spec: v1alpha1.Spec{
+Cluster: v1alpha1.ClusterSpec{
+Distribution: v1alpha1.DistributionK3s,
+CNI:          v1alpha1.CNICilium,
+CSI:          v1alpha1.CSIDisabled,
+},
+},
+}
+
+scaffolderInstance := scaffolder.NewScaffolder(cluster, &bytes.Buffer{}, nil)
+config := scaffolderInstance.CreateK3dConfig()
+
+// Check that both CNI and CSI flags are present
+hasCNIFlag := false
+hasCSIFlag := false
+
+for _, arg := range config.Options.K3sOptions.ExtraArgs {
+if arg.Arg == "--flannel-backend=none" {
+hasCNIFlag = true
+}
+
+if arg.Arg == "--disable=local-storage" {
+hasCSIFlag = true
+}
+}
+
+assert.True(t, hasCNIFlag, "CNI flag should be present")
+assert.True(t, hasCSIFlag, "CSI flag should be present")
+}
+
 func TestCreateK3dConfig_SetsDefaultImage(t *testing.T) {
 	t.Parallel()
 
