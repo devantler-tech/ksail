@@ -1,66 +1,80 @@
 rules:
   impostor-commit:
     ignore:
-      - .github/workflows/audit-workflows.lock.yml
-      - .github/workflows/ci-doctor.lock.yml
-      - .github/workflows/daily-perf-improver.lock.yml
-      - .github/workflows/daily-progress.lock.yml
-      - .github/workflows/daily-qa.lock.yml
-      - .github/workflows/daily-test-improver.lock.yml
-      - .github/workflows/issue-triage.lock.yml
-      - .github/workflows/portfolio-analyst.lock.yml
-      - .github/workflows/pr-fix.lock.yml
-      - .github/workflows/update-docs.lock.yml
-      - .github/workflows/weekly-research.lock.yml
+      - audit-workflows.lock.yml
+      - ci-doctor.lock.yml
+      - daily-perf-improver.lock.yml
+      - daily-progress.lock.yml
+      - daily-qa.lock.yml
+      - daily-test-improver.lock.yml
+      - issue-triage.lock.yml
+      - portfolio-analyst.lock.yml
+      - pr-fix.lock.yml
+      - update-docs.lock.yml
+      - weekly-research.lock.yml
   template-injection:
     ignore:
-      - .github/workflows/audit-workflows.lock.yml
-      - .github/workflows/ci-doctor.lock.yml
-      - .github/workflows/daily-perf-improver.lock.yml
-      - .github/workflows/daily-progress.lock.yml
-      - .github/workflows/daily-qa.lock.yml
-      - .github/workflows/daily-test-improver.lock.yml
-      - .github/workflows/issue-triage.lock.yml
-      - .github/workflows/portfolio-analyst.lock.yml
-      - .github/workflows/pr-fix.lock.yml
-      - .github/workflows/update-docs.lock.yml
-      - .github/workflows/weekly-research.lock.yml
+      - audit-workflows.lock.yml
+      - ci-doctor.lock.yml
+      - daily-perf-improver.lock.yml
+      - daily-progress.lock.yml
+      - daily-qa.lock.yml
+      - daily-test-improver.lock.yml
+      - issue-triage.lock.yml
+      - portfolio-analyst.lock.yml
+      - pr-fix.lock.yml
+      - update-docs.lock.yml
+      - weekly-research.lock.yml
   ref-version-mismatch:
     ignore:
-      - .github/workflows/audit-workflows.lock.yml
-      - .github/workflows/ci-doctor.lock.yml
-      - .github/workflows/daily-perf-improver.lock.yml
-      - .github/workflows/daily-progress.lock.yml
-      - .github/workflows/daily-qa.lock.yml
-      - .github/workflows/daily-test-improver.lock.yml
-      - .github/workflows/issue-triage.lock.yml
-      - .github/workflows/portfolio-analyst.lock.yml
-      - .github/workflows/pr-fix.lock.yml
-      - .github/workflows/update-docs.lock.yml
-      - .github/workflows/weekly-research.lock.yml
+      - audit-workflows.lock.yml
+      - ci-doctor.lock.yml
+      - daily-perf-improver.lock.yml
+      - daily-progress.lock.yml
+      - daily-qa.lock.yml
+      - daily-test-improver.lock.yml
+      - issue-triage.lock.yml
+      - portfolio-analyst.lock.yml
+      - pr-fix.lock.yml
+      - update-docs.lock.yml
+      - weekly-research.lock.yml
   excessive-permissions:
     ignore:
-      - .github/workflows/audit-workflows.lock.yml
-      - .github/workflows/ci-doctor.lock.yml
-      - .github/workflows/daily-perf-improver.lock.yml
-      - .github/workflows/daily-progress.lock.yml
-      - .github/workflows/daily-qa.lock.yml
-      - .github/workflows/daily-test-improver.lock.yml
-      - .github/workflows/issue-triage.lock.yml
-      - .github/workflows/portfolio-analyst.lock.yml
-      - .github/workflows/pr-fix.lock.yml
-      - .github/workflows/update-docs.lock.yml
-      - .github/workflows/weekly-research.lock.yml
+      - audit-workflows.lock.yml
+      - ci-doctor.lock.yml
+      - daily-perf-improver.lock.yml
+      - daily-progress.lock.yml
+      - daily-qa.lock.yml
+      - daily-test-improver.lock.yml
+      - issue-triage.lock.yml
+      - portfolio-analyst.lock.yml
+      - pr-fix.lock.yml
+      - update-docs.lock.yml
+      - weekly-research.lock.yml
   artipacked:
     ignore:
-      - .github/workflows/audit-workflows.lock.yml
-      - .github/workflows/ci-doctor.lock.yml
-      - .github/workflows/daily-perf-improver.lock.yml
-      - .github/workflows/daily-progress.lock.yml
-      - .github/workflows/daily-qa.lock.yml
-      - .github/workflows/daily-test-improver.lock.yml
-      - .github/workflows/issue-triage.lock.yml
-      - .github/workflows/portfolio-analyst.lock.yml
-      - .github/workflows/pr-fix.lock.yml
-      - .github/workflows/update-docs.lock.yml
-      - .github/workflows/weekly-research.lock.yml
+      - audit-workflows.lock.yml
+      - ci-doctor.lock.yml
+      - daily-perf-improver.lock.yml
+      - daily-progress.lock.yml
+      - daily-qa.lock.yml
+      - daily-test-improver.lock.yml
+      - issue-triage.lock.yml
+      - portfolio-analyst.lock.yml
+      - pr-fix.lock.yml
+      - update-docs.lock.yml
+      - weekly-research.lock.yml
+  unpinned-uses:
+    ignore:
+      - agentics-maintenance.yml
+      - audit-workflows.lock.yml
+      - ci-doctor.lock.yml
+      - daily-perf-improver.lock.yml
+      - daily-progress.lock.yml
+      - daily-qa.lock.yml
+      - daily-test-improver.lock.yml
+      - issue-triage.lock.yml
+      - portfolio-analyst.lock.yml
+      - pr-fix.lock.yml
+      - update-docs.lock.yml
+      - weekly-research.lock.yml
