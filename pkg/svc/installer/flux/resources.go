@@ -844,15 +844,9 @@ func waitForFluxInstanceReady(ctx context.Context, restConfig *rest.Config) erro
 						return true, nil
 					}
 
-					if condition.Status == metav1.ConditionFalse {
-						// Ready=False indicates a permanent failure - return error immediately
-						return false, newPermanentError(fmt.Errorf(
-							"%w: %s - %s",
-							errFluxInstanceNotReady,
-							condition.Reason,
-							condition.Message,
-						))
-					}
+					// Ready=False or Unknown - continue polling
+					// FluxInstance can temporarily be not ready during reconciliation,
+					// which is normal behavior. We rely on timeout to catch permanent failures.
 				}
 			}
 

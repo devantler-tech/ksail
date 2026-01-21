@@ -708,8 +708,8 @@ func TestWaitForFluxInstanceReady_ReadyFalse(t *testing.T) {
 				{
 					Type:    "Ready",
 					Status:  metav1.ConditionFalse,
-					Reason:  "SyncFailed",
-					Message: "failed to sync manifests",
+					Reason:  "HealthCheckCanceled",
+					Message: "New reconciliation triggered",
 				},
 			}
 
@@ -723,15 +723,16 @@ func TestWaitForFluxInstanceReady_ReadyFalse(t *testing.T) {
 	})
 	defer restore()
 
-	ctx := context.Background()
+	// Use a short timeout context for this test
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
 	restConfig := &rest.Config{}
 
 	err := fluxinstaller.WaitForFluxInstanceReady(ctx, restConfig)
 
+	// Ready=False is treated as transient, so we should get a timeout error
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "FluxInstance is not ready")
-	assert.Contains(t, err.Error(), "SyncFailed")
-	assert.Contains(t, err.Error(), "failed to sync manifests")
+	assert.Contains(t, err.Error(), "timed out waiting for resource to be ready")
 }
 
 //nolint:paralleltest // Cannot run in parallel due to global mock
