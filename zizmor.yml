@@ -1,36 +1,80 @@
 rules:
   impostor-commit:
     ignore:
+      - audit-workflows.lock.yml
       - ci-doctor.lock.yml
       - daily-perf-improver.lock.yml
+      - daily-progress.lock.yml
       - daily-qa.lock.yml
       - daily-test-improver.lock.yml
+      - issue-triage.lock.yml
+      - portfolio-analyst.lock.yml
+      - pr-fix.lock.yml
       - update-docs.lock.yml
+      - weekly-research.lock.yml
   template-injection:
     ignore:
+      - audit-workflows.lock.yml
       - ci-doctor.lock.yml
       - daily-perf-improver.lock.yml
+      - daily-progress.lock.yml
       - daily-qa.lock.yml
       - daily-test-improver.lock.yml
+      - issue-triage.lock.yml
+      - portfolio-analyst.lock.yml
+      - pr-fix.lock.yml
       - update-docs.lock.yml
+      - weekly-research.lock.yml
   ref-version-mismatch:
     ignore:
+      - audit-workflows.lock.yml
       - ci-doctor.lock.yml
       - daily-perf-improver.lock.yml
+      - daily-progress.lock.yml
       - daily-qa.lock.yml
       - daily-test-improver.lock.yml
+      - issue-triage.lock.yml
+      - portfolio-analyst.lock.yml
+      - pr-fix.lock.yml
       - update-docs.lock.yml
+      - weekly-research.lock.yml
   excessive-permissions:
     ignore:
+      - audit-workflows.lock.yml
       - ci-doctor.lock.yml
       - daily-perf-improver.lock.yml
+      - daily-progress.lock.yml
       - daily-qa.lock.yml
       - daily-test-improver.lock.yml
+      - issue-triage.lock.yml
+      - portfolio-analyst.lock.yml
+      - pr-fix.lock.yml
       - update-docs.lock.yml
+      - weekly-research.lock.yml
   artipacked:
     ignore:
+      - audit-workflows.lock.yml
       - ci-doctor.lock.yml
       - daily-perf-improver.lock.yml
+      - daily-progress.lock.yml
       - daily-qa.lock.yml
       - daily-test-improver.lock.yml
+      - issue-triage.lock.yml
+      - portfolio-analyst.lock.yml
+      - pr-fix.lock.yml
       - update-docs.lock.yml
+      - weekly-research.lock.yml
+  unpinned-uses:
+    ignore:
+      - agentics-maintenance.yml
+      - audit-workflows.lock.yml
+      - ci-doctor.lock.yml
+      - daily-perf-improver.lock.yml
+      - daily-progress.lock.yml
+      - daily-qa.lock.yml
+      - daily-test-improver.lock.yml
+      - issue-triage.lock.yml
+      - portfolio-analyst.lock.yml
+      - pr-fix.lock.yml
+      - update-docs.lock.yml
+      - weekly-research.lock.yml
