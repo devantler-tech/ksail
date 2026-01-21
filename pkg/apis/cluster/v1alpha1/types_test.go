@@ -422,9 +422,14 @@ func TestLocalRegistry_ResolvedHostPortPath(t *testing.T) {
 	}
 }
 
-func TestLocalRegistry_ResolveCredentials(t *testing.T) {
-	// Note: Cannot use t.Parallel() when using t.Setenv()
-	tests := []struct {
+func getLocalRegistryResolveCredentialsTests() []struct {
+	name         string
+	registry     string
+	envVars      map[string]string
+	wantUsername string
+	wantPassword string
+} {
+	return []struct {
 		name         string
 		registry     string
 		envVars      map[string]string
@@ -476,6 +481,11 @@ func TestLocalRegistry_ResolveCredentials(t *testing.T) {
 			wantPassword: "",
 		},
 	}
+}
+
+func TestLocalRegistry_ResolveCredentials(t *testing.T) {
+	// Note: Cannot use t.Parallel() when using t.Setenv()
+	tests := getLocalRegistryResolveCredentialsTests()
 
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
