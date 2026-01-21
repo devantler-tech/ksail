@@ -17,6 +17,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
 	"github.com/docker/docker/client"
 	"github.com/gkampitakis/go-snaps/snaps"
+	v1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/samber/do/v2"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
@@ -522,120 +523,120 @@ var (
 )
 
 func TestSetupK3dCSI_DisablesCSI(t *testing.T) {
-t.Parallel()
+	t.Parallel()
 
-clusterCfg := &v1alpha1.Cluster{
-Spec: v1alpha1.Spec{
-Cluster: v1alpha1.ClusterSpec{
-Distribution: v1alpha1.DistributionK3s,
-CSI:          v1alpha1.CSIDisabled,
-},
-},
-}
+	clusterCfg := &v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				Distribution: v1alpha1.DistributionK3s,
+				CSI:          v1alpha1.CSIDisabled,
+			},
+		},
+	}
 
-k3dConfig := &v1alpha5.SimpleConfig{}
+	k3dConfig := &v1alpha5.SimpleConfig{}
 
-clusterpkg.SetupK3dCSI(clusterCfg, k3dConfig)
+	clusterpkg.SetupK3dCSI(clusterCfg, k3dConfig)
 
-// Verify the flag was added
-found := false
-for _, arg := range k3dConfig.Options.K3sOptions.ExtraArgs {
-if arg.Arg == "--disable=local-storage" {
-found = true
-require.Equal(t, []string{"server:*"}, arg.NodeFilters)
-break
-}
-}
-require.True(t, found, "--disable=local-storage flag should be added")
+	// Verify the flag was added
+	found := false
+	for _, arg := range k3dConfig.Options.K3sOptions.ExtraArgs {
+		if arg.Arg == "--disable=local-storage" {
+			found = true
+			require.Equal(t, []string{"server:*"}, arg.NodeFilters)
+			break
+		}
+	}
+	require.True(t, found, "--disable=local-storage flag should be added")
 }
 
 func TestSetupK3dCSI_DoesNotDuplicateFlag(t *testing.T) {
-t.Parallel()
+	t.Parallel()
 
-clusterCfg := &v1alpha1.Cluster{
-Spec: v1alpha1.Spec{
-Cluster: v1alpha1.ClusterSpec{
-Distribution: v1alpha1.DistributionK3s,
-CSI:          v1alpha1.CSIDisabled,
-},
-},
-}
+	clusterCfg := &v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				Distribution: v1alpha1.DistributionK3s,
+				CSI:          v1alpha1.CSIDisabled,
+			},
+		},
+	}
 
-k3dConfig := &v1alpha5.SimpleConfig{
-Options: v1alpha5.SimpleConfigOptions{
-K3sOptions: v1alpha5.SimpleConfigOptionsK3s{
-ExtraArgs: []v1alpha5.K3sArgWithNodeFilters{
-{
-Arg:         "--disable=local-storage",
-NodeFilters: []string{"server:*"},
-},
-},
-},
-},
-}
+	k3dConfig := &v1alpha5.SimpleConfig{
+		Options: v1alpha5.SimpleConfigOptions{
+			K3sOptions: v1alpha5.SimpleConfigOptionsK3s{
+				ExtraArgs: []v1alpha5.K3sArgWithNodeFilters{
+					{
+						Arg:         "--disable=local-storage",
+						NodeFilters: []string{"server:*"},
+					},
+				},
+			},
+		},
+	}
 
-clusterpkg.SetupK3dCSI(clusterCfg, k3dConfig)
+	clusterpkg.SetupK3dCSI(clusterCfg, k3dConfig)
 
-// Count occurrences of the flag
-count := 0
-for _, arg := range k3dConfig.Options.K3sOptions.ExtraArgs {
-if arg.Arg == "--disable=local-storage" {
-count++
-}
-}
-require.Equal(t, 1, count, "flag should not be duplicated")
+	// Count occurrences of the flag
+	count := 0
+	for _, arg := range k3dConfig.Options.K3sOptions.ExtraArgs {
+		if arg.Arg == "--disable=local-storage" {
+			count++
+		}
+	}
+	require.Equal(t, 1, count, "flag should not be duplicated")
 }
 
 func TestSetupK3dCSI_DoesNothingForNonK3s(t *testing.T) {
-t.Parallel()
+	t.Parallel()
 
-clusterCfg := &v1alpha1.Cluster{
-Spec: v1alpha1.Spec{
-Cluster: v1alpha1.ClusterSpec{
-Distribution: v1alpha1.DistributionVanilla,
-CSI:          v1alpha1.CSIDisabled,
-},
-},
-}
+	clusterCfg := &v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				Distribution: v1alpha1.DistributionVanilla,
+				CSI:          v1alpha1.CSIDisabled,
+			},
+		},
+	}
 
-k3dConfig := &v1alpha5.SimpleConfig{}
+	k3dConfig := &v1alpha5.SimpleConfig{}
 
-clusterpkg.SetupK3dCSI(clusterCfg, k3dConfig)
+	clusterpkg.SetupK3dCSI(clusterCfg, k3dConfig)
 
-// Verify no flags were added
-require.Empty(t, k3dConfig.Options.K3sOptions.ExtraArgs)
+	// Verify no flags were added
+	require.Empty(t, k3dConfig.Options.K3sOptions.ExtraArgs)
 }
 
 func TestSetupK3dCSI_DoesNothingWhenCSINotDisabled(t *testing.T) {
-t.Parallel()
+	t.Parallel()
 
-testCases := []struct {
-name string
-csi  v1alpha1.CSI
-}{
-{"default", v1alpha1.CSIDefault},
-{"enabled", v1alpha1.CSIEnabled},
-}
+	testCases := []struct {
+		name string
+		csi  v1alpha1.CSI
+	}{
+		{"default", v1alpha1.CSIDefault},
+		{"enabled", v1alpha1.CSIEnabled},
+	}
 
-for _, tc := range testCases {
-t.Run(tc.name, func(t *testing.T) {
-t.Parallel()
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 
-clusterCfg := &v1alpha1.Cluster{
-Spec: v1alpha1.Spec{
-Cluster: v1alpha1.ClusterSpec{
-Distribution: v1alpha1.DistributionK3s,
-CSI:          tc.csi,
-},
-},
-}
+			clusterCfg := &v1alpha1.Cluster{
+				Spec: v1alpha1.Spec{
+					Cluster: v1alpha1.ClusterSpec{
+						Distribution: v1alpha1.DistributionK3s,
+						CSI:          tc.csi,
+					},
+				},
+			}
 
-k3dConfig := &v1alpha5.SimpleConfig{}
+			k3dConfig := &v1alpha5.SimpleConfig{}
 
-clusterpkg.SetupK3dCSI(clusterCfg, k3dConfig)
+			clusterpkg.SetupK3dCSI(clusterCfg, k3dConfig)
 
-// Verify no flags were added
-require.Empty(t, k3dConfig.Options.K3sOptions.ExtraArgs)
-})
-}
+			// Verify no flags were added
+			require.Empty(t, k3dConfig.Options.K3sOptions.ExtraArgs)
+		})
+	}
 }
