@@ -16,7 +16,7 @@ For detailed package and API documentation, refer to the Go documentation at [pk
 
 Before you begin, ensure you have the following installed:
 
-- [Go (v1.23.4+)](https://go.dev/doc/install)
+- [Go (v1.25.4+)](https://go.dev/doc/install)
 - [mockery (v3.5+)](https://vektra.github.io/mockery/v3.5/installation/)
 - [golangci-lint](https://golangci-lint.run/docs/welcome/install/)
 - [mega-linter](https://megalinter.io/latest/mega-linter-runner/#installation)
