@@ -1,7 +1,9 @@
+//nolint:err113 // Test helper function uses dynamic errors for type checking
 package fluxinstaller
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
@@ -64,27 +66,39 @@ func PollUntilReady(
 }
 
 // WaitForFluxInstanceReady exports waitForFluxInstanceReady for testing.
-func WaitForFluxInstanceReady(ctx context.Context, restConfig interface{}) error {
-	return waitForFluxInstanceReady(ctx, restConfig.(*rest.Config))
+func WaitForFluxInstanceReady(ctx context.Context, restConfig any) error {
+	rc, ok := restConfig.(*rest.Config)
+	if !ok {
+		return errors.New("invalid rest config type")
+	}
+
+	return waitForFluxInstanceReady(ctx, rc)
 }
 
 // ExportNewFluxResourcesClient returns the current newFluxResourcesClient function for testing.
-func ExportNewFluxResourcesClient() func(*rest.Config) (interface{}, error) {
-	return func(rc *rest.Config) (interface{}, error) {
+func ExportNewFluxResourcesClient() func(*rest.Config) (any, error) {
+	return func(rc *rest.Config) (any, error) {
 		return newFluxResourcesClient(rc)
 	}
 }
 
 // SetNewFluxResourcesClient allows tests to replace newFluxResourcesClient with a mock.
-func SetNewFluxResourcesClient(fn func(*rest.Config) (interface{}, error)) func() {
+func SetNewFluxResourcesClient(fn func(*rest.Config) (any, error)) func() {
 	original := newFluxResourcesClient
 	newFluxResourcesClient = func(rc *rest.Config) (client.Client, error) {
 		c, err := fn(rc)
 		if err != nil {
 			return nil, err
 		}
-		return c.(client.Client), nil
+
+		client, ok := c.(client.Client)
+		if !ok {
+			return nil, errors.New("invalid client type")
+		}
+
+		return client, nil
 	}
+
 	return func() {
 		newFluxResourcesClient = original
 	}

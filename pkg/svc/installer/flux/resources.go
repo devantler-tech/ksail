@@ -58,6 +58,8 @@ var (
 	errCRDNotEstablished         = errors.New("CRD is not yet established")
 	errAPINotServable            = errors.New("API returned no resources")
 	errOCIRepositoryCreateTimout = errors.New("timed out waiting for OCIRepository to be created")
+	errFluxInstanceNotReady      = errors.New("FluxInstance is not ready")
+	errFluxInstancePollTimeout   = errors.New("timed out waiting for FluxInstance to be ready")
 )
 
 //nolint:gochecknoglobals // package-level timeout constants
@@ -795,6 +797,9 @@ func waitForFluxInstanceReady(ctx context.Context, restConfig *rest.Config) erro
 			if err != nil {
 				// Client creation errors are transient during CRD initialization.
 				// Don't return error, just keep polling.
+				//
+				// Intentionally ignoring error to retry later.
+				//nolint:nilerr // Transient error - continue polling
 				return false, nil
 			}
 
@@ -808,6 +813,9 @@ func waitForFluxInstanceReady(ctx context.Context, restConfig *rest.Config) erro
 			if err != nil {
 				// All Get errors are transient (NotFound, API not ready, etc)
 				// Don't return error, just keep polling.
+				//
+				// Intentionally ignoring error to retry later.
+				//nolint:nilerr // Transient error - continue polling
 				return false, nil
 			}
 
@@ -821,7 +829,8 @@ func waitForFluxInstanceReady(ctx context.Context, restConfig *rest.Config) erro
 					if condition.Status == metav1.ConditionFalse {
 						// Ready=False indicates a permanent failure - return error immediately
 						return false, fmt.Errorf(
-							"FluxInstance is not ready: %s - %s",
+							"%w: %s - %s",
+							errFluxInstanceNotReady,
 							condition.Reason,
 							condition.Message,
 						)
@@ -864,7 +873,7 @@ func pollUntilReady(
 
 		select {
 		case <-waitCtx.Done():
-			return fmt.Errorf("timed out waiting for %s", resourceDesc)
+			return fmt.Errorf("%w: %s", errFluxInstancePollTimeout, resourceDesc)
 		case <-ticker.C:
 		}
 	}

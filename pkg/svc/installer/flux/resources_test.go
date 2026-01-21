@@ -14,8 +14,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/rest"
@@ -611,17 +611,19 @@ func (m *mockFluxClient) Patch(
 }
 
 func (m *mockFluxClient) DeleteAllOf(
-	ctx context.Context,
-	obj client.Object,
-	opts ...client.DeleteAllOfOption,
+	_ context.Context,
+	_ client.Object,
+	_ ...client.DeleteAllOfOption,
 ) error {
 	return nil
 }
 
+//nolint:ireturn // Mock client must return interface types
 func (m *mockFluxClient) Status() client.SubResourceWriter {
 	return nil
 }
 
+//nolint:ireturn // Mock client must return interface types
 func (m *mockFluxClient) SubResource(string) client.SubResourceClient {
 	return nil
 }
@@ -630,35 +632,36 @@ func (m *mockFluxClient) Scheme() *runtime.Scheme {
 	return nil
 }
 
+//nolint:ireturn // Mock client must return interface types
 func (m *mockFluxClient) RESTMapper() meta.RESTMapper {
 	return nil
 }
 
-func (m *mockFluxClient) GroupVersionKindFor(obj runtime.Object) (schema.GroupVersionKind, error) {
+func (m *mockFluxClient) GroupVersionKindFor(_ runtime.Object) (schema.GroupVersionKind, error) {
 	return schema.GroupVersionKind{}, nil
 }
 
-func (m *mockFluxClient) IsObjectNamespaced(obj runtime.Object) (bool, error) {
+func (m *mockFluxClient) IsObjectNamespaced(_ runtime.Object) (bool, error) {
 	return false, nil
 }
 
 func (m *mockFluxClient) Apply(
-	ctx context.Context,
-	obj runtime.ApplyConfiguration,
-	opts ...client.ApplyOption,
+	_ context.Context,
+	_ runtime.ApplyConfiguration,
+	_ ...client.ApplyOption,
 ) error {
 	return nil
 }
 
+//nolint:paralleltest // Cannot run in parallel due to global mock
 func TestWaitForFluxInstanceReady_Success(t *testing.T) {
-	t.Parallel()
-
+	// Removed t.Parallel() to avoid test pollution with global mock
 	mockClient := &mockFluxClient{
 		getFunc: func(
-			ctx context.Context,
-			key client.ObjectKey,
+			_ context.Context,
+			_ client.ObjectKey,
 			obj client.Object,
-			opts ...client.GetOption,
+			_ ...client.GetOption,
 		) error {
 			instance, ok := obj.(*fluxinstaller.FluxInstance)
 			require.True(t, ok, "expected FluxInstance type")
@@ -675,7 +678,7 @@ func TestWaitForFluxInstanceReady_Success(t *testing.T) {
 	}
 
 	// Mock the client factory
-	restore := fluxinstaller.SetNewFluxResourcesClient(func(*rest.Config) (interface{}, error) {
+	restore := fluxinstaller.SetNewFluxResourcesClient(func(*rest.Config) (any, error) {
 		return mockClient, nil
 	})
 	defer restore()
@@ -688,15 +691,15 @@ func TestWaitForFluxInstanceReady_Success(t *testing.T) {
 	require.NoError(t, err)
 }
 
+//nolint:paralleltest // Cannot run in parallel due to global mock
 func TestWaitForFluxInstanceReady_ReadyFalse(t *testing.T) {
-	t.Parallel()
-
+	// Removed t.Parallel() to avoid test pollution with global mock
 	mockClient := &mockFluxClient{
 		getFunc: func(
-			ctx context.Context,
-			key client.ObjectKey,
+			_ context.Context,
+			_ client.ObjectKey,
 			obj client.Object,
-			opts ...client.GetOption,
+			_ ...client.GetOption,
 		) error {
 			instance, ok := obj.(*fluxinstaller.FluxInstance)
 			require.True(t, ok, "expected FluxInstance type")
@@ -715,7 +718,7 @@ func TestWaitForFluxInstanceReady_ReadyFalse(t *testing.T) {
 	}
 
 	// Mock the client factory
-	restore := fluxinstaller.SetNewFluxResourcesClient(func(*rest.Config) (interface{}, error) {
+	restore := fluxinstaller.SetNewFluxResourcesClient(func(*rest.Config) (any, error) {
 		return mockClient, nil
 	})
 	defer restore()
@@ -731,16 +734,16 @@ func TestWaitForFluxInstanceReady_ReadyFalse(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to sync manifests")
 }
 
+//nolint:paralleltest // Cannot run in parallel due to global mock
 func TestWaitForFluxInstanceReady_NotFound(t *testing.T) {
-	t.Parallel()
-
+	// Removed t.Parallel() to avoid test pollution with global mock
 	callCount := 0
 	mockClient := &mockFluxClient{
 		getFunc: func(
-			ctx context.Context,
-			key client.ObjectKey,
+			_ context.Context,
+			_ client.ObjectKey,
 			obj client.Object,
-			opts ...client.GetOption,
+			_ ...client.GetOption,
 		) error {
 			callCount++
 			if callCount < 2 {
@@ -762,7 +765,7 @@ func TestWaitForFluxInstanceReady_NotFound(t *testing.T) {
 	}
 
 	// Mock the client factory
-	restore := fluxinstaller.SetNewFluxResourcesClient(func(*rest.Config) (interface{}, error) {
+	restore := fluxinstaller.SetNewFluxResourcesClient(func(*rest.Config) (any, error) {
 		return mockClient, nil
 	})
 	defer restore()
@@ -776,12 +779,12 @@ func TestWaitForFluxInstanceReady_NotFound(t *testing.T) {
 	assert.GreaterOrEqual(t, callCount, 2, "should have retried at least 2 times")
 }
 
+//nolint:paralleltest // Cannot run in parallel due to global mock
 func TestWaitForFluxInstanceReady_ClientCreationError(t *testing.T) {
-	t.Parallel()
-
+	// Removed t.Parallel() to avoid test pollution with global mock
 	callCount := 0
 	// Mock the client factory to fail initially then succeed
-	restore := fluxinstaller.SetNewFluxResourcesClient(func(*rest.Config) (interface{}, error) {
+	restore := fluxinstaller.SetNewFluxResourcesClient(func(*rest.Config) (any, error) {
 		callCount++
 		if callCount < 2 {
 			return nil, errors.New("client creation failed")
@@ -789,10 +792,10 @@ func TestWaitForFluxInstanceReady_ClientCreationError(t *testing.T) {
 
 		return &mockFluxClient{
 			getFunc: func(
-				ctx context.Context,
-				key client.ObjectKey,
+				_ context.Context,
+				_ client.ObjectKey,
 				obj client.Object,
-				opts ...client.GetOption,
+				_ ...client.GetOption,
 			) error {
 				instance, ok := obj.(*fluxinstaller.FluxInstance)
 				require.True(t, ok, "expected FluxInstance type")
@@ -818,4 +821,3 @@ func TestWaitForFluxInstanceReady_ClientCreationError(t *testing.T) {
 	require.NoError(t, err)
 	assert.GreaterOrEqual(t, callCount, 2, "should have retried client creation at least 2 times")
 }
-
