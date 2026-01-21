@@ -628,7 +628,8 @@ func (p *Provider) waitForAction(ctx context.Context, action *hcloud.Action) err
 	defer cancel()
 
 	// Poll for action completion
-	//nolint:staticcheck // WatchProgress is deprecated but simpler than WaitForFunc
+	// WatchProgress is deprecated but simpler than WaitForFunc
+	//nolint:staticcheck // SA1019
 	_, errChan := p.client.Action.WatchProgress(ctx, action)
 
 	err := <-errChan
