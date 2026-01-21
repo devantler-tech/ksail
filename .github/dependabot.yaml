@@ -1,11 +1,9 @@
 version: 2
 updates:
-  # Go modules (main application)
   - package-ecosystem: gomod
     directory: /
     schedule:
       interval: daily
-    # Wait for releases to stabilize before updating
     cooldown:
       default-days: 7
       semver-major-days: 14
@@ -15,19 +13,18 @@ updates:
           - "k8s.io/*"
           - "sigs.k8s.io/*"
 
-  # GitHub Actions workflows
-  # Note: cooldown not supported for github-actions ecosystem
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: daily
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
 
-  # npm (documentation site)
   - package-ecosystem: npm
     directory: /docs
     schedule:
       interval: daily
-    # Wait for releases to stabilize before updating
     cooldown:
       default-days: 7
       semver-major-days: 14
@@ -36,19 +33,26 @@ updates:
         patterns:
           - "*"
 
-  # Docker base images
-  # Note: cooldown not supported for docker ecosystem
   - package-ecosystem: docker
-    directory: / # Dockerfile (build image)
+    directory: /
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
     schedule:
       interval: daily
 
   - package-ecosystem: docker
-    directory: /.github/fixtures/reconcile-test # Kubernetes deployment manifest
+    directory: /.github/fixtures/reconcile-test
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
     schedule:
       interval: daily
 
   - package-ecosystem: docker
-    directory: /pkg/io/config-manager/talos # Talos image (embedded in Go via go:embed)
+    directory: /pkg/io/config-manager/talos
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
     schedule:
       interval: daily
