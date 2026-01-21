@@ -514,6 +514,78 @@ spec:
 	snaps.MatchSnapshot(t, trimTrailingNewline(out.String()))
 }
 
+func TestShouldPushOCIArtifact_FluxWithLocalRegistry(t *testing.T) {
+	t.Parallel()
+
+	clusterCfg := &v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				GitOpsEngine: v1alpha1.GitOpsEngineFlux,
+				LocalRegistry: v1alpha1.LocalRegistry{
+					Registry: "localhost:5000",
+				},
+			},
+		},
+	}
+
+	result := clusterpkg.ExportShouldPushOCIArtifact(clusterCfg)
+	require.True(t, result, "Should push when Flux is enabled with local registry")
+}
+
+func TestShouldPushOCIArtifact_ArgoCDShouldNotPush(t *testing.T) {
+	t.Parallel()
+
+	clusterCfg := &v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				GitOpsEngine: v1alpha1.GitOpsEngineArgoCD,
+				LocalRegistry: v1alpha1.LocalRegistry{
+					Registry: "localhost:5000",
+				},
+			},
+		},
+	}
+
+	result := clusterpkg.ExportShouldPushOCIArtifact(clusterCfg)
+	require.False(t, result, "Should not push when ArgoCD is the GitOps engine")
+}
+
+func TestShouldPushOCIArtifact_NoLocalRegistryShouldNotPush(t *testing.T) {
+	t.Parallel()
+
+	clusterCfg := &v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				GitOpsEngine: v1alpha1.GitOpsEngineFlux,
+				LocalRegistry: v1alpha1.LocalRegistry{
+					// Empty registry - disabled
+				},
+			},
+		},
+	}
+
+	result := clusterpkg.ExportShouldPushOCIArtifact(clusterCfg)
+	require.False(t, result, "Should not push when local registry is disabled")
+}
+
+func TestShouldPushOCIArtifact_NoGitOpsEngineShouldNotPush(t *testing.T) {
+	t.Parallel()
+
+	clusterCfg := &v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				GitOpsEngine: v1alpha1.GitOpsEngineNone,
+				LocalRegistry: v1alpha1.LocalRegistry{
+					Registry: "localhost:5000",
+				},
+			},
+		},
+	}
+
+	result := clusterpkg.ExportShouldPushOCIArtifact(clusterCfg)
+	require.False(t, result, "Should not push when GitOps engine is none")
+}
+
 // Ensure fake types satisfy interfaces at compile time.
 var (
 	_ clusterprovisioner.ClusterProvisioner = (*fakeProvisioner)(nil)
