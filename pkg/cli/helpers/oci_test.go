@@ -70,8 +70,9 @@ func TestPushOCIArtifact_ErrorIfMissing(t *testing.T) {
 	assert.ErrorIs(t, err, io.ErrSourceDirectoryNotFound)
 }
 
+//nolint:paralleltest // Cannot use t.Parallel() with t.Chdir()
 func TestPushOCIArtifact_UsesDefaultSourceDir(t *testing.T) {
-	t.Parallel()
+	// Note: Cannot use t.Parallel() when using t.Chdir()
 
 	// Create a temporary directory
 	tmpDir := t.TempDir()
