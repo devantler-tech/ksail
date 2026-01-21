@@ -556,7 +556,7 @@ func TestShouldPushOCIArtifact_NoLocalRegistryShouldNotPush(t *testing.T) {
 	clusterCfg := &v1alpha1.Cluster{
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{
-				GitOpsEngine: v1alpha1.GitOpsEngineFlux,
+				GitOpsEngine:  v1alpha1.GitOpsEngineFlux,
 				LocalRegistry: v1alpha1.LocalRegistry{
 					// Empty registry - disabled
 				},

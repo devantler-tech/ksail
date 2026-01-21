@@ -12,4 +12,7 @@ var (
 
 	// ErrBasePath is returned when the base path is empty.
 	ErrBasePath = errors.New("base path cannot be empty")
+
+	// ErrSourceDirectoryNotFound is returned when a source directory does not exist.
+	ErrSourceDirectoryNotFound = errors.New("source directory does not exist")
 )

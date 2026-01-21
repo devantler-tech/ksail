@@ -55,11 +55,11 @@ const (
 )
 
 var (
-	errCRDNotEstablished       = errors.New("CRD is not yet established")
-	errAPINotServable          = errors.New("API returned no resources")
+	errCRDNotEstablished         = errors.New("CRD is not yet established")
+	errAPINotServable            = errors.New("API returned no resources")
 	errOCIRepositoryCreateTimout = errors.New("timed out waiting for OCIRepository to be created")
-	errFluxInstanceNotReady    = errors.New("FluxInstance is not ready")
-	errPollTimeout             = errors.New("timed out waiting for resource to be ready")
+	errFluxInstanceNotReady      = errors.New("FluxInstance is not ready")
+	errPollTimeout               = errors.New("timed out waiting for resource to be ready")
 )
 
 // permanentError wraps an error to indicate it's a permanent failure that should not be retried.

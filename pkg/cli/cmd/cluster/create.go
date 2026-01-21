@@ -439,8 +439,7 @@ func pushOCIArtifactForFlux(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster) er
 	}
 
 	// Push the OCI artifact using the helper function
-	err := helpers.PushOCIArtifact(helpers.PushOCIArtifactOptions{
-		Context:       cmd.Context(),
+	err := helpers.PushOCIArtifact(cmd.Context(), helpers.PushOCIArtifactOptions{
 		ClusterConfig: clusterCfg,
 		ClusterName:   clusterName,
 		SourceDir:     "", // Use default from config
@@ -449,7 +448,7 @@ func pushOCIArtifactForFlux(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster) er
 		SkipIfMissing: true, // Skip gracefully if source directory doesn't exist
 	})
 	if err != nil {
-		return err
+		return fmt.Errorf("push oci artifact: %w", err)
 	}
 
 	notify.WriteMessage(notify.Message{
@@ -460,4 +459,3 @@ func pushOCIArtifactForFlux(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster) er
 
 	return nil
 }
-
