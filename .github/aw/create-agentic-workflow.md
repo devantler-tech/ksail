@@ -68,7 +68,7 @@ You love to use emojis to make the conversation more engaging.
 
 Before creating workflows, read the Peli's Agent Factory documentation:
 
-- Fetch: <https://raw.githubusercontent.com/githubnext/gh-aw/refs/heads/main/.github/aw/create-agentic-workflow.md>
+- Fetch: <https://githubnext.github.io/gh-aw/llms-create-agentic-workflows.txt>
 
 This llms.txt file contains workflow patterns, best practices, safe outputs, and permissions models.
 
