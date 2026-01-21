@@ -793,8 +793,9 @@ func waitForFluxInstanceReady(ctx context.Context, restConfig *rest.Config) erro
 			// Create a fresh client on each retry to avoid caching issues
 			fluxClient, err := newFluxResourcesClient(restConfig)
 			if err != nil {
-				// Client creation errors are transient during CRD initialization
-				return false, nil
+				// Client creation errors are transient during CRD initialization.
+				// Return the error so pollUntilReady can track it for timeout messages.
+				return false, fmt.Errorf("create flux client: %w", err)
 			}
 
 			instance := &FluxInstance{}
@@ -811,13 +812,24 @@ func waitForFluxInstanceReady(ctx context.Context, restConfig *rest.Config) erro
 				}
 
 				// Other errors might be transient
-				return false, nil
+				return false, fmt.Errorf("get FluxInstance: %w", err)
 			}
 
 			// Check for Ready condition
 			for _, condition := range instance.Status.Conditions {
-				if condition.Type == "Ready" && condition.Status == metav1.ConditionTrue {
-					return true, nil
+				if condition.Type == "Ready" {
+					if condition.Status == metav1.ConditionTrue {
+						return true, nil
+					}
+
+					if condition.Status == metav1.ConditionFalse {
+						// Ready=False indicates a failure state - return error immediately
+						return false, fmt.Errorf(
+							"FluxInstance is not ready: %s - %s",
+							condition.Reason,
+							condition.Message,
+						)
+					}
 				}
 			}
 
