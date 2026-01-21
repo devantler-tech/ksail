@@ -136,6 +136,7 @@ func convertValue(val reflect.Value) any {
 //
 
 func convertByKind(val reflect.Value) any {
+	//nolint:exhaustive // Default case handles all other reflect.Kind types
 	switch val.Kind() {
 	case reflect.String:
 		return convertString(val)
@@ -382,6 +383,7 @@ func pruneField(fieldVal reflect.Value, fieldPath string, field reflect.StructFi
 //
 
 func pruneByDefaultTag(fieldVal reflect.Value, defaultTag string) bool {
+	//nolint:exhaustive // Default case handles all other reflect.Kind types
 	switch fieldVal.Kind() {
 	case reflect.String:
 		pruneStringDefault(fieldVal, defaultTag)
