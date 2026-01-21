@@ -31,3 +31,12 @@ func TestK3sImage(t *testing.T) {
 		t.Errorf("DefaultK3sImage should be rancher/k3s image, got: %s", image)
 	}
 }
+
+func TestDefaultK3sImage_NotEmpty(t *testing.T) {
+	t.Parallel()
+
+	// Verify the image is set (proves Dockerfile embedding works)
+	if k3d.DefaultK3sImage == "" {
+		t.Error("DefaultK3sImage was not set - Dockerfile may not be embedded")
+	}
+}
