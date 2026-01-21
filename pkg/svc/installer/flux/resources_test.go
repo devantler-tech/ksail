@@ -726,6 +726,7 @@ func TestWaitForFluxInstanceReady_ReadyFalse(t *testing.T) {
 	// Use a short timeout context for this test
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
+
 	restConfig := &rest.Config{}
 
 	err := fluxinstaller.WaitForFluxInstanceReady(ctx, restConfig)

@@ -58,27 +58,8 @@ var (
 	errCRDNotEstablished         = errors.New("CRD is not yet established")
 	errAPINotServable            = errors.New("API returned no resources")
 	errOCIRepositoryCreateTimout = errors.New("timed out waiting for OCIRepository to be created")
-	errFluxInstanceNotReady      = errors.New("FluxInstance is not ready")
 	errPollTimeout               = errors.New("timed out waiting for resource to be ready")
 )
-
-// permanentError wraps an error to indicate it's a permanent failure that should not be retried.
-type permanentError struct {
-	err error
-}
-
-func (e *permanentError) Error() string {
-	return e.err.Error()
-}
-
-func (e *permanentError) Unwrap() error {
-	return e.err
-}
-
-// newPermanentError creates a permanent error that causes pollUntilReady to fail immediately.
-func newPermanentError(err error) error {
-	return &permanentError{err: err}
-}
 
 //nolint:gochecknoglobals // package-level timeout constants
 var (
@@ -858,8 +839,7 @@ func waitForFluxInstanceReady(ctx context.Context, restConfig *rest.Config) erro
 
 // pollUntilReady implements a generic polling pattern for waiting on async conditions.
 // It repeatedly calls checkFn until it returns true (success) or the context expires.
-// If checkFn returns a permanentError, polling stops immediately with that error.
-// For other errors, the last error is tracked and returned if the wait times out.
+// For errors, the last error is tracked and returned if the wait times out.
 func pollUntilReady(
 	ctx context.Context,
 	timeout time.Duration,
@@ -878,12 +858,6 @@ func pollUntilReady(
 	for {
 		ready, err := checkFn()
 		if err != nil {
-			// Check if this is a permanent error that should not be retried
-			var permErr *permanentError
-			if errors.As(err, &permErr) {
-				return permErr.err
-			}
-
 			// Store transient errors for timeout reporting
 			lastErr = err
 		}
