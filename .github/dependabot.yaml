@@ -19,7 +19,6 @@ updates:
       interval: daily
     cooldown:
       default-days: 7
-      semver-major-days: 14
 
   - package-ecosystem: npm
     directory: /docs
@@ -37,7 +36,6 @@ updates:
     directory: /
     cooldown:
       default-days: 7
-      semver-major-days: 14
     schedule:
       interval: daily
 
@@ -45,7 +43,6 @@ updates:
     directory: /.github/fixtures/reconcile-test
     cooldown:
       default-days: 7
-      semver-major-days: 14
     schedule:
       interval: daily
 
@@ -53,6 +50,5 @@ updates:
     directory: /pkg/io/config-manager/talos
     cooldown:
       default-days: 7
-      semver-major-days: 14
     schedule:
       interval: daily
