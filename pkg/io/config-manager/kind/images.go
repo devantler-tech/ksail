@@ -2,39 +2,16 @@ package kind
 
 import (
 	_ "embed"
-	"fmt"
-	"regexp"
-)
 
-// minMatchCount is the minimum number of regex matches required to extract the image reference.
-const minMatchCount = 2
+	"github.com/devantler-tech/ksail/v5/pkg/io/imageparser"
+)
 
 // Embedded Dockerfile containing image references (updated by Dependabot).
 //
 //go:embed Dockerfile
 var dockerfile string
 
-// parseImageFromDockerfile extracts a container image reference from a Dockerfile using the provided regex pattern.
-// This ensures Go code stays in sync with Dependabot updates automatically.
-// Panics if the Dockerfile cannot be parsed - this catches embedding/format issues at init time.
-func parseImageFromDockerfile(dockerfileContent, pattern, imageName string) string {
-	re := regexp.MustCompile(pattern)
-	matches := re.FindStringSubmatch(dockerfileContent)
-
-	if len(matches) < minMatchCount {
-		panic(
-			fmt.Sprintf(
-				"failed to parse %s image from embedded Dockerfile - "+
-					"check that the Dockerfile exists and contains a valid FROM directive",
-				imageName,
-			),
-		)
-	}
-
-	return matches[1]
-}
-
 // kindNodeImage returns the Kind node container image reference from the embedded Dockerfile.
 func kindNodeImage() string {
-	return parseImageFromDockerfile(dockerfile, `FROM\s+(kindest/node:[^\s]+)`, "Kind node")
+	return imageparser.ParseImageFromDockerfile(dockerfile, `FROM\s+(kindest/node:[^\s]+)`, "Kind node")
 }
