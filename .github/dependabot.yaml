@@ -21,6 +21,9 @@ updates:
     directory: /
     schedule:
       interval: daily
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
 
   # npm (documentation site)
   - package-ecosystem: npm
