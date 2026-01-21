@@ -105,7 +105,12 @@ func csiFactory(
 		// For Talos × Hetzner, use the Hetzner CSI driver
 		if clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionTalos &&
 			clusterCfg.Spec.Cluster.Provider == v1alpha1.ProviderHetzner {
-			return hetznercsiinstaller.NewHetznerCSIInstaller(helmClient, timeout), nil
+			return hetznercsiinstaller.NewHetznerCSIInstaller(
+				helmClient,
+				kubeconfig,
+				clusterCfg.Spec.Cluster.Connection.Context,
+				timeout,
+			), nil
 		}
 
 		// For other distributions, use local-path-provisioner
