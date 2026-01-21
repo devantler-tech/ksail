@@ -77,10 +77,10 @@ func TestDistribution_ProvidesMetricsServerByDefault(t *testing.T) {
 		description  string
 	}{
 		{
-			name:         "returns_true_for_k3d",
+			name:         "returns_true_for_k3s",
 			distribution: v1alpha1.DistributionK3s,
 			want:         true,
-			description:  "K3d should provide metrics-server by default",
+			description:  "K3s should provide metrics-server by default",
 		},
 		{
 			name:         "returns_false_for_kind",
@@ -123,10 +123,10 @@ func TestDistribution_ProvidesStorageByDefault(t *testing.T) {
 		description  string
 	}{
 		{
-			name:         "returns_true_for_k3d",
+			name:         "returns_true_for_k3s",
 			distribution: v1alpha1.DistributionK3s,
 			want:         true,
-			description:  "K3d should provide storage by default",
+			description:  "K3s should provide storage by default",
 		},
 		{
 			name:         "returns_false_for_kind",
