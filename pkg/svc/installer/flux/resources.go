@@ -55,12 +55,30 @@ const (
 )
 
 var (
-	errCRDNotEstablished         = errors.New("CRD is not yet established")
-	errAPINotServable            = errors.New("API returned no resources")
+	errCRDNotEstablished       = errors.New("CRD is not yet established")
+	errAPINotServable          = errors.New("API returned no resources")
 	errOCIRepositoryCreateTimout = errors.New("timed out waiting for OCIRepository to be created")
-	errFluxInstanceNotReady      = errors.New("FluxInstance is not ready")
-	errFluxInstancePollTimeout   = errors.New("timed out waiting for FluxInstance to be ready")
+	errFluxInstanceNotReady    = errors.New("FluxInstance is not ready")
+	errPollTimeout             = errors.New("timed out waiting for resource to be ready")
 )
+
+// permanentError wraps an error to indicate it's a permanent failure that should not be retried.
+type permanentError struct {
+	err error
+}
+
+func (e *permanentError) Error() string {
+	return e.err.Error()
+}
+
+func (e *permanentError) Unwrap() error {
+	return e.err
+}
+
+// newPermanentError creates a permanent error that causes pollUntilReady to fail immediately.
+func newPermanentError(err error) error {
+	return &permanentError{err: err}
+}
 
 //nolint:gochecknoglobals // package-level timeout constants
 var (
@@ -828,12 +846,12 @@ func waitForFluxInstanceReady(ctx context.Context, restConfig *rest.Config) erro
 
 					if condition.Status == metav1.ConditionFalse {
 						// Ready=False indicates a permanent failure - return error immediately
-						return false, fmt.Errorf(
+						return false, newPermanentError(fmt.Errorf(
 							"%w: %s - %s",
 							errFluxInstanceNotReady,
 							condition.Reason,
 							condition.Message,
-						)
+						))
 					}
 				}
 			}
@@ -845,8 +863,9 @@ func waitForFluxInstanceReady(ctx context.Context, restConfig *rest.Config) erro
 }
 
 // pollUntilReady implements a generic polling pattern for waiting on async conditions.
-// It repeatedly calls checkFn until it returns true (success) or an error (failure).
-// Returns the error encountered if the check function fails or if the wait times out.
+// It repeatedly calls checkFn until it returns true (success) or the context expires.
+// If checkFn returns a permanentError, polling stops immediately with that error.
+// For other errors, the last error is tracked and returned if the wait times out.
 func pollUntilReady(
 	ctx context.Context,
 	timeout time.Duration,
@@ -860,11 +879,19 @@ func pollUntilReady(
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
+	var lastErr error
+
 	for {
 		ready, err := checkFn()
 		if err != nil {
-			// Return immediately on error (permanent failure)
-			return err
+			// Check if this is a permanent error that should not be retried
+			var permErr *permanentError
+			if errors.As(err, &permErr) {
+				return permErr.err
+			}
+
+			// Store transient errors for timeout reporting
+			lastErr = err
 		}
 
 		if ready {
@@ -873,7 +900,11 @@ func pollUntilReady(
 
 		select {
 		case <-waitCtx.Done():
-			return fmt.Errorf("%w: %s", errFluxInstancePollTimeout, resourceDesc)
+			if lastErr == nil {
+				lastErr = waitCtx.Err()
+			}
+
+			return fmt.Errorf("%w: %s: %w", errPollTimeout, resourceDesc, lastErr)
 		case <-ticker.C:
 		}
 	}

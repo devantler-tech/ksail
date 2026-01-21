@@ -84,9 +84,6 @@ func PushOCIArtifact(opts PushOCIArtifactOptions) error {
 
 	// Determine GitOps engine
 	gitOpsEngine := opts.ClusterConfig.Spec.Cluster.GitOpsEngine
-	if gitOpsEngine == v1alpha1.GitOpsEngineNone {
-		gitOpsEngine = v1alpha1.GitOpsEngineNone
-	}
 
 	// Format registry endpoint
 	var registryEndpoint string
