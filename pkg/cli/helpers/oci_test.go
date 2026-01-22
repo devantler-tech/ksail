@@ -8,12 +8,11 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
-	"github.com/devantler-tech/ksail/v5/pkg/io"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestPushOCIArtifact_SkipIfMissing(t *testing.T) {
+func TestPushOCIArtifact_MissingDirectory_PushesEmptyArtifact(t *testing.T) {
 	t.Parallel()
 
 	// Create a test cluster config
@@ -31,46 +30,28 @@ func TestPushOCIArtifact_SkipIfMissing(t *testing.T) {
 		},
 	}
 
-	// Should skip gracefully when directory doesn't exist and SkipIfMissing is true
+	// Should attempt to push empty artifact when directory doesn't exist
+	// Note: This will fail at the registry push stage since we don't have a real registry,
+	// but it should NOT return early due to missing directory
 	result, err := helpers.PushOCIArtifact(context.Background(), helpers.PushOCIArtifactOptions{
 		ClusterConfig: clusterCfg,
 		ClusterName:   "test-cluster",
-		SkipIfMissing: true,
 	})
 
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	assert.False(t, result.Pushed, "expected Pushed to be false when directory is missing")
-}
-
-func TestPushOCIArtifact_ErrorIfMissing(t *testing.T) {
-	t.Parallel()
-
-	// Create a test cluster config
-	clusterCfg := &v1alpha1.Cluster{
-		Spec: v1alpha1.Spec{
-			Cluster: v1alpha1.ClusterSpec{
-				GitOpsEngine: v1alpha1.GitOpsEngineFlux,
-				LocalRegistry: v1alpha1.LocalRegistry{
-					Registry: "localhost:5000",
-				},
-			},
-			Workload: v1alpha1.WorkloadSpec{
-				SourceDirectory: "/nonexistent/directory",
-			},
-		},
+	// Will error due to registry connection, but should attempt the push
+	// The error should be about pushing, not about missing directory
+	if err != nil {
+		assert.Contains(
+			t,
+			err.Error(),
+			"push",
+			"expected error to be about pushing, not missing directory",
+		)
+	} else {
+		require.NotNil(t, result)
+		assert.True(t, result.Pushed, "expected Pushed to be true")
+		assert.True(t, result.Empty, "expected Empty to be true when directory is missing")
 	}
-
-	// Should return error when directory doesn't exist and SkipIfMissing is false
-	result, err := helpers.PushOCIArtifact(context.Background(), helpers.PushOCIArtifactOptions{
-		ClusterConfig: clusterCfg,
-		ClusterName:   "test-cluster",
-		SkipIfMissing: false,
-	})
-
-	require.Error(t, err)
-	assert.Nil(t, result)
-	assert.ErrorIs(t, err, io.ErrSourceDirectoryNotFound)
 }
 
 //nolint:paralleltest // Cannot use t.Parallel() with t.Chdir()
@@ -110,10 +91,10 @@ func TestPushOCIArtifact_UsesDefaultSourceDir(t *testing.T) {
 	_, err := helpers.PushOCIArtifact(context.Background(), helpers.PushOCIArtifactOptions{
 		ClusterConfig: clusterCfg,
 		ClusterName:   "test-cluster",
-		SkipIfMissing: false,
 	})
-	// Will error due to registry resolution, but not due to missing directory
+	// Will error due to registry resolution, but the directory should be found
+	// (error should be about pushing/registry, not about source directory)
 	if err != nil {
-		assert.NotErrorIs(t, err, io.ErrSourceDirectoryNotFound)
+		assert.NotContains(t, err.Error(), "source directory not found")
 	}
 }

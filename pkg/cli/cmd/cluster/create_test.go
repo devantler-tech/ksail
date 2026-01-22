@@ -3,6 +3,7 @@ package cluster_test
 import (
 	"bytes"
 	"context"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -268,10 +269,22 @@ func setupGitOpsTestMocks(
 				return fake, nil
 			},
 		))
-		t.Cleanup(clusterpkg.SetEnsureFluxResourcesForTests(
-			func(_ context.Context, _ string, _ *v1alpha1.Cluster, _ string, _ bool) error {
+		// Mock the new Flux setup and wait functions
+		t.Cleanup(clusterpkg.SetSetupFluxInstanceForTests(
+			func(_ context.Context, _ string, _ *v1alpha1.Cluster, _ string) error {
 				ensureCalled = true
 				return nil
+			},
+		))
+		t.Cleanup(clusterpkg.SetWaitForFluxReadyForTests(
+			func(_ context.Context, _ string) error {
+				return nil
+			},
+		))
+		// Mock OCI artifact ensure to avoid needing a real registry
+		t.Cleanup(clusterpkg.SetEnsureOCIArtifactForTests(
+			func(_ context.Context, _ *cobra.Command, _ *v1alpha1.Cluster, _ string, _ io.Writer) (bool, error) {
+				return true, nil
 			},
 		))
 	case v1alpha1.GitOpsEngineNone:

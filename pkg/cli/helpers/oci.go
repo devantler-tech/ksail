@@ -7,7 +7,6 @@ import (
 
 	v1alpha1 "github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/client/oci"
-	"github.com/devantler-tech/ksail/v5/pkg/io"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 )
 
@@ -23,20 +22,20 @@ type PushOCIArtifactOptions struct {
 	Ref string
 	// Validate enables manifest validation before pushing
 	Validate bool
-	// SkipIfMissing if true, silently skip push if source directory doesn't exist
-	SkipIfMissing bool
 }
 
 // PushOCIArtifactResult contains the result of a push operation.
 type PushOCIArtifactResult struct {
 	// Pushed indicates if an artifact was actually pushed.
-	// False when source directory is missing and SkipIfMissing is true.
 	Pushed bool
+	// Empty indicates if an empty artifact was pushed (source directory was missing).
+	Empty bool
 }
 
 // PushOCIArtifact builds and pushes an OCI artifact to the configured registry.
 // This function reuses the core logic from `ksail workload push` for consistency.
 // The ctx parameter must be non-nil.
+// If the source directory doesn't exist, an empty OCI artifact is pushed instead.
 // Returns a result indicating whether an artifact was actually pushed.
 func PushOCIArtifact(
 	ctx context.Context,
@@ -60,25 +59,29 @@ func PushOCIArtifact(
 		return nil, err
 	}
 
+	builder := oci.NewWorkloadArtifactBuilder()
+
 	if !exists {
-		if opts.SkipIfMissing {
-			return &PushOCIArtifactResult{Pushed: false}, nil
+		// Push an empty OCI artifact when source directory doesn't exist
+		emptyOpts := buildEmptyPushOptions(registryInfo, opts, sourceDir)
+
+		_, err = builder.BuildEmpty(ctx, emptyOpts)
+		if err != nil {
+			return nil, fmt.Errorf("build and push empty oci artifact: %w", err)
 		}
 
-		return nil, fmt.Errorf("%w: %s", io.ErrSourceDirectoryNotFound, sourceDir)
+		return &PushOCIArtifactResult{Pushed: true, Empty: true}, nil
 	}
 
 	// Build options and push
 	buildOpts := buildPushOptions(registryInfo, opts, sourceDir)
-
-	builder := oci.NewWorkloadArtifactBuilder()
 
 	_, err = builder.Build(ctx, buildOpts)
 	if err != nil {
 		return nil, fmt.Errorf("build and push oci artifact: %w", err)
 	}
 
-	return &PushOCIArtifactResult{Pushed: true}, nil
+	return &PushOCIArtifactResult{Pushed: true, Empty: false}, nil
 }
 
 // resolveSourceDirectory determines the source directory from options or config.
@@ -138,6 +141,44 @@ func buildPushOptions(
 	return oci.BuildOptions{
 		Name:             repository,
 		SourcePath:       sourceDir,
+		RegistryEndpoint: registryEndpoint,
+		Repository:       repository,
+		Version:          ref,
+		GitOpsEngine:     opts.ClusterConfig.Spec.Cluster.GitOpsEngine,
+		Username:         registryInfo.Username,
+		Password:         registryInfo.Password,
+	}
+}
+
+// buildEmptyPushOptions creates the OCI empty build options from registry info and push options.
+func buildEmptyPushOptions(
+	registryInfo *RegistryInfo,
+	opts PushOCIArtifactOptions,
+	sourceDir string,
+) oci.EmptyBuildOptions {
+	repository := registryInfo.Repository
+	if repository == "" {
+		repository = registry.SanitizeRepoName(sourceDir)
+	}
+
+	ref := opts.Ref
+	if ref == "" {
+		if registryInfo.Tag != "" {
+			ref = registryInfo.Tag
+		} else {
+			ref = registry.DefaultLocalArtifactTag
+		}
+	}
+
+	var registryEndpoint string
+	if registryInfo.Port > 0 {
+		registryEndpoint = fmt.Sprintf("%s:%d", registryInfo.Host, registryInfo.Port)
+	} else {
+		registryEndpoint = registryInfo.Host
+	}
+
+	return oci.EmptyBuildOptions{
+		Name:             repository,
 		RegistryEndpoint: registryEndpoint,
 		Repository:       repository,
 		Version:          ref,

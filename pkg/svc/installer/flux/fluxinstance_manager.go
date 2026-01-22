@@ -48,7 +48,7 @@ func newFluxInstanceManager(
 
 // setup waits for the FluxInstance CRD, creates the client, and upserts the FluxInstance.
 //
-//nolint:ireturn // Internal method returns interface for flexibility
+
 func (m *fluxInstanceManager) setup(
 	ctx context.Context,
 	clusterCfg *v1alpha1.Cluster,
@@ -146,7 +146,7 @@ func (m *fluxInstanceManager) waitForReady(ctx context.Context) error {
 // upsertWithRetry creates or updates a FluxInstance with retry logic
 // to handle transient API errors during CRD initialization.
 //
-//nolint:ireturn // Internal method returns interface for flexibility
+
 func (m *fluxInstanceManager) upsertWithRetry(
 	ctx context.Context,
 	clientFactory func() (client.Client, error),

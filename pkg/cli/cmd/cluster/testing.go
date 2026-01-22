@@ -2,6 +2,7 @@ package cluster
 
 import (
 	"context"
+	"io"
 	"sync"
 	"time"
 
@@ -228,4 +229,29 @@ func SetLocalRegistryServiceFactoryForTests(factory localregistry.ServiceFactory
 
 		localRegistryServiceFactoryMu.Unlock()
 	}
+}
+
+// SetSetupFluxInstanceForTests overrides the FluxInstance setup function.
+func SetSetupFluxInstanceForTests(
+	fn func(context.Context, string, *v1alpha1.Cluster, string) error,
+) func() {
+	return overrideInstallerFactory(func(f *setup.InstallerFactories) {
+		f.SetupFluxInstance = fn
+	})
+}
+
+// SetWaitForFluxReadyForTests overrides the Flux readiness wait function.
+func SetWaitForFluxReadyForTests(fn func(context.Context, string) error) func() {
+	return overrideInstallerFactory(func(f *setup.InstallerFactories) {
+		f.WaitForFluxReady = fn
+	})
+}
+
+// SetEnsureOCIArtifactForTests overrides the OCI artifact ensure function.
+func SetEnsureOCIArtifactForTests(
+	fn func(context.Context, *cobra.Command, *v1alpha1.Cluster, string, io.Writer) (bool, error),
+) func() {
+	return overrideInstallerFactory(func(f *setup.InstallerFactories) {
+		f.EnsureOCIArtifact = fn
+	})
 }

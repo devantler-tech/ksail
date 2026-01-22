@@ -315,25 +315,15 @@ func handlePostCreationSetup(
 		return fmt.Errorf("failed to install CNI: %w", err)
 	}
 
-	// Push OCI artifact before installing Flux if Flux is enabled and local registry is used
-	// Track whether artifact was actually pushed to decide if we should wait for FluxInstance readiness
-	artifactPushed := false
-	if shouldPushOCIArtifact(clusterCfg) {
-		artifactPushed, err = pushOCIArtifactForFlux(cmd, clusterCfg)
-		if err != nil {
-			return fmt.Errorf("failed to push OCI artifact: %w", err)
-		}
-	}
-
 	factories := getInstallerFactories()
 	outputTimer := helpers.MaybeTimer(cmd, tmr)
 
+	// OCI artifact push is now handled inside InstallPostCNIComponents after Flux is installed
 	err = setup.InstallPostCNIComponents(
 		cmd,
 		clusterCfg,
 		factories,
 		outputTimer,
-		artifactPushed,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to install post-CNI components: %w", err)
@@ -405,69 +395,4 @@ func applyClusterNameOverride(ctx *localregistry.Context, name string) error {
 	}
 
 	return nil
-}
-
-// shouldPushOCIArtifact determines if we should push the OCI artifact before Flux installation.
-// We push if Flux is enabled and a local registry is configured.
-func shouldPushOCIArtifact(clusterCfg *v1alpha1.Cluster) bool {
-	// Only push if Flux is the GitOps engine
-	if clusterCfg.Spec.Cluster.GitOpsEngine != v1alpha1.GitOpsEngineFlux {
-		return false
-	}
-
-	// Only push if local registry is enabled
-	return clusterCfg.Spec.Cluster.LocalRegistry.Enabled()
-}
-
-// pushOCIArtifactForFlux pushes the OCI artifact to the local registry before Flux installation.
-// This ensures the OCIRepository resource created by FluxInstance can successfully pull the artifact.
-// Returns true if an artifact was actually pushed, false if skipped (e.g., source directory missing).
-func pushOCIArtifactForFlux(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster) (bool, error) {
-	notify.WriteMessage(notify.Message{
-		Type:    notify.TitleType,
-		Emoji:   "📦",
-		Content: "Push OCI Artifact...",
-		Writer:  cmd.OutOrStdout(),
-	})
-
-	notify.WriteMessage(notify.Message{
-		Type:    notify.ActivityType,
-		Content: "pushing workload to local registry",
-		Writer:  cmd.OutOrStdout(),
-	})
-
-	// Resolve cluster name for registry detection
-	clusterName := clusterCfg.Spec.Cluster.Connection.Context
-	if clusterName == "" {
-		clusterName = setup.ResolveClusterNameFromContext(clusterCfg)
-	}
-
-	// Push the OCI artifact using the helper function
-	result, err := helpers.PushOCIArtifact(cmd.Context(), helpers.PushOCIArtifactOptions{
-		ClusterConfig: clusterCfg,
-		ClusterName:   clusterName,
-		SourceDir:     "", // Use default from config
-		Ref:           "", // Use default tag
-		Validate:      clusterCfg.Spec.Workload.ValidateOnPush,
-		SkipIfMissing: true, // Skip gracefully if source directory doesn't exist
-	})
-	if err != nil {
-		return false, fmt.Errorf("push oci artifact: %w", err)
-	}
-
-	if result.Pushed {
-		notify.WriteMessage(notify.Message{
-			Type:    notify.SuccessType,
-			Content: "oci artifact pushed",
-			Writer:  cmd.OutOrStdout(),
-		})
-	} else {
-		notify.WriteMessage(notify.Message{
-			Type:    notify.InfoType,
-			Content: "oci artifact push skipped (source directory not found)",
-			Writer:  cmd.OutOrStdout(),
-		})
-	}
-
-	return result.Pushed, nil
 }

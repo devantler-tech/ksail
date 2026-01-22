@@ -57,16 +57,13 @@
 ► attaching local registry to cluster
 ✔ local registry attached to cluster
 
-📦 Push OCI Artifact...
-► pushing workload to local registry
-ℹ oci artifact push skipped (source directory not found)
-
 📦 Installing components...
 ► flux installing
 ✔ flux installed
 
 ⚙️ Configuring components...
 ► applying custom resources
+► waiting for flux to be ready
 ✔ components configured
 ---
 

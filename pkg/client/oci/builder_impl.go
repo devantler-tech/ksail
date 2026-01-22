@@ -131,6 +131,70 @@ func (b *builder) Build(ctx context.Context, opts BuildOptions) (BuildResult, er
 	return BuildResult{Artifact: artifact}, nil
 }
 
+// BuildEmpty pushes an OCI artifact with an empty kustomization.yaml to the registry.
+// This creates a minimal valid Kustomize structure that Flux can reconcile,
+// useful when no source directory exists but a valid artifact reference is required.
+func (b *builder) BuildEmpty(ctx context.Context, opts EmptyBuildOptions) (BuildResult, error) {
+	validated, err := opts.Validate()
+	if err != nil {
+		return BuildResult{}, err
+	}
+
+	// Create a layer with an empty kustomization.yaml
+	layer, err := newEmptyKustomizationLayer(validated.GitOpsEngine)
+	if err != nil {
+		return BuildResult{}, fmt.Errorf("create empty kustomization layer: %w", err)
+	}
+
+	// Build image with the layer
+	img, err := buildEmptyImageWithLayer(layer, validated)
+	if err != nil {
+		return BuildResult{}, fmt.Errorf("build empty image: %w", err)
+	}
+
+	ref, err := name.ParseReference(
+		fmt.Sprintf(
+			"%s/%s:%s",
+			validated.RegistryEndpoint,
+			validated.Repository,
+			validated.Version,
+		),
+		name.WeakValidation,
+		name.Insecure,
+	)
+	if err != nil {
+		return BuildResult{}, fmt.Errorf("parse reference: %w", err)
+	}
+
+	// Build remote options with authentication if credentials are provided
+	remoteOpts := []remote.Option{remote.WithContext(ctx)}
+
+	if validated.Username != "" || validated.Password != "" {
+		auth := &authn.Basic{
+			Username: validated.Username,
+			Password: validated.Password,
+		}
+		remoteOpts = append(remoteOpts, remote.WithAuth(auth))
+	}
+
+	err = remote.Write(ref, img, remoteOpts...)
+	if err != nil {
+		return BuildResult{}, fmt.Errorf("push empty artifact: %w", err)
+	}
+
+	artifact := v1alpha1.OCIArtifact{
+		Name:             validated.Name,
+		Version:          validated.Version,
+		RegistryEndpoint: validated.RegistryEndpoint,
+		Repository:       validated.Repository,
+		Tag:              validated.Version,
+		SourcePath:       "", // No source path for empty artifacts
+		CreatedAt:        metav1.NewTime(time.Now().UTC()),
+	}
+
+	return BuildResult{Artifact: artifact}, nil
+}
+
 // Manifest collection helpers.
 
 // collectManifestFiles walks the source directory and returns paths to all valid manifest files.
@@ -367,4 +431,113 @@ func buildImage(
 	}
 
 	return finalImg, nil
+}
+
+// buildEmptyImage creates an OCI image with no layers (empty artifact).
+// This is useful when an artifact reference is required but no source manifests exist.
+func buildEmptyImage(opts ValidatedEmptyBuildOptions) (v1.Image, error) {
+	cfg := &v1.ConfigFile{
+		Architecture: runtime.GOARCH,
+		OS:           runtime.GOOS,
+		Created:      v1.Time{Time: time.Now().UTC()},
+		Config: v1.Config{
+			Labels: map[string]string{
+				"org.opencontainers.image.title":        opts.Name,
+				"org.opencontainers.image.version":      opts.Version,
+				"devantler.tech/ksail/repository":       opts.Repository,
+				"devantler.tech/ksail/registryEndpoint": opts.RegistryEndpoint,
+				"devantler.tech/ksail/empty":            "true",
+			},
+		},
+	}
+
+	img, err := mutate.ConfigFile(empty.Image, cfg)
+	if err != nil {
+		return nil, fmt.Errorf("set config file: %w", err)
+	}
+
+	return img, nil
+}
+
+// newEmptyKustomizationLayer creates an OCI layer containing an empty kustomization.yaml file.
+// The structure varies based on the GitOps engine:
+//   - Flux: uses Kustomization with empty resources array
+//   - ArgoCD: creates a minimal kustomization.yaml
+func newEmptyKustomizationLayer(gitOpsEngine v1alpha1.GitOpsEngine) (v1.Layer, error) {
+	compressed := bytes.NewBuffer(nil)
+	gzipWriter := gzip.NewWriter(compressed)
+	gzipWriter.ModTime = time.Time{} // Deterministic output
+
+	tarWriter := tar.NewWriter(gzipWriter)
+
+	// Create empty kustomization.yaml content
+	kustomizationContent := []byte(`apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources: []
+`)
+
+	// Add kustomization.yaml at root
+	if err := addContentToArchive(tarWriter, "kustomization.yaml", kustomizationContent); err != nil {
+		return nil, fmt.Errorf("add kustomization.yaml: %w", err)
+	}
+
+	if err := tarWriter.Close(); err != nil {
+		return nil, fmt.Errorf("close tar writer: %w", err)
+	}
+
+	if err := gzipWriter.Close(); err != nil {
+		return nil, fmt.Errorf("close gzip writer: %w", err)
+	}
+
+	return static.NewLayer(compressed.Bytes(), types.OCILayer), nil
+}
+
+// addContentToArchive adds content with a given filename to the tar archive.
+func addContentToArchive(tw *tar.Writer, filename string, content []byte) error {
+	header := &tar.Header{
+		Name:    filename,
+		Mode:    0o644,
+		Size:    int64(len(content)),
+		ModTime: time.Time{}, // Deterministic output
+	}
+
+	if err := tw.WriteHeader(header); err != nil {
+		return fmt.Errorf("write header for %s: %w", filename, err)
+	}
+
+	if _, err := tw.Write(content); err != nil {
+		return fmt.Errorf("write content for %s: %w", filename, err)
+	}
+
+	return nil
+}
+
+// buildEmptyImageWithLayer creates an OCI image with the given layer and labels from opts.
+func buildEmptyImageWithLayer(layer v1.Layer, opts ValidatedEmptyBuildOptions) (v1.Image, error) {
+	cfg := &v1.ConfigFile{
+		Architecture: runtime.GOARCH,
+		OS:           runtime.GOOS,
+		Created:      v1.Time{Time: time.Now().UTC()},
+		Config: v1.Config{
+			Labels: map[string]string{
+				"org.opencontainers.image.title":        opts.Name,
+				"org.opencontainers.image.version":      opts.Version,
+				"devantler.tech/ksail/repository":       opts.Repository,
+				"devantler.tech/ksail/registryEndpoint": opts.RegistryEndpoint,
+				"devantler.tech/ksail/empty":            "true",
+			},
+		},
+	}
+
+	baseImg, err := mutate.ConfigFile(empty.Image, cfg)
+	if err != nil {
+		return nil, fmt.Errorf("set config file: %w", err)
+	}
+
+	img, err := mutate.AppendLayers(baseImg, layer)
+	if err != nil {
+		return nil, fmt.Errorf("append layer: %w", err)
+	}
+
+	return img, nil
 }
