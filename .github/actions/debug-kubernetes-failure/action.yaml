@@ -83,18 +83,33 @@ runs:
         fi
 
         # GitOps resource status for debugging Flux and ArgoCD deployments
+        # Note: Use plain kubectl for api-resources since ksail workload doesn't support it
+        
+        echo "=== Flux Operator Status ==="
+        # Check for Flux Operator pods (installed before FluxInstance CRD exists)
+        FLUX_OPERATOR_PODS=$($KUBECTL_CMD get pods -n flux-system -l app.kubernetes.io/name=flux-operator -o name 2>/dev/null || true)
+        if [ -n "$FLUX_OPERATOR_PODS" ]; then
+          $KUBECTL_CMD get pods -n flux-system -l app.kubernetes.io/name=flux-operator -o wide
+          echo ""
+          echo "=== Flux Operator Pod Logs ==="
+          $KUBECTL_CMD logs -n flux-system -l app.kubernetes.io/name=flux-operator --tail=100 2>/dev/null || true
+        else
+          echo "No Flux Operator pods found in flux-system namespace"
+        fi
+        echo ""
+        
         echo "=== FluxInstance Status ==="
-        # Check if the CRD exists first
-        if $KUBECTL_CMD api-resources --api-group=fluxcd.controlplane.io 2>/dev/null | grep -q fluxinstance; then
+        # Check if the CRD exists first (use kubectl directly for api-resources)
+        if kubectl api-resources --api-group=fluxcd.controlplane.io 2>/dev/null | grep -q fluxinstance; then
           echo "FluxInstance CRD is registered"
-          FLUX_INSTANCES=$($KUBECTL_CMD get fluxinstance -n flux-system -o name 2>/dev/null || true)
+          FLUX_INSTANCES=$($KUBECTL_CMD get fluxinstance -A -o name 2>/dev/null || true)
           if [ -n "$FLUX_INSTANCES" ]; then
-            $KUBECTL_CMD get fluxinstance -n flux-system -o wide
+            $KUBECTL_CMD get fluxinstance -A -o wide
             echo ""
             echo "=== FluxInstance Details ==="
-            $KUBECTL_CMD describe fluxinstance -n flux-system
+            $KUBECTL_CMD describe fluxinstance -A
           else
-            echo "FluxInstance CRD exists but no FluxInstance resources found in flux-system namespace"
+            echo "FluxInstance CRD exists but no FluxInstance resources found"
           fi
         else
           echo "FluxInstance CRD not registered (Flux Operator may not be installed)"
@@ -102,26 +117,39 @@ runs:
         echo ""
 
         echo "=== OCIRepository Status ==="
-        # Check if the CRD exists first
-        if $KUBECTL_CMD api-resources --api-group=source.toolkit.fluxcd.io 2>/dev/null | grep -q ocirepository; then
+        # Check if the CRD exists first (use kubectl directly for api-resources)
+        if kubectl api-resources --api-group=source.toolkit.fluxcd.io 2>/dev/null | grep -q ocirepository; then
           echo "OCIRepository CRD is registered"
-          OCI_REPOS=$($KUBECTL_CMD get ocirepository -n flux-system -o name 2>/dev/null || true)
+          OCI_REPOS=$($KUBECTL_CMD get ocirepository -A -o name 2>/dev/null || true)
           if [ -n "$OCI_REPOS" ]; then
-            $KUBECTL_CMD get ocirepository -n flux-system -o wide
+            $KUBECTL_CMD get ocirepository -A -o wide
             echo ""
             echo "=== OCIRepository Details ==="
-            $KUBECTL_CMD describe ocirepository -n flux-system
+            $KUBECTL_CMD describe ocirepository -A
           else
-            echo "OCIRepository CRD exists but no OCIRepository resources found in flux-system namespace"
+            echo "OCIRepository CRD exists but no OCIRepository resources found"
           fi
         else
           echo "OCIRepository CRD not registered (Flux source-controller may not be installed)"
         fi
         echo ""
 
+        echo "=== Flux Controllers Status ==="
+        # Check for Flux controllers (source-controller, kustomize-controller, etc.)
+        FLUX_CONTROLLERS=$($KUBECTL_CMD get pods -n flux-system -l app.kubernetes.io/part-of=flux -o name 2>/dev/null || true)
+        if [ -n "$FLUX_CONTROLLERS" ]; then
+          $KUBECTL_CMD get pods -n flux-system -l app.kubernetes.io/part-of=flux -o wide
+          echo ""
+          echo "=== Flux Controller Events ==="
+          $KUBECTL_CMD get events -n flux-system --sort-by='.lastTimestamp' --field-selector involvedObject.kind=Pod | tail -30 || true
+        else
+          echo "No Flux controller pods found (FluxInstance may not have reconciled yet)"
+        fi
+        echo ""
+
         echo "=== ArgoCD Application Status ==="
-        # Check if the CRD exists first
-        if $KUBECTL_CMD api-resources --api-group=argoproj.io 2>/dev/null | grep -q application; then
+        # Check if the CRD exists first (use kubectl directly for api-resources)
+        if kubectl api-resources --api-group=argoproj.io 2>/dev/null | grep -q application; then
           echo "ArgoCD Application CRD is registered"
           ARGO_APPS=$($KUBECTL_CMD get application -A -o name 2>/dev/null || true)
           if [ -n "$ARGO_APPS" ]; then
