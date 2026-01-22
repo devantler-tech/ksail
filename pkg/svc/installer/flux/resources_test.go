@@ -271,6 +271,10 @@ func TestBuildFluxInstance(t *testing.T) {
 			require.NoError(t, err)
 			require.NotNil(t, instance)
 
+			// Verify TypeMeta is set (required for proper API server communication)
+			assert.Equal(t, "fluxcd.controlplane.io/v1", instance.TypeMeta.APIVersion)
+			assert.Equal(t, "FluxInstance", instance.TypeMeta.Kind)
+
 			assert.Equal(t, testCase.wantName, instance.GetName())
 			assert.Equal(t, "flux-system", instance.GetNamespace())
 			assert.NotNil(t, instance.Spec.Sync)

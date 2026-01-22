@@ -477,6 +477,10 @@ func buildFluxInstance(clusterCfg *v1alpha1.Cluster, clusterName string) (*FluxI
 	intervalPtr := &metav1.Duration{Duration: fluxIntervalFallback}
 
 	return &FluxInstance{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: fluxInstanceGroupVersion.String(),
+			Kind:       fluxInstanceKind,
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      fluxInstanceDefaultName,
 			Namespace: fluxclient.DefaultNamespace,
@@ -587,6 +591,20 @@ func tryUpsertFluxInstance(
 					key.Namespace,
 					key.Name,
 					createErr,
+				)
+			}
+
+			// Verify the FluxInstance was actually created by reading it back.
+			// This guards against silent failures where the API accepts the request
+			// but the resource isn't actually persisted (e.g., due to webhooks,
+			// API server issues, or client configuration problems).
+			verifyErr := fluxClient.Get(ctx, key, existing)
+			if verifyErr != nil {
+				return fmt.Errorf(
+					"FluxInstance %s/%s was not persisted after create (verification failed): %w",
+					key.Namespace,
+					key.Name,
+					verifyErr,
 				)
 			}
 
