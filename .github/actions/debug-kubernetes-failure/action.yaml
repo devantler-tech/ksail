@@ -84,13 +84,34 @@ runs:
 
         # GitOps resource status for debugging Flux and ArgoCD deployments
         echo "=== FluxInstance Status ==="
-        $KUBECTL_CMD get fluxinstance -n flux-system -o wide 2>/dev/null || echo "No FluxInstance resources found (Flux may not be installed)"
+        if $KUBECTL_CMD get fluxinstance -n flux-system &>/dev/null; then
+          $KUBECTL_CMD get fluxinstance -n flux-system -o wide
+          echo ""
+          echo "=== FluxInstance Details ==="
+          $KUBECTL_CMD describe fluxinstance -n flux-system | grep -A 50 "Status:" || true
+        else
+          echo "No FluxInstance resources found (Flux may not be installed)"
+        fi
         echo ""
 
         echo "=== OCIRepository Status ==="
-        $KUBECTL_CMD get ocirepository -n flux-system -o wide 2>/dev/null || echo "No OCIRepository resources found (Flux may not be installed)"
+        if $KUBECTL_CMD get ocirepository -n flux-system &>/dev/null; then
+          $KUBECTL_CMD get ocirepository -n flux-system -o wide
+          echo ""
+          echo "=== OCIRepository Details ==="
+          $KUBECTL_CMD describe ocirepository -n flux-system | grep -A 50 "Status:" || true
+        else
+          echo "No OCIRepository resources found (Flux may not be installed)"
+        fi
         echo ""
 
         echo "=== ArgoCD Application Status ==="
-        $KUBECTL_CMD get application -A -o wide 2>/dev/null || echo "No ArgoCD Application resources found (ArgoCD may not be installed)"
+        if $KUBECTL_CMD get application -A &>/dev/null; then
+          $KUBECTL_CMD get application -A -o wide
+          echo ""
+          echo "=== ArgoCD Application Details ==="
+          $KUBECTL_CMD describe application -A | grep -A 100 "Status:" || true
+        else
+          echo "No ArgoCD Application resources found (ArgoCD may not be installed)"
+        fi
         echo ""
