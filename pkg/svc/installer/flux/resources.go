@@ -216,12 +216,9 @@ func EnsureDefaultResources(
 
 	// For local Docker registries (not external like GHCR), patch OCIRepository to use insecure HTTP.
 	// External registries use HTTPS and should not have insecure: true set.
-	localRegistry := clusterCfg.Spec.Cluster.LocalRegistry
-	if localRegistry.Enabled() && !localRegistry.IsExternal() {
-		err = ensureLocalOCIRepositoryInsecure(ctx, restConfig)
-		if err != nil {
-			return err
-		}
+	err = ensureLocalRegistryInsecureIfNeeded(ctx, restConfig, clusterCfg)
+	if err != nil {
+		return err
 	}
 
 	// Wait for the FluxInstance to become ready.
@@ -656,6 +653,21 @@ func isTransientAPIError(err error) bool {
 	}
 
 	return false
+}
+
+// ensureLocalRegistryInsecureIfNeeded patches OCIRepository with insecure: true only for
+// local Docker registries. External registries like GHCR use HTTPS and should not be patched.
+func ensureLocalRegistryInsecureIfNeeded(
+	ctx context.Context,
+	restConfig *rest.Config,
+	clusterCfg *v1alpha1.Cluster,
+) error {
+	localRegistry := clusterCfg.Spec.Cluster.LocalRegistry
+	if !localRegistry.Enabled() || localRegistry.IsExternal() {
+		return nil
+	}
+
+	return ensureLocalOCIRepositoryInsecure(ctx, restConfig)
 }
 
 // ensureLocalOCIRepositoryInsecure uses a dynamic Kubernetes client to patch the OCIRepository
