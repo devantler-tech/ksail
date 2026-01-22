@@ -1,0 +1,72 @@
+name: Daily Test Improver - Coverage Steps
+description: Builds the project, runs tests, and generates coverage reports
+
+runs:
+  using: composite
+  steps:
+    # Step 1: Setup Go environment
+    - name: ⚙️ Setup Go
+      shell: bash
+      run: |
+        echo "Setting up Go environment..." | tee -a coverage-steps.log
+        go version | tee -a coverage-steps.log
+        echo "✅ Go setup complete" | tee -a coverage-steps.log
+
+    # Step 2: Download dependencies
+    - name: 📦 Download Go modules
+      shell: bash
+      run: |
+        echo "Downloading Go modules..." | tee -a coverage-steps.log
+        go mod download 2>&1 | tee -a coverage-steps.log
+        echo "✅ Go modules downloaded" | tee -a coverage-steps.log
+
+    # Step 3: Build the KSail binary
+    - name: 🏗️ Build KSail binary
+      shell: bash
+      run: |
+        echo "Building KSail binary..." | tee -a coverage-steps.log
+        go build -o ksail 2>&1 | tee -a coverage-steps.log
+        echo "✅ Build successful" | tee -a coverage-steps.log
+
+    # Step 4: Enable covdata workaround
+    - name: 👨🏻‍🔧 Enable covdata
+      shell: bash
+      run: |
+        echo "Enabling covdata workaround..." | tee -a coverage-steps.log
+        go env -w GOTOOLCHAIN=go1.25.0+auto 2>&1 | tee -a coverage-steps.log
+        echo "✅ Covdata enabled" | tee -a coverage-steps.log
+
+    # Step 5: Run unit tests with coverage
+    - name: 📊 Run tests and generate coverage
+      shell: bash
+      run: |
+        echo "Running tests with coverage..." | tee -a coverage-steps.log
+        go test -race -coverprofile=coverage.txt -covermode=atomic ./... 2>&1 | tee -a coverage-steps.log
+        echo "✅ Tests complete, coverage generated at: coverage.txt" | tee -a coverage-steps.log
+
+    # Step 6: Display coverage summary
+    - name: 📈 Display coverage summary
+      shell: bash
+      run: |
+        echo "Coverage summary by package:" | tee -a coverage-steps.log
+        go tool cover -func=coverage.txt 2>&1 | tee -a coverage-steps.log
+        echo "✅ Coverage summary complete" | tee -a coverage-steps.log
+
+    # Step 7: Generate HTML coverage report
+    - name: 📄 Generate HTML coverage report
+      shell: bash
+      run: |
+        echo "Generating HTML coverage report..." | tee -a coverage-steps.log
+        go tool cover -html=coverage.txt -o coverage.html 2>&1 | tee -a coverage-steps.log
+        echo "✅ HTML coverage report generated at: coverage.html" | tee -a coverage-steps.log
+
+    # Step 8: Upload coverage artifacts
+    - name: 📤 Upload coverage reports
+      uses: actions/upload-artifact@ea054b56044de43c62e384c6396ee2371e6d0e4b # v4.6.2
+      with:
+        name: coverage
+        path: |
+          coverage.txt
+          coverage.html
+          coverage-steps.log
+        retention-days: 90
