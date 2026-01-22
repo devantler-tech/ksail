@@ -25,7 +25,7 @@ runs:
       shell: bash
       run: |
         echo "Building KSail binary..." | tee -a coverage-steps.log
-        go build -o ksail 2>&1 | tee -a coverage-steps.log
+        go build -o ksail . 2>&1 | tee -a coverage-steps.log
         echo "✅ Build successful" | tee -a coverage-steps.log
 
     # Step 4: Enable covdata workaround
