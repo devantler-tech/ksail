@@ -33,7 +33,7 @@ name: Agentic Maintenance
 
 on:
   schedule:
-    - cron: "37 0 * * *"  # Daily (based on minimum expires: 7 days)
+    - cron: "37 0 * * *" # Daily (based on minimum expires: 7 days)
   workflow_dispatch:
 
 permissions: {}
