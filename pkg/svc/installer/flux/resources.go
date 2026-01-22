@@ -68,6 +68,15 @@ var (
 	// environments like Talos on GitHub Actions. 5 minutes is typically sufficient.
 	fluxAPIAvailabilityTimeout      = 5 * time.Minute
 	fluxAPIAvailabilityPollInterval = 2 * time.Second
+
+	// fluxInstanceReadyTimeout is the maximum time to wait for FluxInstance to become ready.
+	// This includes time for the FluxInstance controller to:
+	// - Pull and apply the OCIRepository artifact
+	// - Install all Flux controllers
+	// - Wait for all controllers to become healthy
+	// 10 minutes provides enough time for slower environments while still catching real failures.
+	fluxInstanceReadyTimeout      = 10 * time.Minute
+	fluxInstanceReadyPollInterval = 2 * time.Second
 )
 
 var (
@@ -787,8 +796,8 @@ func normalizeFluxPath() string {
 func waitForFluxInstanceReady(ctx context.Context, restConfig *rest.Config) error {
 	return pollUntilReady(
 		ctx,
-		fluxAPIAvailabilityTimeout,
-		fluxAPIAvailabilityPollInterval,
+		fluxInstanceReadyTimeout,
+		fluxInstanceReadyPollInterval,
 		"FluxInstance to be ready",
 		func() (bool, error) {
 			// Create a fresh client on each retry to avoid caching issues
