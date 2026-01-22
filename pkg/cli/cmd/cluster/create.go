@@ -316,8 +316,10 @@ func handlePostCreationSetup(
 	}
 
 	// Push OCI artifact before installing Flux if Flux is enabled and local registry is used
+	// Track whether artifact was actually pushed to decide if we should wait for FluxInstance readiness
+	artifactPushed := false
 	if shouldPushOCIArtifact(clusterCfg) {
-		err = pushOCIArtifactForFlux(cmd, clusterCfg)
+		artifactPushed, err = pushOCIArtifactForFlux(cmd, clusterCfg)
 		if err != nil {
 			return fmt.Errorf("failed to push OCI artifact: %w", err)
 		}
@@ -331,6 +333,7 @@ func handlePostCreationSetup(
 		clusterCfg,
 		factories,
 		outputTimer,
+		artifactPushed,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to install post-CNI components: %w", err)
@@ -418,7 +421,8 @@ func shouldPushOCIArtifact(clusterCfg *v1alpha1.Cluster) bool {
 
 // pushOCIArtifactForFlux pushes the OCI artifact to the local registry before Flux installation.
 // This ensures the OCIRepository resource created by FluxInstance can successfully pull the artifact.
-func pushOCIArtifactForFlux(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster) error {
+// Returns true if an artifact was actually pushed, false if skipped (e.g., source directory missing).
+func pushOCIArtifactForFlux(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster) (bool, error) {
 	notify.WriteMessage(notify.Message{
 		Type:    notify.TitleType,
 		Emoji:   "📦",
@@ -439,7 +443,7 @@ func pushOCIArtifactForFlux(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster) er
 	}
 
 	// Push the OCI artifact using the helper function
-	err := helpers.PushOCIArtifact(cmd.Context(), helpers.PushOCIArtifactOptions{
+	result, err := helpers.PushOCIArtifact(cmd.Context(), helpers.PushOCIArtifactOptions{
 		ClusterConfig: clusterCfg,
 		ClusterName:   clusterName,
 		SourceDir:     "", // Use default from config
@@ -448,14 +452,22 @@ func pushOCIArtifactForFlux(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster) er
 		SkipIfMissing: true, // Skip gracefully if source directory doesn't exist
 	})
 	if err != nil {
-		return fmt.Errorf("push oci artifact: %w", err)
+		return false, fmt.Errorf("push oci artifact: %w", err)
 	}
 
-	notify.WriteMessage(notify.Message{
-		Type:    notify.SuccessType,
-		Content: "oci artifact pushed",
-		Writer:  cmd.OutOrStdout(),
-	})
+	if result.Pushed {
+		notify.WriteMessage(notify.Message{
+			Type:    notify.SuccessType,
+			Content: "oci artifact pushed",
+			Writer:  cmd.OutOrStdout(),
+		})
+	} else {
+		notify.WriteMessage(notify.Message{
+			Type:    notify.InfoType,
+			Content: "oci artifact push skipped (source directory not found)",
+			Writer:  cmd.OutOrStdout(),
+		})
+	}
 
-	return nil
+	return result.Pushed, nil
 }

@@ -503,6 +503,7 @@ func TestEnsureDefaultResources_NilConfig(t *testing.T) {
 		"",
 		nil,
 		"test-cluster",
+		true, // artifactPushed
 	)
 
 	require.Error(t, err)

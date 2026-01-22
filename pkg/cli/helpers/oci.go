@@ -27,17 +27,28 @@ type PushOCIArtifactOptions struct {
 	SkipIfMissing bool
 }
 
+// PushOCIArtifactResult contains the result of a push operation.
+type PushOCIArtifactResult struct {
+	// Pushed indicates if an artifact was actually pushed.
+	// False when source directory is missing and SkipIfMissing is true.
+	Pushed bool
+}
+
 // PushOCIArtifact builds and pushes an OCI artifact to the configured registry.
 // This function reuses the core logic from `ksail workload push` for consistency.
 // The ctx parameter must be non-nil.
-func PushOCIArtifact(ctx context.Context, opts PushOCIArtifactOptions) error {
+// Returns a result indicating whether an artifact was actually pushed.
+func PushOCIArtifact(
+	ctx context.Context,
+	opts PushOCIArtifactOptions,
+) (*PushOCIArtifactResult, error) {
 	// Resolve registry using priority-based detection
 	registryInfo, err := ResolveRegistry(ctx, ResolveRegistryOptions{
 		ClusterConfig: opts.ClusterConfig,
 		ClusterName:   opts.ClusterName,
 	})
 	if err != nil {
-		return fmt.Errorf("resolve registry: %w", err)
+		return nil, fmt.Errorf("resolve registry: %w", err)
 	}
 
 	// Determine source directory
@@ -46,15 +57,15 @@ func PushOCIArtifact(ctx context.Context, opts PushOCIArtifactOptions) error {
 	// Check if source directory exists
 	exists, err := checkSourceDirectoryExists(sourceDir)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if !exists {
 		if opts.SkipIfMissing {
-			return nil
+			return &PushOCIArtifactResult{Pushed: false}, nil
 		}
 
-		return fmt.Errorf("%w: %s", io.ErrSourceDirectoryNotFound, sourceDir)
+		return nil, fmt.Errorf("%w: %s", io.ErrSourceDirectoryNotFound, sourceDir)
 	}
 
 	// Build options and push
@@ -64,10 +75,10 @@ func PushOCIArtifact(ctx context.Context, opts PushOCIArtifactOptions) error {
 
 	_, err = builder.Build(ctx, buildOpts)
 	if err != nil {
-		return fmt.Errorf("build and push oci artifact: %w", err)
+		return nil, fmt.Errorf("build and push oci artifact: %w", err)
 	}
 
-	return nil
+	return &PushOCIArtifactResult{Pushed: true}, nil
 }
 
 // resolveSourceDirectory determines the source directory from options or config.

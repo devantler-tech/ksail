@@ -58,6 +58,8 @@ var loadRESTConfig = func(kubeconfig string) (*rest.Config, error) {
 
 // EnsureDefaultResources configures a default FluxInstance so the operator can
 // bootstrap controllers and sync from the local OCI registry.
+// If artifactPushed is false, the function will skip waiting for FluxInstance readiness
+// because the artifact doesn't exist yet (will be pushed later via workload push).
 //
 //nolint:contextcheck // context passed from caller and used in nested functions
 func EnsureDefaultResources(
@@ -65,6 +67,7 @@ func EnsureDefaultResources(
 	kubeconfig string,
 	clusterCfg *v1alpha1.Cluster,
 	clusterName string,
+	artifactPushed bool,
 ) error {
 	if clusterCfg == nil {
 		return errInvalidClusterConfig
@@ -115,10 +118,14 @@ func EnsureDefaultResources(
 		return err
 	}
 
-	// Wait for the FluxInstance to become ready
-	err = fluxMgr.waitForReady(ctx)
-	if err != nil {
-		return fmt.Errorf("failed waiting for FluxInstance to be ready: %w", err)
+	// Only wait for FluxInstance readiness if artifact was pushed.
+	// If no artifact was pushed (e.g., source directory missing during cluster create),
+	// the FluxInstance will remain in "Reconciliation in progress" until workload push is run.
+	if artifactPushed {
+		err = fluxMgr.waitForReady(ctx)
+		if err != nil {
+			return fmt.Errorf("failed waiting for FluxInstance to be ready: %w", err)
+		}
 	}
 
 	return nil

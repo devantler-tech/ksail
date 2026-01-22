@@ -32,13 +32,15 @@ func TestPushOCIArtifact_SkipIfMissing(t *testing.T) {
 	}
 
 	// Should skip gracefully when directory doesn't exist and SkipIfMissing is true
-	err := helpers.PushOCIArtifact(context.Background(), helpers.PushOCIArtifactOptions{
+	result, err := helpers.PushOCIArtifact(context.Background(), helpers.PushOCIArtifactOptions{
 		ClusterConfig: clusterCfg,
 		ClusterName:   "test-cluster",
 		SkipIfMissing: true,
 	})
 
-	assert.NoError(t, err)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.False(t, result.Pushed, "expected Pushed to be false when directory is missing")
 }
 
 func TestPushOCIArtifact_ErrorIfMissing(t *testing.T) {
@@ -60,13 +62,14 @@ func TestPushOCIArtifact_ErrorIfMissing(t *testing.T) {
 	}
 
 	// Should return error when directory doesn't exist and SkipIfMissing is false
-	err := helpers.PushOCIArtifact(context.Background(), helpers.PushOCIArtifactOptions{
+	result, err := helpers.PushOCIArtifact(context.Background(), helpers.PushOCIArtifactOptions{
 		ClusterConfig: clusterCfg,
 		ClusterName:   "test-cluster",
 		SkipIfMissing: false,
 	})
 
 	require.Error(t, err)
+	assert.Nil(t, result)
 	assert.ErrorIs(t, err, io.ErrSourceDirectoryNotFound)
 }
 
@@ -104,7 +107,7 @@ func TestPushOCIArtifact_UsesDefaultSourceDir(t *testing.T) {
 	}
 
 	// This will fail to resolve registry, but we're just testing directory resolution
-	err := helpers.PushOCIArtifact(context.Background(), helpers.PushOCIArtifactOptions{
+	_, err := helpers.PushOCIArtifact(context.Background(), helpers.PushOCIArtifactOptions{
 		ClusterConfig: clusterCfg,
 		ClusterName:   "test-cluster",
 		SkipIfMissing: false,

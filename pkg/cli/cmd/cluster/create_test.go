@@ -269,7 +269,7 @@ func setupGitOpsTestMocks(
 			},
 		))
 		t.Cleanup(clusterpkg.SetEnsureFluxResourcesForTests(
-			func(_ context.Context, _ string, _ *v1alpha1.Cluster, _ string) error {
+			func(_ context.Context, _ string, _ *v1alpha1.Cluster, _ string, _ bool) error {
 				ensureCalled = true
 				return nil
 			},

@@ -51,8 +51,10 @@ type InstallerFactories struct {
 		ctx context.Context, kubeconfig string, clusterCfg *v1alpha1.Cluster, clusterName string,
 	) error
 	// EnsureFluxResources enforces default Flux resources post-install.
+	// If artifactPushed is false, the function will skip waiting for FluxInstance readiness
+	// because the artifact doesn't exist yet (will be pushed later via workload push).
 	EnsureFluxResources func(
-		ctx context.Context, kubeconfig string, clusterCfg *v1alpha1.Cluster, clusterName string,
+		ctx context.Context, kubeconfig string, clusterCfg *v1alpha1.Cluster, clusterName string, artifactPushed bool,
 	) error
 	// HelmClientFactory creates a Helm client for the cluster.
 	HelmClientFactory func(clusterCfg *v1alpha1.Cluster) (*helm.Client, string, error)

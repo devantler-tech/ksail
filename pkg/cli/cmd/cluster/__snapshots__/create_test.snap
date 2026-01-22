@@ -59,7 +59,7 @@
 
 📦 Push OCI Artifact...
 ► pushing workload to local registry
-✔ oci artifact pushed
+ℹ oci artifact push skipped (source directory not found)
 
 📦 Installing components...
 ► flux installing

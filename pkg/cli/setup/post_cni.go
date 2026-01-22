@@ -3,6 +3,7 @@ package setup
 import (
 	"context"
 	"fmt"
+	"io"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	k3dconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/k3d"
@@ -111,11 +112,13 @@ func GetComponentRequirements(clusterCfg *v1alpha1.Cluster) ComponentRequirement
 
 // InstallPostCNIComponents installs all post-CNI components in parallel.
 // This includes metrics-server, CSI, cert-manager, and GitOps engines (Flux/ArgoCD).
+// artifactPushed indicates whether an OCI artifact was pushed for Flux - if false, Flux readiness wait is skipped.
 func InstallPostCNIComponents(
 	cmd *cobra.Command,
 	clusterCfg *v1alpha1.Cluster,
 	factories *InstallerFactories,
 	tmr timer.Timer,
+	artifactPushed bool,
 ) error {
 	reqs := GetComponentRequirements(clusterCfg)
 
@@ -145,7 +148,15 @@ func InstallPostCNIComponents(
 		return err
 	}
 
-	return configureGitOpsResources(ctx, cmd, clusterCfg, factories, reqs, gitOpsKubeconfig)
+	return configureGitOpsResources(
+		ctx,
+		cmd,
+		clusterCfg,
+		factories,
+		reqs,
+		gitOpsKubeconfig,
+		artifactPushed,
+	)
 }
 
 func installComponentsInParallel(
@@ -245,6 +256,7 @@ func configureGitOpsResources(
 	factories *InstallerFactories,
 	reqs ComponentRequirements,
 	gitOpsKubeconfig string,
+	artifactPushed bool,
 ) error {
 	// Only show configure stage if there are GitOps resources to configure
 	if !reqs.NeedsArgoCD && !reqs.NeedsFlux {
@@ -253,54 +265,69 @@ func configureGitOpsResources(
 
 	// Resolve cluster name for registry naming
 	clusterName := ResolveClusterNameFromContext(clusterCfg)
+	writer := cmd.OutOrStdout()
 
 	// Show title for configure stage
 	notify.WriteMessage(notify.Message{
-		Type:    notify.TitleType,
-		Content: "Configuring components...",
-		Emoji:   "⚙️",
-		Writer:  cmd.OutOrStdout(),
+		Type: notify.TitleType, Content: "Configuring components...", Emoji: "⚙️", Writer: writer,
 	})
 
 	// Post-install GitOps configuration
 	if reqs.NeedsArgoCD {
-		notify.WriteMessage(notify.Message{
-			Type:    notify.ActivityType,
-			Content: argoCDResourcesActivity,
-			Writer:  cmd.OutOrStdout(),
-		})
-
-		err := factories.EnsureArgoCDResources(ctx, gitOpsKubeconfig, clusterCfg, clusterName)
-		if err != nil {
-			return fmt.Errorf("failed to configure Argo CD resources: %w", err)
+		if err := configureArgoCD(ctx, factories, gitOpsKubeconfig, clusterCfg, clusterName, writer); err != nil {
+			return err
 		}
-
-		notify.WriteMessage(notify.Message{
-			Type:    notify.InfoType,
-			Content: "Access ArgoCD UI at https://localhost:8080 via: kubectl port-forward svc/argocd-server -n argocd 8080:443",
-			Writer:  cmd.OutOrStdout(),
-		})
 	}
 
 	if reqs.NeedsFlux {
-		notify.WriteMessage(notify.Message{
-			Type:    notify.ActivityType,
-			Content: fluxResourcesActivity,
-			Writer:  cmd.OutOrStdout(),
-		})
-
-		err := factories.EnsureFluxResources(ctx, gitOpsKubeconfig, clusterCfg, clusterName)
-		if err != nil {
-			return fmt.Errorf("failed to configure Flux resources: %w", err)
+		if err := configureFlux(ctx, factories, gitOpsKubeconfig, clusterCfg, clusterName, artifactPushed, writer); err != nil {
+			return err
 		}
 	}
 
 	// Show success message for configure stage
+	notify.WriteMessage(notify.Message{Type: notify.SuccessType, Content: "components configured", Writer: writer})
+
+	return nil
+}
+
+func configureArgoCD(
+	ctx context.Context,
+	factories *InstallerFactories,
+	kubeconfig string,
+	clusterCfg *v1alpha1.Cluster,
+	clusterName string,
+	writer io.Writer,
+) error {
+	notify.WriteMessage(notify.Message{Type: notify.ActivityType, Content: argoCDResourcesActivity, Writer: writer})
+
+	if err := factories.EnsureArgoCDResources(ctx, kubeconfig, clusterCfg, clusterName); err != nil {
+		return fmt.Errorf("failed to configure Argo CD resources: %w", err)
+	}
+
 	notify.WriteMessage(notify.Message{
-		Type:    notify.SuccessType,
-		Content: "components configured",
-		Writer:  cmd.OutOrStdout(),
+		Type:    notify.InfoType,
+		Content: "Access ArgoCD UI at https://localhost:8080 via: kubectl port-forward svc/argocd-server -n argocd 8080:443",
+		Writer:  writer,
 	})
+
+	return nil
+}
+
+func configureFlux(
+	ctx context.Context,
+	factories *InstallerFactories,
+	kubeconfig string,
+	clusterCfg *v1alpha1.Cluster,
+	clusterName string,
+	artifactPushed bool,
+	writer io.Writer,
+) error {
+	notify.WriteMessage(notify.Message{Type: notify.ActivityType, Content: fluxResourcesActivity, Writer: writer})
+
+	if err := factories.EnsureFluxResources(ctx, kubeconfig, clusterCfg, clusterName, artifactPushed); err != nil {
+		return fmt.Errorf("failed to configure Flux resources: %w", err)
+	}
 
 	return nil
 }
