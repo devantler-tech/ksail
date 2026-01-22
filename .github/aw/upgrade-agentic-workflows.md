@@ -111,7 +111,7 @@ If compilation fails, work through errors systematically:
    mcp-servers:
      github:
        mode: remote
-   
+
    # New format
    tools:
      github:
