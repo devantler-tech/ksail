@@ -1,6 +1,6 @@
 # Debug Kubernetes Failure Action
 
-A GitHub composite action that outputs diagnostic information for debugging Kubernetes cluster failures. Shows disk usage, node status, pod status, and recent events.
+A GitHub composite action that outputs diagnostic information for debugging Kubernetes cluster failures. Shows disk usage, node status, pod status, recent events, and GitOps resource statuses (FluxInstance, OCIRepository, ArgoCD Application).
 
 ## Why?
 
@@ -100,14 +100,30 @@ kube-system   coredns-abc123                1/1     Running   0          10m
 NAMESPACE   LAST SEEN   TYPE      REASON      OBJECT              MESSAGE
 default     2m          Normal    Scheduled   pod/my-app-abc123   Successfully assigned...
 default     2m          Normal    Pulled      pod/my-app-abc123   Container image pulled...
+
+=== FluxInstance Status ===
+NAMESPACE     NAME   AGE   READY   STATUS
+flux-system   flux   10m   True    Flux installation is ready
+
+=== OCIRepository Status ===
+NAMESPACE     NAME          URL                                          AGE   READY   STATUS
+flux-system   flux-system   oci://ghcr.io/org/repo/manifests             10m   True    stored artifact for revision 'latest@sha256:abc...'
+
+=== ArgoCD Application Status ===
+NAMESPACE   NAME     SYNC STATUS   HEALTH STATUS   AGE
+argocd      my-app   Synced        Healthy         5m
 ```
 
 ## Common Failure Patterns
 
-| Symptom                    | Likely Cause                                            |
-|----------------------------|---------------------------------------------------------|
-| `DiskPressure: True`       | Runner out of disk space - use `free-disk-space` action |
-| `MemoryPressure: True`     | Not enough RAM for workloads                            |
-| Pods in `Pending`          | Insufficient resources or node selector issues          |
-| Pods in `ImagePullBackOff` | Image not found or registry auth issues                 |
-| Pods in `CrashLoopBackOff` | Application crashing - check container logs             |
+| Symptom                            | Likely Cause                                            |
+|------------------------------------|---------------------------------------------------------|
+| `DiskPressure: True`               | Runner out of disk space - use `free-disk-space` action |
+| `MemoryPressure: True`             | Not enough RAM for workloads                            |
+| Pods in `Pending`                  | Insufficient resources or node selector issues          |
+| Pods in `ImagePullBackOff`         | Image not found or registry auth issues                 |
+| Pods in `CrashLoopBackOff`         | Application crashing - check container logs             |
+| FluxInstance not `Ready`           | Flux installation incomplete or OCIRepository not synced|
+| OCIRepository not `Ready`          | Artifact not pushed or registry authentication failed   |
+| ArgoCD Application not `Synced`    | Git sync issues or manifest errors                      |
+| ArgoCD Application not `Healthy`   | Deployed resources unhealthy or progressing             |

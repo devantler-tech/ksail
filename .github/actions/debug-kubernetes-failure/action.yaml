@@ -1,7 +1,7 @@
 name: Debug Kubernetes Failure
 description: |
   Outputs diagnostic information for debugging Kubernetes cluster failures.
-  Shows disk usage, node status, pod status, and recent events.
+  Shows disk usage, node status, pod status, recent events, and GitOps resource statuses (FluxInstance, OCIRepository, ArgoCD Application).
 
 inputs:
   kubectl-command:
@@ -79,4 +79,17 @@ runs:
         if [ "$SHOW_EVENTS" = "true" ]; then
           echo "=== Pod Events ==="
           $KUBECTL_CMD get events $NS_FLAG --sort-by='.lastTimestamp' | tail -"$EVENTS_LIMIT" || true
+          echo ""
         fi
+
+        # GitOps resource status for debugging Flux and ArgoCD deployments
+        echo "=== FluxInstance Status ==="
+        $KUBECTL_CMD get fluxinstance -n flux-system -o wide 2>/dev/null || echo "No FluxInstance resources found (Flux may not be installed)"
+        echo ""
+
+        echo "=== OCIRepository Status ==="
+        $KUBECTL_CMD get ocirepository -n flux-system -o wide 2>/dev/null || echo "No OCIRepository resources found (Flux may not be installed)"
+        echo ""
+
+        echo "=== ArgoCD Application Status ==="
+        $KUBECTL_CMD get application -A -o wide 2>/dev/null || echo "No ArgoCD Application resources found (ArgoCD may not be installed)"
