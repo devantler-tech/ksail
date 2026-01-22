@@ -1,15 +1,24 @@
-package imageparser
+package imageparser_test
 
 import (
 	"testing"
+
+	"github.com/devantler-tech/ksail/v5/pkg/io/imageparser"
+)
+
+const (
+	kindNodePattern   = `FROM\s+(kindest/node:[^\s]+)`
+	kindNodeImageName = "Kind node"
+	k3sPattern        = `FROM\s+(rancher/k3s:[^\s]+)`
+	k3sImageName      = "K3s"
 )
 
 func TestParseImageFromDockerfile_Success(t *testing.T) {
-	dockerfile := "FROM kindest/node:v1.32.2"
-	pattern := `FROM\s+(kindest/node:[^\s]+)`
-	imageName := "Kind node"
+	t.Parallel()
 
-	result := ParseImageFromDockerfile(dockerfile, pattern, imageName)
+	dockerfile := "FROM kindest/node:v1.32.2"
+
+	result := imageparser.ParseImageFromDockerfile(dockerfile, kindNodePattern, kindNodeImageName)
 	expected := "kindest/node:v1.32.2"
 
 	if result != expected {
@@ -18,11 +27,11 @@ func TestParseImageFromDockerfile_Success(t *testing.T) {
 }
 
 func TestParseImageFromDockerfile_WithMultipleSpaces(t *testing.T) {
-	dockerfile := "FROM    rancher/k3s:v1.32.2-k3s1"
-	pattern := `FROM\s+(rancher/k3s:[^\s]+)`
-	imageName := "K3s"
+	t.Parallel()
 
-	result := ParseImageFromDockerfile(dockerfile, pattern, imageName)
+	dockerfile := "FROM    rancher/k3s:v1.32.2-k3s1"
+
+	result := imageparser.ParseImageFromDockerfile(dockerfile, k3sPattern, k3sImageName)
 	expected := "rancher/k3s:v1.32.2-k3s1"
 
 	if result != expected {
@@ -31,6 +40,8 @@ func TestParseImageFromDockerfile_WithMultipleSpaces(t *testing.T) {
 }
 
 func TestParseImageFromDockerfile_InvalidDockerfile(t *testing.T) {
+	t.Parallel()
+
 	defer func() {
 		if r := recover(); r == nil {
 			t.Errorf("Expected panic but got none")
@@ -38,13 +49,13 @@ func TestParseImageFromDockerfile_InvalidDockerfile(t *testing.T) {
 	}()
 
 	dockerfile := "INVALID CONTENT"
-	pattern := `FROM\s+(kindest/node:[^\s]+)`
-	imageName := "Kind node"
 
-	ParseImageFromDockerfile(dockerfile, pattern, imageName)
+	imageparser.ParseImageFromDockerfile(dockerfile, kindNodePattern, kindNodeImageName)
 }
 
 func TestParseImageFromDockerfile_EmptyDockerfile(t *testing.T) {
+	t.Parallel()
+
 	defer func() {
 		if r := recover(); r == nil {
 			t.Errorf("Expected panic but got none")
@@ -52,8 +63,6 @@ func TestParseImageFromDockerfile_EmptyDockerfile(t *testing.T) {
 	}()
 
 	dockerfile := ""
-	pattern := `FROM\s+(kindest/node:[^\s]+)`
-	imageName := "Kind node"
 
-	ParseImageFromDockerfile(dockerfile, pattern, imageName)
+	imageparser.ParseImageFromDockerfile(dockerfile, kindNodePattern, kindNodeImageName)
 }

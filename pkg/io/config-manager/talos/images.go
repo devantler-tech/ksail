@@ -15,5 +15,9 @@ var dockerfile string
 // This ensures Go code stays in sync with Dependabot updates automatically.
 // Panics if the Dockerfile cannot be parsed - this catches embedding/format issues at init time.
 func talosImage() string {
-	return imageparser.ParseImageFromDockerfile(dockerfile, `FROM\s+(ghcr\.io/siderolabs/talos:[^\s]+)`, "Talos")
+	return imageparser.ParseImageFromDockerfile(
+		dockerfile,
+		`FROM\s+(ghcr\.io/siderolabs/talos:[^\s]+)`,
+		"Talos",
+	)
 }
