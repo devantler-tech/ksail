@@ -116,14 +116,14 @@ argocd      my-app   Synced        Healthy         5m
 
 ## Common Failure Patterns
 
-| Symptom                            | Likely Cause                                            |
-|------------------------------------|---------------------------------------------------------|
-| `DiskPressure: True`               | Runner out of disk space - use `free-disk-space` action |
-| `MemoryPressure: True`             | Not enough RAM for workloads                            |
-| Pods in `Pending`                  | Insufficient resources or node selector issues          |
-| Pods in `ImagePullBackOff`         | Image not found or registry auth issues                 |
-| Pods in `CrashLoopBackOff`         | Application crashing - check container logs             |
-| FluxInstance not `Ready`           | Flux installation incomplete or OCIRepository not synced|
-| OCIRepository not `Ready`          | Artifact not pushed or registry authentication failed   |
-| ArgoCD Application not `Synced`    | Git sync issues or manifest errors                      |
-| ArgoCD Application not `Healthy`   | Deployed resources unhealthy or progressing             |
+| Symptom                          | Likely Cause                                             |
+|----------------------------------|----------------------------------------------------------|
+| `DiskPressure: True`             | Runner out of disk space - use `free-disk-space` action  |
+| `MemoryPressure: True`           | Not enough RAM for workloads                             |
+| Pods in `Pending`                | Insufficient resources or node selector issues           |
+| Pods in `ImagePullBackOff`       | Image not found or registry auth issues                  |
+| Pods in `CrashLoopBackOff`       | Application crashing - check container logs              |
+| FluxInstance not `Ready`         | Flux installation incomplete or OCIRepository not synced |
+| OCIRepository not `Ready`        | Artifact not pushed or registry authentication failed    |
+| ArgoCD Application not `Synced`  | Git sync issues or manifest errors                       |
+| ArgoCD Application not `Healthy` | Deployed resources unhealthy or progressing              |
