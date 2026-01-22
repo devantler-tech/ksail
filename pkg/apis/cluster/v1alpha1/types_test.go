@@ -422,7 +422,7 @@ func TestLocalRegistry_ResolvedHostPortPath(t *testing.T) {
 	}
 }
 
-//nolint:gochecknoglobals // Test data for TestLocalRegistry_ResolveCredentials
+//nolint:gochecknoglobals // Test table data
 var localRegistryResolveCredentialsTests = []struct {
 	name         string
 	registry     string

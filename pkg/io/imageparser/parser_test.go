@@ -9,6 +9,8 @@ import (
 const (
 	kindNodePattern   = `FROM\s+(kindest/node:[^\s]+)`
 	kindNodeImageName = "Kind node"
+	k3sPattern        = `FROM\s+(rancher/k3s:[^\s]+)`
+	k3sImageName      = "K3s"
 )
 
 func TestParseImageFromDockerfile_Success(t *testing.T) {
@@ -28,10 +30,8 @@ func TestParseImageFromDockerfile_WithMultipleSpaces(t *testing.T) {
 	t.Parallel()
 
 	dockerfile := "FROM    rancher/k3s:v1.32.2-k3s1"
-	pattern := `FROM\s+(rancher/k3s:[^\s]+)`
-	imageName := "K3s"
 
-	result := imageparser.ParseImageFromDockerfile(dockerfile, pattern, imageName)
+	result := imageparser.ParseImageFromDockerfile(dockerfile, k3sPattern, k3sImageName)
 	expected := "rancher/k3s:v1.32.2-k3s1"
 
 	if result != expected {
