@@ -375,7 +375,11 @@ func configureFlux(
 	// Step 3: Wait for FluxInstance to be ready (only if artifact was pushed/exists)
 	if artifactPushed {
 		notify.WriteMessage(
-			notify.Message{Type: notify.ActivityType, Content: "waiting for flux to be ready", Writer: writer},
+			notify.Message{
+				Type:    notify.ActivityType,
+				Content: "waiting for flux to be ready",
+				Writer:  writer,
+			},
 		)
 
 		err = factories.WaitForFluxReady(ctx, kubeconfig)
@@ -391,7 +395,7 @@ func configureFlux(
 // Returns true if an artifact exists or was pushed, false if no artifact needed.
 func ensureOCIArtifact(
 	ctx context.Context,
-	cmd *cobra.Command,
+	_ *cobra.Command,
 	clusterCfg *v1alpha1.Cluster,
 	clusterName string,
 	writer io.Writer,

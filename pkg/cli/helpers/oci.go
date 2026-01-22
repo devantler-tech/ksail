@@ -111,12 +111,22 @@ func checkSourceDirectoryExists(sourceDir string) (bool, error) {
 	return true, nil
 }
 
-// buildPushOptions creates the OCI build options from registry info and push options.
-func buildPushOptions(
+// ociPushParams holds the common parameters for building OCI push options.
+type ociPushParams struct {
+	repository       string
+	registryEndpoint string
+	version          string
+	gitOpsEngine     v1alpha1.GitOpsEngine
+	username         string
+	password         string
+}
+
+// resolveOCIPushParams extracts common parameters from registry info and push options.
+func resolveOCIPushParams(
 	registryInfo *RegistryInfo,
 	opts PushOCIArtifactOptions,
 	sourceDir string,
-) oci.BuildOptions {
+) ociPushParams {
 	repository := registryInfo.Repository
 	if repository == "" {
 		repository = registry.SanitizeRepoName(sourceDir)
@@ -138,15 +148,33 @@ func buildPushOptions(
 		registryEndpoint = registryInfo.Host
 	}
 
+	return ociPushParams{
+		repository:       repository,
+		registryEndpoint: registryEndpoint,
+		version:          ref,
+		gitOpsEngine:     opts.ClusterConfig.Spec.Cluster.GitOpsEngine,
+		username:         registryInfo.Username,
+		password:         registryInfo.Password,
+	}
+}
+
+// buildPushOptions creates the OCI build options from registry info and push options.
+func buildPushOptions(
+	registryInfo *RegistryInfo,
+	opts PushOCIArtifactOptions,
+	sourceDir string,
+) oci.BuildOptions {
+	params := resolveOCIPushParams(registryInfo, opts, sourceDir)
+
 	return oci.BuildOptions{
-		Name:             repository,
+		Name:             params.repository,
 		SourcePath:       sourceDir,
-		RegistryEndpoint: registryEndpoint,
-		Repository:       repository,
-		Version:          ref,
-		GitOpsEngine:     opts.ClusterConfig.Spec.Cluster.GitOpsEngine,
-		Username:         registryInfo.Username,
-		Password:         registryInfo.Password,
+		RegistryEndpoint: params.registryEndpoint,
+		Repository:       params.repository,
+		Version:          params.version,
+		GitOpsEngine:     params.gitOpsEngine,
+		Username:         params.username,
+		Password:         params.password,
 	}
 }
 
@@ -156,34 +184,15 @@ func buildEmptyPushOptions(
 	opts PushOCIArtifactOptions,
 	sourceDir string,
 ) oci.EmptyBuildOptions {
-	repository := registryInfo.Repository
-	if repository == "" {
-		repository = registry.SanitizeRepoName(sourceDir)
-	}
-
-	ref := opts.Ref
-	if ref == "" {
-		if registryInfo.Tag != "" {
-			ref = registryInfo.Tag
-		} else {
-			ref = registry.DefaultLocalArtifactTag
-		}
-	}
-
-	var registryEndpoint string
-	if registryInfo.Port > 0 {
-		registryEndpoint = fmt.Sprintf("%s:%d", registryInfo.Host, registryInfo.Port)
-	} else {
-		registryEndpoint = registryInfo.Host
-	}
+	params := resolveOCIPushParams(registryInfo, opts, sourceDir)
 
 	return oci.EmptyBuildOptions{
-		Name:             repository,
-		RegistryEndpoint: registryEndpoint,
-		Repository:       repository,
-		Version:          ref,
-		GitOpsEngine:     opts.ClusterConfig.Spec.Cluster.GitOpsEngine,
-		Username:         registryInfo.Username,
-		Password:         registryInfo.Password,
+		Name:             params.repository,
+		RegistryEndpoint: params.registryEndpoint,
+		Repository:       params.repository,
+		Version:          params.version,
+		GitOpsEngine:     params.gitOpsEngine,
+		Username:         params.username,
+		Password:         params.password,
 	}
 }

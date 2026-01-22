@@ -47,17 +47,15 @@ func newFluxInstanceManager(
 }
 
 // setup waits for the FluxInstance CRD, creates the client, and upserts the FluxInstance.
-//
-
 func (m *fluxInstanceManager) setup(
 	ctx context.Context,
 	clusterCfg *v1alpha1.Cluster,
 	clusterName string,
-) (client.Client, error) {
+) error {
 	// Wait for FluxInstance API to be fully ready
 	err := m.apiWaiter.waitForAPIReady(ctx, fluxInstanceGroupVersion, fluxInstanceCRDName)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	// Brief stabilization delay to allow the API server to fully propagate the CRD
@@ -66,7 +64,7 @@ func (m *fluxInstanceManager) setup(
 	// API as ready slightly before Create operations can succeed.
 	select {
 	case <-ctx.Done():
-		return nil, fmt.Errorf(
+		return fmt.Errorf(
 			"context cancelled during FluxInstance API stabilization: %w",
 			ctx.Err(),
 		)
@@ -75,7 +73,7 @@ func (m *fluxInstanceManager) setup(
 
 	fluxInstance, err := buildFluxInstance(clusterCfg, clusterName)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	// Create a client factory that creates a fresh client on each retry.
@@ -86,12 +84,7 @@ func (m *fluxInstanceManager) setup(
 		return newFluxResourcesClient(m.restConfig)
 	}
 
-	fluxClient, err := m.upsertWithRetry(ctx, clientFactory, fluxInstance)
-	if err != nil {
-		return nil, err
-	}
-
-	return fluxClient, nil
+	return m.upsertWithRetry(ctx, clientFactory, fluxInstance)
 }
 
 // waitForReady waits for the FluxInstance to report a Ready condition.
@@ -145,13 +138,11 @@ func (m *fluxInstanceManager) waitForReady(ctx context.Context) error {
 
 // upsertWithRetry creates or updates a FluxInstance with retry logic
 // to handle transient API errors during CRD initialization.
-//
-
 func (m *fluxInstanceManager) upsertWithRetry(
 	ctx context.Context,
 	clientFactory func() (client.Client, error),
 	desired *FluxInstance,
-) (client.Client, error) {
+) error {
 	waitCtx, cancel := context.WithTimeout(ctx, m.apiWaiter.timeout)
 	defer cancel()
 
@@ -169,7 +160,7 @@ func (m *fluxInstanceManager) upsertWithRetry(
 
 			select {
 			case <-waitCtx.Done():
-				return nil, fmt.Errorf(
+				return fmt.Errorf(
 					"timed out creating client for FluxInstance %s/%s: %w",
 					key.Namespace, key.Name, lastErr,
 				)
@@ -180,18 +171,18 @@ func (m *fluxInstanceManager) upsertWithRetry(
 
 		err := m.tryUpsert(waitCtx, fluxClient, key, desired)
 		if err == nil {
-			return fluxClient, nil
+			return nil
 		}
 
 		if !isTransientAPIError(err) {
-			return nil, err
+			return err
 		}
 
 		lastErr = err
 
 		select {
 		case <-waitCtx.Done():
-			return nil, fmt.Errorf(
+			return fmt.Errorf(
 				"timed out upserting FluxInstance %s/%s: %w",
 				key.Namespace, key.Name, lastErr,
 			)

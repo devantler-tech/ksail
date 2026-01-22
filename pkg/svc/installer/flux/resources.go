@@ -56,6 +56,50 @@ var loadRESTConfig = func(kubeconfig string) (*rest.Config, error) {
 	return k8s.BuildRESTConfig(kubeconfig, "")
 }
 
+// fluxSetupParams holds the components needed for Flux setup operations.
+// Context is passed separately to setupFluxCore to avoid embedding it in a struct.
+type fluxSetupParams struct {
+	restConfig  *rest.Config
+	clusterCfg  *v1alpha1.Cluster
+	clusterName string
+}
+
+// setupFluxCore performs the common Flux setup: secret creation, FluxInstance creation, and OCIRepository patching.
+func setupFluxCore(ctx context.Context, params fluxSetupParams) error {
+	// For external registries with credentials, create the pull secret before FluxInstance
+	err := ensureExternalRegistrySecret(ctx, params.restConfig, params.clusterCfg)
+	if err != nil {
+		return err
+	}
+
+	// Setup FluxInstance
+	fluxMgr := newFluxInstanceManager(
+		params.restConfig,
+		fluxAPIAvailabilityTimeout,
+		fluxAPIAvailabilityPollInterval,
+	)
+
+	err = fluxMgr.setup(ctx, params.clusterCfg, params.clusterName)
+	if err != nil {
+		return err
+	}
+
+	// Wait for OCIRepository API to be available before patching
+	ociPatcher := newOCIRepositoryPatcher(
+		params.restConfig,
+		fluxAPIAvailabilityTimeout,
+		fluxAPIAvailabilityPollInterval,
+	)
+
+	err = ociPatcher.waitForAPI(ctx)
+	if err != nil {
+		return err
+	}
+
+	// For local Docker registries (not external like GHCR), patch OCIRepository to use insecure HTTP
+	return ensureLocalRegistryInsecureIfNeeded(ctx, ociPatcher, params.clusterCfg)
+}
+
 // EnsureDefaultResources configures a default FluxInstance so the operator can
 // bootstrap controllers and sync from the local OCI registry.
 // If artifactPushed is false, the function will skip waiting for FluxInstance readiness
@@ -82,38 +126,11 @@ func EnsureDefaultResources(
 		return err
 	}
 
-	// For external registries with credentials, create the pull secret before FluxInstance
-	err = ensureExternalRegistrySecret(ctx, restConfig, clusterCfg)
-	if err != nil {
-		return err
-	}
-
-	// Setup FluxInstance
-	fluxMgr := newFluxInstanceManager(
-		restConfig,
-		fluxAPIAvailabilityTimeout,
-		fluxAPIAvailabilityPollInterval,
-	)
-
-	_, err = fluxMgr.setup(ctx, clusterCfg, clusterName)
-	if err != nil {
-		return err
-	}
-
-	// Wait for OCIRepository API to be available before patching
-	ociPatcher := newOCIRepositoryPatcher(
-		restConfig,
-		fluxAPIAvailabilityTimeout,
-		fluxAPIAvailabilityPollInterval,
-	)
-
-	err = ociPatcher.waitForAPI(ctx)
-	if err != nil {
-		return err
-	}
-
-	// For local Docker registries (not external like GHCR), patch OCIRepository to use insecure HTTP
-	err = ensureLocalRegistryInsecureIfNeeded(ctx, ociPatcher, clusterCfg)
+	err = setupFluxCore(ctx, fluxSetupParams{
+		restConfig:  restConfig,
+		clusterCfg:  clusterCfg,
+		clusterName: clusterName,
+	})
 	if err != nil {
 		return err
 	}
@@ -122,6 +139,12 @@ func EnsureDefaultResources(
 	// If no artifact was pushed (e.g., source directory missing during cluster create),
 	// the FluxInstance will remain in "Reconciliation in progress" until workload push is run.
 	if artifactPushed {
+		fluxMgr := newFluxInstanceManager(
+			restConfig,
+			fluxAPIAvailabilityTimeout,
+			fluxAPIAvailabilityPollInterval,
+		)
+
 		err = fluxMgr.waitForReady(ctx)
 		if err != nil {
 			return fmt.Errorf("failed waiting for FluxInstance to be ready: %w", err)
@@ -155,43 +178,11 @@ func SetupFluxInstance(
 		return err
 	}
 
-	// For external registries with credentials, create the pull secret before FluxInstance
-	err = ensureExternalRegistrySecret(ctx, restConfig, clusterCfg)
-	if err != nil {
-		return err
-	}
-
-	// Setup FluxInstance
-	fluxMgr := newFluxInstanceManager(
-		restConfig,
-		fluxAPIAvailabilityTimeout,
-		fluxAPIAvailabilityPollInterval,
-	)
-
-	_, err = fluxMgr.setup(ctx, clusterCfg, clusterName)
-	if err != nil {
-		return err
-	}
-
-	// Wait for OCIRepository API to be available before patching
-	ociPatcher := newOCIRepositoryPatcher(
-		restConfig,
-		fluxAPIAvailabilityTimeout,
-		fluxAPIAvailabilityPollInterval,
-	)
-
-	err = ociPatcher.waitForAPI(ctx)
-	if err != nil {
-		return err
-	}
-
-	// For local Docker registries (not external like GHCR), patch OCIRepository to use insecure HTTP
-	err = ensureLocalRegistryInsecureIfNeeded(ctx, ociPatcher, clusterCfg)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return setupFluxCore(ctx, fluxSetupParams{
+		restConfig:  restConfig,
+		clusterCfg:  clusterCfg,
+		clusterName: clusterName,
+	})
 }
 
 // WaitForFluxReady waits for the FluxInstance to report a Ready condition.

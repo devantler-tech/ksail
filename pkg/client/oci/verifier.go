@@ -152,6 +152,8 @@ func (v *verifier) ArtifactExists(ctx context.Context, opts ArtifactExistsOption
 }
 
 // buildReference creates a reference from artifact exists options.
+//
+//nolint:ireturn // Interface return is required by go-containerregistry API
 func (v *verifier) buildReference(opts ArtifactExistsOptions) (name.Reference, error) {
 	refStr := fmt.Sprintf("%s/%s:%s", opts.RegistryEndpoint, opts.Repository, opts.Tag)
 
@@ -173,19 +175,7 @@ func (v *verifier) buildRemoteOptionsForArtifact(
 	ctx context.Context,
 	opts ArtifactExistsOptions,
 ) []remote.Option {
-	remoteOpts := []remote.Option{
-		remote.WithContext(ctx),
-	}
-
-	if opts.Username != "" || opts.Password != "" {
-		auth := &authn.Basic{
-			Username: opts.Username,
-			Password: opts.Password,
-		}
-		remoteOpts = append(remoteOpts, remote.WithAuth(auth))
-	}
-
-	return remoteOpts
+	return buildRemoteOptionsWithAuth(ctx, opts.Username, opts.Password)
 }
 
 // isNotFoundError checks if the error indicates the artifact doesn't exist.
@@ -228,14 +218,19 @@ func (v *verifier) buildRepository(opts VerifyOptions) (name.Repository, error) 
 
 // buildRemoteOptions creates remote options for registry operations.
 func (v *verifier) buildRemoteOptions(ctx context.Context, opts VerifyOptions) []remote.Option {
+	return buildRemoteOptionsWithAuth(ctx, opts.Username, opts.Password)
+}
+
+// buildRemoteOptionsWithAuth creates remote options with optional basic auth.
+func buildRemoteOptionsWithAuth(ctx context.Context, username, password string) []remote.Option {
 	remoteOpts := []remote.Option{
 		remote.WithContext(ctx),
 	}
 
-	if opts.Username != "" || opts.Password != "" {
+	if username != "" || password != "" {
 		auth := &authn.Basic{
-			Username: opts.Username,
-			Password: opts.Password,
+			Username: username,
+			Password: password,
 		}
 		remoteOpts = append(remoteOpts, remote.WithAuth(auth))
 	}
