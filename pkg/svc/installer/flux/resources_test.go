@@ -622,11 +622,10 @@ func (m *mockFluxClient) DeleteAllOf(
 	return nil
 }
 
-func (m *mockFluxClient) Status() client.SubResourceWriter { //nolint:ireturn // Mock client must return interface types
+func (m *mockFluxClient) Status() client.SubResourceWriter {
 	return nil
 }
 
-//nolint:ireturn // Mock client must return interface types
 func (m *mockFluxClient) SubResource(string) client.SubResourceClient {
 	return nil
 }
@@ -635,7 +634,7 @@ func (m *mockFluxClient) Scheme() *runtime.Scheme {
 	return nil
 }
 
-func (m *mockFluxClient) RESTMapper() meta.RESTMapper { //nolint:ireturn // Mock client must return interface types
+func (m *mockFluxClient) RESTMapper() meta.RESTMapper {
 	return nil
 }
 
