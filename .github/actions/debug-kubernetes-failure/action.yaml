@@ -84,34 +84,55 @@ runs:
 
         # GitOps resource status for debugging Flux and ArgoCD deployments
         echo "=== FluxInstance Status ==="
-        if $KUBECTL_CMD get fluxinstance -n flux-system &>/dev/null; then
-          $KUBECTL_CMD get fluxinstance -n flux-system -o wide
-          echo ""
-          echo "=== FluxInstance Details ==="
-          $KUBECTL_CMD describe fluxinstance -n flux-system | grep -A 50 "Status:" || true
+        # Check if the CRD exists first
+        if $KUBECTL_CMD api-resources --api-group=fluxcd.controlplane.io 2>/dev/null | grep -q fluxinstance; then
+          echo "FluxInstance CRD is registered"
+          FLUX_INSTANCES=$($KUBECTL_CMD get fluxinstance -n flux-system -o name 2>/dev/null || true)
+          if [ -n "$FLUX_INSTANCES" ]; then
+            $KUBECTL_CMD get fluxinstance -n flux-system -o wide
+            echo ""
+            echo "=== FluxInstance Details ==="
+            $KUBECTL_CMD describe fluxinstance -n flux-system
+          else
+            echo "FluxInstance CRD exists but no FluxInstance resources found in flux-system namespace"
+          fi
         else
-          echo "No FluxInstance resources found (Flux may not be installed)"
+          echo "FluxInstance CRD not registered (Flux Operator may not be installed)"
         fi
         echo ""
 
         echo "=== OCIRepository Status ==="
-        if $KUBECTL_CMD get ocirepository -n flux-system &>/dev/null; then
-          $KUBECTL_CMD get ocirepository -n flux-system -o wide
-          echo ""
-          echo "=== OCIRepository Details ==="
-          $KUBECTL_CMD describe ocirepository -n flux-system | grep -A 50 "Status:" || true
+        # Check if the CRD exists first
+        if $KUBECTL_CMD api-resources --api-group=source.toolkit.fluxcd.io 2>/dev/null | grep -q ocirepository; then
+          echo "OCIRepository CRD is registered"
+          OCI_REPOS=$($KUBECTL_CMD get ocirepository -n flux-system -o name 2>/dev/null || true)
+          if [ -n "$OCI_REPOS" ]; then
+            $KUBECTL_CMD get ocirepository -n flux-system -o wide
+            echo ""
+            echo "=== OCIRepository Details ==="
+            $KUBECTL_CMD describe ocirepository -n flux-system
+          else
+            echo "OCIRepository CRD exists but no OCIRepository resources found in flux-system namespace"
+          fi
         else
-          echo "No OCIRepository resources found (Flux may not be installed)"
+          echo "OCIRepository CRD not registered (Flux source-controller may not be installed)"
         fi
         echo ""
 
         echo "=== ArgoCD Application Status ==="
-        if $KUBECTL_CMD get application -A &>/dev/null; then
-          $KUBECTL_CMD get application -A -o wide
-          echo ""
-          echo "=== ArgoCD Application Details ==="
-          $KUBECTL_CMD describe application -A | grep -A 100 "Status:" || true
+        # Check if the CRD exists first
+        if $KUBECTL_CMD api-resources --api-group=argoproj.io 2>/dev/null | grep -q application; then
+          echo "ArgoCD Application CRD is registered"
+          ARGO_APPS=$($KUBECTL_CMD get application -A -o name 2>/dev/null || true)
+          if [ -n "$ARGO_APPS" ]; then
+            $KUBECTL_CMD get application -A -o wide
+            echo ""
+            echo "=== ArgoCD Application Details ==="
+            $KUBECTL_CMD describe application -A
+          else
+            echo "ArgoCD Application CRD exists but no Application resources found"
+          fi
         else
-          echo "No ArgoCD Application resources found (ArgoCD may not be installed)"
+          echo "ArgoCD Application CRD not registered (ArgoCD may not be installed)"
         fi
         echo ""
