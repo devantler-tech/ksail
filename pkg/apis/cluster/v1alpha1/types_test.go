@@ -424,7 +424,32 @@ func TestLocalRegistry_ResolvedHostPortPath(t *testing.T) {
 
 func TestLocalRegistry_ResolveCredentials(t *testing.T) {
 	// Note: Cannot use t.Parallel() when using t.Setenv()
-	tests := []struct {
+	tests := getLocalRegistryResolveCredentialsTests()
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			// Set environment variables for this test
+			for key, value := range testCase.envVars {
+				t.Setenv(key, value)
+			}
+
+			reg := v1alpha1.LocalRegistry{Registry: testCase.registry}
+			gotUsername, gotPassword := reg.ResolveCredentials()
+
+			assert.Equal(t, testCase.wantUsername, gotUsername)
+			assert.Equal(t, testCase.wantPassword, gotPassword)
+		})
+	}
+}
+
+func getLocalRegistryResolveCredentialsTests() []struct {
+	name         string
+	registry     string
+	envVars      map[string]string
+	wantUsername string
+	wantPassword string
+} {
+	return []struct {
 		name         string
 		registry     string
 		envVars      map[string]string
@@ -475,20 +500,5 @@ func TestLocalRegistry_ResolveCredentials(t *testing.T) {
 			wantUsername: "",
 			wantPassword: "",
 		},
-	}
-
-	for _, testCase := range tests {
-		t.Run(testCase.name, func(t *testing.T) {
-			// Set environment variables for this test
-			for key, value := range testCase.envVars {
-				t.Setenv(key, value)
-			}
-
-			reg := v1alpha1.LocalRegistry{Registry: testCase.registry}
-			gotUsername, gotPassword := reg.ResolveCredentials()
-
-			assert.Equal(t, testCase.wantUsername, gotUsername)
-			assert.Equal(t, testCase.wantPassword, gotPassword)
-		})
 	}
 }

@@ -19,7 +19,10 @@ import (
 // Reconciler errors.
 var (
 	// ErrReconcileTimeout is returned when reconciliation times out.
-	ErrReconcileTimeout = errors.New("timeout waiting for flux kustomization reconciliation - verify cluster health, Flux controllers status, and network/connectivity to the cluster")
+	ErrReconcileTimeout = errors.New(
+		"timeout waiting for flux kustomization reconciliation - " +
+			"verify cluster health, Flux controllers status, and network/connectivity to the cluster",
+	)
 	// ErrOCIRepositoryNotReady is returned when the OCIRepository is not ready.
 	ErrOCIRepositoryNotReady = errors.New(
 		"flux OCIRepository is not ready - ensure you have pushed an artifact with 'ksail workload push'",
@@ -32,10 +35,10 @@ var (
 
 // Substrings used to detect specific error conditions from error messages.
 const (
-	ociErrManifestUnknownSubstr      = "manifest unknown"
-	ociErrDoesNotExistSubstr         = "does not exist"
-	apiDiscoveryNotFoundSubstr       = "the server could not find the requested resource"
-	apiDiscoveryNoMatchesKindSubstr  = "no matches for kind"
+	ociErrManifestUnknownSubstr     = "manifest unknown"
+	ociErrDoesNotExistSubstr        = "does not exist"
+	apiDiscoveryNotFoundSubstr      = "the server could not find the requested resource"
+	apiDiscoveryNoMatchesKindSubstr = "no matches for kind"
 )
 
 // Reconciler constants.
