@@ -93,3 +93,4 @@ runs:
 
         echo "=== ArgoCD Application Status ==="
         $KUBECTL_CMD get application -A -o wide 2>/dev/null || echo "No ArgoCD Application resources found (ArgoCD may not be installed)"
+        echo ""
