@@ -121,31 +121,13 @@ func (b *builder) Build(ctx context.Context, opts BuildOptions) (BuildResult, er
 		return BuildResult{}, fmt.Errorf("build image: %w", err)
 	}
 
-	ref, err := parseOCIReference(
-		validated.RegistryEndpoint,
-		validated.Repository,
-		validated.Version,
-	)
-	if err != nil {
-		return BuildResult{}, err
-	}
-
-	err = pushImage(ctx, ref, img, validated.Username, validated.Password)
-	if err != nil {
-		return BuildResult{}, fmt.Errorf("push artifact: %w", err)
-	}
-
-	artifact := v1alpha1.OCIArtifact{
+	return pushImageToRegistry(ctx, img, artifactInfo{
 		Name:             validated.Name,
 		Version:          validated.Version,
 		RegistryEndpoint: validated.RegistryEndpoint,
 		Repository:       validated.Repository,
-		Tag:              validated.Version,
 		SourcePath:       validated.SourcePath,
-		CreatedAt:        metav1.NewTime(time.Now().UTC()),
-	}
-
-	return BuildResult{Artifact: artifact}, nil
+	}, validated.Username, validated.Password)
 }
 
 // BuildEmpty pushes an OCI artifact with an empty kustomization.yaml to the registry.
@@ -169,27 +151,47 @@ func (b *builder) BuildEmpty(ctx context.Context, opts EmptyBuildOptions) (Build
 		return BuildResult{}, fmt.Errorf("build empty image: %w", err)
 	}
 
-	ref, err := parseOCIReference(
-		validated.RegistryEndpoint,
-		validated.Repository,
-		validated.Version,
-	)
-	if err != nil {
-		return BuildResult{}, err
-	}
-
-	err = pushImage(ctx, ref, img, validated.Username, validated.Password)
-	if err != nil {
-		return BuildResult{}, fmt.Errorf("push empty artifact: %w", err)
-	}
-
-	artifact := v1alpha1.OCIArtifact{
+	return pushImageToRegistry(ctx, img, artifactInfo{
 		Name:             validated.Name,
 		Version:          validated.Version,
 		RegistryEndpoint: validated.RegistryEndpoint,
 		Repository:       validated.Repository,
-		Tag:              validated.Version,
 		SourcePath:       "", // No source path for empty artifacts
+	}, validated.Username, validated.Password)
+}
+
+// pushImageToRegistry handles the common push logic and creates the artifact result.
+type artifactInfo struct {
+	Name             string
+	Version          string
+	RegistryEndpoint string
+	Repository       string
+	SourcePath       string
+}
+
+func pushImageToRegistry(
+	ctx context.Context,
+	img v1.Image,
+	info artifactInfo,
+	username, password string,
+) (BuildResult, error) {
+	ref, err := parseOCIReference(info.RegistryEndpoint, info.Repository, info.Version)
+	if err != nil {
+		return BuildResult{}, err
+	}
+
+	err = pushImage(ctx, ref, img, username, password)
+	if err != nil {
+		return BuildResult{}, fmt.Errorf("push artifact: %w", err)
+	}
+
+	artifact := v1alpha1.OCIArtifact{
+		Name:             info.Name,
+		Version:          info.Version,
+		RegistryEndpoint: info.RegistryEndpoint,
+		Repository:       info.Repository,
+		Tag:              info.Version,
+		SourcePath:       info.SourcePath,
 		CreatedAt:        metav1.NewTime(time.Now().UTC()),
 	}
 
@@ -402,25 +404,18 @@ func writeTarEntry(
 // Returns a complete OCI v1.Image ready for push to a registry.
 //
 
-func buildImage(
-	layer v1.Layer,
-	opts ValidatedBuildOptions,
-) (v1.Image, error) {
-	cfg := &v1.ConfigFile{
+// newBaseConfigFile creates a base ConfigFile with architecture, OS, and timestamp.
+func newBaseConfigFile() *v1.ConfigFile {
+	return &v1.ConfigFile{
 		Architecture: runtime.GOARCH,
 		OS:           runtime.GOOS,
 		Created:      v1.Time{Time: time.Now().UTC()},
-		Config: v1.Config{
-			Labels: map[string]string{
-				"org.opencontainers.image.title":        opts.Name,
-				"org.opencontainers.image.version":      opts.Version,
-				"org.opencontainers.image.source":       opts.SourcePath,
-				"devantler.tech/ksail/repository":       opts.Repository,
-				"devantler.tech/ksail/registryEndpoint": opts.RegistryEndpoint,
-			},
-		},
+		Config:       v1.Config{Labels: make(map[string]string)},
 	}
+}
 
+// buildImageWithConfig creates an OCI image from a layer and config file.
+func buildImageWithConfig(layer v1.Layer, cfg *v1.ConfigFile) (v1.Image, error) {
 	img, err := mutate.ConfigFile(empty.Image, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("set config file: %w", err)
@@ -432,6 +427,22 @@ func buildImage(
 	}
 
 	return finalImg, nil
+}
+
+func buildImage(
+	layer v1.Layer,
+	opts ValidatedBuildOptions,
+) (v1.Image, error) {
+	cfg := newBaseConfigFile()
+	cfg.Config.Labels = map[string]string{
+		"org.opencontainers.image.title":        opts.Name,
+		"org.opencontainers.image.version":      opts.Version,
+		"org.opencontainers.image.source":       opts.SourcePath,
+		"devantler.tech/ksail/repository":       opts.Repository,
+		"devantler.tech/ksail/registryEndpoint": opts.RegistryEndpoint,
+	}
+
+	return buildImageWithConfig(layer, cfg)
 }
 
 // newEmptyKustomizationLayer creates an OCI layer containing an empty kustomization.yaml file.
@@ -495,30 +506,14 @@ func addContentToArchive(tarWriter *tar.Writer, filename string, content []byte)
 
 // buildEmptyImageWithLayer creates an OCI image with the given layer and labels from opts.
 func buildEmptyImageWithLayer(layer v1.Layer, opts ValidatedEmptyBuildOptions) (v1.Image, error) {
-	cfg := &v1.ConfigFile{
-		Architecture: runtime.GOARCH,
-		OS:           runtime.GOOS,
-		Created:      v1.Time{Time: time.Now().UTC()},
-		Config: v1.Config{
-			Labels: map[string]string{
-				"org.opencontainers.image.title":        opts.Name,
-				"org.opencontainers.image.version":      opts.Version,
-				"devantler.tech/ksail/repository":       opts.Repository,
-				"devantler.tech/ksail/registryEndpoint": opts.RegistryEndpoint,
-				"devantler.tech/ksail/empty":            "true",
-			},
-		},
+	cfg := newBaseConfigFile()
+	cfg.Config.Labels = map[string]string{
+		"org.opencontainers.image.title":        opts.Name,
+		"org.opencontainers.image.version":      opts.Version,
+		"devantler.tech/ksail/repository":       opts.Repository,
+		"devantler.tech/ksail/registryEndpoint": opts.RegistryEndpoint,
+		"devantler.tech/ksail/empty":            "true",
 	}
 
-	baseImg, err := mutate.ConfigFile(empty.Image, cfg)
-	if err != nil {
-		return nil, fmt.Errorf("set config file: %w", err)
-	}
-
-	img, err := mutate.AppendLayers(baseImg, layer)
-	if err != nil {
-		return nil, fmt.Errorf("append layer: %w", err)
-	}
-
-	return img, nil
+	return buildImageWithConfig(layer, cfg)
 }
