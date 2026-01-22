@@ -2,63 +2,42 @@ package fluxinstaller
 
 import (
 	"context"
-	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"net"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
-	fluxclient "github.com/devantler-tech/ksail/v5/pkg/client/flux"
 	"github.com/devantler-tech/ksail/v5/pkg/k8s"
-	registry "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
-	sourcev1 "github.com/fluxcd/source-controller/api/v1"
-	corev1 "k8s.io/api/core/v1"
-	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/client-go/discovery"
-	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 )
 
+// Error definitions for the flux installer package.
+var (
+	errCRDNotEstablished         = errors.New("CRD is not yet established")
+	errAPINotServable            = errors.New("API returned no resources")
+	errOCIRepositoryCreateTimout = errors.New("timed out waiting for OCIRepository to be created")
+	errPollTimeout               = errors.New("timed out waiting for resource to be ready")
+	errInvalidClusterConfig      = errors.New("cluster configuration is required")
+)
+
+// CRD names for waiting on establishment.
 const (
-	defaultSourceDirectory   = "k8s"
-	defaultArtifactTag       = "dev"
-	defaultOCIRepositoryName = fluxclient.DefaultNamespace
-	fluxIntervalFallback     = time.Minute
-	fluxDistributionVersion  = "2.x"
-	fluxDistributionRegistry = "ghcr.io/fluxcd"
-	fluxDistributionArtifact = "oci://ghcr.io/controlplaneio-fluxcd/flux-operator-manifests:latest"
-	// CRD names for waiting on establishment.
-	fluxInstanceCRDName    = "fluxinstances.fluxcd.controlplane.io"
-	ociRepositoriesCRDName = "ocirepositories.source.toolkit.fluxcd.io"
+	fluxInstanceCRDName = "fluxinstances.fluxcd.controlplane.io"
+)
+
+// Timing constants for API availability checks.
+const (
 	// apiStabilizationDelay is a pause after the API is reported ready,
 	// allowing the API server to fully propagate the CRD to all endpoints.
 	// This addresses race conditions observed in slower CI environments (e.g., Talos on GitHub Actions)
 	// where discovery reports the API as ready slightly before Create operations can succeed.
 	// 10 seconds has been empirically determined to provide sufficient margin for GitHub Actions runners.
 	apiStabilizationDelay = 10 * time.Second
-	// ExternalRegistrySecretName is the name of the Kubernetes secret used for external registry authentication.
-	// This secret is created by KSail during cluster creation when credentials are configured.
-	//nolint:gosec // not credentials, just a secret name constant
-	ExternalRegistrySecretName = "ksail-registry-credentials"
-)
-
-var (
-	errCRDNotEstablished         = errors.New("CRD is not yet established")
-	errAPINotServable            = errors.New("API returned no resources")
-	errOCIRepositoryCreateTimout = errors.New("timed out waiting for OCIRepository to be created")
-	errPollTimeout               = errors.New("timed out waiting for resource to be ready")
 )
 
 //nolint:gochecknoglobals // package-level timeout constants
@@ -70,108 +49,11 @@ var (
 	fluxAPIAvailabilityPollInterval = 2 * time.Second
 )
 
-var (
-	errInvalidClusterConfig = errors.New("cluster configuration is required")
-
-	//nolint:gochecknoglobals // Allows mocking REST config for tests
-	loadRESTConfig = func(kubeconfig string) (*rest.Config, error) {
-		return k8s.BuildRESTConfig(kubeconfig, "")
-	}
-
-	//nolint:gochecknoglobals // error handling in scheme registration, allows mocking for tests
-	newFluxResourcesClient = func(restConfig *rest.Config) (client.Client, error) {
-		scheme := runtime.NewScheme()
-
-		err := addFluxInstanceToScheme(scheme)
-		if err != nil {
-			return nil, fmt.Errorf("failed to add flux instance scheme: %w", err)
-		}
-
-		err = sourcev1.AddToScheme(scheme)
-		if err != nil {
-			return nil, fmt.Errorf("failed to add flux source scheme: %w", err)
-		}
-
-		return newDynamicClient(restConfig, scheme)
-	}
-
-	//nolint:gochecknoglobals // Allows mocking discovery client for tests
-	newDiscoveryClient = func(restConfig *rest.Config) (discovery.DiscoveryInterface, error) {
-		return discovery.NewDiscoveryClientForConfig(restConfig)
-	}
-
-	//nolint:gochecknoglobals // Allows mocking for tests
-	newAPIExtensionsClient = func(restConfig *rest.Config) (client.Client, error) {
-		scheme := runtime.NewScheme()
-
-		err := apiextensionsv1.AddToScheme(scheme)
-		if err != nil {
-			return nil, fmt.Errorf("failed to add apiextensions scheme: %w", err)
-		}
-
-		return newDynamicClient(restConfig, scheme)
-	}
-)
-
-// newDynamicClient creates a controller-runtime client with a dynamic REST mapper.
-// The dynamic mapper re-discovers resources on cache misses, which is critical for
-// newly-registered CRDs where a static mapper might have stale cached data.
-func newDynamicClient(restConfig *rest.Config, scheme *runtime.Scheme) (client.Client, error) {
-	httpClient, err := rest.HTTPClientFor(restConfig)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create HTTP client: %w", err)
-	}
-
-	mapper, err := apiutil.NewDynamicRESTMapper(restConfig, httpClient)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create dynamic REST mapper: %w", err)
-	}
-
-	k8sClient, err := client.New(restConfig, client.Options{
-		Scheme: scheme,
-		Mapper: mapper,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to create kubernetes client: %w", err)
-	}
-
-	return k8sClient, nil
-}
-
-// waitForOCIRepositoryAPI waits for the OCIRepository API to be available with stabilization delay.
-func waitForOCIRepositoryAPI(ctx context.Context, restConfig *rest.Config) error {
-	err := waitForAPIReady(ctx, restConfig, sourcev1.GroupVersion, ociRepositoriesCRDName)
-	if err != nil {
-		return err
-	}
-
-	// Brief stabilization delay for OCIRepository API as well
-	select {
-	case <-ctx.Done():
-		return fmt.Errorf("context cancelled during OCIRepository API stabilization: %w", ctx.Err())
-	case <-time.After(apiStabilizationDelay):
-	}
-
-	return nil
-}
-
-// ensureExternalRegistrySecret creates registry secret if external registry with credentials.
-func ensureExternalRegistrySecret(
-	ctx context.Context,
-	restConfig *rest.Config,
-	clusterCfg *v1alpha1.Cluster,
-) error {
-	localRegistry := clusterCfg.Spec.Cluster.LocalRegistry
-	if !localRegistry.IsExternal() || !localRegistry.HasCredentials() {
-		return nil
-	}
-
-	err := ensureRegistrySecret(ctx, restConfig, clusterCfg)
-	if err != nil {
-		return fmt.Errorf("failed to create registry secret: %w", err)
-	}
-
-	return nil
+// loadRESTConfig creates a REST config from a kubeconfig path.
+//
+//nolint:gochecknoglobals // Allows mocking REST config for tests
+var loadRESTConfig = func(kubeconfig string) (*rest.Config, error) {
+	return k8s.BuildRESTConfig(kubeconfig, "")
 }
 
 // EnsureDefaultResources configures a default FluxInstance so the operator can
@@ -203,29 +85,38 @@ func EnsureDefaultResources(
 		return err
 	}
 
-	_, err = setupFluxInstance(ctx, restConfig, clusterCfg, clusterName)
+	// Setup FluxInstance
+	fluxMgr := newFluxInstanceManager(
+		restConfig,
+		fluxAPIAvailabilityTimeout,
+		fluxAPIAvailabilityPollInterval,
+	)
+
+	_, err = fluxMgr.setup(ctx, clusterCfg, clusterName)
 	if err != nil {
 		return err
 	}
 
-	// Wait for OCIRepository API to be available before patching the local registry.
-	err = waitForOCIRepositoryAPI(ctx, restConfig)
+	// Wait for OCIRepository API to be available before patching
+	ociPatcher := newOCIRepositoryPatcher(
+		restConfig,
+		fluxAPIAvailabilityTimeout,
+		fluxAPIAvailabilityPollInterval,
+	)
+
+	err = ociPatcher.waitForAPI(ctx)
 	if err != nil {
 		return err
 	}
 
-	// For local Docker registries (not external like GHCR), patch OCIRepository to use insecure HTTP.
-	// External registries use HTTPS and should not have insecure: true set.
-	err = ensureLocalRegistryInsecureIfNeeded(ctx, restConfig, clusterCfg)
+	// For local Docker registries (not external like GHCR), patch OCIRepository to use insecure HTTP
+	err = ensureLocalRegistryInsecureIfNeeded(ctx, ociPatcher, clusterCfg)
 	if err != nil {
 		return err
 	}
 
-	// Wait for the FluxInstance to become ready.
-	// The FluxInstance controller manages the OCIRepository, so waiting for
-	// FluxInstance.Ready ensures that the OCIRepository is also ready.
-	// See: https://github.com/controlplaneio-fluxcd/flux-operator#monitor-the-flux-installation
-	err = waitForFluxInstanceReady(ctx, restConfig)
+	// Wait for the FluxInstance to become ready
+	err = fluxMgr.waitForReady(ctx)
 	if err != nil {
 		return fmt.Errorf("failed waiting for FluxInstance to be ready: %w", err)
 	}
@@ -233,451 +124,11 @@ func EnsureDefaultResources(
 	return nil
 }
 
-// buildRegistrySecret creates the Secret object for registry authentication.
-func buildRegistrySecret(clusterCfg *v1alpha1.Cluster) (*corev1.Secret, error) {
-	localRegistry := clusterCfg.Spec.Cluster.LocalRegistry
-	parsed := localRegistry.Parse()
-	username, password := localRegistry.ResolveCredentials()
-
-	dockerConfig, err := buildDockerConfigJSON(parsed.Host, username, password)
-	if err != nil {
-		return nil, fmt.Errorf("failed to build docker config: %w", err)
-	}
-
-	return &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      ExternalRegistrySecretName,
-			Namespace: fluxclient.DefaultNamespace,
-			Labels: map[string]string{
-				"app.kubernetes.io/managed-by": "ksail",
-			},
-		},
-		Type: corev1.SecretTypeDockerConfigJson,
-		Data: map[string][]byte{
-			corev1.DockerConfigJsonKey: dockerConfig,
-		},
-	}, nil
-}
-
-// ensureRegistrySecret creates or updates the docker-registry secret for OCI authentication.
-// This secret is used by Flux to pull artifacts from private external registries.
-func ensureRegistrySecret(
-	ctx context.Context,
-	restConfig *rest.Config,
-	clusterCfg *v1alpha1.Cluster,
-) error {
-	scheme := runtime.NewScheme()
-
-	err := corev1.AddToScheme(scheme)
-	if err != nil {
-		return fmt.Errorf("failed to add core scheme: %w", err)
-	}
-
-	k8sClient, err := newDynamicClient(restConfig, scheme)
-	if err != nil {
-		return fmt.Errorf("failed to create kubernetes client: %w", err)
-	}
-
-	secret, err := buildRegistrySecret(clusterCfg)
-	if err != nil {
-		return err
-	}
-
-	return upsertSecret(ctx, k8sClient, secret)
-}
-
-// upsertSecret creates or updates a Kubernetes secret.
-func upsertSecret(ctx context.Context, k8sClient client.Client, secret *corev1.Secret) error {
-	existing := &corev1.Secret{}
-	err := k8sClient.Get(ctx, client.ObjectKeyFromObject(secret), existing)
-
-	if apierrors.IsNotFound(err) {
-		createErr := k8sClient.Create(ctx, secret)
-		if createErr != nil {
-			return fmt.Errorf("failed to create registry secret: %w", createErr)
-		}
-
-		return nil
-	}
-
-	if err != nil {
-		return fmt.Errorf("failed to check existing secret: %w", err)
-	}
-
-	// Update existing secret
-	existing.Data = secret.Data
-
-	updateErr := k8sClient.Update(ctx, existing)
-	if updateErr != nil {
-		return fmt.Errorf("failed to update registry secret: %w", updateErr)
-	}
-
-	return nil
-}
-
-// buildDockerConfigJSON creates the .dockerconfigjson format for registry authentication.
-func buildDockerConfigJSON(registry, username, password string) ([]byte, error) {
-	auth := base64.StdEncoding.EncodeToString([]byte(username + ":" + password))
-
-	config := map[string]any{
-		"auths": map[string]any{
-			registry: map[string]string{
-				"username": username,
-				"password": password,
-				"auth":     auth,
-			},
-		},
-	}
-
-	data, err := json.Marshal(config)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal docker config: %w", err)
-	}
-
-	return data, nil
-}
-
-// setupFluxInstance waits for the FluxInstance CRD, creates the client, and upserts the FluxInstance.
-func setupFluxInstance(
-	ctx context.Context,
-	restConfig *rest.Config,
-	clusterCfg *v1alpha1.Cluster,
-	clusterName string,
-) (client.Client, error) {
-	// Wait for FluxInstance API to be fully ready
-	err := waitForAPIReady(ctx, restConfig, fluxInstanceGroupVersion, fluxInstanceCRDName)
-	if err != nil {
-		return nil, err
-	}
-
-	// Brief stabilization delay to allow the API server to fully propagate the CRD
-	// across all its endpoints. This addresses race conditions observed in slower
-	// CI environments (e.g., Talos on GitHub Actions) where discovery reports the
-	// API as ready slightly before Create operations can succeed.
-	select {
-	case <-ctx.Done():
-		return nil, fmt.Errorf(
-			"context cancelled during FluxInstance API stabilization: %w",
-			ctx.Err(),
-		)
-	case <-time.After(apiStabilizationDelay):
-	}
-
-	fluxInstance, err := buildFluxInstance(clusterCfg, clusterName)
-	if err != nil {
-		return nil, err
-	}
-
-	// Create a client factory that creates a fresh client on each retry.
-	// This is necessary because the dynamic REST mapper caches discovery results,
-	// and if the initial discovery happens before the API server fully propagates
-	// the CRD, subsequent requests will fail until the cache expires.
-	clientFactory := func() (client.Client, error) {
-		return newFluxResourcesClient(restConfig)
-	}
-
-	fluxClient, err := upsertFluxInstanceWithRetry(ctx, clientFactory, fluxInstance)
-	if err != nil {
-		return nil, err
-	}
-
-	return fluxClient, nil
-}
-
-// waitForAPIReady waits for both the API to be discoverable and the CRD to be established.
-// It also verifies that the resource API is actually servable by attempting to list resources.
-func waitForAPIReady(
-	ctx context.Context,
-	restConfig *rest.Config,
-	groupVersion schema.GroupVersion,
-	crdName string,
-) error {
-	// Wait for API to be discoverable
-	err := waitForGroupVersion(ctx, restConfig, groupVersion)
-	if err != nil {
-		return err
-	}
-
-	// Wait for CRD to be fully established (not just discoverable)
-	// This ensures the API server is ready to accept requests for the resources
-	err = waitForCRDEstablished(ctx, restConfig, crdName)
-	if err != nil {
-		return err
-	}
-
-	// Wait for the resource API to be actually servable by the API server.
-	// There can be a delay between CRD establishment and the API server
-	// discovery endpoint being updated to serve the new resource type.
-	return waitForResourceAPIServable(ctx, restConfig, groupVersion)
-}
-
-// buildExternalRegistryURL builds the OCI URL for an external registry.
-// Returns the URL, pull secret name, and optional tag override.
-func buildExternalRegistryURL(localRegistry v1alpha1.LocalRegistry) (string, string, string) {
-	parsed := localRegistry.Parse()
-	// For external registries, build URL without port (HTTPS 443 is implicit)
-	// e.g., oci://ghcr.io/devantler-tech/ksail/gitops-manifests
-	repoURL := fmt.Sprintf("oci://%s/%s", parsed.Host, parsed.Path)
-
-	var pullSecret string
-
-	// If credentials are configured, reference the secret that will be created
-	if localRegistry.HasCredentials() {
-		pullSecret = ExternalRegistrySecretName
-	}
-
-	return repoURL, pullSecret, parsed.Tag
-}
-
-// buildLocalRegistryURL builds the OCI URL for a local registry.
-func buildLocalRegistryURL(
-	localRegistry v1alpha1.LocalRegistry,
-	clusterCfg *v1alpha1.Cluster,
-	clusterName string,
-) string {
-	sourceDir := strings.TrimSpace(clusterCfg.Spec.Workload.SourceDirectory)
-	if sourceDir == "" {
-		sourceDir = defaultSourceDirectory
-	}
-
-	projectName := registry.SanitizeRepoName(sourceDir)
-	// Build the cluster-prefixed local registry name for in-cluster DNS resolution
-	repoHost := registry.BuildLocalRegistryName(clusterName)
-	repoPort := dockerclient.DefaultRegistryPort
-
-	if !localRegistry.Enabled() {
-		hostPort := localRegistry.ResolvedPort()
-		repoHost = registry.DefaultEndpointHost
-		repoPort = int(hostPort)
-	}
-
-	return fmt.Sprintf(
-		"oci://%s/%s",
-		net.JoinHostPort(repoHost, strconv.Itoa(repoPort)),
-		projectName,
-	)
-}
-
-func buildFluxInstance(clusterCfg *v1alpha1.Cluster, clusterName string) (*FluxInstance, error) {
-	localRegistry := clusterCfg.Spec.Cluster.LocalRegistry
-
-	var repoURL, pullSecret, tag string
-
-	if localRegistry.IsExternal() {
-		repoURL, pullSecret, tag = buildExternalRegistryURL(localRegistry)
-	} else {
-		repoURL = buildLocalRegistryURL(localRegistry, clusterCfg, clusterName)
-	}
-
-	// Use configured tag if provided, otherwise default
-	if tag == "" {
-		tag = defaultArtifactTag
-	}
-
-	intervalPtr := &metav1.Duration{Duration: fluxIntervalFallback}
-
-	return &FluxInstance{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: fluxInstanceGroupVersion.String(),
-			Kind:       fluxInstanceKind,
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      fluxInstanceDefaultName,
-			Namespace: fluxclient.DefaultNamespace,
-		},
-		Spec: FluxInstanceSpec{
-			Distribution: Distribution{
-				Version:  fluxDistributionVersion,
-				Registry: fluxDistributionRegistry,
-				Artifact: fluxDistributionArtifact,
-			},
-			Sync: &Sync{
-				Kind:       fluxOCIRepositoryKind,
-				URL:        repoURL,
-				Ref:        tag,
-				Path:       normalizeFluxPath(),
-				Provider:   "generic",
-				Interval:   intervalPtr,
-				PullSecret: pullSecret,
-			},
-		},
-	}, nil
-}
-
-// upsertFluxInstanceWithRetry creates or updates a FluxInstance with retry logic
-// to handle transient API errors during CRD initialization.
-// It accepts a client factory to create a fresh client on each retry, which is
-// necessary because the dynamic REST mapper caches discovery results.
-func upsertFluxInstanceWithRetry(
-	ctx context.Context,
-	clientFactory func() (client.Client, error),
-	desired *FluxInstance,
-) (client.Client, error) {
-	waitCtx, cancel := context.WithTimeout(ctx, fluxAPIAvailabilityTimeout)
-	defer cancel()
-
-	ticker := time.NewTicker(fluxAPIAvailabilityPollInterval)
-	defer ticker.Stop()
-
-	key := client.ObjectKeyFromObject(desired)
-
-	var lastErr error
-
-	for {
-		// Create a fresh client on each retry to ensure the dynamic REST mapper
-		// picks up newly-registered CRDs that might not have been discoverable
-		// in previous attempts.
-		fluxClient, clientErr := clientFactory()
-		if clientErr != nil {
-			lastErr = clientErr
-
-			select {
-			case <-waitCtx.Done():
-				return nil, fmt.Errorf(
-					"timed out creating client for FluxInstance %s/%s: %w",
-					key.Namespace,
-					key.Name,
-					lastErr,
-				)
-			case <-ticker.C:
-				continue
-			}
-		}
-
-		err := tryUpsertFluxInstance(waitCtx, fluxClient, key, desired)
-		if err == nil {
-			return fluxClient, nil
-		}
-
-		// If the error is a transient API error (like "resource not found" during CRD init),
-		// retry. Otherwise, return the error immediately.
-		if !isTransientAPIError(err) {
-			return nil, err
-		}
-
-		lastErr = err
-
-		select {
-		case <-waitCtx.Done():
-			// lastErr is guaranteed non-nil here since we just set it above
-			return nil, fmt.Errorf(
-				"timed out upserting FluxInstance %s/%s: %w",
-				key.Namespace,
-				key.Name,
-				lastErr,
-			)
-		case <-ticker.C:
-			// Retry with a fresh client
-		}
-	}
-}
-
-// tryUpsertFluxInstance attempts to create or update a FluxInstance once.
-func tryUpsertFluxInstance(
-	ctx context.Context,
-	fluxClient client.Client,
-	key client.ObjectKey,
-	desired *FluxInstance,
-) error {
-	existing := &FluxInstance{}
-
-	err := fluxClient.Get(ctx, key, existing)
-	if err != nil {
-		if apierrors.IsNotFound(err) {
-			createErr := fluxClient.Create(ctx, desired)
-			if createErr != nil {
-				return fmt.Errorf(
-					"create FluxInstance %s/%s: %w",
-					key.Namespace,
-					key.Name,
-					createErr,
-				)
-			}
-
-			// Verify the FluxInstance was actually created by reading it back.
-			// This guards against silent failures where the API accepts the request
-			// but the resource isn't actually persisted (e.g., due to webhooks,
-			// API server issues, or client configuration problems).
-			verifyErr := fluxClient.Get(ctx, key, existing)
-			if verifyErr != nil {
-				return fmt.Errorf(
-					"FluxInstance %s/%s was not persisted after create (verification failed): %w",
-					key.Namespace,
-					key.Name,
-					verifyErr,
-				)
-			}
-
-			return nil
-		}
-
-		return fmt.Errorf("failed to get FluxInstance %s/%s: %w", key.Namespace, key.Name, err)
-	}
-
-	existing.Spec = desired.Spec
-
-	err = fluxClient.Update(ctx, existing)
-	if err != nil {
-		return fmt.Errorf("failed to update FluxInstance %s/%s: %w", key.Namespace, key.Name, err)
-	}
-
-	return nil
-}
-
-// isTransientAPIError checks if the error is a transient API error that should be retried.
-// This includes errors like "the server could not find the requested resource" which can
-// occur when a CRD is registered but not fully ready to accept requests.
-func isTransientAPIError(err error) bool {
-	if err == nil {
-		return false
-	}
-
-	// Check for specific status errors that indicate the API isn't ready
-	if apierrors.IsServiceUnavailable(err) {
-		return true
-	}
-
-	// Check for connection-related errors that can occur during API server restarts
-	if apierrors.IsTimeout(err) || apierrors.IsTooManyRequests(err) {
-		return true
-	}
-
-	// Check for conflict errors (optimistic concurrency conflicts).
-	// This occurs when the resource was modified between Get and Update.
-	// Common in slow CI environments where Flux operators may reconcile
-	// resources concurrently with ksail's updates.
-	if apierrors.IsConflict(err) {
-		return true
-	}
-
-	// String-based checks for errors that aren't properly typed
-	errMsg := err.Error()
-
-	// "the server could not find the requested resource" indicates the CRD endpoint
-	// isn't fully registered yet
-	if strings.Contains(errMsg, "the server could not find the requested resource") {
-		return true
-	}
-
-	// "no matches for kind" is a REST mapper error when the CRD isn't known yet
-	if strings.Contains(errMsg, "no matches for kind") {
-		return true
-	}
-
-	// Connection refused/reset can happen during API server initialization
-	if strings.Contains(errMsg, "connection refused") ||
-		strings.Contains(errMsg, "connection reset") {
-		return true
-	}
-
-	return false
-}
-
 // ensureLocalRegistryInsecureIfNeeded patches OCIRepository with insecure: true only for
 // local Docker registries. External registries like GHCR use HTTPS and should not be patched.
 func ensureLocalRegistryInsecureIfNeeded(
 	ctx context.Context,
-	restConfig *rest.Config,
+	patcher *ociRepositoryPatcher,
 	clusterCfg *v1alpha1.Cluster,
 ) error {
 	localRegistry := clusterCfg.Spec.Cluster.LocalRegistry
@@ -685,193 +136,36 @@ func ensureLocalRegistryInsecureIfNeeded(
 		return nil
 	}
 
-	return ensureLocalOCIRepositoryInsecure(ctx, restConfig)
+	return patcher.ensureInsecure(ctx)
 }
 
-// ensureLocalOCIRepositoryInsecure uses a dynamic Kubernetes client to patch the OCIRepository
-// to enable insecure HTTP access for local registries. Using the dynamic client with
-// unstructured objects bypasses the controller-runtime REST mapper cache, which can become
-// stale in slow CI environments where CRD registration takes time to fully propagate.
-//
-//nolint:cyclop,funlen,gocognit // polling loop with retry logic requires multiple conditional branches
-func ensureLocalOCIRepositoryInsecure(
-	ctx context.Context,
-	restConfig *rest.Config,
-) error {
-	waitCtx, cancel := context.WithTimeout(ctx, fluxAPIAvailabilityTimeout)
-	defer cancel()
-
-	ticker := time.NewTicker(fluxAPIAvailabilityPollInterval)
-	defer ticker.Stop()
-
-	// Define the GVR for OCIRepository - this is the key to bypassing REST mapper cache.
-	// With dynamic client + GVR, we don't rely on discovery at all.
-	ociRepoGVR := schema.GroupVersionResource{
-		Group:    sourcev1.GroupVersion.Group,
-		Version:  sourcev1.GroupVersion.Version,
-		Resource: "ocirepositories",
+// newDynamicClient creates a controller-runtime client with a dynamic REST mapper.
+// The dynamic mapper re-discovers resources on cache misses, which is critical for
+// newly-registered CRDs where a static mapper might have stale cached data.
+func newDynamicClient(restConfig *rest.Config, scheme *runtime.Scheme) (client.Client, error) {
+	httpClient, err := rest.HTTPClientFor(restConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create HTTP client: %w", err)
 	}
 
-	var lastErr error
-
-	for {
-		// Create a fresh dynamic client on each retry.
-		// Unlike the typed client, this doesn't require REST mapper discovery.
-		dynamicClient, clientErr := dynamic.NewForConfig(restConfig)
-		if clientErr != nil {
-			lastErr = clientErr
-
-			select {
-			case <-waitCtx.Done():
-				return fmt.Errorf(
-					"timed out creating dynamic client for OCIRepository: %w",
-					lastErr,
-				)
-			case <-ticker.C:
-				continue
-			}
-		}
-
-		// Get the OCIRepository using the dynamic client
-		unstructuredRepo, err := dynamicClient.Resource(ociRepoGVR).
-			Namespace(fluxclient.DefaultNamespace).
-			Get(waitCtx, defaultOCIRepositoryName, metav1.GetOptions{})
-
-		switch {
-		case err == nil:
-			// Check if already insecure
-			insecure, found, _ := unstructured.NestedBool(
-				unstructuredRepo.Object,
-				"spec",
-				"insecure",
-			)
-			if found && insecure {
-				return nil
-			}
-
-			// Patch to set insecure: true
-			err = unstructured.SetNestedField(unstructuredRepo.Object, true, "spec", "insecure")
-			if err != nil {
-				return fmt.Errorf("failed to set insecure field: %w", err)
-			}
-
-			_, updateErr := dynamicClient.Resource(ociRepoGVR).
-				Namespace(fluxclient.DefaultNamespace).
-				Update(ctx, unstructuredRepo, metav1.UpdateOptions{})
-			if updateErr == nil {
-				return nil
-			}
-
-			// If the update fails with a transient API error, retry
-			if isTransientAPIError(updateErr) {
-				lastErr = updateErr
-
-				select {
-				case <-waitCtx.Done():
-					return fmt.Errorf(
-						"timed out updating OCIRepository %s/%s: %w",
-						fluxclient.DefaultNamespace,
-						defaultOCIRepositoryName,
-						lastErr,
-					)
-				case <-ticker.C:
-					continue
-				}
-			}
-
-			return fmt.Errorf(
-				"failed to update OCIRepository %s/%s: %w",
-				fluxclient.DefaultNamespace,
-				defaultOCIRepositoryName,
-				updateErr,
-			)
-		case apierrors.IsNotFound(err):
-			select {
-			case <-waitCtx.Done():
-				return errOCIRepositoryCreateTimout
-			case <-ticker.C:
-			}
-		default:
-			lastErr = err
-
-			// Handle "no matches for kind" errors and other API errors by retrying
-			select {
-			case <-waitCtx.Done():
-				return fmt.Errorf(
-					"timed out waiting for OCIRepository CRD to be ready: %w",
-					lastErr,
-				)
-			case <-ticker.C:
-				// Continue waiting - CRD might not be fully registered yet
-			}
-		}
+	mapper, err := apiutil.NewDynamicRESTMapper(restConfig, httpClient)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create dynamic REST mapper: %w", err)
 	}
-}
 
-func normalizeFluxPath() string {
-	// Flux expects paths to be relative to the root of the unpacked artifact.
-	return "./"
-}
+	k8sClient, err := client.New(restConfig, client.Options{
+		Scheme: scheme,
+		Mapper: mapper,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create kubernetes client: %w", err)
+	}
 
-// waitForFluxInstanceReady waits for the FluxInstance to report a Ready condition.
-// The FluxInstance controller sets this condition when Flux controllers are installed
-// and the sync source (OCIRepository) is ready.
-func waitForFluxInstanceReady(ctx context.Context, restConfig *rest.Config) error {
-	return pollUntilReady(
-		ctx,
-		fluxAPIAvailabilityTimeout,
-		fluxAPIAvailabilityPollInterval,
-		"FluxInstance to be ready",
-		func() (bool, error) {
-			// Create a fresh client on each retry to avoid caching issues
-			fluxClient, err := newFluxResourcesClient(restConfig)
-			if err != nil {
-				// Client creation errors are transient during CRD initialization.
-				// Don't return error, just keep polling.
-				//
-				// Intentionally ignoring error to retry later.
-				//nolint:nilerr // Transient error - continue polling
-				return false, nil
-			}
-
-			instance := &FluxInstance{}
-			key := client.ObjectKey{
-				Name:      fluxInstanceDefaultName,
-				Namespace: fluxclient.DefaultNamespace,
-			}
-
-			err = fluxClient.Get(ctx, key, instance)
-			if err != nil {
-				// All Get errors are transient (NotFound, API not ready, etc)
-				// Don't return error, just keep polling.
-				//
-				// Intentionally ignoring error to retry later.
-				//nolint:nilerr // Transient error - continue polling
-				return false, nil
-			}
-
-			// Check for Ready condition
-			for _, condition := range instance.Status.Conditions {
-				if condition.Type == "Ready" {
-					if condition.Status == metav1.ConditionTrue {
-						return true, nil
-					}
-
-					// Ready=False or Unknown - continue polling
-					// FluxInstance can temporarily be not ready during reconciliation,
-					// which is normal behavior. We rely on timeout to catch permanent failures.
-				}
-			}
-
-			// Not ready yet, keep waiting
-			return false, nil
-		},
-	)
+	return k8sClient, nil
 }
 
 // pollUntilReady implements a generic polling pattern for waiting on async conditions.
 // It repeatedly calls checkFn until it returns true (success) or the context expires.
-// For errors, the last error is tracked and returned if the wait times out.
 func pollUntilReady(
 	ctx context.Context,
 	timeout time.Duration,
@@ -910,136 +204,35 @@ func pollUntilReady(
 	}
 }
 
-func waitForGroupVersion(
-	ctx context.Context,
-	restConfig *rest.Config,
-	groupVersion schema.GroupVersion,
-) error {
-	return pollUntilReady(
-		ctx,
-		fluxAPIAvailabilityTimeout,
-		fluxAPIAvailabilityPollInterval,
-		"API "+groupVersion.String(),
-		func() (bool, error) {
-			discoveryClient, err := newDiscoveryClient(restConfig)
-			if err != nil {
-				return false, fmt.Errorf("failed to create discovery client: %w", err)
-			}
-
-			_, err = discoveryClient.ServerResourcesForGroupVersion(groupVersion.String())
-			if err != nil {
-				return false, fmt.Errorf("API not ready: %w", err)
-			}
-
-			return true, nil
-		},
-	)
-}
-
-// waitForCRDEstablished waits for the CRD to be fully established (not just discoverable).
-// This ensures the API server is ready to accept requests for the custom resource.
-func waitForCRDEstablished(
-	ctx context.Context,
-	restConfig *rest.Config,
-	crdName string,
-) error {
-	waitCtx, cancel := context.WithTimeout(ctx, fluxAPIAvailabilityTimeout)
-	defer cancel()
-
-	ticker := time.NewTicker(fluxAPIAvailabilityPollInterval)
-	defer ticker.Stop()
-
-	apiextClient, err := newAPIExtensionsClient(restConfig)
-	if err != nil {
-		return fmt.Errorf("failed to create apiextensions client: %w", err)
+// isTransientAPIError checks if the error is a transient API error that should be retried.
+func isTransientAPIError(err error) bool {
+	if err == nil {
+		return false
 	}
 
-	var lastErr error
+	// Check for specific Kubernetes API errors
+	if apierrors.IsServiceUnavailable(err) ||
+		apierrors.IsTimeout(err) ||
+		apierrors.IsTooManyRequests(err) ||
+		apierrors.IsConflict(err) {
+		return true
+	}
 
-	for {
-		crd := &apiextensionsv1.CustomResourceDefinition{}
+	errMsg := err.Error()
 
-		err := apiextClient.Get(waitCtx, client.ObjectKey{Name: crdName}, crd)
-		if err != nil {
-			lastErr = err
-		} else {
-			// Check if the CRD has the Established condition set to True
-			for _, condition := range crd.Status.Conditions {
-				if condition.Type == apiextensionsv1.Established &&
-					condition.Status == apiextensionsv1.ConditionTrue {
-					return nil
-				}
-			}
+	// Known transient error patterns
+	transientPatterns := []string{
+		"the server could not find the requested resource",
+		"no matches for kind",
+		"connection refused",
+		"connection reset",
+	}
 
-			lastErr = fmt.Errorf("%w: %s", errCRDNotEstablished, crdName)
-		}
-
-		select {
-		case <-waitCtx.Done():
-			if lastErr == nil {
-				lastErr = waitCtx.Err()
-			}
-
-			return fmt.Errorf(
-				"timed out waiting for CRD %s to be established: %w",
-				crdName,
-				lastErr,
-			)
-		case <-ticker.C:
+	for _, pattern := range transientPatterns {
+		if strings.Contains(errMsg, pattern) {
+			return true
 		}
 	}
-}
 
-// waitForResourceAPIServable waits for the resource API to be actually servable.
-// This is necessary because there can be a delay between when the CRD controller
-// marks a CRD as Established and when the API server's aggregated discovery
-// updates to include the new resource type. During this window, requests to the
-// resource API will fail with "the server could not find the requested resource".
-func waitForResourceAPIServable(
-	ctx context.Context,
-	restConfig *rest.Config,
-	groupVersion schema.GroupVersion,
-) error {
-	return pollUntilReady(
-		ctx,
-		fluxAPIAvailabilityTimeout,
-		fluxAPIAvailabilityPollInterval,
-		fmt.Sprintf("API %s to be servable", groupVersion.String()),
-		func() (bool, error) {
-			resources, err := tryDiscoverResources(restConfig, groupVersion)
-			if err != nil {
-				return false, err
-			}
-
-			if resources != nil && len(resources.APIResources) > 0 {
-				return true, nil
-			}
-
-			return false, fmt.Errorf("%w: %s", errAPINotServable, groupVersion.String())
-		},
-	)
-}
-
-// tryDiscoverResources attempts to discover resources for a group version.
-// Returns the resources list or an error if discovery fails.
-func tryDiscoverResources(
-	restConfig *rest.Config,
-	groupVersion schema.GroupVersion,
-) (*metav1.APIResourceList, error) {
-	// Create a new discovery client on each call to avoid caching issues.
-	// The discovery client caches API group information, and a stale cache
-	// might not reflect newly-registered resources.
-	discoveryClient, err := newDiscoveryClient(restConfig)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create discovery client: %w", err)
-	}
-
-	// Attempt to get the API resources for the group version.
-	// This forces a fresh discovery request and verifies the API is actually servable.
-	resources, err := discoveryClient.ServerResourcesForGroupVersion(groupVersion.String())
-	if err != nil {
-		return nil, fmt.Errorf("failed to get API resources for %s: %w", groupVersion.String(), err)
-	}
-
-	return resources, nil
+	return false
 }

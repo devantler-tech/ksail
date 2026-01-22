@@ -65,14 +65,16 @@ func PollUntilReady(
 	return pollUntilReady(ctx, timeout, interval, resourceDesc, checkFn)
 }
 
-// WaitForFluxInstanceReady exports waitForFluxInstanceReady for testing.
+// WaitForFluxInstanceReady exports the FluxInstance readiness check for testing.
 func WaitForFluxInstanceReady(ctx context.Context, restConfig any) error {
 	rc, ok := restConfig.(*rest.Config)
 	if !ok {
 		return errors.New("invalid rest config type")
 	}
 
-	return waitForFluxInstanceReady(ctx, rc)
+	mgr := newFluxInstanceManager(rc, fluxAPIAvailabilityTimeout, fluxAPIAvailabilityPollInterval)
+
+	return mgr.waitForReady(ctx)
 }
 
 // ExportNewFluxResourcesClient returns the current newFluxResourcesClient function for testing.
