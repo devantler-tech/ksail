@@ -214,8 +214,10 @@ func EnsureDefaultResources(
 		return err
 	}
 
-	// For local registries, patch OCIRepository to use insecure HTTP
-	if clusterCfg.Spec.Cluster.LocalRegistry.Enabled() {
+	// For local Docker registries (not external like GHCR), patch OCIRepository to use insecure HTTP.
+	// External registries use HTTPS and should not have insecure: true set.
+	localRegistry := clusterCfg.Spec.Cluster.LocalRegistry
+	if localRegistry.Enabled() && !localRegistry.IsExternal() {
 		err = ensureLocalOCIRepositoryInsecure(ctx, restConfig)
 		if err != nil {
 			return err
