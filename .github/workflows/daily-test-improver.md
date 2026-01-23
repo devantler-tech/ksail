@@ -25,7 +25,6 @@ safe-outputs:
   create-issue: # can create an issue if it thinks it found bugs
     max: 1
   add-comment:
-    discussion: true
     target: "*" # can add a comment to any one single issue or pull request
   create-pull-request: # can create a pull request
     draft: true

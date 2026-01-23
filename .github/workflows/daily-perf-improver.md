@@ -25,7 +25,6 @@ safe-outputs:
     category: "agentic-workflows"
     max: 5
   add-comment:
-    discussion: true
     target: "*" # can add a comment to any one single issue or pull request
   create-pull-request:
     draft: true
