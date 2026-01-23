@@ -85,14 +85,14 @@ Report back with specific findings and actionable fixes.
    
    ```
    🔍 Let's debug your agentic workflow!
-   
+
    First, which workflow would you like to debug?
-   
+
    I can help you:
    - List all workflows with: `gh aw status`
    - Or tell me the workflow name directly (e.g., 'weekly-research', 'issue-triage')
    - Or provide a workflow run URL (e.g., https://github.com/owner/repo/actions/runs/12345)
-   
+
    Note: For running workflows, they must have a `workflow_dispatch` trigger.
    ```
 
@@ -118,17 +118,17 @@ Report back with specific findings and actionable fixes.
    
    ```
    📊 How would you like to debug this workflow?
-   
+
    **Option 1: Analyze existing logs** 📂
    - I'll download and analyze logs from previous runs
    - Best for: Understanding past failures, performance issues, token usage
    - Command: `gh aw logs <workflow-name> --json`
-   
+
    **Option 2: Run and audit** ▶️
    - I'll run the workflow now and then analyze the results
    - Best for: Testing changes, reproducing issues, validating fixes
    - Commands: `gh aw run <workflow-name>` → automatically poll `gh aw audit <run-id> --json` until the audit finishes
-   
+
    Which option would you prefer? (1 or 2)
    ```
 
@@ -191,14 +191,14 @@ When the user provides a workflow run URL (e.g., `https://github.com/githubnext/
      ```
      The agent called `safeoutputs-create_pull_request` but the correct name is `create_pull_request`.
      The safe-outputs tools don't have a "safeoutputs-" prefix.
-     
+
      Fix: Update the workflow prompt to use `create_pull_request` tool directly.
      ```
    
    - **If tool is not configured:**
      ```
      The agent tried to call `<tool-name>` which is not configured in the workflow.
-     
+
      Fix: Add to frontmatter:
      tools:
        <tool-category>: [...]
@@ -207,7 +207,7 @@ When the user provides a workflow run URL (e.g., `https://github.com/githubnext/
    - **If safe-output is not enabled:**
      ```
      The agent tried to use safe-output `<output-type>` which is not configured.
-     
+
      Fix: Add to frontmatter:
      safe-outputs:
        <output-type>:
@@ -440,7 +440,7 @@ Before finishing:
    After changes are made and validated, explicitly ask the user:
    ```
    Would you like to run the workflow again with the new changes to verify the improvements?
-   
+
    I can help you:
    - Run it now: `gh aw run <workflow-name>`
    - Or monitor the next scheduled/triggered run

@@ -27,6 +27,7 @@ Read the ENTIRE content of this file carefully before proceeding. Follow the ins
 > **Command Execution**
 >
 > When running in GitHub Copilot Cloud, you don't have direct access to `gh aw` CLI commands. Instead, use the **agentic-workflows** MCP tool:
+>
 > - `fix` tool → apply automatic codemods to fix deprecated fields
 > - `compile` tool → compile workflows
 >
@@ -111,7 +112,7 @@ If compilation fails, work through errors systematically:
    mcp-servers:
      github:
        mode: remote
-   
+
    # New format
    tools:
      github:

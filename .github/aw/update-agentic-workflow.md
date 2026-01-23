@@ -331,6 +331,7 @@ If no agentics file exists, edit the markdown body of the workflow file.
 - Adding security notices
 
 **How to do it**:
+
 1. Check if the workflow has a runtime import: `{{#runtime-import agentics/<workflow-id>.md}}`
 2. If yes, edit that file directly - no compilation needed!
 3. Changes take effect on the next workflow run

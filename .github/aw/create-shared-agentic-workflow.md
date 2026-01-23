@@ -175,13 +175,13 @@ safe-outputs:
                 core.setFailed('API_TOKEN secret is not configured');
                 return;
               }
-              
+
               // Read and parse agent output
               if (!outputContent) {
                 core.info('No GH_AW_AGENT_OUTPUT environment variable found');
                 return;
               }
-              
+
               let agentOutputData;
               try {
                 const fileContent = fs.readFileSync(outputContent, 'utf8');
@@ -190,33 +190,33 @@ safe-outputs:
                 core.setFailed(\`Error reading or parsing agent output: \${error instanceof Error ? error.message : String(error)}\`);
                 return;
               }
-              
+
               if (!agentOutputData.items || !Array.isArray(agentOutputData.items)) {
                 core.info('No valid items found in agent output');
                 return;
               }
-              
+
               // Filter for specific action type
               const actionItems = agentOutputData.items.filter(item => item.type === 'custom_action');
-              
+
               if (actionItems.length === 0) {
                 core.info('No custom_action items found in agent output');
                 return;
               }
-              
+
               core.info(\`Found \${actionItems.length} custom_action item(s)\`);
-              
+
               // Process each action item
               for (let i = 0; i < actionItems.length; i++) {
                 const item = actionItems[i];
                 const { field1, field2 } = item;
-                
+
                 // Validate required fields
                 if (!field1) {
                   core.warning(\`Item \${i + 1}: Missing field1, skipping\`);
                   continue;
                 }
-                
+
                 // Handle staged mode
                 if (isStaged) {
                   let summaryContent = "## 🎭 Staged Mode: Action Preview\\n\\n";
@@ -227,7 +227,7 @@ safe-outputs:
                   core.info("📝 Action preview written to step summary");
                   continue;
                 }
-                
+
                 // Execute the actual action
                 core.info(\`Processing action \${i + 1}/\${actionItems.length}\`);
                 try {
@@ -306,7 +306,7 @@ Before running compile or inspect commands, create the shared workflow file:
   \`\`\`
   Required secrets for this MCP server:
   - SECRET_NAME: Description of what this secret is for
-  
+
   To configure in GitHub Actions:
   1. Go to your repository Settings → Secrets and variables → Actions
   2. Click "New repository secret"
@@ -395,7 +395,7 @@ mcp-servers:
 <!--
 DeepWiki MCP Server
 Provides read-only access to GitHub repository documentation
- 
+
 Required secrets: None (public service)
 Available tools:
   - read_wiki_structure: List documentation topics
