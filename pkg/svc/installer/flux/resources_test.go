@@ -14,7 +14,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/rest"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 func TestBuildDockerConfigJSON(t *testing.T) {
@@ -266,6 +271,10 @@ func TestBuildFluxInstance(t *testing.T) {
 			require.NoError(t, err)
 			require.NotNil(t, instance)
 
+			// Verify TypeMeta is set (required for proper API server communication)
+			assert.Equal(t, "fluxcd.controlplane.io/v1", instance.APIVersion)
+			assert.Equal(t, "FluxInstance", instance.Kind)
+
 			assert.Equal(t, testCase.wantName, instance.GetName())
 			assert.Equal(t, "flux-system", instance.GetNamespace())
 			assert.NotNil(t, instance.Spec.Sync)
@@ -425,7 +434,8 @@ func TestPollUntilReady_Timeout(t *testing.T) {
 	t.Parallel()
 
 	checkFn := func() (bool, error) {
-		return false, errors.New("not ready")
+		// Never ready, no error (simulate transient not-ready state)
+		return false, nil
 	}
 
 	err := fluxinstaller.PollUntilReady(
@@ -493,6 +503,7 @@ func TestEnsureDefaultResources_NilConfig(t *testing.T) {
 		"",
 		nil,
 		"test-cluster",
+		true, // artifactPushed
 	)
 
 	require.Error(t, err)
@@ -518,4 +529,299 @@ func TestBuildLocalRegistryURL_CustomPort(t *testing.T) {
 
 	// Should use the resolved host:port from the local registry ref
 	assert.Contains(t, url, "oci://")
+}
+
+// mockFluxClient is a mock implementation of client.Client for testing.
+type mockFluxClient struct {
+	getFunc    func(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error
+	listFunc   func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error
+	createFunc func(ctx context.Context, obj client.Object, opts ...client.CreateOption) error
+	updateFunc func(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error
+	deleteFunc func(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error
+	patchFunc  func(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.PatchOption) error
+}
+
+func (m *mockFluxClient) Get(
+	ctx context.Context,
+	key client.ObjectKey,
+	obj client.Object,
+	opts ...client.GetOption,
+) error {
+	if m.getFunc != nil {
+		return m.getFunc(ctx, key, obj, opts...)
+	}
+
+	return nil
+}
+
+func (m *mockFluxClient) List(
+	ctx context.Context,
+	list client.ObjectList,
+	opts ...client.ListOption,
+) error {
+	if m.listFunc != nil {
+		return m.listFunc(ctx, list, opts...)
+	}
+
+	return nil
+}
+
+func (m *mockFluxClient) Create(
+	ctx context.Context,
+	obj client.Object,
+	opts ...client.CreateOption,
+) error {
+	if m.createFunc != nil {
+		return m.createFunc(ctx, obj, opts...)
+	}
+
+	return nil
+}
+
+func (m *mockFluxClient) Update(
+	ctx context.Context,
+	obj client.Object,
+	opts ...client.UpdateOption,
+) error {
+	if m.updateFunc != nil {
+		return m.updateFunc(ctx, obj, opts...)
+	}
+
+	return nil
+}
+
+func (m *mockFluxClient) Delete(
+	ctx context.Context,
+	obj client.Object,
+	opts ...client.DeleteOption,
+) error {
+	if m.deleteFunc != nil {
+		return m.deleteFunc(ctx, obj, opts...)
+	}
+
+	return nil
+}
+
+func (m *mockFluxClient) Patch(
+	ctx context.Context,
+	obj client.Object,
+	patch client.Patch,
+	opts ...client.PatchOption,
+) error {
+	if m.patchFunc != nil {
+		return m.patchFunc(ctx, obj, patch, opts...)
+	}
+
+	return nil
+}
+
+func (m *mockFluxClient) DeleteAllOf(
+	_ context.Context,
+	_ client.Object,
+	_ ...client.DeleteAllOfOption,
+) error {
+	return nil
+}
+
+func (m *mockFluxClient) Status() client.SubResourceWriter {
+	return nil
+}
+
+func (m *mockFluxClient) SubResource(string) client.SubResourceClient {
+	return nil
+}
+
+func (m *mockFluxClient) Scheme() *runtime.Scheme {
+	return nil
+}
+
+func (m *mockFluxClient) RESTMapper() meta.RESTMapper {
+	return nil
+}
+
+func (m *mockFluxClient) GroupVersionKindFor(_ runtime.Object) (schema.GroupVersionKind, error) {
+	return schema.GroupVersionKind{}, nil
+}
+
+func (m *mockFluxClient) IsObjectNamespaced(_ runtime.Object) (bool, error) {
+	return false, nil
+}
+
+func (m *mockFluxClient) Apply(
+	_ context.Context,
+	_ runtime.ApplyConfiguration,
+	_ ...client.ApplyOption,
+) error {
+	return nil
+}
+
+//nolint:paralleltest // Cannot run in parallel due to global mock
+func TestWaitForFluxInstanceReady_Success(t *testing.T) {
+	// Removed t.Parallel() to avoid test pollution with global mock
+	mockClient := &mockFluxClient{
+		getFunc: func(
+			_ context.Context,
+			_ client.ObjectKey,
+			obj client.Object,
+			_ ...client.GetOption,
+		) error {
+			instance, ok := obj.(*fluxinstaller.FluxInstance)
+			require.True(t, ok, "expected FluxInstance type")
+
+			instance.Status.Conditions = []metav1.Condition{
+				{
+					Type:   "Ready",
+					Status: metav1.ConditionTrue,
+				},
+			}
+
+			return nil
+		},
+	}
+
+	// Mock the client factory
+	restore := fluxinstaller.SetNewFluxResourcesClient(func(*rest.Config) (any, error) {
+		return mockClient, nil
+	})
+	defer restore()
+
+	ctx := context.Background()
+	restConfig := &rest.Config{}
+
+	err := fluxinstaller.WaitForFluxInstanceReady(ctx, restConfig)
+
+	require.NoError(t, err)
+}
+
+//nolint:paralleltest // Cannot run in parallel due to global mock
+func TestWaitForFluxInstanceReady_ReadyFalse(t *testing.T) {
+	// Removed t.Parallel() to avoid test pollution with global mock
+	mockClient := &mockFluxClient{
+		getFunc: func(
+			_ context.Context,
+			_ client.ObjectKey,
+			obj client.Object,
+			_ ...client.GetOption,
+		) error {
+			instance, ok := obj.(*fluxinstaller.FluxInstance)
+			require.True(t, ok, "expected FluxInstance type")
+
+			instance.Status.Conditions = []metav1.Condition{
+				{
+					Type:    "Ready",
+					Status:  metav1.ConditionFalse,
+					Reason:  "HealthCheckCanceled",
+					Message: "New reconciliation triggered",
+				},
+			}
+
+			return nil
+		},
+	}
+
+	// Mock the client factory
+	restore := fluxinstaller.SetNewFluxResourcesClient(func(*rest.Config) (any, error) {
+		return mockClient, nil
+	})
+	defer restore()
+
+	// Use a short timeout context for this test
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	restConfig := &rest.Config{}
+
+	err := fluxinstaller.WaitForFluxInstanceReady(ctx, restConfig)
+
+	// Ready=False is treated as transient, so we should get a timeout error
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "timed out waiting for resource to be ready")
+}
+
+//nolint:paralleltest // Cannot run in parallel due to global mock
+func TestWaitForFluxInstanceReady_NotFound(t *testing.T) {
+	// Removed t.Parallel() to avoid test pollution with global mock
+	callCount := 0
+	mockClient := &mockFluxClient{
+		getFunc: func(
+			_ context.Context,
+			_ client.ObjectKey,
+			obj client.Object,
+			_ ...client.GetOption,
+		) error {
+			callCount++
+			if callCount < 2 {
+				return apierrors.NewNotFound(schema.GroupResource{}, "flux")
+			}
+
+			instance, ok := obj.(*fluxinstaller.FluxInstance)
+			require.True(t, ok, "expected FluxInstance type")
+
+			instance.Status.Conditions = []metav1.Condition{
+				{
+					Type:   "Ready",
+					Status: metav1.ConditionTrue,
+				},
+			}
+
+			return nil
+		},
+	}
+
+	// Mock the client factory
+	restore := fluxinstaller.SetNewFluxResourcesClient(func(*rest.Config) (any, error) {
+		return mockClient, nil
+	})
+	defer restore()
+
+	ctx := context.Background()
+	restConfig := &rest.Config{}
+
+	err := fluxinstaller.WaitForFluxInstanceReady(ctx, restConfig)
+
+	require.NoError(t, err)
+	assert.GreaterOrEqual(t, callCount, 2, "should have retried at least 2 times")
+}
+
+//nolint:paralleltest // Cannot run in parallel due to global mock
+func TestWaitForFluxInstanceReady_ClientCreationError(t *testing.T) {
+	// Removed t.Parallel() to avoid test pollution with global mock
+	callCount := 0
+	// Mock the client factory to fail initially then succeed
+	restore := fluxinstaller.SetNewFluxResourcesClient(func(*rest.Config) (any, error) {
+		callCount++
+		if callCount < 2 {
+			return nil, errors.New("client creation failed")
+		}
+
+		return &mockFluxClient{
+			getFunc: func(
+				_ context.Context,
+				_ client.ObjectKey,
+				obj client.Object,
+				_ ...client.GetOption,
+			) error {
+				instance, ok := obj.(*fluxinstaller.FluxInstance)
+				require.True(t, ok, "expected FluxInstance type")
+
+				instance.Status.Conditions = []metav1.Condition{
+					{
+						Type:   "Ready",
+						Status: metav1.ConditionTrue,
+					},
+				}
+
+				return nil
+			},
+		}, nil
+	})
+	defer restore()
+
+	ctx := context.Background()
+	restConfig := &rest.Config{}
+
+	err := fluxinstaller.WaitForFluxInstanceReady(ctx, restConfig)
+
+	require.NoError(t, err)
+	assert.GreaterOrEqual(t, callCount, 2, "should have retried client creation at least 2 times")
 }

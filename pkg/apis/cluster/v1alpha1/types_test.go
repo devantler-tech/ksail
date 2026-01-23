@@ -480,7 +480,6 @@ func TestLocalRegistry_ResolveCredentials(t *testing.T) {
 	// Note: Cannot use t.Parallel() when using t.Setenv()
 	for _, testCase := range localRegistryResolveCredentialsTests {
 		t.Run(testCase.name, func(t *testing.T) {
-			// Set environment variables for this test
 			for key, value := range testCase.envVars {
 				t.Setenv(key, value)
 			}

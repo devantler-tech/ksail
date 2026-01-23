@@ -318,6 +318,7 @@ func handlePostCreationSetup(
 	factories := getInstallerFactories()
 	outputTimer := helpers.MaybeTimer(cmd, tmr)
 
+	// OCI artifact push is now handled inside InstallPostCNIComponents after Flux is installed
 	err = setup.InstallPostCNIComponents(
 		cmd,
 		clusterCfg,

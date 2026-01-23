@@ -338,7 +338,7 @@ If no agentics file exists, edit the markdown body of the workflow file.
 
 ## Prompt Editing Without Recompilation
 
-**Key Feature**: If the workflow uses runtime imports (e.g., `@./agentics/<workflow-id>.md`), you can edit the imported prompt file WITHOUT recompiling the workflow.
+**Key Feature**: If the workflow uses runtime imports (e.g., `{{#runtime-import agentics/<workflow-id>.md}}`), you can edit the imported prompt file WITHOUT recompiling the workflow.
 
 **When to use this**:
 
@@ -349,7 +349,7 @@ If no agentics file exists, edit the markdown body of the workflow file.
 
 **How to do it**:
 
-1. Check if the workflow has a runtime import: `@./agentics/<workflow-id>.md`
+1. Check if the workflow has a runtime import: `{{#runtime-import agentics/<workflow-id>.md}}`
 2. If yes, edit that file directly - no compilation needed!
 3. Changes take effect on the next workflow run
 
