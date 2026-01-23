@@ -130,8 +130,8 @@ func GetComponentRequirements(clusterCfg *v1alpha1.Cluster) ComponentRequirement
 // distribution × provider combination does not provide it by default.
 //
 // Special case:
-// - Talos × Hetzner: Hetzner CSI is not pre-installed and must be installed
-//   by KSail when CSI is either Default or Enabled.
+//   - Talos × Hetzner: Hetzner CSI is not pre-installed and must be installed
+//     by KSail when CSI is either Default or Enabled.
 func NeedsCSIInstall(clusterCfg *v1alpha1.Cluster) bool {
 	dist := clusterCfg.Spec.Cluster.Distribution
 	provider := clusterCfg.Spec.Cluster.Provider

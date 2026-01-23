@@ -49,7 +49,8 @@ func (l *LocalPathStorageInstaller) Install(ctx context.Context) error {
 	}
 
 	// For Kind and Talos, install local-path-provisioner
-	if l.distribution == v1alpha1.DistributionVanilla || l.distribution == v1alpha1.DistributionTalos {
+	if l.distribution == v1alpha1.DistributionVanilla ||
+		l.distribution == v1alpha1.DistributionTalos {
 		return l.installLocalPathProvisioner(ctx)
 	}
 

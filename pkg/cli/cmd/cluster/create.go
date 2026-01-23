@@ -21,8 +21,8 @@ import (
 )
 
 const (
-	k3sDisableMetricsServerFlag  = "--disable=metrics-server"
-	k3sDisableLocalStorageFlag   = "--disable=local-storage"
+	k3sDisableMetricsServerFlag = "--disable=metrics-server"
+	k3sDisableLocalStorageFlag  = "--disable=local-storage"
 )
 
 // newCreateLifecycleConfig creates the lifecycle configuration for cluster creation.

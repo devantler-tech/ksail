@@ -58,7 +58,7 @@ func (d *Distribution) ProvidesStorageByDefault() bool {
 // ProvidesCSIByDefault returns true if the distribution × provider combination includes CSI by default.
 // - K3s includes local-path-provisioner by default (regardless of provider)
 // - Talos × Hetzner uses Hetzner CSI driver by default
-// - Vanilla and Talos × Docker do not have a default CSI
+// - Vanilla and Talos × Docker do not have a default CSI.
 func (d *Distribution) ProvidesCSIByDefault(provider Provider) bool {
 	switch *d {
 	case DistributionK3s:

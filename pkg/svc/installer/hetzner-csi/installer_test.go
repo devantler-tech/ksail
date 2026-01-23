@@ -9,6 +9,7 @@ import (
 	hetznercsiinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/hetzner-csi"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNewHetznerCSIInstaller(t *testing.T) {
@@ -47,6 +48,6 @@ func TestHetznerCSIInstaller_Uninstall(t *testing.T) {
 	)
 	err := installer.Uninstall(context.Background())
 
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	mockClient.AssertExpectations(t)
 }

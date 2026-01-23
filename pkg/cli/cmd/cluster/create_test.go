@@ -354,7 +354,7 @@ func TestCreate_GitOps_PrintsInstallStage(t *testing.T) {
 }
 
 //nolint:paralleltest // uses t.Chdir and mutates shared test hooks
-func TestCreate_LocalPathStorageCSI_InstallsOnKind(t *testing.T) {
+func TestCreate_CSIEnabled_InstallsOnKind(t *testing.T) {
 	workingDir := t.TempDir()
 	t.Chdir(workingDir)
 
@@ -364,7 +364,7 @@ spec:
   cluster:
     distribution: Vanilla
     distributionConfig: kind.yaml
-    csi: LocalPathStorage
+    csi: Enabled
     metricsServer: Disabled
     connection:
       kubeconfig: ./kubeconfig
@@ -625,13 +625,17 @@ func TestSetupK3dCSI_DisablesCSI(t *testing.T) {
 
 	// Verify the flag was added
 	found := false
+
 	for _, arg := range k3dConfig.Options.K3sOptions.ExtraArgs {
 		if arg.Arg == "--disable=local-storage" {
 			found = true
+
 			require.Equal(t, []string{"server:*"}, arg.NodeFilters)
+
 			break
 		}
 	}
+
 	require.True(t, found, "--disable=local-storage flag should be added")
 }
 
@@ -664,11 +668,13 @@ func TestSetupK3dCSI_DoesNotDuplicateFlag(t *testing.T) {
 
 	// Count occurrences of the flag
 	count := 0
+
 	for _, arg := range k3dConfig.Options.K3sOptions.ExtraArgs {
 		if arg.Arg == "--disable=local-storage" {
 			count++
 		}
 	}
+
 	require.Equal(t, 1, count, "flag should not be duplicated")
 }
 
@@ -703,15 +709,15 @@ func TestSetupK3dCSI_DoesNothingWhenCSINotDisabled(t *testing.T) {
 		{"enabled", v1alpha1.CSIEnabled},
 	}
 
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			clusterCfg := &v1alpha1.Cluster{
 				Spec: v1alpha1.Spec{
 					Cluster: v1alpha1.ClusterSpec{
 						Distribution: v1alpha1.DistributionK3s,
-						CSI:          tc.csi,
+						CSI:          testCase.csi,
 					},
 				},
 			}

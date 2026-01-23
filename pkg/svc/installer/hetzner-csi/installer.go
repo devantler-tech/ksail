@@ -22,6 +22,9 @@ const (
 	hetznerTokenEnvVar  = "HCLOUD_TOKEN"
 )
 
+// ErrHetznerTokenNotSet is returned when the HCLOUD_TOKEN environment variable is not set.
+var ErrHetznerTokenNotSet = fmt.Errorf("environment variable %s is not set", hetznerTokenEnvVar)
+
 // HetznerCSIInstaller installs or upgrades the Hetzner Cloud CSI driver.
 //
 // It implements installer.Installer semantics (Install/Uninstall) so it can be
@@ -55,7 +58,8 @@ func NewHetznerCSIInstaller(
 // then installs the CSI driver chart.
 func (h *HetznerCSIInstaller) Install(ctx context.Context) error {
 	// Create the secret containing the Hetzner Cloud API token
-	if err := h.createHetznerSecret(ctx); err != nil {
+	err := h.createHetznerSecret(ctx)
+	if err != nil {
 		return fmt.Errorf("failed to create hetzner secret: %w", err)
 	}
 
@@ -80,7 +84,7 @@ func (h *HetznerCSIInstaller) createHetznerSecret(ctx context.Context) error {
 	// Get the Hetzner Cloud API token from environment
 	token := os.Getenv(hetznerTokenEnvVar)
 	if token == "" {
-		return fmt.Errorf("environment variable %s is not set", hetznerTokenEnvVar)
+		return ErrHetznerTokenNotSet
 	}
 
 	// Create Kubernetes clientset
