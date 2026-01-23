@@ -422,40 +422,16 @@ func TestLocalRegistry_ResolvedHostPortPath(t *testing.T) {
 	}
 }
 
-func TestLocalRegistry_ResolveCredentials(t *testing.T) {
-	// Note: Cannot use t.Parallel() when using t.Setenv()
-	tests := getLocalRegistryResolveCredentialsTests()
-
-	for _, testCase := range tests {
-		t.Run(testCase.name, func(t *testing.T) {
-			// Set environment variables for this test
-			for key, value := range testCase.envVars {
-				t.Setenv(key, value)
-			}
-
-			reg := v1alpha1.LocalRegistry{Registry: testCase.registry}
-			gotUsername, gotPassword := reg.ResolveCredentials()
-
-			assert.Equal(t, testCase.wantUsername, gotUsername)
-			assert.Equal(t, testCase.wantPassword, gotPassword)
-		})
-	}
-}
-
-func getLocalRegistryResolveCredentialsTests() []struct {
+type resolveCredentialsTestCase struct {
 	name         string
 	registry     string
 	envVars      map[string]string
 	wantUsername string
 	wantPassword string
-} {
-	return []struct {
-		name         string
-		registry     string
-		envVars      map[string]string
-		wantUsername string
-		wantPassword string
-	}{
+}
+
+func getResolveCredentialsTestCases() []resolveCredentialsTestCase {
+	return []resolveCredentialsTestCase{
 		{
 			name:         "literal_credentials",
 			registry:     "myuser:mypass@ghcr.io/org/repo",
@@ -500,5 +476,24 @@ func getLocalRegistryResolveCredentialsTests() []struct {
 			wantUsername: "",
 			wantPassword: "",
 		},
+	}
+}
+
+func TestLocalRegistry_ResolveCredentials(t *testing.T) {
+	// Note: Cannot use t.Parallel() when using t.Setenv()
+	tests := getResolveCredentialsTestCases()
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			for key, value := range testCase.envVars {
+				t.Setenv(key, value)
+			}
+
+			reg := v1alpha1.LocalRegistry{Registry: testCase.registry}
+			gotUsername, gotPassword := reg.ResolveCredentials()
+
+			assert.Equal(t, testCase.wantUsername, gotUsername)
+			assert.Equal(t, testCase.wantPassword, gotPassword)
+		})
 	}
 }
