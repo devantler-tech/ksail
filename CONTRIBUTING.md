@@ -6,7 +6,7 @@ This project accepts contributions in the form of [**bug reports**](https://gith
 
 To get started with contributing to KSail, you'll need to set up your development environment, and understand the codebase, the CI setup and its requirements.
 
-To understand the codebase it is recommended to read the `.github/copilot-instructions.md` file, which provides an overview of the project structure and key components. You can also use GitHub Copilot to assist you in navigating the codebase and understanding its functionality.
+To understand the codebase it is recommended to read the [.github/copilot-instructions.md](.github/copilot-instructions.md) file, which provides an overview of the project structure and key components. You can also use GitHub Copilot to assist you in navigating the codebase and understanding its functionality.
 
 ### Code Documentation
 
@@ -14,17 +14,19 @@ For detailed package and API documentation, refer to the Go documentation at [pk
 
 ### Prerequisites
 
-Before you begin, ensure you have the following installed:
+**Runtime Requirements:**
+
+- [Docker](https://www.docker.com/get-started/) — The only required external dependency for running KSail
+
+**Development Requirements:**
+
+Before you begin developing, ensure you have the following installed:
 
 - [Go (v1.25.4+)](https://go.dev/doc/install)
 - [mockery (v3.5+)](https://vektra.github.io/mockery/v3.5/installation/)
 - [golangci-lint](https://golangci-lint.run/docs/welcome/install/)
 - [mega-linter](https://megalinter.io/latest/mega-linter-runner/#installation)
-- [Docker](https://www.docker.com/get-started/)
-
-For building documentation:
-
-- [Node.js (v22+)](https://nodejs.org/en/download/) (matches CI)
+- [Node.js (v22+)](https://nodejs.org/en/download/) — Required for building documentation (matches CI)
 
 ### Lint
 
@@ -121,6 +123,8 @@ The repository is organized around the top-level CLI entry point (`main.go`) and
 - **svc/provider/** - Infrastructure providers (e.g., `docker.Provider` for running nodes as containers)
 - **svc/provisioner/** - Distribution provisioners (Vanilla, K3s, Talos)
 - **svc/installer/** - Component installers (CNI, CSI, metrics-server, etc.)
+- **svc/image/** - Container image export/import services for Vanilla and K3s distributions
+- **svc/reconciler/** - Common base for GitOps reconciliation clients (Flux and ArgoCD)
 - **di/** - Dependency injection for wiring components
 
 ### Architecture: Providers vs Provisioners
