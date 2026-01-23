@@ -30,9 +30,9 @@ func NewRootCmd(version, commit, date string) *cobra.Command {
 	cmd.Version = fmt.Sprintf("%s (Built on %s from Git SHA %s)", version, date, commit)
 
 	cmd.PersistentFlags().Bool(
-		helpers.TimingFlagName,
+		helpers.BenchmarkFlagName,
 		false,
-		"Show per-activity timing output",
+		"Show per-activity benchmark output",
 	)
 
 	// Add all subcommands

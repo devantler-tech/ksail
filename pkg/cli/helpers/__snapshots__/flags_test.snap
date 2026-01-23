@@ -7,10 +7,10 @@ nil command
 flag not found: "timing"
 ---
 
-[TestIsTimingEnabled_NilCommand - 1]
+[TestIsBenchmarkEnabled_NilCommand - 1]
 nil command
 ---
 
-[TestIsTimingEnabled_FlagNotFound - 1]
-flag not found: "timing"
+[TestIsBenchmarkEnabled_FlagNotFound - 1]
+flag not found: "benchmark"
 ---
