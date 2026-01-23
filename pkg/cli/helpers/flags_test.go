@@ -11,67 +11,67 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestIsTimingEnabled_NilCommand(t *testing.T) {
+func TestIsBenchmarkEnabled_NilCommand(t *testing.T) {
 	t.Parallel()
 
-	_, err := helpers.IsTimingEnabled(nil)
+	_, err := helpers.IsBenchmarkEnabled(nil)
 	require.Error(t, err)
 	snaps.MatchSnapshot(t, err.Error())
 }
 
-func TestIsTimingEnabled_FlagFalse(t *testing.T) {
+func TestIsBenchmarkEnabled_FlagFalse(t *testing.T) {
 	t.Parallel()
 
 	cmd := &cobra.Command{}
-	cmd.Flags().Bool(helpers.TimingFlagName, false, "")
+	cmd.Flags().Bool(helpers.BenchmarkFlagName, false, "")
 
-	enabled, err := helpers.IsTimingEnabled(cmd)
+	enabled, err := helpers.IsBenchmarkEnabled(cmd)
 	require.NoError(t, err)
 	assert.False(t, enabled)
 }
 
-func TestIsTimingEnabled_FlagTrue(t *testing.T) {
+func TestIsBenchmarkEnabled_FlagTrue(t *testing.T) {
 	t.Parallel()
 
 	cmd := &cobra.Command{}
-	cmd.Flags().Bool(helpers.TimingFlagName, true, "")
+	cmd.Flags().Bool(helpers.BenchmarkFlagName, true, "")
 
-	enabled, err := helpers.IsTimingEnabled(cmd)
+	enabled, err := helpers.IsBenchmarkEnabled(cmd)
 	require.NoError(t, err)
 	assert.True(t, enabled)
 }
 
-func TestIsTimingEnabled_PersistentFlags(t *testing.T) {
+func TestIsBenchmarkEnabled_PersistentFlags(t *testing.T) {
 	t.Parallel()
 
 	cmd := &cobra.Command{}
-	cmd.PersistentFlags().Bool(helpers.TimingFlagName, true, "")
+	cmd.PersistentFlags().Bool(helpers.BenchmarkFlagName, true, "")
 
-	enabled, err := helpers.IsTimingEnabled(cmd)
+	enabled, err := helpers.IsBenchmarkEnabled(cmd)
 	require.NoError(t, err)
 	assert.True(t, enabled)
 }
 
-func TestIsTimingEnabled_InheritedFromParent(t *testing.T) {
+func TestIsBenchmarkEnabled_InheritedFromParent(t *testing.T) {
 	t.Parallel()
 
 	parent := &cobra.Command{}
-	parent.PersistentFlags().Bool(helpers.TimingFlagName, true, "")
+	parent.PersistentFlags().Bool(helpers.BenchmarkFlagName, true, "")
 
 	child := &cobra.Command{}
 	parent.AddCommand(child)
 
-	enabled, err := helpers.IsTimingEnabled(child)
+	enabled, err := helpers.IsBenchmarkEnabled(child)
 	require.NoError(t, err)
 	assert.True(t, enabled)
 }
 
-func TestIsTimingEnabled_FlagNotFound(t *testing.T) {
+func TestIsBenchmarkEnabled_FlagNotFound(t *testing.T) {
 	t.Parallel()
 
 	cmd := &cobra.Command{}
 
-	_, err := helpers.IsTimingEnabled(cmd)
+	_, err := helpers.IsBenchmarkEnabled(cmd)
 	require.Error(t, err)
 	snaps.MatchSnapshot(t, err.Error())
 }
@@ -87,27 +87,27 @@ func TestMaybeTimer_NilTimer(t *testing.T) {
 	t.Parallel()
 
 	cmd := &cobra.Command{}
-	cmd.Flags().Bool(helpers.TimingFlagName, true, "")
+	cmd.Flags().Bool(helpers.BenchmarkFlagName, true, "")
 
 	result := helpers.MaybeTimer(cmd, nil)
 	assert.Nil(t, result)
 }
 
-func TestMaybeTimer_TimingDisabled(t *testing.T) {
+func TestMaybeTimer_BenchmarkDisabled(t *testing.T) {
 	t.Parallel()
 
 	cmd := &cobra.Command{}
-	cmd.Flags().Bool(helpers.TimingFlagName, false, "")
+	cmd.Flags().Bool(helpers.BenchmarkFlagName, false, "")
 
 	result := helpers.MaybeTimer(cmd, timer.New())
 	assert.Nil(t, result)
 }
 
-func TestMaybeTimer_TimingEnabled(t *testing.T) {
+func TestMaybeTimer_BenchmarkEnabled(t *testing.T) {
 	t.Parallel()
 
 	cmd := &cobra.Command{}
-	cmd.Flags().Bool(helpers.TimingFlagName, true, "")
+	cmd.Flags().Bool(helpers.BenchmarkFlagName, true, "")
 
 	tmr := timer.New()
 	result := helpers.MaybeTimer(cmd, tmr)
