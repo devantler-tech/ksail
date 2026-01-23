@@ -140,7 +140,9 @@ func (m *ConfigManager) loadConfigWithOptions(
 	}
 
 	// Unmarshal and apply defaults
-	err := m.unmarshalWithFlagOverrides()
+	// Pass ignoreConfigFile so path resolution knows not to make paths absolute
+	// when no config file is being used (e.g., during init command)
+	err := m.unmarshalWithFlagOverrides(ignoreConfigFile)
 	if err != nil {
 		return nil, err
 	}
@@ -163,10 +165,12 @@ func (m *ConfigManager) loadConfigWithOptions(
 }
 
 // unmarshalWithFlagOverrides unmarshals config and applies all overrides and defaults.
-func (m *ConfigManager) unmarshalWithFlagOverrides() error {
+// When ignoreConfigFile is true, paths are kept relative since they'll be joined with
+// an explicit output directory later (e.g., during init command scaffolding).
+func (m *ConfigManager) unmarshalWithFlagOverrides(ignoreConfigFile bool) error {
 	flagOverrides := m.captureChangedFlagValues()
 
-	err := m.unmarshalAndApplyDefaults()
+	err := m.unmarshalAndApplyDefaults(ignoreConfigFile)
 	if err != nil {
 		return err
 	}
@@ -215,7 +219,7 @@ func (m *ConfigManager) readConfig(silent bool) error {
 	return nil
 }
 
-func (m *ConfigManager) unmarshalAndApplyDefaults() error {
+func (m *ConfigManager) unmarshalAndApplyDefaults(ignoreConfigFile bool) error {
 	decoderConfig := func(dc *mapstructure.DecoderConfig) {
 		dc.DecodeHook = mapstructure.ComposeDecodeHookFunc(
 			metav1DurationDecodeHook(),
@@ -256,10 +260,14 @@ func (m *ConfigManager) unmarshalAndApplyDefaults() error {
 		return fmt.Errorf("failed to resolve kubeconfig path: %w", err)
 	}
 
-	// Make source directory path absolute relative to config file directory
-	err = m.makeSourceDirectoryAbsolute()
-	if err != nil {
-		return fmt.Errorf("failed to resolve source directory path: %w", err)
+	// Make source directory path absolute relative to config file directory.
+	// Skip when ignoreConfigFile is true (e.g., during init command scaffolding)
+	// because the path will be joined with an explicit output directory later.
+	if !ignoreConfigFile {
+		err = m.makeSourceDirectoryAbsolute()
+		if err != nil {
+			return fmt.Errorf("failed to resolve source directory path: %w", err)
+		}
 	}
 
 	return nil
