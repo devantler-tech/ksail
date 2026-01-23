@@ -24,7 +24,6 @@ safe-outputs:
     category: "q-a"
     close-older-discussions: true
   add-comment:
-    discussion: true
     max: 3
   create-issue:
     title-prefix: "${{ github.workflow }}"

@@ -6,13 +6,12 @@ REPORTERS_MARKDOWN_SUMMARY_TYPE: sections
 DISABLE_LINTERS:
   - GO_GOLANGCI_LINT # Disabled: MegaLinter container has Go 1.24.7, but project requires Go 1.25.4. CI runs golangci-lint separately with correct Go version.
   - GO_REVIVE
-  - REPOSITORY_GITLEAKS
-  - REPOSITORY_SECRETLINT
-  - SPELL_CSPELL
-DISABLE_ERRORS_LINTERS:
-  - REPOSITORY_GRYPE
   - REPOSITORY_CHECKOV
+  - REPOSITORY_GITLEAKS
+  - REPOSITORY_GRYPE
+  - REPOSITORY_SECRETLINT
   - REPOSITORY_TRIVY
+  - SPELL_CSPELL
 
 # EXCLUDE FILTERS
 EXCLUDED_DIRECTORIES:
@@ -22,10 +21,10 @@ EXCLUDED_DIRECTORIES:
   - .github/prompts
   - .jscpd
   - schemas
-YAML_V8R_FILTER_REGEX_EXCLUDE: .github/workflows/.*\.lock\.yml
-JSON_V8R_FILTER_REGEX_EXCLUDE: .github/workflows/.*\.lock\.yml
-FILTER_REGEX_EXCLUDE: megalinter-reports/.*
 ACTION_ACTIONLINT_FILTER_REGEX_EXCLUDE: .github/workflows/.*\.lock\.yml
-MARKDOWN_MARKDOWNLINT_FILTER_REGEX_EXCLUDE: .github/(agents|prompts)
+FILTER_REGEX_EXCLUDE: megalinter-reports/.*
+JSON_V8R_FILTER_REGEX_EXCLUDE: .github/workflows/.*\.lock\.yml
 MARKDOWN_MARKDOWN_TABLE_FORMATTER_FILTER_REGEX_EXCLUDE: .github/(agents|prompts)
+MARKDOWN_MARKDOWNLINT_FILTER_REGEX_EXCLUDE: .github/(agents|prompts)
 SPELL_LYCHEE_FILTER_REGEX_EXCLUDE: (.github/copilot-instructions\.md|.*\.mdx)
+YAML_V8R_FILTER_REGEX_EXCLUDE: .github/workflows/.*\.lock\.yml

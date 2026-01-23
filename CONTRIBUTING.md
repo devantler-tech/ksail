@@ -4,7 +4,7 @@ This project accepts contributions in the form of [**bug reports**](https://gith
 
 ## Getting Started
 
-To get started with contributing to ksail, you'll need to set up your development environment, and understand the codebase, the CI setup and its requirements.
+To get started with contributing to KSail, you'll need to set up your development environment, and understand the codebase, the CI setup and its requirements.
 
 To understand the codebase it is recommended to read the `.github/copilot-instructions.md` file, which provides an overview of the project structure and key components. You can also use GitHub Copilot to assist you in navigating the codebase and understanding its functionality.
 
@@ -17,14 +17,14 @@ For detailed package and API documentation, refer to the Go documentation at [pk
 Before you begin, ensure you have the following installed:
 
 - [Go (v1.25.4+)](https://go.dev/doc/install)
-- [mockery](https://vektra.github.io/mockery/v3.5/installation/)
+- [mockery (v3.5+)](https://vektra.github.io/mockery/v3.5/installation/)
 - [golangci-lint](https://golangci-lint.run/docs/welcome/install/)
 - [mega-linter](https://megalinter.io/latest/mega-linter-runner/#installation)
 - [Docker](https://www.docker.com/get-started/)
 
 For building documentation:
 
-- [Node.js (v22)](https://nodejs.org/) (matches CI, see `.github/workflows/test-pages.yaml`)
+- [Node.js (v22+)](https://nodejs.org/en/download/) (matches CI)
 
 ### Lint
 
@@ -160,7 +160,7 @@ System tests are configured in `.github/workflows/ci.yaml` and run in GitHub’s
 To test the Hetzner provider locally, you need:
 
 - **`HCLOUD_TOKEN`** – Hetzner Cloud API token with read/write permissions
-- **Talos ISO** – A Talos Linux ISO must be available in your Hetzner Cloud project (default ID: `122630`)
+- **Talos ISO** – A Talos Linux ISO must be available in your Hetzner Cloud project. The ISO ID is specific to your project and may change over time; KSail currently assumes a default ID of `122630`, but you should look up the actual ID under **Images → ISOs** in the Hetzner Cloud Console and configure/use that value in your environment.
 
 **Note:** Some unit tests and CLI code paths enable Hetzner functionality when `HCLOUD_TOKEN` is set. If you’re not intentionally testing Hetzner, unset `HCLOUD_TOKEN` (or set it to an empty value) before running `go test ./...` to keep tests hermetic.
 

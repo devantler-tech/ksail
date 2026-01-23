@@ -1,0 +1,135 @@
+name: Daily Perf Improver Build Steps
+description: |
+  Validated build, test, and lint steps for performance engineering workflow.
+
+  Note: Test and lint steps log warnings if they fail but do not fail the action.
+  This allows the workflow to capture diagnostic output for analysis. Check the
+  build-steps.log file for detailed results.
+author: Daily Perf Improver
+runs:
+  using: composite
+  steps:
+    - name: 📋 Initialize build log
+      shell: bash
+      run: |
+        echo "=== Daily Perf Improver Build Steps ===" | tee build-steps.log
+        echo "Started: $(date -u +"%Y-%m-%d %H:%M:%S UTC")" | tee -a build-steps.log
+        echo "" | tee -a build-steps.log
+
+    - name: ⚙️ Setup Go
+      shell: bash
+      run: |
+        echo "=== Setting up Go ===" | tee -a build-steps.log
+        go version | tee -a build-steps.log
+        echo "GOPATH: $GOPATH" | tee -a build-steps.log
+        echo "GOCACHE: $(go env GOCACHE)" | tee -a build-steps.log
+        echo "" | tee -a build-steps.log
+
+    - name: 🏗️ Build KSail Binary
+      shell: bash
+      run: |
+        echo "=== Building KSail Binary ===" | tee -a build-steps.log
+        build_start=$(date +%s)
+        if go build -o ksail . 2>&1 | tee -a build-steps.log; then
+          build_end=$(date +%s)
+          build_duration=$((build_end - build_start))
+          echo "✅ Build successful in ${build_duration}s" | tee -a build-steps.log
+          ls -lh ksail | tee -a build-steps.log
+        else
+          echo "❌ Build failed" | tee -a build-steps.log
+          exit 1
+        fi
+        echo "" | tee -a build-steps.log
+
+    - name: 🧪 Run Unit Tests
+      shell: bash
+      run: |
+        echo "=== Running Unit Tests ===" | tee -a build-steps.log
+        test_start=$(date +%s)
+        # Enable covdata (temp) see https://github.com/golang/go/issues/75031
+        go env -w GOTOOLCHAIN=go1.25.4+auto
+        if go test -race -coverprofile=coverage.txt -covermode=atomic ./... 2>&1 | tee -a build-steps.log; then
+          test_end=$(date +%s)
+          test_duration=$((test_end - test_start))
+          echo "✅ Tests passed in ${test_duration}s" | tee -a build-steps.log
+          # Show coverage summary
+          go tool cover -func=coverage.txt | tail -1 | tee -a build-steps.log
+        else
+          echo "⚠️ Some tests failed - check output above" | tee -a build-steps.log
+        fi
+        echo "" | tee -a build-steps.log
+
+    - name: 🔍 Run golangci-lint
+      shell: bash
+      run: |
+        echo "=== Running golangci-lint ===" | tee -a build-steps.log
+        lint_start=$(date +%s)
+
+        # Install golangci-lint if not available
+        if ! command -v golangci-lint &> /dev/null; then
+          echo "Installing golangci-lint..." | tee -a build-steps.log
+          GOBIN="$(go env GOPATH)/bin"
+          mkdir -p "${GOBIN}"
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b "${GOBIN}"
+          export PATH="${PATH}:${GOBIN}"
+        fi
+
+        # Resolve golangci-lint binary path explicitly to avoid relying solely on PATH
+        if command -v golangci-lint &> /dev/null; then
+          LINT_BIN="$(command -v golangci-lint)"
+        else
+          LINT_BIN="$(go env GOPATH)/bin/golangci-lint"
+        fi
+
+        if "${LINT_BIN}" run --timeout=5m 2>&1 | tee -a build-steps.log; then
+          lint_end=$(date +%s)
+          lint_duration=$((lint_end - lint_start))
+          echo "✅ Linting passed in ${lint_duration}s" | tee -a build-steps.log
+        else
+          echo "⚠️ Linting issues found - check output above" | tee -a build-steps.log
+        fi
+        echo "" | tee -a build-steps.log
+
+    - name: 📚 Build Documentation
+      shell: bash
+      run: |
+        echo "=== Building Documentation ===" | tee -a build-steps.log
+        docs_start=$(date +%s)
+
+        # Check if Node.js is available
+        if ! command -v node &> /dev/null; then
+          echo "⚠️ Node.js not found - skipping documentation build" | tee -a build-steps.log
+          echo "Install Node.js 22 to build documentation" | tee -a build-steps.log
+        else
+          cd docs
+          if [ ! -d "node_modules" ]; then
+            echo "Installing npm dependencies..." | tee -a ../build-steps.log
+            npm ci 2>&1 | tee -a ../build-steps.log
+          fi
+          
+          if npm run build 2>&1 | tee -a ../build-steps.log; then
+            docs_end=$(date +%s)
+            docs_duration=$((docs_end - docs_start))
+            echo "✅ Documentation built successfully in ${docs_duration}s" | tee -a ../build-steps.log
+            ls -lh dist/ | head -5 | tee -a ../build-steps.log
+          else
+            echo "❌ Documentation build failed" | tee -a ../build-steps.log
+          fi
+          cd ..
+        fi
+        echo "" | tee -a build-steps.log
+
+    - name: 📊 Build Summary
+      shell: bash
+      run: |
+        echo "=== Build Summary ===" | tee -a build-steps.log
+        echo "Completed: $(date -u +"%Y-%m-%d %H:%M:%S UTC")" | tee -a build-steps.log
+        echo "" | tee -a build-steps.log
+        echo "Build log saved to: build-steps.log" | tee -a build-steps.log
+
+        # Show file tree of key directories for reference
+        echo "" | tee -a build-steps.log
+        echo "Key directories:" | tee -a build-steps.log
+        echo "- Binary: ./ksail" | tee -a build-steps.log
+        echo "- Coverage: ./coverage.txt" | tee -a build-steps.log
+        echo "- Docs: ./docs/dist/" | tee -a build-steps.log
