@@ -2,6 +2,13 @@
 name: Release Changelog
 description: Build, test, and release gh-aw extension, then generate and prepend release highlights
 on:
+  workflow_run:
+    workflows:
+      - "CD - Go"
+    types:
+      - completed
+    branches:
+      - main
   workflow_dispatch:
     inputs:
       release_type:
@@ -12,6 +19,10 @@ on:
           - patch
           - minor
           - major
+
+# Only trigger for successful releases
+if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+
 permissions:
   contents: read
   pull-requests: read

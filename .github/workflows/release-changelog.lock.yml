@@ -33,6 +33,14 @@ name: "Release Changelog"
         - major
         required: true
         type: choice
+  workflow_run:
+    # zizmor: ignore[dangerous-triggers] - workflow_run trigger is secured with role and fork validation
+    branches:
+    - main
+    types:
+    - completed
+    workflows:
+    - "CD - Go"
 
 permissions: {}
 
@@ -44,7 +52,11 @@ run-name: "Release Changelog"
 jobs:
   activation:
     needs: pre_activation
-    if: needs.pre_activation.outputs.activated == 'true'
+    # zizmor: ignore[dangerous-triggers] - workflow_run trigger is secured with role and fork validation
+    if: >
+      ((needs.pre_activation.outputs.activated == 'true') && (github.event.workflow_run.conclusion == 'success' ||
+      github.event_name == 'workflow_dispatch')) && ((github.event_name != 'workflow_run') || ((github.event.workflow_run.repository.id == github.repository_id) &&
+      (!(github.event.workflow_run.repository.fork))))
     runs-on: ubuntu-slim
     permissions:
       contents: read
@@ -1229,6 +1241,7 @@ jobs:
           if-no-files-found: ignore
 
   pre_activation:
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-slim
     outputs:
       activated: ${{ steps.check_membership.outputs.is_team_member == 'true' }}
