@@ -1,7 +1,7 @@
 name: Debug Kubernetes Failure
 description: |
   Outputs diagnostic information for debugging Kubernetes cluster failures.
-  Shows disk usage, node status, pod status, and recent events.
+  Shows disk usage, node status, pod status, recent events, and GitOps resource statuses (FluxInstance, OCIRepository, ArgoCD Application).
 
 inputs:
   kubectl-command:
@@ -79,4 +79,39 @@ runs:
         if [ "$SHOW_EVENTS" = "true" ]; then
           echo "=== Pod Events ==="
           $KUBECTL_CMD get events $NS_FLAG --sort-by='.lastTimestamp' | tail -"$EVENTS_LIMIT" || true
+          echo ""
         fi
+
+        # GitOps resource status for debugging Flux and ArgoCD deployments
+        echo "=== FluxInstance Status ==="
+        if $KUBECTL_CMD get fluxinstance -n flux-system &>/dev/null; then
+          $KUBECTL_CMD get fluxinstance -n flux-system -o wide
+          echo ""
+          echo "=== FluxInstance Details ==="
+          $KUBECTL_CMD describe fluxinstance -n flux-system | grep -A 50 "Status:" || true
+        else
+          echo "No FluxInstance resources found (Flux may not be installed)"
+        fi
+        echo ""
+
+        echo "=== OCIRepository Status ==="
+        if $KUBECTL_CMD get ocirepository -n flux-system &>/dev/null; then
+          $KUBECTL_CMD get ocirepository -n flux-system -o wide
+          echo ""
+          echo "=== OCIRepository Details ==="
+          $KUBECTL_CMD describe ocirepository -n flux-system | grep -A 50 "Status:" || true
+        else
+          echo "No OCIRepository resources found (Flux may not be installed)"
+        fi
+        echo ""
+
+        echo "=== ArgoCD Application Status ==="
+        if $KUBECTL_CMD get application -A &>/dev/null; then
+          $KUBECTL_CMD get application -A -o wide
+          echo ""
+          echo "=== ArgoCD Application Details ==="
+          $KUBECTL_CMD describe application -A | grep -A 100 "Status:" || true
+        else
+          echo "No ArgoCD Application resources found (ArgoCD may not be installed)"
+        fi
+        echo ""

@@ -55,17 +55,7 @@ The supported distributions (x-axis) run on different infrastructure providers (
 
 ### Installation
 
-#### Homebrew
-
-```bash
-brew install --cask devantler-tech/tap/ksail
-```
-
-#### Go install
-
-```bash
-go install github.com/devantler-tech/ksail/v5@latest
-```
+See the [Installation Guide](https://ksail.devantler.tech/installation/) for detailed installation instructions.
 
 ## Usage
 
@@ -99,14 +89,7 @@ ksail cluster connect
 
 ## Documentation
 
-### For users
-
-- Browse the documentation in [`docs/`](./docs/src/content/docs/index.mdx) (Markdown) or on <https://ksail.devantler.tech> (GitHub Pages).
-
-### For contributors
-
-- [CONTRIBUTING.md](./CONTRIBUTING.md) — Contribution guide, development prerequisites, and workflows
-- [API Documentation](https://pkg.go.dev/github.com/devantler-tech/ksail/v5) — Go package documentation
+Browse the documentation at <https://ksail.devantler.tech> (GitHub Pages)
 
 ## Related Projects
 

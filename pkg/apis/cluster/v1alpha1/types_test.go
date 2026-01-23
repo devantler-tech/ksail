@@ -421,3 +421,74 @@ func TestLocalRegistry_ResolvedHostPortPath(t *testing.T) {
 		})
 	}
 }
+
+func TestLocalRegistry_ResolveCredentials(t *testing.T) {
+	// Note: Cannot use t.Parallel() when using t.Setenv()
+	tests := []struct {
+		name         string
+		registry     string
+		envVars      map[string]string
+		wantUsername string
+		wantPassword string
+	}{
+		{
+			name:         "literal_credentials",
+			registry:     "myuser:mypass@ghcr.io/org/repo",
+			wantUsername: "myuser",
+			wantPassword: "mypass",
+		},
+		{
+			name:         "env_var_credentials",
+			registry:     "${REGISTRY_USER}:${REGISTRY_PASS}@ghcr.io/org/repo",
+			envVars:      map[string]string{"REGISTRY_USER": "envuser", "REGISTRY_PASS": "envpass"},
+			wantUsername: "envuser",
+			wantPassword: "envpass",
+		},
+		{
+			name:         "mixed_literal_and_env_var",
+			registry:     "literaluser:${REGISTRY_PASS}@ghcr.io/org/repo",
+			envVars:      map[string]string{"REGISTRY_PASS": "secret123"},
+			wantUsername: "literaluser",
+			wantPassword: "secret123",
+		},
+		{
+			name:         "undefined_env_var_becomes_empty",
+			registry:     "${UNDEFINED_USER}:${UNDEFINED_PASS}@ghcr.io/org/repo",
+			wantUsername: "",
+			wantPassword: "",
+		},
+		{
+			name:         "no_credentials",
+			registry:     "ghcr.io/org/repo",
+			wantUsername: "",
+			wantPassword: "",
+		},
+		{
+			name:         "username_only",
+			registry:     "onlyuser@ghcr.io/org/repo",
+			wantUsername: "onlyuser",
+			wantPassword: "",
+		},
+		{
+			name:         "empty_registry",
+			registry:     "",
+			wantUsername: "",
+			wantPassword: "",
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			// Set environment variables for this test
+			for key, value := range testCase.envVars {
+				t.Setenv(key, value)
+			}
+
+			reg := v1alpha1.LocalRegistry{Registry: testCase.registry}
+			gotUsername, gotPassword := reg.ResolveCredentials()
+
+			assert.Equal(t, testCase.wantUsername, gotUsername)
+			assert.Equal(t, testCase.wantPassword, gotPassword)
+		})
+	}
+}

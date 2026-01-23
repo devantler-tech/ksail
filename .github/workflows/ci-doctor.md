@@ -7,19 +7,16 @@ description: |
 
 on:
   workflow_run:
-    workflows: 
+    workflows:
       - "CI - KSail"
       - "CD - Go"
       - "Test - Pages"
       - "Publish - Pages"
     types:
       - completed
-    # NOTE: No branch restrictions - intentionally monitors ALL branches (main, PRs, merge groups)
-    # This is required to catch CI failures on pull requests, which is where most failures occur.
-    # Security is maintained via:
-    # 1. Fork validation (workflow_run.repository.fork check)
-    # 2. Role-based access control (requires admin/maintainer/write permissions)
-    # 3. Failure-only filtering (if: conclusion == 'failure' condition)
+    branches:
+      - main
+      - "**" # Monitor all branches including PRs
   stop-after: +1mo
 
 # Only trigger for failures - check in the workflow body
@@ -40,7 +37,7 @@ tools:
   web-fetch:
   web-search:
 
-timeout-minutes: 10
+timeout-minutes: 60
 
 source: githubnext/agentics/workflows/ci-doctor.md@c5da0cdbfae2a3cba74f330ca34424a4aea929f5
 ---

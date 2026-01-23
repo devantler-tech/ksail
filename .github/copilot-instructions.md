@@ -203,7 +203,7 @@ npm run dev                            # Test locally (if needed)
 - All Kubernetes tools are embedded as Go libraries - only Docker is required externally
 - Unit tests run quickly and should generally pass
 - System tests in CI cover extensive scenarios with multiple tool combinations
-- Documentation is built with Jekyll and uses the "just-the-docs" theme
+- Documentation is built with Astro and uses the Starlight theme
 - Build times: ~2-3 minutes for initial build (downloads dependencies), faster on subsequent builds
 - **NEVER CANCEL** long-running builds - they need time to download packages and compile
 
