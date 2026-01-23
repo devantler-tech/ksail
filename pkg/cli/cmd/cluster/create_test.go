@@ -621,7 +621,7 @@ func TestSetupK3dCSI_DisablesCSI(t *testing.T) {
 
 	k3dConfig := &v1alpha5.SimpleConfig{}
 
-	clusterpkg.SetupK3dCSI(clusterCfg, k3dConfig)
+	clusterpkg.ExportSetupK3dCSI(clusterCfg, k3dConfig)
 
 	// Verify the flag was added
 	found := false
@@ -664,7 +664,7 @@ func TestSetupK3dCSI_DoesNotDuplicateFlag(t *testing.T) {
 		},
 	}
 
-	clusterpkg.SetupK3dCSI(clusterCfg, k3dConfig)
+	clusterpkg.ExportSetupK3dCSI(clusterCfg, k3dConfig)
 
 	// Count occurrences of the flag
 	count := 0
@@ -692,7 +692,7 @@ func TestSetupK3dCSI_DoesNothingForNonK3s(t *testing.T) {
 
 	k3dConfig := &v1alpha5.SimpleConfig{}
 
-	clusterpkg.SetupK3dCSI(clusterCfg, k3dConfig)
+	clusterpkg.ExportSetupK3dCSI(clusterCfg, k3dConfig)
 
 	// Verify no flags were added
 	require.Empty(t, k3dConfig.Options.K3sOptions.ExtraArgs)
@@ -724,7 +724,7 @@ func TestSetupK3dCSI_DoesNothingWhenCSINotDisabled(t *testing.T) {
 
 			k3dConfig := &v1alpha5.SimpleConfig{}
 
-			clusterpkg.SetupK3dCSI(clusterCfg, k3dConfig)
+			clusterpkg.ExportSetupK3dCSI(clusterCfg, k3dConfig)
 
 			// Verify no flags were added
 			require.Empty(t, k3dConfig.Options.K3sOptions.ExtraArgs)
