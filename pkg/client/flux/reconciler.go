@@ -19,13 +19,26 @@ import (
 // Reconciler errors.
 var (
 	// ErrReconcileTimeout is returned when reconciliation times out.
-	ErrReconcileTimeout = errors.New("timeout waiting for flux kustomization reconciliation")
+	ErrReconcileTimeout = errors.New(
+		"timeout waiting for flux kustomization reconciliation - " +
+			"verify cluster health, Flux controllers status, and network/connectivity to the cluster",
+	)
 	// ErrOCIRepositoryNotReady is returned when the OCIRepository is not ready.
 	ErrOCIRepositoryNotReady = errors.New(
 		"flux OCIRepository is not ready - ensure you have pushed an artifact with 'ksail workload push'",
 	)
 	// ErrKustomizationFailed is returned when the Kustomization reconciliation fails.
-	ErrKustomizationFailed = errors.New("flux kustomization reconciliation failed")
+	ErrKustomizationFailed = errors.New(
+		"flux kustomization reconciliation failed - check the Kustomization status and Flux controller logs for details",
+	)
+)
+
+// Substrings used to detect specific error conditions from error messages.
+const (
+	ociErrManifestUnknownSubstr     = "manifest unknown"
+	ociErrDoesNotExistSubstr        = "does not exist"
+	apiDiscoveryNotFoundSubstr      = "the server could not find the requested resource"
+	apiDiscoveryNoMatchesKindSubstr = "no matches for kind"
 )
 
 // Reconciler constants.
@@ -310,20 +323,20 @@ func isPermanentOCIError(err error) bool {
 	errMsg := err.Error()
 
 	// OCI-specific errors that indicate the artifact doesn't exist
-	return strings.Contains(errMsg, "manifest unknown") ||
-		strings.Contains(errMsg, "does not exist")
+	return strings.Contains(errMsg, ociErrManifestUnknownSubstr) ||
+		strings.Contains(errMsg, ociErrDoesNotExistSubstr)
 }
 
 // isAPIDiscoveryError checks if the error indicates the API discovery is incomplete.
 func isAPIDiscoveryError(errMsg string) bool {
 	// "the server could not find the requested resource" indicates the CRD endpoint
 	// isn't fully registered yet or the Flux controllers haven't started
-	if strings.Contains(errMsg, "the server could not find the requested resource") {
+	if strings.Contains(errMsg, apiDiscoveryNotFoundSubstr) {
 		return true
 	}
 
 	// "no matches for kind" is a REST mapper error when the CRD isn't known yet
-	return strings.Contains(errMsg, "no matches for kind")
+	return strings.Contains(errMsg, apiDiscoveryNoMatchesKindSubstr)
 }
 
 // isConnectionError checks if the error is a network connection error.
