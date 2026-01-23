@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"strconv"
@@ -26,6 +27,7 @@ import (
 	localpathstorageinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/localpathstorage"
 	metricsserverinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/metrics-server"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
+	"github.com/spf13/cobra"
 )
 
 // Errors for component installation.
@@ -52,9 +54,25 @@ type InstallerFactories struct {
 		ctx context.Context, kubeconfig string, clusterCfg *v1alpha1.Cluster, clusterName string,
 	) error
 	// EnsureFluxResources enforces default Flux resources post-install.
+	// If artifactPushed is false, the function will skip waiting for FluxInstance readiness
+	// because the artifact doesn't exist yet (will be pushed later via workload push).
 	EnsureFluxResources func(
+		ctx context.Context, kubeconfig string, clusterCfg *v1alpha1.Cluster, clusterName string, artifactPushed bool,
+	) error
+	// SetupFluxInstance creates the FluxInstance CR without waiting for readiness.
+	// Use with WaitForFluxReady after pushing artifacts.
+	SetupFluxInstance func(
 		ctx context.Context, kubeconfig string, clusterCfg *v1alpha1.Cluster, clusterName string,
 	) error
+	// WaitForFluxReady waits for the FluxInstance to be ready.
+	// Call after pushing OCI artifacts.
+	WaitForFluxReady func(ctx context.Context, kubeconfig string) error
+	// EnsureOCIArtifact checks if an OCI artifact exists and pushes one if needed.
+	// Returns true if artifact exists or was pushed, false if not needed.
+	// Set to nil to use the default implementation.
+	EnsureOCIArtifact func(
+		ctx context.Context, cmd *cobra.Command, clusterCfg *v1alpha1.Cluster, clusterName string, writer io.Writer,
+	) (bool, error)
 	// HelmClientFactory creates a Helm client for the cluster.
 	HelmClientFactory func(clusterCfg *v1alpha1.Cluster) (*helm.Client, string, error)
 }
@@ -174,6 +192,8 @@ func DefaultInstallerFactories() *InstallerFactories {
 
 	factories.EnsureArgoCDResources = EnsureArgoCDResources
 	factories.EnsureFluxResources = fluxinstaller.EnsureDefaultResources
+	factories.SetupFluxInstance = fluxinstaller.SetupFluxInstance
+	factories.WaitForFluxReady = fluxinstaller.WaitForFluxReady
 
 	return factories
 }

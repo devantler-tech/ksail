@@ -8,6 +8,9 @@ import (
 	"strings"
 )
 
+// ErrRepositoryRequired indicates that the repository is required for empty artifacts.
+var ErrRepositoryRequired = errors.New("repository is required")
+
 // Validate normalizes and verifies the build options before artifact construction.
 //
 // This method performs the following validation steps:
@@ -197,4 +200,44 @@ func normalizeArtifactName(candidate, repository string) string {
 	}
 
 	return normalized
+}
+
+// Validate normalizes and verifies the empty build options before artifact construction.
+//
+// This method performs the following validation steps:
+//  1. Normalizes and validates the registry endpoint
+//  2. Validates that repository is provided (required for empty artifacts)
+//  3. Validates and normalizes the version (any non-empty string)
+//  4. Normalizes artifact name using repository
+//
+// Returns ValidatedEmptyBuildOptions ready for use by the builder, or an error if validation fails.
+func (o EmptyBuildOptions) Validate() (ValidatedEmptyBuildOptions, error) {
+	endpoint, err := normalizeRegistryEndpoint(o.RegistryEndpoint)
+	if err != nil {
+		return ValidatedEmptyBuildOptions{}, err
+	}
+
+	trimmedRepo := strings.TrimSpace(o.Repository)
+	if trimmedRepo == "" {
+		return ValidatedEmptyBuildOptions{}, ErrRepositoryRequired
+	}
+
+	repository := normalizeRepositoryName(trimmedRepo, "")
+
+	version, err := normalizeVersion(o.Version)
+	if err != nil {
+		return ValidatedEmptyBuildOptions{}, err
+	}
+
+	name := normalizeArtifactName(o.Name, repository)
+
+	return ValidatedEmptyBuildOptions{
+		Name:             name,
+		RegistryEndpoint: endpoint,
+		Repository:       repository,
+		Version:          version,
+		GitOpsEngine:     o.GitOpsEngine,
+		Username:         o.Username,
+		Password:         o.Password,
+	}, nil
 }

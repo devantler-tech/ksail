@@ -1025,7 +1025,9 @@ spec:
 
 	// Verify config was loaded properly (this exercises the "else" branch in readConfigurationFile)
 	assert.Equal(t, v1alpha1.DistributionVanilla, cluster.Spec.Cluster.Distribution)
-	assert.Equal(t, "test-config-found", cluster.Spec.Workload.SourceDirectory)
+	// Source directory should be converted to absolute path relative to config file
+	expectedSourceDir := filepath.Join(tempDir, "test-config-found")
+	assert.Equal(t, expectedSourceDir, cluster.Spec.Workload.SourceDirectory)
 }
 
 //nolint:paralleltest // Cannot use t.Parallel() because test changes directories using t.Chdir()

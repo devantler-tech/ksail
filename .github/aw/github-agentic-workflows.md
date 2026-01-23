@@ -235,7 +235,7 @@ The YAML frontmatter supports these fields:
     ```bash
     # Read the workflow prompt content
     cat $GH_AW_PROMPT
-    
+
     # Process the prompt content in a custom step
     - name: Process workflow instructions
       run: |
@@ -271,7 +271,7 @@ The YAML frontmatter supports these fields:
         log-level: debug                  # Optional: debug, info (default), warn, error
         args: ["--custom-arg", "value"]   # Optional: additional AWF arguments
     ```
-  
+
 - **`sandbox:`** - Sandbox configuration for AI engines (string or object)
   - String format: `"default"` (no sandbox), `"awf"` (Agent Workflow Firewall), `"srt"` or `"sandbox-runtime"` (Anthropic Sandbox Runtime)
   - Object format for full configuration:
@@ -788,7 +788,7 @@ cache:
     restore-keys: |
       node-modules-
   - key: build-cache-${{ github.sha }}
-    path: 
+    path:
       - dist
       - .cache
     restore-keys:
@@ -1064,7 +1064,7 @@ All other expressions are dissallowed.
 The `needs.activation.outputs.text` value provides automatically sanitized content based on the triggering event:
 
 - **Issues**: `title + "\n\n" + body`
-- **Pull Requests**: `title + "\n\n" + body`  
+- **Pull Requests**: `title + "\n\n" + body`
 - **Issue Comments**: `comment.body`
 - **PR Review Comments**: `comment.body`
 - **PR Reviews**: `review.body`
@@ -1285,7 +1285,7 @@ permissions:
 
 safe-outputs:
   create-issue:       # Automatic issue creation
-  add-comment:  # Automatic comment creation  
+  add-comment:  # Automatic comment creation
   create-pull-request: # Automatic PR creation
 ```
 
@@ -1581,7 +1581,7 @@ The `--start-date` and `--end-date` flags support delta time syntax for relative
 # Get runs from the last week
 gh aw logs --start-date -1w
 
-# Get runs up to yesterday  
+# Get runs up to yesterday
 gh aw logs --end-date -1d
 
 # Get runs from the last month
@@ -1638,7 +1638,7 @@ permissions:
 GitHub Agentic Workflows supports security scanning during compilation with `--actionlint`, `--zizmor`, and `--poutine` flags.
 
 **actionlint** - Lints GitHub Actions workflows and validates shell scripts with integrated shellcheck
-**zizmor** - Scans for security vulnerabilities, privilege escalation, and secret exposure  
+**zizmor** - Scans for security vulnerabilities, privilege escalation, and secret exposure
 **poutine** - Analyzes supply chain risks and third-party action usage
 
 ```bash
@@ -1697,7 +1697,7 @@ gh aw mcp list-tools github weekly-research
 This command is useful for:
 
 - **Discovering capabilities**: See what tools are available from each MCP server
-- **Workflow discovery**: Find which workflows use a specific MCP server  
+- **Workflow discovery**: Find which workflows use a specific MCP server
 - **Permission debugging**: Check which tools are allowed in your workflow configuration
 
 ## Compilation Process
@@ -1727,7 +1727,7 @@ Agentic workflows compile to GitHub Actions YAML:
 
 1. **Use descriptive workflow names** that clearly indicate purpose
 2. **Set appropriate timeouts** to prevent runaway costs
-3. **Include security notices** for workflows processing user content  
+3. **Include security notices** for workflows processing user content
 4. **Use the `imports:` field** in frontmatter for common patterns and security boilerplate
 5. **ALWAYS run `gh aw compile` after every change** to generate the GitHub Actions workflow (or `gh aw compile <workflow-id>` for specific workflows)
 6. **Review generated `.lock.yml`** files before deploying

@@ -3,8 +3,11 @@ package setup
 import (
 	"context"
 	"fmt"
+	"io"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
+	"github.com/devantler-tech/ksail/v5/pkg/client/oci"
 	k3dconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/k3d"
 	kindconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/kind"
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
@@ -18,10 +21,22 @@ const (
 	argoCDResourcesActivity = "configuring argocd resources"
 )
 
-// resolveClusterNameFromContext resolves the cluster name from the cluster config.
+// ShouldPushOCIArtifact determines if OCI artifact push should happen for Flux.
+// Returns true if Flux is enabled and a local registry is configured.
+func ShouldPushOCIArtifact(clusterCfg *v1alpha1.Cluster) bool {
+	// Only push if Flux is the GitOps engine
+	if clusterCfg.Spec.Cluster.GitOpsEngine != v1alpha1.GitOpsEngineFlux {
+		return false
+	}
+
+	// Only push if local registry is enabled
+	return clusterCfg.Spec.Cluster.LocalRegistry.Enabled()
+}
+
+// ResolveClusterNameFromContext resolves the cluster name from the cluster config.
 // This uses the distribution's default cluster name for registry naming.
 // The cluster name is used for constructing registry container names (e.g., k3d-default-local-registry).
-func resolveClusterNameFromContext(clusterCfg *v1alpha1.Cluster) string {
+func ResolveClusterNameFromContext(clusterCfg *v1alpha1.Cluster) string {
 	if clusterCfg == nil {
 		return kindconfigmanager.DefaultClusterName
 	}
@@ -140,6 +155,7 @@ func NeedsCSIInstall(clusterCfg *v1alpha1.Cluster) bool {
 
 // InstallPostCNIComponents installs all post-CNI components in parallel.
 // This includes metrics-server, CSI, cert-manager, and GitOps engines (Flux/ArgoCD).
+// For Flux, the OCI artifact push and readiness wait happens after installation.
 func InstallPostCNIComponents(
 	cmd *cobra.Command,
 	clusterCfg *v1alpha1.Cluster,
@@ -174,7 +190,14 @@ func InstallPostCNIComponents(
 		return err
 	}
 
-	return configureGitOpsResources(ctx, cmd, clusterCfg, factories, reqs, gitOpsKubeconfig)
+	return configureGitOpsResources(
+		ctx,
+		cmd,
+		clusterCfg,
+		factories,
+		reqs,
+		gitOpsKubeconfig,
+	)
 }
 
 func installComponentsInParallel(
@@ -281,55 +304,228 @@ func configureGitOpsResources(
 	}
 
 	// Resolve cluster name for registry naming
-	clusterName := resolveClusterNameFromContext(clusterCfg)
+	clusterName := ResolveClusterNameFromContext(clusterCfg)
+	writer := cmd.OutOrStdout()
 
 	// Show title for configure stage
 	notify.WriteMessage(notify.Message{
-		Type:    notify.TitleType,
-		Content: "Configuring components...",
-		Emoji:   "⚙️",
-		Writer:  cmd.OutOrStdout(),
+		Type: notify.TitleType, Content: "Configuring components...", Emoji: "⚙️", Writer: writer,
 	})
 
 	// Post-install GitOps configuration
 	if reqs.NeedsArgoCD {
-		notify.WriteMessage(notify.Message{
-			Type:    notify.ActivityType,
-			Content: argoCDResourcesActivity,
-			Writer:  cmd.OutOrStdout(),
-		})
-
-		err := factories.EnsureArgoCDResources(ctx, gitOpsKubeconfig, clusterCfg, clusterName)
+		err := configureArgoCD(ctx, factories, gitOpsKubeconfig, clusterCfg, clusterName, writer)
 		if err != nil {
-			return fmt.Errorf("failed to configure Argo CD resources: %w", err)
+			return err
 		}
-
-		notify.WriteMessage(notify.Message{
-			Type:    notify.InfoType,
-			Content: "Access ArgoCD UI at https://localhost:8080 via: kubectl port-forward svc/argocd-server -n argocd 8080:443",
-			Writer:  cmd.OutOrStdout(),
-		})
 	}
 
 	if reqs.NeedsFlux {
-		notify.WriteMessage(notify.Message{
-			Type:    notify.ActivityType,
-			Content: fluxResourcesActivity,
-			Writer:  cmd.OutOrStdout(),
-		})
-
-		err := factories.EnsureFluxResources(ctx, gitOpsKubeconfig, clusterCfg, clusterName)
+		err := configureFlux(
+			ctx,
+			cmd,
+			factories,
+			gitOpsKubeconfig,
+			clusterCfg,
+			clusterName,
+			writer,
+		)
 		if err != nil {
-			return fmt.Errorf("failed to configure Flux resources: %w", err)
+			return err
 		}
 	}
 
 	// Show success message for configure stage
+	notify.WriteMessage(
+		notify.Message{Type: notify.SuccessType, Content: "components configured", Writer: writer},
+	)
+
+	return nil
+}
+
+func configureArgoCD(
+	ctx context.Context,
+	factories *InstallerFactories,
+	kubeconfig string,
+	clusterCfg *v1alpha1.Cluster,
+	clusterName string,
+	writer io.Writer,
+) error {
+	notify.WriteMessage(
+		notify.Message{Type: notify.ActivityType, Content: argoCDResourcesActivity, Writer: writer},
+	)
+
+	err := factories.EnsureArgoCDResources(ctx, kubeconfig, clusterCfg, clusterName)
+	if err != nil {
+		return fmt.Errorf("failed to configure Argo CD resources: %w", err)
+	}
+
 	notify.WriteMessage(notify.Message{
-		Type:    notify.SuccessType,
-		Content: "components configured",
-		Writer:  cmd.OutOrStdout(),
+		Type:    notify.InfoType,
+		Content: "Access ArgoCD UI at https://localhost:8080 via: kubectl port-forward svc/argocd-server -n argocd 8080:443",
+		Writer:  writer,
 	})
 
 	return nil
+}
+
+func configureFlux(
+	ctx context.Context,
+	cmd *cobra.Command,
+	factories *InstallerFactories,
+	kubeconfig string,
+	clusterCfg *v1alpha1.Cluster,
+	clusterName string,
+	writer io.Writer,
+) error {
+	notify.WriteMessage(
+		notify.Message{Type: notify.ActivityType, Content: fluxResourcesActivity, Writer: writer},
+	)
+
+	// Step 1: Setup FluxInstance CR (does not wait for readiness)
+	err := factories.SetupFluxInstance(ctx, kubeconfig, clusterCfg, clusterName)
+	if err != nil {
+		return fmt.Errorf("failed to setup FluxInstance: %w", err)
+	}
+
+	// Step 2: Check if OCI artifact exists and push if needed
+	// Use the factory function if provided (for testing), otherwise use default
+	var artifactPushed bool
+	if factories.EnsureOCIArtifact != nil {
+		artifactPushed, err = factories.EnsureOCIArtifact(ctx, cmd, clusterCfg, clusterName, writer)
+	} else {
+		artifactPushed, err = ensureOCIArtifact(ctx, cmd, clusterCfg, clusterName, writer)
+	}
+
+	if err != nil {
+		return fmt.Errorf("failed to ensure OCI artifact: %w", err)
+	}
+
+	// Step 3: Wait for FluxInstance to be ready (only if artifact was pushed/exists)
+	if artifactPushed {
+		notify.WriteMessage(
+			notify.Message{
+				Type:    notify.ActivityType,
+				Content: "waiting for flux to be ready",
+				Writer:  writer,
+			},
+		)
+
+		err = factories.WaitForFluxReady(ctx, kubeconfig)
+		if err != nil {
+			return fmt.Errorf("failed waiting for Flux to be ready: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// ensureOCIArtifact checks if an OCI artifact exists and pushes one if needed.
+// Returns true if an artifact exists or was pushed, false if no artifact needed.
+func ensureOCIArtifact(
+	ctx context.Context,
+	_ *cobra.Command,
+	clusterCfg *v1alpha1.Cluster,
+	clusterName string,
+	writer io.Writer,
+) (bool, error) {
+	// Only check/push for local registries
+	if !clusterCfg.Spec.Cluster.LocalRegistry.Enabled() {
+		return false, nil
+	}
+
+	// Resolve registry info
+	registryInfo, err := helpers.ResolveRegistry(ctx, helpers.ResolveRegistryOptions{
+		ClusterConfig: clusterCfg,
+		ClusterName:   clusterName,
+	})
+	if err != nil {
+		return false, fmt.Errorf("resolve registry: %w", err)
+	}
+
+	// Build the artifact reference details
+	artifactOpts := buildArtifactExistsOptions(registryInfo, clusterCfg)
+
+	// Check if artifact already exists
+	verifier := oci.NewRegistryVerifier()
+
+	exists, err := verifier.ArtifactExists(ctx, artifactOpts)
+	if err != nil {
+		// Log warning but continue - we'll try to push
+		notify.WriteMessage(notify.Message{
+			Type:    notify.ActivityType,
+			Content: "checking for existing artifact",
+			Writer:  writer,
+		})
+	}
+
+	if exists {
+		// Artifact already exists, no need to push
+		return true, nil
+	}
+
+	// Artifact doesn't exist, push an empty one
+	notify.WriteMessage(notify.Message{
+		Type:    notify.ActivityType,
+		Content: "pushing initial oci artifact",
+		Writer:  writer,
+	})
+
+	result, err := helpers.PushOCIArtifact(ctx, helpers.PushOCIArtifactOptions{
+		ClusterConfig: clusterCfg,
+		ClusterName:   clusterName,
+		SourceDir:     "", // Use default from config
+		Ref:           "", // Use default tag
+		Validate:      clusterCfg.Spec.Workload.ValidateOnPush,
+	})
+	if err != nil {
+		return false, fmt.Errorf("push oci artifact: %w", err)
+	}
+
+	if result.Empty {
+		notify.WriteMessage(notify.Message{
+			Type:    notify.InfoType,
+			Content: "pushed empty kustomization (source directory not found)",
+			Writer:  writer,
+		})
+	}
+
+	return result.Pushed, nil
+}
+
+// buildArtifactExistsOptions creates options for checking artifact existence.
+func buildArtifactExistsOptions(
+	registryInfo *helpers.RegistryInfo,
+	clusterCfg *v1alpha1.Cluster,
+) oci.ArtifactExistsOptions {
+	repository := registryInfo.Repository
+	if repository == "" {
+		sourceDir := clusterCfg.Spec.Workload.SourceDirectory
+		if sourceDir == "" {
+			sourceDir = v1alpha1.DefaultSourceDirectory
+		}
+
+		repository = sourceDir
+	}
+
+	tag := registryInfo.Tag
+	if tag == "" {
+		tag = "dev"
+	}
+
+	var registryEndpoint string
+	if registryInfo.Port > 0 {
+		registryEndpoint = fmt.Sprintf("%s:%d", registryInfo.Host, registryInfo.Port)
+	} else {
+		registryEndpoint = registryInfo.Host
+	}
+
+	return oci.ArtifactExistsOptions{
+		RegistryEndpoint: registryEndpoint,
+		Repository:       repository,
+		Tag:              tag,
+		Username:         registryInfo.Username,
+		Password:         registryInfo.Password,
+		Insecure:         !clusterCfg.Spec.Cluster.LocalRegistry.IsExternal(),
+	}
 }
