@@ -265,20 +265,19 @@ func (m *ConfigManager) unmarshalAndApplyDefaults() error {
 	return nil
 }
 
-// makeKubeconfigPathAbsolute converts the kubeconfig path to an absolute path.
-// If the path is relative, it's made absolute relative to the config file's directory.
-// If the path starts with ~/, it's expanded to the user's home directory.
-// If no config file was used, the path is made absolute relative to the current working directory.
-func (m *ConfigManager) makeKubeconfigPathAbsolute() error {
-	kubeconfigPath := m.Config.Spec.Cluster.Connection.Kubeconfig
-	if kubeconfigPath == "" {
-		return nil
+// makePathAbsolute converts a relative path to an absolute path.
+// If the path is empty, starts with ~/, or is already absolute, it returns the path unchanged.
+// Otherwise, the path is made absolute relative to the config file's directory,
+// or the current working directory if no config file was used.
+func (m *ConfigManager) makePathAbsolute(relativePath string) (string, error) {
+	if relativePath == "" {
+		return relativePath, nil
 	}
 
 	// If it starts with ~/, that will be handled by ExpandHomePath later
 	// If it's already absolute, no change needed
-	if strings.HasPrefix(kubeconfigPath, "~/") || filepath.IsAbs(kubeconfigPath) {
-		return nil
+	if strings.HasPrefix(relativePath, "~/") || filepath.IsAbs(relativePath) {
+		return relativePath, nil
 	}
 
 	// Path is relative - make it absolute
@@ -294,11 +293,23 @@ func (m *ConfigManager) makeKubeconfigPathAbsolute() error {
 
 		basePath, err = os.Getwd()
 		if err != nil {
-			return fmt.Errorf("failed to get working directory: %w", err)
+			return "", fmt.Errorf("failed to get working directory: %w", err)
 		}
 	}
 
-	absPath := filepath.Join(basePath, kubeconfigPath)
+	return filepath.Join(basePath, relativePath), nil
+}
+
+// makeKubeconfigPathAbsolute converts the kubeconfig path to an absolute path.
+// If the path is relative, it's made absolute relative to the config file's directory.
+// If the path starts with ~/, it's expanded to the user's home directory.
+// If no config file was used, the path is made absolute relative to the current working directory.
+func (m *ConfigManager) makeKubeconfigPathAbsolute() error {
+	absPath, err := m.makePathAbsolute(m.Config.Spec.Cluster.Connection.Kubeconfig)
+	if err != nil {
+		return err
+	}
+
 	m.Config.Spec.Cluster.Connection.Kubeconfig = absPath
 
 	return nil
@@ -310,35 +321,11 @@ func (m *ConfigManager) makeKubeconfigPathAbsolute() error {
 // If no config file was used, the path is made absolute relative to the current working directory.
 // This ensures scaffolded clusters can find their k8s/ directory regardless of where the command is run from.
 func (m *ConfigManager) makeSourceDirectoryAbsolute() error {
-	sourceDir := m.Config.Spec.Workload.SourceDirectory
-	if sourceDir == "" {
-		return nil
+	absPath, err := m.makePathAbsolute(m.Config.Spec.Workload.SourceDirectory)
+	if err != nil {
+		return err
 	}
 
-	// If it starts with ~/, that will be handled by path expansion later
-	// If it's already absolute, no change needed
-	if strings.HasPrefix(sourceDir, "~/") || filepath.IsAbs(sourceDir) {
-		return nil
-	}
-
-	// Path is relative - make it absolute
-	var basePath string
-
-	if m.configFileFound && m.Viper.ConfigFileUsed() != "" {
-		// Make it relative to the config file's directory
-		configDir := filepath.Dir(m.Viper.ConfigFileUsed())
-		basePath = configDir
-	} else {
-		// No config file - use current working directory
-		var err error
-
-		basePath, err = os.Getwd()
-		if err != nil {
-			return fmt.Errorf("failed to get working directory: %w", err)
-		}
-	}
-
-	absPath := filepath.Join(basePath, sourceDir)
 	m.Config.Spec.Workload.SourceDirectory = absPath
 
 	return nil
