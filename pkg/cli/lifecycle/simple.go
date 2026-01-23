@@ -35,9 +35,6 @@ var (
 
 	// ErrUnknownDistribution indicates an unknown distribution was specified.
 	ErrUnknownDistribution = errors.New("unknown distribution")
-
-	// ErrUnsupportedDistribution indicates an unsupported distribution was specified.
-	ErrUnsupportedDistribution = errors.New("unsupported distribution")
 )
 
 // SimpleLifecycleConfig defines the configuration for a simple lifecycle command.
@@ -589,6 +586,6 @@ func createProvisionerForDistribution( //nolint:ireturn // Interface return is r
 		return provisioner, nil
 
 	default:
-		return nil, fmt.Errorf("%w: %s", ErrUnsupportedDistribution, dist)
+		return nil, fmt.Errorf("%w: %s", clusterprovisioner.ErrUnsupportedDistribution, dist)
 	}
 }

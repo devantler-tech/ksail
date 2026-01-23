@@ -10,12 +10,13 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider/docker"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider/hetzner"
+	clustererrors "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/errors"
 	kindprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/kind"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 )
 
-// ErrUnsupportedProvider is returned when an unsupported provider is specified.
-var ErrUnsupportedProvider = errors.New("unsupported provider")
+// ErrUnsupportedProvider re-exports the shared error for backward compatibility.
+var ErrUnsupportedProvider = clustererrors.ErrUnsupportedProvider
 
 // ErrMissingHetznerToken is returned when the Hetzner API token is not set.
 var ErrMissingHetznerToken = errors.New("hetzner API token not set")
