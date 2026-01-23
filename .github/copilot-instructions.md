@@ -158,7 +158,7 @@ Use the CLI help output as the source of truth:
 
 ```bash
 ksail cluster init --help
-# See also: docs/configuration/cli-flags/cluster/cluster-init.md
+# See also: docs/src/content/docs/cli-flags/cluster/cluster-init.mdx
 ```
 
 ### Troubleshooting Build Issues
