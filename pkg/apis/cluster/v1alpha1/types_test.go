@@ -422,20 +422,16 @@ func TestLocalRegistry_ResolvedHostPortPath(t *testing.T) {
 	}
 }
 
-func getLocalRegistryResolveCredentialsTests() []struct {
+type resolveCredentialsTestCase struct {
 	name         string
 	registry     string
 	envVars      map[string]string
 	wantUsername string
 	wantPassword string
-} {
-	return []struct {
-		name         string
-		registry     string
-		envVars      map[string]string
-		wantUsername string
-		wantPassword string
-	}{
+}
+
+func getResolveCredentialsTestCases() []resolveCredentialsTestCase {
+	return []resolveCredentialsTestCase{
 		{
 			name:         "literal_credentials",
 			registry:     "myuser:mypass@ghcr.io/org/repo",
@@ -485,11 +481,10 @@ func getLocalRegistryResolveCredentialsTests() []struct {
 
 func TestLocalRegistry_ResolveCredentials(t *testing.T) {
 	// Note: Cannot use t.Parallel() when using t.Setenv()
-	tests := getLocalRegistryResolveCredentialsTests()
+	tests := getResolveCredentialsTestCases()
 
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
-			// Set environment variables for this test
 			for key, value := range testCase.envVars {
 				t.Setenv(key, value)
 			}

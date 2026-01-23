@@ -1,6 +1,6 @@
 # Debug Kubernetes Failure Action
 
-A GitHub composite action that outputs diagnostic information for debugging Kubernetes cluster failures. Shows disk usage, node status, pod status, and recent events.
+A GitHub composite action that outputs diagnostic information for debugging Kubernetes cluster failures. Shows disk usage, node status, pod status, recent events, and GitOps resource statuses (FluxInstance, OCIRepository, ArgoCD Application).
 
 ## Why?
 
@@ -100,14 +100,70 @@ kube-system   coredns-abc123                1/1     Running   0          10m
 NAMESPACE   LAST SEEN   TYPE      REASON      OBJECT              MESSAGE
 default     2m          Normal    Scheduled   pod/my-app-abc123   Successfully assigned...
 default     2m          Normal    Pulled      pod/my-app-abc123   Container image pulled...
+
+=== FluxInstance Status ===
+NAMESPACE     NAME   AGE   READY   STATUS
+flux-system   flux   10m   True    Flux installation is ready
+
+=== FluxInstance Details ===
+Status:
+  Conditions:
+    Last Transition Time:  2024-01-22T07:20:00Z
+    Message:               Reconciliation finished, next run in 1h0m0s
+    Reason:                ReconciliationSucceeded
+    Status:                True
+    Type:                  Ready
+
+=== OCIRepository Status ===
+NAMESPACE     NAME          URL                                          AGE   READY   STATUS
+flux-system   flux-system   oci://ghcr.io/org/repo/manifests             10m   True    stored artifact for revision 'latest@sha256:abc...'
+
+=== OCIRepository Details ===
+Status:
+  Artifact:
+    Digest:         sha256:abc123...
+    Last Update Time: 2024-01-22T07:20:00Z
+    Path:           /data/flux-system/flux-system/artifact.tar.gz
+    Revision:       latest@sha256:abc123...
+    URL:            http://source-controller/ocirepository/flux-system/flux-system/artifact.tar.gz
+  Conditions:
+    Last Transition Time:  2024-01-22T07:20:00Z
+    Message:               stored artifact for revision 'latest@sha256:abc123...'
+    Reason:                Succeeded
+    Status:                True
+    Type:                  Ready
+
+=== ArgoCD Application Status ===
+NAMESPACE   NAME     SYNC STATUS   HEALTH STATUS   AGE
+argocd      my-app   Synced        Healthy         5m
+
+=== ArgoCD Application Details ===
+Status:
+  Health:
+    Status:  Healthy
+  Sync:
+    Status:   Synced
+  Conditions:
+    Last Transition Time:  2024-01-22T07:25:00Z
+    Message:               Application synced successfully
+    Type:                  SyncSucceeded
+  Operation State:
+    Phase:     Succeeded
+    Message:   successfully synced (all tasks run)
 ```
 
 ## Common Failure Patterns
 
-| Symptom                    | Likely Cause                                            |
-|----------------------------|---------------------------------------------------------|
-| `DiskPressure: True`       | Runner out of disk space - use `free-disk-space` action |
-| `MemoryPressure: True`     | Not enough RAM for workloads                            |
-| Pods in `Pending`          | Insufficient resources or node selector issues          |
-| Pods in `ImagePullBackOff` | Image not found or registry auth issues                 |
-| Pods in `CrashLoopBackOff` | Application crashing - check container logs             |
+| Symptom                                  | Likely Cause                                                             |
+|------------------------------------------|--------------------------------------------------------------------------|
+| `DiskPressure: True`                     | Runner out of disk space - use `free-disk-space` action                  |
+| `MemoryPressure: True`                   | Not enough RAM for workloads                                             |
+| Pods in `Pending`                        | Insufficient resources or node selector issues                           |
+| Pods in `ImagePullBackOff`               | Image not found or registry authentication failed                        |
+| Pods in `CrashLoopBackOff`               | Application crashing - check container logs                              |
+| FluxInstance not `Ready`                 | Check conditions for reconciliation errors or OCIRepository not synced   |
+| OCIRepository not `Ready`                | Check conditions for artifact fetch errors or authentication failures    |
+| OCIRepository condition `ArtifactFailed` | Artifact not pushed, wrong tag, or registry unreachable                  |
+| ArgoCD Application not `Synced`          | Check sync status and conditions for manifest errors or Git issues       |
+| ArgoCD Application not `Healthy`         | Check health status - deployed resources may be unhealthy or progressing |
+| ArgoCD Application operation `Failed`    | Check operation state message for sync or apply errors                   |

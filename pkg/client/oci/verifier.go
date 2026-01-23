@@ -40,6 +40,11 @@ type RegistryVerifier interface {
 	// VerifyAccess checks if the registry is accessible and we have push permissions.
 	// Returns nil if access is verified, or an actionable error if not.
 	VerifyAccess(ctx context.Context, opts VerifyOptions) error
+
+	// ArtifactExists checks if an artifact with the given tag exists in the repository.
+	// Returns true if the artifact exists, false if it doesn't exist.
+	// Returns an error if the registry check fails for reasons other than "not found".
+	ArtifactExists(ctx context.Context, opts ArtifactExistsOptions) (bool, error)
 }
 
 // VerifyOptions contains options for verifying registry access.
@@ -48,6 +53,22 @@ type VerifyOptions struct {
 	RegistryEndpoint string
 	// Repository is the repository path to check access for.
 	Repository string
+	// Username is the optional username for authentication.
+	Username string
+	// Password is the optional password/token for authentication.
+	Password string
+	// Insecure allows HTTP connections (for local registries).
+	Insecure bool
+}
+
+// ArtifactExistsOptions contains options for checking if an artifact exists.
+type ArtifactExistsOptions struct {
+	// RegistryEndpoint is the registry host[:port] (e.g., "ghcr.io" or "localhost:5000").
+	RegistryEndpoint string
+	// Repository is the repository path.
+	Repository string
+	// Tag is the artifact tag to check (e.g., "dev", "latest").
+	Tag string
 	// Username is the optional username for authentication.
 	Username string
 	// Password is the optional password/token for authentication.
@@ -97,6 +118,87 @@ func (v *verifier) VerifyAccess(ctx context.Context, opts VerifyOptions) error {
 	return nil
 }
 
+// ArtifactExists checks if an artifact with the given tag exists in the repository.
+// Returns true if the artifact exists, false if it doesn't exist or the repo doesn't exist.
+// Returns an error only for unexpected failures (network issues, auth failures, etc.).
+func (v *verifier) ArtifactExists(ctx context.Context, opts ArtifactExistsOptions) (bool, error) {
+	if opts.RegistryEndpoint == "" {
+		return false, ErrRegistryEndpointRequired
+	}
+
+	if opts.Tag == "" {
+		return false, ErrVersionRequired
+	}
+
+	ref, err := v.buildReference(opts)
+	if err != nil {
+		return false, err
+	}
+
+	remoteOpts := v.buildRemoteOptionsForArtifact(ctx, opts)
+
+	// Try to get the image descriptor - this checks if the specific tag exists
+	_, err = remote.Head(ref, remoteOpts...)
+	if err != nil {
+		// Check if it's a "not found" error - that means the artifact doesn't exist
+		if isNotFoundError(err) {
+			return false, nil
+		}
+		// For other errors (auth, network), return them
+		return false, classifyRegistryError(err)
+	}
+
+	return true, nil
+}
+
+// buildReference creates a reference from artifact exists options.
+//
+//nolint:ireturn // Interface return is required by go-containerregistry API
+func (v *verifier) buildReference(opts ArtifactExistsOptions) (name.Reference, error) {
+	refStr := fmt.Sprintf("%s/%s:%s", opts.RegistryEndpoint, opts.Repository, opts.Tag)
+
+	nameOpts := []name.Option{name.WeakValidation}
+	if opts.Insecure {
+		nameOpts = append(nameOpts, name.Insecure)
+	}
+
+	ref, err := name.ParseReference(refStr, nameOpts...)
+	if err != nil {
+		return nil, fmt.Errorf("parse reference: %w", err)
+	}
+
+	return ref, nil
+}
+
+// buildRemoteOptionsForArtifact creates remote options for artifact existence check.
+func (v *verifier) buildRemoteOptionsForArtifact(
+	ctx context.Context,
+	opts ArtifactExistsOptions,
+) []remote.Option {
+	return buildRemoteOptionsWithAuth(ctx, opts.Username, opts.Password)
+}
+
+// isNotFoundError checks if the error indicates the artifact doesn't exist.
+func isNotFoundError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	var transportErr *transport.Error
+	if errors.As(err, &transportErr) {
+		if transportErr.StatusCode == http.StatusNotFound {
+			return true
+		}
+	}
+
+	errStr := strings.ToLower(err.Error())
+
+	return strings.Contains(errStr, "not found") ||
+		strings.Contains(errStr, "manifest unknown") ||
+		strings.Contains(errStr, "name_unknown") ||
+		strings.Contains(errStr, "name unknown")
+}
+
 // buildRepository creates a repository reference from the verify options.
 func (v *verifier) buildRepository(opts VerifyOptions) (name.Repository, error) {
 	refStr := fmt.Sprintf("%s/%s", opts.RegistryEndpoint, opts.Repository)
@@ -116,14 +218,19 @@ func (v *verifier) buildRepository(opts VerifyOptions) (name.Repository, error) 
 
 // buildRemoteOptions creates remote options for registry operations.
 func (v *verifier) buildRemoteOptions(ctx context.Context, opts VerifyOptions) []remote.Option {
+	return buildRemoteOptionsWithAuth(ctx, opts.Username, opts.Password)
+}
+
+// buildRemoteOptionsWithAuth creates remote options with optional basic auth.
+func buildRemoteOptionsWithAuth(ctx context.Context, username, password string) []remote.Option {
 	remoteOpts := []remote.Option{
 		remote.WithContext(ctx),
 	}
 
-	if opts.Username != "" || opts.Password != "" {
+	if username != "" || password != "" {
 		auth := &authn.Basic{
-			Username: opts.Username,
-			Password: opts.Password,
+			Username: username,
+			Password: password,
 		}
 		remoteOpts = append(remoteOpts, remote.WithAuth(auth))
 	}
