@@ -126,7 +126,7 @@ func TestStandardFieldSelectors(t *testing.T) {
 		{
 			name:            "csi",
 			factory:         configmanager.DefaultCSIFieldSelector,
-			expectedDesc:    "Container Storage Interface (CSI) to use",
+			expectedDesc:    "Container Storage Interface (Default: use distribution, Enabled: install CSI, Disabled: skip CSI)",
 			expectedDefault: v1alpha1.CSIDefault,
 			assertPointer: func(t *testing.T, cluster *v1alpha1.Cluster, ptr any) {
 				t.Helper()
