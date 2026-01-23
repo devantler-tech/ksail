@@ -422,63 +422,68 @@ func TestLocalRegistry_ResolvedHostPortPath(t *testing.T) {
 	}
 }
 
-//nolint:gochecknoglobals // Test table data
-var localRegistryResolveCredentialsTests = []struct {
+type resolveCredentialsTestCase struct {
 	name         string
 	registry     string
 	envVars      map[string]string
 	wantUsername string
 	wantPassword string
-}{
-	{
-		name:         "literal_credentials",
-		registry:     "myuser:mypass@ghcr.io/org/repo",
-		wantUsername: "myuser",
-		wantPassword: "mypass",
-	},
-	{
-		name:         "env_var_credentials",
-		registry:     "${REGISTRY_USER}:${REGISTRY_PASS}@ghcr.io/org/repo",
-		envVars:      map[string]string{"REGISTRY_USER": "envuser", "REGISTRY_PASS": "envpass"},
-		wantUsername: "envuser",
-		wantPassword: "envpass",
-	},
-	{
-		name:         "mixed_literal_and_env_var",
-		registry:     "literaluser:${REGISTRY_PASS}@ghcr.io/org/repo",
-		envVars:      map[string]string{"REGISTRY_PASS": "secret123"},
-		wantUsername: "literaluser",
-		wantPassword: "secret123",
-	},
-	{
-		name:         "undefined_env_var_becomes_empty",
-		registry:     "${UNDEFINED_USER}:${UNDEFINED_PASS}@ghcr.io/org/repo",
-		wantUsername: "",
-		wantPassword: "",
-	},
-	{
-		name:         "no_credentials",
-		registry:     "ghcr.io/org/repo",
-		wantUsername: "",
-		wantPassword: "",
-	},
-	{
-		name:         "username_only",
-		registry:     "onlyuser@ghcr.io/org/repo",
-		wantUsername: "onlyuser",
-		wantPassword: "",
-	},
-	{
-		name:         "empty_registry",
-		registry:     "",
-		wantUsername: "",
-		wantPassword: "",
-	},
+}
+
+func getResolveCredentialsTestCases() []resolveCredentialsTestCase {
+	return []resolveCredentialsTestCase{
+		{
+			name:         "literal_credentials",
+			registry:     "myuser:mypass@ghcr.io/org/repo",
+			wantUsername: "myuser",
+			wantPassword: "mypass",
+		},
+		{
+			name:         "env_var_credentials",
+			registry:     "${REGISTRY_USER}:${REGISTRY_PASS}@ghcr.io/org/repo",
+			envVars:      map[string]string{"REGISTRY_USER": "envuser", "REGISTRY_PASS": "envpass"},
+			wantUsername: "envuser",
+			wantPassword: "envpass",
+		},
+		{
+			name:         "mixed_literal_and_env_var",
+			registry:     "literaluser:${REGISTRY_PASS}@ghcr.io/org/repo",
+			envVars:      map[string]string{"REGISTRY_PASS": "secret123"},
+			wantUsername: "literaluser",
+			wantPassword: "secret123",
+		},
+		{
+			name:         "undefined_env_var_becomes_empty",
+			registry:     "${UNDEFINED_USER}:${UNDEFINED_PASS}@ghcr.io/org/repo",
+			wantUsername: "",
+			wantPassword: "",
+		},
+		{
+			name:         "no_credentials",
+			registry:     "ghcr.io/org/repo",
+			wantUsername: "",
+			wantPassword: "",
+		},
+		{
+			name:         "username_only",
+			registry:     "onlyuser@ghcr.io/org/repo",
+			wantUsername: "onlyuser",
+			wantPassword: "",
+		},
+		{
+			name:         "empty_registry",
+			registry:     "",
+			wantUsername: "",
+			wantPassword: "",
+		},
+	}
 }
 
 func TestLocalRegistry_ResolveCredentials(t *testing.T) {
 	// Note: Cannot use t.Parallel() when using t.Setenv()
-	for _, testCase := range localRegistryResolveCredentialsTests {
+	tests := getResolveCredentialsTestCases()
+
+	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
 			for key, value := range testCase.envVars {
 				t.Setenv(key, value)
