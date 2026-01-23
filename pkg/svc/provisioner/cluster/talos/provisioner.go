@@ -3,7 +3,6 @@ package talosprovisioner
 import (
 	"context"
 	"crypto/tls"
-	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -88,32 +87,6 @@ const (
 	byte0Shift = 24
 	byte1Shift = 16
 	byte2Shift = 8
-)
-
-// Common errors for the Talos provisioner.
-var (
-	// ErrDockerNotAvailable is returned when Docker is not available.
-	ErrDockerNotAvailable = errors.New("docker is not available: ensure Docker is running")
-	// ErrClusterAlreadyExists is returned when attempting to create a cluster that already exists.
-	ErrClusterAlreadyExists = errors.New("cluster already exists")
-	// ErrInvalidPatch is returned when a patch file is invalid.
-	ErrInvalidPatch = errors.New("invalid patch file")
-	// ErrNotImplemented is returned when a method is not yet implemented.
-	ErrNotImplemented = errors.New("not implemented")
-	// ErrIPv6NotSupported is returned when IPv6 addresses are used but not supported.
-	ErrIPv6NotSupported = errors.New("IPv6 not supported")
-	// ErrNegativeOffset is returned when a negative offset is provided for IP calculation.
-	ErrNegativeOffset = errors.New("negative offset not allowed")
-	// ErrNoControlPlane is returned when no control plane container is found.
-	ErrNoControlPlane = errors.New("no control plane container found")
-	// ErrNoPortMapping is returned when no port mapping is found for a required port.
-	ErrNoPortMapping = errors.New("no port mapping found")
-	// ErrHetznerProviderRequired is returned when the Hetzner provider is expected but not available.
-	ErrHetznerProviderRequired = errors.New("hetzner provider required for this operation")
-	// ErrMissingKubernetesEndpoint is returned when the cluster info is missing the Kubernetes endpoint.
-	ErrMissingKubernetesEndpoint = errors.New("cluster info missing KubernetesEndpoint")
-	// ErrKernelModuleLoadFailed is returned when loading a required kernel module fails.
-	ErrKernelModuleLoadFailed = errors.New("failed to load kernel module")
 )
 
 // TalosProvisioner implements ClusterProvisioner for Talos-in-Docker clusters.
@@ -1764,55 +1737,6 @@ func (p *TalosProvisioner) resolveClusterName(name string) string {
 	return talosconfigmanager.DefaultClusterName
 }
 
-// nthIPInNetwork returns the nth IP in the network (1-indexed).
-// The offset parameter specifies how many addresses to skip from the network base address.
-func nthIPInNetwork(prefix netip.Prefix, offset int) (netip.Addr, error) {
-	addr := prefix.Addr()
-
-	// Convert to byte slice for manipulation
-	if addr.Is4() {
-		ipBytes := addr.As4()
-		ipValue := uint32(ipBytes[0])<<byte0Shift |
-			uint32(ipBytes[1])<<byte1Shift |
-			uint32(ipBytes[2])<<byte2Shift |
-			uint32(ipBytes[3])
-
-		// Safe conversion: offset should always be small and positive for valid cluster sizes
-		if offset < 0 {
-			return netip.Addr{}, ErrNegativeOffset
-		}
-
-		//nolint:gosec // G115: offset validated above and bounded by cluster size
-		ipValue += uint32(offset)
-
-		return netip.AddrFrom4([4]byte{
-			byte(ipValue >> byte0Shift),
-			byte(ipValue >> byte1Shift),
-			byte(ipValue >> byte2Shift),
-			byte(ipValue),
-		}), nil
-	}
-
-	return netip.Addr{}, ErrIPv6NotSupported
-}
-
-// getStateDirectory returns the state directory for Talos clusters.
-func getStateDirectory() (string, error) {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("failed to get home directory: %w", err)
-	}
-
-	stateDir := filepath.Join(homeDir, ".talos", "clusters")
-
-	mkdirErr := os.MkdirAll(stateDir, stateDirectoryPermissions)
-	if mkdirErr != nil {
-		return "", fmt.Errorf("failed to create state directory: %w", mkdirErr)
-	}
-
-	return stateDir, nil
-}
-
 // talosAPIPort is the Talos apid service port.
 const talosAPIPort = 50000
 
@@ -2229,22 +2153,4 @@ func (p *TalosProvisioner) ensureKernelModules(ctx context.Context) error {
 	_, _ = fmt.Fprintf(p.logWriter, "Successfully loaded br_netfilter kernel module\n")
 
 	return nil
-}
-
-// containsModule checks if a module name appears in /proc/modules output.
-func containsModule(modulesContent, moduleName string) bool {
-	// /proc/modules format: "module_name size refcount deps state offset"
-	// Each module is on its own line, and the name is the first field
-	for line := range strings.SplitSeq(modulesContent, "\n") {
-		if len(line) == 0 {
-			continue
-		}
-		// Get the first field (module name)
-		fields := strings.Fields(line)
-		if len(fields) > 0 && fields[0] == moduleName {
-			return true
-		}
-	}
-
-	return false
 }
