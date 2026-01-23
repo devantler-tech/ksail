@@ -1,12 +1,12 @@
 #
-#    ___                   _   _
-#   / _ \                 | | (_)
-#  | |_| | __ _  ___ _ __ | |_ _  ___
+#    ___                   _   _      
+#   / _ \                 | | (_)     
+#  | |_| | __ _  ___ _ __ | |_ _  ___ 
 #  |  _  |/ _` |/ _ \ '_ \| __| |/ __|
-#  | | | | (_| |  __/ | | | |_| | (__
+#  | | | | (_| |  __/ | | | |_| | (__ 
 #  \_| |_/\__, |\___|_| |_|\__|_|\___|
 #          __/ |
-#  _    _ |___/
+#  _    _ |___/ 
 # | |  | |                / _| |
 # | |  | | ___ _ __ _  __| |_| | _____      ____
 # | |/\| |/ _ \ '__| |/ /|  _| |/ _ \ \ /\ / / ___|
@@ -28,9 +28,9 @@ name: "Release Changelog"
       release_type:
         description: Release type (patch, minor, or major)
         options:
-          - patch
-          - minor
-          - major
+        - patch
+        - minor
+        - major
         required: true
         type: choice
 
@@ -101,7 +101,7 @@ jobs:
         with:
           destination: /opt/gh-aw/actions
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
           persist-credentials: false
       - name: Create gh-aw temp directory
@@ -340,18 +340,18 @@ jobs:
           API_KEY=""
           API_KEY=$(openssl rand -base64 45 | tr -d '/+=')
           PORT=3001
-
+          
           # Register API key as secret to mask it from logs
           echo "::add-mask::${API_KEY}"
-
+          
           # Set outputs for next steps
           {
             echo "safe_outputs_api_key=${API_KEY}"
             echo "safe_outputs_port=${PORT}"
           } >> "$GITHUB_OUTPUT"
-
+          
           echo "Safe Outputs MCP server will run on port ${PORT}"
-
+          
       - name: Start Safe Outputs MCP HTTP Server
         id: safe-outputs-start
         env:
@@ -367,9 +367,9 @@ jobs:
           export GH_AW_SAFE_OUTPUTS_TOOLS_PATH
           export GH_AW_SAFE_OUTPUTS_CONFIG_PATH
           export GH_AW_MCP_LOG_DIR
-
+          
           bash /opt/gh-aw/actions/start_safe_outputs_server.sh
-
+          
       - name: Start MCP gateway
         id: start-mcp-gateway
         env:
@@ -381,19 +381,19 @@ jobs:
         run: |
           set -eo pipefail
           mkdir -p /tmp/gh-aw/mcp-config
-
+          
           # Export gateway environment variables for MCP config and gateway script
           export MCP_GATEWAY_PORT="80"
           export MCP_GATEWAY_DOMAIN="host.docker.internal"
           MCP_GATEWAY_API_KEY=""
           MCP_GATEWAY_API_KEY=$(openssl rand -base64 45 | tr -d '/+=')
           export MCP_GATEWAY_API_KEY
-
+          
           # Register API key as secret to mask it from logs
           echo "::add-mask::${MCP_GATEWAY_API_KEY}"
           export GH_AW_ENGINE="copilot"
           export MCP_GATEWAY_DOCKER_COMMAND='docker run -i --rm --network host -v /var/run/docker.sock:/var/run/docker.sock -e MCP_GATEWAY_PORT -e MCP_GATEWAY_DOMAIN -e MCP_GATEWAY_API_KEY -e DEBUG="*" -e MCP_GATEWAY_LOG_DIR -e GH_AW_MCP_LOG_DIR -e GH_AW_SAFE_OUTPUTS -e GH_AW_SAFE_OUTPUTS_CONFIG_PATH -e GH_AW_SAFE_OUTPUTS_TOOLS_PATH -e GH_AW_ASSETS_BRANCH -e GH_AW_ASSETS_MAX_SIZE_KB -e GH_AW_ASSETS_ALLOWED_EXTS -e DEFAULT_BRANCH -e GITHUB_MCP_SERVER_TOKEN -e GITHUB_MCP_LOCKDOWN -e GITHUB_REPOSITORY -e GITHUB_SERVER_URL -e GITHUB_SHA -e GITHUB_WORKSPACE -e GITHUB_TOKEN -e GITHUB_RUN_ID -e GITHUB_RUN_NUMBER -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e GITHUB_ACTION -e GITHUB_EVENT_NAME -e GITHUB_EVENT_PATH -e GITHUB_ACTOR -e GITHUB_ACTOR_ID -e GITHUB_TRIGGERING_ACTOR -e GITHUB_WORKFLOW -e GITHUB_WORKFLOW_REF -e GITHUB_WORKFLOW_SHA -e GITHUB_REF -e GITHUB_REF_NAME -e GITHUB_REF_TYPE -e GITHUB_HEAD_REF -e GITHUB_BASE_REF -e GH_AW_SAFE_OUTPUTS_PORT -e GH_AW_SAFE_OUTPUTS_API_KEY -v /opt:/opt:ro -v /tmp:/tmp:rw -v '"${GITHUB_WORKSPACE}"':'"${GITHUB_WORKSPACE}"':rw ghcr.io/githubnext/gh-aw-mcpg:v0.0.76'
-
+          
           mkdir -p /home/runner/.copilot
           cat << MCPCONFIG_EOF | bash /opt/gh-aw/actions/start_mcp_gateway.sh
           {
@@ -429,7 +429,7 @@ jobs:
         with:
           script: |
             const fs = require('fs');
-
+            
             const awInfo = {
               engine_id: "copilot",
               engine_name: "GitHub Copilot CLI",
@@ -460,13 +460,13 @@ jobs:
               },
               created_at: new Date().toISOString()
             };
-
+            
             // Write to /tmp/gh-aw directory to avoid inclusion in PR
             const tmpPath = '/tmp/gh-aw/aw_info.json';
             fs.writeFileSync(tmpPath, JSON.stringify(awInfo, null, 2));
             console.log('Generated aw_info.json at:', tmpPath);
             console.log(JSON.stringify(awInfo, null, 2));
-
+            
             // Set model as output for reuse in other steps/jobs
             core.setOutput('model', awInfo.model);
       - name: Generate workflow overview
@@ -503,9 +503,9 @@ jobs:
           </important>
           <instructions>
           To create or modify GitHub resources (issues, discussions, pull requests, etc.), you MUST call the appropriate safe output tool. Simply writing content will NOT work - the workflow requires actual tool calls.
-
+          
           **Available tools**: missing_tool, noop, update_release
-
+          
           **Critical**: Tool calls write structured data that downstream jobs process. Without tool calls, follow-up actions will be skipped.
           </instructions>
           </safe-outputs>
@@ -536,124 +536,124 @@ jobs:
           - **workflow-run-id**: __GH_AW_GITHUB_RUN_ID__
           {{/if}}
           </github-context>
-
+          
           PROMPT_EOF
           cat << 'PROMPT_EOF' >> "$GH_AW_PROMPT"
           </system>
           PROMPT_EOF
           cat << 'PROMPT_EOF' >> "$GH_AW_PROMPT"
           # Release Highlights Generator
-
+          
           Generate an engaging release highlights summary for **__GH_AW_GITHUB_REPOSITORY__** release `${RELEASE_TAG}`.
-
+          
           **Release ID**: __GH_AW_NEEDS_RELEASE_OUTPUTS_RELEASE_ID__
-
+          
           ## Data Available
-
+          
           All data is pre-fetched in `/tmp/gh-aw/release-data/`:
-
+          
           - `current_release.json` - Release metadata (tag, name, dates, existing body)
           - `pull_requests.json` - PRs merged between `${PREV_RELEASE_TAG}` and `${RELEASE_TAG}` (empty array if first release)
           - `CHANGELOG.md` - Full changelog for context (if exists)
           - `docs_files.txt` - Available documentation files for linking
-
+          
           ## Output Requirements
-
+          
           Create a **"🌟 Release Highlights"** section that:
-
+          
           - Is concise and scannable (users grasp key changes in 30 seconds)
           - Uses professional, enthusiastic tone (not overly casual)
           - Categorizes changes logically (features, fixes, docs, breaking changes)
           - Links to relevant documentation where helpful
           - Focuses on user impact (why changes matter, not just what changed)
-
+          
           ## Workflow
-
+          
           ### 1. Load Data
-
+          
           ```bash
           # View release metadata
           cat /tmp/gh-aw/release-data/current_release.json | jq
-
+          
           # List PRs (empty if first release)
           cat /tmp/gh-aw/release-data/pull_requests.json | jq -r '.[] | "- #\(.number): \(.title) by @\(.author.login)"'
-
+          
           # Check CHANGELOG context
           head -100 /tmp/gh-aw/release-data/CHANGELOG.md 2>/dev/null || echo "No CHANGELOG"
-
+          
           # View available docs
           cat /tmp/gh-aw/release-data/docs_files.txt
           ```
-
+          
           ### 2. Categorize & Prioritize
-
+          
           Group PRs by category (omit categories with no items):
-
+          
           - **✨ New Features** - User-facing capabilities
           - **🐛 Bug Fixes** - Issue resolutions
           - **⚡ Performance** - Speed/efficiency improvements
           - **📚 Documentation** - Guide/reference updates
           - **⚠️ Breaking Changes** - Requires user action (ALWAYS list first if present)
           - **🔧 Internal** - Refactoring, dependencies (usually omit from highlights)
-
+          
           ### 3. Write Highlights
-
+          
           Structure:
-
+          
           ```markdown
           ## 🌟 Release Highlights
-
+          
           [1-2 sentence summary of the release theme/focus]
-
+          
           ### ⚠️ Breaking Changes
           [If any - list FIRST with migration guidance]
-
+          
           ### ✨ What's New
           [Top 3-5 features with user benefit, link docs when relevant]
-
+          
           ### 🐛 Bug Fixes & Improvements
           [Notable fixes - focus on user impact]
-
+          
           ### 📚 Documentation
           [Only if significant doc additions/improvements]
-
+          
           ---
           For complete details, see [CHANGELOG](https://github.com/githubnext/gh-aw/blob/main/CHANGELOG.md).
           ```
-
+          
           **Writing Guidelines:**
-
+          
           - Lead with benefits: "GitHub MCP now supports remote mode" not "Added remote mode"
           - Be specific: "Reduced compilation time by 40%" not "Faster compilation"
           - Skip internal changes unless they have user impact
           - Use docs links: `[Learn more](https://githubnext.github.io/gh-aw/path/)`
           - Keep breaking changes prominent with action items
-
+          
           ### 4. Handle Special Cases
-
+          
           **First Release** (no `${PREV_RELEASE_TAG}`):
-
+          
           ```markdown
           ## 🎉 First Release
-
+          
           Welcome to the inaugural release! This version includes [core capabilities].
-
+          
           ### Key Features
           [List primary features with brief descriptions]
           ```
-
+          
           **Maintenance Release** (no user-facing changes):
-
+          
           ```markdown
           ## 🔧 Maintenance Release
-
+          
           Dependency updates and internal improvements to keep things running smoothly.
           ```
-
+          
           ## Output Format
-
+          
           **CRITICAL**: You MUST call the `update_release` tool to update the release with the generated highlights:
-
+          
           ```javascript
           update_release({
             tag: "${RELEASE_TAG}",
@@ -661,23 +661,23 @@ jobs:
             body: "## 🌟 Release Highlights\n\n[Your complete markdown highlights here]"
           })
           ```
-
+          
           **Required Parameters:**
-
+          
           - `tag` - Release tag from `${RELEASE_TAG}` environment variable (e.g., "v0.30.2")
           - `operation` - Must be `"prepend"` to add before existing notes
           - `body` - Complete markdown content (include all formatting, emojis, links)
-
+          
           **WARNING**: If you don't call the `update_release` tool, the release notes will NOT be updated!
-
+          
           **Documentation Base URLs:**
-
+          
           - User docs: `https://githubnext.github.io/gh-aw/`
           - Reference: `https://githubnext.github.io/gh-aw/reference/`
           - Setup: `https://githubnext.github.io/gh-aw/setup/`
-
+          
           Verify paths exist in `docs_files.txt` before linking.
-
+          
           PROMPT_EOF
       - name: Substitute placeholders
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
@@ -695,7 +695,7 @@ jobs:
         with:
           script: |
             const substitutePlaceholders = require('/opt/gh-aw/actions/substitute_placeholders.cjs');
-
+            
             // Call the substitution function
             return await substitutePlaceholders({
               file: process.env.GH_AW_PROMPT,
@@ -760,7 +760,7 @@ jobs:
           # This ensures they are in /tmp/gh-aw/ where secret redaction can scan them
           SESSION_STATE_DIR="$HOME/.copilot/session-state"
           LOGS_DIR="/tmp/gh-aw/sandbox/agent/logs"
-
+          
           if [ -d "$SESSION_STATE_DIR" ]; then
             echo "Copying Copilot session state files from $SESSION_STATE_DIR to $LOGS_DIR"
             mkdir -p "$LOGS_DIR"
@@ -788,7 +788,7 @@ jobs:
             const { main } = require('/opt/gh-aw/actions/redact_secrets.cjs');
             await main();
         env:
-          GH_AW_SECRET_NAMES: "COPILOT_GITHUB_TOKEN,GH_AW_GITHUB_MCP_SERVER_TOKEN,GH_AW_GITHUB_TOKEN,GITHUB_TOKEN"
+          GH_AW_SECRET_NAMES: 'COPILOT_GITHUB_TOKEN,GH_AW_GITHUB_MCP_SERVER_TOKEN,GH_AW_GITHUB_TOKEN,GITHUB_TOKEN'
           SECRET_COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
           SECRET_GH_AW_GITHUB_MCP_SERVER_TOKEN: ${{ secrets.GH_AW_GITHUB_MCP_SERVER_TOKEN }}
           SECRET_GH_AW_GITHUB_TOKEN: ${{ secrets.GH_AW_GITHUB_TOKEN }}
@@ -908,7 +908,7 @@ jobs:
           echo "Agent Conclusion: $AGENT_CONCLUSION"
       - name: Download agent output artifact
         continue-on-error: true
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
         with:
           name: agent-output
           path: /tmp/gh-aw/safeoutputs/
@@ -986,13 +986,13 @@ jobs:
       release_tag: ${{ steps.compute_config.outputs.release_tag }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
       - name: Compute release configuration
         id: compute_config
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         with:
           script: |
             const releaseType = context.payload.inputs.release_type;
@@ -1102,13 +1102,13 @@ jobs:
           destination: /opt/gh-aw/actions
       - name: Download agent artifacts
         continue-on-error: true
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
         with:
           name: agent-artifacts
           path: /tmp/gh-aw/threat-detection/
       - name: Download agent output artifact
         continue-on-error: true
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
         with:
           name: agent-output
           path: /tmp/gh-aw/threat-detection/
@@ -1265,7 +1265,7 @@ jobs:
       release_id: ${{ steps.get_release.outputs.release_id }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
           fetch-depth: 0
           persist-credentials: true
@@ -1420,7 +1420,7 @@ jobs:
           destination: /opt/gh-aw/actions
       - name: Download agent output artifact
         continue-on-error: true
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
         with:
           name: agent-output
           path: /tmp/gh-aw/safeoutputs/
@@ -1434,7 +1434,7 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
           GH_AW_AGENT_OUTPUT: ${{ env.GH_AW_AGENT_OUTPUT }}
-          GH_AW_SAFE_OUTPUTS_HANDLER_CONFIG: '{"missing_data":{},"missing_tool":{},"update_release":{"max":1}}'
+          GH_AW_SAFE_OUTPUTS_HANDLER_CONFIG: "{\"missing_data\":{},\"missing_tool\":{},\"update_release\":{\"max\":1}}"
         with:
           github-token: ${{ secrets.GH_AW_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
           script: |
@@ -1442,3 +1442,4 @@ jobs:
             setupGlobals(core, github, context, exec, io);
             const { main } = require('/opt/gh-aw/actions/safe_output_handler_manager.cjs');
             await main();
+

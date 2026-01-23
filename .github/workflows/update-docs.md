@@ -15,6 +15,8 @@ on:
 
 permissions: read-all
 
+bots: ["github-actions[bot]"]
+
 network: defaults
 
 safe-outputs:
