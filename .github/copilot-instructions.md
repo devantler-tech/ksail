@@ -121,6 +121,11 @@ go run main.go --help
 │   ├── io/                 # I/O utilities
 │   ├── k8s/                # Kubernetes helpers/templates
 │   └── svc/                # Services (installers, managers, etc.)
+│       ├── installer/      # Component installers (CNI, CSI, metrics-server, etc.)
+│       ├── provider/       # Infrastructure providers (docker, hetzner)
+│       ├── provisioner/    # Distribution provisioners (Vanilla, K3s, Talos)
+│       ├── image/          # Container image export/import services
+│       └── reconciler/     # Common base for GitOps reconciliation clients
 ├── docs/                   # Astro documentation source
 │   ├── dist/               # Generated site (after npm run build)
 │   └── package.json        # Node.js dependencies for documentation
@@ -232,6 +237,11 @@ npm run dev                            # Test locally (if needed)
 - `pkg/apis/`: API types, schemas, and enums (`pkg/apis/cluster/v1alpha1/enums.go` defines Distribution values)
 - `pkg/client/`: Embedded tool clients (kubectl, helm, kind, k3d, flux, argocd)
 - `pkg/svc/`: Services including installers, providers, and provisioners
+  - `pkg/svc/installer/`: Component installers (CNI, CSI, metrics-server, etc.)
+  - `pkg/svc/provider/`: Infrastructure providers (docker, hetzner)
+  - `pkg/svc/provisioner/`: Distribution provisioners (Vanilla, K3s, Talos)
+  - `pkg/svc/image/`: Container image export/import services for Vanilla and K3s distributions
+  - `pkg/svc/reconciler/`: Common base for GitOps reconciliation clients (Flux and ArgoCD)
 - `pkg/di/`: Dependency injection for wiring components
 
 ## Active Technologies
