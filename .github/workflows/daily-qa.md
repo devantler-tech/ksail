@@ -22,7 +22,6 @@ safe-outputs:
     title-prefix: "${{ github.workflow }}"
     category: "agentic-workflows"
   add-comment:
-    discussion: true
     target: "*" # all issues and PRs
     max: 5
   create-pull-request:

@@ -154,16 +154,16 @@ Status:
 
 ## Common Failure Patterns
 
-| Symptom                                      | Likely Cause                                            |
-|----------------------------------------------|---------------------------------------------------------|
-| `DiskPressure: True`                         | Runner out of disk space - use `free-disk-space` action |
-| `MemoryPressure: True`                       | Not enough RAM for workloads                            |
-| Pods in `Pending`                            | Insufficient resources or node selector issues          |
-| Pods in `ImagePullBackOff`                   | Image not found or registry authentication failed       |
-| Pods in `CrashLoopBackOff`                   | Application crashing - check container logs             |
-| FluxInstance not `Ready`                     | Check conditions for reconciliation errors or OCIRepository not synced |
-| OCIRepository not `Ready`                    | Check conditions for artifact fetch errors or authentication failures |
-| OCIRepository condition `ArtifactFailed`     | Artifact not pushed, wrong tag, or registry unreachable |
-| ArgoCD Application not `Synced`              | Check sync status and conditions for manifest errors or Git issues |
-| ArgoCD Application not `Healthy`             | Check health status - deployed resources may be unhealthy or progressing |
-| ArgoCD Application operation `Failed`        | Check operation state message for sync or apply errors  |
+| Symptom                                  | Likely Cause                                                             |
+|------------------------------------------|--------------------------------------------------------------------------|
+| `DiskPressure: True`                     | Runner out of disk space - use `free-disk-space` action                  |
+| `MemoryPressure: True`                   | Not enough RAM for workloads                                             |
+| Pods in `Pending`                        | Insufficient resources or node selector issues                           |
+| Pods in `ImagePullBackOff`               | Image not found or registry authentication failed                        |
+| Pods in `CrashLoopBackOff`               | Application crashing - check container logs                              |
+| FluxInstance not `Ready`                 | Check conditions for reconciliation errors or OCIRepository not synced   |
+| OCIRepository not `Ready`                | Check conditions for artifact fetch errors or authentication failures    |
+| OCIRepository condition `ArtifactFailed` | Artifact not pushed, wrong tag, or registry unreachable                  |
+| ArgoCD Application not `Synced`          | Check sync status and conditions for manifest errors or Git issues       |
+| ArgoCD Application not `Healthy`         | Check health status - deployed resources may be unhealthy or progressing |
+| ArgoCD Application operation `Failed`    | Check operation state message for sync or apply errors                   |

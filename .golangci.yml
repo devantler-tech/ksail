@@ -63,6 +63,9 @@ linters:
         path: pkg/svc/installer/flux/resources.go
       - linters:
           - ireturn
+        path: pkg/svc/installer/flux/resources_test.go
+      - linters:
+          - ireturn
         path: pkg/cli/cmd/cipher/encrypt.go
       - linters:
           - ireturn
