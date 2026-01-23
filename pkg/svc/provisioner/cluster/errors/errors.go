@@ -23,3 +23,12 @@ var ErrNotHetznerProvider = errors.New("infrastructure provider is not a Hetzner
 
 // ErrNoControlPlaneNodes is returned when no control-plane nodes are found.
 var ErrNoControlPlaneNodes = errors.New("no control-plane nodes found for cluster")
+
+// ErrUnsupportedDistribution is returned when an unsupported distribution is specified.
+var ErrUnsupportedDistribution = errors.New("unsupported distribution")
+
+// ErrUnsupportedProvider is returned when an unsupported provider is specified.
+var ErrUnsupportedProvider = errors.New("unsupported provider")
+
+// ErrMissingDistributionConfig is returned when no pre-loaded distribution config is provided.
+var ErrMissingDistributionConfig = errors.New("missing distribution config")

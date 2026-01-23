@@ -9,6 +9,12 @@ import (
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
 
+// DefaultKindNodeImage is the default Kind node container image.
+// This value is read from the Dockerfile in this package which is updated by Dependabot.
+//
+//nolint:gochecknoglobals // Exported constant initialized from embedded Dockerfile
+var DefaultKindNodeImage = kindNodeImage()
+
 // ConfigManager implements configuration management for Kind cluster configurations.
 // It provides file-based configuration loading without Viper dependency.
 type ConfigManager struct {

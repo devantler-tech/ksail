@@ -49,6 +49,41 @@ func NewWorkloadArtifactBuilder() WorkloadArtifactBuilder {
 
 type builder struct{}
 
+// parseOCIReference creates an OCI reference from endpoint, repository, and version.
+func parseOCIReference(endpoint, repository, version string) (name.Reference, error) {
+	ref, err := name.ParseReference(
+		fmt.Sprintf("%s/%s:%s", endpoint, repository, version),
+		name.WeakValidation,
+		name.Insecure,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("parse reference: %w", err)
+	}
+
+	return ref, nil
+}
+
+// pushImage pushes an OCI image to the registry with optional authentication.
+func pushImage(
+	ctx context.Context,
+	ref name.Reference,
+	img v1.Image,
+	username, password string,
+) error {
+	remoteOpts := []remote.Option{remote.WithContext(ctx)}
+
+	if username != "" || password != "" {
+		auth := &authn.Basic{
+			Username: username,
+			Password: password,
+		}
+		remoteOpts = append(remoteOpts, remote.WithAuth(auth))
+	}
+
+	//nolint:wrapcheck // Error is wrapped by caller with more context
+	return remote.Write(ref, img, remoteOpts...)
+}
+
 // Build collects manifests from the source path, packages them into an OCI artifact, and pushes it to the registry.
 //
 // The build process follows these steps:
@@ -61,8 +96,6 @@ type builder struct{}
 //  7. Returns artifact metadata on success
 //
 // Returns BuildResult with complete artifact metadata, or an error if any step fails.
-//
-//nolint:funlen // Single cohesive build pipeline with sequential steps
 func (b *builder) Build(ctx context.Context, opts BuildOptions) (BuildResult, error) {
 	validated, err := opts.Validate()
 	if err != nil {
@@ -88,43 +121,77 @@ func (b *builder) Build(ctx context.Context, opts BuildOptions) (BuildResult, er
 		return BuildResult{}, fmt.Errorf("build image: %w", err)
 	}
 
-	ref, err := name.ParseReference(
-		fmt.Sprintf(
-			"%s/%s:%s",
-			validated.RegistryEndpoint,
-			validated.Repository,
-			validated.Version,
-		),
-		name.WeakValidation,
-		name.Insecure,
-	)
+	return pushImageToRegistry(ctx, img, artifactInfo{
+		Name:             validated.Name,
+		Version:          validated.Version,
+		RegistryEndpoint: validated.RegistryEndpoint,
+		Repository:       validated.Repository,
+		SourcePath:       validated.SourcePath,
+	}, validated.Username, validated.Password)
+}
+
+// BuildEmpty pushes an OCI artifact with an empty kustomization.yaml to the registry.
+// This creates a minimal valid Kustomize structure that Flux can reconcile,
+// useful when no source directory exists but a valid artifact reference is required.
+func (b *builder) BuildEmpty(ctx context.Context, opts EmptyBuildOptions) (BuildResult, error) {
+	validated, err := opts.Validate()
 	if err != nil {
-		return BuildResult{}, fmt.Errorf("parse reference: %w", err)
+		return BuildResult{}, err
 	}
 
-	// Build remote options with authentication if credentials are provided
-	remoteOpts := []remote.Option{remote.WithContext(ctx)}
-
-	if validated.Username != "" || validated.Password != "" {
-		auth := &authn.Basic{
-			Username: validated.Username,
-			Password: validated.Password,
-		}
-		remoteOpts = append(remoteOpts, remote.WithAuth(auth))
+	// Create a layer with an empty kustomization.yaml
+	layer, err := newEmptyKustomizationLayer()
+	if err != nil {
+		return BuildResult{}, fmt.Errorf("create empty kustomization layer: %w", err)
 	}
 
-	err = remote.Write(ref, img, remoteOpts...)
+	// Build image with the layer
+	img, err := buildEmptyImageWithLayer(layer, validated)
+	if err != nil {
+		return BuildResult{}, fmt.Errorf("build empty image: %w", err)
+	}
+
+	return pushImageToRegistry(ctx, img, artifactInfo{
+		Name:             validated.Name,
+		Version:          validated.Version,
+		RegistryEndpoint: validated.RegistryEndpoint,
+		Repository:       validated.Repository,
+		SourcePath:       "", // No source path for empty artifacts
+	}, validated.Username, validated.Password)
+}
+
+// pushImageToRegistry handles the common push logic and creates the artifact result.
+type artifactInfo struct {
+	Name             string
+	Version          string
+	RegistryEndpoint string
+	Repository       string
+	SourcePath       string
+}
+
+func pushImageToRegistry(
+	ctx context.Context,
+	img v1.Image,
+	info artifactInfo,
+	username, password string,
+) (BuildResult, error) {
+	ref, err := parseOCIReference(info.RegistryEndpoint, info.Repository, info.Version)
+	if err != nil {
+		return BuildResult{}, err
+	}
+
+	err = pushImage(ctx, ref, img, username, password)
 	if err != nil {
 		return BuildResult{}, fmt.Errorf("push artifact: %w", err)
 	}
 
 	artifact := v1alpha1.OCIArtifact{
-		Name:             validated.Name,
-		Version:          validated.Version,
-		RegistryEndpoint: validated.RegistryEndpoint,
-		Repository:       validated.Repository,
-		Tag:              validated.Version,
-		SourcePath:       validated.SourcePath,
+		Name:             info.Name,
+		Version:          info.Version,
+		RegistryEndpoint: info.RegistryEndpoint,
+		Repository:       info.Repository,
+		Tag:              info.Version,
+		SourcePath:       info.SourcePath,
 		CreatedAt:        metav1.NewTime(time.Now().UTC()),
 	}
 
@@ -337,25 +404,18 @@ func writeTarEntry(
 // Returns a complete OCI v1.Image ready for push to a registry.
 //
 
-func buildImage(
-	layer v1.Layer,
-	opts ValidatedBuildOptions,
-) (v1.Image, error) {
-	cfg := &v1.ConfigFile{
+// newBaseConfigFile creates a base ConfigFile with architecture, OS, and timestamp.
+func newBaseConfigFile() *v1.ConfigFile {
+	return &v1.ConfigFile{
 		Architecture: runtime.GOARCH,
 		OS:           runtime.GOOS,
 		Created:      v1.Time{Time: time.Now().UTC()},
-		Config: v1.Config{
-			Labels: map[string]string{
-				"org.opencontainers.image.title":        opts.Name,
-				"org.opencontainers.image.version":      opts.Version,
-				"org.opencontainers.image.source":       opts.SourcePath,
-				"devantler.tech/ksail/repository":       opts.Repository,
-				"devantler.tech/ksail/registryEndpoint": opts.RegistryEndpoint,
-			},
-		},
+		Config:       v1.Config{Labels: make(map[string]string)},
 	}
+}
 
+// buildImageWithConfig creates an OCI image from a layer and config file.
+func buildImageWithConfig(layer v1.Layer, cfg *v1.ConfigFile) (v1.Image, error) {
 	img, err := mutate.ConfigFile(empty.Image, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("set config file: %w", err)
@@ -367,4 +427,93 @@ func buildImage(
 	}
 
 	return finalImg, nil
+}
+
+func buildImage(
+	layer v1.Layer,
+	opts ValidatedBuildOptions,
+) (v1.Image, error) {
+	cfg := newBaseConfigFile()
+	cfg.Config.Labels = map[string]string{
+		"org.opencontainers.image.title":        opts.Name,
+		"org.opencontainers.image.version":      opts.Version,
+		"org.opencontainers.image.source":       opts.SourcePath,
+		"devantler.tech/ksail/repository":       opts.Repository,
+		"devantler.tech/ksail/registryEndpoint": opts.RegistryEndpoint,
+	}
+
+	return buildImageWithConfig(layer, cfg)
+}
+
+// newEmptyKustomizationLayer creates an OCI layer containing an empty kustomization.yaml file.
+// Currently creates a Flux-compatible Kustomization with empty resources array.
+func newEmptyKustomizationLayer() (v1.Layer, error) {
+	compressed := bytes.NewBuffer(nil)
+	gzipWriter := gzip.NewWriter(compressed)
+	gzipWriter.ModTime = time.Time{} // Deterministic output
+
+	tarWriter := tar.NewWriter(gzipWriter)
+
+	// Create empty kustomization.yaml content
+	kustomizationContent := []byte(`apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources: []
+`)
+
+	// Add kustomization.yaml at root
+	err := addContentToArchive(tarWriter, "kustomization.yaml", kustomizationContent)
+	if err != nil {
+		return nil, fmt.Errorf("add kustomization.yaml: %w", err)
+	}
+
+	err = tarWriter.Close()
+	if err != nil {
+		return nil, fmt.Errorf("close tar writer: %w", err)
+	}
+
+	err = gzipWriter.Close()
+	if err != nil {
+		return nil, fmt.Errorf("close gzip writer: %w", err)
+	}
+
+	return static.NewLayer(compressed.Bytes(), types.OCILayer), nil
+}
+
+// tarFilePermissions is the standard file mode for files in tar archives.
+const tarFilePermissions = 0o644
+
+// addContentToArchive adds content with a given filename to the tar archive.
+func addContentToArchive(tarWriter *tar.Writer, filename string, content []byte) error {
+	header := &tar.Header{
+		Name:    filename,
+		Mode:    tarFilePermissions,
+		Size:    int64(len(content)),
+		ModTime: time.Time{}, // Deterministic output
+	}
+
+	err := tarWriter.WriteHeader(header)
+	if err != nil {
+		return fmt.Errorf("write header for %s: %w", filename, err)
+	}
+
+	_, err = tarWriter.Write(content)
+	if err != nil {
+		return fmt.Errorf("write content for %s: %w", filename, err)
+	}
+
+	return nil
+}
+
+// buildEmptyImageWithLayer creates an OCI image with the given layer and labels from opts.
+func buildEmptyImageWithLayer(layer v1.Layer, opts ValidatedEmptyBuildOptions) (v1.Image, error) {
+	cfg := newBaseConfigFile()
+	cfg.Config.Labels = map[string]string{
+		"org.opencontainers.image.title":        opts.Name,
+		"org.opencontainers.image.version":      opts.Version,
+		"devantler.tech/ksail/repository":       opts.Repository,
+		"devantler.tech/ksail/registryEndpoint": opts.RegistryEndpoint,
+		"devantler.tech/ksail/empty":            "true",
+	}
+
+	return buildImageWithConfig(layer, cfg)
 }

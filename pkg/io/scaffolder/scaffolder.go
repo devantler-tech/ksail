@@ -15,17 +15,12 @@ import (
 	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
 	k3dconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/k3d"
 	kindconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/kind"
-	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
-	"github.com/devantler-tech/ksail/v5/pkg/io/detector"
 	"github.com/devantler-tech/ksail/v5/pkg/io/generator"
-	argocdgenerator "github.com/devantler-tech/ksail/v5/pkg/io/generator/argocd"
-	fluxgenerator "github.com/devantler-tech/ksail/v5/pkg/io/generator/flux"
 	k3dgenerator "github.com/devantler-tech/ksail/v5/pkg/io/generator/k3d"
 	kindgenerator "github.com/devantler-tech/ksail/v5/pkg/io/generator/kind"
 	kustomizationgenerator "github.com/devantler-tech/ksail/v5/pkg/io/generator/kustomization"
 	talosgenerator "github.com/devantler-tech/ksail/v5/pkg/io/generator/talos"
 	yamlgenerator "github.com/devantler-tech/ksail/v5/pkg/io/generator/yaml"
-	fluxinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/flux"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
 	"github.com/k3d-io/k3d/v5/pkg/config/types"
@@ -53,31 +48,6 @@ const (
 	filePerm = 0o600
 )
 
-var (
-	// Scaffolding errors.
-
-	// ErrUnknownDistribution indicates an unsupported distribution was requested.
-	ErrUnknownDistribution = errors.New("unknown distribution")
-
-	// ErrKSailConfigGeneration wraps failures when creating ksail.yaml.
-	ErrKSailConfigGeneration = errors.New("failed to generate ksail configuration")
-
-	// ErrKindConfigGeneration wraps failures when creating Kind configuration.
-	ErrKindConfigGeneration = errors.New("failed to generate kind configuration")
-
-	// ErrK3dConfigGeneration wraps failures when creating K3d configuration.
-	ErrK3dConfigGeneration = errors.New("failed to generate k3d configuration")
-
-	// ErrTalosConfigGeneration wraps failures when creating Talos configuration.
-	ErrTalosConfigGeneration = errors.New("failed to generate talos configuration")
-
-	// ErrKustomizationGeneration wraps failures when creating kustomization.yaml.
-	ErrKustomizationGeneration = errors.New("failed to generate kustomization configuration")
-
-	// ErrGitOpsConfigGeneration wraps failures when creating GitOps CR manifests.
-	ErrGitOpsConfigGeneration = errors.New("failed to generate gitops configuration")
-)
-
 // Scaffolder is responsible for generating KSail project files and configurations.
 type Scaffolder struct {
 	KSailConfig            v1alpha1.Cluster
@@ -86,8 +56,6 @@ type Scaffolder struct {
 	K3dGenerator           generator.Generator[*k3dv1alpha5.SimpleConfig, yamlgenerator.Options]
 	TalosGenerator         *talosgenerator.TalosGenerator
 	KustomizationGenerator generator.Generator[*ktypes.Kustomization, yamlgenerator.Options]
-	FluxInstanceGenerator  *fluxgenerator.InstanceGenerator
-	ArgoCDAppGenerator     *argocdgenerator.ApplicationGenerator
 	Writer                 io.Writer
 	MirrorRegistries       []string // Format: "name=upstream" (e.g., "docker.io=https://registry-1.docker.io")
 	ClusterName            string   // Optional override for cluster name. If set, overrides distribution defaults.
@@ -100,8 +68,6 @@ func NewScaffolder(cfg v1alpha1.Cluster, writer io.Writer, mirrorRegistries []st
 	k3dGenerator := k3dgenerator.NewK3dGenerator()
 	talosGen := talosgenerator.NewTalosGenerator()
 	kustomizationGenerator := kustomizationgenerator.NewKustomizationGenerator()
-	fluxInstanceGen := fluxgenerator.NewInstanceGenerator()
-	argocdAppGen := argocdgenerator.NewApplicationGenerator()
 
 	return &Scaffolder{
 		KSailConfig:            cfg,
@@ -110,8 +76,6 @@ func NewScaffolder(cfg v1alpha1.Cluster, writer io.Writer, mirrorRegistries []st
 		K3dGenerator:           k3dGenerator,
 		TalosGenerator:         talosGen,
 		KustomizationGenerator: kustomizationGenerator,
-		FluxInstanceGenerator:  fluxInstanceGen,
-		ArgoCDAppGenerator:     argocdAppGen,
 		Writer:                 writer,
 		MirrorRegistries:       mirrorRegistries,
 	}
@@ -685,11 +649,17 @@ func (s *Scaffolder) applyKindNodeCounts(kindConfig *v1alpha4.Cluster) {
 	nodes := make([]v1alpha4.Node, 0, controlPlanes+workers)
 
 	for range controlPlanes {
-		nodes = append(nodes, v1alpha4.Node{Role: v1alpha4.ControlPlaneRole})
+		nodes = append(nodes, v1alpha4.Node{
+			Role:  v1alpha4.ControlPlaneRole,
+			Image: kindconfigmanager.DefaultKindNodeImage,
+		})
 	}
 
 	for range workers {
-		nodes = append(nodes, v1alpha4.Node{Role: v1alpha4.WorkerRole})
+		nodes = append(nodes, v1alpha4.Node{
+			Role:  v1alpha4.WorkerRole,
+			Image: kindconfigmanager.DefaultKindNodeImage,
+		})
 	}
 
 	kindConfig.Nodes = nodes
@@ -711,7 +681,10 @@ func (s *Scaffolder) addMirrorMountsToKindConfig(kindConfig *v1alpha4.Cluster, o
 	}
 
 	if len(kindConfig.Nodes) == 0 {
-		kindConfig.Nodes = []v1alpha4.Node{{Role: v1alpha4.ControlPlaneRole}}
+		kindConfig.Nodes = []v1alpha4.Node{{
+			Role:  v1alpha4.ControlPlaneRole,
+			Image: kindconfigmanager.DefaultKindNodeImage,
+		}}
 	}
 
 	for _, spec := range specs {
@@ -845,283 +818,17 @@ func (s *Scaffolder) notifyTalosPatchCreated(subdir, filename string) {
 	})
 }
 
-// generateGitOpsConfig generates GitOps CR manifests (FluxInstance or ArgoCD Application)
-// into the source directory when a GitOps engine is configured.
-func (s *Scaffolder) generateGitOpsConfig(output string, force bool) error {
-	gitOpsEngine := s.KSailConfig.Spec.Cluster.GitOpsEngine
-	if gitOpsEngine == v1alpha1.GitOpsEngineNone || gitOpsEngine == "" {
-		return nil
-	}
-
-	sourceDir := filepath.Join(output, s.KSailConfig.Spec.Workload.SourceDirectory)
-
-	switch gitOpsEngine {
-	case v1alpha1.GitOpsEngineFlux:
-		return s.generateFluxInstanceConfig(sourceDir, force)
-	case v1alpha1.GitOpsEngineArgoCD:
-		return s.generateArgoCDApplicationConfig(sourceDir, force)
-	case v1alpha1.GitOpsEngineNone:
-		return nil
-	}
-
+// generateGitOpsConfig is a no-op placeholder for GitOps configuration generation.
+// GitOps resources (FluxInstance, ArgoCD Application) are NOT scaffolded as YAML files.
+// Instead, they are created via Kubernetes API during cluster creation, which ensures:
+// - FluxInstance has all required fields (Distribution.Artifact, Sync.Provider, etc.)
+// - ArgoCD Application is properly configured with server-side defaults
+// - No conflicts between scaffolded YAML and API-created resources
+// Users can overtake the source-of-truth via GitOps if they wish after cluster creation.
+func (s *Scaffolder) generateGitOpsConfig(_ string, _ bool) error {
+	// All GitOps engines (Flux, ArgoCD) create their resources server-side during cluster creation.
+	// This simplifies scaffolding and ensures proper configuration.
 	return nil
-}
-
-// generateFluxInstanceConfig generates a FluxInstance CR manifest.
-func (s *Scaffolder) generateFluxInstanceConfig(sourceDir string, force bool) error {
-	existingPath, err := s.checkExistingFluxInstance(sourceDir)
-	if err != nil {
-		return err
-	}
-
-	if existingPath != "" {
-		s.notifySkip("FluxInstance", existingPath)
-
-		return nil
-	}
-
-	return s.createFluxInstanceManifest(sourceDir, force)
-}
-
-// checkExistingFluxInstance checks if a FluxInstance already exists in the source directory.
-func (s *Scaffolder) checkExistingFluxInstance(sourceDir string) (string, error) {
-	crDetector := detector.NewGitOpsCRDetector(sourceDir)
-
-	existingPath, err := crDetector.FindFluxInstance()
-	if err != nil {
-		return "", fmt.Errorf(
-			"%w: failed to detect existing FluxInstance: %w",
-			ErrGitOpsConfigGeneration,
-			err,
-		)
-	}
-
-	return existingPath, nil
-}
-
-// createFluxInstanceManifest generates the FluxInstance CR file directly in the source directory.
-func (s *Scaffolder) createFluxInstanceManifest(sourceDir string, force bool) error {
-	outputPath := filepath.Join(sourceDir, "flux-instance.yaml")
-	displayName := filepath.Join(
-		s.KSailConfig.Spec.Workload.SourceDirectory,
-		"flux-instance.yaml",
-	)
-
-	opts := s.buildFluxInstanceOptions(outputPath, force)
-
-	skip, existed, previousModTime := s.checkFileExistsAndSkip(outputPath, displayName, force)
-	if skip {
-		return nil
-	}
-
-	_, err := s.FluxInstanceGenerator.Generate(opts)
-	if err != nil {
-		return fmt.Errorf("%w: %w", ErrGitOpsConfigGeneration, err)
-	}
-
-	if force && existed {
-		err = ensureOverwriteModTime(outputPath, previousModTime)
-		if err != nil {
-			return fmt.Errorf("failed to update mod time for %s: %w", displayName, err)
-		}
-	}
-
-	s.notifyFileAction(displayName, existed)
-
-	return nil
-}
-
-// buildFluxInstanceOptions constructs the options for FluxInstance generation.
-func (s *Scaffolder) buildFluxInstanceOptions(
-	outputPath string,
-	force bool,
-) fluxgenerator.InstanceGeneratorOptions {
-	localRegistry := s.KSailConfig.Spec.Cluster.LocalRegistry
-
-	// Check if using an external registry (e.g., ghcr.io, Docker Hub)
-	if localRegistry.IsExternal() {
-		parsed := localRegistry.Parse()
-
-		opts := fluxgenerator.InstanceGeneratorOptions{
-			Options: yamlgenerator.Options{
-				Output: outputPath,
-				Force:  force,
-			},
-			ProjectName:  parsed.Path,
-			RegistryHost: parsed.Host,
-			// External registries: use -1 to signal no port (HTTPS 443 is implicit)
-			RegistryPort: -1,
-			Ref:          registry.DefaultLocalArtifactTag,
-			Interval:     fluxgenerator.DefaultInterval,
-		}
-
-		// For external registries with credentials, reference the secret
-		if localRegistry.HasCredentials() {
-			opts.SecretName = fluxinstaller.ExternalRegistrySecretName
-		}
-
-		return opts
-	}
-
-	// Use sanitized source directory name to match what the push command uses
-	sourceDir := s.KSailConfig.Spec.Workload.SourceDirectory
-	if sourceDir == "" {
-		sourceDir = v1alpha1.DefaultSourceDirectory
-	}
-
-	repoName := registry.SanitizeRepoName(sourceDir)
-
-	// Resolve cluster name to build the registry container name for in-cluster access.
-	// The registry name must match what the provisioner creates (e.g., k3d-default-local-registry).
-	clusterName := s.resolveClusterNameForDistribution()
-	registryName := registry.BuildLocalRegistryName(clusterName)
-
-	return fluxgenerator.InstanceGeneratorOptions{
-		Options: yamlgenerator.Options{
-			Output: outputPath,
-			Force:  force,
-		},
-		ProjectName:  repoName,
-		RegistryHost: registryName,
-		// In-cluster registry always uses the internal port (5000), not the host-mapped port
-		RegistryPort: int32(dockerclient.DefaultRegistryPort),
-		Ref:          registry.DefaultLocalArtifactTag,
-		Interval:     fluxgenerator.DefaultInterval,
-	}
-}
-
-// resolveClusterNameForDistribution returns the cluster name for the configured distribution.
-// This is used for in-cluster registry naming.
-func (s *Scaffolder) resolveClusterNameForDistribution() string {
-	switch s.KSailConfig.Spec.Cluster.Distribution {
-	case v1alpha1.DistributionK3s:
-		return k3dconfigmanager.ResolveClusterName(&s.KSailConfig, nil)
-	case v1alpha1.DistributionVanilla:
-		return kindconfigmanager.DefaultClusterName
-	case v1alpha1.DistributionTalos:
-		return talosconfigmanager.DefaultClusterName
-	default:
-		return kindconfigmanager.DefaultClusterName
-	}
-}
-
-// generateArgoCDApplicationConfig generates an ArgoCD Application CR manifest.
-func (s *Scaffolder) generateArgoCDApplicationConfig(sourceDir string, force bool) error {
-	existingPath, err := s.checkExistingArgoCDApplication(sourceDir)
-	if err != nil {
-		return err
-	}
-
-	if existingPath != "" {
-		s.notifySkip("ArgoCD Application", existingPath)
-
-		return nil
-	}
-
-	return s.createArgoCDApplicationManifest(sourceDir, force)
-}
-
-// checkExistingArgoCDApplication checks if an ArgoCD Application already exists in the source directory.
-func (s *Scaffolder) checkExistingArgoCDApplication(sourceDir string) (string, error) {
-	crDetector := detector.NewGitOpsCRDetector(sourceDir)
-
-	existingPath, err := crDetector.FindArgoCDApplication()
-	if err != nil {
-		return "", fmt.Errorf(
-			"%w: failed to detect existing ArgoCD Application: %w",
-			ErrGitOpsConfigGeneration,
-			err,
-		)
-	}
-
-	return existingPath, nil
-}
-
-// createArgoCDApplicationManifest generates the ArgoCD Application CR file directly in the source directory.
-func (s *Scaffolder) createArgoCDApplicationManifest(sourceDir string, force bool) error {
-	outputPath := filepath.Join(sourceDir, "argocd-application.yaml")
-	displayName := filepath.Join(
-		s.KSailConfig.Spec.Workload.SourceDirectory,
-		"argocd-application.yaml",
-	)
-
-	opts := s.buildArgoCDApplicationOptions(outputPath, force)
-
-	skip, existed, previousModTime := s.checkFileExistsAndSkip(outputPath, displayName, force)
-	if skip {
-		return nil
-	}
-
-	_, err := s.ArgoCDAppGenerator.Generate(opts)
-	if err != nil {
-		return fmt.Errorf("%w: %w", ErrGitOpsConfigGeneration, err)
-	}
-
-	if force && existed {
-		err = ensureOverwriteModTime(outputPath, previousModTime)
-		if err != nil {
-			return fmt.Errorf("failed to update mod time for %s: %w", displayName, err)
-		}
-	}
-
-	s.notifyFileAction(displayName, existed)
-
-	return nil
-}
-
-// buildArgoCDApplicationOptions constructs the options for ArgoCD Application generation.
-func (s *Scaffolder) buildArgoCDApplicationOptions(
-	outputPath string,
-	force bool,
-) argocdgenerator.ApplicationGeneratorOptions {
-	localRegistry := s.KSailConfig.Spec.Cluster.LocalRegistry
-
-	// Check if using an external registry (e.g., ghcr.io, Docker Hub)
-	if localRegistry.IsExternal() {
-		parsed := localRegistry.Parse()
-
-		// For external registries, the path from the registry spec is the full repository path
-		return argocdgenerator.ApplicationGeneratorOptions{
-			Options: yamlgenerator.Options{
-				Output: outputPath,
-				Force:  force,
-			},
-			ProjectName:  parsed.Path,
-			RegistryHost: parsed.Host,
-			// External registries: use -1 to signal no port (HTTPS 443 is implicit)
-			RegistryPort: -1,
-		}
-	}
-
-	return argocdgenerator.ApplicationGeneratorOptions{
-		Options: yamlgenerator.Options{
-			Output: outputPath,
-			Force:  force,
-		},
-		ProjectName:  s.getProjectName(),
-		RegistryHost: "ksail-registry.localhost",
-		RegistryPort: localRegistry.ResolvedPort(),
-	}
-}
-
-// notifySkip sends a notification about skipping an existing resource.
-func (s *Scaffolder) notifySkip(resourceType, path string) {
-	notify.WriteMessage(notify.Message{
-		Type:    notify.InfoType,
-		Content: "skipping %s scaffolding: existing found at '%s'",
-		Args:    []any{resourceType, path},
-		Writer:  s.Writer,
-	})
-}
-
-// getProjectName derives the project name from the current directory.
-func (s *Scaffolder) getProjectName() string {
-	cwd, err := os.Getwd()
-	if err != nil {
-		return "ksail"
-	}
-
-	return filepath.Base(cwd)
 }
 
 // generateKustomizationConfig generates the kustomization.yaml file.
@@ -1159,21 +866,10 @@ func (s *Scaffolder) generateKustomizationConfig(output string, force bool) erro
 }
 
 // getKustomizationResources returns the resources to include in the kustomization.
+// GitOps resources (FluxInstance, ArgoCD Application) are created server-side via Kubernetes API,
+// not scaffolded, so this returns an empty slice.
 func (s *Scaffolder) getKustomizationResources() []string {
-	var resources []string
-
-	gitOpsEngine := s.KSailConfig.Spec.Cluster.GitOpsEngine
-
-	switch gitOpsEngine {
-	case v1alpha1.GitOpsEngineFlux:
-		resources = append(resources, "flux-instance.yaml")
-	case v1alpha1.GitOpsEngineArgoCD:
-		resources = append(resources, "argocd-application.yaml")
-	case v1alpha1.GitOpsEngineNone:
-		// No GitOps resources to add
-	}
-
-	return resources
+	return []string{}
 }
 
 // generateKindMirrorsConfig generates hosts.toml files for Kind registry mirrors.

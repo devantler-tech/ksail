@@ -2,13 +2,13 @@ package clusterprovisioner
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	kindconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/kind"
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
+	clustererrors "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/errors"
 	k3dprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/k3d"
 	kindprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/kind"
 	talosprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/talos"
@@ -17,14 +17,15 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-// ErrUnsupportedDistribution is returned when an unsupported distribution is specified.
-var ErrUnsupportedDistribution = errors.New("unsupported distribution")
-
-// ErrUnsupportedProvider is returned when an unsupported provider is specified.
-var ErrUnsupportedProvider = errors.New("unsupported provider")
-
-// ErrMissingDistributionConfig is returned when no pre-loaded distribution config is provided.
-var ErrMissingDistributionConfig = errors.New("missing distribution config")
+// Re-export errors for backward compatibility.
+var (
+	// ErrUnsupportedDistribution is returned when an unsupported distribution is specified.
+	ErrUnsupportedDistribution = clustererrors.ErrUnsupportedDistribution
+	// ErrUnsupportedProvider is returned when an unsupported provider is specified.
+	ErrUnsupportedProvider = clustererrors.ErrUnsupportedProvider
+	// ErrMissingDistributionConfig is returned when no pre-loaded distribution config is provided.
+	ErrMissingDistributionConfig = clustererrors.ErrMissingDistributionConfig
+)
 
 // DistributionConfig holds pre-loaded distribution-specific configuration.
 // This config is used directly by the factory, preserving any in-memory modifications
@@ -139,14 +140,20 @@ func applyKindNodeCounts(kindConfig *v1alpha4.Cluster, opts v1alpha1.OptionsTalo
 	// Build new nodes slice based on target counts
 	newNodes := make([]v1alpha4.Node, 0, targetCP+targetWorkers)
 
-	// Add control-plane nodes
+	// Add control-plane nodes with default image
 	for range targetCP {
-		newNodes = append(newNodes, v1alpha4.Node{Role: v1alpha4.ControlPlaneRole})
+		newNodes = append(newNodes, v1alpha4.Node{
+			Role:  v1alpha4.ControlPlaneRole,
+			Image: kindconfigmanager.DefaultKindNodeImage,
+		})
 	}
 
-	// Add worker nodes
+	// Add worker nodes with default image
 	for range targetWorkers {
-		newNodes = append(newNodes, v1alpha4.Node{Role: v1alpha4.WorkerRole})
+		newNodes = append(newNodes, v1alpha4.Node{
+			Role:  v1alpha4.WorkerRole,
+			Image: kindconfigmanager.DefaultKindNodeImage,
+		})
 	}
 
 	kindConfig.Nodes = newNodes
