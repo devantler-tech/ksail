@@ -15,6 +15,9 @@ on:
 
 permissions: read-all
 
+bots:
+  - "github-merge-queue[bot]"
+
 network: defaults
 
 safe-outputs:
@@ -26,7 +29,7 @@ tools:
     toolsets: [all]
   web-fetch:
   web-search:
-  # By default this workflow allows all bash commands within the confine of Github Actions VM 
+  # By default this workflow allows all bash commands within the confine of Github Actions VM
   bash: [ ":*" ]
 
 timeout-minutes: 15
