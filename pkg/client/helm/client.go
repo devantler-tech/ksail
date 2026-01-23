@@ -372,7 +372,7 @@ func convertRepositoryEntry(entry *RepositoryEntry) *repov1.Entry {
 		CertFile:              entry.CertFile,
 		KeyFile:               entry.KeyFile,
 		CAFile:                entry.CaFile,
-		InsecureSkipTLSverify: entry.InsecureSkipTLSverify,
+		InsecureSkipTLSVerify: entry.InsecureSkipTLSverify,
 	}
 }
 
@@ -609,7 +609,7 @@ func buildChartPathOptions(spec *ChartSpec, repoURL string) helmv4action.ChartPa
 		CertFile:              spec.CertFile,
 		KeyFile:               spec.KeyFile,
 		CaFile:                spec.CaFile,
-		InsecureSkipTLSverify: spec.InsecureSkipTLSverify,
+		InsecureSkipTLSVerify: spec.InsecureSkipTLSverify,
 	}
 }
 
