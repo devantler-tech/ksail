@@ -140,14 +140,20 @@ func applyKindNodeCounts(kindConfig *v1alpha4.Cluster, opts v1alpha1.OptionsTalo
 	// Build new nodes slice based on target counts
 	newNodes := make([]v1alpha4.Node, 0, targetCP+targetWorkers)
 
-	// Add control-plane nodes
+	// Add control-plane nodes with default image
 	for range targetCP {
-		newNodes = append(newNodes, v1alpha4.Node{Role: v1alpha4.ControlPlaneRole})
+		newNodes = append(newNodes, v1alpha4.Node{
+			Role:  v1alpha4.ControlPlaneRole,
+			Image: kindconfigmanager.DefaultKindNodeImage,
+		})
 	}
 
-	// Add worker nodes
+	// Add worker nodes with default image
 	for range targetWorkers {
-		newNodes = append(newNodes, v1alpha4.Node{Role: v1alpha4.WorkerRole})
+		newNodes = append(newNodes, v1alpha4.Node{
+			Role:  v1alpha4.WorkerRole,
+			Image: kindconfigmanager.DefaultKindNodeImage,
+		})
 	}
 
 	kindConfig.Nodes = newNodes

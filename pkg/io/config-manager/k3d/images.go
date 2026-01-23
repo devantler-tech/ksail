@@ -1,4 +1,4 @@
-package talos
+package k3d
 
 import (
 	_ "embed"
@@ -11,13 +11,9 @@ import (
 //go:embed Dockerfile
 var dockerfile string
 
-// talosImage returns the Talos container image reference from the embedded Dockerfile.
+// k3sImage returns the K3s container image reference from the embedded Dockerfile.
 // This ensures Go code stays in sync with Dependabot updates automatically.
 // Panics if the Dockerfile cannot be parsed - this catches embedding/format issues at init time.
-func talosImage() string {
-	return imageparser.ParseImageFromDockerfile(
-		dockerfile,
-		`FROM\s+(ghcr\.io/siderolabs/talos:[^\s]+)`,
-		"Talos",
-	)
+func k3sImage() string {
+	return imageparser.ParseImageFromDockerfile(dockerfile, `FROM\s+(rancher/k3s:[^\s]+)`, "K3s")
 }
