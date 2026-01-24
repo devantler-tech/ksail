@@ -2,6 +2,7 @@ package chat
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -152,7 +153,15 @@ func readFileTool() copilot.Tool {
 		Handler: withPathHandler(
 			true,
 			func(_ map[string]any, safePath string) (copilot.ToolResult, error) {
-				content, err := os.ReadFile(safePath)
+				file, err := os.Open(safePath)
+				if err != nil {
+					return failureResult(fmt.Sprintf("Error opening file: %v", err)), nil
+				}
+				defer file.Close()
+
+				// Use LimitReader to prevent excessive memory allocation for large files
+				limitedReader := io.LimitReader(file, maxFileSize+1)
+				content, err := io.ReadAll(limitedReader)
 				if err != nil {
 					return failureResult(fmt.Sprintf("Error reading file: %v", err)), nil
 				}
@@ -249,11 +258,17 @@ func writeFileTool() copilot.Tool {
 }
 
 // securePath validates and resolves a path, ensuring it stays within the working directory.
-// This prevents directory traversal attacks (e.g., ../../../etc/passwd).
+// This prevents directory traversal attacks (e.g., ../../../etc/passwd) and symlink escapes.
 func securePath(path string) (string, error) {
 	workDir, err := os.Getwd()
 	if err != nil {
 		return "", fmt.Errorf("could not get working directory: %w", err)
+	}
+
+	// Resolve symlinks in the working directory to get the real path
+	realWorkDir, err := filepath.EvalSymlinks(workDir)
+	if err != nil {
+		return "", fmt.Errorf("could not resolve working directory symlinks: %w", err)
 	}
 
 	// Resolve to absolute path
@@ -264,8 +279,32 @@ func securePath(path string) (string, error) {
 		absPath = filepath.Clean(filepath.Join(workDir, path))
 	}
 
-	// Ensure the resolved path is within or equal to the working directory
-	if !strings.HasPrefix(absPath, workDir) {
+	// Resolve symlinks in the target path to get the real destination
+	// This prevents symlink escape attacks where a symlink points outside workDir
+	realAbsPath, err := filepath.EvalSymlinks(absPath)
+	if err != nil {
+		// If the path doesn't exist yet (e.g., for write operations),
+		// resolve the parent directory and check that instead
+		if os.IsNotExist(err) {
+			parentDir := filepath.Dir(absPath)
+			realParentDir, parentErr := filepath.EvalSymlinks(parentDir)
+			if parentErr != nil {
+				return "", fmt.Errorf("could not resolve parent directory: %w", parentErr)
+			}
+			// For non-existent paths, check that the parent is within workDir
+			if !strings.HasPrefix(realParentDir+string(filepath.Separator), realWorkDir+string(filepath.Separator)) &&
+				realParentDir != realWorkDir {
+				return "", errPathAccessDenied
+			}
+			// Return the cleaned path (not the real path since it doesn't exist yet)
+			return absPath, nil
+		}
+		return "", fmt.Errorf("could not resolve path symlinks: %w", err)
+	}
+
+	// Ensure the resolved real path is within or equal to the real working directory
+	if !strings.HasPrefix(realAbsPath+string(filepath.Separator), realWorkDir+string(filepath.Separator)) &&
+		realAbsPath != realWorkDir {
 		return "", errPathAccessDenied
 	}
 

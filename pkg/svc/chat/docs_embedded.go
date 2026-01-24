@@ -1,5 +1,7 @@
 package chat
 
+// go:generate requires a Unix-like environment (Linux, macOS, or WSL on Windows).
+// The shell commands (rm -rf, cp -r) are not available on native Windows.
 //go:generate sh -c "rm -rf docs && cp -r ../../../docs/src/content/docs docs"
 
 import (

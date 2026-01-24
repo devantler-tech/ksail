@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -512,6 +513,12 @@ func buildCommandArgs(
 
 // runKSailCommand executes a KSail command with the given arguments.
 // It streams output in real-time through the OutputChan if configured.
+//
+// NOTE: This function creates its own context with CommandTimeout duration.
+// The Copilot SDK tool handlers don't accept a context parameter, so parent
+// cancellation (e.g., when the chat session ends) won't interrupt running commands.
+// Commands will continue until completion or timeout. This is a known limitation
+// of the current Copilot SDK design.
 func runKSailCommand(args []string, toolName string, opts ToolOptions) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), opts.CommandTimeout)
 	defer cancel()
@@ -601,8 +608,8 @@ func findKSailBinary() (string, error) {
 	// First, check if we're running as the ksail binary itself
 	executable, err := os.Executable()
 	if err == nil {
-		// If the executable is named "ksail", use it
-		if strings.HasSuffix(executable, "ksail") || strings.Contains(executable, "ksail") {
+		// Only accept if the binary is named exactly "ksail"
+		if filepath.Base(executable) == "ksail" {
 			return executable, nil
 		}
 	}
