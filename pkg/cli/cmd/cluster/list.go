@@ -319,7 +319,7 @@ func displayListResults(
 		// Format each cluster with explicit NAME= prefix for clarity
 		namedClusters := make([]string, len(clusters))
 		for i, name := range clusters {
-			namedClusters[i] = fmt.Sprintf("NAME=%s", name)
+			namedClusters[i] = "NAME=" + name
 		}
 
 		_, _ = fmt.Fprintf(

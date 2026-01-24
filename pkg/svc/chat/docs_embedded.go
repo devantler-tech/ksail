@@ -47,16 +47,19 @@ func buildEmbeddedDocumentation() string {
 			builder.WriteString("\n\n")
 			builder.WriteString(content)
 			builder.WriteString("\n")
+
 			loadedFiles[relPath] = true
 		}
 	}
 
 	// Load CLI flags documentation
 	builder.WriteString("\n## CLI Command Reference\n\n")
+
 	_ = fs.WalkDir(docsFS, "docs/cli-flags", func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() || loadedFiles[path] {
 			return nil
 		}
+
 		if !strings.HasSuffix(path, ".md") && !strings.HasSuffix(path, ".mdx") {
 			return nil
 		}
@@ -72,8 +75,10 @@ func buildEmbeddedDocumentation() string {
 			builder.WriteString("\n\n")
 			builder.WriteString(content)
 			builder.WriteString("\n")
+
 			loadedFiles[path] = true
 		}
+
 		return nil
 	})
 
@@ -82,9 +87,11 @@ func buildEmbeddedDocumentation() string {
 		if err != nil || d.IsDir() || loadedFiles[path] {
 			return nil
 		}
+
 		if !strings.HasSuffix(path, ".md") && !strings.HasSuffix(path, ".mdx") {
 			return nil
 		}
+
 		if strings.HasSuffix(path, "index.mdx") || strings.HasSuffix(path, "index.md") {
 			return nil
 		}
@@ -96,8 +103,10 @@ func buildEmbeddedDocumentation() string {
 			builder.WriteString("\n\n")
 			builder.WriteString(content)
 			builder.WriteString("\n")
+
 			loadedFiles[path] = true
 		}
+
 		return nil
 	})
 

@@ -19,7 +19,7 @@ import (
 )
 
 // enumValuer is implemented by flag Value types that provide valid enum values.
-// This matches the EnumValuer interface in pkg/apis/cluster/v1alpha1/enums.go
+// This matches the EnumValuer interface in pkg/apis/cluster/v1alpha1/enums.go.
 type enumValuer interface {
 	ValidValues() []string
 }
@@ -212,6 +212,7 @@ func shouldExclude(cmd *cobra.Command, opts ToolOptions) bool {
 
 	// Check exclusion list
 	cmdPath := cmd.CommandPath()
+
 	return slices.Contains(opts.ExcludeCommands, cmdPath)
 }
 
@@ -330,7 +331,11 @@ func flagToSchemaProperty(f *pflag.Flag) map[string]any {
 			// Add enum constraint for LLM to know valid options
 			prop["type"] = "string"
 			prop["enum"] = validValues
-			prop["description"] = fmt.Sprintf("%s (valid options: %s)", f.Usage, strings.Join(validValues, ", "))
+			prop["description"] = fmt.Sprintf(
+				"%s (valid options: %s)",
+				f.Usage,
+				strings.Join(validValues, ", "),
+			)
 
 			// Check if it also implements defaulter
 			if d, ok := f.Value.(defaulter); ok {
@@ -410,7 +415,7 @@ func buildHandler(cmd *cobra.Command, opts ToolOptions) copilot.ToolHandler {
 				),
 				ResultType:    "failure",
 				SessionLog:    fmt.Sprintf("[FAILED] %s: %v", fullCmd, err),
-				ToolTelemetry: map[string]interface{}{},
+				ToolTelemetry: map[string]any{},
 			}, nil
 		}
 
@@ -428,7 +433,7 @@ func buildHandler(cmd *cobra.Command, opts ToolOptions) copilot.ToolHandler {
 			),
 			ResultType:    "success",
 			SessionLog:    fmt.Sprintf("[SUCCESS] %s", fullCmd),
-			ToolTelemetry: map[string]interface{}{},
+			ToolTelemetry: map[string]any{},
 		}, nil
 	}
 }
@@ -544,11 +549,8 @@ func runKSailCommand(args []string, toolName string, opts ToolOptions) (string, 
 	)
 
 	// Stream stdout
-	wg.Add(1)
 
-	go func() {
-		defer wg.Done()
-
+	wg.Go(func() {
 		reader := bufio.NewReader(stdoutPipe)
 		for {
 			line, err := reader.ReadString('\n')
@@ -568,14 +570,11 @@ func runKSailCommand(args []string, toolName string, opts ToolOptions) (string, 
 				break
 			}
 		}
-	}()
+	})
 
 	// Stream stderr
-	wg.Add(1)
 
-	go func() {
-		defer wg.Done()
-
+	wg.Go(func() {
 		reader := bufio.NewReader(stderrPipe)
 		for {
 			line, err := reader.ReadString('\n')
@@ -595,7 +594,7 @@ func runKSailCommand(args []string, toolName string, opts ToolOptions) (string, 
 				break
 			}
 		}
-	}()
+	})
 
 	// Wait for pipes to be fully read before Wait() closes them
 	wg.Wait()
