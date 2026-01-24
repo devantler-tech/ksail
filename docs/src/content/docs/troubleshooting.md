@@ -53,8 +53,8 @@ docker system prune  # Clean up if needed
 **Solution:**
 
 ``````bash
-# Use a different local registry port
-ksail cluster init --local-registry-port 5050
+# Use a different local registry port by specifying host:port in --local-registry
+ksail cluster init --local-registry http://localhost:5050
 
 # Or find and stop the process using the port
 # macOS/Linux:
