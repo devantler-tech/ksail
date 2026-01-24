@@ -15,7 +15,11 @@ import (
 const (
 	dirPermissions  = 0o750 // rwxr-x---
 	filePermissions = 0o600 // rw-------
+	maxFileSize     = 50000 // Maximum file size for read operations
 )
+
+// errPathAccessDenied is returned when a path is outside the working directory.
+var errPathAccessDenied = fmt.Errorf("access denied: path must be within working directory")
 
 // GetKSailTools returns the tools available to the chat assistant.
 // It combines auto-generated tools from Cobra commands with manual file system tools.
@@ -37,6 +41,66 @@ func GetKSailTools(rootCmd *cobra.Command, outputChan chan<- generator.OutputChu
 	return append(generatedTools, fileSystemTools...)
 }
 
+// --- Tool Result Helpers ---
+
+// failureResult creates a failure ToolResult with the given message.
+func failureResult(message string) copilot.ToolResult {
+	return copilot.ToolResult{
+		TextResultForLLM: message,
+		ResultType:       "failure",
+	}
+}
+
+// successResult creates a success ToolResult with the given message.
+func successResult(message string) copilot.ToolResult {
+	return copilot.ToolResult{
+		TextResultForLLM: message,
+		ResultType:       "success",
+	}
+}
+
+// --- Parameter Extraction Helpers ---
+
+// extractParams extracts map parameters from tool invocation.
+// Returns params map and ok flag.
+func extractParams(invocation copilot.ToolInvocation) (map[string]any, bool) {
+	params, ok := invocation.Arguments.(map[string]any)
+
+	return params, ok
+}
+
+// extractStringParam extracts a string parameter from params map.
+func extractStringParam(params map[string]any, key string) string {
+	val, _ := params[key].(string)
+
+	return val
+}
+
+// extractAndValidatePath extracts path from params and validates it securely.
+// Returns the secure path and error (as ToolResult if failed).
+func extractAndValidatePath(params map[string]any, required bool) (string, *copilot.ToolResult) {
+	path := extractStringParam(params, "path")
+
+	if path == "" {
+		if required {
+			result := failureResult("Path is required")
+
+			return "", &result
+		}
+
+		path = "."
+	}
+
+	safePath, err := securePath(path)
+	if err != nil {
+		result := failureResult(fmt.Sprintf("Path error: %v", err))
+
+		return "", &result
+	}
+
+	return safePath, nil
+}
+
 // readFileTool reads the contents of a file.
 func readFileTool() copilot.Tool {
 	return copilot.Tool{
@@ -54,51 +118,27 @@ func readFileTool() copilot.Tool {
 			"required": []string{"path"},
 		},
 		Handler: func(invocation copilot.ToolInvocation) (copilot.ToolResult, error) {
-			params, ok := invocation.Arguments.(map[string]any)
+			params, ok := extractParams(invocation)
 			if !ok {
-				return copilot.ToolResult{
-					TextResultForLLM: "Invalid parameters",
-					ResultType:       "failure",
-				}, nil
+				return failureResult("Invalid parameters"), nil
 			}
 
-			path, _ := params["path"].(string)
-			if path == "" {
-				return copilot.ToolResult{
-					TextResultForLLM: "Path is required",
-					ResultType:       "failure",
-				}, nil
-			}
-
-			// Resolve and validate path security
-			safePath, err := securePath(path)
-			if err != nil {
-				return copilot.ToolResult{
-					TextResultForLLM: fmt.Sprintf("Path error: %v", err),
-					ResultType:       "failure",
-				}, nil
+			safePath, errResult := extractAndValidatePath(params, true)
+			if errResult != nil {
+				return *errResult, nil
 			}
 
 			content, err := os.ReadFile(safePath)
 			if err != nil {
-				return copilot.ToolResult{
-					TextResultForLLM: fmt.Sprintf("Error reading file: %v", err),
-					ResultType:       "failure",
-				}, nil
+				return failureResult(fmt.Sprintf("Error reading file: %v", err)), nil
 			}
-
-			// Truncate if too large
-			const maxSize = 50000
 
 			result := string(content)
-			if len(result) > maxSize {
-				result = result[:maxSize] + "\n... [truncated]"
+			if len(result) > maxFileSize {
+				result = result[:maxFileSize] + "\n... [truncated]"
 			}
 
-			return copilot.ToolResult{
-				TextResultForLLM: result,
-				ResultType:       "success",
-			}, nil
+			return successResult(result), nil
 		},
 	}
 }
@@ -119,34 +159,19 @@ func listDirectoryTool() copilot.Tool {
 			},
 		},
 		Handler: func(invocation copilot.ToolInvocation) (copilot.ToolResult, error) {
-			params, ok := invocation.Arguments.(map[string]any)
+			params, ok := extractParams(invocation)
 			if !ok {
-				return copilot.ToolResult{
-					TextResultForLLM: "Invalid parameters",
-					ResultType:       "failure",
-				}, nil
+				return failureResult("Invalid parameters"), nil
 			}
 
-			path, _ := params["path"].(string)
-			if path == "" {
-				path = "."
-			}
-
-			// Resolve and validate path security
-			safePath, err := securePath(path)
-			if err != nil {
-				return copilot.ToolResult{
-					TextResultForLLM: fmt.Sprintf("Path error: %v", err),
-					ResultType:       "failure",
-				}, nil
+			safePath, errResult := extractAndValidatePath(params, false)
+			if errResult != nil {
+				return *errResult, nil
 			}
 
 			entries, err := os.ReadDir(safePath)
 			if err != nil {
-				return copilot.ToolResult{
-					TextResultForLLM: fmt.Sprintf("Error listing directory: %v", err),
-					ResultType:       "failure",
-				}, nil
+				return failureResult(fmt.Sprintf("Error listing directory: %v", err)), nil
 			}
 
 			var result strings.Builder
@@ -162,10 +187,7 @@ func listDirectoryTool() copilot.Tool {
 				result.WriteString(fmt.Sprintf("  %s%s\n", entry.Name(), indicator))
 			}
 
-			return copilot.ToolResult{
-				TextResultForLLM: result.String(),
-				ResultType:       "success",
-			}, nil
+			return successResult(result.String()), nil
 		},
 	}
 }
@@ -191,58 +213,32 @@ func writeFileTool() copilot.Tool {
 			"required": []string{"path", "content"},
 		},
 		Handler: func(invocation copilot.ToolInvocation) (copilot.ToolResult, error) {
-			params, ok := invocation.Arguments.(map[string]any)
+			params, ok := extractParams(invocation)
 			if !ok {
-				return copilot.ToolResult{
-					TextResultForLLM: "Invalid parameters",
-					ResultType:       "failure",
-				}, nil
+				return failureResult("Invalid parameters"), nil
 			}
 
-			path, _ := params["path"].(string)
-			content, _ := params["content"].(string)
-
-			if path == "" {
-				return copilot.ToolResult{
-					TextResultForLLM: "Path is required",
-					ResultType:       "failure",
-				}, nil
+			safePath, errResult := extractAndValidatePath(params, true)
+			if errResult != nil {
+				return *errResult, nil
 			}
 
-			// Resolve and validate path security
-			safePath, err := securePath(path)
-			if err != nil {
-				return copilot.ToolResult{
-					TextResultForLLM: fmt.Sprintf("Path error: %v", err),
-					ResultType:       "failure",
-				}, nil
-			}
+			content := extractStringParam(params, "content")
 
 			// Create parent directories if needed
 			dir := filepath.Dir(safePath)
 			if err := os.MkdirAll(dir, dirPermissions); err != nil {
-				return copilot.ToolResult{
-					TextResultForLLM: fmt.Sprintf("Error creating directory: %v", err),
-					ResultType:       "failure",
-				}, nil
+				return failureResult(fmt.Sprintf("Error creating directory: %v", err)), nil
 			}
 
 			// Write the file
 			if err := os.WriteFile(safePath, []byte(content), filePermissions); err != nil {
-				return copilot.ToolResult{
-					TextResultForLLM: fmt.Sprintf("Error writing file: %v", err),
-					ResultType:       "failure",
-				}, nil
+				return failureResult(fmt.Sprintf("Error writing file: %v", err)), nil
 			}
 
-			return copilot.ToolResult{
-				TextResultForLLM: fmt.Sprintf(
-					"Successfully wrote %d bytes to %s",
-					len(content),
-					safePath,
-				),
-				ResultType: "success",
-			}, nil
+			msg := fmt.Sprintf("Successfully wrote %d bytes to %s", len(content), safePath)
+
+			return successResult(msg), nil
 		},
 	}
 }
@@ -270,6 +266,3 @@ func securePath(path string) (string, error) {
 
 	return absPath, nil
 }
-
-// errPathAccessDenied is returned when a path is outside the working directory.
-var errPathAccessDenied = fmt.Errorf("access denied: path must be within working directory")

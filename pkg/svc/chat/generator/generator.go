@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"slices"
@@ -511,8 +512,6 @@ func buildCommandArgs(
 
 // runKSailCommand executes a KSail command with the given arguments.
 // It streams output in real-time through the OutputChan if configured.
-//
-//nolint:gocognit // Streaming command execution requires complex control flow for pipe handling.
 func runKSailCommand(args []string, toolName string, opts ToolOptions) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), opts.CommandTimeout)
 	defer cancel()
@@ -558,12 +557,11 @@ func runKSailCommand(args []string, toolName string, opts ToolOptions) (string, 
 		waitGroup     sync.WaitGroup
 	)
 
-	// Stream stdout
-
-	waitGroup.Go(func() {
-		reader := bufio.NewReader(stdoutPipe)
+	// Stream stdout and stderr concurrently
+	streamPipe := func(pipe io.ReadCloser) {
+		reader := bufio.NewReader(pipe)
 		for {
-			line, err := reader.ReadString('\n')
+			line, readErr := reader.ReadString('\n')
 			if len(line) > 0 {
 				mutex.Lock()
 				outputBuilder.WriteString(line)
@@ -576,35 +574,14 @@ func runKSailCommand(args []string, toolName string, opts ToolOptions) (string, 
 				}
 			}
 
-			if err != nil {
+			if readErr != nil {
 				break
 			}
 		}
-	})
+	}
 
-	// Stream stderr
-
-	waitGroup.Go(func() {
-		reader := bufio.NewReader(stderrPipe)
-		for {
-			line, err := reader.ReadString('\n')
-			if len(line) > 0 {
-				mutex.Lock()
-				outputBuilder.WriteString(line)
-				mutex.Unlock()
-				// Send chunk to channel (non-blocking to avoid deadlock)
-				select {
-				case opts.OutputChan <- OutputChunk{ToolID: toolName, Chunk: line}:
-				default:
-					// Channel full, skip this chunk
-				}
-			}
-
-			if err != nil {
-				break
-			}
-		}
-	})
+	waitGroup.Go(func() { streamPipe(stdoutPipe) })
+	waitGroup.Go(func() { streamPipe(stderrPipe) })
 
 	// Wait for pipes to be fully read before Wait() closes them
 	waitGroup.Wait()

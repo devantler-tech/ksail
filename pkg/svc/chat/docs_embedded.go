@@ -58,51 +58,34 @@ func buildEmbeddedDocumentation() string {
 
 	// Load CLI flags documentation
 	builder.WriteString("\n## CLI Command Reference\n\n")
-
-	_ = fs.WalkDir(docsFS, "docs/cli-flags", func(path string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() || loadedFiles[path] {
-			return nil
-		}
-
-		if !strings.HasSuffix(path, ".md") && !strings.HasSuffix(path, ".mdx") {
-			return nil
-		}
-		// Skip index files
-		if strings.HasSuffix(path, "index.mdx") || strings.HasSuffix(path, "index.md") {
-			return nil
-		}
-
-		content, readErr := readEmbeddedDocFile(path)
-		if readErr == nil && content != "" {
-			builder.WriteString("\n### ")
-			builder.WriteString(extractTitleFromPath(path))
-			builder.WriteString("\n\n")
-			builder.WriteString(content)
-			builder.WriteString("\n")
-
-			loadedFiles[path] = true
-		}
-
-		return nil
-	})
+	processDocDirectory(&builder, "docs/cli-flags", "### ", loadedFiles)
 
 	// Load any remaining configuration files
-	_ = fs.WalkDir(docsFS, "docs/configuration", func(path string, d fs.DirEntry, err error) error {
+	processDocDirectory(&builder, "docs/configuration", "### ", loadedFiles)
+
+	return builder.String()
+}
+
+// processDocDirectory walks a directory and processes all doc files,
+// writing them to the builder with the specified title prefix.
+func processDocDirectory(
+	builder *strings.Builder,
+	dir, titlePrefix string,
+	loadedFiles map[string]bool,
+) {
+	_ = fs.WalkDir(docsFS, dir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() || loadedFiles[path] {
 			return nil
 		}
 
-		if !strings.HasSuffix(path, ".md") && !strings.HasSuffix(path, ".mdx") {
-			return nil
-		}
-
-		if strings.HasSuffix(path, "index.mdx") || strings.HasSuffix(path, "index.md") {
+		if !isDocFile(path) || isIndexFile(path) {
 			return nil
 		}
 
 		content, readErr := readEmbeddedDocFile(path)
 		if readErr == nil && content != "" {
-			builder.WriteString("\n### ")
+			builder.WriteString("\n")
+			builder.WriteString(titlePrefix)
 			builder.WriteString(extractTitleFromPath(path))
 			builder.WriteString("\n\n")
 			builder.WriteString(content)
@@ -113,8 +96,16 @@ func buildEmbeddedDocumentation() string {
 
 		return nil
 	})
+}
 
-	return builder.String()
+// isDocFile checks if a path is a markdown/mdx documentation file.
+func isDocFile(path string) bool {
+	return strings.HasSuffix(path, ".md") || strings.HasSuffix(path, ".mdx")
+}
+
+// isIndexFile checks if a path is an index file.
+func isIndexFile(path string) bool {
+	return strings.HasSuffix(path, "index.mdx") || strings.HasSuffix(path, "index.md")
 }
 
 // readEmbeddedDocFile reads a doc file from the embedded FS and strips frontmatter.
