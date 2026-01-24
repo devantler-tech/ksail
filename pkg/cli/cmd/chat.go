@@ -16,6 +16,7 @@ import (
 	chatui "github.com/devantler-tech/ksail/v5/pkg/cli/ui/chat"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	chatsvc "github.com/devantler-tech/ksail/v5/pkg/svc/chat"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/chat/generator"
 	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
 	copilot "github.com/github/copilot-sdk/go"
 	"github.com/spf13/cobra"
@@ -164,7 +165,6 @@ func handleChatRunE(cmd *cobra.Command) error {
 			Mode:    "append",
 			Content: systemContext,
 		},
-		Tools: chatsvc.GetKSailTools(),
 	}
 
 	if model != "" {
@@ -173,10 +173,11 @@ func handleChatRunE(cmd *cobra.Command) error {
 
 	// Start interactive loop - TUI or simple mode
 	if useTUI {
-		return runTUIChat(ctx, client, sessionConfig, timeout)
+		return runTUIChat(ctx, client, sessionConfig, timeout, cmd.Root())
 	}
 
-	// Non-TUI mode: use standard permission handler
+	// Non-TUI mode: use standard permission handler and tools without streaming
+	sessionConfig.Tools = chatsvc.GetKSailTools(cmd.Root(), nil)
 	sessionConfig.OnPermissionRequest = chatsvc.CreatePermissionHandler(writer)
 
 	// Create session
@@ -212,9 +213,26 @@ func runTUIChat(
 	client *copilot.Client,
 	sessionConfig *copilot.SessionConfig,
 	timeout time.Duration,
+	rootCmd *cobra.Command,
 ) error {
 	// Create event channel for TUI communication
 	eventChan := make(chan tea.Msg, 100)
+
+	// Create output channel for real-time tool output streaming
+	outputChan := make(chan generator.OutputChunk, 100)
+
+	// Forward output chunks to the TUI event channel
+	go func() {
+		for chunk := range outputChan {
+			eventChan <- chatui.ToolOutputChunkMsg{
+				ToolID: chunk.ToolID,
+				Chunk:  chunk.Chunk,
+			}
+		}
+	}()
+
+	// Set up tools with real-time output streaming
+	sessionConfig.Tools = chatsvc.GetKSailTools(rootCmd, outputChan)
 
 	// Set up permission handler that integrates with the TUI
 	sessionConfig.OnPermissionRequest = chatui.CreateTUIPermissionHandler(eventChan)
@@ -226,6 +244,7 @@ func runTUIChat(
 	}
 	// Cleanup with forced exit on interrupt to prevent hanging
 	defer func() {
+		close(outputChan) // Close output channel to stop forwarder goroutine
 		select {
 		case <-ctx.Done():
 			// If interrupted, force exit without waiting for cleanup

@@ -43,13 +43,14 @@ const (
 
 // toolExecution tracks a single tool invocation.
 type toolExecution struct {
-	id        string
-	name      string
-	command   string // The actual command being executed (e.g., "ksail cluster list --all")
-	status    toolStatus
-	output    string
-	expanded  bool // whether output is expanded in the view
-	startTime time.Time
+	id           string
+	name         string
+	command      string // The actual command being executed (e.g., "ksail cluster list --all")
+	status       toolStatus
+	output       string
+	expanded     bool // whether output is expanded in the view
+	startTime    time.Time
+	textPosition int // position in assistant response when tool was called
 }
 
 // humanizeToolName converts snake_case tool names to readable format.
@@ -144,6 +145,8 @@ type Model struct {
 	messages        []chatMessage
 	currentResponse strings.Builder
 	isStreaming     bool
+	justCompleted   bool // true when a response just finished, shows "Ready" indicator
+	userScrolled    bool // true when user has scrolled away from bottom (pause auto-scroll)
 	err             error
 	quitting        bool
 	ready           bool
@@ -176,14 +179,18 @@ type Model struct {
 }
 
 // New creates a new chat TUI model.
-func New(session *copilot.Session, timeout time.Duration) Model {
+func New(session *copilot.Session, timeout time.Duration) *Model {
 	return NewWithEventChannel(session, timeout, nil)
 }
 
 // NewWithEventChannel creates a new chat TUI model with an optional pre-existing event channel.
 // If eventChan is nil, a new channel is created. This allows external code to send events
 // to the TUI (e.g., permission requests).
-func NewWithEventChannel(session *copilot.Session, timeout time.Duration, eventChan chan tea.Msg) Model {
+func NewWithEventChannel(
+	session *copilot.Session,
+	timeout time.Duration,
+	eventChan chan tea.Msg,
+) *Model {
 	// Initialize textarea for user input
 	textArea := textarea.New()
 	textArea.Placeholder = "Ask me anything about Kubernetes, KSail, or cluster management..."
@@ -221,7 +228,7 @@ func NewWithEventChannel(session *copilot.Session, timeout time.Duration, eventC
 		eventChan = make(chan tea.Msg, 100)
 	}
 
-	return Model{
+	return &Model{
 		viewport:  viewPort,
 		textarea:  textArea,
 		spinner:   spin,
@@ -245,12 +252,12 @@ func (m *Model) GetEventChannel() chan tea.Msg {
 }
 
 // Init initializes the model and returns an initial command.
-func (m Model) Init() tea.Cmd {
+func (m *Model) Init() tea.Cmd {
 	return tea.Batch(textarea.Blink, m.spinner.Tick)
 }
 
 // Update handles messages and updates the model.
-func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
 	switch msg := msg.(type) {
@@ -277,8 +284,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case toolEndMsg:
 		return m.handleToolEnd(msg)
 
+	case toolOutputChunkMsg:
+		return m.handleToolOutputChunk(msg.toolID, msg.chunk)
+
+	case ToolOutputChunkMsg:
+		return m.handleToolOutputChunk(msg.ToolID, msg.Chunk)
+
 	case streamEndMsg:
 		return m.handleStreamEnd()
+
+	case turnEndMsg:
+		return m.handleTurnEnd()
 
 	case streamErrMsg:
 		return m.handleStreamErr(msg)
@@ -297,6 +313,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
 		cmds = append(cmds, cmd)
+		// Update viewport content if there are active tools or streaming to animate spinners
+		if m.isStreaming || m.hasRunningTools() {
+			m.updateViewportContent()
+		}
 
 	case tea.MouseMsg:
 		return m.handleMouseMsg(msg)
@@ -317,7 +337,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // View renders the TUI.
-func (m Model) View() string {
+func (m *Model) View() string {
 	if m.quitting {
 		goodbye := statusStyle.Render("  Goodbye! Thanks for using KSail.\n")
 		return logoStyle.Render(logo) + "\n\n" + goodbye
@@ -329,6 +349,8 @@ func (m Model) View() string {
 	headerContent := logoStyle.Render(logo) + "\n" + taglineStyle.Render("  "+tagline)
 	if m.isStreaming && !m.awaitingApproval {
 		headerContent += "  " + m.spinner.View() + " " + statusStyle.Render("Thinking...")
+	} else if m.justCompleted && !m.awaitingApproval {
+		headerContent += "  " + statusStyle.Render("Ready ✓")
 	}
 	header := headerBoxStyle.Width(m.width - 2).Render(headerContent)
 	sections = append(sections, header)
@@ -342,12 +364,46 @@ func (m Model) View() string {
 	if m.awaitingApproval && m.pendingPermission != nil {
 		// Build permission request display
 		var permBox strings.Builder
-		permBox.WriteString(warningStyle.Render("⚠ Permission Required") + "\n")
+		permBox.WriteString(warningStyle.Render("⚠ Permission Required") + "\n\n")
+
+		// Show command (most important) if available - highlight it prominently
 		if m.pendingPermission.command != "" {
-			permBox.WriteString(toolMsgStyle.Render("  $ " + m.pendingPermission.command))
+			permBox.WriteString(toolMsgStyle.Render("  $ "+m.pendingPermission.command) + "\n")
+		} else if m.pendingPermission.description != "" && m.pendingPermission.description != "shell" {
+			// Show description if no command and it's not just "shell"
+			permBox.WriteString(
+				helpStyle.Render("  Operation: ") + m.pendingPermission.description + "\n",
+			)
 		} else {
-			permBox.WriteString(toolMsgStyle.Render("  " + m.pendingPermission.toolName))
+			// Generic shell operation - show what we know
+			permBox.WriteString(helpStyle.Render("  Tool: ") + m.pendingPermission.toolName + "\n")
+			permBox.WriteString(helpStyle.Render("  Note: Shell command execution requested\n"))
+			permBox.WriteString(
+				helpStyle.Render("        (Command details not available from this tool)\n"),
+			)
 		}
+
+		// Show arguments if present (separate from command)
+		if len(m.pendingPermission.args) > 0 {
+			permBox.WriteString(
+				helpStyle.Render("  Args: ") + strings.Join(m.pendingPermission.args, " ") + "\n",
+			)
+		}
+
+		// Show file path if present
+		if m.pendingPermission.path != "" {
+			permBox.WriteString(helpStyle.Render("  Path: ") + m.pendingPermission.path + "\n")
+		}
+
+		// Show content preview if present (for file write operations)
+		if m.pendingPermission.content != "" {
+			lines := strings.Split(m.pendingPermission.content, "\n")
+			permBox.WriteString(helpStyle.Render("  Content:\n"))
+			for _, line := range lines {
+				permBox.WriteString(helpStyle.Render("    "+line) + "\n")
+			}
+		}
+
 		permBox.WriteString("\n")
 		permBox.WriteString(helpStyle.Render("  Press Y to approve, N to deny"))
 		inputContent = inputStyle.Width(m.width - 2).Render(permBox.String())
@@ -363,7 +419,7 @@ func (m Model) View() string {
 	} else if len(m.toolOrder) > 0 {
 		helpText = "  ⏎ Send • ⌥⏎ Newline • ⇥ Toggle Output • ^L Clear • esc Quit • Powered by GitHub Copilot"
 	} else {
-		helpText = "  ⏎ Send • ⌥⏎ Newline • ^L Clear • esc Quit • Powered by GitHub Copilot"
+		helpText = "  ⏎ Send • ⌥⏎ Newline • ^L Clear • ^T Toggle tools • esc Quit"
 	}
 	help := helpStyle.Render(helpText)
 	sections = append(sections, help)
@@ -372,7 +428,7 @@ func (m Model) View() string {
 }
 
 // handleKeyMsg handles keyboard input.
-func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Handle permission approval mode separately
 	if m.awaitingApproval {
 		return m.handleApprovalKey(msg)
@@ -425,6 +481,26 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, nil
+	case "ctrl+t":
+		// Toggle ALL tool outputs expanded/collapsed
+		if len(m.toolOrder) > 0 {
+			// Determine target state by checking first completed tool
+			expandAll := false
+			for _, id := range m.toolOrder {
+				if tool := m.tools[id]; tool != nil && tool.status != toolRunning {
+					expandAll = !tool.expanded
+					break
+				}
+			}
+			// Apply to all completed tools
+			for _, id := range m.toolOrder {
+				if tool := m.tools[id]; tool != nil && tool.status != toolRunning {
+					tool.expanded = expandAll
+				}
+			}
+			m.updateViewportContent()
+		}
+		return m, nil
 	case "enter":
 		// Send message on Enter
 		if !m.isStreaming && strings.TrimSpace(m.textarea.Value()) != "" {
@@ -432,6 +508,7 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.textarea.Reset()
 			// Set streaming immediately so spinner shows right away
 			m.isStreaming = true
+			m.justCompleted = false // Clear completion indicator
 			// Batch spinner tick with send command to start animation immediately
 			return m, tea.Batch(m.spinner.Tick, m.sendMessageCmd(content))
 		}
@@ -440,11 +517,15 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Update textarea for other keys
 	var taCmd tea.Cmd
 	m.textarea, taCmd = m.textarea.Update(msg)
+	// Clear completion indicator when user starts typing
+	if m.justCompleted {
+		m.justCompleted = false
+	}
 	return m, taCmd
 }
 
 // handleApprovalKey handles keyboard input when awaiting permission approval.
-func (m Model) handleApprovalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m *Model) handleApprovalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "ctrl+c":
 		m.cleanup()
@@ -477,12 +558,14 @@ func (m Model) handleApprovalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 // handleUserSubmit handles user message submission.
-func (m Model) handleUserSubmit(msg userSubmitMsg) (tea.Model, tea.Cmd) {
+func (m *Model) handleUserSubmit(msg userSubmitMsg) (tea.Model, tea.Cmd) {
 	m.messages = append(m.messages, chatMessage{
 		role:    "user",
 		content: msg.content,
 	})
 	m.isStreaming = true
+	m.justCompleted = false // Clear completion indicator
+	m.userScrolled = false  // Resume auto-scroll on new message
 	m.currentResponse.Reset()
 	m.messages = append(m.messages, chatMessage{
 		role:        "assistant",
@@ -495,7 +578,7 @@ func (m Model) handleUserSubmit(msg userSubmitMsg) (tea.Model, tea.Cmd) {
 }
 
 // handleStreamChunk handles streaming response chunks.
-func (m Model) handleStreamChunk(msg streamChunkMsg) (tea.Model, tea.Cmd) {
+func (m *Model) handleStreamChunk(msg streamChunkMsg) (tea.Model, tea.Cmd) {
 	if msg.content != "" {
 		m.currentResponse.WriteString(msg.content)
 		if len(m.messages) > 0 {
@@ -507,21 +590,25 @@ func (m Model) handleStreamChunk(msg streamChunkMsg) (tea.Model, tea.Cmd) {
 }
 
 // handleToolStart handles tool execution start events.
-func (m Model) handleToolStart(msg toolStartMsg) (tea.Model, tea.Cmd) {
+func (m *Model) handleToolStart(msg toolStartMsg) (tea.Model, tea.Cmd) {
 	// Generate tool ID if not provided
 	toolID := msg.toolID
 	if toolID == "" {
 		toolID = fmt.Sprintf("tool-%d", time.Now().UnixNano())
 	}
 
+	// Record current position in assistant response for interleaving
+	textPos := m.currentResponse.Len()
+
 	// Create tool execution entry
 	tool := &toolExecution{
-		id:        toolID,
-		name:      msg.toolName,
-		command:   msg.command,
-		status:    toolRunning,
-		expanded:  true, // expanded by default while running
-		startTime: time.Now(),
+		id:           toolID,
+		name:         msg.toolName,
+		command:      msg.command,
+		status:       toolRunning,
+		expanded:     true, // expanded by default while running
+		startTime:    time.Now(),
+		textPosition: textPos,
 	}
 	m.tools[toolID] = tool
 	m.toolOrder = append(m.toolOrder, toolID)
@@ -532,17 +619,32 @@ func (m Model) handleToolStart(msg toolStartMsg) (tea.Model, tea.Cmd) {
 }
 
 // handleToolEnd handles tool execution completion events.
-func (m Model) handleToolEnd(msg toolEndMsg) (tea.Model, tea.Cmd) {
-	// Find the tool by ID or by name (fallback for SDK compatibility)
+func (m *Model) handleToolEnd(msg toolEndMsg) (tea.Model, tea.Cmd) {
+	// Find the tool to complete. The SDK's ToolExecutionComplete event often
+	// doesn't include the tool name, so we use FIFO matching as primary strategy.
 	var tool *toolExecution
+
+	// Strategy 1: Try matching by tool ID if provided
 	if msg.toolID != "" {
 		tool = m.tools[msg.toolID]
 	}
-	if tool == nil {
-		// Fallback: find by name (last running tool with this name)
-		for i := len(m.toolOrder) - 1; i >= 0; i-- {
-			t := m.tools[m.toolOrder[i]]
+
+	// Strategy 2: Try matching by name if provided and not "unknown"
+	if tool == nil && msg.toolName != "" && msg.toolName != "unknown" {
+		for _, id := range m.toolOrder {
+			t := m.tools[id]
 			if t != nil && t.name == msg.toolName && t.status == toolRunning {
+				tool = t
+				break
+			}
+		}
+	}
+
+	// Strategy 3: FIFO - match the first running tool (SDK doesn't always provide name)
+	if tool == nil {
+		for _, id := range m.toolOrder {
+			t := m.tools[id]
+			if t != nil && t.status == toolRunning {
 				tool = t
 				break
 			}
@@ -556,18 +658,57 @@ func (m Model) handleToolEnd(msg toolEndMsg) (tea.Model, tea.Cmd) {
 		} else {
 			tool.status = toolFailed
 		}
-		tool.output = msg.output
-		tool.expanded = false // collapse after completion
+		// Only use SDK output if we didn't stream any output already
+		if tool.output == "" && msg.output != "" {
+			tool.output = msg.output
+		}
+		// Keep expanded so users can follow along with output (press Tab to collapse)
+		tool.expanded = true
 	}
 
 	m.updateViewportContent()
-	return m, m.waitForEvent()
+
+	// Continue waiting for events if streaming or more tools are running
+	if m.isStreaming || m.hasRunningTools() {
+		return m, m.waitForEvent()
+	}
+	// All tools done and not streaming, cleanup
+	m.cleanup()
+	return m, nil
 }
 
-// handleStreamEnd handles stream completion events.
-func (m Model) handleStreamEnd() (tea.Model, tea.Cmd) {
+// handleToolOutputChunk handles real-time output chunks from running tools.
+func (m *Model) handleToolOutputChunk(toolID, chunk string) (tea.Model, tea.Cmd) {
+	// The toolID from generator is actually the tool name (e.g., "ksail_cluster_list")
+	// Find the FIRST running tool that matches this name (FIFO order)
+	var tool *toolExecution
+	for _, id := range m.toolOrder {
+		t := m.tools[id]
+		if t != nil && t.name == toolID && t.status == toolRunning {
+			tool = t
+			break
+		}
+	}
+
+	if tool != nil {
+		// Append the chunk to the tool's output
+		tool.output += chunk
+		m.updateViewportContent()
+	}
+
+	// Continue waiting for events if streaming or tools are running
+	if m.isStreaming || m.hasRunningTools() {
+		return m, m.waitForEvent()
+	}
+	// All done, cleanup
+	m.cleanup()
+	return m, nil
+}
+
+// handleStreamEnd handles stream completion events (SessionIdle).
+func (m *Model) handleStreamEnd() (tea.Model, tea.Cmd) {
 	m.isStreaming = false
-	m.cleanup() // Clean up event subscription
+	m.justCompleted = true // Show "Ready" indicator
 	if len(m.messages) > 0 {
 		last := &m.messages[len(m.messages)-1]
 		last.isStreaming = false
@@ -576,12 +717,49 @@ func (m Model) handleStreamEnd() (tea.Model, tea.Cmd) {
 		last.rendered = renderMarkdownWithRenderer(m.renderer, last.content)
 	}
 	m.updateViewportContent()
-	// Don't wait for more events - response is complete
+	// Continue listening for events if there are still running tools
+	// DON'T cleanup until tools are done - we need to receive ToolExecutionComplete events
+	if m.hasRunningTools() {
+		return m, m.waitForEvent()
+	}
+	// All done, safe to cleanup
+	m.cleanup()
+	return m, nil
+}
+
+// handleTurnEnd handles assistant turn end events (AssistantTurnEnd).
+// Unlike handleStreamEnd, this is a "soft" completion signal. AssistantTurnEnd
+// fires after each turn, including intermediate turns where the assistant calls
+// tools. We only consider it complete if the assistant has produced a response.
+func (m *Model) handleTurnEnd() (tea.Model, tea.Cmd) {
+	// If there are running tools, keep waiting - more turns are coming
+	if m.hasRunningTools() {
+		return m, m.waitForEvent()
+	}
+
+	// If the assistant hasn't produced any response content yet, keep waiting
+	// This handles the case where the assistant only called tools on this turn
+	// and needs another turn to process the results and respond.
+	if m.currentResponse.Len() == 0 {
+		return m, m.waitForEvent()
+	}
+
+	// Assistant has produced content and no tools are running - we're done
+	m.isStreaming = false
+	m.justCompleted = true
+	if len(m.messages) > 0 {
+		last := &m.messages[len(m.messages)-1]
+		last.isStreaming = false
+		last.content = m.currentResponse.String()
+		last.rendered = renderMarkdownWithRenderer(m.renderer, last.content)
+	}
+	m.updateViewportContent()
+	m.cleanup()
 	return m, nil
 }
 
 // handleStreamErr handles streaming error events.
-func (m Model) handleStreamErr(msg streamErrMsg) (tea.Model, tea.Cmd) {
+func (m *Model) handleStreamErr(msg streamErrMsg) (tea.Model, tea.Cmd) {
 	m.isStreaming = false
 	m.cleanup() // Clean up event subscription
 	m.err = msg.err
@@ -595,7 +773,7 @@ func (m Model) handleStreamErr(msg streamErrMsg) (tea.Model, tea.Cmd) {
 }
 
 // handlePermissionRequest handles permission request events from the Copilot SDK.
-func (m Model) handlePermissionRequest(msg permissionRequestMsg) (tea.Model, tea.Cmd) {
+func (m *Model) handlePermissionRequest(msg permissionRequestMsg) (tea.Model, tea.Cmd) {
 	m.pendingPermission = &msg
 	m.awaitingApproval = true
 
@@ -609,16 +787,29 @@ func (m Model) handlePermissionRequest(msg permissionRequestMsg) (tea.Model, tea
 }
 
 // handleMouseMsg handles mouse events.
-func (m Model) handleMouseMsg(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
+func (m *Model) handleMouseMsg(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
+	// Track scroll position before update
+	wasAtBottom := m.viewport.AtBottom()
+
 	// Pass mouse events to viewport for scrolling
 	var vpCmd tea.Cmd
 	m.viewport, vpCmd = m.viewport.Update(msg)
+
+	// Detect user scrolling away from bottom (pause auto-scroll)
+	if wasAtBottom && !m.viewport.AtBottom() {
+		m.userScrolled = true
+	}
+	// Resume auto-scroll if user scrolls back to bottom
+	if m.viewport.AtBottom() {
+		m.userScrolled = false
+	}
+
 	return m, vpCmd
 }
 
 // waitForEvent returns a command that waits for an event from the channel.
 // Uses select to allow context cancellation.
-func (m Model) waitForEvent() tea.Cmd {
+func (m *Model) waitForEvent() tea.Cmd {
 	ctx := m.ctx
 	eventChan := m.eventChan
 	return func() tea.Msg {
@@ -637,15 +828,8 @@ func (m *Model) cleanup() {
 		m.unsubscribe()
 		m.unsubscribe = nil
 	}
-	// Drain any remaining events from the channel
-	for {
-		select {
-		case <-m.eventChan:
-			// Discard
-		default:
-			return
-		}
-	}
+	// Don't drain the channel - tool completion events may still be pending
+	// and need to be processed to update tool status indicators
 }
 
 // updateDimensions updates component dimensions based on terminal size.
@@ -659,9 +843,26 @@ func (m *Model) updateDimensions() {
 		viewportHeight = 5
 	}
 
+	oldWidth := m.viewport.Width
 	m.viewport.Width = contentWidth - 2
 	m.viewport.Height = viewportHeight
 	m.textarea.SetWidth(contentWidth - 2)
+
+	// If viewport width changed, recreate the renderer and re-render completed messages
+	if oldWidth != m.viewport.Width {
+		m.renderer = createRenderer(m.viewport.Width - 4)
+		m.reRenderCompletedMessages()
+	}
+}
+
+// reRenderCompletedMessages re-renders all completed assistant messages with the current renderer.
+func (m *Model) reRenderCompletedMessages() {
+	for i := range m.messages {
+		msg := &m.messages[i]
+		if msg.role == "assistant" && msg.content != "" {
+			msg.rendered = renderMarkdownWithRenderer(m.renderer, msg.content)
+		}
+	}
 }
 
 // updateViewportContent rebuilds the viewport content from message history.
@@ -705,37 +906,68 @@ func (m *Model) updateViewportContent() {
 			}
 			builder.WriteString("\n")
 
-			// Render any tools that belong to this response BEFORE the text
+			// Interleave tools with assistant text based on their textPosition
+			content := msg.content
+			lastPos := 0
+
+			// Render tools at their positions, interleaved with text
 			for toolIdx < len(m.toolOrder) {
 				tool := m.tools[m.toolOrder[toolIdx]]
 				if tool == nil {
 					toolIdx++
 					continue
 				}
+
+				// Render text before this tool's position
+				if tool.textPosition > lastPos && tool.textPosition <= len(content) {
+					textBefore := content[lastPos:tool.textPosition]
+					if textBefore != "" {
+						wrapped := wordwrap.WrapString(textBefore, wrapWidthUint)
+						for _, line := range strings.Split(wrapped, "\n") {
+							builder.WriteString("  ")
+							builder.WriteString(line)
+							builder.WriteString("\n")
+						}
+					}
+					lastPos = tool.textPosition
+				}
+
+				// Render the tool
 				m.renderToolInline(&builder, tool, wrapWidthUint)
 				toolIdx++
 			}
 
-			// Now render the assistant's text content
-			if msg.isStreaming {
-				if msg.content != "" {
-					wrapped := wordwrap.WrapString(msg.content, wrapWidthUint)
-					for _, line := range strings.Split(wrapped, "\n") {
-						builder.WriteString("  ")
-						builder.WriteString(line)
-						builder.WriteString("\n")
+			// Render remaining text after all tools
+			if lastPos < len(content) {
+				remainingText := content[lastPos:]
+				if remainingText != "" {
+					if msg.isStreaming {
+						wrapped := wordwrap.WrapString(remainingText, wrapWidthUint)
+						for _, line := range strings.Split(wrapped, "\n") {
+							builder.WriteString("  ")
+							builder.WriteString(line)
+							builder.WriteString("\n")
+						}
+					} else if msg.rendered != "" && lastPos == 0 {
+						// Use rendered markdown if no tools were interleaved
+						builder.WriteString(msg.rendered)
+					} else {
+						wrapped := wordwrap.WrapString(remainingText, wrapWidthUint)
+						for _, line := range strings.Split(wrapped, "\n") {
+							builder.WriteString("  ")
+							builder.WriteString(line)
+							builder.WriteString("\n")
+						}
 					}
 				}
-				builder.WriteString("  ▌")
-			} else if msg.rendered != "" {
+			} else if lastPos == 0 && !msg.isStreaming && msg.rendered != "" {
+				// No tools, use pre-rendered markdown
 				builder.WriteString(msg.rendered)
-			} else if msg.content != "" {
-				wrapped := wordwrap.WrapString(msg.content, wrapWidthUint)
-				for _, line := range strings.Split(wrapped, "\n") {
-					builder.WriteString("  ")
-					builder.WriteString(line)
-					builder.WriteString("\n")
-				}
+			}
+
+			// Show streaming cursor
+			if msg.isStreaming {
+				builder.WriteString("  ▌")
 			}
 			builder.WriteString("\n")
 
@@ -753,7 +985,10 @@ func (m *Model) updateViewportContent() {
 		}
 	}
 	m.viewport.SetContent(builder.String())
-	m.viewport.GotoBottom()
+	// Only auto-scroll if user hasn't manually scrolled up
+	if !m.userScrolled {
+		m.viewport.GotoBottom()
+	}
 }
 
 // renderToolInline renders a tool execution inline within an assistant response.
@@ -772,6 +1007,10 @@ func (m *Model) renderToolInline(builder *strings.Builder, tool *toolExecution, 
 		line := fmt.Sprintf("  %s %s", m.spinner.View(), displayName)
 		builder.WriteString(toolMsgStyle.Render(line))
 		builder.WriteString("\n")
+		// Show streaming output while running (always expanded during execution)
+		if tool.output != "" {
+			m.renderToolOutput(builder, tool.output, wrapWidth)
+		}
 
 	case toolSuccess:
 		// Completed: show checkmark with summary
@@ -849,7 +1088,7 @@ func (m *Model) getToolSummary(tool *toolExecution) string {
 
 // renderToolOutput renders tool output with proper indentation and truncation.
 func (m *Model) renderToolOutput(builder *strings.Builder, output string, wrapWidth uint) {
-	const maxOutputLines = 20
+	const maxOutputLines = 10 // Show 10 lines by default, press Tab to expand for full output
 	lines := strings.Split(output, "\n")
 	truncated := false
 
@@ -898,7 +1137,13 @@ func (m *Model) streamResponseCmd(userMessage string) tea.Cmd {
 					eventChan <- streamChunkMsg{content: *event.Data.DeltaContent}
 				}
 			case copilot.SessionIdle:
+				// SessionIdle means the session is truly idle - all turns complete
 				eventChan <- streamEndMsg{}
+			case copilot.AssistantTurnEnd:
+				// AssistantTurnEnd fires after each turn, including intermediate turns
+				// where the assistant calls tools. We use a "soft end" signal that
+				// only completes if the assistant has produced a response.
+				eventChan <- turnEndMsg{}
 			case copilot.SessionError:
 				var errMsg string
 				if event.Data.Message != nil {
@@ -1015,6 +1260,16 @@ func createSpinner() spinner.Model {
 	return s
 }
 
+// hasRunningTools returns true if any tools are currently running.
+func (m *Model) hasRunningTools() bool {
+	for _, tool := range m.tools {
+		if tool != nil && tool.status == toolRunning {
+			return true
+		}
+	}
+	return false
+}
+
 // CreateTUIPermissionHandler creates a permission handler that integrates with the TUI.
 // It sends permission requests to the provided event channel and waits for a response.
 // This allows the TUI to display permission prompts and collect user input.
@@ -1023,31 +1278,76 @@ func CreateTUIPermissionHandler(eventChan chan<- tea.Msg) copilot.PermissionHand
 		request copilot.PermissionRequest,
 		_ copilot.PermissionInvocation,
 	) (copilot.PermissionRequestResult, error) {
-		// Extract tool name
-		toolName := "unknown"
-		if name, ok := request.Extra["toolName"].(string); ok {
-			toolName = name
+		// Extract tool name from request.Extra
+		toolName := ""
+		if request.Extra != nil {
+			if name, ok := request.Extra["toolName"].(string); ok {
+				toolName = name
+			}
+		}
+		if toolName == "" {
+			toolName = request.Kind
 		}
 
-		// Extract command if available
+		// Humanize the tool name for display
+		humanName := humanizeToolName(toolName)
+
+		// Extract command from request.Extra if available
 		command := ""
-		if cmd, ok := request.Extra["command"].(string); ok {
-			command = cmd
+		if request.Extra != nil {
+			if cmd, ok := request.Extra["command"].(string); ok {
+				command = cmd
+			}
+			// Also check for 'text' field which might contain command details
+			if command == "" {
+				if text, ok := request.Extra["text"].(string); ok {
+					command = text
+				}
+			}
 		}
 
-		// Build description
-		description := ""
-		if request.Kind != "" {
-			description = request.Kind
+		// Extract arguments
+		var args []string
+		if request.Extra != nil {
+			if argsAny, ok := request.Extra["args"].([]any); ok {
+				for _, arg := range argsAny {
+					args = append(args, fmt.Sprintf("%v", arg))
+				}
+			}
 		}
+
+		// Extract file path
+		path := ""
+		if request.Extra != nil {
+			if p, ok := request.Extra["path"].(string); ok {
+				path = p
+			}
+		}
+
+		// Extract content (truncate for display)
+		content := ""
+		if request.Extra != nil {
+			if c, ok := request.Extra["content"].(string); ok {
+				content = c
+				if len(content) > 200 {
+					content = content[:200] + "..."
+				}
+			}
+		}
+
+		// Build description from Kind
+		description := request.Kind
 
 		// Create response channel
 		responseChan := make(chan bool, 1)
 
-		// Send permission request to TUI
+		// Send permission request to TUI - use humanized name for display
 		eventChan <- permissionRequestMsg{
-			toolName:    toolName,
+			toolName:    humanName,
 			command:     command,
+			args:        args,
+			path:        path,
+			content:     content,
 			description: description,
 			respondChan: responseChan,
 		}

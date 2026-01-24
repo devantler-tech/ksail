@@ -8,6 +8,11 @@ type streamChunkMsg struct {
 // streamEndMsg signals the end of a streamed response.
 type streamEndMsg struct{}
 
+// turnEndMsg signals the end of an assistant turn (may not be final).
+// Used for AssistantTurnEnd events which fire after each turn, including
+// intermediate turns where the assistant calls tools.
+type turnEndMsg struct{}
+
 // streamErrMsg carries an error encountered during streaming.
 type streamErrMsg struct {
 	err error
@@ -33,6 +38,18 @@ type toolEndMsg struct {
 	success  bool
 }
 
+// toolOutputChunkMsg carries a chunk of output from a running tool.
+type toolOutputChunkMsg struct {
+	toolID string
+	chunk  string
+}
+
+// ToolOutputChunkMsg is the exported version of toolOutputChunkMsg for external use.
+type ToolOutputChunkMsg struct {
+	ToolID string
+	Chunk  string
+}
+
 // unsubscribeMsg carries the unsubscribe function from the event subscription.
 type unsubscribeMsg struct {
 	fn func()
@@ -42,6 +59,9 @@ type unsubscribeMsg struct {
 type permissionRequestMsg struct {
 	toolName    string
 	command     string
+	args        []string
+	path        string
+	content     string
 	description string
 	respondChan chan<- bool // Channel to send the user's response
 }

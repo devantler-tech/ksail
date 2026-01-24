@@ -1,202 +1,34 @@
 package chat
 
 import (
-	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
-	"time"
 
+	"github.com/devantler-tech/ksail/v5/pkg/svc/chat/generator"
 	copilot "github.com/github/copilot-sdk/go"
+	"github.com/spf13/cobra"
 )
 
-// GetKSailTools returns the custom tools available to the chat assistant.
-// These tools wrap KSail commands and provide structured access to cluster operations.
-func GetKSailTools() []copilot.Tool {
-	return []copilot.Tool{
-		clusterListTool(),
-		clusterInfoTool(),
-		workloadGetTool(),
+// GetKSailTools returns the tools available to the chat assistant.
+// It combines auto-generated tools from Cobra commands with manual file system tools.
+// The rootCmd parameter should be the root Cobra command for the CLI.
+// The outputChan parameter enables real-time output streaming (can be nil).
+func GetKSailTools(rootCmd *cobra.Command, outputChan chan<- generator.OutputChunk) []copilot.Tool {
+	// Generate tools from the Cobra command tree
+	opts := generator.DefaultOptions()
+	opts.OutputChan = outputChan
+	generatedTools := generator.GenerateToolsFromCommand(rootCmd, opts)
+
+	// Add manual file system tools that aren't part of the CLI
+	fileSystemTools := []copilot.Tool{
 		readFileTool(),
 		listDirectoryTool(),
+		writeFileTool(),
 	}
-}
 
-// clusterListTool lists all KSail clusters.
-func clusterListTool() copilot.Tool {
-	return copilot.Tool{
-		Name:        "ksail_cluster_list",
-		Description: "List all KSail clusters. Use this to see available clusters before operating on them.",
-		Parameters: map[string]any{
-			"type": "object",
-			"properties": map[string]any{
-				"all": map[string]any{
-					"type":        "boolean",
-					"description": "Include stopped/exited clusters",
-				},
-			},
-		},
-		Handler: func(invocation copilot.ToolInvocation) (copilot.ToolResult, error) {
-			args := []string{"cluster", "list"}
-
-			if params, ok := invocation.Arguments.(map[string]any); ok {
-				if all, ok := params["all"].(bool); ok && all {
-					args = append(args, "--all")
-				}
-			}
-
-			output, err := RunKSailCommand(args...)
-			if err != nil {
-				return copilot.ToolResult{
-					TextResultForLLM: fmt.Sprintf(
-						"Error listing clusters: %v\nOutput: %s",
-						err,
-						output,
-					),
-					ResultType: "failure",
-				}, nil
-			}
-
-			return copilot.ToolResult{
-				TextResultForLLM: output,
-				ResultType:       "success",
-			}, nil
-		},
-	}
-}
-
-// clusterInfoTool gets information about a specific cluster.
-func clusterInfoTool() copilot.Tool {
-	return copilot.Tool{
-		Name: "ksail_cluster_info",
-		Description: "Get detailed information about a KSail cluster " +
-			"including nodes, status, and configuration.",
-		Parameters: map[string]any{
-			"type": "object",
-			"properties": map[string]any{
-				"name": map[string]any{
-					"type":        "string",
-					"description": "Name of the cluster (optional, uses current context if not specified)",
-				},
-			},
-		},
-		Handler: func(invocation copilot.ToolInvocation) (copilot.ToolResult, error) {
-			args := []string{"cluster", "info"}
-
-			if params, ok := invocation.Arguments.(map[string]any); ok {
-				if name, ok := params["name"].(string); ok && name != "" {
-					args = append(args, "--name", name)
-				}
-			}
-
-			output, err := RunKSailCommand(args...)
-			if err != nil {
-				return copilot.ToolResult{
-					TextResultForLLM: fmt.Sprintf(
-						"Error getting cluster info: %v\nOutput: %s",
-						err,
-						output,
-					),
-					ResultType: "failure",
-				}, nil
-			}
-
-			return copilot.ToolResult{
-				TextResultForLLM: output,
-				ResultType:       "success",
-			}, nil
-		},
-	}
-}
-
-// workloadGetTool gets Kubernetes resources from the cluster.
-func workloadGetTool() copilot.Tool {
-	return copilot.Tool{
-		Name: "ksail_workload_get",
-		Description: "Get Kubernetes resources from the cluster. " +
-			"Equivalent to 'kubectl get' but using KSail.",
-		Parameters: map[string]any{
-			"type": "object",
-			"properties": map[string]any{
-				"resource": map[string]any{
-					"type":        "string",
-					"description": "Resource type to get (e.g., pods, deployments, services, nodes)",
-				},
-				"name": map[string]any{
-					"type":        "string",
-					"description": "Specific resource name (optional)",
-				},
-				"namespace": map[string]any{
-					"type":        "string",
-					"description": "Namespace (optional, defaults to default namespace)",
-				},
-				"all_namespaces": map[string]any{
-					"type":        "boolean",
-					"description": "Get resources from all namespaces",
-				},
-				"output": map[string]any{
-					"type":        "string",
-					"description": "Output format: wide, yaml, json",
-					"enum":        []string{"wide", "yaml", "json"},
-				},
-			},
-			"required": []string{"resource"},
-		},
-		Handler: func(invocation copilot.ToolInvocation) (copilot.ToolResult, error) {
-			params, ok := invocation.Arguments.(map[string]any)
-			if !ok {
-				return copilot.ToolResult{
-					TextResultForLLM: "Invalid parameters",
-					ResultType:       "failure",
-				}, nil
-			}
-
-			resource, _ := params["resource"].(string)
-			if resource == "" {
-				return copilot.ToolResult{
-					TextResultForLLM: "Resource type is required",
-					ResultType:       "failure",
-				}, nil
-			}
-
-			args := []string{"workload", "get", resource}
-
-			if name, ok := params["name"].(string); ok && name != "" {
-				args = append(args, name)
-			}
-
-			if ns, ok := params["namespace"].(string); ok && ns != "" {
-				args = append(args, "-n", ns)
-			}
-
-			if allNs, ok := params["all_namespaces"].(bool); ok && allNs {
-				args = append(args, "-A")
-			}
-
-			if output, ok := params["output"].(string); ok && output != "" {
-				args = append(args, "-o", output)
-			}
-
-			output, err := RunKSailCommand(args...)
-			if err != nil {
-				return copilot.ToolResult{
-					TextResultForLLM: fmt.Sprintf(
-						"Error getting resources: %v\nOutput: %s",
-						err,
-						output,
-					),
-					ResultType: "failure",
-				}, nil
-			}
-
-			return copilot.ToolResult{
-				TextResultForLLM: output,
-				ResultType:       "success",
-			}, nil
-		},
-	}
+	return append(generatedTools, fileSystemTools...)
 }
 
 // readFileTool reads the contents of a file.
@@ -332,6 +164,83 @@ func listDirectoryTool() copilot.Tool {
 	}
 }
 
+// writeFileTool writes content to a file.
+func writeFileTool() copilot.Tool {
+	return copilot.Tool{
+		Name: "write_file",
+		Description: "Write content to a file. Useful for creating or modifying Kubernetes " +
+			"manifests, configuration files, etc. Only writes files within the working directory.",
+		Parameters: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"path": map[string]any{
+					"type":        "string",
+					"description": "Path to file (relative or absolute, must be within working directory)",
+				},
+				"content": map[string]any{
+					"type":        "string",
+					"description": "Content to write to the file",
+				},
+			},
+			"required": []string{"path", "content"},
+		},
+		Handler: func(invocation copilot.ToolInvocation) (copilot.ToolResult, error) {
+			params, ok := invocation.Arguments.(map[string]any)
+			if !ok {
+				return copilot.ToolResult{
+					TextResultForLLM: "Invalid parameters",
+					ResultType:       "failure",
+				}, nil
+			}
+
+			path, _ := params["path"].(string)
+			content, _ := params["content"].(string)
+
+			if path == "" {
+				return copilot.ToolResult{
+					TextResultForLLM: "Path is required",
+					ResultType:       "failure",
+				}, nil
+			}
+
+			// Resolve and validate path security
+			safePath, err := securePath(path)
+			if err != nil {
+				return copilot.ToolResult{
+					TextResultForLLM: fmt.Sprintf("Path error: %v", err),
+					ResultType:       "failure",
+				}, nil
+			}
+
+			// Create parent directories if needed
+			dir := filepath.Dir(safePath)
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				return copilot.ToolResult{
+					TextResultForLLM: fmt.Sprintf("Error creating directory: %v", err),
+					ResultType:       "failure",
+				}, nil
+			}
+
+			// Write the file
+			if err := os.WriteFile(safePath, []byte(content), 0o644); err != nil {
+				return copilot.ToolResult{
+					TextResultForLLM: fmt.Sprintf("Error writing file: %v", err),
+					ResultType:       "failure",
+				}, nil
+			}
+
+			return copilot.ToolResult{
+				TextResultForLLM: fmt.Sprintf(
+					"Successfully wrote %d bytes to %s",
+					len(content),
+					safePath,
+				),
+				ResultType: "success",
+			}, nil
+		},
+	}
+}
+
 // securePath validates and resolves a path, ensuring it stays within the working directory.
 // This prevents directory traversal attacks (e.g., ../../../etc/passwd).
 func securePath(path string) (string, error) {
@@ -358,25 +267,3 @@ func securePath(path string) (string, error) {
 
 // errPathAccessDenied is returned when a path is outside the working directory.
 var errPathAccessDenied = fmt.Errorf("access denied: path must be within working directory")
-
-// RunKSailCommand runs a ksail command and returns the combined stdout/stderr output.
-// It automatically locates the ksail executable using FindKSailExecutable.
-func RunKSailCommand(args ...string) (string, error) {
-	ksailPath := FindKSailExecutable()
-	if ksailPath == "" {
-		return "", errKSailNotFound
-	}
-
-	const commandTimeout = 60 * time.Second
-
-	ctx, cancel := context.WithTimeout(context.Background(), commandTimeout)
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, ksailPath, args...)
-	output, err := cmd.CombinedOutput()
-
-	return string(output), err
-}
-
-// errKSailNotFound is returned when the ksail executable cannot be located.
-var errKSailNotFound = fmt.Errorf("ksail executable not found in PATH or common locations")
