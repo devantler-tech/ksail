@@ -72,11 +72,6 @@ type ToolOutputChunkMsg struct {
 	Chunk  string
 }
 
-// unsubscribeMsg carries the unsubscribe function from the event subscription.
-type unsubscribeMsg struct {
-	fn func()
-}
-
 // permissionRequestMsg signals that a tool requires user approval before execution.
 type permissionRequestMsg struct {
 	toolName    string

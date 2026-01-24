@@ -51,7 +51,7 @@ By default, lists clusters from all distributions across all providers.
 Use --provider to filter results to a specific provider.
 
 Output Format:
-  PROVIDER=<provider>: NAME=<cluster_name>
+  PROVIDER=<provider> NAME=<cluster_name>
 
 The PROVIDER value (Docker or Hetzner) and NAME value (cluster name) from
 the output can be used directly with other cluster commands:
@@ -324,7 +324,7 @@ func displayListResults(
 
 		_, _ = fmt.Fprintf(
 			writer,
-			"PROVIDER=%s: %s\n",
+			"PROVIDER=%s %s\n",
 			strings.ToLower(string(prov)),
 			strings.Join(namedClusters, ", "),
 		)

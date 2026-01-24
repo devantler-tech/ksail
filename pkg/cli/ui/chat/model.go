@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -146,7 +147,6 @@ type Model struct {
 	currentResponse strings.Builder
 	isStreaming     bool
 	justCompleted   bool // true when a response just finished, shows "Ready" indicator
-	sessionComplete bool // true when SessionIdle received - stops waiting for more events
 	userScrolled    bool // true when user has scrolled away from bottom (pause auto-scroll)
 	err             error
 	quitting        bool
@@ -155,8 +155,13 @@ type Model struct {
 	// Tool execution tracking
 	tools            map[string]*toolExecution // keyed by tool ID
 	toolOrder        []string                  // ordered list of tool IDs for rendering
-	pendingToolCount int                       // count of tools started but not yet completed
-	lastToolCall     string                    // last tool call signature for duplicate detection
+	pendingToolCount int                       // number of tools awaiting completion
+	lastToolCall     time.Time                 // timestamp of most recent tool start
+
+	// Session completion tracking
+	sessionComplete bool       // true when SessionIdle has been received
+	unsubscribe     func()     // function to unsubscribe from session events
+	unsubscribeMu   sync.Mutex // protects unsubscribe access
 
 	// Permission request state
 	pendingPermission *permissionRequestMsg
@@ -176,9 +181,6 @@ type Model struct {
 
 	// Channel for async streaming events from Copilot
 	eventChan chan tea.Msg
-
-	// Cleanup function for event subscription
-	unsubscribe func()
 }
 
 // New creates a new chat TUI model.
@@ -316,12 +318,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case permissionRequestMsg:
 		return m.handlePermissionRequest(msg)
-
-	case unsubscribeMsg:
-		// Store unsubscribe function for cleanup
-		m.unsubscribe = msg.fn
-		// Continue waiting for actual content events
-		return m, m.waitForEvent()
 
 	case spinner.TickMsg:
 		// Always update spinner to keep it ticking
@@ -574,23 +570,17 @@ func (m *Model) handleApprovalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // handleUserSubmit handles user message submission.
 func (m *Model) handleUserSubmit(msg userSubmitMsg) (tea.Model, tea.Cmd) {
-	// Clean up any previous subscription before starting a new one
-	if m.unsubscribe != nil {
-		m.unsubscribe()
-		m.unsubscribe = nil
-	}
-
 	// Drain any stale events from previous conversation turn
 	// This prevents old events from interfering with the new message
 	m.drainEventChannel()
 
 	// Clear tool state for new conversation turn
-	// Keep tool history visible but reset running state tracking
 	m.tools = make(map[string]*toolExecution)
 	m.toolOrder = make([]string, 0)
-	m.pendingToolCount = 0   // Reset pending tool count
-	m.sessionComplete = false // Reset session complete flag
-	m.lastToolCall = ""       // Reset duplicate detection
+
+	// Reset completion tracking state for new turn
+	m.sessionComplete = false
+	m.pendingToolCount = 0
 
 	m.messages = append(m.messages, chatMessage{
 		role:    "user",
@@ -664,9 +654,6 @@ func (m *Model) handleAssistantMessage(msg assistantMessageMsg) (tea.Model, tea.
 
 // handleToolStart handles tool execution start events.
 func (m *Model) handleToolStart(msg toolStartMsg) (tea.Model, tea.Cmd) {
-	// Increment pending tool count for reliable completion tracking
-	m.pendingToolCount++
-
 	// Generate tool ID if not provided
 	toolID := msg.toolID
 	if toolID == "" {
@@ -688,6 +675,10 @@ func (m *Model) handleToolStart(msg toolStartMsg) (tea.Model, tea.Cmd) {
 	}
 	m.tools[toolID] = tool
 	m.toolOrder = append(m.toolOrder, toolID)
+
+	// Track pending tools for proper completion detection
+	m.pendingToolCount++
+	m.lastToolCall = time.Now()
 
 	// DON'T insert tool as separate message - render inline with assistant response
 	m.updateViewportContent()
@@ -727,12 +718,6 @@ func (m *Model) handleToolEnd(msg toolEndMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	// Decrement pending tool count regardless of whether we found the tool
-	// This ensures our count stays in sync with SDK events
-	if m.pendingToolCount > 0 {
-		m.pendingToolCount--
-	}
-
 	if tool != nil {
 		// Update tool status
 		if msg.success {
@@ -746,13 +731,24 @@ func (m *Model) handleToolEnd(msg toolEndMsg) (tea.Model, tea.Cmd) {
 		}
 		// Keep expanded so users can follow along with output (press Tab to collapse)
 		tool.expanded = true
+
+		// Track pending tools for proper completion detection
+		m.pendingToolCount--
+		if m.pendingToolCount < 0 {
+			m.pendingToolCount = 0 // Safety guard
+		}
 	}
 
 	m.updateViewportContent()
 
+	// Check if we can finalize (sessionComplete and no pending tools)
+	if m.sessionComplete && m.pendingToolCount == 0 {
+		return m.tryFinalizeResponse()
+	}
+
 	// Always keep waiting for events after tool completion.
 	// The SDK will fire another turn for the assistant to process results and respond.
-	// Only AssistantTurnEnd (with response content) or SessionIdle should trigger cleanup.
+	// SessionIdle will signal when the entire turn (including tool result processing) is complete.
 	return m, m.waitForEvent()
 }
 
@@ -780,18 +776,30 @@ func (m *Model) handleToolOutputChunk(toolID, chunk string) (tea.Model, tea.Cmd)
 }
 
 // handleStreamEnd handles stream completion events (SessionIdle).
-// SessionIdle means the session has finished processing. However, if tools are
-// still pending, we keep waiting for their completion.
+// SessionIdle means the session has truly finished processing.
+// Per SDK best practices, SessionIdle is the authoritative signal for turn completion.
 func (m *Model) handleStreamEnd() (tea.Model, tea.Cmd) {
-	// If there are pending tools, keep waiting - don't mark as complete yet
-	if m.pendingToolCount > 0 || m.hasRunningTools() {
-		return m, m.waitForEvent()
+	// Mark session as complete
+	m.sessionComplete = true
+
+	// Check if we can finalize (no pending tools)
+	if m.pendingToolCount == 0 {
+		return m.tryFinalizeResponse()
 	}
 
-	// Truly complete - mark session as finished
+	// Still have pending tools - wait for them to complete
+	// The tool end handlers will check sessionComplete and finalize when ready
+	return m, m.waitForEvent()
+}
+
+// tryFinalizeResponse attempts to finalize the assistant response.
+// Called when both sessionComplete is true AND pendingToolCount is 0.
+// This ensures all tool events have been processed before we stop listening.
+func (m *Model) tryFinalizeResponse() (tea.Model, tea.Cmd) {
+	// Finalize the response
 	m.isStreaming = false
-	m.justCompleted = true  // Show "Ready" indicator
-	m.sessionComplete = true // Stop waiting for more events
+	m.justCompleted = true // Show "Ready" indicator
+
 	if len(m.messages) > 0 {
 		last := &m.messages[len(m.messages)-1]
 		last.isStreaming = false
@@ -799,39 +807,18 @@ func (m *Model) handleStreamEnd() (tea.Model, tea.Cmd) {
 		// Render markdown using cached renderer (avoids terminal queries)
 		last.rendered = renderMarkdownWithRenderer(m.renderer, last.content)
 	}
+
 	m.updateViewportContent()
-	m.cleanup() // Unsubscribe from events - session is complete
+	m.cleanup() // Clean up event subscription
 	return m, nil
 }
 
 // handleTurnEnd handles assistant turn end events (AssistantTurnEnd).
 // AssistantTurnEnd fires after each turn, including intermediate turns where the
-// assistant calls tools. We only mark as complete if there's content and no pending tools.
+// assistant calls tools. We always wait for SessionIdle for authoritative completion.
 func (m *Model) handleTurnEnd() (tea.Model, tea.Cmd) {
-	// If there are pending tools, keep waiting - more turns are coming
-	if m.pendingToolCount > 0 || m.hasRunningTools() {
-		return m, m.waitForEvent()
-	}
-
-	// If the assistant hasn't produced any response content yet, keep waiting
-	// This handles the case where the assistant only called tools on this turn
-	// and needs another turn to process the results and respond.
-	if m.currentResponse.Len() == 0 {
-		return m, m.waitForEvent()
-	}
-
-	// Assistant has produced content and no tools are pending - we're done
-	m.isStreaming = false
-	m.justCompleted = true
-	m.sessionComplete = true // Mark session as complete
-	if len(m.messages) > 0 {
-		last := &m.messages[len(m.messages)-1]
-		last.isStreaming = false
-		last.content = m.currentResponse.String()
-		last.rendered = renderMarkdownWithRenderer(m.renderer, last.content)
-	}
-	m.updateViewportContent()
-	// Keep waiting for SessionIdle to confirm completion
+	// TurnEnd is informational - always wait for SessionIdle for completion
+	// This ensures tool results are fully processed before we stop listening
 	return m, m.waitForEvent()
 }
 
@@ -841,7 +828,6 @@ func (m *Model) handleTurnStart() (tea.Model, tea.Cmd) {
 	// Ensure we're in streaming mode when a new turn starts
 	m.isStreaming = true
 	m.justCompleted = false
-	m.sessionComplete = false // New turn means session is active again
 	m.updateViewportContent()
 	return m, m.waitForEvent()
 }
@@ -944,12 +930,20 @@ func (m *Model) waitForEvent() tea.Cmd {
 
 // cleanup releases resources when streaming ends or is cancelled.
 func (m *Model) cleanup() {
+	// Unsubscribe from session events (thread-safe)
+	m.unsubscribeMu.Lock()
 	if m.unsubscribe != nil {
 		m.unsubscribe()
 		m.unsubscribe = nil
 	}
-	// Don't drain the channel - tool completion events may still be pending
-	// and need to be processed to update tool status indicators
+	m.unsubscribeMu.Unlock()
+
+	// Reset completion tracking state
+	m.sessionComplete = false
+	m.pendingToolCount = 0
+
+	// Drain any remaining events to prevent blocking
+	m.drainEventChannel()
 }
 
 // updateDimensions updates component dimensions based on terminal size.
@@ -1245,16 +1239,18 @@ func (m *Model) sendMessageCmd(content string) tea.Cmd {
 }
 
 // streamResponseCmd creates a command that streams the Copilot response.
+// It implements the per-turn subscribe pattern: subscribe, send, events flow to channel,
+// unsubscribe is stored in the model for cleanup() to call when complete.
 func (m *Model) streamResponseCmd(userMessage string) tea.Cmd {
 	session := m.session
 	eventChan := m.eventChan
 
 	return func() tea.Msg {
-		// Set up event handler to send events to the channel
+		// Subscribe for this turn's events and store unsubscribe in the model
 		unsubscribe := session.On(func(event copilot.SessionEvent) {
 			switch event.Type {
 			case copilot.AssistantTurnStart:
-				// New turn started - reset streaming state
+				// New turn started
 				eventChan <- turnStartMsg{}
 			case copilot.AssistantMessageDelta:
 				// Streaming message chunk - incremental text
@@ -1263,13 +1259,11 @@ func (m *Model) streamResponseCmd(userMessage string) tea.Cmd {
 				}
 			case copilot.AssistantMessage:
 				// Final complete message - SDK always sends this regardless of streaming
-				// This is more reliable than tracking deltas for completion detection
 				if event.Data.Content != nil {
 					eventChan <- assistantMessageMsg{content: *event.Data.Content}
 				}
 			case copilot.AssistantReasoning, copilot.AssistantReasoningDelta:
 				// Reasoning events - LLM is "thinking"
-				// We track these to know the LLM is actively processing
 				var content string
 				if event.Data.Content != nil {
 					content = *event.Data.Content
@@ -1282,14 +1276,13 @@ func (m *Model) streamResponseCmd(userMessage string) tea.Cmd {
 				}
 			case copilot.SessionIdle:
 				// SessionIdle means the session is truly idle - all turns complete
+				// This is the authoritative completion signal per SDK best practices
 				eventChan <- streamEndMsg{}
 			case copilot.AssistantTurnEnd:
 				// AssistantTurnEnd fires after each turn, including intermediate turns
-				// where the assistant calls tools. We use a "soft end" signal that
-				// only completes if the assistant has produced a response.
 				eventChan <- turnEndMsg{}
 			case copilot.Abort:
-				// Session aborted - signal error and stop
+				// Session aborted
 				eventChan <- abortMsg{}
 			case copilot.SessionError:
 				var errMsg string
@@ -1323,16 +1316,26 @@ func (m *Model) streamResponseCmd(userMessage string) tea.Cmd {
 			}
 		})
 
-		// Store unsubscribe for cleanup - send via message to update model
-		eventChan <- unsubscribeMsg{fn: unsubscribe}
+		// Store unsubscribe in the model (thread-safe) for cleanup() to call
+		m.unsubscribeMu.Lock()
+		m.unsubscribe = unsubscribe
+		m.unsubscribeMu.Unlock()
 
 		// Send the message
 		_, err := session.Send(copilot.MessageOptions{Prompt: userMessage})
 		if err != nil {
-			unsubscribe()
+			// Clean up on error
+			m.unsubscribeMu.Lock()
+			if m.unsubscribe != nil {
+				m.unsubscribe()
+				m.unsubscribe = nil
+			}
+			m.unsubscribeMu.Unlock()
 			return streamErrMsg{err: err}
 		}
 
+		// Event handler will send events to eventChan
+		// tryFinalizeResponse() will call cleanup() when done
 		return nil
 	}
 }

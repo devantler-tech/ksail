@@ -60,14 +60,107 @@ type OutputChunk struct {
 }
 
 // DefaultOptions returns sensible default options for tool generation.
+// The exclusion list is designed to keep the tool count manageable for LLMs.
+// Too many tools (50+) overwhelms the model's context and causes confusion.
+// We focus on ~20 essential tools that cover 95% of use cases.
 func DefaultOptions() ToolOptions {
 	return ToolOptions{
 		ExcludeCommands: []string{
+			// Meta commands - not useful as tools
 			"ksail chat",       // Don't expose chat command as a tool
 			"ksail completion", // Shell completion not useful as tool
+
+			// Cluster info dump - rarely needed in chat
+			"ksail cluster info dump",
+
+			// Workload apply subcommands - rarely used, apply is enough
+			"ksail workload apply edit-last-applied",
+			"ksail workload apply set-last-applied",
+			"ksail workload apply view-last-applied",
+
+			// Workload create - use workload apply instead for most cases
+			// Keep only: configmap, deployment, namespace (most common)
+			"ksail workload create clusterrole",
+			"ksail workload create clusterrolebinding",
+			"ksail workload create cronjob",
+			"ksail workload create helmrelease",
+			"ksail workload create ingress",
+			"ksail workload create job",
+			"ksail workload create kustomization",
+			"ksail workload create poddisruptionbudget",
+			"ksail workload create priorityclass",
+			"ksail workload create quota",
+			"ksail workload create role",
+			"ksail workload create rolebinding",
+			"ksail workload create secret",
+			"ksail workload create secret docker-registry",
+			"ksail workload create secret generic",
+			"ksail workload create secret tls",
+			"ksail workload create service",
+			"ksail workload create service clusterip",
+			"ksail workload create service externalname",
+			"ksail workload create service loadbalancer",
+			"ksail workload create service nodeport",
+			"ksail workload create serviceaccount",
+			"ksail workload create source",
+			"ksail workload create source git",
+			"ksail workload create source helm",
+			"ksail workload create source oci",
+			"ksail workload create token",
+
+			// Workload gen - use workload create or apply instead
+			"ksail workload gen",
+			"ksail workload gen clusterrole",
+			"ksail workload gen clusterrolebinding",
+			"ksail workload gen configmap",
+			"ksail workload gen cronjob",
+			"ksail workload gen deployment",
+			"ksail workload gen helmrelease",
+			"ksail workload gen ingress",
+			"ksail workload gen job",
+			"ksail workload gen namespace",
+			"ksail workload gen poddisruptionbudget",
+			"ksail workload gen priorityclass",
+			"ksail workload gen quota",
+			"ksail workload gen role",
+			"ksail workload gen rolebinding",
+			"ksail workload gen secret",
+			"ksail workload gen secret docker-registry",
+			"ksail workload gen secret generic",
+			"ksail workload gen secret tls",
+			"ksail workload gen service",
+			"ksail workload gen service clusterip",
+			"ksail workload gen service externalname",
+			"ksail workload gen service loadbalancer",
+			"ksail workload gen service nodeport",
+			"ksail workload gen serviceaccount",
+
+			// Workload rollout subcommands - use kubectl directly if needed
+			"ksail workload rollout",
+			"ksail workload rollout history",
+			"ksail workload rollout pause",
+			"ksail workload rollout restart",
+			"ksail workload rollout resume",
+			"ksail workload rollout status",
+			"ksail workload rollout undo",
+
+			// Advanced workload commands - less commonly needed
+			"ksail workload edit",
+			"ksail workload explain",
+			"ksail workload export",
+			"ksail workload expose",
+			"ksail workload import",
+			"ksail workload install",
+			"ksail workload push",
+			"ksail workload scale",
+			"ksail workload validate",
+			"ksail workload wait",
+
+			// Keep: cluster (all), workload apply/get/describe/delete/logs/exec/reconcile,
+			// cipher (all), plus file system tools = ~25 tools
 		},
 		IncludeHidden:  false,
-		CommandTimeout: 60 * time.Second,
+		CommandTimeout: 5 * time.Minute,
 	}
 }
 
@@ -315,8 +408,9 @@ func buildHandler(cmd *cobra.Command, opts ToolOptions) copilot.ToolHandler {
 					err,
 					output,
 				),
-				ResultType: "failure",
-				SessionLog: fmt.Sprintf("[FAILED] %s: %v", fullCmd, err),
+				ResultType:    "failure",
+				SessionLog:    fmt.Sprintf("[FAILED] %s: %v", fullCmd, err),
+				ToolTelemetry: map[string]interface{}{},
 			}, nil
 		}
 
@@ -332,8 +426,9 @@ func buildHandler(cmd *cobra.Command, opts ToolOptions) copilot.ToolHandler {
 				fullCmd,
 				resultText,
 			),
-			ResultType: "success",
-			SessionLog: fmt.Sprintf("[SUCCESS] %s", fullCmd),
+			ResultType:    "success",
+			SessionLog:    fmt.Sprintf("[SUCCESS] %s", fullCmd),
+			ToolTelemetry: map[string]interface{}{},
 		}, nil
 	}
 }
