@@ -22,6 +22,7 @@ type userSubmitMsg struct {
 type toolStartMsg struct {
 	toolID   string
 	toolName string
+	command  string // The actual command being executed (e.g., "ksail cluster list --all")
 }
 
 // toolEndMsg signals the completion of a tool execution with its output.
@@ -35,4 +36,12 @@ type toolEndMsg struct {
 // unsubscribeMsg carries the unsubscribe function from the event subscription.
 type unsubscribeMsg struct {
 	fn func()
+}
+
+// permissionRequestMsg signals that a tool requires user approval before execution.
+type permissionRequestMsg struct {
+	toolName    string
+	command     string
+	description string
+	respondChan chan<- bool // Channel to send the user's response
 }

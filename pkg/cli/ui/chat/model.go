@@ -45,6 +45,7 @@ const (
 type toolExecution struct {
 	id        string
 	name      string
+	command   string // The actual command being executed (e.g., "ksail cluster list --all")
 	status    toolStatus
 	output    string
 	expanded  bool // whether output is expanded in the view
@@ -78,6 +79,60 @@ func humanizeToolName(name string) string {
 	return strings.Join(words, " ")
 }
 
+// extractCommandFromArgs extracts a command string from tool arguments for display.
+// This helps users understand exactly what command is being executed.
+func extractCommandFromArgs(toolName string, args any) string {
+	argsMap, ok := args.(map[string]any)
+	if !ok {
+		return ""
+	}
+
+	switch toolName {
+	case "ksail_cluster_list":
+		cmd := "ksail cluster list"
+		if all, ok := argsMap["all"].(bool); ok && all {
+			cmd += " --all"
+		}
+		return cmd
+	case "ksail_cluster_info":
+		cmd := "ksail cluster info"
+		if name, ok := argsMap["name"].(string); ok && name != "" {
+			cmd += " --name " + name
+		}
+		return cmd
+	case "ksail_workload_get":
+		resource, _ := argsMap["resource"].(string)
+		if resource == "" {
+			return ""
+		}
+		cmd := "ksail workload get " + resource
+		if name, ok := argsMap["name"].(string); ok && name != "" {
+			cmd += " " + name
+		}
+		if ns, ok := argsMap["namespace"].(string); ok && ns != "" {
+			cmd += " -n " + ns
+		}
+		if allNs, ok := argsMap["all_namespaces"].(bool); ok && allNs {
+			cmd += " -A"
+		}
+		if output, ok := argsMap["output"].(string); ok && output != "" {
+			cmd += " -o " + output
+		}
+		return cmd
+	case "read_file":
+		if path, ok := argsMap["path"].(string); ok && path != "" {
+			return "cat " + path
+		}
+	case "list_directory":
+		path := "."
+		if p, ok := argsMap["path"].(string); ok && p != "" {
+			path = p
+		}
+		return "ls " + path
+	}
+	return ""
+}
+
 // Model is the Bubbletea model for the chat TUI.
 type Model struct {
 	// Components
@@ -96,6 +151,10 @@ type Model struct {
 	// Tool execution tracking
 	tools     map[string]*toolExecution // keyed by tool ID
 	toolOrder []string                  // ordered list of tool IDs for rendering
+
+	// Permission request state
+	pendingPermission *permissionRequestMsg
+	awaitingApproval  bool
 
 	// Dimensions
 	width  int
@@ -118,6 +177,13 @@ type Model struct {
 
 // New creates a new chat TUI model.
 func New(session *copilot.Session, timeout time.Duration) Model {
+	return NewWithEventChannel(session, timeout, nil)
+}
+
+// NewWithEventChannel creates a new chat TUI model with an optional pre-existing event channel.
+// If eventChan is nil, a new channel is created. This allows external code to send events
+// to the TUI (e.g., permission requests).
+func NewWithEventChannel(session *copilot.Session, timeout time.Duration, eventChan chan tea.Msg) Model {
 	// Initialize textarea for user input
 	textArea := textarea.New()
 	textArea.Placeholder = "Ask me anything about Kubernetes, KSail, or cluster management..."
@@ -150,6 +216,11 @@ func New(session *copilot.Session, timeout time.Duration) Model {
 	// This avoids terminal queries that could interfere with input
 	mdRenderer := createRenderer(defaultWidth - 8)
 
+	// Use provided event channel or create new one
+	if eventChan == nil {
+		eventChan = make(chan tea.Msg, 100)
+	}
+
 	return Model{
 		viewport:  viewPort,
 		textarea:  textArea,
@@ -159,12 +230,18 @@ func New(session *copilot.Session, timeout time.Duration) Model {
 		session:   session,
 		timeout:   timeout,
 		ctx:       context.Background(),
-		eventChan: make(chan tea.Msg, 100),
+		eventChan: eventChan,
 		width:     defaultWidth,
 		height:    defaultHeight,
 		tools:     make(map[string]*toolExecution),
 		toolOrder: make([]string, 0),
 	}
+}
+
+// GetEventChannel returns the model's event channel for external use.
+// This is useful for creating permission handlers that can send events to the TUI.
+func (m *Model) GetEventChannel() chan tea.Msg {
+	return m.eventChan
 }
 
 // Init initializes the model and returns an initial command.
@@ -206,6 +283,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case streamErrMsg:
 		return m.handleStreamErr(msg)
 
+	case permissionRequestMsg:
+		return m.handlePermissionRequest(msg)
+
 	case unsubscribeMsg:
 		// Store unsubscribe function for cleanup
 		m.unsubscribe = msg.fn
@@ -222,8 +302,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleMouseMsg(msg)
 	}
 
-	// Update sub-components
-	if !m.isStreaming {
+	// Update sub-components - allow input when awaiting approval
+	if !m.isStreaming || m.awaitingApproval {
 		var taCmd tea.Cmd
 		m.textarea, taCmd = m.textarea.Update(msg)
 		cmds = append(cmds, taCmd)
@@ -247,7 +327,7 @@ func (m Model) View() string {
 
 	// Header with logo
 	headerContent := logoStyle.Render(logo) + "\n" + taglineStyle.Render("  "+tagline)
-	if m.isStreaming {
+	if m.isStreaming && !m.awaitingApproval {
 		headerContent += "  " + m.spinner.View() + " " + statusStyle.Render("Thinking...")
 	}
 	header := headerBoxStyle.Width(m.width - 2).Render(headerContent)
@@ -257,13 +337,30 @@ func (m Model) View() string {
 	chatContent := viewportStyle.Width(m.width - 2).Render(m.viewport.View())
 	sections = append(sections, chatContent)
 
-	// Input area
-	inputContent := inputStyle.Width(m.width - 2).Render(m.textarea.View())
+	// Input area - show permission prompt if awaiting approval
+	var inputContent string
+	if m.awaitingApproval && m.pendingPermission != nil {
+		// Build permission request display
+		var permBox strings.Builder
+		permBox.WriteString(warningStyle.Render("⚠ Permission Required") + "\n")
+		if m.pendingPermission.command != "" {
+			permBox.WriteString(toolMsgStyle.Render("  $ " + m.pendingPermission.command))
+		} else {
+			permBox.WriteString(toolMsgStyle.Render("  " + m.pendingPermission.toolName))
+		}
+		permBox.WriteString("\n")
+		permBox.WriteString(helpStyle.Render("  Press Y to approve, N to deny"))
+		inputContent = inputStyle.Width(m.width - 2).Render(permBox.String())
+	} else {
+		inputContent = inputStyle.Width(m.width - 2).Render(m.textarea.View())
+	}
 	sections = append(sections, inputContent)
 
 	// Footer/help
 	var helpText string
-	if len(m.toolOrder) > 0 {
+	if m.awaitingApproval {
+		helpText = "  Y Approve • N Deny • esc Cancel • Powered by GitHub Copilot"
+	} else if len(m.toolOrder) > 0 {
 		helpText = "  ⏎ Send • ⌥⏎ Newline • ⇥ Toggle Output • ^L Clear • esc Quit • Powered by GitHub Copilot"
 	} else {
 		helpText = "  ⏎ Send • ⌥⏎ Newline • ^L Clear • esc Quit • Powered by GitHub Copilot"
@@ -276,6 +373,11 @@ func (m Model) View() string {
 
 // handleKeyMsg handles keyboard input.
 func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Handle permission approval mode separately
+	if m.awaitingApproval {
+		return m.handleApprovalKey(msg)
+	}
+
 	switch msg.String() {
 	case "ctrl+c":
 		// Always quit on ctrl+c, even during streaming
@@ -341,6 +443,39 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, taCmd
 }
 
+// handleApprovalKey handles keyboard input when awaiting permission approval.
+func (m Model) handleApprovalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "ctrl+c":
+		m.cleanup()
+		m.quitting = true
+		return m, tea.Quit
+	case "y", "Y":
+		// Approve the permission request
+		if m.pendingPermission != nil && m.pendingPermission.respondChan != nil {
+			m.pendingPermission.respondChan <- true
+		}
+		m.awaitingApproval = false
+		m.pendingPermission = nil
+		m.textarea.Reset()
+		m.textarea.Placeholder = "Ask me anything about Kubernetes, KSail, or cluster management..."
+		m.updateViewportContent()
+		return m, m.waitForEvent()
+	case "n", "N", "esc":
+		// Deny the permission request
+		if m.pendingPermission != nil && m.pendingPermission.respondChan != nil {
+			m.pendingPermission.respondChan <- false
+		}
+		m.awaitingApproval = false
+		m.pendingPermission = nil
+		m.textarea.Reset()
+		m.textarea.Placeholder = "Ask me anything about Kubernetes, KSail, or cluster management..."
+		m.updateViewportContent()
+		return m, m.waitForEvent()
+	}
+	return m, nil
+}
+
 // handleUserSubmit handles user message submission.
 func (m Model) handleUserSubmit(msg userSubmitMsg) (tea.Model, tea.Cmd) {
 	m.messages = append(m.messages, chatMessage{
@@ -383,6 +518,7 @@ func (m Model) handleToolStart(msg toolStartMsg) (tea.Model, tea.Cmd) {
 	tool := &toolExecution{
 		id:        toolID,
 		name:      msg.toolName,
+		command:   msg.command,
 		status:    toolRunning,
 		expanded:  true, // expanded by default while running
 		startTime: time.Now(),
@@ -455,6 +591,20 @@ func (m Model) handleStreamErr(msg streamErrMsg) (tea.Model, tea.Cmd) {
 	}
 	m.updateViewportContent()
 	// Don't wait for more events - response is complete (with error)
+	return m, nil
+}
+
+// handlePermissionRequest handles permission request events from the Copilot SDK.
+func (m Model) handlePermissionRequest(msg permissionRequestMsg) (tea.Model, tea.Cmd) {
+	m.pendingPermission = &msg
+	m.awaitingApproval = true
+
+	// Update textarea to show approval prompt
+	m.textarea.Reset()
+	m.textarea.Placeholder = "Press Y to approve, N to deny"
+	m.textarea.Focus()
+
+	m.updateViewportContent()
 	return m, nil
 }
 
@@ -610,10 +760,16 @@ func (m *Model) updateViewportContent() {
 func (m *Model) renderToolInline(builder *strings.Builder, tool *toolExecution, wrapWidth uint) {
 	humanName := humanizeToolName(tool.name)
 
+	// Determine what to display: command if available, otherwise humanized name
+	displayName := humanName
+	if tool.command != "" {
+		displayName = "$ " + tool.command
+	}
+
 	switch tool.status {
 	case toolRunning:
-		// Running: show spinner with human-readable action
-		line := fmt.Sprintf("  %s %s...", m.spinner.View(), humanName)
+		// Running: show spinner with command/action
+		line := fmt.Sprintf("  %s %s", m.spinner.View(), displayName)
 		builder.WriteString(toolMsgStyle.Render(line))
 		builder.WriteString("\n")
 
@@ -621,7 +777,7 @@ func (m *Model) renderToolInline(builder *strings.Builder, tool *toolExecution, 
 		// Completed: show checkmark with summary
 		summary := m.getToolSummary(tool)
 		if tool.expanded {
-			line := fmt.Sprintf("  ✓ %s", humanName)
+			line := fmt.Sprintf("  ✓ %s", displayName)
 			builder.WriteString(toolCollapsedStyle.Render(line))
 			builder.WriteString("\n")
 			// Show output when expanded
@@ -630,7 +786,7 @@ func (m *Model) renderToolInline(builder *strings.Builder, tool *toolExecution, 
 			}
 		} else {
 			// Collapsed: show name + brief summary on same line
-			line := fmt.Sprintf("  ✓ %s", humanName)
+			line := fmt.Sprintf("  ✓ %s", displayName)
 			if summary != "" {
 				line += toolOutputStyle.Render(" — " + summary)
 			}
@@ -642,14 +798,14 @@ func (m *Model) renderToolInline(builder *strings.Builder, tool *toolExecution, 
 		// Failed: show X with error info
 		//nolint:nestif // nested conditions for expanded/collapsed view
 		if tool.expanded {
-			line := fmt.Sprintf("  ✗ %s", humanName)
+			line := fmt.Sprintf("  ✗ %s", displayName)
 			builder.WriteString(errorStyle.Render(line))
 			builder.WriteString("\n")
 			if tool.output != "" {
 				m.renderToolOutput(builder, tool.output, wrapWidth)
 			}
 		} else {
-			line := fmt.Sprintf("  ✗ %s", humanName)
+			line := fmt.Sprintf("  ✗ %s", displayName)
 			if tool.output != "" {
 				// Show first line of error
 				firstLine := strings.Split(tool.output, "\n")[0]
@@ -756,9 +912,11 @@ func (m *Model) streamResponseCmd(userMessage string) tea.Cmd {
 				if event.Data.ToolName != nil {
 					toolName = *event.Data.ToolName
 				}
+				// Extract command from arguments if available (for ksail tools)
+				command := extractCommandFromArgs(toolName, event.Data.Arguments)
 				// Generate tool ID from timestamp
 				toolID := fmt.Sprintf("tool-%d", time.Now().UnixNano())
-				eventChan <- toolStartMsg{toolID: toolID, toolName: toolName}
+				eventChan <- toolStartMsg{toolID: toolID, toolName: toolName, command: command}
 			case copilot.ToolExecutionComplete:
 				toolName := "unknown"
 				if event.Data.ToolName != nil {
@@ -787,7 +945,9 @@ func (m *Model) streamResponseCmd(userMessage string) tea.Cmd {
 	}
 }
 
-// Run starts the chat TUI.
+// Run starts the chat TUI and returns a permission handler for integration with the Copilot SDK.
+// The returned handler can be used with SessionConfig.OnPermissionRequest to enable interactive
+// permission prompting within the TUI.
 func Run(
 	ctx context.Context,
 	session *copilot.Session,
@@ -804,4 +964,100 @@ func Run(
 
 	_, err := program.Run()
 	return err
+}
+
+// RunWithEventChannel starts the chat TUI with a pre-created event channel.
+// This allows external code (like permission handlers) to send events to the TUI.
+func RunWithEventChannel(
+	ctx context.Context,
+	session *copilot.Session,
+	timeout time.Duration,
+	eventChan chan tea.Msg,
+) error {
+	model := NewWithEventChannel(session, timeout, eventChan)
+	model.ctx = ctx
+	program := tea.NewProgram(
+		model,
+		tea.WithAltScreen(),
+		tea.WithContext(ctx),
+		tea.WithMouseCellMotion(), // Enable mouse support
+	)
+
+	_, err := program.Run()
+	return err
+}
+
+// createTextarea creates and configures the input textarea.
+func createTextarea() textarea.Model {
+	ta := textarea.New()
+	ta.Placeholder = "Ask me anything about Kubernetes, KSail, or cluster management..."
+	ta.Focus()
+	ta.CharLimit = 4096
+	ta.SetWidth(defaultWidth - 6)
+	ta.SetHeight(inputHeight)
+	ta.ShowLineNumbers = false
+	ta.SetPromptFunc(2, func(lineIdx int) string {
+		if lineIdx == 0 {
+			return "> "
+		}
+		return "  "
+	})
+	ta.FocusedStyle.CursorLine = lipgloss.NewStyle()
+	ta.FocusedStyle.Placeholder = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	return ta
+}
+
+// createSpinner creates and configures the loading spinner.
+func createSpinner() spinner.Model {
+	s := spinner.New()
+	s.Spinner = spinner.MiniDot
+	s.Style = spinnerStyle
+	return s
+}
+
+// CreateTUIPermissionHandler creates a permission handler that integrates with the TUI.
+// It sends permission requests to the provided event channel and waits for a response.
+// This allows the TUI to display permission prompts and collect user input.
+func CreateTUIPermissionHandler(eventChan chan<- tea.Msg) copilot.PermissionHandler {
+	return func(
+		request copilot.PermissionRequest,
+		_ copilot.PermissionInvocation,
+	) (copilot.PermissionRequestResult, error) {
+		// Extract tool name
+		toolName := "unknown"
+		if name, ok := request.Extra["toolName"].(string); ok {
+			toolName = name
+		}
+
+		// Extract command if available
+		command := ""
+		if cmd, ok := request.Extra["command"].(string); ok {
+			command = cmd
+		}
+
+		// Build description
+		description := ""
+		if request.Kind != "" {
+			description = request.Kind
+		}
+
+		// Create response channel
+		responseChan := make(chan bool, 1)
+
+		// Send permission request to TUI
+		eventChan <- permissionRequestMsg{
+			toolName:    toolName,
+			command:     command,
+			description: description,
+			respondChan: responseChan,
+		}
+
+		// Wait for response from TUI
+		approved := <-responseChan
+
+		if approved {
+			return copilot.PermissionRequestResult{Kind: "approved"}, nil
+		}
+		return copilot.PermissionRequestResult{Kind: "denied-interactively-by-user"}, nil
+	}
 }

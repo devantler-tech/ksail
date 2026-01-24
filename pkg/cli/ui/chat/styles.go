@@ -97,6 +97,14 @@ var (
 			Foreground(errorColor).
 			Bold(true)
 
+	// warningColor for warning/permission messages.
+	warningColor = lipgloss.Color("214") // Orange/yellow
+
+	// warningStyle styles warning/permission request messages.
+	warningStyle = lipgloss.NewStyle().
+			Foreground(warningColor).
+			Bold(true)
+
 	// toolCollapsedStyle styles the collapsed tool header (completed successfully).
 	toolCollapsedStyle = lipgloss.NewStyle().
 				Foreground(successColor)

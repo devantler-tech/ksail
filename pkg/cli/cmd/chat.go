@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
 	chatui "github.com/devantler-tech/ksail/v5/pkg/cli/ui/chat"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	chatsvc "github.com/devantler-tech/ksail/v5/pkg/svc/chat"
@@ -195,13 +196,11 @@ func runTUIChat(
 	sessionConfig *copilot.SessionConfig,
 	timeout time.Duration,
 ) error {
-	// Auto-approve all permission requests in TUI mode - users can see tool
-	// execution inline and cancel with Esc if needed
-	sessionConfig.OnPermissionRequest = func(
-		_ copilot.PermissionRequest, _ copilot.PermissionInvocation,
-	) (copilot.PermissionRequestResult, error) {
-		return copilot.PermissionRequestResult{Kind: "approved"}, nil
-	}
+	// Create event channel for TUI communication
+	eventChan := make(chan tea.Msg, 100)
+
+	// Set up permission handler that integrates with the TUI
+	sessionConfig.OnPermissionRequest = chatui.CreateTUIPermissionHandler(eventChan)
 
 	// Create session
 	session, err := client.CreateSession(sessionConfig)
@@ -212,7 +211,7 @@ func runTUIChat(
 		_ = session.Destroy()
 	}()
 
-	return chatui.Run(ctx, session, timeout)
+	return chatui.RunWithEventChannel(ctx, session, timeout, eventChan)
 }
 
 // runChatInteractiveLoop runs the interactive chat loop.
