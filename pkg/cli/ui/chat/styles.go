@@ -59,10 +59,6 @@ var (
 	toolMsgStyle = lipgloss.NewStyle().
 			Foreground(toolColor)
 
-	// toolSuccessStyle is the style for completed tool messages.
-	toolSuccessStyle = lipgloss.NewStyle().
-				Foreground(successColor)
-
 	// toolOutputStyle is the style for tool output text.
 	toolOutputStyle = lipgloss.NewStyle().
 			Foreground(dimColor)
@@ -93,23 +89,15 @@ var (
 			Foreground(dimColor).
 			Italic(true)
 
-	// warningColor for permission prompts.
-	warningColor = lipgloss.Color("214") // Amber/warning
+	// errorColor for error messages.
+	errorColor = lipgloss.Color("196") // Red
 
-	// permissionBoxStyle styles the permission dialog.
-	permissionBoxStyle = lipgloss.NewStyle().
-				BorderStyle(lipgloss.RoundedBorder()).
-				BorderForeground(warningColor).
-				Padding(1, 2).
-				MarginTop(1).
-				MarginBottom(1)
+	// errorStyle styles error messages.
+	errorStyle = lipgloss.NewStyle().
+			Foreground(errorColor).
+			Bold(true)
 
-	// permissionTitleStyle styles the permission dialog title.
-	permissionTitleStyle = lipgloss.NewStyle().
-				Foreground(warningColor).
-				Bold(true)
-
-	// permissionDescStyle styles the permission description text.
-	permissionDescStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("252"))
+	// toolCollapsedStyle styles the collapsed tool header (completed successfully).
+	toolCollapsedStyle = lipgloss.NewStyle().
+				Foreground(successColor)
 )

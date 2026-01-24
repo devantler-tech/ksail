@@ -13,7 +13,7 @@ import (
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 	copilot "github.com/github/copilot-sdk/go"
-	"github.com/muesli/reflow/wordwrap"
+	"github.com/mitchellh/go-wordwrap"
 )
 
 const (
@@ -32,6 +32,52 @@ type chatMessage struct {
 	isStreaming bool
 }
 
+// toolStatus represents the current state of a tool execution.
+type toolStatus int
+
+const (
+	toolRunning toolStatus = iota
+	toolSuccess
+	toolFailed
+)
+
+// toolExecution tracks a single tool invocation.
+type toolExecution struct {
+	id        string
+	name      string
+	status    toolStatus
+	output    string
+	expanded  bool // whether output is expanded in the view
+	startTime time.Time
+}
+
+// humanizeToolName converts snake_case tool names to readable format.
+func humanizeToolName(name string) string {
+	// Common tool name mappings for better readability
+	mappings := map[string]string{
+		"report_intent":        "Analyzing request",
+		"ksail_cluster_list":   "Listing clusters",
+		"ksail_cluster_info":   "Getting cluster info",
+		"ksail_cluster_create": "Creating cluster",
+		"ksail_cluster_delete": "Deleting cluster",
+		"bash":                 "Running command",
+		"read_file":            "Reading file",
+		"write_file":           "Writing file",
+		"list_dir":             "Listing directory",
+	}
+	if mapped, ok := mappings[name]; ok {
+		return mapped
+	}
+	// Fallback: convert snake_case to Title Case
+	words := strings.Split(name, "_")
+	for i, word := range words {
+		if len(word) > 0 {
+			words[i] = strings.ToUpper(word[:1]) + word[1:]
+		}
+	}
+	return strings.Join(words, " ")
+}
+
 // Model is the Bubbletea model for the chat TUI.
 type Model struct {
 	// Components
@@ -47,10 +93,9 @@ type Model struct {
 	quitting        bool
 	ready           bool
 
-	// Permission dialog state
-	permissionPending bool
-	permissionDesc    string
-	permissionRespCh  chan<- copilot.PermissionRequestResult
+	// Tool execution tracking
+	tools     map[string]*toolExecution // keyed by tool ID
+	toolOrder []string                  // ordered list of tool IDs for rendering
 
 	// Dimensions
 	width  int
@@ -117,6 +162,8 @@ func New(session *copilot.Session, timeout time.Duration) Model {
 		eventChan: make(chan tea.Msg, 100),
 		width:     defaultWidth,
 		height:    defaultHeight,
+		tools:     make(map[string]*toolExecution),
+		toolOrder: make([]string, 0),
 	}
 }
 
@@ -159,9 +206,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case streamErrMsg:
 		return m.handleStreamErr(msg)
 
-	case permissionRequestMsg:
-		return m.handlePermissionRequest(msg)
-
 	case unsubscribeMsg:
 		// Store unsubscribe function for cleanup
 		m.unsubscribe = msg.fn
@@ -173,6 +217,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
 		cmds = append(cmds, cmd)
+
+	case tea.MouseMsg:
+		return m.handleMouseMsg(msg)
 	}
 
 	// Update sub-components
@@ -211,35 +258,13 @@ func (m Model) View() string {
 	sections = append(sections, chatContent)
 
 	// Input area
-	var inputContent string
-	if m.permissionPending {
-		// Show permission prompt with details
-		var promptLines []string
-		promptLines = append(promptLines, permissionTitleStyle.Render("⚠️  Permission Required"))
-		if m.permissionDesc != "" {
-			// Add description lines with styling
-			for _, line := range strings.Split(m.permissionDesc, "\n") {
-				if line != "" {
-					promptLines = append(promptLines, "    "+permissionDescStyle.Render(line))
-				}
-			}
-		}
-		promptLines = append(promptLines, "")
-		promptLines = append(
-			promptLines,
-			permissionDescStyle.Render("    Press [y] to allow, [n] to deny"),
-		)
-		promptText := strings.Join(promptLines, "\n")
-		inputContent = permissionBoxStyle.Width(m.width - 2).Render(promptText)
-	} else {
-		inputContent = inputStyle.Width(m.width - 2).Render(m.textarea.View())
-	}
+	inputContent := inputStyle.Width(m.width - 2).Render(m.textarea.View())
 	sections = append(sections, inputContent)
 
 	// Footer/help
 	var helpText string
-	if m.permissionPending {
-		helpText = "  Powered by GitHub Copilot"
+	if len(m.toolOrder) > 0 {
+		helpText = "  ⏎ Send • ⌥⏎ Newline • ⇥ Toggle Output • ^L Clear • esc Quit • Powered by GitHub Copilot"
 	} else {
 		helpText = "  ⏎ Send • ⌥⏎ Newline • ^L Clear • esc Quit • Powered by GitHub Copilot"
 	}
@@ -251,11 +276,6 @@ func (m Model) View() string {
 
 // handleKeyMsg handles keyboard input.
 func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	// Handle permission dialog keys first
-	if m.permissionPending {
-		return m.handlePermissionKeys(msg)
-	}
-
 	switch msg.String() {
 	case "ctrl+c":
 		// Always quit on ctrl+c, even during streaming
@@ -277,15 +297,31 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.quitting = true
 		return m, tea.Quit
 	case "ctrl+l":
-		// Clear chat history
+		// Clear chat history and tool tracking
 		if !m.isStreaming {
 			m.messages = make([]chatMessage, 0)
 			m.currentResponse.Reset()
+			m.tools = make(map[string]*toolExecution)
+			m.toolOrder = make([]string, 0)
 			m.updateViewportContent()
 		}
 	case "alt+enter":
 		// Insert newline (alt+enter since terminals don't detect shift+enter)
 		m.textarea.InsertString("\n")
+		return m, nil
+	case "tab":
+		// Toggle expansion of the most recent completed tool
+		if !m.isStreaming && len(m.toolOrder) > 0 {
+			// Find the most recent completed tool and toggle it
+			for i := len(m.toolOrder) - 1; i >= 0; i-- {
+				tool := m.tools[m.toolOrder[i]]
+				if tool != nil && tool.status != toolRunning {
+					tool.expanded = !tool.expanded
+					m.updateViewportContent()
+					break
+				}
+			}
+		}
 		return m, nil
 	case "enter":
 		// Send message on Enter
@@ -303,62 +339,6 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	var taCmd tea.Cmd
 	m.textarea, taCmd = m.textarea.Update(msg)
 	return m, taCmd
-}
-
-// handlePermissionKeys handles keys during permission dialog.
-func (m Model) handlePermissionKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-	case "y", "Y":
-		m.permissionPending = false
-		respChan := m.permissionRespCh
-		m.permissionDesc = ""
-		m.permissionRespCh = nil
-		// Add approval message to chat
-		m.messages = append(m.messages, chatMessage{
-			role:    "tool",
-			content: "✓ Permission granted",
-		})
-		m.updateViewportContent()
-		// Send response async and resume waiting for events
-		return m, tea.Batch(
-			m.sendPermissionResponse(respChan, copilot.PermissionRequestResult{Kind: "approved"}),
-			m.waitForEvent(),
-		)
-	case "n", "N":
-		m.permissionPending = false
-		respChan := m.permissionRespCh
-		m.permissionDesc = ""
-		m.permissionRespCh = nil
-		// Add denial message to chat
-		m.messages = append(m.messages, chatMessage{
-			role:    "tool",
-			content: "✗ Permission denied",
-		})
-		m.updateViewportContent()
-		// Send response async and resume waiting for events
-		return m, tea.Batch(
-			m.sendPermissionResponse(respChan, copilot.PermissionRequestResult{
-				Kind: "denied-interactively-by-user",
-			}),
-			m.waitForEvent(),
-		)
-	}
-	// Ignore other keys during permission dialog
-	return m, nil
-}
-
-// sendPermissionResponse returns a command that sends a permission response.
-// This keeps the Update function non-blocking per Bubbletea best practices.
-func (m *Model) sendPermissionResponse(
-	respChan chan<- copilot.PermissionRequestResult,
-	result copilot.PermissionRequestResult,
-) tea.Cmd {
-	return func() tea.Msg {
-		if respChan != nil {
-			respChan <- result
-		}
-		return nil
-	}
 }
 
 // handleUserSubmit handles user message submission.
@@ -393,45 +373,57 @@ func (m Model) handleStreamChunk(msg streamChunkMsg) (tea.Model, tea.Cmd) {
 
 // handleToolStart handles tool execution start events.
 func (m Model) handleToolStart(msg toolStartMsg) (tea.Model, tea.Cmd) {
-	// Insert a tool message before the current assistant response
-	if len(m.messages) > 0 && m.messages[len(m.messages)-1].role == "assistant" {
-		lastAssistant := m.messages[len(m.messages)-1]
-		m.messages = m.messages[:len(m.messages)-1]
-		m.messages = append(m.messages, chatMessage{
-			role:    "tool",
-			content: fmt.Sprintf("🔧 Running: %s", msg.toolName),
-		})
-		m.messages = append(m.messages, lastAssistant)
+	// Generate tool ID if not provided
+	toolID := msg.toolID
+	if toolID == "" {
+		toolID = fmt.Sprintf("tool-%d", time.Now().UnixNano())
 	}
+
+	// Create tool execution entry
+	tool := &toolExecution{
+		id:        toolID,
+		name:      msg.toolName,
+		status:    toolRunning,
+		expanded:  true, // expanded by default while running
+		startTime: time.Now(),
+	}
+	m.tools[toolID] = tool
+	m.toolOrder = append(m.toolOrder, toolID)
+
+	// DON'T insert tool as separate message - render inline with assistant response
 	m.updateViewportContent()
 	return m, m.waitForEvent()
 }
 
 // handleToolEnd handles tool execution completion events.
 func (m Model) handleToolEnd(msg toolEndMsg) (tea.Model, tea.Cmd) {
-	// Update the last tool message to show completion
-	for i := len(m.messages) - 1; i >= 0; i-- {
-		if m.messages[i].role == "tool" &&
-			strings.HasPrefix(m.messages[i].content, "🔧 Running:") {
-			m.messages[i].content = strings.Replace(m.messages[i].content, "🔧 Running:", "✓", 1)
-			break
+	// Find the tool by ID or by name (fallback for SDK compatibility)
+	var tool *toolExecution
+	if msg.toolID != "" {
+		tool = m.tools[msg.toolID]
+	}
+	if tool == nil {
+		// Fallback: find by name (last running tool with this name)
+		for i := len(m.toolOrder) - 1; i >= 0; i-- {
+			t := m.tools[m.toolOrder[i]]
+			if t != nil && t.name == msg.toolName && t.status == toolRunning {
+				tool = t
+				break
+			}
 		}
 	}
-	// Add output if available (truncate long output)
-	if msg.output != "" {
-		output := msg.output
-		const maxOutputLines = 20
-		lines := strings.Split(output, "\n")
-		if len(lines) > maxOutputLines {
-			lines = lines[:maxOutputLines]
-			lines = append(lines, fmt.Sprintf("... (%d more lines)", len(lines)-maxOutputLines))
-			output = strings.Join(lines, "\n")
+
+	if tool != nil {
+		// Update tool status
+		if msg.success {
+			tool.status = toolSuccess
+		} else {
+			tool.status = toolFailed
 		}
-		m.messages = append(m.messages, chatMessage{
-			role:    "tool-output",
-			content: output,
-		})
+		tool.output = msg.output
+		tool.expanded = false // collapse after completion
 	}
+
 	m.updateViewportContent()
 	return m, m.waitForEvent()
 }
@@ -466,14 +458,12 @@ func (m Model) handleStreamErr(msg streamErrMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// handlePermissionRequest handles permission request events.
-func (m Model) handlePermissionRequest(msg permissionRequestMsg) (tea.Model, tea.Cmd) {
-	// Show permission dialog - store state and wait for user input
-	m.permissionPending = true
-	m.permissionDesc = formatPermissionDesc(msg.request)
-	m.permissionRespCh = msg.respChan
-	// Don't add to chat messages - permission details shown in bottom prompt only
-	return m, m.waitForEvent()
+// handleMouseMsg handles mouse events.
+func (m Model) handleMouseMsg(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
+	// Pass mouse events to viewport for scrolling
+	var vpCmd tea.Cmd
+	m.viewport, vpCmd = m.viewport.Update(msg)
+	return m, vpCmd
 }
 
 // waitForEvent returns a command that waits for an event from the channel.
@@ -537,40 +527,60 @@ func (m *Model) updateViewportContent() {
 	if wrapWidth < 20 {
 		wrapWidth = 20
 	}
+	wrapWidthUint := uint(wrapWidth) //nolint:gosec // wrapWidth is guaranteed >= 20
 
 	var builder strings.Builder
+
+	// Track which tools have been rendered to avoid duplicates
+	toolIdx := 0
+
 	for _, msg := range m.messages {
 		switch msg.role {
 		case "user":
 			builder.WriteString(userMsgStyle.Render("▶ You"))
 			builder.WriteString("\n")
 			// Wrap user content
-			wrapped := wordwrap.String(msg.content, wrapWidth)
+			wrapped := wordwrap.WrapString(msg.content, wrapWidthUint)
 			for _, line := range strings.Split(wrapped, "\n") {
 				builder.WriteString("  ")
 				builder.WriteString(line)
 				builder.WriteString("\n")
 			}
 			builder.WriteString("\n")
+
 		case "assistant":
 			builder.WriteString(assistantMsgStyle.Render("▶ KSail"))
 			if msg.isStreaming {
 				builder.WriteString(" " + m.spinner.View())
 			}
 			builder.WriteString("\n")
+
+			// Render any tools that belong to this response BEFORE the text
+			for toolIdx < len(m.toolOrder) {
+				tool := m.tools[m.toolOrder[toolIdx]]
+				if tool == nil {
+					toolIdx++
+					continue
+				}
+				m.renderToolInline(&builder, tool, wrapWidthUint)
+				toolIdx++
+			}
+
+			// Now render the assistant's text content
 			if msg.isStreaming {
-				// Wrap streaming content
-				wrapped := wordwrap.String(msg.content, wrapWidth)
-				for _, line := range strings.Split(wrapped, "\n") {
-					builder.WriteString("  ")
-					builder.WriteString(line)
-					builder.WriteString("\n")
+				if msg.content != "" {
+					wrapped := wordwrap.WrapString(msg.content, wrapWidthUint)
+					for _, line := range strings.Split(wrapped, "\n") {
+						builder.WriteString("  ")
+						builder.WriteString(line)
+						builder.WriteString("\n")
+					}
 				}
 				builder.WriteString("  ▌")
 			} else if msg.rendered != "" {
 				builder.WriteString(msg.rendered)
-			} else {
-				wrapped := wordwrap.String(msg.content, wrapWidth)
+			} else if msg.content != "" {
+				wrapped := wordwrap.WrapString(msg.content, wrapWidthUint)
 				for _, line := range strings.Split(wrapped, "\n") {
 					builder.WriteString("  ")
 					builder.WriteString(line)
@@ -578,16 +588,14 @@ func (m *Model) updateViewportContent() {
 				}
 			}
 			builder.WriteString("\n")
+
 		case "tool":
-			if strings.HasPrefix(msg.content, "✓") {
-				builder.WriteString(toolSuccessStyle.Render("  " + msg.content))
-			} else {
-				builder.WriteString(toolMsgStyle.Render("  " + msg.content))
-			}
-			builder.WriteString("\n")
+			// Skip - tools are now rendered inline with assistant messages
+			continue
+
 		case "tool-output":
-			// Render tool output in a dimmed/code-like style
-			wrapped := wordwrap.String(msg.content, wrapWidth-2)
+			// Legacy tool output - still render for backward compatibility
+			wrapped := wordwrap.WrapString(msg.content, wrapWidthUint-2)
 			for _, line := range strings.Split(wrapped, "\n") {
 				builder.WriteString(toolOutputStyle.Render("    " + line))
 				builder.WriteString("\n")
@@ -596,6 +604,121 @@ func (m *Model) updateViewportContent() {
 	}
 	m.viewport.SetContent(builder.String())
 	m.viewport.GotoBottom()
+}
+
+// renderToolInline renders a tool execution inline within an assistant response.
+func (m *Model) renderToolInline(builder *strings.Builder, tool *toolExecution, wrapWidth uint) {
+	humanName := humanizeToolName(tool.name)
+
+	switch tool.status {
+	case toolRunning:
+		// Running: show spinner with human-readable action
+		line := fmt.Sprintf("  %s %s...", m.spinner.View(), humanName)
+		builder.WriteString(toolMsgStyle.Render(line))
+		builder.WriteString("\n")
+
+	case toolSuccess:
+		// Completed: show checkmark with summary
+		summary := m.getToolSummary(tool)
+		if tool.expanded {
+			line := fmt.Sprintf("  ✓ %s", humanName)
+			builder.WriteString(toolCollapsedStyle.Render(line))
+			builder.WriteString("\n")
+			// Show output when expanded
+			if tool.output != "" {
+				m.renderToolOutput(builder, tool.output, wrapWidth)
+			}
+		} else {
+			// Collapsed: show name + brief summary on same line
+			line := fmt.Sprintf("  ✓ %s", humanName)
+			if summary != "" {
+				line += toolOutputStyle.Render(" — " + summary)
+			}
+			builder.WriteString(toolCollapsedStyle.Render(line))
+			builder.WriteString("\n")
+		}
+
+	case toolFailed:
+		// Failed: show X with error info
+		//nolint:nestif // nested conditions for expanded/collapsed view
+		if tool.expanded {
+			line := fmt.Sprintf("  ✗ %s", humanName)
+			builder.WriteString(errorStyle.Render(line))
+			builder.WriteString("\n")
+			if tool.output != "" {
+				m.renderToolOutput(builder, tool.output, wrapWidth)
+			}
+		} else {
+			line := fmt.Sprintf("  ✗ %s", humanName)
+			if tool.output != "" {
+				// Show first line of error
+				firstLine := strings.Split(tool.output, "\n")[0]
+				if len(firstLine) > 50 {
+					firstLine = firstLine[:50] + "..."
+				}
+				line += toolOutputStyle.Render(" — " + firstLine)
+			}
+			builder.WriteString(errorStyle.Render(line))
+			builder.WriteString("\n")
+		}
+	}
+}
+
+// getToolSummary returns a brief summary of tool output for collapsed view.
+func (m *Model) getToolSummary(tool *toolExecution) string {
+	if tool.output == "" {
+		return ""
+	}
+
+	output := strings.TrimSpace(tool.output)
+	lines := strings.Split(output, "\n")
+
+	// For short outputs, just show the whole thing
+	if len(output) < 60 && len(lines) == 1 {
+		return output
+	}
+
+	// Return first meaningful line, truncated
+	firstLine := strings.TrimSpace(lines[0])
+	if len(firstLine) > 60 {
+		firstLine = firstLine[:60] + "..."
+	}
+
+	if len(lines) > 1 {
+		firstLine += fmt.Sprintf(" (+%d lines)", len(lines)-1)
+	}
+
+	return firstLine
+}
+
+// renderToolOutput renders tool output with proper indentation and truncation.
+func (m *Model) renderToolOutput(builder *strings.Builder, output string, wrapWidth uint) {
+	const maxOutputLines = 20
+	lines := strings.Split(output, "\n")
+	truncated := false
+
+	if len(lines) > maxOutputLines {
+		lines = lines[:maxOutputLines]
+		truncated = true
+	}
+
+	output = strings.Join(lines, "\n")
+	wrapped := wordwrap.WrapString(output, wrapWidth-6)
+
+	for _, line := range strings.Split(wrapped, "\n") {
+		builder.WriteString(toolOutputStyle.Render("      " + line))
+		builder.WriteString("\n")
+	}
+
+	if truncated {
+		builder.WriteString(
+			toolOutputStyle.Render(
+				fmt.Sprintf("      ... (%d more lines, press ⇥ for full output)",
+					len(strings.Split(output, "\n"))-maxOutputLines),
+			),
+		)
+		builder.WriteString("\n")
+	}
 }
 
 // sendMessageCmd returns a command that initiates message sending.
@@ -633,7 +756,9 @@ func (m *Model) streamResponseCmd(userMessage string) tea.Cmd {
 				if event.Data.ToolName != nil {
 					toolName = *event.Data.ToolName
 				}
-				eventChan <- toolStartMsg{toolName: toolName}
+				// Generate tool ID from timestamp
+				toolID := fmt.Sprintf("tool-%d", time.Now().UnixNano())
+				eventChan <- toolStartMsg{toolID: toolID, toolName: toolName}
 			case copilot.ToolExecutionComplete:
 				toolName := "unknown"
 				if event.Data.ToolName != nil {
@@ -643,7 +768,8 @@ func (m *Model) streamResponseCmd(userMessage string) tea.Cmd {
 				if event.Data.Result != nil {
 					output = event.Data.Result.Content
 				}
-				eventChan <- toolEndMsg{toolName: toolName, output: output}
+				// Assume success if we got a result (SDK doesn't expose error state directly)
+				eventChan <- toolEndMsg{toolName: toolName, output: output, success: true}
 			}
 		})
 
@@ -662,19 +788,19 @@ func (m *Model) streamResponseCmd(userMessage string) tea.Cmd {
 }
 
 // Run starts the chat TUI.
-// The permissionBridge should be created before calling Run and its handler passed to the Copilot session.
 func Run(
 	ctx context.Context,
 	session *copilot.Session,
 	timeout time.Duration,
-	permissionBridge *PermissionBridge,
 ) error {
 	model := New(session, timeout)
 	model.ctx = ctx
-	program := tea.NewProgram(model, tea.WithAltScreen(), tea.WithContext(ctx))
-
-	// Connect the permission bridge to the program for thread-safe messaging
-	permissionBridge.SetProgram(program)
+	program := tea.NewProgram(
+		model,
+		tea.WithAltScreen(),
+		tea.WithContext(ctx),
+		tea.WithMouseCellMotion(), // Enable mouse support
+	)
 
 	_, err := program.Run()
 	return err

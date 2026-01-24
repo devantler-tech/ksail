@@ -20,13 +20,16 @@ type userSubmitMsg struct {
 
 // toolStartMsg signals the start of a tool execution.
 type toolStartMsg struct {
+	toolID   string
 	toolName string
 }
 
 // toolEndMsg signals the completion of a tool execution with its output.
 type toolEndMsg struct {
+	toolID   string
 	toolName string
 	output   string
+	success  bool
 }
 
 // unsubscribeMsg carries the unsubscribe function from the event subscription.

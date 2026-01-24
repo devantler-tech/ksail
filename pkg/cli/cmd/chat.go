@@ -189,21 +189,13 @@ func handleChatRunE(cmd *cobra.Command) error {
 }
 
 // runTUIChat starts the TUI chat mode.
-// Creates a permission bridge first, then wires up the handler and model together.
-// This follows Bubbletea best practices by using tea.Program.Send() for external events.
 func runTUIChat(
 	ctx context.Context,
 	client *copilot.Client,
 	sessionConfig *copilot.SessionConfig,
 	timeout time.Duration,
 ) error {
-	// Create permission bridge - this coordinates between SDK callbacks and TUI
-	permissionBridge := chatui.NewPermissionBridge()
-
-	// Wire up permission handler to the bridge
-	sessionConfig.OnPermissionRequest = permissionBridge.Handler()
-
-	// Create session with permission handler
+	// Create session - permission requests are handled inline by the TUI
 	session, err := client.CreateSession(sessionConfig)
 	if err != nil {
 		return fmt.Errorf("failed to create chat session: %w", err)
@@ -212,8 +204,7 @@ func runTUIChat(
 		_ = session.Destroy()
 	}()
 
-	// Run TUI - will connect permission bridge to the program internally
-	return chatui.Run(ctx, session, timeout, permissionBridge)
+	return chatui.Run(ctx, session, timeout)
 }
 
 // runChatInteractiveLoop runs the interactive chat loop.

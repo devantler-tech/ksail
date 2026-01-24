@@ -18,6 +18,7 @@ Usage:
   ksail [command]
 
 Available Commands:
+  chat        Start an AI-assisted chat session
   cipher      Manage encrypted files with SOPS
   cluster     Manage cluster lifecycle
   completion  Generate the autocompletion script for the specified shell
@@ -41,6 +42,7 @@ Usage:
   ksail [command]
 
 Available Commands:
+  chat        Start an AI-assisted chat session
   cipher      Manage encrypted files with SOPS
   cluster     Manage cluster lifecycle
   completion  Generate the autocompletion script for the specified shell
