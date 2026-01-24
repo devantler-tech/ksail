@@ -3,6 +3,11 @@ on:
   workflow_dispatch:
   schedule:
     - cron: "0 0 1 * *" # Monthly at 00:00 on the 1st
+
+concurrency:
+  group: maintenance
+  cancel-in-progress: false
+
 jobs:
   delete-old-workflow-runs:
     runs-on: ubuntu-latest
