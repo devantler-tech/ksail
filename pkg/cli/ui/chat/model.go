@@ -1008,7 +1008,7 @@ func (m *Model) renderToolInline(builder *strings.Builder, tool *toolExecution, 
 		builder.WriteString("\n")
 		// Show streaming output while running (always expanded during execution)
 		if tool.output != "" {
-			m.renderToolOutput(builder, tool.output, wrapWidth)
+			m.renderToolOutput(builder, tool.output, wrapWidth, true)
 		}
 
 	case toolSuccess:
@@ -1020,7 +1020,7 @@ func (m *Model) renderToolInline(builder *strings.Builder, tool *toolExecution, 
 			builder.WriteString("\n")
 			// Show output when expanded
 			if tool.output != "" {
-				m.renderToolOutput(builder, tool.output, wrapWidth)
+				m.renderToolOutput(builder, tool.output, wrapWidth, true)
 			}
 		} else {
 			// Collapsed: show name + brief summary on same line
@@ -1040,7 +1040,7 @@ func (m *Model) renderToolInline(builder *strings.Builder, tool *toolExecution, 
 			builder.WriteString(errorStyle.Render(line))
 			builder.WriteString("\n")
 			if tool.output != "" {
-				m.renderToolOutput(builder, tool.output, wrapWidth)
+				m.renderToolOutput(builder, tool.output, wrapWidth, true)
 			}
 		} else {
 			line := fmt.Sprintf("  ✗ %s", displayName)
@@ -1085,13 +1085,20 @@ func (m *Model) getToolSummary(tool *toolExecution) string {
 	return firstLine
 }
 
-// renderToolOutput renders tool output with proper indentation and truncation.
-func (m *Model) renderToolOutput(builder *strings.Builder, output string, wrapWidth uint) {
-	const maxOutputLines = 10 // Show 10 lines by default, press Tab to expand for full output
+// renderToolOutput renders tool output with proper indentation.
+// When expanded is false, output is truncated to maxOutputLines.
+func (m *Model) renderToolOutput(
+	builder *strings.Builder,
+	output string,
+	wrapWidth uint,
+	expanded bool,
+) {
+	const maxOutputLines = 10 // Show 10 lines when collapsed
 	lines := strings.Split(output, "\n")
 	truncated := false
 
-	if len(lines) > maxOutputLines {
+	// Only truncate when not expanded
+	if !expanded && len(lines) > maxOutputLines {
 		lines = lines[:maxOutputLines]
 		truncated = true
 	}
