@@ -20,8 +20,8 @@ func NewRootCmd(version, commit, date string) *cobra.Command {
 	// Create the command using the helper (no field selectors needed for root command)
 	cmd := &cobra.Command{
 		Use:          "ksail",
-		Short:        "KSail is a CLI tool for creating and maintaining local Kubernetes clusters",
-		Long:         "KSail is a CLI tool for creating and maintaining local Kubernetes clusters",
+		Short:        "CLI tool for creating and maintaining local Kubernetes clusters",
+		Long:         "CLI tool for creating and maintaining local Kubernetes clusters",
 		RunE:         handleRootRunE,
 		SilenceUsage: true,
 	}
