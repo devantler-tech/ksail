@@ -71,14 +71,3 @@ type ToolOutputChunkMsg struct {
 	ToolID string
 	Chunk  string
 }
-
-// permissionRequestMsg signals that a tool requires user approval before execution.
-type permissionRequestMsg struct {
-	toolName    string
-	command     string
-	args        []string
-	path        string
-	content     string
-	description string
-	respondChan chan<- bool // Channel to send the user's response
-}

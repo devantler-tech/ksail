@@ -176,9 +176,8 @@ func handleChatRunE(cmd *cobra.Command) error {
 		return runTUIChat(ctx, client, sessionConfig, timeout, cmd.Root())
 	}
 
-	// Non-TUI mode: use standard permission handler and tools without streaming
+	// Non-TUI mode: set up tools without streaming
 	sessionConfig.Tools = chatsvc.GetKSailTools(cmd.Root(), nil)
-	sessionConfig.OnPermissionRequest = chatsvc.CreatePermissionHandler(writer)
 
 	// Create session
 	session, err := client.CreateSession(sessionConfig)
@@ -233,9 +232,6 @@ func runTUIChat(
 
 	// Set up tools with real-time output streaming
 	sessionConfig.Tools = chatsvc.GetKSailTools(rootCmd, outputChan)
-
-	// Set up permission handler that integrates with the TUI
-	sessionConfig.OnPermissionRequest = chatui.CreateTUIPermissionHandler(eventChan)
 
 	// Create session
 	session, err := client.CreateSession(sessionConfig)

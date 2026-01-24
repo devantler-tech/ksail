@@ -7,8 +7,6 @@
 //     configuration into a system context for the AI assistant.
 //   - Custom tools: Read-only tools for cluster inspection (list, info, get),
 //     file reading, and directory listing.
-//   - Permission handling: Prompts users for confirmation on write operations
-//     while auto-approving read-only operations.
 //
 // Security: All file and directory operations are restricted to paths within
 // the current working directory to prevent directory traversal attacks.

@@ -3,11 +3,9 @@ package chat
 import (
 	"context"
 	"fmt"
-	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	goruntime "runtime"
 	"strings"
 	"time"
@@ -94,183 +92,10 @@ func getCLIHelp() string {
 	return string(output)
 }
 
-// loadDocumentation reads documentation from the docs/ directory.
+// loadDocumentation returns the embedded documentation.
+// The documentation is embedded at compile time from the docs/ directory.
 func loadDocumentation() string {
-	docsDir := findDocsDirectory()
-	if docsDir == "" {
-		return ""
-	}
-
-	var builder strings.Builder
-
-	// Priority files to load first (core documentation)
-	priorityFiles := []string{
-		"concepts.mdx",
-		"features.mdx",
-		"use-cases.mdx",
-		"installation.mdx",
-		"support-matrix.mdx",
-		"troubleshooting.md",
-		"faq.md",
-		"configuration/declarative-configuration.mdx",
-	}
-
-	loadedFiles := make(map[string]bool)
-
-	// Load priority files first
-	for _, relPath := range priorityFiles {
-		fullPath := filepath.Join(docsDir, relPath)
-		if content, err := readDocFile(fullPath); err == nil {
-			builder.WriteString(fmt.Sprintf("\n## %s\n\n", extractTitle(relPath)))
-			builder.WriteString(content)
-			builder.WriteString("\n")
-
-			loadedFiles[fullPath] = true
-		}
-	}
-
-	// Walk CLI flags directory for command reference
-	cliDir := filepath.Join(docsDir, "cli-flags")
-
-	_, statErr := os.Stat(cliDir)
-	if statErr == nil {
-		builder.WriteString("\n## CLI Command Reference\n\n")
-
-		_ = filepath.WalkDir(cliDir, func(path string, d fs.DirEntry, walkErr error) error {
-			if walkErr != nil || d.IsDir() || loadedFiles[path] {
-				return nil
-			}
-
-			if !strings.HasSuffix(path, ".md") && !strings.HasSuffix(path, ".mdx") {
-				return nil
-			}
-
-			// Skip index files in CLI flags
-			if strings.HasSuffix(path, "index.mdx") || strings.HasSuffix(path, "index.md") {
-				return nil
-			}
-
-			if content, readErr := readDocFile(path); readErr == nil {
-				relPath, _ := filepath.Rel(docsDir, path)
-				builder.WriteString(fmt.Sprintf("\n### %s\n\n", extractTitle(relPath)))
-				builder.WriteString(content)
-				builder.WriteString("\n")
-
-				loadedFiles[path] = true
-			}
-
-			return nil
-		})
-	}
-
-	return builder.String()
-}
-
-// findDocsDirectory locates the docs/src/content/docs directory.
-func findDocsDirectory() string {
-	// Check relative to executable
-	exe, err := os.Executable()
-	if err == nil {
-		exeDir := filepath.Dir(exe)
-
-		candidates := []string{
-			filepath.Join(exeDir, "docs", "src", "content", "docs"),
-			filepath.Join(exeDir, "..", "docs", "src", "content", "docs"),
-		}
-		for _, candidate := range candidates {
-			if info, statErr := os.Stat(candidate); statErr == nil && info.IsDir() {
-				return candidate
-			}
-		}
-	}
-
-	// Check relative to working directory
-	workDir, err := os.Getwd()
-	if err == nil {
-		candidates := []string{
-			filepath.Join(workDir, "docs", "src", "content", "docs"),
-			filepath.Join(workDir, "..", "docs", "src", "content", "docs"),
-		}
-		for _, candidate := range candidates {
-			if info, statErr := os.Stat(candidate); statErr == nil && info.IsDir() {
-				return candidate
-			}
-		}
-	}
-
-	// Check common development locations
-	homeDir, err := os.UserHomeDir()
-	if err == nil {
-		commonPaths := []string{
-			filepath.Join(
-				homeDir,
-				"go",
-				"src",
-				"github.com",
-				"devantler-tech",
-				"ksail",
-				"docs",
-				"src",
-				"content",
-				"docs",
-			),
-		}
-		for _, p := range commonPaths {
-			if info, statErr := os.Stat(p); statErr == nil && info.IsDir() {
-				return p
-			}
-		}
-	}
-
-	return ""
-}
-
-// readDocFile reads a markdown/mdx file and strips frontmatter.
-func readDocFile(path string) (string, error) {
-	content, err := os.ReadFile(path)
-	if err != nil {
-		return "", fmt.Errorf("reading doc file: %w", err)
-	}
-
-	text := string(content)
-
-	// Strip YAML frontmatter (between --- markers)
-	frontmatterRegex := regexp.MustCompile(`(?s)^---\n.*?\n---\n*`)
-	text = frontmatterRegex.ReplaceAllString(text, "")
-
-	// Strip import statements
-	importRegex := regexp.MustCompile(`(?m)^import\s+.*$\n*`)
-	text = importRegex.ReplaceAllString(text, "")
-
-	// Strip JSX/MDX components but keep their text content
-	componentRegex := regexp.MustCompile(`<[A-Z][^>]*>|</[A-Z][^>]*>`)
-	text = componentRegex.ReplaceAllString(text, "")
-
-	return strings.TrimSpace(text), nil
-}
-
-// extractTitle extracts a readable title from a file path.
-func extractTitle(path string) string {
-	// Get filename without extension
-	base := filepath.Base(path)
-	name := strings.TrimSuffix(strings.TrimSuffix(base, ".mdx"), ".md")
-
-	// Handle special cases
-	if name == "index" {
-		// Use parent directory name
-		dir := filepath.Dir(path)
-		name = filepath.Base(dir)
-	}
-
-	// Convert kebab-case to Title Case
-	words := strings.Split(name, "-")
-	for i, word := range words {
-		if len(word) > 0 {
-			words[i] = strings.ToUpper(string(word[0])) + word[1:]
-		}
-	}
-
-	return strings.Join(words, " ")
+	return embeddedDocumentation
 }
 
 // FindKSailExecutable attempts to find the ksail executable.

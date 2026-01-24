@@ -17,15 +17,15 @@ const logoHeight = 6
 const tagline = "AI-Powered Kubernetes Assistant"
 
 var (
-	// Color palette - ocean/nautical theme.
-	primaryColor   = lipgloss.Color("39")  // Bright cyan (ocean)
-	accentColor    = lipgloss.Color("45")  // Lighter cyan
-	secondaryColor = lipgloss.Color("245") // Gray
-	userColor      = lipgloss.Color("117") // Sky blue
-	assistantColor = lipgloss.Color("183") // Soft purple
-	toolColor      = lipgloss.Color("215") // Warm orange
-	successColor   = lipgloss.Color("78")  // Green
-	dimColor       = lipgloss.Color("240") // Dim gray
+	// Color palette - uses standard ANSI colors (0-15) to respect user's terminal theme.
+	primaryColor   = lipgloss.ANSIColor(14) // Bright cyan
+	accentColor    = lipgloss.ANSIColor(6)  // Cyan
+	secondaryColor = lipgloss.ANSIColor(8)  // Bright black (gray)
+	userColor      = lipgloss.ANSIColor(12) // Bright blue
+	assistantColor = lipgloss.ANSIColor(13) // Bright magenta
+	toolColor      = lipgloss.ANSIColor(11) // Bright yellow
+	successColor   = lipgloss.ANSIColor(10) // Bright green
+	dimColor       = lipgloss.ANSIColor(8)  // Bright black (gray)
 
 	// logoStyle renders the ASCII art logo.
 	logoStyle = lipgloss.NewStyle().
@@ -90,7 +90,7 @@ var (
 			Italic(true)
 
 	// errorColor for error messages.
-	errorColor = lipgloss.Color("196") // Red
+	errorColor = lipgloss.ANSIColor(9) // Bright red
 
 	// errorStyle styles error messages.
 	errorStyle = lipgloss.NewStyle().
@@ -98,7 +98,7 @@ var (
 			Bold(true)
 
 	// warningColor for warning/permission messages.
-	warningColor = lipgloss.Color("214") // Orange/yellow
+	warningColor = lipgloss.ANSIColor(11) // Bright yellow
 
 	// warningStyle styles warning/permission request messages.
 	warningStyle = lipgloss.NewStyle().

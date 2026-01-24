@@ -152,6 +152,11 @@ type Model struct {
 	quitting        bool
 	ready           bool
 
+	// Prompt history
+	history      []string // previously submitted prompts
+	historyIndex int      // -1 means not browsing history, 0+ is position in history
+	savedInput   string   // saves current input when browsing history
+
 	// Tool execution tracking
 	tools            map[string]*toolExecution // keyed by tool ID
 	toolOrder        []string                  // ordered list of tool IDs for rendering
@@ -162,10 +167,6 @@ type Model struct {
 	sessionComplete bool       // true when SessionIdle has been received
 	unsubscribe     func()     // function to unsubscribe from session events
 	unsubscribeMu   sync.Mutex // protects unsubscribe access
-
-	// Permission request state
-	pendingPermission *permissionRequestMsg
-	awaitingApproval  bool
 
 	// Dimensions
 	width  int
@@ -234,19 +235,21 @@ func NewWithEventChannel(
 	}
 
 	return &Model{
-		viewport:  viewPort,
-		textarea:  textArea,
-		spinner:   spin,
-		renderer:  mdRenderer,
-		messages:  make([]chatMessage, 0),
-		session:   session,
-		timeout:   timeout,
-		ctx:       context.Background(),
-		eventChan: eventChan,
-		width:     defaultWidth,
-		height:    defaultHeight,
-		tools:     make(map[string]*toolExecution),
-		toolOrder: make([]string, 0),
+		viewport:     viewPort,
+		textarea:     textArea,
+		spinner:      spin,
+		renderer:     mdRenderer,
+		messages:     make([]chatMessage, 0),
+		session:      session,
+		timeout:      timeout,
+		ctx:          context.Background(),
+		eventChan:    eventChan,
+		width:        defaultWidth,
+		height:       defaultHeight,
+		tools:        make(map[string]*toolExecution),
+		toolOrder:    make([]string, 0),
+		history:      make([]string, 0),
+		historyIndex: -1,
 	}
 }
 
@@ -268,6 +271,23 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		return m.handleKeyMsg(msg)
+
+	case tea.MouseMsg:
+		// Handle only mouse wheel scrolling - let click/drag pass through for text selection
+		if msg.Button == tea.MouseButtonWheelUp {
+			m.viewport.LineUp(3)
+			m.userScrolled = !m.viewport.AtBottom()
+			return m, nil
+		}
+		if msg.Button == tea.MouseButtonWheelDown {
+			m.viewport.LineDown(3)
+			if m.viewport.AtBottom() {
+				m.userScrolled = false
+			}
+			return m, nil
+		}
+		// Ignore other mouse events (clicks, drags) - terminal handles text selection
+		return m, nil
 
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
@@ -316,9 +336,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case streamErrMsg:
 		return m.handleStreamErr(msg)
 
-	case permissionRequestMsg:
-		return m.handlePermissionRequest(msg)
-
 	case spinner.TickMsg:
 		// Always update spinner to keep it ticking
 		var cmd tea.Cmd
@@ -328,13 +345,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.isStreaming || m.hasRunningTools() {
 			m.updateViewportContent()
 		}
-
-	case tea.MouseMsg:
-		return m.handleMouseMsg(msg)
 	}
 
-	// Update sub-components - allow input when awaiting approval
-	if !m.isStreaming || m.awaitingApproval {
+	// Update sub-components
+	if !m.isStreaming {
 		var taCmd tea.Cmd
 		m.textarea, taCmd = m.textarea.Update(msg)
 		cmds = append(cmds, taCmd)
@@ -358,9 +372,9 @@ func (m *Model) View() string {
 
 	// Header with logo
 	headerContent := logoStyle.Render(logo) + "\n" + taglineStyle.Render("  "+tagline)
-	if m.isStreaming && !m.awaitingApproval {
+	if m.isStreaming {
 		headerContent += "  " + m.spinner.View() + " " + statusStyle.Render("Thinking...")
-	} else if m.justCompleted && !m.awaitingApproval {
+	} else if m.justCompleted {
 		headerContent += "  " + statusStyle.Render("Ready ✓")
 	}
 	header := headerBoxStyle.Width(m.width - 2).Render(headerContent)
@@ -370,67 +384,16 @@ func (m *Model) View() string {
 	chatContent := viewportStyle.Width(m.width - 2).Render(m.viewport.View())
 	sections = append(sections, chatContent)
 
-	// Input area - show permission prompt if awaiting approval
-	var inputContent string
-	if m.awaitingApproval && m.pendingPermission != nil {
-		// Build permission request display
-		var permBox strings.Builder
-		permBox.WriteString(warningStyle.Render("⚠ Permission Required") + "\n\n")
-
-		// Show command (most important) if available - highlight it prominently
-		if m.pendingPermission.command != "" {
-			permBox.WriteString(toolMsgStyle.Render("  $ "+m.pendingPermission.command) + "\n")
-		} else if m.pendingPermission.description != "" && m.pendingPermission.description != "shell" {
-			// Show description if no command and it's not just "shell"
-			permBox.WriteString(
-				helpStyle.Render("  Operation: ") + m.pendingPermission.description + "\n",
-			)
-		} else {
-			// Generic shell operation - show what we know
-			permBox.WriteString(helpStyle.Render("  Tool: ") + m.pendingPermission.toolName + "\n")
-			permBox.WriteString(helpStyle.Render("  Note: Shell command execution requested\n"))
-			permBox.WriteString(
-				helpStyle.Render("        (Command details not available from this tool)\n"),
-			)
-		}
-
-		// Show arguments if present (separate from command)
-		if len(m.pendingPermission.args) > 0 {
-			permBox.WriteString(
-				helpStyle.Render("  Args: ") + strings.Join(m.pendingPermission.args, " ") + "\n",
-			)
-		}
-
-		// Show file path if present
-		if m.pendingPermission.path != "" {
-			permBox.WriteString(helpStyle.Render("  Path: ") + m.pendingPermission.path + "\n")
-		}
-
-		// Show content preview if present (for file write operations)
-		if m.pendingPermission.content != "" {
-			lines := strings.Split(m.pendingPermission.content, "\n")
-			permBox.WriteString(helpStyle.Render("  Content:\n"))
-			for _, line := range lines {
-				permBox.WriteString(helpStyle.Render("    "+line) + "\n")
-			}
-		}
-
-		permBox.WriteString("\n")
-		permBox.WriteString(helpStyle.Render("  Press Y to approve, N to deny"))
-		inputContent = inputStyle.Width(m.width - 2).Render(permBox.String())
-	} else {
-		inputContent = inputStyle.Width(m.width - 2).Render(m.textarea.View())
-	}
+	// Input area
+	inputContent := inputStyle.Width(m.width - 2).Render(m.textarea.View())
 	sections = append(sections, inputContent)
 
 	// Footer/help
 	var helpText string
-	if m.awaitingApproval {
-		helpText = "  Y Approve • N Deny • esc Cancel • Powered by GitHub Copilot"
-	} else if len(m.toolOrder) > 0 {
-		helpText = "  ⏎ Send • ⌥⏎ Newline • ⇥ Toggle Output • ^L Clear • esc Quit • Powered by GitHub Copilot"
+	if len(m.toolOrder) > 0 {
+		helpText = "  ⏎ Send • ↑↓ History • PgUp/Dn Scroll • ⇥ Toggle • ^T All • ^L Clear • esc Quit"
 	} else {
-		helpText = "  ⏎ Send • ⌥⏎ Newline • ^L Clear • ^T Toggle tools • esc Quit"
+		helpText = "  ⏎ Send • ↑↓ History • PgUp/Dn Scroll • ^L Clear • esc Quit"
 	}
 	help := helpStyle.Render(helpText)
 	sections = append(sections, help)
@@ -440,11 +403,6 @@ func (m *Model) View() string {
 
 // handleKeyMsg handles keyboard input.
 func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	// Handle permission approval mode separately
-	if m.awaitingApproval {
-		return m.handleApprovalKey(msg)
-	}
-
 	switch msg.String() {
 	case "ctrl+c":
 		// Always quit on ctrl+c, even during streaming
@@ -457,8 +415,10 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.cleanup()
 			m.isStreaming = false
 			if len(m.messages) > 0 && m.messages[len(m.messages)-1].role == "assistant" {
-				m.messages[len(m.messages)-1].content += " [cancelled]"
-				m.messages[len(m.messages)-1].isStreaming = false
+				last := &m.messages[len(m.messages)-1]
+				last.content += " [cancelled]"
+				last.isStreaming = false
+				last.rendered = renderMarkdownWithRenderer(m.renderer, last.content)
 			}
 			m.updateViewportContent()
 			return m, nil
@@ -512,6 +472,34 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.updateViewportContent()
 		}
 		return m, nil
+	case "up":
+		// Navigate to previous prompt in history
+		if !m.isStreaming && len(m.history) > 0 {
+			if m.historyIndex == -1 {
+				// Save current input before browsing history
+				m.savedInput = m.textarea.Value()
+				m.historyIndex = len(m.history) - 1
+			} else if m.historyIndex > 0 {
+				m.historyIndex--
+			}
+			m.textarea.SetValue(m.history[m.historyIndex])
+			m.textarea.CursorEnd()
+		}
+		return m, nil
+	case "down":
+		// Navigate to next prompt in history or back to current input
+		if !m.isStreaming && m.historyIndex >= 0 {
+			if m.historyIndex < len(m.history)-1 {
+				m.historyIndex++
+				m.textarea.SetValue(m.history[m.historyIndex])
+			} else {
+				// Back to current input
+				m.historyIndex = -1
+				m.textarea.SetValue(m.savedInput)
+			}
+			m.textarea.CursorEnd()
+		}
+		return m, nil
 	case "enter":
 		// Send message on Enter
 		if !m.isStreaming && strings.TrimSpace(m.textarea.Value()) != "" {
@@ -525,6 +513,20 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	// Handle page up/down for viewport scrolling (fn+arrows on Mac)
+	switch msg.Type {
+	case tea.KeyPgUp:
+		m.viewport.HalfViewUp()
+		m.userScrolled = !m.viewport.AtBottom()
+		return m, nil
+	case tea.KeyPgDown:
+		m.viewport.HalfViewDown()
+		if m.viewport.AtBottom() {
+			m.userScrolled = false
+		}
+		return m, nil
+	}
+
 	// Update textarea for other keys
 	var taCmd tea.Cmd
 	m.textarea, taCmd = m.textarea.Update(msg)
@@ -535,41 +537,20 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, taCmd
 }
 
-// handleApprovalKey handles keyboard input when awaiting permission approval.
-func (m *Model) handleApprovalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-	case "ctrl+c":
-		m.cleanup()
-		m.quitting = true
-		return m, tea.Quit
-	case "y", "Y":
-		// Approve the permission request
-		if m.pendingPermission != nil && m.pendingPermission.respondChan != nil {
-			m.pendingPermission.respondChan <- true
-		}
-		m.awaitingApproval = false
-		m.pendingPermission = nil
-		m.textarea.Reset()
-		m.textarea.Placeholder = "Ask me anything about Kubernetes, KSail, or cluster management..."
-		m.updateViewportContent()
-		return m, m.waitForEvent()
-	case "n", "N", "esc":
-		// Deny the permission request
-		if m.pendingPermission != nil && m.pendingPermission.respondChan != nil {
-			m.pendingPermission.respondChan <- false
-		}
-		m.awaitingApproval = false
-		m.pendingPermission = nil
-		m.textarea.Reset()
-		m.textarea.Placeholder = "Ask me anything about Kubernetes, KSail, or cluster management..."
-		m.updateViewportContent()
-		return m, m.waitForEvent()
-	}
-	return m, nil
-}
-
 // handleUserSubmit handles user message submission.
 func (m *Model) handleUserSubmit(msg userSubmitMsg) (tea.Model, tea.Cmd) {
+	// Ensure any previous assistant messages are properly rendered
+	// This handles cases where SessionIdle didn't fire properly
+	m.reRenderCompletedMessages()
+
+	// Save prompt to history
+	prompt := msg.content
+	if prompt != "" && (len(m.history) == 0 || m.history[len(m.history)-1] != prompt) {
+		m.history = append(m.history, prompt)
+	}
+	m.historyIndex = -1
+	m.savedInput = ""
+
 	// Drain any stale events from previous conversation turn
 	// This prevents old events from interfering with the new message
 	m.drainEventChannel()
@@ -850,8 +831,10 @@ func (m *Model) handleAbort() (tea.Model, tea.Cmd) {
 	m.isStreaming = false
 	m.cleanup()
 	if len(m.messages) > 0 && m.messages[len(m.messages)-1].role == "assistant" {
-		m.messages[len(m.messages)-1].content += "\n\n[Session aborted]"
-		m.messages[len(m.messages)-1].isStreaming = false
+		last := &m.messages[len(m.messages)-1]
+		last.content += "\n\n[Session aborted]"
+		last.isStreaming = false
+		last.rendered = renderMarkdownWithRenderer(m.renderer, last.content)
 	}
 	m.updateViewportContent()
 	return m, nil
@@ -863,47 +846,14 @@ func (m *Model) handleStreamErr(msg streamErrMsg) (tea.Model, tea.Cmd) {
 	m.cleanup() // Clean up event subscription
 	m.err = msg.err
 	if len(m.messages) > 0 && m.messages[len(m.messages)-1].role == "assistant" {
-		m.messages[len(m.messages)-1].content = fmt.Sprintf("Error: %v", msg.err)
-		m.messages[len(m.messages)-1].isStreaming = false
+		last := &m.messages[len(m.messages)-1]
+		last.content = fmt.Sprintf("Error: %v", msg.err)
+		last.isStreaming = false
+		last.rendered = renderMarkdownWithRenderer(m.renderer, last.content)
 	}
 	m.updateViewportContent()
 	// Don't wait for more events - response is complete (with error)
 	return m, nil
-}
-
-// handlePermissionRequest handles permission request events from the Copilot SDK.
-func (m *Model) handlePermissionRequest(msg permissionRequestMsg) (tea.Model, tea.Cmd) {
-	m.pendingPermission = &msg
-	m.awaitingApproval = true
-
-	// Update textarea to show approval prompt
-	m.textarea.Reset()
-	m.textarea.Placeholder = "Press Y to approve, N to deny"
-	m.textarea.Focus()
-
-	m.updateViewportContent()
-	return m, nil
-}
-
-// handleMouseMsg handles mouse events.
-func (m *Model) handleMouseMsg(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
-	// Track scroll position before update
-	wasAtBottom := m.viewport.AtBottom()
-
-	// Pass mouse events to viewport for scrolling
-	var vpCmd tea.Cmd
-	m.viewport, vpCmd = m.viewport.Update(msg)
-
-	// Detect user scrolling away from bottom (pause auto-scroll)
-	if wasAtBottom && !m.viewport.AtBottom() {
-		m.userScrolled = true
-	}
-	// Resume auto-scroll if user scrolls back to bottom
-	if m.viewport.AtBottom() {
-		m.userScrolled = false
-	}
-
-	return m, vpCmd
 }
 
 // waitForEvent returns a command that waits for an event from the channel.
@@ -1003,8 +953,9 @@ func (m *Model) updateViewportContent() {
 	for _, msg := range m.messages {
 		switch msg.role {
 		case "user":
-			builder.WriteString(userMsgStyle.Render("▶ You"))
 			builder.WriteString("\n")
+			builder.WriteString(userMsgStyle.Render("▶ You"))
+			builder.WriteString("\n\n")
 			// Wrap user content
 			wrapped := wordwrap.WrapString(msg.content, wrapWidthUint)
 			for _, line := range strings.Split(wrapped, "\n") {
@@ -1015,11 +966,12 @@ func (m *Model) updateViewportContent() {
 			builder.WriteString("\n")
 
 		case "assistant":
+			builder.WriteString("\n")
 			builder.WriteString(assistantMsgStyle.Render("▶ KSail"))
 			if msg.isStreaming {
 				builder.WriteString(" " + m.spinner.View())
 			}
-			builder.WriteString("\n")
+			builder.WriteString("\n\n")
 
 			// Interleave tools with assistant text based on their textPosition
 			content := msg.content
@@ -1113,7 +1065,7 @@ func (m *Model) renderToolInline(builder *strings.Builder, tool *toolExecution, 
 	// Determine what to display: command if available, otherwise humanized name
 	displayName := humanName
 	if tool.command != "" {
-		displayName = "$ " + tool.command
+		displayName = "> " + tool.command
 	}
 
 	switch tool.status {
@@ -1354,7 +1306,7 @@ func Run(
 		model,
 		tea.WithAltScreen(),
 		tea.WithContext(ctx),
-		tea.WithMouseCellMotion(), // Enable mouse support
+		tea.WithMouseCellMotion(), // Enable mouse wheel (use shift+click for text selection)
 	)
 
 	_, err := program.Run()
@@ -1375,7 +1327,7 @@ func RunWithEventChannel(
 		model,
 		tea.WithAltScreen(),
 		tea.WithContext(ctx),
-		tea.WithMouseCellMotion(), // Enable mouse support
+		tea.WithMouseCellMotion(), // Enable mouse wheel (use shift+click for text selection)
 	)
 
 	_, err := program.Run()
@@ -1418,96 +1370,4 @@ func (m *Model) hasRunningTools() bool {
 		}
 	}
 	return false
-}
-
-// CreateTUIPermissionHandler creates a permission handler that integrates with the TUI.
-// It sends permission requests to the provided event channel and waits for a response.
-// This allows the TUI to display permission prompts and collect user input.
-func CreateTUIPermissionHandler(eventChan chan<- tea.Msg) copilot.PermissionHandler {
-	return func(
-		request copilot.PermissionRequest,
-		_ copilot.PermissionInvocation,
-	) (copilot.PermissionRequestResult, error) {
-		// Extract tool name from request.Extra
-		toolName := ""
-		if request.Extra != nil {
-			if name, ok := request.Extra["toolName"].(string); ok {
-				toolName = name
-			}
-		}
-		if toolName == "" {
-			toolName = request.Kind
-		}
-
-		// Humanize the tool name for display
-		humanName := humanizeToolName(toolName)
-
-		// Extract command from request.Extra if available
-		command := ""
-		if request.Extra != nil {
-			if cmd, ok := request.Extra["command"].(string); ok {
-				command = cmd
-			}
-			// Also check for 'text' field which might contain command details
-			if command == "" {
-				if text, ok := request.Extra["text"].(string); ok {
-					command = text
-				}
-			}
-		}
-
-		// Extract arguments
-		var args []string
-		if request.Extra != nil {
-			if argsAny, ok := request.Extra["args"].([]any); ok {
-				for _, arg := range argsAny {
-					args = append(args, fmt.Sprintf("%v", arg))
-				}
-			}
-		}
-
-		// Extract file path
-		path := ""
-		if request.Extra != nil {
-			if p, ok := request.Extra["path"].(string); ok {
-				path = p
-			}
-		}
-
-		// Extract content (truncate for display)
-		content := ""
-		if request.Extra != nil {
-			if c, ok := request.Extra["content"].(string); ok {
-				content = c
-				if len(content) > 200 {
-					content = content[:200] + "..."
-				}
-			}
-		}
-
-		// Build description from Kind
-		description := request.Kind
-
-		// Create response channel
-		responseChan := make(chan bool, 1)
-
-		// Send permission request to TUI - use humanized name for display
-		eventChan <- permissionRequestMsg{
-			toolName:    humanName,
-			command:     command,
-			args:        args,
-			path:        path,
-			content:     content,
-			description: description,
-			respondChan: responseChan,
-		}
-
-		// Wait for response from TUI
-		approved := <-responseChan
-
-		if approved {
-			return copilot.PermissionRequestResult{Kind: "approved"}, nil
-		}
-		return copilot.PermissionRequestResult{Kind: "denied-interactively-by-user"}, nil
-	}
 }
