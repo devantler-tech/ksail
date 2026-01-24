@@ -173,12 +173,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.MouseMsg:
 		// Handle only mouse wheel scrolling - let click/drag pass through for text selection
 		if msg.Button == tea.MouseButtonWheelUp {
-			m.viewport.LineUp(3)
+			m.viewport.ScrollUp(3)
 			m.userScrolled = !m.viewport.AtBottom()
 			return m, nil
 		}
 		if msg.Button == tea.MouseButtonWheelDown {
-			m.viewport.LineDown(3)
+			m.viewport.ScrollDown(3)
 			if m.viewport.AtBottom() {
 				m.userScrolled = false
 			}
@@ -263,18 +263,43 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m *Model) View() string {
 	if m.quitting {
 		goodbye := statusStyle.Render("  Goodbye! Thanks for using KSail.\n")
-		return logoStyle.Render(logo) + "\n\n" + goodbye
+		return logoStyle.Render(logo()) + "\n\n" + goodbye
 	}
 
 	sections := make([]string, 0, 4)
 
-	// Header with logo
-	headerContent := logoStyle.Render(logo) + "\n" + taglineStyle.Render("  "+tagline)
+	// Header with logo and right-aligned status indicator
+	logoRendered := logoStyle.Render(logo())
+
+	// Build tagline row with right-aligned status
+	taglineText := taglineStyle.Render("  " + tagline())
+	statusText := ""
 	if m.isStreaming {
-		headerContent += "  " + m.spinner.View() + " " + statusStyle.Render("Thinking...")
+		statusText = m.spinner.View() + " " + statusStyle.Render("Thinking...")
 	} else if m.justCompleted {
-		headerContent += "  " + statusStyle.Render("Ready ✓")
+		statusText = statusStyle.Render("Ready ✓")
 	}
+
+	// Calculate available width for the tagline row (inside border padding)
+	contentWidth := m.width - 8 // Account for borders and padding
+	if contentWidth < 40 {
+		contentWidth = 40
+	}
+
+	// Create tagline row with status on the right
+	taglineRow := taglineText
+	if statusText != "" {
+		// Calculate spacing to push status to the right
+		taglineLen := lipgloss.Width(taglineText)
+		statusLen := lipgloss.Width(statusText)
+		spacing := contentWidth - taglineLen - statusLen
+		if spacing < 2 {
+			spacing = 2
+		}
+		taglineRow = taglineText + strings.Repeat(" ", spacing) + statusText
+	}
+
+	headerContent := logoRendered + "\n" + taglineRow
 	header := headerBoxStyle.Width(m.width - 2).Render(headerContent)
 	sections = append(sections, header)
 
@@ -300,6 +325,8 @@ func (m *Model) View() string {
 }
 
 // handleKeyMsg handles keyboard input.
+//
+//nolint:gocyclo // Key handlers inherently have high cyclomatic complexity due to many case branches.
 func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "ctrl+c":
@@ -414,11 +441,11 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Handle page up/down for viewport scrolling (fn+arrows on Mac)
 	switch msg.Type {
 	case tea.KeyPgUp:
-		m.viewport.HalfViewUp()
+		m.viewport.HalfPageUp()
 		m.userScrolled = !m.viewport.AtBottom()
 		return m, nil
 	case tea.KeyPgDown:
-		m.viewport.HalfViewDown()
+		m.viewport.HalfPageDown()
 		if m.viewport.AtBottom() {
 			m.userScrolled = false
 		}
@@ -713,7 +740,7 @@ func (m *Model) handleTurnStart() (tea.Model, tea.Cmd) {
 
 // handleReasoning handles reasoning events from the assistant.
 // These indicate the LLM is actively "thinking" about the response.
-func (m *Model) handleReasoning(msg reasoningMsg) (tea.Model, tea.Cmd) {
+func (m *Model) handleReasoning(_ reasoningMsg) (tea.Model, tea.Cmd) {
 	// Reasoning events confirm the LLM is actively working
 	// We just keep streaming state active and wait for more events
 	m.isStreaming = true
@@ -834,6 +861,8 @@ func (m *Model) reRenderCompletedMessages() {
 }
 
 // updateViewportContent rebuilds the viewport content from message history.
+//
+//nolint:nestif // Complex rendering logic requires nested conditionals for different content types.
 func (m *Model) updateViewportContent() {
 	if len(m.messages) == 0 {
 		welcomeMsg := "  Type a message below to start chatting with KSail AI.\n"
@@ -1235,34 +1264,6 @@ func RunWithEventChannel(
 
 	_, err := program.Run()
 	return err
-}
-
-// createTextarea creates and configures the input textarea.
-func createTextarea() textarea.Model {
-	ta := textarea.New()
-	ta.Placeholder = "Ask me anything about Kubernetes, KSail, or cluster management..."
-	ta.Focus()
-	ta.CharLimit = 4096
-	ta.SetWidth(defaultWidth - 6)
-	ta.SetHeight(inputHeight)
-	ta.ShowLineNumbers = false
-	ta.SetPromptFunc(2, func(lineIdx int) string {
-		if lineIdx == 0 {
-			return "> "
-		}
-		return "  "
-	})
-	ta.FocusedStyle.CursorLine = lipgloss.NewStyle()
-	ta.FocusedStyle.Placeholder = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-	return ta
-}
-
-// createSpinner creates and configures the loading spinner.
-func createSpinner() spinner.Model {
-	s := spinner.New()
-	s.Spinner = spinner.MiniDot
-	s.Style = spinnerStyle
-	return s
 }
 
 // hasRunningTools returns true if any tools are currently running.

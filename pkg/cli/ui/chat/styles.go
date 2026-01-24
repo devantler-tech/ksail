@@ -1,20 +1,21 @@
 package chat
 
-import "github.com/charmbracelet/lipgloss"
+import (
+	"github.com/charmbracelet/lipgloss"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/asciiart"
+)
 
-// ASCII art logo for the header.
-const logo = `  ██╗  ██╗███████╗ █████╗ ██╗██╗
-  ██║ ██╔╝██╔════╝██╔══██╗██║██║
-  █████╔╝ ███████╗███████║██║██║
-  ██╔═██╗ ╚════██║██╔══██║██║██║
-  ██║  ██╗███████║██║  ██║██║███████╗
-  ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═╝╚══════╝`
-
-// logoHeight is the number of lines in the logo.
+// logoHeight is the number of lines in the block letter logo (must be const for headerHeight calculation).
 const logoHeight = 6
 
-// tagline displayed under the logo.
-const tagline = "AI-Powered Kubernetes Assistant"
+// Logo functions that delegate to the shared asciiart package.
+var (
+	// logo returns the ASCII art block letter logo.
+	logo = asciiart.Logo
+
+	// tagline returns the standard tagline.
+	tagline = asciiart.Tagline
+)
 
 var (
 	// Color palette - uses standard ANSI colors (0-15) to respect user's terminal theme.
@@ -95,14 +96,6 @@ var (
 	// errorStyle styles error messages.
 	errorStyle = lipgloss.NewStyle().
 			Foreground(errorColor).
-			Bold(true)
-
-	// warningColor for warning/permission messages.
-	warningColor = lipgloss.ANSIColor(11) // Bright yellow
-
-	// warningStyle styles warning/permission request messages.
-	warningStyle = lipgloss.NewStyle().
-			Foreground(warningColor).
 			Bold(true)
 
 	// toolCollapsedStyle styles the collapsed tool header (completed successfully).

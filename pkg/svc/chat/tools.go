@@ -11,6 +11,12 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// File permission constants for secure file operations.
+const (
+	dirPermissions  = 0o750 // rwxr-x---
+	filePermissions = 0o600 // rw-------
+)
+
 // GetKSailTools returns the tools available to the chat assistant.
 // It combines auto-generated tools from Cobra commands with manual file system tools.
 // The rootCmd parameter should be the root Cobra command for the CLI.
@@ -214,7 +220,7 @@ func writeFileTool() copilot.Tool {
 
 			// Create parent directories if needed
 			dir := filepath.Dir(safePath)
-			if err := os.MkdirAll(dir, 0o755); err != nil {
+			if err := os.MkdirAll(dir, dirPermissions); err != nil {
 				return copilot.ToolResult{
 					TextResultForLLM: fmt.Sprintf("Error creating directory: %v", err),
 					ResultType:       "failure",
@@ -222,7 +228,7 @@ func writeFileTool() copilot.Tool {
 			}
 
 			// Write the file
-			if err := os.WriteFile(safePath, []byte(content), 0o644); err != nil {
+			if err := os.WriteFile(safePath, []byte(content), filePermissions); err != nil {
 				return copilot.ToolResult{
 					TextResultForLLM: fmt.Sprintf("Error writing file: %v", err),
 					ResultType:       "failure",

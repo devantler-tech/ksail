@@ -4,6 +4,7 @@ package chat
 
 import (
 	"embed"
+	"fmt"
 	"io/fs"
 	"path/filepath"
 	"regexp"
@@ -14,8 +15,11 @@ import (
 var docsFS embed.FS
 
 // embeddedDocumentation is built at init time from the embedded docs.
+//
+//nolint:gochecknoglobals // Required for go:embed pattern - must be package-level.
 var embeddedDocumentation string
 
+//nolint:gochecknoinits // Required to initialize embedded docs at startup.
 func init() {
 	embeddedDocumentation = buildEmbeddedDocumentation()
 }
@@ -117,7 +121,7 @@ func buildEmbeddedDocumentation() string {
 func readEmbeddedDocFile(path string) (string, error) {
 	content, err := docsFS.ReadFile(path)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("reading embedded doc %s: %w", path, err)
 	}
 
 	text := string(content)

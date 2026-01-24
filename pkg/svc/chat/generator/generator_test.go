@@ -8,6 +8,8 @@ import (
 )
 
 func TestGenerateToolsFromCommand(t *testing.T) {
+	t.Parallel()
+
 	root := cmd.NewRootCmd("test", "abc123", "2024-01-01")
 	opts := generator.DefaultOptions()
 
@@ -59,10 +61,10 @@ func TestGenerateToolsFromCommand(t *testing.T) {
 	}
 }
 
-func truncate(s string, max int) string {
-	if len(s) <= max {
+func truncate(s string, maxLen int) string {
+	if len(s) <= maxLen {
 		return s
 	}
 
-	return s[:max] + "..."
+	return s[:maxLen] + "..."
 }

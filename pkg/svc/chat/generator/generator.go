@@ -38,6 +38,12 @@ const (
 	// AnnotationDescription provides a custom description for the tool.
 	// If not set, cmd.Short is used.
 	AnnotationDescription = "chat.description"
+
+	// defaultCommandTimeout is the default timeout for command execution.
+	defaultCommandTimeout = 5 * time.Minute
+
+	// jsonSchemaTypeString is the JSON schema type for string values.
+	jsonSchemaTypeString = "string"
 )
 
 // ToolOptions configures tool generation behavior.
@@ -160,7 +166,7 @@ func DefaultOptions() ToolOptions {
 			// cipher (all), plus file system tools = ~25 tools
 		},
 		IncludeHidden:  false,
-		CommandTimeout: 5 * time.Minute,
+		CommandTimeout: defaultCommandTimeout,
 	}
 }
 
@@ -281,19 +287,19 @@ func buildParameterSchema(cmd *cobra.Command) map[string]any {
 	required := []string{}
 
 	// Visit all flags (local and persistent)
-	cmd.Flags().VisitAll(func(f *pflag.Flag) {
+	cmd.Flags().VisitAll(func(flag *pflag.Flag) {
 		// Skip help flag
-		if f.Name == "help" {
+		if flag.Name == "help" {
 			return
 		}
 
-		prop := flagToSchemaProperty(f)
-		properties[f.Name] = prop
+		prop := flagToSchemaProperty(flag)
+		properties[flag.Name] = prop
 
 		// Mark as required if no default value and not a bool
 		// Bools default to false so they're never truly "required"
-		if f.DefValue == "" && f.Value.Type() != "bool" {
-			required = append(required, f.Name)
+		if flag.DefValue == "" && flag.Value.Type() != "bool" {
+			required = append(required, flag.Name)
 		}
 	})
 
@@ -321,29 +327,31 @@ func buildParameterSchema(cmd *cobra.Command) map[string]any {
 }
 
 // flagToSchemaProperty converts a pflag to a JSON schema property.
-func flagToSchemaProperty(f *pflag.Flag) map[string]any {
+//
+//nolint:nestif // Type checking with interface assertions requires nested conditionals.
+func flagToSchemaProperty(flag *pflag.Flag) map[string]any {
 	prop := map[string]any{}
 
 	// Check if the flag value implements enumValuer interface
-	if ev, ok := f.Value.(enumValuer); ok {
+	if ev, ok := flag.Value.(enumValuer); ok {
 		validValues := ev.ValidValues()
 		if len(validValues) > 0 {
 			// Add enum constraint for LLM to know valid options
-			prop["type"] = "string"
+			prop["type"] = jsonSchemaTypeString
 			prop["enum"] = validValues
 			prop["description"] = fmt.Sprintf(
 				"%s (valid options: %s)",
-				f.Usage,
+				flag.Usage,
 				strings.Join(validValues, ", "),
 			)
 
 			// Check if it also implements defaulter
-			if d, ok := f.Value.(defaulter); ok {
+			if d, ok := flag.Value.(defaulter); ok {
 				if def := d.Default(); def != nil {
 					prop["default"] = fmt.Sprintf("%v", def)
 				}
-			} else if f.DefValue != "" {
-				prop["default"] = f.DefValue
+			} else if flag.DefValue != "" {
+				prop["default"] = flag.DefValue
 			}
 
 			return prop
@@ -351,10 +359,10 @@ func flagToSchemaProperty(f *pflag.Flag) map[string]any {
 	}
 
 	// Standard description
-	prop["description"] = f.Usage
+	prop["description"] = flag.Usage
 
 	// Map pflag types to JSON schema types
-	switch f.Value.Type() {
+	switch flag.Value.Type() {
 	case "bool":
 		prop["type"] = "boolean"
 	case "int", "int8", "int16", "int32", "int64",
@@ -369,16 +377,16 @@ func flagToSchemaProperty(f *pflag.Flag) map[string]any {
 		prop["type"] = "array"
 		prop["items"] = map[string]any{"type": "integer"}
 	case "duration":
-		prop["type"] = "string"
-		prop["description"] = f.Usage + " (format: 1h30m, 5m, 30s)"
+		prop["type"] = jsonSchemaTypeString
+		prop["description"] = flag.Usage + " (format: 1h30m, 5m, 30s)"
 	default:
 		// Default to string for unknown types
-		prop["type"] = "string"
+		prop["type"] = jsonSchemaTypeString
 	}
 
 	// Add default value if present
-	if f.DefValue != "" && f.DefValue != "false" && f.DefValue != "[]" {
-		prop["default"] = f.DefValue
+	if flag.DefValue != "" && flag.DefValue != "false" && flag.DefValue != "[]" {
+		prop["default"] = flag.DefValue
 	}
 
 	return prop
@@ -477,24 +485,24 @@ func buildCommandArgs(
 		}
 
 		// Format flag based on type
-		switch v := value.(type) {
+		switch typedValue := value.(type) {
 		case bool:
-			if v {
+			if typedValue {
 				args = append(args, "--"+name)
 			}
 		case string:
 			// Skip empty strings - they're invalid for most flags
 			// especially enum-type flags that require valid values
-			if v != "" {
-				args = append(args, fmt.Sprintf("--%s=%v", name, v))
+			if typedValue != "" {
+				args = append(args, fmt.Sprintf("--%s=%v", name, typedValue))
 			}
 		case []any:
 			// Handle slice flags
-			for _, item := range v {
+			for _, item := range typedValue {
 				args = append(args, fmt.Sprintf("--%s=%v", name, item))
 			}
 		default:
-			args = append(args, fmt.Sprintf("--%s=%v", name, v))
+			args = append(args, fmt.Sprintf("--%s=%v", name, typedValue))
 		}
 	}
 
@@ -503,6 +511,8 @@ func buildCommandArgs(
 
 // runKSailCommand executes a KSail command with the given arguments.
 // It streams output in real-time through the OutputChan if configured.
+//
+//nolint:gocognit // Streaming command execution requires complex control flow for pipe handling.
 func runKSailCommand(args []string, toolName string, opts ToolOptions) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), opts.CommandTimeout)
 	defer cancel()
@@ -545,12 +555,12 @@ func runKSailCommand(args []string, toolName string, opts ToolOptions) (string, 
 	var (
 		outputBuilder strings.Builder
 		mutex         sync.Mutex
-		wg            sync.WaitGroup
+		waitGroup     sync.WaitGroup
 	)
 
 	// Stream stdout
 
-	wg.Go(func() {
+	waitGroup.Go(func() {
 		reader := bufio.NewReader(stdoutPipe)
 		for {
 			line, err := reader.ReadString('\n')
@@ -574,7 +584,7 @@ func runKSailCommand(args []string, toolName string, opts ToolOptions) (string, 
 
 	// Stream stderr
 
-	wg.Go(func() {
+	waitGroup.Go(func() {
 		reader := bufio.NewReader(stderrPipe)
 		for {
 			line, err := reader.ReadString('\n')
@@ -597,7 +607,7 @@ func runKSailCommand(args []string, toolName string, opts ToolOptions) (string, 
 	})
 
 	// Wait for pipes to be fully read before Wait() closes them
-	wg.Wait()
+	waitGroup.Wait()
 
 	// Wait for command to complete
 	waitErr := cmd.Wait()

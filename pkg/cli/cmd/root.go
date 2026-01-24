@@ -63,7 +63,8 @@ func handleRootRunE(
 	cmd *cobra.Command,
 	_ []string,
 ) error {
-	asciiart.PrintKSailLogo(cmd.OutOrStdout())
+	_, _ = fmt.Fprintln(cmd.OutOrStdout(), asciiart.Logo())
+	_, _ = fmt.Fprintln(cmd.OutOrStdout())
 
 	// The err can safely be ignored, as it can never fail at runtime.
 	_ = cmd.Help()

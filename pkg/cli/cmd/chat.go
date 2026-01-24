@@ -231,7 +231,8 @@ func runTUIChat(
 	}()
 
 	// Set up tools with real-time output streaming
-	sessionConfig.Tools = chatsvc.GetKSailTools(rootCmd, outputChan)
+	// Tool handlers create their own timeout context since SDK's ToolHandler interface doesn't include context.
+	sessionConfig.Tools = chatsvc.GetKSailTools(rootCmd, outputChan) //nolint:contextcheck
 
 	// Create session
 	session, err := client.CreateSession(sessionConfig)
@@ -330,7 +331,7 @@ func runChatInteractiveLoop(
 		if err != nil {
 			// Check if error was due to context cancellation
 			if ctx.Err() != nil {
-				return nil
+				return ctx.Err()
 			}
 			notify.WriteMessage(notify.Message{
 				Type:    notify.ErrorType,

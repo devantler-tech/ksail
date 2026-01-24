@@ -144,7 +144,8 @@ const ksailInstructions = `<instructions>
 - If a ksail.yaml exists in the working directory, reference it when relevant
 - When generating configuration, follow the ksail.yaml schema
 - For cluster operations, verify the cluster exists first with 'ksail cluster list'
-- IMPORTANT: Do NOT call the same tool multiple times with the same arguments. If a command returns "No clusters found", respond to the user accordingly - do not retry the command.
+- IMPORTANT: Do NOT call the same tool multiple times with the same arguments.
+- If a command returns "No clusters found", respond to the user accordingly - do not retry.
 - When asked to delete/modify clusters but none exist, inform the user there are no clusters to act on.
 </instructions>
 `
