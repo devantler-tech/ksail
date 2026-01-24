@@ -62,8 +62,9 @@ func TestCSI_ValidValues(t *testing.T) {
 
 	values := csi.ValidValues()
 	assert.Contains(t, values, "Default")
-	assert.Contains(t, values, "LocalPathStorage")
-	assert.Len(t, values, 2)
+	assert.Contains(t, values, "Enabled")
+	assert.Contains(t, values, "Disabled")
+	assert.Len(t, values, 3)
 }
 
 func TestMetricsServer_Default(t *testing.T) {
@@ -279,6 +280,51 @@ func TestProvider_ValidateForDistribution_InvalidCombinations(t *testing.T) {
 
 			err := testCase.provider.ValidateForDistribution(testCase.distribution)
 			require.Error(t, err)
+		})
+	}
+}
+
+func TestDistribution_ProvidesCSIByDefault(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		distribution v1alpha1.Distribution
+		provider     v1alpha1.Provider
+		expected     bool
+	}{
+		{
+			name:         "k3s_docker_provides_csi",
+			distribution: v1alpha1.DistributionK3s,
+			provider:     v1alpha1.ProviderDocker,
+			expected:     true,
+		},
+		{
+			name:         "vanilla_docker_no_csi",
+			distribution: v1alpha1.DistributionVanilla,
+			provider:     v1alpha1.ProviderDocker,
+			expected:     false,
+		},
+		{
+			name:         "talos_docker_no_csi",
+			distribution: v1alpha1.DistributionTalos,
+			provider:     v1alpha1.ProviderDocker,
+			expected:     false,
+		},
+		{
+			name:         "talos_hetzner_provides_csi",
+			distribution: v1alpha1.DistributionTalos,
+			provider:     v1alpha1.ProviderHetzner,
+			expected:     true,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			result := testCase.distribution.ProvidesCSIByDefault(testCase.provider)
+			assert.Equal(t, testCase.expected, result)
 		})
 	}
 }

@@ -100,7 +100,7 @@ func TestGetComponentRequirements(t *testing.T) {
 					Cluster: v1alpha1.ClusterSpec{
 						Distribution:  v1alpha1.DistributionVanilla,
 						MetricsServer: v1alpha1.MetricsServerDefault,
-						CSI:           v1alpha1.CSILocalPathStorage,
+						CSI:           v1alpha1.CSIEnabled,
 						CertManager:   v1alpha1.CertManagerDisabled,
 						PolicyEngine:  v1alpha1.PolicyEngineNone,
 						GitOpsEngine:  v1alpha1.GitOpsEngineNone,
@@ -225,7 +225,7 @@ func TestGetComponentRequirements(t *testing.T) {
 					Cluster: v1alpha1.ClusterSpec{
 						Distribution:  v1alpha1.DistributionVanilla,
 						MetricsServer: v1alpha1.MetricsServerEnabled,
-						CSI:           v1alpha1.CSILocalPathStorage,
+						CSI:           v1alpha1.CSIEnabled,
 						CertManager:   v1alpha1.CertManagerEnabled,
 						PolicyEngine:  v1alpha1.PolicyEngineKyverno,
 						GitOpsEngine:  v1alpha1.GitOpsEngineFlux,

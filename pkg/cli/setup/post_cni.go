@@ -116,12 +116,41 @@ func GetComponentRequirements(clusterCfg *v1alpha1.Cluster) ComponentRequirement
 	return ComponentRequirements{
 		NeedsMetricsServer:      needsMetricsServer,
 		NeedsKubeletCSRApprover: needsKubeletCSRApprover,
-		NeedsCSI:                clusterCfg.Spec.Cluster.CSI == v1alpha1.CSILocalPathStorage,
+		NeedsCSI:                NeedsCSIInstall(clusterCfg),
 		NeedsCertManager:        clusterCfg.Spec.Cluster.CertManager == v1alpha1.CertManagerEnabled,
 		NeedsPolicyEngine:       clusterCfg.Spec.Cluster.PolicyEngine != v1alpha1.PolicyEngineNone,
 		NeedsArgoCD:             clusterCfg.Spec.Cluster.GitOpsEngine == v1alpha1.GitOpsEngineArgoCD,
 		NeedsFlux:               clusterCfg.Spec.Cluster.GitOpsEngine == v1alpha1.GitOpsEngineFlux,
 	}
+}
+
+// NeedsCSIInstall determines if CSI needs to be installed.
+//
+// In general, we install CSI only when it is explicitly Enabled AND the
+// distribution × provider combination does not provide it by default.
+//
+// Special case:
+//   - Talos × Hetzner: Hetzner CSI is not pre-installed and must be installed
+//     by KSail when CSI is either Default or Enabled.
+func NeedsCSIInstall(clusterCfg *v1alpha1.Cluster) bool {
+	dist := clusterCfg.Spec.Cluster.Distribution
+	provider := clusterCfg.Spec.Cluster.Provider
+	csiSetting := clusterCfg.Spec.Cluster.CSI
+
+	// Special handling for Talos clusters on Hetzner:
+	// According to the distribution × provider matrix, Hetzner CSI must be
+	// installed by KSail for both Default and Enabled CSI settings.
+	if dist == v1alpha1.DistributionTalos && provider == v1alpha1.ProviderHetzner {
+		return csiSetting == v1alpha1.CSIDefault || csiSetting == v1alpha1.CSIEnabled
+	}
+
+	// Generic behavior for all other distribution × provider combinations.
+	if csiSetting != v1alpha1.CSIEnabled {
+		return false
+	}
+
+	// Don't install if distribution × provider provides it by default.
+	return !dist.ProvidesCSIByDefault(provider)
 }
 
 // InstallPostCNIComponents installs all post-CNI components in parallel.
