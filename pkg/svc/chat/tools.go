@@ -161,6 +161,7 @@ func readFileTool() copilot.Tool {
 
 				// Use LimitReader to prevent excessive memory allocation for large files
 				limitedReader := io.LimitReader(file, maxFileSize+1)
+
 				content, err := io.ReadAll(limitedReader)
 				if err != nil {
 					return failureResult(fmt.Sprintf("Error reading file: %v", err)), nil
@@ -287,23 +288,31 @@ func securePath(path string) (string, error) {
 		// resolve the parent directory and check that instead
 		if os.IsNotExist(err) {
 			parentDir := filepath.Dir(absPath)
+
 			realParentDir, parentErr := filepath.EvalSymlinks(parentDir)
 			if parentErr != nil {
 				return "", fmt.Errorf("could not resolve parent directory: %w", parentErr)
 			}
 			// For non-existent paths, check that the parent is within workDir
-			if !strings.HasPrefix(realParentDir+string(filepath.Separator), realWorkDir+string(filepath.Separator)) &&
+			if !strings.HasPrefix(
+				realParentDir+string(filepath.Separator),
+				realWorkDir+string(filepath.Separator),
+			) &&
 				realParentDir != realWorkDir {
 				return "", errPathAccessDenied
 			}
 			// Return the cleaned path (not the real path since it doesn't exist yet)
 			return absPath, nil
 		}
+
 		return "", fmt.Errorf("could not resolve path symlinks: %w", err)
 	}
 
 	// Ensure the resolved real path is within or equal to the real working directory
-	if !strings.HasPrefix(realAbsPath+string(filepath.Separator), realWorkDir+string(filepath.Separator)) &&
+	if !strings.HasPrefix(
+		realAbsPath+string(filepath.Separator),
+		realWorkDir+string(filepath.Separator),
+	) &&
 		realAbsPath != realWorkDir {
 		return "", errPathAccessDenied
 	}
