@@ -91,6 +91,10 @@ ksail cluster connect
 
 Browse the documentation at <https://ksail.devantler.tech> (GitHub Pages)
 
+## Contributing
+
+Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) for details on our development process, coding standards, and how to submit pull requests.
+
 ## Related Projects
 
 KSail is a powerful tool that can be used in many different ways. Here are some projects that use KSail in their setup:
