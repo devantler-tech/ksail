@@ -625,7 +625,7 @@ Use this skill when:
 ## Common Refactoring Operations
 
 | Operation                                     | Description                           |
-| --------------------------------------------- | ------------------------------------- |
+|-----------------------------------------------|---------------------------------------|
 | Extract Method                                | Turn code fragment into method        |
 | Extract Class                                 | Move behavior to new class            |
 | Extract Interface                             | Create interface from implementation  |

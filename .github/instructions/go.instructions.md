@@ -34,7 +34,7 @@ Follow idiomatic Go practices and community standards when writing Go code. Thes
 - Avoid generic names like `util`, `common`, or `base`
 - Package names should be singular, not plural
 
-#### Package Declaration Rules (CRITICAL):
+#### Package Declaration Rules (CRITICAL)
 
 - **NEVER duplicate `package` declarations** - each Go file must have exactly ONE `package` line
 - When editing an existing `.go` file:
@@ -177,12 +177,14 @@ Follow idiomatic Go practices and community standards when writing Go code. Thes
 - Use `sync.Once` for one-time initialization
 - WaitGroup usage by Go version:
   - If `go >= 1.25` in `go.mod`, use the new `WaitGroup.Go` method ([documentation](https://pkg.go.dev/sync#WaitGroup)):
+
     ```go
     var wg sync.WaitGroup
     wg.Go(task1)
     wg.Go(task2)
     wg.Wait()
     ```
+
   - If `go < 1.25`, use the classic `Add`/`Done` pattern
 
 ## Error Handling Patterns
