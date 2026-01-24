@@ -1,3 +1,4 @@
+// Package chat provides AI chat functionality including tools for the chat assistant.
 package chat
 
 import (
@@ -76,6 +77,16 @@ func extractStringParam(params map[string]any, key string) string {
 	return val
 }
 
+// --- JSON Schema Helpers ---
+
+// pathProperty returns the JSON schema for a file/directory path parameter.
+func pathProperty() map[string]any {
+	return map[string]any{
+		"type":        "string",
+		"description": "Path to file (relative or absolute, must be within working directory)",
+	}
+}
+
 // extractAndValidatePath extracts path from params and validates it securely.
 // Returns the secure path and error (as ToolResult if failed).
 func extractAndValidatePath(params map[string]any, required bool) (string, *copilot.ToolResult) {
@@ -101,6 +112,31 @@ func extractAndValidatePath(params map[string]any, required bool) (string, *copi
 	return safePath, nil
 }
 
+// --- Handler Wrappers ---
+
+// pathHandler is a tool handler that receives extracted params and validated path.
+type pathHandler func(params map[string]any, safePath string) (copilot.ToolResult, error)
+
+// withPathHandler wraps a handler with common param/path extraction boilerplate.
+func withPathHandler(
+	pathRequired bool,
+	handler pathHandler,
+) func(copilot.ToolInvocation) (copilot.ToolResult, error) {
+	return func(invocation copilot.ToolInvocation) (copilot.ToolResult, error) {
+		params, ok := extractParams(invocation)
+		if !ok {
+			return failureResult("Invalid parameters"), nil
+		}
+
+		safePath, errResult := extractAndValidatePath(params, pathRequired)
+		if errResult != nil {
+			return *errResult, nil
+		}
+
+		return handler(params, safePath)
+	}
+}
+
 // readFileTool reads the contents of a file.
 func readFileTool() copilot.Tool {
 	return copilot.Tool{
@@ -110,36 +146,26 @@ func readFileTool() copilot.Tool {
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
-				"path": map[string]any{
-					"type":        "string",
-					"description": "Path to file (relative or absolute, must be within working directory)",
-				},
+				"path": pathProperty(),
 			},
 			"required": []string{"path"},
 		},
-		Handler: func(invocation copilot.ToolInvocation) (copilot.ToolResult, error) {
-			params, ok := extractParams(invocation)
-			if !ok {
-				return failureResult("Invalid parameters"), nil
-			}
+		Handler: withPathHandler(
+			true,
+			func(_ map[string]any, safePath string) (copilot.ToolResult, error) {
+				content, err := os.ReadFile(safePath)
+				if err != nil {
+					return failureResult(fmt.Sprintf("Error reading file: %v", err)), nil
+				}
 
-			safePath, errResult := extractAndValidatePath(params, true)
-			if errResult != nil {
-				return *errResult, nil
-			}
+				result := string(content)
+				if len(result) > maxFileSize {
+					result = result[:maxFileSize] + "\n... [truncated]"
+				}
 
-			content, err := os.ReadFile(safePath)
-			if err != nil {
-				return failureResult(fmt.Sprintf("Error reading file: %v", err)), nil
-			}
-
-			result := string(content)
-			if len(result) > maxFileSize {
-				result = result[:maxFileSize] + "\n... [truncated]"
-			}
-
-			return successResult(result), nil
-		},
+				return successResult(result), nil
+			},
+		),
 	}
 }
 
@@ -152,43 +178,33 @@ func listDirectoryTool() copilot.Tool {
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
-				"path": map[string]any{
-					"type":        "string",
-					"description": "Path to directory (relative or absolute, must be within working directory)",
-				},
+				"path": pathProperty(),
 			},
 		},
-		Handler: func(invocation copilot.ToolInvocation) (copilot.ToolResult, error) {
-			params, ok := extractParams(invocation)
-			if !ok {
-				return failureResult("Invalid parameters"), nil
-			}
-
-			safePath, errResult := extractAndValidatePath(params, false)
-			if errResult != nil {
-				return *errResult, nil
-			}
-
-			entries, err := os.ReadDir(safePath)
-			if err != nil {
-				return failureResult(fmt.Sprintf("Error listing directory: %v", err)), nil
-			}
-
-			var result strings.Builder
-
-			result.WriteString(fmt.Sprintf("Contents of %s:\n", safePath))
-
-			for _, entry := range entries {
-				indicator := ""
-				if entry.IsDir() {
-					indicator = "/"
+		Handler: withPathHandler(
+			false,
+			func(_ map[string]any, safePath string) (copilot.ToolResult, error) {
+				entries, err := os.ReadDir(safePath)
+				if err != nil {
+					return failureResult(fmt.Sprintf("Error listing directory: %v", err)), nil
 				}
 
-				result.WriteString(fmt.Sprintf("  %s%s\n", entry.Name(), indicator))
-			}
+				var result strings.Builder
 
-			return successResult(result.String()), nil
-		},
+				result.WriteString(fmt.Sprintf("Contents of %s:\n", safePath))
+
+				for _, entry := range entries {
+					indicator := ""
+					if entry.IsDir() {
+						indicator = "/"
+					}
+
+					result.WriteString(fmt.Sprintf("  %s%s\n", entry.Name(), indicator))
+				}
+
+				return successResult(result.String()), nil
+			},
+		),
 	}
 }
 
@@ -201,10 +217,7 @@ func writeFileTool() copilot.Tool {
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
-				"path": map[string]any{
-					"type":        "string",
-					"description": "Path to file (relative or absolute, must be within working directory)",
-				},
+				"path": pathProperty(),
 				"content": map[string]any{
 					"type":        "string",
 					"description": "Content to write to the file",
@@ -212,34 +225,27 @@ func writeFileTool() copilot.Tool {
 			},
 			"required": []string{"path", "content"},
 		},
-		Handler: func(invocation copilot.ToolInvocation) (copilot.ToolResult, error) {
-			params, ok := extractParams(invocation)
-			if !ok {
-				return failureResult("Invalid parameters"), nil
-			}
+		Handler: withPathHandler(
+			true,
+			func(params map[string]any, safePath string) (copilot.ToolResult, error) {
+				content := extractStringParam(params, "content")
 
-			safePath, errResult := extractAndValidatePath(params, true)
-			if errResult != nil {
-				return *errResult, nil
-			}
+				// Create parent directories if needed
+				dir := filepath.Dir(safePath)
+				if err := os.MkdirAll(dir, dirPermissions); err != nil {
+					return failureResult(fmt.Sprintf("Error creating directory: %v", err)), nil
+				}
 
-			content := extractStringParam(params, "content")
+				// Write the file
+				if err := os.WriteFile(safePath, []byte(content), filePermissions); err != nil {
+					return failureResult(fmt.Sprintf("Error writing file: %v", err)), nil
+				}
 
-			// Create parent directories if needed
-			dir := filepath.Dir(safePath)
-			if err := os.MkdirAll(dir, dirPermissions); err != nil {
-				return failureResult(fmt.Sprintf("Error creating directory: %v", err)), nil
-			}
+				msg := fmt.Sprintf("Successfully wrote %d bytes to %s", len(content), safePath)
 
-			// Write the file
-			if err := os.WriteFile(safePath, []byte(content), filePermissions); err != nil {
-				return failureResult(fmt.Sprintf("Error writing file: %v", err)), nil
-			}
-
-			msg := fmt.Sprintf("Successfully wrote %d bytes to %s", len(content), safePath)
-
-			return successResult(msg), nil
-		},
+				return successResult(msg), nil
+			},
+		),
 	}
 }
 
