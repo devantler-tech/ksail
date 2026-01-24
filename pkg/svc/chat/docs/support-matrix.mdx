@@ -1,0 +1,119 @@
+---
+title: Support Matrix
+description: KSail supports multiple Kubernetes distributions, providers, and components. This matrix shows compatibility and support status.
+---
+
+KSail supports multiple Kubernetes distributions, providers, and components. This matrix shows compatibility and support status.
+
+## Distribution × Provider Matrix
+
+| Distribution | Docker | Hetzner |
+|--------------|--------|---------|
+| Vanilla (Kind) | ✅ | ❌ |
+| K3s (K3d) | ✅ | ❌ |
+| Talos | ✅ | ✅ |
+
+**Notes:**
+
+- Docker provider requires Docker Desktop or Docker Engine installed locally
+- Hetzner provider requires `HCLOUD_TOKEN` environment variable and Talos ISO in your account
+
+## Component × Distribution Matrix
+
+| Component | Vanilla | K3s | Talos |
+|-----------|---------|-----|-------|
+| **CNI** |
+| Cilium | ✅ | ✅ | ✅ |
+| Calico | ✅ | ✅ | ✅ |
+| **CSI** |
+| Local Path Provisioner | ✅ | Built-in | ✅ (Docker) |
+| Hetzner CSI Driver | ❌ | ❌ | ✅ (Hetzner) |
+| **GitOps** |
+| Flux | ✅ | ✅ | ✅ |
+| ArgoCD | ✅ | ✅ | ✅ |
+| **Observability** |
+| Metrics Server | ✅ | Built-in | ✅ |
+| **Security** |
+| cert-manager | ✅ | ✅ | ✅ |
+| Kyverno | ✅ | ✅ | ✅ |
+| Gatekeeper | ✅ | ✅ | ✅ |
+| **Registry** |
+| Local Registry | ✅ | ✅ | ✅ |
+| Mirror Registries | ✅ | ✅ | ✅ |
+| External Registries with Auth | ✅ | ✅ | ✅ |
+
+**Notes:**
+
+- "Built-in" means the distribution includes this component by default
+- K3s includes local-path-provisioner and metrics-server out of the box
+- Talos CSI support is provider-dependent: Local Path Provisioner for Docker, Hetzner CSI Driver for Hetzner Cloud
+
+## Secret Management × Provider Matrix
+
+| Provider | Encryption | Decryption | Edit |
+|----------|------------|------------|------|
+| age | ✅ | ✅ | ✅ |
+| PGP | ✅ | ✅ | ✅ |
+| AWS KMS | ✅ | ✅ | ✅ |
+| GCP KMS | ✅ | ✅ | ✅ |
+| Azure Key Vault | ✅ | ✅ | ✅ |
+| HashiCorp Vault | ✅ | ✅ | ✅ |
+
+**Notes:**
+
+- Cloud KMS providers require appropriate credentials configured
+- See [SOPS documentation](https://github.com/getsops/sops) for provider-specific setup
+
+## CLI Commands
+
+| Command Group | Commands Available |
+|---------------|-------------------|
+| `ksail cluster` | `init`, `create`, `delete`, `start`, `stop`, `info`, `list`, `connect` |
+| `ksail workload` | `apply`, `get`, `describe`, `logs`, `exec`, `gen`, `validate`, `install`, `scale`, `rollout`, `wait`, `push`, `reconcile`, `create` |
+| `ksail cipher` | `encrypt`, `decrypt`, `edit`, `import` |
+
+## Platform Requirements
+
+| Requirement | Minimum | Recommended |
+|-------------|---------|-------------|
+| Docker | Docker Desktop 4.x or Docker Engine 24.x | Latest stable |
+| RAM | 4 GB | 8 GB+ |
+| CPU | 2 cores | 4 cores+ |
+| Disk | 10 GB | 20 GB+ |
+
+**Operating System Support:**
+
+| OS | Support |
+|----|---------|
+| macOS (Intel) | ✅ |
+| macOS (Apple Silicon) | ✅ |
+| Linux (x86_64) | ✅ |
+| Linux (arm64) | ✅ |
+| Windows (WSL2) | ✅ |
+| Windows (native) | ❌ |
+
+## Version Compatibility
+
+KSail embeds specific versions of Kubernetes tooling:
+
+| Tool | Embedded Version | Purpose |
+|------|------------------|---------|
+| kubectl | Latest | Kubernetes CLI |
+| Helm | v4 (with kstatus) | Package manager |
+| Kind | Latest | Vanilla clusters |
+| K3d | Latest | K3s clusters |
+| Flux | Latest | GitOps toolkit |
+| ArgoCD | Latest | GitOps continuous delivery |
+| SOPS | Latest | Secret encryption |
+
+**Notes:**
+
+- Kubernetes versions depend on the distribution release
+- Component versions (CNI, CSI, etc.) are updated with KSail releases
+- See [releases](https://github.com/devantler-tech/ksail/releases) for specific version information
+
+## Next Steps
+
+- **[Features](/features/)** – Explore what KSail can do
+- **[Concepts](/concepts/)** – Understand the technologies
+- **[Configuration](/configuration/)** – Complete configuration reference

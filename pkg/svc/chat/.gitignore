@@ -1,2 +1,3 @@
-# Generated docs for go:embed - created by `go generate`
-docs/
+# NOTE: The docs/ directory is committed (not ignored) because go:embed
+# requires the files to exist at build time. Run `go generate ./...` to
+# regenerate from the source docs if they change.

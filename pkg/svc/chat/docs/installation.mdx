@@ -1,0 +1,147 @@
+---
+title: Installation
+description: Installation methods and prerequisites for KSail
+---
+
+import { TabItem, Tabs } from "@astrojs/starlight/components";
+
+## Prerequisites
+
+### System Requirements
+
+KSail works on all major operating systems and modern CPU architectures:
+
+| OS                   | Architecture    |
+| -------------------- | --------------- |
+| 🐧 Linux             | amd64 and arm64 |
+|  macOS              | arm64           |
+| ⊞ Windows (untested) | amd64 and arm64 |
+
+### Docker (Required for Local Clusters)
+
+**Docker is required** to create local clusters using the Docker provider. Install Docker Desktop or Docker Engine and ensure `docker ps` works.
+
+- [Install Docker Desktop](https://www.docker.com/get-started/)
+- [Install Docker Engine](https://docs.docker.com/engine/install/)
+
+After installation, verify Docker is running:
+
+```bash
+docker ps
+```
+
+### Provider Support
+
+The supported Kubernetes distributions (x-axis) run on different infrastructure providers (y-axis). You need to have access to at least one provider for your chosen distribution.
+
+| Provider | Vanilla   | K3s      | Talos |
+| -------- | --------- | -------- | ----- |
+| Docker   | ✅ (Kind) | ✅ (K3d) | ✅    |
+| Hetzner  | —         | —        | ✅    |
+
+> [!NOTE]
+> Talos on Hetzner requires a Hetzner Cloud account and API token (`HCLOUD_TOKEN`). See the [Support Matrix](/support-matrix/) for more details.
+
+## Installation Methods
+
+<Tabs>
+  <TabItem label="Homebrew">
+    ### Homebrew (macOS/Linux)
+
+    The easiest way to install KSail on macOS or Linux:
+
+    ```bash
+    brew install --cask devantler-tech/tap/ksail
+    ```
+
+    This installs the latest stable release and makes `ksail` available in your PATH.
+
+  </TabItem>
+
+  <TabItem label="Go Install">
+    ### Go Install
+
+    If you have Go 1.25.4+ installed, you can install KSail directly from source:
+
+    ```bash
+    go install github.com/devantler-tech/ksail/v5@latest
+    ```
+
+    This builds and installs the `ksail` binary to `$GOPATH/bin` (typically `~/go/bin`). Ensure this directory is in your PATH.
+
+  </TabItem>
+
+  <TabItem label="Binary Download">
+    ### Binary Download
+
+    Download pre-built binaries from the [GitHub Releases](https://github.com/devantler-tech/ksail/releases) page:
+
+    1. Navigate to the [latest release](https://github.com/devantler-tech/ksail/releases/latest)
+    2. Download the appropriate binary for your OS and architecture
+    3. Extract the archive
+    4. Move the `ksail` binary to a directory in your PATH (e.g., `/usr/local/bin`)
+    5. Make it executable (Linux/macOS): `chmod +x ksail`
+
+  </TabItem>
+
+  <TabItem label="From Source">
+    ### Build from Source
+
+    Clone the repository and build the binary:
+
+    ```bash
+    git clone https://github.com/devantler-tech/ksail.git
+    cd ksail
+    go build -o ksail
+    ```
+
+    The `ksail` binary will be created in the current directory. Move it to a directory in your PATH if desired.
+
+  </TabItem>
+</Tabs>
+
+## Embedded Tools
+
+KSail embeds common Kubernetes tools as Go libraries, so **you don't need to install them separately**:
+
+- **kubectl** — Kubernetes command-line tool
+- **helm** — Kubernetes package manager
+- **kind** — Kubernetes in Docker (for Vanilla distribution)
+- **k3d** — K3s in Docker (for K3s distribution)
+- **flux** — GitOps toolkit (optional)
+- **argocd** — Declarative GitOps (optional)
+- **sops** — Secret encryption (optional)
+
+All these tools are available through KSail's unified CLI interface.
+
+## Optional: GitHub Copilot CLI (for AI Chat)
+
+To use the `ksail chat` AI assistant feature, you need the GitHub Copilot CLI:
+
+1. **Install Copilot CLI**: Follow the [Copilot CLI installation guide](https://docs.github.com/en/copilot/using-github-copilot/using-github-copilot-in-the-command-line/about-github-copilot-in-the-cli#installing-copilot-in-the-cli)
+2. **Authenticate**: Run `copilot auth login` to authenticate with your GitHub account
+3. **Set path (if needed)**: Set `COPILOT_CLI_PATH` environment variable if the CLI is not in your PATH
+
+> [!NOTE]
+> GitHub Copilot requires an active subscription. The `ksail chat` command is optional and all other KSail features work without it.
+
+## Verification
+
+After installation, verify that KSail is installed correctly:
+
+```bash
+ksail --version
+```
+
+You should see version information displayed. To see all available commands:
+
+```bash
+ksail --help
+```
+
+## Next Steps
+
+- Read the [Features](/features/) overview to understand what KSail can do
+- Follow the [Configuration](/configuration/) guide to set up your first cluster
+- Explore [Use Cases](/use-cases/) for common workflows
+- Check the [Support Matrix](/support-matrix/) for detailed platform compatibility
