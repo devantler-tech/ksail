@@ -60,7 +60,6 @@ export default defineConfig({
           items: [
             { label: "FAQ", link: "/faq/" },
             { label: "Troubleshooting", link: "/troubleshooting/" },
-            { label: "Contributing", link: "/contributing/" },
           ],
         },
       ],
