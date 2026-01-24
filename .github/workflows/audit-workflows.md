@@ -21,7 +21,7 @@ network:
 safe-outputs:
   create-discussion:
     title-prefix: "${{ github.workflow }}"
-    category: "q-a"
+    category: "agentic-workflows"
     close-older-discussions: true
   add-comment:
     max: 3

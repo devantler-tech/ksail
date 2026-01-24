@@ -17,7 +17,7 @@ imports:
 - shared/trending-charts-simple.md
 safe-outputs:
   create-discussion:
-    category: Audits
+    category: "agentic-workflows"
     close-older-discussions: true
     title-prefix: "[portfolio] "
   upload-asset: null
