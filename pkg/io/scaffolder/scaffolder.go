@@ -176,7 +176,7 @@ func (s *Scaffolder) GenerateK3dRegistryConfig() k3dv1alpha5.SimpleConfigRegistr
 // CreateK3dConfig creates a K3d configuration with distribution-specific settings.
 // Node counts can be set via --control-planes and --workers CLI flags.
 //
-//nolint:funlen // K3d config requires setting many fields; splitting would reduce readability
+//nolint:funlen,cyclop // K3d config requires setting many fields; splitting would reduce readability
 func (s *Scaffolder) CreateK3dConfig() k3dv1alpha5.SimpleConfig {
 	// Resolve cluster name - use explicit ClusterName if set, otherwise resolve from config
 	var clusterName string
@@ -232,6 +232,16 @@ func (s *Scaffolder) CreateK3dConfig() k3dv1alpha5.SimpleConfig {
 		extraArgs = append(extraArgs,
 			k3dv1alpha5.K3sArgWithNodeFilters{
 				Arg:         "--disable=metrics-server",
+				NodeFilters: []string{"server:*"},
+			},
+		)
+	}
+
+	// Disable local-storage if explicitly disabled (K3s includes it by default)
+	if s.KSailConfig.Spec.Cluster.CSI == v1alpha1.CSIDisabled {
+		extraArgs = append(extraArgs,
+			k3dv1alpha5.K3sArgWithNodeFilters{
+				Arg:         "--disable=local-storage",
 				NodeFilters: []string{"server:*"},
 			},
 		)

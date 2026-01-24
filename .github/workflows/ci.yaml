@@ -211,7 +211,8 @@ jobs:
           - "--cert-manager Enabled"
           - "--cni Cilium"
           - "--cni Calico"
-          - "--csi LocalPathStorage"
+          - "--csi Enabled"
+          - "--csi Disabled"
           - "--gitops-engine Flux"
           - "--gitops-engine ArgoCD"
           - "--gitops-engine Flux --local-registry ghcr.io/devantler-tech/ksail/system-test-manifests"
@@ -222,6 +223,19 @@ jobs:
           - "--metrics-server Disabled"
           - "--policy-engine Kyverno"
           - "--policy-engine Gatekeeper"
+        # Exclude combinations where CSI flag matches distribution × provider default behavior
+        # to avoid wasting GitHub Actions minutes on no-op tests
+        exclude:
+          # Vanilla has no default CSI, so --csi Disabled is a no-op
+          - distribution: Vanilla
+            args: "--csi Disabled"
+          # K3s has default CSI (local-path), so --csi Enabled is a no-op
+          - distribution: K3s
+            args: "--csi Enabled"
+          # Talos × Docker has no default CSI, so --csi Disabled is a no-op
+          - distribution: Talos
+            provider: Docker
+            args: "--csi Disabled"
         # Add Talos x Hetzner combination
         include:
           - distribution: Talos
@@ -232,6 +246,8 @@ jobs:
             provider: Hetzner
             init: false
             args: "--name system-test-cluster-without-scaffolding"
+          # Note: Talos × Hetzner has default CSI (Hetzner CSI), so --csi Enabled
+          # would be a no-op. We don't add it to the matrix to save CI minutes.
     steps:
       - name: 📄 Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2

@@ -55,6 +55,26 @@ func (d *Distribution) ProvidesStorageByDefault() bool {
 	}
 }
 
+// ProvidesCSIByDefault returns true if the distribution × provider combination includes CSI by default.
+// - K3s includes local-path-provisioner by default (regardless of provider)
+// - Talos × Hetzner uses Hetzner CSI driver by default
+// - Vanilla and Talos × Docker do not have a default CSI.
+func (d *Distribution) ProvidesCSIByDefault(provider Provider) bool {
+	switch *d {
+	case DistributionK3s:
+		// K3s always includes local-path-provisioner
+		return true
+	case DistributionTalos:
+		// Talos × Hetzner provides Hetzner CSI by default
+		return provider == ProviderHetzner
+	case DistributionVanilla:
+		// Vanilla (Kind) does not provide CSI by default
+		return false
+	default:
+		return false
+	}
+}
+
 // Set for Distribution (pflag.Value interface).
 func (d *Distribution) Set(value string) error {
 	for _, dist := range ValidDistributions() {
@@ -172,10 +192,12 @@ func (c *CNI) ValidValues() []string {
 type CSI string
 
 const (
-	// CSIDefault is the default CSI.
+	// CSIDefault relies on the distribution's default behavior for CSI.
 	CSIDefault CSI = "Default"
-	// CSILocalPathStorage is the LocalPathStorage CSI.
-	CSILocalPathStorage CSI = "LocalPathStorage"
+	// CSIEnabled ensures a CSI driver is installed (local-path-provisioner or Hetzner CSI).
+	CSIEnabled CSI = "Enabled"
+	// CSIDisabled ensures no CSI driver is installed.
+	CSIDisabled CSI = "Disabled"
 )
 
 // Set for CSI (pflag.Value interface).
@@ -188,8 +210,8 @@ func (c *CSI) Set(value string) error {
 		}
 	}
 
-	return fmt.Errorf("%w: %s (valid options: %s, %s)",
-		ErrInvalidCSI, value, CSIDefault, CSILocalPathStorage)
+	return fmt.Errorf("%w: %s (valid options: %s, %s, %s)",
+		ErrInvalidCSI, value, CSIDefault, CSIEnabled, CSIDisabled)
 }
 
 // String returns the string representation of the CSI.
@@ -209,7 +231,7 @@ func (c *CSI) Default() any {
 
 // ValidValues returns all valid CSI values as strings.
 func (c *CSI) ValidValues() []string {
-	return []string{string(CSIDefault), string(CSILocalPathStorage)}
+	return []string{string(CSIDefault), string(CSIEnabled), string(CSIDisabled)}
 }
 
 // --- Metrics Server Types ---

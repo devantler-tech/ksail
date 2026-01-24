@@ -122,7 +122,7 @@ func DefaultPolicyEngineFieldSelector() FieldSelector[v1alpha1.Cluster] {
 func DefaultCSIFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	return FieldSelector[v1alpha1.Cluster]{
 		Selector:     func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.CSI },
-		Description:  "Container Storage Interface (CSI) to use",
+		Description:  "Container Storage Interface (Default: use distribution, Enabled: install CSI, Disabled: skip CSI)",
 		DefaultValue: v1alpha1.CSIDefault,
 	}
 }

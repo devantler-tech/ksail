@@ -197,7 +197,7 @@ func TestCluster_MarshalJSON(t *testing.T) {
 					Cluster: v1alpha1.ClusterSpec{
 						Distribution: v1alpha1.DistributionK3s,
 						CNI:          v1alpha1.CNICilium,
-						CSI:          v1alpha1.CSILocalPathStorage,
+						CSI:          v1alpha1.CSIEnabled,
 						GitOpsEngine: v1alpha1.GitOpsEngineFlux,
 						Connection: v1alpha1.Connection{
 							Kubeconfig: "/custom/path",
@@ -248,7 +248,7 @@ func TestCluster_MarshalRoundTrip(t *testing.T) {
 			Cluster: v1alpha1.ClusterSpec{
 				Distribution: v1alpha1.DistributionK3s,
 				CNI:          v1alpha1.CNICilium,
-				CSI:          v1alpha1.CSILocalPathStorage,
+				CSI:          v1alpha1.CSIEnabled,
 				GitOpsEngine: v1alpha1.GitOpsEngineFlux,
 				Connection: v1alpha1.Connection{
 					Kubeconfig: "/custom/kubeconfig",

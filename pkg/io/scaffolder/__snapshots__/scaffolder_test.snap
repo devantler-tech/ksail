@@ -58,8 +58,8 @@ Error type: *fmt.wrapErrors, contains 'invalid argument': true
 K3d error occurred: false
 ---
 
-[TestScaffoldGeneratorFailures/Kind_config_with_problematic_path - 1]
-Kind error occurred: false
+[TestScaffoldGeneratorFailures/Vanilla_config_with_problematic_path - 1]
+Vanilla error occurred: false
 ---
 
 [TestScaffoldOverwritesFilesWhenForceEnabled - 1]
@@ -81,8 +81,4 @@ Kind error occurred: false
 ✚ created 'kind.yaml'
 ✚ created 'k8s/kustomization.yaml'
 
----
-
-[TestScaffoldGeneratorFailures/Vanilla_config_with_problematic_path - 1]
-Vanilla error occurred: false
 ---
