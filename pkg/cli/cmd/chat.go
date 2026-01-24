@@ -220,8 +220,13 @@ func runTUIChat(
 	// Create output channel for real-time tool output streaming
 	outputChan := make(chan generator.OutputChunk, 100)
 
+	// Track when forwarder goroutine exits
+	var forwarderWg sync.WaitGroup
+	forwarderWg.Add(1)
+
 	// Forward output chunks to the TUI event channel
 	go func() {
+		defer forwarderWg.Done()
 		for chunk := range outputChan {
 			eventChan <- chatui.ToolOutputChunkMsg{
 				ToolID: chunk.ToolID,
@@ -237,11 +242,14 @@ func runTUIChat(
 	// Create session
 	session, err := client.CreateSession(sessionConfig)
 	if err != nil {
+		close(outputChan)
+		forwarderWg.Wait()
 		return fmt.Errorf("failed to create chat session: %w", err)
 	}
 	// Cleanup with forced exit on interrupt to prevent hanging
 	defer func() {
-		close(outputChan) // Close output channel to stop forwarder goroutine
+		close(outputChan)  // Close output channel to stop forwarder goroutine
+		forwarderWg.Wait() // Wait for forwarder to exit before proceeding
 		select {
 		case <-ctx.Done():
 			// If interrupted, force exit without waiting for cleanup
@@ -262,6 +270,11 @@ type inputResult struct {
 
 // runChatInteractiveLoop runs the interactive chat loop.
 // It handles user input and AI responses until the user exits or the context is cancelled.
+//
+// NOTE: The stdin reading goroutine cannot be interrupted once started, as Go's
+// bufio.Reader.ReadString blocks until input or EOF. If context is cancelled
+// before input arrives, one goroutine will remain blocked until process exit.
+// This is a known Go limitation with blocking stdin reads.
 func runChatInteractiveLoop(
 	ctx context.Context,
 	session *copilot.Session,
@@ -283,7 +296,9 @@ func runChatInteractiveLoop(
 		// Prompt
 		fmt.Fprint(writer, "You: ")
 
-		// Read input in a goroutine so we can respond to context cancellation
+		// Read input in a goroutine so we can respond to context cancellation.
+		// Note: This goroutine will block on ReadString until input arrives or EOF.
+		// If context is cancelled first, the goroutine remains blocked until process exit.
 		go func() {
 			input, err := reader.ReadString('\n')
 			inputChan <- inputResult{input: input, err: err}

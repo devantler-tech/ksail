@@ -157,7 +157,8 @@ func readFileTool() copilot.Tool {
 				if err != nil {
 					return failureResult(fmt.Sprintf("Error opening file: %v", err)), nil
 				}
-				defer file.Close()
+
+				defer func() { _ = file.Close() }()
 
 				// Use LimitReader to prevent excessive memory allocation for large files
 				limitedReader := io.LimitReader(file, maxFileSize+1)
@@ -260,6 +261,8 @@ func writeFileTool() copilot.Tool {
 
 // securePath validates and resolves a path, ensuring it stays within the working directory.
 // This prevents directory traversal attacks (e.g., ../../../etc/passwd) and symlink escapes.
+//
+//nolint:nestif // Security validation requires nested conditions for thorough path checking.
 func securePath(path string) (string, error) {
 	workDir, err := os.Getwd()
 	if err != nil {

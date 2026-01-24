@@ -323,15 +323,15 @@ func discoverDockerNodes(cmd *cobra.Command, clusterName string) []string {
 // IsClusterContainer checks if a container name belongs to the given cluster.
 // Exported for testing.
 func IsClusterContainer(containerName, clusterName string) bool {
-	// Kind pattern: {cluster}-control-plane, {cluster}-worker, {cluster}-worker2
-	if strings.HasPrefix(containerName, clusterName+"-control-plane") ||
-		strings.HasPrefix(containerName, clusterName+"-worker") {
+	// Kind pattern: {cluster}-control-plane, {cluster}-worker, {cluster}-worker{N}
+	// Check for exact prefixes with valid suffixes to avoid partial cluster name matches
+	if matchesKindPattern(containerName, clusterName) {
 		return true
 	}
 
 	// K3d pattern: k3d-{cluster}-server-*, k3d-{cluster}-agent-*
-	if strings.HasPrefix(containerName, "k3d-"+clusterName+"-server") ||
-		strings.HasPrefix(containerName, "k3d-"+clusterName+"-agent") {
+	if strings.HasPrefix(containerName, "k3d-"+clusterName+"-server-") ||
+		strings.HasPrefix(containerName, "k3d-"+clusterName+"-agent-") {
 		return true
 	}
 
@@ -342,6 +342,43 @@ func IsClusterContainer(containerName, clusterName string) bool {
 	}
 
 	return false
+}
+
+// matchesKindPattern checks if container matches Kind's naming convention.
+// Kind uses: {cluster}-control-plane, {cluster}-worker, {cluster}-worker{N}.
+func matchesKindPattern(containerName, clusterName string) bool {
+	// Check control-plane (exact suffix)
+	if containerName == clusterName+"-control-plane" {
+		return true
+	}
+
+	// Check worker nodes: {cluster}-worker or {cluster}-worker{N}
+	workerPrefix := clusterName + "-worker"
+	if containerName == workerPrefix {
+		return true
+	}
+
+	// Check for numbered workers: {cluster}-worker2, {cluster}-worker3, etc.
+	if strings.HasPrefix(containerName, workerPrefix) {
+		suffix := containerName[len(workerPrefix):]
+		// Suffix must be a number for valid worker nodes
+		if suffix != "" && isNumericString(suffix) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// isNumericString checks if a string contains only digits.
+func isNumericString(s string) bool {
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+
+	return true
 }
 
 // executeDelete performs the cluster deletion operation.
