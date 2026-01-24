@@ -6,18 +6,12 @@ mcp-servers:
     type: http
     url: http://localhost:8765
 steps:
-  - name: Setup Go
-    uses: actions/setup-go@v6
-    with:
-      go-version-file: go.mod
-      cache: true
-  - name: Install dependencies
-    run: make deps-dev
-  - name: Install binary as 'gh-aw'
+  - name: Install gh-aw extension
     run: |
       # Check if gh-aw extension is already installed
       if gh extension list | grep -q "githubnext/gh-aw"; then
-        echo "gh-aw extension already installed, skipping installation..."
+        echo "gh-aw extension already installed, upgrading..."
+        gh extension upgrade githubnext/gh-aw || true
       else
         # Check if a different extension provides the 'aw' command
         # gh extension list format: NAME  COMMAND  VERSION
@@ -30,7 +24,7 @@ steps:
         
         # Install the extension
         echo "Installing gh-aw extension..."
-        make install
+        gh extension install githubnext/gh-aw
       fi
       
       # Verify installation
@@ -40,7 +34,7 @@ steps:
   - name: Start MCP server
     run: |
       set -e
-      ./gh-aw mcp-server --cmd ./gh-aw --port 8765 &
+      gh aw mcp-server --port 8765 &
       MCP_PID=$!
       
       # Robust health check with TCP connection test
