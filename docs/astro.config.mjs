@@ -55,6 +55,13 @@ export default defineConfig({
         { label: "Concepts", link: "/concepts/" },
         { label: "Use Cases", link: "/use-cases/" },
         { label: "Support Matrix", link: "/support-matrix/" },
+        {
+          label: "Help",
+          items: [
+            { label: "FAQ", link: "/faq/" },
+            { label: "Troubleshooting", link: "/troubleshooting/" },
+          ],
+        },
       ],
       lastUpdated: true,
       pagination: true,
