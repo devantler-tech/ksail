@@ -65,36 +65,6 @@ netstat -ano | findstr :5000
 # Then kill the process ID shown
 ``````
 
-## Build and Test Issues
-
-### Go Version Mismatch
-
-**Symptom:** `go: module requires Go 1.25.4` or similar
-
-**Solution:**
-
-``````bash
-# Check your Go version
-go version
-
-# Install/update Go from https://go.dev/dl/
-# Or use version manager like gvm or asdf
-``````
-
-### Tests Failing with Hetzner Errors
-
-**Symptom:** Tests fail with Hetzner-related errors when running `go test ./...`
-
-**Solution:**
-
-``````bash
-# Unset HCLOUD_TOKEN if you're not testing Hetzner features
-unset HCLOUD_TOKEN
-
-# Run tests again
-go test ./...
-``````
-
 ## GitOps Workflow Issues
 
 ### Image Push Failed
@@ -223,47 +193,6 @@ The default ISO ID may be outdated. Check your Hetzner Cloud project:
 4. Find the Talos ISO ID
 
 Configure KSail to use the correct ISO ID (implementation-specific - check latest documentation).
-
-## Documentation Build Issues
-
-### npm ci Fails
-
-**Symptom:** `npm ci` fails with dependency errors
-
-**Solution:**
-
-``````bash
-# Clear npm cache
-npm cache clean --force
-
-# Remove node_modules and package-lock.json
-cd docs
-rm -rf node_modules package-lock.json
-
-# Reinstall
-npm install
-``````
-
-### Documentation Build Fails
-
-**Symptom:** `npm run build` fails
-
-**Solution:**
-
-``````bash
-# Ensure Node.js version matches CI (v22+)
-node --version
-
-# Update Node.js if needed
-# Using nvm:
-nvm install 22
-nvm use 22
-
-# Rebuild documentation
-cd docs
-npm ci
-npm run build
-``````
 
 ## Getting More Help
 
