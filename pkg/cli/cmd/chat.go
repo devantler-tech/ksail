@@ -195,7 +195,15 @@ func runTUIChat(
 	sessionConfig *copilot.SessionConfig,
 	timeout time.Duration,
 ) error {
-	// Create session - permission requests are handled inline by the TUI
+	// Auto-approve all permission requests in TUI mode - users can see tool
+	// execution inline and cancel with Esc if needed
+	sessionConfig.OnPermissionRequest = func(
+		_ copilot.PermissionRequest, _ copilot.PermissionInvocation,
+	) (copilot.PermissionRequestResult, error) {
+		return copilot.PermissionRequestResult{Kind: "approved"}, nil
+	}
+
+	// Create session
 	session, err := client.CreateSession(sessionConfig)
 	if err != nil {
 		return fmt.Errorf("failed to create chat session: %w", err)
