@@ -17,6 +17,8 @@ jobs:
           repository: ${{ github.repository }}
           retain_days: 30
           keep_minimum_runs: 50
+          check_branch_existence: true
+          check_pullrequest_existence: true
 
   delete-old-images:
     runs-on: ubuntu-latest
