@@ -278,6 +278,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case streamChunkMsg:
 		return m.handleStreamChunk(msg)
 
+	case assistantMessageMsg:
+		return m.handleAssistantMessage(msg)
+
 	case toolStartMsg:
 		return m.handleToolStart(msg)
 
@@ -559,6 +562,21 @@ func (m *Model) handleApprovalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // handleUserSubmit handles user message submission.
 func (m *Model) handleUserSubmit(msg userSubmitMsg) (tea.Model, tea.Cmd) {
+	// Clean up any previous subscription before starting a new one
+	if m.unsubscribe != nil {
+		m.unsubscribe()
+		m.unsubscribe = nil
+	}
+
+	// Drain any stale events from previous conversation turn
+	// This prevents old events from interfering with the new message
+	m.drainEventChannel()
+
+	// Clear tool state for new conversation turn
+	// Keep tool history visible but reset running state tracking
+	m.tools = make(map[string]*toolExecution)
+	m.toolOrder = make([]string, 0)
+
 	m.messages = append(m.messages, chatMessage{
 		role:    "user",
 		content: msg.content,
@@ -577,6 +595,21 @@ func (m *Model) handleUserSubmit(msg userSubmitMsg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(m.spinner.Tick, m.streamResponseCmd(msg.content), m.waitForEvent())
 }
 
+// drainEventChannel removes any stale events from the channel.
+// This prevents events from a previous conversation turn from interfering
+// with a new message submission.
+func (m *Model) drainEventChannel() {
+	for {
+		select {
+		case <-m.eventChan:
+			// Discard stale event
+		default:
+			// Channel is empty
+			return
+		}
+	}
+}
+
 // handleStreamChunk handles streaming response chunks.
 func (m *Model) handleStreamChunk(msg streamChunkMsg) (tea.Model, tea.Cmd) {
 	if msg.content != "" {
@@ -586,6 +619,31 @@ func (m *Model) handleStreamChunk(msg streamChunkMsg) (tea.Model, tea.Cmd) {
 		}
 		m.updateViewportContent()
 	}
+	return m, m.waitForEvent()
+}
+
+// handleAssistantMessage handles the final complete message from the assistant.
+// Per SDK best practices, this event is always sent (regardless of streaming)
+// and contains the complete response. It's more reliable for completion than
+// accumulating deltas.
+func (m *Model) handleAssistantMessage(msg assistantMessageMsg) (tea.Model, tea.Cmd) {
+	// If we have more complete content from the final message, use it
+	// This handles cases where deltas might have been missed
+	if len(msg.content) > m.currentResponse.Len() {
+		m.currentResponse.Reset()
+		m.currentResponse.WriteString(msg.content)
+	}
+
+	// Update the message content
+	if len(m.messages) > 0 {
+		last := &m.messages[len(m.messages)-1]
+		if last.role == "assistant" {
+			last.content = m.currentResponse.String()
+			// Don't render yet - wait for SessionIdle or TurnEnd for proper completion
+		}
+	}
+
+	m.updateViewportContent()
 	return m, m.waitForEvent()
 }
 
@@ -668,13 +726,10 @@ func (m *Model) handleToolEnd(msg toolEndMsg) (tea.Model, tea.Cmd) {
 
 	m.updateViewportContent()
 
-	// Continue waiting for events if streaming or more tools are running
-	if m.isStreaming || m.hasRunningTools() {
-		return m, m.waitForEvent()
-	}
-	// All tools done and not streaming, cleanup
-	m.cleanup()
-	return m, nil
+	// Always keep waiting for events after tool completion.
+	// The SDK will fire another turn for the assistant to process results and respond.
+	// Only AssistantTurnEnd (with response content) or SessionIdle should trigger cleanup.
+	return m, m.waitForEvent()
 }
 
 // handleToolOutputChunk handles real-time output chunks from running tools.
@@ -696,13 +751,8 @@ func (m *Model) handleToolOutputChunk(toolID, chunk string) (tea.Model, tea.Cmd)
 		m.updateViewportContent()
 	}
 
-	// Continue waiting for events if streaming or tools are running
-	if m.isStreaming || m.hasRunningTools() {
-		return m, m.waitForEvent()
-	}
-	// All done, cleanup
-	m.cleanup()
-	return m, nil
+	// Always keep waiting - more output chunks or events (like turn completion) may come
+	return m, m.waitForEvent()
 }
 
 // handleStreamEnd handles stream completion events (SessionIdle).
@@ -812,10 +862,17 @@ func (m *Model) handleMouseMsg(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 func (m *Model) waitForEvent() tea.Cmd {
 	ctx := m.ctx
 	eventChan := m.eventChan
+	timeout := m.timeout
 	return func() tea.Msg {
+		// Use timeout to detect stuck conditions (e.g., assistant looping on tools)
+		timer := time.NewTimer(timeout)
+		defer timer.Stop()
+
 		select {
 		case msg := <-eventChan:
 			return msg
+		case <-timer.C:
+			return streamErrMsg{err: fmt.Errorf("response timed out after %v - the assistant may be stuck", timeout)}
 		case <-ctx.Done():
 			return streamErrMsg{err: ctx.Err()}
 		}
@@ -852,6 +909,7 @@ func (m *Model) updateDimensions() {
 	if oldWidth != m.viewport.Width {
 		m.renderer = createRenderer(m.viewport.Width - 4)
 		m.reRenderCompletedMessages()
+		m.updateViewportContent()
 	}
 }
 
@@ -1133,8 +1191,15 @@ func (m *Model) streamResponseCmd(userMessage string) tea.Cmd {
 		unsubscribe := session.On(func(event copilot.SessionEvent) {
 			switch event.Type {
 			case copilot.AssistantMessageDelta:
+				// Streaming message chunk - incremental text
 				if event.Data.DeltaContent != nil {
 					eventChan <- streamChunkMsg{content: *event.Data.DeltaContent}
+				}
+			case copilot.AssistantMessage:
+				// Final complete message - SDK always sends this regardless of streaming
+				// This is more reliable than tracking deltas for completion detection
+				if event.Data.Content != nil {
+					eventChan <- assistantMessageMsg{content: *event.Data.Content}
 				}
 			case copilot.SessionIdle:
 				// SessionIdle means the session is truly idle - all turns complete

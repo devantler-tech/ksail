@@ -13,6 +13,14 @@ type streamEndMsg struct{}
 // intermediate turns where the assistant calls tools.
 type turnEndMsg struct{}
 
+// assistantMessageMsg carries the final complete message from the assistant.
+// This is sent regardless of streaming mode and contains the full response.
+// Per SDK best practices, this is more reliable for completion detection than
+// tracking message deltas.
+type assistantMessageMsg struct {
+	content string
+}
+
 // streamErrMsg carries an error encountered during streaming.
 type streamErrMsg struct {
 	err error

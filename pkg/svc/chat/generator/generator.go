@@ -299,23 +299,41 @@ func buildHandler(cmd *cobra.Command, opts ToolOptions) copilot.ToolHandler {
 		// Build command arguments from invocation
 		args := buildCommandArgs(cmd, invocation, cmdParts)
 
+		// Build the full command string for reporting
+		fullCmd := "ksail"
+		if len(args) > 0 {
+			fullCmd += " " + strings.Join(args, " ")
+		}
+
 		// Execute the command with streaming output
 		output, err := runKSailCommand(args, toolName, opts)
 		if err != nil {
 			return copilot.ToolResult{
 				TextResultForLLM: fmt.Sprintf(
-					"Error executing %s: %v\nOutput: %s",
-					cmdPath,
+					"Command: %s\nStatus: FAILED\nError: %v\nOutput:\n%s",
+					fullCmd,
 					err,
 					output,
 				),
 				ResultType: "failure",
+				SessionLog: fmt.Sprintf("[FAILED] %s: %v", fullCmd, err),
 			}, nil
 		}
 
+		// Format output with clear structure for the LLM
+		resultText := output
+		if resultText == "" {
+			resultText = "(no output)"
+		}
+
 		return copilot.ToolResult{
-			TextResultForLLM: output,
-			ResultType:       "success",
+			TextResultForLLM: fmt.Sprintf(
+				"Command: %s\nStatus: SUCCESS\nOutput:\n%s",
+				fullCmd,
+				resultText,
+			),
+			ResultType: "success",
+			SessionLog: fmt.Sprintf("[SUCCESS] %s", fullCmd),
 		}, nil
 	}
 }
