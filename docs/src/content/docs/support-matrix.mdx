@@ -26,7 +26,8 @@ KSail supports multiple Kubernetes distributions, providers, and components. Thi
 | Cilium | ✅ | ✅ | ✅ |
 | Calico | ✅ | ✅ | ✅ |
 | **CSI** |
-| Local Path Provisioner | ✅ | Built-in | ✅ |
+| Local Path Provisioner | ✅ | Built-in | ✅ (Docker) |
+| Hetzner CSI Driver | ❌ | ❌ | ✅ (Hetzner) |
 | **GitOps** |
 | Flux | ✅ | ✅ | ✅ |
 | ArgoCD | ✅ | ✅ | ✅ |
@@ -45,6 +46,7 @@ KSail supports multiple Kubernetes distributions, providers, and components. Thi
 
 - "Built-in" means the distribution includes this component by default
 - K3s includes local-path-provisioner and metrics-server out of the box
+- Talos CSI support is provider-dependent: Local Path Provisioner for Docker, Hetzner CSI Driver for Hetzner Cloud
 
 ## Secret Management × Provider Matrix
 
