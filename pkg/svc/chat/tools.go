@@ -1,4 +1,3 @@
-// Package chat provides AI chat functionality including tools for the chat assistant.
 package chat
 
 import (
