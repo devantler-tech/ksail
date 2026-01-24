@@ -27,6 +27,8 @@ Setting up and operating Kubernetes clusters is a skill of its own, often requir
 
 🔐 **SOPS Built In** — Encrypt, decrypt, and edit secrets with integrated cipher commands.
 
+🤖 **AI Assistant** — Interactive chat powered by GitHub Copilot to help configure clusters and troubleshoot issues.
+
 ## Getting Started
 
 ### Prerequisites

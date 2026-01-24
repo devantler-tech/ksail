@@ -1,0 +1,64 @@
+---
+title: ksail chat
+description: Start an AI-assisted chat session powered by GitHub Copilot
+---
+
+The `ksail chat` command starts an interactive AI chat session that understands KSail's CLI, configuration schemas, and can help with:
+
+- Guided cluster configuration and setup
+- Troubleshooting cluster issues
+- Explaining KSail concepts and features
+- Running KSail commands with your approval
+
+## Prerequisites
+
+The chat command requires the GitHub Copilot CLI to be installed and authenticated:
+
+1. **Install Copilot CLI**: Follow the [Copilot CLI installation guide](https://docs.github.com/en/copilot/using-github-copilot/using-github-copilot-in-the-command-line/about-github-copilot-in-the-cli#installing-copilot-in-the-cli)
+2. **Authenticate**: Run `copilot auth login` to authenticate with your GitHub account
+3. **Set path (if needed)**: Set `COPILOT_CLI_PATH` environment variable if the CLI is not in your PATH
+
+## Usage
+
+```bash
+# Start a chat session
+ksail chat
+
+# Use a specific model
+ksail chat --model gpt-5
+
+# Disable streaming (wait for complete responses)
+ksail chat --streaming=false
+```
+
+## Flags
+
+| Flag | Short | Default | Description |
+|------|-------|---------|-------------|
+| `--model` | `-m` | (auto) | Model to use (e.g., gpt-5, claude-sonnet-4) |
+| `--streaming` | `-s` | `true` | Enable streaming responses |
+
+## Interactive Commands
+
+During a chat session, you can use these commands:
+
+| Command | Description |
+|---------|-------------|
+| `exit`, `quit`, `q` | End the chat session |
+| `/exit`, `/quit` | End the chat session |
+
+## Permission Handling
+
+The AI assistant can execute KSail commands on your behalf. For safety:
+
+- **Read operations** (listing clusters, getting resources) are auto-approved
+- **Write operations** (creating clusters, applying workloads) require explicit `y/N` confirmation
+
+## Example Session
+
+```
+🤖 Starting KSail AI Assistant...
+ℹ Authenticated as your-github-username
+✔ Chat session started. Type 'exit' or 'quit' to end the session.
+
+You: I want to create a lightweight cluster for testing. What distribution should I use?

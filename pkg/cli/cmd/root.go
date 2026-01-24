@@ -39,6 +39,7 @@ func NewRootCmd(version, commit, date string) *cobra.Command {
 	cmd.AddCommand(cluster.NewClusterCmd(runtimeContainer))
 	cmd.AddCommand(workload.NewWorkloadCmd(runtimeContainer))
 	cmd.AddCommand(cipher.NewCipherCmd(runtimeContainer))
+	cmd.AddCommand(NewChatCmd(runtimeContainer))
 
 	return cmd
 }

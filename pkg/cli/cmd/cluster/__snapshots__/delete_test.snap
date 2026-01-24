@@ -1,4 +1,22 @@
 
+[TestDelete_Confirmation_Accepted - 1]
+⚠ The following resources will be deleted:
+ℹ   Cluster:  my-cluster
+    Provider: Docker
+⚠ Type "yes" to confirm deletion: 
+
+🗑️ Delete cluster...
+► deleting cluster 'my-cluster' on Docker
+✔ cluster deleted
+---
+
+[TestDelete_Confirmation_Denied - 1]
+⚠ The following resources will be deleted:
+ℹ   Cluster:  my-cluster
+    Provider: Docker
+⚠ Type "yes" to confirm deletion: 
+---
+
 [TestDelete_ContextBasedDetection_ClusterNotFound - 1]
 🗑️ Delete cluster...
 ► deleting cluster 'nonexistent' on Docker
@@ -19,5 +37,17 @@
 [TestDelete_ContextBasedDetection_DeletesCluster/Talos_context_pattern - 1]
 🗑️ Delete cluster...
 ► deleting cluster 'talos-homelab' on Docker
+✔ cluster deleted
+---
+
+[TestDelete_ForceFlag_SkipsConfirmation - 1]
+🗑️ Delete cluster...
+► deleting cluster 'my-cluster' on Docker
+✔ cluster deleted
+---
+
+[TestDelete_NonTTY_SkipsConfirmation - 1]
+🗑️ Delete cluster...
+► deleting cluster 'my-cluster' on Docker
 ✔ cluster deleted
 ---
