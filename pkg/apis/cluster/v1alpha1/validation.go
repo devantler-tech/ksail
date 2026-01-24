@@ -63,7 +63,7 @@ func ValidCNIs() []CNI {
 
 // ValidCSIs returns supported CSI values.
 func ValidCSIs() []CSI {
-	return []CSI{CSIDefault, CSILocalPathStorage}
+	return []CSI{CSIDefault, CSIEnabled, CSIDisabled}
 }
 
 // ValidMetricsServers returns supported metrics server values.

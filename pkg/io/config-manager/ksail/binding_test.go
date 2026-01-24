@@ -185,7 +185,7 @@ func getNetworkingFieldTests() []fieldTestCase {
 			name: "CSI field",
 			fieldSelector: newFieldSelector(
 				func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.CSI },
-				v1alpha1.CSILocalPathStorage,
+				v1alpha1.CSIEnabled,
 				"CSI driver",
 			),
 			expectedFlag: "csi",

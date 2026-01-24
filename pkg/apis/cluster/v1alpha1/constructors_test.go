@@ -28,7 +28,7 @@ func TestClusterDirectCreation(t *testing.T) {
 					Timeout:    metav1.Duration{Duration: time.Duration(10) * time.Minute},
 				},
 				CNI:          v1alpha1.CNICilium,
-				CSI:          v1alpha1.CSILocalPathStorage,
+				CSI:          v1alpha1.CSIEnabled,
 				GitOpsEngine: v1alpha1.GitOpsEngineNone,
 			},
 		},
@@ -161,8 +161,10 @@ func TestCSISet(t *testing.T) {
 
 	validCases := []struct{ input, expected string }{
 		{"Default", "Default"},
-		{"localpathstorage", "LocalPathStorage"},
-		{"LOCALPATHSTORAGE", "LocalPathStorage"},
+		{"enabled", "Enabled"},
+		{"ENABLED", "Enabled"},
+		{"disabled", "Disabled"},
+		{"DISABLED", "Disabled"},
 	}
 	for _, validCase := range validCases {
 		var csi v1alpha1.CSI
