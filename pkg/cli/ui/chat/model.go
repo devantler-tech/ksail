@@ -146,14 +146,17 @@ type Model struct {
 	currentResponse strings.Builder
 	isStreaming     bool
 	justCompleted   bool // true when a response just finished, shows "Ready" indicator
+	sessionComplete bool // true when SessionIdle received - stops waiting for more events
 	userScrolled    bool // true when user has scrolled away from bottom (pause auto-scroll)
 	err             error
 	quitting        bool
 	ready           bool
 
 	// Tool execution tracking
-	tools     map[string]*toolExecution // keyed by tool ID
-	toolOrder []string                  // ordered list of tool IDs for rendering
+	tools            map[string]*toolExecution // keyed by tool ID
+	toolOrder        []string                  // ordered list of tool IDs for rendering
+	pendingToolCount int                       // count of tools started but not yet completed
+	lastToolCall     string                    // last tool call signature for duplicate detection
 
 	// Permission request state
 	pendingPermission *permissionRequestMsg
@@ -296,8 +299,17 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case streamEndMsg:
 		return m.handleStreamEnd()
 
+	case turnStartMsg:
+		return m.handleTurnStart()
+
 	case turnEndMsg:
 		return m.handleTurnEnd()
+
+	case reasoningMsg:
+		return m.handleReasoning(msg)
+
+	case abortMsg:
+		return m.handleAbort()
 
 	case streamErrMsg:
 		return m.handleStreamErr(msg)
@@ -576,6 +588,9 @@ func (m *Model) handleUserSubmit(msg userSubmitMsg) (tea.Model, tea.Cmd) {
 	// Keep tool history visible but reset running state tracking
 	m.tools = make(map[string]*toolExecution)
 	m.toolOrder = make([]string, 0)
+	m.pendingToolCount = 0   // Reset pending tool count
+	m.sessionComplete = false // Reset session complete flag
+	m.lastToolCall = ""       // Reset duplicate detection
 
 	m.messages = append(m.messages, chatMessage{
 		role:    "user",
@@ -649,6 +664,9 @@ func (m *Model) handleAssistantMessage(msg assistantMessageMsg) (tea.Model, tea.
 
 // handleToolStart handles tool execution start events.
 func (m *Model) handleToolStart(msg toolStartMsg) (tea.Model, tea.Cmd) {
+	// Increment pending tool count for reliable completion tracking
+	m.pendingToolCount++
+
 	// Generate tool ID if not provided
 	toolID := msg.toolID
 	if toolID == "" {
@@ -709,6 +727,12 @@ func (m *Model) handleToolEnd(msg toolEndMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	// Decrement pending tool count regardless of whether we found the tool
+	// This ensures our count stays in sync with SDK events
+	if m.pendingToolCount > 0 {
+		m.pendingToolCount--
+	}
+
 	if tool != nil {
 		// Update tool status
 		if msg.success {
@@ -756,9 +780,18 @@ func (m *Model) handleToolOutputChunk(toolID, chunk string) (tea.Model, tea.Cmd)
 }
 
 // handleStreamEnd handles stream completion events (SessionIdle).
+// SessionIdle means the session has finished processing. However, if tools are
+// still pending, we keep waiting for their completion.
 func (m *Model) handleStreamEnd() (tea.Model, tea.Cmd) {
+	// If there are pending tools, keep waiting - don't mark as complete yet
+	if m.pendingToolCount > 0 || m.hasRunningTools() {
+		return m, m.waitForEvent()
+	}
+
+	// Truly complete - mark session as finished
 	m.isStreaming = false
-	m.justCompleted = true // Show "Ready" indicator
+	m.justCompleted = true  // Show "Ready" indicator
+	m.sessionComplete = true // Stop waiting for more events
 	if len(m.messages) > 0 {
 		last := &m.messages[len(m.messages)-1]
 		last.isStreaming = false
@@ -767,23 +800,16 @@ func (m *Model) handleStreamEnd() (tea.Model, tea.Cmd) {
 		last.rendered = renderMarkdownWithRenderer(m.renderer, last.content)
 	}
 	m.updateViewportContent()
-	// Continue listening for events if there are still running tools
-	// DON'T cleanup until tools are done - we need to receive ToolExecutionComplete events
-	if m.hasRunningTools() {
-		return m, m.waitForEvent()
-	}
-	// All done, safe to cleanup
-	m.cleanup()
+	m.cleanup() // Unsubscribe from events - session is complete
 	return m, nil
 }
 
 // handleTurnEnd handles assistant turn end events (AssistantTurnEnd).
-// Unlike handleStreamEnd, this is a "soft" completion signal. AssistantTurnEnd
-// fires after each turn, including intermediate turns where the assistant calls
-// tools. We only consider it complete if the assistant has produced a response.
+// AssistantTurnEnd fires after each turn, including intermediate turns where the
+// assistant calls tools. We only mark as complete if there's content and no pending tools.
 func (m *Model) handleTurnEnd() (tea.Model, tea.Cmd) {
-	// If there are running tools, keep waiting - more turns are coming
-	if m.hasRunningTools() {
+	// If there are pending tools, keep waiting - more turns are coming
+	if m.pendingToolCount > 0 || m.hasRunningTools() {
 		return m, m.waitForEvent()
 	}
 
@@ -794,9 +820,10 @@ func (m *Model) handleTurnEnd() (tea.Model, tea.Cmd) {
 		return m, m.waitForEvent()
 	}
 
-	// Assistant has produced content and no tools are running - we're done
+	// Assistant has produced content and no tools are pending - we're done
 	m.isStreaming = false
 	m.justCompleted = true
+	m.sessionComplete = true // Mark session as complete
 	if len(m.messages) > 0 {
 		last := &m.messages[len(m.messages)-1]
 		last.isStreaming = false
@@ -804,7 +831,43 @@ func (m *Model) handleTurnEnd() (tea.Model, tea.Cmd) {
 		last.rendered = renderMarkdownWithRenderer(m.renderer, last.content)
 	}
 	m.updateViewportContent()
+	// Keep waiting for SessionIdle to confirm completion
+	return m, m.waitForEvent()
+}
+
+// handleTurnStart handles assistant turn start events (AssistantTurnStart).
+// This fires when the assistant begins a new turn, ensuring we're in streaming mode.
+func (m *Model) handleTurnStart() (tea.Model, tea.Cmd) {
+	// Ensure we're in streaming mode when a new turn starts
+	m.isStreaming = true
+	m.justCompleted = false
+	m.sessionComplete = false // New turn means session is active again
+	m.updateViewportContent()
+	return m, m.waitForEvent()
+}
+
+// handleReasoning handles reasoning events from the assistant.
+// These indicate the LLM is actively "thinking" about the response.
+func (m *Model) handleReasoning(msg reasoningMsg) (tea.Model, tea.Cmd) {
+	// Reasoning events confirm the LLM is actively working
+	// We just keep streaming state active and wait for more events
+	m.isStreaming = true
+	m.justCompleted = false
+	// Optionally, we could append reasoning content to a separate buffer
+	// For now, just acknowledge we're still processing
+	m.updateViewportContent()
+	return m, m.waitForEvent()
+}
+
+// handleAbort handles session abort events.
+func (m *Model) handleAbort() (tea.Model, tea.Cmd) {
+	m.isStreaming = false
 	m.cleanup()
+	if len(m.messages) > 0 && m.messages[len(m.messages)-1].role == "assistant" {
+		m.messages[len(m.messages)-1].content += "\n\n[Session aborted]"
+		m.messages[len(m.messages)-1].isStreaming = false
+	}
+	m.updateViewportContent()
 	return m, nil
 }
 
@@ -1190,6 +1253,9 @@ func (m *Model) streamResponseCmd(userMessage string) tea.Cmd {
 		// Set up event handler to send events to the channel
 		unsubscribe := session.On(func(event copilot.SessionEvent) {
 			switch event.Type {
+			case copilot.AssistantTurnStart:
+				// New turn started - reset streaming state
+				eventChan <- turnStartMsg{}
 			case copilot.AssistantMessageDelta:
 				// Streaming message chunk - incremental text
 				if event.Data.DeltaContent != nil {
@@ -1201,6 +1267,19 @@ func (m *Model) streamResponseCmd(userMessage string) tea.Cmd {
 				if event.Data.Content != nil {
 					eventChan <- assistantMessageMsg{content: *event.Data.Content}
 				}
+			case copilot.AssistantReasoning, copilot.AssistantReasoningDelta:
+				// Reasoning events - LLM is "thinking"
+				// We track these to know the LLM is actively processing
+				var content string
+				if event.Data.Content != nil {
+					content = *event.Data.Content
+				} else if event.Data.DeltaContent != nil {
+					content = *event.Data.DeltaContent
+				}
+				eventChan <- reasoningMsg{
+					content: content,
+					isDelta: event.Type == copilot.AssistantReasoningDelta,
+				}
 			case copilot.SessionIdle:
 				// SessionIdle means the session is truly idle - all turns complete
 				eventChan <- streamEndMsg{}
@@ -1209,6 +1288,9 @@ func (m *Model) streamResponseCmd(userMessage string) tea.Cmd {
 				// where the assistant calls tools. We use a "soft end" signal that
 				// only completes if the assistant has produced a response.
 				eventChan <- turnEndMsg{}
+			case copilot.Abort:
+				// Session aborted - signal error and stop
+				eventChan <- abortMsg{}
 			case copilot.SessionError:
 				var errMsg string
 				if event.Data.Message != nil {

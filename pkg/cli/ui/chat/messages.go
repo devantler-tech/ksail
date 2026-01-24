@@ -8,10 +8,24 @@ type streamChunkMsg struct {
 // streamEndMsg signals the end of a streamed response.
 type streamEndMsg struct{}
 
+// turnStartMsg signals the start of a new assistant turn.
+// This fires when the assistant begins processing (after user message or tool results).
+type turnStartMsg struct{}
+
 // turnEndMsg signals the end of an assistant turn (may not be final).
 // Used for AssistantTurnEnd events which fire after each turn, including
 // intermediate turns where the assistant calls tools.
 type turnEndMsg struct{}
+
+// reasoningMsg carries reasoning content from the assistant.
+// This indicates the LLM is actively "thinking" about the response.
+type reasoningMsg struct {
+	content string
+	isDelta bool // true if this is incremental content
+}
+
+// abortMsg signals the session was aborted.
+type abortMsg struct{}
 
 // assistantMessageMsg carries the final complete message from the assistant.
 // This is sent regardless of streaming mode and contains the full response.
