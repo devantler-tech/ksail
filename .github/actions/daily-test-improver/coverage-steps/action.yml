@@ -6,13 +6,20 @@ runs:
   steps:
     # Step 1: Setup Go environment
     - name: ⚙️ Setup Go
+      uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6
+      with:
+        cache: true
+        go-version-file: go.mod
+    
+    # Step 2: Verify Go installation
+    - name: ✅ Verify Go setup
       shell: bash
       run: |
-        echo "Setting up Go environment..." | tee -a coverage-steps.log
+        echo "Verifying Go environment..." | tee -a coverage-steps.log
         go version | tee -a coverage-steps.log
         echo "✅ Go setup complete" | tee -a coverage-steps.log
 
-    # Step 2: Download dependencies
+    # Step 3: Download dependencies
     - name: 📦 Download Go modules
       shell: bash
       run: |
@@ -20,7 +27,7 @@ runs:
         go mod download 2>&1 | tee -a coverage-steps.log
         echo "✅ Go modules downloaded" | tee -a coverage-steps.log
 
-    # Step 3: Build the KSail binary
+    # Step 4: Build the KSail binary
     - name: 🏗️ Build KSail binary
       shell: bash
       run: |
@@ -28,7 +35,7 @@ runs:
         go build -o ksail . 2>&1 | tee -a coverage-steps.log
         echo "✅ Build successful" | tee -a coverage-steps.log
 
-    # Step 4: Enable covdata workaround
+    # Step 5: Enable covdata workaround
     - name: 👨🏻‍🔧 Enable covdata
       shell: bash
       run: |
@@ -36,7 +43,7 @@ runs:
         go env -w GOTOOLCHAIN=go1.25.4+auto 2>&1 | tee -a coverage-steps.log
         echo "✅ Covdata enabled" | tee -a coverage-steps.log
 
-    # Step 5: Run unit tests with coverage
+    # Step 6: Run unit tests with coverage
     - name: 📊 Run tests and generate coverage
       shell: bash
       run: |
@@ -44,7 +51,7 @@ runs:
         go test -race -coverprofile=coverage.txt -covermode=atomic ./... 2>&1 | tee -a coverage-steps.log
         echo "✅ Tests complete, coverage generated at: coverage.txt" | tee -a coverage-steps.log
 
-    # Step 6: Display coverage summary
+    # Step 7: Display coverage summary
     - name: 📈 Display coverage summary
       shell: bash
       run: |
@@ -52,7 +59,7 @@ runs:
         go tool cover -func=coverage.txt 2>&1 | tee -a coverage-steps.log
         echo "✅ Coverage summary complete" | tee -a coverage-steps.log
 
-    # Step 7: Generate HTML coverage report
+    # Step 8: Generate HTML coverage report
     - name: 📄 Generate HTML coverage report
       shell: bash
       run: |
@@ -60,7 +67,7 @@ runs:
         go tool cover -html=coverage.txt -o coverage.html 2>&1 | tee -a coverage-steps.log
         echo "✅ HTML coverage report generated at: coverage.html" | tee -a coverage-steps.log
 
-    # Step 8: Upload coverage artifacts
+    # Step 9: Upload coverage artifacts
     - name: 📤 Upload coverage reports
       uses: actions/upload-artifact@ea054b56044de43c62e384c6396ee2371e6d0e4b # v4.6.2
       with:
