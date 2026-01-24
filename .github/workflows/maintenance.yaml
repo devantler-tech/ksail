@@ -33,6 +33,6 @@ jobs:
       - name: Delete old package versions
         uses: actions/delete-package-versions@v5
         with:
-          package-name: 'ksail/system-test-manifests'
-          package-type: 'container'
+          package-name: "ksail/system-test-manifests"
+          package-type: "container"
           min-versions-to-keep: 100
