@@ -3,7 +3,7 @@ package confirm
 
 import (
 	"bufio"
-	"fmt"
+	"errors"
 	"io"
 	"os"
 	"strings"
@@ -14,7 +14,7 @@ import (
 )
 
 // ErrDeletionCancelled is returned when the user cancels a deletion operation.
-var ErrDeletionCancelled = fmt.Errorf("deletion cancelled")
+var ErrDeletionCancelled = errors.New("deletion cancelled")
 
 // DeletionPreview contains all resources that will be deleted.
 type DeletionPreview struct {
@@ -119,84 +119,85 @@ func IsTTY() bool {
 }
 
 // ShouldSkipPrompt returns true if the confirmation prompt should be skipped.
-// This happens when:
-// - force flag is set, OR
-// - stdin is not a TTY (non-interactive environment)
+// This happens when force flag is set OR stdin is not a TTY (non-interactive environment).
 func ShouldSkipPrompt(force bool) bool {
 	return force || !IsTTY()
 }
 
-// ShowDeletionPreview displays information about what will be deleted.
+// ShowDeletionPreview displays information about what will be deleted and the confirmation prompt.
 // This includes the cluster name, provider, and any associated resources.
 func ShowDeletionPreview(writer io.Writer, preview *DeletionPreview) {
-	notify.WriteMessage(notify.Message{
-		Type:    notify.WarningType,
-		Content: "The following resources will be deleted:",
-		Writer:  writer,
-	})
-
-	// Build the preview content
+	// Build the preview content as a single block
 	var previewText strings.Builder
 
-	previewText.WriteString(fmt.Sprintf("  Cluster:  %s\n", preview.ClusterName))
-	previewText.WriteString(fmt.Sprintf("  Provider: %s", preview.Provider.String()))
+	previewText.WriteString("The following resources will be deleted:\n")
+	previewText.WriteString("  Cluster:  " + preview.ClusterName + "\n")
+	previewText.WriteString("  Provider: " + preview.Provider.String())
 
 	// Show provider-specific resources
 	switch preview.Provider {
 	case v1alpha1.ProviderDocker:
-		if len(preview.Nodes) > 0 {
-			previewText.WriteString("\n  Containers:")
-
-			for _, node := range preview.Nodes {
-				previewText.WriteString(fmt.Sprintf("\n    - %s", node))
-			}
-		}
-
-		if len(preview.Registries) > 0 {
-			previewText.WriteString("\n  Registries:")
-
-			for _, reg := range preview.Registries {
-				previewText.WriteString(fmt.Sprintf("\n    - %s", reg))
-			}
-		}
+		writeDockerResources(&previewText, preview)
 	case v1alpha1.ProviderHetzner:
-		if len(preview.Servers) > 0 {
-			previewText.WriteString("\n  Servers:")
-
-			for _, server := range preview.Servers {
-				previewText.WriteString(fmt.Sprintf("\n    - %s", server))
-			}
-		}
-
-		if preview.PlacementGroup != "" {
-			previewText.WriteString(fmt.Sprintf("\n  Placement Group: %s", preview.PlacementGroup))
-		}
-
-		if preview.Firewall != "" {
-			previewText.WriteString(fmt.Sprintf("\n  Firewall: %s", preview.Firewall))
-		}
-
-		if preview.Network != "" {
-			previewText.WriteString(fmt.Sprintf("\n  Network: %s", preview.Network))
-		}
+		writeHetznerResources(&previewText, preview)
 	}
 
+	// Add the confirmation prompt
+	previewText.WriteString("\n" + `Type "yes" to confirm deletion: `)
+
 	notify.WriteMessage(notify.Message{
-		Type:    notify.InfoType,
+		Type:    notify.WarningType,
 		Content: previewText.String(),
 		Writer:  writer,
 	})
 }
 
-// PromptForConfirmation asks the user to type "yes" to confirm.
-// Returns true only if the user types exactly "yes" (case-insensitive).
-func PromptForConfirmation(writer io.Writer) bool {
-	notify.WriteMessage(notify.Message{
-		Type:    notify.WarningType,
-		Content: `Type "yes" to confirm deletion: `,
-		Writer:  writer,
-	})
+// writeDockerResources writes Docker-specific resources to the preview.
+func writeDockerResources(previewText *strings.Builder, preview *DeletionPreview) {
+	if len(preview.Nodes) > 0 {
+		previewText.WriteString("\n  Containers:")
 
+		for _, node := range preview.Nodes {
+			previewText.WriteString("\n    - " + node)
+		}
+	}
+
+	if len(preview.Registries) > 0 {
+		previewText.WriteString("\n  Registries:")
+
+		for _, reg := range preview.Registries {
+			previewText.WriteString("\n    - " + reg)
+		}
+	}
+}
+
+// writeHetznerResources writes Hetzner-specific resources to the preview.
+func writeHetznerResources(previewText *strings.Builder, preview *DeletionPreview) {
+	if len(preview.Servers) > 0 {
+		previewText.WriteString("\n  Servers:")
+
+		for _, server := range preview.Servers {
+			previewText.WriteString("\n    - " + server)
+		}
+	}
+
+	if preview.PlacementGroup != "" {
+		previewText.WriteString("\n  Placement Group: " + preview.PlacementGroup)
+	}
+
+	if preview.Firewall != "" {
+		previewText.WriteString("\n  Firewall: " + preview.Firewall)
+	}
+
+	if preview.Network != "" {
+		previewText.WriteString("\n  Network: " + preview.Network)
+	}
+}
+
+// PromptForConfirmation reads user input and checks for "yes" confirmation.
+// Returns true only if the user types exactly "yes" (case-insensitive).
+// Note: The prompt text is displayed by ShowDeletionPreview.
+func PromptForConfirmation(_ io.Writer) bool {
 	reader := bufio.NewReader(getStdinReader())
 
 	input, err := reader.ReadString('\n')

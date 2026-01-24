@@ -39,16 +39,19 @@ The kubeconfig is resolved in the following priority order:
   3. From ksail.yaml config file (if present)
   4. Defaults to ~/.kube/config`
 
+// deleteFlags holds all the flags for the delete command.
+type deleteFlags struct {
+	name       string
+	provider   v1alpha1.Provider
+	kubeconfig string
+	storage    bool
+	force      bool
+}
+
 // NewDeleteCmd creates and returns the delete command.
 // Delete uses --name and --provider flags to determine the cluster to delete.
 func NewDeleteCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
-	var (
-		nameFlag       string
-		providerFlag   v1alpha1.Provider
-		kubeconfigFlag string
-		deleteStorage  bool
-		forceFlag      bool
-	)
+	flags := &deleteFlags{}
 
 	cmd := &cobra.Command{
 		Use:           "delete",
@@ -57,93 +60,42 @@ func NewDeleteCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runDeleteAction(
-				cmd,
-				runtimeContainer,
-				nameFlag,
-				providerFlag,
-				kubeconfigFlag,
-				deleteStorage,
-				forceFlag,
-			)
+			return runDeleteAction(cmd, runtimeContainer, flags)
 		},
 	}
 
-	cmd.Flags().StringVarP(
-		&nameFlag,
-		"name",
-		"n",
-		"",
-		"Name of the cluster to delete",
-	)
-
-	cmd.Flags().VarP(
-		&providerFlag,
-		"provider",
-		"p",
-		fmt.Sprintf("Provider to use (%s)", providerFlag.ValidValues()),
-	)
-
-	cmd.Flags().StringVarP(
-		&kubeconfigFlag,
-		"kubeconfig",
-		"k",
-		"",
-		"Path to kubeconfig file for context cleanup",
-	)
-
-	cmd.Flags().BoolVar(
-		&deleteStorage,
-		"delete-storage",
-		false,
-		"Delete storage volumes when cleaning up (registry volumes for Docker, block storage for Hetzner)",
-	)
-
-	cmd.Flags().BoolVarP(
-		&forceFlag,
-		"force",
-		"f",
-		false,
-		"Skip confirmation prompt and delete immediately",
-	)
+	registerDeleteFlags(cmd, flags)
 
 	return cmd
+}
+
+// registerDeleteFlags registers all flags for the delete command.
+func registerDeleteFlags(cmd *cobra.Command, flags *deleteFlags) {
+	cmd.Flags().StringVarP(&flags.name, "name", "n", "", "Name of the cluster to delete")
+	cmd.Flags().VarP(&flags.provider, "provider", "p",
+		fmt.Sprintf("Provider to use (%s)", flags.provider.ValidValues()))
+	cmd.Flags().StringVarP(&flags.kubeconfig, "kubeconfig", "k", "",
+		"Path to kubeconfig file for context cleanup")
+	cmd.Flags().BoolVar(&flags.storage, "delete-storage", false,
+		"Delete storage volumes when cleaning up (registry volumes for Docker, block storage for Hetzner)")
+	cmd.Flags().BoolVarP(&flags.force, "force", "f", false,
+		"Skip confirmation prompt and delete immediately")
 }
 
 // runDeleteAction executes the cluster deletion with registry cleanup.
 func runDeleteAction(
 	cmd *cobra.Command,
 	runtimeContainer *runtime.Runtime,
-	nameFlag string,
-	providerFlag v1alpha1.Provider,
-	kubeconfigFlag string,
-	deleteStorage bool,
-	forceFlag bool,
+	flags *deleteFlags,
 ) error {
 	// Wrap output with StageSeparatingWriter for automatic stage separation
 	stageWriter := notify.NewStageSeparatingWriter(cmd.OutOrStdout())
 	cmd.SetOut(stageWriter)
 
-	// Get timer from runtime container using Invoke
-	var tmr timer.Timer
-
-	if runtimeContainer != nil {
-		//nolint:wrapcheck // Error is captured to outer scope, not returned
-		_ = runtimeContainer.Invoke(func(injector runtime.Injector) error {
-			var err error
-
-			tmr, err = runtime.ResolveTimer(injector)
-
-			return err
-		})
-	}
-
-	if tmr != nil {
-		tmr.Start()
-	}
+	tmr := initTimer(runtimeContainer)
 
 	// Resolve cluster info from flags, config, or kubeconfig
-	resolved, err := lifecycle.ResolveClusterInfo(nameFlag, providerFlag, kubeconfigFlag)
+	resolved, err := lifecycle.ResolveClusterInfo(flags.name, flags.provider, flags.kubeconfig)
 	if err != nil {
 		return fmt.Errorf("failed to resolve cluster info: %w", err)
 	}
@@ -168,18 +120,14 @@ func runDeleteAction(
 	}
 
 	// Show confirmation prompt unless force flag is set or non-TTY
-	if !confirm.ShouldSkipPrompt(forceFlag) {
-		preview := buildDeletionPreview(cmd, resolved, preDiscovered)
-		confirm.ShowDeletionPreview(cmd.OutOrStdout(), preview)
-
-		if !confirm.PromptForConfirmation(cmd.OutOrStdout()) {
-			return confirm.ErrDeletionCancelled
+	if !confirm.ShouldSkipPrompt(flags.force) {
+		err := promptForDeletion(cmd, resolved, preDiscovered)
+		if err != nil {
+			return err
 		}
 	}
 
-	// Disconnect registries from network BEFORE deleting the cluster
-	// This is required because Talos destroys the network during deletion,
-	// and it will fail if registries are still connected
+	// Handle Docker-specific pre-deletion steps
 	if resolved.Provider == v1alpha1.ProviderDocker {
 		disconnectRegistriesBeforeDelete(cmd, resolved.ClusterName)
 	}
@@ -192,7 +140,45 @@ func runDeleteAction(
 
 	// Cleanup registries after cluster deletion (only for Docker provider)
 	if resolved.Provider == v1alpha1.ProviderDocker {
-		cleanupRegistriesAfterDelete(cmd, tmr, resolved, deleteStorage, preDiscovered)
+		cleanupRegistriesAfterDelete(cmd, tmr, resolved, flags.storage, preDiscovered)
+	}
+
+	return nil
+}
+
+// initTimer initializes and starts the timer from the runtime container.
+func initTimer(runtimeContainer *runtime.Runtime) timer.Timer {
+	var tmr timer.Timer
+
+	if runtimeContainer != nil {
+		//nolint:wrapcheck // Error is captured to outer scope, not returned
+		_ = runtimeContainer.Invoke(func(injector runtime.Injector) error {
+			var err error
+
+			tmr, err = runtime.ResolveTimer(injector)
+
+			return err
+		})
+	}
+
+	if tmr != nil {
+		tmr.Start()
+	}
+
+	return tmr
+}
+
+// promptForDeletion shows the deletion preview and prompts for confirmation.
+func promptForDeletion(
+	cmd *cobra.Command,
+	resolved *lifecycle.ResolvedClusterInfo,
+	preDiscovered *mirrorregistry.DiscoveredRegistries,
+) error {
+	preview := buildDeletionPreview(cmd, resolved, preDiscovered)
+	confirm.ShowDeletionPreview(cmd.OutOrStdout(), preview)
+
+	if !confirm.PromptForConfirmation(cmd.OutOrStdout()) {
+		return confirm.ErrDeletionCancelled
 	}
 
 	return nil
@@ -200,8 +186,6 @@ func runDeleteAction(
 
 // createDeleteProvisioner creates the appropriate provisioner for cluster deletion.
 // It first checks for test overrides, then falls back to creating a minimal provisioner.
-//
-//nolint:ireturn // Provisioner interface is required
 func createDeleteProvisioner(
 	clusterInfo *lifecycle.ClusterInfo,
 ) (clusterprovisioner.ClusterProvisioner, error) {
@@ -289,7 +273,8 @@ func buildDeletionPreview(
 		preview.Network = resolved.ClusterName + "-network"
 		// Servers are labeled but we don't have API access here to list them
 		// Add a placeholder to indicate servers will be deleted
-		preview.Servers = []string{"(all servers labeled with cluster: " + resolved.ClusterName + ")"}
+		serverPlaceholder := "(all servers labeled with cluster: " + resolved.ClusterName + ")"
+		preview.Servers = []string{serverPlaceholder}
 	}
 
 	return preview
@@ -314,7 +299,7 @@ func discoverDockerNodes(cmd *cobra.Command, clusterName string) []string {
 			All: true,
 		})
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to list containers: %w", err)
 		}
 
 		for _, ctr := range containers {
@@ -323,7 +308,7 @@ func discoverDockerNodes(cmd *cobra.Command, clusterName string) []string {
 				containerName := strings.TrimPrefix(name, "/")
 
 				// Check if container belongs to this cluster
-				if isClusterContainer(containerName, clusterName) {
+				if IsClusterContainer(containerName, clusterName) {
 					nodes = append(nodes, containerName)
 				}
 			}
@@ -335,8 +320,9 @@ func discoverDockerNodes(cmd *cobra.Command, clusterName string) []string {
 	return nodes
 }
 
-// isClusterContainer checks if a container name belongs to the given cluster.
-func isClusterContainer(containerName, clusterName string) bool {
+// IsClusterContainer checks if a container name belongs to the given cluster.
+// Exported for testing.
+func IsClusterContainer(containerName, clusterName string) bool {
 	// Kind pattern: {cluster}-control-plane, {cluster}-worker, {cluster}-worker2
 	if strings.HasPrefix(containerName, clusterName+"-control-plane") ||
 		strings.HasPrefix(containerName, clusterName+"-worker") {

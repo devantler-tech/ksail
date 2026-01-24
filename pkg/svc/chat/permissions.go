@@ -7,15 +7,23 @@ import (
 	"os"
 	"strings"
 
-	copilot "github.com/github/copilot-sdk/go"
-
 	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
+	copilot "github.com/github/copilot-sdk/go"
 )
 
-// CreatePermissionHandler creates a permission handler that prompts the user
-// for confirmation on write operations.
+// CreatePermissionHandler creates a permission handler that manages user consent
+// for tool operations. Read operations (read, url) are auto-approved, while write
+// operations require explicit user confirmation via an interactive prompt.
+//
+// The handler displays operation details in a formatted box showing:
+//   - Tool name being executed
+//   - Shell command (for command execution)
+//   - Arguments and file paths involved
+//   - Content preview for write operations (truncated to 200 chars)
 func CreatePermissionHandler(writer io.Writer) copilot.PermissionHandler {
-	return func(request copilot.PermissionRequest, _ copilot.PermissionInvocation) (copilot.PermissionRequestResult, error) {
+	return func(
+		request copilot.PermissionRequest, _ copilot.PermissionInvocation,
+	) (copilot.PermissionRequestResult, error) {
 		// Auto-approve read operations
 		if isReadOperation(request.Kind) {
 			return copilot.PermissionRequestResult{Kind: "approved"}, nil
@@ -32,39 +40,48 @@ func isReadOperation(kind string) bool {
 		"read": true,
 		"url":  true, // URL fetching is typically read-only
 	}
+
 	return readKinds[kind]
 }
 
 // promptForPermission prompts the user for permission and returns the result.
-func promptForPermission(writer io.Writer, request copilot.PermissionRequest) (copilot.PermissionRequestResult, error) {
+func promptForPermission(
+	writer io.Writer,
+	request copilot.PermissionRequest,
+) (copilot.PermissionRequestResult, error) {
 	// Display permission request details
-	fmt.Fprintln(writer, "")
+	_, _ = fmt.Fprintln(writer, "")
 
 	// Build a descriptive message
 	desc := getPermissionDescription(request)
 	if desc != "" {
 		// Show the command/action being requested
-		fmt.Fprintf(writer, "┌─ Permission Required (%s)\n", request.Kind)
+		_, _ = fmt.Fprintf(writer, "\u250c\u2500 Permission Required (%s)\n", request.Kind)
+
 		for _, line := range strings.Split(desc, "\n") {
 			if line != "" {
-				fmt.Fprintf(writer, "│  %s\n", line)
+				_, _ = fmt.Fprintf(writer, "\u2502  %s\n", line)
 			}
 		}
-		fmt.Fprint(writer, "└─")
+
+		_, _ = fmt.Fprint(writer, "\u2514\u2500")
 	} else {
 		notify.WriteMessage(notify.Message{
 			Type:    notify.WarningType,
-			Content: fmt.Sprintf("Permission requested: %s", request.Kind),
+			Content: "Permission requested: " + request.Kind,
 			Writer:  writer,
 		})
 	}
 
 	// Prompt for confirmation
-	fmt.Fprint(writer, "Allow this operation? [y/N]: ")
+	_, _ = fmt.Fprint(writer, "Allow this operation? [y/N]: ")
 
 	reader := bufio.NewReader(os.Stdin)
+
 	input, err := reader.ReadString('\n')
 	if err != nil {
+		// Return denied result. The error (typically EOF) is expected in non-interactive contexts.
+		// We intentionally don't propagate it since the denied result handles this case.
 		return copilot.PermissionRequestResult{
 			Kind: "denied-no-approval-rule-and-could-not-request-from-user",
 		}, nil
@@ -78,6 +95,7 @@ func promptForPermission(writer io.Writer, request copilot.PermissionRequest) (c
 			Content: "Permission granted",
 			Writer:  writer,
 		})
+
 		return copilot.PermissionRequestResult{Kind: "approved"}, nil
 	}
 
@@ -86,6 +104,7 @@ func promptForPermission(writer io.Writer, request copilot.PermissionRequest) (c
 		Content: "Permission denied",
 		Writer:  writer,
 	})
+
 	return copilot.PermissionRequestResult{Kind: "denied-interactively-by-user"}, nil
 }
 
@@ -109,26 +128,30 @@ func getPermissionDescription(request copilot.PermissionRequest) string {
 	}
 
 	// Arguments if present
-	if args, ok := request.Extra["args"].([]interface{}); ok && len(args) > 0 {
+	if args, ok := request.Extra["args"].([]any); ok && len(args) > 0 {
 		argStrs := make([]string, len(args))
 		for i, arg := range args {
 			argStrs[i] = fmt.Sprintf("%v", arg)
 		}
-		parts = append(parts, fmt.Sprintf("Args: %s", strings.Join(argStrs, " ")))
+
+		parts = append(parts, "Args: "+strings.Join(argStrs, " "))
 	}
 
 	// File path for write operations
 	if path, ok := request.Extra["path"].(string); ok && path != "" {
-		parts = append(parts, fmt.Sprintf("Path: %s", path))
+		parts = append(parts, "Path: "+path)
 	}
 
 	// Content preview for writes (truncated)
+	const maxContentPreview = 200
+
 	if content, ok := request.Extra["content"].(string); ok && content != "" {
 		preview := content
-		if len(preview) > 200 {
-			preview = preview[:200] + "..."
+		if len(preview) > maxContentPreview {
+			preview = preview[:maxContentPreview] + "..."
 		}
-		parts = append(parts, fmt.Sprintf("Content:\n%s", preview))
+
+		parts = append(parts, "Content:\n"+preview)
 	}
 
 	return strings.Join(parts, "\n")

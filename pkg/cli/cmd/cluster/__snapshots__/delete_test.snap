@@ -1,9 +1,9 @@
 
 [TestDelete_Confirmation_Accepted - 1]
 ⚠ The following resources will be deleted:
-ℹ   Cluster:  my-cluster
+    Cluster:  my-cluster
     Provider: Docker
-⚠ Type "yes" to confirm deletion: 
+  Type "yes" to confirm deletion: 
 
 🗑️ Delete cluster...
 ► deleting cluster 'my-cluster' on Docker
@@ -12,9 +12,9 @@
 
 [TestDelete_Confirmation_Denied - 1]
 ⚠ The following resources will be deleted:
-ℹ   Cluster:  my-cluster
+    Cluster:  my-cluster
     Provider: Docker
-⚠ Type "yes" to confirm deletion: 
+  Type "yes" to confirm deletion: 
 ---
 
 [TestDelete_ContextBasedDetection_ClusterNotFound - 1]

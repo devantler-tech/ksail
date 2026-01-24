@@ -2,18 +2,21 @@ package cmd
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
-	copilot "github.com/github/copilot-sdk/go"
-
+	chatui "github.com/devantler-tech/ksail/v5/pkg/cli/ui/chat"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	chatsvc "github.com/devantler-tech/ksail/v5/pkg/svc/chat"
 	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
+	copilot "github.com/github/copilot-sdk/go"
 	"github.com/spf13/cobra"
 )
 
@@ -41,6 +44,8 @@ Write operations require explicit confirmation before execution.`,
 	// Optional flags
 	cmd.Flags().StringP("model", "m", "", "Model to use (e.g., gpt-5, claude-sonnet-4)")
 	cmd.Flags().BoolP("streaming", "s", true, "Enable streaming responses")
+	cmd.Flags().DurationP("timeout", "t", 5*time.Minute, "Response timeout duration")
+	cmd.Flags().Bool("tui", true, "Use interactive TUI mode with markdown rendering")
 
 	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
 		return handleChatRunE(cmd)
@@ -53,16 +58,37 @@ Write operations require explicit confirmation before execution.`,
 func handleChatRunE(cmd *cobra.Command) error {
 	writer := cmd.OutOrStdout()
 
-	notify.WriteMessage(notify.Message{
-		Type:    notify.TitleType,
-		Content: "Starting KSail AI Assistant...",
-		Emoji:   "🤖",
-		Writer:  writer,
-	})
+	// Set up signal handling for graceful shutdown
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-	// Get flags
+	// Get flags early to determine mode
 	model, _ := cmd.Flags().GetString("model")
 	streaming, _ := cmd.Flags().GetBool("streaming")
+	timeout, _ := cmd.Flags().GetDuration("timeout")
+	useTUI, _ := cmd.Flags().GetBool("tui")
+
+	// Set up signal handler - TUI handles its own signals
+	if !useTUI {
+		sigChan := make(chan os.Signal, 1)
+		signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+		go func() {
+			<-sigChan
+			notify.WriteMessage(notify.Message{
+				Type:    notify.InfoType,
+				Content: "\nReceived interrupt signal, shutting down...",
+				Writer:  writer,
+			})
+			cancel()
+		}()
+
+		notify.WriteMessage(notify.Message{
+			Type:    notify.TitleType,
+			Content: "Starting KSail AI Assistant...",
+			Emoji:   "🤖",
+			Writer:  writer,
+		})
+	}
 
 	// Create Copilot client
 	client := copilot.NewClient(&copilot.ClientOptions{
@@ -71,7 +97,13 @@ func handleChatRunE(cmd *cobra.Command) error {
 
 	err := client.Start()
 	if err != nil {
-		return fmt.Errorf("failed to start Copilot client: %w\n\nEnsure GitHub Copilot CLI is installed and COPILOT_CLI_PATH is set", err)
+		return fmt.Errorf(
+			"failed to start Copilot client: %w\n\n"+
+				"To fix:\n"+
+				"  1. Install GitHub Copilot CLI: npm install -g @githubnext/github-copilot-cli\n"+
+				"  2. Or set COPILOT_CLI_PATH to your installation",
+			err,
+		)
 	}
 	defer func() {
 		_ = client.Stop()
@@ -83,22 +115,30 @@ func handleChatRunE(cmd *cobra.Command) error {
 		return fmt.Errorf("failed to check authentication: %w", err)
 	}
 	if !authStatus.IsAuthenticated {
-		return fmt.Errorf("not authenticated with GitHub Copilot. Run 'copilot auth login' to authenticate")
+		return fmt.Errorf(
+			"not authenticated with GitHub Copilot\n\n" +
+				"To fix:\n" +
+				"  1. Run: gh auth login\n" +
+				"  2. Ensure you have an active GitHub Copilot subscription",
+		)
 	}
 
 	loginName := "unknown"
 	if authStatus.Login != nil {
 		loginName = *authStatus.Login
 	}
-	notify.WriteMessage(notify.Message{
-		Type:    notify.InfoType,
-		Content: fmt.Sprintf("Authenticated as %s", loginName),
-		Writer:  writer,
-	})
+
+	if !useTUI {
+		notify.WriteMessage(notify.Message{
+			Type:    notify.InfoType,
+			Content: fmt.Sprintf("Authenticated as %s", loginName),
+			Writer:  writer,
+		})
+	}
 
 	// Build system context from KSail documentation
 	systemContext, err := chatsvc.BuildSystemContext()
-	if err != nil {
+	if err != nil && !useTUI {
 		notify.WriteMessage(notify.Message{
 			Type:    notify.WarningType,
 			Content: fmt.Sprintf("Could not load full context: %v", err),
@@ -113,13 +153,20 @@ func handleChatRunE(cmd *cobra.Command) error {
 			Mode:    "append",
 			Content: systemContext,
 		},
-		Tools:               chatsvc.GetKSailTools(),
-		OnPermissionRequest: chatsvc.CreatePermissionHandler(writer),
+		Tools: chatsvc.GetKSailTools(),
 	}
 
 	if model != "" {
 		sessionConfig.Model = model
 	}
+
+	// Start interactive loop - TUI or simple mode
+	if useTUI {
+		return runTUIChat(ctx, client, sessionConfig, timeout)
+	}
+
+	// Non-TUI mode: use standard permission handler
+	sessionConfig.OnPermissionRequest = chatsvc.CreatePermissionHandler(writer)
 
 	// Create session
 	session, err := client.CreateSession(sessionConfig)
@@ -138,21 +185,65 @@ func handleChatRunE(cmd *cobra.Command) error {
 
 	fmt.Fprintln(writer, "")
 
-	// Start interactive loop
-	return runChatInteractiveLoop(session, streaming, writer)
+	return runChatInteractiveLoop(ctx, session, streaming, timeout, writer)
+}
+
+// runTUIChat starts the TUI chat mode.
+// Creates a permission bridge first, then wires up the handler and model together.
+// This follows Bubbletea best practices by using tea.Program.Send() for external events.
+func runTUIChat(
+	ctx context.Context,
+	client *copilot.Client,
+	sessionConfig *copilot.SessionConfig,
+	timeout time.Duration,
+) error {
+	// Create permission bridge - this coordinates between SDK callbacks and TUI
+	permissionBridge := chatui.NewPermissionBridge()
+
+	// Wire up permission handler to the bridge
+	sessionConfig.OnPermissionRequest = permissionBridge.Handler()
+
+	// Create session with permission handler
+	session, err := client.CreateSession(sessionConfig)
+	if err != nil {
+		return fmt.Errorf("failed to create chat session: %w", err)
+	}
+	defer func() {
+		_ = session.Destroy()
+	}()
+
+	// Run TUI - will connect permission bridge to the program internally
+	return chatui.Run(ctx, session, timeout, permissionBridge)
 }
 
 // runChatInteractiveLoop runs the interactive chat loop.
-func runChatInteractiveLoop(session *copilot.Session, streaming bool, writer io.Writer) error {
+// It handles user input and AI responses until the user exits or the context is cancelled.
+func runChatInteractiveLoop(
+	ctx context.Context,
+	session *copilot.Session,
+	streaming bool,
+	timeout time.Duration,
+	writer io.Writer,
+) error {
 	reader := bufio.NewReader(os.Stdin)
 
 	for {
+		// Check for cancellation
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+		}
+
 		// Prompt
 		fmt.Fprint(writer, "You: ")
 
 		// Read input
 		input, err := reader.ReadString('\n')
 		if err != nil {
+			if err == io.EOF {
+				return nil // Graceful exit on EOF (e.g., piped input)
+			}
 			return fmt.Errorf("failed to read input: %w", err)
 		}
 
@@ -162,7 +253,7 @@ func runChatInteractiveLoop(session *copilot.Session, streaming bool, writer io.
 		}
 
 		// Check for exit commands
-		if isChatExitCommand(input) {
+		if isExitCommand(input) {
 			notify.WriteMessage(notify.Message{
 				Type:    notify.InfoType,
 				Content: "Chat session ended. Goodbye!",
@@ -175,9 +266,9 @@ func runChatInteractiveLoop(session *copilot.Session, streaming bool, writer io.
 		fmt.Fprint(writer, "\nAssistant: ")
 
 		if streaming {
-			err = sendChatWithStreaming(session, input, writer)
+			err = sendChatWithStreaming(ctx, session, input, timeout, writer)
 		} else {
-			err = sendChatWithoutStreaming(session, input, writer)
+			err = sendChatWithoutStreaming(session, input, timeout, writer)
 		}
 
 		if err != nil {
@@ -193,7 +284,14 @@ func runChatInteractiveLoop(session *copilot.Session, streaming bool, writer io.
 }
 
 // sendChatWithStreaming sends a message and streams the response.
-func sendChatWithStreaming(session *copilot.Session, input string, writer io.Writer) error {
+// It respects the context for cancellation and the timeout for maximum response time.
+func sendChatWithStreaming(
+	ctx context.Context,
+	session *copilot.Session,
+	input string,
+	timeout time.Duration,
+	writer io.Writer,
+) error {
 	done := make(chan struct{})
 	var responseErr error
 	var mu sync.Mutex
@@ -226,8 +324,8 @@ func sendChatWithStreaming(session *copilot.Session, input string, writer io.Wri
 				close(done)
 			}
 		case copilot.ToolExecutionStart:
-			toolName := getChatToolName(event)
-			toolArgs := getChatToolArgs(event)
+			toolName := getToolName(event)
+			toolArgs := getToolArgs(event)
 			fmt.Fprintf(writer, "\n🔧 Running: %s%s\n", toolName, toolArgs)
 		case copilot.ToolExecutionComplete:
 			fmt.Fprint(writer, "✓ Done\n")
@@ -240,19 +338,26 @@ func sendChatWithStreaming(session *copilot.Session, input string, writer io.Wri
 		return err
 	}
 
-	// Wait for completion with timeout
+	// Wait for completion with timeout and context cancellation
 	select {
 	case <-done:
-	case <-time.After(5 * time.Minute):
-		return fmt.Errorf("response timeout")
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(timeout):
+		return fmt.Errorf("response timeout after %v", timeout)
 	}
 
 	return responseErr
 }
 
 // sendChatWithoutStreaming sends a message and waits for the complete response.
-func sendChatWithoutStreaming(session *copilot.Session, input string, writer io.Writer) error {
-	response, err := session.SendAndWait(copilot.MessageOptions{Prompt: input}, 5*time.Minute)
+func sendChatWithoutStreaming(
+	session *copilot.Session,
+	input string,
+	timeout time.Duration,
+	writer io.Writer,
+) error {
+	response, err := session.SendAndWait(copilot.MessageOptions{Prompt: input}, timeout)
 	if err != nil {
 		return err
 	}
@@ -264,22 +369,23 @@ func sendChatWithoutStreaming(session *copilot.Session, input string, writer io.
 	return nil
 }
 
-// isChatExitCommand checks if the input is an exit command.
-func isChatExitCommand(input string) bool {
+// isExitCommand checks if the input is an exit command.
+func isExitCommand(input string) bool {
 	lower := strings.ToLower(input)
-	return lower == "exit" || lower == "quit" || lower == "q" || lower == "/exit" || lower == "/quit"
+	return lower == "exit" || lower == "quit" || lower == "q" || lower == "/exit" ||
+		lower == "/quit"
 }
 
-// getChatToolName extracts the tool name from a session event.
-func getChatToolName(event copilot.SessionEvent) string {
+// getToolName extracts the tool name from a session event.
+func getToolName(event copilot.SessionEvent) string {
 	if event.Data.ToolName != nil {
 		return *event.Data.ToolName
 	}
 	return "unknown"
 }
 
-// getChatToolArgs formats tool arguments for display.
-func getChatToolArgs(event copilot.SessionEvent) string {
+// getToolArgs formats tool arguments for display.
+func getToolArgs(event copilot.SessionEvent) string {
 	if event.Data.Arguments == nil {
 		return ""
 	}

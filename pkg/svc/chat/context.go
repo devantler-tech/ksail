@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"context"
 	"fmt"
 	"io/fs"
 	"os"
@@ -9,10 +10,19 @@ import (
 	"regexp"
 	goruntime "runtime"
 	"strings"
+	"time"
 )
 
 // BuildSystemContext builds the system prompt context for the chat assistant.
-// It combines documentation, CLI help, and working directory into a structured context.
+// It combines multiple sources of information:
+//   - Identity and role description for the AI assistant
+//   - Current working directory and ksail.yaml configuration if present
+//   - KSail documentation loaded from the docs/ directory
+//   - Dynamic CLI help output from the ksail executable
+//   - Instructions for proper behavior and command usage
+//
+// Returns the complete system context string and any error encountered.
+// If documentation loading fails, a partial context is still returned.
 func BuildSystemContext() (string, error) {
 	var builder strings.Builder
 
@@ -25,13 +35,13 @@ You help users configure, troubleshoot, and operate Kubernetes clusters using KS
 `)
 
 	// Add working directory context
-	wd, err := os.Getwd()
+	workDir, err := os.Getwd()
 	if err == nil {
-		builder.WriteString(fmt.Sprintf("<working_directory>%s</working_directory>\n\n", wd))
+		builder.WriteString(fmt.Sprintf("<working_directory>%s</working_directory>\n\n", workDir))
 
 		// Check if ksail.yaml exists in working directory
-		if _, statErr := os.Stat(filepath.Join(wd, "ksail.yaml")); statErr == nil {
-			content, readErr := os.ReadFile(filepath.Join(wd, "ksail.yaml"))
+		if _, statErr := os.Stat(filepath.Join(workDir, "ksail.yaml")); statErr == nil {
+			content, readErr := os.ReadFile(filepath.Join(workDir, "ksail.yaml"))
 			if readErr == nil {
 				builder.WriteString("<current_ksail_config>\n")
 				builder.WriteString(string(content))
@@ -69,7 +79,13 @@ func getCLIHelp() string {
 		return ""
 	}
 
-	cmd := exec.Command(ksailPath, "--help")
+	const cliHelpTimeout = 10 * time.Second
+
+	ctx, cancel := context.WithTimeout(context.Background(), cliHelpTimeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, ksailPath, "--help")
+
 	output, err := cmd.Output()
 	if err != nil {
 		return ""
@@ -108,32 +124,41 @@ func loadDocumentation() string {
 			builder.WriteString(fmt.Sprintf("\n## %s\n\n", extractTitle(relPath)))
 			builder.WriteString(content)
 			builder.WriteString("\n")
+
 			loadedFiles[fullPath] = true
 		}
 	}
 
 	// Walk CLI flags directory for command reference
 	cliDir := filepath.Join(docsDir, "cli-flags")
-	if _, err := os.Stat(cliDir); err == nil {
+
+	_, statErr := os.Stat(cliDir)
+	if statErr == nil {
 		builder.WriteString("\n## CLI Command Reference\n\n")
-		_ = filepath.WalkDir(cliDir, func(path string, d fs.DirEntry, err error) error {
-			if err != nil || d.IsDir() || loadedFiles[path] {
+
+		_ = filepath.WalkDir(cliDir, func(path string, d fs.DirEntry, walkErr error) error {
+			if walkErr != nil || d.IsDir() || loadedFiles[path] {
 				return nil
 			}
+
 			if !strings.HasSuffix(path, ".md") && !strings.HasSuffix(path, ".mdx") {
 				return nil
 			}
+
 			// Skip index files in CLI flags
 			if strings.HasSuffix(path, "index.mdx") || strings.HasSuffix(path, "index.md") {
 				return nil
 			}
+
 			if content, readErr := readDocFile(path); readErr == nil {
 				relPath, _ := filepath.Rel(docsDir, path)
 				builder.WriteString(fmt.Sprintf("\n### %s\n\n", extractTitle(relPath)))
 				builder.WriteString(content)
 				builder.WriteString("\n")
+
 				loadedFiles[path] = true
 			}
+
 			return nil
 		})
 	}
@@ -147,6 +172,7 @@ func findDocsDirectory() string {
 	exe, err := os.Executable()
 	if err == nil {
 		exeDir := filepath.Dir(exe)
+
 		candidates := []string{
 			filepath.Join(exeDir, "docs", "src", "content", "docs"),
 			filepath.Join(exeDir, "..", "docs", "src", "content", "docs"),
@@ -159,11 +185,11 @@ func findDocsDirectory() string {
 	}
 
 	// Check relative to working directory
-	wd, err := os.Getwd()
+	workDir, err := os.Getwd()
 	if err == nil {
 		candidates := []string{
-			filepath.Join(wd, "docs", "src", "content", "docs"),
-			filepath.Join(wd, "..", "docs", "src", "content", "docs"),
+			filepath.Join(workDir, "docs", "src", "content", "docs"),
+			filepath.Join(workDir, "..", "docs", "src", "content", "docs"),
 		}
 		for _, candidate := range candidates {
 			if info, statErr := os.Stat(candidate); statErr == nil && info.IsDir() {
@@ -176,7 +202,18 @@ func findDocsDirectory() string {
 	homeDir, err := os.UserHomeDir()
 	if err == nil {
 		commonPaths := []string{
-			filepath.Join(homeDir, "go", "src", "github.com", "devantler-tech", "ksail", "docs", "src", "content", "docs"),
+			filepath.Join(
+				homeDir,
+				"go",
+				"src",
+				"github.com",
+				"devantler-tech",
+				"ksail",
+				"docs",
+				"src",
+				"content",
+				"docs",
+			),
 		}
 		for _, p := range commonPaths {
 			if info, statErr := os.Stat(p); statErr == nil && info.IsDir() {
@@ -192,7 +229,7 @@ func findDocsDirectory() string {
 func readDocFile(path string) (string, error) {
 	content, err := os.ReadFile(path)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("reading doc file: %w", err)
 	}
 
 	text := string(content)
@@ -232,6 +269,7 @@ func extractTitle(path string) string {
 			words[i] = strings.ToUpper(string(word[0])) + word[1:]
 		}
 	}
+
 	return strings.Join(words, " ")
 }
 

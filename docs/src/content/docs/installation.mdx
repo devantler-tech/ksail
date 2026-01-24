@@ -3,7 +3,7 @@ title: Installation
 description: Installation methods and prerequisites for KSail
 ---
 
-import { Tabs, TabItem } from '@astrojs/starlight/components';
+import { TabItem, Tabs } from "@astrojs/starlight/components";
 
 ## Prerequisites
 
@@ -11,11 +11,11 @@ import { Tabs, TabItem } from '@astrojs/starlight/components';
 
 KSail works on all major operating systems and modern CPU architectures:
 
-| OS                   | Architecture     |
-|----------------------|------------------|
-| 🐧 Linux             | amd64 and arm64  |
-|  macOS              | arm64            |
-| ⊞ Windows (untested) | amd64 and arm64  |
+| OS                   | Architecture    |
+| -------------------- | --------------- |
+| 🐧 Linux             | amd64 and arm64 |
+|  macOS              | arm64           |
+| ⊞ Windows (untested) | amd64 and arm64 |
 
 ### Docker (Required for Local Clusters)
 
@@ -34,10 +34,10 @@ docker ps
 
 The supported Kubernetes distributions (x-axis) run on different infrastructure providers (y-axis). You need to have access to at least one provider for your chosen distribution.
 
-| Provider | Vanilla  | K3s     | Talos |
-|----------|----------|---------|-------|
-| Docker   | ✅ (Kind) | ✅ (K3d) | ✅     |
-| Hetzner  | —        | —       | ✅     |
+| Provider | Vanilla   | K3s      | Talos |
+| -------- | --------- | -------- | ----- |
+| Docker   | ✅ (Kind) | ✅ (K3d) | ✅    |
+| Hetzner  | —         | —        | ✅    |
 
 > [!NOTE]
 > Talos on Hetzner requires a Hetzner Cloud account and API token (`HCLOUD_TOKEN`). See the [Support Matrix](/support-matrix/) for more details.
@@ -55,6 +55,7 @@ The supported Kubernetes distributions (x-axis) run on different infrastructure 
     ```
 
     This installs the latest stable release and makes `ksail` available in your PATH.
+
   </TabItem>
 
   <TabItem label="Go Install">
@@ -67,6 +68,7 @@ The supported Kubernetes distributions (x-axis) run on different infrastructure 
     ```
 
     This builds and installs the `ksail` binary to `$GOPATH/bin` (typically `~/go/bin`). Ensure this directory is in your PATH.
+
   </TabItem>
 
   <TabItem label="Binary Download">
@@ -79,6 +81,7 @@ The supported Kubernetes distributions (x-axis) run on different infrastructure 
     3. Extract the archive
     4. Move the `ksail` binary to a directory in your PATH (e.g., `/usr/local/bin`)
     5. Make it executable (Linux/macOS): `chmod +x ksail`
+
   </TabItem>
 
   <TabItem label="From Source">
@@ -93,6 +96,7 @@ The supported Kubernetes distributions (x-axis) run on different infrastructure 
     ```
 
     The `ksail` binary will be created in the current directory. Move it to a directory in your PATH if desired.
+
   </TabItem>
 </Tabs>
 
