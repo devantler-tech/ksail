@@ -33,10 +33,10 @@ Setting up and operating Kubernetes clusters is a skill of its own, often requir
 
 The binary works on all major operating systems and modern CPU architectures:
 
-| OS                   | Arch            |
+| OS                   | Architecture    |
 |----------------------|-----------------|
 | 🐧 Linux             | amd64 and arm64 |
-|  MacOS              | arm64           |
+|  macOS              | arm64           |
 | ⊞ Windows (untested) | amd64 and arm64 |
 
 **Docker is required** to create local clusters (the Docker provider). Install Docker Desktop/Engine and ensure `docker ps` works.
