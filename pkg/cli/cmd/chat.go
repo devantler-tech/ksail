@@ -81,6 +81,9 @@ func handleChatRunE(cmd *cobra.Command) error {
 				Writer:  writer,
 			})
 			cancel()
+			// Force exit after a brief delay to allow message to print
+			time.Sleep(50 * time.Millisecond)
+			os.Exit(130) // Standard exit code for Ctrl+C
 		}()
 
 		notify.WriteMessage(notify.Message{
@@ -106,8 +109,15 @@ func handleChatRunE(cmd *cobra.Command) error {
 			err,
 		)
 	}
+	// Cleanup with forced exit on interrupt to prevent hanging
 	defer func() {
-		_ = client.Stop()
+		select {
+		case <-ctx.Done():
+			// If interrupted, force exit without waiting for cleanup
+			os.Exit(130) // Standard exit code for Ctrl+C
+		default:
+			_ = client.Stop()
+		}
 	}()
 
 	// Check authentication
@@ -174,8 +184,15 @@ func handleChatRunE(cmd *cobra.Command) error {
 	if err != nil {
 		return fmt.Errorf("failed to create chat session: %w", err)
 	}
+	// Cleanup with forced exit on interrupt to prevent hanging
 	defer func() {
-		_ = session.Destroy()
+		select {
+		case <-ctx.Done():
+			// If interrupted, force exit without waiting for cleanup
+			os.Exit(130) // Standard exit code for Ctrl+C
+		default:
+			_ = session.Destroy()
+		}
 	}()
 
 	notify.WriteMessage(notify.Message{
@@ -207,11 +224,24 @@ func runTUIChat(
 	if err != nil {
 		return fmt.Errorf("failed to create chat session: %w", err)
 	}
+	// Cleanup with forced exit on interrupt to prevent hanging
 	defer func() {
-		_ = session.Destroy()
+		select {
+		case <-ctx.Done():
+			// If interrupted, force exit without waiting for cleanup
+			os.Exit(130) // Standard exit code for Ctrl+C
+		default:
+			_ = session.Destroy()
+		}
 	}()
 
 	return chatui.RunWithEventChannel(ctx, session, timeout, eventChan)
+}
+
+// inputResult holds the result of reading from stdin.
+type inputResult struct {
+	input string
+	err   error
 }
 
 // runChatInteractiveLoop runs the interactive chat loop.
@@ -224,9 +254,10 @@ func runChatInteractiveLoop(
 	writer io.Writer,
 ) error {
 	reader := bufio.NewReader(os.Stdin)
+	inputChan := make(chan inputResult, 1)
 
 	for {
-		// Check for cancellation
+		// Check for cancellation before prompting
 		select {
 		case <-ctx.Done():
 			return nil
@@ -236,16 +267,27 @@ func runChatInteractiveLoop(
 		// Prompt
 		fmt.Fprint(writer, "You: ")
 
-		// Read input
-		input, err := reader.ReadString('\n')
-		if err != nil {
-			if err == io.EOF {
-				return nil // Graceful exit on EOF (e.g., piped input)
+		// Read input in a goroutine so we can respond to context cancellation
+		go func() {
+			input, err := reader.ReadString('\n')
+			inputChan <- inputResult{input: input, err: err}
+		}()
+
+		// Wait for either input or cancellation
+		var input string
+		select {
+		case <-ctx.Done():
+			return nil
+		case result := <-inputChan:
+			if result.err != nil {
+				if result.err == io.EOF {
+					return nil // Graceful exit on EOF (e.g., piped input)
+				}
+				return fmt.Errorf("failed to read input: %w", result.err)
 			}
-			return fmt.Errorf("failed to read input: %w", err)
+			input = strings.TrimSpace(result.input)
 		}
 
-		input = strings.TrimSpace(input)
 		if input == "" {
 			continue
 		}
@@ -263,13 +305,18 @@ func runChatInteractiveLoop(
 		// Send message and handle response
 		fmt.Fprint(writer, "\nAssistant: ")
 
+		var err error
 		if streaming {
 			err = sendChatWithStreaming(ctx, session, input, timeout, writer)
 		} else {
-			err = sendChatWithoutStreaming(session, input, timeout, writer)
+			err = sendChatWithoutStreaming(ctx, session, input, timeout, writer)
 		}
 
 		if err != nil {
+			// Check if error was due to context cancellation
+			if ctx.Err() != nil {
+				return nil
+			}
 			notify.WriteMessage(notify.Message{
 				Type:    notify.ErrorType,
 				Content: fmt.Sprintf("Error: %v", err),
@@ -350,21 +397,36 @@ func sendChatWithStreaming(
 
 // sendChatWithoutStreaming sends a message and waits for the complete response.
 func sendChatWithoutStreaming(
+	ctx context.Context,
 	session *copilot.Session,
 	input string,
 	timeout time.Duration,
 	writer io.Writer,
 ) error {
-	response, err := session.SendAndWait(copilot.MessageOptions{Prompt: input}, timeout)
-	if err != nil {
-		return err
+	// Use a channel to make the blocking call cancellable
+	type result struct {
+		response *copilot.SessionEvent
+		err      error
 	}
+	resultChan := make(chan result, 1)
 
-	if response != nil && response.Data.Content != nil {
-		fmt.Fprintln(writer, *response.Data.Content)
+	go func() {
+		response, err := session.SendAndWait(copilot.MessageOptions{Prompt: input}, timeout)
+		resultChan <- result{response: response, err: err}
+	}()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case r := <-resultChan:
+		if r.err != nil {
+			return r.err
+		}
+		if r.response != nil && r.response.Data.Content != nil {
+			fmt.Fprintln(writer, *r.response.Data.Content)
+		}
+		return nil
 	}
-
-	return nil
 }
 
 // isExitCommand checks if the input is an exit command.
