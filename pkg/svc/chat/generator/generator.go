@@ -569,7 +569,7 @@ func runKSailCommand(args []string, toolName string, opts ToolOptions) (string, 
 		reader := bufio.NewReader(pipe)
 		for {
 			line, readErr := reader.ReadString('\n')
-			
+
 			// Process any data returned, even if there's an error
 			// ReadString returns both data and io.EOF when the last line doesn't end with '\n'
 			if len(line) > 0 {
