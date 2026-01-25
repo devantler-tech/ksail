@@ -36,15 +36,13 @@ var (
 	// taglineStyle renders the tagline under the logo.
 	taglineStyle = lipgloss.NewStyle().
 			Foreground(accentColor).
-			Italic(true).
-			MarginBottom(1)
+			Italic(true)
 
 	// headerBoxStyle wraps the entire header section.
 	headerBoxStyle = lipgloss.NewStyle().
 			BorderStyle(lipgloss.RoundedBorder()).
 			BorderForeground(primaryColor).
-			Padding(0, 2).
-			MarginBottom(1)
+			Padding(0, 2)
 
 	// userMsgStyle is the style for user messages.
 	userMsgStyle = lipgloss.NewStyle().
@@ -66,8 +64,7 @@ var (
 
 	// helpStyle is the style for help text.
 	helpStyle = lipgloss.NewStyle().
-			Foreground(dimColor).
-			MarginTop(1)
+			Foreground(dimColor)
 
 	// spinnerStyle is the style for the loading spinner.
 	spinnerStyle = lipgloss.NewStyle().

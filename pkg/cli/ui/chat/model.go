@@ -22,7 +22,7 @@ const (
 	defaultHeight = 30
 	inputHeight   = 3
 	headerHeight  = logoHeight + 3 // logo + tagline + border
-	footerHeight  = 2
+	footerHeight  = 1              // single line help text
 )
 
 // chatMessage represents a single message in the chat history.
@@ -269,7 +269,25 @@ func (m *Model) View() string {
 	sections := make([]string, 0, 4)
 
 	// Header with logo and right-aligned status indicator
-	logoRendered := logoStyle.Render(logo())
+	// Calculate content width inside border (border=2, padding=4)
+	headerContentWidth := m.width - 6
+	if headerContentWidth < 1 {
+		headerContentWidth = 1
+	}
+
+	// Truncate each logo line by display width (handles Unicode properly)
+	// This clips the logo at narrow widths rather than wrapping
+	logoLines := strings.Split(logo(), "\n")
+	truncateStyle := lipgloss.NewStyle().MaxWidth(headerContentWidth).Inline(true)
+	var clippedLogo strings.Builder
+	for i, line := range logoLines {
+		clippedLine := truncateStyle.Render(line)
+		clippedLogo.WriteString(clippedLine)
+		if i < len(logoLines)-1 {
+			clippedLogo.WriteString("\n")
+		}
+	}
+	logoRendered := logoStyle.Render(clippedLogo.String())
 
 	// Build tagline row with right-aligned status
 	taglineText := taglineStyle.Render("  " + tagline())
@@ -280,48 +298,46 @@ func (m *Model) View() string {
 		statusText = statusStyle.Render("Ready ✓")
 	}
 
-	// Calculate available width for the tagline row (inside border padding)
-	contentWidth := m.width - 8 // Account for borders and padding
-	if contentWidth < 40 {
-		contentWidth = 40
-	}
-
-	// Create tagline row with status on the right
+	// Clip tagline if too wide
 	taglineRow := taglineText
 	if statusText != "" {
 		// Calculate spacing to push status to the right
 		taglineLen := lipgloss.Width(taglineText)
 		statusLen := lipgloss.Width(statusText)
-		spacing := contentWidth - taglineLen - statusLen
+		spacing := headerContentWidth - taglineLen - statusLen
 		if spacing < 2 {
 			spacing = 2
 		}
 		taglineRow = taglineText + strings.Repeat(" ", spacing) + statusText
 	}
+	// Clip tagline row to content width and prevent wrapping
+	taglineRow = lipgloss.NewStyle().MaxWidth(headerContentWidth).Inline(true).Render(taglineRow)
 
 	headerContent := logoRendered + "\n" + taglineRow
 	header := headerBoxStyle.Width(m.width - 2).Render(headerContent)
 	sections = append(sections, header)
 
-	// Chat viewport
+	// Chat viewport - box handles clipping via fixed width
 	chatContent := viewportStyle.Width(m.width - 2).Render(m.viewport.View())
 	sections = append(sections, chatContent)
 
-	// Input area
+	// Input area - box handles clipping via fixed width
 	inputContent := inputStyle.Width(m.width - 2).Render(m.textarea.View())
 	sections = append(sections, inputContent)
 
-	// Footer/help
+	// Footer/help - clip to terminal width to prevent wrapping
 	var helpText string
 	if len(m.toolOrder) > 0 {
 		helpText = "  ⏎ Send • ↑↓ History • PgUp/Dn Scroll • ⇥ Toggle • ^T All • ^L Clear • esc Quit"
 	} else {
 		helpText = "  ⏎ Send • ↑↓ History • PgUp/Dn Scroll • ^L Clear • esc Quit"
 	}
-	help := helpStyle.Render(helpText)
+	help := lipgloss.NewStyle().MaxWidth(m.width).Inline(true).Render(helpStyle.Render(helpText))
 	sections = append(sections, help)
 
-	return lipgloss.JoinVertical(lipgloss.Left, sections...)
+	// Join sections and clip final output to terminal width to prevent any wrapping
+	output := lipgloss.JoinVertical(lipgloss.Left, sections...)
+	return lipgloss.NewStyle().MaxWidth(m.width).Render(output)
 }
 
 // handleKeyMsg handles keyboard input.
@@ -830,8 +846,10 @@ func (m *Model) cleanup() {
 func (m *Model) updateDimensions() {
 	// Account for borders and padding
 	contentWidth := m.width - 4
-	// Calculate available height: total - header - input - footer - borders/padding
-	viewportHeight := m.height - headerHeight - inputHeight - footerHeight - 8
+
+	// Calculate available height: total - header - input - footer - borders
+	// Each bordered box adds 2 lines (top + bottom border)
+	viewportHeight := m.height - headerHeight - inputHeight - footerHeight - 4
 
 	if viewportHeight < 5 {
 		viewportHeight = 5
