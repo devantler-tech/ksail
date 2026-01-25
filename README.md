@@ -117,6 +117,7 @@ If you use KSail in your project, feel free to open a PR to add it to the list, 
 - [Local Kubernetes Development with KSail and K3d](https://devantler.tech/local-kubernetes-development-with-ksail-and-k3d)
 - [Local Kubernetes Development with KSail and Talos](https://devantler.tech/local-kubernetes-development-with-ksail-and-talos)
 - [Creating Kubernetes Clusters on Hetzner with KSail and Talos](https://devantler.tech/creating-development-kubernetes-clusters-on-hetzner-with-ksail-and-talos)
+- [AI-first TUI for KSail with Copilot SDK and Bubbletea](https://devantler.tech/building-an-ai-assistant-for-kubernetes-with-github-copilot-sdk)
 
 ## Star History
 
