@@ -484,7 +484,7 @@ func getToolArgs(event copilot.SessionEvent) string {
 	if !ok {
 		return ""
 	}
-	var parts []string
+	parts := make([]string, 0, len(args))
 	for k, v := range args {
 		parts = append(parts, fmt.Sprintf("%s=%v", k, v))
 	}
