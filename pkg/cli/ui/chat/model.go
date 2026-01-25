@@ -31,6 +31,8 @@ type chatMessage struct {
 	content     string
 	rendered    string // markdown-rendered content for assistant messages
 	isStreaming bool
+	tools       []*toolExecution // tools executed during this assistant message
+	toolOrder   []string         // ordered tool IDs for this message
 }
 
 // Model is the Bubbletea model for the chat TUI.
@@ -327,7 +329,16 @@ func (m *Model) View() string {
 
 	// Footer/help - clip to terminal width to prevent wrapping
 	var helpText string
-	if len(m.toolOrder) > 0 {
+	hasTools := len(m.toolOrder) > 0
+	if !hasTools {
+		for _, msg := range m.messages {
+			if msg.role == "assistant" && len(msg.tools) > 0 {
+				hasTools = true
+				break
+			}
+		}
+	}
+	if hasTools {
 		helpText = "  ⏎ Send • ↑↓ History • PgUp/Dn Scroll • ⇥ Toggle • ^T All • ^L Clear • esc Quit"
 	} else {
 		helpText = "  ⏎ Send • ↑↓ History • PgUp/Dn Scroll • ^L Clear • esc Quit"
@@ -380,23 +391,10 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.textarea.InsertString("\n")
 		return m, nil
 	case "tab":
-		// Toggle expansion of the most recent completed tool
-		if !m.isStreaming && len(m.toolOrder) > 0 {
-			// Find the most recent completed tool and toggle it
-			for i := len(m.toolOrder) - 1; i >= 0; i-- {
-				tool := m.tools[m.toolOrder[i]]
-				if tool != nil && tool.status != toolRunning {
-					tool.expanded = !tool.expanded
-					m.updateViewportContent()
-					break
-				}
-			}
-		}
-		return m, nil
-	case "ctrl+t":
-		// Toggle ALL tool outputs expanded/collapsed
+		// Toggle expansion of tool outputs for the current (last) assistant message only
+		toggled := false
+		// First try global tools (for current streaming message)
 		if len(m.toolOrder) > 0 {
-			// Determine target state by checking first completed tool
 			expandAll := false
 			for _, id := range m.toolOrder {
 				if tool := m.tools[id]; tool != nil && tool.status != toolRunning {
@@ -404,14 +402,75 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					break
 				}
 			}
-			// Apply to all completed tools
 			for _, id := range m.toolOrder {
 				if tool := m.tools[id]; tool != nil && tool.status != toolRunning {
 					tool.expanded = expandAll
+					toggled = true
 				}
 			}
-			m.updateViewportContent()
 		}
+		// If no global tools, try the last assistant message's committed tools
+		if !toggled {
+			for i := len(m.messages) - 1; i >= 0; i-- {
+				if m.messages[i].role == "assistant" && len(m.messages[i].tools) > 0 {
+					expandAll := !m.messages[i].tools[0].expanded
+					for _, tool := range m.messages[i].tools {
+						if tool != nil && tool.status != toolRunning {
+							tool.expanded = expandAll
+						}
+					}
+					break
+				}
+			}
+		}
+		m.updateViewportContent()
+		return m, nil
+	case "ctrl+t":
+		// Toggle ALL tool outputs expanded/collapsed across all messages
+		// Determine target state from first tool found
+		expandAll := false
+		found := false
+		// Check global tools first
+		for _, id := range m.toolOrder {
+			if tool := m.tools[id]; tool != nil && tool.status != toolRunning {
+				expandAll = !tool.expanded
+				found = true
+				break
+			}
+		}
+		// Check committed message tools if no global tools
+		if !found {
+			for _, msg := range m.messages {
+				if msg.role == "assistant" {
+					for _, tool := range msg.tools {
+						if tool != nil && tool.status != toolRunning {
+							expandAll = !tool.expanded
+							found = true
+							break
+						}
+					}
+				}
+				if found {
+					break
+				}
+			}
+		}
+		// Apply to all tools everywhere
+		for _, id := range m.toolOrder {
+			if tool := m.tools[id]; tool != nil && tool.status != toolRunning {
+				tool.expanded = expandAll
+			}
+		}
+		for i := range m.messages {
+			if m.messages[i].role == "assistant" {
+				for _, tool := range m.messages[i].tools {
+					if tool != nil && tool.status != toolRunning {
+						tool.expanded = expandAll
+					}
+				}
+			}
+		}
+		m.updateViewportContent()
 		return m, nil
 	case "up":
 		// Navigate to previous prompt in history
@@ -483,6 +542,22 @@ func (m *Model) handleUserSubmit(msg userSubmitMsg) (tea.Model, tea.Cmd) {
 	// Ensure any previous assistant messages are properly rendered
 	// This handles cases where SessionIdle didn't fire properly
 	m.reRenderCompletedMessages()
+
+	// Commit current tools to the last assistant message before clearing
+	// This preserves tool history across conversation turns
+	for i := len(m.messages) - 1; i >= 0; i-- {
+		if m.messages[i].role == "assistant" {
+			m.messages[i].tools = make([]*toolExecution, 0, len(m.toolOrder))
+			m.messages[i].toolOrder = make([]string, len(m.toolOrder))
+			copy(m.messages[i].toolOrder, m.toolOrder)
+			for _, id := range m.toolOrder {
+				if tool := m.tools[id]; tool != nil {
+					m.messages[i].tools = append(m.messages[i].tools, tool)
+				}
+			}
+			break
+		}
+	}
 
 	// Save prompt to history
 	prompt := msg.content
@@ -728,6 +803,16 @@ func (m *Model) tryFinalizeResponse() (tea.Model, tea.Cmd) {
 		last.content = m.currentResponse.String()
 		// Render markdown using cached renderer (avoids terminal queries)
 		last.rendered = renderMarkdownWithRenderer(m.renderer, last.content)
+
+		// Commit current tools to this message for persistence across turns
+		last.tools = make([]*toolExecution, 0, len(m.toolOrder))
+		last.toolOrder = make([]string, len(m.toolOrder))
+		copy(last.toolOrder, m.toolOrder)
+		for _, id := range m.toolOrder {
+			if tool := m.tools[id]; tool != nil {
+				last.tools = append(last.tools, tool)
+			}
+		}
 	}
 
 	m.updateViewportContent()
@@ -897,9 +982,6 @@ func (m *Model) updateViewportContent() {
 
 	var builder strings.Builder
 
-	// Track which tools have been rendered to avoid duplicates
-	toolIdx := 0
-
 	for _, msg := range m.messages {
 		switch msg.role {
 		case "user":
@@ -923,15 +1005,28 @@ func (m *Model) updateViewportContent() {
 			}
 			builder.WriteString("\n\n")
 
+			// Determine which tools to use: global state for streaming, per-message for completed
+			var tools []*toolExecution
+			if msg.isStreaming {
+				// Use global tool state for current streaming message
+				tools = make([]*toolExecution, 0, len(m.toolOrder))
+				for _, id := range m.toolOrder {
+					if tool := m.tools[id]; tool != nil {
+						tools = append(tools, tool)
+					}
+				}
+			} else {
+				// Use committed per-message tools for completed messages
+				tools = msg.tools
+			}
+
 			// Interleave tools with assistant text based on their textPosition
 			content := msg.content
 			lastPos := 0
 
 			// Render tools at their positions, interleaved with text
-			for toolIdx < len(m.toolOrder) {
-				tool := m.tools[m.toolOrder[toolIdx]]
+			for _, tool := range tools {
 				if tool == nil {
-					toolIdx++
 					continue
 				}
 
@@ -951,7 +1046,6 @@ func (m *Model) updateViewportContent() {
 
 				// Render the tool
 				m.renderToolInline(&builder, tool, wrapWidthUint)
-				toolIdx++
 			}
 
 			// Render remaining text after all tools
