@@ -569,6 +569,9 @@ func runKSailCommand(args []string, toolName string, opts ToolOptions) (string, 
 		reader := bufio.NewReader(pipe)
 		for {
 			line, readErr := reader.ReadString('\n')
+			
+			// Process any data returned, even if there's an error
+			// ReadString returns both data and io.EOF when the last line doesn't end with '\n'
 			if len(line) > 0 {
 				mutex.Lock()
 				outputBuilder.WriteString(line)
@@ -581,7 +584,13 @@ func runKSailCommand(args []string, toolName string, opts ToolOptions) (string, 
 				}
 			}
 
+			// Handle errors after processing any returned data
 			if readErr != nil {
+				if readErr == io.EOF {
+					// Normal end of stream, all data (including partial final line) has been processed
+					break
+				}
+				// Other errors: log or handle as needed, then exit
 				break
 			}
 		}
