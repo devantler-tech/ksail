@@ -24,7 +24,7 @@ You format your questions and responses similarly to the GitHub Copilot CLI chat
 
 - Always consult the **instructions file** for schema and features:
   - Local copy: @.github/aw/github-agentic-workflows.md
-  - Canonical upstream: https://raw.githubusercontent.com/githubnext/gh-aw/main/.github/aw/github-agentic-workflows.md
+  - Canonical upstream: <https://raw.githubusercontent.com/githubnext/gh-aw/main/.github/aw/github-agentic-workflows.md>
 - Key commands:
   - `gh aw compile` → compile all workflows
   - `gh aw compile <name>` → compile one workflow
@@ -91,6 +91,7 @@ Wait for the user to respond before proceeding.
 - ❌ **DON'T**: Change existing patterns unless specifically requested
 
 **Example - Adding a Tool**:
+
 ```yaml
 # ❌ BAD - Rewrites entire frontmatter
 ---
@@ -118,6 +119,7 @@ tools:
 ### Keep Frontmatter Minimal
 
 Only include fields that differ from sensible defaults:
+
 - ⚙️ **DO NOT include `engine: copilot`** - Copilot is the default engine
 - ⏱️ **DO NOT include `timeout-minutes:`** unless user needs a specific timeout
 - 📋 **DO NOT include other fields with good defaults** unless the user specifically requests them
@@ -127,30 +129,35 @@ Only include fields that differ from sensible defaults:
 When adding or modifying tools:
 
 **GitHub tool with toolsets**:
+
 ```yaml
 tools:
   github:
     toolsets: [default]
 ```
 
-⚠️ **IMPORTANT**: 
+⚠️ **IMPORTANT**:
+
 - **Always use `toolsets:` for GitHub tools** - Use `toolsets: [default]` instead of manually listing individual tools
 - **Never recommend GitHub mutation tools** like `create_issue`, `add_issue_comment`, `update_issue`, etc.
 - **Always use `safe-outputs` instead** for any GitHub write operations
 - **Do NOT recommend `mode: remote`** for GitHub tools - it requires additional configuration
 
 **General tools (Serena language server)**:
+
 ```yaml
 tools:
   serena: ["go"]  # Update with the repository's programming language
 ```
 
-⚠️ **IMPORTANT - Default Tools**: 
+⚠️ **IMPORTANT - Default Tools**:
+
 - **`edit` and `bash` are enabled by default** when sandboxing is active (no need to add explicitly)
 - `bash` defaults to `*` (all commands) when sandboxing is active
 - Only specify `bash:` with specific patterns if you need to restrict commands beyond the secure defaults
 
 **MCP servers (top-level block)**:
+
 ```yaml
 mcp-servers:
   my-custom-server:
@@ -166,6 +173,7 @@ mcp-servers:
 ⚠️ **IMPORTANT**: When adding a **new safe output** (e.g., sending email via custom service, posting to Slack/Discord, calling custom APIs), guide the user to create a **custom safe output job** under `safe-outputs.jobs:` instead of using `post-steps:`.
 
 **When to use custom safe output jobs:**
+
 - Sending notifications to external services (email, Slack, Discord, Teams, PagerDuty)
 - Creating/updating records in third-party systems (Notion, Jira, databases)
 - Triggering deployments or webhooks
@@ -176,6 +184,7 @@ mcp-servers:
 ### Security Best Practices
 
 When updating workflows, maintain security:
+
 - Default to `permissions: read-all` and expand only if necessary
 - Prefer `safe-outputs` over granting write permissions
 - Constrain `network:` to the minimum required ecosystems/domains
@@ -186,6 +195,7 @@ When updating workflows, maintain security:
 ### Step 1: Read the Current Workflow
 
 Use the `view` tool to read the current workflow file:
+
 ```bash
 # View the workflow markdown file
 view /path/to/.github/workflows/<workflow-id>.md
@@ -201,16 +211,19 @@ Understand the current configuration before making changes.
 Based on the user's request, make **minimal, targeted changes**:
 
 **For frontmatter changes**:
+
 - Use `edit` tool to modify only the specific YAML fields that need updating
 - Preserve existing indentation and formatting
 - Don't rewrite sections that don't need changes
 
 **For prompt changes**:
+
 - If an agentics prompt file exists (`.github/agentics/<workflow-id>.md`), edit that file directly
 - If no agentics file exists, edit the markdown body in the workflow file
 - Make surgical changes to the prompt text
 
 **Example - Adding a Safe Output**:
+
 ```yaml
 # Find the safe-outputs section and add:
 safe-outputs:
@@ -229,6 +242,7 @@ gh aw compile <workflow-id>
 ```
 
 If compilation fails:
+
 1. **Fix ALL syntax errors** - Never leave a workflow in a broken state
 2. Review error messages carefully
 3. Re-run `gh aw compile <workflow-id>` until it succeeds
@@ -237,6 +251,7 @@ If compilation fails:
 ### Step 4: Verify Changes
 
 After successful compilation:
+
 1. Review the `.lock.yml` file to ensure changes are reflected
 2. Confirm the changes match the user's request
 3. Explain what was changed and why
@@ -296,6 +311,7 @@ on:
 ### Improving the Prompt
 
 If an agentics prompt file exists:
+
 ```bash
 # Edit the agentics prompt file directly
 edit .github/agentics/<workflow-id>.md
@@ -325,17 +341,20 @@ If no agentics file exists, edit the markdown body of the workflow file.
 **Key Feature**: If the workflow uses runtime imports (e.g., `{{#runtime-import agentics/<workflow-id>.md}}`), you can edit the imported prompt file WITHOUT recompiling the workflow.
 
 **When to use this**:
+
 - Improving agent instructions
 - Adding clarifications or guidelines
 - Refining prompt engineering
 - Adding security notices
 
 **How to do it**:
+
 1. Check if the workflow has a runtime import: `{{#runtime-import agentics/<workflow-id>.md}}`
 2. If yes, edit that file directly - no compilation needed!
 3. Changes take effect on the next workflow run
 
 **Example**:
+
 ```bash
 # Edit the prompt without recompiling
 edit .github/agentics/issue-classifier.md
@@ -347,6 +366,7 @@ edit .github/agentics/issue-classifier.md
 ## Final Words
 
 After completing updates:
+
 - Inform the user which files were changed
 - Explain what was modified and why
 - Remind them to commit and push the changes

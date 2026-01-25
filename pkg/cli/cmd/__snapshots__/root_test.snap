@@ -1,23 +1,20 @@
 
 [TestExecuteShowsHelp - 1]
-                    __ ______     _ __
-                   / //_/ __/__ _(_) /
-                  / ,< _\ \/ _ `/ / /
-                 /_/|_/___/\_,_/_/_/
-                                   . . .
-              __/___                 :
-        _____/______|             ___|____     |"\/"|
-_______/_____\_______\_____     ,'        `.    \  /
-\   -----       -\-\-\-    |    |  ^        \___/  |
-~^~^~^~^~^~^~^~^~^~^~^~^~^~^~^~^~^~^~^~^~^~^~^~^~^~^~
+██╗  ██╗███████╗ █████╗ ██╗██╗
+██║ ██╔╝██╔════╝██╔══██╗██║██║
+█████╔╝ ███████╗███████║██║██║
+██╔═██╗ ╚════██║██╔══██║██║██║
+██║  ██╗███████║██║  ██║██║███████╗
+╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═╝╚══════╝
 
-KSail is a CLI tool for creating and maintaining local Kubernetes clusters
+CLI tool for operating Kubernetes
 
 Usage:
   ksail [flags]
   ksail [command]
 
 Available Commands:
+  chat        Start an AI-assisted chat session
   cipher      Manage encrypted files with SOPS
   cluster     Manage cluster lifecycle
   completion  Generate the autocompletion script for the specified shell
@@ -34,13 +31,14 @@ Use "ksail [command] --help" for more information about a command.
 ---
 
 [TestExecuteShowsHelpFlag - 1]
-KSail is a CLI tool for creating and maintaining local Kubernetes clusters
+CLI tool for operating Kubernetes
 
 Usage:
   ksail [flags]
   ksail [command]
 
 Available Commands:
+  chat        Start an AI-assisted chat session
   cipher      Manage encrypted files with SOPS
   cluster     Manage cluster lifecycle
   completion  Generate the autocompletion script for the specified shell

@@ -20,8 +20,8 @@ func NewRootCmd(version, commit, date string) *cobra.Command {
 	// Create the command using the helper (no field selectors needed for root command)
 	cmd := &cobra.Command{
 		Use:          "ksail",
-		Short:        "KSail is a CLI tool for creating and maintaining local Kubernetes clusters",
-		Long:         "KSail is a CLI tool for creating and maintaining local Kubernetes clusters",
+		Short:        "CLI tool for operating Kubernetes",
+		Long:         "CLI tool for operating Kubernetes",
 		RunE:         handleRootRunE,
 		SilenceUsage: true,
 	}
@@ -39,6 +39,7 @@ func NewRootCmd(version, commit, date string) *cobra.Command {
 	cmd.AddCommand(cluster.NewClusterCmd(runtimeContainer))
 	cmd.AddCommand(workload.NewWorkloadCmd(runtimeContainer))
 	cmd.AddCommand(cipher.NewCipherCmd(runtimeContainer))
+	cmd.AddCommand(NewChatCmd(runtimeContainer))
 
 	return cmd
 }
@@ -62,7 +63,8 @@ func handleRootRunE(
 	cmd *cobra.Command,
 	_ []string,
 ) error {
-	asciiart.PrintKSailLogo(cmd.OutOrStdout())
+	_, _ = fmt.Fprintln(cmd.OutOrStdout(), asciiart.Logo())
+	_, _ = fmt.Fprintln(cmd.OutOrStdout())
 
 	// The err can safely be ignored, as it can never fail at runtime.
 	_ = cmd.Help()

@@ -15,7 +15,7 @@ Read the ENTIRE content of this file carefully before proceeding. Follow the ins
 - The `gh aw` CLI may be available in this environment.
 - Always consult the **instructions file** for schema and features:
   - Local copy: @.github/aw/github-agentic-workflows.md
-  - Canonical upstream: https://raw.githubusercontent.com/githubnext/gh-aw/main/.github/aw/github-agentic-workflows.md
+  - Canonical upstream: <https://raw.githubusercontent.com/githubnext/gh-aw/main/.github/aw/github-agentic-workflows.md>
 
 **Key Commands Available**
 
@@ -27,6 +27,7 @@ Read the ENTIRE content of this file carefully before proceeding. Follow the ins
 > **Command Execution**
 >
 > When running in GitHub Copilot Cloud, you don't have direct access to `gh aw` CLI commands. Instead, use the **agentic-workflows** MCP tool:
+>
 > - `fix` tool → apply automatic codemods to fix deprecated fields
 > - `compile` tool → compile workflows
 >
@@ -58,9 +59,9 @@ Before upgrading, always review what's new:
 Before attempting to compile, apply automatic codemods:
 
 1. **Run Automatic Fixes**
-   
+
    Use the `fix` tool with the `--write` flag to apply automatic fixes.
-   
+
    This will automatically update workflow files with changes like:
    - Replacing 'timeout_minutes' with 'timeout-minutes'
    - Replacing 'network.firewall' with 'sandbox.agent: false'
@@ -75,7 +76,7 @@ Before attempting to compile, apply automatic codemods:
 Try to compile all workflows:
 
 1. **Run Compilation**
-   
+
    Use the `compile` tool to compile all workflows.
 
 2. **Analyze Results**
@@ -93,19 +94,19 @@ If compilation fails, work through errors systematically:
    - Check the gh-aw instructions for correct syntax
 
 2. **Common Error Patterns**
-   
+
    **Schema Changes:**
    - Old field names that have been renamed
    - New required fields
    - Changed field types or formats
-   
+
    **Breaking Changes:**
    - Deprecated features that have been removed
    - Changed default behaviors
    - Updated tool configurations
-   
+
    **Example Fixes:**
-   
+
    ```yaml
    # Old format (deprecated)
    mcp-servers:
@@ -134,7 +135,7 @@ If compilation fails, work through errors systematically:
 After fixing all errors:
 
 1. **Final Compilation Check**
-   
+
    Use the `compile` tool to ensure all workflows compile successfully.
 
 2. **Review Generated Lock Files**
@@ -142,7 +143,7 @@ After fixing all errors:
    - Check that lock files are valid GitHub Actions YAML
 
 3. **Refresh Agent and Instruction Files**
-   
+
    After successfully upgrading workflows, refresh the agent files and instructions to ensure you have the latest versions:
    - Run `gh aw init --push` to update all agent files (`.github/agents/*.md`) and instruction files (`.github/aw/github-agentic-workflows.md`), then automatically commit and push the changes
    - This ensures that agents and instructions are aligned with the new gh-aw version
@@ -159,6 +160,7 @@ Create a **pull request** with:
 **Title:** `Upgrade workflows to latest gh-aw version`
 
 **Description:**
+
 ```markdown
 ## Summary
 
@@ -206,6 +208,7 @@ Create an **issue** with:
 **Title:** `Failed to upgrade workflows to latest gh-aw version`
 
 **Description:**
+
 ```markdown
 ## Summary
 
@@ -219,7 +222,9 @@ Attempted to upgrade workflows to gh-aw version [VERSION] but encountered compil
 
 ### Error 1: [Error Type]
 ```
+
 [Full error message]
+
 ```
 
 **Affected Workflows:**
@@ -281,6 +286,6 @@ Attempted to upgrade workflows to gh-aw version [VERSION] but encountered compil
 ## Important Notes
 
 - When running in GitHub Copilot Cloud, use the **agentic-workflows** MCP tool for all commands
-- When running in environments with `gh aw` CLI access, prefix commands with `gh aw` 
+- When running in environments with `gh aw` CLI access, prefix commands with `gh aw`
 - Breaking changes are inevitable - expect to make manual fixes
 - If stuck, create an issue with detailed information for the maintainers

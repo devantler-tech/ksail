@@ -5,10 +5,12 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	clusterpkg "github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/confirm"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	clustererrors "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/errors"
@@ -136,9 +138,14 @@ func setupContextBasedTest(
 		},
 	)
 
+	// Override TTY check to return false by default (non-interactive mode)
+	// This ensures existing tests don't prompt for confirmation
+	restoreTTY := confirm.SetTTYCheckerForTests(func() bool { return false })
+
 	testRuntime := newDeleteTestRuntimeContainer(t)
 
 	cleanup := func() {
+		restoreTTY()
 		restoreDocker()
 		restoreFactory()
 	}
@@ -266,6 +273,10 @@ func TestDelete_CommandFlags(t *testing.T) {
 	deleteStorageFlag := cmd.Flags().Lookup("delete-storage")
 	require.NotNil(t, deleteStorageFlag, "expected --delete-storage flag")
 
+	forceFlag := cmd.Flags().Lookup("force")
+	require.NotNil(t, forceFlag, "expected --force flag")
+	require.Equal(t, "f", forceFlag.Shorthand)
+
 	// Verify old flags do NOT exist
 	contextFlag := cmd.Flags().Lookup("context")
 	require.Nil(t, contextFlag, "unexpected --context flag (should be removed)")
@@ -274,8 +285,180 @@ func TestDelete_CommandFlags(t *testing.T) {
 	require.Nil(t, distributionFlag, "unexpected --distribution flag (should be removed)")
 }
 
+// TestDelete_Confirmation_Accepted tests that deletion proceeds when user confirms with "yes".
+//
+//nolint:paralleltest // Cannot use t.Parallel() with t.Chdir() and t.Setenv() in helper
+func TestDelete_Confirmation_Accepted(t *testing.T) {
+	testRuntime, cleanup := setupContextBasedTest(t, "kind-my-cluster", true, nil)
+	defer cleanup()
+
+	// Mock stdin to return "yes"
+	stdinReader := strings.NewReader("yes\n")
+
+	restoreStdin := confirm.SetStdinReaderForTests(stdinReader)
+	defer restoreStdin()
+
+	// Mock TTY check to return true (simulates interactive terminal)
+	restoreTTY := confirm.SetTTYCheckerForTests(func() bool { return true })
+	defer restoreTTY()
+
+	cmd := clusterpkg.NewDeleteCmd(testRuntime)
+
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetContext(context.Background())
+
+	err := cmd.Execute()
+	require.NoError(t, err)
+
+	output := out.String()
+	require.Contains(t, output, "cluster deleted")
+	require.Contains(t, output, "The following resources will be deleted")
+
+	snaps.MatchSnapshot(t, trimTrailingNewlineDelete(output))
+}
+
+// TestDelete_Confirmation_Denied tests that deletion is cancelled when user does not confirm.
+//
+//nolint:paralleltest // Cannot use t.Parallel() with t.Chdir() and t.Setenv() in helper
+func TestDelete_Confirmation_Denied(t *testing.T) {
+	testRuntime, cleanup := setupContextBasedTest(t, "kind-my-cluster", true, nil)
+	defer cleanup()
+
+	// Mock stdin to return "no"
+	stdinReader := strings.NewReader("no\n")
+
+	restoreStdin := confirm.SetStdinReaderForTests(stdinReader)
+	defer restoreStdin()
+
+	// Mock TTY check to return true (simulates interactive terminal)
+	restoreTTY := confirm.SetTTYCheckerForTests(func() bool { return true })
+	defer restoreTTY()
+
+	cmd := clusterpkg.NewDeleteCmd(testRuntime)
+
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetContext(context.Background())
+
+	err := cmd.Execute()
+	require.Error(t, err)
+	require.ErrorIs(t, err, confirm.ErrDeletionCancelled)
+
+	output := out.String()
+	require.Contains(t, output, "The following resources will be deleted")
+	require.NotContains(t, output, "cluster deleted")
+
+	snaps.MatchSnapshot(t, trimTrailingNewlineDelete(output))
+}
+
+// TestDelete_ForceFlag_SkipsConfirmation tests that --force flag bypasses the confirmation prompt.
+//
+//nolint:paralleltest // Cannot use t.Parallel() with t.Chdir() and t.Setenv() in helper
+func TestDelete_ForceFlag_SkipsConfirmation(t *testing.T) {
+	testRuntime, cleanup := setupContextBasedTest(t, "kind-my-cluster", true, nil)
+	defer cleanup()
+
+	// Mock TTY check to return true (simulates interactive terminal)
+	// Note: stdin is NOT mocked - if prompt runs, it will fail to read
+	restoreTTY := confirm.SetTTYCheckerForTests(func() bool { return true })
+	defer restoreTTY()
+
+	cmd := clusterpkg.NewDeleteCmd(testRuntime)
+	cmd.SetArgs([]string{"--force"})
+
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetContext(context.Background())
+
+	err := cmd.Execute()
+	require.NoError(t, err)
+
+	output := out.String()
+	require.Contains(t, output, "cluster deleted")
+	// Should NOT show confirmation preview when --force is used
+	require.NotContains(t, output, "The following resources will be deleted")
+
+	snaps.MatchSnapshot(t, trimTrailingNewlineDelete(output))
+}
+
+// TestDelete_NonTTY_SkipsConfirmation tests that non-TTY environments skip the confirmation prompt.
+//
+//nolint:paralleltest // Cannot use t.Parallel() with t.Chdir() and t.Setenv() in helper
+func TestDelete_NonTTY_SkipsConfirmation(t *testing.T) {
+	testRuntime, cleanup := setupContextBasedTest(t, "kind-my-cluster", true, nil)
+	defer cleanup()
+
+	// Mock TTY check to return false (simulates CI/pipeline environment)
+	restoreTTY := confirm.SetTTYCheckerForTests(func() bool { return false })
+	defer restoreTTY()
+
+	cmd := clusterpkg.NewDeleteCmd(testRuntime)
+
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetContext(context.Background())
+
+	err := cmd.Execute()
+	require.NoError(t, err)
+
+	output := out.String()
+	require.Contains(t, output, "cluster deleted")
+	// Should NOT show confirmation preview when stdin is not a TTY
+	require.NotContains(t, output, "The following resources will be deleted")
+
+	snaps.MatchSnapshot(t, trimTrailingNewlineDelete(output))
+}
+
 // Ensure fake types satisfy interfaces at compile time.
 var (
 	_ clusterprovisioner.ClusterProvisioner = (*fakeDeleteProvisioner)(nil)
 	_ clusterprovisioner.Factory            = (*fakeDeleteFactory)(nil)
 )
+
+// containerTestCase is a test case for IsClusterContainer.
+type containerTestCase struct {
+	name          string
+	containerName string
+	clusterName   string
+	expected      bool
+}
+
+// getContainerTestCases returns test cases for IsClusterContainer.
+func getContainerTestCases() []containerTestCase {
+	return []containerTestCase{
+		// Kind patterns
+		{"kind_control_plane", "my-cluster-control-plane", "my-cluster", true},
+		{"kind_worker", "my-cluster-worker", "my-cluster", true},
+		{"kind_worker_numbered", "my-cluster-worker2", "my-cluster", true},
+		// K3d patterns
+		{"k3d_server", "k3d-my-cluster-server-0", "my-cluster", true},
+		{"k3d_agent", "k3d-my-cluster-agent-0", "my-cluster", true},
+		// Talos patterns
+		{"talos_controlplane", "my-cluster-controlplane-1", "my-cluster", true},
+		{"talos_worker", "my-cluster-worker-1", "my-cluster", true},
+		// Non-matching
+		{"different_cluster", "other-cluster-control-plane", "my-cluster", false},
+		{"registry_container", "registry.localhost", "my-cluster", false},
+		{"partial_match", "my-cluster-registry", "my-cluster", false},
+		{"prefix_collision", "my-cluster-test-control-plane", "my-cluster", false},
+	}
+}
+
+// TestIsClusterContainer tests the container name matching logic.
+func TestIsClusterContainer(t *testing.T) {
+	t.Parallel()
+
+	for _, testCase := range getContainerTestCases() {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			result := clusterpkg.IsClusterContainer(testCase.containerName, testCase.clusterName)
+			require.Equal(t, testCase.expected, result)
+		})
+	}
+}

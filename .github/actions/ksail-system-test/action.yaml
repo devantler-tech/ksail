@@ -120,7 +120,7 @@ runs:
         ARGS: ${{ steps.resolve-args.outputs.args }}
         HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
       run: |
-        ksail cluster init --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS
+        ksail cluster init --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS --force
 
     - name: 🧪 ksail cluster create
       id: cluster-create

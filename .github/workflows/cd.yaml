@@ -45,6 +45,9 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: 📚 Generate embedded docs
+        run: go generate ./pkg/svc/chat/...
+
       - name: 🏗️ Run GoReleaser
         uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6.4.0
         with:

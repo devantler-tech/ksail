@@ -50,6 +50,14 @@ const listLongDesc = `List all Kubernetes clusters managed by KSail.
 By default, lists clusters from all distributions across all providers.
 Use --provider to filter results to a specific provider.
 
+Output Format:
+  PROVIDER=<provider> NAME=<cluster_name>
+
+The PROVIDER value (Docker or Hetzner) and NAME value (cluster name) from
+the output can be used directly with other cluster commands:
+  ksail cluster delete --name <cluster_name> --provider <provider>
+  ksail cluster stop --name <cluster_name> --provider <provider>
+
 Examples:
   # List all clusters
   ksail cluster list
@@ -279,7 +287,9 @@ func createEmptyDistributionConfig(
 }
 
 // displayListResults outputs the cluster list grouped by provider.
-// Only providers with clusters are shown, formatted as "provider: cluster1, cluster2".
+// Output is formatted for clarity, especially for AI assistants that need
+// to parse the cluster names for subsequent commands.
+// Format: "PROVIDER: NAME=cluster1, NAME=cluster2" to clearly identify cluster names.
 // If no clusters exist, displays "No clusters found.".
 func displayListResults(
 	writer io.Writer,
@@ -299,17 +309,24 @@ func displayListResults(
 	}
 
 	// Output in provider order for consistent output
+	// Format explicitly labels cluster names for AI parsing
 	for _, prov := range providers {
 		clusters, exists := providerClusters[prov]
 		if !exists || len(clusters) == 0 {
 			continue
 		}
 
+		// Format each cluster with explicit NAME= prefix for clarity
+		namedClusters := make([]string, len(clusters))
+		for i, name := range clusters {
+			namedClusters[i] = "NAME=" + name
+		}
+
 		_, _ = fmt.Fprintf(
 			writer,
-			"%s: %s\n",
+			"PROVIDER=%s %s\n",
 			strings.ToLower(string(prov)),
-			strings.Join(clusters, ", "),
+			strings.Join(namedClusters, ", "),
 		)
 	}
 }

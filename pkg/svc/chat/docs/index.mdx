@@ -1,0 +1,75 @@
+---
+title: KSail Documentation
+description: CLI tool for creating, maintaining and operating Kubernetes clusters
+template: splash
+hero:
+  tagline: KSail bundles Kubernetes tooling into a single CLI for cluster management and cloud-native operations.
+  image:
+    alt: KSail CLI showing ASCII art banner and help output
+    dark: ../../assets/header-dark.png
+    light: ../../assets/header-light.png
+  actions:
+    - text: Get Started
+      link: /installation/
+      icon: right-arrow
+      variant: primary
+    - text: View on GitHub
+      link: https://github.com/devantler-tech/ksail
+      icon: external
+---
+
+import { Card, CardGrid } from "@astrojs/starlight/components";
+import { Image } from "astro:assets";
+import mentalModel from "../../assets/mental-model.svg";
+
+## How It Works
+
+<Image src={mentalModel} alt="KSail Mental Model" />
+
+## Documentation
+
+<CardGrid>
+  <Card title="Features" icon="rocket">
+    Cluster provisioning, GitOps, secret management, and more. [Learn more →](/features/)
+  </Card>
+  <Card title="Concepts" icon="open-book">
+    Kubernetes, CNI, CSI, GitOps, and related technologies. [Learn more →](/concepts/)
+  </Card>
+  <Card title="Use Cases" icon="puzzle">
+    Workflows for learning, development, and CI/CD. [Learn more →](/use-cases/)
+  </Card>
+  <Card title="Support Matrix" icon="list-format">
+    Supported platforms, distributions, and components. [Learn more →](/support-matrix/)
+  </Card>
+</CardGrid>
+
+## Configuration
+
+<CardGrid>
+  <Card title="Configuration Overview" icon="setting">
+    Configuration sources, precedence, and when to use each. [Learn more →](/configuration/)
+  </Card>
+  <Card title="Declarative Configuration" icon="document">
+    Complete `ksail.yaml` reference. [Learn more →](/configuration/declarative-configuration/)
+  </Card>
+  <Card title="CLI Flags" icon="forward-slash">
+    Complete CLI flags for all commands. [Learn more →](/cli-flags/)
+  </Card>
+</CardGrid>
+
+## Help
+
+<CardGrid>
+  <Card title="FAQ" icon="information">
+    Frequently asked questions about KSail. [Learn more →](/faq/)
+  </Card>
+  <Card title="Troubleshooting" icon="warning">
+    Common issues and solutions when using KSail. [Learn more →](/troubleshooting/)
+  </Card>
+</CardGrid>
+
+## Quick Links
+
+- **Installing?** See the [Installation Guide](/installation/)
+- **Issues?** Open an [issue](https://github.com/devantler-tech/ksail/issues) in the repository
+- **Questions?** Start a [discussion](https://github.com/devantler-tech/ksail/discussions) in the repository

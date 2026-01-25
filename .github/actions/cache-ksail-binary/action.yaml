@@ -87,8 +87,9 @@ runs:
             chmod +x "$output_target"
           fi
         else
-          # Build binary to local cache first
+          # Build binary (first generate embedded docs)
           mkdir -p ./.cache
+          go generate ./pkg/svc/chat/...
           go build -o ./.cache/ksail .
           # Copy to target location
           if [[ "$output_target" = /* ]]; then

@@ -5,7 +5,7 @@
 
 # 🛥️🐳 KSail
 
-![ksail-cli-dark](./docs/src/assets/ksail-cli-dark.png)
+![ksail](./docs/src/assets/ksail-cli-dark.png)
 
 KSail is a CLI tool that bundles common Kubernetes tooling into a single binary. It provides one consistent interface to create clusters, deploy workloads, and operate cloud-native stacks across different distributions and providers.
 
@@ -26,6 +26,8 @@ Setting up and operating Kubernetes clusters is a skill of its own, often requir
 ⚙️ **Customizable Stack** — Select your CNI, CSI, policy engine, cert-manager, and mirror registries to match your setup.
 
 🔐 **SOPS Built In** — Encrypt, decrypt, and edit secrets with integrated cipher commands.
+
+🤖 **AI Assistant** — Interactive chat powered by GitHub Copilot to help configure clusters and troubleshoot issues.
 
 ## Getting Started
 
