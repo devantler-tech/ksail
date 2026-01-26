@@ -121,3 +121,30 @@ func calculatePickerScrollOffset(selectedIndex, totalItems, maxVisible int) int 
 	}
 	return scrollOffset
 }
+
+// calculatePickerContentLines calculates the number of content lines for a picker modal.
+func calculatePickerContentLines(visibleCount int, isScrollable bool) int {
+	contentLines := 1 + visibleCount
+	if isScrollable {
+		contentLines += 2
+	}
+	return max(contentLines, 6)
+}
+
+// createPickerModalStyle creates a consistent modal style for picker dialogs.
+func createPickerModalStyle(width, height int) lipgloss.Style {
+	return lipgloss.NewStyle().
+		BorderStyle(lipgloss.RoundedBorder()).
+		BorderForeground(primaryColor).
+		PaddingLeft(1).
+		PaddingRight(1).
+		Width(width).
+		Height(height)
+}
+
+// renderPickerModal finalizes and renders a picker modal with consistent styling.
+func renderPickerModal(content string, modalWidth, visibleCount int, isScrollable bool) string {
+	contentLines := calculatePickerContentLines(visibleCount, isScrollable)
+	modalStyle := createPickerModalStyle(modalWidth, contentLines)
+	return modalStyle.Render(content)
+}

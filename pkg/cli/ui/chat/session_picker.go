@@ -298,21 +298,8 @@ func (m *Model) renderSessionPickerModal() string {
 
 	m.renderScrollIndicatorBottom(&listContent, clipStyle, isScrollable, endIdx, totalItems)
 
-	contentLines := 1 + visibleCount
-	if isScrollable {
-		contentLines += 2
-	}
-	contentLines = max(contentLines, 6)
-
-	modalStyle := lipgloss.NewStyle().
-		BorderStyle(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.ANSIColor(14)).
-		PaddingLeft(1).
-		PaddingRight(1).
-		Width(modalWidth).
-		Height(contentLines)
-
-	return modalStyle.Render(strings.TrimRight(listContent.String(), "\n"))
+	content := strings.TrimRight(listContent.String(), "\n")
+	return renderPickerModal(content, modalWidth, visibleCount, isScrollable)
 }
 
 // renderSessionPickerTitle renders the title or delete confirmation.
