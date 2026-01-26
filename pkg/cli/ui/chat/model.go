@@ -24,6 +24,11 @@ const (
 	footerHeight       = 1              // single line help text
 	modelPickerHeight  = 16             // title + 10 visible items + scroll indicators + borders/padding
 	permissionModalMax = 12             // title + tool + command + args + question + buttons + borders/padding
+
+	// Shared picker/output constants.
+	maxPickerVisible   = 3  // maximum visible items in picker modals
+	maxToolOutputLines = 10 // maximum lines shown in collapsed tool output
+	minWrapWidth       = 20 // minimum width for text wrapping
 )
 
 // chatMessage represents a single message in the chat history.
@@ -333,12 +338,22 @@ func (m *Model) View() string {
 
 	sections := make([]string, 0, 4)
 
-	// Header with logo and right-aligned status indicator
-	// Calculate content width inside border (border=2, padding=4)
+	// Header, chat viewport, input/modal, and footer
+	sections = append(sections, m.renderHeader())
+	sections = append(sections, viewportStyle.Width(m.width-2).Render(m.viewport.View()))
+	sections = append(sections, m.renderInputOrModal())
+	sections = append(sections, m.renderFooter())
+
+	// Join sections and clip final output to terminal width to prevent any wrapping
+	output := lipgloss.JoinVertical(lipgloss.Left, sections...)
+	return lipgloss.NewStyle().MaxWidth(m.width).Render(output)
+}
+
+// renderHeader renders the header section with logo and status.
+func (m *Model) renderHeader() string {
 	headerContentWidth := max(m.width-6, 1)
 
 	// Truncate each logo line by display width (handles Unicode properly)
-	// This clips the logo at narrow widths rather than wrapping
 	logoLines := strings.Split(logo(), "\n")
 	truncateStyle := lipgloss.NewStyle().MaxWidth(headerContentWidth).Inline(true)
 	var clippedLogo strings.Builder
@@ -351,11 +366,33 @@ func (m *Model) View() string {
 	}
 	logoRendered := logoStyle.Render(clippedLogo.String())
 
-	// Build tagline row with right-aligned status
-	taglineText := taglineStyle.Render("  " + tagline())
+	// Build tagline with right-aligned status
+	taglineRow := m.buildTaglineRow(headerContentWidth)
+	taglineRow = lipgloss.NewStyle().MaxWidth(headerContentWidth).Inline(true).Render(taglineRow)
 
-	// Build status with mode icon and model name
+	headerContent := logoRendered + "\n" + taglineRow
+	return headerBoxStyle.Width(m.width - 2).Render(headerContent)
+}
+
+// buildTaglineRow builds the tagline row with right-aligned status indicator.
+func (m *Model) buildTaglineRow(contentWidth int) string {
+	taglineText := taglineStyle.Render("  " + tagline())
+	statusText := m.buildStatusText()
+
+	if statusText == "" {
+		return taglineText
+	}
+
+	taglineLen := lipgloss.Width(taglineText)
+	statusLen := lipgloss.Width(statusText)
+	spacing := max(contentWidth-taglineLen-statusLen, 2)
+	return taglineText + strings.Repeat(" ", spacing) + statusText
+}
+
+// buildStatusText builds the status indicator text (mode, model, streaming state).
+func (m *Model) buildStatusText() string {
 	var statusParts []string
+
 	// Mode icon: </> for Agent, ≡ for Plan
 	modeStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(14))
 	if m.agentMode {
@@ -363,70 +400,75 @@ func (m *Model) View() string {
 	} else {
 		statusParts = append(statusParts, modeStyle.Render("≡"))
 	}
+
+	// Model name
 	modelStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8))
 	if m.currentModel != "" {
 		statusParts = append(statusParts, modelStyle.Render(m.currentModel))
 	} else {
 		statusParts = append(statusParts, modelStyle.Render("auto"))
 	}
+
+	// Streaming state
 	if m.isStreaming {
 		statusParts = append(statusParts, m.spinner.View()+" "+statusStyle.Render("Thinking..."))
 	} else if m.justCompleted {
 		statusParts = append(statusParts, statusStyle.Render("Ready ✓"))
 	}
-	statusText := strings.Join(statusParts, " • ")
 
-	// Clip tagline if too wide
-	taglineRow := taglineText
-	if statusText != "" {
-		// Calculate spacing to push status to the right
-		taglineLen := lipgloss.Width(taglineText)
-		statusLen := lipgloss.Width(statusText)
-		spacing := max(headerContentWidth-taglineLen-statusLen, 2)
-		taglineRow = taglineText + strings.Repeat(" ", spacing) + statusText
-	}
-	// Clip tagline row to content width and prevent wrapping
-	taglineRow = lipgloss.NewStyle().MaxWidth(headerContentWidth).Inline(true).Render(taglineRow)
+	return strings.Join(statusParts, " • ")
+}
 
-	headerContent := logoRendered + "\n" + taglineRow
-	header := headerBoxStyle.Width(m.width - 2).Render(headerContent)
-	sections = append(sections, header)
-
-	// Chat viewport - box handles clipping via fixed width
-	chatContent := viewportStyle.Width(m.width - 2).Render(m.viewport.View())
-	sections = append(sections, chatContent)
-
-	// Show modal OR input area (modal replaces input when active)
+// renderInputOrModal renders either the input area or active modal.
+func (m *Model) renderInputOrModal() string {
 	if m.pendingPermission != nil {
-		sections = append(sections, m.renderPermissionModal())
-	} else if m.showModelPicker {
-		sections = append(sections, m.renderModelPickerModal())
-	} else if m.showSessionPicker {
-		sections = append(sections, m.renderSessionPickerModal())
-	} else {
-		// Input area - box handles clipping via fixed width
-		inputContent := inputStyle.Width(m.width - 2).Render(m.textarea.View())
-		sections = append(sections, inputContent)
+		return m.renderPermissionModal()
 	}
+	if m.showModelPicker {
+		return m.renderModelPickerModal()
+	}
+	if m.showSessionPicker {
+		return m.renderSessionPickerModal()
+	}
+	return inputStyle.Width(m.width - 2).Render(m.textarea.View())
+}
 
-	// Footer/help - context-aware based on active view
+// renderFooter renders the context-aware help text footer.
+func (m *Model) renderFooter() string {
 	helpText := m.getContextualHelpText()
-	help := lipgloss.NewStyle().MaxWidth(m.width).Inline(true).Render(helpStyle.Render(helpText))
-	sections = append(sections, help)
-
-	// Join sections and clip final output to terminal width to prevent any wrapping
-	output := lipgloss.JoinVertical(lipgloss.Left, sections...)
-	return lipgloss.NewStyle().MaxWidth(m.width).Render(output)
+	return lipgloss.NewStyle().MaxWidth(m.width).Inline(true).Render(helpStyle.Render(helpText))
 }
 
 // handleUserSubmit handles user message submission.
 func (m *Model) handleUserSubmit(msg userSubmitMsg) (tea.Model, tea.Cmd) {
 	// Ensure any previous assistant messages are properly rendered
-	// This handles cases where SessionIdle didn't fire properly
 	m.reRenderCompletedMessages()
 
-	// Commit current tools to the last assistant message before clearing
-	// This preserves tool history across conversation turns
+	// Preserve tool history from the previous turn
+	m.commitToolsToLastAssistantMessage()
+
+	// Save prompt to history and prepare for new turn
+	m.addToPromptHistory(msg.content)
+	m.prepareForNewTurn()
+
+	// Add user message and placeholder assistant message
+	m.messages = append(m.messages, chatMessage{
+		role:    "user",
+		content: msg.content,
+	})
+	m.messages = append(m.messages, chatMessage{
+		role:        "assistant",
+		content:     "",
+		isStreaming: true,
+	})
+	m.updateViewportContent()
+
+	// Start streaming, keep spinner ticking, and wait for events
+	return m, tea.Batch(m.spinner.Tick, m.streamResponseCmd(msg.content), m.waitForEvent())
+}
+
+// commitToolsToLastAssistantMessage saves current tools to the last assistant message.
+func (m *Model) commitToolsToLastAssistantMessage() {
 	for i := len(m.messages) - 1; i >= 0; i-- {
 		if m.messages[i].role == "assistant" {
 			m.messages[i].tools = make([]*toolExecution, 0, len(m.toolOrder))
@@ -440,43 +482,28 @@ func (m *Model) handleUserSubmit(msg userSubmitMsg) (tea.Model, tea.Cmd) {
 			break
 		}
 	}
+}
 
-	// Save prompt to history
-	prompt := msg.content
+// addToPromptHistory adds a prompt to history if it's unique.
+func (m *Model) addToPromptHistory(prompt string) {
 	if prompt != "" && (len(m.history) == 0 || m.history[len(m.history)-1] != prompt) {
 		m.history = append(m.history, prompt)
 	}
 	m.historyIndex = -1
 	m.savedInput = ""
+}
 
-	// Drain any stale events from previous conversation turn
-	// This prevents old events from interfering with the new message
+// prepareForNewTurn clears state for a new conversation turn.
+func (m *Model) prepareForNewTurn() {
 	m.drainEventChannel()
-
-	// Clear tool state for new conversation turn
 	m.tools = make(map[string]*toolExecution)
 	m.toolOrder = make([]string, 0)
-
-	// Reset completion tracking state for new turn
 	m.sessionComplete = false
 	m.pendingToolCount = 0
-
-	m.messages = append(m.messages, chatMessage{
-		role:    "user",
-		content: msg.content,
-	})
 	m.isStreaming = true
-	m.justCompleted = false // Clear completion indicator
-	m.userScrolled = false  // Resume auto-scroll on new message
+	m.justCompleted = false
+	m.userScrolled = false
 	m.currentResponse.Reset()
-	m.messages = append(m.messages, chatMessage{
-		role:        "assistant",
-		content:     "",
-		isStreaming: true,
-	})
-	m.updateViewportContent()
-	// Start streaming, keep spinner ticking, and wait for events
-	return m, tea.Batch(m.spinner.Tick, m.streamResponseCmd(msg.content), m.waitForEvent())
 }
 
 // activeModalHeight returns the extra height needed for the currently active modal
@@ -502,13 +529,12 @@ func (m *Model) activeModalHeight() int {
 	if m.showModelPicker || m.showSessionPicker {
 		// Calculate actual model picker height based on content
 		totalItems := len(m.availableModels) + 1 // +1 for "auto" option
-		const maxVisible = 3
-		visibleCount := min(totalItems, maxVisible)
+		visibleCount := min(totalItems, maxPickerVisible)
 
 		// Calculate content lines: title + blank + items + reserved scroll indicator space
 		lines := 1 // title line + blank line
 		lines += visibleCount
-		if totalItems > maxVisible {
+		if totalItems > maxPickerVisible {
 			lines += 2 // always reserve space for scroll indicators (up + down)
 		}
 		modalHeight := lines // +2 for border (top + bottom)

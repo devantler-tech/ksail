@@ -31,8 +31,8 @@ func (m *Model) updateViewportContent() {
 
 // calculateWrapWidth calculates the content width for text wrapping.
 func (m *Model) calculateWrapWidth() uint {
-	wrapWidth := max(m.viewport.Width-4, 20)
-	return uint(wrapWidth) //nolint:gosec // wrapWidth is guaranteed >= 20
+	wrapWidth := max(m.viewport.Width-4, minWrapWidth)
+	return uint(wrapWidth) //nolint:gosec // wrapWidth is guaranteed >= minWrapWidth
 }
 
 // renderMessage renders a single message to the builder.
@@ -293,12 +293,11 @@ func (m *Model) renderToolOutput(
 	wrapWidth uint,
 	expanded bool,
 ) {
-	const maxOutputLines = 10
 	lines := strings.Split(output, "\n")
 	truncated := false
 
-	if !expanded && len(lines) > maxOutputLines {
-		lines = lines[:maxOutputLines]
+	if !expanded && len(lines) > maxToolOutputLines {
+		lines = lines[:maxToolOutputLines]
 		truncated = true
 	}
 
@@ -314,7 +313,7 @@ func (m *Model) renderToolOutput(
 		builder.WriteString(
 			toolOutputStyle.Render(
 				fmt.Sprintf("      ... (%d more lines, press ⇥ for full output)",
-					len(strings.Split(output, "\n"))-maxOutputLines),
+					len(strings.Split(output, "\n"))-maxToolOutputLines),
 			),
 		)
 		builder.WriteString("\n")

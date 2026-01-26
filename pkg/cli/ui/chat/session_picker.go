@@ -285,15 +285,14 @@ func (m *Model) renderSessionPickerModal() string {
 	clipStyle := lipgloss.NewStyle().MaxWidth(contentWidth).Inline(true)
 
 	totalItems := len(m.availableSessions) + 1
-	const maxVisible = 3
-	visibleCount := min(totalItems, maxVisible)
+	visibleCount := min(totalItems, maxPickerVisible)
 
-	scrollOffset := calculatePickerScrollOffset(m.sessionPickerIndex, totalItems, maxVisible)
+	scrollOffset := calculatePickerScrollOffset(m.sessionPickerIndex, totalItems, maxPickerVisible)
 
 	var listContent strings.Builder
 	m.renderSessionPickerTitle(&listContent, clipStyle)
 
-	isScrollable := totalItems > maxVisible
+	isScrollable := totalItems > maxPickerVisible
 	renderScrollIndicatorTop(&listContent, clipStyle, isScrollable, scrollOffset)
 
 	endIdx := min(scrollOffset+visibleCount, totalItems)
