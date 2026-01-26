@@ -188,7 +188,7 @@
           "properties": {
             "model": {
               "type": "string",
-              "description": "Model to use for chat (empty string or 'auto' lets the API choose)"
+              "description": "Chat model (empty or 'auto' for API default)"
             }
           },
           "additionalProperties": false,
