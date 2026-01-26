@@ -109,6 +109,9 @@ type Model struct {
 	// Markdown renderer (cached to avoid terminal queries)
 	renderer *glamour.TermRenderer
 
+	// Mode selection (agent executes tools, plan describes only)
+	agentMode bool // true = agent (execute), false = plan (describe only)
+
 	// Channel for async streaming events from Copilot
 	eventChan chan tea.Msg
 }
@@ -195,6 +198,7 @@ func NewWithEventChannel(
 		historyIndex:     -1,
 		availableModels:  models,
 		currentModel:     currentModel,
+		agentMode:        true, // Default to agent mode
 	}
 }
 
@@ -350,8 +354,15 @@ func (m *Model) View() string {
 	// Build tagline row with right-aligned status
 	taglineText := taglineStyle.Render("  " + tagline())
 
-	// Build status with model name
+	// Build status with mode icon and model name
 	var statusParts []string
+	// Mode icon: </> for Agent, ≡ for Plan
+	modeStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(14))
+	if m.agentMode {
+		statusParts = append(statusParts, modeStyle.Render("</>"))
+	} else {
+		statusParts = append(statusParts, modeStyle.Render("≡"))
+	}
 	modelStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8))
 	if m.currentModel != "" {
 		statusParts = append(statusParts, modelStyle.Render(m.currentModel))
@@ -567,7 +578,12 @@ func (m *Model) getContextualHelpText() string {
 		return "  ↑↓ Navigate • ⏎ Select • r Rename • d Delete • esc Cancel"
 	}
 
-	// Default input view - check if tools are present for toggle option
+	// Default input view - show mode and tool expand options
+	modeIcon := "</>"
+	if !m.agentMode {
+		modeIcon = "≡"
+	}
+	// Check if tools are present for expand option
 	hasTools := len(m.toolOrder) > 0
 	if !hasTools {
 		for _, msg := range m.messages {
@@ -578,9 +594,11 @@ func (m *Model) getContextualHelpText() string {
 		}
 	}
 	if hasTools {
-		return "  ⏎ Send • ↑↓ History • PgUp/Dn Scroll • ⇥ Toggle • ^T All • ^H Sessions • ^O Model • ^N New • esc Quit"
+		return "  ⏎ Send • ↑↓ History • PgUp/Dn Scroll • ⇥ " + modeIcon +
+			" • ^T Expand • ^H Sessions • ^O Model • ^N New • esc Quit"
 	}
-	return "  ⏎ Send • ↑↓ History • PgUp/Dn Scroll • ^H Sessions • ^O Model • ^N New • esc Quit"
+	return "  ⏎ Send • ↑↓ History • PgUp/Dn Scroll • ⇥ " + modeIcon +
+		" • ^H Sessions • ^O Model • ^N New • esc Quit"
 }
 
 // sendMessageCmd returns a command that initiates message sending.
@@ -596,6 +614,7 @@ func (m *Model) sendMessageCmd(content string) tea.Cmd {
 func (m *Model) streamResponseCmd(userMessage string) tea.Cmd {
 	session := m.session
 	eventChan := m.eventChan
+	agentMode := m.agentMode
 
 	return func() tea.Msg {
 		// Subscribe for this turn's events and store unsubscribe in the model
@@ -673,8 +692,16 @@ func (m *Model) streamResponseCmd(userMessage string) tea.Cmd {
 		m.unsubscribe = unsubscribe
 		m.unsubscribeMu.Unlock()
 
+		// In plan mode, prefix the prompt with instructions to plan without executing
+		prompt := userMessage
+		if !agentMode {
+			prompt = "[PLAN MODE] Research and outline steps to accomplish this task. " +
+				"Do not execute tools or make changes - only describe what you would do:\n\n" +
+				userMessage
+		}
+
 		// Send the message
-		_, err := session.Send(copilot.MessageOptions{Prompt: userMessage})
+		_, err := session.Send(copilot.MessageOptions{Prompt: prompt})
 		if err != nil {
 			// Clean up on error
 			m.unsubscribeMu.Lock()

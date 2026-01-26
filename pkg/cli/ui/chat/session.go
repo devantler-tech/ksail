@@ -18,6 +18,7 @@ type SessionMetadata struct {
 	ID        string    `json:"id"`
 	Name      string    `json:"name"`
 	Model     string    `json:"model,omitempty"`
+	AgentMode bool      `json:"agentMode,omitempty"` // true = agent, false = plan
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
 }
