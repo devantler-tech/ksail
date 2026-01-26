@@ -29,6 +29,27 @@ const (
 	minWrapWidth       = 20 // minimum width for text wrapping
 )
 
+// AgentModeRef is a thread-safe reference to the agent mode state.
+// It allows tool handlers to check the current mode at execution time.
+type AgentModeRef struct {
+	mu      sync.RWMutex
+	Enabled bool
+}
+
+// IsEnabled returns true if agent mode is enabled (tools can execute).
+func (r *AgentModeRef) IsEnabled() bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.Enabled
+}
+
+// SetEnabled updates the agent mode state.
+func (r *AgentModeRef) SetEnabled(enabled bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.Enabled = enabled
+}
+
 // chatMessage represents a single message in the chat history.
 type chatMessage struct {
 	role        string // "user", "assistant", or "tool"
@@ -113,7 +134,8 @@ type Model struct {
 	renderer *glamour.TermRenderer
 
 	// Mode selection (agent executes tools, plan describes only)
-	agentMode bool // true = agent (execute), false = plan (describe only)
+	agentMode    bool          // true = agent (execute), false = plan (describe only)
+	agentModeRef *AgentModeRef // shared reference for tool handlers to check current mode
 
 	// Channel for async streaming events from Copilot
 	eventChan chan tea.Msg
@@ -128,12 +150,13 @@ func New(
 	currentModel string,
 	timeout time.Duration,
 ) *Model {
-	return NewWithEventChannel(session, client, sessionConfig, models, currentModel, timeout, nil)
+	return NewWithEventChannel(session, client, sessionConfig, models, currentModel, timeout, nil, nil)
 }
 
 // NewWithEventChannel creates a new chat TUI model with an optional pre-existing event channel.
 // If eventChan is nil, a new channel is created. This allows external code to send events
 // to the TUI (e.g., permission requests).
+// If agentModeRef is provided, it will be used to synchronize agent mode state with tool handlers.
 func NewWithEventChannel(
 	session *copilot.Session,
 	client *copilot.Client,
@@ -142,6 +165,7 @@ func NewWithEventChannel(
 	currentModel string,
 	timeout time.Duration,
 	eventChan chan tea.Msg,
+	agentModeRef *AgentModeRef,
 ) *Model {
 	// Initialize textarea for user input
 	textArea := textarea.New()
@@ -201,7 +225,8 @@ func NewWithEventChannel(
 		historyIndex:     -1,
 		availableModels:  models,
 		currentModel:     currentModel,
-		agentMode:        true, // Default to agent mode
+		agentMode:        true,         // Default to agent mode
+		agentModeRef:     agentModeRef, // Store reference for tool handlers
 	}
 }
 
@@ -787,6 +812,32 @@ func RunWithEventChannel(
 	timeout time.Duration,
 	eventChan chan tea.Msg,
 ) error {
+	return RunWithEventChannelAndModeRef(
+		ctx,
+		session,
+		client,
+		sessionConfig,
+		models,
+		currentModel,
+		timeout,
+		eventChan,
+		nil,
+	)
+}
+
+// RunWithEventChannelAndModeRef starts the chat TUI with a pre-created event channel and agent mode reference.
+// This allows external code (like permission handlers) to send events to the TUI and synchronize agent mode state.
+func RunWithEventChannelAndModeRef(
+	ctx context.Context,
+	session *copilot.Session,
+	client *copilot.Client,
+	sessionConfig *copilot.SessionConfig,
+	models []copilot.ModelInfo,
+	currentModel string,
+	timeout time.Duration,
+	eventChan chan tea.Msg,
+	agentModeRef *AgentModeRef,
+) error {
 	model := NewWithEventChannel(
 		session,
 		client,
@@ -795,8 +846,15 @@ func RunWithEventChannel(
 		currentModel,
 		timeout,
 		eventChan,
+		agentModeRef,
 	)
 	model.ctx = ctx
+	
+	// Ensure agentModeRef is initialized with the model's initial state
+	if agentModeRef != nil {
+		agentModeRef.SetEnabled(model.agentMode)
+	}
+	
 	program := tea.NewProgram(
 		model,
 		tea.WithAltScreen(),
