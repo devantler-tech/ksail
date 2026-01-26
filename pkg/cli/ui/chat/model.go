@@ -22,8 +22,6 @@ const (
 	inputHeight        = 3
 	headerHeight       = logoHeight + 3 // logo + tagline + border
 	footerHeight       = 1              // single line help text
-	modelPickerHeight  = 16             // title + 10 visible items + scroll indicators + borders/padding
-	permissionModalMax = 12             // title + tool + command + args + question + buttons + borders/padding
 
 	// Shared picker/output constants.
 	maxPickerVisible   = 3  // maximum visible items in picker modals
