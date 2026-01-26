@@ -510,17 +510,20 @@ func (m *Model) activeModalHeight() int {
 	if m.pendingPermission != nil {
 		// Calculate actual permission modal height based on content
 		// title(1) + blank(1) + tool(1) + blank(1) + "Allow?"(1) + blank(1) + buttons(1) = 7 base
-		lines := 7
+		contentLines := 7
 		if m.pendingPermission.command != "" {
-			lines++
+			contentLines++
 		}
 		if m.pendingPermission.arguments != "" {
-			lines++
+			contentLines++
 		}
-		modalHeight := lines
+
+		// Add borders (2 lines: top + bottom)
+		totalModalLines := contentLines + 2
+
 		// Return extra height beyond input area
-		if modalHeight > inputHeight {
-			return modalHeight - inputHeight
+		if totalModalLines > inputHeight {
+			return totalModalLines - inputHeight
 		}
 		return 0
 	}
@@ -533,18 +536,19 @@ func (m *Model) activeModalHeight() int {
 			totalItems = len(m.availableModels) + 1 // +1 for "auto" option
 		}
 		visibleCount := min(totalItems, maxPickerVisible)
+		isScrollable := totalItems > maxPickerVisible
 
-		// Calculate content lines: title + blank + items + reserved scroll indicator space
-		lines := 1 // title line + blank line
-		lines += visibleCount
-		if totalItems > maxPickerVisible {
-			lines += 2 // always reserve space for scroll indicators (up + down)
+		// Calculate content lines: title + visible items
+		contentLines := 1 + visibleCount
+		if isScrollable {
+			contentLines += 2 // Add space for scroll indicators
 		}
-		modalHeight := lines // +2 for border (top + bottom)
+		// Apply minimum height constraint (matches calculatePickerContentLines in styles.go)
+		contentLines = max(contentLines, 6)
 
 		// Return extra height beyond input area
-		if modalHeight > inputHeight {
-			return modalHeight - inputHeight
+		if contentLines > inputHeight {
+			return contentLines - inputHeight
 		}
 		return 0
 	}
