@@ -525,8 +525,13 @@ func (m *Model) activeModalHeight() int {
 		return 0
 	}
 	if m.showModelPicker || m.showSessionPicker {
-		// Calculate actual model picker height based on content
-		totalItems := len(m.availableModels) + 1 // +1 for "auto" option
+		// Calculate actual picker height based on content
+		var totalItems int
+		if m.showSessionPicker {
+			totalItems = len(m.availableSessions) + 1 // +1 for "New Chat" option
+		} else {
+			totalItems = len(m.availableModels) + 1 // +1 for "auto" option
+		}
 		visibleCount := min(totalItems, maxPickerVisible)
 
 		// Calculate content lines: title + blank + items + reserved scroll indicator space

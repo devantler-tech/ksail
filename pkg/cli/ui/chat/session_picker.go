@@ -164,6 +164,7 @@ func (m *Model) startNewSession() error {
 
 	// Clear all state for new session
 	m.messages = []chatMessage{}
+	m.agentMode = true // New chats start in agent mode by default
 	m.resetStreamingState()
 	m.updateViewportContent()
 	return nil
@@ -172,7 +173,8 @@ func (m *Model) startNewSession() error {
 // loadSession loads a chat session into the model using the Copilot SDK.
 func (m *Model) loadSession(metadata *SessionMetadata) {
 	m.currentSessionID = metadata.ID
-	m.agentMode = metadata.AgentMode // Restore mode from session
+	// Restore mode from session (nil or true = agent mode, false = plan mode)
+	m.agentMode = metadata.AgentMode == nil || *metadata.AgentMode
 
 	m.cleanup()
 	if m.session != nil {
@@ -263,11 +265,12 @@ func (m *Model) saveCurrentSession() error {
 		return nil
 	}
 
+	agentMode := m.agentMode
 	metadata := &SessionMetadata{
 		ID:        sessionID,
 		Model:     m.currentModel,
 		Name:      GenerateSessionName(m.messages),
-		AgentMode: m.agentMode,
+		AgentMode: &agentMode,
 	}
 
 	if err := SaveSession(metadata); err != nil {
