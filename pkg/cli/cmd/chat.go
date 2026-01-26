@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"syscall"
@@ -556,9 +557,16 @@ func formatToolArguments(args any) string {
 		return ""
 	}
 
-	parts := make([]string, 0, len(params))
-	for k, v := range params {
-		parts = append(parts, fmt.Sprintf("%s=%v", k, v))
+	// Sort keys for consistent output (Go map iteration order is non-deterministic)
+	keys := make([]string, 0, len(params))
+	for k := range params {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	parts := make([]string, 0, len(keys))
+	for _, k := range keys {
+		parts = append(parts, fmt.Sprintf("%s=%v", k, params[k]))
 	}
 	return strings.Join(parts, ", ")
 }

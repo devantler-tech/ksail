@@ -206,10 +206,8 @@ func (m *Model) GetEventChannel() chan tea.Msg {
 
 // Init initializes the model and returns an initial command.
 func (m *Model) Init() tea.Cmd {
-	// Auto-load most recent session if available
-	if metadata, err := GetMostRecentSession(); err == nil {
-		m.loadSession(metadata)
-	}
+	// Do not auto-load or replace the existing session here.
+	// Session loading should be driven explicitly by the caller or user actions.
 	return tea.Batch(textarea.Blink, m.spinner.Tick)
 }
 
