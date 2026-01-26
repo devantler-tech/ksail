@@ -312,7 +312,7 @@ func (m *Model) renderToolOutput(
 	if truncated {
 		builder.WriteString(
 			toolOutputStyle.Render(
-				fmt.Sprintf("      ... (%d more lines, press ^T for full output)",
+				fmt.Sprintf("      ... (%d more lines, press ^T to expand tool outputs)",
 					len(strings.Split(output, "\n"))-maxToolOutputLines),
 			),
 		)
