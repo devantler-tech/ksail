@@ -331,10 +331,7 @@ func (m *Model) View() string {
 
 	// Header with logo and right-aligned status indicator
 	// Calculate content width inside border (border=2, padding=4)
-	headerContentWidth := m.width - 6
-	if headerContentWidth < 1 {
-		headerContentWidth = 1
-	}
+	headerContentWidth := max(m.width-6, 1)
 
 	// Truncate each logo line by display width (handles Unicode properly)
 	// This clips the logo at narrow widths rather than wrapping
@@ -374,10 +371,7 @@ func (m *Model) View() string {
 		// Calculate spacing to push status to the right
 		taglineLen := lipgloss.Width(taglineText)
 		statusLen := lipgloss.Width(statusText)
-		spacing := headerContentWidth - taglineLen - statusLen
-		if spacing < 2 {
-			spacing = 2
-		}
+		spacing := max(headerContentWidth-taglineLen-statusLen, 2)
 		taglineRow = taglineText + strings.Repeat(" ", spacing) + statusText
 	}
 	// Clip tagline row to content width and prevent wrapping
@@ -525,11 +519,7 @@ func (m *Model) updateDimensions() {
 	// Calculate available height: total - header - input - footer - borders - modal
 	// Each bordered box adds 2 lines (top + bottom border)
 	modalHeight := m.activeModalHeight()
-	viewportHeight := m.height - headerHeight - inputHeight - footerHeight - 4 - modalHeight
-
-	if viewportHeight < 5 {
-		viewportHeight = 5
-	}
+	viewportHeight := max(m.height-headerHeight-inputHeight-footerHeight-4-modalHeight, 5)
 
 	oldWidth := m.viewport.Width
 	m.viewport.Width = contentWidth - 2

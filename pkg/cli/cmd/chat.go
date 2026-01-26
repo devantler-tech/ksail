@@ -252,18 +252,16 @@ func runTUIChat(
 
 	// Track when forwarder goroutine exits
 	var forwarderWg sync.WaitGroup
-	forwarderWg.Add(1)
 
 	// Forward output chunks to the TUI event channel
-	go func() {
-		defer forwarderWg.Done()
+	forwarderWg.Go(func() {
 		for chunk := range outputChan {
 			eventChan <- chatui.ToolOutputChunkMsg{
 				ToolID: chunk.ToolID,
 				Chunk:  chunk.Chunk,
 			}
 		}
-	}()
+	})
 
 	// Set up tools with real-time output streaming
 	// Tool handlers create their own timeout context since SDK's ToolHandler interface doesn't include context.
@@ -523,7 +521,7 @@ func getToolArgs(event copilot.SessionEvent) string {
 	if event.Data.Arguments == nil {
 		return ""
 	}
-	args, ok := event.Data.Arguments.(map[string]interface{})
+	args, ok := event.Data.Arguments.(map[string]any)
 	if !ok {
 		return ""
 	}

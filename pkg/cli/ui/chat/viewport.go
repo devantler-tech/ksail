@@ -31,10 +31,7 @@ func (m *Model) updateViewportContent() {
 
 // calculateWrapWidth calculates the content width for text wrapping.
 func (m *Model) calculateWrapWidth() uint {
-	wrapWidth := m.viewport.Width - 4
-	if wrapWidth < 20 {
-		wrapWidth = 20
-	}
+	wrapWidth := max(m.viewport.Width-4, 20)
 	return uint(wrapWidth) //nolint:gosec // wrapWidth is guaranteed >= 20
 }
 
@@ -130,7 +127,7 @@ func (m *Model) renderTextSegment(builder *strings.Builder, text string, wrapWid
 		return
 	}
 	wrapped := wordwrap.WrapString(text, wrapWidth)
-	for _, line := range strings.Split(wrapped, "\n") {
+	for line := range strings.SplitSeq(wrapped, "\n") {
 		builder.WriteString("  ")
 		builder.WriteString(line)
 		builder.WriteString("\n")
@@ -308,7 +305,7 @@ func (m *Model) renderToolOutput(
 	output = strings.Join(lines, "\n")
 	wrapped := wordwrap.WrapString(output, wrapWidth-6)
 
-	for _, line := range strings.Split(wrapped, "\n") {
+	for line := range strings.SplitSeq(wrapped, "\n") {
 		builder.WriteString(toolOutputStyle.Render("      " + line))
 		builder.WriteString("\n")
 	}
