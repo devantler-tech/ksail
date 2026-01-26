@@ -543,11 +543,11 @@ func getToolArgs(event copilot.SessionEvent) string {
 // mutabilityPattern matches tool names that indicate mutable/destructive operations.
 // Read-only operations (get, list, info, describe, logs, status) are auto-approved.
 // Pattern covers: create, delete, start, stop, apply, write, remove, destroy, update, patch, set, configure, etc.
-// Note: No word boundaries (\b) because tool names use underscores (e.g., ksail_cluster_create)
-// and underscore is a word character, so \b won't match before/after underscore-separated words.
+// Uses underscore-aware boundaries to match complete tool name segments (e.g., matches "create" in
+// "ksail_cluster_create" but not in "ksail_cluster_recreate").
 var mutabilityPattern = regexp.MustCompile(
-	`(?i)(create|delete|start|stop|restart|apply|write|remove|` +
-		`destroy|edit|scale|rollout|init|update|patch|set|configure)`,
+	`(?i)(?:^|_)(create|delete|start|stop|restart|apply|write|remove|` +
+		`destroy|edit|scale|rollout|init|update|patch|set|configure)(?:_|$)`,
 )
 
 // isMutableTool checks if a tool name indicates a mutable operation.
