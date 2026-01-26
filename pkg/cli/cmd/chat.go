@@ -576,15 +576,15 @@ func formatToolArguments(args any) string {
 func wrapToolsWithPermission(tools []copilot.Tool, eventChan chan tea.Msg) []copilot.Tool {
 	wrappedTools := make([]copilot.Tool, len(tools))
 
-	for i, tool := range tools {
-		wrappedTools[i] = tool
+	for toolIdx, tool := range tools {
+		wrappedTools[toolIdx] = tool
 
 		// Only wrap mutable tools that need permission
 		if isMutableTool(tool.Name) {
 			originalHandler := tool.Handler
 			toolName := tool.Name
 
-			wrappedTools[i].Handler = func(invocation copilot.ToolInvocation) (copilot.ToolResult, error) {
+			wrappedTools[toolIdx].Handler = func(invocation copilot.ToolInvocation) (copilot.ToolResult, error) {
 				// Create channel for permission response
 				responseChan := make(chan bool, 1)
 

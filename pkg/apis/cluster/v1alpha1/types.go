@@ -61,7 +61,7 @@ type WorkloadSpec struct {
 
 // ChatSpec defines AI chat assistant configuration.
 type ChatSpec struct {
-	Model string `json:"model,omitzero" jsonschema:"description=Model to use for chat (empty string or 'auto' lets the API choose)"`
+	Model string `json:"model,omitzero" jsonschema:"description=Chat model (empty or 'auto' for API default)"`
 }
 
 // Connection defines connection options for a KSail cluster.

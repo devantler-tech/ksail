@@ -58,7 +58,7 @@ func ListSessions() ([]SessionMetadata, error) {
 		return nil, fmt.Errorf("failed to read sessions directory: %w", err)
 	}
 
-	var sessions []SessionMetadata
+	sessions := make([]SessionMetadata, 0, len(entries))
 	for _, entry := range entries {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
 			continue
