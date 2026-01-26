@@ -2306,7 +2306,7 @@ func (m *Model) renderSessionPickerModal() string {
 		) + "\n\n")
 	} else {
 		listContent.WriteString(
-			clipStyle.Render("Chat History") + "\n",
+			clipStyle.Render("Chat History") + "\n\n",
 		)
 	}
 
