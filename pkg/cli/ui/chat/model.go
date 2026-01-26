@@ -18,11 +18,13 @@ import (
 )
 
 const (
-	defaultWidth  = 100
-	defaultHeight = 30
-	inputHeight   = 3
-	headerHeight  = logoHeight + 3 // logo + tagline + border
-	footerHeight  = 1              // single line help text
+	defaultWidth       = 100
+	defaultHeight      = 30
+	inputHeight        = 3
+	headerHeight       = logoHeight + 3 // logo + tagline + border
+	footerHeight       = 1              // single line help text
+	modelPickerHeight  = 16             // title + 10 visible items + scroll indicators + borders/padding
+	permissionModalMax = 12             // title + tool + command + args + question + buttons + borders/padding
 )
 
 // chatMessage represents a single message in the chat history.
@@ -33,6 +35,13 @@ type chatMessage struct {
 	isStreaming bool
 	tools       []*toolExecution // tools executed during this assistant message
 	toolOrder   []string         // ordered tool IDs for this message
+}
+
+// permissionResponse records a user's response to a permission request.
+type permissionResponse struct {
+	toolName string
+	command  string
+	allowed  bool
 }
 
 // Model is the Bubbletea model for the chat TUI.
@@ -80,10 +89,14 @@ type Model struct {
 	ctx           context.Context
 
 	// Model selection
-	currentModel      string              // currently selected model ID
-	availableModels   []copilot.ModelInfo // models the user has access to
-	showModelPicker   bool                // true when model picker overlay is visible
-	modelPickerIndex  int                 // currently highlighted model in picker
+	currentModel     string              // currently selected model ID
+	availableModels  []copilot.ModelInfo // models the user has access to
+	showModelPicker  bool                // true when model picker overlay is visible
+	modelPickerIndex int                 // currently highlighted model in picker
+
+	// Permission request handling
+	pendingPermission *permissionRequestMsg // current permission request awaiting user response
+	permissionHistory []permissionResponse  // history of permission decisions
 
 	// Markdown renderer (cached to avoid terminal queries)
 	renderer *glamour.TermRenderer
@@ -241,6 +254,18 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case ToolOutputChunkMsg:
 		return m.handleToolOutputChunk(msg.ToolID, msg.Chunk)
 
+	case permissionRequestMsg:
+		return m.handlePermissionRequest(&msg)
+
+	case PermissionRequestMsg:
+		return m.handlePermissionRequest(&permissionRequestMsg{
+			toolCallID: msg.ToolCallID,
+			toolName:   msg.ToolName,
+			command:    msg.Command,
+			arguments:  msg.Arguments,
+			response:   msg.Response,
+		})
+
 	case streamEndMsg:
 		return m.handleStreamEnd()
 
@@ -319,9 +344,11 @@ func (m *Model) View() string {
 
 	// Build status with model name
 	var statusParts []string
+	modelStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8))
 	if m.currentModel != "" {
-		modelStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8))
 		statusParts = append(statusParts, modelStyle.Render(m.currentModel))
+	} else {
+		statusParts = append(statusParts, modelStyle.Render("auto"))
 	}
 	if m.isStreaming {
 		statusParts = append(statusParts, m.spinner.View()+" "+statusStyle.Render("Thinking..."))
@@ -353,9 +380,16 @@ func (m *Model) View() string {
 	chatContent := viewportStyle.Width(m.width - 2).Render(m.viewport.View())
 	sections = append(sections, chatContent)
 
-	// Input area - box handles clipping via fixed width
-	inputContent := inputStyle.Width(m.width - 2).Render(m.textarea.View())
-	sections = append(sections, inputContent)
+	// Show modal OR input area (modal replaces input when active)
+	if m.pendingPermission != nil {
+		sections = append(sections, m.renderPermissionModal())
+	} else if m.showModelPicker {
+		sections = append(sections, m.renderModelPickerModal())
+	} else {
+		// Input area - box handles clipping via fixed width
+		inputContent := inputStyle.Width(m.width - 2).Render(m.textarea.View())
+		sections = append(sections, inputContent)
+	}
 
 	// Footer/help - clip to terminal width to prevent wrapping
 	var helpText string
@@ -378,20 +412,18 @@ func (m *Model) View() string {
 
 	// Join sections and clip final output to terminal width to prevent any wrapping
 	output := lipgloss.JoinVertical(lipgloss.Left, sections...)
-	baseView := lipgloss.NewStyle().MaxWidth(m.width).Render(output)
-
-	// Render model picker overlay if active
-	if m.showModelPicker {
-		return m.renderModelPickerOverlay(baseView)
-	}
-
-	return baseView
+	return lipgloss.NewStyle().MaxWidth(m.width).Render(output)
 }
 
 // handleKeyMsg handles keyboard input.
 //
 //nolint:gocyclo // Key handlers inherently have high cyclomatic complexity due to many case branches.
 func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Handle permission prompt first (highest priority overlay)
+	if m.pendingPermission != nil {
+		return m.handlePermissionKey(msg)
+	}
+
 	// Handle model picker navigation when active
 	if m.showModelPicker {
 		return m.handleModelPickerKey(msg)
@@ -423,12 +455,18 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Open model picker (only when not streaming)
 		if !m.isStreaming && len(m.availableModels) > 0 {
 			m.showModelPicker = true
+			m.updateDimensions() // Shrink viewport to make room for modal
 			// Set picker index to current model
-			m.modelPickerIndex = 0
-			for i, model := range m.availableModels {
-				if model.ID == m.currentModel {
-					m.modelPickerIndex = i
-					break
+			// Index 0 = "auto", Index 1+ = availableModels[i-1]
+			if m.currentModel == "" || m.currentModel == "auto" {
+				m.modelPickerIndex = 0
+			} else {
+				m.modelPickerIndex = 0 // default to auto if not found
+				for i, model := range m.availableModels {
+					if model.ID == m.currentModel {
+						m.modelPickerIndex = i + 1 // offset by 1 for auto option
+						break
+					}
 				}
 			}
 		}
@@ -983,14 +1021,58 @@ func (m *Model) cleanup() {
 	m.drainEventChannel()
 }
 
+// activeModalHeight returns the extra height needed for the currently active modal
+// beyond the input area height (since modals replace the input area).
+func (m *Model) activeModalHeight() int {
+	if m.pendingPermission != nil {
+		// Calculate actual permission modal height based on content
+		// title(1) + blank(1) + tool(1) + blank(1) + "Allow?"(1) + blank(1) + buttons(1) = 7 base
+		lines := 7
+		if m.pendingPermission.command != "" {
+			lines++
+		}
+		if m.pendingPermission.arguments != "" {
+			lines++
+		}
+		modalHeight := lines
+		// Return extra height beyond input area
+		if modalHeight > inputHeight {
+			return modalHeight - inputHeight
+		}
+		return 0
+	}
+	if m.showModelPicker {
+		// Calculate actual model picker height based on content
+		totalItems := len(m.availableModels) + 1 // +1 for "auto" option
+		const maxVisible = 5
+		visibleCount := min(totalItems, maxVisible)
+
+		// Calculate content lines: title + blank + items + reserved scroll indicator space
+		lines := 0 // title line + blank line
+		lines += visibleCount
+		if totalItems > maxVisible {
+			lines += 2 // always reserve space for scroll indicators (up + down)
+		}
+		modalHeight := lines // +2 for border (top + bottom)
+
+		// Return extra height beyond input area
+		if modalHeight > inputHeight {
+			return modalHeight - inputHeight
+		}
+		return 0
+	}
+	return 0
+}
+
 // updateDimensions updates component dimensions based on terminal size.
 func (m *Model) updateDimensions() {
 	// Account for borders and padding
 	contentWidth := m.width - 4
 
-	// Calculate available height: total - header - input - footer - borders
+	// Calculate available height: total - header - input - footer - borders - modal
 	// Each bordered box adds 2 lines (top + bottom border)
-	viewportHeight := m.height - headerHeight - inputHeight - footerHeight - 4
+	modalHeight := m.activeModalHeight()
+	viewportHeight := m.height - headerHeight - inputHeight - footerHeight - 4 - modalHeight
 
 	if viewportHeight < 5 {
 		viewportHeight = 5
@@ -1046,12 +1128,11 @@ func (m *Model) updateViewportContent() {
 			builder.WriteString("\n\n")
 			// Wrap user content
 			wrapped := wordwrap.WrapString(msg.content, wrapWidthUint)
-			for _, line := range strings.Split(wrapped, "\n") {
+			for line := range strings.SplitSeq(wrapped, "\n") {
 				builder.WriteString("  ")
 				builder.WriteString(line)
 				builder.WriteString("\n")
 			}
-			builder.WriteString("\n")
 
 		case "assistant":
 			builder.WriteString("\n")
@@ -1145,7 +1226,7 @@ func (m *Model) updateViewportContent() {
 		case "tool-output":
 			// Legacy tool output - still render for backward compatibility
 			wrapped := wordwrap.WrapString(msg.content, wrapWidthUint-2)
-			for _, line := range strings.Split(wrapped, "\n") {
+			for line := range strings.SplitSeq(wrapped, "\n") {
 				builder.WriteString(toolOutputStyle.Render("    " + line))
 				builder.WriteString("\n")
 			}
@@ -1436,7 +1517,15 @@ func RunWithEventChannel(
 	timeout time.Duration,
 	eventChan chan tea.Msg,
 ) error {
-	model := NewWithEventChannel(session, client, sessionConfig, models, currentModel, timeout, eventChan)
+	model := NewWithEventChannel(
+		session,
+		client,
+		sessionConfig,
+		models,
+		currentModel,
+		timeout,
+		eventChan,
+	)
 	model.ctx = ctx
 	program := tea.NewProgram(
 		model,
@@ -1461,10 +1550,14 @@ func (m *Model) hasRunningTools() bool {
 
 // handleModelPickerKey handles keyboard input when the model picker is active.
 func (m *Model) handleModelPickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Total items = 1 (auto) + len(availableModels)
+	totalItems := len(m.availableModels) + 1
+
 	switch msg.String() {
 	case "esc", "ctrl+o":
 		// Close picker without changing model
 		m.showModelPicker = false
+		m.updateDimensions() // Restore viewport height
 		return m, nil
 	case "up", "k":
 		if m.modelPickerIndex > 0 {
@@ -1472,20 +1565,26 @@ func (m *Model) handleModelPickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case "down", "j":
-		if m.modelPickerIndex < len(m.availableModels)-1 {
+		if m.modelPickerIndex < totalItems-1 {
 			m.modelPickerIndex++
 		}
 		return m, nil
 	case "enter":
 		// Select the model and close picker
-		if m.modelPickerIndex >= 0 && m.modelPickerIndex < len(m.availableModels) {
-			selectedModel := m.availableModels[m.modelPickerIndex]
+		if m.modelPickerIndex == 0 {
+			// "auto" option selected
+			if m.currentModel != "" && m.currentModel != "auto" {
+				return m.switchModel("")
+			}
+		} else if m.modelPickerIndex > 0 && m.modelPickerIndex < totalItems {
+			// Regular model selected (offset by 1 for auto option)
+			selectedModel := m.availableModels[m.modelPickerIndex-1]
 			if selectedModel.ID != m.currentModel {
-				// Switch to new model
 				return m.switchModel(selectedModel.ID)
 			}
 		}
 		m.showModelPicker = false
+		m.updateDimensions() // Restore viewport height
 		return m, nil
 	case "ctrl+c":
 		m.cleanup()
@@ -1512,6 +1611,7 @@ func (m *Model) switchModel(newModelID string) (tea.Model, tea.Cmd) {
 	if err != nil {
 		m.err = fmt.Errorf("failed to switch model: %w", err)
 		m.showModelPicker = false
+		m.updateDimensions() // Restore viewport height
 		return m, nil
 	}
 	m.session = session
@@ -1526,6 +1626,7 @@ func (m *Model) switchModel(newModelID string) (tea.Model, tea.Cmd) {
 	m.sessionComplete = false
 
 	m.showModelPicker = false
+	m.updateDimensions() // Restore viewport height
 	m.updateViewportContent()
 	return m, nil
 }
@@ -1538,17 +1639,20 @@ func (m *Model) renderModelPickerOverlay(baseView string) string {
 		overlayWidth = 30
 	}
 
-	// Max 10 visible models
+	// Build list of display items: "auto" option + available models
+	// Index 0 = "auto", Index 1+ = availableModels[i-1]
+	totalItems := len(m.availableModels) + 1 // +1 for "auto" option
+
+	// Max 10 visible items
 	const maxVisible = 10
-	totalModels := len(m.availableModels)
-	visibleCount := totalModels
+	visibleCount := totalItems
 	if visibleCount > maxVisible {
 		visibleCount = maxVisible
 	}
 
 	// Calculate scroll offset to keep selected item visible
 	scrollOffset := 0
-	if totalModels > maxVisible {
+	if totalItems > maxVisible {
 		// Keep selected item in view with some padding
 		if m.modelPickerIndex >= scrollOffset+maxVisible {
 			scrollOffset = m.modelPickerIndex - maxVisible + 1
@@ -1557,8 +1661,8 @@ func (m *Model) renderModelPickerOverlay(baseView string) string {
 			scrollOffset = m.modelPickerIndex
 		}
 		// Clamp scroll offset
-		if scrollOffset > totalModels-maxVisible {
-			scrollOffset = totalModels - maxVisible
+		if scrollOffset > totalItems-maxVisible {
+			scrollOffset = totalItems - maxVisible
 		}
 		if scrollOffset < 0 {
 			scrollOffset = 0
@@ -1571,34 +1675,47 @@ func (m *Model) renderModelPickerOverlay(baseView string) string {
 
 	// Show scroll indicator if needed
 	if scrollOffset > 0 {
-		listContent.WriteString(lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8)).Render("  ↑ more above\n"))
+		listContent.WriteString(
+			lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8)).Render("  ↑ more above\n"),
+		)
 	}
 
-	// Render visible models
+	// Render visible items
 	endIdx := scrollOffset + visibleCount
-	if endIdx > totalModels {
-		endIdx = totalModels
+	if endIdx > totalItems {
+		endIdx = totalItems
 	}
 	for i := scrollOffset; i < endIdx; i++ {
-		model := m.availableModels[i]
 		prefix := "  "
 		if i == m.modelPickerIndex {
 			prefix = "> "
 		}
 
-		// Format: name (multiplier)
-		multiplier := ""
-		if model.Billing != nil && model.Billing.Multiplier > 0 {
-			multiplier = fmt.Sprintf(" (%.0fx)", model.Billing.Multiplier)
+		var line string
+		var isCurrentModel bool
+
+		if i == 0 {
+			// "auto" option - lets the API choose the best model
+			line = prefix + "auto (let Copilot choose)"
+			isCurrentModel = m.currentModel == "" || m.currentModel == "auto"
+		} else {
+			// Regular model from availableModels (index offset by 1)
+			model := m.availableModels[i-1]
+
+			// Format: name (multiplier)
+			multiplier := ""
+			if model.Billing != nil && model.Billing.Multiplier > 0 {
+				multiplier = fmt.Sprintf(" (%.0fx)", model.Billing.Multiplier)
+			}
+
+			line = fmt.Sprintf("%s%s%s", prefix, model.ID, multiplier)
+			isCurrentModel = model.ID == m.currentModel
 		}
 
 		// Add checkmark if this is the current model
-		checkmark := ""
-		if model.ID == m.currentModel {
-			checkmark = " ✓"
+		if isCurrentModel {
+			line += " ✓"
 		}
-
-		line := fmt.Sprintf("%s%s%s%s", prefix, model.ID, multiplier, checkmark)
 
 		if i == m.modelPickerIndex {
 			// Highlight selected item
@@ -1606,7 +1723,7 @@ func (m *Model) renderModelPickerOverlay(baseView string) string {
 				Foreground(lipgloss.ANSIColor(14)). // Bright cyan
 				Bold(true).
 				Render(line))
-		} else if model.ID == m.currentModel {
+		} else if isCurrentModel {
 			// Current model indicator
 			listContent.WriteString(lipgloss.NewStyle().
 				Foreground(lipgloss.ANSIColor(10)). // Bright green
@@ -1618,8 +1735,10 @@ func (m *Model) renderModelPickerOverlay(baseView string) string {
 	}
 
 	// Show scroll indicator if more below
-	if endIdx < totalModels {
-		listContent.WriteString(lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8)).Render("  ↓ more below"))
+	if endIdx < totalItems {
+		listContent.WriteString(
+			lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8)).Render("  ↓ more below"),
+		)
 	}
 
 	// Create styled modal box
@@ -1657,4 +1776,262 @@ func (m *Model) renderModelPickerOverlay(baseView string) string {
 	}
 
 	return strings.Join(baseLines, "\n")
+}
+
+// handlePermissionRequest handles incoming permission request messages.
+func (m *Model) handlePermissionRequest(req *permissionRequestMsg) (tea.Model, tea.Cmd) {
+	// Store the pending permission request for user response
+	m.pendingPermission = req
+	m.updateDimensions()      // Shrink viewport to make room for modal
+	m.updateViewportContent() // Scroll to show latest content above modal
+	// Keep waiting for user input
+	return m, nil
+}
+
+// handlePermissionKey handles keyboard input when a permission prompt is active.
+func (m *Model) handlePermissionKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.pendingPermission == nil {
+		return m, nil
+	}
+
+	switch msg.String() {
+	case "y", "Y":
+		// User approved - send response and record in history
+		m.permissionHistory = append(m.permissionHistory, permissionResponse{
+			toolName: m.pendingPermission.toolName,
+			command:  m.pendingPermission.command,
+			allowed:  true,
+		})
+		m.pendingPermission.response <- true
+		m.pendingPermission = nil
+		m.updateDimensions() // Restore viewport height
+		m.updateViewportContent()
+		return m, m.waitForEvent()
+
+	case "n", "N", "esc":
+		// User denied - send response and record in history
+		m.permissionHistory = append(m.permissionHistory, permissionResponse{
+			toolName: m.pendingPermission.toolName,
+			command:  m.pendingPermission.command,
+			allowed:  false,
+		})
+		m.pendingPermission.response <- false
+		m.pendingPermission = nil
+		m.updateDimensions() // Restore viewport height
+		m.updateViewportContent()
+		return m, m.waitForEvent()
+
+	case "ctrl+c":
+		// Deny and quit
+		m.pendingPermission.response <- false
+		m.pendingPermission = nil
+		m.cleanup()
+		m.quitting = true
+		return m, tea.Quit
+	}
+
+	return m, nil
+}
+
+// renderPermissionModal renders the permission prompt as an inline modal section.
+func (m *Model) renderPermissionModal() string {
+	if m.pendingPermission == nil {
+		return ""
+	}
+
+	// Calculate modal width - match other UI elements
+	modalWidth := m.width - 2
+
+	// Calculate content width (modal width - border - padding)
+	contentWidth := modalWidth - 4 // -2 for borders, -2 for padding (1 each side)
+	if contentWidth < 1 {
+		contentWidth = 1
+	}
+
+	// Style for clipping text to content width
+	clipStyle := lipgloss.NewStyle().MaxWidth(contentWidth).Inline(true)
+
+	// Warning text style (yellow) - for title only
+	warningStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(11))
+
+	// Build permission prompt content and count lines
+	var content strings.Builder
+	contentLines := 0
+
+	content.WriteString(clipStyle.Render(warningStyle.Render("⚠️  Permission Required")) + "\n\n")
+	contentLines += 2 // title + blank
+
+	// Show tool name
+	humanName := humanizeToolName(m.pendingPermission.toolName)
+	content.WriteString(clipStyle.Render(fmt.Sprintf("Tool: %s", humanName)) + "\n")
+	contentLines++
+
+	// Show command if available
+	if m.pendingPermission.command != "" {
+		content.WriteString(clipStyle.Render(fmt.Sprintf("Command: %s", m.pendingPermission.command)) + "\n")
+		contentLines++
+	}
+
+	// Show arguments if available
+	if m.pendingPermission.arguments != "" {
+		content.WriteString(clipStyle.Render(fmt.Sprintf("Arguments: %s", m.pendingPermission.arguments)) + "\n")
+		contentLines++
+	}
+
+	content.WriteString("\n" + clipStyle.Render("Allow this operation?") + "\n")
+	contentLines += 2 // blank + "Allow this operation?"
+
+	content.WriteString("\n" + clipStyle.Render("[Y] Allow  [N] Deny  [esc] Cancel"))
+	contentLines += 2 // blank + buttons
+
+	// Create styled modal box with warning color and explicit height
+	modalStyle := lipgloss.NewStyle().
+		BorderStyle(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.ANSIColor(11)). // Yellow/warning
+		PaddingLeft(1).
+		PaddingRight(1).
+		Width(modalWidth).
+		Height(contentLines)
+
+	return modalStyle.Render(strings.TrimRight(content.String(), "\n"))
+}
+
+// renderModelPickerModal renders the model picker as an inline modal section.
+func (m *Model) renderModelPickerModal() string {
+	// Calculate modal width - match other UI elements
+	modalWidth := m.width - 2
+
+	// Calculate content width (modal width - border - padding)
+	contentWidth := max(
+		// -2 for borders, -2 for padding (1 each side)
+		modalWidth-4, 1)
+
+	// Style for clipping text to content width
+	clipStyle := lipgloss.NewStyle().MaxWidth(contentWidth).Inline(true)
+
+	// Build list of display items: "auto" option + available models
+	// Index 0 = "auto", Index 1+ = availableModels[i-1]
+	totalItems := len(m.availableModels) + 1 // +1 for "auto" option
+
+	// Max 10 visible items
+	const maxVisible = 5
+	visibleCount := min(totalItems, maxVisible)
+
+	// Calculate scroll offset to keep selected item visible
+	scrollOffset := 0
+	if totalItems > maxVisible {
+		// Keep selected item in view with some padding
+		if m.modelPickerIndex >= scrollOffset+maxVisible {
+			scrollOffset = m.modelPickerIndex - maxVisible + 1
+		}
+		if m.modelPickerIndex < scrollOffset {
+			scrollOffset = m.modelPickerIndex
+		}
+		// Clamp scroll offset
+		if scrollOffset > totalItems-maxVisible {
+			scrollOffset = totalItems - maxVisible
+		}
+		if scrollOffset < 0 {
+			scrollOffset = 0
+		}
+	}
+
+	// Build model list content
+	var listContent strings.Builder
+	listContent.WriteString(clipStyle.Render("Select Model (↑↓ navigate, ⏎ select, esc cancel)") + "\n")
+
+	// Determine if list is scrollable
+	isScrollable := totalItems > maxVisible
+
+	// Always reserve space for "more above" when scrollable
+	if isScrollable {
+		if scrollOffset > 0 {
+			listContent.WriteString(clipStyle.Render(
+				lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8)).Render("  ↑ more above"),
+			) + "\n")
+		} else {
+			listContent.WriteString("\n") // blank placeholder
+		}
+	}
+
+	// Render visible items
+	endIdx := min(scrollOffset + visibleCount, totalItems)
+	for i := scrollOffset; i < endIdx; i++ {
+		prefix := "  "
+		if i == m.modelPickerIndex {
+			prefix = "> "
+		}
+
+		var line string
+		var isCurrentModel bool
+
+		if i == 0 {
+			// "auto" option - lets the API choose the best model
+			line = prefix + "auto (let Copilot choose)"
+			isCurrentModel = m.currentModel == "" || m.currentModel == "auto"
+		} else {
+			// Regular model from availableModels (index offset by 1)
+			model := m.availableModels[i-1]
+
+			// Format: name (multiplier)
+			multiplier := ""
+			if model.Billing != nil && model.Billing.Multiplier > 0 {
+				multiplier = fmt.Sprintf(" (%.0fx)", model.Billing.Multiplier)
+			}
+
+			line = fmt.Sprintf("%s%s%s", prefix, model.ID, multiplier)
+			isCurrentModel = model.ID == m.currentModel
+		}
+
+		// Add checkmark if this is the current model
+		if isCurrentModel {
+			line += " ✓"
+		}
+
+		var styledLine string
+		if i == m.modelPickerIndex {
+			// Highlight selected item
+			styledLine = lipgloss.NewStyle().
+				Foreground(lipgloss.ANSIColor(14)). // Bright cyan
+				Bold(true).
+				Render(line)
+		} else if isCurrentModel {
+			// Current model indicator
+			styledLine = lipgloss.NewStyle().
+				Foreground(lipgloss.ANSIColor(10)). // Bright green
+				Render(line)
+		} else {
+			styledLine = line
+		}
+
+		listContent.WriteString(clipStyle.Render(styledLine) + "\n")
+	}
+
+	// Always reserve space for "more below" when scrollable
+	if isScrollable {
+		if endIdx < totalItems {
+			listContent.WriteString(clipStyle.Render(
+				lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8)).Render("  ↓ more below"),
+			))
+		}
+		// blank placeholder handled by fixed height
+	}
+
+	// Calculate fixed content height for the modal
+	contentLines := 1 // title + blank
+	contentLines += visibleCount
+	if isScrollable {
+		contentLines += 2 // always reserve space for scroll indicators
+	}
+
+	// Create styled modal box with explicit height to prevent size changes
+	modalStyle := lipgloss.NewStyle().
+		BorderStyle(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.ANSIColor(14)). // Bright cyan
+		PaddingLeft(1).
+		PaddingRight(1).
+		Width(modalWidth).
+		Height(contentLines)
+
+	return modalStyle.Render(strings.TrimRight(listContent.String(), "\n"))
 }

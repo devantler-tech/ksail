@@ -183,6 +183,16 @@
           },
           "additionalProperties": false,
           "type": "object"
+        },
+        "chat": {
+          "properties": {
+            "model": {
+              "type": "string",
+              "description": "Model to use for chat (empty string or 'auto' lets the API choose)"
+            }
+          },
+          "additionalProperties": false,
+          "type": "object"
         }
       },
       "additionalProperties": false,
