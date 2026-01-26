@@ -510,7 +510,7 @@ func (m *Model) activeModalHeight() int {
 	if m.pendingPermission != nil {
 		// Calculate actual permission modal height based on content
 		// title(1) + blank(1) + tool(1) + blank(1) + "Allow?"(1) + blank(1) + buttons(1) = 7 base
-		contentLines := 7
+		contentLines := 6
 		if m.pendingPermission.command != "" {
 			contentLines++
 		}
@@ -518,12 +518,9 @@ func (m *Model) activeModalHeight() int {
 			contentLines++
 		}
 
-		// Add borders (2 lines: top + bottom)
-		totalModalLines := contentLines + 2
-
 		// Return extra height beyond input area
-		if totalModalLines > inputHeight {
-			return totalModalLines - inputHeight
+		if contentLines > inputHeight {
+			return contentLines - inputHeight
 		}
 		return 0
 	}
