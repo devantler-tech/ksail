@@ -470,14 +470,23 @@ func (m *Model) handleUserSubmit(msg userSubmitMsg) (tea.Model, tea.Cmd) {
 	// Preserve tool history from the previous turn
 	m.commitToolsToLastAssistantMessage()
 
-	// Save prompt to history and prepare for new turn
+	// Save original prompt to history and prepare for new turn
 	m.addToPromptHistory(msg.content)
 	m.prepareForNewTurn()
 
-	// Add user message and placeholder assistant message
+	// Add compact mode indicator to message for display purposes
+	// The full instruction is sent to the model in streamResponseCmd
+	displayContent := msg.content
+	if m.agentMode {
+		displayContent = "[AGENT] " + msg.content
+	} else {
+		displayContent = "[PLAN] " + msg.content
+	}
+
+	// Add user message with compact mode indicator and placeholder assistant message
 	m.messages = append(m.messages, chatMessage{
 		role:    "user",
-		content: msg.content,
+		content: displayContent,
 	})
 	m.messages = append(m.messages, chatMessage{
 		role:        "assistant",
@@ -487,6 +496,7 @@ func (m *Model) handleUserSubmit(msg userSubmitMsg) (tea.Model, tea.Cmd) {
 	m.updateViewportContent()
 
 	// Start streaming, keep spinner ticking, and wait for events
+	// streamResponseCmd will send the full plan mode instruction to the model
 	return m, tea.Batch(m.spinner.Tick, m.streamResponseCmd(msg.content), m.waitForEvent())
 }
 
