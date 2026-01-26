@@ -72,10 +72,18 @@ type Model struct {
 	width  int
 	height int
 
-	// Copilot session
-	session *copilot.Session
-	timeout time.Duration
-	ctx     context.Context
+	// Copilot session and model switching
+	session       *copilot.Session
+	client        *copilot.Client
+	sessionConfig *copilot.SessionConfig
+	timeout       time.Duration
+	ctx           context.Context
+
+	// Model selection
+	currentModel      string              // currently selected model ID
+	availableModels   []copilot.ModelInfo // models the user has access to
+	showModelPicker   bool                // true when model picker overlay is visible
+	modelPickerIndex  int                 // currently highlighted model in picker
 
 	// Markdown renderer (cached to avoid terminal queries)
 	renderer *glamour.TermRenderer
@@ -85,8 +93,15 @@ type Model struct {
 }
 
 // New creates a new chat TUI model.
-func New(session *copilot.Session, timeout time.Duration) *Model {
-	return NewWithEventChannel(session, timeout, nil)
+func New(
+	session *copilot.Session,
+	client *copilot.Client,
+	sessionConfig *copilot.SessionConfig,
+	models []copilot.ModelInfo,
+	currentModel string,
+	timeout time.Duration,
+) *Model {
+	return NewWithEventChannel(session, client, sessionConfig, models, currentModel, timeout, nil)
 }
 
 // NewWithEventChannel creates a new chat TUI model with an optional pre-existing event channel.
@@ -94,6 +109,10 @@ func New(session *copilot.Session, timeout time.Duration) *Model {
 // to the TUI (e.g., permission requests).
 func NewWithEventChannel(
 	session *copilot.Session,
+	client *copilot.Client,
+	sessionConfig *copilot.SessionConfig,
+	models []copilot.ModelInfo,
+	currentModel string,
 	timeout time.Duration,
 	eventChan chan tea.Msg,
 ) *Model {
@@ -135,21 +154,25 @@ func NewWithEventChannel(
 	}
 
 	return &Model{
-		viewport:     viewPort,
-		textarea:     textArea,
-		spinner:      spin,
-		renderer:     mdRenderer,
-		messages:     make([]chatMessage, 0),
-		session:      session,
-		timeout:      timeout,
-		ctx:          context.Background(),
-		eventChan:    eventChan,
-		width:        defaultWidth,
-		height:       defaultHeight,
-		tools:        make(map[string]*toolExecution),
-		toolOrder:    make([]string, 0),
-		history:      make([]string, 0),
-		historyIndex: -1,
+		viewport:        viewPort,
+		textarea:        textArea,
+		spinner:         spin,
+		renderer:        mdRenderer,
+		messages:        make([]chatMessage, 0),
+		session:         session,
+		client:          client,
+		sessionConfig:   sessionConfig,
+		timeout:         timeout,
+		ctx:             context.Background(),
+		eventChan:       eventChan,
+		width:           defaultWidth,
+		height:          defaultHeight,
+		tools:           make(map[string]*toolExecution),
+		toolOrder:       make([]string, 0),
+		history:         make([]string, 0),
+		historyIndex:    -1,
+		availableModels: models,
+		currentModel:    currentModel,
 	}
 }
 
@@ -293,12 +316,19 @@ func (m *Model) View() string {
 
 	// Build tagline row with right-aligned status
 	taglineText := taglineStyle.Render("  " + tagline())
-	statusText := ""
-	if m.isStreaming {
-		statusText = m.spinner.View() + " " + statusStyle.Render("Thinking...")
-	} else if m.justCompleted {
-		statusText = statusStyle.Render("Ready ✓")
+
+	// Build status with model name
+	var statusParts []string
+	if m.currentModel != "" {
+		modelStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8))
+		statusParts = append(statusParts, modelStyle.Render(m.currentModel))
 	}
+	if m.isStreaming {
+		statusParts = append(statusParts, m.spinner.View()+" "+statusStyle.Render("Thinking..."))
+	} else if m.justCompleted {
+		statusParts = append(statusParts, statusStyle.Render("Ready ✓"))
+	}
+	statusText := strings.Join(statusParts, " • ")
 
 	// Clip tagline if too wide
 	taglineRow := taglineText
@@ -339,22 +369,34 @@ func (m *Model) View() string {
 		}
 	}
 	if hasTools {
-		helpText = "  ⏎ Send • ↑↓ History • PgUp/Dn Scroll • ⇥ Toggle • ^T All • ^L Clear • esc Quit"
+		helpText = "  ⏎ Send • ↑↓ History • PgUp/Dn Scroll • ⇥ Toggle • ^T All • ^O Model • ^L Clear • esc Quit"
 	} else {
-		helpText = "  ⏎ Send • ↑↓ History • PgUp/Dn Scroll • ^L Clear • esc Quit"
+		helpText = "  ⏎ Send • ↑↓ History • PgUp/Dn Scroll • ^O Model • ^L Clear • esc Quit"
 	}
 	help := lipgloss.NewStyle().MaxWidth(m.width).Inline(true).Render(helpStyle.Render(helpText))
 	sections = append(sections, help)
 
 	// Join sections and clip final output to terminal width to prevent any wrapping
 	output := lipgloss.JoinVertical(lipgloss.Left, sections...)
-	return lipgloss.NewStyle().MaxWidth(m.width).Render(output)
+	baseView := lipgloss.NewStyle().MaxWidth(m.width).Render(output)
+
+	// Render model picker overlay if active
+	if m.showModelPicker {
+		return m.renderModelPickerOverlay(baseView)
+	}
+
+	return baseView
 }
 
 // handleKeyMsg handles keyboard input.
 //
 //nolint:gocyclo // Key handlers inherently have high cyclomatic complexity due to many case branches.
 func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Handle model picker navigation when active
+	if m.showModelPicker {
+		return m.handleModelPickerKey(msg)
+	}
+
 	switch msg.String() {
 	case "ctrl+c":
 		// Always quit on ctrl+c, even during streaming
@@ -377,6 +419,20 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		m.quitting = true
 		return m, tea.Quit
+	case "ctrl+o":
+		// Open model picker (only when not streaming)
+		if !m.isStreaming && len(m.availableModels) > 0 {
+			m.showModelPicker = true
+			// Set picker index to current model
+			m.modelPickerIndex = 0
+			for i, model := range m.availableModels {
+				if model.ID == m.currentModel {
+					m.modelPickerIndex = i
+					break
+				}
+			}
+		}
+		return m, nil
 	case "ctrl+l":
 		// Clear chat history and tool tracking
 		if !m.isStreaming {
@@ -1349,9 +1405,13 @@ func (m *Model) streamResponseCmd(userMessage string) tea.Cmd {
 func Run(
 	ctx context.Context,
 	session *copilot.Session,
+	client *copilot.Client,
+	sessionConfig *copilot.SessionConfig,
+	models []copilot.ModelInfo,
+	currentModel string,
 	timeout time.Duration,
 ) error {
-	model := New(session, timeout)
+	model := New(session, client, sessionConfig, models, currentModel, timeout)
 	model.ctx = ctx
 	program := tea.NewProgram(
 		model,
@@ -1369,10 +1429,14 @@ func Run(
 func RunWithEventChannel(
 	ctx context.Context,
 	session *copilot.Session,
+	client *copilot.Client,
+	sessionConfig *copilot.SessionConfig,
+	models []copilot.ModelInfo,
+	currentModel string,
 	timeout time.Duration,
 	eventChan chan tea.Msg,
 ) error {
-	model := NewWithEventChannel(session, timeout, eventChan)
+	model := NewWithEventChannel(session, client, sessionConfig, models, currentModel, timeout, eventChan)
 	model.ctx = ctx
 	program := tea.NewProgram(
 		model,
@@ -1393,4 +1457,204 @@ func (m *Model) hasRunningTools() bool {
 		}
 	}
 	return false
+}
+
+// handleModelPickerKey handles keyboard input when the model picker is active.
+func (m *Model) handleModelPickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc", "ctrl+o":
+		// Close picker without changing model
+		m.showModelPicker = false
+		return m, nil
+	case "up", "k":
+		if m.modelPickerIndex > 0 {
+			m.modelPickerIndex--
+		}
+		return m, nil
+	case "down", "j":
+		if m.modelPickerIndex < len(m.availableModels)-1 {
+			m.modelPickerIndex++
+		}
+		return m, nil
+	case "enter":
+		// Select the model and close picker
+		if m.modelPickerIndex >= 0 && m.modelPickerIndex < len(m.availableModels) {
+			selectedModel := m.availableModels[m.modelPickerIndex]
+			if selectedModel.ID != m.currentModel {
+				// Switch to new model
+				return m.switchModel(selectedModel.ID)
+			}
+		}
+		m.showModelPicker = false
+		return m, nil
+	case "ctrl+c":
+		m.cleanup()
+		m.quitting = true
+		return m, tea.Quit
+	}
+	return m, nil
+}
+
+// switchModel changes to a new model by recreating the session.
+func (m *Model) switchModel(newModelID string) (tea.Model, tea.Cmd) {
+	// Clean up current session
+	m.cleanup()
+	if m.session != nil {
+		_ = m.session.Destroy()
+	}
+
+	// Update config with new model
+	m.sessionConfig.Model = newModelID
+	m.currentModel = newModelID
+
+	// Create new session
+	session, err := m.client.CreateSession(m.sessionConfig)
+	if err != nil {
+		m.err = fmt.Errorf("failed to switch model: %w", err)
+		m.showModelPicker = false
+		return m, nil
+	}
+	m.session = session
+
+	// Clear streaming state but preserve chat history
+	m.tools = make(map[string]*toolExecution)
+	m.toolOrder = make([]string, 0)
+	m.currentResponse.Reset()
+	m.isStreaming = false
+	m.justCompleted = false
+	m.pendingToolCount = 0
+	m.sessionComplete = false
+
+	m.showModelPicker = false
+	m.updateViewportContent()
+	return m, nil
+}
+
+// renderModelPickerOverlay renders the model picker as a modal overlay at the bottom.
+func (m *Model) renderModelPickerOverlay(baseView string) string {
+	// Calculate overlay dimensions - match other UI elements (header, viewport, input)
+	overlayWidth := m.width - 2
+	if overlayWidth < 30 {
+		overlayWidth = 30
+	}
+
+	// Max 10 visible models
+	const maxVisible = 10
+	totalModels := len(m.availableModels)
+	visibleCount := totalModels
+	if visibleCount > maxVisible {
+		visibleCount = maxVisible
+	}
+
+	// Calculate scroll offset to keep selected item visible
+	scrollOffset := 0
+	if totalModels > maxVisible {
+		// Keep selected item in view with some padding
+		if m.modelPickerIndex >= scrollOffset+maxVisible {
+			scrollOffset = m.modelPickerIndex - maxVisible + 1
+		}
+		if m.modelPickerIndex < scrollOffset {
+			scrollOffset = m.modelPickerIndex
+		}
+		// Clamp scroll offset
+		if scrollOffset > totalModels-maxVisible {
+			scrollOffset = totalModels - maxVisible
+		}
+		if scrollOffset < 0 {
+			scrollOffset = 0
+		}
+	}
+
+	// Build model list content
+	var listContent strings.Builder
+	listContent.WriteString("Select Model (↑↓ navigate, ⏎ select, esc cancel)\n\n")
+
+	// Show scroll indicator if needed
+	if scrollOffset > 0 {
+		listContent.WriteString(lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8)).Render("  ↑ more above\n"))
+	}
+
+	// Render visible models
+	endIdx := scrollOffset + visibleCount
+	if endIdx > totalModels {
+		endIdx = totalModels
+	}
+	for i := scrollOffset; i < endIdx; i++ {
+		model := m.availableModels[i]
+		prefix := "  "
+		if i == m.modelPickerIndex {
+			prefix = "> "
+		}
+
+		// Format: name (multiplier)
+		multiplier := ""
+		if model.Billing != nil && model.Billing.Multiplier > 0 {
+			multiplier = fmt.Sprintf(" (%.0fx)", model.Billing.Multiplier)
+		}
+
+		// Add checkmark if this is the current model
+		checkmark := ""
+		if model.ID == m.currentModel {
+			checkmark = " ✓"
+		}
+
+		line := fmt.Sprintf("%s%s%s%s", prefix, model.ID, multiplier, checkmark)
+
+		if i == m.modelPickerIndex {
+			// Highlight selected item
+			listContent.WriteString(lipgloss.NewStyle().
+				Foreground(lipgloss.ANSIColor(14)). // Bright cyan
+				Bold(true).
+				Render(line))
+		} else if model.ID == m.currentModel {
+			// Current model indicator
+			listContent.WriteString(lipgloss.NewStyle().
+				Foreground(lipgloss.ANSIColor(10)). // Bright green
+				Render(line))
+		} else {
+			listContent.WriteString(line)
+		}
+		listContent.WriteString("\n")
+	}
+
+	// Show scroll indicator if more below
+	if endIdx < totalModels {
+		listContent.WriteString(lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8)).Render("  ↓ more below"))
+	}
+
+	// Create styled modal box
+	modalStyle := lipgloss.NewStyle().
+		BorderStyle(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.ANSIColor(14)). // Bright cyan
+		Padding(0, 2).
+		Width(overlayWidth)
+
+	modal := modalStyle.Render(listContent.String())
+
+	// Calculate position at bottom (covering input area and up into chat)
+	modalHeight := lipgloss.Height(modal)
+	baseLines := strings.Split(baseView, "\n")
+
+	// Position modal at bottom of screen
+	startY := m.height - modalHeight - footerHeight
+	if startY < headerHeight {
+		startY = headerHeight // Don't cover header
+	}
+
+	// Dim background lines that will be overlaid
+	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8))
+	for i := startY; i < len(baseLines) && i < startY+modalHeight; i++ {
+		baseLines[i] = dimStyle.Render(baseLines[i])
+	}
+
+	// Overlay the modal
+	modalLines := strings.Split(modal, "\n")
+	for i, line := range modalLines {
+		y := startY + i
+		if y >= 0 && y < len(baseLines) {
+			baseLines[y] = line
+		}
+	}
+
+	return strings.Join(baseLines, "\n")
 }

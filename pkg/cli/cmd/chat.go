@@ -214,6 +214,27 @@ func runTUIChat(
 	timeout time.Duration,
 	rootCmd *cobra.Command,
 ) error {
+	// Fetch available models
+	allModels, err := client.ListModels()
+	if err != nil {
+		return fmt.Errorf("failed to list models: %w", err)
+	}
+
+	// Filter to only enabled models
+	var models []copilot.ModelInfo
+	for _, m := range allModels {
+		if m.Policy != nil && m.Policy.State == "enabled" {
+			models = append(models, m)
+		}
+	}
+
+	// Determine current model (from flag or default to first available)
+	currentModel := sessionConfig.Model
+	if currentModel == "" && len(models) > 0 {
+		currentModel = models[0].ID
+		sessionConfig.Model = currentModel
+	}
+
 	// Create event channel for TUI communication
 	eventChan := make(chan tea.Msg, 100)
 
@@ -259,7 +280,7 @@ func runTUIChat(
 		}
 	}()
 
-	return chatui.RunWithEventChannel(ctx, session, timeout, eventChan)
+	return chatui.RunWithEventChannel(ctx, session, client, sessionConfig, models, currentModel, timeout, eventChan)
 }
 
 // inputResult holds the result of reading from stdin.
