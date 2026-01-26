@@ -1,6 +1,8 @@
 package chat
 
 import (
+	"strings"
+
 	"github.com/charmbracelet/lipgloss"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/asciiart"
 )
@@ -99,3 +101,83 @@ var (
 	toolCollapsedStyle = lipgloss.NewStyle().
 				Foreground(successColor)
 )
+
+// calculatePickerScrollOffset determines the scroll position for a picker list.
+// It keeps the selected item visible within the visible window.
+func calculatePickerScrollOffset(selectedIndex, totalItems, maxVisible int) int {
+	if totalItems <= maxVisible {
+		return 0
+	}
+	scrollOffset := 0
+	if selectedIndex >= scrollOffset+maxVisible {
+		scrollOffset = selectedIndex - maxVisible + 1
+	}
+	if selectedIndex < scrollOffset {
+		scrollOffset = selectedIndex
+	}
+	if scrollOffset > totalItems-maxVisible {
+		scrollOffset = totalItems - maxVisible
+	}
+	if scrollOffset < 0 {
+		scrollOffset = 0
+	}
+	return scrollOffset
+}
+
+// calculatePickerContentLines calculates the number of content lines for a picker modal.
+func calculatePickerContentLines(visibleCount int, isScrollable bool) int {
+	contentLines := 1 + visibleCount
+	if isScrollable {
+		contentLines += 2
+	}
+	return max(contentLines, 6)
+}
+
+// createPickerModalStyle creates a consistent modal style for picker dialogs.
+func createPickerModalStyle(width, height int) lipgloss.Style {
+	return lipgloss.NewStyle().
+		BorderStyle(lipgloss.RoundedBorder()).
+		BorderForeground(primaryColor).
+		PaddingLeft(1).
+		PaddingRight(1).
+		Width(width).
+		Height(height)
+}
+
+// renderPickerModal finalizes and renders a picker modal with consistent styling.
+func renderPickerModal(content string, modalWidth, visibleCount int, isScrollable bool) string {
+	contentLines := calculatePickerContentLines(visibleCount, isScrollable)
+	modalStyle := createPickerModalStyle(modalWidth, contentLines)
+	return modalStyle.Render(content)
+}
+
+// scrollIndicatorStyle is the style for scroll indicators in pickers.
+var scrollIndicatorStyle = lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8))
+
+// renderScrollIndicatorTop renders the "more above" indicator for a picker.
+func renderScrollIndicatorTop(
+	listContent *strings.Builder,
+	clipStyle lipgloss.Style,
+	isScrollable bool,
+	scrollOffset int,
+) {
+	if isScrollable && scrollOffset > 0 {
+		listContent.WriteString(clipStyle.Render(
+			scrollIndicatorStyle.Render("  ↑ more above"),
+		) + "\n")
+	}
+}
+
+// renderScrollIndicatorBottom renders the "more below" indicator for a picker.
+func renderScrollIndicatorBottom(
+	listContent *strings.Builder,
+	clipStyle lipgloss.Style,
+	isScrollable bool,
+	endIdx, totalItems int,
+) {
+	if isScrollable && endIdx < totalItems {
+		listContent.WriteString(clipStyle.Render(
+			scrollIndicatorStyle.Render("  ↓ more below"),
+		))
+	}
+}

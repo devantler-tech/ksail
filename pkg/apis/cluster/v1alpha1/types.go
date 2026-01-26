@@ -28,6 +28,7 @@ type Spec struct {
 	Editor   string       `json:"editor,omitzero"   jsonschema:"description=Editor command for interactive workflows (e.g. code --wait)"` //nolint:lll
 	Cluster  ClusterSpec  `json:"cluster,omitzero"`
 	Workload WorkloadSpec `json:"workload,omitzero"`
+	Chat     ChatSpec     `json:"chat,omitzero"`
 }
 
 // ClusterSpec defines cluster-related configuration.
@@ -56,6 +57,11 @@ type ClusterSpec struct {
 type WorkloadSpec struct {
 	SourceDirectory string `default:"k8s" json:"sourceDirectory,omitzero"`
 	ValidateOnPush  bool   `              json:"validateOnPush,omitzero"`
+}
+
+// ChatSpec defines AI chat assistant configuration.
+type ChatSpec struct {
+	Model string `json:"model,omitzero" jsonschema:"description=Chat model (empty or 'auto' for API default)"`
 }
 
 // Connection defines connection options for a KSail cluster.

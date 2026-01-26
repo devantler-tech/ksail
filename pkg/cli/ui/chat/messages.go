@@ -71,3 +71,22 @@ type ToolOutputChunkMsg struct {
 	ToolID string
 	Chunk  string
 }
+
+// permissionRequestMsg carries a permission request from a tool execution.
+// The TUI will display this to the user for approval/denial.
+type permissionRequestMsg struct {
+	toolCallID string      // unique identifier for this tool call
+	toolName   string      // name of the tool requesting permission
+	command    string      // the actual command or action being requested
+	arguments  string      // formatted arguments for display
+	response   chan<- bool // channel to send user response (true=allow, false=deny)
+}
+
+// PermissionRequestMsg is the exported version of permissionRequestMsg for external use.
+type PermissionRequestMsg struct {
+	ToolCallID string
+	ToolName   string
+	Command    string
+	Arguments  string
+	Response   chan<- bool
+}

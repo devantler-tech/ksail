@@ -183,6 +183,16 @@
           },
           "additionalProperties": false,
           "type": "object"
+        },
+        "chat": {
+          "properties": {
+            "model": {
+              "type": "string",
+              "description": "Chat model (empty or 'auto' for API default)"
+            }
+          },
+          "additionalProperties": false,
+          "type": "object"
         }
       },
       "additionalProperties": false,

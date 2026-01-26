@@ -22,6 +22,7 @@ func NewClusterSpec() Spec {
 		Editor:   "",
 		Cluster:  NewClusterSubSpec(),
 		Workload: NewWorkloadSubSpec(),
+		Chat:     NewChatSpec(),
 	}
 }
 
@@ -45,6 +46,13 @@ func NewClusterSubSpec() ClusterSpec {
 func NewWorkloadSubSpec() WorkloadSpec {
 	return WorkloadSpec{
 		SourceDirectory: "",
+	}
+}
+
+// NewChatSpec creates a new ChatSpec with default values.
+func NewChatSpec() ChatSpec {
+	return ChatSpec{
+		Model: "", // empty = auto (let API choose)
 	}
 }
 

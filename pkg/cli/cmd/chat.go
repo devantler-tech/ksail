@@ -7,12 +7,15 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"syscall"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	chatui "github.com/devantler-tech/ksail/v5/pkg/cli/ui/chat"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	chatsvc "github.com/devantler-tech/ksail/v5/pkg/svc/chat"
@@ -20,6 +23,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
 	copilot "github.com/github/copilot-sdk/go"
 	"github.com/spf13/cobra"
+	"sigs.k8s.io/yaml"
 )
 
 // NewChatCmd creates and returns the chat command.
@@ -65,10 +69,19 @@ func handleChatRunE(cmd *cobra.Command) error {
 	defer cancel()
 
 	// Get flags early to determine mode
-	model, _ := cmd.Flags().GetString("model")
+	modelFlag, _ := cmd.Flags().GetString("model")
 	streaming, _ := cmd.Flags().GetBool("streaming")
 	timeout, _ := cmd.Flags().GetDuration("timeout")
 	useTUI, _ := cmd.Flags().GetBool("tui")
+
+	// Determine model: flag > config > "" (auto)
+	model := modelFlag
+	if model == "" {
+		// Try to load model from ksail.yaml config
+		if configModel := loadChatModelFromConfig(); configModel != "" && configModel != "auto" {
+			model = configModel
+		}
+	}
 
 	// Set up signal handler - TUI handles its own signals
 	if !useTUI {
@@ -214,6 +227,23 @@ func runTUIChat(
 	timeout time.Duration,
 	rootCmd *cobra.Command,
 ) error {
+	// Fetch available models
+	allModels, err := client.ListModels()
+	if err != nil {
+		return fmt.Errorf("failed to list models: %w", err)
+	}
+
+	// Filter to only enabled models
+	var models []copilot.ModelInfo
+	for _, m := range allModels {
+		if m.Policy != nil && m.Policy.State == "enabled" {
+			models = append(models, m)
+		}
+	}
+
+	// Determine current model (from config, empty means "auto" - let Copilot choose)
+	currentModel := sessionConfig.Model
+
 	// Create event channel for TUI communication
 	eventChan := make(chan tea.Msg, 100)
 
@@ -222,22 +252,24 @@ func runTUIChat(
 
 	// Track when forwarder goroutine exits
 	var forwarderWg sync.WaitGroup
-	forwarderWg.Add(1)
 
 	// Forward output chunks to the TUI event channel
-	go func() {
-		defer forwarderWg.Done()
+	forwarderWg.Go(func() {
 		for chunk := range outputChan {
 			eventChan <- chatui.ToolOutputChunkMsg{
 				ToolID: chunk.ToolID,
 				Chunk:  chunk.Chunk,
 			}
 		}
-	}()
+	})
 
 	// Set up tools with real-time output streaming
 	// Tool handlers create their own timeout context since SDK's ToolHandler interface doesn't include context.
-	sessionConfig.Tools = chatsvc.GetKSailTools(rootCmd, outputChan) //nolint:contextcheck
+	tools := chatsvc.GetKSailTools(rootCmd, outputChan) //nolint:contextcheck
+
+	// Wrap mutable tools with permission prompts
+	tools = wrapToolsWithPermission(tools, eventChan)
+	sessionConfig.Tools = tools
 
 	// Create session
 	session, err := client.CreateSession(sessionConfig)
@@ -259,7 +291,16 @@ func runTUIChat(
 		}
 	}()
 
-	return chatui.RunWithEventChannel(ctx, session, timeout, eventChan)
+	return chatui.RunWithEventChannel(
+		ctx,
+		session,
+		client,
+		sessionConfig,
+		models,
+		currentModel,
+		timeout,
+		eventChan,
+	)
 }
 
 // inputResult holds the result of reading from stdin.
@@ -480,7 +521,7 @@ func getToolArgs(event copilot.SessionEvent) string {
 	if event.Data.Arguments == nil {
 		return ""
 	}
-	args, ok := event.Data.Arguments.(map[string]interface{})
+	args, ok := event.Data.Arguments.(map[string]any)
 	if !ok {
 		return ""
 	}
@@ -492,4 +533,125 @@ func getToolArgs(event copilot.SessionEvent) string {
 		return ""
 	}
 	return " (" + strings.Join(parts, ", ") + ")"
+}
+
+// mutabilityPattern matches tool names that indicate mutable/destructive operations.
+// Read-only operations (get, list, info, describe, logs, status) are auto-approved.
+// Pattern covers: create, delete, start, stop, apply, write, remove, destroy, update, patch, set, configure, etc.
+var mutabilityPattern = regexp.MustCompile(
+	`(?i)\b(create|delete|start|stop|restart|apply|write|remove|` +
+		`destroy|edit|scale|rollout|init|update|patch|set|configure)\b`,
+)
+
+// isMutableTool checks if a tool name indicates a mutable operation.
+func isMutableTool(toolName string) bool {
+	return mutabilityPattern.MatchString(toolName)
+}
+
+// formatToolArguments converts tool invocation arguments to a display string.
+func formatToolArguments(args any) string {
+	params, ok := args.(map[string]any)
+	if !ok || len(params) == 0 {
+		return ""
+	}
+
+	// Sort keys for consistent output (Go map iteration order is non-deterministic)
+	keys := make([]string, 0, len(params))
+	for k := range params {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	parts := make([]string, 0, len(keys))
+	for _, k := range keys {
+		parts = append(parts, fmt.Sprintf("%s=%v", k, params[k]))
+	}
+	return strings.Join(parts, ", ")
+}
+
+// wrapToolsWithPermission wraps tools that perform mutable operations with permission prompts.
+// Read-only operations (get, list, describe, logs, etc.) are auto-approved.
+func wrapToolsWithPermission(tools []copilot.Tool, eventChan chan tea.Msg) []copilot.Tool {
+	wrappedTools := make([]copilot.Tool, len(tools))
+
+	for toolIdx, tool := range tools {
+		wrappedTools[toolIdx] = tool
+
+		// Only wrap mutable tools that need permission
+		if isMutableTool(tool.Name) {
+			originalHandler := tool.Handler
+			toolName := tool.Name
+
+			wrappedTools[toolIdx].Handler = func(invocation copilot.ToolInvocation) (copilot.ToolResult, error) {
+				// Create channel for permission response
+				responseChan := make(chan bool, 1)
+
+				// Extract command if available (for nicer display)
+				cmdDescription := strings.ReplaceAll(toolName, "_", " ")
+
+				// Send permission request to TUI
+				eventChan <- chatui.PermissionRequestMsg{
+					ToolCallID: invocation.ToolCallID,
+					ToolName:   toolName,
+					Command:    cmdDescription,
+					Arguments:  formatToolArguments(invocation.Arguments),
+					Response:   responseChan,
+				}
+
+				// Wait for user response with timeout to prevent channel leaks
+				var approved bool
+				select {
+				case approved = <-responseChan:
+				case <-time.After(5 * time.Minute):
+					return copilot.ToolResult{
+						TextResultForLLM: fmt.Sprintf(
+							"Permission request timed out for: %s\n"+
+								"The user did not respond within the timeout period.",
+							cmdDescription,
+						),
+						ResultType: "failure",
+						SessionLog: fmt.Sprintf("[TIMEOUT] %s", cmdDescription),
+					}, nil
+				}
+
+				if !approved {
+					return copilot.ToolResult{
+						TextResultForLLM: fmt.Sprintf(
+							"Permission denied by user for: %s\n"+
+								"The user chose not to allow this operation.",
+							cmdDescription,
+						),
+						ResultType: "failure",
+						SessionLog: fmt.Sprintf("[DENIED] %s", cmdDescription),
+					}, nil
+				}
+
+				// User approved - execute the original handler
+				return originalHandler(invocation)
+			}
+		}
+	}
+
+	return wrappedTools
+}
+
+// loadChatModelFromConfig attempts to load the chat model from ksail.yaml config.
+// Returns empty string if config doesn't exist or model is not set.
+func loadChatModelFromConfig() string {
+	// Try to load ksail.yaml from current directory
+	configPath := "ksail.yaml"
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		// Config doesn't exist or can't be read - use default
+		return ""
+	}
+
+	var config v1alpha1.Cluster
+	err = yaml.Unmarshal(data, &config)
+	if err != nil {
+		// Config exists but couldn't be parsed - ignore and use default
+		return ""
+	}
+
+	return config.Spec.Chat.Model
 }

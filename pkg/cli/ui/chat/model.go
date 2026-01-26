@@ -14,15 +14,16 @@ import (
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 	copilot "github.com/github/copilot-sdk/go"
-	"github.com/mitchellh/go-wordwrap"
 )
 
 const (
-	defaultWidth  = 100
-	defaultHeight = 30
-	inputHeight   = 3
-	headerHeight  = logoHeight + 3 // logo + tagline + border
-	footerHeight  = 1              // single line help text
+	defaultWidth       = 100
+	defaultHeight      = 30
+	inputHeight        = 3
+	headerHeight       = logoHeight + 3 // logo + tagline + border
+	footerHeight       = 1              // single line help text
+	modelPickerHeight  = 16             // title + 10 visible items + scroll indicators + borders/padding
+	permissionModalMax = 12             // title + tool + command + args + question + buttons + borders/padding
 )
 
 // chatMessage represents a single message in the chat history.
@@ -33,6 +34,13 @@ type chatMessage struct {
 	isStreaming bool
 	tools       []*toolExecution // tools executed during this assistant message
 	toolOrder   []string         // ordered tool IDs for this message
+}
+
+// permissionResponse records a user's response to a permission request.
+type permissionResponse struct {
+	toolName string
+	command  string
+	allowed  bool
 }
 
 // Model is the Bubbletea model for the chat TUI.
@@ -72,10 +80,31 @@ type Model struct {
 	width  int
 	height int
 
-	// Copilot session
-	session *copilot.Session
-	timeout time.Duration
-	ctx     context.Context
+	// Copilot session and model switching
+	session       *copilot.Session
+	client        *copilot.Client
+	sessionConfig *copilot.SessionConfig
+	timeout       time.Duration
+	ctx           context.Context
+
+	// Model selection
+	currentModel     string              // currently selected model ID
+	availableModels  []copilot.ModelInfo // models the user has access to
+	showModelPicker  bool                // true when model picker overlay is visible
+	modelPickerIndex int                 // currently highlighted model in picker
+
+	// Permission request handling
+	pendingPermission *permissionRequestMsg // current permission request awaiting user response
+	permissionHistory []permissionResponse  // history of permission decisions
+
+	// Session management
+	currentSessionID     string            // ID of the current session (empty if new)
+	availableSessions    []SessionMetadata // cached list of available sessions
+	showSessionPicker    bool              // true when session picker overlay is visible
+	sessionPickerIndex   int               // currently highlighted session in picker
+	confirmDeleteSession bool              // true when confirming session deletion
+	renamingSession      bool              // true when renaming a session
+	sessionRenameInput   string            // current rename input text
 
 	// Markdown renderer (cached to avoid terminal queries)
 	renderer *glamour.TermRenderer
@@ -85,8 +114,15 @@ type Model struct {
 }
 
 // New creates a new chat TUI model.
-func New(session *copilot.Session, timeout time.Duration) *Model {
-	return NewWithEventChannel(session, timeout, nil)
+func New(
+	session *copilot.Session,
+	client *copilot.Client,
+	sessionConfig *copilot.SessionConfig,
+	models []copilot.ModelInfo,
+	currentModel string,
+	timeout time.Duration,
+) *Model {
+	return NewWithEventChannel(session, client, sessionConfig, models, currentModel, timeout, nil)
 }
 
 // NewWithEventChannel creates a new chat TUI model with an optional pre-existing event channel.
@@ -94,6 +130,10 @@ func New(session *copilot.Session, timeout time.Duration) *Model {
 // to the TUI (e.g., permission requests).
 func NewWithEventChannel(
 	session *copilot.Session,
+	client *copilot.Client,
+	sessionConfig *copilot.SessionConfig,
+	models []copilot.ModelInfo,
+	currentModel string,
 	timeout time.Duration,
 	eventChan chan tea.Msg,
 ) *Model {
@@ -135,21 +175,26 @@ func NewWithEventChannel(
 	}
 
 	return &Model{
-		viewport:     viewPort,
-		textarea:     textArea,
-		spinner:      spin,
-		renderer:     mdRenderer,
-		messages:     make([]chatMessage, 0),
-		session:      session,
-		timeout:      timeout,
-		ctx:          context.Background(),
-		eventChan:    eventChan,
-		width:        defaultWidth,
-		height:       defaultHeight,
-		tools:        make(map[string]*toolExecution),
-		toolOrder:    make([]string, 0),
-		history:      make([]string, 0),
-		historyIndex: -1,
+		viewport:         viewPort,
+		textarea:         textArea,
+		spinner:          spin,
+		renderer:         mdRenderer,
+		messages:         make([]chatMessage, 0),
+		session:          session,
+		client:           client,
+		sessionConfig:    sessionConfig,
+		currentSessionID: session.SessionID, // Track the SDK's session ID
+		timeout:          timeout,
+		ctx:              context.Background(),
+		eventChan:        eventChan,
+		width:            defaultWidth,
+		height:           defaultHeight,
+		tools:            make(map[string]*toolExecution),
+		toolOrder:        make([]string, 0),
+		history:          make([]string, 0),
+		historyIndex:     -1,
+		availableModels:  models,
+		currentModel:     currentModel,
 	}
 }
 
@@ -161,6 +206,8 @@ func (m *Model) GetEventChannel() chan tea.Msg {
 
 // Init initializes the model and returns an initial command.
 func (m *Model) Init() tea.Cmd {
+	// Do not auto-load or replace the existing session here.
+	// Session loading should be driven explicitly by the caller or user actions.
 	return tea.Batch(textarea.Blink, m.spinner.Tick)
 }
 
@@ -218,6 +265,18 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case ToolOutputChunkMsg:
 		return m.handleToolOutputChunk(msg.ToolID, msg.Chunk)
 
+	case permissionRequestMsg:
+		return m.handlePermissionRequest(&msg)
+
+	case PermissionRequestMsg:
+		return m.handlePermissionRequest(&permissionRequestMsg{
+			toolCallID: msg.ToolCallID,
+			toolName:   msg.ToolName,
+			command:    msg.Command,
+			arguments:  msg.Arguments,
+			response:   msg.Response,
+		})
+
 	case streamEndMsg:
 		return m.handleStreamEnd()
 
@@ -272,10 +331,7 @@ func (m *Model) View() string {
 
 	// Header with logo and right-aligned status indicator
 	// Calculate content width inside border (border=2, padding=4)
-	headerContentWidth := m.width - 6
-	if headerContentWidth < 1 {
-		headerContentWidth = 1
-	}
+	headerContentWidth := max(m.width-6, 1)
 
 	// Truncate each logo line by display width (handles Unicode properly)
 	// This clips the logo at narrow widths rather than wrapping
@@ -293,12 +349,21 @@ func (m *Model) View() string {
 
 	// Build tagline row with right-aligned status
 	taglineText := taglineStyle.Render("  " + tagline())
-	statusText := ""
-	if m.isStreaming {
-		statusText = m.spinner.View() + " " + statusStyle.Render("Thinking...")
-	} else if m.justCompleted {
-		statusText = statusStyle.Render("Ready ✓")
+
+	// Build status with model name
+	var statusParts []string
+	modelStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8))
+	if m.currentModel != "" {
+		statusParts = append(statusParts, modelStyle.Render(m.currentModel))
+	} else {
+		statusParts = append(statusParts, modelStyle.Render("auto"))
 	}
+	if m.isStreaming {
+		statusParts = append(statusParts, m.spinner.View()+" "+statusStyle.Render("Thinking..."))
+	} else if m.justCompleted {
+		statusParts = append(statusParts, statusStyle.Render("Ready ✓"))
+	}
+	statusText := strings.Join(statusParts, " • ")
 
 	// Clip tagline if too wide
 	taglineRow := taglineText
@@ -306,10 +371,7 @@ func (m *Model) View() string {
 		// Calculate spacing to push status to the right
 		taglineLen := lipgloss.Width(taglineText)
 		statusLen := lipgloss.Width(statusText)
-		spacing := headerContentWidth - taglineLen - statusLen
-		if spacing < 2 {
-			spacing = 2
-		}
+		spacing := max(headerContentWidth-taglineLen-statusLen, 2)
 		taglineRow = taglineText + strings.Repeat(" ", spacing) + statusText
 	}
 	// Clip tagline row to content width and prevent wrapping
@@ -323,218 +385,27 @@ func (m *Model) View() string {
 	chatContent := viewportStyle.Width(m.width - 2).Render(m.viewport.View())
 	sections = append(sections, chatContent)
 
-	// Input area - box handles clipping via fixed width
-	inputContent := inputStyle.Width(m.width - 2).Render(m.textarea.View())
-	sections = append(sections, inputContent)
-
-	// Footer/help - clip to terminal width to prevent wrapping
-	var helpText string
-	hasTools := len(m.toolOrder) > 0
-	if !hasTools {
-		for _, msg := range m.messages {
-			if msg.role == "assistant" && len(msg.tools) > 0 {
-				hasTools = true
-				break
-			}
-		}
-	}
-	if hasTools {
-		helpText = "  ⏎ Send • ↑↓ History • PgUp/Dn Scroll • ⇥ Toggle • ^T All • ^L Clear • esc Quit"
+	// Show modal OR input area (modal replaces input when active)
+	if m.pendingPermission != nil {
+		sections = append(sections, m.renderPermissionModal())
+	} else if m.showModelPicker {
+		sections = append(sections, m.renderModelPickerModal())
+	} else if m.showSessionPicker {
+		sections = append(sections, m.renderSessionPickerModal())
 	} else {
-		helpText = "  ⏎ Send • ↑↓ History • PgUp/Dn Scroll • ^L Clear • esc Quit"
+		// Input area - box handles clipping via fixed width
+		inputContent := inputStyle.Width(m.width - 2).Render(m.textarea.View())
+		sections = append(sections, inputContent)
 	}
+
+	// Footer/help - context-aware based on active view
+	helpText := m.getContextualHelpText()
 	help := lipgloss.NewStyle().MaxWidth(m.width).Inline(true).Render(helpStyle.Render(helpText))
 	sections = append(sections, help)
 
 	// Join sections and clip final output to terminal width to prevent any wrapping
 	output := lipgloss.JoinVertical(lipgloss.Left, sections...)
 	return lipgloss.NewStyle().MaxWidth(m.width).Render(output)
-}
-
-// handleKeyMsg handles keyboard input.
-//
-//nolint:gocyclo // Key handlers inherently have high cyclomatic complexity due to many case branches.
-func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-	case "ctrl+c":
-		// Always quit on ctrl+c, even during streaming
-		m.cleanup()
-		m.quitting = true
-		return m, tea.Quit
-	case "esc":
-		if m.isStreaming {
-			// Cancel current stream
-			m.cleanup()
-			m.isStreaming = false
-			if len(m.messages) > 0 && m.messages[len(m.messages)-1].role == "assistant" {
-				last := &m.messages[len(m.messages)-1]
-				last.content += " [cancelled]"
-				last.isStreaming = false
-				last.rendered = renderMarkdownWithRenderer(m.renderer, last.content)
-			}
-			m.updateViewportContent()
-			return m, nil
-		}
-		m.quitting = true
-		return m, tea.Quit
-	case "ctrl+l":
-		// Clear chat history and tool tracking
-		if !m.isStreaming {
-			m.messages = make([]chatMessage, 0)
-			m.currentResponse.Reset()
-			m.tools = make(map[string]*toolExecution)
-			m.toolOrder = make([]string, 0)
-			m.updateViewportContent()
-		}
-	case "alt+enter":
-		// Insert newline (alt+enter since terminals don't detect shift+enter)
-		m.textarea.InsertString("\n")
-		return m, nil
-	case "tab":
-		// Toggle expansion of tool outputs for the current (last) assistant message only
-		toggled := false
-		// First try global tools (for current streaming message)
-		if len(m.toolOrder) > 0 {
-			expandAll := false
-			for _, id := range m.toolOrder {
-				if tool := m.tools[id]; tool != nil && tool.status != toolRunning {
-					expandAll = !tool.expanded
-					break
-				}
-			}
-			for _, id := range m.toolOrder {
-				if tool := m.tools[id]; tool != nil && tool.status != toolRunning {
-					tool.expanded = expandAll
-					toggled = true
-				}
-			}
-		}
-		// If no global tools, try the last assistant message's committed tools
-		if !toggled {
-			for i := len(m.messages) - 1; i >= 0; i-- {
-				if m.messages[i].role == "assistant" && len(m.messages[i].tools) > 0 {
-					expandAll := !m.messages[i].tools[0].expanded
-					for _, tool := range m.messages[i].tools {
-						if tool != nil && tool.status != toolRunning {
-							tool.expanded = expandAll
-						}
-					}
-					break
-				}
-			}
-		}
-		m.updateViewportContent()
-		return m, nil
-	case "ctrl+t":
-		// Toggle ALL tool outputs expanded/collapsed across all messages
-		// Determine target state from first tool found
-		expandAll := false
-		found := false
-		// Check global tools first
-		for _, id := range m.toolOrder {
-			if tool := m.tools[id]; tool != nil && tool.status != toolRunning {
-				expandAll = !tool.expanded
-				found = true
-				break
-			}
-		}
-		// Check committed message tools if no global tools
-		if !found {
-			for _, msg := range m.messages {
-				if msg.role == "assistant" {
-					for _, tool := range msg.tools {
-						if tool != nil && tool.status != toolRunning {
-							expandAll = !tool.expanded
-							found = true
-							break
-						}
-					}
-				}
-				if found {
-					break
-				}
-			}
-		}
-		// Apply to all tools everywhere
-		for _, id := range m.toolOrder {
-			if tool := m.tools[id]; tool != nil && tool.status != toolRunning {
-				tool.expanded = expandAll
-			}
-		}
-		for i := range m.messages {
-			if m.messages[i].role == "assistant" {
-				for _, tool := range m.messages[i].tools {
-					if tool != nil && tool.status != toolRunning {
-						tool.expanded = expandAll
-					}
-				}
-			}
-		}
-		m.updateViewportContent()
-		return m, nil
-	case "up":
-		// Navigate to previous prompt in history
-		if !m.isStreaming && len(m.history) > 0 {
-			if m.historyIndex == -1 {
-				// Save current input before browsing history
-				m.savedInput = m.textarea.Value()
-				m.historyIndex = len(m.history) - 1
-			} else if m.historyIndex > 0 {
-				m.historyIndex--
-			}
-			m.textarea.SetValue(m.history[m.historyIndex])
-			m.textarea.CursorEnd()
-		}
-		return m, nil
-	case "down":
-		// Navigate to next prompt in history or back to current input
-		if !m.isStreaming && m.historyIndex >= 0 {
-			if m.historyIndex < len(m.history)-1 {
-				m.historyIndex++
-				m.textarea.SetValue(m.history[m.historyIndex])
-			} else {
-				// Back to current input
-				m.historyIndex = -1
-				m.textarea.SetValue(m.savedInput)
-			}
-			m.textarea.CursorEnd()
-		}
-		return m, nil
-	case "enter":
-		// Send message on Enter
-		if !m.isStreaming && strings.TrimSpace(m.textarea.Value()) != "" {
-			content := m.textarea.Value()
-			m.textarea.Reset()
-			// Set streaming immediately so spinner shows right away
-			m.isStreaming = true
-			m.justCompleted = false // Clear completion indicator
-			// Batch spinner tick with send command to start animation immediately
-			return m, tea.Batch(m.spinner.Tick, m.sendMessageCmd(content))
-		}
-	}
-
-	// Handle page up/down for viewport scrolling (fn+arrows on Mac)
-	switch msg.Type {
-	case tea.KeyPgUp:
-		m.viewport.HalfPageUp()
-		m.userScrolled = !m.viewport.AtBottom()
-		return m, nil
-	case tea.KeyPgDown:
-		m.viewport.HalfPageDown()
-		if m.viewport.AtBottom() {
-			m.userScrolled = false
-		}
-		return m, nil
-	}
-
-	// Update textarea for other keys
-	var taCmd tea.Cmd
-	m.textarea, taCmd = m.textarea.Update(msg)
-	// Clear completion indicator when user starts typing
-	if m.justCompleted {
-		m.justCompleted = false
-	}
-	return m, taCmd
 }
 
 // handleUserSubmit handles user message submission.
@@ -597,334 +468,47 @@ func (m *Model) handleUserSubmit(msg userSubmitMsg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(m.spinner.Tick, m.streamResponseCmd(msg.content), m.waitForEvent())
 }
 
-// drainEventChannel removes any stale events from the channel.
-// This prevents events from a previous conversation turn from interfering
-// with a new message submission.
-func (m *Model) drainEventChannel() {
-	for {
-		select {
-		case <-m.eventChan:
-			// Discard stale event
-		default:
-			// Channel is empty
-			return
+// activeModalHeight returns the extra height needed for the currently active modal
+// beyond the input area height (since modals replace the input area).
+func (m *Model) activeModalHeight() int {
+	if m.pendingPermission != nil {
+		// Calculate actual permission modal height based on content
+		// title(1) + blank(1) + tool(1) + blank(1) + "Allow?"(1) + blank(1) + buttons(1) = 7 base
+		lines := 7
+		if m.pendingPermission.command != "" {
+			lines++
 		}
-	}
-}
-
-// handleStreamChunk handles streaming response chunks.
-func (m *Model) handleStreamChunk(msg streamChunkMsg) (tea.Model, tea.Cmd) {
-	if msg.content != "" {
-		m.currentResponse.WriteString(msg.content)
-		if len(m.messages) > 0 {
-			m.messages[len(m.messages)-1].content = m.currentResponse.String()
+		if m.pendingPermission.arguments != "" {
+			lines++
 		}
-		m.updateViewportContent()
-	}
-	return m, m.waitForEvent()
-}
-
-// handleAssistantMessage handles the final complete message from the assistant.
-// Per SDK best practices, this event is always sent (regardless of streaming)
-// and contains the complete response. It's more reliable for completion than
-// accumulating deltas.
-func (m *Model) handleAssistantMessage(msg assistantMessageMsg) (tea.Model, tea.Cmd) {
-	// If we have more complete content from the final message, use it
-	// This handles cases where deltas might have been missed
-	if len(msg.content) > m.currentResponse.Len() {
-		m.currentResponse.Reset()
-		m.currentResponse.WriteString(msg.content)
-	}
-
-	// Update the message content
-	if len(m.messages) > 0 {
-		last := &m.messages[len(m.messages)-1]
-		if last.role == "assistant" {
-			last.content = m.currentResponse.String()
-			// Don't render yet - wait for SessionIdle or TurnEnd for proper completion
+		modalHeight := lines
+		// Return extra height beyond input area
+		if modalHeight > inputHeight {
+			return modalHeight - inputHeight
 		}
+		return 0
 	}
+	if m.showModelPicker || m.showSessionPicker {
+		// Calculate actual model picker height based on content
+		totalItems := len(m.availableModels) + 1 // +1 for "auto" option
+		const maxVisible = 3
+		visibleCount := min(totalItems, maxVisible)
 
-	m.updateViewportContent()
-	return m, m.waitForEvent()
-}
-
-// handleToolStart handles tool execution start events.
-func (m *Model) handleToolStart(msg toolStartMsg) (tea.Model, tea.Cmd) {
-	// Generate tool ID if not provided
-	toolID := msg.toolID
-	if toolID == "" {
-		toolID = fmt.Sprintf("tool-%d", time.Now().UnixNano())
-	}
-
-	// Record current position in assistant response for interleaving
-	textPos := m.currentResponse.Len()
-
-	// Create tool execution entry
-	tool := &toolExecution{
-		id:           toolID,
-		name:         msg.toolName,
-		command:      msg.command,
-		status:       toolRunning,
-		expanded:     true, // expanded by default while running
-		startTime:    time.Now(),
-		textPosition: textPos,
-	}
-	m.tools[toolID] = tool
-	m.toolOrder = append(m.toolOrder, toolID)
-
-	// Track pending tools for proper completion detection
-	m.pendingToolCount++
-	m.lastToolCall = time.Now()
-
-	// DON'T insert tool as separate message - render inline with assistant response
-	m.updateViewportContent()
-	return m, m.waitForEvent()
-}
-
-// handleToolEnd handles tool execution completion events.
-func (m *Model) handleToolEnd(msg toolEndMsg) (tea.Model, tea.Cmd) {
-	// Find the tool to complete. The SDK's ToolExecutionComplete event often
-	// doesn't include the tool name, so we use FIFO matching as primary strategy.
-	var tool *toolExecution
-
-	// Strategy 1: Try matching by tool ID if provided
-	if msg.toolID != "" {
-		tool = m.tools[msg.toolID]
-	}
-
-	// Strategy 2: Try matching by name if provided and not "unknown"
-	if tool == nil && msg.toolName != "" && msg.toolName != "unknown" {
-		for _, id := range m.toolOrder {
-			t := m.tools[id]
-			if t != nil && t.name == msg.toolName && t.status == toolRunning {
-				tool = t
-				break
-			}
+		// Calculate content lines: title + blank + items + reserved scroll indicator space
+		lines := 1 // title line + blank line
+		lines += visibleCount
+		if totalItems > maxVisible {
+			lines += 2 // always reserve space for scroll indicators (up + down)
 		}
-	}
+		modalHeight := lines // +2 for border (top + bottom)
 
-	// Strategy 3: FIFO - match the first running tool (SDK doesn't always provide name)
-	if tool == nil {
-		for _, id := range m.toolOrder {
-			t := m.tools[id]
-			if t != nil && t.status == toolRunning {
-				tool = t
-				break
-			}
+		// Return extra height beyond input area
+		if modalHeight > inputHeight {
+			return modalHeight - inputHeight
 		}
+		return 0
 	}
-
-	if tool != nil {
-		// Update tool status
-		if msg.success {
-			tool.status = toolSuccess
-		} else {
-			tool.status = toolFailed
-		}
-		// Only use SDK output if we didn't stream any output already
-		if tool.output == "" && msg.output != "" {
-			tool.output = msg.output
-		}
-		// Keep expanded so users can follow along with output (press Tab to collapse)
-		tool.expanded = true
-
-		// Track pending tools for proper completion detection
-		m.pendingToolCount--
-		if m.pendingToolCount < 0 {
-			m.pendingToolCount = 0 // Safety guard
-		}
-	}
-
-	m.updateViewportContent()
-
-	// Check if we can finalize (sessionComplete and no pending tools)
-	if m.sessionComplete && m.pendingToolCount == 0 {
-		return m.tryFinalizeResponse()
-	}
-
-	// Always keep waiting for events after tool completion.
-	// The SDK will fire another turn for the assistant to process results and respond.
-	// SessionIdle will signal when the entire turn (including tool result processing) is complete.
-	return m, m.waitForEvent()
-}
-
-// handleToolOutputChunk handles real-time output chunks from running tools.
-func (m *Model) handleToolOutputChunk(toolID, chunk string) (tea.Model, tea.Cmd) {
-	// The toolID from generator is actually the tool name (e.g., "ksail_cluster_list")
-	// Find the FIRST running tool that matches this name (FIFO order)
-	var tool *toolExecution
-	for _, id := range m.toolOrder {
-		t := m.tools[id]
-		if t != nil && t.name == toolID && t.status == toolRunning {
-			tool = t
-			break
-		}
-	}
-
-	if tool != nil {
-		// Append the chunk to the tool's output
-		tool.output += chunk
-		m.updateViewportContent()
-	}
-
-	// Always keep waiting - more output chunks or events (like turn completion) may come
-	return m, m.waitForEvent()
-}
-
-// handleStreamEnd handles stream completion events (SessionIdle).
-// SessionIdle means the session has truly finished processing.
-// Per SDK best practices, SessionIdle is the authoritative signal for turn completion.
-func (m *Model) handleStreamEnd() (tea.Model, tea.Cmd) {
-	// Mark session as complete
-	m.sessionComplete = true
-
-	// Check if we can finalize (no pending tools)
-	if m.pendingToolCount == 0 {
-		return m.tryFinalizeResponse()
-	}
-
-	// Still have pending tools - wait for them to complete
-	// The tool end handlers will check sessionComplete and finalize when ready
-	return m, m.waitForEvent()
-}
-
-// tryFinalizeResponse attempts to finalize the assistant response.
-// Called when both sessionComplete is true AND pendingToolCount is 0.
-// This ensures all tool events have been processed before we stop listening.
-func (m *Model) tryFinalizeResponse() (tea.Model, tea.Cmd) {
-	// Finalize the response
-	m.isStreaming = false
-	m.justCompleted = true // Show "Ready" indicator
-
-	if len(m.messages) > 0 {
-		last := &m.messages[len(m.messages)-1]
-		last.isStreaming = false
-		last.content = m.currentResponse.String()
-		// Render markdown using cached renderer (avoids terminal queries)
-		last.rendered = renderMarkdownWithRenderer(m.renderer, last.content)
-
-		// Commit current tools to this message for persistence across turns
-		last.tools = make([]*toolExecution, 0, len(m.toolOrder))
-		last.toolOrder = make([]string, len(m.toolOrder))
-		copy(last.toolOrder, m.toolOrder)
-		for _, id := range m.toolOrder {
-			if tool := m.tools[id]; tool != nil {
-				last.tools = append(last.tools, tool)
-			}
-		}
-	}
-
-	m.updateViewportContent()
-	m.cleanup() // Clean up event subscription
-	return m, nil
-}
-
-// handleTurnEnd handles assistant turn end events (AssistantTurnEnd).
-// AssistantTurnEnd fires after each turn, including intermediate turns where the
-// assistant calls tools. We always wait for SessionIdle for authoritative completion.
-func (m *Model) handleTurnEnd() (tea.Model, tea.Cmd) {
-	// TurnEnd is informational - always wait for SessionIdle for completion
-	// This ensures tool results are fully processed before we stop listening
-	return m, m.waitForEvent()
-}
-
-// handleTurnStart handles assistant turn start events (AssistantTurnStart).
-// This fires when the assistant begins a new turn, ensuring we're in streaming mode.
-func (m *Model) handleTurnStart() (tea.Model, tea.Cmd) {
-	// Ensure we're in streaming mode when a new turn starts
-	m.isStreaming = true
-	m.justCompleted = false
-	m.updateViewportContent()
-	return m, m.waitForEvent()
-}
-
-// handleReasoning handles reasoning events from the assistant.
-// These indicate the LLM is actively "thinking" about the response.
-func (m *Model) handleReasoning(_ reasoningMsg) (tea.Model, tea.Cmd) {
-	// Reasoning events confirm the LLM is actively working
-	// We just keep streaming state active and wait for more events
-	m.isStreaming = true
-	m.justCompleted = false
-	// Optionally, we could append reasoning content to a separate buffer
-	// For now, just acknowledge we're still processing
-	m.updateViewportContent()
-	return m, m.waitForEvent()
-}
-
-// handleAbort handles session abort events.
-func (m *Model) handleAbort() (tea.Model, tea.Cmd) {
-	m.isStreaming = false
-	m.cleanup()
-	if len(m.messages) > 0 && m.messages[len(m.messages)-1].role == "assistant" {
-		last := &m.messages[len(m.messages)-1]
-		last.content += "\n\n[Session aborted]"
-		last.isStreaming = false
-		last.rendered = renderMarkdownWithRenderer(m.renderer, last.content)
-	}
-	m.updateViewportContent()
-	return m, nil
-}
-
-// handleStreamErr handles streaming error events.
-func (m *Model) handleStreamErr(msg streamErrMsg) (tea.Model, tea.Cmd) {
-	m.isStreaming = false
-	m.cleanup() // Clean up event subscription
-	m.err = msg.err
-	if len(m.messages) > 0 && m.messages[len(m.messages)-1].role == "assistant" {
-		last := &m.messages[len(m.messages)-1]
-		last.content = fmt.Sprintf("Error: %v", msg.err)
-		last.isStreaming = false
-		last.rendered = renderMarkdownWithRenderer(m.renderer, last.content)
-	}
-	m.updateViewportContent()
-	// Don't wait for more events - response is complete (with error)
-	return m, nil
-}
-
-// waitForEvent returns a command that waits for an event from the channel.
-// Uses select to allow context cancellation.
-func (m *Model) waitForEvent() tea.Cmd {
-	ctx := m.ctx
-	eventChan := m.eventChan
-	timeout := m.timeout
-	return func() tea.Msg {
-		// Use timeout to detect stuck conditions (e.g., assistant looping on tools)
-		timer := time.NewTimer(timeout)
-		defer timer.Stop()
-
-		select {
-		case msg := <-eventChan:
-			return msg
-		case <-timer.C:
-			return streamErrMsg{
-				err: fmt.Errorf(
-					"response timed out after %v - the assistant may be stuck",
-					timeout,
-				),
-			}
-		case <-ctx.Done():
-			return streamErrMsg{err: ctx.Err()}
-		}
-	}
-}
-
-// cleanup releases resources when streaming ends or is cancelled.
-func (m *Model) cleanup() {
-	// Unsubscribe from session events (thread-safe)
-	m.unsubscribeMu.Lock()
-	if m.unsubscribe != nil {
-		m.unsubscribe()
-		m.unsubscribe = nil
-	}
-	m.unsubscribeMu.Unlock()
-
-	// Reset completion tracking state
-	m.sessionComplete = false
-	m.pendingToolCount = 0
-
-	// Drain any remaining events to prevent blocking
-	m.drainEventChannel()
+	return 0
 }
 
 // updateDimensions updates component dimensions based on terminal size.
@@ -932,13 +516,10 @@ func (m *Model) updateDimensions() {
 	// Account for borders and padding
 	contentWidth := m.width - 4
 
-	// Calculate available height: total - header - input - footer - borders
+	// Calculate available height: total - header - input - footer - borders - modal
 	// Each bordered box adds 2 lines (top + bottom border)
-	viewportHeight := m.height - headerHeight - inputHeight - footerHeight - 4
-
-	if viewportHeight < 5 {
-		viewportHeight = 5
-	}
+	modalHeight := m.activeModalHeight()
+	viewportHeight := max(m.height-headerHeight-inputHeight-footerHeight-4-modalHeight, 5)
 
 	oldWidth := m.viewport.Width
 	m.viewport.Width = contentWidth - 2
@@ -963,275 +544,43 @@ func (m *Model) reRenderCompletedMessages() {
 	}
 }
 
-// updateViewportContent rebuilds the viewport content from message history.
-//
-//nolint:nestif // Complex rendering logic requires nested conditionals for different content types.
-func (m *Model) updateViewportContent() {
-	if len(m.messages) == 0 {
-		welcomeMsg := "  Type a message below to start chatting with KSail AI.\n"
-		m.viewport.SetContent(statusStyle.Render(welcomeMsg))
-		return
+// getContextualHelpText returns help text based on the current active view.
+func (m *Model) getContextualHelpText() string {
+	// Permission prompt - highest priority
+	if m.pendingPermission != nil {
+		return "  y Allow • n Deny • esc Cancel"
 	}
 
-	// Calculate content width for wrapping (viewport width minus indent)
-	wrapWidth := m.viewport.Width - 4
-	if wrapWidth < 20 {
-		wrapWidth = 20
+	// Model picker modal
+	if m.showModelPicker {
+		return "  ↑↓ Navigate • ⏎ Select • esc Cancel"
 	}
-	wrapWidthUint := uint(wrapWidth) //nolint:gosec // wrapWidth is guaranteed >= 20
 
-	var builder strings.Builder
+	// Session picker modal
+	if m.showSessionPicker {
+		if m.renamingSession {
+			return "  Type name • ⏎ Save • esc Cancel"
+		}
+		if m.confirmDeleteSession {
+			return "  y Delete • n Cancel"
+		}
+		return "  ↑↓ Navigate • ⏎ Select • r Rename • d Delete • esc Cancel"
+	}
 
-	for _, msg := range m.messages {
-		switch msg.role {
-		case "user":
-			builder.WriteString("\n")
-			builder.WriteString(userMsgStyle.Render("▶ You"))
-			builder.WriteString("\n\n")
-			// Wrap user content
-			wrapped := wordwrap.WrapString(msg.content, wrapWidthUint)
-			for _, line := range strings.Split(wrapped, "\n") {
-				builder.WriteString("  ")
-				builder.WriteString(line)
-				builder.WriteString("\n")
-			}
-			builder.WriteString("\n")
-
-		case "assistant":
-			builder.WriteString("\n")
-			builder.WriteString(assistantMsgStyle.Render("▶ KSail"))
-			if msg.isStreaming {
-				builder.WriteString(" " + m.spinner.View())
-			}
-			builder.WriteString("\n\n")
-
-			// Determine which tools to use: global state for streaming, per-message for completed
-			var tools []*toolExecution
-			if msg.isStreaming {
-				// Use global tool state for current streaming message
-				tools = make([]*toolExecution, 0, len(m.toolOrder))
-				for _, id := range m.toolOrder {
-					if tool := m.tools[id]; tool != nil {
-						tools = append(tools, tool)
-					}
-				}
-			} else {
-				// Use committed per-message tools for completed messages
-				tools = msg.tools
-			}
-
-			// Interleave tools with assistant text based on their textPosition
-			content := msg.content
-			lastPos := 0
-
-			// Render tools at their positions, interleaved with text
-			for _, tool := range tools {
-				if tool == nil {
-					continue
-				}
-
-				// Render text before this tool's position
-				if tool.textPosition > lastPos && tool.textPosition <= len(content) {
-					textBefore := content[lastPos:tool.textPosition]
-					if textBefore != "" {
-						wrapped := wordwrap.WrapString(textBefore, wrapWidthUint)
-						for _, line := range strings.Split(wrapped, "\n") {
-							builder.WriteString("  ")
-							builder.WriteString(line)
-							builder.WriteString("\n")
-						}
-					}
-					lastPos = tool.textPosition
-				}
-
-				// Render the tool
-				m.renderToolInline(&builder, tool, wrapWidthUint)
-			}
-
-			// Render remaining text after all tools
-			if lastPos < len(content) {
-				remainingText := content[lastPos:]
-				if remainingText != "" {
-					if msg.isStreaming {
-						wrapped := wordwrap.WrapString(remainingText, wrapWidthUint)
-						for _, line := range strings.Split(wrapped, "\n") {
-							builder.WriteString("  ")
-							builder.WriteString(line)
-							builder.WriteString("\n")
-						}
-					} else if msg.rendered != "" && lastPos == 0 {
-						// Use rendered markdown if no tools were interleaved
-						builder.WriteString(msg.rendered)
-					} else {
-						wrapped := wordwrap.WrapString(remainingText, wrapWidthUint)
-						for _, line := range strings.Split(wrapped, "\n") {
-							builder.WriteString("  ")
-							builder.WriteString(line)
-							builder.WriteString("\n")
-						}
-					}
-				}
-			} else if lastPos == 0 && !msg.isStreaming && msg.rendered != "" {
-				// No tools, use pre-rendered markdown
-				builder.WriteString(msg.rendered)
-			}
-
-			// Show streaming cursor
-			if msg.isStreaming {
-				builder.WriteString("  ▌")
-			}
-			builder.WriteString("\n")
-
-		case "tool":
-			// Skip - tools are now rendered inline with assistant messages
-			continue
-
-		case "tool-output":
-			// Legacy tool output - still render for backward compatibility
-			wrapped := wordwrap.WrapString(msg.content, wrapWidthUint-2)
-			for _, line := range strings.Split(wrapped, "\n") {
-				builder.WriteString(toolOutputStyle.Render("    " + line))
-				builder.WriteString("\n")
+	// Default input view - check if tools are present for toggle option
+	hasTools := len(m.toolOrder) > 0
+	if !hasTools {
+		for _, msg := range m.messages {
+			if msg.role == "assistant" && len(msg.tools) > 0 {
+				hasTools = true
+				break
 			}
 		}
 	}
-	m.viewport.SetContent(builder.String())
-	// Only auto-scroll if user hasn't manually scrolled up
-	if !m.userScrolled {
-		m.viewport.GotoBottom()
+	if hasTools {
+		return "  ⏎ Send • ↑↓ History • PgUp/Dn Scroll • ⇥ Toggle • ^T All • ^H Sessions • ^O Model • ^N New • esc Quit"
 	}
-}
-
-// renderToolInline renders a tool execution inline within an assistant response.
-func (m *Model) renderToolInline(builder *strings.Builder, tool *toolExecution, wrapWidth uint) {
-	humanName := humanizeToolName(tool.name)
-
-	// Determine what to display: command if available, otherwise humanized name
-	displayName := humanName
-	if tool.command != "" {
-		displayName = "> " + tool.command
-	}
-
-	switch tool.status {
-	case toolRunning:
-		// Running: show spinner with command/action
-		line := fmt.Sprintf("  %s %s", m.spinner.View(), displayName)
-		builder.WriteString(toolMsgStyle.Render(line))
-		builder.WriteString("\n")
-		// Show streaming output while running (always expanded during execution)
-		if tool.output != "" {
-			m.renderToolOutput(builder, tool.output, wrapWidth, true)
-		}
-
-	case toolSuccess:
-		// Completed: show checkmark with summary
-		summary := m.getToolSummary(tool)
-		if tool.expanded {
-			line := fmt.Sprintf("  ✓ %s", displayName)
-			builder.WriteString(toolCollapsedStyle.Render(line))
-			builder.WriteString("\n")
-			// Show output when expanded
-			if tool.output != "" {
-				m.renderToolOutput(builder, tool.output, wrapWidth, true)
-			}
-		} else {
-			// Collapsed: show name + brief summary on same line
-			line := fmt.Sprintf("  ✓ %s", displayName)
-			if summary != "" {
-				line += toolOutputStyle.Render(" — " + summary)
-			}
-			builder.WriteString(toolCollapsedStyle.Render(line))
-			builder.WriteString("\n")
-		}
-
-	case toolFailed:
-		// Failed: show X with error info
-		//nolint:nestif // nested conditions for expanded/collapsed view
-		if tool.expanded {
-			line := fmt.Sprintf("  ✗ %s", displayName)
-			builder.WriteString(errorStyle.Render(line))
-			builder.WriteString("\n")
-			if tool.output != "" {
-				m.renderToolOutput(builder, tool.output, wrapWidth, true)
-			}
-		} else {
-			line := fmt.Sprintf("  ✗ %s", displayName)
-			if tool.output != "" {
-				// Show first line of error
-				firstLine := strings.Split(tool.output, "\n")[0]
-				if len(firstLine) > 50 {
-					firstLine = firstLine[:50] + "..."
-				}
-				line += toolOutputStyle.Render(" — " + firstLine)
-			}
-			builder.WriteString(errorStyle.Render(line))
-			builder.WriteString("\n")
-		}
-	}
-}
-
-// getToolSummary returns a brief summary of tool output for collapsed view.
-func (m *Model) getToolSummary(tool *toolExecution) string {
-	if tool.output == "" {
-		return ""
-	}
-
-	output := strings.TrimSpace(tool.output)
-	lines := strings.Split(output, "\n")
-
-	// For short outputs, just show the whole thing
-	if len(output) < 60 && len(lines) == 1 {
-		return output
-	}
-
-	// Return first meaningful line, truncated
-	firstLine := strings.TrimSpace(lines[0])
-	if len(firstLine) > 60 {
-		firstLine = firstLine[:60] + "..."
-	}
-
-	if len(lines) > 1 {
-		firstLine += fmt.Sprintf(" (+%d lines)", len(lines)-1)
-	}
-
-	return firstLine
-}
-
-// renderToolOutput renders tool output with proper indentation.
-// When expanded is false, output is truncated to maxOutputLines.
-func (m *Model) renderToolOutput(
-	builder *strings.Builder,
-	output string,
-	wrapWidth uint,
-	expanded bool,
-) {
-	const maxOutputLines = 10 // Show 10 lines when collapsed
-	lines := strings.Split(output, "\n")
-	truncated := false
-
-	// Only truncate when not expanded
-	if !expanded && len(lines) > maxOutputLines {
-		lines = lines[:maxOutputLines]
-		truncated = true
-	}
-
-	output = strings.Join(lines, "\n")
-	wrapped := wordwrap.WrapString(output, wrapWidth-6)
-
-	for _, line := range strings.Split(wrapped, "\n") {
-		builder.WriteString(toolOutputStyle.Render("      " + line))
-		builder.WriteString("\n")
-	}
-
-	if truncated {
-		builder.WriteString(
-			toolOutputStyle.Render(
-				fmt.Sprintf("      ... (%d more lines, press ⇥ for full output)",
-					len(strings.Split(output, "\n"))-maxOutputLines),
-			),
-		)
-		builder.WriteString("\n")
-	}
+	return "  ⏎ Send • ↑↓ History • PgUp/Dn Scroll • ^H Sessions • ^O Model • ^N New • esc Quit"
 }
 
 // sendMessageCmd returns a command that initiates message sending.
@@ -1349,9 +698,13 @@ func (m *Model) streamResponseCmd(userMessage string) tea.Cmd {
 func Run(
 	ctx context.Context,
 	session *copilot.Session,
+	client *copilot.Client,
+	sessionConfig *copilot.SessionConfig,
+	models []copilot.ModelInfo,
+	currentModel string,
 	timeout time.Duration,
 ) error {
-	model := New(session, timeout)
+	model := New(session, client, sessionConfig, models, currentModel, timeout)
 	model.ctx = ctx
 	program := tea.NewProgram(
 		model,
@@ -1369,10 +722,22 @@ func Run(
 func RunWithEventChannel(
 	ctx context.Context,
 	session *copilot.Session,
+	client *copilot.Client,
+	sessionConfig *copilot.SessionConfig,
+	models []copilot.ModelInfo,
+	currentModel string,
 	timeout time.Duration,
 	eventChan chan tea.Msg,
 ) error {
-	model := NewWithEventChannel(session, timeout, eventChan)
+	model := NewWithEventChannel(
+		session,
+		client,
+		sessionConfig,
+		models,
+		currentModel,
+		timeout,
+		eventChan,
+	)
 	model.ctx = ctx
 	program := tea.NewProgram(
 		model,
