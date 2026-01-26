@@ -508,8 +508,9 @@ func (m *Model) prepareForNewTurn() {
 // beyond the input area height (since modals replace the input area).
 func (m *Model) activeModalHeight() int {
 	if m.pendingPermission != nil {
-		// Calculate actual permission modal height based on content
-		// title(1) + blank(1) + tool(1) + blank(1) + "Allow?"(1) + blank(1) + buttons(1) = 7 base
+		// Calculate actual permission modal height based on content.
+		// Base layout: title(1) + blank(1) + tool(1) + blank(1) + "Allow?"(1) + buttons(1) = 6 lines,
+		// plus optional lines for the command and arguments when present.
 		contentLines := 6
 		if m.pendingPermission.command != "" {
 			contentLines++
