@@ -449,19 +449,19 @@ func (m *Model) handleUserSubmit(msg userSubmitMsg) (tea.Model, tea.Cmd) {
 	m.addToPromptHistory(msg.content)
 	m.prepareForNewTurn()
 
-	// Build the actual prompt that will be sent to Copilot
-	// In plan mode, prefix with instructions; otherwise use original
-	displayPrompt := msg.content
-	if !m.agentMode {
-		displayPrompt = "[PLAN MODE] Research and outline steps to accomplish this task. " +
-			"Do not execute tools or make changes - only describe what you would do:\n\n" +
-			msg.content
+	// Add compact mode indicator to message for display purposes
+	// The full instruction is sent to the model in streamResponseCmd
+	displayContent := msg.content
+	if m.agentMode {
+		displayContent = "[AGENT] " + msg.content
+	} else {
+		displayContent = "[PLAN] " + msg.content
 	}
 
-	// Add user message (with the actual prompt that will be sent) and placeholder assistant message
+	// Add user message with compact mode indicator and placeholder assistant message
 	m.messages = append(m.messages, chatMessage{
 		role:    "user",
-		content: displayPrompt,
+		content: displayContent,
 	})
 	m.messages = append(m.messages, chatMessage{
 		role:        "assistant",
@@ -471,7 +471,7 @@ func (m *Model) handleUserSubmit(msg userSubmitMsg) (tea.Model, tea.Cmd) {
 	m.updateViewportContent()
 
 	// Start streaming, keep spinner ticking, and wait for events
-	// Note: streamResponseCmd will apply the same plan mode logic, ensuring consistency
+	// streamResponseCmd will send the full plan mode instruction to the model
 	return m, tea.Batch(m.spinner.Tick, m.streamResponseCmd(msg.content), m.waitForEvent())
 }
 
