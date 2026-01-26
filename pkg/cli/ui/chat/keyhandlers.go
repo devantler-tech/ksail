@@ -162,6 +162,10 @@ func (m *Model) handleNewChat() (tea.Model, tea.Cmd) {
 // handleToggleMode toggles between agent and plan mode.
 func (m *Model) handleToggleMode() (tea.Model, tea.Cmd) {
 	m.agentMode = !m.agentMode
+	// Update the shared reference so tool handlers see the change
+	if m.agentModeRef != nil {
+		m.agentModeRef.SetEnabled(m.agentMode)
+	}
 	m.updateViewportContent()
 	return m, nil
 }

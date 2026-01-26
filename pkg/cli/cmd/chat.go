@@ -267,8 +267,12 @@ func runTUIChat(
 	// Tool handlers create their own timeout context since SDK's ToolHandler interface doesn't include context.
 	tools := chatsvc.GetKSailTools(rootCmd, outputChan) //nolint:contextcheck
 
-	// Wrap mutable tools with permission prompts
-	tools = wrapToolsWithPermission(tools, eventChan)
+	// Create a shared agent mode reference that can be updated by the TUI
+	// Default to agent mode (true = execute tools, false = plan only)
+	agentModeRef := &chatui.AgentModeRef{Enabled: true}
+
+	// Wrap tools with permission prompts and mode enforcement
+	tools = wrapToolsWithPermissionAndMode(tools, eventChan, agentModeRef)
 	sessionConfig.Tools = tools
 
 	// Create session
@@ -291,7 +295,7 @@ func runTUIChat(
 		}
 	}()
 
-	return chatui.RunWithEventChannel(
+	return chatui.RunWithEventChannelAndModeRef(
 		ctx,
 		session,
 		client,
@@ -300,6 +304,7 @@ func runTUIChat(
 		currentModel,
 		timeout,
 		eventChan,
+		agentModeRef,
 	)
 }
 
@@ -571,66 +576,89 @@ func formatToolArguments(args any) string {
 	return strings.Join(parts, ", ")
 }
 
-// wrapToolsWithPermission wraps tools that perform mutable operations with permission prompts.
-// Read-only operations (get, list, describe, logs, etc.) are auto-approved.
-func wrapToolsWithPermission(tools []copilot.Tool, eventChan chan tea.Msg) []copilot.Tool {
+// wrapToolsWithPermissionAndMode wraps ALL tools with mode enforcement and permission prompts.
+// In plan mode, ALL tool execution is blocked (model can only describe what it would do).
+// In agent mode, mutable tools require permission, while read-only tools are auto-approved.
+func wrapToolsWithPermissionAndMode(
+	tools []copilot.Tool,
+	eventChan chan tea.Msg,
+	agentModeRef *chatui.AgentModeRef,
+) []copilot.Tool {
 	wrappedTools := make([]copilot.Tool, len(tools))
 
 	for toolIdx, tool := range tools {
 		wrappedTools[toolIdx] = tool
+		originalHandler := tool.Handler
+		toolName := tool.Name
 
-		// Only wrap mutable tools that need permission
-		if isMutableTool(tool.Name) {
-			originalHandler := tool.Handler
-			toolName := tool.Name
-
-			wrappedTools[toolIdx].Handler = func(invocation copilot.ToolInvocation) (copilot.ToolResult, error) {
-				// Create channel for permission response
-				responseChan := make(chan bool, 1)
-
-				// Extract command if available (for nicer display)
+		wrappedTools[toolIdx].Handler = func(invocation copilot.ToolInvocation) (copilot.ToolResult, error) {
+			// Check if agent mode is enabled - if not, block ALL tool execution
+			if agentModeRef != nil && !agentModeRef.IsEnabled() {
 				cmdDescription := strings.ReplaceAll(toolName, "_", " ")
+				return copilot.ToolResult{
+					TextResultForLLM: fmt.Sprintf(
+						"Tool execution blocked - currently in Plan mode.\n"+
+							"Tool: %s\n"+
+							"In Plan mode, I can only describe what I would do, not execute tools.\n"+
+							"Switch to Agent mode (press Tab) to execute tools.",
+						cmdDescription,
+					),
+					ResultType:  "failure",
+					SessionLog:  fmt.Sprintf("[PLAN MODE BLOCKED] %s", cmdDescription),
+					Error:       fmt.Sprintf("Tool execution blocked in plan mode: %s", toolName),
+					ToolResults: []copilot.ToolResultItem{},
+				}, nil
+			}
 
-				// Send permission request to TUI
-				eventChan <- chatui.PermissionRequestMsg{
-					ToolCallID: invocation.ToolCallID,
-					ToolName:   toolName,
-					Command:    cmdDescription,
-					Arguments:  formatToolArguments(invocation.Arguments),
-					Response:   responseChan,
-				}
-
-				// Wait for user response with timeout to prevent channel leaks
-				var approved bool
-				select {
-				case approved = <-responseChan:
-				case <-time.After(5 * time.Minute):
-					return copilot.ToolResult{
-						TextResultForLLM: fmt.Sprintf(
-							"Permission request timed out for: %s\n"+
-								"The user did not respond within the timeout period.",
-							cmdDescription,
-						),
-						ResultType: "failure",
-						SessionLog: fmt.Sprintf("[TIMEOUT] %s", cmdDescription),
-					}, nil
-				}
-
-				if !approved {
-					return copilot.ToolResult{
-						TextResultForLLM: fmt.Sprintf(
-							"Permission denied by user for: %s\n"+
-								"The user chose not to allow this operation.",
-							cmdDescription,
-						),
-						ResultType: "failure",
-						SessionLog: fmt.Sprintf("[DENIED] %s", cmdDescription),
-					}, nil
-				}
-
-				// User approved - execute the original handler
+			// In agent mode, only wrap mutable tools with permission prompts
+			if !isMutableTool(toolName) {
+				// Read-only tool - execute directly
 				return originalHandler(invocation)
 			}
+
+			// Mutable tool - request permission
+			responseChan := make(chan bool, 1)
+			cmdDescription := strings.ReplaceAll(toolName, "_", " ")
+
+			// Send permission request to TUI
+			eventChan <- chatui.PermissionRequestMsg{
+				ToolCallID: invocation.ToolCallID,
+				ToolName:   toolName,
+				Command:    cmdDescription,
+				Arguments:  formatToolArguments(invocation.Arguments),
+				Response:   responseChan,
+			}
+
+			// Wait for user response with timeout to prevent channel leaks
+			var approved bool
+			select {
+			case approved = <-responseChan:
+			case <-time.After(5 * time.Minute):
+				return copilot.ToolResult{
+					TextResultForLLM: fmt.Sprintf(
+						"Permission request timed out for: %s\n"+
+							"The user did not respond within the timeout period.",
+						cmdDescription,
+					),
+					ResultType: "failure",
+					SessionLog: fmt.Sprintf("[TIMEOUT] %s", cmdDescription),
+				}, nil
+			}
+
+			if !approved {
+				return copilot.ToolResult{
+					TextResultForLLM: fmt.Sprintf(
+						"Permission denied by user for: %s\n"+
+							"The user chose not to allow this operation.",
+						cmdDescription,
+					),
+					ResultType: "failure",
+					SessionLog: fmt.Sprintf("[DENIED] %s", cmdDescription),
+				}, nil
+			}
+
+			// User approved - execute the original handler
+			return originalHandler(invocation)
 		}
 	}
 
