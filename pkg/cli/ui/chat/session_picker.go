@@ -164,6 +164,11 @@ func (m *Model) startNewSession() error {
 
 	// Clear all state for new session
 	m.messages = []chatMessage{}
+	m.agentMode = true // New chats start in agent mode by default
+	// Update the shared reference so tool handlers see the change
+	if m.agentModeRef != nil {
+		m.agentModeRef.SetEnabled(true)
+	}
 	m.resetStreamingState()
 	m.updateViewportContent()
 	return nil
@@ -172,6 +177,12 @@ func (m *Model) startNewSession() error {
 // loadSession loads a chat session into the model using the Copilot SDK.
 func (m *Model) loadSession(metadata *SessionMetadata) {
 	m.currentSessionID = metadata.ID
+	// Restore mode from session (nil or true = agent mode, false = plan mode)
+	m.agentMode = metadata.AgentMode == nil || *metadata.AgentMode
+	// Update the shared reference so tool handlers see the change
+	if m.agentModeRef != nil {
+		m.agentModeRef.SetEnabled(m.agentMode)
+	}
 
 	m.cleanup()
 	if m.session != nil {
@@ -198,7 +209,7 @@ func (m *Model) loadSession(metadata *SessionMetadata) {
 	if err != nil {
 		m.messages = []chatMessage{}
 	} else {
-		m.messages = m.sessionEventsToMessages(events)
+		m.messages = m.sessionEventsToMessages(events, metadata)
 	}
 
 	for i := range m.messages {
@@ -223,8 +234,13 @@ func (m *Model) resetStreamingState() {
 }
 
 // sessionEventsToMessages converts Copilot SessionEvents to internal chatMessages.
-func (m *Model) sessionEventsToMessages(events []copilot.SessionEvent) []chatMessage {
+// It also restores per-message metadata (like agentMode) from the session metadata.
+func (m *Model) sessionEventsToMessages(
+	events []copilot.SessionEvent,
+	metadata *SessionMetadata,
+) []chatMessage {
 	var messages []chatMessage
+	userMsgIndex := 0
 	for _, event := range events {
 		var role, content string
 		switch event.Type {
@@ -242,10 +258,21 @@ func (m *Model) sessionEventsToMessages(events []copilot.SessionEvent) []chatMes
 			continue
 		}
 		if content != "" {
-			messages = append(messages, chatMessage{
+			msg := chatMessage{
 				role:    role,
 				content: content,
-			})
+			}
+			// Restore agentMode for user messages from metadata
+			if role == "user" {
+				if userMsgIndex < len(metadata.Messages) {
+					msg.agentMode = metadata.Messages[userMsgIndex].AgentMode
+				} else {
+					// Default to true (agent mode) for messages without metadata
+					msg.agentMode = true
+				}
+				userMsgIndex++
+			}
+			messages = append(messages, msg)
 		}
 	}
 	return messages
@@ -262,10 +289,22 @@ func (m *Model) saveCurrentSession() error {
 		return nil
 	}
 
+	agentMode := m.agentMode
+	// Build per-message metadata
+	messageMetadata := make([]MessageMetadata, 0)
+	for _, msg := range m.messages {
+		if msg.role == "user" {
+			messageMetadata = append(messageMetadata, MessageMetadata{
+				AgentMode: msg.agentMode,
+			})
+		}
+	}
 	metadata := &SessionMetadata{
-		ID:    sessionID,
-		Model: m.currentModel,
-		Name:  GenerateSessionName(m.messages),
+		ID:        sessionID,
+		Messages:  messageMetadata,
+		Model:     m.currentModel,
+		Name:      GenerateSessionName(m.messages),
+		AgentMode: &agentMode,
 	}
 
 	if err := SaveSession(metadata); err != nil {
@@ -283,15 +322,14 @@ func (m *Model) renderSessionPickerModal() string {
 	clipStyle := lipgloss.NewStyle().MaxWidth(contentWidth).Inline(true)
 
 	totalItems := len(m.availableSessions) + 1
-	const maxVisible = 3
-	visibleCount := min(totalItems, maxVisible)
+	visibleCount := min(totalItems, maxPickerVisible)
 
-	scrollOffset := calculatePickerScrollOffset(m.sessionPickerIndex, totalItems, maxVisible)
+	scrollOffset := calculatePickerScrollOffset(m.sessionPickerIndex, totalItems, maxPickerVisible)
 
 	var listContent strings.Builder
 	m.renderSessionPickerTitle(&listContent, clipStyle)
 
-	isScrollable := totalItems > maxVisible
+	isScrollable := totalItems > maxPickerVisible
 	renderScrollIndicatorTop(&listContent, clipStyle, isScrollable, scrollOffset)
 
 	endIdx := min(scrollOffset+visibleCount, totalItems)

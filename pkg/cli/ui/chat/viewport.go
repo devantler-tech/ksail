@@ -31,8 +31,8 @@ func (m *Model) updateViewportContent() {
 
 // calculateWrapWidth calculates the content width for text wrapping.
 func (m *Model) calculateWrapWidth() uint {
-	wrapWidth := max(m.viewport.Width-4, 20)
-	return uint(wrapWidth) //nolint:gosec // wrapWidth is guaranteed >= 20
+	wrapWidth := max(m.viewport.Width-4, minWrapWidth)
+	return uint(wrapWidth) //nolint:gosec // wrapWidth is guaranteed >= minWrapWidth
 }
 
 // renderMessage renders a single message to the builder.
@@ -52,7 +52,12 @@ func (m *Model) renderMessage(builder *strings.Builder, msg *chatMessage, wrapWi
 // renderUserMessage renders a user message.
 func (m *Model) renderUserMessage(builder *strings.Builder, msg *chatMessage, wrapWidth uint) {
 	builder.WriteString("\n")
-	builder.WriteString(userMsgStyle.Render("▶ You"))
+	// Add mode indicator: </> for agent, ≡ for plan
+	modeIcon := "</>"
+	if !msg.agentMode {
+		modeIcon = "≡"
+	}
+	builder.WriteString(userMsgStyle.Render("▶ You " + modeIcon))
 	builder.WriteString("\n\n")
 
 	wrapped := wordwrap.WrapString(msg.content, wrapWidth)
@@ -293,17 +298,17 @@ func (m *Model) renderToolOutput(
 	wrapWidth uint,
 	expanded bool,
 ) {
-	const maxOutputLines = 10
 	lines := strings.Split(output, "\n")
+	totalLines := len(lines)
 	truncated := false
 
-	if !expanded && len(lines) > maxOutputLines {
-		lines = lines[:maxOutputLines]
+	if !expanded && totalLines > maxToolOutputLines {
+		lines = lines[:maxToolOutputLines]
 		truncated = true
 	}
 
-	output = strings.Join(lines, "\n")
-	wrapped := wordwrap.WrapString(output, wrapWidth-6)
+	truncatedOutput := strings.Join(lines, "\n")
+	wrapped := wordwrap.WrapString(truncatedOutput, wrapWidth-6)
 
 	for line := range strings.SplitSeq(wrapped, "\n") {
 		builder.WriteString(toolOutputStyle.Render("      " + line))
@@ -311,10 +316,10 @@ func (m *Model) renderToolOutput(
 	}
 
 	if truncated {
+		more := totalLines - maxToolOutputLines
 		builder.WriteString(
 			toolOutputStyle.Render(
-				fmt.Sprintf("      ... (%d more lines, press ⇥ for full output)",
-					len(strings.Split(output, "\n"))-maxOutputLines),
+				fmt.Sprintf("      ... (%d more lines, press ^T to expand tool outputs)", more),
 			),
 		)
 		builder.WriteString("\n")

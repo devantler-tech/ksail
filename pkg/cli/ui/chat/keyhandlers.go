@@ -35,7 +35,7 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.textarea.InsertString("\n")
 		return m, nil
 	case "tab":
-		return m.handleToggleCurrentTools()
+		return m.handleToggleMode()
 	case "ctrl+t":
 		return m.handleToggleAllTools()
 	case "up":
@@ -159,48 +159,25 @@ func (m *Model) handleNewChat() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// handleToggleCurrentTools toggles tool expansion for the current message only.
-func (m *Model) handleToggleCurrentTools() (tea.Model, tea.Cmd) {
-	toggled := m.toggleGlobalTools()
-	if !toggled {
-		m.toggleLastMessageTools()
+// handleToggleMode toggles between agent and plan mode.
+func (m *Model) handleToggleMode() (tea.Model, tea.Cmd) {
+	// Prevent mode toggling while streaming to avoid mode mismatch between
+	// message submission and tool execution time
+	if m.isStreaming {
+		return m, nil
+	}
+	m.agentMode = !m.agentMode
+	// Update the shared reference so tool handlers see the change
+	if m.agentModeRef != nil {
+		m.agentModeRef.SetEnabled(m.agentMode)
 	}
 	m.updateViewportContent()
 	return m, nil
 }
 
-// toggleGlobalTools toggles tools in the global tool map (current streaming message).
-func (m *Model) toggleGlobalTools() bool {
-	if len(m.toolOrder) == 0 {
-		return false
-	}
-	expandAll := m.findFirstToolExpandState(true)
-	for _, id := range m.toolOrder {
-		if tool := m.tools[id]; tool != nil && tool.status != toolRunning {
-			tool.expanded = expandAll
-		}
-	}
-	return true
-}
-
-// toggleLastMessageTools toggles tools in the last assistant message.
-func (m *Model) toggleLastMessageTools() {
-	for i := len(m.messages) - 1; i >= 0; i-- {
-		if m.messages[i].role == "assistant" && len(m.messages[i].tools) > 0 {
-			expandAll := !m.messages[i].tools[0].expanded
-			for _, tool := range m.messages[i].tools {
-				if tool != nil && tool.status != toolRunning {
-					tool.expanded = expandAll
-				}
-			}
-			break
-		}
-	}
-}
-
 // handleToggleAllTools toggles tool expansion for all messages.
 func (m *Model) handleToggleAllTools() (tea.Model, tea.Cmd) {
-	expandAll := m.findFirstToolExpandState(false)
+	expandAll := m.findFirstToolExpandState()
 	m.setAllToolsExpanded(expandAll)
 	m.updateViewportContent()
 	return m, nil
@@ -208,15 +185,12 @@ func (m *Model) handleToggleAllTools() (tea.Model, tea.Cmd) {
 
 // findFirstToolExpandState finds the expand state of the first tool.
 // Returns the inverse of `expanded` for the first tool found.
-func (m *Model) findFirstToolExpandState(globalOnly bool) bool {
+func (m *Model) findFirstToolExpandState() bool {
 	// Check global tools first
 	for _, id := range m.toolOrder {
 		if tool := m.tools[id]; tool != nil && tool.status != toolRunning {
 			return !tool.expanded
 		}
-	}
-	if globalOnly {
-		return false
 	}
 	// Check committed message tools
 	for _, msg := range m.messages {
