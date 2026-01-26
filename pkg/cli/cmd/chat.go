@@ -603,10 +603,9 @@ func wrapToolsWithPermissionAndMode(
 							"Switch to Agent mode (press Tab) to execute tools.",
 						cmdDescription,
 					),
-					ResultType:  "failure",
-					SessionLog:  fmt.Sprintf("[PLAN MODE BLOCKED] %s", cmdDescription),
-					Error:       fmt.Sprintf("Tool execution blocked in plan mode: %s", toolName),
-					ToolResults: []copilot.ToolResultItem{},
+					ResultType: "failure",
+					SessionLog: fmt.Sprintf("[PLAN MODE BLOCKED] %s", cmdDescription),
+					Error:      fmt.Sprintf("Tool execution blocked in plan mode: %s", toolName),
 				}, nil
 			}
 
