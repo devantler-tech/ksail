@@ -306,7 +306,7 @@ func (m *Model) renderSessionPickerModal() string {
 
 	modalStyle := lipgloss.NewStyle().
 		BorderStyle(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.ANSIColor(13)).
+		BorderForeground(lipgloss.ANSIColor(14)).
 		PaddingLeft(1).
 		PaddingRight(1).
 		Width(modalWidth).
