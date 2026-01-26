@@ -99,3 +99,25 @@ var (
 	toolCollapsedStyle = lipgloss.NewStyle().
 				Foreground(successColor)
 )
+
+// calculatePickerScrollOffset determines the scroll position for a picker list.
+// It keeps the selected item visible within the visible window.
+func calculatePickerScrollOffset(selectedIndex, totalItems, maxVisible int) int {
+	if totalItems <= maxVisible {
+		return 0
+	}
+	scrollOffset := 0
+	if selectedIndex >= scrollOffset+maxVisible {
+		scrollOffset = selectedIndex - maxVisible + 1
+	}
+	if selectedIndex < scrollOffset {
+		scrollOffset = selectedIndex
+	}
+	if scrollOffset > totalItems-maxVisible {
+		scrollOffset = totalItems - maxVisible
+	}
+	if scrollOffset < 0 {
+		scrollOffset = 0
+	}
+	return scrollOffset
+}
