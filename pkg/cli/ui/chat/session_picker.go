@@ -235,7 +235,10 @@ func (m *Model) resetStreamingState() {
 
 // sessionEventsToMessages converts Copilot SessionEvents to internal chatMessages.
 // It also restores per-message metadata (like agentMode) from the session metadata.
-func (m *Model) sessionEventsToMessages(events []copilot.SessionEvent, metadata *SessionMetadata) []chatMessage {
+func (m *Model) sessionEventsToMessages(
+	events []copilot.SessionEvent,
+	metadata *SessionMetadata,
+) []chatMessage {
 	var messages []chatMessage
 	userMsgIndex := 0
 	for _, event := range events {
@@ -297,8 +300,8 @@ func (m *Model) saveCurrentSession() error {
 		}
 	}
 	metadata := &SessionMetadata{
-		ID:       sessionID,
-		Messages: messageMetadata,
+		ID:        sessionID,
+		Messages:  messageMetadata,
 		Model:     m.currentModel,
 		Name:      GenerateSessionName(m.messages),
 		AgentMode: &agentMode,

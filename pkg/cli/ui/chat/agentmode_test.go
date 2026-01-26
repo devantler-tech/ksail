@@ -1,13 +1,17 @@
-package chat
+package chat_test
 
 import (
 	"sync"
 	"testing"
+
+	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/chat"
 )
 
 // TestAgentModeRef tests the thread-safe agent mode reference.
 func TestAgentModeRef(t *testing.T) {
-	ref := &AgentModeRef{Enabled: true}
+	t.Parallel()
+
+	ref := chat.NewAgentModeRef(true)
 
 	// Test initial state
 	if !ref.IsEnabled() {
@@ -29,7 +33,9 @@ func TestAgentModeRef(t *testing.T) {
 
 // TestAgentModeRefConcurrency tests concurrent access to agent mode reference.
 func TestAgentModeRefConcurrency(t *testing.T) {
-	ref := &AgentModeRef{Enabled: true}
+	t.Parallel()
+
+	ref := chat.NewAgentModeRef(true)
 	var wg sync.WaitGroup
 
 	// Start multiple goroutines that toggle the mode

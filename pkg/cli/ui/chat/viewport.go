@@ -302,13 +302,13 @@ func (m *Model) renderToolOutput(
 	totalLines := len(lines)
 	truncated := false
 
-	if !expanded && len(lines) > maxToolOutputLines {
+	if !expanded && totalLines > maxToolOutputLines {
 		lines = lines[:maxToolOutputLines]
 		truncated = true
 	}
 
-	output = strings.Join(lines, "\n")
-	wrapped := wordwrap.WrapString(output, wrapWidth-6)
+	truncatedOutput := strings.Join(lines, "\n")
+	wrapped := wordwrap.WrapString(truncatedOutput, wrapWidth-6)
 
 	for line := range strings.SplitSeq(wrapped, "\n") {
 		builder.WriteString(toolOutputStyle.Render("      " + line))

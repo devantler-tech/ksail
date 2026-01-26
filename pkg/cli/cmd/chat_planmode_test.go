@@ -12,7 +12,7 @@ import (
 // TestPlanModeBlocksToolExecution verifies that plan mode blocks all tool execution.
 func TestPlanModeBlocksToolExecution(t *testing.T) {
 	eventChan := make(chan tea.Msg, 10)
-	agentModeRef := &chatui.AgentModeRef{Enabled: true}
+	agentModeRef := chatui.NewAgentModeRef(true)
 
 	// Create a simple test tool
 	testToolCalled := false
@@ -51,8 +51,12 @@ func TestPlanModeBlocksToolExecution(t *testing.T) {
 			t.Errorf("Unexpected error: %v", err)
 		}
 
-		// In agent mode, tool is executed (testToolCalled would be true)
-		// But since it's read-only, it goes straight through
+		// Verify tool was actually executed in agent mode
+		if !testToolCalled {
+			t.Error("Tool should have been called in agent mode")
+		}
+
+		// In agent mode, tool is executed (read-only tool goes straight through)
 		if result.ResultType != "success" {
 			t.Errorf("Expected success, got %s", result.ResultType)
 		}
@@ -108,6 +112,11 @@ func TestPlanModeBlocksToolExecution(t *testing.T) {
 			t.Errorf("Unexpected error: %v", err)
 		}
 
+		// Verify tool was actually executed after toggling back
+		if !testToolCalled {
+			t.Error("Tool should have been called after toggling back to agent mode")
+		}
+
 		if result.ResultType != "success" {
 			t.Errorf("Expected success after toggling back, got %s", result.ResultType)
 		}
@@ -117,7 +126,7 @@ func TestPlanModeBlocksToolExecution(t *testing.T) {
 // TestPlanModeBlocksMutableTools verifies that mutable tools are blocked in plan mode.
 func TestPlanModeBlocksMutableTools(t *testing.T) {
 	eventChan := make(chan tea.Msg, 10)
-	agentModeRef := &chatui.AgentModeRef{Enabled: false} // Start in plan mode
+	agentModeRef := chatui.NewAgentModeRef(false) // Start in plan mode
 
 	// Create a mutable test tool (name matches mutability pattern)
 	mutableToolCalled := false

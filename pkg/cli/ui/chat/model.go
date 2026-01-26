@@ -31,23 +31,31 @@ const (
 
 // AgentModeRef is a thread-safe reference to the agent mode state.
 // It allows tool handlers to check the current mode at execution time.
+// The enabled field is unexported to ensure all access goes through mutex-protected methods.
 type AgentModeRef struct {
 	mu      sync.RWMutex
-	Enabled bool
+	enabled bool
+}
+
+// NewAgentModeRef creates a new AgentModeRef with the given initial state.
+func NewAgentModeRef(initial bool) *AgentModeRef {
+	return &AgentModeRef{
+		enabled: initial,
+	}
 }
 
 // IsEnabled returns true if agent mode is enabled (tools can execute).
 func (r *AgentModeRef) IsEnabled() bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.Enabled
+	return r.enabled
 }
 
 // SetEnabled updates the agent mode state.
 func (r *AgentModeRef) SetEnabled(enabled bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.Enabled = enabled
+	r.enabled = enabled
 }
 
 // chatMessage represents a single message in the chat history.

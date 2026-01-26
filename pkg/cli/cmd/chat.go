@@ -269,7 +269,7 @@ func runTUIChat(
 
 	// Create a shared agent mode reference that can be updated by the TUI
 	// Default to agent mode (true = execute tools, false = plan only)
-	agentModeRef := &chatui.AgentModeRef{Enabled: true}
+	agentModeRef := chatui.NewAgentModeRef(true)
 
 	// Wrap tools with permission prompts and mode enforcement
 	tools = wrapToolsWithPermissionAndMode(tools, eventChan, agentModeRef)
@@ -588,6 +588,9 @@ func wrapToolsWithPermissionAndMode(
 
 	for toolIdx, tool := range tools {
 		wrappedTools[toolIdx] = tool
+
+		// Create per-iteration copies to avoid closure capture bug.
+		// Each handler must use its own tool's name and handler, not the last iteration's values.
 		originalHandler := tool.Handler
 		toolName := tool.Name
 
