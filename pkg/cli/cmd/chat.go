@@ -539,10 +539,10 @@ func getToolArgs(event copilot.SessionEvent) string {
 
 // mutabilityPattern matches tool names that indicate mutable/destructive operations.
 // Read-only operations (get, list, info, describe, logs, status) are auto-approved.
-// Pattern covers: create, delete, start, stop, apply, write, remove, destroy, etc.
+// Pattern covers: create, delete, start, stop, apply, write, remove, destroy, update, patch, set, configure, etc.
 var mutabilityPattern = regexp.MustCompile(
-	`(?i)_(create|delete|start|stop|restart|apply|write|remove|destroy|edit|scale|rollout|init)(_|$)|` +
-		`(?i)^(write_file)$`,
+	`(?i)\b(create|delete|start|stop|restart|apply|write|remove|` +
+		`destroy|edit|scale|rollout|init|update|patch|set|configure)\b`,
 )
 
 // isMutableTool checks if a tool name indicates a mutable operation.
@@ -600,8 +600,21 @@ func wrapToolsWithPermission(tools []copilot.Tool, eventChan chan tea.Msg) []cop
 					Response:   responseChan,
 				}
 
-				// Wait for user response
-				approved := <-responseChan
+				// Wait for user response with timeout to prevent channel leaks
+				var approved bool
+				select {
+				case approved = <-responseChan:
+				case <-time.After(5 * time.Minute):
+					return copilot.ToolResult{
+						TextResultForLLM: fmt.Sprintf(
+							"Permission request timed out for: %s\n"+
+								"The user did not respond within the timeout period.",
+							cmdDescription,
+						),
+						ResultType: "failure",
+						SessionLog: fmt.Sprintf("[TIMEOUT] %s", cmdDescription),
+					}, nil
+				}
 
 				if !approved {
 					return copilot.ToolResult{
@@ -636,7 +649,8 @@ func loadChatModelFromConfig() string {
 	}
 
 	var config v1alpha1.Cluster
-	if err := yaml.Unmarshal(data, &config); err != nil {
+	err = yaml.Unmarshal(data, &config)
+	if err != nil {
 		// Config exists but couldn't be parsed - ignore and use default
 		return ""
 	}

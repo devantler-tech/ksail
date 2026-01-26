@@ -3,6 +3,7 @@ package chat
 import (
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -383,10 +384,11 @@ func (m *Model) styleSessionItem(line string, index int, isCurrentSession bool) 
 	return line
 }
 
-// truncateString truncates a string to maxLen characters with ellipsis.
+// truncateString truncates a string to maxLen runes with ellipsis (Unicode-safe).
 func truncateString(s string, maxLen int) string {
-	if len(s) <= maxLen {
+	if utf8.RuneCountInString(s) <= maxLen {
 		return s
 	}
-	return s[:maxLen-3] + "..."
+	runes := []rune(s)
+	return string(runes[:maxLen-3]) + "..."
 }

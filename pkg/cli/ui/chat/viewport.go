@@ -3,6 +3,7 @@ package chat
 import (
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/mitchellh/go-wordwrap"
 )
@@ -276,8 +277,9 @@ func (m *Model) getToolSummary(tool *toolExecution) string {
 	}
 
 	firstLine := strings.TrimSpace(lines[0])
-	if len(firstLine) > 60 {
-		firstLine = firstLine[:60] + "..."
+	if utf8.RuneCountInString(firstLine) > 60 {
+		runes := []rune(firstLine)
+		firstLine = string(runes[:60]) + "..."
 	}
 
 	if len(lines) > 1 {
@@ -322,11 +324,12 @@ func (m *Model) renderToolOutput(
 	}
 }
 
-// truncateLine returns the first line of text, truncated to maxLen characters.
+// truncateLine returns the first line of text, truncated to maxLen runes (Unicode-safe).
 func (m *Model) truncateLine(text string, maxLen int) string {
 	firstLine := strings.Split(text, "\n")[0]
-	if len(firstLine) > maxLen {
-		return firstLine[:maxLen] + "..."
+	if utf8.RuneCountInString(firstLine) > maxLen {
+		runes := []rune(firstLine)
+		return string(runes[:maxLen]) + "..."
 	}
 	return firstLine
 }

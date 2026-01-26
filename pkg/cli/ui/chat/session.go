@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // SessionMetadata represents metadata for a chat session stored locally.
@@ -79,15 +80,38 @@ func ListSessions() ([]SessionMetadata, error) {
 	return sessions, nil
 }
 
+// validateSessionID ensures the session ID contains only safe characters.
+// Allowed characters are ASCII letters, digits, hyphens, and underscores.
+// This prevents path traversal attacks using malicious session IDs.
+func validateSessionID(id string) error {
+	if id == "" {
+		return errors.New("session ID is empty")
+	}
+	for _, c := range id {
+		if (c >= 'a' && c <= 'z') ||
+			(c >= 'A' && c <= 'Z') ||
+			(c >= '0' && c <= '9') ||
+			c == '-' || c == '_' {
+			continue
+		}
+		return fmt.Errorf("invalid session ID %q: contains invalid character %q", id, c)
+	}
+	return nil
+}
+
 // LoadSession loads session metadata by ID.
 func LoadSession(id string) (*SessionMetadata, error) {
+	if err := validateSessionID(id); err != nil {
+		return nil, err
+	}
+
 	dir, err := sessionsDir()
 	if err != nil {
 		return nil, err
 	}
 
 	path := filepath.Join(dir, id+".json")
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // Path is validated via validateSessionID
 	if err != nil {
 		return nil, fmt.Errorf("failed to read session file: %w", err)
 	}
@@ -103,8 +127,8 @@ func LoadSession(id string) (*SessionMetadata, error) {
 // SaveSession saves session metadata to disk.
 // The ID must be provided (typically from the Copilot SDK session.SessionID).
 func SaveSession(session *SessionMetadata) error {
-	if session.ID == "" {
-		return fmt.Errorf("session ID is required")
+	if err := validateSessionID(session.ID); err != nil {
+		return err
 	}
 
 	dir, err := ensureSessionsDir()
@@ -138,6 +162,10 @@ func SaveSession(session *SessionMetadata) error {
 
 // DeleteSession removes a chat session from disk.
 func DeleteSession(id string) error {
+	if err := validateSessionID(id); err != nil {
+		return err
+	}
+
 	dir, err := sessionsDir()
 	if err != nil {
 		return err
@@ -174,13 +202,13 @@ func GetMostRecentSession() (*SessionMetadata, error) {
 func GenerateSessionName(messages []chatMessage) string {
 	for _, msg := range messages {
 		if msg.role == "user" && msg.content != "" {
-			// Truncate to ~40 chars
-			name := msg.content
-			if len(name) > 40 {
-				name = name[:37] + "..."
+			// Remove newlines first, then truncate
+			name := strings.ReplaceAll(msg.content, "\n", " ")
+			// Truncate to ~40 runes (Unicode-safe)
+			if utf8.RuneCountInString(name) > 40 {
+				runes := []rune(name)
+				name = string(runes[:37]) + "..."
 			}
-			// Remove newlines
-			name = strings.ReplaceAll(name, "\n", " ")
 			return name
 		}
 	}

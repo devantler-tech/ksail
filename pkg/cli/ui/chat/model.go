@@ -922,9 +922,9 @@ func (m *Model) getContextualHelpText() string {
 		}
 	}
 	if hasTools {
-		return "  ⏎ Send • ↑↓ History • PgUp/Dn Scroll • ⇥ Toggle • ^T All • ^H History • ^O Model • ^N New • esc Quit"
+		return "  ⏎ Send • ↑↓ History • PgUp/Dn Scroll • ⇥ Toggle • ^T All • ^H Sessions • ^O Model • ^N New • esc Quit"
 	}
-	return "  ⏎ Send • ↑↓ History • PgUp/Dn Scroll • ^H History • ^O Model • ^N New • esc Quit"
+	return "  ⏎ Send • ↑↓ History • PgUp/Dn Scroll • ^H Sessions • ^O Model • ^N New • esc Quit"
 }
 
 // sendMessageCmd returns a command that initiates message sending.
