@@ -289,7 +289,7 @@ func parseExtractPath(extract string) ([]any, error) {
 
 	// Parse the JSONPath format: ["key1"]["key2"]
 	var path []any
-	//nolint:modernize // Using Split is clearer than SplitN for this use case
+
 	parts := strings.SplitSeq(extract, "][")
 
 	for part := range parts {
