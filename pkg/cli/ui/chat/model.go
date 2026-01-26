@@ -58,6 +58,7 @@ type chatMessage struct {
 	isStreaming bool
 	tools       []*toolExecution // tools executed during this assistant message
 	toolOrder   []string         // ordered tool IDs for this message
+	agentMode   bool             // true = agent mode, false = plan mode (for user messages)
 }
 
 // permissionResponse records a user's response to a permission request.
@@ -150,7 +151,16 @@ func New(
 	currentModel string,
 	timeout time.Duration,
 ) *Model {
-	return NewWithEventChannel(session, client, sessionConfig, models, currentModel, timeout, nil, nil)
+	return NewWithEventChannel(
+		session,
+		client,
+		sessionConfig,
+		models,
+		currentModel,
+		timeout,
+		nil,
+		nil,
+	)
 }
 
 // NewWithEventChannel creates a new chat TUI model with an optional pre-existing event channel.
@@ -474,19 +484,12 @@ func (m *Model) handleUserSubmit(msg userSubmitMsg) (tea.Model, tea.Cmd) {
 	m.addToPromptHistory(msg.content)
 	m.prepareForNewTurn()
 
-	// Add compact mode indicator to message for display purposes
-	// The full instruction is sent to the model in streamResponseCmd
-	displayContent := msg.content
-	if m.agentMode {
-		displayContent = "[AGENT] " + msg.content
-	} else {
-		displayContent = "[PLAN] " + msg.content
-	}
-
-	// Add user message with compact mode indicator and placeholder assistant message
+	// Add user message and placeholder assistant message
+	// Store the current mode with the message so it can be displayed in the indicator
 	m.messages = append(m.messages, chatMessage{
-		role:    "user",
-		content: displayContent,
+		role:      "user",
+		content:   msg.content,
+		agentMode: m.agentMode,
 	})
 	m.messages = append(m.messages, chatMessage{
 		role:        "assistant",
@@ -859,12 +862,12 @@ func RunWithEventChannelAndModeRef(
 		agentModeRef,
 	)
 	model.ctx = ctx
-	
+
 	// Ensure agentModeRef is initialized with the model's initial state
 	if agentModeRef != nil {
 		agentModeRef.SetEnabled(model.agentMode)
 	}
-	
+
 	program := tea.NewProgram(
 		model,
 		tea.WithAltScreen(),

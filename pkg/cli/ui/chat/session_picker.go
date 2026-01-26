@@ -209,7 +209,7 @@ func (m *Model) loadSession(metadata *SessionMetadata) {
 	if err != nil {
 		m.messages = []chatMessage{}
 	} else {
-		m.messages = m.sessionEventsToMessages(events)
+		m.messages = m.sessionEventsToMessages(events, metadata)
 	}
 
 	for i := range m.messages {
@@ -234,8 +234,10 @@ func (m *Model) resetStreamingState() {
 }
 
 // sessionEventsToMessages converts Copilot SessionEvents to internal chatMessages.
-func (m *Model) sessionEventsToMessages(events []copilot.SessionEvent) []chatMessage {
+// It also restores per-message metadata (like agentMode) from the session metadata.
+func (m *Model) sessionEventsToMessages(events []copilot.SessionEvent, metadata *SessionMetadata) []chatMessage {
 	var messages []chatMessage
+	userMsgIndex := 0
 	for _, event := range events {
 		var role, content string
 		switch event.Type {
@@ -253,10 +255,21 @@ func (m *Model) sessionEventsToMessages(events []copilot.SessionEvent) []chatMes
 			continue
 		}
 		if content != "" {
-			messages = append(messages, chatMessage{
+			msg := chatMessage{
 				role:    role,
 				content: content,
-			})
+			}
+			// Restore agentMode for user messages from metadata
+			if role == "user" {
+				if userMsgIndex < len(metadata.Messages) {
+					msg.agentMode = metadata.Messages[userMsgIndex].AgentMode
+				} else {
+					// Default to true (agent mode) for messages without metadata
+					msg.agentMode = true
+				}
+				userMsgIndex++
+			}
+			messages = append(messages, msg)
 		}
 	}
 	return messages
@@ -274,8 +287,18 @@ func (m *Model) saveCurrentSession() error {
 	}
 
 	agentMode := m.agentMode
+	// Build per-message metadata
+	messageMetadata := make([]MessageMetadata, 0)
+	for _, msg := range m.messages {
+		if msg.role == "user" {
+			messageMetadata = append(messageMetadata, MessageMetadata{
+				AgentMode: msg.agentMode,
+			})
+		}
+	}
 	metadata := &SessionMetadata{
-		ID:        sessionID,
+		ID:       sessionID,
+		Messages: messageMetadata,
 		Model:     m.currentModel,
 		Name:      GenerateSessionName(m.messages),
 		AgentMode: &agentMode,

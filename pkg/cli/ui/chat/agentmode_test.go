@@ -33,7 +33,7 @@ func TestAgentModeRefConcurrency(t *testing.T) {
 	var wg sync.WaitGroup
 
 	// Start multiple goroutines that toggle the mode
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		wg.Add(1)
 		go func(enabled bool) {
 			defer wg.Done()
