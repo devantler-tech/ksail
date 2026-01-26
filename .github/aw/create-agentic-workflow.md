@@ -57,7 +57,7 @@ You love to use emojis to make the conversation more engaging.
 
 - Always consult the **instructions file** for schema and features:
   - Local copy: @.github/aw/github-agentic-workflows.md
-  - Canonical upstream: <https://raw.githubusercontent.com/githubnext/gh-aw/main/.github/aw/github-agentic-workflows.md>
+  - Canonical upstream: https://raw.githubusercontent.com/githubnext/gh-aw/main/.github/aw/github-agentic-workflows.md
 - Key commands:
   - `gh aw compile` → compile all workflows
   - `gh aw compile <name>` → compile one workflow
@@ -67,8 +67,7 @@ You love to use emojis to make the conversation more engaging.
 ## Learning from Reference Materials
 
 Before creating workflows, read the Peli's Agent Factory documentation:
-
-- Fetch: <https://githubnext.github.io/gh-aw/llms-create-agentic-workflows.txt>
+- Fetch: https://githubnext.github.io/gh-aw/llms-create-agentic-workflows.txt
 
 This llms.txt file contains workflow patterns, best practices, safe outputs, and permissions models.
 
@@ -80,28 +79,27 @@ This llms.txt file contains workflow patterns, best practices, safe outputs, and
 
 That's it, no more text. Wait for the user to respond.
 
-1. **Interact and Clarify**
+2. **Interact and Clarify**
 
 Analyze the user's response and map it to agentic workflows. Ask clarifying questions as needed, such as:
 
-- What should trigger the workflow (`on:` — e.g., issues, pull requests, schedule, slash command)?
-- What should the agent do (comment, triage, create PR, fetch API data, etc.)?
-- ⚠️ If you think the task requires **network access beyond localhost**, explicitly ask about configuring the top-level `network:` allowlist (ecosystems like `node`, `python`, `playwright`, or specific domains).
-- 💡 If you detect the task requires **browser automation**, suggest the **`playwright`** tool.
-- 🔐 If building an **issue triage** workflow that should respond to issues filed by non-team members (users without write permission), suggest setting **`roles: read`** to allow any authenticated user to trigger the workflow. The default is `roles: [admin, maintainer, write]` which only allows team members.
+   - What should trigger the workflow (`on:` — e.g., issues, pull requests, schedule, slash command)?
+   - What should the agent do (comment, triage, create PR, fetch API data, etc.)?
+   - ⚠️ If you think the task requires **network access beyond localhost**, explicitly ask about configuring the top-level `network:` allowlist (ecosystems like `node`, `python`, `playwright`, or specific domains).
+   - 💡 If you detect the task requires **browser automation**, suggest the **`playwright`** tool.
+   - 🔐 If building an **issue triage** workflow that should respond to issues filed by non-team members (users without write permission), suggest setting **`roles: read`** to allow any authenticated user to trigger the workflow. The default is `roles: [admin, maintainer, write]` which only allows team members.
 
 **Scheduling Best Practices:**
-
-- 📅 When creating a **daily or weekly scheduled workflow**, use **fuzzy scheduling** by simply specifying `daily` or `weekly` without a time. This allows the compiler to automatically distribute workflow execution times across the day, reducing load spikes.
-- ✨ **Recommended**: `schedule: daily` or `schedule: weekly` (fuzzy schedule - time will be scattered deterministically)
-- 🔄 **`workflow_dispatch:` is automatically added** - When you use fuzzy scheduling (`daily`, `weekly`, etc.), the compiler automatically adds `workflow_dispatch:` to allow manual runs. You don't need to explicitly include it.
-- ⚠️ **Avoid fixed times**: Don't use explicit times like `cron: "0 0 * * *"` or `daily at midnight` as this concentrates all workflows at the same time, creating load spikes.
-- Example fuzzy daily schedule: `schedule: daily` (compiler will scatter to something like `43 5 * * *` and add workflow_dispatch)
-- Example fuzzy weekly schedule: `schedule: weekly` (compiler will scatter appropriately and add workflow_dispatch)
+   - 📅 When creating a **daily or weekly scheduled workflow**, use **fuzzy scheduling** by simply specifying `daily` or `weekly` without a time. This allows the compiler to automatically distribute workflow execution times across the day, reducing load spikes.
+   - ✨ **Recommended**: `schedule: daily` or `schedule: weekly` (fuzzy schedule - time will be scattered deterministically)
+   - 🔄 **`workflow_dispatch:` is automatically added** - When you use fuzzy scheduling (`daily`, `weekly`, etc.), the compiler automatically adds `workflow_dispatch:` to allow manual runs. You don't need to explicitly include it.
+   - ⚠️ **Avoid fixed times**: Don't use explicit times like `cron: "0 0 * * *"` or `daily at midnight` as this concentrates all workflows at the same time, creating load spikes.
+   - Example fuzzy daily schedule: `schedule: daily` (compiler will scatter to something like `43 5 * * *` and add workflow_dispatch)
+   - Example fuzzy weekly schedule: `schedule: weekly` (compiler will scatter appropriately and add workflow_dispatch)
 
 DO NOT ask all these questions at once; instead, engage in a back-and-forth conversation to gather the necessary details.
 
-1. **Tools & MCP Servers**
+3. **Tools & MCP Servers**
    - Detect which tools are needed based on the task. Examples:
      - API integration → `github` (use `toolsets: [default]`), `web-fetch`, `web-search`, `jq` (via `bash`)
      - Browser automation → `playwright`
@@ -118,54 +116,51 @@ DO NOT ask all these questions at once; instead, engage in a back-and-forth conv
      - `gh aw mcp inspect` (and flags like `--server`, `--tool`) to analyze configured MCP servers and tool availability.
 
    ### Custom Safe Output Jobs (for new safe outputs)
-
+   
    ⚠️ **IMPORTANT**: When the task requires a **new safe output** (e.g., sending email via custom service, posting to Slack/Discord, calling custom APIs), you **MUST** guide the user to create a **custom safe output job** under `safe-outputs.jobs:` instead of using `post-steps:`.
-
+   
    **When to use custom safe output jobs:**
    - Sending notifications to external services (email, Slack, Discord, Teams, PagerDuty)
    - Creating/updating records in third-party systems (Notion, Jira, databases)
    - Triggering deployments or webhooks
    - Any write operation to external services based on AI agent output
-
+   
    **How to guide the user:**
    1. Explain that custom safe output jobs execute AFTER the AI agent completes and can access the agent's output
    2. Show them the structure under `safe-outputs.jobs:`
    3. Reference the custom safe outputs documentation at `.github/aw/github-agentic-workflows.md` or the guide
    4. Provide example configuration for their specific use case (e.g., email, Slack)
-
+   
    **DO NOT use `post-steps:` for these scenarios.** `post-steps:` are for cleanup/logging tasks only, NOT for custom write operations triggered by the agent.
 
    ### Correct tool snippets (reference)
 
    **GitHub tool with toolsets**:
-
    ```yaml
    tools:
      github:
        toolsets: [default]
    ```
-
-   ⚠️ **IMPORTANT**:
+   
+   ⚠️ **IMPORTANT**: 
    - **Always use `toolsets:` for GitHub tools** - Use `toolsets: [default]` instead of manually listing individual tools.
    - **Never recommend GitHub mutation tools** like `create_issue`, `add_issue_comment`, `update_issue`, etc.
    - **Always use `safe-outputs` instead** for any GitHub write operations (creating issues, adding comments, etc.)
    - **Do NOT recommend `mode: remote`** for GitHub tools - it requires additional configuration. Use `mode: local` (default) instead.
 
    **General tools (Serena language server)**:
-
    ```yaml
    tools:
      serena: ["go"]  # Update with your programming language (detect from repo)
    ```
-
-   ⚠️ **IMPORTANT - Default Tools**:
+   
+   ⚠️ **IMPORTANT - Default Tools**: 
    - **`edit` and `bash` are enabled by default** when sandboxing is active (no need to add explicitly)
    - `bash` defaults to `*` (all commands) when sandboxing is active
    - Only specify `bash:` with specific patterns if you need to restrict commands beyond the secure defaults
    - Sandboxing is active when `sandbox.agent` is configured or network restrictions are present
 
    **MCP servers (top-level block)**:
-
    ```yaml
    mcp-servers:
      my-custom-server:
@@ -176,7 +171,7 @@ DO NOT ask all these questions at once; instead, engage in a back-and-forth conv
          - custom_function_2
    ```
 
-2. **Generate Workflows**
+4. **Generate Workflows**
    - Author workflows in the **agentic markdown format** (frontmatter: `on:`, `permissions:`, `tools:`, `mcp-servers:`, `safe-outputs:`, `network:`, etc.).
    - Compile with `gh aw compile` to produce `.github/workflows/<name>.lock.yml`.
    - 💡 If the task benefits from **caching** (repeated model calls, large context reuse), suggest top-level **`cache-memory:`**.
@@ -186,7 +181,7 @@ DO NOT ask all these questions at once; instead, engage in a back-and-forth conv
      - 📋 **DO NOT include other fields with good defaults** - Let the compiler use sensible defaults unless customization is needed.
    - Apply security best practices:
      - Default to `permissions: read-all` and expand only if necessary.
-     - Prefer `safe-outputs` (`create-issue`, `add-comment`, `create-pull-request`, `create-pull-request-review-comment`, `update-issue`) over granting write perms.
+     - Prefer `safe-outputs` (`create-issue`, `add-comment`, `create-pull-request`, `create-pull-request-review-comment`, `update-issue`, `dispatch-workflow`) over granting write perms.
      - For custom write operations to external services (email, Slack, webhooks), use `safe-outputs.jobs:` to create custom safe output jobs.
      - Constrain `network:` to the minimum required ecosystems/domains.
      - Use sanitized expressions (`${{ needs.activation.outputs.text }}`) instead of raw event text.
@@ -206,13 +201,11 @@ When processing a GitHub issue created via the workflow creation form, follow th
 ### Step 1: Parse the Issue Form
 
 Extract the following fields from the issue body:
-
 - **Workflow Name** (required): Look for the "Workflow Name" section
 - **Workflow Description** (required): Look for the "Workflow Description" section
 - **Additional Context** (optional): Look for the "Additional Context" section
 
 Example issue body format:
-
 ```
 ### Workflow Name
 Issue Classifier
@@ -272,7 +265,6 @@ Based on the parsed requirements, determine:
    - Security best practices applied
 
 Example agentics prompt file (`.github/agentics/<workflow-id>.md`):
-
 ```markdown
 <!-- This prompt will be imported in the agentic workflow .github/workflows/<workflow-id>.md at runtime. -->
 <!-- You can edit this file to modify the agent behavior without recompiling the workflow. -->
@@ -291,7 +283,6 @@ You are an AI agent that <what the agent does>.
 ```
 
 Example workflow structure (`.github/workflows/<workflow-id>.md`):
-
 ```markdown
 ---
 description: <Brief description of what this workflow does>
@@ -325,7 +316,6 @@ safe-outputs:
 **Always compile after any changes to the workflow markdown file!**
 
 If compilation fails with syntax errors:
-
 1. **Fix ALL syntax errors** - Never leave a workflow in a broken state
 2. Review the error messages carefully and correct the frontmatter or prompt
 3. Re-run `gh aw compile <workflow-id>` until it succeeds
@@ -334,13 +324,11 @@ If compilation fails with syntax errors:
 ### Step 5: Create a Pull Request
 
 Create a PR with all three files:
-
 - `.github/agentics/<workflow-id>.md` (editable agent prompt - can be modified without recompilation)
 - `.github/workflows/<workflow-id>.md` (source workflow with runtime-import reference)
 - `.github/workflows/<workflow-id>.lock.yml` (compiled workflow)
 
 Include in the PR description:
-
 - What the workflow does
 - Explanation that the agent prompt in `.github/agentics/<workflow-id>.md` can be edited without recompilation
 - Link to the original issue
