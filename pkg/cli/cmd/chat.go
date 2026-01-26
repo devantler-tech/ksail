@@ -272,7 +272,7 @@ func runTUIChat(
 	agentModeRef := chatui.NewAgentModeRef(true)
 
 	// Wrap tools with permission prompts and mode enforcement
-	tools = wrapToolsWithPermissionAndMode(tools, eventChan, agentModeRef)
+	tools = WrapToolsWithPermissionAndMode(tools, eventChan, agentModeRef)
 	sessionConfig.Tools = tools
 
 	// Create session
@@ -576,10 +576,10 @@ func formatToolArguments(args any) string {
 	return strings.Join(parts, ", ")
 }
 
-// wrapToolsWithPermissionAndMode wraps ALL tools with mode enforcement and permission prompts.
+// WrapToolsWithPermissionAndMode wraps ALL tools with mode enforcement and permission prompts.
 // In plan mode, ALL tool execution is blocked (model can only describe what it would do).
 // In agent mode, mutable tools require permission, while read-only tools are auto-approved.
-func wrapToolsWithPermissionAndMode(
+func WrapToolsWithPermissionAndMode(
 	tools []copilot.Tool,
 	eventChan chan tea.Msg,
 	agentModeRef *chatui.AgentModeRef,
