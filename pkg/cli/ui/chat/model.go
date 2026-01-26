@@ -98,6 +98,13 @@ type Model struct {
 	pendingPermission *permissionRequestMsg // current permission request awaiting user response
 	permissionHistory []permissionResponse  // history of permission decisions
 
+	// Session management
+	currentSessionID     string            // ID of the current session (empty if new)
+	availableSessions    []SessionMetadata // cached list of available sessions
+	showSessionPicker    bool              // true when session picker overlay is visible
+	sessionPickerIndex   int               // currently highlighted session in picker
+	confirmDeleteSession bool              // true when confirming session deletion
+
 	// Markdown renderer (cached to avoid terminal queries)
 	renderer *glamour.TermRenderer
 
@@ -167,25 +174,26 @@ func NewWithEventChannel(
 	}
 
 	return &Model{
-		viewport:        viewPort,
-		textarea:        textArea,
-		spinner:         spin,
-		renderer:        mdRenderer,
-		messages:        make([]chatMessage, 0),
-		session:         session,
-		client:          client,
-		sessionConfig:   sessionConfig,
-		timeout:         timeout,
-		ctx:             context.Background(),
-		eventChan:       eventChan,
-		width:           defaultWidth,
-		height:          defaultHeight,
-		tools:           make(map[string]*toolExecution),
-		toolOrder:       make([]string, 0),
-		history:         make([]string, 0),
-		historyIndex:    -1,
-		availableModels: models,
-		currentModel:    currentModel,
+		viewport:         viewPort,
+		textarea:         textArea,
+		spinner:          spin,
+		renderer:         mdRenderer,
+		messages:         make([]chatMessage, 0),
+		session:          session,
+		client:           client,
+		sessionConfig:    sessionConfig,
+		currentSessionID: session.SessionID, // Track the SDK's session ID
+		timeout:          timeout,
+		ctx:              context.Background(),
+		eventChan:        eventChan,
+		width:            defaultWidth,
+		height:           defaultHeight,
+		tools:            make(map[string]*toolExecution),
+		toolOrder:        make([]string, 0),
+		history:          make([]string, 0),
+		historyIndex:     -1,
+		availableModels:  models,
+		currentModel:     currentModel,
 	}
 }
 
@@ -197,6 +205,10 @@ func (m *Model) GetEventChannel() chan tea.Msg {
 
 // Init initializes the model and returns an initial command.
 func (m *Model) Init() tea.Cmd {
+	// Auto-load most recent session if available
+	if metadata, err := GetMostRecentSession(); err == nil {
+		m.loadSession(metadata)
+	}
 	return tea.Batch(textarea.Blink, m.spinner.Tick)
 }
 
@@ -385,6 +397,8 @@ func (m *Model) View() string {
 		sections = append(sections, m.renderPermissionModal())
 	} else if m.showModelPicker {
 		sections = append(sections, m.renderModelPickerModal())
+	} else if m.showSessionPicker {
+		sections = append(sections, m.renderSessionPickerModal())
 	} else {
 		// Input area - box handles clipping via fixed width
 		inputContent := inputStyle.Width(m.width - 2).Render(m.textarea.View())
@@ -403,9 +417,9 @@ func (m *Model) View() string {
 		}
 	}
 	if hasTools {
-		helpText = "  ⏎ Send • ↑↓ History • PgUp/Dn Scroll • ⇥ Toggle • ^T All • ^O Model • ^L Clear • esc Quit"
+		helpText = "  ⏎ Send • ↑↓ History • PgUp/Dn Scroll • ⇥ Toggle • ^T All • ^H History • ^O Model • ^L Clear • esc Quit"
 	} else {
-		helpText = "  ⏎ Send • ↑↓ History • PgUp/Dn Scroll • ^O Model • ^L Clear • esc Quit"
+		helpText = "  ⏎ Send • ↑↓ History • PgUp/Dn Scroll • ^H History • ^O Model • ^L Clear • esc Quit"
 	}
 	help := lipgloss.NewStyle().MaxWidth(m.width).Inline(true).Render(helpStyle.Render(helpText))
 	sections = append(sections, help)
@@ -429,10 +443,16 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleModelPickerKey(msg)
 	}
 
+	// Handle session picker navigation when active
+	if m.showSessionPicker {
+		return m.handleSessionPickerKey(msg)
+	}
+
 	switch msg.String() {
 	case "ctrl+c":
 		// Always quit on ctrl+c, even during streaming
 		m.cleanup()
+		_ = m.saveCurrentSession() // Auto-save on exit
 		m.quitting = true
 		return m, tea.Quit
 	case "esc":
@@ -449,6 +469,7 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.updateViewportContent()
 			return m, nil
 		}
+		_ = m.saveCurrentSession() // Auto-save on exit
 		m.quitting = true
 		return m, tea.Quit
 	case "ctrl+o":
@@ -471,15 +492,41 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, nil
-	case "ctrl+l":
-		// Clear chat history and tool tracking
+	case "ctrl+h":
+		// Open session picker (only when not streaming)
 		if !m.isStreaming {
-			m.messages = make([]chatMessage, 0)
-			m.currentResponse.Reset()
-			m.tools = make(map[string]*toolExecution)
-			m.toolOrder = make([]string, 0)
-			m.updateViewportContent()
+			// Refresh session list
+			sessions, _ := ListSessions()
+			m.availableSessions = sessions
+			m.showSessionPicker = true
+			m.confirmDeleteSession = false
+			m.updateDimensions() // Shrink viewport to make room for modal
+			// Set picker index to current session
+			// Index 0 = "New Chat", Index 1+ = availableSessions[i-1]
+			if m.currentSessionID == "" {
+				m.sessionPickerIndex = 0
+			} else {
+				m.sessionPickerIndex = 0 // default to "New Chat" if not found
+				for i, session := range m.availableSessions {
+					if session.ID == m.currentSessionID {
+						m.sessionPickerIndex = i + 1 // offset by 1 for "New Chat" option
+						break
+					}
+				}
+			}
 		}
+		return m, nil
+	case "ctrl+l":
+		// Clear chat history and start a new session
+		if !m.isStreaming {
+			// Save current session before clearing
+			_ = m.saveCurrentSession()
+			// Create a brand new session with new ID
+			if err := m.startNewSession(); err != nil {
+				m.err = err
+			}
+		}
+		return m, nil
 	case "alt+enter":
 		// Insert newline (alt+enter since terminals don't detect shift+enter)
 		m.textarea.InsertString("\n")
@@ -911,6 +958,10 @@ func (m *Model) tryFinalizeResponse() (tea.Model, tea.Cmd) {
 
 	m.updateViewportContent()
 	m.cleanup() // Clean up event subscription
+
+	// Auto-save session after each completed turn
+	_ = m.saveCurrentSession()
+
 	return m, nil
 }
 
@@ -1041,14 +1092,14 @@ func (m *Model) activeModalHeight() int {
 		}
 		return 0
 	}
-	if m.showModelPicker {
+	if m.showModelPicker || m.showSessionPicker {
 		// Calculate actual model picker height based on content
 		totalItems := len(m.availableModels) + 1 // +1 for "auto" option
 		const maxVisible = 5
 		visibleCount := min(totalItems, maxVisible)
 
 		// Calculate content lines: title + blank + items + reserved scroll indicator space
-		lines := 0 // title line + blank line
+		lines := 1 // title line + blank line
 		lines += visibleCount
 		if totalItems > maxVisible {
 			lines += 2 // always reserve space for scroll indicators (up + down)
@@ -1631,153 +1682,6 @@ func (m *Model) switchModel(newModelID string) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// renderModelPickerOverlay renders the model picker as a modal overlay at the bottom.
-func (m *Model) renderModelPickerOverlay(baseView string) string {
-	// Calculate overlay dimensions - match other UI elements (header, viewport, input)
-	overlayWidth := m.width - 2
-	if overlayWidth < 30 {
-		overlayWidth = 30
-	}
-
-	// Build list of display items: "auto" option + available models
-	// Index 0 = "auto", Index 1+ = availableModels[i-1]
-	totalItems := len(m.availableModels) + 1 // +1 for "auto" option
-
-	// Max 10 visible items
-	const maxVisible = 10
-	visibleCount := totalItems
-	if visibleCount > maxVisible {
-		visibleCount = maxVisible
-	}
-
-	// Calculate scroll offset to keep selected item visible
-	scrollOffset := 0
-	if totalItems > maxVisible {
-		// Keep selected item in view with some padding
-		if m.modelPickerIndex >= scrollOffset+maxVisible {
-			scrollOffset = m.modelPickerIndex - maxVisible + 1
-		}
-		if m.modelPickerIndex < scrollOffset {
-			scrollOffset = m.modelPickerIndex
-		}
-		// Clamp scroll offset
-		if scrollOffset > totalItems-maxVisible {
-			scrollOffset = totalItems - maxVisible
-		}
-		if scrollOffset < 0 {
-			scrollOffset = 0
-		}
-	}
-
-	// Build model list content
-	var listContent strings.Builder
-	listContent.WriteString("Select Model (↑↓ navigate, ⏎ select, esc cancel)\n\n")
-
-	// Show scroll indicator if needed
-	if scrollOffset > 0 {
-		listContent.WriteString(
-			lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8)).Render("  ↑ more above\n"),
-		)
-	}
-
-	// Render visible items
-	endIdx := scrollOffset + visibleCount
-	if endIdx > totalItems {
-		endIdx = totalItems
-	}
-	for i := scrollOffset; i < endIdx; i++ {
-		prefix := "  "
-		if i == m.modelPickerIndex {
-			prefix = "> "
-		}
-
-		var line string
-		var isCurrentModel bool
-
-		if i == 0 {
-			// "auto" option - lets the API choose the best model
-			line = prefix + "auto (let Copilot choose)"
-			isCurrentModel = m.currentModel == "" || m.currentModel == "auto"
-		} else {
-			// Regular model from availableModels (index offset by 1)
-			model := m.availableModels[i-1]
-
-			// Format: name (multiplier)
-			multiplier := ""
-			if model.Billing != nil && model.Billing.Multiplier > 0 {
-				multiplier = fmt.Sprintf(" (%.0fx)", model.Billing.Multiplier)
-			}
-
-			line = fmt.Sprintf("%s%s%s", prefix, model.ID, multiplier)
-			isCurrentModel = model.ID == m.currentModel
-		}
-
-		// Add checkmark if this is the current model
-		if isCurrentModel {
-			line += " ✓"
-		}
-
-		if i == m.modelPickerIndex {
-			// Highlight selected item
-			listContent.WriteString(lipgloss.NewStyle().
-				Foreground(lipgloss.ANSIColor(14)). // Bright cyan
-				Bold(true).
-				Render(line))
-		} else if isCurrentModel {
-			// Current model indicator
-			listContent.WriteString(lipgloss.NewStyle().
-				Foreground(lipgloss.ANSIColor(10)). // Bright green
-				Render(line))
-		} else {
-			listContent.WriteString(line)
-		}
-		listContent.WriteString("\n")
-	}
-
-	// Show scroll indicator if more below
-	if endIdx < totalItems {
-		listContent.WriteString(
-			lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8)).Render("  ↓ more below"),
-		)
-	}
-
-	// Create styled modal box
-	modalStyle := lipgloss.NewStyle().
-		BorderStyle(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.ANSIColor(14)). // Bright cyan
-		Padding(0, 2).
-		Width(overlayWidth)
-
-	modal := modalStyle.Render(listContent.String())
-
-	// Calculate position at bottom (covering input area and up into chat)
-	modalHeight := lipgloss.Height(modal)
-	baseLines := strings.Split(baseView, "\n")
-
-	// Position modal at bottom of screen
-	startY := m.height - modalHeight - footerHeight
-	if startY < headerHeight {
-		startY = headerHeight // Don't cover header
-	}
-
-	// Dim background lines that will be overlaid
-	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8))
-	for i := startY; i < len(baseLines) && i < startY+modalHeight; i++ {
-		baseLines[i] = dimStyle.Render(baseLines[i])
-	}
-
-	// Overlay the modal
-	modalLines := strings.Split(modal, "\n")
-	for i, line := range modalLines {
-		y := startY + i
-		if y >= 0 && y < len(baseLines) {
-			baseLines[y] = line
-		}
-	}
-
-	return strings.Join(baseLines, "\n")
-}
-
 // handlePermissionRequest handles incoming permission request messages.
 func (m *Model) handlePermissionRequest(req *permissionRequestMsg) (tea.Model, tea.Cmd) {
 	// Store the pending permission request for user response
@@ -1868,13 +1772,17 @@ func (m *Model) renderPermissionModal() string {
 
 	// Show command if available
 	if m.pendingPermission.command != "" {
-		content.WriteString(clipStyle.Render(fmt.Sprintf("Command: %s", m.pendingPermission.command)) + "\n")
+		content.WriteString(
+			clipStyle.Render(fmt.Sprintf("Command: %s", m.pendingPermission.command)) + "\n",
+		)
 		contentLines++
 	}
 
 	// Show arguments if available
 	if m.pendingPermission.arguments != "" {
-		content.WriteString(clipStyle.Render(fmt.Sprintf("Arguments: %s", m.pendingPermission.arguments)) + "\n")
+		content.WriteString(
+			clipStyle.Render(fmt.Sprintf("Arguments: %s", m.pendingPermission.arguments)) + "\n",
+		)
 		contentLines++
 	}
 
@@ -1938,7 +1846,9 @@ func (m *Model) renderModelPickerModal() string {
 
 	// Build model list content
 	var listContent strings.Builder
-	listContent.WriteString(clipStyle.Render("Select Model (↑↓ navigate, ⏎ select, esc cancel)") + "\n")
+	listContent.WriteString(
+		clipStyle.Render("Select Model (↑↓ navigate, ⏎ select, esc cancel)") + "\n",
+	)
 
 	// Determine if list is scrollable
 	isScrollable := totalItems > maxVisible
@@ -1955,7 +1865,7 @@ func (m *Model) renderModelPickerModal() string {
 	}
 
 	// Render visible items
-	endIdx := min(scrollOffset + visibleCount, totalItems)
+	endIdx := min(scrollOffset+visibleCount, totalItems)
 	for i := scrollOffset; i < endIdx; i++ {
 		prefix := "  "
 		if i == m.modelPickerIndex {
@@ -2034,4 +1944,387 @@ func (m *Model) renderModelPickerModal() string {
 		Height(contentLines)
 
 	return modalStyle.Render(strings.TrimRight(listContent.String(), "\n"))
+}
+
+// handleSessionPickerKey handles keyboard input when the session picker is active.
+func (m *Model) handleSessionPickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	totalItems := len(m.availableSessions) + 1 // +1 for "New Chat" option
+
+	// Handle delete confirmation
+	if m.confirmDeleteSession {
+		switch msg.String() {
+		case "y", "Y":
+			// Delete the selected session
+			if m.sessionPickerIndex > 0 && m.sessionPickerIndex <= len(m.availableSessions) {
+				session := m.availableSessions[m.sessionPickerIndex-1]
+				_ = DeleteSession(session.ID)
+				// Refresh session list
+				sessions, _ := ListSessions()
+				m.availableSessions = sessions
+				// Adjust index if needed
+				if m.sessionPickerIndex > len(m.availableSessions) {
+					m.sessionPickerIndex = len(m.availableSessions)
+				}
+			}
+			m.confirmDeleteSession = false
+			return m, nil
+		case "n", "N", "esc":
+			m.confirmDeleteSession = false
+			return m, nil
+		}
+		return m, nil
+	}
+
+	switch msg.String() {
+	case "esc":
+		m.showSessionPicker = false
+		m.updateDimensions()
+		return m, nil
+	case "up", "k":
+		if m.sessionPickerIndex > 0 {
+			m.sessionPickerIndex--
+		}
+		return m, nil
+	case "down", "j":
+		if m.sessionPickerIndex < totalItems-1 {
+			m.sessionPickerIndex++
+		}
+		return m, nil
+	case "d", "delete", "backspace":
+		// Delete selected session (not "New Chat")
+		if m.sessionPickerIndex > 0 && m.sessionPickerIndex <= len(m.availableSessions) {
+			m.confirmDeleteSession = true
+		}
+		return m, nil
+	case "enter":
+		// Save current session before switching
+		_ = m.saveCurrentSession()
+		// Select the session
+		if m.sessionPickerIndex == 0 {
+			// "New Chat" option - create a brand new session
+			if err := m.startNewSession(); err != nil {
+				m.err = err
+			}
+		} else if m.sessionPickerIndex > 0 && m.sessionPickerIndex <= len(m.availableSessions) {
+			// Load selected session
+			session := m.availableSessions[m.sessionPickerIndex-1]
+			m.loadSession(&session)
+		}
+		m.showSessionPicker = false
+		m.updateDimensions()
+		return m, nil
+	case "ctrl+c":
+		m.cleanup()
+		m.quitting = true
+		return m, tea.Quit
+	}
+	return m, nil
+}
+
+// startNewSession destroys the current session and creates a fresh one.
+// This ensures a new session ID is assigned by the SDK.
+func (m *Model) startNewSession() error {
+	// Clean up current session
+	m.cleanup()
+	if m.session != nil {
+		_ = m.session.Destroy()
+	}
+
+	// Clear session ID from config to let SDK generate a new one
+	m.sessionConfig.SessionID = ""
+
+	// Create a new session
+	session, err := m.client.CreateSession(m.sessionConfig)
+	if err != nil {
+		return fmt.Errorf("failed to create new session: %w", err)
+	}
+	m.session = session
+	m.currentSessionID = session.SessionID
+
+	// Reset state
+	m.messages = []chatMessage{}
+	m.tools = make(map[string]*toolExecution)
+	m.toolOrder = make([]string, 0)
+	m.currentResponse.Reset()
+	m.isStreaming = false
+	m.justCompleted = false
+	m.pendingToolCount = 0
+	m.sessionComplete = false
+
+	m.updateViewportContent()
+	return nil
+}
+
+// loadSession loads a chat session into the model using the Copilot SDK.
+// The metadata is stored locally, but messages are retrieved from Copilot server.
+func (m *Model) loadSession(metadata *SessionMetadata) {
+	m.currentSessionID = metadata.ID
+
+	// Clean up current session before switching
+	m.cleanup()
+	if m.session != nil {
+		_ = m.session.Destroy()
+	}
+
+	// Update model if session had a specific one
+	if metadata.Model != "" {
+		m.sessionConfig.Model = metadata.Model
+		m.currentModel = metadata.Model
+	}
+
+	// Resume session from Copilot server using the session ID
+	session, err := m.client.ResumeSession(metadata.ID)
+	if err != nil {
+		// If resume fails, create a new session with the same ID
+		m.sessionConfig.SessionID = metadata.ID
+		session, err = m.client.CreateSession(m.sessionConfig)
+		if err != nil {
+			m.err = fmt.Errorf("failed to resume session: %w", err)
+			return
+		}
+	}
+	m.session = session
+
+	// Get message history from server
+	events, err := session.GetMessages()
+	if err != nil {
+		// Continue with empty history if retrieval fails
+		m.messages = []chatMessage{}
+	} else {
+		// Convert SessionEvents to chatMessages
+		m.messages = m.sessionEventsToMessages(events)
+	}
+
+	// Re-render assistant messages with current renderer
+	for i := range m.messages {
+		if m.messages[i].role == "assistant" && m.messages[i].content != "" {
+			m.messages[i].rendered = renderMarkdownWithRenderer(m.renderer, m.messages[i].content)
+		}
+	}
+
+	// Reset streaming state
+	m.tools = make(map[string]*toolExecution)
+	m.toolOrder = make([]string, 0)
+	m.currentResponse.Reset()
+	m.isStreaming = false
+	m.justCompleted = false
+	m.pendingToolCount = 0
+	m.sessionComplete = false
+
+	m.updateViewportContent()
+}
+
+// sessionEventsToMessages converts Copilot SessionEvents to internal chatMessages.
+func (m *Model) sessionEventsToMessages(events []copilot.SessionEvent) []chatMessage {
+	var messages []chatMessage
+	for _, event := range events {
+		var role, content string
+		switch event.Type {
+		case copilot.UserMessage:
+			role = "user"
+			if event.Data.Content != nil {
+				content = *event.Data.Content
+			}
+		case copilot.AssistantMessage:
+			role = "assistant"
+			if event.Data.Content != nil {
+				content = *event.Data.Content
+			}
+		default:
+			// Skip other event types (tool events, etc.)
+			continue
+		}
+		if content != "" {
+			messages = append(messages, chatMessage{
+				role:    role,
+				content: content,
+			})
+		}
+	}
+	return messages
+}
+
+// saveCurrentSession saves the current session metadata to disk.
+// Messages are stored server-side by Copilot, only metadata is saved locally.
+func (m *Model) saveCurrentSession() error {
+	if len(m.messages) == 0 || m.session == nil {
+		return nil // Nothing to save
+	}
+
+	// Use the SDK's session ID - this is what Copilot uses to store messages
+	sessionID := m.session.SessionID
+	if sessionID == "" {
+		return nil // No valid session
+	}
+
+	metadata := &SessionMetadata{
+		ID:    sessionID,
+		Model: m.currentModel,
+		Name:  GenerateSessionName(m.messages),
+	}
+
+	if err := SaveSession(metadata); err != nil {
+		return err
+	}
+
+	// Update current session ID to match SDK
+	m.currentSessionID = sessionID
+
+	return nil
+}
+
+// renderSessionPickerModal renders the session picker as an inline modal section.
+func (m *Model) renderSessionPickerModal() string {
+	// Calculate modal width - match other UI elements
+	modalWidth := m.width - 2
+
+	// Calculate content width (modal width - border - padding)
+	contentWidth := max(modalWidth-4, 1) // -2 for borders, -2 for padding (1 each side)
+
+	// Style for clipping text to content width
+	clipStyle := lipgloss.NewStyle().MaxWidth(contentWidth).Inline(true)
+
+	// Build list of display items: "New Chat" option + available sessions
+	// Index 0 = "New Chat", Index 1+ = availableSessions[i-1]
+	totalItems := len(m.availableSessions) + 1 // +1 for "New Chat" option
+
+	// Max 5 visible items
+	const maxVisible = 5
+	visibleCount := min(totalItems, maxVisible)
+
+	// Calculate scroll offset to keep selected item visible
+	scrollOffset := 0
+	if totalItems > maxVisible {
+		if m.sessionPickerIndex >= scrollOffset+maxVisible {
+			scrollOffset = m.sessionPickerIndex - maxVisible + 1
+		}
+		if m.sessionPickerIndex < scrollOffset {
+			scrollOffset = m.sessionPickerIndex
+		}
+		if scrollOffset > totalItems-maxVisible {
+			scrollOffset = totalItems - maxVisible
+		}
+		if scrollOffset < 0 {
+			scrollOffset = 0
+		}
+	}
+
+	// Build session list content
+	var listContent strings.Builder
+
+	// Show title or delete confirmation
+	if m.confirmDeleteSession && m.sessionPickerIndex > 0 &&
+		m.sessionPickerIndex <= len(m.availableSessions) {
+		session := m.availableSessions[m.sessionPickerIndex-1]
+		listContent.WriteString(clipStyle.Render(
+			lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(11)).Render(
+				fmt.Sprintf("Delete \"%s\"? [y/n]", truncateString(session.Name, 30)),
+			),
+		) + "\n\n")
+	} else {
+		listContent.WriteString(
+			clipStyle.Render("Chat History (↑↓ navigate, ⏎ select, d delete, esc cancel)") + "\n\n",
+		)
+	}
+
+	// Determine if list is scrollable
+	isScrollable := totalItems > maxVisible
+
+	// Always reserve space for "more above" when scrollable
+	if isScrollable {
+		if scrollOffset > 0 {
+			listContent.WriteString(clipStyle.Render(
+				lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8)).Render("  ↑ more above"),
+			) + "\n")
+		} else {
+			listContent.WriteString("\n") // blank placeholder
+		}
+	}
+
+	// Render visible items
+	endIdx := min(scrollOffset+visibleCount, totalItems)
+	for i := scrollOffset; i < endIdx; i++ {
+		prefix := "  "
+		if i == m.sessionPickerIndex {
+			prefix = "> "
+		}
+
+		var line string
+		var isCurrentSession bool
+
+		if i == 0 {
+			// "New Chat" option
+			line = prefix + "+ New Chat"
+			isCurrentSession = m.currentSessionID == ""
+		} else {
+			// Session from availableSessions (index offset by 1)
+			session := m.availableSessions[i-1]
+
+			// Format: name (time ago)
+			timeAgo := FormatRelativeTime(session.UpdatedAt)
+			name := truncateString(session.Name, 30)
+
+			line = fmt.Sprintf("%s%s (%s)", prefix, name, timeAgo)
+			isCurrentSession = session.ID == m.currentSessionID
+		}
+
+		// Add checkmark if this is the current session
+		if isCurrentSession {
+			line += " ✓"
+		}
+
+		var styledLine string
+		if i == m.sessionPickerIndex {
+			// Highlight selected item
+			styledLine = lipgloss.NewStyle().
+				Foreground(lipgloss.ANSIColor(14)). // Bright cyan
+				Bold(true).
+				Render(line)
+		} else if isCurrentSession {
+			// Current session indicator
+			styledLine = lipgloss.NewStyle().
+				Foreground(lipgloss.ANSIColor(10)). // Bright green
+				Render(line)
+		} else {
+			styledLine = line
+		}
+
+		listContent.WriteString(clipStyle.Render(styledLine) + "\n")
+	}
+
+	// Always reserve space for "more below" when scrollable
+	if isScrollable {
+		if endIdx < totalItems {
+			listContent.WriteString(clipStyle.Render(
+				lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8)).Render("  ↓ more below"),
+			))
+		}
+	}
+
+	// Calculate fixed content height for the modal
+	contentLines := 2 // title + blank
+	contentLines += visibleCount
+	if isScrollable {
+		contentLines += 2 // always reserve space for scroll indicators
+	}
+  contentLines = max(contentLines, 8) // Minimum height for delete confirmation
+
+	// Create styled modal box with explicit height to prevent size changes
+	modalStyle := lipgloss.NewStyle().
+		BorderStyle(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.ANSIColor(13)). // Magenta for session picker
+		PaddingLeft(1).
+		PaddingRight(1).
+		Width(modalWidth).
+		Height(contentLines)
+
+	return modalStyle.Render(strings.TrimRight(listContent.String(), "\n"))
+}
+
+// truncateString truncates a string to maxLen characters with ellipsis.
+func truncateString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen-3] + "..."
 }
