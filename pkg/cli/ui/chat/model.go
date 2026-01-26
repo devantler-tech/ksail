@@ -17,11 +17,11 @@ import (
 )
 
 const (
-	defaultWidth       = 100
-	defaultHeight      = 30
-	inputHeight        = 3
-	headerHeight       = logoHeight + 3 // logo + tagline + border
-	footerHeight       = 1              // single line help text
+	defaultWidth  = 100
+	defaultHeight = 30
+	inputHeight   = 3
+	headerHeight  = logoHeight + 3 // logo + tagline + border
+	footerHeight  = 1              // single line help text
 
 	// Shared picker/output constants.
 	maxPickerVisible   = 3  // maximum visible items in picker modals
