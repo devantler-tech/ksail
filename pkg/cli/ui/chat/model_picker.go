@@ -97,12 +97,12 @@ func (m *Model) renderModelPickerModal() string {
 	listContent.WriteString(clipStyle.Render("Select Model") + "\n")
 
 	isScrollable := totalItems > maxVisible
-	m.renderScrollIndicatorTop(&listContent, clipStyle, isScrollable, scrollOffset)
+	renderScrollIndicatorTop(&listContent, clipStyle, isScrollable, scrollOffset)
 
 	endIdx := min(scrollOffset+visibleCount, totalItems)
 	m.renderModelItems(&listContent, clipStyle, scrollOffset, endIdx)
 
-	m.renderScrollIndicatorBottom(&listContent, clipStyle, isScrollable, endIdx, totalItems)
+	renderScrollIndicatorBottom(&listContent, clipStyle, isScrollable, endIdx, totalItems)
 
 	content := strings.TrimRight(listContent.String(), "\n")
 	return renderPickerModal(content, modalWidth, visibleCount, isScrollable)

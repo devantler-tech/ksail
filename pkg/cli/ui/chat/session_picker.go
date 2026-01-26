@@ -291,12 +291,12 @@ func (m *Model) renderSessionPickerModal() string {
 	m.renderSessionPickerTitle(&listContent, clipStyle)
 
 	isScrollable := totalItems > maxVisible
-	m.renderScrollIndicatorTop(&listContent, clipStyle, isScrollable, scrollOffset)
+	renderScrollIndicatorTop(&listContent, clipStyle, isScrollable, scrollOffset)
 
 	endIdx := min(scrollOffset+visibleCount, totalItems)
 	m.renderSessionItems(&listContent, clipStyle, scrollOffset, endIdx)
 
-	m.renderScrollIndicatorBottom(&listContent, clipStyle, isScrollable, endIdx, totalItems)
+	renderScrollIndicatorBottom(&listContent, clipStyle, isScrollable, endIdx, totalItems)
 
 	content := strings.TrimRight(listContent.String(), "\n")
 	return renderPickerModal(content, modalWidth, visibleCount, isScrollable)
@@ -314,40 +314,6 @@ func (m *Model) renderSessionPickerTitle(listContent *strings.Builder, clipStyle
 		) + "\n\n")
 	} else {
 		listContent.WriteString(clipStyle.Render("Chat History") + "\n")
-	}
-}
-
-// renderScrollIndicatorTop renders the "more above" indicator.
-func (m *Model) renderScrollIndicatorTop(
-	listContent *strings.Builder,
-	clipStyle lipgloss.Style,
-	isScrollable bool,
-	scrollOffset int,
-) {
-	if !isScrollable {
-		return
-	}
-	if scrollOffset > 0 {
-		listContent.WriteString(clipStyle.Render(
-			lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8)).Render("  ↑ more above"),
-		) + "\n")
-	}
-}
-
-// renderScrollIndicatorBottom renders the "more below" indicator.
-func (m *Model) renderScrollIndicatorBottom(
-	listContent *strings.Builder,
-	clipStyle lipgloss.Style,
-	isScrollable bool,
-	endIdx, totalItems int,
-) {
-	if !isScrollable {
-		return
-	}
-	if endIdx < totalItems {
-		listContent.WriteString(clipStyle.Render(
-			lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8)).Render("  ↓ more below"),
-		))
 	}
 }
 

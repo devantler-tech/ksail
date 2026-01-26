@@ -1,6 +1,8 @@
 package chat
 
 import (
+	"strings"
+
 	"github.com/charmbracelet/lipgloss"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/asciiart"
 )
@@ -147,4 +149,35 @@ func renderPickerModal(content string, modalWidth, visibleCount int, isScrollabl
 	contentLines := calculatePickerContentLines(visibleCount, isScrollable)
 	modalStyle := createPickerModalStyle(modalWidth, contentLines)
 	return modalStyle.Render(content)
+}
+
+// scrollIndicatorStyle is the style for scroll indicators in pickers.
+var scrollIndicatorStyle = lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8))
+
+// renderScrollIndicatorTop renders the "more above" indicator for a picker.
+func renderScrollIndicatorTop(
+	listContent *strings.Builder,
+	clipStyle lipgloss.Style,
+	isScrollable bool,
+	scrollOffset int,
+) {
+	if isScrollable && scrollOffset > 0 {
+		listContent.WriteString(clipStyle.Render(
+			scrollIndicatorStyle.Render("  ↑ more above"),
+		) + "\n")
+	}
+}
+
+// renderScrollIndicatorBottom renders the "more below" indicator for a picker.
+func renderScrollIndicatorBottom(
+	listContent *strings.Builder,
+	clipStyle lipgloss.Style,
+	isScrollable bool,
+	endIdx, totalItems int,
+) {
+	if isScrollable && endIdx < totalItems {
+		listContent.WriteString(clipStyle.Render(
+			scrollIndicatorStyle.Render("  ↓ more below"),
+		))
+	}
 }
