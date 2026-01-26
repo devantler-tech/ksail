@@ -104,6 +104,8 @@ type Model struct {
 	showSessionPicker    bool              // true when session picker overlay is visible
 	sessionPickerIndex   int               // currently highlighted session in picker
 	confirmDeleteSession bool              // true when confirming session deletion
+	renamingSession      bool              // true when renaming a session
+	sessionRenameInput   string            // current rename input text
 
 	// Markdown renderer (cached to avoid terminal queries)
 	renderer *glamour.TermRenderer
@@ -405,22 +407,8 @@ func (m *Model) View() string {
 		sections = append(sections, inputContent)
 	}
 
-	// Footer/help - clip to terminal width to prevent wrapping
-	var helpText string
-	hasTools := len(m.toolOrder) > 0
-	if !hasTools {
-		for _, msg := range m.messages {
-			if msg.role == "assistant" && len(msg.tools) > 0 {
-				hasTools = true
-				break
-			}
-		}
-	}
-	if hasTools {
-		helpText = "  ⏎ Send • ↑↓ History • PgUp/Dn Scroll • ⇥ Toggle • ^T All • ^H History • ^O Model • ^L Clear • esc Quit"
-	} else {
-		helpText = "  ⏎ Send • ↑↓ History • PgUp/Dn Scroll • ^H History • ^O Model • ^L Clear • esc Quit"
-	}
+	// Footer/help - context-aware based on active view
+	helpText := m.getContextualHelpText()
 	help := lipgloss.NewStyle().MaxWidth(m.width).Inline(true).Render(helpStyle.Render(helpText))
 	sections = append(sections, help)
 
@@ -516,10 +504,10 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, nil
-	case "ctrl+l":
-		// Clear chat history and start a new session
+	case "ctrl+n":
+		// Create new chat session
 		if !m.isStreaming {
-			// Save current session before clearing
+			// Save current session before creating new
 			_ = m.saveCurrentSession()
 			// Create a brand new session with new ID
 			if err := m.startNewSession(); err != nil {
@@ -1150,6 +1138,45 @@ func (m *Model) reRenderCompletedMessages() {
 			msg.rendered = renderMarkdownWithRenderer(m.renderer, msg.content)
 		}
 	}
+}
+
+// getContextualHelpText returns help text based on the current active view.
+func (m *Model) getContextualHelpText() string {
+	// Permission prompt - highest priority
+	if m.pendingPermission != nil {
+		return "  y Allow • n Deny • esc Cancel"
+	}
+
+	// Model picker modal
+	if m.showModelPicker {
+		return "  ↑↓ Navigate • ⏎ Select • esc Cancel"
+	}
+
+	// Session picker modal
+	if m.showSessionPicker {
+		if m.renamingSession {
+			return "  Type name • ⏎ Save • esc Cancel"
+		}
+		if m.confirmDeleteSession {
+			return "  y Delete • n Cancel"
+		}
+		return "  ↑↓ Navigate • ⏎ Select • r Rename • d Delete • esc Cancel"
+	}
+
+	// Default input view - check if tools are present for toggle option
+	hasTools := len(m.toolOrder) > 0
+	if !hasTools {
+		for _, msg := range m.messages {
+			if msg.role == "assistant" && len(msg.tools) > 0 {
+				hasTools = true
+				break
+			}
+		}
+	}
+	if hasTools {
+		return "  ⏎ Send • ↑↓ History • PgUp/Dn Scroll • ⇥ Toggle • ^T All • ^H History • ^O Model • ^N New • esc Quit"
+	}
+	return "  ⏎ Send • ↑↓ History • PgUp/Dn Scroll • ^H History • ^O Model • ^N New • esc Quit"
 }
 
 // updateViewportContent rebuilds the viewport content from message history.
@@ -1789,8 +1816,7 @@ func (m *Model) renderPermissionModal() string {
 	content.WriteString("\n" + clipStyle.Render("Allow this operation?") + "\n")
 	contentLines += 2 // blank + "Allow this operation?"
 
-	content.WriteString("\n" + clipStyle.Render("[Y] Allow  [N] Deny  [esc] Cancel"))
-	contentLines += 2 // blank + buttons
+	contentLines++ // blank line
 
 	// Create styled modal box with warning color and explicit height
 	modalStyle := lipgloss.NewStyle().
@@ -1847,7 +1873,7 @@ func (m *Model) renderModelPickerModal() string {
 	// Build model list content
 	var listContent strings.Builder
 	listContent.WriteString(
-		clipStyle.Render("Select Model (↑↓ navigate, ⏎ select, esc cancel)") + "\n",
+		clipStyle.Render("Select Model") + "\n",
 	)
 
 	// Determine if list is scrollable
@@ -1950,6 +1976,43 @@ func (m *Model) renderModelPickerModal() string {
 func (m *Model) handleSessionPickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	totalItems := len(m.availableSessions) + 1 // +1 for "New Chat" option
 
+	// Handle rename mode
+	if m.renamingSession {
+		switch msg.String() {
+		case "enter":
+			// Save the new name
+			if m.sessionPickerIndex > 0 && m.sessionPickerIndex <= len(m.availableSessions) {
+				session := m.availableSessions[m.sessionPickerIndex-1]
+				newName := strings.TrimSpace(m.sessionRenameInput)
+				if newName != "" {
+					session.Name = newName
+					_ = SaveSession(&session)
+					// Refresh session list
+					sessions, _ := ListSessions()
+					m.availableSessions = sessions
+				}
+			}
+			m.renamingSession = false
+			m.sessionRenameInput = ""
+			return m, nil
+		case "esc":
+			m.renamingSession = false
+			m.sessionRenameInput = ""
+			return m, nil
+		case "backspace":
+			if len(m.sessionRenameInput) > 0 {
+				m.sessionRenameInput = m.sessionRenameInput[:len(m.sessionRenameInput)-1]
+			}
+			return m, nil
+		default:
+			// Add typed character to input
+			if msg.Type == tea.KeyRunes {
+				m.sessionRenameInput += string(msg.Runes)
+			}
+			return m, nil
+		}
+	}
+
 	// Handle delete confirmation
 	if m.confirmDeleteSession {
 		switch msg.String() {
@@ -1994,6 +2057,14 @@ func (m *Model) handleSessionPickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Delete selected session (not "New Chat")
 		if m.sessionPickerIndex > 0 && m.sessionPickerIndex <= len(m.availableSessions) {
 			m.confirmDeleteSession = true
+		}
+		return m, nil
+	case "r":
+		// Rename selected session (not "New Chat")
+		if m.sessionPickerIndex > 0 && m.sessionPickerIndex <= len(m.availableSessions) {
+			session := m.availableSessions[m.sessionPickerIndex-1]
+			m.renamingSession = true
+			m.sessionRenameInput = session.Name // Pre-fill with current name
 		}
 		return m, nil
 	case "enter":
@@ -2212,18 +2283,30 @@ func (m *Model) renderSessionPickerModal() string {
 	// Build session list content
 	var listContent strings.Builder
 
-	// Show title or delete confirmation
-	if m.confirmDeleteSession && m.sessionPickerIndex > 0 &&
+	// Show title, delete confirmation, or rename input
+	if m.renamingSession && m.sessionPickerIndex > 0 &&
+		m.sessionPickerIndex <= len(m.availableSessions) {
+		listContent.WriteString(clipStyle.Render(
+			lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(14)).Render("Rename session:"),
+		) + "\n")
+		// Show input field with cursor
+		inputStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.ANSIColor(15)).
+			Background(lipgloss.ANSIColor(8))
+		listContent.WriteString(clipStyle.Render(
+			inputStyle.Render(m.sessionRenameInput+"_"),
+		) + "\n")
+	} else if m.confirmDeleteSession && m.sessionPickerIndex > 0 &&
 		m.sessionPickerIndex <= len(m.availableSessions) {
 		session := m.availableSessions[m.sessionPickerIndex-1]
 		listContent.WriteString(clipStyle.Render(
 			lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(11)).Render(
-				fmt.Sprintf("Delete \"%s\"? [y/n]", truncateString(session.Name, 30)),
+				fmt.Sprintf("Delete \"%s\"?", truncateString(session.Name, 30)),
 			),
 		) + "\n\n")
 	} else {
 		listContent.WriteString(
-			clipStyle.Render("Chat History (↑↓ navigate, ⏎ select, d delete, esc cancel)") + "\n\n",
+			clipStyle.Render("Chat History") + "\n",
 		)
 	}
 
@@ -2302,7 +2385,7 @@ func (m *Model) renderSessionPickerModal() string {
 	}
 
 	// Calculate fixed content height for the modal
-	contentLines := 2 // title + blank
+	contentLines := 1 // title + blank
 	contentLines += visibleCount
 	if isScrollable {
 		contentLines += 2 // always reserve space for scroll indicators
