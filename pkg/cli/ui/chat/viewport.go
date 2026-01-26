@@ -299,6 +299,7 @@ func (m *Model) renderToolOutput(
 	expanded bool,
 ) {
 	lines := strings.Split(output, "\n")
+	totalLines := len(lines)
 	truncated := false
 
 	if !expanded && len(lines) > maxToolOutputLines {
@@ -315,10 +316,10 @@ func (m *Model) renderToolOutput(
 	}
 
 	if truncated {
+		more := totalLines - maxToolOutputLines
 		builder.WriteString(
 			toolOutputStyle.Render(
-				fmt.Sprintf("      ... (%d more lines, press ^T to expand tool outputs)",
-					len(strings.Split(output, "\n"))-maxToolOutputLines),
+				fmt.Sprintf("      ... (%d more lines, press ^T to expand tool outputs)", more),
 			),
 		)
 		builder.WriteString("\n")
