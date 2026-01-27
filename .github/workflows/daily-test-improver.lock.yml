@@ -113,7 +113,7 @@ jobs:
         name: Initialize safe outputs directory
         run: "# Create safe outputs directories to prevent file not found errors\nmkdir -p /opt/gh-aw/safeoutputs\nmkdir -p /tmp/gh-aw/safeoutputs\n# Create empty safe outputs file if it doesn't exist\n# This ensures the \"Ingest agent output\" step can process it\ntouch /opt/gh-aw/safeoutputs/outputs.jsonl\n# Pre-create the agent output file that will be uploaded\n# This ensures the artifact upload always has a file to upload\necho '{}' > /tmp/gh-aw/safeoutputs/agent_output.json\n"
       - name: Checkout repository
-        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v5
       - id: check_coverage_steps_file
         name: Check if action.yml exists
         run: |
@@ -1449,7 +1449,7 @@ jobs:
           permission-pull-requests: write
       - name: Checkout repository
         if: ((!cancelled()) && (needs.agent.result != 'skipped')) && (contains(needs.agent.outputs.output_types, 'create_pull_request'))
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           token: ${{ steps.safe-outputs-app-token.outputs.token }}
           persist-credentials: false
