@@ -176,6 +176,12 @@ func executeCommand(
 		return string(output), nil
 	}
 
+	// Run with streaming output
+	return executeWithStreaming(cmd, toolName, opts.OutputChan)
+}
+
+// executeWithStreaming sets up pipes and streams command output.
+func executeWithStreaming(cmd *exec.Cmd, toolName string, outputChan chan<- OutputChunk) (string, error) {
 	// Set up streaming output
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -205,7 +211,7 @@ func executeCommand(
 			pipeReader: stdout,
 			source:     "stdout",
 			toolName:   toolName,
-			outputChan: opts.OutputChan,
+			outputChan: outputChan,
 			buffer:     &outputBuffer,
 			mutex:      &bufferMutex,
 		})
@@ -216,7 +222,7 @@ func executeCommand(
 			pipeReader: stderr,
 			source:     "stderr",
 			toolName:   toolName,
-			outputChan: opts.OutputChan,
+			outputChan: outputChan,
 			buffer:     &outputBuffer,
 			mutex:      &bufferMutex,
 		})

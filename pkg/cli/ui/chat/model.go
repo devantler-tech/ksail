@@ -241,11 +241,9 @@ func NewWithEventChannel(
 	mdRenderer := createRenderer(defaultWidth - 8)
 
 	// Initialize clipboard for copy operations
-	err := clipboard.Init()
-	if err != nil {
-		// Clipboard initialization failed - copy operations will be silently disabled
-		// This is acceptable as clipboard may not be available in all environments
-	}
+	// Clipboard initialization may fail in environments where it's not available,
+	// which is acceptable as copy operations will be silently disabled
+	_ = clipboard.Init()
 
 	// Use provided event channel or create new one
 	if eventChan == nil {
