@@ -112,6 +112,10 @@ jobs:
           persist-credentials: false
       - name: Create gh-aw temp directory
         run: bash /opt/gh-aw/actions/create_gh_aw_tmp_dir.sh
+      - if: always()
+        name: Initialize safe outputs directory
+        run: "# Create safe outputs directories to prevent file not found errors\nmkdir -p /opt/gh-aw/safeoutputs\nmkdir -p /tmp/gh-aw/safeoutputs\n# Create empty safe outputs file if it doesn't exist\n# This ensures the \"Ingest agent output\" step can process it\ntouch /opt/gh-aw/safeoutputs/outputs.jsonl\n# Pre-create the agent output file that will be uploaded\n# This ensures the artifact upload always has a file to upload\necho '{}' > /tmp/gh-aw/safeoutputs/agent_output.json\n"
+
       # Cache memory file share configuration from frontmatter processed below
       - name: Create cache-memory directory
         run: bash /opt/gh-aw/actions/create_cache_memory_dir.sh
@@ -983,6 +987,18 @@ jobs:
         with:
           name: cache-memory
           path: /tmp/gh-aw/cache-memory
+      - if: always()
+        name: Ensure agent output artifact exists
+        run: "# Ensure the agent output file exists for artifact upload\n# This step runs after the main workflow and ensures the file is present\nif [ ! -f \"/tmp/gh-aw/safeoutputs/agent_output.json\" ]; then\n  mkdir -p /tmp/gh-aw/safeoutputs\n  echo '{}' > /tmp/gh-aw/safeoutputs/agent_output.json\nfi\n"
+      - continue-on-error: true
+        if: always()
+        name: Upload agent output fallback
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: agent-output
+          overwrite: true
+          path: /tmp/gh-aw/safeoutputs/agent_output.json
+
       - name: Upload agent artifacts
         if: always()
         continue-on-error: true
