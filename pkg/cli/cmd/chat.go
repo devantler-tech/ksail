@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"os/signal"
-	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -15,11 +14,12 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/devantler-tech/ksail/v5/pkg/ai/toolgen"
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
 	chatui "github.com/devantler-tech/ksail/v5/pkg/cli/ui/chat"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	chatsvc "github.com/devantler-tech/ksail/v5/pkg/svc/chat"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/chat/generator"
 	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
 	copilot "github.com/github/copilot-sdk/go"
 	"github.com/spf13/cobra"
@@ -45,6 +45,9 @@ Prerequisites:
 
 Write operations require explicit confirmation before execution.`,
 		SilenceUsage: true,
+		Annotations: map[string]string{
+			annotations.AnnotationExclude: "true",
+		},
 	}
 
 	// Optional flags
@@ -190,7 +193,9 @@ func handleChatRunE(cmd *cobra.Command) error {
 	}
 
 	// Non-TUI mode: set up tools without streaming
-	sessionConfig.Tools = chatsvc.GetKSailTools(cmd.Root(), nil)
+	tools, toolMetadata := chatsvc.GetKSailToolMetadata(cmd.Root(), nil)
+	tools = WrapToolsWithPermissionAndModeMetadata(tools, nil, nil, toolMetadata)
+	sessionConfig.Tools = tools
 
 	// Create session
 	session, err := client.CreateSession(sessionConfig)
@@ -248,7 +253,7 @@ func runTUIChat(
 	eventChan := make(chan tea.Msg, 100)
 
 	// Create output channel for real-time tool output streaming
-	outputChan := make(chan generator.OutputChunk, 100)
+	outputChan := make(chan toolgen.OutputChunk, 100)
 
 	// Track when forwarder goroutine exits
 	var forwarderWg sync.WaitGroup
@@ -265,14 +270,14 @@ func runTUIChat(
 
 	// Set up tools with real-time output streaming
 	// Tool handlers create their own timeout context since SDK's ToolHandler interface doesn't include context.
-	tools := chatsvc.GetKSailTools(rootCmd, outputChan) //nolint:contextcheck
+	tools, toolMetadata := chatsvc.GetKSailToolMetadata(rootCmd, outputChan) //nolint:contextcheck
 
 	// Create a shared agent mode reference that can be updated by the TUI
 	// Default to agent mode (true = execute tools, false = plan only)
 	agentModeRef := chatui.NewAgentModeRef(true)
 
 	// Wrap tools with permission prompts and mode enforcement
-	tools = WrapToolsWithPermissionAndMode(tools, eventChan, agentModeRef)
+	tools = WrapToolsWithPermissionAndModeMetadata(tools, eventChan, agentModeRef, toolMetadata)
 	sessionConfig.Tools = tools
 
 	// Create session
@@ -540,21 +545,6 @@ func getToolArgs(event copilot.SessionEvent) string {
 	return " (" + strings.Join(parts, ", ") + ")"
 }
 
-// mutabilityPattern matches tool names that indicate mutable/destructive operations.
-// Read-only operations (get, list, info, describe, logs, status) are auto-approved.
-// Pattern covers: create, delete, start, stop, apply, write, remove, destroy, update, patch, set, configure, etc.
-// Uses underscore-aware boundaries to match complete tool name segments (e.g., matches "create" in
-// "ksail_cluster_create" but not in "ksail_cluster_recreate").
-var mutabilityPattern = regexp.MustCompile(
-	`(?i)(?:^|_)(create|delete|start|stop|restart|apply|write|remove|` +
-		`destroy|edit|scale|rollout|init|update|patch|set|configure)(?:_|$)`,
-)
-
-// isMutableTool checks if a tool name indicates a mutable operation.
-func isMutableTool(toolName string) bool {
-	return mutabilityPattern.MatchString(toolName)
-}
-
 // formatToolArguments converts tool invocation arguments to a display string.
 func formatToolArguments(args any) string {
 	params, ok := args.(map[string]any)
@@ -576,13 +566,14 @@ func formatToolArguments(args any) string {
 	return strings.Join(parts, ", ")
 }
 
-// WrapToolsWithPermissionAndMode wraps ALL tools with mode enforcement and permission prompts.
+// WrapToolsWithPermissionAndModeMetadata wraps ALL tools with mode enforcement and permission prompts.
 // In plan mode, ALL tool execution is blocked (model can only describe what it would do).
-// In agent mode, mutable tools require permission, while read-only tools are auto-approved.
-func WrapToolsWithPermissionAndMode(
+// In agent mode, edit tools require permission (based on RequiresPermission annotation), while read-only tools are auto-approved.
+func WrapToolsWithPermissionAndModeMetadata(
 	tools []copilot.Tool,
 	eventChan chan tea.Msg,
 	agentModeRef *chatui.AgentModeRef,
+	toolMetadata map[string]toolgen.ToolDefinition,
 ) []copilot.Tool {
 	wrappedTools := make([]copilot.Tool, len(tools))
 
@@ -612,13 +603,18 @@ func WrapToolsWithPermissionAndMode(
 				}, nil
 			}
 
-			// In agent mode, only wrap mutable tools with permission prompts
-			if !isMutableTool(toolName) {
+			// In agent mode, check if tool requires permission from metadata
+			requiresPermission := false
+			if metadata, ok := toolMetadata[toolName]; ok {
+				requiresPermission = metadata.RequiresPermission
+			}
+
+			if !requiresPermission {
 				// Read-only tool - execute directly
 				return originalHandler(invocation)
 			}
 
-			// Mutable tool - request permission
+			// Edit tool - request permission
 			responseChan := make(chan bool, 1)
 			cmdDescription := strings.ReplaceAll(toolName, "_", " ")
 

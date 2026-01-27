@@ -1,6 +1,7 @@
 package cipher
 
 import (
+	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	"github.com/spf13/cobra"
 )
@@ -21,6 +22,9 @@ SOPS supports multiple key management systems:
   - Azure Key Vault
   - HashiCorp Vault`,
 		SilenceUsage: true,
+		Annotations: map[string]string{
+			annotations.AnnotationConsolidate: "operation",
+		},
 	}
 
 	// Add subcommands

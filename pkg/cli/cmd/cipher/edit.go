@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
 	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
 	"github.com/getsops/sops/v3"
@@ -550,6 +551,10 @@ Example:
 		"",
 		"editor command to use (e.g., 'code --wait', 'vim', 'nano')",
 	)
+
+	cmd.Annotations = map[string]string{
+		annotations.AnnotationPermission: "write",
+	}
 
 	return cmd
 }

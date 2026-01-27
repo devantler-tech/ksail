@@ -7,6 +7,7 @@ import (
 	"time"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
 	"github.com/devantler-tech/ksail/v5/pkg/client/argocd"
 	"github.com/devantler-tech/ksail/v5/pkg/client/flux"
@@ -51,6 +52,9 @@ func NewReconcileCmd(_ *runtime.Runtime) *cobra.Command {
 		Short:        "Trigger reconciliation for GitOps workloads",
 		Long:         "Trigger reconciliation/sync for the root Flux kustomization or root ArgoCD application.",
 		SilenceUsage: true,
+		Annotations: map[string]string{
+			annotations.AnnotationPermission: "write",
+		},
 	}
 
 	cmd.Flags().Duration(

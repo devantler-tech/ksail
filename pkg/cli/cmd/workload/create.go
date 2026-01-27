@@ -3,6 +3,7 @@ package workload
 import (
 	"os"
 
+	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
 	"github.com/devantler-tech/ksail/v5/pkg/client/flux"
 	"github.com/devantler-tech/ksail/v5/pkg/client/kubectl"
@@ -37,6 +38,12 @@ func NewCreateCmd(_ *runtime.Runtime) *cobra.Command {
 	for _, subCmd := range fluxCreateCmd.Commands() {
 		createCmd.AddCommand(subCmd)
 	}
+
+	// Add permission annotation
+	if createCmd.Annotations == nil {
+		createCmd.Annotations = make(map[string]string)
+	}
+	createCmd.Annotations[annotations.AnnotationPermission] = "write"
 
 	return createCmd
 }

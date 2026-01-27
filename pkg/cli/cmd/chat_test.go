@@ -75,8 +75,8 @@ func runPlanModeTestCase(t *testing.T, testCase planModeTestCase) {
 	toolCalled := false
 	testTool := createTestTool(&toolCalled)
 
-	wrappedTools := cmd.WrapToolsWithPermissionAndMode(
-		[]copilot.Tool{testTool}, eventChan, agentModeRef,
+	wrappedTools := cmd.WrapToolsWithPermissionAndModeMetadata(
+		[]copilot.Tool{testTool}, eventChan, agentModeRef, nil,
 	)
 
 	result, err := wrappedTools[0].Handler(copilot.ToolInvocation{
@@ -123,8 +123,8 @@ func TestPlanModeToggle(t *testing.T) {
 		},
 	}
 
-	wrappedTools := cmd.WrapToolsWithPermissionAndMode(
-		[]copilot.Tool{testTool}, eventChan, agentModeRef,
+	wrappedTools := cmd.WrapToolsWithPermissionAndModeMetadata(
+		[]copilot.Tool{testTool}, eventChan, agentModeRef, nil,
 	)
 	wrappedTool := wrappedTools[0]
 
@@ -159,7 +159,7 @@ func TestPlanModeToggle(t *testing.T) {
 	}
 }
 
-// TestPlanModeBlocksMutableTools verifies that mutable tools are blocked in plan mode.
+// TestPlanModeBlocksMutableTools verifies that edit tools are blocked in plan mode.
 func TestPlanModeBlocksMutableTools(t *testing.T) {
 	t.Parallel()
 
@@ -180,8 +180,8 @@ func TestPlanModeBlocksMutableTools(t *testing.T) {
 		},
 	}
 
-	wrappedTools := cmd.WrapToolsWithPermissionAndMode(
-		[]copilot.Tool{mutableTool}, eventChan, agentModeRef,
+	wrappedTools := cmd.WrapToolsWithPermissionAndModeMetadata(
+		[]copilot.Tool{mutableTool}, eventChan, agentModeRef, nil,
 	)
 
 	result, err := wrappedTools[0].Handler(copilot.ToolInvocation{
@@ -193,14 +193,14 @@ func TestPlanModeBlocksMutableTools(t *testing.T) {
 	}
 
 	if mutableToolCalled {
-		t.Error("Mutable tool should not have been called in plan mode")
+		t.Error("Edit tool should not have been called in plan mode")
 	}
 
 	if result.ResultType != "failure" {
-		t.Errorf("Expected failure for blocked mutable tool, got %s", result.ResultType)
+		t.Errorf("Expected failure for blocked edit tool, got %s", result.ResultType)
 	}
 
 	if !strings.Contains(result.TextResultForLLM, "Tool execution blocked") {
-		t.Error("Expected blocking message for mutable tool in plan mode")
+		t.Error("Expected blocking message for edit tool in plan mode")
 	}
 }

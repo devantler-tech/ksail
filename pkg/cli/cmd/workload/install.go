@@ -3,6 +3,7 @@ package workload
 import (
 	"fmt"
 
+	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
 	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
@@ -66,6 +67,9 @@ func NewInstallCmd(_ *runtime.Runtime) *cobra.Command {
 			}
 
 			return nil
+		},
+		Annotations: map[string]string{
+			annotations.AnnotationPermission: "write",
 		},
 	}
 

@@ -1,6 +1,7 @@
 package workload
 
 import (
+	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/cmd/workload/gen"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	"github.com/spf13/cobra"
@@ -18,6 +19,9 @@ func NewWorkloadCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
 			return cmd.Help()
 		},
 		SilenceUsage: true,
+		Annotations: map[string]string{
+			annotations.AnnotationConsolidate: "command",
+		},
 	}
 
 	cmd.AddCommand(NewReconcileCmd(runtimeContainer))

@@ -3,6 +3,7 @@ package cluster
 import (
 	"fmt"
 
+	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	"github.com/spf13/cobra"
 )
@@ -17,6 +18,9 @@ func NewClusterCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
 		Args:         cobra.NoArgs,
 		RunE:         handleClusterRunE,
 		SilenceUsage: true,
+		Annotations: map[string]string{
+			annotations.AnnotationConsolidate: "command",
+		},
 	}
 
 	cmd.AddCommand(NewInitCmd(runtimeContainer))

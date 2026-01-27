@@ -3,6 +3,7 @@ package workload
 import (
 	"fmt"
 
+	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
 	"github.com/devantler-tech/ksail/v5/pkg/client/docker"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	configmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
@@ -34,6 +35,9 @@ func NewImportCmd(_ *runtime.Runtime) *cobra.Command {
 		Long:         importCmdLong,
 		Args:         cobra.MaximumNArgs(1),
 		SilenceUsage: true,
+		Annotations: map[string]string{
+			annotations.AnnotationPermission: "write",
+		},
 	}
 
 	// Create config manager during command setup to register flags

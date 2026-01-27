@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
 	"github.com/devantler-tech/ksail/v5/pkg/client/oci"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
@@ -60,6 +61,9 @@ All parts of the OCI reference are optional and will be inferred:
   - ref: Defaults to "dev"`,
 		Args:         cobra.MaximumNArgs(1),
 		SilenceUsage: true,
+		Annotations: map[string]string{
+			annotations.AnnotationPermission: "write",
+		},
 	}
 
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
