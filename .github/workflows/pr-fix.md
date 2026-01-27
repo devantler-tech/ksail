@@ -18,6 +18,9 @@ permissions: read-all
 network: defaults
 
 safe-outputs:
+  app:
+    app-id: ${{ vars.APP_ID }}
+    private-key: ${{ secrets.APP_PRIVATE_KEY }}
   push-to-pull-request-branch:
     if-no-changes: "warn"
   create-issue:
