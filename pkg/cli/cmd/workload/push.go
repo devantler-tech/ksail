@@ -30,9 +30,28 @@ func NewPushCmd(_ *runtime.Runtime) *cobra.Command {
 	viperInstance.AutomaticEnv()
 
 	cmd := &cobra.Command{
-		Use:   "push [oci://<host>:<port>/<repository>[/<variant>]:<ref>]",
-		Short: "Package and push an OCI artifact to a registry",
-		Long: `Build and push local workloads as an OCI artifact to a registry.
+		Use:          "push [oci://<host>:<port>/<repository>[/<variant>]:<ref>]",
+		Short:        "Package and push an OCI artifact to a registry",
+		Long:         pushCommandLongDescription(),
+		Args:         cobra.MaximumNArgs(1),
+		SilenceUsage: true,
+		Annotations: map[string]string{
+			annotations.AnnotationPermission: "write",
+		},
+	}
+
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		return runPushCommand(cmd, args, pathFlag, validate, viperInstance)
+	}
+
+	configurePushFlags(cmd, &validate, &pathFlag, viperInstance)
+
+	return cmd
+}
+
+// pushCommandLongDescription returns the long description for the push command.
+func pushCommandLongDescription() string {
+	return `Build and push local workloads as an OCI artifact to a registry.
 
 The OCI reference format is: oci://<host>:<port>/<repository>[/<variant>]:<ref>
 
@@ -58,20 +77,18 @@ Examples:
 All parts of the OCI reference are optional and will be inferred:
   - host:port: Auto-detected from running local-registry container
   - repository: Derived from source directory name
-  - ref: Defaults to "dev"`,
-		Args:         cobra.MaximumNArgs(1),
-		SilenceUsage: true,
-		Annotations: map[string]string{
-			annotations.AnnotationPermission: "write",
-		},
-	}
+  - ref: Defaults to "dev"`
+}
 
-	cmd.RunE = func(cmd *cobra.Command, args []string) error {
-		return runPushCommand(cmd, args, pathFlag, validate, viperInstance)
-	}
-
-	cmd.Flags().BoolVar(&validate, "validate", false, "Validate manifests before pushing")
-	cmd.Flags().StringVar(&pathFlag, "path", "", "Source directory containing manifests to push")
+// configurePushFlags configures flags for the push command.
+func configurePushFlags(
+	cmd *cobra.Command,
+	validate *bool,
+	pathFlag *string,
+	viperInstance *viper.Viper,
+) {
+	cmd.Flags().BoolVar(validate, "validate", false, "Validate manifests before pushing")
+	cmd.Flags().StringVar(pathFlag, "path", "", "Source directory containing manifests to push")
 	cmd.Flags().String(
 		"registry",
 		"",
@@ -80,8 +97,6 @@ All parts of the OCI reference are optional and will be inferred:
 
 	// Bind registry flag to viper for env var support (KSAIL_REGISTRY)
 	_ = viperInstance.BindPFlag(helpers.ViperRegistryKey, cmd.Flags().Lookup("registry"))
-
-	return cmd
 }
 
 // runPushCommand executes the push logic with the provided parameters.

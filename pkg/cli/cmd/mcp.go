@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"fmt"
 	"os"
 
 	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
@@ -25,7 +26,7 @@ Example usage with an MCP client:
   ksail mcp
 
 The server will run until the client disconnects or the process is terminated.`,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			return runMCPServer(cmd)
 		},
 		Annotations: map[string]string{
@@ -45,6 +46,7 @@ func runMCPServer(cmd *cobra.Command) error {
 
 	// Get version from root command annotation
 	version := "dev"
+
 	if rootCmd.Annotations != nil {
 		if v, ok := rootCmd.Annotations["version"]; ok {
 			version = v
@@ -57,11 +59,16 @@ func runMCPServer(cmd *cobra.Command) error {
 	// Set working directory to current directory
 	workDir, err := os.Getwd()
 	if err != nil {
-		return err
+		return fmt.Errorf("getting working directory: %w", err)
 	}
 
 	cfg.WorkingDirectory = workDir
 
 	// Run server - blocks until client disconnects
-	return mcpsvc.RunServer(ctx, cfg)
+	err = mcpsvc.RunServer(ctx, cfg)
+	if err != nil {
+		return fmt.Errorf("running MCP server: %w", err)
+	}
+
+	return nil
 }

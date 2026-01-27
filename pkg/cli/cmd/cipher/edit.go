@@ -501,9 +501,28 @@ func NewEditCmd() *cobra.Command {
 	var editor string
 
 	cmd := &cobra.Command{
-		Use:   "edit <file>",
-		Short: "Edit an encrypted file with SOPS",
-		Long: `Edit an encrypted file using SOPS (Secrets OPerationS).
+		Use:          "edit <file>",
+		Short:        "Edit an encrypted file with SOPS",
+		Long:         editCommandLongDescription(),
+		SilenceUsage: true,
+		Args:         cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return handleEditRunE(cmd, args, ignoreMac, showMasterKeys, editor)
+		},
+	}
+
+	configureEditFlags(cmd, &ignoreMac, &showMasterKeys, &editor)
+
+	cmd.Annotations = map[string]string{
+		annotations.AnnotationPermission: "write",
+	}
+
+	return cmd
+}
+
+// editCommandLongDescription returns the long description for the edit command.
+func editCommandLongDescription() string {
+	return `Edit an encrypted file using SOPS (Secrets OPerationS).
 
 If the file exists and is encrypted, it will be decrypted for editing.
 If the file does not exist, an example file will be created.
@@ -525,38 +544,29 @@ SOPS supports multiple key management systems:
 Example:
   ksail cipher edit secrets.yaml
   ksail cipher edit --editor "code --wait" secrets.yaml
-  SOPS_EDITOR="code --wait" ksail cipher edit secrets.yaml`,
-		SilenceUsage: true,
-		Args:         cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return handleEditRunE(cmd, args, ignoreMac, showMasterKeys, editor)
-		},
-	}
+  SOPS_EDITOR="code --wait" ksail cipher edit secrets.yaml`
+}
 
+// configureEditFlags configures flags for the edit command.
+func configureEditFlags(cmd *cobra.Command, ignoreMac, showMasterKeys *bool, editor *string) {
 	cmd.Flags().BoolVar(
-		&ignoreMac,
+		ignoreMac,
 		"ignore-mac",
 		false,
 		"ignore Message Authentication Code during decryption",
 	)
 	cmd.Flags().BoolVar(
-		&showMasterKeys,
+		showMasterKeys,
 		"show-master-keys",
 		false,
 		"show master keys in the editor",
 	)
 	cmd.Flags().StringVar(
-		&editor,
+		editor,
 		"editor",
 		"",
 		"editor command to use (e.g., 'code --wait', 'vim', 'nano')",
 	)
-
-	cmd.Annotations = map[string]string{
-		annotations.AnnotationPermission: "write",
-	}
-
-	return cmd
 }
 
 // editNewFile handles editing a new file that doesn't exist yet.

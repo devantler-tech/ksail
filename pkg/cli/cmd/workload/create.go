@@ -43,6 +43,7 @@ func NewCreateCmd(_ *runtime.Runtime) *cobra.Command {
 	if createCmd.Annotations == nil {
 		createCmd.Annotations = make(map[string]string)
 	}
+
 	createCmd.Annotations[annotations.AnnotationPermission] = "write"
 
 	return createCmd

@@ -12,6 +12,10 @@ import (
 	copilot "github.com/github/copilot-sdk/go"
 )
 
+const (
+	failureResultType = "failure"
+)
+
 // planModeTestCase defines a test case for plan/agent mode tool execution.
 type planModeTestCase struct {
 	name              string
@@ -139,7 +143,7 @@ func TestPlanModeToggle(t *testing.T) {
 		t.Error("Tool should not be called in plan mode")
 	}
 
-	if result.ResultType != "failure" {
+	if result.ResultType != failureResultType {
 		t.Errorf("Expected failure in plan mode, got %s", result.ResultType)
 	}
 
@@ -198,7 +202,7 @@ func TestPlanModeBlocksMutableTools(t *testing.T) {
 		t.Error("Edit tool should not have been called in plan mode")
 	}
 
-	if result.ResultType != "failure" {
+	if result.ResultType != failureResultType {
 		t.Errorf("Expected failure for blocked edit tool, got %s", result.ResultType)
 	}
 
@@ -207,207 +211,204 @@ func TestPlanModeBlocksMutableTools(t *testing.T) {
 	}
 }
 
-// TestPermissionFlowForWriteTools verifies that tools with RequiresPermission=true
-// trigger permission requests and handle approval/denial correctly.
-func TestPermissionFlowForWriteTools(t *testing.T) {
+// createTestWriteTool creates a write tool for permission testing.
+func createTestWriteTool(toolName string, toolCalled *bool) copilot.Tool {
+	return copilot.Tool{
+		Name:        toolName,
+		Description: "A write tool that requires permission",
+		Handler: func(_ copilot.ToolInvocation) (copilot.ToolResult, error) {
+			*toolCalled = true
+
+			return copilot.ToolResult{
+				TextResultForLLM: "Write operation completed",
+				ResultType:       "success",
+			}, nil
+		},
+	}
+}
+
+// createToolMetadata creates metadata for a tool with permission requirements.
+func createToolMetadata(
+	toolName string,
+	requiresPermission bool,
+) map[string]toolgen.ToolDefinition {
+	return map[string]toolgen.ToolDefinition{
+		toolName: {
+			Name:               toolName,
+			RequiresPermission: requiresPermission,
+		},
+	}
+}
+
+// waitForPermissionRequestAndRespond waits for a permission request and responds with the given value.
+func waitForPermissionRequestAndRespond(
+	t *testing.T,
+	eventChan chan tea.Msg,
+	expectedToolName string,
+	approved bool,
+) {
+	t.Helper()
+
+	select {
+	case msg := <-eventChan:
+		permReq, ok := msg.(chatui.PermissionRequestMsg)
+		if !ok {
+			t.Fatalf("Expected PermissionRequestMsg, got %T", msg)
+		}
+
+		if permReq.ToolName != expectedToolName {
+			t.Errorf("Expected tool name '%s', got '%s'", expectedToolName, permReq.ToolName)
+		}
+
+		permReq.Response <- approved
+
+	case <-time.After(2 * time.Second):
+		t.Fatal("Timeout waiting for permission request")
+	}
+}
+
+// TestWriteToolSendsPermissionRequest verifies that tools with RequiresPermission=true
+// send permission requests and execute after approval.
+func TestWriteToolSendsPermissionRequest(t *testing.T) {
 	t.Parallel()
 
-	t.Run("WriteToolSendsPermissionRequest", func(t *testing.T) {
-		t.Parallel()
+	eventChan := make(chan tea.Msg, 10)
+	agentModeRef := chatui.NewAgentModeRef(true) // Agent mode enabled
 
-		eventChan := make(chan tea.Msg, 10)
-		agentModeRef := chatui.NewAgentModeRef(true) // Agent mode enabled
+	toolCalled := false
+	writeTool := createTestWriteTool("test_write_tool", &toolCalled)
+	metadata := createToolMetadata("test_write_tool", true)
 
-		toolCalled := false
-		writeTool := copilot.Tool{
-			Name:        "test_write_tool",
-			Description: "A write tool that requires permission",
-			Handler: func(_ copilot.ToolInvocation) (copilot.ToolResult, error) {
-				toolCalled = true
+	wrappedTools := cmd.WrapToolsWithPermissionAndModeMetadata(
+		[]copilot.Tool{writeTool}, eventChan, agentModeRef, metadata,
+	)
 
-				return copilot.ToolResult{
-					TextResultForLLM: "Write operation completed",
-					ResultType:       "success",
-				}, nil
-			},
-		}
+	// Start tool invocation in goroutine since it will block waiting for permission
+	done := make(chan struct{})
 
-		// Create metadata indicating this tool requires permission
-		metadata := map[string]toolgen.ToolDefinition{
-			"test_write_tool": {
-				Name:               "test_write_tool",
-				RequiresPermission: true,
-			},
-		}
+	go func() {
+		defer close(done)
 
-		wrappedTools := cmd.WrapToolsWithPermissionAndModeMetadata(
-			[]copilot.Tool{writeTool}, eventChan, agentModeRef, metadata,
-		)
-
-		// Start tool invocation in goroutine since it will block waiting for permission
-		done := make(chan struct{})
-		go func() {
-			defer close(done)
-			_, _ = wrappedTools[0].Handler(copilot.ToolInvocation{
-				ToolCallID: "test_write",
-				ToolName:   "test_write_tool",
-			})
-		}()
-
-		// Wait for permission request to be sent
-		select {
-		case msg := <-eventChan:
-			permReq, ok := msg.(chatui.PermissionRequestMsg)
-			if !ok {
-				t.Fatalf("Expected PermissionRequestMsg, got %T", msg)
-			}
-
-			if permReq.ToolName != "test_write_tool" {
-				t.Errorf("Expected tool name 'test_write_tool', got '%s'", permReq.ToolName)
-			}
-
-			// Approve the permission
-			permReq.Response <- true
-
-		case <-time.After(2 * time.Second):
-			t.Fatal("Timeout waiting for permission request")
-		}
-
-		// Wait for handler to complete
-		<-done
-
-		if !toolCalled {
-			t.Error("Tool should have been called after permission approval")
-		}
-	})
-
-	t.Run("WriteToolDeniedPermission", func(t *testing.T) {
-		t.Parallel()
-
-		eventChan := make(chan tea.Msg, 10)
-		agentModeRef := chatui.NewAgentModeRef(true) // Agent mode enabled
-
-		toolCalled := false
-		writeTool := copilot.Tool{
-			Name:        "test_write_tool2",
-			Description: "Another write tool",
-			Handler: func(_ copilot.ToolInvocation) (copilot.ToolResult, error) {
-				toolCalled = true
-
-				return copilot.ToolResult{
-					TextResultForLLM: "Write operation completed",
-					ResultType:       "success",
-				}, nil
-			},
-		}
-
-		metadata := map[string]toolgen.ToolDefinition{
-			"test_write_tool2": {
-				Name:               "test_write_tool2",
-				RequiresPermission: true,
-			},
-		}
-
-		wrappedTools := cmd.WrapToolsWithPermissionAndModeMetadata(
-			[]copilot.Tool{writeTool}, eventChan, agentModeRef, metadata,
-		)
-
-		// Start tool invocation in goroutine
-		var result copilot.ToolResult
-		done := make(chan struct{})
-		go func() {
-			defer close(done)
-			result, _ = wrappedTools[0].Handler(copilot.ToolInvocation{
-				ToolCallID: "test_write_denied",
-				ToolName:   "test_write_tool2",
-			})
-		}()
-
-		// Wait for permission request and deny it
-		select {
-		case msg := <-eventChan:
-			permReq, ok := msg.(chatui.PermissionRequestMsg)
-			if !ok {
-				t.Fatalf("Expected PermissionRequestMsg, got %T", msg)
-			}
-			// Deny the permission
-			permReq.Response <- false
-
-		case <-time.After(2 * time.Second):
-			t.Fatal("Timeout waiting for permission request")
-		}
-
-		// Wait for handler to complete
-		<-done
-
-		if toolCalled {
-			t.Error("Tool should NOT have been called after permission denial")
-		}
-
-		if result.ResultType != "failure" {
-			t.Errorf("Expected failure result, got %s", result.ResultType)
-		}
-
-		if !strings.Contains(result.TextResultForLLM, "Permission denied") {
-			t.Errorf("Expected denial message, got: %s", result.TextResultForLLM)
-		}
-	})
-
-	t.Run("ReadToolSkipsPermission", func(t *testing.T) {
-		t.Parallel()
-
-		eventChan := make(chan tea.Msg, 10)
-		agentModeRef := chatui.NewAgentModeRef(true) // Agent mode enabled
-
-		toolCalled := false
-		readTool := copilot.Tool{
-			Name:        "test_read_tool",
-			Description: "A read tool",
-			Handler: func(_ copilot.ToolInvocation) (copilot.ToolResult, error) {
-				toolCalled = true
-
-				return copilot.ToolResult{
-					TextResultForLLM: "Read operation completed",
-					ResultType:       "success",
-				}, nil
-			},
-		}
-
-		// Metadata with RequiresPermission=false (read-only)
-		metadata := map[string]toolgen.ToolDefinition{
-			"test_read_tool": {
-				Name:               "test_read_tool",
-				RequiresPermission: false,
-			},
-		}
-
-		wrappedTools := cmd.WrapToolsWithPermissionAndModeMetadata(
-			[]copilot.Tool{readTool}, eventChan, agentModeRef, metadata,
-		)
-
-		// Execute directly - should not send permission request
-		result, err := wrappedTools[0].Handler(copilot.ToolInvocation{
-			ToolCallID: "test_read",
-			ToolName:   "test_read_tool",
+		_, _ = wrappedTools[0].Handler(copilot.ToolInvocation{
+			ToolCallID: "test_write",
+			ToolName:   "test_write_tool",
 		})
-		if err != nil {
-			t.Errorf("Unexpected error: %v", err)
-		}
+	}()
 
-		// Check no permission request was sent
-		select {
-		case msg := <-eventChan:
-			t.Errorf("Read tool should not send permission request, got: %T", msg)
-		default:
-			// Good - no message sent
-		}
+	// Wait for permission request and approve it
+	waitForPermissionRequestAndRespond(t, eventChan, "test_write_tool", true)
 
-		if !toolCalled {
-			t.Error("Read tool should have been called directly")
-		}
+	// Wait for handler to complete
+	<-done
 
-		if result.ResultType != "success" {
-			t.Errorf("Expected success, got %s", result.ResultType)
-		}
+	if !toolCalled {
+		t.Error("Tool should have been called after permission approval")
+	}
+}
+
+// TestWriteToolDeniedPermission verifies that tools are blocked when permission is denied.
+func TestWriteToolDeniedPermission(t *testing.T) {
+	t.Parallel()
+
+	eventChan := make(chan tea.Msg, 10)
+	agentModeRef := chatui.NewAgentModeRef(true) // Agent mode enabled
+
+	toolCalled := false
+	writeTool := createTestWriteTool("test_write_tool2", &toolCalled)
+	metadata := createToolMetadata("test_write_tool2", true)
+
+	wrappedTools := cmd.WrapToolsWithPermissionAndModeMetadata(
+		[]copilot.Tool{writeTool}, eventChan, agentModeRef, metadata,
+	)
+
+	// Start tool invocation in goroutine
+	var result copilot.ToolResult
+
+	done := make(chan struct{})
+
+	go func() {
+		defer close(done)
+
+		result, _ = wrappedTools[0].Handler(copilot.ToolInvocation{
+			ToolCallID: "test_write_denied",
+			ToolName:   "test_write_tool2",
+		})
+	}()
+
+	// Wait for permission request and deny it
+	waitForPermissionRequestAndRespond(t, eventChan, "test_write_tool2", false)
+
+	// Wait for handler to complete
+	<-done
+
+	if toolCalled {
+		t.Error("Tool should NOT have been called after permission denial")
+	}
+
+	if result.ResultType != "failure" {
+		t.Errorf("Expected failure result, got %s", result.ResultType)
+	}
+
+	if !strings.Contains(result.TextResultForLLM, "Permission denied") {
+		t.Errorf("Expected denial message, got: %s", result.TextResultForLLM)
+	}
+}
+
+// TestReadToolSkipsPermission verifies that read-only tools execute without permission requests.
+func TestReadToolSkipsPermission(t *testing.T) {
+	t.Parallel()
+
+	eventChan := make(chan tea.Msg, 10)
+	agentModeRef := chatui.NewAgentModeRef(true) // Agent mode enabled
+
+	toolCalled := false
+	readTool := copilot.Tool{
+		Name:        "test_read_tool",
+		Description: "A read tool",
+		Handler: func(_ copilot.ToolInvocation) (copilot.ToolResult, error) {
+			toolCalled = true
+
+			return copilot.ToolResult{
+				TextResultForLLM: "Read operation completed",
+				ResultType:       "success",
+			}, nil
+		},
+	}
+
+	// Metadata with RequiresPermission=false (read-only)
+	metadata := map[string]toolgen.ToolDefinition{
+		"test_read_tool": {
+			Name:               "test_read_tool",
+			RequiresPermission: false,
+		},
+	}
+
+	wrappedTools := cmd.WrapToolsWithPermissionAndModeMetadata(
+		[]copilot.Tool{readTool}, eventChan, agentModeRef, metadata,
+	)
+
+	// Execute directly - should not send permission request
+	result, err := wrappedTools[0].Handler(copilot.ToolInvocation{
+		ToolCallID: "test_read",
+		ToolName:   "test_read_tool",
 	})
+	if err != nil {
+		t.Errorf("Unexpected error: %v", err)
+	}
+
+	// Check no permission request was sent
+	select {
+	case msg := <-eventChan:
+		t.Errorf("Read tool should not send permission request, got: %T", msg)
+	default:
+		// Good - no message sent
+	}
+
+	if !toolCalled {
+		t.Error("Read tool should have been called directly")
+	}
+
+	if result.ResultType != "success" {
+		t.Errorf("Expected success, got %s", result.ResultType)
+	}
 }
