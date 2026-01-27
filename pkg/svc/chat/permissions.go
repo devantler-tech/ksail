@@ -58,7 +58,7 @@ func promptForPermission(
 		// Show the command/action being requested
 		_, _ = fmt.Fprintf(writer, "┌─ Permission Required (%s)\n", request.Kind)
 
-		for _, line := range strings.Split(desc, "\n") {
+		for line := range strings.SplitSeq(desc, "\n") {
 			if line != "" {
 				_, _ = fmt.Fprintf(writer, "│  %s\n", line)
 			}

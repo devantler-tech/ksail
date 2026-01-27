@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	failureResultType = "failure"
+	failureResult = "failure"
 )
 
 // planModeTestCase defines a test case for plan/agent mode tool execution.
@@ -143,7 +143,7 @@ func TestPlanModeToggle(t *testing.T) {
 		t.Error("Tool should not be called in plan mode")
 	}
 
-	if result.ResultType != failureResultType {
+	if result.ResultType != failureResult {
 		t.Errorf("Expected failure in plan mode, got %s", result.ResultType)
 	}
 
@@ -202,7 +202,7 @@ func TestPlanModeBlocksMutableTools(t *testing.T) {
 		t.Error("Edit tool should not have been called in plan mode")
 	}
 
-	if result.ResultType != failureResultType {
+	if result.ResultType != failureResult {
 		t.Errorf("Expected failure for blocked edit tool, got %s", result.ResultType)
 	}
 

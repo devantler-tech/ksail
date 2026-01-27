@@ -99,16 +99,23 @@ func TestConsolidatedToolExecution(t *testing.T) {
 
 			if testCase.expectError {
 				if err == nil {
-					t.Error("Expected error but got none")
-				} else if testCase.errorSubstring != "" &&
-				!strings.Contains(err.Error(), testCase.errorSubstring) {
-				t.Errorf(
-					"Expected error containing '%s', got: %v",
-					testCase.errorSubstring,
-					err,
-				)
+					t.Fatalf("Expected error but got none")
+				}
+
+				if testCase.errorSubstring != "" &&
+					!strings.Contains(err.Error(), testCase.errorSubstring) {
+					t.Fatalf(
+						"Expected error containing '%s', got: %v",
+						testCase.errorSubstring,
+						err,
+					)
+				}
+
+				// Error was expected and matched; no further checks needed.
+				return
 			}
 
+			if err != nil {
 				t.Fatalf("Unexpected error: %v", err)
 			}
 
@@ -118,5 +125,3 @@ func TestConsolidatedToolExecution(t *testing.T) {
 		})
 	}
 }
-
-

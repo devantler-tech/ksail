@@ -194,16 +194,32 @@ func executeCommand(
 	}
 
 	// Stream output with synchronization and accumulate for return
-	var outputBuffer strings.Builder
-	var bufferMutex sync.Mutex
-	var waitGroup sync.WaitGroup
+	var (
+		outputBuffer strings.Builder
+		bufferMutex  sync.Mutex
+		waitGroup    sync.WaitGroup
+	)
 
 	waitGroup.Go(func() {
-		streamOutput(stdout, "stdout", toolName, opts.OutputChan, &outputBuffer, &bufferMutex)
+		streamOutput(streamConfig{
+			pipeReader: stdout,
+			source:     "stdout",
+			toolName:   toolName,
+			outputChan: opts.OutputChan,
+			buffer:     &outputBuffer,
+			mutex:      &bufferMutex,
+		})
 	})
 
 	waitGroup.Go(func() {
-		streamOutput(stderr, "stderr", toolName, opts.OutputChan, &outputBuffer, &bufferMutex)
+		streamOutput(streamConfig{
+			pipeReader: stderr,
+			source:     "stderr",
+			toolName:   toolName,
+			outputChan: opts.OutputChan,
+			buffer:     &outputBuffer,
+			mutex:      &bufferMutex,
+		})
 	})
 
 	// Wait for all output to be read before waiting for command
@@ -218,25 +234,35 @@ func executeCommand(
 	return outputBuffer.String(), nil
 }
 
+// streamConfig holds configuration for streaming output.
+type streamConfig struct {
+	pipeReader io.Reader
+	source     string
+	toolName   string
+	outputChan chan<- OutputChunk
+	buffer     *strings.Builder
+	mutex      *sync.Mutex
+}
+
 // streamOutput reads from a reader and sends chunks to the output channel.
 // Also accumulates output in the provided buffer for returning to the LLM.
-func streamOutput(pipeReader io.Reader, source string, toolName string, outputChan chan<- OutputChunk, buffer *strings.Builder, mutex *sync.Mutex) {
-	scanner := bufio.NewScanner(pipeReader)
+func streamOutput(cfg streamConfig) {
+	scanner := bufio.NewScanner(cfg.pipeReader)
 
 	for scanner.Scan() {
 		line := scanner.Text() + "\n"
 
 		// Send to channel for UI display
-		outputChan <- OutputChunk{
-			ToolID: toolName,
-			Source: source,
+		cfg.outputChan <- OutputChunk{
+			ToolID: cfg.toolName,
+			Source: cfg.source,
 			Chunk:  line,
 		}
 
 		// Accumulate for LLM (thread-safe)
-		mutex.Lock()
-		buffer.WriteString(line)
-		mutex.Unlock()
+		cfg.mutex.Lock()
+		cfg.buffer.WriteString(line)
+		cfg.mutex.Unlock()
 	}
 }
 

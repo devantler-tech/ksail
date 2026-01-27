@@ -27,7 +27,7 @@ const (
 
 // Cobra flag type constants.
 const (
-	flagTypeHelp = "help"
+	helpFlagName = "help"
 	flagTypeBool = "bool"
 )
 

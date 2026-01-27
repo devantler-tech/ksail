@@ -101,7 +101,7 @@ func isRunnableCommand(cmd *cobra.Command) bool {
 		hasNonHelpFlags := false
 
 		cmd.Flags().VisitAll(func(f *pflag.Flag) {
-			if f.Name != flagTypeHelp {
+			if f.Name != helpFlagName {
 				hasNonHelpFlags = true
 			}
 		})
@@ -158,7 +158,7 @@ func buildParameterSchema(cmd *cobra.Command) map[string]any {
 	// Visit all flags (local and persistent)
 	cmd.Flags().VisitAll(func(flag *pflag.Flag) {
 		// Skip help flag
-		if flag.Name == flagTypeHelp {
+		if flag.Name == helpFlagName {
 			return
 		}
 
@@ -579,7 +579,7 @@ func extractFlags(cmd *cobra.Command) map[string]*FlagDef {
 	flags := make(map[string]*FlagDef)
 
 	cmd.Flags().VisitAll(func(flag *pflag.Flag) {
-		if flag.Name == flagTypeHelp {
+		if flag.Name == helpFlagName {
 			return
 		}
 

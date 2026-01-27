@@ -15,10 +15,9 @@ import (
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 	copilot "github.com/github/copilot-sdk/go"
+	"golang.design/x/clipboard"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
-
-	"golang.design/x/clipboard"
 )
 
 const (
@@ -956,7 +955,7 @@ func extractPermissionDetails(request copilot.PermissionRequest) (string, string
 	}
 
 	// Check for nested execution object (some SDK versions nest the command)
-	if exec, ok := request.Extra["execution"].(map[string]interface{}); ok {
+	if exec, ok := request.Extra["execution"].(map[string]any); ok {
 		for _, field := range commandFields {
 			if val, ok := exec[field]; ok {
 				if cmd := extractStringValue(val); cmd != "" {
@@ -999,11 +998,11 @@ func extractPermissionDetails(request copilot.PermissionRequest) (string, string
 }
 
 // extractStringValue extracts a string from various value types.
-func extractStringValue(val interface{}) string {
+func extractStringValue(val any) string {
 	switch v := val.(type) {
 	case string:
 		return v
-	case []interface{}:
+	case []any:
 		// Join array elements
 		parts := make([]string, 0, len(v))
 		for _, item := range v {
@@ -1014,7 +1013,7 @@ func extractStringValue(val interface{}) string {
 		if len(parts) > 0 {
 			return strings.Join(parts, " ")
 		}
-	case map[string]interface{}:
+	case map[string]any:
 		// Try to extract command from nested object
 		if cmd, ok := v["command"].(string); ok {
 			return cmd
