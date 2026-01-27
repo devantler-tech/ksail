@@ -777,7 +777,7 @@ jobs:
           repositories: ${{ github.event.repository.name }}
           github-api-url: ${{ github.api_url }}
           permission-contents: read
-          permission-discussions: write
+          permission-team-discussions: write
           permission-issues: write
           permission-pull-requests: write
       - name: Debug job inputs
@@ -1093,7 +1093,7 @@ jobs:
           repositories: ${{ github.event.repository.name }}
           github-api-url: ${{ github.api_url }}
           permission-contents: read
-          permission-discussions: write
+          permission-team-discussions: write
       - name: Process Safe Outputs
         id: process_safe_outputs
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
