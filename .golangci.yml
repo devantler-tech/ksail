@@ -291,6 +291,7 @@ linters:
             - filippo.io/age
             - golang.org/x/sync
             - golang.org/x/term
+            - golang.org/x/text
             - helm.sh/helm
             - k8s.io
             - sigs.k8s.io

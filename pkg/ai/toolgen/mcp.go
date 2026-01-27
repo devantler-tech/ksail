@@ -21,10 +21,8 @@ func addMCPTool(server *mcp.Server, tool ToolDefinition, opts ToolOptions) {
 	mcpTool := &mcp.Tool{
 		Name:        tool.Name,
 		Description: tool.Description,
-		// Note: MCP Go SDK uses struct tags for JSON schema generation
-		// Since we already have a JSON schema in tool.Parameters,
-		// we'll need to pass it via the handler and rely on the SDK's
-		// generic map[string]any input handling
+		// Expose the existing JSON schema to MCP clients for validation and UI generation.
+		InputSchema: tool.Parameters,
 	}
 
 	// Create handler

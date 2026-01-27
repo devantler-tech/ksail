@@ -8,6 +8,7 @@ import (
 	"io"
 	"os/exec"
 	"strings"
+	"sync"
 )
 
 // ExecuteTool executes a tool definition with the given parameters.
@@ -190,9 +191,19 @@ func executeCommand(
 		return fmt.Errorf("starting command: %w", err)
 	}
 
-	// Stream output
-	go streamOutput(stdout, "stdout", toolName, opts.OutputChan)
-	go streamOutput(stderr, "stderr", toolName, opts.OutputChan)
+	// Stream output with synchronization
+	var waitGroup sync.WaitGroup
+
+	waitGroup.Go(func() {
+		streamOutput(stdout, "stdout", toolName, opts.OutputChan)
+	})
+
+	waitGroup.Go(func() {
+		streamOutput(stderr, "stderr", toolName, opts.OutputChan)
+	})
+
+	// Wait for all output to be read before waiting for command
+	waitGroup.Wait()
 
 	// Wait for completion
 	err = cmd.Wait()

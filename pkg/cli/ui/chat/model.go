@@ -15,6 +15,8 @@ import (
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 	copilot "github.com/github/copilot-sdk/go"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 const (
@@ -1033,6 +1035,7 @@ func formatPermissionKind(kind string) string {
 		}
 		// Replace underscores with spaces and title case
 		formatted := strings.ReplaceAll(kind, "_", " ")
-		return strings.Title(formatted) //nolint:staticcheck // strings.Title is fine here
+		caser := cases.Title(language.English)
+		return caser.String(formatted)
 	}
 }
