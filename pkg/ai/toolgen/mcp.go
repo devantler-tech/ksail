@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp" //nolint:depguard // MCP SDK is required for MCP integration
 )
 
 // ToMCPTools converts tool definitions to MCP server tools.
@@ -28,7 +28,11 @@ func addMCPTool(server *mcp.Server, tool ToolDefinition, opts ToolOptions) {
 	}
 
 	// Create handler
-	handler := func(ctx context.Context, _ *mcp.CallToolRequest, input map[string]any) (*mcp.CallToolResult, map[string]any, error) {
+	handler := func(
+		ctx context.Context,
+		_ *mcp.CallToolRequest,
+		input map[string]any,
+	) (*mcp.CallToolResult, map[string]any, error) {
 		// Execute the tool
 		err := ExecuteTool(ctx, tool, input, opts)
 		if err != nil {

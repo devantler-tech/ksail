@@ -185,7 +185,8 @@ func executeCommand(
 	}
 
 	// Start command
-	if err := cmd.Start(); err != nil {
+	err = cmd.Start()
+	if err != nil {
 		return fmt.Errorf("starting command: %w", err)
 	}
 
@@ -194,7 +195,8 @@ func executeCommand(
 	go streamOutput(stderr, "stderr", toolName, opts.OutputChan)
 
 	// Wait for completion
-	if err := cmd.Wait(); err != nil {
+	err = cmd.Wait()
+	if err != nil {
 		return fmt.Errorf("command failed: %w", err)
 	}
 

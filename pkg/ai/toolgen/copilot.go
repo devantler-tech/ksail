@@ -39,14 +39,7 @@ func buildCopilotHandler(tool ToolDefinition, opts ToolOptions) copilot.ToolHand
 		}
 
 		// Build the full command string for reporting
-		fullCmd := tool.CommandPath
-
-		if len(params) > 0 {
-			argStrs := formatParametersForDisplay(params)
-			if len(argStrs) > 0 {
-				fullCmd += " " + strings.Join(argStrs, " ")
-			}
-		}
+		fullCmd := buildFullCommand(tool.CommandPath, params)
 
 		// Execute the command
 		// Note: We create our own context since Copilot SDK ToolHandler
@@ -54,56 +47,40 @@ func buildCopilotHandler(tool ToolDefinition, opts ToolOptions) copilot.ToolHand
 		ctx := context.Background()
 		err := ExecuteTool(ctx, tool, params, opts)
 
-		// If we have an output channel, we've already streamed the output
-		// Return a simple result
-		if opts.OutputChan != nil {
-			if err != nil {
-				return copilot.ToolResult{
-					TextResultForLLM: fmt.Sprintf(
-						"Command: %s\nStatus: FAILED\nError: %v",
-						fullCmd,
-						err,
-					),
-					ResultType:    "failure",
-					SessionLog:    fmt.Sprintf("[FAILED] %s: %v", fullCmd, err),
-					ToolTelemetry: map[string]any{},
-				}, nil
-			}
+		return buildCopilotResult(fullCmd, err), nil
+	}
+}
 
-			return copilot.ToolResult{
-				TextResultForLLM: fmt.Sprintf(
-					"Command: %s\nStatus: SUCCESS",
-					fullCmd,
-				),
-				ResultType:    "success",
-				SessionLog:    "[SUCCESS] " + fullCmd,
-				ToolTelemetry: map[string]any{},
-			}, nil
+// buildFullCommand constructs the full command string for display.
+func buildFullCommand(commandPath string, params map[string]any) string {
+	fullCmd := commandPath
+
+	if len(params) > 0 {
+		argStrs := formatParametersForDisplay(params)
+		if len(argStrs) > 0 {
+			fullCmd += " " + strings.Join(argStrs, " ")
 		}
+	}
 
-		// For non-streaming, err will contain the output in the error message
-		if err != nil {
-			return copilot.ToolResult{
-				TextResultForLLM: fmt.Sprintf(
-					"Command: %s\nStatus: FAILED\nError: %v",
-					fullCmd,
-					err,
-				),
-				ResultType:    "failure",
-				SessionLog:    fmt.Sprintf("[FAILED] %s: %v", fullCmd, err),
-				ToolTelemetry: map[string]any{},
-			}, nil
-		}
+	return fullCmd
+}
 
+// buildCopilotResult creates a Copilot ToolResult based on execution outcome.
+func buildCopilotResult(fullCmd string, err error) copilot.ToolResult {
+	if err != nil {
 		return copilot.ToolResult{
-			TextResultForLLM: fmt.Sprintf(
-				"Command: %s\nStatus: SUCCESS",
-				fullCmd,
-			),
-			ResultType:    "success",
-			SessionLog:    "[SUCCESS] " + fullCmd,
-			ToolTelemetry: map[string]any{},
-		}, nil
+			TextResultForLLM: fmt.Sprintf("Command: %s\nStatus: FAILED\nError: %v", fullCmd, err),
+			ResultType:       "failure",
+			SessionLog:       fmt.Sprintf("[FAILED] %s: %v", fullCmd, err),
+			ToolTelemetry:    map[string]any{},
+		}
+	}
+
+	return copilot.ToolResult{
+		TextResultForLLM: fmt.Sprintf("Command: %s\nStatus: SUCCESS", fullCmd),
+		ResultType:       "success",
+		SessionLog:       "[SUCCESS] " + fullCmd,
+		ToolTelemetry:    map[string]any{},
 	}
 }
 
@@ -113,30 +90,26 @@ func formatParametersForDisplay(params map[string]any) []string {
 
 	for name, value := range params {
 		if name == "args" {
-			// Positional arguments
-			if args, ok := value.([]any); ok {
-				for _, arg := range args {
-					argStrs = append(argStrs, fmt.Sprintf("%v", arg))
-				}
-			}
+			argStrs = append(argStrs, formatPositionalArgs(value)...)
 		} else {
-			// Flag arguments
-			switch v := value.(type) {
-			case bool:
-				if v {
-					argStrs = append(argStrs, "--"+name)
-				}
-			case []any:
-				for _, item := range v {
-					argStrs = append(argStrs, fmt.Sprintf("--%s=%v", name, item))
-				}
-			case nil:
-				// Skip nil
-			default:
-				argStrs = append(argStrs, fmt.Sprintf("--%s=%v", name, value))
-			}
+			argStrs = append(argStrs, formatFlagArg(name, value)...)
 		}
 	}
 
 	return argStrs
+}
+
+// formatPositionalArgs converts positional arguments to strings.
+func formatPositionalArgs(value any) []string {
+	args, ok := value.([]any)
+	if !ok {
+		return nil
+	}
+
+	result := make([]string, 0, len(args))
+	for _, arg := range args {
+		result = append(result, fmt.Sprintf("%v", arg))
+	}
+
+	return result
 }

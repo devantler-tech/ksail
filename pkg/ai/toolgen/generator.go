@@ -20,37 +20,52 @@ func GenerateTools(root *cobra.Command, opts ToolOptions) []ToolDefinition {
 
 // generateToolsRecursive traverses the command tree depth-first.
 func generateToolsRecursive(cmd *cobra.Command, tools *[]ToolDefinition, opts ToolOptions) {
-	// Skip excluded commands
-	if shouldExclude(cmd, opts) {
+	// Check for explicit exclusion annotation - skip entirely (including children)
+	if hasExcludeAnnotation(cmd) {
 		return
 	}
 
-	// Check for explicit exclusion annotation
-	if cmd.Annotations != nil && cmd.Annotations[AnnotationExclude] == "true" {
-		return
-	}
+	// Check if this command is excluded from tool generation
+	// Note: We still traverse children of excluded commands
+	isExcluded := shouldExclude(cmd, opts)
 
-	// Check if this command should be consolidated
-	if shouldConsolidate(cmd) {
+	// Check if this command should be consolidated (only if not excluded)
+	if !isExcluded && shouldConsolidate(cmd) {
 		splitTools := commandToPermissionSplitTools(cmd)
 		*tools = append(*tools, splitTools...)
 
 		return // Don't traverse children - they're now part of the consolidated tool(s)
 	}
 
+	// Traverse children and potentially add this command as a tool
+	processCommandAndChildren(cmd, tools, opts, isExcluded)
+}
+
+// hasExcludeAnnotation checks if a command has the explicit exclude annotation.
+func hasExcludeAnnotation(cmd *cobra.Command) bool {
+	return cmd.Annotations != nil && cmd.Annotations[AnnotationExclude] == "true"
+}
+
+// processCommandAndChildren traverses children and adds the command as a tool if applicable.
+func processCommandAndChildren(
+	cmd *cobra.Command,
+	tools *[]ToolDefinition,
+	opts ToolOptions,
+	isExcluded bool,
+) {
 	// If command has subcommands, traverse them
 	if len(cmd.Commands()) > 0 {
 		for _, subCmd := range cmd.Commands() {
 			generateToolsRecursive(subCmd, tools, opts)
 		}
-		// Also check if this command is runnable itself (has RunE and isn't just a group)
-		if !isRunnableCommand(cmd) {
+		// Skip generating tool for excluded or non-runnable parent commands
+		if isExcluded || !isRunnableCommand(cmd) {
 			return
 		}
 	}
 
-	// Generate tool for runnable commands
-	if isRunnableCommand(cmd) {
+	// Generate tool for runnable commands (if not excluded)
+	if !isExcluded && isRunnableCommand(cmd) {
 		tool := commandToToolDefinition(cmd)
 		*tools = append(*tools, tool)
 	}
@@ -190,11 +205,20 @@ func flagToSchemaProperty(flag *pflag.Flag) map[string]any {
 	}
 
 	// Build standard property
+	prop := buildStandardProperty(flag)
+
+	// Add default value if present
+	addDefaultValue(prop, flag)
+
+	return prop
+}
+
+// buildStandardProperty creates a property map with type information based on flag type.
+func buildStandardProperty(flag *pflag.Flag) map[string]any {
 	prop := map[string]any{
 		"description": flag.Usage,
 	}
 
-	// Map pflag types to JSON schema types
 	switch flag.Value.Type() {
 	case flagTypeBool:
 		prop["type"] = jsonSchemaTypeBoolean
@@ -213,17 +237,18 @@ func flagToSchemaProperty(flag *pflag.Flag) map[string]any {
 		prop["type"] = jsonSchemaTypeString
 		prop["description"] = flag.Usage + " (format: 1h30m, 5m, 30s)"
 	default:
-		// Default to string for unknown types
 		prop["type"] = jsonSchemaTypeString
 	}
 
-	// Add default value if present
+	return prop
+}
+
+// addDefaultValue adds a default value to the property if applicable.
+func addDefaultValue(prop map[string]any, flag *pflag.Flag) {
 	if flag.DefValue != "" && flag.DefValue != defaultValueFalse &&
 		flag.DefValue != defaultValueEmptyArray {
 		prop["default"] = flag.DefValue
 	}
-
-	return prop
 }
 
 // buildEnumProperty builds a JSON schema property for enum-valued flags.
@@ -416,55 +441,99 @@ func collectSubcommandsWithPrefix(
 		}
 
 		// Build the relative key: prefix_name or just name if no prefix
-		relativeKey := subCmd.Name()
-		if prefix != "" {
-			relativeKey = prefix + "_" + subCmd.Name()
-		}
+		relativeKey := buildRelativeKey(prefix, subCmd.Name())
 
 		// Determine if this command requires write permission
-		// Use subcommand's explicit permission if set, otherwise inherit from parent
-		requiresWrite := parentRequiresWrite
-		if subCmd.Annotations != nil && subCmd.Annotations[AnnotationPermission] != "" {
-			requiresWrite = subCmd.Annotations[AnnotationPermission] == permissionWrite
-		}
+		requiresWrite := determineWritePermission(subCmd, parentRequiresWrite)
 
-		subCmdPath := subCmd.CommandPath()
-		subCmdParts := strings.Fields(subCmdPath)
-		flags := extractFlags(subCmd)
+		subcommandDef := buildSubcommandDef(subCmd, relativeKey)
 
-		subcommandDef := &SubcommandDef{
-			Name:         relativeKey,
-			Description:  subCmd.Short,
-			CommandParts: subCmdParts,
-			Flags:        flags,
-		}
+		// Process subcommand based on whether it has children
+		processSubcommand(
+			subCmd,
+			subcommandDef,
+			relativeKey,
+			requiresWrite,
+			readSubcommands,
+			writeSubcommands,
+		)
+	}
+}
 
-		// If this subcommand has its own children, check if it's also runnable
-		if len(subCmd.Commands()) > 0 {
-			// Include runnable parent commands (have RunE and non-help flags)
-			if isRunnableCommand(subCmd) {
-				if requiresWrite {
-					(*writeSubcommands)[relativeKey] = subcommandDef
-				} else {
-					(*readSubcommands)[relativeKey] = subcommandDef
-				}
-			}
-			// Recursively collect nested subcommands with updated prefix
-			collectSubcommandsWithPrefix(
-				subCmd,
-				readSubcommands,
-				writeSubcommands,
-				relativeKey,
-				requiresWrite,
-			)
-		} else {
-			// Leaf command - add it to the appropriate map
-			if requiresWrite {
-				(*writeSubcommands)[relativeKey] = subcommandDef
-			} else {
-				(*readSubcommands)[relativeKey] = subcommandDef
-			}
-		}
+// buildRelativeKey constructs the relative key for a subcommand.
+func buildRelativeKey(prefix, name string) string {
+	if prefix != "" {
+		return prefix + "_" + name
+	}
+
+	return name
+}
+
+// determineWritePermission checks if a command requires write permission.
+func determineWritePermission(cmd *cobra.Command, parentRequiresWrite bool) bool {
+	if cmd.Annotations != nil && cmd.Annotations[AnnotationPermission] != "" {
+		return cmd.Annotations[AnnotationPermission] == permissionWrite
+	}
+
+	return parentRequiresWrite
+}
+
+// buildSubcommandDef creates a SubcommandDef from a command.
+func buildSubcommandDef(cmd *cobra.Command, relativeKey string) *SubcommandDef {
+	return &SubcommandDef{
+		Name:         relativeKey,
+		Description:  cmd.Short,
+		CommandParts: strings.Fields(cmd.CommandPath()),
+		Flags:        extractFlags(cmd),
+	}
+}
+
+// processSubcommand processes a subcommand with its children.
+func processSubcommand(
+	subCmd *cobra.Command,
+	subcommandDef *SubcommandDef,
+	relativeKey string,
+	requiresWrite bool,
+	readSubcommands *map[string]*SubcommandDef,
+	writeSubcommands *map[string]*SubcommandDef,
+) {
+	hasChildren := len(subCmd.Commands()) > 0
+
+	// Add to appropriate map if runnable (or if it's a leaf command)
+	if !hasChildren || isRunnableCommand(subCmd) {
+		addToSubcommandMap(
+			subcommandDef,
+			relativeKey,
+			requiresWrite,
+			readSubcommands,
+			writeSubcommands,
+		)
+	}
+
+	// Recursively collect nested subcommands
+	if hasChildren {
+		collectSubcommandsWithPrefix(
+			subCmd,
+			readSubcommands,
+			writeSubcommands,
+			relativeKey,
+			requiresWrite,
+		)
+	}
+}
+
+// addToSubcommandMap adds a subcommand definition to the appropriate map based on permission.
+func addToSubcommandMap(
+	def *SubcommandDef,
+	key string,
+	requiresWrite bool,
+	readSubcommands *map[string]*SubcommandDef,
+	writeSubcommands *map[string]*SubcommandDef,
+) {
+	if requiresWrite {
+		(*writeSubcommands)[key] = def
+	} else {
+		(*readSubcommands)[key] = def
 	}
 }
 
@@ -539,34 +608,46 @@ func buildConsolidatedParameterSchema(
 	required := []string{subcommandParam}
 
 	// Add subcommand parameter as enum
-	subcommandNames := make([]string, 0, len(subcommands))
-	subcommandDescriptions := make([]string, 0, len(subcommands))
+	properties[subcommandParam] = buildSubcommandEnumProperty(subcommands)
+
+	// Merge and add all flags from subcommands
+	allFlags := mergeSubcommandFlags(subcommands)
+	addFlagProperties(properties, allFlags, len(subcommands))
+
+	return map[string]any{
+		"type":       "object",
+		"properties": properties,
+		"required":   required,
+	}
+}
+
+// buildSubcommandEnumProperty creates the enum property for subcommand selection.
+func buildSubcommandEnumProperty(subcommands map[string]*SubcommandDef) map[string]any {
+	names := make([]string, 0, len(subcommands))
+	descriptions := make([]string, 0, len(subcommands))
 
 	for name, def := range subcommands {
-		subcommandNames = append(subcommandNames, name)
-		subcommandDescriptions = append(subcommandDescriptions, name+": "+def.Description)
+		names = append(names, name)
+		descriptions = append(descriptions, name+": "+def.Description)
 	}
 
-	properties[subcommandParam] = map[string]any{
-		"type": jsonSchemaTypeString,
-		"enum": subcommandNames,
-		"description": "The subcommand to execute. Options:\n" + strings.Join(
-			subcommandDescriptions,
-			"\n",
-		),
+	return map[string]any{
+		"type":        jsonSchemaTypeString,
+		"enum":        names,
+		"description": "The subcommand to execute. Options:\n" + strings.Join(descriptions, "\n"),
 	}
+}
 
-	// Merge all flags from all subcommands
+// mergeSubcommandFlags collects all flags from subcommands, tracking which subcommands each applies to.
+func mergeSubcommandFlags(subcommands map[string]*SubcommandDef) map[string]*FlagDef {
 	allFlags := make(map[string]*FlagDef)
 
 	for subCmdName, subCmd := range subcommands {
 		for flagName, flagDef := range subCmd.Flags {
 			if existing, exists := allFlags[flagName]; exists {
-				// Flag exists in multiple subcommands - update AppliesToSubcommands
 				existing.AppliesToSubcommands = append(existing.AppliesToSubcommands, subCmdName)
 			} else {
-				// New flag - clone it and track which subcommand it applies to
-				newFlagDef := &FlagDef{
+				allFlags[flagName] = &FlagDef{
 					Name:                 flagDef.Name,
 					Type:                 flagDef.Type,
 					Description:          flagDef.Description,
@@ -574,12 +655,19 @@ func buildConsolidatedParameterSchema(
 					Default:              flagDef.Default,
 					AppliesToSubcommands: []string{subCmdName},
 				}
-				allFlags[flagName] = newFlagDef
 			}
 		}
 	}
 
-	// Add all flags to properties with conditional annotations
+	return allFlags
+}
+
+// addFlagProperties adds flag definitions to the properties map with conditional annotations.
+func addFlagProperties(
+	properties map[string]any,
+	allFlags map[string]*FlagDef,
+	totalSubcommands int,
+) {
 	for flagName, flagDef := range allFlags {
 		prop := map[string]any{
 			"type": flagDef.Type,
@@ -587,8 +675,7 @@ func buildConsolidatedParameterSchema(
 
 		// Build description with conditional applicability
 		description := flagDef.Description
-		if len(flagDef.AppliesToSubcommands) < len(subcommands) {
-			// Flag doesn't apply to all subcommands - add annotation
+		if len(flagDef.AppliesToSubcommands) < totalSubcommands {
 			description = fmt.Sprintf(
 				"%s (applies to: %s)",
 				description,
@@ -605,18 +692,7 @@ func buildConsolidatedParameterSchema(
 		}
 
 		properties[flagName] = prop
-
-		// Note: We don't add flags to required array since they're conditional
-		// The executor will validate based on which subcommand is selected
 	}
-
-	schema := map[string]any{
-		"type":       "object",
-		"properties": properties,
-		"required":   required,
-	}
-
-	return schema
 }
 
 // mapFlagTypeToJSONType converts pflag types to JSON schema types.

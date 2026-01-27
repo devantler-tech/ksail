@@ -1,3 +1,4 @@
+// Package mcp provides MCP server functionality for KSail integration.
 package mcp
 
 import (
@@ -8,7 +9,7 @@ import (
 	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/ai/toolgen"
-	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
+	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp" //nolint:depguard // MCP SDK is required for MCP server
 	"github.com/spf13/cobra"
 )
 
@@ -85,7 +86,8 @@ func RunServer(ctx context.Context, cfg ServerConfig) error {
 	transport := &mcpsdk.StdioTransport{}
 
 	// Run server - blocks until client disconnects or context is cancelled
-	if err := server.Run(ctx, transport); err != nil {
+	err = server.Run(ctx, transport)
+	if err != nil {
 		return fmt.Errorf("running server: %w", err)
 	}
 
