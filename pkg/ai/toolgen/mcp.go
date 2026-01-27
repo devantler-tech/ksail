@@ -9,6 +9,7 @@ import (
 
 // ToMCPTools converts tool definitions to MCP server tools.
 // Each tool definition is registered with the MCP server.
+// Note: mcp.AddTool does not return errors; registration failures will panic.
 func ToMCPTools(server *mcp.Server, tools []ToolDefinition, opts ToolOptions) {
 	for _, tool := range tools {
 		addMCPTool(server, tool, opts)
@@ -32,7 +33,7 @@ func addMCPTool(server *mcp.Server, tool ToolDefinition, opts ToolOptions) {
 		input map[string]any,
 	) (*mcp.CallToolResult, map[string]any, error) {
 		// Execute the tool
-		err := ExecuteTool(ctx, tool, input, opts)
+		output, err := ExecuteTool(ctx, tool, input, opts)
 		if err != nil {
 			// MCP returns errors via IsError flag and error messages in content
 			return &mcp.CallToolResult{
@@ -45,12 +46,17 @@ func addMCPTool(server *mcp.Server, tool ToolDefinition, opts ToolOptions) {
 			}, nil, nil
 		}
 
-		// Success - return empty content (output was streamed if OutputChan was set)
+		// Success - include command output in response
+		resultText := fmt.Sprintf("Command '%s' completed successfully", tool.CommandPath)
+		if output != "" {
+			resultText += "\nOutput:\n" + output
+		}
+
 		return &mcp.CallToolResult{
 			IsError: false,
 			Content: []mcp.Content{
 				&mcp.TextContent{
-					Text: fmt.Sprintf("Command '%s' completed successfully", tool.CommandPath),
+					Text: resultText,
 				},
 			},
 		}, nil, nil

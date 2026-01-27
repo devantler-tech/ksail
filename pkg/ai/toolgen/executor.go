@@ -13,16 +13,17 @@ import (
 
 // ExecuteTool executes a tool definition with the given parameters.
 // It sends output chunks via the opts.OutputChan if set.
+// Returns the combined stdout/stderr output and any error.
 func ExecuteTool(
 	ctx context.Context,
 	tool ToolDefinition,
 	params map[string]any,
 	opts ToolOptions,
-) error {
+) (string, error) {
 	// Build command line arguments
 	args, err := BuildCommandArgs(tool, params)
 	if err != nil {
-		return fmt.Errorf("building command args: %w", err)
+		return "", fmt.Errorf("building command args: %w", err)
 	}
 
 	// Execute command with tool name for output correlation
@@ -144,13 +145,14 @@ func formatFlagArg(name string, value any) []string {
 }
 
 // executeCommand runs the command and streams output.
+// Returns the combined stdout/stderr output and any error.
 func executeCommand(
 	ctx context.Context,
 	command string,
 	args []string,
 	toolName string,
 	opts ToolOptions,
-) error {
+) (string, error) {
 	// Create context with timeout
 	execCtx := ctx
 
@@ -168,38 +170,40 @@ func executeCommand(
 	if opts.OutputChan == nil {
 		output, err := cmd.CombinedOutput()
 		if err != nil {
-			return fmt.Errorf("command failed: %w\nOutput: %s", err, string(output))
+			return string(output), fmt.Errorf("command failed: %w\nOutput: %s", err, string(output))
 		}
 
-		return nil
+		return string(output), nil
 	}
 
 	// Set up streaming output
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		return fmt.Errorf("creating stdout pipe: %w", err)
+		return "", fmt.Errorf("creating stdout pipe: %w", err)
 	}
 
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
-		return fmt.Errorf("creating stderr pipe: %w", err)
+		return "", fmt.Errorf("creating stderr pipe: %w", err)
 	}
 
 	// Start command
 	err = cmd.Start()
 	if err != nil {
-		return fmt.Errorf("starting command: %w", err)
+		return "", fmt.Errorf("starting command: %w", err)
 	}
 
-	// Stream output with synchronization
+	// Stream output with synchronization and accumulate for return
+	var outputBuffer strings.Builder
+	var bufferMutex sync.Mutex
 	var waitGroup sync.WaitGroup
 
 	waitGroup.Go(func() {
-		streamOutput(stdout, "stdout", toolName, opts.OutputChan)
+		streamOutput(stdout, "stdout", toolName, opts.OutputChan, &outputBuffer, &bufferMutex)
 	})
 
 	waitGroup.Go(func() {
-		streamOutput(stderr, "stderr", toolName, opts.OutputChan)
+		streamOutput(stderr, "stderr", toolName, opts.OutputChan, &outputBuffer, &bufferMutex)
 	})
 
 	// Wait for all output to be read before waiting for command
@@ -208,22 +212,31 @@ func executeCommand(
 	// Wait for completion
 	err = cmd.Wait()
 	if err != nil {
-		return fmt.Errorf("command failed: %w", err)
+		return outputBuffer.String(), fmt.Errorf("command failed: %w", err)
 	}
 
-	return nil
+	return outputBuffer.String(), nil
 }
 
 // streamOutput reads from a reader and sends chunks to the output channel.
-func streamOutput(reader io.Reader, source string, toolName string, outputChan chan<- OutputChunk) {
+// Also accumulates output in the provided buffer for returning to the LLM.
+func streamOutput(reader io.Reader, source string, toolName string, outputChan chan<- OutputChunk, buffer *strings.Builder, mutex *sync.Mutex) {
 	scanner := bufio.NewScanner(reader)
 
 	for scanner.Scan() {
+		line := scanner.Text() + "\n"
+
+		// Send to channel for UI display
 		outputChan <- OutputChunk{
 			ToolID: toolName,
 			Source: source,
-			Chunk:  scanner.Text() + "\n",
+			Chunk:  line,
 		}
+
+		// Accumulate for LLM (thread-safe)
+		mutex.Lock()
+		buffer.WriteString(line)
+		mutex.Unlock()
 	}
 }
 

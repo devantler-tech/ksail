@@ -1,6 +1,8 @@
 package toolgen_test
 
 import (
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v5/pkg/ai/toolgen"
@@ -99,55 +101,22 @@ func TestConsolidatedToolExecution(t *testing.T) {
 				if err == nil {
 					t.Error("Expected error but got none")
 				} else if testCase.errorSubstring != "" &&
-					!contains(err.Error(), testCase.errorSubstring) {
-					t.Errorf(
-						"Expected error containing '%s', got: %v",
-						testCase.errorSubstring,
-						err,
-					)
-				}
-
-				return
+				!strings.Contains(err.Error(), testCase.errorSubstring) {
+				t.Errorf(
+					"Expected error containing '%s', got: %v",
+					testCase.errorSubstring,
+					err,
+				)
 			}
 
-			if err != nil {
 				t.Fatalf("Unexpected error: %v", err)
 			}
 
-			if !slicesEqual(args, testCase.expectedArgs) {
+			if !slices.Equal(args, testCase.expectedArgs) {
 				t.Errorf("Expected args %v, got %v", testCase.expectedArgs, args)
 			}
 		})
 	}
 }
 
-// Helper function to check if a string contains a substring.
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(substr) == 0 ||
-		(len(s) > 0 && len(substr) > 0 && hasSubstring(s, substr)))
-}
 
-func hasSubstring(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-
-	return false
-}
-
-// slicesEqual compares two string slices for equality.
-func slicesEqual(first, second []string) bool {
-	if len(first) != len(second) {
-		return false
-	}
-
-	for i := range first {
-		if first[i] != second[i] {
-			return false
-		}
-	}
-
-	return true
-}

@@ -45,9 +45,9 @@ func buildCopilotHandler(tool ToolDefinition, opts ToolOptions) copilot.ToolHand
 		// Note: We create our own context since Copilot SDK ToolHandler
 		// doesn't provide a context parameter
 		ctx := context.Background()
-		err := ExecuteTool(ctx, tool, params, opts)
+		output, err := ExecuteTool(ctx, tool, params, opts)
 
-		return buildCopilotResult(fullCmd, err), nil
+		return buildCopilotResult(fullCmd, output, err), nil
 	}
 }
 
@@ -66,7 +66,7 @@ func buildFullCommand(commandPath string, params map[string]any) string {
 }
 
 // buildCopilotResult creates a Copilot ToolResult based on execution outcome.
-func buildCopilotResult(fullCmd string, err error) copilot.ToolResult {
+func buildCopilotResult(fullCmd string, output string, err error) copilot.ToolResult {
 	if err != nil {
 		return copilot.ToolResult{
 			TextResultForLLM: fmt.Sprintf("Command: %s\nStatus: FAILED\nError: %v", fullCmd, err),
@@ -76,8 +76,13 @@ func buildCopilotResult(fullCmd string, err error) copilot.ToolResult {
 		}
 	}
 
+	result := fmt.Sprintf("Command: %s\nStatus: SUCCESS", fullCmd)
+	if output != "" {
+		result += "\nOutput:\n" + output
+	}
+
 	return copilot.ToolResult{
-		TextResultForLLM: fmt.Sprintf("Command: %s\nStatus: SUCCESS", fullCmd),
+		TextResultForLLM: result,
 		ResultType:       "success",
 		SessionLog:       "[SUCCESS] " + fullCmd,
 		ToolTelemetry:    map[string]any{},
