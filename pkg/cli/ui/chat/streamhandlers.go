@@ -83,7 +83,6 @@ func (m *Model) handleToolStart(msg toolStartMsg) (tea.Model, tea.Cmd) {
 
 	// Track pending tools for proper completion detection
 	m.pendingToolCount++
-	m.lastToolCall = time.Now()
 
 	// DON'T insert tool as separate message - render inline with assistant response
 	m.updateViewportContent()
@@ -311,7 +310,8 @@ func (m *Model) waitForEvent() tea.Cmd {
 		case <-timer.C:
 			return streamErrMsg{
 				err: fmt.Errorf(
-					"response timed out after %v - the assistant may be stuck",
+					"waiting for streaming event (assistant response or tool output) timed out after %v; "+
+						"the assistant or tools may be stuck",
 					timeout,
 				),
 			}
