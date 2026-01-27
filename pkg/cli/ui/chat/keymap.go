@@ -24,6 +24,9 @@ type KeyMap struct {
 	// Tools
 	ExpandTools key.Binding
 
+	// Output
+	CopyOutput key.Binding
+
 	// Modals
 	OpenSessions key.Binding
 	OpenModel    key.Binding
@@ -93,6 +96,12 @@ func DefaultKeyMap() KeyMap {
 		ExpandTools: key.NewBinding(
 			key.WithKeys("ctrl+t"),
 			key.WithHelp("Ctrl+T", "expand/collapse tools"),
+		),
+
+		// Output
+		CopyOutput: key.NewBinding(
+			key.WithKeys("ctrl+y"),
+			key.WithHelp("Ctrl+Y", "copy latest output"),
 		),
 
 		// Modals
@@ -174,6 +183,7 @@ func (k KeyMap) FullHelp() [][]key.Binding {
 		{
 			k.ToggleMode,
 			k.ExpandTools,
+			k.CopyOutput,
 			k.ToggleHelp,
 		},
 		// Column 3: Modals & Session

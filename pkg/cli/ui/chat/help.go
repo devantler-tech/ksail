@@ -49,6 +49,7 @@ func (m *Model) renderHelpOverlay() string {
 	content.WriteString(clipStyle.Render(
 		helpKeyStyle.Render("Tab")+" mode • "+
 			helpKeyStyle.Render("^T")+" tools • "+
+			helpKeyStyle.Render("^Y")+" copy • "+
 			helpKeyStyle.Render("^H")+" sessions • "+
 			helpKeyStyle.Render("^O")+" model • "+
 			helpKeyStyle.Render("^N")+" new") + "\n")
@@ -132,6 +133,12 @@ func (m *Model) renderShortHelp() string {
 			helpKeyStyle.Render("^O") + " model",
 			helpKeyStyle.Render("^N") + " new",
 		}
+		// Add copy output hint when there are assistant messages to copy
+		if m.hasAssistantMessages() {
+			parts = append(
+				parts[:1],
+				append([]string{helpKeyStyle.Render("^Y") + " copy"}, parts[1:]...)...)
+		}
 		// Add tool expand hint if tools exist
 		if len(m.toolOrder) > 0 || m.hasToolsInMessages() {
 			parts = append(
@@ -184,6 +191,16 @@ func getFilterModeHelpParts() []string {
 func (m *Model) hasToolsInMessages() bool {
 	for _, msg := range m.messages {
 		if msg.role == "assistant" && len(msg.tools) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// hasAssistantMessages checks if there are any completed assistant messages.
+func (m *Model) hasAssistantMessages() bool {
+	for _, msg := range m.messages {
+		if msg.role == "assistant" && msg.content != "" && !msg.isStreaming {
 			return true
 		}
 	}

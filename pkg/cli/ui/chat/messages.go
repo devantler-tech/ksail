@@ -90,3 +90,6 @@ type PermissionRequestMsg struct {
 	Arguments  string
 	Response   chan<- bool
 }
+
+// copyFeedbackClearMsg signals that the copy feedback should be hidden.
+type copyFeedbackClearMsg struct{}

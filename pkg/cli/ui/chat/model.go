@@ -17,6 +17,8 @@ import (
 	copilot "github.com/github/copilot-sdk/go"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
+
+	"github.com/golang-design/clipboard"
 )
 
 const (
@@ -95,14 +97,15 @@ type Model struct {
 	spinner  spinner.Model
 
 	// State
-	messages        []chatMessage
-	currentResponse strings.Builder
-	isStreaming     bool
-	justCompleted   bool // true when a response just finished, shows "Ready" indicator
-	userScrolled    bool // true when user has scrolled away from bottom (pause auto-scroll)
-	err             error
-	quitting        bool
-	ready           bool
+	messages         []chatMessage
+	currentResponse  strings.Builder
+	isStreaming      bool
+	justCompleted    bool // true when a response just finished, shows "Ready" indicator
+	showCopyFeedback bool // true when copy feedback should be shown briefly
+	userScrolled     bool // true when user has scrolled away from bottom (pause auto-scroll)
+	err              error
+	quitting         bool
+	ready            bool
 
 	// Prompt history
 	history      []string // previously submitted prompts
@@ -239,6 +242,13 @@ func NewWithEventChannel(
 	// This avoids terminal queries that could interfere with input
 	mdRenderer := createRenderer(defaultWidth - 8)
 
+	// Initialize clipboard for copy operations
+	err := clipboard.Init()
+	if err != nil {
+		// Clipboard initialization failed - copy operations will be silently disabled
+		// This is acceptable as clipboard may not be available in all environments
+	}
+
 	// Use provided event channel or create new one
 	if eventChan == nil {
 		eventChan = make(chan tea.Msg, 100)
@@ -369,6 +379,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case streamErrMsg:
 		return m.handleStreamErr(msg)
 
+	case copyFeedbackClearMsg:
+		m.showCopyFeedback = false
+		return m, nil
+
 	case spinner.TickMsg:
 		// Always update spinner to keep it ticking
 		var cmd tea.Cmd
@@ -474,9 +488,11 @@ func (m *Model) buildStatusText() string {
 		statusParts = append(statusParts, modelStyle.Render("auto"))
 	}
 
-	// Streaming state
+	// Streaming state and feedback
 	if m.isStreaming {
 		statusParts = append(statusParts, m.spinner.View()+" "+statusStyle.Render("Thinking..."))
+	} else if m.showCopyFeedback {
+		statusParts = append(statusParts, statusStyle.Render("Copied ✓"))
 	} else if m.justCompleted {
 		statusParts = append(statusParts, statusStyle.Render("Ready ✓"))
 	}

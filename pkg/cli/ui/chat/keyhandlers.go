@@ -2,8 +2,10 @@ package chat
 
 import (
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/golang-design/clipboard"
 )
 
 // handleKeyMsg handles keyboard input.
@@ -51,6 +53,8 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleToggleMode()
 	case "ctrl+t":
 		return m.handleToggleAllTools()
+	case "ctrl+y":
+		return m.handleCopyOutput()
 	case "up":
 		return m.handleHistoryUp()
 	case "down":
@@ -284,4 +288,30 @@ func (m *Model) handleEnter() (tea.Model, tea.Cmd) {
 	m.isStreaming = true
 	m.justCompleted = false
 	return m, tea.Batch(m.spinner.Tick, m.sendMessageCmd(content))
+}
+
+// handleCopyOutput copies the latest assistant message to clipboard.
+// Works when not streaming and there is a completed assistant message.
+func (m *Model) handleCopyOutput() (tea.Model, tea.Cmd) {
+	// Don't allow copying while streaming
+	if m.isStreaming {
+		return m, nil
+	}
+
+	// Find the last assistant message
+	for i := len(m.messages) - 1; i >= 0; i-- {
+		if m.messages[i].role == "assistant" && m.messages[i].content != "" {
+			// Copy the raw content (markdown) to clipboard
+			clipboard.Write(clipboard.FmtText, []byte(m.messages[i].content))
+
+			// Show feedback and schedule its clearing after 1.5 seconds
+			m.showCopyFeedback = true
+
+			return m, tea.Tick(1500*time.Millisecond, func(_ time.Time) tea.Msg {
+				return copyFeedbackClearMsg{}
+			})
+		}
+	}
+
+	return m, nil
 }
