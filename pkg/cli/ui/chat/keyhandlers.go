@@ -4,8 +4,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/atotto/clipboard"
 	tea "github.com/charmbracelet/bubbletea"
-	"golang.design/x/clipboard"
 )
 
 // handleKeyMsg handles keyboard input.
@@ -302,7 +302,8 @@ func (m *Model) handleCopyOutput() (tea.Model, tea.Cmd) {
 	for i := len(m.messages) - 1; i >= 0; i-- {
 		if m.messages[i].role == "assistant" && m.messages[i].content != "" {
 			// Copy the raw content (markdown) to clipboard
-			clipboard.Write(clipboard.FmtText, []byte(m.messages[i].content))
+			// Silently ignore errors (clipboard may be unavailable in CI/headless environments)
+			_ = clipboard.WriteAll(m.messages[i].content)
 
 			// Show feedback and schedule its clearing after 1.5 seconds
 			m.showCopyFeedback = true

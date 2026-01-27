@@ -15,7 +15,6 @@ import (
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 	copilot "github.com/github/copilot-sdk/go"
-	"golang.design/x/clipboard"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 )
@@ -239,11 +238,6 @@ func NewWithEventChannel(
 	// Initialize markdown renderer before Bubbletea takes over terminal
 	// This avoids terminal queries that could interfere with input
 	mdRenderer := createRenderer(defaultWidth - 8)
-
-	// Initialize clipboard for copy operations
-	// Clipboard initialization may fail in environments where it's not available,
-	// which is acceptable as copy operations will be silently disabled
-	_ = clipboard.Init()
 
 	// Use provided event channel or create new one
 	if eventChan == nil {
