@@ -258,6 +258,7 @@ linters:
           list-mode: strict
           allow:
             - $gostd
+            - github.com/atotto
             - github.com/devantler-tech
             - github.com/charmbracelet
             - github.com/derailed/k9s
