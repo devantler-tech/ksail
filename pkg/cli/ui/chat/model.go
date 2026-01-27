@@ -116,7 +116,6 @@ type Model struct {
 	tools            map[string]*toolExecution // keyed by tool ID
 	toolOrder        []string                  // ordered list of tool IDs for rendering
 	pendingToolCount int                       // number of tools awaiting completion
-	lastToolCall     time.Time                 // timestamp of most recent tool start
 
 	// Session completion tracking
 	sessionComplete bool       // true when SessionIdle has been received
