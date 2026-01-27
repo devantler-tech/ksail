@@ -170,7 +170,7 @@ func executeCommand(
 	if opts.OutputChan == nil {
 		output, err := cmd.CombinedOutput()
 		if err != nil {
-			return string(output), fmt.Errorf("command failed: %w\nOutput: %s", err, string(output))
+			return string(output), fmt.Errorf("command failed: %w", err)
 		}
 
 		return string(output), nil
