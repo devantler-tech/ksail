@@ -20,15 +20,42 @@ var (
 )
 
 var (
-	// Color palette - uses standard ANSI colors (0-15) to respect user's terminal theme.
-	primaryColor   = lipgloss.ANSIColor(14) // Bright cyan
-	accentColor    = lipgloss.ANSIColor(6)  // Cyan
-	secondaryColor = lipgloss.ANSIColor(8)  // Bright black (gray)
-	userColor      = lipgloss.ANSIColor(12) // Bright blue
-	assistantColor = lipgloss.ANSIColor(13) // Bright magenta
-	toolColor      = lipgloss.ANSIColor(11) // Bright yellow
-	successColor   = lipgloss.ANSIColor(10) // Bright green
-	dimColor       = lipgloss.ANSIColor(8)  // Bright black (gray)
+	// Color palette - uses AdaptiveColor for light/dark theme support.
+	// Light color is used on dark backgrounds, Dark color on light backgrounds.
+	// Falls back to ANSI colors for maximum compatibility.
+
+	// Primary color - cyan family, used for main accents.
+	primaryColor = lipgloss.AdaptiveColor{Light: "#0891b2", Dark: "#22d3ee"} // cyan-600 / cyan-400
+
+	// Accent color - slightly muted cyan.
+	accentColor = lipgloss.AdaptiveColor{Light: "#0e7490", Dark: "#67e8f9"} // cyan-700 / cyan-300
+
+	// Secondary color - gray for borders and muted elements.
+	secondaryColor = lipgloss.AdaptiveColor{
+		Light: "#6b7280",
+		Dark:  "#9ca3af",
+	} // gray-500 / gray-400
+
+	// User message color - blue family.
+	userColor = lipgloss.AdaptiveColor{Light: "#2563eb", Dark: "#60a5fa"} // blue-600 / blue-400
+
+	// Assistant message color - purple/magenta family.
+	assistantColor = lipgloss.AdaptiveColor{
+		Light: "#9333ea",
+		Dark:  "#c084fc",
+	} // purple-600 / purple-400
+
+	// Tool color - yellow/amber family.
+	toolColor = lipgloss.AdaptiveColor{Light: "#d97706", Dark: "#fbbf24"} // amber-600 / amber-400
+
+	// Success color - green family.
+	successColor = lipgloss.AdaptiveColor{
+		Light: "#16a34a",
+		Dark:  "#4ade80",
+	} // green-600 / green-400
+
+	// Dim color - muted gray for less important text.
+	dimColor = lipgloss.AdaptiveColor{Light: "#9ca3af", Dark: "#6b7280"} // gray-400 / gray-500
 
 	// logoStyle renders the ASCII art logo.
 	logoStyle = lipgloss.NewStyle().
@@ -66,7 +93,7 @@ var (
 
 	// helpStyle is the style for help text.
 	helpStyle = lipgloss.NewStyle().
-			Foreground(dimColor)
+			Foreground(dimColor) // Muted gray for subtle help text
 
 	// spinnerStyle is the style for the loading spinner.
 	spinnerStyle = lipgloss.NewStyle().
@@ -89,8 +116,8 @@ var (
 			Foreground(dimColor).
 			Italic(true)
 
-	// errorColor for error messages.
-	errorColor = lipgloss.ANSIColor(9) // Bright red
+	// errorColor for error messages - red family.
+	errorColor = lipgloss.AdaptiveColor{Light: "#dc2626", Dark: "#f87171"} // red-600 / red-400
 
 	// errorStyle styles error messages.
 	errorStyle = lipgloss.NewStyle().

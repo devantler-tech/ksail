@@ -12,7 +12,7 @@ import (
 
 // handleSessionPickerKey handles keyboard input when the session picker is active.
 func (m *Model) handleSessionPickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	totalItems := len(m.availableSessions) + 1 // +1 for "New Chat" option
+	totalItems := len(m.filteredSessions) + 1 // +1 for "New Chat" option
 
 	// Handle rename mode
 	if m.renamingSession {
@@ -22,6 +22,11 @@ func (m *Model) handleSessionPickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Handle delete confirmation
 	if m.confirmDeleteSession {
 		return m.handleSessionDeleteConfirmKey(msg)
+	}
+
+	// Handle filter mode
+	if m.sessionFilterActive {
+		return m.handleSessionFilterKey(msg)
 	}
 
 	return m.handleSessionPickerNavKey(msg, totalItems)
@@ -54,14 +59,15 @@ func (m *Model) handleSessionRenameKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // confirmSessionRename saves the renamed session.
 func (m *Model) confirmSessionRename() (tea.Model, tea.Cmd) {
-	if m.sessionPickerIndex > 0 && m.sessionPickerIndex <= len(m.availableSessions) {
-		session := m.availableSessions[m.sessionPickerIndex-1]
+	if m.sessionPickerIndex > 0 && m.sessionPickerIndex <= len(m.filteredSessions) {
+		session := m.filteredSessions[m.sessionPickerIndex-1]
 		newName := strings.TrimSpace(m.sessionRenameInput)
 		if newName != "" {
 			session.Name = newName
 			_ = SaveSession(&session)
 			sessions, _ := ListSessions()
 			m.availableSessions = sessions
+			m.applySessionFilter() // Re-apply filter after rename
 		}
 	}
 	m.renamingSession = false
@@ -73,13 +79,14 @@ func (m *Model) confirmSessionRename() (tea.Model, tea.Cmd) {
 func (m *Model) handleSessionDeleteConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "y", "Y":
-		if m.sessionPickerIndex > 0 && m.sessionPickerIndex <= len(m.availableSessions) {
-			session := m.availableSessions[m.sessionPickerIndex-1]
+		if m.sessionPickerIndex > 0 && m.sessionPickerIndex <= len(m.filteredSessions) {
+			session := m.filteredSessions[m.sessionPickerIndex-1]
 			_ = DeleteSession(session.ID)
 			sessions, _ := ListSessions()
 			m.availableSessions = sessions
-			if m.sessionPickerIndex > len(m.availableSessions) {
-				m.sessionPickerIndex = len(m.availableSessions)
+			m.applySessionFilter() // Re-apply filter after deletion
+			if m.sessionPickerIndex > len(m.filteredSessions) {
+				m.sessionPickerIndex = len(m.filteredSessions)
 			}
 		}
 		m.confirmDeleteSession = false
@@ -96,7 +103,12 @@ func (m *Model) handleSessionPickerNavKey(msg tea.KeyMsg, totalItems int) (tea.M
 	switch msg.String() {
 	case "esc":
 		m.showSessionPicker = false
+		m.sessionFilterText = ""
+		m.sessionFilterActive = false
 		m.updateDimensions()
+		return m, nil
+	case "/":
+		m.sessionFilterActive = true
 		return m, nil
 	case "up", "k":
 		if m.sessionPickerIndex > 0 {
@@ -109,13 +121,13 @@ func (m *Model) handleSessionPickerNavKey(msg tea.KeyMsg, totalItems int) (tea.M
 		}
 		return m, nil
 	case "d", "delete", "backspace":
-		if m.sessionPickerIndex > 0 && m.sessionPickerIndex <= len(m.availableSessions) {
+		if m.sessionPickerIndex > 0 && m.sessionPickerIndex <= len(m.filteredSessions) {
 			m.confirmDeleteSession = true
 		}
 		return m, nil
 	case "r":
-		if m.sessionPickerIndex > 0 && m.sessionPickerIndex <= len(m.availableSessions) {
-			session := m.availableSessions[m.sessionPickerIndex-1]
+		if m.sessionPickerIndex > 0 && m.sessionPickerIndex <= len(m.filteredSessions) {
+			session := m.filteredSessions[m.sessionPickerIndex-1]
 			m.renamingSession = true
 			m.sessionRenameInput = session.Name
 		}
@@ -130,6 +142,57 @@ func (m *Model) handleSessionPickerNavKey(msg tea.KeyMsg, totalItems int) (tea.M
 	return m, nil
 }
 
+// handleSessionFilterKey handles keyboard input when filtering sessions.
+func (m *Model) handleSessionFilterKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "enter":
+		m.sessionFilterActive = false
+		return m, nil
+	case "esc":
+		// Clear filter and exit filter mode
+		m.sessionFilterText = ""
+		m.sessionFilterActive = false
+		m.applySessionFilter()
+		return m, nil
+	case "backspace":
+		if len(m.sessionFilterText) > 0 {
+			m.sessionFilterText = m.sessionFilterText[:len(m.sessionFilterText)-1]
+			m.applySessionFilter()
+		}
+		return m, nil
+	case "ctrl+c":
+		m.cleanup()
+		m.quitting = true
+		return m, tea.Quit
+	default:
+		if msg.Type == tea.KeyRunes {
+			m.sessionFilterText += string(msg.Runes)
+			m.applySessionFilter()
+		}
+		return m, nil
+	}
+}
+
+// applySessionFilter filters the available sessions based on the current filter text.
+func (m *Model) applySessionFilter() {
+	if m.sessionFilterText == "" {
+		m.filteredSessions = m.availableSessions
+	} else {
+		filterLower := strings.ToLower(m.sessionFilterText)
+		m.filteredSessions = make([]SessionMetadata, 0)
+		for _, session := range m.availableSessions {
+			if strings.Contains(strings.ToLower(session.Name), filterLower) {
+				m.filteredSessions = append(m.filteredSessions, session)
+			}
+		}
+	}
+	// Reset picker index if it's out of bounds
+	maxIndex := len(m.filteredSessions)
+	if m.sessionPickerIndex > maxIndex {
+		m.sessionPickerIndex = maxIndex
+	}
+}
+
 // selectSession handles session selection from the picker.
 func (m *Model) selectSession() (tea.Model, tea.Cmd) {
 	_ = m.saveCurrentSession()
@@ -137,11 +200,13 @@ func (m *Model) selectSession() (tea.Model, tea.Cmd) {
 		if err := m.startNewSession(); err != nil {
 			m.err = err
 		}
-	} else if m.sessionPickerIndex > 0 && m.sessionPickerIndex <= len(m.availableSessions) {
-		session := m.availableSessions[m.sessionPickerIndex-1]
+	} else if m.sessionPickerIndex > 0 && m.sessionPickerIndex <= len(m.filteredSessions) {
+		session := m.filteredSessions[m.sessionPickerIndex-1]
 		m.loadSession(&session)
 	}
 	m.showSessionPicker = false
+	m.sessionFilterText = ""
+	m.sessionFilterActive = false
 	m.updateDimensions()
 	return m, nil
 }
@@ -328,7 +393,7 @@ func (m *Model) renderSessionPickerModal() string {
 	contentWidth := max(modalWidth-4, 1)
 	clipStyle := lipgloss.NewStyle().MaxWidth(contentWidth).Inline(true)
 
-	totalItems := len(m.availableSessions) + 1
+	totalItems := len(m.filteredSessions) + 1
 	visibleCount := min(totalItems, maxPickerVisible)
 
 	scrollOffset := calculatePickerScrollOffset(m.sessionPickerIndex, totalItems, maxPickerVisible)
@@ -348,16 +413,28 @@ func (m *Model) renderSessionPickerModal() string {
 	return renderPickerModal(content, modalWidth, visibleCount, isScrollable)
 }
 
-// renderSessionPickerTitle renders the title or delete confirmation.
+// renderSessionPickerTitle renders the title, filter input, or delete confirmation.
 func (m *Model) renderSessionPickerTitle(listContent *strings.Builder, clipStyle lipgloss.Style) {
 	if m.confirmDeleteSession && m.sessionPickerIndex > 0 &&
-		m.sessionPickerIndex <= len(m.availableSessions) {
-		session := m.availableSessions[m.sessionPickerIndex-1]
+		m.sessionPickerIndex <= len(m.filteredSessions) {
+		session := m.filteredSessions[m.sessionPickerIndex-1]
 		listContent.WriteString(clipStyle.Render(
 			lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(11)).Render(
 				fmt.Sprintf("Delete \"%s\"?", truncateString(session.Name, 30)),
 			),
 		) + "\n\n")
+		return
+	}
+
+	// Show filter input if filtering is active or has text
+	if m.sessionFilterActive || m.sessionFilterText != "" {
+		filterStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(14))
+		cursor := ""
+		if m.sessionFilterActive {
+			cursor = "_"
+		}
+		filterLine := filterStyle.Render("🔍 " + m.sessionFilterText + cursor)
+		listContent.WriteString(clipStyle.Render(filterLine) + "\n")
 	} else {
 		listContent.WriteString(clipStyle.Render("Chat History") + "\n")
 	}
@@ -387,7 +464,7 @@ func (m *Model) formatSessionItem(index int) (string, bool) {
 		return prefix + "+ New Chat", m.currentSessionID == ""
 	}
 
-	session := m.availableSessions[index-1]
+	session := m.filteredSessions[index-1]
 
 	if m.renamingSession && index == m.sessionPickerIndex {
 		inputStyle := lipgloss.NewStyle().

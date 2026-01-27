@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -27,6 +28,14 @@ const (
 	maxPickerVisible   = 3  // maximum visible items in picker modals
 	maxToolOutputLines = 10 // maximum lines shown in collapsed tool output
 	minWrapWidth       = 20 // minimum width for text wrapping
+
+	// Tool and error message constants.
+	unknownToolName  = "unknown"           // fallback when tool name is nil
+	unknownErrorMsg  = "unknown error"     // fallback when error message is nil
+	toolIDFormat     = "tool-%d"           // format string for generating unique tool IDs (timestamp-based)
+	unknownOperation = "Unknown Operation" // fallback when operation type is unrecognized
+	planModePrefix   = "[PLAN MODE] Research and outline steps to accomplish this task. " +
+		"Do not execute tools or make changes - only describe what you would do:\n\n"
 )
 
 // AgentModeRef is a thread-safe reference to the agent mode state.
@@ -113,6 +122,11 @@ type Model struct {
 	width  int
 	height int
 
+	// Help system
+	help            help.Model // bubbles/help model for rendering help
+	keys            KeyMap     // structured keybindings
+	showHelpOverlay bool       // true when help overlay is visible
+
 	// Copilot session and model switching
 	session       *copilot.Session
 	client        *copilot.Client
@@ -121,10 +135,13 @@ type Model struct {
 	ctx           context.Context
 
 	// Model selection
-	currentModel     string              // currently selected model ID
-	availableModels  []copilot.ModelInfo // models the user has access to
-	showModelPicker  bool                // true when model picker overlay is visible
-	modelPickerIndex int                 // currently highlighted model in picker
+	currentModel      string              // currently selected model ID
+	availableModels   []copilot.ModelInfo // models the user has access to
+	filteredModels    []copilot.ModelInfo // models matching current filter
+	showModelPicker   bool                // true when model picker overlay is visible
+	modelPickerIndex  int                 // currently highlighted model in picker
+	modelFilterActive bool                // true when filter input is focused
+	modelFilterText   string              // current filter text
 
 	// Permission request handling
 	pendingPermission *permissionRequestMsg // current permission request awaiting user response
@@ -133,11 +150,14 @@ type Model struct {
 	// Session management
 	currentSessionID     string            // ID of the current session (empty if new)
 	availableSessions    []SessionMetadata // cached list of available sessions
+	filteredSessions     []SessionMetadata // sessions matching current filter
 	showSessionPicker    bool              // true when session picker overlay is visible
 	sessionPickerIndex   int               // currently highlighted session in picker
 	confirmDeleteSession bool              // true when confirming session deletion
 	renamingSession      bool              // true when renaming a session
 	sessionRenameInput   string            // current rename input text
+	sessionFilterActive  bool              // true when filter input is focused
+	sessionFilterText    string            // current filter text
 
 	// Markdown renderer (cached to avoid terminal queries)
 	renderer *glamour.TermRenderer
@@ -227,6 +247,8 @@ func NewWithEventChannel(
 		textarea:         textArea,
 		spinner:          spin,
 		renderer:         mdRenderer,
+		help:             createHelpModel(),
+		keys:             DefaultKeyMap(),
 		messages:         make([]chatMessage, 0),
 		session:          session,
 		client:           client,
@@ -443,7 +465,7 @@ func (m *Model) buildStatusText() string {
 	}
 
 	// Model name
-	modelStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8))
+	modelStyle := lipgloss.NewStyle().Foreground(dimColor)
 	if m.currentModel != "" {
 		statusParts = append(statusParts, modelStyle.Render(m.currentModel))
 	} else {
@@ -462,6 +484,9 @@ func (m *Model) buildStatusText() string {
 
 // renderInputOrModal renders either the input area or active modal.
 func (m *Model) renderInputOrModal() string {
+	if m.showHelpOverlay {
+		return m.renderHelpOverlay()
+	}
 	if m.pendingPermission != nil {
 		return m.renderPermissionModal()
 	}
@@ -474,10 +499,9 @@ func (m *Model) renderInputOrModal() string {
 	return inputStyle.Width(m.width - 2).Render(m.textarea.View())
 }
 
-// renderFooter renders the context-aware help text footer.
+// renderFooter renders the context-aware help text footer using bubbles/help.
 func (m *Model) renderFooter() string {
-	helpText := m.getContextualHelpText()
-	return lipgloss.NewStyle().MaxWidth(m.width).Inline(true).Render(helpStyle.Render(helpText))
+	return lipgloss.NewStyle().MaxWidth(m.width).Inline(true).Render(m.renderShortHelp())
 }
 
 // handleUserSubmit handles user message submission.
@@ -553,6 +577,10 @@ func (m *Model) prepareForNewTurn() {
 // activeModalHeight returns the extra height needed for the currently active modal
 // beyond the input area height (since modals replace the input area).
 func (m *Model) activeModalHeight() int {
+	if m.showHelpOverlay {
+		// Help overlay uses fixed 5 lines (same as input area)
+		return 0
+	}
 	if m.pendingPermission != nil {
 		// Calculate actual permission modal height based on content.
 		// Base layout: title(1) + blank(1) + tool(1) + blank(1) + "Allow?"(1) + buttons(1) = 6 lines,
@@ -575,9 +603,9 @@ func (m *Model) activeModalHeight() int {
 		// Calculate actual picker height based on content
 		var totalItems int
 		if m.showSessionPicker {
-			totalItems = len(m.availableSessions) + 1 // +1 for "New Chat" option
+			totalItems = len(m.filteredSessions) + 1 // +1 for "New Chat" option
 		} else {
-			totalItems = len(m.availableModels) + 1 // +1 for "auto" option
+			totalItems = len(m.filteredModels) + 1 // +1 for "auto" option
 		}
 		visibleCount := min(totalItems, maxPickerVisible)
 		isScrollable := totalItems > maxPickerVisible
@@ -630,52 +658,6 @@ func (m *Model) reRenderCompletedMessages() {
 			msg.rendered = renderMarkdownWithRenderer(m.renderer, msg.content)
 		}
 	}
-}
-
-// getContextualHelpText returns help text based on the current active view.
-func (m *Model) getContextualHelpText() string {
-	// Permission prompt - highest priority
-	if m.pendingPermission != nil {
-		return "  y Allow • n Deny • esc Cancel"
-	}
-
-	// Model picker modal
-	if m.showModelPicker {
-		return "  ↑↓ Navigate • ⏎ Select • esc Cancel"
-	}
-
-	// Session picker modal
-	if m.showSessionPicker {
-		if m.renamingSession {
-			return "  Type name • ⏎ Save • esc Cancel"
-		}
-		if m.confirmDeleteSession {
-			return "  y Delete • n Cancel"
-		}
-		return "  ↑↓ Navigate • ⏎ Select • r Rename • d Delete • esc Cancel"
-	}
-
-	// Default input view - show mode and tool expand options
-	modeIcon := "</>"
-	if !m.agentMode {
-		modeIcon = "≡"
-	}
-	// Check if tools are present for expand option
-	hasTools := len(m.toolOrder) > 0
-	if !hasTools {
-		for _, msg := range m.messages {
-			if msg.role == "assistant" && len(msg.tools) > 0 {
-				hasTools = true
-				break
-			}
-		}
-	}
-	if hasTools {
-		return "  ⏎ Send • ↑↓ History • PgUp/Dn Scroll • ⇥ " + modeIcon +
-			" • ^T Expand • ^H Sessions • ^O Model • ^N New • esc Quit"
-	}
-	return "  ⏎ Send • ↑↓ History • PgUp/Dn Scroll • ⇥ " + modeIcon +
-		" • ^H Sessions • ^O Model • ^N New • esc Quit"
 }
 
 // sendMessageCmd returns a command that initiates message sending.
@@ -737,21 +719,21 @@ func (m *Model) streamResponseCmd(userMessage string) tea.Cmd {
 				if event.Data.Message != nil {
 					errMsg = *event.Data.Message
 				} else {
-					errMsg = "unknown error"
+					errMsg = unknownErrorMsg
 				}
 				eventChan <- streamErrMsg{err: fmt.Errorf("%s", errMsg)}
 			case copilot.ToolExecutionStart:
-				toolName := "unknown"
+				toolName := unknownToolName
 				if event.Data.ToolName != nil {
 					toolName = *event.Data.ToolName
 				}
 				// Extract command from arguments if available (for ksail tools)
 				command := extractCommandFromArgs(toolName, event.Data.Arguments)
 				// Generate tool ID from timestamp
-				toolID := fmt.Sprintf("tool-%d", time.Now().UnixNano())
+				toolID := fmt.Sprintf(toolIDFormat, time.Now().UnixNano())
 				eventChan <- toolStartMsg{toolID: toolID, toolName: toolName, command: command}
 			case copilot.ToolExecutionComplete:
-				toolName := "unknown"
+				toolName := unknownToolName
 				if event.Data.ToolName != nil {
 					toolName = *event.Data.ToolName
 				}
@@ -772,9 +754,7 @@ func (m *Model) streamResponseCmd(userMessage string) tea.Cmd {
 		// In plan mode, prefix the prompt with instructions to plan without executing
 		prompt := userMessage
 		if !agentMode {
-			prompt = "[PLAN MODE] Research and outline steps to accomplish this task. " +
-				"Do not execute tools or make changes - only describe what you would do:\n\n" +
-				userMessage
+			prompt = planModePrefix + userMessage
 		}
 
 		// Send the message
@@ -934,9 +914,9 @@ func CreateTUIPermissionHandler(eventChan chan<- tea.Msg) copilot.PermissionHand
 
 // extractPermissionDetails extracts human-readable tool name and command from an SDK permission request.
 // The Extra map contains different fields depending on the permission kind.
-func extractPermissionDetails(request copilot.PermissionRequest) (toolName, command string) {
+func extractPermissionDetails(request copilot.PermissionRequest) (string, string) {
 	// Default tool name based on permission kind
-	toolName = formatPermissionKind(request.Kind)
+	toolName := formatPermissionKind(request.Kind)
 
 	// Fields that contain the actual command/action (ordered by priority)
 	commandFields := []string{
@@ -953,8 +933,7 @@ func extractPermissionDetails(request copilot.PermissionRequest) (toolName, comm
 	for _, field := range commandFields {
 		if val, ok := request.Extra[field]; ok {
 			if cmd := extractStringValue(val); cmd != "" {
-				command = cmd
-				return toolName, command
+				return toolName, cmd
 			}
 		}
 	}
@@ -964,8 +943,7 @@ func extractPermissionDetails(request copilot.PermissionRequest) (toolName, comm
 		for _, field := range commandFields {
 			if val, ok := exec[field]; ok {
 				if cmd := extractStringValue(val); cmd != "" {
-					command = cmd
-					return toolName, command
+					return toolName, cmd
 				}
 			}
 		}
@@ -976,8 +954,7 @@ func extractPermissionDetails(request copilot.PermissionRequest) (toolName, comm
 	for _, field := range pathFields {
 		if val, ok := request.Extra[field]; ok {
 			if path := extractStringValue(val); path != "" {
-				command = path
-				return toolName, command
+				return toolName, path
 			}
 		}
 	}
@@ -996,14 +973,12 @@ func extractPermissionDetails(request copilot.PermissionRequest) (toolName, comm
 		}
 		if cmd := extractStringValue(val); cmd != "" {
 			// Found a non-metadata string value - use it
-			command = cmd
-			return toolName, command
+			return toolName, cmd
 		}
 	}
 
 	// Last resort: just show the permission kind
-	command = request.Kind
-	return toolName, command
+	return toolName, request.Kind
 }
 
 // extractStringValue extracts a string from various value types.
@@ -1054,7 +1029,7 @@ func formatPermissionKind(kind string) string {
 	default:
 		// Capitalize and format the kind
 		if kind == "" {
-			return "Unknown Operation"
+			return unknownOperation
 		}
 		// Replace underscores with spaces and title case
 		formatted := strings.ReplaceAll(kind, "_", " ")

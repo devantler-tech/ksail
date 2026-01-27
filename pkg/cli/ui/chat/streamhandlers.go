@@ -102,7 +102,7 @@ func (m *Model) handleToolEnd(msg toolEndMsg) (tea.Model, tea.Cmd) {
 	}
 
 	// Strategy 2: Try matching by name if provided and not "unknown"
-	if tool == nil && msg.toolName != "" && msg.toolName != "unknown" {
+	if tool == nil && msg.toolName != "" && msg.toolName != unknownToolName {
 		for _, id := range m.toolOrder {
 			t := m.tools[id]
 			if t != nil && t.name == msg.toolName && t.status == toolRunning {

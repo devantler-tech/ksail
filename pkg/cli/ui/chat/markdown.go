@@ -42,6 +42,7 @@ func createRenderer(width int) *glamour.TermRenderer {
 		},
 		Paragraph: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{},
+			Margin:         uintPtr(0),
 		},
 		List: ansi.StyleList{
 			LevelIndent: 2,
@@ -84,6 +85,14 @@ func createRenderer(width int) *glamour.TermRenderer {
 					Color: stringPtr("#626262"),
 				},
 			},
+		},
+		Table: ansi.StyleTable{
+			StyleBlock: ansi.StyleBlock{
+				StylePrimitive: ansi.StylePrimitive{},
+			},
+			CenterSeparator: stringPtr("│"),
+			ColumnSeparator: stringPtr("│"),
+			RowSeparator:    stringPtr("─"),
 		},
 		Emph: ansi.StylePrimitive{
 			Italic: boolPtr(true),

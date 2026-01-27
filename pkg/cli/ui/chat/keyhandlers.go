@@ -8,6 +8,16 @@ import (
 
 // handleKeyMsg handles keyboard input.
 func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Handle help overlay with highest priority (only F1 or esc can close it)
+	if m.showHelpOverlay {
+		switch msg.String() {
+		case "f1", "esc":
+			m.showHelpOverlay = false
+			return m, nil
+		}
+		return m, nil
+	}
+
 	// Handle overlays first (highest priority)
 	if m.pendingPermission != nil {
 		return m.handlePermissionKey(msg)
@@ -25,6 +35,9 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleQuit(true)
 	case "esc":
 		return m.handleEscape()
+	case "f1":
+		m.showHelpOverlay = true
+		return m, nil
 	case "ctrl+o":
 		return m.handleOpenModelPicker()
 	case "ctrl+h":
@@ -102,6 +115,9 @@ func (m *Model) handleOpenModelPicker() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.showModelPicker = true
+	m.filteredModels = m.availableModels // Start with all models
+	m.modelFilterText = ""               // Reset filter
+	m.modelFilterActive = false          // Start in navigation mode
 	m.updateDimensions()
 	m.modelPickerIndex = m.findCurrentModelIndex()
 	return m, nil
@@ -112,7 +128,7 @@ func (m *Model) findCurrentModelIndex() int {
 	if m.currentModel == "" || m.currentModel == "auto" {
 		return 0
 	}
-	for i, model := range m.availableModels {
+	for i, model := range m.filteredModels {
 		if model.ID == m.currentModel {
 			return i + 1 // offset by 1 for auto option
 		}
@@ -127,6 +143,9 @@ func (m *Model) handleOpenSessionPicker() (tea.Model, tea.Cmd) {
 	}
 	sessions, _ := ListSessions()
 	m.availableSessions = sessions
+	m.filteredSessions = sessions // Start with all sessions
+	m.sessionFilterText = ""      // Reset filter
+	m.sessionFilterActive = false // Start in navigation mode
 	m.showSessionPicker = true
 	m.confirmDeleteSession = false
 	m.updateDimensions()
