@@ -1,26 +1,29 @@
-package toolgen
+package toolgen_test
 
 import (
 	"testing"
+
+	"github.com/devantler-tech/ksail/v5/pkg/ai/toolgen"
 )
 
+//nolint:funlen // Test functions are inherently verbose with test data setup
 func TestConsolidatedToolExecution(t *testing.T) {
 	t.Parallel()
 
 	// Create a consolidated tool definition manually
-	tool := ToolDefinition{
+	tool := toolgen.ToolDefinition{
 		Name:            "ksail_workload_gen",
 		Description:     "Generate Kubernetes resources",
 		CommandPath:     "ksail workload gen",
 		CommandParts:    []string{"ksail", "workload", "gen"},
 		IsConsolidated:  true,
 		SubcommandParam: "resource_type",
-		Subcommands: map[string]*SubcommandDef{
+		Subcommands: map[string]*toolgen.SubcommandDef{
 			"deployment": {
 				Name:         "deployment",
 				Description:  "Generate a deployment",
 				CommandParts: []string{"ksail", "workload", "gen", "deployment"},
-				Flags: map[string]*FlagDef{
+				Flags: map[string]*toolgen.FlagDef{
 					"image": {
 						Name:        "image",
 						Type:        "string",
@@ -32,7 +35,7 @@ func TestConsolidatedToolExecution(t *testing.T) {
 				Name:         "service",
 				Description:  "Generate a service",
 				CommandParts: []string{"ksail", "workload", "gen", "service"},
-				Flags: map[string]*FlagDef{
+				Flags: map[string]*toolgen.FlagDef{
 					"port": {
 						Name:        "port",
 						Type:        "integer",
@@ -86,17 +89,22 @@ func TestConsolidatedToolExecution(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			args, err := buildCommandArgs(tool, tt.params)
+			args, err := toolgen.BuildCommandArgs(tool, testCase.params)
 
-			if tt.expectError {
+			if testCase.expectError {
 				if err == nil {
 					t.Error("Expected error but got none")
-				} else if tt.errorSubstring != "" && !contains(err.Error(), tt.errorSubstring) {
-					t.Errorf("Expected error containing '%s', got: %v", tt.errorSubstring, err)
+				} else if testCase.errorSubstring != "" &&
+					!contains(err.Error(), testCase.errorSubstring) {
+					t.Errorf(
+						"Expected error containing '%s', got: %v",
+						testCase.errorSubstring,
+						err,
+					)
 				}
 
 				return
@@ -106,8 +114,8 @@ func TestConsolidatedToolExecution(t *testing.T) {
 				t.Fatalf("Unexpected error: %v", err)
 			}
 
-			if !slicesEqual(args, tt.expectedArgs) {
-				t.Errorf("Expected args %v, got %v", tt.expectedArgs, args)
+			if !slicesEqual(args, testCase.expectedArgs) {
+				t.Errorf("Expected args %v, got %v", testCase.expectedArgs, args)
 			}
 		})
 	}
@@ -129,14 +137,14 @@ func hasSubstring(s, substr string) bool {
 	return false
 }
 
-// Helper function to compare slices.
-func slicesEqual(a, b []string) bool {
-	if len(a) != len(b) {
+// slicesEqual compares two string slices for equality.
+func slicesEqual(first, second []string) bool {
+	if len(first) != len(second) {
 		return false
 	}
 
-	for i := range a {
-		if a[i] != b[i] {
+	for i := range first {
+		if first[i] != second[i] {
 			return false
 		}
 	}

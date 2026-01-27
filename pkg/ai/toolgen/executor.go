@@ -19,7 +19,7 @@ func ExecuteTool(
 	opts ToolOptions,
 ) error {
 	// Build command line arguments
-	args, err := buildCommandArgs(tool, params)
+	args, err := BuildCommandArgs(tool, params)
 	if err != nil {
 		return fmt.Errorf("building command args: %w", err)
 	}
@@ -28,8 +28,8 @@ func ExecuteTool(
 	return executeCommand(ctx, tool.CommandParts[0], args, tool.Name, opts)
 }
 
-// buildCommandArgs constructs command-line arguments from parameters.
-func buildCommandArgs(tool ToolDefinition, params map[string]any) ([]string, error) {
+// BuildCommandArgs constructs command-line arguments from parameters.
+func BuildCommandArgs(tool ToolDefinition, params map[string]any) ([]string, error) {
 	args := make([]string, 0)
 
 	// Handle consolidated tools

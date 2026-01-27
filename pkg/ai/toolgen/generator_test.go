@@ -131,13 +131,13 @@ func TestFormatToolName(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			result := toolgen.FormatToolName(tt.commandPath)
-			if result != tt.expected {
-				t.Errorf("expected %q, got %q", tt.expected, result)
+			result := toolgen.FormatToolName(testCase.commandPath)
+			if result != testCase.expected {
+				t.Errorf("expected %q, got %q", testCase.expected, result)
 			}
 		})
 	}
@@ -220,6 +220,7 @@ func TestConsolidatedToolGeneration(t *testing.T) {
 	}
 }
 
+//nolint:funlen // Test functions are inherently verbose with test data setup
 func TestConsolidatedToolSchema(t *testing.T) {
 	t.Parallel()
 
@@ -261,8 +262,8 @@ func TestConsolidatedToolSchema(t *testing.T) {
 	params := tool.Parameters
 
 	// Check that action parameter exists with enum
-	properties, ok := params["properties"].(map[string]any)
-	if !ok {
+	properties, validType := params["properties"].(map[string]any)
+	if !validType {
 		t.Fatal("Properties should be a map")
 	}
 
@@ -271,8 +272,8 @@ func TestConsolidatedToolSchema(t *testing.T) {
 		t.Fatal("Expected 'action' parameter in schema")
 	}
 
-	actionMap, ok := actionProp.(map[string]any)
-	if !ok {
+	actionMap, isMap := actionProp.(map[string]any)
+	if !isMap {
 		t.Fatal("Action property should be a map")
 	}
 
@@ -282,8 +283,8 @@ func TestConsolidatedToolSchema(t *testing.T) {
 		t.Fatal("Expected enum in action parameter")
 	}
 
-	enumSlice, ok := enum.([]string)
-	if !ok {
+	enumSlice, isSlice := enum.([]string)
+	if !isSlice {
 		t.Fatal("Enum should be a string slice")
 	}
 
