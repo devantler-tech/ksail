@@ -10,7 +10,7 @@ const (
 	AnnotationDescription = "ai.toolgen.description"
 
 	// AnnotationPermission is a command annotation to indicate permission requirements.
-	// Set to "edit" for commands that modify state and need user confirmation.
+	// Set to "write" for commands that modify state and need user confirmation.
 	AnnotationPermission = "ai.toolgen.permission"
 
 	// AnnotationConsolidate is a command annotation to consolidate subcommands into a single tool.
