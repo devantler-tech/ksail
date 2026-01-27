@@ -18,7 +18,7 @@ import (
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 
-	"github.com/golang-design/clipboard"
+	"golang.design/x/clipboard"
 )
 
 const (

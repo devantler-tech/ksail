@@ -56,6 +56,7 @@ require (
 	github.com/hetznercloud/hcloud-go/v2 v2.35.0
 	github.com/modelcontextprotocol/go-sdk v1.2.0
 	github.com/siderolabs/go-retry v0.3.3
+	golang.design/x/clipboard v0.7.1
 	golang.org/x/text v0.33.0
 )
 
@@ -516,6 +517,9 @@ require (
 	go4.org/netipx v0.0.0-20231129151722-fdeea329fbba // indirect
 	golang.org/x/crypto v0.47.0 // indirect
 	golang.org/x/exp v0.0.0-20250711185948-6ae5c78190dc // indirect
+	golang.org/x/exp/shiny v0.0.0-20250606033433-dcc06ee1d476 // indirect
+	golang.org/x/image v0.28.0 // indirect
+	golang.org/x/mobile v0.0.0-20250606033058-a2a15c67f36f // indirect
 	golang.org/x/mod v0.32.0 // indirect
 	golang.org/x/net v0.49.0 // indirect
 	golang.org/x/oauth2 v0.34.0 // indirect

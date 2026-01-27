@@ -5,7 +5,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/golang-design/clipboard"
+	"golang.design/x/clipboard"
 )
 
 // handleKeyMsg handles keyboard input.
