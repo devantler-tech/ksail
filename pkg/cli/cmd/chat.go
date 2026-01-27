@@ -197,6 +197,9 @@ func handleChatRunE(cmd *cobra.Command) error {
 	tools = WrapToolsWithPermissionAndModeMetadata(tools, nil, nil, toolMetadata)
 	sessionConfig.Tools = tools
 
+	// Set up permission handler for non-KSail tools (git, shell, etc.)
+	sessionConfig.OnPermissionRequest = chatsvc.CreatePermissionHandler(writer)
+
 	// Create session
 	session, err := client.CreateSession(sessionConfig)
 	if err != nil {
@@ -279,6 +282,9 @@ func runTUIChat(
 	// Wrap tools with permission prompts and mode enforcement
 	tools = WrapToolsWithPermissionAndModeMetadata(tools, eventChan, agentModeRef, toolMetadata)
 	sessionConfig.Tools = tools
+
+	// Set up permission handler for non-KSail tools (git, shell, etc.)
+	sessionConfig.OnPermissionRequest = chatui.CreateTUIPermissionHandler(eventChan)
 
 	// Create session
 	session, err := client.CreateSession(sessionConfig)
@@ -568,7 +574,8 @@ func formatToolArguments(args any) string {
 
 // WrapToolsWithPermissionAndModeMetadata wraps ALL tools with mode enforcement and permission prompts.
 // In plan mode, ALL tool execution is blocked (model can only describe what it would do).
-// In agent mode, edit tools require permission (based on RequiresPermission annotation), while read-only tools are auto-approved.
+// In agent mode, edit tools require permission (based on RequiresPermission annotation),
+// while read-only tools are auto-approved.
 func WrapToolsWithPermissionAndModeMetadata(
 	tools []copilot.Tool,
 	eventChan chan tea.Msg,

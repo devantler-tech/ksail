@@ -194,8 +194,15 @@ func (m *Model) loadSession(metadata *SessionMetadata) {
 		m.currentModel = metadata.Model
 	}
 
-	session, err := m.client.ResumeSession(metadata.ID)
+	// Resume session with tools and permission handler.
+	// The SDK requires tools and handlers to be re-registered when resuming.
+	resumeConfig := &copilot.ResumeSessionConfig{
+		Tools:               m.sessionConfig.Tools,
+		OnPermissionRequest: m.sessionConfig.OnPermissionRequest,
+	}
+	session, err := m.client.ResumeSessionWithOptions(metadata.ID, resumeConfig)
 	if err != nil {
+		// If resume fails, try creating a new session with the same ID
 		m.sessionConfig.SessionID = metadata.ID
 		session, err = m.client.CreateSession(m.sessionConfig)
 		if err != nil {

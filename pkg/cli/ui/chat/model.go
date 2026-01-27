@@ -896,3 +896,168 @@ func (m *Model) hasRunningTools() bool {
 	}
 	return false
 }
+
+// CreateTUIPermissionHandler creates a permission handler that integrates with the TUI.
+// It sends permission requests to the provided event channel and waits for a response.
+// This allows the TUI to display permission prompts and collect user input.
+func CreateTUIPermissionHandler(eventChan chan<- tea.Msg) copilot.PermissionHandler {
+	return func(
+		request copilot.PermissionRequest,
+		_ copilot.PermissionInvocation,
+	) (copilot.PermissionRequestResult, error) {
+		// Extract tool name and command from the permission request.
+		// The Extra map contains the raw permission request data from the SDK.
+		// Common keys vary by permission kind (shell, file_edit, etc.)
+		toolName, command := extractPermissionDetails(request)
+
+		// Create response channel
+		responseChan := make(chan bool, 1)
+
+		// Send permission request to TUI
+		eventChan <- permissionRequestMsg{
+			toolCallID: request.ToolCallID,
+			toolName:   toolName,
+			command:    command,
+			arguments:  "", // Arguments are included in the command for SDK permissions
+			response:   responseChan,
+		}
+
+		// Wait for response from TUI
+		approved := <-responseChan
+
+		if approved {
+			return copilot.PermissionRequestResult{Kind: "approved"}, nil
+		}
+		return copilot.PermissionRequestResult{Kind: "denied-interactively-by-user"}, nil
+	}
+}
+
+// extractPermissionDetails extracts human-readable tool name and command from an SDK permission request.
+// The Extra map contains different fields depending on the permission kind.
+func extractPermissionDetails(request copilot.PermissionRequest) (toolName, command string) {
+	// Default tool name based on permission kind
+	toolName = formatPermissionKind(request.Kind)
+
+	// Fields that contain the actual command/action (ordered by priority)
+	commandFields := []string{
+		"command",       // Shell commands
+		"cmd",           // Alternative shell command field
+		"shell",         // Some shells use this
+		"runInTerminal", // VS Code terminal execution
+		"execute",       // Generic execution
+		"run",           // Generic run
+		"script",        // Script execution
+		"input",         // Input to execute
+	}
+
+	for _, field := range commandFields {
+		if val, ok := request.Extra[field]; ok {
+			if cmd := extractStringValue(val); cmd != "" {
+				command = cmd
+				return toolName, command
+			}
+		}
+	}
+
+	// Check for nested execution object (some SDK versions nest the command)
+	if exec, ok := request.Extra["execution"].(map[string]interface{}); ok {
+		for _, field := range commandFields {
+			if val, ok := exec[field]; ok {
+				if cmd := extractStringValue(val); cmd != "" {
+					command = cmd
+					return toolName, command
+				}
+			}
+		}
+	}
+
+	// Path-based operations (file read/write/edit)
+	pathFields := []string{"path", "filePath", "file", "target"}
+	for _, field := range pathFields {
+		if val, ok := request.Extra[field]; ok {
+			if path := extractStringValue(val); path != "" {
+				command = path
+				return toolName, command
+			}
+		}
+	}
+
+	// Fallback: look for any string value that looks like a command
+	// Skip metadata fields that don't contain the actual command
+	metadataFields := map[string]bool{
+		"kind": true, "toolCallId": true, "possiblePaths": true,
+		"possibleUrls": true, "sessionId": true, "requestId": true,
+		"timestamp": true, "type": true, "id": true,
+	}
+
+	for key, val := range request.Extra {
+		if metadataFields[key] {
+			continue
+		}
+		if cmd := extractStringValue(val); cmd != "" {
+			// Found a non-metadata string value - use it
+			command = cmd
+			return toolName, command
+		}
+	}
+
+	// Last resort: just show the permission kind
+	command = request.Kind
+	return toolName, command
+}
+
+// extractStringValue extracts a string from various value types.
+func extractStringValue(val interface{}) string {
+	switch v := val.(type) {
+	case string:
+		return v
+	case []interface{}:
+		// Join array elements
+		parts := make([]string, 0, len(v))
+		for _, item := range v {
+			if s, ok := item.(string); ok && s != "" {
+				parts = append(parts, s)
+			}
+		}
+		if len(parts) > 0 {
+			return strings.Join(parts, " ")
+		}
+	case map[string]interface{}:
+		// Try to extract command from nested object
+		if cmd, ok := v["command"].(string); ok {
+			return cmd
+		}
+		if cmd, ok := v["cmd"].(string); ok {
+			return cmd
+		}
+	}
+	return ""
+}
+
+// formatPermissionKind converts a permission kind to a human-readable tool name.
+func formatPermissionKind(kind string) string {
+	switch kind {
+	case "shell":
+		return "Shell Command"
+	case "file_edit", "fileEdit":
+		return "File Edit"
+	case "file_read", "fileRead":
+		return "File Read"
+	case "file_write", "fileWrite":
+		return "File Write"
+	case "terminal":
+		return "Terminal"
+	case "browser":
+		return "Browser"
+	case "network":
+		return "Network Request"
+	default:
+		// Capitalize and format the kind
+		if kind == "" {
+			return "Unknown Operation"
+		}
+		// Replace underscores with spaces and title case
+		formatted := strings.ReplaceAll(kind, "_", " ")
+		return strings.Title(formatted) //nolint:staticcheck // strings.Title is fine here
+	}
+}
