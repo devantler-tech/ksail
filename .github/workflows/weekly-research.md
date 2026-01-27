@@ -35,6 +35,39 @@ tools:
 timeout-minutes: 15
 
 source: githubnext/agentics/workflows/weekly-research.md@1ef9dbe65e8265b57fe2ffa76098457cf3ae2b32
+
+steps:
+  - name: Initialize safe outputs directory
+    if: always()
+    run: |
+      # Create safe outputs directories to prevent file not found errors
+      mkdir -p /opt/gh-aw/safeoutputs
+      mkdir -p /tmp/gh-aw/safeoutputs
+      # Create empty safe outputs file if it doesn't exist
+      # This ensures the "Ingest agent output" step can process it
+      touch /opt/gh-aw/safeoutputs/outputs.jsonl
+      # Pre-create the agent output file that will be uploaded
+      # This ensures the artifact upload always has a file to upload
+      echo '{}' > /tmp/gh-aw/safeoutputs/agent_output.json
+
+post-steps:
+  - name: Ensure agent output artifact exists
+    if: always()
+    run: |
+      # Ensure the agent output file exists for artifact upload
+      # This step runs after the main workflow and ensures the file is present
+      if [ ! -f "/tmp/gh-aw/safeoutputs/agent_output.json" ]; then
+        mkdir -p /tmp/gh-aw/safeoutputs
+        echo '{}' > /tmp/gh-aw/safeoutputs/agent_output.json
+      fi
+  - name: Upload agent output fallback
+    if: always()
+    continue-on-error: true
+    uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+    with:
+      name: agent-output
+      path: /tmp/gh-aw/safeoutputs/agent_output.json
+      overwrite: true
 ---
 
 # Weekly Research

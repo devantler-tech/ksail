@@ -40,6 +40,18 @@ tools:
     toolsets: [all]
 
 steps:
+  - name: Initialize safe outputs directory
+    if: always()
+    run: |
+      # Create safe outputs directories to prevent file not found errors
+      mkdir -p /opt/gh-aw/safeoutputs
+      mkdir -p /tmp/gh-aw/safeoutputs
+      # Create empty safe outputs file if it doesn't exist
+      # This ensures the "Ingest agent output" step can process it
+      touch /opt/gh-aw/safeoutputs/outputs.jsonl
+      # Pre-create the agent output file that will be uploaded
+      # This ensures the artifact upload always has a file to upload
+      echo '{}' > /tmp/gh-aw/safeoutputs/agent_output.json
   - name: Checkout repository
     uses: actions/checkout@v5
 
@@ -59,6 +71,25 @@ steps:
     continue-on-error: true # the model may not have got it right, so continue anyway, the model will check the results and try to fix the steps
 
 source: githubnext/agentics/workflows/daily-test-improver.md@c5da0cdbfae2a3cba74f330ca34424a4aea929f5
+
+post-steps:
+  - name: Ensure agent output artifact exists
+    if: always()
+    run: |
+      # Ensure the agent output file exists for artifact upload
+      # This step runs after the main workflow and ensures the file is present
+      if [ ! -f "/tmp/gh-aw/safeoutputs/agent_output.json" ]; then
+        mkdir -p /tmp/gh-aw/safeoutputs
+        echo '{}' > /tmp/gh-aw/safeoutputs/agent_output.json
+      fi
+  - name: Upload agent output fallback
+    if: always()
+    continue-on-error: true
+    uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+    with:
+      name: agent-output
+      path: /tmp/gh-aw/safeoutputs/agent_output.json
+      overwrite: true
 ---
 
 # Daily Test Coverage Improver
