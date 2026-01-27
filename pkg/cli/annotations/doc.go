@@ -21,10 +21,10 @@
 //	}
 //
 // AnnotationPermission: Mark commands that modify state and require user confirmation.
-// Set to "edit" for any operation that creates, updates, or deletes resources.
+// Set to "write" for any operation that creates, updates, or deletes resources.
 //
 //	cmd.Annotations = map[string]string{
-//	    annotations.AnnotationPermission: "edit",
+//	    annotations.AnnotationPermission: "write",
 //	}
 //
 // AnnotationConsolidate: Consolidate subcommands into a single AI tool with an enum parameter.
