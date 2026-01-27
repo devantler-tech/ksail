@@ -1,5 +1,11 @@
 # GitHub App Token Configuration
 
+## Status
+
+✅ **All workflows have been updated and compiled successfully!**
+
+The `.lock.yml` files have been regenerated with GitHub App token configuration and are ready to use.
+
 ## What Changed
 
 All agentic workflows (`.github/workflows/*.md`) have been updated to use GitHub App tokens for safe outputs instead of the default `GITHUB_TOKEN`. This provides enhanced security with:
@@ -31,9 +37,37 @@ The following are required and should already be configured:
 
 These are already in use by the CI workflow (`.github/workflows/ci.yaml`).
 
-## Next Steps
+## Compilation Results
 
-To apply these changes, the workflows need to be compiled:
+All workflows have been compiled successfully using `gh aw compile v0.37.26`:
+
+```
+✓ audit-workflows.md (70.3 KB)
+✓ ci-doctor.md (72.0 KB)
+✓ daily-perf-improver.md (75.9 KB)
+✓ daily-progress.md (69.6 KB)
+✓ daily-qa.md (65.5 KB)
+✓ daily-test-improver.md (79.0 KB)
+✓ issue-triage.md (62.0 KB)
+✓ pr-fix.md (70.1 KB)
+✓ update-docs.md (64.5 KB)
+✓ weekly-research.md (56.3 KB)
+
+Compiled 10 workflow(s): 0 error(s), 9 warning(s)
+```
+
+The warnings are pre-existing issues unrelated to the GitHub App token changes.
+
+## Verification
+
+Each compiled `.lock.yml` file now includes:
+- `actions/create-github-app-token@v2.2.1` step for token creation
+- Automatic permission calculation (e.g., `permission-issues: write`, `permission-pull-requests: write`)
+- Proper references to `vars.APP_ID` and `secrets.APP_PRIVATE_KEY`
+
+## Future Updates
+
+If you modify any workflow `.md` files in the future, remember to recompile them:
 
 ```bash
 # Install gh-aw extension if not already installed
@@ -46,8 +80,6 @@ gh aw compile
 # Or compile specific workflow
 gh aw compile issue-triage
 ```
-
-This will regenerate the `.lock.yml` files with the GitHub App token configuration.
 
 ## Workflows Updated
 
