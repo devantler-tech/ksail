@@ -310,7 +310,8 @@ func (m *Model) waitForEvent() tea.Cmd {
 		case <-timer.C:
 			return streamErrMsg{
 				err: fmt.Errorf(
-					"waiting for streaming event (assistant response or tool output) timed out after %v; the assistant or tools may be stuck",
+					"waiting for streaming event (assistant response or tool output) timed out after %v; "+
+						"the assistant or tools may be stuck",
 					timeout,
 				),
 			}
