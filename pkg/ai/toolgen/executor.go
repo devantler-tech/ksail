@@ -220,8 +220,8 @@ func executeCommand(
 
 // streamOutput reads from a reader and sends chunks to the output channel.
 // Also accumulates output in the provided buffer for returning to the LLM.
-func streamOutput(reader io.Reader, source string, toolName string, outputChan chan<- OutputChunk, buffer *strings.Builder, mutex *sync.Mutex) {
-	scanner := bufio.NewScanner(reader)
+func streamOutput(pipeReader io.Reader, source string, toolName string, outputChan chan<- OutputChunk, buffer *strings.Builder, mutex *sync.Mutex) {
+	scanner := bufio.NewScanner(pipeReader)
 
 	for scanner.Scan() {
 		line := scanner.Text() + "\n"
