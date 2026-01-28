@@ -149,7 +149,7 @@ func (m *Model) renderRemainingText(
 ) {
 	// Use pre-rendered markdown when no tools were interleaved and message is complete
 	if lastPos == 0 && !msg.isStreaming && msg.rendered != "" {
-		builder.WriteString(msg.rendered)
+		m.writeIndentedContent(builder, msg.rendered)
 		return
 	}
 
@@ -165,11 +165,25 @@ func (m *Model) renderRemainingText(
 
 	// Use pre-rendered markdown if available and no prior tools
 	if !msg.isStreaming && msg.rendered != "" && lastPos == 0 {
-		builder.WriteString(msg.rendered)
+		m.writeIndentedContent(builder, msg.rendered)
 		return
 	}
 
 	m.renderTextSegment(builder, remainingText, wrapWidth)
+}
+
+// writeIndentedContent writes pre-rendered content with 2-space indent on each line.
+func (m *Model) writeIndentedContent(builder *strings.Builder, content string) {
+	lines := strings.Split(content, "\n")
+	for i, line := range lines {
+		// Skip empty trailing line (from content ending with newline)
+		if i == len(lines)-1 && line == "" {
+			continue
+		}
+		builder.WriteString("  ")
+		builder.WriteString(line)
+		builder.WriteString("\n")
+	}
 }
 
 // renderLegacyToolOutput renders legacy tool output for backward compatibility.
@@ -210,7 +224,7 @@ func (m *Model) renderRunningTool(
 	builder.WriteString(toolMsgStyle.Render(line))
 	builder.WriteString("\n")
 	if tool.output != "" {
-		m.renderToolOutput(builder, tool.output, wrapWidth, true)
+		m.renderToolOutput(builder, tool.output, wrapWidth)
 	}
 }
 
@@ -227,7 +241,7 @@ func (m *Model) renderSuccessTool(
 		builder.WriteString(toolCollapsedStyle.Render(line))
 		builder.WriteString("\n")
 		if tool.output != "" {
-			m.renderToolOutput(builder, tool.output, wrapWidth, true)
+			m.renderToolOutput(builder, tool.output, wrapWidth)
 		}
 	} else {
 		line := fmt.Sprintf("  ✓ %s", displayName)
@@ -252,7 +266,7 @@ func (m *Model) renderFailedTool(
 		builder.WriteString(errorStyle.Render(line))
 		builder.WriteString("\n")
 		if tool.output != "" {
-			m.renderToolOutput(builder, tool.output, wrapWidth, true)
+			m.renderToolOutput(builder, tool.output, wrapWidth)
 		}
 		return
 	}
@@ -296,32 +310,14 @@ func (m *Model) renderToolOutput(
 	builder *strings.Builder,
 	output string,
 	wrapWidth uint,
-	expanded bool,
 ) {
 	lines := strings.Split(output, "\n")
-	totalLines := len(lines)
-	truncated := false
-
-	if !expanded && totalLines > maxToolOutputLines {
-		lines = lines[:maxToolOutputLines]
-		truncated = true
-	}
 
 	truncatedOutput := strings.Join(lines, "\n")
 	wrapped := wordwrap.WrapString(truncatedOutput, wrapWidth-6)
 
 	for line := range strings.SplitSeq(wrapped, "\n") {
 		builder.WriteString(toolOutputStyle.Render("      " + line))
-		builder.WriteString("\n")
-	}
-
-	if truncated {
-		more := totalLines - maxToolOutputLines
-		builder.WriteString(
-			toolOutputStyle.Render(
-				fmt.Sprintf("      ... (%d more lines, press ^T to expand tool outputs)", more),
-			),
-		)
 		builder.WriteString("\n")
 	}
 }

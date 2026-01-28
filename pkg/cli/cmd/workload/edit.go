@@ -3,6 +3,7 @@ package workload
 import (
 	"os"
 
+	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
 	"github.com/devantler-tech/ksail/v5/pkg/client/kubectl"
 	"github.com/spf13/cobra"
@@ -55,6 +56,9 @@ Example:
 
 			// Execute kubectl edit command
 			return editCmd.Execute()
+		},
+		Annotations: map[string]string{
+			annotations.AnnotationPermission: "write",
 		},
 	}
 

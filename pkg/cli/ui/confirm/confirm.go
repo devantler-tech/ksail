@@ -99,13 +99,10 @@ func getStdinReader() io.Reader {
 // This is used to skip confirmation prompts in non-interactive environments (CI/pipelines).
 func IsTTY() bool {
 	ttyCheckerMu.RLock()
+	defer ttyCheckerMu.RUnlock()
 
-	override := ttyCheckerOverride
-
-	ttyCheckerMu.RUnlock()
-
-	if override != nil {
-		return override()
+	if ttyCheckerOverride != nil {
+		return ttyCheckerOverride()
 	}
 
 	// Check if stdin is a terminal

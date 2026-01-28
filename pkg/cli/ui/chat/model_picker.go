@@ -6,16 +6,27 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	copilot "github.com/github/copilot-sdk/go"
 )
 
 // handleModelPickerKey handles keyboard input when the model picker is active.
 func (m *Model) handleModelPickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	totalItems := len(m.availableModels) + 1 // auto + models
+	totalItems := len(m.filteredModels) + 1 // auto + filtered models
+
+	// Handle filter mode
+	if m.modelFilterActive {
+		return m.handleModelFilterKey(msg)
+	}
 
 	switch msg.String() {
 	case "esc", "ctrl+o":
 		m.showModelPicker = false
+		m.modelFilterText = ""
+		m.modelFilterActive = false
 		m.updateDimensions()
+		return m, nil
+	case "/":
+		m.modelFilterActive = true
 		return m, nil
 	case "up", "k":
 		if m.modelPickerIndex > 0 {
@@ -37,6 +48,57 @@ func (m *Model) handleModelPickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// handleModelFilterKey handles keyboard input when filtering models.
+func (m *Model) handleModelFilterKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "enter":
+		m.modelFilterActive = false
+		return m, nil
+	case "esc":
+		// Clear filter and exit filter mode
+		m.modelFilterText = ""
+		m.modelFilterActive = false
+		m.applyModelFilter()
+		return m, nil
+	case "backspace":
+		if len(m.modelFilterText) > 0 {
+			m.modelFilterText = m.modelFilterText[:len(m.modelFilterText)-1]
+			m.applyModelFilter()
+		}
+		return m, nil
+	case "ctrl+c":
+		m.cleanup()
+		m.quitting = true
+		return m, tea.Quit
+	default:
+		if msg.Type == tea.KeyRunes {
+			m.modelFilterText += string(msg.Runes)
+			m.applyModelFilter()
+		}
+		return m, nil
+	}
+}
+
+// applyModelFilter filters the available models based on the current filter text.
+func (m *Model) applyModelFilter() {
+	if m.modelFilterText == "" {
+		m.filteredModels = m.availableModels
+	} else {
+		filterLower := strings.ToLower(m.modelFilterText)
+		m.filteredModels = make([]copilot.ModelInfo, 0)
+		for _, model := range m.availableModels {
+			if strings.Contains(strings.ToLower(model.ID), filterLower) {
+				m.filteredModels = append(m.filteredModels, model)
+			}
+		}
+	}
+	// Reset picker index if it's out of bounds
+	maxIndex := len(m.filteredModels)
+	if m.modelPickerIndex > maxIndex {
+		m.modelPickerIndex = maxIndex
+	}
+}
+
 // selectModel handles model selection from the picker.
 func (m *Model) selectModel(totalItems int) (tea.Model, tea.Cmd) {
 	if m.modelPickerIndex == 0 {
@@ -45,12 +107,14 @@ func (m *Model) selectModel(totalItems int) (tea.Model, tea.Cmd) {
 			return m.switchModel("")
 		}
 	} else if m.modelPickerIndex > 0 && m.modelPickerIndex < totalItems {
-		selectedModel := m.availableModels[m.modelPickerIndex-1]
+		selectedModel := m.filteredModels[m.modelPickerIndex-1]
 		if selectedModel.ID != m.currentModel {
 			return m.switchModel(selectedModel.ID)
 		}
 	}
 	m.showModelPicker = false
+	m.modelFilterText = ""
+	m.modelFilterActive = false
 	m.updateDimensions()
 	return m, nil
 }
@@ -76,6 +140,8 @@ func (m *Model) switchModel(newModelID string) (tea.Model, tea.Cmd) {
 
 	m.resetStreamingState()
 	m.showModelPicker = false
+	m.modelFilterText = ""
+	m.modelFilterActive = false
 	m.updateDimensions()
 	m.updateViewportContent()
 	return m, nil
@@ -87,15 +153,16 @@ func (m *Model) renderModelPickerModal() string {
 	contentWidth := max(modalWidth-4, 1)
 	clipStyle := lipgloss.NewStyle().MaxWidth(contentWidth).Inline(true)
 
-	totalItems := len(m.availableModels) + 1
-	visibleCount := min(totalItems, maxPickerVisible)
+	totalItems := len(m.filteredModels) + 1
+	maxVisible := m.calculateMaxPickerVisible()
+	visibleCount := min(totalItems, maxVisible)
 
-	scrollOffset := calculatePickerScrollOffset(m.modelPickerIndex, totalItems, maxPickerVisible)
+	scrollOffset := calculatePickerScrollOffset(m.modelPickerIndex, totalItems, maxVisible)
 
 	var listContent strings.Builder
-	listContent.WriteString(clipStyle.Render("Select Model") + "\n")
+	m.renderModelPickerTitle(&listContent, clipStyle)
 
-	isScrollable := totalItems > maxPickerVisible
+	isScrollable := totalItems > maxVisible
 	renderScrollIndicatorTop(&listContent, clipStyle, isScrollable, scrollOffset)
 
 	endIdx := min(scrollOffset+visibleCount, totalItems)
@@ -105,6 +172,22 @@ func (m *Model) renderModelPickerModal() string {
 
 	content := strings.TrimRight(listContent.String(), "\n")
 	return renderPickerModal(content, modalWidth, visibleCount, isScrollable)
+}
+
+// renderModelPickerTitle renders the title or filter input.
+func (m *Model) renderModelPickerTitle(listContent *strings.Builder, clipStyle lipgloss.Style) {
+	// Show filter input if filtering is active or has text
+	if m.modelFilterActive || m.modelFilterText != "" {
+		filterStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(14))
+		cursor := ""
+		if m.modelFilterActive {
+			cursor = "_"
+		}
+		filterLine := filterStyle.Render("🔍 " + m.modelFilterText + cursor)
+		listContent.WriteString(clipStyle.Render(filterLine) + "\n")
+	} else {
+		listContent.WriteString(clipStyle.Render("Select Model") + "\n")
+	}
 }
 
 // renderModelItems renders the visible model list items.
@@ -136,7 +219,7 @@ func (m *Model) formatModelItem(index int) (string, bool) {
 		return line, isCurrentModel
 	}
 
-	model := m.availableModels[index-1]
+	model := m.filteredModels[index-1]
 	multiplier := ""
 	if model.Billing != nil && model.Billing.Multiplier > 0 {
 		multiplier = fmt.Sprintf(" (%.0fx)", model.Billing.Multiplier)

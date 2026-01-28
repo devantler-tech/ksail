@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"filippo.io/age"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
 	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
 	"github.com/spf13/cobra"
 )
@@ -270,6 +271,9 @@ Examples:
 		Args:         cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return handleImportRunE(cmd, args[0])
+		},
+		Annotations: map[string]string{
+			annotations.AnnotationPermission: "write",
 		},
 	}
 

@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup"
@@ -46,6 +47,9 @@ func NewCreateCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
 		Short:        "Create a cluster",
 		Long:         `Create a Kubernetes cluster as defined by configuration.`,
 		SilenceUsage: true,
+		Annotations: map[string]string{
+			annotations.AnnotationPermission: "write",
+		},
 	}
 
 	fieldSelectors := ksailconfigmanager.DefaultClusterFieldSelectors()

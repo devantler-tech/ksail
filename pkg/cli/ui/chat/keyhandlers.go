@@ -2,12 +2,24 @@ package chat
 
 import (
 	"strings"
+	"time"
 
+	"github.com/atotto/clipboard"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
 // handleKeyMsg handles keyboard input.
 func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Handle help overlay with highest priority (only F1 or esc can close it)
+	if m.showHelpOverlay {
+		switch msg.String() {
+		case "f1", "esc":
+			m.showHelpOverlay = false
+			return m, nil
+		}
+		return m, nil
+	}
+
 	// Handle overlays first (highest priority)
 	if m.pendingPermission != nil {
 		return m.handlePermissionKey(msg)
@@ -25,6 +37,9 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleQuit(true)
 	case "esc":
 		return m.handleEscape()
+	case "f1":
+		m.showHelpOverlay = true
+		return m, nil
 	case "ctrl+o":
 		return m.handleOpenModelPicker()
 	case "ctrl+h":
@@ -38,6 +53,8 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleToggleMode()
 	case "ctrl+t":
 		return m.handleToggleAllTools()
+	case "ctrl+y":
+		return m.handleCopyOutput()
 	case "up":
 		return m.handleHistoryUp()
 	case "down":
@@ -102,6 +119,9 @@ func (m *Model) handleOpenModelPicker() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.showModelPicker = true
+	m.filteredModels = m.availableModels // Start with all models
+	m.modelFilterText = ""               // Reset filter
+	m.modelFilterActive = false          // Start in navigation mode
 	m.updateDimensions()
 	m.modelPickerIndex = m.findCurrentModelIndex()
 	return m, nil
@@ -112,7 +132,7 @@ func (m *Model) findCurrentModelIndex() int {
 	if m.currentModel == "" || m.currentModel == "auto" {
 		return 0
 	}
-	for i, model := range m.availableModels {
+	for i, model := range m.filteredModels {
 		if model.ID == m.currentModel {
 			return i + 1 // offset by 1 for auto option
 		}
@@ -125,8 +145,11 @@ func (m *Model) handleOpenSessionPicker() (tea.Model, tea.Cmd) {
 	if m.isStreaming {
 		return m, nil
 	}
-	sessions, _ := ListSessions()
+	sessions, _ := ListSessions(m.client)
 	m.availableSessions = sessions
+	m.filteredSessions = sessions // Start with all sessions
+	m.sessionFilterText = ""      // Reset filter
+	m.sessionFilterActive = false // Start in navigation mode
 	m.showSessionPicker = true
 	m.confirmDeleteSession = false
 	m.updateDimensions()
@@ -265,4 +288,31 @@ func (m *Model) handleEnter() (tea.Model, tea.Cmd) {
 	m.isStreaming = true
 	m.justCompleted = false
 	return m, tea.Batch(m.spinner.Tick, m.sendMessageCmd(content))
+}
+
+// handleCopyOutput copies the latest assistant message to clipboard.
+// Works when not streaming and there is a completed assistant message.
+func (m *Model) handleCopyOutput() (tea.Model, tea.Cmd) {
+	// Don't allow copying while streaming
+	if m.isStreaming {
+		return m, nil
+	}
+
+	// Find the last assistant message
+	for i := len(m.messages) - 1; i >= 0; i-- {
+		if m.messages[i].role == "assistant" && m.messages[i].content != "" {
+			// Copy the raw content (markdown) to clipboard.
+			// Silently ignore errors since clipboard may be unavailable in CI/headless environments.
+			_ = clipboard.WriteAll(m.messages[i].content)
+
+			// Show feedback and schedule its clearing after 1.5 seconds
+			m.showCopyFeedback = true
+
+			return m, tea.Tick(1500*time.Millisecond, func(_ time.Time) tea.Msg {
+				return copyFeedbackClearMsg{}
+			})
+		}
+	}
+
+	return m, nil
 }

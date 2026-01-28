@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	configmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager"
@@ -22,6 +23,9 @@ func NewInitCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
 		Short:        "Initialize a new project",
 		Long:         "Initialize a new project in the specified directory (or current directory if none specified).",
 		SilenceUsage: true,
+		Annotations: map[string]string{
+			annotations.AnnotationPermission: "write",
+		},
 	}
 
 	cfgManager := ksailconfigmanager.NewCommandConfigManager(cmd, InitFieldSelectors())

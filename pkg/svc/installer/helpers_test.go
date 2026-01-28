@@ -145,3 +145,27 @@ func TestMaxTimeout(t *testing.T) {
 		assert.Equal(t, 5*time.Minute, installer.MaxTimeout(5*time.Minute, 5*time.Minute))
 	})
 }
+
+func TestTimeoutConstants(t *testing.T) {
+	t.Parallel()
+
+	t.Run("default_install_timeout", func(t *testing.T) {
+		t.Parallel()
+		assert.Equal(t, 5*time.Minute, installer.DefaultInstallTimeout)
+	})
+
+	t.Run("talos_install_timeout", func(t *testing.T) {
+		t.Parallel()
+		assert.Equal(t, 5*time.Minute, installer.TalosInstallTimeout)
+	})
+
+	t.Run("calico_install_timeout", func(t *testing.T) {
+		t.Parallel()
+		assert.Equal(t, 10*time.Minute, installer.CalicoInstallTimeout)
+	})
+
+	t.Run("kyverno_install_timeout", func(t *testing.T) {
+		t.Parallel()
+		assert.Equal(t, 7*time.Minute, installer.KyvernoInstallTimeout)
+	})
+}

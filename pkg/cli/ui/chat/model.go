@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -14,6 +15,8 @@ import (
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 	copilot "github.com/github/copilot-sdk/go"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 const (
@@ -24,9 +27,19 @@ const (
 	footerHeight  = 1              // single line help text
 
 	// Shared picker/output constants.
-	maxPickerVisible   = 3  // maximum visible items in picker modals
+	maxPickerItems     = 10 // absolute maximum items in picker modals
+	minPickerItems     = 3  // minimum items to show in picker modals
+	minViewportHeight  = 10 // minimum height to preserve for main viewport
 	maxToolOutputLines = 10 // maximum lines shown in collapsed tool output
 	minWrapWidth       = 20 // minimum width for text wrapping
+
+	// Tool and error message constants.
+	unknownToolName  = "unknown"           // fallback when tool name is nil
+	unknownErrorMsg  = "unknown error"     // fallback when error message is nil
+	toolIDFormat     = "tool-%d"           // format string for generating unique tool IDs (timestamp-based)
+	unknownOperation = "Unknown Operation" // fallback when operation type is unrecognized
+	planModePrefix   = "[PLAN MODE] Research and outline steps to accomplish this task. " +
+		"Do not execute tools or make changes - only describe what you would do:\n\n"
 )
 
 // AgentModeRef is a thread-safe reference to the agent mode state.
@@ -84,14 +97,15 @@ type Model struct {
 	spinner  spinner.Model
 
 	// State
-	messages        []chatMessage
-	currentResponse strings.Builder
-	isStreaming     bool
-	justCompleted   bool // true when a response just finished, shows "Ready" indicator
-	userScrolled    bool // true when user has scrolled away from bottom (pause auto-scroll)
-	err             error
-	quitting        bool
-	ready           bool
+	messages         []chatMessage
+	currentResponse  strings.Builder
+	isStreaming      bool
+	justCompleted    bool // true when a response just finished, shows "Ready" indicator
+	showCopyFeedback bool // true when copy feedback should be shown briefly
+	userScrolled     bool // true when user has scrolled away from bottom (pause auto-scroll)
+	err              error
+	quitting         bool
+	ready            bool
 
 	// Prompt history
 	history      []string // previously submitted prompts
@@ -112,6 +126,11 @@ type Model struct {
 	width  int
 	height int
 
+	// Help system
+	help            help.Model // bubbles/help model for rendering help
+	keys            KeyMap     // structured keybindings
+	showHelpOverlay bool       // true when help overlay is visible
+
 	// Copilot session and model switching
 	session       *copilot.Session
 	client        *copilot.Client
@@ -120,10 +139,13 @@ type Model struct {
 	ctx           context.Context
 
 	// Model selection
-	currentModel     string              // currently selected model ID
-	availableModels  []copilot.ModelInfo // models the user has access to
-	showModelPicker  bool                // true when model picker overlay is visible
-	modelPickerIndex int                 // currently highlighted model in picker
+	currentModel      string              // currently selected model ID
+	availableModels   []copilot.ModelInfo // models the user has access to
+	filteredModels    []copilot.ModelInfo // models matching current filter
+	showModelPicker   bool                // true when model picker overlay is visible
+	modelPickerIndex  int                 // currently highlighted model in picker
+	modelFilterActive bool                // true when filter input is focused
+	modelFilterText   string              // current filter text
 
 	// Permission request handling
 	pendingPermission *permissionRequestMsg // current permission request awaiting user response
@@ -132,11 +154,14 @@ type Model struct {
 	// Session management
 	currentSessionID     string            // ID of the current session (empty if new)
 	availableSessions    []SessionMetadata // cached list of available sessions
+	filteredSessions     []SessionMetadata // sessions matching current filter
 	showSessionPicker    bool              // true when session picker overlay is visible
 	sessionPickerIndex   int               // currently highlighted session in picker
 	confirmDeleteSession bool              // true when confirming session deletion
 	renamingSession      bool              // true when renaming a session
 	sessionRenameInput   string            // current rename input text
+	sessionFilterActive  bool              // true when filter input is focused
+	sessionFilterText    string            // current filter text
 
 	// Markdown renderer (cached to avoid terminal queries)
 	renderer *glamour.TermRenderer
@@ -226,6 +251,8 @@ func NewWithEventChannel(
 		textarea:         textArea,
 		spinner:          spin,
 		renderer:         mdRenderer,
+		help:             createHelpModel(),
+		keys:             DefaultKeyMap(),
 		messages:         make([]chatMessage, 0),
 		session:          session,
 		client:           client,
@@ -341,8 +368,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case abortMsg:
 		return m.handleAbort()
 
+	case snapshotRewindMsg:
+		return m.handleSnapshotRewind()
+
 	case streamErrMsg:
 		return m.handleStreamErr(msg)
+
+	case copyFeedbackClearMsg:
+		m.showCopyFeedback = false
+		return m, nil
 
 	case spinner.TickMsg:
 		// Always update spinner to keep it ticking
@@ -387,6 +421,22 @@ func (m *Model) View() string {
 	// Join sections and clip final output to terminal width to prevent any wrapping
 	output := lipgloss.JoinVertical(lipgloss.Left, sections...)
 	return lipgloss.NewStyle().MaxWidth(m.width).Render(output)
+}
+
+// calculateMaxPickerVisible returns the maximum number of items that can be shown
+// in a picker modal without pushing the viewport out of view.
+func (m *Model) calculateMaxPickerVisible() int {
+	// Calculate available height: total - header - input - footer - borders
+	// Reserve space for: title (1) + scroll indicators (2) + borders (2) + minimum viewport
+	availableHeight := m.height - headerHeight - inputHeight - footerHeight - 4 - minViewportHeight
+
+	// Subtract space for picker overhead (title + top/bottom padding)
+	pickerOverhead := 3 // title + top/bottom padding
+	availableForItems := availableHeight - pickerOverhead
+
+	// Calculate max items: cap between min and max
+	maxItems := max(minPickerItems, min(availableForItems, maxPickerItems))
+	return maxItems
 }
 
 // renderHeader renders the header section with logo and status.
@@ -442,16 +492,18 @@ func (m *Model) buildStatusText() string {
 	}
 
 	// Model name
-	modelStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8))
+	modelStyle := lipgloss.NewStyle().Foreground(dimColor)
 	if m.currentModel != "" {
 		statusParts = append(statusParts, modelStyle.Render(m.currentModel))
 	} else {
 		statusParts = append(statusParts, modelStyle.Render("auto"))
 	}
 
-	// Streaming state
+	// Streaming state and feedback
 	if m.isStreaming {
 		statusParts = append(statusParts, m.spinner.View()+" "+statusStyle.Render("Thinking..."))
+	} else if m.showCopyFeedback {
+		statusParts = append(statusParts, statusStyle.Render("Copied ✓"))
 	} else if m.justCompleted {
 		statusParts = append(statusParts, statusStyle.Render("Ready ✓"))
 	}
@@ -461,6 +513,9 @@ func (m *Model) buildStatusText() string {
 
 // renderInputOrModal renders either the input area or active modal.
 func (m *Model) renderInputOrModal() string {
+	if m.showHelpOverlay {
+		return m.renderHelpOverlay()
+	}
 	if m.pendingPermission != nil {
 		return m.renderPermissionModal()
 	}
@@ -473,10 +528,9 @@ func (m *Model) renderInputOrModal() string {
 	return inputStyle.Width(m.width - 2).Render(m.textarea.View())
 }
 
-// renderFooter renders the context-aware help text footer.
+// renderFooter renders the context-aware help text footer using bubbles/help.
 func (m *Model) renderFooter() string {
-	helpText := m.getContextualHelpText()
-	return lipgloss.NewStyle().MaxWidth(m.width).Inline(true).Render(helpStyle.Render(helpText))
+	return lipgloss.NewStyle().MaxWidth(m.width).Inline(true).Render(m.renderShortHelp())
 }
 
 // handleUserSubmit handles user message submission.
@@ -552,6 +606,10 @@ func (m *Model) prepareForNewTurn() {
 // activeModalHeight returns the extra height needed for the currently active modal
 // beyond the input area height (since modals replace the input area).
 func (m *Model) activeModalHeight() int {
+	if m.showHelpOverlay {
+		// Help overlay uses fixed 5 lines (same as input area)
+		return 0
+	}
 	if m.pendingPermission != nil {
 		// Calculate actual permission modal height based on content.
 		// Base layout: title(1) + blank(1) + tool(1) + blank(1) + "Allow?"(1) + buttons(1) = 6 lines,
@@ -574,12 +632,13 @@ func (m *Model) activeModalHeight() int {
 		// Calculate actual picker height based on content
 		var totalItems int
 		if m.showSessionPicker {
-			totalItems = len(m.availableSessions) + 1 // +1 for "New Chat" option
+			totalItems = len(m.filteredSessions) + 1 // +1 for "New Chat" option
 		} else {
-			totalItems = len(m.availableModels) + 1 // +1 for "auto" option
+			totalItems = len(m.filteredModels) + 1 // +1 for "auto" option
 		}
-		visibleCount := min(totalItems, maxPickerVisible)
-		isScrollable := totalItems > maxPickerVisible
+		maxVisible := m.calculateMaxPickerVisible()
+		visibleCount := min(totalItems, maxVisible)
+		isScrollable := totalItems > maxVisible
 
 		// Calculate content lines: title + visible items
 		contentLines := 1 + visibleCount
@@ -629,52 +688,6 @@ func (m *Model) reRenderCompletedMessages() {
 			msg.rendered = renderMarkdownWithRenderer(m.renderer, msg.content)
 		}
 	}
-}
-
-// getContextualHelpText returns help text based on the current active view.
-func (m *Model) getContextualHelpText() string {
-	// Permission prompt - highest priority
-	if m.pendingPermission != nil {
-		return "  y Allow • n Deny • esc Cancel"
-	}
-
-	// Model picker modal
-	if m.showModelPicker {
-		return "  ↑↓ Navigate • ⏎ Select • esc Cancel"
-	}
-
-	// Session picker modal
-	if m.showSessionPicker {
-		if m.renamingSession {
-			return "  Type name • ⏎ Save • esc Cancel"
-		}
-		if m.confirmDeleteSession {
-			return "  y Delete • n Cancel"
-		}
-		return "  ↑↓ Navigate • ⏎ Select • r Rename • d Delete • esc Cancel"
-	}
-
-	// Default input view - show mode and tool expand options
-	modeIcon := "</>"
-	if !m.agentMode {
-		modeIcon = "≡"
-	}
-	// Check if tools are present for expand option
-	hasTools := len(m.toolOrder) > 0
-	if !hasTools {
-		for _, msg := range m.messages {
-			if msg.role == "assistant" && len(msg.tools) > 0 {
-				hasTools = true
-				break
-			}
-		}
-	}
-	if hasTools {
-		return "  ⏎ Send • ↑↓ History • PgUp/Dn Scroll • ⇥ " + modeIcon +
-			" • ^T Expand • ^H Sessions • ^O Model • ^N New • esc Quit"
-	}
-	return "  ⏎ Send • ↑↓ History • PgUp/Dn Scroll • ⇥ " + modeIcon +
-		" • ^H Sessions • ^O Model • ^N New • esc Quit"
 }
 
 // sendMessageCmd returns a command that initiates message sending.
@@ -736,21 +749,35 @@ func (m *Model) streamResponseCmd(userMessage string) tea.Cmd {
 				if event.Data.Message != nil {
 					errMsg = *event.Data.Message
 				} else {
-					errMsg = "unknown error"
+					errMsg = unknownErrorMsg
 				}
 				eventChan <- streamErrMsg{err: fmt.Errorf("%s", errMsg)}
 			case copilot.ToolExecutionStart:
-				toolName := "unknown"
+				toolName := unknownToolName
 				if event.Data.ToolName != nil {
 					toolName = *event.Data.ToolName
+				}
+				// Check for MCP tool info (new in SDK v0.1.19)
+				var mcpServerName, mcpToolName string
+				if event.Data.MCPServerName != nil {
+					mcpServerName = *event.Data.MCPServerName
+				}
+				if event.Data.MCPToolName != nil {
+					mcpToolName = *event.Data.MCPToolName
 				}
 				// Extract command from arguments if available (for ksail tools)
 				command := extractCommandFromArgs(toolName, event.Data.Arguments)
 				// Generate tool ID from timestamp
-				toolID := fmt.Sprintf("tool-%d", time.Now().UnixNano())
-				eventChan <- toolStartMsg{toolID: toolID, toolName: toolName, command: command}
+				toolID := fmt.Sprintf(toolIDFormat, time.Now().UnixNano())
+				eventChan <- toolStartMsg{
+					toolID:        toolID,
+					toolName:      toolName,
+					command:       command,
+					mcpServerName: mcpServerName,
+					mcpToolName:   mcpToolName,
+				}
 			case copilot.ToolExecutionComplete:
-				toolName := "unknown"
+				toolName := unknownToolName
 				if event.Data.ToolName != nil {
 					toolName = *event.Data.ToolName
 				}
@@ -760,6 +787,10 @@ func (m *Model) streamResponseCmd(userMessage string) tea.Cmd {
 				}
 				// Assume success if we got a result (SDK doesn't expose error state directly)
 				eventChan <- toolEndMsg{toolName: toolName, output: output, success: true}
+			case copilot.SessionSnapshotRewind:
+				// SessionSnapshotRewind indicates the session was rewound to a previous state
+				// This can happen when the user discards changes or reverts to a checkpoint
+				eventChan <- snapshotRewindMsg{}
 			}
 		})
 
@@ -771,9 +802,7 @@ func (m *Model) streamResponseCmd(userMessage string) tea.Cmd {
 		// In plan mode, prefix the prompt with instructions to plan without executing
 		prompt := userMessage
 		if !agentMode {
-			prompt = "[PLAN MODE] Research and outline steps to accomplish this task. " +
-				"Do not execute tools or make changes - only describe what you would do:\n\n" +
-				userMessage
+			prompt = planModePrefix + userMessage
 		}
 
 		// Send the message
@@ -894,4 +923,167 @@ func (m *Model) hasRunningTools() bool {
 		}
 	}
 	return false
+}
+
+// CreateTUIPermissionHandler creates a permission handler that integrates with the TUI.
+// It sends permission requests to the provided event channel and waits for a response.
+// This allows the TUI to display permission prompts and collect user input.
+func CreateTUIPermissionHandler(eventChan chan<- tea.Msg) copilot.PermissionHandler {
+	return func(
+		request copilot.PermissionRequest,
+		_ copilot.PermissionInvocation,
+	) (copilot.PermissionRequestResult, error) {
+		// Extract tool name and command from the permission request.
+		// The Extra map contains the raw permission request data from the SDK.
+		// Common keys vary by permission kind (shell, file_edit, etc.)
+		toolName, command := extractPermissionDetails(request)
+
+		// Create response channel
+		responseChan := make(chan bool, 1)
+
+		// Send permission request to TUI
+		eventChan <- permissionRequestMsg{
+			toolCallID: request.ToolCallID,
+			toolName:   toolName,
+			command:    command,
+			arguments:  "", // Arguments are included in the command for SDK permissions
+			response:   responseChan,
+		}
+
+		// Wait for response from TUI
+		approved := <-responseChan
+
+		if approved {
+			return copilot.PermissionRequestResult{Kind: "approved"}, nil
+		}
+		return copilot.PermissionRequestResult{Kind: "denied-interactively-by-user"}, nil
+	}
+}
+
+// extractPermissionDetails extracts human-readable tool name and command from an SDK permission request.
+// The Extra map contains different fields depending on the permission kind.
+// Uses priority-based field checking with early returns to avoid deep nesting.
+func extractPermissionDetails(request copilot.PermissionRequest) (string, string) {
+	// Default tool name based on permission kind
+	toolName := formatPermissionKind(request.Kind)
+
+	// Fields that contain the actual command/action (ordered by priority)
+	commandFields := []string{
+		"command",       // Shell commands
+		"cmd",           // Alternative shell command field
+		"shell",         // Some shells use this
+		"runInTerminal", // VS Code terminal execution
+		"execute",       // Generic execution
+		"run",           // Generic run
+		"script",        // Script execution
+		"input",         // Input to execute
+	}
+
+	for _, field := range commandFields {
+		if val, ok := request.Extra[field]; ok {
+			if cmd := extractStringValue(val); cmd != "" {
+				return toolName, cmd
+			}
+		}
+	}
+
+	// Check for nested execution object (some SDK versions nest the command)
+	if exec, ok := request.Extra["execution"].(map[string]any); ok {
+		for _, field := range commandFields {
+			if val, ok := exec[field]; ok {
+				if cmd := extractStringValue(val); cmd != "" {
+					return toolName, cmd
+				}
+			}
+		}
+	}
+
+	// Path-based operations (file read/write/edit)
+	pathFields := []string{"path", "filePath", "file", "target"}
+	for _, field := range pathFields {
+		if val, ok := request.Extra[field]; ok {
+			if path := extractStringValue(val); path != "" {
+				return toolName, path
+			}
+		}
+	}
+
+	// Fallback: look for any string value that looks like a command
+	// Skip metadata fields that don't contain the actual command
+	metadataFields := map[string]bool{
+		"kind": true, "toolCallId": true, "possiblePaths": true,
+		"possibleUrls": true, "sessionId": true, "requestId": true,
+		"timestamp": true, "type": true, "id": true,
+	}
+
+	for key, val := range request.Extra {
+		if metadataFields[key] {
+			continue
+		}
+		if cmd := extractStringValue(val); cmd != "" {
+			// Found a non-metadata string value - use it
+			return toolName, cmd
+		}
+	}
+
+	// Last resort: just show the permission kind
+	return toolName, request.Kind
+}
+
+// extractStringValue extracts a string from various value types.
+func extractStringValue(val any) string {
+	switch v := val.(type) {
+	case string:
+		return v
+	case []any:
+		// Join array elements
+		parts := make([]string, 0, len(v))
+		for _, item := range v {
+			if s, ok := item.(string); ok && s != "" {
+				parts = append(parts, s)
+			}
+		}
+		if len(parts) > 0 {
+			return strings.Join(parts, " ")
+		}
+	case map[string]any:
+		// Try to extract command from nested object
+		if cmd, ok := v["command"].(string); ok {
+			return cmd
+		}
+		if cmd, ok := v["cmd"].(string); ok {
+			return cmd
+		}
+	}
+	return ""
+}
+
+// formatPermissionKind converts a permission kind to a human-readable tool name.
+func formatPermissionKind(kind string) string {
+	switch kind {
+	case "shell":
+		return "Shell Command"
+	case "file_edit", "fileEdit":
+		return "File Edit"
+	case "file_read", "fileRead":
+		return "File Read"
+	case "file_write", "fileWrite":
+		return "File Write"
+	case "terminal":
+		return "Terminal"
+	case "browser":
+		return "Browser"
+	case "network":
+		return "Network Request"
+	default:
+		// Capitalize and format the kind
+		if kind == "" {
+			return unknownOperation
+		}
+		// Replace underscores with spaces and title case.
+		// English titlecase is appropriate for all SDK permission kinds (shell, file_edit, etc.)
+		formatted := strings.ReplaceAll(kind, "_", " ")
+		caser := cases.Title(language.English)
+		return caser.String(formatted)
+	}
 }

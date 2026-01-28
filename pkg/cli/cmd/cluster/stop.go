@@ -3,6 +3,7 @@ package cluster
 import (
 	"context"
 
+	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	"github.com/spf13/cobra"
@@ -24,7 +25,7 @@ Supported distributions are automatically detected from existing clusters.`
 
 // NewStopCmd creates and returns the stop command.
 func NewStopCmd(_ any) *cobra.Command {
-	return lifecycle.NewSimpleLifecycleCmd(lifecycle.SimpleLifecycleConfig{
+	cmd := lifecycle.NewSimpleLifecycleCmd(lifecycle.SimpleLifecycleConfig{
 		Use:          "stop",
 		Short:        "Stop a running cluster",
 		Long:         stopLongDesc,
@@ -40,4 +41,10 @@ func NewStopCmd(_ any) *cobra.Command {
 			return provisioner.Stop(ctx, clusterName)
 		},
 	})
+
+	cmd.Annotations = map[string]string{
+		annotations.AnnotationPermission: "write",
+	}
+
+	return cmd
 }

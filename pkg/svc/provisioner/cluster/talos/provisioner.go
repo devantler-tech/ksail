@@ -403,7 +403,7 @@ func (p *TalosProvisioner) createHetznerCluster(ctx context.Context, clusterName
 
 	// Save talosconfig
 	if p.options.TalosconfigPath != "" {
-		saveErr := p.saveHetznerTalosconfig(configBundle)
+		saveErr := p.saveTalosconfig(configBundle)
 		if saveErr != nil {
 			return fmt.Errorf("failed to save talosconfig: %w", saveErr)
 		}
@@ -863,10 +863,10 @@ func (p *TalosProvisioner) saveHetznerKubeconfig(
 	return nil
 }
 
-// saveHetznerTalosconfig saves the talosconfig for a Hetzner cluster.
+// saveTalosconfig saves the talosconfig for any cluster type.
 //
-//nolint:funcorder // Grouped with Hetzner cluster methods for logical code organization
-func (p *TalosProvisioner) saveHetznerTalosconfig(configBundle *bundle.Bundle) error {
+//nolint:funcorder // Grouped with cluster methods for logical code organization
+func (p *TalosProvisioner) saveTalosconfig(configBundle *bundle.Bundle) error {
 	// Expand tilde in talosconfig path
 	talosconfigPath, err := iopath.ExpandHomePath(p.options.TalosconfigPath)
 	if err != nil {
@@ -1594,12 +1594,10 @@ func (p *TalosProvisioner) saveClusterConfigs(
 ) error {
 	// Save talosconfig if path is configured
 	if p.options.TalosconfigPath != "" {
-		saveErr := configBundle.TalosConfig().Save(p.options.TalosconfigPath)
+		saveErr := p.saveTalosconfig(configBundle)
 		if saveErr != nil {
 			return fmt.Errorf("failed to save talosconfig: %w", saveErr)
 		}
-
-		_, _ = fmt.Fprintf(p.logWriter, "Saved talosconfig to %s\n", p.options.TalosconfigPath)
 	}
 
 	// Bootstrap the cluster and retrieve kubeconfig
