@@ -23,7 +23,8 @@ if: ${{ github.event.workflow_run.conclusion == 'failure' }}
 
 permissions: read-all
 
-network: defaults
+network:
+  allowed: [defaults, go]
 
 safe-outputs:
   app:
