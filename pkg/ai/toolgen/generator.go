@@ -3,6 +3,7 @@ package toolgen
 import (
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -247,7 +248,38 @@ func buildStandardProperty(flag *pflag.Flag) map[string]any {
 func addDefaultValue(prop map[string]any, flag *pflag.Flag) {
 	if flag.DefValue != "" && flag.DefValue != defaultValueFalse &&
 		flag.DefValue != defaultValueEmptyArray {
-		prop["default"] = flag.DefValue
+		// Get the JSON schema type from the prop map
+		flagType, _ := prop["type"].(string)
+		prop["default"] = convertDefaultValue(flagType, flag.DefValue)
+	}
+}
+
+// convertDefaultValue converts a string default value to its proper type based on the JSON schema type.
+// This ensures that boolean, integer, and number types have typed default values rather than strings,
+// which is required by strict JSON Schema validators like the MCP SDK.
+func convertDefaultValue(jsonSchemaType string, defaultStr string) any {
+	switch jsonSchemaType {
+	case jsonSchemaTypeBoolean:
+		// Parse boolean from string ("true" -> true, "false" -> false)
+		if defaultStr == "true" {
+			return true
+		}
+		return false
+	case jsonSchemaTypeInteger:
+		// Parse integer from string
+		if val, err := strconv.ParseInt(defaultStr, 10, 64); err == nil {
+			return val
+		}
+		return defaultStr // Fallback to string if parsing fails
+	case jsonSchemaTypeNumber:
+		// Parse float from string
+		if val, err := strconv.ParseFloat(defaultStr, 64); err == nil {
+			return val
+		}
+		return defaultStr // Fallback to string if parsing fails
+	default:
+		// For strings, arrays, and other types, return as-is
+		return defaultStr
 	}
 }
 
@@ -692,7 +724,14 @@ func addFlagProperties(
 		// Add default if present
 		if flagDef.Default != "" && flagDef.Default != defaultValueFalse &&
 			flagDef.Default != defaultValueEmptyArray {
-			prop["default"] = flagDef.Default
+			// Convert string default to proper type (boolean, integer, number)
+			defaultStr, ok := flagDef.Default.(string)
+			if ok {
+				prop["default"] = convertDefaultValue(flagDef.Type, defaultStr)
+			} else {
+				// Already typed (shouldn't happen with current code, but handle gracefully)
+				prop["default"] = flagDef.Default
+			}
 		}
 
 		properties[flagName] = prop
