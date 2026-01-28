@@ -24,7 +24,7 @@ require (
 	github.com/opencontainers/runc v1.2.8 // indirect; CVE-2025-27612, CVE-2025-21613, CVE-2025-21613 fix
 	github.com/samber/do/v2 v2.0.0
 	github.com/siderolabs/talos v1.11.0-alpha.3
-	github.com/siderolabs/talos/pkg/machinery v1.12.1
+	github.com/siderolabs/talos/pkg/machinery v1.12.2
 	github.com/sirupsen/logrus v1.9.4
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
