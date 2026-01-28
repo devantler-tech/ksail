@@ -4,4 +4,4 @@
 # Image mappings:
 # - kindest/node → DefaultKindNodeImage in this package
 
-FROM kindest/node:v1.32.2
+FROM kindest/node:v1.35.0
