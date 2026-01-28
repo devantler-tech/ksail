@@ -277,6 +277,20 @@ func (m *Model) handleAbort() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// handleSnapshotRewind handles session snapshot rewind events.
+// This occurs when the session is rewound to a previous state (e.g., user discards changes).
+func (m *Model) handleSnapshotRewind() (tea.Model, tea.Cmd) {
+	// For now, just add an indicator and continue listening for events
+	// A more sophisticated implementation could reload session state
+	if len(m.messages) > 0 && m.messages[len(m.messages)-1].role == "assistant" {
+		last := &m.messages[len(m.messages)-1]
+		last.content += "\n\n[Session rewound to previous state]"
+		last.rendered = renderMarkdownWithRenderer(m.renderer, last.content)
+	}
+	m.updateViewportContent()
+	return m, m.waitForEvent()
+}
+
 // handleStreamErr handles streaming error events.
 func (m *Model) handleStreamErr(msg streamErrMsg) (tea.Model, tea.Cmd) {
 	m.isStreaming = false

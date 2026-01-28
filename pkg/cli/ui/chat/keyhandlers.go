@@ -145,7 +145,7 @@ func (m *Model) handleOpenSessionPicker() (tea.Model, tea.Cmd) {
 	if m.isStreaming {
 		return m, nil
 	}
-	sessions, _ := ListSessions()
+	sessions, _ := ListSessions(m.client)
 	m.availableSessions = sessions
 	m.filteredSessions = sessions // Start with all sessions
 	m.sessionFilterText = ""      // Reset filter
@@ -302,8 +302,7 @@ func (m *Model) handleCopyOutput() (tea.Model, tea.Cmd) {
 	for i := len(m.messages) - 1; i >= 0; i-- {
 		if m.messages[i].role == "assistant" && m.messages[i].content != "" {
 			// Copy the raw content (markdown) to clipboard.
-			// Silently ignore errors (clipboard may be unavailable in CI/headless environments).
-			// TODO: Consider logging clipboard errors at debug level for troubleshooting.
+			// Silently ignore errors since clipboard may be unavailable in CI/headless environments.
 			_ = clipboard.WriteAll(m.messages[i].content)
 
 			// Show feedback and schedule its clearing after 1.5 seconds

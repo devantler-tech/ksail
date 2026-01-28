@@ -10,6 +10,23 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	copilot "github.com/github/copilot-sdk/go"
+)
+
+const (
+	// sessionDirPerm is the permission for the sessions directory.
+	sessionDirPerm = 0o700
+	// sessionFilePerm is the permission for session files.
+	sessionFilePerm = 0o600
+	// maxSessionNameLength is the maximum length for generated session names.
+	maxSessionNameLength = 40
+	// truncatedNameSuffix is added when session names are truncated.
+	truncatedNameSuffix = "..."
+	// defaultSessionName is used when no name can be generated.
+	defaultSessionName = "New Chat"
+	// unnamedSessionName is used when SDK has no summary and no local name.
+	unnamedSessionName = "Unnamed"
 )
 
 // MessageMetadata represents metadata for a single message in a session.
@@ -20,13 +37,27 @@ type MessageMetadata struct {
 // SessionMetadata represents metadata for a chat session stored locally.
 // Message content is stored server-side by Copilot and retrieved via ResumeSession.
 type SessionMetadata struct {
-	ID        string            `json:"id"`
-	Name      string            `json:"name"`
-	Model     string            `json:"model,omitempty"`
-	AgentMode *bool             `json:"agentMode,omitempty"` // nil or true = agent mode, false = plan mode
-	Messages  []MessageMetadata `json:"messages,omitempty"`  // per-message metadata (agentMode for each user message)
-	CreatedAt time.Time         `json:"createdAt"`
-	UpdatedAt time.Time         `json:"updatedAt"`
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Model     string `json:"model,omitempty"`
+	AgentMode *bool  `json:"agentMode,omitempty"` // nil or true = agent mode, false = plan mode
+	// Messages stores per-message metadata (agentMode for each user message).
+	Messages    []MessageMetadata        `json:"messages,omitempty"`
+	SDKMetadata *copilot.SessionMetadata `json:"-"` // SDK metadata (not persisted)
+	CreatedAt   time.Time                `json:"createdAt"`
+	UpdatedAt   time.Time                `json:"updatedAt"`
+}
+
+// GetDisplayName returns the display name using hierarchy: Local Name → SDK Summary → "Unnamed".
+// User-defined names take precedence over SDK-generated summaries.
+func (s *SessionMetadata) GetDisplayName() string {
+	if s.Name != "" {
+		return s.Name
+	}
+	if s.SDKMetadata != nil && s.SDKMetadata.Summary != nil && *s.SDKMetadata.Summary != "" {
+		return *s.SDKMetadata.Summary
+	}
+	return unnamedSessionName
 }
 
 // sessionsDir returns the path to the chat sessions directory.
@@ -44,44 +75,49 @@ func ensureSessionsDir() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+	if err := os.MkdirAll(dir, sessionDirPerm); err != nil {
 		return "", fmt.Errorf("failed to create sessions directory: %w", err)
 	}
 	return dir, nil
 }
 
-// ListSessions returns all saved session metadata, sorted by UpdatedAt (most recent first).
-func ListSessions() ([]SessionMetadata, error) {
-	dir, err := sessionsDir()
+// ListSessions returns all session metadata from SDK, enriched with local metadata.
+// Sessions are sorted by ModifiedTime (most recent first), filtering out remote sessions.
+func ListSessions(client *copilot.Client) ([]SessionMetadata, error) {
+	// Get sessions from SDK
+	sdkSessions, err := client.ListSessions()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to list SDK sessions: %w", err)
 	}
 
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return []SessionMetadata{}, nil
-		}
-		return nil, fmt.Errorf("failed to read sessions directory: %w", err)
-	}
-
-	sessions := make([]SessionMetadata, 0, len(entries))
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
-			continue
+	sessions := make([]SessionMetadata, 0, len(sdkSessions))
+	for i := range sdkSessions {
+		sdkSession := &sdkSessions[i]
+		if sdkSession.IsRemote {
+			continue // Skip remote sessions
 		}
 
-		session, err := LoadSession(strings.TrimSuffix(entry.Name(), ".json"))
+		// Try to load local metadata
+		localSession, err := LoadSession(sdkSession.SessionID)
 		if err != nil {
-			// Skip corrupted sessions
-			continue
+			// No local metadata, create from SDK only
+			localSession = &SessionMetadata{
+				ID:   sdkSession.SessionID,
+				Name: "", // Will use SDK Summary or "Unnamed" for display
+			}
 		}
-		sessions = append(sessions, *session)
+
+		// Attach SDK metadata
+		localSession.SDKMetadata = sdkSession
+
+		sessions = append(sessions, *localSession)
 	}
 
-	// Sort by UpdatedAt descending (most recent first)
+	// Sort by SDK ModifiedTime descending (most recent first)
 	sort.Slice(sessions, func(i, j int) bool {
-		return sessions[i].UpdatedAt.After(sessions[j].UpdatedAt)
+		iTime := sessions[i].SDKMetadata.ModifiedTime
+		jTime := sessions[j].SDKMetadata.ModifiedTime
+		return iTime > jTime // String comparison works for ISO timestamps
 	})
 
 	return sessions, nil
@@ -149,9 +185,8 @@ func SaveSession(session *SessionMetadata) error {
 	}
 	session.UpdatedAt = time.Now()
 
-	// Name should be set by caller from first user message
 	if session.Name == "" {
-		session.Name = "New Chat"
+		session.Name = defaultSessionName
 	}
 
 	data, err := json.MarshalIndent(session, "", "  ")
@@ -160,15 +195,30 @@ func SaveSession(session *SessionMetadata) error {
 	}
 
 	path := filepath.Join(dir, session.ID+".json")
-	if err := os.WriteFile(path, data, 0o600); err != nil {
+	if err := os.WriteFile(path, data, sessionFilePerm); err != nil {
 		return fmt.Errorf("failed to write session file: %w", err)
 	}
 
 	return nil
 }
 
-// DeleteSession removes a chat session from disk.
-func DeleteSession(id string) error {
+// DeleteSession removes a chat session from both SDK and local disk.
+func DeleteSession(client *copilot.Client, id string) error {
+	if err := validateSessionID(id); err != nil {
+		return err
+	}
+
+	// Delete from SDK first
+	if err := client.DeleteSession(id); err != nil {
+		return fmt.Errorf("failed to delete SDK session: %w", err)
+	}
+
+	// Then delete local file
+	return deleteLocalSession(id)
+}
+
+// deleteLocalSession removes a chat session from local disk only.
+func deleteLocalSession(id string) error {
 	if err := validateSessionID(id); err != nil {
 		return err
 	}
@@ -189,13 +239,66 @@ func DeleteSession(id string) error {
 	return nil
 }
 
+// SyncSessionMetadata synchronizes local session files with SDK sessions.
+// It removes local session files that no longer exist in the SDK (excluding remote sessions).
+// Returns an error if sync fails (caller should display as non-blocking toast).
+func SyncSessionMetadata(client *copilot.Client) error {
+	// Get all sessions from SDK
+	sdkSessions, err := client.ListSessions()
+	if err != nil {
+		return fmt.Errorf("failed to list SDK sessions: %w", err)
+	}
+
+	// Build set of valid local SDK session IDs (excluding remote sessions)
+	validIDs := make(map[string]struct{})
+	for _, sdkSession := range sdkSessions {
+		if sdkSession.IsRemote {
+			continue // Skip remote sessions
+		}
+		validIDs[sdkSession.SessionID] = struct{}{}
+	}
+
+	// Get local sessions directory
+	dir, err := sessionsDir()
+	if err != nil {
+		return err
+	}
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil // No local sessions to sync
+		}
+		return fmt.Errorf("failed to read sessions directory: %w", err)
+	}
+
+	// Delete local files that don't exist in SDK
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
+			continue
+		}
+
+		id := strings.TrimSuffix(entry.Name(), ".json")
+		if _, exists := validIDs[id]; !exists {
+			// Local session doesn't exist in SDK, delete it
+			path := filepath.Join(dir, entry.Name())
+			if removeErr := os.Remove(path); removeErr != nil && !os.IsNotExist(removeErr) {
+				// Log error but continue with other files
+				continue
+			}
+		}
+	}
+
+	return nil
+}
+
 // ErrNoSessions is returned when there are no sessions available.
 var ErrNoSessions = errors.New("no sessions available")
 
 // GetMostRecentSession returns the most recently updated session metadata.
 // Returns ErrNoSessions if no sessions exist.
-func GetMostRecentSession() (*SessionMetadata, error) {
-	sessions, err := ListSessions()
+func GetMostRecentSession(client *copilot.Client) (*SessionMetadata, error) {
+	sessions, err := ListSessions(client)
 	if err != nil {
 		return nil, err
 	}
@@ -209,17 +312,17 @@ func GetMostRecentSession() (*SessionMetadata, error) {
 func GenerateSessionName(messages []chatMessage) string {
 	for _, msg := range messages {
 		if msg.role == "user" && msg.content != "" {
-			// Remove newlines first, then truncate
 			name := strings.ReplaceAll(msg.content, "\n", " ")
-			// Truncate to ~40 runes (Unicode-safe)
-			if utf8.RuneCountInString(name) > 40 {
+			if utf8.RuneCountInString(name) > maxSessionNameLength {
 				runes := []rune(name)
-				name = string(runes[:37]) + "..."
+				name = string(
+					runes[:maxSessionNameLength-len(truncatedNameSuffix)],
+				) + truncatedNameSuffix
 			}
 			return name
 		}
 	}
-	return "New Chat"
+	return defaultSessionName
 }
 
 // FormatRelativeTime formats a time as a relative string (e.g., "2 hours ago").

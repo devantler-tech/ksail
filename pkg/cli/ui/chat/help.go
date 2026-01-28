@@ -7,6 +7,15 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+// Help key symbols for consistent rendering.
+const (
+	keyEnter   = "⏎"
+	keyEscape  = "esc"
+	keyArrows  = "↑↓"
+	keyPageNav = "PgUp/Dn"
+	helpSep    = " • "
+)
+
 // helpKeyStyle renders keybinding keys.
 var helpKeyStyle = lipgloss.NewStyle().
 	Foreground(toolColor)
@@ -42,19 +51,19 @@ func (m *Model) renderHelpOverlay() string {
 	// Compact help content fitting in input area height (3 lines of content)
 	var content strings.Builder
 	content.WriteString(clipStyle.Render(
-		helpKeyStyle.Render("⏎")+" send • "+
-			helpKeyStyle.Render("Alt+⏎")+" newline • "+
-			helpKeyStyle.Render("↑↓")+" history • "+
-			helpKeyStyle.Render("PgUp/Dn")+" scroll") + "\n")
+		helpKeyStyle.Render(keyEnter)+" send"+helpSep+
+			helpKeyStyle.Render("Alt+"+keyEnter)+" newline"+helpSep+
+			helpKeyStyle.Render(keyArrows)+" history"+helpSep+
+			helpKeyStyle.Render(keyPageNav)+" scroll") + "\n")
 	content.WriteString(clipStyle.Render(
-		helpKeyStyle.Render("Tab")+" mode • "+
-			helpKeyStyle.Render("^T")+" tools • "+
-			helpKeyStyle.Render("^Y")+" copy • "+
-			helpKeyStyle.Render("^H")+" sessions • "+
-			helpKeyStyle.Render("^O")+" model • "+
+		helpKeyStyle.Render("Tab")+" mode"+helpSep+
+			helpKeyStyle.Render("^T")+" tools"+helpSep+
+			helpKeyStyle.Render("^Y")+" copy"+helpSep+
+			helpKeyStyle.Render("^H")+" sessions"+helpSep+
+			helpKeyStyle.Render("^O")+" model"+helpSep+
 			helpKeyStyle.Render("^N")+" new") + "\n")
 	content.WriteString(clipStyle.Render(
-		helpKeyStyle.Render("esc") + " close • " +
+		helpKeyStyle.Render(keyEscape) + " close" + helpSep +
 			helpKeyStyle.Render("^C") + " quit"))
 
 	// Use same height as input area (inputHeight = 3)
@@ -71,119 +80,149 @@ func (m *Model) renderShortHelp() string {
 	helpToggleWidth := lipgloss.Width(helpToggle)
 	usableWidth := availWidth - helpToggleWidth - 3 // Space for separator
 
-	var parts []string
+	parts := m.getContextHelpParts()
+	result := buildTruncatedHelp(parts, usableWidth)
 
-	// Context-specific help hints (keywords only)
+	// Always append help toggle
+	if result != "" {
+		result += helpSep
+	}
+	result += helpToggle
+
+	return helpStyle.Render("  " + result)
+}
+
+// getContextHelpParts returns help parts based on current UI context.
+func (m *Model) getContextHelpParts() []string {
 	switch {
 	case m.showHelpOverlay:
-		parts = []string{helpKeyStyle.Render("esc") + " close"}
+		return []string{helpKeyStyle.Render(keyEscape) + " close"}
 
 	case m.pendingPermission != nil:
-		parts = []string{
-			helpKeyStyle.Render("y") + " allow",
-			helpKeyStyle.Render("n") + " deny",
-			helpKeyStyle.Render("a") + " always",
-		}
+		return getPermissionHelpParts()
 
 	case m.showModelPicker:
-		if m.modelFilterActive {
-			parts = getFilterModeHelpParts()
-		} else {
-			parts = []string{
-				helpKeyStyle.Render("↑↓") + " select",
-				helpKeyStyle.Render("/") + " filter",
-				helpKeyStyle.Render("⏎") + " confirm",
-				helpKeyStyle.Render("esc") + " cancel",
-			}
-		}
+		return m.getModelPickerHelpParts()
 
 	case m.showSessionPicker:
-		if m.renamingSession {
-			parts = []string{
-				helpKeyStyle.Render("⏎") + " save",
-				helpKeyStyle.Render("esc") + " cancel",
-			}
-		} else if m.confirmDeleteSession {
-			parts = []string{
-				helpKeyStyle.Render("y") + " delete",
-				helpKeyStyle.Render("n") + " cancel",
-			}
-		} else if m.sessionFilterActive {
-			parts = getFilterModeHelpParts()
-		} else {
-			parts = []string{
-				helpKeyStyle.Render("↑↓") + " select",
-				helpKeyStyle.Render("/") + " filter",
-				helpKeyStyle.Render("r") + " rename",
-				helpKeyStyle.Render("d") + " delete",
-				helpKeyStyle.Render("esc") + " close",
-			}
-		}
+		return m.getSessionPickerHelpParts()
 
 	default:
-		// Default view - mode icon + common shortcuts
-		modeIcon := "</>"
-		if !m.agentMode {
-			modeIcon = "≡"
+		return m.getDefaultHelpParts()
+	}
+}
+
+// getPermissionHelpParts returns help for permission prompts.
+func getPermissionHelpParts() []string {
+	return []string{
+		helpKeyStyle.Render("y") + " allow",
+		helpKeyStyle.Render("n") + " deny",
+		helpKeyStyle.Render("a") + " always",
+	}
+}
+
+// getModelPickerHelpParts returns help for model picker state.
+func (m *Model) getModelPickerHelpParts() []string {
+	if m.modelFilterActive {
+		return getFilterModeHelpParts()
+	}
+	return []string{
+		helpKeyStyle.Render(keyArrows) + " select",
+		helpKeyStyle.Render("/") + " filter",
+		helpKeyStyle.Render(keyEnter) + " confirm",
+		helpKeyStyle.Render(keyEscape) + " cancel",
+	}
+}
+
+// getSessionPickerHelpParts returns help for session picker state.
+func (m *Model) getSessionPickerHelpParts() []string {
+	switch {
+	case m.renamingSession:
+		return []string{
+			helpKeyStyle.Render(keyEnter) + " save",
+			helpKeyStyle.Render(keyEscape) + " cancel",
 		}
-		parts = []string{
-			helpKeyStyle.Render("⏎") + " send",
-			helpKeyStyle.Render("Tab") + " " + modeIcon,
-			helpKeyStyle.Render("^H") + " sessions",
-			helpKeyStyle.Render("^O") + " model",
-			helpKeyStyle.Render("^N") + " new",
+	case m.confirmDeleteSession:
+		return []string{
+			helpKeyStyle.Render("y") + " delete",
+			helpKeyStyle.Render("n") + " cancel",
 		}
-		// Add copy output hint when there are assistant messages to copy
-		if m.hasAssistantMessages() {
-			parts = append(
-				parts[:1],
-				append([]string{helpKeyStyle.Render("^Y") + " copy"}, parts[1:]...)...)
-		}
-		// Add tool expand hint if tools exist
-		if len(m.toolOrder) > 0 || m.hasToolsInMessages() {
-			parts = append(
-				parts[:2],
-				append([]string{helpKeyStyle.Render("^T") + " tools"}, parts[2:]...)...)
+	case m.sessionFilterActive:
+		return getFilterModeHelpParts()
+	default:
+		return []string{
+			helpKeyStyle.Render(keyArrows) + " select",
+			helpKeyStyle.Render("/") + " filter",
+			helpKeyStyle.Render("r") + " rename",
+			helpKeyStyle.Render("d") + " delete",
+			helpKeyStyle.Render(keyEscape) + " close",
 		}
 	}
+}
 
-	// Build help string, fitting as many parts as possible within usableWidth
+// getDefaultHelpParts returns help for the default chat view.
+func (m *Model) getDefaultHelpParts() []string {
+	modeIcon := "</>"
+	if !m.agentMode {
+		modeIcon = "≡"
+	}
+
+	parts := []string{
+		helpKeyStyle.Render(keyEnter) + " send",
+	}
+
+	// Conditionally add copy hint
+	if m.hasAssistantMessages() {
+		parts = append(parts, helpKeyStyle.Render("^Y")+" copy")
+	}
+
+	parts = append(parts, helpKeyStyle.Render("Tab")+" "+modeIcon)
+
+	// Conditionally add tools hint
+	if len(m.toolOrder) > 0 || m.hasToolsInMessages() {
+		parts = append(parts, helpKeyStyle.Render("^T")+" tools")
+	}
+
+	parts = append(parts,
+		helpKeyStyle.Render("^H")+" sessions",
+		helpKeyStyle.Render("^O")+" model",
+		helpKeyStyle.Render("^N")+" new",
+	)
+
+	return parts
+}
+
+// buildTruncatedHelp builds a help string that fits within maxWidth.
+func buildTruncatedHelp(parts []string, maxWidth int) string {
 	var result strings.Builder
-	sep := " • "
 	currentWidth := 0
 
 	for i, part := range parts {
 		partWidth := lipgloss.Width(part)
 		sepWidth := 0
 		if i > 0 {
-			sepWidth = lipgloss.Width(sep)
+			sepWidth = lipgloss.Width(helpSep)
 		}
 
-		if currentWidth+sepWidth+partWidth > usableWidth {
-			break // Can't fit more
+		if currentWidth+sepWidth+partWidth > maxWidth {
+			break
 		}
 
 		if i > 0 {
-			result.WriteString(sep)
+			result.WriteString(helpSep)
 		}
 		result.WriteString(part)
 		currentWidth += sepWidth + partWidth
 	}
 
-	// Always append help toggle
-	if result.Len() > 0 {
-		result.WriteString(" • ")
-	}
-	result.WriteString(helpToggle)
-
-	return helpStyle.Render("  " + result.String())
+	return result.String()
 }
 
 // getFilterModeHelpParts returns help parts for filter mode (used by both model and session pickers).
 func getFilterModeHelpParts() []string {
 	return []string{
-		helpKeyStyle.Render("⏎") + " done",
-		helpKeyStyle.Render("esc") + " clear",
+		helpKeyStyle.Render(keyEnter) + " done",
+		helpKeyStyle.Render(keyEscape) + " clear",
 	}
 }
 

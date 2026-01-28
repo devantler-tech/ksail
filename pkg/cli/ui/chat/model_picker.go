@@ -154,14 +154,15 @@ func (m *Model) renderModelPickerModal() string {
 	clipStyle := lipgloss.NewStyle().MaxWidth(contentWidth).Inline(true)
 
 	totalItems := len(m.filteredModels) + 1
-	visibleCount := min(totalItems, maxPickerVisible)
+	maxVisible := m.calculateMaxPickerVisible()
+	visibleCount := min(totalItems, maxVisible)
 
-	scrollOffset := calculatePickerScrollOffset(m.modelPickerIndex, totalItems, maxPickerVisible)
+	scrollOffset := calculatePickerScrollOffset(m.modelPickerIndex, totalItems, maxVisible)
 
 	var listContent strings.Builder
 	m.renderModelPickerTitle(&listContent, clipStyle)
 
-	isScrollable := totalItems > maxPickerVisible
+	isScrollable := totalItems > maxVisible
 	renderScrollIndicatorTop(&listContent, clipStyle, isScrollable, scrollOffset)
 
 	endIdx := min(scrollOffset+visibleCount, totalItems)

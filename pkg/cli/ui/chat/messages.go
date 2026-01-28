@@ -47,9 +47,11 @@ type userSubmitMsg struct {
 
 // toolStartMsg signals the start of a tool execution.
 type toolStartMsg struct {
-	toolID   string
-	toolName string
-	command  string // The actual command being executed (e.g., "ksail cluster list --all")
+	toolID        string
+	toolName      string
+	command       string // The actual command being executed (e.g., "ksail cluster list --all")
+	mcpServerName string // MCP server name (if tool is from MCP server, empty otherwise)
+	mcpToolName   string // MCP tool name (if tool is from MCP server, empty otherwise)
 }
 
 // toolEndMsg signals the completion of a tool execution with its output.
@@ -93,3 +95,7 @@ type PermissionRequestMsg struct {
 
 // copyFeedbackClearMsg signals that the copy feedback should be hidden.
 type copyFeedbackClearMsg struct{}
+
+// snapshotRewindMsg signals that the session was rewound to a previous state.
+// This can happen when the user discards changes or reverts to a checkpoint.
+type snapshotRewindMsg struct{}

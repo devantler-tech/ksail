@@ -27,7 +27,9 @@ const (
 	footerHeight  = 1              // single line help text
 
 	// Shared picker/output constants.
-	maxPickerVisible   = 3  // maximum visible items in picker modals
+	maxPickerItems     = 10 // absolute maximum items in picker modals
+	minPickerItems     = 3  // minimum items to show in picker modals
+	minViewportHeight  = 10 // minimum height to preserve for main viewport
 	maxToolOutputLines = 10 // maximum lines shown in collapsed tool output
 	minWrapWidth       = 20 // minimum width for text wrapping
 
@@ -366,6 +368,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case abortMsg:
 		return m.handleAbort()
 
+	case snapshotRewindMsg:
+		return m.handleSnapshotRewind()
+
 	case streamErrMsg:
 		return m.handleStreamErr(msg)
 
@@ -416,6 +421,22 @@ func (m *Model) View() string {
 	// Join sections and clip final output to terminal width to prevent any wrapping
 	output := lipgloss.JoinVertical(lipgloss.Left, sections...)
 	return lipgloss.NewStyle().MaxWidth(m.width).Render(output)
+}
+
+// calculateMaxPickerVisible returns the maximum number of items that can be shown
+// in a picker modal without pushing the viewport out of view.
+func (m *Model) calculateMaxPickerVisible() int {
+	// Calculate available height: total - header - input - footer - borders
+	// Reserve space for: title (1) + scroll indicators (2) + borders (2) + minimum viewport
+	availableHeight := m.height - headerHeight - inputHeight - footerHeight - 4 - minViewportHeight
+
+	// Subtract space for picker overhead (title + top/bottom padding)
+	pickerOverhead := 3 // title + top/bottom padding
+	availableForItems := availableHeight - pickerOverhead
+
+	// Calculate max items: cap between min and max
+	maxItems := max(minPickerItems, min(availableForItems, maxPickerItems))
+	return maxItems
 }
 
 // renderHeader renders the header section with logo and status.
@@ -615,8 +636,9 @@ func (m *Model) activeModalHeight() int {
 		} else {
 			totalItems = len(m.filteredModels) + 1 // +1 for "auto" option
 		}
-		visibleCount := min(totalItems, maxPickerVisible)
-		isScrollable := totalItems > maxPickerVisible
+		maxVisible := m.calculateMaxPickerVisible()
+		visibleCount := min(totalItems, maxVisible)
+		isScrollable := totalItems > maxVisible
 
 		// Calculate content lines: title + visible items
 		contentLines := 1 + visibleCount
@@ -735,11 +757,25 @@ func (m *Model) streamResponseCmd(userMessage string) tea.Cmd {
 				if event.Data.ToolName != nil {
 					toolName = *event.Data.ToolName
 				}
+				// Check for MCP tool info (new in SDK v0.1.19)
+				var mcpServerName, mcpToolName string
+				if event.Data.MCPServerName != nil {
+					mcpServerName = *event.Data.MCPServerName
+				}
+				if event.Data.MCPToolName != nil {
+					mcpToolName = *event.Data.MCPToolName
+				}
 				// Extract command from arguments if available (for ksail tools)
 				command := extractCommandFromArgs(toolName, event.Data.Arguments)
 				// Generate tool ID from timestamp
 				toolID := fmt.Sprintf(toolIDFormat, time.Now().UnixNano())
-				eventChan <- toolStartMsg{toolID: toolID, toolName: toolName, command: command}
+				eventChan <- toolStartMsg{
+					toolID:        toolID,
+					toolName:      toolName,
+					command:       command,
+					mcpServerName: mcpServerName,
+					mcpToolName:   mcpToolName,
+				}
 			case copilot.ToolExecutionComplete:
 				toolName := unknownToolName
 				if event.Data.ToolName != nil {
@@ -751,6 +787,10 @@ func (m *Model) streamResponseCmd(userMessage string) tea.Cmd {
 				}
 				// Assume success if we got a result (SDK doesn't expose error state directly)
 				eventChan <- toolEndMsg{toolName: toolName, output: output, success: true}
+			case copilot.SessionSnapshotRewind:
+				// SessionSnapshotRewind indicates the session was rewound to a previous state
+				// This can happen when the user discards changes or reverts to a checkpoint
+				eventChan <- snapshotRewindMsg{}
 			}
 		})
 
