@@ -301,8 +301,9 @@ func (m *Model) handleCopyOutput() (tea.Model, tea.Cmd) {
 	// Find the last assistant message
 	for i := len(m.messages) - 1; i >= 0; i-- {
 		if m.messages[i].role == "assistant" && m.messages[i].content != "" {
-			// Copy the raw content (markdown) to clipboard
-			// Silently ignore errors (clipboard may be unavailable in CI/headless environments)
+			// Copy the raw content (markdown) to clipboard.
+			// Silently ignore errors (clipboard may be unavailable in CI/headless environments).
+			// TODO: Consider logging clipboard errors at debug level for troubleshooting.
 			_ = clipboard.WriteAll(m.messages[i].content)
 
 			// Show feedback and schedule its clearing after 1.5 seconds

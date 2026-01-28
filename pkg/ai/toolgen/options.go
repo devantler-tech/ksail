@@ -44,7 +44,7 @@ type OutputChunk struct {
 
 // DefaultOptions returns sensible default options for tool generation.
 // With permission-based consolidation, all workload and cluster commands are grouped
-// into 5 tools: workload_read, workload_write, cluster_read, cluster_write, and cipher.
+// into 6 tools: cluster_read, cluster_write, workload_read, workload_write, cipher_read, and cipher_write.
 func DefaultOptions() ToolOptions {
 	return ToolOptions{
 		ExcludeCommands: []string{

@@ -15,10 +15,10 @@ func GetKSailTools(rootCmd *cobra.Command, outputChan chan<- toolgen.OutputChunk
 	opts := toolgen.DefaultOptions()
 	opts.OutputChan = outputChan
 
-	// Get SDK-agnostic tool definitions
+	// Get SDK-agnostic tool definitions from Cobra command tree
 	toolDefs := toolgen.GenerateTools(rootCmd, opts)
 
-	// Convert to Copilot SDK tools
+	// Convert SDK-agnostic definitions to Copilot SDK format
 	return toolgen.ToCopilotTools(toolDefs, opts)
 }
 

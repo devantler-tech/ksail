@@ -922,6 +922,7 @@ func CreateTUIPermissionHandler(eventChan chan<- tea.Msg) copilot.PermissionHand
 
 // extractPermissionDetails extracts human-readable tool name and command from an SDK permission request.
 // The Extra map contains different fields depending on the permission kind.
+// Uses priority-based field checking with early returns to avoid deep nesting.
 func extractPermissionDetails(request copilot.PermissionRequest) (string, string) {
 	// Default tool name based on permission kind
 	toolName := formatPermissionKind(request.Kind)

@@ -12,6 +12,9 @@ func NewApplyCmd() *cobra.Command {
 		return client.CreateApplyCommand(kubeconfigPath)
 	})
 
+	// Mark as requiring permission for edit operations.
+	// Note: kubectl/helm may have their own confirmation prompts for certain operations.
+	// The permission system here is for AI tool execution confirmation.
 	cmd.Annotations = map[string]string{
 		annotations.AnnotationPermission: "write",
 	}

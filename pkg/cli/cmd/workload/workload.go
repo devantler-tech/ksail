@@ -20,7 +20,10 @@ func NewWorkloadCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
 		},
 		SilenceUsage: true,
 		Annotations: map[string]string{
-			annotations.AnnotationConsolidate: "command",
+			// Consolidate workload subcommands into tools split by permission:
+			// workload_read and workload_write.
+			// The "workload_command" parameter will select which command to execute.
+			annotations.AnnotationConsolidate: "workload_command",
 		},
 	}
 
