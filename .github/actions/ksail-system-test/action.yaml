@@ -36,9 +36,11 @@ inputs:
     required: false
     default: "k8s"
   workload-timeout:
-    description: Timeout for workload wait operations
+    description: |
+      Timeout for workload wait operations. Set to 10 minutes to handle
+      intermittent delays in CI environments (image pulls, resource contention).
     required: false
-    default: "300s"
+    default: "600s"
   hcloud-token:
     description: Hetzner Cloud API token (required when provider is Hetzner)
     required: false
