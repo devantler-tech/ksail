@@ -17,15 +17,13 @@ on:
     branches:
       - main
       - "**" # Monitor all branches including PRs
-  stop-after: +1mo
 
 # Only trigger for failures - check in the workflow body
 if: ${{ github.event.workflow_run.conclusion == 'failure' }}
 
 permissions: read-all
 
-network:
-  allowed: [defaults, go]
+network: defaults
 
 safe-outputs:
   app:
@@ -33,49 +31,21 @@ safe-outputs:
     private-key: ${{ secrets.APP_PRIVATE_KEY }}
   create-issue:
     title-prefix: "${{ github.workflow }}"
+    close-older-issues: true
   add-comment:
 
 tools:
+  github:
+    app:
+      app-id: ${{ vars.APP_ID }}
+      private-key: ${{ secrets.APP_PRIVATE_KEY }}
+    toolsets: [all]
   cache-memory: true
   web-fetch:
-  web-search:
+  bash:
 
 timeout-minutes: 60
-
-source: githubnext/agentics/workflows/ci-doctor.md@c5da0cdbfae2a3cba74f330ca34424a4aea929f5
-
-steps:
-  - name: Initialize safe outputs directory
-    if: always()
-    run: |
-      # Create safe outputs directories to prevent file not found errors
-      mkdir -p /opt/gh-aw/safeoutputs
-      mkdir -p /tmp/gh-aw/safeoutputs
-      # Create empty safe outputs file if it doesn't exist
-      # This ensures the "Ingest agent output" step can process it
-      touch /opt/gh-aw/safeoutputs/outputs.jsonl
-      # Pre-create the agent output file that will be uploaded
-      # This ensures the artifact upload always has a file to upload
-      echo '{}' > /tmp/gh-aw/safeoutputs/agent_output.json
-
-post-steps:
-  - name: Ensure agent output artifact exists
-    if: always()
-    run: |
-      # Ensure the agent output file exists for artifact upload
-      # This step runs after the main workflow and ensures the file is present
-      if [ ! -f "/tmp/gh-aw/safeoutputs/agent_output.json" ]; then
-        mkdir -p /tmp/gh-aw/safeoutputs
-        echo '{}' > /tmp/gh-aw/safeoutputs/agent_output.json
-      fi
-  - name: Upload agent output fallback
-    if: always()
-    continue-on-error: true
-    uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
-    with:
-      name: agent-output
-      path: /tmp/gh-aw/safeoutputs/agent_output.json
-      overwrite: true
+source: githubnext/agentics/workflows/ci-doctor.md@1ef9dbe65e8265b57fe2ffa76098457cf3ae2b32
 ---
 
 # CI Failure Doctor
