@@ -264,18 +264,23 @@ func convertDefaultValue(jsonSchemaType string, defaultStr string) any {
 		if defaultStr == "true" {
 			return true
 		}
+
 		return false
 	case jsonSchemaTypeInteger:
 		// Parse integer from string
-		if val, err := strconv.ParseInt(defaultStr, 10, 64); err == nil {
+		val, err := strconv.ParseInt(defaultStr, 10, 64)
+		if err == nil {
 			return val
 		}
+
 		return defaultStr // Fallback to string if parsing fails
 	case jsonSchemaTypeNumber:
 		// Parse float from string
-		if val, err := strconv.ParseFloat(defaultStr, 64); err == nil {
+		val, err := strconv.ParseFloat(defaultStr, 64)
+		if err == nil {
 			return val
 		}
+
 		return defaultStr // Fallback to string if parsing fails
 	default:
 		// For strings, arrays, and other types, return as-is
