@@ -8,7 +8,6 @@ description: |
 on:
   schedule: daily
   workflow_dispatch:
-  stop-after: +1mo # workflow will no longer trigger after 1 month
 
 timeout-minutes: 15
 
@@ -24,6 +23,7 @@ safe-outputs:
   create-discussion:
     title-prefix: "${{ github.workflow }}"
     category: "agentic-workflows"
+    close-older-discussions: true
   add-comment:
     target: "*" # all issues and PRs
     max: 5
@@ -32,45 +32,14 @@ safe-outputs:
 
 tools:
   github:
+    app:
+      app-id: ${{ vars.APP_ID }}
+      private-key: ${{ secrets.APP_PRIVATE_KEY }}
     toolsets: [all]
   web-fetch:
-  web-search:
   bash:
 
-source: githubnext/agentics/workflows/daily-qa.md@c5da0cdbfae2a3cba74f330ca34424a4aea929f5
-
-steps:
-  - name: Initialize safe outputs directory
-    if: always()
-    run: |
-      # Create safe outputs directories to prevent file not found errors
-      mkdir -p /opt/gh-aw/safeoutputs
-      mkdir -p /tmp/gh-aw/safeoutputs
-      # Create empty safe outputs file if it doesn't exist
-      # This ensures the "Ingest agent output" step can process it
-      touch /opt/gh-aw/safeoutputs/outputs.jsonl
-      # Pre-create the agent output file that will be uploaded
-      # This ensures the artifact upload always has a file to upload
-      echo '{}' > /tmp/gh-aw/safeoutputs/agent_output.json
-
-post-steps:
-  - name: Ensure agent output artifact exists
-    if: always()
-    run: |
-      # Ensure the agent output file exists for artifact upload
-      # This step runs after the main workflow and ensures the file is present
-      if [ ! -f "/tmp/gh-aw/safeoutputs/agent_output.json" ]; then
-        mkdir -p /tmp/gh-aw/safeoutputs
-        echo '{}' > /tmp/gh-aw/safeoutputs/agent_output.json
-      fi
-  - name: Upload agent output fallback
-    if: always()
-    continue-on-error: true
-    uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
-    with:
-      name: agent-output
-      path: /tmp/gh-aw/safeoutputs/agent_output.json
-      overwrite: true
+source: githubnext/agentics/workflows/daily-qa.md@1ef9dbe65e8265b57fe2ffa76098457cf3ae2b32
 ---
 
 # Daily QA
