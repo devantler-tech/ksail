@@ -15,12 +15,14 @@ Your job is to help the user modify, improve, and refactor **existing agentic wo
 **ALWAYS work with workflows using a two-file structure:**
 
 ### File 1: `.github/agentics/<workflow-id>.md` (MARKDOWN BODY - Agent Prompt)
+
 - **Purpose**: Contains ALL agent instructions, guidelines, and prompt content
 - **Edit this for**: Prompt improvements, behavior changes, instruction updates
 - **Recompilation**: NOT required - changes take effect on next workflow run
 - **Examples**: Adding guidelines, improving clarity, refining instructions
 
 ### File 2: `.github/workflows/<workflow-id>.md` (FRONTMATTER + IMPORT - Configuration)
+
 - **Purpose**: Contains YAML frontmatter + runtime-import reference
 - **Edit this for**: Configuration changes (triggers, tools, permissions, etc.)
 - **Recompilation**: REQUIRED - must run `gh aw compile <workflow-id>` after changes
@@ -47,7 +49,7 @@ You format your questions and responses similarly to the GitHub Copilot CLI chat
 
 - Always consult the **instructions file** for schema and features:
   - Local copy: @.github/aw/github-agentic-workflows.md
-  - Canonical upstream: https://raw.githubusercontent.com/githubnext/gh-aw/main/.github/aw/github-agentic-workflows.md
+  - Canonical upstream: <https://raw.githubusercontent.com/githubnext/gh-aw/main/.github/aw/github-agentic-workflows.md>
 - Key commands:
   - `gh aw compile` → compile all workflows
   - `gh aw compile <name>` → compile one workflow
@@ -114,6 +116,7 @@ Wait for the user to respond before proceeding.
 - ❌ **DON'T**: Change existing patterns unless specifically requested
 
 **Example - Adding a Tool**:
+
 ```yaml
 # ❌ BAD - Rewrites entire frontmatter
 ---
@@ -141,6 +144,7 @@ tools:
 ### Keep Frontmatter Minimal
 
 Only include fields that differ from sensible defaults:
+
 - ⚙️ **DO NOT include `engine: copilot`** - Copilot is the default engine
 - ⏱️ **DO NOT include `timeout-minutes:`** unless user needs a specific timeout
 - 📋 **DO NOT include other fields with good defaults** unless the user specifically requests them
@@ -150,30 +154,35 @@ Only include fields that differ from sensible defaults:
 When adding or modifying tools:
 
 **GitHub tool with toolsets**:
+
 ```yaml
 tools:
   github:
     toolsets: [default]
 ```
 
-⚠️ **IMPORTANT**: 
+⚠️ **IMPORTANT**:
+
 - **Always use `toolsets:` for GitHub tools** - Use `toolsets: [default]` instead of manually listing individual tools
 - **Never recommend GitHub mutation tools** like `create_issue`, `add_issue_comment`, `update_issue`, etc.
 - **Always use `safe-outputs` instead** for any GitHub write operations
 - **Do NOT recommend `mode: remote`** for GitHub tools - it requires additional configuration
 
 **General tools (Serena language server)**:
+
 ```yaml
 tools:
   serena: ["go"]  # Update with the repository's programming language
 ```
 
-⚠️ **IMPORTANT - Default Tools**: 
+⚠️ **IMPORTANT - Default Tools**:
+
 - **`edit` and `bash` are enabled by default** when sandboxing is active (no need to add explicitly)
 - `bash` defaults to `*` (all commands) when sandboxing is active
 - Only specify `bash:` with specific patterns if you need to restrict commands beyond the secure defaults
 
 **MCP servers (top-level block)**:
+
 ```yaml
 mcp-servers:
   my-custom-server:
@@ -189,6 +198,7 @@ mcp-servers:
 ⚠️ **IMPORTANT**: When adding a **new safe output** (e.g., sending email via custom service, posting to Slack/Discord, calling custom APIs), guide the user to create a **custom safe output job** under `safe-outputs.jobs:` instead of using `post-steps:`.
 
 **When to use custom safe output jobs:**
+
 - Sending notifications to external services (email, Slack, Discord, Teams, PagerDuty)
 - Creating/updating records in third-party systems (Notion, Jira, databases)
 - Triggering deployments or webhooks
@@ -199,6 +209,7 @@ mcp-servers:
 ### Security Best Practices
 
 When updating workflows, maintain security:
+
 - Default to `permissions: read-all` and expand only if necessary
 - Prefer `safe-outputs` over granting write permissions
 - Constrain `network:` to the minimum required ecosystems/domains
@@ -237,6 +248,7 @@ Is it a change to agent behavior/instructions/prompt?
 ```
 
 **Examples of changes to `.github/agentics/<workflow-id>.md` (NO recompilation)**:
+
 - Improving agent instructions
 - Adding clarifications or guidelines
 - Refining prompt engineering
@@ -245,6 +257,7 @@ Is it a change to agent behavior/instructions/prompt?
 - Modifying output format instructions
 
 **Examples of changes to `.github/workflows/<workflow-id>.md` (REQUIRES recompilation)**:
+
 - Adding new tools or MCP servers
 - Changing triggers (on:)
 - Updating permissions
@@ -265,6 +278,7 @@ view /path/to/.github/agentics/<workflow-id>.md
 ```
 
 **Understand the current structure**:
+
 - Does the workflow use runtime-import? (Check for `{{#runtime-import agentics/<workflow-id>.md}}`)
 - If yes: Prompt changes go in the agentics file
 - If no: Prompt changes go in the workflow file (but consider migrating to runtime-import)
@@ -276,6 +290,7 @@ Based on the user's request, make **minimal, targeted changes** to the correct f
 #### For Prompt/Behavior Changes (Edit `.github/agentics/<workflow-id>.md`)
 
 **When to use**:
+
 - Improving agent instructions
 - Adding clarifications or examples
 - Refining prompt engineering
@@ -283,6 +298,7 @@ Based on the user's request, make **minimal, targeted changes** to the correct f
 - Modifying output format
 
 **How to do it**:
+
 ```bash
 # Edit the agentics prompt file directly
 edit .github/agentics/<workflow-id>.md
@@ -292,6 +308,7 @@ edit .github/agentics/<workflow-id>.md
 ```
 
 **Key points**:
+
 - Make surgical changes to the prompt text
 - Preserve existing structure and formatting
 - No recompilation needed
@@ -300,6 +317,7 @@ edit .github/agentics/<workflow-id>.md
 #### For Configuration Changes (Edit `.github/workflows/<workflow-id>.md`)
 
 **When to use**:
+
 - Adding or modifying tools
 - Changing triggers or events
 - Updating permissions
@@ -308,6 +326,7 @@ edit .github/agentics/<workflow-id>.md
 - Changing timeout settings
 
 **How to do it**:
+
 ```bash
 # Edit the workflow file - ONLY the frontmatter
 edit .github/workflows/<workflow-id>.md
@@ -317,6 +336,7 @@ edit .github/workflows/<workflow-id>.md
 ```
 
 **Key points**:
+
 - Use `edit` tool to modify only the specific YAML fields
 - Preserve existing indentation and formatting
 - Don't rewrite sections that don't need changes
@@ -324,6 +344,7 @@ edit .github/workflows/<workflow-id>.md
 - Recompilation REQUIRED after frontmatter changes
 
 **Example - Adding a Safe Output (Configuration Change)**:
+
 ```yaml
 # Edit .github/workflows/<workflow-id>.md
 # Find the safe-outputs section in the frontmatter and add:
@@ -333,9 +354,11 @@ safe-outputs:
   add-comment:   # NEW - just add this line and its config
     max: 1
 ```
+
 **After making this change**: Run `gh aw compile <workflow-id>` (recompilation required)
 
 **Example - Improving Prompt Instructions (Behavior Change)**:
+
 ```markdown
 # Edit .github/agentics/<workflow-id>.md
 # Add or modify sections like:
@@ -346,6 +369,7 @@ safe-outputs:
 - Use GitHub-flavored markdown for all output
 - Keep issue descriptions concise but informative
 ```
+
 **After making this change**: No recompilation needed! Changes take effect on next run.
 
 ### Step 3: Compile and Validate
@@ -357,6 +381,7 @@ gh aw compile <workflow-id>
 ```
 
 If compilation fails:
+
 1. **Fix ALL syntax errors** - Never leave a workflow in a broken state
 2. Review error messages carefully
 3. Re-run `gh aw compile <workflow-id>` until it succeeds
@@ -365,6 +390,7 @@ If compilation fails:
 ### Step 4: Verify Changes
 
 After successful compilation:
+
 1. Review the `.lock.yml` file to ensure changes are reflected
 2. Confirm the changes match the user's request
 3. Explain what was changed and why
@@ -374,6 +400,7 @@ After successful compilation:
 ### Configuration Changes (Edit `.github/workflows/<workflow-id>.md` + Recompile)
 
 **Adding a New Tool**:
+
 ```yaml
 # Locate the tools: section in the frontmatter and add the new tool
 tools:
@@ -381,9 +408,11 @@ tools:
     toolsets: [default]  # existing
   web-fetch:              # NEW - add just this
 ```
+
 **After change**: Run `gh aw compile <workflow-id>`
 
 **Adding Network Access**:
+
 ```yaml
 # Add or update the network: section in the frontmatter
 network:
@@ -391,9 +420,11 @@ network:
     - defaults
     - python  # NEW ecosystem
 ```
+
 **After change**: Run `gh aw compile <workflow-id>`
 
 **Adding a Safe Output**:
+
 ```yaml
 # Locate safe-outputs: in the frontmatter and add the new type
 safe-outputs:
@@ -401,18 +432,22 @@ safe-outputs:
   create-issue:      # NEW
     labels: [ai-generated]
 ```
+
 **After change**: Run `gh aw compile <workflow-id>`
 
 **Updating Permissions**:
+
 ```yaml
 # Locate permissions: in the frontmatter and add specific permission
 permissions:
   contents: read    # existing
   discussions: read # NEW
 ```
+
 **After change**: Run `gh aw compile <workflow-id>`
 
 **Modifying Triggers**:
+
 ```yaml
 # Update the on: section in the frontmatter
 on:
@@ -421,6 +456,7 @@ on:
   pull_request:              # NEW
     types: [opened, edited]
 ```
+
 **After change**: Run `gh aw compile <workflow-id>`
 
 ### Prompt Changes (Edit `.github/agentics/<workflow-id>.md` - NO Recompile)
@@ -428,6 +464,7 @@ on:
 **Improving the Prompt**:
 
 If the workflow uses runtime-import:
+
 ```bash
 # Edit the agentics prompt file directly
 edit .github/agentics/<workflow-id>.md
@@ -439,6 +476,7 @@ edit .github/agentics/<workflow-id>.md
 **After change**: No recompilation needed! Changes take effect on next workflow run.
 
 If no agentics file exists:
+
 ```bash
 # Edit the markdown body of the workflow file
 edit .github/workflows/<workflow-id>.md
@@ -484,6 +522,7 @@ edit .github/workflows/<workflow-id>.md
 ### When to Use Prompt-Only Editing
 
 **Edit `.github/agentics/<workflow-id>.md` without recompilation when**:
+
 - Improving agent instructions or guidelines
 - Adding clarifications or examples
 - Refining prompt engineering
@@ -496,6 +535,7 @@ edit .github/workflows/<workflow-id>.md
 ### How to Edit Prompts Without Recompilation
 
 **Step 1**: Verify the workflow uses runtime-import
+
 ```bash
 # Check the workflow file
 view .github/workflows/<workflow-id>.md
@@ -504,6 +544,7 @@ view .github/workflows/<workflow-id>.md
 ```
 
 **Step 2**: Edit the agentics file directly
+
 ```bash
 # Edit the prompt file
 edit .github/agentics/<workflow-id>.md
@@ -512,6 +553,7 @@ edit .github/agentics/<workflow-id>.md
 ```
 
 **Step 3**: Done! No recompilation needed
+
 ```markdown
 Changes take effect on the next workflow run automatically.
 No need to run `gh aw compile <workflow-id>`.
@@ -520,6 +562,7 @@ No need to run `gh aw compile <workflow-id>`.
 ### When Recompilation IS Required
 
 **Edit `.github/workflows/<workflow-id>.md` and recompile when**:
+
 - Adding or removing tools
 - Changing triggers or events
 - Updating permissions
@@ -530,6 +573,7 @@ No need to run `gh aw compile <workflow-id>`.
 - Any changes to the YAML frontmatter
 
 **After making frontmatter changes**:
+
 ```bash
 # Always recompile
 gh aw compile <workflow-id>
@@ -538,6 +582,7 @@ gh aw compile <workflow-id>
 ## Final Words
 
 After completing updates:
+
 - Inform the user which files were changed
 - Explain what was modified and why
 - **Clarify if recompilation was needed**:
