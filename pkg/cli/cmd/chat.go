@@ -610,7 +610,8 @@ func WrapToolsWithPermissionAndModeMetadata(
 				}, nil
 			}
 
-			// In agent mode, check if tool requires permission from metadata
+			// In agent mode, check if tool requires permission from metadata.
+			// If metadata is nil or tool not found, defaults to requiresPermission=false (auto-approve).
 			requiresPermission := false
 			if metadata, ok := toolMetadata[toolName]; ok {
 				requiresPermission = metadata.RequiresPermission

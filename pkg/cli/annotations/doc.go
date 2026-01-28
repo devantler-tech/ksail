@@ -4,6 +4,8 @@
 // These annotations are used by the toolgen package to generate AI-accessible tools
 // and by the chat interface to enforce permission checks for edit operations.
 //
+// See also: pkg/ai/toolgen for annotation processing and tool generation.
+//
 // # Available Annotations
 //
 // AnnotationExclude: Exclude a command and all its subcommands from AI tool generation.

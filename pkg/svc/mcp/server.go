@@ -1,4 +1,4 @@
-// Package mcp provides MCP server functionality for KSail integration.
+// Package mcp provides an MCP server for exposing KSail commands as tools.
 package mcp
 
 import (
@@ -59,6 +59,7 @@ func NewServer(cfg ServerConfig) (*mcpsdk.Server, error) {
 
 	// Generate tool definitions
 	// Use DefaultOptions() to expose all tools except metadata commands.
+	// Excluded commands: chat, mcp, completion, help (see toolgen.DefaultOptions()).
 	// MCP clients can toggle individual tools on/off as needed.
 	opts := toolgen.DefaultOptions()
 	if cfg.WorkingDirectory != "" {

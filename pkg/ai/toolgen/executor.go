@@ -153,7 +153,8 @@ func executeCommand(
 	toolName string,
 	opts ToolOptions,
 ) (string, error) {
-	// Create context with timeout
+	// Create context with timeout.
+	// If opts.CommandTimeout is 0 or negative, no timeout is applied.
 	execCtx := ctx
 
 	if opts.CommandTimeout > 0 {
@@ -256,6 +257,12 @@ type streamConfig struct {
 
 // streamOutput reads from a reader and sends chunks to the output channel.
 // Also accumulates output in the provided buffer for returning to the LLM.
+//
+// Note: Uses bufio.Scanner which has a default max token size of 64KB.
+// For KSail use cases (command output), this is acceptable. If extremely long lines
+// are encountered, Scanner.Scan() will fail and stop reading. The command will still
+// complete, but output may be truncated. If this becomes an issue, consider using
+// bufio.Reader.ReadString('\n') or scanner.Buffer() to increase the limit.
 func streamOutput(cfg streamConfig) {
 	scanner := bufio.NewScanner(cfg.pipeReader)
 

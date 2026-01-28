@@ -639,6 +639,8 @@ func buildSubcommandEnumProperty(subcommands map[string]*SubcommandDef) map[stri
 }
 
 // mergeSubcommandFlags collects all flags from subcommands, tracking which subcommands each applies to.
+// If multiple subcommands have the same flag name, the later definition overwrites the earlier one.
+// For consistent behavior, flags with the same name should have the same type and description across subcommands.
 func mergeSubcommandFlags(subcommands map[string]*SubcommandDef) map[string]*FlagDef {
 	allFlags := make(map[string]*FlagDef)
 

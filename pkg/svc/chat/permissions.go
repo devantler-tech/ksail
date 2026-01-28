@@ -12,8 +12,8 @@ import (
 )
 
 // CreatePermissionHandler creates a permission handler that manages user consent
-// for tool operations. Read operations (read, url) are auto-approved, while write
-// operations require explicit user confirmation via an interactive prompt.
+// for tool operations. Read operations with kind "read" or "url" are auto-approved,
+// while write operations require explicit user confirmation via an interactive prompt.
 //
 // The handler displays operation details in a formatted box showing:
 //   - Tool name being executed
