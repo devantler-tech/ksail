@@ -27,9 +27,6 @@ network:
   allowed: [defaults, go]
 
 safe-outputs:
-  app:
-    app-id: ${{ vars.APP_ID }}
-    private-key: ${{ secrets.APP_PRIVATE_KEY }}
   create-issue:
     title-prefix: "${{ github.workflow }}"
     close-older-issues: true
@@ -37,9 +34,6 @@ safe-outputs:
 
 tools:
   github:
-    app:
-      app-id: ${{ vars.APP_ID }}
-      private-key: ${{ secrets.APP_PRIVATE_KEY }}
     toolsets: [all]
   cache-memory: true
   web-fetch:
