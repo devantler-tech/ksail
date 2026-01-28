@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"k8s.io/client-go/tools/clientcmd"
+	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
 
 // kubeconfigFileMode is the file mode for kubeconfig files.
@@ -65,12 +66,7 @@ func removeEntriesFromKubeconfig(
 	}
 
 	// Check if any entries exist to remove
-	_, hasContext := kubeConfig.Contexts[contextName]
-	_, hasCluster := kubeConfig.Clusters[clusterName]
-	_, hasUser := kubeConfig.AuthInfos[userName]
-	clearCurrentCtx := kubeConfig.CurrentContext == contextName
-
-	if !hasContext && !hasCluster && !hasUser && !clearCurrentCtx {
+	if !hasKubeconfigEntriesToCleanup(kubeConfig, contextName, clusterName, userName) {
 		return nil
 	}
 
@@ -78,7 +74,7 @@ func removeEntriesFromKubeconfig(
 	delete(kubeConfig.Clusters, clusterName)
 	delete(kubeConfig.AuthInfos, userName)
 
-	if clearCurrentCtx {
+	if kubeConfig.CurrentContext == contextName {
 		kubeConfig.CurrentContext = ""
 	}
 
@@ -96,4 +92,20 @@ func removeEntriesFromKubeconfig(
 	}
 
 	return nil
+}
+
+// hasKubeconfigEntriesToCleanup checks if any kubeconfig entries exist for cleanup.
+// Returns true if at least one of: context, cluster, user, or current-context needs removal.
+func hasKubeconfigEntriesToCleanup(
+	kubeConfig *clientcmdapi.Config,
+	contextName string,
+	clusterName string,
+	userName string,
+) bool {
+	_, hasContext := kubeConfig.Contexts[contextName]
+	_, hasCluster := kubeConfig.Clusters[clusterName]
+	_, hasUser := kubeConfig.AuthInfos[userName]
+	isCurrentContext := kubeConfig.CurrentContext == contextName
+
+	return hasContext || hasCluster || hasUser || isCurrentContext
 }

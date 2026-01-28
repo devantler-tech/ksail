@@ -99,6 +99,8 @@ func policyEngineFactory(
 		//nolint:exhaustive // PolicyEngineNone is handled above with early return
 		switch engine {
 		case v1alpha1.PolicyEngineKyverno:
+			timeout = installer.MaxTimeout(timeout, installer.KyvernoInstallTimeout)
+
 			return kyvernoinstaller.NewKyvernoInstaller(helmClient, timeout), nil
 		case v1alpha1.PolicyEngineGatekeeper:
 			return gatekeeperinstaller.NewGatekeeperInstaller(helmClient, timeout), nil
@@ -445,26 +447,41 @@ func buildArgoCDEnsureOptions(
 	clusterCfg *v1alpha1.Cluster,
 	clusterName string,
 ) argocdgitops.EnsureOptions {
-	localRegistry := clusterCfg.Spec.Cluster.LocalRegistry
 	opts := argocdgitops.EnsureOptions{
 		SourcePath:      ".",
 		ApplicationName: "ksail",
 		TargetRevision:  "dev",
 	}
 
-	// For external registries, use the configured host, path, and credentials
+	localRegistry := clusterCfg.Spec.Cluster.LocalRegistry
 	if localRegistry.IsExternal() {
-		parsed := localRegistry.Parse()
-		opts.RepositoryURL = fmt.Sprintf("oci://%s/%s", parsed.Host, parsed.Path)
-		username, password := localRegistry.ResolveCredentials()
-		opts.Username = username
-		opts.Password = password
-		opts.Insecure = false
-
-		return opts
+		applyExternalRegistryOptions(&opts, localRegistry)
+	} else {
+		applyLocalRegistryOptions(&opts, clusterCfg, clusterName)
 	}
 
-	// For local registries, use cluster-prefixed registry name for in-cluster DNS resolution
+	return opts
+}
+
+// applyExternalRegistryOptions configures options for external OCI registries.
+func applyExternalRegistryOptions(
+	opts *argocdgitops.EnsureOptions,
+	localRegistry v1alpha1.LocalRegistry,
+) {
+	parsed := localRegistry.Parse()
+	opts.RepositoryURL = fmt.Sprintf("oci://%s/%s", parsed.Host, parsed.Path)
+	username, password := localRegistry.ResolveCredentials()
+	opts.Username = username
+	opts.Password = password
+	opts.Insecure = false
+}
+
+// applyLocalRegistryOptions configures options for local in-cluster registries.
+func applyLocalRegistryOptions(
+	opts *argocdgitops.EnsureOptions,
+	clusterCfg *v1alpha1.Cluster,
+	clusterName string,
+) {
 	sourceDir := strings.TrimSpace(clusterCfg.Spec.Workload.SourceDirectory)
 	if sourceDir == "" {
 		sourceDir = v1alpha1.DefaultSourceDirectory
@@ -478,6 +495,4 @@ func buildArgoCDEnsureOptions(
 	)
 	opts.RepositoryURL = fmt.Sprintf("oci://%s/%s", hostPort, repoName)
 	opts.Insecure = true
-
-	return opts
 }
