@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/ai/toolgen"
-	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp" //nolint:depguard // MCP SDK is required for MCP server
+	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/spf13/cobra"
 )
 

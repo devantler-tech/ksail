@@ -6,7 +6,7 @@ import (
 	"os"
 
 	"k8s.io/client-go/tools/clientcmd"
-	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
+	"k8s.io/client-go/tools/clientcmd/api"
 )
 
 // kubeconfigFileMode is the file mode for kubeconfig files.
@@ -97,7 +97,7 @@ func removeEntriesFromKubeconfig(
 // hasKubeconfigEntriesToCleanup checks if any kubeconfig entries exist for cleanup.
 // Returns true if at least one of: context, cluster, user, or current-context needs removal.
 func hasKubeconfigEntriesToCleanup(
-	kubeConfig *clientcmdapi.Config,
+	kubeConfig *api.Config,
 	contextName string,
 	clusterName string,
 	userName string,

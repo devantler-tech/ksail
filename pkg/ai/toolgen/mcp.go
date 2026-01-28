@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/modelcontextprotocol/go-sdk/mcp" //nolint:depguard // MCP SDK is required for MCP integration
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // ToMCPTools converts tool definitions to MCP server tools.

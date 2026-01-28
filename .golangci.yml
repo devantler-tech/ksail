@@ -282,6 +282,7 @@ linters:
             - github.com/k3d-io
             - github.com/rancher
             - github.com/mittwald
+            - github.com/modelcontextprotocol
             - github.com/spf13/cobra
             - github.com/spf13/pflag
             - github.com/spf13/viper
