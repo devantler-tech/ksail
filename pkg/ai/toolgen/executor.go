@@ -258,11 +258,15 @@ type streamConfig struct {
 // streamOutput reads from a reader and sends chunks to the output channel.
 // Also accumulates output in the provided buffer for returning to the LLM.
 //
-// Note: Uses bufio.Scanner which has a default max token size of 64KB.
-// For KSail use cases (command output), this is acceptable. If extremely long lines
-// are encountered, Scanner.Scan() will fail and stop reading. The command will still
-// complete, but output may be truncated. If this becomes an issue, consider using
-// bufio.Reader.ReadString('\n') or scanner.Buffer() to increase the limit.
+// Scanner Limit Behavior:
+// Uses bufio.Scanner with a default max token (line) size of 64KB. When a line exceeds
+// this limit, Scanner.Scan() returns false and scanning stops silently. This results in:
+//   - Partial output being sent to the UI and LLM (all lines before the too-long line)
+//   - The command continues executing but remaining output is not captured
+//   - No error is returned to the caller (output truncation is silent)
+//
+// For typical KSail command output, 64KB per line is sufficient. If truncation occurs,
+// increase the buffer with scanner.Buffer() or switch to bufio.Reader.ReadString('\n').
 func streamOutput(cfg streamConfig) {
 	scanner := bufio.NewScanner(cfg.pipeReader)
 

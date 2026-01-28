@@ -194,6 +194,9 @@ func handleChatRunE(cmd *cobra.Command) error {
 
 	// Non-TUI mode: set up tools without streaming
 	tools, toolMetadata := chatsvc.GetKSailToolMetadata(cmd.Root(), nil)
+	// In non-TUI mode, pass nil for eventChan and agentModeRef:
+	// - nil eventChan: tool execution is not streamed to UI (output goes directly to LLM)
+	// - nil agentModeRef: agent mode is always enabled (no plan-only mode in non-TUI)
 	tools = WrapToolsWithPermissionAndModeMetadata(tools, nil, nil, toolMetadata)
 	sessionConfig.Tools = tools
 

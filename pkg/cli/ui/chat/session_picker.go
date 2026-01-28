@@ -11,6 +11,13 @@ import (
 	copilot "github.com/github/copilot-sdk/go"
 )
 
+const (
+	// maxSessionDisplayLength is the maximum display length for session names in the picker before truncation.
+	maxSessionDisplayLength = 30
+	// ellipsisLength is the number of characters used for the ellipsis suffix.
+	ellipsisLength = 3
+)
+
 // handleSessionPickerKey handles keyboard input when the session picker is active.
 func (m *Model) handleSessionPickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	totalItems := len(m.filteredSessions) + 1 // +1 for "New Chat" option
@@ -65,12 +72,13 @@ func (m *Model) confirmSessionRename() (tea.Model, tea.Cmd) {
 		m.sessionRenameInput = ""
 	}()
 
-	if m.sessionPickerIndex <= 0 || m.sessionPickerIndex > len(m.filteredSessions) {
+	if m.isInvalidSessionIndex() {
 		return m, nil
 	}
 
 	session := m.filteredSessions[m.sessionPickerIndex-1]
 	newName := strings.TrimSpace(m.sessionRenameInput)
+	// Silently ignore empty names (user can press Esc to cancel explicitly)
 	if newName == "" {
 		return m, nil
 	}
@@ -102,7 +110,7 @@ func (m *Model) handleSessionDeleteConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cm
 
 // deleteSelectedSession deletes the currently selected session.
 func (m *Model) deleteSelectedSession() (tea.Model, tea.Cmd) {
-	if m.sessionPickerIndex <= 0 || m.sessionPickerIndex > len(m.filteredSessions) {
+	if m.isInvalidSessionIndex() {
 		return m, nil
 	}
 
@@ -115,9 +123,7 @@ func (m *Model) deleteSelectedSession() (tea.Model, tea.Cmd) {
 	if err := m.refreshSessionList(); err != nil {
 		return m, nil
 	}
-	if m.sessionPickerIndex > len(m.filteredSessions) {
-		m.sessionPickerIndex = len(m.filteredSessions)
-	}
+	m.clampSessionIndex()
 	return m, nil
 }
 
@@ -156,12 +162,12 @@ func (m *Model) handleSessionPickerNavKey(msg tea.KeyMsg, totalItems int) (tea.M
 		}
 		return m, nil
 	case "d", "delete", "backspace":
-		if m.sessionPickerIndex > 0 && m.sessionPickerIndex <= len(m.filteredSessions) {
+		if m.isValidSessionIndex() {
 			m.confirmDeleteSession = true
 		}
 		return m, nil
 	case "r":
-		if m.sessionPickerIndex > 0 && m.sessionPickerIndex <= len(m.filteredSessions) {
+		if m.isValidSessionIndex() {
 			session := m.filteredSessions[m.sessionPickerIndex-1]
 			m.renamingSession = true
 			m.sessionRenameInput = session.GetDisplayName()
@@ -235,7 +241,7 @@ func (m *Model) selectSession() (tea.Model, tea.Cmd) {
 		if err := m.startNewSession(); err != nil {
 			m.err = err
 		}
-	} else if m.sessionPickerIndex > 0 && m.sessionPickerIndex <= len(m.filteredSessions) {
+	} else if m.isValidSessionIndex() {
 		session := m.filteredSessions[m.sessionPickerIndex-1]
 		m.loadSession(&session)
 	}
@@ -458,12 +464,11 @@ func (m *Model) renderSessionPickerModal() string {
 
 // renderSessionPickerTitle renders the title, filter input, or delete confirmation.
 func (m *Model) renderSessionPickerTitle(listContent *strings.Builder, clipStyle lipgloss.Style) {
-	if m.confirmDeleteSession && m.sessionPickerIndex > 0 &&
-		m.sessionPickerIndex <= len(m.filteredSessions) {
+	if m.confirmDeleteSession && m.isValidSessionIndex() {
 		session := m.filteredSessions[m.sessionPickerIndex-1]
 		listContent.WriteString(clipStyle.Render(
 			lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(11)).Render(
-				fmt.Sprintf("Delete \"%s\"?", truncateString(session.GetDisplayName(), 30)),
+				fmt.Sprintf("Delete \"%s\"?", truncateString(session.GetDisplayName(), maxSessionDisplayLength)),
 			),
 		) + "\n\n")
 		return
@@ -521,7 +526,7 @@ func (m *Model) formatSessionItem(index int) (string, bool) {
 	}
 
 	timeAgo := m.formatSessionTime(&session)
-	name := truncateString(session.GetDisplayName(), 30)
+	name := truncateString(session.GetDisplayName(), maxSessionDisplayLength)
 	line := fmt.Sprintf("%s%s (%s)", prefix, name, timeAgo)
 	isCurrentSession := session.ID == m.currentSessionID
 	if isCurrentSession {
@@ -569,5 +574,22 @@ func truncateString(s string, maxLen int) string {
 		return s
 	}
 	runes := []rune(s)
-	return string(runes[:maxLen-3]) + "..."
+	return string(runes[:maxLen-ellipsisLength]) + "..."
+}
+
+// isValidSessionIndex returns true if the picker index points to a valid session (not "New Chat").
+func (m *Model) isValidSessionIndex() bool {
+	return m.sessionPickerIndex > 0 && m.sessionPickerIndex <= len(m.filteredSessions)
+}
+
+// isInvalidSessionIndex returns true if the picker index is out of bounds for any selection.
+func (m *Model) isInvalidSessionIndex() bool {
+	return m.sessionPickerIndex <= 0 || m.sessionPickerIndex > len(m.filteredSessions)
+}
+
+// clampSessionIndex ensures the session picker index is within valid bounds.
+func (m *Model) clampSessionIndex() {
+	if m.sessionPickerIndex > len(m.filteredSessions) {
+		m.sessionPickerIndex = len(m.filteredSessions)
+	}
 }

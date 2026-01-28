@@ -1080,7 +1080,8 @@ func formatPermissionKind(kind string) string {
 		if kind == "" {
 			return unknownOperation
 		}
-		// Replace underscores with spaces and title case
+		// Replace underscores with spaces and title case.
+		// English titlecase is appropriate for all SDK permission kinds (shell, file_edit, etc.)
 		formatted := strings.ReplaceAll(kind, "_", " ")
 		caser := cases.Title(language.English)
 		return caser.String(formatted)

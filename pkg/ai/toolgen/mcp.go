@@ -63,7 +63,11 @@ func addMCPTool(server *mcp.Server, tool ToolDefinition, opts ToolOptions) {
 	}
 
 	// Add tool to server.
-	// Note: mcp.AddTool may panic on registration failures.
+	// Note: mcp.AddTool may panic on registration failures such as:
+	//   - Duplicate tool names (tool already registered)
+	//   - Invalid tool definitions (nil server, malformed schema)
+	//   - Internal MCP server errors
 	// This is acceptable for server initialization where failures should be fatal.
+	// The panic will propagate up and terminate the MCP server startup process.
 	mcp.AddTool(server, mcpTool, handler)
 }

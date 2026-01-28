@@ -40,7 +40,7 @@ func GetKSailToolMetadata(rootCmd *cobra.Command, outputChan chan<- toolgen.Outp
 		metadata[def.Name] = def
 	}
 
-	// Convert to Copilot SDK tools
+	// Convert SDK-agnostic definitions to Copilot SDK format
 	tools := toolgen.ToCopilotTools(toolDefs, opts)
 
 	return tools, metadata

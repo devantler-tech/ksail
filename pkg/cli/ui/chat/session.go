@@ -81,8 +81,9 @@ func ensureSessionsDir() (string, error) {
 	return dir, nil
 }
 
-// ListSessions returns all session metadata from SDK, enriched with local metadata.
-// Sessions are sorted by ModifiedTime (most recent first), filtering out remote sessions.
+// ListSessions returns all local session metadata from SDK, enriched with local metadata.
+// Remote sessions are excluded from the returned slice.
+// Sessions are sorted by ModifiedTime (most recent first).
 func ListSessions(client *copilot.Client) ([]SessionMetadata, error) {
 	// Get sessions from SDK
 	sdkSessions, err := client.ListSessions()
