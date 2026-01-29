@@ -95,11 +95,11 @@ jobs:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
         continue-on-error: true
 
-      - name: 📤 Publish to Open VSX Registry
-        run: npx ovsx publish --pat ${{ secrets.OVSX_PAT }}
-        env:
-          OVSX_PAT: ${{ secrets.OVSX_PAT }}
-        continue-on-error: true
+      # - name: 📤 Publish to Open VSX Registry
+      #   run: npx ovsx publish --pat ${{ secrets.OVSX_PAT }}
+      #   env:
+      #     OVSX_PAT: ${{ secrets.OVSX_PAT }}
+      #   continue-on-error: true
 
       - name: 📦 Create VSIX package
         run: npx @vscode/vsce package --out ksail.vsix
