@@ -24,6 +24,7 @@ jobs:
       code: ${{ steps.filter.outputs.code }}
       schema: ${{ steps.filter.outputs.schema }}
       cli: ${{ steps.filter.outputs.cli }}
+      vsce: ${{ steps.filter.outputs.vsce }}
     steps:
       - name: 📄 Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -49,6 +50,9 @@ jobs:
               - 'pkg/**/*.go'
               - 'go.mod'
               - '.github/scripts/generate-cli-flags-docs.sh'
+            vsce:
+              - 'vsce/**'
+              - '.github/workflows/ci.yaml'
 
   build-artifact:
     name: 🏗️ Build KSail Binary
@@ -300,6 +304,50 @@ jobs:
         with:
           hcloud-token: ${{ secrets.HCLOUD_TOKEN }}
 
+  vscode-extension:
+    name: 🧩 VSCode Extension
+    runs-on: ubuntu-latest
+    needs: [changes]
+    if: needs.changes.outputs.vsce == 'true'
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: vsce
+    steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: ⚙️ Setup Node.js
+        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: "vsce/package-lock.json"
+
+      - name: 📦 Install dependencies
+        run: npm ci
+
+      - name: 🏗️ Compile
+        run: npm run compile
+
+      - name: 📦 Package extension
+        run: npm run package
+
+      - name: 📦 Create VSIX package
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+        run: npx @vscode/vsce package --out ksail.vsix
+
+      - name: 📤 Upload VSIX artifact
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # 6.0.0
+        with:
+          name: ksail-vsix
+          path: ksail.vsix
+          retention-days: 7
+
   status:
     name: CI - KSail
     runs-on: ubuntu-latest
@@ -312,6 +360,7 @@ jobs:
         coverage,
         system-test,
         cleanup-hetzner,
+        vscode-extension,
       ]
     if: ${{ always() }}
     steps:
@@ -328,3 +377,4 @@ jobs:
             ${{ needs.coverage.result }}
             ${{ needs.system-test.result }}
             ${{ needs.cleanup-hetzner.result }}
+            ${{ needs.vscode-extension.result }}

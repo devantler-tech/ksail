@@ -6,14 +6,13 @@ on:
       - "v*"
   workflow_dispatch:
 
-permissions:
-  contents: write
-  packages: write
-
 jobs:
   goreleaser:
     name: Release with GoReleaser
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
     steps:
       - name: 📑 Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -57,3 +56,55 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HOMEBREW_GITHUB_API_TOKEN: ${{ secrets.HOMEBREW_GITHUB_API_TOKEN }}
+
+  vscode-extension:
+    name: 🧩 Release VSCode Extension
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    defaults:
+      run:
+        working-directory: vsce
+    steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: ⚙️ Setup Node.js
+        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0 # zizmor: ignore[cache-poisoning]
+        with:
+          node-version: "22"
+          # Disable cache in release workflows to avoid cache-poisoning risk
+          # for runtime artifacts (see https://docs.zizmor.sh/audits/#cache-poisoning)
+          cache: false
+
+      - name: 📦 Install dependencies
+        run: npm ci
+
+      - name: 🏗️ Compile
+        run: npm run compile
+
+      - name: 📦 Package extension
+        run: npm run package
+
+      - name: 📤 Publish to VS Code Marketplace
+        run: npx @vscode/vsce publish
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        continue-on-error: true
+
+      # - name: 📤 Publish to Open VSX Registry
+      #   run: npx ovsx publish --pat ${{ secrets.OVSX_PAT }}
+      #   env:
+      #     OVSX_PAT: ${{ secrets.OVSX_PAT }}
+      #   continue-on-error: true
+
+      - name: 📦 Create VSIX package
+        run: npx @vscode/vsce package --out ksail.vsix
+
+      - name: 📤 Upload VSIX to release
+        uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2.5.0
+        with:
+          files: vsce/ksail.vsix
