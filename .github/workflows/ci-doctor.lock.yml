@@ -1,12 +1,12 @@
 #
-#    ___                   _   _
-#   / _ \                 | | (_)
-#  | |_| | __ _  ___ _ __ | |_ _  ___
+#    ___                   _   _      
+#   / _ \                 | | (_)     
+#  | |_| | __ _  ___ _ __ | |_ _  ___ 
 #  |  _  |/ _` |/ _ \ '_ \| __| |/ __|
-#  | | | | (_| |  __/ | | | |_| | (__
+#  | | | | (_| |  __/ | | | |_| | (__ 
 #  \_| |_/\__, |\___|_| |_|\__|_|\___|
 #          __/ |
-#  _    _ |___/
+#  _    _ |___/ 
 # | |  | |                / _| |
 # | |  | | ___ _ __ _  __| |_| | _____      ____
 # | |/\| |/ _ \ '__| |/ /|  _| |/ _ \ \ /\ / / ___|
@@ -31,15 +31,15 @@ name: "CI Failure Doctor"
   workflow_run:
     # zizmor: ignore[dangerous-triggers] - workflow_run trigger is secured with role and fork validation
     branches:
-      - main
-      - "**"
+    - main
+    - "**"
     types:
-      - completed
+    - completed
     workflows:
-      - "CI - KSail"
-      - "CD - Go"
-      - "Test - Pages"
-      - "Publish - Pages"
+    - "CI - KSail"
+    - "CD - Go"
+    - "Test - Pages"
+    - "Publish - Pages"
 
 permissions: {}
 
@@ -164,27 +164,6 @@ jobs:
           script: |
             const determineAutomaticLockdown = require('/opt/gh-aw/actions/determine_automatic_lockdown.cjs');
             await determineAutomaticLockdown(github, context, core);
-      - name: Generate GitHub App token
-        id: github-mcp-app-token
-        uses: actions/create-github-app-token@29824e69f54612133e76f7eaac726eef6c875baf # v2.2.1
-        with:
-          app-id: ${{ vars.APP_ID }}
-          private-key: ${{ secrets.APP_PRIVATE_KEY }}
-          owner: ${{ github.repository_owner }}
-          repositories: ${{ github.event.repository.name }}
-          github-api-url: ${{ github.api_url }}
-          permission-actions: read
-          permission-checks: read
-          permission-contents: read
-          permission-deployments: read
-          permission-discussions: read
-          permission-issues: read
-          permission-organization-projects: read
-          permission-packages: read
-          permission-pages: read
-          permission-pull-requests: read
-          permission-security-events: read
-          permission-statuses: read
       - name: Download container images
         run: bash /opt/gh-aw/actions/download_docker_images.sh ghcr.io/github/github-mcp-server:v0.30.2 ghcr.io/githubnext/gh-aw-mcpg:v0.0.84 node:lts-alpine
       - name: Write Safe Outputs Config
@@ -419,18 +398,18 @@ jobs:
           API_KEY=""
           API_KEY=$(openssl rand -base64 45 | tr -d '/+=')
           PORT=3001
-
+          
           # Register API key as secret to mask it from logs
           echo "::add-mask::${API_KEY}"
-
+          
           # Set outputs for next steps
           {
             echo "safe_outputs_api_key=${API_KEY}"
             echo "safe_outputs_port=${PORT}"
           } >> "$GITHUB_OUTPUT"
-
+          
           echo "Safe Outputs MCP server will run on port ${PORT}"
-
+          
       - name: Start Safe Outputs MCP HTTP Server
         id: safe-outputs-start
         env:
@@ -446,9 +425,9 @@ jobs:
           export GH_AW_SAFE_OUTPUTS_TOOLS_PATH
           export GH_AW_SAFE_OUTPUTS_CONFIG_PATH
           export GH_AW_MCP_LOG_DIR
-
+          
           bash /opt/gh-aw/actions/start_safe_outputs_server.sh
-
+          
       - name: Start MCP gateway
         id: start-mcp-gateway
         env:
@@ -456,23 +435,23 @@ jobs:
           GH_AW_SAFE_OUTPUTS_API_KEY: ${{ steps.safe-outputs-start.outputs.api_key }}
           GH_AW_SAFE_OUTPUTS_PORT: ${{ steps.safe-outputs-start.outputs.port }}
           GITHUB_MCP_LOCKDOWN: ${{ steps.determine-automatic-lockdown.outputs.lockdown == 'true' && '1' || '0' }}
-          GITHUB_MCP_SERVER_TOKEN: ${{ steps.github-mcp-app-token.outputs.token }}
+          GITHUB_MCP_SERVER_TOKEN: ${{ secrets.GH_AW_GITHUB_MCP_SERVER_TOKEN || secrets.GH_AW_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
           set -eo pipefail
           mkdir -p /tmp/gh-aw/mcp-config
-
+          
           # Export gateway environment variables for MCP config and gateway script
           export MCP_GATEWAY_PORT="80"
           export MCP_GATEWAY_DOMAIN="host.docker.internal"
           MCP_GATEWAY_API_KEY=""
           MCP_GATEWAY_API_KEY=$(openssl rand -base64 45 | tr -d '/+=')
           export MCP_GATEWAY_API_KEY
-
+          
           # Register API key as secret to mask it from logs
           echo "::add-mask::${MCP_GATEWAY_API_KEY}"
           export GH_AW_ENGINE="copilot"
           export MCP_GATEWAY_DOCKER_COMMAND='docker run -i --rm --network host -v /var/run/docker.sock:/var/run/docker.sock -e MCP_GATEWAY_PORT -e MCP_GATEWAY_DOMAIN -e MCP_GATEWAY_API_KEY -e DEBUG="*" -e MCP_GATEWAY_LOG_DIR -e GH_AW_MCP_LOG_DIR -e GH_AW_SAFE_OUTPUTS -e GH_AW_SAFE_OUTPUTS_CONFIG_PATH -e GH_AW_SAFE_OUTPUTS_TOOLS_PATH -e GH_AW_ASSETS_BRANCH -e GH_AW_ASSETS_MAX_SIZE_KB -e GH_AW_ASSETS_ALLOWED_EXTS -e DEFAULT_BRANCH -e GITHUB_MCP_SERVER_TOKEN -e GITHUB_MCP_LOCKDOWN -e GITHUB_REPOSITORY -e GITHUB_SERVER_URL -e GITHUB_SHA -e GITHUB_WORKSPACE -e GITHUB_TOKEN -e GITHUB_RUN_ID -e GITHUB_RUN_NUMBER -e GITHUB_RUN_ATTEMPT -e GITHUB_JOB -e GITHUB_ACTION -e GITHUB_EVENT_NAME -e GITHUB_EVENT_PATH -e GITHUB_ACTOR -e GITHUB_ACTOR_ID -e GITHUB_TRIGGERING_ACTOR -e GITHUB_WORKFLOW -e GITHUB_WORKFLOW_REF -e GITHUB_WORKFLOW_SHA -e GITHUB_REF -e GITHUB_REF_NAME -e GITHUB_REF_TYPE -e GITHUB_HEAD_REF -e GITHUB_BASE_REF -e GH_AW_SAFE_OUTPUTS_PORT -e GH_AW_SAFE_OUTPUTS_API_KEY -v /opt:/opt:ro -v /tmp:/tmp:rw -v '"${GITHUB_WORKSPACE}"':'"${GITHUB_WORKSPACE}"':rw ghcr.io/githubnext/gh-aw-mcpg:v0.0.84'
-
+          
           mkdir -p /home/runner/.copilot
           cat << MCPCONFIG_EOF | bash /opt/gh-aw/actions/start_mcp_gateway.sh
           {
@@ -508,7 +487,7 @@ jobs:
         with:
           script: |
             const fs = require('fs');
-
+            
             const awInfo = {
               engine_id: "copilot",
               engine_name: "GitHub Copilot CLI",
@@ -538,13 +517,13 @@ jobs:
               },
               created_at: new Date().toISOString()
             };
-
+            
             // Write to /tmp/gh-aw directory to avoid inclusion in PR
             const tmpPath = '/tmp/gh-aw/aw_info.json';
             fs.writeFileSync(tmpPath, JSON.stringify(awInfo, null, 2));
             console.log('Generated aw_info.json at:', tmpPath);
             console.log(JSON.stringify(awInfo, null, 2));
-
+            
             // Set model as output for reuse in other steps/jobs
             core.setOutput('model', awInfo.model);
       - name: Generate workflow overview
@@ -587,9 +566,9 @@ jobs:
           </important>
           <instructions>
           To create or modify GitHub resources (issues, discussions, pull requests, etc.), you MUST call the appropriate safe output tool. Simply writing content will NOT work - the workflow requires actual tool calls.
-
+          
           Discover available tools from the safeoutputs MCP server.
-
+          
           **Critical**: Tool calls write structured data that downstream jobs process. Without tool calls, follow-up actions will be skipped.
           </instructions>
           </safe-outputs>
@@ -620,37 +599,37 @@ jobs:
           - **workflow-run-id**: __GH_AW_GITHUB_RUN_ID__
           {{/if}}
           </github-context>
-
+          
           PROMPT_EOF
           cat << 'PROMPT_EOF' >> "$GH_AW_PROMPT"
           </system>
           PROMPT_EOF
           cat << 'PROMPT_EOF' >> "$GH_AW_PROMPT"
           # CI Failure Doctor
-
+          
           You are the CI Failure Doctor, an expert investigative agent that analyzes failed GitHub Actions workflows to identify root causes and patterns. Your mission is to conduct a deep investigation when the CI workflow fails.
-
+          
           ## Current Context
-
+          
           - **Repository**: __GH_AW_GITHUB_REPOSITORY__
           - **Workflow Run**: __GH_AW_GITHUB_EVENT_WORKFLOW_RUN_ID__
           - **Conclusion**: __GH_AW_GITHUB_EVENT_WORKFLOW_RUN_CONCLUSION__
           - **Run URL**: __GH_AW_GITHUB_EVENT_WORKFLOW_RUN_HTML_URL__
           - **Head SHA**: __GH_AW_GITHUB_EVENT_WORKFLOW_RUN_HEAD_SHA__
-
+          
           ## Investigation Protocol
-
+          
           **ONLY proceed if the workflow conclusion is 'failure' or 'cancelled'**. Exit immediately if the workflow was successful.
-
+          
           ### Phase 1: Initial Triage
-
+          
           1. **Verify Failure**: Check that `__GH_AW_GITHUB_EVENT_WORKFLOW_RUN_CONCLUSION__` is `failure` or `cancelled`
           2. **Get Workflow Details**: Use `get_workflow_run` to get full details of the failed run
           3. **List Jobs**: Use `list_workflow_jobs` to identify which specific jobs failed
           4. **Quick Assessment**: Determine if this is a new type of failure or a recurring pattern
-
+          
           ### Phase 2: Deep Log Analysis
-
+          
           1. **Retrieve Logs**: Use `get_job_logs` with `failed_only=true` to get logs from all failed jobs
           2. **Pattern Recognition**: Analyze logs for:
              - Error messages and stack traces
@@ -665,9 +644,9 @@ jobs:
              - Test names that failed
              - Dependency versions involved
              - Timing patterns
-
+          
           ### Phase 3: Historical Context Analysis
-
+          
           1. **Search Investigation History**: Use file-based storage to search for similar failures:
              - Read from cached investigation files in `/tmp/memory/investigations/`
              - Parse previous failure patterns and solutions
@@ -675,9 +654,9 @@ jobs:
           2. **Issue History**: Search existing issues for related problems
           3. **Commit Analysis**: Examine the commit that triggered the failure
           4. **PR Context**: If triggered by a PR, analyze the changed files
-
+          
           ### Phase 4: Root Cause Investigation
-
+          
           1. **Categorize Failure Type**:
              - **Code Issues**: Syntax errors, logic bugs, test failures
              - **Infrastructure**: Runner issues, network problems, resource constraints
@@ -685,24 +664,24 @@ jobs:
              - **Configuration**: Workflow configuration, environment variables
              - **Flaky Tests**: Intermittent failures, timing issues
              - **External Services**: Third-party API failures, downstream dependencies
-
+          
           2. **Deep Dive Analysis**:
              - For test failures: Identify specific test methods and assertions
              - For build failures: Analyze compilation errors and missing dependencies
              - For infrastructure issues: Check runner logs and resource usage
              - For timeout issues: Identify slow operations and bottlenecks
-
+          
           ### Phase 5: Pattern Storage and Knowledge Building
-
+          
           1. **Store Investigation**: Save structured investigation data to files:
              - Write investigation report to `/tmp/memory/investigations/<timestamp>-<run-id>.json`
              - Store error patterns in `/tmp/memory/patterns/`
              - Maintain an index file of all investigations for fast searching
           2. **Update Pattern Database**: Enhance knowledge with new findings by updating pattern files
           3. **Save Artifacts**: Store detailed logs and analysis in the cached directories
-
+          
           ### Phase 6: Looking for existing issues
-
+          
           1. **Convert the report to a search query**
              - Use any advanced search features in GitHub Issues to find related issues
              - Look for keywords, error messages, and patterns in existing issues
@@ -711,9 +690,9 @@ jobs:
           3. **Add issue comment to duplicate issue and finish**
              - If you find a duplicate issue, add a comment with your findings and close the investigation.
              - Do NOT open a new issue since you found a duplicate already (skip next phases).
-
+          
           ### Phase 6: Reporting and Recommendations
-
+          
           1. **Create Investigation Report**: Generate a comprehensive analysis including:
              - **Executive Summary**: Quick overview of the failure
              - **Root Cause**: Detailed explanation of what went wrong
@@ -722,63 +701,63 @@ jobs:
              - **Prevention Strategies**: How to avoid similar failures
              - **AI Team Self-Improvement**: Give a short set of additional prompting instructions to copy-and-paste into instructions.md for AI coding agents to help prevent this type of failure in future
              - **Historical Context**: Similar past failures and their resolutions
-
+          
           2. **Actionable Deliverables**:
              - Create an issue with investigation results (if warranted)
              - Comment on related PR with analysis (if PR-triggered)
              - Provide specific file locations and line numbers for fixes
              - Suggest code changes or configuration updates
-
+          
           ## Output Requirements
-
+          
           ### Investigation Issue Template
-
+          
           When creating an investigation issue, use this structure:
-
+          
           ```markdown
           # 🏥 CI Failure Investigation - Run #__GH_AW_GITHUB_EVENT_WORKFLOW_RUN_RUN_NUMBER__
-
+          
           ## Summary
-
+          
           [Brief description of the failure]
-
+          
           ## Failure Details
-
+          
           - **Run**: [__GH_AW_GITHUB_EVENT_WORKFLOW_RUN_ID__](__GH_AW_GITHUB_EVENT_WORKFLOW_RUN_HTML_URL__)
           - **Commit**: __GH_AW_GITHUB_EVENT_WORKFLOW_RUN_HEAD_SHA__
           - **Trigger**: __GH_AW_GITHUB_EVENT_WORKFLOW_RUN_EVENT__
-
+          
           ## Root Cause Analysis
-
+          
           [Detailed analysis of what went wrong]
-
+          
           ## Failed Jobs and Errors
-
+          
           [List of failed jobs with key error messages]
-
+          
           ## Investigation Findings
-
+          
           [Deep analysis results]
-
+          
           ## Recommended Actions
-
+          
           - [ ] [Specific actionable steps]
-
+          
           ## Prevention Strategies
-
+          
           [How to prevent similar failures]
-
+          
           ## AI Team Self-Improvement
-
+          
           [Short set of additional prompting instructions to copy-and-paste into instructions.md for a AI coding agents to help prevent this type of failure in future]
-
+          
           ## Historical Context
-
+          
           [Similar past failures and patterns]
           ```
-
+          
           ## Important Guidelines
-
+          
           - **Be Thorough**: Don't just report the error - investigate the underlying cause
           - **Use Memory**: Always check for similar past failures and learn from them
           - **Be Specific**: Provide exact file paths, line numbers, and error messages
@@ -786,15 +765,15 @@ jobs:
           - **Pattern Building**: Contribute to the knowledge base for future investigations
           - **Resource Efficient**: Use caching to avoid re-downloading large logs
           - **Security Conscious**: Never execute untrusted code from logs or external sources
-
+          
           ## Cache Usage Strategy
-
+          
           - Store investigation database and knowledge patterns in `/tmp/memory/investigations/` and `/tmp/memory/patterns/`
           - Cache detailed log analysis and artifacts in `/tmp/investigation/logs/` and `/tmp/investigation/reports/`
           - Persist findings across workflow runs using GitHub Actions cache
           - Build cumulative knowledge about failure patterns and solutions using structured JSON files
           - Use file-based indexing for fast pattern matching and similarity detection
-
+          
           PROMPT_EOF
       - name: Substitute placeholders
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
@@ -819,7 +798,7 @@ jobs:
         with:
           script: |
             const substitutePlaceholders = require('/opt/gh-aw/actions/substitute_placeholders.cjs');
-
+            
             // Call the substitution function
             return await substitutePlaceholders({
               file: process.env.GH_AW_PROMPT,
@@ -913,7 +892,7 @@ jobs:
           # This ensures they are in /tmp/gh-aw/ where secret redaction can scan them
           SESSION_STATE_DIR="$HOME/.copilot/session-state"
           LOGS_DIR="/tmp/gh-aw/sandbox/agent/logs"
-
+          
           if [ -d "$SESSION_STATE_DIR" ]; then
             echo "Copying Copilot session state files from $SESSION_STATE_DIR to $LOGS_DIR"
             mkdir -p "$LOGS_DIR"
@@ -941,8 +920,7 @@ jobs:
             const { main } = require('/opt/gh-aw/actions/redact_secrets.cjs');
             await main();
         env:
-          GH_AW_SECRET_NAMES: "APP_PRIVATE_KEY,COPILOT_GITHUB_TOKEN,GH_AW_GITHUB_MCP_SERVER_TOKEN,GH_AW_GITHUB_TOKEN,GITHUB_TOKEN"
-          SECRET_APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
+          GH_AW_SECRET_NAMES: 'COPILOT_GITHUB_TOKEN,GH_AW_GITHUB_MCP_SERVER_TOKEN,GH_AW_GITHUB_TOKEN,GITHUB_TOKEN'
           SECRET_COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
           SECRET_GH_AW_GITHUB_MCP_SERVER_TOKEN: ${{ secrets.GH_AW_GITHUB_MCP_SERVER_TOKEN }}
           SECRET_GH_AW_GITHUB_TOKEN: ${{ secrets.GH_AW_GITHUB_TOKEN }}
@@ -1032,19 +1010,6 @@ jobs:
             /tmp/gh-aw/sandbox/firewall/logs/
             /tmp/gh-aw/agent-stdio.log
           if-no-files-found: ignore
-      - name: Invalidate GitHub App token
-        if: always() && steps.github-mcp-app-token.outputs.token != ''
-        env:
-          TOKEN: ${{ steps.github-mcp-app-token.outputs.token }}
-        run: |
-          echo "Revoking GitHub App installation token..."
-          # GitHub CLI will auth with the token being revoked.
-          gh api \
-            --method DELETE \
-            -H "Authorization: token $TOKEN" \
-            /installation/token || echo "Token revoke may already be expired."
-
-          echo "Token invalidation step complete."
 
   conclusion:
     needs:
@@ -1182,7 +1147,7 @@ jobs:
             --method DELETE \
             -H "Authorization: token $TOKEN" \
             /installation/token || echo "Token revoke may already be expired."
-
+          
           echo "Token invalidation step complete."
 
   detection:
@@ -1406,7 +1371,7 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
           GH_AW_AGENT_OUTPUT: ${{ env.GH_AW_AGENT_OUTPUT }}
-          GH_AW_SAFE_OUTPUTS_HANDLER_CONFIG: '{"add_comment":{"max":1},"create_issue":{"close_older_issues":true,"max":1,"title_prefix":"${{ github.workflow }}"},"missing_data":{},"missing_tool":{},"noop":{"max":1}}'
+          GH_AW_SAFE_OUTPUTS_HANDLER_CONFIG: "{\"add_comment\":{\"max\":1},\"create_issue\":{\"close_older_issues\":true,\"max\":1,\"title_prefix\":\"${{ github.workflow }}\"},\"missing_data\":{},\"missing_tool\":{},\"noop\":{\"max\":1}}"
         with:
           github-token: ${{ steps.safe-outputs-app-token.outputs.token }}
           script: |
@@ -1425,7 +1390,7 @@ jobs:
             --method DELETE \
             -H "Authorization: token $TOKEN" \
             /installation/token || echo "Token revoke may already be expired."
-
+          
           echo "Token invalidation step complete."
 
   update_cache_memory:
@@ -1451,3 +1416,4 @@ jobs:
         with:
           key: memory-${{ github.workflow }}-${{ github.run_id }}
           path: /tmp/gh-aw/cache-memory
+
