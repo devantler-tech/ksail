@@ -19,8 +19,10 @@ export class ClusterItem extends vscode.TreeItem {
   constructor(public readonly cluster: ClusterInfo) {
     super(cluster.name, vscode.TreeItemCollapsibleState.None);
 
-    this.contextValue = "cluster";
-    this.description = cluster.provider;
+    // Set contextValue based on status for conditional context menus
+    this.contextValue = `cluster-${cluster.status}`;
+    // Capitalize provider name
+    this.description = cluster.provider.charAt(0).toUpperCase() + cluster.provider.slice(1);
 
     // Set icon based on status
     if (cluster.status === "running") {
@@ -159,22 +161,21 @@ export class ClustersTreeDataProvider
       this.clusters = clusterList.map((c) => new ClusterItem(c));
       this._onDidChangeTreeData.fire();
 
-      // Detect status for each cluster asynchronously
-      for (const cluster of clusterList) {
-        detectClusterStatus(cluster.name, cluster.provider).then((status) => {
+      // Detect status for all clusters in parallel
+      const statusPromises = clusterList.map(async (cluster) => {
+        try {
+          const status = await detectClusterStatus(cluster.name, cluster.provider);
           cluster.status = status;
-          // Update the corresponding cluster item
-          const clusterItem = this.clusters.find((item) => item.cluster.name === cluster.name);
-          if (clusterItem) {
-            // Recreate the item with updated status
-            const index = this.clusters.indexOf(clusterItem);
-            this.clusters[index] = new ClusterItem(cluster);
-            this._onDidChangeTreeData.fire();
-          }
-        }).catch(() => {
-          // Ignore errors in status detection
-        });
-      }
+        } catch {
+          // Keep status as unknown on error
+        }
+      });
+
+      // Wait for all status detections and refresh once
+      Promise.all(statusPromises).then(() => {
+        this.clusters = clusterList.map((c) => new ClusterItem(c));
+        this._onDidChangeTreeData.fire();
+      });
 
       // Clear message on success
       if (this.treeView) {

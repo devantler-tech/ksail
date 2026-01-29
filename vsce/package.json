@@ -97,7 +97,7 @@
         "command": "ksail.cluster.connect",
         "title": "Connect to Cluster (K9s)",
         "category": "KSail",
-        "icon": "$(plug)"
+        "icon": "$(terminal)"
       },
       {
         "command": "ksail.showOutput",
@@ -189,22 +189,22 @@
       "view/item/context": [
         {
           "command": "ksail.cluster.connect",
-          "when": "view == ksailClusters && viewItem == cluster",
+          "when": "view == ksailClusters && viewItem =~ /^cluster-/",
           "group": "inline@1"
         },
         {
           "command": "ksail.cluster.start",
-          "when": "view == ksailClusters && viewItem == cluster",
+          "when": "view == ksailClusters && viewItem =~ /^cluster-(stopped|unknown)$/",
           "group": "1_lifecycle@1"
         },
         {
           "command": "ksail.cluster.stop",
-          "when": "view == ksailClusters && viewItem == cluster",
+          "when": "view == ksailClusters && viewItem == cluster-running",
           "group": "1_lifecycle@2"
         },
         {
           "command": "ksail.cluster.delete",
-          "when": "view == ksailClusters && viewItem == cluster",
+          "when": "view == ksailClusters && viewItem =~ /^cluster-/",
           "group": "2_destructive"
         }
       ]

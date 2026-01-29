@@ -59,8 +59,14 @@ The **Init** and **Create** commands feature multi-step wizards with:
 The KSail sidebar shows:
 
 - **Clusters**: Lists clusters with name and provider (e.g., `my-cluster - Docker`)
-- Right-click for context menu actions (info, connect, start, stop, delete)
-- Inline action buttons for quick access
+- **Status Indicators**: Visual icons show cluster state
+  - ✅ Green checkmark: Running
+  - 🚫 Red slash: Stopped
+  - 📦 Server icon: Unknown status
+- **Smart Context Menus**: Right-click shows relevant actions based on cluster state
+  - Running clusters: Stop, Delete, Connect
+  - Stopped clusters: Start, Delete, Connect
+- **Pending Clusters**: Spinner icon during cluster creation
 
 ## Extension Settings
 
