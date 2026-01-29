@@ -109,34 +109,61 @@ async function queryToolsList(): Promise<McpTool[]> {
     let stdout = "";
     let stderr = "";
     let requestId = 1;
-    let initialized = false;
+    let initializeId = 0;
+    let toolsListId = 0;
+    const processedIds = new Set<number>();
 
-    const sendRequest = (method: string, params?: unknown): void => {
+    const sendRequest = (method: string, params?: unknown): number => {
+      const id = requestId++;
       const request: JsonRpcRequest = {
         jsonrpc: "2.0",
-        id: requestId++,
+        id,
         method,
         params,
       };
       const message = JSON.stringify(request);
       const content = `Content-Length: ${Buffer.byteLength(message)}\r\n\r\n${message}`;
       proc.stdin?.write(content);
+      return id;
     };
 
-    const parseMessages = (data: string): JsonRpcResponse[] => {
+    const parseMessages = (
+      data: string
+    ): { responses: JsonRpcResponse[]; remaining: string } => {
       const responses: JsonRpcResponse[] = [];
-      const parts = data.split(/Content-Length: \d+\r\n\r\n/).filter(Boolean);
-      for (const part of parts) {
+      let remaining = data;
+
+      while (remaining.length > 0) {
+        const headerMatch = remaining.match(/^Content-Length: (\d+)\r\n\r\n/);
+        if (!headerMatch) {
+          break; // No more complete headers
+        }
+
+        const contentLength = parseInt(headerMatch[1], 10);
+        const headerLength = headerMatch[0].length;
+        const totalLength = headerLength + contentLength;
+
+        if (remaining.length < totalLength) {
+          break; // Incomplete message
+        }
+
+        const messageContent = remaining.slice(
+          headerLength,
+          headerLength + contentLength
+        );
+        remaining = remaining.slice(totalLength);
+
         try {
-          const parsed = JSON.parse(part.trim()) as JsonRpcResponse;
+          const parsed = JSON.parse(messageContent) as JsonRpcResponse;
           if (parsed.jsonrpc === "2.0") {
             responses.push(parsed);
           }
         } catch {
-          // Partial message, continue
+          // Invalid JSON, skip this message
         }
       }
-      return responses;
+
+      return { responses, remaining };
     };
 
     const cleanup = (): void => {
@@ -152,15 +179,28 @@ async function queryToolsList(): Promise<McpTool[]> {
     proc.stdout?.on("data", (data: Buffer) => {
       stdout += data.toString();
 
-      const responses = parseMessages(stdout);
+      const { responses, remaining } = parseMessages(stdout);
+      stdout = remaining; // Keep only unparsed data
+
       for (const response of responses) {
-        if (!initialized) {
-          // First response is from initialize
-          initialized = true;
-          // Send tools/list after initialization
-          sendRequest("tools/list", {});
-        } else {
-          // This should be the tools/list response
+        // Skip already processed responses
+        if (processedIds.has(response.id)) {
+          continue;
+        }
+        processedIds.add(response.id);
+
+        if (response.id === initializeId) {
+          // Handle initialize response
+          if (response.error) {
+            clearTimeout(timeout);
+            cleanup();
+            reject(new Error(response.error.message));
+            return;
+          }
+          // Send tools/list after successful initialization
+          toolsListId = sendRequest("tools/list", {});
+        } else if (response.id === toolsListId) {
+          // Handle tools/list response
           clearTimeout(timeout);
           cleanup();
 
@@ -170,7 +210,9 @@ async function queryToolsList(): Promise<McpTool[]> {
             const result = response.result as ToolsListResult;
             resolve(result.tools || []);
           }
+          return;
         }
+        // Ignore other responses (notifications, etc.)
       }
     });
 
@@ -191,7 +233,7 @@ async function queryToolsList(): Promise<McpTool[]> {
     });
 
     // Send initialize request
-    sendRequest("initialize", {
+    initializeId = sendRequest("initialize", {
       protocolVersion: "2024-11-05",
       capabilities: {},
       clientInfo: {
