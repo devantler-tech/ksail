@@ -77,6 +77,18 @@ let cacheTimestamp = 0;
 const CACHE_TTL_MS = 60000; // 1 minute cache
 
 /**
+ * Extension version (set during activation)
+ */
+let extensionVersion = "0.1.0"; // fallback default
+
+/**
+ * Initialize the schema client with extension version
+ */
+export function initializeSchemaClient(version: string): void {
+  extensionVersion = version;
+}
+
+/**
  * Get the KSail binary path from configuration
  */
 function getBinaryPath(): string {
@@ -238,7 +250,7 @@ async function queryToolsList(): Promise<McpTool[]> {
       capabilities: {},
       clientInfo: {
         name: "vscode-ksail",
-        version: "0.1.0",
+        version: extensionVersion,
       },
     });
   });

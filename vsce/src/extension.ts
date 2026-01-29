@@ -15,6 +15,8 @@ import { isBinaryAvailable } from "./ksail/index.js";
 import {
   createConfigChangeListener,
   createKSailConfigWatcher,
+  initializeSchemaClient,
+  initializeServerProvider,
   KSailMcpServerDefinitionProvider,
 } from "./mcp/index.js";
 import { ClustersTreeDataProvider } from "./views/clustersView.js";
@@ -34,6 +36,11 @@ export async function activate(
   context.subscriptions.push(outputChannel);
 
   outputChannel.appendLine("KSail extension activating...");
+
+  // Initialize schema client with extension version
+  const extensionVersion = context.extension.packageJSON.version || "0.1.0";
+  initializeSchemaClient(extensionVersion);
+  initializeServerProvider(extensionVersion);
 
   // Register MCP server definition provider with VSCode's native MCP infrastructure
   // This makes KSail tools available to GitHub Copilot and agent mode
