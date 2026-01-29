@@ -37,7 +37,10 @@ var (
 	ErrKubeletCSRApproverInstallerFactoryNil = errors.New(
 		"kubelet-csr-approver installer factory is nil",
 	)
-	ErrClusterConfigNil = errors.New("cluster config is nil")
+	ErrCSIInstallerFactoryNil          = errors.New("CSI installer factory is nil")
+	ErrPolicyEngineInstallerFactoryNil = errors.New("policy engine installer factory is nil")
+	ErrPolicyEngineDisabled            = errors.New("policy engine is disabled")
+	ErrClusterConfigNil                = errors.New("cluster config is nil")
 )
 
 // InstallerFactories holds factory functions for creating component installers.
@@ -335,9 +338,6 @@ func InstallFluxSilent(
 	return nil
 }
 
-// ErrCSIInstallerFactoryNil is returned when the CSI installer factory is nil.
-var ErrCSIInstallerFactoryNil = errors.New("CSI installer factory is nil")
-
 // InstallCSISilent installs CSI silently for parallel execution.
 func InstallCSISilent(
 	ctx context.Context,
@@ -383,12 +383,6 @@ func InstallCertManagerSilent(
 
 	return nil
 }
-
-// ErrPolicyEngineInstallerFactoryNil is returned when the policy engine installer factory is nil.
-var ErrPolicyEngineInstallerFactoryNil = errors.New("policy engine installer factory is nil")
-
-// ErrPolicyEngineDisabled is returned when the policy engine is disabled.
-var ErrPolicyEngineDisabled = errors.New("policy engine is disabled")
 
 // InstallPolicyEngineSilent installs the policy engine silently for parallel execution.
 func InstallPolicyEngineSilent(
