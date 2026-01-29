@@ -105,6 +105,6 @@ jobs:
         run: npx @vscode/vsce package --out ksail.vsix
 
       - name: 📤 Upload VSIX to release
-        uses: softprops/action-gh-release@da8d4be880cf33d86f733e3461d3c6f76c678c1b # v3.1.0
+        uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2.5.0
         with:
           files: vsce/ksail.vsix
