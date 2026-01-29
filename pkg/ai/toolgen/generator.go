@@ -2,6 +2,7 @@ package toolgen
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -102,13 +103,8 @@ func shouldExclude(cmd *cobra.Command, opts ToolOptions) bool {
 
 	// Check exclusion list for exact match
 	cmdPath := cmd.CommandPath()
-	for _, excluded := range opts.ExcludeCommands {
-		if cmdPath == excluded {
-			return true
-		}
-	}
 
-	return false
+	return slices.Contains(opts.ExcludeCommands, cmdPath)
 }
 
 // isRunnableCommand checks if a command can actually be executed.
@@ -254,10 +250,10 @@ func buildStandardProperty(flag *pflag.Flag) map[string]any {
 		prop["type"] = jsonSchemaTypeInteger
 	case "float32", "float64":
 		prop["type"] = jsonSchemaTypeNumber
-	case "stringSlice", "stringArray":
+	case flagTypeStringSlice, flagTypeStringArray:
 		prop["type"] = jsonSchemaTypeArray
 		prop["items"] = map[string]any{"type": jsonSchemaTypeString}
-	case "intSlice":
+	case flagTypeIntSlice:
 		prop["type"] = jsonSchemaTypeArray
 		prop["items"] = map[string]any{"type": jsonSchemaTypeInteger}
 	case "duration":

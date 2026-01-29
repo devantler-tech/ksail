@@ -195,13 +195,14 @@ func executeCommand(
 					"output", string(output),
 					"error", err)
 			}
+
 			return string(output), fmt.Errorf("command failed: %w", err)
 		}
 
 		if opts.Logger != nil {
 			opts.Logger.Debug("command completed successfully",
-			"command", command,
-			"args", args)
+				"command", command,
+				"args", args)
 		}
 
 		return string(output), nil

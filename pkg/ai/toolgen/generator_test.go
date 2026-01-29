@@ -375,42 +375,62 @@ func TestArrayParametersHaveItems(t *testing.T) {
 	tools := toolgen.GenerateTools(root, opts)
 
 	for _, tool := range tools {
-		properties, ok := tool.Parameters["properties"].(map[string]any)
+		validateArrayParameters(t, tool)
+	}
+}
+
+// validateArrayParameters checks that all array parameters have proper items definitions.
+func validateArrayParameters(t *testing.T, tool toolgen.ToolDefinition) {
+	t.Helper()
+
+	properties, ok := tool.Parameters["properties"].(map[string]any)
+	if !ok {
+		return
+	}
+
+	for paramName, prop := range properties {
+		propMap, ok := prop.(map[string]any)
 		if !ok {
 			continue
 		}
 
-		for paramName, prop := range properties {
-			propMap, ok := prop.(map[string]any)
-			if !ok {
-				continue
-			}
-
-			propType, _ := propMap["type"].(string)
-			if propType == "array" {
-				items, hasItems := propMap["items"]
-				if !hasItems {
-					t.Errorf("tool %q: array parameter %q missing 'items' property", tool.Name, paramName)
-					continue
-				}
-
-				itemsMap, ok := items.(map[string]any)
-				if !ok {
-					t.Errorf("tool %q: parameter %q 'items' should be a map", tool.Name, paramName)
-					continue
-				}
-
-				itemType, hasType := itemsMap["type"]
-				if !hasType {
-					t.Errorf("tool %q: parameter %q 'items' missing 'type' property", tool.Name, paramName)
-					continue
-				}
-
-				if itemType != "string" && itemType != "integer" {
-					t.Errorf("tool %q: parameter %q 'items.type' should be 'string' or 'integer', got %q", tool.Name, paramName, itemType)
-				}
-			}
+		propType, _ := propMap["type"].(string)
+		if propType == "array" {
+			validateArrayItems(t, tool.Name, paramName, propMap)
 		}
+	}
+}
+
+// validateArrayItems verifies that an array parameter has valid items configuration.
+func validateArrayItems(t *testing.T, toolName, paramName string, propMap map[string]any) {
+	t.Helper()
+
+	items, hasItems := propMap["items"]
+	if !hasItems {
+		t.Errorf("tool %q: array parameter %q missing 'items' property", toolName, paramName)
+
+		return
+	}
+
+	itemsMap, ok := items.(map[string]any)
+	if !ok {
+		t.Errorf("tool %q: parameter %q 'items' should be a map", toolName, paramName)
+
+		return
+	}
+
+	itemType, hasType := itemsMap["type"]
+	if !hasType {
+		t.Errorf("tool %q: parameter %q 'items' missing 'type' property", toolName, paramName)
+
+		return
+	}
+
+	if itemType != "string" && itemType != "integer" {
+		t.Errorf(
+			"tool %q: parameter %q 'items.type' should be 'string' or 'integer', got %q",
+			toolName, paramName, itemType,
+		)
 	}
 }
 
@@ -433,7 +453,8 @@ func TestExcludedCommandsAndChildren(t *testing.T) {
 
 	for _, tool := range tools {
 		for _, prefix := range forbiddenPrefixes {
-			if tool.Name == prefix || len(tool.Name) > len(prefix) && tool.Name[:len(prefix)+1] == prefix+"_" {
+			if tool.Name == prefix ||
+				len(tool.Name) > len(prefix) && tool.Name[:len(prefix)+1] == prefix+"_" {
 				t.Errorf("excluded tool %q (or child) should not be generated", tool.Name)
 			}
 		}

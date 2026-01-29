@@ -42,6 +42,7 @@ func addMCPTool(server *mcp.Server, tool ToolDefinition, opts ToolOptions) {
 			if output != "" {
 				errorMsg += "\nOutput:\n" + output
 			}
+
 			errorMsg += fmt.Sprintf("\nError: %v", err)
 
 			return &mcp.CallToolResult{
