@@ -2,5 +2,10 @@
  * Views module exports
  */
 
-export { ClusterItem, ClustersTreeDataProvider } from "./clustersView.js";
+export {
+  ClusterItem,
+  ClusterTreeItem,
+  ClustersTreeDataProvider,
+  PendingClusterItem
+} from "./clustersView.js";
 

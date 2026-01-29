@@ -7,9 +7,9 @@
 
 import * as vscode from "vscode";
 import {
-  connectCluster,
   createCluster,
   deleteCluster,
+  getBinaryPath,
   getClusterInfo,
   initCluster,
   listClusters,
@@ -18,13 +18,10 @@ import {
 } from "../ksail/index.js";
 import { ClusterItem, ClustersTreeDataProvider } from "../views/index.js";
 import {
-  promptAdvancedOptions,
-  promptClusterName,
   promptClusterSelection,
-  promptCNI,
-  promptDistribution,
-  promptProvider,
   promptYesNo,
+  runClusterCreateWizard,
+  runClusterInitWizard,
 } from "./prompts.js";
 
 /**
@@ -53,7 +50,7 @@ export function registerCommands(
             vscode.window.showInformationMessage("No clusters found");
           } else {
             const message = clusters
-              .map((c) => `${c.name} (${c.status})`)
+              .map((c) => `${c.name} (${c.provider})`)
               .join(", ");
             vscode.window.showInformationMessage(`Clusters: ${message}`);
           }
@@ -65,44 +62,29 @@ export function registerCommands(
     })
   );
 
-  // Cluster init (with wizard)
+  // Cluster init (with multi-step wizard)
   context.subscriptions.push(
     vscode.commands.registerCommand("ksail.cluster.init", async () => {
       try {
-        // Step 1: Cluster name
-        const name = await promptClusterName("local");
-        if (!name) {return;}
-
-        // Step 2: Distribution
-        const distribution = await promptDistribution();
-        if (!distribution) {return;}
-
-        // Step 3: Provider
-        const provider = await promptProvider();
-        if (!provider) {return;}
-
-        // Step 4: CNI
-        const cni = await promptCNI();
-        if (!cni) {return;}
-
-        // Step 5: Advanced options
-        const advanced = await promptAdvancedOptions();
-        if (advanced === undefined) {return;}
+        // Run multi-step wizard
+        const options = await runClusterInitWizard();
+        if (!options) { return; }
 
         // Execute init
         await executeWithProgress("Initializing cluster...", async () => {
           await initCluster(
             {
-              name,
-              distribution,
-              provider,
-              cni,
-              ...advanced,
+              name: options.name,
+              distribution: options.distribution,
+              provider: options.provider,
+              cni: options.cni,
+              gitopsEngine: options.gitopsEngine,
+              outputDir: options.outputPath,
             },
             outputChannel
           );
           vscode.window.showInformationMessage(
-            `Cluster "${name}" initialized successfully`
+            `Cluster "${options.name}" initialized successfully`
           );
           clustersProvider.refresh();
         });
@@ -112,22 +94,54 @@ export function registerCommands(
     })
   );
 
-  // Cluster create
+  // Cluster create (with multi-step wizard)
   context.subscriptions.push(
     vscode.commands.registerCommand("ksail.cluster.create", async () => {
       try {
-        // Optional: Prompt for name
-        const name = await promptClusterName();
+        // Run multi-step wizard
+        const options = await runClusterCreateWizard();
+        if (!options) { return; }
 
-        await executeWithProgress("Creating cluster...", async () => {
-          await createCluster({ name }, outputChannel);
-          vscode.window.showInformationMessage(
-            name
-              ? `Cluster "${name}" created successfully`
-              : "Cluster created successfully"
+        const clusterName = options.name || "new-cluster";
+
+        // Add pending cluster to tree view
+        clustersProvider.addPendingCluster(clusterName);
+
+        try {
+          await vscode.window.withProgress(
+            {
+              location: vscode.ProgressLocation.Notification,
+              title: `Creating cluster "${clusterName}"...`,
+              cancellable: false,
+            },
+            async (progress) => {
+              progress.report({ message: "Starting..." });
+
+              await createCluster({
+                name: options.name,
+                distributionConfigPath: options.distributionConfigPath,
+                distribution: options.distribution,
+                provider: options.provider,
+                cni: options.cni,
+                csi: options.csi,
+                metricsServer: options.metricsServer,
+                certManager: options.certManager,
+                policyEngine: options.policyEngine,
+                gitopsEngine: options.gitopsEngine,
+                controlPlanes: options.controlPlanes,
+                workers: options.workers,
+              }, outputChannel);
+            }
           );
+
+          vscode.window.showInformationMessage(
+            `Cluster "${clusterName}" created successfully`
+          );
+        } finally {
+          // Always remove pending cluster and refresh
+          clustersProvider.removePendingCluster(clusterName);
           clustersProvider.refresh();
-        });
+        }
       } catch (error) {
         showError("create cluster", error, outputChannel);
       }
@@ -254,12 +268,28 @@ export function registerCommands(
     )
   );
 
-  // Cluster info (uses ksail.yaml in workspace)
+  // Cluster info (uses ksail.yaml context in current workspace)
   context.subscriptions.push(
     vscode.commands.registerCommand(
       "ksail.cluster.info",
-      async () => {
+      async (item?: ClusterItem) => {
         try {
+          // Check if ksail.yaml exists - required for info
+          const ksailYamlExists = await vscode.workspace.findFiles("ksail.yaml", null, 1);
+          if (ksailYamlExists.length === 0) {
+            vscode.window.showErrorMessage(
+              "No ksail.yaml found. Cluster info requires a cluster configuration in the workspace."
+            );
+            return;
+          }
+
+          // If called from tree view, inform about workspace context (non-blocking)
+          if (item) {
+            vscode.window.showInformationMessage(
+              `Showing info for cluster configured in ksail.yaml (workspace context).`
+            );
+          }
+
           await executeWithProgress("Getting cluster info...", async () => {
             const info = await getClusterInfo(outputChannel);
             outputChannel.appendLine("\n=== Cluster Info ===");
@@ -273,17 +303,37 @@ export function registerCommands(
     )
   );
 
-  // Cluster connect (K9s) - uses ksail.yaml in workspace
+  // Cluster connect (K9s) - uses ksail.yaml context in current workspace
   context.subscriptions.push(
     vscode.commands.registerCommand(
       "ksail.cluster.connect",
-      async () => {
+      async (item?: ClusterItem) => {
         try {
-          // Note: This spawns K9s which is interactive
-          await connectCluster(outputChannel);
-          vscode.window.showInformationMessage(
-            "Connecting to cluster with K9s..."
-          );
+          // Check if ksail.yaml exists - required for connect
+          const ksailYamlExists = await vscode.workspace.findFiles("ksail.yaml", null, 1);
+          if (ksailYamlExists.length === 0) {
+            vscode.window.showErrorMessage(
+              "No ksail.yaml found. Connect requires a cluster configuration in the workspace."
+            );
+            return;
+          }
+
+          // If called from tree view, inform about workspace context (non-blocking)
+          if (item) {
+            vscode.window.showInformationMessage(
+              `Connecting to cluster configured in ksail.yaml (workspace context).`
+            );
+          }
+
+          // K9s requires interactive TTY - use VSCode Terminal API
+          const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+          const binaryPath = getBinaryPath();
+          const terminal = vscode.window.createTerminal({
+            name: "KSail: K9s",
+            cwd: workspaceFolder,
+          });
+          terminal.show();
+          terminal.sendText(`${binaryPath} cluster connect`);
         } catch (error) {
           showError("connect to cluster", error, outputChannel);
         }

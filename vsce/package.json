@@ -54,47 +54,56 @@
       {
         "command": "ksail.cluster.init",
         "title": "Init Cluster",
-        "category": "KSail"
+        "category": "KSail",
+        "icon": "$(add)"
       },
       {
         "command": "ksail.cluster.list",
         "title": "List Clusters",
-        "category": "KSail"
+        "category": "KSail",
+        "icon": "$(list-unordered)"
       },
       {
         "command": "ksail.cluster.create",
         "title": "Create Cluster",
-        "category": "KSail"
+        "category": "KSail",
+        "icon": "$(play)"
       },
       {
         "command": "ksail.cluster.delete",
         "title": "Delete Cluster",
-        "category": "KSail"
+        "category": "KSail",
+        "icon": "$(trash)"
       },
       {
         "command": "ksail.cluster.start",
         "title": "Start Cluster",
-        "category": "KSail"
+        "category": "KSail",
+        "icon": "$(debug-start)"
       },
       {
         "command": "ksail.cluster.stop",
         "title": "Stop Cluster",
-        "category": "KSail"
+        "category": "KSail",
+        "icon": "$(debug-stop)"
       },
       {
         "command": "ksail.cluster.info",
         "title": "Cluster Info",
-        "category": "KSail"
+        "category": "KSail",
+        "icon": "$(info)"
       },
       {
         "command": "ksail.cluster.connect",
         "title": "Connect to Cluster (K9s)",
-        "category": "KSail"
+        "category": "KSail",
+        "icon": "$(plug)"
       },
       {
         "command": "ksail.showOutput",
         "title": "Show Output",
-        "category": "KSail"
+        "category": "KSail",
+        "icon": "$(output)"
       }
     ],
     "keybindings": [
@@ -126,11 +135,6 @@
           "type": "string",
           "default": "ksail",
           "description": "Path to the KSail binary"
-        },
-        "ksail.showStatusBar": {
-          "type": "boolean",
-          "default": true,
-          "description": "Show KSail status in the status bar"
         }
       }
     },
@@ -138,10 +142,23 @@
       "ksail": [
         {
           "id": "ksailClusters",
-          "name": "Clusters"
+          "name": "Clusters",
+          "icon": "$(server)"
         }
       ]
     },
+    "viewsWelcome": [
+      {
+        "view": "ksailClusters",
+        "contents": "No clusters found.\n[Initialize Cluster](command:ksail.cluster.init)\n[Create Cluster](command:ksail.cluster.create)\nTo get started, initialize a new cluster configuration or create one from an existing ksail.yaml.\n[Learn more](https://github.com/devantler-tech/ksail)",
+        "when": "ksail.hasConfig"
+      },
+      {
+        "view": "ksailClusters",
+        "contents": "No ksail.yaml found in this workspace.\n[Initialize Cluster](command:ksail.cluster.init)\nCreate a ksail.yaml configuration to get started with KSail.\n[Learn more](https://github.com/devantler-tech/ksail)",
+        "when": "!ksail.hasConfig"
+      }
+    ],
     "viewsContainers": {
       "activitybar": [
         {
@@ -154,32 +171,41 @@
     "menus": {
       "view/title": [
         {
+          "command": "ksail.cluster.init",
+          "when": "view == ksailClusters",
+          "group": "navigation@1"
+        },
+        {
+          "command": "ksail.cluster.create",
+          "when": "view == ksailClusters && ksail.hasConfig",
+          "group": "navigation@2"
+        },
+        {
           "command": "ksail.refresh",
           "when": "view == ksailClusters",
-          "group": "navigation"
+          "group": "navigation@3"
         }
       ],
       "view/item/context": [
         {
-          "command": "ksail.cluster.info",
-          "when": "view == ksailClusters && viewItem == cluster",
-          "group": "inline"
-        },
-        {
           "command": "ksail.cluster.connect",
-          "when": "view == ksailClusters && viewItem == cluster"
+          "when": "view == ksailClusters && viewItem == cluster",
+          "group": "inline@1"
         },
         {
           "command": "ksail.cluster.start",
-          "when": "view == ksailClusters && viewItem == cluster"
+          "when": "view == ksailClusters && viewItem == cluster",
+          "group": "1_lifecycle@1"
         },
         {
           "command": "ksail.cluster.stop",
-          "when": "view == ksailClusters && viewItem == cluster"
+          "when": "view == ksailClusters && viewItem == cluster",
+          "group": "1_lifecycle@2"
         },
         {
           "command": "ksail.cluster.delete",
-          "when": "view == ksailClusters && viewItem == cluster"
+          "when": "view == ksailClusters && viewItem == cluster",
+          "group": "2_destructive"
         }
       ]
     }

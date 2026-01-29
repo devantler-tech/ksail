@@ -3,11 +3,13 @@
  *
  * Dynamic input helpers that query MCP tool schemas for valid values.
  * This ensures the extension stays in sync with CLI capabilities automatically.
+ *
+ * Uses VSCode's multi-step QuickPick pattern with step indicators.
  */
 
 import * as vscode from "vscode";
 import type { ClusterInfo } from "../ksail/index.js";
-import { getEnumValues, getPropertyDescription } from "../mcp/index.js";
+import { getEnumValues } from "../mcp/index.js";
 
 /**
  * MCP tool name for cluster init command
@@ -16,6 +18,7 @@ const CLUSTER_INIT_TOOL = "cluster_init";
 
 /**
  * Fallback enum values when MCP schema is unavailable
+ * First value in each array is the CLI default
  */
 const FALLBACK_VALUES: Record<string, string[]> = {
   distribution: ["Vanilla", "K3s", "Talos"],
@@ -23,24 +26,696 @@ const FALLBACK_VALUES: Record<string, string[]> = {
   cni: ["Default", "Cilium", "Calico"],
   csi: ["Default", "Enabled", "Disabled"],
   metrics_server: ["Default", "Enabled", "Disabled"],
-  cert_manager: ["Enabled", "Disabled"],
+  cert_manager: ["Disabled", "Enabled"],
   policy_engine: ["None", "Kyverno", "Gatekeeper"],
-  gitops_engine: ["Flux", "ArgoCD", "None"],
+  gitops_engine: ["None", "Flux", "ArgoCD"],
 };
 
+// ============================================================================
+// Multi-Step Input Helper
+// ============================================================================
+
 /**
- * Property descriptions for user-friendly prompts
+ * QuickPick item with value
  */
-const PROPERTY_DESCRIPTIONS: Record<string, string> = {
-  distribution: "Kubernetes distribution",
-  provider: "Infrastructure provider",
-  cni: "Container Network Interface (CNI)",
-  csi: "Container Storage Interface (CSI)",
-  metrics_server: "Metrics Server",
-  cert_manager: "Cert-Manager",
-  policy_engine: "Policy Engine",
-  gitops_engine: "GitOps Engine",
-};
+interface QuickPickItemWithValue<T> extends vscode.QuickPickItem {
+  value: T;
+}
+
+/**
+ * Create a multi-step QuickPick
+ */
+async function showMultiStepQuickPick<T>(
+  items: QuickPickItemWithValue<T>[],
+  options: {
+    title: string;
+    step: number;
+    totalSteps: number;
+    placeholder?: string;
+  }
+): Promise<T | undefined> {
+  const quickPick = vscode.window.createQuickPick<QuickPickItemWithValue<T>>();
+  quickPick.title = `${options.title} (${options.step}/${options.totalSteps})`;
+  quickPick.placeholder = options.placeholder;
+  quickPick.items = items;
+  quickPick.ignoreFocusOut = true;
+
+  // Pre-select the first item (which is the default)
+  if (items.length > 0) {
+    quickPick.activeItems = [items[0]];
+  }
+
+  return new Promise<T | undefined>((resolve) => {
+    quickPick.onDidAccept(() => {
+      const selection = quickPick.selectedItems[0];
+      quickPick.hide();
+      resolve(selection?.value);
+    });
+    quickPick.onDidHide(() => {
+      quickPick.dispose();
+      resolve(undefined);
+    });
+    quickPick.show();
+  });
+}
+
+/**
+ * Create a multi-step InputBox
+ */
+async function showMultiStepInputBox(options: {
+  title: string;
+  step: number;
+  totalSteps: number;
+  prompt?: string;
+  placeholder?: string;
+  value?: string;
+  validateInput?: (value: string) => string | undefined;
+}): Promise<string | undefined> {
+  const inputBox = vscode.window.createInputBox();
+  inputBox.title = `${options.title} (${options.step}/${options.totalSteps})`;
+  inputBox.prompt = options.prompt;
+  inputBox.placeholder = options.placeholder;
+  inputBox.value = options.value ?? "";
+  inputBox.ignoreFocusOut = true;
+
+  return new Promise<string | undefined>((resolve) => {
+    inputBox.onDidAccept(() => {
+      const value = inputBox.value;
+      if (options.validateInput) {
+        const error = options.validateInput(value);
+        if (error) {
+          inputBox.validationMessage = error;
+          return;
+        }
+      }
+      inputBox.hide();
+      resolve(value);
+    });
+    inputBox.onDidChangeValue((value) => {
+      if (options.validateInput) {
+        inputBox.validationMessage = options.validateInput(value);
+      }
+    });
+    inputBox.onDidHide(() => {
+      inputBox.dispose();
+      resolve(undefined);
+    });
+    inputBox.show();
+  });
+}
+
+// ============================================================================
+// Schema-Driven Helpers
+// ============================================================================
+
+/**
+ * Get enum values from MCP schema with fallback
+ */
+async function getSchemaEnumValues(propertyName: string): Promise<string[]> {
+  try {
+    const values = await getEnumValues(CLUSTER_INIT_TOOL, propertyName);
+    if (values && values.length > 0) {
+      return values;
+    }
+  } catch {
+    // MCP unavailable, use fallback
+  }
+  return FALLBACK_VALUES[propertyName] || [];
+}
+
+// ============================================================================
+// Cluster Init Wizard
+// ============================================================================
+
+/**
+ * Full cluster init options
+ */
+export interface ClusterInitOptions {
+  outputPath: string;
+  name: string;
+  distribution: string;
+  provider: string;
+  cni: string;
+  gitopsEngine: string;
+}
+
+/**
+ * Run the cluster init wizard
+ *
+ * Multi-step QuickPick flow with step indicators.
+ * Returns undefined if user cancels at any step.
+ */
+export async function runClusterInitWizard(): Promise<ClusterInitOptions | undefined> {
+  const title = "KSail: Initialize Cluster";
+  const totalSteps = 6;
+
+  // Get workspace folder for default output path
+  const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? ".";
+
+  // Step 1: Output path
+  const outputPath = await showMultiStepInputBox({
+    title,
+    step: 1,
+    totalSteps,
+    prompt: "Enter output directory for cluster configuration",
+    placeholder: workspaceFolder,
+    value: workspaceFolder,
+  });
+  if (outputPath === undefined) { return undefined; }
+
+  // Step 2: Cluster name
+  const name = await showMultiStepInputBox({
+    title,
+    step: 2,
+    totalSteps,
+    prompt: "Enter a name for your cluster",
+    placeholder: "my-cluster",
+    value: "local",
+    validateInput: (value) => {
+      if (!value) {
+        return "Cluster name is required";
+      }
+      if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(value)) {
+        return "Must be lowercase alphanumeric, may contain hyphens, cannot start/end with hyphen";
+      }
+      if (value.length > 63) {
+        return "Must be 63 characters or less";
+      }
+      return undefined;
+    },
+  });
+  if (!name) { return undefined; }
+
+  // Step 3: Distribution (first value is default)
+  const distributionValues = await getSchemaEnumValues("distribution");
+  const distributionItems: QuickPickItemWithValue<string>[] = distributionValues.map((v, i) => ({
+    label: v,
+    description: getDistributionDescription(v) + (i === 0 ? " (default)" : ""),
+    value: v,
+    picked: i === 0,
+  }));
+  const distribution = await showMultiStepQuickPick(distributionItems, {
+    title,
+    step: 3,
+    totalSteps,
+    placeholder: "Select Kubernetes distribution",
+  });
+  if (!distribution) { return undefined; }
+
+  // Step 4: Provider (first value is default)
+  const providerValues = await getSchemaEnumValues("provider");
+  const providerItems: QuickPickItemWithValue<string>[] = providerValues.map((v, i) => ({
+    label: v,
+    description: getProviderDescription(v) + (i === 0 ? " (default)" : ""),
+    value: v,
+    picked: i === 0,
+  }));
+  const provider = await showMultiStepQuickPick(providerItems, {
+    title,
+    step: 4,
+    totalSteps,
+    placeholder: "Select infrastructure provider",
+  });
+  if (!provider) { return undefined; }
+
+  // Step 5: CNI (first value is default)
+  const cniValues = await getSchemaEnumValues("cni");
+  const cniItems: QuickPickItemWithValue<string>[] = cniValues.map((v, i) => ({
+    label: v,
+    description: getCniDescription(v) + (i === 0 ? " (default)" : ""),
+    value: v,
+    picked: i === 0,
+  }));
+  const cni = await showMultiStepQuickPick(cniItems, {
+    title,
+    step: 5,
+    totalSteps,
+    placeholder: "Select Container Network Interface (CNI)",
+  });
+  if (!cni) { return undefined; }
+
+  // Step 6: GitOps Engine (first value is default)
+  const gitopsValues = await getSchemaEnumValues("gitops_engine");
+  const gitopsItems: QuickPickItemWithValue<string>[] = gitopsValues.map((v, i) => ({
+    label: v,
+    description: getGitopsDescription(v) + (i === 0 ? " (default)" : ""),
+    value: v,
+    picked: i === 0,
+  }));
+  const gitopsEngine = await showMultiStepQuickPick(gitopsItems, {
+    title,
+    step: 6,
+    totalSteps,
+    placeholder: "Select GitOps engine",
+  });
+  if (!gitopsEngine) { return undefined; }
+
+  return { outputPath, name, distribution, provider, cni, gitopsEngine };
+}
+
+// ============================================================================
+// Cluster Create Wizard
+// ============================================================================
+
+/**
+ * Full cluster create options
+ */
+export interface ClusterCreateOptions {
+  distributionConfigPath?: string;
+  name?: string;
+  distribution?: string;
+  provider?: string;
+  cni?: string;
+  csi?: string;
+  metricsServer?: string;
+  certManager?: string;
+  policyEngine?: string;
+  gitopsEngine?: string;
+  controlPlanes?: number;
+  workers?: number;
+}
+
+/**
+ * Run the cluster create wizard
+ *
+ * Multi-step QuickPick flow with step indicators.
+ * The CLI uses ksail.yaml from the current working directory automatically.
+ * Returns undefined if user cancels at any step.
+ */
+export async function runClusterCreateWizard(): Promise<ClusterCreateOptions | undefined> {
+  const title = "KSail: Create Cluster";
+
+  // Check if ksail.yaml exists in workspace
+  const ksailYamlExists = await vscode.workspace.findFiles("ksail.yaml", null, 1);
+  const hasKsailYaml = ksailYamlExists.length > 0;
+
+  // If no ksail.yaml, prompt user to init first or continue with defaults
+  if (!hasKsailYaml) {
+    const noConfigItems: QuickPickItemWithValue<"defaults" | "customize" | "init">[] = [
+      {
+        label: "$(play) Create with CLI defaults",
+        description: "Use KSail's built-in default settings",
+        value: "defaults",
+        picked: true,
+      },
+      {
+        label: "$(settings-gear) Customize options...",
+        description: "Configure distribution, provider, CNI, and more",
+        value: "customize",
+      },
+      {
+        label: "$(add) Initialize first...",
+        description: "Create a ksail.yaml configuration file",
+        value: "init",
+      },
+    ];
+
+    const noConfigChoice = await showMultiStepQuickPick(noConfigItems, {
+      title,
+      step: 1,
+      totalSteps: 1,
+      placeholder: "No ksail.yaml found. How would you like to proceed?",
+    });
+
+    if (!noConfigChoice) { return undefined; }
+
+    if (noConfigChoice === "init") {
+      // Trigger init command instead
+      await vscode.commands.executeCommand("ksail.cluster.init");
+      return undefined;
+    }
+
+    if (noConfigChoice === "defaults") {
+      // Use CLI defaults with no options
+      return {};
+    }
+
+    // Continue to full customization wizard
+    return runFullCustomizationWizard(title, 2);
+  }
+
+  // ksail.yaml exists - show simplified wizard
+  const totalSteps = 3;
+  let currentStep = 1;
+
+  // Step 1: Use defaults or customize
+  const defaultsItems: QuickPickItemWithValue<boolean>[] = [
+    {
+      label: "$(check) Use defaults from ksail.yaml",
+      description: "Create cluster with settings from your configuration",
+      value: true,
+      picked: true,
+    },
+    {
+      label: "$(settings-gear) Customize options...",
+      description: "Override distribution, provider, CNI, and more",
+      value: false,
+    },
+  ];
+
+  const useDefaults = await showMultiStepQuickPick(defaultsItems, {
+    title,
+    step: currentStep++,
+    totalSteps,
+    placeholder: "Use default settings?",
+  });
+  if (useDefaults === undefined) { return undefined; }
+
+  // Step 2: Distribution config path (optional)
+  const distConfigItems: QuickPickItemWithValue<string | "browse" | "none">[] = [
+    {
+      label: "$(dash) Use default from ksail.yaml",
+      description: "Let KSail determine the distribution config (default)",
+      value: "none",
+      picked: true,
+    },
+    {
+      label: "$(folder-opened) Browse for distribution config...",
+      description: "Select kind.yaml, k3d.yaml, or Talos config",
+      value: "browse",
+    },
+  ];
+
+  const distConfigSelection = await showMultiStepQuickPick(distConfigItems, {
+    title,
+    step: currentStep++,
+    totalSteps,
+    placeholder: "Select distribution configuration (optional)",
+  });
+  if (distConfigSelection === undefined) { return undefined; }
+
+  let distributionConfigPath: string | undefined;
+  if (distConfigSelection === "browse") {
+    const result = await vscode.window.showOpenDialog({
+      canSelectFiles: true,
+      canSelectFolders: false,
+      canSelectMany: false,
+      filters: { "YAML files": ["yaml", "yml"] },
+      title: "Select distribution config (kind.yaml, k3d.yaml, etc.)",
+    });
+    if (!result || result.length === 0) { return undefined; }
+    distributionConfigPath = result[0].fsPath;
+  }
+
+  // Step 3: Cluster name (optional override)
+  const nameItems: QuickPickItemWithValue<string | "custom">[] = [
+    {
+      label: "$(dash) Use name from ksail.yaml",
+      description: "Use the cluster name defined in the config (default)",
+      value: "",
+      picked: true,
+    },
+    {
+      label: "$(pencil) Enter custom name...",
+      description: "Override the cluster name",
+      value: "custom",
+    },
+  ];
+
+  const nameSelection = await showMultiStepQuickPick(nameItems, {
+    title,
+    step: currentStep++,
+    totalSteps,
+    placeholder: "Cluster name",
+  });
+  if (nameSelection === undefined) { return undefined; }
+
+  let name: string | undefined;
+  if (nameSelection === "custom") {
+    name = await vscode.window.showInputBox({
+      prompt: "Enter cluster name",
+      placeHolder: "my-cluster",
+      validateInput: (value) => {
+        if (!value) { return "Cluster name is required"; }
+        if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(value)) {
+          return "Must be lowercase alphanumeric, may contain hyphens";
+        }
+        return undefined;
+      },
+    });
+    if (!name) { return undefined; }
+  }
+
+  // If using defaults, return minimal options
+  if (useDefaults) {
+    return {
+      distributionConfigPath,
+      name: name || undefined,
+    };
+  }
+
+  // Continue to full customization
+  return runFullCustomizationWizard(title, 4, distributionConfigPath, name);
+}
+
+/**
+ * Run the full customization wizard for cluster creation
+ */
+async function runFullCustomizationWizard(
+  title: string,
+  startStep: number,
+  distributionConfigPath?: string,
+  name?: string
+): Promise<ClusterCreateOptions | undefined> {
+  const totalSteps = startStep + 9; // 10 more steps for customization
+  let step = startStep;
+
+  // Distribution
+  const distributionValues = await getSchemaEnumValues("distribution");
+  const distributionItems: QuickPickItemWithValue<string>[] = distributionValues.map((v, i) => ({
+    label: v,
+    description: getDistributionDescription(v) + (i === 0 ? " (default)" : ""),
+    value: v,
+    picked: i === 0,
+  }));
+  const distribution = await showMultiStepQuickPick(distributionItems, {
+    title,
+    step: step++,
+    totalSteps,
+    placeholder: "Select Kubernetes distribution",
+  });
+  if (!distribution) { return undefined; }
+
+  // Provider
+  const providerValues = await getSchemaEnumValues("provider");
+  const providerItems: QuickPickItemWithValue<string>[] = providerValues.map((v, i) => ({
+    label: v,
+    description: getProviderDescription(v) + (i === 0 ? " (default)" : ""),
+    value: v,
+    picked: i === 0,
+  }));
+  const provider = await showMultiStepQuickPick(providerItems, {
+    title,
+    step: step++,
+    totalSteps,
+    placeholder: "Select infrastructure provider",
+  });
+  if (!provider) { return undefined; }
+
+  // CNI
+  const cniValues = await getSchemaEnumValues("cni");
+  const cniItems: QuickPickItemWithValue<string>[] = cniValues.map((v, i) => ({
+    label: v,
+    description: getCniDescription(v) + (i === 0 ? " (default)" : ""),
+    value: v,
+    picked: i === 0,
+  }));
+  const cni = await showMultiStepQuickPick(cniItems, {
+    title,
+    step: step++,
+    totalSteps,
+    placeholder: "Select Container Network Interface (CNI)",
+  });
+  if (!cni) { return undefined; }
+
+  // CSI
+  const csiValues = await getSchemaEnumValues("csi");
+  const csiItems: QuickPickItemWithValue<string>[] = csiValues.map((v, i) => ({
+    label: v,
+    description: getCsiDescription(v) + (i === 0 ? " (default)" : ""),
+    value: v,
+    picked: i === 0,
+  }));
+  const csi = await showMultiStepQuickPick(csiItems, {
+    title,
+    step: step++,
+    totalSteps,
+    placeholder: "Select Container Storage Interface (CSI)",
+  });
+  if (!csi) { return undefined; }
+
+  // Metrics Server
+  const metricsValues = await getSchemaEnumValues("metrics_server");
+  const metricsItems: QuickPickItemWithValue<string>[] = metricsValues.map((v, i) => ({
+    label: v,
+    description: i === 0 ? "(default)" : "",
+    value: v,
+    picked: i === 0,
+  }));
+  const metricsServer = await showMultiStepQuickPick(metricsItems, {
+    title,
+    step: step++,
+    totalSteps,
+    placeholder: "Select Metrics Server option",
+  });
+  if (!metricsServer) { return undefined; }
+
+  // Cert Manager
+  const certValues = await getSchemaEnumValues("cert_manager");
+  const certItems: QuickPickItemWithValue<string>[] = certValues.map((v, i) => ({
+    label: v,
+    description: i === 0 ? "(default)" : "",
+    value: v,
+    picked: i === 0,
+  }));
+  const certManager = await showMultiStepQuickPick(certItems, {
+    title,
+    step: step++,
+    totalSteps,
+    placeholder: "Select Cert-Manager option",
+  });
+  if (!certManager) { return undefined; }
+
+  // Policy Engine
+  const policyValues = await getSchemaEnumValues("policy_engine");
+  const policyItems: QuickPickItemWithValue<string>[] = policyValues.map((v, i) => ({
+    label: v,
+    description: getPolicyDescription(v) + (i === 0 ? " (default)" : ""),
+    value: v,
+    picked: i === 0,
+  }));
+  const policyEngine = await showMultiStepQuickPick(policyItems, {
+    title,
+    step: step++,
+    totalSteps,
+    placeholder: "Select Policy Engine",
+  });
+  if (!policyEngine) { return undefined; }
+
+  // GitOps Engine
+  const gitopsValues = await getSchemaEnumValues("gitops_engine");
+  const gitopsItems: QuickPickItemWithValue<string>[] = gitopsValues.map((v, i) => ({
+    label: v,
+    description: getGitopsDescription(v) + (i === 0 ? " (default)" : ""),
+    value: v,
+    picked: i === 0,
+  }));
+  const gitopsEngine = await showMultiStepQuickPick(gitopsItems, {
+    title,
+    step: step++,
+    totalSteps,
+    placeholder: "Select GitOps engine",
+  });
+  if (!gitopsEngine) { return undefined; }
+
+  // Control planes count
+  const controlPlanes = await promptNumber(
+    "Number of control plane nodes",
+    1,
+    1,
+    10
+  );
+  if (controlPlanes === undefined) { return undefined; }
+
+  // Workers count
+  const workers = await promptNumber(
+    "Number of worker nodes",
+    0,
+    0,
+    100
+  );
+  if (workers === undefined) { return undefined; }
+
+  return {
+    distributionConfigPath,
+    name: name || undefined,
+    distribution,
+    provider,
+    cni,
+    csi,
+    metricsServer,
+    certManager,
+    policyEngine,
+    gitopsEngine,
+    controlPlanes,
+    workers,
+  };
+}
+
+/**
+ * Get description for distribution options
+ */
+function getDistributionDescription(distribution: string): string {
+  const descriptions: Record<string, string> = {
+    Vanilla: "Standard upstream Kubernetes via Kind",
+    K3s: "Lightweight Kubernetes via K3d",
+    Talos: "Immutable Talos Linux Kubernetes",
+  };
+  return descriptions[distribution] || "";
+}
+
+/**
+ * Get description for provider options
+ */
+function getProviderDescription(provider: string): string {
+  const descriptions: Record<string, string> = {
+    Docker: "Run cluster nodes as Docker containers",
+    Hetzner: "Run cluster on Hetzner Cloud servers",
+  };
+  return descriptions[provider] || "";
+}
+
+/**
+ * Get description for CNI options
+ */
+function getCniDescription(cni: string): string {
+  const descriptions: Record<string, string> = {
+    Default: "Use the distribution's default CNI",
+    Cilium: "eBPF-based networking with advanced features",
+    Calico: "Flexible networking and network policy",
+  };
+  return descriptions[cni] || "";
+}
+
+/**
+ * Get description for CSI options
+ */
+function getCsiDescription(csi: string): string {
+  const descriptions: Record<string, string> = {
+    Default: "Use the distribution's default CSI",
+    Enabled: "Enable local path provisioner",
+    Disabled: "No CSI provisioner",
+  };
+  return descriptions[csi] || "";
+}
+
+/**
+ * Get description for policy options
+ */
+function getPolicyDescription(policy: string): string {
+  const descriptions: Record<string, string> = {
+    None: "No policy engine",
+    Kyverno: "Kubernetes native policy management",
+    Gatekeeper: "OPA-based policy controller",
+  };
+  return descriptions[policy] || "";
+}
+
+/**
+ * Get description for GitOps options
+ */
+function getGitopsDescription(gitops: string): string {
+  const descriptions: Record<string, string> = {
+    Flux: "Flux CD - GitOps toolkit for Kubernetes",
+    ArgoCD: "Argo CD - Declarative GitOps for Kubernetes",
+    None: "No GitOps engine installed",
+  };
+  return descriptions[gitops] || "";
+}
+
+// ============================================================================
+// Simple Prompts (for non-wizard use cases)
+// ============================================================================
 
 /**
  * Prompt for cluster name with DNS-1123 validation
@@ -82,7 +757,7 @@ export async function promptClusterSelection(
 
   const items = clusters.map((c) => ({
     label: c.name,
-    description: `${c.distribution} - ${c.status}`,
+    description: c.provider,
     cluster: c,
   }));
 
@@ -91,90 +766,6 @@ export async function promptClusterSelection(
   });
 
   return selected?.cluster;
-}
-
-/**
- * Get enum values from MCP schema with fallback
- */
-async function getSchemaEnumValues(propertyName: string): Promise<string[]> {
-  try {
-    const values = await getEnumValues(CLUSTER_INIT_TOOL, propertyName);
-    if (values && values.length > 0) {
-      return values;
-    }
-  } catch {
-    // MCP unavailable, use fallback
-  }
-  return FALLBACK_VALUES[propertyName] || [];
-}
-
-/**
- * Get property description from MCP schema with fallback
- */
-async function getSchemaDescription(propertyName: string): Promise<string> {
-  try {
-    const description = await getPropertyDescription(CLUSTER_INIT_TOOL, propertyName);
-    if (description) {
-      return description;
-    }
-  } catch {
-    // MCP unavailable, use fallback
-  }
-  return PROPERTY_DESCRIPTIONS[propertyName] || propertyName;
-}
-
-/**
- * Generic schema-driven enum prompt
- *
- * Queries the MCP schema for valid enum values and presents them as a QuickPick.
- */
-async function promptSchemaEnum(
-  propertyName: string,
-  placeholder?: string
-): Promise<string | undefined> {
-  const values = await getSchemaEnumValues(propertyName);
-  const description = placeholder || await getSchemaDescription(propertyName);
-
-  if (values.length === 0) {
-    vscode.window.showErrorMessage(`No options available for ${propertyName}`);
-    return undefined;
-  }
-
-  const items = values.map((v) => ({ label: v, value: v }));
-
-  const selected = await vscode.window.showQuickPick(items, {
-    placeHolder: `Select ${description}`,
-  });
-
-  return selected?.value;
-}
-
-/**
- * Prompt for distribution selection (schema-driven)
- */
-export async function promptDistribution(): Promise<string | undefined> {
-  return promptSchemaEnum("distribution", "Kubernetes distribution");
-}
-
-/**
- * Prompt for provider selection (schema-driven)
- */
-export async function promptProvider(): Promise<string | undefined> {
-  return promptSchemaEnum("provider", "Infrastructure provider");
-}
-
-/**
- * Prompt for CNI selection (schema-driven)
- */
-export async function promptCNI(): Promise<string | undefined> {
-  return promptSchemaEnum("cni", "Container Network Interface (CNI)");
-}
-
-/**
- * Prompt for GitOps engine selection (schema-driven)
- */
-export async function promptGitOpsEngine(): Promise<string | undefined> {
-  return promptSchemaEnum("gitops_engine", "GitOps Engine");
 }
 
 /**
@@ -222,59 +813,4 @@ export async function promptNumber(
   });
 
   return value ? parseInt(value, 10) : undefined;
-}
-
-/**
- * Advanced options for cluster init (schema-driven)
- */
-export interface AdvancedInitOptions {
-  csi?: string;
-  metricsServer?: string;
-  certManager?: string;
-  policyEngine?: string;
-  gitopsEngine?: string;
-}
-
-/**
- * Prompt for advanced cluster init options (schema-driven)
- */
-export async function promptAdvancedOptions(): Promise<AdvancedInitOptions | undefined> {
-  const configure = await promptYesNo(
-    "Configure advanced options?",
-    "Yes, configure",
-    "No, use defaults"
-  );
-
-  if (!configure) {
-    return {};
-  }
-
-  const options: AdvancedInitOptions = {};
-
-  // CSI (schema-driven)
-  const csi = await promptSchemaEnum("csi", "Container Storage Interface (CSI)");
-  if (csi === undefined) { return undefined; }
-  options.csi = csi;
-
-  // Metrics Server (schema-driven)
-  const metrics = await promptSchemaEnum("metrics_server", "Metrics Server");
-  if (metrics === undefined) { return undefined; }
-  options.metricsServer = metrics;
-
-  // Cert Manager (schema-driven)
-  const cert = await promptSchemaEnum("cert_manager", "Cert-Manager");
-  if (cert === undefined) { return undefined; }
-  options.certManager = cert;
-
-  // Policy Engine (schema-driven)
-  const policy = await promptSchemaEnum("policy_engine", "Policy Engine");
-  if (policy === undefined) { return undefined; }
-  options.policyEngine = policy;
-
-  // GitOps Engine (schema-driven)
-  const gitops = await promptSchemaEnum("gitops_engine", "GitOps Engine");
-  if (gitops === undefined) { return undefined; }
-  options.gitopsEngine = gitops;
-
-  return options;
 }

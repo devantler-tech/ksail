@@ -17,12 +17,10 @@ import {
   createKSailConfigWatcher,
   KSailMcpServerDefinitionProvider,
 } from "./mcp/index.js";
-import { StatusBarManager } from "./ui/statusBar.js";
 import { ClustersTreeDataProvider } from "./views/clustersView.js";
 
 // Global extension state
 let outputChannel: vscode.OutputChannel;
-let statusBarManager: StatusBarManager;
 let clustersProvider: ClustersTreeDataProvider;
 
 /**
@@ -57,17 +55,16 @@ export async function activate(
     );
   }
 
-  // Create status bar
-  statusBarManager = new StatusBarManager();
-  context.subscriptions.push(statusBarManager);
-
   // Create tree data provider for clusters
   clustersProvider = new ClustersTreeDataProvider(outputChannel);
 
-  // Register tree view
-  context.subscriptions.push(
-    vscode.window.registerTreeDataProvider("ksailClusters", clustersProvider)
-  );
+  // Register tree view using createTreeView for programmatic access
+  const clustersTreeView = vscode.window.createTreeView("ksailClusters", {
+    treeDataProvider: clustersProvider,
+    showCollapseAll: false,
+  });
+  clustersProvider.setTreeView(clustersTreeView);
+  context.subscriptions.push(clustersTreeView);
 
   // Register commands
   registerCommands(context, outputChannel, clustersProvider);
@@ -94,11 +91,6 @@ export async function activate(
     }),
     configWatcher
   );
-
-  // Initial refresh of clusters
-  if (hasKsailYaml) {
-    clustersProvider.refresh();
-  }
 
   outputChannel.appendLine("KSail extension activated");
 }

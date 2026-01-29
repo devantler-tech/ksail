@@ -8,13 +8,20 @@ import * as vscode from "vscode";
 import { runKsailCommand } from "./binary.js";
 
 /**
+ * Cluster status
+ */
+export type ClusterStatus = "running" | "stopped" | "unknown";
+
+/**
  * Cluster information
+ *
+ * Note: The CLI `cluster list` command only returns name and provider.
+ * Status is detected separately for each cluster.
  */
 export interface ClusterInfo {
   name: string;
-  status: string;
-  distribution: string;
   provider: string;
+  status?: ClusterStatus;
 }
 
 /**
@@ -22,6 +29,17 @@ export interface ClusterInfo {
  */
 export interface CreateClusterOptions {
   name?: string;
+  distributionConfigPath?: string;
+  distribution?: string;
+  provider?: string;
+  cni?: string;
+  csi?: string;
+  metricsServer?: string;
+  certManager?: string;
+  policyEngine?: string;
+  gitopsEngine?: string;
+  controlPlanes?: number;
+  workers?: number;
 }
 
 /**
@@ -106,9 +124,8 @@ function parseClusterListOutput(output: string): ClusterInfo[] {
     for (const match of nameMatches) {
       clusters.push({
         name: match[1],
-        status: "unknown", // Status not provided in list output
-        distribution: "unknown", // Distribution not provided in list output
         provider: provider,
+        status: "unknown",
       });
     }
   }
@@ -117,7 +134,69 @@ function parseClusterListOutput(output: string): ClusterInfo[] {
 }
 
 /**
+ * Detect cluster status by checking Docker container state
+ * Only works for Docker-based providers (Kind, K3d)
+ */
+export async function detectClusterStatus(
+  clusterName: string,
+  provider: string
+): Promise<ClusterStatus> {
+  // Only check status for Docker-based providers
+  if (provider.toLowerCase() !== "docker") {
+    return "unknown";
+  }
+
+  try {
+    const { spawn } = await import("child_process");
+
+    return new Promise((resolve) => {
+      // Check if any containers with cluster name are running
+      // Kind uses pattern: kind-<cluster-name>-control-plane, kind-<cluster-name>-worker
+      // K3d uses pattern: k3d-<cluster-name>-server-0, k3d-<cluster-name>-agent-0
+      const proc = spawn("docker", [
+        "ps",
+        "-a",
+        "--filter",
+        `name=${clusterName}`,
+        "--format",
+        "{{.State}}",
+      ]);
+
+      let output = "";
+      proc.stdout.on("data", (data: Buffer) => {
+        output += data.toString();
+      });
+
+      proc.on("close", (code) => {
+        if (code !== 0) {
+          resolve("unknown");
+          return;
+        }
+
+        const states = output.trim().split("\n").filter(Boolean);
+        if (states.length === 0) {
+          resolve("unknown");
+        } else if (states.some((state) => state === "running")) {
+          resolve("running");
+        } else {
+          resolve("stopped");
+        }
+      });
+
+      proc.on("error", () => {
+        resolve("unknown");
+      });
+    });
+  } catch {
+    return "unknown";
+  }
+}
+
+/**
  * Create a cluster
+ *
+ * Note: The CLI reads ksail.yaml from the current working directory automatically.
+ * There is no --config flag.
  */
 export async function createCluster(
   options: CreateClusterOptions = {},
@@ -125,8 +204,41 @@ export async function createCluster(
 ): Promise<void> {
   const args = ["cluster", "create"];
 
+  if (options.distributionConfigPath) {
+    args.push("--distribution-config", options.distributionConfigPath);
+  }
   if (options.name) {
     args.push("--name", options.name);
+  }
+  if (options.distribution) {
+    args.push("--distribution", options.distribution);
+  }
+  if (options.provider) {
+    args.push("--provider", options.provider);
+  }
+  if (options.cni) {
+    args.push("--cni", options.cni);
+  }
+  if (options.csi) {
+    args.push("--csi", options.csi);
+  }
+  if (options.metricsServer) {
+    args.push("--metrics-server", options.metricsServer);
+  }
+  if (options.certManager) {
+    args.push("--cert-manager", options.certManager);
+  }
+  if (options.policyEngine) {
+    args.push("--policy-engine", options.policyEngine);
+  }
+  if (options.gitopsEngine) {
+    args.push("--gitops-engine", options.gitopsEngine);
+  }
+  if (options.controlPlanes !== undefined) {
+    args.push("--control-planes", options.controlPlanes.toString());
+  }
+  if (options.workers !== undefined) {
+    args.push("--workers", options.workers.toString());
   }
 
   const result = await runKsailCommand(args, undefined, outputChannel);
@@ -206,6 +318,7 @@ export async function stopCluster(
  * Get cluster info
  *
  * Uses the ksail.yaml context in the current working directory.
+ * Note: The CLI does not support specifying a cluster by name.
  */
 export async function getClusterInfo(
   outputChannel?: vscode.OutputChannel
@@ -219,24 +332,6 @@ export async function getClusterInfo(
   }
 
   return result.stdout;
-}
-
-/**
- * Connect to a cluster with K9s
- *
- * Uses the ksail.yaml context in the current working directory.
- * Connect runs K9s which is interactive.
- */
-export async function connectCluster(
-  outputChannel?: vscode.OutputChannel
-): Promise<void> {
-  const args = ["cluster", "connect"];
-
-  const result = await runKsailCommand(args, undefined, outputChannel);
-
-  if (result.exitCode !== 0) {
-    throw new Error(`Failed to connect to cluster: ${result.stderr || result.stdout}`);
-  }
 }
 
 /**

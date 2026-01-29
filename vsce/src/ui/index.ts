@@ -1,5 +1,5 @@
 /**
  * UI module exports
+ *
+ * Currently empty - status bar removed.
  */
-
-export { StatusBarManager } from "./statusBar.js";
