@@ -89,6 +89,26 @@ func TestConsolidatedToolExecution(t *testing.T) {
 			expectError:    true,
 			errorSubstring: "invalid subcommand",
 		},
+		{
+			name: "deployment with inapplicable service flag should filter it out",
+			params: map[string]any{
+				"resource_type": "deployment",
+				"image":         "nginx:latest",
+				"port":          8080, // This is a service-only flag, should be filtered
+			},
+			expectedArgs: []string{"workload", "gen", "deployment", "--image=nginx:latest"},
+			expectError:  false,
+		},
+		{
+			name: "service with inapplicable deployment flag should filter it out",
+			params: map[string]any{
+				"resource_type": "service",
+				"port":          8080,
+				"image":         "nginx:latest", // This is a deployment-only flag, should be filtered
+			},
+			expectedArgs: []string{"workload", "gen", "service", "--port=8080"},
+			expectError:  false,
+		},
 	}
 
 	for _, testCase := range tests {

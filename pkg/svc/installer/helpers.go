@@ -20,6 +20,9 @@ const (
 	// extra time for multiple deployments to become ready (admission-controller,
 	// background-controller, cleanup-controller, and reports-controller).
 	KyvernoInstallTimeout = 7 * time.Minute
+	// CertManagerInstallTimeout is the timeout for cert-manager installs, which need
+	// extra time for multiple deployments and webhook configurations to become ready.
+	CertManagerInstallTimeout = 7 * time.Minute
 )
 
 // GetInstallTimeout determines the timeout for component installation.

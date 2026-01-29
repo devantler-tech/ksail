@@ -65,6 +65,8 @@ func NewServer(cfg ServerConfig) (*mcpsdk.Server, error) {
 	if cfg.WorkingDirectory != "" {
 		opts.WorkingDirectory = cfg.WorkingDirectory
 	}
+	// Pass logger for debug logging during command execution
+	opts.Logger = cfg.Logger
 
 	toolDefs := toolgen.GenerateTools(cfg.RootCmd, opts)
 

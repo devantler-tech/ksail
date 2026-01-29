@@ -36,11 +36,20 @@ func addMCPTool(server *mcp.Server, tool ToolDefinition, opts ToolOptions) {
 		output, err := ExecuteTool(ctx, tool, input, opts)
 		if err != nil {
 			// MCP returns errors via IsError flag and error messages in content
+			// Include both the captured output (which contains the actual error details)
+			// and the error message (which contains the exit code)
+			errorMsg := fmt.Sprintf("Command '%s' failed", tool.CommandPath)
+			if output != "" {
+				errorMsg += "\nOutput:\n" + output
+			}
+
+			errorMsg += fmt.Sprintf("\nError: %v", err)
+
 			return &mcp.CallToolResult{
 				IsError: true,
 				Content: []mcp.Content{
 					&mcp.TextContent{
-						Text: fmt.Sprintf("Command failed: %v", err),
+						Text: errorMsg,
 					},
 				},
 			}, nil, nil
