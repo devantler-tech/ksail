@@ -8,7 +8,8 @@
 
 export {
   KSailMcpServerDefinitionProvider, createConfigChangeListener,
-  createKSailConfigWatcher
+  createKSailConfigWatcher,
+  initializeServerProvider
 } from "./serverProvider.js";
 
 export {
@@ -18,6 +19,7 @@ export {
   getToolProperties,
   getToolSchema,
   getToolSchemas,
+  initializeSchemaClient,
   isPropertyRequired,
   type McpInputSchema,
   type McpPropertySchema,

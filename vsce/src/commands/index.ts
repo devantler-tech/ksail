@@ -103,7 +103,7 @@ export function registerCommands(
         const options = await runClusterCreateWizard();
         if (!options) { return; }
 
-        const clusterName = options.name || "new-cluster";
+        const clusterName = options.name || "Creating cluster...";
 
         // Add pending cluster to tree view
         clustersProvider.addPendingCluster(clusterName);
@@ -135,9 +135,10 @@ export function registerCommands(
             }
           );
 
-          vscode.window.showInformationMessage(
-            `Cluster "${clusterName}" created successfully`
-          );
+          const successMessage = options.name 
+            ? `Cluster "${options.name}" created successfully`
+            : "Cluster created successfully";
+          vscode.window.showInformationMessage(successMessage);
         } finally {
           // Always remove pending cluster and refresh
           clustersProvider.removePendingCluster(clusterName);

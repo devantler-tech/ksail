@@ -8,6 +8,18 @@
 import * as vscode from "vscode";
 
 /**
+ * Extension version (set during activation)
+ */
+let extensionVersion = "0.1.0"; // fallback default
+
+/**
+ * Initialize the server provider with extension version
+ */
+export function initializeServerProvider(version: string): void {
+  extensionVersion = version;
+}
+
+/**
  * Event emitter for server definition changes
  */
 const onDidChangeMcpServerDefinitionsEmitter =
@@ -15,7 +27,7 @@ const onDidChangeMcpServerDefinitionsEmitter =
 
 /**
  * Creates the MCP server definition for KSail.
- * Returns undefined if no workspace is available.
+ * Always returns a server definition; sets cwd only if a workspace is available.
  */
 function createKSailServerDefinition(): vscode.McpStdioServerDefinition {
   const config = vscode.workspace.getConfiguration("ksail");
@@ -27,7 +39,7 @@ function createKSailServerDefinition(): vscode.McpStdioServerDefinition {
     binaryPath,        // command
     ["mcp"],           // args
     {},                // env
-    "1.0.0"            // version
+    extensionVersion   // version
   );
 
   // Set working directory if workspace is available

@@ -116,7 +116,7 @@ vsce/
 │   │   ├── clustersView.ts   # Tree view provider
 │   │   └── index.ts          # Module exports
 │   └── ui/
-│       └── index.ts          # UI helpers (progress, error handling)
+│       └── index.ts          # Reserved for future UI helpers (currently empty)
 ├── dist/                     # Compiled output
 └── package.json              # Extension manifest
 ```
