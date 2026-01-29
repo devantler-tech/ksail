@@ -1,0 +1,214 @@
+{
+  "name": "vscode-ksail",
+  "displayName": "KSail",
+  "description": "KSail - Kubernetes SDK for Local GitOps Development",
+  "version": "0.1.0",
+  "publisher": "devantler-tech",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/devantler-tech/ksail"
+  },
+  "homepage": "https://github.com/devantler-tech/ksail",
+  "bugs": {
+    "url": "https://github.com/devantler-tech/ksail/issues"
+  },
+  "engines": {
+    "vscode": "^1.96.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "kubernetes",
+    "k8s",
+    "gitops",
+    "flux",
+    "kind",
+    "k3d",
+    "talos",
+    "mcp"
+  ],
+  "galleryBanner": {
+    "color": "#1e1e1e",
+    "theme": "dark"
+  },
+  "activationEvents": [
+    "workspaceContains:ksail.yaml"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "mcpServerDefinitionProviders": [
+      {
+        "id": "ksail",
+        "label": "KSail MCP Server"
+      }
+    ],
+    "commands": [
+      {
+        "command": "ksail.refresh",
+        "title": "Refresh Clusters",
+        "category": "KSail",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "ksail.cluster.init",
+        "title": "Init Cluster",
+        "category": "KSail"
+      },
+      {
+        "command": "ksail.cluster.list",
+        "title": "List Clusters",
+        "category": "KSail"
+      },
+      {
+        "command": "ksail.cluster.create",
+        "title": "Create Cluster",
+        "category": "KSail"
+      },
+      {
+        "command": "ksail.cluster.delete",
+        "title": "Delete Cluster",
+        "category": "KSail"
+      },
+      {
+        "command": "ksail.cluster.start",
+        "title": "Start Cluster",
+        "category": "KSail"
+      },
+      {
+        "command": "ksail.cluster.stop",
+        "title": "Stop Cluster",
+        "category": "KSail"
+      },
+      {
+        "command": "ksail.cluster.info",
+        "title": "Cluster Info",
+        "category": "KSail"
+      },
+      {
+        "command": "ksail.cluster.connect",
+        "title": "Connect to Cluster (K9s)",
+        "category": "KSail"
+      },
+      {
+        "command": "ksail.showOutput",
+        "title": "Show Output",
+        "category": "KSail"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "ksail.cluster.init",
+        "key": "ctrl+shift+k i",
+        "mac": "cmd+shift+k i"
+      },
+      {
+        "command": "ksail.cluster.create",
+        "key": "ctrl+shift+k c",
+        "mac": "cmd+shift+k c"
+      },
+      {
+        "command": "ksail.cluster.delete",
+        "key": "ctrl+shift+k d",
+        "mac": "cmd+shift+k d"
+      },
+      {
+        "command": "ksail.cluster.list",
+        "key": "ctrl+shift+k l",
+        "mac": "cmd+shift+k l"
+      }
+    ],
+    "configuration": {
+      "title": "KSail",
+      "properties": {
+        "ksail.binaryPath": {
+          "type": "string",
+          "default": "ksail",
+          "description": "Path to the KSail binary"
+        },
+        "ksail.showStatusBar": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show KSail status in the status bar"
+        }
+      }
+    },
+    "views": {
+      "ksail": [
+        {
+          "id": "ksailClusters",
+          "name": "Clusters"
+        }
+      ]
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "ksail",
+          "title": "KSail",
+          "icon": "resources/ksail-icon.svg"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "ksail.refresh",
+          "when": "view == ksailClusters",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "ksail.cluster.info",
+          "when": "view == ksailClusters && viewItem == cluster",
+          "group": "inline"
+        },
+        {
+          "command": "ksail.cluster.connect",
+          "when": "view == ksailClusters && viewItem == cluster"
+        },
+        {
+          "command": "ksail.cluster.start",
+          "when": "view == ksailClusters && viewItem == cluster"
+        },
+        {
+          "command": "ksail.cluster.stop",
+          "when": "view == ksailClusters && viewItem == cluster"
+        },
+        {
+          "command": "ksail.cluster.delete",
+          "when": "view == ksailClusters && viewItem == cluster"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run package",
+    "compile": "npm run check-types && npm run lint && node esbuild.js",
+    "watch": "npm-run-all -p watch:*",
+    "watch:esbuild": "node esbuild.js --watch",
+    "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
+    "package": "npm run check-types && npm run lint && node esbuild.js --production",
+    "check-types": "tsc --noEmit",
+    "lint": "eslint src",
+    "lint:fix": "eslint src --fix",
+    "test": "vscode-test",
+    "clean": "rm -rf dist out"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/vscode": "^1.96.0",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "@vscode/test-cli": "^0.0.10",
+    "@vscode/test-electron": "^2.4.0",
+    "@vscode/vsce": "^3.0.0",
+    "esbuild": "^0.27.2",
+    "eslint": "^9.0.0",
+    "npm-run-all": "^4.1.5",
+    "typescript": "^5.6.0",
+    "typescript-eslint": "^8.54.0"
+  }
+}
