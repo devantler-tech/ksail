@@ -137,11 +137,23 @@ func isRunnableCommand(cmd *cobra.Command) bool {
 	return true
 }
 
+// stripRootCommand removes the root command from a command path.
+// Example: "ksail cluster create" -> "cluster create"
+// If only root command, returns it unchanged: "ksail" -> "ksail"
+func stripRootCommand(commandPath string) string {
+	parts := strings.Fields(commandPath)
+	if len(parts) <= 1 {
+		return commandPath
+	}
+	return strings.Join(parts[1:], " ")
+}
+
 // commandToToolDefinition converts a Cobra command to a tool definition.
 func commandToToolDefinition(cmd *cobra.Command) ToolDefinition {
-	// Build tool name: "ksail cluster create" -> "ksail_cluster_create"
+	// Build tool name: "ksail cluster create" -> "cluster_create"
 	cmdPath := cmd.CommandPath()
-	toolName := strings.ReplaceAll(cmdPath, " ", "_")
+	strippedPath := stripRootCommand(cmdPath)
+	toolName := strings.ReplaceAll(strippedPath, " ", "_")
 
 	// Get description from annotation or Short
 	description := cmd.Short
@@ -360,7 +372,8 @@ func commandToPermissionSplitTools(cmd *cobra.Command) []ToolDefinition {
 
 	// Build base name and path
 	cmdPath := cmd.CommandPath()
-	baseName := strings.ReplaceAll(cmdPath, " ", "_")
+	strippedPath := stripRootCommand(cmdPath)
+	baseName := strings.ReplaceAll(strippedPath, " ", "_")
 
 	// Check if parent has explicit permission - if so, don't split
 	parentHasPermission := cmd.Annotations != nil &&

@@ -28,12 +28,12 @@ func TestGenerateTools(t *testing.T) {
 
 	// Verify expected tools are present
 	expectedTools := map[string]bool{
-		"ksail_cluster_read":   false,
-		"ksail_cluster_write":  false,
-		"ksail_workload_read":  false,
-		"ksail_workload_write": false,
-		"ksail_cipher_read":    false,
-		"ksail_cipher_write":   false,
+		"cluster_read":   false,
+		"cluster_write":  false,
+		"workload_read":  false,
+		"workload_write": false,
+		"cipher_read":    false,
+		"cipher_write":   false,
 	}
 
 	for _, tool := range tools {
@@ -50,9 +50,9 @@ func TestGenerateTools(t *testing.T) {
 
 	// Verify excluded tools are NOT present
 	excludedTools := []string{
-		"ksail_chat",
-		"ksail_completion",
-		"ksail_mcp",
+		"chat",
+		"completion",
+		"mcp",
 	}
 
 	for _, tool := range tools {
@@ -122,12 +122,12 @@ func TestFormatToolName(t *testing.T) {
 		{
 			name:        "two level command",
 			commandPath: "ksail cluster",
-			expected:    "ksail_cluster",
+			expected:    "cluster",
 		},
 		{
 			name:        "three level command",
 			commandPath: "ksail cluster create",
-			expected:    "ksail_cluster_create",
+			expected:    "cluster_create",
 		},
 	}
 
@@ -443,12 +443,12 @@ func TestExcludedCommandsAndChildren(t *testing.T) {
 	tools := toolgen.GenerateTools(root, opts)
 
 	// Verify that excluded commands AND their children are not present
-	// ksail completion is excluded, so ksail completion bash, zsh, fish, powershell should also be excluded
+	// completion is excluded, so completion bash, zsh, fish, powershell should also be excluded
 	forbiddenPrefixes := []string{
-		"ksail_completion",
-		"ksail_chat",
-		"ksail_mcp",
-		"ksail_help",
+		"completion",
+		"chat",
+		"mcp",
+		"help",
 	}
 
 	for _, tool := range tools {

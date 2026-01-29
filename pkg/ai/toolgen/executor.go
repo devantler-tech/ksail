@@ -331,7 +331,8 @@ func ToolParametersFromJSON(jsonParams string) (map[string]any, error) {
 }
 
 // FormatToolName formats a tool name from a command path.
-// Example: "ksail cluster create" -> "ksail_cluster_create".
+// Example: "ksail cluster create" -> "cluster_create".
 func FormatToolName(commandPath string) string {
-	return strings.ReplaceAll(commandPath, " ", "_")
+	strippedPath := stripRootCommand(commandPath)
+	return strings.ReplaceAll(strippedPath, " ", "_")
 }
