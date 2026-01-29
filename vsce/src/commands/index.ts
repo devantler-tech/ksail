@@ -9,7 +9,9 @@ import * as vscode from "vscode";
 import {
   createCluster,
   deleteCluster,
+  detectDistribution,
   getBinaryPath,
+  getContextName,
   initCluster,
   listClusters,
   startCluster,
@@ -273,10 +275,17 @@ export function registerCommands(
       "ksail.cluster.connect",
       async (item?: ClusterItem) => {
         try {
-          let clusterName = item?.cluster.name;
+          let contextName: string | undefined;
+          let clusterName: string | undefined;
 
-          // If not from context menu, check for ksail.yaml or prompt for cluster
-          if (!clusterName) {
+          // If from context menu, derive context from cluster info
+          if (item?.cluster) {
+            clusterName = item.cluster.name;
+            const provider = item.cluster.provider;
+            const distribution = await detectDistribution(clusterName, provider);
+            contextName = getContextName(clusterName, distribution);
+          } else {
+            // Not from context menu - check for ksail.yaml or prompt for cluster
             const ksailYamlExists = await vscode.workspace.findFiles("ksail.yaml", null, 1);
             if (ksailYamlExists.length === 0) {
               // No ksail.yaml and no cluster selected - prompt for cluster
@@ -288,8 +297,10 @@ export function registerCommands(
               const selected = await promptClusterSelection(clusters, "Select cluster to connect to");
               if (!selected) { return; }
               clusterName = selected.name;
+              const distribution = await detectDistribution(clusterName, selected.provider);
+              contextName = getContextName(clusterName, distribution);
             }
-            // If ksail.yaml exists and no cluster selected, use default context
+            // If ksail.yaml exists and no cluster selected, CLI will use default context
           }
 
           // K9s requires interactive TTY - use VSCode Terminal API
@@ -301,9 +312,9 @@ export function registerCommands(
           });
           terminal.show();
 
-          // Pass --context flag if specific cluster selected
-          if (clusterName) {
-            terminal.sendText(`${binaryPath} cluster connect --context ${clusterName}`);
+          // Pass --context flag with correctly derived context name
+          if (contextName) {
+            terminal.sendText(`${binaryPath} cluster connect --context ${contextName}`);
           } else {
             terminal.sendText(`${binaryPath} cluster connect`);
           }

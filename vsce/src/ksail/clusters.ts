@@ -134,6 +134,99 @@ function parseClusterListOutput(output: string): ClusterInfo[] {
 }
 
 /**
+ * Distribution type for Docker-based clusters
+ */
+export type Distribution = "kind" | "k3d" | "talos" | "unknown";
+
+/**
+ * Detect cluster distribution by checking Docker container names
+ * Kind uses pattern: {name}-control-plane, {name}-worker
+ * K3d uses pattern: k3d-{name}-server-0, k3d-{name}-agent-0
+ */
+export async function detectDistribution(
+  clusterName: string,
+  provider: string
+): Promise<Distribution> {
+  // Hetzner provider always uses Talos
+  if (provider.toLowerCase() === "hetzner") {
+    return "talos";
+  }
+
+  // Only check Docker containers for Docker provider
+  if (provider.toLowerCase() !== "docker") {
+    return "unknown";
+  }
+
+  try {
+    const { spawn } = await import("child_process");
+
+    return new Promise((resolve) => {
+      const proc = spawn("docker", [
+        "ps",
+        "-a",
+        "--filter",
+        `name=${clusterName}`,
+        "--format",
+        "{{.Names}}",
+      ]);
+
+      let output = "";
+      proc.stdout.on("data", (data: Buffer) => {
+        output += data.toString();
+      });
+
+      proc.on("close", (code) => {
+        if (code !== 0) {
+          resolve("unknown");
+          return;
+        }
+
+        const containers = output.trim().split("\n").filter(Boolean);
+        if (containers.length === 0) {
+          resolve("unknown");
+        } else if (containers.some((name) => name.startsWith("k3d-"))) {
+          resolve("k3d");
+        } else if (containers.some((name) => name.includes("-control-plane") || name.includes("-worker"))) {
+          // Kind containers: {name}-control-plane, {name}-worker, {name}-worker2
+          resolve("kind");
+        } else {
+          resolve("unknown");
+        }
+      });
+
+      proc.on("error", () => {
+        resolve("unknown");
+      });
+    });
+  } catch {
+    return "unknown";
+  }
+}
+
+/**
+ * Get the Kubernetes context name for a cluster
+ * Kind: kind-{name}
+ * K3d: k3d-{name}
+ * Talos: admin@{name} or {name}
+ */
+export function getContextName(
+  clusterName: string,
+  distribution: Distribution
+): string {
+  switch (distribution) {
+    case "kind":
+      return `kind-${clusterName}`;
+    case "k3d":
+      return `k3d-${clusterName}`;
+    case "talos":
+      return `admin@${clusterName}`;
+    default:
+      // Fallback: try the cluster name directly
+      return clusterName;
+  }
+}
+
+/**
  * Detect cluster status by checking Docker container state
  * Only works for Docker-based providers (Kind, K3d)
  */

@@ -163,6 +163,12 @@
       ]
     },
     "menus": {
+      "commandPalette": [
+        {
+          "command": "ksail.refresh",
+          "when": "false"
+        }
+      ],
       "view/title": [
         {
           "command": "ksail.cluster.init",
