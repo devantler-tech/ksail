@@ -8,7 +8,7 @@
  */
 
 import * as vscode from "vscode";
-import type { ClusterInfo, CreateClusterOptions, CommonClusterOptions } from "../ksail/index.js";
+import type { ClusterInfo, CommonClusterOptions, CreateClusterOptions } from "../ksail/index.js";
 import { getEnumValues } from "../mcp/index.js";
 
 /**
