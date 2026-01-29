@@ -365,3 +365,77 @@ func TestToolCountReduction(t *testing.T) {
 		t.Errorf("Expected reduction of 16 tools, got %d", reduction)
 	}
 }
+
+func TestArrayParametersHaveItems(t *testing.T) {
+	t.Parallel()
+
+	root := cmd.NewRootCmd("test", "abc123", "2024-01-01")
+	opts := toolgen.DefaultOptions()
+
+	tools := toolgen.GenerateTools(root, opts)
+
+	for _, tool := range tools {
+		properties, ok := tool.Parameters["properties"].(map[string]any)
+		if !ok {
+			continue
+		}
+
+		for paramName, prop := range properties {
+			propMap, ok := prop.(map[string]any)
+			if !ok {
+				continue
+			}
+
+			propType, _ := propMap["type"].(string)
+			if propType == "array" {
+				items, hasItems := propMap["items"]
+				if !hasItems {
+					t.Errorf("tool %q: array parameter %q missing 'items' property", tool.Name, paramName)
+					continue
+				}
+
+				itemsMap, ok := items.(map[string]any)
+				if !ok {
+					t.Errorf("tool %q: parameter %q 'items' should be a map", tool.Name, paramName)
+					continue
+				}
+
+				itemType, hasType := itemsMap["type"]
+				if !hasType {
+					t.Errorf("tool %q: parameter %q 'items' missing 'type' property", tool.Name, paramName)
+					continue
+				}
+
+				if itemType != "string" && itemType != "integer" {
+					t.Errorf("tool %q: parameter %q 'items.type' should be 'string' or 'integer', got %q", tool.Name, paramName, itemType)
+				}
+			}
+		}
+	}
+}
+
+func TestExcludedCommandsAndChildren(t *testing.T) {
+	t.Parallel()
+
+	root := cmd.NewRootCmd("test", "abc123", "2024-01-01")
+	opts := toolgen.DefaultOptions()
+
+	tools := toolgen.GenerateTools(root, opts)
+
+	// Verify that excluded commands AND their children are not present
+	// ksail completion is excluded, so ksail completion bash, zsh, fish, powershell should also be excluded
+	forbiddenPrefixes := []string{
+		"ksail_completion",
+		"ksail_chat",
+		"ksail_mcp",
+		"ksail_help",
+	}
+
+	for _, tool := range tools {
+		for _, prefix := range forbiddenPrefixes {
+			if tool.Name == prefix || len(tool.Name) > len(prefix) && tool.Name[:len(prefix)+1] == prefix+"_" {
+				t.Errorf("excluded tool %q (or child) should not be generated", tool.Name)
+			}
+		}
+	}
+}

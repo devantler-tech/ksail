@@ -1,6 +1,7 @@
 package toolgen
 
 import (
+	"log/slog"
 	"time"
 )
 
@@ -33,6 +34,9 @@ type ToolOptions struct {
 	// OutputChan receives real-time output chunks from running commands.
 	// If nil, output is only available after command completion.
 	OutputChan chan<- OutputChunk
+	// Logger is used for debug logging during command execution.
+	// If nil, no logging is performed.
+	Logger *slog.Logger
 }
 
 // OutputChunk represents a chunk of output from a running command.

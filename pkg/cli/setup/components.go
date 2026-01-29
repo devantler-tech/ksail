@@ -171,12 +171,17 @@ func DefaultInstallerFactories() *InstallerFactories {
 		return fluxinstaller.NewFluxInstaller(client, timeout)
 	}
 
-	factories.CertManager = helmInstallerFactory(
-		factories,
-		func(c helm.Interface, t time.Duration) installer.Installer {
-			return certmanagerinstaller.NewCertManagerInstaller(c, t)
-		},
-	)
+	factories.CertManager = func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error) {
+		helmClient, _, err := factories.HelmClientFactory(clusterCfg)
+		if err != nil {
+			return nil, err
+		}
+
+		timeout := installer.GetInstallTimeout(clusterCfg)
+		timeout = installer.MaxTimeout(timeout, installer.CertManagerInstallTimeout)
+
+		return certmanagerinstaller.NewCertManagerInstaller(helmClient, timeout), nil
+	}
 	factories.ArgoCD = helmInstallerFactory(
 		factories,
 		func(c helm.Interface, t time.Duration) installer.Installer {
