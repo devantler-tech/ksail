@@ -10,7 +10,7 @@ import * as vscode from "vscode";
 /**
  * Extension version (set during activation)
  */
-let extensionVersion = "1.0.0"; // fallback default
+let extensionVersion = "0.1.0"; // fallback default
 
 /**
  * Initialize the server provider with extension version
