@@ -25,11 +25,13 @@ export interface ClusterInfo {
 }
 
 /**
- * Options for creating a cluster
+ * Common cluster options shared between create and init
+ *
+ * Types are strings to support dynamic schema-driven values.
+ * The MCP schema determines the actual valid enum values.
  */
-export interface CreateClusterOptions {
+export interface CommonClusterOptions {
   name?: string;
-  distributionConfigPath?: string;
   distribution?: string;
   provider?: string;
   cni?: string;
@@ -40,6 +42,13 @@ export interface CreateClusterOptions {
   gitopsEngine?: string;
   controlPlanes?: number;
   workers?: number;
+}
+
+/**
+ * Options for creating a cluster
+ */
+export interface CreateClusterOptions extends CommonClusterOptions {
+  distributionConfigPath?: string;
 }
 
 /**
@@ -53,24 +62,41 @@ export interface DeleteClusterOptions {
 
 /**
  * Options for initializing a cluster
- *
- * Types are strings to support dynamic schema-driven values.
- * The MCP schema determines the actual valid enum values.
  */
-export interface InitClusterOptions {
-  name?: string;
-  distribution?: string;
-  provider?: string;
-  cni?: string;
-  csi?: string;
-  metricsServer?: string;
-  certManager?: string;
-  policyEngine?: string;
-  gitopsEngine?: string;
-  controlPlanes?: number;
-  workers?: number;
+export interface InitClusterOptions extends CommonClusterOptions {
   outputDir?: string;
   force?: boolean;
+}
+
+/**
+ * Add common cluster options to CLI args array
+ */
+function addCommonClusterArgs(args: string[], options: CommonClusterOptions): void {
+  const stringFlags: [keyof CommonClusterOptions, string][] = [
+    ["name", "--name"],
+    ["distribution", "--distribution"],
+    ["provider", "--provider"],
+    ["cni", "--cni"],
+    ["csi", "--csi"],
+    ["metricsServer", "--metrics-server"],
+    ["certManager", "--cert-manager"],
+    ["policyEngine", "--policy-engine"],
+    ["gitopsEngine", "--gitops-engine"],
+  ];
+
+  for (const [key, flag] of stringFlags) {
+    const value = options[key];
+    if (typeof value === "string" && value) {
+      args.push(flag, value);
+    }
+  }
+
+  if (options.controlPlanes !== undefined) {
+    args.push("--control-planes", options.controlPlanes.toString());
+  }
+  if (options.workers !== undefined) {
+    args.push("--workers", options.workers.toString());
+  }
 }
 
 /**
@@ -139,6 +165,37 @@ function parseClusterListOutput(output: string): ClusterInfo[] {
 export type Distribution = "kind" | "k3d" | "talos" | "unknown";
 
 /**
+ * Helper to spawn Docker and collect output
+ */
+async function spawnDocker(
+  args: string[],
+  defaultValue: string
+): Promise<string> {
+  try {
+    const { spawn } = await import("child_process");
+
+    return new Promise((resolve) => {
+      const proc = spawn("docker", args);
+
+      let output = "";
+      proc.stdout.on("data", (data: Buffer) => {
+        output += data.toString();
+      });
+
+      proc.on("close", (code) => {
+        resolve(code === 0 ? output.trim() : defaultValue);
+      });
+
+      proc.on("error", () => {
+        resolve(defaultValue);
+      });
+    });
+  } catch {
+    return defaultValue;
+  }
+}
+
+/**
  * Detect cluster distribution by checking Docker container names
  * Kind uses pattern: {name}-control-plane, {name}-worker
  * K3d uses pattern: k3d-{name}-server-0, k3d-{name}-agent-0
@@ -157,50 +214,22 @@ export async function detectDistribution(
     return "unknown";
   }
 
-  try {
-    const { spawn } = await import("child_process");
+  const output = await spawnDocker(
+    ["ps", "-a", "--filter", `name=${clusterName}`, "--format", "{{.Names}}"],
+    ""
+  );
 
-    return new Promise((resolve) => {
-      const proc = spawn("docker", [
-        "ps",
-        "-a",
-        "--filter",
-        `name=${clusterName}`,
-        "--format",
-        "{{.Names}}",
-      ]);
-
-      let output = "";
-      proc.stdout.on("data", (data: Buffer) => {
-        output += data.toString();
-      });
-
-      proc.on("close", (code) => {
-        if (code !== 0) {
-          resolve("unknown");
-          return;
-        }
-
-        const containers = output.trim().split("\n").filter(Boolean);
-        if (containers.length === 0) {
-          resolve("unknown");
-        } else if (containers.some((name) => name.startsWith("k3d-"))) {
-          resolve("k3d");
-        } else if (containers.some((name) => name.includes("-control-plane") || name.includes("-worker"))) {
-          // Kind containers: {name}-control-plane, {name}-worker, {name}-worker2
-          resolve("kind");
-        } else {
-          resolve("unknown");
-        }
-      });
-
-      proc.on("error", () => {
-        resolve("unknown");
-      });
-    });
-  } catch {
+  const containers = output.split("\n").filter(Boolean);
+  if (containers.length === 0) {
     return "unknown";
   }
+  if (containers.some((name) => name.startsWith("k3d-"))) {
+    return "k3d";
+  }
+  if (containers.some((name) => name.includes("-control-plane") || name.includes("-worker"))) {
+    return "kind";
+  }
+  return "unknown";
 }
 
 /**
@@ -239,50 +268,19 @@ export async function detectClusterStatus(
     return "unknown";
   }
 
-  try {
-    const { spawn } = await import("child_process");
+  const output = await spawnDocker(
+    ["ps", "-a", "--filter", `name=${clusterName}`, "--format", "{{.State}}"],
+    ""
+  );
 
-    return new Promise((resolve) => {
-      // Check if any containers with cluster name are running
-      // Kind uses pattern: kind-<cluster-name>-control-plane, kind-<cluster-name>-worker
-      // K3d uses pattern: k3d-<cluster-name>-server-0, k3d-<cluster-name>-agent-0
-      const proc = spawn("docker", [
-        "ps",
-        "-a",
-        "--filter",
-        `name=${clusterName}`,
-        "--format",
-        "{{.State}}",
-      ]);
-
-      let output = "";
-      proc.stdout.on("data", (data: Buffer) => {
-        output += data.toString();
-      });
-
-      proc.on("close", (code) => {
-        if (code !== 0) {
-          resolve("unknown");
-          return;
-        }
-
-        const states = output.trim().split("\n").filter(Boolean);
-        if (states.length === 0) {
-          resolve("unknown");
-        } else if (states.some((state) => state === "running")) {
-          resolve("running");
-        } else {
-          resolve("stopped");
-        }
-      });
-
-      proc.on("error", () => {
-        resolve("unknown");
-      });
-    });
-  } catch {
+  const states = output.split("\n").filter(Boolean);
+  if (states.length === 0) {
     return "unknown";
   }
+  if (states.some((state) => state === "running")) {
+    return "running";
+  }
+  return "stopped";
 }
 
 /**
@@ -300,39 +298,7 @@ export async function createCluster(
   if (options.distributionConfigPath) {
     args.push("--distribution-config", options.distributionConfigPath);
   }
-  if (options.name) {
-    args.push("--name", options.name);
-  }
-  if (options.distribution) {
-    args.push("--distribution", options.distribution);
-  }
-  if (options.provider) {
-    args.push("--provider", options.provider);
-  }
-  if (options.cni) {
-    args.push("--cni", options.cni);
-  }
-  if (options.csi) {
-    args.push("--csi", options.csi);
-  }
-  if (options.metricsServer) {
-    args.push("--metrics-server", options.metricsServer);
-  }
-  if (options.certManager) {
-    args.push("--cert-manager", options.certManager);
-  }
-  if (options.policyEngine) {
-    args.push("--policy-engine", options.policyEngine);
-  }
-  if (options.gitopsEngine) {
-    args.push("--gitops-engine", options.gitopsEngine);
-  }
-  if (options.controlPlanes !== undefined) {
-    args.push("--control-planes", options.controlPlanes.toString());
-  }
-  if (options.workers !== undefined) {
-    args.push("--workers", options.workers.toString());
-  }
+  addCommonClusterArgs(args, options);
 
   const result = await runKsailCommand(args, undefined, outputChannel);
 
@@ -416,39 +382,8 @@ export async function initCluster(
 ): Promise<void> {
   const args = ["cluster", "init"];
 
-  if (options.name) {
-    args.push("--name", options.name);
-  }
-  if (options.distribution) {
-    args.push("--distribution", options.distribution);
-  }
-  if (options.provider) {
-    args.push("--provider", options.provider);
-  }
-  if (options.cni) {
-    args.push("--cni", options.cni);
-  }
-  if (options.csi) {
-    args.push("--csi", options.csi);
-  }
-  if (options.metricsServer) {
-    args.push("--metrics-server", options.metricsServer);
-  }
-  if (options.certManager) {
-    args.push("--cert-manager", options.certManager);
-  }
-  if (options.policyEngine) {
-    args.push("--policy-engine", options.policyEngine);
-  }
-  if (options.gitopsEngine) {
-    args.push("--gitops-engine", options.gitopsEngine);
-  }
-  if (options.controlPlanes !== undefined) {
-    args.push("--control-planes", options.controlPlanes.toString());
-  }
-  if (options.workers !== undefined) {
-    args.push("--workers", options.workers.toString());
-  }
+  addCommonClusterArgs(args, options);
+
   if (options.outputDir) {
     args.push("--output", options.outputDir);
   }

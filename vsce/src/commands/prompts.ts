@@ -8,7 +8,7 @@
  */
 
 import * as vscode from "vscode";
-import type { ClusterInfo } from "../ksail/index.js";
+import type { ClusterInfo, CreateClusterOptions, CommonClusterOptions } from "../ksail/index.js";
 import { getEnumValues } from "../mcp/index.js";
 
 /**
@@ -143,6 +143,22 @@ async function getSchemaEnumValues(propertyName: string): Promise<string[]> {
   return FALLBACK_VALUES[propertyName] || [];
 }
 
+/**
+ * Create QuickPick items from enum values with descriptions
+ * First item is marked as default
+ */
+function createEnumQuickPickItems(
+  values: string[],
+  getDescription: (value: string) => string
+): QuickPickItemWithValue<string>[] {
+  return values.map((v, i) => ({
+    label: v,
+    description: getDescription(v) + (i === 0 ? " (default)" : ""),
+    value: v,
+    picked: i === 0,
+  }));
+}
+
 // ============================================================================
 // Cluster Init Wizard
 // ============================================================================
@@ -150,13 +166,8 @@ async function getSchemaEnumValues(propertyName: string): Promise<string[]> {
 /**
  * Full cluster init options
  */
-export interface ClusterInitOptions {
+export interface ClusterInitOptions extends CommonClusterOptions {
   outputPath: string;
-  name: string;
-  distribution: string;
-  provider: string;
-  cni: string;
-  gitopsEngine: string;
 }
 
 /**
@@ -208,12 +219,7 @@ export async function runClusterInitWizard(): Promise<ClusterInitOptions | undef
 
   // Step 3: Distribution (first value is default)
   const distributionValues = await getSchemaEnumValues("distribution");
-  const distributionItems: QuickPickItemWithValue<string>[] = distributionValues.map((v, i) => ({
-    label: v,
-    description: getDistributionDescription(v) + (i === 0 ? " (default)" : ""),
-    value: v,
-    picked: i === 0,
-  }));
+  const distributionItems = createEnumQuickPickItems(distributionValues, getDistributionDescription);
   const distribution = await showMultiStepQuickPick(distributionItems, {
     title,
     step: 3,
@@ -224,12 +230,7 @@ export async function runClusterInitWizard(): Promise<ClusterInitOptions | undef
 
   // Step 4: Provider (first value is default)
   const providerValues = await getSchemaEnumValues("provider");
-  const providerItems: QuickPickItemWithValue<string>[] = providerValues.map((v, i) => ({
-    label: v,
-    description: getProviderDescription(v) + (i === 0 ? " (default)" : ""),
-    value: v,
-    picked: i === 0,
-  }));
+  const providerItems = createEnumQuickPickItems(providerValues, getProviderDescription);
   const provider = await showMultiStepQuickPick(providerItems, {
     title,
     step: 4,
@@ -240,12 +241,7 @@ export async function runClusterInitWizard(): Promise<ClusterInitOptions | undef
 
   // Step 5: CNI (first value is default)
   const cniValues = await getSchemaEnumValues("cni");
-  const cniItems: QuickPickItemWithValue<string>[] = cniValues.map((v, i) => ({
-    label: v,
-    description: getCniDescription(v) + (i === 0 ? " (default)" : ""),
-    value: v,
-    picked: i === 0,
-  }));
+  const cniItems = createEnumQuickPickItems(cniValues, getCniDescription);
   const cni = await showMultiStepQuickPick(cniItems, {
     title,
     step: 5,
@@ -256,12 +252,7 @@ export async function runClusterInitWizard(): Promise<ClusterInitOptions | undef
 
   // Step 6: GitOps Engine (first value is default)
   const gitopsValues = await getSchemaEnumValues("gitops_engine");
-  const gitopsItems: QuickPickItemWithValue<string>[] = gitopsValues.map((v, i) => ({
-    label: v,
-    description: getGitopsDescription(v) + (i === 0 ? " (default)" : ""),
-    value: v,
-    picked: i === 0,
-  }));
+  const gitopsItems = createEnumQuickPickItems(gitopsValues, getGitopsDescription);
   const gitopsEngine = await showMultiStepQuickPick(gitopsItems, {
     title,
     step: 6,
@@ -270,30 +261,12 @@ export async function runClusterInitWizard(): Promise<ClusterInitOptions | undef
   });
   if (!gitopsEngine) { return undefined; }
 
-  return { outputPath, name, distribution, provider, cni, gitopsEngine };
+  return { outputPath, name: name!, distribution: distribution!, provider: provider!, cni: cni!, gitopsEngine: gitopsEngine! };
 }
 
 // ============================================================================
 // Cluster Create Wizard
 // ============================================================================
-
-/**
- * Full cluster create options
- */
-export interface ClusterCreateOptions {
-  distributionConfigPath?: string;
-  name?: string;
-  distribution?: string;
-  provider?: string;
-  cni?: string;
-  csi?: string;
-  metricsServer?: string;
-  certManager?: string;
-  policyEngine?: string;
-  gitopsEngine?: string;
-  controlPlanes?: number;
-  workers?: number;
-}
 
 /**
  * Run the cluster create wizard
@@ -302,7 +275,7 @@ export interface ClusterCreateOptions {
  * The CLI uses ksail.yaml from the current working directory automatically.
  * Returns undefined if user cancels at any step.
  */
-export async function runClusterCreateWizard(): Promise<ClusterCreateOptions | undefined> {
+export async function runClusterCreateWizard(): Promise<CreateClusterOptions | undefined> {
   const title = "KSail: Create Cluster";
 
   // Check if ksail.yaml exists in workspace
@@ -476,18 +449,13 @@ async function runFullCustomizationWizard(
   startStep: number,
   distributionConfigPath?: string,
   name?: string
-): Promise<ClusterCreateOptions | undefined> {
+): Promise<CreateClusterOptions | undefined> {
   const totalSteps = startStep + 9; // 10 more steps for customization
   let step = startStep;
 
   // Distribution
   const distributionValues = await getSchemaEnumValues("distribution");
-  const distributionItems: QuickPickItemWithValue<string>[] = distributionValues.map((v, i) => ({
-    label: v,
-    description: getDistributionDescription(v) + (i === 0 ? " (default)" : ""),
-    value: v,
-    picked: i === 0,
-  }));
+  const distributionItems = createEnumQuickPickItems(distributionValues, getDistributionDescription);
   const distribution = await showMultiStepQuickPick(distributionItems, {
     title,
     step: step++,
@@ -498,12 +466,7 @@ async function runFullCustomizationWizard(
 
   // Provider
   const providerValues = await getSchemaEnumValues("provider");
-  const providerItems: QuickPickItemWithValue<string>[] = providerValues.map((v, i) => ({
-    label: v,
-    description: getProviderDescription(v) + (i === 0 ? " (default)" : ""),
-    value: v,
-    picked: i === 0,
-  }));
+  const providerItems = createEnumQuickPickItems(providerValues, getProviderDescription);
   const provider = await showMultiStepQuickPick(providerItems, {
     title,
     step: step++,
@@ -514,12 +477,7 @@ async function runFullCustomizationWizard(
 
   // CNI
   const cniValues = await getSchemaEnumValues("cni");
-  const cniItems: QuickPickItemWithValue<string>[] = cniValues.map((v, i) => ({
-    label: v,
-    description: getCniDescription(v) + (i === 0 ? " (default)" : ""),
-    value: v,
-    picked: i === 0,
-  }));
+  const cniItems = createEnumQuickPickItems(cniValues, getCniDescription);
   const cni = await showMultiStepQuickPick(cniItems, {
     title,
     step: step++,
@@ -530,12 +488,7 @@ async function runFullCustomizationWizard(
 
   // CSI
   const csiValues = await getSchemaEnumValues("csi");
-  const csiItems: QuickPickItemWithValue<string>[] = csiValues.map((v, i) => ({
-    label: v,
-    description: getCsiDescription(v) + (i === 0 ? " (default)" : ""),
-    value: v,
-    picked: i === 0,
-  }));
+  const csiItems = createEnumQuickPickItems(csiValues, getCsiDescription);
   const csi = await showMultiStepQuickPick(csiItems, {
     title,
     step: step++,
@@ -546,12 +499,7 @@ async function runFullCustomizationWizard(
 
   // Metrics Server
   const metricsValues = await getSchemaEnumValues("metrics_server");
-  const metricsItems: QuickPickItemWithValue<string>[] = metricsValues.map((v, i) => ({
-    label: v,
-    description: i === 0 ? "(default)" : "",
-    value: v,
-    picked: i === 0,
-  }));
+  const metricsItems = createEnumQuickPickItems(metricsValues, () => "");
   const metricsServer = await showMultiStepQuickPick(metricsItems, {
     title,
     step: step++,
@@ -562,12 +510,7 @@ async function runFullCustomizationWizard(
 
   // Cert Manager
   const certValues = await getSchemaEnumValues("cert_manager");
-  const certItems: QuickPickItemWithValue<string>[] = certValues.map((v, i) => ({
-    label: v,
-    description: i === 0 ? "(default)" : "",
-    value: v,
-    picked: i === 0,
-  }));
+  const certItems = createEnumQuickPickItems(certValues, () => "");
   const certManager = await showMultiStepQuickPick(certItems, {
     title,
     step: step++,
@@ -578,12 +521,7 @@ async function runFullCustomizationWizard(
 
   // Policy Engine
   const policyValues = await getSchemaEnumValues("policy_engine");
-  const policyItems: QuickPickItemWithValue<string>[] = policyValues.map((v, i) => ({
-    label: v,
-    description: getPolicyDescription(v) + (i === 0 ? " (default)" : ""),
-    value: v,
-    picked: i === 0,
-  }));
+  const policyItems = createEnumQuickPickItems(policyValues, getPolicyDescription);
   const policyEngine = await showMultiStepQuickPick(policyItems, {
     title,
     step: step++,
@@ -594,12 +532,7 @@ async function runFullCustomizationWizard(
 
   // GitOps Engine
   const gitopsValues = await getSchemaEnumValues("gitops_engine");
-  const gitopsItems: QuickPickItemWithValue<string>[] = gitopsValues.map((v, i) => ({
-    label: v,
-    description: getGitopsDescription(v) + (i === 0 ? " (default)" : ""),
-    value: v,
-    picked: i === 0,
-  }));
+  const gitopsItems = createEnumQuickPickItems(gitopsValues, getGitopsDescription);
   const gitopsEngine = await showMultiStepQuickPick(gitopsItems, {
     title,
     step: step++,

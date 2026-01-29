@@ -6,14 +6,13 @@ on:
       - "v*"
   workflow_dispatch:
 
-permissions:
-  contents: write
-  packages: write
-
 jobs:
   goreleaser:
     name: Release with GoReleaser
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
     steps:
       - name: 📑 Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -74,11 +73,12 @@ jobs:
           persist-credentials: false
 
       - name: ⚙️ Setup Node.js
-        uses: actions/setup-node@1e60f620b9541d16bece96c5465dc8ee9832be0b # v6.1.0
+        uses: actions/setup-node@1e60f620b9541d16bece96c5465dc8ee9832be0b # v6.1.0 # zizmor: ignore[cache-poisoning]
         with:
           node-version: "22"
-          cache: "npm"
-          cache-dependency-path: "vsce/package-lock.json"
+          # Disable cache in release workflows to avoid cache-poisoning risk
+          # for runtime artifacts (see https://docs.zizmor.sh/audits/#cache-poisoning)
+          cache: false
 
       - name: 📦 Install dependencies
         run: npm ci
