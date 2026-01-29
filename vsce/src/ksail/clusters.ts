@@ -315,26 +315,6 @@ export async function stopCluster(
 }
 
 /**
- * Get cluster info
- *
- * Uses the ksail.yaml context in the current working directory.
- * Note: The CLI does not support specifying a cluster by name.
- */
-export async function getClusterInfo(
-  outputChannel?: vscode.OutputChannel
-): Promise<string> {
-  const args = ["cluster", "info"];
-
-  const result = await runKsailCommand(args, undefined, outputChannel);
-
-  if (result.exitCode !== 0) {
-    throw new Error(`Failed to get cluster info: ${result.stderr || result.stdout}`);
-  }
-
-  return result.stdout;
-}
-
-/**
  * Initialize a new cluster configuration
  */
 export async function initCluster(

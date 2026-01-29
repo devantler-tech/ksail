@@ -88,12 +88,6 @@
         "icon": "$(debug-stop)"
       },
       {
-        "command": "ksail.cluster.info",
-        "title": "Cluster Info",
-        "category": "KSail",
-        "icon": "$(info)"
-      },
-      {
         "command": "ksail.cluster.connect",
         "title": "Connect to Cluster (K9s)",
         "category": "KSail",

@@ -10,7 +10,6 @@ import {
   createCluster,
   deleteCluster,
   getBinaryPath,
-  getClusterInfo,
   initCluster,
   listClusters,
   startCluster,
@@ -268,72 +267,46 @@ export function registerCommands(
     )
   );
 
-  // Cluster info (uses ksail.yaml context in current workspace)
-  context.subscriptions.push(
-    vscode.commands.registerCommand(
-      "ksail.cluster.info",
-      async (item?: ClusterItem) => {
-        try {
-          // Check if ksail.yaml exists - required for info
-          const ksailYamlExists = await vscode.workspace.findFiles("ksail.yaml", null, 1);
-          if (ksailYamlExists.length === 0) {
-            vscode.window.showErrorMessage(
-              "No ksail.yaml found. Cluster info requires a cluster configuration in the workspace."
-            );
-            return;
-          }
-
-          // If called from tree view, inform about workspace context (non-blocking)
-          if (item) {
-            vscode.window.showInformationMessage(
-              `Showing info for cluster configured in ksail.yaml (workspace context).`
-            );
-          }
-
-          await executeWithProgress("Getting cluster info...", async () => {
-            const info = await getClusterInfo(outputChannel);
-            outputChannel.appendLine("\n=== Cluster Info ===");
-            outputChannel.appendLine(info);
-            outputChannel.show();
-          });
-        } catch (error) {
-          showError("get cluster info", error, outputChannel);
-        }
-      }
-    )
-  );
-
-  // Cluster connect (K9s) - uses ksail.yaml context in current workspace
+  // Cluster connect (K9s)
   context.subscriptions.push(
     vscode.commands.registerCommand(
       "ksail.cluster.connect",
       async (item?: ClusterItem) => {
         try {
-          // Check if ksail.yaml exists - required for connect
-          const ksailYamlExists = await vscode.workspace.findFiles("ksail.yaml", null, 1);
-          if (ksailYamlExists.length === 0) {
-            vscode.window.showErrorMessage(
-              "No ksail.yaml found. Connect requires a cluster configuration in the workspace."
-            );
-            return;
-          }
+          let clusterName = item?.cluster.name;
 
-          // If called from tree view, inform about workspace context (non-blocking)
-          if (item) {
-            vscode.window.showInformationMessage(
-              `Connecting to cluster configured in ksail.yaml (workspace context).`
-            );
+          // If not from context menu, check for ksail.yaml or prompt for cluster
+          if (!clusterName) {
+            const ksailYamlExists = await vscode.workspace.findFiles("ksail.yaml", null, 1);
+            if (ksailYamlExists.length === 0) {
+              // No ksail.yaml and no cluster selected - prompt for cluster
+              const clusters = await listClusters();
+              if (clusters.length === 0) {
+                vscode.window.showErrorMessage("No clusters found to connect to.");
+                return;
+              }
+              const selected = await promptClusterSelection(clusters, "Select cluster to connect to");
+              if (!selected) { return; }
+              clusterName = selected.name;
+            }
+            // If ksail.yaml exists and no cluster selected, use default context
           }
 
           // K9s requires interactive TTY - use VSCode Terminal API
           const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
           const binaryPath = getBinaryPath();
           const terminal = vscode.window.createTerminal({
-            name: "KSail: K9s",
+            name: `KSail: K9s${clusterName ? ` (${clusterName})` : ""}`,
             cwd: workspaceFolder,
           });
           terminal.show();
-          terminal.sendText(`${binaryPath} cluster connect`);
+
+          // Pass --context flag if specific cluster selected
+          if (clusterName) {
+            terminal.sendText(`${binaryPath} cluster connect --context ${clusterName}`);
+          } else {
+            terminal.sendText(`${binaryPath} cluster connect`);
+          }
         } catch (error) {
           showError("connect to cluster", error, outputChannel);
         }

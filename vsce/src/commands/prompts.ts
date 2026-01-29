@@ -358,30 +358,7 @@ export async function runClusterCreateWizard(): Promise<ClusterCreateOptions | u
   const totalSteps = 3;
   let currentStep = 1;
 
-  // Step 1: Use defaults or customize
-  const defaultsItems: QuickPickItemWithValue<boolean>[] = [
-    {
-      label: "$(check) Use defaults from ksail.yaml",
-      description: "Create cluster with settings from your configuration",
-      value: true,
-      picked: true,
-    },
-    {
-      label: "$(settings-gear) Customize options...",
-      description: "Override distribution, provider, CNI, and more",
-      value: false,
-    },
-  ];
-
-  const useDefaults = await showMultiStepQuickPick(defaultsItems, {
-    title,
-    step: currentStep++,
-    totalSteps,
-    placeholder: "Use default settings?",
-  });
-  if (useDefaults === undefined) { return undefined; }
-
-  // Step 2: Distribution config path (optional)
+  // Step 1: Distribution config path (optional)
   const distConfigItems: QuickPickItemWithValue<string | "browse" | "none">[] = [
     {
       label: "$(dash) Use default from ksail.yaml",
@@ -417,7 +394,7 @@ export async function runClusterCreateWizard(): Promise<ClusterCreateOptions | u
     distributionConfigPath = result[0].fsPath;
   }
 
-  // Step 3: Cluster name (optional override)
+  // Step 2: Cluster name (optional override)
   const nameItems: QuickPickItemWithValue<string | "custom">[] = [
     {
       label: "$(dash) Use name from ksail.yaml",
@@ -455,6 +432,29 @@ export async function runClusterCreateWizard(): Promise<ClusterCreateOptions | u
     });
     if (!name) { return undefined; }
   }
+
+  // Step 3: Use defaults or customize
+  const defaultsItems: QuickPickItemWithValue<boolean>[] = [
+    {
+      label: "$(check) Use defaults from ksail.yaml",
+      description: "Create cluster with settings from your configuration",
+      value: true,
+      picked: true,
+    },
+    {
+      label: "$(settings-gear) Customize options...",
+      description: "Override distribution, provider, CNI, and more",
+      value: false,
+    },
+  ];
+
+  const useDefaults = await showMultiStepQuickPick(defaultsItems, {
+    title,
+    step: currentStep++,
+    totalSteps,
+    placeholder: "Use default settings?",
+  });
+  if (useDefaults === undefined) { return undefined; }
 
   // If using defaults, return minimal options
   if (useDefaults) {
