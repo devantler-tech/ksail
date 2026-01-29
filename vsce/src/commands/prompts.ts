@@ -25,10 +25,10 @@ const FALLBACK_VALUES: Record<string, string[]> = {
   provider: ["Docker", "Hetzner"],
   cni: ["Default", "Cilium", "Calico"],
   csi: ["Default", "Enabled", "Disabled"],
-  metrics_server: ["Default", "Enabled", "Disabled"],
-  cert_manager: ["Disabled", "Enabled"],
-  policy_engine: ["None", "Kyverno", "Gatekeeper"],
-  gitops_engine: ["None", "Flux", "ArgoCD"],
+  "metrics-server": ["Default", "Enabled", "Disabled"],
+  "cert-manager": ["Disabled", "Enabled"],
+  "policy-engine": ["None", "Kyverno", "Gatekeeper"],
+  "gitops-engine": ["None", "Flux", "ArgoCD"],
 };
 
 // ============================================================================
@@ -251,7 +251,7 @@ export async function runClusterInitWizard(): Promise<ClusterInitOptions | undef
   if (!cni) { return undefined; }
 
   // Step 6: GitOps Engine (first value is default)
-  const gitopsValues = await getSchemaEnumValues("gitops_engine");
+  const gitopsValues = await getSchemaEnumValues("gitops-engine");
   const gitopsItems = createEnumQuickPickItems(gitopsValues, getGitopsDescription);
   const gitopsEngine = await showMultiStepQuickPick(gitopsItems, {
     title,
@@ -498,7 +498,7 @@ async function runFullCustomizationWizard(
   if (!csi) { return undefined; }
 
   // Metrics Server
-  const metricsValues = await getSchemaEnumValues("metrics_server");
+  const metricsValues = await getSchemaEnumValues("metrics-server");
   const metricsItems = createEnumQuickPickItems(metricsValues, () => "");
   const metricsServer = await showMultiStepQuickPick(metricsItems, {
     title,
@@ -509,7 +509,7 @@ async function runFullCustomizationWizard(
   if (!metricsServer) { return undefined; }
 
   // Cert Manager
-  const certValues = await getSchemaEnumValues("cert_manager");
+  const certValues = await getSchemaEnumValues("cert-manager");
   const certItems = createEnumQuickPickItems(certValues, () => "");
   const certManager = await showMultiStepQuickPick(certItems, {
     title,
@@ -520,7 +520,7 @@ async function runFullCustomizationWizard(
   if (!certManager) { return undefined; }
 
   // Policy Engine
-  const policyValues = await getSchemaEnumValues("policy_engine");
+  const policyValues = await getSchemaEnumValues("policy-engine");
   const policyItems = createEnumQuickPickItems(policyValues, getPolicyDescription);
   const policyEngine = await showMultiStepQuickPick(policyItems, {
     title,
@@ -531,7 +531,7 @@ async function runFullCustomizationWizard(
   if (!policyEngine) { return undefined; }
 
   // GitOps Engine
-  const gitopsValues = await getSchemaEnumValues("gitops_engine");
+  const gitopsValues = await getSchemaEnumValues("gitops-engine");
   const gitopsItems = createEnumQuickPickItems(gitopsValues, getGitopsDescription);
   const gitopsEngine = await showMultiStepQuickPick(gitopsItems, {
     title,

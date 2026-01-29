@@ -100,20 +100,25 @@ npx @vscode/vsce package --no-dependencies
 ```
 vsce/
 ├── src/
-│   ├── extension.ts        # Entry point, command registration
+│   ├── extension.ts          # Entry point, command registration
 │   ├── commands/
-│   │   ├── index.ts        # Command handlers
-│   │   └── prompts.ts      # Interactive wizard implementations
+│   │   ├── index.ts          # Command handlers (command registry)
+│   │   └── prompts.ts        # Interactive wizard implementations
 │   ├── ksail/
-│   │   └── clusters.ts     # KSail CLI wrapper functions
+│   │   ├── clusters.ts       # KSail CLI wrapper functions
+│   │   ├── binary.ts         # KSail binary discovery and execution
+│   │   └── index.ts          # Module exports
 │   ├── mcp/
-│   │   └── server.ts       # MCP server definition provider
+│   │   ├── serverProvider.ts # MCP server definition provider
+│   │   ├── schemaClient.ts   # MCP schema client for KSail
+│   │   └── index.ts          # Module exports
 │   ├── views/
-│   │   └── clustersView.ts # Tree view provider
+│   │   ├── clustersView.ts   # Tree view provider
+│   │   └── index.ts          # Module exports
 │   └── ui/
-│       └── helpers.ts      # Progress indicators, error handling
-├── dist/                   # Compiled output
-└── package.json            # Extension manifest
+│       └── index.ts          # UI helpers (progress, error handling)
+├── dist/                     # Compiled output
+└── package.json              # Extension manifest
 ```
 
 ## License

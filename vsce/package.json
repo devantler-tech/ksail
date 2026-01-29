@@ -34,7 +34,8 @@
     "theme": "dark"
   },
   "activationEvents": [
-    "workspaceContains:ksail.yaml"
+    "workspaceContains:ksail.yaml",
+    "onCommand:ksail.cluster.init"
   ],
   "main": "./dist/extension.js",
   "contributes": {
