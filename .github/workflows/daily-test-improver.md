@@ -17,6 +17,9 @@ network:
   allowed: [defaults, go]
 
 safe-outputs:
+  app:
+    app-id: ${{ vars.APP_ID }}
+    private-key: ${{ secrets.APP_PRIVATE_KEY }}
   create-discussion: # needed to create planning discussion
     title-prefix: "${{ github.workflow }}"
     category: "agentic-workflows"
