@@ -341,7 +341,7 @@ jobs:
 
       - name: 📤 Upload VSIX artifact
         if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
-        uses: actions/upload-artifact@ea0d451445924e06149d0c1cf1011f1aee367c64 # v6.0.2
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # 6.0.0
         with:
           name: ksail-vsix
           path: vsce/*.vsix
