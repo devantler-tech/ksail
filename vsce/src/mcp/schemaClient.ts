@@ -111,6 +111,7 @@ async function queryToolsList(): Promise<McpTool[]> {
     let requestId = 1;
     let initializeId = 0;
     let toolsListId = 0;
+    const processedIds = new Set<number>();
 
     const sendRequest = (method: string, params?: unknown): number => {
       const id = requestId++;
@@ -126,7 +127,9 @@ async function queryToolsList(): Promise<McpTool[]> {
       return id;
     };
 
-    const parseMessages = (data: string): JsonRpcResponse[] => {
+    const parseMessages = (
+      data: string
+    ): { responses: JsonRpcResponse[]; remaining: string } => {
       const responses: JsonRpcResponse[] = [];
       let remaining = data;
 
@@ -160,7 +163,7 @@ async function queryToolsList(): Promise<McpTool[]> {
         }
       }
 
-      return responses;
+      return { responses, remaining };
     };
 
     const cleanup = (): void => {
@@ -176,8 +179,16 @@ async function queryToolsList(): Promise<McpTool[]> {
     proc.stdout?.on("data", (data: Buffer) => {
       stdout += data.toString();
 
-      const responses = parseMessages(stdout);
+      const { responses, remaining } = parseMessages(stdout);
+      stdout = remaining; // Keep only unparsed data
+
       for (const response of responses) {
+        // Skip already processed responses
+        if (processedIds.has(response.id)) {
+          continue;
+        }
+        processedIds.add(response.id);
+
         if (response.id === initializeId) {
           // Handle initialize response
           if (response.error) {
@@ -201,6 +212,7 @@ async function queryToolsList(): Promise<McpTool[]> {
           }
           return;
         }
+        // Ignore other responses (notifications, etc.)
       }
     });
 
