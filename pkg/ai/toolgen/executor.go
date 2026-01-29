@@ -334,5 +334,6 @@ func ToolParametersFromJSON(jsonParams string) (map[string]any, error) {
 // Example: "ksail cluster create" -> "cluster_create".
 func FormatToolName(commandPath string) string {
 	strippedPath := stripRootCommand(commandPath)
+
 	return strings.ReplaceAll(strippedPath, " ", "_")
 }

@@ -139,12 +139,13 @@ func isRunnableCommand(cmd *cobra.Command) bool {
 
 // stripRootCommand removes the root command from a command path.
 // Example: "ksail cluster create" -> "cluster create"
-// If only root command, returns it unchanged: "ksail" -> "ksail"
+// If only root command, returns it unchanged: "ksail" -> "ksail".
 func stripRootCommand(commandPath string) string {
 	parts := strings.Fields(commandPath)
 	if len(parts) <= 1 {
 		return commandPath
 	}
+
 	return strings.Join(parts[1:], " ")
 }
 
