@@ -8,6 +8,10 @@
 🗑️ Delete cluster...
 ► deleting cluster 'my-cluster' on Docker
 ✔ cluster deleted
+
+🧹 Cleanup cloud-provider-kind...
+► uninstalling cloud-provider-kind (no kind clusters remain)
+✔ cloud-provider-kind cleaned up
 ---
 
 [TestDelete_Confirmation_Denied - 1]
@@ -32,6 +36,10 @@
 🗑️ Delete cluster...
 ► deleting cluster 'my-cluster' on Docker
 ✔ cluster deleted
+
+🧹 Cleanup cloud-provider-kind...
+► uninstalling cloud-provider-kind (no kind clusters remain)
+✔ cloud-provider-kind cleaned up
 ---
 
 [TestDelete_ContextBasedDetection_DeletesCluster/Talos_context_pattern - 1]
@@ -44,10 +52,18 @@
 🗑️ Delete cluster...
 ► deleting cluster 'my-cluster' on Docker
 ✔ cluster deleted
+
+🧹 Cleanup cloud-provider-kind...
+► uninstalling cloud-provider-kind (no kind clusters remain)
+✔ cloud-provider-kind cleaned up
 ---
 
 [TestDelete_NonTTY_SkipsConfirmation - 1]
 🗑️ Delete cluster...
 ► deleting cluster 'my-cluster' on Docker
 ✔ cluster deleted
+
+🧹 Cleanup cloud-provider-kind...
+► uninstalling cloud-provider-kind (no kind clusters remain)
+✔ cloud-provider-kind cleaned up
 ---

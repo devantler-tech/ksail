@@ -104,6 +104,15 @@ func runDeleteAction(
 		return fmt.Errorf("failed to resolve cluster info: %w", err)
 	}
 
+	// Detect distribution from kubeconfig context before deletion for cleanup decisions
+	isKindCluster := false
+	if resolved.Provider == v1alpha1.ProviderDocker {
+		clusterInfo, detectErr := lifecycle.DetectClusterInfo(resolved.KubeconfigPath, "")
+		if detectErr == nil && clusterInfo != nil {
+			isKindCluster = clusterInfo.Distribution == v1alpha1.DistributionVanilla
+		}
+	}
+
 	// Create cluster info for provisioner creation
 	clusterInfo := &lifecycle.ClusterInfo{
 		ClusterName:    resolved.ClusterName,
@@ -148,8 +157,9 @@ func runDeleteAction(
 	}
 
 	// Cleanup cloud-provider-kind if this was the last kind cluster
-	if resolved.Provider == v1alpha1.ProviderDocker {
-		cleanupCloudProviderKindIfLastCluster(cmd, tmr, provisioner)
+	// Only run for Vanilla (Kind) distribution on Docker provider
+	if isKindCluster {
+		cleanupCloudProviderKindIfLastCluster(cmd, tmr)
 	}
 
 	return nil
@@ -488,34 +498,50 @@ func cleanupRegistriesAfterDelete(
 	}
 }
 
+// hasRemainingKindClusters checks if there are any Kind clusters remaining in Docker.
+func hasRemainingKindClusters() bool {
+	dockerClientInvokerMu.RLock()
+	invoker := dockerClientInvoker
+	dockerClientInvokerMu.RUnlock()
+
+	var hasKind bool
+	_ = invoker(nil, func(dockerClient client.APIClient) error {
+		ctx := context.Background()
+		containers, err := dockerClient.ContainerList(ctx, container.ListOptions{
+			All: true,
+		})
+		if err != nil {
+			return err
+		}
+
+		// Check if any container matches Kind's naming pattern
+		// Kind containers end with -control-plane or -worker*
+		for _, ctr := range containers {
+			for _, name := range ctr.Names {
+				containerName := strings.TrimPrefix(name, "/")
+				// Kind control plane pattern: *-control-plane
+				if strings.HasSuffix(containerName, "-control-plane") {
+					hasKind = true
+					return nil
+				}
+			}
+		}
+
+		return nil
+	})
+
+	return hasKind
+}
+
 // cleanupCloudProviderKindIfLastCluster uninstalls cloud-provider-kind if no kind clusters remain.
 // Cloud-provider-kind creates containers that can be shared across multiple kind clusters,
 // so we only uninstall when the last kind cluster is deleted.
 func cleanupCloudProviderKindIfLastCluster(
 	cmd *cobra.Command,
 	tmr timer.Timer,
-	provisioner clusterprovisioner.ClusterProvisioner,
 ) {
-	ctx := cmd.Context()
-	if ctx == nil {
-		ctx = context.Background()
-	}
-
-	// Check if there are any remaining kind clusters
-	clusters, err := provisioner.List(ctx)
-	if err != nil {
-		// If we can't list clusters, skip cleanup to be safe
-		notify.WriteMessage(notify.Message{
-			Type:    notify.WarningType,
-			Content: "unable to verify remaining kind clusters, skipping cloud-provider-kind cleanup",
-			Writer:  cmd.OutOrStdout(),
-		})
-
-		return
-	}
-
-	// If there are still kind clusters, don't uninstall cloud-provider-kind
-	if len(clusters) > 0 {
+	// Check if there are any remaining Kind clusters by looking for Kind containers
+	if hasRemainingKindClusters() {
 		return
 	}
 
@@ -540,11 +566,11 @@ func cleanupCloudProviderKindIfLastCluster(
 	// We need to uninstall from one of the recently deleted clusters
 	// Since all clusters are gone, we can't actually uninstall via Helm
 	// Instead, we need to clean up any remaining cloud-provider-kind containers
-	err = cleanupCloudProviderKindContainers(cmd)
-	if err != nil {
+	cleanupErr := cleanupCloudProviderKindContainers(cmd)
+	if cleanupErr != nil {
 		notify.WriteMessage(notify.Message{
 			Type:    notify.WarningType,
-			Content: fmt.Sprintf("failed to cleanup cloud-provider-kind containers: %v", err),
+			Content: fmt.Sprintf("failed to cleanup cloud-provider-kind containers: %v", cleanupErr),
 			Writer:  cmd.OutOrStdout(),
 		})
 
