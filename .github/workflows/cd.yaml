@@ -131,25 +131,25 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const tag = '${{ steps.get_version.outputs.version }}';
-            
+
             // Get the release by tag
             const { data: releases } = await github.rest.repos.listReleases({
               owner: context.repo.owner,
               repo: context.repo.repo,
             });
-            
+
             const release = releases.find(r => r.tag_name === tag);
-            
+
             if (!release) {
               core.setFailed(`Release not found for tag ${tag}`);
               return;
             }
-            
+
             if (!release.draft) {
               console.log(`Release ${tag} is already published`);
               return;
             }
-            
+
             // Publish the release
             await github.rest.repos.updateRelease({
               owner: context.repo.owner,
@@ -157,6 +157,5 @@ jobs:
               release_id: release.id,
               draft: false,
             });
-            
-            console.log(`Successfully published release ${tag}`);
 
+            console.log(`Successfully published release ${tag}`);
