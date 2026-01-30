@@ -19,6 +19,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/svc/installer"
 	argocdinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/argocd"
 	certmanagerinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/cert-manager"
+	cloudproviderkindinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/cloudproviderkind"
 	fluxinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/flux"
 	gatekeeperinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/gatekeeper"
 	hetznercsiinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/hetzner-csi"
@@ -241,6 +242,18 @@ func NeedsMetricsServerInstall(clusterCfg *v1alpha1.Cluster) bool {
 	return !clusterCfg.Spec.Cluster.Distribution.ProvidesMetricsServerByDefault()
 }
 
+// NeedsLoadBalancerInstall determines if LoadBalancer support needs to be installed.
+// Returns true only when LoadBalancer is Enabled AND the distribution × provider doesn't provide it by default.
+// When LoadBalancer is Default, we don't install (rely on distribution × provider default behavior).
+func NeedsLoadBalancerInstall(clusterCfg *v1alpha1.Cluster) bool {
+	if clusterCfg.Spec.Cluster.LoadBalancer != v1alpha1.LoadBalancerEnabled {
+		return false
+	}
+
+	// Don't install if distribution × provider provides it by default
+	return !clusterCfg.Spec.Cluster.Distribution.ProvidesLoadBalancerByDefault(clusterCfg.Spec.Cluster.Provider)
+}
+
 // InstallMetricsServerSilent installs metrics-server silently for parallel execution.
 func InstallMetricsServerSilent(
 	ctx context.Context,
@@ -263,6 +276,49 @@ func InstallMetricsServerSilent(
 	installErr := msInstaller.Install(ctx)
 	if installErr != nil {
 		return fmt.Errorf("metrics-server installation failed: %w", installErr)
+	}
+
+	return nil
+}
+
+// InstallLoadBalancerSilent installs LoadBalancer support silently for parallel execution.
+// For Vanilla (Kind) × Docker, installs Cloud Provider KIND.
+func InstallLoadBalancerSilent(
+	ctx context.Context,
+	clusterCfg *v1alpha1.Cluster,
+	factories *InstallerFactories,
+) error {
+	helmClient, kubeconfig, err := factories.HelmClientFactory(clusterCfg)
+	if err != nil {
+		return fmt.Errorf("failed to create helm client: %w", err)
+	}
+
+	timeout := installer.GetInstallTimeout(clusterCfg)
+
+	// Determine which LoadBalancer implementation to install based on distribution × provider
+	switch clusterCfg.Spec.Cluster.Distribution {
+	case v1alpha1.DistributionVanilla:
+		// Vanilla (Kind) × Docker uses Cloud Provider KIND
+		if clusterCfg.Spec.Cluster.Provider == v1alpha1.ProviderDocker {
+			lbInstaller := cloudproviderkindinstaller.NewCloudProviderKINDInstaller(
+				helmClient,
+				kubeconfig,
+				clusterCfg.Spec.Cluster.Connection.Context,
+				timeout,
+			)
+
+			installErr := lbInstaller.Install(ctx)
+			if installErr != nil {
+				return fmt.Errorf("cloud-provider-kind installation failed: %w", installErr)
+			}
+		}
+	case v1alpha1.DistributionTalos:
+		// Talos × Docker would use MetalLB (future implementation)
+		// Talos × Hetzner uses hcloud-ccm (future implementation)
+		return fmt.Errorf("LoadBalancer installation for Talos is not yet implemented")
+	case v1alpha1.DistributionK3s:
+		// K3s already has ServiceLB (Klipper) by default, no installation needed
+		return nil
 	}
 
 	return nil

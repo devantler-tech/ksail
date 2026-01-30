@@ -75,6 +75,26 @@ func (d *Distribution) ProvidesCSIByDefault(provider Provider) bool {
 	}
 }
 
+// ProvidesLoadBalancerByDefault returns true if the distribution × provider combination includes LoadBalancer support by default.
+// - K3s includes ServiceLB (Klipper-LB) by default (regardless of provider)
+// - Talos × Hetzner uses hcloud-cloud-controller-manager by default
+// - Vanilla and Talos × Docker do not have default LoadBalancer support.
+func (d *Distribution) ProvidesLoadBalancerByDefault(provider Provider) bool {
+	switch *d {
+	case DistributionK3s:
+		// K3s always includes ServiceLB (Klipper-LB)
+		return true
+	case DistributionTalos:
+		// Talos × Hetzner provides hcloud-cloud-controller-manager by default
+		return provider == ProviderHetzner
+	case DistributionVanilla:
+		// Vanilla (Kind) does not provide LoadBalancer by default
+		return false
+	default:
+		return false
+	}
+}
+
 // Set for Distribution (pflag.Value interface).
 func (d *Distribution) Set(value string) error {
 	for _, dist := range ValidDistributions() {
@@ -289,6 +309,64 @@ func (m *MetricsServer) ValidValues() []string {
 		string(MetricsServerDefault),
 		string(MetricsServerEnabled),
 		string(MetricsServerDisabled),
+	}
+}
+
+// --- Load Balancer Types ---
+
+// LoadBalancer defines the LoadBalancer options for a KSail cluster.
+type LoadBalancer string
+
+const (
+	// LoadBalancerDefault relies on the distribution × provider default behavior for LoadBalancer support.
+	LoadBalancerDefault LoadBalancer = "Default"
+	// LoadBalancerEnabled ensures LoadBalancer support is enabled.
+	LoadBalancerEnabled LoadBalancer = "Enabled"
+	// LoadBalancerDisabled ensures LoadBalancer support is disabled.
+	LoadBalancerDisabled LoadBalancer = "Disabled"
+)
+
+// Set for LoadBalancer (pflag.Value interface).
+func (l *LoadBalancer) Set(value string) error {
+	for _, lb := range ValidLoadBalancers() {
+		if strings.EqualFold(value, string(lb)) {
+			*l = lb
+
+			return nil
+		}
+	}
+
+	return fmt.Errorf(
+		"%w: %s (valid options: %s, %s, %s)",
+		ErrInvalidLoadBalancer,
+		value,
+		LoadBalancerDefault,
+		LoadBalancerEnabled,
+		LoadBalancerDisabled,
+	)
+}
+
+// String returns the string representation of the LoadBalancer.
+func (l *LoadBalancer) String() string {
+	return string(*l)
+}
+
+// Type returns the type of the LoadBalancer.
+func (l *LoadBalancer) Type() string {
+	return "LoadBalancer"
+}
+
+// Default returns the default value for LoadBalancer (Default, which defers to the distribution × provider).
+func (l *LoadBalancer) Default() any {
+	return LoadBalancerDefault
+}
+
+// ValidValues returns all valid LoadBalancer values as strings.
+func (l *LoadBalancer) ValidValues() []string {
+	return []string{
+		string(LoadBalancerDefault),
+		string(LoadBalancerEnabled),
+		string(LoadBalancerDisabled),
 	}
 }
 

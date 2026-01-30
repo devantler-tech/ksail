@@ -17,6 +17,9 @@ var ErrInvalidCSI = errors.New("invalid CSI")
 // ErrInvalidMetricsServer is returned when an invalid metrics server is specified.
 var ErrInvalidMetricsServer = errors.New("invalid metrics server")
 
+// ErrInvalidLoadBalancer is returned when an invalid load balancer option is specified.
+var ErrInvalidLoadBalancer = errors.New("invalid load balancer")
+
 // ErrInvalidCertManager is returned when an invalid cert-manager option is specified.
 var ErrInvalidCertManager = errors.New("invalid cert-manager")
 
