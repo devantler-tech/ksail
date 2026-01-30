@@ -80,8 +80,17 @@ jobs:
           file_pattern: "docs/package*.json"
           token: ${{ steps.generate-token.outputs.token }}
 
+      - name: 🔍 Re-audit after fix
+        id: reaudit
+        if: steps.fix.outputs.changes_made == 'true'
+        run: npm audit --audit-level=moderate
+        continue-on-error: true
+
       - name: ❌ Fail if vulnerabilities remain
-        if: steps.audit.outcome == 'failure' && (github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+        if: |
+          (github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+          && (steps.fix.outputs.changes_made != 'true' && steps.audit.outcome == 'failure'
+              || steps.fix.outputs.changes_made == 'true' && steps.reaudit.outcome == 'failure')
         run: npm audit --audit-level=moderate
 
   audit-vsce:
@@ -140,8 +149,17 @@ jobs:
           file_pattern: "vsce/package*.json"
           token: ${{ steps.generate-token.outputs.token }}
 
+      - name: 🔍 Re-audit after fix
+        id: reaudit
+        if: steps.fix.outputs.changes_made == 'true'
+        run: npm audit --audit-level=moderate
+        continue-on-error: true
+
       - name: ❌ Fail if vulnerabilities remain
-        if: steps.audit.outcome == 'failure' && (github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+        if: |
+          (github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+          && (steps.fix.outputs.changes_made != 'true' && steps.audit.outcome == 'failure'
+              || steps.fix.outputs.changes_made == 'true' && steps.reaudit.outcome == 'failure')
         run: npm audit --audit-level=moderate
 
   status:
