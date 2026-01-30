@@ -12,9 +12,8 @@ A VSCode extension for managing local Kubernetes clusters with KSail.
 
 ## Requirements
 
-- [KSail](https://github.com/devantler-tech/ksail) CLI installed and available in PATH
+- [KSail](https://ksail.devantler.tech/installation/) CLI installed and available in PATH
 - Docker running (for local cluster operations)
-- [K9s](https://k9scli.io/) (optional, for cluster connection)
 
 ## Installation
 
@@ -39,10 +38,9 @@ All cluster operations are available via the Command Palette (`Cmd+Shift+P` / `C
 | `KSail: Init Cluster`             | Initialize a new ksail.yaml configuration | `Cmd+Shift+K I` |
 | `KSail: Create Cluster`           | Create and start a cluster                | `Cmd+Shift+K C` |
 | `KSail: Delete Cluster`           | Delete the cluster                        | `Cmd+Shift+K D` |
-| `KSail: List Clusters`            | List all clusters                         | `Cmd+Shift+K L` |
 | `KSail: Start Cluster`            | Start an existing cluster                 | -               |
 | `KSail: Stop Cluster`             | Stop a running cluster                    | -               |
-| `KSail: Connect to Cluster (K9s)` | Open K9s terminal UI                      | -               |
+| `KSail: Connect to Cluster (K9s)` | Open K9s terminal UI (embedded in KSail)  | -               |
 
 ### Interactive Wizards
 

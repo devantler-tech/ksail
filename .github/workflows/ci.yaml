@@ -7,7 +7,7 @@ on:
   merge_group:
 
 concurrency:
-  group: "ci-ksail-${{ github.ref }}"
+  group: "ci-ksail-${{ github.workflow }}-${{ github.ref }}"
   cancel-in-progress: true
 
 permissions: {}
