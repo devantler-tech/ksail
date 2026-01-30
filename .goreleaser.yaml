@@ -80,6 +80,7 @@ changelog:
       order: 999
 
 release:
+  draft: true
   footer: |
     ## Quick Start
 
