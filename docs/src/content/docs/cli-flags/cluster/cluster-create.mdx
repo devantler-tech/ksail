@@ -22,13 +22,13 @@ Flags:
   -g, --gitops-engine GitOpsEngine     GitOps engine to use (None disables GitOps, Flux installs Flux controllers, ArgoCD installs Argo CD) (default None)
   -h, --help                           help for create
   -k, --kubeconfig string              Path to kubeconfig file (default "~/.kube/config")
+      --load-balancer LoadBalancer     LoadBalancer support (Default: use distribution × provider, Enabled: install, Disabled: uninstall)
       --local-registry string          Local registry specification: [user:pass@]host[:port][/path] (e.g., localhost:5050, ghcr.io/myorg, ${USER}:${PASS}@ghcr.io:443/org)
       --metrics-server MetricsServer   Metrics Server (Default: use distribution, Enabled: install, Disabled: uninstall)
       --mirror-registry strings        Configure mirror registries with format 'host=upstream' (e.g., docker.io=https://registry-1.docker.io)
   -n, --name string                    Cluster name used for container names, registry names, and kubeconfig context
       --policy-engine PolicyEngine     Policy engine (None: skip, Kyverno: install Kyverno, Gatekeeper: install Gatekeeper)
       --provider Provider              Infrastructure provider backend (e.g., Docker)
-      --unknown LoadBalancer           LoadBalancer support (Default: use distribution × provider, Enabled: install, Disabled: uninstall)
       --workers int32                  Number of worker nodes
 
 Global Flags:
