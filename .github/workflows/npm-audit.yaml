@@ -45,6 +45,9 @@ jobs:
           cache: "npm"
           cache-dependency-path: docs/package-lock.json
 
+      - name: 📦 Install dependencies
+        run: npm ci
+
       - name: 🔍 Run npm audit
         id: audit
         run: npm audit --audit-level=moderate
@@ -89,8 +92,8 @@ jobs:
       - name: ❌ Fail if vulnerabilities remain
         if: |
           (github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
-          && (steps.fix.outputs.changes_made != 'true' && steps.audit.outcome == 'failure'
-              || steps.fix.outputs.changes_made == 'true' && steps.reaudit.outcome == 'failure')
+          && ((steps.fix.outputs.changes_made != 'true' && steps.audit.outcome == 'failure')
+              || (steps.fix.outputs.changes_made == 'true' && steps.reaudit.outcome == 'failure'))
         run: npm audit --audit-level=moderate
 
   audit-vsce:
@@ -113,6 +116,9 @@ jobs:
           node-version: "22"
           cache: "npm"
           cache-dependency-path: vsce/package-lock.json
+
+      - name: 📦 Install dependencies
+        run: npm ci
 
       - name: 🔍 Run npm audit
         id: audit
@@ -158,8 +164,8 @@ jobs:
       - name: ❌ Fail if vulnerabilities remain
         if: |
           (github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
-          && (steps.fix.outputs.changes_made != 'true' && steps.audit.outcome == 'failure'
-              || steps.fix.outputs.changes_made == 'true' && steps.reaudit.outcome == 'failure')
+          && ((steps.fix.outputs.changes_made != 'true' && steps.audit.outcome == 'failure')
+              || (steps.fix.outputs.changes_made == 'true' && steps.reaudit.outcome == 'failure'))
         run: npm audit --audit-level=moderate
 
   status:
