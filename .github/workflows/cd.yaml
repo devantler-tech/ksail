@@ -77,6 +77,10 @@ jobs:
         with:
           node-version: "22"
 
+      - name: 🏷️ Extract version from tag
+        id: get_version
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
       - name: 📦 Install dependencies
         run: npm ci
 
@@ -87,7 +91,7 @@ jobs:
         run: npm run package
 
       - name: 📤 Publish to VS Code Marketplace
-        run: npx @vscode/vsce publish
+        run: npx @vscode/vsce publish ${{ steps.get_version.outputs.version }}
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
         continue-on-error: true
@@ -99,7 +103,7 @@ jobs:
       #   continue-on-error: true
 
       - name: 📦 Create VSIX package
-        run: npx @vscode/vsce package --out ksail.vsix
+        run: npx @vscode/vsce package ${{ steps.get_version.outputs.version }} --out ksail.vsix
 
       - name: 📤 Upload VSIX to release
         uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2.5.0
