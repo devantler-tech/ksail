@@ -91,9 +91,10 @@ jobs:
         run: npm run package
 
       - name: 📤 Publish to VS Code Marketplace
-        run: npx @vscode/vsce publish ${{ steps.get_version.outputs.version }}
+        run: npx @vscode/vsce publish "$VERSION"
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
+          VERSION: ${{ steps.get_version.outputs.version }}
         continue-on-error: true
 
       # - name: 📤 Publish to Open VSX Registry
@@ -103,7 +104,9 @@ jobs:
       #   continue-on-error: true
 
       - name: 📦 Create VSIX package
-        run: npx @vscode/vsce package ${{ steps.get_version.outputs.version }} --out ksail.vsix
+        run: npx @vscode/vsce package "$VERSION" --out ksail.vsix
+        env:
+          VERSION: ${{ steps.get_version.outputs.version }}
 
       - name: 📤 Upload VSIX to release
         uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2.5.0
