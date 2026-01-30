@@ -4,11 +4,13 @@ description: Builds the project, runs tests, and generates coverage reports
 runs:
   using: composite
   steps:
-    # Step 1: Setup Go environment
+    # Step 1: Setup Go environment with module caching
     - name: ⚙️ Setup Go
       uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
       with:
         go-version-file: go.mod
+        cache: true
+        cache-dependency-path: go.sum
     
     # Step 2: Verify Go installation
     - name: ✅ Verify Go setup
