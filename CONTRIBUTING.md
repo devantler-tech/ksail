@@ -108,6 +108,33 @@ npm run dev
 
 The built site will be available in `docs/dist/`. Note that `docs/dist/` and `docs/node_modules/` are excluded from git via `.gitignore`.
 
+### VSCode Extension
+
+The VSCode extension is located in the `vsce/` directory and provides cluster management capabilities directly in VSCode.
+
+#### Building the extension
+
+```sh
+# working-directory: ./vsce
+
+# Install dependencies (first time only or when package-lock.json changes)
+npm ci
+
+# Compile TypeScript to JavaScript
+npm run compile
+
+# Package as VSIX for distribution
+npx @vscode/vsce package --no-dependencies
+```
+
+#### Testing locally
+
+1. Open the `vsce` folder in VSCode
+2. Press `F5` to launch Extension Development Host
+3. Test commands from the Command Palette (`Cmd+Shift+P` / `Ctrl+Shift+P`)
+
+See [vsce/README.md](vsce/README.md) for full extension documentation including features, architecture, and development workflows.
+
 ## Project Structure
 
 The repository is organized around the top-level CLI entry point (`main.go`) and the public packages in `pkg/`.
@@ -115,6 +142,8 @@ The repository is organized around the top-level CLI entry point (`main.go`) and
 - **main.go** - CLI entry point
 - **pkg/cli/cmd/** - CLI command implementations
 - **pkg/** - Public packages (importable by external projects)
+- **docs/** - Astro documentation site
+- **vsce/** - VSCode extension
 
 ### Key Packages in pkg/
 

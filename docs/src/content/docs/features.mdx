@@ -234,6 +234,47 @@ ksail chat
 
 **Commands:** [`ksail chat`](/cli-flags/chat/chat-root/)
 
+## VSCode Extension
+
+Manage KSail clusters directly from Visual Studio Code with an integrated extension that provides cluster management, interactive wizards, and AI assistant integration.
+
+```bash
+# Install from VSCode Marketplace
+# Search for "KSail" in Extensions view
+```
+
+**Capabilities:**
+
+- **Clusters sidebar view** — View and manage clusters with status indicators (running/stopped)
+- **Interactive wizards** — Step-by-step configuration for cluster init and create operations
+- **Command palette** — Full access to all cluster lifecycle commands
+- **Keyboard shortcuts** — Quick access to common operations (`Cmd+Shift+K` prefix)
+- **Smart context menus** — Right-click actions based on cluster state
+- **MCP server provider** — Exposes KSail as an MCP server for AI assistants
+
+**Features:**
+
+| Feature              | Description                                           |
+| -------------------- | ----------------------------------------------------- |
+| Cluster tree view    | Shows all clusters with provider and status info      |
+| Init wizard          | Multi-step configuration for new clusters             |
+| Create wizard        | Guided cluster creation with component selection      |
+| Command shortcuts    | `Cmd+Shift+K I` (init), `C` (create), `D` (delete)   |
+| K9s integration      | Open cluster in K9s terminal UI                       |
+| MCP integration      | Use KSail with Copilot and other AI tools             |
+
+**Prerequisites:**
+
+- [KSail CLI](https://ksail.devantler.tech/installation/) installed and in PATH
+- [Docker](https://www.docker.com/get-started/) running (for cluster operations)
+- [K9s](https://k9scli.io/) (optional, for cluster connection)
+
+**Installation:** See [VSCode Extension Installation](/installation/#vscode-extension) for setup instructions.
+
+**Repository:** [vsce/](https://github.com/devantler-tech/ksail/tree/main/vsce)
+
+**Marketplace:** [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=devantler-tech.ksail)
+
 ## Next Steps
 
 - **[Use Cases](/use-cases/)** – Workflows for learning, development, and CI/CD
