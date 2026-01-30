@@ -50,3 +50,6 @@ var ErrLocalRegistryNotSupported = errors.New(
 	"cloud provider requires an external registry\n" +
 		"- use --local-registry with an internet-accessible registry (e.g., ghcr.io/myorg)",
 )
+
+// ErrLoadBalancerNotImplemented is returned when LoadBalancer installation is not yet implemented.
+var ErrLoadBalancerNotImplemented = errors.New("LoadBalancer installation not yet implemented")
