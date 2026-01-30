@@ -201,7 +201,7 @@ To test the Hetzner provider locally, you need:
 
 **Note:** CI includes a safety-net cleanup job (`cleanup-hetzner`) that runs after system tests and deletes any Hetzner resources labeled `ksail.owned=true`. This is implemented as a GitHub Action at `.github/actions/cleanup-hetzner/action.yaml` and is not intended for local execution.
 
-**Warning:** The cleanup action is destructive and will delete *all* resources in your Hetzner project matching `ksail.owned=true`. Manual cleanup should be done via the Hetzner Cloud Console or `hcloud` CLI if needed.
+**Warning:** The cleanup action is destructive and will delete all KSail-managed Hetzner resources (servers, placement groups, firewalls, and networks) in your project that are labeled `ksail.owned=true`. Manual cleanup of any remaining resources should be done via the Hetzner Cloud Console or `hcloud` CLI if needed.
 
 ## CD
 
