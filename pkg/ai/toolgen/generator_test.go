@@ -28,12 +28,12 @@ func TestGenerateTools(t *testing.T) {
 
 	// Verify expected tools are present
 	expectedTools := map[string]bool{
-		"ksail_cluster_read":   false,
-		"ksail_cluster_write":  false,
-		"ksail_workload_read":  false,
-		"ksail_workload_write": false,
-		"ksail_cipher_read":    false,
-		"ksail_cipher_write":   false,
+		"cluster_read":   false,
+		"cluster_write":  false,
+		"workload_read":  false,
+		"workload_write": false,
+		"cipher_read":    false,
+		"cipher_write":   false,
 	}
 
 	for _, tool := range tools {
@@ -50,9 +50,9 @@ func TestGenerateTools(t *testing.T) {
 
 	// Verify excluded tools are NOT present
 	excludedTools := []string{
-		"ksail_chat",
-		"ksail_completion",
-		"ksail_mcp",
+		"chat",
+		"completion",
+		"mcp",
 	}
 
 	for _, tool := range tools {
@@ -122,12 +122,12 @@ func TestFormatToolName(t *testing.T) {
 		{
 			name:        "two level command",
 			commandPath: "ksail cluster",
-			expected:    "ksail_cluster",
+			expected:    "cluster",
 		},
 		{
 			name:        "three level command",
 			commandPath: "ksail cluster create",
-			expected:    "ksail_cluster_create",
+			expected:    "cluster_create",
 		},
 	}
 
@@ -363,5 +363,100 @@ func TestToolCountReduction(t *testing.T) {
 	reduction := len(unconsolidatedTools) - len(consolidatedTools)
 	if reduction != 16 {
 		t.Errorf("Expected reduction of 16 tools, got %d", reduction)
+	}
+}
+
+func TestArrayParametersHaveItems(t *testing.T) {
+	t.Parallel()
+
+	root := cmd.NewRootCmd("test", "abc123", "2024-01-01")
+	opts := toolgen.DefaultOptions()
+
+	tools := toolgen.GenerateTools(root, opts)
+
+	for _, tool := range tools {
+		validateArrayParameters(t, tool)
+	}
+}
+
+// validateArrayParameters checks that all array parameters have proper items definitions.
+func validateArrayParameters(t *testing.T, tool toolgen.ToolDefinition) {
+	t.Helper()
+
+	properties, ok := tool.Parameters["properties"].(map[string]any)
+	if !ok {
+		return
+	}
+
+	for paramName, prop := range properties {
+		propMap, ok := prop.(map[string]any)
+		if !ok {
+			continue
+		}
+
+		propType, _ := propMap["type"].(string)
+		if propType == "array" {
+			validateArrayItems(t, tool.Name, paramName, propMap)
+		}
+	}
+}
+
+// validateArrayItems verifies that an array parameter has valid items configuration.
+func validateArrayItems(t *testing.T, toolName, paramName string, propMap map[string]any) {
+	t.Helper()
+
+	items, hasItems := propMap["items"]
+	if !hasItems {
+		t.Errorf("tool %q: array parameter %q missing 'items' property", toolName, paramName)
+
+		return
+	}
+
+	itemsMap, ok := items.(map[string]any)
+	if !ok {
+		t.Errorf("tool %q: parameter %q 'items' should be a map", toolName, paramName)
+
+		return
+	}
+
+	itemType, hasType := itemsMap["type"]
+	if !hasType {
+		t.Errorf("tool %q: parameter %q 'items' missing 'type' property", toolName, paramName)
+
+		return
+	}
+
+	if itemType != "string" && itemType != "integer" {
+		t.Errorf(
+			"tool %q: parameter %q 'items.type' should be 'string' or 'integer', got %q",
+			toolName, paramName, itemType,
+		)
+	}
+}
+
+func TestExcludedCommandsAndChildren(t *testing.T) {
+	t.Parallel()
+
+	root := cmd.NewRootCmd("test", "abc123", "2024-01-01")
+	opts := toolgen.DefaultOptions()
+
+	tools := toolgen.GenerateTools(root, opts)
+
+	// Verify that excluded commands AND their children are not present
+	// completion is excluded, so completion bash, zsh, fish, powershell should also be excluded
+	forbiddenPrefixes := []string{
+		"completion",
+		"chat",
+		"mcp",
+		"help",
+	}
+
+	for _, tool := range tools {
+		for _, prefix := range forbiddenPrefixes {
+			if tool.Name == prefix ||
+				len(tool.Name) > len(prefix) && tool.Name[:len(prefix)+1] == prefix+"_" {
+				t.Errorf("excluded tool %q (or child) should not be generated", tool.Name)
+			}
+		}
 	}
 }

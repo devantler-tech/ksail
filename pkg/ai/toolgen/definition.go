@@ -68,6 +68,10 @@ type FlagDef struct {
 	// Type is the JSON schema type.
 	Type string
 
+	// ItemsType is the JSON schema type for array items (e.g., "string", "integer").
+	// Only populated when Type is "array".
+	ItemsType string
+
 	// Description describes the flag.
 	Description string
 

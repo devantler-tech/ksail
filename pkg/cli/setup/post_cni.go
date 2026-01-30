@@ -72,33 +72,22 @@ type ComponentRequirements struct {
 
 // Count returns the number of components that need to be installed.
 func (r ComponentRequirements) Count() int {
+	components := []bool{
+		r.NeedsMetricsServer,
+		r.NeedsKubeletCSRApprover,
+		r.NeedsCSI,
+		r.NeedsCertManager,
+		r.NeedsPolicyEngine,
+		r.NeedsArgoCD,
+		r.NeedsFlux,
+	}
+
 	count := 0
-	if r.NeedsMetricsServer {
-		count++
-	}
 
-	if r.NeedsKubeletCSRApprover {
-		count++
-	}
-
-	if r.NeedsCSI {
-		count++
-	}
-
-	if r.NeedsCertManager {
-		count++
-	}
-
-	if r.NeedsPolicyEngine {
-		count++
-	}
-
-	if r.NeedsArgoCD {
-		count++
-	}
-
-	if r.NeedsFlux {
-		count++
+	for _, needed := range components {
+		if needed {
+			count++
+		}
 	}
 
 	return count

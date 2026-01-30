@@ -32,6 +32,18 @@ updates:
         patterns:
           - "*"
 
+  - package-ecosystem: npm
+    directory: /vsce
+    schedule:
+      interval: daily
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
+    groups:
+      npm-dependencies:
+        patterns:
+          - "*"
+
   - package-ecosystem: docker
     directory: /
     cooldown:

@@ -26,8 +26,13 @@ func generateToolsRecursive(cmd *cobra.Command, tools *[]ToolDefinition, opts To
 		return
 	}
 
-	// Check if this command is excluded from tool generation
-	// Note: We still traverse children of excluded commands
+	// Check if this command (and its children) should be excluded via prefix match
+	// Prefix matching only applies to multi-word exclusions like "ksail completion"
+	if shouldExcludeWithChildren(cmd, opts) {
+		return
+	}
+
+	// Check if this command itself is excluded (but children may not be)
 	isExcluded := shouldExclude(cmd, opts)
 
 	// Check if this command should be consolidated (only if not excluded)
@@ -72,14 +77,31 @@ func processCommandAndChildren(
 	}
 }
 
+// shouldExcludeWithChildren checks if a command and all its children should be excluded.
+// This uses prefix matching for multi-word exclusions (e.g., "ksail completion")
+// so excluding "ksail completion" also excludes "ksail completion bash".
+func shouldExcludeWithChildren(cmd *cobra.Command, opts ToolOptions) bool {
+	cmdPath := cmd.CommandPath()
+	for _, excluded := range opts.ExcludeCommands {
+		// Only apply prefix matching for subcommand paths (those containing spaces)
+		// This means excluding "ksail completion" will also exclude its children
+		if strings.Contains(excluded, " ") && strings.HasPrefix(cmdPath, excluded+" ") {
+			return true
+		}
+	}
+
+	return false
+}
+
 // shouldExclude checks if a command should be excluded from tool generation.
+// This checks for exact matches only. Children are still processed.
 func shouldExclude(cmd *cobra.Command, opts ToolOptions) bool {
 	// Check hidden commands
 	if cmd.Hidden && !opts.IncludeHidden {
 		return true
 	}
 
-	// Check exclusion list
+	// Check exclusion list for exact match
 	cmdPath := cmd.CommandPath()
 
 	return slices.Contains(opts.ExcludeCommands, cmdPath)
@@ -115,11 +137,24 @@ func isRunnableCommand(cmd *cobra.Command) bool {
 	return true
 }
 
+// stripRootCommand removes the root command from a command path.
+// Example: "ksail cluster create" -> "cluster create"
+// If only root command, returns it unchanged: "ksail" -> "ksail".
+func stripRootCommand(commandPath string) string {
+	parts := strings.Fields(commandPath)
+	if len(parts) <= 1 {
+		return commandPath
+	}
+
+	return strings.Join(parts[1:], " ")
+}
+
 // commandToToolDefinition converts a Cobra command to a tool definition.
 func commandToToolDefinition(cmd *cobra.Command) ToolDefinition {
-	// Build tool name: "ksail cluster create" -> "ksail_cluster_create"
+	// Build tool name: "ksail cluster create" -> "cluster_create"
 	cmdPath := cmd.CommandPath()
-	toolName := strings.ReplaceAll(cmdPath, " ", "_")
+	strippedPath := stripRootCommand(cmdPath)
+	toolName := strings.ReplaceAll(strippedPath, " ", "_")
 
 	// Get description from annotation or Short
 	description := cmd.Short
@@ -228,10 +263,10 @@ func buildStandardProperty(flag *pflag.Flag) map[string]any {
 		prop["type"] = jsonSchemaTypeInteger
 	case "float32", "float64":
 		prop["type"] = jsonSchemaTypeNumber
-	case "stringSlice", "stringArray":
+	case flagTypeStringSlice, flagTypeStringArray:
 		prop["type"] = jsonSchemaTypeArray
 		prop["items"] = map[string]any{"type": jsonSchemaTypeString}
-	case "intSlice":
+	case flagTypeIntSlice:
 		prop["type"] = jsonSchemaTypeArray
 		prop["items"] = map[string]any{"type": jsonSchemaTypeInteger}
 	case "duration":
@@ -338,7 +373,8 @@ func commandToPermissionSplitTools(cmd *cobra.Command) []ToolDefinition {
 
 	// Build base name and path
 	cmdPath := cmd.CommandPath()
-	baseName := strings.ReplaceAll(cmdPath, " ", "_")
+	strippedPath := stripRootCommand(cmdPath)
+	baseName := strings.ReplaceAll(strippedPath, " ", "_")
 
 	// Check if parent has explicit permission - if so, don't split
 	parentHasPermission := cmd.Annotations != nil &&
@@ -620,12 +656,15 @@ func extractFlags(cmd *cobra.Command) map[string]*FlagDef {
 			return
 		}
 
-		flagType := mapFlagTypeToJSONType(flag.Value.Type())
-		required := flag.DefValue == "" && flag.Value.Type() != flagTypeBool
+		rawFlagType := flag.Value.Type()
+		flagType := mapFlagTypeToJSONType(rawFlagType)
+		itemsType := mapFlagTypeToItemsType(rawFlagType)
+		required := flag.DefValue == "" && rawFlagType != flagTypeBool
 
 		flags[flag.Name] = &FlagDef{
 			Name:        flag.Name,
 			Type:        flagType,
+			ItemsType:   itemsType,
 			Description: flag.Usage,
 			Required:    required,
 			Default:     flag.DefValue,
@@ -691,6 +730,7 @@ func mergeSubcommandFlags(subcommands map[string]*SubcommandDef) map[string]*Fla
 				allFlags[flagName] = &FlagDef{
 					Name:                 flagDef.Name,
 					Type:                 flagDef.Type,
+					ItemsType:            flagDef.ItemsType,
 					Description:          flagDef.Description,
 					Required:             flagDef.Required,
 					Default:              flagDef.Default,
@@ -712,6 +752,11 @@ func addFlagProperties(
 	for flagName, flagDef := range allFlags {
 		prop := map[string]any{
 			"type": flagDef.Type,
+		}
+
+		// Add items property for array types (required by JSON Schema)
+		if flagDef.ItemsType != "" {
+			prop["items"] = map[string]any{"type": flagDef.ItemsType}
 		}
 
 		// Build description with conditional applicability
@@ -757,5 +802,18 @@ func mapFlagTypeToJSONType(flagType string) string {
 		return jsonSchemaTypeArray
 	default:
 		return jsonSchemaTypeString
+	}
+}
+
+// mapFlagTypeToItemsType returns the JSON schema type for array items.
+// Returns empty string for non-array types.
+func mapFlagTypeToItemsType(flagType string) string {
+	switch flagType {
+	case "stringSlice", "stringArray":
+		return jsonSchemaTypeString
+	case "intSlice":
+		return jsonSchemaTypeInteger
+	default:
+		return ""
 	}
 }

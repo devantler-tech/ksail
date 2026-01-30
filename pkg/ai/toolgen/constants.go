@@ -29,8 +29,11 @@ const (
 
 // Cobra flag type constants.
 const (
-	helpFlagName = "help"
-	flagTypeBool = "bool"
+	helpFlagName        = "help"
+	flagTypeBool        = "bool"
+	flagTypeStringSlice = "stringSlice"
+	flagTypeStringArray = "stringArray"
+	flagTypeIntSlice    = "intSlice"
 )
 
 // Default value strings to skip when adding defaults to schema.
