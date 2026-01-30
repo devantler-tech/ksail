@@ -1,5 +1,5 @@
 {
-  "name": "vscode-ksail",
+  "name": "ksail",
   "displayName": "KSail",
   "description": "KSail - Kubernetes SDK for Local GitOps Development",
   "version": "0.1.0",

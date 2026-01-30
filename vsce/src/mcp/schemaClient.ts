@@ -249,7 +249,7 @@ async function queryToolsList(): Promise<McpTool[]> {
       protocolVersion: "2024-11-05",
       capabilities: {},
       clientInfo: {
-        name: "vscode-ksail",
+        name: "ksail",
         version: extensionVersion,
       },
     });
