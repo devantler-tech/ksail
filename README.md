@@ -56,7 +56,7 @@ See the [Installation Guide](https://ksail.devantler.tech/installation/) for det
 
 #### VSCode Extension
 
-For VSCode users, install the [KSail extension](https://marketplace.visualstudio.com/items?itemName=devantler-tech.ksail) to manage clusters directly from your editor. See the [extension documentation](vsce/README.md) for features and usage.
+For VSCode users, install the [KSail extension](https://marketplace.visualstudio.com/items?itemName=devantler.ksail) to manage clusters directly from your editor. See the [extension documentation](vsce/README.md) for features and usage.
 
 ## Usage
 
