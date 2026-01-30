@@ -9,7 +9,7 @@
     "type": "git",
     "url": "https://github.com/devantler-tech/ksail"
   },
-  "homepage": "https://github.com/devantler-tech/ksail",
+  "homepage": "https://ksail.devantler.tech/",
   "bugs": {
     "url": "https://github.com/devantler-tech/ksail/issues"
   },
@@ -116,11 +116,6 @@
         "command": "ksail.cluster.delete",
         "key": "ctrl+shift+k d",
         "mac": "cmd+shift+k d"
-      },
-      {
-        "command": "ksail.cluster.list",
-        "key": "ctrl+shift+k l",
-        "mac": "cmd+shift+k l"
       }
     ],
     "configuration": {
@@ -145,12 +140,12 @@
     "viewsWelcome": [
       {
         "view": "ksailClusters",
-        "contents": "No clusters found.\n[Initialize Cluster](command:ksail.cluster.init)\n[Create Cluster](command:ksail.cluster.create)\nTo get started, initialize a new cluster configuration or create one from an existing ksail.yaml.\n[Learn more](https://github.com/devantler-tech/ksail)",
+        "contents": "No clusters found.\n[Initialize Cluster](command:ksail.cluster.init)\n[Create Cluster](command:ksail.cluster.create)\nTo get started, initialize a new cluster configuration or create one from an existing ksail.yaml.\n[Learn more](https://ksail.devantler.tech/)",
         "when": "ksail.hasConfig"
       },
       {
         "view": "ksailClusters",
-        "contents": "No ksail.yaml found in this workspace.\n[Initialize Cluster](command:ksail.cluster.init)\nCreate a ksail.yaml configuration to get started with KSail.\n[Learn more](https://github.com/devantler-tech/ksail)",
+        "contents": "No ksail.yaml found in this workspace.\n[Initialize Cluster](command:ksail.cluster.init)\nCreate a ksail.yaml configuration to get started with KSail.\n[Learn more](https://ksail.devantler.tech/)",
         "when": "!ksail.hasConfig"
       }
     ],
@@ -167,6 +162,10 @@
       "commandPalette": [
         {
           "command": "ksail.refresh",
+          "when": "false"
+        },
+        {
+          "command": "ksail.cluster.list",
           "when": "false"
         }
       ],
