@@ -41,28 +41,6 @@ export function registerCommands(
     })
   );
 
-  // Cluster list
-  context.subscriptions.push(
-    vscode.commands.registerCommand("ksail.cluster.list", async () => {
-      await executeWithProgress("Listing clusters...", async () => {
-        try {
-          const clusters = await listClusters(outputChannel);
-          if (clusters.length === 0) {
-            vscode.window.showInformationMessage("No clusters found");
-          } else {
-            const message = clusters
-              .map((c) => `${c.name} (${c.provider})`)
-              .join(", ");
-            vscode.window.showInformationMessage(`Clusters: ${message}`);
-          }
-          clustersProvider.refresh();
-        } catch (error) {
-          showError("list clusters", error, outputChannel);
-        }
-      });
-    })
-  );
-
   // Cluster init (with multi-step wizard)
   context.subscriptions.push(
     vscode.commands.registerCommand("ksail.cluster.init", async () => {
@@ -135,7 +113,7 @@ export function registerCommands(
             }
           );
 
-          const successMessage = options.name 
+          const successMessage = options.name
             ? `Cluster "${options.name}" created successfully`
             : "Cluster created successfully";
           vscode.window.showInformationMessage(successMessage);
