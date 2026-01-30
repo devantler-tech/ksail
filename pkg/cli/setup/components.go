@@ -251,7 +251,9 @@ func NeedsLoadBalancerInstall(clusterCfg *v1alpha1.Cluster) bool {
 	}
 
 	// Don't install if distribution × provider provides it by default
-	return !clusterCfg.Spec.Cluster.Distribution.ProvidesLoadBalancerByDefault(clusterCfg.Spec.Cluster.Provider)
+	return !clusterCfg.Spec.Cluster.Distribution.ProvidesLoadBalancerByDefault(
+		clusterCfg.Spec.Cluster.Provider,
+	)
 }
 
 // InstallMetricsServerSilent installs metrics-server silently for parallel execution.
@@ -315,7 +317,7 @@ func InstallLoadBalancerSilent(
 	case v1alpha1.DistributionTalos:
 		// Talos × Docker would use MetalLB (future implementation)
 		// Talos × Hetzner uses hcloud-ccm (future implementation)
-		return fmt.Errorf("LoadBalancer installation for Talos is not yet implemented")
+		return fmt.Errorf("%w for Talos", v1alpha1.ErrLoadBalancerNotImplemented)
 	case v1alpha1.DistributionK3s:
 		// K3s already has ServiceLB (Klipper) by default, no installation needed
 		return nil

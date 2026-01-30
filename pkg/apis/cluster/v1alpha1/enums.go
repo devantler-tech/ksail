@@ -75,7 +75,8 @@ func (d *Distribution) ProvidesCSIByDefault(provider Provider) bool {
 	}
 }
 
-// ProvidesLoadBalancerByDefault returns true if the distribution × provider combination includes LoadBalancer support by default.
+// ProvidesLoadBalancerByDefault returns true if the distribution × provider combination
+// includes LoadBalancer support by default.
 // - K3s includes ServiceLB (Klipper-LB) by default (regardless of provider)
 // - Talos × Hetzner uses hcloud-cloud-controller-manager by default
 // - Vanilla and Talos × Docker do not have default LoadBalancer support.

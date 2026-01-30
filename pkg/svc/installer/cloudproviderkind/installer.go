@@ -42,7 +42,9 @@ func (c *CloudProviderKINDInstaller) Install(ctx context.Context) error {
 
 // --- internals ---
 
-func (c *CloudProviderKINDInstaller) helmInstallOrUpgradeCloudProviderKIND(ctx context.Context) error {
+func (c *CloudProviderKINDInstaller) helmInstallOrUpgradeCloudProviderKIND(
+	ctx context.Context,
+) error {
 	repoEntry := &helm.RepositoryEntry{
 		Name: "cloud-provider-kind",
 		URL:  "https://kubernetes-sigs.github.io/cloud-provider-kind",
