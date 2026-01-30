@@ -124,6 +124,15 @@ runs:
       run: |
         ksail cluster init --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS --force
 
+    - name: 📥 Preload cached cluster images into Docker daemon
+      id: preload-image-cache
+      if: inputs.enable-image-cache == 'true'
+      uses: ./.github/actions/cache-cluster-images
+      with:
+        distribution: ${{ inputs.distribution }}
+        operation: preload
+        cache-version: ${{ inputs.image-cache-version }}
+
     - name: 🧪 ksail cluster create
       id: cluster-create
       shell: bash
@@ -139,15 +148,6 @@ runs:
         else
           ksail cluster create --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS
         fi
-
-    - name: 📥 Restore cached cluster images
-      id: restore-image-cache
-      if: inputs.enable-image-cache == 'true'
-      uses: ./.github/actions/cache-cluster-images
-      with:
-        distribution: ${{ inputs.distribution }}
-        operation: restore
-        cache-version: ${{ inputs.image-cache-version }}
 
     - name: 🧪 ksail cluster list
       shell: bash
@@ -198,7 +198,7 @@ runs:
         ksail workload reconcile
 
     - name: 💾 Save cluster images to cache
-      if: inputs.enable-image-cache == 'true' && steps.restore-image-cache.outputs.cache-hit != 'true' && steps.restore-image-cache.outputs.skipped != 'true'
+      if: inputs.enable-image-cache == 'true' && steps.preload-image-cache.outputs.cache-hit != 'true' && steps.preload-image-cache.outputs.skipped != 'true'
       uses: ./.github/actions/cache-cluster-images
       with:
         distribution: ${{ inputs.distribution }}
