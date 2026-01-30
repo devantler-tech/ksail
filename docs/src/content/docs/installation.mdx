@@ -125,6 +125,61 @@ To use the `ksail chat` AI assistant feature, you need the GitHub Copilot CLI:
 > [!NOTE]
 > GitHub Copilot requires an active subscription. The `ksail chat` command is optional and all other KSail features work without it.
 
+## VSCode Extension
+
+For Visual Studio Code users, install the KSail extension to manage clusters directly from your editor.
+
+<Tabs>
+  <TabItem label="Marketplace">
+    ### Install from Marketplace
+
+    1. Open VSCode
+    2. Press `Cmd+Shift+X` (macOS) or `Ctrl+Shift+X` (Windows/Linux) to open Extensions view
+    3. Search for "KSail"
+    4. Click **Install** on the extension by devantler-tech
+
+    **Marketplace Link:** [KSail - Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=devantler-tech.ksail)
+
+  </TabItem>
+
+  <TabItem label="VSIX File">
+    ### Install from VSIX
+
+    1. Download the latest `.vsix` file from [GitHub Releases](https://github.com/devantler-tech/ksail/releases)
+    2. Open VSCode
+    3. Press `Cmd+Shift+P` (macOS) or `Ctrl+Shift+P` (Windows/Linux)
+    4. Type `Extensions: Install from VSIX...`
+    5. Select the downloaded `.vsix` file
+
+  </TabItem>
+</Tabs>
+
+### Extension Prerequisites
+
+- **KSail CLI** installed and available in PATH (see [installation methods](#installation-methods) above)
+- **Docker** running (for cluster operations)
+- **K9s** (optional, for cluster connection via `Connect to Cluster` command)
+
+### Extension Features
+
+The extension provides:
+
+- **Cluster sidebar** with status indicators and context menus
+- **Interactive wizards** for cluster init and create
+- **Command palette** integration for all cluster operations
+- **Keyboard shortcuts** for common actions
+- **MCP server** integration for AI assistants
+
+See the [Features - VSCode Extension](/features/#vscode-extension) section for detailed capabilities.
+
+### Extension Settings
+
+Configure the extension in VSCode settings (`Cmd+,` / `Ctrl+,`):
+
+| Setting            | Description          | Default |
+| ------------------ | -------------------- | ------- |
+| `ksail.binaryPath` | Path to ksail binary | `ksail` |
+
 ## Verification
 
 After installation, verify that KSail is installed correctly:

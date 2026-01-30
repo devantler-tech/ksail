@@ -29,6 +29,8 @@ Setting up and operating Kubernetes clusters is a skill of its own, often requir
 
 🤖 **AI Assistant** — Interactive chat powered by GitHub Copilot to help configure clusters and troubleshoot issues.
 
+💻 **VSCode Extension** — Manage clusters directly from VSCode with interactive wizards, sidebar views, and command palette integration.
+
 ## Getting Started
 
 ### Prerequisites
@@ -58,6 +60,10 @@ The supported distributions (x-axis) run on different infrastructure providers (
 ### Installation
 
 See the [Installation Guide](https://ksail.devantler.tech/installation/) for detailed installation instructions.
+
+#### VSCode Extension
+
+For VSCode users, install the [KSail extension](https://marketplace.visualstudio.com/items?itemName=devantler-tech.ksail) to manage clusters directly from your editor. See the [extension documentation](vsce/README.md) for features and usage.
 
 ## Usage
 

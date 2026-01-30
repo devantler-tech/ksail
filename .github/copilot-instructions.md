@@ -50,6 +50,15 @@ npm run build
 # Takes ~2-3 seconds. Documentation builds to dist/ directory
 ```
 
+**Build VSCode Extension**:
+
+```bash
+cd /path/to/repo/vsce
+npm ci
+npm run compile
+# Package: npx @vscode/vsce package --no-dependencies
+```
+
 ### Running the Application
 
 **CLI Usage**:
@@ -105,6 +114,14 @@ go run main.go --help
    ls dist/  # Should contain generated HTML files
    ```
 
+5. **VSCode Extension Validation** (optional):
+
+   ```bash
+   cd /path/to/repo/vsce
+   npm ci
+   npm run compile  # Must succeed
+   ```
+
 ## Common Tasks
 
 ### Project Structure
@@ -129,6 +146,9 @@ go run main.go --help
 ├── docs/                   # Astro documentation source
 │   ├── dist/               # Generated site (after npm run build)
 │   └── package.json        # Node.js dependencies for documentation
+├── vsce/                   # VSCode extension source
+│   ├── src/                # Extension TypeScript source
+│   └── package.json        # Extension manifest and dependencies
 ├── go.mod                  # Go module file
 └── README.md               # Main repository documentation
 ```
@@ -258,3 +278,4 @@ npm run dev                            # Test locally (if needed)
 - **Hetzner Provider**: Added support for running Talos clusters on Hetzner Cloud
 - **Registry Authentication**: Added support for external registries with username/password authentication
 - **Distribution Naming**: Changed user-facing names from `Kind`/`K3d` to `Vanilla`/`K3s` to focus on the Kubernetes distribution rather than the underlying tool
+- **VSCode Extension**: Added VSCode extension for managing KSail clusters from the editor with interactive wizards and MCP server support
