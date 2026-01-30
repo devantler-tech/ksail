@@ -227,6 +227,8 @@ jobs:
           - "--metrics-server Disabled"
           - "--policy-engine Kyverno"
           - "--policy-engine Gatekeeper"
+          - "--load-balancer Enabled"
+          - "--load-balancer Disabled"
         # Exclude combinations where CSI flag matches distribution × provider default behavior
         # to avoid wasting GitHub Actions minutes on no-op tests
         exclude:
@@ -240,6 +242,16 @@ jobs:
           - distribution: Talos
             provider: Docker
             args: "--csi Disabled"
+          # Vanilla has no default LoadBalancer, so --load-balancer Disabled is a no-op
+          - distribution: Vanilla
+            args: "--load-balancer Disabled"
+          # K3s has default LoadBalancer (ServiceLB), so --load-balancer Enabled is a no-op
+          - distribution: K3s
+            args: "--load-balancer Enabled"
+          # Talos × Docker has no default LoadBalancer, so --load-balancer Disabled is a no-op
+          - distribution: Talos
+            provider: Docker
+            args: "--load-balancer Disabled"
         # Add Talos x Hetzner combination
         include:
           - distribution: Talos
@@ -251,7 +263,9 @@ jobs:
             init: false
             args: "--name system-test-cluster-without-scaffolding"
           # Note: Talos × Hetzner has default CSI (Hetzner CSI), so --csi Enabled
-          # would be a no-op. We don't add it to the matrix to save CI minutes.
+          # would be a no-op. Similarly, Talos × Hetzner has default LoadBalancer
+          # (hcloud-cloud-controller-manager), so --load-balancer Enabled would be
+          # a no-op. We don't add these to the matrix to save CI minutes.
     steps:
       - name: 📄 Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
