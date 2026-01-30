@@ -106,11 +106,18 @@ func handleConsolidatedTool(
 		args = subcommandDef.CommandParts[1:]
 	}
 
-	// Remove subcommand parameter from params before processing flags
+	// Filter params to only include flags that apply to this subcommand.
+	// This prevents "unknown flag" errors when MCP clients pass default values
+	// for flags that belong to other subcommands in the consolidated tool.
 	filteredParams := make(map[string]any)
 
 	for key, val := range params {
-		if key != tool.SubcommandParam {
+		// Skip the subcommand selector parameter
+		if key == tool.SubcommandParam {
+			continue
+		}
+		// Only include flags that exist in the selected subcommand's flag definitions
+		if _, appliesToSubcommand := subcommandDef.Flags[key]; appliesToSubcommand {
 			filteredParams[key] = val
 		}
 	}
@@ -167,11 +174,35 @@ func executeCommand(
 	cmd := exec.CommandContext(execCtx, command, args...)
 	cmd.Dir = opts.WorkingDirectory
 
+	// Log command execution for debugging
+	if opts.Logger != nil {
+		opts.Logger.Debug("executing command",
+			"command", command,
+			"args", args,
+			"workdir", opts.WorkingDirectory,
+			"tool", toolName)
+	}
+
 	// If no output channel, just run and return
 	if opts.OutputChan == nil {
 		output, err := cmd.CombinedOutput()
 		if err != nil {
+			// Log failure with captured output
+			if opts.Logger != nil {
+				opts.Logger.Error("command failed",
+					"command", command,
+					"args", args,
+					"output", string(output),
+					"error", err)
+			}
+
 			return string(output), fmt.Errorf("command failed: %w", err)
+		}
+
+		if opts.Logger != nil {
+			opts.Logger.Debug("command completed successfully",
+				"command", command,
+				"args", args)
 		}
 
 		return string(output), nil
@@ -300,7 +331,9 @@ func ToolParametersFromJSON(jsonParams string) (map[string]any, error) {
 }
 
 // FormatToolName formats a tool name from a command path.
-// Example: "ksail cluster create" -> "ksail_cluster_create".
+// Example: "ksail cluster create" -> "cluster_create".
 func FormatToolName(commandPath string) string {
-	return strings.ReplaceAll(commandPath, " ", "_")
+	strippedPath := stripRootCommand(commandPath)
+
+	return strings.ReplaceAll(strippedPath, " ", "_")
 }

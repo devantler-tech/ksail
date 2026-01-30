@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="24" height="24">
+  <!-- VSCode activity bar icons must use currentColor for theme compatibility -->
+
+  <!-- Main sail (right) -->
+  <path d="M51 12 L51 48 L78 48 Z"
+        fill="currentColor" fill-opacity="0.3" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/>
+
+  <!-- Secondary sail (left) -->
+  <path d="M49 18 L49 45 L28 45 Z"
+        fill="currentColor" fill-opacity="0.2" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/>
+
+  <!-- Mast -->
+  <line x1="50" y1="10" x2="50" y2="52" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+
+  <!-- Whale body -->
+  <path d="M14 56
+           C10 64 14 76 26 82
+           C40 88 62 86 76 78
+           C86 72 90 62 86 54
+           C82 48 72 50 50 52
+           C35 53 22 50 14 56"
+        fill="currentColor" fill-opacity="0.15" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/>
+
+  <!-- Whale tail flukes -->
+  <path d="M14 56 Q6 48 4 36" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M14 56 Q4 62 2 74" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+
+  <!-- Whale belly fin -->
+  <path d="M40 70 Q50 60 60 70" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+
+  <!-- Whale eye -->
+  <circle cx="80" cy="60" r="3" fill="currentColor"/>
+
+  <!-- Whale smile -->
+  <path d="M84 66 Q89 72 94 68" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+</svg>

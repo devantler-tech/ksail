@@ -50,6 +50,15 @@ npm run build
 # Takes ~2-3 seconds. Documentation builds to dist/ directory
 ```
 
+**Build VSCode Extension**:
+
+```bash
+cd /path/to/repo/vsce
+npm ci
+npm run compile
+# Package: npx @vscode/vsce package --no-dependencies
+```
+
 ### Running the Application
 
 **CLI Usage**:
@@ -105,6 +114,14 @@ go run main.go --help
    ls dist/  # Should contain generated HTML files
    ```
 
+5. **VSCode Extension Validation** (optional):
+
+   ```bash
+   cd /path/to/repo/vsce
+   npm ci
+   npm run compile  # Must succeed
+   ```
+
 ## Common Tasks
 
 ### Project Structure
@@ -113,6 +130,8 @@ go run main.go --help
 /
 ├── main.go                 # Main entry point
 ├── pkg/                    # Core packages
+│   ├── ai/                 # AI-related utilities
+│   │   └── toolgen/        # Tool generation for AI assistants
 │   ├── apis/               # API types and schemas
 │   ├── cli/                # CLI wiring, UI, and Cobra commands
 │   │   └── cmd/            # CLI command implementations
@@ -120,8 +139,11 @@ go run main.go --help
 │   ├── di/                 # Dependency injection
 │   ├── io/                 # I/O utilities
 │   ├── k8s/                # Kubernetes helpers/templates
+│   ├── utils/              # General utilities
 │   └── svc/                # Services (installers, managers, etc.)
+│       ├── chat/           # AI chat integration (GitHub Copilot SDK)
 │       ├── installer/      # Component installers (CNI, CSI, metrics-server, etc.)
+│       ├── mcp/            # Model Context Protocol server
 │       ├── provider/       # Infrastructure providers (docker, hetzner)
 │       ├── provisioner/    # Distribution provisioners (Vanilla, K3s, Talos)
 │       ├── image/          # Container image export/import services
@@ -129,6 +151,9 @@ go run main.go --help
 ├── docs/                   # Astro documentation source
 │   ├── dist/               # Generated site (after npm run build)
 │   └── package.json        # Node.js dependencies for documentation
+├── vsce/                   # VSCode extension source
+│   ├── src/                # Extension TypeScript source
+│   └── package.json        # Extension manifest and dependencies
 ├── go.mod                  # Go module file
 └── README.md               # Main repository documentation
 ```
@@ -234,15 +259,19 @@ npm run dev                            # Test locally (if needed)
 
 **Key Packages:**
 
+- `pkg/ai/toolgen/`: AI tool generation utilities for integrating with AI assistants
 - `pkg/apis/`: API types, schemas, and enums (`pkg/apis/cluster/v1alpha1/enums.go` defines Distribution values)
 - `pkg/client/`: Embedded tool clients (kubectl, helm, kind, k3d, flux, argocd)
 - `pkg/svc/`: Services including installers, providers, and provisioners
+  - `pkg/svc/chat/`: AI chat integration using GitHub Copilot SDK with embedded CLI documentation
   - `pkg/svc/installer/`: Component installers (CNI, CSI, metrics-server, etc.)
+  - `pkg/svc/mcp/`: Model Context Protocol server for Claude and other AI assistants
   - `pkg/svc/provider/`: Infrastructure providers (docker, hetzner)
   - `pkg/svc/provisioner/`: Distribution provisioners (Vanilla, K3s, Talos)
   - `pkg/svc/image/`: Container image export/import services for Vanilla and K3s distributions
   - `pkg/svc/reconciler/`: Common base for GitOps reconciliation clients (Flux and ArgoCD)
 - `pkg/di/`: Dependency injection for wiring components
+- `pkg/utils/`: General utility functions
 
 ## Active Technologies
 
@@ -258,3 +287,6 @@ npm run dev                            # Test locally (if needed)
 - **Hetzner Provider**: Added support for running Talos clusters on Hetzner Cloud
 - **Registry Authentication**: Added support for external registries with username/password authentication
 - **Distribution Naming**: Changed user-facing names from `Kind`/`K3d` to `Vanilla`/`K3s` to focus on the Kubernetes distribution rather than the underlying tool
+- **VSCode Extension**: Added VSCode extension for managing KSail clusters from the editor with interactive wizards and MCP server support
+- **AI Chat Integration**: Added `ksail chat` command powered by GitHub Copilot SDK for interactive cluster configuration and troubleshooting (`pkg/svc/chat/`)
+- **MCP Server**: Implemented Model Context Protocol server to expose KSail as a tool for Claude and other AI assistants (`pkg/svc/mcp/`)
