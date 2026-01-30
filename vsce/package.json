@@ -59,12 +59,6 @@
         "icon": "$(add)"
       },
       {
-        "command": "ksail.cluster.list",
-        "title": "List Clusters",
-        "category": "KSail",
-        "icon": "$(list-unordered)"
-      },
-      {
         "command": "ksail.cluster.create",
         "title": "Create Cluster",
         "category": "KSail",
@@ -162,10 +156,6 @@
       "commandPalette": [
         {
           "command": "ksail.refresh",
-          "when": "false"
-        },
-        {
-          "command": "ksail.cluster.list",
           "when": "false"
         }
       ],
