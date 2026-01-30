@@ -15,37 +15,30 @@ Setting up and operating Kubernetes clusters is a skill of its own, often requir
 
 ## Key Features
 
-📦 **One Binary** — Embeds cluster provisioning, GitOps engines, and deployment tooling. No tool sprawl.
-
-☸️ **Simple Clusters** — Spin up Vanilla, K3s, or Talos clusters with one command. Same workflow across supported distributions and providers.
-
-📄 **Everything as Code** — Cluster settings, distribution configs, and workloads all live in version-controlled files.
-
-🔄 **GitOps Native** — Opt into Flux or ArgoCD. KSail handles the bootstrap and gives you push and reconcile commands.
-
-⚙️ **Customizable Stack** — Select your CNI, CSI, policy engine, cert-manager, and mirror registries to match your setup.
-
-🔐 **SOPS Built In** — Encrypt, decrypt, and edit secrets with integrated cipher commands.
-
-🤖 **AI Assistant** — Interactive chat powered by GitHub Copilot to help configure clusters and troubleshoot issues.
-
-💻 **VSCode Extension** — Manage clusters directly from VSCode with interactive wizards, sidebar views, and command palette integration.
+- 📦 **One Binary** — Embeds cluster provisioning, GitOps engines, and deployment tooling. No tool sprawl.
+- ☸️ **Simple Clusters** — Spin up Vanilla, K3s, or Talos clusters with one command. Same workflow across distributions.
+- 📄 **Everything as Code** — Cluster settings, distribution configs, and workloads in version-controlled files.
+- 🔄 **GitOps Native** — Built-in Flux or ArgoCD support with bootstrap, push, and reconcile commands.
+- ⚙️ **Customizable Stack** — Select your CNI, CSI, policy engine, cert-manager, and mirror registries.
+- 🔐 **SOPS Built In** — Encrypt, decrypt, and edit secrets with integrated cipher commands.
+- 🤖 **AI Assistant** — Interactive chat powered by GitHub Copilot for configuration and troubleshooting.
+- 💻 **VSCode Extension** — Manage clusters from VSCode with wizards, sidebar views, and command palette.
 
 ## Getting Started
 
 ### Prerequisites
 
-The binary works on all major operating systems and modern CPU architectures:
+KSail works on all major operating systems and CPU architectures:
 
-| OS                   | Architecture    |
-|----------------------|-----------------|
-| 🐧 Linux             | amd64 and arm64 |
-|  macOS              | arm64           |
-| ⊞ Windows (untested) | amd64 and arm64 |
+| OS | Architecture |
+|----|--------------|
+| 🐧 Linux | amd64, arm64 |
+|  macOS | arm64 |
+| ⊞ Windows (untested) | amd64, arm64 |
 
-**Docker is required** to create local clusters (the Docker provider). Install Docker Desktop/Engine and ensure `docker ps` works.
+**Docker is required** for local clusters. Install Docker Desktop/Engine and ensure `docker ps` works.
 
-The supported distributions (x-axis) run on different infrastructure providers (y-axis). You need to have access to at least one provider for your chosen distribution for KSail to create and manage the cluster.
+Supported distributions run on different infrastructure providers:
 
 | Provider | Vanilla  | K3s     | Talos |
 |----------|----------|---------|-------|
