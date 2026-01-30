@@ -40,6 +40,16 @@ func (c *CloudProviderKINDInstaller) Install(ctx context.Context) error {
 	return nil
 }
 
+// Uninstall uninstalls Cloud Provider KIND via Helm.
+func (c *CloudProviderKINDInstaller) Uninstall(ctx context.Context) error {
+	err := c.client.UninstallRelease(ctx, "cloud-provider-kind", "kube-system")
+	if err != nil {
+		return fmt.Errorf("failed to uninstall cloud-provider-kind: %w", err)
+	}
+
+	return nil
+}
+
 // --- internals ---
 
 func (c *CloudProviderKINDInstaller) helmInstallOrUpgradeCloudProviderKIND(

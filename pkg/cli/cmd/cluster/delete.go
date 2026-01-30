@@ -147,6 +147,11 @@ func runDeleteAction(
 		cleanupRegistriesAfterDelete(cmd, tmr, resolved, flags.storage, preDiscovered)
 	}
 
+	// Cleanup cloud-provider-kind if this was the last kind cluster
+	if resolved.Provider == v1alpha1.ProviderDocker {
+		cleanupCloudProviderKindIfLastCluster(cmd, tmr, provisioner)
+	}
+
 	return nil
 }
 
@@ -481,4 +486,131 @@ func cleanupRegistriesAfterDelete(
 			Writer:  cmd.OutOrStdout(),
 		})
 	}
+}
+
+// cleanupCloudProviderKindIfLastCluster uninstalls cloud-provider-kind if no kind clusters remain.
+// Cloud-provider-kind creates containers that can be shared across multiple kind clusters,
+// so we only uninstall when the last kind cluster is deleted.
+func cleanupCloudProviderKindIfLastCluster(
+	cmd *cobra.Command,
+	tmr timer.Timer,
+	provisioner clusterprovisioner.ClusterProvisioner,
+) {
+	ctx := cmd.Context()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	// Check if there are any remaining kind clusters
+	clusters, err := provisioner.List(ctx)
+	if err != nil {
+		// If we can't list clusters, skip cleanup to be safe
+		notify.WriteMessage(notify.Message{
+			Type:    notify.WarningType,
+			Content: "unable to verify remaining kind clusters, skipping cloud-provider-kind cleanup",
+			Writer:  cmd.OutOrStdout(),
+		})
+
+		return
+	}
+
+	// If there are still kind clusters, don't uninstall cloud-provider-kind
+	if len(clusters) > 0 {
+		return
+	}
+
+	// No kind clusters remain - proceed with cloud-provider-kind cleanup
+	if tmr != nil {
+		tmr.NewStage()
+	}
+
+	notify.WriteMessage(notify.Message{
+		Type:    notify.TitleType,
+		Content: "Cleanup cloud-provider-kind...",
+		Emoji:   "🧹",
+		Writer:  cmd.OutOrStdout(),
+	})
+
+	notify.WriteMessage(notify.Message{
+		Type:    notify.ActivityType,
+		Content: "uninstalling cloud-provider-kind (no kind clusters remain)",
+		Writer:  cmd.OutOrStdout(),
+	})
+
+	// We need to uninstall from one of the recently deleted clusters
+	// Since all clusters are gone, we can't actually uninstall via Helm
+	// Instead, we need to clean up any remaining cloud-provider-kind containers
+	err = cleanupCloudProviderKindContainers(cmd)
+	if err != nil {
+		notify.WriteMessage(notify.Message{
+			Type:    notify.WarningType,
+			Content: fmt.Sprintf("failed to cleanup cloud-provider-kind containers: %v", err),
+			Writer:  cmd.OutOrStdout(),
+		})
+
+		return
+	}
+
+	outputTimer := helpers.MaybeTimer(cmd, tmr)
+
+	notify.WriteMessage(notify.Message{
+		Type:    notify.SuccessType,
+		Content: "cloud-provider-kind cleaned up",
+		Timer:   outputTimer,
+		Writer:  cmd.OutOrStdout(),
+	})
+}
+
+// cleanupCloudProviderKindContainers removes any cloud-provider-kind related containers.
+func cleanupCloudProviderKindContainers(cmd *cobra.Command) error {
+	dockerClientInvokerMu.RLock()
+
+	invoker := dockerClientInvoker
+
+	dockerClientInvokerMu.RUnlock()
+
+	var cleanupErr error
+
+	_ = invoker(cmd, func(dockerClient client.APIClient) error {
+		containers, err := dockerClient.ContainerList(cmd.Context(), container.ListOptions{
+			All: true,
+		})
+		if err != nil {
+			cleanupErr = fmt.Errorf("failed to list containers: %w", err)
+
+			return cleanupErr
+		}
+
+		for _, ctr := range containers {
+			// Cloud-provider-kind creates containers for load balancer services
+			// These containers are named with a specific pattern
+			// Look for containers created by cloud-provider-kind
+			for _, name := range ctr.Names {
+				containerName := strings.TrimPrefix(name, "/")
+				// Cloud-provider-kind containers are typically named: lb-<service>-<namespace>-<cluster>
+				if strings.HasPrefix(containerName, "lb-") {
+					err := dockerClient.ContainerRemove(
+						cmd.Context(),
+						ctr.ID,
+						container.RemoveOptions{
+							Force: true,
+						},
+					)
+					if err != nil {
+						cleanupErr = fmt.Errorf(
+							"failed to remove container %s: %w",
+							containerName,
+							err,
+						)
+
+						return cleanupErr
+					}
+				}
+			}
+		}
+
+		return nil
+	})
+
+	return cleanupErr
 }
