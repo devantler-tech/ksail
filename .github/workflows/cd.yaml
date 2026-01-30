@@ -1,5 +1,5 @@
 ---
-name: CD - Go
+name: CD
 on:
   push:
     tags:
