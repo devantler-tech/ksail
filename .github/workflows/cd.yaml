@@ -79,7 +79,7 @@ jobs:
 
       - name: 🏷️ Extract version from tag
         id: get_version
-        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
 
       - name: 📦 Install dependencies
         run: npm ci
