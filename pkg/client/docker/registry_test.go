@@ -1127,11 +1127,6 @@ Username:    "${GITHUB_USER}",
 Password:    "${GITHUB_TOKEN}",
 }
 
-// Use reflection to call the private buildContainerConfig method
-// or expose it for testing
-// Since we can't easily test private methods, let's test via CreateRegistry
-// which will call buildContainerConfig internally
-
 mockRegistryNotExists(context.Background(), mockClient)
 mockImagePullSequence(context.Background(), mockClient)
 mockVolumeCreateSequence(context.Background(), mockClient, config.Name)
