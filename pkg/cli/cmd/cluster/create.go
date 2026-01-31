@@ -199,15 +199,27 @@ func handleCreateRunE(
 	// to ensure images are available when CNI, CSI, etc. are installed
 	importPath := ctx.ClusterCfg.Spec.Cluster.ImportImages
 	if importPath != "" {
-		err = importCachedImages(cmd, ctx, importPath, deps.Timer)
-		if err != nil {
-			// Log warning but don't fail cluster creation
+		// Image import is not supported for Talos clusters. The image service will
+		// return ErrUnsupportedDistribution in that case, so we short-circuit here
+		// to provide clearer feedback and avoid a spurious warning.
+		if ctx.ClusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionTalos {
 			notify.WriteMessage(notify.Message{
 				Type:    notify.WarningType,
-				Content: "failed to import images from %s: %v",
-				Args:    []any{importPath, err},
+				Content: "image import is not supported for Talos clusters; ignoring --import-images value %q",
+				Args:    []any{importPath},
 				Writer:  cmd.OutOrStderr(),
 			})
+		} else {
+			err = importCachedImages(cmd, ctx, importPath, deps.Timer)
+			if err != nil {
+				// Log warning but don't fail cluster creation
+				notify.WriteMessage(notify.Message{
+					Type:    notify.WarningType,
+					Content: "failed to import images from %s: %v",
+					Args:    []any{importPath, err},
+					Writer:  cmd.OutOrStderr(),
+				})
+			}
 		}
 	}
 
