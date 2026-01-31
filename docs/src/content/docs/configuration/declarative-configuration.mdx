@@ -16,6 +16,102 @@ The configuration file uses the `ksail.io/v1alpha1` API version and follows the 
 - **Workload configuration**: manifest directory, validation preferences
 - **Editor preferences**: for interactive workflows
 
+## Environment Variable Expansion
+
+KSail supports environment variable expansion in all string configuration values using the `${VAR_NAME}` syntax. This enables:
+
+- **Secure credential management**: Keep sensitive values out of version control
+- **Environment-specific configuration**: Use different values per environment (dev/staging/prod)
+- **Dynamic path resolution**: Reference user-specific or system-specific paths
+
+### Syntax
+
+Use `${VARIABLE_NAME}` to reference environment variables. If a variable is not set, it expands to an empty string.
+
+```yaml
+spec:
+  editor: "${EDITOR}"
+  cluster:
+    connection:
+      kubeconfig: "${HOME}/.kube/config"
+      context: "${KUBE_CONTEXT}"
+    distributionConfig: "${CONFIG_DIR}/kind.yaml"
+    localRegistry:
+      registry: "${REGISTRY_USER}:${REGISTRY_PASS}@ghcr.io"
+    vanilla:
+      mirrorsDir: "${MIRRORS_DIR}"
+    talos:
+      config: "${TALOS_CONFIG_PATH}"
+    hetzner:
+      sshKeyName: "${HCLOUD_SSH_KEY}"
+  workload:
+    sourceDirectory: "${WORKLOAD_DIR}"
+  chat:
+    model: "${CHAT_MODEL}"
+```
+
+### Supported Fields
+
+Environment variable expansion works in these string fields:
+
+**General:**
+- `spec.editor` - Editor command
+- `spec.cluster.connection.kubeconfig` - Kubeconfig path
+- `spec.cluster.connection.context` - Kubernetes context name
+- `spec.cluster.distributionConfig` - Distribution config path
+- `spec.cluster.localRegistry.registry` - Registry specification (including credentials)
+- `spec.workload.sourceDirectory` - Workload manifest directory
+- `spec.chat.model` - Chat model name
+
+**Distribution-specific:**
+- `spec.cluster.vanilla.mirrorsDir` - Mirror configuration directory
+- `spec.cluster.talos.config` - Talos configuration path
+
+**Provider-specific:**
+- `spec.cluster.hetzner.sshKeyName` - SSH key name
+- `spec.cluster.hetzner.networkName` - Network name
+- `spec.cluster.hetzner.placementGroup` - Placement group name
+
+### Example: Credentials
+
+```yaml
+spec:
+  cluster:
+    localRegistry:
+      # Expand registry credentials from environment variables
+      registry: "${REGISTRY_USER}:${REGISTRY_PASS}@ghcr.io/myorg/myrepo"
+```
+
+```bash
+export REGISTRY_USER="github-user"
+export REGISTRY_PASS="ghp_secrettoken123"
+ksail cluster create
+```
+
+### Example: Multi-Environment Setup
+
+```yaml
+spec:
+  cluster:
+    connection:
+      context: "${CLUSTER_NAME}"
+    distributionConfig: "${ENV}/kind.yaml"
+  workload:
+    sourceDirectory: "${ENV}/k8s"
+```
+
+```bash
+# Development
+export ENV="dev"
+export CLUSTER_NAME="dev-cluster"
+ksail cluster create
+
+# Production
+export ENV="prod"
+export CLUSTER_NAME="prod-cluster"
+ksail cluster create
+```
+
 ## Minimal Example
 
 ```yaml
