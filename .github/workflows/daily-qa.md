@@ -24,11 +24,15 @@ safe-outputs:
     title-prefix: "${{ github.workflow }}"
     category: "agentic-workflows"
     close-older-discussions: true
+    max: 5
+  create-issue:
+    max: 3
   add-comment:
     target: "*" # all issues and PRs
     max: 5
   create-pull-request:
     draft: true
+    title-prefix: "[qa] "
 
 tools:
   github:
