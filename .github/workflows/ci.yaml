@@ -249,6 +249,19 @@ jobs:
             provider: Docker
             args: "--csi Disabled"
           
+          # === metrics-server no-op exclusions ===
+          # Exclude combinations where metrics-server flag matches distribution default behavior
+          
+          # K3s has default metrics-server, so --metrics-server Enabled is a no-op
+          - distribution: K3s
+            args: "--metrics-server Enabled"
+          # Vanilla has no default metrics-server, so --metrics-server Disabled is a no-op
+          - distribution: Vanilla
+            args: "--metrics-server Disabled"
+          # Talos has no default metrics-server, so --metrics-server Disabled is a no-op
+          - distribution: Talos
+            args: "--metrics-server Disabled"
+          
           # === init=false exclusions ===
           # Only test init=false with core cluster creation (empty args)
           # All other args combinations only need init=true testing
