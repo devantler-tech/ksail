@@ -3,6 +3,7 @@ package cluster
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
@@ -14,7 +15,10 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/client/docker"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	configmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager"
+	k3dconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/k3d"
+	kindconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/kind"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
+	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
 	imagesvc "github.com/devantler-tech/ksail/v5/pkg/svc/image"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
@@ -61,6 +65,7 @@ func NewCreateCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
 	fieldSelectors = append(fieldSelectors, ksailconfigmanager.DefaultCertManagerFieldSelector())
 	fieldSelectors = append(fieldSelectors, ksailconfigmanager.DefaultPolicyEngineFieldSelector())
 	fieldSelectors = append(fieldSelectors, ksailconfigmanager.DefaultCSIFieldSelector())
+	fieldSelectors = append(fieldSelectors, ksailconfigmanager.DefaultImportImagesFieldSelector())
 	fieldSelectors = append(fieldSelectors, ksailconfigmanager.ControlPlanesFieldSelector())
 	fieldSelectors = append(fieldSelectors, ksailconfigmanager.WorkersFieldSelector())
 
@@ -73,10 +78,6 @@ func NewCreateCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
 	cmd.Flags().StringP("name", "n", "",
 		"Cluster name used for container names, registry names, and kubeconfig context")
 	_ = cfgManager.Viper.BindPFlag("name", cmd.Flags().Lookup("name"))
-
-	cmd.Flags().String("import", "",
-		"Import container images from tar archive after cluster creation but before component installation")
-	_ = cfgManager.Viper.BindPFlag("import", cmd.Flags().Lookup("import"))
 
 	cmd.RunE = lifecycle.WrapHandler(runtimeContainer, cfgManager, handleCreateRunE)
 
@@ -193,12 +194,12 @@ func handleCreateRunE(
 		return fmt.Errorf("failed to wait for local registry: %w", err)
 	}
 
-	// Import cached images if --import flag is provided
+	// Import cached images if --import-images flag is provided
 	// This happens after cluster creation but before component installation
 	// to ensure images are available when CNI, CSI, etc. are installed
-	importPath := cfgManager.Viper.GetString("import")
+	importPath := ctx.ClusterCfg.Spec.Cluster.ImportImages
 	if importPath != "" {
-		err = importCachedImages(cmd, ctx.ClusterCfg, importPath, deps.Timer)
+		err = importCachedImages(cmd, ctx, importPath, deps.Timer)
 		if err != nil {
 			// Log warning but don't fail cluster creation
 			notify.WriteMessage(notify.Message{
@@ -457,7 +458,7 @@ func applyClusterNameOverride(ctx *localregistry.Context, name string) error {
 // CNI, CSI, metrics-server, and other components can use pre-loaded images.
 func importCachedImages(
 	cmd *cobra.Command,
-	clusterCfg *v1alpha1.Cluster,
+	ctx *localregistry.Context,
 	importPath string,
 	tmr timer.Timer,
 ) error {
@@ -482,11 +483,14 @@ func importCachedImages(
 
 	importer := imagesvc.NewImporter(dockerClient)
 
+	// Resolve cluster name from distribution configs
+	clusterName := resolveClusterNameFromContext(ctx)
+
 	err = importer.Import(
 		cmd.Context(),
-		clusterCfg.Metadata.Name,
-		clusterCfg.Spec.Cluster.Distribution,
-		clusterCfg.Spec.Cluster.Provider,
+		clusterName,
+		ctx.ClusterCfg.Spec.Cluster.Distribution,
+		ctx.ClusterCfg.Spec.Cluster.Provider,
 		imagesvc.ImportOptions{
 			InputPath: importPath,
 		},
@@ -503,4 +507,23 @@ func importCachedImages(
 	})
 
 	return nil
+}
+
+// resolveClusterNameFromContext determines the cluster name from distribution configs.
+func resolveClusterNameFromContext(ctx *localregistry.Context) string {
+	switch ctx.ClusterCfg.Spec.Cluster.Distribution {
+	case v1alpha1.DistributionVanilla:
+		return kindconfigmanager.ResolveClusterName(ctx.ClusterCfg, ctx.KindConfig)
+	case v1alpha1.DistributionK3s:
+		return k3dconfigmanager.ResolveClusterName(ctx.ClusterCfg, ctx.K3dConfig)
+	case v1alpha1.DistributionTalos:
+		return talosconfigmanager.ResolveClusterName(ctx.ClusterCfg, ctx.TalosConfig)
+	default:
+		// Fallback to context name or default
+		if name := strings.TrimSpace(ctx.ClusterCfg.Spec.Cluster.Connection.Context); name != "" {
+			return name
+		}
+
+		return "ksail"
+	}
 }

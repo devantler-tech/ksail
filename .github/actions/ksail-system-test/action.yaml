@@ -145,10 +145,10 @@ runs:
         ENABLE_CACHE: ${{ inputs.enable-image-cache }}
         CACHE_HIT: ${{ steps.restore-image-cache.outputs.cache-hit }}
       run: |
-        # Add --import flag if cache was restored successfully
+        # Add --import-images flag if cache was restored successfully
         IMPORT_FLAG=""
         if [[ "$ENABLE_CACHE" == "true" ]] && [[ "$CACHE_HIT" == "true" ]]; then
-          IMPORT_FLAG="--import /tmp/ksail-image-cache/images.tar"
+          IMPORT_FLAG="--import-images /tmp/ksail-image-cache/images.tar"
         fi
 
         if [ "$INIT" = "true" ]; then

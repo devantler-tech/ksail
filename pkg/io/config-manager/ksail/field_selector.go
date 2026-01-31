@@ -173,3 +173,12 @@ func WorkersFieldSelector() FieldSelector[v1alpha1.Cluster] {
 		DefaultValue: int32(0),
 	}
 }
+
+// DefaultImportImagesFieldSelector creates a standard field selector for import-images.
+func DefaultImportImagesFieldSelector() FieldSelector[v1alpha1.Cluster] {
+	return FieldSelector[v1alpha1.Cluster]{
+		Selector:     func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.ImportImages },
+		Description:  "Path to tar archive with container images to import after cluster creation but before component installation",
+		DefaultValue: "",
+	}
+}
