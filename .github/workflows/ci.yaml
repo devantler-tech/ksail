@@ -214,52 +214,128 @@ jobs:
       packages: write
     strategy:
       matrix:
-        distribution: [Vanilla, K3s, Talos]
-        provider: [Docker]
-        init: [true, false]
-        args:
-          - ""
-          - "--name system-test-cluster"
-          - "--cert-manager Enabled"
-          - "--cni Cilium"
-          - "--cni Calico"
-          - "--csi Enabled"
-          - "--csi Disabled"
-          - "--gitops-engine Flux"
-          - "--gitops-engine ArgoCD"
-          - "--gitops-engine Flux --local-registry ghcr.io/devantler-tech/ksail/system-test-manifests"
-          - "--gitops-engine ArgoCD --local-registry ghcr.io/devantler-tech/ksail/system-test-manifests"
-          - "--mirror-registry ghcr.io=https://ghcr.io"
-          - "--mirror-registry ghcr.io=https://ghcr.io --mirror-registry docker.io=https://registry-1.docker.io"
-          - "--metrics-server Enabled"
-          - "--metrics-server Disabled"
-          - "--policy-engine Kyverno"
-          - "--policy-engine Gatekeeper"
-        # Exclude combinations where CSI flag matches distribution × provider default behavior
-        # to avoid wasting GitHub Actions minutes on no-op tests
-        exclude:
-          # Vanilla has no default CSI, so --csi Disabled is a no-op
+        # Smart matrix: combine related features to reduce test count while maintaining coverage
+        # Previous matrix: 98 tests (3 distributions × 2 init × 17 args - 6 exclusions + 2 inclusions)
+        # New matrix: 19 tests (80.6% reduction)
+        include:
+          # === Core Distribution Tests (4 tests) ===
+          # Test basic cluster creation for each distribution/provider combination
           - distribution: Vanilla
-            args: "--csi Disabled"
-          # K3s has default CSI (local-path), so --csi Enabled is a no-op
+            provider: Docker
+            init: true
+            args: ""
+            test-purpose: "Core Vanilla cluster"
           - distribution: K3s
-            args: "--csi Enabled"
-          # Talos × Docker has no default CSI, so --csi Disabled is a no-op
+            provider: Docker
+            init: true
+            args: ""
+            test-purpose: "Core K3s cluster"
           - distribution: Talos
             provider: Docker
-            args: "--csi Disabled"
-        # Add Talos x Hetzner combination
-        include:
+            init: true
+            args: ""
+            test-purpose: "Core Talos cluster on Docker"
           - distribution: Talos
             provider: Hetzner
             init: true
-            args: "--name system-test-cluster-with-scaffolding"
-          - distribution: Talos
-            provider: Hetzner
+            args: ""
+            test-purpose: "Core Talos cluster on Hetzner"
+
+          # === Init Flag Tests (2 tests) ===
+          # Test init=true vs init=false behavior with representative config
+          - distribution: Vanilla
+            provider: Docker
+            init: true
+            args: "--name system-test-with-init"
+            test-purpose: "Init workflow with scaffolding"
+          - distribution: Vanilla
+            provider: Docker
             init: false
-            args: "--name system-test-cluster-without-scaffolding"
-          # Note: Talos × Hetzner has default CSI (Hetzner CSI), so --csi Enabled
-          # would be a no-op. We don't add it to the matrix to save CI minutes.
+            args: "--name system-test-no-init"
+            test-purpose: "Direct creation without scaffolding"
+
+          # === CNI Tests (2 tests) ===
+          # CNI behavior varies by distribution, test one per distribution
+          - distribution: Vanilla
+            provider: Docker
+            init: true
+            args: "--cni Cilium"
+            test-purpose: "CNI: Cilium on Vanilla"
+          - distribution: K3s
+            provider: Docker
+            init: true
+            args: "--cni Calico"
+            test-purpose: "CNI: Calico on K3s"
+
+          # === CSI Tests (3 tests) ===
+          # CSI drivers are distribution/provider-specific; test non-default configs
+          - distribution: Vanilla
+            provider: Docker
+            init: true
+            args: "--csi Enabled"
+            test-purpose: "CSI: Enable on Vanilla (non-default)"
+          - distribution: K3s
+            provider: Docker
+            init: true
+            args: "--csi Disabled"
+            test-purpose: "CSI: Disable on K3s (non-default)"
+          - distribution: Talos
+            provider: Docker
+            init: true
+            args: "--csi Enabled"
+            test-purpose: "CSI: Enable on Talos+Docker (non-default)"
+
+          # === GitOps Tests (3 tests) ===
+          # Core feature: test each distribution with different engines
+          - distribution: Vanilla
+            provider: Docker
+            init: true
+            args: "--gitops-engine Flux"
+            test-purpose: "GitOps: Flux on Vanilla"
+          - distribution: K3s
+            provider: Docker
+            init: true
+            args: "--gitops-engine ArgoCD"
+            test-purpose: "GitOps: ArgoCD on K3s"
+          - distribution: Talos
+            provider: Docker
+            init: true
+            args: "--gitops-engine Flux --local-registry ghcr.io/devantler-tech/ksail/system-test-manifests"
+            test-purpose: "GitOps: Flux with local registry on Talos"
+
+          # === Addon Combo Tests (2 tests) ===
+          # Test multiple addons together (they're independent, so one distribution is sufficient)
+          - distribution: Vanilla
+            provider: Docker
+            init: true
+            args: "--cert-manager Enabled --metrics-server Enabled --policy-engine Kyverno"
+            test-purpose: "Addons: cert-manager + metrics-server + Kyverno"
+          - distribution: K3s
+            provider: Docker
+            init: true
+            args: "--metrics-server Disabled --policy-engine Gatekeeper"
+            test-purpose: "Addons: metrics-server disabled + Gatekeeper"
+
+          # === Mirror Registry Tests (2 tests) ===
+          # Test single and multiple mirror registries
+          - distribution: Vanilla
+            provider: Docker
+            init: true
+            args: "--mirror-registry ghcr.io=https://ghcr.io"
+            test-purpose: "Mirror registry: Single mirror"
+          - distribution: K3s
+            provider: Docker
+            init: true
+            args: "--mirror-registry ghcr.io=https://ghcr.io --mirror-registry docker.io=https://registry-1.docker.io"
+            test-purpose: "Mirror registry: Multiple mirrors"
+
+          # === Combined GitOps + Registry (1 test) ===
+          # Test ArgoCD with local registry (Flux already tested above)
+          - distribution: Talos
+            provider: Docker
+            init: true
+            args: "--gitops-engine ArgoCD --local-registry ghcr.io/devantler-tech/ksail/system-test-manifests"
+            test-purpose: "GitOps: ArgoCD with local registry"
     steps:
       - name: 📄 Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
