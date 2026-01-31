@@ -237,7 +237,7 @@ jobs:
           # === CSI no-op exclusions ===
           # Exclude combinations where CSI flag matches distribution × provider default behavior
           # to avoid wasting GitHub Actions minutes on no-op tests
-          
+
           # Vanilla has no default CSI, so --csi Disabled is a no-op
           - distribution: Vanilla
             args: "--csi Disabled"
@@ -248,10 +248,10 @@ jobs:
           - distribution: Talos
             provider: Docker
             args: "--csi Disabled"
-          
+
           # === metrics-server no-op exclusions ===
           # Exclude combinations where metrics-server flag matches distribution default behavior
-          
+
           # K3s has default metrics-server, so --metrics-server Enabled is a no-op
           - distribution: K3s
             args: "--metrics-server Enabled"
@@ -261,7 +261,7 @@ jobs:
           # Talos has no default metrics-server, so --metrics-server Disabled is a no-op
           - distribution: Talos
             args: "--metrics-server Disabled"
-          
+
           # === init=false exclusions ===
           # Only test init=false with core cluster creation (empty args)
           # All other args combinations only need init=true testing
@@ -289,7 +289,7 @@ jobs:
             args: "--metrics-server Enabled"
           - init: false
             args: "--metrics-server Disabled"
-        
+
         # Add Talos x Hetzner combination
         include:
           - distribution: Talos
