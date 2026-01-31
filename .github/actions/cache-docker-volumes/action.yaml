@@ -103,17 +103,17 @@ runs:
       shell: bash
       run: |
         mkdir -p /tmp/docker-volumes
-        
+
         # Find all Docker volumes that match registry patterns
         # KSail creates volumes with predictable names for registries
         VOLUMES=$(docker volume ls --format '{{.Name}}' | grep -E '(docker\.io|ghcr\.io|registry)' || true)
-        
+
         if [ -z "$VOLUMES" ]; then
           echo "⚠️ No registry volumes found to cache"
           echo "export-failed=true" >> "$GITHUB_OUTPUT"
           exit 0
         fi
-        
+
         echo "📦 Exporting Docker volumes:"
         for VOL in $VOLUMES; do
           echo "  Exporting volume: $VOL"
@@ -125,13 +125,13 @@ runs:
             busybox \
             sh -c "cd /volume && tar -cf /backup/${VOL}.tar ." || echo "⚠️ Failed to export $VOL"
         done
-        
+
         # Show cache size
         if command -v du &> /dev/null; then
           TOTAL_SIZE=$(du -sh /tmp/docker-volumes | cut -f1)
           echo "✅ Total cache size: $TOTAL_SIZE"
         fi
-        
+
         echo "export-failed=false" >> "$GITHUB_OUTPUT"
 
     - name: 💾 Save Docker volume cache
