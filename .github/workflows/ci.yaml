@@ -25,6 +25,8 @@ jobs:
       schema: ${{ steps.filter.outputs.schema }}
       cli: ${{ steps.filter.outputs.cli }}
       vsce: ${{ steps.filter.outputs.vsce }}
+      docs-deps: ${{ steps.filter.outputs.docs-deps }}
+      vsce-deps: ${{ steps.filter.outputs.vsce-deps }}
     steps:
       - name: 📄 Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -52,6 +54,12 @@ jobs:
               - '.github/scripts/generate-cli-flags-docs.sh'
             vsce:
               - 'vsce/**'
+              - '.github/workflows/ci.yaml'
+            docs-deps:
+              - 'docs/package*.json'
+              - '.github/workflows/ci.yaml'
+            vsce-deps:
+              - 'vsce/package*.json'
               - '.github/workflows/ci.yaml'
 
   build-artifact:
@@ -304,6 +312,152 @@ jobs:
         with:
           hcloud-token: ${{ secrets.HCLOUD_TOKEN }}
 
+  audit-docs:
+    name: 🔍 Audit Docs Dependencies
+    runs-on: ubuntu-latest
+    needs: [changes]
+    if: needs.changes.outputs.docs-deps == 'true'
+    permissions:
+      contents: write
+    defaults:
+      run:
+        working-directory: docs
+    steps:
+      - name: 🔑 Generate GitHub App Token
+        uses: tibdex/github-app-token@3beb63f4bd073e61482598c45c71c1019b59b73a # v2.1.0
+        id: generate-token
+        with:
+          app_id: ${{ vars.APP_ID }}
+          private_key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - name: 📄 Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: true
+          token: ${{ steps.generate-token.outputs.token }}
+
+      - name: ⚙️ Setup Node.js
+        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: docs/package-lock.json
+
+      - name: 📦 Install dependencies
+        run: npm ci
+
+      - name: 🔍 Run npm audit
+        id: audit
+        run: npm audit --audit-level=moderate
+        continue-on-error: true
+
+      - name: 🔧 Attempt automatic fix (non-breaking)
+        id: fix
+        if: steps.audit.outcome == 'failure' && (github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main'))
+        run: |
+          # Only apply non-breaking fixes automatically
+          npm audit fix --no-force
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "changes_made=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changes_made=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: 📤 Commit and push fixes
+        if: steps.fix.outputs.changes_made == 'true' && github.event_name != 'merge_group'
+        uses: stefanzweifel/git-auto-commit-action@04702edda442b2e678b25b537cec683a1493fcb9 # v7.1.0
+        with:
+          commit_message: "chore(docs): fix npm audit vulnerabilities"
+          commit_user_name: security-bot
+          commit_user_email: security-bot@users.noreply.github.com
+          file_pattern: "docs/package*.json"
+
+      - name: 🔍 Re-audit after fix
+        id: reaudit
+        if: steps.fix.outputs.changes_made == 'true'
+        run: npm audit --audit-level=moderate
+        continue-on-error: true
+
+      - name: ❌ Fail if vulnerabilities remain
+        if: |
+          github.event_name == 'push' && github.ref == 'refs/heads/main'
+          && ((steps.fix.outputs.changes_made != 'true' && steps.audit.outcome == 'failure')
+              || (steps.fix.outputs.changes_made == 'true' && steps.reaudit.outcome == 'failure'))
+        run: npm audit --audit-level=moderate
+
+  audit-vsce:
+    name: 🔍 Audit VSCode Extension Dependencies
+    runs-on: ubuntu-latest
+    needs: [changes]
+    if: needs.changes.outputs.vsce-deps == 'true'
+    permissions:
+      contents: write
+    defaults:
+      run:
+        working-directory: vsce
+    steps:
+      - name: 🔑 Generate GitHub App Token
+        uses: tibdex/github-app-token@3beb63f4bd073e61482598c45c71c1019b59b73a # v2.1.0
+        id: generate-token
+        with:
+          app_id: ${{ vars.APP_ID }}
+          private_key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - name: 📄 Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: true
+          token: ${{ steps.generate-token.outputs.token }}
+
+      - name: ⚙️ Setup Node.js
+        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: vsce/package-lock.json
+
+      - name: 📦 Install dependencies
+        run: npm ci
+
+      - name: 🔍 Run npm audit
+        id: audit
+        run: npm audit --audit-level=moderate
+        continue-on-error: true
+
+      - name: 🔧 Attempt automatic fix (non-breaking)
+        id: fix
+        if: steps.audit.outcome == 'failure' && (github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main'))
+        run: |
+          # Only apply non-breaking fixes automatically
+          npm audit fix --no-force
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "changes_made=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changes_made=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: 📤 Commit and push fixes
+        if: steps.fix.outputs.changes_made == 'true' && github.event_name != 'merge_group'
+        uses: stefanzweifel/git-auto-commit-action@04702edda442b2e678b25b537cec683a1493fcb9 # v7.1.0
+        with:
+          commit_message: "chore(vsce): fix npm audit vulnerabilities"
+          commit_user_name: security-bot
+          commit_user_email: security-bot@users.noreply.github.com
+          file_pattern: "vsce/package*.json"
+
+      - name: 🔍 Re-audit after fix
+        id: reaudit
+        if: steps.fix.outputs.changes_made == 'true'
+        run: npm audit --audit-level=moderate
+        continue-on-error: true
+
+      - name: ❌ Fail if vulnerabilities remain
+        if: |
+          github.event_name == 'push' && github.ref == 'refs/heads/main'
+          && ((steps.fix.outputs.changes_made != 'true' && steps.audit.outcome == 'failure')
+              || (steps.fix.outputs.changes_made == 'true' && steps.reaudit.outcome == 'failure'))
+        run: npm audit --audit-level=moderate
+
   vscode-extension:
     name: 🧩 VSCode Extension
     runs-on: ubuntu-latest
@@ -360,6 +514,8 @@ jobs:
         coverage,
         system-test,
         cleanup-hetzner,
+        audit-docs,
+        audit-vsce,
         vscode-extension,
       ]
     if: ${{ always() }}
@@ -377,4 +533,6 @@ jobs:
             ${{ needs.coverage.result }}
             ${{ needs.system-test.result }}
             ${{ needs.cleanup-hetzner.result }}
+            ${{ needs.audit-docs.result }}
+            ${{ needs.audit-vsce.result }}
             ${{ needs.vscode-extension.result }}
