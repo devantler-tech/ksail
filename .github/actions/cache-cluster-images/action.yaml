@@ -82,7 +82,7 @@ runs:
           # Fallback to distribution-only key (less precise, more sharing)
           CACHE_KEY="cluster-images-${CACHE_VERSION}-${DIST_LOWER}-${RUNNER_OS}-${RUNNER_ARCH}"
         fi
-        
+
         echo "cache-key=$CACHE_KEY" >> "$GITHUB_OUTPUT"
         echo "📦 Cache key: $CACHE_KEY"
 
@@ -110,21 +110,21 @@ runs:
       run: |
         METADATA="/tmp/ksail-image-cache/metadata.json"
         ARCHIVE="/tmp/ksail-image-cache/images.tar"
-        
+
         # Check if archive exists
         if [[ ! -f "$ARCHIVE" ]]; then
           echo "⚠️ Cache archive not found at $ARCHIVE"
           echo "valid=false" >> "$GITHUB_OUTPUT"
           exit 0
         fi
-        
+
         # Check if metadata exists (older caches might not have it)
         if [[ ! -f "$METADATA" ]]; then
           echo "⚠️ Cache metadata not found (older cache format)"
           echo "valid=true" >> "$GITHUB_OUTPUT"  # Still use it, but it's less precise
           exit 0
         fi
-        
+
         # Validate metadata if go.mod hash is provided
         if [[ -n "$GO_MOD_HASH" ]]; then
           CACHED_HASH=$(jq -r '.go_mod_hash // ""' "$METADATA")
@@ -134,14 +134,14 @@ runs:
             # Still valid, but user is warned
           fi
         fi
-        
+
         # Display cache metadata
         if command -v jq &> /dev/null; then
           echo "📋 Cache metadata:"
           jq -r '.created_at // "unknown", .image_count // "unknown", .total_size // "unknown"' "$METADATA" | \
             awk 'BEGIN{print "   Created: " } NR==1{print "   Images: " $0} NR==2{print "   Size: " $0}'
         fi
-        
+
         echo "valid=true" >> "$GITHUB_OUTPUT"
 
     - name: 📥 Import cached images to cluster
@@ -185,14 +185,14 @@ runs:
 
         SIZE=$(du -h "$ARCHIVE" | cut -f1)
         SIZE_BYTES=$(stat -c%s "$ARCHIVE" 2>/dev/null || stat -f%z "$ARCHIVE" 2>/dev/null || echo "0")
-        
+
         echo "✅ Exported images archive: $SIZE"
-        
+
         # Generate metadata file to track cache contents and versions
         # This helps validate cache freshness and debug cache issues
         IMAGE_COUNT=$(tar -tf "$ARCHIVE" 2>/dev/null | wc -l || echo 0)
         CREATED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-        
+
         printf '%s\n' \
           '{' \
           '  "distribution": "'"$DISTRIBUTION"'",' \
@@ -206,14 +206,14 @@ runs:
           '  "cache_version": "'"${{ inputs.cache-version }}"'"' \
           '}' \
           > "$METADATA"
-        
+
         echo "📋 Generated cache metadata"
         if command -v jq &> /dev/null; then
           jq '.' "$METADATA"
         else
           cat "$METADATA"
         fi
-        
+
         echo "export-failed=false" >> "$GITHUB_OUTPUT"
 
     - name: 💾 Save image cache
