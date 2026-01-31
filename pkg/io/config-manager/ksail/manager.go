@@ -239,6 +239,11 @@ func (m *ConfigManager) unmarshalAndApplyDefaults(ignoreConfigFile bool) error {
 		return fmt.Errorf("failed to unmarshal configuration: %w", err)
 	}
 
+	// Expand environment variables in all string fields.
+	// This happens immediately after unmarshaling, before applying defaults
+	// or making paths absolute, so that env vars can be used anywhere.
+	m.Config.ExpandEnvVars()
+
 	// Do NOT restore defaults for TypeMeta fields - they should be validated as-is.
 	// This ensures validation will catch incorrect/missing apiVersion and kind values.
 

@@ -57,6 +57,65 @@ func getExpandTestCasesWithNoEnvVars() []expandTestCase {
 	}
 }
 
+func getExpandTestCasesWithDefaultValues() []expandTestCase {
+	return []expandTestCase{
+		{
+			name:     "default value - undefined var uses default",
+			input:    "${UNDEFINED_VAR:-fallback}",
+			envVars:  nil,
+			expected: "fallback",
+		},
+		{
+			name:     "default value - defined var ignores default",
+			input:    "${TEST_DEFINED:-fallback}",
+			envVars:  map[string]string{"TEST_DEFINED": "actual"},
+			expected: "actual",
+		},
+		{
+			name:     "default value - empty default for undefined",
+			input:    "${UNDEFINED_VAR:-}",
+			envVars:  nil,
+			expected: "",
+		},
+		{
+			name:     "default value - with port number",
+			input:    "${REGISTRY:-localhost:5000}",
+			envVars:  nil,
+			expected: "localhost:5000",
+		},
+		{
+			name:     "default value - with path",
+			input:    "${CONFIG_PATH:-/etc/config/default.yaml}",
+			envVars:  nil,
+			expected: "/etc/config/default.yaml",
+		},
+		{
+			name:     "default value - URL",
+			input:    "endpoint: ${ENDPOINT:-http://localhost:8080/api}",
+			envVars:  nil,
+			expected: "endpoint: http://localhost:8080/api",
+		},
+		{
+			name:     "default value - multiple with defaults",
+			input:    "${HOST:-localhost}:${PORT:-8080}",
+			envVars:  nil,
+			expected: "localhost:8080",
+		},
+		{
+			name:     "default value - mixed defined and default",
+			input:    "${HOST:-localhost}:${PORT:-8080}",
+			envVars:  map[string]string{"HOST": "example.com"},
+			expected: "example.com:8080",
+		},
+		{
+			name:     "default value - empty string env var overrides default",
+			input:    "${EMPTY_VAR:-fallback}",
+			envVars:  map[string]string{"EMPTY_VAR": ""},
+			expected: "",
+		},
+	}
+}
+
 func getExpandTestCasesWithEnvVarsBasic() []expandTestCase {
 	return []expandTestCase{
 		{
@@ -185,4 +244,60 @@ func TestExpand_PathLikeVariable(t *testing.T) {
 
 	result := envvar.Expand("Paths: ${TEST_PATH}")
 	assert.Equal(t, "Paths: /usr/bin:/usr/local/bin", result)
+}
+
+func TestExpand_DefaultValues(t *testing.T) {
+	// Note: Cannot use t.Parallel() when using t.Setenv()
+	tests := getExpandTestCasesWithDefaultValues()
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			// Set environment variables for this test
+			for key, value := range testCase.envVars {
+				t.Setenv(key, value)
+			}
+
+			result := envvar.Expand(testCase.input)
+			assert.Equal(t, testCase.expected, result)
+		})
+	}
+}
+
+func TestExpandBytes(t *testing.T) {
+	t.Setenv("TEST_VAR", "expanded")
+
+	input := []byte("value: ${TEST_VAR}")
+	expected := []byte("value: expanded")
+
+	result := envvar.ExpandBytes(input)
+	assert.Equal(t, expected, result)
+}
+
+func TestExpandBytes_WithDefaultValue(t *testing.T) { //nolint:paralleltest // Uses t.Setenv
+	input := []byte("registry: ${REGISTRY:-localhost:5000}")
+	expected := []byte("registry: localhost:5000")
+
+	result := envvar.ExpandBytes(input)
+	assert.Equal(t, expected, result)
+}
+
+func TestExpandBytes_YAMLContent(t *testing.T) {
+	t.Setenv("TEST_REGISTRY", "myregistry.io:5000")
+
+	input := []byte(`apiVersion: kind.x-k8s.io/v1alpha4
+kind: Cluster
+containerdConfigPatches:
+- |-
+  [plugins."io.containerd.grpc.v1.cri".registry.mirrors."${TEST_REGISTRY}"]
+    endpoint = ["http://${TEST_REGISTRY}"]`)
+
+	expected := []byte(`apiVersion: kind.x-k8s.io/v1alpha4
+kind: Cluster
+containerdConfigPatches:
+- |-
+  [plugins."io.containerd.grpc.v1.cri".registry.mirrors."myregistry.io:5000"]
+    endpoint = ["http://myregistry.io:5000"]`)
+
+	result := envvar.ExpandBytes(input)
+	assert.Equal(t, expected, result)
 }
