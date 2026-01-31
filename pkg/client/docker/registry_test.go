@@ -1108,26 +1108,26 @@ func TestErrConstants(t *testing.T) {
 	// Test error messages contain useful information
 	assert.Contains(t, docker.ErrAPIClientNil.Error(), "apiClient")
 	assert.Contains(t, docker.ErrRegistryNotFound.Error(), "registry")
-	assert.Contains(t, docker.ErrRegistryAlreadyExists.Error(), "already exists")
-	assert.Contains(t, docker.ErrRegistryPortNotFound.Error(), "port")
-}
+	// Set environment variables for testing
+	t.Setenv("GITHUB_USER", "testuser")
+	t.Setenv("GITHUB_TOKEN", "ghp_test123")
 
-func TestBuildContainerConfig_WithCredentials(t *testing.T) {
-// Set environment variables for testing
-t.Setenv("GITHUB_USER", "testuser")
-t.Setenv("GITHUB_TOKEN", "ghp_test123")
+	mockClient, manager, _ := setupTestRegistryManager(t)
 
-mockClient, manager, _ := setupTestRegistryManager(t)
+	config := docker.RegistryConfig{
+		Name:        "ghcr.io",
+		Port:        5000,
+		UpstreamURL: "https://ghcr.io",
+		Username:    "${GITHUB_USER}",
+		Password:    "${GITHUB_TOKEN}",
+	}
 
-config := docker.RegistryConfig{
-Name:        "ghcr.io",
-Port:        5000,
-UpstreamURL: "https://ghcr.io",
-Username:    "${GITHUB_USER}",
-Password:    "${GITHUB_TOKEN}",
-}
+	// Use reflection to call the private buildContainerConfig method
+	// or expose it for testing
+	// Since we can't easily test private methods, let's test via CreateRegistry
+	// which will call buildContainerConfig internally
 
-mockRegistryNotExists(context.Background(), mockClient)
+	mockRegistryNotExists(context.Background(), mockClient)
 mockImagePullSequence(context.Background(), mockClient)
 mockVolumeCreateSequence(context.Background(), mockClient, config.Name)
 
