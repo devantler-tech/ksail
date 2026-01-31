@@ -288,6 +288,7 @@ func runStageWithParams(params StageParams, role Role) error {
 // This function manually handles mirror-registry flag merging because it's not bound to Viper.
 // Behavior:
 // - If --mirror-registry flag is explicitly set:
+//   - If set to empty string (""): DISABLE (return empty array, no defaults)
 //   - With config values: EXTEND (append flag values to config values)
 //   - Without config values: REPLACE defaults with flag values
 // - If flag not set:
@@ -319,6 +320,12 @@ func getMirrorRegistriesWithDefaults(cmd *cobra.Command, cfgManager *ksailconfig
 	
 	// Flag was explicitly set: get flag values
 	flagValues, _ := cmd.Flags().GetStringSlice(mirrorRegistryFlag)
+	
+	// Check if user explicitly disabled mirrors with empty string
+	if len(flagValues) == 1 && flagValues[0] == "" {
+		// User explicitly disabled mirrors
+		return []string{}
+	}
 	
 	if len(configValues) > 0 {
 		// Has config values: EXTEND by appending flag values to config values
