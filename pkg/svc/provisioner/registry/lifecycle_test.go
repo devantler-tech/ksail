@@ -178,6 +178,8 @@ func TestBuildRegistryInfo(t *testing.T) {
 		dockerclient.DefaultRegistryPort,
 		"",
 		"",
+		"",
+		"",
 	)
 
 	require.Equal(t, "docker.io", info.Host)
@@ -196,6 +198,8 @@ func TestBuildRegistryInfo_UsesOverride(t *testing.T) {
 		dockerclient.DefaultRegistryPort,
 		"",
 		"https://mirror.example.com",
+		"",
+		"",
 	)
 
 	require.Equal(t, "https://mirror.example.com", info.Upstream)

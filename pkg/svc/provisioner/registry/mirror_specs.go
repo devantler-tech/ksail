@@ -432,7 +432,7 @@ func BuildRegistryInfosFromSpecs(
 		}
 
 		// Port 0 indicates no host port binding needed (mirrors use Docker network)
-		info := BuildRegistryInfo(host, []string{endpoint}, 0, prefix, upstream)
+		info := BuildRegistryInfo(host, []string{endpoint}, 0, prefix, upstream, spec.Username, spec.Password)
 		registryInfos = append(registryInfos, info)
 	}
 

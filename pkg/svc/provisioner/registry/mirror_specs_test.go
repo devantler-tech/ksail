@@ -183,3 +183,262 @@ func TestMergeSpecs_DeterministicOrder(t *testing.T) {
 	}
 	assert.Equal(t, expected, previousResult)
 }
+
+func TestMirrorSpec_HasCredentials(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name     string
+		spec     registry.MirrorSpec
+		expected bool
+	}{
+		{
+			name: "no_credentials",
+			spec: registry.MirrorSpec{
+				Host:   "docker.io",
+				Remote: "https://registry-1.docker.io",
+			},
+			expected: false,
+		},
+		{
+			name: "username_only",
+			spec: registry.MirrorSpec{
+				Host:     "ghcr.io",
+				Remote:   "https://ghcr.io",
+				Username: "myuser",
+			},
+			expected: true,
+		},
+		{
+			name: "password_only",
+			spec: registry.MirrorSpec{
+				Host:     "quay.io",
+				Remote:   "https://quay.io",
+				Password: "mypass",
+			},
+			expected: true,
+		},
+		{
+			name: "both_credentials",
+			spec: registry.MirrorSpec{
+				Host:     "gcr.io",
+				Remote:   "https://gcr.io",
+				Username: "user",
+				Password: "pass",
+			},
+			expected: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			result := tc.spec.HasCredentials()
+			assert.Equal(t, tc.expected, result)
+		})
+	}
+}
+
+func TestMirrorSpec_ResolveCredentials(t *testing.T) {
+	// Set test environment variables
+	t.Setenv("TEST_USER", "github-user")
+	t.Setenv("TEST_TOKEN", "ghp_test1234")
+
+	testCases := []struct {
+		name             string
+		spec             registry.MirrorSpec
+		expectedUsername string
+		expectedPassword string
+	}{
+		{
+			name: "no_credentials",
+			spec: registry.MirrorSpec{
+				Host:   "docker.io",
+				Remote: "https://registry-1.docker.io",
+			},
+			expectedUsername: "",
+			expectedPassword: "",
+		},
+		{
+			name: "literal_credentials",
+			spec: registry.MirrorSpec{
+				Host:     "ghcr.io",
+				Remote:   "https://ghcr.io",
+				Username: "myuser",
+				Password: "mypass",
+			},
+			expectedUsername: "myuser",
+			expectedPassword: "mypass",
+		},
+		{
+			name: "env_var_credentials",
+			spec: registry.MirrorSpec{
+				Host:     "ghcr.io",
+				Remote:   "https://ghcr.io",
+				Username: "${TEST_USER}",
+				Password: "${TEST_TOKEN}",
+			},
+			expectedUsername: "github-user",
+			expectedPassword: "ghp_test1234",
+		},
+		{
+			name: "mixed_credentials",
+			spec: registry.MirrorSpec{
+				Host:     "quay.io",
+				Remote:   "https://quay.io",
+				Username: "literal-user",
+				Password: "${TEST_TOKEN}",
+			},
+			expectedUsername: "literal-user",
+			expectedPassword: "ghp_test1234",
+		},
+		{
+			name: "undefined_env_var",
+			spec: registry.MirrorSpec{
+				Host:     "gcr.io",
+				Remote:   "https://gcr.io",
+				Username: "${UNDEFINED_VAR}",
+				Password: "pass",
+			},
+			expectedUsername: "",
+			expectedPassword: "pass",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			username, password := tc.spec.ResolveCredentials()
+			assert.Equal(t, tc.expectedUsername, username)
+			assert.Equal(t, tc.expectedPassword, password)
+		})
+	}
+}
+
+func TestParseMirrorSpecs_WithCredentials(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name     string
+		specs    []string
+		expected []registry.MirrorSpec
+	}{
+		{
+			name: "credentials_with_username_password",
+			specs: []string{
+				"user:pass@ghcr.io=https://ghcr.io",
+			},
+			expected: []registry.MirrorSpec{
+				{
+					Host:     "ghcr.io",
+					Remote:   "https://ghcr.io",
+					Username: "user",
+					Password: "pass",
+				},
+			},
+		},
+		{
+			name: "credentials_with_env_vars",
+			specs: []string{
+				"${USER}:${TOKEN}@docker.io=https://registry-1.docker.io",
+			},
+			expected: []registry.MirrorSpec{
+				{
+					Host:     "docker.io",
+					Remote:   "https://registry-1.docker.io",
+					Username: "${USER}",
+					Password: "${TOKEN}",
+				},
+			},
+		},
+		{
+			name: "credentials_username_only",
+			specs: []string{
+				"user@ghcr.io=https://ghcr.io",
+			},
+			expected: []registry.MirrorSpec{
+				{
+					Host:     "ghcr.io",
+					Remote:   "https://ghcr.io",
+					Username: "user",
+					Password: "",
+				},
+			},
+		},
+		{
+			name: "no_credentials",
+			specs: []string{
+				"docker.io=https://registry-1.docker.io",
+			},
+			expected: []registry.MirrorSpec{
+				{
+					Host:     "docker.io",
+					Remote:   "https://registry-1.docker.io",
+					Username: "",
+					Password: "",
+				},
+			},
+		},
+		{
+			name: "mixed_specs",
+			specs: []string{
+				"user:pass@ghcr.io=https://ghcr.io",
+				"docker.io=https://registry-1.docker.io",
+			},
+			expected: []registry.MirrorSpec{
+				{
+					Host:     "ghcr.io",
+					Remote:   "https://ghcr.io",
+					Username: "user",
+					Password: "pass",
+				},
+				{
+					Host:     "docker.io",
+					Remote:   "https://registry-1.docker.io",
+					Username: "",
+					Password: "",
+				},
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			result := registry.ParseMirrorSpecs(tc.specs)
+			assert.Equal(t, tc.expected, result)
+		})
+	}
+}
+
+func TestBuildRegistryInfosFromSpecs_WithCredentials(t *testing.T) {
+	t.Parallel()
+
+	specs := []registry.MirrorSpec{
+		{
+			Host:     "ghcr.io",
+			Remote:   "https://ghcr.io",
+			Username: "${GITHUB_USER}",
+			Password: "${GITHUB_TOKEN}",
+		},
+		{
+			Host:   "docker.io",
+			Remote: "https://registry-1.docker.io",
+		},
+	}
+
+	infos := registry.BuildRegistryInfosFromSpecs(specs, nil, nil, "test")
+
+	assert.Len(t, infos, 2)
+
+	// Check first registry with credentials
+	assert.Equal(t, "ghcr.io", infos[0].Host)
+	assert.Equal(t, "${GITHUB_USER}", infos[0].Username)
+	assert.Equal(t, "${GITHUB_TOKEN}", infos[0].Password)
+
+	// Check second registry without credentials
+	assert.Equal(t, "docker.io", infos[1].Host)
+	assert.Equal(t, "", infos[1].Username)
+	assert.Equal(t, "", infos[1].Password)
+}
