@@ -37,7 +37,7 @@ name: "CI Failure Doctor"
       - completed
     workflows:
       - "CI - KSail"
-      - "CD - Go"
+      - "CD"
       - "Test - Pages"
       - "Publish - Pages"
 
