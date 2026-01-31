@@ -323,10 +323,19 @@ jobs:
       run:
         working-directory: docs
     steps:
+      - name: 🔑 Generate GitHub App Token
+        if: steps.fix.outputs.changes_made == 'true'
+        uses: tibdex/github-app-token@3beb63f4bd073e61482598c45c71c1019b59b73a # v2.1.0
+        id: generate-token
+        with:
+          app_id: ${{ vars.APP_ID }}
+          private_key: ${{ secrets.APP_PRIVATE_KEY }}
+
       - name: 📄 Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
+          token: ${{ steps.generate-token.outputs.token }}
 
       - name: ⚙️ Setup Node.js
         uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
@@ -355,14 +364,6 @@ jobs:
             echo "changes_made=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: 🔑 Generate GitHub App Token
-        if: steps.fix.outputs.changes_made == 'true'
-        uses: tibdex/github-app-token@3beb63f4bd073e61482598c45c71c1019b59b73a # v2.1.0
-        id: generate-token
-        with:
-          app_id: ${{ vars.APP_ID }}
-          private_key: ${{ secrets.APP_PRIVATE_KEY }}
-
       - name: 📤 Commit and push fixes
         if: steps.fix.outputs.changes_made == 'true' && github.event_name != 'merge_group'
         uses: stefanzweifel/git-auto-commit-action@04702edda442b2e678b25b537cec683a1493fcb9 # v7.1.0
@@ -371,7 +372,6 @@ jobs:
           commit_user_name: security-bot
           commit_user_email: security-bot@users.noreply.github.com
           file_pattern: "docs/package*.json"
-          token: ${{ steps.generate-token.outputs.token }}
 
       - name: 🔍 Re-audit after fix
         id: reaudit
@@ -397,10 +397,19 @@ jobs:
       run:
         working-directory: vsce
     steps:
+      - name: 🔑 Generate GitHub App Token
+        if: steps.fix.outputs.changes_made == 'true'
+        uses: tibdex/github-app-token@3beb63f4bd073e61482598c45c71c1019b59b73a # v2.1.0
+        id: generate-token
+        with:
+          app_id: ${{ vars.APP_ID }}
+          private_key: ${{ secrets.APP_PRIVATE_KEY }}
+
       - name: 📄 Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
+          token: ${{ steps.generate-token.outputs.token }}
 
       - name: ⚙️ Setup Node.js
         uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
@@ -429,14 +438,6 @@ jobs:
             echo "changes_made=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: 🔑 Generate GitHub App Token
-        if: steps.fix.outputs.changes_made == 'true'
-        uses: tibdex/github-app-token@3beb63f4bd073e61482598c45c71c1019b59b73a # v2.1.0
-        id: generate-token
-        with:
-          app_id: ${{ vars.APP_ID }}
-          private_key: ${{ secrets.APP_PRIVATE_KEY }}
-
       - name: 📤 Commit and push fixes
         if: steps.fix.outputs.changes_made == 'true' && github.event_name != 'merge_group'
         uses: stefanzweifel/git-auto-commit-action@04702edda442b2e678b25b537cec683a1493fcb9 # v7.1.0
@@ -445,7 +446,6 @@ jobs:
           commit_user_name: security-bot
           commit_user_email: security-bot@users.noreply.github.com
           file_pattern: "vsce/package*.json"
-          token: ${{ steps.generate-token.outputs.token }}
 
       - name: 🔍 Re-audit after fix
         id: reaudit
