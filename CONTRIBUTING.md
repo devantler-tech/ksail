@@ -210,7 +210,7 @@ To test the Hetzner provider locally, you need:
 The release process for KSail is fully automated and split across two GitHub Actions workflows:
 
 1. **Release** (`.github/workflows/release.yaml`) runs on pushes to `main` and creates the next semantic version tag (`vX.Y.Z`) based on Conventional Commits (typically the PR title / squash-merge commit message).
-2. **CD - Go** (`.github/workflows/cd.yaml`) runs on tag pushes (`v*`) and uses **GoReleaser** to build and publish release artifacts.
+2. **CD** (`.github/workflows/cd.yaml`) runs on tag pushes (`v*`) and uses **GoReleaser** to build and publish release artifacts.
 
 Versioning conventions:
 
