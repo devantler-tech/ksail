@@ -237,9 +237,10 @@ jobs:
           - "--policy-engine Gatekeeper"
           - "--load-balancer Enabled"
           - "--load-balancer Disabled"
-        # Exclude combinations where CSI flag matches distribution × provider default behavior
+        # Exclude combinations where flags match distribution × provider default behavior
         # to avoid wasting GitHub Actions minutes on no-op tests
         exclude:
+          # CSI exclusions: no-op when flag matches distribution × provider default
           # Vanilla has no default CSI, so --csi Disabled is a no-op
           - distribution: Vanilla
             args: "--csi Disabled"
@@ -260,6 +261,16 @@ jobs:
           - distribution: Talos
             provider: Docker
             args: "--load-balancer Disabled"
+          # Metrics Server exclusions: no-op when flag matches distribution default
+          # K3s has default metrics-server, so --metrics-server Enabled is a no-op
+          - distribution: K3s
+            args: "--metrics-server Enabled"
+          # Vanilla has no default metrics-server, so --metrics-server Disabled is a no-op
+          - distribution: Vanilla
+            args: "--metrics-server Disabled"
+          # Talos has no default metrics-server, so --metrics-server Disabled is a no-op
+          - distribution: Talos
+            args: "--metrics-server Disabled"
         # Add Talos x Hetzner combination
         include:
           - distribution: Talos
