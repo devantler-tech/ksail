@@ -3,14 +3,11 @@ package mirrorregistry
 import (
 	"context"
 	"fmt"
-	"os"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	kindconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/kind"
-	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
 	kindprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/kind"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
 	"github.com/docker/docker/client"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
@@ -144,37 +141,19 @@ func runKindPostClusterConnectAction(
 // PrepareKindConfigWithMirrors prepares the Kind config by setting up hosts directory for mirrors.
 // Returns true if mirror configuration is needed, false otherwise.
 // This uses the modern hosts directory pattern instead of deprecated ContainerdConfigPatches.
+// Note: mirrorSpecs should be the pre-computed merged specs from RunStage.
 func PrepareKindConfigWithMirrors(
 	clusterCfg *v1alpha1.Cluster,
-	cfgManager *ksailconfigmanager.ConfigManager,
 	kindConfig *v1alpha4.Cluster,
+	mirrorSpecs []registry.MirrorSpec,
 ) bool {
 	// Only for Kind distribution
 	if clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionVanilla || kindConfig == nil {
 		return false
 	}
 
-	// Check for --mirror-registry flag with defaults applied
-	mirrors := getMirrorRegistriesWithDefaults(cmd, cfgManager)
-	mirrorRegistries := registry.ParseMirrorSpecs(mirrors)
-
-	// Also check for existing hosts.toml files
-	existingSpecs, err := registry.ReadExistingHostsToml(GetKindMirrorsDir(clusterCfg))
-	if err != nil {
-		notify.WriteMessage(notify.Message{
-			Type:    notify.ErrorType,
-			Content: "failed to read existing hosts configuration: %v",
-			Args:    []any{err},
-			Writer:  os.Stderr,
-		})
-	}
-
-	// If we have either flag specs or existing specs, configuration is needed
-	if len(mirrorRegistries) > 0 || len(existingSpecs) > 0 {
-		return true
-	}
-
-	return false
+	// If we have any mirror specs, configuration is needed
+	return len(mirrorSpecs) > 0
 }
 
 // GetKindMirrorsDir returns the configured Kind mirrors directory or the default.
