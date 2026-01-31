@@ -11,9 +11,9 @@ import (
 )
 
 var (
-	// Global state for the cloud-provider-kind controller
-	globalController *cloudProviderController
-	globalMu         sync.Mutex
+	// Global state for the cloud-provider-kind controller.
+	globalController *cloudProviderController //nolint:gochecknoglobals // Required for singleton controller
+	globalMu         sync.Mutex               //nolint:gochecknoglobals // Required for singleton controller
 )
 
 // cloudProviderController wraps the cloud-provider-kind controller with lifecycle management.
@@ -37,7 +37,9 @@ func NewCloudProviderKINDInstaller() *CloudProviderKINDInstaller {
 // The controller runs as a background goroutine and monitors all KIND clusters.
 // Multiple calls to Install() will increment a reference count, ensuring the
 // controller stays running as long as at least one cluster needs it.
-func (c *CloudProviderKINDInstaller) Install(ctx context.Context) error {
+//
+//nolint:contextcheck // Background context is intentional for long-running controller
+func (c *CloudProviderKINDInstaller) Install(_ context.Context) error {
 	globalMu.Lock()
 	defer globalMu.Unlock()
 
@@ -67,6 +69,7 @@ func (c *CloudProviderKINDInstaller) Install(ctx context.Context) error {
 	cmd := cpkcmd.NewCommand()
 
 	// Create a cancelable context for the controller
+	// Background context is intentional for long-running controller
 	ctrlCtx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 
@@ -78,7 +81,8 @@ func (c *CloudProviderKINDInstaller) Install(ctx context.Context) error {
 	}()
 
 	// Mark as running and create lock file
-	if err := createLockFile(); err != nil {
+	err := createLockFile()
+	if err != nil {
 		cancel()
 		<-done // Wait for goroutine to finish
 
@@ -96,7 +100,7 @@ func (c *CloudProviderKINDInstaller) Install(ctx context.Context) error {
 
 // Uninstall decrements the reference count and stops the cloud-provider-kind controller
 // if no more clusters are using it.
-func (c *CloudProviderKINDInstaller) Uninstall(ctx context.Context) error {
+func (c *CloudProviderKINDInstaller) Uninstall(_ context.Context) error {
 	globalMu.Lock()
 	defer globalMu.Unlock()
 
@@ -118,7 +122,8 @@ func (c *CloudProviderKINDInstaller) Uninstall(ctx context.Context) error {
 		}
 
 		// Remove lock file
-		if err := removeLockFile(); err != nil {
+		err := removeLockFile()
+		if err != nil {
 			// Log error but don't fail uninstall
 			fmt.Fprintf(os.Stderr, "Warning: failed to remove lock file: %v\n", err)
 		}
@@ -142,7 +147,9 @@ func getLockFilePath() string {
 
 func isRunningExternally() bool {
 	lockPath := getLockFilePath()
-	if _, err := os.Stat(lockPath); err == nil {
+
+	_, statErr := os.Stat(lockPath)
+	if statErr == nil {
 		// Lock file exists - check if the process is still running
 		// For now, we assume if the file exists, it's running
 		// In production, we'd want to validate the PID
@@ -159,11 +166,23 @@ func createLockFile() error {
 	pid := os.Getpid()
 	content := fmt.Sprintf("%d\n", pid)
 
-	return os.WriteFile(lockPath, []byte(content), 0644)
+	const lockFilePermissions = 0o600
+
+	err := os.WriteFile(lockPath, []byte(content), lockFilePermissions)
+	if err != nil {
+		return fmt.Errorf("failed to write lock file: %w", err)
+	}
+
+	return nil
 }
 
 func removeLockFile() error {
 	lockPath := getLockFilePath()
 
-	return os.Remove(lockPath)
+	err := os.Remove(lockPath)
+	if err != nil {
+		return fmt.Errorf("failed to remove lock file: %w", err)
+	}
+
+	return nil
 }

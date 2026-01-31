@@ -20,6 +20,8 @@ func TestNewCloudProviderKINDInstaller(t *testing.T) {
 }
 
 func TestCloudProviderKINDInstallerInstall(t *testing.T) {
+	t.Parallel()
+
 	// Note: This is an integration test that actually starts the controller
 	// Skip in CI environments where Docker might not be available
 	if os.Getenv("CI") == "true" {
@@ -40,6 +42,8 @@ func TestCloudProviderKINDInstallerInstall(t *testing.T) {
 }
 
 func TestCloudProviderKINDInstallerInstallMultipleCalls(t *testing.T) {
+	t.Parallel()
+
 	// Skip in CI
 	if os.Getenv("CI") == "true" {
 		t.Skip("Skipping integration test in CI")
@@ -95,4 +99,3 @@ func TestLockFileOperations(t *testing.T) {
 	// Note: We can't directly test the lock file functions since they're not exported
 	// They are tested indirectly through Install/Uninstall tests
 }
-
