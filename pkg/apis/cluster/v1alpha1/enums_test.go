@@ -89,7 +89,33 @@ func TestMetricsServer_ValidValues(t *testing.T) {
 func TestLoadBalancer_Set(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
+	tests := getLoadBalancerSetTestCases()
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			var loadBalancer v1alpha1.LoadBalancer
+
+			err := loadBalancer.Set(testCase.input)
+			if testCase.wantError {
+				require.Error(t, err)
+				require.ErrorIs(t, err, v1alpha1.ErrInvalidLoadBalancer)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, testCase.expected, loadBalancer)
+			}
+		})
+	}
+}
+
+func getLoadBalancerSetTestCases() []struct {
+	name      string
+	input     string
+	expected  v1alpha1.LoadBalancer
+	wantError bool
+} {
+	return []struct {
 		name      string
 		input     string
 		expected  v1alpha1.LoadBalancer
@@ -136,23 +162,6 @@ func TestLoadBalancer_Set(t *testing.T) {
 			input:     "invalid",
 			wantError: true,
 		},
-	}
-
-	for _, testCase := range tests {
-		t.Run(testCase.name, func(t *testing.T) {
-			t.Parallel()
-
-			var lb v1alpha1.LoadBalancer
-
-			err := lb.Set(testCase.input)
-			if testCase.wantError {
-				require.Error(t, err)
-				require.ErrorIs(t, err, v1alpha1.ErrInvalidLoadBalancer)
-			} else {
-				require.NoError(t, err)
-				assert.Equal(t, testCase.expected, lb)
-			}
-		})
 	}
 }
 

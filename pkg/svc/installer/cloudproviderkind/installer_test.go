@@ -144,9 +144,17 @@ func expectCloudProviderKINDInstall(
 			mock.Anything,
 			mock.MatchedBy(func(spec *helm.ChartSpec) bool {
 				assert.Equal(t, "cloud-provider-kind", spec.ReleaseName)
-				assert.Equal(t, "cloud-provider-kind/cloud-provider-kind", spec.ChartName)
+				assert.Equal(
+					t,
+					"cloud-provider-kind/cloud-provider-kind",
+					spec.ChartName,
+				)
 				assert.Equal(t, "kube-system", spec.Namespace)
-				assert.Equal(t, "https://kubernetes-sigs.github.io/cloud-provider-kind", spec.RepoURL)
+				assert.Equal(
+					t,
+					"https://kubernetes-sigs.github.io/cloud-provider-kind",
+					spec.RepoURL,
+				)
 				assert.True(t, spec.Atomic)
 				assert.True(t, spec.Wait)
 				assert.True(t, spec.WaitForJobs)
