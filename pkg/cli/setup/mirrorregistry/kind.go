@@ -154,8 +154,9 @@ func PrepareKindConfigWithMirrors(
 		return false
 	}
 
-	// Check for --mirror-registry flag
-	mirrorRegistries := cfgManager.Viper.GetStringSlice("mirror-registry")
+	// Check for --mirror-registry flag with defaults applied
+	mirrors := getMirrorRegistriesWithDefaults(cmd, cfgManager)
+	mirrorRegistries := registry.ParseMirrorSpecs(mirrors)
 
 	// Also check for existing hosts.toml files
 	existingSpecs, err := registry.ReadExistingHostsToml(GetKindMirrorsDir(clusterCfg))

@@ -71,12 +71,10 @@ func NewCreateCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
 
 	cfgManager := ksailconfigmanager.NewCommandConfigManager(cmd, fieldSelectors)
 
-	cmd.Flags().StringSlice("mirror-registry", []string{
-		"docker.io=https://registry-1.docker.io",
-		"ghcr.io=https://ghcr.io",
-	},
+	cmd.Flags().StringSlice("mirror-registry", []string{},
 		"Configure mirror registries with format 'host=upstream' (e.g., docker.io=https://registry-1.docker.io)")
-	_ = cfgManager.Viper.BindPFlag("mirror-registry", cmd.Flags().Lookup("mirror-registry"))
+	// NOTE: mirror-registry is NOT bound to Viper to allow custom merge logic
+	// It's handled manually via getMirrorRegistriesWithDefaults() in setup/mirrorregistry
 
 	cmd.Flags().StringP("name", "n", "",
 		"Cluster name used for container names, registry names, and kubeconfig context")

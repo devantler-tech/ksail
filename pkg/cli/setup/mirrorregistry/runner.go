@@ -71,10 +71,9 @@ func RunStage(
 	role Role,
 	dockerInvoker DockerClientInvoker,
 ) error {
-	// Get mirror specs from --mirror-registry flag
-	flagSpecs := registry.ParseMirrorSpecs(
-		cfgManager.Viper.GetStringSlice("mirror-registry"),
-	)
+	// Get mirror specs with defaults applied
+	mirrors := getMirrorRegistriesWithDefaults(cmd, cfgManager)
+	flagSpecs := registry.ParseMirrorSpecs(mirrors)
 
 	// Try to read existing hosts.toml files from the configured mirrors directory.
 	// ReadExistingHostsToml returns (nil, nil) for missing directories, and an error for actual I/O issues.
@@ -283,4 +282,52 @@ func runStageWithParams(params StageParams, role Role) error {
 		role,
 		params.DockerInvoker,
 	)
+}
+
+// getMirrorRegistriesWithDefaults returns mirror registries with default values applied.
+// This function manually handles mirror-registry flag merging because it's not bound to Viper.
+// Behavior:
+// - If --mirror-registry flag is explicitly set:
+//   - With config values: EXTEND (append flag values to config values)
+//   - Without config values: REPLACE defaults with flag values
+// - If flag not set:
+//   - With config values: use config values
+//   - Without config values: use defaults (docker.io and ghcr.io)
+func getMirrorRegistriesWithDefaults(cmd *cobra.Command, cfgManager *ksailconfigmanager.ConfigManager) []string {
+	const mirrorRegistryFlag = "mirror-registry"
+	
+	defaultMirrors := []string{
+		"docker.io=https://registry-1.docker.io",
+		"ghcr.io=https://ghcr.io",
+	}
+	
+	// Check if the flag was explicitly set by the user
+	flagChanged := cmd.Flags().Changed(mirrorRegistryFlag)
+	
+	// Get config values (if any) - since we didn't bind the flag, Viper only has config values
+	configValues := cfgManager.Viper.GetStringSlice(mirrorRegistryFlag)
+	
+	if !flagChanged {
+		// Flag not set by user
+		if len(configValues) > 0 {
+			// Has value from config file
+			return configValues
+		}
+		// No config value: use defaults
+		return defaultMirrors
+	}
+	
+	// Flag was explicitly set: get flag values
+	flagValues, _ := cmd.Flags().GetStringSlice(mirrorRegistryFlag)
+	
+	if len(configValues) > 0 {
+		// Has config values: EXTEND by appending flag values to config values
+		result := make([]string, 0, len(configValues)+len(flagValues))
+		result = append(result, configValues...)
+		result = append(result, flagValues...)
+		return result
+	}
+	
+	// No config values: REPLACE defaults with flag values
+	return flagValues
 }
