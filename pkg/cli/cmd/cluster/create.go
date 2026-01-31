@@ -11,9 +11,11 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup/localregistry"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup/mirrorregistry"
+	"github.com/devantler-tech/ksail/v5/pkg/client/docker"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	configmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
+	imagesvc "github.com/devantler-tech/ksail/v5/pkg/svc/image"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
 	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
@@ -71,6 +73,10 @@ func NewCreateCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
 	cmd.Flags().StringP("name", "n", "",
 		"Cluster name used for container names, registry names, and kubeconfig context")
 	_ = cfgManager.Viper.BindPFlag("name", cmd.Flags().Lookup("name"))
+
+	cmd.Flags().String("import", "",
+		"Import container images from tar archive after cluster creation but before component installation")
+	_ = cfgManager.Viper.BindPFlag("import", cmd.Flags().Lookup("import"))
 
 	cmd.RunE = lifecycle.WrapHandler(runtimeContainer, cfgManager, handleCreateRunE)
 
@@ -185,6 +191,23 @@ func handleCreateRunE(
 	)
 	if err != nil {
 		return fmt.Errorf("failed to wait for local registry: %w", err)
+	}
+
+	// Import cached images if --import flag is provided
+	// This happens after cluster creation but before component installation
+	// to ensure images are available when CNI, CSI, etc. are installed
+	importPath := cfgManager.Viper.GetString("import")
+	if importPath != "" {
+		err = importCachedImages(cmd, ctx.ClusterCfg, importPath, deps.Timer)
+		if err != nil {
+			// Log warning but don't fail cluster creation
+			notify.WriteMessage(notify.Message{
+				Type:    notify.WarningType,
+				Content: "failed to import images from %s: %v",
+				Args:    []any{importPath, err},
+				Writer:  cmd.OutOrStderr(),
+			})
+		}
 	}
 
 	return handlePostCreationSetup(cmd, ctx.ClusterCfg, deps.Timer)
@@ -425,6 +448,59 @@ func applyClusterNameOverride(ctx *localregistry.Context, name string) error {
 		dist := ctx.ClusterCfg.Spec.Cluster.Distribution
 		ctx.ClusterCfg.Spec.Cluster.Connection.Context = dist.ContextName(name)
 	}
+
+	return nil
+}
+
+// importCachedImages imports container images from a tar archive to the cluster.
+// This is called after cluster creation but before component installation to ensure
+// CNI, CSI, metrics-server, and other components can use pre-loaded images.
+func importCachedImages(
+	cmd *cobra.Command,
+	clusterCfg *v1alpha1.Cluster,
+	importPath string,
+	tmr timer.Timer,
+) error {
+	outputTimer := helpers.MaybeTimer(cmd, tmr)
+
+	notify.WriteMessage(notify.Message{
+		Type:    notify.ActivityType,
+		Emoji:   "📥",
+		Content: "importing cached images from %s",
+		Args:    []any{importPath},
+		Timer:   outputTimer,
+		Writer:  cmd.OutOrStdout(),
+	})
+
+	// Use the existing image import functionality
+	dockerClient, err := docker.GetDockerClient()
+	if err != nil {
+		return fmt.Errorf("failed to create Docker client: %w", err)
+	}
+
+	defer func() { _ = dockerClient.Close() }()
+
+	importer := imagesvc.NewImporter(dockerClient)
+
+	err = importer.Import(
+		cmd.Context(),
+		clusterCfg.Metadata.Name,
+		clusterCfg.Spec.Cluster.Distribution,
+		clusterCfg.Spec.Cluster.Provider,
+		imagesvc.ImportOptions{
+			InputPath: importPath,
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("import images: %w", err)
+	}
+
+	notify.WriteMessage(notify.Message{
+		Type:    notify.SuccessType,
+		Content: "images imported successfully",
+		Timer:   outputTimer,
+		Writer:  cmd.OutOrStdout(),
+	})
 
 	return nil
 }

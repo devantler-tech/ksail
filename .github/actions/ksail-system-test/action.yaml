@@ -124,13 +124,13 @@ runs:
       run: |
         ksail cluster init --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS --force
 
-    - name: 📥 Preload cached cluster images into Docker daemon
-      id: preload-image-cache
+    - name: 📥 Restore cached cluster images
+      id: restore-image-cache
       if: inputs.enable-image-cache == 'true'
       uses: ./.github/actions/cache-cluster-images
       with:
         distribution: ${{ inputs.distribution }}
-        operation: preload
+        operation: restore
         cache-version: ${{ inputs.image-cache-version }}
 
     - name: 🧪 ksail cluster create
@@ -142,11 +142,19 @@ runs:
         PROVIDER: ${{ inputs.provider }}
         ARGS: ${{ steps.resolve-args.outputs.args }}
         HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
+        ENABLE_CACHE: ${{ inputs.enable-image-cache }}
+        CACHE_HIT: ${{ steps.restore-image-cache.outputs.cache-hit }}
       run: |
+        # Add --import flag if cache was restored successfully
+        IMPORT_FLAG=""
+        if [[ "$ENABLE_CACHE" == "true" ]] && [[ "$CACHE_HIT" == "true" ]]; then
+          IMPORT_FLAG="--import /tmp/ksail-image-cache/images.tar"
+        fi
+
         if [ "$INIT" = "true" ]; then
-          ksail cluster create
+          ksail cluster create $IMPORT_FLAG
         else
-          ksail cluster create --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS
+          ksail cluster create --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS $IMPORT_FLAG
         fi
 
     - name: 🧪 ksail cluster list
@@ -198,7 +206,7 @@ runs:
         ksail workload reconcile
 
     - name: 💾 Save cluster images to cache
-      if: inputs.enable-image-cache == 'true' && steps.preload-image-cache.outputs.cache-hit != 'true' && steps.preload-image-cache.outputs.skipped != 'true'
+      if: inputs.enable-image-cache == 'true' && steps.restore-image-cache.outputs.cache-hit != 'true' && steps.restore-image-cache.outputs.skipped != 'true'
       uses: ./.github/actions/cache-cluster-images
       with:
         distribution: ${{ inputs.distribution }}
