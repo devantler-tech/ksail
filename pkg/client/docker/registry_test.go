@@ -1128,112 +1128,112 @@ func TestErrConstants(t *testing.T) {
 	// which will call buildContainerConfig internally
 
 	mockRegistryNotExists(context.Background(), mockClient)
-mockImagePullSequence(context.Background(), mockClient)
-mockVolumeCreateSequence(context.Background(), mockClient, config.Name)
+	mockImagePullSequence(context.Background(), mockClient)
+	mockVolumeCreateSequence(context.Background(), mockClient, config.Name)
 
-// Mock container create with credentials check
-mockClient.EXPECT().
-ContainerCreate(
-context.Background(),
-mock.MatchedBy(func(cfg *container.Config) bool {
-if cfg == nil {
-return false
-}
+	// Mock container create with credentials check
+	mockClient.EXPECT().
+		ContainerCreate(
+			context.Background(),
+			mock.MatchedBy(func(cfg *container.Config) bool {
+				if cfg == nil {
+					return false
+				}
 
-// Check for expected environment variables
-hasRemoteURL := false
-hasUsername := false
-hasPassword := false
+				// Check for expected environment variables
+				hasRemoteURL := false
+				hasUsername := false
+				hasPassword := false
 
-for _, env := range cfg.Env {
-if env == "REGISTRY_PROXY_REMOTEURL=https://ghcr.io" {
-hasRemoteURL = true
-}
-if env == "REGISTRY_PROXY_USERNAME=testuser" {
-hasUsername = true
-}
-if env == "REGISTRY_PROXY_PASSWORD=ghp_test123" {
-hasPassword = true
-}
-}
+				for _, env := range cfg.Env {
+					if env == "REGISTRY_PROXY_REMOTEURL=https://ghcr.io" {
+						hasRemoteURL = true
+					}
+					if env == "REGISTRY_PROXY_USERNAME=testuser" {
+						hasUsername = true
+					}
+					if env == "REGISTRY_PROXY_PASSWORD=ghp_test123" {
+						hasPassword = true
+					}
+				}
 
-return hasRemoteURL && hasUsername && hasPassword
-}),
-mock.Anything,
-mock.Anything,
-mock.Anything,
-"ghcr.io",
-).
-Return(container.CreateResponse{ID: "test-id"}, nil).
-Once()
+				return hasRemoteURL && hasUsername && hasPassword
+			}),
+			mock.Anything,
+			mock.Anything,
+			mock.Anything,
+			"ghcr.io",
+		).
+		Return(container.CreateResponse{ID: "test-id"}, nil).
+		Once()
 
-mockClient.EXPECT().
-ContainerStart(context.Background(), "test-id", mock.Anything).
-Return(nil).
-Once()
+	mockClient.EXPECT().
+		ContainerStart(context.Background(), "test-id", mock.Anything).
+		Return(nil).
+		Once()
 
-err := manager.CreateRegistry(context.Background(), config)
+	err := manager.CreateRegistry(context.Background(), config)
 
-require.NoError(t, err)
+	require.NoError(t, err)
 }
 
 func TestBuildContainerConfig_WithoutCredentials(t *testing.T) {
-t.Parallel()
+	t.Parallel()
 
-mockClient, manager, ctx := setupTestRegistryManager(t)
+	mockClient, manager, ctx := setupTestRegistryManager(t)
 
-config := docker.RegistryConfig{
-Name:        "docker.io",
-Port:        5000,
-UpstreamURL: "https://registry-1.docker.io",
-}
+	config := docker.RegistryConfig{
+		Name:        "docker.io",
+		Port:        5000,
+		UpstreamURL: "https://registry-1.docker.io",
+	}
 
-mockRegistryNotExists(ctx, mockClient)
-mockImagePullSequence(ctx, mockClient)
-mockVolumeCreateSequence(ctx, mockClient, config.Name)
+	mockRegistryNotExists(ctx, mockClient)
+	mockImagePullSequence(ctx, mockClient)
+	mockVolumeCreateSequence(ctx, mockClient, config.Name)
 
-// Mock container create without credentials check
-mockClient.EXPECT().
-ContainerCreate(
-ctx,
-mock.MatchedBy(func(cfg *container.Config) bool {
-if cfg == nil {
-return false
-}
+	// Mock container create without credentials check
+	mockClient.EXPECT().
+		ContainerCreate(
+			ctx,
+			mock.MatchedBy(func(cfg *container.Config) bool {
+				if cfg == nil {
+					return false
+				}
 
-// Check that only REGISTRY_PROXY_REMOTEURL is set
-hasRemoteURL := false
-hasUsername := false
-hasPassword := false
+				// Check that only REGISTRY_PROXY_REMOTEURL is set
+				hasRemoteURL := false
+				hasUsername := false
+				hasPassword := false
 
-for _, env := range cfg.Env {
-if env == "REGISTRY_PROXY_REMOTEURL=https://registry-1.docker.io" {
-hasRemoteURL = true
-}
-if strings.HasPrefix(env, "REGISTRY_PROXY_USERNAME=") {
-hasUsername = true
-}
-if strings.HasPrefix(env, "REGISTRY_PROXY_PASSWORD=") {
-hasPassword = true
-}
-}
+				for _, env := range cfg.Env {
+					if env == "REGISTRY_PROXY_REMOTEURL=https://registry-1.docker.io" {
+						hasRemoteURL = true
+					}
+					if strings.HasPrefix(env, "REGISTRY_PROXY_USERNAME=") {
+						hasUsername = true
+					}
+					if strings.HasPrefix(env, "REGISTRY_PROXY_PASSWORD=") {
+						hasPassword = true
+					}
+				}
 
-return hasRemoteURL && !hasUsername && !hasPassword
-}),
-mock.Anything,
-mock.Anything,
-mock.Anything,
-"docker.io",
-).
-Return(container.CreateResponse{ID: "test-id"}, nil).
-Once()
+				return hasRemoteURL && !hasUsername && !hasPassword
+			}),
+			mock.Anything,
+			mock.Anything,
+			mock.Anything,
+			"docker.io",
+		).
+		Return(container.CreateResponse{ID: "test-id"}, nil).
+		Once()
 
-mockClient.EXPECT().
-ContainerStart(ctx, "test-id", mock.Anything).
-Return(nil).
-Once()
+	mockClient.EXPECT().
+		ContainerStart(ctx, "test-id", mock.Anything).
+		Return(nil).
+		Once()
 
-err := manager.CreateRegistry(ctx, config)
+	err := manager.CreateRegistry(ctx, config)
 
-require.NoError(t, err)
+	require.NoError(t, err)
 }
