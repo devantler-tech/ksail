@@ -26,28 +26,68 @@ KSail supports environment variable expansion in all string configuration values
 
 ### Syntax
 
-Use `${VARIABLE_NAME}` to reference environment variables. If a variable is not set, it expands to an empty string.
+**Basic syntax:** `${VARIABLE_NAME}` — Reference an environment variable. If not set, expands to an empty string and logs a warning.
+
+**Default value syntax:** `${VARIABLE_NAME:-default}` — Use a default value if the variable is not set. No warning is logged when using defaults.
 
 ```yaml
 spec:
-  editor: "${EDITOR}"
+  editor: "${EDITOR:-vim}" # Uses 'vim' if EDITOR is not set
   cluster:
     connection:
       kubeconfig: "${HOME}/.kube/config"
-      context: "${KUBE_CONTEXT}"
-    distributionConfig: "${CONFIG_DIR}/kind.yaml"
+      context: "${KUBE_CONTEXT:-kind-kind}"
+    distributionConfig: "${CONFIG_DIR:-configs}/kind.yaml"
     localRegistry:
-      registry: "${REGISTRY_USER}:${REGISTRY_PASS}@ghcr.io"
+      registry: "${REGISTRY:-localhost:5000}"
     vanilla:
-      mirrorsDir: "${MIRRORS_DIR}"
+      mirrorsDir: "${MIRRORS_DIR:-mirrors}"
     talos:
-      config: "${TALOS_CONFIG_PATH}"
+      config: "${TALOS_CONFIG_PATH:-~/.talos/config}"
     hetzner:
       sshKeyName: "${HCLOUD_SSH_KEY}"
   workload:
-    sourceDirectory: "${WORKLOAD_DIR}"
+    sourceDirectory: "${WORKLOAD_DIR:-k8s}"
   chat:
-    model: "${CHAT_MODEL}"
+    model: "${CHAT_MODEL:-gpt-4o}"
+```
+
+### Expansion Behavior
+
+| Syntax            | Variable Set | Variable Not Set          |
+| ----------------- | ------------ | ------------------------- |
+| `${VAR}`          | Uses value   | Empty string + warning    |
+| `${VAR:-default}` | Uses value   | Uses default (no warning) |
+| `${VAR:-}`        | Uses value   | Empty string (no warning) |
+
+### Scope
+
+Environment variables are expanded in:
+
+1. **ksail.yaml** — All supported string fields (see below)
+2. **Distribution configs** — `kind.yaml`, `k3d.yaml` file contents
+3. **Talos patches** — All YAML patch files in `talos/cluster/`, `talos/control-planes/`, `talos/workers/`
+
+This means you can use `${VAR}` syntax inside your Kind, K3d, or Talos configuration files too:
+
+```yaml
+# kind.yaml - Environment variables are expanded before parsing
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+containerdConfigPatches:
+  - |-
+    [plugins."io.containerd.grpc.v1.cri".registry.mirrors."${REGISTRY:-localhost:5000}"]
+      endpoint = ["http://${REGISTRY:-localhost:5000}"]
+```
+
+```yaml
+# talos/cluster/registry.yaml - Environment variables are expanded
+machine:
+  registries:
+    mirrors:
+      docker.io:
+        endpoints:
+          - http://${REGISTRY:-localhost:5000}
 ```
 
 ### Supported Fields
@@ -55,6 +95,7 @@ spec:
 Environment variable expansion works in these string fields:
 
 **General:**
+
 - `spec.editor` - Editor command
 - `spec.cluster.connection.kubeconfig` - Kubeconfig path
 - `spec.cluster.connection.context` - Kubernetes context name
@@ -64,10 +105,12 @@ Environment variable expansion works in these string fields:
 - `spec.chat.model` - Chat model name
 
 **Distribution-specific:**
+
 - `spec.cluster.vanilla.mirrorsDir` - Mirror configuration directory
 - `spec.cluster.talos.config` - Talos configuration path
 
 **Provider-specific:**
+
 - `spec.cluster.hetzner.sshKeyName` - SSH key name
 - `spec.cluster.hetzner.networkName` - Network name
 - `spec.cluster.hetzner.placementGroup` - Placement group name
@@ -79,12 +122,13 @@ spec:
   cluster:
     localRegistry:
       # Expand registry credentials from environment variables
-      registry: "${REGISTRY_USER}:${REGISTRY_PASS}@ghcr.io/myorg/myrepo"
+      registry: "${REGISTRY_USER}:${REGISTRY_PASS}@${REGISTRY_HOST:-ghcr.io}/myorg/myrepo"
 ```
 
 ```bash
 export REGISTRY_USER="github-user"
 export REGISTRY_PASS="ghp_secrettoken123"
+# REGISTRY_HOST not set, defaults to ghcr.io
 ksail cluster create
 ```
 
@@ -94,22 +138,49 @@ ksail cluster create
 spec:
   cluster:
     connection:
-      context: "${CLUSTER_NAME}"
-    distributionConfig: "${ENV}/kind.yaml"
+      context: "${CLUSTER_NAME:-kind-kind}"
+    distributionConfig: "${ENV:-dev}/kind.yaml"
   workload:
-    sourceDirectory: "${ENV}/k8s"
+    sourceDirectory: "${ENV:-dev}/k8s"
 ```
 
 ```bash
-# Development
-export ENV="dev"
-export CLUSTER_NAME="dev-cluster"
+# Development (using defaults)
 ksail cluster create
 
-# Production
+# Production (override with environment variables)
 export ENV="prod"
 export CLUSTER_NAME="prod-cluster"
 ksail cluster create
+```
+
+### Example: Distribution Config with Variables
+
+Environment variables also work inside distribution configuration files:
+
+```yaml
+# kind.yaml
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+  - role: control-plane
+    extraPortMappings:
+      - containerPort: ${INGRESS_PORT:-80}
+        hostPort: ${HOST_PORT:-8080}
+containerdConfigPatches:
+  - |-
+    [plugins."io.containerd.grpc.v1.cri".registry.mirrors."${MIRROR_REGISTRY:-docker.io}"]
+      endpoint = ["http://${REGISTRY:-localhost:5000}"]
+```
+
+```yaml
+# talos/cluster/registry.yaml
+machine:
+  registries:
+    mirrors:
+      docker.io:
+        endpoints:
+          - http://${REGISTRY:-localhost:5000}
 ```
 
 ## Minimal Example
@@ -164,7 +235,7 @@ spec:
 ### Top-Level Fields
 
 | Field        | Type   | Required | Description                                    |
-|--------------|--------|----------|------------------------------------------------|
+| ------------ | ------ | -------- | ---------------------------------------------- |
 | `apiVersion` | string | Yes      | Must be `ksail.io/v1alpha1`                    |
 | `kind`       | string | Yes      | Must be `Cluster`                              |
 | `spec`       | object | Yes      | Cluster and workload specification (see below) |
@@ -174,7 +245,7 @@ spec:
 The `spec` field is a `Spec` object that defines editor, cluster, and workload configuration.
 
 | Field      | Type         | Default | Description                                      |
-|------------|--------------|---------|--------------------------------------------------|
+| ---------- | ------------ | ------- | ------------------------------------------------ |
 | `editor`   | string       | –       | Editor command for interactive workflows         |
 | `cluster`  | ClusterSpec  | –       | Cluster configuration (distribution, components) |
 | `workload` | WorkloadSpec | –       | Workload manifest configuration                  |
@@ -190,7 +261,7 @@ If not specified, KSail falls back to standard editor environment variables (`SO
 ### spec.cluster (ClusterSpec)
 
 | Field                | Type          | Default     | Description                                  |
-|----------------------|---------------|-------------|----------------------------------------------|
+| -------------------- | ------------- | ----------- | -------------------------------------------- |
 | `distribution`       | enum          | `Vanilla`   | Kubernetes distribution to use               |
 | `provider`           | enum          | `Docker`    | Infrastructure provider (Docker, Hetzner)    |
 | `distributionConfig` | string        | (see below) | Path to distribution-specific configuration  |
@@ -251,7 +322,7 @@ See [Distribution Configuration](#distribution-configuration) below for details 
 #### connection (Connection)
 
 | Field        | Type     | Default          | Description                    |
-|--------------|----------|------------------|--------------------------------|
+| ------------ | -------- | ---------------- | ------------------------------ |
 | `kubeconfig` | string   | `~/.kube/config` | Path to kubeconfig file        |
 | `context`    | string   | (derived)        | Kubeconfig context name        |
 | `timeout`    | duration | –                | Timeout for cluster operations |
@@ -378,7 +449,7 @@ Advanced configuration options are direct fields under `spec.cluster`. See [Sche
 ### spec.workload (WorkloadSpec)
 
 | Field             | Type    | Default | Description                                   |
-|-------------------|---------|---------|-----------------------------------------------|
+| ----------------- | ------- | ------- | --------------------------------------------- |
 | `sourceDirectory` | string  | `k8s`   | Directory containing Kubernetes manifests     |
 | `validateOnPush`  | boolean | `false` | Validate manifests before pushing to registry |
 

@@ -14,8 +14,8 @@ func TestCluster_ExpandEnvVars_EmptyStrings(t *testing.T) {
 	cluster.ExpandEnvVars()
 
 	// Should not panic or error with empty strings
-	assert.Equal(t, "", cluster.Spec.Editor)
-	assert.Equal(t, "", cluster.Spec.Cluster.DistributionConfig)
+	assert.Empty(t, cluster.Spec.Editor)
+	assert.Empty(t, cluster.Spec.Cluster.DistributionConfig)
 }
 
 func TestCluster_ExpandEnvVars_NoPlaceholders(t *testing.T) {
@@ -78,11 +78,16 @@ func TestCluster_ExpandEnvVars_LocalRegistry(t *testing.T) {
 	t.Setenv("TEST_REGISTRY_HOST", "ghcr.io")
 
 	cluster := v1alpha1.NewCluster()
+	//nolint:lll // Test input intentionally long
 	cluster.Spec.Cluster.LocalRegistry.Registry = "${TEST_REGISTRY_USER}:${TEST_REGISTRY_PASS}@${TEST_REGISTRY_HOST}/myorg/myrepo"
 
 	cluster.ExpandEnvVars()
 
-	assert.Equal(t, "testuser:testpass@ghcr.io/myorg/myrepo", cluster.Spec.Cluster.LocalRegistry.Registry)
+	assert.Equal(
+		t,
+		"testuser:testpass@ghcr.io/myorg/myrepo",
+		cluster.Spec.Cluster.LocalRegistry.Registry,
+	)
 }
 
 func TestCluster_ExpandEnvVars_VanillaOptions(t *testing.T) {
@@ -139,7 +144,7 @@ func TestCluster_ExpandEnvVars_UndefinedVariables(t *testing.T) {
 	cluster.ExpandEnvVars()
 
 	// Undefined variables should expand to empty string
-	assert.Equal(t, "", cluster.Spec.Editor)
+	assert.Empty(t, cluster.Spec.Editor)
 	assert.Equal(t, "prefix--suffix", cluster.Spec.Cluster.Connection.Context)
 	assert.Equal(t, "/k8s", cluster.Spec.Workload.SourceDirectory)
 }
@@ -166,8 +171,16 @@ func TestCluster_ExpandEnvVars_PathWithMultipleVars(t *testing.T) {
 
 	cluster.ExpandEnvVars()
 
-	assert.Equal(t, "/home/user/.kube/dev-cluster/config", cluster.Spec.Cluster.Connection.Kubeconfig)
-	assert.Equal(t, "/home/user/clusters/dev-cluster/kind.yaml", cluster.Spec.Cluster.DistributionConfig)
+	assert.Equal(
+		t,
+		"/home/user/.kube/dev-cluster/config",
+		cluster.Spec.Cluster.Connection.Kubeconfig,
+	)
+	assert.Equal(
+		t,
+		"/home/user/clusters/dev-cluster/kind.yaml",
+		cluster.Spec.Cluster.DistributionConfig,
+	)
 }
 
 func TestCluster_ExpandEnvVars_ComplexRegistry(t *testing.T) {
@@ -177,6 +190,7 @@ func TestCluster_ExpandEnvVars_ComplexRegistry(t *testing.T) {
 	t.Setenv("REGISTRY_REPO", "my-repo")
 
 	cluster := v1alpha1.NewCluster()
+	//nolint:lll // Test input intentionally long
 	cluster.Spec.Cluster.LocalRegistry.Registry = "${REGISTRY_USER}:${REGISTRY_TOKEN}@ghcr.io:443/${REGISTRY_ORG}/${REGISTRY_REPO}"
 
 	cluster.ExpandEnvVars()
@@ -236,9 +250,9 @@ func TestCluster_ExpandEnvVars_InvalidSyntax(t *testing.T) {
 
 	cluster := v1alpha1.NewCluster()
 	// These should NOT be expanded (invalid syntax)
-	cluster.Spec.Editor = "$PLAIN_VAR"           // Missing braces
+	cluster.Spec.Editor = "$PLAIN_VAR"             // Missing braces
 	cluster.Spec.Cluster.Connection.Context = "${" // Incomplete
-	cluster.Spec.Workload.SourceDirectory = "${}" // Empty placeholder
+	cluster.Spec.Workload.SourceDirectory = "${}"  // Empty placeholder
 
 	cluster.ExpandEnvVars()
 
@@ -276,4 +290,44 @@ func TestCluster_ExpandEnvVars_PreservesStructure(t *testing.T) {
 	assert.Equal(t, int32(3), cluster.Spec.Cluster.Talos.ControlPlanes)
 	assert.Equal(t, int32(5), cluster.Spec.Cluster.Talos.Workers)
 	assert.True(t, cluster.Spec.Workload.ValidateOnPush)
+}
+
+func TestCluster_ExpandEnvVars_DefaultValueSyntax(t *testing.T) {
+	// Note: Cannot use t.Parallel() when using t.Setenv()
+
+	// Only set TEST_DEFINED, leave TEST_UNDEFINED unset
+	t.Setenv("TEST_DEFINED", "actual-value")
+
+	cluster := v1alpha1.NewCluster()
+	// Use default value syntax for both defined and undefined vars
+	cluster.Spec.Editor = "${TEST_DEFINED:-default-editor}"                      // Should use actual value
+	cluster.Spec.Cluster.DistributionConfig = "${TEST_UNDEFINED:-kind.yaml}"     // Should use default
+	cluster.Spec.Cluster.Connection.Kubeconfig = "${KUBECONFIG:-~/.kube/config}" // Should use default
+	cluster.Spec.Cluster.LocalRegistry.Registry = "${REGISTRY:-localhost:5000}"  // Default with port
+	cluster.Spec.Chat.Model = "${AI_MODEL:-gpt-4o}"                              // Default AI model
+
+	cluster.ExpandEnvVars()
+
+	// Defined variable should use actual value, ignoring default
+	assert.Equal(t, "actual-value", cluster.Spec.Editor)
+
+	// Undefined variables should use default values
+	assert.Equal(t, "kind.yaml", cluster.Spec.Cluster.DistributionConfig)
+	assert.Equal(t, "~/.kube/config", cluster.Spec.Cluster.Connection.Kubeconfig)
+	assert.Equal(t, "localhost:5000", cluster.Spec.Cluster.LocalRegistry.Registry)
+	assert.Equal(t, "gpt-4o", cluster.Spec.Chat.Model)
+}
+
+func TestCluster_ExpandEnvVars_MixedDefaultAndNoDefault(t *testing.T) {
+	// Note: Cannot use t.Parallel() when using t.Setenv()
+	t.Setenv("TEST_HOST", "custom.example.com")
+
+	cluster := v1alpha1.NewCluster()
+	// Mix of vars with and without defaults
+	cluster.Spec.Cluster.LocalRegistry.Registry = "${TEST_HOST}:${PORT:-5000}"
+
+	cluster.ExpandEnvVars()
+
+	// TEST_HOST is defined, PORT uses default
+	assert.Equal(t, "custom.example.com:5000", cluster.Spec.Cluster.LocalRegistry.Registry)
 }

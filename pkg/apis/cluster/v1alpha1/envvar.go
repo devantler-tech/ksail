@@ -18,36 +18,36 @@ func (c *Cluster) ExpandEnvVars() {
 func (c *Cluster) expandSpec() {
 	// Expand top-level Spec fields
 	c.Spec.Editor = envvar.Expand(c.Spec.Editor)
-	
+
 	// Expand ClusterSpec fields
 	c.expandClusterSpec()
-	
+
 	// Expand WorkloadSpec fields
 	c.expandWorkloadSpec()
-	
+
 	// Expand ChatSpec fields
 	c.expandChatSpec()
 }
 
 func (c *Cluster) expandClusterSpec() {
 	cluster := &c.Spec.Cluster
-	
+
 	// Expand cluster-level fields
 	cluster.DistributionConfig = envvar.Expand(cluster.DistributionConfig)
-	
+
 	// Expand Connection fields
 	cluster.Connection.Kubeconfig = envvar.Expand(cluster.Connection.Kubeconfig)
 	cluster.Connection.Context = envvar.Expand(cluster.Connection.Context)
-	
+
 	// Expand entire registry string including credentials and host. When
 	// ResolveCredentials() is called later, the envvar.Expand() calls within it
 	// become no-ops since expansion has already occurred.
 	cluster.LocalRegistry.Registry = envvar.Expand(cluster.LocalRegistry.Registry)
-	
+
 	// Expand distribution-specific options
 	c.expandVanillaOptions()
 	c.expandTalosOptions()
-	
+
 	// Expand provider-specific options
 	c.expandHetznerOptions()
 }
