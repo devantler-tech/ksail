@@ -93,6 +93,28 @@ runs:
         echo "tag=$TAG" >> "$GITHUB_OUTPUT"
         echo "Generated unique artifact tag: $TAG"
 
+    - name: 🔧 Compute dependency hash for cache key
+      id: compute-dep-hash
+      shell: bash
+      run: |
+        # Compute hash of go.mod to track dependency versions
+        # This ensures cache is invalidated when component versions change
+        if [[ -f "go.mod" ]]; then
+          if command -v sha256sum &> /dev/null; then
+            GO_MOD_HASH=$(sha256sum go.mod | cut -d' ' -f1)
+          elif command -v shasum &> /dev/null; then
+            GO_MOD_HASH=$(shasum -a 256 go.mod | cut -d' ' -f1)
+          else
+            echo "⚠️ No SHA tool available, cache won't track dependency drift"
+            GO_MOD_HASH=""
+          fi
+          echo "go-mod-hash=$GO_MOD_HASH" >> "$GITHUB_OUTPUT"
+          echo "📦 Dependency hash: ${GO_MOD_HASH:0:12}..."
+        else
+          echo "⚠️ go.mod not found"
+          echo "go-mod-hash=" >> "$GITHUB_OUTPUT"
+        fi
+
     - name: 🔧 Resolve GHCR credentials in args
       id: resolve-args
       shell: bash
@@ -132,6 +154,7 @@ runs:
         distribution: ${{ inputs.distribution }}
         operation: restore
         cache-version: ${{ inputs.image-cache-version }}
+        go-mod-hash: ${{ steps.compute-dep-hash.outputs.go-mod-hash }}
 
     - name: 🧪 ksail cluster create
       id: cluster-create
@@ -212,6 +235,7 @@ runs:
         distribution: ${{ inputs.distribution }}
         operation: save
         cache-version: ${{ inputs.image-cache-version }}
+        go-mod-hash: ${{ steps.compute-dep-hash.outputs.go-mod-hash }}
 
     - name: 🐞 Debug Kubernetes failure
       if: failure() && (steps.cluster-create.outcome == 'failure' || steps.workload-create.outcome == 'failure' || steps.workload-apply.outcome == 'failure' || steps.workload-push-reconcile.outcome == 'failure')

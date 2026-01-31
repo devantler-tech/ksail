@@ -4,6 +4,10 @@ description: |
   ksail workload export/import commands. This reduces image pull times
   and avoids flaky pulls in CI.
 
+  The cache key includes a hash of go.mod to automatically invalidate when
+  dependency versions change, ensuring cached images stay in sync with the
+  codebase.
+
   Note: This action only supports Vanilla (Kind) and K3s (K3d) distributions.
   Talos clusters are not supported because the Talos Machine API does not
   expose image export functionality.
@@ -25,6 +29,13 @@ inputs:
       Version salt for cache key. Bump this to invalidate all caches.
     required: false
     default: "v1"
+  go-mod-hash:
+    description: |
+      Hash of go.mod file to include in cache key for automatic invalidation
+      when dependency versions change. If not provided, cache won't track
+      dependency drift.
+    required: false
+    default: ""
 
 outputs:
   cache-hit:
@@ -33,6 +44,9 @@ outputs:
   skipped:
     description: Whether the operation was skipped (e.g., Talos distribution)
     value: ${{ steps.check-support.outputs.skipped || 'false' }}
+  cache-key:
+    description: The cache key used for this operation
+    value: ${{ steps.check-support.outputs.cache-key || '' }}
 
 runs:
   using: composite
@@ -43,6 +57,7 @@ runs:
       env:
         DISTRIBUTION: ${{ inputs.distribution }}
         CACHE_VERSION: ${{ inputs.cache-version }}
+        GO_MOD_HASH: ${{ inputs.go-mod-hash }}
         RUNNER_OS: ${{ runner.os }}
         RUNNER_ARCH: ${{ runner.arch }}
       run: |
@@ -57,9 +72,17 @@ runs:
 
         echo "skipped=false" >> "$GITHUB_OUTPUT"
 
-        # Generate cache key based on distribution
-        # Using distribution-only key allows sharing across providers
-        CACHE_KEY="cluster-images-${CACHE_VERSION}-${DIST_LOWER}-${RUNNER_OS}-${RUNNER_ARCH}"
+        # Generate cache key based on distribution and dependency versions
+        # Include go.mod hash to automatically invalidate when dependencies change
+        if [[ -n "$GO_MOD_HASH" ]]; then
+          # Truncate hash to first 12 characters for readability
+          HASH_SHORT="${GO_MOD_HASH:0:12}"
+          CACHE_KEY="cluster-images-${CACHE_VERSION}-${DIST_LOWER}-deps-${HASH_SHORT}-${RUNNER_OS}-${RUNNER_ARCH}"
+        else
+          # Fallback to distribution-only key (less precise, more sharing)
+          CACHE_KEY="cluster-images-${CACHE_VERSION}-${DIST_LOWER}-${RUNNER_OS}-${RUNNER_ARCH}"
+        fi
+        
         echo "cache-key=$CACHE_KEY" >> "$GITHUB_OUTPUT"
         echo "📦 Cache key: $CACHE_KEY"
 
@@ -75,21 +98,61 @@ runs:
         path: /tmp/ksail-image-cache
         key: ${{ steps.check-support.outputs.cache-key }}
         restore-keys: |
+          cluster-images-${{ inputs.cache-version }}-${{ inputs.distribution }}-deps-
           cluster-images-${{ inputs.cache-version }}-${{ inputs.distribution }}-${{ runner.os }}-
 
-    - name: 📥 Import cached images to cluster
+    - name: 🔍 Validate cache metadata
       if: inputs.operation == 'restore' && steps.check-support.outputs.skipped != 'true' && steps.restore-cache.outputs.cache-hit == 'true'
+      id: validate-cache
+      shell: bash
+      env:
+        GO_MOD_HASH: ${{ inputs.go-mod-hash }}
+      run: |
+        METADATA="/tmp/ksail-image-cache/metadata.json"
+        ARCHIVE="/tmp/ksail-image-cache/images.tar"
+        
+        # Check if archive exists
+        if [[ ! -f "$ARCHIVE" ]]; then
+          echo "⚠️ Cache archive not found at $ARCHIVE"
+          echo "valid=false" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+        
+        # Check if metadata exists (older caches might not have it)
+        if [[ ! -f "$METADATA" ]]; then
+          echo "⚠️ Cache metadata not found (older cache format)"
+          echo "valid=true" >> "$GITHUB_OUTPUT"  # Still use it, but it's less precise
+          exit 0
+        fi
+        
+        # Validate metadata if go.mod hash is provided
+        if [[ -n "$GO_MOD_HASH" ]]; then
+          CACHED_HASH=$(jq -r '.go_mod_hash // ""' "$METADATA")
+          if [[ "$CACHED_HASH" != "$GO_MOD_HASH" ]]; then
+            echo "⚠️ Cache dependency mismatch (cached: ${CACHED_HASH:0:12}, current: ${GO_MOD_HASH:0:12})"
+            echo "ℹ️  Cache may contain outdated component versions"
+            # Still valid, but user is warned
+          fi
+        fi
+        
+        # Display cache metadata
+        if command -v jq &> /dev/null; then
+          echo "📋 Cache metadata:"
+          jq -r '.created_at // "unknown", .image_count // "unknown", .total_size // "unknown"' "$METADATA" | \
+            awk 'BEGIN{print "   Created: " } NR==1{print "   Images: " $0} NR==2{print "   Size: " $0}'
+        fi
+        
+        echo "valid=true" >> "$GITHUB_OUTPUT"
+
+    - name: 📥 Import cached images to cluster
+      if: inputs.operation == 'restore' && steps.check-support.outputs.skipped != 'true' && steps.validate-cache.outputs.valid == 'true'
       shell: bash
       run: |
         ARCHIVE="/tmp/ksail-image-cache/images.tar"
-        if [[ -f "$ARCHIVE" ]]; then
-          echo "📦 Importing cached images from $ARCHIVE"
-          ksail workload import "$ARCHIVE" || {
-            echo "⚠️ Image import failed (non-fatal), cluster will pull images normally"
-          }
-        else
-          echo "⚠️ Cache archive not found at $ARCHIVE"
-        fi
+        echo "📦 Importing cached images from $ARCHIVE"
+        ksail workload import "$ARCHIVE" || {
+          echo "⚠️ Image import failed (non-fatal), cluster will pull images normally"
+        }
 
     # ─────────────────────────────────────────────────────────────────────────
     # SAVE operation: Export images from cluster and save to cache
@@ -99,9 +162,13 @@ runs:
       if: inputs.operation == 'save' && steps.check-support.outputs.skipped != 'true'
       id: export-images
       shell: bash
+      env:
+        GO_MOD_HASH: ${{ inputs.go-mod-hash }}
+        DISTRIBUTION: ${{ inputs.distribution }}
       run: |
         mkdir -p /tmp/ksail-image-cache
         ARCHIVE="/tmp/ksail-image-cache/images.tar"
+        METADATA="/tmp/ksail-image-cache/metadata.json"
 
         echo "📦 Exporting cluster images to $ARCHIVE"
         ksail workload export "$ARCHIVE" || {
@@ -110,14 +177,44 @@ runs:
           exit 0
         }
 
-        if [[ -f "$ARCHIVE" ]]; then
-          SIZE=$(du -h "$ARCHIVE" | cut -f1)
-          echo "✅ Exported images archive: $SIZE"
-          echo "export-failed=false" >> "$GITHUB_OUTPUT"
-        else
+        if [[ ! -f "$ARCHIVE" ]]; then
           echo "⚠️ Export completed but archive not found"
           echo "export-failed=true" >> "$GITHUB_OUTPUT"
+          exit 0
         fi
+
+        SIZE=$(du -h "$ARCHIVE" | cut -f1)
+        SIZE_BYTES=$(stat -c%s "$ARCHIVE" 2>/dev/null || stat -f%z "$ARCHIVE" 2>/dev/null || echo "0")
+        
+        echo "✅ Exported images archive: $SIZE"
+        
+        # Generate metadata file to track cache contents and versions
+        # This helps validate cache freshness and debug cache issues
+        IMAGE_COUNT=$(tar -tf "$ARCHIVE" 2>/dev/null | wc -l || echo 0)
+        CREATED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+        
+        printf '%s\n' \
+          '{' \
+          '  "distribution": "'"$DISTRIBUTION"'",' \
+          '  "go_mod_hash": "'"${GO_MOD_HASH:-unknown}"'",' \
+          '  "created_at": "'"$CREATED_AT"'",' \
+          '  "runner_os": "'"$RUNNER_OS"'",' \
+          '  "runner_arch": "'"$RUNNER_ARCH"'",' \
+          '  "total_size": "'"$SIZE"'",' \
+          '  "total_size_bytes": '"$SIZE_BYTES"',' \
+          '  "image_count": "'"$IMAGE_COUNT"'",' \
+          '  "cache_version": "'"${{ inputs.cache-version }}"'"' \
+          '}' \
+          > "$METADATA"
+        
+        echo "📋 Generated cache metadata"
+        if command -v jq &> /dev/null; then
+          jq '.' "$METADATA"
+        else
+          cat "$METADATA"
+        fi
+        
+        echo "export-failed=false" >> "$GITHUB_OUTPUT"
 
     - name: 💾 Save image cache
       if: inputs.operation == 'save' && steps.check-support.outputs.skipped != 'true' && steps.export-images.outputs.export-failed != 'true'
