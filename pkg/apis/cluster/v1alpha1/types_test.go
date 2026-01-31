@@ -3,10 +3,9 @@ package v1alpha1_test
 import (
 	"testing"
 
+	v1alpha1 "github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	v1alpha1 "github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 )
 
 func TestPolicyEngineSet(t *testing.T) {
