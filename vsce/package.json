@@ -9,7 +9,7 @@
     "type": "git",
     "url": "https://github.com/devantler-tech/ksail"
   },
-  "homepage": "https://github.com/devantler-tech/ksail",
+  "homepage": "https://ksail.devantler.tech/",
   "bugs": {
     "url": "https://github.com/devantler-tech/ksail/issues"
   },
@@ -57,12 +57,6 @@
         "title": "Init Cluster",
         "category": "KSail",
         "icon": "$(add)"
-      },
-      {
-        "command": "ksail.cluster.list",
-        "title": "List Clusters",
-        "category": "KSail",
-        "icon": "$(list-unordered)"
       },
       {
         "command": "ksail.cluster.create",
@@ -116,11 +110,6 @@
         "command": "ksail.cluster.delete",
         "key": "ctrl+shift+k d",
         "mac": "cmd+shift+k d"
-      },
-      {
-        "command": "ksail.cluster.list",
-        "key": "ctrl+shift+k l",
-        "mac": "cmd+shift+k l"
       }
     ],
     "configuration": {
@@ -145,12 +134,12 @@
     "viewsWelcome": [
       {
         "view": "ksailClusters",
-        "contents": "No clusters found.\n[Initialize Cluster](command:ksail.cluster.init)\n[Create Cluster](command:ksail.cluster.create)\nTo get started, initialize a new cluster configuration or create one from an existing ksail.yaml.\n[Learn more](https://github.com/devantler-tech/ksail)",
+        "contents": "No clusters found.\n[Initialize Cluster](command:ksail.cluster.init)\n[Create Cluster](command:ksail.cluster.create)\nTo get started, initialize a new cluster configuration or create one from an existing ksail.yaml.\n[Learn more](https://ksail.devantler.tech/)",
         "when": "ksail.hasConfig"
       },
       {
         "view": "ksailClusters",
-        "contents": "No ksail.yaml found in this workspace.\n[Initialize Cluster](command:ksail.cluster.init)\nCreate a ksail.yaml configuration to get started with KSail.\n[Learn more](https://github.com/devantler-tech/ksail)",
+        "contents": "No ksail.yaml found in this workspace.\n[Initialize Cluster](command:ksail.cluster.init)\nCreate a ksail.yaml configuration to get started with KSail.\n[Learn more](https://ksail.devantler.tech/)",
         "when": "!ksail.hasConfig"
       }
     ],
@@ -225,7 +214,7 @@
     "clean": "rm -rf dist out"
   },
   "devDependencies": {
-    "@types/node": "^25.0.9",
+    "@types/node": "^25.0.10",
     "@types/vscode": "^1.96.0",
     "@typescript-eslint/eslint-plugin": "^8.0.0",
     "@typescript-eslint/parser": "^8.0.0",
