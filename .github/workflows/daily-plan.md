@@ -16,14 +16,23 @@ permissions: read-all
 network: defaults
 
 safe-outputs:
+  app:
+    app-id: ${{ vars.APP_ID }}
+    private-key: ${{ secrets.APP_PRIVATE_KEY }}
   create-discussion: # needed to create the project plan discussion
     title-prefix: "${{ github.workflow }}"
-    category: "announcements"
+    category: "agentic-workflows"
+    close-older-discussions: true
+    max: 3
+  add-comment:
+    target: "*" # can add a comment to any issue or PR
+    max: 3
 
 tools:
   github:
     toolsets: [all]
   web-fetch:
+  bash:
 
 timeout-minutes: 15
 source: githubnext/agentics/workflows/daily-plan.md@212e871f0e4527153d3643a8216dc64043eb89dd
