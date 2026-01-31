@@ -230,9 +230,8 @@ jobs:
           - "--gitops-engine Flux --local-registry ghcr.io/devantler-tech/ksail/system-test-manifests"
           - "--gitops-engine ArgoCD --local-registry ghcr.io/devantler-tech/ksail/system-test-manifests"
           - "--cert-manager Enabled --policy-engine Kyverno"
-          - "--policy-engine Gatekeeper"
+          - "--metrics-server Enabled --policy-engine Gatekeeper"
           - "--mirror-registry ghcr.io=https://ghcr.io --mirror-registry docker.io=https://registry-1.docker.io"
-          - "--metrics-server Enabled"
           - "--metrics-server Disabled"
         exclude:
           # === CSI no-op exclusions ===
@@ -255,7 +254,7 @@ jobs:
 
           # K3s has default metrics-server, so --metrics-server Enabled is a no-op
           - distribution: K3s
-            args: "--metrics-server Enabled"
+            args: "--metrics-server Enabled --policy-engine Gatekeeper"
           # Vanilla has no default metrics-server, so --metrics-server Disabled is a no-op
           - distribution: Vanilla
             args: "--metrics-server Disabled"
@@ -285,11 +284,9 @@ jobs:
           - init: false
             args: "--cert-manager Enabled --policy-engine Kyverno"
           - init: false
-            args: "--policy-engine Gatekeeper"
+            args: "--metrics-server Enabled --policy-engine Gatekeeper"
           - init: false
             args: "--mirror-registry ghcr.io=https://ghcr.io --mirror-registry docker.io=https://registry-1.docker.io"
-          - init: false
-            args: "--metrics-server Enabled"
           - init: false
             args: "--metrics-server Disabled"
 
