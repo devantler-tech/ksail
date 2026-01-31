@@ -155,6 +155,7 @@ runs:
       env:
         GO_MOD_HASH: ${{ inputs.go-mod-hash }}
         DISTRIBUTION: ${{ inputs.distribution }}
+        CACHE_VERSION: ${{ inputs.cache-version }}
       run: |
         mkdir -p /tmp/ksail-image-cache
         ARCHIVE="/tmp/ksail-image-cache/images.tar"
@@ -194,7 +195,7 @@ runs:
           '  "total_size": "'"$SIZE"'",' \
           '  "total_size_bytes": '"$SIZE_BYTES"',' \
           '  "tar_entry_count": "'"$TAR_ENTRY_COUNT"'",' \
-          '  "cache_version": "'"${{ inputs.cache-version }}"'"' \
+          '  "cache_version": "'"$CACHE_VERSION"'"' \
           '}' \
           > "$METADATA"
 
