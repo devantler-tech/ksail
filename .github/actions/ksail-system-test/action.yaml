@@ -176,10 +176,11 @@ runs:
         fi
 
         if [ "$INIT" = "true" ]; then
-          ksail cluster create ${IMPORT_FLAG:+"$IMPORT_FLAG"}
+          # shellcheck disable=SC2086
+          ksail cluster create $IMPORT_FLAG
         else
           # shellcheck disable=SC2086
-          ksail cluster create --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS ${IMPORT_FLAG:+"$IMPORT_FLAG"}
+          ksail cluster create --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS $IMPORT_FLAG
         fi
 
     - name: 🧪 ksail cluster list
