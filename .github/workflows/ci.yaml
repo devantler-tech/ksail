@@ -351,16 +351,16 @@ jobs:
         run: npm audit --audit-level=moderate
         continue-on-error: true
 
-      - name: 🔧 Attempt automatic fix
+      - name: 🔧 Attempt automatic fix (non-breaking)
         id: fix
         if: steps.audit.outcome == 'failure' && (github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main'))
         run: |
           # Only apply non-breaking fixes automatically
-          npm audit fix --force
+          npm audit fix --no-force
           if [ -n "$(git status --porcelain)" ]; then
-            echo "changes_made=true" >> $GITHUB_OUTPUT
+            echo "changes_made=true" >> "$GITHUB_OUTPUT"
           else
-            echo "changes_made=false" >> $GITHUB_OUTPUT
+            echo "changes_made=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: 📤 Commit and push fixes
@@ -424,16 +424,16 @@ jobs:
         run: npm audit --audit-level=moderate
         continue-on-error: true
 
-      - name: 🔧 Attempt automatic fix
+      - name: 🔧 Attempt automatic fix (non-breaking)
         id: fix
         if: steps.audit.outcome == 'failure' && (github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main'))
         run: |
           # Only apply non-breaking fixes automatically
-          npm audit fix --force
+          npm audit fix --no-force
           if [ -n "$(git status --porcelain)" ]; then
-            echo "changes_made=true" >> $GITHUB_OUTPUT
+            echo "changes_made=true" >> "$GITHUB_OUTPUT"
           else
-            echo "changes_made=false" >> $GITHUB_OUTPUT
+            echo "changes_made=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: 📤 Commit and push fixes
