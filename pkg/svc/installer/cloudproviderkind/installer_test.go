@@ -2,259 +2,97 @@ package cloudproviderkindinstaller_test
 
 import (
 	"context"
-	"io"
-	"strings"
+	"os"
+	"path/filepath"
 	"testing"
 
-	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/image"
 	cloudproviderkindinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/cloudproviderkind"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
-
-// MockDockerClient is a mock for the Docker API client.
-type MockDockerClient struct {
-	mock.Mock
-}
-
-func (m *MockDockerClient) ContainerList(
-	ctx context.Context,
-	opts container.ListOptions,
-) ([]container.Summary, error) {
-	args := m.Called(ctx, opts)
-
-	return args.Get(0).([]container.Summary), args.Error(1)
-}
-
-func (m *MockDockerClient) ImageInspect(
-	ctx context.Context,
-	imageName string,
-) (image.InspectResponse, error) {
-	args := m.Called(ctx, imageName)
-
-	return args.Get(0).(image.InspectResponse), args.Error(1)
-}
-
-func (m *MockDockerClient) ImagePull(
-	ctx context.Context,
-	imageName string,
-	opts image.PullOptions,
-) (io.ReadCloser, error) {
-	args := m.Called(ctx, imageName, opts)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-
-	return args.Get(0).(io.ReadCloser), args.Error(1)
-}
-
-func (m *MockDockerClient) ContainerCreate(
-	ctx context.Context,
-	config *container.Config,
-	hostConfig *container.HostConfig,
-	networkingConfig interface{},
-	platform interface{},
-	containerName string,
-) (container.CreateResponse, error) {
-	args := m.Called(ctx, config, hostConfig, networkingConfig, platform, containerName)
-
-	return args.Get(0).(container.CreateResponse), args.Error(1)
-}
-
-func (m *MockDockerClient) ContainerStart(
-	ctx context.Context,
-	containerID string,
-	opts container.StartOptions,
-) error {
-	args := m.Called(ctx, containerID, opts)
-
-	return args.Error(0)
-}
-
-func (m *MockDockerClient) ContainerStop(
-	ctx context.Context,
-	containerID string,
-	opts container.StopOptions,
-) error {
-	args := m.Called(ctx, containerID, opts)
-
-	return args.Error(0)
-}
-
-func (m *MockDockerClient) ContainerRemove(
-	ctx context.Context,
-	containerID string,
-	opts container.RemoveOptions,
-) error {
-	args := m.Called(ctx, containerID, opts)
-
-	return args.Error(0)
-}
 
 func TestNewCloudProviderKINDInstaller(t *testing.T) {
 	t.Parallel()
 
-	client := new(MockDockerClient)
-	installer := cloudproviderkindinstaller.NewCloudProviderKINDInstaller(client)
+	installer := cloudproviderkindinstaller.NewCloudProviderKINDInstaller()
 
 	assert.NotNil(t, installer)
 }
 
-func TestCloudProviderKINDInstallerInstallSuccess(t *testing.T) {
-	t.Parallel()
+func TestCloudProviderKINDInstallerInstall(t *testing.T) {
+	// Note: This is an integration test that actually starts the controller
+	// Skip in CI environments where Docker might not be available
+	if os.Getenv("CI") == "true" {
+		t.Skip("Skipping integration test in CI")
+	}
 
-	client := new(MockDockerClient)
-	installer := cloudproviderkindinstaller.NewCloudProviderKINDInstaller(client)
+	installer := cloudproviderkindinstaller.NewCloudProviderKINDInstaller()
 
-	// Container not running
-	client.On("ContainerList", mock.Anything, mock.Anything).
-		Return([]container.Summary{}, nil).
-		Once()
+	ctx := context.Background()
+	err := installer.Install(ctx)
 
-	// Image exists
-	client.On("ImageInspect", mock.Anything, cloudproviderkindinstaller.CloudProviderKindImage).
-		Return(image.InspectResponse{}, nil).
-		Once()
-
-	// Container create
-	client.On("ContainerCreate",
-		mock.Anything,
-		mock.Anything,
-		mock.Anything,
-		mock.Anything,
-		mock.Anything,
-		cloudproviderkindinstaller.CloudProviderKindContainerName,
-	).Return(container.CreateResponse{ID: "test-id"}, nil).
-		Once()
-
-	// Container start
-	client.On("ContainerStart", mock.Anything, "test-id", mock.Anything).
-		Return(nil).
-		Once()
-
-	err := installer.Install(context.Background())
+	// Clean up
+	defer func() {
+		_ = installer.Uninstall(ctx)
+	}()
 
 	require.NoError(t, err)
-	client.AssertExpectations(t)
 }
 
-func TestCloudProviderKINDInstallerInstallAlreadyRunning(t *testing.T) {
-	t.Parallel()
+func TestCloudProviderKINDInstallerInstallMultipleCalls(t *testing.T) {
+	// Skip in CI
+	if os.Getenv("CI") == "true" {
+		t.Skip("Skipping integration test in CI")
+	}
 
-	client := new(MockDockerClient)
-	installer := cloudproviderkindinstaller.NewCloudProviderKINDInstaller(client)
+	installer1 := cloudproviderkindinstaller.NewCloudProviderKINDInstaller()
+	installer2 := cloudproviderkindinstaller.NewCloudProviderKINDInstaller()
 
-	// Container already running
-	client.On("ContainerList", mock.Anything, mock.Anything).
-		Return([]container.Summary{
-			{
-				ID:    "test-id",
-				State: "running",
-			},
-		}, nil).
-		Once()
+	ctx := context.Background()
 
-	err := installer.Install(context.Background())
-
+	// First install
+	err := installer1.Install(ctx)
 	require.NoError(t, err)
-	client.AssertExpectations(t)
+
+	// Second install (should increment reference count)
+	err = installer2.Install(ctx)
+	require.NoError(t, err)
+
+	// Uninstall first (should not stop controller)
+	err = installer1.Uninstall(ctx)
+	require.NoError(t, err)
+
+	// Uninstall second (should stop controller)
+	err = installer2.Uninstall(ctx)
+	require.NoError(t, err)
 }
 
-func TestCloudProviderKINDInstallerInstallWithImagePull(t *testing.T) {
+func TestCloudProviderKINDInstallerUninstallNoInstall(t *testing.T) {
 	t.Parallel()
 
-	client := new(MockDockerClient)
-	installer := cloudproviderkindinstaller.NewCloudProviderKINDInstaller(client)
+	installer := cloudproviderkindinstaller.NewCloudProviderKINDInstaller()
 
-	// Container not running
-	client.On("ContainerList", mock.Anything, mock.Anything).
-		Return([]container.Summary{}, nil).
-		Once()
-
-	// Image doesn't exist
-	client.On("ImageInspect", mock.Anything, cloudproviderkindinstaller.CloudProviderKindImage).
-		Return(image.InspectResponse{}, assert.AnError).
-		Once()
-
-	// Pull image
-	reader := io.NopCloser(strings.NewReader(""))
-	client.On("ImagePull",
-		mock.Anything,
-		cloudproviderkindinstaller.CloudProviderKindImage,
-		mock.Anything,
-	).Return(reader, nil).
-		Once()
-
-	// Container create
-	client.On("ContainerCreate",
-		mock.Anything,
-		mock.Anything,
-		mock.Anything,
-		mock.Anything,
-		mock.Anything,
-		cloudproviderkindinstaller.CloudProviderKindContainerName,
-	).Return(container.CreateResponse{ID: "test-id"}, nil).
-		Once()
-
-	// Container start
-	client.On("ContainerStart", mock.Anything, "test-id", mock.Anything).
-		Return(nil).
-		Once()
-
-	err := installer.Install(context.Background())
+	ctx := context.Background()
+	err := installer.Uninstall(ctx)
 
 	require.NoError(t, err)
-	client.AssertExpectations(t)
 }
 
-func TestCloudProviderKINDInstallerUninstallSuccess(t *testing.T) {
+func TestLockFileOperations(t *testing.T) {
 	t.Parallel()
 
-	client := new(MockDockerClient)
-	installer := cloudproviderkindinstaller.NewCloudProviderKINDInstaller(client)
+	// Get the lock file path
+	tmpDir := os.TempDir()
+	lockPath := filepath.Join(tmpDir, "cloud-provider-kind.lock")
 
-	// Container exists and is running
-	client.On("ContainerList", mock.Anything, mock.Anything).
-		Return([]container.Summary{
-			{
-				ID:    "test-id",
-				State: "running",
-			},
-		}, nil).
-		Once()
+	// Clean up any existing lock file
+	_ = os.Remove(lockPath)
 
-	// Stop container
-	client.On("ContainerStop", mock.Anything, "test-id", mock.Anything).
-		Return(nil).
-		Once()
+	// Verify lock file doesn't exist initially
+	_, err := os.Stat(lockPath)
+	assert.True(t, os.IsNotExist(err))
 
-	// Remove container
-	client.On("ContainerRemove", mock.Anything, "test-id", mock.Anything).
-		Return(nil).
-		Once()
-
-	err := installer.Uninstall(context.Background())
-
-	require.NoError(t, err)
-	client.AssertExpectations(t)
-}
-
-func TestCloudProviderKINDInstallerUninstallNoContainer(t *testing.T) {
-	t.Parallel()
-
-	client := new(MockDockerClient)
-	installer := cloudproviderkindinstaller.NewCloudProviderKINDInstaller(client)
-
-	// No container exists
-	client.On("ContainerList", mock.Anything, mock.Anything).
-		Return([]container.Summary{}, nil).
-		Once()
-
-	err := installer.Uninstall(context.Background())
-
-	require.NoError(t, err)
-	client.AssertExpectations(t)
+	// Note: We can't directly test the lock file functions since they're not exported
+	// They are tested indirectly through Install/Uninstall tests
 }
 

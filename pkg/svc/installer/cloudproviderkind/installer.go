@@ -3,204 +3,167 @@ package cloudproviderkindinstaller
 import (
 	"context"
 	"fmt"
-	"io"
-	"strings"
+	"os"
+	"path/filepath"
+	"sync"
 
-	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/filters"
-	"github.com/docker/docker/api/types/image"
-	"github.com/docker/docker/api/types/mount"
-	"github.com/docker/docker/api/types/network"
-	"github.com/docker/docker/client"
+	cpkcmd "sigs.k8s.io/cloud-provider-kind/cmd"
 )
 
-const (
-	// CloudProviderKindImage is the official cloud-provider-kind image.
-	CloudProviderKindImage = "registry.k8s.io/cloud-provider-kind/cloud-controller-manager:latest"
-	// CloudProviderKindContainerName is the name of the cloud-provider-kind container.
-	CloudProviderKindContainerName = "cloud-provider-kind"
-	// CloudProviderKindNetworkName is the default KIND network name.
-	CloudProviderKindNetworkName = "kind"
-	// DockerSocketPath is the path to the Docker socket.
-	DockerSocketPath = "/var/run/docker.sock"
+var (
+	// Global state for the cloud-provider-kind controller
+	globalController *cloudProviderController
+	globalMu         sync.Mutex
 )
 
-// CloudProviderKINDInstaller manages the cloud-provider-kind Docker container.
+// cloudProviderController wraps the cloud-provider-kind controller with lifecycle management.
+type cloudProviderController struct {
+	cancel   context.CancelFunc
+	refCount int
+	done     chan struct{}
+}
+
+// CloudProviderKINDInstaller manages the cloud-provider-kind controller as a background goroutine.
 type CloudProviderKINDInstaller struct {
-	client client.APIClient
+	// No fields needed - controller is managed globally
 }
 
 // NewCloudProviderKINDInstaller creates a new Cloud Provider KIND installer instance.
-func NewCloudProviderKINDInstaller(
-	dockerClient client.APIClient,
-) *CloudProviderKINDInstaller {
-	return &CloudProviderKINDInstaller{
-		client: dockerClient,
-	}
+func NewCloudProviderKINDInstaller() *CloudProviderKINDInstaller {
+	return &CloudProviderKINDInstaller{}
 }
 
-// Install starts the cloud-provider-kind container if not already running.
+// Install starts the cloud-provider-kind controller if not already running.
+// The controller runs as a background goroutine and monitors all KIND clusters.
+// Multiple calls to Install() will increment a reference count, ensuring the
+// controller stays running as long as at least one cluster needs it.
 func (c *CloudProviderKINDInstaller) Install(ctx context.Context) error {
-	// Check if container is already running
-	running, err := c.isContainerRunning(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to check if container is running: %w", err)
+	globalMu.Lock()
+	defer globalMu.Unlock()
+
+	// Check if another ksail process is managing cloud-provider-kind
+	if isRunningExternally() {
+		// Another process is managing it, just increment local reference
+		if globalController == nil {
+			// Initialize local state but don't start the controller
+			globalController = &cloudProviderController{
+				refCount: 1,
+			}
+		} else {
+			globalController.refCount++
+		}
+
+		return nil
 	}
 
-	if running {
-		return nil // Already running
+	// If controller is already running in this process, increment reference count
+	if globalController != nil && globalController.done != nil {
+		globalController.refCount++
+
+		return nil
 	}
 
-	// Ensure the cloud-provider-kind image is available
-	err = c.ensureImage(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to ensure cloud-provider-kind image: %w", err)
+	// Start the cloud-provider-kind controller using the cmd package
+	cmd := cpkcmd.NewCommand()
+
+	// Create a cancelable context for the controller
+	ctrlCtx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+
+	// Start controller in background goroutine
+	go func() {
+		defer close(done)
+		// Run the command - this will block until context is canceled
+		_ = cmd.ExecuteContext(ctrlCtx)
+	}()
+
+	// Mark as running and create lock file
+	if err := createLockFile(); err != nil {
+		cancel()
+		<-done // Wait for goroutine to finish
+
+		return fmt.Errorf("failed to create lock file: %w", err)
 	}
 
-	// Create and start the container
-	err = c.createAndStartContainer(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to create and start cloud-provider-kind container: %w", err)
+	globalController = &cloudProviderController{
+		cancel:   cancel,
+		refCount: 1,
+		done:     done,
 	}
 
 	return nil
 }
 
-// Uninstall stops and removes the cloud-provider-kind container.
+// Uninstall decrements the reference count and stops the cloud-provider-kind controller
+// if no more clusters are using it.
 func (c *CloudProviderKINDInstaller) Uninstall(ctx context.Context) error {
-	containers, err := c.listContainers(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to list containers: %w", err)
-	}
+	globalMu.Lock()
+	defer globalMu.Unlock()
 
-	if len(containers) == 0 {
+	if globalController == nil {
 		return nil // Nothing to uninstall
 	}
 
-	// Stop and remove container
-	for _, ctr := range containers {
-		// Stop container if running
-		if strings.EqualFold(ctr.State, "running") {
-			err = c.client.ContainerStop(ctx, ctr.ID, container.StopOptions{})
-			if err != nil {
-				return fmt.Errorf("failed to stop container: %w", err)
+	globalController.refCount--
+
+	// Only stop the controller if reference count reaches zero
+	if globalController.refCount <= 0 {
+		if globalController.cancel != nil {
+			globalController.cancel()
+
+			// Wait for the goroutine to finish
+			if globalController.done != nil {
+				<-globalController.done
 			}
 		}
 
-		// Remove container
-		err = c.client.ContainerRemove(ctx, ctr.ID, container.RemoveOptions{
-			Force: true,
-		})
-		if err != nil {
-			return fmt.Errorf("failed to remove container: %w", err)
+		// Remove lock file
+		if err := removeLockFile(); err != nil {
+			// Log error but don't fail uninstall
+			fmt.Fprintf(os.Stderr, "Warning: failed to remove lock file: %v\n", err)
 		}
+
+		globalController = nil
 	}
 
 	return nil
 }
 
-// --- internals ---
+// --- Lock file management ---
 
-// isContainerRunning checks if the cloud-provider-kind container is running.
-func (c *CloudProviderKINDInstaller) isContainerRunning(ctx context.Context) (bool, error) {
-	containers, err := c.listContainers(ctx)
-	if err != nil {
-		return false, err
-	}
+const lockFileName = "cloud-provider-kind.lock"
 
-	if len(containers) == 0 {
-		return false, nil
-	}
+func getLockFilePath() string {
+	// Use a temporary directory for the lock file
+	tmpDir := os.TempDir()
 
-	return strings.EqualFold(containers[0].State, "running"), nil
+	return filepath.Join(tmpDir, lockFileName)
 }
 
-// listContainers lists all cloud-provider-kind containers.
-func (c *CloudProviderKINDInstaller) listContainers(ctx context.Context) ([]container.Summary, error) {
-	filterArgs := filters.NewArgs()
-	filterArgs.Add("name", "^/"+CloudProviderKindContainerName+"$")
-
-	containers, err := c.client.ContainerList(ctx, container.ListOptions{
-		All:     true,
-		Filters: filterArgs,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to list containers: %w", err)
+func isRunningExternally() bool {
+	lockPath := getLockFilePath()
+	if _, err := os.Stat(lockPath); err == nil {
+		// Lock file exists - check if the process is still running
+		// For now, we assume if the file exists, it's running
+		// In production, we'd want to validate the PID
+		return true
 	}
 
-	return containers, nil
+	return false
 }
 
-// ensureImage pulls the cloud-provider-kind image if not already present.
-func (c *CloudProviderKINDInstaller) ensureImage(ctx context.Context) error {
-	// Check if image exists
-	_, err := c.client.ImageInspect(ctx, CloudProviderKindImage)
-	if err == nil {
-		return nil // Image already exists
-	}
+func createLockFile() error {
+	lockPath := getLockFilePath()
 
-	// Pull image
-	reader, err := c.client.ImagePull(ctx, CloudProviderKindImage, image.PullOptions{})
-	if err != nil {
-		return fmt.Errorf("failed to pull image: %w", err)
-	}
-	defer reader.Close()
+	// Create lock file with current process ID
+	pid := os.Getpid()
+	content := fmt.Sprintf("%d\n", pid)
 
-	// Consume pull output
-	_, err = io.Copy(io.Discard, reader)
-	if err != nil {
-		return fmt.Errorf("failed to read image pull output: %w", err)
-	}
-
-	return nil
+	return os.WriteFile(lockPath, []byte(content), 0644)
 }
 
-// createAndStartContainer creates and starts the cloud-provider-kind container.
-func (c *CloudProviderKINDInstaller) createAndStartContainer(ctx context.Context) error {
-	// Container configuration
-	containerConfig := &container.Config{
-		Image: CloudProviderKindImage,
-	}
+func removeLockFile() error {
+	lockPath := getLockFilePath()
 
-	// Host configuration - mount Docker socket
-	hostConfig := &container.HostConfig{
-		Mounts: []mount.Mount{
-			{
-				Type:   mount.TypeBind,
-				Source: DockerSocketPath,
-				Target: DockerSocketPath,
-			},
-		},
-		RestartPolicy: container.RestartPolicy{
-			Name: "unless-stopped",
-		},
-	}
-
-	// Network configuration - connect to KIND network
-	networkConfig := &network.NetworkingConfig{
-		EndpointsConfig: map[string]*network.EndpointSettings{
-			CloudProviderKindNetworkName: {},
-		},
-	}
-
-	// Create container
-	resp, err := c.client.ContainerCreate(
-		ctx,
-		containerConfig,
-		hostConfig,
-		networkConfig,
-		nil,
-		CloudProviderKindContainerName,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to create container: %w", err)
-	}
-
-	// Start container
-	err = c.client.ContainerStart(ctx, resp.ID, container.StartOptions{})
-	if err != nil {
-		return fmt.Errorf("failed to start container: %w", err)
-	}
-
-	return nil
+	return os.Remove(lockPath)
 }

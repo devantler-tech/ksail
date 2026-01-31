@@ -299,7 +299,7 @@ func InstallMetricsServerSilent(
 }
 
 // InstallLoadBalancerSilent installs LoadBalancer support silently for parallel execution.
-// For Vanilla (Kind) × Docker, installs Cloud Provider KIND as a Docker container.
+// For Vanilla (Kind) × Docker, starts the Cloud Provider KIND controller as a background goroutine.
 func InstallLoadBalancerSilent(
 	ctx context.Context,
 	clusterCfg *v1alpha1.Cluster,
@@ -310,13 +310,7 @@ func InstallLoadBalancerSilent(
 	case v1alpha1.DistributionVanilla:
 		// Vanilla (Kind) × Docker uses Cloud Provider KIND
 		if clusterCfg.Spec.Cluster.Provider == v1alpha1.ProviderDocker {
-			// Create Docker client for container management
-			dockerClient, err := dockerclient.GetDockerClient()
-			if err != nil {
-				return fmt.Errorf("failed to create Docker client: %w", err)
-			}
-
-			lbInstaller := cloudproviderkindinstaller.NewCloudProviderKINDInstaller(dockerClient)
+			lbInstaller := cloudproviderkindinstaller.NewCloudProviderKINDInstaller()
 
 			installErr := lbInstaller.Install(ctx)
 			if installErr != nil {
