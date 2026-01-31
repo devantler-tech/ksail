@@ -23,6 +23,8 @@ type Info struct {
 	Upstream string
 	Port     int
 	Volume   string
+	Username string // Optional: username for registry authentication (supports ${ENV_VAR} placeholders)
+	Password string // Optional: password for registry authentication (supports ${ENV_VAR} placeholders)
 }
 
 const expectedEndpointParts = 2
@@ -274,6 +276,8 @@ func ensureRegistry(
 		ClusterName: clusterName,
 		NetworkName: "",
 		VolumeName:  reg.Volume,
+		Username:    reg.Username,
+		Password:    reg.Password,
 	}
 
 	err := registryMgr.CreateRegistry(ctx, config)
@@ -705,6 +709,8 @@ func BuildRegistryInfo(
 	port int,
 	prefix string,
 	upstreamOverride string,
+	username string,
+	password string,
 ) Info {
 	name := ResolveRegistryName(host, endpoints, prefix)
 
@@ -721,6 +727,8 @@ func BuildRegistryInfo(
 		Upstream: upstream,
 		Port:     port,
 		Volume:   volume,
+		Username: username,
+		Password: password,
 	}
 }
 

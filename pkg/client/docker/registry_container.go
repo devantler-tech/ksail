@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/devantler-tech/ksail/v5/pkg/utils/envvar"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/image"
@@ -341,6 +342,8 @@ func (rm *RegistryManager) createAndStartContainer(
 // buildContainerConfig builds the container configuration for a registry.
 // If an upstream URL is provided, environment variables are set to configure
 // the registry as a pull-through cache (proxy) to that upstream.
+// If credentials are provided, they are expanded from environment variables
+// and set as REGISTRY_PROXY_USERNAME and REGISTRY_PROXY_PASSWORD.
 func (rm *RegistryManager) buildContainerConfig(
 	config RegistryConfig,
 ) *container.Config {
@@ -354,6 +357,21 @@ func (rm *RegistryManager) buildContainerConfig(
 	if config.UpstreamURL != "" {
 		// Configure registry as a pull-through cache to the upstream
 		env = append(env, "REGISTRY_PROXY_REMOTEURL="+config.UpstreamURL)
+
+		// Add authentication credentials if provided
+		// Expand environment variable placeholders (e.g., ${GITHUB_TOKEN})
+		if config.Username != "" || config.Password != "" {
+			username := envvar.Expand(config.Username)
+			password := envvar.Expand(config.Password)
+
+			if username != "" {
+				env = append(env, "REGISTRY_PROXY_USERNAME="+username)
+			}
+
+			if password != "" {
+				env = append(env, "REGISTRY_PROXY_PASSWORD="+password)
+			}
+		}
 	}
 
 	return &container.Config{
