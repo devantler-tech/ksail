@@ -64,7 +64,10 @@ func (c *CertManagerInstaller) helmInstallOrUpgradeCertManager(ctx context.Conte
 		Wait:            true,
 		WaitForJobs:     true,
 		Timeout:         c.timeout,
-		SetValues:       map[string]string{"installCRDs": "true"},
+		SetValues: map[string]string{
+			"installCRDs":             "true",
+			"startupapicheck.timeout": "5m",
+		},
 	}
 
 	_, err = c.client.InstallOrUpgradeChart(ctx, spec)
