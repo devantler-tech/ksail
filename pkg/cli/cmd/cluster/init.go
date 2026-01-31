@@ -74,7 +74,9 @@ func bindInitLocalFlags(cmd *cobra.Command, cfgManager *ksailconfigmanager.Confi
 	cmd.Flags().StringSlice(
 		"mirror-registry",
 		[]string{},
-		"Configure mirror registries with format 'host=upstream' (e.g., docker.io=https://registry-1.docker.io).",
+		"Configure mirror registries with optional authentication. Format: [user:pass@]host[=upstream]. "+
+			"Credentials support environment variables using ${VAR} syntax. "+
+			"Examples: docker.io=https://registry-1.docker.io, ${USER}:${TOKEN}@ghcr.io=https://ghcr.io",
 	)
 	_ = cfgManager.Viper.BindPFlag("mirror-registry", cmd.Flags().Lookup("mirror-registry"))
 	cmd.Flags().StringP(
