@@ -144,6 +144,7 @@ runs:
         ARGS: ${{ steps.resolve-args.outputs.args }}
         HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
       run: |
+        # shellcheck disable=SC2086
         ksail cluster init --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS --force
 
     - name: 📥 Restore cached cluster images
@@ -177,6 +178,7 @@ runs:
         if [ "$INIT" = "true" ]; then
           ksail cluster create "$IMPORT_FLAG"
         else
+          # shellcheck disable=SC2086
           ksail cluster create --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS "$IMPORT_FLAG"
         fi
 

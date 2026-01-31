@@ -19,6 +19,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
 	"github.com/docker/docker/client"
 	"github.com/gkampitakis/go-snaps/snaps"
+	"github.com/k3d-io/k3d/v5/pkg/config/types"
 	v1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/samber/do/v2"
 	"github.com/spf13/cobra"
@@ -756,7 +757,7 @@ func TestResolveClusterNameFromContext_K3s(t *testing.T) {
 	t.Parallel()
 
 	k3dConfig := &v1alpha5.SimpleConfig{
-		ObjectMeta: v1alpha5.ObjectMeta{
+		ObjectMeta: types.ObjectMeta{
 			Name: "k3s-cluster",
 		},
 	}
