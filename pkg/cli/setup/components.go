@@ -325,13 +325,11 @@ func InstallLoadBalancerSilent(
 			return nil
 		}
 
-		// Talos × Docker: MetalLB is planned but not yet implemented in ksail,
-		// so installing a LoadBalancer implementation is currently unsupported.
-		return fmt.Errorf(
-			"%w for Talos with provider %s",
-			v1alpha1.ErrLoadBalancerNotImplemented,
-			clusterCfg.Spec.Cluster.Provider,
-		)
+		// Talos × Docker: MetalLB is planned but not yet implemented in ksail.
+		// For now, we skip installation (no-op) rather than failing, allowing users
+		// to explicitly enable LoadBalancer in their configuration without errors.
+		// TODO: Implement MetalLB installer for Talos × Docker.
+		return nil
 	case v1alpha1.DistributionK3s:
 		// K3s already has ServiceLB (Klipper) by default, no installation needed
 		return nil
