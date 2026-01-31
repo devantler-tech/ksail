@@ -79,6 +79,14 @@
                 "Disabled"
               ]
             },
+            "loadBalancer": {
+              "type": "string",
+              "enum": [
+                "Default",
+                "Enabled",
+                "Disabled"
+              ]
+            },
             "certManager": {
               "type": "string",
               "enum": [

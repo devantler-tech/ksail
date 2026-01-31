@@ -247,6 +247,16 @@ func (s *Scaffolder) CreateK3dConfig() k3dv1alpha5.SimpleConfig {
 		)
 	}
 
+	// Disable servicelb if explicitly disabled (K3s includes it by default)
+	if s.KSailConfig.Spec.Cluster.LoadBalancer == v1alpha1.LoadBalancerDisabled {
+		extraArgs = append(extraArgs,
+			k3dv1alpha5.K3sArgWithNodeFilters{
+				Arg:         "--disable=servicelb",
+				NodeFilters: []string{"server:*"},
+			},
+		)
+	}
+
 	// Set ExtraArgs if we have any
 	if len(extraArgs) > 0 {
 		config.Options.K3sOptions.ExtraArgs = extraArgs

@@ -40,6 +40,7 @@ type ClusterSpec struct {
 	CNI                CNI           `json:"cni,omitzero"`
 	CSI                CSI           `json:"csi,omitzero"`
 	MetricsServer      MetricsServer `json:"metricsServer,omitzero"`
+	LoadBalancer       LoadBalancer  `json:"loadBalancer,omitzero"`
 	CertManager        CertManager   `json:"certManager,omitzero"`
 	PolicyEngine       PolicyEngine  `json:"policyEngine,omitzero"`
 	LocalRegistry      LocalRegistry `json:"localRegistry,omitzero"`

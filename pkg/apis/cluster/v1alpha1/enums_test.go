@@ -86,6 +86,118 @@ func TestMetricsServer_ValidValues(t *testing.T) {
 	assert.Len(t, values, 3)
 }
 
+func TestLoadBalancer_Set(t *testing.T) {
+	t.Parallel()
+
+	tests := getLoadBalancerSetTestCases()
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			var loadBalancer v1alpha1.LoadBalancer
+
+			err := loadBalancer.Set(testCase.input)
+			if testCase.wantError {
+				require.Error(t, err)
+				require.ErrorIs(t, err, v1alpha1.ErrInvalidLoadBalancer)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, testCase.expected, loadBalancer)
+			}
+		})
+	}
+}
+
+func getLoadBalancerSetTestCases() []struct {
+	name      string
+	input     string
+	expected  v1alpha1.LoadBalancer
+	wantError bool
+} {
+	return []struct {
+		name      string
+		input     string
+		expected  v1alpha1.LoadBalancer
+		wantError bool
+	}{
+		{
+			name:      "default_lowercase",
+			input:     "default",
+			expected:  v1alpha1.LoadBalancerDefault,
+			wantError: false,
+		},
+		{
+			name:      "default_uppercase",
+			input:     "DEFAULT",
+			expected:  v1alpha1.LoadBalancerDefault,
+			wantError: false,
+		},
+		{
+			name:      "enabled_lowercase",
+			input:     "enabled",
+			expected:  v1alpha1.LoadBalancerEnabled,
+			wantError: false,
+		},
+		{
+			name:      "enabled_mixed_case",
+			input:     "Enabled",
+			expected:  v1alpha1.LoadBalancerEnabled,
+			wantError: false,
+		},
+		{
+			name:      "disabled_lowercase",
+			input:     "disabled",
+			expected:  v1alpha1.LoadBalancerDisabled,
+			wantError: false,
+		},
+		{
+			name:      "disabled_uppercase",
+			input:     "DISABLED",
+			expected:  v1alpha1.LoadBalancerDisabled,
+			wantError: false,
+		},
+		{
+			name:      "invalid_value",
+			input:     "invalid",
+			wantError: true,
+		},
+	}
+}
+
+func TestLoadBalancer_String(t *testing.T) {
+	t.Parallel()
+
+	lb := v1alpha1.LoadBalancerEnabled
+	assert.Equal(t, "Enabled", lb.String())
+}
+
+func TestLoadBalancer_Type(t *testing.T) {
+	t.Parallel()
+
+	var lb v1alpha1.LoadBalancer
+	assert.Equal(t, "LoadBalancer", lb.Type())
+}
+
+func TestLoadBalancer_Default(t *testing.T) {
+	t.Parallel()
+
+	var lb v1alpha1.LoadBalancer
+	assert.Equal(t, v1alpha1.LoadBalancerDefault, lb.Default())
+}
+
+func TestLoadBalancer_ValidValues(t *testing.T) {
+	t.Parallel()
+
+	var lb v1alpha1.LoadBalancer
+
+	values := lb.ValidValues()
+	assert.Contains(t, values, "Default")
+	assert.Contains(t, values, "Enabled")
+	assert.Contains(t, values, "Disabled")
+	assert.Len(t, values, 3)
+}
+
 func TestCertManager_Default(t *testing.T) {
 	t.Parallel()
 
@@ -324,6 +436,57 @@ func TestDistribution_ProvidesCSIByDefault(t *testing.T) {
 			t.Parallel()
 
 			result := testCase.distribution.ProvidesCSIByDefault(testCase.provider)
+			assert.Equal(t, testCase.expected, result)
+		})
+	}
+}
+
+func TestDistribution_ProvidesLoadBalancerByDefault(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		distribution v1alpha1.Distribution
+		provider     v1alpha1.Provider
+		expected     bool
+	}{
+		{
+			name:         "k3s_docker_provides_loadbalancer",
+			distribution: v1alpha1.DistributionK3s,
+			provider:     v1alpha1.ProviderDocker,
+			expected:     true,
+		},
+		{
+			name:         "vanilla_docker_no_loadbalancer",
+			distribution: v1alpha1.DistributionVanilla,
+			provider:     v1alpha1.ProviderDocker,
+			expected:     false,
+		},
+		{
+			name:         "talos_docker_no_loadbalancer",
+			distribution: v1alpha1.DistributionTalos,
+			provider:     v1alpha1.ProviderDocker,
+			expected:     false,
+		},
+		{
+			name:         "talos_hetzner_provides_loadbalancer",
+			distribution: v1alpha1.DistributionTalos,
+			provider:     v1alpha1.ProviderHetzner,
+			expected:     true,
+		},
+		{
+			name:         "unknown_distribution_no_loadbalancer",
+			distribution: v1alpha1.Distribution("Unknown"),
+			provider:     v1alpha1.ProviderDocker,
+			expected:     false,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			result := testCase.distribution.ProvidesLoadBalancerByDefault(testCase.provider)
 			assert.Equal(t, testCase.expected, result)
 		})
 	}

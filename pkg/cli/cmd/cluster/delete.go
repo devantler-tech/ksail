@@ -104,6 +104,9 @@ func runDeleteAction(
 		return fmt.Errorf("failed to resolve cluster info: %w", err)
 	}
 
+	// Detect if this is a Kind cluster for cleanup decisions
+	isKindCluster := detectIsKindCluster(resolved)
+
 	// Create cluster info for provisioner creation
 	clusterInfo := &lifecycle.ClusterInfo{
 		ClusterName:    resolved.ClusterName,
@@ -118,10 +121,7 @@ func runDeleteAction(
 	}
 
 	// Pre-discover registries before deletion for Docker provider
-	var preDiscovered *mirrorregistry.DiscoveredRegistries
-	if resolved.Provider == v1alpha1.ProviderDocker {
-		preDiscovered = discoverRegistriesBeforeDelete(cmd, clusterInfo)
-	}
+	preDiscovered := prepareDockerDeletion(cmd, resolved, clusterInfo)
 
 	// Show confirmation prompt unless force flag is set or non-TTY
 	if !confirm.ShouldSkipPrompt(flags.force) {
@@ -131,23 +131,74 @@ func runDeleteAction(
 		}
 	}
 
-	// Handle Docker-specific pre-deletion steps
-	if resolved.Provider == v1alpha1.ProviderDocker {
-		disconnectRegistriesBeforeDelete(cmd, resolved.ClusterName)
-	}
-
 	// Delete the cluster
 	err = executeDelete(cmd, tmr, provisioner, resolved)
 	if err != nil {
 		return err
 	}
 
+	// Perform post-deletion cleanup
+	performPostDeletionCleanup(cmd, tmr, resolved, flags, preDiscovered, isKindCluster)
+
+	return nil
+}
+
+// detectIsKindCluster determines if the cluster is a Kind (Vanilla) cluster.
+// This detection must happen before the cluster is deleted to ensure the kubeconfig
+// entry is still available for reading cluster information.
+func detectIsKindCluster(resolved *lifecycle.ResolvedClusterInfo) bool {
+	if resolved.Provider != v1alpha1.ProviderDocker {
+		return false
+	}
+
+	contextName := ""
+	if strings.TrimSpace(resolved.ClusterName) != "" {
+		contextName = "kind-" + resolved.ClusterName
+	}
+
+	clusterInfo, detectErr := lifecycle.DetectClusterInfo(resolved.KubeconfigPath, contextName)
+	if detectErr != nil || clusterInfo == nil {
+		return false
+	}
+
+	return clusterInfo.Distribution == v1alpha1.DistributionVanilla
+}
+
+// prepareDockerDeletion prepares Docker-specific resources before deletion.
+func prepareDockerDeletion(
+	cmd *cobra.Command,
+	resolved *lifecycle.ResolvedClusterInfo,
+	clusterInfo *lifecycle.ClusterInfo,
+) *mirrorregistry.DiscoveredRegistries {
+	if resolved.Provider != v1alpha1.ProviderDocker {
+		return nil
+	}
+
+	preDiscovered := discoverRegistriesBeforeDelete(cmd, clusterInfo)
+	disconnectRegistriesBeforeDelete(cmd, resolved.ClusterName)
+
+	return preDiscovered
+}
+
+// performPostDeletionCleanup handles all post-deletion cleanup tasks.
+func performPostDeletionCleanup(
+	cmd *cobra.Command,
+	tmr timer.Timer,
+	resolved *lifecycle.ResolvedClusterInfo,
+	flags *deleteFlags,
+	preDiscovered *mirrorregistry.DiscoveredRegistries,
+	isKindCluster bool,
+) {
 	// Cleanup registries after cluster deletion (only for Docker provider)
 	if resolved.Provider == v1alpha1.ProviderDocker {
 		cleanupRegistriesAfterDelete(cmd, tmr, resolved, flags.storage, preDiscovered)
 	}
 
-	return nil
+	// Cleanup cloud-provider-kind if this was the last kind cluster
+	// Only run for Vanilla (Kind) distribution on Docker provider
+	if isKindCluster {
+		cleanupCloudProviderKindIfLastCluster(cmd, tmr)
+	}
 }
 
 // initTimer initializes and starts the timer from the runtime container.
@@ -481,4 +532,197 @@ func cleanupRegistriesAfterDelete(
 			Writer:  cmd.OutOrStdout(),
 		})
 	}
+}
+
+// hasRemainingKindClusters checks if there are any Kind clusters remaining in Docker.
+func hasRemainingKindClusters(cmd *cobra.Command) bool {
+	dockerClientInvokerMu.RLock()
+
+	invoker := dockerClientInvoker
+
+	dockerClientInvokerMu.RUnlock()
+
+	var hasKind bool
+
+	_ = invoker(nil, func(dockerClient client.APIClient) error {
+		ctx := cmd.Context()
+
+		containers, err := dockerClient.ContainerList(ctx, container.ListOptions{
+			All: true,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to list Docker containers: %w", err)
+		}
+
+		// Check if any container matches Kind's naming pattern
+		// Kind containers end with -control-plane or -worker*
+		for _, ctr := range containers {
+			for _, name := range ctr.Names {
+				containerName := strings.TrimPrefix(name, "/")
+				// Kind control plane pattern: *-control-plane
+				if strings.HasSuffix(containerName, "-control-plane") {
+					hasKind = true
+
+					return nil
+				}
+			}
+		}
+
+		return nil
+	})
+
+	return hasKind
+}
+
+// hasCloudProviderKindContainers checks if there are any cloud-provider-kind containers.
+func hasCloudProviderKindContainers(cmd *cobra.Command) bool {
+	dockerClientInvokerMu.RLock()
+
+	invoker := dockerClientInvoker
+
+	dockerClientInvokerMu.RUnlock()
+
+	var hasContainers bool
+
+	_ = invoker(nil, func(dockerClient client.APIClient) error {
+		containers, err := dockerClient.ContainerList(cmd.Context(), container.ListOptions{
+			All: true,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to list Docker containers: %w", err)
+		}
+
+		// Check if any container matches cloud-provider-kind's naming pattern
+		for _, ctr := range containers {
+			for _, name := range ctr.Names {
+				containerName := strings.TrimPrefix(name, "/")
+				// Cloud-provider-kind containers start with "cpk-"
+				if strings.HasPrefix(containerName, "cpk-") {
+					hasContainers = true
+
+					return nil
+				}
+			}
+		}
+
+		return nil
+	})
+
+	return hasContainers
+}
+
+// cleanupCloudProviderKindIfLastCluster uninstalls cloud-provider-kind if no kind clusters remain.
+// Cloud-provider-kind creates containers that can be shared across multiple kind clusters,
+// so we only uninstall when the last kind cluster is deleted.
+func cleanupCloudProviderKindIfLastCluster(
+	cmd *cobra.Command,
+	tmr timer.Timer,
+) {
+	// Check if there are any remaining Kind clusters by looking for Kind containers
+	if hasRemainingKindClusters(cmd) {
+		return
+	}
+
+	// Check if there are any cloud-provider-kind containers to clean up
+	if !hasCloudProviderKindContainers(cmd) {
+		return
+	}
+
+	// No kind clusters remain - proceed with cloud-provider-kind cleanup
+	if tmr != nil {
+		tmr.NewStage()
+	}
+
+	notify.WriteMessage(notify.Message{
+		Type:    notify.TitleType,
+		Content: "Cleanup cloud-provider-kind...",
+		Emoji:   "🧹",
+		Writer:  cmd.OutOrStdout(),
+	})
+
+	notify.WriteMessage(notify.Message{
+		Type:    notify.ActivityType,
+		Content: "uninstalling cloud-provider-kind (no kind clusters remain)",
+		Writer:  cmd.OutOrStdout(),
+	})
+
+	// We need to uninstall from one of the recently deleted clusters
+	// Since all clusters are gone, we can't actually uninstall via Helm
+	// Instead, we need to clean up any remaining cloud-provider-kind containers
+	cleanupErr := cleanupCloudProviderKindContainers(cmd)
+	if cleanupErr != nil {
+		notify.WriteMessage(notify.Message{
+			Type: notify.WarningType,
+			Content: fmt.Sprintf(
+				"failed to cleanup cloud-provider-kind containers: %v",
+				cleanupErr,
+			),
+			Writer: cmd.OutOrStdout(),
+		})
+
+		return
+	}
+
+	outputTimer := helpers.MaybeTimer(cmd, tmr)
+
+	notify.WriteMessage(notify.Message{
+		Type:    notify.SuccessType,
+		Content: "cloud-provider-kind cleaned up",
+		Timer:   outputTimer,
+		Writer:  cmd.OutOrStdout(),
+	})
+}
+
+// cleanupCloudProviderKindContainers removes any cloud-provider-kind related containers.
+func cleanupCloudProviderKindContainers(cmd *cobra.Command) error {
+	dockerClientInvokerMu.RLock()
+
+	invoker := dockerClientInvoker
+
+	dockerClientInvokerMu.RUnlock()
+
+	var cleanupErr error
+
+	_ = invoker(cmd, func(dockerClient client.APIClient) error {
+		containers, err := dockerClient.ContainerList(cmd.Context(), container.ListOptions{
+			All: true,
+		})
+		if err != nil {
+			cleanupErr = fmt.Errorf("failed to list containers: %w", err)
+
+			return cleanupErr
+		}
+
+		for _, ctr := range containers {
+			// Cloud-provider-kind creates containers for load balancer services
+			// These containers are named with a specific pattern
+			// Look for containers created by cloud-provider-kind
+			for _, name := range ctr.Names {
+				containerName := strings.TrimPrefix(name, "/")
+				// Cloud-provider-kind containers are typically named: cpk-<service>-<namespace>-<cluster>
+				if strings.HasPrefix(containerName, "cpk-") {
+					err := dockerClient.ContainerRemove(
+						cmd.Context(),
+						ctr.ID,
+						container.RemoveOptions{
+							Force: true,
+						},
+					)
+					if err != nil {
+						cleanupErr = fmt.Errorf(
+							"failed to remove container %s: %w",
+							containerName,
+							err,
+						)
+
+						return cleanupErr
+					}
+				}
+			}
+		}
+
+		return nil
+	})
+
+	return cleanupErr
 }

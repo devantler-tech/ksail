@@ -100,6 +100,15 @@ func DefaultMetricsServerFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	}
 }
 
+// DefaultLoadBalancerFieldSelector creates a standard field selector for LoadBalancer.
+func DefaultLoadBalancerFieldSelector() FieldSelector[v1alpha1.Cluster] {
+	return FieldSelector[v1alpha1.Cluster]{
+		Selector:     func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.LoadBalancer },
+		Description:  "LoadBalancer support (Default: use distribution × provider, Enabled: install, Disabled: uninstall)",
+		DefaultValue: v1alpha1.LoadBalancerDefault,
+	}
+}
+
 // DefaultCertManagerFieldSelector creates a standard field selector for Cert-Manager.
 func DefaultCertManagerFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	return FieldSelector[v1alpha1.Cluster]{
