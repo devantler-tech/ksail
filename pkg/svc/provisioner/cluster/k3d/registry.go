@@ -251,7 +251,7 @@ func buildRegistryInfos(
 		endpoints := mirrors[host].Endpoint
 		port := registry.ExtractRegistryPort(endpoints, usedPorts, &nextPort)
 		upstream := upstreamFromEndpoints(host, endpoints, clusterName)
-		info := registry.BuildRegistryInfo(host, endpoints, port, clusterName, upstream)
+		info := registry.BuildRegistryInfo(host, endpoints, port, clusterName, upstream, "", "")
 		registryInfos = append(registryInfos, info)
 	}
 
