@@ -9,7 +9,7 @@ on:
   workflow_run:
     workflows:
       - "CI - KSail"
-      - "CD - Go"
+      - "CD"
       - "Test - Pages"
       - "Publish - Pages"
     types:
