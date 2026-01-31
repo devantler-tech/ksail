@@ -343,12 +343,12 @@ jobs:
         run: npm audit --audit-level=moderate
         continue-on-error: true
 
-      - name: 🔧 Attempt automatic fix (non-breaking)
+      - name: 🔧 Attempt automatic fix
         id: fix
         if: steps.audit.outcome == 'failure' && (github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main'))
         run: |
           # Only apply non-breaking fixes automatically
-          npm audit fix --no-force
+          npm audit fix --force
           if [ -n "$(git status --porcelain)" ]; then
             echo "changes_made=true" >> $GITHUB_OUTPUT
           else
@@ -417,12 +417,12 @@ jobs:
         run: npm audit --audit-level=moderate
         continue-on-error: true
 
-      - name: 🔧 Attempt automatic fix (non-breaking)
+      - name: 🔧 Attempt automatic fix
         id: fix
         if: steps.audit.outcome == 'failure' && (github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main'))
         run: |
           # Only apply non-breaking fixes automatically
-          npm audit fix --no-force
+          npm audit fix --force
           if [ -n "$(git status --porcelain)" ]; then
             echo "changes_made=true" >> $GITHUB_OUTPUT
           else
