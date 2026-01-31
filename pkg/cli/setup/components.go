@@ -303,7 +303,7 @@ func InstallMetricsServerSilent(
 func InstallLoadBalancerSilent(
 	ctx context.Context,
 	clusterCfg *v1alpha1.Cluster,
-	factories *InstallerFactories,
+	_ *InstallerFactories,
 ) error {
 	// Determine which LoadBalancer implementation to install based on distribution × provider
 	switch clusterCfg.Spec.Cluster.Distribution {
