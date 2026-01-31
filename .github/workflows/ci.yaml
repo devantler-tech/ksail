@@ -345,7 +345,7 @@ jobs:
 
       - name: 🔧 Attempt automatic fix (non-breaking)
         id: fix
-        if: steps.audit.outcome == 'failure' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: steps.audit.outcome == 'failure' && (github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main'))
         run: |
           # Only apply non-breaking fixes automatically
           npm audit fix --no-force
@@ -364,7 +364,7 @@ jobs:
           private_key: ${{ secrets.APP_PRIVATE_KEY }}
 
       - name: 📤 Commit and push fixes
-        if: steps.fix.outputs.changes_made == 'true'
+        if: steps.fix.outputs.changes_made == 'true' && github.event_name != 'merge_group'
         uses: stefanzweifel/git-auto-commit-action@04702edda442b2e678b25b537cec683a1493fcb9 # v7.1.0
         with:
           commit_message: "chore(docs): fix npm audit vulnerabilities"
@@ -419,7 +419,7 @@ jobs:
 
       - name: 🔧 Attempt automatic fix (non-breaking)
         id: fix
-        if: steps.audit.outcome == 'failure' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: steps.audit.outcome == 'failure' && (github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main'))
         run: |
           # Only apply non-breaking fixes automatically
           npm audit fix --no-force
@@ -438,7 +438,7 @@ jobs:
           private_key: ${{ secrets.APP_PRIVATE_KEY }}
 
       - name: 📤 Commit and push fixes
-        if: steps.fix.outputs.changes_made == 'true'
+        if: steps.fix.outputs.changes_made == 'true' && github.event_name != 'merge_group'
         uses: stefanzweifel/git-auto-commit-action@04702edda442b2e678b25b537cec683a1493fcb9 # v7.1.0
         with:
           commit_message: "chore(vsce): fix npm audit vulnerabilities"
