@@ -328,9 +328,16 @@ func InstallLoadBalancerSilent(
 			}
 		}
 	case v1alpha1.DistributionTalos:
-		// Talos × Docker would use MetalLB (future implementation)
-		// Talos × Hetzner uses hcloud-ccm (future implementation)
-		return fmt.Errorf("%w for Talos", v1alpha1.ErrLoadBalancerNotImplemented)
+		// Talos × Hetzner: LoadBalancer support is expected to be provided by default
+		// (via the Hetzner cloud-controller-manager / hcloud-ccm), so there is
+		// nothing for this installer to do here.
+		if clusterCfg.Spec.Cluster.Provider == v1alpha1.ProviderHetzner {
+			return nil
+		}
+
+		// Talos × Docker: MetalLB is planned but not yet implemented in ksail,
+		// so installing a LoadBalancer implementation is currently unsupported.
+		return fmt.Errorf("%w for Talos with provider %s", v1alpha1.ErrLoadBalancerNotImplemented, clusterCfg.Spec.Cluster.Provider)
 	case v1alpha1.DistributionK3s:
 		// K3s already has ServiceLB (Klipper) by default, no installation needed
 		return nil
