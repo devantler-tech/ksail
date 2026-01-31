@@ -39,8 +39,9 @@ func (c *Cluster) expandClusterSpec() {
 	cluster.Connection.Kubeconfig = envvar.Expand(cluster.Connection.Kubeconfig)
 	cluster.Connection.Context = envvar.Expand(cluster.Connection.Context)
 	
-	// LocalRegistry.Registry is already expanded via ResolveCredentials(),
-	// but we expand it here too for consistency and to support non-credential use cases
+	// Expand entire registry string including credentials and host. When
+	// ResolveCredentials() is called later, the envvar.Expand() calls within it
+	// become no-ops since expansion has already occurred.
 	cluster.LocalRegistry.Registry = envvar.Expand(cluster.LocalRegistry.Registry)
 	
 	// Expand distribution-specific options
