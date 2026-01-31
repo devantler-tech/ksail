@@ -25,7 +25,7 @@ Flags:
   -k, --kubeconfig string              Path to kubeconfig file (default "~/.kube/config")
       --local-registry string          Local registry specification: [user:pass@]host[:port][/path] (e.g., localhost:5050, ghcr.io/myorg, ${USER}:${PASS}@ghcr.io:443/org)
       --metrics-server MetricsServer   Metrics Server (Default: use distribution, Enabled: install, Disabled: uninstall)
-      --mirror-registry strings        Configure mirror registries with format 'host=upstream' (default: docker.io=https://registry-1.docker.io, ghcr.io=https://ghcr.io)
+      --mirror-registry strings        Configure mirror registries with format 'host=upstream' (e.g., docker.io=https://registry-1.docker.io) (default [docker.io=https://registry-1.docker.io,ghcr.io=https://ghcr.io])
   -n, --name string                    Cluster name used for container names, registry names, and kubeconfig context
       --policy-engine PolicyEngine     Policy engine (None: skip, Kyverno: install Kyverno, Gatekeeper: install Gatekeeper)
       --provider Provider              Infrastructure provider backend (e.g., Docker)
