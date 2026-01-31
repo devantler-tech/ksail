@@ -3,6 +3,7 @@ package cluster
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
@@ -11,9 +12,14 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup/localregistry"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup/mirrorregistry"
+	"github.com/devantler-tech/ksail/v5/pkg/client/docker"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	configmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager"
+	k3dconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/k3d"
+	kindconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/kind"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
+	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
+	imagesvc "github.com/devantler-tech/ksail/v5/pkg/svc/image"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
 	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
@@ -59,6 +65,7 @@ func NewCreateCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
 	fieldSelectors = append(fieldSelectors, ksailconfigmanager.DefaultCertManagerFieldSelector())
 	fieldSelectors = append(fieldSelectors, ksailconfigmanager.DefaultPolicyEngineFieldSelector())
 	fieldSelectors = append(fieldSelectors, ksailconfigmanager.DefaultCSIFieldSelector())
+	fieldSelectors = append(fieldSelectors, ksailconfigmanager.DefaultImportImagesFieldSelector())
 	fieldSelectors = append(fieldSelectors, ksailconfigmanager.ControlPlanesFieldSelector())
 	fieldSelectors = append(fieldSelectors, ksailconfigmanager.WorkersFieldSelector())
 
@@ -185,6 +192,35 @@ func handleCreateRunE(
 	)
 	if err != nil {
 		return fmt.Errorf("failed to wait for local registry: %w", err)
+	}
+
+	// Import cached images if --import-images flag is provided
+	// This happens after cluster creation but before component installation
+	// to ensure images are available when CNI, CSI, etc. are installed
+	importPath := ctx.ClusterCfg.Spec.Cluster.ImportImages
+	if importPath != "" {
+		// Image import is not supported for Talos clusters. The image service will
+		// return ErrUnsupportedDistribution in that case, so we short-circuit here
+		// to provide clearer feedback and avoid a spurious warning.
+		if ctx.ClusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionTalos {
+			notify.WriteMessage(notify.Message{
+				Type:    notify.WarningType,
+				Content: "image import is not supported for Talos clusters; ignoring --import-images value %q",
+				Args:    []any{importPath},
+				Writer:  cmd.OutOrStderr(),
+			})
+		} else {
+			err = importCachedImages(cmd, ctx, importPath, deps.Timer)
+			if err != nil {
+				// Log warning but don't fail cluster creation
+				notify.WriteMessage(notify.Message{
+					Type:    notify.WarningType,
+					Content: "failed to import images from %s: %v",
+					Args:    []any{importPath, err},
+					Writer:  cmd.OutOrStderr(),
+				})
+			}
+		}
 	}
 
 	return handlePostCreationSetup(cmd, ctx.ClusterCfg, deps.Timer)
@@ -427,4 +463,79 @@ func applyClusterNameOverride(ctx *localregistry.Context, name string) error {
 	}
 
 	return nil
+}
+
+// importCachedImages imports container images from a tar archive to the cluster.
+// This is called after cluster creation but before component installation to ensure
+// CNI, CSI, metrics-server, and other components can use pre-loaded images.
+func importCachedImages(
+	cmd *cobra.Command,
+	ctx *localregistry.Context,
+	importPath string,
+	tmr timer.Timer,
+) error {
+	outputTimer := helpers.MaybeTimer(cmd, tmr)
+
+	notify.WriteMessage(notify.Message{
+		Type:    notify.ActivityType,
+		Emoji:   "📥",
+		Content: "importing cached images from %s",
+		Args:    []any{importPath},
+		Timer:   outputTimer,
+		Writer:  cmd.OutOrStdout(),
+	})
+
+	// Use the existing image import functionality
+	dockerClient, err := docker.GetDockerClient()
+	if err != nil {
+		return fmt.Errorf("failed to create Docker client: %w", err)
+	}
+
+	defer func() { _ = dockerClient.Close() }()
+
+	importer := imagesvc.NewImporter(dockerClient)
+
+	// Resolve cluster name from distribution configs
+	clusterName := resolveClusterNameFromContext(ctx)
+
+	err = importer.Import(
+		cmd.Context(),
+		clusterName,
+		ctx.ClusterCfg.Spec.Cluster.Distribution,
+		ctx.ClusterCfg.Spec.Cluster.Provider,
+		imagesvc.ImportOptions{
+			InputPath: importPath,
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("import images: %w", err)
+	}
+
+	notify.WriteMessage(notify.Message{
+		Type:    notify.SuccessType,
+		Content: "images imported successfully",
+		Timer:   outputTimer,
+		Writer:  cmd.OutOrStdout(),
+	})
+
+	return nil
+}
+
+// resolveClusterNameFromContext determines the cluster name from distribution configs.
+func resolveClusterNameFromContext(ctx *localregistry.Context) string {
+	switch ctx.ClusterCfg.Spec.Cluster.Distribution {
+	case v1alpha1.DistributionVanilla:
+		return kindconfigmanager.ResolveClusterName(ctx.ClusterCfg, ctx.KindConfig)
+	case v1alpha1.DistributionK3s:
+		return k3dconfigmanager.ResolveClusterName(ctx.ClusterCfg, ctx.K3dConfig)
+	case v1alpha1.DistributionTalos:
+		return talosconfigmanager.ResolveClusterName(ctx.ClusterCfg, ctx.TalosConfig)
+	default:
+		// Fallback to context name or default
+		if name := strings.TrimSpace(ctx.ClusterCfg.Spec.Cluster.Connection.Context); name != "" {
+			return name
+		}
+
+		return "ksail"
+	}
 }

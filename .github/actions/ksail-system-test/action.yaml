@@ -93,6 +93,28 @@ runs:
         echo "tag=$TAG" >> "$GITHUB_OUTPUT"
         echo "Generated unique artifact tag: $TAG"
 
+    - name: 🔧 Compute dependency hash for cache key
+      id: compute-dep-hash
+      shell: bash
+      run: |
+        # Compute hash of go.mod to track dependency versions
+        # This ensures cache is invalidated when component versions change
+        if [[ -f "go.mod" ]]; then
+          if command -v sha256sum &> /dev/null; then
+            GO_MOD_HASH=$(sha256sum go.mod | cut -d' ' -f1)
+          elif command -v shasum &> /dev/null; then
+            GO_MOD_HASH=$(shasum -a 256 go.mod | cut -d' ' -f1)
+          else
+            echo "⚠️ No SHA tool available, cache won't track dependency drift"
+            GO_MOD_HASH=""
+          fi
+          echo "go-mod-hash=$GO_MOD_HASH" >> "$GITHUB_OUTPUT"
+          echo "📦 Dependency hash: ${GO_MOD_HASH:0:12}..."
+        else
+          echo "⚠️ go.mod not found"
+          echo "go-mod-hash=" >> "$GITHUB_OUTPUT"
+        fi
+
     - name: 🔧 Resolve GHCR credentials in args
       id: resolve-args
       shell: bash
@@ -122,7 +144,18 @@ runs:
         ARGS: ${{ steps.resolve-args.outputs.args }}
         HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
       run: |
+        # shellcheck disable=SC2086
         ksail cluster init --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS --force
+
+    - name: 📥 Restore cached cluster images
+      id: restore-image-cache
+      if: inputs.enable-image-cache == 'true'
+      uses: ./.github/actions/cache-cluster-images
+      with:
+        distribution: ${{ inputs.distribution }}
+        operation: restore
+        cache-version: ${{ inputs.image-cache-version }}
+        go-mod-hash: ${{ steps.compute-dep-hash.outputs.go-mod-hash }}
 
     - name: 🧪 ksail cluster create
       id: cluster-create
@@ -133,21 +166,22 @@ runs:
         PROVIDER: ${{ inputs.provider }}
         ARGS: ${{ steps.resolve-args.outputs.args }}
         HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
+        ENABLE_CACHE: ${{ inputs.enable-image-cache }}
+        CACHE_HIT: ${{ steps.restore-image-cache.outputs.cache-hit }}
       run: |
-        if [ "$INIT" = "true" ]; then
-          ksail cluster create
-        else
-          ksail cluster create --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS
+        # Add --import-images flag if cache was restored successfully
+        IMPORT_FLAG=""
+        if [[ "$ENABLE_CACHE" == "true" ]] && [[ "$CACHE_HIT" == "true" ]]; then
+          IMPORT_FLAG="--import-images /tmp/ksail-image-cache/images.tar"
         fi
 
-    - name: 📥 Restore cached cluster images
-      id: restore-image-cache
-      if: inputs.enable-image-cache == 'true'
-      uses: ./.github/actions/cache-cluster-images
-      with:
-        distribution: ${{ inputs.distribution }}
-        operation: restore
-        cache-version: ${{ inputs.image-cache-version }}
+        if [ "$INIT" = "true" ]; then
+          # shellcheck disable=SC2086
+          ksail cluster create $IMPORT_FLAG
+        else
+          # shellcheck disable=SC2086
+          ksail cluster create --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS $IMPORT_FLAG
+        fi
 
     - name: 🧪 ksail cluster list
       shell: bash
@@ -204,6 +238,7 @@ runs:
         distribution: ${{ inputs.distribution }}
         operation: save
         cache-version: ${{ inputs.image-cache-version }}
+        go-mod-hash: ${{ steps.compute-dep-hash.outputs.go-mod-hash }}
 
     - name: 🐞 Debug Kubernetes failure
       if: failure() && (steps.cluster-create.outcome == 'failure' || steps.workload-create.outcome == 'failure' || steps.workload-apply.outcome == 'failure' || steps.workload-push-reconcile.outcome == 'failure')
