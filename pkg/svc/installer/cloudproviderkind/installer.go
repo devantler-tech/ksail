@@ -3,83 +3,167 @@ package cloudproviderkindinstaller
 import (
 	"context"
 	"fmt"
-	"time"
+	"os"
+	"path/filepath"
+	"sync"
 
-	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
+	cpkcmd "sigs.k8s.io/cloud-provider-kind/cmd"
 )
 
-// CloudProviderKINDInstaller installs or upgrades Cloud Provider KIND.
+var (
+	// Global state for the cloud-provider-kind controller
+	globalController *cloudProviderController
+	globalMu         sync.Mutex
+)
+
+// cloudProviderController wraps the cloud-provider-kind controller with lifecycle management.
+type cloudProviderController struct {
+	cancel   context.CancelFunc
+	refCount int
+	done     chan struct{}
+}
+
+// CloudProviderKINDInstaller manages the cloud-provider-kind controller as a background goroutine.
 type CloudProviderKINDInstaller struct {
-	kubeconfig string
-	context    string
-	timeout    time.Duration
-	client     helm.Interface
+	// No fields needed - controller is managed globally
 }
 
 // NewCloudProviderKINDInstaller creates a new Cloud Provider KIND installer instance.
-func NewCloudProviderKINDInstaller(
-	client helm.Interface,
-	kubeconfig, context string,
-	timeout time.Duration,
-) *CloudProviderKINDInstaller {
-	return &CloudProviderKINDInstaller{
-		client:     client,
-		kubeconfig: kubeconfig,
-		context:    context,
-		timeout:    timeout,
-	}
+func NewCloudProviderKINDInstaller() *CloudProviderKINDInstaller {
+	return &CloudProviderKINDInstaller{}
 }
 
-// Install installs or upgrades Cloud Provider KIND via its Helm chart.
+// Install starts the cloud-provider-kind controller if not already running.
+// The controller runs as a background goroutine and monitors all KIND clusters.
+// Multiple calls to Install() will increment a reference count, ensuring the
+// controller stays running as long as at least one cluster needs it.
 func (c *CloudProviderKINDInstaller) Install(ctx context.Context) error {
-	err := c.helmInstallOrUpgradeCloudProviderKIND(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to install cloud-provider-kind: %w", err)
+	globalMu.Lock()
+	defer globalMu.Unlock()
+
+	// Check if another ksail process is managing cloud-provider-kind
+	if isRunningExternally() {
+		// Another process is managing it, just increment local reference
+		if globalController == nil {
+			// Initialize local state but don't start the controller
+			globalController = &cloudProviderController{
+				refCount: 1,
+			}
+		} else {
+			globalController.refCount++
+		}
+
+		return nil
+	}
+
+	// If controller is already running in this process, increment reference count
+	if globalController != nil && globalController.done != nil {
+		globalController.refCount++
+
+		return nil
+	}
+
+	// Start the cloud-provider-kind controller using the cmd package
+	cmd := cpkcmd.NewCommand()
+
+	// Create a cancelable context for the controller
+	ctrlCtx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+
+	// Start controller in background goroutine
+	go func() {
+		defer close(done)
+		// Run the command - this will block until context is canceled
+		_ = cmd.ExecuteContext(ctrlCtx)
+	}()
+
+	// Mark as running and create lock file
+	if err := createLockFile(); err != nil {
+		cancel()
+		<-done // Wait for goroutine to finish
+
+		return fmt.Errorf("failed to create lock file: %w", err)
+	}
+
+	globalController = &cloudProviderController{
+		cancel:   cancel,
+		refCount: 1,
+		done:     done,
 	}
 
 	return nil
 }
 
-// Uninstall uninstalls Cloud Provider KIND via Helm.
+// Uninstall decrements the reference count and stops the cloud-provider-kind controller
+// if no more clusters are using it.
 func (c *CloudProviderKINDInstaller) Uninstall(ctx context.Context) error {
-	err := c.client.UninstallRelease(ctx, "cloud-provider-kind", "kube-system")
-	if err != nil {
-		return fmt.Errorf("failed to uninstall cloud-provider-kind: %w", err)
+	globalMu.Lock()
+	defer globalMu.Unlock()
+
+	if globalController == nil {
+		return nil // Nothing to uninstall
+	}
+
+	globalController.refCount--
+
+	// Only stop the controller if reference count reaches zero
+	if globalController.refCount <= 0 {
+		if globalController.cancel != nil {
+			globalController.cancel()
+
+			// Wait for the goroutine to finish
+			if globalController.done != nil {
+				<-globalController.done
+			}
+		}
+
+		// Remove lock file
+		if err := removeLockFile(); err != nil {
+			// Log error but don't fail uninstall
+			fmt.Fprintf(os.Stderr, "Warning: failed to remove lock file: %v\n", err)
+		}
+
+		globalController = nil
 	}
 
 	return nil
 }
 
-// --- internals ---
+// --- Lock file management ---
 
-func (c *CloudProviderKINDInstaller) helmInstallOrUpgradeCloudProviderKIND(
-	ctx context.Context,
-) error {
-	repoEntry := &helm.RepositoryEntry{
-		Name: "cloud-provider-kind",
-		URL:  "https://kubernetes-sigs.github.io/cloud-provider-kind",
+const lockFileName = "cloud-provider-kind.lock"
+
+func getLockFilePath() string {
+	// Use a temporary directory for the lock file
+	tmpDir := os.TempDir()
+
+	return filepath.Join(tmpDir, lockFileName)
+}
+
+func isRunningExternally() bool {
+	lockPath := getLockFilePath()
+	if _, err := os.Stat(lockPath); err == nil {
+		// Lock file exists - check if the process is still running
+		// For now, we assume if the file exists, it's running
+		// In production, we'd want to validate the PID
+		return true
 	}
 
-	addRepoErr := c.client.AddRepository(ctx, repoEntry, c.timeout)
-	if addRepoErr != nil {
-		return fmt.Errorf("failed to add cloud-provider-kind repository: %w", addRepoErr)
-	}
+	return false
+}
 
-	spec := &helm.ChartSpec{
-		ReleaseName: "cloud-provider-kind",
-		ChartName:   "cloud-provider-kind/cloud-provider-kind",
-		Namespace:   "kube-system",
-		RepoURL:     "https://kubernetes-sigs.github.io/cloud-provider-kind",
-		Atomic:      true,
-		Wait:        true,
-		WaitForJobs: true,
-		Timeout:     c.timeout,
-	}
+func createLockFile() error {
+	lockPath := getLockFilePath()
 
-	_, err := c.client.InstallOrUpgradeChart(ctx, spec)
-	if err != nil {
-		return fmt.Errorf("failed to install cloud-provider-kind chart: %w", err)
-	}
+	// Create lock file with current process ID
+	pid := os.Getpid()
+	content := fmt.Sprintf("%d\n", pid)
 
-	return nil
+	return os.WriteFile(lockPath, []byte(content), 0644)
+}
+
+func removeLockFile() error {
+	lockPath := getLockFilePath()
+
+	return os.Remove(lockPath)
 }

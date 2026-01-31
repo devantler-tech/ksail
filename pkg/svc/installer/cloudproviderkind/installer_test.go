@@ -2,165 +2,97 @@ package cloudproviderkindinstaller_test
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
-	"time"
 
-	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
 	cloudproviderkindinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/cloudproviderkind"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
 func TestNewCloudProviderKINDInstaller(t *testing.T) {
 	t.Parallel()
 
-	kubeconfig := "~/.kube/config"
-	kubeContext := "test-context"
-	timeout := 5 * time.Minute
-
-	client := helm.NewMockInterface(t)
-	installer := cloudproviderkindinstaller.NewCloudProviderKINDInstaller(
-		client,
-		kubeconfig,
-		kubeContext,
-		timeout,
-	)
+	installer := cloudproviderkindinstaller.NewCloudProviderKINDInstaller()
 
 	assert.NotNil(t, installer)
 }
 
-func TestCloudProviderKINDInstallerInstallSuccess(t *testing.T) {
-	t.Parallel()
+func TestCloudProviderKINDInstallerInstall(t *testing.T) {
+	// Note: This is an integration test that actually starts the controller
+	// Skip in CI environments where Docker might not be available
+	if os.Getenv("CI") == "true" {
+		t.Skip("Skipping integration test in CI")
+	}
 
-	installer, client := newCloudProviderKINDInstallerWithDefaults(t)
-	expectCloudProviderKINDInstall(t, client, nil)
+	installer := cloudproviderkindinstaller.NewCloudProviderKINDInstaller()
 
-	err := installer.Install(context.Background())
+	ctx := context.Background()
+	err := installer.Install(ctx)
 
-	require.NoError(t, err)
-}
-
-func TestCloudProviderKINDInstallerInstallError(t *testing.T) {
-	t.Parallel()
-
-	installer, client := newCloudProviderKINDInstallerWithDefaults(t)
-	expectCloudProviderKINDInstall(t, client, assert.AnError)
-
-	err := installer.Install(context.Background())
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to install cloud-provider-kind")
-}
-
-func TestCloudProviderKINDInstallerInstallAddRepositoryError(t *testing.T) {
-	t.Parallel()
-
-	installer, client := newCloudProviderKINDInstallerWithDefaults(t)
-	expectCloudProviderKINDAddRepository(t, client, assert.AnError)
-
-	err := installer.Install(context.Background())
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to add cloud-provider-kind repository")
-}
-
-func TestCloudProviderKINDInstallerUninstallSuccess(t *testing.T) {
-	t.Parallel()
-
-	installer, client := newCloudProviderKINDInstallerWithDefaults(t)
-	client.EXPECT().
-		UninstallRelease(mock.Anything, "cloud-provider-kind", "kube-system").
-		Return(nil)
-
-	err := installer.Uninstall(context.Background())
+	// Clean up
+	defer func() {
+		_ = installer.Uninstall(ctx)
+	}()
 
 	require.NoError(t, err)
 }
 
-func TestCloudProviderKINDInstallerUninstallError(t *testing.T) {
+func TestCloudProviderKINDInstallerInstallMultipleCalls(t *testing.T) {
+	// Skip in CI
+	if os.Getenv("CI") == "true" {
+		t.Skip("Skipping integration test in CI")
+	}
+
+	installer1 := cloudproviderkindinstaller.NewCloudProviderKINDInstaller()
+	installer2 := cloudproviderkindinstaller.NewCloudProviderKINDInstaller()
+
+	ctx := context.Background()
+
+	// First install
+	err := installer1.Install(ctx)
+	require.NoError(t, err)
+
+	// Second install (should increment reference count)
+	err = installer2.Install(ctx)
+	require.NoError(t, err)
+
+	// Uninstall first (should not stop controller)
+	err = installer1.Uninstall(ctx)
+	require.NoError(t, err)
+
+	// Uninstall second (should stop controller)
+	err = installer2.Uninstall(ctx)
+	require.NoError(t, err)
+}
+
+func TestCloudProviderKINDInstallerUninstallNoInstall(t *testing.T) {
 	t.Parallel()
 
-	installer, client := newCloudProviderKINDInstallerWithDefaults(t)
-	client.EXPECT().
-		UninstallRelease(mock.Anything, "cloud-provider-kind", "kube-system").
-		Return(assert.AnError)
+	installer := cloudproviderkindinstaller.NewCloudProviderKINDInstaller()
 
-	err := installer.Uninstall(context.Background())
+	ctx := context.Background()
+	err := installer.Uninstall(ctx)
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to uninstall cloud-provider-kind")
+	require.NoError(t, err)
 }
 
-func newCloudProviderKINDInstallerWithDefaults(
-	t *testing.T,
-) (*cloudproviderkindinstaller.CloudProviderKINDInstaller, *helm.MockInterface) {
-	t.Helper()
+func TestLockFileOperations(t *testing.T) {
+	t.Parallel()
 
-	kubeconfig := "~/.kube/config"
-	kubeContext := "test-context"
-	timeout := 5 * time.Second
+	// Get the lock file path
+	tmpDir := os.TempDir()
+	lockPath := filepath.Join(tmpDir, "cloud-provider-kind.lock")
 
-	client := helm.NewMockInterface(t)
-	installer := cloudproviderkindinstaller.NewCloudProviderKINDInstaller(
-		client,
-		kubeconfig,
-		kubeContext,
-		timeout,
-	)
+	// Clean up any existing lock file
+	_ = os.Remove(lockPath)
 
-	return installer, client
+	// Verify lock file doesn't exist initially
+	_, err := os.Stat(lockPath)
+	assert.True(t, os.IsNotExist(err))
+
+	// Note: We can't directly test the lock file functions since they're not exported
+	// They are tested indirectly through Install/Uninstall tests
 }
 
-func expectCloudProviderKINDAddRepository(
-	t *testing.T,
-	client *helm.MockInterface,
-	err error,
-) {
-	t.Helper()
-	client.EXPECT().
-		AddRepository(
-			mock.Anything,
-			mock.MatchedBy(func(entry *helm.RepositoryEntry) bool {
-				assert.Equal(t, "cloud-provider-kind", entry.Name)
-				assert.Equal(t, "https://kubernetes-sigs.github.io/cloud-provider-kind", entry.URL)
-
-				return true
-			}),
-			mock.Anything,
-		).
-		Return(err)
-}
-
-func expectCloudProviderKINDInstall(
-	t *testing.T,
-	client *helm.MockInterface,
-	installErr error,
-) {
-	t.Helper()
-	expectCloudProviderKINDAddRepository(t, client, nil)
-	client.EXPECT().
-		InstallOrUpgradeChart(
-			mock.Anything,
-			mock.MatchedBy(func(spec *helm.ChartSpec) bool {
-				assert.Equal(t, "cloud-provider-kind", spec.ReleaseName)
-				assert.Equal(
-					t,
-					"cloud-provider-kind/cloud-provider-kind",
-					spec.ChartName,
-				)
-				assert.Equal(t, "kube-system", spec.Namespace)
-				assert.Equal(
-					t,
-					"https://kubernetes-sigs.github.io/cloud-provider-kind",
-					spec.RepoURL,
-				)
-				assert.True(t, spec.Atomic)
-				assert.True(t, spec.Wait)
-				assert.True(t, spec.WaitForJobs)
-
-				return true
-			}),
-		).
-		Return(nil, installErr)
-}

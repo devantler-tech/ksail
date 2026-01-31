@@ -299,28 +299,18 @@ func InstallMetricsServerSilent(
 }
 
 // InstallLoadBalancerSilent installs LoadBalancer support silently for parallel execution.
-// For Vanilla (Kind) × Docker, installs Cloud Provider KIND.
+// For Vanilla (Kind) × Docker, starts the Cloud Provider KIND controller as a background goroutine.
 func InstallLoadBalancerSilent(
 	ctx context.Context,
 	clusterCfg *v1alpha1.Cluster,
 	factories *InstallerFactories,
 ) error {
-	helmClient, kubeconfig, timeout, err := helmClientSetup(clusterCfg, factories)
-	if err != nil {
-		return err
-	}
-
 	// Determine which LoadBalancer implementation to install based on distribution × provider
 	switch clusterCfg.Spec.Cluster.Distribution {
 	case v1alpha1.DistributionVanilla:
 		// Vanilla (Kind) × Docker uses Cloud Provider KIND
 		if clusterCfg.Spec.Cluster.Provider == v1alpha1.ProviderDocker {
-			lbInstaller := cloudproviderkindinstaller.NewCloudProviderKINDInstaller(
-				helmClient,
-				kubeconfig,
-				clusterCfg.Spec.Cluster.Connection.Context,
-				timeout,
-			)
+			lbInstaller := cloudproviderkindinstaller.NewCloudProviderKINDInstaller()
 
 			installErr := lbInstaller.Install(ctx)
 			if installErr != nil {
