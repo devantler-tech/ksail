@@ -56,9 +56,9 @@ func newConfigManager(
 	_ = manager.Viper.BindPFlag("force", cmd.Flags().Lookup("force"))
 	cmd.Flags().
 		StringSlice("mirror-registry", []string{
-		"docker.io=https://registry-1.docker.io",
-		"ghcr.io=https://ghcr.io",
-	}, mirrorRegistryHelp)
+			"docker.io=https://registry-1.docker.io",
+			"ghcr.io=https://ghcr.io",
+		}, mirrorRegistryHelp)
 	_ = manager.Viper.BindPFlag("mirror-registry", cmd.Flags().Lookup("mirror-registry"))
 
 	return manager
