@@ -55,7 +55,10 @@ func newConfigManager(
 	cmd.Flags().BoolP("force", "f", false, "Overwrite existing files")
 	_ = manager.Viper.BindPFlag("force", cmd.Flags().Lookup("force"))
 	cmd.Flags().
-		StringSlice("mirror-registry", []string{}, mirrorRegistryHelp)
+		StringSlice("mirror-registry", []string{
+		"docker.io=https://registry-1.docker.io",
+		"ghcr.io=https://ghcr.io",
+	}, mirrorRegistryHelp)
 	_ = manager.Viper.BindPFlag("mirror-registry", cmd.Flags().Lookup("mirror-registry"))
 
 	return manager

@@ -71,7 +71,10 @@ func NewCreateCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
 
 	cfgManager := ksailconfigmanager.NewCommandConfigManager(cmd, fieldSelectors)
 
-	cmd.Flags().StringSlice("mirror-registry", []string{},
+	cmd.Flags().StringSlice("mirror-registry", []string{
+		"docker.io=https://registry-1.docker.io",
+		"ghcr.io=https://ghcr.io",
+	},
 		"Configure mirror registries with format 'host=upstream' (e.g., docker.io=https://registry-1.docker.io)")
 	_ = cfgManager.Viper.BindPFlag("mirror-registry", cmd.Flags().Lookup("mirror-registry"))
 
