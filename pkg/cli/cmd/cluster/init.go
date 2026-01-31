@@ -58,6 +58,7 @@ func InitFieldSelectors() []ksailconfigmanager.FieldSelector[v1alpha1.Cluster] {
 	selectors = append(selectors, ksailconfigmanager.DefaultLoadBalancerFieldSelector())
 	selectors = append(selectors, ksailconfigmanager.DefaultCertManagerFieldSelector())
 	selectors = append(selectors, ksailconfigmanager.DefaultPolicyEngineFieldSelector())
+	selectors = append(selectors, ksailconfigmanager.DefaultImportImagesFieldSelector())
 	// Unified node count selectors for all distributions
 	selectors = append(selectors, ksailconfigmanager.ControlPlanesFieldSelector())
 	selectors = append(selectors, ksailconfigmanager.WorkersFieldSelector())
