@@ -144,6 +144,8 @@ func runDeleteAction(
 }
 
 // detectIsKindCluster determines if the cluster is a Kind (Vanilla) cluster.
+// This detection must happen before the cluster is deleted to ensure the kubeconfig
+// entry is still available for reading cluster information.
 func detectIsKindCluster(resolved *lifecycle.ResolvedClusterInfo) bool {
 	if resolved.Provider != v1alpha1.ProviderDocker {
 		return false
@@ -528,7 +530,7 @@ func cleanupRegistriesAfterDelete(
 }
 
 // hasRemainingKindClusters checks if there are any Kind clusters remaining in Docker.
-func hasRemainingKindClusters() bool {
+func hasRemainingKindClusters(cmd *cobra.Command) bool {
 	dockerClientInvokerMu.RLock()
 
 	invoker := dockerClientInvoker
@@ -538,7 +540,7 @@ func hasRemainingKindClusters() bool {
 	var hasKind bool
 
 	_ = invoker(nil, func(dockerClient client.APIClient) error {
-		ctx := context.Background()
+		ctx := cmd.Context()
 
 		containers, err := dockerClient.ContainerList(ctx, container.ListOptions{
 			All: true,
@@ -567,6 +569,43 @@ func hasRemainingKindClusters() bool {
 	return hasKind
 }
 
+// hasCloudProviderKindContainers checks if there are any cloud-provider-kind containers.
+func hasCloudProviderKindContainers(cmd *cobra.Command) bool {
+	dockerClientInvokerMu.RLock()
+
+	invoker := dockerClientInvoker
+
+	dockerClientInvokerMu.RUnlock()
+
+	var hasContainers bool
+
+	_ = invoker(nil, func(dockerClient client.APIClient) error {
+		containers, err := dockerClient.ContainerList(cmd.Context(), container.ListOptions{
+			All: true,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to list Docker containers: %w", err)
+		}
+
+		// Check if any container matches cloud-provider-kind's naming pattern
+		for _, ctr := range containers {
+			for _, name := range ctr.Names {
+				containerName := strings.TrimPrefix(name, "/")
+				// Cloud-provider-kind containers start with "cpk-"
+				if strings.HasPrefix(containerName, "cpk-") {
+					hasContainers = true
+
+					return nil
+				}
+			}
+		}
+
+		return nil
+	})
+
+	return hasContainers
+}
+
 // cleanupCloudProviderKindIfLastCluster uninstalls cloud-provider-kind if no kind clusters remain.
 // Cloud-provider-kind creates containers that can be shared across multiple kind clusters,
 // so we only uninstall when the last kind cluster is deleted.
@@ -575,7 +614,12 @@ func cleanupCloudProviderKindIfLastCluster(
 	tmr timer.Timer,
 ) {
 	// Check if there are any remaining Kind clusters by looking for Kind containers
-	if hasRemainingKindClusters() {
+	if hasRemainingKindClusters(cmd) {
+		return
+	}
+
+	// Check if there are any cloud-provider-kind containers to clean up
+	if !hasCloudProviderKindContainers(cmd) {
 		return
 	}
 
@@ -650,8 +694,8 @@ func cleanupCloudProviderKindContainers(cmd *cobra.Command) error {
 			// Look for containers created by cloud-provider-kind
 			for _, name := range ctr.Names {
 				containerName := strings.TrimPrefix(name, "/")
-				// Cloud-provider-kind containers are typically named: lb-<service>-<namespace>-<cluster>
-				if strings.HasPrefix(containerName, "lb-") {
+				// Cloud-provider-kind containers are typically named: cpk-<service>-<namespace>-<cluster>
+				if strings.HasPrefix(containerName, "cpk-") {
 					err := dockerClient.ContainerRemove(
 						cmd.Context(),
 						ctr.ID,
