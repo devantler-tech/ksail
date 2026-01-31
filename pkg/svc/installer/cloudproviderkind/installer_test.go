@@ -2,30 +2,102 @@ package cloudproviderkindinstaller_test
 
 import (
 	"context"
+	"io"
+	"strings"
 	"testing"
-	"time"
 
-	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
+	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/image"
 	cloudproviderkindinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/cloudproviderkind"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
+// MockDockerClient is a mock for the Docker API client.
+type MockDockerClient struct {
+	mock.Mock
+}
+
+func (m *MockDockerClient) ContainerList(
+	ctx context.Context,
+	opts container.ListOptions,
+) ([]container.Summary, error) {
+	args := m.Called(ctx, opts)
+
+	return args.Get(0).([]container.Summary), args.Error(1)
+}
+
+func (m *MockDockerClient) ImageInspect(
+	ctx context.Context,
+	imageName string,
+) (image.InspectResponse, error) {
+	args := m.Called(ctx, imageName)
+
+	return args.Get(0).(image.InspectResponse), args.Error(1)
+}
+
+func (m *MockDockerClient) ImagePull(
+	ctx context.Context,
+	imageName string,
+	opts image.PullOptions,
+) (io.ReadCloser, error) {
+	args := m.Called(ctx, imageName, opts)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+
+	return args.Get(0).(io.ReadCloser), args.Error(1)
+}
+
+func (m *MockDockerClient) ContainerCreate(
+	ctx context.Context,
+	config *container.Config,
+	hostConfig *container.HostConfig,
+	networkingConfig interface{},
+	platform interface{},
+	containerName string,
+) (container.CreateResponse, error) {
+	args := m.Called(ctx, config, hostConfig, networkingConfig, platform, containerName)
+
+	return args.Get(0).(container.CreateResponse), args.Error(1)
+}
+
+func (m *MockDockerClient) ContainerStart(
+	ctx context.Context,
+	containerID string,
+	opts container.StartOptions,
+) error {
+	args := m.Called(ctx, containerID, opts)
+
+	return args.Error(0)
+}
+
+func (m *MockDockerClient) ContainerStop(
+	ctx context.Context,
+	containerID string,
+	opts container.StopOptions,
+) error {
+	args := m.Called(ctx, containerID, opts)
+
+	return args.Error(0)
+}
+
+func (m *MockDockerClient) ContainerRemove(
+	ctx context.Context,
+	containerID string,
+	opts container.RemoveOptions,
+) error {
+	args := m.Called(ctx, containerID, opts)
+
+	return args.Error(0)
+}
+
 func TestNewCloudProviderKINDInstaller(t *testing.T) {
 	t.Parallel()
 
-	kubeconfig := "~/.kube/config"
-	kubeContext := "test-context"
-	timeout := 5 * time.Minute
-
-	client := helm.NewMockInterface(t)
-	installer := cloudproviderkindinstaller.NewCloudProviderKINDInstaller(
-		client,
-		kubeconfig,
-		kubeContext,
-		timeout,
-	)
+	client := new(MockDockerClient)
+	installer := cloudproviderkindinstaller.NewCloudProviderKINDInstaller(client)
 
 	assert.NotNil(t, installer)
 }
@@ -33,134 +105,156 @@ func TestNewCloudProviderKINDInstaller(t *testing.T) {
 func TestCloudProviderKINDInstallerInstallSuccess(t *testing.T) {
 	t.Parallel()
 
-	installer, client := newCloudProviderKINDInstallerWithDefaults(t)
-	expectCloudProviderKINDInstall(t, client, nil)
+	client := new(MockDockerClient)
+	installer := cloudproviderkindinstaller.NewCloudProviderKINDInstaller(client)
+
+	// Container not running
+	client.On("ContainerList", mock.Anything, mock.Anything).
+		Return([]container.Summary{}, nil).
+		Once()
+
+	// Image exists
+	client.On("ImageInspect", mock.Anything, cloudproviderkindinstaller.CloudProviderKindImage).
+		Return(image.InspectResponse{}, nil).
+		Once()
+
+	// Container create
+	client.On("ContainerCreate",
+		mock.Anything,
+		mock.Anything,
+		mock.Anything,
+		mock.Anything,
+		mock.Anything,
+		cloudproviderkindinstaller.CloudProviderKindContainerName,
+	).Return(container.CreateResponse{ID: "test-id"}, nil).
+		Once()
+
+	// Container start
+	client.On("ContainerStart", mock.Anything, "test-id", mock.Anything).
+		Return(nil).
+		Once()
 
 	err := installer.Install(context.Background())
 
 	require.NoError(t, err)
+	client.AssertExpectations(t)
 }
 
-func TestCloudProviderKINDInstallerInstallError(t *testing.T) {
+func TestCloudProviderKINDInstallerInstallAlreadyRunning(t *testing.T) {
 	t.Parallel()
 
-	installer, client := newCloudProviderKINDInstallerWithDefaults(t)
-	expectCloudProviderKINDInstall(t, client, assert.AnError)
+	client := new(MockDockerClient)
+	installer := cloudproviderkindinstaller.NewCloudProviderKINDInstaller(client)
+
+	// Container already running
+	client.On("ContainerList", mock.Anything, mock.Anything).
+		Return([]container.Summary{
+			{
+				ID:    "test-id",
+				State: "running",
+			},
+		}, nil).
+		Once()
 
 	err := installer.Install(context.Background())
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to install cloud-provider-kind")
+	require.NoError(t, err)
+	client.AssertExpectations(t)
 }
 
-func TestCloudProviderKINDInstallerInstallAddRepositoryError(t *testing.T) {
+func TestCloudProviderKINDInstallerInstallWithImagePull(t *testing.T) {
 	t.Parallel()
 
-	installer, client := newCloudProviderKINDInstallerWithDefaults(t)
-	expectCloudProviderKINDAddRepository(t, client, assert.AnError)
+	client := new(MockDockerClient)
+	installer := cloudproviderkindinstaller.NewCloudProviderKINDInstaller(client)
+
+	// Container not running
+	client.On("ContainerList", mock.Anything, mock.Anything).
+		Return([]container.Summary{}, nil).
+		Once()
+
+	// Image doesn't exist
+	client.On("ImageInspect", mock.Anything, cloudproviderkindinstaller.CloudProviderKindImage).
+		Return(image.InspectResponse{}, assert.AnError).
+		Once()
+
+	// Pull image
+	reader := io.NopCloser(strings.NewReader(""))
+	client.On("ImagePull",
+		mock.Anything,
+		cloudproviderkindinstaller.CloudProviderKindImage,
+		mock.Anything,
+	).Return(reader, nil).
+		Once()
+
+	// Container create
+	client.On("ContainerCreate",
+		mock.Anything,
+		mock.Anything,
+		mock.Anything,
+		mock.Anything,
+		mock.Anything,
+		cloudproviderkindinstaller.CloudProviderKindContainerName,
+	).Return(container.CreateResponse{ID: "test-id"}, nil).
+		Once()
+
+	// Container start
+	client.On("ContainerStart", mock.Anything, "test-id", mock.Anything).
+		Return(nil).
+		Once()
 
 	err := installer.Install(context.Background())
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to add cloud-provider-kind repository")
+	require.NoError(t, err)
+	client.AssertExpectations(t)
 }
 
 func TestCloudProviderKINDInstallerUninstallSuccess(t *testing.T) {
 	t.Parallel()
 
-	installer, client := newCloudProviderKINDInstallerWithDefaults(t)
-	client.EXPECT().
-		UninstallRelease(mock.Anything, "cloud-provider-kind", "kube-system").
-		Return(nil)
+	client := new(MockDockerClient)
+	installer := cloudproviderkindinstaller.NewCloudProviderKINDInstaller(client)
+
+	// Container exists and is running
+	client.On("ContainerList", mock.Anything, mock.Anything).
+		Return([]container.Summary{
+			{
+				ID:    "test-id",
+				State: "running",
+			},
+		}, nil).
+		Once()
+
+	// Stop container
+	client.On("ContainerStop", mock.Anything, "test-id", mock.Anything).
+		Return(nil).
+		Once()
+
+	// Remove container
+	client.On("ContainerRemove", mock.Anything, "test-id", mock.Anything).
+		Return(nil).
+		Once()
 
 	err := installer.Uninstall(context.Background())
 
 	require.NoError(t, err)
+	client.AssertExpectations(t)
 }
 
-func TestCloudProviderKINDInstallerUninstallError(t *testing.T) {
+func TestCloudProviderKINDInstallerUninstallNoContainer(t *testing.T) {
 	t.Parallel()
 
-	installer, client := newCloudProviderKINDInstallerWithDefaults(t)
-	client.EXPECT().
-		UninstallRelease(mock.Anything, "cloud-provider-kind", "kube-system").
-		Return(assert.AnError)
+	client := new(MockDockerClient)
+	installer := cloudproviderkindinstaller.NewCloudProviderKINDInstaller(client)
+
+	// No container exists
+	client.On("ContainerList", mock.Anything, mock.Anything).
+		Return([]container.Summary{}, nil).
+		Once()
 
 	err := installer.Uninstall(context.Background())
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to uninstall cloud-provider-kind")
+	require.NoError(t, err)
+	client.AssertExpectations(t)
 }
 
-func newCloudProviderKINDInstallerWithDefaults(
-	t *testing.T,
-) (*cloudproviderkindinstaller.CloudProviderKINDInstaller, *helm.MockInterface) {
-	t.Helper()
-
-	kubeconfig := "~/.kube/config"
-	kubeContext := "test-context"
-	timeout := 5 * time.Second
-
-	client := helm.NewMockInterface(t)
-	installer := cloudproviderkindinstaller.NewCloudProviderKINDInstaller(
-		client,
-		kubeconfig,
-		kubeContext,
-		timeout,
-	)
-
-	return installer, client
-}
-
-func expectCloudProviderKINDAddRepository(
-	t *testing.T,
-	client *helm.MockInterface,
-	err error,
-) {
-	t.Helper()
-	client.EXPECT().
-		AddRepository(
-			mock.Anything,
-			mock.MatchedBy(func(entry *helm.RepositoryEntry) bool {
-				assert.Equal(t, "cloud-provider-kind", entry.Name)
-				assert.Equal(t, "https://kubernetes-sigs.github.io/cloud-provider-kind", entry.URL)
-
-				return true
-			}),
-			mock.Anything,
-		).
-		Return(err)
-}
-
-func expectCloudProviderKINDInstall(
-	t *testing.T,
-	client *helm.MockInterface,
-	installErr error,
-) {
-	t.Helper()
-	expectCloudProviderKINDAddRepository(t, client, nil)
-	client.EXPECT().
-		InstallOrUpgradeChart(
-			mock.Anything,
-			mock.MatchedBy(func(spec *helm.ChartSpec) bool {
-				assert.Equal(t, "cloud-provider-kind", spec.ReleaseName)
-				assert.Equal(
-					t,
-					"cloud-provider-kind/cloud-provider-kind",
-					spec.ChartName,
-				)
-				assert.Equal(t, "kube-system", spec.Namespace)
-				assert.Equal(
-					t,
-					"https://kubernetes-sigs.github.io/cloud-provider-kind",
-					spec.RepoURL,
-				)
-				assert.True(t, spec.Atomic)
-				assert.True(t, spec.Wait)
-				assert.True(t, spec.WaitForJobs)
-
-				return true
-			}),
-		).
-		Return(nil, installErr)
-}
