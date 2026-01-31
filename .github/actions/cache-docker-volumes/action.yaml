@@ -1,0 +1,142 @@
+name: Cache Docker Volumes
+description: |
+  Caches Docker volumes (specifically registry volumes) between workflow runs
+  to avoid re-pulling images from Docker Hub and GHCR, improving CI performance
+  and reducing the risk of rate limiting.
+
+  The cache key includes the distribution to ensure volumes are compatible
+  across test runs.
+
+inputs:
+  distribution:
+    description: |
+      Kubernetes distribution (Vanilla, K3s, Talos).
+      Used to determine cache key prefix.
+    required: true
+  operation:
+    description: |
+      Cache operation to perform:
+      - 'restore': Restore cached Docker volumes
+      - 'save': Save Docker volumes to cache
+    required: true
+  cache-version:
+    description: |
+      Version salt for cache key. Bump this to invalidate all caches.
+    required: false
+    default: "v1"
+
+outputs:
+  cache-hit:
+    description: Whether the cache was restored successfully
+    value: ${{ steps.restore-cache.outputs.cache-hit || 'false' }}
+  cache-key:
+    description: The cache key used for this operation
+    value: ${{ steps.check-support.outputs.cache-key || '' }}
+
+runs:
+  using: composite
+  steps:
+    - name: 🔍 Generate cache key
+      id: check-support
+      shell: bash
+      env:
+        DISTRIBUTION: ${{ inputs.distribution }}
+        CACHE_VERSION: ${{ inputs.cache-version }}
+        RUNNER_OS: ${{ runner.os }}
+        RUNNER_ARCH: ${{ runner.arch }}
+      run: |
+        DIST_LOWER=$(echo "$DISTRIBUTION" | tr '[:upper:]' '[:lower:]')
+        CACHE_KEY="docker-volumes-${CACHE_VERSION}-${DIST_LOWER}-${RUNNER_OS}-${RUNNER_ARCH}"
+        echo "cache-key=$CACHE_KEY" >> "$GITHUB_OUTPUT"
+        echo "📦 Cache key: $CACHE_KEY"
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # RESTORE operation: Restore Docker volumes from cache
+    # ─────────────────────────────────────────────────────────────────────────
+
+    - name: 📥 Restore Docker volume cache
+      if: inputs.operation == 'restore'
+      id: restore-cache
+      uses: actions/cache/restore@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+      with:
+        path: /tmp/docker-volumes
+        key: ${{ steps.check-support.outputs.cache-key }}
+        restore-keys: |
+          docker-volumes-${{ inputs.cache-version }}-${{ inputs.distribution }}-
+          docker-volumes-${{ inputs.cache-version }}-
+
+    - name: 🔍 Restore Docker volumes from cache
+      if: inputs.operation == 'restore' && steps.restore-cache.outputs.cache-hit == 'true'
+      shell: bash
+      run: |
+        if [ -d "/tmp/docker-volumes" ]; then
+          echo "📥 Restoring Docker volumes from cache"
+          cd /tmp/docker-volumes
+          for vol_tar in *.tar; do
+            if [ -f "$vol_tar" ]; then
+              VOL_NAME="${vol_tar%.tar}"
+              echo "  Restoring volume: $VOL_NAME"
+              
+              # Create volume if it doesn't exist
+              docker volume create "$VOL_NAME" 2>/dev/null || true
+              
+              # Extract tarball directly into the volume using a temporary container
+              docker run --rm \
+                -v "$VOL_NAME":/volume \
+                -v "$(pwd)/$vol_tar":/backup.tar:ro \
+                busybox \
+                sh -c "cd /volume && tar -xf /backup.tar" || echo "⚠️ Failed to restore $VOL_NAME"
+            fi
+          done
+          echo "✅ Docker volumes restored"
+        else
+          echo "⚠️ No cached volumes found"
+        fi
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # SAVE operation: Save Docker volumes to cache
+    # ─────────────────────────────────────────────────────────────────────────
+
+    - name: 📤 Export Docker volumes to cache
+      if: inputs.operation == 'save'
+      id: export-volumes
+      shell: bash
+      run: |
+        mkdir -p /tmp/docker-volumes
+
+        # Find all Docker volumes that match registry patterns
+        # KSail creates volumes with predictable names for registries
+        VOLUMES=$(docker volume ls --format '{{.Name}}' | grep -E '(docker\.io|ghcr\.io|registry)' || true)
+
+        if [ -z "$VOLUMES" ]; then
+          echo "⚠️ No registry volumes found to cache"
+          echo "export-failed=true" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        echo "📦 Exporting Docker volumes:"
+        for VOL in $VOLUMES; do
+          echo "  Exporting volume: $VOL"
+          
+          # Create tarball of volume contents using a temporary container
+          docker run --rm \
+            -v "$VOL":/volume:ro \
+            -v /tmp/docker-volumes:/backup \
+            busybox \
+            sh -c "cd /volume && tar -cf /backup/${VOL}.tar ." || echo "⚠️ Failed to export $VOL"
+        done
+
+        # Show cache size
+        if command -v du &> /dev/null; then
+          TOTAL_SIZE=$(du -sh /tmp/docker-volumes | cut -f1)
+          echo "✅ Total cache size: $TOTAL_SIZE"
+        fi
+
+        echo "export-failed=false" >> "$GITHUB_OUTPUT"
+
+    - name: 💾 Save Docker volume cache
+      if: inputs.operation == 'save' && steps.export-volumes.outputs.export-failed != 'true'
+      uses: actions/cache/save@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+      with:
+        path: /tmp/docker-volumes
+        key: ${{ steps.check-support.outputs.cache-key }}

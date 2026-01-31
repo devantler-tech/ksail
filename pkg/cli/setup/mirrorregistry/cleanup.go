@@ -362,14 +362,9 @@ func cleanupPreDiscoveredRegistries(
 		return err
 	}
 
-	displayRegistryCleanupOutput(cmd, deps, deletedNames)
+	displayRegistryCleanupOutputWithTimer(cmd, deps.Timer, deletedNames)
 
 	return nil
-}
-
-// displayRegistryCleanupOutput shows the cleanup stage output for deleted registries.
-func displayRegistryCleanupOutput(cmd *cobra.Command, deps lifecycle.Deps, deletedNames []string) {
-	displayRegistryCleanupOutputWithTimer(cmd, deps.Timer, deletedNames)
 }
 
 // getNetworkNameForDistribution returns the Docker network name for a given distribution.
@@ -434,11 +429,13 @@ func CleanupMirrorRegistries(
 // CollectMirrorSpecs collects and merges mirror specs from flags and existing config.
 // Returns the merged specs, registry names, and any error.
 func CollectMirrorSpecs(
+	cmd *cobra.Command,
 	cfgManager *ksailconfigmanager.ConfigManager,
 	mirrorsDir string,
 ) ([]registry.MirrorSpec, []string, error) {
-	// Get mirror registry specs from command line flag
-	flagSpecs := registry.ParseMirrorSpecs(cfgManager.Viper.GetStringSlice("mirror-registry"))
+	// Get mirror registry specs with defaults applied
+	mirrors := GetMirrorRegistriesWithDefaults(cmd, cfgManager)
+	flagSpecs := registry.ParseMirrorSpecs(mirrors)
 
 	// Try to read existing hosts.toml files.
 	existingSpecs, err := registry.ReadExistingHostsToml(mirrorsDir)
@@ -449,7 +446,9 @@ func CollectMirrorSpecs(
 	// Merge specs: flag specs override existing specs
 	mirrorSpecs := registry.MergeSpecs(existingSpecs, flagSpecs)
 
-	return buildMirrorSpecsResult(mirrorSpecs)
+	specs, names := buildMirrorSpecsResult(mirrorSpecs)
+
+	return specs, names, nil
 }
 
 func cleanupKindMirrorRegistries(
@@ -462,6 +461,7 @@ func cleanupKindMirrorRegistries(
 	cleanupDeps CleanupDependencies,
 ) error {
 	mirrorSpecs, registryNames, err := CollectMirrorSpecs(
+		cmd,
 		cfgManager,
 		GetKindMirrorsDir(clusterCfg),
 	)
@@ -655,7 +655,7 @@ func cleanupTalosMirrorRegistries(
 	cleanupDeps CleanupDependencies,
 ) error {
 	// Collect mirror specs from Talos config (not kind/mirrors directory)
-	mirrorSpecs, registryNames := CollectTalosMirrorSpecs(cfgManager)
+	mirrorSpecs, registryNames := CollectTalosMirrorSpecs(cmd, cfgManager)
 
 	// Talos uses the cluster name as the network name
 	networkName := clusterName
@@ -729,7 +729,7 @@ func cleanupRegistriesByNetwork(
 		return err
 	}
 
-	displayRegistryCleanupOutput(cmd, deps, registryNames)
+	displayRegistryCleanupOutputWithTimer(cmd, deps.Timer, registryNames)
 
 	return nil
 }
@@ -738,10 +738,12 @@ func cleanupRegistriesByNetwork(
 // This extracts mirror hosts from the loaded Talos config bundle which includes any
 // mirror-registries.yaml patches that were applied during cluster creation.
 func CollectTalosMirrorSpecs(
+	cmd *cobra.Command,
 	cfgManager *ksailconfigmanager.ConfigManager,
 ) ([]registry.MirrorSpec, []string) {
-	// Get mirror registry specs from command line flag
-	flagSpecs := registry.ParseMirrorSpecs(cfgManager.Viper.GetStringSlice("mirror-registry"))
+	// Get mirror registry specs with defaults applied
+	mirrors := GetMirrorRegistriesWithDefaults(cmd, cfgManager)
+	flagSpecs := registry.ParseMirrorSpecs(mirrors)
 
 	// Extract mirror hosts from the loaded Talos config
 	var talosSpecs []registry.MirrorSpec
@@ -759,9 +761,7 @@ func CollectTalosMirrorSpecs(
 	// Merge specs: flag specs override Talos config specs for the same host
 	mirrorSpecs := registry.MergeSpecs(talosSpecs, flagSpecs)
 
-	specs, names, _ := buildMirrorSpecsResult(mirrorSpecs)
-
-	return specs, names
+	return buildMirrorSpecsResult(mirrorSpecs)
 }
 
 // DisconnectMirrorRegistries disconnects mirror registries from the Talos network.
@@ -773,7 +773,7 @@ func DisconnectMirrorRegistries(
 	cleanupDeps CleanupDependencies,
 ) error {
 	// Collect mirror specs from Talos config
-	mirrorSpecs, registryNames := CollectTalosMirrorSpecs(cfgManager)
+	mirrorSpecs, registryNames := CollectTalosMirrorSpecs(cmd, cfgManager)
 
 	// Talos uses the cluster name as the network name
 	networkName := clusterName
@@ -880,12 +880,12 @@ func DisconnectLocalRegistryWithWarning(
 }
 
 // buildMirrorSpecsResult builds the registry names from mirror specs.
-// This is a shared helper used by CollectMirrorSpecs.
+// This is a shared helper used by CollectMirrorSpecs and CollectTalosMirrorSpecs.
 func buildMirrorSpecsResult(
 	mirrorSpecs []registry.MirrorSpec,
-) ([]registry.MirrorSpec, []string, error) {
+) ([]registry.MirrorSpec, []string) {
 	if len(mirrorSpecs) == 0 {
-		return nil, nil, nil
+		return nil, nil
 	}
 
 	// Build registry info to get container names
@@ -896,5 +896,5 @@ func buildMirrorSpecsResult(
 		registryNames = append(registryNames, entry.ContainerName)
 	}
 
-	return mirrorSpecs, registryNames, nil
+	return mirrorSpecs, registryNames
 }
