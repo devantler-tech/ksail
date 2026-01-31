@@ -324,7 +324,6 @@ jobs:
         working-directory: docs
     steps:
       - name: 🔑 Generate GitHub App Token
-        if: steps.fix.outputs.changes_made == 'true'
         uses: tibdex/github-app-token@3beb63f4bd073e61482598c45c71c1019b59b73a # v2.1.0
         id: generate-token
         with:
@@ -334,7 +333,7 @@ jobs:
       - name: 📄 Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          persist-credentials: false
+          persist-credentials: true
           token: ${{ steps.generate-token.outputs.token }}
 
       - name: ⚙️ Setup Node.js
@@ -398,7 +397,6 @@ jobs:
         working-directory: vsce
     steps:
       - name: 🔑 Generate GitHub App Token
-        if: steps.fix.outputs.changes_made == 'true'
         uses: tibdex/github-app-token@3beb63f4bd073e61482598c45c71c1019b59b73a # v2.1.0
         id: generate-token
         with:
@@ -408,7 +406,7 @@ jobs:
       - name: 📄 Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          persist-credentials: false
+          persist-credentials: true
           token: ${{ steps.generate-token.outputs.token }}
 
       - name: ⚙️ Setup Node.js
