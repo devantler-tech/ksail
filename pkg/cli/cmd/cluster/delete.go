@@ -151,7 +151,12 @@ func detectIsKindCluster(resolved *lifecycle.ResolvedClusterInfo) bool {
 		return false
 	}
 
-	clusterInfo, detectErr := lifecycle.DetectClusterInfo(resolved.KubeconfigPath, "")
+	contextName := ""
+	if strings.TrimSpace(resolved.ClusterName) != "" {
+		contextName = "kind-" + resolved.ClusterName
+	}
+
+	clusterInfo, detectErr := lifecycle.DetectClusterInfo(resolved.KubeconfigPath, contextName)
 	if detectErr != nil || clusterInfo == nil {
 		return false
 	}
