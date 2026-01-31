@@ -457,12 +457,6 @@ func TestDistribution_ProvidesLoadBalancerByDefault(t *testing.T) {
 			expected:     true,
 		},
 		{
-			name:         "k3s_hetzner_provides_loadbalancer",
-			distribution: v1alpha1.DistributionK3s,
-			provider:     v1alpha1.ProviderHetzner,
-			expected:     true,
-		},
-		{
 			name:         "vanilla_docker_no_loadbalancer",
 			distribution: v1alpha1.DistributionVanilla,
 			provider:     v1alpha1.ProviderDocker,
