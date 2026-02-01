@@ -97,6 +97,40 @@ func writeFile(t *testing.T, dir, name, content string) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(content), 0o600))
 }
 
+// writeTestConfigFilesWithLocalRegistry writes test config files without disabling local registry.
+// This config requires mocking Docker client and registry service factory.
+func writeTestConfigFilesWithLocalRegistry(t *testing.T, workingDir string) {
+	t.Helper()
+
+	ksailYAML := `apiVersion: ksail.io/v1alpha1
+kind: Cluster
+spec:
+  cluster:
+    distribution: Vanilla
+    distributionConfig: kind.yaml
+    metricsServer: Disabled
+    connection:
+      kubeconfig: ./kubeconfig
+`
+
+	writeFile(t, workingDir, "ksail.yaml", ksailYAML)
+	writeFile(
+		t,
+		workingDir,
+		"kind.yaml",
+		"kind: Cluster\napiVersion: kind.x-k8s.io/v1alpha4\nname: test\nnodes: []\n",
+	)
+	// Create a fake kubeconfig file to prevent errors when ArgoCD tries to create Helm client
+	writeFile(
+		t,
+		workingDir,
+		"kubeconfig",
+		"apiVersion: v1\nkind: Config\nclusters: []\ncontexts: []\nusers: []\n",
+	)
+}
+
+// writeTestConfigFiles writes test config files with local registry disabled.
+// This produces minimal output without needing Docker client mocking.
 func writeTestConfigFiles(t *testing.T, workingDir string) {
 	t.Helper()
 
@@ -107,6 +141,8 @@ spec:
     distribution: Vanilla
     distributionConfig: kind.yaml
     metricsServer: Disabled
+    localRegistry:
+      enabled: false
     connection:
       kubeconfig: ./kubeconfig
 `
@@ -444,24 +480,17 @@ func TestCreate_DefaultCSI_DoesNotInstall(t *testing.T) {
 
 // TestCreate_Minimal_PrintsOnlyClusterLifecycle tests cluster creation with no extras.
 // This verifies the minimal output when all optional components are disabled.
+// Uses config with localRegistry disabled to skip registry stages.
 //
 //nolint:paralleltest // uses t.Chdir and mutates shared test hooks
 func TestCreate_Minimal_PrintsOnlyClusterLifecycle(t *testing.T) {
 	workingDir := t.TempDir()
 	t.Chdir(workingDir)
-	writeTestConfigFiles(t, workingDir)
+	writeTestConfigFiles(t, workingDir) // Uses config with localRegistry disabled
 
 	// Override cluster provisioner factory to use fake provisioner
 	restoreFactory := clusterpkg.SetClusterProvisionerFactoryForTests(fakeFactory{})
 	defer restoreFactory()
-
-	// Override Docker client to call the callback for success messages
-	restoreDocker := clusterpkg.SetDockerClientInvokerForTests(
-		func(_ *cobra.Command, fn func(client.APIClient) error) error {
-			return fn(nil) // Call the callback to trigger success messages
-		},
-	)
-	defer restoreDocker()
 
 	cmd := clusterpkg.NewCreateCmd(newTestRuntimeContainer(t))
 
