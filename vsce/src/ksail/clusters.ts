@@ -102,7 +102,7 @@ function addCommonClusterArgs(args: string[], options: CommonClusterOptions): vo
 /**
  * List all clusters
  *
- * The CLI outputs text format: "PROVIDER=docker NAME=local, NAME=test"
+ * The CLI outputs text format: "docker local, test"
  * or "No clusters found." when empty.
  */
 export async function listClusters(
@@ -124,8 +124,8 @@ export async function listClusters(
 /**
  * Parse cluster list text output
  *
- * Format: "PROVIDER=docker NAME=local, NAME=test"
- * Each provider section contains comma-separated NAME=value pairs.
+ * Format: "docker local,test"
+ * Each provider section contains comma-separated cluster names.
  * Lines may contain multiple clusters for the same provider.
  */
 function parseClusterListOutput(output: string): ClusterInfo[] {
@@ -141,12 +141,12 @@ function parseClusterListOutput(output: string): ClusterInfo[] {
   const lines = trimmed.split("\n").filter((line) => line.trim());
 
   for (const line of lines) {
-    // Extract PROVIDER=value
-    const providerMatch = line.match(/PROVIDER=(\w+)/i);
+    // Extract value
+    const providerMatch = line.match(/(\w+)/i);
     const provider = providerMatch ? providerMatch[1] : "unknown";
 
-    // Extract all NAME=value pairs
-    const nameMatches = line.matchAll(/NAME=([^,\s]+)/gi);
+    // Extract all value pairs
+    const nameMatches = line.matchAll(/([^,\s]+)/gi);
     for (const match of nameMatches) {
       clusters.push({
         name: match[1],

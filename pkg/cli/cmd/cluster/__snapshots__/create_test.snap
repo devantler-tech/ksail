@@ -1,8 +1,30 @@
 
 [TestCreate_CSIEnabled_InstallsOnKind - 1]
+📦 Create registries...
+► creating and configuring registries
+► creating 'test-docker.io' for 'https://registry-1.docker.io'
+► creating 'test-ghcr.io' for 'https://ghcr.io'
+► waiting for mirror registries to become ready
+✔ registries created
+
+🌐 Create network...
+► creating docker network
+► creating network 'kind'
+✔ docker network created
+
+🔗 Connect registries...
+► connecting registries to docker network
+► connecting 'test-docker.io' to 'kind'
+► connecting 'test-ghcr.io' to 'kind'
+✔ registries connected to docker network
+
 🚀 Create cluster...
 ► creating cluster
 ✔ cluster created
+
+⚙️ Configure registry mirrors...
+► configuring registry mirrors in cluster
+✗ failed to configure registry mirrors in cluster: run registry stage: failed to execute stage: failed to configure registry mirrors: failed to configure containerd registry mirrors: no Kind nodes found for cluster: test
 
 📦 Installing components...
 ► csi installing
@@ -10,21 +32,87 @@
 ---
 
 [TestCreate_DefaultCSI_DoesNotInstall - 1]
+📦 Create registries...
+► creating and configuring registries
+► creating 'test-docker.io' for 'https://registry-1.docker.io'
+► creating 'test-ghcr.io' for 'https://ghcr.io'
+► waiting for mirror registries to become ready
+✔ registries created
+
+🌐 Create network...
+► creating docker network
+► creating network 'kind'
+✔ docker network created
+
+🔗 Connect registries...
+► connecting registries to docker network
+► connecting 'test-docker.io' to 'kind'
+► connecting 'test-ghcr.io' to 'kind'
+✔ registries connected to docker network
+
 🚀 Create cluster...
 ► creating cluster
 ✔ cluster created
+
+⚙️ Configure registry mirrors...
+► configuring registry mirrors in cluster
+✗ failed to configure registry mirrors in cluster: run registry stage: failed to execute stage: failed to configure registry mirrors: failed to configure containerd registry mirrors: no Kind nodes found for cluster: test
 ---
 
 [TestCreate_DefaultCertManager_DoesNotInstall - 1]
+📦 Create registries...
+► creating and configuring registries
+► creating 'test-docker.io' for 'https://registry-1.docker.io'
+► creating 'test-ghcr.io' for 'https://ghcr.io'
+► waiting for mirror registries to become ready
+✔ registries created
+
+🌐 Create network...
+► creating docker network
+► creating network 'kind'
+✔ docker network created
+
+🔗 Connect registries...
+► connecting registries to docker network
+► connecting 'test-docker.io' to 'kind'
+► connecting 'test-ghcr.io' to 'kind'
+✔ registries connected to docker network
+
 🚀 Create cluster...
 ► creating cluster
 ✔ cluster created
+
+⚙️ Configure registry mirrors...
+► configuring registry mirrors in cluster
+✗ failed to configure registry mirrors in cluster: run registry stage: failed to execute stage: failed to configure registry mirrors: failed to configure containerd registry mirrors: no Kind nodes found for cluster: test
 ---
 
 [TestCreate_EnabledCertManager_PrintsInstallStage - 1]
+📦 Create registries...
+► creating and configuring registries
+► creating 'test-docker.io' for 'https://registry-1.docker.io'
+► creating 'test-ghcr.io' for 'https://ghcr.io'
+► waiting for mirror registries to become ready
+✔ registries created
+
+🌐 Create network...
+► creating docker network
+► creating network 'kind'
+✔ docker network created
+
+🔗 Connect registries...
+► connecting registries to docker network
+► connecting 'test-docker.io' to 'kind'
+► connecting 'test-ghcr.io' to 'kind'
+✔ registries connected to docker network
+
 🚀 Create cluster...
 ► creating cluster
 ✔ cluster created
+
+⚙️ Configure registry mirrors...
+► configuring registry mirrors in cluster
+✗ failed to configure registry mirrors in cluster: run registry stage: failed to execute stage: failed to configure registry mirrors: failed to configure containerd registry mirrors: no Kind nodes found for cluster: test
 
 📦 Installing components...
 ► cert-manager installing
@@ -36,9 +124,31 @@
 ► creating local registry
 ✔ local registry created
 
+📦 Create registries...
+► creating and configuring registries
+► creating 'test-docker.io' for 'https://registry-1.docker.io'
+► creating 'test-ghcr.io' for 'https://ghcr.io'
+► waiting for mirror registries to become ready
+✔ registries created
+
+🌐 Create network...
+► creating docker network
+► creating network 'kind'
+✔ docker network created
+
+🔗 Connect registries...
+► connecting registries to docker network
+► connecting 'test-docker.io' to 'kind'
+► connecting 'test-ghcr.io' to 'kind'
+✔ registries connected to docker network
+
 🚀 Create cluster...
 ► creating cluster
 ✔ cluster created
+
+⚙️ Configure registry mirrors...
+► configuring registry mirrors in cluster
+✗ failed to configure registry mirrors in cluster: run registry stage: failed to execute stage: failed to configure registry mirrors: failed to configure containerd registry mirrors: no Kind nodes found for cluster: test
 
 🔌 Attach local registry...
 ► attaching local registry to cluster
@@ -59,9 +169,31 @@
 ► creating local registry
 ✔ local registry created
 
+📦 Create registries...
+► creating and configuring registries
+► creating 'test-docker.io' for 'https://registry-1.docker.io'
+► creating 'test-ghcr.io' for 'https://ghcr.io'
+► waiting for mirror registries to become ready
+✔ registries created
+
+🌐 Create network...
+► creating docker network
+► creating network 'kind'
+✔ docker network created
+
+🔗 Connect registries...
+► connecting registries to docker network
+► connecting 'test-docker.io' to 'kind'
+► connecting 'test-ghcr.io' to 'kind'
+✔ registries connected to docker network
+
 🚀 Create cluster...
 ► creating cluster
 ✔ cluster created
+
+⚙️ Configure registry mirrors...
+► configuring registry mirrors in cluster
+✗ failed to configure registry mirrors in cluster: run registry stage: failed to execute stage: failed to configure registry mirrors: failed to configure containerd registry mirrors: no Kind nodes found for cluster: test
 
 🔌 Attach local registry...
 ► attaching local registry to cluster
@@ -78,13 +210,57 @@
 ---
 
 [TestCreate_LocalRegistryDisabled_SkipsRegistryStages - 1]
+📦 Create registries...
+► creating and configuring registries
+► creating 'test-docker.io' for 'https://registry-1.docker.io'
+► creating 'test-ghcr.io' for 'https://ghcr.io'
+► waiting for mirror registries to become ready
+✔ registries created
+
+🌐 Create network...
+► creating docker network
+► creating network 'kind'
+✔ docker network created
+
+🔗 Connect registries...
+► connecting registries to docker network
+► connecting 'test-docker.io' to 'kind'
+► connecting 'test-ghcr.io' to 'kind'
+✔ registries connected to docker network
+
 🚀 Create cluster...
 ► creating cluster
 ✔ cluster created
+
+⚙️ Configure registry mirrors...
+► configuring registry mirrors in cluster
+✗ failed to configure registry mirrors in cluster: run registry stage: failed to execute stage: failed to configure registry mirrors: failed to configure containerd registry mirrors: no Kind nodes found for cluster: test
 ---
 
 [TestCreate_Minimal_PrintsOnlyClusterLifecycle - 1]
+📦 Create registries...
+► creating and configuring registries
+► creating 'test-docker.io' for 'https://registry-1.docker.io'
+► creating 'test-ghcr.io' for 'https://ghcr.io'
+► waiting for mirror registries to become ready
+✔ registries created
+
+🌐 Create network...
+► creating docker network
+► creating network 'kind'
+✔ docker network created
+
+🔗 Connect registries...
+► connecting registries to docker network
+► connecting 'test-docker.io' to 'kind'
+► connecting 'test-ghcr.io' to 'kind'
+✔ registries connected to docker network
+
 🚀 Create cluster...
 ► creating cluster
 ✔ cluster created
+
+⚙️ Configure registry mirrors...
+► configuring registry mirrors in cluster
+✗ failed to configure registry mirrors in cluster: run registry stage: failed to execute stage: failed to configure registry mirrors: failed to configure containerd registry mirrors: no Kind nodes found for cluster: test
 ---

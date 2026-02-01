@@ -12,17 +12,21 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	clusterpkg "github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup/localregistry"
+	dockerpkg "github.com/devantler-tech/ksail/v5/pkg/client/docker"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/installer"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
+	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
 	"github.com/gkampitakis/go-snaps/snaps"
 	"github.com/k3d-io/k3d/v5/pkg/config/types"
 	v1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/samber/do/v2"
 	"github.com/spf13/cobra"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
@@ -91,42 +95,84 @@ func fakeRegistryServiceFactory(_ registry.Config) (registry.Service, error) {
 	return &fakeRegistryService{}, nil
 }
 
+// newMockDockerClient creates a mock Docker API client for use in tests.
+// It stubs all commonly-used Docker operations to succeed as no-ops.
+func newMockDockerClient(t *testing.T) *dockerpkg.MockAPIClient {
+	t.Helper()
+
+	mockClient := dockerpkg.NewMockAPIClient(t)
+
+	// Network operations - return empty/success
+	mockClient.EXPECT().
+		NetworkList(mock.Anything, mock.Anything).
+		Return([]network.Summary{}, nil).Maybe()
+	mockClient.EXPECT().
+		NetworkCreate(mock.Anything, mock.Anything, mock.Anything).
+		Return(network.CreateResponse{}, nil).Maybe()
+	mockClient.EXPECT().
+		NetworkRemove(mock.Anything, mock.Anything).
+		Return(nil).Maybe()
+	mockClient.EXPECT().
+		NetworkConnect(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(nil).Maybe()
+
+	// Container operations - return empty list (no existing containers)
+	mockClient.EXPECT().
+		ContainerList(mock.Anything, mock.Anything).
+		Return([]container.Summary{}, nil).
+		Maybe()
+
+	// Close operation - succeed
+	mockClient.EXPECT().Close().Return(nil).Maybe()
+
+	return mockClient
+}
+
+// setupMockRegistryBackend configures a mock registry backend that doesn't create real containers.
+// Call this in tests to enable default mirror registries (docker.io, ghcr.io) without Docker.
+// This also mocks the Docker client invoker to use a mock Docker API client.
+//
+// IMPORTANT: Call this BEFORE other test setup helpers (like setupGitOpsTestMocks) to ensure
+// the mock Docker client is properly configured for all Docker operations.
+func setupMockRegistryBackend(t *testing.T) {
+	t.Helper()
+
+	mockBackend := registry.NewMockBackend(t)
+	// Allow any calls to ListRegistries - returns empty list (no existing registries)
+	mockBackend.EXPECT().ListRegistries(mock.Anything).Return([]string{}, nil).Maybe()
+	// Allow any calls to GetRegistryPort - returns 0, not found (no existing registries)
+	mockBackend.EXPECT().GetRegistryPort(mock.Anything, mock.Anything).Return(0, nil).Maybe()
+	// Allow any calls to CreateRegistry - succeeds (no-op in tests)
+	mockBackend.EXPECT().CreateRegistry(mock.Anything, mock.Anything).Return(nil).Maybe()
+	// Allow any calls to DeleteRegistry - succeeds (no-op in tests)
+	mockBackend.EXPECT().
+		DeleteRegistry(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(nil).
+		Maybe()
+	// Allow any calls to WaitForRegistriesReady - succeeds immediately (no-op in tests)
+	mockBackend.EXPECT().WaitForRegistriesReady(mock.Anything, mock.Anything).Return(nil).Maybe()
+
+	t.Cleanup(registry.SetBackendFactoryForTests(
+		func(_ client.APIClient) (registry.Backend, error) {
+			return mockBackend, nil
+		},
+	))
+
+	// Mock the Docker client invoker to use a mock Docker API client.
+	// This calls the callback with a mock client so stages execute and print output.
+	t.Cleanup(clusterpkg.SetDockerClientInvokerForTests(
+		func(_ *cobra.Command, fn func(client.APIClient) error) error {
+			mockClient := newMockDockerClient(t)
+
+			return fn(mockClient)
+		},
+	))
+}
+
 func writeFile(t *testing.T, dir, name, content string) {
 	t.Helper()
 	require.NoError(t, os.MkdirAll(dir, 0o750))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(content), 0o600))
-}
-
-// writeTestConfigFilesWithLocalRegistry writes test config files without disabling local registry.
-// This config requires mocking Docker client and registry service factory.
-func writeTestConfigFilesWithLocalRegistry(t *testing.T, workingDir string) {
-	t.Helper()
-
-	ksailYAML := `apiVersion: ksail.io/v1alpha1
-kind: Cluster
-spec:
-  cluster:
-    distribution: Vanilla
-    distributionConfig: kind.yaml
-    metricsServer: Disabled
-    connection:
-      kubeconfig: ./kubeconfig
-`
-
-	writeFile(t, workingDir, "ksail.yaml", ksailYAML)
-	writeFile(
-		t,
-		workingDir,
-		"kind.yaml",
-		"kind: Cluster\napiVersion: kind.x-k8s.io/v1alpha4\nname: test\nnodes: []\n",
-	)
-	// Create a fake kubeconfig file to prevent errors when ArgoCD tries to create Helm client
-	writeFile(
-		t,
-		workingDir,
-		"kubeconfig",
-		"apiVersion: v1\nkind: Config\nclusters: []\ncontexts: []\nusers: []\n",
-	)
 }
 
 // writeTestConfigFiles writes test config files with local registry disabled.
@@ -195,6 +241,7 @@ func TestCreate_EnabledCertManager_PrintsInstallStage(t *testing.T) {
 	workingDir := t.TempDir()
 	t.Chdir(workingDir)
 	writeTestConfigFiles(t, workingDir)
+	setupMockRegistryBackend(t)
 
 	// Override cluster provisioner factory to use fake provisioner
 	restoreFactory := clusterpkg.SetClusterProvisionerFactoryForTests(fakeFactory{})
@@ -237,6 +284,7 @@ func TestCreate_DefaultCertManager_DoesNotInstall(t *testing.T) {
 	workingDir := t.TempDir()
 	t.Chdir(workingDir)
 	writeTestConfigFiles(t, workingDir)
+	setupMockRegistryBackend(t)
 
 	// Override cluster provisioner factory to use fake provisioner
 	restoreFactory := clusterpkg.SetClusterProvisionerFactoryForTests(fakeFactory{})
@@ -259,6 +307,7 @@ func TestCreate_DefaultCertManager_DoesNotInstall(t *testing.T) {
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
 	cmd.SetContext(context.Background())
+	cmd.SetArgs([]string{})
 
 	err := cmd.Execute()
 	if err != nil {
@@ -333,11 +382,9 @@ func setupGitOpsTestMocks(
 	// Mock registry service factory to avoid needing a real Docker client
 	t.Cleanup(clusterpkg.SetLocalRegistryServiceFactoryForTests(fakeRegistryServiceFactory))
 
-	t.Cleanup(clusterpkg.SetDockerClientInvokerForTests(
-		func(_ *cobra.Command, fn func(client.APIClient) error) error {
-			return fn(nil) // Call the callback to trigger success messages
-		},
-	))
+	// Note: DockerClientInvoker is NOT overridden here - tests should call
+	// setupMockRegistryBackend() before setupGitOpsTestMocks() to configure
+	// a mock Docker client that will be used for all Docker operations.
 
 	return func() *fakeInstaller { return fake }, &ensureCalled
 }
@@ -360,6 +407,7 @@ func TestCreate_GitOps_PrintsInstallStage(t *testing.T) {
 			workingDir := t.TempDir()
 			t.Chdir(workingDir)
 			writeTestConfigFiles(t, workingDir)
+			setupMockRegistryBackend(t)
 
 			fake, ensureCalled := setupGitOpsTestMocks(t, testCase.engine)
 
@@ -434,12 +482,15 @@ spec:
 	)
 	defer restore()
 
+	setupMockRegistryBackend(t)
+
 	cmd := clusterpkg.NewCreateCmd(newTestRuntimeContainer(t))
 
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
 	cmd.SetContext(context.Background())
+	cmd.SetArgs([]string{})
 
 	err := cmd.Execute()
 	if err != nil {
@@ -458,6 +509,7 @@ func TestCreate_DefaultCSI_DoesNotInstall(t *testing.T) {
 	workingDir := t.TempDir()
 	t.Chdir(workingDir)
 	writeTestConfigFiles(t, workingDir)
+	setupMockRegistryBackend(t)
 
 	// Override cluster provisioner factory to use fake provisioner
 	restoreFactory := clusterpkg.SetClusterProvisionerFactoryForTests(fakeFactory{})
@@ -469,6 +521,7 @@ func TestCreate_DefaultCSI_DoesNotInstall(t *testing.T) {
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
 	cmd.SetContext(context.Background())
+	cmd.SetArgs([]string{})
 
 	err := cmd.Execute()
 	if err != nil {
@@ -487,6 +540,7 @@ func TestCreate_Minimal_PrintsOnlyClusterLifecycle(t *testing.T) {
 	workingDir := t.TempDir()
 	t.Chdir(workingDir)
 	writeTestConfigFiles(t, workingDir) // Uses config with localRegistry disabled
+	setupMockRegistryBackend(t)
 
 	// Override cluster provisioner factory to use fake provisioner
 	restoreFactory := clusterpkg.SetClusterProvisionerFactoryForTests(fakeFactory{})
@@ -498,6 +552,7 @@ func TestCreate_Minimal_PrintsOnlyClusterLifecycle(t *testing.T) {
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
 	cmd.SetContext(context.Background())
+	cmd.SetArgs([]string{})
 
 	err := cmd.Execute()
 	if err != nil {
@@ -544,12 +599,15 @@ spec:
 	restoreFactory := clusterpkg.SetClusterProvisionerFactoryForTests(fakeFactory{})
 	defer restoreFactory()
 
+	setupMockRegistryBackend(t)
+
 	cmd := clusterpkg.NewCreateCmd(newTestRuntimeContainer(t))
 
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
 	cmd.SetContext(context.Background())
+	cmd.SetArgs([]string{})
 
 	err := cmd.Execute()
 	if err != nil {

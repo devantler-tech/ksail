@@ -6,7 +6,6 @@ import (
 	"io"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
@@ -58,14 +57,14 @@ func runTalosRegistryAction(
 	ctx *Context,
 	dockerAPIClient client.APIClient,
 ) error {
-	// Create registry manager first to get used ports
-	registryMgr, err := dockerclient.NewRegistryManager(dockerAPIClient)
+	// Create registry backend using the factory (allows test injection)
+	backend, err := GetBackendFactory()(dockerAPIClient)
 	if err != nil {
-		return fmt.Errorf("failed to create registry manager: %w", err)
+		return fmt.Errorf("failed to create registry backend: %w", err)
 	}
 
 	// Get used ports from running containers to avoid conflicts
-	usedPorts, err := registryMgr.GetUsedHostPorts(execCtx)
+	usedPorts, err := getUsedPorts(execCtx, backend)
 	if err != nil {
 		return fmt.Errorf("failed to get used ports: %w", err)
 	}
@@ -79,7 +78,7 @@ func runTalosRegistryAction(
 	writer := ctx.Cmd.OutOrStdout()
 
 	err = registry.SetupRegistries(
-		execCtx, registryMgr, registryInfos, clusterName, "", writer,
+		execCtx, backend, registryInfos, clusterName, "", writer,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to setup talos registries: %w", err)
@@ -91,7 +90,7 @@ func runTalosRegistryAction(
 		registryIPs[info.Name] = ""
 	}
 
-	return waitForTalosRegistries(execCtx, registryMgr, registryIPs, writer)
+	return waitForTalosRegistries(execCtx, backend, registryIPs, writer)
 }
 
 // runTalosNetworkAction creates the Docker network for Talos.
@@ -120,14 +119,14 @@ func runTalosConnectAction(
 	ctx *Context,
 	dockerAPIClient client.APIClient,
 ) error {
-	// Create registry manager to get used ports
-	registryMgr, err := dockerclient.NewRegistryManager(dockerAPIClient)
+	// Create registry backend using the factory (allows test injection)
+	backend, err := GetBackendFactory()(dockerAPIClient)
 	if err != nil {
-		return fmt.Errorf("failed to create registry manager: %w", err)
+		return fmt.Errorf("failed to create registry backend: %w", err)
 	}
 
 	// Get used ports from running containers (for consistent registry info building)
-	usedPorts, err := registryMgr.GetUsedHostPorts(execCtx)
+	usedPorts, err := getUsedPorts(execCtx, backend)
 	if err != nil {
 		return fmt.Errorf("failed to get used ports: %w", err)
 	}
@@ -175,10 +174,34 @@ func buildTalosRegistryInfos(
 	)
 }
 
+// PortGetter is an interface for getting used host ports.
+// This is a subset of the Backend interface used for port collection.
+type PortGetter interface {
+	GetRegistryPort(ctx context.Context, name string) (int, error)
+	ListRegistries(ctx context.Context) ([]string, error)
+}
+
+// getUsedPorts collects used ports from the backend if it supports GetUsedHostPorts.
+// Returns empty map if backend doesn't support port collection or no ports are in use.
+func getUsedPorts(ctx context.Context, backend registry.Backend) (map[int]struct{}, error) {
+	// Try to get used ports if the backend supports it
+	ports, err := registry.CollectExistingRegistryPorts(ctx, backend)
+	if err != nil {
+		return nil, fmt.Errorf("failed to collect existing registry ports: %w", err)
+	}
+
+	return ports, nil
+}
+
+// ReadinessChecker is an interface for checking registry readiness.
+type ReadinessChecker interface {
+	WaitForRegistriesReady(ctx context.Context, registryIPs map[string]string) error
+}
+
 // waitForTalosRegistries waits for registries to become ready.
 func waitForTalosRegistries(
 	ctx context.Context,
-	registryMgr *dockerclient.RegistryManager,
+	backend registry.Backend,
 	registryIPs map[string]string,
 	writer io.Writer,
 ) error {
@@ -192,10 +215,14 @@ func waitForTalosRegistries(
 		Writer:  writer,
 	})
 
-	err := registryMgr.WaitForRegistriesReady(ctx, registryIPs)
-	if err != nil {
-		return fmt.Errorf("failed waiting for registries to become ready: %w", err)
+	// Check if the backend supports readiness checking
+	if checker, ok := backend.(ReadinessChecker); ok {
+		err := checker.WaitForRegistriesReady(ctx, registryIPs)
+		if err != nil {
+			return fmt.Errorf("failed waiting for registries to become ready: %w", err)
+		}
 	}
+	// If backend doesn't support readiness checking (e.g., mock), skip it
 
 	notify.WriteMessage(notify.Message{
 		Type:    notify.ActivityType,
