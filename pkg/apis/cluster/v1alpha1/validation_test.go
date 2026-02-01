@@ -271,10 +271,13 @@ func TestValidateMirrorRegistriesForProvider(t *testing.T) {
 			wantError:        false,
 		},
 		{
-			name:             "Hetzner: multiple external mirrors -> valid",
-			provider:         v1alpha1.ProviderHetzner,
-			mirrorRegistries: []string{"docker.io=https://mirror.gcr.io", "ghcr.io=https://ghcr.io"},
-			wantError:        false,
+			name:     "Hetzner: multiple external mirrors -> valid",
+			provider: v1alpha1.ProviderHetzner,
+			mirrorRegistries: []string{
+				"docker.io=https://mirror.gcr.io",
+				"ghcr.io=https://ghcr.io",
+			},
+			wantError: false,
 		},
 		{
 			name:             "Hetzner: localhost mirror -> error",
@@ -298,11 +301,14 @@ func TestValidateMirrorRegistriesForProvider(t *testing.T) {
 			errorContains:    "local mirror registry not supported",
 		},
 		{
-			name:             "Hetzner: mixed local and external -> error on local",
-			provider:         v1alpha1.ProviderHetzner,
-			mirrorRegistries: []string{"docker.io=https://mirror.gcr.io", "ghcr.io=http://localhost:5000"},
-			wantError:        true,
-			errorContains:    "local mirror registry not supported",
+			name:     "Hetzner: mixed local and external -> error on local",
+			provider: v1alpha1.ProviderHetzner,
+			mirrorRegistries: []string{
+				"docker.io=https://mirror.gcr.io",
+				"ghcr.io=http://localhost:5000",
+			},
+			wantError:     true,
+			errorContains: "local mirror registry not supported",
 		},
 	}
 
@@ -310,7 +316,10 @@ func TestValidateMirrorRegistriesForProvider(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			err := v1alpha1.ValidateMirrorRegistriesForProvider(testCase.provider, testCase.mirrorRegistries)
+			err := v1alpha1.ValidateMirrorRegistriesForProvider(
+				testCase.provider,
+				testCase.mirrorRegistries,
+			)
 			if testCase.wantError {
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), testCase.errorContains)

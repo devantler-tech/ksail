@@ -48,6 +48,7 @@ func GetMirrorRegistriesWithDefaults(
 		if provider == v1alpha1.ProviderHetzner {
 			return []string{}
 		}
+
 		return DefaultMirrors
 	}
 

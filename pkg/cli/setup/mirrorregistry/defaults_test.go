@@ -180,7 +180,11 @@ func TestGetMirrorRegistriesWithDefaults(t *testing.T) {
 				require.NoError(t, err)
 			}
 
-			result := mirrorregistry.GetMirrorRegistriesWithDefaults(cmd, cfgManager, testCase.provider)
+			result := mirrorregistry.GetMirrorRegistriesWithDefaults(
+				cmd,
+				cfgManager,
+				testCase.provider,
+			)
 			assert.Equal(t, testCase.expectedResult, result)
 		})
 	}
