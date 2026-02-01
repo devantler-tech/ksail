@@ -52,7 +52,6 @@ func (noopInfoLogger) Info(string)          {}
 func (noopInfoLogger) Infof(string, ...any) {}
 func (noopInfoLogger) Enabled() bool        { return false }
 
-//nolint:ireturn // Required by Kind SDK log.Logger interface
 func (l *streamLogger) V(level log.Level) log.InfoLogger {
 	// Only enable info-level messages (V(0)), suppress verbose/debug (V(1+))
 	if level > 0 {

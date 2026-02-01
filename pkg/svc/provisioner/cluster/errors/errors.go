@@ -32,3 +32,18 @@ var ErrUnsupportedProvider = errors.New("unsupported provider")
 
 // ErrMissingDistributionConfig is returned when no pre-loaded distribution config is provided.
 var ErrMissingDistributionConfig = errors.New("missing distribution config")
+
+// ErrRecreationRequired is returned when configuration changes require cluster recreation.
+var ErrRecreationRequired = errors.New("cluster recreation required; use delete + create instead")
+
+// ErrConfigNil is returned when a required configuration is nil.
+var ErrConfigNil = errors.New("config is nil")
+
+// ErrNoProviderConfigured is returned when no infrastructure provider is configured for an operation.
+var ErrNoProviderConfigured = errors.New("no provider configured to get node IPs")
+
+// ErrDockerClientNotConfigured is returned when Docker client is required but not configured.
+var ErrDockerClientNotConfigured = errors.New("docker client not configured")
+
+// ErrClusterDoesNotExist is returned when attempting to update a cluster that doesn't exist.
+var ErrClusterDoesNotExist = errors.New("cluster does not exist; use 'ksail cluster create' to create a new cluster")

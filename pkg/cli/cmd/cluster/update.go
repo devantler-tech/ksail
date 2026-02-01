@@ -1,7 +1,6 @@
 package cluster
 
 import (
-	"context"
 	"fmt"
 	"strings"
 
@@ -11,16 +10,17 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup/localregistry"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
-	configmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
+	clustererrors "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/errors"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/types"
 	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
 	"github.com/spf13/cobra"
 )
 
 // NewUpdateCmd creates the cluster update command.
 // The update command applies configuration changes to a running cluster.
-// In this initial version, it uses a delete + create flow with user confirmation.
+// It supports in-place updates where possible and falls back to recreation when necessary.
 func NewUpdateCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "update",
@@ -28,12 +28,19 @@ func NewUpdateCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
 		Long: `Update a Kubernetes cluster to match the current configuration.
 
 This command applies changes from your ksail.yaml configuration to a running cluster.
-Currently, updates are performed via a delete + create flow, which means:
-  - All workloads and data will be lost (backup important data first)
-  - The cluster will be recreated with the new configuration
-  - Post-creation components (CNI, CSI, etc.) will be reinstalled
 
-Future versions will support in-place updates for certain configuration changes.`,
+For Talos clusters, many configuration changes can be applied in-place without
+cluster recreation (e.g., network settings, kubelet config, registry mirrors).
+
+For Kind/K3d clusters, in-place updates are more limited. Worker node scaling
+is supported for K3d, but most other changes require cluster recreation.
+
+Changes are classified into three categories:
+  - In-Place: Applied without disruption
+  - Reboot-Required: Applied but may require node reboots
+  - Recreate-Required: Require full cluster recreation
+
+Use --dry-run to preview changes without applying them.`,
 		SilenceUsage: true,
 		Annotations: map[string]string{
 			annotations.AnnotationPermission: "write",
@@ -66,13 +73,20 @@ Future versions will support in-place updates for certain configuration changes.
 		"Skip confirmation prompt and proceed with cluster recreation")
 	_ = cfgManager.Viper.BindPFlag("force", cmd.Flags().Lookup("force"))
 
+	cmd.Flags().Bool("dry-run", false,
+		"Preview changes without applying them")
+	_ = cfgManager.Viper.BindPFlag("dry-run", cmd.Flags().Lookup("dry-run"))
+
 	cmd.RunE = lifecycle.WrapHandler(runtimeContainer, cfgManager, handleUpdateRunE)
 
 	return cmd
 }
 
 // handleUpdateRunE executes the cluster update logic.
-// Currently implements a delete + create flow with confirmation prompt.
+// It computes a diff between current and desired configuration, then applies
+// changes in-place where possible, falling back to cluster recreation when necessary.
+//
+//nolint:cyclop,funlen // Update logic has inherent complexity from multiple code paths
 func handleUpdateRunE(
 	cmd *cobra.Command,
 	cfgManager *ksailconfigmanager.ConfigManager,
@@ -113,27 +127,12 @@ func handleUpdateRunE(
 	// Get cluster name for messaging
 	clusterName := resolveClusterNameFromContext(ctx)
 
-	// Check if cluster exists
-	clusterProvisionerFactoryMu.RLock()
-	factoryOverride := clusterProvisionerFactoryOverride
-	clusterProvisionerFactoryMu.RUnlock()
+	// Create provisioner
+	factory := getProvisionerFactory(ctx)
 
-	var factory clusterprovisioner.Factory
-	if factoryOverride != nil {
-		factory = factoryOverride
-	} else {
-		factory = clusterprovisioner.DefaultFactory{
-			DistributionConfig: &clusterprovisioner.DistributionConfig{
-				Kind:  ctx.KindConfig,
-				K3d:   ctx.K3dConfig,
-				Talos: ctx.TalosConfig,
-			},
-		}
-	}
-
-	provisioner, err := factory.Create(
-		ctx.ClusterCfg.Spec.Cluster.Distribution,
-		ctx.ClusterCfg.Spec.Cluster.Provider,
+	provisioner, _, err := factory.Create(
+		cmd.Context(),
+		ctx.ClusterCfg,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create provisioner: %w", err)
@@ -146,10 +145,186 @@ func handleUpdateRunE(
 	}
 
 	if !exists {
-		return fmt.Errorf("cluster %q does not exist; use 'ksail cluster create' to create a new cluster", clusterName)
+		return fmt.Errorf("%w: %q", clustererrors.ErrClusterDoesNotExist, clusterName)
 	}
 
-	// Show warning about recreate flow
+	// Get flags
+	dryRun := cfgManager.Viper.GetBool("dry-run")
+	force := cfgManager.Viper.GetBool("force")
+
+	// Check if provisioner supports updates
+	updater, supportsUpdate := provisioner.(clusterprovisioner.ClusterUpdater)
+	if !supportsUpdate {
+		// Fall back to recreate flow
+		return executeRecreateFlow(cmd, cfgManager, ctx, deps, clusterName, force)
+	}
+
+	// Get current configuration from running cluster
+	currentSpec, err := updater.GetCurrentConfig()
+	if err != nil {
+		notify.WriteMessage(notify.Message{
+			Type:    notify.WarningType,
+			Content: "Could not retrieve current cluster configuration, falling back to recreate",
+			Writer:  cmd.OutOrStderr(),
+		})
+
+		return executeRecreateFlow(cmd, cfgManager, ctx, deps, clusterName, force)
+	}
+
+	// Compute diff between current and desired configuration
+	diff, err := updater.DiffConfig(
+		cmd.Context(),
+		clusterName,
+		currentSpec,
+		&ctx.ClusterCfg.Spec.Cluster,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to compute configuration diff: %w", err)
+	}
+
+	// Display changes summary
+	displayChangesSummary(cmd, diff)
+
+	// If dry-run, stop here
+	if dryRun {
+		notify.WriteMessage(notify.Message{
+			Type:    notify.InfoType,
+			Content: "Dry run complete. No changes applied.",
+			Writer:  cmd.OutOrStdout(),
+		})
+
+		return nil
+	}
+
+	// If there are recreate-required changes, need confirmation
+	if diff.HasRecreateRequired() {
+		notify.WriteMessage(notify.Message{
+			Type: notify.WarningType,
+			Content: fmt.Sprintf(
+				"%d changes require cluster recreation",
+				len(diff.RecreateRequired),
+			),
+			Writer: cmd.OutOrStderr(),
+		})
+
+		return executeRecreateFlow(cmd, cfgManager, ctx, deps, clusterName, force)
+	}
+
+	// Apply in-place and reboot-required changes
+	if diff.HasInPlaceChanges() || diff.HasRebootRequired() {
+		updateOpts := types.UpdateOptions{
+			DryRun:        false,
+			RollingReboot: true,
+		}
+
+		notify.WriteMessage(notify.Message{
+			Type:    notify.ActivityType,
+			Emoji:   "🔄",
+			Content: "applying configuration changes in-place",
+			Timer:   outputTimer,
+			Writer:  cmd.OutOrStdout(),
+		})
+
+		result, err := updater.Update(
+			cmd.Context(),
+			clusterName,
+			currentSpec,
+			&ctx.ClusterCfg.Spec.Cluster,
+			updateOpts,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to apply updates: %w", err)
+		}
+
+		// Display results
+		if len(result.AppliedChanges) > 0 {
+			notify.WriteMessage(notify.Message{
+				Type:    notify.SuccessType,
+				Content: fmt.Sprintf("applied %d changes successfully", len(result.AppliedChanges)),
+				Timer:   outputTimer,
+				Writer:  cmd.OutOrStdout(),
+			})
+		}
+
+		if len(result.FailedChanges) > 0 {
+			notify.WriteMessage(notify.Message{
+				Type:    notify.WarningType,
+				Content: fmt.Sprintf("%d changes failed to apply", len(result.FailedChanges)),
+				Writer:  cmd.OutOrStderr(),
+			})
+
+			for _, change := range result.FailedChanges {
+				notify.WriteMessage(notify.Message{
+					Type:    notify.ErrorType,
+					Content: fmt.Sprintf("  - %s: %s", change.Field, change.Reason),
+					Writer:  cmd.OutOrStderr(),
+				})
+			}
+		}
+	} else {
+		notify.WriteMessage(notify.Message{
+			Type:    notify.InfoType,
+			Content: "No changes detected",
+			Writer:  cmd.OutOrStdout(),
+		})
+	}
+
+	return nil
+}
+
+// displayChangesSummary outputs a human-readable summary of configuration changes.
+func displayChangesSummary(cmd *cobra.Command, diff *types.UpdateResult) {
+	totalChanges := len(diff.InPlaceChanges) + len(diff.RebootRequired) + len(diff.RecreateRequired)
+
+	if totalChanges == 0 {
+		return
+	}
+
+	notify.WriteMessage(notify.Message{
+		Type:    notify.InfoType,
+		Content: fmt.Sprintf("Detected %d configuration changes:", totalChanges),
+		Writer:  cmd.OutOrStdout(),
+	})
+
+	for _, change := range diff.InPlaceChanges {
+		notify.WriteMessage(notify.Message{
+			Type:    notify.InfoType,
+			Content: fmt.Sprintf("  ✓ %s (in-place)", change.Field),
+			Writer:  cmd.OutOrStdout(),
+		})
+	}
+
+	for _, change := range diff.RebootRequired {
+		notify.WriteMessage(notify.Message{
+			Type:    notify.WarningType,
+			Content: fmt.Sprintf("  ⚡ %s (reboot required)", change.Field),
+			Writer:  cmd.OutOrStdout(),
+		})
+	}
+
+	for _, change := range diff.RecreateRequired {
+		notify.WriteMessage(notify.Message{
+			Type:    notify.ErrorType,
+			Content: fmt.Sprintf("  ✗ %s (recreate required)", change.Field),
+			Writer:  cmd.OutOrStdout(),
+		})
+	}
+}
+
+// executeRecreateFlow performs the delete + create flow with confirmation.
+//
+//nolint:funlen // Recreate flow has sequential steps that are clearer kept together
+func executeRecreateFlow(
+	cmd *cobra.Command,
+	cfgManager *ksailconfigmanager.ConfigManager,
+	ctx *localregistry.Context,
+	deps lifecycle.Deps,
+	clusterName string,
+	force bool,
+) error {
+	outputTimer := helpers.MaybeTimer(cmd, deps.Timer)
+
+	// Show warning
 	notify.WriteMessage(notify.Message{
 		Type:    notify.WarningType,
 		Content: "Update will delete and recreate the cluster",
@@ -163,7 +338,6 @@ func handleUpdateRunE(
 	})
 
 	// Get confirmation unless --force is set
-	force := cfgManager.Viper.GetBool("force")
 	if !force {
 		confirmed := promptForUpdateConfirmation(cmd, clusterName)
 		if !confirmed {
@@ -175,6 +349,14 @@ func handleUpdateRunE(
 
 			return nil
 		}
+	}
+
+	// Create provisioner for delete
+	factory := getProvisionerFactory(ctx)
+
+	provisioner, _, err := factory.Create(cmd.Context(), ctx.ClusterCfg)
+	if err != nil {
+		return fmt.Errorf("failed to create provisioner: %w", err)
 	}
 
 	// Execute delete
@@ -198,19 +380,21 @@ func handleUpdateRunE(
 		Writer:  cmd.OutOrStdout(),
 	})
 
-	// Execute create (reuse existing create logic)
+	// Execute create
 	return executeClusterCreation(cmd, cfgManager, ctx, deps)
 }
 
 // executeClusterCreation performs the cluster creation workflow.
 // This extracts the core creation logic to be reused by both create and update commands.
+//
+//nolint:funlen // Creation workflow has sequential steps that are clearer kept together
 func executeClusterCreation(
 	cmd *cobra.Command,
 	cfgManager *ksailconfigmanager.ConfigManager,
 	ctx *localregistry.Context,
 	deps lifecycle.Deps,
 ) error {
-	outputTimer := helpers.MaybeTimer(cmd, deps.Timer)
+	_ = helpers.MaybeTimer(cmd, deps.Timer) // Timer value unused in this function
 
 	localDeps := getLocalRegistryDeps()
 
@@ -228,21 +412,7 @@ func executeClusterCreation(
 	setupK3dMetricsServer(ctx.ClusterCfg, ctx.K3dConfig)
 	SetupK3dCSI(ctx.ClusterCfg, ctx.K3dConfig)
 
-	clusterProvisionerFactoryMu.RLock()
-	factoryOverride := clusterProvisionerFactoryOverride
-	clusterProvisionerFactoryMu.RUnlock()
-
-	if factoryOverride != nil {
-		deps.Factory = factoryOverride
-	} else {
-		deps.Factory = clusterprovisioner.DefaultFactory{
-			DistributionConfig: &clusterprovisioner.DistributionConfig{
-				Kind:  ctx.KindConfig,
-				K3d:   ctx.K3dConfig,
-				Talos: ctx.TalosConfig,
-			},
-		}
-	}
+	deps.Factory = getProvisionerFactory(ctx)
 
 	err = executeClusterLifecycle(cmd, ctx.ClusterCfg, deps)
 	if err != nil {
@@ -320,4 +490,27 @@ func promptForUpdateConfirmation(cmd *cobra.Command, clusterName string) bool {
 	}
 
 	return strings.TrimSpace(strings.ToLower(response)) == "yes"
+}
+
+// getProvisionerFactory returns the cluster provisioner factory, using any override if set.
+//
+//nolint:ireturn // Factory interface is appropriate for dependency injection
+func getProvisionerFactory(ctx *localregistry.Context) clusterprovisioner.Factory {
+	clusterProvisionerFactoryMu.RLock()
+
+	factoryOverride := clusterProvisionerFactoryOverride
+
+	clusterProvisionerFactoryMu.RUnlock()
+
+	if factoryOverride != nil {
+		return factoryOverride
+	}
+
+	return clusterprovisioner.DefaultFactory{
+		DistributionConfig: &clusterprovisioner.DistributionConfig{
+			Kind:  ctx.KindConfig,
+			K3d:   ctx.K3dConfig,
+			Talos: ctx.TalosConfig,
+		},
+	}
 }
