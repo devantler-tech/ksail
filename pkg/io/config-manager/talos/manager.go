@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	configmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager"
+	"github.com/devantler-tech/ksail/v5/pkg/utils/envvar"
 	"sigs.k8s.io/yaml"
 )
 
@@ -205,6 +206,9 @@ func forEachYAMLFile(dir string, callback func(filePath string, content []byte) 
 		if readErr != nil {
 			return fmt.Errorf("failed to read file '%s': %w", filePath, readErr)
 		}
+
+		// Expand environment variables in file content
+		content = envvar.ExpandBytes(content)
 
 		callbackErr := callback(filePath, content)
 		if callbackErr != nil {
