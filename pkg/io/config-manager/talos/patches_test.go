@@ -238,3 +238,52 @@ func TestConstants(t *testing.T) {
 	assert.NotEmpty(t, talos.DefaultClusterName)
 	assert.Contains(t, talos.DefaultTalosImage, "talos")
 }
+
+func TestLoadPatches_ExpandsEnvVars(t *testing.T) {
+	// Note: Cannot use t.Parallel() when using t.Setenv()
+	tmpDir := t.TempDir()
+	clusterDir := filepath.Join(tmpDir, "cluster")
+
+	require.NoError(t, os.MkdirAll(clusterDir, 0o750))
+
+	// Patch with environment variable placeholder
+	patchContent := []byte("machine:\n  network:\n    hostname: ${TEST_HOSTNAME}\n")
+	patchFile := filepath.Join(clusterDir, "hostname.yaml")
+	require.NoError(t, os.WriteFile(patchFile, patchContent, 0o600))
+
+	// Set environment variable
+	t.Setenv("TEST_HOSTNAME", "expanded-host")
+
+	patches, err := talos.LoadPatches(tmpDir)
+
+	require.NoError(t, err)
+	require.Len(t, patches, 1)
+
+	// Verify the content was expanded
+	assert.Contains(t, string(patches[0].Content), "hostname: expanded-host")
+	assert.NotContains(t, string(patches[0].Content), "${TEST_HOSTNAME}")
+}
+
+//nolint:paralleltest // Uses t.Setenv
+func TestLoadPatches_ExpandsEnvVarsWithDefault(
+	t *testing.T,
+) {
+	tmpDir := t.TempDir()
+	clusterDir := filepath.Join(tmpDir, "cluster")
+
+	require.NoError(t, os.MkdirAll(clusterDir, 0o750))
+
+	// Patch with default value syntax - UNDEFINED_VAR not set
+	patchContent := []byte("machine:\n  network:\n    hostname: ${UNDEFINED_HOST:-default-host}\n")
+	patchFile := filepath.Join(clusterDir, "hostname.yaml")
+	require.NoError(t, os.WriteFile(patchFile, patchContent, 0o600))
+
+	patches, err := talos.LoadPatches(tmpDir)
+
+	require.NoError(t, err)
+	require.Len(t, patches, 1)
+
+	// Verify the default value was used
+	assert.Contains(t, string(patches[0].Content), "hostname: default-host")
+	assert.NotContains(t, string(patches[0].Content), "${UNDEFINED_HOST")
+}
