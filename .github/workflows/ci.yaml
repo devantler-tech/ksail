@@ -219,44 +219,10 @@ jobs:
         init: [true, false]
         args:
           - ""
-          - "--name system-test-cluster"
-          - "--cert-manager Enabled"
-          - "--cni Cilium"
-          - "--cni Calico"
-          - "--csi Enabled"
-          - "--csi Disabled"
-          - "--gitops-engine Flux"
-          - "--gitops-engine ArgoCD"
+          - "--name system-test-cluster --cni Cilium --csi Enabled --metrics-server Enabled --policy-engine Kyverno --cert-manager Enabled --gitops-engine Flux"
+          - "--cni Calico --csi Disabled --metrics-server Disabled --policy-engine Gatekeeper --gitops-engine ArgoCD"
           - "--gitops-engine Flux --local-registry ghcr.io/devantler-tech/ksail/system-test-manifests"
           - "--gitops-engine ArgoCD --local-registry ghcr.io/devantler-tech/ksail/system-test-manifests"
-          - "--metrics-server Enabled"
-          - "--metrics-server Disabled"
-          - "--policy-engine Kyverno"
-          - "--policy-engine Gatekeeper"
-        # Exclude combinations where flags match distribution × provider default behavior
-        # to avoid wasting GitHub Actions minutes on no-op tests
-        exclude:
-          # CSI exclusions: no-op when flag matches distribution × provider default
-          # Vanilla has no default CSI, so --csi Disabled is a no-op
-          - distribution: Vanilla
-            args: "--csi Disabled"
-          # K3s has default CSI (local-path), so --csi Enabled is a no-op
-          - distribution: K3s
-            args: "--csi Enabled"
-          # Talos × Docker has no default CSI, so --csi Disabled is a no-op
-          - distribution: Talos
-            provider: Docker
-            args: "--csi Disabled"
-          # Metrics Server exclusions: no-op when flag matches distribution default
-          # K3s has default metrics-server, so --metrics-server Enabled is a no-op
-          - distribution: K3s
-            args: "--metrics-server Enabled"
-          # Vanilla has no default metrics-server, so --metrics-server Disabled is a no-op
-          - distribution: Vanilla
-            args: "--metrics-server Disabled"
-          # Talos has no default metrics-server, so --metrics-server Disabled is a no-op
-          - distribution: Talos
-            args: "--metrics-server Disabled"
         # Add Talos x Hetzner combination
         include:
           - distribution: Talos
