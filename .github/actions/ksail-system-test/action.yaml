@@ -245,6 +245,12 @@ runs:
       uses: ./.github/actions/debug-kubernetes-failure
       with:
         kubectl-command: "ksail workload"
+        show-cni: ${{ contains(inputs.args, '--cni') || (!contains(inputs.args, '--') && inputs.args == '') }}
+        show-csi: ${{ contains(inputs.args, '--csi') || (!contains(inputs.args, '--') && inputs.args == '') }}
+        show-gitops: ${{ contains(inputs.args, '--gitops-engine') || (!contains(inputs.args, '--') && inputs.args == '') }}
+        show-policy-engine: ${{ contains(inputs.args, '--policy-engine') || (!contains(inputs.args, '--') && inputs.args == '') }}
+        show-cert-manager: ${{ contains(inputs.args, '--cert-manager') || (!contains(inputs.args, '--') && inputs.args == '') }}
+        show-metrics-server: ${{ contains(inputs.args, '--metrics-server') || (!contains(inputs.args, '--') && inputs.args == '') }}
 
     - name: 🧪 ksail cluster stop
       shell: bash
