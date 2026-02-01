@@ -161,10 +161,6 @@ func commandToToolDefinition(cmd *cobra.Command) ToolDefinition {
 	if cmd.Annotations != nil && cmd.Annotations[AnnotationDescription] != "" {
 		description = cmd.Annotations[AnnotationDescription]
 	}
-	// Append Long description if available and different
-	if cmd.Long != "" && cmd.Long != cmd.Short {
-		description = description + "\n\n" + cmd.Long
-	}
 
 	// Build JSON schema from flags
 	parameters := buildParameterSchema(cmd)
@@ -622,10 +618,6 @@ func buildConsolidatedTool(
 	description := cmd.Short
 	if cmd.Annotations != nil && cmd.Annotations[AnnotationDescription] != "" {
 		description = cmd.Annotations[AnnotationDescription]
-	}
-
-	if cmd.Long != "" && cmd.Long != cmd.Short {
-		description = description + "\n\n" + cmd.Long
 	}
 
 	// Build dynamic parameter schema
