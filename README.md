@@ -7,7 +7,7 @@
 
 ![ksail](./docs/src/assets/ksail-cli-dark.png)
 
-KSail is a tool that bundles common Kubernetes tooling into a single binary. It provides a VSCode Extension, CLI, TUI or MCP interface to create clusters, deploy workloads, and operate cloud-native stacks across different distributions and providers.
+KSail is a tool that bundles common Kubernetes tooling into a single binary. It provides a VSCode Extension, CLI, AI-Enabled Chat TUI or MCP interface to create clusters, deploy workloads, and operate cloud-native stacks across different distributions and providers.
 
 ## Why?
 
