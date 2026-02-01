@@ -100,7 +100,7 @@ jobs:
       #   continue-on-error: true
 
       - name: 📦 Create VSIX package
-        run: npx @vscode/vsce package "$VERSION" --out ksail_${VERSION}.vsix
+        run: npx @vscode/vsce package "$VERSION" --out ksail_"$VERSION".vsix
         env:
           VERSION: ${{ steps.get_version.outputs.version }}
 
