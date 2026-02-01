@@ -56,6 +56,7 @@ jobs:
   vscode-extension:
     name: 🧩 Release VSCode Extension
     runs-on: ubuntu-latest
+    needs: [goreleaser]
     permissions:
       contents: write
     defaults:
