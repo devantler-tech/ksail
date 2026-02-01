@@ -80,9 +80,9 @@
       "version": "v3.12.0",
       "sha": "8d2750c68a42422c14e847fe6c8ac0403b4cbd6f"
     },
-    "githubnext/gh-aw/actions/setup@v0.38.0": {
+    "githubnext/gh-aw/actions/setup@v0.39.0": {
       "repo": "githubnext/gh-aw/actions/setup",
-      "version": "v0.38.0",
+      "version": "v0.39.0",
       "sha": "10f1341b529f9a8b51c463e191b7dd63d4caccfd"
     }
   }

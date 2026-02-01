@@ -196,8 +196,6 @@ jobs:
         run: go env -w GOTOOLCHAIN=go1.25.0+auto
 
       - name: 📄 Generate coverage
-        env:
-          GOPROXY: https://proxy.golang.org,direct
         run: |
           go test -race -coverprofile=coverage.txt -covermode=atomic ./...
 

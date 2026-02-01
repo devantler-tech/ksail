@@ -23,8 +23,6 @@ runs:
     # Step 3: Download dependencies
     - name: 📦 Download Go modules
       shell: bash
-      env:
-        GOPROXY: https://proxy.golang.org,direct
       run: |
         echo "Downloading Go modules..." | tee -a coverage-steps.log
         go mod download 2>&1 | tee -a coverage-steps.log
@@ -33,8 +31,6 @@ runs:
     # Step 4: Build the KSail binary
     - name: 🏗️ Build KSail binary
       shell: bash
-      env:
-        GOPROXY: https://proxy.golang.org,direct
       run: |
         echo "Building KSail binary..." | tee -a coverage-steps.log
         go build -o ksail . 2>&1 | tee -a coverage-steps.log
@@ -51,8 +47,6 @@ runs:
     # Step 6: Run unit tests with coverage
     - name: 📊 Run tests and generate coverage
       shell: bash
-      env:
-        GOPROXY: https://proxy.golang.org,direct
       run: |
         echo "Running tests with coverage..." | tee -a coverage-steps.log
         go test -race -coverprofile=coverage.txt -covermode=atomic ./... 2>&1 | tee -a coverage-steps.log
