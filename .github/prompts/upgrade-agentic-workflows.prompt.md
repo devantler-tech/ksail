@@ -1,3 +1,3 @@
 ---
-agent: upgrade-agentic-workflows
+agent: agentic-workflows
 ---
