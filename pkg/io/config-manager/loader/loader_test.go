@@ -460,3 +460,50 @@ func TestValidationSummaryError(t *testing.T) {
 		assert.Equal(t, "validation reported 2 warning(s)", err.Error())
 	})
 }
+
+func TestLoadConfigFromFile_ExpandsEnvVars(t *testing.T) {
+	// Note: Cannot use t.Parallel() when using t.Setenv()
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "test-config.yaml")
+
+	// Config with environment variable placeholders
+	configContent := `name: ${TEST_CLUSTER_NAME}
+apiVersion: test/v1
+kind: TestCluster`
+	err := os.WriteFile(configPath, []byte(configContent), 0o600)
+	require.NoError(t, err)
+
+	// Set environment variable
+	t.Setenv("TEST_CLUSTER_NAME", "expanded-cluster")
+
+	config, err := loader.LoadConfigFromFile(
+		configPath,
+		createDefaultConfig,
+	)
+
+	require.NoError(t, err)
+	assert.Equal(t, "expanded-cluster", config.Name)
+}
+
+//nolint:paralleltest // Uses t.Setenv
+func TestLoadConfigFromFile_ExpandsEnvVarsWithDefault(
+	t *testing.T,
+) {
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "test-config.yaml")
+
+	// Config with default value syntax - UNDEFINED_VAR not set
+	configContent := `name: ${UNDEFINED_VAR:-default-cluster}
+apiVersion: test/v1
+kind: TestCluster`
+	err := os.WriteFile(configPath, []byte(configContent), 0o600)
+	require.NoError(t, err)
+
+	config, err := loader.LoadConfigFromFile(
+		configPath,
+		createDefaultConfig,
+	)
+
+	require.NoError(t, err)
+	assert.Equal(t, "default-cluster", config.Name)
+}

@@ -11,6 +11,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/io"
 	"github.com/devantler-tech/ksail/v5/pkg/io/marshaller"
 	"github.com/devantler-tech/ksail/v5/pkg/io/validator"
+	"github.com/devantler-tech/ksail/v5/pkg/utils/envvar"
 )
 
 // Configuration validation errors.
@@ -87,6 +88,9 @@ func LoadConfigFromFile[T any](
 
 		return zero, fmt.Errorf("failed to read config file %s: %w", cleaned, err)
 	}
+
+	// Expand environment variables in file content before parsing
+	data = envvar.ExpandBytes(data)
 
 	// Parse YAML into the default config (which will overwrite defaults with file values)
 	config := createDefault()
