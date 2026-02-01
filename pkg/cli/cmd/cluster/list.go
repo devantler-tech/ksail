@@ -322,7 +322,7 @@ func displayListResults(
 
 		_, _ = fmt.Fprintf(
 			writer,
-			"%s %s\n",
+			"%s: %s\n",
 			strings.ToLower(string(prov)),
 			strings.Join(namedClusters, ", "),
 		)
