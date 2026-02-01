@@ -129,8 +129,14 @@ runs:
         fi
 
         if [ "$SHOW_PODS" = "true" ]; then
-          print_section "POD STATUS (All Namespaces)"
-          $KUBECTL_CMD get pods -A -o wide || true
+          if [ -n "$NAMESPACE" ]; then
+            print_section "POD STATUS (Namespace: $NAMESPACE)"
+            # shellcheck disable=SC2086
+            $KUBECTL_CMD get pods $NS_FLAG -o wide || true
+          else
+            print_section "POD STATUS (All Namespaces)"
+            $KUBECTL_CMD get pods -A -o wide || true
+          fi
         fi
 
         if [ "$SHOW_EVENTS" = "true" ]; then
@@ -165,20 +171,28 @@ runs:
           fi
           echo ""
           echo "--- Pods in Error/CrashLoopBackOff State ---"
-          ERROR_PODS=$($KUBECTL_CMD get pods -A --field-selector=status.phase!=Running,status.phase!=Succeeded -o name 2>/dev/null || true)
+          # Find pods not in Running/Succeeded phase OR pods with containers in CrashLoopBackOff/Error state
+          # First get non-running pods
+          NON_RUNNING_PODS=$($KUBECTL_CMD get pods -A --field-selector=status.phase!=Running,status.phase!=Succeeded -o jsonpath='{range .items[*]}{.metadata.namespace}/{.metadata.name}{"\n"}{end}' 2>/dev/null || true)
+          # Then get pods with CrashLoopBackOff containers (these are often in Running phase)
+          CRASHLOOP_PODS=$($KUBECTL_CMD get pods -A -o jsonpath='{range .items[*]}{range .status.containerStatuses[*]}{@.state.waiting.reason}{" "}{end}{@.metadata.namespace}/{@.metadata.name}{"\n"}{end}' 2>/dev/null | grep -E "CrashLoopBackOff|Error|ImagePullBackOff" | awk '{print $NF}' || true)
+          # Combine and deduplicate
+          ERROR_PODS=$(echo -e "$NON_RUNNING_PODS\n$CRASHLOOP_PODS" | sort -u | grep -v '^$' || true)
           if [ -n "$ERROR_PODS" ]; then
-            $KUBECTL_CMD get pods -A --field-selector=status.phase!=Running,status.phase!=Succeeded -o wide || true
+            echo "Found pods with issues:"
+            echo "$ERROR_PODS"
             echo ""
-            # Show logs for crashing pods (limit to first 5)
+            # Show logs for error pods (limit to first 5)
             COUNT=0
-            for POD in $ERROR_PODS; do
+            for POD_FULL in $ERROR_PODS; do
               if [ $COUNT -ge 5 ]; then
                 echo "... (showing first 5 error pods only)"
                 break
               fi
-              POD_NAME=${POD#pod/}
-              echo "--- Logs: $POD_NAME ---"
-              $KUBECTL_CMD logs "$POD" -A --tail=50 2>/dev/null || true
+              POD_NS=$(echo "$POD_FULL" | cut -d'/' -f1)
+              POD_NAME=$(echo "$POD_FULL" | cut -d'/' -f2)
+              echo "--- Logs: $POD_NS/$POD_NAME ---"
+              $KUBECTL_CMD logs -n "$POD_NS" "$POD_NAME" --tail=50 2>/dev/null || echo "  (unable to fetch logs)"
               COUNT=$((COUNT + 1))
             done
           else
@@ -225,8 +239,8 @@ runs:
           fi
           echo ""
 
-          # Check for Calico
-          if kubectl api-resources 2>/dev/null | grep -q tigerastatus; then
+          # Check for Calico (detect via TigeraStatus CRD)
+          if $KUBECTL_CMD get crd tigerastatuses.operator.tigera.io >/dev/null 2>&1; then
             echo "--- Calico/Tigera Status ---"
             $KUBECTL_CMD get tigerastatus 2>/dev/null || true
             echo ""
@@ -312,7 +326,7 @@ runs:
           echo ""
 
           echo "--- FluxInstance Status ---"
-          if kubectl api-resources --api-group=fluxcd.controlplane.io 2>/dev/null | grep -q fluxinstance; then
+          if $KUBECTL_CMD get crd fluxinstances.fluxcd.controlplane.io >/dev/null 2>&1; then
             FLUX_INSTANCES=$($KUBECTL_CMD get fluxinstance -A -o name 2>/dev/null || true)
             if [ -n "$FLUX_INSTANCES" ]; then
               $KUBECTL_CMD get fluxinstance -A -o wide
@@ -352,7 +366,7 @@ runs:
           echo ""
 
           echo "--- OCIRepository Status ---"
-          if kubectl api-resources --api-group=source.toolkit.fluxcd.io 2>/dev/null | grep -q ocirepository; then
+          if $KUBECTL_CMD get crd ocirepositories.source.toolkit.fluxcd.io >/dev/null 2>&1; then
             OCI_REPOS=$($KUBECTL_CMD get ocirepository -A -o name 2>/dev/null || true)
             if [ -n "$OCI_REPOS" ]; then
               $KUBECTL_CMD get ocirepository -A -o wide
@@ -368,7 +382,7 @@ runs:
           echo ""
 
           echo "--- Kustomization Status ---"
-          if kubectl api-resources --api-group=kustomize.toolkit.fluxcd.io 2>/dev/null | grep -q kustomization; then
+          if $KUBECTL_CMD get crd kustomizations.kustomize.toolkit.fluxcd.io >/dev/null 2>&1; then
             KUSTOMIZATIONS=$($KUBECTL_CMD get kustomization -A -o name 2>/dev/null || true)
             if [ -n "$KUSTOMIZATIONS" ]; then
               $KUBECTL_CMD get kustomization -A -o wide
@@ -384,7 +398,7 @@ runs:
           echo ""
 
           echo "--- HelmRelease Status ---"
-          if kubectl api-resources --api-group=helm.toolkit.fluxcd.io 2>/dev/null | grep -q helmrelease; then
+          if $KUBECTL_CMD get crd helmreleases.helm.toolkit.fluxcd.io >/dev/null 2>&1; then
             HELM_RELEASES=$($KUBECTL_CMD get helmrelease -A -o name 2>/dev/null || true)
             if [ -n "$HELM_RELEASES" ]; then
               $KUBECTL_CMD get helmrelease -A -o wide
@@ -401,7 +415,7 @@ runs:
 
           # --- ArgoCD ---
           echo "--- ArgoCD Status ---"
-          if kubectl api-resources --api-group=argoproj.io 2>/dev/null | grep -q application; then
+          if $KUBECTL_CMD get crd applications.argoproj.io >/dev/null 2>&1; then
             echo "ArgoCD Application CRD is registered"
             $KUBECTL_CMD get pods -n argocd -o wide 2>/dev/null || true
             echo ""
