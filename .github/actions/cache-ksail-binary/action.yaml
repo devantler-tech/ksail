@@ -51,6 +51,7 @@ runs:
       env:
         CACHE_HIT: ${{ steps.ksail-cache.outputs.cache-hit }}
         OUTPUT_PATH: ${{ inputs.output-path }}
+        GOPROXY: https://proxy.golang.org,direct
       run: |
         set -Eeuo pipefail
 

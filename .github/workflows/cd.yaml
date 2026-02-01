@@ -100,14 +100,14 @@ jobs:
       #   continue-on-error: true
 
       - name: 📦 Create VSIX package
-        run: npx @vscode/vsce package "$VERSION" --out ksail.vsix
+        run: npx @vscode/vsce package "$VERSION" --out ksail_"$VERSION".vsix
         env:
           VERSION: ${{ steps.get_version.outputs.version }}
 
       - name: 📤 Upload VSIX to release
         uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2.5.0
         with:
-          files: vsce/ksail.vsix
+          files: vsce/ksail_*.vsix
           draft: true
 
   publish-release:
