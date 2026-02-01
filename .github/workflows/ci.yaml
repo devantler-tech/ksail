@@ -233,10 +233,6 @@ jobs:
             provider: Hetzner
             init: false
             args: "--name system-test-cluster-without-scaffolding"
-          # Note: Talos × Hetzner has default CSI (Hetzner CSI), so --csi Enabled
-          # would be a no-op. Similarly, Talos × Hetzner has default LoadBalancer
-          # (hcloud-cloud-controller-manager), so --load-balancer Enabled would be
-          # a no-op. We don't add these to the matrix to save CI minutes.
     steps:
       - name: 📄 Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
