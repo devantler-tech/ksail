@@ -2,7 +2,6 @@ package talosprovisioner
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"strconv"
 
@@ -293,20 +292,7 @@ func (p *TalosProvisioner) createTalosClient(
 		}
 	}
 
-	// Fallback: insecure client for maintenance mode
-	tlsConfig := &tls.Config{
-		InsecureSkipVerify: true, //nolint:gosec // Local development clusters use self-signed certs
-	}
-
-	client, err := talosclient.New(ctx,
-		talosclient.WithEndpoints(nodeIP),
-		talosclient.WithTLSConfig(tlsConfig),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create insecure Talos client: %w", err)
-	}
-
-	return client, nil
+	return nil, clustererrors.ErrTalosConfigRequired
 }
 
 // getNodeIPs returns the IPs of all nodes in the cluster.

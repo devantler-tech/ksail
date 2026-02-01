@@ -46,4 +46,12 @@ var ErrNoProviderConfigured = errors.New("no provider configured to get node IPs
 var ErrDockerClientNotConfigured = errors.New("docker client not configured")
 
 // ErrClusterDoesNotExist is returned when attempting to update a cluster that doesn't exist.
-var ErrClusterDoesNotExist = errors.New("cluster does not exist; use 'ksail cluster create' to create a new cluster")
+var ErrClusterDoesNotExist = errors.New(
+	"cluster does not exist; use 'ksail cluster create' to create a new cluster",
+)
+
+// ErrTalosConfigRequired is returned when TalosConfig credentials are required but not available.
+// This occurs when attempting to update a Talos cluster without valid PKI credentials.
+var ErrTalosConfigRequired = errors.New(
+	"TalosConfig required for cluster updates but not available",
+)
