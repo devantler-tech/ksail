@@ -23,6 +23,7 @@ Flags:
   -h, --help                           help for create
       --import-images string           Path to tar archive with container images to import after cluster creation but before component installation
   -k, --kubeconfig string              Path to kubeconfig file (default "~/.kube/config")
+      --load-balancer LoadBalancer     LoadBalancer support (Default: use distribution × provider, Enabled: install, Disabled: uninstall)
       --local-registry string          Local registry specification: [user:pass@]host[:port][/path] (e.g., localhost:5050, ghcr.io/myorg, ${USER}:${PASS}@ghcr.io:443/org)
       --metrics-server MetricsServer   Metrics Server (Default: use distribution, Enabled: install, Disabled: uninstall)
       --mirror-registry strings        Configure mirror registries with format 'host=upstream' (e.g., docker.io=https://registry-1.docker.io)

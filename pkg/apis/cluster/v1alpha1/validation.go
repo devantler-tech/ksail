@@ -76,6 +76,15 @@ func ValidMetricsServers() []MetricsServer {
 	}
 }
 
+// ValidLoadBalancers returns supported load balancer values.
+func ValidLoadBalancers() []LoadBalancer {
+	return []LoadBalancer{
+		LoadBalancerDefault,
+		LoadBalancerEnabled,
+		LoadBalancerDisabled,
+	}
+}
+
 // ValidCertManagers returns supported cert-manager values.
 func ValidCertManagers() []CertManager {
 	return []CertManager{
