@@ -58,6 +58,6 @@ Your job is to act as a planner for the GitHub repository ${{ github.repository 
 
    2c. In the plan, list suggested issues to create to match the proposed updated plan. Don't create any issues, just list the suggestions. Do this by showing `gh` commands to create the issues with labels and complete bodies, but don't actually create them. Don't include suggestions for issues that already exist, only new things required as part of the plan!
 
-3. Create a new planning discussion with the project plan in its body. 
+3. Create a new planning discussion with the project plan in its body.
 
    3a. Create a discussion with an appropriate title starting with "${{ github.workflow }}" and the current date (e.g., "Daily Plan - 2025-10-10"), using the project plan as the body.
