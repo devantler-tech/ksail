@@ -130,21 +130,24 @@ jobs:
           script: |
             const tag = process.env.RELEASE_TAG;
 
-            // Get the release by tag using the dedicated endpoint (avoids pagination issues)
+            // List releases and find the one matching the tag
+            // Note: getReleaseByTag does not return draft releases, so we use listReleases instead
             let release;
             try {
-              const { data } = await github.rest.repos.getReleaseByTag({
+              const { data: releases } = await github.rest.repos.listReleases({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                tag,
+                per_page: 100,
               });
-              release = data;
+              release = releases.find(r => r.tag_name === tag);
             } catch (error) {
-              if (error.status === 404) {
-                core.setFailed(`Release not found for tag ${tag}`);
-                return;
-              }
+              core.setFailed(`Failed to list releases: ${error.message}`);
               throw error;
+            }
+
+            if (!release) {
+              core.setFailed(`Release not found for tag ${tag}`);
+              return;
             }
 
             if (!release.draft) {
