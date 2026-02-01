@@ -11,6 +11,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	clusterpkg "github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/setup/localregistry"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/installer"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
@@ -18,6 +19,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
 	"github.com/docker/docker/client"
 	"github.com/gkampitakis/go-snaps/snaps"
+	"github.com/k3d-io/k3d/v5/pkg/config/types"
 	v1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/samber/do/v2"
 	"github.com/spf13/cobra"
@@ -730,4 +732,83 @@ func TestSetupK3dCSI_DoesNothingWhenCSINotDisabled(t *testing.T) {
 			require.Empty(t, k3dConfig.Options.K3sOptions.ExtraArgs)
 		})
 	}
+}
+
+func TestResolveClusterNameFromContext_Vanilla(t *testing.T) {
+	t.Parallel()
+
+	kindConfig := &v1alpha4.Cluster{Name: "kind-cluster"}
+	ctx := &localregistry.Context{
+		ClusterCfg: &v1alpha1.Cluster{
+			Spec: v1alpha1.Spec{
+				Cluster: v1alpha1.ClusterSpec{
+					Distribution: v1alpha1.DistributionVanilla,
+				},
+			},
+		},
+		KindConfig: kindConfig,
+	}
+
+	name := clusterpkg.ExportResolveClusterNameFromContext(ctx)
+	require.Equal(t, "kind-cluster", name)
+}
+
+func TestResolveClusterNameFromContext_K3s(t *testing.T) {
+	t.Parallel()
+
+	k3dConfig := &v1alpha5.SimpleConfig{
+		ObjectMeta: types.ObjectMeta{
+			Name: "k3s-cluster",
+		},
+	}
+	ctx := &localregistry.Context{
+		ClusterCfg: &v1alpha1.Cluster{
+			Spec: v1alpha1.Spec{
+				Cluster: v1alpha1.ClusterSpec{
+					Distribution: v1alpha1.DistributionK3s,
+				},
+			},
+		},
+		K3dConfig: k3dConfig,
+	}
+
+	name := clusterpkg.ExportResolveClusterNameFromContext(ctx)
+	require.Equal(t, "k3s-cluster", name)
+}
+
+func TestResolveClusterNameFromContext_FallbackToContext(t *testing.T) {
+	t.Parallel()
+
+	ctx := &localregistry.Context{
+		ClusterCfg: &v1alpha1.Cluster{
+			Spec: v1alpha1.Spec{
+				Cluster: v1alpha1.ClusterSpec{
+					Distribution: v1alpha1.Distribution("unknown"),
+					Connection: v1alpha1.Connection{
+						Context: "custom-context",
+					},
+				},
+			},
+		},
+	}
+
+	name := clusterpkg.ExportResolveClusterNameFromContext(ctx)
+	require.Equal(t, "custom-context", name)
+}
+
+func TestResolveClusterNameFromContext_FallbackToDefault(t *testing.T) {
+	t.Parallel()
+
+	ctx := &localregistry.Context{
+		ClusterCfg: &v1alpha1.Cluster{
+			Spec: v1alpha1.Spec{
+				Cluster: v1alpha1.ClusterSpec{
+					Distribution: v1alpha1.Distribution("unknown"),
+				},
+			},
+		},
+	}
+
+	name := clusterpkg.ExportResolveClusterNameFromContext(ctx)
+	require.Equal(t, "ksail", name)
 }

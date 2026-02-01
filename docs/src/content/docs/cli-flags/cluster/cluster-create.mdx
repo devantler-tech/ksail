@@ -21,6 +21,7 @@ Flags:
       --distribution-config string     Configuration file for the distribution
   -g, --gitops-engine GitOpsEngine     GitOps engine to use (None disables GitOps, Flux installs Flux controllers, ArgoCD installs Argo CD) (default None)
   -h, --help                           help for create
+      --import-images string           Path to tar archive with container images to import after cluster creation but before component installation
   -k, --kubeconfig string              Path to kubeconfig file (default "~/.kube/config")
       --local-registry string          Local registry specification: [user:pass@]host[:port][/path] (e.g., localhost:5050, ghcr.io/myorg, ${USER}:${PASS}@ghcr.io:443/org)
       --metrics-server MetricsServer   Metrics Server (Default: use distribution, Enabled: install, Disabled: uninstall)

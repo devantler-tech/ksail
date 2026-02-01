@@ -27,6 +27,8 @@ runs:
 
     - name: 🏗️ Build KSail Binary
       shell: bash
+      env:
+        GOPROXY: https://proxy.golang.org,direct
       run: |
         echo "=== Building KSail Binary ===" | tee -a build-steps.log
         build_start=$(date +%s)
@@ -43,6 +45,8 @@ runs:
 
     - name: 🧪 Run Unit Tests
       shell: bash
+      env:
+        GOPROXY: https://proxy.golang.org,direct
       run: |
         echo "=== Running Unit Tests ===" | tee -a build-steps.log
         test_start=$(date +%s)
