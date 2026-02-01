@@ -181,7 +181,9 @@ func prepareScaffolder(
 	}
 
 	force := cfgManager.Viper.GetBool("force")
-	mirrorRegistries := mirrorregistry.GetMirrorRegistriesWithDefaults(cmd, cfgManager)
+	mirrorRegistries := mirrorregistry.GetMirrorRegistriesWithDefaults(
+		cmd, cfgManager, clusterCfg.Spec.Cluster.Provider,
+	)
 	clusterName := cfgManager.Viper.GetString("name")
 
 	// Validate mirror registries are compatible with the provider

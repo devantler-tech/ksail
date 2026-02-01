@@ -1,6 +1,7 @@
 package mirrorregistry
 
 import (
+	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
 	"github.com/spf13/cobra"
 )
@@ -26,10 +27,12 @@ var DefaultMirrors = []string{
 //   - With values: REPLACE defaults (flag values override both defaults and config)
 //   - If flag not set:
 //   - With config values: use config values
-//   - Without config values: use defaults (docker.io and ghcr.io)
+//   - Without config values: use defaults (docker.io and ghcr.io) for Docker provider,
+//     or empty for cloud providers (Hetzner) since they cannot use local Docker mirrors.
 func GetMirrorRegistriesWithDefaults(
 	cmd *cobra.Command,
 	cfgManager *ksailconfigmanager.ConfigManager,
+	provider v1alpha1.Provider,
 ) []string {
 	// Check if the flag was explicitly set by the user
 	flagChanged := cmd.Flags().Changed(MirrorRegistryFlag)
@@ -40,7 +43,11 @@ func GetMirrorRegistriesWithDefaults(
 		if len(configValues) > 0 {
 			return configValues
 		}
-		// No config value: use defaults
+		// No config value: use defaults only for providers that support local Docker mirrors
+		// Cloud providers (Hetzner) cannot access local Docker containers as mirrors
+		if provider == v1alpha1.ProviderHetzner {
+			return []string{}
+		}
 		return DefaultMirrors
 	}
 

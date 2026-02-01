@@ -72,7 +72,7 @@ func RunStage(
 	dockerInvoker DockerClientInvoker,
 ) error {
 	// Get mirror specs with defaults applied
-	mirrors := GetMirrorRegistriesWithDefaults(cmd, cfgManager)
+	mirrors := GetMirrorRegistriesWithDefaults(cmd, cfgManager, clusterCfg.Spec.Cluster.Provider)
 	flagSpecs := registry.ParseMirrorSpecs(mirrors)
 
 	// Try to read existing hosts.toml files from the configured mirrors directory.

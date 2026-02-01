@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup/mirrorregistry"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
 	"github.com/spf13/cobra"
@@ -31,66 +32,73 @@ func TestGetMirrorRegistriesWithDefaults(t *testing.T) {
 		flagValues     []string
 		flagChanged    bool
 		configValues   []string
+		provider       v1alpha1.Provider
 		expectedResult []string
 	}{
 		{
-			name:           "no flag, no config -> defaults",
+			name:           "Docker: no flag, no config -> defaults",
 			flagValues:     nil,
 			flagChanged:    false,
 			configValues:   nil,
+			provider:       v1alpha1.ProviderDocker,
 			expectedResult: mirrorregistry.DefaultMirrors,
 		},
 		{
-			name:        "no flag, with config -> config values",
+			name:        "Docker: no flag, with config -> config values",
 			flagValues:  nil,
 			flagChanged: false,
 			configValues: []string{
 				"registry.example.com=https://registry.example.com",
 			},
+			provider: v1alpha1.ProviderDocker,
 			expectedResult: []string{
 				"registry.example.com=https://registry.example.com",
 			},
 		},
 		{
-			name:           "flag set to empty string -> disabled (empty)",
+			name:           "Docker: flag set to empty string -> disabled (empty)",
 			flagValues:     []string{""},
 			flagChanged:    true,
 			configValues:   nil,
+			provider:       v1alpha1.ProviderDocker,
 			expectedResult: []string{},
 		},
 		{
-			name:           "flag with values, no config -> flag replaces defaults",
+			name:           "Docker: flag with values, no config -> flag replaces defaults",
 			flagValues:     []string{"gcr.io=https://gcr.io"},
 			flagChanged:    true,
 			configValues:   nil,
+			provider:       v1alpha1.ProviderDocker,
 			expectedResult: []string{"gcr.io=https://gcr.io"},
 		},
 		{
-			name:        "flag with values, with config -> flag replaces all",
+			name:        "Docker: flag with values, with config -> flag replaces all",
 			flagValues:  []string{"gcr.io=https://gcr.io"},
 			flagChanged: true,
 			configValues: []string{
 				"docker.io=https://registry-1.docker.io",
 			},
+			provider: v1alpha1.ProviderDocker,
 			expectedResult: []string{
 				"gcr.io=https://gcr.io",
 			},
 		},
 		{
-			name: "flag with multiple values, no config -> flag replaces defaults",
+			name: "Docker: flag with multiple values, no config -> flag replaces defaults",
 			flagValues: []string{
 				"gcr.io=https://gcr.io",
 				"quay.io=https://quay.io",
 			},
 			flagChanged:  true,
 			configValues: nil,
+			provider:     v1alpha1.ProviderDocker,
 			expectedResult: []string{
 				"gcr.io=https://gcr.io",
 				"quay.io=https://quay.io",
 			},
 		},
 		{
-			name: "flag with multiple values, with config -> flag replaces all",
+			name: "Docker: flag with multiple values, with config -> flag replaces all",
 			flagValues: []string{
 				"gcr.io=https://gcr.io",
 				"quay.io=https://quay.io",
@@ -100,18 +108,57 @@ func TestGetMirrorRegistriesWithDefaults(t *testing.T) {
 				"docker.io=https://registry-1.docker.io",
 				"ghcr.io=https://ghcr.io",
 			},
+			provider: v1alpha1.ProviderDocker,
 			expectedResult: []string{
 				"gcr.io=https://gcr.io",
 				"quay.io=https://quay.io",
 			},
 		},
 		{
-			name:        "empty string flag with config -> disabled (empty)",
+			name:        "Docker: empty string flag with config -> disabled (empty)",
 			flagValues:  []string{""},
 			flagChanged: true,
 			configValues: []string{
 				"docker.io=https://registry-1.docker.io",
 			},
+			provider:       v1alpha1.ProviderDocker,
+			expectedResult: []string{},
+		},
+		// Hetzner provider tests - defaults should be skipped
+		{
+			name:           "Hetzner: no flag, no config -> empty (no defaults for cloud)",
+			flagValues:     nil,
+			flagChanged:    false,
+			configValues:   nil,
+			provider:       v1alpha1.ProviderHetzner,
+			expectedResult: []string{},
+		},
+		{
+			name:        "Hetzner: no flag, with config -> config values",
+			flagValues:  nil,
+			flagChanged: false,
+			configValues: []string{
+				"docker.io=https://mirror.gcr.io",
+			},
+			provider: v1alpha1.ProviderHetzner,
+			expectedResult: []string{
+				"docker.io=https://mirror.gcr.io",
+			},
+		},
+		{
+			name:           "Hetzner: flag with external mirror -> flag values",
+			flagValues:     []string{"docker.io=https://mirror.gcr.io"},
+			flagChanged:    true,
+			configValues:   nil,
+			provider:       v1alpha1.ProviderHetzner,
+			expectedResult: []string{"docker.io=https://mirror.gcr.io"},
+		},
+		{
+			name:           "Hetzner: flag set to empty string -> disabled (empty)",
+			flagValues:     []string{""},
+			flagChanged:    true,
+			configValues:   nil,
+			provider:       v1alpha1.ProviderHetzner,
 			expectedResult: []string{},
 		},
 	}
@@ -133,7 +180,7 @@ func TestGetMirrorRegistriesWithDefaults(t *testing.T) {
 				require.NoError(t, err)
 			}
 
-			result := mirrorregistry.GetMirrorRegistriesWithDefaults(cmd, cfgManager)
+			result := mirrorregistry.GetMirrorRegistriesWithDefaults(cmd, cfgManager, testCase.provider)
 			assert.Equal(t, testCase.expectedResult, result)
 		})
 	}

@@ -420,6 +420,7 @@ func CleanupMirrorRegistries(
 			clusterName,
 			deleteVolumes,
 			cleanupDeps,
+			clusterCfg.Spec.Cluster.Provider,
 		)
 	default:
 		return nil
@@ -432,9 +433,10 @@ func CollectMirrorSpecs(
 	cmd *cobra.Command,
 	cfgManager *ksailconfigmanager.ConfigManager,
 	mirrorsDir string,
+	provider v1alpha1.Provider,
 ) ([]registry.MirrorSpec, []string, error) {
 	// Get mirror registry specs with defaults applied
-	mirrors := GetMirrorRegistriesWithDefaults(cmd, cfgManager)
+	mirrors := GetMirrorRegistriesWithDefaults(cmd, cfgManager, provider)
 	flagSpecs := registry.ParseMirrorSpecs(mirrors)
 
 	// Try to read existing hosts.toml files.
@@ -464,6 +466,7 @@ func cleanupKindMirrorRegistries(
 		cmd,
 		cfgManager,
 		GetKindMirrorsDir(clusterCfg),
+		clusterCfg.Spec.Cluster.Provider,
 	)
 	if err != nil {
 		return err
@@ -653,9 +656,10 @@ func cleanupTalosMirrorRegistries(
 	clusterName string,
 	deleteVolumes bool,
 	cleanupDeps CleanupDependencies,
+	provider v1alpha1.Provider,
 ) error {
 	// Collect mirror specs from Talos config (not kind/mirrors directory)
-	mirrorSpecs, registryNames := CollectTalosMirrorSpecs(cmd, cfgManager)
+	mirrorSpecs, registryNames := CollectTalosMirrorSpecs(cmd, cfgManager, provider)
 
 	// Talos uses the cluster name as the network name
 	networkName := clusterName
@@ -740,9 +744,10 @@ func cleanupRegistriesByNetwork(
 func CollectTalosMirrorSpecs(
 	cmd *cobra.Command,
 	cfgManager *ksailconfigmanager.ConfigManager,
+	provider v1alpha1.Provider,
 ) ([]registry.MirrorSpec, []string) {
 	// Get mirror registry specs with defaults applied
-	mirrors := GetMirrorRegistriesWithDefaults(cmd, cfgManager)
+	mirrors := GetMirrorRegistriesWithDefaults(cmd, cfgManager, provider)
 	flagSpecs := registry.ParseMirrorSpecs(mirrors)
 
 	// Extract mirror hosts from the loaded Talos config
@@ -771,9 +776,10 @@ func DisconnectMirrorRegistries(
 	cfgManager *ksailconfigmanager.ConfigManager,
 	clusterName string,
 	cleanupDeps CleanupDependencies,
+	provider v1alpha1.Provider,
 ) error {
 	// Collect mirror specs from Talos config
-	mirrorSpecs, registryNames := CollectTalosMirrorSpecs(cmd, cfgManager)
+	mirrorSpecs, registryNames := CollectTalosMirrorSpecs(cmd, cfgManager, provider)
 
 	// Talos uses the cluster name as the network name
 	networkName := clusterName
@@ -840,8 +846,9 @@ func DisconnectMirrorRegistriesWithWarning(
 	cfgManager *ksailconfigmanager.ConfigManager,
 	clusterName string,
 	cleanupDeps CleanupDependencies,
+	provider v1alpha1.Provider,
 ) {
-	err := DisconnectMirrorRegistries(cmd, cfgManager, clusterName, cleanupDeps)
+	err := DisconnectMirrorRegistries(cmd, cfgManager, clusterName, cleanupDeps, provider)
 	if err != nil {
 		notify.WriteMessage(notify.Message{
 			Type:    notify.ErrorType,
