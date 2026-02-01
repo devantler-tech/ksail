@@ -124,9 +124,8 @@ export async function listClusters(
 /**
  * Parse cluster list text output
  *
- * Format: "docker local,test"
- * Each provider section contains comma-separated cluster names.
- * Lines may contain multiple clusters for the same provider.
+ * Format: "docker: cluster1, cluster2"
+ * Each line starts with provider name followed by colon, then comma-separated cluster names.
  */
 function parseClusterListOutput(output: string): ClusterInfo[] {
   const clusters: ClusterInfo[] = [];
@@ -141,15 +140,25 @@ function parseClusterListOutput(output: string): ClusterInfo[] {
   const lines = trimmed.split("\n").filter((line) => line.trim());
 
   for (const line of lines) {
-    // Extract value
-    const providerMatch = line.match(/(\w+)/i);
-    const provider = providerMatch ? providerMatch[1] : "unknown";
+    // Split on colon to separate provider from cluster names
+    const colonIndex = line.indexOf(":");
+    if (colonIndex === -1) {
+      continue; // Skip lines without colon separator
+    }
 
-    // Extract all value pairs
-    const nameMatches = line.matchAll(/([^,\s]+)/gi);
-    for (const match of nameMatches) {
+    const provider = line.substring(0, colonIndex).trim();
+    const clustersPart = line.substring(colonIndex + 1).trim();
+
+    if (!clustersPart) {
+      continue; // No clusters for this provider
+    }
+
+    // Split cluster names by comma and trim each
+    const clusterNames = clustersPart.split(",").map((n) => n.trim()).filter((n) => n);
+
+    for (const name of clusterNames) {
       clusters.push({
-        name: match[1],
+        name: name,
         provider: provider,
         status: "unknown",
       });
