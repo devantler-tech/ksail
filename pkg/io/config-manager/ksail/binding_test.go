@@ -202,6 +202,16 @@ func getNetworkingFieldTests() []fieldTestCase {
 			expectedType: "MetricsServer",
 		},
 		{
+			name: "LoadBalancer field",
+			fieldSelector: newFieldSelector(
+				func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.LoadBalancer },
+				v1alpha1.LoadBalancerDefault,
+				"LoadBalancer configuration",
+			),
+			expectedFlag: "load-balancer",
+			expectedType: "LoadBalancer",
+		},
+		{
 			name: "CertManager field",
 			fieldSelector: newFieldSelector(
 				func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.CertManager },
@@ -312,6 +322,11 @@ func TestGenerateFlagName(t *testing.T) {
 			"MetricsServer field",
 			&manager.Config.Spec.Cluster.MetricsServer,
 			"metrics-server",
+		},
+		{
+			"LoadBalancer field",
+			&manager.Config.Spec.Cluster.LoadBalancer,
+			"load-balancer",
 		},
 		{
 			"LocalRegistry.Registry field",

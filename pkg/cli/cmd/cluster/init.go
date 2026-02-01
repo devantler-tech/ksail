@@ -55,6 +55,7 @@ func InitFieldSelectors() []ksailconfigmanager.FieldSelector[v1alpha1.Cluster] {
 	selectors = append(selectors, ksailconfigmanager.DefaultCNIFieldSelector())
 	selectors = append(selectors, ksailconfigmanager.DefaultCSIFieldSelector())
 	selectors = append(selectors, ksailconfigmanager.DefaultMetricsServerFieldSelector())
+	selectors = append(selectors, ksailconfigmanager.DefaultLoadBalancerFieldSelector())
 	selectors = append(selectors, ksailconfigmanager.DefaultCertManagerFieldSelector())
 	selectors = append(selectors, ksailconfigmanager.DefaultPolicyEngineFieldSelector())
 	selectors = append(selectors, ksailconfigmanager.DefaultImportImagesFieldSelector())

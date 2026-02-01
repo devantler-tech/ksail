@@ -17,6 +17,9 @@ var ErrInvalidCSI = errors.New("invalid CSI")
 // ErrInvalidMetricsServer is returned when an invalid metrics server is specified.
 var ErrInvalidMetricsServer = errors.New("invalid metrics server")
 
+// ErrInvalidLoadBalancer is returned when an invalid load balancer option is specified.
+var ErrInvalidLoadBalancer = errors.New("invalid load balancer")
+
 // ErrInvalidCertManager is returned when an invalid cert-manager option is specified.
 var ErrInvalidCertManager = errors.New("invalid cert-manager")
 
@@ -47,3 +50,6 @@ var ErrLocalRegistryNotSupported = errors.New(
 	"cloud provider requires an external registry\n" +
 		"- use --local-registry with an internet-accessible registry (e.g., ghcr.io/myorg)",
 )
+
+// ErrLoadBalancerNotImplemented is returned when LoadBalancer installation is not yet implemented.
+var ErrLoadBalancerNotImplemented = errors.New("LoadBalancer installation not yet implemented")
