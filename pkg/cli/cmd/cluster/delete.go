@@ -276,11 +276,17 @@ func discoverRegistriesBeforeDelete(
 ) *mirrorregistry.DiscoveredRegistries {
 	cleanupDeps := getCleanupDeps()
 
-	// For Docker provider, we need to try all distributions
-	// Use Talos as the distribution hint since registry cleanup uses cluster name as network name
+	// Use the detected distribution for correct network name resolution
+	// Kind uses fixed "kind" network, Talos uses cluster name as network name
+	distribution := clusterInfo.Distribution
+	if distribution == "" {
+		// Fallback to Talos if distribution is unknown (uses cluster name as network)
+		distribution = v1alpha1.DistributionTalos
+	}
+
 	return mirrorregistry.DiscoverRegistriesByNetwork(
 		cmd,
-		v1alpha1.DistributionTalos, // Distribution hint for network naming
+		distribution,
 		clusterInfo.ClusterName,
 		cleanupDeps,
 	)
@@ -575,6 +581,7 @@ func hasRemainingKindClusters(cmd *cobra.Command) bool {
 }
 
 // hasCloudProviderKindContainers checks if there are any cloud-provider-kind containers.
+// This includes both the main ksail-cloud-provider-kind controller and cpk-* service containers.
 func hasCloudProviderKindContainers(cmd *cobra.Command) bool {
 	dockerClientInvokerMu.RLock()
 
@@ -596,8 +603,9 @@ func hasCloudProviderKindContainers(cmd *cobra.Command) bool {
 		for _, ctr := range containers {
 			for _, name := range ctr.Names {
 				containerName := strings.TrimPrefix(name, "/")
-				// Cloud-provider-kind containers start with "cpk-"
-				if strings.HasPrefix(containerName, "cpk-") {
+				// Check for main controller container or cpk-* service containers
+				if containerName == "ksail-cloud-provider-kind" ||
+					strings.HasPrefix(containerName, "cpk-") {
 					hasContainers = true
 
 					return nil
@@ -674,6 +682,9 @@ func cleanupCloudProviderKindIfLastCluster(
 }
 
 // cleanupCloudProviderKindContainers removes any cloud-provider-kind related containers.
+// This includes:
+// - The main ksail-cloud-provider-kind controller container
+// - Any cpk-* containers created by cloud-provider-kind for LoadBalancer services.
 func cleanupCloudProviderKindContainers(cmd *cobra.Command) error {
 	dockerClientInvokerMu.RLock()
 
@@ -699,8 +710,10 @@ func cleanupCloudProviderKindContainers(cmd *cobra.Command) error {
 			// Look for containers created by cloud-provider-kind
 			for _, name := range ctr.Names {
 				containerName := strings.TrimPrefix(name, "/")
-				// Cloud-provider-kind containers are typically named: cpk-<service>-<namespace>-<cluster>
-				if strings.HasPrefix(containerName, "cpk-") {
+				// Remove the main ksail-cloud-provider-kind controller container
+				// and cpk-* containers (named: cpk-<service>-<namespace>-<cluster>)
+				if containerName == "ksail-cloud-provider-kind" ||
+					strings.HasPrefix(containerName, "cpk-") {
 					err := dockerClient.ContainerRemove(
 						cmd.Context(),
 						ctr.ID,
