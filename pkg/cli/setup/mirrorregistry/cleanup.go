@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
@@ -43,6 +44,25 @@ type DiscoveredRegistries struct {
 	Registries []dockerclient.RegistryInfo
 }
 
+// filterRegistriesByClusterName filters registries to only include those belonging to a specific cluster.
+// Registry names follow the pattern "{clusterName}-{host}" (e.g., "my-cluster-ghcr.io").
+func filterRegistriesByClusterName(registries []dockerclient.RegistryInfo, clusterName string) []dockerclient.RegistryInfo {
+	if clusterName == "" {
+		return registries
+	}
+
+	prefix := clusterName + "-"
+	filtered := make([]dockerclient.RegistryInfo, 0, len(registries))
+
+	for _, reg := range registries {
+		if strings.HasPrefix(reg.Name, prefix) {
+			filtered = append(filtered, reg)
+		}
+	}
+
+	return filtered
+}
+
 // DiscoverRegistries finds all registries connected to the cluster network.
 // This should be called BEFORE cluster deletion for distributions that destroy
 // the network during deletion (e.g., Talos).
@@ -62,6 +82,7 @@ func DiscoverRegistries(
 
 // DiscoverRegistriesByNetwork finds all registries connected to the cluster network.
 // This is a simplified version that doesn't require a cluster config object.
+// Registries are filtered to only include those belonging to the specified cluster.
 func DiscoverRegistriesByNetwork(
 	cmd *cobra.Command,
 	distribution v1alpha1.Distribution,
@@ -83,7 +104,8 @@ func DiscoverRegistriesByNetwork(
 			return fmt.Errorf("list registries on network: %w", listErr)
 		}
 
-		registries = discovered
+		// Filter to only include registries belonging to this cluster
+		registries = filterRegistriesByClusterName(discovered, clusterName)
 
 		return nil
 	})
@@ -149,9 +171,11 @@ func CleanupPreDiscoveredRegistries(
 
 // deleteRegistriesOnNetworkCore performs the core deletion of registries on a network.
 // Returns the list of deleted registry names and true if registries were found.
+// Only registries belonging to the specified cluster (by name prefix) are deleted.
 func deleteRegistriesOnNetworkCore(
 	cmd *cobra.Command,
 	networkName string,
+	clusterName string,
 	deleteVolumes bool,
 	cleanupDeps CleanupDependencies,
 ) ([]string, bool, error) {
@@ -166,10 +190,13 @@ func deleteRegistriesOnNetworkCore(
 		}
 
 		// Discover registries connected to the network
-		registries, listErr := registryMgr.ListRegistriesOnNetwork(cmd.Context(), networkName)
+		allRegistries, listErr := registryMgr.ListRegistriesOnNetwork(cmd.Context(), networkName)
 		if listErr != nil {
 			return fmt.Errorf("failed to list registries on network: %w", listErr)
 		}
+
+		// Filter to only include registries belonging to this cluster
+		registries := filterRegistriesByClusterName(allRegistries, clusterName)
 
 		if len(registries) == 0 {
 			return nil
@@ -182,10 +209,10 @@ func deleteRegistriesOnNetworkCore(
 			registryNames = append(registryNames, reg.Name)
 		}
 
-		// Delete all registries on the network
-		_, deleteErr := registryMgr.DeleteRegistriesOnNetwork(
+		// Delete filtered registries by their info
+		_, deleteErr := registryMgr.DeleteRegistriesByInfo(
 			cmd.Context(),
-			networkName,
+			registries,
 			deleteVolumes,
 		)
 		if deleteErr != nil {
@@ -200,6 +227,7 @@ func deleteRegistriesOnNetworkCore(
 
 // CleanupRegistriesByNetwork discovers and cleans up all registry containers by network.
 // This is the exported version for use by the simplified delete command.
+// Only registries belonging to the specified cluster (by name prefix) are deleted.
 func CleanupRegistriesByNetwork(
 	cmd *cobra.Command,
 	tmr timer.Timer,
@@ -213,6 +241,7 @@ func CleanupRegistriesByNetwork(
 	registryNames, found, err := deleteRegistriesOnNetworkCore(
 		cmd,
 		networkName,
+		clusterName,
 		deleteVolumes,
 		cleanupDeps,
 	)
@@ -331,6 +360,7 @@ func CleanupAll(
 			cmd,
 			deps,
 			networkName,
+			clusterName,
 			deleteVolumes,
 			cleanupDeps,
 		)
@@ -482,6 +512,7 @@ func cleanupKindMirrorRegistries(
 			cmd,
 			deps,
 			networkName,
+			clusterName,
 			deleteVolumes,
 			cleanupDeps,
 		)
@@ -523,6 +554,7 @@ func cleanupK3dMirrorRegistries(
 			cmd,
 			deps,
 			networkName,
+			clusterName,
 			deleteVolumes,
 			cleanupDeps,
 		)
@@ -537,6 +569,7 @@ func cleanupK3dMirrorRegistries(
 			cmd,
 			deps,
 			networkName,
+			clusterName,
 			deleteVolumes,
 			cleanupDeps,
 		)
@@ -671,6 +704,7 @@ func cleanupTalosMirrorRegistries(
 			cmd,
 			deps,
 			networkName,
+			clusterName,
 			deleteVolumes,
 			cleanupDeps,
 		)
@@ -716,16 +750,19 @@ func cleanupTalosMirrorRegistries(
 // cleanupRegistriesByNetwork discovers and cleans up all registry containers
 // (both local and mirror registries) by inspecting the Docker network.
 // This unified approach works for both scaffolded and non-scaffolded clusters.
+// Only registries belonging to the specified cluster (by name prefix) are deleted.
 func cleanupRegistriesByNetwork(
 	cmd *cobra.Command,
 	deps lifecycle.Deps,
 	networkName string,
+	clusterName string,
 	deleteVolumes bool,
 	cleanupDeps CleanupDependencies,
 ) error {
 	registryNames, _, err := deleteRegistriesOnNetworkCore(
 		cmd,
 		networkName,
+		clusterName,
 		deleteVolumes,
 		cleanupDeps,
 	)

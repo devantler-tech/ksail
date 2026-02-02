@@ -104,14 +104,27 @@ func runDeleteAction(
 		return fmt.Errorf("failed to resolve cluster info: %w", err)
 	}
 
-	// Detect if this is a Kind cluster for cleanup decisions
-	isKindCluster := detectIsKindCluster(resolved)
+	// Detect cluster distribution and info before deletion
+	// This must happen before deletion while kubeconfig is still available
+	detectedInfo := detectClusterDistribution(resolved)
+	isKindCluster := detectedInfo != nil &&
+		detectedInfo.Distribution == v1alpha1.DistributionVanilla
 
-	// Create cluster info for provisioner creation
+	// Fallback: detect Kind cluster from container naming patterns if kubeconfig detection failed
+	// This handles cases where kubeconfig context is missing but cluster containers exist
+	if !isKindCluster && resolved.Provider == v1alpha1.ProviderDocker {
+		nodes := discoverDockerNodes(cmd, resolved.ClusterName)
+		isKindCluster = isKindClusterFromNodes(nodes, resolved.ClusterName)
+	}
+
+	// Create cluster info for provisioner creation, including detected distribution
 	clusterInfo := &lifecycle.ClusterInfo{
 		ClusterName:    resolved.ClusterName,
 		Provider:       resolved.Provider,
 		KubeconfigPath: resolved.KubeconfigPath,
+	}
+	if detectedInfo != nil {
+		clusterInfo.Distribution = detectedInfo.Distribution
 	}
 
 	// Create provisioner for the provider
@@ -125,7 +138,7 @@ func runDeleteAction(
 
 	// Show confirmation prompt unless force flag is set or non-TTY
 	if !confirm.ShouldSkipPrompt(flags.force) {
-		err := promptForDeletion(cmd, resolved, preDiscovered)
+		err := promptForDeletion(cmd, resolved, preDiscovered, isKindCluster)
 		if err != nil {
 			return err
 		}
@@ -143,25 +156,37 @@ func runDeleteAction(
 	return nil
 }
 
-// detectIsKindCluster determines if the cluster is a Kind (Vanilla) cluster.
+// detectClusterDistribution detects the distribution and other cluster info.
 // This detection must happen before the cluster is deleted to ensure the kubeconfig
 // entry is still available for reading cluster information.
-func detectIsKindCluster(resolved *lifecycle.ResolvedClusterInfo) bool {
+// Returns nil if detection fails or the provider is not Docker.
+func detectClusterDistribution(resolved *lifecycle.ResolvedClusterInfo) *lifecycle.ClusterInfo {
 	if resolved.Provider != v1alpha1.ProviderDocker {
-		return false
+		return nil
 	}
 
+	// Try to detect using Kind context naming convention
 	contextName := ""
 	if strings.TrimSpace(resolved.ClusterName) != "" {
 		contextName = "kind-" + resolved.ClusterName
 	}
 
 	clusterInfo, detectErr := lifecycle.DetectClusterInfo(resolved.KubeconfigPath, contextName)
-	if detectErr != nil || clusterInfo == nil {
-		return false
+	if detectErr == nil && clusterInfo != nil {
+		return clusterInfo
 	}
 
-	return clusterInfo.Distribution == v1alpha1.DistributionVanilla
+	// Try to detect using K3d context naming convention
+	if strings.TrimSpace(resolved.ClusterName) != "" {
+		contextName = "k3d-" + resolved.ClusterName
+	}
+
+	clusterInfo, detectErr = lifecycle.DetectClusterInfo(resolved.KubeconfigPath, contextName)
+	if detectErr == nil && clusterInfo != nil {
+		return clusterInfo
+	}
+
+	return nil
 }
 
 // prepareDockerDeletion prepares Docker-specific resources before deletion.
@@ -228,8 +253,9 @@ func promptForDeletion(
 	cmd *cobra.Command,
 	resolved *lifecycle.ResolvedClusterInfo,
 	preDiscovered *mirrorregistry.DiscoveredRegistries,
+	isKindCluster bool,
 ) error {
-	preview := buildDeletionPreview(cmd, resolved, preDiscovered)
+	preview := buildDeletionPreview(cmd, resolved, preDiscovered, isKindCluster)
 	confirm.ShowDeletionPreview(cmd.OutOrStdout(), preview)
 
 	if !confirm.PromptForConfirmation(cmd.OutOrStdout()) {
@@ -309,6 +335,7 @@ func buildDeletionPreview(
 	cmd *cobra.Command,
 	resolved *lifecycle.ResolvedClusterInfo,
 	preDiscovered *mirrorregistry.DiscoveredRegistries,
+	isKindCluster bool,
 ) *confirm.DeletionPreview {
 	preview := &confirm.DeletionPreview{
 		ClusterName: resolved.ClusterName,
@@ -326,6 +353,11 @@ func buildDeletionPreview(
 
 		// Try to discover cluster node containers
 		preview.Nodes = discoverDockerNodes(cmd, resolved.ClusterName)
+
+		// If this is the last Kind cluster, show shared containers that will be deleted
+		if isKindCluster && countKindClusters(cmd) == 1 {
+			preview.SharedContainers = listCloudProviderKindContainerNames(cmd)
+		}
 	case v1alpha1.ProviderHetzner:
 		// For Hetzner, resources follow predictable naming patterns
 		// Note: We can't list actual servers without API access, but we know infrastructure resources
@@ -342,40 +374,18 @@ func buildDeletionPreview(
 }
 
 // discoverDockerNodes discovers cluster node containers for Docker provider.
+// Kind uses: {cluster}-control-plane, {cluster}-worker, etc.
+// K3d uses: k3d-{cluster}-server-0, k3d-{cluster}-agent-0, etc.
+// Talos uses: {cluster}-controlplane-*, {cluster}-worker-*.
 func discoverDockerNodes(cmd *cobra.Command, clusterName string) []string {
 	var nodes []string
 
-	dockerClientInvokerMu.RLock()
-
-	invoker := dockerClientInvoker
-
-	dockerClientInvokerMu.RUnlock()
-
-	// Try to list containers matching cluster name patterns
-	// Kind uses: {cluster}-control-plane, {cluster}-worker, etc.
-	// K3d uses: k3d-{cluster}-server-0, k3d-{cluster}-agent-0, etc.
-	// Talos uses: {cluster}-controlplane-*, {cluster}-worker-*
-	_ = invoker(cmd, func(dockerClient client.APIClient) error {
-		containers, err := dockerClient.ContainerList(cmd.Context(), container.ListOptions{
-			All: true,
-		})
-		if err != nil {
-			return fmt.Errorf("failed to list containers: %w", err)
+	_ = forEachContainerName(cmd, func(containerName string) bool {
+		if IsClusterContainer(containerName, clusterName) {
+			nodes = append(nodes, containerName)
 		}
 
-		for _, ctr := range containers {
-			for _, name := range ctr.Names {
-				// Remove leading slash from container name
-				containerName := strings.TrimPrefix(name, "/")
-
-				// Check if container belongs to this cluster
-				if IsClusterContainer(containerName, clusterName) {
-					nodes = append(nodes, containerName)
-				}
-			}
-		}
-
-		return nil
+		return false // continue processing all containers
 	})
 
 	return nodes
@@ -400,6 +410,19 @@ func IsClusterContainer(containerName, clusterName string) bool {
 	if strings.HasPrefix(containerName, clusterName+"-controlplane-") ||
 		strings.HasPrefix(containerName, clusterName+"-worker-") {
 		return true
+	}
+
+	return false
+}
+
+// isKindClusterFromNodes determines if a cluster is a Kind cluster by checking
+// if any of its nodes match Kind's container naming convention.
+// This is used as a fallback when kubeconfig-based detection fails.
+func isKindClusterFromNodes(nodes []string, clusterName string) bool {
+	for _, node := range nodes {
+		if matchesKindPattern(node, clusterName) {
+			return true
+		}
 	}
 
 	return false
@@ -520,7 +543,7 @@ func cleanupRegistriesAfterDelete(
 		)
 	} else {
 		// Discover and cleanup registries by network
-		// Use Talos as distribution hint since registry cleanup uses cluster name as network name
+		// Use Talos as fallback since it uses cluster name as network name
 		err = mirrorregistry.CleanupRegistriesByNetwork(
 			cmd,
 			tmr,
@@ -542,81 +565,50 @@ func cleanupRegistriesAfterDelete(
 
 // hasRemainingKindClusters checks if there are any Kind clusters remaining in Docker.
 func hasRemainingKindClusters(cmd *cobra.Command) bool {
-	dockerClientInvokerMu.RLock()
-
-	invoker := dockerClientInvoker
-
-	dockerClientInvokerMu.RUnlock()
-
-	var hasKind bool
-
-	_ = invoker(nil, func(dockerClient client.APIClient) error {
-		ctx := cmd.Context()
-
-		containers, err := dockerClient.ContainerList(ctx, container.ListOptions{
-			All: true,
-		})
-		if err != nil {
-			return fmt.Errorf("failed to list Docker containers: %w", err)
-		}
-
-		// Check if any container matches Kind's naming pattern
-		// Kind containers end with -control-plane or -worker*
-		for _, ctr := range containers {
-			for _, name := range ctr.Names {
-				containerName := strings.TrimPrefix(name, "/")
-				// Kind control plane pattern: *-control-plane
-				if strings.HasSuffix(containerName, "-control-plane") {
-					hasKind = true
-
-					return nil
-				}
-			}
-		}
-
-		return nil
-	})
-
-	return hasKind
+	return countKindClusters(cmd) > 0
 }
 
 // hasCloudProviderKindContainers checks if there are any cloud-provider-kind containers.
 // This includes both the main ksail-cloud-provider-kind controller and cpk-* service containers.
 func hasCloudProviderKindContainers(cmd *cobra.Command) bool {
-	dockerClientInvokerMu.RLock()
+	return len(listCloudProviderKindContainerNames(cmd)) > 0
+}
 
-	invoker := dockerClientInvoker
+// listCloudProviderKindContainerNames returns the names of all cloud-provider-kind containers.
+// This includes both the main ksail-cloud-provider-kind controller and cpk-* service containers.
+func listCloudProviderKindContainerNames(cmd *cobra.Command) []string {
+	var names []string
 
-	dockerClientInvokerMu.RUnlock()
-
-	var hasContainers bool
-
-	_ = invoker(nil, func(dockerClient client.APIClient) error {
-		containers, err := dockerClient.ContainerList(cmd.Context(), container.ListOptions{
-			All: true,
-		})
-		if err != nil {
-			return fmt.Errorf("failed to list Docker containers: %w", err)
+	_ = forEachContainerName(cmd, func(containerName string) bool {
+		if isCloudProviderKindContainer(containerName) {
+			names = append(names, containerName)
 		}
 
-		// Check if any container matches cloud-provider-kind's naming pattern
-		for _, ctr := range containers {
-			for _, name := range ctr.Names {
-				containerName := strings.TrimPrefix(name, "/")
-				// Check for main controller container or cpk-* service containers
-				if containerName == "ksail-cloud-provider-kind" ||
-					strings.HasPrefix(containerName, "cpk-") {
-					hasContainers = true
-
-					return nil
-				}
-			}
-		}
-
-		return nil
+		return false // continue processing all containers
 	})
 
-	return hasContainers
+	return names
+}
+
+// isCloudProviderKindContainer checks if a container name belongs to cloud-provider-kind.
+func isCloudProviderKindContainer(name string) bool {
+	return name == "ksail-cloud-provider-kind" || strings.HasPrefix(name, "cpk-")
+}
+
+// countKindClusters counts the number of Kind clusters currently running.
+// This is determined by counting containers with the -control-plane suffix.
+func countKindClusters(cmd *cobra.Command) int {
+	var count int
+
+	_ = forEachContainerName(cmd, func(containerName string) bool {
+		if strings.HasSuffix(containerName, "-control-plane") {
+			count++
+		}
+
+		return false // continue processing all containers
+	})
+
+	return count
 }
 
 // cleanupCloudProviderKindIfLastCluster uninstalls cloud-provider-kind if no kind clusters remain.
@@ -686,49 +678,25 @@ func cleanupCloudProviderKindIfLastCluster(
 // - The main ksail-cloud-provider-kind controller container
 // - Any cpk-* containers created by cloud-provider-kind for LoadBalancer services.
 func cleanupCloudProviderKindContainers(cmd *cobra.Command) error {
-	dockerClientInvokerMu.RLock()
-
-	invoker := dockerClientInvoker
-
-	dockerClientInvokerMu.RUnlock()
-
-	var cleanupErr error
-
-	_ = invoker(cmd, func(dockerClient client.APIClient) error {
+	return withDockerClient(cmd, func(dockerClient client.APIClient) error {
 		containers, err := dockerClient.ContainerList(cmd.Context(), container.ListOptions{
 			All: true,
 		})
 		if err != nil {
-			cleanupErr = fmt.Errorf("failed to list containers: %w", err)
-
-			return cleanupErr
+			return fmt.Errorf("failed to list containers: %w", err)
 		}
 
 		for _, ctr := range containers {
-			// Cloud-provider-kind creates containers for load balancer services
-			// These containers are named with a specific pattern
-			// Look for containers created by cloud-provider-kind
 			for _, name := range ctr.Names {
 				containerName := strings.TrimPrefix(name, "/")
-				// Remove the main ksail-cloud-provider-kind controller container
-				// and cpk-* containers (named: cpk-<service>-<namespace>-<cluster>)
-				if containerName == "ksail-cloud-provider-kind" ||
-					strings.HasPrefix(containerName, "cpk-") {
+				if isCloudProviderKindContainer(containerName) {
 					err := dockerClient.ContainerRemove(
 						cmd.Context(),
 						ctr.ID,
-						container.RemoveOptions{
-							Force: true,
-						},
+						container.RemoveOptions{Force: true},
 					)
 					if err != nil {
-						cleanupErr = fmt.Errorf(
-							"failed to remove container %s: %w",
-							containerName,
-							err,
-						)
-
-						return cleanupErr
+						return fmt.Errorf("failed to remove container %s: %w", containerName, err)
 					}
 				}
 			}
@@ -736,6 +704,4 @@ func cleanupCloudProviderKindContainers(cmd *cobra.Command) error {
 
 		return nil
 	})
-
-	return cleanupErr
 }
