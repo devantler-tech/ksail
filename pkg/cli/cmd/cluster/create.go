@@ -30,6 +30,7 @@ import (
 const (
 	k3sDisableMetricsServerFlag = "--disable=metrics-server"
 	k3sDisableLocalStorageFlag  = "--disable=local-storage"
+	k3sDisableServiceLBFlag     = "--disable=servicelb"
 )
 
 // newCreateLifecycleConfig creates the lifecycle configuration for cluster creation.
@@ -141,6 +142,7 @@ func handleCreateRunE(
 
 	setupK3dMetricsServer(ctx.ClusterCfg, ctx.K3dConfig)
 	SetupK3dCSI(ctx.ClusterCfg, ctx.K3dConfig)
+	SetupK3dLoadBalancer(ctx.ClusterCfg, ctx.K3dConfig)
 
 	clusterProvisionerFactoryMu.RLock()
 
@@ -421,6 +423,32 @@ func SetupK3dCSI(clusterCfg *v1alpha1.Cluster, k3dConfig *v1alpha5.SimpleConfig)
 		k3dConfig.Options.K3sOptions.ExtraArgs,
 		v1alpha5.K3sArgWithNodeFilters{
 			Arg:         k3sDisableLocalStorageFlag,
+			NodeFilters: []string{"server:*"},
+		},
+	)
+}
+
+// SetupK3dLoadBalancer configures K3d to disable servicelb when LoadBalancer is explicitly disabled.
+// This function is exported for testing purposes.
+func SetupK3dLoadBalancer(clusterCfg *v1alpha1.Cluster, k3dConfig *v1alpha5.SimpleConfig) {
+	if clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionK3s || k3dConfig == nil {
+		return
+	}
+
+	if clusterCfg.Spec.Cluster.LoadBalancer != v1alpha1.LoadBalancerDisabled {
+		return
+	}
+
+	for _, arg := range k3dConfig.Options.K3sOptions.ExtraArgs {
+		if arg.Arg == k3sDisableServiceLBFlag {
+			return
+		}
+	}
+
+	k3dConfig.Options.K3sOptions.ExtraArgs = append(
+		k3dConfig.Options.K3sOptions.ExtraArgs,
+		v1alpha5.K3sArgWithNodeFilters{
+			Arg:         k3sDisableServiceLBFlag,
 			NodeFilters: []string{"server:*"},
 		},
 	)
