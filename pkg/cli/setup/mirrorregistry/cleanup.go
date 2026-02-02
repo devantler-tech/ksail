@@ -46,7 +46,10 @@ type DiscoveredRegistries struct {
 
 // filterRegistriesByClusterName filters registries to only include those belonging to a specific cluster.
 // Registry names follow the pattern "{clusterName}-{host}" (e.g., "my-cluster-ghcr.io").
-func filterRegistriesByClusterName(registries []dockerclient.RegistryInfo, clusterName string) []dockerclient.RegistryInfo {
+func filterRegistriesByClusterName(
+	registries []dockerclient.RegistryInfo,
+	clusterName string,
+) []dockerclient.RegistryInfo {
 	if clusterName == "" {
 		return registries
 	}

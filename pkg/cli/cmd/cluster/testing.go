@@ -2,6 +2,7 @@ package cluster
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -113,6 +114,28 @@ func forEachContainerName(
 	cmd *cobra.Command,
 	callback func(containerName string) (done bool),
 ) error {
+	return forEachContainer(
+		cmd,
+		func(_ client.APIClient, _ container.Summary, name string) error {
+			if callback(name) {
+				return errStopIteration
+			}
+
+			return nil
+		},
+	)
+}
+
+// errStopIteration is a sentinel error used to stop container iteration early.
+var errStopIteration = errors.New("stop iteration")
+
+// forEachContainer lists all Docker containers and calls the callback for each container name.
+// The callback receives the docker client, container info, and normalized container name.
+// Return an error to stop iteration (use errStopIteration for normal early exit).
+func forEachContainer(
+	cmd *cobra.Command,
+	callback func(dockerClient client.APIClient, ctr container.Summary, name string) error,
+) error {
 	return withDockerClient(cmd, func(dockerClient client.APIClient) error {
 		containers, err := dockerClient.ContainerList(cmd.Context(), container.ListOptions{
 			All: true,
@@ -124,8 +147,14 @@ func forEachContainerName(
 		for _, ctr := range containers {
 			for _, name := range ctr.Names {
 				containerName := strings.TrimPrefix(name, "/")
-				if callback(containerName) {
-					return nil // early exit
+
+				err := callback(dockerClient, ctr, containerName)
+				if err != nil {
+					if errors.Is(err, errStopIteration) {
+						return nil // Normal early exit
+					}
+
+					return err
 				}
 			}
 		}

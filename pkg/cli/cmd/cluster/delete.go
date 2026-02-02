@@ -678,30 +678,23 @@ func cleanupCloudProviderKindIfLastCluster(
 // - The main ksail-cloud-provider-kind controller container
 // - Any cpk-* containers created by cloud-provider-kind for LoadBalancer services.
 func cleanupCloudProviderKindContainers(cmd *cobra.Command) error {
-	return withDockerClient(cmd, func(dockerClient client.APIClient) error {
-		containers, err := dockerClient.ContainerList(cmd.Context(), container.ListOptions{
-			All: true,
-		})
-		if err != nil {
-			return fmt.Errorf("failed to list containers: %w", err)
-		}
-
-		for _, ctr := range containers {
-			for _, name := range ctr.Names {
-				containerName := strings.TrimPrefix(name, "/")
-				if isCloudProviderKindContainer(containerName) {
-					err := dockerClient.ContainerRemove(
-						cmd.Context(),
-						ctr.ID,
-						container.RemoveOptions{Force: true},
-					)
-					if err != nil {
-						return fmt.Errorf("failed to remove container %s: %w", containerName, err)
-					}
-				}
+	return forEachContainer(
+		cmd,
+		func(dockerClient client.APIClient, ctr container.Summary, name string) error {
+			if !isCloudProviderKindContainer(name) {
+				return nil
 			}
-		}
 
-		return nil
-	})
+			err := dockerClient.ContainerRemove(
+				cmd.Context(),
+				ctr.ID,
+				container.RemoveOptions{Force: true},
+			)
+			if err != nil {
+				return fmt.Errorf("failed to remove container %s: %w", name, err)
+			}
+
+			return nil
+		},
+	)
 }

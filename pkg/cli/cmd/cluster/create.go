@@ -89,7 +89,7 @@ func NewCreateCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
 
 // handleCreateRunE executes cluster creation with mirror registry setup and CNI installation.
 //
-//nolint:funlen,cyclop // Orchestrates full cluster creation lifecycle with multiple stages.
+//nolint:funlen // Orchestrates full cluster creation lifecycle with multiple stages.
 func handleCreateRunE(
 	cmd *cobra.Command,
 	cfgManager *ksailconfigmanager.ConfigManager,
@@ -144,23 +144,7 @@ func handleCreateRunE(
 	SetupK3dCSI(ctx.ClusterCfg, ctx.K3dConfig)
 	SetupK3dLoadBalancer(ctx.ClusterCfg, ctx.K3dConfig)
 
-	clusterProvisionerFactoryMu.RLock()
-
-	factoryOverride := clusterProvisionerFactoryOverride
-
-	clusterProvisionerFactoryMu.RUnlock()
-
-	if factoryOverride != nil {
-		deps.Factory = factoryOverride
-	} else {
-		deps.Factory = clusterprovisioner.DefaultFactory{
-			DistributionConfig: &clusterprovisioner.DistributionConfig{
-				Kind:  ctx.KindConfig,
-				K3d:   ctx.K3dConfig,
-				Talos: ctx.TalosConfig,
-			},
-		}
-	}
+	configureClusterProvisionerFactory(&deps, ctx)
 
 	err = executeClusterLifecycle(cmd, ctx.ClusterCfg, deps)
 	if err != nil {
@@ -198,36 +182,69 @@ func handleCreateRunE(
 		return fmt.Errorf("failed to wait for local registry: %w", err)
 	}
 
-	// Import cached images if --import-images flag is provided
-	// This happens after cluster creation but before component installation
-	// to ensure images are available when CNI, CSI, etc. are installed
-	importPath := ctx.ClusterCfg.Spec.Cluster.ImportImages
-	if importPath != "" {
-		// Image import is not supported for Talos clusters. The image service will
-		// return ErrUnsupportedDistribution in that case, so we short-circuit here
-		// to provide clearer feedback and avoid a spurious warning.
-		if ctx.ClusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionTalos {
-			notify.WriteMessage(notify.Message{
-				Type:    notify.WarningType,
-				Content: "image import is not supported for Talos clusters; ignoring --import-images value %q",
-				Args:    []any{importPath},
-				Writer:  cmd.OutOrStderr(),
-			})
-		} else {
-			err = importCachedImages(cmd, ctx, importPath, deps.Timer)
-			if err != nil {
-				// Log warning but don't fail cluster creation
-				notify.WriteMessage(notify.Message{
-					Type:    notify.WarningType,
-					Content: "failed to import images from %s: %v",
-					Args:    []any{importPath, err},
-					Writer:  cmd.OutOrStderr(),
-				})
-			}
-		}
-	}
+	maybeImportCachedImages(cmd, ctx, deps.Timer)
 
 	return handlePostCreationSetup(cmd, ctx.ClusterCfg, deps.Timer)
+}
+
+// configureClusterProvisionerFactory sets up the cluster provisioner factory.
+// Uses test override if available, otherwise creates a default factory.
+func configureClusterProvisionerFactory(
+	deps *lifecycle.Deps,
+	ctx *localregistry.Context,
+) {
+	clusterProvisionerFactoryMu.RLock()
+
+	factoryOverride := clusterProvisionerFactoryOverride
+
+	clusterProvisionerFactoryMu.RUnlock()
+
+	if factoryOverride != nil {
+		deps.Factory = factoryOverride
+	} else {
+		deps.Factory = clusterprovisioner.DefaultFactory{
+			DistributionConfig: &clusterprovisioner.DistributionConfig{
+				Kind:  ctx.KindConfig,
+				K3d:   ctx.K3dConfig,
+				Talos: ctx.TalosConfig,
+			},
+		}
+	}
+}
+
+// maybeImportCachedImages imports cached container images if configured.
+// Logs warnings but does not fail cluster creation on import errors.
+func maybeImportCachedImages(
+	cmd *cobra.Command,
+	ctx *localregistry.Context,
+	tmr timer.Timer,
+) {
+	importPath := ctx.ClusterCfg.Spec.Cluster.ImportImages
+	if importPath == "" {
+		return
+	}
+
+	// Image import is not supported for Talos clusters
+	if ctx.ClusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionTalos {
+		notify.WriteMessage(notify.Message{
+			Type:    notify.WarningType,
+			Content: "image import is not supported for Talos clusters; ignoring --import-images value %q",
+			Args:    []any{importPath},
+			Writer:  cmd.OutOrStderr(),
+		})
+
+		return
+	}
+
+	err := importCachedImages(cmd, ctx, importPath, tmr)
+	if err != nil {
+		notify.WriteMessage(notify.Message{
+			Type:    notify.WarningType,
+			Content: "failed to import images from %s: %v",
+			Args:    []any{importPath, err},
+			Writer:  cmd.OutOrStderr(),
+		})
+	}
 }
 
 func loadClusterConfiguration(
