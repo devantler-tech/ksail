@@ -1270,11 +1270,21 @@ func (p *TalosProvisioner) createHetznerNodes(
 
 	_, _ = fmt.Fprintf(p.logWriter, "Creating %d %s node(s)...\n", opts.Count, opts.Role)
 
+	// Build retry options from Hetzner config
+	retryOpts := hetzner.ServerRetryOpts{
+		LogWriter: p.logWriter,
+	}
+
+	if p.hetznerOpts != nil {
+		retryOpts.FallbackLocations = p.hetznerOpts.FallbackLocations
+		retryOpts.AllowPlacementFallback = p.hetznerOpts.PlacementGroupFallbackToNone
+	}
+
 	servers := make([]*hcloud.Server, 0, opts.Count)
 	for nodeIndex := range opts.Count {
 		nodeName := fmt.Sprintf("%s-%s-%d", opts.ClusterName, opts.Role, nodeIndex+1)
 
-		server, err := hzProvider.CreateServer(ctx, hetzner.CreateServerOpts{
+		server, err := hzProvider.CreateServerWithRetry(ctx, hetzner.CreateServerOpts{
 			Name:             nodeName,
 			ServerType:       opts.ServerType,
 			ISOID:            opts.ISOID,
@@ -1284,7 +1294,7 @@ func (p *TalosProvisioner) createHetznerNodes(
 			PlacementGroupID: infra.PlacementGroupID,
 			SSHKeyID:         infra.SSHKeyID,
 			FirewallIDs:      []int64{infra.FirewallID},
-		})
+		}, retryOpts)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create %s node %s: %w", opts.Role, nodeName, err)
 		}

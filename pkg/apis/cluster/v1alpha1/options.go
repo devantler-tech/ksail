@@ -75,4 +75,14 @@ type OptionsHetzner struct {
 	// If empty, a placement group named "<cluster-name>-placement" will be created.
 	// Only used when PlacementGroupStrategy is "Spread".
 	PlacementGroup string `json:"placementGroup,omitzero"`
+	// FallbackLocations specifies alternative datacenter locations to try when
+	// server creation fails in the primary location due to resource unavailability.
+	// Defaults to ["nbg1", "hel1"] (Nuremberg, Helsinki) as fallbacks for fsn1 (Falkenstein).
+	// All locations should be in the same network zone (eu-central) for consistency.
+	FallbackLocations []string `json:"fallbackLocations,omitzero"`
+	// PlacementGroupFallbackToNone allows automatic fallback to no placement group
+	// when spread placement constraints cannot be satisfied (e.g., due to datacenter capacity).
+	// When true and placement fails, retries server creation without a placement group.
+	// Defaults to false to preserve HA guarantees; set to true for best-effort provisioning.
+	PlacementGroupFallbackToNone bool `json:"placementGroupFallbackToNone,omitzero"`
 }
