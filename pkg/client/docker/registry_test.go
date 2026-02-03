@@ -1108,7 +1108,15 @@ func TestErrConstants(t *testing.T) {
 	// Test error messages contain useful information
 	assert.Contains(t, docker.ErrAPIClientNil.Error(), "apiClient")
 	assert.Contains(t, docker.ErrRegistryNotFound.Error(), "registry")
+	assert.Contains(t, docker.ErrRegistryAlreadyExists.Error(), "already exists")
+	assert.Contains(t, docker.ErrRegistryPortNotFound.Error(), "port")
+}
+
+// TestCreateRegistry_WithCredentials tests registry creation with authentication
+// credentials that use environment variable expansion.
+func TestCreateRegistry_WithCredentials(t *testing.T) {
 	// Set environment variables for testing
+	// Note: t.Setenv must be called before t.Parallel()
 	t.Setenv("GITHUB_USER", "testuser")
 	t.Setenv("GITHUB_TOKEN", "ghp_test123")
 
@@ -1121,11 +1129,6 @@ func TestErrConstants(t *testing.T) {
 		Username:    "${GITHUB_USER}",
 		Password:    "${GITHUB_TOKEN}",
 	}
-
-	// Use reflection to call the private buildContainerConfig method
-	// or expose it for testing
-	// Since we can't easily test private methods, let's test via CreateRegistry
-	// which will call buildContainerConfig internally
 
 	mockRegistryNotExists(context.Background(), mockClient)
 	mockImagePullSequence(context.Background(), mockClient)
