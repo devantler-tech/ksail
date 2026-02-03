@@ -5,7 +5,6 @@ Serena is a **language service protocol (LSP) MCP server** for semantic code ana
 ## Quick Decision: Should I Use Serena?
 
 **✅ YES - Use Serena when you need:**
-
 - Symbol navigation (find all usages of a function/type)
 - Call graph analysis across files
 - Semantic duplicate detection (not just text matching)
@@ -13,7 +12,6 @@ Serena is a **language service protocol (LSP) MCP server** for semantic code ana
 - Type relationships and interface implementations
 
 **❌ NO - Use simpler tools when:**
-
 - Searching text patterns → Use `grep`
 - Editing files → Use `edit` tool
 - Running commands → Use `bash`
@@ -32,7 +30,6 @@ tools:
 ```
 
 Multi-language repositories:
-
 ```yaml
 tools:
   serena: ["go", "typescript"]  # First language is default fallback
@@ -41,7 +38,6 @@ tools:
 ## Available Serena Tools
 
 ### Navigation & Analysis
-
 - `find_symbol` - Search for symbols by name
 - `get_symbols_overview` - List all symbols in a file
 - `find_referencing_symbols` - Find where a symbol is used
@@ -49,7 +45,6 @@ tools:
 - `search_for_pattern` - Search for code patterns (regex)
 
 ### Code Editing
-
 - `read_file` - Read file with semantic context
 - `create_text_file` - Create/overwrite files
 - `insert_at_line` - Insert content at line number
@@ -59,7 +54,6 @@ tools:
 - `delete_lines` - Delete line range
 
 ### Project Management
-
 - `activate_project` - **REQUIRED** - Activate Serena for workspace
 - `onboarding` - Analyze project structure
 - `restart_language_server` - Restart LSP if needed
@@ -93,8 +87,7 @@ tools:
     toolsets: [default]
 ```
 
-**Pattern**:
-
+**Pattern**: 
 1. Use `bash` to list files
 2. Use Serena to analyze semantic structure
 3. Use `edit` to make changes
@@ -159,7 +152,6 @@ Workflows successfully using Serena:
 ## Supported Languages
 
 Primary languages with full LSP features:
-
 - `go` (gopls)
 - `typescript` (TypeScript/JavaScript)
 - `python` (jedi/pyright)
