@@ -86,7 +86,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, opts ReconcileOptions) error
 func (r *Reconciler) TriggerRefresh(ctx context.Context, hardRefresh bool) error {
 	appClient := r.applicationClient()
 
-	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		app, err := appClient.Get(ctx, rootApplicationName, metav1.GetOptions{})
 		if err != nil {
 			return fmt.Errorf("get argocd application: %w", err)
@@ -112,6 +112,11 @@ func (r *Reconciler) TriggerRefresh(ctx context.Context, hardRefresh bool) error
 
 		return nil
 	})
+	if err != nil {
+		return fmt.Errorf("failed to trigger argocd refresh: %w", err)
+	}
+
+	return nil
 }
 
 // WaitForApplicationReady waits for the ArgoCD application to be synced and healthy.
