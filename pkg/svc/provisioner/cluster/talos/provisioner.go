@@ -89,6 +89,25 @@ const (
 	byte2Shift = 8
 )
 
+// HetznerInfra holds shared Hetzner infrastructure resource IDs.
+// These resources are created once and shared across all node groups.
+type HetznerInfra struct {
+	NetworkID        int64
+	FirewallID       int64
+	PlacementGroupID int64
+	SSHKeyID         int64
+}
+
+// HetznerNodeGroupOpts specifies parameters for creating a group of Hetzner nodes.
+type HetznerNodeGroupOpts struct {
+	ClusterName string
+	Role        string // "control-plane" or "worker"
+	Count       int
+	ServerType  string
+	ISOID       int64
+	Location    string
+}
+
 // TalosProvisioner implements ClusterProvisioner for Talos-in-Docker clusters.
 type TalosProvisioner struct {
 	// talosConfigs holds the loaded Talos machine configurations with all patches applied.
@@ -281,12 +300,24 @@ func (p *TalosProvisioner) createHetznerCluster(ctx context.Context, clusterName
 
 	_, _ = fmt.Fprintf(p.logWriter, "  ✓ Firewall %s created\n", firewall.Name)
 
-	placementGroup, err := hzProvider.EnsurePlacementGroup(ctx, clusterName)
+	placementGroup, err := hzProvider.EnsurePlacementGroup(
+		ctx,
+		clusterName,
+		p.hetznerOpts.PlacementGroupStrategy.String(),
+		p.hetznerOpts.PlacementGroup,
+	)
 	if err != nil {
 		return fmt.Errorf("failed to create placement group: %w", err)
 	}
 
-	_, _ = fmt.Fprintf(p.logWriter, "  ✓ Placement group %s created\n", placementGroup.Name)
+	var placementGroupID int64
+
+	if placementGroup != nil {
+		placementGroupID = placementGroup.ID
+		_, _ = fmt.Fprintf(p.logWriter, "  ✓ Placement group %s created\n", placementGroup.Name)
+	} else {
+		_, _ = fmt.Fprintf(p.logWriter, "  ✓ Placement group disabled (strategy: None)\n")
+	}
 
 	// Get SSH key if configured
 	var sshKeyID int64
@@ -302,38 +333,34 @@ func (p *TalosProvisioner) createHetznerCluster(ctx context.Context, clusterName
 		}
 	}
 
-	controlPlaneServers, err := p.createHetznerNodes(
-		ctx,
-		hzProvider,
-		clusterName,
-		"control-plane",
-		p.options.ControlPlaneNodes,
-		p.hetznerOpts.ControlPlaneServerType,
-		p.talosOpts.ISO,
-		p.hetznerOpts.Location,
-		network.ID,
-		placementGroup.ID,
-		sshKeyID,
-		[]int64{firewall.ID},
-	)
+	// Bundle shared infrastructure resources
+	infra := HetznerInfra{
+		NetworkID:        network.ID,
+		FirewallID:       firewall.ID,
+		PlacementGroupID: placementGroupID,
+		SSHKeyID:         sshKeyID,
+	}
+
+	controlPlaneServers, err := p.createHetznerNodes(ctx, hzProvider, infra, HetznerNodeGroupOpts{
+		ClusterName: clusterName,
+		Role:        "control-plane",
+		Count:       p.options.ControlPlaneNodes,
+		ServerType:  p.hetznerOpts.ControlPlaneServerType,
+		ISOID:       p.talosOpts.ISO,
+		Location:    p.hetznerOpts.Location,
+	})
 	if err != nil {
 		return err
 	}
 
-	workerServers, err := p.createHetznerNodes(
-		ctx,
-		hzProvider,
-		clusterName,
-		"worker",
-		p.options.WorkerNodes,
-		p.hetznerOpts.WorkerServerType,
-		p.talosOpts.ISO,
-		p.hetznerOpts.Location,
-		network.ID,
-		placementGroup.ID,
-		sshKeyID,
-		[]int64{firewall.ID},
-	)
+	workerServers, err := p.createHetznerNodes(ctx, hzProvider, infra, HetznerNodeGroupOpts{
+		ClusterName: clusterName,
+		Role:        "worker",
+		Count:       p.options.WorkerNodes,
+		ServerType:  p.hetznerOpts.WorkerServerType,
+		ISOID:       p.talosOpts.ISO,
+		Location:    p.hetznerOpts.Location,
+	})
 	if err != nil {
 		return err
 	}
@@ -1225,57 +1252,41 @@ func (p *TalosProvisioner) Stop(ctx context.Context, name string) error {
 // Parameters:
 //   - ctx: request-scoped context for cancellation and timeouts.
 //   - provider: Hetzner infrastructure provider used to create the servers.
-//   - clusterName: logical name of the Talos cluster; used as a prefix for node names and labels.
-//   - role: node role identifier (e.g., "control-plane", "worker") used for naming, labeling, and log output.
-//   - count: number of servers to create for this role; if count <= 0, no servers are created.
-//   - serverType: Hetzner server type (size/flavor) to use for each node.
-//   - isoID: identifier of the Talos ISO image to attach to each server.
-//   - location: Hetzner location (datacenter/region) where servers should be created.
-//   - networkID: identifier of the Hetzner private network to attach to the servers.
-//   - placementGroupID: identifier of the Hetzner placement group used for spreading servers.
-//   - sshKeyID: identifier of the SSH key to associate with the servers.
-//   - firewallIDs: list of firewall identifiers to apply to the servers.
+//   - infra: shared infrastructure resources (network, firewall, placement group, SSH key).
+//   - opts: node group specification (cluster name, role, count, server type, ISO, location).
 //
 // Returns:
 //   - []*hcloud.Server: slice of successfully created servers (empty if count <= 0).
 //   - error: non-nil if any server creation fails.
 func (p *TalosProvisioner) createHetznerNodes(
 	ctx context.Context,
-	provider *hetzner.Provider,
-	clusterName string,
-	role string,
-	count int,
-	serverType string,
-	isoID int64,
-	location string,
-	networkID int64,
-	placementGroupID int64,
-	sshKeyID int64,
-	firewallIDs []int64,
+	hzProvider *hetzner.Provider,
+	infra HetznerInfra,
+	opts HetznerNodeGroupOpts,
 ) ([]*hcloud.Server, error) {
-	if count <= 0 {
+	if opts.Count <= 0 {
 		return []*hcloud.Server{}, nil
 	}
 
-	_, _ = fmt.Fprintf(p.logWriter, "Creating %d %s node(s)...\n", count, role)
+	_, _ = fmt.Fprintf(p.logWriter, "Creating %d %s node(s)...\n", opts.Count, opts.Role)
 
-	servers := make([]*hcloud.Server, 0, count)
-	for nodeIndex := range count {
-		nodeName := fmt.Sprintf("%s-%s-%d", clusterName, role, nodeIndex+1)
+	servers := make([]*hcloud.Server, 0, opts.Count)
+	for nodeIndex := range opts.Count {
+		nodeName := fmt.Sprintf("%s-%s-%d", opts.ClusterName, opts.Role, nodeIndex+1)
 
-		server, err := provider.CreateServer(ctx, hetzner.CreateServerOpts{
+		server, err := hzProvider.CreateServer(ctx, hetzner.CreateServerOpts{
 			Name:             nodeName,
-			ServerType:       serverType,
-			ISOID:            isoID,
-			Location:         location,
-			Labels:           hetzner.NodeLabels(clusterName, role, nodeIndex+1),
-			NetworkID:        networkID,
-			PlacementGroupID: placementGroupID,
-			SSHKeyID:         sshKeyID,
-			FirewallIDs:      firewallIDs,
+			ServerType:       opts.ServerType,
+			ISOID:            opts.ISOID,
+			Location:         opts.Location,
+			Labels:           hetzner.NodeLabels(opts.ClusterName, opts.Role, nodeIndex+1),
+			NetworkID:        infra.NetworkID,
+			PlacementGroupID: infra.PlacementGroupID,
+			SSHKeyID:         infra.SSHKeyID,
+			FirewallIDs:      []int64{infra.FirewallID},
 		})
 		if err != nil {
-			return nil, fmt.Errorf("failed to create %s node %s: %w", role, nodeName, err)
+			return nil, fmt.Errorf("failed to create %s node %s: %w", opts.Role, nodeName, err)
 		}
 
 		servers = append(servers, server)
@@ -1283,7 +1294,7 @@ func (p *TalosProvisioner) createHetznerNodes(
 		_, _ = fmt.Fprintf(
 			p.logWriter,
 			"  ✓ %s node %s created (IP: %s)\n",
-			role,
+			opts.Role,
 			server.Name,
 			server.PublicNet.IPv4.IP.String(),
 		)

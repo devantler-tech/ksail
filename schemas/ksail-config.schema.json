@@ -173,6 +173,14 @@
                 "tokenEnvVar": {
                   "type": "string"
                 },
+                "placementGroupStrategy": {
+                  "type": "string",
+                  "enum": [
+                    "None",
+                    "Spread"
+                  ],
+                  "description": "Controls placement group strategy. 'Spread' (default) distributes servers across physical hosts for HA. 'None' disables placement groups."
+                },
                 "placementGroup": {
                   "type": "string"
                 }

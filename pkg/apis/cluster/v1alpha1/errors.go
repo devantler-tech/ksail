@@ -29,6 +29,9 @@ var ErrInvalidPolicyEngine = errors.New("invalid policy engine")
 // ErrInvalidProvider is returned when an invalid provider is specified.
 var ErrInvalidProvider = errors.New("invalid provider")
 
+// ErrInvalidPlacementGroupStrategy is returned when an invalid placement group strategy is specified.
+var ErrInvalidPlacementGroupStrategy = errors.New("invalid placement group strategy")
+
 // ErrInvalidDistributionProviderCombination is returned when the distribution and provider combination is invalid.
 var ErrInvalidDistributionProviderCombination = errors.New(
 	"invalid distribution and provider combination",

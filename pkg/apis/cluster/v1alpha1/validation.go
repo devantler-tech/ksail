@@ -107,6 +107,11 @@ func ValidProviders() []Provider {
 	return []Provider{ProviderDocker, ProviderHetzner}
 }
 
+// ValidPlacementGroupStrategies returns supported placement group strategy values.
+func ValidPlacementGroupStrategies() []PlacementGroupStrategy {
+	return []PlacementGroupStrategy{PlacementGroupStrategyNone, PlacementGroupStrategySpread}
+}
+
 // ValidateMirrorRegistriesForProvider validates that mirror registries are compatible with the provider.
 // Cloud providers (like Hetzner) cannot access local Docker containers running as mirror registries.
 // For cloud providers, mirror registries must point to external, internet-accessible registries.
