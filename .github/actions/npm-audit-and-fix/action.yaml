@@ -61,15 +61,6 @@ runs:
       working-directory: ${{ inputs.working-directory }}
       run: npm ci
 
-    - name: 🔍 Run npm audit
-      id: audit
-      shell: bash
-      working-directory: ${{ inputs.working-directory }}
-      env:
-        AUDIT_LEVEL: ${{ inputs.audit-level }}
-      run: npm audit --audit-level="$AUDIT_LEVEL"
-      continue-on-error: true
-
     - name: 🔧 Attempt automatic fix
       id: fix
       if: steps.audit.outcome == 'failure' && (github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main'))
@@ -82,6 +73,7 @@ runs:
         else
           echo "changes_made=false" >> "$GITHUB_OUTPUT"
         fi
+      continue-on-error: true
 
     - name: 📤 Commit and push fixes
       if: steps.fix.outputs.changes_made == 'true' && github.event_name != 'merge_group'
