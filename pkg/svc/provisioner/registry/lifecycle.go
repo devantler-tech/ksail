@@ -36,12 +36,15 @@ const expectedEndpointParts = 2
 // The extractor receives the set of already used ports (if any) and should return the registries that need work.
 // This function collects ports from ALL running containers (not just ksail-managed registries) to avoid
 // port conflicts with registries created by other cluster distributions (e.g., K3d's native registries).
+//
+//nolint:ireturn // returns interface for dependency injection; concrete type is dockerclient.RegistryManager
 func PrepareRegistryManager(
 	ctx context.Context,
 	dockerClient client.APIClient,
 	extractor func(baseUsedPorts map[int]struct{}) []Info,
-) (*dockerclient.RegistryManager, []Info, error) {
-	regManager, err := dockerclient.NewRegistryManager(dockerClient)
+) (Backend, []Info, error) {
+	// Use the backend factory to create the registry manager
+	backend, err := GetBackendFactory()(dockerClient)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create registry manager: %w", err)
 	}
@@ -53,7 +56,7 @@ func PrepareRegistryManager(
 
 	// Get used ports from ALL running containers to avoid conflicts with registries
 	// created by other cluster distributions (e.g., K3d's native registries).
-	usedPorts, err := regManager.GetUsedHostPorts(ctx)
+	usedPorts, err := CollectExistingRegistryPorts(ctx, backend)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get used host ports: %w", err)
 	}
@@ -62,7 +65,7 @@ func PrepareRegistryManager(
 		registryInfos = extractor(usedPorts)
 	}
 
-	return regManager, registryInfos, nil
+	return backend, registryInfos, nil
 }
 
 // SetupRegistries ensures that the provided registries exist. Any newly created

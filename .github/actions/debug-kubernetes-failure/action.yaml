@@ -1,7 +1,9 @@
 name: Debug Kubernetes Failure
 description: |
-  Outputs diagnostic information for debugging Kubernetes cluster failures.
-  Shows disk usage, node status, pod status, recent events, and GitOps resource statuses (FluxInstance, OCIRepository, ArgoCD Application).
+  Outputs comprehensive diagnostic information for debugging Kubernetes cluster failures.
+  Shows disk usage, node status, pod status, recent events, and detailed status for all
+  KSail-supported components: CNI (Cilium/Calico), CSI (Local Path/Hetzner), GitOps (Flux/ArgoCD),
+  Policy Engines (Kyverno/Gatekeeper), cert-manager, and Metrics Server.
 
 inputs:
   kubectl-command:
@@ -32,6 +34,42 @@ inputs:
     description: Namespace to query (empty for all namespaces)
     required: false
     default: ""
+  show-deployments:
+    description: Show deployment status and details for failing deployments
+    required: false
+    default: "true"
+  show-helm-releases:
+    description: Show Helm release status summary
+    required: false
+    default: "true"
+  show-cni:
+    description: Show CNI (Cilium/Calico) status and logs
+    required: false
+    default: "true"
+  show-csi:
+    description: Show CSI (Local Path/Hetzner) status
+    required: false
+    default: "true"
+  show-gitops:
+    description: Show GitOps (Flux/ArgoCD) status, resources, and controller logs
+    required: false
+    default: "true"
+  show-policy-engine:
+    description: Show Policy Engine (Kyverno/Gatekeeper) status and logs
+    required: false
+    default: "true"
+  show-cert-manager:
+    description: Show cert-manager status and certificate resources
+    required: false
+    default: "true"
+  show-metrics-server:
+    description: Show Metrics Server status
+    required: false
+    default: "true"
+  log-tail-lines:
+    description: Number of log lines to show per controller
+    required: false
+    default: "100"
 
 runs:
   using: composite
@@ -46,121 +84,472 @@ runs:
         SHOW_PODS: ${{ inputs.show-pods }}
         SHOW_EVENTS: ${{ inputs.show-events }}
         EVENTS_LIMIT: ${{ inputs.events-limit }}
+        SHOW_DEPLOYMENTS: ${{ inputs.show-deployments }}
+        SHOW_HELM_RELEASES: ${{ inputs.show-helm-releases }}
+        SHOW_CNI: ${{ inputs.show-cni }}
+        SHOW_CSI: ${{ inputs.show-csi }}
+        SHOW_GITOPS: ${{ inputs.show-gitops }}
+        SHOW_POLICY_ENGINE: ${{ inputs.show-policy-engine }}
+        SHOW_CERT_MANAGER: ${{ inputs.show-cert-manager }}
+        SHOW_METRICS_SERVER: ${{ inputs.show-metrics-server }}
+        LOG_TAIL_LINES: ${{ inputs.log-tail-lines }}
       run: |
+        # shellcheck shell=bash
+        # Helper function for section headers
+        print_section() {
+          echo ""
+          echo "════════════════════════════════════════════════════════════════"
+          echo "=== $1 ==="
+          echo "════════════════════════════════════════════════════════════════"
+        }
+
         NS_FLAG=""
         if [ -n "$NAMESPACE" ]; then
           NS_FLAG="-n $NAMESPACE"
         fi
 
+        # ============================================================
+        # SYSTEM STATUS
+        # ============================================================
+
         if [ "$SHOW_DISK_USAGE" = "true" ]; then
-          echo "=== Disk Usage ==="
+          print_section "DISK USAGE"
           df -h /
           echo ""
-          echo "=== Docker Disk Usage ==="
+          echo "--- Docker Disk Usage ---"
           docker system df || true
-          echo ""
         fi
 
         if [ "$SHOW_NODES" = "true" ]; then
-          echo "=== Node Status ==="
+          print_section "NODE STATUS"
           $KUBECTL_CMD get nodes -o wide || true
           echo ""
-          echo "=== Node Describe (conditions) ==="
+          echo "--- Node Conditions ---"
           $KUBECTL_CMD describe nodes | grep -A 20 "Conditions:" || true
-          echo ""
         fi
 
         if [ "$SHOW_PODS" = "true" ]; then
-          echo "=== Pod Status ==="
-          $KUBECTL_CMD get pods $NS_FLAG -o wide || true
-          echo ""
+          if [ -n "$NAMESPACE" ]; then
+            print_section "POD STATUS (Namespace: $NAMESPACE)"
+            # shellcheck disable=SC2086
+            $KUBECTL_CMD get pods $NS_FLAG -o wide || true
+          else
+            print_section "POD STATUS (All Namespaces)"
+            $KUBECTL_CMD get pods -A -o wide || true
+          fi
         fi
 
         if [ "$SHOW_EVENTS" = "true" ]; then
-          echo "=== Pod Events ==="
+          print_section "RECENT EVENTS"
+          # shellcheck disable=SC2086
           $KUBECTL_CMD get events $NS_FLAG --sort-by='.lastTimestamp' | tail -"$EVENTS_LIMIT" || true
-          echo ""
         fi
 
-        # GitOps resource status for debugging Flux and ArgoCD deployments
-        # Note: Use plain kubectl for api-resources since ksail workload doesn't support it
+        # ============================================================
+        # DEPLOYMENTS
+        # ============================================================
 
-        echo "=== Flux Operator Status ==="
-        # Check for Flux Operator pods (installed before FluxInstance CRD exists)
-        FLUX_OPERATOR_PODS=$($KUBECTL_CMD get pods -n flux-system -l app.kubernetes.io/name=flux-operator -o name 2>/dev/null || true)
-        if [ -n "$FLUX_OPERATOR_PODS" ]; then
-          $KUBECTL_CMD get pods -n flux-system -l app.kubernetes.io/name=flux-operator -o wide
-          echo ""
-          echo "=== Flux Operator Pod Logs ==="
-          $KUBECTL_CMD logs -n flux-system -l app.kubernetes.io/name=flux-operator --tail=100 2>/dev/null || true
-        else
-          echo "No Flux Operator pods found in flux-system namespace"
-        fi
-        echo ""
-
-        echo "=== FluxInstance Status ==="
-        # Check if the CRD exists first (use kubectl directly for api-resources)
-        if kubectl api-resources --api-group=fluxcd.controlplane.io 2>/dev/null | grep -q fluxinstance; then
-          echo "FluxInstance CRD is registered"
-          FLUX_INSTANCES=$($KUBECTL_CMD get fluxinstance -A -o name 2>/dev/null || true)
-          if [ -n "$FLUX_INSTANCES" ]; then
-            $KUBECTL_CMD get fluxinstance -A -o wide
-            echo ""
-            echo "=== FluxInstance Details ==="
-            $KUBECTL_CMD describe fluxinstance -A
+        if [ "$SHOW_DEPLOYMENTS" = "true" ]; then
+          if [ -n "$NAMESPACE" ]; then
+            print_section "DEPLOYMENT STATUS (Namespace: $NAMESPACE)"
+            # shellcheck disable=SC2086
+            $KUBECTL_CMD get deployments $NS_FLAG -o wide || true
           else
-            echo "FluxInstance CRD exists but no FluxInstance resources found"
+            print_section "DEPLOYMENT STATUS (All Namespaces)"
+            $KUBECTL_CMD get deployments -A -o wide || true
           fi
-        else
-          echo "FluxInstance CRD not registered (Flux Operator may not be installed)"
-        fi
-        echo ""
-
-        echo "=== OCIRepository Status ==="
-        # Check if the CRD exists first (use kubectl directly for api-resources)
-        if kubectl api-resources --api-group=source.toolkit.fluxcd.io 2>/dev/null | grep -q ocirepository; then
-          echo "OCIRepository CRD is registered"
-          OCI_REPOS=$($KUBECTL_CMD get ocirepository -A -o name 2>/dev/null || true)
-          if [ -n "$OCI_REPOS" ]; then
-            $KUBECTL_CMD get ocirepository -A -o wide
-            echo ""
-            echo "=== OCIRepository Details ==="
-            $KUBECTL_CMD describe ocirepository -A
-          else
-            echo "OCIRepository CRD exists but no OCIRepository resources found"
-          fi
-        else
-          echo "OCIRepository CRD not registered (Flux source-controller may not be installed)"
-        fi
-        echo ""
-
-        echo "=== Flux Controllers Status ==="
-        # Check for Flux controllers (source-controller, kustomize-controller, etc.)
-        FLUX_CONTROLLERS=$($KUBECTL_CMD get pods -n flux-system -l app.kubernetes.io/part-of=flux -o name 2>/dev/null || true)
-        if [ -n "$FLUX_CONTROLLERS" ]; then
-          $KUBECTL_CMD get pods -n flux-system -l app.kubernetes.io/part-of=flux -o wide
           echo ""
-          echo "=== Flux Controller Events ==="
-          $KUBECTL_CMD get events -n flux-system --sort-by='.lastTimestamp' --field-selector involvedObject.kind=Pod | tail -30 || true
-        else
-          echo "No Flux controller pods found (FluxInstance may not have reconciled yet)"
-        fi
-        echo ""
-
-        echo "=== ArgoCD Application Status ==="
-        # Check if the CRD exists first (use kubectl directly for api-resources)
-        if kubectl api-resources --api-group=argoproj.io 2>/dev/null | grep -q application; then
-          echo "ArgoCD Application CRD is registered"
-          ARGO_APPS=$($KUBECTL_CMD get application -A -o name 2>/dev/null || true)
-          if [ -n "$ARGO_APPS" ]; then
-            $KUBECTL_CMD get application -A -o wide
-            echo ""
-            echo "=== ArgoCD Application Details ==="
-            $KUBECTL_CMD describe application -A
+          echo "--- Failing Deployments (Available < Desired) ---"
+          # Find deployments where available replicas < desired
+          if [ -n "$NAMESPACE" ]; then
+            # shellcheck disable=SC2086
+            FAILING_DEPLOYMENTS=$($KUBECTL_CMD get deployments $NS_FLAG -o jsonpath='{range .items[?(@.status.availableReplicas<@.spec.replicas)]}{.metadata.namespace}/{.metadata.name}{"\n"}{end}' 2>/dev/null || true)
           else
-            echo "ArgoCD Application CRD exists but no Application resources found"
+            FAILING_DEPLOYMENTS=$($KUBECTL_CMD get deployments -A -o jsonpath='{range .items[?(@.status.availableReplicas<@.spec.replicas)]}{.metadata.namespace}/{.metadata.name}{"\n"}{end}' 2>/dev/null || true)
           fi
-        else
-          echo "ArgoCD Application CRD not registered (ArgoCD may not be installed)"
+          if [ -n "$FAILING_DEPLOYMENTS" ]; then
+            echo "$FAILING_DEPLOYMENTS"
+            echo ""
+            for DEP in $FAILING_DEPLOYMENTS; do
+              NS=$(echo "$DEP" | cut -d'/' -f1)
+              NAME=$(echo "$DEP" | cut -d'/' -f2)
+              echo "--- Describe: $DEP ---"
+              $KUBECTL_CMD describe deployment "$NAME" -n "$NS" 2>/dev/null || true
+              echo ""
+            done
+          else
+            echo "No failing deployments found"
+          fi
+          echo ""
+          echo "--- Pods in Error/CrashLoopBackOff State ---"
+          # Find pods not in Running/Succeeded phase OR pods with containers in CrashLoopBackOff/Error state
+          # First get non-running pods
+          # shellcheck disable=SC2086
+          NON_RUNNING_PODS=$($KUBECTL_CMD get pods ${NS_FLAG:--A} --field-selector=status.phase!=Running,status.phase!=Succeeded -o jsonpath='{range .items[*]}{.metadata.namespace}/{.metadata.name}{"\n"}{end}' 2>/dev/null || true)
+          # Then get pods with CrashLoopBackOff containers (these are often in Running phase)
+          # JSONPath: print namespace/name first, then iterate containerStatuses for reasons
+          # shellcheck disable=SC2086
+          CRASHLOOP_PODS=$($KUBECTL_CMD get pods ${NS_FLAG:--A} -o jsonpath='{range .items[*]}{.metadata.namespace}/{.metadata.name}{" "}{range .status.containerStatuses[*]}{.state.waiting.reason}{" "}{end}{"\n"}{end}' 2>/dev/null | grep -E "CrashLoopBackOff|Error|ImagePullBackOff" | awk '{print $1}' || true)
+          # Combine and deduplicate
+          ERROR_PODS=$(echo -e "$NON_RUNNING_PODS\n$CRASHLOOP_PODS" | sort -u | grep -v '^$' || true)
+          if [ -n "$ERROR_PODS" ]; then
+            echo "Found pods with issues:"
+            echo "$ERROR_PODS"
+            echo ""
+            # Show logs for error pods (limit to first 5)
+            COUNT=0
+            for POD_FULL in $ERROR_PODS; do
+              if [ $COUNT -ge 5 ]; then
+                echo "... (showing first 5 error pods only)"
+                break
+              fi
+              POD_NS=$(echo "$POD_FULL" | cut -d'/' -f1)
+              POD_NAME=$(echo "$POD_FULL" | cut -d'/' -f2)
+              echo "--- Logs: $POD_NS/$POD_NAME ---"
+              $KUBECTL_CMD logs -n "$POD_NS" "$POD_NAME" --tail=50 2>/dev/null || echo "  (unable to fetch logs)"
+              COUNT=$((COUNT + 1))
+            done
+          else
+            echo "No pods in error state found"
+          fi
         fi
-        echo ""
+
+        # ============================================================
+        # HELM RELEASES
+        # ============================================================
+
+        if [ "$SHOW_HELM_RELEASES" = "true" ]; then
+          print_section "HELM RELEASES"
+          if command -v helm &> /dev/null; then
+            helm list -A 2>/dev/null || echo "Failed to list Helm releases"
+          else
+            echo "Helm CLI not available"
+          fi
+        fi
+
+        # ============================================================
+        # CNI (Container Network Interface)
+        # ============================================================
+
+        if [ "$SHOW_CNI" = "true" ]; then
+          print_section "CNI STATUS"
+
+          # Check for Cilium
+          CILIUM_PODS=$($KUBECTL_CMD get pods -n kube-system -l app.kubernetes.io/name=cilium-agent -o name 2>/dev/null || true)
+          if [ -n "$CILIUM_PODS" ]; then
+            echo "--- Cilium Agent Pods ---"
+            $KUBECTL_CMD get pods -n kube-system -l app.kubernetes.io/name=cilium-agent -o wide || true
+            echo ""
+            echo "--- Cilium Operator Pods ---"
+            $KUBECTL_CMD get pods -n kube-system -l app.kubernetes.io/name=cilium-operator -o wide || true
+            echo ""
+            echo "--- Cilium Agent Logs (last $LOG_TAIL_LINES lines) ---"
+            $KUBECTL_CMD logs -n kube-system -l app.kubernetes.io/name=cilium-agent --tail="$LOG_TAIL_LINES" 2>/dev/null | head -200 || true
+            echo ""
+            echo "--- Cilium Operator Logs (last $LOG_TAIL_LINES lines) ---"
+            $KUBECTL_CMD logs -n kube-system -l app.kubernetes.io/name=cilium-operator --tail="$LOG_TAIL_LINES" 2>/dev/null || true
+          else
+            echo "Cilium not detected"
+          fi
+          echo ""
+
+          # Check for Calico (detect via TigeraStatus CRD)
+          if $KUBECTL_CMD get crd tigerastatuses.operator.tigera.io >/dev/null 2>&1; then
+            echo "--- Calico/Tigera Status ---"
+            $KUBECTL_CMD get tigerastatus 2>/dev/null || true
+            echo ""
+            echo "--- Tigera Operator Pods ---"
+            $KUBECTL_CMD get pods -n tigera-operator -o wide 2>/dev/null || true
+            echo ""
+            echo "--- Calico System Pods ---"
+            $KUBECTL_CMD get pods -n calico-system -o wide 2>/dev/null || true
+            echo ""
+            echo "--- Calico Node Logs (last $LOG_TAIL_LINES lines) ---"
+            $KUBECTL_CMD logs -n calico-system -l k8s-app=calico-node --tail="$LOG_TAIL_LINES" 2>/dev/null | head -200 || true
+            echo ""
+            echo "--- Tigera Operator Logs (last $LOG_TAIL_LINES lines) ---"
+            $KUBECTL_CMD logs -n tigera-operator -l app.kubernetes.io/name=tigera-operator --tail="$LOG_TAIL_LINES" 2>/dev/null || true
+          else
+            CALICO_PODS=$($KUBECTL_CMD get pods -n calico-system -o name 2>/dev/null || true)
+            if [ -z "$CALICO_PODS" ]; then
+              echo "Calico not detected"
+            fi
+          fi
+        fi
+
+        # ============================================================
+        # CSI (Container Storage Interface)
+        # ============================================================
+
+        if [ "$SHOW_CSI" = "true" ]; then
+          print_section "CSI STATUS"
+
+          echo "--- Storage Classes ---"
+          $KUBECTL_CMD get storageclass || true
+          echo ""
+          echo "--- CSI Drivers ---"
+          $KUBECTL_CMD get csidriver 2>/dev/null || echo "No CSI drivers found"
+          echo ""
+
+          # Check for Local Path Provisioner
+          LOCAL_PATH_DEP=$($KUBECTL_CMD get deployment -n local-path-storage local-path-provisioner -o name 2>/dev/null || true)
+          if [ -n "$LOCAL_PATH_DEP" ]; then
+            echo "--- Local Path Provisioner ---"
+            $KUBECTL_CMD get deployment -n local-path-storage local-path-provisioner -o wide || true
+            echo ""
+            $KUBECTL_CMD get pods -n local-path-storage -l app=local-path-provisioner -o wide || true
+            echo ""
+            echo "--- Local Path Provisioner Logs (last $LOG_TAIL_LINES lines) ---"
+            $KUBECTL_CMD logs -n local-path-storage -l app=local-path-provisioner --tail="$LOG_TAIL_LINES" 2>/dev/null || true
+          else
+            echo "Local Path Provisioner not detected"
+          fi
+          echo ""
+
+          # Check for Hetzner CSI
+          HETZNER_CSI=$($KUBECTL_CMD get csidriver csi.hetzner.cloud -o name 2>/dev/null || true)
+          if [ -n "$HETZNER_CSI" ]; then
+            echo "--- Hetzner CSI ---"
+            $KUBECTL_CMD get pods -n kube-system -l app.kubernetes.io/name=hcloud-csi -o wide || true
+            echo ""
+            echo "--- Hetzner CSI Logs (last $LOG_TAIL_LINES lines) ---"
+            $KUBECTL_CMD logs -n kube-system -l app.kubernetes.io/name=hcloud-csi --tail="$LOG_TAIL_LINES" 2>/dev/null || true
+          else
+            echo "Hetzner CSI not detected"
+          fi
+        fi
+
+        # ============================================================
+        # GITOPS (Flux / ArgoCD)
+        # ============================================================
+
+        if [ "$SHOW_GITOPS" = "true" ]; then
+          print_section "GITOPS STATUS"
+
+          # --- Flux ---
+          echo "--- Flux Operator ---"
+          FLUX_OPERATOR_PODS=$($KUBECTL_CMD get pods -n flux-system -l app.kubernetes.io/name=flux-operator -o name 2>/dev/null || true)
+          if [ -n "$FLUX_OPERATOR_PODS" ]; then
+            $KUBECTL_CMD get pods -n flux-system -l app.kubernetes.io/name=flux-operator -o wide
+            echo ""
+            echo "--- Flux Operator Logs (last $LOG_TAIL_LINES lines) ---"
+            $KUBECTL_CMD logs -n flux-system -l app.kubernetes.io/name=flux-operator --tail="$LOG_TAIL_LINES" 2>/dev/null || true
+          else
+            echo "No Flux Operator pods found"
+          fi
+          echo ""
+
+          echo "--- FluxInstance Status ---"
+          if $KUBECTL_CMD get crd fluxinstances.fluxcd.controlplane.io >/dev/null 2>&1; then
+            FLUX_INSTANCES=$($KUBECTL_CMD get fluxinstance -A -o name 2>/dev/null || true)
+            if [ -n "$FLUX_INSTANCES" ]; then
+              $KUBECTL_CMD get fluxinstance -A -o wide
+              echo ""
+              echo "--- FluxInstance Conditions ---"
+              $KUBECTL_CMD get fluxinstance -A -o jsonpath='{range .items[*]}{"Name: "}{.metadata.name}{"\n"}{range .status.conditions[*]}{"  "}{.type}{": "}{.status}{" - "}{.reason}{": "}{.message}{"\n"}{end}{"\n"}{end}' 2>/dev/null || true
+            else
+              echo "No FluxInstance resources found"
+            fi
+          else
+            echo "FluxInstance CRD not registered"
+          fi
+          echo ""
+
+          echo "--- Flux Controllers ---"
+          FLUX_CONTROLLERS=$($KUBECTL_CMD get pods -n flux-system -l app.kubernetes.io/part-of=flux -o name 2>/dev/null || true)
+          if [ -n "$FLUX_CONTROLLERS" ]; then
+            $KUBECTL_CMD get pods -n flux-system -l app.kubernetes.io/part-of=flux -o wide
+            echo ""
+
+            # Source Controller logs
+            echo "--- Source Controller Logs (last $LOG_TAIL_LINES lines) ---"
+            $KUBECTL_CMD logs -n flux-system -l app=source-controller --tail="$LOG_TAIL_LINES" 2>/dev/null || true
+            echo ""
+
+            # Kustomize Controller logs
+            echo "--- Kustomize Controller Logs (last $LOG_TAIL_LINES lines) ---"
+            $KUBECTL_CMD logs -n flux-system -l app=kustomize-controller --tail="$LOG_TAIL_LINES" 2>/dev/null || true
+            echo ""
+
+            # Helm Controller logs
+            echo "--- Helm Controller Logs (last $LOG_TAIL_LINES lines) ---"
+            $KUBECTL_CMD logs -n flux-system -l app=helm-controller --tail="$LOG_TAIL_LINES" 2>/dev/null || true
+          else
+            echo "No Flux controller pods found"
+          fi
+          echo ""
+
+          echo "--- OCIRepository Status ---"
+          if $KUBECTL_CMD get crd ocirepositories.source.toolkit.fluxcd.io >/dev/null 2>&1; then
+            OCI_REPOS=$($KUBECTL_CMD get ocirepository -A -o name 2>/dev/null || true)
+            if [ -n "$OCI_REPOS" ]; then
+              $KUBECTL_CMD get ocirepository -A -o wide
+              echo ""
+              echo "--- OCIRepository Conditions ---"
+              $KUBECTL_CMD get ocirepository -A -o jsonpath='{range .items[*]}{"Name: "}{.metadata.namespace}{"/"}{.metadata.name}{"\n"}{range .status.conditions[*]}{"  "}{.type}{": "}{.status}{" - "}{.reason}{": "}{.message}{"\n"}{end}{"\n"}{end}' 2>/dev/null || true
+            else
+              echo "No OCIRepository resources found"
+            fi
+          else
+            echo "OCIRepository CRD not registered"
+          fi
+          echo ""
+
+          echo "--- Kustomization Status ---"
+          if $KUBECTL_CMD get crd kustomizations.kustomize.toolkit.fluxcd.io >/dev/null 2>&1; then
+            KUSTOMIZATIONS=$($KUBECTL_CMD get kustomization -A -o name 2>/dev/null || true)
+            if [ -n "$KUSTOMIZATIONS" ]; then
+              $KUBECTL_CMD get kustomization -A -o wide
+              echo ""
+              echo "--- Kustomization Conditions ---"
+              $KUBECTL_CMD get kustomization -A -o jsonpath='{range .items[*]}{"Name: "}{.metadata.namespace}{"/"}{.metadata.name}{"\n"}{range .status.conditions[*]}{"  "}{.type}{": "}{.status}{" - "}{.reason}{": "}{.message}{"\n"}{end}{"\n"}{end}' 2>/dev/null || true
+            else
+              echo "No Kustomization resources found"
+            fi
+          else
+            echo "Kustomization CRD not registered"
+          fi
+          echo ""
+
+          echo "--- HelmRelease Status ---"
+          if $KUBECTL_CMD get crd helmreleases.helm.toolkit.fluxcd.io >/dev/null 2>&1; then
+            HELM_RELEASES=$($KUBECTL_CMD get helmrelease -A -o name 2>/dev/null || true)
+            if [ -n "$HELM_RELEASES" ]; then
+              $KUBECTL_CMD get helmrelease -A -o wide
+              echo ""
+              echo "--- HelmRelease Conditions ---"
+              $KUBECTL_CMD get helmrelease -A -o jsonpath='{range .items[*]}{"Name: "}{.metadata.namespace}{"/"}{.metadata.name}{"\n"}{range .status.conditions[*]}{"  "}{.type}{": "}{.status}{" - "}{.reason}{": "}{.message}{"\n"}{end}{"\n"}{end}' 2>/dev/null || true
+            else
+              echo "No HelmRelease resources found"
+            fi
+          else
+            echo "HelmRelease CRD not registered"
+          fi
+          echo ""
+
+          # --- ArgoCD ---
+          echo "--- ArgoCD Status ---"
+          if $KUBECTL_CMD get crd applications.argoproj.io >/dev/null 2>&1; then
+            echo "ArgoCD Application CRD is registered"
+            $KUBECTL_CMD get pods -n argocd -o wide 2>/dev/null || true
+            echo ""
+            ARGO_APPS=$($KUBECTL_CMD get application -A -o name 2>/dev/null || true)
+            if [ -n "$ARGO_APPS" ]; then
+              echo "--- ArgoCD Applications ---"
+              $KUBECTL_CMD get application -A -o wide
+              echo ""
+              echo "--- ArgoCD Application Sync Status ---"
+              $KUBECTL_CMD get application -A -o jsonpath='{range .items[*]}{"Name: "}{.metadata.namespace}{"/"}{.metadata.name}{"\n"}{"  Sync: "}{.status.sync.status}{"\n"}{"  Health: "}{.status.health.status}{"\n"}{range .status.conditions[*]}{"  Condition: "}{.type}{" - "}{.message}{"\n"}{end}{"\n"}{end}' 2>/dev/null || true
+            else
+              echo "No ArgoCD Application resources found"
+            fi
+            echo ""
+            echo "--- ArgoCD Application Controller Logs (last $LOG_TAIL_LINES lines) ---"
+            $KUBECTL_CMD logs -n argocd -l app.kubernetes.io/name=argocd-application-controller --tail="$LOG_TAIL_LINES" 2>/dev/null || true
+          else
+            echo "ArgoCD not detected"
+          fi
+        fi
+
+        # ============================================================
+        # POLICY ENGINES (Kyverno / Gatekeeper)
+        # ============================================================
+
+        if [ "$SHOW_POLICY_ENGINE" = "true" ]; then
+          print_section "POLICY ENGINE STATUS"
+
+          # Check for Kyverno
+          KYVERNO_NS=$($KUBECTL_CMD get ns kyverno -o name 2>/dev/null || true)
+          if [ -n "$KYVERNO_NS" ]; then
+            echo "--- Kyverno Pods ---"
+            $KUBECTL_CMD get pods -n kyverno -o wide || true
+            echo ""
+            echo "--- Kyverno ClusterPolicies ---"
+            $KUBECTL_CMD get clusterpolicy -o wide 2>/dev/null || echo "No ClusterPolicies found"
+            echo ""
+            echo "--- Kyverno Admission Controller Logs (last $LOG_TAIL_LINES lines) ---"
+            $KUBECTL_CMD logs -n kyverno -l app.kubernetes.io/component=admission-controller --tail="$LOG_TAIL_LINES" 2>/dev/null || true
+            echo ""
+            echo "--- Kyverno Background Controller Logs (last $LOG_TAIL_LINES lines) ---"
+            $KUBECTL_CMD logs -n kyverno -l app.kubernetes.io/component=background-controller --tail="$LOG_TAIL_LINES" 2>/dev/null || true
+          else
+            echo "Kyverno not detected"
+          fi
+          echo ""
+
+          # Check for Gatekeeper
+          GATEKEEPER_NS=$($KUBECTL_CMD get ns gatekeeper-system -o name 2>/dev/null || true)
+          if [ -n "$GATEKEEPER_NS" ]; then
+            echo "--- Gatekeeper Pods ---"
+            $KUBECTL_CMD get pods -n gatekeeper-system -o wide || true
+            echo ""
+            echo "--- Constraint Templates ---"
+            $KUBECTL_CMD get constrainttemplates 2>/dev/null || echo "No ConstraintTemplates found"
+            echo ""
+            echo "--- Gatekeeper Controller Logs (last $LOG_TAIL_LINES lines) ---"
+            $KUBECTL_CMD logs -n gatekeeper-system -l control-plane=controller-manager --tail="$LOG_TAIL_LINES" 2>/dev/null || true
+            echo ""
+            echo "--- Gatekeeper Audit Logs (last $LOG_TAIL_LINES lines) ---"
+            $KUBECTL_CMD logs -n gatekeeper-system -l control-plane=audit-controller --tail="$LOG_TAIL_LINES" 2>/dev/null || true
+          else
+            echo "Gatekeeper not detected"
+          fi
+        fi
+
+        # ============================================================
+        # CERT-MANAGER
+        # ============================================================
+
+        if [ "$SHOW_CERT_MANAGER" = "true" ]; then
+          print_section "CERT-MANAGER STATUS"
+
+          CERT_MANAGER_NS=$($KUBECTL_CMD get ns cert-manager -o name 2>/dev/null || true)
+          if [ -n "$CERT_MANAGER_NS" ]; then
+            echo "--- cert-manager Pods ---"
+            $KUBECTL_CMD get pods -n cert-manager -o wide || true
+            echo ""
+            echo "--- ClusterIssuers ---"
+            $KUBECTL_CMD get clusterissuer -o wide 2>/dev/null || echo "No ClusterIssuers found"
+            echo ""
+            echo "--- Certificates (All Namespaces) ---"
+            $KUBECTL_CMD get certificate -A -o wide 2>/dev/null || echo "No Certificates found"
+            echo ""
+            echo "--- CertificateRequests (All Namespaces) ---"
+            $KUBECTL_CMD get certificaterequest -A -o wide 2>/dev/null || echo "No CertificateRequests found"
+            echo ""
+            echo "--- cert-manager Controller Logs (last $LOG_TAIL_LINES lines) ---"
+            $KUBECTL_CMD logs -n cert-manager -l app.kubernetes.io/name=cert-manager --tail="$LOG_TAIL_LINES" 2>/dev/null || true
+            echo ""
+            echo "--- cert-manager Webhook Logs (last $LOG_TAIL_LINES lines) ---"
+            $KUBECTL_CMD logs -n cert-manager -l app.kubernetes.io/name=webhook --tail="$LOG_TAIL_LINES" 2>/dev/null || true
+          else
+            echo "cert-manager not detected"
+          fi
+        fi
+
+        # ============================================================
+        # METRICS SERVER
+        # ============================================================
+
+        if [ "$SHOW_METRICS_SERVER" = "true" ]; then
+          print_section "METRICS SERVER STATUS"
+
+          METRICS_SERVER_DEP=$($KUBECTL_CMD get deployment -n kube-system metrics-server -o name 2>/dev/null || true)
+          if [ -n "$METRICS_SERVER_DEP" ]; then
+            echo "--- Metrics Server Deployment ---"
+            $KUBECTL_CMD get deployment -n kube-system metrics-server -o wide || true
+            echo ""
+            echo "--- Metrics Server Pods ---"
+            $KUBECTL_CMD get pods -n kube-system -l app.kubernetes.io/name=metrics-server -o wide || true
+            echo ""
+            echo "--- Metrics API Test ---"
+            $KUBECTL_CMD top nodes 2>/dev/null || echo "Metrics API not responding (metrics-server may not be ready)"
+            echo ""
+            echo "--- Metrics Server Logs (last $LOG_TAIL_LINES lines) ---"
+            $KUBECTL_CMD logs -n kube-system -l app.kubernetes.io/name=metrics-server --tail="$LOG_TAIL_LINES" 2>/dev/null || true
+          else
+            echo "Metrics Server not detected"
+          fi
+        fi
+
+        print_section "DEBUG OUTPUT COMPLETE"

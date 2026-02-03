@@ -525,6 +525,19 @@ The YAML frontmatter supports these fields:
     ```
 
     When using `safe-outputs.close-pull-request`, the main job does **not** need `pull-requests: write` permission since PR closing is handled by a separate job with appropriate permissions.
+  - `mark-pull-request-as-ready-for-review:` - Mark draft PRs as ready for review
+
+    ```yaml
+    safe-outputs:
+      mark-pull-request-as-ready-for-review:
+        max: 1                              # Optional: max operations (default: 1)
+        target: "*"                         # Optional: "triggering" (default), "*", or number
+        required-labels: [automated]        # Optional: only mark PRs with these labels
+        required-title-prefix: "[bot]"      # Optional: only mark PRs with this prefix
+        target-repo: "owner/repo"           # Optional: cross-repository
+    ```
+
+    When using `safe-outputs.mark-pull-request-as-ready-for-review`, the main job does **not** need `pull-requests: write` permission since marking as ready is handled by a separate job with appropriate permissions.
   - `add-labels:` - Safe label addition to issues or PRs
 
     ```yaml
@@ -585,6 +598,18 @@ The YAML frontmatter supports these fields:
     ```
 
     Links issues as sub-issues using GitHub's parent-child relationships. Agent output includes `parent_issue_number` and `sub_issue_number`. Use with `create-issue` temporary IDs or existing issue numbers.
+  - `create-project:` - Create GitHub Projects V2
+
+    ```yaml
+    safe-outputs:
+      create-project:
+        max: 1                          # Optional: max projects (default: 1)
+        github-token: ${{ secrets.PROJECTS_PAT }}  # Optional: token with projects:write
+        target-owner: "org-or-user"     # Optional: owner for created projects
+        title-prefix: "[ai] "           # Optional: prefix for project titles
+    ```
+
+    Not supported for cross-repository operations.
   - `update-project:` - Manage GitHub Projects boards
 
     ```yaml
@@ -606,6 +631,16 @@ The YAML frontmatter supports these fields:
 
     ```json
     {"type": "update_project", "project": "https://github.com/orgs/myorg/projects/42", "content_type": "draft_issue", "draft_title": "Task title", "draft_body": "Task description", "fields": {"Status": "Todo"}}
+    ```
+
+    Not supported for cross-repository operations.
+  - `create-project-status-update:` - Create GitHub project status updates
+
+    ```yaml
+    safe-outputs:
+      create-project-status-update:
+        max: 10                         # Optional: max status updates (default: 10)
+        github-token: ${{ secrets.PROJECTS_PAT }}  # Optional: token with projects:write
     ```
 
     Not supported for cross-repository operations.
@@ -679,6 +714,15 @@ The YAML frontmatter supports these fields:
     ```
 
     Severity levels: error, warning, info, note.
+  - `autofix-code-scanning-alert:` - Add autofixes to code scanning alerts
+
+    ```yaml
+    safe-outputs:
+      autofix-code-scanning-alert:
+        max: 10                         # Optional: max autofixes (default: 10)
+    ```
+
+    Provides automated fixes for code scanning alerts.
   - `create-agent-session:` - Create GitHub Copilot agent sessions
 
     ```yaml
@@ -744,6 +788,17 @@ The YAML frontmatter supports these fields:
     ```
 
     The missing-tool safe-output allows agents to report when they need tools or functionality not currently available. This is automatically enabled by default and helps track feature requests from agents.
+  - `missing-data:` - Report missing data required to complete tasks (auto-enabled)
+
+    ```yaml
+    safe-outputs:
+      missing-data:
+        create-issue: true              # Optional: create issues for missing data (default: true)
+        title-prefix: "[missing data]"  # Optional: prefix for issue titles
+        labels: [data-request]          # Optional: labels for created issues
+    ```
+
+    The missing-data safe-output allows agents to report when required data or information is unavailable. This is automatically enabled by default. When `create-issue` is true, missing data reports create or update GitHub issues for tracking.
 
   **Global Safe Output Configuration:**
   - `github-token:` - Custom GitHub token for all safe output jobs
@@ -1652,7 +1707,7 @@ gh aw logs --start-date -1mo         # Last month's runs
 gh aw logs --start-date -2w3d        # 2 weeks 3 days ago
 
 # Filter staged logs
-gw aw logs --no-staged               # ignore workflows with safe output staged true
+gh aw logs --no-staged               # ignore workflows with safe output staged true
 
 # Download to custom directory
 gh aw logs -o ./workflow-logs
@@ -1850,13 +1905,13 @@ Use `gh aw compile --verbose` to see detailed validation messages, or `gh aw com
 ### Installation
 
 ```bash
-gh extension install githubnext/gh-aw
+gh extension install github/gh-aw
 ```
 
 If there are authentication issues, use the standalone installer:
 
 ```bash
-curl -O https://raw.githubusercontent.com/githubnext/gh-aw/main/install-gh-aw.sh
+curl -O https://raw.githubusercontent.com/github/gh-aw/main/install-gh-aw.sh
 chmod +x install-gh-aw.sh
 ./install-gh-aw.sh
 ```
@@ -1885,4 +1940,4 @@ gh aw logs <workflow-id>
 
 ### Documentation
 
-For complete CLI documentation, see: <https://githubnext.github.io/gh-aw/setup/cli/>
+For complete CLI documentation, see: <https://github.github.com/gh-aw/setup/cli/>

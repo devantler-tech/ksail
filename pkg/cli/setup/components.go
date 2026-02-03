@@ -19,6 +19,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/svc/installer"
 	argocdinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/argocd"
 	certmanagerinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/cert-manager"
+	cloudproviderkindinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/cloudproviderkind"
 	fluxinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/flux"
 	gatekeeperinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/gatekeeper"
 	hetznercsiinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/hetzner-csi"
@@ -241,18 +242,47 @@ func NeedsMetricsServerInstall(clusterCfg *v1alpha1.Cluster) bool {
 	return !clusterCfg.Spec.Cluster.Distribution.ProvidesMetricsServerByDefault()
 }
 
+// NeedsLoadBalancerInstall determines if LoadBalancer support needs to be installed.
+// Returns true only when LoadBalancer is Enabled AND the distribution × provider doesn't provide it by default.
+// When LoadBalancer is Default, we don't install (rely on distribution × provider default behavior).
+func NeedsLoadBalancerInstall(clusterCfg *v1alpha1.Cluster) bool {
+	if clusterCfg.Spec.Cluster.LoadBalancer != v1alpha1.LoadBalancerEnabled {
+		return false
+	}
+
+	// Don't install if distribution × provider provides it by default
+	return !clusterCfg.Spec.Cluster.Distribution.ProvidesLoadBalancerByDefault(
+		clusterCfg.Spec.Cluster.Provider,
+	)
+}
+
+// helmClientSetup creates a Helm client and retrieves the install timeout.
+// Returns the Helm client, kubeconfig path, timeout, and any error.
+func helmClientSetup(
+	clusterCfg *v1alpha1.Cluster,
+	factories *InstallerFactories,
+) (*helm.Client, string, time.Duration, error) {
+	helmClient, kubeconfig, err := factories.HelmClientFactory(clusterCfg)
+	if err != nil {
+		return nil, "", 0, fmt.Errorf("failed to create helm client: %w", err)
+	}
+
+	timeout := installer.GetInstallTimeout(clusterCfg)
+
+	return helmClient, kubeconfig, timeout, nil
+}
+
 // InstallMetricsServerSilent installs metrics-server silently for parallel execution.
 func InstallMetricsServerSilent(
 	ctx context.Context,
 	clusterCfg *v1alpha1.Cluster,
 	factories *InstallerFactories,
 ) error {
-	helmClient, kubeconfig, err := factories.HelmClientFactory(clusterCfg)
+	helmClient, kubeconfig, timeout, err := helmClientSetup(clusterCfg, factories)
 	if err != nil {
-		return fmt.Errorf("failed to create helm client: %w", err)
+		return err
 	}
 
-	timeout := installer.GetInstallTimeout(clusterCfg)
 	msInstaller := metricsserverinstaller.NewMetricsServerInstaller(
 		helmClient,
 		kubeconfig,
@@ -263,6 +293,54 @@ func InstallMetricsServerSilent(
 	installErr := msInstaller.Install(ctx)
 	if installErr != nil {
 		return fmt.Errorf("metrics-server installation failed: %w", installErr)
+	}
+
+	return nil
+}
+
+// InstallLoadBalancerSilent installs LoadBalancer support silently for parallel execution.
+// For Vanilla (Kind) × Docker, starts the Cloud Provider KIND controller as a Docker container.
+func InstallLoadBalancerSilent(
+	ctx context.Context,
+	clusterCfg *v1alpha1.Cluster,
+	_ *InstallerFactories,
+) error {
+	// Determine which LoadBalancer implementation to install based on distribution × provider
+	switch clusterCfg.Spec.Cluster.Distribution {
+	case v1alpha1.DistributionVanilla:
+		// Vanilla (Kind) × Docker uses Cloud Provider KIND
+		if clusterCfg.Spec.Cluster.Provider == v1alpha1.ProviderDocker {
+			// Create Docker client for container management
+			dockerAPIClient, dockErr := dockerclient.GetDockerClient()
+			if dockErr != nil {
+				return fmt.Errorf("create docker client: %w", dockErr)
+			}
+
+			defer func() { _ = dockerAPIClient.Close() }()
+
+			lbInstaller := cloudproviderkindinstaller.NewCloudProviderKINDInstaller(dockerAPIClient)
+
+			installErr := lbInstaller.Install(ctx)
+			if installErr != nil {
+				return fmt.Errorf("cloud-provider-kind installation failed: %w", installErr)
+			}
+		}
+	case v1alpha1.DistributionTalos:
+		// Talos × Hetzner: LoadBalancer support is expected to be provided by default
+		// (via the Hetzner cloud-controller-manager / hcloud-ccm), so there is
+		// nothing for this installer to do here.
+		if clusterCfg.Spec.Cluster.Provider == v1alpha1.ProviderHetzner {
+			return nil
+		}
+
+		// Talos × Docker: MetalLB is planned but not yet implemented in ksail.
+		// For now, we skip installation (no-op) rather than failing, allowing users
+		// to explicitly enable LoadBalancer in their configuration without errors.
+		// MetalLB installer implementation is planned for a future release.
+		return nil
+	case v1alpha1.DistributionK3s:
+		// K3s already has ServiceLB (Klipper) by default, no installation needed
+		return nil
 	}
 
 	return nil

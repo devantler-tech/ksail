@@ -30,9 +30,9 @@
       "version": "v2.2.1",
       "sha": "29824e69f54612133e76f7eaac726eef6c875baf"
     },
-    "actions/download-artifact@v6": {
+    "actions/download-artifact@v6.0.0": {
       "repo": "actions/download-artifact",
-      "version": "v6",
+      "version": "v6.0.0",
       "sha": "018cc2cf5baa6db3ef3c5f8a56943fffe632ef53"
     },
     "actions/github-script@v7.1.0": {
@@ -50,9 +50,9 @@
       "version": "v6.2.0",
       "sha": "7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5"
     },
-    "actions/upload-artifact@v6": {
+    "actions/upload-artifact@v6.0.0": {
       "repo": "actions/upload-artifact",
-      "version": "v6",
+      "version": "v6.0.0",
       "sha": "b7c566a772e6b6bfb58ed0dc250532a479d7789f"
     },
     "anchore/sbom-action@v0.22.1": {
@@ -80,10 +80,15 @@
       "version": "v3.12.0",
       "sha": "8d2750c68a42422c14e847fe6c8ac0403b4cbd6f"
     },
-    "githubnext/gh-aw/actions/setup@v0.38.0": {
+    "github/gh-aw/actions/setup@v0.40.0": {
+      "repo": "github/gh-aw/actions/setup",
+      "version": "v0.40.0",
+      "sha": "76d37d925abd44fee97379206f105b74b91a285b"
+    },
+    "githubnext/gh-aw/actions/setup@v0.40.0": {
       "repo": "githubnext/gh-aw/actions/setup",
-      "version": "v0.38.0",
-      "sha": "10f1341b529f9a8b51c463e191b7dd63d4caccfd"
+      "version": "v0.40.0",
+      "sha": "76d37d925abd44fee97379206f105b74b91a285b"
     }
   }
 }

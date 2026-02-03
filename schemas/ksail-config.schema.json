@@ -79,6 +79,14 @@
                 "Disabled"
               ]
             },
+            "loadBalancer": {
+              "type": "string",
+              "enum": [
+                "Default",
+                "Enabled",
+                "Disabled"
+              ]
+            },
             "certManager": {
               "type": "string",
               "enum": [
@@ -165,8 +173,24 @@
                 "tokenEnvVar": {
                   "type": "string"
                 },
+                "placementGroupStrategy": {
+                  "type": "string",
+                  "enum": [
+                    "None",
+                    "Spread"
+                  ]
+                },
                 "placementGroup": {
                   "type": "string"
+                },
+                "fallbackLocations": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "placementGroupFallbackToNone": {
+                  "type": "boolean"
                 }
               },
               "additionalProperties": false,

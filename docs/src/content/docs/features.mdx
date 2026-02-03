@@ -133,9 +133,15 @@ ksail cluster init \
 
 ### Mirror Registries
 
+> [!NOTE]
+> **Default mirrors enabled:** KSail now enables `docker.io` and `ghcr.io` mirrors by default to avoid rate limits and improve CI/CD performance.
+
 ```bash
+# Mirrors are enabled by default (docker.io and ghcr.io)
+ksail cluster init
+
+# Add additional mirrors
 ksail cluster init \
-  --mirror-registry docker.io=https://registry-1.docker.io \
   --mirror-registry gcr.io=https://gcr.io
 ```
 

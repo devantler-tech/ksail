@@ -112,3 +112,11 @@ packages:
       Installer:
       Manager:
       StatusProvider:
+  github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry:
+    config:
+      recursive: false
+      dir: pkg/svc/provisioner/registry
+      filename: mocks.go
+      pkgname: registry
+    interfaces:
+      Backend:

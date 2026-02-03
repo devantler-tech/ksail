@@ -7,6 +7,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/setup/mirrorregistry"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	configmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
@@ -55,6 +56,7 @@ func InitFieldSelectors() []ksailconfigmanager.FieldSelector[v1alpha1.Cluster] {
 	selectors = append(selectors, ksailconfigmanager.DefaultCNIFieldSelector())
 	selectors = append(selectors, ksailconfigmanager.DefaultCSIFieldSelector())
 	selectors = append(selectors, ksailconfigmanager.DefaultMetricsServerFieldSelector())
+	selectors = append(selectors, ksailconfigmanager.DefaultLoadBalancerFieldSelector())
 	selectors = append(selectors, ksailconfigmanager.DefaultCertManagerFieldSelector())
 	selectors = append(selectors, ksailconfigmanager.DefaultPolicyEngineFieldSelector())
 	selectors = append(selectors, ksailconfigmanager.DefaultImportImagesFieldSelector())
@@ -79,7 +81,8 @@ func bindInitLocalFlags(cmd *cobra.Command, cfgManager *ksailconfigmanager.Confi
 			"Credentials support environment variables using ${VAR} syntax. "+
 			"Examples: docker.io=https://registry-1.docker.io, ${USER}:${TOKEN}@ghcr.io=https://ghcr.io",
 	)
-	_ = cfgManager.Viper.BindPFlag("mirror-registry", cmd.Flags().Lookup("mirror-registry"))
+	// NOTE: mirror-registry is NOT bound to Viper to allow custom merge logic
+	// It's handled manually in mirrorregistry.GetMirrorRegistriesWithDefaults()
 	cmd.Flags().StringP(
 		"name",
 		"n",
@@ -181,7 +184,9 @@ func prepareScaffolder(
 	}
 
 	force := cfgManager.Viper.GetBool("force")
-	mirrorRegistries := cfgManager.Viper.GetStringSlice("mirror-registry")
+	mirrorRegistries := mirrorregistry.GetMirrorRegistriesWithDefaults(
+		cmd, cfgManager, clusterCfg.Spec.Cluster.Provider,
+	)
 	clusterName := cfgManager.Viper.GetString("name")
 
 	// Validate mirror registries are compatible with the provider

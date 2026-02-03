@@ -62,6 +62,7 @@ func resolveDefaultClusterName(distribution v1alpha1.Distribution) string {
 // ComponentRequirements represents which components need to be installed.
 type ComponentRequirements struct {
 	NeedsMetricsServer      bool
+	NeedsLoadBalancer       bool
 	NeedsKubeletCSRApprover bool
 	NeedsCSI                bool
 	NeedsCertManager        bool
@@ -74,6 +75,7 @@ type ComponentRequirements struct {
 func (r ComponentRequirements) Count() int {
 	components := []bool{
 		r.NeedsMetricsServer,
+		r.NeedsLoadBalancer,
 		r.NeedsKubeletCSRApprover,
 		r.NeedsCSI,
 		r.NeedsCertManager,
@@ -104,6 +106,7 @@ func GetComponentRequirements(clusterCfg *v1alpha1.Cluster) ComponentRequirement
 
 	return ComponentRequirements{
 		NeedsMetricsServer:      needsMetricsServer,
+		NeedsLoadBalancer:       NeedsLoadBalancerInstall(clusterCfg),
 		NeedsKubeletCSRApprover: needsKubeletCSRApprover,
 		NeedsCSI:                NeedsCSIInstall(clusterCfg),
 		NeedsCertManager:        clusterCfg.Spec.Cluster.CertManager == v1alpha1.CertManagerEnabled,
@@ -226,6 +229,13 @@ func buildComponentTasks(
 		tasks = append(
 			tasks,
 			newTask("metrics-server", clusterCfg, factories, InstallMetricsServerSilent),
+		)
+	}
+
+	if reqs.NeedsLoadBalancer {
+		tasks = append(
+			tasks,
+			newTask("load-balancer", clusterCfg, factories, InstallLoadBalancerSilent),
 		)
 	}
 
