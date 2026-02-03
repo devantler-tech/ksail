@@ -339,11 +339,32 @@ func (rm *RegistryManager) createAndStartContainer(
 
 // Configuration builders.
 
+// buildProxyCredentialsEnv builds environment variables for proxy authentication.
+// If credentials are provided, they are expanded from environment variables
+// and set as REGISTRY_PROXY_USERNAME and REGISTRY_PROXY_PASSWORD.
+func (rm *RegistryManager) buildProxyCredentialsEnv(
+	username string,
+	password string,
+) []string {
+	var env []string
+
+	expandedUsername := envvar.Expand(username)
+	expandedPassword := envvar.Expand(password)
+
+	if expandedUsername != "" {
+		env = append(env, "REGISTRY_PROXY_USERNAME="+expandedUsername)
+	}
+
+	if expandedPassword != "" {
+		env = append(env, "REGISTRY_PROXY_PASSWORD="+expandedPassword)
+	}
+
+	return env
+}
+
 // buildContainerConfig builds the container configuration for a registry.
 // If an upstream URL is provided, environment variables are set to configure
 // the registry as a pull-through cache (proxy) to that upstream.
-// If credentials are provided, they are expanded from environment variables
-// and set as REGISTRY_PROXY_USERNAME and REGISTRY_PROXY_PASSWORD.
 func (rm *RegistryManager) buildContainerConfig(
 	config RegistryConfig,
 ) *container.Config {
@@ -354,24 +375,24 @@ func (rm *RegistryManager) buildContainerConfig(
 
 	// Build environment variables for registry configuration
 	var env []string
-	if config.UpstreamURL != "" {
-		// Configure registry as a pull-through cache to the upstream
-		env = append(env, "REGISTRY_PROXY_REMOTEURL="+config.UpstreamURL)
-
-		// Add authentication credentials if provided
-		// Expand environment variable placeholders (e.g., ${GITHUB_TOKEN})
-		if config.Username != "" || config.Password != "" {
-			username := envvar.Expand(config.Username)
-			password := envvar.Expand(config.Password)
-
-			if username != "" {
-				env = append(env, "REGISTRY_PROXY_USERNAME="+username)
-			}
-
-			if password != "" {
-				env = append(env, "REGISTRY_PROXY_PASSWORD="+password)
-			}
+	if config.UpstreamURL == "" {
+		return &container.Config{
+			Image: RegistryImageName,
+			ExposedPorts: nat.PortSet{
+				RegistryContainerPort: struct{}{},
+			},
+			Labels: labels,
+			Env:    env,
 		}
+	}
+
+	// Configure registry as a pull-through cache to the upstream
+	env = append(env, "REGISTRY_PROXY_REMOTEURL="+config.UpstreamURL)
+
+	// Add authentication credentials if provided
+	if config.Username != "" || config.Password != "" {
+		credEnv := rm.buildProxyCredentialsEnv(config.Username, config.Password)
+		env = append(env, credEnv...)
 	}
 
 	return &container.Config{

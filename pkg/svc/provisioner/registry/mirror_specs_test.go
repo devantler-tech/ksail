@@ -240,10 +240,8 @@ func TestMirrorSpec_HasCredentials(t *testing.T) {
 	}
 }
 
-func TestMirrorSpec_ResolveCredentials(t *testing.T) {
-	// Set test environment variables
-	t.Setenv("TEST_USER", "github-user")
-	t.Setenv("TEST_TOKEN", "ghp_test1234")
+func TestMirrorSpec_ResolveCredentials_Basic(t *testing.T) {
+	t.Parallel()
 
 	testCases := []struct {
 		name             string
@@ -271,6 +269,31 @@ func TestMirrorSpec_ResolveCredentials(t *testing.T) {
 			expectedUsername: "myuser",
 			expectedPassword: "mypass",
 		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			username, password := testCase.spec.ResolveCredentials()
+			assert.Equal(t, testCase.expectedUsername, username)
+			assert.Equal(t, testCase.expectedPassword, password)
+		})
+	}
+}
+
+func TestMirrorSpec_ResolveCredentials_EnvVars(t *testing.T) {
+	// Set test environment variables first (before t.Parallel())
+	t.Setenv("TEST_USER", "github-user")
+	t.Setenv("TEST_TOKEN", "ghp_test1234")
+	t.Parallel()
+
+	testCases := []struct {
+		name             string
+		spec             registry.MirrorSpec
+		expectedUsername string
+		expectedPassword string
+	}{
 		{
 			name: "env_var_credentials",
 			spec: registry.MirrorSpec{
@@ -306,16 +329,112 @@ func TestMirrorSpec_ResolveCredentials(t *testing.T) {
 		},
 	}
 
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			username, password := tc.spec.ResolveCredentials()
-			assert.Equal(t, tc.expectedUsername, username)
-			assert.Equal(t, tc.expectedPassword, password)
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			username, password := testCase.spec.ResolveCredentials()
+			assert.Equal(t, testCase.expectedUsername, username)
+			assert.Equal(t, testCase.expectedPassword, password)
 		})
 	}
 }
 
-func TestParseMirrorSpecs_WithCredentials(t *testing.T) {
+func TestParseMirrorSpecs_NoCredentials(t *testing.T) {
+	t.Parallel()
+
+	specs := []string{
+		"docker.io=https://registry-1.docker.io",
+	}
+	expected := []registry.MirrorSpec{
+		{
+			Host:     "docker.io",
+			Remote:   "https://registry-1.docker.io",
+			Username: "",
+			Password: "",
+		},
+	}
+
+	result := registry.ParseMirrorSpecs(specs)
+	assert.Equal(t, expected, result)
+}
+
+func TestParseMirrorSpecs_UsernamePassword(t *testing.T) {
+	t.Parallel()
+
+	specs := []string{"user:pass@ghcr.io=https://ghcr.io"}
+	expected := []registry.MirrorSpec{{
+		Host:     "ghcr.io",
+		Remote:   "https://ghcr.io",
+		Username: "user",
+		Password: "pass",
+	}}
+
+	result := registry.ParseMirrorSpecs(specs)
+	assert.Equal(t, expected, result)
+}
+
+func TestParseMirrorSpecs_UsernameOnly(t *testing.T) {
+	t.Parallel()
+
+	specs := []string{"user@ghcr.io=https://ghcr.io"}
+	expected := []registry.MirrorSpec{{
+		Host:     "ghcr.io",
+		Remote:   "https://ghcr.io",
+		Username: "user",
+		Password: "",
+	}}
+
+	result := registry.ParseMirrorSpecs(specs)
+	assert.Equal(t, expected, result)
+}
+
+func TestParseMirrorSpecs_EnvVarCredentials(t *testing.T) {
+	t.Parallel()
+
+	specs := []string{
+		"${USER}:${TOKEN}@docker.io=https://registry-1.docker.io",
+	}
+	expected := []registry.MirrorSpec{
+		{
+			Host:     "docker.io",
+			Remote:   "https://registry-1.docker.io",
+			Username: "${USER}",
+			Password: "${TOKEN}",
+		},
+	}
+
+	result := registry.ParseMirrorSpecs(specs)
+	assert.Equal(t, expected, result)
+}
+
+func TestParseMirrorSpecs_MixedSpecs(t *testing.T) {
+	t.Parallel()
+
+	specs := []string{
+		"user:pass@ghcr.io=https://ghcr.io",
+		"docker.io=https://registry-1.docker.io",
+	}
+	expected := []registry.MirrorSpec{
+		{
+			Host:     "ghcr.io",
+			Remote:   "https://ghcr.io",
+			Username: "user",
+			Password: "pass",
+		},
+		{
+			Host:     "docker.io",
+			Remote:   "https://registry-1.docker.io",
+			Username: "",
+			Password: "",
+		},
+	}
+
+	result := registry.ParseMirrorSpecs(specs)
+	assert.Equal(t, expected, result)
+}
+
+func TestParseMirrorSpecs_AtSignInURL(t *testing.T) {
 	t.Parallel()
 
 	testCases := []struct {
@@ -323,83 +442,6 @@ func TestParseMirrorSpecs_WithCredentials(t *testing.T) {
 		specs    []string
 		expected []registry.MirrorSpec
 	}{
-		{
-			name: "credentials_with_username_password",
-			specs: []string{
-				"user:pass@ghcr.io=https://ghcr.io",
-			},
-			expected: []registry.MirrorSpec{
-				{
-					Host:     "ghcr.io",
-					Remote:   "https://ghcr.io",
-					Username: "user",
-					Password: "pass",
-				},
-			},
-		},
-		{
-			name: "credentials_with_env_vars",
-			specs: []string{
-				"${USER}:${TOKEN}@docker.io=https://registry-1.docker.io",
-			},
-			expected: []registry.MirrorSpec{
-				{
-					Host:     "docker.io",
-					Remote:   "https://registry-1.docker.io",
-					Username: "${USER}",
-					Password: "${TOKEN}",
-				},
-			},
-		},
-		{
-			name: "credentials_username_only",
-			specs: []string{
-				"user@ghcr.io=https://ghcr.io",
-			},
-			expected: []registry.MirrorSpec{
-				{
-					Host:     "ghcr.io",
-					Remote:   "https://ghcr.io",
-					Username: "user",
-					Password: "",
-				},
-			},
-		},
-		{
-			name: "no_credentials",
-			specs: []string{
-				"docker.io=https://registry-1.docker.io",
-			},
-			expected: []registry.MirrorSpec{
-				{
-					Host:     "docker.io",
-					Remote:   "https://registry-1.docker.io",
-					Username: "",
-					Password: "",
-				},
-			},
-		},
-		{
-			name: "mixed_specs",
-			specs: []string{
-				"user:pass@ghcr.io=https://ghcr.io",
-				"docker.io=https://registry-1.docker.io",
-			},
-			expected: []registry.MirrorSpec{
-				{
-					Host:     "ghcr.io",
-					Remote:   "https://ghcr.io",
-					Username: "user",
-					Password: "pass",
-				},
-				{
-					Host:     "docker.io",
-					Remote:   "https://registry-1.docker.io",
-					Username: "",
-					Password: "",
-				},
-			},
-		},
 		{
 			name: "at_sign_in_remote_url_not_parsed_as_credentials",
 			specs: []string{
@@ -467,6 +509,6 @@ func TestBuildRegistryInfosFromSpecs_WithCredentials(t *testing.T) {
 
 	// Check second registry without credentials
 	assert.Equal(t, "docker.io", infos[1].Host)
-	assert.Equal(t, "", infos[1].Username)
-	assert.Equal(t, "", infos[1].Password)
+	assert.Empty(t, infos[1].Username)
+	assert.Empty(t, infos[1].Password)
 }

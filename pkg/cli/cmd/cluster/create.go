@@ -77,6 +77,7 @@ func NewCreateCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
 		"Configure mirror registries with optional authentication. Format: [user:pass@]host[=upstream]. "+
 			"Credentials support environment variables using ${VAR} syntax. "+
 			"Examples: docker.io=https://registry-1.docker.io, ${USER}:${TOKEN}@ghcr.io=https://ghcr.io")
+
 	// NOTE: mirror-registry is NOT bound to Viper to allow custom merge logic
 	// It's handled manually via getMirrorRegistriesWithDefaults() in setup/mirrorregistry
 
