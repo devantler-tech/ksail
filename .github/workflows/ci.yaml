@@ -362,7 +362,6 @@ jobs:
         with:
           hcloud-token: ${{ secrets.HCLOUD_TOKEN }}
 
-
   status:
     name: CI - KSail
     runs-on: ubuntu-latest
