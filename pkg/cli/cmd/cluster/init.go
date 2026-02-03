@@ -7,6 +7,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/setup/mirrorregistry"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	configmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
@@ -78,7 +79,8 @@ func bindInitLocalFlags(cmd *cobra.Command, cfgManager *ksailconfigmanager.Confi
 		[]string{},
 		"Configure mirror registries with format 'host=upstream' (e.g., docker.io=https://registry-1.docker.io).",
 	)
-	_ = cfgManager.Viper.BindPFlag("mirror-registry", cmd.Flags().Lookup("mirror-registry"))
+	// NOTE: mirror-registry is NOT bound to Viper to allow custom merge logic
+	// It's handled manually in mirrorregistry.GetMirrorRegistriesWithDefaults()
 	cmd.Flags().StringP(
 		"name",
 		"n",
@@ -180,7 +182,9 @@ func prepareScaffolder(
 	}
 
 	force := cfgManager.Viper.GetBool("force")
-	mirrorRegistries := cfgManager.Viper.GetStringSlice("mirror-registry")
+	mirrorRegistries := mirrorregistry.GetMirrorRegistriesWithDefaults(
+		cmd, cfgManager, clusterCfg.Spec.Cluster.Provider,
+	)
 	clusterName := cfgManager.Viper.GetString("name")
 
 	// Validate mirror registries are compatible with the provider

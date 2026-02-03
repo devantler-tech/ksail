@@ -3,99 +3,89 @@ package cloudproviderkindinstaller_test
 import (
 	"context"
 	"os"
-	"path/filepath"
 	"testing"
 
+	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
 	cloudproviderkindinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/cloudproviderkind"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
+const ciEnvValue = "true"
+
 func TestNewCloudProviderKINDInstaller(t *testing.T) {
 	t.Parallel()
 
-	installer := cloudproviderkindinstaller.NewCloudProviderKINDInstaller()
+	// Skip in CI - requires Docker
+	if os.Getenv("CI") == ciEnvValue {
+		t.Skip("Skipping test that requires Docker in CI")
+	}
+
+	dockerClient, err := dockerclient.GetDockerClient()
+	require.NoError(t, err)
+
+	defer func() { _ = dockerClient.Close() }()
+
+	installer := cloudproviderkindinstaller.NewCloudProviderKINDInstaller(dockerClient)
 
 	assert.NotNil(t, installer)
 }
 
-func TestCloudProviderKINDInstallerInstall(t *testing.T) {
+func TestCloudProviderKINDInstallerInstallAndUninstall(t *testing.T) {
 	t.Parallel()
 
 	// Note: This is an integration test that actually starts the controller
 	// Skip in CI environments where Docker might not be available
-	if os.Getenv("CI") == "true" {
+	if os.Getenv("CI") == ciEnvValue {
 		t.Skip("Skipping integration test in CI")
 	}
 
-	installer := cloudproviderkindinstaller.NewCloudProviderKINDInstaller()
+	dockerClient, err := dockerclient.GetDockerClient()
+	require.NoError(t, err)
+
+	defer func() { _ = dockerClient.Close() }()
+
+	installer := cloudproviderkindinstaller.NewCloudProviderKINDInstaller(dockerClient)
 
 	ctx := context.Background()
-	err := installer.Install(ctx)
+
+	// Install - this creates and starts the container
+	err = installer.Install(ctx)
+	require.NoError(t, err)
 
 	// Clean up
-	defer func() {
-		_ = installer.Uninstall(ctx)
-	}()
-
-	require.NoError(t, err)
-}
-
-func TestCloudProviderKINDInstallerInstallMultipleCalls(t *testing.T) {
-	t.Parallel()
-
-	// Skip in CI
-	if os.Getenv("CI") == "true" {
-		t.Skip("Skipping integration test in CI")
-	}
-
-	installer1 := cloudproviderkindinstaller.NewCloudProviderKINDInstaller()
-	installer2 := cloudproviderkindinstaller.NewCloudProviderKINDInstaller()
-
-	ctx := context.Background()
-
-	// First install
-	err := installer1.Install(ctx)
-	require.NoError(t, err)
-
-	// Second install (should increment reference count)
-	err = installer2.Install(ctx)
-	require.NoError(t, err)
-
-	// Uninstall first (should not stop controller)
-	err = installer1.Uninstall(ctx)
-	require.NoError(t, err)
-
-	// Uninstall second (should stop controller)
-	err = installer2.Uninstall(ctx)
+	err = installer.Uninstall(ctx)
 	require.NoError(t, err)
 }
 
 func TestCloudProviderKINDInstallerUninstallNoInstall(t *testing.T) {
 	t.Parallel()
 
-	installer := cloudproviderkindinstaller.NewCloudProviderKINDInstaller()
+	// Skip in CI - requires Docker
+	if os.Getenv("CI") == ciEnvValue {
+		t.Skip("Skipping test that requires Docker in CI")
+	}
+
+	dockerClient, err := dockerclient.GetDockerClient()
+	require.NoError(t, err)
+
+	defer func() { _ = dockerClient.Close() }()
+
+	installer := cloudproviderkindinstaller.NewCloudProviderKINDInstaller(dockerClient)
 
 	ctx := context.Background()
-	err := installer.Uninstall(ctx)
+	err = installer.Uninstall(ctx)
 
+	// Uninstall when nothing is installed should succeed (no-op)
 	require.NoError(t, err)
 }
 
-func TestLockFileOperations(t *testing.T) {
+func TestCloudProviderKindImage(t *testing.T) {
 	t.Parallel()
 
-	// Get the lock file path
-	tmpDir := os.TempDir()
-	lockPath := filepath.Join(tmpDir, "cloud-provider-kind.lock")
+	image := cloudproviderkindinstaller.CloudProviderKindImage()
 
-	// Clean up any existing lock file
-	_ = os.Remove(lockPath)
-
-	// Verify lock file doesn't exist initially
-	_, err := os.Stat(lockPath)
-	assert.True(t, os.IsNotExist(err))
-
-	// Note: We can't directly test the lock file functions since they're not exported
-	// They are tested indirectly through Install/Uninstall tests
+	// Verify the image is parsed from the Dockerfile
+	assert.NotEmpty(t, image)
+	assert.Contains(t, image, "registry.k8s.io/cloud-provider-kind/cloud-controller-manager")
 }

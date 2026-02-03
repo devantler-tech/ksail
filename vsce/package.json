@@ -4,6 +4,7 @@
   "description": "KSail - Kubernetes SDK for Local GitOps Development",
   "version": "0.1.0",
   "publisher": "devantler",
+  "icon": "resources/icon.png",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",

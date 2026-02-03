@@ -228,3 +228,104 @@ func TestValidateClusterName(t *testing.T) {
 		})
 	}
 }
+
+//nolint:funlen // Table-driven test with comprehensive test cases.
+func TestValidateMirrorRegistriesForProvider(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name             string
+		provider         v1alpha1.Provider
+		mirrorRegistries []string
+		wantError        bool
+		errorContains    string
+	}{
+		{
+			name:             "Docker: empty registries -> valid",
+			provider:         v1alpha1.ProviderDocker,
+			mirrorRegistries: []string{},
+			wantError:        false,
+		},
+		{
+			name:             "Docker: local mirror -> valid",
+			provider:         v1alpha1.ProviderDocker,
+			mirrorRegistries: []string{"docker.io=http://localhost:5000"},
+			wantError:        false,
+		},
+		{
+			name:             "Docker: external mirror -> valid",
+			provider:         v1alpha1.ProviderDocker,
+			mirrorRegistries: []string{"docker.io=https://mirror.gcr.io"},
+			wantError:        false,
+		},
+		{
+			name:             "Hetzner: empty registries -> valid",
+			provider:         v1alpha1.ProviderHetzner,
+			mirrorRegistries: []string{},
+			wantError:        false,
+		},
+		{
+			name:             "Hetzner: external mirror -> valid",
+			provider:         v1alpha1.ProviderHetzner,
+			mirrorRegistries: []string{"docker.io=https://mirror.gcr.io"},
+			wantError:        false,
+		},
+		{
+			name:     "Hetzner: multiple external mirrors -> valid",
+			provider: v1alpha1.ProviderHetzner,
+			mirrorRegistries: []string{
+				"docker.io=https://mirror.gcr.io",
+				"ghcr.io=https://ghcr.io",
+			},
+			wantError: false,
+		},
+		{
+			name:             "Hetzner: localhost mirror -> error",
+			provider:         v1alpha1.ProviderHetzner,
+			mirrorRegistries: []string{"docker.io=http://localhost:5000"},
+			wantError:        true,
+			errorContains:    "local mirror registry not supported",
+		},
+		{
+			name:             "Hetzner: 127.0.0.1 mirror -> error",
+			provider:         v1alpha1.ProviderHetzner,
+			mirrorRegistries: []string{"docker.io=http://127.0.0.1:5000"},
+			wantError:        true,
+			errorContains:    "local mirror registry not supported",
+		},
+		{
+			name:             "Hetzner: host.docker.internal mirror -> error",
+			provider:         v1alpha1.ProviderHetzner,
+			mirrorRegistries: []string{"docker.io=http://host.docker.internal:5000"},
+			wantError:        true,
+			errorContains:    "local mirror registry not supported",
+		},
+		{
+			name:     "Hetzner: mixed local and external -> error on local",
+			provider: v1alpha1.ProviderHetzner,
+			mirrorRegistries: []string{
+				"docker.io=https://mirror.gcr.io",
+				"ghcr.io=http://localhost:5000",
+			},
+			wantError:     true,
+			errorContains: "local mirror registry not supported",
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := v1alpha1.ValidateMirrorRegistriesForProvider(
+				testCase.provider,
+				testCase.mirrorRegistries,
+			)
+			if testCase.wantError {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), testCase.errorContains)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}

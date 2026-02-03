@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
@@ -43,6 +44,28 @@ type DiscoveredRegistries struct {
 	Registries []dockerclient.RegistryInfo
 }
 
+// filterRegistriesByClusterName filters registries to only include those belonging to a specific cluster.
+// Registry names follow the pattern "{clusterName}-{host}" (e.g., "my-cluster-ghcr.io").
+func filterRegistriesByClusterName(
+	registries []dockerclient.RegistryInfo,
+	clusterName string,
+) []dockerclient.RegistryInfo {
+	if clusterName == "" {
+		return registries
+	}
+
+	prefix := clusterName + "-"
+	filtered := make([]dockerclient.RegistryInfo, 0, len(registries))
+
+	for _, reg := range registries {
+		if strings.HasPrefix(reg.Name, prefix) {
+			filtered = append(filtered, reg)
+		}
+	}
+
+	return filtered
+}
+
 // DiscoverRegistries finds all registries connected to the cluster network.
 // This should be called BEFORE cluster deletion for distributions that destroy
 // the network during deletion (e.g., Talos).
@@ -62,6 +85,7 @@ func DiscoverRegistries(
 
 // DiscoverRegistriesByNetwork finds all registries connected to the cluster network.
 // This is a simplified version that doesn't require a cluster config object.
+// Registries are filtered to only include those belonging to the specified cluster.
 func DiscoverRegistriesByNetwork(
 	cmd *cobra.Command,
 	distribution v1alpha1.Distribution,
@@ -83,7 +107,8 @@ func DiscoverRegistriesByNetwork(
 			return fmt.Errorf("list registries on network: %w", listErr)
 		}
 
-		registries = discovered
+		// Filter to only include registries belonging to this cluster
+		registries = filterRegistriesByClusterName(discovered, clusterName)
 
 		return nil
 	})
@@ -149,9 +174,11 @@ func CleanupPreDiscoveredRegistries(
 
 // deleteRegistriesOnNetworkCore performs the core deletion of registries on a network.
 // Returns the list of deleted registry names and true if registries were found.
+// Only registries belonging to the specified cluster (by name prefix) are deleted.
 func deleteRegistriesOnNetworkCore(
 	cmd *cobra.Command,
 	networkName string,
+	clusterName string,
 	deleteVolumes bool,
 	cleanupDeps CleanupDependencies,
 ) ([]string, bool, error) {
@@ -166,10 +193,13 @@ func deleteRegistriesOnNetworkCore(
 		}
 
 		// Discover registries connected to the network
-		registries, listErr := registryMgr.ListRegistriesOnNetwork(cmd.Context(), networkName)
+		allRegistries, listErr := registryMgr.ListRegistriesOnNetwork(cmd.Context(), networkName)
 		if listErr != nil {
 			return fmt.Errorf("failed to list registries on network: %w", listErr)
 		}
+
+		// Filter to only include registries belonging to this cluster
+		registries := filterRegistriesByClusterName(allRegistries, clusterName)
 
 		if len(registries) == 0 {
 			return nil
@@ -182,10 +212,10 @@ func deleteRegistriesOnNetworkCore(
 			registryNames = append(registryNames, reg.Name)
 		}
 
-		// Delete all registries on the network
-		_, deleteErr := registryMgr.DeleteRegistriesOnNetwork(
+		// Delete filtered registries by their info
+		_, deleteErr := registryMgr.DeleteRegistriesByInfo(
 			cmd.Context(),
-			networkName,
+			registries,
 			deleteVolumes,
 		)
 		if deleteErr != nil {
@@ -200,6 +230,7 @@ func deleteRegistriesOnNetworkCore(
 
 // CleanupRegistriesByNetwork discovers and cleans up all registry containers by network.
 // This is the exported version for use by the simplified delete command.
+// Only registries belonging to the specified cluster (by name prefix) are deleted.
 func CleanupRegistriesByNetwork(
 	cmd *cobra.Command,
 	tmr timer.Timer,
@@ -213,6 +244,7 @@ func CleanupRegistriesByNetwork(
 	registryNames, found, err := deleteRegistriesOnNetworkCore(
 		cmd,
 		networkName,
+		clusterName,
 		deleteVolumes,
 		cleanupDeps,
 	)
@@ -331,6 +363,7 @@ func CleanupAll(
 			cmd,
 			deps,
 			networkName,
+			clusterName,
 			deleteVolumes,
 			cleanupDeps,
 		)
@@ -362,14 +395,9 @@ func cleanupPreDiscoveredRegistries(
 		return err
 	}
 
-	displayRegistryCleanupOutput(cmd, deps, deletedNames)
+	displayRegistryCleanupOutputWithTimer(cmd, deps.Timer, deletedNames)
 
 	return nil
-}
-
-// displayRegistryCleanupOutput shows the cleanup stage output for deleted registries.
-func displayRegistryCleanupOutput(cmd *cobra.Command, deps lifecycle.Deps, deletedNames []string) {
-	displayRegistryCleanupOutputWithTimer(cmd, deps.Timer, deletedNames)
 }
 
 // getNetworkNameForDistribution returns the Docker network name for a given distribution.
@@ -425,6 +453,7 @@ func CleanupMirrorRegistries(
 			clusterName,
 			deleteVolumes,
 			cleanupDeps,
+			clusterCfg.Spec.Cluster.Provider,
 		)
 	default:
 		return nil
@@ -434,11 +463,14 @@ func CleanupMirrorRegistries(
 // CollectMirrorSpecs collects and merges mirror specs from flags and existing config.
 // Returns the merged specs, registry names, and any error.
 func CollectMirrorSpecs(
+	cmd *cobra.Command,
 	cfgManager *ksailconfigmanager.ConfigManager,
 	mirrorsDir string,
+	provider v1alpha1.Provider,
 ) ([]registry.MirrorSpec, []string, error) {
-	// Get mirror registry specs from command line flag
-	flagSpecs := registry.ParseMirrorSpecs(cfgManager.Viper.GetStringSlice("mirror-registry"))
+	// Get mirror registry specs with defaults applied
+	mirrors := GetMirrorRegistriesWithDefaults(cmd, cfgManager, provider)
+	flagSpecs := registry.ParseMirrorSpecs(mirrors)
 
 	// Try to read existing hosts.toml files.
 	existingSpecs, err := registry.ReadExistingHostsToml(mirrorsDir)
@@ -449,7 +481,9 @@ func CollectMirrorSpecs(
 	// Merge specs: flag specs override existing specs
 	mirrorSpecs := registry.MergeSpecs(existingSpecs, flagSpecs)
 
-	return buildMirrorSpecsResult(mirrorSpecs)
+	specs, names := buildMirrorSpecsResult(mirrorSpecs)
+
+	return specs, names, nil
 }
 
 func cleanupKindMirrorRegistries(
@@ -462,8 +496,10 @@ func cleanupKindMirrorRegistries(
 	cleanupDeps CleanupDependencies,
 ) error {
 	mirrorSpecs, registryNames, err := CollectMirrorSpecs(
+		cmd,
 		cfgManager,
 		GetKindMirrorsDir(clusterCfg),
+		clusterCfg.Spec.Cluster.Provider,
 	)
 	if err != nil {
 		return err
@@ -479,6 +515,7 @@ func cleanupKindMirrorRegistries(
 			cmd,
 			deps,
 			networkName,
+			clusterName,
 			deleteVolumes,
 			cleanupDeps,
 		)
@@ -520,6 +557,7 @@ func cleanupK3dMirrorRegistries(
 			cmd,
 			deps,
 			networkName,
+			clusterName,
 			deleteVolumes,
 			cleanupDeps,
 		)
@@ -534,6 +572,7 @@ func cleanupK3dMirrorRegistries(
 			cmd,
 			deps,
 			networkName,
+			clusterName,
 			deleteVolumes,
 			cleanupDeps,
 		)
@@ -653,9 +692,10 @@ func cleanupTalosMirrorRegistries(
 	clusterName string,
 	deleteVolumes bool,
 	cleanupDeps CleanupDependencies,
+	provider v1alpha1.Provider,
 ) error {
 	// Collect mirror specs from Talos config (not kind/mirrors directory)
-	mirrorSpecs, registryNames := CollectTalosMirrorSpecs(cfgManager)
+	mirrorSpecs, registryNames := CollectTalosMirrorSpecs(cmd, cfgManager, provider)
 
 	// Talos uses the cluster name as the network name
 	networkName := clusterName
@@ -667,6 +707,7 @@ func cleanupTalosMirrorRegistries(
 			cmd,
 			deps,
 			networkName,
+			clusterName,
 			deleteVolumes,
 			cleanupDeps,
 		)
@@ -712,16 +753,19 @@ func cleanupTalosMirrorRegistries(
 // cleanupRegistriesByNetwork discovers and cleans up all registry containers
 // (both local and mirror registries) by inspecting the Docker network.
 // This unified approach works for both scaffolded and non-scaffolded clusters.
+// Only registries belonging to the specified cluster (by name prefix) are deleted.
 func cleanupRegistriesByNetwork(
 	cmd *cobra.Command,
 	deps lifecycle.Deps,
 	networkName string,
+	clusterName string,
 	deleteVolumes bool,
 	cleanupDeps CleanupDependencies,
 ) error {
 	registryNames, _, err := deleteRegistriesOnNetworkCore(
 		cmd,
 		networkName,
+		clusterName,
 		deleteVolumes,
 		cleanupDeps,
 	)
@@ -729,7 +773,7 @@ func cleanupRegistriesByNetwork(
 		return err
 	}
 
-	displayRegistryCleanupOutput(cmd, deps, registryNames)
+	displayRegistryCleanupOutputWithTimer(cmd, deps.Timer, registryNames)
 
 	return nil
 }
@@ -738,10 +782,13 @@ func cleanupRegistriesByNetwork(
 // This extracts mirror hosts from the loaded Talos config bundle which includes any
 // mirror-registries.yaml patches that were applied during cluster creation.
 func CollectTalosMirrorSpecs(
+	cmd *cobra.Command,
 	cfgManager *ksailconfigmanager.ConfigManager,
+	provider v1alpha1.Provider,
 ) ([]registry.MirrorSpec, []string) {
-	// Get mirror registry specs from command line flag
-	flagSpecs := registry.ParseMirrorSpecs(cfgManager.Viper.GetStringSlice("mirror-registry"))
+	// Get mirror registry specs with defaults applied
+	mirrors := GetMirrorRegistriesWithDefaults(cmd, cfgManager, provider)
+	flagSpecs := registry.ParseMirrorSpecs(mirrors)
 
 	// Extract mirror hosts from the loaded Talos config
 	var talosSpecs []registry.MirrorSpec
@@ -759,9 +806,7 @@ func CollectTalosMirrorSpecs(
 	// Merge specs: flag specs override Talos config specs for the same host
 	mirrorSpecs := registry.MergeSpecs(talosSpecs, flagSpecs)
 
-	specs, names, _ := buildMirrorSpecsResult(mirrorSpecs)
-
-	return specs, names
+	return buildMirrorSpecsResult(mirrorSpecs)
 }
 
 // DisconnectMirrorRegistries disconnects mirror registries from the Talos network.
@@ -771,9 +816,10 @@ func DisconnectMirrorRegistries(
 	cfgManager *ksailconfigmanager.ConfigManager,
 	clusterName string,
 	cleanupDeps CleanupDependencies,
+	provider v1alpha1.Provider,
 ) error {
 	// Collect mirror specs from Talos config
-	mirrorSpecs, registryNames := CollectTalosMirrorSpecs(cfgManager)
+	mirrorSpecs, registryNames := CollectTalosMirrorSpecs(cmd, cfgManager, provider)
 
 	// Talos uses the cluster name as the network name
 	networkName := clusterName
@@ -840,8 +886,9 @@ func DisconnectMirrorRegistriesWithWarning(
 	cfgManager *ksailconfigmanager.ConfigManager,
 	clusterName string,
 	cleanupDeps CleanupDependencies,
+	provider v1alpha1.Provider,
 ) {
-	err := DisconnectMirrorRegistries(cmd, cfgManager, clusterName, cleanupDeps)
+	err := DisconnectMirrorRegistries(cmd, cfgManager, clusterName, cleanupDeps, provider)
 	if err != nil {
 		notify.WriteMessage(notify.Message{
 			Type:    notify.ErrorType,
@@ -880,12 +927,12 @@ func DisconnectLocalRegistryWithWarning(
 }
 
 // buildMirrorSpecsResult builds the registry names from mirror specs.
-// This is a shared helper used by CollectMirrorSpecs.
+// This is a shared helper used by CollectMirrorSpecs and CollectTalosMirrorSpecs.
 func buildMirrorSpecsResult(
 	mirrorSpecs []registry.MirrorSpec,
-) ([]registry.MirrorSpec, []string, error) {
+) ([]registry.MirrorSpec, []string) {
 	if len(mirrorSpecs) == 0 {
-		return nil, nil, nil
+		return nil, nil
 	}
 
 	// Build registry info to get container names
@@ -896,5 +943,5 @@ func buildMirrorSpecsResult(
 		registryNames = append(registryNames, entry.ContainerName)
 	}
 
-	return mirrorSpecs, registryNames, nil
+	return mirrorSpecs, registryNames
 }

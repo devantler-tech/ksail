@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 
-	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
 	"github.com/docker/docker/client"
@@ -23,9 +22,9 @@ func WaitForRegistriesReady(
 		return nil
 	}
 
-	registryMgr, err := dockerclient.NewRegistryManager(dockerAPIClient)
+	backend, err := registry.GetBackendFactory()(dockerAPIClient)
 	if err != nil {
-		return fmt.Errorf("failed to create registry manager: %w", err)
+		return fmt.Errorf("failed to create registry backend: %w", err)
 	}
 
 	// Build registry name map for health check
@@ -40,7 +39,7 @@ func WaitForRegistriesReady(
 		Writer:  writer,
 	})
 
-	err = registryMgr.WaitForRegistriesReady(ctx, registryIPs)
+	err = backend.WaitForRegistriesReady(ctx, registryIPs)
 	if err != nil {
 		return fmt.Errorf("failed waiting for registries to become ready: %w", err)
 	}

@@ -51,10 +51,13 @@ By default, lists clusters from all distributions across all providers.
 Use --provider to filter results to a specific provider.
 
 Output Format:
-  PROVIDER=<provider> NAME=<cluster_name>
+  <provider>: <cluster_name>[, <cluster_name>...]
 
-The PROVIDER value (Docker or Hetzner) and NAME value (cluster name) from
-the output can be used directly with other cluster commands:
+Each line groups clusters by provider. For example:
+  docker: dev-cluster, test-cluster
+
+The provider name (docker or hetzner) and each cluster name from the
+output can be used directly with other cluster commands:
   ksail cluster delete --name <cluster_name> --provider <provider>
   ksail cluster stop --name <cluster_name> --provider <provider>
 
@@ -289,7 +292,7 @@ func createEmptyDistributionConfig(
 // displayListResults outputs the cluster list grouped by provider.
 // Output is formatted for clarity, especially for AI assistants that need
 // to parse the cluster names for subsequent commands.
-// Format: "PROVIDER: NAME=cluster1, NAME=cluster2" to clearly identify cluster names.
+// Format: "<provider>: cluster1, cluster2" to clearly identify cluster names.
 // If no clusters exist, displays "No clusters found.".
 func displayListResults(
 	writer io.Writer,
@@ -316,15 +319,13 @@ func displayListResults(
 			continue
 		}
 
-		// Format each cluster with explicit NAME= prefix for clarity
+		// Format each cluster with explicit prefix for clarity
 		namedClusters := make([]string, len(clusters))
-		for i, name := range clusters {
-			namedClusters[i] = "NAME=" + name
-		}
+		copy(namedClusters, clusters)
 
 		_, _ = fmt.Fprintf(
 			writer,
-			"PROVIDER=%s %s\n",
+			"%s: %s\n",
 			strings.ToLower(string(prov)),
 			strings.Join(namedClusters, ", "),
 		)

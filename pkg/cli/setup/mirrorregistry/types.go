@@ -13,6 +13,19 @@ import (
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
 
+// BackendFactory is an alias for registry.BackendFactory for convenience.
+type BackendFactory = registry.BackendFactory
+
+// GetBackendFactory returns the current backend factory from the registry package.
+func GetBackendFactory() BackendFactory {
+	return registry.GetBackendFactory()
+}
+
+// SetBackendFactoryForTests is an alias for registry.SetBackendFactoryForTests.
+func SetBackendFactoryForTests(factory BackendFactory) func() {
+	return registry.SetBackendFactoryForTests(factory)
+}
+
 // Stage message constants for registry operations.
 const (
 	// RegistryStageTitle is the title for the registry stage that creates and configures registries.

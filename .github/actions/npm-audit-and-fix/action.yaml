@@ -1,0 +1,130 @@
+name: NPM Audit and Fix
+description: Run npm audit, attempt automatic fixes, and commit changes using a GitHub App token.
+author: Devantler Tech Platform Team
+
+inputs:
+  working-directory:
+    description: Directory containing package.json (e.g., 'docs' or 'vsce').
+    required: true
+  app-id:
+    description: GitHub App ID for generating commit token.
+    required: true
+  app-private-key:
+    description: GitHub App private key for generating commit token.
+    required: true
+  commit-message:
+    description: Commit message for fixed vulnerabilities.
+    required: false
+    default: "chore: fix npm audit vulnerabilities"
+  commit-user-name:
+    description: Git user name for commits.
+    required: false
+    default: "security-bot"
+  audit-level:
+    description: Minimum vulnerability level to report (low, moderate, high, critical).
+    required: false
+    default: "moderate"
+
+outputs:
+  audit-passed:
+    description: Whether the audit passed without vulnerabilities ('true' or 'false').
+    value: ${{ steps.final-result.outputs.passed }}
+  changes-committed:
+    description: Whether changes were committed ('true' or 'false').
+    value: ${{ steps.fix.outputs.changes_made }}
+
+runs:
+  using: composite
+  steps:
+    - name: 🔑 Generate GitHub App Token
+      uses: tibdex/github-app-token@3beb63f4bd073e61482598c45c71c1019b59b73a # v2.1.0
+      id: generate-token
+      with:
+        app_id: ${{ inputs.app-id }}
+        private_key: ${{ inputs.app-private-key }}
+
+    - name: 📄 Checkout
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      with:
+        persist-credentials: true
+        token: ${{ steps.generate-token.outputs.token }}
+
+    - name: ⚙️ Setup Node.js
+      uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
+      with:
+        node-version: "22"
+        cache: "npm"
+        cache-dependency-path: ${{ inputs.working-directory }}/package-lock.json
+
+    - name: 📦 Install dependencies
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: npm ci
+
+    - name: 🔍 Run npm audit
+      id: audit
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        AUDIT_LEVEL: ${{ inputs.audit-level }}
+      run: npm audit --audit-level="$AUDIT_LEVEL"
+      continue-on-error: true
+
+    - name: 🔧 Attempt automatic fix
+      id: fix
+      if: steps.audit.outcome == 'failure' && (github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main'))
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        npm audit fix --force
+        if [ -n "$(git status --porcelain)" ]; then
+          echo "changes_made=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "changes_made=false" >> "$GITHUB_OUTPUT"
+        fi
+      continue-on-error: true
+
+    - name: 📤 Commit and push fixes
+      if: steps.fix.outputs.changes_made == 'true' && github.event_name != 'merge_group'
+      uses: stefanzweifel/git-auto-commit-action@04702edda442b2e678b25b537cec683a1493fcb9 # v7.1.0
+      with:
+        commit_message: ${{ inputs.commit-message }}
+        commit_user_name: ${{ inputs.commit-user-name }}
+        commit_user_email: ${{ inputs.commit-user-name }}@users.noreply.github.com
+        file_pattern: "${{ inputs.working-directory }}/package*.json"
+
+    - name: 🔍 Re-audit after fix
+      id: reaudit
+      if: steps.fix.outputs.changes_made == 'true'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        AUDIT_LEVEL: ${{ inputs.audit-level }}
+      run: npm audit --audit-level="$AUDIT_LEVEL"
+      continue-on-error: true
+
+    - name: 📊 Determine final result
+      id: final-result
+      shell: bash
+      env:
+        AUDIT_OUTCOME: ${{ steps.audit.outcome }}
+        FIX_CHANGES_MADE: ${{ steps.fix.outputs.changes_made }}
+        REAUDIT_OUTCOME: ${{ steps.reaudit.outcome }}
+      run: |
+        if [ "$AUDIT_OUTCOME" = "success" ]; then
+          echo "passed=true" >> "$GITHUB_OUTPUT"
+        elif [ "$FIX_CHANGES_MADE" = "true" ] && [ "$REAUDIT_OUTCOME" = "success" ]; then
+          echo "passed=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "passed=false" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: ❌ Fail if vulnerabilities remain
+      if: |
+        github.event_name == 'push' && github.ref == 'refs/heads/main'
+        && steps.final-result.outputs.passed == 'false'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        AUDIT_LEVEL: ${{ inputs.audit-level }}
+      run: npm audit --audit-level="$AUDIT_LEVEL"

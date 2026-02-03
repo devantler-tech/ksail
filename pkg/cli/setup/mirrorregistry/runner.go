@@ -71,10 +71,9 @@ func RunStage(
 	role Role,
 	dockerInvoker DockerClientInvoker,
 ) error {
-	// Get mirror specs from --mirror-registry flag
-	flagSpecs := registry.ParseMirrorSpecs(
-		cfgManager.Viper.GetStringSlice("mirror-registry"),
-	)
+	// Get mirror specs with defaults applied
+	mirrors := GetMirrorRegistriesWithDefaults(cmd, cfgManager, clusterCfg.Spec.Cluster.Provider)
+	flagSpecs := registry.ParseMirrorSpecs(mirrors)
 
 	// Try to read existing hosts.toml files from the configured mirrors directory.
 	// ReadExistingHostsToml returns (nil, nil) for missing directories, and an error for actual I/O issues.
@@ -127,7 +126,6 @@ func RunStage(
 
 	handlers := newRegistryHandlers(
 		clusterCfg,
-		cfgManager,
 		kindConfig,
 		k3dConfig,
 		talosConfig,
@@ -155,7 +153,6 @@ func RunStage(
 
 func newRegistryHandlers(
 	clusterCfg *v1alpha1.Cluster,
-	cfgManager *ksailconfigmanager.ConfigManager,
 	kindConfig *v1alpha4.Cluster,
 	k3dConfig *v1alpha5.SimpleConfig,
 	talosConfig *talosconfigmanager.Configs,
@@ -167,7 +164,7 @@ func newRegistryHandlers(
 ) map[v1alpha1.Distribution]Handler {
 	return map[v1alpha1.Distribution]Handler{
 		v1alpha1.DistributionVanilla: {
-			Prepare: func() bool { return PrepareKindConfigWithMirrors(clusterCfg, cfgManager, kindConfig) },
+			Prepare: func() bool { return PrepareKindConfigWithMirrors(clusterCfg, kindConfig, mirrorSpecs) },
 			Action:  kindAction,
 		},
 		v1alpha1.DistributionK3s: {
