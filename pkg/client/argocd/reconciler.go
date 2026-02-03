@@ -12,6 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/util/retry"
 )
 
 // Reconciler errors.
@@ -80,33 +81,37 @@ func (r *Reconciler) Reconcile(ctx context.Context, opts ReconcileOptions) error
 }
 
 // TriggerRefresh triggers an ArgoCD application refresh.
+// Uses retry logic to handle optimistic concurrency conflicts when the Application
+// is modified by ArgoCD controllers between GET and UPDATE operations.
 func (r *Reconciler) TriggerRefresh(ctx context.Context, hardRefresh bool) error {
 	appClient := r.applicationClient()
 
-	app, err := appClient.Get(ctx, rootApplicationName, metav1.GetOptions{})
-	if err != nil {
-		return fmt.Errorf("get argocd application: %w", err)
-	}
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		app, err := appClient.Get(ctx, rootApplicationName, metav1.GetOptions{})
+		if err != nil {
+			return fmt.Errorf("get argocd application: %w", err)
+		}
 
-	annotations := app.GetAnnotations()
-	if annotations == nil {
-		annotations = make(map[string]string)
-	}
+		annotations := app.GetAnnotations()
+		if annotations == nil {
+			annotations = make(map[string]string)
+		}
 
-	if hardRefresh {
-		annotations[argoCDRefreshAnnotationKey] = argoCDHardRefreshAnnotation
-	} else {
-		annotations[argoCDRefreshAnnotationKey] = "normal"
-	}
+		if hardRefresh {
+			annotations[argoCDRefreshAnnotationKey] = argoCDHardRefreshAnnotation
+		} else {
+			annotations[argoCDRefreshAnnotationKey] = "normal"
+		}
 
-	app.SetAnnotations(annotations)
+		app.SetAnnotations(annotations)
 
-	_, err = appClient.Update(ctx, app, metav1.UpdateOptions{})
-	if err != nil {
-		return fmt.Errorf("trigger argocd refresh: %w", err)
-	}
+		_, err = appClient.Update(ctx, app, metav1.UpdateOptions{})
+		if err != nil {
+			return fmt.Errorf("trigger argocd refresh: %w", err)
+		}
 
-	return nil
+		return nil
+	})
 }
 
 // WaitForApplicationReady waits for the ArgoCD application to be synced and healthy.
