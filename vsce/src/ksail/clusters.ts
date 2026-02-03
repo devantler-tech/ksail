@@ -102,7 +102,7 @@ function addCommonClusterArgs(args: string[], options: CommonClusterOptions): vo
 /**
  * List all clusters
  *
- * The CLI outputs text format: "docker local, test"
+ * The CLI outputs text format: "docker: local, test"
  * or "No clusters found." when empty.
  */
 export async function listClusters(

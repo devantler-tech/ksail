@@ -21,14 +21,18 @@ var DefaultMirrors = []string{
 
 // GetMirrorRegistriesWithDefaults returns mirror registries with default values applied.
 // This function manually handles mirror-registry flag merging because it's not bound to Viper.
-// Behavior:
+//
+// Behavior (REPLACE semantics for flags):
 //   - If --mirror-registry flag is explicitly set:
 //   - If set to empty string (""): DISABLE (return empty array)
-//   - With values: REPLACE defaults (flag values override both defaults and config)
+//   - With values: REPLACE (flag values completely override defaults AND config values)
 //   - If flag not set:
-//   - With config values: use config values
+//   - With config values: use config values from ksail.yaml
 //   - Without config values: use defaults (docker.io and ghcr.io) for Docker provider,
 //     or empty for cloud providers (Hetzner) since they cannot use local Docker mirrors.
+//
+// Note: This is intentionally REPLACE semantics, not EXTEND. When a user provides
+// --mirror-registry flags, they explicitly specify the complete list of mirrors they want.
 func GetMirrorRegistriesWithDefaults(
 	cmd *cobra.Command,
 	cfgManager *ksailconfigmanager.ConfigManager,
