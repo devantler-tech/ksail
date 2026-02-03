@@ -45,32 +45,32 @@ type LocalRegistry struct {
 type OptionsHetzner struct {
 	// ControlPlaneServerType is the Hetzner server type for control-plane nodes.
 	// Examples: "cx23" (x86), "cax11" (ARM), "cpx21" (AMD). Defaults to "cx23".
-	ControlPlaneServerType string `json:"controlPlaneServerType,omitzero" default:"cx23"`
+	ControlPlaneServerType string `json:"controlPlaneServerType,omitzero"       default:"cx23"`
 	// WorkerServerType is the Hetzner server type for worker nodes.
 	// Examples: "cx23" (x86), "cax11" (ARM), "cpx21" (AMD). Defaults to "cx23".
-	WorkerServerType string `json:"workerServerType,omitzero"       default:"cx23"`
+	WorkerServerType string `json:"workerServerType,omitzero"             default:"cx23"`
 	// Location is the Hetzner datacenter location.
 	// Examples: "fsn1" (Falkenstein), "nbg1" (Nuremberg), "hel1" (Helsinki).
 	// Defaults to "fsn1".
-	Location string `json:"location,omitzero"               default:"fsn1"`
+	Location string `json:"location,omitzero"                     default:"fsn1"`
 	// NetworkName is the name of the private network to create or use.
 	// If empty, a network named "<cluster-name>-network" will be created.
 	NetworkName string `json:"networkName,omitzero"`
 	// NetworkCIDR is the CIDR block for the private network.
 	// Defaults to "10.0.0.0/16".
-	NetworkCIDR string `json:"networkCidr,omitzero"            default:"10.0.0.0/16"`
+	NetworkCIDR string `json:"networkCidr,omitzero"                  default:"10.0.0.0/16"`
 	// SSHKeyName is the name of the SSH key to use for server access.
 	// The key must already exist in the Hetzner Cloud project.
 	// If empty, no SSH key is attached (only Talos API access).
 	SSHKeyName string `json:"sshKeyName,omitzero"`
 	// TokenEnvVar is the environment variable containing the Hetzner API token.
 	// Defaults to "HCLOUD_TOKEN".
-	TokenEnvVar string `json:"tokenEnvVar,omitzero"            default:"HCLOUD_TOKEN"`
+	TokenEnvVar string `json:"tokenEnvVar,omitzero"                  default:"HCLOUD_TOKEN"`
 	// PlacementGroupStrategy controls whether and how placement groups are used.
 	// "Spread" (default) distributes servers across different physical hosts for HA.
 	// "None" disables placement groups, useful when Hetzner resources are constrained.
 	// Note: Spread groups are limited to 10 servers per datacenter.
-	PlacementGroupStrategy PlacementGroupStrategy `json:"placementGroupStrategy,omitzero" default:"Spread"`
+	PlacementGroupStrategy PlacementGroupStrategy `json:"placementGroupStrategy,omitzero"       default:"Spread"`
 	// PlacementGroup is the name of the placement group for server distribution.
 	// If empty, a placement group named "<cluster-name>-placement" will be created.
 	// Only used when PlacementGroupStrategy is "Spread".
