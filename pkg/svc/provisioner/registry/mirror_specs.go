@@ -481,11 +481,27 @@ func splitMirrorSpec(spec string) (host, remote, username, password string, ok b
 	//   docker.io=https://registry-1.docker.io
 	//   user:pass@ghcr.io
 	//   ${USER}:${PASS}@ghcr.io=https://ghcr.io
+	//   docker.io=https://user:pass@registry-1.docker.io (@ in remote should not be parsed as credentials)
 	workingSpec := spec
 
-	// Extract credentials if present (user:pass@ prefix)
-	if atIdx := strings.Index(workingSpec, "@"); atIdx > 0 {
-		credPart := workingSpec[:atIdx]
+	// Find the position of '=' to determine where credentials can appear
+	// Credentials (user:pass@) can only appear BEFORE the '=' sign
+	eqIdx := strings.Index(workingSpec, "=")
+
+	// Determine the portion where we look for credentials
+	// If there's an '=', only look in the left-hand side (before '=')
+	// Otherwise, look in the entire spec
+	var credSearchPart string
+	if eqIdx > 0 {
+		credSearchPart = workingSpec[:eqIdx]
+	} else {
+		credSearchPart = workingSpec
+	}
+
+	// Extract credentials if present (user:pass@ prefix) - only from the left-hand side
+	if atIdx := strings.Index(credSearchPart, "@"); atIdx > 0 {
+		credPart := credSearchPart[:atIdx]
+		// Remove credentials from the spec
 		workingSpec = workingSpec[atIdx+1:]
 
 		// Parse user:pass from credPart

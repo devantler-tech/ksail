@@ -400,6 +400,34 @@ func TestParseMirrorSpecs_WithCredentials(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "at_sign_in_remote_url_not_parsed_as_credentials",
+			specs: []string{
+				"docker.io=https://user:pass@registry-1.docker.io",
+			},
+			expected: []registry.MirrorSpec{
+				{
+					Host:     "docker.io",
+					Remote:   "https://user:pass@registry-1.docker.io",
+					Username: "",
+					Password: "",
+				},
+			},
+		},
+		{
+			name: "credentials_with_at_sign_in_remote_url",
+			specs: []string{
+				"myuser:mypass@docker.io=https://user:pass@registry-1.docker.io",
+			},
+			expected: []registry.MirrorSpec{
+				{
+					Host:     "docker.io",
+					Remote:   "https://user:pass@registry-1.docker.io",
+					Username: "myuser",
+					Password: "mypass",
+				},
+			},
+		},
 	}
 
 	for _, tc := range testCases {
