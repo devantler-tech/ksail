@@ -283,10 +283,10 @@ func TestMirrorSpec_ResolveCredentials_Basic(t *testing.T) {
 }
 
 func TestMirrorSpec_ResolveCredentials_EnvVars(t *testing.T) {
-	// Set test environment variables first (before t.Parallel())
+	// Set test environment variables
+	// Note: Cannot use t.Parallel() with t.Setenv() as it would create race conditions
 	t.Setenv("TEST_USER", "github-user")
 	t.Setenv("TEST_TOKEN", "ghp_test1234")
-	t.Parallel()
 
 	testCases := []struct {
 		name             string
