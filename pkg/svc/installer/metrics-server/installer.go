@@ -68,7 +68,12 @@ func (m *MetricsServerInstaller) Images(ctx context.Context) ([]string, error) {
 		return nil, fmt.Errorf("failed to template metrics-server chart: %w", err)
 	}
 
-	return image.ExtractImagesFromManifest(manifest)
+	images, err := image.ExtractImagesFromManifest(manifest)
+	if err != nil {
+		return nil, fmt.Errorf("extract images from metrics-server manifest: %w", err)
+	}
+
+	return images, nil
 }
 
 func (m *MetricsServerInstaller) chartSpec() *helm.ChartSpec {

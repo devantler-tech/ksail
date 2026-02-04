@@ -83,7 +83,12 @@ func (c *CiliumInstaller) Uninstall(ctx context.Context) error {
 
 // Images returns the container images used by Cilium.
 func (c *CiliumInstaller) Images(ctx context.Context) ([]string, error) {
-	return c.ImagesFromChart(ctx, c.chartSpec())
+	images, err := c.ImagesFromChart(ctx, c.chartSpec())
+	if err != nil {
+		return nil, fmt.Errorf("get cilium images: %w", err)
+	}
+
+	return images, nil
 }
 
 func (c *CiliumInstaller) chartSpec() *helm.ChartSpec {

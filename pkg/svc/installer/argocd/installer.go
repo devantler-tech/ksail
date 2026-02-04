@@ -58,7 +58,12 @@ func (a *ArgoCDInstaller) Images(ctx context.Context) ([]string, error) {
 		return nil, fmt.Errorf("failed to template argocd chart: %w", err)
 	}
 
-	return image.ExtractImagesFromManifest(manifest)
+	images, err := image.ExtractImagesFromManifest(manifest)
+	if err != nil {
+		return nil, fmt.Errorf("extract images from argocd manifest: %w", err)
+	}
+
+	return images, nil
 }
 
 func (a *ArgoCDInstaller) chartSpec() *helm.ChartSpec {

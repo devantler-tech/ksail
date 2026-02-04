@@ -107,7 +107,12 @@ func (l *LocalPathStorageInstaller) Images(ctx context.Context) ([]string, error
 		return nil, fmt.Errorf("failed to read manifest: %w", err)
 	}
 
-	return image.ExtractImagesFromManifest(string(body))
+	images, err := image.ExtractImagesFromManifest(string(body))
+	if err != nil {
+		return nil, fmt.Errorf("extract images from local-path-storage manifest: %w", err)
+	}
+
+	return images, nil
 }
 
 // installLocalPathProvisioner installs Rancher local-path-provisioner on Kind clusters.

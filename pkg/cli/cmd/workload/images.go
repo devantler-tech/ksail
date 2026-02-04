@@ -110,8 +110,8 @@ func runImagesCommand(
 	}
 
 	// Create Helm client for dynamic image extraction from Helm charts
-	// No kubeconfig needed - we only template charts, not install them
-	helmClient, err := helm.NewClient("", "")
+	// Uses template-only client that doesn't require kubeconfig
+	helmClient, err := helm.NewTemplateOnlyClient()
 	if err != nil {
 		return fmt.Errorf("create helm client: %w", err)
 	}

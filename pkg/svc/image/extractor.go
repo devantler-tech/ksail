@@ -33,8 +33,8 @@ func ExtractImagesFromManifest(manifest string) ([]string, error) {
 	return images, nil
 }
 
-// ExtractImagesFromReader extracts images from a YAML reader.
-func extractImagesFromReader(r io.Reader, seen map[string]struct{}) ([]string, error) {
+// extractImagesFromReader extracts images from a YAML reader.
+func extractImagesFromReader(reader io.Reader, seen map[string]struct{}) ([]string, error) {
 	var images []string
 
 	// Pattern to match image: fields in YAML
@@ -54,7 +54,7 @@ func extractImagesFromReader(r io.Reader, seen map[string]struct{}) ([]string, e
 	// - Optional trailing comment
 	imagePattern := regexp.MustCompile(`^\s*-?\s*image:\s*["']?([^\s"'#]+)["']?\s*(?:#.*)?$`)
 
-	scanner := bufio.NewScanner(r)
+	scanner := bufio.NewScanner(reader)
 	for scanner.Scan() {
 		line := scanner.Text()
 
@@ -67,7 +67,7 @@ func extractImagesFromReader(r io.Reader, seen map[string]struct{}) ([]string, e
 			}
 
 			// Normalize image reference
-			img = normalizeImageRef(img)
+			img = NormalizeImageRef(img)
 
 			if _, exists := seen[img]; !exists {
 				seen[img] = struct{}{}
@@ -115,11 +115,11 @@ func stripTagFromRef(ref string) string {
 	return before
 }
 
-// normalizeImageRef normalizes an image reference to a fully qualified form.
+// NormalizeImageRef normalizes an image reference to a fully qualified form.
 // - Adds "docker.io/library/" prefix for images without registry and namespace
 // - Adds "docker.io/" prefix for images without registry but with namespace
 // - Adds ":latest" tag if no tag is specified (not for @sha256 digests).
-func normalizeImageRef(ref string) string {
+func NormalizeImageRef(ref string) string {
 	// Parse the image reference to determine if it has a registry
 	// A registry is present if the first component (before first /) contains:
 	// - A dot (.) like docker.io, ghcr.io, registry.k8s.io

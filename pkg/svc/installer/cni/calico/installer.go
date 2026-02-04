@@ -98,7 +98,12 @@ func (c *CalicoInstaller) Uninstall(ctx context.Context) error {
 
 // Images returns the container images used by Calico.
 func (c *CalicoInstaller) Images(ctx context.Context) ([]string, error) {
-	return c.ImagesFromChart(ctx, c.chartSpec())
+	images, err := c.ImagesFromChart(ctx, c.chartSpec())
+	if err != nil {
+		return nil, fmt.Errorf("get calico images: %w", err)
+	}
+
+	return images, nil
 }
 
 func (c *CalicoInstaller) chartSpec() *helm.ChartSpec {

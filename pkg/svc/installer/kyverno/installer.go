@@ -56,7 +56,12 @@ func (k *KyvernoInstaller) Images(ctx context.Context) ([]string, error) {
 		return nil, fmt.Errorf("failed to template kyverno chart: %w", err)
 	}
 
-	return image.ExtractImagesFromManifest(manifest)
+	images, err := image.ExtractImagesFromManifest(manifest)
+	if err != nil {
+		return nil, fmt.Errorf("extract images from kyverno manifest: %w", err)
+	}
+
+	return images, nil
 }
 
 func (k *KyvernoInstaller) chartSpec() *helm.ChartSpec {

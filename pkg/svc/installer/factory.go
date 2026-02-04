@@ -57,85 +57,13 @@ func (f *Factory) CreateInstallersForConfig(cfg *v1alpha1.Cluster) map[string]In
 	installers := make(map[string]Installer)
 	spec := cfg.Spec.Cluster
 
-	// GitOps engine
-	switch spec.GitOpsEngine {
-	case v1alpha1.GitOpsEngineFlux:
-		installers["flux"] = fluxinstaller.NewFluxInstaller(f.helmClient, f.timeout)
-	case v1alpha1.GitOpsEngineArgoCD:
-		installers["argocd"] = argocdinstaller.NewArgoCDInstaller(f.helmClient, f.timeout)
-	case v1alpha1.GitOpsEngineNone:
-		// No GitOps engine configured
-	}
-
-	// CNI
-	switch spec.CNI {
-	case v1alpha1.CNICilium:
-		installers["cilium"] = ciliuminstaller.NewCiliumInstallerWithDistribution(
-			f.helmClient, f.kubeconfig, f.kubecontext, f.timeout, f.distribution,
-		)
-	case v1alpha1.CNICalico:
-		installers["calico"] = calicoinstaller.NewCalicoInstallerWithDistribution(
-			f.helmClient, f.kubeconfig, f.kubecontext,
-			MaxTimeout(f.timeout, CalicoInstallTimeout), f.distribution,
-		)
-	case v1alpha1.CNIDefault:
-		// Default CNI - no explicit installer needed
-	}
-
-	// Policy engine
-	switch spec.PolicyEngine {
-	case v1alpha1.PolicyEngineKyverno:
-		installers["kyverno"] = kyvernoinstaller.NewKyvernoInstaller(
-			f.helmClient, MaxTimeout(f.timeout, KyvernoInstallTimeout),
-		)
-	case v1alpha1.PolicyEngineGatekeeper:
-		installers["gatekeeper"] = gatekeeperinstaller.NewGatekeeperInstaller(
-			f.helmClient,
-			f.timeout,
-		)
-	case v1alpha1.PolicyEngineNone:
-		// No policy engine configured
-	}
-
-	// Cert-manager
-	if spec.CertManager == v1alpha1.CertManagerEnabled {
-		installers["cert-manager"] = certmanagerinstaller.NewCertManagerInstaller(
-			f.helmClient, MaxTimeout(f.timeout, CertManagerInstallTimeout),
-		)
-	}
-
-	// Metrics server
-	if spec.MetricsServer == v1alpha1.MetricsServerEnabled ||
-		(spec.MetricsServer == v1alpha1.MetricsServerDefault &&
-			!spec.Distribution.ProvidesMetricsServerByDefault()) {
-		installers["metrics-server"] = metricsserverinstaller.NewMetricsServerInstaller(
-			f.helmClient, f.kubeconfig, f.kubecontext, f.timeout,
-		)
-	}
-
-	// CSI
-	if f.needsLocalPathStorage(spec) {
-		installers["local-path-storage"] = localpathstorageinstaller.NewLocalPathStorageInstaller(
-			f.kubeconfig, f.kubecontext, f.timeout, f.distribution,
-		)
-	}
-
-	if f.needsHetznerCSI(spec) {
-		installers["hetzner-csi"] = hetznercsiinstaller.NewHetznerCSIInstaller(
-			f.helmClient, f.kubeconfig, f.kubecontext, f.timeout,
-		)
-		installers["kubelet-csr-approver"] = kubeletcsrapproverinstaller.NewKubeletCSRApproverInstaller(
-			f.helmClient,
-			f.timeout,
-		)
-	}
-
-	// LoadBalancer
-	if f.needsCloudProviderKind(spec) && f.dockerClient != nil {
-		installers["cloud-provider-kind"] = cloudproviderkindinstaller.NewCloudProviderKINDInstaller(
-			f.dockerClient,
-		)
-	}
+	f.addGitOpsInstaller(installers, spec)
+	f.addCNIInstaller(installers, spec)
+	f.addPolicyEngineInstaller(installers, spec)
+	f.addCertManagerInstaller(installers, spec)
+	f.addMetricsServerInstaller(installers, spec)
+	f.addCSIInstallers(installers, spec)
+	f.addLoadBalancerInstaller(installers, spec)
 
 	return installers
 }
@@ -176,6 +104,99 @@ func (f *Factory) GetImagesForCluster(
 	installers := f.CreateInstallersForConfig(cfg)
 
 	return GetImagesFromInstallers(ctx, installers)
+}
+
+func (f *Factory) addGitOpsInstaller(installers map[string]Installer, spec v1alpha1.ClusterSpec) {
+	switch spec.GitOpsEngine {
+	case v1alpha1.GitOpsEngineFlux:
+		installers["flux"] = fluxinstaller.NewFluxInstaller(f.helmClient, f.timeout)
+	case v1alpha1.GitOpsEngineArgoCD:
+		installers["argocd"] = argocdinstaller.NewArgoCDInstaller(f.helmClient, f.timeout)
+	case v1alpha1.GitOpsEngineNone:
+		// No GitOps engine configured
+	}
+}
+
+func (f *Factory) addCNIInstaller(installers map[string]Installer, spec v1alpha1.ClusterSpec) {
+	switch spec.CNI {
+	case v1alpha1.CNICilium:
+		installers["cilium"] = ciliuminstaller.NewCiliumInstallerWithDistribution(
+			f.helmClient, f.kubeconfig, f.kubecontext, f.timeout, f.distribution,
+		)
+	case v1alpha1.CNICalico:
+		installers["calico"] = calicoinstaller.NewCalicoInstallerWithDistribution(
+			f.helmClient, f.kubeconfig, f.kubecontext,
+			MaxTimeout(f.timeout, CalicoInstallTimeout), f.distribution,
+		)
+	case v1alpha1.CNIDefault:
+		// Default CNI - no explicit installer needed
+	}
+}
+
+func (f *Factory) addPolicyEngineInstaller(
+	installers map[string]Installer,
+	spec v1alpha1.ClusterSpec,
+) {
+	switch spec.PolicyEngine {
+	case v1alpha1.PolicyEngineKyverno:
+		installers["kyverno"] = kyvernoinstaller.NewKyvernoInstaller(
+			f.helmClient, MaxTimeout(f.timeout, KyvernoInstallTimeout),
+		)
+	case v1alpha1.PolicyEngineGatekeeper:
+		installers["gatekeeper"] = gatekeeperinstaller.NewGatekeeperInstaller(
+			f.helmClient,
+			f.timeout,
+		)
+	case v1alpha1.PolicyEngineNone:
+		// No policy engine configured
+	}
+}
+
+func (f *Factory) addCertManagerInstaller(
+	installers map[string]Installer,
+	spec v1alpha1.ClusterSpec,
+) {
+	if spec.CertManager == v1alpha1.CertManagerEnabled {
+		installers["cert-manager"] = certmanagerinstaller.NewCertManagerInstaller(
+			f.helmClient, MaxTimeout(f.timeout, CertManagerInstallTimeout),
+		)
+	}
+}
+
+func (f *Factory) addMetricsServerInstaller(installers map[string]Installer, spec v1alpha1.ClusterSpec) {
+	if spec.MetricsServer == v1alpha1.MetricsServerEnabled ||
+		(spec.MetricsServer == v1alpha1.MetricsServerDefault &&
+			!spec.Distribution.ProvidesMetricsServerByDefault()) {
+		installers["metrics-server"] = metricsserverinstaller.NewMetricsServerInstaller(
+			f.helmClient, f.kubeconfig, f.kubecontext, f.timeout,
+		)
+	}
+}
+
+func (f *Factory) addCSIInstallers(installers map[string]Installer, spec v1alpha1.ClusterSpec) {
+	if f.needsLocalPathStorage(spec) {
+		installers["local-path-storage"] = localpathstorageinstaller.NewLocalPathStorageInstaller(
+			f.kubeconfig, f.kubecontext, f.timeout, f.distribution,
+		)
+	}
+
+	if f.needsHetznerCSI(spec) {
+		installers["hetzner-csi"] = hetznercsiinstaller.NewHetznerCSIInstaller(
+			f.helmClient, f.kubeconfig, f.kubecontext, f.timeout,
+		)
+		installers["kubelet-csr-approver"] = kubeletcsrapproverinstaller.NewKubeletCSRApproverInstaller(
+			f.helmClient,
+			f.timeout,
+		)
+	}
+}
+
+func (f *Factory) addLoadBalancerInstaller(installers map[string]Installer, spec v1alpha1.ClusterSpec) {
+	if f.needsCloudProviderKind(spec) && f.dockerClient != nil {
+		installers["cloud-provider-kind"] = cloudproviderkindinstaller.NewCloudProviderKINDInstaller(
+			f.dockerClient,
+		)
+	}
 }
 
 // needsLocalPathStorage determines if local-path-storage is needed.

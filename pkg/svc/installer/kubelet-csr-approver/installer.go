@@ -58,7 +58,12 @@ func (k *KubeletCSRApproverInstaller) Images(ctx context.Context) ([]string, err
 		return nil, fmt.Errorf("failed to template kubelet-csr-approver chart: %w", err)
 	}
 
-	return image.ExtractImagesFromManifest(manifest)
+	images, err := image.ExtractImagesFromManifest(manifest)
+	if err != nil {
+		return nil, fmt.Errorf("extract images from kubelet-csr-approver manifest: %w", err)
+	}
+
+	return images, nil
 }
 
 func (k *KubeletCSRApproverInstaller) chartSpec() *helm.ChartSpec {

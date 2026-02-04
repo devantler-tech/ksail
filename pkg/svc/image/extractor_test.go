@@ -1,13 +1,16 @@
-package image
+package image_test
 
 import (
 	"testing"
 
+	"github.com/devantler-tech/ksail/v5/pkg/svc/image"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestExtractImagesFromManifest(t *testing.T) {
+func TestExtractImagesFromManifest_EmptyAndSingle(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		manifest string
@@ -31,6 +34,27 @@ spec:
 `,
 			want: []string{"docker.io/library/nginx:1.25"},
 		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := image.ExtractImagesFromManifest(testCase.manifest)
+			require.NoError(t, err)
+			assert.Equal(t, testCase.want, got)
+		})
+	}
+}
+
+func TestExtractImagesFromManifest_MultipleContainers(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		manifest string
+		want     []string
+	}{
 		{
 			name: "multiple containers",
 			manifest: `apiVersion: v1
@@ -64,6 +88,27 @@ spec:
 				"docker.io/library/nginx:latest",
 			},
 		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := image.ExtractImagesFromManifest(testCase.manifest)
+			require.NoError(t, err)
+			assert.Equal(t, testCase.want, got)
+		})
+	}
+}
+
+func TestExtractImagesFromManifest_FullyQualified(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		manifest string
+		want     []string
+	}{
 		{
 			name: "fully qualified images",
 			manifest: `apiVersion: v1
@@ -94,9 +139,23 @@ spec:
 				"docker.io/library/redis:7.4",
 			},
 		},
-		{
-			name: "deduplication",
-			manifest: `apiVersion: apps/v1
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := image.ExtractImagesFromManifest(testCase.manifest)
+			require.NoError(t, err)
+			assert.Equal(t, testCase.want, got)
+		})
+	}
+}
+
+func TestExtractImagesFromManifest_Deduplication(t *testing.T) {
+	t.Parallel()
+
+	manifest := `apiVersion: apps/v1
 kind: DaemonSet
 spec:
   template:
@@ -106,55 +165,69 @@ spec:
       containers:
         - image: busybox:1.36
         - image: nginx:1.25
-`,
-			want: []string{
-				"docker.io/library/busybox:1.36",
-				"docker.io/library/nginx:1.25",
-			},
-		},
-		{
-			name: "sha256 digest",
-			manifest: `apiVersion: v1
+`
+	want := []string{
+		"docker.io/library/busybox:1.36",
+		"docker.io/library/nginx:1.25",
+	}
+
+	got, err := image.ExtractImagesFromManifest(manifest)
+	require.NoError(t, err)
+	assert.Equal(t, want, got)
+}
+
+func TestExtractImagesFromManifest_Sha256Digest(t *testing.T) {
+	t.Parallel()
+
+	manifest := `apiVersion: v1
 kind: Pod
 spec:
   containers:
     - image: nginx@sha256:abc123def456
-`,
-			want: []string{"docker.io/library/nginx@sha256:abc123def456"},
-		},
-		{
-			name: "skip template variables",
-			manifest: `apiVersion: v1
+`
+	want := []string{"docker.io/library/nginx@sha256:abc123def456"}
+
+	got, err := image.ExtractImagesFromManifest(manifest)
+	require.NoError(t, err)
+	assert.Equal(t, want, got)
+}
+
+func TestExtractImagesFromManifest_TemplateVariables(t *testing.T) {
+	t.Parallel()
+
+	manifest := `apiVersion: v1
 kind: Pod
 spec:
   containers:
     - image: {{ .Values.image }}
     - image: nginx:1.25
-`,
-			want: []string{"docker.io/library/nginx:1.25"},
-		},
-		{
-			name: "image with comment",
-			manifest: `apiVersion: v1
+`
+	want := []string{"docker.io/library/nginx:1.25"}
+
+	got, err := image.ExtractImagesFromManifest(manifest)
+	require.NoError(t, err)
+	assert.Equal(t, want, got)
+}
+
+func TestExtractImagesFromManifest_WithComment(t *testing.T) {
+	t.Parallel()
+
+	manifest := `apiVersion: v1
 kind: Pod
 spec:
   containers:
     - image: nginx:1.25  # main app
-`,
-			want: []string{"docker.io/library/nginx:1.25"},
-		},
-	}
+`
+	want := []string{"docker.io/library/nginx:1.25"}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := ExtractImagesFromManifest(tt.manifest)
-			require.NoError(t, err)
-			assert.Equal(t, tt.want, got)
-		})
-	}
+	got, err := image.ExtractImagesFromManifest(manifest)
+	require.NoError(t, err)
+	assert.Equal(t, want, got)
 }
 
 func TestNormalizeImageRef(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		input string
 		want  string
@@ -175,15 +248,19 @@ func TestNormalizeImageRef(t *testing.T) {
 		{"ghcr.io/org/image@sha256:def456", "ghcr.io/org/image@sha256:def456"},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.input, func(t *testing.T) {
-			got := normalizeImageRef(tt.input)
-			assert.Equal(t, tt.want, got)
+	for _, testCase := range tests {
+		t.Run(testCase.input, func(t *testing.T) {
+			t.Parallel()
+
+			got := image.NormalizeImageRef(testCase.input)
+			assert.Equal(t, testCase.want, got)
 		})
 	}
 }
 
 func TestExtractImagesFromMultipleManifests(t *testing.T) {
+	t.Parallel()
+
 	manifest1 := `apiVersion: v1
 kind: Pod
 spec:
@@ -198,7 +275,7 @@ spec:
     - image: nginx:1.25
 `
 
-	got, err := ExtractImagesFromMultipleManifests(manifest1, manifest2)
+	got, err := image.ExtractImagesFromMultipleManifests(manifest1, manifest2)
 	require.NoError(t, err)
 
 	want := []string{

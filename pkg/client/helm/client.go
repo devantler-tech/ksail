@@ -188,6 +188,26 @@ func NewClient(kubeConfig, kubeContext string) (*Client, error) {
 	return newClient(kubeConfig, kubeContext, nil)
 }
 
+// NewTemplateOnlyClient creates a Helm client for templating operations only.
+// It does not require a kubeconfig and cannot perform install/uninstall operations.
+// Use this for extracting images from charts in CI environments without cluster access.
+func NewTemplateOnlyClient() (*Client, error) {
+	settings := helmv4cli.New()
+	actionConfig := new(helmv4action.Configuration)
+
+	// Initialize with a no-op kube client for templating-only operations
+	actionConfig.KubeClient = &helmv4kube.Client{}
+	actionConfig.Releases = nil // Not needed for templating
+
+	return &Client{
+		actionConfig: actionConfig,
+		settings:     settings,
+		kubeConfig:   "",
+		kubeContext:  "",
+		debugLog:     func(string, ...any) {},
+	}, nil
+}
+
 func newClient(
 	kubeConfig, kubeContext string,
 	debug func(string, ...any),

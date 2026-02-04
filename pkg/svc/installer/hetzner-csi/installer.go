@@ -87,7 +87,12 @@ func (h *HetznerCSIInstaller) Images(ctx context.Context) ([]string, error) {
 		return nil, fmt.Errorf("failed to template hetzner-csi chart: %w", err)
 	}
 
-	return image.ExtractImagesFromManifest(manifest)
+	images, err := image.ExtractImagesFromManifest(manifest)
+	if err != nil {
+		return nil, fmt.Errorf("extract images from hetzner-csi manifest: %w", err)
+	}
+
+	return images, nil
 }
 
 func (h *HetznerCSIInstaller) chartSpec() *helm.ChartSpec {

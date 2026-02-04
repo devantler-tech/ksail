@@ -56,7 +56,12 @@ func (g *GatekeeperInstaller) Images(ctx context.Context) ([]string, error) {
 		return nil, fmt.Errorf("failed to template gatekeeper chart: %w", err)
 	}
 
-	return image.ExtractImagesFromManifest(manifest)
+	images, err := image.ExtractImagesFromManifest(manifest)
+	if err != nil {
+		return nil, fmt.Errorf("extract images from gatekeeper manifest: %w", err)
+	}
+
+	return images, nil
 }
 
 func (g *GatekeeperInstaller) chartSpec() *helm.ChartSpec {

@@ -150,5 +150,10 @@ func (b *InstallerBase) ImagesFromChart(
 		return nil, fmt.Errorf("template chart %s: %w", spec.ChartName, err)
 	}
 
-	return image.ExtractImagesFromManifest(manifest)
+	images, err := image.ExtractImagesFromManifest(manifest)
+	if err != nil {
+		return nil, fmt.Errorf("extract images from %s manifest: %w", spec.ChartName, err)
+	}
+
+	return images, nil
 }

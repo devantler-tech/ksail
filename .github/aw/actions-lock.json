@@ -55,10 +55,10 @@
       "version": "v6.0.0",
       "sha": "b7c566a772e6b6bfb58ed0dc250532a479d7789f"
     },
-    "anchore/sbom-action@v0.22.1": {
+    "anchore/sbom-action@v0.22.2": {
       "repo": "anchore/sbom-action",
-      "version": "v0.22.1",
-      "sha": "deef08a0db64bfad603422135db61477b16cef56"
+      "version": "v0.22.2",
+      "sha": "28d71544de8eaf1b958d335707167c5f783590ad"
     },
     "docker/build-push-action@v6.18.0": {
       "repo": "docker/build-push-action",
@@ -80,15 +80,15 @@
       "version": "v3.12.0",
       "sha": "8d2750c68a42422c14e847fe6c8ac0403b4cbd6f"
     },
-    "github/gh-aw/actions/setup@v0.40.1": {
+    "github/gh-aw/actions/setup@v0.42.0": {
       "repo": "github/gh-aw/actions/setup",
-      "version": "v0.40.1",
-      "sha": "17c31ffe96b274cb4a6693638cabf61e45996ee7"
+      "version": "v0.42.0",
+      "sha": "a7134347103ecf66b4bd422c3e9ce6466d400c02"
     },
-    "githubnext/gh-aw/actions/setup@v0.40.1": {
+    "githubnext/gh-aw/actions/setup@v0.42.0": {
       "repo": "githubnext/gh-aw/actions/setup",
-      "version": "v0.40.1",
-      "sha": "17c31ffe96b274cb4a6693638cabf61e45996ee7"
+      "version": "v0.42.0",
+      "sha": "a7134347103ecf66b4bd422c3e9ce6466d400c02"
     }
   }
 }

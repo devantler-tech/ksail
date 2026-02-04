@@ -56,7 +56,12 @@ func (c *CertManagerInstaller) Images(ctx context.Context) ([]string, error) {
 		return nil, fmt.Errorf("failed to template cert-manager chart: %w", err)
 	}
 
-	return image.ExtractImagesFromManifest(manifest)
+	images, err := image.ExtractImagesFromManifest(manifest)
+	if err != nil {
+		return nil, fmt.Errorf("extract images from cert-manager manifest: %w", err)
+	}
+
+	return images, nil
 }
 
 func (c *CertManagerInstaller) chartSpec() *helm.ChartSpec {

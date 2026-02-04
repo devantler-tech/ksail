@@ -55,7 +55,12 @@ func (b *FluxInstaller) Images(ctx context.Context) ([]string, error) {
 		return nil, fmt.Errorf("failed to template flux-operator chart: %w", err)
 	}
 
-	return image.ExtractImagesFromManifest(manifest)
+	images, err := image.ExtractImagesFromManifest(manifest)
+	if err != nil {
+		return nil, fmt.Errorf("extract images from flux-operator manifest: %w", err)
+	}
+
+	return images, nil
 }
 
 func (b *FluxInstaller) chartSpec() *helm.ChartSpec {

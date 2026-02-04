@@ -329,7 +329,7 @@ func TestMirrorSpec_ResolveCredentials_EnvVars(t *testing.T) {
 		},
 	}
 
-	for _, testCase := range testCases {
+	for _, testCase := range testCases { //nolint:paralleltest // t.Setenv mutates global env
 		t.Run(testCase.name, func(t *testing.T) {
 			// Note: Cannot use t.Parallel() here - t.Setenv() in parent test
 			// mutates global process environment, causing race conditions
