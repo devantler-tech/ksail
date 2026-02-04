@@ -111,12 +111,22 @@ runs:
         # Create temp file for all images
         IMAGES_FILE="/tmp/all-images.txt"
         > "$IMAGES_FILE"
+        ERRORS_FILE="/tmp/extraction-errors.txt"
+        > "$ERRORS_FILE"
 
         for config in "${CONFIGS[@]}"; do
           echo "  Extracting: $config"
           # shellcheck disable=SC2086
-          ksail workload images $config 2>/dev/null >> "$IMAGES_FILE" || true
+          if ! ksail workload images $config >> "$IMAGES_FILE" 2>> "$ERRORS_FILE"; then
+            echo "  ⚠️ Warning: Failed to extract images for: $config"
+          fi
         done
+
+        # Show any errors that occurred
+        if [ -s "$ERRORS_FILE" ]; then
+          echo "⚠️ Extraction errors (may be expected for some configs):"
+          cat "$ERRORS_FILE"
+        fi
 
         # Deduplicate and sort
         sort -u "$IMAGES_FILE" > /tmp/unique-images.txt
@@ -124,6 +134,13 @@ runs:
 
         COUNT=$(wc -l < "$IMAGES_FILE" | tr -d ' ')
         echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+
+        # Fail if no images were extracted (indicates a problem with ksail or config)
+        if [ "$COUNT" -eq 0 ]; then
+          echo "❌ Error: No images extracted. Check errors above."
+          exit 1
+        fi
+
         echo "✅ Extracted $COUNT unique images"
 
         # Show images for debugging

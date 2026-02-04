@@ -88,7 +88,10 @@ func (l *LocalPathStorageInstaller) Images(ctx context.Context) ([]string, error
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	// Use a client with timeout to avoid hanging indefinitely
+	client := &http.Client{Timeout: l.timeout}
+
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch manifest: %w", err)
 	}
