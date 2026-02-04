@@ -6,6 +6,15 @@ import (
 	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/image"
+)
+
+const (
+	metricsServerRepoName  = "metrics-server"
+	metricsServerRepoURL   = "https://kubernetes-sigs.github.io/metrics-server/"
+	metricsServerRelease   = "metrics-server"
+	metricsServerNamespace = "kube-system"
+	metricsServerChartName = "metrics-server/metrics-server"
 )
 
 // MetricsServerInstaller installs or upgrades metrics-server.
@@ -40,24 +49,34 @@ func (m *MetricsServerInstaller) Install(ctx context.Context) error {
 	return nil
 }
 
-// --- internals ---
-
-func (m *MetricsServerInstaller) helmInstallOrUpgradeMetricsServer(ctx context.Context) error {
-	repoEntry := &helm.RepositoryEntry{
-		Name: "metrics-server",
-		URL:  "https://kubernetes-sigs.github.io/metrics-server/",
+// Uninstall removes the Helm release for metrics-server.
+func (m *MetricsServerInstaller) Uninstall(ctx context.Context) error {
+	err := m.client.UninstallRelease(ctx, metricsServerRelease, metricsServerNamespace)
+	if err != nil {
+		return fmt.Errorf("failed to uninstall metrics-server release: %w", err)
 	}
 
-	addRepoErr := m.client.AddRepository(ctx, repoEntry, m.timeout)
-	if addRepoErr != nil {
-		return fmt.Errorf("failed to add metrics-server repository: %w", addRepoErr)
+	return nil
+}
+
+// Images returns the container images used by metrics-server.
+func (m *MetricsServerInstaller) Images(ctx context.Context) ([]string, error) {
+	spec := m.chartSpec()
+
+	manifest, err := m.client.TemplateChart(ctx, spec)
+	if err != nil {
+		return nil, fmt.Errorf("failed to template metrics-server chart: %w", err)
 	}
 
-	spec := &helm.ChartSpec{
-		ReleaseName: "metrics-server",
-		ChartName:   "metrics-server/metrics-server",
-		Namespace:   "kube-system",
-		RepoURL:     "https://kubernetes-sigs.github.io/metrics-server/",
+	return image.ExtractImagesFromManifest(manifest)
+}
+
+func (m *MetricsServerInstaller) chartSpec() *helm.ChartSpec {
+	return &helm.ChartSpec{
+		ReleaseName: metricsServerRelease,
+		ChartName:   metricsServerChartName,
+		Namespace:   metricsServerNamespace,
+		RepoURL:     metricsServerRepoURL,
 		Atomic:      true,
 		Wait:        true,
 		WaitForJobs: true,
@@ -67,6 +86,22 @@ func (m *MetricsServerInstaller) helmInstallOrUpgradeMetricsServer(ctx context.C
 		ValuesYaml: `args:
   - --kubelet-preferred-address-types=InternalIP`,
 	}
+}
+
+// --- internals ---
+
+func (m *MetricsServerInstaller) helmInstallOrUpgradeMetricsServer(ctx context.Context) error {
+	repoEntry := &helm.RepositoryEntry{
+		Name: metricsServerRepoName,
+		URL:  metricsServerRepoURL,
+	}
+
+	addRepoErr := m.client.AddRepository(ctx, repoEntry, m.timeout)
+	if addRepoErr != nil {
+		return fmt.Errorf("failed to add metrics-server repository: %w", addRepoErr)
+	}
+
+	spec := m.chartSpec()
 
 	_, err := m.client.InstallOrUpgradeChart(ctx, spec)
 	if err != nil {

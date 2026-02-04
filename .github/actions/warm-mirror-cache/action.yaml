@@ -1,0 +1,306 @@
+name: Warm Mirror Cache
+description: |
+  Pre-warms the mirror registry cache by extracting all images needed for
+  system tests and pulling them through mirror registries. Run this before
+  the system test matrix to ensure all tests have a warm cache.
+
+  This action:
+  1. Extracts images for all distribution × component combinations
+  2. Deduplicates the image list
+  3. Creates mirror registries for docker.io, ghcr.io, quay.io, and registry.k8s.io
+  4. Pulls all images through the mirrors (populating their volumes)
+  5. Saves the mirror volumes to GitHub Actions cache
+
+  The cache key includes the go.mod hash to invalidate when dependencies change.
+
+inputs:
+  cache-version:
+    description: |
+      Version salt for cache key. Bump this to invalidate all caches.
+    required: false
+    default: "v1"
+
+outputs:
+  cache-hit:
+    description: Whether the cache was restored (warm start)
+    value: ${{ steps.restore-cache.outputs.cache-hit || 'false' }}
+  cache-key:
+    description: The cache key used for this operation
+    value: ${{ steps.generate-key.outputs.cache-key }}
+  image-count:
+    description: Number of unique images extracted
+    value: ${{ steps.extract-images.outputs.count }}
+
+runs:
+  using: composite
+  steps:
+    - name: 🔑 Generate cache key
+      id: generate-key
+      shell: bash
+      env:
+        CACHE_VERSION: ${{ inputs.cache-version }}
+        RUNNER_OS: ${{ runner.os }}
+        RUNNER_ARCH: ${{ runner.arch }}
+      run: |
+        # Include go.mod hash to invalidate when Helm chart versions change
+        GO_MOD_HASH="${{ hashFiles('go.mod', 'go.sum') }}"
+        HASH_SHORT="${GO_MOD_HASH:0:12}"
+        CACHE_KEY="mirror-cache-${CACHE_VERSION}-${HASH_SHORT}-${RUNNER_OS}-${RUNNER_ARCH}"
+        echo "cache-key=$CACHE_KEY" >> "$GITHUB_OUTPUT"
+        echo "📦 Cache key: $CACHE_KEY"
+
+    - name: 📥 Restore mirror cache
+      id: restore-cache
+      uses: actions/cache/restore@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+      with:
+        path: /tmp/mirror-cache
+        key: ${{ steps.generate-key.outputs.cache-key }}
+        restore-keys: |
+          mirror-cache-${{ inputs.cache-version }}-
+
+    - name: 🔍 Check if cache is complete
+      id: check-cache
+      if: steps.restore-cache.outputs.cache-hit == 'true'
+      shell: bash
+      run: |
+        if [ -d "/tmp/mirror-cache" ] && [ -n "$(ls -A /tmp/mirror-cache 2>/dev/null)" ]; then
+          echo "✅ Cache restored, checking completeness..."
+          # Check for all 4 mirror volumes (using KSail's naming convention)
+          if [ -f "/tmp/mirror-cache/docker.io.tar" ] && \
+             [ -f "/tmp/mirror-cache/ghcr.io.tar" ] && \
+             [ -f "/tmp/mirror-cache/quay.io.tar" ] && \
+             [ -f "/tmp/mirror-cache/registry.k8s.io.tar" ]; then
+            echo "complete=true" >> "$GITHUB_OUTPUT"
+            echo "✅ Cache complete with all 4 mirror volumes"
+          else
+            echo "complete=false" >> "$GITHUB_OUTPUT"
+            echo "⚠️ Cache incomplete, will re-warm"
+          fi
+        else
+          echo "complete=false" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: 📋 Extract images for all configurations
+      id: extract-images
+      if: steps.check-cache.outputs.complete != 'true'
+      shell: bash
+      run: |
+        echo "📋 Extracting images for all system test configurations..."
+
+        # All unique component combinations from CI matrix
+        # Distribution doesn't affect Helm chart images, only CSI/LoadBalancer selection
+        CONFIGS=(
+          # Default (Cilium CNI)
+          "--distribution Vanilla --cni Cilium"
+
+          # Full featured (Cilium + Flux + all extras)
+          "--distribution Vanilla --cni Cilium --csi Enabled --load-balancer Enabled --metrics-server Enabled --policy-engine Kyverno --cert-manager Enabled --gitops-engine Flux"
+
+          # Calico + ArgoCD + Gatekeeper
+          "--distribution Vanilla --cni Calico --policy-engine Gatekeeper --gitops-engine ArgoCD"
+
+          # K3s specific (no cloud-provider-kind)
+          "--distribution K3s --cni Cilium --gitops-engine Flux"
+          "--distribution K3s --cni Cilium --gitops-engine ArgoCD"
+
+          # Talos specific
+          "--distribution Talos --cni Cilium --gitops-engine Flux"
+          "--distribution Talos --cni Cilium --gitops-engine ArgoCD"
+        )
+
+        # Create temp file for all images
+        IMAGES_FILE="/tmp/all-images.txt"
+        > "$IMAGES_FILE"
+
+        for config in "${CONFIGS[@]}"; do
+          echo "  Extracting: $config"
+          # shellcheck disable=SC2086
+          ksail workload images $config 2>/dev/null >> "$IMAGES_FILE" || true
+        done
+
+        # Deduplicate and sort
+        sort -u "$IMAGES_FILE" > /tmp/unique-images.txt
+        mv /tmp/unique-images.txt "$IMAGES_FILE"
+
+        COUNT=$(wc -l < "$IMAGES_FILE" | tr -d ' ')
+        echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+        echo "✅ Extracted $COUNT unique images"
+
+        # Show images for debugging
+        echo "📦 Images to cache:"
+        cat "$IMAGES_FILE" | head -30
+        if [ "$COUNT" -gt 30 ]; then
+          echo "  ... and $((COUNT - 30)) more"
+        fi
+
+    - name: 🐳 Create mirror registries
+      id: create-mirrors
+      if: steps.check-cache.outputs.complete != 'true'
+      shell: bash
+      run: |
+        echo "🐳 Creating mirror registries for docker.io, ghcr.io, quay.io, and registry.k8s.io..."
+
+        # Create Docker network for mirrors
+        docker network create ksail-mirrors 2>/dev/null || true
+
+        # Create docker.io mirror (port 5000)
+        docker run -d \
+          --name docker.io-mirror \
+          --network ksail-mirrors \
+          -p 5000:5000 \
+          -e REGISTRY_PROXY_REMOTEURL=https://registry-1.docker.io \
+          -v docker.io:/var/lib/registry \
+          registry:3 || echo "docker.io mirror already exists"
+
+        # Create ghcr.io mirror (port 5001)
+        docker run -d \
+          --name ghcr.io-mirror \
+          --network ksail-mirrors \
+          -p 5001:5000 \
+          -e REGISTRY_PROXY_REMOTEURL=https://ghcr.io \
+          -v ghcr.io:/var/lib/registry \
+          registry:3 || echo "ghcr.io mirror already exists"
+
+        # Create quay.io mirror (port 5002)
+        docker run -d \
+          --name quay.io-mirror \
+          --network ksail-mirrors \
+          -p 5002:5000 \
+          -e REGISTRY_PROXY_REMOTEURL=https://quay.io \
+          -v quay.io:/var/lib/registry \
+          registry:3 || echo "quay.io mirror already exists"
+
+        # Create registry.k8s.io mirror (port 5003)
+        docker run -d \
+          --name registry.k8s.io-mirror \
+          --network ksail-mirrors \
+          -p 5003:5000 \
+          -e REGISTRY_PROXY_REMOTEURL=https://registry.k8s.io \
+          -v registry.k8s.io:/var/lib/registry \
+          registry:3 || echo "registry.k8s.io mirror already exists"
+
+        # Wait for registries to be ready
+        sleep 5
+        echo "✅ Mirror registries created"
+
+    - name: 📥 Pull images through mirrors
+      id: pull-images
+      if: steps.check-cache.outputs.complete != 'true'
+      shell: bash
+      run: |
+        echo "📥 Pulling images through mirrors..."
+
+        IMAGES_FILE="/tmp/all-images.txt"
+        TOTAL=$(wc -l < "$IMAGES_FILE" | tr -d ' ')
+        CURRENT=0
+        FAILED=0
+
+        while IFS= read -r image; do
+          CURRENT=$((CURRENT + 1))
+
+          # Determine which mirror to use based on registry
+          if [[ "$image" == docker.io/* ]] || [[ "$image" == library/* ]] || [[ "$image" != */* ]]; then
+            # Normalize image reference for docker.io
+            if [[ "$image" != docker.io/* ]]; then
+              if [[ "$image" == library/* ]]; then
+                IMAGE_REF="docker.io/$image"
+              else
+                IMAGE_REF="docker.io/library/$image"
+              fi
+            else
+              IMAGE_REF="$image"
+            fi
+            PULL_REF="${IMAGE_REF/docker.io\//localhost:5000/}"
+          elif [[ "$image" == ghcr.io/* ]]; then
+            PULL_REF="${image/ghcr.io\//localhost:5001/}"
+          elif [[ "$image" == quay.io/* ]]; then
+            PULL_REF="${image/quay.io\//localhost:5002/}"
+          elif [[ "$image" == registry.k8s.io/* ]]; then
+            PULL_REF="${image/registry.k8s.io\//localhost:5003/}"
+          else
+            # Unknown registry, try direct pull
+            echo "[$CURRENT/$TOTAL] Pulling directly: $image"
+            docker pull "$image" --quiet 2>/dev/null || {
+              echo "  ⚠️ Failed: $image"
+              FAILED=$((FAILED + 1))
+            }
+            continue
+          fi
+
+          echo "[$CURRENT/$TOTAL] Pulling via mirror: $image"
+
+          # Pull through the mirror to populate cache
+          # The mirror acts as a pull-through cache
+          docker pull "$PULL_REF" --quiet 2>/dev/null || {
+            # Fallback to direct pull if mirror fails
+            echo "  ⚠️ Mirror failed, trying direct: $image"
+            docker pull "$image" --quiet 2>/dev/null || {
+              echo "  ⚠️ Failed: $image"
+              FAILED=$((FAILED + 1))
+            }
+          }
+
+        done < "$IMAGES_FILE"
+
+        echo ""
+        echo "✅ Pulled $((TOTAL - FAILED))/$TOTAL images successfully"
+        if [ "$FAILED" -gt 0 ]; then
+          echo "⚠️ $FAILED images failed (may be platform-specific)"
+        fi
+
+    - name: 💾 Export mirror volumes
+      id: export-volumes
+      if: steps.check-cache.outputs.complete != 'true'
+      shell: bash
+      run: |
+        echo "💾 Exporting mirror registry volumes..."
+        mkdir -p /tmp/mirror-cache
+
+        # Export docker.io mirror volume
+        docker run --rm \
+          -v docker.io:/volume:ro \
+          -v /tmp/mirror-cache:/backup \
+          busybox \
+          tar -cf /backup/docker.io.tar -C /volume . || echo "⚠️ Failed to export docker.io mirror"
+
+        # Export ghcr.io mirror volume
+        docker run --rm \
+          -v ghcr.io:/volume:ro \
+          -v /tmp/mirror-cache:/backup \
+          busybox \
+          tar -cf /backup/ghcr.io.tar -C /volume . || echo "⚠️ Failed to export ghcr.io mirror"
+
+        # Export quay.io mirror volume
+        docker run --rm \
+          -v quay.io:/volume:ro \
+          -v /tmp/mirror-cache:/backup \
+          busybox \
+          tar -cf /backup/quay.io.tar -C /volume . || echo "⚠️ Failed to export quay.io mirror"
+
+        # Export registry.k8s.io mirror volume
+        docker run --rm \
+          -v registry.k8s.io:/volume:ro \
+          -v /tmp/mirror-cache:/backup \
+          busybox \
+          tar -cf /backup/registry.k8s.io.tar -C /volume . || echo "⚠️ Failed to export registry.k8s.io mirror"
+
+        # Show cache size
+        if command -v du &> /dev/null; then
+          TOTAL_SIZE=$(du -sh /tmp/mirror-cache | cut -f1)
+          echo "✅ Mirror cache size: $TOTAL_SIZE"
+          ls -lh /tmp/mirror-cache/
+        fi
+
+    - name: 🧹 Cleanup containers
+      if: always() && steps.check-cache.outputs.complete != 'true'
+      shell: bash
+      run: |
+        docker rm -f docker.io-mirror ghcr.io-mirror quay.io-mirror registry.k8s.io-mirror 2>/dev/null || true
+        docker network rm ksail-mirrors 2>/dev/null || true
+
+    - name: 💾 Save mirror cache
+      if: steps.check-cache.outputs.complete != 'true'
+      uses: actions/cache/save@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+      with:
+        path: /tmp/mirror-cache
+        key: ${{ steps.generate-key.outputs.cache-key }}

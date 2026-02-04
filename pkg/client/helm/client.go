@@ -20,6 +20,7 @@ import (
 	helmv4getter "helm.sh/helm/v4/pkg/getter"
 	helmv4kube "helm.sh/helm/v4/pkg/kube"
 	helmv4registry "helm.sh/helm/v4/pkg/registry"
+	helmv4release "helm.sh/helm/v4/pkg/release"
 	v1 "helm.sh/helm/v4/pkg/release/v1"
 	repov1 "helm.sh/helm/v4/pkg/repo/v1"
 	helmv4strvals "helm.sh/helm/v4/pkg/strvals"
@@ -163,13 +164,12 @@ type ReleaseInfo struct {
 }
 
 // Interface defines the subset of Helm functionality required by KSail.
-//
-//go:generate mockery --name=Interface --output=. --filename=mocks.go
 type Interface interface {
 	InstallChart(ctx context.Context, spec *ChartSpec) (*ReleaseInfo, error)
 	InstallOrUpgradeChart(ctx context.Context, spec *ChartSpec) (*ReleaseInfo, error)
 	UninstallRelease(ctx context.Context, releaseName, namespace string) error
 	AddRepository(ctx context.Context, entry *RepositoryEntry, timeout time.Duration) error
+	TemplateChart(ctx context.Context, spec *ChartSpec) (string, error)
 }
 
 // Client represents the default helm implementation used by KSail.
@@ -236,6 +236,57 @@ func (c *Client) InstallChart(ctx context.Context, spec *ChartSpec) (*ReleaseInf
 // InstallOrUpgradeChart upgrades a Helm chart when present and installs it otherwise.
 func (c *Client) InstallOrUpgradeChart(ctx context.Context, spec *ChartSpec) (*ReleaseInfo, error) {
 	return c.installRelease(ctx, spec, true)
+}
+
+// TemplateChart renders a Helm chart's templates without installing it.
+// It returns the rendered YAML manifests as a string.
+// This is useful for extracting container images from charts.
+func (c *Client) TemplateChart(ctx context.Context, spec *ChartSpec) (string, error) {
+	if spec == nil {
+		return "", errChartSpecRequired
+	}
+
+	ctxErr := ctx.Err()
+	if ctxErr != nil {
+		return "", fmt.Errorf("template chart context cancelled: %w", ctxErr)
+	}
+
+	client := helmv4action.NewInstall(c.actionConfig)
+	client.ReleaseName = spec.ReleaseName
+	if client.ReleaseName == "" {
+		client.ReleaseName = "template-release"
+	}
+
+	client.Namespace = spec.Namespace
+	if client.Namespace == "" {
+		client.Namespace = "default"
+	}
+
+	client.DryRunStrategy = helmv4action.DryRunClient
+	client.Replace = true // Skip name uniqueness check
+
+	// Set version if provided
+	if spec.Version != "" {
+		client.Version = spec.Version
+	}
+
+	chart, vals, err := c.loadChartAndValues(spec, client)
+	if err != nil {
+		return "", fmt.Errorf("load chart and values: %w", err)
+	}
+
+	rel, err := client.RunWithContext(ctx, chart, vals)
+	if err != nil {
+		return "", fmt.Errorf("template chart %q: %w", spec.ChartName, err)
+	}
+
+	// Convert Releaser to Accessor to get the manifest
+	accessor, accErr := helmv4release.NewAccessor(rel)
+	if accErr != nil {
+		return "", fmt.Errorf("create release accessor: %w", accErr)
+	}
+
+	return accessor.Manifest(), nil
 }
 
 // UninstallRelease removes a Helm release by name within the provided namespace.

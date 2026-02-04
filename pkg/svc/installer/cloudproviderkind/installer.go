@@ -100,6 +100,11 @@ func (c *CloudProviderKINDInstaller) Uninstall(ctx context.Context) error {
 	return nil
 }
 
+// Images returns the container images used by cloud-provider-kind.
+func (c *CloudProviderKINDInstaller) Images(_ context.Context) ([]string, error) {
+	return []string{CloudProviderKindImage()}, nil
+}
+
 // isContainerRunning checks if the cloud-provider-kind container is running.
 func (c *CloudProviderKINDInstaller) isContainerRunning(ctx context.Context) (bool, error) {
 	containers, err := c.listContainersByName(ctx, ContainerName)

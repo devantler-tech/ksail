@@ -9,4 +9,8 @@ type Installer interface {
 
 	// Uninstall uninstalls the component.
 	Uninstall(ctx context.Context) error
+
+	// Images returns the container images used by this component.
+	// The images are extracted from the rendered Helm chart manifests.
+	Images(ctx context.Context) ([]string, error)
 }

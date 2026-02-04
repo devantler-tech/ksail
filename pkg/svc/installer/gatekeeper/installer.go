@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/image"
 )
 
 const (
@@ -46,15 +47,20 @@ func (g *GatekeeperInstaller) Uninstall(ctx context.Context) error {
 	return nil
 }
 
-func (g *GatekeeperInstaller) helmInstallOrUpgradeGatekeeper(ctx context.Context) error {
-	repoEntry := &helm.RepositoryEntry{Name: gatekeeperRepoName, URL: gatekeeperRepoURL}
+// Images returns the container images used by Gatekeeper.
+func (g *GatekeeperInstaller) Images(ctx context.Context) ([]string, error) {
+	spec := g.chartSpec()
 
-	err := g.client.AddRepository(ctx, repoEntry, g.timeout)
+	manifest, err := g.client.TemplateChart(ctx, spec)
 	if err != nil {
-		return fmt.Errorf("failed to add gatekeeper repository: %w", err)
+		return nil, fmt.Errorf("failed to template gatekeeper chart: %w", err)
 	}
 
-	spec := &helm.ChartSpec{
+	return image.ExtractImagesFromManifest(manifest)
+}
+
+func (g *GatekeeperInstaller) chartSpec() *helm.ChartSpec {
+	return &helm.ChartSpec{
 		ReleaseName:     gatekeeperRelease,
 		ChartName:       gatekeeperChartName,
 		Namespace:       gatekeeperNamespace,
@@ -65,6 +71,17 @@ func (g *GatekeeperInstaller) helmInstallOrUpgradeGatekeeper(ctx context.Context
 		WaitForJobs:     true,
 		Timeout:         g.timeout,
 	}
+}
+
+func (g *GatekeeperInstaller) helmInstallOrUpgradeGatekeeper(ctx context.Context) error {
+	repoEntry := &helm.RepositoryEntry{Name: gatekeeperRepoName, URL: gatekeeperRepoURL}
+
+	err := g.client.AddRepository(ctx, repoEntry, g.timeout)
+	if err != nil {
+		return fmt.Errorf("failed to add gatekeeper repository: %w", err)
+	}
+
+	spec := g.chartSpec()
 
 	_, err = g.client.InstallOrUpgradeChart(ctx, spec)
 	if err != nil {

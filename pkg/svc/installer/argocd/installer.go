@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/image"
 )
 
 const (
@@ -48,10 +49,20 @@ func (a *ArgoCDInstaller) Uninstall(ctx context.Context) error {
 	return nil
 }
 
-// --- internals ---
+// Images returns the container images used by Argo CD.
+func (a *ArgoCDInstaller) Images(ctx context.Context) ([]string, error) {
+	spec := a.chartSpec()
 
-func (a *ArgoCDInstaller) helmInstallOrUpgradeArgoCD(ctx context.Context) error {
-	spec := &helm.ChartSpec{
+	manifest, err := a.client.TemplateChart(ctx, spec)
+	if err != nil {
+		return nil, fmt.Errorf("failed to template argocd chart: %w", err)
+	}
+
+	return image.ExtractImagesFromManifest(manifest)
+}
+
+func (a *ArgoCDInstaller) chartSpec() *helm.ChartSpec {
+	return &helm.ChartSpec{
 		ReleaseName:     argoCDReleaseName,
 		ChartName:       argoCDChartName,
 		Namespace:       argoCDNamespace,
@@ -62,6 +73,12 @@ func (a *ArgoCDInstaller) helmInstallOrUpgradeArgoCD(ctx context.Context) error 
 		Wait:            true,
 		WaitForJobs:     true,
 	}
+}
+
+// --- internals ---
+
+func (a *ArgoCDInstaller) helmInstallOrUpgradeArgoCD(ctx context.Context) error {
+	spec := a.chartSpec()
 
 	// Set context deadline longer than Helm timeout to ensure Helm has
 	// sufficient time to complete its kstatus-based wait operation.
