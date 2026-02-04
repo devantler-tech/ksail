@@ -163,7 +163,10 @@ func (f *Factory) addCertManagerInstaller(
 	}
 }
 
-func (f *Factory) addMetricsServerInstaller(installers map[string]Installer, spec v1alpha1.ClusterSpec) {
+func (f *Factory) addMetricsServerInstaller(
+	installers map[string]Installer,
+	spec v1alpha1.ClusterSpec,
+) {
 	if spec.MetricsServer == v1alpha1.MetricsServerEnabled ||
 		(spec.MetricsServer == v1alpha1.MetricsServerDefault &&
 			!spec.Distribution.ProvidesMetricsServerByDefault()) {
@@ -191,7 +194,10 @@ func (f *Factory) addCSIInstallers(installers map[string]Installer, spec v1alpha
 	}
 }
 
-func (f *Factory) addLoadBalancerInstaller(installers map[string]Installer, spec v1alpha1.ClusterSpec) {
+func (f *Factory) addLoadBalancerInstaller(
+	installers map[string]Installer,
+	spec v1alpha1.ClusterSpec,
+) {
 	if f.needsCloudProviderKind(spec) && f.dockerClient != nil {
 		installers["cloud-provider-kind"] = cloudproviderkindinstaller.NewCloudProviderKINDInstaller(
 			f.dockerClient,
