@@ -8,6 +8,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
 	"github.com/devantler-tech/ksail/v5/pkg/k8s"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/image"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 )
@@ -131,4 +132,23 @@ func (b *InstallerBase) GetKubeconfig() string {
 // GetContext returns the kubeconfig context.
 func (b *InstallerBase) GetContext() string {
 	return b.context
+}
+
+// ImagesFromChart templates the given ChartSpec and extracts container images.
+// This provides a common implementation for CNI installers' Images() method.
+func (b *InstallerBase) ImagesFromChart(
+	ctx context.Context,
+	spec *helm.ChartSpec,
+) ([]string, error) {
+	client, err := b.GetClient()
+	if err != nil {
+		return nil, fmt.Errorf("get helm client: %w", err)
+	}
+
+	manifest, err := client.TemplateChart(ctx, spec)
+	if err != nil {
+		return nil, fmt.Errorf("template chart %s: %w", spec.ChartName, err)
+	}
+
+	return image.ExtractImagesFromManifest(manifest)
 }

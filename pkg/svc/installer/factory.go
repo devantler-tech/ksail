@@ -85,7 +85,10 @@ func (f *InstallerFactory) CreateInstallersForConfig(cfg *v1alpha1.Cluster) map[
 			f.helmClient, MaxTimeout(f.timeout, KyvernoInstallTimeout),
 		)
 	case v1alpha1.PolicyEngineGatekeeper:
-		installers["gatekeeper"] = gatekeeperinstaller.NewGatekeeperInstaller(f.helmClient, f.timeout)
+		installers["gatekeeper"] = gatekeeperinstaller.NewGatekeeperInstaller(
+			f.helmClient,
+			f.timeout,
+		)
 	}
 
 	// Cert-manager
@@ -116,7 +119,8 @@ func (f *InstallerFactory) CreateInstallersForConfig(cfg *v1alpha1.Cluster) map[
 			f.helmClient, f.kubeconfig, f.kubecontext, f.timeout,
 		)
 		installers["kubelet-csr-approver"] = kubeletcsrapproverinstaller.NewKubeletCSRApproverInstaller(
-			f.helmClient, f.timeout,
+			f.helmClient,
+			f.timeout,
 		)
 	}
 
@@ -132,8 +136,12 @@ func (f *InstallerFactory) CreateInstallersForConfig(cfg *v1alpha1.Cluster) map[
 
 // GetImagesFromInstallers retrieves container images from all provided installers.
 // Returns a deduplicated list of all images across all installers.
-func GetImagesFromInstallers(ctx context.Context, installers map[string]Installer) ([]string, error) {
+func GetImagesFromInstallers(
+	ctx context.Context,
+	installers map[string]Installer,
+) ([]string, error) {
 	seen := make(map[string]struct{})
+
 	var result []string
 
 	for name, inst := range installers {
@@ -172,7 +180,8 @@ func (f *InstallerFactory) needsLocalPathStorage(spec v1alpha1.ClusterSpec) bool
 	}
 
 	// Talos with Hetzner uses Hetzner CSI
-	if spec.Distribution == v1alpha1.DistributionTalos && spec.Provider == v1alpha1.ProviderHetzner {
+	if spec.Distribution == v1alpha1.DistributionTalos &&
+		spec.Provider == v1alpha1.ProviderHetzner {
 		return false
 	}
 

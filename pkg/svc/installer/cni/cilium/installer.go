@@ -8,7 +8,6 @@ import (
 
 	v1alpha1 "github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/image"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/installer/cni"
 )
 
@@ -84,19 +83,7 @@ func (c *CiliumInstaller) Uninstall(ctx context.Context) error {
 
 // Images returns the container images used by Cilium.
 func (c *CiliumInstaller) Images(ctx context.Context) ([]string, error) {
-	client, err := c.GetClient()
-	if err != nil {
-		return nil, fmt.Errorf("get helm client: %w", err)
-	}
-
-	spec := c.chartSpec()
-
-	manifest, err := client.TemplateChart(ctx, spec)
-	if err != nil {
-		return nil, fmt.Errorf("failed to template cilium chart: %w", err)
-	}
-
-	return image.ExtractImagesFromManifest(manifest)
+	return c.ImagesFromChart(ctx, c.chartSpec())
 }
 
 func (c *CiliumInstaller) chartSpec() *helm.ChartSpec {

@@ -282,7 +282,6 @@ func TestMirrorSpec_ResolveCredentials_Basic(t *testing.T) {
 	}
 }
 
-//nolint:tparallel // Cannot use t.Parallel() with t.Setenv() - would cause panic
 func TestMirrorSpec_ResolveCredentials_EnvVars(t *testing.T) {
 	// Set test environment variables
 	// Note: Cannot use t.Parallel() with t.Setenv() as it would create race conditions
@@ -334,7 +333,6 @@ func TestMirrorSpec_ResolveCredentials_EnvVars(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			// Note: Cannot use t.Parallel() here - t.Setenv() in parent test
 			// mutates global process environment, causing race conditions
-
 			username, password := testCase.spec.ResolveCredentials()
 			assert.Equal(t, testCase.expectedUsername, username)
 			assert.Equal(t, testCase.expectedPassword, password)

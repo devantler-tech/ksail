@@ -63,6 +63,8 @@ func (f *fakeInstaller) Install(context.Context) error {
 
 func (*fakeInstaller) Uninstall(context.Context) error { return nil }
 
+func (*fakeInstaller) Images(context.Context) ([]string, error) { return nil, nil }
+
 // fakeRegistryService is a mock registry service for testing.
 type fakeRegistryService struct{}
 

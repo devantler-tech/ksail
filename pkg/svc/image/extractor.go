@@ -20,9 +20,11 @@ func ExtractImagesFromManifest(manifest string) ([]string, error) {
 	}
 
 	seen := make(map[string]struct{})
+
 	var images []string
 
 	reader := strings.NewReader(manifest)
+
 	images, err := extractImagesFromReader(reader, seen)
 	if err != nil {
 		return nil, fmt.Errorf("extract images: %w", err)
@@ -74,7 +76,8 @@ func extractImagesFromReader(r io.Reader, seen map[string]struct{}) ([]string, e
 		}
 	}
 
-	if err := scanner.Err(); err != nil {
+	err := scanner.Err()
+	if err != nil {
 		return nil, fmt.Errorf("scan manifest: %w", err)
 	}
 
@@ -84,7 +87,7 @@ func extractImagesFromReader(r io.Reader, seen map[string]struct{}) ([]string, e
 // normalizeImageRef normalizes an image reference to a fully qualified form.
 // - Adds "docker.io/library/" prefix for images without registry and namespace
 // - Adds "docker.io/" prefix for images without registry but with namespace
-// - Adds ":latest" tag if no tag is specified (not for @sha256 digests)
+// - Adds ":latest" tag if no tag is specified (not for @sha256 digests).
 func normalizeImageRef(ref string) string {
 	// Parse the image reference to determine if it has a registry
 	// A registry is present if the first component (before first /) contains:
@@ -116,9 +119,11 @@ func normalizeImageRef(ref string) string {
 		for _, c := range afterColon {
 			if c < '0' || c > '9' {
 				isPort = false
+
 				break
 			}
 		}
+
 		if !isPort {
 			// It's a tag like nginx:1.25, strip it for registry detection
 			firstPartBase = firstPartBase[:colonIdx]
@@ -153,6 +158,7 @@ func ensureTag(ref string) string {
 
 	// Check if already has a tag (contains : after the last /)
 	lastSlash := strings.LastIndex(ref, "/")
+
 	afterSlash := ref
 	if lastSlash >= 0 {
 		afterSlash = ref[lastSlash+1:]
@@ -169,6 +175,7 @@ func ensureTag(ref string) string {
 // Images are deduplicated across all manifests.
 func ExtractImagesFromMultipleManifests(manifests ...string) ([]string, error) {
 	seen := make(map[string]struct{})
+
 	var allImages []string
 
 	for _, manifest := range manifests {
@@ -177,6 +184,7 @@ func ExtractImagesFromMultipleManifests(manifests ...string) ([]string, error) {
 		}
 
 		reader := strings.NewReader(manifest)
+
 		images, err := extractImagesFromReader(reader, seen)
 		if err != nil {
 			return nil, err

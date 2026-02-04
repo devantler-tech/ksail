@@ -74,7 +74,12 @@ func (l *LocalPathStorageInstaller) Images(ctx context.Context) ([]string, error
 	}
 
 	// Fetch the manifest from the URL
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, localPathProvisionerManifestURL, nil)
+	req, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodGet,
+		localPathProvisionerManifestURL,
+		nil,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -83,6 +88,7 @@ func (l *LocalPathStorageInstaller) Images(ctx context.Context) ([]string, error
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch manifest: %w", err)
 	}
+
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {

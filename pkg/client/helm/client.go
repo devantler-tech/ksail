@@ -252,6 +252,7 @@ func (c *Client) TemplateChart(ctx context.Context, spec *ChartSpec) (string, er
 	}
 
 	client := helmv4action.NewInstall(c.actionConfig)
+
 	client.ReleaseName = spec.ReleaseName
 	if client.ReleaseName == "" {
 		client.ReleaseName = "template-release"
