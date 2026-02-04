@@ -332,7 +332,8 @@ func TestMirrorSpec_ResolveCredentials_EnvVars(t *testing.T) {
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			t.Parallel()
+			// Note: Cannot use t.Parallel() here - t.Setenv() in parent test
+			// mutates global process environment, causing race conditions
 
 			username, password := testCase.spec.ResolveCredentials()
 			assert.Equal(t, testCase.expectedUsername, username)
