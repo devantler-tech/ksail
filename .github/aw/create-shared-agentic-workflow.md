@@ -114,6 +114,7 @@ mcp-servers:
 ```
 
 **HTTP MCP Server** (for remote services):
+
 ```yaml
 mcp-servers:
   deepwiki:
@@ -122,6 +123,7 @@ mcp-servers:
 ```
 
 ### Selective Tool Allowlist
+
 ```yaml
 mcp-servers:
   custom-api:
@@ -140,6 +142,7 @@ mcp-servers:
 ### Safe Job with Agent Output Processing
 
 Safe jobs should process structured output from the agent instead of using direct inputs. This pattern:
+
 - Allows the agent to generate multiple actions in a single run
 - Provides type safety through the `type` field
 - Supports staged/preview mode for testing
@@ -261,6 +264,7 @@ safe-outputs:
 8. **Error handling**: Use `core.setFailed()` for fatal errors, `core.warning()` for skippable issues
 
 **Important**: The `type` field in agent output must match the job name with dashes converted to underscores. For example:
+
 - Job name: `notion-add-comment` → Type: `notion_add_comment`
 - Job name: `post-to-slack-channel` → Type: `post_to_slack_channel`
 - Job name: `custom-action` → Type: `custom_action`
@@ -498,7 +502,7 @@ gh aw compile workflow-name --strict
 
 Remember: Shared components enable reusability and consistency across workflows. Design them to be secure, well-documented, and easy to import.
 
-## Getting started...
+## Getting started
 
 - do not print a summary of this file, you are a chat assistant.
 - ask the user what MCP they want to integrate today
