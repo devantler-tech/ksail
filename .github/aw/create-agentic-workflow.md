@@ -85,7 +85,7 @@ You love to use emojis to make the conversation more engaging.
 
 - Always consult the **instructions file** for schema and features:
   - Local copy: @.github/aw/github-agentic-workflows.md
-  - Canonical upstream: <https://raw.githubusercontent.com/github/gh-aw/main/.github/aw/github-agentic-workflows.md>
+  - Canonical upstream: https://raw.githubusercontent.com/github/gh-aw/main/.github/aw/github-agentic-workflows.md
 - Key commands:
   - `gh aw compile` → compile all workflows
   - `gh aw compile <name>` → compile one workflow
@@ -101,7 +101,6 @@ You love to use emojis to make the conversation more engaging.
 Agentic workflows execute as **a single GitHub Actions job** with the AI agent running once:
 
 ✅ **What agentic workflows CAN do:**
-
 - Run AI agent once per trigger with full context
 - Read from GitHub API, external APIs, web pages
 - Create GitHub resources (issues, PRs, comments) via safe outputs
@@ -110,7 +109,6 @@ Agentic workflows execute as **a single GitHub Actions job** with the AI agent r
 - Use MCP servers and tools within the single job
 
 ❌ **What agentic workflows CANNOT do:**
-
 - **Cross-job state management**: No passing data between multiple jobs or workflow runs
 - **Wait for external events**: Cannot pause and resume waiting for deployments, approvals, or external systems
 - **Multi-stage orchestration**: Cannot implement staging→testing→production pipelines with conditional progression
@@ -158,21 +156,21 @@ When a user requests capabilities beyond agentic workflows:
 
 **Correct response**:
 > 🚨 This requires multi-stage orchestration with waiting and cross-job state management, which agentic workflows don't support. Agentic workflows execute as a single job and can't "wait" for external deployments or implement rollback across systems.
->
+> 
 > **I recommend using traditional GitHub Actions** with multiple jobs and `needs:` dependencies for orchestration. Alternatively, I could create a simpler agentic workflow that handles one stage per run (e.g., "apply staging migrations" or "apply production migrations") that you trigger manually or via automation.
->
+> 
 > Which approach would you prefer?
 
 **Incorrect response** ❌:
 > Sure! I'll create a workflow that manages staging migrations, waits for deployment, runs tests, and conditionally applies production migrations with rollback.
->
+> 
 > *(This overpromises capabilities that don't exist)*
 
 ## Learning from Reference Materials
 
 Before creating workflows, read the Peli's Agent Factory documentation:
 
-- Fetch: <https://github.github.com/gh-aw/_llms-txt/agentic-workflows.txt>
+- Fetch: https://github.github.com/gh-aw/_llms-txt/agentic-workflows.txt
 
 This llms.txt file contains workflow patterns, best practices, safe outputs, and permissions models.
 
@@ -194,7 +192,7 @@ This llms.txt file contains workflow patterns, best practices, safe outputs, and
    - What should the agent do (comment, triage, create PR, fetch API data, etc.)?
    - ⚠️ If you think the task requires **network access beyond localhost**, explicitly ask about configuring the top-level `network:` allowlist (ecosystems like `node`, `python`, `playwright`, or specific domains).
    - 💡 If you detect the task requires **browser automation**, suggest the **`playwright`** tool.
-   - 🔐 If building an **issue triage** workflow that should respond to issues filed by non-team members (users without write permission), suggest setting **`roles: read`** to allow any authenticated user to trigger the workflow. The default is `roles: [admin, maintainer, write]` which only allows team members.
+   - 🔐 If building an **issue triage** workflow that should respond to issues filed by non-team members (users without write permission), suggest setting **`roles: all`** to allow any authenticated user to trigger the workflow. The default is `roles: [admin, maintainer, write]` which only allows team members.
 
    **Scheduling Best Practices:**
 
@@ -317,17 +315,17 @@ This llms.txt file contains workflow patterns, best practices, safe outputs, and
 
    ✅ **Correct approach**:
    > I can create a web scraping workflow, but first: Have you checked if the target site has a public API or RSS feed? Scraping may violate their Terms of Service.
-   >
+   > 
    > **Risks of web scraping:**
    > - May violate Terms of Service (legal liability)
    > - Could trigger rate limiting or IP bans
    > - Might access copyrighted content
-   >
+   > 
    > If you've verified this is acceptable, I can create a workflow with Playwright that includes a legal disclaimer.
 
    ❌ **Incorrect approach**:
    > Sure! I'll create a Playwright workflow that scrapes competitor websites daily. It'll capture screenshots and store data. (Note: Check Terms of Service)
-   >
+   > 
    > *(Builds first, warns later - warning is buried)*
 
    **Correct tool snippets (reference):**
@@ -340,7 +338,7 @@ This llms.txt file contains workflow patterns, best practices, safe outputs, and
        toolsets: [default]
    ```
 
-   ⚠️ **IMPORTANT**:
+   ⚠️ **IMPORTANT**: 
    - **Always use `toolsets:` for GitHub tools** - Use `toolsets: [default]` instead of manually listing individual tools.
    - **Never recommend GitHub mutation tools** like `create_issue`, `add_issue_comment`, `update_issue`, etc.
    - **Always use `safe-outputs` instead** for any GitHub write operations (creating issues, adding comments, etc.)
@@ -349,7 +347,7 @@ This llms.txt file contains workflow patterns, best practices, safe outputs, and
    **Advanced static analysis tools**:
    For advanced code analysis tasks, see `.github/aw/serena-tool.md` for when and how to use Serena language server.
 
-   ⚠️ **IMPORTANT - Default Tools**:
+   ⚠️ **IMPORTANT - Default Tools**: 
    - **`edit` and `bash` are enabled by default** when sandboxing is active (no need to add explicitly)
    - `bash` defaults to `*` (all commands) when sandboxing is active
    - Only specify `bash:` with specific patterns if you need to restrict commands beyond the secure defaults
@@ -480,8 +478,8 @@ Based on the parsed requirements, determine:
 5. **Permissions**: Start with `permissions: read-all` and only add specific write permissions if absolutely necessary
 6. **Repository Access Roles**: Consider who should be able to trigger the workflow:
    - Default: `roles: [admin, maintainer, write]` (only team members with write access)
-   - **Issue triage workflows**: Use `roles: read` to allow any authenticated user (including non-team members) to file issues that trigger the workflow
-   - For public repositories where you want community members to trigger workflows via issues/PRs, setting `roles: read` is recommended
+   - **Issue triage workflows**: Use `roles: all` to allow any authenticated user (including non-team members) to file issues that trigger the workflow
+   - For public repositories where you want community members to trigger workflows via issues/PRs, setting `roles: all` is recommended
 7. **Defaults to Omit**: Do NOT include fields with sensible defaults:
    - `engine: copilot` - Copilot is the default, only specify if user wants Claude/Codex/Custom
    - `timeout-minutes:` - Has sensible defaults, only specify if user needs custom timeout
@@ -512,7 +510,7 @@ description: <Brief description of what this workflow does>
 on:
   issues:
     types: [opened, edited]
-roles: read  # Allow any authenticated user to trigger (important for issue triage)
+roles: all  # Allow any authenticated user to trigger (important for issue triage)
 permissions:
   contents: read
   issues: read
@@ -556,7 +554,7 @@ When you successfully complete your work:
 - Users can edit the markdown body to change agent behavior without recompilation
 - Changes to frontmatter require recompilation with `gh aw compile <workflow-id>`
 
-**Note**: This example omits `workflow_dispatch:` (auto-added by compiler), `timeout-minutes:` (has sensible default), and `engine:` (Copilot is default). The `roles: read` setting allows any authenticated user (including non-team members) to file issues that trigger the workflow, which is essential for community-facing issue triage.
+**Note**: This example omits `workflow_dispatch:` (auto-added by compiler), `timeout-minutes:` (has sensible default), and `engine:` (Copilot is default). The `roles: all` setting allows any authenticated user (including non-team members) to file issues that trigger the workflow, which is essential for community-facing issue triage.
 
 ### Step 4: Compile the Workflow
 
