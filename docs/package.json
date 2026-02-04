@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@astrojs/starlight": "^0.37.3",
-    "astro": "^5.16.9",
+    "astro": "^5.16.16",
     "astro-mermaid": "^1.1.0",
     "mermaid": "^10.9.5",
     "sharp": "^0.34.5",
