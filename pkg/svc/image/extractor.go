@@ -84,6 +84,37 @@ func extractImagesFromReader(r io.Reader, seen map[string]struct{}) ([]string, e
 	return images, nil
 }
 
+// isPortNumber checks if a string consists only of digits (i.e., could be a port number).
+func isPortNumber(s string) bool {
+	if len(s) == 0 {
+		return false
+	}
+
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+
+	return true
+}
+
+// stripTagFromRef strips a version tag (not a port) from a reference for registry detection.
+// Returns the base ref without the tag, e.g., "nginx:1.25" -> "nginx".
+func stripTagFromRef(ref string) string {
+	before, after, ok := strings.Cut(ref, ":")
+	if !ok {
+		return ref
+	}
+
+	// If after colon is all digits, it's a port; otherwise it's a tag
+	if isPortNumber(after) {
+		return ref // Keep port for localhost:5000 detection
+	}
+
+	return before
+}
+
 // normalizeImageRef normalizes an image reference to a fully qualified form.
 // - Adds "docker.io/library/" prefix for images without registry and namespace
 // - Adds "docker.io/" prefix for images without registry but with namespace
@@ -98,37 +129,13 @@ func normalizeImageRef(ref string) string {
 	firstPart := parts[0]
 
 	// For registry detection, we need to check the part before any tag or digest
-	// because version tags like 1.25 contain dots
-	// Examples:
-	//   "nginx:1.25" -> firstPartBase = "nginx" (no dot = not registry)
-	//   "nginx@sha256:abc" -> firstPartBase = "nginx" (no dot = not registry)
-	//   "docker.io/nginx:1.25" -> firstPartBase = "docker.io" (has dot = registry)
-	//   "localhost:5000/img" -> handled by localhost check
+	// Strip @sha256:... digest if present, then strip tag if present
 	firstPartBase := firstPart
-
-	// Strip @sha256:... digest if present
 	if digestIdx := strings.Index(firstPartBase, "@"); digestIdx >= 0 {
 		firstPartBase = firstPartBase[:digestIdx]
 	}
 
-	// Strip :tag if present (but keep port numbers for localhost)
-	if colonIdx := strings.Index(firstPartBase, ":"); colonIdx >= 0 {
-		afterColon := firstPartBase[colonIdx+1:]
-		// If after colon is all digits, it's a port; otherwise it's a tag
-		isPort := len(afterColon) > 0
-		for _, c := range afterColon {
-			if c < '0' || c > '9' {
-				isPort = false
-
-				break
-			}
-		}
-
-		if !isPort {
-			// It's a tag like nginx:1.25, strip it for registry detection
-			firstPartBase = firstPartBase[:colonIdx]
-		}
-	}
+	firstPartBase = stripTagFromRef(firstPartBase)
 
 	// Check if first part looks like a registry
 	hasRegistry := strings.Contains(firstPartBase, ".") ||

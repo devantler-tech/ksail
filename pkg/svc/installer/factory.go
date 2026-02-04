@@ -22,9 +22,9 @@ import (
 	"github.com/docker/docker/client"
 )
 
-// InstallerFactory creates installers based on cluster configuration.
+// Factory creates installers based on cluster configuration.
 // It holds the shared dependencies required by installers.
-type InstallerFactory struct {
+type Factory struct {
 	helmClient   helm.Interface
 	dockerClient client.APIClient
 	kubeconfig   string
@@ -33,15 +33,15 @@ type InstallerFactory struct {
 	distribution v1alpha1.Distribution
 }
 
-// NewInstallerFactory creates a new installer factory with the required dependencies.
-func NewInstallerFactory(
+// NewFactory creates a new installer factory with the required dependencies.
+func NewFactory(
 	helmClient helm.Interface,
 	dockerClient client.APIClient,
 	kubeconfig, kubecontext string,
 	timeout time.Duration,
 	distribution v1alpha1.Distribution,
-) *InstallerFactory {
-	return &InstallerFactory{
+) *Factory {
+	return &Factory{
 		helmClient:   helmClient,
 		dockerClient: dockerClient,
 		kubeconfig:   kubeconfig,
@@ -53,7 +53,7 @@ func NewInstallerFactory(
 
 // CreateInstallersForConfig creates installers for all components specified in the cluster config.
 // Returns a map of component name to installer.
-func (f *InstallerFactory) CreateInstallersForConfig(cfg *v1alpha1.Cluster) map[string]Installer {
+func (f *Factory) CreateInstallersForConfig(cfg *v1alpha1.Cluster) map[string]Installer {
 	installers := make(map[string]Installer)
 	spec := cfg.Spec.Cluster
 
@@ -63,6 +63,8 @@ func (f *InstallerFactory) CreateInstallersForConfig(cfg *v1alpha1.Cluster) map[
 		installers["flux"] = fluxinstaller.NewFluxInstaller(f.helmClient, f.timeout)
 	case v1alpha1.GitOpsEngineArgoCD:
 		installers["argocd"] = argocdinstaller.NewArgoCDInstaller(f.helmClient, f.timeout)
+	case v1alpha1.GitOpsEngineNone:
+		// No GitOps engine configured
 	}
 
 	// CNI
@@ -76,6 +78,8 @@ func (f *InstallerFactory) CreateInstallersForConfig(cfg *v1alpha1.Cluster) map[
 			f.helmClient, f.kubeconfig, f.kubecontext,
 			MaxTimeout(f.timeout, CalicoInstallTimeout), f.distribution,
 		)
+	case v1alpha1.CNIDefault:
+		// Default CNI - no explicit installer needed
 	}
 
 	// Policy engine
@@ -89,6 +93,8 @@ func (f *InstallerFactory) CreateInstallersForConfig(cfg *v1alpha1.Cluster) map[
 			f.helmClient,
 			f.timeout,
 		)
+	case v1alpha1.PolicyEngineNone:
+		// No policy engine configured
 	}
 
 	// Cert-manager
@@ -163,7 +169,7 @@ func GetImagesFromInstallers(
 
 // GetImagesForCluster is a convenience function that creates installers and retrieves images
 // for a given cluster configuration.
-func (f *InstallerFactory) GetImagesForCluster(
+func (f *Factory) GetImagesForCluster(
 	ctx context.Context,
 	cfg *v1alpha1.Cluster,
 ) ([]string, error) {
@@ -173,7 +179,7 @@ func (f *InstallerFactory) GetImagesForCluster(
 }
 
 // needsLocalPathStorage determines if local-path-storage is needed.
-func (f *InstallerFactory) needsLocalPathStorage(spec v1alpha1.ClusterSpec) bool {
+func (f *Factory) needsLocalPathStorage(spec v1alpha1.ClusterSpec) bool {
 	// K3s has built-in storage
 	if spec.Distribution == v1alpha1.DistributionK3s {
 		return false
@@ -189,7 +195,7 @@ func (f *InstallerFactory) needsLocalPathStorage(spec v1alpha1.ClusterSpec) bool
 }
 
 // needsHetznerCSI determines if Hetzner CSI is needed.
-func (f *InstallerFactory) needsHetznerCSI(spec v1alpha1.ClusterSpec) bool {
+func (f *Factory) needsHetznerCSI(spec v1alpha1.ClusterSpec) bool {
 	if spec.Distribution != v1alpha1.DistributionTalos {
 		return false
 	}
@@ -202,7 +208,7 @@ func (f *InstallerFactory) needsHetznerCSI(spec v1alpha1.ClusterSpec) bool {
 }
 
 // needsCloudProviderKind determines if cloud-provider-kind is needed.
-func (f *InstallerFactory) needsCloudProviderKind(spec v1alpha1.ClusterSpec) bool {
+func (f *Factory) needsCloudProviderKind(spec v1alpha1.ClusterSpec) bool {
 	if spec.Distribution != v1alpha1.DistributionVanilla {
 		return false
 	}

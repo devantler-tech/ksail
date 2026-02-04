@@ -1,6 +1,7 @@
 package workload
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -15,6 +16,9 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
 	"github.com/spf13/cobra"
 )
+
+// ErrUnknownOutputFormat is returned when an unrecognized output format is specified.
+var ErrUnknownOutputFormat = errors.New("unknown output format")
 
 const imagesCmdLong = `List container images required by the configured cluster components.
 
@@ -112,8 +116,8 @@ func runImagesCommand(
 		return fmt.Errorf("create helm client: %w", err)
 	}
 
-	// Use InstallerFactory to get images dynamically from Helm charts
-	factory := installer.NewInstallerFactory(
+	// Use Factory to get images dynamically from Helm charts
+	factory := installer.NewFactory(
 		helmClient,
 		nil, // dockerClient not needed for image extraction
 		"",  // kubeconfig not needed for image extraction
@@ -137,7 +141,7 @@ func runImagesCommand(
 	case "plain", "":
 		return outputPlain(cmd, images, outputTimer)
 	default:
-		return fmt.Errorf("unknown output format: %s (valid: plain, json)", outputFormat)
+		return fmt.Errorf("%w: %s (valid: plain, json)", ErrUnknownOutputFormat, outputFormat)
 	}
 }
 
@@ -154,7 +158,7 @@ func outputPlain(cmd *cobra.Command, images []string, tmr timer.Timer) error {
 	}
 
 	for _, img := range images {
-		fmt.Fprintln(cmd.OutOrStdout(), img)
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), img)
 	}
 
 	return nil
@@ -162,17 +166,17 @@ func outputPlain(cmd *cobra.Command, images []string, tmr timer.Timer) error {
 
 func outputJSON(cmd *cobra.Command, images []string, _ timer.Timer) error {
 	// Manual JSON array to avoid import
-	fmt.Fprint(cmd.OutOrStdout(), "[")
+	_, _ = fmt.Fprint(cmd.OutOrStdout(), "[")
 
 	for i, img := range images {
 		if i > 0 {
-			fmt.Fprint(cmd.OutOrStdout(), ",")
+			_, _ = fmt.Fprint(cmd.OutOrStdout(), ",")
 		}
 
-		fmt.Fprintf(cmd.OutOrStdout(), "%q", img)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%q", img)
 	}
 
-	fmt.Fprintln(cmd.OutOrStdout(), "]")
+	_, _ = fmt.Fprintln(cmd.OutOrStdout(), "]")
 
 	return nil
 }

@@ -2,6 +2,7 @@ package localpathstorageinstaller
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -13,6 +14,9 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/svc/image"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
+
+// ErrManifestFetchFailed is returned when the manifest cannot be fetched from the remote URL.
+var ErrManifestFetchFailed = errors.New("failed to fetch manifest")
 
 const (
 	// localPathProvisionerVersion is the version of Rancher local-path-provisioner to install.
@@ -92,7 +96,7 @@ func (l *LocalPathStorageInstaller) Images(ctx context.Context) ([]string, error
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("failed to fetch manifest: status %d", resp.StatusCode)
+		return nil, fmt.Errorf("%w: status %d", ErrManifestFetchFailed, resp.StatusCode)
 	}
 
 	body, err := io.ReadAll(resp.Body)
