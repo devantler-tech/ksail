@@ -286,6 +286,7 @@ npm run dev                            # Test locally (if needed)
 - **Provider/Provisioner Architecture**: Separated infrastructure providers (Docker, Hetzner) from distribution provisioners (Vanilla, K3s, Talos)
 - **Hetzner Provider**: Added support for running Talos clusters on Hetzner Cloud
 - **Registry Authentication**: Added support for external registries with username/password authentication
+- **Default Registry Mirrors**: Enabled docker.io and ghcr.io mirrors by default to avoid rate limits and improve CI/CD performance (`pkg/cli/setup/mirrorregistry/defaults.go`)
 - **Distribution Naming**: Changed user-facing names from `Kind`/`K3d` to `Vanilla`/`K3s` to focus on the Kubernetes distribution rather than the underlying tool
 - **VSCode Extension**: Added VSCode extension for managing KSail clusters from the editor with interactive wizards and MCP server support
 - **AI Chat Integration**: Added `ksail chat` command powered by GitHub Copilot SDK for interactive cluster configuration and troubleshooting (`pkg/svc/chat/`)
