@@ -11,7 +11,9 @@ description: |
   4. Pulls all images through the mirrors (populating their volumes)
   5. Saves the mirror volumes to GitHub Actions cache
 
-  The cache key includes the go.mod hash to invalidate when dependencies change.
+  The cache key is based on the hash of the extracted image list, ensuring
+  cache invalidation when any image reference changes (including code changes
+  that affect image extraction, not just go.mod changes).
 
 inputs:
   cache-version:
@@ -34,55 +36,8 @@ outputs:
 runs:
   using: composite
   steps:
-    - name: 🔑 Generate cache key
-      id: generate-key
-      shell: bash
-      env:
-        CACHE_VERSION: ${{ inputs.cache-version }}
-        RUNNER_OS: ${{ runner.os }}
-        RUNNER_ARCH: ${{ runner.arch }}
-      run: |
-        # Include go.mod hash to invalidate when Helm chart versions change
-        GO_MOD_HASH="${{ hashFiles('go.mod', 'go.sum') }}"
-        HASH_SHORT="${GO_MOD_HASH:0:12}"
-        CACHE_KEY="mirror-cache-${CACHE_VERSION}-${HASH_SHORT}-${RUNNER_OS}-${RUNNER_ARCH}"
-        echo "cache-key=$CACHE_KEY" >> "$GITHUB_OUTPUT"
-        echo "📦 Cache key: $CACHE_KEY"
-
-    - name: 📥 Restore mirror cache
-      id: restore-cache
-      uses: actions/cache/restore@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
-      with:
-        path: /tmp/mirror-cache
-        key: ${{ steps.generate-key.outputs.cache-key }}
-        restore-keys: |
-          mirror-cache-${{ inputs.cache-version }}-
-
-    - name: 🔍 Check if cache is complete
-      id: check-cache
-      if: steps.restore-cache.outputs.cache-hit == 'true'
-      shell: bash
-      run: |
-        if [ -d "/tmp/mirror-cache" ] && [ -n "$(ls -A /tmp/mirror-cache 2>/dev/null)" ]; then
-          echo "✅ Cache restored, checking completeness..."
-          # Check for all 4 mirror volumes (using KSail's naming convention)
-          if [ -f "/tmp/mirror-cache/docker.io.tar" ] && \
-             [ -f "/tmp/mirror-cache/ghcr.io.tar" ] && \
-             [ -f "/tmp/mirror-cache/quay.io.tar" ] && \
-             [ -f "/tmp/mirror-cache/registry.k8s.io.tar" ]; then
-            echo "complete=true" >> "$GITHUB_OUTPUT"
-            echo "✅ Cache complete with all 4 mirror volumes"
-          else
-            echo "complete=false" >> "$GITHUB_OUTPUT"
-            echo "⚠️ Cache incomplete, will re-warm"
-          fi
-        else
-          echo "complete=false" >> "$GITHUB_OUTPUT"
-        fi
-
     - name: 📋 Extract images for all configurations
       id: extract-images
-      if: steps.check-cache.outputs.complete != 'true'
       shell: bash
       run: |
         echo "📋 Extracting images for all system test configurations..."
@@ -143,11 +98,63 @@ runs:
 
         echo "✅ Extracted $COUNT unique images"
 
+        # Compute hash of the image list for cache key
+        # This ensures cache invalidation when any image reference changes
+        IMAGES_HASH=$(sha256sum "$IMAGES_FILE" | cut -c1-12)
+        echo "images-hash=$IMAGES_HASH" >> "$GITHUB_OUTPUT"
+        echo "🔑 Images hash: $IMAGES_HASH"
+
         # Show images for debugging
         echo "📦 Images to cache:"
         cat "$IMAGES_FILE" | head -30
         if [ "$COUNT" -gt 30 ]; then
           echo "  ... and $((COUNT - 30)) more"
+        fi
+
+    - name: 🔑 Generate cache key
+      id: generate-key
+      shell: bash
+      env:
+        CACHE_VERSION: ${{ inputs.cache-version }}
+        RUNNER_OS: ${{ runner.os }}
+        RUNNER_ARCH: ${{ runner.arch }}
+        IMAGES_HASH: ${{ steps.extract-images.outputs.images-hash }}
+      run: |
+        # Use hash of extracted image list to invalidate when images change
+        # This covers both go.mod changes AND code changes affecting image extraction
+        CACHE_KEY="mirror-cache-${CACHE_VERSION}-${IMAGES_HASH}-${RUNNER_OS}-${RUNNER_ARCH}"
+        echo "cache-key=$CACHE_KEY" >> "$GITHUB_OUTPUT"
+        echo "📦 Cache key: $CACHE_KEY"
+
+    - name: 📥 Restore mirror cache
+      id: restore-cache
+      uses: actions/cache/restore@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+      with:
+        path: /tmp/mirror-cache
+        key: ${{ steps.generate-key.outputs.cache-key }}
+        restore-keys: |
+          mirror-cache-${{ inputs.cache-version }}-
+
+    - name: 🔍 Check if cache is complete
+      id: check-cache
+      if: steps.restore-cache.outputs.cache-hit == 'true'
+      shell: bash
+      run: |
+        if [ -d "/tmp/mirror-cache" ] && [ -n "$(ls -A /tmp/mirror-cache 2>/dev/null)" ]; then
+          echo "✅ Cache restored, checking completeness..."
+          # Check for all 4 mirror volumes (using KSail's naming convention)
+          if [ -f "/tmp/mirror-cache/docker.io.tar" ] && \
+             [ -f "/tmp/mirror-cache/ghcr.io.tar" ] && \
+             [ -f "/tmp/mirror-cache/quay.io.tar" ] && \
+             [ -f "/tmp/mirror-cache/registry.k8s.io.tar" ]; then
+            echo "complete=true" >> "$GITHUB_OUTPUT"
+            echo "✅ Cache complete with all 4 mirror volumes"
+          else
+            echo "complete=false" >> "$GITHUB_OUTPUT"
+            echo "⚠️ Cache incomplete, will re-warm"
+          fi
+        else
+          echo "complete=false" >> "$GITHUB_OUTPUT"
         fi
 
     - name: 🐳 Create mirror registries

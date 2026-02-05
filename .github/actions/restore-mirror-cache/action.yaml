@@ -3,6 +3,9 @@ description: |
   Restores the pre-warmed mirror cache volumes created by warm-mirror-cache.
   Use this in system test jobs to benefit from the warmed cache.
 
+  The cache key is computed by extracting the same image list and hashing it,
+  ensuring restore jobs can find the cache created by warm-mirror-cache.
+
 inputs:
   cache-version:
     description: |
@@ -18,6 +21,40 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: 📋 Extract images for cache key computation
+      id: extract-images
+      shell: bash
+      run: |
+        echo "📋 Extracting images to compute cache key..."
+
+        # Same configurations as warm-mirror-cache to get identical hash
+        CONFIGS=(
+          "--distribution Vanilla --cni Cilium"
+          "--distribution Vanilla --cni Cilium --csi Enabled --load-balancer Enabled --metrics-server Enabled --policy-engine Kyverno --cert-manager Enabled --gitops-engine Flux"
+          "--distribution Vanilla --cni Calico --policy-engine Gatekeeper --gitops-engine ArgoCD"
+          "--distribution K3s --cni Cilium --gitops-engine Flux"
+          "--distribution K3s --cni Cilium --gitops-engine ArgoCD"
+          "--distribution Talos --cni Cilium --gitops-engine Flux"
+          "--distribution Talos --cni Cilium --gitops-engine ArgoCD"
+        )
+
+        IMAGES_FILE="/tmp/all-images.txt"
+        > "$IMAGES_FILE"
+
+        for config in "${CONFIGS[@]}"; do
+          # shellcheck disable=SC2086
+          ksail workload images $config >> "$IMAGES_FILE" 2>/dev/null || true
+        done
+
+        # Deduplicate and sort (must match warm-mirror-cache exactly)
+        sort -u "$IMAGES_FILE" > /tmp/unique-images.txt
+        mv /tmp/unique-images.txt "$IMAGES_FILE"
+
+        # Compute hash of the image list
+        IMAGES_HASH=$(sha256sum "$IMAGES_FILE" | cut -c1-12)
+        echo "images-hash=$IMAGES_HASH" >> "$GITHUB_OUTPUT"
+        echo "🔑 Images hash: $IMAGES_HASH"
+
     - name: 🔑 Generate cache key
       id: generate-key
       shell: bash
@@ -25,10 +62,9 @@ runs:
         CACHE_VERSION: ${{ inputs.cache-version }}
         RUNNER_OS: ${{ runner.os }}
         RUNNER_ARCH: ${{ runner.arch }}
+        IMAGES_HASH: ${{ steps.extract-images.outputs.images-hash }}
       run: |
-        GO_MOD_HASH="${{ hashFiles('go.mod', 'go.sum') }}"
-        HASH_SHORT="${GO_MOD_HASH:0:12}"
-        CACHE_KEY="mirror-cache-${CACHE_VERSION}-${HASH_SHORT}-${RUNNER_OS}-${RUNNER_ARCH}"
+        CACHE_KEY="mirror-cache-${CACHE_VERSION}-${IMAGES_HASH}-${RUNNER_OS}-${RUNNER_ARCH}"
         echo "cache-key=$CACHE_KEY" >> "$GITHUB_OUTPUT"
 
     - name: 📥 Restore mirror cache
