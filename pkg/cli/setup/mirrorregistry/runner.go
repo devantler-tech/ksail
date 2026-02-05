@@ -59,7 +59,7 @@ var DefaultDockerClientInvoker DockerClientInvoker = helpers.WithDockerClient
 
 // RunStage executes the registry stage for the given role.
 //
-//nolint:funlen,cyclop // Orchestrates multi-step registry operations with proper error handling.
+//nolint:funlen // Orchestrates multi-step registry operations with proper error handling.
 func RunStage(
 	cmd *cobra.Command,
 	clusterCfg *v1alpha1.Cluster,
