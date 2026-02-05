@@ -284,13 +284,13 @@ func TestValidateLocalRegistryForProvider(t *testing.T) {
 		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			err := v1alpha1.ValidateLocalRegistryForProvider(tc.provider, tc.registry)
+			err := v1alpha1.ValidateLocalRegistryForProvider(testCase.provider, testCase.registry)
 
-			if tc.wantError {
+			if testCase.wantError {
 				require.ErrorIs(t, err, v1alpha1.ErrLocalRegistryNotSupported)
 			} else {
 				require.NoError(t, err)

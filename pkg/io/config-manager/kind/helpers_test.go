@@ -111,13 +111,13 @@ func TestResolveMirrorsDir(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			result := kind.ResolveMirrorsDir(tt.clusterCfg)
+			result := kind.ResolveMirrorsDir(testCase.clusterCfg)
 
-			assert.Equal(t, tt.expected, result)
+			assert.Equal(t, testCase.expected, result)
 		})
 	}
 }

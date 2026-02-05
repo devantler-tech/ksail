@@ -385,13 +385,13 @@ func TestResolveNetworkName(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			result := k3d.ResolveNetworkName(tt.clusterName)
+			result := k3d.ResolveNetworkName(testCase.clusterName)
 
-			assert.Equal(t, tt.expected, result)
+			assert.Equal(t, testCase.expected, result)
 		})
 	}
 }

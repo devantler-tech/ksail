@@ -28,17 +28,17 @@ func TestToolParametersFromJSON(t *testing.T) {
 		{"empty string", ``, nil, true},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			params, err := toolgen.ToolParametersFromJSON(tc.json)
+			params, err := toolgen.ToolParametersFromJSON(testCase.json)
 
-			if tc.expectError {
+			if testCase.expectError {
 				require.Error(t, err)
 			} else {
 				require.NoError(t, err)
-				assert.Equal(t, tc.expected, params)
+				assert.Equal(t, testCase.expected, params)
 			}
 		})
 	}
@@ -85,6 +85,7 @@ func TestBuildCommandArgs_BooleanFlags(t *testing.T) {
 		args, err := toolgen.BuildCommandArgs(tool, map[string]any{"force": false})
 
 		require.NoError(t, err)
+
 		for _, arg := range args {
 			assert.NotContains(t, arg, "force")
 		}
@@ -154,6 +155,7 @@ func TestBuildCommandArgs_NilValueSkipped(t *testing.T) {
 	})
 
 	require.NoError(t, err)
+
 	for _, arg := range args {
 		assert.NotContains(t, arg, "config")
 	}

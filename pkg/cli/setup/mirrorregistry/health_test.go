@@ -14,6 +14,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+var (
+	errDockerUnavailable = errors.New("docker unavailable")
+	errRegistryTimeout   = errors.New("registry timeout")
+)
+
 func TestWaitForRegistriesReady_EmptyRegistries(t *testing.T) {
 	t.Parallel()
 
@@ -33,7 +38,8 @@ func TestWaitForRegistriesReady_EmptyRegistries(t *testing.T) {
 func TestWaitForRegistriesReady_BackendFactoryError(t *testing.T) {
 	t.Parallel()
 
-	factoryErr := errors.New("docker unavailable")
+	factoryErr := errDockerUnavailable
+
 	cleanup := registry.SetBackendFactoryForTests(
 		func(_ client.APIClient) (registry.Backend, error) {
 			return nil, factoryErr
@@ -62,10 +68,15 @@ func TestWaitForRegistriesReady_Success(t *testing.T) {
 	t.Parallel()
 
 	mockBackend := registry.NewMockBackend(t)
-	mockBackend.On("WaitForRegistriesReady", mock.Anything, mock.MatchedBy(func(m map[string]string) bool {
-		_, ok := m["mirror-docker-io"]
-		return ok && len(m) == 1
-	})).Return(nil)
+	mockBackend.On(
+		"WaitForRegistriesReady",
+		mock.Anything,
+		mock.MatchedBy(func(m map[string]string) bool {
+			_, ok := m["mirror-docker-io"]
+
+			return ok && len(m) == 1
+		}),
+	).Return(nil)
 
 	cleanup := registry.SetBackendFactoryForTests(
 		func(_ client.APIClient) (registry.Backend, error) {
@@ -94,7 +105,7 @@ func TestWaitForRegistriesReady_Success(t *testing.T) {
 func TestWaitForRegistriesReady_BackendError(t *testing.T) {
 	t.Parallel()
 
-	backendErr := errors.New("registry timeout")
+	backendErr := errRegistryTimeout
 	mockBackend := registry.NewMockBackend(t)
 	mockBackend.On("WaitForRegistriesReady", mock.Anything, mock.Anything).Return(backendErr)
 
@@ -120,7 +131,7 @@ func TestWaitForRegistriesReady_BackendError(t *testing.T) {
 	)
 
 	require.Error(t, err)
-	assert.ErrorIs(t, err, backendErr)
+	require.ErrorIs(t, err, backendErr)
 	mockBackend.AssertExpectations(t)
 }
 
@@ -128,11 +139,16 @@ func TestWaitForRegistriesReady_MultipleRegistries(t *testing.T) {
 	t.Parallel()
 
 	mockBackend := registry.NewMockBackend(t)
-	mockBackend.On("WaitForRegistriesReady", mock.Anything, mock.MatchedBy(func(m map[string]string) bool {
-		_, hasDockerhub := m["mirror-docker-io"]
-		_, hasGhcr := m["mirror-ghcr-io"]
-		return hasDockerhub && hasGhcr && len(m) == 2
-	})).Return(nil)
+	mockBackend.On(
+		"WaitForRegistriesReady",
+		mock.Anything,
+		mock.MatchedBy(func(m map[string]string) bool {
+			_, hasDockerhub := m["mirror-docker-io"]
+			_, hasGhcr := m["mirror-ghcr-io"]
+
+			return hasDockerhub && hasGhcr && len(m) == 2
+		}),
+	).Return(nil)
 
 	cleanup := registry.SetBackendFactoryForTests(
 		func(_ client.APIClient) (registry.Backend, error) {

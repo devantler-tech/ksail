@@ -468,16 +468,17 @@ func TestAddFlagsFromFields_BoolField(t *testing.T) {
 				"test bool field",
 			)
 
+			assertFlagRegistered(t, selector, "unknown", "bool", testCase.setValue)
+
 			manager := configmanager.NewConfigManager(io.Discard, selector)
 			cmd := &cobra.Command{Use: "test"}
 			manager.AddFlagsFromFields(cmd)
 
-			flag := cmd.Flags().Lookup("unknown")
-			require.NotNil(t, flag, "bool flag should be registered")
-			assert.Equal(t, "bool", flag.Value.Type())
-
 			require.NoError(t, cmd.Flags().Set("unknown", testCase.setValue))
-			assert.Equal(t, testCase.expected, manager.Config.Spec.Cluster.Hetzner.PlacementGroupFallbackToNone)
+			assert.Equal(
+				t, testCase.expected,
+				manager.Config.Spec.Cluster.Hetzner.PlacementGroupFallbackToNone,
+			)
 		})
 	}
 }
@@ -510,21 +511,45 @@ func TestAddFlagsFromFields_Int32Field(t *testing.T) {
 			t.Parallel()
 
 			selector := newFieldSelector(
-				func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.Talos.ControlPlanes },
+				func(c *v1alpha1.Cluster) any {
+					return &c.Spec.Cluster.Talos.ControlPlanes
+				},
 				testCase.defaultValue,
 				"Number of control planes",
 			)
+
+			assertFlagRegistered(t, selector, "control-planes", "int32", testCase.setValue)
 
 			manager := configmanager.NewConfigManager(io.Discard, selector)
 			cmd := &cobra.Command{Use: "test"}
 			manager.AddFlagsFromFields(cmd)
 
-			flag := cmd.Flags().Lookup("control-planes")
-			require.NotNil(t, flag, "int32 flag should be registered")
-			assert.Equal(t, "int32", flag.Value.Type())
-
 			require.NoError(t, cmd.Flags().Set("control-planes", testCase.setValue))
-			assert.Equal(t, testCase.expected, manager.Config.Spec.Cluster.Talos.ControlPlanes)
+			assert.Equal(
+				t, testCase.expected,
+				manager.Config.Spec.Cluster.Talos.ControlPlanes,
+			)
 		})
 	}
+}
+
+// assertFlagRegistered verifies that a field selector registers a flag with the expected name and type.
+func assertFlagRegistered(
+	t *testing.T,
+	selector configmanager.FieldSelector[v1alpha1.Cluster],
+	flagName string,
+	expectedType string,
+	setValue string,
+) {
+	t.Helper()
+
+	manager := configmanager.NewConfigManager(io.Discard, selector)
+	cmd := &cobra.Command{Use: "test"}
+	manager.AddFlagsFromFields(cmd)
+
+	flag := cmd.Flags().Lookup(flagName)
+	require.NotNil(t, flag, "flag %q should be registered", flagName)
+	assert.Equal(t, expectedType, flag.Value.Type())
+
+	require.NoError(t, cmd.Flags().Set(flagName, setValue))
 }

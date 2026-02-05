@@ -12,6 +12,7 @@ import (
 
 func TestNewOptions_DefaultValues(t *testing.T) {
 	t.Parallel()
+
 	opts := talosprovisioner.NewOptions()
 	require.NotNil(t, opts)
 	assert.Equal(t, talos.DefaultTalosImage, opts.TalosImage)
@@ -33,11 +34,11 @@ func TestOptions_WithTalosImage(t *testing.T) {
 		{"sets custom image", "ghcr.io/siderolabs/talos:v1.8.0", "ghcr.io/siderolabs/talos:v1.8.0"},
 		{"ignores empty string", "", talos.DefaultTalosImage},
 	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
-			opts := talosprovisioner.NewOptions().WithTalosImage(tc.image)
-			assert.Equal(t, tc.expected, opts.TalosImage)
+			opts := talosprovisioner.NewOptions().WithTalosImage(testCase.image)
+			assert.Equal(t, testCase.expected, opts.TalosImage)
 		})
 	}
 }
@@ -53,11 +54,11 @@ func TestOptions_WithControlPlaneNodes(t *testing.T) {
 		{"rejects zero", 0, talosprovisioner.DefaultControlPlaneNodes},
 		{"rejects negative", -1, talosprovisioner.DefaultControlPlaneNodes},
 	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
-			opts := talosprovisioner.NewOptions().WithControlPlaneNodes(tc.count)
-			assert.Equal(t, tc.expected, opts.ControlPlaneNodes)
+			opts := talosprovisioner.NewOptions().WithControlPlaneNodes(testCase.count)
+			assert.Equal(t, testCase.expected, opts.ControlPlaneNodes)
 		})
 	}
 }
@@ -73,11 +74,11 @@ func TestOptions_WithWorkerNodes(t *testing.T) {
 		{"allows zero", 0, 0},
 		{"rejects negative", -1, talosprovisioner.DefaultWorkerNodes},
 	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
-			opts := talosprovisioner.NewOptions().WithWorkerNodes(tc.count)
-			assert.Equal(t, tc.expected, opts.WorkerNodes)
+			opts := talosprovisioner.NewOptions().WithWorkerNodes(testCase.count)
+			assert.Equal(t, testCase.expected, opts.WorkerNodes)
 		})
 	}
 }
@@ -92,11 +93,11 @@ func TestOptions_WithNetworkCIDR(t *testing.T) {
 		{"sets custom CIDR", "192.168.0.0/16", "192.168.0.0/16"},
 		{"ignores empty string", "", talos.DefaultNetworkCIDR},
 	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
-			opts := talosprovisioner.NewOptions().WithNetworkCIDR(tc.cidr)
-			assert.Equal(t, tc.expected, opts.NetworkCIDR)
+			opts := talosprovisioner.NewOptions().WithNetworkCIDR(testCase.cidr)
+			assert.Equal(t, testCase.expected, opts.NetworkCIDR)
 		})
 	}
 }
@@ -111,11 +112,11 @@ func TestOptions_WithKubeconfigPath(t *testing.T) {
 		{"sets path", "/tmp/kubeconfig", "/tmp/kubeconfig"},
 		{"ignores empty string", "", ""},
 	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
-			opts := talosprovisioner.NewOptions().WithKubeconfigPath(tc.path)
-			assert.Equal(t, tc.expected, opts.KubeconfigPath)
+			opts := talosprovisioner.NewOptions().WithKubeconfigPath(testCase.path)
+			assert.Equal(t, testCase.expected, opts.KubeconfigPath)
 		})
 	}
 }
@@ -130,11 +131,12 @@ func TestOptions_WithTalosconfigPath(t *testing.T) {
 		{"sets path", "/tmp/talosconfig", "/tmp/talosconfig"},
 		{"ignores empty string", "", ""},
 	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
-			opts := talosprovisioner.NewOptions().WithTalosconfigPath(tc.path)
-			assert.Equal(t, tc.expected, opts.TalosconfigPath)
+			opts := talosprovisioner.NewOptions().WithTalosconfigPath(testCase.path)
+
+			assert.Equal(t, testCase.expected, opts.TalosconfigPath)
 		})
 	}
 }
@@ -149,11 +151,11 @@ func TestOptions_WithSkipCNIChecks(t *testing.T) {
 		{"enables skip", true, true},
 		{"disables skip", false, false},
 	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
-			opts := talosprovisioner.NewOptions().WithSkipCNIChecks(tc.skip)
-			assert.Equal(t, tc.expected, opts.SkipCNIChecks)
+			opts := talosprovisioner.NewOptions().WithSkipCNIChecks(testCase.skip)
+			assert.Equal(t, testCase.expected, opts.SkipCNIChecks)
 		})
 	}
 }
@@ -179,6 +181,7 @@ func TestOptions_Chaining(t *testing.T) {
 
 func TestNewPatchDirs(t *testing.T) {
 	t.Parallel()
+
 	tests := []struct {
 		name            string
 		patchesDir      string
@@ -212,14 +215,14 @@ func TestNewPatchDirs(t *testing.T) {
 			filepath.Join("config/talos/patches", "workers"),
 		},
 	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
-			dirs := talosprovisioner.NewPatchDirs(tc.patchesDir)
-			assert.Equal(t, tc.expectedRoot, dirs.Root)
-			assert.Equal(t, tc.expectedCluster, dirs.Cluster)
-			assert.Equal(t, tc.expectedCP, dirs.ControlPlanes)
-			assert.Equal(t, tc.expectedWorkers, dirs.Workers)
+			dirs := talosprovisioner.NewPatchDirs(testCase.patchesDir)
+			assert.Equal(t, testCase.expectedRoot, dirs.Root)
+			assert.Equal(t, testCase.expectedCluster, dirs.Cluster)
+			assert.Equal(t, testCase.expectedCP, dirs.ControlPlanes)
+			assert.Equal(t, testCase.expectedWorkers, dirs.Workers)
 		})
 	}
 }
