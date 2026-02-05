@@ -33,6 +33,12 @@ const (
 	repoDirMode    = 0o750
 	repoFileMode   = 0o640
 	chartRefParts  = 2
+
+	// Retry configuration for repository index downloads.
+	// External Helm repositories may experience transient 5xx errors.
+	repoIndexMaxRetries    = 3
+	repoIndexRetryBaseWait = 2 * time.Second
+	repoIndexRetryMaxWait  = 15 * time.Second
 )
 
 var (
@@ -495,17 +501,58 @@ func newChartRepository(
 }
 
 func downloadRepositoryIndex(chartRepository *repov1.ChartRepository) error {
-	indexPath, err := chartRepository.DownloadIndexFile()
-	if err != nil {
-		return fmt.Errorf("failed to download repository index file: %w", err)
+	var lastErr error
+
+	for attempt := 1; attempt <= repoIndexMaxRetries; attempt++ {
+		indexPath, err := chartRepository.DownloadIndexFile()
+		if err == nil {
+			_, statErr := os.Stat(indexPath)
+			if statErr == nil {
+				return nil
+			}
+
+			lastErr = fmt.Errorf("failed to verify repository index file: %w", statErr)
+		} else {
+			lastErr = fmt.Errorf("failed to download repository index file: %w", err)
+		}
+
+		// Check if this is a retryable transient HTTP error (5xx)
+		if !isRetryableHTTPError(lastErr) || attempt == repoIndexMaxRetries {
+			break
+		}
+
+		// Calculate delay with exponential backoff
+		delay := calculateRepoRetryDelay(attempt)
+		time.Sleep(delay)
 	}
 
-	_, statErr := os.Stat(indexPath)
-	if statErr != nil {
-		return fmt.Errorf("failed to verify repository index file: %w", statErr)
+	return lastErr
+}
+
+// isRetryableHTTPError returns true if the error indicates a transient HTTP error
+// that should be retried (5xx status codes).
+func isRetryableHTTPError(err error) bool {
+	if err == nil {
+		return false
 	}
 
-	return nil
+	errMsg := err.Error()
+
+	// Check for common 5xx error status codes in error messages
+	return strings.Contains(errMsg, "500") ||
+		strings.Contains(errMsg, "502") ||
+		strings.Contains(errMsg, "503") ||
+		strings.Contains(errMsg, "504") ||
+		strings.Contains(errMsg, "Internal Server Error") ||
+		strings.Contains(errMsg, "Bad Gateway") ||
+		strings.Contains(errMsg, "Service Unavailable") ||
+		strings.Contains(errMsg, "Gateway Timeout")
+}
+
+// calculateRepoRetryDelay returns the delay for the given retry attempt.
+// Uses exponential backoff: 2s, 4s, 8s... capped at repoIndexRetryMaxWait.
+func calculateRepoRetryDelay(attempt int) time.Duration {
+	return min(repoIndexRetryBaseWait*time.Duration(1<<(attempt-1)), repoIndexRetryMaxWait)
 }
 
 func (c *Client) installRelease(
