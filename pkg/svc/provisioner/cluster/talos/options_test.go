@@ -26,6 +26,7 @@ func TestNewOptions_DefaultValues(t *testing.T) {
 
 func TestOptions_WithTalosImage(t *testing.T) {
 	t.Parallel()
+
 	tests := []struct {
 		name     string
 		image    string
@@ -37,7 +38,9 @@ func TestOptions_WithTalosImage(t *testing.T) {
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
+
 			opts := talosprovisioner.NewOptions().WithTalosImage(testCase.image)
+
 			assert.Equal(t, testCase.expected, opts.TalosImage)
 		})
 	}
@@ -45,6 +48,7 @@ func TestOptions_WithTalosImage(t *testing.T) {
 
 func TestOptions_WithControlPlaneNodes(t *testing.T) {
 	t.Parallel()
+
 	tests := []struct {
 		name     string
 		count    int
@@ -54,10 +58,13 @@ func TestOptions_WithControlPlaneNodes(t *testing.T) {
 		{"rejects zero", 0, talosprovisioner.DefaultControlPlaneNodes},
 		{"rejects negative", -1, talosprovisioner.DefaultControlPlaneNodes},
 	}
+
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
+
 			opts := talosprovisioner.NewOptions().WithControlPlaneNodes(testCase.count)
+
 			assert.Equal(t, testCase.expected, opts.ControlPlaneNodes)
 		})
 	}
@@ -65,6 +72,7 @@ func TestOptions_WithControlPlaneNodes(t *testing.T) {
 
 func TestOptions_WithWorkerNodes(t *testing.T) {
 	t.Parallel()
+
 	tests := []struct {
 		name     string
 		count    int
@@ -77,7 +85,9 @@ func TestOptions_WithWorkerNodes(t *testing.T) {
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
+
 			opts := talosprovisioner.NewOptions().WithWorkerNodes(testCase.count)
+
 			assert.Equal(t, testCase.expected, opts.WorkerNodes)
 		})
 	}
@@ -85,6 +95,7 @@ func TestOptions_WithWorkerNodes(t *testing.T) {
 
 func TestOptions_WithNetworkCIDR(t *testing.T) {
 	t.Parallel()
+
 	tests := []struct {
 		name     string
 		cidr     string
@@ -96,7 +107,9 @@ func TestOptions_WithNetworkCIDR(t *testing.T) {
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
+
 			opts := talosprovisioner.NewOptions().WithNetworkCIDR(testCase.cidr)
+
 			assert.Equal(t, testCase.expected, opts.NetworkCIDR)
 		})
 	}
@@ -104,6 +117,7 @@ func TestOptions_WithNetworkCIDR(t *testing.T) {
 
 func TestOptions_WithKubeconfigPath(t *testing.T) {
 	t.Parallel()
+
 	tests := []struct {
 		name     string
 		path     string
@@ -115,7 +129,9 @@ func TestOptions_WithKubeconfigPath(t *testing.T) {
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
+
 			opts := talosprovisioner.NewOptions().WithKubeconfigPath(testCase.path)
+
 			assert.Equal(t, testCase.expected, opts.KubeconfigPath)
 		})
 	}
@@ -123,6 +139,7 @@ func TestOptions_WithKubeconfigPath(t *testing.T) {
 
 func TestOptions_WithTalosconfigPath(t *testing.T) {
 	t.Parallel()
+
 	tests := []struct {
 		name     string
 		path     string
@@ -134,6 +151,7 @@ func TestOptions_WithTalosconfigPath(t *testing.T) {
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
+
 			opts := talosprovisioner.NewOptions().WithTalosconfigPath(testCase.path)
 
 			assert.Equal(t, testCase.expected, opts.TalosconfigPath)
@@ -143,6 +161,7 @@ func TestOptions_WithTalosconfigPath(t *testing.T) {
 
 func TestOptions_WithSkipCNIChecks(t *testing.T) {
 	t.Parallel()
+
 	tests := []struct {
 		name     string
 		skip     bool
@@ -154,7 +173,9 @@ func TestOptions_WithSkipCNIChecks(t *testing.T) {
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
+
 			opts := talosprovisioner.NewOptions().WithSkipCNIChecks(testCase.skip)
+
 			assert.Equal(t, testCase.expected, opts.SkipCNIChecks)
 		})
 	}
@@ -162,6 +183,7 @@ func TestOptions_WithSkipCNIChecks(t *testing.T) {
 
 func TestOptions_Chaining(t *testing.T) {
 	t.Parallel()
+
 	opts := talosprovisioner.NewOptions().
 		WithTalosImage("custom:v1.0").
 		WithControlPlaneNodes(3).
@@ -218,7 +240,9 @@ func TestNewPatchDirs(t *testing.T) {
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
+
 			dirs := talosprovisioner.NewPatchDirs(testCase.patchesDir)
+
 			assert.Equal(t, testCase.expectedRoot, dirs.Root)
 			assert.Equal(t, testCase.expectedCluster, dirs.Cluster)
 			assert.Equal(t, testCase.expectedCP, dirs.ControlPlanes)

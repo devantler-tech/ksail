@@ -56,7 +56,7 @@ func TestSetBackendFactoryForTests_CleanupRestoresOriginal(t *testing.T) {
 	// We can't compare funcs directly, so we verify it's not the mock by calling it with nil.
 	// The default factory will fail because nil docker client, while mock succeeds.
 	_, err := restoredFactory(nil)
-	assert.Error(
+	require.Error(
 		t, err,
 		"restored factory should be the original DefaultBackendFactory which rejects nil client",
 	)
@@ -74,11 +74,13 @@ func TestSetBackendFactoryForTests_NestedOverrides(t *testing.T) {
 
 	firstFactory := func(_ client.APIClient) (registry.Backend, error) {
 		firstCalled = true
+
 		return registry.NewMockBackend(t), nil
 	}
 
 	secondFactory := func(_ client.APIClient) (registry.Backend, error) {
 		secondCalled = true
+
 		return registry.NewMockBackend(t), nil
 	}
 
@@ -95,6 +97,7 @@ func TestSetBackendFactoryForTests_NestedOverrides(t *testing.T) {
 
 	// Restore to first override
 	cleanup2()
+
 	secondCalled = false
 
 	factory = registry.GetBackendFactory()

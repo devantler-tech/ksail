@@ -554,17 +554,17 @@ func TestAllocatePort(t *testing.T) {
 		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			nextPort := tc.initPort
-			usedPorts := tc.usedPorts
+			nextPort := testCase.initPort
+			usedPorts := testCase.usedPorts
 
 			port := registry.AllocatePort(&nextPort, usedPorts)
 
-			assert.Equal(t, tc.expectedPort, port)
-			assert.Equal(t, tc.expectedNext, nextPort)
+			assert.Equal(t, testCase.expectedPort, port)
+			assert.Equal(t, testCase.expectedNext, nextPort)
 		})
 	}
 }
@@ -627,14 +627,14 @@ func TestInitPortAllocation(t *testing.T) {
 		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			usedPorts, nextPort := registry.InitPortAllocation(tc.baseUsed)
+			usedPorts, nextPort := registry.InitPortAllocation(testCase.baseUsed)
 
-			assert.Equal(t, tc.expectedNext, nextPort)
-			assert.Len(t, usedPorts, tc.expectedLen)
+			assert.Equal(t, testCase.expectedNext, nextPort)
+			assert.Len(t, usedPorts, testCase.expectedLen)
 		})
 	}
 }
@@ -694,13 +694,13 @@ func TestBuildUpstreamLookup(t *testing.T) {
 		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			result := registry.BuildUpstreamLookup(tc.specs)
+			result := registry.BuildUpstreamLookup(testCase.specs)
 
-			assert.Equal(t, tc.expected, result)
+			assert.Equal(t, testCase.expected, result)
 		})
 	}
 }
@@ -745,13 +745,13 @@ func TestRenderK3dMirrorConfig(t *testing.T) {
 		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			result := registry.RenderK3dMirrorConfig(tc.input)
+			result := registry.RenderK3dMirrorConfig(testCase.input)
 
-			assert.Equal(t, tc.expected, result)
+			assert.Equal(t, testCase.expected, result)
 		})
 	}
 }
@@ -788,13 +788,13 @@ func TestGenerateScaffoldedHostsToml(t *testing.T) {
 		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			result := registry.GenerateScaffoldedHostsToml(tc.spec)
+			result := registry.GenerateScaffoldedHostsToml(testCase.spec)
 
-			for _, expected := range tc.contains {
+			for _, expected := range testCase.contains {
 				assert.Contains(t, result, expected)
 			}
 		})
@@ -853,18 +853,18 @@ func TestBuildMirrorEntries(t *testing.T) {
 		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			nextPort := 5000
 			usedPorts := map[int]struct{}{}
 
 			entries := registry.BuildMirrorEntries(
-				tc.specs, tc.prefix, tc.existingHosts, usedPorts, &nextPort,
+				testCase.specs, testCase.prefix, testCase.existingHosts, usedPorts, &nextPort,
 			)
 
-			assert.Len(t, entries, tc.expectedLen)
+			assert.Len(t, entries, testCase.expectedLen)
 		})
 	}
 }
