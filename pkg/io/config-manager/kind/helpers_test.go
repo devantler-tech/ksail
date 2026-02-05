@@ -38,6 +38,42 @@ func TestResolveClusterName_FallbackToContext(t *testing.T) {
 	assert.Equal(t, "my-context", name)
 }
 
+func TestResolveClusterName_StripsKindPrefix(t *testing.T) {
+	t.Parallel()
+
+	clusterCfg := &v1alpha1.Cluster{}
+	clusterCfg.Spec.Cluster.Connection.Context = "kind-mycluster"
+
+	name := kind.ResolveClusterName(clusterCfg, nil)
+	assert.Equal(t, "mycluster", name)
+}
+
+func TestResolveClusterName_RoundTripsWithContextName(t *testing.T) {
+	t.Parallel()
+
+	// Simulate the round-trip: ContextName("kind") -> "kind-kind" -> ResolveClusterName -> "kind"
+	dist := v1alpha1.DistributionVanilla
+	originalName := "kind"
+	contextName := dist.ContextName(originalName)
+
+	clusterCfg := &v1alpha1.Cluster{}
+	clusterCfg.Spec.Cluster.Connection.Context = contextName
+
+	resolved := kind.ResolveClusterName(clusterCfg, nil)
+	assert.Equal(t, originalName, resolved, "ResolveClusterName should reverse ContextName")
+}
+
+func TestResolveClusterName_KindOnlyPrefix(t *testing.T) {
+	t.Parallel()
+
+	// Context is exactly "kind-" with nothing after it — should return raw context
+	clusterCfg := &v1alpha1.Cluster{}
+	clusterCfg.Spec.Cluster.Connection.Context = "kind-"
+
+	name := kind.ResolveClusterName(clusterCfg, nil)
+	assert.Equal(t, "kind-", name)
+}
+
 func TestResolveClusterName_NilKindConfig(t *testing.T) {
 	t.Parallel()
 

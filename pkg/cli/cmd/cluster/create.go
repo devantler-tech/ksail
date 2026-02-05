@@ -154,13 +154,6 @@ func handleCreateRunE(
 		return err
 	}
 
-	// Set Connection.Context so post-CNI setup can resolve the cluster name correctly.
-	// This must happen after cluster creation when we have access to distribution configs.
-	clusterName := resolveClusterNameFromContext(ctx)
-	ctx.ClusterCfg.Spec.Cluster.Connection.Context = ctx.ClusterCfg.Spec.Cluster.Distribution.ContextName(
-		clusterName,
-	)
-
 	configureRegistryMirrorsInClusterWithWarning(
 		cmd,
 		ctx,
@@ -191,6 +184,15 @@ func handleCreateRunE(
 	if err != nil {
 		return fmt.Errorf("failed to wait for local registry: %w", err)
 	}
+
+	// Set Connection.Context so post-CNI setup (InstallCNI, helm, kubectl) can resolve
+	// the correct kubeconfig context. This MUST happen after local registry operations
+	// (which resolve cluster name from distribution configs, not from context) but before
+	// post-CNI setup (which needs the kubectl context name like "kind-kind").
+	clusterName := resolveClusterNameFromContext(ctx)
+	ctx.ClusterCfg.Spec.Cluster.Connection.Context = ctx.ClusterCfg.Spec.Cluster.Distribution.ContextName(
+		clusterName,
+	)
 
 	maybeImportCachedImages(cmd, ctx, deps.Timer)
 
