@@ -492,6 +492,141 @@ func TestDistribution_ProvidesLoadBalancerByDefault(t *testing.T) {
 	}
 }
 
+// DefaultClusterName tests.
+
+func TestDistribution_DefaultClusterName(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		distribution v1alpha1.Distribution
+		expected     string
+	}{
+		{
+			name:         "vanilla_returns_kind",
+			distribution: v1alpha1.DistributionVanilla,
+			expected:     "kind",
+		},
+		{
+			name:         "k3s_returns_k3d_default",
+			distribution: v1alpha1.DistributionK3s,
+			expected:     "k3d-default",
+		},
+		{
+			name:         "talos_returns_talos_default",
+			distribution: v1alpha1.DistributionTalos,
+			expected:     "talos-default",
+		},
+		{
+			name:         "unknown_returns_kind",
+			distribution: v1alpha1.Distribution("Unknown"),
+			expected:     "kind",
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			result := testCase.distribution.DefaultClusterName()
+			assert.Equal(t, testCase.expected, result)
+		})
+	}
+}
+
+// PlacementGroupStrategy tests.
+
+func TestPlacementGroupStrategy_Set(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		input     string
+		expected  v1alpha1.PlacementGroupStrategy
+		wantError bool
+	}{
+		{
+			name:     "none_lowercase",
+			input:    "none",
+			expected: v1alpha1.PlacementGroupStrategyNone,
+		},
+		{
+			name:     "none_uppercase",
+			input:    "NONE",
+			expected: v1alpha1.PlacementGroupStrategyNone,
+		},
+		{
+			name:     "none_mixed_case",
+			input:    "None",
+			expected: v1alpha1.PlacementGroupStrategyNone,
+		},
+		{
+			name:     "spread_lowercase",
+			input:    "spread",
+			expected: v1alpha1.PlacementGroupStrategySpread,
+		},
+		{
+			name:     "spread_uppercase",
+			input:    "SPREAD",
+			expected: v1alpha1.PlacementGroupStrategySpread,
+		},
+		{
+			name:     "spread_mixed_case",
+			input:    "Spread",
+			expected: v1alpha1.PlacementGroupStrategySpread,
+		},
+		{
+			name:      "invalid_value",
+			input:     "invalid",
+			wantError: true,
+		},
+		{
+			name:      "empty_string",
+			input:     "",
+			wantError: true,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			var strategy v1alpha1.PlacementGroupStrategy
+
+			err := strategy.Set(testCase.input)
+			if testCase.wantError {
+				require.Error(t, err)
+				require.ErrorIs(t, err, v1alpha1.ErrInvalidPlacementGroupStrategy)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, testCase.expected, strategy)
+			}
+		})
+	}
+}
+
+func TestPlacementGroupStrategy_StringAndType(t *testing.T) {
+	t.Parallel()
+
+	strategy := v1alpha1.PlacementGroupStrategySpread
+	assert.Equal(t, "Spread", strategy.String())
+	assert.Equal(t, "PlacementGroupStrategy", strategy.Type())
+
+	none := v1alpha1.PlacementGroupStrategyNone
+	assert.Equal(t, "None", none.String())
+}
+
+func TestPlacementGroupStrategy_ValidValues(t *testing.T) {
+	t.Parallel()
+
+	var strategy v1alpha1.PlacementGroupStrategy
+
+	values := strategy.ValidValues()
+	assert.Contains(t, values, "None")
+	assert.Contains(t, values, "Spread")
+	assert.Len(t, values, 2)
+}
+
 // Defaults tests.
 
 func TestExpectedDistributionConfigName(t *testing.T) {

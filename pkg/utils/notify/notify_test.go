@@ -396,3 +396,292 @@ func hasUppercaseLetters(s string) bool {
 
 	return false
 }
+
+// =============================================================================
+// Convenience Function Tests
+// =============================================================================
+
+func TestErrorf(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		format string
+		args   []any
+		want   string
+	}{
+		{
+			name:   "simple message",
+			format: "something went wrong",
+			want:   "✗ something went wrong\n",
+		},
+		{
+			name:   "formatted message",
+			format: "failed to create %s: %d errors",
+			args:   []any{"cluster", 3},
+			want:   "✗ failed to create cluster: 3 errors\n",
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			var buf bytes.Buffer
+
+			notify.Errorf(&buf, testCase.format, testCase.args...)
+
+			if got := buf.String(); got != testCase.want {
+				t.Errorf("Errorf() = %q, want %q", got, testCase.want)
+			}
+		})
+	}
+}
+
+func TestWarningf(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		format string
+		args   []any
+		want   string
+	}{
+		{
+			name:   "simple message",
+			format: "deprecated feature used",
+			want:   "⚠ deprecated feature used\n",
+		},
+		{
+			name:   "formatted message",
+			format: "cluster %q may be unstable",
+			args:   []any{"test-cluster"},
+			want:   "⚠ cluster \"test-cluster\" may be unstable\n",
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			var buf bytes.Buffer
+
+			notify.Warningf(&buf, testCase.format, testCase.args...)
+
+			if got := buf.String(); got != testCase.want {
+				t.Errorf("Warningf() = %q, want %q", got, testCase.want)
+			}
+		})
+	}
+}
+
+func TestActivityf(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		format string
+		args   []any
+		want   string
+	}{
+		{
+			name:   "simple message",
+			format: "installing cilium",
+			want:   "► installing cilium\n",
+		},
+		{
+			name:   "formatted message",
+			format: "deploying %s to namespace %s",
+			args:   []any{"app", "default"},
+			want:   "► deploying app to namespace default\n",
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			var buf bytes.Buffer
+
+			notify.Activityf(&buf, testCase.format, testCase.args...)
+
+			if got := buf.String(); got != testCase.want {
+				t.Errorf("Activityf() = %q, want %q", got, testCase.want)
+			}
+		})
+	}
+}
+
+func TestGeneratef(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		format string
+		args   []any
+		want   string
+	}{
+		{
+			name:   "simple message",
+			format: "kind.yaml",
+			want:   "✚ kind.yaml\n",
+		},
+		{
+			name:   "formatted message",
+			format: "%s/%s",
+			args:   []any{"k8s", "kustomization.yaml"},
+			want:   "✚ k8s/kustomization.yaml\n",
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			var buf bytes.Buffer
+
+			notify.Generatef(&buf, testCase.format, testCase.args...)
+
+			if got := buf.String(); got != testCase.want {
+				t.Errorf("Generatef() = %q, want %q", got, testCase.want)
+			}
+		})
+	}
+}
+
+func TestSuccessf(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		format string
+		args   []any
+		want   string
+	}{
+		{
+			name:   "simple message",
+			format: "cluster created",
+			want:   "✔ cluster created\n",
+		},
+		{
+			name:   "formatted message",
+			format: "deployed %d replicas of %s",
+			args:   []any{3, "nginx"},
+			want:   "✔ deployed 3 replicas of nginx\n",
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			var buf bytes.Buffer
+
+			notify.Successf(&buf, testCase.format, testCase.args...)
+
+			if got := buf.String(); got != testCase.want {
+				t.Errorf("Successf() = %q, want %q", got, testCase.want)
+			}
+		})
+	}
+}
+
+func TestSuccessWithTimerf(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+
+	tmr := &fixedTimer{total: 5 * time.Second, stage: 2 * time.Second}
+
+	notify.SuccessWithTimerf(&buf, tmr, "operation %s complete", "deploy")
+
+	got := buf.String()
+	want := "✔ operation deploy complete\n⏲ current: 2s\n  total:  5s\n"
+
+	if got != want {
+		t.Errorf("SuccessWithTimerf() = %q, want %q", got, want)
+	}
+}
+
+func TestInfof(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		format string
+		args   []any
+		want   string
+	}{
+		{
+			name:   "simple message",
+			format: "using context local",
+			want:   "ℹ using context local\n",
+		},
+		{
+			name:   "formatted message",
+			format: "cluster %s has %d nodes",
+			args:   []any{"prod", 5},
+			want:   "ℹ cluster prod has 5 nodes\n",
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			var buf bytes.Buffer
+
+			notify.Infof(&buf, testCase.format, testCase.args...)
+
+			if got := buf.String(); got != testCase.want {
+				t.Errorf("Infof() = %q, want %q", got, testCase.want)
+			}
+		})
+	}
+}
+
+func TestTitlef(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		emoji  string
+		format string
+		args   []any
+		want   string
+	}{
+		{
+			name:   "with custom emoji",
+			emoji:  "🚀",
+			format: "deploying to production",
+			want:   "🚀 deploying to production\n",
+		},
+		{
+			name:   "with formatted message",
+			emoji:  "📦",
+			format: "installing %d components",
+			args:   []any{5},
+			want:   "📦 installing 5 components\n",
+		},
+		{
+			name:   "with empty emoji uses default",
+			emoji:  "",
+			format: "status update",
+			want:   "ℹ️ status update\n",
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			var buf bytes.Buffer
+
+			notify.Titlef(&buf, testCase.emoji, testCase.format, testCase.args...)
+
+			if got := buf.String(); got != testCase.want {
+				t.Errorf("Titlef() = %q, want %q", got, testCase.want)
+			}
+		})
+	}
+}

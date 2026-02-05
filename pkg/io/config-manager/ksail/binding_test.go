@@ -426,3 +426,105 @@ func TestAddFlagsFromFields_GitOpsEngineAcceptsArgoCD(t *testing.T) {
 	require.NoError(t, cmd.Flags().Set("gitops-engine", "ArgoCD"))
 	assert.Equal(t, v1alpha1.GitOpsEngine("ArgoCD"), manager.Config.Spec.Cluster.GitOpsEngine)
 }
+
+func TestAddFlagsFromFields_BoolField(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		defaultValue any
+		setValue     string
+		expected     bool
+	}{
+		{
+			name:         "bool with default false",
+			defaultValue: false,
+			setValue:     "true",
+			expected:     true,
+		},
+		{
+			name:         "bool with default true",
+			defaultValue: true,
+			setValue:     "false",
+			expected:     false,
+		},
+		{
+			name:         "bool with nil default",
+			defaultValue: nil,
+			setValue:     "true",
+			expected:     true,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			selector := newFieldSelector(
+				func(c *v1alpha1.Cluster) any {
+					return &c.Spec.Cluster.Hetzner.PlacementGroupFallbackToNone
+				},
+				testCase.defaultValue,
+				"test bool field",
+			)
+
+			manager := configmanager.NewConfigManager(io.Discard, selector)
+			cmd := &cobra.Command{Use: "test"}
+			manager.AddFlagsFromFields(cmd)
+
+			flag := cmd.Flags().Lookup("unknown")
+			require.NotNil(t, flag, "bool flag should be registered")
+			assert.Equal(t, "bool", flag.Value.Type())
+
+			require.NoError(t, cmd.Flags().Set("unknown", testCase.setValue))
+			assert.Equal(t, testCase.expected, manager.Config.Spec.Cluster.Hetzner.PlacementGroupFallbackToNone)
+		})
+	}
+}
+
+func TestAddFlagsFromFields_Int32Field(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		defaultValue any
+		setValue     string
+		expected     int32
+	}{
+		{
+			name:         "int32 with no default",
+			defaultValue: nil,
+			setValue:     "5",
+			expected:     5,
+		},
+		{
+			name:         "int32 with default value",
+			defaultValue: int32(3),
+			setValue:     "7",
+			expected:     7,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			selector := newFieldSelector(
+				func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.Talos.ControlPlanes },
+				testCase.defaultValue,
+				"Number of control planes",
+			)
+
+			manager := configmanager.NewConfigManager(io.Discard, selector)
+			cmd := &cobra.Command{Use: "test"}
+			manager.AddFlagsFromFields(cmd)
+
+			flag := cmd.Flags().Lookup("control-planes")
+			require.NotNil(t, flag, "int32 flag should be registered")
+			assert.Equal(t, "int32", flag.Value.Type())
+
+			require.NoError(t, cmd.Flags().Set("control-planes", testCase.setValue))
+			assert.Equal(t, testCase.expected, manager.Config.Spec.Cluster.Talos.ControlPlanes)
+		})
+	}
+}
