@@ -26,10 +26,10 @@ const (
 	footerHeight  = 1              // single line help text
 
 	// Shared picker/output constants.
-	maxPickerItems     = 10 // absolute maximum items in picker modals
-	minPickerItems     = 3  // minimum items to show in picker modals
-	minViewportHeight  = 10 // minimum height to preserve for main viewport
-	minWrapWidth       = 20 // minimum width for text wrapping
+	maxPickerItems    = 10 // absolute maximum items in picker modals
+	minPickerItems    = 3  // minimum items to show in picker modals
+	minViewportHeight = 10 // minimum height to preserve for main viewport
+	minWrapWidth      = 20 // minimum width for text wrapping
 
 	// Tool and error message constants.
 	unknownToolName  = "unknown"           // fallback when tool name is nil
