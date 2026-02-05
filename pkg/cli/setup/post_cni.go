@@ -4,13 +4,13 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
 	"github.com/devantler-tech/ksail/v5/pkg/client/oci"
-	k3dconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/k3d"
 	kindconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/kind"
-	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
 	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
 	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
 	"github.com/spf13/cobra"
@@ -34,29 +34,25 @@ func ShouldPushOCIArtifact(clusterCfg *v1alpha1.Cluster) bool {
 }
 
 // ResolveClusterNameFromContext resolves the cluster name from the cluster config.
-// This uses the distribution's default cluster name for registry naming.
-// The cluster name is used for constructing registry container names (e.g., k3d-default-local-registry).
+// It first attempts to parse the cluster name from Connection.Context (e.g., "k3d-system-test-cluster" -> "system-test-cluster").
+// Falls back to the distribution's default cluster name if context is not set or parsing fails.
+// The cluster name is used for constructing registry container names (e.g., system-test-cluster-local-registry).
 func ResolveClusterNameFromContext(clusterCfg *v1alpha1.Cluster) string {
 	if clusterCfg == nil {
 		return kindconfigmanager.DefaultClusterName
 	}
 
-	return resolveDefaultClusterName(clusterCfg.Spec.Cluster.Distribution)
-}
-
-// resolveDefaultClusterName returns the default cluster name for a given distribution.
-// This matches the naming conventions used by each distribution's provisioner.
-func resolveDefaultClusterName(distribution v1alpha1.Distribution) string {
-	switch distribution {
-	case v1alpha1.DistributionK3s:
-		return k3dconfigmanager.DefaultClusterName
-	case v1alpha1.DistributionVanilla:
-		return kindconfigmanager.DefaultClusterName
-	case v1alpha1.DistributionTalos:
-		return talosconfigmanager.DefaultClusterName
-	default:
-		return kindconfigmanager.DefaultClusterName
+	// First try to extract cluster name from the context if available
+	contextName := strings.TrimSpace(clusterCfg.Spec.Cluster.Connection.Context)
+	if contextName != "" {
+		_, clusterName, err := lifecycle.DetectDistributionFromContext(contextName)
+		if err == nil && clusterName != "" {
+			return clusterName
+		}
 	}
+
+	// Fall back to default cluster name for the distribution
+	return clusterCfg.Spec.Cluster.Distribution.DefaultClusterName()
 }
 
 // ComponentRequirements represents which components need to be installed.

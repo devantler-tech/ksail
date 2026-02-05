@@ -154,6 +154,11 @@ func handleCreateRunE(
 		return err
 	}
 
+	// Set Connection.Context so post-CNI setup can resolve the cluster name correctly.
+	// This must happen after cluster creation when we have access to distribution configs.
+	clusterName := resolveClusterNameFromContext(ctx)
+	ctx.ClusterCfg.Spec.Cluster.Connection.Context = ctx.ClusterCfg.Spec.Cluster.Distribution.ContextName(clusterName)
+
 	configureRegistryMirrorsInClusterWithWarning(
 		cmd,
 		ctx,

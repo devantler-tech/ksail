@@ -29,7 +29,6 @@ const (
 	maxPickerItems     = 10 // absolute maximum items in picker modals
 	minPickerItems     = 3  // minimum items to show in picker modals
 	minViewportHeight  = 10 // minimum height to preserve for main viewport
-	maxToolOutputLines = 10 // maximum lines shown in collapsed tool output
 	minWrapWidth       = 20 // minimum width for text wrapping
 
 	// Tool and error message constants.
