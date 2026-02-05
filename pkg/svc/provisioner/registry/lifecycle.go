@@ -651,11 +651,17 @@ func ExtractPortFromEndpoint(endpoint string) int {
 }
 
 // ResolveRegistryName determines the registry container name from endpoints or falls back to prefix + host.
+// Only HTTP endpoints represent local mirror containers; HTTPS endpoints are remote upstreams and should be skipped.
 func ResolveRegistryName(host string, endpoints []string, prefix string) string {
 	expected := SanitizeHostIdentifier(host)
 	expectedWithPrefix := BuildRegistryName(prefix, host)
 
 	for _, endpoint := range endpoints {
+		// Skip HTTPS endpoints - they represent remote upstreams, not local mirror containers
+		if strings.HasPrefix(endpoint, "https://") {
+			continue
+		}
+
 		name := ExtractNameFromEndpoint(endpoint)
 		if name == "" {
 			continue
