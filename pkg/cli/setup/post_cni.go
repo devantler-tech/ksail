@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
+	"strconv"
 	"strings"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
@@ -11,6 +13,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
 	"github.com/devantler-tech/ksail/v5/pkg/client/oci"
 	kindconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/kind"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
 	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
 	"github.com/spf13/cobra"
@@ -34,9 +37,11 @@ func ShouldPushOCIArtifact(clusterCfg *v1alpha1.Cluster) bool {
 }
 
 // ResolveClusterNameFromContext resolves the cluster name from the cluster config.
-// It first attempts to parse the cluster name from Connection.Context (e.g., "k3d-system-test-cluster" -> "system-test-cluster").
+// It first attempts to parse the cluster name from Connection.Context
+// (e.g., "k3d-system-test-cluster" -> "system-test-cluster").
 // Falls back to the distribution's default cluster name if context is not set or parsing fails.
-// The cluster name is used for constructing registry container names (e.g., system-test-cluster-local-registry).
+// The cluster name is used for constructing registry container names
+// (e.g., system-test-cluster-local-registry).
 func ResolveClusterNameFromContext(clusterCfg *v1alpha1.Cluster) string {
 	if clusterCfg == nil {
 		return kindconfigmanager.DefaultClusterName
@@ -493,34 +498,41 @@ func buildArtifactExistsOptions(
 	registryInfo *helpers.RegistryInfo,
 	clusterCfg *v1alpha1.Cluster,
 ) oci.ArtifactExistsOptions {
-	repository := registryInfo.Repository
-	if repository == "" {
-		sourceDir := clusterCfg.Spec.Workload.SourceDirectory
-		if sourceDir == "" {
-			sourceDir = v1alpha1.DefaultSourceDirectory
-		}
-
-		repository = sourceDir
-	}
-
-	tag := registryInfo.Tag
-	if tag == "" {
-		tag = "dev"
-	}
-
-	var registryEndpoint string
-	if registryInfo.Port > 0 {
-		registryEndpoint = fmt.Sprintf("%s:%d", registryInfo.Host, registryInfo.Port)
-	} else {
-		registryEndpoint = registryInfo.Host
-	}
-
 	return oci.ArtifactExistsOptions{
-		RegistryEndpoint: registryEndpoint,
-		Repository:       repository,
-		Tag:              tag,
+		RegistryEndpoint: resolveRegistryEndpoint(registryInfo),
+		Repository:       resolveRepository(registryInfo, clusterCfg),
+		Tag:              resolveTag(registryInfo),
 		Username:         registryInfo.Username,
 		Password:         registryInfo.Password,
 		Insecure:         !clusterCfg.Spec.Cluster.LocalRegistry.IsExternal(),
 	}
+}
+
+func resolveRegistryEndpoint(info *helpers.RegistryInfo) string {
+	if info.Port > 0 {
+		return net.JoinHostPort(info.Host, strconv.Itoa(int(info.Port)))
+	}
+
+	return info.Host
+}
+
+func resolveRepository(info *helpers.RegistryInfo, cfg *v1alpha1.Cluster) string {
+	if info.Repository != "" {
+		return info.Repository
+	}
+
+	sourceDir := cfg.Spec.Workload.SourceDirectory
+	if sourceDir == "" {
+		return v1alpha1.DefaultSourceDirectory
+	}
+
+	return sourceDir
+}
+
+func resolveTag(info *helpers.RegistryInfo) string {
+	if info.Tag != "" {
+		return info.Tag
+	}
+
+	return registry.DefaultLocalArtifactTag
 }
