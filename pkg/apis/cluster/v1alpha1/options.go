@@ -19,12 +19,12 @@ type OptionsTalos struct {
 	Workers int32 `json:"workers,omitzero"`
 	// Config is the path to the talosconfig file.
 	// Defaults to "~/.talos/config".
-	Config string `json:"config,omitzero"        default:"~/.talos/config"`
+	Config string `json:"config,omitzero" default:"~/.talos/config"`
 	// ISO is the cloud provider's ISO/image ID for booting Talos Linux.
 	// Only used when targeting cloud providers (e.g., Hetzner Cloud).
 	// For Hetzner: See https://docs.hetzner.cloud/changelog for available Talos ISOs.
 	// Defaults to 122630 (Talos Linux 1.11.2 x86). Use 122629 for ARM.
-	ISO int64 `json:"iso,omitzero"           default:"122630"`
+	ISO int64 `json:"iso,omitzero" default:"122630"`
 }
 
 // LocalRegistry defines options for the host-local OCI registry integration.

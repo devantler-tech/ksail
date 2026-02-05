@@ -35,6 +35,7 @@ func TestWaitForRegistriesReady_EmptyRegistries(t *testing.T) {
 	assert.Empty(t, buf.String(), "should not write any messages for empty registries")
 }
 
+//nolint:paralleltest // shares global backendFactoryOverride via SetBackendFactoryForTests
 func TestWaitForRegistriesReady_BackendFactoryError(t *testing.T) {
 	factoryErr := errDockerUnavailable
 
@@ -62,6 +63,7 @@ func TestWaitForRegistriesReady_BackendFactoryError(t *testing.T) {
 	assert.ErrorIs(t, err, factoryErr)
 }
 
+//nolint:paralleltest // shares global backendFactoryOverride via SetBackendFactoryForTests
 func TestWaitForRegistriesReady_Success(t *testing.T) {
 	mockBackend := registry.NewMockBackend(t)
 	mockBackend.On(
@@ -98,6 +100,7 @@ func TestWaitForRegistriesReady_Success(t *testing.T) {
 	mockBackend.AssertExpectations(t)
 }
 
+//nolint:paralleltest // shares global backendFactoryOverride via SetBackendFactoryForTests
 func TestWaitForRegistriesReady_BackendError(t *testing.T) {
 	backendErr := errRegistryTimeout
 	mockBackend := registry.NewMockBackend(t)
@@ -129,6 +132,7 @@ func TestWaitForRegistriesReady_BackendError(t *testing.T) {
 	mockBackend.AssertExpectations(t)
 }
 
+//nolint:paralleltest // shares global backendFactoryOverride via SetBackendFactoryForTests
 func TestWaitForRegistriesReady_MultipleRegistries(t *testing.T) {
 	mockBackend := registry.NewMockBackend(t)
 	mockBackend.On(
