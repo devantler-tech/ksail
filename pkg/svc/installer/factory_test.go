@@ -338,7 +338,7 @@ func TestFactory_CreateInstallersForConfig_CSI(t *testing.T) {
 		cfg := newTestCluster(func(clusterSpec *v1alpha1.ClusterSpec) {
 			clusterSpec.CSI = v1alpha1.CSIEnabled
 			clusterSpec.Distribution = v1alpha1.DistributionTalos
-			s.Provider = v1alpha1.ProviderHetzner
+			clusterSpec.Provider = v1alpha1.ProviderHetzner
 		})
 
 		installers := factory.CreateInstallersForConfig(cfg)
@@ -356,7 +356,7 @@ func TestFactory_CreateInstallersForConfig_CSI(t *testing.T) {
 		cfg := newTestCluster(func(clusterSpec *v1alpha1.ClusterSpec) {
 			clusterSpec.CSI = v1alpha1.CSIDisabled
 			clusterSpec.Distribution = v1alpha1.DistributionTalos
-			s.Provider = v1alpha1.ProviderHetzner
+			clusterSpec.Provider = v1alpha1.ProviderHetzner
 		})
 
 		installers := factory.CreateInstallersForConfig(cfg)

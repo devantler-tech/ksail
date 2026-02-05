@@ -730,7 +730,8 @@ func TestRenderK3dMirrorConfig(t *testing.T) {
 			input: map[string][]string{
 				"docker.io": {"http://mirror:5000", "https://registry-1.docker.io"},
 			},
-			expected: "mirrors:\n  \"docker.io\":\n    endpoint:\n      - http://mirror:5000\n      - https://registry-1.docker.io\n",
+			expected: "mirrors:\n  \"docker.io\":\n    endpoint:\n" +
+				"      - http://mirror:5000\n      - https://registry-1.docker.io\n",
 		},
 		{
 			name: "multiple hosts sorted",
@@ -738,7 +739,9 @@ func TestRenderK3dMirrorConfig(t *testing.T) {
 				"ghcr.io":   {"https://ghcr.io"},
 				"docker.io": {"https://registry-1.docker.io"},
 			},
-			expected: "mirrors:\n  \"docker.io\":\n    endpoint:\n      - https://registry-1.docker.io\n  \"ghcr.io\":\n    endpoint:\n      - https://ghcr.io\n",
+			expected: "mirrors:\n  \"docker.io\":\n    endpoint:\n" +
+				"      - https://registry-1.docker.io\n" +
+				"  \"ghcr.io\":\n    endpoint:\n      - https://ghcr.io\n",
 		},
 	}
 

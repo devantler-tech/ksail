@@ -171,6 +171,7 @@ func TestApplyKubeletCertRotationPatches(t *testing.T) {
 		kind.ApplyKubeletCertRotationPatches(kindConfig)
 
 		assert.Len(t, kindConfig.Nodes, 3)
+
 		for i, node := range kindConfig.Nodes {
 			assert.Len(t, node.KubeadmConfigPatches, 1, "node %d should have 1 patch", i)
 			assert.Equal(t, kind.KubeletCertRotationPatch, node.KubeadmConfigPatches[0])
