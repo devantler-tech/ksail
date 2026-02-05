@@ -5,6 +5,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestMergeSpecs(t *testing.T) { //nolint:funlen // table-driven test with many cases
@@ -511,4 +512,376 @@ func TestBuildRegistryInfosFromSpecs_WithCredentials(t *testing.T) {
 	assert.Equal(t, "docker.io", infos[1].Host)
 	assert.Empty(t, infos[1].Username)
 	assert.Empty(t, infos[1].Password)
+}
+
+func TestAllocatePort(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		initPort     int
+		usedPorts    map[int]struct{}
+		expectedPort int
+		expectedNext int
+	}{
+		{
+			name:         "first allocation from default",
+			initPort:     5000,
+			usedPorts:    map[int]struct{}{},
+			expectedPort: 5000,
+			expectedNext: 5001,
+		},
+		{
+			name:         "skips used port",
+			initPort:     5000,
+			usedPorts:    map[int]struct{}{5000: {}},
+			expectedPort: 5001,
+			expectedNext: 5002,
+		},
+		{
+			name:         "skips multiple used ports",
+			initPort:     5000,
+			usedPorts:    map[int]struct{}{5000: {}, 5001: {}, 5002: {}},
+			expectedPort: 5003,
+			expectedNext: 5004,
+		},
+		{
+			name:         "nil usedPorts creates new map",
+			initPort:     5000,
+			usedPorts:    nil,
+			expectedPort: 5000,
+			expectedNext: 5001,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			nextPort := tc.initPort
+			usedPorts := tc.usedPorts
+
+			port := registry.AllocatePort(&nextPort, usedPorts)
+
+			assert.Equal(t, tc.expectedPort, port)
+			assert.Equal(t, tc.expectedNext, nextPort)
+		})
+	}
+}
+
+func TestAllocatePort_NilNextPort(t *testing.T) {
+	t.Parallel()
+
+	port := registry.AllocatePort(nil, nil)
+
+	assert.Equal(t, 5000, port)
+}
+
+func TestAllocatePort_Sequential(t *testing.T) {
+	t.Parallel()
+
+	nextPort := 5000
+	usedPorts := map[int]struct{}{}
+
+	port1 := registry.AllocatePort(&nextPort, usedPorts)
+	port2 := registry.AllocatePort(&nextPort, usedPorts)
+	port3 := registry.AllocatePort(&nextPort, usedPorts)
+
+	assert.Equal(t, 5000, port1)
+	assert.Equal(t, 5001, port2)
+	assert.Equal(t, 5002, port3)
+}
+
+func TestInitPortAllocation(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		baseUsed     map[int]struct{}
+		expectedNext int
+		expectedLen  int
+	}{
+		{
+			name:         "empty base",
+			baseUsed:     map[int]struct{}{},
+			expectedNext: 5000,
+			expectedLen:  0,
+		},
+		{
+			name:         "single port",
+			baseUsed:     map[int]struct{}{5000: {}},
+			expectedNext: 5001,
+			expectedLen:  1,
+		},
+		{
+			name:         "multiple ports with gap",
+			baseUsed:     map[int]struct{}{5000: {}, 5002: {}},
+			expectedNext: 5003,
+			expectedLen:  2,
+		},
+		{
+			name:         "port below default",
+			baseUsed:     map[int]struct{}{3000: {}},
+			expectedNext: 5000,
+			expectedLen:  1,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			usedPorts, nextPort := registry.InitPortAllocation(tc.baseUsed)
+
+			assert.Equal(t, tc.expectedNext, nextPort)
+			assert.Len(t, usedPorts, tc.expectedLen)
+		})
+	}
+}
+
+func TestBuildUpstreamLookup(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		specs    []registry.MirrorSpec
+		expected map[string]string
+	}{
+		{
+			name:     "nil specs",
+			specs:    nil,
+			expected: nil,
+		},
+		{
+			name:     "empty specs",
+			specs:    []registry.MirrorSpec{},
+			expected: nil,
+		},
+		{
+			name: "single spec",
+			specs: []registry.MirrorSpec{
+				{Host: "docker.io", Remote: "https://registry-1.docker.io"},
+			},
+			expected: map[string]string{
+				"docker.io": "https://registry-1.docker.io",
+			},
+		},
+		{
+			name: "empty host skipped",
+			specs: []registry.MirrorSpec{
+				{Host: "", Remote: "https://example.com"},
+			},
+			expected: nil,
+		},
+		{
+			name: "empty remote skipped",
+			specs: []registry.MirrorSpec{
+				{Host: "docker.io", Remote: ""},
+			},
+			expected: nil,
+		},
+		{
+			name: "multiple specs",
+			specs: []registry.MirrorSpec{
+				{Host: "docker.io", Remote: "https://registry-1.docker.io"},
+				{Host: "ghcr.io", Remote: "https://ghcr.io"},
+			},
+			expected: map[string]string{
+				"docker.io": "https://registry-1.docker.io",
+				"ghcr.io":   "https://ghcr.io",
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			result := registry.BuildUpstreamLookup(tc.specs)
+
+			assert.Equal(t, tc.expected, result)
+		})
+	}
+}
+
+func TestRenderK3dMirrorConfig(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		input    map[string][]string
+		expected string
+	}{
+		{
+			name:     "empty map",
+			input:    map[string][]string{},
+			expected: "",
+		},
+		{
+			name: "single host single endpoint",
+			input: map[string][]string{
+				"docker.io": {"https://registry-1.docker.io"},
+			},
+			expected: "mirrors:\n  \"docker.io\":\n    endpoint:\n      - https://registry-1.docker.io\n",
+		},
+		{
+			name: "single host multiple endpoints",
+			input: map[string][]string{
+				"docker.io": {"http://mirror:5000", "https://registry-1.docker.io"},
+			},
+			expected: "mirrors:\n  \"docker.io\":\n    endpoint:\n      - http://mirror:5000\n      - https://registry-1.docker.io\n",
+		},
+		{
+			name: "multiple hosts sorted",
+			input: map[string][]string{
+				"ghcr.io":   {"https://ghcr.io"},
+				"docker.io": {"https://registry-1.docker.io"},
+			},
+			expected: "mirrors:\n  \"docker.io\":\n    endpoint:\n      - https://registry-1.docker.io\n  \"ghcr.io\":\n    endpoint:\n      - https://ghcr.io\n",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			result := registry.RenderK3dMirrorConfig(tc.input)
+
+			assert.Equal(t, tc.expected, result)
+		})
+	}
+}
+
+func TestGenerateScaffoldedHostsToml(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		spec     registry.MirrorSpec
+		contains []string
+	}{
+		{
+			name: "docker.io with remote",
+			spec: registry.MirrorSpec{
+				Host:   "docker.io",
+				Remote: "https://registry-1.docker.io",
+			},
+			contains: []string{
+				`server = "https://registry-1.docker.io"`,
+				`[host."http://docker.io:5000"]`,
+				`capabilities = ["pull", "resolve"]`,
+			},
+		},
+		{
+			name: "host without remote uses generated URL",
+			spec: registry.MirrorSpec{
+				Host: "ghcr.io",
+			},
+			contains: []string{
+				`server = "https://ghcr.io"`,
+				`[host."http://ghcr.io:5000"]`,
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			result := registry.GenerateScaffoldedHostsToml(tc.spec)
+
+			for _, expected := range tc.contains {
+				assert.Contains(t, result, expected)
+			}
+		})
+	}
+}
+
+func TestBuildMirrorEntries(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		specs         []registry.MirrorSpec
+		prefix        string
+		existingHosts map[string]struct{}
+		expectedLen   int
+	}{
+		{
+			name:        "empty specs",
+			specs:       []registry.MirrorSpec{},
+			prefix:      "kind",
+			expectedLen: 0,
+		},
+		{
+			name: "single spec with prefix",
+			specs: []registry.MirrorSpec{
+				{Host: "docker.io", Remote: "https://registry-1.docker.io"},
+			},
+			prefix:      "kind",
+			expectedLen: 1,
+		},
+		{
+			name: "empty prefix",
+			specs: []registry.MirrorSpec{
+				{Host: "docker.io", Remote: "https://registry-1.docker.io"},
+			},
+			prefix:      "",
+			expectedLen: 1,
+		},
+		{
+			name: "existing host skipped",
+			specs: []registry.MirrorSpec{
+				{Host: "docker.io", Remote: "https://registry-1.docker.io"},
+			},
+			prefix:        "kind",
+			existingHosts: map[string]struct{}{"docker.io": {}},
+			expectedLen:   0,
+		},
+		{
+			name: "empty host spec skipped",
+			specs: []registry.MirrorSpec{
+				{Host: "", Remote: "https://example.com"},
+			},
+			prefix:      "kind",
+			expectedLen: 0,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			nextPort := 5000
+			usedPorts := map[int]struct{}{}
+
+			entries := registry.BuildMirrorEntries(
+				tc.specs, tc.prefix, tc.existingHosts, usedPorts, &nextPort,
+			)
+
+			assert.Len(t, entries, tc.expectedLen)
+		})
+	}
+}
+
+func TestBuildMirrorEntries_FieldValues(t *testing.T) {
+	t.Parallel()
+
+	specs := []registry.MirrorSpec{
+		{Host: "docker.io", Remote: "https://registry-1.docker.io"},
+	}
+	nextPort := 5000
+	usedPorts := map[int]struct{}{}
+
+	entries := registry.BuildMirrorEntries(specs, "kind", nil, usedPorts, &nextPort)
+
+	require.Len(t, entries, 1)
+
+	entry := entries[0]
+	assert.Equal(t, "docker.io", entry.Host)
+	assert.Equal(t, "https://registry-1.docker.io", entry.Remote)
+	assert.Equal(t, 5000, entry.Port)
+	assert.Contains(t, entry.ContainerName, "kind-")
+	assert.NotEmpty(t, entry.SanitizedName)
+	assert.Contains(t, entry.Endpoint, "http://")
 }
