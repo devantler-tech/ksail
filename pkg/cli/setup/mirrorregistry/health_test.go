@@ -36,8 +36,6 @@ func TestWaitForRegistriesReady_EmptyRegistries(t *testing.T) {
 }
 
 func TestWaitForRegistriesReady_BackendFactoryError(t *testing.T) {
-	t.Parallel()
-
 	factoryErr := errDockerUnavailable
 
 	cleanup := registry.SetBackendFactoryForTests(
@@ -65,8 +63,6 @@ func TestWaitForRegistriesReady_BackendFactoryError(t *testing.T) {
 }
 
 func TestWaitForRegistriesReady_Success(t *testing.T) {
-	t.Parallel()
-
 	mockBackend := registry.NewMockBackend(t)
 	mockBackend.On(
 		"WaitForRegistriesReady",
@@ -103,8 +99,6 @@ func TestWaitForRegistriesReady_Success(t *testing.T) {
 }
 
 func TestWaitForRegistriesReady_BackendError(t *testing.T) {
-	t.Parallel()
-
 	backendErr := errRegistryTimeout
 	mockBackend := registry.NewMockBackend(t)
 	mockBackend.On("WaitForRegistriesReady", mock.Anything, mock.Anything).Return(backendErr)
@@ -136,8 +130,6 @@ func TestWaitForRegistriesReady_BackendError(t *testing.T) {
 }
 
 func TestWaitForRegistriesReady_MultipleRegistries(t *testing.T) {
-	t.Parallel()
-
 	mockBackend := registry.NewMockBackend(t)
 	mockBackend.On(
 		"WaitForRegistriesReady",
