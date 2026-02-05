@@ -122,6 +122,7 @@ func TestResolveMirrorsDir(t *testing.T) {
 	}
 }
 
+//nolint:funlen // Table-driven test covering multiple scenarios.
 func TestApplyKubeletCertRotationPatches(t *testing.T) {
 	t.Parallel()
 

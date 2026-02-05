@@ -83,8 +83,8 @@ func TestFactory_CreateInstallersForConfig_GitOpsEngine(t *testing.T) {
 			t.Parallel()
 
 			factory := newTestFactory(t, v1alpha1.DistributionVanilla)
-			cfg := newTestCluster(func(s *v1alpha1.ClusterSpec) {
-				s.GitOpsEngine = testCase.gitOpsEngine
+			cfg := newTestCluster(func(clusterSpec *v1alpha1.ClusterSpec) {
+				clusterSpec.GitOpsEngine = testCase.gitOpsEngine
 			})
 
 			installers := factory.CreateInstallersForConfig(cfg)
@@ -98,8 +98,8 @@ func TestFactory_CreateInstallersForConfig_NoGitOpsEngine(t *testing.T) {
 	t.Parallel()
 
 	factory := newTestFactory(t, v1alpha1.DistributionVanilla)
-	cfg := newTestCluster(func(s *v1alpha1.ClusterSpec) {
-		s.GitOpsEngine = v1alpha1.GitOpsEngineNone
+	cfg := newTestCluster(func(clusterSpec *v1alpha1.ClusterSpec) {
+		clusterSpec.GitOpsEngine = v1alpha1.GitOpsEngineNone
 	})
 
 	installers := factory.CreateInstallersForConfig(cfg)
@@ -133,8 +133,8 @@ func TestFactory_CreateInstallersForConfig_CNI(t *testing.T) {
 			t.Parallel()
 
 			factory := newTestFactory(t, v1alpha1.DistributionVanilla)
-			cfg := newTestCluster(func(s *v1alpha1.ClusterSpec) {
-				s.CNI = testCase.cni
+			cfg := newTestCluster(func(clusterSpec *v1alpha1.ClusterSpec) {
+				clusterSpec.CNI = testCase.cni
 			})
 
 			installers := factory.CreateInstallersForConfig(cfg)
@@ -148,8 +148,8 @@ func TestFactory_CreateInstallersForConfig_DefaultCNI(t *testing.T) {
 	t.Parallel()
 
 	factory := newTestFactory(t, v1alpha1.DistributionVanilla)
-	cfg := newTestCluster(func(s *v1alpha1.ClusterSpec) {
-		s.CNI = v1alpha1.CNIDefault
+	cfg := newTestCluster(func(clusterSpec *v1alpha1.ClusterSpec) {
+		clusterSpec.CNI = v1alpha1.CNIDefault
 	})
 
 	installers := factory.CreateInstallersForConfig(cfg)
@@ -183,8 +183,8 @@ func TestFactory_CreateInstallersForConfig_PolicyEngine(t *testing.T) {
 			t.Parallel()
 
 			factory := newTestFactory(t, v1alpha1.DistributionVanilla)
-			cfg := newTestCluster(func(s *v1alpha1.ClusterSpec) {
-				s.PolicyEngine = testCase.engine
+			cfg := newTestCluster(func(clusterSpec *v1alpha1.ClusterSpec) {
+				clusterSpec.PolicyEngine = testCase.engine
 			})
 
 			installers := factory.CreateInstallersForConfig(cfg)
@@ -198,8 +198,8 @@ func TestFactory_CreateInstallersForConfig_NoPolicyEngine(t *testing.T) {
 	t.Parallel()
 
 	factory := newTestFactory(t, v1alpha1.DistributionVanilla)
-	cfg := newTestCluster(func(s *v1alpha1.ClusterSpec) {
-		s.PolicyEngine = v1alpha1.PolicyEngineNone
+	cfg := newTestCluster(func(clusterSpec *v1alpha1.ClusterSpec) {
+		clusterSpec.PolicyEngine = v1alpha1.PolicyEngineNone
 	})
 
 	installers := factory.CreateInstallersForConfig(cfg)
@@ -215,8 +215,8 @@ func TestFactory_CreateInstallersForConfig_CertManager(t *testing.T) {
 		t.Parallel()
 
 		factory := newTestFactory(t, v1alpha1.DistributionVanilla)
-		cfg := newTestCluster(func(s *v1alpha1.ClusterSpec) {
-			s.CertManager = v1alpha1.CertManagerEnabled
+		cfg := newTestCluster(func(clusterSpec *v1alpha1.ClusterSpec) {
+			clusterSpec.CertManager = v1alpha1.CertManagerEnabled
 		})
 
 		installers := factory.CreateInstallersForConfig(cfg)
@@ -228,8 +228,8 @@ func TestFactory_CreateInstallersForConfig_CertManager(t *testing.T) {
 		t.Parallel()
 
 		factory := newTestFactory(t, v1alpha1.DistributionVanilla)
-		cfg := newTestCluster(func(s *v1alpha1.ClusterSpec) {
-			s.CertManager = v1alpha1.CertManagerDisabled
+		cfg := newTestCluster(func(clusterSpec *v1alpha1.ClusterSpec) {
+			clusterSpec.CertManager = v1alpha1.CertManagerDisabled
 		})
 
 		installers := factory.CreateInstallersForConfig(cfg)
@@ -245,8 +245,8 @@ func TestFactory_CreateInstallersForConfig_MetricsServer(t *testing.T) {
 		t.Parallel()
 
 		factory := newTestFactory(t, v1alpha1.DistributionVanilla)
-		cfg := newTestCluster(func(s *v1alpha1.ClusterSpec) {
-			s.MetricsServer = v1alpha1.MetricsServerEnabled
+		cfg := newTestCluster(func(clusterSpec *v1alpha1.ClusterSpec) {
+			clusterSpec.MetricsServer = v1alpha1.MetricsServerEnabled
 		})
 
 		installers := factory.CreateInstallersForConfig(cfg)
@@ -258,8 +258,8 @@ func TestFactory_CreateInstallersForConfig_MetricsServer(t *testing.T) {
 		t.Parallel()
 
 		factory := newTestFactory(t, v1alpha1.DistributionVanilla)
-		cfg := newTestCluster(func(s *v1alpha1.ClusterSpec) {
-			s.MetricsServer = v1alpha1.MetricsServerDisabled
+		cfg := newTestCluster(func(clusterSpec *v1alpha1.ClusterSpec) {
+			clusterSpec.MetricsServer = v1alpha1.MetricsServerDisabled
 		})
 
 		installers := factory.CreateInstallersForConfig(cfg)
@@ -271,9 +271,9 @@ func TestFactory_CreateInstallersForConfig_MetricsServer(t *testing.T) {
 		t.Parallel()
 
 		factory := newTestFactory(t, v1alpha1.DistributionVanilla)
-		cfg := newTestCluster(func(s *v1alpha1.ClusterSpec) {
-			s.MetricsServer = v1alpha1.MetricsServerDefault
-			s.Distribution = v1alpha1.DistributionVanilla
+		cfg := newTestCluster(func(clusterSpec *v1alpha1.ClusterSpec) {
+			clusterSpec.MetricsServer = v1alpha1.MetricsServerDefault
+			clusterSpec.Distribution = v1alpha1.DistributionVanilla
 		})
 
 		installers := factory.CreateInstallersForConfig(cfg)
@@ -286,9 +286,9 @@ func TestFactory_CreateInstallersForConfig_MetricsServer(t *testing.T) {
 		t.Parallel()
 
 		factory := newTestFactory(t, v1alpha1.DistributionK3s)
-		cfg := newTestCluster(func(s *v1alpha1.ClusterSpec) {
-			s.MetricsServer = v1alpha1.MetricsServerDefault
-			s.Distribution = v1alpha1.DistributionK3s
+		cfg := newTestCluster(func(clusterSpec *v1alpha1.ClusterSpec) {
+			clusterSpec.MetricsServer = v1alpha1.MetricsServerDefault
+			clusterSpec.Distribution = v1alpha1.DistributionK3s
 		})
 
 		installers := factory.CreateInstallersForConfig(cfg)
@@ -298,6 +298,7 @@ func TestFactory_CreateInstallersForConfig_MetricsServer(t *testing.T) {
 	})
 }
 
+//nolint:funlen // Table-driven test with comprehensive test cases.
 func TestFactory_CreateInstallersForConfig_CSI(t *testing.T) {
 	t.Parallel()
 
@@ -305,9 +306,9 @@ func TestFactory_CreateInstallersForConfig_CSI(t *testing.T) {
 		t.Parallel()
 
 		factory := newTestFactory(t, v1alpha1.DistributionVanilla)
-		cfg := newTestCluster(func(s *v1alpha1.ClusterSpec) {
-			s.CSI = v1alpha1.CSIEnabled
-			s.Distribution = v1alpha1.DistributionVanilla
+		cfg := newTestCluster(func(clusterSpec *v1alpha1.ClusterSpec) {
+			clusterSpec.CSI = v1alpha1.CSIEnabled
+			clusterSpec.Distribution = v1alpha1.DistributionVanilla
 		})
 
 		installers := factory.CreateInstallersForConfig(cfg)
@@ -319,9 +320,9 @@ func TestFactory_CreateInstallersForConfig_CSI(t *testing.T) {
 		t.Parallel()
 
 		factory := newTestFactory(t, v1alpha1.DistributionK3s)
-		cfg := newTestCluster(func(s *v1alpha1.ClusterSpec) {
-			s.CSI = v1alpha1.CSIEnabled
-			s.Distribution = v1alpha1.DistributionK3s
+		cfg := newTestCluster(func(clusterSpec *v1alpha1.ClusterSpec) {
+			clusterSpec.CSI = v1alpha1.CSIEnabled
+			clusterSpec.Distribution = v1alpha1.DistributionK3s
 		})
 
 		installers := factory.CreateInstallersForConfig(cfg)
@@ -334,9 +335,9 @@ func TestFactory_CreateInstallersForConfig_CSI(t *testing.T) {
 		t.Parallel()
 
 		factory := newTestFactory(t, v1alpha1.DistributionTalos)
-		cfg := newTestCluster(func(s *v1alpha1.ClusterSpec) {
-			s.CSI = v1alpha1.CSIEnabled
-			s.Distribution = v1alpha1.DistributionTalos
+		cfg := newTestCluster(func(clusterSpec *v1alpha1.ClusterSpec) {
+			clusterSpec.CSI = v1alpha1.CSIEnabled
+			clusterSpec.Distribution = v1alpha1.DistributionTalos
 			s.Provider = v1alpha1.ProviderHetzner
 		})
 
@@ -352,9 +353,9 @@ func TestFactory_CreateInstallersForConfig_CSI(t *testing.T) {
 		t.Parallel()
 
 		factory := newTestFactory(t, v1alpha1.DistributionTalos)
-		cfg := newTestCluster(func(s *v1alpha1.ClusterSpec) {
-			s.CSI = v1alpha1.CSIDisabled
-			s.Distribution = v1alpha1.DistributionTalos
+		cfg := newTestCluster(func(clusterSpec *v1alpha1.ClusterSpec) {
+			clusterSpec.CSI = v1alpha1.CSIDisabled
+			clusterSpec.Distribution = v1alpha1.DistributionTalos
 			s.Provider = v1alpha1.ProviderHetzner
 		})
 
@@ -369,14 +370,14 @@ func TestFactory_CreateInstallersForConfig_MultipleComponents(t *testing.T) {
 	t.Parallel()
 
 	factory := newTestFactory(t, v1alpha1.DistributionVanilla)
-	cfg := newTestCluster(func(s *v1alpha1.ClusterSpec) {
-		s.GitOpsEngine = v1alpha1.GitOpsEngineFlux
-		s.CNI = v1alpha1.CNICilium
-		s.PolicyEngine = v1alpha1.PolicyEngineKyverno
-		s.CertManager = v1alpha1.CertManagerEnabled
-		s.MetricsServer = v1alpha1.MetricsServerEnabled
-		s.CSI = v1alpha1.CSIEnabled
-		s.Distribution = v1alpha1.DistributionVanilla
+	cfg := newTestCluster(func(clusterSpec *v1alpha1.ClusterSpec) {
+		clusterSpec.GitOpsEngine = v1alpha1.GitOpsEngineFlux
+		clusterSpec.CNI = v1alpha1.CNICilium
+		clusterSpec.PolicyEngine = v1alpha1.PolicyEngineKyverno
+		clusterSpec.CertManager = v1alpha1.CertManagerEnabled
+		clusterSpec.MetricsServer = v1alpha1.MetricsServerEnabled
+		clusterSpec.CSI = v1alpha1.CSIEnabled
+		clusterSpec.Distribution = v1alpha1.DistributionVanilla
 	})
 
 	installers := factory.CreateInstallersForConfig(cfg)

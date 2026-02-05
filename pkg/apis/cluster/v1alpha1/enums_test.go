@@ -536,6 +536,7 @@ func TestDistribution_DefaultClusterName(t *testing.T) {
 
 // PlacementGroupStrategy tests.
 
+//nolint:funlen // Table-driven test with comprehensive test cases.
 func TestPlacementGroupStrategy_Set(t *testing.T) {
 	t.Parallel()
 

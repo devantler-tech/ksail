@@ -85,6 +85,7 @@ func TestLocalRegistry_Parse_LocalhostWithPort(t *testing.T) {
 	}
 }
 
+//nolint:funlen // Table-driven test with comprehensive test cases.
 func TestLocalRegistry_Parse_ExternalHost(t *testing.T) {
 	t.Parallel()
 
@@ -149,6 +150,7 @@ func TestLocalRegistry_Parse_ExternalHost(t *testing.T) {
 	}
 }
 
+//nolint:funlen // Table-driven test with comprehensive test cases.
 func TestLocalRegistry_Parse_Credentials(t *testing.T) {
 	t.Parallel()
 
