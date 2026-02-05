@@ -3,7 +3,6 @@ package mirrorregistry
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
@@ -12,7 +11,6 @@ import (
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
 	"github.com/docker/docker/client"
 	"github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/spf13/cobra"
@@ -111,22 +109,6 @@ func RunStage(
 
 	// Merge specs: flag specs override existing specs for the same host
 	mirrorSpecs := registry.MergeSpecs(existingSpecs, flagSpecs)
-
-	// Log the configured mirrors for debugging CI issues (see issue #2075).
-	// Only log during registry setup to avoid duplicate output.
-	if role == RoleRegistry && len(mirrorSpecs) > 0 {
-		hosts := make([]string, 0, len(mirrorSpecs))
-		for _, spec := range mirrorSpecs {
-			hosts = append(hosts, spec.Host)
-		}
-
-		notify.WriteMessage(notify.Message{
-			Type:    notify.InfoType,
-			Content: "configuring mirrors: %s",
-			Args:    []any{strings.Join(hosts, ", ")},
-			Writer:  cmd.OutOrStdout(),
-		})
-	}
 
 	definition, definitionExists := StageDefinitions[role]
 	if !definitionExists {
