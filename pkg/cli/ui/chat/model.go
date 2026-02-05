@@ -2,7 +2,6 @@ package chat
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -706,93 +705,11 @@ func (m *Model) streamResponseCmd(userMessage string) tea.Cmd {
 	agentMode := m.agentMode
 
 	return func() tea.Msg {
+		// Create event dispatcher to route SDK events to tea messages
+		dispatcher := newSessionEventDispatcher(eventChan)
+
 		// Subscribe for this turn's events and store unsubscribe in the model
-		unsubscribe := session.On(func(event copilot.SessionEvent) {
-			switch event.Type {
-			case copilot.AssistantTurnStart:
-				// New turn started
-				eventChan <- turnStartMsg{}
-			case copilot.AssistantMessageDelta:
-				// Streaming message chunk - incremental text
-				if event.Data.DeltaContent != nil {
-					eventChan <- streamChunkMsg{content: *event.Data.DeltaContent}
-				}
-			case copilot.AssistantMessage:
-				// Final complete message - SDK always sends this regardless of streaming
-				if event.Data.Content != nil {
-					eventChan <- assistantMessageMsg{content: *event.Data.Content}
-				}
-			case copilot.AssistantReasoning, copilot.AssistantReasoningDelta:
-				// Reasoning events - LLM is "thinking"
-				var content string
-				if event.Data.Content != nil {
-					content = *event.Data.Content
-				} else if event.Data.DeltaContent != nil {
-					content = *event.Data.DeltaContent
-				}
-				eventChan <- reasoningMsg{
-					content: content,
-					isDelta: event.Type == copilot.AssistantReasoningDelta,
-				}
-			case copilot.SessionIdle:
-				// SessionIdle means the session is truly idle - all turns complete
-				// This is the authoritative completion signal per SDK best practices
-				eventChan <- streamEndMsg{}
-			case copilot.AssistantTurnEnd:
-				// AssistantTurnEnd fires after each turn, including intermediate turns
-				eventChan <- turnEndMsg{}
-			case copilot.Abort:
-				// Session aborted
-				eventChan <- abortMsg{}
-			case copilot.SessionError:
-				var errMsg string
-				if event.Data.Message != nil {
-					errMsg = *event.Data.Message
-				} else {
-					errMsg = unknownErrorMsg
-				}
-				eventChan <- streamErrMsg{err: fmt.Errorf("%s", errMsg)}
-			case copilot.ToolExecutionStart:
-				toolName := unknownToolName
-				if event.Data.ToolName != nil {
-					toolName = *event.Data.ToolName
-				}
-				// Check for MCP tool info (new in SDK v0.1.19)
-				var mcpServerName, mcpToolName string
-				if event.Data.MCPServerName != nil {
-					mcpServerName = *event.Data.MCPServerName
-				}
-				if event.Data.MCPToolName != nil {
-					mcpToolName = *event.Data.MCPToolName
-				}
-				// Extract command from arguments if available (for ksail tools)
-				command := extractCommandFromArgs(toolName, event.Data.Arguments)
-				// Generate tool ID from timestamp
-				toolID := fmt.Sprintf(toolIDFormat, time.Now().UnixNano())
-				eventChan <- toolStartMsg{
-					toolID:        toolID,
-					toolName:      toolName,
-					command:       command,
-					mcpServerName: mcpServerName,
-					mcpToolName:   mcpToolName,
-				}
-			case copilot.ToolExecutionComplete:
-				toolName := unknownToolName
-				if event.Data.ToolName != nil {
-					toolName = *event.Data.ToolName
-				}
-				output := ""
-				if event.Data.Result != nil {
-					output = event.Data.Result.Content
-				}
-				// Assume success if we got a result (SDK doesn't expose error state directly)
-				eventChan <- toolEndMsg{toolName: toolName, output: output, success: true}
-			case copilot.SessionSnapshotRewind:
-				// SessionSnapshotRewind indicates the session was rewound to a previous state
-				// This can happen when the user discards changes or reverts to a checkpoint
-				eventChan <- snapshotRewindMsg{}
-			}
-		})
+		unsubscribe := session.On(dispatcher.dispatch)
 
 		// Store unsubscribe in the model (thread-safe) for cleanup() to call
 		m.unsubscribeMu.Lock()
