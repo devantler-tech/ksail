@@ -639,6 +639,7 @@ func TestInitPortAllocation(t *testing.T) {
 	}
 }
 
+//nolint:funlen // Table-driven test with comprehensive test cases.
 func TestBuildUpstreamLookup(t *testing.T) {
 	t.Parallel()
 
@@ -797,6 +798,7 @@ func TestGenerateScaffoldedHostsToml(t *testing.T) {
 	}
 }
 
+//nolint:funlen // Table-driven test with comprehensive test cases.
 func TestBuildMirrorEntries(t *testing.T) {
 	t.Parallel()
 
