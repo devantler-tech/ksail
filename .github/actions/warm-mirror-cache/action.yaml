@@ -308,6 +308,35 @@ runs:
           ls -lh /tmp/mirror-cache/
         fi
 
+    - name: 🔍 Verify all mirror volumes exported
+      id: verify-exports
+      if: steps.check-cache.outputs.complete != 'true'
+      shell: bash
+      run: |
+        # Verify all 4 required mirror volumes were exported (see issue #2075)
+        echo "🔍 Verifying exported mirror volumes..."
+        REQUIRED_VOLUMES=("docker.io" "ghcr.io" "quay.io" "registry.k8s.io")
+        MISSING_VOLUMES=()
+
+        for vol in "${REQUIRED_VOLUMES[@]}"; do
+          TAR_FILE="/tmp/mirror-cache/${vol}.tar"
+          if [ -f "$TAR_FILE" ]; then
+            SIZE=$(du -h "$TAR_FILE" | cut -f1)
+            echo "  ✅ ${vol}.tar ($SIZE)"
+          else
+            echo "  ❌ ${vol}.tar - MISSING"
+            MISSING_VOLUMES+=("$vol")
+          fi
+        done
+
+        if [ ${#MISSING_VOLUMES[@]} -gt 0 ]; then
+          echo "❌ Error: ${#MISSING_VOLUMES[@]} mirror volumes failed to export: ${MISSING_VOLUMES[*]}"
+          echo "   This will cause CI tests to hit rate limits for these registries."
+          exit 1
+        fi
+
+        echo "✅ All 4 required mirror cache volumes exported successfully"
+
     - name: 🧹 Cleanup containers
       if: always() && steps.check-cache.outputs.complete != 'true'
       shell: bash

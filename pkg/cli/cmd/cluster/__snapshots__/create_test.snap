@@ -1,5 +1,7 @@
 
 [TestCreate_CSIEnabled_InstallsOnKind - 1]
+ℹ configuring mirrors: docker.io, ghcr.io, quay.io, registry.k8s.io
+
 📦 Create registries...
 ► creating and configuring registries
 ► creating 'test-docker.io' for 'https://registry-1.docker.io'
@@ -36,6 +38,8 @@
 ---
 
 [TestCreate_DefaultCSI_DoesNotInstall - 1]
+ℹ configuring mirrors: docker.io, ghcr.io, quay.io, registry.k8s.io
+
 📦 Create registries...
 ► creating and configuring registries
 ► creating 'test-docker.io' for 'https://registry-1.docker.io'
@@ -68,6 +72,8 @@
 ---
 
 [TestCreate_DefaultCertManager_DoesNotInstall - 1]
+ℹ configuring mirrors: docker.io, ghcr.io, quay.io, registry.k8s.io
+
 📦 Create registries...
 ► creating and configuring registries
 ► creating 'test-docker.io' for 'https://registry-1.docker.io'
@@ -100,6 +106,8 @@
 ---
 
 [TestCreate_EnabledCertManager_PrintsInstallStage - 1]
+ℹ configuring mirrors: docker.io, ghcr.io, quay.io, registry.k8s.io
+
 📦 Create registries...
 ► creating and configuring registries
 ► creating 'test-docker.io' for 'https://registry-1.docker.io'
@@ -139,6 +147,7 @@
 🗄️ Create local registry...
 ► creating local registry
 ✔ local registry created
+ℹ configuring mirrors: docker.io, ghcr.io, quay.io, registry.k8s.io
 
 📦 Create registries...
 ► creating and configuring registries
@@ -188,6 +197,7 @@
 🗄️ Create local registry...
 ► creating local registry
 ✔ local registry created
+ℹ configuring mirrors: docker.io, ghcr.io, quay.io, registry.k8s.io
 
 📦 Create registries...
 ► creating and configuring registries
@@ -234,6 +244,8 @@
 ---
 
 [TestCreate_LocalRegistryDisabled_SkipsRegistryStages - 1]
+ℹ configuring mirrors: docker.io, ghcr.io, quay.io, registry.k8s.io
+
 📦 Create registries...
 ► creating and configuring registries
 ► creating 'test-docker.io' for 'https://registry-1.docker.io'
@@ -266,6 +278,8 @@
 ---
 
 [TestCreate_Minimal_PrintsOnlyClusterLifecycle - 1]
+ℹ configuring mirrors: docker.io, ghcr.io, quay.io, registry.k8s.io
+
 📦 Create registries...
 ► creating and configuring registries
 ► creating 'test-docker.io' for 'https://registry-1.docker.io'
