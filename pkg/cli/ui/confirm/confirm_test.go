@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+//nolint:paralleltest,tparallel // Subtests cannot run in parallel - they share TTY checker state
 func TestShouldSkipPrompt(t *testing.T) {
 	t.Parallel()
 
@@ -47,8 +48,7 @@ func TestShouldSkipPrompt(t *testing.T) {
 
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
-			t.Parallel()
-
+			// Do NOT run subtests in parallel - they share TTY checker state
 			restoreTTY := confirm.SetTTYCheckerForTests(func() bool { return testCase.isTTY })
 			defer restoreTTY()
 
