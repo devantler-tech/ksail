@@ -185,7 +185,13 @@ runs:
         TIMEOUT: ${{ inputs.workload-timeout }}
         HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
       run: |
-        ksail workload create deployment "$WORKLOAD_NAME" --image="$WORKLOAD_IMAGE"
+        for attempt in 1 2 3; do
+          if ksail workload create deployment "$WORKLOAD_NAME" --image="$WORKLOAD_IMAGE"; then
+            break
+          fi
+          echo "⚠️ workload create attempt $attempt failed, retrying in 10s…"
+          sleep 10
+        done
         ksail workload wait --for=condition=Available deployment/"$WORKLOAD_NAME" --timeout="$TIMEOUT"
 
     - name: 🧪 ksail workload apply

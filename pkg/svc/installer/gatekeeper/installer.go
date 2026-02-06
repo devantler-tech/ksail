@@ -75,6 +75,12 @@ func (g *GatekeeperInstaller) chartSpec() *helm.ChartSpec {
 		Wait:            true,
 		WaitForJobs:     true,
 		Timeout:         g.timeout,
+		SetValues: map[string]string{
+			// Use Ignore so the validating webhook does not block API
+			// requests when webhook pods are temporarily unreachable
+			// (e.g. during CNI churn on freshly bootstrapped clusters).
+			"webhook.failurePolicy": "Ignore",
+		},
 	}
 }
 
