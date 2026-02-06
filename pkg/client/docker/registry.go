@@ -22,7 +22,9 @@ var (
 	// ErrRegistryHealthCheckCancelled is returned when the health check is cancelled via context.
 	ErrRegistryHealthCheckCancelled = errors.New("registry health check cancelled")
 	// ErrRegistryPartialCredentials is returned when only username or password is provided.
-	ErrRegistryPartialCredentials = errors.New("registry proxy credentials incomplete: both username and password are required")
+	ErrRegistryPartialCredentials = errors.New(
+		"registry proxy credentials incomplete: both username and password are required",
+	)
 )
 
 const (

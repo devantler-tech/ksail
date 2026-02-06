@@ -59,6 +59,7 @@ func extractImagesFromReader(reader io.Reader, seen map[string]struct{}) ([]stri
 	// (e.g., Calico/Tigera CRDs can exceed the default 64 KiB token limit).
 	const maxTokenSize = 1024 * 1024 // 1 MiB
 	scanner.Buffer(make([]byte, 0, bufio.MaxScanTokenSize), maxTokenSize)
+
 	for scanner.Scan() {
 		line := scanner.Text()
 

@@ -195,11 +195,13 @@ func (m *ConfigManager) readConfig(silent bool) error {
 		if !silent {
 			m.notifyUsingDefaults()
 		}
-	} else {
-		m.configFileFound = true
-		if !silent {
-			m.notifyConfigFound()
-		}
+
+		return nil
+	}
+
+	m.configFileFound = true
+	if !silent {
+		m.notifyConfigFound()
 	}
 
 	return nil

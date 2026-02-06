@@ -126,7 +126,7 @@ func (f *Factory) addCNIInstaller(installers map[string]Installer, spec v1alpha1
 	case v1alpha1.CNICalico:
 		installers["calico"] = calicoinstaller.NewCalicoInstallerWithDistribution(
 			f.helmClient, f.kubeconfig, f.kubecontext,
-			MaxTimeout(f.timeout, CalicoInstallTimeout), f.distribution,
+			max(f.timeout, CalicoInstallTimeout), f.distribution,
 		)
 	case v1alpha1.CNIDefault:
 		// Default CNI - no explicit installer needed
@@ -140,7 +140,7 @@ func (f *Factory) addPolicyEngineInstaller(
 	switch spec.PolicyEngine {
 	case v1alpha1.PolicyEngineKyverno:
 		installers["kyverno"] = kyvernoinstaller.NewKyvernoInstaller(
-			f.helmClient, MaxTimeout(f.timeout, KyvernoInstallTimeout),
+			f.helmClient, max(f.timeout, KyvernoInstallTimeout),
 		)
 	case v1alpha1.PolicyEngineGatekeeper:
 		installers["gatekeeper"] = gatekeeperinstaller.NewGatekeeperInstaller(
@@ -158,7 +158,7 @@ func (f *Factory) addCertManagerInstaller(
 ) {
 	if spec.CertManager == v1alpha1.CertManagerEnabled {
 		installers["cert-manager"] = certmanagerinstaller.NewCertManagerInstaller(
-			f.helmClient, MaxTimeout(f.timeout, CertManagerInstallTimeout),
+			f.helmClient, max(f.timeout, CertManagerInstallTimeout),
 		)
 	}
 }

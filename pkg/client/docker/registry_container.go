@@ -216,16 +216,6 @@ func (rm *RegistryManager) stopRegistryContainer(
 	return nil
 }
 
-// addClusterLabel is a no-op with network-based tracking.
-// Previously used for label-based tracking, now replaced by network connections.
-// Kept for interface compatibility but may be removed in future refactoring.
-func (rm *RegistryManager) addClusterLabel(
-	_ context.Context,
-	_, _ string,
-) error {
-	return nil
-}
-
 // Image management.
 
 // ensureRegistryImage pulls the registry image if not already present locally.
@@ -381,30 +371,20 @@ func (rm *RegistryManager) buildContainerConfig(
 		labels[RegistryLabelKey] = config.Name
 	}
 
-	// Build environment variables for registry configuration
+	// Build environment variables for proxy configuration
 	var env []string
-	if config.UpstreamURL == "" {
-		return &container.Config{
-			Image: RegistryImageName,
-			ExposedPorts: nat.PortSet{
-				RegistryContainerPort: struct{}{},
-			},
-			Labels: labels,
-			Env:    env,
-		}, nil
-	}
 
-	// Configure registry as a pull-through cache to the upstream
-	env = append(env, "REGISTRY_PROXY_REMOTEURL="+config.UpstreamURL)
+	if config.UpstreamURL != "" {
+		env = append(env, "REGISTRY_PROXY_REMOTEURL="+config.UpstreamURL)
 
-	// Add authentication credentials if provided
-	if config.Username != "" || config.Password != "" {
-		credEnv, err := rm.buildProxyCredentialsEnv(config.Username, config.Password)
-		if err != nil {
-			return nil, fmt.Errorf("proxy credentials for %s: %w", config.Name, err)
+		if config.Username != "" || config.Password != "" {
+			credEnv, err := rm.buildProxyCredentialsEnv(config.Username, config.Password)
+			if err != nil {
+				return nil, fmt.Errorf("proxy credentials for %s: %w", config.Name, err)
+			}
+
+			env = append(env, credEnv...)
 		}
-
-		env = append(env, credEnv...)
 	}
 
 	return &container.Config{

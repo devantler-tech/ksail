@@ -48,12 +48,3 @@ func GetInstallTimeout(clusterCfg *v1alpha1.Cluster) time.Duration {
 
 	return DefaultInstallTimeout
 }
-
-// MaxTimeout returns the larger of the two durations.
-func MaxTimeout(a, b time.Duration) time.Duration {
-	if a >= b {
-		return a
-	}
-
-	return b
-}
