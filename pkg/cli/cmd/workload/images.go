@@ -1,6 +1,7 @@
 package workload
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
@@ -167,18 +168,12 @@ func outputPlain(cmd *cobra.Command, images []string, tmr timer.Timer) error {
 }
 
 func outputJSON(cmd *cobra.Command, images []string, _ timer.Timer) error {
-	// Manual JSON array to avoid import
-	_, _ = fmt.Fprint(cmd.OutOrStdout(), "[")
-
-	for i, img := range images {
-		if i > 0 {
-			_, _ = fmt.Fprint(cmd.OutOrStdout(), ",")
-		}
-
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%q", img)
+	data, err := json.Marshal(images)
+	if err != nil {
+		return fmt.Errorf("marshal images to JSON: %w", err)
 	}
 
-	_, _ = fmt.Fprintln(cmd.OutOrStdout(), "]")
+	_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 
 	return nil
 }
