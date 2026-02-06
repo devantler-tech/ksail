@@ -109,7 +109,10 @@ func (f *Factory) GetImagesForCluster(
 func (f *Factory) addGitOpsInstaller(installers map[string]Installer, spec v1alpha1.ClusterSpec) {
 	switch spec.GitOpsEngine {
 	case v1alpha1.GitOpsEngineFlux:
-		installers["flux"] = fluxinstaller.NewFluxInstaller(f.helmClient, max(f.timeout, FluxInstallTimeout))
+		installers["flux"] = fluxinstaller.NewFluxInstaller(
+			f.helmClient,
+			max(f.timeout, FluxInstallTimeout),
+		)
 	case v1alpha1.GitOpsEngineArgoCD:
 		installers["argocd"] = argocdinstaller.NewArgoCDInstaller(f.helmClient, f.timeout)
 	case v1alpha1.GitOpsEngineNone:
