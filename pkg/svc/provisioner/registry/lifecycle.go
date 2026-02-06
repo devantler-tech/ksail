@@ -375,18 +375,18 @@ func ConnectRegistriesToNetworkWithStaticIPs(
 	staticIPs := calculateRegistryIPs(networkCIDR, len(registries))
 	registryIPs := make(map[string]string, len(registries))
 
-	for i, reg := range registries {
-		ip := connectRegistryToNetwork(
+	for regIdx, reg := range registries {
+		registryIP := connectRegistryToNetwork(
 			ctx,
 			dockerClient,
 			reg,
 			networkName,
-			staticIPAt(staticIPs, i),
+			staticIPAt(staticIPs, regIdx),
 			writer,
 		)
-		if ip != "" {
+		if registryIP != "" {
 			containerName, _ := ksailio.TrimNonEmpty(reg.Name)
-			registryIPs[containerName] = ip
+			registryIPs[containerName] = registryIP
 		}
 	}
 

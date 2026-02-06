@@ -323,7 +323,6 @@ func TestCreate_DefaultCertManager_DoesNotInstall(t *testing.T) {
 	snaps.MatchSnapshot(t, trimTrailingNewline(out.String()))
 }
 
-//nolint:nlreturn // keep inline returns in short closures for function length
 func setupGitOpsTestMocks(
 	t *testing.T,
 	engine v1alpha1.GitOpsEngine,
@@ -340,49 +339,9 @@ func setupGitOpsTestMocks(
 	// Set up the appropriate installer and ensure mocks based on the GitOps engine
 	switch engine {
 	case v1alpha1.GitOpsEngineArgoCD:
-		t.Cleanup(clusterpkg.SetArgoCDInstallerFactoryForTests(
-			func(_ *v1alpha1.Cluster) (installer.Installer, error) {
-				fake = &fakeInstaller{}
-				return fake, nil
-			},
-		))
-		t.Cleanup(clusterpkg.SetEnsureArgoCDResourcesForTests(
-			func(_ context.Context, _ string, _ *v1alpha1.Cluster, _ string) error {
-				ensureCalled = true
-				return nil
-			},
-		))
-		// Mock OCI artifact ensure to avoid needing a real registry
-		t.Cleanup(clusterpkg.SetEnsureOCIArtifactForTests(
-			func(_ context.Context, _ *cobra.Command, _ *v1alpha1.Cluster, _ string, _ io.Writer) (bool, error) {
-				return true, nil
-			},
-		))
+		setupArgoCDMocks(t, &fake, &ensureCalled)
 	case v1alpha1.GitOpsEngineFlux:
-		t.Cleanup(clusterpkg.SetFluxInstallerFactoryForTests(
-			func(_ *v1alpha1.Cluster) (installer.Installer, error) {
-				fake = &fakeInstaller{}
-				return fake, nil
-			},
-		))
-		// Mock the new Flux setup and wait functions
-		t.Cleanup(clusterpkg.SetSetupFluxInstanceForTests(
-			func(_ context.Context, _ string, _ *v1alpha1.Cluster, _ string) error {
-				ensureCalled = true
-				return nil
-			},
-		))
-		t.Cleanup(clusterpkg.SetWaitForFluxReadyForTests(
-			func(_ context.Context, _ string) error {
-				return nil
-			},
-		))
-		// Mock OCI artifact ensure to avoid needing a real registry
-		t.Cleanup(clusterpkg.SetEnsureOCIArtifactForTests(
-			func(_ context.Context, _ *cobra.Command, _ *v1alpha1.Cluster, _ string, _ io.Writer) (bool, error) {
-				return true, nil
-			},
-		))
+		setupFluxMocks(t, &fake, &ensureCalled)
 	case v1alpha1.GitOpsEngineNone:
 		t.Fatalf("GitOpsEngineNone is not supported in this test helper")
 	}
@@ -395,6 +354,57 @@ func setupGitOpsTestMocks(
 	// a mock Docker client that will be used for all Docker operations.
 
 	return func() *fakeInstaller { return fake }, &ensureCalled
+}
+
+func setupArgoCDMocks(t *testing.T, fake **fakeInstaller, ensureCalled *bool) {
+	t.Helper()
+	t.Cleanup(clusterpkg.SetArgoCDInstallerFactoryForTests(
+		func(_ *v1alpha1.Cluster) (installer.Installer, error) {
+			*fake = &fakeInstaller{}
+
+			return *fake, nil
+		},
+	))
+	t.Cleanup(clusterpkg.SetEnsureArgoCDResourcesForTests(
+		func(_ context.Context, _ string, _ *v1alpha1.Cluster, _ string) error {
+			*ensureCalled = true
+
+			return nil
+		},
+	))
+	t.Cleanup(clusterpkg.SetEnsureOCIArtifactForTests(
+		func(_ context.Context, _ *cobra.Command, _ *v1alpha1.Cluster, _ string, _ io.Writer) (bool, error) {
+			return true, nil
+		},
+	))
+}
+
+func setupFluxMocks(t *testing.T, fake **fakeInstaller, ensureCalled *bool) {
+	t.Helper()
+	t.Cleanup(clusterpkg.SetFluxInstallerFactoryForTests(
+		func(_ *v1alpha1.Cluster) (installer.Installer, error) {
+			*fake = &fakeInstaller{}
+
+			return *fake, nil
+		},
+	))
+	t.Cleanup(clusterpkg.SetSetupFluxInstanceForTests(
+		func(_ context.Context, _ string, _ *v1alpha1.Cluster, _ string) error {
+			*ensureCalled = true
+
+			return nil
+		},
+	))
+	t.Cleanup(clusterpkg.SetWaitForFluxReadyForTests(
+		func(_ context.Context, _ string) error {
+			return nil
+		},
+	))
+	t.Cleanup(clusterpkg.SetEnsureOCIArtifactForTests(
+		func(_ context.Context, _ *cobra.Command, _ *v1alpha1.Cluster, _ string, _ io.Writer) (bool, error) {
+			return true, nil
+		},
+	))
 }
 
 func TestCreate_GitOps_PrintsInstallStage(t *testing.T) {

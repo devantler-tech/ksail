@@ -6,6 +6,12 @@ on:
   pull_request:
   merge_group:
 
+env:
+  # Use pipe (|) instead of comma (,) so Go falls through to direct on ANY proxy
+  # error (including 403), not just 404/410. Hardens CI against transient
+  # proxy.golang.org outages. go.sum still verifies module integrity.
+  GOPROXY: "https://proxy.golang.org|direct"
+
 concurrency:
   group: "ci-ksail-${{ github.workflow }}-${{ github.ref }}"
   cancel-in-progress: true
