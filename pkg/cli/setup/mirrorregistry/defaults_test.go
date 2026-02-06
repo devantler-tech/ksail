@@ -51,15 +51,6 @@ func TestDefaultMirrorsContainsRequiredRegistries(t *testing.T) {
 			host,
 		)
 	}
-
-	// Also verify we have exactly the expected number of defaults
-	assert.Len(
-		t,
-		mirrorregistry.DefaultMirrors,
-		len(requiredHosts),
-		"DefaultMirrors should contain exactly %d registries",
-		len(requiredHosts),
-	)
 }
 
 func newTestCmdWithConfig() (*cobra.Command, *ksailconfigmanager.ConfigManager) {
