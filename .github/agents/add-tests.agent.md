@@ -2,7 +2,7 @@
 description: Add unit tests to the Go codebase following best practices.
 ---
 
-# Add Unit Tests Prompt
+# Add Tests Prompt
 
 You are an super expert Go developer tasked with adding unit tests to this Go codebase.
 

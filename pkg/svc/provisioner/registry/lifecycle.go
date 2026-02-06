@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"sort"
 	"strings"
@@ -26,8 +27,6 @@ type Info struct {
 	Username string // Optional: username for registry authentication (supports ${ENV_VAR} placeholders)
 	Password string // Optional: password for registry authentication (supports ${ENV_VAR} placeholders)
 }
-
-const expectedEndpointParts = 2
 
 // Registry Lifecycle Management
 // These functions handle the creation, setup, and cleanup of registry containers.
@@ -464,12 +463,7 @@ func ConnectRegistriesToNetworkWithStaticIPs(
 // For a /24 network like 10.5.0.0/24, it returns addresses like 10.5.0.250, 10.5.0.249, etc.
 // Returns empty strings if the CIDR is invalid or cannot be parsed.
 func calculateRegistryIPs(networkCIDR string, count int) []string {
-	// CIDR format constants
-	const (
-		cidrParts  = 2 // CIDR has format "IP/prefix"
-		ipv4Octets = 4 // IPv4 address has 4 octets
-		baseOffset = 250
-	)
+	const baseOffset = 250
 
 	result := make([]string, count)
 
@@ -477,25 +471,23 @@ func calculateRegistryIPs(networkCIDR string, count int) []string {
 		return result
 	}
 
-	// Parse the CIDR to extract the base address
-	// Example: 10.5.0.0/24 -> base = 10.5.0, last usable = .254 (broadcast is .255)
-	parts := strings.Split(networkCIDR, "/")
-	if len(parts) != cidrParts {
+	_, ipNet, err := net.ParseCIDR(networkCIDR)
+	if err != nil {
 		return result
 	}
 
-	baseIP := parts[0]
-
-	ipParts := strings.Split(baseIP, ".")
-	if len(ipParts) != ipv4Octets {
+	ipv4 := ipNet.IP.To4()
+	if ipv4 == nil {
 		return result
 	}
 
 	// For a /24 network, assign from .250 down to avoid node IPs starting at .2
 	// This gives space for ~248 nodes before we'd have a conflict
-
 	for i := 0; i < count && i < baseOffset-2; i++ {
-		result[i] = fmt.Sprintf("%s.%s.%s.%d", ipParts[0], ipParts[1], ipParts[2], baseOffset-i)
+		addr := make(net.IP, len(ipv4))
+		copy(addr, ipv4)
+		addr[3] = byte(baseOffset - i)
+		result[i] = addr.String()
 	}
 
 	return result
@@ -682,17 +674,14 @@ func ResolveRegistryName(host string, endpoints []string, prefix string) string 
 
 // ExtractNameFromEndpoint extracts the hostname portion from an endpoint URL.
 func ExtractNameFromEndpoint(endpoint string) string {
-	parts := strings.Split(endpoint, "//")
-	if len(parts) != expectedEndpointParts {
+	_, afterScheme, found := strings.Cut(endpoint, "//")
+	if !found {
 		return ""
 	}
 
-	hostPort := strings.Split(parts[1], ":")
-	if len(hostPort) == 0 {
-		return ""
-	}
+	host, _, _ := strings.Cut(afterScheme, ":")
 
-	return hostPort[0]
+	return host
 }
 
 // BuildRegistryName constructs a registry container name from prefix and host.

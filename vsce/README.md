@@ -34,7 +34,7 @@ Search for "KSail" in the VSCode Extensions Marketplace.
 All cluster operations are available via the Command Palette (`Cmd+Shift+P` / `Ctrl+Shift+P`):
 
 | Command                           | Description                               | Shortcut        |
-|-----------------------------------|-------------------------------------------|-----------------|
+| --------------------------------- | ----------------------------------------- | --------------- |
 | `KSail: Init Cluster`             | Initialize a new ksail.yaml configuration | `Cmd+Shift+K I` |
 | `KSail: Create Cluster`           | Create and start a cluster                | `Cmd+Shift+K C` |
 | `KSail: Delete Cluster`           | Delete the cluster                        | `Cmd+Shift+K D` |
@@ -68,7 +68,7 @@ The KSail sidebar shows:
 ## Extension Settings
 
 | Setting            | Description          | Default |
-|--------------------|----------------------|---------|
+| ------------------ | -------------------- | ------- |
 | `ksail.binaryPath` | Path to ksail binary | `ksail` |
 
 ## Development
@@ -110,11 +110,9 @@ vsce/
 │   │   ├── serverProvider.ts # MCP server definition provider
 │   │   ├── schemaClient.ts   # MCP schema client for KSail
 │   │   └── index.ts          # Module exports
-│   ├── views/
-│   │   ├── clustersView.ts   # Tree view provider
-│   │   └── index.ts          # Module exports
-│   └── ui/
-│       └── index.ts          # Reserved for future UI helpers (currently empty)
+│   └── views/
+│       ├── clustersView.ts   # Tree view provider
+│       └── index.ts          # Module exports
 ├── dist/                     # Compiled output
 └── package.json              # Extension manifest
 ```

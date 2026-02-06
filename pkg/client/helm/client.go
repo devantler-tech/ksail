@@ -749,6 +749,13 @@ func buildChartPathOptions(spec *ChartSpec, repoURL string) helmv4action.ChartPa
 	}
 }
 
+// chartLocator abstracts the common chart location capabilities shared by
+// helmv4action.Install and helmv4action.Upgrade.
+type chartLocator interface {
+	SetRegistryClient(client *helmv4registry.Client)
+	LocateChart(name string, settings *helmv4cli.EnvSettings) (string, error)
+}
+
 // applyChartPathOptions applies ChartPathOptions to an Install or Upgrade client.
 func applyChartPathOptions(client any, opts helmv4action.ChartPathOptions) {
 	switch cl := client.(type) {
@@ -760,30 +767,21 @@ func applyChartPathOptions(client any, opts helmv4action.ChartPathOptions) {
 }
 
 func (c *Client) locateOCIChart(spec *ChartSpec, client any) (string, error) {
-	// Create a registry client for OCI operations
 	registryClient, err := helmv4registry.NewClient()
 	if err != nil {
 		return "", fmt.Errorf("failed to create registry client: %w", err)
 	}
 
-	opts := buildChartPathOptions(spec, "")
+	applyChartPathOptions(client, buildChartPathOptions(spec, ""))
 
-	// Apply options and registry client, then locate chart
-	var chartPath string
-
-	switch actionClient := client.(type) {
-	case *helmv4action.Install:
-		actionClient.ChartPathOptions = opts
-		actionClient.SetRegistryClient(registryClient)
-		chartPath, err = actionClient.LocateChart(spec.ChartName, c.settings)
-	case *helmv4action.Upgrade:
-		actionClient.ChartPathOptions = opts
-		actionClient.SetRegistryClient(registryClient)
-		chartPath, err = actionClient.LocateChart(spec.ChartName, c.settings)
-	default:
+	locator, ok := client.(chartLocator)
+	if !ok {
 		return "", fmt.Errorf("%w: %T", errUnsupportedClientType, client)
 	}
 
+	locator.SetRegistryClient(registryClient)
+
+	chartPath, err := locator.LocateChart(spec.ChartName, c.settings)
 	if err != nil {
 		return "", fmt.Errorf("failed to locate OCI chart %q: %w", spec.ChartName, err)
 	}
@@ -804,7 +802,7 @@ func (c *Client) locateChartFromRepo(spec *ChartSpec, client any) (string, error
 		timeout = DefaultTimeout
 	}
 
-	originalTimeout := os.Getenv("HELM_HTTP_TIMEOUT")
+	originalTimeout, hadTimeout := os.LookupEnv("HELM_HTTP_TIMEOUT")
 
 	err := os.Setenv("HELM_HTTP_TIMEOUT", timeout.String())
 	if err != nil {
@@ -812,7 +810,7 @@ func (c *Client) locateChartFromRepo(spec *ChartSpec, client any) (string, error
 	}
 
 	defer func() {
-		if originalTimeout != "" {
+		if hadTimeout {
 			_ = os.Setenv("HELM_HTTP_TIMEOUT", originalTimeout)
 		} else {
 			_ = os.Unsetenv("HELM_HTTP_TIMEOUT")
