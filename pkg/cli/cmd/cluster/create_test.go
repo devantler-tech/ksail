@@ -352,6 +352,12 @@ func setupGitOpsTestMocks(
 				return nil
 			},
 		))
+		// Mock OCI artifact ensure to avoid needing a real registry
+		t.Cleanup(clusterpkg.SetEnsureOCIArtifactForTests(
+			func(_ context.Context, _ *cobra.Command, _ *v1alpha1.Cluster, _ string, _ io.Writer) (bool, error) {
+				return true, nil
+			},
+		))
 	case v1alpha1.GitOpsEngineFlux:
 		t.Cleanup(clusterpkg.SetFluxInstallerFactoryForTests(
 			func(_ *v1alpha1.Cluster) (installer.Installer, error) {
@@ -637,7 +643,7 @@ func TestShouldPushOCIArtifact_FluxWithLocalRegistry(t *testing.T) {
 	require.True(t, result, "Should push when Flux is enabled with local registry")
 }
 
-func TestShouldPushOCIArtifact_ArgoCDShouldNotPush(t *testing.T) {
+func TestShouldPushOCIArtifact_ArgoCDWithLocalRegistry(t *testing.T) {
 	t.Parallel()
 
 	clusterCfg := &v1alpha1.Cluster{
@@ -652,7 +658,7 @@ func TestShouldPushOCIArtifact_ArgoCDShouldNotPush(t *testing.T) {
 	}
 
 	result := clusterpkg.ExportShouldPushOCIArtifact(clusterCfg)
-	require.False(t, result, "Should not push when ArgoCD is the GitOps engine")
+	require.True(t, result, "Should push when ArgoCD is enabled with local registry")
 }
 
 func TestShouldPushOCIArtifact_NoLocalRegistryShouldNotPush(t *testing.T) {

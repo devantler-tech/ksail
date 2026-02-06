@@ -24,11 +24,12 @@ const (
 	argoCDResourcesActivity = "configuring argocd resources"
 )
 
-// ShouldPushOCIArtifact determines if OCI artifact push should happen for Flux.
-// Returns true if Flux is enabled and a local registry is configured.
+// ShouldPushOCIArtifact determines if OCI artifact push should happen for GitOps engines.
+// Returns true if Flux or ArgoCD is enabled and a local registry is configured.
 func ShouldPushOCIArtifact(clusterCfg *v1alpha1.Cluster) bool {
-	// Only push if Flux is the GitOps engine
-	if clusterCfg.Spec.Cluster.GitOpsEngine != v1alpha1.GitOpsEngineFlux {
+	// Only push for GitOps engines that consume OCI artifacts
+	engine := clusterCfg.Spec.Cluster.GitOpsEngine
+	if engine != v1alpha1.GitOpsEngineFlux && engine != v1alpha1.GitOpsEngineArgoCD {
 		return false
 	}
 
@@ -314,7 +315,15 @@ func configureGitOpsResources(
 
 	// Post-install GitOps configuration
 	if reqs.NeedsArgoCD {
-		err := configureArgoCD(ctx, factories, gitOpsKubeconfig, clusterCfg, clusterName, writer)
+		err := configureArgoCD(
+			ctx,
+			cmd,
+			factories,
+			gitOpsKubeconfig,
+			clusterCfg,
+			clusterName,
+			writer,
+		)
 		if err != nil {
 			return err
 		}
@@ -345,17 +354,31 @@ func configureGitOpsResources(
 
 func configureArgoCD(
 	ctx context.Context,
+	cmd *cobra.Command,
 	factories *InstallerFactories,
 	kubeconfig string,
 	clusterCfg *v1alpha1.Cluster,
 	clusterName string,
 	writer io.Writer,
 ) error {
+	// Ensure OCI artifact exists before creating the ArgoCD Application,
+	// otherwise ArgoCD enters a ComparisonError loop that can saturate etcd.
+	var err error
+	if factories.EnsureOCIArtifact != nil {
+		_, err = factories.EnsureOCIArtifact(ctx, cmd, clusterCfg, clusterName, writer)
+	} else {
+		_, err = ensureOCIArtifact(ctx, cmd, clusterCfg, clusterName, writer)
+	}
+
+	if err != nil {
+		return fmt.Errorf("failed to ensure OCI artifact for ArgoCD: %w", err)
+	}
+
 	notify.WriteMessage(
 		notify.Message{Type: notify.ActivityType, Content: argoCDResourcesActivity, Writer: writer},
 	)
 
-	err := factories.EnsureArgoCDResources(ctx, kubeconfig, clusterCfg, clusterName)
+	err = factories.EnsureArgoCDResources(ctx, kubeconfig, clusterCfg, clusterName)
 	if err != nil {
 		return fmt.Errorf("failed to configure Argo CD resources: %w", err)
 	}
