@@ -1,9 +1,10 @@
 package registry
 
 import (
+	"cmp"
 	"fmt"
 	"net"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -98,8 +99,8 @@ func MergeSpecs(existingSpecs, flagSpecs []MirrorSpec) []MirrorSpec {
 	}
 
 	// Sort by host to ensure deterministic output
-	sort.Slice(result, func(i, j int) bool {
-		return result[i].Host < result[j].Host
+	slices.SortFunc(result, func(a, b MirrorSpec) int {
+		return cmp.Compare(a.Host, b.Host)
 	})
 
 	return result

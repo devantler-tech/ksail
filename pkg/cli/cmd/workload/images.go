@@ -3,7 +3,7 @@ package workload
 import (
 	"errors"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
@@ -132,7 +132,7 @@ func runImagesCommand(
 	}
 
 	// Sort for consistent output
-	sort.Strings(images)
+	slices.Sort(images)
 
 	// Output based on format
 	switch strings.ToLower(outputFormat) {

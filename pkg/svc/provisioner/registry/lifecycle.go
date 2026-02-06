@@ -7,7 +7,8 @@ import (
 	"io"
 	"net"
 	"os"
-	"sort"
+	"slices"
+	"strconv"
 	"strings"
 
 	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
@@ -218,24 +219,23 @@ func CollectExistingRegistryPorts(
 	}
 
 	for _, name := range names {
-		trimmed := strings.TrimSpace(name)
-		if trimmed == "" {
+		trimmed, ok := ksailio.TrimNonEmpty(name)
+		if !ok {
 			continue
 		}
 
 		port, portErr := registryMgr.GetRegistryPort(ctx, trimmed)
 		if portErr != nil {
-			switch {
-			case errors.Is(portErr, dockerclient.ErrRegistryNotFound),
-				errors.Is(portErr, dockerclient.ErrRegistryPortNotFound):
+			if errors.Is(portErr, dockerclient.ErrRegistryNotFound) ||
+				errors.Is(portErr, dockerclient.ErrRegistryPortNotFound) {
 				continue
-			default:
-				return nil, fmt.Errorf(
-					"failed to resolve port for registry %s: %w",
-					trimmed,
-					portErr,
-				)
 			}
+
+			return nil, fmt.Errorf(
+				"failed to resolve port for registry %s: %w",
+				trimmed,
+				portErr,
+			)
 		}
 
 		if port > 0 {
@@ -347,34 +347,7 @@ func ConnectRegistriesToNetwork(
 	}
 
 	for _, reg := range registries {
-		containerName, nameOK := ksailio.TrimNonEmpty(reg.Name)
-		if !nameOK {
-			continue
-		}
-
-		notify.WriteMessage(notify.Message{
-			Type:    notify.ActivityType,
-			Content: "connecting '%s' to '%s'",
-			Writer:  writer,
-			Args: []any{
-				containerName,
-				networkName,
-			},
-		})
-
-		err := dockerClient.NetworkConnect(ctx, networkName, containerName, nil)
-		if err != nil {
-			notify.WriteMessage(notify.Message{
-				Type: notify.ErrorType,
-				Content: fmt.Sprintf(
-					"failed to connect registry %s to %s network: %v",
-					containerName,
-					networkName,
-					err,
-				),
-				Writer: writer,
-			})
-		}
+		connectRegistryToNetwork(ctx, dockerClient, reg, networkName, "", writer)
 	}
 
 	return nil
@@ -384,8 +357,6 @@ func ConnectRegistriesToNetwork(
 // from the high end of the subnet to avoid conflicts with Talos node IPs that start from .2.
 // For a /24 network, registries are assigned starting from .250 down (.250, .249, .248, etc.).
 // Returns a map of registry names to their assigned static IPs.
-//
-//nolint:funlen,varnamelen // Function handles multiple notification types; 'i' is clear for loop index
 func ConnectRegistriesToNetworkWithStaticIPs(
 	ctx context.Context,
 	dockerClient client.APIClient,
@@ -405,58 +376,88 @@ func ConnectRegistriesToNetworkWithStaticIPs(
 	registryIPs := make(map[string]string, len(registries))
 
 	for i, reg := range registries {
-		containerName, nameOK := ksailio.TrimNonEmpty(reg.Name)
-		if !nameOK {
-			continue
-		}
-
-		var endpointConfig *network.EndpointSettings
-		if i < len(staticIPs) && staticIPs[i] != "" {
-			endpointConfig = &network.EndpointSettings{
-				IPAMConfig: &network.EndpointIPAMConfig{
-					IPv4Address: staticIPs[i],
-				},
-			}
-			registryIPs[containerName] = staticIPs[i]
-
-			notify.WriteMessage(notify.Message{
-				Type:    notify.ActivityType,
-				Content: "connecting '%s' to '%s' with IP %s",
-				Writer:  writer,
-				Args: []any{
-					containerName,
-					networkName,
-					staticIPs[i],
-				},
-			})
-		} else {
-			notify.WriteMessage(notify.Message{
-				Type:    notify.ActivityType,
-				Content: "connecting '%s' to '%s'",
-				Writer:  writer,
-				Args: []any{
-					containerName,
-					networkName,
-				},
-			})
-		}
-
-		err := dockerClient.NetworkConnect(ctx, networkName, containerName, endpointConfig)
-		if err != nil {
-			notify.WriteMessage(notify.Message{
-				Type: notify.ErrorType,
-				Content: fmt.Sprintf(
-					"failed to connect registry %s to %s network: %v",
-					containerName,
-					networkName,
-					err,
-				),
-				Writer: writer,
-			})
+		ip := connectRegistryToNetwork(
+			ctx,
+			dockerClient,
+			reg,
+			networkName,
+			staticIPAt(staticIPs, i),
+			writer,
+		)
+		if ip != "" {
+			containerName, _ := ksailio.TrimNonEmpty(reg.Name)
+			registryIPs[containerName] = ip
 		}
 	}
 
 	return registryIPs, nil
+}
+
+// connectRegistryToNetwork connects a single registry to a network, optionally with a static IP.
+// Returns the assigned static IP (empty if none was assigned or the connection failed).
+func connectRegistryToNetwork(
+	ctx context.Context,
+	dockerClient client.APIClient,
+	reg Info,
+	networkName string,
+	staticIP string,
+	writer io.Writer,
+) string {
+	containerName, nameOK := ksailio.TrimNonEmpty(reg.Name)
+	if !nameOK {
+		return ""
+	}
+
+	var endpointConfig *network.EndpointSettings
+
+	if staticIP != "" {
+		endpointConfig = &network.EndpointSettings{
+			IPAMConfig: &network.EndpointIPAMConfig{
+				IPv4Address: staticIP,
+			},
+		}
+
+		notify.WriteMessage(notify.Message{
+			Type:    notify.ActivityType,
+			Content: "connecting '%s' to '%s' with IP %s",
+			Writer:  writer,
+			Args:    []any{containerName, networkName, staticIP},
+		})
+	} else {
+		notify.WriteMessage(notify.Message{
+			Type:    notify.ActivityType,
+			Content: "connecting '%s' to '%s'",
+			Writer:  writer,
+			Args:    []any{containerName, networkName},
+		})
+	}
+
+	err := dockerClient.NetworkConnect(ctx, networkName, containerName, endpointConfig)
+	if err != nil {
+		notify.WriteMessage(notify.Message{
+			Type: notify.ErrorType,
+			Content: fmt.Sprintf(
+				"failed to connect registry %s to %s network: %v",
+				containerName,
+				networkName,
+				err,
+			),
+			Writer: writer,
+		})
+
+		return ""
+	}
+
+	return staticIP
+}
+
+// staticIPAt returns the static IP at the given index, or empty if out of bounds.
+func staticIPAt(ips []string, idx int) string {
+	if idx < len(ips) {
+		return ips[idx]
+	}
+
+	return ""
 }
 
 // calculateRegistryIPs computes static IPs for registries from the high end of the subnet.
@@ -632,9 +633,7 @@ func ExtractPortFromEndpoint(endpoint string) int {
 		portStr = portStr[:slashIdx]
 	}
 
-	var port int
-
-	_, err := fmt.Sscanf(portStr, "%d", &port)
+	port, err := strconv.Atoi(portStr)
 	if err != nil || port <= 0 || port > 65535 {
 		return 0
 	}
@@ -732,7 +731,7 @@ func BuildRegistryInfo(
 
 // SortHosts deterministically sorts registry hostnames.
 func SortHosts(hosts []string) {
-	sort.Strings(hosts)
+	slices.Sort(hosts)
 }
 
 // CollectRegistryNames extracts registry names from a slice of registry Info structs.
