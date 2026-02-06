@@ -26,6 +26,7 @@ import (
 	kubeletcsrapproverinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/kubelet-csr-approver"
 	kyvernoinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/kyverno"
 	localpathstorageinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/localpathstorage"
+	metallbinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/metallb"
 	metricsserverinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/metrics-server"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	"github.com/spf13/cobra"
@@ -300,10 +301,11 @@ func InstallMetricsServerSilent(
 
 // InstallLoadBalancerSilent installs LoadBalancer support silently for parallel execution.
 // For Vanilla (Kind) × Docker, starts the Cloud Provider KIND controller as a Docker container.
+// For Talos × Docker, installs MetalLB.
 func InstallLoadBalancerSilent(
 	ctx context.Context,
 	clusterCfg *v1alpha1.Cluster,
-	_ *InstallerFactories,
+	factories *InstallerFactories,
 ) error {
 	// Determine which LoadBalancer implementation to install based on distribution × provider
 	switch clusterCfg.Spec.Cluster.Distribution {
@@ -333,11 +335,26 @@ func InstallLoadBalancerSilent(
 			return nil
 		}
 
-		// Talos × Docker: MetalLB is planned but not yet implemented in ksail.
-		// For now, we skip installation (no-op) rather than failing, allowing users
-		// to explicitly enable LoadBalancer in their configuration without errors.
-		// MetalLB installer implementation is planned for a future release.
-		return nil
+		// Talos × Docker: Install MetalLB for LoadBalancer support
+		if clusterCfg.Spec.Cluster.Provider == v1alpha1.ProviderDocker {
+			helmClient, kubeconfig, timeout, err := helmClientSetup(clusterCfg, factories)
+			if err != nil {
+				return fmt.Errorf("failed to setup helm client for metallb: %w", err)
+			}
+
+			lbInstaller := metallbinstaller.NewMetalLBInstaller(
+				helmClient,
+				kubeconfig,
+				clusterCfg.Spec.Cluster.Connection.Context,
+				timeout,
+				"", // Use default IP range
+			)
+
+			installErr := lbInstaller.Install(ctx)
+			if installErr != nil {
+				return fmt.Errorf("metallb installation failed: %w", installErr)
+			}
+		}
 	case v1alpha1.DistributionK3s:
 		// K3s already has ServiceLB (Klipper) by default, no installation needed
 		return nil
