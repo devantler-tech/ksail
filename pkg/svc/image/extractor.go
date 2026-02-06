@@ -55,6 +55,10 @@ func extractImagesFromReader(reader io.Reader, seen map[string]struct{}) ([]stri
 	imagePattern := regexp.MustCompile(`^\s*-?\s*image:\s*["']?([^\s"'#]+)["']?\s*(?:#.*)?$`)
 
 	scanner := bufio.NewScanner(reader)
+	// Increase buffer size to handle very long lines in Helm-rendered CRDs
+	// (e.g., Calico/Tigera CRDs can exceed the default 64 KiB token limit).
+	const maxTokenSize = 1024 * 1024 // 1 MiB
+	scanner.Buffer(make([]byte, 0, bufio.MaxScanTokenSize), maxTokenSize)
 	for scanner.Scan() {
 		line := scanner.Text()
 

@@ -205,6 +205,14 @@ func NewTemplateOnlyClient() (*Client, error) {
 	actionConfig.KubeClient = &helmv4kube.Client{}
 	actionConfig.Releases = nil // Not needed for templating
 
+	// Initialize registry client so OCI chart references (oci://) can be resolved
+	registryClient, err := helmv4registry.NewClient()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create registry client for template client: %w", err)
+	}
+
+	actionConfig.RegistryClient = registryClient
+
 	return &Client{
 		actionConfig: actionConfig,
 		settings:     settings,
@@ -377,7 +385,7 @@ func (c *Client) AddRepository(
 		return err
 	}
 
-	downloadErr := downloadRepositoryIndex(chartRepository)
+	downloadErr := downloadRepositoryIndex(ctx, chartRepository)
 	if downloadErr != nil {
 		return downloadErr
 	}
@@ -500,7 +508,7 @@ func newChartRepository(
 	return chartRepository, nil
 }
 
-func downloadRepositoryIndex(chartRepository *repov1.ChartRepository) error {
+func downloadRepositoryIndex(ctx context.Context, chartRepository *repov1.ChartRepository) error {
 	var lastErr error
 
 	for attempt := 1; attempt <= repoIndexMaxRetries; attempt++ {
@@ -523,7 +531,16 @@ func downloadRepositoryIndex(chartRepository *repov1.ChartRepository) error {
 
 		// Calculate delay with exponential backoff
 		delay := calculateRepoRetryDelay(attempt)
-		time.Sleep(delay)
+
+		// Use a timer so the retry loop respects context cancellation
+		timer := time.NewTimer(delay)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+
+			return fmt.Errorf("download repository index cancelled: %w", ctx.Err())
+		case <-timer.C:
+		}
 	}
 
 	return lastErr

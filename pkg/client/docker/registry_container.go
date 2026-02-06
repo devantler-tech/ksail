@@ -309,7 +309,11 @@ func (rm *RegistryManager) createAndStartContainer(
 	volumeName string,
 ) error {
 	// Prepare container configuration
-	containerConfig := rm.buildContainerConfig(config)
+	containerConfig, err := rm.buildContainerConfig(config)
+	if err != nil {
+		return fmt.Errorf("failed to build container config: %w", err)
+	}
+
 	hostConfig := rm.buildHostConfig(config, volumeName)
 	networkConfig := rm.buildNetworkConfig(config)
 
@@ -340,24 +344,30 @@ func (rm *RegistryManager) createAndStartContainer(
 // buildProxyCredentialsEnv builds environment variables for proxy authentication.
 // If credentials are provided, they are expanded from environment variables
 // and set as REGISTRY_PROXY_USERNAME and REGISTRY_PROXY_PASSWORD.
+// Returns ErrRegistryPartialCredentials if only one of username/password is provided.
 func (rm *RegistryManager) buildProxyCredentialsEnv(
 	username string,
 	password string,
-) []string {
-	var env []string
-
+) ([]string, error) {
 	expandedUsername := envvar.Expand(username)
 	expandedPassword := envvar.Expand(password)
 
-	if expandedUsername != "" {
-		env = append(env, "REGISTRY_PROXY_USERNAME="+expandedUsername)
+	hasUsername := expandedUsername != ""
+	hasPassword := expandedPassword != ""
+
+	// Both empty is valid (no auth); both present is valid; one without the other is an error
+	if hasUsername != hasPassword {
+		return nil, ErrRegistryPartialCredentials
 	}
 
-	if expandedPassword != "" {
-		env = append(env, "REGISTRY_PROXY_PASSWORD="+expandedPassword)
+	if !hasUsername {
+		return nil, nil
 	}
 
-	return env
+	return []string{
+		"REGISTRY_PROXY_USERNAME=" + expandedUsername,
+		"REGISTRY_PROXY_PASSWORD=" + expandedPassword,
+	}, nil
 }
 
 // buildContainerConfig builds the container configuration for a registry.
@@ -365,7 +375,7 @@ func (rm *RegistryManager) buildProxyCredentialsEnv(
 // the registry as a pull-through cache (proxy) to that upstream.
 func (rm *RegistryManager) buildContainerConfig(
 	config RegistryConfig,
-) *container.Config {
+) (*container.Config, error) {
 	labels := map[string]string{}
 	if config.Name != "" {
 		labels[RegistryLabelKey] = config.Name
@@ -381,7 +391,7 @@ func (rm *RegistryManager) buildContainerConfig(
 			},
 			Labels: labels,
 			Env:    env,
-		}
+		}, nil
 	}
 
 	// Configure registry as a pull-through cache to the upstream
@@ -389,7 +399,11 @@ func (rm *RegistryManager) buildContainerConfig(
 
 	// Add authentication credentials if provided
 	if config.Username != "" || config.Password != "" {
-		credEnv := rm.buildProxyCredentialsEnv(config.Username, config.Password)
+		credEnv, err := rm.buildProxyCredentialsEnv(config.Username, config.Password)
+		if err != nil {
+			return nil, fmt.Errorf("proxy credentials for %s: %w", config.Name, err)
+		}
+
 		env = append(env, credEnv...)
 	}
 
@@ -400,7 +414,7 @@ func (rm *RegistryManager) buildContainerConfig(
 		},
 		Labels: labels,
 		Env:    env,
-	}
+	}, nil
 }
 
 // buildHostConfig builds the host configuration including port bindings and mounts.
