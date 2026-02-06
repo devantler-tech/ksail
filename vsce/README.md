@@ -34,7 +34,7 @@ Search for "KSail" in the VSCode Extensions Marketplace.
 All cluster operations are available via the Command Palette (`Cmd+Shift+P` / `Ctrl+Shift+P`):
 
 | Command                           | Description                               | Shortcut        |
-| --------------------------------- | ----------------------------------------- | --------------- |
+|-----------------------------------|-------------------------------------------|-----------------|
 | `KSail: Init Cluster`             | Initialize a new ksail.yaml configuration | `Cmd+Shift+K I` |
 | `KSail: Create Cluster`           | Create and start a cluster                | `Cmd+Shift+K C` |
 | `KSail: Delete Cluster`           | Delete the cluster                        | `Cmd+Shift+K D` |
@@ -68,7 +68,7 @@ The KSail sidebar shows:
 ## Extension Settings
 
 | Setting            | Description          | Default |
-| ------------------ | -------------------- | ------- |
+|--------------------|----------------------|---------|
 | `ksail.binaryPath` | Path to ksail binary | `ksail` |
 
 ## Development
