@@ -4,13 +4,44 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 
 	iopath "github.com/devantler-tech/ksail/v5/pkg/io"
 	"github.com/devantler-tech/ksail/v5/pkg/k8s"
+	"github.com/siderolabs/talos/pkg/cluster/check"
 	clientconfig "github.com/siderolabs/talos/pkg/machinery/client/config"
 	"github.com/siderolabs/talos/pkg/machinery/config/bundle"
 	"k8s.io/client-go/tools/clientcmd"
 )
+
+// writeKubeconfig writes the raw kubeconfig bytes to the configured kubeconfig path.
+// It expands tilde in the path, ensures the directory exists, and writes the file.
+func (p *TalosProvisioner) writeKubeconfig(kubeconfig []byte) error {
+	// Expand tilde in kubeconfig path (e.g., ~/.kube/config -> /home/user/.kube/config)
+	kubeconfigPath, err := iopath.ExpandHomePath(p.options.KubeconfigPath)
+	if err != nil {
+		return fmt.Errorf("failed to expand kubeconfig path: %w", err)
+	}
+
+	// Ensure kubeconfig directory exists
+	kubeconfigDir := filepath.Dir(kubeconfigPath)
+	if kubeconfigDir != "" && kubeconfigDir != "." {
+		mkdirErr := os.MkdirAll(kubeconfigDir, stateDirectoryPermissions)
+		if mkdirErr != nil {
+			return fmt.Errorf("failed to create kubeconfig directory: %w", mkdirErr)
+		}
+	}
+
+	// Write kubeconfig to file
+	err = os.WriteFile(kubeconfigPath, kubeconfig, kubeconfigFileMode)
+	if err != nil {
+		return fmt.Errorf("failed to write kubeconfig: %w", err)
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "Kubeconfig saved to %s\n", kubeconfigPath)
+
+	return nil
+}
 
 // saveTalosconfig saves the talosconfig for any cluster type.
 func (p *TalosProvisioner) saveTalosconfig(configBundle *bundle.Bundle) error {
@@ -147,4 +178,24 @@ func (p *TalosProvisioner) cleanupTalosconfig(clusterName string) error {
 	_, _ = fmt.Fprintf(p.logWriter, "Cleaned up talosconfig entries for cluster %q\n", clusterName)
 
 	return nil
+}
+
+// clusterReadinessChecks returns the appropriate set of cluster readiness checks
+// based on CNI configuration. When CNI is disabled (either by Talos config or
+// SkipCNIChecks option), returns lighter checks that skip node Ready status.
+// Otherwise returns the full DefaultClusterChecks.
+//
+// See: https://pkg.go.dev/github.com/siderolabs/talos/pkg/cluster/check
+func (p *TalosProvisioner) clusterReadinessChecks() []check.ClusterCheck {
+	skipNodeReadiness := (p.talosConfigs != nil && p.talosConfigs.IsCNIDisabled()) ||
+		p.options.SkipCNIChecks
+
+	if skipNodeReadiness {
+		return slices.Concat(
+			check.PreBootSequenceChecks(),
+			check.K8sComponentsReadinessChecks(),
+		)
+	}
+
+	return check.DefaultClusterChecks()
 }

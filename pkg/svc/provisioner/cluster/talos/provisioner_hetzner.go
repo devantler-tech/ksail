@@ -6,12 +6,8 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"os"
-	"path/filepath"
-	"slices"
 	"strings"
 
-	iopath "github.com/devantler-tech/ksail/v5/pkg/io"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider/hetzner"
 	clustererrors "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/errors"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
@@ -26,6 +22,70 @@ import (
 	"github.com/siderolabs/talos/pkg/provision"
 	"github.com/siderolabs/talos/pkg/provision/access"
 )
+
+// ensureHetznerInfra creates the network, firewall, placement group, and retrieves
+// the SSH key needed for Hetzner cluster provisioning.
+func (p *TalosProvisioner) ensureHetznerInfra(
+	ctx context.Context,
+	hzProvider *hetzner.Provider,
+	clusterName string,
+) (HetznerInfra, error) {
+	_, _ = fmt.Fprintf(p.logWriter, "Creating infrastructure resources...\n")
+
+	network, err := hzProvider.EnsureNetwork(ctx, clusterName, p.hetznerOpts.NetworkCIDR)
+	if err != nil {
+		return HetznerInfra{}, fmt.Errorf("failed to create network: %w", err)
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "  ✓ Network %s created\n", network.Name)
+
+	firewall, err := hzProvider.EnsureFirewall(ctx, clusterName)
+	if err != nil {
+		return HetznerInfra{}, fmt.Errorf("failed to create firewall: %w", err)
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "  ✓ Firewall %s created\n", firewall.Name)
+
+	placementGroup, err := hzProvider.EnsurePlacementGroup(
+		ctx,
+		clusterName,
+		p.hetznerOpts.PlacementGroupStrategy.String(),
+		p.hetznerOpts.PlacementGroup,
+	)
+	if err != nil {
+		return HetznerInfra{}, fmt.Errorf("failed to create placement group: %w", err)
+	}
+
+	var placementGroupID int64
+
+	if placementGroup != nil {
+		placementGroupID = placementGroup.ID
+		_, _ = fmt.Fprintf(p.logWriter, "  ✓ Placement group %s created\n", placementGroup.Name)
+	} else {
+		_, _ = fmt.Fprintf(p.logWriter, "  ✓ Placement group disabled (strategy: None)\n")
+	}
+
+	// Get SSH key if configured
+	var sshKeyID int64
+
+	if p.hetznerOpts.SSHKeyName != "" {
+		sshKey, keyErr := hzProvider.GetSSHKey(ctx, p.hetznerOpts.SSHKeyName)
+		if keyErr != nil {
+			return HetznerInfra{}, fmt.Errorf("failed to get SSH key: %w", keyErr)
+		}
+
+		if sshKey != nil {
+			sshKeyID = sshKey.ID
+		}
+	}
+
+	return HetznerInfra{
+		NetworkID:        network.ID,
+		FirewallID:       firewall.ID,
+		PlacementGroupID: placementGroupID,
+		SSHKeyID:         sshKeyID,
+	}, nil
+}
 
 // createHetznerCluster creates a Talos cluster on Hetzner Cloud infrastructure.
 //
@@ -48,62 +108,10 @@ func (p *TalosProvisioner) createHetznerCluster(ctx context.Context, clusterName
 		return fmt.Errorf("%w: %s", ErrClusterAlreadyExists, clusterName)
 	}
 
-	// Create infrastructure resources
-	_, _ = fmt.Fprintf(p.logWriter, "Creating infrastructure resources...\n")
-
-	network, err := hzProvider.EnsureNetwork(ctx, clusterName, p.hetznerOpts.NetworkCIDR)
+	// Create infrastructure resources (network, firewall, placement group, SSH key)
+	infra, err := p.ensureHetznerInfra(ctx, hzProvider, clusterName)
 	if err != nil {
-		return fmt.Errorf("failed to create network: %w", err)
-	}
-
-	_, _ = fmt.Fprintf(p.logWriter, "  ✓ Network %s created\n", network.Name)
-
-	firewall, err := hzProvider.EnsureFirewall(ctx, clusterName)
-	if err != nil {
-		return fmt.Errorf("failed to create firewall: %w", err)
-	}
-
-	_, _ = fmt.Fprintf(p.logWriter, "  ✓ Firewall %s created\n", firewall.Name)
-
-	placementGroup, err := hzProvider.EnsurePlacementGroup(
-		ctx,
-		clusterName,
-		p.hetznerOpts.PlacementGroupStrategy.String(),
-		p.hetznerOpts.PlacementGroup,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to create placement group: %w", err)
-	}
-
-	var placementGroupID int64
-
-	if placementGroup != nil {
-		placementGroupID = placementGroup.ID
-		_, _ = fmt.Fprintf(p.logWriter, "  ✓ Placement group %s created\n", placementGroup.Name)
-	} else {
-		_, _ = fmt.Fprintf(p.logWriter, "  ✓ Placement group disabled (strategy: None)\n")
-	}
-
-	// Get SSH key if configured
-	var sshKeyID int64
-
-	if p.hetznerOpts.SSHKeyName != "" {
-		sshKey, keyErr := hzProvider.GetSSHKey(ctx, p.hetznerOpts.SSHKeyName)
-		if keyErr != nil {
-			return fmt.Errorf("failed to get SSH key: %w", keyErr)
-		}
-
-		if sshKey != nil {
-			sshKeyID = sshKey.ID
-		}
-	}
-
-	// Bundle shared infrastructure resources
-	infra := HetznerInfra{
-		NetworkID:        network.ID,
-		FirewallID:       firewall.ID,
-		PlacementGroupID: placementGroupID,
-		SSHKeyID:         sshKeyID,
+		return err
 	}
 
 	controlPlaneServers, err := p.createHetznerNodes(ctx, hzProvider, infra, HetznerNodeGroupOpts{
@@ -621,28 +629,11 @@ func (p *TalosProvisioner) saveHetznerKubeconfig(
 		return fmt.Errorf("failed to rewrite kubeconfig endpoint: %w", err)
 	}
 
-	// Expand tilde in kubeconfig path
-	kubeconfigPath, err := iopath.ExpandHomePath(p.options.KubeconfigPath)
+	// Write kubeconfig to the configured path
+	err = p.writeKubeconfig(kubeconfig)
 	if err != nil {
-		return fmt.Errorf("failed to expand kubeconfig path: %w", err)
+		return err
 	}
-
-	// Ensure kubeconfig directory exists
-	kubeconfigDir := filepath.Dir(kubeconfigPath)
-	if kubeconfigDir != "" && kubeconfigDir != "." {
-		mkdirErr := os.MkdirAll(kubeconfigDir, stateDirectoryPermissions)
-		if mkdirErr != nil {
-			return fmt.Errorf("failed to create kubeconfig directory: %w", mkdirErr)
-		}
-	}
-
-	// Write kubeconfig to file
-	err = os.WriteFile(kubeconfigPath, kubeconfig, kubeconfigFileMode)
-	if err != nil {
-		return fmt.Errorf("failed to write kubeconfig: %w", err)
-	}
-
-	_, _ = fmt.Fprintf(p.logWriter, "  ✓ Kubeconfig saved to %s\n", kubeconfigPath)
 
 	return nil
 }
@@ -769,6 +760,21 @@ func (p *TalosProvisioner) createHetznerNodes(
 	return servers, nil
 }
 
+// newHetznerClusterWithEndpoint constructs a HetznerClusterResult with the
+// Kubernetes API endpoint derived from the first control-plane server's public IPv4.
+func newHetznerClusterWithEndpoint(
+	clusterName string,
+	controlPlaneServers []*hcloud.Server,
+	workerServers []*hcloud.Server,
+) (*HetznerClusterResult, error) {
+	kubeEndpoint := "https://" + net.JoinHostPort(
+		controlPlaneServers[0].PublicNet.IPv4.IP.String(),
+		"6443",
+	)
+
+	return NewHetznerClusterResult(clusterName, controlPlaneServers, workerServers, kubeEndpoint)
+}
+
 // waitForHetznerClusterReady waits for the Hetzner cluster to be fully ready.
 // This uses the upstream Talos SDK's access.NewAdapter() and check.Wait() patterns
 // to perform the same readiness checks as Docker-based clusters.
@@ -785,18 +791,10 @@ func (p *TalosProvisioner) waitForHetznerClusterReady(
 	workerServers []*hcloud.Server,
 	configBundle *bundle.Bundle,
 ) error {
-	// Build the first control-plane endpoint for Kubernetes API access
-	kubeEndpoint := "https://" + net.JoinHostPort(
-		controlPlaneServers[0].PublicNet.IPv4.IP.String(),
-		"6443",
-	)
-
-	// Create HetznerClusterResult which implements provision.Cluster
-	hetznerCluster, err := NewHetznerClusterResult(
+	hetznerCluster, err := newHetznerClusterWithEndpoint(
 		clusterName,
 		controlPlaneServers,
 		workerServers,
-		kubeEndpoint,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create cluster result: %w", err)
@@ -816,103 +814,29 @@ func (p *TalosProvisioner) waitForHetznerClusterReady(
 
 	// Determine which checks to run based on CNI configuration
 	// When CNI is disabled, nodes won't become Ready until CNI is installed
-	skipNodeReadiness := (p.talosConfigs != nil && p.talosConfigs.IsCNIDisabled()) ||
-		p.options.SkipCNIChecks
-
-	var checks []check.ClusterCheck
-
-	if skipNodeReadiness {
-		_, _ = fmt.Fprintf(
-			p.logWriter,
-			"  Running pre-boot and K8s component checks (CNI not installed yet)...\n",
-		)
-		// Use PreBootSequence + K8sComponentsReadiness checks (skips K8sAllNodesReady)
-		checks = slices.Concat(check.PreBootSequenceChecks(), check.K8sComponentsReadinessChecks())
-	} else {
-		_, _ = fmt.Fprintf(p.logWriter, "  Running full cluster readiness checks...\n")
-		// Use full DefaultClusterChecks which includes all readiness checks
-		checks = check.DefaultClusterChecks()
-	}
-
-	// Create a reporter that logs to our log writer
-	reporter := &hetznerCheckReporter{writer: p.logWriter}
-
-	// Run the checks using upstream check.Wait()
-	// This is the same pattern used by talosctl and Docker provisioner
-	checkCtx, cancel := context.WithTimeout(ctx, clusterReadinessTimeout)
-	defer cancel()
-
-	checkErr := check.Wait(checkCtx, clusterAccess, checks, reporter)
-	if checkErr != nil {
-		return fmt.Errorf("cluster readiness checks failed: %w", checkErr)
-	}
-
-	return nil
+	return p.runHetznerClusterChecks(ctx, clusterAccess)
 }
 
 // waitForHetznerClusterReadyAfterStart waits for a Hetzner cluster to be ready after starting.
 // This is similar to waitForHetznerClusterReady but loads the TalosConfig from disk
 // instead of from the config bundle (which is not available during start operations).
-//
-//nolint:cyclop,funlen // Inherent complexity from cluster readiness checks with multiple node types
 func (p *TalosProvisioner) waitForHetznerClusterReadyAfterStart(
 	ctx context.Context,
 	clusterName string,
 ) error {
 	_, _ = fmt.Fprintf(p.logWriter, "Waiting for cluster to be ready...\n")
 
-	// Get nodes from the infrastructure provider
-	nodes, err := p.infraProvider.ListNodes(ctx, clusterName)
+	// Discover and classify servers by role
+	controlPlaneServers, workerServers, err := p.discoverHetznerServers(ctx, clusterName)
 	if err != nil {
-		return fmt.Errorf("failed to list nodes: %w", err)
+		return err
 	}
 
-	if len(nodes) == 0 {
-		return fmt.Errorf("%w: %s", clustererrors.ErrNoNodesFound, clusterName)
-	}
-
-	// Cast to Hetzner provider to get server details
-	hetznerProvider, ok := p.infraProvider.(*hetzner.Provider)
-	if !ok {
-		return clustererrors.ErrNotHetznerProvider
-	}
-
-	// Get control-plane and worker servers
-	var controlPlaneServers, workerServers []*hcloud.Server
-
-	for _, node := range nodes {
-		server, err := hetznerProvider.GetServerByName(ctx, node.Name)
-		if err != nil {
-			return fmt.Errorf("failed to get server %s: %w", node.Name, err)
-		}
-
-		if server == nil {
-			continue
-		}
-
-		if node.Role == "control-plane" {
-			controlPlaneServers = append(controlPlaneServers, server)
-		} else {
-			workerServers = append(workerServers, server)
-		}
-	}
-
-	if len(controlPlaneServers) == 0 {
-		return fmt.Errorf("%w: %s", clustererrors.ErrNoControlPlaneNodes, clusterName)
-	}
-
-	// Build the kubernetes endpoint from the first control-plane server
-	kubeEndpoint := "https://" + net.JoinHostPort(
-		controlPlaneServers[0].PublicNet.IPv4.IP.String(),
-		"6443",
-	)
-
-	// Create HetznerClusterResult which implements provision.Cluster
-	hetznerCluster, err := NewHetznerClusterResult(
+	// Build the cluster result from the discovered servers
+	hetznerCluster, err := newHetznerClusterWithEndpoint(
 		clusterName,
 		controlPlaneServers,
 		workerServers,
-		kubeEndpoint,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create cluster result: %w", err)
@@ -932,21 +856,78 @@ func (p *TalosProvisioner) waitForHetznerClusterReadyAfterStart(
 
 	defer clusterAccess.Close() //nolint:errcheck
 
-	// Determine which checks to run based on CNI configuration
-	skipNodeReadiness := (p.talosConfigs != nil && p.talosConfigs.IsCNIDisabled()) ||
-		p.options.SkipCNIChecks
+	err = p.runHetznerClusterChecks(ctx, clusterAccess)
+	if err != nil {
+		return err
+	}
 
-	var checks []check.ClusterCheck
+	_, _ = fmt.Fprintf(p.logWriter, "  ✓ Cluster is ready\n")
 
-	if skipNodeReadiness {
+	return nil
+}
+
+// discoverHetznerServers lists nodes for a cluster and classifies them by role,
+// returning separate slices of control-plane and worker servers.
+func (p *TalosProvisioner) discoverHetznerServers(
+	ctx context.Context,
+	clusterName string,
+) ([]*hcloud.Server, []*hcloud.Server, error) {
+	nodes, err := p.infraProvider.ListNodes(ctx, clusterName)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to list nodes: %w", err)
+	}
+
+	if len(nodes) == 0 {
+		return nil, nil, fmt.Errorf("%w: %s", clustererrors.ErrNoNodesFound, clusterName)
+	}
+
+	hetznerProvider, ok := p.infraProvider.(*hetzner.Provider)
+	if !ok {
+		return nil, nil, clustererrors.ErrNotHetznerProvider
+	}
+
+	var controlPlaneServers, workerServers []*hcloud.Server
+
+	for _, node := range nodes {
+		server, serverErr := hetznerProvider.GetServerByName(ctx, node.Name)
+		if serverErr != nil {
+			return nil, nil, fmt.Errorf("failed to get server %s: %w", node.Name, serverErr)
+		}
+
+		if server == nil {
+			continue
+		}
+
+		if node.Role == "control-plane" {
+			controlPlaneServers = append(controlPlaneServers, server)
+		} else {
+			workerServers = append(workerServers, server)
+		}
+	}
+
+	if len(controlPlaneServers) == 0 {
+		return nil, nil, fmt.Errorf("%w: %s", clustererrors.ErrNoControlPlaneNodes, clusterName)
+	}
+
+	return controlPlaneServers, workerServers, nil
+}
+
+// runHetznerClusterChecks runs CNI-aware readiness checks on a Hetzner cluster.
+// It selects the appropriate checks based on CNI configuration, logs progress,
+// and waits for all checks to pass.
+func (p *TalosProvisioner) runHetznerClusterChecks(
+	ctx context.Context,
+	clusterAccess *access.Adapter,
+) error {
+	checks := p.clusterReadinessChecks()
+
+	if (p.talosConfigs != nil && p.talosConfigs.IsCNIDisabled()) || p.options.SkipCNIChecks {
 		_, _ = fmt.Fprintf(
 			p.logWriter,
 			"  Running pre-boot and K8s component checks (CNI not installed yet)...\n",
 		)
-		checks = slices.Concat(check.PreBootSequenceChecks(), check.K8sComponentsReadinessChecks())
 	} else {
 		_, _ = fmt.Fprintf(p.logWriter, "  Running full cluster readiness checks...\n")
-		checks = check.DefaultClusterChecks()
 	}
 
 	reporter := &hetznerCheckReporter{writer: p.logWriter}
@@ -954,12 +935,10 @@ func (p *TalosProvisioner) waitForHetznerClusterReadyAfterStart(
 	checkCtx, cancel := context.WithTimeout(ctx, clusterReadinessTimeout)
 	defer cancel()
 
-	checkErr := check.Wait(checkCtx, clusterAccess, checks, reporter)
-	if checkErr != nil {
-		return fmt.Errorf("cluster readiness checks failed: %w", checkErr)
+	err := check.Wait(checkCtx, clusterAccess, checks, reporter)
+	if err != nil {
+		return fmt.Errorf("cluster readiness checks failed: %w", err)
 	}
-
-	_, _ = fmt.Fprintf(p.logWriter, "  ✓ Cluster is ready\n")
 
 	return nil
 }

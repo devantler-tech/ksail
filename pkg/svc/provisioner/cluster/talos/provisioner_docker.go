@@ -7,11 +7,8 @@ import (
 	"net/netip"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"runtime"
-	"slices"
 
-	iopath "github.com/devantler-tech/ksail/v5/pkg/io"
 	clustererrors "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/errors"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
@@ -327,26 +324,7 @@ func (p *TalosProvisioner) bootstrapAndSaveKubeconfig(
 	// Select appropriate cluster checks based on CNI configuration.
 	// When using a custom CNI (e.g., Cilium), skip CNI-dependent checks (CoreDNS, kube-proxy)
 	// because pods cannot start until the CNI is installed.
-	// However, we still need K8sComponentsReadinessChecks to ensure K8s API is ready.
-	// See: https://pkg.go.dev/github.com/siderolabs/talos/pkg/cluster/check#K8sComponentsReadinessChecks
-	clusterChecks := check.DefaultClusterChecks()
-
-	// Skip CNI-dependent checks if:
-	// 1. The Talos config has CNI disabled (scaffolded project with disable-default-cni.yaml patch), OR
-	// 2. KSail will install a custom CNI after cluster creation (options.SkipCNIChecks)
-	//
-	// We use PreBootSequenceChecks + K8sComponentsReadinessChecks (without the node ready checks)
-	// to ensure:
-	// - Talos services are healthy (etcd, apid, kubelet)
-	// - K8s nodes are reported (registered with API server)
-	// - Control plane static pods are running
-	// This matches talosctl's SkipK8sNodeReadinessCheck behavior.
-	if (p.talosConfigs != nil && p.talosConfigs.IsCNIDisabled()) || p.options.SkipCNIChecks {
-		clusterChecks = slices.Concat(
-			check.PreBootSequenceChecks(),
-			check.K8sComponentsReadinessChecks(),
-		)
-	}
+	clusterChecks := p.clusterReadinessChecks()
 
 	err = check.Wait(checkCtx, clusterAccess, clusterChecks, check.StderrReporter())
 	if err != nil {
@@ -370,28 +348,11 @@ func (p *TalosProvisioner) bootstrapAndSaveKubeconfig(
 		return fmt.Errorf("failed to rewrite kubeconfig endpoint: %w", err)
 	}
 
-	// Expand tilde in kubeconfig path (e.g., ~/.kube/config -> /home/user/.kube/config)
-	kubeconfigPath, err := iopath.ExpandHomePath(p.options.KubeconfigPath)
+	// Write kubeconfig to the configured path
+	err = p.writeKubeconfig(kubeconfig)
 	if err != nil {
-		return fmt.Errorf("failed to expand kubeconfig path: %w", err)
+		return err
 	}
-
-	// Ensure kubeconfig directory exists
-	kubeconfigDir := filepath.Dir(kubeconfigPath)
-	if kubeconfigDir != "" && kubeconfigDir != "." {
-		mkdirErr := os.MkdirAll(kubeconfigDir, stateDirectoryPermissions)
-		if mkdirErr != nil {
-			return fmt.Errorf("failed to create kubeconfig directory: %w", mkdirErr)
-		}
-	}
-
-	// Write kubeconfig to file
-	err = os.WriteFile(kubeconfigPath, kubeconfig, kubeconfigFileMode)
-	if err != nil {
-		return fmt.Errorf("failed to write kubeconfig: %w", err)
-	}
-
-	_, _ = fmt.Fprintf(p.logWriter, "Saved kubeconfig to %s\n", kubeconfigPath)
 
 	return nil
 }
