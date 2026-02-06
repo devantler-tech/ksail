@@ -12,6 +12,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider"
 	dockerprovider "github.com/devantler-tech/ksail/v5/pkg/svc/provider/docker"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider/hetzner"
+	"github.com/devantler-tech/ksail/v5/pkg/utils/labels"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	dockerclient "github.com/docker/docker/client"
@@ -267,22 +268,13 @@ func (p *TalosProvisioner) List(ctx context.Context) ([]string, error) {
 		return nil, fmt.Errorf("failed to list containers: %w", err)
 	}
 
-	// Extract unique cluster names
-	clusterSet := make(map[string]struct{})
-
-	for _, c := range containers {
-		if name, ok := c.Labels[LabelTalosClusterName]; ok && name != "" {
-			clusterSet[name] = struct{}{}
-		}
-	}
-
-	// Convert set to slice
-	clusters := make([]string, 0, len(clusterSet))
-	for name := range clusterSet {
-		clusters = append(clusters, name)
-	}
-
-	return clusters, nil
+	return labels.UniqueValues(
+		containers,
+		LabelTalosClusterName,
+		func(c container.Summary) map[string]string {
+			return c.Labels
+		},
+	), nil
 }
 
 // Start starts a stopped Talos-in-Docker cluster.
