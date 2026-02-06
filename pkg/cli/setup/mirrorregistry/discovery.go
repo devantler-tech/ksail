@@ -68,7 +68,7 @@ func DiscoverRegistriesByNetwork(
 
 	var registries []dockerclient.RegistryInfo
 
-	if err := cleanupDeps.DockerInvoker(cmd, func(dockerClient client.APIClient) error {
+	err := cleanupDeps.DockerInvoker(cmd, func(dockerClient client.APIClient) error {
 		registryMgr, mgrErr := dockerclient.NewRegistryManager(dockerClient)
 		if mgrErr != nil {
 			return fmt.Errorf("create registry manager: %w", mgrErr)
@@ -79,12 +79,16 @@ func DiscoverRegistriesByNetwork(
 			return fmt.Errorf("list registries on network: %w", listErr)
 		}
 
-		// Filter to only include registries belonging to this cluster
 		registries = filterRegistriesByClusterName(discovered, clusterName)
 
 		return nil
-	}); err != nil {
-		cmd.PrintErrf("Warning: failed to discover registries on network %q: %v\n", networkName, err)
+	})
+	if err != nil {
+		cmd.PrintErrf(
+			"Warning: failed to discover registries on network %q: %v\n",
+			networkName,
+			err,
+		)
 	}
 
 	return &DiscoveredRegistries{Registries: registries}
