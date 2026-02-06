@@ -131,8 +131,9 @@ func runImagesCommand(
 		return fmt.Errorf("extract images from installers: %w", err)
 	}
 
-	// Sort for consistent output
+	// Sort and deduplicate for consistent, stable output
 	slices.Sort(images)
+	images = slices.Compact(images)
 
 	// Output based on format
 	switch strings.ToLower(outputFormat) {

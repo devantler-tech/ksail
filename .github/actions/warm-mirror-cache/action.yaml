@@ -284,28 +284,28 @@ runs:
         docker run --rm \
           -v docker.io:/volume:ro \
           -v /tmp/mirror-cache:/backup \
-          busybox \
+          busybox:1.37@sha256:b3255e7dfbcd10cb367af0d409747d511aeb66dfac98cf30e97e87e4207dd76f \
           tar -cf /backup/docker.io.tar -C /volume . || echo "⚠️ Failed to export docker.io mirror"
 
         # Export ghcr.io mirror volume
         docker run --rm \
           -v ghcr.io:/volume:ro \
           -v /tmp/mirror-cache:/backup \
-          busybox \
+          busybox:1.37@sha256:b3255e7dfbcd10cb367af0d409747d511aeb66dfac98cf30e97e87e4207dd76f \
           tar -cf /backup/ghcr.io.tar -C /volume . || echo "⚠️ Failed to export ghcr.io mirror"
 
         # Export quay.io mirror volume
         docker run --rm \
           -v quay.io:/volume:ro \
           -v /tmp/mirror-cache:/backup \
-          busybox \
+          busybox:1.37@sha256:b3255e7dfbcd10cb367af0d409747d511aeb66dfac98cf30e97e87e4207dd76f \
           tar -cf /backup/quay.io.tar -C /volume . || echo "⚠️ Failed to export quay.io mirror"
 
         # Export registry.k8s.io mirror volume
         docker run --rm \
           -v registry.k8s.io:/volume:ro \
           -v /tmp/mirror-cache:/backup \
-          busybox \
+          busybox:1.37@sha256:b3255e7dfbcd10cb367af0d409747d511aeb66dfac98cf30e97e87e4207dd76f \
           tar -cf /backup/registry.k8s.io.tar -C /volume . || echo "⚠️ Failed to export registry.k8s.io mirror"
 
         # Show cache size

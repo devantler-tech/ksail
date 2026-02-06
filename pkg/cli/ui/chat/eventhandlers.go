@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -95,7 +96,7 @@ func (d *sessionEventDispatcher) handleSessionError(event copilot.SessionEvent) 
 		errMsg = *event.Data.Message
 	}
 
-	d.eventChan <- streamErrMsg{err: fmt.Errorf("%s", errMsg)}
+	d.eventChan <- streamErrMsg{err: errors.New(errMsg)}
 }
 
 func (d *sessionEventDispatcher) handleToolStart(event copilot.SessionEvent) {

@@ -88,7 +88,7 @@ runs:
           docker run --rm \
             -v docker.io:/volume \
             -v /tmp/mirror-cache:/backup:ro \
-            busybox \
+            busybox:1.37@sha256:b3255e7dfbcd10cb367af0d409747d511aeb66dfac98cf30e97e87e4207dd76f \
             sh -c "cd /volume && tar -xf /backup/docker.io.tar" || echo "⚠️ Failed to import docker.io mirror"
           echo "✅ Restored docker.io mirror cache"
         fi
@@ -99,7 +99,7 @@ runs:
           docker run --rm \
             -v ghcr.io:/volume \
             -v /tmp/mirror-cache:/backup:ro \
-            busybox \
+            busybox:1.37@sha256:b3255e7dfbcd10cb367af0d409747d511aeb66dfac98cf30e97e87e4207dd76f \
             sh -c "cd /volume && tar -xf /backup/ghcr.io.tar" || echo "⚠️ Failed to import ghcr.io mirror"
           echo "✅ Restored ghcr.io mirror cache"
         fi
@@ -110,7 +110,7 @@ runs:
           docker run --rm \
             -v quay.io:/volume \
             -v /tmp/mirror-cache:/backup:ro \
-            busybox \
+            busybox:1.37@sha256:b3255e7dfbcd10cb367af0d409747d511aeb66dfac98cf30e97e87e4207dd76f \
             sh -c "cd /volume && tar -xf /backup/quay.io.tar" || echo "⚠️ Failed to import quay.io mirror"
           echo "✅ Restored quay.io mirror cache"
         fi
@@ -121,7 +121,7 @@ runs:
           docker run --rm \
             -v registry.k8s.io:/volume \
             -v /tmp/mirror-cache:/backup:ro \
-            busybox \
+            busybox:1.37@sha256:b3255e7dfbcd10cb367af0d409747d511aeb66dfac98cf30e97e87e4207dd76f \
             sh -c "cd /volume && tar -xf /backup/registry.k8s.io.tar" || echo "⚠️ Failed to import registry.k8s.io mirror"
           echo "✅ Restored registry.k8s.io mirror cache"
         fi
