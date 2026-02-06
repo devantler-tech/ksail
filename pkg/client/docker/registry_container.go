@@ -118,7 +118,6 @@ func (rm *RegistryManager) listRegistryContainers(
 ) ([]container.Summary, error) {
 	filterArgs := filters.NewArgs()
 	filterArgs.Add("name", name)
-	filterArgs.Add("ancestor", RegistryImageName)
 	filterArgs.Add("label", fmt.Sprintf("%s=%s", RegistryLabelKey, name))
 
 	containers, err := rm.client.ContainerList(ctx, container.ListOptions{
@@ -187,7 +186,6 @@ func (rm *RegistryManager) listAllRegistryContainers(
 	ctx context.Context,
 ) ([]container.Summary, error) {
 	filterArgs := filters.NewArgs()
-	filterArgs.Add("ancestor", RegistryImageName)
 	filterArgs.Add("label", RegistryLabelKey)
 
 	containers, err := rm.client.ContainerList(ctx, container.ListOptions{
