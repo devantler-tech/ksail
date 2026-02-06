@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-//nolint:paralleltest,tparallel // Subtests cannot run in parallel - they share TTY checker state
+//nolint:paralleltest // Subtests cannot run in parallel - they share TTY checker state
 func TestShouldSkipPrompt(t *testing.T) {
 
 	tests := []struct {
@@ -77,7 +77,7 @@ func getPromptTestCases() []promptTestCase {
 	}
 }
 
-//nolint:paralleltest,tparallel // Subtests cannot run in parallel - they share stdin reader state
+//nolint:paralleltest // Subtests cannot run in parallel - they share stdin reader state
 func TestPromptForConfirmation(t *testing.T) {
 
 	for _, testCase := range getPromptTestCases() {

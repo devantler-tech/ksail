@@ -1,12 +1,16 @@
 package configmanager
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
+
+// errUnsupportedFlagFieldType is returned when setFieldValueFromFlag encounters an unknown field pointer type.
+var errUnsupportedFlagFieldType = errors.New("unsupported flag field type")
 
 // flagValueSetter is an interface for types that can set their value from a string.
 // This is typically implemented by enum types that satisfy pflag.Value.
@@ -38,7 +42,7 @@ func setFieldValueFromFlag(fieldPtr any, raw string) error {
 	case *int32:
 		return setInt32FromFlag(ptr, raw)
 	default:
-		return fmt.Errorf("unsupported flag field type %T", fieldPtr)
+		return fmt.Errorf("%w: %T", errUnsupportedFlagFieldType, fieldPtr)
 	}
 }
 

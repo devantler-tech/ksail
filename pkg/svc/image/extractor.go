@@ -120,6 +120,27 @@ func stripTagFromRef(ref string) string {
 	return before
 }
 
+// hasHostPort checks whether the first path component of a multi-segment
+// reference contains a numeric port (e.g. "registry:5000" in "registry:5000/foo").
+func hasHostPort(firstPart string, multiSegment bool) bool {
+	if !multiSegment {
+		return false
+	}
+
+	// Strip digest so "host@sha256:..." does not confuse port detection.
+	clean := firstPart
+	if digestIdx := strings.Index(clean, "@"); digestIdx >= 0 {
+		clean = clean[:digestIdx]
+	}
+
+	colonIdx := strings.LastIndex(clean, ":")
+	if colonIdx < 0 || colonIdx >= len(clean)-1 {
+		return false
+	}
+
+	return isPortNumber(clean[colonIdx+1:])
+}
+
 // NormalizeImageRef normalizes an image reference to a fully qualified form.
 // - Adds "docker.io/library/" prefix for images without registry and namespace
 // - Adds "docker.io/" prefix for images without registry but with namespace
@@ -140,33 +161,13 @@ func NormalizeImageRef(ref string) string {
 		firstPartBase = firstPartBase[:digestIdx]
 	}
 
-	// Use a copy without digest for port detection so we do not depend on tag stripping.
-	firstPartNoDigest := firstPart
-	if digestIdx := strings.Index(firstPartNoDigest, "@"); digestIdx >= 0 {
-		firstPartNoDigest = firstPartNoDigest[:digestIdx]
-	}
-
 	firstPartBase = stripTagFromRef(firstPartBase)
-
-	// Detect hostname:port/... style registries where the first path component
-	// has a colon followed by a numeric port. Only treat this as a registry when
-	// there is at least one "/" in the reference so that "nginx:1.25" is not
-	// misclassified as a host:port registry.
-	hasPort := false
-	if len(parts) > 1 {
-		if colonIdx := strings.LastIndex(firstPartNoDigest, ":"); colonIdx >= 0 && colonIdx < len(firstPartNoDigest)-1 {
-			portPart := firstPartNoDigest[colonIdx+1:]
-			if isPortNumber(portPart) {
-				hasPort = true
-			}
-		}
-	}
 
 	// Check if first part looks like a registry
 	hasRegistry := strings.Contains(firstPartBase, ".") ||
 		firstPartBase == "localhost" ||
 		strings.HasPrefix(firstPart, "localhost:") ||
-		hasPort
+		hasHostPort(firstPart, len(parts) > 1)
 
 	if hasRegistry {
 		// Already has registry, just ensure tag (unless it's a digest)
