@@ -140,12 +140,33 @@ func NormalizeImageRef(ref string) string {
 		firstPartBase = firstPartBase[:digestIdx]
 	}
 
+	// Use a copy without digest for port detection so we do not depend on tag stripping.
+	firstPartNoDigest := firstPart
+	if digestIdx := strings.Index(firstPartNoDigest, "@"); digestIdx >= 0 {
+		firstPartNoDigest = firstPartNoDigest[:digestIdx]
+	}
+
 	firstPartBase = stripTagFromRef(firstPartBase)
+
+	// Detect hostname:port/... style registries where the first path component
+	// has a colon followed by a numeric port. Only treat this as a registry when
+	// there is at least one "/" in the reference so that "nginx:1.25" is not
+	// misclassified as a host:port registry.
+	hasPort := false
+	if len(parts) > 1 {
+		if colonIdx := strings.LastIndex(firstPartNoDigest, ":"); colonIdx >= 0 && colonIdx < len(firstPartNoDigest)-1 {
+			portPart := firstPartNoDigest[colonIdx+1:]
+			if isPortNumber(portPart) {
+				hasPort = true
+			}
+		}
+	}
 
 	// Check if first part looks like a registry
 	hasRegistry := strings.Contains(firstPartBase, ".") ||
 		firstPartBase == "localhost" ||
-		strings.HasPrefix(firstPart, "localhost:")
+		strings.HasPrefix(firstPart, "localhost:") ||
+		hasPort
 
 	if hasRegistry {
 		// Already has registry, just ensure tag (unless it's a digest)

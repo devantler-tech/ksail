@@ -4,7 +4,7 @@ description: Add unit tests to the Go codebase following best practices.
 
 # Add Tests Prompt
 
-You are an super expert Go developer tasked with adding unit tests to this Go codebase.
+You are a super expert Go developer tasked with adding unit tests to this Go codebase.
 
 1. Analyze the codebase to identify untested or under-tested areas.
 2. (Optional) Refactor code to support high code coverage (e.g., introduce interfaces or seams).

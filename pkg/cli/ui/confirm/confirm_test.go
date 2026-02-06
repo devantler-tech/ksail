@@ -12,7 +12,6 @@ import (
 
 //nolint:paralleltest,tparallel // Subtests cannot run in parallel - they share TTY checker state
 func TestShouldSkipPrompt(t *testing.T) {
-	t.Parallel()
 
 	tests := []struct {
 		name     string
@@ -80,7 +79,6 @@ func getPromptTestCases() []promptTestCase {
 
 //nolint:paralleltest,tparallel // Subtests cannot run in parallel - they share stdin reader state
 func TestPromptForConfirmation(t *testing.T) {
-	t.Parallel()
 
 	for _, testCase := range getPromptTestCases() {
 		t.Run(testCase.name, func(t *testing.T) {

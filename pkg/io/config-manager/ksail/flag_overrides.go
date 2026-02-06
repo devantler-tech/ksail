@@ -38,7 +38,7 @@ func setFieldValueFromFlag(fieldPtr any, raw string) error {
 	case *int32:
 		return setInt32FromFlag(ptr, raw)
 	default:
-		return nil
+		return fmt.Errorf("unsupported flag field type %T", fieldPtr)
 	}
 }
 
