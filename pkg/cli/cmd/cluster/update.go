@@ -2,13 +2,12 @@ package cluster
 
 import (
 	"fmt"
-	"strings"
 
-	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup/localregistry"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/confirm"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
@@ -47,27 +46,13 @@ Use --dry-run to preview changes without applying them.`,
 		},
 	}
 
-	// Use the same field selectors as create command
-	fieldSelectors := ksailconfigmanager.DefaultClusterFieldSelectors()
-	fieldSelectors = append(fieldSelectors, ksailconfigmanager.DefaultProviderFieldSelector())
-	fieldSelectors = append(fieldSelectors, ksailconfigmanager.DefaultCNIFieldSelector())
-	fieldSelectors = append(fieldSelectors, ksailconfigmanager.DefaultMetricsServerFieldSelector())
-	fieldSelectors = append(fieldSelectors, ksailconfigmanager.DefaultCertManagerFieldSelector())
-	fieldSelectors = append(fieldSelectors, ksailconfigmanager.DefaultPolicyEngineFieldSelector())
-	fieldSelectors = append(fieldSelectors, ksailconfigmanager.DefaultCSIFieldSelector())
-	fieldSelectors = append(fieldSelectors, ksailconfigmanager.DefaultImportImagesFieldSelector())
-	fieldSelectors = append(fieldSelectors, ksailconfigmanager.ControlPlanesFieldSelector())
-	fieldSelectors = append(fieldSelectors, ksailconfigmanager.WorkersFieldSelector())
+	cfgManager := ksailconfigmanager.NewCommandConfigManager(
+		cmd,
+		defaultClusterMutationFieldSelectors(),
+	)
 
-	cfgManager := ksailconfigmanager.NewCommandConfigManager(cmd, fieldSelectors)
-
-	cmd.Flags().StringSlice("mirror-registry", []string{},
-		"Configure mirror registries with format 'host=upstream' (e.g., docker.io=https://registry-1.docker.io)")
-	_ = cfgManager.Viper.BindPFlag("mirror-registry", cmd.Flags().Lookup("mirror-registry"))
-
-	cmd.Flags().StringP("name", "n", "",
-		"Cluster name used for container names, registry names, and kubeconfig context")
-	_ = cfgManager.Viper.BindPFlag("name", cmd.Flags().Lookup("name"))
+	registerMirrorRegistryFlag(cmd)
+	registerNameFlag(cmd, cfgManager)
 
 	cmd.Flags().Bool("force", false,
 		"Skip confirmation prompt and proceed with cluster recreation")
@@ -96,39 +81,14 @@ func handleUpdateRunE(
 
 	outputTimer := helpers.MaybeTimer(cmd, deps.Timer)
 
-	// Load cluster configuration
-	ctx, err := loadClusterConfiguration(cfgManager, outputTimer)
+	// Load and validate configuration using shared helper
+	ctx, clusterName, err := loadAndValidateClusterConfig(cfgManager, deps)
 	if err != nil {
 		return err
 	}
 
-	// Apply cluster name override from --name flag if provided
-	nameOverride := cfgManager.Viper.GetString("name")
-	if nameOverride != "" {
-		validationErr := v1alpha1.ValidateClusterName(nameOverride)
-		if validationErr != nil {
-			return fmt.Errorf("invalid --name flag: %w", validationErr)
-		}
-
-		err = applyClusterNameOverride(ctx, nameOverride)
-		if err != nil {
-			return err
-		}
-	}
-
-	// Validate distribution x provider combination
-	err = ctx.ClusterCfg.Spec.Cluster.Provider.ValidateForDistribution(
-		ctx.ClusterCfg.Spec.Cluster.Distribution,
-	)
-	if err != nil {
-		return fmt.Errorf("invalid configuration: %w", err)
-	}
-
-	// Get cluster name for messaging
-	clusterName := resolveClusterNameFromContext(ctx)
-
 	// Create provisioner
-	factory := getProvisionerFactory(ctx)
+	factory := newProvisionerFactory(ctx)
 
 	provisioner, _, err := factory.Create(
 		cmd.Context(),
@@ -155,9 +115,14 @@ func handleUpdateRunE(
 	// Check if provisioner supports updates
 	updater, supportsUpdate := provisioner.(clusterprovisioner.ClusterUpdater)
 	if !supportsUpdate {
-		// Fall back to recreate flow
 		return executeRecreateFlow(cmd, cfgManager, ctx, deps, clusterName, force)
 	}
+
+	// Use DiffEngine as the central diff source for ClusterSpec-level changes
+	diffEngine := NewDiffEngine(
+		ctx.ClusterCfg.Spec.Cluster.Distribution,
+		ctx.ClusterCfg.Spec.Cluster.Provider,
+	)
 
 	// Get current configuration from running cluster
 	currentSpec, err := updater.GetCurrentConfig()
@@ -171,22 +136,41 @@ func handleUpdateRunE(
 		return executeRecreateFlow(cmd, cfgManager, ctx, deps, clusterName, force)
 	}
 
-	// Compute diff between current and desired configuration
-	diff, err := updater.DiffConfig(
+	// Use DiffEngine as the central classifier for ClusterSpec-level changes
+	diff := diffEngine.ComputeDiff(currentSpec, &ctx.ClusterCfg.Spec.Cluster)
+
+	// Augment with provisioner-specific details (node count from running state, etc.)
+	provisionerDiff, err := updater.DiffConfig(
 		cmd.Context(),
 		clusterName,
 		currentSpec,
 		&ctx.ClusterCfg.Spec.Cluster,
 	)
 	if err != nil {
-		return fmt.Errorf("failed to compute configuration diff: %w", err)
+		return fmt.Errorf("failed to compute provisioner-specific diff: %w", err)
 	}
+
+	// Merge provisioner-specific changes into the main diff
+	mergeProvisionerDiff(diff, provisionerDiff)
 
 	// Display changes summary
 	displayChangesSummary(cmd, diff)
 
-	// If dry-run, stop here
+	// If dry-run, show summary and exit
 	if dryRun {
+		changeCounts := fmt.Sprintf(
+			"Would apply %d in-place, %d reboot-required, %d recreate-required changes.",
+			len(diff.InPlaceChanges),
+			len(diff.RebootRequired),
+			len(diff.RecreateRequired),
+		)
+
+		notify.WriteMessage(notify.Message{
+			Type:    notify.InfoType,
+			Content: changeCounts,
+			Writer:  cmd.OutOrStdout(),
+		})
+
 		notify.WriteMessage(notify.Message{
 			Type:    notify.InfoType,
 			Content: "Dry run complete. No changes applied.",
@@ -196,16 +180,31 @@ func handleUpdateRunE(
 		return nil
 	}
 
-	// If there are recreate-required changes, need confirmation
+	// If there are recreate-required changes, show clear error and require confirmation
 	if diff.HasRecreateRequired() {
+		for _, change := range diff.RecreateRequired {
+			notify.WriteMessage(notify.Message{
+				Type: notify.ErrorType,
+				Content: fmt.Sprintf(
+					"Cannot change %s from %s to %s in-place. %s",
+					change.Field, change.OldValue, change.NewValue, change.Reason,
+				),
+				Writer: cmd.OutOrStderr(),
+			})
+		}
+
 		notify.WriteMessage(notify.Message{
 			Type: notify.WarningType,
 			Content: fmt.Sprintf(
-				"%d changes require cluster recreation",
+				"%d changes require cluster recreation. Use 'ksail cluster delete && ksail cluster create' or --force to recreate.",
 				len(diff.RecreateRequired),
 			),
 			Writer: cmd.OutOrStderr(),
 		})
+
+		if !force {
+			return fmt.Errorf("%d changes require cluster recreation", len(diff.RecreateRequired))
+		}
 
 		return executeRecreateFlow(cmd, cfgManager, ctx, deps, clusterName, force)
 	}
@@ -225,6 +224,7 @@ func handleUpdateRunE(
 			Writer:  cmd.OutOrStdout(),
 		})
 
+		// Apply provisioner-level changes (node scaling, Talos config, etc.)
 		result, err := updater.Update(
 			cmd.Context(),
 			clusterName,
@@ -235,6 +235,11 @@ func handleUpdateRunE(
 		if err != nil {
 			return fmt.Errorf("failed to apply updates: %w", err)
 		}
+
+		// Apply component-level changes (CNI, CSI, cert-manager, etc.)
+		reconciler := newComponentReconciler(cmd, ctx.ClusterCfg)
+
+		componentErr := reconciler.reconcileComponents(cmd.Context(), diff, result)
 
 		// Display results
 		if len(result.AppliedChanges) > 0 {
@@ -260,6 +265,10 @@ func handleUpdateRunE(
 					Writer:  cmd.OutOrStderr(),
 				})
 			}
+		}
+
+		if componentErr != nil {
+			return fmt.Errorf("some component changes failed to apply: %w", componentErr)
 		}
 	} else {
 		notify.WriteMessage(notify.Message{
@@ -337,10 +346,15 @@ func executeRecreateFlow(
 		Writer:  cmd.OutOrStderr(),
 	})
 
-	// Get confirmation unless --force is set
-	if !force {
-		confirmed := promptForUpdateConfirmation(cmd, clusterName)
-		if !confirmed {
+	// Get confirmation using the shared confirm package
+	if !confirm.ShouldSkipPrompt(force) {
+		notify.WriteMessage(notify.Message{
+			Type:    notify.InfoType,
+			Content: fmt.Sprintf("To proceed with updating cluster %q, type 'yes':", clusterName),
+			Writer:  cmd.OutOrStdout(),
+		})
+
+		if !confirm.PromptForConfirmation(cmd.OutOrStdout()) {
 			notify.WriteMessage(notify.Message{
 				Type:    notify.InfoType,
 				Content: "Update cancelled",
@@ -352,7 +366,7 @@ func executeRecreateFlow(
 	}
 
 	// Create provisioner for delete
-	factory := getProvisionerFactory(ctx)
+	factory := newProvisionerFactory(ctx)
 
 	provisioner, _, err := factory.Create(cmd.Context(), ctx.ClusterCfg)
 	if err != nil {
@@ -380,137 +394,47 @@ func executeRecreateFlow(
 		Writer:  cmd.OutOrStdout(),
 	})
 
-	// Execute create
-	return executeClusterCreation(cmd, cfgManager, ctx, deps)
+	// Execute create using shared workflow
+	return runClusterCreationWorkflow(cmd, cfgManager, ctx, deps)
 }
 
-// executeClusterCreation performs the cluster creation workflow.
-// This extracts the core creation logic to be reused by both create and update commands.
-//
-//nolint:funlen // Creation workflow has sequential steps that are clearer kept together
-func executeClusterCreation(
-	cmd *cobra.Command,
-	cfgManager *ksailconfigmanager.ConfigManager,
-	ctx *localregistry.Context,
-	deps lifecycle.Deps,
-) error {
-	_ = helpers.MaybeTimer(cmd, deps.Timer) // Timer value unused in this function
-
-	localDeps := getLocalRegistryDeps()
-
-	err := ensureLocalRegistriesReady(
-		cmd,
-		ctx,
-		deps,
-		cfgManager,
-		localDeps,
-	)
-	if err != nil {
-		return err
+// mergeProvisionerDiff merges provisioner-specific diff results into the main diff.
+// Provisioner diffs may contain distribution-specific changes (node counts, etc.)
+// that the DiffEngine doesn't track. We avoid duplicating fields already covered
+// by DiffEngine by checking field names.
+func mergeProvisionerDiff(main, provisioner *types.UpdateResult) {
+	if provisioner == nil {
+		return
 	}
 
-	setupK3dMetricsServer(ctx.ClusterCfg, ctx.K3dConfig)
-	SetupK3dCSI(ctx.ClusterCfg, ctx.K3dConfig)
-
-	deps.Factory = getProvisionerFactory(ctx)
-
-	err = executeClusterLifecycle(cmd, ctx.ClusterCfg, deps)
-	if err != nil {
-		return err
+	existingFields := make(map[string]bool)
+	for _, c := range main.InPlaceChanges {
+		existingFields[c.Field] = true
 	}
 
-	configureRegistryMirrorsInClusterWithWarning(
-		cmd,
-		ctx,
-		deps,
-		cfgManager,
-	)
-
-	err = localregistry.ExecuteStage(
-		cmd,
-		ctx,
-		deps,
-		localregistry.StageConnect,
-		localDeps,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to connect local registry: %w", err)
+	for _, c := range main.RebootRequired {
+		existingFields[c.Field] = true
 	}
 
-	err = localregistry.WaitForK3dLocalRegistryReady(
-		cmd,
-		ctx.ClusterCfg,
-		ctx.K3dConfig,
-		localDeps.DockerInvoker,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to wait for local registry: %w", err)
+	for _, c := range main.RecreateRequired {
+		existingFields[c.Field] = true
 	}
 
-	// Import cached images if configured
-	importPath := ctx.ClusterCfg.Spec.Cluster.ImportImages
-	if importPath != "" {
-		if ctx.ClusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionTalos {
-			notify.WriteMessage(notify.Message{
-				Type:    notify.WarningType,
-				Content: "image import is not supported for Talos clusters; ignoring --import-images value %q",
-				Args:    []any{importPath},
-				Writer:  cmd.OutOrStderr(),
-			})
-		} else {
-			err = importCachedImages(cmd, ctx, importPath, deps.Timer)
-			if err != nil {
-				notify.WriteMessage(notify.Message{
-					Type:    notify.WarningType,
-					Content: "failed to import images from %s: %v",
-					Args:    []any{importPath, err},
-					Writer:  cmd.OutOrStderr(),
-				})
-			}
+	for _, c := range provisioner.InPlaceChanges {
+		if !existingFields[c.Field] {
+			main.InPlaceChanges = append(main.InPlaceChanges, c)
 		}
 	}
 
-	return handlePostCreationSetup(cmd, ctx.ClusterCfg, deps.Timer)
-}
-
-// promptForUpdateConfirmation prompts the user to confirm cluster update.
-// Returns true if the user confirms, false otherwise.
-func promptForUpdateConfirmation(cmd *cobra.Command, clusterName string) bool {
-	notify.WriteMessage(notify.Message{
-		Type:    notify.InfoType,
-		Content: fmt.Sprintf("To proceed with updating cluster %q, type 'yes':", clusterName),
-		Writer:  cmd.OutOrStdout(),
-	})
-
-	var response string
-
-	_, err := fmt.Fscanln(cmd.InOrStdin(), &response)
-	if err != nil {
-		return false
+	for _, c := range provisioner.RebootRequired {
+		if !existingFields[c.Field] {
+			main.RebootRequired = append(main.RebootRequired, c)
+		}
 	}
 
-	return strings.TrimSpace(strings.ToLower(response)) == "yes"
-}
-
-// getProvisionerFactory returns the cluster provisioner factory, using any override if set.
-//
-//nolint:ireturn // Factory interface is appropriate for dependency injection
-func getProvisionerFactory(ctx *localregistry.Context) clusterprovisioner.Factory {
-	clusterProvisionerFactoryMu.RLock()
-
-	factoryOverride := clusterProvisionerFactoryOverride
-
-	clusterProvisionerFactoryMu.RUnlock()
-
-	if factoryOverride != nil {
-		return factoryOverride
-	}
-
-	return clusterprovisioner.DefaultFactory{
-		DistributionConfig: &clusterprovisioner.DistributionConfig{
-			Kind:  ctx.KindConfig,
-			K3d:   ctx.K3dConfig,
-			Talos: ctx.TalosConfig,
-		},
+	for _, c := range provisioner.RecreateRequired {
+		if !existingFields[c.Field] {
+			main.RecreateRequired = append(main.RecreateRequired, c)
+		}
 	}
 }

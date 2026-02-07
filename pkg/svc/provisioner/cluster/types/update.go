@@ -122,3 +122,26 @@ func DefaultUpdateOptions() UpdateOptions {
 		RollingReboot: true,
 	}
 }
+
+// NewEmptyUpdateResult returns a new UpdateResult with all slices initialized.
+// Use this factory instead of manually constructing UpdateResult to avoid
+// code duplication across provisioner implementations.
+func NewEmptyUpdateResult() *UpdateResult {
+	return &UpdateResult{
+		InPlaceChanges:   make([]Change, 0),
+		RebootRequired:   make([]Change, 0),
+		RecreateRequired: make([]Change, 0),
+	}
+}
+
+// NewUpdateResultFromDiff creates an UpdateResult seeded with diff classification data
+// and initialized applied/failed slices for tracking execution outcomes.
+func NewUpdateResultFromDiff(diff *UpdateResult) *UpdateResult {
+	return &UpdateResult{
+		InPlaceChanges:   diff.InPlaceChanges,
+		RebootRequired:   diff.RebootRequired,
+		RecreateRequired: diff.RecreateRequired,
+		AppliedChanges:   make([]Change, 0),
+		FailedChanges:    make([]Change, 0),
+	}
+}

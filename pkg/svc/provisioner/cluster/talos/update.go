@@ -33,15 +33,8 @@ func (p *TalosProvisioner) Update(
 		return diff, nil
 	}
 
-	result := &types.UpdateResult{
-		InPlaceChanges:   diff.InPlaceChanges,
-		RebootRequired:   diff.RebootRequired,
-		RecreateRequired: diff.RecreateRequired,
-		AppliedChanges:   make([]types.Change, 0),
-		FailedChanges:    make([]types.Change, 0),
-	}
+	result := types.NewUpdateResultFromDiff(diff)
 
-	// If there are recreate-required changes, we cannot handle them in Update
 	if diff.HasRecreateRequired() {
 		return result, fmt.Errorf("%w: %d changes require restart",
 			clustererrors.ErrRecreationRequired, len(diff.RecreateRequired))
@@ -78,11 +71,7 @@ func (p *TalosProvisioner) DiffConfig(
 	_ string,
 	oldSpec, newSpec *v1alpha1.ClusterSpec,
 ) (*types.UpdateResult, error) {
-	result := &types.UpdateResult{
-		InPlaceChanges:   make([]types.Change, 0),
-		RebootRequired:   make([]types.Change, 0),
-		RecreateRequired: make([]types.Change, 0),
-	}
+	result := types.NewEmptyUpdateResult()
 
 	if oldSpec == nil || newSpec == nil {
 		return result, nil
@@ -129,20 +118,26 @@ func (p *TalosProvisioner) DiffConfig(
 	return result, nil
 }
 
-// applyNodeScalingChanges handles adding or removing nodes.
+// applyNodeScalingChanges handles adding or removing Talos nodes.
+// For Docker: requires Talos SDK provisioning with IP allocation and machine configs.
+// For Hetzner: requires Hetzner API calls to create/delete servers.
 //
-//nolint:unparam // result will be used when node scaling is fully implemented
+// This is not yet implemented because it requires:
+//   - Network CIDR inspection and IP allocation for new nodes
+//   - Talos machine config generation for new nodes
+//   - Provider-specific node creation (Docker containers / Hetzner servers)
+//   - Talos bootstrap for new control-plane nodes
+//   - etcd member management for control-plane scaling
 func (p *TalosProvisioner) applyNodeScalingChanges(
 	_ context.Context,
 	clusterName string,
 	oldSpec, newSpec *v1alpha1.ClusterSpec,
-	_ *types.UpdateResult,
+	result *types.UpdateResult,
 ) error {
 	if oldSpec == nil || newSpec == nil {
 		return nil
 	}
 
-	// Calculate differences
 	cpDelta := int(newSpec.Talos.ControlPlanes - oldSpec.Talos.ControlPlanes)
 	workerDelta := int(newSpec.Talos.Workers - oldSpec.Talos.Workers)
 
@@ -150,23 +145,32 @@ func (p *TalosProvisioner) applyNodeScalingChanges(
 		return nil
 	}
 
-	_, _ = fmt.Fprintf(p.logWriter, "  Scaling cluster %s: CP %+d, Workers %+d\n",
+	_, _ = fmt.Fprintf(p.logWriter, "  Node scaling for Talos cluster %q: CP %+d, Workers %+d\n",
 		clusterName, cpDelta, workerDelta)
 
-	// For now, log what would happen - actual implementation depends on provider
-	if cpDelta > 0 {
-		_, _ = fmt.Fprintf(p.logWriter, "  TODO: Add %d control-plane node(s)\n", cpDelta)
-	} else if cpDelta < 0 {
-		_, _ = fmt.Fprintf(p.logWriter, "  TODO: Remove %d control-plane node(s)\n", -cpDelta)
+	// Record each scaling operation as a failed change with a clear reason
+	if cpDelta != 0 {
+		result.FailedChanges = append(result.FailedChanges, types.Change{
+			Field:    "talos.controlPlanes",
+			OldValue: strconv.Itoa(int(oldSpec.Talos.ControlPlanes)),
+			NewValue: strconv.Itoa(int(newSpec.Talos.ControlPlanes)),
+			Category: types.ChangeCategoryInPlace,
+			Reason:   "Talos control-plane node scaling is not yet implemented",
+		})
 	}
 
-	if workerDelta > 0 {
-		_, _ = fmt.Fprintf(p.logWriter, "  TODO: Add %d worker node(s)\n", workerDelta)
-	} else if workerDelta < 0 {
-		_, _ = fmt.Fprintf(p.logWriter, "  TODO: Remove %d worker node(s)\n", -workerDelta)
+	if workerDelta != 0 {
+		result.FailedChanges = append(result.FailedChanges, types.Change{
+			Field:    "talos.workers",
+			OldValue: strconv.Itoa(int(oldSpec.Talos.Workers)),
+			NewValue: strconv.Itoa(int(newSpec.Talos.Workers)),
+			Category: types.ChangeCategoryInPlace,
+			Reason:   "Talos worker node scaling is not yet implemented",
+		})
 	}
 
-	return nil
+	return fmt.Errorf("%w: Talos node scaling (CP %+d, Workers %+d)",
+		ErrNotImplemented, cpDelta, workerDelta)
 }
 
 // applyInPlaceConfigChanges applies configuration changes that don't require reboots.
@@ -212,9 +216,13 @@ func (p *TalosProvisioner) applyInPlaceConfigChanges(
 }
 
 // applyRebootRequiredChanges applies changes that require node reboots.
-// Uses rolling reboot strategy when opts.RollingReboot is true.
+// Uses rolling reboot strategy: for each node, apply config with STAGED mode,
+// cordon the node (drain workloads), reboot, wait for Ready, then uncordon.
 //
-//nolint:unparam // result will be used when rolling reboot is implemented
+// This is not yet implemented because it requires:
+//   - Kubernetes client for cordon/drain/uncordon operations
+//   - Node readiness polling after reboot
+//   - Proper ordering (workers first, then control-planes)
 func (p *TalosProvisioner) applyRebootRequiredChanges(
 	_ context.Context,
 	_ string,
@@ -225,17 +233,19 @@ func (p *TalosProvisioner) applyRebootRequiredChanges(
 		"  %d changes require reboot (rolling=%v)\n",
 		len(result.RebootRequired), opts.RollingReboot)
 
-	// Rolling reboot strategy (not yet implemented):
-	// 1. Get list of nodes
-	// 2. For each node:
-	//    a. Apply config with STAGED mode
-	//    b. Cordon the node (drain workloads)
-	//    c. Reboot the node
-	//    d. Wait for node to be Ready
-	//    e. Uncordon the node
-	// 3. Move to next node
+	// Record as failed changes
+	for i := range result.RebootRequired {
+		result.FailedChanges = append(result.FailedChanges, types.Change{
+			Field:    result.RebootRequired[i].Field,
+			OldValue: result.RebootRequired[i].OldValue,
+			NewValue: result.RebootRequired[i].NewValue,
+			Category: types.ChangeCategoryRebootRequired,
+			Reason:   "Talos rolling reboot is not yet implemented",
+		})
+	}
 
-	return nil
+	return fmt.Errorf("%w: Talos rolling reboot for %d change(s)",
+		ErrNotImplemented, len(result.RebootRequired))
 }
 
 // applyConfigWithMode applies configuration to a single node with the specified mode.

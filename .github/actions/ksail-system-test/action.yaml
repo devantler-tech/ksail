@@ -223,6 +223,22 @@ runs:
         ksail workload push --path "$GITOPS_PATH/"
         ksail workload reconcile
 
+    - name: 🧪 ksail cluster update --dry-run
+      id: cluster-update-dry-run
+      shell: bash
+      env:
+        HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
+      run: |
+        ksail cluster update --dry-run
+
+    - name: 🧪 ksail cluster update
+      id: cluster-update
+      shell: bash
+      env:
+        HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
+      run: |
+        ksail cluster update --force
+
     - name: 💾 Save Docker volumes to cache
       if: inputs.provider == 'Docker' && steps.restore-volume-cache.outputs.cache-hit != 'true'
       uses: ./.github/actions/cache-docker-volumes
@@ -232,7 +248,7 @@ runs:
         cache-version: v1
 
     - name: 🐞 Debug Kubernetes failure
-      if: failure() && (steps.cluster-create.outcome == 'failure' || steps.workload-create.outcome == 'failure' || steps.workload-apply.outcome == 'failure' || steps.workload-push-reconcile.outcome == 'failure')
+      if: failure() && (steps.cluster-create.outcome == 'failure' || steps.workload-create.outcome == 'failure' || steps.workload-apply.outcome == 'failure' || steps.workload-push-reconcile.outcome == 'failure' || steps.cluster-update-dry-run.outcome == 'failure' || steps.cluster-update.outcome == 'failure')
       uses: ./.github/actions/debug-kubernetes-failure
       with:
         kubectl-command: "ksail workload"

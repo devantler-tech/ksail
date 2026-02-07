@@ -23,11 +23,7 @@ func NewDiffEngine(distribution v1alpha1.Distribution, provider v1alpha1.Provide
 
 // ComputeDiff compares old and new ClusterSpec and categorizes all changes.
 func (e *DiffEngine) ComputeDiff(oldSpec, newSpec *v1alpha1.ClusterSpec) *types.UpdateResult {
-	result := &types.UpdateResult{
-		InPlaceChanges:   make([]types.Change, 0),
-		RebootRequired:   make([]types.Change, 0),
-		RecreateRequired: make([]types.Change, 0),
-	}
+	result := types.NewEmptyUpdateResult()
 
 	if oldSpec == nil || newSpec == nil {
 		return result
@@ -43,6 +39,7 @@ func (e *DiffEngine) ComputeDiff(oldSpec, newSpec *v1alpha1.ClusterSpec) *types.
 	e.checkCNIChange(oldSpec, newSpec, result)
 	e.checkCSIChange(oldSpec, newSpec, result)
 	e.checkMetricsServerChange(oldSpec, newSpec, result)
+	e.checkLoadBalancerChange(oldSpec, newSpec, result)
 	e.checkCertManagerChange(oldSpec, newSpec, result)
 	e.checkPolicyEngineChange(oldSpec, newSpec, result)
 	e.checkGitOpsEngineChange(oldSpec, newSpec, result)
@@ -132,6 +129,22 @@ func (e *DiffEngine) checkMetricsServerChange(
 			NewValue: newSpec.MetricsServer.String(),
 			Category: types.ChangeCategoryInPlace,
 			Reason:   "metrics-server can be installed/uninstalled via Helm",
+		})
+	}
+}
+
+// checkLoadBalancerChange checks if the load balancer setting has changed.
+func (e *DiffEngine) checkLoadBalancerChange(
+	oldSpec, newSpec *v1alpha1.ClusterSpec,
+	result *types.UpdateResult,
+) {
+	if oldSpec.LoadBalancer != newSpec.LoadBalancer {
+		result.InPlaceChanges = append(result.InPlaceChanges, types.Change{
+			Field:    "cluster.loadBalancer",
+			OldValue: oldSpec.LoadBalancer.String(),
+			NewValue: newSpec.LoadBalancer.String(),
+			Category: types.ChangeCategoryInPlace,
+			Reason:   "load balancer can be enabled/disabled via Helm",
 		})
 	}
 }

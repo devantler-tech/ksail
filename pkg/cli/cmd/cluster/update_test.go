@@ -2,9 +2,10 @@
 package cluster
 
 import (
-	"bytes"
+	"strings"
 	"testing"
 
+	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/confirm"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 )
 
@@ -49,7 +50,7 @@ func TestNewUpdateCmd(t *testing.T) {
 	}
 }
 
-func TestPromptForUpdateConfirmation(t *testing.T) {
+func TestUpdateConfirmation_UsesConfirmPackage(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -68,11 +69,6 @@ func TestPromptForUpdateConfirmation(t *testing.T) {
 			expected: true,
 		},
 		{
-			name:     "user confirms with 'Yes'",
-			input:    "Yes\n",
-			expected: true,
-		},
-		{
 			name:     "user rejects with 'no'",
 			input:    "no\n",
 			expected: false,
@@ -82,33 +78,53 @@ func TestPromptForUpdateConfirmation(t *testing.T) {
 			input:    "\n",
 			expected: false,
 		},
-		{
-			name:     "user rejects with random text",
-			input:    "maybe\n",
-			expected: false,
-		},
 	}
 
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			runtimeContainer := &runtime.Runtime{}
-			cmd := NewUpdateCmd(runtimeContainer)
+			// Use the confirm package's test infrastructure
+			restore := confirm.SetStdinReaderForTests(strings.NewReader(testCase.input))
+			defer restore()
 
-			// Set up input/output buffers
-			inputBuf := bytes.NewBufferString(testCase.input)
-			outputBuf := &bytes.Buffer{}
-
-			cmd.SetIn(inputBuf)
-			cmd.SetOut(outputBuf)
-			cmd.SetErr(outputBuf)
-
-			// Test prompt function
-			result := promptForUpdateConfirmation(cmd, "test-cluster")
+			result := confirm.PromptForConfirmation(nil)
 
 			if result != testCase.expected {
 				t.Errorf("expected %v, got %v", testCase.expected, result)
+			}
+		})
+	}
+}
+
+func TestUpdateConfirmation_ShouldSkipPrompt(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		force    bool
+		isTTY    bool
+		expected bool
+	}{
+		{name: "force skips prompt", force: true, isTTY: true, expected: true},
+		{name: "force skips even non-TTY", force: true, isTTY: false, expected: true},
+		{name: "non-TTY skips prompt", force: false, isTTY: false, expected: true},
+		{name: "TTY without force shows prompt", force: false, isTTY: true, expected: false},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			restore := confirm.SetTTYCheckerForTests(func() bool {
+				return testCase.isTTY
+			})
+			defer restore()
+
+			result := confirm.ShouldSkipPrompt(testCase.force)
+			if result != testCase.expected {
+				t.Errorf("expected ShouldSkipPrompt(%v) = %v, got %v",
+					testCase.force, testCase.expected, result)
 			}
 		})
 	}

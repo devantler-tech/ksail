@@ -27,6 +27,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// NOTE: Some imports above (configmanager, k3dconfigmanager, kindconfigmanager,
+// talosconfigmanager, etc.) are used by functions that remain in this file
+// (loadClusterConfiguration, resolveClusterNameFromContext, etc.)
+
 const (
 	k3sDisableMetricsServerFlag = "--disable=metrics-server"
 	k3sDisableLocalStorageFlag  = "--disable=local-storage"
@@ -59,31 +63,13 @@ func NewCreateCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
 		},
 	}
 
-	fieldSelectors := ksailconfigmanager.DefaultClusterFieldSelectors()
-	fieldSelectors = append(fieldSelectors, ksailconfigmanager.DefaultProviderFieldSelector())
-	fieldSelectors = append(fieldSelectors, ksailconfigmanager.DefaultCNIFieldSelector())
-	fieldSelectors = append(fieldSelectors, ksailconfigmanager.DefaultMetricsServerFieldSelector())
-	fieldSelectors = append(fieldSelectors, ksailconfigmanager.DefaultLoadBalancerFieldSelector())
-	fieldSelectors = append(fieldSelectors, ksailconfigmanager.DefaultCertManagerFieldSelector())
-	fieldSelectors = append(fieldSelectors, ksailconfigmanager.DefaultPolicyEngineFieldSelector())
-	fieldSelectors = append(fieldSelectors, ksailconfigmanager.DefaultCSIFieldSelector())
-	fieldSelectors = append(fieldSelectors, ksailconfigmanager.DefaultImportImagesFieldSelector())
-	fieldSelectors = append(fieldSelectors, ksailconfigmanager.ControlPlanesFieldSelector())
-	fieldSelectors = append(fieldSelectors, ksailconfigmanager.WorkersFieldSelector())
+	cfgManager := ksailconfigmanager.NewCommandConfigManager(
+		cmd,
+		defaultClusterMutationFieldSelectors(),
+	)
 
-	cfgManager := ksailconfigmanager.NewCommandConfigManager(cmd, fieldSelectors)
-
-	cmd.Flags().StringSlice("mirror-registry", []string{},
-		"Configure mirror registries with optional authentication. Format: [user:pass@]host[=upstream]. "+
-			"Credentials support environment variables using ${VAR} syntax (quote placeholders so KSail can expand them). "+
-			"Examples: docker.io=https://registry-1.docker.io, '${USER}:${TOKEN}@ghcr.io=https://ghcr.io'")
-
-	// NOTE: mirror-registry is NOT bound to Viper to allow custom merge logic
-	// It's handled manually via getMirrorRegistriesWithDefaults() in setup/mirrorregistry
-
-	cmd.Flags().StringP("name", "n", "",
-		"Cluster name used for container names, registry names, and kubeconfig context")
-	_ = cfgManager.Viper.BindPFlag("name", cmd.Flags().Lookup("name"))
+	registerMirrorRegistryFlag(cmd)
+	registerNameFlag(cmd, cfgManager)
 
 	cmd.RunE = lifecycle.WrapHandler(runtimeContainer, cfgManager, handleCreateRunE)
 
@@ -92,7 +78,7 @@ func NewCreateCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
 
 // handleCreateRunE executes cluster creation with mirror registry setup and CNI installation.
 //
-//nolint:funlen // Orchestrates full cluster creation lifecycle with multiple stages.
+
 func handleCreateRunE(
 	cmd *cobra.Command,
 	cfgManager *ksailconfigmanager.ConfigManager,
@@ -100,111 +86,18 @@ func handleCreateRunE(
 ) error {
 	deps.Timer.Start()
 
-	outputTimer := helpers.MaybeTimer(cmd, deps.Timer)
-
-	ctx, err := loadClusterConfiguration(cfgManager, outputTimer)
+	ctx, _, err := loadAndValidateClusterConfig(cfgManager, deps)
 	if err != nil {
 		return err
 	}
 
-	// Apply cluster name override from --name flag if provided
-	nameOverride := cfgManager.Viper.GetString("name")
-	if nameOverride != "" {
-		// Validate cluster name is DNS-1123 compliant
-		validationErr := v1alpha1.ValidateClusterName(nameOverride)
-		if validationErr != nil {
-			return fmt.Errorf("invalid --name flag: %w", validationErr)
-		}
-
-		err = applyClusterNameOverride(ctx, nameOverride)
-		if err != nil {
-			return err
-		}
-	}
-
-	// Early validation of distribution x provider combination
-	err = ctx.ClusterCfg.Spec.Cluster.Provider.ValidateForDistribution(
-		ctx.ClusterCfg.Spec.Cluster.Distribution,
-	)
-	if err != nil {
-		return fmt.Errorf("invalid configuration: %w", err)
-	}
-
-	localDeps := getLocalRegistryDeps()
-
-	err = ensureLocalRegistriesReady(
-		cmd,
-		ctx,
-		deps,
-		cfgManager,
-		localDeps,
-	)
-	if err != nil {
-		return err
-	}
-
-	setupK3dMetricsServer(ctx.ClusterCfg, ctx.K3dConfig)
-	SetupK3dCSI(ctx.ClusterCfg, ctx.K3dConfig)
-	SetupK3dLoadBalancer(ctx.ClusterCfg, ctx.K3dConfig)
-
-	configureClusterProvisionerFactory(&deps, ctx)
-
-	err = executeClusterLifecycle(cmd, ctx.ClusterCfg, deps)
-	if err != nil {
-		return err
-	}
-
-	configureRegistryMirrorsInClusterWithWarning(
-		cmd,
-		ctx,
-		deps,
-		cfgManager,
-	)
-
-	err = localregistry.ExecuteStage(
-		cmd,
-		ctx,
-		deps,
-		localregistry.StageConnect,
-		localDeps,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to connect local registry: %w", err)
-	}
-
-	// Wait for K3d local registry to be ready before installing components.
-	// K3d creates the registry during cluster creation, so we need to wait
-	// for it to be ready before Flux can sync from it.
-	err = localregistry.WaitForK3dLocalRegistryReady(
-		cmd,
-		ctx.ClusterCfg,
-		ctx.K3dConfig,
-		localDeps.DockerInvoker,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to wait for local registry: %w", err)
-	}
-
-	// Set Connection.Context so post-CNI setup (InstallCNI, helm, kubectl) can resolve
-	// the correct kubeconfig context. This MUST happen after local registry operations
-	// (which resolve cluster name from distribution configs, not from context) but before
-	// post-CNI setup (which needs the kubectl context name like "kind-kind").
-	clusterName := resolveClusterNameFromContext(ctx)
-	ctx.ClusterCfg.Spec.Cluster.Connection.Context = ctx.ClusterCfg.Spec.Cluster.Distribution.ContextName(
-		clusterName,
-	)
-
-	maybeImportCachedImages(cmd, ctx, deps.Timer)
-
-	return handlePostCreationSetup(cmd, ctx.ClusterCfg, deps.Timer)
+	return runClusterCreationWorkflow(cmd, cfgManager, ctx, deps)
 }
 
-// configureClusterProvisionerFactory sets up the cluster provisioner factory.
-// Uses test override if available, otherwise creates a default factory.
-func configureClusterProvisionerFactory(
-	deps *lifecycle.Deps,
-	ctx *localregistry.Context,
-) {
+// newProvisionerFactory returns the cluster provisioner factory, using any test override if set.
+//
+//nolint:ireturn // Factory interface is appropriate for dependency injection
+func newProvisionerFactory(ctx *localregistry.Context) clusterprovisioner.Factory {
 	clusterProvisionerFactoryMu.RLock()
 
 	factoryOverride := clusterProvisionerFactoryOverride
@@ -212,16 +105,25 @@ func configureClusterProvisionerFactory(
 	clusterProvisionerFactoryMu.RUnlock()
 
 	if factoryOverride != nil {
-		deps.Factory = factoryOverride
-	} else {
-		deps.Factory = clusterprovisioner.DefaultFactory{
-			DistributionConfig: &clusterprovisioner.DistributionConfig{
-				Kind:  ctx.KindConfig,
-				K3d:   ctx.K3dConfig,
-				Talos: ctx.TalosConfig,
-			},
-		}
+		return factoryOverride
 	}
+
+	return clusterprovisioner.DefaultFactory{
+		DistributionConfig: &clusterprovisioner.DistributionConfig{
+			Kind:  ctx.KindConfig,
+			K3d:   ctx.K3dConfig,
+			Talos: ctx.TalosConfig,
+		},
+	}
+}
+
+// configureClusterProvisionerFactory sets up the cluster provisioner factory on deps.
+// Uses test override if available, otherwise creates a default factory.
+func configureClusterProvisionerFactory(
+	deps *lifecycle.Deps,
+	ctx *localregistry.Context,
+) {
+	deps.Factory = newProvisionerFactory(ctx)
 }
 
 // maybeImportCachedImages imports cached container images if configured.

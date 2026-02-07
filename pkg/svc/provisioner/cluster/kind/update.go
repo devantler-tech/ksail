@@ -26,20 +26,13 @@ func (k *KindClusterProvisioner) Update(
 	oldSpec, newSpec *v1alpha1.ClusterSpec,
 	opts types.UpdateOptions,
 ) (*types.UpdateResult, error) {
-	// Compute diff to identify what changed
 	diff, err := k.DiffConfig(ctx, name, oldSpec, newSpec)
 	if err != nil {
 		return nil, fmt.Errorf("failed to compute config diff: %w", err)
 	}
 
-	// For Kind, we can only report what would change - any structural
-	// changes require cluster recreation
-	if opts.DryRun || diff.HasRecreateRequired() {
-		return diff, nil
-	}
-
-	// If there are only in-place changes (Helm components), those are handled
-	// by the installer layer, not here
+	// Kind cannot apply any structural changes in-place.
+	// Component changes (Helm) are handled by the installer layer.
 	return diff, nil
 }
 
@@ -51,11 +44,7 @@ func (k *KindClusterProvisioner) DiffConfig(
 	_ string,
 	oldSpec, newSpec *v1alpha1.ClusterSpec,
 ) (*types.UpdateResult, error) {
-	result := &types.UpdateResult{
-		InPlaceChanges:   make([]types.Change, 0),
-		RebootRequired:   make([]types.Change, 0),
-		RecreateRequired: make([]types.Change, 0),
-	}
+	result := types.NewEmptyUpdateResult()
 
 	if oldSpec == nil || newSpec == nil {
 		return result, nil
