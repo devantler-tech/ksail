@@ -2,7 +2,6 @@ package hetznercsiinstaller_test
 
 import (
 	"context"
-	"os"
 	"testing"
 	"time"
 
@@ -81,18 +80,9 @@ func TestHetznerCSIInstaller_Uninstall(t *testing.T) {
 }
 
 func TestHetznerCSIInstaller_Install_MissingToken(t *testing.T) {
-	t.Parallel()
-
-	// Ensure HCLOUD_TOKEN is not set
-	originalToken := os.Getenv("HCLOUD_TOKEN")
-
-	require.NoError(t, os.Unsetenv("HCLOUD_TOKEN"))
-
-	defer func() {
-		if originalToken != "" {
-			t.Setenv("HCLOUD_TOKEN", originalToken)
-		}
-	}()
+	// Do not call t.Parallel(): t.Setenv mutates process-wide state
+	// and is incompatible with parallel test execution.
+	t.Setenv("HCLOUD_TOKEN", "")
 
 	mockClient := helm.NewMockInterface(t)
 	timeout := 5 * time.Minute
@@ -201,6 +191,31 @@ data:
 	mockClient.EXPECT().
 		TemplateChart(mock.Anything, mock.Anything).
 		Return(emptyManifest, nil).
+		Once()
+
+	installer := hetznercsiinstaller.NewHetznerCSIInstaller(
+		mockClient,
+		"~/.kube/config",
+		"test-context",
+		timeout,
+	)
+
+	images, err := installer.Images(context.Background())
+
+	require.NoError(t, err)
+	assert.Empty(t, images)
+	mockClient.AssertExpectations(t)
+}
+
+func TestHetznerCSIInstaller_Images_EmptyManifest(t *testing.T) {
+	t.Parallel()
+
+	mockClient := helm.NewMockInterface(t)
+	timeout := 5 * time.Minute
+
+	mockClient.EXPECT().
+		TemplateChart(mock.Anything, mock.Anything).
+		Return("", nil).
 		Once()
 
 	installer := hetznercsiinstaller.NewHetznerCSIInstaller(
