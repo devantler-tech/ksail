@@ -229,9 +229,11 @@ runs:
       env:
         DISTRIBUTION: ${{ inputs.distribution }}
         PROVIDER: ${{ inputs.provider }}
+        ARGS: ${{ steps.resolve-args.outputs.args }}
         HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
       run: |
-        ksail cluster update --dry-run --distribution "$DISTRIBUTION" --provider "$PROVIDER"
+        # shellcheck disable=SC2086
+        ksail cluster update --dry-run --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS
 
     - name: 🧪 ksail cluster update
       id: cluster-update
@@ -239,9 +241,11 @@ runs:
       env:
         DISTRIBUTION: ${{ inputs.distribution }}
         PROVIDER: ${{ inputs.provider }}
+        ARGS: ${{ steps.resolve-args.outputs.args }}
         HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
       run: |
-        ksail cluster update --force --distribution "$DISTRIBUTION" --provider "$PROVIDER"
+        # shellcheck disable=SC2086
+        ksail cluster update --force --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS
 
     - name: 💾 Save Docker volumes to cache
       if: inputs.provider == 'Docker' && steps.restore-volume-cache.outputs.cache-hit != 'true'
