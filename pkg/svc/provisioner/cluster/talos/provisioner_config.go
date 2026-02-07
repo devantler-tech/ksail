@@ -1,14 +1,17 @@
 package talosprovisioner
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
+	"time"
 
 	iopath "github.com/devantler-tech/ksail/v5/pkg/io"
 	"github.com/devantler-tech/ksail/v5/pkg/k8s"
 	"github.com/siderolabs/talos/pkg/cluster/check"
+	"github.com/siderolabs/talos/pkg/conditions"
 	clientconfig "github.com/siderolabs/talos/pkg/machinery/client/config"
 	"github.com/siderolabs/talos/pkg/machinery/config/bundle"
 	"k8s.io/client-go/tools/clientcmd"
@@ -181,21 +184,69 @@ func (p *TalosProvisioner) cleanupTalosconfig(clusterName string) error {
 }
 
 // clusterReadinessChecks returns the appropriate set of cluster readiness checks
-// based on CNI configuration. When CNI is disabled (either by Talos config or
-// SkipCNIChecks option), returns lighter checks that skip node Ready status.
-// Otherwise returns the full DefaultClusterChecks.
+// based on CNI and kubelet certificate configuration.
+//
+// When CNI is disabled (either by Talos config or SkipCNIChecks option), returns
+// lighter checks that skip node Ready status, since nodes will remain NotReady
+// until the CNI is installed post-creation.
+//
+// Additionally, when kubelet serving certificate rotation is enabled with CNI disabled,
+// the K8sControlPlaneStaticPods check is skipped because it depends on Talos
+// StaticPodStatus resources which require a kubelet serving certificate. Without CNI,
+// the kubelet-serving-cert-approver pod cannot schedule, leaving CSRs unapproved and
+// the kubelet without a serving certificate. The K8sFullControlPlaneAssertion check
+// validates the same control plane readiness via the K8s API instead.
 //
 // See: https://pkg.go.dev/github.com/siderolabs/talos/pkg/cluster/check
 func (p *TalosProvisioner) clusterReadinessChecks() []check.ClusterCheck {
 	skipNodeReadiness := (p.talosConfigs != nil && p.talosConfigs.IsCNIDisabled()) ||
 		p.options.SkipCNIChecks
 
-	if skipNodeReadiness {
+	if !skipNodeReadiness {
+		return check.DefaultClusterChecks()
+	}
+
+	// When kubelet cert rotation is enabled with CNI disabled, the kubelet-serving-cert-approver
+	// pod cannot schedule (node has not-ready taint), so kubelet serving CSRs remain pending.
+	// Without a serving certificate, Talos cannot connect to kubelet, and StaticPodStatus
+	// resources are never populated. Skip the Talos-based static pod check and rely on
+	// K8sFullControlPlaneAssertion which validates the same thing via the K8s API.
+	skipStaticPodStatusCheck := p.talosConfigs != nil && p.talosConfigs.IsKubeletCertRotationEnabled()
+
+	if skipStaticPodStatusCheck {
 		return slices.Concat(
 			check.PreBootSequenceChecks(),
-			check.K8sComponentsReadinessChecks(),
+			p.k8sComponentsReadinessChecksWithoutStaticPodStatus(),
 		)
 	}
 
-	return check.DefaultClusterChecks()
+	return slices.Concat(
+		check.PreBootSequenceChecks(),
+		check.K8sComponentsReadinessChecks(),
+	)
+}
+
+// k8sComponentsReadinessChecksWithoutStaticPodStatus returns K8s component readiness checks
+// that skip the Talos-based K8sControlPlaneStaticPods check. This is used when kubelet
+// serving certificate rotation is enabled but the CSR approver cannot run (e.g., no CNI),
+// making StaticPodStatus resources unavailable. The K8sFullControlPlaneAssertion check
+// validates control plane readiness via the K8s API instead.
+func (p *TalosProvisioner) k8sComponentsReadinessChecksWithoutStaticPodStatus() []check.ClusterCheck {
+	return []check.ClusterCheck{
+		// wait for all the nodes to report in at k8s level
+		func(cluster check.ClusterInfo) conditions.Condition {
+			return conditions.PollingCondition("all k8s nodes to report", func(ctx context.Context) error {
+				return check.K8sAllNodesReportedAssertion(ctx, cluster)
+			}, 5*time.Minute, 30*time.Second)
+		},
+
+		// skip K8sControlPlaneStaticPods — Talos can't connect to kubelet without serving cert
+
+		// wait for HA k8s control plane
+		func(cluster check.ClusterInfo) conditions.Condition {
+			return conditions.PollingCondition("all control plane components to be ready", func(ctx context.Context) error {
+				return check.K8sFullControlPlaneAssertion(ctx, cluster)
+			}, 5*time.Minute, 5*time.Second)
+		},
+	}
 }
