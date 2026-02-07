@@ -280,27 +280,27 @@ func (k *K3dClusterProvisioner) listClusterNodes(
 	// bypassing Cobra's cmd.OutOrStdout().
 	origStdout := os.Stdout
 
-	r, w, err := os.Pipe()
+	pipeReader, pipeWriter, err := os.Pipe()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create pipe: %w", err)
 	}
 
-	os.Stdout = w
+	os.Stdout = pipeWriter
 
-	nodeRunner := runner.NewCobraCommandRunner(w, io.Discard)
+	nodeRunner := runner.NewCobraCommandRunner(pipeWriter, io.Discard)
 	cmd := nodecommand.NewCmdNodeList()
 
 	_, runErr := nodeRunner.Run(ctx, cmd, []string{"--output", "json"})
 
 	// Restore stdout and collect captured output
-	w.Close()
+	_ = pipeWriter.Close()
 
 	os.Stdout = origStdout
 
 	var buf bytes.Buffer
 
-	_, _ = io.Copy(&buf, r)
-	r.Close()
+	_, _ = io.Copy(&buf, pipeReader)
+	_ = pipeReader.Close()
 
 	if runErr != nil {
 		return nil, fmt.Errorf("failed to list nodes: %w", runErr)
