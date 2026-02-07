@@ -58,8 +58,6 @@ type DockerClientInvoker = setup.DockerClientInvoker
 var DefaultDockerClientInvoker DockerClientInvoker = helpers.WithDockerClient
 
 // RunStage executes the registry stage for the given role.
-//
-//nolint:funlen // Orchestrates multi-step registry operations with proper error handling.
 func RunStage(
 	cmd *cobra.Command,
 	clusterCfg *v1alpha1.Cluster,
@@ -75,36 +73,10 @@ func RunStage(
 	mirrors := GetMirrorRegistriesWithDefaults(cmd, cfgManager, clusterCfg.Spec.Cluster.Provider)
 	flagSpecs := registry.ParseMirrorSpecs(mirrors)
 
-	// Try to read existing hosts.toml files from the configured mirrors directory.
-	// ReadExistingHostsToml returns (nil, nil) for missing directories, and an error for actual I/O issues.
-	existingSpecs, err := registry.ReadExistingHostsToml(GetKindMirrorsDir(clusterCfg))
+	// Collect existing specs from hosts.toml files and Talos config
+	existingSpecs, err := collectExistingMirrorSpecs(clusterCfg, talosConfig)
 	if err != nil {
-		return fmt.Errorf("failed to read existing hosts configuration: %w", err)
-	}
-
-	// For Talos, also extract mirror hosts from the loaded Talos config.
-	// The Talos config includes any mirror-registries.yaml patches that were applied.
-	if talosConfig != nil {
-		talosHosts := talosConfig.ExtractMirrorHosts()
-		for _, host := range talosHosts {
-			// Only add if not already present in existingSpecs
-			found := false
-
-			for _, spec := range existingSpecs {
-				if spec.Host == host {
-					found = true
-
-					break
-				}
-			}
-
-			if !found {
-				existingSpecs = append(existingSpecs, registry.MirrorSpec{
-					Host:   host,
-					Remote: registry.GenerateUpstreamURL(host),
-				})
-			}
-		}
+		return err
 	}
 
 	// Merge specs: flag specs override existing specs for the same host
@@ -149,6 +121,40 @@ func RunStage(
 		handler.Action,
 		dockerInvoker,
 	)
+}
+
+// collectExistingMirrorSpecs reads existing mirror specs from hosts.toml files
+// and, for Talos clusters, also extracts mirror hosts from the Talos config.
+func collectExistingMirrorSpecs(
+	clusterCfg *v1alpha1.Cluster,
+	talosConfig *talosconfigmanager.Configs,
+) ([]registry.MirrorSpec, error) {
+	// ReadExistingHostsToml returns (nil, nil) for missing directories.
+	existingSpecs, err := registry.ReadExistingHostsToml(GetKindMirrorsDir(clusterCfg))
+	if err != nil {
+		return nil, fmt.Errorf("failed to read existing hosts configuration: %w", err)
+	}
+
+	if talosConfig == nil {
+		return existingSpecs, nil
+	}
+
+	// Extract mirror hosts from the loaded Talos config (mirror-registries.yaml patches).
+	existingHosts := make(map[string]bool, len(existingSpecs))
+	for _, spec := range existingSpecs {
+		existingHosts[spec.Host] = true
+	}
+
+	for _, host := range talosConfig.ExtractMirrorHosts() {
+		if !existingHosts[host] {
+			existingSpecs = append(existingSpecs, registry.MirrorSpec{
+				Host:   host,
+				Remote: registry.GenerateUpstreamURL(host),
+			})
+		}
+	}
+
+	return existingSpecs, nil
 }
 
 func newRegistryHandlers(
