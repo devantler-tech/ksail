@@ -234,7 +234,7 @@ func applyOrReportChanges(
 			)
 		}
 
-		notify.Warningf(cmd.OutOrStderr(), strings.TrimRight(block.String(), "\n"))
+		notify.Warningf(cmd.OutOrStderr(), "%s", strings.TrimRight(block.String(), "\n"))
 
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(),
 			"Type \"yes\" to proceed with reboot-required changes: ",
@@ -298,7 +298,7 @@ func handleRecreateRequired(
 		"Use 'ksail cluster delete && ksail cluster create' or --force to recreate.",
 	)
 
-	notify.Warningf(cmd.OutOrStderr(), block.String())
+	notify.Warningf(cmd.OutOrStderr(), "%s", block.String())
 
 	if !force {
 		return fmt.Errorf("%d %w", len(diff.RecreateRequired), errRecreateChanges)
@@ -416,7 +416,7 @@ func executeRecreateFlow(
 		)
 		prompt.WriteString("All workloads and data will be lost.")
 
-		notify.Warningf(cmd.OutOrStderr(), prompt.String())
+		notify.Warningf(cmd.OutOrStderr(), "%s", prompt.String())
 
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(),
 			"Type \"yes\" to proceed with updating cluster %q: ", clusterName,

@@ -320,7 +320,7 @@ func (p *TalosProvisioner) hetznerConfigForRole(role string) talosconfig.Provide
 		return nil
 	}
 
-	if role == "control-plane" {
+	if role == RoleControlPlane {
 		return p.talosConfigs.ControlPlane()
 	}
 

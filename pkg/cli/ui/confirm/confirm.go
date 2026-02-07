@@ -141,7 +141,7 @@ func ShowDeletionPreview(writer io.Writer, preview *DeletionPreview) {
 		writeHetznerResources(&previewText, preview)
 	}
 
-	notify.Warningf(writer, previewText.String())
+	notify.Warningf(writer, "%s", previewText.String())
 
 	// Print the confirmation prompt on its own line without a symbol prefix
 	_, _ = fmt.Fprint(writer, `Type "yes" to confirm deletion: `)
