@@ -222,6 +222,31 @@ func applyOrReportChanges(
 		return nil
 	}
 
+	// Reboot-required changes are disruptive — require confirmation unless --force
+	if diff.HasRebootRequired() && !confirm.ShouldSkipPrompt(force) {
+		var block strings.Builder
+
+		fmt.Fprintf(&block, "%d changes require node reboots:\n", len(diff.RebootRequired))
+
+		for _, change := range diff.RebootRequired {
+			fmt.Fprintf(&block, "  ⚠ %s: %s → %s. %s\n",
+				change.Field, change.OldValue, change.NewValue, change.Reason,
+			)
+		}
+
+		notify.Warningf(cmd.OutOrStderr(), strings.TrimRight(block.String(), "\n"))
+
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(),
+			"Type \"yes\" to proceed with reboot-required changes: ",
+		)
+
+		if !confirm.PromptForConfirmation(cmd.OutOrStdout()) {
+			notify.Infof(cmd.OutOrStdout(), "Update cancelled")
+
+			return nil
+		}
+	}
+
 	reconciler := newComponentReconciler(cmd, ctx.ClusterCfg)
 
 	return applyInPlaceChanges(

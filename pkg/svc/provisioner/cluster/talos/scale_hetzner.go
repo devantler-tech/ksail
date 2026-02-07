@@ -34,10 +34,10 @@ func (p *TalosProvisioner) scaleHetznerWorkers(
 	result *types.UpdateResult,
 ) error {
 	if delta > 0 {
-		return p.addHetznerNodes(ctx, clusterName, "worker", delta, result)
+		return p.addHetznerNodes(ctx, clusterName, RoleWorker, delta, result)
 	}
 
-	return p.removeHetznerNodes(ctx, clusterName, "worker", -delta, result)
+	return p.removeHetznerNodes(ctx, clusterName, RoleWorker, -delta, result)
 }
 
 // addHetznerNodes creates new Hetzner servers for the given role.
@@ -181,7 +181,7 @@ func (p *TalosProvisioner) removeHetznerNodes(
 		// Best-effort etcd cleanup for control-plane nodes
 		if role == RoleControlPlane {
 			serverIP := server.PublicNet.IPv4.IP.String()
-			p.etcdCleanupBeforeRemoval(ctx, serverIP, clusterName)
+			p.etcdCleanupBeforeRemoval(ctx, serverIP)
 		}
 
 		err = p.deleteHetznerServer(ctx, hzProvider, server)

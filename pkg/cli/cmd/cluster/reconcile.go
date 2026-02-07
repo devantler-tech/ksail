@@ -144,10 +144,7 @@ func (r *componentReconciler) reconcileMetricsServer(
 	newValue := v1alpha1.MetricsServer(change.NewValue)
 
 	if newValue == v1alpha1.MetricsServerDisabled {
-		// For uninstall, create a metrics-server installer and uninstall.
-		// We need to create the installer manually since the setup package
-		// only exposes Install functions.
-		return nil // Metrics-server uninstall is a no-op for now
+		return fmt.Errorf("disabling metrics-server in-place is not yet supported; use 'ksail cluster delete && ksail cluster create'")
 	}
 
 	if setup.NeedsMetricsServerInstall(r.clusterCfg) {

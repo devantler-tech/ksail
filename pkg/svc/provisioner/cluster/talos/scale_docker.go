@@ -122,7 +122,7 @@ func (p *TalosProvisioner) removeDockerNodes(
 		// Best-effort etcd cleanup for control-plane nodes
 		if role == RoleControlPlane {
 			nodeIP := containerIP(ctr, clusterName)
-			p.etcdCleanupBeforeRemoval(ctx, nodeIP, clusterName)
+			p.etcdCleanupBeforeRemoval(ctx, nodeIP)
 		}
 
 		err = p.removeDockerContainer(ctx, ctr.ID)

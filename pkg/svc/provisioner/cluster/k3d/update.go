@@ -288,19 +288,35 @@ func (k *K3dClusterProvisioner) listClusterNodes(
 	nodeRunner := runner.NewCobraCommandRunner(pipeWriter, io.Discard)
 	cmd := nodecommand.NewCmdNodeList()
 
-	_, runErr := nodeRunner.Run(ctx, cmd, []string{"--output", "json"})
+	// Run the command in a goroutine since we need to read from the pipe
+	// while the command is running (otherwise it may block on a full pipe buffer).
+	errChan := make(chan error, 1)
 
-	// Restore stdout and collect captured output
-	_ = pipeWriter.Close()
+	go func() {
+		_, runErr := nodeRunner.Run(ctx, cmd, []string{"--output", "json"})
+		// Close write end to signal EOF to the reader
+		_ = pipeWriter.Close()
 
+		errChan <- runErr
+	}()
+
+	// Read all output from the pipe (this is the JSON from k3d)
+	var buf bytes.Buffer
+
+	_, copyErr := io.Copy(&buf, pipeReader)
+	_ = pipeReader.Close()
+
+	// Restore stdout while still holding the lock
 	os.Stdout = origStdout
 
 	listMutex.Unlock()
 
-	var buf bytes.Buffer
+	// Wait for command to complete and get any error
+	runErr := <-errChan
 
-	_, _ = io.Copy(&buf, pipeReader)
-	_ = pipeReader.Close()
+	if copyErr != nil {
+		return nil, fmt.Errorf("failed to read node list output: %w", copyErr)
+	}
 
 	if runErr != nil {
 		return nil, fmt.Errorf("failed to list nodes: %w", runErr)

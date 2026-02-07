@@ -15,7 +15,7 @@ import (
 // regardless of whether etcd cleanup succeeded.
 func (p *TalosProvisioner) etcdCleanupBeforeRemoval(
 	ctx context.Context,
-	nodeIP, _ string,
+	nodeIP string,
 ) {
 	_, _ = fmt.Fprintf(p.logWriter,
 		"  Cleaning up etcd membership for %s...\n", nodeIP)
