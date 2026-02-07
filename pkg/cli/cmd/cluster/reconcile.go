@@ -123,7 +123,12 @@ func (r *componentReconciler) reconcileCSI(ctx context.Context, change types.Cha
 	}
 
 	// Install the new CSI
-	return setup.InstallCSISilent(ctx, r.clusterCfg, r.factories)
+	err := setup.InstallCSISilent(ctx, r.clusterCfg, r.factories)
+	if err != nil {
+		return fmt.Errorf("failed to install CSI: %w", err)
+	}
+
+	return nil
 }
 
 // reconcileMetricsServer installs or uninstalls the metrics server.
@@ -141,7 +146,10 @@ func (r *componentReconciler) reconcileMetricsServer(
 	}
 
 	if setup.NeedsMetricsServerInstall(r.clusterCfg) {
-		return setup.InstallMetricsServerSilent(ctx, r.clusterCfg, r.factories)
+		err := setup.InstallMetricsServerSilent(ctx, r.clusterCfg, r.factories)
+		if err != nil {
+			return fmt.Errorf("failed to install metrics-server: %w", err)
+		}
 	}
 
 	return nil
@@ -153,7 +161,10 @@ func (r *componentReconciler) reconcileLoadBalancer(
 	_ types.Change,
 ) error {
 	if setup.NeedsLoadBalancerInstall(r.clusterCfg) {
-		return setup.InstallLoadBalancerSilent(ctx, r.clusterCfg, r.factories)
+		err := setup.InstallLoadBalancerSilent(ctx, r.clusterCfg, r.factories)
+		if err != nil {
+			return fmt.Errorf("failed to install load balancer: %w", err)
+		}
 	}
 
 	return nil
@@ -174,7 +185,12 @@ func (r *componentReconciler) reconcileCertManager(
 		return r.uninstallWithFactory(ctx, r.factories.CertManager)
 	}
 
-	return setup.InstallCertManagerSilent(ctx, r.clusterCfg, r.factories)
+	err := setup.InstallCertManagerSilent(ctx, r.clusterCfg, r.factories)
+	if err != nil {
+		return fmt.Errorf("failed to install cert-manager: %w", err)
+	}
+
+	return nil
 }
 
 // reconcilePolicyEngine installs or uninstalls the policy engine.
@@ -192,10 +208,17 @@ func (r *componentReconciler) reconcilePolicyEngine(
 		return r.uninstallWithFactory(ctx, r.factories.PolicyEngine)
 	}
 
-	return setup.InstallPolicyEngineSilent(ctx, r.clusterCfg, r.factories)
+	err := setup.InstallPolicyEngineSilent(ctx, r.clusterCfg, r.factories)
+	if err != nil {
+		return fmt.Errorf("failed to install policy engine: %w", err)
+	}
+
+	return nil
 }
 
 // reconcileGitOpsEngine installs or uninstalls the GitOps engine.
+//
+//nolint:exhaustive // Only Flux and ArgoCD are installable; None is handled above
 func (r *componentReconciler) reconcileGitOpsEngine(
 	ctx context.Context,
 	change types.Change,
@@ -209,15 +232,27 @@ func (r *componentReconciler) reconcileGitOpsEngine(
 	// Install the new GitOps engine
 	switch newValue {
 	case v1alpha1.GitOpsEngineFlux:
-		return setup.InstallFluxSilent(ctx, r.clusterCfg, r.factories)
+		err := setup.InstallFluxSilent(ctx, r.clusterCfg, r.factories)
+		if err != nil {
+			return fmt.Errorf("failed to install Flux: %w", err)
+		}
+
+		return nil
 	case v1alpha1.GitOpsEngineArgoCD:
-		return setup.InstallArgoCDSilent(ctx, r.clusterCfg, r.factories)
+		err := setup.InstallArgoCDSilent(ctx, r.clusterCfg, r.factories)
+		if err != nil {
+			return fmt.Errorf("failed to install ArgoCD: %w", err)
+		}
+
+		return nil
 	default:
 		return nil
 	}
 }
 
 // uninstallGitOpsEngine uninstalls the old GitOps engine.
+//
+//nolint:exhaustive // Only Flux and ArgoCD can be uninstalled; other values are no-op
 func (r *componentReconciler) uninstallGitOpsEngine(
 	ctx context.Context,
 	change types.Change,
@@ -233,7 +268,12 @@ func (r *componentReconciler) uninstallGitOpsEngine(
 
 		fluxInst := r.factories.Flux(helmClient, defaultReconcileTimeout)
 
-		return fluxInst.Uninstall(ctx)
+		err = fluxInst.Uninstall(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to uninstall Flux: %w", err)
+		}
+
+		return nil
 
 	case v1alpha1.GitOpsEngineArgoCD:
 		if r.factories.ArgoCD == nil {
@@ -257,5 +297,10 @@ func (r *componentReconciler) uninstallWithFactory(
 		return fmt.Errorf("failed to create installer for uninstall: %w", err)
 	}
 
-	return inst.Uninstall(ctx)
+	err = inst.Uninstall(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to uninstall component: %w", err)
+	}
+
+	return nil
 }

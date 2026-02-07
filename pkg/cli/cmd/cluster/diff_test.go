@@ -8,6 +8,13 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/types"
 )
 
+const (
+	// testValueEnabled is a common test value for component settings.
+	testValueEnabled = "Enabled"
+	// testRegistryAlt is an alternative registry address used in diff tests.
+	testRegistryAlt = "localhost:6060"
+)
+
 func newBaseSpec() *v1alpha1.ClusterSpec {
 	return &v1alpha1.ClusterSpec{
 		Distribution:  v1alpha1.DistributionVanilla,
@@ -124,6 +131,7 @@ func TestDiffEngine_ProviderChange(t *testing.T) {
 		"Docker", "Hetzner", types.ChangeCategoryRecreateRequired)
 }
 
+//nolint:funlen // Table-driven test with multiple component scenarios is clearer as single function
 func TestDiffEngine_ComponentChanges(t *testing.T) {
 	t.Parallel()
 
@@ -146,28 +154,28 @@ func TestDiffEngine_ComponentChanges(t *testing.T) {
 			mutate:   func(s *v1alpha1.ClusterSpec) { s.CSI = v1alpha1.CSIEnabled },
 			field:    "cluster.csi",
 			oldValue: "Default",
-			newValue: "Enabled",
+			newValue: testValueEnabled,
 		},
 		{
 			name:     "MetricsServer change",
-			mutate:   func(s *v1alpha1.ClusterSpec) { s.MetricsServer = "Enabled" },
+			mutate:   func(s *v1alpha1.ClusterSpec) { s.MetricsServer = testValueEnabled },
 			field:    "cluster.metricsServer",
 			oldValue: "Default",
-			newValue: "Enabled",
+			newValue: testValueEnabled,
 		},
 		{
 			name:     "LoadBalancer change",
-			mutate:   func(s *v1alpha1.ClusterSpec) { s.LoadBalancer = "Enabled" },
+			mutate:   func(s *v1alpha1.ClusterSpec) { s.LoadBalancer = testValueEnabled },
 			field:    "cluster.loadBalancer",
 			oldValue: "Default",
-			newValue: "Enabled",
+			newValue: testValueEnabled,
 		},
 		{
 			name:     "CertManager change",
-			mutate:   func(s *v1alpha1.ClusterSpec) { s.CertManager = "Enabled" },
+			mutate:   func(s *v1alpha1.ClusterSpec) { s.CertManager = testValueEnabled },
 			field:    "cluster.certManager",
 			oldValue: "Disabled",
-			newValue: "Enabled",
+			newValue: testValueEnabled,
 		},
 		{
 			name:     "PolicyEngine change",
@@ -215,7 +223,7 @@ func TestDiffEngine_LocalRegistryChange_Vanilla(t *testing.T) {
 
 	old := newBaseSpec()
 	newer := clone(old)
-	newer.LocalRegistry.Registry = "localhost:6060"
+	newer.LocalRegistry.Registry = testRegistryAlt
 
 	engine := NewDiffEngine(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
 	result := engine.ComputeDiff(old, newer)
@@ -225,7 +233,7 @@ func TestDiffEngine_LocalRegistryChange_Vanilla(t *testing.T) {
 	}
 
 	assertSingleChange(t, result.RecreateRequired, "cluster.localRegistry.registry",
-		"localhost:5050", "localhost:6060", types.ChangeCategoryRecreateRequired)
+		"localhost:5050", testRegistryAlt, types.ChangeCategoryRecreateRequired)
 }
 
 func TestDiffEngine_LocalRegistryChange_Talos(t *testing.T) {
@@ -235,7 +243,7 @@ func TestDiffEngine_LocalRegistryChange_Talos(t *testing.T) {
 	old.Distribution = v1alpha1.DistributionTalos
 
 	newer := clone(old)
-	newer.LocalRegistry.Registry = "localhost:6060"
+	newer.LocalRegistry.Registry = testRegistryAlt
 
 	engine := NewDiffEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderDocker)
 	result := engine.ComputeDiff(old, newer)
@@ -249,7 +257,7 @@ func TestDiffEngine_LocalRegistryChange_Talos(t *testing.T) {
 	}
 
 	assertSingleChange(t, result.InPlaceChanges, "cluster.localRegistry.registry",
-		"localhost:5050", "localhost:6060", types.ChangeCategoryInPlace)
+		"localhost:5050", testRegistryAlt, types.ChangeCategoryInPlace)
 }
 
 func TestDiffEngine_LocalRegistryChange_K3s(t *testing.T) {
@@ -259,7 +267,7 @@ func TestDiffEngine_LocalRegistryChange_K3s(t *testing.T) {
 	old.Distribution = v1alpha1.DistributionK3s
 
 	newer := clone(old)
-	newer.LocalRegistry.Registry = "localhost:6060"
+	newer.LocalRegistry.Registry = testRegistryAlt
 
 	engine := NewDiffEngine(v1alpha1.DistributionK3s, v1alpha1.ProviderDocker)
 	result := engine.ComputeDiff(old, newer)
@@ -273,7 +281,7 @@ func TestDiffEngine_LocalRegistryChange_K3s(t *testing.T) {
 	}
 
 	assertSingleChange(t, result.InPlaceChanges, "cluster.localRegistry.registry",
-		"localhost:5050", "localhost:6060", types.ChangeCategoryInPlace)
+		"localhost:5050", testRegistryAlt, types.ChangeCategoryInPlace)
 }
 
 func TestDiffEngine_VanillaOptionsChange(t *testing.T) {
@@ -541,6 +549,7 @@ func TestDiffEngine_MultipleChanges(t *testing.T) {
 	}
 }
 
+//nolint:funlen // Table-driven test with multiple sub-tests is clearer as single function
 func TestMergeProvisionerDiff(t *testing.T) {
 	t.Parallel()
 

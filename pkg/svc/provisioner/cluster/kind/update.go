@@ -24,7 +24,7 @@ func (k *KindClusterProvisioner) Update(
 	ctx context.Context,
 	name string,
 	oldSpec, newSpec *v1alpha1.ClusterSpec,
-	opts types.UpdateOptions,
+	_ types.UpdateOptions,
 ) (*types.UpdateResult, error) {
 	diff, err := k.DiffConfig(ctx, name, oldSpec, newSpec)
 	if err != nil {

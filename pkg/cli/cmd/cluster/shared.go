@@ -91,6 +91,8 @@ func loadAndValidateClusterConfig(
 // runClusterCreationWorkflow performs the full cluster creation workflow.
 // This is the shared implementation used by both the create handler and
 // the update command's recreate flow.
+//
+//nolint:funlen // Sequential workflow steps are clearer kept together
 func runClusterCreationWorkflow(
 	cmd *cobra.Command,
 	cfgManager *ksailconfigmanager.ConfigManager,

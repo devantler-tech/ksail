@@ -238,22 +238,24 @@ func (k *K3dClusterProvisioner) removeAgentNodes(
 func (k *K3dClusterProvisioner) countRunningNodes(
 	ctx context.Context,
 	clusterName string,
-) (agents, servers int, err error) {
+) (int, int, error) {
 	nodes, err := k.listClusterNodes(ctx, clusterName)
 	if err != nil {
 		return 0, 0, err
 	}
 
+	var agentCount, serverCount int
+
 	for _, n := range nodes {
 		switch n.Role {
 		case "agent":
-			agents++
+			agentCount++
 		case "server":
-			servers++
+			serverCount++
 		}
 	}
 
-	return agents, servers, nil
+	return agentCount, serverCount, nil
 }
 
 // k3dNodeInfo holds basic info about a k3d node from JSON output.
@@ -283,12 +285,13 @@ func (k *K3dClusterProvisioner) listClusterNodes(
 	}
 
 	var allNodes []struct {
-		Name   string `json:"name"`
-		Role   string `json:"role"`
-		Labels map[string]string
+		Name   string            `json:"name"`
+		Role   string            `json:"role"`
+		Labels map[string]string `json:"labels"`
 	}
 
-	if err := json.Unmarshal([]byte(output), &allNodes); err != nil {
+	err = json.Unmarshal([]byte(output), &allNodes)
+	if err != nil {
 		return nil, fmt.Errorf("failed to parse node list: %w", err)
 	}
 

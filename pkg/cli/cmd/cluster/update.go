@@ -3,6 +3,7 @@ package cluster
 import (
 	"fmt"
 
+	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
@@ -14,7 +15,15 @@ import (
 	clustererrors "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/errors"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/types"
 	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
+	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
 	"github.com/spf13/cobra"
+)
+
+// errRecreateChanges is returned when some changes require cluster recreation
+// but --force was not specified.
+var errRecreateChanges = fmt.Errorf(
+	"changes require cluster recreation: %w",
+	clustererrors.ErrRecreationRequired,
 )
 
 // NewUpdateCmd creates the cluster update command.
@@ -203,79 +212,101 @@ func handleUpdateRunE(
 		})
 
 		if !force {
-			return fmt.Errorf("%d changes require cluster recreation", len(diff.RecreateRequired))
+			return fmt.Errorf("%d %w", len(diff.RecreateRequired), errRecreateChanges)
 		}
 
 		return executeRecreateFlow(cmd, cfgManager, ctx, deps, clusterName, force)
 	}
 
-	// Apply in-place and reboot-required changes
-	if diff.HasInPlaceChanges() || diff.HasRebootRequired() {
-		updateOpts := types.UpdateOptions{
-			DryRun:        false,
-			RollingReboot: true,
-		}
-
-		notify.WriteMessage(notify.Message{
-			Type:    notify.ActivityType,
-			Emoji:   "🔄",
-			Content: "applying configuration changes in-place",
-			Timer:   outputTimer,
-			Writer:  cmd.OutOrStdout(),
-		})
-
-		// Apply provisioner-level changes (node scaling, Talos config, etc.)
-		result, err := updater.Update(
-			cmd.Context(),
-			clusterName,
-			currentSpec,
-			&ctx.ClusterCfg.Spec.Cluster,
-			updateOpts,
-		)
-		if err != nil {
-			return fmt.Errorf("failed to apply updates: %w", err)
-		}
-
-		// Apply component-level changes (CNI, CSI, cert-manager, etc.)
-		reconciler := newComponentReconciler(cmd, ctx.ClusterCfg)
-
-		componentErr := reconciler.reconcileComponents(cmd.Context(), diff, result)
-
-		// Display results
-		if len(result.AppliedChanges) > 0 {
-			notify.WriteMessage(notify.Message{
-				Type:    notify.SuccessType,
-				Content: fmt.Sprintf("applied %d changes successfully", len(result.AppliedChanges)),
-				Timer:   outputTimer,
-				Writer:  cmd.OutOrStdout(),
-			})
-		}
-
-		if len(result.FailedChanges) > 0 {
-			notify.WriteMessage(notify.Message{
-				Type:    notify.WarningType,
-				Content: fmt.Sprintf("%d changes failed to apply", len(result.FailedChanges)),
-				Writer:  cmd.OutOrStderr(),
-			})
-
-			for _, change := range result.FailedChanges {
-				notify.WriteMessage(notify.Message{
-					Type:    notify.ErrorType,
-					Content: fmt.Sprintf("  - %s: %s", change.Field, change.Reason),
-					Writer:  cmd.OutOrStderr(),
-				})
-			}
-		}
-
-		if componentErr != nil {
-			return fmt.Errorf("some component changes failed to apply: %w", componentErr)
-		}
-	} else {
+	// No actionable changes — nothing to do
+	if !diff.HasInPlaceChanges() && !diff.HasRebootRequired() {
 		notify.WriteMessage(notify.Message{
 			Type:    notify.InfoType,
 			Content: "No changes detected",
 			Writer:  cmd.OutOrStdout(),
 		})
+
+		return nil
+	}
+
+	// Apply in-place and reboot-required changes
+	reconciler := newComponentReconciler(cmd, ctx.ClusterCfg)
+
+	return applyInPlaceChanges(
+		cmd, updater, reconciler, clusterName,
+		currentSpec, ctx, diff, outputTimer,
+	)
+}
+
+// applyInPlaceChanges applies provisioner-level and component-level changes in-place.
+//
+//nolint:funlen // Sequential apply-and-report steps are clearer kept together
+func applyInPlaceChanges(
+	cmd *cobra.Command,
+	updater clusterprovisioner.ClusterUpdater,
+	reconciler *componentReconciler,
+	clusterName string,
+	currentSpec *v1alpha1.ClusterSpec,
+	ctx *localregistry.Context,
+	diff *types.UpdateResult,
+	outputTimer timer.Timer,
+) error {
+	updateOpts := types.UpdateOptions{
+		DryRun:        false,
+		RollingReboot: true,
+	}
+
+	notify.WriteMessage(notify.Message{
+		Type:    notify.ActivityType,
+		Emoji:   "🔄",
+		Content: "applying configuration changes in-place",
+		Timer:   outputTimer,
+		Writer:  cmd.OutOrStdout(),
+	})
+
+	// Apply provisioner-level changes (node scaling, Talos config, etc.)
+	result, err := updater.Update(
+		cmd.Context(),
+		clusterName,
+		currentSpec,
+		&ctx.ClusterCfg.Spec.Cluster,
+		updateOpts,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to apply updates: %w", err)
+	}
+
+	// Apply component-level changes (CNI, CSI, cert-manager, etc.)
+	componentErr := reconciler.reconcileComponents(cmd.Context(), diff, result)
+
+	// Display results
+	if len(result.AppliedChanges) > 0 {
+		notify.WriteMessage(notify.Message{
+			Type:    notify.SuccessType,
+			Content: fmt.Sprintf("applied %d changes successfully", len(result.AppliedChanges)),
+			Timer:   outputTimer,
+			Writer:  cmd.OutOrStdout(),
+		})
+	}
+
+	if len(result.FailedChanges) > 0 {
+		notify.WriteMessage(notify.Message{
+			Type:    notify.WarningType,
+			Content: fmt.Sprintf("%d changes failed to apply", len(result.FailedChanges)),
+			Writer:  cmd.OutOrStderr(),
+		})
+
+		for _, change := range result.FailedChanges {
+			notify.WriteMessage(notify.Message{
+				Type:    notify.ErrorType,
+				Content: fmt.Sprintf("  - %s: %s", change.Field, change.Reason),
+				Writer:  cmd.OutOrStderr(),
+			})
+		}
+	}
+
+	if componentErr != nil {
+		return fmt.Errorf("some component changes failed to apply: %w", componentErr)
 	}
 
 	return nil
@@ -407,34 +438,45 @@ func mergeProvisionerDiff(main, provisioner *types.UpdateResult) {
 		return
 	}
 
-	existingFields := make(map[string]bool)
-	for _, c := range main.InPlaceChanges {
-		existingFields[c.Field] = true
+	existingFields := collectExistingFields(main)
+
+	main.InPlaceChanges = appendUniqueChanges(
+		main.InPlaceChanges, provisioner.InPlaceChanges, existingFields,
+	)
+	main.RebootRequired = appendUniqueChanges(
+		main.RebootRequired, provisioner.RebootRequired, existingFields,
+	)
+	main.RecreateRequired = appendUniqueChanges(
+		main.RecreateRequired, provisioner.RecreateRequired, existingFields,
+	)
+}
+
+// collectExistingFields builds a set of field names already present in the diff.
+func collectExistingFields(diff *types.UpdateResult) map[string]bool {
+	fields := make(map[string]bool)
+
+	for _, c := range diff.InPlaceChanges {
+		fields[c.Field] = true
 	}
 
-	for _, c := range main.RebootRequired {
-		existingFields[c.Field] = true
+	for _, c := range diff.RebootRequired {
+		fields[c.Field] = true
 	}
 
-	for _, c := range main.RecreateRequired {
-		existingFields[c.Field] = true
+	for _, c := range diff.RecreateRequired {
+		fields[c.Field] = true
 	}
 
-	for _, c := range provisioner.InPlaceChanges {
-		if !existingFields[c.Field] {
-			main.InPlaceChanges = append(main.InPlaceChanges, c)
+	return fields
+}
+
+// appendUniqueChanges appends changes from src to dst, skipping fields already in existing.
+func appendUniqueChanges(dst, src []types.Change, existing map[string]bool) []types.Change {
+	for _, c := range src {
+		if !existing[c.Field] {
+			dst = append(dst, c)
 		}
 	}
 
-	for _, c := range provisioner.RebootRequired {
-		if !existingFields[c.Field] {
-			main.RebootRequired = append(main.RebootRequired, c)
-		}
-	}
-
-	for _, c := range provisioner.RecreateRequired {
-		if !existingFields[c.Field] {
-			main.RecreateRequired = append(main.RecreateRequired, c)
-		}
-	}
+	return dst
 }
