@@ -175,8 +175,6 @@ func (s *Scaffolder) GenerateK3dRegistryConfig() k3dv1alpha5.SimpleConfigRegistr
 
 // CreateK3dConfig creates a K3d configuration with distribution-specific settings.
 // Node counts can be set via --control-planes and --workers CLI flags.
-//
-//nolint:funlen,cyclop // K3d config requires setting many fields; splitting would reduce readability
 func (s *Scaffolder) CreateK3dConfig() k3dv1alpha5.SimpleConfig {
 	// Resolve cluster name - use explicit ClusterName if set, otherwise resolve from config
 	var clusterName string
@@ -209,7 +207,33 @@ func (s *Scaffolder) CreateK3dConfig() k3dv1alpha5.SimpleConfig {
 		config.Agents = workers
 	}
 
-	// Initialize ExtraArgs slice
+	if extraArgs := s.buildK3dExtraArgs(); len(extraArgs) > 0 {
+		config.Options.K3sOptions.ExtraArgs = extraArgs
+	}
+
+	// Add registry configuration for mirror registries
+	if len(s.MirrorRegistries) > 0 {
+		config.Registries = s.GenerateK3dRegistryConfig()
+	}
+
+	// Configure K3d-native local registry when enabled.
+	// K3d's Registries.Create automatically manages the registry container,
+	// including DNS resolution, network connectivity, and lifecycle management.
+	if s.KSailConfig.Spec.Cluster.LocalRegistry.Enabled() {
+		config.Registries = s.addK3dLocalRegistryConfig(config.Registries)
+	}
+
+	return config
+}
+
+// GetKindMirrorsDir returns the configured mirrors directory or the default.
+func (s *Scaffolder) GetKindMirrorsDir() string {
+	return kindconfigmanager.ResolveMirrorsDir(&s.KSailConfig)
+}
+
+// buildK3dExtraArgs constructs K3s server arguments that disable built-in
+// components when the KSail configuration specifies alternative or disabled values.
+func (s *Scaffolder) buildK3dExtraArgs() []k3dv1alpha5.K3sArgWithNodeFilters {
 	var extraArgs []k3dv1alpha5.K3sArgWithNodeFilters
 
 	// Disable default CNI (Flannel) if using a non-default CNI (Cilium or Calico)
@@ -257,29 +281,7 @@ func (s *Scaffolder) CreateK3dConfig() k3dv1alpha5.SimpleConfig {
 		)
 	}
 
-	// Set ExtraArgs if we have any
-	if len(extraArgs) > 0 {
-		config.Options.K3sOptions.ExtraArgs = extraArgs
-	}
-
-	// Add registry configuration for mirror registries
-	if len(s.MirrorRegistries) > 0 {
-		config.Registries = s.GenerateK3dRegistryConfig()
-	}
-
-	// Configure K3d-native local registry when enabled.
-	// K3d's Registries.Create automatically manages the registry container,
-	// including DNS resolution, network connectivity, and lifecycle management.
-	if s.KSailConfig.Spec.Cluster.LocalRegistry.Enabled() {
-		config.Registries = s.addK3dLocalRegistryConfig(config.Registries)
-	}
-
-	return config
-}
-
-// GetKindMirrorsDir returns the configured mirrors directory or the default.
-func (s *Scaffolder) GetKindMirrorsDir() string {
-	return kindconfigmanager.ResolveMirrorsDir(&s.KSailConfig)
+	return extraArgs
 }
 
 // addK3dLocalRegistryConfig adds K3d-native local registry configuration.
