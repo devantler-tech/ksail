@@ -163,8 +163,6 @@ func validateFile(
 
 // validateDirectory validates all YAML files and kustomizations in a directory.
 // Validation is performed in parallel with live progress display for better UX.
-//
-//nolint:funlen // Orchestrates parallel validation with progress display
 func validateDirectory(
 	ctx context.Context,
 	cmd *cobra.Command,
@@ -188,58 +186,63 @@ func validateDirectory(
 	if len(kustomizations) > 0 {
 		kustomizeClient := kustomize.NewClient()
 
-		tasks := make([]notify.ProgressTask, len(kustomizations))
-		for i, kustDir := range kustomizations {
-			tasks[i] = notify.ProgressTask{
-				Name: filepath.Base(kustDir),
-				Fn: func(taskCtx context.Context) error {
-					return validateKustomizationSilent(
-						taskCtx,
-						kustDir,
-						kubeconformClient,
-						kustomizeClient,
-						opts,
-					)
-				},
-			}
-		}
-
-		progressGroup := notify.NewProgressGroup(
-			"Validating kustomizations",
-			"✅",
-			cmd.OutOrStdout(),
-			notify.WithLabels(notify.ValidatingLabels()),
+		kustErr := runParallelValidation(
+			ctx, cmd, kustomizations, "Validating kustomizations", "✅",
+			func(taskCtx context.Context, kustDir string) error {
+				return validateKustomizationSilent(
+					taskCtx, kustDir, kubeconformClient, kustomizeClient, opts,
+				)
+			},
 		)
-
-		pgErr := progressGroup.Run(ctx, tasks...)
-		if pgErr != nil {
-			return fmt.Errorf("kustomization validation failed: %w", pgErr)
+		if kustErr != nil {
+			return fmt.Errorf("kustomization validation failed: %w", kustErr)
 		}
 	}
 
 	// Validate individual YAML files in parallel with progress display
 	if len(yamlFiles) > 0 {
-		tasks := make([]notify.ProgressTask, len(yamlFiles))
-		for i, file := range yamlFiles {
-			tasks[i] = notify.ProgressTask{
-				Name: filepath.Base(file),
-				Fn: func(taskCtx context.Context) error {
-					return validateFileSilent(taskCtx, file, kubeconformClient, opts)
-				},
-			}
-		}
-
-		progressGroup := notify.NewProgressGroup(
-			"Validating YAML files",
-			"📄",
-			cmd.OutOrStdout(),
-			notify.WithLabels(notify.ValidatingLabels()),
+		filesErr := runParallelValidation(ctx, cmd, yamlFiles, "Validating YAML files", "📄",
+			func(taskCtx context.Context, file string) error {
+				return validateFileSilent(taskCtx, file, kubeconformClient, opts)
+			},
 		)
-
-		pgErr := progressGroup.Run(ctx, tasks...)
-		if pgErr != nil {
-			return fmt.Errorf("YAML validation failed: %w", pgErr)
+		if filesErr != nil {
+			return fmt.Errorf("YAML validation failed: %w", filesErr)
 		}
+	}
+
+	return nil
+}
+
+// runParallelValidation runs a set of validation tasks in parallel with progress display.
+func runParallelValidation(
+	ctx context.Context,
+	cmd *cobra.Command,
+	items []string,
+	title string,
+	emoji string,
+	validateFn func(ctx context.Context, item string) error,
+) error {
+	tasks := make([]notify.ProgressTask, len(items))
+	for taskIdx, item := range items {
+		tasks[taskIdx] = notify.ProgressTask{
+			Name: filepath.Base(item),
+			Fn: func(taskCtx context.Context) error {
+				return validateFn(taskCtx, item)
+			},
+		}
+	}
+
+	progressGroup := notify.NewProgressGroup(
+		title,
+		emoji,
+		cmd.OutOrStdout(),
+		notify.WithLabels(notify.ValidatingLabels()),
+	)
+
+	pgErr := progressGroup.Run(ctx, tasks...)
+	if pgErr != nil {
+		return fmt.Errorf("parallel validation: %w", pgErr)
 	}
 
 	return nil
