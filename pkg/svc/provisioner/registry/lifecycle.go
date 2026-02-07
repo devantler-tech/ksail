@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os"
-	"sort"
+	"slices"
+	"strconv"
 	"strings"
 
 	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
@@ -23,9 +25,9 @@ type Info struct {
 	Upstream string
 	Port     int
 	Volume   string
+	Username string // Optional: username for registry authentication (supports ${ENV_VAR} placeholders)
+	Password string // Optional: password for registry authentication (supports ${ENV_VAR} placeholders)
 }
-
-const expectedEndpointParts = 2
 
 // Registry Lifecycle Management
 // These functions handle the creation, setup, and cleanup of registry containers.
@@ -217,24 +219,23 @@ func CollectExistingRegistryPorts(
 	}
 
 	for _, name := range names {
-		trimmed := strings.TrimSpace(name)
-		if trimmed == "" {
+		trimmed, ok := ksailio.TrimNonEmpty(name)
+		if !ok {
 			continue
 		}
 
 		port, portErr := registryMgr.GetRegistryPort(ctx, trimmed)
 		if portErr != nil {
-			switch {
-			case errors.Is(portErr, dockerclient.ErrRegistryNotFound),
-				errors.Is(portErr, dockerclient.ErrRegistryPortNotFound):
+			if errors.Is(portErr, dockerclient.ErrRegistryNotFound) ||
+				errors.Is(portErr, dockerclient.ErrRegistryPortNotFound) {
 				continue
-			default:
-				return nil, fmt.Errorf(
-					"failed to resolve port for registry %s: %w",
-					trimmed,
-					portErr,
-				)
 			}
+
+			return nil, fmt.Errorf(
+				"failed to resolve port for registry %s: %w",
+				trimmed,
+				portErr,
+			)
 		}
 
 		if port > 0 {
@@ -277,6 +278,8 @@ func ensureRegistry(
 		ClusterName: clusterName,
 		NetworkName: "",
 		VolumeName:  reg.Volume,
+		Username:    reg.Username,
+		Password:    reg.Password,
 	}
 
 	err := registryMgr.CreateRegistry(ctx, config)
@@ -344,34 +347,7 @@ func ConnectRegistriesToNetwork(
 	}
 
 	for _, reg := range registries {
-		containerName, nameOK := ksailio.TrimNonEmpty(reg.Name)
-		if !nameOK {
-			continue
-		}
-
-		notify.WriteMessage(notify.Message{
-			Type:    notify.ActivityType,
-			Content: "connecting '%s' to '%s'",
-			Writer:  writer,
-			Args: []any{
-				containerName,
-				networkName,
-			},
-		})
-
-		err := dockerClient.NetworkConnect(ctx, networkName, containerName, nil)
-		if err != nil {
-			notify.WriteMessage(notify.Message{
-				Type: notify.ErrorType,
-				Content: fmt.Sprintf(
-					"failed to connect registry %s to %s network: %v",
-					containerName,
-					networkName,
-					err,
-				),
-				Writer: writer,
-			})
-		}
+		connectRegistryToNetwork(ctx, dockerClient, reg, networkName, "", writer)
 	}
 
 	return nil
@@ -381,8 +357,6 @@ func ConnectRegistriesToNetwork(
 // from the high end of the subnet to avoid conflicts with Talos node IPs that start from .2.
 // For a /24 network, registries are assigned starting from .250 down (.250, .249, .248, etc.).
 // Returns a map of registry names to their assigned static IPs.
-//
-//nolint:funlen,varnamelen // Function handles multiple notification types; 'i' is clear for loop index
 func ConnectRegistriesToNetworkWithStaticIPs(
 	ctx context.Context,
 	dockerClient client.APIClient,
@@ -401,71 +375,96 @@ func ConnectRegistriesToNetworkWithStaticIPs(
 	staticIPs := calculateRegistryIPs(networkCIDR, len(registries))
 	registryIPs := make(map[string]string, len(registries))
 
-	for i, reg := range registries {
-		containerName, nameOK := ksailio.TrimNonEmpty(reg.Name)
-		if !nameOK {
-			continue
-		}
-
-		var endpointConfig *network.EndpointSettings
-		if i < len(staticIPs) && staticIPs[i] != "" {
-			endpointConfig = &network.EndpointSettings{
-				IPAMConfig: &network.EndpointIPAMConfig{
-					IPv4Address: staticIPs[i],
-				},
-			}
-			registryIPs[containerName] = staticIPs[i]
-
-			notify.WriteMessage(notify.Message{
-				Type:    notify.ActivityType,
-				Content: "connecting '%s' to '%s' with IP %s",
-				Writer:  writer,
-				Args: []any{
-					containerName,
-					networkName,
-					staticIPs[i],
-				},
-			})
-		} else {
-			notify.WriteMessage(notify.Message{
-				Type:    notify.ActivityType,
-				Content: "connecting '%s' to '%s'",
-				Writer:  writer,
-				Args: []any{
-					containerName,
-					networkName,
-				},
-			})
-		}
-
-		err := dockerClient.NetworkConnect(ctx, networkName, containerName, endpointConfig)
-		if err != nil {
-			notify.WriteMessage(notify.Message{
-				Type: notify.ErrorType,
-				Content: fmt.Sprintf(
-					"failed to connect registry %s to %s network: %v",
-					containerName,
-					networkName,
-					err,
-				),
-				Writer: writer,
-			})
+	for regIdx, reg := range registries {
+		registryIP := connectRegistryToNetwork(
+			ctx,
+			dockerClient,
+			reg,
+			networkName,
+			staticIPAt(staticIPs, regIdx),
+			writer,
+		)
+		if registryIP != "" {
+			containerName, _ := ksailio.TrimNonEmpty(reg.Name)
+			registryIPs[containerName] = registryIP
 		}
 	}
 
 	return registryIPs, nil
 }
 
+// connectRegistryToNetwork connects a single registry to a network, optionally with a static IP.
+// Returns the assigned static IP (empty if none was assigned or the connection failed).
+func connectRegistryToNetwork(
+	ctx context.Context,
+	dockerClient client.APIClient,
+	reg Info,
+	networkName string,
+	staticIP string,
+	writer io.Writer,
+) string {
+	containerName, nameOK := ksailio.TrimNonEmpty(reg.Name)
+	if !nameOK {
+		return ""
+	}
+
+	var endpointConfig *network.EndpointSettings
+
+	if staticIP != "" {
+		endpointConfig = &network.EndpointSettings{
+			IPAMConfig: &network.EndpointIPAMConfig{
+				IPv4Address: staticIP,
+			},
+		}
+
+		notify.WriteMessage(notify.Message{
+			Type:    notify.ActivityType,
+			Content: "connecting '%s' to '%s' with IP %s",
+			Writer:  writer,
+			Args:    []any{containerName, networkName, staticIP},
+		})
+	} else {
+		notify.WriteMessage(notify.Message{
+			Type:    notify.ActivityType,
+			Content: "connecting '%s' to '%s'",
+			Writer:  writer,
+			Args:    []any{containerName, networkName},
+		})
+	}
+
+	err := dockerClient.NetworkConnect(ctx, networkName, containerName, endpointConfig)
+	if err != nil {
+		notify.WriteMessage(notify.Message{
+			Type: notify.ErrorType,
+			Content: fmt.Sprintf(
+				"failed to connect registry %s to %s network: %v",
+				containerName,
+				networkName,
+				err,
+			),
+			Writer: writer,
+		})
+
+		return ""
+	}
+
+	return staticIP
+}
+
+// staticIPAt returns the static IP at the given index, or empty if out of bounds.
+func staticIPAt(ips []string, idx int) string {
+	if idx < len(ips) {
+		return ips[idx]
+	}
+
+	return ""
+}
+
 // calculateRegistryIPs computes static IPs for registries from the high end of the subnet.
 // For a /24 network like 10.5.0.0/24, it returns addresses like 10.5.0.250, 10.5.0.249, etc.
 // Returns empty strings if the CIDR is invalid or cannot be parsed.
 func calculateRegistryIPs(networkCIDR string, count int) []string {
-	// CIDR format constants
-	const (
-		cidrParts  = 2 // CIDR has format "IP/prefix"
-		ipv4Octets = 4 // IPv4 address has 4 octets
-		baseOffset = 250
-	)
+	const baseOffset = 250
 
 	result := make([]string, count)
 
@@ -473,25 +472,23 @@ func calculateRegistryIPs(networkCIDR string, count int) []string {
 		return result
 	}
 
-	// Parse the CIDR to extract the base address
-	// Example: 10.5.0.0/24 -> base = 10.5.0, last usable = .254 (broadcast is .255)
-	parts := strings.Split(networkCIDR, "/")
-	if len(parts) != cidrParts {
+	_, ipNet, err := net.ParseCIDR(networkCIDR)
+	if err != nil {
 		return result
 	}
 
-	baseIP := parts[0]
-
-	ipParts := strings.Split(baseIP, ".")
-	if len(ipParts) != ipv4Octets {
+	ipv4 := ipNet.IP.To4()
+	if ipv4 == nil {
 		return result
 	}
 
 	// For a /24 network, assign from .250 down to avoid node IPs starting at .2
 	// This gives space for ~248 nodes before we'd have a conflict
-
 	for i := 0; i < count && i < baseOffset-2; i++ {
-		result[i] = fmt.Sprintf("%s.%s.%s.%d", ipParts[0], ipParts[1], ipParts[2], baseOffset-i)
+		addr := make(net.IP, len(ipv4))
+		copy(addr, ipv4)
+		addr[3] = byte(baseOffset - i)
+		result[i] = addr.String()
 	}
 
 	return result
@@ -636,9 +633,7 @@ func ExtractPortFromEndpoint(endpoint string) int {
 		portStr = portStr[:slashIdx]
 	}
 
-	var port int
-
-	_, err := fmt.Sscanf(portStr, "%d", &port)
+	port, err := strconv.Atoi(portStr)
 	if err != nil || port <= 0 || port > 65535 {
 		return 0
 	}
@@ -647,11 +642,17 @@ func ExtractPortFromEndpoint(endpoint string) int {
 }
 
 // ResolveRegistryName determines the registry container name from endpoints or falls back to prefix + host.
+// Only HTTP endpoints represent local mirror containers; HTTPS endpoints are remote upstreams and should be skipped.
 func ResolveRegistryName(host string, endpoints []string, prefix string) string {
 	expected := SanitizeHostIdentifier(host)
 	expectedWithPrefix := BuildRegistryName(prefix, host)
 
 	for _, endpoint := range endpoints {
+		// Skip HTTPS endpoints - they represent remote upstreams, not local mirror containers
+		if strings.HasPrefix(endpoint, "https://") {
+			continue
+		}
+
 		name := ExtractNameFromEndpoint(endpoint)
 		if name == "" {
 			continue
@@ -672,17 +673,14 @@ func ResolveRegistryName(host string, endpoints []string, prefix string) string 
 
 // ExtractNameFromEndpoint extracts the hostname portion from an endpoint URL.
 func ExtractNameFromEndpoint(endpoint string) string {
-	parts := strings.Split(endpoint, "//")
-	if len(parts) != expectedEndpointParts {
+	_, afterScheme, found := strings.Cut(endpoint, "//")
+	if !found {
 		return ""
 	}
 
-	hostPort := strings.Split(parts[1], ":")
-	if len(hostPort) == 0 {
-		return ""
-	}
+	host, _, _ := strings.Cut(afterScheme, ":")
 
-	return hostPort[0]
+	return host
 }
 
 // BuildRegistryName constructs a registry container name from prefix and host.
@@ -708,6 +706,8 @@ func BuildRegistryInfo(
 	port int,
 	prefix string,
 	upstreamOverride string,
+	username string,
+	password string,
 ) Info {
 	name := ResolveRegistryName(host, endpoints, prefix)
 
@@ -724,12 +724,14 @@ func BuildRegistryInfo(
 		Upstream: upstream,
 		Port:     port,
 		Volume:   volume,
+		Username: username,
+		Password: password,
 	}
 }
 
 // SortHosts deterministically sorts registry hostnames.
 func SortHosts(hosts []string) {
-	sort.Strings(hosts)
+	slices.Sort(hosts)
 }
 
 // CollectRegistryNames extracts registry names from a slice of registry Info structs.

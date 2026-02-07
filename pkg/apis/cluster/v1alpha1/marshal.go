@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"maps"
 	"reflect"
+	"strconv"
 	"strings"
 	"time"
 
@@ -417,9 +418,7 @@ func pruneStringDefault(fieldVal reflect.Value, defaultTag string) {
 }
 
 func pruneIntDefault(fieldVal reflect.Value, defaultTag string) {
-	var defaultInt int64
-
-	_, err := fmt.Sscanf(defaultTag, "%d", &defaultInt)
+	defaultInt, err := strconv.ParseInt(defaultTag, 10, 64)
 	if err != nil {
 		return
 	}
@@ -430,9 +429,7 @@ func pruneIntDefault(fieldVal reflect.Value, defaultTag string) {
 }
 
 func pruneUintDefault(fieldVal reflect.Value, defaultTag string) {
-	var defaultUint uint64
-
-	_, err := fmt.Sscanf(defaultTag, "%d", &defaultUint)
+	defaultUint, err := strconv.ParseUint(defaultTag, 10, 64)
 	if err != nil {
 		return
 	}

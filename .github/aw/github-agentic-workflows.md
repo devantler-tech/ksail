@@ -469,8 +469,12 @@ The YAML frontmatter supports these fields:
         reviewers: [user1, copilot]     # Optional: reviewers (use 'copilot' for bot)
         draft: true                     # Optional: create as draft PR (defaults to true)
         if-no-changes: "warn"           # Optional: "warn" (default), "error", or "ignore"
+        expires: 7                      # Optional: auto-close after 7 days (supports: 2h, 7d, 2w, 1m, 1y; min: 2h)
+        auto-merge: false               # Optional: enable auto-merge when checks pass (default: false)
         target-repo: "owner/repo"       # Optional: cross-repository
     ```
+
+    **Auto-Expiration**: The `expires` field auto-closes PRs after a time period. Supports integers (days) or relative formats (2h, 7d, 2w, 1m, 1y). Minimum duration: 2 hours. Only for same-repo PRs without target-repo. Generates `agentics-maintenance.yml` workflow.
 
     When using `output.create-pull-request`, the main job does **not** need `contents: write` or `pull-requests: write` permissions since PR creation is handled by a separate job with appropriate permissions.
   - `create-pull-request-review-comment:` - Safe PR review comment creation on code lines
@@ -1384,6 +1388,7 @@ Import shared components using the `imports:` field in frontmatter:
 on: issues
 engine: copilot
 imports:
+  - copilot-setup-steps.yml    # Import setup steps from copilot-setup-steps.yml
   - shared/security-notice.md
   - shared/tool-setup.md
   - shared/mcp/tavily.md
@@ -1413,6 +1418,37 @@ safe-outputs:
 
 Additional instructions for the coding agent.
 ```
+
+### Special Import: copilot-setup-steps.yml
+
+The `copilot-setup-steps.yml` file receives special handling when imported. Instead of importing the entire job structure, **only the steps** from the `copilot-setup-steps` job are extracted and inserted **at the start** of your workflow's agent job.
+
+**Key behaviors:**
+
+- Only the steps array is imported (job metadata like `runs-on`, `permissions` is ignored)
+- Imported steps are placed **at the start** of the agent job (before all other steps)
+- Other imported steps are placed after copilot-setup-steps but before main frontmatter steps
+- Main frontmatter steps come last
+- Final order: **copilot-setup-steps → other imported steps → main frontmatter steps**
+- Supports both `.yml` and `.yaml` extensions
+- Enables clean reuse of common setup configurations across workflows
+
+**Example:**
+
+```yaml
+---
+on: issue_comment
+engine: copilot
+imports:
+  - copilot-setup-steps.yml
+  - shared/common-tools.md
+steps:
+  - name: Custom environment setup
+    run: echo "Main frontmatter step runs last"
+---
+```
+
+In the compiled workflow, the order is: copilot-setup-steps → imported steps from shared/common-tools.md → main frontmatter steps.
 
 ## Permission Patterns
 

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/image"
 )
 
 // FluxInstaller implements the installer.Installer interface for Flux.
@@ -45,10 +46,25 @@ func (b *FluxInstaller) Uninstall(ctx context.Context) error {
 	return nil
 }
 
-// --- internals ---
+// Images returns the container images used by the Flux Operator.
+func (b *FluxInstaller) Images(ctx context.Context) ([]string, error) {
+	spec := b.chartSpec()
 
-func (b *FluxInstaller) helmInstallOrUpgradeFluxOperator(ctx context.Context) error {
-	spec := &helm.ChartSpec{
+	manifest, err := b.client.TemplateChart(ctx, spec)
+	if err != nil {
+		return nil, fmt.Errorf("failed to template flux-operator chart: %w", err)
+	}
+
+	images, err := image.ExtractImagesFromManifest(manifest)
+	if err != nil {
+		return nil, fmt.Errorf("extract images from flux-operator manifest: %w", err)
+	}
+
+	return images, nil
+}
+
+func (b *FluxInstaller) chartSpec() *helm.ChartSpec {
+	return &helm.ChartSpec{
 		ReleaseName:     "flux-operator",
 		ChartName:       "oci://ghcr.io/controlplaneio-fluxcd/charts/flux-operator",
 		Namespace:       "flux-system",
@@ -62,6 +78,12 @@ func (b *FluxInstaller) helmInstallOrUpgradeFluxOperator(ctx context.Context) er
 		// "unrecognized format" warnings that confuse users if printed.
 		Silent: true,
 	}
+}
+
+// --- internals ---
+
+func (b *FluxInstaller) helmInstallOrUpgradeFluxOperator(ctx context.Context) error {
+	spec := b.chartSpec()
 
 	// Set context deadline longer than Helm timeout to ensure Helm has
 	// sufficient time to complete its kstatus-based wait operation.

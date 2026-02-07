@@ -113,7 +113,7 @@ func CleanupRegistries(
 // prepareRegistryContext sets up the registry manager and resolves the network name.
 // Returns nil manager if no registries are configured.
 //
-//nolint:ireturn // returns interface for dependency injection; concrete type is dockerclient.RegistryManager
+//nolint:ireturn // returns registry.Backend interface for dependency injection
 func prepareRegistryContext(
 	ctx context.Context,
 	simpleCfg *k3dv1alpha5.SimpleConfig,
@@ -139,7 +139,7 @@ func prepareRegistryContext(
 	return registryMgr, registryInfos, networkName, nil
 }
 
-//nolint:ireturn // returns interface for dependency injection; concrete type is dockerclient.RegistryManager
+//nolint:ireturn // returns registry.Backend interface for dependency injection
 func setupRegistryManager(
 	ctx context.Context,
 	simpleCfg *k3dv1alpha5.SimpleConfig,
@@ -254,7 +254,7 @@ func buildRegistryInfos(
 		endpoints := mirrors[host].Endpoint
 		port := registry.ExtractRegistryPort(endpoints, usedPorts, &nextPort)
 		upstream := upstreamFromEndpoints(host, endpoints, clusterName)
-		info := registry.BuildRegistryInfo(host, endpoints, port, clusterName, upstream)
+		info := registry.BuildRegistryInfo(host, endpoints, port, clusterName, upstream, "", "")
 		registryInfos = append(registryInfos, info)
 	}
 

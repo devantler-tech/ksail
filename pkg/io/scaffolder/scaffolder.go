@@ -277,11 +277,6 @@ func (s *Scaffolder) CreateK3dConfig() k3dv1alpha5.SimpleConfig {
 	return config
 }
 
-// DefaultKindMirrorsDir is the default directory name for Kind containerd host mirror configuration.
-//
-// Deprecated: Use kindconfigmanager.DefaultMirrorsDir instead. This alias is kept for backwards compatibility.
-const DefaultKindMirrorsDir = kindconfigmanager.DefaultMirrorsDir
-
 // GetKindMirrorsDir returns the configured mirrors directory or the default.
 func (s *Scaffolder) GetKindMirrorsDir() string {
 	return kindconfigmanager.ResolveMirrorsDir(&s.KSailConfig)

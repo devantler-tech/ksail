@@ -167,6 +167,33 @@ func TestResolveRegistryName(t *testing.T) {
 		)
 		assert.Equal(t, "kind-docker.io", name)
 	})
+
+	t.Run("skipsHTTPSEndpointsToAvoidMatchingUpstreams", func(t *testing.T) {
+		t.Parallel()
+
+		// HTTPS endpoints represent remote upstreams (e.g., https://ghcr.io),
+		// not local mirror containers. The function should skip them and
+		// fallback to the prefixed name.
+		name := registry.ResolveRegistryName(
+			"ghcr.io",
+			[]string{"https://ghcr.io"},
+			"cluster-",
+		)
+		assert.Equal(t, "cluster-ghcr.io", name)
+	})
+
+	t.Run("prefersHTTPEndpointOverHTTPSUpstream", func(t *testing.T) {
+		t.Parallel()
+
+		// When both HTTPS upstream and HTTP local mirror are present,
+		// the HTTP endpoint should be used (representing the local container).
+		name := registry.ResolveRegistryName(
+			"ghcr.io",
+			[]string{"https://ghcr.io", "http://cluster-ghcr.io:5000"},
+			"cluster-",
+		)
+		assert.Equal(t, "cluster-ghcr.io", name)
+	})
 }
 
 func TestBuildRegistryInfo(t *testing.T) {
@@ -176,6 +203,8 @@ func TestBuildRegistryInfo(t *testing.T) {
 		"docker.io",
 		[]string{"http://docker.io:5000"},
 		dockerclient.DefaultRegistryPort,
+		"",
+		"",
 		"",
 		"",
 	)
@@ -196,6 +225,8 @@ func TestBuildRegistryInfo_UsesOverride(t *testing.T) {
 		dockerclient.DefaultRegistryPort,
 		"",
 		"https://mirror.example.com",
+		"",
+		"",
 	)
 
 	require.Equal(t, "https://mirror.example.com", info.Upstream)

@@ -110,100 +110,103 @@ type ResolvedClusterInfo struct {
 // Priority for cluster name: flag > config > kubeconfig context.
 // Priority for provider: flag > config > default (Docker).
 // Priority for kubeconfig: flag > env (KUBECONFIG) > config > default (~/.kube/config).
-//
-//nolint:cyclop,funlen,gocognit,nestif // Inherent complexity from multi-source resolution with fallback logic
 func ResolveClusterInfo(
 	nameFlag string,
 	providerFlag v1alpha1.Provider,
 	kubeconfigFlag string,
 ) (*ResolvedClusterInfo, error) {
-	var clusterName string
+	clusterName := nameFlag
+	provider := providerFlag
+	kubeconfigPath := kubeconfigFlag
 
-	var provider v1alpha1.Provider
-
-	var kubeconfigPath string
-
-	// Try to get values from flags first
-	if nameFlag != "" {
-		clusterName = nameFlag
-	}
-
-	if providerFlag != "" {
-		provider = providerFlag
-	}
-
-	if kubeconfigFlag != "" {
-		kubeconfigPath = kubeconfigFlag
-	}
-
-	// If we don't have a cluster name yet, try loading from ksail.yaml config
+	// Fill missing values from ksail.yaml config file
 	if clusterName == "" {
-		cfgManager := ksailconfigmanager.NewConfigManager(nil)
-		cfg, err := cfgManager.Load(configmanager.LoadOptions{Silent: true, SkipValidation: true})
-
-		if err == nil && cfg != nil && cfgManager.IsConfigFileFound() {
-			// Get cluster name from distribution config
-			if cfgManager.DistributionConfig != nil {
-				distCfg := cfgManager.DistributionConfig
-				switch {
-				case distCfg.Kind != nil && distCfg.Kind.Name != "":
-					clusterName = distCfg.Kind.Name
-				case distCfg.K3d != nil && distCfg.K3d.Name != "":
-					clusterName = distCfg.K3d.Name
-				case distCfg.Talos != nil && distCfg.Talos.GetClusterName() != "":
-					clusterName = distCfg.Talos.GetClusterName()
-				}
-			}
-
-			// Get provider from config if not set by flag
-			if provider == "" && cfg.Spec.Cluster.Provider != "" {
-				provider = cfg.Spec.Cluster.Provider
-			}
-
-			// Get kubeconfig from config if not set by flag
-			if kubeconfigPath == "" && cfg.Spec.Cluster.Connection.Kubeconfig != "" {
-				kubeconfigPath = cfg.Spec.Cluster.Connection.Kubeconfig
-			}
-		}
+		resolveFromConfig(&clusterName, &provider, &kubeconfigPath)
 	}
 
-	// If we still don't have a cluster name, try detecting from kubeconfig context
+	// Fall back to kubeconfig context detection
 	if clusterName == "" {
-		clusterInfo, err := DetectClusterInfo(kubeconfigPath, "")
-		if err == nil && clusterInfo != nil {
-			clusterName = clusterInfo.ClusterName
-
-			// Also use detected provider if not set
-			if provider == "" {
-				provider = clusterInfo.Provider
-			}
-		}
+		resolveFromKubecontext(&clusterName, &provider, kubeconfigPath)
 	}
 
-	// Cluster name is required
 	if clusterName == "" {
 		return nil, ErrClusterNameRequired
 	}
 
-	// Default provider to Docker
 	if provider == "" {
 		provider = v1alpha1.ProviderDocker
 	}
 
-	// Resolve kubeconfig path using the standard resolution
-	// This handles: flag > env > default, and expands ~ to home directory
 	resolvedPath, err := resolveKubeconfigPath(kubeconfigPath)
 	if err != nil {
 		return nil, fmt.Errorf("resolve kubeconfig path: %w", err)
 	}
 
-	kubeconfigPath = resolvedPath
-
 	return &ResolvedClusterInfo{
 		ClusterName:    clusterName,
 		Provider:       provider,
-		KubeconfigPath: kubeconfigPath,
+		KubeconfigPath: resolvedPath,
 	}, nil
+}
+
+// resolveFromConfig fills missing cluster info from the ksail.yaml config file.
+func resolveFromConfig(
+	clusterName *string,
+	provider *v1alpha1.Provider,
+	kubeconfigPath *string,
+) {
+	cfgManager := ksailconfigmanager.NewConfigManager(nil)
+
+	cfg, err := cfgManager.Load(configmanager.LoadOptions{Silent: true, SkipValidation: true})
+	if err != nil || cfg == nil || !cfgManager.IsConfigFileFound() {
+		return
+	}
+
+	*clusterName = clusterNameFromDistConfig(cfgManager.DistributionConfig)
+
+	if *provider == "" && cfg.Spec.Cluster.Provider != "" {
+		*provider = cfg.Spec.Cluster.Provider
+	}
+
+	if *kubeconfigPath == "" && cfg.Spec.Cluster.Connection.Kubeconfig != "" {
+		*kubeconfigPath = cfg.Spec.Cluster.Connection.Kubeconfig
+	}
+}
+
+// clusterNameFromDistConfig extracts the cluster name from distribution-specific config.
+func clusterNameFromDistConfig(distCfg *clusterprovisioner.DistributionConfig) string {
+	if distCfg == nil {
+		return ""
+	}
+
+	switch {
+	case distCfg.Kind != nil && distCfg.Kind.Name != "":
+		return distCfg.Kind.Name
+	case distCfg.K3d != nil && distCfg.K3d.Name != "":
+		return distCfg.K3d.Name
+	case distCfg.Talos != nil && distCfg.Talos.GetClusterName() != "":
+		return distCfg.Talos.GetClusterName()
+	default:
+		return ""
+	}
+}
+
+// resolveFromKubecontext fills missing cluster info from the current kubeconfig context.
+func resolveFromKubecontext(
+	clusterName *string,
+	provider *v1alpha1.Provider,
+	kubeconfigPath string,
+) {
+	clusterInfo, err := DetectClusterInfo(kubeconfigPath, "")
+	if err != nil || clusterInfo == nil {
+		return
+	}
+
+	*clusterName = clusterInfo.ClusterName
+
+	if *provider == "" {
+		*provider = clusterInfo.Provider
+	}
 }
 
 func runSimpleLifecycleAction(
@@ -297,49 +300,12 @@ func GetCurrentKubeContext() (string, error) {
 func CreateMinimalProvisioner(
 	info *ClusterInfo,
 ) (clusterprovisioner.ClusterProvisioner, error) {
-	switch info.Distribution {
-	case v1alpha1.DistributionVanilla:
-		kindConfig := &v1alpha4.Cluster{Name: info.ClusterName}
-
-		provisioner, err := kindprovisioner.CreateProvisioner(kindConfig, "")
-		if err != nil {
-			return nil, fmt.Errorf("failed to create kind provisioner: %w", err)
-		}
-
-		return provisioner, nil
-
-	case v1alpha1.DistributionK3s:
-		k3dConfig := &k3dv1alpha5.SimpleConfig{
-			ObjectMeta: k3dtypes.ObjectMeta{Name: info.ClusterName},
-		}
-
-		return k3dprovisioner.CreateProvisioner(k3dConfig, ""), nil
-
-	case v1alpha1.DistributionTalos:
-		talosConfig := &talosconfigmanager.Configs{Name: info.ClusterName}
-
-		// Create provisioner with detected provider and kubeconfig path
-		provisioner, err := talosprovisioner.CreateProvisioner(
-			talosConfig,
-			info.KubeconfigPath,
-			info.Provider,
-			v1alpha1.OptionsTalos{},
-			v1alpha1.OptionsHetzner{},
-			false, // skipCNIChecks - not relevant for simple lifecycle operations
-		)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create talos provisioner: %w", err)
-		}
-
-		return provisioner, nil
-
-	default:
-		return nil, fmt.Errorf(
-			"%w: %s",
-			clusterprovisioner.ErrUnsupportedDistribution,
-			info.Distribution,
-		)
-	}
+	return createProvisionerForDistribution(
+		info.Distribution,
+		info.ClusterName,
+		info.KubeconfigPath,
+		info.Provider,
+	)
 }
 
 // CreateMinimalProvisionerForProvider creates provisioners for all distributions
@@ -420,49 +386,22 @@ func getSupportedDistributions() []v1alpha1.Distribution {
 
 // Start starts the cluster by trying each distribution's provisioner.
 func (m *multiDistributionProvisioner) Start(ctx context.Context, name string) error {
-	return m.forExistingCluster(
-		ctx,
-		name,
-		func(p clusterprovisioner.ClusterProvisioner, n string) error {
-			err := p.Start(ctx, n)
-			if err != nil {
-				return fmt.Errorf("failed to start cluster: %w", err)
-			}
-
-			return nil
-		},
+	return m.delegateToExisting(ctx, name, "start",
+		func(p clusterprovisioner.ClusterProvisioner, n string) error { return p.Start(ctx, n) },
 	)
 }
 
 // Stop stops the cluster by trying each distribution's provisioner.
 func (m *multiDistributionProvisioner) Stop(ctx context.Context, name string) error {
-	return m.forExistingCluster(
-		ctx,
-		name,
-		func(p clusterprovisioner.ClusterProvisioner, n string) error {
-			err := p.Stop(ctx, n)
-			if err != nil {
-				return fmt.Errorf("failed to stop cluster: %w", err)
-			}
-
-			return nil
-		},
+	return m.delegateToExisting(ctx, name, "stop",
+		func(p clusterprovisioner.ClusterProvisioner, n string) error { return p.Stop(ctx, n) },
 	)
 }
 
 // Delete deletes the cluster by trying each distribution's provisioner.
 func (m *multiDistributionProvisioner) Delete(ctx context.Context, name string) error {
-	return m.forExistingCluster(
-		ctx,
-		name,
-		func(p clusterprovisioner.ClusterProvisioner, n string) error {
-			err := p.Delete(ctx, n)
-			if err != nil {
-				return fmt.Errorf("failed to delete cluster: %w", err)
-			}
-
-			return nil
-		},
+	return m.delegateToExisting(ctx, name, "delete",
+		func(p clusterprovisioner.ClusterProvisioner, n string) error { return p.Delete(ctx, n) },
 	)
 }
 
@@ -493,7 +432,7 @@ func (m *multiDistributionProvisioner) List(ctx context.Context) ([]string, erro
 	var allClusters []string
 
 	for _, dist := range getSupportedDistributions() {
-		provisioner, err := createProvisionerForDistribution(dist, m.clusterName)
+		provisioner, err := createProvisionerForDistribution(dist, m.clusterName, "", "")
 		if err != nil {
 			continue
 		}
@@ -514,6 +453,28 @@ func (m *multiDistributionProvisioner) Create(_ context.Context, _ string) error
 	return ErrCreateNotSupported
 }
 
+// delegateToExisting finds the existing cluster and delegates the operation,
+// wrapping any error with a descriptive verb.
+func (m *multiDistributionProvisioner) delegateToExisting(
+	ctx context.Context,
+	name string,
+	verb string,
+	operation clusterOperation,
+) error {
+	return m.forExistingCluster(
+		ctx,
+		name,
+		func(p clusterprovisioner.ClusterProvisioner, n string) error {
+			err := operation(p, n)
+			if err != nil {
+				return fmt.Errorf("failed to %s cluster: %w", verb, err)
+			}
+
+			return nil
+		},
+	)
+}
+
 // forExistingCluster finds an existing cluster across all distributions and applies an operation.
 // Returns ErrClusterNotFoundInDistributions if the cluster doesn't exist in any distribution.
 func (m *multiDistributionProvisioner) forExistingCluster(
@@ -527,7 +488,7 @@ func (m *multiDistributionProvisioner) forExistingCluster(
 	}
 
 	for _, dist := range getSupportedDistributions() {
-		provisioner, err := createProvisionerForDistribution(dist, clusterName)
+		provisioner, err := createProvisionerForDistribution(dist, clusterName, "", "")
 		if err != nil {
 			continue
 		}
@@ -546,10 +507,21 @@ func (m *multiDistributionProvisioner) forExistingCluster(
 }
 
 // createProvisionerForDistribution creates a provisioner for a specific distribution.
-func createProvisionerForDistribution( //nolint:ireturn // Interface return is required for provisioner abstraction
+// The kubeconfigPath and providerType parameters allow callers that have
+// richer context (e.g., ClusterInfo) to pass it through; when empty, defaults
+// are used ("" and ProviderDocker respectively).
+//
+//nolint:ireturn // Interface return is required for provisioner abstraction
+func createProvisionerForDistribution(
 	dist v1alpha1.Distribution,
 	clusterName string,
+	kubeconfigPath string,
+	providerType v1alpha1.Provider,
 ) (clusterprovisioner.ClusterProvisioner, error) {
+	if providerType == "" {
+		providerType = v1alpha1.ProviderDocker
+	}
+
 	switch dist {
 	case v1alpha1.DistributionVanilla:
 		kindConfig := &v1alpha4.Cluster{Name: clusterName}
@@ -573,8 +545,8 @@ func createProvisionerForDistribution( //nolint:ireturn // Interface return is r
 
 		provisioner, err := talosprovisioner.CreateProvisioner(
 			talosConfig,
-			"",
-			v1alpha1.ProviderDocker,
+			kubeconfigPath,
+			providerType,
 			v1alpha1.OptionsTalos{},
 			v1alpha1.OptionsHetzner{},
 			false,

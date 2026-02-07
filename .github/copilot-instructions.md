@@ -134,7 +134,12 @@ go run main.go --help
 │   │   └── toolgen/        # Tool generation for AI assistants
 │   ├── apis/               # API types and schemas
 │   ├── cli/                # CLI wiring, UI, and Cobra commands
-│   │   └── cmd/            # CLI command implementations
+│   │   ├── annotations/    # Command annotation constants
+│   │   ├── cmd/            # CLI command implementations
+│   │   ├── helpers/        # CLI helper utilities
+│   │   ├── lifecycle/      # Cluster lifecycle orchestration
+│   │   ├── setup/          # Component setup (CNI, mirror registries, etc.)
+│   │   └── ui/             # Terminal UI (ASCII art, chat TUI, confirmations)
 │   ├── client/             # Embedded tool clients (kubectl, helm, flux, etc.)
 │   ├── di/                 # Dependency injection
 │   ├── io/                 # I/O utilities
@@ -180,6 +185,8 @@ ksail cluster connect                  # Connect to cluster with K9s
 ksail workload apply                   # Apply workloads
 ksail workload gen <resource>          # Generate resources
 ksail cipher <command>                 # Manage secrets with SOPS
+ksail chat                             # AI chat powered by GitHub Copilot
+ksail mcp                              # Start MCP server for AI assistants
 ```
 
 ### Init Command Options

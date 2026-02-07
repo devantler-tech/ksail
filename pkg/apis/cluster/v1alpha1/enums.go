@@ -159,6 +159,26 @@ func (d *Distribution) ContextName(clusterName string) string {
 	}
 }
 
+// DefaultClusterName returns the default cluster name for a distribution.
+// Each distribution has its own default naming convention:
+//   - Vanilla: "kind"
+//   - K3s: "k3d-default"
+//   - Talos: "talos-default"
+//
+// Returns "kind" for unknown distributions.
+func (d *Distribution) DefaultClusterName() string {
+	switch *d {
+	case DistributionVanilla:
+		return "kind"
+	case DistributionK3s:
+		return "k3d-default"
+	case DistributionTalos:
+		return "talos-default"
+	default:
+		return "kind"
+	}
+}
+
 // --- CNI Types ---
 
 // CNI defines the CNI options for a KSail cluster.

@@ -20,6 +20,7 @@ import (
 	helmv4getter "helm.sh/helm/v4/pkg/getter"
 	helmv4kube "helm.sh/helm/v4/pkg/kube"
 	helmv4registry "helm.sh/helm/v4/pkg/registry"
+	helmv4release "helm.sh/helm/v4/pkg/release"
 	v1 "helm.sh/helm/v4/pkg/release/v1"
 	repov1 "helm.sh/helm/v4/pkg/repo/v1"
 	helmv4strvals "helm.sh/helm/v4/pkg/strvals"
@@ -32,6 +33,12 @@ const (
 	repoDirMode    = 0o750
 	repoFileMode   = 0o640
 	chartRefParts  = 2
+
+	// Retry configuration for repository index downloads.
+	// External Helm repositories may experience transient 5xx errors.
+	repoIndexMaxRetries    = 3
+	repoIndexRetryBaseWait = 2 * time.Second
+	repoIndexRetryMaxWait  = 15 * time.Second
 )
 
 var (
@@ -163,13 +170,12 @@ type ReleaseInfo struct {
 }
 
 // Interface defines the subset of Helm functionality required by KSail.
-//
-//go:generate mockery --name=Interface --output=. --filename=mocks.go
 type Interface interface {
 	InstallChart(ctx context.Context, spec *ChartSpec) (*ReleaseInfo, error)
 	InstallOrUpgradeChart(ctx context.Context, spec *ChartSpec) (*ReleaseInfo, error)
 	UninstallRelease(ctx context.Context, releaseName, namespace string) error
 	AddRepository(ctx context.Context, entry *RepositoryEntry, timeout time.Duration) error
+	TemplateChart(ctx context.Context, spec *ChartSpec) (string, error)
 }
 
 // Client represents the default helm implementation used by KSail.
@@ -186,6 +192,34 @@ var _ Interface = (*Client)(nil)
 // NewClient creates a Helm client using the provided kubeconfig and context.
 func NewClient(kubeConfig, kubeContext string) (*Client, error) {
 	return newClient(kubeConfig, kubeContext, nil)
+}
+
+// NewTemplateOnlyClient creates a Helm client for templating operations only.
+// It does not require a kubeconfig and cannot perform install/uninstall operations.
+// Use this for extracting images from charts in CI environments without cluster access.
+func NewTemplateOnlyClient() (*Client, error) {
+	settings := helmv4cli.New()
+	actionConfig := new(helmv4action.Configuration)
+
+	// Initialize with a no-op kube client for templating-only operations
+	actionConfig.KubeClient = &helmv4kube.Client{}
+	actionConfig.Releases = nil // Not needed for templating
+
+	// Initialize registry client so OCI chart references (oci://) can be resolved
+	registryClient, err := helmv4registry.NewClient()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create registry client for template client: %w", err)
+	}
+
+	actionConfig.RegistryClient = registryClient
+
+	return &Client{
+		actionConfig: actionConfig,
+		settings:     settings,
+		kubeConfig:   "",
+		kubeContext:  "",
+		debugLog:     func(string, ...any) {},
+	}, nil
 }
 
 func newClient(
@@ -236,6 +270,58 @@ func (c *Client) InstallChart(ctx context.Context, spec *ChartSpec) (*ReleaseInf
 // InstallOrUpgradeChart upgrades a Helm chart when present and installs it otherwise.
 func (c *Client) InstallOrUpgradeChart(ctx context.Context, spec *ChartSpec) (*ReleaseInfo, error) {
 	return c.installRelease(ctx, spec, true)
+}
+
+// TemplateChart renders a Helm chart's templates without installing it.
+// It returns the rendered YAML manifests as a string.
+// This is useful for extracting container images from charts.
+func (c *Client) TemplateChart(ctx context.Context, spec *ChartSpec) (string, error) {
+	if spec == nil {
+		return "", errChartSpecRequired
+	}
+
+	ctxErr := ctx.Err()
+	if ctxErr != nil {
+		return "", fmt.Errorf("template chart context cancelled: %w", ctxErr)
+	}
+
+	client := helmv4action.NewInstall(c.actionConfig)
+
+	client.ReleaseName = spec.ReleaseName
+	if client.ReleaseName == "" {
+		client.ReleaseName = "template-release"
+	}
+
+	client.Namespace = spec.Namespace
+	if client.Namespace == "" {
+		client.Namespace = "default"
+	}
+
+	client.DryRunStrategy = helmv4action.DryRunClient
+	client.Replace = true // Skip name uniqueness check
+
+	// Set version if provided
+	if spec.Version != "" {
+		client.Version = spec.Version
+	}
+
+	chart, vals, err := c.loadChartAndValues(spec, client)
+	if err != nil {
+		return "", fmt.Errorf("load chart and values: %w", err)
+	}
+
+	rel, err := client.RunWithContext(ctx, chart, vals)
+	if err != nil {
+		return "", fmt.Errorf("template chart %q: %w", spec.ChartName, err)
+	}
+
+	// Convert Releaser to Accessor to get the manifest
+	accessor, accErr := helmv4release.NewAccessor(rel)
+	if accErr != nil {
+		return "", fmt.Errorf("create release accessor: %w", accErr)
+	}
+
+	return accessor.Manifest(), nil
 }
 
 // UninstallRelease removes a Helm release by name within the provided namespace.
@@ -299,7 +385,7 @@ func (c *Client) AddRepository(
 		return err
 	}
 
-	downloadErr := downloadRepositoryIndex(chartRepository)
+	downloadErr := downloadRepositoryIndex(ctx, chartRepository)
 	if downloadErr != nil {
 		return downloadErr
 	}
@@ -422,18 +508,68 @@ func newChartRepository(
 	return chartRepository, nil
 }
 
-func downloadRepositoryIndex(chartRepository *repov1.ChartRepository) error {
-	indexPath, err := chartRepository.DownloadIndexFile()
-	if err != nil {
-		return fmt.Errorf("failed to download repository index file: %w", err)
+func downloadRepositoryIndex(ctx context.Context, chartRepository *repov1.ChartRepository) error {
+	var lastErr error
+
+	for attempt := 1; attempt <= repoIndexMaxRetries; attempt++ {
+		indexPath, err := chartRepository.DownloadIndexFile()
+		if err == nil {
+			_, statErr := os.Stat(indexPath)
+			if statErr == nil {
+				return nil
+			}
+
+			lastErr = fmt.Errorf("failed to verify repository index file: %w", statErr)
+		} else {
+			lastErr = fmt.Errorf("failed to download repository index file: %w", err)
+		}
+
+		// Check if this is a retryable transient HTTP error (5xx)
+		if !isRetryableHTTPError(lastErr) || attempt == repoIndexMaxRetries {
+			break
+		}
+
+		// Calculate delay with exponential backoff
+		delay := calculateRepoRetryDelay(attempt)
+
+		// Use a timer so the retry loop respects context cancellation
+		timer := time.NewTimer(delay)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+
+			return fmt.Errorf("download repository index cancelled: %w", ctx.Err())
+		case <-timer.C:
+		}
 	}
 
-	_, statErr := os.Stat(indexPath)
-	if statErr != nil {
-		return fmt.Errorf("failed to verify repository index file: %w", statErr)
+	return lastErr
+}
+
+// isRetryableHTTPError returns true if the error indicates a transient HTTP error
+// that should be retried (5xx status codes).
+func isRetryableHTTPError(err error) bool {
+	if err == nil {
+		return false
 	}
 
-	return nil
+	errMsg := err.Error()
+
+	// Check for common 5xx error status codes in error messages
+	return strings.Contains(errMsg, "500") ||
+		strings.Contains(errMsg, "502") ||
+		strings.Contains(errMsg, "503") ||
+		strings.Contains(errMsg, "504") ||
+		strings.Contains(errMsg, "Internal Server Error") ||
+		strings.Contains(errMsg, "Bad Gateway") ||
+		strings.Contains(errMsg, "Service Unavailable") ||
+		strings.Contains(errMsg, "Gateway Timeout")
+}
+
+// calculateRepoRetryDelay returns the delay for the given retry attempt.
+// Uses exponential backoff: 2s, 4s, 8s... capped at repoIndexRetryMaxWait.
+func calculateRepoRetryDelay(attempt int) time.Duration {
+	return min(repoIndexRetryBaseWait*time.Duration(1<<(attempt-1)), repoIndexRetryMaxWait)
 }
 
 func (c *Client) installRelease(
@@ -613,6 +749,13 @@ func buildChartPathOptions(spec *ChartSpec, repoURL string) helmv4action.ChartPa
 	}
 }
 
+// chartLocator abstracts the common chart location capabilities shared by
+// helmv4action.Install and helmv4action.Upgrade.
+type chartLocator interface {
+	SetRegistryClient(client *helmv4registry.Client)
+	LocateChart(name string, settings *helmv4cli.EnvSettings) (string, error)
+}
+
 // applyChartPathOptions applies ChartPathOptions to an Install or Upgrade client.
 func applyChartPathOptions(client any, opts helmv4action.ChartPathOptions) {
 	switch cl := client.(type) {
@@ -624,30 +767,21 @@ func applyChartPathOptions(client any, opts helmv4action.ChartPathOptions) {
 }
 
 func (c *Client) locateOCIChart(spec *ChartSpec, client any) (string, error) {
-	// Create a registry client for OCI operations
 	registryClient, err := helmv4registry.NewClient()
 	if err != nil {
 		return "", fmt.Errorf("failed to create registry client: %w", err)
 	}
 
-	opts := buildChartPathOptions(spec, "")
+	applyChartPathOptions(client, buildChartPathOptions(spec, ""))
 
-	// Apply options and registry client, then locate chart
-	var chartPath string
-
-	switch actionClient := client.(type) {
-	case *helmv4action.Install:
-		actionClient.ChartPathOptions = opts
-		actionClient.SetRegistryClient(registryClient)
-		chartPath, err = actionClient.LocateChart(spec.ChartName, c.settings)
-	case *helmv4action.Upgrade:
-		actionClient.ChartPathOptions = opts
-		actionClient.SetRegistryClient(registryClient)
-		chartPath, err = actionClient.LocateChart(spec.ChartName, c.settings)
-	default:
+	locator, ok := client.(chartLocator)
+	if !ok {
 		return "", fmt.Errorf("%w: %T", errUnsupportedClientType, client)
 	}
 
+	locator.SetRegistryClient(registryClient)
+
+	chartPath, err := locator.LocateChart(spec.ChartName, c.settings)
 	if err != nil {
 		return "", fmt.Errorf("failed to locate OCI chart %q: %w", spec.ChartName, err)
 	}
@@ -668,7 +802,7 @@ func (c *Client) locateChartFromRepo(spec *ChartSpec, client any) (string, error
 		timeout = DefaultTimeout
 	}
 
-	originalTimeout := os.Getenv("HELM_HTTP_TIMEOUT")
+	originalTimeout, hadTimeout := os.LookupEnv("HELM_HTTP_TIMEOUT")
 
 	err := os.Setenv("HELM_HTTP_TIMEOUT", timeout.String())
 	if err != nil {
@@ -676,7 +810,7 @@ func (c *Client) locateChartFromRepo(spec *ChartSpec, client any) (string, error
 	}
 
 	defer func() {
-		if originalTimeout != "" {
+		if hadTimeout {
 			_ = os.Setenv("HELM_HTTP_TIMEOUT", originalTimeout)
 		} else {
 			_ = os.Unsetenv("HELM_HTTP_TIMEOUT")

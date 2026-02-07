@@ -10,7 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -242,7 +242,7 @@ func collectManifestFiles(root string) ([]string, error) {
 		return nil, fmt.Errorf("walk directory %s: %w", root, err)
 	}
 
-	sort.Strings(manifests)
+	slices.Sort(manifests)
 
 	return manifests, nil
 }

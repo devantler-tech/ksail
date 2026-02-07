@@ -349,3 +349,49 @@ func TestResolveClusterName(t *testing.T) {
 		assert.Equal(t, k3d.DefaultClusterName, name)
 	})
 }
+
+func TestResolveNetworkName(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		clusterName string
+		expected    string
+	}{
+		{
+			name:        "prefixes_cluster_name_with_k3d",
+			clusterName: "my-cluster",
+			expected:    "k3d-my-cluster",
+		},
+		{
+			name:        "returns_k3d_only_for_empty_string",
+			clusterName: "",
+			expected:    "k3d",
+		},
+		{
+			name:        "returns_k3d_only_for_whitespace_only",
+			clusterName: "   ",
+			expected:    "k3d",
+		},
+		{
+			name:        "trims_whitespace_from_cluster_name",
+			clusterName: "  my-cluster  ",
+			expected:    "k3d-my-cluster",
+		},
+		{
+			name:        "handles_single_character_name",
+			clusterName: "a",
+			expected:    "k3d-a",
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			result := k3d.ResolveNetworkName(testCase.clusterName)
+
+			assert.Equal(t, testCase.expected, result)
+		})
+	}
+}

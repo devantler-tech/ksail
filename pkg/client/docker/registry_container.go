@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/devantler-tech/ksail/v5/pkg/utils/envvar"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/image"
@@ -117,7 +118,6 @@ func (rm *RegistryManager) listRegistryContainers(
 ) ([]container.Summary, error) {
 	filterArgs := filters.NewArgs()
 	filterArgs.Add("name", name)
-	filterArgs.Add("ancestor", RegistryImageName)
 	filterArgs.Add("label", fmt.Sprintf("%s=%s", RegistryLabelKey, name))
 
 	containers, err := rm.client.ContainerList(ctx, container.ListOptions{
@@ -186,7 +186,6 @@ func (rm *RegistryManager) listAllRegistryContainers(
 	ctx context.Context,
 ) ([]container.Summary, error) {
 	filterArgs := filters.NewArgs()
-	filterArgs.Add("ancestor", RegistryImageName)
 	filterArgs.Add("label", RegistryLabelKey)
 
 	containers, err := rm.client.ContainerList(ctx, container.ListOptions{
@@ -214,16 +213,6 @@ func (rm *RegistryManager) stopRegistryContainer(
 		return fmt.Errorf("failed to stop registry container: %w", err)
 	}
 
-	return nil
-}
-
-// addClusterLabel is a no-op with network-based tracking.
-// Previously used for label-based tracking, now replaced by network connections.
-// Kept for interface compatibility but may be removed in future refactoring.
-func (rm *RegistryManager) addClusterLabel(
-	_ context.Context,
-	_, _ string,
-) error {
 	return nil
 }
 
@@ -310,7 +299,11 @@ func (rm *RegistryManager) createAndStartContainer(
 	volumeName string,
 ) error {
 	// Prepare container configuration
-	containerConfig := rm.buildContainerConfig(config)
+	containerConfig, err := rm.buildContainerConfig(config)
+	if err != nil {
+		return fmt.Errorf("failed to build container config: %w", err)
+	}
+
 	hostConfig := rm.buildHostConfig(config, volumeName)
 	networkConfig := rm.buildNetworkConfig(config)
 
@@ -338,22 +331,60 @@ func (rm *RegistryManager) createAndStartContainer(
 
 // Configuration builders.
 
+// buildProxyCredentialsEnv builds environment variables for proxy authentication.
+// If credentials are provided, they are expanded from environment variables
+// and set as REGISTRY_PROXY_USERNAME and REGISTRY_PROXY_PASSWORD.
+// Returns ErrRegistryPartialCredentials if only one of username/password is provided.
+func (rm *RegistryManager) buildProxyCredentialsEnv(
+	username string,
+	password string,
+) ([]string, error) {
+	expandedUsername := envvar.Expand(username)
+	expandedPassword := envvar.Expand(password)
+
+	hasUsername := expandedUsername != ""
+	hasPassword := expandedPassword != ""
+
+	// Both empty is valid (no auth); both present is valid; one without the other is an error
+	if hasUsername != hasPassword {
+		return nil, ErrRegistryPartialCredentials
+	}
+
+	if !hasUsername {
+		return nil, nil
+	}
+
+	return []string{
+		"REGISTRY_PROXY_USERNAME=" + expandedUsername,
+		"REGISTRY_PROXY_PASSWORD=" + expandedPassword,
+	}, nil
+}
+
 // buildContainerConfig builds the container configuration for a registry.
 // If an upstream URL is provided, environment variables are set to configure
 // the registry as a pull-through cache (proxy) to that upstream.
 func (rm *RegistryManager) buildContainerConfig(
 	config RegistryConfig,
-) *container.Config {
+) (*container.Config, error) {
 	labels := map[string]string{}
 	if config.Name != "" {
 		labels[RegistryLabelKey] = config.Name
 	}
 
-	// Build environment variables for registry configuration
+	// Build environment variables for proxy configuration
 	var env []string
+
 	if config.UpstreamURL != "" {
-		// Configure registry as a pull-through cache to the upstream
 		env = append(env, "REGISTRY_PROXY_REMOTEURL="+config.UpstreamURL)
+
+		if config.Username != "" || config.Password != "" {
+			credEnv, err := rm.buildProxyCredentialsEnv(config.Username, config.Password)
+			if err != nil {
+				return nil, fmt.Errorf("proxy credentials for %s: %w", config.Name, err)
+			}
+
+			env = append(env, credEnv...)
+		}
 	}
 
 	return &container.Config{
@@ -363,7 +394,7 @@ func (rm *RegistryManager) buildContainerConfig(
 		},
 		Labels: labels,
 		Env:    env,
-	}
+	}, nil
 }
 
 // buildHostConfig builds the host configuration including port bindings and mounts.

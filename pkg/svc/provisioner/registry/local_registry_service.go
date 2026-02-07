@@ -340,7 +340,6 @@ func (s *service) listRegistryContainers(
 ) ([]container.Summary, error) {
 	filtersArgs := filters.NewArgs()
 	filtersArgs.Add("name", name)
-	filtersArgs.Add("ancestor", dockerclient.RegistryImageName)
 	filtersArgs.Add("label", fmt.Sprintf("%s=%s", dockerclient.RegistryLabelKey, name))
 
 	containers, err := s.docker.ContainerList(

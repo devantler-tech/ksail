@@ -24,7 +24,7 @@ if: ${{ github.event.workflow_run.conclusion == 'failure' }}
 permissions: read-all
 
 network:
-  allowed: [defaults, go]
+  allowed: [defaults, go, "storage.googleapis.com"]
 
 safe-outputs:
   app:

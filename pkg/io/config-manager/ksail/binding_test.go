@@ -426,3 +426,130 @@ func TestAddFlagsFromFields_GitOpsEngineAcceptsArgoCD(t *testing.T) {
 	require.NoError(t, cmd.Flags().Set("gitops-engine", "ArgoCD"))
 	assert.Equal(t, v1alpha1.GitOpsEngine("ArgoCD"), manager.Config.Spec.Cluster.GitOpsEngine)
 }
+
+func TestAddFlagsFromFields_BoolField(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		defaultValue any
+		setValue     string
+		expected     bool
+	}{
+		{
+			name:         "bool with default false",
+			defaultValue: false,
+			setValue:     "true",
+			expected:     true,
+		},
+		{
+			name:         "bool with default true",
+			defaultValue: true,
+			setValue:     "false",
+			expected:     false,
+		},
+		{
+			name:         "bool with nil default",
+			defaultValue: nil,
+			setValue:     "true",
+			expected:     true,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			selector := newFieldSelector(
+				func(c *v1alpha1.Cluster) any {
+					return &c.Spec.Cluster.Hetzner.PlacementGroupFallbackToNone
+				},
+				testCase.defaultValue,
+				"test bool field",
+			)
+
+			assertFlagRegistered(t, selector, "unknown", "bool", testCase.setValue)
+
+			manager := configmanager.NewConfigManager(io.Discard, selector)
+			cmd := &cobra.Command{Use: "test"}
+			manager.AddFlagsFromFields(cmd)
+
+			require.NoError(t, cmd.Flags().Set("unknown", testCase.setValue))
+			assert.Equal(
+				t, testCase.expected,
+				manager.Config.Spec.Cluster.Hetzner.PlacementGroupFallbackToNone,
+			)
+		})
+	}
+}
+
+func TestAddFlagsFromFields_Int32Field(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		defaultValue any
+		setValue     string
+		expected     int32
+	}{
+		{
+			name:         "int32 with no default",
+			defaultValue: nil,
+			setValue:     "5",
+			expected:     5,
+		},
+		{
+			name:         "int32 with default value",
+			defaultValue: int32(3),
+			setValue:     "7",
+			expected:     7,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			selector := newFieldSelector(
+				func(c *v1alpha1.Cluster) any {
+					return &c.Spec.Cluster.Talos.ControlPlanes
+				},
+				testCase.defaultValue,
+				"Number of control planes",
+			)
+
+			assertFlagRegistered(t, selector, "control-planes", "int32", testCase.setValue)
+
+			manager := configmanager.NewConfigManager(io.Discard, selector)
+			cmd := &cobra.Command{Use: "test"}
+			manager.AddFlagsFromFields(cmd)
+
+			require.NoError(t, cmd.Flags().Set("control-planes", testCase.setValue))
+			assert.Equal(
+				t, testCase.expected,
+				manager.Config.Spec.Cluster.Talos.ControlPlanes,
+			)
+		})
+	}
+}
+
+// assertFlagRegistered verifies that a field selector registers a flag with the expected name and type.
+func assertFlagRegistered(
+	t *testing.T,
+	selector configmanager.FieldSelector[v1alpha1.Cluster],
+	flagName string,
+	expectedType string,
+	setValue string,
+) {
+	t.Helper()
+
+	manager := configmanager.NewConfigManager(io.Discard, selector)
+	cmd := &cobra.Command{Use: "test"}
+	manager.AddFlagsFromFields(cmd)
+
+	flag := cmd.Flags().Lookup(flagName)
+	require.NotNil(t, flag, "flag %q should be registered", flagName)
+	assert.Equal(t, expectedType, flag.Value.Type())
+
+	require.NoError(t, cmd.Flags().Set(flagName, setValue))
+}

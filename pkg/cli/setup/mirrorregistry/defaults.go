@@ -12,11 +12,18 @@ const (
 )
 
 // DefaultMirrors are the default mirror registries applied when no config or flags are provided.
+// These registries are used by KSail's installers:
+//   - docker.io: Calico, Gatekeeper, local-path-provisioner, Hetzner CSI
+//   - ghcr.io: Flux, Kyverno, kubelet-csr-approver, ArgoCD
+//   - quay.io: Cilium, Calico (tigera), ArgoCD, cert-manager
+//   - registry.k8s.io: metrics-server, cloud-provider-kind, CSI sidecars
 //
 //nolint:gochecknoglobals // Exported constant configuration for test access.
 var DefaultMirrors = []string{
 	"docker.io=https://registry-1.docker.io",
 	"ghcr.io=https://ghcr.io",
+	"quay.io=https://quay.io",
+	"registry.k8s.io=https://registry.k8s.io",
 }
 
 // GetMirrorRegistriesWithDefaults returns mirror registries with default values applied.

@@ -115,7 +115,7 @@ func installCalicoCNI(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster, tmr time
 		return err
 	}
 
-	setup.timeout = installer.MaxTimeout(setup.timeout, installer.CalicoInstallTimeout)
+	setup.timeout = max(setup.timeout, installer.CalicoInstallTimeout)
 
 	calicoInst := calicoinstaller.NewCalicoInstallerWithDistribution(
 		setup.helmClient,
