@@ -346,6 +346,32 @@ func InstallLoadBalancerSilent(
 	return nil
 }
 
+// installFromFactory is a shared helper for Install*Silent functions that follow the
+// factory pattern: check factory != nil, create installer, call Install.
+func installFromFactory(
+	ctx context.Context,
+	clusterCfg *v1alpha1.Cluster,
+	factory func(*v1alpha1.Cluster) (installer.Installer, error),
+	nilErr error,
+	componentName string,
+) error {
+	if factory == nil {
+		return nilErr
+	}
+
+	inst, err := factory(clusterCfg)
+	if err != nil {
+		return fmt.Errorf("failed to create %s installer: %w", componentName, err)
+	}
+
+	installErr := inst.Install(ctx)
+	if installErr != nil {
+		return fmt.Errorf("%s installation failed: %w", componentName, installErr)
+	}
+
+	return nil
+}
+
 // InstallKubeletCSRApproverSilent installs kubelet-csr-approver silently for parallel execution.
 // kubelet-csr-approver is required when metrics-server is installed with secure TLS enabled,
 // as it automatically approves kubelet serving certificate CSRs.
@@ -354,21 +380,10 @@ func InstallKubeletCSRApproverSilent(
 	clusterCfg *v1alpha1.Cluster,
 	factories *InstallerFactories,
 ) error {
-	if factories.KubeletCSRApprover == nil {
-		return ErrKubeletCSRApproverInstallerFactoryNil
-	}
-
-	csrApproverInstaller, err := factories.KubeletCSRApprover(clusterCfg)
-	if err != nil {
-		return fmt.Errorf("failed to create kubelet-csr-approver installer: %w", err)
-	}
-
-	installErr := csrApproverInstaller.Install(ctx)
-	if installErr != nil {
-		return fmt.Errorf("kubelet-csr-approver installation failed: %w", installErr)
-	}
-
-	return nil
+	return installFromFactory(
+		ctx, clusterCfg, factories.KubeletCSRApprover,
+		ErrKubeletCSRApproverInstallerFactoryNil, "kubelet-csr-approver",
+	)
 }
 
 // InstallArgoCDSilent installs ArgoCD silently for parallel execution.
@@ -377,21 +392,10 @@ func InstallArgoCDSilent(
 	clusterCfg *v1alpha1.Cluster,
 	factories *InstallerFactories,
 ) error {
-	if factories.ArgoCD == nil {
-		return ErrArgoCDInstallerFactoryNil
-	}
-
-	argoInstaller, err := factories.ArgoCD(clusterCfg)
-	if err != nil {
-		return fmt.Errorf("failed to create argocd installer: %w", err)
-	}
-
-	installErr := argoInstaller.Install(ctx)
-	if installErr != nil {
-		return fmt.Errorf("failed to install argocd: %w", installErr)
-	}
-
-	return nil
+	return installFromFactory(
+		ctx, clusterCfg, factories.ArgoCD,
+		ErrArgoCDInstallerFactoryNil, "argocd",
+	)
 }
 
 // InstallFluxSilent installs Flux silently for parallel execution.
@@ -422,21 +426,10 @@ func InstallCSISilent(
 	clusterCfg *v1alpha1.Cluster,
 	factories *InstallerFactories,
 ) error {
-	if factories.CSI == nil {
-		return ErrCSIInstallerFactoryNil
-	}
-
-	csiInstaller, err := factories.CSI(clusterCfg)
-	if err != nil {
-		return fmt.Errorf("failed to create CSI installer: %w", err)
-	}
-
-	installErr := csiInstaller.Install(ctx)
-	if installErr != nil {
-		return fmt.Errorf("local-path-storage installation failed: %w", installErr)
-	}
-
-	return nil
+	return installFromFactory(
+		ctx, clusterCfg, factories.CSI,
+		ErrCSIInstallerFactoryNil, "CSI",
+	)
 }
 
 // InstallCertManagerSilent installs cert-manager silently for parallel execution.
@@ -445,21 +438,10 @@ func InstallCertManagerSilent(
 	clusterCfg *v1alpha1.Cluster,
 	factories *InstallerFactories,
 ) error {
-	if factories.CertManager == nil {
-		return ErrCertManagerInstallerFactoryNil
-	}
-
-	cmInstaller, err := factories.CertManager(clusterCfg)
-	if err != nil {
-		return fmt.Errorf("failed to create cert-manager installer: %w", err)
-	}
-
-	installErr := cmInstaller.Install(ctx)
-	if installErr != nil {
-		return fmt.Errorf("failed to install cert-manager: %w", installErr)
-	}
-
-	return nil
+	return installFromFactory(
+		ctx, clusterCfg, factories.CertManager,
+		ErrCertManagerInstallerFactoryNil, "cert-manager",
+	)
 }
 
 // InstallPolicyEngineSilent installs the policy engine silently for parallel execution.
@@ -468,21 +450,10 @@ func InstallPolicyEngineSilent(
 	clusterCfg *v1alpha1.Cluster,
 	factories *InstallerFactories,
 ) error {
-	if factories.PolicyEngine == nil {
-		return ErrPolicyEngineInstallerFactoryNil
-	}
-
-	peInstaller, err := factories.PolicyEngine(clusterCfg)
-	if err != nil {
-		return fmt.Errorf("failed to create policy engine installer: %w", err)
-	}
-
-	installErr := peInstaller.Install(ctx)
-	if installErr != nil {
-		return fmt.Errorf("failed to install policy engine: %w", installErr)
-	}
-
-	return nil
+	return installFromFactory(
+		ctx, clusterCfg, factories.PolicyEngine,
+		ErrPolicyEngineInstallerFactoryNil, "policy-engine",
+	)
 }
 
 // EnsureArgoCDResources configures default Argo CD resources post-install.
