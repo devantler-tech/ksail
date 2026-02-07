@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	clustererrors "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/errors"
@@ -168,44 +169,88 @@ func (p *TalosProvisioner) applyNodeScalingChanges(
 
 // applyInPlaceConfigChanges applies configuration changes that don't require reboots.
 // Uses ApplyConfiguration with NO_REBOOT mode for Talos-supported fields.
+// Control-plane nodes receive the ControlPlane() config and worker nodes receive the Worker() config.
 func (p *TalosProvisioner) applyInPlaceConfigChanges(
 	ctx context.Context,
 	clusterName string,
-	_ *types.UpdateResult,
+	result *types.UpdateResult,
 ) error {
 	if p.talosConfigs == nil {
 		return nil
 	}
 
-	// Get node IPs from the cluster
-	nodeIPs, err := p.getNodeIPs(ctx, clusterName)
+	// Get nodes with role information from the cluster
+	nodes, err := p.getNodesByRole(ctx, clusterName)
 	if err != nil {
-		return fmt.Errorf("failed to get node IPs: %w", err)
+		return fmt.Errorf("failed to get nodes: %w", err)
 	}
 
-	if len(nodeIPs) == 0 {
+	if len(nodes) == 0 {
 		_, _ = fmt.Fprintf(p.logWriter, "  No nodes found for cluster %s\n", clusterName)
 
 		return nil
 	}
 
-	// Apply config to each node with NO_REBOOT mode
-	for _, nodeIP := range nodeIPs {
-		err := p.applyConfigWithMode(
-			ctx,
-			nodeIP,
-			p.talosConfigs.ControlPlane(),
-			machineapi.ApplyConfigurationRequest_NO_REBOOT,
-		)
-		if err != nil {
-			_, _ = fmt.Fprintf(p.logWriter, "  ⚠ Failed to apply config to %s: %v\n", nodeIP, err)
-			// Continue with other nodes
-		} else {
-			_, _ = fmt.Fprintf(p.logWriter, "  ✓ Config applied to %s (no reboot)\n", nodeIP)
+	// Apply the appropriate config to each node based on its role
+	for _, node := range nodes {
+		config := p.talosConfigs.ControlPlane()
+		if node.Role == "worker" {
+			config = p.talosConfigs.Worker()
 		}
+
+		if config == nil {
+			_, _ = fmt.Fprintf(
+				p.logWriter, "  ⚠ No config available for %s node %s\n",
+				node.Role, node.IP,
+			)
+
+			continue
+		}
+
+		p.applyNodeConfig(ctx, node, config, result)
 	}
 
 	return nil
+}
+
+// applyNodeConfig applies the appropriate config to a single node and records the result.
+func (p *TalosProvisioner) applyNodeConfig(
+	ctx context.Context,
+	node nodeWithRole,
+	config talosconfig.Provider,
+	result *types.UpdateResult,
+) {
+	err := p.applyConfigWithMode(
+		ctx,
+		node.IP,
+		config,
+		machineapi.ApplyConfigurationRequest_NO_REBOOT,
+	)
+	if err != nil {
+		_, _ = fmt.Fprintf(
+			p.logWriter, "  ⚠ Failed to apply config to %s (%s): %v\n",
+			node.IP, node.Role, err,
+		)
+
+		result.FailedChanges = append(result.FailedChanges, types.Change{
+			Field:    "talos.config",
+			NewValue: node.IP,
+			Category: types.ChangeCategoryInPlace,
+			Reason:   fmt.Sprintf("failed to apply %s config: %v", node.Role, err),
+		})
+	} else {
+		_, _ = fmt.Fprintf(
+			p.logWriter, "  ✓ Config applied to %s (%s, no reboot)\n",
+			node.IP, node.Role,
+		)
+
+		result.AppliedChanges = append(result.AppliedChanges, types.Change{
+			Field:    "talos.config",
+			NewValue: node.IP,
+			Category: types.ChangeCategoryInPlace,
+			Reason:   node.Role + " config applied successfully",
+		})
+	}
 }
 
 // applyRebootRequiredChanges applies changes that require node reboots.
@@ -298,31 +343,47 @@ func (p *TalosProvisioner) createTalosClient(
 	return nil, clustererrors.ErrTalosConfigRequired
 }
 
-// getNodeIPs returns the IPs of all nodes in the cluster.
-func (p *TalosProvisioner) getNodeIPs(ctx context.Context, clusterName string) ([]string, error) {
-	// For Docker provider, get IPs from Docker containers
-	if p.dockerClient != nil {
-		return p.getDockerNodeIPs(ctx, clusterName)
-	}
-
-	// For Hetzner provider, get IPs from Hetzner API
-	if p.infraProvider != nil {
-		return p.getHetznerNodeIPs(ctx, clusterName)
-	}
-
-	return nil, clustererrors.ErrNoProviderConfigured
+// nodeWithRole holds an IP address and its role for role-aware config application.
+type nodeWithRole struct {
+	IP   string
+	Role string // "control-plane" or "worker"
 }
 
-// getDockerNodeIPs gets node IPs from Docker containers.
-func (p *TalosProvisioner) getDockerNodeIPs(
+// getNodesByRole returns nodes with their roles for the cluster.
+func (p *TalosProvisioner) getNodesByRole(
 	ctx context.Context,
 	clusterName string,
-) ([]string, error) {
+) ([]nodeWithRole, error) {
+	if p.dockerClient != nil {
+		return p.getDockerNodesByRole(ctx, clusterName)
+	}
+
+	// For Hetzner, fall back to treating all nodes as control-plane (no role info yet)
+	ips, err := p.getHetznerNodeIPs(ctx, clusterName)
+	if err != nil {
+		return nil, err
+	}
+
+	nodes := make([]nodeWithRole, 0, len(ips))
+
+	for _, ip := range ips {
+		nodes = append(nodes, nodeWithRole{IP: ip, Role: "control-plane"})
+	}
+
+	return nodes, nil
+}
+
+// getDockerNodesByRole gets node IPs and roles from Docker containers.
+// Role is inferred from container names: names containing "controlplane" are control-plane nodes,
+// all others are workers.
+func (p *TalosProvisioner) getDockerNodesByRole(
+	ctx context.Context,
+	clusterName string,
+) ([]nodeWithRole, error) {
 	if p.dockerClient == nil {
 		return nil, clustererrors.ErrDockerClientNotConfigured
 	}
 
-	// List containers with the Talos cluster label
 	containers, err := p.dockerClient.ContainerList(ctx, container.ListOptions{
 		Filters: filters.NewArgs(
 			filters.Arg("label", LabelTalosClusterName+"="+clusterName),
@@ -332,19 +393,32 @@ func (p *TalosProvisioner) getDockerNodeIPs(
 		return nil, fmt.Errorf("failed to list containers: %w", err)
 	}
 
-	ips := make([]string, 0, len(containers))
+	nodes := make([]nodeWithRole, 0, len(containers))
 
-	for _, c := range containers {
-		for _, network := range c.NetworkSettings.Networks {
+	for _, ctr := range containers {
+		role := "worker"
+
+		for _, name := range ctr.Names {
+			if strings.Contains(name, "controlplane") {
+				role = "control-plane"
+
+				break
+			}
+		}
+
+		for _, network := range ctr.NetworkSettings.Networks {
 			if network.IPAddress != "" {
-				ips = append(ips, network.IPAddress)
+				nodes = append(nodes, nodeWithRole{
+					IP:   network.IPAddress,
+					Role: role,
+				})
 
 				break
 			}
 		}
 	}
 
-	return ips, nil
+	return nodes, nil
 }
 
 // getHetznerNodeIPs gets node IPs from Hetzner servers.

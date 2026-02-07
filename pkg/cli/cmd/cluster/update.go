@@ -124,6 +124,13 @@ func handleUpdateRunE(
 
 // createAndVerifyProvisioner creates a provisioner and verifies the cluster exists.
 //
+// NOTE(limitation): If the user changes distribution in ksail.yaml (e.g., Kind → Talos), this
+// creates a provisioner for the NEW distribution whose Exists() check won't find
+// the old cluster, reporting "cluster does not exist" rather than detecting a
+// distribution change. A proper fix would probe all provisioners for an existing
+// cluster of any distribution. For now, users must run 'ksail cluster delete'
+// before switching distributions.
+//
 //nolint:ireturn // caller needs interface for type assertion
 func createAndVerifyProvisioner(
 	cmd *cobra.Command,

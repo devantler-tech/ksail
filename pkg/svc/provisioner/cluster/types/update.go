@@ -207,7 +207,7 @@ func PrepareUpdate(
 	result := NewUpdateResultFromDiff(diff)
 
 	if diff.HasRecreateRequired() {
-		return result, false, fmt.Errorf("%w: %d changes require restart",
+		return result, false, fmt.Errorf("%w: %d changes require recreation",
 			recreateErr, len(diff.RecreateRequired))
 	}
 

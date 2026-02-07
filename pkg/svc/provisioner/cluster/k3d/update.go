@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -271,10 +272,14 @@ func (k *K3dClusterProvisioner) listClusterNodes(
 	// Temporarily redirect os.Stdout to capture K3d's direct writes.
 	// K3d's node list --output json writes to os.Stdout directly,
 	// bypassing Cobra's cmd.OutOrStdout().
+	listMutex.Lock()
+
 	origStdout := os.Stdout
 
 	pipeReader, pipeWriter, err := os.Pipe()
 	if err != nil {
+		listMutex.Unlock()
+
 		return nil, fmt.Errorf("failed to create pipe: %w", err)
 	}
 
@@ -290,6 +295,8 @@ func (k *K3dClusterProvisioner) listClusterNodes(
 
 	os.Stdout = origStdout
 
+	listMutex.Unlock()
+
 	var buf bytes.Buffer
 
 	_, _ = io.Copy(&buf, pipeReader)
@@ -299,7 +306,11 @@ func (k *K3dClusterProvisioner) listClusterNodes(
 		return nil, fmt.Errorf("failed to list nodes: %w", runErr)
 	}
 
-	output := strings.TrimSpace(buf.String())
+	return parseClusterNodes(strings.TrimSpace(buf.String()), clusterName)
+}
+
+// parseClusterNodes parses JSON node list output and filters to cluster-specific nodes.
+func parseClusterNodes(output, clusterName string) ([]k3dNodeInfo, error) {
 	if output == "" {
 		return nil, nil
 	}
@@ -310,7 +321,7 @@ func (k *K3dClusterProvisioner) listClusterNodes(
 		Labels map[string]string `json:"labels"`
 	}
 
-	err = json.Unmarshal([]byte(output), &allNodes)
+	err := json.Unmarshal([]byte(output), &allNodes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse node list: %w", err)
 	}
@@ -350,11 +361,14 @@ func (k *K3dClusterProvisioner) listAgentNodes(
 		}
 	}
 
+	slices.Sort(agents)
+
 	return agents, nil
 }
 
 // nextAgentIndex calculates the next agent index for naming.
-// It accounts for existing nodes and the offset of nodes being added in the current batch.
+// It finds the maximum existing agent index to avoid naming collisions when there
+// are gaps in the index sequence, then adds 1 plus the batch offset.
 func (k *K3dClusterProvisioner) nextAgentIndex(
 	ctx context.Context,
 	clusterName string,
@@ -365,7 +379,26 @@ func (k *K3dClusterProvisioner) nextAgentIndex(
 		return batchOffset
 	}
 
-	return len(agents) + batchOffset
+	if len(agents) == 0 {
+		return batchOffset
+	}
+
+	maxIndex := -1
+	prefix := fmt.Sprintf("k3d-%s-agent-", clusterName)
+
+	for _, name := range agents {
+		idx, found := strings.CutPrefix(name, prefix)
+		if !found {
+			continue
+		}
+
+		n, parseErr := strconv.Atoi(idx)
+		if parseErr == nil && n > maxIndex {
+			maxIndex = n
+		}
+	}
+
+	return maxIndex + 1 + batchOffset
 }
 
 // GetCurrentConfig retrieves the current cluster configuration.

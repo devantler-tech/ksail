@@ -116,7 +116,7 @@ Use `ksail cluster update --force` or `ksail cluster delete && ksail cluster cre
 
 It depends on the distribution:
 
-- **Talos** - Yes, both control-plane and worker nodes can be scaled via `ksail cluster update`
+- **Talos** - Not yet implemented. Node scaling support is planned but currently returns an error
 - **K3s (K3d)** - Yes, worker (agent) nodes can be added/removed. Server (control-plane) scaling requires recreation
 - **Vanilla (Kind)** - No, Kind does not support node changes after creation. Requires recreation
 
