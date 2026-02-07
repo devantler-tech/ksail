@@ -112,8 +112,6 @@ func CleanupRegistries(
 
 // prepareRegistryContext sets up the registry manager and resolves the network name.
 // Returns nil manager if no registries are configured.
-//
-//nolint:ireturn // returns registry.Backend interface for dependency injection
 func prepareRegistryContext(
 	ctx context.Context,
 	simpleCfg *k3dv1alpha5.SimpleConfig,
@@ -139,7 +137,6 @@ func prepareRegistryContext(
 	return registryMgr, registryInfos, networkName, nil
 }
 
-//nolint:ireturn // returns registry.Backend interface for dependency injection
 func setupRegistryManager(
 	ctx context.Context,
 	simpleCfg *k3dv1alpha5.SimpleConfig,

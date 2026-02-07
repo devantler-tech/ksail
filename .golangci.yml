@@ -89,6 +89,9 @@ linters:
           - ireturn
         path: pkg/svc/reconciler/base.go
       - linters:
+          - ireturn
+        path: pkg/svc/provisioner/cluster/k3d/registry.go
+      - linters:
           - paralleltest
         path: pkg/cli/cmd/cipher/import_test.go
       # Chat package exclusions - legitimate CLI tool behavior
