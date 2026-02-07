@@ -7,11 +7,11 @@ KSail supports multiple Kubernetes distributions, providers, and components. Thi
 
 ## Distribution × Provider Matrix
 
-| Distribution | Docker | Hetzner |
-|--------------|--------|---------|
-| Vanilla (Kind) | ✅ | ❌ |
-| K3s (K3d) | ✅ | ❌ |
-| Talos | ✅ | ✅ |
+| Distribution   | Docker | Hetzner |
+| -------------- | ------ | ------- |
+| Vanilla (Kind) | ✅     | ❌      |
+| K3s (K3d)      | ✅     | ❌      |
+| Talos          | ✅     | ✅      |
 
 **Notes:**
 
@@ -20,27 +20,27 @@ KSail supports multiple Kubernetes distributions, providers, and components. Thi
 
 ## Component × Distribution Matrix
 
-| Component | Vanilla | K3s | Talos |
-|-----------|---------|-----|-------|
-| **CNI** |
-| Cilium | ✅ | ✅ | ✅ |
-| Calico | ✅ | ✅ | ✅ |
-| **CSI** |
-| Local Path Provisioner | ✅ | Built-in | ✅ (Docker) |
-| Hetzner CSI Driver | ❌ | ❌ | ✅ (Hetzner) |
-| **GitOps** |
-| Flux | ✅ | ✅ | ✅ |
-| ArgoCD | ✅ | ✅ | ✅ |
-| **Observability** |
-| Metrics Server | ✅ | Built-in | ✅ |
-| **Security** |
-| cert-manager | ✅ | ✅ | ✅ |
-| Kyverno | ✅ | ✅ | ✅ |
-| Gatekeeper | ✅ | ✅ | ✅ |
-| **Registry** |
-| Local Registry | ✅ | ✅ | ✅ |
-| Mirror Registries | ✅ | ✅ | ✅ |
-| External Registries with Auth | ✅ | ✅ | ✅ |
+| Component                     | Vanilla | K3s      | Talos        |
+| ----------------------------- | ------- | -------- | ------------ |
+| **CNI**                       |
+| Cilium                        | ✅      | ✅       | ✅           |
+| Calico                        | ✅      | ✅       | ✅           |
+| **CSI**                       |
+| Local Path Provisioner        | ✅      | Built-in | ✅ (Docker)  |
+| Hetzner CSI Driver            | ❌      | ❌       | ✅ (Hetzner) |
+| **GitOps**                    |
+| Flux                          | ✅      | ✅       | ✅           |
+| ArgoCD                        | ✅      | ✅       | ✅           |
+| **Observability**             |
+| Metrics Server                | ✅      | Built-in | ✅           |
+| **Security**                  |
+| cert-manager                  | ✅      | ✅       | ✅           |
+| Kyverno                       | ✅      | ✅       | ✅           |
+| Gatekeeper                    | ✅      | ✅       | ✅           |
+| **Registry**                  |
+| Local Registry                | ✅      | ✅       | ✅           |
+| Mirror Registries             | ✅      | ✅       | ✅           |
+| External Registries with Auth | ✅      | ✅       | ✅           |
 
 **Notes:**
 
@@ -50,14 +50,14 @@ KSail supports multiple Kubernetes distributions, providers, and components. Thi
 
 ## Secret Management × Provider Matrix
 
-| Provider | Encryption | Decryption | Edit |
-|----------|------------|------------|------|
-| age | ✅ | ✅ | ✅ |
-| PGP | ✅ | ✅ | ✅ |
-| AWS KMS | ✅ | ✅ | ✅ |
-| GCP KMS | ✅ | ✅ | ✅ |
-| Azure Key Vault | ✅ | ✅ | ✅ |
-| HashiCorp Vault | ✅ | ✅ | ✅ |
+| Provider        | Encryption | Decryption | Edit |
+| --------------- | ---------- | ---------- | ---- |
+| age             | ✅         | ✅         | ✅   |
+| PGP             | ✅         | ✅         | ✅   |
+| AWS KMS         | ✅         | ✅         | ✅   |
+| GCP KMS         | ✅         | ✅         | ✅   |
+| Azure Key Vault | ✅         | ✅         | ✅   |
+| HashiCorp Vault | ✅         | ✅         | ✅   |
 
 **Notes:**
 
@@ -66,45 +66,77 @@ KSail supports multiple Kubernetes distributions, providers, and components. Thi
 
 ## CLI Commands
 
-| Command Group | Commands Available |
-|---------------|-------------------|
-| `ksail cluster` | `init`, `create`, `delete`, `start`, `stop`, `info`, `list`, `connect` |
+| Command Group    | Commands Available                                                                                                                  |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `ksail cluster`  | `init`, `create`, `update`, `delete`, `start`, `stop`, `info`, `list`, `connect`                                                    |
 | `ksail workload` | `apply`, `get`, `describe`, `logs`, `exec`, `gen`, `validate`, `install`, `scale`, `rollout`, `wait`, `push`, `reconcile`, `create` |
-| `ksail cipher` | `encrypt`, `decrypt`, `edit`, `import` |
+| `ksail cipher`   | `encrypt`, `decrypt`, `edit`, `import`                                                                                              |
+
+## Update Behavior
+
+The `ksail cluster update` command applies configuration changes to a running cluster.
+Changes are classified by impact: **in-place** (no disruption), **reboot-required** (node restart needed), or **recreate-required** (full cluster recreation).
+
+| Change                   | Vanilla (Kind) | K3s (K3d) | Talos    |
+| ------------------------ | -------------- | --------- | -------- |
+| Distribution             | Recreate       | Recreate  | Recreate |
+| Provider                 | Recreate       | Recreate  | Recreate |
+| CNI                      | In-place       | In-place  | In-place |
+| CSI                      | In-place       | In-place  | In-place |
+| Metrics Server           | In-place       | In-place  | In-place |
+| Load Balancer            | In-place       | In-place  | In-place |
+| cert-manager             | In-place       | In-place  | In-place |
+| Policy Engine            | In-place       | In-place  | In-place |
+| GitOps Engine            | In-place       | In-place  | In-place |
+| Local Registry           | Recreate       | In-place  | In-place |
+| Mirrors Dir              | Recreate       | N/A       | N/A      |
+| Control Planes           | Recreate       | Recreate  | In-place |
+| Workers                  | Recreate       | In-place  | In-place |
+| Hetzner Server Type (CP) | N/A            | N/A       | Recreate |
+| Hetzner Location         | N/A            | N/A       | Recreate |
+| Hetzner Network          | N/A            | N/A       | Recreate |
+
+**Notes:**
+
+- "In-place" changes are applied without cluster downtime via Helm or provider APIs
+- "Recreate" changes require `ksail cluster delete && ksail cluster create` or `ksail cluster update --force`
+- Use `ksail cluster update --dry-run` to preview changes before applying
+- Talos supports the broadest set of in-place updates, including node scaling
+- Kind does not support any structural node changes after creation
 
 ## Platform Requirements
 
-| Requirement | Minimum | Recommended |
-|-------------|---------|-------------|
-| Docker | Docker Desktop 4.x or Docker Engine 24.x | Latest stable |
-| RAM | 4 GB | 8 GB+ |
-| CPU | 2 cores | 4 cores+ |
-| Disk | 10 GB | 20 GB+ |
+| Requirement | Minimum                                  | Recommended   |
+| ----------- | ---------------------------------------- | ------------- |
+| Docker      | Docker Desktop 4.x or Docker Engine 24.x | Latest stable |
+| RAM         | 4 GB                                     | 8 GB+         |
+| CPU         | 2 cores                                  | 4 cores+      |
+| Disk        | 10 GB                                    | 20 GB+        |
 
 **Operating System Support:**
 
-| OS | Support |
-|----|---------|
-| macOS (Intel) | ✅ |
-| macOS (Apple Silicon) | ✅ |
-| Linux (x86_64) | ✅ |
-| Linux (arm64) | ✅ |
-| Windows (WSL2) | ✅ |
-| Windows (native) | ❌ |
+| OS                    | Support |
+| --------------------- | ------- |
+| macOS (Intel)         | ✅      |
+| macOS (Apple Silicon) | ✅      |
+| Linux (x86_64)        | ✅      |
+| Linux (arm64)         | ✅      |
+| Windows (WSL2)        | ✅      |
+| Windows (native)      | ❌      |
 
 ## Version Compatibility
 
 KSail embeds specific versions of Kubernetes tooling:
 
-| Tool | Embedded Version | Purpose |
-|------|------------------|---------|
-| kubectl | Latest | Kubernetes CLI |
-| Helm | v4 (with kstatus) | Package manager |
-| Kind | Latest | Vanilla clusters |
-| K3d | Latest | K3s clusters |
-| Flux | Latest | GitOps toolkit |
-| ArgoCD | Latest | GitOps continuous delivery |
-| SOPS | Latest | Secret encryption |
+| Tool    | Embedded Version  | Purpose                    |
+| ------- | ----------------- | -------------------------- |
+| kubectl | Latest            | Kubernetes CLI             |
+| Helm    | v4 (with kstatus) | Package manager            |
+| Kind    | Latest            | Vanilla clusters           |
+| K3d     | Latest            | K3s clusters               |
+| Flux    | Latest            | GitOps toolkit             |
+| ArgoCD  | Latest            | GitOps continuous delivery |
+| SOPS    | Latest            | Secret encryption          |
 
 **Notes:**
 
