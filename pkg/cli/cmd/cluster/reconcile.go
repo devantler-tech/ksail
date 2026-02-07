@@ -2,6 +2,7 @@ package cluster
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -14,6 +15,11 @@ import (
 
 // defaultReconcileTimeout is the default timeout for component reconciliation operations.
 const defaultReconcileTimeout = 5 * time.Minute
+
+// errMetricsServerDisableUnsupported is returned when attempting to disable metrics-server in-place.
+var errMetricsServerDisableUnsupported = errors.New(
+	"disabling metrics-server in-place is not yet supported; use 'ksail cluster delete && ksail cluster create'",
+)
 
 // componentReconciler applies component-level changes detected by the DiffEngine.
 // It maps field names from the diff to installer Install/Uninstall operations.
@@ -144,7 +150,7 @@ func (r *componentReconciler) reconcileMetricsServer(
 	newValue := v1alpha1.MetricsServer(change.NewValue)
 
 	if newValue == v1alpha1.MetricsServerDisabled {
-		return fmt.Errorf("disabling metrics-server in-place is not yet supported; use 'ksail cluster delete && ksail cluster create'")
+		return errMetricsServerDisableUnsupported
 	}
 
 	if setup.NeedsMetricsServerInstall(r.clusterCfg) {
