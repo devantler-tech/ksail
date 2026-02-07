@@ -30,7 +30,7 @@ func (e *DiffEngine) ComputeDiff(oldSpec, newSpec *v1alpha1.ClusterSpec) *types.
 	}
 
 	// Check simple scalar fields via table-driven rules
-	e.applyFieldRules(oldSpec, newSpec, result)
+	e.applyFieldRules(oldSpec, newSpec, result, scalarFieldRules())
 
 	// Check complex / distribution-specific changes
 	e.checkLocalRegistryChange(oldSpec, newSpec, result)
@@ -111,12 +111,13 @@ func scalarFieldRules() []fieldRule {
 	}
 }
 
-// applyFieldRules evaluates each scalar field rule and appends changes to the result.
+// applyFieldRules evaluates each field rule and appends changes to the result.
 func (e *DiffEngine) applyFieldRules(
 	oldSpec, newSpec *v1alpha1.ClusterSpec,
 	result *types.UpdateResult,
+	rules []fieldRule,
 ) {
-	for _, rule := range scalarFieldRules() {
+	for _, rule := range rules {
 		oldVal := rule.getVal(oldSpec)
 		newVal := rule.getVal(newSpec)
 
@@ -210,43 +211,34 @@ func (e *DiffEngine) checkTalosOptionsChange(
 		return
 	}
 
-	// Control plane count change - can scale via provider
-	if oldSpec.Talos.ControlPlanes != newSpec.Talos.ControlPlanes {
-		result.InPlaceChanges = append(result.InPlaceChanges, types.Change{
-			Field:    "cluster.talos.controlPlanes",
-			OldValue: strconv.Itoa(int(oldSpec.Talos.ControlPlanes)),
-			NewValue: strconv.Itoa(int(newSpec.Talos.ControlPlanes)),
-			Category: types.ChangeCategoryInPlace,
-			Reason:   "Talos supports adding/removing control-plane nodes via provider",
-		})
-	}
+	e.applyFieldRules(oldSpec, newSpec, result, talosFieldRules())
+}
 
-	// Worker count change - can scale via provider
-	if oldSpec.Talos.Workers != newSpec.Talos.Workers {
-		result.InPlaceChanges = append(result.InPlaceChanges, types.Change{
-			Field:    "cluster.talos.workers",
-			OldValue: strconv.Itoa(int(oldSpec.Talos.Workers)),
-			NewValue: strconv.Itoa(int(newSpec.Talos.Workers)),
-			Category: types.ChangeCategoryInPlace,
-			Reason:   "Talos supports adding/removing worker nodes via provider",
-		})
-	}
-
-	// ISO change doesn't affect existing nodes, only new ones
-	if oldSpec.Talos.ISO != newSpec.Talos.ISO {
-		result.InPlaceChanges = append(result.InPlaceChanges, types.Change{
-			Field:    "cluster.talos.iso",
-			OldValue: strconv.FormatInt(oldSpec.Talos.ISO, 10),
-			NewValue: strconv.FormatInt(newSpec.Talos.ISO, 10),
-			Category: types.ChangeCategoryInPlace,
-			Reason:   "ISO change only affects newly provisioned nodes",
-		})
+// talosFieldRules returns the Talos-specific scalar field diff rules.
+func talosFieldRules() []fieldRule {
+	return []fieldRule{
+		{
+			field:    "cluster.talos.controlPlanes",
+			category: types.ChangeCategoryInPlace,
+			reason:   "Talos supports adding/removing control-plane nodes via provider",
+			getVal:   func(s *v1alpha1.ClusterSpec) string { return strconv.Itoa(int(s.Talos.ControlPlanes)) },
+		},
+		{
+			field:    "cluster.talos.workers",
+			category: types.ChangeCategoryInPlace,
+			reason:   "Talos supports adding/removing worker nodes via provider",
+			getVal:   func(s *v1alpha1.ClusterSpec) string { return strconv.Itoa(int(s.Talos.Workers)) },
+		},
+		{
+			field:    "cluster.talos.iso",
+			category: types.ChangeCategoryInPlace,
+			reason:   "ISO change only affects newly provisioned nodes",
+			getVal:   func(s *v1alpha1.ClusterSpec) string { return strconv.FormatInt(s.Talos.ISO, 10) },
+		},
 	}
 }
 
 // checkHetznerOptionsChange checks Hetzner-specific option changes.
-//
-//nolint:funlen // Multiple Hetzner options need to be checked sequentially
 func (e *DiffEngine) checkHetznerOptionsChange(
 	oldSpec, newSpec *v1alpha1.ClusterSpec,
 	result *types.UpdateResult,
@@ -255,69 +247,47 @@ func (e *DiffEngine) checkHetznerOptionsChange(
 		return
 	}
 
-	// Server type changes require node replacement
-	if oldSpec.Hetzner.ControlPlaneServerType != newSpec.Hetzner.ControlPlaneServerType {
-		result.RecreateRequired = append(result.RecreateRequired, types.Change{
-			Field:    "cluster.hetzner.controlPlaneServerType",
-			OldValue: oldSpec.Hetzner.ControlPlaneServerType,
-			NewValue: newSpec.Hetzner.ControlPlaneServerType,
-			Category: types.ChangeCategoryRecreateRequired,
-			Reason:   "existing control-plane servers cannot change VM type",
-		})
-	}
+	e.applyFieldRules(oldSpec, newSpec, result, hetznerFieldRules())
+}
 
-	// Worker server type - new workers use new type, existing keep old
-	if oldSpec.Hetzner.WorkerServerType != newSpec.Hetzner.WorkerServerType {
-		result.InPlaceChanges = append(result.InPlaceChanges, types.Change{
-			Field:    "cluster.hetzner.workerServerType",
-			OldValue: oldSpec.Hetzner.WorkerServerType,
-			NewValue: newSpec.Hetzner.WorkerServerType,
-			Category: types.ChangeCategoryInPlace,
-			Reason:   "new worker servers will use the new type; existing workers unchanged",
-		})
-	}
-
-	// Location change requires full recreate
-	if oldSpec.Hetzner.Location != newSpec.Hetzner.Location {
-		result.RecreateRequired = append(result.RecreateRequired, types.Change{
-			Field:    "cluster.hetzner.location",
-			OldValue: oldSpec.Hetzner.Location,
-			NewValue: newSpec.Hetzner.Location,
-			Category: types.ChangeCategoryRecreateRequired,
-			Reason:   "datacenter location cannot be changed for existing servers",
-		})
-	}
-
-	// Network name change requires recreate
-	if oldSpec.Hetzner.NetworkName != newSpec.Hetzner.NetworkName {
-		result.RecreateRequired = append(result.RecreateRequired, types.Change{
-			Field:    "cluster.hetzner.networkName",
-			OldValue: oldSpec.Hetzner.NetworkName,
-			NewValue: newSpec.Hetzner.NetworkName,
-			Category: types.ChangeCategoryRecreateRequired,
-			Reason:   "cannot migrate servers between networks",
-		})
-	}
-
-	// Network CIDR change requires recreate
-	if oldSpec.Hetzner.NetworkCIDR != newSpec.Hetzner.NetworkCIDR {
-		result.RecreateRequired = append(result.RecreateRequired, types.Change{
-			Field:    "cluster.hetzner.networkCidr",
-			OldValue: oldSpec.Hetzner.NetworkCIDR,
-			NewValue: newSpec.Hetzner.NetworkCIDR,
-			Category: types.ChangeCategoryRecreateRequired,
-			Reason:   "network CIDR change requires PKI regeneration",
-		})
-	}
-
-	// SSH key change only affects new servers
-	if oldSpec.Hetzner.SSHKeyName != newSpec.Hetzner.SSHKeyName {
-		result.InPlaceChanges = append(result.InPlaceChanges, types.Change{
-			Field:    "cluster.hetzner.sshKeyName",
-			OldValue: oldSpec.Hetzner.SSHKeyName,
-			NewValue: newSpec.Hetzner.SSHKeyName,
-			Category: types.ChangeCategoryInPlace,
-			Reason:   "SSH key change only affects newly provisioned servers",
-		})
+// hetznerFieldRules returns the Hetzner-specific scalar field diff rules.
+func hetznerFieldRules() []fieldRule {
+	return []fieldRule{
+		{
+			field:    "cluster.hetzner.controlPlaneServerType",
+			category: types.ChangeCategoryRecreateRequired,
+			reason:   "existing control-plane servers cannot change VM type",
+			getVal:   func(s *v1alpha1.ClusterSpec) string { return s.Hetzner.ControlPlaneServerType },
+		},
+		{
+			field:    "cluster.hetzner.workerServerType",
+			category: types.ChangeCategoryInPlace,
+			reason:   "new worker servers will use the new type; existing workers unchanged",
+			getVal:   func(s *v1alpha1.ClusterSpec) string { return s.Hetzner.WorkerServerType },
+		},
+		{
+			field:    "cluster.hetzner.location",
+			category: types.ChangeCategoryRecreateRequired,
+			reason:   "datacenter location cannot be changed for existing servers",
+			getVal:   func(s *v1alpha1.ClusterSpec) string { return s.Hetzner.Location },
+		},
+		{
+			field:    "cluster.hetzner.networkName",
+			category: types.ChangeCategoryRecreateRequired,
+			reason:   "cannot migrate servers between networks",
+			getVal:   func(s *v1alpha1.ClusterSpec) string { return s.Hetzner.NetworkName },
+		},
+		{
+			field:    "cluster.hetzner.networkCidr",
+			category: types.ChangeCategoryRecreateRequired,
+			reason:   "network CIDR change requires PKI regeneration",
+			getVal:   func(s *v1alpha1.ClusterSpec) string { return s.Hetzner.NetworkCIDR },
+		},
+		{
+			field:    "cluster.hetzner.sshKeyName",
+			category: types.ChangeCategoryInPlace,
+			reason:   "SSH key change only affects newly provisioned servers",
+			getVal:   func(s *v1alpha1.ClusterSpec) string { return s.Hetzner.SSHKeyName },
+		},
 	}
 }
