@@ -44,9 +44,9 @@ func (k *KindClusterProvisioner) DiffConfig(
 	_ string,
 	oldSpec, newSpec *v1alpha1.ClusterSpec,
 ) (*types.UpdateResult, error) {
-	result := types.NewEmptyUpdateResult()
-
-	if oldSpec == nil || newSpec == nil {
+	// Kind clusters require recreation for most structural changes.
+	result, ok := types.NewDiffResult(oldSpec, newSpec)
+	if !ok {
 		return result, nil
 	}
 

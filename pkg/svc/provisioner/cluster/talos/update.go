@@ -64,9 +64,9 @@ func (p *TalosProvisioner) DiffConfig(
 	_ string,
 	oldSpec, newSpec *v1alpha1.ClusterSpec,
 ) (*types.UpdateResult, error) {
-	result := types.NewEmptyUpdateResult()
-
-	if oldSpec == nil || newSpec == nil {
+	// Talos clusters support in-place changes for most config paths.
+	result, ok := types.NewDiffResult(oldSpec, newSpec)
+	if !ok {
 		return result, nil
 	}
 

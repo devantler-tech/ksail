@@ -106,6 +106,15 @@ func NewEmptyUpdateResult() *UpdateResult {
 	}
 }
 
+// NewDiffResult creates an initialized UpdateResult for DiffConfig methods and
+// reports whether both specs are non-nil. Callers should return early with the
+// result when ok is false.
+func NewDiffResult(
+	oldSpec, newSpec *v1alpha1.ClusterSpec,
+) (*UpdateResult, bool) {
+	return NewEmptyUpdateResult(), oldSpec != nil && newSpec != nil
+}
+
 // NewUpdateResultFromDiff creates an UpdateResult seeded with diff classification data
 // and initialized applied/failed slices for tracking execution outcomes.
 func NewUpdateResultFromDiff(diff *UpdateResult) *UpdateResult {
