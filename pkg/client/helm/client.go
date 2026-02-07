@@ -524,8 +524,8 @@ func downloadRepositoryIndex(ctx context.Context, chartRepository *repov1.ChartR
 			lastErr = fmt.Errorf("failed to download repository index file: %w", err)
 		}
 
-		// Check if this is a retryable transient HTTP error (5xx)
-		if !isRetryableHTTPError(lastErr) || attempt == repoIndexMaxRetries {
+		// Check if this is a retryable transient network error
+		if !isRetryableNetworkError(lastErr) || attempt == repoIndexMaxRetries {
 			break
 		}
 
@@ -546,24 +546,34 @@ func downloadRepositoryIndex(ctx context.Context, chartRepository *repov1.ChartR
 	return lastErr
 }
 
-// isRetryableHTTPError returns true if the error indicates a transient HTTP error
-// that should be retried (5xx status codes).
-func isRetryableHTTPError(err error) bool {
+// isRetryableNetworkError returns true if the error indicates a transient network error
+// that should be retried. This covers HTTP 5xx status codes and TCP-level errors
+// such as connection resets, timeouts, and unexpected EOF.
+func isRetryableNetworkError(err error) bool {
 	if err == nil {
 		return false
 	}
 
 	errMsg := err.Error()
 
-	// Check for common 5xx error status codes in error messages
-	return strings.Contains(errMsg, "500") ||
-		strings.Contains(errMsg, "502") ||
-		strings.Contains(errMsg, "503") ||
-		strings.Contains(errMsg, "504") ||
-		strings.Contains(errMsg, "Internal Server Error") ||
-		strings.Contains(errMsg, "Bad Gateway") ||
-		strings.Contains(errMsg, "Service Unavailable") ||
-		strings.Contains(errMsg, "Gateway Timeout")
+	patterns := []string{
+		// HTTP 5xx status codes
+		"500", "502", "503", "504",
+		"Internal Server Error", "Bad Gateway",
+		"Service Unavailable", "Gateway Timeout",
+		// TCP-level transient network errors
+		"connection reset by peer", "connection refused",
+		"i/o timeout", "TLS handshake timeout",
+		"unexpected EOF", "no such host",
+	}
+
+	for _, pattern := range patterns {
+		if strings.Contains(errMsg, pattern) {
+			return true
+		}
+	}
+
+	return false
 }
 
 // calculateRepoRetryDelay returns the delay for the given retry attempt.

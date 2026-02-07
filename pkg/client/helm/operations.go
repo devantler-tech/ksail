@@ -10,6 +10,10 @@ const (
 	// ContextTimeoutBuffer is the additional time added to the Helm timeout to ensure
 	// the Go context doesn't cancel prematurely while Helm's kstatus wait is running.
 	ContextTimeoutBuffer = 5 * time.Minute
+
+	// chartInstallMaxRetries is the maximum number of retry attempts for chart
+	// installation when transient network errors occur.
+	chartInstallMaxRetries = 3
 )
 
 // InstallOrUpgradeChart performs a Helm install or upgrade operation.
@@ -53,10 +57,39 @@ func InstallOrUpgradeChart(
 	timeoutCtx, cancel := context.WithTimeout(ctx, contextTimeout)
 	defer cancel()
 
-	_, err := client.InstallOrUpgradeChart(timeoutCtx, spec)
-	if err != nil {
-		return fmt.Errorf("failed to install %s chart: %w", repoConfig.RepoName, err)
+	return installChartWithRetry(timeoutCtx, client, spec, repoConfig.RepoName)
+}
+
+// installChartWithRetry attempts to install a chart, retrying on transient network errors.
+func installChartWithRetry(
+	ctx context.Context,
+	client Interface,
+	spec *ChartSpec,
+	repoName string,
+) error {
+	var lastErr error
+
+	for attempt := 1; attempt <= chartInstallMaxRetries; attempt++ {
+		_, lastErr = client.InstallOrUpgradeChart(ctx, spec)
+		if lastErr == nil {
+			return nil
+		}
+
+		if !isRetryableNetworkError(lastErr) || attempt == chartInstallMaxRetries {
+			break
+		}
+
+		delay := calculateRepoRetryDelay(attempt)
+
+		timer := time.NewTimer(delay)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+
+			return fmt.Errorf("chart install retry cancelled: %w", ctx.Err())
+		case <-timer.C:
+		}
 	}
 
-	return nil
+	return fmt.Errorf("failed to install %s chart: %w", repoName, lastErr)
 }
