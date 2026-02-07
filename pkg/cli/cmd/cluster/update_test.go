@@ -50,7 +50,8 @@ func TestNewUpdateCmd(t *testing.T) {
 	}
 }
 
-func TestUpdateConfirmation_UsesConfirmPackage(t *testing.T) { //nolint:paralleltest // subtests override global stdin reader
+//nolint:paralleltest // subtests override global stdin reader
+func TestUpdateConfirmation_UsesConfirmPackage(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    string
@@ -93,7 +94,8 @@ func TestUpdateConfirmation_UsesConfirmPackage(t *testing.T) { //nolint:parallel
 	}
 }
 
-func TestUpdateConfirmation_ShouldSkipPrompt(t *testing.T) { //nolint:paralleltest // subtests override global TTY checker
+//nolint:paralleltest // subtests override global TTY checker
+func TestUpdateConfirmation_ShouldSkipPrompt(t *testing.T) {
 	tests := []struct {
 		name     string
 		force    bool
