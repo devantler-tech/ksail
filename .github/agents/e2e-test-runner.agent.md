@@ -1,5 +1,10 @@
 ---
 description: E2E test runner agent for KSail, responsible for running end-to-end tests on the cluster management features to validate functionality and catch regressions.
+handoffs:
+  - label: Start Implementation
+    agent: agent
+    prompt: "Start implementation"
+    send: true
 ---
 
 # E2E Test Runner Agent
