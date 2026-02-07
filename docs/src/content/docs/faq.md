@@ -109,8 +109,8 @@ See [Registry Management](/features/#registry-management) for examples.
 ### What happens if I change the distribution or provider in ksail.yaml?
 
 Changing the distribution (e.g., Vanilla to Talos) or provider (e.g., Docker to Hetzner) requires full cluster recreation.
-Running `ksail cluster update` will detect these as recreate-required changes and prompt you to confirm.
-Use `ksail cluster update --force` or `ksail cluster delete && ksail cluster create` to apply these changes.
+The current implementation does not automatically detect distribution/provider changes on an existing cluster.
+You must manually delete the old cluster first with `ksail cluster delete`, then run `ksail cluster create`.
 
 ### Can I add nodes to an existing cluster?
 

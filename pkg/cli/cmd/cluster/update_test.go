@@ -50,9 +50,7 @@ func TestNewUpdateCmd(t *testing.T) {
 	}
 }
 
-func TestUpdateConfirmation_UsesConfirmPackage(t *testing.T) {
-	t.Parallel()
-
+func TestUpdateConfirmation_UsesConfirmPackage(t *testing.T) { //nolint:paralleltest // subtests override global stdin reader
 	tests := []struct {
 		name     string
 		input    string
@@ -82,9 +80,7 @@ func TestUpdateConfirmation_UsesConfirmPackage(t *testing.T) {
 
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
-			t.Parallel()
-
-			// Use the confirm package's test infrastructure
+			// Not parallel: SetStdinReaderForTests overrides a process-wide global
 			restore := confirm.SetStdinReaderForTests(strings.NewReader(testCase.input))
 			defer restore()
 
@@ -97,9 +93,7 @@ func TestUpdateConfirmation_UsesConfirmPackage(t *testing.T) {
 	}
 }
 
-func TestUpdateConfirmation_ShouldSkipPrompt(t *testing.T) {
-	t.Parallel()
-
+func TestUpdateConfirmation_ShouldSkipPrompt(t *testing.T) { //nolint:paralleltest // subtests override global TTY checker
 	tests := []struct {
 		name     string
 		force    bool
@@ -114,8 +108,7 @@ func TestUpdateConfirmation_ShouldSkipPrompt(t *testing.T) {
 
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
-			t.Parallel()
-
+			// Not parallel: SetTTYCheckerForTests overrides a process-wide global
 			restore := confirm.SetTTYCheckerForTests(func() bool {
 				return testCase.isTTY
 			})
