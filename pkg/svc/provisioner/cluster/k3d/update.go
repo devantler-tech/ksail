@@ -38,15 +38,15 @@ func (k *K3dClusterProvisioner) Update(
 		return nil, fmt.Errorf("failed to compute config diff: %w", err)
 	}
 
-	if opts.DryRun {
-		return diff, nil
-	}
+	result, proceed, prepErr := types.PrepareUpdate(
+		diff, opts, clustererrors.ErrRecreationRequired,
+	)
+	if !proceed {
+		if prepErr != nil {
+			return result, fmt.Errorf("update precondition failed: %w", prepErr)
+		}
 
-	result := types.NewUpdateResultFromDiff(diff)
-
-	if diff.HasRecreateRequired() {
-		return result, fmt.Errorf("%w: %d changes require restart",
-			clustererrors.ErrRecreationRequired, len(diff.RecreateRequired))
+		return result, nil
 	}
 
 	clusterName := k.resolveName(name)

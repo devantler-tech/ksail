@@ -5,7 +5,11 @@
 //nolint:revive // package name "types" is intentionally generic for shared types
 package types
 
-import "github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+import (
+	"fmt"
+
+	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+)
 
 // DefaultCurrentSpec returns a ClusterSpec populated with the default values
 // that the config system applies at creation time. Provisioners that cannot
@@ -167,4 +171,30 @@ func DefaultUpdateOptions() UpdateOptions {
 		DryRun:        false,
 		RollingReboot: true,
 	}
+}
+
+// PrepareUpdate handles the common update preamble shared by provisioners:
+//   - If dry-run, return the diff immediately.
+//   - Create a mutable result from the diff.
+//   - If recreate-required changes exist, return an error.
+//
+// Returns (result, true, nil) when the caller should continue applying changes.
+// Returns (result, false, nil/err) when the caller should return result as-is.
+func PrepareUpdate(
+	diff *UpdateResult,
+	opts UpdateOptions,
+	recreateErr error,
+) (*UpdateResult, bool, error) {
+	if opts.DryRun {
+		return diff, false, nil
+	}
+
+	result := NewUpdateResultFromDiff(diff)
+
+	if diff.HasRecreateRequired() {
+		return result, false, fmt.Errorf("%w: %d changes require restart",
+			recreateErr, len(diff.RecreateRequired))
+	}
+
+	return result, true, nil
 }
