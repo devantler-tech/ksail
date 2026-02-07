@@ -71,6 +71,11 @@ func (p *TalosProvisioner) DiffConfig(
 		return result, nil
 	}
 
+	// Guard: control-plane count must remain >= 1
+	if newSpec.Talos.ControlPlanes < 1 {
+		return nil, ErrMinimumControlPlanes
+	}
+
 	// Compare control plane count
 	if oldSpec.Talos.ControlPlanes != newSpec.Talos.ControlPlanes {
 		result.InPlaceChanges = append(result.InPlaceChanges, types.Change{
@@ -113,17 +118,10 @@ func (p *TalosProvisioner) DiffConfig(
 }
 
 // applyNodeScalingChanges handles adding or removing Talos nodes.
-// For Docker: requires Talos SDK provisioning with IP allocation and machine configs.
-// For Hetzner: requires Hetzner API calls to create/delete servers.
-//
-// This is not yet implemented because it requires:
-//   - Network CIDR inspection and IP allocation for new nodes
-//   - Talos machine config generation for new nodes
-//   - Provider-specific node creation (Docker containers / Hetzner servers)
-//   - Talos bootstrap for new control-plane nodes
-//   - etcd member management for control-plane scaling
+// For Docker: creates or removes containers with static IPs and Talos config.
+// For Hetzner: creates or deletes servers via the Hetzner API.
 func (p *TalosProvisioner) applyNodeScalingChanges(
-	_ context.Context,
+	ctx context.Context,
 	clusterName string,
 	oldSpec, newSpec *v1alpha1.ClusterSpec,
 	result *types.UpdateResult,
@@ -139,32 +137,77 @@ func (p *TalosProvisioner) applyNodeScalingChanges(
 		return nil
 	}
 
+	// Prevent scaling control-plane nodes below 1
+	if newSpec.Talos.ControlPlanes < 1 {
+		return ErrMinimumControlPlanes
+	}
+
 	_, _ = fmt.Fprintf(p.logWriter, "  Node scaling for Talos cluster %q: CP %+d, Workers %+d\n",
 		clusterName, cpDelta, workerDelta)
 
-	// Record each scaling operation as a failed change with a clear reason
+	return p.dispatchScaling(ctx, clusterName, cpDelta, workerDelta, result)
+}
+
+// dispatchScaling routes scaling operations to the appropriate provider.
+func (p *TalosProvisioner) dispatchScaling(
+	ctx context.Context,
+	clusterName string,
+	cpDelta, workerDelta int,
+	result *types.UpdateResult,
+) error {
+	if p.hetznerOpts != nil {
+		return p.scaleHetzner(ctx, clusterName, cpDelta, workerDelta, result)
+	}
+
+	return p.scaleDocker(ctx, clusterName, cpDelta, workerDelta, result)
+}
+
+// scaleDocker applies node scaling changes for Docker-based clusters.
+func (p *TalosProvisioner) scaleDocker(
+	ctx context.Context,
+	clusterName string,
+	cpDelta, workerDelta int,
+	result *types.UpdateResult,
+) error {
 	if cpDelta != 0 {
-		result.FailedChanges = append(result.FailedChanges, types.Change{
-			Field:    "talos.controlPlanes",
-			OldValue: strconv.Itoa(int(oldSpec.Talos.ControlPlanes)),
-			NewValue: strconv.Itoa(int(newSpec.Talos.ControlPlanes)),
-			Category: types.ChangeCategoryInPlace,
-			Reason:   "Talos control-plane node scaling is not yet implemented",
-		})
+		err := p.scaleDockerControlPlanes(ctx, clusterName, cpDelta, result)
+		if err != nil {
+			return err
+		}
 	}
 
 	if workerDelta != 0 {
-		result.FailedChanges = append(result.FailedChanges, types.Change{
-			Field:    "talos.workers",
-			OldValue: strconv.Itoa(int(oldSpec.Talos.Workers)),
-			NewValue: strconv.Itoa(int(newSpec.Talos.Workers)),
-			Category: types.ChangeCategoryInPlace,
-			Reason:   "Talos worker node scaling is not yet implemented",
-		})
+		err := p.scaleDockerWorkers(ctx, clusterName, workerDelta, result)
+		if err != nil {
+			return err
+		}
 	}
 
-	return fmt.Errorf("%w: Talos node scaling (CP %+d, Workers %+d)",
-		ErrNotImplemented, cpDelta, workerDelta)
+	return nil
+}
+
+// scaleHetzner applies node scaling changes for Hetzner-based clusters.
+func (p *TalosProvisioner) scaleHetzner(
+	ctx context.Context,
+	clusterName string,
+	cpDelta, workerDelta int,
+	result *types.UpdateResult,
+) error {
+	if cpDelta != 0 {
+		err := p.scaleHetznerControlPlanes(ctx, clusterName, cpDelta, result)
+		if err != nil {
+			return err
+		}
+	}
+
+	if workerDelta != 0 {
+		err := p.scaleHetznerWorkers(ctx, clusterName, workerDelta, result)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // applyInPlaceConfigChanges applies configuration changes that don't require reboots.
@@ -358,16 +401,39 @@ func (p *TalosProvisioner) getNodesByRole(
 		return p.getDockerNodesByRole(ctx, clusterName)
 	}
 
-	// For Hetzner, fall back to treating all nodes as control-plane (no role info yet)
-	ips, err := p.getHetznerNodeIPs(ctx, clusterName)
+	return p.getHetznerNodesByRole(ctx, clusterName)
+}
+
+// getHetznerNodesByRole gets node IPs and roles from Hetzner servers.
+func (p *TalosProvisioner) getHetznerNodesByRole(
+	ctx context.Context,
+	clusterName string,
+) ([]nodeWithRole, error) {
+	if p.infraProvider == nil {
+		return nil, nil
+	}
+
+	hzProvider, err := p.hetznerProvider()
 	if err != nil {
 		return nil, err
 	}
 
-	nodes := make([]nodeWithRole, 0, len(ips))
+	listed, err := p.infraProvider.ListNodes(ctx, clusterName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list Hetzner nodes: %w", err)
+	}
 
-	for _, ip := range ips {
-		nodes = append(nodes, nodeWithRole{IP: ip, Role: "control-plane"})
+	nodes := make([]nodeWithRole, 0, len(listed))
+
+	for _, node := range listed {
+		server, serverErr := hzProvider.GetServerByName(ctx, node.Name)
+		if serverErr != nil || server == nil {
+			continue
+		}
+
+		ip := server.PublicNet.IPv4.IP.String()
+
+		nodes = append(nodes, nodeWithRole{IP: ip, Role: node.Role})
 	}
 
 	return nodes, nil
@@ -419,16 +485,6 @@ func (p *TalosProvisioner) getDockerNodesByRole(
 	}
 
 	return nodes, nil
-}
-
-// getHetznerNodeIPs gets node IPs from Hetzner servers.
-func (p *TalosProvisioner) getHetznerNodeIPs(
-	_ context.Context,
-	_ string,
-) ([]string, error) {
-	// For now, return empty - would need Hetzner client to list servers
-	// The actual implementation would query Hetzner API for servers with matching labels
-	return nil, nil
 }
 
 // getTalosNoRebootPaths returns the list of machine config paths that can be changed without reboot.

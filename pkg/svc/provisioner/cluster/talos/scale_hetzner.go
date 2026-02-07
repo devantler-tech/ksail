@@ -1,0 +1,299 @@
+package talosprovisioner
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/devantler-tech/ksail/v5/pkg/svc/provider/hetzner"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/types"
+	"github.com/hetznercloud/hcloud-go/v2/hcloud"
+	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
+)
+
+// scaleHetznerControlPlanes adjusts the number of Hetzner control-plane servers.
+// Scale-up: creates new servers, waits for Talos API, applies config.
+// Scale-down: removes etcd members then deletes servers (highest-index first).
+func (p *TalosProvisioner) scaleHetznerControlPlanes(
+	ctx context.Context,
+	clusterName string,
+	delta int,
+	result *types.UpdateResult,
+) error {
+	if delta > 0 {
+		return p.addHetznerNodes(ctx, clusterName, RoleControlPlane, delta, result)
+	}
+
+	return p.removeHetznerNodes(ctx, clusterName, RoleControlPlane, -delta, result)
+}
+
+// scaleHetznerWorkers adjusts the number of Hetzner worker servers.
+func (p *TalosProvisioner) scaleHetznerWorkers(
+	ctx context.Context,
+	clusterName string,
+	delta int,
+	result *types.UpdateResult,
+) error {
+	if delta > 0 {
+		return p.addHetznerNodes(ctx, clusterName, "worker", delta, result)
+	}
+
+	return p.removeHetznerNodes(ctx, clusterName, "worker", -delta, result)
+}
+
+// addHetznerNodes creates new Hetzner servers for the given role.
+// It reuses the existing createHetznerNodes flow, then applies Talos config
+// to the newly created servers.
+//
+//nolint:funlen // Sequential steps for server creation with retry logic
+func (p *TalosProvisioner) addHetznerNodes(
+	ctx context.Context,
+	clusterName, role string,
+	count int,
+	result *types.UpdateResult,
+) error {
+	hzProvider, err := p.hetznerProvider()
+	if err != nil {
+		return err
+	}
+
+	// Discover existing nodes to determine the next index
+	existing, err := p.listHetznerNodesByRole(ctx, hzProvider, clusterName, role)
+	if err != nil {
+		return fmt.Errorf("failed to list existing %s nodes: %w", role, err)
+	}
+
+	nextIndex := len(existing) + 1
+	serverType := p.hetznerServerType(role)
+
+	// Ensure infrastructure exists (network, firewall, etc.)
+	infra, err := p.ensureHetznerInfra(ctx, hzProvider, clusterName)
+	if err != nil {
+		return fmt.Errorf("failed to ensure Hetzner infrastructure: %w", err)
+	}
+
+	retryOpts := p.hetznerRetryOpts()
+
+	servers := make([]*hcloud.Server, 0, count)
+
+	for i := range count {
+		nodeIndex := nextIndex + i
+		nodeName := fmt.Sprintf("%s-%s-%d", clusterName, role, nodeIndex)
+
+		server, createErr := hzProvider.CreateServerWithRetry(ctx, hetzner.CreateServerOpts{
+			Name:             nodeName,
+			ServerType:       serverType,
+			ISOID:            p.talosOpts.ISO,
+			Location:         p.hetznerOpts.Location,
+			Labels:           hetzner.NodeLabels(clusterName, role, nodeIndex),
+			NetworkID:        infra.NetworkID,
+			PlacementGroupID: infra.PlacementGroupID,
+			SSHKeyID:         infra.SSHKeyID,
+			FirewallIDs:      []int64{infra.FirewallID},
+		}, retryOpts)
+		if createErr != nil {
+			recordFailedChange(result, role, nodeName, createErr)
+
+			return fmt.Errorf("failed to create %s server %s: %w", role, nodeName, createErr)
+		}
+
+		servers = append(servers, server)
+
+		_, _ = fmt.Fprintf(p.logWriter, "  ✓ Created %s server %s (IP: %s)\n",
+			role, server.Name, server.PublicNet.IPv4.IP.String())
+	}
+
+	// Wait for Talos API and apply configuration
+	err = p.configureNewHetznerNodes(ctx, servers, role, result)
+	if err != nil {
+		return err
+	}
+
+	for _, server := range servers {
+		recordAppliedChange(result, role, server.Name, "added")
+	}
+
+	return nil
+}
+
+// configureNewHetznerNodes waits for Talos API on new servers and applies config.
+func (p *TalosProvisioner) configureNewHetznerNodes(
+	ctx context.Context,
+	servers []*hcloud.Server,
+	role string,
+	result *types.UpdateResult,
+) error {
+	if len(servers) == 0 {
+		return nil
+	}
+
+	// Wait for Talos API on all new nodes
+	_, _ = fmt.Fprintf(p.logWriter, "  Waiting for Talos API on %d new %s node(s)...\n",
+		len(servers), role)
+
+	err := p.waitForHetznerTalosAPI(ctx, servers)
+	if err != nil {
+		return fmt.Errorf("failed waiting for Talos API on new nodes: %w", err)
+	}
+
+	// Apply configuration to new nodes
+	config := p.hetznerConfigForRole(role)
+	if config == nil {
+		return fmt.Errorf("%w: %s", ErrNoConfigForRole, role)
+	}
+
+	for _, server := range servers {
+		applyErr := p.applyConfigToNode(ctx, server, config)
+		if applyErr != nil {
+			recordFailedChange(result, role, server.Name, applyErr)
+
+			return fmt.Errorf("failed to apply config to %s: %w", server.Name, applyErr)
+		}
+	}
+
+	return nil
+}
+
+// removeHetznerNodes removes Hetzner servers for a given role (highest-index first).
+// For control-plane nodes, etcd membership is cleaned up before each removal.
+func (p *TalosProvisioner) removeHetznerNodes(
+	ctx context.Context,
+	clusterName, role string,
+	count int,
+	result *types.UpdateResult,
+) error {
+	hzProvider, err := p.hetznerProvider()
+	if err != nil {
+		return err
+	}
+
+	existing, err := p.listHetznerNodesByRole(ctx, hzProvider, clusterName, role)
+	if err != nil {
+		return fmt.Errorf("failed to list %s nodes: %w", role, err)
+	}
+
+	if count > len(existing) {
+		count = len(existing)
+	}
+
+	for i := len(existing) - 1; i >= len(existing)-count; i-- {
+		server := existing[i]
+
+		// Best-effort etcd cleanup for control-plane nodes
+		if role == RoleControlPlane {
+			serverIP := server.PublicNet.IPv4.IP.String()
+			p.etcdCleanupBeforeRemoval(ctx, serverIP, clusterName)
+		}
+
+		err = p.deleteHetznerServer(ctx, hzProvider, server)
+		if err != nil {
+			recordFailedChange(result, role, server.Name, err)
+
+			return fmt.Errorf("failed to delete %s server %s: %w", role, server.Name, err)
+		}
+
+		recordAppliedChange(result, role, server.Name, "removed")
+
+		_, _ = fmt.Fprintf(p.logWriter, "  ✓ Removed %s server %s\n", role, server.Name)
+	}
+
+	return nil
+}
+
+// listHetznerNodesByRole returns servers for a cluster filtered by role, sorted by name.
+func (p *TalosProvisioner) listHetznerNodesByRole(
+	ctx context.Context,
+	hzProvider *hetzner.Provider,
+	clusterName, role string,
+) ([]*hcloud.Server, error) {
+	nodes, err := hzProvider.ListNodes(ctx, clusterName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list nodes: %w", err)
+	}
+
+	var servers []*hcloud.Server
+
+	for _, node := range nodes {
+		if node.Role != role {
+			continue
+		}
+
+		server, serverErr := hzProvider.GetServerByName(ctx, node.Name)
+		if serverErr != nil {
+			return nil, fmt.Errorf("failed to get server %s: %w", node.Name, serverErr)
+		}
+
+		if server != nil {
+			servers = append(servers, server)
+		}
+	}
+
+	return servers, nil
+}
+
+// deleteHetznerServer deletes a single Hetzner Cloud server.
+func (p *TalosProvisioner) deleteHetznerServer(
+	ctx context.Context,
+	hzProvider *hetzner.Provider,
+	server *hcloud.Server,
+) error {
+	_, _ = fmt.Fprintf(p.logWriter, "  Deleting server %s...\n", server.Name)
+
+	err := hzProvider.DeleteServer(ctx, server)
+	if err != nil {
+		return fmt.Errorf("failed to delete server %s: %w", server.Name, err)
+	}
+
+	return nil
+}
+
+// hetznerProvider extracts the Hetzner provider from the infra provider.
+func (p *TalosProvisioner) hetznerProvider() (*hetzner.Provider, error) {
+	hzProvider, ok := p.infraProvider.(*hetzner.Provider)
+	if !ok {
+		return nil, fmt.Errorf("%w: got %T", ErrHetznerProviderRequired, p.infraProvider)
+	}
+
+	return hzProvider, nil
+}
+
+// hetznerServerType returns the server type for a given role.
+func (p *TalosProvisioner) hetznerServerType(role string) string {
+	if p.hetznerOpts == nil {
+		return ""
+	}
+
+	if role == RoleControlPlane {
+		return p.hetznerOpts.ControlPlaneServerType
+	}
+
+	return p.hetznerOpts.WorkerServerType
+}
+
+// hetznerRetryOpts builds retry options from Hetzner configuration.
+func (p *TalosProvisioner) hetznerRetryOpts() hetzner.ServerRetryOpts {
+	opts := hetzner.ServerRetryOpts{
+		LogWriter: p.logWriter,
+	}
+
+	if p.hetznerOpts != nil {
+		opts.FallbackLocations = p.hetznerOpts.FallbackLocations
+		opts.AllowPlacementFallback = p.hetznerOpts.PlacementGroupFallbackToNone
+	}
+
+	return opts
+}
+
+// hetznerConfigForRole returns the appropriate Talos config for new Hetzner nodes.
+//
+//nolint:ireturn // Must return talosconfig.Provider to match Talos SDK API
+func (p *TalosProvisioner) hetznerConfigForRole(role string) talosconfig.Provider {
+	if p.talosConfigs == nil {
+		return nil
+	}
+
+	if role == "control-plane" {
+		return p.talosConfigs.ControlPlane()
+	}
+
+	return p.talosConfigs.Worker()
+}

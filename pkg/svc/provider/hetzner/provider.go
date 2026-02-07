@@ -252,6 +252,21 @@ func (p *Provider) DeleteNodes(ctx context.Context, clusterName string) error {
 	return nil
 }
 
+// DeleteServer deletes a single Hetzner Cloud server.
+// Unlike DeleteNodes, this targets a specific server without removing infrastructure.
+func (p *Provider) DeleteServer(ctx context.Context, server *hcloud.Server) error {
+	if p.client == nil {
+		return provider.ErrProviderUnavailable
+	}
+
+	_, _, err := p.client.Server.DeleteWithResult(ctx, server)
+	if err != nil {
+		return fmt.Errorf("failed to delete server %s: %w", server.Name, err)
+	}
+
+	return nil
+}
+
 // CreateServer creates a new Hetzner server with the specified configuration.
 func (p *Provider) CreateServer(
 	ctx context.Context,

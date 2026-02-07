@@ -116,7 +116,7 @@ func (p *TalosProvisioner) createHetznerCluster(ctx context.Context, clusterName
 
 	controlPlaneServers, err := p.createHetznerNodes(ctx, hzProvider, infra, HetznerNodeGroupOpts{
 		ClusterName: clusterName,
-		Role:        "control-plane",
+		Role:        RoleControlPlane,
 		Count:       p.options.ControlPlaneNodes,
 		ServerType:  p.hetznerOpts.ControlPlaneServerType,
 		ISOID:       p.talosOpts.ISO,
@@ -898,7 +898,7 @@ func (p *TalosProvisioner) discoverHetznerServers(
 			continue
 		}
 
-		if node.Role == "control-plane" {
+		if node.Role == RoleControlPlane {
 			controlPlaneServers = append(controlPlaneServers, server)
 		} else {
 			workerServers = append(workerServers, server)

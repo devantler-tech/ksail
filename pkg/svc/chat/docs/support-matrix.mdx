@@ -90,8 +90,8 @@ Changes are classified by impact: **in-place** (no disruption), **reboot-require
 | GitOps Engine            | In-place       | In-place  | In-place |
 | Local Registry           | Recreate       | In-place  | In-place |
 | Mirrors Dir              | Recreate       | N/A       | N/A      |
-| Control Planes           | Recreate       | Recreate  | Planned  |
-| Workers                  | Recreate       | In-place  | Planned  |
+| Control Planes           | Recreate       | Recreate  | In-place |
+| Workers                  | Recreate       | In-place  | In-place |
 | Hetzner Server Type (CP) | N/A            | N/A       | Recreate |
 | Hetzner Location         | N/A            | N/A       | Recreate |
 | Hetzner Network          | N/A            | N/A       | Recreate |
@@ -101,7 +101,7 @@ Changes are classified by impact: **in-place** (no disruption), **reboot-require
 - "In-place" changes are applied without cluster downtime via Helm or provider APIs
 - "Recreate" changes require `ksail cluster delete && ksail cluster create` or `ksail cluster update --force`
 - Use `ksail cluster update --dry-run` to preview changes before applying
-- Talos supports the broadest set of in-place updates; node scaling is planned but not yet implemented
+- Talos supports the broadest set of in-place updates, including node scaling for both control-plane and worker nodes
 - Kind does not support any structural node changes after creation
 
 ## Platform Requirements

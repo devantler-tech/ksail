@@ -549,16 +549,9 @@ func (p *TalosProvisioner) getMappedTalosAPIEndpoint(
 	}
 
 	// Find the control plane container for this cluster
-	containers, err := p.dockerClient.ContainerList(ctx, container.ListOptions{
-		All: true,
-		Filters: filters.NewArgs(
-			filters.Arg("label", LabelTalosOwned+"=true"),
-			filters.Arg("label", LabelTalosClusterName+"="+clusterName),
-			filters.Arg("label", "talos.type=controlplane"),
-		),
-	})
+	containers, err := p.listDockerNodesByRole(ctx, clusterName, RoleControlPlane)
 	if err != nil {
-		return "", fmt.Errorf("failed to list containers: %w", err)
+		return "", fmt.Errorf("failed to list control-plane containers: %w", err)
 	}
 
 	if len(containers) == 0 {

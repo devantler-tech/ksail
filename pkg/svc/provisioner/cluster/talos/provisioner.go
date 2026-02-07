@@ -31,11 +31,23 @@ const (
 	LabelTalosClusterName = "talos.cluster.name"
 )
 
+// Node role constants.
+const (
+	// RoleControlPlane is the role identifier for control-plane nodes.
+	RoleControlPlane = "control-plane"
+	// RoleWorker is the role identifier for worker nodes.
+	RoleWorker = "worker"
+)
+
 // Default resource values for nodes.
 const (
 	defaultNodeMemory = 2 * 1024 * 1024 * 1024 // 2GB
 	defaultNodeCPUs   = 2 * 1000 * 1000 * 1000 // 2 CPU cores
-	defaultMTU        = 1500
+	// nanosPerCPU converts nanoCPUs to CPU count for Talos SKU labels.
+	nanosPerCPU = 1_000_000_000
+	// bytesPerMiB converts bytes to MiB for Talos SKU labels.
+	bytesPerMiB = 1024 * 1024
+	defaultMTU  = 1500
 	// ipv4Offset is the offset from gateway for node IPs (gateway is .1, nodes start at .2).
 	ipv4Offset = 2
 	// stateDirectoryPermissions is the permissions for the state directory.
