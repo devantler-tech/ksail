@@ -3,6 +3,9 @@ package talosprovisioner
 import (
 	"context"
 	"fmt"
+	"slices"
+	"strconv"
+	"strings"
 
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider/hetzner"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/types"
@@ -62,7 +65,7 @@ func (p *TalosProvisioner) addHetznerNodes(
 		return fmt.Errorf("failed to list existing %s nodes: %w", role, err)
 	}
 
-	nextIndex := len(existing) + 1
+	nextIndex := nextHetznerNodeIndex(existing, clusterName, role)
 	serverType := p.hetznerServerType(role)
 
 	// Ensure infrastructure exists (network, firewall, etc.)
@@ -227,7 +230,33 @@ func (p *TalosProvisioner) listHetznerNodesByRole(
 		}
 	}
 
+	slices.SortFunc(servers, func(a, b *hcloud.Server) int {
+		return strings.Compare(a.Name, b.Name)
+	})
+
 	return servers, nil
+}
+
+// nextHetznerNodeIndex finds the next available index for a node role.
+// It scans existing server names to find the max index, avoiding naming collisions
+// when there are gaps in the index sequence (e.g., nodes 1,2,4 after removing 3).
+func nextHetznerNodeIndex(servers []*hcloud.Server, clusterName, role string) int {
+	prefix := fmt.Sprintf("%s-%s-", clusterName, role)
+	maxIndex := 0
+
+	for _, server := range servers {
+		idx, found := strings.CutPrefix(server.Name, prefix)
+		if !found {
+			continue
+		}
+
+		n, err := strconv.Atoi(idx)
+		if err == nil && n >= maxIndex {
+			maxIndex = n + 1
+		}
+	}
+
+	return maxIndex
 }
 
 // deleteHetznerServer deletes a single Hetzner Cloud server.

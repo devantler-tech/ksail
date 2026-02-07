@@ -103,6 +103,8 @@ func NewEmptyUpdateResult() *UpdateResult {
 		InPlaceChanges:   make([]Change, 0),
 		RebootRequired:   make([]Change, 0),
 		RecreateRequired: make([]Change, 0),
+		AppliedChanges:   make([]Change, 0),
+		FailedChanges:    make([]Change, 0),
 	}
 }
 
