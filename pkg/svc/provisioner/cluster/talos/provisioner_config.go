@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"time"
 
 	iopath "github.com/devantler-tech/ksail/v5/pkg/io"
 	"github.com/devantler-tech/ksail/v5/pkg/k8s"
@@ -236,18 +235,28 @@ func (p *TalosProvisioner) k8sComponentsReadinessChecksWithoutStaticPodStatus() 
 	return []check.ClusterCheck{
 		// wait for all the nodes to report in at k8s level
 		func(cluster check.ClusterInfo) conditions.Condition {
-			return conditions.PollingCondition("all k8s nodes to report", func(ctx context.Context) error {
-				return check.K8sAllNodesReportedAssertion(ctx, cluster)
-			}, talosAPIWaitTimeout, 30*time.Second) //nolint:mnd // matches upstream Talos SDK intervals
+			return conditions.PollingCondition(
+				"all k8s nodes to report",
+				func(ctx context.Context) error {
+					return check.K8sAllNodesReportedAssertion(ctx, cluster)
+				},
+				talosAPIWaitTimeout,
+				nodeReportPollInterval,
+			)
 		},
 
 		// skip K8sControlPlaneStaticPods — Talos can't connect to kubelet without serving cert
 
 		// wait for HA k8s control plane
 		func(cluster check.ClusterInfo) conditions.Condition {
-			return conditions.PollingCondition("all control plane components to be ready", func(ctx context.Context) error {
-				return check.K8sFullControlPlaneAssertion(ctx, cluster)
-			}, talosAPIWaitTimeout, retryInterval)
+			return conditions.PollingCondition(
+				"all control plane components to be ready",
+				func(ctx context.Context) error {
+					return check.K8sFullControlPlaneAssertion(ctx, cluster)
+				},
+				talosAPIWaitTimeout,
+				retryInterval,
+			)
 		},
 	}
 }
