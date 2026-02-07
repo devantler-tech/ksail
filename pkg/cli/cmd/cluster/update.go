@@ -80,8 +80,6 @@ Use --dry-run to preview changes without applying them.`,
 // handleUpdateRunE executes the cluster update logic.
 // It computes a diff between current and desired configuration, then applies
 // changes in-place where possible, falling back to cluster recreation when necessary.
-//
-//nolint:cyclop,funlen // Update logic has inherent complexity from multiple code paths
 func handleUpdateRunE(
 	cmd *cobra.Command,
 	cfgManager *ksailconfigmanager.ConfigManager,
@@ -97,30 +95,13 @@ func handleUpdateRunE(
 		return err
 	}
 
-	// Create provisioner
-	factory := newProvisionerFactory(ctx)
-
-	provisioner, _, err := factory.Create(
-		cmd.Context(),
-		ctx.ClusterCfg,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to create provisioner: %w", err)
-	}
-
-	// Check if cluster exists
-	exists, err := provisioner.Exists(cmd.Context(), clusterName)
-	if err != nil {
-		return fmt.Errorf("failed to check cluster existence: %w", err)
-	}
-
-	if !exists {
-		return fmt.Errorf("%w: %q", clustererrors.ErrClusterDoesNotExist, clusterName)
-	}
-
-	// Get flags
-	dryRun := cfgManager.Viper.GetBool("dry-run")
 	force := cfgManager.Viper.GetBool("force")
+
+	// Create provisioner and verify cluster exists
+	provisioner, err := createAndVerifyProvisioner(cmd, ctx, clusterName)
+	if err != nil {
+		return err
+	}
 
 	// Check if provisioner supports updates
 	updater, supportsUpdate := provisioner.(clusterprovisioner.ClusterUpdater)
@@ -128,13 +109,59 @@ func handleUpdateRunE(
 		return executeRecreateFlow(cmd, cfgManager, ctx, deps, clusterName, force)
 	}
 
-	// Use DiffEngine as the central diff source for ClusterSpec-level changes
+	// Compute full diff (falls back to nil diff if config retrieval fails)
+	currentSpec, diff := computeUpdateDiff(cmd, ctx, updater, clusterName)
+	if diff == nil {
+		return executeRecreateFlow(cmd, cfgManager, ctx, deps, clusterName, force)
+	}
+
+	// Display changes summary
+	displayChangesSummary(cmd, diff)
+
+	return applyOrReportChanges(cmd, cfgManager, ctx, deps, updater,
+		clusterName, currentSpec, diff, outputTimer)
+}
+
+// createAndVerifyProvisioner creates a provisioner and verifies the cluster exists.
+//
+//nolint:ireturn // caller needs interface for type assertion
+func createAndVerifyProvisioner(
+	cmd *cobra.Command,
+	ctx *localregistry.Context,
+	clusterName string,
+) (clusterprovisioner.ClusterProvisioner, error) {
+	factory := newProvisionerFactory(ctx)
+
+	provisioner, _, err := factory.Create(cmd.Context(), ctx.ClusterCfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create provisioner: %w", err)
+	}
+
+	exists, err := provisioner.Exists(cmd.Context(), clusterName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check cluster existence: %w", err)
+	}
+
+	if !exists {
+		return nil, fmt.Errorf("%w: %q", clustererrors.ErrClusterDoesNotExist, clusterName)
+	}
+
+	return provisioner, nil
+}
+
+// computeUpdateDiff retrieves current config and computes the full diff.
+// Returns nil diff if current config could not be retrieved (caller should fall back to recreate).
+func computeUpdateDiff(
+	cmd *cobra.Command,
+	ctx *localregistry.Context,
+	updater clusterprovisioner.ClusterUpdater,
+	clusterName string,
+) (*v1alpha1.ClusterSpec, *types.UpdateResult) {
 	diffEngine := NewDiffEngine(
 		ctx.ClusterCfg.Spec.Cluster.Distribution,
 		ctx.ClusterCfg.Spec.Cluster.Provider,
 	)
 
-	// Get current configuration from running cluster
 	currentSpec, err := updater.GetCurrentConfig()
 	if err != nil {
 		notify.WriteMessage(notify.Message{
@@ -143,86 +170,109 @@ func handleUpdateRunE(
 			Writer:  cmd.OutOrStderr(),
 		})
 
-		return executeRecreateFlow(cmd, cfgManager, ctx, deps, clusterName, force)
+		return nil, nil
 	}
 
-	// Use DiffEngine as the central classifier for ClusterSpec-level changes
 	diff := diffEngine.ComputeDiff(currentSpec, &ctx.ClusterCfg.Spec.Cluster)
 
-	// Augment with provisioner-specific details (node count from running state, etc.)
-	provisionerDiff, err := updater.DiffConfig(
-		cmd.Context(),
-		clusterName,
-		currentSpec,
-		&ctx.ClusterCfg.Spec.Cluster,
+	provisionerDiff, diffErr := updater.DiffConfig(
+		cmd.Context(), clusterName, currentSpec, &ctx.ClusterCfg.Spec.Cluster,
 	)
-	if err != nil {
-		return fmt.Errorf("failed to compute provisioner-specific diff: %w", err)
+	if diffErr == nil {
+		mergeProvisionerDiff(diff, provisionerDiff)
 	}
 
-	// Merge provisioner-specific changes into the main diff
-	mergeProvisionerDiff(diff, provisionerDiff)
+	return currentSpec, diff
+}
 
-	// Display changes summary
-	displayChangesSummary(cmd, diff)
+// applyOrReportChanges handles dry-run, recreate-required, no-changes, and
+// in-place change application.
+func applyOrReportChanges(
+	cmd *cobra.Command,
+	cfgManager *ksailconfigmanager.ConfigManager,
+	ctx *localregistry.Context,
+	deps lifecycle.Deps,
+	updater clusterprovisioner.ClusterUpdater,
+	clusterName string,
+	currentSpec *v1alpha1.ClusterSpec,
+	diff *types.UpdateResult,
+	outputTimer timer.Timer,
+) error {
+	dryRun := cfgManager.Viper.GetBool("dry-run")
+	force := cfgManager.Viper.GetBool("force")
 
-	// If dry-run, show summary and exit
 	if dryRun {
-		var summary strings.Builder
-
-		fmt.Fprintf(&summary,
-			"Would apply %d in-place, %d reboot-required, %d recreate-required changes.\n",
-			len(diff.InPlaceChanges),
-			len(diff.RebootRequired),
-			len(diff.RecreateRequired),
-		)
-
-		summary.WriteString("Dry run complete. No changes applied.")
-
-		notify.Infof(cmd.OutOrStdout(), summary.String())
-
-		return nil
+		return reportDryRun(cmd, diff)
 	}
 
-	// If there are recreate-required changes, show clear error and require confirmation
 	if diff.HasRecreateRequired() {
-		var block strings.Builder
-
-		fmt.Fprintf(&block, "%d changes require cluster recreation:\n", len(diff.RecreateRequired))
-
-		for _, change := range diff.RecreateRequired {
-			fmt.Fprintf(&block, "  ✗ %s: cannot change from %s to %s in-place. %s\n",
-				change.Field, change.OldValue, change.NewValue, change.Reason,
-			)
-		}
-
-		block.WriteString(
-			"Use 'ksail cluster delete && ksail cluster create' or --force to recreate.",
-		)
-
-		notify.Warningf(cmd.OutOrStderr(), block.String())
-
-		if !force {
-			return fmt.Errorf("%d %w", len(diff.RecreateRequired), errRecreateChanges)
-		}
-
-		return executeRecreateFlow(cmd, cfgManager, ctx, deps, clusterName, force)
+		return handleRecreateRequired(cmd, cfgManager, ctx, deps, clusterName, diff, force)
 	}
 
-	// No actionable changes — nothing to do
 	if !diff.HasInPlaceChanges() && !diff.HasRebootRequired() {
 		notify.Infof(cmd.OutOrStdout(), "No changes detected")
 
 		return nil
 	}
 
-	// Apply in-place and reboot-required changes
 	reconciler := newComponentReconciler(cmd, ctx.ClusterCfg)
 
 	return applyInPlaceChanges(
 		cmd, updater, reconciler, clusterName,
 		currentSpec, ctx, diff, outputTimer,
 	)
+}
+
+// reportDryRun prints a summary of what would be applied and returns nil.
+func reportDryRun(cmd *cobra.Command, diff *types.UpdateResult) error {
+	var summary strings.Builder
+
+	fmt.Fprintf(&summary,
+		"Would apply %d in-place, %d reboot-required, %d recreate-required changes.\n",
+		len(diff.InPlaceChanges),
+		len(diff.RebootRequired),
+		len(diff.RecreateRequired),
+	)
+
+	summary.WriteString("Dry run complete. No changes applied.")
+
+	notify.Infof(cmd.OutOrStdout(), summary.String())
+
+	return nil
+}
+
+// handleRecreateRequired warns about recreate-required changes and either
+// proceeds with recreation (if force) or returns an error.
+func handleRecreateRequired(
+	cmd *cobra.Command,
+	cfgManager *ksailconfigmanager.ConfigManager,
+	ctx *localregistry.Context,
+	deps lifecycle.Deps,
+	clusterName string,
+	diff *types.UpdateResult,
+	force bool,
+) error {
+	var block strings.Builder
+
+	fmt.Fprintf(&block, "%d changes require cluster recreation:\n", len(diff.RecreateRequired))
+
+	for _, change := range diff.RecreateRequired {
+		fmt.Fprintf(&block, "  ✗ %s: cannot change from %s to %s in-place. %s\n",
+			change.Field, change.OldValue, change.NewValue, change.Reason,
+		)
+	}
+
+	block.WriteString(
+		"Use 'ksail cluster delete && ksail cluster create' or --force to recreate.",
+	)
+
+	notify.Warningf(cmd.OutOrStderr(), block.String())
+
+	if !force {
+		return fmt.Errorf("%d %w", len(diff.RecreateRequired), errRecreateChanges)
+	}
+
+	return executeRecreateFlow(cmd, cfgManager, ctx, deps, clusterName, force)
 }
 
 // applyInPlaceChanges applies provisioner-level and component-level changes in-place.
