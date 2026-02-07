@@ -24,34 +24,27 @@ func (p *TalosProvisioner) Update(
 	opts types.UpdateOptions,
 ) (*types.UpdateResult, error) {
 	// Compute diff to determine what changed
-	diff, err := p.DiffConfig(ctx, name, oldSpec, newSpec)
-	if err != nil {
-		return nil, fmt.Errorf("failed to compute config diff: %w", err)
-	}
+	diff, diffErr := p.DiffConfig(ctx, name, oldSpec, newSpec)
 
 	result, proceed, prepErr := types.PrepareUpdate(
-		diff, opts, clustererrors.ErrRecreationRequired,
+		diff, diffErr, opts, clustererrors.ErrRecreationRequired,
 	)
 	if !proceed {
-		if prepErr != nil {
-			return result, fmt.Errorf("update precondition failed: %w", prepErr)
-		}
-
-		return result, nil
+		return result, prepErr //nolint:wrapcheck // error context added in PrepareUpdate
 	}
 
 	clusterName := p.resolveClusterName(name)
 
 	// Handle node scaling changes
-	err = p.applyNodeScalingChanges(ctx, clusterName, oldSpec, newSpec, result)
-	if err != nil {
-		return result, fmt.Errorf("failed to apply node scaling changes: %w", err)
+	scaleErr := p.applyNodeScalingChanges(ctx, clusterName, oldSpec, newSpec, result)
+	if scaleErr != nil {
+		return result, fmt.Errorf("failed to apply node scaling changes: %w", scaleErr)
 	}
 
 	// Handle in-place config changes (NO_REBOOT mode)
-	err = p.applyInPlaceConfigChanges(ctx, clusterName, result)
-	if err != nil {
-		return result, fmt.Errorf("failed to apply in-place config changes: %w", err)
+	cfgErr := p.applyInPlaceConfigChanges(ctx, clusterName, result)
+	if cfgErr != nil {
+		return result, fmt.Errorf("failed to apply in-place config changes: %w", cfgErr)
 	}
 
 	// Handle reboot-required changes (STAGED mode with rolling reboot)

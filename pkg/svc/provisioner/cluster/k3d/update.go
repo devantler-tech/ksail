@@ -33,25 +33,18 @@ func (k *K3dClusterProvisioner) Update(
 		return types.NewEmptyUpdateResult(), nil
 	}
 
-	diff, err := k.DiffConfig(ctx, name, oldSpec, newSpec)
-	if err != nil {
-		return nil, fmt.Errorf("failed to compute config diff: %w", err)
-	}
+	diff, diffErr := k.DiffConfig(ctx, name, oldSpec, newSpec)
 
 	result, proceed, prepErr := types.PrepareUpdate(
-		diff, opts, clustererrors.ErrRecreationRequired,
+		diff, diffErr, opts, clustererrors.ErrRecreationRequired,
 	)
 	if !proceed {
-		if prepErr != nil {
-			return result, fmt.Errorf("update precondition failed: %w", prepErr)
-		}
-
-		return result, nil
+		return result, prepErr //nolint:wrapcheck // error context added in PrepareUpdate
 	}
 
 	clusterName := k.resolveName(name)
 
-	err = k.applyWorkerScaling(ctx, clusterName, result)
+	err := k.applyWorkerScaling(ctx, clusterName, result)
 	if err != nil {
 		return result, fmt.Errorf("failed to scale workers: %w", err)
 	}

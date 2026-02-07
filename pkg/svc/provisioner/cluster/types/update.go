@@ -174,6 +174,7 @@ func DefaultUpdateOptions() UpdateOptions {
 }
 
 // PrepareUpdate handles the common update preamble shared by provisioners:
+//   - If diffErr is non-nil, return it immediately.
 //   - If dry-run, return the diff immediately.
 //   - Create a mutable result from the diff.
 //   - If recreate-required changes exist, return an error.
@@ -182,9 +183,14 @@ func DefaultUpdateOptions() UpdateOptions {
 // Returns (result, false, nil/err) when the caller should return result as-is.
 func PrepareUpdate(
 	diff *UpdateResult,
+	diffErr error,
 	opts UpdateOptions,
 	recreateErr error,
 ) (*UpdateResult, bool, error) {
+	if diffErr != nil {
+		return nil, false, fmt.Errorf("failed to compute config diff: %w", diffErr)
+	}
+
 	if opts.DryRun {
 		return diff, false, nil
 	}
