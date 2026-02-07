@@ -69,16 +69,21 @@ func (k *KindClusterProvisioner) DiffConfig(
 }
 
 // GetCurrentConfig retrieves the current cluster configuration.
-// For Kind clusters, we return the configuration used to create the cluster.
+// For Kind clusters, we return the configuration based on the defaults
+// that the config system applies. Kind doesn't persist its original config,
+// so we reconstruct the spec with the same defaults used during creation.
+// This ensures DiffEngine doesn't report false-positive changes when
+// the user hasn't changed any settings.
 func (k *KindClusterProvisioner) GetCurrentConfig() (*v1alpha1.ClusterSpec, error) {
-	// Kind doesn't persist configuration after creation.
-	// Return the spec from the config file that was used.
-	// This is a limitation of Kind - it doesn't store original config.
 	return &v1alpha1.ClusterSpec{
-		Distribution: v1alpha1.DistributionVanilla,
-		Provider:     v1alpha1.ProviderDocker,
-		Vanilla: v1alpha1.OptionsVanilla{
-			MirrorsDir: "", // Cannot retrieve from running cluster
-		},
+		Distribution:  v1alpha1.DistributionVanilla,
+		Provider:      v1alpha1.ProviderDocker,
+		CNI:           v1alpha1.CNIDefault,
+		CSI:           v1alpha1.CSIDefault,
+		MetricsServer: v1alpha1.MetricsServerDefault,
+		LoadBalancer:  v1alpha1.LoadBalancerDefault,
+		CertManager:   v1alpha1.CertManagerDisabled,
+		PolicyEngine:  v1alpha1.PolicyEngineNone,
+		GitOpsEngine:  v1alpha1.GitOpsEngineNone,
 	}, nil
 }

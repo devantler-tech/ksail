@@ -2,6 +2,7 @@ package cluster
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
@@ -451,29 +452,40 @@ func mergeProvisionerDiff(main, provisioner *types.UpdateResult) {
 	)
 }
 
-// collectExistingFields builds a set of field names already present in the diff.
+// clusterFieldPrefix is the prefix used by DiffEngine for ClusterSpec-level fields.
+// Provisioner diffs may omit this prefix — normalization strips it before dedup.
+const clusterFieldPrefix = "cluster."
+
+// normalizeFieldName strips the "cluster." prefix for deduplication purposes,
+// so "cluster.vanilla.mirrorsDir" and "vanilla.mirrorsDir" are treated as the same field.
+func normalizeFieldName(field string) string {
+	return strings.TrimPrefix(field, clusterFieldPrefix)
+}
+
+// collectExistingFields builds a set of normalized field names already present in the diff.
 func collectExistingFields(diff *types.UpdateResult) map[string]bool {
 	fields := make(map[string]bool)
 
 	for _, c := range diff.InPlaceChanges {
-		fields[c.Field] = true
+		fields[normalizeFieldName(c.Field)] = true
 	}
 
 	for _, c := range diff.RebootRequired {
-		fields[c.Field] = true
+		fields[normalizeFieldName(c.Field)] = true
 	}
 
 	for _, c := range diff.RecreateRequired {
-		fields[c.Field] = true
+		fields[normalizeFieldName(c.Field)] = true
 	}
 
 	return fields
 }
 
 // appendUniqueChanges appends changes from src to dst, skipping fields already in existing.
+// Field names are normalized before comparison to avoid duplicates caused by prefix differences.
 func appendUniqueChanges(dst, src []types.Change, existing map[string]bool) []types.Change {
 	for _, c := range src {
-		if !existing[c.Field] {
+		if !existing[normalizeFieldName(c.Field)] {
 			dst = append(dst, c)
 		}
 	}

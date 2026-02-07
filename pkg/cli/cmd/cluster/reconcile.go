@@ -116,9 +116,14 @@ func (r *componentReconciler) reconcileCSI(ctx context.Context, change types.Cha
 	}
 
 	newValue := v1alpha1.CSI(change.NewValue)
+	oldValue := v1alpha1.CSI(change.OldValue)
 
-	// If new value disables CSI, uninstall the old one
+	// If new value disables CSI, uninstall the old one (only if it was installed)
 	if newValue == v1alpha1.CSIDisabled {
+		if oldValue == v1alpha1.CSIDisabled || oldValue == "" {
+			return nil
+		}
+
 		return r.uninstallWithFactory(ctx, r.factories.CSI)
 	}
 
@@ -180,8 +185,14 @@ func (r *componentReconciler) reconcileCertManager(
 	}
 
 	newValue := v1alpha1.CertManager(change.NewValue)
+	oldValue := v1alpha1.CertManager(change.OldValue)
 
 	if newValue == v1alpha1.CertManagerDisabled {
+		// If already disabled, nothing to uninstall
+		if oldValue == v1alpha1.CertManagerDisabled || oldValue == "" {
+			return nil
+		}
+
 		return r.uninstallWithFactory(ctx, r.factories.CertManager)
 	}
 
@@ -198,14 +209,24 @@ func (r *componentReconciler) reconcilePolicyEngine(
 	ctx context.Context,
 	change types.Change,
 ) error {
-	if r.factories.PolicyEngine == nil {
-		return setup.ErrPolicyEngineInstallerFactoryNil
-	}
-
 	newValue := v1alpha1.PolicyEngine(change.NewValue)
+	oldValue := v1alpha1.PolicyEngine(change.OldValue)
 
 	if newValue == v1alpha1.PolicyEngineNone || newValue == "" {
+		// If already none/disabled, nothing to uninstall
+		if oldValue == v1alpha1.PolicyEngineNone || oldValue == "" {
+			return nil
+		}
+
+		if r.factories.PolicyEngine == nil {
+			return setup.ErrPolicyEngineInstallerFactoryNil
+		}
+
 		return r.uninstallWithFactory(ctx, r.factories.PolicyEngine)
+	}
+
+	if r.factories.PolicyEngine == nil {
+		return setup.ErrPolicyEngineInstallerFactoryNil
 	}
 
 	err := setup.InstallPolicyEngineSilent(ctx, r.clusterCfg, r.factories)
@@ -224,8 +245,14 @@ func (r *componentReconciler) reconcileGitOpsEngine(
 	change types.Change,
 ) error {
 	newValue := v1alpha1.GitOpsEngine(change.NewValue)
+	oldValue := v1alpha1.GitOpsEngine(change.OldValue)
 
 	if newValue == v1alpha1.GitOpsEngineNone || newValue == "" {
+		// If already none/disabled, nothing to uninstall
+		if oldValue == v1alpha1.GitOpsEngineNone || oldValue == "" {
+			return nil
+		}
+
 		return r.uninstallGitOpsEngine(ctx, change)
 	}
 

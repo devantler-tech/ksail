@@ -625,6 +625,33 @@ func TestMergeProvisionerDiff(t *testing.T) {
 			)
 		}
 	})
+
+	t.Run("deduplicates fields with cluster prefix mismatch", func(t *testing.T) {
+		t.Parallel()
+
+		main := &types.UpdateResult{
+			InPlaceChanges:   []types.Change{},
+			RebootRequired:   []types.Change{},
+			RecreateRequired: []types.Change{{Field: "cluster.vanilla.mirrorsDir"}},
+		}
+
+		provisioner := &types.UpdateResult{
+			InPlaceChanges: []types.Change{},
+			RebootRequired: []types.Change{},
+			RecreateRequired: []types.Change{
+				{Field: "vanilla.mirrorsDir"},
+			}, // same field, no prefix
+		}
+
+		mergeProvisionerDiff(main, provisioner)
+
+		if len(main.RecreateRequired) != 1 {
+			t.Errorf(
+				"expected 1 recreate change (deduplicated across prefix), got %d",
+				len(main.RecreateRequired),
+			)
+		}
+	})
 }
 
 // assertSingleChange validates that exactly one change matches the expected parameters.
