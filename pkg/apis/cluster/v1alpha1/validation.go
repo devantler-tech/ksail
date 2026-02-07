@@ -3,6 +3,7 @@ package v1alpha1
 import (
 	"fmt"
 	"regexp"
+	"strings"
 )
 
 // clusterNameRegex matches DNS-1123 subdomain names: lowercase alphanumeric with optional hyphens.
@@ -106,6 +107,11 @@ func ValidProviders() []Provider {
 	return []Provider{ProviderDocker, ProviderHetzner}
 }
 
+// ValidPlacementGroupStrategies returns supported placement group strategy values.
+func ValidPlacementGroupStrategies() []PlacementGroupStrategy {
+	return []PlacementGroupStrategy{PlacementGroupStrategyNone, PlacementGroupStrategySpread}
+}
+
 // ValidateMirrorRegistriesForProvider validates that mirror registries are compatible with the provider.
 // Cloud providers (like Hetzner) cannot access local Docker containers running as mirror registries.
 // For cloud providers, mirror registries must point to external, internet-accessible registries.
@@ -122,15 +128,45 @@ func ValidateMirrorRegistriesForProvider(provider Provider, mirrorRegistries []s
 
 	// Cloud providers cannot access local Docker containers as mirrors
 	if provider == ProviderHetzner {
-		return fmt.Errorf(
-			"%w: mirror registries cannot be used with provider %s; "+
-				"cloud-based clusters cannot access local Docker containers",
-			ErrMirrorRegistryNotSupported,
-			provider,
-		)
+		for _, spec := range mirrorRegistries {
+			if isLocalMirrorSpec(spec) {
+				return fmt.Errorf(
+					"%w: %q references a local endpoint; "+
+						"cloud-based clusters cannot access local Docker containers; "+
+						"use external registry URLs instead (e.g., docker.io=https://registry-1.docker.io)",
+					ErrMirrorRegistryNotSupported,
+					spec,
+				)
+			}
+		}
 	}
 
 	return nil
+}
+
+// isLocalMirrorSpec checks if a mirror specification references a local endpoint.
+// Local endpoints include localhost, 127.0.0.1, 0.0.0.0, and host.docker.internal.
+func isLocalMirrorSpec(spec string) bool {
+	// Normalize to lowercase for comparison
+	lower := strings.ToLower(spec)
+
+	// Check for local patterns in the spec
+	// These patterns indicate local Docker container references that won't work on cloud providers
+	localPatterns := []string{
+		"localhost",
+		"127.0.0.1",
+		"0.0.0.0",
+		"host.docker.internal",
+		"[::1]", // IPv6 localhost
+	}
+
+	for _, pattern := range localPatterns {
+		if strings.Contains(lower, pattern) {
+			return true
+		}
+	}
+
+	return false
 }
 
 // ValidateLocalRegistryForProvider validates that local registry configuration is compatible with the provider.

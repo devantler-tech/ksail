@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/image"
 )
 
 const (
@@ -46,15 +47,25 @@ func (c *CertManagerInstaller) Uninstall(ctx context.Context) error {
 	return nil
 }
 
-func (c *CertManagerInstaller) helmInstallOrUpgradeCertManager(ctx context.Context) error {
-	repoEntry := &helm.RepositoryEntry{Name: certManagerRepoName, URL: certManagerRepoURL}
+// Images returns the container images used by cert-manager.
+func (c *CertManagerInstaller) Images(ctx context.Context) ([]string, error) {
+	spec := c.chartSpec()
 
-	err := c.client.AddRepository(ctx, repoEntry, c.timeout)
+	manifest, err := c.client.TemplateChart(ctx, spec)
 	if err != nil {
-		return fmt.Errorf("failed to add jetstack repository: %w", err)
+		return nil, fmt.Errorf("failed to template cert-manager chart: %w", err)
 	}
 
-	spec := &helm.ChartSpec{
+	images, err := image.ExtractImagesFromManifest(manifest)
+	if err != nil {
+		return nil, fmt.Errorf("extract images from cert-manager manifest: %w", err)
+	}
+
+	return images, nil
+}
+
+func (c *CertManagerInstaller) chartSpec() *helm.ChartSpec {
+	return &helm.ChartSpec{
 		ReleaseName:     certManagerRelease,
 		ChartName:       certManagerChartName,
 		Namespace:       certManagerNamespace,
@@ -69,6 +80,17 @@ func (c *CertManagerInstaller) helmInstallOrUpgradeCertManager(ctx context.Conte
 			"startupapicheck.timeout": "5m",
 		},
 	}
+}
+
+func (c *CertManagerInstaller) helmInstallOrUpgradeCertManager(ctx context.Context) error {
+	repoEntry := &helm.RepositoryEntry{Name: certManagerRepoName, URL: certManagerRepoURL}
+
+	err := c.client.AddRepository(ctx, repoEntry, c.timeout)
+	if err != nil {
+		return fmt.Errorf("failed to add jetstack repository: %w", err)
+	}
+
+	spec := c.chartSpec()
 
 	_, err = c.client.InstallOrUpgradeChart(ctx, spec)
 	if err != nil {

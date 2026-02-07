@@ -14,7 +14,7 @@ timeout-minutes: 30
 permissions: read-all
 
 network:
-  allowed: [defaults, go]
+  allowed: [defaults, go, "storage.googleapis.com"]
 
 safe-outputs:
   app:
@@ -70,7 +70,7 @@ To decide which phase to perform:
 - Opportunities for new ways of greatly increasing test coverage
 - Any questions or clarifications needed from maintainers
 
-   **Include a "How to Control this Workflow" section at the end of the discussion that explains:**
+  **Include a "How to Control this Workflow" section at the end of the discussion that explains:**
 
 - The user can add comments to the discussion to provide feedback or adjustments to the plan
 - The user can use these commands:
@@ -80,7 +80,7 @@ To decide which phase to perform:
       gh aw run daily-test-improver --repo ${{ github.repository }} --repeat <number-of-repeats>
       gh aw logs daily-test-improver --repo ${{ github.repository }}
 
-   **Include a "What Happens Next" section at the end of the discussion that explains:**
+  **Include a "What Happens Next" section at the end of the discussion that explains:**
 
 - The next time this workflow runs, Phase 2 will be performed, which will analyze the codebase to create coverage steps configuration
 - After Phase 2 completes, Phase 3 will begin on subsequent runs to implement actual test coverage improvements
@@ -95,7 +95,7 @@ To decide which phase to perform:
 
 2. Have a careful think about the CI commands needed to build the repository, run tests, produce a combined coverage report and upload it as an artifact. Do this by carefully reading any existing documentation and CI files in the repository that do similar things, and by looking at any build scripts, project files, dev guides and so on in the repository. If multiple projects are present, perform build and coverage testing on as many as possible, and where possible merge the coverage reports into one combined report. Work out the steps you worked out, in order, as a series of YAML steps suitable for inclusion in a GitHub Action.
 
-3. Create the file `.github/actions/daily-test-improver/coverage-steps/action.yml` containing these steps, ensuring that the action.yml file is valid. Leave comments in the file to explain what the steps are doing, where the coverage report will be generated, and any other relevant information. Ensure that the steps include uploading the coverage report(s) as an artifact called "coverage".  Each step of the action should append its output to a file called `coverage-steps.log` in the root of the repository. Ensure that the action.yml file is valid and correctly formatted.
+3. Create the file `.github/actions/daily-test-improver/coverage-steps/action.yml` containing these steps, ensuring that the action.yml file is valid. Leave comments in the file to explain what the steps are doing, where the coverage report will be generated, and any other relevant information. Ensure that the steps include uploading the coverage report(s) as an artifact called "coverage". Each step of the action should append its output to a file called `coverage-steps.log` in the root of the repository. Ensure that the action.yml file is valid and correctly formatted.
 
 4. Before running any of the steps, make a pull request for the addition of the `action.yml` file, with title "${{ github.workflow }} - Updates to complete configuration". Encourage the maintainer to review the files carefully to ensure they are appropriate for the project.
 
@@ -126,7 +126,7 @@ To decide which phase to perform:
    e. Check for existing open pull requests (especially yours with "${{ github.workflow }}" prefix). Avoid duplicate work.
 
    f. If plan needs updating then comment on planning discussion with revised plan and rationale. Consider maintainer feedback.
-  
+
    g. Based on all of the above, select an area of relatively low coverage to work on that appears tractable for further test additions. Ensure that you have a good understanding of the code and the testing requirements before proceeding.
 
 2. **Work towards your selected goal**. For the test coverage improvement goal you selected, do the following:
@@ -151,24 +151,23 @@ To decide which phase to perform:
 
    a. If you succeeded in writing useful code changes that improve test coverage, create a **draft** pull request with your changes.
 
-      **Critical:** Exclude coverage reports and tool-generated files from PR. Double-check added files and remove any that don't belong.
+   **Critical:** Exclude coverage reports and tool-generated files from PR. Double-check added files and remove any that don't belong.
 
-      Include a description of the improvements with evidence of impact. In the description, explain:
+   Include a description of the improvements with evidence of impact. In the description, explain:
+   - **Goal and rationale:** Coverage area chosen and why it matters
+   - **Approach:** Testing strategy, methodology, and implementation steps
+   - **Impact measurement:** How coverage was tested and results achieved
+   - **Trade-offs:** What changed (complexity, test maintenance)
+   - **Validation:** Testing approach and success criteria met
+   - **Future work:** Additional coverage opportunities identified
 
-      - **Goal and rationale:** Coverage area chosen and why it matters
-      - **Approach:** Testing strategy, methodology, and implementation steps
-      - **Impact measurement:** How coverage was tested and results achieved
-      - **Trade-offs:** What changed (complexity, test maintenance)
-      - **Validation:** Testing approach and success criteria met
-      - **Future work:** Additional coverage opportunities identified
+   **Test coverage results section:**
+   Document coverage impact with exact coverage numbers before and after the changes, drawing from the coverage reports, in a table if possible. Include changes in numbers for overall coverage. Be transparent about measurement limitations and methodology. Mark estimates clearly.
 
-      **Test coverage results section:**
-      Document coverage impact with exact coverage numbers before and after the changes, drawing from the coverage reports, in a table if possible. Include changes in numbers for overall coverage. Be transparent about measurement limitations and methodology. Mark estimates clearly.
+   **Reproducibility section:**
+   Provide clear instructions to reproduce coverage testing, including setup commands (install dependencies, build code, run tests, generate coverage reports), measurement procedures, and expected results format.
 
-      **Reproducibility section:**
-      Provide clear instructions to reproduce coverage testing, including setup commands (install dependencies, build code, run tests, generate coverage reports), measurement procedures, and expected results format.
-
-      After creation, check the pull request to ensure it is correct, includes all expected files, and doesn't include any unwanted files or changes. Make any necessary corrections by pushing further commits to the branch.
+   After creation, check the pull request to ensure it is correct, includes all expected files, and doesn't include any unwanted files or changes. Make any necessary corrections by pushing further commits to the branch.
 
    b. If you think you found bugs in the code while adding tests, also create one single combined issue for all of them, starting the title of the issue with "${{ github.workflow }}". Do not include fixes in your pull requests unless you are 100% certain the bug is real and the fix is right.
 

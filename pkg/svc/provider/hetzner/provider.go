@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider"
+	"github.com/devantler-tech/ksail/v5/pkg/utils/labels"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 )
 
@@ -28,6 +30,12 @@ const (
 	IPv4CIDRBits = 32
 	// IPv6CIDRBits is the number of bits in an IPv6 CIDR mask for ::/0.
 	IPv6CIDRBits = 128
+	// DefaultMaxServerCreateRetries is the number of retry attempts for server creation.
+	DefaultMaxServerCreateRetries = 3
+	// DefaultRetryBaseDelay is the base delay for exponential backoff.
+	DefaultRetryBaseDelay = 2 * time.Second
+	// DefaultRetryMaxDelay is the maximum delay between retry attempts.
+	DefaultRetryMaxDelay = 10 * time.Second
 )
 
 // ErrHetznerActionFailed indicates that a Hetzner action failed.
@@ -197,22 +205,9 @@ func (p *Provider) ListAllClusters(ctx context.Context) ([]string, error) {
 		return nil, fmt.Errorf("failed to list servers: %w", err)
 	}
 
-	// Extract unique cluster names
-	clusterSet := make(map[string]struct{})
-
-	for _, server := range servers {
-		if name, ok := server.Labels[LabelClusterName]; ok && name != "" {
-			clusterSet[name] = struct{}{}
-		}
-	}
-
-	// Convert set to slice
-	clusters := make([]string, 0, len(clusterSet))
-	for name := range clusterSet {
-		clusters = append(clusters, name)
-	}
-
-	return clusters, nil
+	return labels.UniqueValues(servers, LabelClusterName, func(s *hcloud.Server) map[string]string {
+		return s.Labels
+	}), nil
 }
 
 // NodesExist returns true if nodes exist for the given cluster name.
@@ -288,6 +283,151 @@ func (p *Provider) CreateServer(
 	}
 
 	return result.Server, nil
+}
+
+// ServerRetryOpts configures retry and fallback behavior for server creation.
+type ServerRetryOpts struct {
+	// FallbackLocations is a list of alternative locations to try if the primary fails.
+	FallbackLocations []string
+	// AllowPlacementFallback allows disabling placement group if placement fails.
+	AllowPlacementFallback bool
+	// LogWriter receives retry progress messages. If nil, no logging is performed.
+	LogWriter io.Writer
+}
+
+// CreateServerWithRetry creates a server with retry and location fallback support.
+// It handles transient Hetzner API errors with exponential backoff and can fallback
+// to alternative locations when the primary location has resource constraints.
+//
+//nolint:cyclop,funlen,gocognit // Complex retry logic with location fallback requires multiple conditions
+func (p *Provider) CreateServerWithRetry(
+	ctx context.Context,
+	opts CreateServerOpts,
+	retryOpts ServerRetryOpts,
+) (*hcloud.Server, error) {
+	if p.client == nil {
+		return nil, provider.ErrProviderUnavailable
+	}
+
+	// Build list of locations to try: primary + fallbacks
+	locations := make([]string, 0, 1+len(retryOpts.FallbackLocations))
+	locations = append(locations, opts.Location)
+	locations = append(locations, retryOpts.FallbackLocations...)
+
+	var lastErr error
+
+	originalPlacementGroupID := opts.PlacementGroupID
+
+	for locationIdx, location := range locations {
+		// Update location for this attempt
+		currentOpts := opts
+		currentOpts.Location = location
+
+		// Reset placement group for each new location (may have been disabled in previous location)
+		currentOpts.PlacementGroupID = originalPlacementGroupID
+		placementDisabledForLocation := false
+
+		for attempt := 1; attempt <= DefaultMaxServerCreateRetries; attempt++ {
+			server, err := p.CreateServer(ctx, currentOpts)
+			if err == nil {
+				// Success - log if we had to fallback
+				if locationIdx > 0 || placementDisabledForLocation {
+					p.logRetryf(
+						retryOpts.LogWriter,
+						"  ✓ Server %s created successfully after fallback (location: %s, placement group: %v)\n",
+						opts.Name,
+						location,
+						currentOpts.PlacementGroupID > 0,
+					)
+				}
+
+				return server, nil
+			}
+
+			lastErr = err
+
+			// Check if this is a permanent error that shouldn't be retried
+			if IsResourceLimitError(err) {
+				return nil, fmt.Errorf("permanent error creating server %s: %w", opts.Name, err)
+			}
+
+			// Handle placement errors with optional fallback
+			if IsPlacementError(err) && retryOpts.AllowPlacementFallback &&
+				currentOpts.PlacementGroupID > 0 {
+				p.logRetryf(
+					retryOpts.LogWriter,
+					"  ⚠ Placement failed for %s in %s, retrying without placement group...\n",
+					opts.Name,
+					location,
+				)
+
+				currentOpts.PlacementGroupID = 0
+				placementDisabledForLocation = true
+
+				continue
+			}
+
+			// Check if we should retry this error
+			if !IsRetryableHetznerError(err) && !IsPlacementError(err) {
+				// Non-retryable error - try next location if available
+				break
+			}
+
+			// Log retry attempt
+			if attempt < DefaultMaxServerCreateRetries {
+				delay := p.calculateRetryDelay(attempt)
+				p.logRetryf(
+					retryOpts.LogWriter,
+					"  ⚠ Attempt %d/%d failed for %s in %s: %v. Retrying in %v...\n",
+					attempt,
+					DefaultMaxServerCreateRetries,
+					opts.Name,
+					location,
+					err,
+					delay,
+				)
+
+				select {
+				case <-ctx.Done():
+					return nil, fmt.Errorf("context cancelled during retry: %w", ctx.Err())
+				case <-time.After(delay):
+					// Continue to next attempt
+				}
+			}
+		}
+
+		// All retries exhausted for this location, try next
+		if locationIdx < len(locations)-1 {
+			p.logRetryf(
+				retryOpts.LogWriter,
+				"  ⚠ All attempts failed in %s, trying fallback location %s...\n",
+				location,
+				locations[locationIdx+1],
+			)
+		}
+	}
+
+	// All locations exhausted
+	return nil, fmt.Errorf("%w: %s (last error: %w)", ErrAllLocationsFailed, opts.Name, lastErr)
+}
+
+// logRetryf writes a formatted message to the log writer if it's not nil.
+//
+//nolint:funcorder // Helper grouped with CreateServerWithRetry
+func (p *Provider) logRetryf(w io.Writer, format string, args ...any) {
+	if w != nil {
+		_, _ = fmt.Fprintf(w, format, args...)
+	}
+}
+
+// calculateRetryDelay returns the delay for the given retry attempt.
+// Uses exponential backoff: 2s, 4s, 8s (capped at 10s).
+//
+//nolint:funcorder // Helper grouped with CreateServerWithRetry
+func (p *Provider) calculateRetryDelay(attempt int) time.Duration {
+	delay := min(DefaultRetryBaseDelay*time.Duration(1<<(attempt-1)), DefaultRetryMaxDelay)
+
+	return delay
 }
 
 // attachISOAndReboot attaches an ISO to a server and reboots it to boot from the ISO.

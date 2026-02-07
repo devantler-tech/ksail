@@ -22,8 +22,9 @@ type DeletionPreview struct {
 	Provider    v1alpha1.Provider
 
 	// Docker resources
-	Nodes      []string // Container names for Docker nodes
-	Registries []string // Registry container names
+	Nodes            []string // Container names for Docker nodes
+	Registries       []string // Registry container names
+	SharedContainers []string // Shared containers (e.g., cloud-provider-kind) to be deleted with last cluster
 
 	// Hetzner Cloud resources
 	Servers        []string // Server names
@@ -164,6 +165,14 @@ func writeDockerResources(previewText *strings.Builder, preview *DeletionPreview
 
 		for _, reg := range preview.Registries {
 			previewText.WriteString("\n    - " + reg)
+		}
+	}
+
+	if len(preview.SharedContainers) > 0 {
+		previewText.WriteString("\n  Shared containers (last Kind cluster):")
+
+		for _, container := range preview.SharedContainers {
+			previewText.WriteString("\n    - " + container)
 		}
 	}
 }

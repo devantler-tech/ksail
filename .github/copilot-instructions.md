@@ -134,7 +134,12 @@ go run main.go --help
 │   │   └── toolgen/        # Tool generation for AI assistants
 │   ├── apis/               # API types and schemas
 │   ├── cli/                # CLI wiring, UI, and Cobra commands
-│   │   └── cmd/            # CLI command implementations
+│   │   ├── annotations/    # Command annotation constants
+│   │   ├── cmd/            # CLI command implementations
+│   │   ├── helpers/        # CLI helper utilities
+│   │   ├── lifecycle/      # Cluster lifecycle orchestration
+│   │   ├── setup/          # Component setup (CNI, mirror registries, etc.)
+│   │   └── ui/             # Terminal UI (ASCII art, chat TUI, confirmations)
 │   ├── client/             # Embedded tool clients (kubectl, helm, flux, etc.)
 │   ├── di/                 # Dependency injection
 │   ├── io/                 # I/O utilities
@@ -180,6 +185,8 @@ ksail cluster connect                  # Connect to cluster with K9s
 ksail workload apply                   # Apply workloads
 ksail workload gen <resource>          # Generate resources
 ksail cipher <command>                 # Manage secrets with SOPS
+ksail chat                             # AI chat powered by GitHub Copilot
+ksail mcp                              # Start MCP server for AI assistants
 ```
 
 ### Init Command Options
@@ -286,6 +293,7 @@ npm run dev                            # Test locally (if needed)
 - **Provider/Provisioner Architecture**: Separated infrastructure providers (Docker, Hetzner) from distribution provisioners (Vanilla, K3s, Talos)
 - **Hetzner Provider**: Added support for running Talos clusters on Hetzner Cloud
 - **Registry Authentication**: Added support for external registries with username/password authentication
+- **Default Registry Mirrors**: Enabled docker.io and ghcr.io mirrors by default to avoid rate limits and improve CI/CD performance (`pkg/cli/setup/mirrorregistry/defaults.go`)
 - **Distribution Naming**: Changed user-facing names from `Kind`/`K3d` to `Vanilla`/`K3s` to focus on the Kubernetes distribution rather than the underlying tool
 - **VSCode Extension**: Added VSCode extension for managing KSail clusters from the editor with interactive wizards and MCP server support
 - **AI Chat Integration**: Added `ksail chat` command powered by GitHub Copilot SDK for interactive cluster configuration and troubleshooting (`pkg/svc/chat/`)

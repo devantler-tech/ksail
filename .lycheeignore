@@ -18,6 +18,7 @@ https://x-access-token/
 
 # GitHub Agentic Workflows documentation (LLM-optimized format)
 https://githubnext.github.io/gh-aw/llms-create-agentic-workflows.txt
+https://githubnext.github.io/gh-aw/_llms-txt/agentic-workflows.txt
 
 # Intermittent Network Errors
 http://host.docker.internal:8765/
@@ -51,3 +52,4 @@ https://www.i18next.com/how-to/faq#i18next-is-awesome.-how-can-i-support-the-pro
 https://www.openpolicyagent.org/docs/latest/
 https://www.talos.dev/
 https://mcp.deepwiki.com/sse
+https://feross.org/support

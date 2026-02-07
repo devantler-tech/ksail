@@ -6,7 +6,175 @@ import (
 	"testing"
 
 	"github.com/devantler-tech/ksail/v5/pkg/ai/toolgen"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
+
+func TestToolParametersFromJSON(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		json        string
+		expected    map[string]any
+		expectError bool
+	}{
+		{"empty object", `{}`, map[string]any{}, false},
+		{"string value", `{"name": "test"}`, map[string]any{"name": "test"}, false},
+		{"boolean value", `{"force": true}`, map[string]any{"force": true}, false},
+		{"numeric value", `{"count": 3}`, map[string]any{"count": float64(3)}, false},
+		{"array value", `{"args": ["a", "b"]}`, map[string]any{"args": []any{"a", "b"}}, false},
+		{"malformed JSON", `{invalid}`, nil, true},
+		{"empty string", ``, nil, true},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			params, err := toolgen.ToolParametersFromJSON(testCase.json)
+
+			if testCase.expectError {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, testCase.expected, params)
+			}
+		})
+	}
+}
+
+func TestBuildCommandArgs_SimpleCommand(t *testing.T) {
+	t.Parallel()
+
+	tool := toolgen.ToolDefinition{
+		Name:         "cluster_create",
+		CommandParts: []string{"ksail", "cluster", "create"},
+	}
+
+	args, err := toolgen.BuildCommandArgs(tool, map[string]any{
+		"name": "my-cluster",
+	})
+
+	require.NoError(t, err)
+	assert.Contains(t, args, "cluster")
+	assert.Contains(t, args, "create")
+	assert.Contains(t, args, "--name=my-cluster")
+}
+
+func TestBuildCommandArgs_BooleanFlags(t *testing.T) {
+	t.Parallel()
+
+	tool := toolgen.ToolDefinition{
+		Name:         "cluster_delete",
+		CommandParts: []string{"ksail", "cluster", "delete"},
+	}
+
+	t.Run("true boolean includes flag", func(t *testing.T) {
+		t.Parallel()
+
+		args, err := toolgen.BuildCommandArgs(tool, map[string]any{"force": true})
+
+		require.NoError(t, err)
+		assert.Contains(t, args, "--force")
+	})
+
+	t.Run("false boolean omits flag", func(t *testing.T) {
+		t.Parallel()
+
+		args, err := toolgen.BuildCommandArgs(tool, map[string]any{"force": false})
+
+		require.NoError(t, err)
+
+		for _, arg := range args {
+			assert.NotContains(t, arg, "force")
+		}
+	})
+}
+
+func TestBuildCommandArgs_ArrayFlag(t *testing.T) {
+	t.Parallel()
+
+	tool := toolgen.ToolDefinition{
+		Name:         "workload_apply",
+		CommandParts: []string{"ksail", "workload", "apply"},
+	}
+
+	args, err := toolgen.BuildCommandArgs(tool, map[string]any{
+		"filename": []any{"/tmp/a.yaml", "/tmp/b.yaml"},
+	})
+
+	require.NoError(t, err)
+	assert.Contains(t, args, "--filename=/tmp/a.yaml")
+	assert.Contains(t, args, "--filename=/tmp/b.yaml")
+}
+
+func TestBuildCommandArgs_PositionalArgs(t *testing.T) {
+	t.Parallel()
+
+	tool := toolgen.ToolDefinition{
+		Name:         "workload_get",
+		CommandParts: []string{"ksail", "workload", "get"},
+	}
+
+	args, err := toolgen.BuildCommandArgs(tool, map[string]any{
+		"args": []any{"pods", "my-pod"},
+	})
+
+	require.NoError(t, err)
+	assert.Contains(t, args, "pods")
+	assert.Contains(t, args, "my-pod")
+}
+
+func TestBuildCommandArgs_ArgsNotArray(t *testing.T) {
+	t.Parallel()
+
+	tool := toolgen.ToolDefinition{
+		Name:         "workload_get",
+		CommandParts: []string{"ksail", "workload", "get"},
+	}
+
+	_, err := toolgen.BuildCommandArgs(tool, map[string]any{
+		"args": "not-an-array",
+	})
+
+	require.ErrorIs(t, err, toolgen.ErrArgsNotArray)
+}
+
+func TestBuildCommandArgs_NilValueSkipped(t *testing.T) {
+	t.Parallel()
+
+	tool := toolgen.ToolDefinition{
+		Name:         "cluster_create",
+		CommandParts: []string{"ksail", "cluster", "create"},
+	}
+
+	args, err := toolgen.BuildCommandArgs(tool, map[string]any{
+		"name":   "my-cluster",
+		"config": nil,
+	})
+
+	require.NoError(t, err)
+
+	for _, arg := range args {
+		assert.NotContains(t, arg, "config")
+	}
+}
+
+func TestBuildCommandArgs_EmptyParams(t *testing.T) {
+	t.Parallel()
+
+	tool := toolgen.ToolDefinition{
+		Name:         "cluster_list",
+		CommandParts: []string{"ksail", "cluster", "list"},
+	}
+
+	args, err := toolgen.BuildCommandArgs(tool, map[string]any{})
+
+	require.NoError(t, err)
+	assert.Contains(t, args, "cluster")
+	assert.Contains(t, args, "list")
+}
 
 //nolint:funlen // Test functions are inherently verbose with test data setup
 func TestConsolidatedToolExecution(t *testing.T) {

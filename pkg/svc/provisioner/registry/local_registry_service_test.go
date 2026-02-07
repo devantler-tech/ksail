@@ -56,6 +56,15 @@ func (m *mockRegistryBackend) GetRegistryPort(ctx context.Context, name string) 
 	return args.Int(0), wrapMockError("GetRegistryPort", args.Error(1))
 }
 
+func (m *mockRegistryBackend) WaitForRegistriesReady(
+	ctx context.Context,
+	registryIPs map[string]string,
+) error {
+	args := m.Called(ctx, registryIPs)
+
+	return wrapMockError("WaitForRegistriesReady", args.Error(0))
+}
+
 type registryTestHarness struct {
 	docker  *dockerclient.MockAPIClient
 	backend *mockRegistryBackend

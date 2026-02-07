@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	iohelpers "github.com/devantler-tech/ksail/v5/pkg/io"
 )
 
 // ErrRepositoryRequired indicates that the repository is required for empty artifacts.
@@ -142,46 +144,8 @@ func normalizeRepositoryName(candidate, sourcePath string) string {
 // sanitizeSegment converts a repository path segment to lowercase alphanumeric with hyphens.
 // Consecutive hyphens are collapsed to single hyphens.
 // Leading and trailing hyphens are trimmed.
-//
-//nolint:cyclop // segment sanitization requires character-by-character validation
 func sanitizeSegment(segment string) string {
-	trimmed := strings.TrimSpace(segment)
-	if trimmed == "" {
-		return ""
-	}
-
-	trimmed = strings.ToLower(trimmed)
-
-	var builder strings.Builder
-
-	prevHyphen := false
-
-	for _, char := range trimmed {
-		switch {
-		case char >= 'a' && char <= 'z':
-			builder.WriteRune(char)
-
-			prevHyphen = false
-		case char >= '0' && char <= '9':
-			builder.WriteRune(char)
-
-			prevHyphen = false
-		case char == '-':
-			if !prevHyphen {
-				builder.WriteRune('-')
-
-				prevHyphen = true
-			}
-		default:
-			if !prevHyphen {
-				builder.WriteRune('-')
-
-				prevHyphen = true
-			}
-		}
-	}
-
-	return strings.Trim(builder.String(), "-")
+	return iohelpers.SanitizeToDNSLabel(segment)
 }
 
 // normalizeArtifactName derives an artifact name from the candidate or repository.

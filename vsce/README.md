@@ -110,11 +110,9 @@ vsce/
 │   │   ├── serverProvider.ts # MCP server definition provider
 │   │   ├── schemaClient.ts   # MCP schema client for KSail
 │   │   └── index.ts          # Module exports
-│   ├── views/
-│   │   ├── clustersView.ts   # Tree view provider
-│   │   └── index.ts          # Module exports
-│   └── ui/
-│       └── index.ts          # Reserved for future UI helpers (currently empty)
+│   └── views/
+│       ├── clustersView.ts   # Tree view provider
+│       └── index.ts          # Module exports
 ├── dist/                     # Compiled output
 └── package.json              # Extension manifest
 ```

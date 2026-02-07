@@ -8,6 +8,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
 	"github.com/devantler-tech/ksail/v5/pkg/k8s"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/image"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -77,6 +78,37 @@ func (h *HetznerCSIInstaller) Uninstall(ctx context.Context) error {
 	return nil
 }
 
+// Images returns the container images used by the Hetzner CSI driver.
+func (h *HetznerCSIInstaller) Images(ctx context.Context) ([]string, error) {
+	spec := h.chartSpec()
+
+	manifest, err := h.client.TemplateChart(ctx, spec)
+	if err != nil {
+		return nil, fmt.Errorf("failed to template hetzner-csi chart: %w", err)
+	}
+
+	images, err := image.ExtractImagesFromManifest(manifest)
+	if err != nil {
+		return nil, fmt.Errorf("extract images from hetzner-csi manifest: %w", err)
+	}
+
+	return images, nil
+}
+
+func (h *HetznerCSIInstaller) chartSpec() *helm.ChartSpec {
+	return &helm.ChartSpec{
+		ReleaseName:     hetznerCSIRelease,
+		ChartName:       hetznerCSIChartName,
+		Namespace:       hetznerCSINamespace,
+		RepoURL:         hetznerCSIRepoURL,
+		CreateNamespace: false, // kube-system already exists
+		Atomic:          true,
+		Wait:            true,
+		WaitForJobs:     true,
+		Timeout:         h.timeout,
+	}
+}
+
 // createHetznerSecret creates the required secret containing the Hetzner Cloud API token.
 // The secret is named 'hcloud' and is created in the 'kube-system' namespace.
 // It reads the token from the HCLOUD_TOKEN environment variable.
@@ -143,17 +175,7 @@ func (h *HetznerCSIInstaller) helmInstallOrUpgradeHetznerCSI(ctx context.Context
 		return fmt.Errorf("failed to add hetzner CSI repository: %w", err)
 	}
 
-	spec := &helm.ChartSpec{
-		ReleaseName:     hetznerCSIRelease,
-		ChartName:       hetznerCSIChartName,
-		Namespace:       hetznerCSINamespace,
-		RepoURL:         hetznerCSIRepoURL,
-		CreateNamespace: false, // kube-system already exists
-		Atomic:          true,
-		Wait:            true,
-		WaitForJobs:     true,
-		Timeout:         h.timeout,
-	}
+	spec := h.chartSpec()
 
 	_, err = h.client.InstallOrUpgradeChart(ctx, spec)
 	if err != nil {

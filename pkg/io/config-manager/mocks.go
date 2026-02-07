@@ -5,7 +5,6 @@
 package configmanager
 
 import (
-	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
 	mock "github.com/stretchr/testify/mock"
 )
 
@@ -36,50 +35,50 @@ func (_m *MockConfigManager[T]) EXPECT() *MockConfigManager_Expecter[T] {
 	return &MockConfigManager_Expecter[T]{mock: &_m.Mock}
 }
 
-// LoadConfig provides a mock function for the type MockConfigManager
-func (_mock *MockConfigManager[T]) LoadConfig(tmr timer.Timer) (*T, error) {
-	ret := _mock.Called(tmr)
+// Load provides a mock function for the type MockConfigManager
+func (_mock *MockConfigManager[T]) Load(opts LoadOptions) (*T, error) {
+	ret := _mock.Called(opts)
 
 	if len(ret) == 0 {
-		panic("no return value specified for LoadConfig")
+		panic("no return value specified for Load")
 	}
 
 	var r0 *T
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(timer.Timer) (*T, error)); ok {
-		return returnFunc(tmr)
+	if returnFunc, ok := ret.Get(0).(func(LoadOptions) (*T, error)); ok {
+		return returnFunc(opts)
 	}
-	if returnFunc, ok := ret.Get(0).(func(timer.Timer) *T); ok {
-		r0 = returnFunc(tmr)
+	if returnFunc, ok := ret.Get(0).(func(LoadOptions) *T); ok {
+		r0 = returnFunc(opts)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*T)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(timer.Timer) error); ok {
-		r1 = returnFunc(tmr)
+	if returnFunc, ok := ret.Get(1).(func(LoadOptions) error); ok {
+		r1 = returnFunc(opts)
 	} else {
 		r1 = ret.Error(1)
 	}
 	return r0, r1
 }
 
-// MockConfigManager_LoadConfig_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'LoadConfig'
-type MockConfigManager_LoadConfig_Call[T any] struct {
+// MockConfigManager_Load_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Load'
+type MockConfigManager_Load_Call[T any] struct {
 	*mock.Call
 }
 
-// LoadConfig is a helper method to define mock.On call
-//   - tmr timer.Timer
-func (_e *MockConfigManager_Expecter[T]) LoadConfig(tmr interface{}) *MockConfigManager_LoadConfig_Call[T] {
-	return &MockConfigManager_LoadConfig_Call[T]{Call: _e.mock.On("LoadConfig", tmr)}
+// Load is a helper method to define mock.On call
+//   - opts LoadOptions
+func (_e *MockConfigManager_Expecter[T]) Load(opts interface{}) *MockConfigManager_Load_Call[T] {
+	return &MockConfigManager_Load_Call[T]{Call: _e.mock.On("Load", opts)}
 }
 
-func (_c *MockConfigManager_LoadConfig_Call[T]) Run(run func(tmr timer.Timer)) *MockConfigManager_LoadConfig_Call[T] {
+func (_c *MockConfigManager_Load_Call[T]) Run(run func(opts LoadOptions)) *MockConfigManager_Load_Call[T] {
 	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 timer.Timer
+		var arg0 LoadOptions
 		if args[0] != nil {
-			arg0 = args[0].(timer.Timer)
+			arg0 = args[0].(LoadOptions)
 		}
 		run(
 			arg0,
@@ -88,12 +87,12 @@ func (_c *MockConfigManager_LoadConfig_Call[T]) Run(run func(tmr timer.Timer)) *
 	return _c
 }
 
-func (_c *MockConfigManager_LoadConfig_Call[T]) Return(v *T, err error) *MockConfigManager_LoadConfig_Call[T] {
+func (_c *MockConfigManager_Load_Call[T]) Return(v *T, err error) *MockConfigManager_Load_Call[T] {
 	_c.Call.Return(v, err)
 	return _c
 }
 
-func (_c *MockConfigManager_LoadConfig_Call[T]) RunAndReturn(run func(tmr timer.Timer) (*T, error)) *MockConfigManager_LoadConfig_Call[T] {
+func (_c *MockConfigManager_Load_Call[T]) RunAndReturn(run func(opts LoadOptions) (*T, error)) *MockConfigManager_Load_Call[T] {
 	_c.Call.Return(run)
 	return _c
 }

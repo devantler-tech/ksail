@@ -108,15 +108,29 @@ func (p *Provider) EnsureFirewall(
 }
 
 // EnsurePlacementGroup ensures a placement group exists for the cluster.
+// If strategy is None, returns nil without creating a placement group.
+// If customName is provided, uses that name; otherwise uses "<clusterName>-placement".
+//
+//nolint:nilnil // Intentional: nil,nil means "placement groups disabled, no error" - caller checks for nil group
 func (p *Provider) EnsurePlacementGroup(
 	ctx context.Context,
 	clusterName string,
+	strategy string,
+	customName string,
 ) (*hcloud.PlacementGroup, error) {
+	// Skip placement group creation if strategy is None
+	if strategy == "None" || strategy == "" {
+		return nil, nil
+	}
+
 	if p.client == nil {
 		return nil, provider.ErrProviderUnavailable
 	}
 
-	placementGroupName := clusterName + PlacementGroupSuffix
+	placementGroupName := customName
+	if placementGroupName == "" {
+		placementGroupName = clusterName + PlacementGroupSuffix
+	}
 
 	// Check if placement group already exists
 	placementGroup, _, err := p.client.PlacementGroup.GetByName(ctx, placementGroupName)
@@ -200,39 +214,63 @@ func buildFirewallRules() []hcloud.FirewallRule {
 }
 
 // deleteInfrastructure cleans up infrastructure resources for a cluster.
-//
-//nolint:cyclop // Inherent complexity from deleting multiple resource types with retry logic
 func (p *Provider) deleteInfrastructure(ctx context.Context, clusterName string) error {
 	// Small delay to ensure server deletions are fully processed
 	time.Sleep(DefaultPreDeleteDelay)
 
-	// Delete placement group
+	err := p.deletePlacementGroup(ctx, clusterName)
+	if err != nil {
+		return err
+	}
+
+	err = p.deleteFirewallWithRetry(ctx, clusterName)
+	if err != nil {
+		return err
+	}
+
+	return p.deleteNetwork(ctx, clusterName)
+}
+
+// deletePlacementGroup deletes the placement group for a cluster if it exists.
+func (p *Provider) deletePlacementGroup(ctx context.Context, clusterName string) error {
 	placementGroupName := clusterName + PlacementGroupSuffix
 
 	placementGroup, _, err := p.client.PlacementGroup.GetByName(ctx, placementGroupName)
-	if err == nil && placementGroup != nil {
-		_, deleteErr := p.client.PlacementGroup.Delete(ctx, placementGroup)
-		if deleteErr != nil {
-			return fmt.Errorf(
-				"failed to delete placement group %s: %w",
-				placementGroupName,
-				deleteErr,
-			)
-		}
+	if err != nil {
+		// Log error but don't fail - resource may not exist
+		return nil //nolint:nilerr // Ignoring lookup error - resource may not exist
 	}
 
-	// Delete firewall with retry (may still be attached during server deletion)
+	if placementGroup == nil {
+		return nil
+	}
+
+	_, deleteErr := p.client.PlacementGroup.Delete(ctx, placementGroup)
+	if deleteErr != nil {
+		return fmt.Errorf("failed to delete placement group %s: %w", placementGroupName, deleteErr)
+	}
+
+	return nil
+}
+
+// deleteFirewallWithRetry deletes the firewall for a cluster with retry logic.
+// Retries are needed because firewall may still be attached during server deletion.
+func (p *Provider) deleteFirewallWithRetry(ctx context.Context, clusterName string) error {
 	firewallName := clusterName + FirewallSuffix
 
 	for attempt := range MaxDeleteRetries {
 		firewall, _, err := p.client.Firewall.GetByName(ctx, firewallName)
-		if err != nil || firewall == nil {
-			break // Firewall doesn't exist, we're done
+		if err != nil {
+			return nil //nolint:nilerr // Ignoring lookup error - resource may not exist
+		}
+
+		if firewall == nil {
+			return nil
 		}
 
 		_, err = p.client.Firewall.Delete(ctx, firewall)
 		if err == nil {
-			break // Successfully deleted
+			return nil // Successfully deleted
 		}
 
 		// If this is the last attempt, return the error
@@ -249,15 +287,25 @@ func (p *Provider) deleteInfrastructure(ctx context.Context, clusterName string)
 		time.Sleep(DefaultDeleteRetryDelay)
 	}
 
-	// Delete network
+	return nil
+}
+
+// deleteNetwork deletes the network for a cluster if it exists.
+func (p *Provider) deleteNetwork(ctx context.Context, clusterName string) error {
 	networkName := clusterName + NetworkSuffix
 
 	network, _, err := p.client.Network.GetByName(ctx, networkName)
-	if err == nil && network != nil {
-		_, deleteErr := p.client.Network.Delete(ctx, network)
-		if deleteErr != nil {
-			return fmt.Errorf("failed to delete network %s: %w", networkName, deleteErr)
-		}
+	if err != nil {
+		return nil //nolint:nilerr // Ignoring lookup error - resource may not exist
+	}
+
+	if network == nil {
+		return nil
+	}
+
+	_, deleteErr := p.client.Network.Delete(ctx, network)
+	if deleteErr != nil {
+		return fmt.Errorf("failed to delete network %s: %w", networkName, deleteErr)
 	}
 
 	return nil

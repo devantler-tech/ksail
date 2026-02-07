@@ -56,7 +56,8 @@ func newConfigManager(
 	_ = manager.Viper.BindPFlag("force", cmd.Flags().Lookup("force"))
 	cmd.Flags().
 		StringSlice("mirror-registry", []string{}, mirrorRegistryHelp)
-	_ = manager.Viper.BindPFlag("mirror-registry", cmd.Flags().Lookup("mirror-registry"))
+	// NOTE: mirror-registry is NOT bound to Viper to allow custom merge logic in production
+	// Tests that need to check mirror values should call getMirrorRegistriesWithDefaults()
 
 	return manager
 }

@@ -38,6 +38,12 @@ homebrew_casks:
           if OS.mac?
             system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/ksail"]
           end
+    commit_author:
+      signing:
+        enabled: true
+        key: "{{ .Env.GPG_PRIVATE_KEY }}"
+        program: gpg2
+        format: openpgp
 
 dockers_v2:
   - images:
@@ -85,9 +91,6 @@ release:
     ## Quick Start
 
     **Homebrew Cask** (macOS):
-
-    > [!NOTE]
-    > Since the binary is not signed/notarized, you may need to add the `--no-quarantine` flag on some macOS systems.
 
     ```bash
     # Standard installation:
