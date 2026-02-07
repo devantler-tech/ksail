@@ -4,6 +4,7 @@ package confirm
 import (
 	"bufio"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"strings"
@@ -140,14 +141,10 @@ func ShowDeletionPreview(writer io.Writer, preview *DeletionPreview) {
 		writeHetznerResources(&previewText, preview)
 	}
 
-	// Add the confirmation prompt
-	previewText.WriteString("\n" + `Type "yes" to confirm deletion: `)
+	notify.Warningf(writer, previewText.String())
 
-	notify.WriteMessage(notify.Message{
-		Type:    notify.WarningType,
-		Content: previewText.String(),
-		Writer:  writer,
-	})
+	// Print the confirmation prompt on its own line without a symbol prefix
+	_, _ = fmt.Fprint(writer, `Type "yes" to confirm deletion: `)
 }
 
 // writeDockerResources writes Docker-specific resources to the preview.

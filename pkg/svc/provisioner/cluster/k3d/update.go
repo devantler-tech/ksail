@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"strconv"
 	"strings"
 
@@ -82,6 +83,11 @@ func (k *K3dClusterProvisioner) DiffConfig(
 
 	desiredAgents := k.simpleCfg.Agents
 	desiredServers := k.simpleCfg.Servers
+
+	// K3d defaults to 1 server when not explicitly set (Go zero value)
+	if desiredServers == 0 {
+		desiredServers = 1
+	}
 
 	// Server (control-plane) changes require recreate — K3d does not support scaling servers
 	if runningServers != desiredServers {
@@ -269,14 +275,35 @@ func (k *K3dClusterProvisioner) listClusterNodes(
 	ctx context.Context,
 	clusterName string,
 ) ([]k3dNodeInfo, error) {
-	var buf bytes.Buffer
+	// Temporarily redirect os.Stdout to capture K3d's direct writes.
+	// K3d's node list --output json writes to os.Stdout directly,
+	// bypassing Cobra's cmd.OutOrStdout().
+	origStdout := os.Stdout
 
-	nodeRunner := runner.NewCobraCommandRunner(&buf, io.Discard)
+	r, w, err := os.Pipe()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create pipe: %w", err)
+	}
+
+	os.Stdout = w
+
+	nodeRunner := runner.NewCobraCommandRunner(w, io.Discard)
 	cmd := nodecommand.NewCmdNodeList()
 
-	_, err := nodeRunner.Run(ctx, cmd, []string{"--output", "json"})
-	if err != nil {
-		return nil, fmt.Errorf("failed to list nodes: %w", err)
+	_, runErr := nodeRunner.Run(ctx, cmd, []string{"--output", "json"})
+
+	// Restore stdout and collect captured output
+	w.Close()
+
+	os.Stdout = origStdout
+
+	var buf bytes.Buffer
+
+	_, _ = io.Copy(&buf, r)
+	r.Close()
+
+	if runErr != nil {
+		return nil, fmt.Errorf("failed to list nodes: %w", runErr)
 	}
 
 	output := strings.TrimSpace(buf.String())

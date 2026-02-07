@@ -3,8 +3,7 @@
 ⚠ The following resources will be deleted:
     Cluster:  my-cluster
     Provider: Docker
-  Type "yes" to confirm deletion: 
-
+Type "yes" to confirm deletion: 
 🗑️ Delete cluster...
 ► deleting cluster 'my-cluster' on Docker
 ✔ cluster deleted
@@ -14,7 +13,7 @@
 ⚠ The following resources will be deleted:
     Cluster:  my-cluster
     Provider: Docker
-  Type "yes" to confirm deletion: 
+Type "yes" to confirm deletion: 
 ---
 
 [TestDelete_ContextBasedDetection_ClusterNotFound - 1]

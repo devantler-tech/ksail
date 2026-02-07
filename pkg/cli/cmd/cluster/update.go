@@ -168,49 +168,39 @@ func handleUpdateRunE(
 
 	// If dry-run, show summary and exit
 	if dryRun {
-		changeCounts := fmt.Sprintf(
-			"Would apply %d in-place, %d reboot-required, %d recreate-required changes.",
+		var summary strings.Builder
+
+		fmt.Fprintf(&summary,
+			"Would apply %d in-place, %d reboot-required, %d recreate-required changes.\n",
 			len(diff.InPlaceChanges),
 			len(diff.RebootRequired),
 			len(diff.RecreateRequired),
 		)
 
-		notify.WriteMessage(notify.Message{
-			Type:    notify.InfoType,
-			Content: changeCounts,
-			Writer:  cmd.OutOrStdout(),
-		})
+		summary.WriteString("Dry run complete. No changes applied.")
 
-		notify.WriteMessage(notify.Message{
-			Type:    notify.InfoType,
-			Content: "Dry run complete. No changes applied.",
-			Writer:  cmd.OutOrStdout(),
-		})
+		notify.Infof(cmd.OutOrStdout(), summary.String())
 
 		return nil
 	}
 
 	// If there are recreate-required changes, show clear error and require confirmation
 	if diff.HasRecreateRequired() {
+		var block strings.Builder
+
+		fmt.Fprintf(&block, "%d changes require cluster recreation:\n", len(diff.RecreateRequired))
+
 		for _, change := range diff.RecreateRequired {
-			notify.WriteMessage(notify.Message{
-				Type: notify.ErrorType,
-				Content: fmt.Sprintf(
-					"Cannot change %s from %s to %s in-place. %s",
-					change.Field, change.OldValue, change.NewValue, change.Reason,
-				),
-				Writer: cmd.OutOrStderr(),
-			})
+			fmt.Fprintf(&block, "  ✗ %s: cannot change from %s to %s in-place. %s\n",
+				change.Field, change.OldValue, change.NewValue, change.Reason,
+			)
 		}
 
-		notify.WriteMessage(notify.Message{
-			Type: notify.WarningType,
-			Content: fmt.Sprintf(
-				"%d changes require cluster recreation. Use 'ksail cluster delete && ksail cluster create' or --force to recreate.",
-				len(diff.RecreateRequired),
-			),
-			Writer: cmd.OutOrStderr(),
-		})
+		block.WriteString(
+			"Use 'ksail cluster delete && ksail cluster create' or --force to recreate.",
+		)
+
+		notify.Warningf(cmd.OutOrStderr(), block.String())
 
 		if !force {
 			return fmt.Errorf("%d %w", len(diff.RecreateRequired), errRecreateChanges)
@@ -221,11 +211,7 @@ func handleUpdateRunE(
 
 	// No actionable changes — nothing to do
 	if !diff.HasInPlaceChanges() && !diff.HasRebootRequired() {
-		notify.WriteMessage(notify.Message{
-			Type:    notify.InfoType,
-			Content: "No changes detected",
-			Writer:  cmd.OutOrStdout(),
-		})
+		notify.Infof(cmd.OutOrStdout(), "No changes detected")
 
 		return nil
 	}
@@ -240,8 +226,6 @@ func handleUpdateRunE(
 }
 
 // applyInPlaceChanges applies provisioner-level and component-level changes in-place.
-//
-//nolint:funlen // Sequential apply-and-report steps are clearer kept together
 func applyInPlaceChanges(
 	cmd *cobra.Command,
 	updater clusterprovisioner.ClusterUpdater,
@@ -257,13 +241,7 @@ func applyInPlaceChanges(
 		RollingReboot: true,
 	}
 
-	notify.WriteMessage(notify.Message{
-		Type:    notify.ActivityType,
-		Emoji:   "🔄",
-		Content: "applying configuration changes in-place",
-		Timer:   outputTimer,
-		Writer:  cmd.OutOrStdout(),
-	})
+	notify.Titlef(cmd.OutOrStdout(), "🔄", "Applying changes...")
 
 	// Apply provisioner-level changes (node scaling, Talos config, etc.)
 	result, err := updater.Update(
@@ -282,28 +260,21 @@ func applyInPlaceChanges(
 
 	// Display results
 	if len(result.AppliedChanges) > 0 {
-		notify.WriteMessage(notify.Message{
-			Type:    notify.SuccessType,
-			Content: fmt.Sprintf("applied %d changes successfully", len(result.AppliedChanges)),
-			Timer:   outputTimer,
-			Writer:  cmd.OutOrStdout(),
-		})
+		notify.SuccessWithTimerf(cmd.OutOrStdout(), outputTimer,
+			"applied %d changes successfully", len(result.AppliedChanges),
+		)
 	}
 
 	if len(result.FailedChanges) > 0 {
-		notify.WriteMessage(notify.Message{
-			Type:    notify.WarningType,
-			Content: fmt.Sprintf("%d changes failed to apply", len(result.FailedChanges)),
-			Writer:  cmd.OutOrStderr(),
-		})
+		var failBlock strings.Builder
+
+		fmt.Fprintf(&failBlock, "%d changes failed to apply:\n", len(result.FailedChanges))
 
 		for _, change := range result.FailedChanges {
-			notify.WriteMessage(notify.Message{
-				Type:    notify.ErrorType,
-				Content: fmt.Sprintf("  - %s: %s", change.Field, change.Reason),
-				Writer:  cmd.OutOrStderr(),
-			})
+			fmt.Fprintf(&failBlock, "  - %s: %s\n", change.Field, change.Reason)
 		}
+
+		notify.Errorf(cmd.OutOrStderr(), strings.TrimRight(failBlock.String(), "\n"))
 	}
 
 	if componentErr != nil {
@@ -313,7 +284,8 @@ func applyInPlaceChanges(
 	return nil
 }
 
-// displayChangesSummary outputs a human-readable summary of configuration changes.
+// displayChangesSummary outputs a human-readable summary of configuration changes
+// as a single grouped block to avoid per-line symbol prefixes.
 func displayChangesSummary(cmd *cobra.Command, diff *types.UpdateResult) {
 	totalChanges := len(diff.InPlaceChanges) + len(diff.RebootRequired) + len(diff.RecreateRequired)
 
@@ -321,40 +293,28 @@ func displayChangesSummary(cmd *cobra.Command, diff *types.UpdateResult) {
 		return
 	}
 
-	notify.WriteMessage(notify.Message{
-		Type:    notify.InfoType,
-		Content: fmt.Sprintf("Detected %d configuration changes:", totalChanges),
-		Writer:  cmd.OutOrStdout(),
-	})
+	notify.Titlef(cmd.OutOrStdout(), "🔍", "Change summary")
+
+	var block strings.Builder
+
+	fmt.Fprintf(&block, "Detected %d configuration changes:", totalChanges)
 
 	for _, change := range diff.InPlaceChanges {
-		notify.WriteMessage(notify.Message{
-			Type:    notify.InfoType,
-			Content: fmt.Sprintf("  ✓ %s (in-place)", change.Field),
-			Writer:  cmd.OutOrStdout(),
-		})
+		fmt.Fprintf(&block, "\n  ✓ %s (in-place)", change.Field)
 	}
 
 	for _, change := range diff.RebootRequired {
-		notify.WriteMessage(notify.Message{
-			Type:    notify.WarningType,
-			Content: fmt.Sprintf("  ⚡ %s (reboot required)", change.Field),
-			Writer:  cmd.OutOrStdout(),
-		})
+		fmt.Fprintf(&block, "\n  ⚡ %s (reboot required)", change.Field)
 	}
 
 	for _, change := range diff.RecreateRequired {
-		notify.WriteMessage(notify.Message{
-			Type:    notify.ErrorType,
-			Content: fmt.Sprintf("  ✗ %s (recreate required)", change.Field),
-			Writer:  cmd.OutOrStdout(),
-		})
+		fmt.Fprintf(&block, "\n  ✗ %s (recreate required)", change.Field)
 	}
+
+	notify.Infof(cmd.OutOrStdout(), block.String())
 }
 
 // executeRecreateFlow performs the delete + create flow with confirmation.
-//
-//nolint:funlen // Recreate flow has sequential steps that are clearer kept together
 func executeRecreateFlow(
 	cmd *cobra.Command,
 	cfgManager *ksailconfigmanager.ConfigManager,
@@ -365,33 +325,23 @@ func executeRecreateFlow(
 ) error {
 	outputTimer := helpers.MaybeTimer(cmd, deps.Timer)
 
-	// Show warning
-	notify.WriteMessage(notify.Message{
-		Type:    notify.WarningType,
-		Content: "Update will delete and recreate the cluster",
-		Writer:  cmd.OutOrStderr(),
-	})
-
-	notify.WriteMessage(notify.Message{
-		Type:    notify.WarningType,
-		Content: "All workloads and data will be lost",
-		Writer:  cmd.OutOrStderr(),
-	})
-
-	// Get confirmation using the shared confirm package
+	// Show warning and get confirmation
 	if !confirm.ShouldSkipPrompt(force) {
-		notify.WriteMessage(notify.Message{
-			Type:    notify.InfoType,
-			Content: fmt.Sprintf("To proceed with updating cluster %q, type 'yes':", clusterName),
-			Writer:  cmd.OutOrStdout(),
-		})
+		var prompt strings.Builder
+
+		prompt.WriteString(
+			"Update will delete and recreate the cluster.\n",
+		)
+		prompt.WriteString("All workloads and data will be lost.")
+
+		notify.Warningf(cmd.OutOrStderr(), prompt.String())
+
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(),
+			"Type \"yes\" to proceed with updating cluster %q: ", clusterName,
+		)
 
 		if !confirm.PromptForConfirmation(cmd.OutOrStdout()) {
-			notify.WriteMessage(notify.Message{
-				Type:    notify.InfoType,
-				Content: "Update cancelled",
-				Writer:  cmd.OutOrStdout(),
-			})
+			notify.Infof(cmd.OutOrStdout(), "Update cancelled")
 
 			return nil
 		}
