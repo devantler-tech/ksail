@@ -2,7 +2,6 @@ package hetznercsiinstaller_test
 
 import (
 	"context"
-	"errors"
 	"os"
 	"testing"
 	"time"
@@ -61,11 +60,10 @@ func TestHetznerCSIInstaller_Uninstall(t *testing.T) {
 
 		mockClient := helm.NewMockInterface(t)
 		timeout := 5 * time.Minute
-		expectedErr := errors.New("release not found")
 
 		mockClient.EXPECT().
 			UninstallRelease(mock.Anything, "hcloud-csi", "kube-system").
-			Return(expectedErr).
+			Return(assert.AnError).
 			Once()
 
 		installer := hetznercsiinstaller.NewHetznerCSIInstaller(
@@ -87,10 +85,12 @@ func TestHetznerCSIInstaller_Install_MissingToken(t *testing.T) {
 
 	// Ensure HCLOUD_TOKEN is not set
 	originalToken := os.Getenv("HCLOUD_TOKEN")
-	os.Unsetenv("HCLOUD_TOKEN")
+
+	require.NoError(t, os.Unsetenv("HCLOUD_TOKEN"))
+
 	defer func() {
 		if originalToken != "" {
-			os.Setenv("HCLOUD_TOKEN", originalToken)
+			t.Setenv("HCLOUD_TOKEN", originalToken)
 		}
 	}()
 
@@ -107,21 +107,18 @@ func TestHetznerCSIInstaller_Install_MissingToken(t *testing.T) {
 	err := installer.Install(context.Background())
 
 	require.Error(t, err)
-	assert.ErrorIs(t, err, hetznercsiinstaller.ErrHetznerTokenNotSet)
+	require.ErrorIs(t, err, hetznercsiinstaller.ErrHetznerTokenNotSet)
 	assert.Contains(t, err.Error(), "HCLOUD_TOKEN")
 }
 
-func TestHetznerCSIInstaller_Images(t *testing.T) {
+func TestHetznerCSIInstaller_Images_SuccessfulExtraction(t *testing.T) {
 	t.Parallel()
 
-	t.Run("successfully extracts images from chart", func(t *testing.T) {
-		t.Parallel()
+	mockClient := helm.NewMockInterface(t)
+	timeout := 5 * time.Minute
 
-		mockClient := helm.NewMockInterface(t)
-		timeout := 5 * time.Minute
-
-		// Mock manifest with container images
-		mockManifest := `
+	// Mock manifest with container images
+	mockManifest := `
 apiVersion: v1
 kind: Pod
 metadata:
@@ -134,66 +131,65 @@ spec:
     image: registry.k8s.io/sig-storage/csi-attacher:v4.3.0
 `
 
-		mockClient.EXPECT().
-			TemplateChart(mock.Anything, mock.MatchedBy(func(spec *helm.ChartSpec) bool {
-				return spec.ChartName == "hcloud/hcloud-csi" &&
-					spec.ReleaseName == "hcloud-csi" &&
-					spec.Namespace == "kube-system"
-			})).
-			Return(mockManifest, nil).
-			Once()
+	mockClient.EXPECT().
+		TemplateChart(mock.Anything, mock.MatchedBy(func(spec *helm.ChartSpec) bool {
+			return spec.ChartName == "hcloud/hcloud-csi" &&
+				spec.ReleaseName == "hcloud-csi" &&
+				spec.Namespace == "kube-system"
+		})).
+		Return(mockManifest, nil).
+		Once()
 
-		installer := hetznercsiinstaller.NewHetznerCSIInstaller(
-			mockClient,
-			"~/.kube/config",
-			"test-context",
-			timeout,
-		)
+	installer := hetznercsiinstaller.NewHetznerCSIInstaller(
+		mockClient,
+		"~/.kube/config",
+		"test-context",
+		timeout,
+	)
 
-		images, err := installer.Images(context.Background())
+	images, err := installer.Images(context.Background())
 
-		require.NoError(t, err)
-		assert.Len(t, images, 2)
-		assert.Contains(t, images, "docker.io/hetznercloud/hcloud-csi-driver:v2.5.0")
-		assert.Contains(t, images, "registry.k8s.io/sig-storage/csi-attacher:v4.3.0")
-		mockClient.AssertExpectations(t)
-	})
+	require.NoError(t, err)
+	assert.Len(t, images, 2)
+	assert.Contains(t, images, "docker.io/hetznercloud/hcloud-csi-driver:v2.5.0")
+	assert.Contains(t, images, "registry.k8s.io/sig-storage/csi-attacher:v4.3.0")
+	mockClient.AssertExpectations(t)
+}
 
-	t.Run("returns error when templating fails", func(t *testing.T) {
-		t.Parallel()
+func TestHetznerCSIInstaller_Images_TemplatingFails(t *testing.T) {
+	t.Parallel()
 
-		mockClient := helm.NewMockInterface(t)
-		timeout := 5 * time.Minute
-		expectedErr := errors.New("chart not found")
+	mockClient := helm.NewMockInterface(t)
+	timeout := 5 * time.Minute
 
-		mockClient.EXPECT().
-			TemplateChart(mock.Anything, mock.Anything).
-			Return("", expectedErr).
-			Once()
+	mockClient.EXPECT().
+		TemplateChart(mock.Anything, mock.Anything).
+		Return("", assert.AnError).
+		Once()
 
-		installer := hetznercsiinstaller.NewHetznerCSIInstaller(
-			mockClient,
-			"~/.kube/config",
-			"test-context",
-			timeout,
-		)
+	installer := hetznercsiinstaller.NewHetznerCSIInstaller(
+		mockClient,
+		"~/.kube/config",
+		"test-context",
+		timeout,
+	)
 
-		images, err := installer.Images(context.Background())
+	images, err := installer.Images(context.Background())
 
-		require.Error(t, err)
-		assert.Nil(t, images)
-		assert.Contains(t, err.Error(), "failed to template hetzner-csi chart")
-		mockClient.AssertExpectations(t)
-	})
+	require.Error(t, err)
+	assert.Nil(t, images)
+	assert.Contains(t, err.Error(), "failed to template hetzner-csi chart")
+	mockClient.AssertExpectations(t)
+}
 
-	t.Run("handles manifest with no images", func(t *testing.T) {
-		t.Parallel()
+func TestHetznerCSIInstaller_Images_NoImages(t *testing.T) {
+	t.Parallel()
 
-		mockClient := helm.NewMockInterface(t)
-		timeout := 5 * time.Minute
+	mockClient := helm.NewMockInterface(t)
+	timeout := 5 * time.Minute
 
-		// Manifest with no container specs
-		emptyManifest := `
+	// Manifest with no container specs
+	emptyManifest := `
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -202,22 +198,21 @@ data:
   key: value
 `
 
-		mockClient.EXPECT().
-			TemplateChart(mock.Anything, mock.Anything).
-			Return(emptyManifest, nil).
-			Once()
+	mockClient.EXPECT().
+		TemplateChart(mock.Anything, mock.Anything).
+		Return(emptyManifest, nil).
+		Once()
 
-		installer := hetznercsiinstaller.NewHetznerCSIInstaller(
-			mockClient,
-			"~/.kube/config",
-			"test-context",
-			timeout,
-		)
+	installer := hetznercsiinstaller.NewHetznerCSIInstaller(
+		mockClient,
+		"~/.kube/config",
+		"test-context",
+		timeout,
+	)
 
-		images, err := installer.Images(context.Background())
+	images, err := installer.Images(context.Background())
 
-		require.NoError(t, err)
-		assert.Empty(t, images)
-		mockClient.AssertExpectations(t)
-	})
+	require.NoError(t, err)
+	assert.Empty(t, images)
+	mockClient.AssertExpectations(t)
 }
