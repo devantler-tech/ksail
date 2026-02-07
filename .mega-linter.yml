@@ -3,6 +3,7 @@ APPLY_FIXES: all
 FLAVOR_SUGGESTIONS: false
 IGNORE_GITIGNORED_FILES: true
 REPORTERS_MARKDOWN_SUMMARY_TYPE: sections
+LINTER_RULES_PATH: .
 DISABLE_LINTERS:
   - GO_GOLANGCI_LINT # Disabled: MegaLinter container has Go 1.24.7, but project requires Go 1.25.4. CI runs golangci-lint separately with correct Go version.
   - GO_REVIVE

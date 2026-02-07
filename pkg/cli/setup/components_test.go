@@ -41,6 +41,10 @@ func (m *mockInstaller) Uninstall(_ context.Context) error {
 	return m.uninstallErr
 }
 
+func (m *mockInstaller) Images(_ context.Context) ([]string, error) {
+	return nil, nil
+}
+
 func TestDefaultInstallerFactories(t *testing.T) {
 	t.Parallel()
 

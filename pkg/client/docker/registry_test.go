@@ -1111,3 +1111,110 @@ func TestErrConstants(t *testing.T) {
 	assert.Contains(t, docker.ErrRegistryAlreadyExists.Error(), "already exists")
 	assert.Contains(t, docker.ErrRegistryPortNotFound.Error(), "port")
 }
+
+// TestCreateRegistry_WithCredentials tests registry creation with credentials.
+func TestCreateRegistry_WithCredentials(t *testing.T) {
+	t.Setenv("GITHUB_USER", "testuser")
+	t.Setenv("GITHUB_TOKEN", "ghp_test123")
+
+	mockClient, manager, _ := setupTestRegistryManager(t)
+	config := docker.RegistryConfig{
+		Name: "ghcr.io", Port: 5000, UpstreamURL: "https://ghcr.io",
+		Username: "${GITHUB_USER}", Password: "${GITHUB_TOKEN}",
+	}
+
+	mockRegistryNotExists(context.Background(), mockClient)
+	mockImagePullSequence(context.Background(), mockClient)
+	mockVolumeCreateSequence(context.Background(), mockClient, config.Name)
+
+	mockClient.EXPECT().ContainerCreate(context.Background(),
+		mock.MatchedBy(func(containerCfg *container.Config) bool {
+			if containerCfg == nil {
+				return false
+			}
+
+			remote, user, pass := false, false, false
+
+			for _, e := range containerCfg.Env {
+				switch e {
+				case "REGISTRY_PROXY_REMOTEURL=https://ghcr.io":
+					remote = true
+				case "REGISTRY_PROXY_USERNAME=testuser":
+					user = true
+				case "REGISTRY_PROXY_PASSWORD=ghp_test123":
+					pass = true
+				}
+			}
+
+			return remote && user && pass
+		}), mock.Anything, mock.Anything, mock.Anything, "ghcr.io").
+		Return(container.CreateResponse{ID: "test-id"}, nil).Once()
+	mockClient.EXPECT().ContainerStart(context.Background(), "test-id", mock.Anything).
+		Return(nil).Once()
+
+	err := manager.CreateRegistry(context.Background(), config)
+	require.NoError(t, err)
+}
+
+func TestBuildContainerConfig_WithoutCredentials(t *testing.T) {
+	t.Parallel()
+
+	mockClient, manager, ctx := setupTestRegistryManager(t)
+
+	config := docker.RegistryConfig{
+		Name:        "docker.io",
+		Port:        5000,
+		UpstreamURL: "https://registry-1.docker.io",
+	}
+
+	mockRegistryNotExists(ctx, mockClient)
+	mockImagePullSequence(ctx, mockClient)
+	mockVolumeCreateSequence(ctx, mockClient, config.Name)
+
+	// Mock container create without credentials check
+	mockClient.EXPECT().
+		ContainerCreate(
+			ctx,
+			mock.MatchedBy(func(cfg *container.Config) bool {
+				if cfg == nil {
+					return false
+				}
+
+				// Check that only REGISTRY_PROXY_REMOTEURL is set
+				hasRemoteURL := false
+				hasUsername := false
+				hasPassword := false
+
+				for _, env := range cfg.Env {
+					if env == "REGISTRY_PROXY_REMOTEURL=https://registry-1.docker.io" {
+						hasRemoteURL = true
+					}
+
+					if strings.HasPrefix(env, "REGISTRY_PROXY_USERNAME=") {
+						hasUsername = true
+					}
+
+					if strings.HasPrefix(env, "REGISTRY_PROXY_PASSWORD=") {
+						hasPassword = true
+					}
+				}
+
+				return hasRemoteURL && !hasUsername && !hasPassword
+			}),
+			mock.Anything,
+			mock.Anything,
+			mock.Anything,
+			"docker.io",
+		).
+		Return(container.CreateResponse{ID: "test-id"}, nil).
+		Once()
+
+	mockClient.EXPECT().
+		ContainerStart(ctx, "test-id", mock.Anything).
+		Return(nil).
+		Once()
+
+	err := manager.CreateRegistry(ctx, config)
+
+	require.NoError(t, err)
+}

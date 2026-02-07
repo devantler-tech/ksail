@@ -40,6 +40,7 @@ func NewWorkloadCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
 	cmd.AddCommand(NewExposeCmd())
 	cmd.AddCommand(NewGetCmd())
 	cmd.AddCommand(gen.NewGenCmd(runtimeContainer))
+	cmd.AddCommand(NewImagesCmd())
 	cmd.AddCommand(NewImportCmd(runtimeContainer))
 	cmd.AddCommand(NewInstallCmd(runtimeContainer))
 	cmd.AddCommand(NewLogsCmd())

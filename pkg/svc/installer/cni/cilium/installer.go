@@ -81,6 +81,28 @@ func (c *CiliumInstaller) Uninstall(ctx context.Context) error {
 	return nil
 }
 
+// Images returns the container images used by Cilium.
+func (c *CiliumInstaller) Images(ctx context.Context) ([]string, error) {
+	images, err := c.ImagesFromChart(ctx, c.chartSpec())
+	if err != nil {
+		return nil, fmt.Errorf("get cilium images: %w", err)
+	}
+
+	return images, nil
+}
+
+func (c *CiliumInstaller) chartSpec() *helm.ChartSpec {
+	return &helm.ChartSpec{
+		ReleaseName:     "cilium",
+		ChartName:       "cilium/cilium",
+		Namespace:       "kube-system",
+		RepoURL:         "https://helm.cilium.io",
+		CreateNamespace: false,
+		SetJSONVals:     c.getCiliumValues(),
+		Timeout:         c.GetTimeout(),
+	}
+}
+
 // --- internals ---
 
 func (c *CiliumInstaller) helmInstallOrUpgradeCilium(ctx context.Context) error {

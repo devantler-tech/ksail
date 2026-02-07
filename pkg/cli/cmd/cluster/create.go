@@ -30,6 +30,7 @@ import (
 const (
 	k3sDisableMetricsServerFlag = "--disable=metrics-server"
 	k3sDisableLocalStorageFlag  = "--disable=local-storage"
+	k3sDisableServiceLBFlag     = "--disable=servicelb"
 )
 
 // newCreateLifecycleConfig creates the lifecycle configuration for cluster creation.
@@ -73,8 +74,12 @@ func NewCreateCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
 	cfgManager := ksailconfigmanager.NewCommandConfigManager(cmd, fieldSelectors)
 
 	cmd.Flags().StringSlice("mirror-registry", []string{},
-		"Configure mirror registries with format 'host=upstream' (e.g., docker.io=https://registry-1.docker.io)")
-	_ = cfgManager.Viper.BindPFlag("mirror-registry", cmd.Flags().Lookup("mirror-registry"))
+		"Configure mirror registries with optional authentication. Format: [user:pass@]host[=upstream]. "+
+			"Credentials support environment variables using ${VAR} syntax (quote placeholders so KSail can expand them). "+
+			"Examples: docker.io=https://registry-1.docker.io, '${USER}:${TOKEN}@ghcr.io=https://ghcr.io'")
+
+	// NOTE: mirror-registry is NOT bound to Viper to allow custom merge logic
+	// It's handled manually via getMirrorRegistriesWithDefaults() in setup/mirrorregistry
 
 	cmd.Flags().StringP("name", "n", "",
 		"Cluster name used for container names, registry names, and kubeconfig context")
@@ -87,7 +92,7 @@ func NewCreateCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
 
 // handleCreateRunE executes cluster creation with mirror registry setup and CNI installation.
 //
-//nolint:funlen,cyclop // Orchestrates full cluster creation lifecycle with multiple stages.
+//nolint:funlen // Orchestrates full cluster creation lifecycle with multiple stages.
 func handleCreateRunE(
 	cmd *cobra.Command,
 	cfgManager *ksailconfigmanager.ConfigManager,
@@ -140,24 +145,9 @@ func handleCreateRunE(
 
 	setupK3dMetricsServer(ctx.ClusterCfg, ctx.K3dConfig)
 	SetupK3dCSI(ctx.ClusterCfg, ctx.K3dConfig)
+	SetupK3dLoadBalancer(ctx.ClusterCfg, ctx.K3dConfig)
 
-	clusterProvisionerFactoryMu.RLock()
-
-	factoryOverride := clusterProvisionerFactoryOverride
-
-	clusterProvisionerFactoryMu.RUnlock()
-
-	if factoryOverride != nil {
-		deps.Factory = factoryOverride
-	} else {
-		deps.Factory = clusterprovisioner.DefaultFactory{
-			DistributionConfig: &clusterprovisioner.DistributionConfig{
-				Kind:  ctx.KindConfig,
-				K3d:   ctx.K3dConfig,
-				Talos: ctx.TalosConfig,
-			},
-		}
-	}
+	configureClusterProvisionerFactory(&deps, ctx)
 
 	err = executeClusterLifecycle(cmd, ctx.ClusterCfg, deps)
 	if err != nil {
@@ -195,36 +185,78 @@ func handleCreateRunE(
 		return fmt.Errorf("failed to wait for local registry: %w", err)
 	}
 
-	// Import cached images if --import-images flag is provided
-	// This happens after cluster creation but before component installation
-	// to ensure images are available when CNI, CSI, etc. are installed
-	importPath := ctx.ClusterCfg.Spec.Cluster.ImportImages
-	if importPath != "" {
-		// Image import is not supported for Talos clusters. The image service will
-		// return ErrUnsupportedDistribution in that case, so we short-circuit here
-		// to provide clearer feedback and avoid a spurious warning.
-		if ctx.ClusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionTalos {
-			notify.WriteMessage(notify.Message{
-				Type:    notify.WarningType,
-				Content: "image import is not supported for Talos clusters; ignoring --import-images value %q",
-				Args:    []any{importPath},
-				Writer:  cmd.OutOrStderr(),
-			})
-		} else {
-			err = importCachedImages(cmd, ctx, importPath, deps.Timer)
-			if err != nil {
-				// Log warning but don't fail cluster creation
-				notify.WriteMessage(notify.Message{
-					Type:    notify.WarningType,
-					Content: "failed to import images from %s: %v",
-					Args:    []any{importPath, err},
-					Writer:  cmd.OutOrStderr(),
-				})
-			}
-		}
-	}
+	// Set Connection.Context so post-CNI setup (InstallCNI, helm, kubectl) can resolve
+	// the correct kubeconfig context. This MUST happen after local registry operations
+	// (which resolve cluster name from distribution configs, not from context) but before
+	// post-CNI setup (which needs the kubectl context name like "kind-kind").
+	clusterName := resolveClusterNameFromContext(ctx)
+	ctx.ClusterCfg.Spec.Cluster.Connection.Context = ctx.ClusterCfg.Spec.Cluster.Distribution.ContextName(
+		clusterName,
+	)
+
+	maybeImportCachedImages(cmd, ctx, deps.Timer)
 
 	return handlePostCreationSetup(cmd, ctx.ClusterCfg, deps.Timer)
+}
+
+// configureClusterProvisionerFactory sets up the cluster provisioner factory.
+// Uses test override if available, otherwise creates a default factory.
+func configureClusterProvisionerFactory(
+	deps *lifecycle.Deps,
+	ctx *localregistry.Context,
+) {
+	clusterProvisionerFactoryMu.RLock()
+
+	factoryOverride := clusterProvisionerFactoryOverride
+
+	clusterProvisionerFactoryMu.RUnlock()
+
+	if factoryOverride != nil {
+		deps.Factory = factoryOverride
+	} else {
+		deps.Factory = clusterprovisioner.DefaultFactory{
+			DistributionConfig: &clusterprovisioner.DistributionConfig{
+				Kind:  ctx.KindConfig,
+				K3d:   ctx.K3dConfig,
+				Talos: ctx.TalosConfig,
+			},
+		}
+	}
+}
+
+// maybeImportCachedImages imports cached container images if configured.
+// Logs warnings but does not fail cluster creation on import errors.
+func maybeImportCachedImages(
+	cmd *cobra.Command,
+	ctx *localregistry.Context,
+	tmr timer.Timer,
+) {
+	importPath := ctx.ClusterCfg.Spec.Cluster.ImportImages
+	if importPath == "" {
+		return
+	}
+
+	// Image import is not supported for Talos clusters
+	if ctx.ClusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionTalos {
+		notify.WriteMessage(notify.Message{
+			Type:    notify.WarningType,
+			Content: "image import is not supported for Talos clusters; ignoring --import-images value %q",
+			Args:    []any{importPath},
+			Writer:  cmd.OutOrStderr(),
+		})
+
+		return
+	}
+
+	err := importCachedImages(cmd, ctx, importPath, tmr)
+	if err != nil {
+		notify.WriteMessage(notify.Message{
+			Type:    notify.WarningType,
+			Content: "failed to import images from %s: %v",
+			Args:    []any{importPath, err},
+			Writer:  cmd.OutOrStderr(),
+		})
+	}
 }
 
 func loadClusterConfiguration(
@@ -420,6 +452,32 @@ func SetupK3dCSI(clusterCfg *v1alpha1.Cluster, k3dConfig *v1alpha5.SimpleConfig)
 		k3dConfig.Options.K3sOptions.ExtraArgs,
 		v1alpha5.K3sArgWithNodeFilters{
 			Arg:         k3sDisableLocalStorageFlag,
+			NodeFilters: []string{"server:*"},
+		},
+	)
+}
+
+// SetupK3dLoadBalancer configures K3d to disable servicelb when LoadBalancer is explicitly disabled.
+// This function is exported for testing purposes.
+func SetupK3dLoadBalancer(clusterCfg *v1alpha1.Cluster, k3dConfig *v1alpha5.SimpleConfig) {
+	if clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionK3s || k3dConfig == nil {
+		return
+	}
+
+	if clusterCfg.Spec.Cluster.LoadBalancer != v1alpha1.LoadBalancerDisabled {
+		return
+	}
+
+	for _, arg := range k3dConfig.Options.K3sOptions.ExtraArgs {
+		if arg.Arg == k3sDisableServiceLBFlag {
+			return
+		}
+	}
+
+	k3dConfig.Options.K3sOptions.ExtraArgs = append(
+		k3dConfig.Options.K3sOptions.ExtraArgs,
+		v1alpha5.K3sArgWithNodeFilters{
+			Arg:         k3sDisableServiceLBFlag,
 			NodeFilters: []string{"server:*"},
 		},
 	)

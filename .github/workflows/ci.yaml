@@ -6,6 +6,12 @@ on:
   pull_request:
   merge_group:
 
+env:
+  # Use pipe (|) instead of comma (,) so Go falls through to direct on ANY proxy
+  # error (including 403), not just 404/410. Hardens CI against transient
+  # proxy.golang.org outages. go.sum still verifies module integrity.
+  GOPROXY: "https://proxy.golang.org|direct"
+
 concurrency:
   group: "ci-ksail-${{ github.workflow }}-${{ github.ref }}"
   cancel-in-progress: true
@@ -204,10 +210,128 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
 
+  audit-docs:
+    name: 🔍 Audit Docs Dependencies
+    runs-on: ubuntu-latest
+    needs: [changes]
+    if: needs.changes.outputs.docs-deps == 'true'
+    permissions:
+      contents: write
+    steps:
+      - name: � Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: �🔍 NPM Audit and Fix
+        uses: ./.github/actions/npm-audit-and-fix
+        with:
+          working-directory: docs
+          app-id: ${{ vars.APP_ID }}
+          app-private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          commit-message: "chore(docs): fix npm audit vulnerabilities"
+
+  audit-vsce:
+    name: 🔍 Audit VSCode Extension Dependencies
+    runs-on: ubuntu-latest
+    needs: [changes]
+    if: needs.changes.outputs.vsce-deps == 'true'
+    permissions:
+      contents: write
+    steps:
+      - name: � Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: �🔍 NPM Audit and Fix
+        uses: ./.github/actions/npm-audit-and-fix
+        with:
+          working-directory: vsce
+          app-id: ${{ vars.APP_ID }}
+          app-private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          commit-message: "chore(vsce): fix npm audit vulnerabilities"
+
+  vscode-extension:
+    name: 🧩 VSCode Extension
+    runs-on: ubuntu-latest
+    needs: [changes]
+    if: needs.changes.outputs.vsce == 'true'
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: vsce
+    steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: ⚙️ Setup Node.js
+        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: "vsce/package-lock.json"
+
+      - name: 📦 Install dependencies
+        run: npm ci
+
+      - name: 🏗️ Compile
+        run: npm run compile
+
+      - name: 📦 Package extension
+        run: npm run package
+
+      - name: 📦 Create VSIX package
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+        run: npx @vscode/vsce package --out ksail.vsix
+
+      - name: 📤 Upload VSIX artifact
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # 6.0.0
+        with:
+          name: ksail-vsix
+          path: ksail.vsix
+          retention-days: 7
+
+  warm-mirror-cache:
+    name: 🔥 Warm Mirror Cache
+    runs-on: ubuntu-latest
+    needs: [changes, build-artifact]
+    if: github.event_name == 'merge_group' && needs.changes.outputs.code == 'true'
+    permissions:
+      contents: read
+    outputs:
+      cache-key: ${{ steps.warm.outputs.cache-key }}
+    steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: ⚙️ Setup Go
+        id: setup-go
+        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
+        with:
+          go-version-file: go.mod
+
+      - name: 📦 Cache KSail Binary
+        uses: ./.github/actions/cache-ksail-binary
+        with:
+          go-version: ${{ steps.setup-go.outputs.go-version }}
+          source-hash: ${{ hashFiles('go.mod', 'go.sum', '**/*.go') }}
+          output-path: /usr/local/bin/ksail
+
+      - name: 🔥 Warm mirror cache
+        id: warm
+        uses: ./.github/actions/warm-mirror-cache
+
   system-test:
     name: 🧪 System Test
     runs-on: ubuntu-latest
-    needs: [changes, build-artifact]
+    needs: [changes, build-artifact, warm-mirror-cache]
     if: github.event_name == 'merge_group' && needs.changes.outputs.code == 'true'
     permissions:
       contents: read
@@ -219,72 +343,21 @@ jobs:
         init: [true, false]
         args:
           - ""
-          - "--name system-test-cluster"
-          - "--cert-manager Enabled"
-          - "--cni Cilium"
-          - "--cni Calico"
-          - "--csi Enabled"
-          - "--csi Disabled"
-          - "--gitops-engine Flux"
-          - "--gitops-engine ArgoCD"
+          - "--name system-test-cluster --cni Cilium --csi Enabled --load-balancer Enabled --metrics-server Enabled --policy-engine Kyverno --cert-manager Enabled --gitops-engine Flux"
+          - "--cni Calico --csi Disabled --load-balancer Disabled --metrics-server Disabled --policy-engine Gatekeeper --gitops-engine ArgoCD"
           - "--gitops-engine Flux --local-registry ghcr.io/devantler-tech/ksail/system-test-manifests"
           - "--gitops-engine ArgoCD --local-registry ghcr.io/devantler-tech/ksail/system-test-manifests"
-          - "--mirror-registry ghcr.io=https://ghcr.io"
-          - "--mirror-registry ghcr.io=https://ghcr.io --mirror-registry docker.io=https://registry-1.docker.io"
-          - "--metrics-server Enabled"
-          - "--metrics-server Disabled"
-          - "--policy-engine Kyverno"
-          - "--policy-engine Gatekeeper"
-          - "--load-balancer Enabled"
-          - "--load-balancer Disabled"
-        # Exclude combinations where flags match distribution × provider default behavior
-        # to avoid wasting GitHub Actions minutes on no-op tests
-        exclude:
-          # CSI exclusions: no-op when flag matches distribution × provider default
-          # Vanilla has no default CSI, so --csi Disabled is a no-op
-          - distribution: Vanilla
-            args: "--csi Disabled"
-          # K3s has default CSI (local-path), so --csi Enabled is a no-op
-          - distribution: K3s
-            args: "--csi Enabled"
-          # Talos × Docker has no default CSI, so --csi Disabled is a no-op
-          - distribution: Talos
-            provider: Docker
-            args: "--csi Disabled"
-          # Vanilla has no default LoadBalancer, so --load-balancer Disabled is a no-op
-          - distribution: Vanilla
-            args: "--load-balancer Disabled"
-          # K3s has default LoadBalancer (ServiceLB), so --load-balancer Enabled is a no-op
-          - distribution: K3s
-            args: "--load-balancer Enabled"
-          # Talos × Docker has no default LoadBalancer, so --load-balancer Disabled is a no-op
-          - distribution: Talos
-            provider: Docker
-            args: "--load-balancer Disabled"
-          # Metrics Server exclusions: no-op when flag matches distribution default
-          # K3s has default metrics-server, so --metrics-server Enabled is a no-op
-          - distribution: K3s
-            args: "--metrics-server Enabled"
-          # Vanilla has no default metrics-server, so --metrics-server Disabled is a no-op
-          - distribution: Vanilla
-            args: "--metrics-server Disabled"
-          # Talos has no default metrics-server, so --metrics-server Disabled is a no-op
-          - distribution: Talos
-            args: "--metrics-server Disabled"
+        # Temporarily disable Hetzner system tests as Hetzner has limited availability
         # Add Talos x Hetzner combination
-        include:
-          - distribution: Talos
-            provider: Hetzner
-            init: true
-            args: "--name system-test-cluster-with-scaffolding"
-          - distribution: Talos
-            provider: Hetzner
-            init: false
-            args: "--name system-test-cluster-without-scaffolding"
-          # Note: Talos × Hetzner has default CSI (Hetzner CSI), so --csi Enabled
-          # would be a no-op. Similarly, Talos × Hetzner has default LoadBalancer
-          # (hcloud-cloud-controller-manager), so --load-balancer Enabled would be
-          # a no-op. We don't add these to the matrix to save CI minutes.
+        # include:
+        #   - distribution: Talos
+        #     provider: Hetzner
+        #     init: true
+        #     args: "--name system-test-cluster-with-scaffolding"
+        #   - distribution: Talos
+        #     provider: Hetzner
+        #     init: false
+        #     args: "--name system-test-cluster-without-scaffolding"
     steps:
       - name: 📄 Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -336,196 +409,6 @@ jobs:
         uses: ./.github/actions/cleanup-hetzner
         with:
           hcloud-token: ${{ secrets.HCLOUD_TOKEN }}
-
-  audit-docs:
-    name: 🔍 Audit Docs Dependencies
-    runs-on: ubuntu-latest
-    needs: [changes]
-    if: needs.changes.outputs.docs-deps == 'true'
-    permissions:
-      contents: write
-    defaults:
-      run:
-        working-directory: docs
-    steps:
-      - name: 🔑 Generate GitHub App Token
-        uses: tibdex/github-app-token@3beb63f4bd073e61482598c45c71c1019b59b73a # v2.1.0
-        id: generate-token
-        with:
-          app_id: ${{ vars.APP_ID }}
-          private_key: ${{ secrets.APP_PRIVATE_KEY }}
-
-      - name: 📄 Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: true
-          token: ${{ steps.generate-token.outputs.token }}
-
-      - name: ⚙️ Setup Node.js
-        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
-        with:
-          node-version: "22"
-          cache: "npm"
-          cache-dependency-path: docs/package-lock.json
-
-      - name: 📦 Install dependencies
-        run: npm ci
-
-      - name: 🔍 Run npm audit
-        id: audit
-        run: npm audit --audit-level=moderate
-        continue-on-error: true
-
-      - name: 🔧 Attempt automatic fix (non-breaking)
-        id: fix
-        if: steps.audit.outcome == 'failure' && (github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main'))
-        run: |
-          # Only apply non-breaking fixes automatically
-          npm audit fix --no-force
-          if [ -n "$(git status --porcelain)" ]; then
-            echo "changes_made=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "changes_made=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: 📤 Commit and push fixes
-        if: steps.fix.outputs.changes_made == 'true' && github.event_name != 'merge_group'
-        uses: stefanzweifel/git-auto-commit-action@04702edda442b2e678b25b537cec683a1493fcb9 # v7.1.0
-        with:
-          commit_message: "chore(docs): fix npm audit vulnerabilities"
-          commit_user_name: security-bot
-          commit_user_email: security-bot@users.noreply.github.com
-          file_pattern: "docs/package*.json"
-
-      - name: 🔍 Re-audit after fix
-        id: reaudit
-        if: steps.fix.outputs.changes_made == 'true'
-        run: npm audit --audit-level=moderate
-        continue-on-error: true
-
-      - name: ❌ Fail if vulnerabilities remain
-        if: |
-          github.event_name == 'push' && github.ref == 'refs/heads/main'
-          && ((steps.fix.outputs.changes_made != 'true' && steps.audit.outcome == 'failure')
-              || (steps.fix.outputs.changes_made == 'true' && steps.reaudit.outcome == 'failure'))
-        run: npm audit --audit-level=moderate
-
-  audit-vsce:
-    name: 🔍 Audit VSCode Extension Dependencies
-    runs-on: ubuntu-latest
-    needs: [changes]
-    if: needs.changes.outputs.vsce-deps == 'true'
-    permissions:
-      contents: write
-    defaults:
-      run:
-        working-directory: vsce
-    steps:
-      - name: 🔑 Generate GitHub App Token
-        uses: tibdex/github-app-token@3beb63f4bd073e61482598c45c71c1019b59b73a # v2.1.0
-        id: generate-token
-        with:
-          app_id: ${{ vars.APP_ID }}
-          private_key: ${{ secrets.APP_PRIVATE_KEY }}
-
-      - name: 📄 Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: true
-          token: ${{ steps.generate-token.outputs.token }}
-
-      - name: ⚙️ Setup Node.js
-        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
-        with:
-          node-version: "22"
-          cache: "npm"
-          cache-dependency-path: vsce/package-lock.json
-
-      - name: 📦 Install dependencies
-        run: npm ci
-
-      - name: 🔍 Run npm audit
-        id: audit
-        run: npm audit --audit-level=moderate
-        continue-on-error: true
-
-      - name: 🔧 Attempt automatic fix (non-breaking)
-        id: fix
-        if: steps.audit.outcome == 'failure' && (github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main'))
-        run: |
-          # Only apply non-breaking fixes automatically
-          npm audit fix --no-force
-          if [ -n "$(git status --porcelain)" ]; then
-            echo "changes_made=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "changes_made=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: 📤 Commit and push fixes
-        if: steps.fix.outputs.changes_made == 'true' && github.event_name != 'merge_group'
-        uses: stefanzweifel/git-auto-commit-action@04702edda442b2e678b25b537cec683a1493fcb9 # v7.1.0
-        with:
-          commit_message: "chore(vsce): fix npm audit vulnerabilities"
-          commit_user_name: security-bot
-          commit_user_email: security-bot@users.noreply.github.com
-          file_pattern: "vsce/package*.json"
-
-      - name: 🔍 Re-audit after fix
-        id: reaudit
-        if: steps.fix.outputs.changes_made == 'true'
-        run: npm audit --audit-level=moderate
-        continue-on-error: true
-
-      - name: ❌ Fail if vulnerabilities remain
-        if: |
-          github.event_name == 'push' && github.ref == 'refs/heads/main'
-          && ((steps.fix.outputs.changes_made != 'true' && steps.audit.outcome == 'failure')
-              || (steps.fix.outputs.changes_made == 'true' && steps.reaudit.outcome == 'failure'))
-        run: npm audit --audit-level=moderate
-
-  vscode-extension:
-    name: 🧩 VSCode Extension
-    runs-on: ubuntu-latest
-    needs: [changes]
-    if: needs.changes.outputs.vsce == 'true'
-    permissions:
-      contents: read
-    defaults:
-      run:
-        working-directory: vsce
-    steps:
-      - name: 📄 Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
-
-      - name: ⚙️ Setup Node.js
-        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
-        with:
-          node-version: "22"
-          cache: "npm"
-          cache-dependency-path: "vsce/package-lock.json"
-
-      - name: 📦 Install dependencies
-        run: npm ci
-
-      - name: 🏗️ Compile
-        run: npm run compile
-
-      - name: 📦 Package extension
-        run: npm run package
-
-      - name: 📦 Create VSIX package
-        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
-        run: npx @vscode/vsce package --out ksail.vsix
-
-      - name: 📤 Upload VSIX artifact
-        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # 6.0.0
-        with:
-          name: ksail-vsix
-          path: ksail.vsix
-          retention-days: 7
 
   status:
     name: CI - KSail

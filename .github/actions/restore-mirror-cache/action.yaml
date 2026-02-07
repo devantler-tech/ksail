@@ -1,0 +1,135 @@
+name: Restore Mirror Cache
+description: |
+  Restores the pre-warmed mirror cache volumes created by warm-mirror-cache.
+  Use this in system test jobs to benefit from the warmed cache.
+
+  The cache key is computed by extracting the same image list and hashing it,
+  ensuring restore jobs can find the cache created by warm-mirror-cache.
+
+inputs:
+  cache-version:
+    description: |
+      Version salt for cache key. Must match warm-mirror-cache.
+    required: false
+    default: "v1"
+
+outputs:
+  cache-hit:
+    description: Whether the cache was found and restored
+    value: ${{ steps.restore-cache.outputs.cache-hit || 'false' }}
+
+runs:
+  using: composite
+  steps:
+    - name: 📋 Extract images for cache key computation
+      id: extract-images
+      shell: bash
+      run: |
+        echo "📋 Extracting images to compute cache key..."
+
+        # Same configurations as warm-mirror-cache to get identical hash
+        CONFIGS=(
+          "--distribution Vanilla --cni Cilium"
+          "--distribution Vanilla --cni Cilium --csi Enabled --load-balancer Enabled --metrics-server Enabled --policy-engine Kyverno --cert-manager Enabled --gitops-engine Flux"
+          "--distribution Vanilla --cni Calico --policy-engine Gatekeeper --gitops-engine ArgoCD"
+          "--distribution K3s --cni Cilium --gitops-engine Flux"
+          "--distribution K3s --cni Cilium --gitops-engine ArgoCD"
+          "--distribution Talos --cni Cilium --gitops-engine Flux"
+          "--distribution Talos --cni Cilium --gitops-engine ArgoCD"
+        )
+
+        IMAGES_FILE="/tmp/all-images.txt"
+        > "$IMAGES_FILE"
+
+        for config in "${CONFIGS[@]}"; do
+          # shellcheck disable=SC2086
+          ksail workload images $config >> "$IMAGES_FILE" 2>/dev/null || true
+        done
+
+        # Deduplicate and sort (must match warm-mirror-cache exactly)
+        sort -u "$IMAGES_FILE" > /tmp/unique-images.txt
+        mv /tmp/unique-images.txt "$IMAGES_FILE"
+
+        # Compute hash of the image list
+        IMAGES_HASH=$(sha256sum "$IMAGES_FILE" | cut -c1-12)
+        echo "images-hash=$IMAGES_HASH" >> "$GITHUB_OUTPUT"
+        echo "🔑 Images hash: $IMAGES_HASH"
+
+    - name: 🔑 Generate cache key
+      id: generate-key
+      shell: bash
+      env:
+        CACHE_VERSION: ${{ inputs.cache-version }}
+        RUNNER_OS: ${{ runner.os }}
+        RUNNER_ARCH: ${{ runner.arch }}
+        IMAGES_HASH: ${{ steps.extract-images.outputs.images-hash }}
+      run: |
+        CACHE_KEY="mirror-cache-${CACHE_VERSION}-${IMAGES_HASH}-${RUNNER_OS}-${RUNNER_ARCH}"
+        echo "cache-key=$CACHE_KEY" >> "$GITHUB_OUTPUT"
+
+    - name: 📥 Restore mirror cache
+      id: restore-cache
+      uses: actions/cache/restore@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+      with:
+        path: /tmp/mirror-cache
+        key: ${{ steps.generate-key.outputs.cache-key }}
+        restore-keys: |
+          mirror-cache-${{ inputs.cache-version }}-
+
+    - name: 📦 Import mirror volumes
+      if: steps.restore-cache.outputs.cache-hit == 'true'
+      shell: bash
+      run: |
+        echo "📦 Importing mirror registry volumes..."
+
+        # Import docker.io mirror volume
+        if [ -f "/tmp/mirror-cache/docker.io.tar" ]; then
+          docker volume create docker.io 2>/dev/null || true
+          docker run --rm \
+            -v docker.io:/volume \
+            -v /tmp/mirror-cache:/backup:ro \
+            busybox:1.37@sha256:b3255e7dfbcd10cb367af0d409747d511aeb66dfac98cf30e97e87e4207dd76f \
+            sh -c "cd /volume && tar -xf /backup/docker.io.tar" || echo "⚠️ Failed to import docker.io mirror"
+          echo "✅ Restored docker.io mirror cache"
+        fi
+
+        # Import ghcr.io mirror volume
+        if [ -f "/tmp/mirror-cache/ghcr.io.tar" ]; then
+          docker volume create ghcr.io 2>/dev/null || true
+          docker run --rm \
+            -v ghcr.io:/volume \
+            -v /tmp/mirror-cache:/backup:ro \
+            busybox:1.37@sha256:b3255e7dfbcd10cb367af0d409747d511aeb66dfac98cf30e97e87e4207dd76f \
+            sh -c "cd /volume && tar -xf /backup/ghcr.io.tar" || echo "⚠️ Failed to import ghcr.io mirror"
+          echo "✅ Restored ghcr.io mirror cache"
+        fi
+
+        # Import quay.io mirror volume
+        if [ -f "/tmp/mirror-cache/quay.io.tar" ]; then
+          docker volume create quay.io 2>/dev/null || true
+          docker run --rm \
+            -v quay.io:/volume \
+            -v /tmp/mirror-cache:/backup:ro \
+            busybox:1.37@sha256:b3255e7dfbcd10cb367af0d409747d511aeb66dfac98cf30e97e87e4207dd76f \
+            sh -c "cd /volume && tar -xf /backup/quay.io.tar" || echo "⚠️ Failed to import quay.io mirror"
+          echo "✅ Restored quay.io mirror cache"
+        fi
+
+        # Import registry.k8s.io mirror volume
+        if [ -f "/tmp/mirror-cache/registry.k8s.io.tar" ]; then
+          docker volume create registry.k8s.io 2>/dev/null || true
+          docker run --rm \
+            -v registry.k8s.io:/volume \
+            -v /tmp/mirror-cache:/backup:ro \
+            busybox:1.37@sha256:b3255e7dfbcd10cb367af0d409747d511aeb66dfac98cf30e97e87e4207dd76f \
+            sh -c "cd /volume && tar -xf /backup/registry.k8s.io.tar" || echo "⚠️ Failed to import registry.k8s.io mirror"
+          echo "✅ Restored registry.k8s.io mirror cache"
+        fi
+
+    - name: ℹ️ Cache miss notice
+      if: steps.restore-cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        echo "⚠️ Mirror cache not found. Images will be pulled directly."
+        echo "   This may increase test duration and risk rate limits."
+        echo "   The warm-mirror-cache job should run before system tests."

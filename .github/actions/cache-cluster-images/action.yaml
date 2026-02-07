@@ -8,21 +8,27 @@ description: |
   dependency versions change, ensuring cached images stay in sync with the
   codebase.
 
-  Note: This action only supports Vanilla (Kind) and K3s (K3d) distributions.
-  Talos clusters are not supported because the Talos Machine API does not
-  expose image export functionality.
+  Operations:
+  - 'restore': Restore cached images and import to cluster (Vanilla/K3s only)
+  - 'save': Export images from cluster and save to cache (Vanilla/K3s only)
+  - 'list': Output image list for configured components (all distributions)
+
+  Note: Talos clusters do not support export/import operations because the
+  Talos Machine API does not expose image export functionality. Use mirror
+  registries for Talos image caching instead.
 
 inputs:
   distribution:
     description: |
       Kubernetes distribution (Vanilla, K3s, Talos).
-      Talos is silently skipped since it doesn't support image export/import.
+      Talos only supports 'list' operation.
     required: true
   operation:
     description: |
       Cache operation to perform:
-      - 'restore': Restore cached images and import to cluster
-      - 'save': Export images from cluster and save to cache
+      - 'restore': Restore cached images and import to cluster (Vanilla/K3s only)
+      - 'save': Export images from cluster and save to cache (Vanilla/K3s only)
+      - 'list': Output image list for configured components (all distributions)
     required: true
   cache-version:
     description: |
@@ -36,17 +42,28 @@ inputs:
       dependency drift.
     required: false
     default: ""
+  output-format:
+    description: |
+      Output format for 'list' operation: 'plain' (one per line) or 'json' (array).
+    required: false
+    default: "plain"
 
 outputs:
   cache-hit:
     description: Whether the cache was restored successfully
     value: ${{ steps.restore-cache.outputs.cache-hit || 'false' }}
   skipped:
-    description: Whether the operation was skipped (e.g., Talos distribution)
+    description: Whether the operation was skipped (e.g., incompatible distribution)
     value: ${{ steps.check-support.outputs.skipped || 'false' }}
   cache-key:
     description: The cache key used for this operation
     value: ${{ steps.check-support.outputs.cache-key || '' }}
+  images:
+    description: List of images (for 'list' operation)
+    value: ${{ steps.list-images.outputs.images || '' }}
+  image-count:
+    description: Number of images listed (for 'list' operation)
+    value: ${{ steps.list-images.outputs.count || '0' }}
 
 runs:
   using: composite
@@ -56,6 +73,7 @@ runs:
       shell: bash
       env:
         DISTRIBUTION: ${{ inputs.distribution }}
+        OPERATION: ${{ inputs.operation }}
         CACHE_VERSION: ${{ inputs.cache-version }}
         GO_MOD_HASH: ${{ inputs.go-mod-hash }}
         RUNNER_OS: ${{ runner.os }}
@@ -63,9 +81,17 @@ runs:
       run: |
         DIST_LOWER=$(echo "$DISTRIBUTION" | tr '[:upper:]' '[:lower:]')
 
-        # Talos doesn't support image export/import via its Machine API
+        # 'list' operation works for all distributions
+        if [[ "$OPERATION" == "list" ]]; then
+          echo "skipped=false" >> "$GITHUB_OUTPUT"
+          echo "cache-key=" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        # restore/save operations not supported for Talos
         if [[ "$DIST_LOWER" == "talos" ]]; then
-          echo "⏭️ Skipping image cache for Talos (not supported by Talos API)"
+          echo "⏭️ Skipping image cache for Talos (export/import not supported by Talos API)"
+          echo "ℹ️  Use mirror registries for Talos image caching instead"
           echo "skipped=true" >> "$GITHUB_OUTPUT"
           exit 0
         fi
@@ -85,6 +111,49 @@ runs:
 
         echo "cache-key=$CACHE_KEY" >> "$GITHUB_OUTPUT"
         echo "📦 Cache key: $CACHE_KEY"
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # LIST operation: Output required images for configured components
+    # Works for all distributions without requiring a running cluster
+    # ─────────────────────────────────────────────────────────────────────────
+
+    - name: 📋 List required images
+      if: inputs.operation == 'list'
+      id: list-images
+      shell: bash
+      env:
+        OUTPUT_FORMAT: ${{ inputs.output-format }}
+      run: |
+        echo "📋 Listing required images for configured components..."
+
+        # Get images using ksail workload images command
+        IMAGES=$(ksail workload images --output="$OUTPUT_FORMAT" 2>/dev/null || echo "")
+
+        if [[ -z "$IMAGES" ]]; then
+          echo "⚠️ No images found for current configuration"
+          echo "images=" >> "$GITHUB_OUTPUT"
+          echo "count=0" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        # Count images (plain format has one per line)
+        if [[ "$OUTPUT_FORMAT" == "plain" ]]; then
+          COUNT=$(echo "$IMAGES" | wc -l | tr -d ' ')
+        else
+          COUNT=$(echo "$IMAGES" | jq -r 'length' 2>/dev/null || echo "unknown")
+        fi
+
+        echo "✅ Found $COUNT required images"
+        echo "$IMAGES"
+
+        # Output for GitHub Actions
+        # For multiline output, use delimiter
+        {
+          echo "images<<EOF"
+          echo "$IMAGES"
+          echo "EOF"
+        } >> "$GITHUB_OUTPUT"
+        echo "count=$COUNT" >> "$GITHUB_OUTPUT"
 
     # ─────────────────────────────────────────────────────────────────────────
     # RESTORE operation: Download cached images and import to cluster

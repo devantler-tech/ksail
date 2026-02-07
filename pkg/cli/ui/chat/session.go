@@ -1,12 +1,13 @@
 package chat
 
 import (
+	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -115,10 +116,8 @@ func ListSessions(client *copilot.Client) ([]SessionMetadata, error) {
 	}
 
 	// Sort by SDK ModifiedTime descending (most recent first)
-	sort.Slice(sessions, func(i, j int) bool {
-		iTime := sessions[i].SDKMetadata.ModifiedTime
-		jTime := sessions[j].SDKMetadata.ModifiedTime
-		return iTime > jTime // String comparison works for ISO timestamps
+	slices.SortFunc(sessions, func(a, b SessionMetadata) int {
+		return cmp.Compare(b.SDKMetadata.ModifiedTime, a.SDKMetadata.ModifiedTime)
 	})
 
 	return sessions, nil

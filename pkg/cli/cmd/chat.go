@@ -7,7 +7,7 @@ import (
 	"io"
 	"os"
 	"os/signal"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"syscall"
@@ -25,6 +25,102 @@ import (
 	"github.com/spf13/cobra"
 	"sigs.k8s.io/yaml"
 )
+
+// chatFlags holds parsed flags for the chat command.
+type chatFlags struct {
+	model     string
+	streaming bool
+	timeout   time.Duration
+	useTUI    bool
+}
+
+// parseChatFlags extracts and resolves chat command flags.
+func parseChatFlags(cmd *cobra.Command) chatFlags {
+	modelFlag, _ := cmd.Flags().GetString("model")
+	streaming, _ := cmd.Flags().GetBool("streaming")
+	timeout, _ := cmd.Flags().GetDuration("timeout")
+	useTUI, _ := cmd.Flags().GetBool("tui")
+
+	// Determine model: flag > config > "" (auto)
+	model := modelFlag
+	if model == "" {
+		if configModel := loadChatModelFromConfig(); configModel != "" && configModel != "auto" {
+			model = configModel
+		}
+	}
+
+	return chatFlags{
+		model:     model,
+		streaming: streaming,
+		timeout:   timeout,
+		useTUI:    useTUI,
+	}
+}
+
+// startCopilotClient creates and starts a Copilot client.
+func startCopilotClient() (*copilot.Client, error) {
+	client := copilot.NewClient(&copilot.ClientOptions{
+		LogLevel: "error",
+	})
+
+	err := client.Start()
+	if err != nil {
+		return nil, fmt.Errorf(
+			"failed to start Copilot client: %w\n\n"+
+				"To fix:\n"+
+				"  1. Install GitHub Copilot CLI: npm install -g @githubnext/github-copilot-cli\n"+
+				"  2. Or set COPILOT_CLI_PATH to your installation",
+			err,
+		)
+	}
+
+	return client, nil
+}
+
+// validateCopilotAuth checks authentication and returns the login name.
+func validateCopilotAuth(client *copilot.Client) (string, error) {
+	authStatus, err := client.GetAuthStatus()
+	if err != nil {
+		return "", fmt.Errorf("failed to check authentication: %w", err)
+	}
+
+	if !authStatus.IsAuthenticated {
+		return "", fmt.Errorf(
+			"not authenticated with GitHub Copilot\n\n" +
+				"To fix:\n" +
+				"  1. Run: gh auth login\n" +
+				"  2. Ensure you have an active GitHub Copilot subscription",
+		)
+	}
+
+	loginName := "unknown"
+	if authStatus.Login != nil {
+		loginName = *authStatus.Login
+	}
+
+	return loginName, nil
+}
+
+// buildSessionConfig creates the Copilot session configuration.
+func buildSessionConfig(
+	model string,
+	streaming bool,
+	systemContext string,
+) *copilot.SessionConfig {
+	config := &copilot.SessionConfig{
+		Streaming: streaming,
+		SystemMessage: &copilot.SystemMessageConfig{
+			Mode:    "append",
+			Content: systemContext,
+		},
+	}
+
+	if model != "" {
+		config.Model = model
+	}
+
+	return config
+}
 
 // NewChatCmd creates and returns the chat command.
 func NewChatCmd(_ *runtime.Runtime) *cobra.Command {
@@ -63,137 +159,38 @@ Write operations require explicit confirmation before execution.`,
 	return cmd
 }
 
-// handleChatRunE handles the chat command execution.
-func handleChatRunE(cmd *cobra.Command) error {
-	writer := cmd.OutOrStdout()
+// setupNonTUISignalHandler configures signal handling for non-TUI mode.
+func setupNonTUISignalHandler(
+	cancel context.CancelFunc,
+	writer io.Writer,
+) {
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
-	// Set up signal handling for graceful shutdown
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	// Get flags early to determine mode
-	modelFlag, _ := cmd.Flags().GetString("model")
-	streaming, _ := cmd.Flags().GetBool("streaming")
-	timeout, _ := cmd.Flags().GetDuration("timeout")
-	useTUI, _ := cmd.Flags().GetBool("tui")
-
-	// Determine model: flag > config > "" (auto)
-	model := modelFlag
-	if model == "" {
-		// Try to load model from ksail.yaml config
-		if configModel := loadChatModelFromConfig(); configModel != "" && configModel != "auto" {
-			model = configModel
-		}
-	}
-
-	// Set up signal handler - TUI handles its own signals
-	if !useTUI {
-		sigChan := make(chan os.Signal, 1)
-		signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-		go func() {
-			<-sigChan
-			notify.WriteMessage(notify.Message{
-				Type:    notify.InfoType,
-				Content: "\nReceived interrupt signal, shutting down...",
-				Writer:  writer,
-			})
-			cancel()
-			// Force exit after a brief delay to allow message to print
-			time.Sleep(50 * time.Millisecond)
-			os.Exit(130) // Standard exit code for Ctrl+C
-		}()
-
-		notify.WriteMessage(notify.Message{
-			Type:    notify.TitleType,
-			Content: "Starting KSail AI Assistant...",
-			Emoji:   "🤖",
-			Writer:  writer,
-		})
-	}
-
-	// Create Copilot client
-	client := copilot.NewClient(&copilot.ClientOptions{
-		LogLevel: "error",
-	})
-
-	err := client.Start()
-	if err != nil {
-		return fmt.Errorf(
-			"failed to start Copilot client: %w\n\n"+
-				"To fix:\n"+
-				"  1. Install GitHub Copilot CLI: npm install -g @githubnext/github-copilot-cli\n"+
-				"  2. Or set COPILOT_CLI_PATH to your installation",
-			err,
-		)
-	}
-	// Cleanup with forced exit on interrupt to prevent hanging
-	defer func() {
-		select {
-		case <-ctx.Done():
-			// If interrupted, force exit without waiting for cleanup
-			os.Exit(130) // Standard exit code for Ctrl+C
-		default:
-			_ = client.Stop()
-		}
-	}()
-
-	// Check authentication
-	authStatus, err := client.GetAuthStatus()
-	if err != nil {
-		return fmt.Errorf("failed to check authentication: %w", err)
-	}
-	if !authStatus.IsAuthenticated {
-		return fmt.Errorf(
-			"not authenticated with GitHub Copilot\n\n" +
-				"To fix:\n" +
-				"  1. Run: gh auth login\n" +
-				"  2. Ensure you have an active GitHub Copilot subscription",
-		)
-	}
-
-	loginName := "unknown"
-	if authStatus.Login != nil {
-		loginName = *authStatus.Login
-	}
-
-	if !useTUI {
+	go func() {
+		<-sigChan
 		notify.WriteMessage(notify.Message{
 			Type:    notify.InfoType,
-			Content: fmt.Sprintf("Authenticated as %s", loginName),
+			Content: "\nReceived interrupt signal, shutting down...",
 			Writer:  writer,
 		})
-	}
+		cancel()
+		time.Sleep(50 * time.Millisecond)
+		os.Exit(130)
+	}()
+}
 
-	// Build system context from KSail documentation
-	systemContext, err := chatsvc.BuildSystemContext()
-	if err != nil && !useTUI {
-		notify.WriteMessage(notify.Message{
-			Type:    notify.WarningType,
-			Content: fmt.Sprintf("Could not load full context: %v", err),
-			Writer:  writer,
-		})
-	}
-
-	// Create session configuration
-	sessionConfig := &copilot.SessionConfig{
-		Streaming: streaming,
-		SystemMessage: &copilot.SystemMessageConfig{
-			Mode:    "append",
-			Content: systemContext,
-		},
-	}
-
-	if model != "" {
-		sessionConfig.Model = model
-	}
-
-	// Start interactive loop - TUI or simple mode
-	if useTUI {
-		return runTUIChat(ctx, client, sessionConfig, timeout, cmd.Root())
-	}
-
-	// Non-TUI mode: set up tools without streaming
-	tools, toolMetadata := chatsvc.GetKSailToolMetadata(cmd.Root(), nil)
+// runNonTUIChat handles the non-TUI chat mode.
+func runNonTUIChat(
+	ctx context.Context,
+	client *copilot.Client,
+	sessionConfig *copilot.SessionConfig,
+	flags chatFlags,
+	cmd *cobra.Command,
+	writer io.Writer,
+) error {
+	// Set up tools without streaming
+	tools, toolMetadata := chatsvc.GetKSailToolMetadata(cmd.Root(), nil) //nolint:contextcheck
 	// In non-TUI mode, pass nil for eventChan and agentModeRef:
 	// - nil eventChan: tool execution is not streamed to UI (output goes directly to LLM)
 	// - nil agentModeRef: agent mode is always enabled (no plan-only mode in non-TUI)
@@ -208,12 +205,11 @@ func handleChatRunE(cmd *cobra.Command) error {
 	if err != nil {
 		return fmt.Errorf("failed to create chat session: %w", err)
 	}
-	// Cleanup with forced exit on interrupt to prevent hanging
+
 	defer func() {
 		select {
 		case <-ctx.Done():
-			// If interrupted, force exit without waiting for cleanup
-			os.Exit(130) // Standard exit code for Ctrl+C
+			os.Exit(130)
 		default:
 			_ = session.Destroy()
 		}
@@ -224,10 +220,73 @@ func handleChatRunE(cmd *cobra.Command) error {
 		Content: "Chat session started. Type 'exit' or 'quit' to end the session.",
 		Writer:  writer,
 	})
-
 	fmt.Fprintln(writer, "")
 
-	return runChatInteractiveLoop(ctx, session, streaming, timeout, writer)
+	return runChatInteractiveLoop(ctx, session, flags.streaming, flags.timeout, writer)
+}
+
+// handleChatRunE handles the chat command execution.
+func handleChatRunE(cmd *cobra.Command) error {
+	writer := cmd.OutOrStdout()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	flags := parseChatFlags(cmd)
+
+	if !flags.useTUI {
+		setupNonTUISignalHandler(cancel, writer)
+		notify.WriteMessage(notify.Message{
+			Type:    notify.TitleType,
+			Content: "Starting KSail AI Assistant...",
+			Emoji:   "🤖",
+			Writer:  writer,
+		})
+	}
+
+	client, err := startCopilotClient()
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		select {
+		case <-ctx.Done():
+			os.Exit(130)
+		default:
+			_ = client.Stop()
+		}
+	}()
+
+	loginName, err := validateCopilotAuth(client)
+	if err != nil {
+		return err
+	}
+
+	if !flags.useTUI {
+		notify.WriteMessage(notify.Message{
+			Type:    notify.InfoType,
+			Content: fmt.Sprintf("Authenticated as %s", loginName),
+			Writer:  writer,
+		})
+	}
+
+	systemContext, err := chatsvc.BuildSystemContext()
+	if err != nil && !flags.useTUI {
+		notify.WriteMessage(notify.Message{
+			Type:    notify.WarningType,
+			Content: fmt.Sprintf("Could not load full context: %v", err),
+			Writer:  writer,
+		})
+	}
+
+	sessionConfig := buildSessionConfig(flags.model, flags.streaming, systemContext)
+
+	if flags.useTUI {
+		return runTUIChat(ctx, client, sessionConfig, flags.timeout, cmd.Root())
+	}
+
+	return runNonTUIChat(ctx, client, sessionConfig, flags, cmd, writer)
 }
 
 // runTUIChat starts the TUI chat mode.
@@ -566,7 +625,7 @@ func formatToolArguments(args any) string {
 	for k := range params {
 		keys = append(keys, k)
 	}
-	sort.Strings(keys)
+	slices.Sort(keys)
 
 	parts := make([]string, 0, len(keys))
 	for _, k := range keys {

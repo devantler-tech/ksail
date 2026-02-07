@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/image"
 )
 
 const (
@@ -48,17 +49,25 @@ func (k *KubeletCSRApproverInstaller) Uninstall(ctx context.Context) error {
 	return nil
 }
 
-func (k *KubeletCSRApproverInstaller) helmInstallOrUpgradeKubeletCSRApprover(
-	ctx context.Context,
-) error {
-	repoEntry := &helm.RepositoryEntry{Name: repoName, URL: repoURL}
+// Images returns the container images used by kubelet-csr-approver.
+func (k *KubeletCSRApproverInstaller) Images(ctx context.Context) ([]string, error) {
+	spec := k.chartSpec()
 
-	err := k.client.AddRepository(ctx, repoEntry, k.timeout)
+	manifest, err := k.client.TemplateChart(ctx, spec)
 	if err != nil {
-		return fmt.Errorf("failed to add kubelet-csr-approver repository: %w", err)
+		return nil, fmt.Errorf("failed to template kubelet-csr-approver chart: %w", err)
 	}
 
-	spec := &helm.ChartSpec{
+	images, err := image.ExtractImagesFromManifest(manifest)
+	if err != nil {
+		return nil, fmt.Errorf("extract images from kubelet-csr-approver manifest: %w", err)
+	}
+
+	return images, nil
+}
+
+func (k *KubeletCSRApproverInstaller) chartSpec() *helm.ChartSpec {
+	return &helm.ChartSpec{
 		ReleaseName: release,
 		ChartName:   chartName,
 		Namespace:   namespace,
@@ -72,6 +81,19 @@ func (k *KubeletCSRApproverInstaller) helmInstallOrUpgradeKubeletCSRApprover(
 		ValuesYaml: `providerRegex: ".*"
 bypassDnsResolution: true`,
 	}
+}
+
+func (k *KubeletCSRApproverInstaller) helmInstallOrUpgradeKubeletCSRApprover(
+	ctx context.Context,
+) error {
+	repoEntry := &helm.RepositoryEntry{Name: repoName, URL: repoURL}
+
+	err := k.client.AddRepository(ctx, repoEntry, k.timeout)
+	if err != nil {
+		return fmt.Errorf("failed to add kubelet-csr-approver repository: %w", err)
+	}
+
+	spec := k.chartSpec()
 
 	_, err = k.client.InstallOrUpgradeChart(ctx, spec)
 	if err != nil {

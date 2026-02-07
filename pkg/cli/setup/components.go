@@ -103,7 +103,7 @@ func policyEngineFactory(
 		//nolint:exhaustive // PolicyEngineNone is handled above with early return
 		switch engine {
 		case v1alpha1.PolicyEngineKyverno:
-			timeout = installer.MaxTimeout(timeout, installer.KyvernoInstallTimeout)
+			timeout = max(timeout, installer.KyvernoInstallTimeout)
 
 			return kyvernoinstaller.NewKyvernoInstaller(helmClient, timeout), nil
 		case v1alpha1.PolicyEngineGatekeeper:
@@ -182,7 +182,7 @@ func DefaultInstallerFactories() *InstallerFactories {
 		}
 
 		timeout := installer.GetInstallTimeout(clusterCfg)
-		timeout = installer.MaxTimeout(timeout, installer.CertManagerInstallTimeout)
+		timeout = max(timeout, installer.CertManagerInstallTimeout)
 
 		return certmanagerinstaller.NewCertManagerInstaller(helmClient, timeout), nil
 	}
@@ -299,7 +299,7 @@ func InstallMetricsServerSilent(
 }
 
 // InstallLoadBalancerSilent installs LoadBalancer support silently for parallel execution.
-// For Vanilla (Kind) × Docker, starts the Cloud Provider KIND controller as a background goroutine.
+// For Vanilla (Kind) × Docker, starts the Cloud Provider KIND controller as a Docker container.
 func InstallLoadBalancerSilent(
 	ctx context.Context,
 	clusterCfg *v1alpha1.Cluster,
@@ -310,7 +310,15 @@ func InstallLoadBalancerSilent(
 	case v1alpha1.DistributionVanilla:
 		// Vanilla (Kind) × Docker uses Cloud Provider KIND
 		if clusterCfg.Spec.Cluster.Provider == v1alpha1.ProviderDocker {
-			lbInstaller := cloudproviderkindinstaller.NewCloudProviderKINDInstaller()
+			// Create Docker client for container management
+			dockerAPIClient, dockErr := dockerclient.GetDockerClient()
+			if dockErr != nil {
+				return fmt.Errorf("create docker client: %w", dockErr)
+			}
+
+			defer func() { _ = dockerAPIClient.Close() }()
+
+			lbInstaller := cloudproviderkindinstaller.NewCloudProviderKINDInstaller(dockerAPIClient)
 
 			installErr := lbInstaller.Install(ctx)
 			if installErr != nil {

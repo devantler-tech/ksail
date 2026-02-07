@@ -90,9 +90,7 @@ func parseHostPort(hostPort string) hostPortInfo {
 	host := hostPort[:colonIdx]
 	portStr := hostPort[colonIdx+1:]
 
-	var port int
-
-	_, err := fmt.Sscanf(portStr, "%d", &port)
+	port, err := strconv.Atoi(portStr)
 	if err == nil && port > 0 {
 		return hostPortInfo{
 			host: host,

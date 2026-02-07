@@ -3,6 +3,10 @@
 📂 Initialize project...
 ✚ created 'ksail.yaml'
 ✚ created 'kind.yaml'
+✚ created 'kind/mirrors/docker.io/hosts.toml'
+✚ created 'kind/mirrors/ghcr.io/hosts.toml'
+✚ created 'kind/mirrors/quay.io/hosts.toml'
+✚ created 'kind/mirrors/registry.k8s.io/hosts.toml'
 ✚ created 'k8s/kustomization.yaml'
 ✔ initialized project
 
@@ -12,6 +16,10 @@
 📂 Initialize project...
 ✚ created 'ksail.yaml'
 ✚ created 'kind.yaml'
+✚ created 'kind/mirrors/docker.io/hosts.toml'
+✚ created 'kind/mirrors/ghcr.io/hosts.toml'
+✚ created 'kind/mirrors/quay.io/hosts.toml'
+✚ created 'kind/mirrors/registry.k8s.io/hosts.toml'
 ✚ created 'k8s/kustomization.yaml'
 ✔ initialized project
 

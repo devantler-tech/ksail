@@ -1,8 +1,7 @@
 package registry
 
 import (
-	"strings"
-
+	iohelpers "github.com/devantler-tech/ksail/v5/pkg/io"
 	"k8s.io/apimachinery/pkg/util/validation"
 )
 
@@ -33,45 +32,15 @@ const (
 //   - Trims leading/trailing hyphens
 //   - Truncates to DNS1123LabelMaxLength (63 chars)
 //   - Falls back to DefaultRepoName if result is invalid
-//
-//nolint:cyclop // name sanitization requires character-by-character validation
 func SanitizeRepoName(value string) string {
-	trimmed := strings.ToLower(strings.TrimSpace(value))
-	if trimmed == "" {
-		return DefaultRepoName
-	}
-
-	var builder strings.Builder
-
-	previousHyphen := false
-
-	for _, char := range trimmed {
-		switch {
-		case char >= 'a' && char <= 'z':
-			builder.WriteRune(char)
-
-			previousHyphen = false
-		case char >= '0' && char <= '9':
-			builder.WriteRune(char)
-
-			previousHyphen = false
-		default:
-			if !previousHyphen {
-				builder.WriteRune('-')
-
-				previousHyphen = true
-			}
-		}
-	}
-
-	sanitized := strings.Trim(builder.String(), "-")
+	sanitized := iohelpers.SanitizeToDNSLabel(value)
 	if sanitized == "" {
 		return DefaultRepoName
 	}
 
 	if len(sanitized) > validation.DNS1123LabelMaxLength {
 		sanitized = sanitized[:validation.DNS1123LabelMaxLength]
-		sanitized = strings.Trim(sanitized, "-")
+		sanitized = trimHyphens(sanitized)
 	}
 
 	if sanitized == "" {
@@ -83,6 +52,19 @@ func SanitizeRepoName(value string) string {
 	}
 
 	return DefaultRepoName
+}
+
+// trimHyphens removes leading and trailing hyphens.
+func trimHyphens(value string) string {
+	for len(value) > 0 && value[0] == '-' {
+		value = value[1:]
+	}
+
+	for len(value) > 0 && value[len(value)-1] == '-' {
+		value = value[:len(value)-1]
+	}
+
+	return value
 }
 
 // BuildLocalRegistryName constructs the local registry container name with cluster prefix.

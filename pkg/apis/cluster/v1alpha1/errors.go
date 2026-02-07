@@ -29,6 +29,9 @@ var ErrInvalidPolicyEngine = errors.New("invalid policy engine")
 // ErrInvalidProvider is returned when an invalid provider is specified.
 var ErrInvalidProvider = errors.New("invalid provider")
 
+// ErrInvalidPlacementGroupStrategy is returned when an invalid placement group strategy is specified.
+var ErrInvalidPlacementGroupStrategy = errors.New("invalid placement group strategy")
+
 // ErrInvalidDistributionProviderCombination is returned when the distribution and provider combination is invalid.
 var ErrInvalidDistributionProviderCombination = errors.New(
 	"invalid distribution and provider combination",
@@ -40,9 +43,9 @@ var ErrClusterNameTooLong = errors.New("cluster name is too long")
 // ErrClusterNameInvalid is returned when the cluster name is not DNS-1123 compliant.
 var ErrClusterNameInvalid = errors.New("cluster name is invalid")
 
-// ErrMirrorRegistryNotSupported is returned when mirror registries are used with an unsupported provider.
+// ErrMirrorRegistryNotSupported is returned when local mirror registries are used with a cloud provider.
 var ErrMirrorRegistryNotSupported = errors.New(
-	"mirror registry configuration not supported for provider",
+	"local mirror registry not supported for cloud provider",
 )
 
 // ErrLocalRegistryNotSupported is returned when local registry is used with a cloud provider without external host.

@@ -69,21 +69,6 @@ func expectRegistryPortScan(
 		Once()
 }
 
-// expectGetUsedHostPorts adds a mock expectation for GetUsedHostPorts call.
-// This should be called FIRST before expectRegistryPortScan when setting up mocks.
-func expectGetUsedHostPorts(
-	mockClient *docker.MockAPIClient,
-	containers []container.Summary,
-) {
-	mockClient.EXPECT().
-		ContainerList(mock.Anything, mock.MatchedBy(func(opts container.ListOptions) bool {
-			// GetUsedHostPorts uses All: false with no filters
-			return !opts.All && len(opts.Filters.Get("name")) == 0
-		})).
-		Return(containers, nil).
-		Once()
-}
-
 func matchListOptionsByName(name string) any {
 	return mock.MatchedBy(func(opts container.ListOptions) bool {
 		values := opts.Filters.Get("name")
@@ -208,10 +193,17 @@ func runSetupRegistriesExistingRegistryScenario(t *testing.T) {
 		},
 	}
 
-	// GetUsedHostPorts is called first to get all used ports from running containers
-	expectGetUsedHostPorts(mockClient, []container.Summary{existing})
+	// CollectExistingRegistryPorts calls ListRegistries (finds existing registry)
+	expectRegistryPortScan(mockClient, []container.Summary{existing})
 
-	// Existing registry is discovered before provisioning new mirrors.
+	// CollectExistingRegistryPorts also calls GetRegistryPort for each existing registry,
+	// which queries the container by name to get its port mapping.
+	mockClient.EXPECT().
+		ContainerList(mock.Anything, matchListOptionsByName("test-docker.io")).
+		Return([]container.Summary{existing}, nil).
+		Once()
+
+	// SetupRegistries → newMirrorBatch → collectExistingRegistryNames calls ListRegistries again
 	expectRegistryPortScan(mockClient, []container.Summary{existing})
 
 	// CreateRegistry for docker.io - check if exists (returns existing, so addClusterLabel is called as no-op)
@@ -256,9 +248,9 @@ func newSingleMirrorSpec() []registry.MirrorSpec {
 }
 
 func expectInitialRegistryScan(mockClient *docker.MockAPIClient) {
-	// GetUsedHostPorts is called first in PrepareRegistryManager
-	expectGetUsedHostPorts(mockClient, []container.Summary{})
-	// Then listAllRegistryContainers is called in collectExistingRegistryNames
+	// CollectExistingRegistryPorts calls ListRegistries (no existing registries)
+	expectRegistryPortScan(mockClient, []container.Summary{})
+	// SetupRegistries → newMirrorBatch → collectExistingRegistryNames calls ListRegistries again
 	expectRegistryPortScan(mockClient, []container.Summary{})
 }
 

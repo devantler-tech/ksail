@@ -23,6 +23,9 @@ const (
 	// CertManagerInstallTimeout is the timeout for cert-manager installs, which need
 	// extra time for multiple deployments and webhook configurations to become ready.
 	CertManagerInstallTimeout = 10 * time.Minute
+	// FluxInstallTimeout is the timeout for Flux operator installs, which need
+	// extra time when running under heavy parallel load on resource-constrained nodes.
+	FluxInstallTimeout = 7 * time.Minute
 )
 
 // GetInstallTimeout determines the timeout for component installation.
@@ -47,13 +50,4 @@ func GetInstallTimeout(clusterCfg *v1alpha1.Cluster) time.Duration {
 	}
 
 	return DefaultInstallTimeout
-}
-
-// MaxTimeout returns the larger of the two durations.
-func MaxTimeout(a, b time.Duration) time.Duration {
-	if a >= b {
-		return a
-	}
-
-	return b
 }

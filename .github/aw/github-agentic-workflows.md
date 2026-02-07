@@ -469,8 +469,12 @@ The YAML frontmatter supports these fields:
         reviewers: [user1, copilot]     # Optional: reviewers (use 'copilot' for bot)
         draft: true                     # Optional: create as draft PR (defaults to true)
         if-no-changes: "warn"           # Optional: "warn" (default), "error", or "ignore"
+        expires: 7                      # Optional: auto-close after 7 days (supports: 2h, 7d, 2w, 1m, 1y; min: 2h)
+        auto-merge: false               # Optional: enable auto-merge when checks pass (default: false)
         target-repo: "owner/repo"       # Optional: cross-repository
     ```
+
+    **Auto-Expiration**: The `expires` field auto-closes PRs after a time period. Supports integers (days) or relative formats (2h, 7d, 2w, 1m, 1y). Minimum duration: 2 hours. Only for same-repo PRs without target-repo. Generates `agentics-maintenance.yml` workflow.
 
     When using `output.create-pull-request`, the main job does **not** need `contents: write` or `pull-requests: write` permissions since PR creation is handled by a separate job with appropriate permissions.
   - `create-pull-request-review-comment:` - Safe PR review comment creation on code lines
@@ -525,6 +529,19 @@ The YAML frontmatter supports these fields:
     ```
 
     When using `safe-outputs.close-pull-request`, the main job does **not** need `pull-requests: write` permission since PR closing is handled by a separate job with appropriate permissions.
+  - `mark-pull-request-as-ready-for-review:` - Mark draft PRs as ready for review
+
+    ```yaml
+    safe-outputs:
+      mark-pull-request-as-ready-for-review:
+        max: 1                              # Optional: max operations (default: 1)
+        target: "*"                         # Optional: "triggering" (default), "*", or number
+        required-labels: [automated]        # Optional: only mark PRs with these labels
+        required-title-prefix: "[bot]"      # Optional: only mark PRs with this prefix
+        target-repo: "owner/repo"           # Optional: cross-repository
+    ```
+
+    When using `safe-outputs.mark-pull-request-as-ready-for-review`, the main job does **not** need `pull-requests: write` permission since marking as ready is handled by a separate job with appropriate permissions.
   - `add-labels:` - Safe label addition to issues or PRs
 
     ```yaml
@@ -585,6 +602,18 @@ The YAML frontmatter supports these fields:
     ```
 
     Links issues as sub-issues using GitHub's parent-child relationships. Agent output includes `parent_issue_number` and `sub_issue_number`. Use with `create-issue` temporary IDs or existing issue numbers.
+  - `create-project:` - Create GitHub Projects V2
+
+    ```yaml
+    safe-outputs:
+      create-project:
+        max: 1                          # Optional: max projects (default: 1)
+        github-token: ${{ secrets.PROJECTS_PAT }}  # Optional: token with projects:write
+        target-owner: "org-or-user"     # Optional: owner for created projects
+        title-prefix: "[ai] "           # Optional: prefix for project titles
+    ```
+
+    Not supported for cross-repository operations.
   - `update-project:` - Manage GitHub Projects boards
 
     ```yaml
@@ -606,6 +635,16 @@ The YAML frontmatter supports these fields:
 
     ```json
     {"type": "update_project", "project": "https://github.com/orgs/myorg/projects/42", "content_type": "draft_issue", "draft_title": "Task title", "draft_body": "Task description", "fields": {"Status": "Todo"}}
+    ```
+
+    Not supported for cross-repository operations.
+  - `create-project-status-update:` - Create GitHub project status updates
+
+    ```yaml
+    safe-outputs:
+      create-project-status-update:
+        max: 10                         # Optional: max status updates (default: 10)
+        github-token: ${{ secrets.PROJECTS_PAT }}  # Optional: token with projects:write
     ```
 
     Not supported for cross-repository operations.
@@ -679,6 +718,15 @@ The YAML frontmatter supports these fields:
     ```
 
     Severity levels: error, warning, info, note.
+  - `autofix-code-scanning-alert:` - Add autofixes to code scanning alerts
+
+    ```yaml
+    safe-outputs:
+      autofix-code-scanning-alert:
+        max: 10                         # Optional: max autofixes (default: 10)
+    ```
+
+    Provides automated fixes for code scanning alerts.
   - `create-agent-session:` - Create GitHub Copilot agent sessions
 
     ```yaml
@@ -744,6 +792,17 @@ The YAML frontmatter supports these fields:
     ```
 
     The missing-tool safe-output allows agents to report when they need tools or functionality not currently available. This is automatically enabled by default and helps track feature requests from agents.
+  - `missing-data:` - Report missing data required to complete tasks (auto-enabled)
+
+    ```yaml
+    safe-outputs:
+      missing-data:
+        create-issue: true              # Optional: create issues for missing data (default: true)
+        title-prefix: "[missing data]"  # Optional: prefix for issue titles
+        labels: [data-request]          # Optional: labels for created issues
+    ```
+
+    The missing-data safe-output allows agents to report when required data or information is unavailable. This is automatically enabled by default. When `create-issue` is true, missing data reports create or update GitHub issues for tracking.
 
   **Global Safe Output Configuration:**
   - `github-token:` - Custom GitHub token for all safe output jobs
@@ -1329,6 +1388,7 @@ Import shared components using the `imports:` field in frontmatter:
 on: issues
 engine: copilot
 imports:
+  - copilot-setup-steps.yml    # Import setup steps from copilot-setup-steps.yml
   - shared/security-notice.md
   - shared/tool-setup.md
   - shared/mcp/tavily.md
@@ -1358,6 +1418,37 @@ safe-outputs:
 
 Additional instructions for the coding agent.
 ```
+
+### Special Import: copilot-setup-steps.yml
+
+The `copilot-setup-steps.yml` file receives special handling when imported. Instead of importing the entire job structure, **only the steps** from the `copilot-setup-steps` job are extracted and inserted **at the start** of your workflow's agent job.
+
+**Key behaviors:**
+
+- Only the steps array is imported (job metadata like `runs-on`, `permissions` is ignored)
+- Imported steps are placed **at the start** of the agent job (before all other steps)
+- Other imported steps are placed after copilot-setup-steps but before main frontmatter steps
+- Main frontmatter steps come last
+- Final order: **copilot-setup-steps → other imported steps → main frontmatter steps**
+- Supports both `.yml` and `.yaml` extensions
+- Enables clean reuse of common setup configurations across workflows
+
+**Example:**
+
+```yaml
+---
+on: issue_comment
+engine: copilot
+imports:
+  - copilot-setup-steps.yml
+  - shared/common-tools.md
+steps:
+  - name: Custom environment setup
+    run: echo "Main frontmatter step runs last"
+---
+```
+
+In the compiled workflow, the order is: copilot-setup-steps → imported steps from shared/common-tools.md → main frontmatter steps.
 
 ## Permission Patterns
 
@@ -1652,7 +1743,7 @@ gh aw logs --start-date -1mo         # Last month's runs
 gh aw logs --start-date -2w3d        # 2 weeks 3 days ago
 
 # Filter staged logs
-gw aw logs --no-staged               # ignore workflows with safe output staged true
+gh aw logs --no-staged               # ignore workflows with safe output staged true
 
 # Download to custom directory
 gh aw logs -o ./workflow-logs
@@ -1850,13 +1941,13 @@ Use `gh aw compile --verbose` to see detailed validation messages, or `gh aw com
 ### Installation
 
 ```bash
-gh extension install githubnext/gh-aw
+gh extension install github/gh-aw
 ```
 
 If there are authentication issues, use the standalone installer:
 
 ```bash
-curl -O https://raw.githubusercontent.com/githubnext/gh-aw/main/install-gh-aw.sh
+curl -O https://raw.githubusercontent.com/github/gh-aw/main/install-gh-aw.sh
 chmod +x install-gh-aw.sh
 ./install-gh-aw.sh
 ```
@@ -1885,4 +1976,4 @@ gh aw logs <workflow-id>
 
 ### Documentation
 
-For complete CLI documentation, see: <https://githubnext.github.io/gh-aw/setup/cli/>
+For complete CLI documentation, see: <https://github.github.com/gh-aw/setup/cli/>
