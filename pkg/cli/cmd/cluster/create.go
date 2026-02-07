@@ -309,17 +309,25 @@ func handlePostCreationSetup(
 	return nil
 }
 
-func setupK3dMetricsServer(clusterCfg *v1alpha1.Cluster, k3dConfig *v1alpha5.SimpleConfig) {
+// maybeDisableK3dFeature conditionally appends a K3s --disable flag to K3d config.
+// It is a no-op when the distribution is not K3s, k3dConfig is nil, the feature
+// is not in the disabled state, or the flag is already present.
+func maybeDisableK3dFeature(
+	clusterCfg *v1alpha1.Cluster,
+	k3dConfig *v1alpha5.SimpleConfig,
+	isDisabled bool,
+	flag string,
+) {
 	if clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionK3s || k3dConfig == nil {
 		return
 	}
 
-	if clusterCfg.Spec.Cluster.MetricsServer != v1alpha1.MetricsServerDisabled {
+	if !isDisabled {
 		return
 	}
 
 	for _, arg := range k3dConfig.Options.K3sOptions.ExtraArgs {
-		if arg.Arg == k3sDisableMetricsServerFlag {
+		if arg.Arg == flag {
 			return
 		}
 	}
@@ -327,61 +335,37 @@ func setupK3dMetricsServer(clusterCfg *v1alpha1.Cluster, k3dConfig *v1alpha5.Sim
 	k3dConfig.Options.K3sOptions.ExtraArgs = append(
 		k3dConfig.Options.K3sOptions.ExtraArgs,
 		v1alpha5.K3sArgWithNodeFilters{
-			Arg:         k3sDisableMetricsServerFlag,
+			Arg:         flag,
 			NodeFilters: []string{"server:*"},
 		},
+	)
+}
+
+func setupK3dMetricsServer(clusterCfg *v1alpha1.Cluster, k3dConfig *v1alpha5.SimpleConfig) {
+	maybeDisableK3dFeature(
+		clusterCfg, k3dConfig,
+		clusterCfg.Spec.Cluster.MetricsServer == v1alpha1.MetricsServerDisabled,
+		k3sDisableMetricsServerFlag,
 	)
 }
 
 // SetupK3dCSI configures K3d to disable local-storage when CSI is explicitly disabled.
 // This function is exported for testing purposes.
 func SetupK3dCSI(clusterCfg *v1alpha1.Cluster, k3dConfig *v1alpha5.SimpleConfig) {
-	if clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionK3s || k3dConfig == nil {
-		return
-	}
-
-	if clusterCfg.Spec.Cluster.CSI != v1alpha1.CSIDisabled {
-		return
-	}
-
-	for _, arg := range k3dConfig.Options.K3sOptions.ExtraArgs {
-		if arg.Arg == k3sDisableLocalStorageFlag {
-			return
-		}
-	}
-
-	k3dConfig.Options.K3sOptions.ExtraArgs = append(
-		k3dConfig.Options.K3sOptions.ExtraArgs,
-		v1alpha5.K3sArgWithNodeFilters{
-			Arg:         k3sDisableLocalStorageFlag,
-			NodeFilters: []string{"server:*"},
-		},
+	maybeDisableK3dFeature(
+		clusterCfg, k3dConfig,
+		clusterCfg.Spec.Cluster.CSI == v1alpha1.CSIDisabled,
+		k3sDisableLocalStorageFlag,
 	)
 }
 
 // SetupK3dLoadBalancer configures K3d to disable servicelb when LoadBalancer is explicitly disabled.
 // This function is exported for testing purposes.
 func SetupK3dLoadBalancer(clusterCfg *v1alpha1.Cluster, k3dConfig *v1alpha5.SimpleConfig) {
-	if clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionK3s || k3dConfig == nil {
-		return
-	}
-
-	if clusterCfg.Spec.Cluster.LoadBalancer != v1alpha1.LoadBalancerDisabled {
-		return
-	}
-
-	for _, arg := range k3dConfig.Options.K3sOptions.ExtraArgs {
-		if arg.Arg == k3sDisableServiceLBFlag {
-			return
-		}
-	}
-
-	k3dConfig.Options.K3sOptions.ExtraArgs = append(
-		k3dConfig.Options.K3sOptions.ExtraArgs,
-		v1alpha5.K3sArgWithNodeFilters{
-			Arg:         k3sDisableServiceLBFlag,
-			NodeFilters: []string{"server:*"},
-		},
+	maybeDisableK3dFeature(
+		clusterCfg, k3dConfig,
+		clusterCfg.Spec.Cluster.LoadBalancer == v1alpha1.LoadBalancerDisabled,
+		k3sDisableServiceLBFlag,
 	)
 }
 

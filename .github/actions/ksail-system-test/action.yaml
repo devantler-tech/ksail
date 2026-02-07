@@ -53,6 +53,13 @@ inputs:
     description: GitHub Container Registry token (for external registry auth)
     required: false
     default: ""
+  update-args:
+    description: |
+      Additional arguments for ksail cluster update to test config changes.
+      When set, the update steps will apply these args to test actual in-place
+      or recreate-required changes (e.g., "--metrics-server Enabled").
+    required: false
+    default: ""
 
 runs:
   using: composite
@@ -228,16 +235,20 @@ runs:
       shell: bash
       env:
         HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
+        UPDATE_ARGS: ${{ inputs.update-args }}
       run: |
-        ksail cluster update --dry-run
+        # shellcheck disable=SC2086
+        ksail cluster update --dry-run $UPDATE_ARGS
 
     - name: 🧪 ksail cluster update
       id: cluster-update
       shell: bash
       env:
         HCLOUD_TOKEN: ${{ inputs.hcloud-token }}
+        UPDATE_ARGS: ${{ inputs.update-args }}
       run: |
-        ksail cluster update --force
+        # shellcheck disable=SC2086
+        ksail cluster update --force $UPDATE_ARGS
 
     - name: 💾 Save Docker volumes to cache
       if: inputs.provider == 'Docker' && steps.restore-volume-cache.outputs.cache-hit != 'true'
