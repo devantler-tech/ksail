@@ -29,23 +29,11 @@ func (e *DiffEngine) ComputeDiff(oldSpec, newSpec *v1alpha1.ClusterSpec) *types.
 		return result
 	}
 
-	// Check distribution change (always requires recreate)
-	e.checkDistributionChange(oldSpec, newSpec, result)
+	// Check simple scalar fields via table-driven rules
+	e.applyFieldRules(oldSpec, newSpec, result)
 
-	// Check provider change (always requires recreate)
-	e.checkProviderChange(oldSpec, newSpec, result)
-
-	// Check component changes (usually in-place via Helm)
-	e.checkCNIChange(oldSpec, newSpec, result)
-	e.checkCSIChange(oldSpec, newSpec, result)
-	e.checkMetricsServerChange(oldSpec, newSpec, result)
-	e.checkLoadBalancerChange(oldSpec, newSpec, result)
-	e.checkCertManagerChange(oldSpec, newSpec, result)
-	e.checkPolicyEngineChange(oldSpec, newSpec, result)
-	e.checkGitOpsEngineChange(oldSpec, newSpec, result)
+	// Check complex / distribution-specific changes
 	e.checkLocalRegistryChange(oldSpec, newSpec, result)
-
-	// Check distribution-specific options
 	e.checkVanillaOptionsChange(oldSpec, newSpec, result)
 	e.checkTalosOptionsChange(oldSpec, newSpec, result)
 	e.checkHetznerOptionsChange(oldSpec, newSpec, result)
@@ -53,147 +41,105 @@ func (e *DiffEngine) ComputeDiff(oldSpec, newSpec *v1alpha1.ClusterSpec) *types.
 	return result
 }
 
-// checkDistributionChange checks if the distribution has changed.
-func (e *DiffEngine) checkDistributionChange(
-	oldSpec, newSpec *v1alpha1.ClusterSpec,
-	result *types.UpdateResult,
-) {
-	if oldSpec.Distribution != newSpec.Distribution {
-		result.RecreateRequired = append(result.RecreateRequired, types.Change{
-			Field:    "cluster.distribution",
-			OldValue: oldSpec.Distribution.String(),
-			NewValue: newSpec.Distribution.String(),
-			Category: types.ChangeCategoryRecreateRequired,
-			Reason:   "changing the Kubernetes distribution requires cluster recreation",
-		})
+// fieldRule describes how to diff a single scalar field.
+type fieldRule struct {
+	field    string
+	category types.ChangeCategory
+	reason   string
+	// getVal extracts the string representation of this field from a ClusterSpec.
+	getVal func(*v1alpha1.ClusterSpec) string
+}
+
+// scalarFieldRules returns the table of simple scalar field diff rules.
+// These fields follow a uniform pattern: compare old vs new, emit a Change if different.
+func scalarFieldRules() []fieldRule {
+	return []fieldRule{
+		{
+			field:    "cluster.distribution",
+			category: types.ChangeCategoryRecreateRequired,
+			reason:   "changing the Kubernetes distribution requires cluster recreation",
+			getVal:   func(s *v1alpha1.ClusterSpec) string { return s.Distribution.String() },
+		},
+		{
+			field:    "cluster.provider",
+			category: types.ChangeCategoryRecreateRequired,
+			reason:   "changing the infrastructure provider requires cluster recreation",
+			getVal:   func(s *v1alpha1.ClusterSpec) string { return s.Provider.String() },
+		},
+		{
+			field:    "cluster.cni",
+			category: types.ChangeCategoryInPlace,
+			reason:   "CNI can be switched via Helm upgrade/uninstall",
+			getVal:   func(s *v1alpha1.ClusterSpec) string { return s.CNI.String() },
+		},
+		{
+			field:    "cluster.csi",
+			category: types.ChangeCategoryInPlace,
+			reason:   "CSI can be switched via Helm install/uninstall",
+			getVal:   func(s *v1alpha1.ClusterSpec) string { return s.CSI.String() },
+		},
+		{
+			field:    "cluster.metricsServer",
+			category: types.ChangeCategoryInPlace,
+			reason:   "metrics-server can be installed/uninstalled via Helm",
+			getVal:   func(s *v1alpha1.ClusterSpec) string { return s.MetricsServer.String() },
+		},
+		{
+			field:    "cluster.loadBalancer",
+			category: types.ChangeCategoryInPlace,
+			reason:   "load balancer can be enabled/disabled via Helm",
+			getVal:   func(s *v1alpha1.ClusterSpec) string { return s.LoadBalancer.String() },
+		},
+		{
+			field:    "cluster.certManager",
+			category: types.ChangeCategoryInPlace,
+			reason:   "cert-manager can be installed/uninstalled via Helm",
+			getVal:   func(s *v1alpha1.ClusterSpec) string { return s.CertManager.String() },
+		},
+		{
+			field:    "cluster.policyEngine",
+			category: types.ChangeCategoryInPlace,
+			reason:   "policy engine can be switched via Helm install/uninstall",
+			getVal:   func(s *v1alpha1.ClusterSpec) string { return s.PolicyEngine.String() },
+		},
+		{
+			field:    "cluster.gitOpsEngine",
+			category: types.ChangeCategoryInPlace,
+			reason:   "GitOps engine can be switched via Helm install/uninstall",
+			getVal:   func(s *v1alpha1.ClusterSpec) string { return s.GitOpsEngine.String() },
+		},
 	}
 }
 
-// checkProviderChange checks if the provider has changed.
-func (e *DiffEngine) checkProviderChange(
+// applyFieldRules evaluates each scalar field rule and appends changes to the result.
+func (e *DiffEngine) applyFieldRules(
 	oldSpec, newSpec *v1alpha1.ClusterSpec,
 	result *types.UpdateResult,
 ) {
-	if oldSpec.Provider != newSpec.Provider {
-		result.RecreateRequired = append(result.RecreateRequired, types.Change{
-			Field:    "cluster.provider",
-			OldValue: oldSpec.Provider.String(),
-			NewValue: newSpec.Provider.String(),
-			Category: types.ChangeCategoryRecreateRequired,
-			Reason:   "changing the infrastructure provider requires cluster recreation",
-		})
-	}
-}
+	for _, rule := range scalarFieldRules() {
+		oldVal := rule.getVal(oldSpec)
+		newVal := rule.getVal(newSpec)
 
-// checkCNIChange checks if the CNI has changed.
-func (e *DiffEngine) checkCNIChange(
-	oldSpec, newSpec *v1alpha1.ClusterSpec,
-	result *types.UpdateResult,
-) {
-	if oldSpec.CNI != newSpec.CNI {
-		result.InPlaceChanges = append(result.InPlaceChanges, types.Change{
-			Field:    "cluster.cni",
-			OldValue: oldSpec.CNI.String(),
-			NewValue: newSpec.CNI.String(),
-			Category: types.ChangeCategoryInPlace,
-			Reason:   "CNI can be switched via Helm upgrade/uninstall",
-		})
-	}
-}
+		if oldVal == newVal {
+			continue
+		}
 
-// checkCSIChange checks if the CSI has changed.
-func (e *DiffEngine) checkCSIChange(
-	oldSpec, newSpec *v1alpha1.ClusterSpec,
-	result *types.UpdateResult,
-) {
-	if oldSpec.CSI != newSpec.CSI {
-		result.InPlaceChanges = append(result.InPlaceChanges, types.Change{
-			Field:    "cluster.csi",
-			OldValue: oldSpec.CSI.String(),
-			NewValue: newSpec.CSI.String(),
-			Category: types.ChangeCategoryInPlace,
-			Reason:   "CSI can be switched via Helm install/uninstall",
-		})
-	}
-}
+		change := types.Change{
+			Field:    rule.field,
+			OldValue: oldVal,
+			NewValue: newVal,
+			Category: rule.category,
+			Reason:   rule.reason,
+		}
 
-// checkMetricsServerChange checks if the metrics server setting has changed.
-func (e *DiffEngine) checkMetricsServerChange(
-	oldSpec, newSpec *v1alpha1.ClusterSpec,
-	result *types.UpdateResult,
-) {
-	if oldSpec.MetricsServer != newSpec.MetricsServer {
-		result.InPlaceChanges = append(result.InPlaceChanges, types.Change{
-			Field:    "cluster.metricsServer",
-			OldValue: oldSpec.MetricsServer.String(),
-			NewValue: newSpec.MetricsServer.String(),
-			Category: types.ChangeCategoryInPlace,
-			Reason:   "metrics-server can be installed/uninstalled via Helm",
-		})
-	}
-}
-
-// checkLoadBalancerChange checks if the load balancer setting has changed.
-func (e *DiffEngine) checkLoadBalancerChange(
-	oldSpec, newSpec *v1alpha1.ClusterSpec,
-	result *types.UpdateResult,
-) {
-	if oldSpec.LoadBalancer != newSpec.LoadBalancer {
-		result.InPlaceChanges = append(result.InPlaceChanges, types.Change{
-			Field:    "cluster.loadBalancer",
-			OldValue: oldSpec.LoadBalancer.String(),
-			NewValue: newSpec.LoadBalancer.String(),
-			Category: types.ChangeCategoryInPlace,
-			Reason:   "load balancer can be enabled/disabled via Helm",
-		})
-	}
-}
-
-// checkCertManagerChange checks if cert-manager setting has changed.
-func (e *DiffEngine) checkCertManagerChange(
-	oldSpec, newSpec *v1alpha1.ClusterSpec,
-	result *types.UpdateResult,
-) {
-	if oldSpec.CertManager != newSpec.CertManager {
-		result.InPlaceChanges = append(result.InPlaceChanges, types.Change{
-			Field:    "cluster.certManager",
-			OldValue: oldSpec.CertManager.String(),
-			NewValue: newSpec.CertManager.String(),
-			Category: types.ChangeCategoryInPlace,
-			Reason:   "cert-manager can be installed/uninstalled via Helm",
-		})
-	}
-}
-
-// checkPolicyEngineChange checks if the policy engine has changed.
-func (e *DiffEngine) checkPolicyEngineChange(
-	oldSpec, newSpec *v1alpha1.ClusterSpec,
-	result *types.UpdateResult,
-) {
-	if oldSpec.PolicyEngine != newSpec.PolicyEngine {
-		result.InPlaceChanges = append(result.InPlaceChanges, types.Change{
-			Field:    "cluster.policyEngine",
-			OldValue: oldSpec.PolicyEngine.String(),
-			NewValue: newSpec.PolicyEngine.String(),
-			Category: types.ChangeCategoryInPlace,
-			Reason:   "policy engine can be switched via Helm install/uninstall",
-		})
-	}
-}
-
-// checkGitOpsEngineChange checks if the GitOps engine has changed.
-func (e *DiffEngine) checkGitOpsEngineChange(
-	oldSpec, newSpec *v1alpha1.ClusterSpec,
-	result *types.UpdateResult,
-) {
-	if oldSpec.GitOpsEngine != newSpec.GitOpsEngine {
-		result.InPlaceChanges = append(result.InPlaceChanges, types.Change{
-			Field:    "cluster.gitOpsEngine",
-			OldValue: oldSpec.GitOpsEngine.String(),
-			NewValue: newSpec.GitOpsEngine.String(),
-			Category: types.ChangeCategoryInPlace,
-			Reason:   "GitOps engine can be switched via Helm install/uninstall",
-		})
+		switch rule.category {
+		case types.ChangeCategoryRecreateRequired:
+			result.RecreateRequired = append(result.RecreateRequired, change)
+		case types.ChangeCategoryInPlace:
+			result.InPlaceChanges = append(result.InPlaceChanges, change)
+		case types.ChangeCategoryRebootRequired:
+			result.RebootRequired = append(result.RebootRequired, change)
+		}
 	}
 }
 
