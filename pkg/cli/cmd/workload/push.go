@@ -100,8 +100,6 @@ func configurePushFlags(
 }
 
 // runPushCommand executes the push logic with the provided parameters.
-//
-//nolint:funlen // Command execution logic with multiple stages
 func runPushCommand(
 	cmd *cobra.Command,
 	args []string,
@@ -147,34 +145,53 @@ func runPushCommand(
 
 	// Validate if flag is set or config option is enabled
 	if validate || clusterCfg.Spec.Workload.ValidateOnPush {
-		notify.WriteMessage(notify.Message{
-			Type:    notify.ActivityType,
-			Content: "validating manifests",
-			Timer:   outputTimer,
-			Writer:  cmd.OutOrStdout(),
-		})
-
-		err = runValidateCmd(
-			cmd.Context(),
-			cmd,
-			[]string{params.SourceDir},
-			true,  // skipSecrets
-			true,  // strict
-			true,  // ignoreMissingSchemas
-			false, // verbose
-		)
-		if err != nil {
-			return fmt.Errorf("validate manifests: %w", err)
+		validateErr := validateManifests(cmd, params.SourceDir, outputTimer)
+		if validateErr != nil {
+			return validateErr
 		}
-
-		notify.WriteMessage(notify.Message{
-			Type:    notify.SuccessType,
-			Content: "manifests validated",
-			Timer:   outputTimer,
-			Writer:  cmd.OutOrStdout(),
-		})
 	}
 
+	return buildAndPushArtifact(cmd, params, outputTimer)
+}
+
+// validateManifests runs manifest validation and reports progress.
+func validateManifests(cmd *cobra.Command, sourceDir string, outputTimer timer.Timer) error {
+	notify.WriteMessage(notify.Message{
+		Type:    notify.ActivityType,
+		Content: "validating manifests",
+		Timer:   outputTimer,
+		Writer:  cmd.OutOrStdout(),
+	})
+
+	err := runValidateCmd(
+		cmd.Context(),
+		cmd,
+		[]string{sourceDir},
+		true,  // skipSecrets
+		true,  // strict
+		true,  // ignoreMissingSchemas
+		false, // verbose
+	)
+	if err != nil {
+		return fmt.Errorf("validate manifests: %w", err)
+	}
+
+	notify.WriteMessage(notify.Message{
+		Type:    notify.SuccessType,
+		Content: "manifests validated",
+		Timer:   outputTimer,
+		Writer:  cmd.OutOrStdout(),
+	})
+
+	return nil
+}
+
+// buildAndPushArtifact builds an OCI artifact from the source directory and pushes it.
+func buildAndPushArtifact(
+	cmd *cobra.Command,
+	params *pushParams,
+	outputTimer timer.Timer,
+) error {
 	notify.WriteMessage(notify.Message{
 		Type:    notify.ActivityType,
 		Content: "building oci artifact",
@@ -182,18 +199,7 @@ func runPushCommand(
 		Writer:  cmd.OutOrStdout(),
 	})
 
-	// Format registry reference for display and endpoint
-	var registryDisplay, registryEndpoint string
-	if params.Port > 0 {
-		registryDisplay = fmt.Sprintf(
-			"%s:%d/%s:%s", params.Host, params.Port, params.Repository, params.Ref,
-		)
-		registryEndpoint = fmt.Sprintf("%s:%d", params.Host, params.Port)
-	} else {
-		// External registry - no port (HTTPS implicit)
-		registryDisplay = fmt.Sprintf("%s/%s:%s", params.Host, params.Repository, params.Ref)
-		registryEndpoint = params.Host
-	}
+	registryDisplay, registryEndpoint := formatRegistryEndpoints(params)
 
 	notify.WriteMessage(notify.Message{
 		Type:    notify.ActivityType,
@@ -205,7 +211,7 @@ func runPushCommand(
 
 	builder := oci.NewWorkloadArtifactBuilder()
 
-	_, err = builder.Build(cmd.Context(), oci.BuildOptions{
+	_, err := builder.Build(cmd.Context(), oci.BuildOptions{
 		Name:             params.Repository,
 		SourcePath:       params.SourceDir,
 		RegistryEndpoint: registryEndpoint,
@@ -229,6 +235,20 @@ func runPushCommand(
 	return nil
 }
 
+// formatRegistryEndpoints returns display and endpoint strings for a registry.
+func formatRegistryEndpoints(params *pushParams) (string, string) {
+	if params.Port > 0 {
+		return fmt.Sprintf(
+				"%s:%d/%s:%s", params.Host, params.Port, params.Repository, params.Ref,
+			),
+			fmt.Sprintf("%s:%d", params.Host, params.Port)
+	}
+
+	// External registry - no port (HTTPS implicit)
+	return fmt.Sprintf("%s/%s:%s", params.Host, params.Repository, params.Ref),
+		params.Host
+}
+
 // pushParams holds all resolved parameters for the push operation.
 type pushParams struct {
 	Host         string
@@ -249,9 +269,7 @@ type pushParams struct {
 // 2. Config file (ksail.yaml localRegistry)
 // 3. Cluster GitOps resources (FluxInstance or ArgoCD Application)
 // 4. Docker containers (matching cluster name)
-// 5. Error (no registry found)
-//
-//nolint:funlen // Resolution requires multiple sources
+// 5. Error (no registry found).
 func resolvePushParams(
 	cmd *cobra.Command,
 	cfg *v1alpha1.Cluster,
@@ -266,32 +284,9 @@ func resolvePushParams(
 		return newPushParamsFromOCIRef(cfg, ociRef, pathFlag), nil
 	}
 
-	// Show detection section
-	cmd.Println()
-	notify.WriteMessage(notify.Message{
-		Type:    notify.TitleType,
-		Emoji:   "🔎",
-		Content: "Get registry details...",
-		Writer:  cmd.OutOrStdout(),
-	})
-
-	tmr.NewStage()
-
-	notify.WriteMessage(notify.Message{
-		Type:    notify.ActivityType,
-		Content: "resolving registry configuration",
-		Timer:   outputTimer,
-		Writer:  cmd.OutOrStdout(),
-	})
-
-	// Use priority-based registry resolution
-	registryInfo, err := helpers.ResolveRegistry(cmd.Context(), helpers.ResolveRegistryOptions{
-		Viper:         viperInstance,
-		ClusterConfig: cfg,
-		ClusterName:   cfg.Spec.Cluster.Connection.Context,
-	})
+	registryInfo, err := detectRegistry(cmd, cfg, viperInstance, tmr, outputTimer)
 	if err != nil {
-		return nil, fmt.Errorf("resolve registry: %w", err)
+		return nil, err
 	}
 
 	// Build params from detected registry info
@@ -329,6 +324,43 @@ func resolvePushParams(
 	})
 
 	return params, nil
+}
+
+// detectRegistry shows the detection UI and resolves registry information.
+func detectRegistry(
+	cmd *cobra.Command,
+	cfg *v1alpha1.Cluster,
+	viperInstance *viper.Viper,
+	tmr timer.Timer,
+	outputTimer timer.Timer,
+) (*helpers.RegistryInfo, error) {
+	cmd.Println()
+	notify.WriteMessage(notify.Message{
+		Type:    notify.TitleType,
+		Emoji:   "🔎",
+		Content: "Get registry details...",
+		Writer:  cmd.OutOrStdout(),
+	})
+
+	tmr.NewStage()
+
+	notify.WriteMessage(notify.Message{
+		Type:    notify.ActivityType,
+		Content: "resolving registry configuration",
+		Timer:   outputTimer,
+		Writer:  cmd.OutOrStdout(),
+	})
+
+	registryInfo, err := helpers.ResolveRegistry(cmd.Context(), helpers.ResolveRegistryOptions{
+		Viper:         viperInstance,
+		ClusterConfig: cfg,
+		ClusterName:   cfg.Spec.Cluster.Connection.Context,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("resolve registry: %w", err)
+	}
+
+	return registryInfo, nil
 }
 
 // applyOCIRefOverrides applies OCI reference values to params if provided.
