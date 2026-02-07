@@ -53,6 +53,18 @@ func humanizeToolName(name string) string {
 	return strings.Join(words, " ")
 }
 
+// commandBuilder extracts a display command from tool arguments.
+type commandBuilder func(args map[string]any) string
+
+// commandBuilders maps tool names to their command extraction logic.
+var commandBuilders = map[string]commandBuilder{
+	"ksail_cluster_list": buildClusterListCommand,
+	"ksail_cluster_info": buildClusterInfoCommand,
+	"ksail_workload_get": buildWorkloadGetCommand,
+	"read_file":          buildReadFileCommand,
+	"list_directory":     buildListDirectoryCommand,
+}
+
 // extractCommandFromArgs extracts a command string from tool arguments for display.
 // This helps users understand exactly what command is being executed.
 func extractCommandFromArgs(toolName string, args any) string {
@@ -61,48 +73,71 @@ func extractCommandFromArgs(toolName string, args any) string {
 		return ""
 	}
 
-	switch toolName {
-	case "ksail_cluster_list":
-		cmd := "ksail cluster list"
-		if all, ok := argsMap["all"].(bool); ok && all {
-			cmd += " --all"
-		}
-		return cmd
-	case "ksail_cluster_info":
-		cmd := "ksail cluster info"
-		if name, ok := argsMap["name"].(string); ok && name != "" {
-			cmd += " --name " + name
-		}
-		return cmd
-	case "ksail_workload_get":
-		resource, _ := argsMap["resource"].(string)
-		if resource == "" {
-			return ""
-		}
-		cmd := "ksail workload get " + resource
-		if name, ok := argsMap["name"].(string); ok && name != "" {
-			cmd += " " + name
-		}
-		if ns, ok := argsMap["namespace"].(string); ok && ns != "" {
-			cmd += " -n " + ns
-		}
-		if allNs, ok := argsMap["all_namespaces"].(bool); ok && allNs {
-			cmd += " -A"
-		}
-		if output, ok := argsMap["output"].(string); ok && output != "" {
-			cmd += " -o " + output
-		}
-		return cmd
-	case "read_file":
-		if path, ok := argsMap["path"].(string); ok && path != "" {
-			return "cat " + path
-		}
-	case "list_directory":
-		path := "."
-		if p, ok := argsMap["path"].(string); ok && p != "" {
-			path = p
-		}
-		return "ls " + path
+	if builder, exists := commandBuilders[toolName]; exists {
+		return builder(argsMap)
 	}
+
 	return ""
+}
+
+func buildClusterListCommand(args map[string]any) string {
+	cmd := "ksail cluster list"
+	if all, ok := args["all"].(bool); ok && all {
+		cmd += " --all"
+	}
+
+	return cmd
+}
+
+func buildClusterInfoCommand(args map[string]any) string {
+	cmd := "ksail cluster info"
+	if name, ok := args["name"].(string); ok && name != "" {
+		cmd += " --name " + name
+	}
+
+	return cmd
+}
+
+func buildWorkloadGetCommand(args map[string]any) string {
+	resource, _ := args["resource"].(string)
+	if resource == "" {
+		return ""
+	}
+
+	cmd := "ksail workload get " + resource
+
+	if name, ok := args["name"].(string); ok && name != "" {
+		cmd += " " + name
+	}
+
+	if ns, ok := args["namespace"].(string); ok && ns != "" {
+		cmd += " -n " + ns
+	}
+
+	if allNs, ok := args["all_namespaces"].(bool); ok && allNs {
+		cmd += " -A"
+	}
+
+	if output, ok := args["output"].(string); ok && output != "" {
+		cmd += " -o " + output
+	}
+
+	return cmd
+}
+
+func buildReadFileCommand(args map[string]any) string {
+	if path, ok := args["path"].(string); ok && path != "" {
+		return "cat " + path
+	}
+
+	return ""
+}
+
+func buildListDirectoryCommand(args map[string]any) string {
+	path := "."
+	if p, ok := args["path"].(string); ok && p != "" {
+		path = p
+	}
+
+	return "ls " + path
 }

@@ -366,3 +366,44 @@ func TestNewOCIRegistry(t *testing.T) {
 	assert.Equal(t, v1alpha1.OCIRegistryStatusNotProvisioned, registry.Status)
 	assert.Empty(t, registry.Endpoint)
 }
+
+func TestNewClusterSubSpec(t *testing.T) {
+	t.Parallel()
+
+	spec := v1alpha1.NewClusterSubSpec()
+
+	assert.Empty(t, spec.DistributionConfig)
+	assert.Equal(t, v1alpha1.NewClusterConnection(), spec.Connection)
+	assert.Empty(t, string(spec.Distribution))
+	assert.Empty(t, string(spec.Provider))
+	assert.Empty(t, string(spec.CNI))
+	assert.Empty(t, string(spec.CSI))
+	assert.Equal(t, v1alpha1.NewLocalRegistry(), spec.LocalRegistry)
+	assert.Equal(t, v1alpha1.GitOpsEngineNone, spec.GitOpsEngine)
+	assert.Equal(t, v1alpha1.NewClusterOptionsVanilla(), spec.Vanilla)
+	assert.Equal(t, v1alpha1.NewClusterOptionsTalos(), spec.Talos)
+}
+
+func TestNewWorkloadSubSpec(t *testing.T) {
+	t.Parallel()
+
+	spec := v1alpha1.NewWorkloadSubSpec()
+
+	assert.Empty(t, spec.SourceDirectory)
+}
+
+func TestNewChatSpec(t *testing.T) {
+	t.Parallel()
+
+	spec := v1alpha1.NewChatSpec()
+
+	assert.Empty(t, spec.Model)
+}
+
+func TestNewClusterOptionsTalos(t *testing.T) {
+	t.Parallel()
+
+	opts := v1alpha1.NewClusterOptionsTalos()
+
+	assert.Equal(t, v1alpha1.OptionsTalos{}, opts)
+}

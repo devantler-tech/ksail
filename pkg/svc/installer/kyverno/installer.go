@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/image"
 )
 
 const (
@@ -46,15 +47,25 @@ func (k *KyvernoInstaller) Uninstall(ctx context.Context) error {
 	return nil
 }
 
-func (k *KyvernoInstaller) helmInstallOrUpgradeKyverno(ctx context.Context) error {
-	repoEntry := &helm.RepositoryEntry{Name: kyvernoRepoName, URL: kyvernoRepoURL}
+// Images returns the container images used by Kyverno.
+func (k *KyvernoInstaller) Images(ctx context.Context) ([]string, error) {
+	spec := k.chartSpec()
 
-	err := k.client.AddRepository(ctx, repoEntry, k.timeout)
+	manifest, err := k.client.TemplateChart(ctx, spec)
 	if err != nil {
-		return fmt.Errorf("failed to add kyverno repository: %w", err)
+		return nil, fmt.Errorf("failed to template kyverno chart: %w", err)
 	}
 
-	spec := &helm.ChartSpec{
+	images, err := image.ExtractImagesFromManifest(manifest)
+	if err != nil {
+		return nil, fmt.Errorf("extract images from kyverno manifest: %w", err)
+	}
+
+	return images, nil
+}
+
+func (k *KyvernoInstaller) chartSpec() *helm.ChartSpec {
+	return &helm.ChartSpec{
 		ReleaseName:     kyvernoRelease,
 		ChartName:       kyvernoChartName,
 		Namespace:       kyvernoNamespace,
@@ -65,6 +76,17 @@ func (k *KyvernoInstaller) helmInstallOrUpgradeKyverno(ctx context.Context) erro
 		WaitForJobs:     true,
 		Timeout:         k.timeout,
 	}
+}
+
+func (k *KyvernoInstaller) helmInstallOrUpgradeKyverno(ctx context.Context) error {
+	repoEntry := &helm.RepositoryEntry{Name: kyvernoRepoName, URL: kyvernoRepoURL}
+
+	err := k.client.AddRepository(ctx, repoEntry, k.timeout)
+	if err != nil {
+		return fmt.Errorf("failed to add kyverno repository: %w", err)
+	}
+
+	spec := k.chartSpec()
 
 	_, err = k.client.InstallOrUpgradeChart(ctx, spec)
 	if err != nil {

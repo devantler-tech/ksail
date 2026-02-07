@@ -4,13 +4,16 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
+	"strconv"
+	"strings"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
 	"github.com/devantler-tech/ksail/v5/pkg/client/oci"
-	k3dconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/k3d"
 	kindconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/kind"
-	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
 	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
 	"github.com/spf13/cobra"
@@ -21,11 +24,12 @@ const (
 	argoCDResourcesActivity = "configuring argocd resources"
 )
 
-// ShouldPushOCIArtifact determines if OCI artifact push should happen for Flux.
-// Returns true if Flux is enabled and a local registry is configured.
+// ShouldPushOCIArtifact determines if OCI artifact push should happen for GitOps engines.
+// Returns true if Flux or ArgoCD is enabled and a local registry is configured.
 func ShouldPushOCIArtifact(clusterCfg *v1alpha1.Cluster) bool {
-	// Only push if Flux is the GitOps engine
-	if clusterCfg.Spec.Cluster.GitOpsEngine != v1alpha1.GitOpsEngineFlux {
+	// Only push for GitOps engines that consume OCI artifacts
+	engine := clusterCfg.Spec.Cluster.GitOpsEngine
+	if engine != v1alpha1.GitOpsEngineFlux && engine != v1alpha1.GitOpsEngineArgoCD {
 		return false
 	}
 
@@ -34,29 +38,27 @@ func ShouldPushOCIArtifact(clusterCfg *v1alpha1.Cluster) bool {
 }
 
 // ResolveClusterNameFromContext resolves the cluster name from the cluster config.
-// This uses the distribution's default cluster name for registry naming.
-// The cluster name is used for constructing registry container names (e.g., k3d-default-local-registry).
+// It first attempts to parse the cluster name from Connection.Context
+// (e.g., "k3d-system-test-cluster" -> "system-test-cluster").
+// Falls back to the distribution's default cluster name if context is not set or parsing fails.
+// The cluster name is used for constructing registry container names
+// (e.g., system-test-cluster-local-registry).
 func ResolveClusterNameFromContext(clusterCfg *v1alpha1.Cluster) string {
 	if clusterCfg == nil {
 		return kindconfigmanager.DefaultClusterName
 	}
 
-	return resolveDefaultClusterName(clusterCfg.Spec.Cluster.Distribution)
-}
-
-// resolveDefaultClusterName returns the default cluster name for a given distribution.
-// This matches the naming conventions used by each distribution's provisioner.
-func resolveDefaultClusterName(distribution v1alpha1.Distribution) string {
-	switch distribution {
-	case v1alpha1.DistributionK3s:
-		return k3dconfigmanager.DefaultClusterName
-	case v1alpha1.DistributionVanilla:
-		return kindconfigmanager.DefaultClusterName
-	case v1alpha1.DistributionTalos:
-		return talosconfigmanager.DefaultClusterName
-	default:
-		return kindconfigmanager.DefaultClusterName
+	// First try to extract cluster name from the context if available
+	contextName := strings.TrimSpace(clusterCfg.Spec.Cluster.Connection.Context)
+	if contextName != "" {
+		_, clusterName, err := lifecycle.DetectDistributionFromContext(contextName)
+		if err == nil && clusterName != "" {
+			return clusterName
+		}
 	}
+
+	// Fall back to default cluster name for the distribution
+	return clusterCfg.Spec.Cluster.Distribution.DefaultClusterName()
 }
 
 // ComponentRequirements represents which components need to be installed.
@@ -313,7 +315,15 @@ func configureGitOpsResources(
 
 	// Post-install GitOps configuration
 	if reqs.NeedsArgoCD {
-		err := configureArgoCD(ctx, factories, gitOpsKubeconfig, clusterCfg, clusterName, writer)
+		err := configureArgoCD(
+			ctx,
+			cmd,
+			factories,
+			gitOpsKubeconfig,
+			clusterCfg,
+			clusterName,
+			writer,
+		)
 		if err != nil {
 			return err
 		}
@@ -344,17 +354,31 @@ func configureGitOpsResources(
 
 func configureArgoCD(
 	ctx context.Context,
+	cmd *cobra.Command,
 	factories *InstallerFactories,
 	kubeconfig string,
 	clusterCfg *v1alpha1.Cluster,
 	clusterName string,
 	writer io.Writer,
 ) error {
+	// Ensure OCI artifact exists before creating the ArgoCD Application,
+	// otherwise ArgoCD enters a ComparisonError loop that can saturate etcd.
+	var err error
+	if factories.EnsureOCIArtifact != nil {
+		_, err = factories.EnsureOCIArtifact(ctx, cmd, clusterCfg, clusterName, writer)
+	} else {
+		_, err = ensureOCIArtifact(ctx, cmd, clusterCfg, clusterName, writer)
+	}
+
+	if err != nil {
+		return fmt.Errorf("failed to ensure OCI artifact for ArgoCD: %w", err)
+	}
+
 	notify.WriteMessage(
 		notify.Message{Type: notify.ActivityType, Content: argoCDResourcesActivity, Writer: writer},
 	)
 
-	err := factories.EnsureArgoCDResources(ctx, kubeconfig, clusterCfg, clusterName)
+	err = factories.EnsureArgoCDResources(ctx, kubeconfig, clusterCfg, clusterName)
 	if err != nil {
 		return fmt.Errorf("failed to configure Argo CD resources: %w", err)
 	}
@@ -497,34 +521,41 @@ func buildArtifactExistsOptions(
 	registryInfo *helpers.RegistryInfo,
 	clusterCfg *v1alpha1.Cluster,
 ) oci.ArtifactExistsOptions {
-	repository := registryInfo.Repository
-	if repository == "" {
-		sourceDir := clusterCfg.Spec.Workload.SourceDirectory
-		if sourceDir == "" {
-			sourceDir = v1alpha1.DefaultSourceDirectory
-		}
-
-		repository = sourceDir
-	}
-
-	tag := registryInfo.Tag
-	if tag == "" {
-		tag = "dev"
-	}
-
-	var registryEndpoint string
-	if registryInfo.Port > 0 {
-		registryEndpoint = fmt.Sprintf("%s:%d", registryInfo.Host, registryInfo.Port)
-	} else {
-		registryEndpoint = registryInfo.Host
-	}
-
 	return oci.ArtifactExistsOptions{
-		RegistryEndpoint: registryEndpoint,
-		Repository:       repository,
-		Tag:              tag,
+		RegistryEndpoint: resolveRegistryEndpoint(registryInfo),
+		Repository:       resolveRepository(registryInfo, clusterCfg),
+		Tag:              resolveTag(registryInfo),
 		Username:         registryInfo.Username,
 		Password:         registryInfo.Password,
 		Insecure:         !clusterCfg.Spec.Cluster.LocalRegistry.IsExternal(),
 	}
+}
+
+func resolveRegistryEndpoint(info *helpers.RegistryInfo) string {
+	if info.Port > 0 {
+		return net.JoinHostPort(info.Host, strconv.Itoa(int(info.Port)))
+	}
+
+	return info.Host
+}
+
+func resolveRepository(info *helpers.RegistryInfo, cfg *v1alpha1.Cluster) string {
+	if info.Repository != "" {
+		return info.Repository
+	}
+
+	sourceDir := cfg.Spec.Workload.SourceDirectory
+	if sourceDir == "" {
+		return v1alpha1.DefaultSourceDirectory
+	}
+
+	return sourceDir
+}
+
+func resolveTag(info *helpers.RegistryInfo) string {
+	if info.Tag != "" {
+		return info.Tag
+	}
+
+	return registry.DefaultLocalArtifactTag
 }

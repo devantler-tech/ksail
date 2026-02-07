@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider"
+	"github.com/devantler-tech/ksail/v5/pkg/utils/labels"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 )
 
@@ -204,22 +205,9 @@ func (p *Provider) ListAllClusters(ctx context.Context) ([]string, error) {
 		return nil, fmt.Errorf("failed to list servers: %w", err)
 	}
 
-	// Extract unique cluster names
-	clusterSet := make(map[string]struct{})
-
-	for _, server := range servers {
-		if name, ok := server.Labels[LabelClusterName]; ok && name != "" {
-			clusterSet[name] = struct{}{}
-		}
-	}
-
-	// Convert set to slice
-	clusters := make([]string, 0, len(clusterSet))
-	for name := range clusterSet {
-		clusters = append(clusters, name)
-	}
-
-	return clusters, nil
+	return labels.UniqueValues(servers, LabelClusterName, func(s *hcloud.Server) map[string]string {
+		return s.Labels
+	}), nil
 }
 
 // NodesExist returns true if nodes exist for the given cluster name.

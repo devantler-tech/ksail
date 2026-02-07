@@ -19,8 +19,7 @@ func (rm *RegistryManager) CreateRegistry(ctx context.Context, config RegistryCo
 	}
 
 	if exists {
-		// Add cluster label to existing registry
-		return rm.addClusterLabel(ctx, config.Name, config.ClusterName)
+		return nil
 	}
 
 	// Pull registry image if not present

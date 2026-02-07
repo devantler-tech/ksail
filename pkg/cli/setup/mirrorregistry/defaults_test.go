@@ -13,6 +13,46 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestDefaultMirrorsContainsRequiredRegistries verifies that DefaultMirrors includes all
+// registries needed by KSail's installers. This test prevents accidental removal of required
+// mirrors from the defaults, which would cause CI rate limiting issues. See issue #2075.
+func TestDefaultMirrorsContainsRequiredRegistries(t *testing.T) {
+	t.Parallel()
+
+	// These registries are required for KSail's installers to avoid rate limits:
+	// - docker.io: Calico, Gatekeeper, local-path-provisioner, Hetzner CSI
+	// - ghcr.io: Flux, Kyverno, kubelet-csr-approver, ArgoCD
+	// - quay.io: Cilium, Calico (tigera), ArgoCD, cert-manager
+	// - registry.k8s.io: metrics-server, cloud-provider-kind, CSI sidecars
+	requiredHosts := []string{
+		"docker.io",
+		"ghcr.io",
+		"quay.io",
+		"registry.k8s.io",
+	}
+
+	// Build a set of hosts from DefaultMirrors
+	hostSet := make(map[string]bool)
+
+	for _, mirror := range mirrorregistry.DefaultMirrors {
+		// Extract host from "host=url" format
+		parts := strings.SplitN(mirror, "=", 2)
+		if len(parts) >= 1 {
+			hostSet[parts[0]] = true
+		}
+	}
+
+	// Verify all required hosts are present
+	for _, host := range requiredHosts {
+		assert.True(
+			t,
+			hostSet[host],
+			"DefaultMirrors must include %s - required for KSail installers (see issue #2075)",
+			host,
+		)
+	}
+}
+
 func newTestCmdWithConfig() (*cobra.Command, *ksailconfigmanager.ConfigManager) {
 	cmd := &cobra.Command{Use: "test"}
 	cmd.Flags().StringSlice("mirror-registry", []string{}, "")

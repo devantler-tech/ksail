@@ -1,4 +1,19 @@
 version: 2
+
+registries:
+  dockerhub:
+    type: docker-registry
+    url: https://registry.hub.docker.com
+    username: devantler
+    password: ${{secrets.DOCKERHUB_TOKEN}}
+    replaces-base: true
+  ghcr:
+    type: docker-registry
+    url: https://ghcr.io
+    username: devantler
+    password: ${{secrets.GHCR_TOKEN}}
+    replaces-base: true
+
 updates:
   - package-ecosystem: gomod
     directory: /
@@ -45,6 +60,7 @@ updates:
           - "*"
 
   - package-ecosystem: docker
+    registries: [dockerhub, ghcr]
     directory: /
     cooldown:
       default-days: 7
@@ -52,6 +68,7 @@ updates:
       interval: daily
 
   - package-ecosystem: docker
+    registries: [dockerhub, ghcr]
     directory: /.github/fixtures/reconcile-test
     cooldown:
       default-days: 7
@@ -59,6 +76,7 @@ updates:
       interval: daily
 
   - package-ecosystem: docker
+    registries: [dockerhub, ghcr]
     directory: /pkg/io/config-manager/talos # Talos image (embedded in Go via go:embed)
     cooldown:
       default-days: 7
@@ -66,6 +84,7 @@ updates:
       interval: daily
 
   - package-ecosystem: docker
+    registries: [dockerhub, ghcr]
     directory: /pkg/io/config-manager/k3d # K3s image (embedded in Go via go:embed)
     cooldown:
       default-days: 7
@@ -73,6 +92,7 @@ updates:
       interval: daily
 
   - package-ecosystem: docker
+    registries: [dockerhub, ghcr]
     directory: /pkg/io/config-manager/kind # Kind node image (embedded in Go via go:embed)
     cooldown:
       default-days: 7

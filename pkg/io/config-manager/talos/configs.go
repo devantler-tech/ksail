@@ -240,6 +240,27 @@ func (c *Configs) IsCNIDisabled() bool {
 	return cni.Name() == "none"
 }
 
+// IsKubeletCertRotationEnabled returns true if kubelet serving certificate rotation is enabled.
+// This is detected by the presence of "rotate-server-certificates" in kubelet extra args.
+// When enabled with CNI disabled, the kubelet-serving-cert-approver pod cannot schedule
+// (node is NotReady without CNI), so kubelet has no serving certificate, and Talos cannot
+// connect to kubelet to populate StaticPodStatus resources.
+func (c *Configs) IsKubeletCertRotationEnabled() bool {
+	cp := c.ControlPlane()
+	if cp == nil || cp.Machine() == nil || cp.Machine().Kubelet() == nil {
+		return false
+	}
+
+	extraArgs := cp.Machine().Kubelet().ExtraArgs()
+	if extraArgs == nil {
+		return false
+	}
+
+	val, ok := extraArgs["rotate-server-certificates"]
+
+	return ok && val == "true"
+}
+
 // ExtractMirrorHosts returns a list of registry hosts that have mirror configurations.
 // This extracts hosts from the loaded config bundle, which includes any patches that
 // were applied (including scaffolded mirror-registries.yaml patches).

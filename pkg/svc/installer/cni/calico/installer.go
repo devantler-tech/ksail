@@ -96,6 +96,28 @@ func (c *CalicoInstaller) Uninstall(ctx context.Context) error {
 	return nil
 }
 
+// Images returns the container images used by Calico.
+func (c *CalicoInstaller) Images(ctx context.Context) ([]string, error) {
+	images, err := c.ImagesFromChart(ctx, c.chartSpec())
+	if err != nil {
+		return nil, fmt.Errorf("get calico images: %w", err)
+	}
+
+	return images, nil
+}
+
+func (c *CalicoInstaller) chartSpec() *helm.ChartSpec {
+	return &helm.ChartSpec{
+		ReleaseName:     "calico",
+		ChartName:       "projectcalico/tigera-operator",
+		Namespace:       "tigera-operator",
+		RepoURL:         "https://docs.tigera.io/calico/charts",
+		CreateNamespace: true,
+		SetJSONVals:     c.getCalicoValues(),
+		Timeout:         c.GetTimeout(),
+	}
+}
+
 // --- internals ---
 
 func (c *CalicoInstaller) helmInstallOrUpgradeCalico(ctx context.Context) error {

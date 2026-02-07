@@ -29,6 +29,9 @@ func ResolveMirrorsDir(clusterCfg *v1alpha1.Cluster) string {
 
 // ResolveClusterName returns the effective cluster name from Kind config or cluster config.
 // Priority: kindConfig.Name > clusterCfg.Spec.Cluster.Connection.Context > "kind" (default).
+// When using Connection.Context, strips the "kind-" prefix that ContextName adds,
+// making the ContextName/ResolveClusterName mapping bidirectional
+// (matching Talos's "admin@" prefix stripping pattern).
 // Returns "kind" if both configs are nil or have empty names.
 func ResolveClusterName(
 	clusterCfg *v1alpha1.Cluster,
@@ -41,8 +44,14 @@ func ResolveClusterName(
 	}
 
 	if clusterCfg != nil {
-		if name := strings.TrimSpace(clusterCfg.Spec.Cluster.Connection.Context); name != "" {
-			return name
+		if ctx := strings.TrimSpace(clusterCfg.Spec.Cluster.Connection.Context); ctx != "" {
+			// Strip the "kind-" prefix added by Distribution.ContextName()
+			// to recover the original cluster name.
+			if clusterName, ok := strings.CutPrefix(ctx, "kind-"); ok && clusterName != "" {
+				return clusterName
+			}
+
+			return ctx
 		}
 	}
 

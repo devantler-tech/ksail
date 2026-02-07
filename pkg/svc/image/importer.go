@@ -142,17 +142,10 @@ func (i *Importer) getK8sNodes(
 // filterK8sNodes filters out helper containers (tools, loadbalancer, registry) and returns
 // only actual Kubernetes nodes that have containerd.
 func filterK8sNodes(nodes []provider.NodeInfo) []provider.NodeInfo {
-	// Roles to exclude (helper containers without containerd)
-	excludedRoles := map[string]bool{
-		"loadbalancer": true, // K3d load balancer proxy
-		"noRole":       true, // K3d tools container
-		"registry":     true, // K3d registry container
-	}
-
 	var result []provider.NodeInfo
 
 	for _, node := range nodes {
-		if !excludedRoles[node.Role] {
+		if !isHelperContainer(node.Role) {
 			result = append(result, node)
 		}
 	}

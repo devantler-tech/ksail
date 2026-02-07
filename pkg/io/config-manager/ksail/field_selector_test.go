@@ -133,6 +133,79 @@ func TestStandardFieldSelectors(t *testing.T) {
 				assertPointerSame(t, ptr, &cluster.Spec.Cluster.CSI)
 			},
 		},
+		{
+			name:            "provider",
+			factory:         configmanager.DefaultProviderFieldSelector,
+			expectedDesc:    "Infrastructure provider backend (e.g., Docker)",
+			expectedDefault: v1alpha1.ProviderDocker,
+			assertPointer: func(t *testing.T, cluster *v1alpha1.Cluster, ptr any) {
+				t.Helper()
+				assertPointerSame(t, ptr, &cluster.Spec.Cluster.Provider)
+			},
+		},
+		{
+			name:    "load balancer",
+			factory: configmanager.DefaultLoadBalancerFieldSelector,
+			expectedDesc: "LoadBalancer support " +
+				"(Default: use distribution × provider, Enabled: install, Disabled: uninstall)",
+			expectedDefault: v1alpha1.LoadBalancerDefault,
+			assertPointer: func(t *testing.T, cluster *v1alpha1.Cluster, ptr any) {
+				t.Helper()
+				assertPointerSame(t, ptr, &cluster.Spec.Cluster.LoadBalancer)
+			},
+		},
+		{
+			name:    "policy engine",
+			factory: configmanager.DefaultPolicyEngineFieldSelector,
+			expectedDesc: "Policy engine " +
+				"(None: skip, Kyverno: install Kyverno, Gatekeeper: install Gatekeeper)",
+			expectedDefault: v1alpha1.PolicyEngineNone,
+			assertPointer: func(t *testing.T, cluster *v1alpha1.Cluster, ptr any) {
+				t.Helper()
+				assertPointerSame(t, ptr, &cluster.Spec.Cluster.PolicyEngine)
+			},
+		},
+		{
+			name:            "kubeconfig",
+			factory:         configmanager.DefaultKubeconfigFieldSelector,
+			expectedDesc:    "Path to kubeconfig file",
+			expectedDefault: "~/.kube/config",
+			assertPointer: func(t *testing.T, cluster *v1alpha1.Cluster, ptr any) {
+				t.Helper()
+				assertPointerSame(t, ptr, &cluster.Spec.Cluster.Connection.Kubeconfig)
+			},
+		},
+		{
+			name:            "control planes",
+			factory:         configmanager.ControlPlanesFieldSelector,
+			expectedDesc:    "Number of control-plane nodes",
+			expectedDefault: int32(1),
+			assertPointer: func(t *testing.T, cluster *v1alpha1.Cluster, ptr any) {
+				t.Helper()
+				assertPointerSame(t, ptr, &cluster.Spec.Cluster.Talos.ControlPlanes)
+			},
+		},
+		{
+			name:            "workers",
+			factory:         configmanager.WorkersFieldSelector,
+			expectedDesc:    "Number of worker nodes",
+			expectedDefault: int32(0),
+			assertPointer: func(t *testing.T, cluster *v1alpha1.Cluster, ptr any) {
+				t.Helper()
+				assertPointerSame(t, ptr, &cluster.Spec.Cluster.Talos.Workers)
+			},
+		},
+		{
+			name:    "import images",
+			factory: configmanager.DefaultImportImagesFieldSelector,
+			expectedDesc: "Path to tar archive with container images to import after cluster creation " +
+				"but before component installation",
+			expectedDefault: "",
+			assertPointer: func(t *testing.T, cluster *v1alpha1.Cluster, ptr any) {
+				t.Helper()
+				assertPointerSame(t, ptr, &cluster.Spec.Cluster.ImportImages)
+			},
+		},
 	}
 
 	for _, testCase := range cases {

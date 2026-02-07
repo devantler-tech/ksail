@@ -2,14 +2,21 @@ package localpathstorageinstaller
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
+	"net/http"
 	"os/exec"
 	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/k8s"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/image"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
+
+// ErrManifestFetchFailed is returned when the manifest cannot be fetched from the remote URL.
+var ErrManifestFetchFailed = errors.New("failed to fetch manifest")
 
 const (
 	// localPathProvisionerVersion is the version of Rancher local-path-provisioner to install.
@@ -60,6 +67,52 @@ func (l *LocalPathStorageInstaller) Install(ctx context.Context) error {
 // Uninstall is a no-op as we don't support uninstalling storage provisioners.
 func (l *LocalPathStorageInstaller) Uninstall(_ context.Context) error {
 	return nil
+}
+
+// Images returns the container images used by local-path-provisioner.
+// It fetches and parses the manifest from the upstream URL.
+func (l *LocalPathStorageInstaller) Images(ctx context.Context) ([]string, error) {
+	// K3d/K3s already has local-path-provisioner, return empty list
+	if l.distribution.ProvidesStorageByDefault() {
+		return nil, nil
+	}
+
+	// Fetch the manifest from the URL
+	req, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodGet,
+		localPathProvisionerManifestURL,
+		nil,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	// Use a client with timeout to avoid hanging indefinitely
+	client := &http.Client{Timeout: l.timeout}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch manifest: %w", err)
+	}
+
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("%w: status %d", ErrManifestFetchFailed, resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read manifest: %w", err)
+	}
+
+	images, err := image.ExtractImagesFromManifest(string(body))
+	if err != nil {
+		return nil, fmt.Errorf("extract images from local-path-storage manifest: %w", err)
+	}
+
+	return images, nil
 }
 
 // installLocalPathProvisioner installs Rancher local-path-provisioner on Kind clusters.

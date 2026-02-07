@@ -395,15 +395,8 @@ func (e *Exporter) writeFileFromTar(dstPath string, tarReader *tar.Reader) error
 
 // getLabelScheme returns the Docker provider label scheme for a distribution.
 func getLabelScheme(distribution v1alpha1.Distribution) dockerprovider.LabelScheme {
-	switch distribution {
-	case v1alpha1.DistributionVanilla:
-		return dockerprovider.LabelSchemeKind
-	case v1alpha1.DistributionK3s:
+	if distribution == v1alpha1.DistributionK3s {
 		return dockerprovider.LabelSchemeK3d
-	case v1alpha1.DistributionTalos:
-		// Talos is not supported for image operations, but we return Kind as fallback
-		// The caller should have already checked for Talos and returned an error
-		return dockerprovider.LabelSchemeKind
 	}
 
 	return dockerprovider.LabelSchemeKind
@@ -432,19 +425,13 @@ func selectNodeForExport(nodes []provider.NodeInfo) string {
 		"":              rolePriorityUnknown,      // Unknown role - fallback
 	}
 
-	// Roles to exclude (helper containers without containerd)
-	excludedRoles := map[string]bool{
-		"loadbalancer": true, // K3d load balancer proxy
-		"noRole":       true, // K3d tools container
-	}
-
 	var bestNode provider.NodeInfo
 
 	bestPriority := rolePriorityUnselectedStart
 
 	for _, node := range nodes {
-		// Skip excluded roles
-		if excludedRoles[node.Role] {
+		// Skip helper containers without containerd
+		if isHelperContainer(node.Role) {
 			continue
 		}
 
@@ -472,15 +459,8 @@ const (
 // Kind containers have tmpfs on /tmp which Docker cp can't access properly,
 // so we use /root instead. K3d containers don't have /root but /tmp works fine.
 func getTempPath(distribution v1alpha1.Distribution) string {
-	switch distribution {
-	case v1alpha1.DistributionVanilla:
+	if distribution == v1alpha1.DistributionVanilla {
 		return tmpPathRoot // Kind has tmpfs on /tmp
-	case v1alpha1.DistributionK3s:
-		return tmpPathTmp // K3d doesn't have /root
-	case v1alpha1.DistributionTalos:
-		// Talos is not supported for image operations, but we return /tmp as fallback
-		// The caller should have already checked for Talos and returned an error
-		return tmpPathTmp
 	}
 
 	return tmpPathTmp

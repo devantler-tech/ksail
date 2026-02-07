@@ -21,6 +21,10 @@ var (
 	ErrRegistryUnexpectedStatus = errors.New("registry returned unexpected status")
 	// ErrRegistryHealthCheckCancelled is returned when the health check is cancelled via context.
 	ErrRegistryHealthCheckCancelled = errors.New("registry health check cancelled")
+	// ErrRegistryPartialCredentials is returned when only username or password is provided.
+	ErrRegistryPartialCredentials = errors.New(
+		"registry proxy credentials incomplete: both username and password are required",
+	)
 )
 
 const (
@@ -91,4 +95,6 @@ type RegistryConfig struct {
 	ClusterName string
 	NetworkName string
 	VolumeName  string
+	Username    string // Optional: username for upstream registry authentication (supports ${ENV_VAR} placeholders)
+	Password    string // Optional: password for upstream registry authentication (supports ${ENV_VAR} placeholders)
 }

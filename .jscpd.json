@@ -4,6 +4,7 @@
     "**/.git/**",
     "**/.rbenv/**",
     "**/.venv/**",
+    "**/.astro/**",
     "**/report/**",
     "**/megalinter-reports/**",
     "**/__snapshots__/**",

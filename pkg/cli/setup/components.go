@@ -104,7 +104,7 @@ func policyEngineFactory(
 		//nolint:exhaustive // PolicyEngineNone is handled above with early return
 		switch engine {
 		case v1alpha1.PolicyEngineKyverno:
-			timeout = installer.MaxTimeout(timeout, installer.KyvernoInstallTimeout)
+			timeout = max(timeout, installer.KyvernoInstallTimeout)
 
 			return kyvernoinstaller.NewKyvernoInstaller(helmClient, timeout), nil
 		case v1alpha1.PolicyEngineGatekeeper:
@@ -183,7 +183,7 @@ func DefaultInstallerFactories() *InstallerFactories {
 		}
 
 		timeout := installer.GetInstallTimeout(clusterCfg)
-		timeout = installer.MaxTimeout(timeout, installer.CertManagerInstallTimeout)
+		timeout = max(timeout, installer.CertManagerInstallTimeout)
 
 		return certmanagerinstaller.NewCertManagerInstaller(helmClient, timeout), nil
 	}
