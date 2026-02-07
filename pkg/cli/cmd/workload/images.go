@@ -161,7 +161,8 @@ func outputPlain(cmd *cobra.Command, images []string, tmr timer.Timer) error {
 	}
 
 	for _, img := range images {
-		if _, err := fmt.Fprintln(cmd.OutOrStdout(), img); err != nil {
+		_, err := fmt.Fprintln(cmd.OutOrStdout(), img)
+		if err != nil {
 			return fmt.Errorf("write image to stdout: %w", err)
 		}
 	}
@@ -175,7 +176,8 @@ func outputJSON(cmd *cobra.Command, images []string, _ timer.Timer) error {
 		return fmt.Errorf("marshal images to JSON: %w", err)
 	}
 
-	if _, err := fmt.Fprintln(cmd.OutOrStdout(), string(data)); err != nil {
+	_, err = fmt.Fprintln(cmd.OutOrStdout(), string(data))
+	if err != nil {
 		return fmt.Errorf("write JSON to stdout: %w", err)
 	}
 
