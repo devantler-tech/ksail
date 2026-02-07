@@ -211,7 +211,8 @@ func (p *TalosProvisioner) clusterReadinessChecks() []check.ClusterCheck {
 	// Without a serving certificate, Talos cannot connect to kubelet, and StaticPodStatus
 	// resources are never populated. Skip the Talos-based static pod check and rely on
 	// K8sFullControlPlaneAssertion which validates the same thing via the K8s API.
-	skipStaticPodStatusCheck := p.talosConfigs != nil && p.talosConfigs.IsKubeletCertRotationEnabled()
+	skipStaticPodStatusCheck := p.talosConfigs != nil &&
+		p.talosConfigs.IsKubeletCertRotationEnabled()
 
 	if skipStaticPodStatusCheck {
 		return slices.Concat(
@@ -237,7 +238,7 @@ func (p *TalosProvisioner) k8sComponentsReadinessChecksWithoutStaticPodStatus() 
 		func(cluster check.ClusterInfo) conditions.Condition {
 			return conditions.PollingCondition("all k8s nodes to report", func(ctx context.Context) error {
 				return check.K8sAllNodesReportedAssertion(ctx, cluster)
-			}, 5*time.Minute, 30*time.Second)
+			}, talosAPIWaitTimeout, 30*time.Second) //nolint:mnd // matches upstream Talos SDK intervals
 		},
 
 		// skip K8sControlPlaneStaticPods — Talos can't connect to kubelet without serving cert
@@ -246,7 +247,7 @@ func (p *TalosProvisioner) k8sComponentsReadinessChecksWithoutStaticPodStatus() 
 		func(cluster check.ClusterInfo) conditions.Condition {
 			return conditions.PollingCondition("all control plane components to be ready", func(ctx context.Context) error {
 				return check.K8sFullControlPlaneAssertion(ctx, cluster)
-			}, 5*time.Minute, 5*time.Second)
+			}, talosAPIWaitTimeout, retryInterval)
 		},
 	}
 }
