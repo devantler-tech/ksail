@@ -376,19 +376,8 @@ func (k *K3dClusterProvisioner) nextAgentIndex(
 }
 
 // GetCurrentConfig retrieves the current cluster configuration.
-// For K3d clusters, we return the configuration based on the defaults
-// that the config system applies. This ensures DiffEngine doesn't report
-// false-positive changes when the user hasn't changed any settings.
+// K3d doesn't persist its original config, so we reconstruct the spec
+// with the same defaults used during creation.
 func (k *K3dClusterProvisioner) GetCurrentConfig() (*v1alpha1.ClusterSpec, error) {
-	return &v1alpha1.ClusterSpec{
-		Distribution:  v1alpha1.DistributionK3s,
-		Provider:      v1alpha1.ProviderDocker,
-		CNI:           v1alpha1.CNIDefault,
-		CSI:           v1alpha1.CSIDefault,
-		MetricsServer: v1alpha1.MetricsServerDefault,
-		LoadBalancer:  v1alpha1.LoadBalancerDefault,
-		CertManager:   v1alpha1.CertManagerDisabled,
-		PolicyEngine:  v1alpha1.PolicyEngineNone,
-		GitOpsEngine:  v1alpha1.GitOpsEngineNone,
-	}, nil
+	return types.DefaultCurrentSpec(v1alpha1.DistributionK3s, v1alpha1.ProviderDocker), nil
 }

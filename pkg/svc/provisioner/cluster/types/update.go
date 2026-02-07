@@ -5,6 +5,29 @@
 //nolint:revive // package name "types" is intentionally generic for shared types
 package types
 
+import "github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+
+// DefaultCurrentSpec returns a ClusterSpec populated with the default values
+// that the config system applies at creation time. Provisioners that cannot
+// introspect their running config (Kind, K3d) return this to ensure
+// DiffEngine does not report false-positive changes.
+func DefaultCurrentSpec(
+	distribution v1alpha1.Distribution,
+	provider v1alpha1.Provider,
+) *v1alpha1.ClusterSpec {
+	return &v1alpha1.ClusterSpec{
+		Distribution:  distribution,
+		Provider:      provider,
+		CNI:           v1alpha1.CNIDefault,
+		CSI:           v1alpha1.CSIDefault,
+		MetricsServer: v1alpha1.MetricsServerDefault,
+		LoadBalancer:  v1alpha1.LoadBalancerDefault,
+		CertManager:   v1alpha1.CertManagerDisabled,
+		PolicyEngine:  v1alpha1.PolicyEngineNone,
+		GitOpsEngine:  v1alpha1.GitOpsEngineNone,
+	}
+}
+
 // ChangeCategory classifies the impact of a configuration change.
 type ChangeCategory int
 

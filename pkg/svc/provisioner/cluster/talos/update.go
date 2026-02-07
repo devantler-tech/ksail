@@ -419,27 +419,16 @@ func pathMatches(path, pattern string) bool {
 }
 
 // GetCurrentConfig retrieves the current cluster configuration.
-// For Talos clusters, we return the configuration from the TalosConfigs,
-// populated with the same defaults that the config system applies.
-// This ensures DiffEngine doesn't report false-positive changes.
+// Starts from the shared defaults and adds Talos-specific state.
 func (p *TalosProvisioner) GetCurrentConfig() (*v1alpha1.ClusterSpec, error) {
-	spec := &v1alpha1.ClusterSpec{
-		Distribution:  v1alpha1.DistributionTalos,
-		CNI:           v1alpha1.CNIDefault,
-		CSI:           v1alpha1.CSIDefault,
-		MetricsServer: v1alpha1.MetricsServerDefault,
-		LoadBalancer:  v1alpha1.LoadBalancerDefault,
-		CertManager:   v1alpha1.CertManagerDisabled,
-		PolicyEngine:  v1alpha1.PolicyEngineNone,
-		GitOpsEngine:  v1alpha1.GitOpsEngineNone,
+	var provider v1alpha1.Provider
+	if p.dockerClient != nil {
+		provider = v1alpha1.ProviderDocker
+	} else if p.infraProvider != nil {
+		provider = v1alpha1.ProviderHetzner
 	}
 
-	// Determine provider
-	if p.dockerClient != nil {
-		spec.Provider = v1alpha1.ProviderDocker
-	} else if p.infraProvider != nil {
-		spec.Provider = v1alpha1.ProviderHetzner
-	}
+	spec := types.DefaultCurrentSpec(v1alpha1.DistributionTalos, provider)
 
 	// Set Talos-specific options from the provisioner state
 	spec.Talos = v1alpha1.OptionsTalos{
