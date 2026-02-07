@@ -62,7 +62,9 @@ func installCNIOnly(
 	tmr timer.Timer,
 	installFunc func(*cobra.Command, *v1alpha1.Cluster, timer.Timer) error,
 ) error {
-	tmr.NewStage()
+	if tmr != nil {
+		tmr.NewStage()
+	}
 
 	return installFunc(cmd, clusterCfg, tmr)
 }
