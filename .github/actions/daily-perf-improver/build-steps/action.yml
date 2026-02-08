@@ -30,7 +30,7 @@ runs:
       run: |
         echo "=== Building KSail Binary ===" | tee -a build-steps.log
         build_start=$(date +%s)
-        if go build -o ksail . 2>&1 | tee -a build-steps.log; then
+        if go build -ldflags="-s -w" -o ksail . 2>&1 | tee -a build-steps.log; then
           build_end=$(date +%s)
           build_duration=$((build_end - build_start))
           echo "✅ Build successful in ${build_duration}s" | tee -a build-steps.log

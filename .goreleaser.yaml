@@ -18,6 +18,8 @@ builds:
         goarch: amd64
     env:
       - CGO_ENABLED=0
+    ldflags:
+      - -s -w
 
 archives:
   - name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
