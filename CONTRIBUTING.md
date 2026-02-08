@@ -45,12 +45,17 @@ MegaLinter also checks Markdown files. Markdown lint rules are configured in `.m
 
 ```sh
 # working-directory: ./
-# Build the ksail binary
+# Build the ksail binary (development build)
 go build -o ksail
 
 # Or: compile all packages (no binary output)
 go build ./...
+
+# For production-optimized builds (matches release artifacts):
+go build -ldflags="-s -w" -o ksail
 ```
+
+> **Note:** Release builds use `-ldflags="-s -w"` to strip debug symbols and reduce binary size by ~28% (302MB → 217MB). Development builds include debug symbols for better debugging experience.
 
 ### Test
 

@@ -32,6 +32,10 @@ npm ci
 cd /path/to/repo
 go build -o ksail
 # Takes a few seconds on first run for Go module downloads
+
+# For production-optimized builds (matches release artifacts):
+go build -ldflags="-s -w" -o ksail
+# Strips debug symbols, reduces binary size by ~28% (302MB → 217MB)
 ```
 
 **Run Unit Tests**:
