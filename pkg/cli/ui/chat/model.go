@@ -438,16 +438,18 @@ func (m *Model) calculateMaxPickerVisible() int {
 
 // renderHeader renders the header section with logo and status.
 func (m *Model) renderHeader() string {
-	headerContentWidth := max(m.width-6, 1)
+	headerContentWidth := max(m.width-headerPadding, 1)
 
 	// Truncate each logo line by display width (handles Unicode properly)
 	logoLines := strings.Split(logo(), "\n")
 	truncateStyle := lipgloss.NewStyle().MaxWidth(headerContentWidth).Inline(true)
+
 	var clippedLogo strings.Builder
-	for i, line := range logoLines {
+
+	for idx, line := range logoLines {
 		clippedLine := truncateStyle.Render(line)
 		clippedLogo.WriteString(clippedLine)
-		if i < len(logoLines)-1 {
+		if idx < len(logoLines)-1 {
 			clippedLogo.WriteString("\n")
 		}
 	}
@@ -458,7 +460,7 @@ func (m *Model) renderHeader() string {
 	taglineRow = lipgloss.NewStyle().MaxWidth(headerContentWidth).Inline(true).Render(taglineRow)
 
 	headerContent := logoRendered + "\n" + taglineRow
-	return headerBoxStyle.Width(m.width - 2).Render(headerContent)
+	return headerBoxStyle.Width(m.width - modalPadding).Render(headerContent)
 }
 
 // buildTaglineRow builds the tagline row with right-aligned status indicator.
@@ -472,7 +474,7 @@ func (m *Model) buildTaglineRow(contentWidth int) string {
 
 	taglineLen := lipgloss.Width(taglineText)
 	statusLen := lipgloss.Width(statusText)
-	spacing := max(contentWidth-taglineLen-statusLen, 2)
+	spacing := max(contentWidth-taglineLen-statusLen, minSpacing)
 	return taglineText + strings.Repeat(" ", spacing) + statusText
 }
 
@@ -481,7 +483,7 @@ func (m *Model) buildStatusText() string {
 	var statusParts []string
 
 	// Mode icon: </> for Agent, ≡ for Plan
-	modeStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(14))
+	modeStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(ansiCyan))
 	if m.agentMode {
 		statusParts = append(statusParts, modeStyle.Render("</>"))
 	} else {
@@ -490,18 +492,21 @@ func (m *Model) buildStatusText() string {
 
 	// Model name
 	modelStyle := lipgloss.NewStyle().Foreground(dimColor)
-	if m.currentModel != "" {
+
+	switch {
+	case m.currentModel != "":
 		statusParts = append(statusParts, modelStyle.Render(m.currentModel))
-	} else {
-		statusParts = append(statusParts, modelStyle.Render("auto"))
+	default:
+		statusParts = append(statusParts, modelStyle.Render(modelAuto))
 	}
 
 	// Streaming state and feedback
-	if m.isStreaming {
+	switch {
+	case m.isStreaming:
 		statusParts = append(statusParts, m.spinner.View()+" "+statusStyle.Render("Thinking..."))
-	} else if m.showCopyFeedback {
+	case m.showCopyFeedback:
 		statusParts = append(statusParts, statusStyle.Render("Copied ✓"))
-	} else if m.justCompleted {
+	case m.justCompleted:
 		statusParts = append(statusParts, statusStyle.Render("Ready ✓"))
 	}
 
