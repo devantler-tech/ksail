@@ -4,3 +4,4 @@
 # 415 - because some websites have unsupported Media Types.
 # 429 - because some websites have low rate limits.
 accept = ["100..=103", "200..=299", "403", "415", "429"]
+timeout = 60
