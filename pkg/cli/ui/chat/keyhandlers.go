@@ -24,6 +24,7 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.pendingPermission != nil {
 		return m.handlePermissionKey(msg)
 	}
+
 	if m.showModelPicker {
 		return m.handleModelPickerKey(msg)
 	}
@@ -41,6 +42,7 @@ func (m *Model) handleHelpOverlayKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "f1", keyEscape:
 		m.showHelpOverlay = false
+
 		return m, nil
 	}
 
@@ -127,11 +129,13 @@ func (m *Model) handleViewportAndTextareaKey(msg tea.KeyMsg) (tea.Model, tea.Cmd
 // handleQuit handles application quit.
 func (m *Model) handleQuit(saveSession bool) (tea.Model, tea.Cmd) {
 	m.cleanup()
+
 	if saveSession {
 		_ = m.saveCurrentSession()
 	}
 
 	m.quitting = true
+
 	return m, tea.Quit
 }
 
@@ -162,12 +166,14 @@ func (m *Model) handleOpenModelPicker() (tea.Model, tea.Cmd) {
 	if m.isStreaming || len(m.availableModels) == 0 {
 		return m, nil
 	}
+
 	m.showModelPicker = true
 	m.filteredModels = m.availableModels // Start with all models
 	m.modelFilterText = ""               // Reset filter
 	m.modelFilterActive = false          // Start in navigation mode
 	m.updateDimensions()
 	m.modelPickerIndex = m.findCurrentModelIndex()
+
 	return m, nil
 }
 
@@ -182,6 +188,7 @@ func (m *Model) findCurrentModelIndex() int {
 			return idx + 1 // offset by 1 for auto option
 		}
 	}
+
 	return 0
 }
 
@@ -190,6 +197,7 @@ func (m *Model) handleOpenSessionPicker() (tea.Model, tea.Cmd) {
 	if m.isStreaming {
 		return m, nil
 	}
+
 	sessions, _ := ListSessions(m.client)
 	m.availableSessions = sessions
 	m.filteredSessions = sessions // Start with all sessions
@@ -199,6 +207,7 @@ func (m *Model) handleOpenSessionPicker() (tea.Model, tea.Cmd) {
 	m.confirmDeleteSession = false
 	m.updateDimensions()
 	m.sessionPickerIndex = m.findCurrentSessionIndex()
+
 	return m, nil
 }
 
@@ -213,6 +222,7 @@ func (m *Model) findCurrentSessionIndex() int {
 			return idx + 1 // offset by 1 for "New Chat" option
 		}
 	}
+
 	return 0
 }
 
@@ -228,6 +238,7 @@ func (m *Model) handleNewChat() (tea.Model, tea.Cmd) {
 	if err != nil {
 		m.err = err
 	}
+
 	return m, nil
 }
 
@@ -238,6 +249,7 @@ func (m *Model) handleToggleMode() (tea.Model, tea.Cmd) {
 	if m.isStreaming {
 		return m, nil
 	}
+
 	m.agentMode = !m.agentMode
 	// Update the shared reference so tool handlers see the change
 	if m.agentModeRef != nil {
@@ -245,6 +257,7 @@ func (m *Model) handleToggleMode() (tea.Model, tea.Cmd) {
 	}
 
 	m.updateViewportContent()
+
 	return m, nil
 }
 
@@ -253,6 +266,7 @@ func (m *Model) handleToggleAllTools() (tea.Model, tea.Cmd) {
 	expandAll := m.findFirstToolExpandState()
 	m.setAllToolsExpanded(expandAll)
 	m.updateViewportContent()
+
 	return m, nil
 }
 
@@ -275,6 +289,7 @@ func (m *Model) findFirstToolExpandState() bool {
 			}
 		}
 	}
+
 	return false
 }
 
@@ -312,6 +327,7 @@ func (m *Model) handleHistoryUp() (tea.Model, tea.Cmd) {
 
 	m.textarea.SetValue(m.history[m.historyIndex])
 	m.textarea.CursorEnd()
+
 	return m, nil
 }
 
@@ -331,6 +347,7 @@ func (m *Model) handleHistoryDown() (tea.Model, tea.Cmd) {
 	}
 
 	m.textarea.CursorEnd()
+
 	return m, nil
 }
 
@@ -339,10 +356,12 @@ func (m *Model) handleEnter() (tea.Model, tea.Cmd) {
 	if m.isStreaming || strings.TrimSpace(m.textarea.Value()) == "" {
 		return m, nil
 	}
+
 	content := m.textarea.Value()
 	m.textarea.Reset()
 	m.isStreaming = true
 	m.justCompleted = false
+
 	return m, tea.Batch(m.spinner.Tick, m.sendMessageCmd(content))
 }
 

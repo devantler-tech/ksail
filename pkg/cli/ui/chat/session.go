@@ -63,9 +63,11 @@ func (s *SessionMetadata) GetDisplayName() string {
 	if s.Name != "" {
 		return s.Name
 	}
+
 	if s.SDKMetadata != nil && s.SDKMetadata.Summary != nil && *s.SDKMetadata.Summary != "" {
 		return *s.SDKMetadata.Summary
 	}
+
 	return unnamedSessionName
 }
 
@@ -75,6 +77,7 @@ func sessionsDir() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to get home directory: %w", err)
 	}
+
 	return filepath.Join(home, ".ksail", "chat", "sessions"), nil
 }
 
@@ -183,6 +186,7 @@ func LoadSession(
 	}
 
 	path := filepath.Join(dir, sessionID+".json")
+
 	data, err := os.ReadFile(path) //nolint:gosec // Path is validated via validateSessionID
 	if err != nil {
 		return nil, fmt.Errorf("failed to read session file: %w", err)
@@ -215,6 +219,7 @@ func SaveSession(session *SessionMetadata) error {
 	if session.CreatedAt.IsZero() {
 		session.CreatedAt = time.Now()
 	}
+
 	session.UpdatedAt = time.Now()
 
 	if session.Name == "" {
@@ -271,11 +276,14 @@ func deleteLocalSession(
 	}
 
 	path := filepath.Join(dir, sessionID+".json")
-	if err := os.Remove(path); err != nil {
-		if os.IsNotExist(err) {
+
+	removeErr := os.Remove(path)
+	if removeErr != nil {
+		if os.IsNotExist(removeErr) {
 			return nil // Already deleted
 		}
-		return fmt.Errorf("failed to delete session file: %w", err)
+
+		return fmt.Errorf("failed to delete session file: %w", removeErr)
 	}
 
 	return nil
@@ -333,7 +341,8 @@ func deleteOrphanedLocalSessions(dir string, validIDs map[string]struct{}) error
 			// Local session doesn't exist in SDK, delete it
 			path := filepath.Join(dir, entry.Name())
 
-			if removeErr := os.Remove(path); removeErr != nil && !os.IsNotExist(removeErr) {
+			removeErr := os.Remove(path)
+			if removeErr != nil && !os.IsNotExist(removeErr) {
 				// Log error but continue with other files
 				continue
 			}
@@ -353,9 +362,11 @@ func GetMostRecentSession(client *copilot.Client) (*SessionMetadata, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	if len(sessions) == 0 {
 		return nil, ErrNoSessions
 	}
+
 	return &sessions[0], nil
 }
 
@@ -370,9 +381,11 @@ func GenerateSessionName(messages []chatMessage) string {
 					runes[:maxSessionNameLength-len(truncatedNameSuffix)],
 				) + truncatedNameSuffix
 			}
+
 			return name
 		}
 	}
+
 	return defaultSessionName
 }
 
@@ -389,18 +402,21 @@ func FormatRelativeTime(timestamp time.Time) string {
 		if mins == 1 {
 			return "1 min ago"
 		}
+
 		return fmt.Sprintf("%d mins ago", mins)
 	case diff < hoursPerDay*time.Hour:
 		hours := int(diff.Hours())
 		if hours == 1 {
 			return "1 hour ago"
 		}
+
 		return fmt.Sprintf("%d hours ago", hours)
 	case diff < 7*hoursPerDay*time.Hour:
 		days := int(diff.Hours() / hoursPerDay)
 		if days == 1 {
 			return "yesterday"
 		}
+
 		return fmt.Sprintf("%d days ago", days)
 	default:
 		return timestamp.Format("Jan 2")

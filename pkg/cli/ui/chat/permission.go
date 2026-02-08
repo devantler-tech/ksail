@@ -12,6 +12,7 @@ func (m *Model) handlePermissionRequest(req *permissionRequestMsg) (tea.Model, t
 	m.pendingPermission = req
 	m.updateDimensions()
 	m.updateViewportContent()
+
 	return m, nil
 }
 
@@ -28,11 +29,14 @@ func (m *Model) handlePermissionKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.denyPermission()
 	case "ctrl+c":
 		m.pendingPermission.response <- false
+
 		m.pendingPermission = nil
 		m.cleanup()
 		m.quitting = true
+
 		return m, tea.Quit
 	}
+
 	return m, nil
 }
 
@@ -44,9 +48,11 @@ func (m *Model) allowPermission() (tea.Model, tea.Cmd) {
 		allowed:  true,
 	})
 	m.pendingPermission.response <- true
+
 	m.pendingPermission = nil
 	m.updateDimensions()
 	m.updateViewportContent()
+
 	return m, m.waitForEvent()
 }
 
@@ -58,9 +64,11 @@ func (m *Model) denyPermission() (tea.Model, tea.Cmd) {
 		allowed:  false,
 	})
 	m.pendingPermission.response <- false
+
 	m.pendingPermission = nil
 	m.updateDimensions()
 	m.updateViewportContent()
+
 	return m, m.waitForEvent()
 }
 
@@ -76,9 +84,11 @@ func (m *Model) renderPermissionModal() string {
 	warningStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(ansiYellow))
 
 	var content strings.Builder
+
 	contentLines := 0
 
 	content.WriteString(clipStyle.Render(warningStyle.Render("⚠️  Permission Required")) + "\n\n")
+
 	contentLines += 2
 
 	humanName := humanizeToolName(m.pendingPermission.toolName)
@@ -103,6 +113,7 @@ func (m *Model) renderPermissionModal() string {
 	}
 
 	content.WriteString("\n" + clipStyle.Render("Allow this operation?") + "\n")
+
 	contentLines += 3
 
 	modalStyle := lipgloss.NewStyle().

@@ -83,7 +83,7 @@ var (
 	headerBoxStyle = lipgloss.NewStyle().
 			BorderStyle(lipgloss.RoundedBorder()).
 			BorderForeground(primaryColor).
-			Padding(0, 2)
+			Padding(0, modalPadding)
 
 	// userMsgStyle is the style for user messages.
 	userMsgStyle = lipgloss.NewStyle().
@@ -147,19 +147,24 @@ func calculatePickerScrollOffset(selectedIndex, totalItems, maxVisible int) int 
 	if totalItems <= maxVisible {
 		return 0
 	}
+
 	scrollOffset := 0
 	if selectedIndex >= scrollOffset+maxVisible {
 		scrollOffset = selectedIndex - maxVisible + 1
 	}
+
 	if selectedIndex < scrollOffset {
 		scrollOffset = selectedIndex
 	}
+
 	if scrollOffset > totalItems-maxVisible {
 		scrollOffset = totalItems - maxVisible
 	}
+
 	if scrollOffset < 0 {
 		scrollOffset = 0
 	}
+
 	return scrollOffset
 }
 
@@ -188,6 +193,7 @@ func createPickerModalStyle(width, height int) lipgloss.Style {
 func renderPickerModal(content string, modalWidth, visibleCount int, isScrollable bool) string {
 	contentLines := calculatePickerContentLines(visibleCount, isScrollable)
 	modalStyle := createPickerModalStyle(modalWidth, contentLines)
+
 	return modalStyle.Render(content)
 }
 

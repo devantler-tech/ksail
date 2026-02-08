@@ -236,10 +236,13 @@ func TestStartStartsAndConnectsRegistry(t *testing.T) {
 	assert.Equal(t, v1alpha1.OCIRegistryStatusRunning, regResult.Status)
 }
 
-func TestStopHandlesScenarios(t *testing.T) {
-	t.Parallel()
-
-	testCases := []struct {
+// stopTestCases returns test scenarios for TestStopHandlesScenarios.
+func stopTestCases() []struct {
+	name  string
+	setup func(harness *registryTestHarness)
+	opts  registry.StopOptions
+} {
+	return []struct {
 		name  string
 		setup func(harness *registryTestHarness)
 		opts  registry.StopOptions
@@ -288,8 +291,12 @@ func TestStopHandlesScenarios(t *testing.T) {
 			},
 		},
 	}
+}
 
-	for _, testCase := range testCases {
+func TestStopHandlesScenarios(t *testing.T) {
+	t.Parallel()
+
+	for _, testCase := range stopTestCases() {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 

@@ -26,6 +26,7 @@ func (m *Model) updateViewportContent() {
 	if len(m.messages) == 0 {
 		welcomeMsg := "  Type a message below to start chatting with KSail AI.\n"
 		m.viewport.SetContent(statusStyle.Render(welcomeMsg))
+
 		return
 	}
 
@@ -38,6 +39,7 @@ func (m *Model) updateViewportContent() {
 	}
 
 	m.viewport.SetContent(builder.String())
+
 	if !m.userScrolled {
 		m.viewport.GotoBottom()
 	}
@@ -46,6 +48,7 @@ func (m *Model) updateViewportContent() {
 // calculateWrapWidth calculates the content width for text wrapping.
 func (m *Model) calculateWrapWidth() uint {
 	wrapWidth := max(m.viewport.Width-wrapPadding, minWrapWidth)
+
 	return uint(wrapWidth) //nolint:gosec // wrapWidth is guaranteed >= minWrapWidth
 }
 
@@ -71,6 +74,7 @@ func (m *Model) renderUserMessage(builder *strings.Builder, msg *chatMessage, wr
 	if !msg.agentMode {
 		modeIcon = "≡"
 	}
+
 	builder.WriteString(userMsgStyle.Render("▶ You " + modeIcon))
 	builder.WriteString("\n\n")
 
@@ -86,9 +90,11 @@ func (m *Model) renderUserMessage(builder *strings.Builder, msg *chatMessage, wr
 func (m *Model) renderAssistantMessage(builder *strings.Builder, msg *chatMessage, wrapWidth uint) {
 	builder.WriteString("\n")
 	builder.WriteString(assistantMsgStyle.Render("▶ KSail"))
+
 	if msg.isStreaming {
 		builder.WriteString(" " + m.spinner.View())
 	}
+
 	builder.WriteString("\n\n")
 
 	tools := m.getToolsForMessage(msg)
@@ -97,6 +103,7 @@ func (m *Model) renderAssistantMessage(builder *strings.Builder, msg *chatMessag
 	if msg.isStreaming {
 		builder.WriteString("  ▌")
 	}
+
 	builder.WriteString("\n")
 }
 
@@ -109,8 +116,10 @@ func (m *Model) getToolsForMessage(msg *chatMessage) []*toolExecution {
 				tools = append(tools, tool)
 			}
 		}
+
 		return tools
 	}
+
 	return msg.tools
 }
 
@@ -145,6 +154,7 @@ func (m *Model) renderTextSegment(builder *strings.Builder, text string, wrapWid
 	if text == "" {
 		return
 	}
+
 	wrapped := wordwrap.WrapString(text, wrapWidth)
 	for line := range strings.SplitSeq(wrapped, "\n") {
 		builder.WriteString("  ")
@@ -164,6 +174,7 @@ func (m *Model) renderRemainingText(
 	// Use pre-rendered markdown when no tools were interleaved and message is complete
 	if lastPos == 0 && !msg.isStreaming && msg.rendered != "" {
 		m.writeIndentedContent(builder, msg.rendered)
+
 		return
 	}
 
@@ -180,6 +191,7 @@ func (m *Model) renderRemainingText(
 	// Use pre-rendered markdown if available and no prior tools
 	if !msg.isStreaming && msg.rendered != "" && lastPos == 0 {
 		m.writeIndentedContent(builder, msg.rendered)
+
 		return
 	}
 
@@ -194,6 +206,7 @@ func (m *Model) writeIndentedContent(builder *strings.Builder, content string) {
 		if i == len(lines)-1 && line == "" {
 			continue
 		}
+
 		builder.WriteString("  ")
 		builder.WriteString(line)
 		builder.WriteString("\n")
@@ -212,6 +225,7 @@ func (m *Model) renderLegacyToolOutput(builder *strings.Builder, msg *chatMessag
 // renderToolInline renders a tool execution inline within an assistant response.
 func (m *Model) renderToolInline(builder *strings.Builder, tool *toolExecution, wrapWidth uint) {
 	humanName := humanizeToolName(tool.name)
+
 	displayName := humanName
 	if tool.command != "" {
 		displayName = "> " + tool.command
@@ -237,6 +251,7 @@ func (m *Model) renderRunningTool(
 	line := fmt.Sprintf("  %s %s", m.spinner.View(), displayName)
 	builder.WriteString(toolMsgStyle.Render(line))
 	builder.WriteString("\n")
+
 	if tool.output != "" {
 		m.renderToolOutput(builder, tool.output, wrapWidth)
 	}
@@ -254,6 +269,7 @@ func (m *Model) renderSuccessTool(
 		line := "  ✓ " + displayName
 		builder.WriteString(toolCollapsedStyle.Render(line))
 		builder.WriteString("\n")
+
 		if tool.output != "" {
 			m.renderToolOutput(builder, tool.output, wrapWidth)
 		}
@@ -262,6 +278,7 @@ func (m *Model) renderSuccessTool(
 		if summary != "" {
 			line += toolOutputStyle.Render(" — " + summary)
 		}
+
 		builder.WriteString(toolCollapsedStyle.Render(line))
 		builder.WriteString("\n")
 	}
@@ -279,9 +296,11 @@ func (m *Model) renderFailedTool(
 	if tool.expanded {
 		builder.WriteString(errorStyle.Render(line))
 		builder.WriteString("\n")
+
 		if tool.output != "" {
 			m.renderToolOutput(builder, tool.output, wrapWidth)
 		}
+
 		return
 	}
 
@@ -289,6 +308,7 @@ func (m *Model) renderFailedTool(
 	if tool.output != "" {
 		line += toolOutputStyle.Render(" — " + m.truncateLine(tool.output, toolOutputTruncateLen))
 	}
+
 	builder.WriteString(errorStyle.Render(line))
 	builder.WriteString("\n")
 }
@@ -341,7 +361,9 @@ func (m *Model) truncateLine(text string, maxLen int) string {
 	firstLine := strings.Split(text, "\n")[0]
 	if utf8.RuneCountInString(firstLine) > maxLen {
 		runes := []rune(firstLine)
+
 		return string(runes[:maxLen]) + "..."
 	}
+
 	return firstLine
 }

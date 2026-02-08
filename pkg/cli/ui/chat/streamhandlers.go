@@ -28,11 +28,14 @@ func (m *Model) drainEventChannel() {
 func (m *Model) handleStreamChunk(msg streamChunkMsg) (tea.Model, tea.Cmd) {
 	if msg.content != "" {
 		m.currentResponse.WriteString(msg.content)
+
 		if len(m.messages) > 0 {
 			m.messages[len(m.messages)-1].content = m.currentResponse.String()
 		}
+
 		m.updateViewportContent()
 	}
+
 	return m, m.waitForEvent()
 }
 
@@ -58,6 +61,7 @@ func (m *Model) handleAssistantMessage(msg assistantMessageMsg) (tea.Model, tea.
 	}
 
 	m.updateViewportContent()
+
 	return m, m.waitForEvent()
 }
 
@@ -90,6 +94,7 @@ func (m *Model) handleToolStart(msg toolStartMsg) (tea.Model, tea.Cmd) {
 
 	// DON'T insert tool as separate message - render inline with assistant response
 	m.updateViewportContent()
+
 	return m, m.waitForEvent()
 }
 
@@ -284,6 +289,7 @@ func (m *Model) handleTurnStart() (tea.Model, tea.Cmd) {
 	m.isStreaming = true
 	m.justCompleted = false
 	m.updateViewportContent()
+
 	return m, m.waitForEvent()
 }
 
@@ -298,6 +304,7 @@ func (m *Model) handleReasoning(_ reasoningMsg) (tea.Model, tea.Cmd) {
 	// Optionally, we could append reasoning content to a separate buffer
 	// For now, just acknowledge we're still processing
 	m.updateViewportContent()
+
 	return m, m.waitForEvent()
 }
 
@@ -312,7 +319,9 @@ func (m *Model) handleAbort() (tea.Model, tea.Cmd) {
 		last.isStreaming = false
 		last.rendered = renderMarkdownWithRenderer(m.renderer, last.content)
 	}
+
 	m.updateViewportContent()
+
 	return m, nil
 }
 
@@ -326,7 +335,9 @@ func (m *Model) handleSnapshotRewind() (tea.Model, tea.Cmd) {
 		last.content += "\n\n[Session rewound to previous state]"
 		last.rendered = renderMarkdownWithRenderer(m.renderer, last.content)
 	}
+
 	m.updateViewportContent()
+
 	return m, m.waitForEvent()
 }
 
@@ -335,13 +346,16 @@ func (m *Model) handleStreamErr(msg streamErrMsg) (tea.Model, tea.Cmd) {
 	m.isStreaming = false
 	m.cleanup() // Clean up event subscription
 	m.err = msg.err
+
 	if len(m.messages) > 0 && m.messages[len(m.messages)-1].role == roleAssistant {
 		last := &m.messages[len(m.messages)-1]
 		last.content = fmt.Sprintf("Error: %v", msg.err)
 		last.isStreaming = false
 		last.rendered = renderMarkdownWithRenderer(m.renderer, last.content)
 	}
+
 	m.updateViewportContent()
+
 	// Don't wait for more events - response is complete (with error)
 	return m, nil
 }
@@ -352,6 +366,7 @@ func (m *Model) waitForEvent() tea.Cmd {
 	ctx := m.ctx
 	eventChan := m.eventChan
 	timeout := m.timeout
+
 	return func() tea.Msg {
 		// Use timeout to detect stuck conditions (e.g., assistant looping on tools)
 		timer := time.NewTimer(timeout)
@@ -378,10 +393,12 @@ func (m *Model) waitForEvent() tea.Cmd {
 func (m *Model) cleanup() {
 	// Unsubscribe from session events (thread-safe)
 	m.unsubscribeMu.Lock()
+
 	if m.unsubscribe != nil {
 		m.unsubscribe()
 		m.unsubscribe = nil
 	}
+
 	m.unsubscribeMu.Unlock()
 
 	// Reset completion tracking state

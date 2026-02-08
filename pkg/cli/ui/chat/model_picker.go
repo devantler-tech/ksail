@@ -24,27 +24,33 @@ func (m *Model) handleModelPickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.modelFilterText = ""
 		m.modelFilterActive = false
 		m.updateDimensions()
+
 		return m, nil
 	case "/":
 		m.modelFilterActive = true
+
 		return m, nil
 	case "up", "k":
 		if m.modelPickerIndex > 0 {
 			m.modelPickerIndex--
 		}
+
 		return m, nil
 	case keyDown, "j":
 		if m.modelPickerIndex < totalItems-1 {
 			m.modelPickerIndex++
 		}
+
 		return m, nil
 	case keyEnter:
 		return m.selectModel(totalItems)
 	case keyCtrlC:
 		m.cleanup()
 		m.quitting = true
+
 		return m, tea.Quit
 	}
+
 	return m, nil
 }
 
@@ -53,28 +59,33 @@ func (m *Model) handleModelFilterKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case keyEnter:
 		m.modelFilterActive = false
+
 		return m, nil
 	case keyEscape:
 		// Clear filter and exit filter mode
 		m.modelFilterText = ""
 		m.modelFilterActive = false
 		m.applyModelFilter()
+
 		return m, nil
 	case keyBackspace:
 		if len(m.modelFilterText) > 0 {
 			m.modelFilterText = m.modelFilterText[:len(m.modelFilterText)-1]
 			m.applyModelFilter()
 		}
+
 		return m, nil
 	case keyCtrlC:
 		m.cleanup()
 		m.quitting = true
+
 		return m, tea.Quit
 	default:
 		if msg.Type == tea.KeyRunes {
 			m.modelFilterText += string(msg.Runes)
 			m.applyModelFilter()
 		}
+
 		return m, nil
 	}
 }
@@ -114,16 +125,19 @@ func (m *Model) selectModel(totalItems int) (tea.Model, tea.Cmd) {
 			return m.switchModel(selectedModel.ID)
 		}
 	}
+
 	m.showModelPicker = false
 	m.modelFilterText = ""
 	m.modelFilterActive = false
 	m.updateDimensions()
+
 	return m, nil
 }
 
 // switchModel changes to a new model by recreating the session.
 func (m *Model) switchModel(newModelID string) (tea.Model, tea.Cmd) {
 	m.cleanup()
+
 	if m.session != nil {
 		_ = m.session.Destroy()
 	}
@@ -136,8 +150,10 @@ func (m *Model) switchModel(newModelID string) (tea.Model, tea.Cmd) {
 		m.err = fmt.Errorf("failed to switch model: %w", err)
 		m.showModelPicker = false
 		m.updateDimensions()
+
 		return m, nil
 	}
+
 	m.session = session
 
 	m.resetStreamingState()
@@ -146,6 +162,7 @@ func (m *Model) switchModel(newModelID string) (tea.Model, tea.Cmd) {
 	m.modelFilterActive = false
 	m.updateDimensions()
 	m.updateViewportContent()
+
 	return m, nil
 }
 
@@ -173,6 +190,7 @@ func (m *Model) renderModelPickerModal() string {
 	renderScrollIndicatorBottom(&listContent, clipStyle, isScrollable, endIdx, totalItems)
 
 	content := strings.TrimRight(listContent.String(), "\n")
+
 	return renderPickerModal(content, modalWidth, visibleCount, isScrollable)
 }
 
@@ -186,6 +204,7 @@ func (m *Model) renderModelPickerTitle(listContent *strings.Builder, clipStyle l
 		if m.modelFilterActive {
 			cursor = "_"
 		}
+
 		filterLine := filterStyle.Render("🔍 " + m.modelFilterText + cursor)
 		listContent.WriteString(clipStyle.Render(filterLine) + "\n")
 	} else {
@@ -220,6 +239,7 @@ func (m *Model) formatModelItem(index int) (string, bool) {
 		if isCurrentModel {
 			line += checkmarkSuffix
 		}
+
 		return line, isCurrentModel
 	}
 
@@ -236,6 +256,7 @@ func (m *Model) formatModelItem(index int) (string, bool) {
 	if isCurrentModel {
 		line += " ✓"
 	}
+
 	return line, isCurrentModel
 }
 
@@ -253,5 +274,6 @@ func (m *Model) styleModelItem(line string, index int, isCurrentModel bool) stri
 			Foreground(lipgloss.ANSIColor(ansiGreen)).
 			Render(line)
 	}
+
 	return line
 }

@@ -2,6 +2,7 @@ package chat
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -60,6 +61,7 @@ func NewAgentModeRef(initial bool) *AgentModeRef {
 func (r *AgentModeRef) IsEnabled() bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
+
 	return r.enabled
 }
 
@@ -67,6 +69,7 @@ func (r *AgentModeRef) IsEnabled() bool {
 func (r *AgentModeRef) SetEnabled(enabled bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
 	r.enabled = enabled
 }
 
@@ -330,11 +333,13 @@ func (m *Model) Update(
 
 	case copyFeedbackClearMsg:
 		m.showCopyFeedback = false
+
 		return m, nil
 
 	case spinner.TickMsg:
 		// Always update spinner to keep it ticking
 		var cmd tea.Cmd
+
 		m.spinner, cmd = m.spinner.Update(msg)
 		cmds = append(cmds, cmd)
 		// Update viewport content if there are active tools or streaming to animate spinners
@@ -346,15 +351,39 @@ func (m *Model) Update(
 	// Update sub-components
 	if !m.isStreaming {
 		var taCmd tea.Cmd
+
 		m.textarea, taCmd = m.textarea.Update(msg)
 		cmds = append(cmds, taCmd)
 	}
 
 	var vpCmd tea.Cmd
+
 	m.viewport, vpCmd = m.viewport.Update(msg)
 	cmds = append(cmds, vpCmd)
 
 	return m, tea.Batch(cmds...)
+}
+
+// View renders the TUI.
+func (m *Model) View() string {
+	if m.quitting {
+		goodbye := statusStyle.Render("  Goodbye! Thanks for using KSail.\n")
+
+		return logoStyle.Render(logo()) + "\n\n" + goodbye
+	}
+
+	sections := make([]string, 0, viewSectionCount)
+
+	// Header, chat viewport, input/modal, and footer
+	sections = append(sections, m.renderHeader())
+	sections = append(sections, viewportStyle.Width(m.width-modalPadding).Render(m.viewport.View()))
+	sections = append(sections, m.renderInputOrModal())
+	sections = append(sections, m.renderFooter())
+
+	// Join sections and clip final output to terminal width to prevent any wrapping
+	output := lipgloss.JoinVertical(lipgloss.Left, sections...)
+
+	return lipgloss.NewStyle().MaxWidth(m.width).Render(output)
 }
 
 // handleStreamEvent dispatches streaming-related events to their specific handlers.
@@ -420,26 +449,6 @@ func (m *Model) handleStreamEvent(
 	}
 }
 
-// View renders the TUI.
-func (m *Model) View() string {
-	if m.quitting {
-		goodbye := statusStyle.Render("  Goodbye! Thanks for using KSail.\n")
-		return logoStyle.Render(logo()) + "\n\n" + goodbye
-	}
-
-	sections := make([]string, 0, viewSectionCount)
-
-	// Header, chat viewport, input/modal, and footer
-	sections = append(sections, m.renderHeader())
-	sections = append(sections, viewportStyle.Width(m.width-modalPadding).Render(m.viewport.View()))
-	sections = append(sections, m.renderInputOrModal())
-	sections = append(sections, m.renderFooter())
-
-	// Join sections and clip final output to terminal width to prevent any wrapping
-	output := lipgloss.JoinVertical(lipgloss.Left, sections...)
-	return lipgloss.NewStyle().MaxWidth(m.width).Render(output)
-}
-
 // handleMouseMsg handles mouse input events.
 func (m *Model) handleMouseMsg(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	//nolint:exhaustive // Only wheel events are relevant for viewport scrolling.
@@ -483,6 +492,7 @@ func (m *Model) calculateMaxPickerVisible() int {
 
 	// Calculate max items: cap between min and max
 	maxItems := max(minPickerItems, min(availableForItems, maxPickerItems))
+
 	return maxItems
 }
 
@@ -499,10 +509,12 @@ func (m *Model) renderHeader() string {
 	for idx, line := range logoLines {
 		clippedLine := truncateStyle.Render(line)
 		clippedLogo.WriteString(clippedLine)
+
 		if idx < len(logoLines)-1 {
 			clippedLogo.WriteString("\n")
 		}
 	}
+
 	logoRendered := logoStyle.Render(clippedLogo.String())
 
 	// Build tagline with right-aligned status
@@ -510,6 +522,7 @@ func (m *Model) renderHeader() string {
 	taglineRow = lipgloss.NewStyle().MaxWidth(headerContentWidth).Inline(true).Render(taglineRow)
 
 	headerContent := logoRendered + "\n" + taglineRow
+
 	return headerBoxStyle.Width(m.width - modalPadding).Render(headerContent)
 }
 
@@ -525,6 +538,7 @@ func (m *Model) buildTaglineRow(contentWidth int) string {
 	taglineLen := lipgloss.Width(taglineText)
 	statusLen := lipgloss.Width(statusText)
 	spacing := max(contentWidth-taglineLen-statusLen, minSpacing)
+
 	return taglineText + strings.Repeat(" ", spacing) + statusText
 }
 
@@ -568,15 +582,19 @@ func (m *Model) renderInputOrModal() string {
 	if m.showHelpOverlay {
 		return m.renderHelpOverlay()
 	}
+
 	if m.pendingPermission != nil {
 		return m.renderPermissionModal()
 	}
+
 	if m.showModelPicker {
 		return m.renderModelPickerModal()
 	}
+
 	if m.showSessionPicker {
 		return m.renderSessionPickerModal()
 	}
+
 	return inputStyle.Width(m.width - modalPadding).Render(m.textarea.View())
 }
 
@@ -640,6 +658,7 @@ func (m *Model) addToPromptHistory(prompt string) {
 	if prompt != "" && (len(m.history) == 0 || m.history[len(m.history)-1] != prompt) {
 		m.history = append(m.history, prompt)
 	}
+
 	m.historyIndex = -1
 	m.savedInput = ""
 }
@@ -678,6 +697,7 @@ func (m *Model) permissionModalExtraHeight() int {
 	if m.pendingPermission.command != "" {
 		contentLines++
 	}
+
 	if m.pendingPermission.arguments != "" {
 		contentLines++
 	}
@@ -792,10 +812,12 @@ func (m *Model) streamResponseCmd(userMessage string) tea.Cmd {
 		if err != nil {
 			// Clean up on error
 			m.unsubscribeMu.Lock()
+
 			if m.unsubscribe != nil {
 				m.unsubscribe()
 				m.unsubscribe = nil
 			}
+
 			m.unsubscribeMu.Unlock()
 
 			return streamErrMsg{err: err}
@@ -829,7 +851,11 @@ func Run(
 	)
 
 	_, err := program.Run()
-	return err
+	if err != nil {
+		return fmt.Errorf("running chat program: %w", err)
+	}
+
+	return nil
 }
 
 // RunWithEventChannel starts the chat TUI with a pre-created event channel.
@@ -895,7 +921,11 @@ func RunWithEventChannelAndModeRef(
 	)
 
 	_, err := program.Run()
-	return err
+	if err != nil {
+		return fmt.Errorf("running chat program with event channel: %w", err)
+	}
+
+	return nil
 }
 
 // hasRunningTools returns true if any tools are currently running.
@@ -905,6 +935,7 @@ func (m *Model) hasRunningTools() bool {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -939,6 +970,7 @@ func CreateTUIPermissionHandler(eventChan chan<- tea.Msg) copilot.PermissionHand
 		if approved {
 			return copilot.PermissionRequestResult{Kind: "approved"}, nil
 		}
+
 		return copilot.PermissionRequestResult{Kind: "denied-interactively-by-user"}, nil
 	}
 }
@@ -1050,6 +1082,7 @@ func extractStringValue(val any) string {
 				parts = append(parts, s)
 			}
 		}
+
 		if len(parts) > 0 {
 			return strings.Join(parts, " ")
 		}
@@ -1058,10 +1091,12 @@ func extractStringValue(val any) string {
 		if cmd, ok := typedVal["command"].(string); ok {
 			return cmd
 		}
+
 		if cmd, ok := typedVal["cmd"].(string); ok {
 			return cmd
 		}
 	}
+
 	return ""
 }
 
@@ -1091,6 +1126,7 @@ func formatPermissionKind(kind string) string {
 		// English titlecase is appropriate for all SDK permission kinds (shell, file_edit, etc.)
 		formatted := strings.ReplaceAll(kind, "_", " ")
 		caser := cases.Title(language.English)
+
 		return caser.String(formatted)
 	}
 }

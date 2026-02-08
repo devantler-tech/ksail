@@ -80,7 +80,8 @@ func LoadClusterSpec(clusterName string) (*v1alpha1.ClusterSpec, error) {
 		return nil, err
 	}
 
-	data, err := os.ReadFile(statePath) //nolint:gosec // path is constructed from user home + constant subpath, not user input
+	//nolint:gosec // path is constructed from user home + constant subpath, not user input
+	data, err := os.ReadFile(statePath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, fmt.Errorf("%w: %s", ErrStateNotFound, clusterName)

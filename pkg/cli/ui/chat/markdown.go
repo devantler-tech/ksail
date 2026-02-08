@@ -133,6 +133,7 @@ func renderMarkdownWithRenderer(renderer *glamour.TermRenderer, content string) 
 	if renderer == nil {
 		return content
 	}
+
 	out, err := renderer.Render(content)
 	if err != nil {
 		return content
