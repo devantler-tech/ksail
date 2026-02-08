@@ -11,12 +11,12 @@ type TestItem struct {
 	Labels map[string]string
 }
 
-func TestUniqueValues(t *testing.T) {
-	t.Parallel()
+func getTestItemLabels(item TestItem) map[string]string {
+	return item.Labels
+}
 
-	getLabels := func(item TestItem) map[string]string {
-		return item.Labels
-	}
+func TestUniqueValues_BasicCases(t *testing.T) {
+	t.Parallel()
 
 	tests := []struct {
 		name     string
@@ -52,6 +52,35 @@ func TestUniqueValues(t *testing.T) {
 			expected: []string{"dev", "prod"},
 		},
 		{
+			name: "handles single item",
+			items: []TestItem{
+				{Labels: map[string]string{"env": "prod"}},
+			},
+			key:      "env",
+			expected: []string{"prod"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			result := labels.UniqueValues(tt.items, tt.key, getTestItemLabels)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestUniqueValues_MissingAndNilHandling(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		items    []TestItem
+		key      string
+		expected []string
+	}{
+		{
 			name: "handles missing key",
 			items: []TestItem{
 				{Labels: map[string]string{"env": "prod"}},
@@ -80,14 +109,27 @@ func TestUniqueValues(t *testing.T) {
 			key:      "env",
 			expected: []string{},
 		},
-		{
-			name: "handles single item",
-			items: []TestItem{
-				{Labels: map[string]string{"env": "prod"}},
-			},
-			key:      "env",
-			expected: []string{"prod"},
-		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			result := labels.UniqueValues(tt.items, tt.key, getTestItemLabels)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestUniqueValues_DeduplicationAndSorting(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		items    []TestItem
+		key      string
+		expected []string
+	}{
 		{
 			name: "deduplicates identical values",
 			items: []TestItem{
@@ -134,7 +176,7 @@ func TestUniqueValues(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			result := labels.UniqueValues(tt.items, tt.key, getLabels)
+			result := labels.UniqueValues(tt.items, tt.key, getTestItemLabels)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -189,10 +231,6 @@ func TestUniqueValues_WithDifferentTypes(t *testing.T) {
 func TestUniqueValues_EdgeCases(t *testing.T) {
 	t.Parallel()
 
-	getLabels := func(item TestItem) map[string]string {
-		return item.Labels
-	}
-
 	t.Run("handles empty key string", func(t *testing.T) {
 		t.Parallel()
 
@@ -201,7 +239,7 @@ func TestUniqueValues_EdgeCases(t *testing.T) {
 			{Labels: map[string]string{"env": "prod"}},
 		}
 
-		result := labels.UniqueValues(items, "", getLabels)
+		result := labels.UniqueValues(items, "", getTestItemLabels)
 		assert.Equal(t, []string{"value"}, result)
 	})
 
@@ -215,7 +253,7 @@ func TestUniqueValues_EdgeCases(t *testing.T) {
 			}
 		}
 
-		result := labels.UniqueValues(items, "env", getLabels)
+		result := labels.UniqueValues(items, "env", getTestItemLabels)
 		assert.Equal(t, []string{"prod"}, result)
 	})
 
@@ -229,11 +267,11 @@ func TestUniqueValues_EdgeCases(t *testing.T) {
 			}
 		}
 
-		result := labels.UniqueValues(items, "id", getLabels)
+		result := labels.UniqueValues(items, "id", getTestItemLabels)
 		assert.Len(t, result, 100)
 		// Verify sorted
 		for i := 1; i < len(result); i++ {
-			assert.True(t, result[i-1] < result[i], "result should be sorted")
+			assert.Less(t, result[i-1], result[i], "result should be sorted")
 		}
 	})
 }
