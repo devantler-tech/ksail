@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/devantler-tech/ksail/v5/pkg/svc/detector"
 	clustererrors "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/errors"
 	runner "github.com/devantler-tech/ksail/v5/pkg/utils/runner"
 	clustercommand "github.com/k3d-io/k3d/v5/cmd/cluster"
@@ -30,9 +31,10 @@ var (
 
 // K3dClusterProvisioner executes k3d lifecycle commands via Cobra.
 type K3dClusterProvisioner struct {
-	simpleCfg  *v1alpha5.SimpleConfig
-	configPath string
-	runner     runner.CommandRunner
+	simpleCfg         *v1alpha5.SimpleConfig
+	configPath        string
+	runner            runner.CommandRunner
+	componentDetector *detector.ComponentDetector
 }
 
 // NewK3dClusterProvisioner constructs a new command-backed provisioner.
@@ -210,6 +212,11 @@ func (k *K3dClusterProvisioner) Exists(ctx context.Context, name string) (bool, 
 	}
 
 	return slices.Contains(clusters, target), nil
+}
+
+// WithComponentDetector sets the component detector for querying cluster state.
+func (k *K3dClusterProvisioner) WithComponentDetector(d *detector.ComponentDetector) {
+	k.componentDetector = d
 }
 
 // runListCommand executes the k3d cluster list command and returns the output.

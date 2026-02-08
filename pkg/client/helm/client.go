@@ -176,6 +176,7 @@ type Interface interface {
 	UninstallRelease(ctx context.Context, releaseName, namespace string) error
 	AddRepository(ctx context.Context, entry *RepositoryEntry, timeout time.Duration) error
 	TemplateChart(ctx context.Context, spec *ChartSpec) (string, error)
+	ReleaseExists(ctx context.Context, releaseName, namespace string) (bool, error)
 }
 
 // Client represents the default helm implementation used by KSail.
@@ -351,6 +352,35 @@ func (c *Client) UninstallRelease(ctx context.Context, releaseName, namespace st
 	}
 
 	return nil
+}
+
+// ReleaseExists checks whether a Helm release with the given name exists in the
+// specified namespace. It returns true when at least one revision is recorded.
+func (c *Client) ReleaseExists(
+	_ context.Context,
+	releaseName, namespace string,
+) (bool, error) {
+	if releaseName == "" {
+		return false, errReleaseNameRequired
+	}
+
+	cleanup, err := c.switchNamespace(namespace)
+	if err != nil {
+		return false, err
+	}
+
+	defer cleanup()
+
+	histClient := helmv4action.NewHistory(c.actionConfig)
+	histClient.Max = 1
+
+	releases, err := histClient.Run(releaseName)
+	if err != nil {
+		// History returns an error when the release does not exist.
+		return false, nil
+	}
+
+	return len(releases) > 0, nil
 }
 
 // AddRepository registers a Helm repository for the current client instance.

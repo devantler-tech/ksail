@@ -417,9 +417,24 @@ func (k *K3dClusterProvisioner) nextAgentIndex(
 	return maxIndex + 1 + batchOffset
 }
 
-// GetCurrentConfig retrieves the current cluster configuration.
-// K3d doesn't persist its original config, so we reconstruct the spec
-// with the same defaults used during creation.
-func (k *K3dClusterProvisioner) GetCurrentConfig() (*v1alpha1.ClusterSpec, error) {
+// GetCurrentConfig retrieves the current cluster configuration by probing the
+// running cluster via Helm releases and Kubernetes Deployments. Falls back to
+// static defaults when no detector is available.
+func (k *K3dClusterProvisioner) GetCurrentConfig(
+	ctx context.Context,
+) (*v1alpha1.ClusterSpec, error) {
+	if k.componentDetector != nil {
+		spec, err := k.componentDetector.DetectComponents(
+			ctx,
+			v1alpha1.DistributionK3s,
+			v1alpha1.ProviderDocker,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("detect components: %w", err)
+		}
+
+		return spec, nil
+	}
+
 	return types.DefaultCurrentSpec(v1alpha1.DistributionK3s, v1alpha1.ProviderDocker), nil
 }

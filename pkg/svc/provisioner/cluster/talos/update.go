@@ -541,9 +541,9 @@ func pathMatches(path, pattern string) bool {
 	return len(path) >= len(pattern) && path[:len(pattern)] == pattern
 }
 
-// GetCurrentConfig retrieves the current cluster configuration.
-// Starts from the shared defaults and adds Talos-specific state.
-func (p *TalosProvisioner) GetCurrentConfig() (*v1alpha1.ClusterSpec, error) {
+// GetCurrentConfig retrieves the current cluster configuration by probing the
+// running cluster through the Kubernetes API and Docker/Hetzner providers.
+func (p *TalosProvisioner) GetCurrentConfig(ctx context.Context) (*v1alpha1.ClusterSpec, error) {
 	var provider v1alpha1.Provider
 	if p.dockerClient != nil {
 		provider = v1alpha1.ProviderDocker
@@ -552,6 +552,24 @@ func (p *TalosProvisioner) GetCurrentConfig() (*v1alpha1.ClusterSpec, error) {
 	}
 
 	spec := types.DefaultCurrentSpec(v1alpha1.DistributionTalos, provider)
+
+	// Detect installed components from the live cluster when the detector is available.
+	if p.componentDetector != nil {
+		detected, err := p.componentDetector.DetectComponents(
+			ctx,
+			v1alpha1.DistributionTalos,
+			provider,
+		)
+		if err == nil {
+			spec.CNI = detected.CNI
+			spec.CSI = detected.CSI
+			spec.MetricsServer = detected.MetricsServer
+			spec.LoadBalancer = detected.LoadBalancer
+			spec.CertManager = detected.CertManager
+			spec.PolicyEngine = detected.PolicyEngine
+			spec.GitOpsEngine = detected.GitOpsEngine
+		}
+	}
 
 	// Set Talos-specific options from the provisioner state
 	spec.Talos = v1alpha1.OptionsTalos{

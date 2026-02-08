@@ -8,10 +8,14 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/setup"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup/localregistry"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/confirm"
+	docker "github.com/devantler-tech/ksail/v5/pkg/client/docker"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
+	"github.com/devantler-tech/ksail/v5/pkg/k8s"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/detector"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	clustererrors "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/errors"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/types"
@@ -123,6 +127,8 @@ func handleUpdateRunE(
 }
 
 // createAndVerifyProvisioner creates a provisioner and verifies the cluster exists.
+// It constructs a ComponentDetector from the cluster's kubeconfig and injects it
+// into the provisioner so that GetCurrentConfig probes the live cluster.
 //
 // NOTE(limitation): If the user changes distribution in ksail.yaml (e.g., Kind → Talos), this
 // creates a provisioner for the NEW distribution whose Exists() check won't find
@@ -137,7 +143,17 @@ func createAndVerifyProvisioner(
 	ctx *localregistry.Context,
 	clusterName string,
 ) (clusterprovisioner.ClusterProvisioner, error) {
-	factory := newProvisionerFactory(ctx)
+	// Build a ComponentDetector scoped to the running cluster.
+	componentDetector := buildComponentDetector(cmd, ctx)
+
+	factory := clusterprovisioner.DefaultFactory{
+		DistributionConfig: &clusterprovisioner.DistributionConfig{
+			Kind:  ctx.KindConfig,
+			K3d:   ctx.K3dConfig,
+			Talos: ctx.TalosConfig,
+		},
+		ComponentDetector: componentDetector,
+	}
 
 	provisioner, _, err := factory.Create(cmd.Context(), ctx.ClusterCfg)
 	if err != nil {
@@ -156,6 +172,41 @@ func createAndVerifyProvisioner(
 	return provisioner, nil
 }
 
+// buildComponentDetector creates a ComponentDetector using the cluster's
+// kubeconfig and Docker client. Returns nil when clients cannot be created
+// (the provisioner will fall back to static defaults).
+func buildComponentDetector(
+	cmd *cobra.Command,
+	ctx *localregistry.Context,
+) *detector.ComponentDetector {
+	helmClient, kubeconfig, err := setup.HelmClientForCluster(ctx.ClusterCfg)
+	if err != nil {
+		notify.Warningf(cmd.OutOrStderr(),
+			"Cannot create Helm client for component detection, using defaults: %v", err)
+
+		return nil
+	}
+
+	k8sContext := ctx.ClusterCfg.Spec.Cluster.Connection.Context
+	if k8sContext == "" {
+		clusterName := resolveClusterNameFromContext(ctx)
+		k8sContext = ctx.ClusterCfg.Spec.Cluster.Distribution.ContextName(clusterName)
+	}
+
+	k8sClientset, err := k8s.NewClientset(kubeconfig, k8sContext)
+	if err != nil {
+		notify.Warningf(cmd.OutOrStderr(),
+			"Cannot create K8s clientset for component detection, using defaults: %v", err)
+
+		return nil
+	}
+
+	// Docker client is optional — only needed for cloud-provider-kind detection.
+	dockerClient, _ := docker.GetDockerClient()
+
+	return detector.NewComponentDetector(helmClient, k8sClientset, dockerClient)
+}
+
 // computeUpdateDiff retrieves current config and computes the full diff.
 // Returns nil diff if current config could not be retrieved (caller should fall back to recreate).
 func computeUpdateDiff(
@@ -169,7 +220,7 @@ func computeUpdateDiff(
 		ctx.ClusterCfg.Spec.Cluster.Provider,
 	)
 
-	currentSpec, err := updater.GetCurrentConfig()
+	currentSpec, err := updater.GetCurrentConfig(cmd.Context())
 	if err != nil {
 		notify.WriteMessage(notify.Message{
 			Type:    notify.WarningType,

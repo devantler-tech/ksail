@@ -9,6 +9,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/detector"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider"
 	dockerprovider "github.com/devantler-tech/ksail/v5/pkg/svc/provider/docker"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider/hetzner"
@@ -117,6 +118,7 @@ type TalosProvisioner struct {
 	hetznerOpts        *v1alpha1.OptionsHetzner
 	provisionerFactory func(ctx context.Context) (provision.Provisioner, error)
 	logWriter          io.Writer
+	componentDetector  *detector.ComponentDetector
 }
 
 // NewTalosProvisioner creates a new TalosProvisioner.
@@ -181,6 +183,13 @@ func (p *TalosProvisioner) WithHetznerOptions(opts v1alpha1.OptionsHetzner) *Tal
 // WithTalosOptions sets the Talos-specific options (node counts, cloud ISO, etc.).
 func (p *TalosProvisioner) WithTalosOptions(opts v1alpha1.OptionsTalos) *TalosProvisioner {
 	p.talosOpts = &opts
+
+	return p
+}
+
+// WithComponentDetector sets the component detector for querying cluster state.
+func (p *TalosProvisioner) WithComponentDetector(d *detector.ComponentDetector) *TalosProvisioner {
+	p.componentDetector = d
 
 	return p
 }

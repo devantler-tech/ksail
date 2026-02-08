@@ -11,6 +11,7 @@ import (
 
 	iopath "github.com/devantler-tech/ksail/v5/pkg/io"
 	"github.com/devantler-tech/ksail/v5/pkg/io/marshaller"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/detector"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider"
 	clustererrors "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/errors"
 	runner "github.com/devantler-tech/ksail/v5/pkg/utils/runner"
@@ -106,11 +107,12 @@ type KindProvider interface {
 // It uses kind's Cobra commands where available (create, delete, list) and delegates
 // infrastructure operations (start, stop) to the injected Provider.
 type KindClusterProvisioner struct {
-	kubeConfig      string
-	kindConfig      *v1alpha4.Cluster
-	kindSDKProvider KindProvider
-	infraProvider   provider.Provider
-	runner          runner.CommandRunner
+	kubeConfig        string
+	kindConfig        *v1alpha4.Cluster
+	kindSDKProvider   KindProvider
+	infraProvider     provider.Provider
+	runner            runner.CommandRunner
+	componentDetector *detector.ComponentDetector
 }
 
 // NewKindClusterProvisioner constructs a KindClusterProvisioner with explicit dependencies
@@ -152,6 +154,11 @@ func NewKindClusterProvisionerWithRunner(
 // This implements the ProviderAware interface.
 func (k *KindClusterProvisioner) SetProvider(p provider.Provider) {
 	k.infraProvider = p
+}
+
+// WithComponentDetector sets the component detector for querying cluster state.
+func (k *KindClusterProvisioner) WithComponentDetector(d *detector.ComponentDetector) {
+	k.componentDetector = d
 }
 
 // Create creates a kind cluster using kind's Cobra command.

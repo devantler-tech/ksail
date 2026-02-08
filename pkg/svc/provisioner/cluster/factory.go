@@ -8,6 +8,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	kindconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/kind"
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/detector"
 	clustererrors "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/errors"
 	k3dprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/k3d"
 	kindprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/kind"
@@ -51,6 +52,11 @@ type DefaultFactory struct {
 	// DistributionConfig holds pre-loaded distribution-specific configuration.
 	// This is required and must contain the appropriate config for the cluster's distribution.
 	DistributionConfig *DistributionConfig
+
+	// ComponentDetector is an optional detector used to probe running clusters
+	// for installed components. When non-nil it is injected into provisioners
+	// so that GetCurrentConfig returns accurate live state instead of defaults.
+	ComponentDetector *detector.ComponentDetector
 }
 
 // Create selects the correct distribution provisioner for the KSail cluster configuration.
@@ -116,6 +122,10 @@ func (f DefaultFactory) createKindProvisioner(
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create Kind provisioner: %w", err)
+	}
+
+	if f.ComponentDetector != nil {
+		provisioner.WithComponentDetector(f.ComponentDetector)
 	}
 
 	return provisioner, kindConfig, nil
@@ -188,6 +198,10 @@ func (f DefaultFactory) createK3dProvisioner(
 		tempConfigPath,
 	)
 
+	if f.ComponentDetector != nil {
+		provisioner.WithComponentDetector(f.ComponentDetector)
+	}
+
 	return provisioner, k3dConfig, nil
 }
 
@@ -245,6 +259,10 @@ func (f DefaultFactory) createTalosProvisioner(
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create Talos provisioner: %w", err)
+	}
+
+	if f.ComponentDetector != nil {
+		provisioner.WithComponentDetector(f.ComponentDetector)
 	}
 
 	return provisioner, f.DistributionConfig.Talos, nil
