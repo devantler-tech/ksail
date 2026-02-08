@@ -45,6 +45,9 @@ linters:
         text: "var-naming: avoid meaningless package names"
         path: pkg/utils/doc.go
   settings:
+    tagalign:
+      align: false
+      sort: true
     wsl_v5:
       allow-first-in-block: true
       allow-whole-block: false
