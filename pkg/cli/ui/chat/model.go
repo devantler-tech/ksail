@@ -211,12 +211,12 @@ func NewWithEventChannel(
 	textArea := textarea.New()
 	textArea.Placeholder = "Ask me anything about Kubernetes, KSail, or cluster management..."
 	textArea.Focus()
-	textArea.CharLimit = 4096
-	textArea.SetWidth(defaultWidth - 6)
+	textArea.CharLimit = charLimit
+	textArea.SetWidth(defaultWidth - textAreaPadding)
 	textArea.SetHeight(inputHeight)
 	textArea.ShowLineNumbers = false
 	// Show ">" only on first line, nothing on continuation lines
-	textArea.SetPromptFunc(2, func(lineIdx int) string {
+	textArea.SetPromptFunc(modalPadding, func(lineIdx int) string {
 		if lineIdx == 0 {
 			return "> "
 		}
@@ -226,7 +226,7 @@ func NewWithEventChannel(
 	textArea.FocusedStyle.Placeholder = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 
 	// Initialize viewport for chat history
-	viewPort := viewport.New(defaultWidth-4, defaultHeight-inputHeight-headerHeight-footerHeight-4)
+	viewPort := viewport.New(defaultWidth-viewportPadding, defaultHeight-inputHeight-headerHeight-footerHeight-viewportPadding)
 	initialMsg := "  Type a message below to start chatting with KSail AI.\n"
 	viewPort.SetContent(statusStyle.Render(initialMsg))
 
@@ -237,11 +237,11 @@ func NewWithEventChannel(
 
 	// Initialize markdown renderer before Bubbletea takes over terminal
 	// This avoids terminal queries that could interfere with input
-	mdRenderer := createRenderer(defaultWidth - 8)
+	mdRenderer := createRenderer(defaultWidth - rendererPadding)
 
 	// Use provided event channel or create new one
 	if eventChan == nil {
-		eventChan = make(chan tea.Msg, 100)
+		eventChan = make(chan tea.Msg, eventChanBuf)
 	}
 
 	return &Model{
@@ -296,12 +296,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.MouseMsg:
 		// Handle only mouse wheel scrolling - let click/drag pass through for text selection
 		if msg.Button == tea.MouseButtonWheelUp {
-			m.viewport.ScrollUp(3)
+			m.viewport.ScrollUp(scrollLines)
 			m.userScrolled = !m.viewport.AtBottom()
 			return m, nil
 		}
 		if msg.Button == tea.MouseButtonWheelDown {
-			m.viewport.ScrollDown(3)
+			m.viewport.ScrollDown(scrollLines)
 			if m.viewport.AtBottom() {
 				m.userScrolled = false
 			}
@@ -412,7 +412,7 @@ func (m *Model) View() string {
 
 	// Header, chat viewport, input/modal, and footer
 	sections = append(sections, m.renderHeader())
-	sections = append(sections, viewportStyle.Width(m.width-2).Render(m.viewport.View()))
+	sections = append(sections, viewportStyle.Width(m.width-modalPadding).Render(m.viewport.View()))
 	sections = append(sections, m.renderInputOrModal())
 	sections = append(sections, m.renderFooter())
 
@@ -426,10 +426,9 @@ func (m *Model) View() string {
 func (m *Model) calculateMaxPickerVisible() int {
 	// Calculate available height: total - header - input - footer - borders
 	// Reserve space for: title (1) + scroll indicators (2) + borders (2) + minimum viewport
-	availableHeight := m.height - headerHeight - inputHeight - footerHeight - 4 - minViewportHeight
+	availableHeight := m.height - headerHeight - inputHeight - footerHeight - viewportPadding - minViewportHeight
 
 	// Subtract space for picker overhead (title + top/bottom padding)
-	pickerOverhead := 3 // title + top/bottom padding
 	availableForItems := availableHeight - pickerOverhead
 
 	// Calculate max items: cap between min and max
@@ -523,7 +522,7 @@ func (m *Model) renderInputOrModal() string {
 	if m.showSessionPicker {
 		return m.renderSessionPickerModal()
 	}
-	return inputStyle.Width(m.width - 2).Render(m.textarea.View())
+	return inputStyle.Width(m.width - modalPadding).Render(m.textarea.View())
 }
 
 // renderFooter renders the context-aware help text footer using bubbles/help.

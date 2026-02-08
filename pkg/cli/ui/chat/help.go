@@ -9,11 +9,46 @@ import (
 
 // Help key symbols for consistent rendering.
 const (
-	keyEnter   = "⏎"
-	keyEscape  = "esc"
-	keyArrows  = "↑↓"
-	keyPageNav = "PgUp/Dn"
-	helpSep    = " • "
+	enterSymbol = "⏎"
+	keyEscape   = "esc"
+	keyArrows   = "↑↓"
+	keyPageNav  = "PgUp/Dn"
+	helpSep     = " • "
+
+	// Key string constants for keyboard event matching.
+	keyEnter     = "enter"
+	keyCtrlC     = "ctrl+c"
+	keyDown      = "down"
+	keyBackspace = "backspace"
+
+	// UI dimension constants.
+	modalPadding   = 2 // border width subtracted from terminal width
+	contentPadding = 4 // padding inside modal content area
+	helpSepSpacing = 3 // spacing for help separator
+
+	// Header and layout constants.
+	headerPadding    = 6 // padding around header content
+	textAreaPadding  = 6 // padding subtracted from width for textarea
+	viewportPadding  = 4 // padding subtracted from width for viewport
+	viewportInner    = 2 // inner padding inside viewport
+	rendererPadding  = 8 // padding subtracted from width for markdown renderer
+	rendererMinWidth = 4 // padding subtracted from viewport width for recreation
+	charLimit        = 4096
+	eventChanBuf     = 100 // buffer size for event channel
+	scrollLines      = 3   // number of lines to scroll per mouse wheel event
+	minHeight        = 5   // minimum viewport height
+	minSpacing       = 2   // minimum spacing for tagline row
+
+	// Permission modal line counts.
+	permissionBaseLines = 6 // title + blank + tool + blank + "Allow?" + buttons
+	pickerOverhead      = 3 // title + top/bottom padding
+	minPickerHeight     = 6 // minimum content lines for picker modal
+
+	// Model and role constants.
+	modelAuto       = "auto"
+	checkmarkSuffix = " ✓"
+	roleUser        = "user"
+	roleAssistant   = "assistant"
 )
 
 // helpKeyStyle renders keybinding keys.
@@ -26,11 +61,11 @@ var helpDescStyle = lipgloss.NewStyle().
 
 // createHelpModel creates a configured help model.
 func createHelpModel() help.Model {
-	h := help.New()
-	h.ShortSeparator = " • "
-	h.FullSeparator = "   "
-	h.Ellipsis = "…"
-	h.Styles = help.Styles{
+	helpModel := help.New()
+	helpModel.ShortSeparator = " • "
+	helpModel.FullSeparator = "   "
+	helpModel.Ellipsis = "…"
+	helpModel.Styles = help.Styles{
 		ShortKey:       helpKeyStyle,
 		ShortDesc:      helpDescStyle,
 		ShortSeparator: helpStyle,
@@ -39,20 +74,21 @@ func createHelpModel() help.Model {
 		FullDesc:       helpDescStyle,
 		FullSeparator:  helpStyle,
 	}
-	return h
+
+	return helpModel
 }
 
 // renderHelpOverlay renders the full help overlay modal matching the input area size.
 func (m *Model) renderHelpOverlay() string {
-	modalWidth := m.width - 2
-	contentWidth := max(modalWidth-4, 1)
+	modalWidth := m.width - modalPadding
+	contentWidth := max(modalWidth-contentPadding, 1)
 	clipStyle := lipgloss.NewStyle().MaxWidth(contentWidth).Inline(true)
 
 	// Compact help content fitting in input area height (3 lines of content)
 	var content strings.Builder
 	content.WriteString(clipStyle.Render(
-		helpKeyStyle.Render(keyEnter)+" send"+helpSep+
-			helpKeyStyle.Render("Alt+"+keyEnter)+" newline"+helpSep+
+		helpKeyStyle.Render(enterSymbol)+" send"+helpSep+
+			helpKeyStyle.Render("Alt+"+enterSymbol)+" newline"+helpSep+
 			helpKeyStyle.Render(keyArrows)+" history"+helpSep+
 			helpKeyStyle.Render(keyPageNav)+" scroll") + "\n")
 	content.WriteString(clipStyle.Render(
@@ -69,16 +105,17 @@ func (m *Model) renderHelpOverlay() string {
 	// Use same height as input area (inputHeight = 3)
 	contentStr := content.String()
 	modalStyle := createPickerModalStyle(modalWidth, inputHeight)
+
 	return modalStyle.Render(contentStr)
 }
 
 // renderShortHelp renders the context-aware footer help text using the KeyMap.
 // It intelligently truncates to fit available width while always showing "F1 help".
 func (m *Model) renderShortHelp() string {
-	availWidth := max(m.width-4, 20) // Account for padding
+	availWidth := max(m.width-contentPadding, 20) // Account for padding
 	helpToggle := helpKeyStyle.Render("F1") + " help"
 	helpToggleWidth := lipgloss.Width(helpToggle)
-	usableWidth := availWidth - helpToggleWidth - 3 // Space for separator
+	usableWidth := availWidth - helpToggleWidth - helpSepSpacing // Space for separator
 
 	parts := m.getContextHelpParts()
 	result := buildTruncatedHelp(parts, usableWidth)
@@ -87,6 +124,7 @@ func (m *Model) renderShortHelp() string {
 	if result != "" {
 		result += helpSep
 	}
+
 	result += helpToggle
 
 	return helpStyle.Render("  " + result)
@@ -126,10 +164,11 @@ func (m *Model) getModelPickerHelpParts() []string {
 	if m.modelFilterActive {
 		return getFilterModeHelpParts()
 	}
+
 	return []string{
 		helpKeyStyle.Render(keyArrows) + " select",
 		helpKeyStyle.Render("/") + " filter",
-		helpKeyStyle.Render(keyEnter) + " confirm",
+		helpKeyStyle.Render(enterSymbol) + " confirm",
 		helpKeyStyle.Render(keyEscape) + " cancel",
 	}
 }
@@ -139,7 +178,7 @@ func (m *Model) getSessionPickerHelpParts() []string {
 	switch {
 	case m.renamingSession:
 		return []string{
-			helpKeyStyle.Render(keyEnter) + " save",
+			helpKeyStyle.Render(enterSymbol) + " save",
 			helpKeyStyle.Render(keyEscape) + " cancel",
 		}
 	case m.confirmDeleteSession:
@@ -168,7 +207,7 @@ func (m *Model) getDefaultHelpParts() []string {
 	}
 
 	parts := []string{
-		helpKeyStyle.Render(keyEnter) + " send",
+		helpKeyStyle.Render(enterSymbol) + " send",
 	}
 
 	// Conditionally add copy hint
@@ -195,12 +234,14 @@ func (m *Model) getDefaultHelpParts() []string {
 // buildTruncatedHelp builds a help string that fits within maxWidth.
 func buildTruncatedHelp(parts []string, maxWidth int) string {
 	var result strings.Builder
+
 	currentWidth := 0
 
-	for i, part := range parts {
+	for idx, part := range parts {
 		partWidth := lipgloss.Width(part)
+
 		sepWidth := 0
-		if i > 0 {
+		if idx > 0 {
 			sepWidth = lipgloss.Width(helpSep)
 		}
 
@@ -208,10 +249,12 @@ func buildTruncatedHelp(parts []string, maxWidth int) string {
 			break
 		}
 
-		if i > 0 {
+		if idx > 0 {
 			result.WriteString(helpSep)
 		}
+
 		result.WriteString(part)
+
 		currentWidth += sepWidth + partWidth
 	}
 
@@ -221,7 +264,7 @@ func buildTruncatedHelp(parts []string, maxWidth int) string {
 // getFilterModeHelpParts returns help parts for filter mode (used by both model and session pickers).
 func getFilterModeHelpParts() []string {
 	return []string{
-		helpKeyStyle.Render(keyEnter) + " done",
+		helpKeyStyle.Render(enterSymbol) + " done",
 		helpKeyStyle.Render(keyEscape) + " clear",
 	}
 }
@@ -229,7 +272,7 @@ func getFilterModeHelpParts() []string {
 // hasToolsInMessages checks if any messages have tools.
 func (m *Model) hasToolsInMessages() bool {
 	for _, msg := range m.messages {
-		if msg.role == "assistant" && len(msg.tools) > 0 {
+		if msg.role == roleAssistant && len(msg.tools) > 0 {
 			return true
 		}
 	}
@@ -239,7 +282,7 @@ func (m *Model) hasToolsInMessages() bool {
 // hasAssistantMessages checks if there are any completed assistant messages.
 func (m *Model) hasAssistantMessages() bool {
 	for _, msg := range m.messages {
-		if msg.role == "assistant" && msg.content != "" && !msg.isStreaming {
+		if msg.role == roleAssistant && msg.content != "" && !msg.isStreaming {
 			return true
 		}
 	}

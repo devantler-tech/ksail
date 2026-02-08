@@ -43,13 +43,13 @@ func (m *Model) handleSessionPickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // handleSessionRenameKey handles keyboard input when renaming a session.
 func (m *Model) handleSessionRenameKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
-	case "enter":
+	case keyEnter:
 		return m.confirmSessionRename()
-	case "esc":
+	case keyEscape:
 		m.renamingSession = false
 		m.sessionRenameInput = ""
 		return m, nil
-	case "backspace":
+	case keyBackspace:
 		if len(m.sessionRenameInput) > 0 {
 			m.sessionRenameInput = m.sessionRenameInput[:len(m.sessionRenameInput)-1]
 		}
@@ -142,7 +142,7 @@ func (m *Model) refreshSessionList() error {
 // handleSessionPickerNavKey handles navigation keys in the session picker.
 func (m *Model) handleSessionPickerNavKey(msg tea.KeyMsg, totalItems int) (tea.Model, tea.Cmd) {
 	switch msg.String() {
-	case "esc":
+	case keyEscape:
 		m.showSessionPicker = false
 		m.sessionFilterText = ""
 		m.sessionFilterActive = false
@@ -156,12 +156,12 @@ func (m *Model) handleSessionPickerNavKey(msg tea.KeyMsg, totalItems int) (tea.M
 			m.sessionPickerIndex--
 		}
 		return m, nil
-	case "down", "j":
+	case keyDown, "j":
 		if m.sessionPickerIndex < totalItems-1 {
 			m.sessionPickerIndex++
 		}
 		return m, nil
-	case "d", "delete", "backspace":
+	case "d", "delete", keyBackspace:
 		if m.isValidSessionIndex() {
 			m.confirmDeleteSession = true
 		}
@@ -173,9 +173,9 @@ func (m *Model) handleSessionPickerNavKey(msg tea.KeyMsg, totalItems int) (tea.M
 			m.sessionRenameInput = session.GetDisplayName()
 		}
 		return m, nil
-	case "enter":
+	case keyEnter:
 		return m.selectSession()
-	case "ctrl+c":
+	case keyCtrlC:
 		m.cleanup()
 		m.quitting = true
 		return m, tea.Quit
@@ -186,22 +186,22 @@ func (m *Model) handleSessionPickerNavKey(msg tea.KeyMsg, totalItems int) (tea.M
 // handleSessionFilterKey handles keyboard input when filtering sessions.
 func (m *Model) handleSessionFilterKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
-	case "enter":
+	case keyEnter:
 		m.sessionFilterActive = false
 		return m, nil
-	case "esc":
+	case keyEscape:
 		// Clear filter and exit filter mode
 		m.sessionFilterText = ""
 		m.sessionFilterActive = false
 		m.applySessionFilter()
 		return m, nil
-	case "backspace":
+	case keyBackspace:
 		if len(m.sessionFilterText) > 0 {
 			m.sessionFilterText = m.sessionFilterText[:len(m.sessionFilterText)-1]
 			m.applySessionFilter()
 		}
 		return m, nil
-	case "ctrl+c":
+	case keyCtrlC:
 		m.cleanup()
 		m.quitting = true
 		return m, tea.Quit
@@ -220,7 +220,9 @@ func (m *Model) applySessionFilter() {
 		m.filteredSessions = m.availableSessions
 	} else {
 		filterLower := strings.ToLower(m.sessionFilterText)
+
 		m.filteredSessions = make([]SessionMetadata, 0)
+
 		for _, session := range m.availableSessions {
 			if strings.Contains(strings.ToLower(session.GetDisplayName()), filterLower) {
 				m.filteredSessions = append(m.filteredSessions, session)
@@ -354,29 +356,35 @@ func (m *Model) sessionEventsToMessages(
 ) []chatMessage {
 	var messages []chatMessage
 	userMsgIndex := 0
+
 	for _, event := range events {
 		var role, content string
+
+		//nolint:exhaustive // Only user and assistant messages are relevant for session history.
 		switch event.Type {
 		case copilot.UserMessage:
-			role = "user"
+			role = roleUser
+
 			if event.Data.Content != nil {
 				content = *event.Data.Content
 			}
 		case copilot.AssistantMessage:
-			role = "assistant"
+			role = roleAssistant
+
 			if event.Data.Content != nil {
 				content = *event.Data.Content
 			}
 		default:
 			continue
 		}
+
 		if content != "" {
 			msg := chatMessage{
 				role:    role,
 				content: content,
 			}
 			// Restore agentMode for user messages from metadata
-			if role == "user" {
+			if role == roleUser {
 				if userMsgIndex < len(metadata.Messages) {
 					msg.agentMode = metadata.Messages[userMsgIndex].AgentMode
 				} else {
@@ -412,8 +420,9 @@ func (m *Model) saveCurrentSession() error {
 	agentMode := m.agentMode
 	// Build per-message metadata
 	messageMetadata := make([]MessageMetadata, 0)
+
 	for _, msg := range m.messages {
-		if msg.role == "user" {
+		if msg.role == roleUser {
 			messageMetadata = append(messageMetadata, MessageMetadata{
 				AgentMode: msg.agentMode,
 			})
@@ -437,8 +446,8 @@ func (m *Model) saveCurrentSession() error {
 
 // renderSessionPickerModal renders the session picker as an inline modal section.
 func (m *Model) renderSessionPickerModal() string {
-	modalWidth := m.width - 2
-	contentWidth := max(modalWidth-4, 1)
+	modalWidth := m.width - modalPadding
+	contentWidth := max(modalWidth-contentPadding, 1)
 	clipStyle := lipgloss.NewStyle().MaxWidth(contentWidth).Inline(true)
 
 	totalItems := len(m.filteredSessions) + 1
@@ -467,7 +476,7 @@ func (m *Model) renderSessionPickerTitle(listContent *strings.Builder, clipStyle
 	if m.confirmDeleteSession && m.isValidSessionIndex() {
 		session := m.filteredSessions[m.sessionPickerIndex-1]
 		listContent.WriteString(clipStyle.Render(
-			lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(11)).Render(
+			lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(ansiYellow)).Render(
 				fmt.Sprintf("Delete \"%s\"?", truncateString(session.GetDisplayName(), maxSessionDisplayLength)),
 			),
 		) + "\n\n")
@@ -476,7 +485,7 @@ func (m *Model) renderSessionPickerTitle(listContent *strings.Builder, clipStyle
 
 	// Show filter input if filtering is active or has text
 	if m.sessionFilterActive || m.sessionFilterText != "" {
-		filterStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(14))
+		filterStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(ansiCyan))
 		cursor := ""
 		if m.sessionFilterActive {
 			cursor = "_"
@@ -516,11 +525,11 @@ func (m *Model) formatSessionItem(index int) (string, bool) {
 
 	if m.renamingSession && index == m.sessionPickerIndex {
 		inputStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.ANSIColor(15)).
-			Background(lipgloss.ANSIColor(8))
+			Foreground(lipgloss.ANSIColor(ansiWhite)).
+			Background(lipgloss.ANSIColor(ansiGray))
 		line := prefix + inputStyle.Render(m.sessionRenameInput+"_")
 		if session.ID == m.currentSessionID {
-			line += " ✓"
+			line += checkmarkSuffix
 		}
 		return line, session.ID == m.currentSessionID
 	}
@@ -530,8 +539,9 @@ func (m *Model) formatSessionItem(index int) (string, bool) {
 	line := fmt.Sprintf("%s%s (%s)", prefix, name, timeAgo)
 	isCurrentSession := session.ID == m.currentSessionID
 	if isCurrentSession {
-		line += " ✓"
+		line += checkmarkSuffix
 	}
+
 	return line, isCurrentSession
 }
 

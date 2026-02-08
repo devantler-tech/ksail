@@ -1,7 +1,6 @@
 package chat
 
 import (
-	"fmt"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -74,7 +73,7 @@ func (m *Model) renderPermissionModal() string {
 	modalWidth := m.width - 2
 	contentWidth := max(modalWidth-4, 1)
 	clipStyle := lipgloss.NewStyle().MaxWidth(contentWidth).Inline(true)
-	warningStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(11))
+	warningStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(ansiYellow))
 
 	var content strings.Builder
 	contentLines := 0
@@ -83,20 +82,23 @@ func (m *Model) renderPermissionModal() string {
 	contentLines += 2
 
 	humanName := humanizeToolName(m.pendingPermission.toolName)
-	content.WriteString(clipStyle.Render(fmt.Sprintf("Tool: %s", humanName)) + "\n")
+	content.WriteString(clipStyle.Render("Tool: " + humanName) + "\n")
+
 	contentLines++
 
 	if m.pendingPermission.command != "" {
 		content.WriteString(
-			clipStyle.Render(fmt.Sprintf("Command: %s", m.pendingPermission.command)) + "\n",
+			clipStyle.Render("Command: "+m.pendingPermission.command) + "\n",
 		)
+
 		contentLines++
 	}
 
 	if m.pendingPermission.arguments != "" {
 		content.WriteString(
-			clipStyle.Render(fmt.Sprintf("Arguments: %s", m.pendingPermission.arguments)) + "\n",
+			clipStyle.Render("Arguments: "+m.pendingPermission.arguments) + "\n",
 		)
+
 		contentLines++
 	}
 
@@ -105,7 +107,7 @@ func (m *Model) renderPermissionModal() string {
 
 	modalStyle := lipgloss.NewStyle().
 		BorderStyle(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.ANSIColor(11)).
+		BorderForeground(lipgloss.ANSIColor(ansiYellow)).
 		PaddingLeft(1).
 		PaddingRight(1).
 		Width(modalWidth).

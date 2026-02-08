@@ -10,6 +10,15 @@ import (
 // logoHeight is the number of lines in the block letter logo (must be const for headerHeight calculation).
 const logoHeight = 6
 
+// ANSI color constants for picker and modal styling.
+const (
+	ansiGray   = 8
+	ansiGreen  = 10
+	ansiYellow = 11
+	ansiCyan   = 14
+	ansiWhite  = 15
+)
+
 // Logo functions that delegate to the shared asciiart package.
 var (
 	// logo returns the ASCII art block letter logo.
@@ -179,7 +188,7 @@ func renderPickerModal(content string, modalWidth, visibleCount int, isScrollabl
 }
 
 // scrollIndicatorStyle is the style for scroll indicators in pickers.
-var scrollIndicatorStyle = lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8))
+var scrollIndicatorStyle = lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(ansiGray))
 
 // renderScrollIndicatorTop renders the "more above" indicator for a picker.
 func renderScrollIndicatorTop(

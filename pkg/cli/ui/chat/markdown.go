@@ -7,11 +7,29 @@ import (
 	"github.com/charmbracelet/glamour/ansi"
 )
 
+// listLevelIndent is the indentation depth for list items.
+const listLevelIndent = 2
+
 // createRenderer creates a glamour renderer with a static dark style.
 // This avoids terminal queries that can cause escape sequences to be captured as input.
 func createRenderer(width int) *glamour.TermRenderer {
-	// Use a completely static style definition to avoid any terminal queries
-	style := ansi.StyleConfig{
+	style := defaultMarkdownStyle()
+
+	renderer, err := glamour.NewTermRenderer(
+		glamour.WithStyles(style),
+		glamour.WithWordWrap(width),
+	)
+	if err != nil {
+		return nil
+	}
+
+	return renderer
+}
+
+// defaultMarkdownStyle returns a static dark style configuration for glamour.
+// Uses a completely static style definition to avoid any terminal queries.
+func defaultMarkdownStyle() ansi.StyleConfig {
+	return ansi.StyleConfig{
 		Document: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
 				BlockPrefix: "",
@@ -45,7 +63,7 @@ func createRenderer(width int) *glamour.TermRenderer {
 			Margin:         uintPtr(0),
 		},
 		List: ansi.StyleList{
-			LevelIndent: 2,
+			LevelIndent: listLevelIndent,
 		},
 		Item: ansi.StylePrimitive{
 			BlockPrefix: "• ",
@@ -108,15 +126,6 @@ func createRenderer(width int) *glamour.TermRenderer {
 			Color: stringPtr("45"),
 		},
 	}
-
-	r, err := glamour.NewTermRenderer(
-		glamour.WithStyles(style),
-		glamour.WithWordWrap(width),
-	)
-	if err != nil {
-		return nil
-	}
-	return r
 }
 
 // renderMarkdownWithRenderer renders markdown using the provided renderer.

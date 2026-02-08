@@ -19,7 +19,7 @@ func (m *Model) handleModelPickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	switch msg.String() {
-	case "esc", "ctrl+o":
+	case keyEscape, "ctrl+o":
 		m.showModelPicker = false
 		m.modelFilterText = ""
 		m.modelFilterActive = false
@@ -33,14 +33,14 @@ func (m *Model) handleModelPickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.modelPickerIndex--
 		}
 		return m, nil
-	case "down", "j":
+	case keyDown, "j":
 		if m.modelPickerIndex < totalItems-1 {
 			m.modelPickerIndex++
 		}
 		return m, nil
-	case "enter":
+	case keyEnter:
 		return m.selectModel(totalItems)
-	case "ctrl+c":
+	case keyCtrlC:
 		m.cleanup()
 		m.quitting = true
 		return m, tea.Quit
@@ -51,22 +51,22 @@ func (m *Model) handleModelPickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // handleModelFilterKey handles keyboard input when filtering models.
 func (m *Model) handleModelFilterKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
-	case "enter":
+	case keyEnter:
 		m.modelFilterActive = false
 		return m, nil
-	case "esc":
+	case keyEscape:
 		// Clear filter and exit filter mode
 		m.modelFilterText = ""
 		m.modelFilterActive = false
 		m.applyModelFilter()
 		return m, nil
-	case "backspace":
+	case keyBackspace:
 		if len(m.modelFilterText) > 0 {
 			m.modelFilterText = m.modelFilterText[:len(m.modelFilterText)-1]
 			m.applyModelFilter()
 		}
 		return m, nil
-	case "ctrl+c":
+	case keyCtrlC:
 		m.cleanup()
 		m.quitting = true
 		return m, tea.Quit
@@ -85,7 +85,9 @@ func (m *Model) applyModelFilter() {
 		m.filteredModels = m.availableModels
 	} else {
 		filterLower := strings.ToLower(m.modelFilterText)
+
 		m.filteredModels = make([]copilot.ModelInfo, 0)
+
 		for _, model := range m.availableModels {
 			if strings.Contains(strings.ToLower(model.ID), filterLower) {
 				m.filteredModels = append(m.filteredModels, model)
@@ -103,7 +105,7 @@ func (m *Model) applyModelFilter() {
 func (m *Model) selectModel(totalItems int) (tea.Model, tea.Cmd) {
 	if m.modelPickerIndex == 0 {
 		// "auto" option selected
-		if m.currentModel != "" && m.currentModel != "auto" {
+		if m.currentModel != "" && m.currentModel != modelAuto {
 			return m.switchModel("")
 		}
 	} else if m.modelPickerIndex > 0 && m.modelPickerIndex < totalItems {
@@ -149,8 +151,8 @@ func (m *Model) switchModel(newModelID string) (tea.Model, tea.Cmd) {
 
 // renderModelPickerModal renders the model picker as an inline modal section.
 func (m *Model) renderModelPickerModal() string {
-	modalWidth := m.width - 2
-	contentWidth := max(modalWidth-4, 1)
+	modalWidth := m.width - modalPadding
+	contentWidth := max(modalWidth-contentPadding, 1)
 	clipStyle := lipgloss.NewStyle().MaxWidth(contentWidth).Inline(true)
 
 	totalItems := len(m.filteredModels) + 1
@@ -178,7 +180,8 @@ func (m *Model) renderModelPickerModal() string {
 func (m *Model) renderModelPickerTitle(listContent *strings.Builder, clipStyle lipgloss.Style) {
 	// Show filter input if filtering is active or has text
 	if m.modelFilterActive || m.modelFilterText != "" {
-		filterStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(14))
+		filterStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(ansiCyan))
+
 		cursor := ""
 		if m.modelFilterActive {
 			cursor = "_"
@@ -212,9 +215,9 @@ func (m *Model) formatModelItem(index int) (string, bool) {
 
 	if index == 0 {
 		line := prefix + "auto (let Copilot choose)"
-		isCurrentModel := m.currentModel == "" || m.currentModel == "auto"
+		isCurrentModel := m.currentModel == "" || m.currentModel == modelAuto
 		if isCurrentModel {
-			line += " ✓"
+			line += checkmarkSuffix
 		}
 		return line, isCurrentModel
 	}

@@ -1,13 +1,15 @@
 package chat
 
 import (
-	"errors"
 	"fmt"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	copilot "github.com/github/copilot-sdk/go"
 )
+
+// errStreamEvent is a sentinel error for stream event errors.
+var errStreamEvent = fmt.Errorf("stream event error")
 
 // sessionEventDispatcher routes SDK session events to the appropriate tea.Msg channel.
 // It converts Copilot SDK events into chat-specific messages for the TUI.
@@ -22,6 +24,7 @@ func newSessionEventDispatcher(eventChan chan<- tea.Msg) *sessionEventDispatcher
 
 // dispatch routes a Copilot session event to the appropriate handler.
 func (d *sessionEventDispatcher) dispatch(event copilot.SessionEvent) {
+	//nolint:exhaustive // Only handling events relevant to the chat TUI.
 	switch event.Type {
 	case copilot.AssistantTurnStart:
 		d.handleTurnStart()
@@ -31,10 +34,8 @@ func (d *sessionEventDispatcher) dispatch(event copilot.SessionEvent) {
 		d.handleMessage(event)
 	case copilot.AssistantReasoning, copilot.AssistantReasoningDelta:
 		d.handleReasoning(event)
-	case copilot.SessionIdle:
-		d.handleSessionIdle()
-	case copilot.AssistantTurnEnd:
-		d.handleTurnEnd()
+	case copilot.SessionIdle, copilot.AssistantTurnEnd:
+		d.handleSessionLifecycle(event.Type)
 	case copilot.Abort:
 		d.handleAbort()
 	case copilot.SessionError:
@@ -45,6 +46,16 @@ func (d *sessionEventDispatcher) dispatch(event copilot.SessionEvent) {
 		d.handleToolComplete(event)
 	case copilot.SessionSnapshotRewind:
 		d.handleSnapshotRewind()
+	}
+}
+
+func (d *sessionEventDispatcher) handleSessionLifecycle(eventType copilot.SessionEventType) {
+	switch eventType {
+	case copilot.SessionIdle:
+		d.eventChan <- streamEndMsg{}
+	case copilot.AssistantTurnEnd:
+		d.eventChan <- turnEndMsg{}
+	default:
 	}
 }
 
@@ -78,14 +89,6 @@ func (d *sessionEventDispatcher) handleReasoning(event copilot.SessionEvent) {
 	}
 }
 
-func (d *sessionEventDispatcher) handleSessionIdle() {
-	d.eventChan <- streamEndMsg{}
-}
-
-func (d *sessionEventDispatcher) handleTurnEnd() {
-	d.eventChan <- turnEndMsg{}
-}
-
 func (d *sessionEventDispatcher) handleAbort() {
 	d.eventChan <- abortMsg{}
 }
@@ -96,7 +99,7 @@ func (d *sessionEventDispatcher) handleSessionError(event copilot.SessionEvent) 
 		errMsg = *event.Data.Message
 	}
 
-	d.eventChan <- streamErrMsg{err: errors.New(errMsg)}
+	d.eventChan <- streamErrMsg{err: fmt.Errorf("%w: %s", errStreamEvent, errMsg)}
 }
 
 func (d *sessionEventDispatcher) handleToolStart(event copilot.SessionEvent) {

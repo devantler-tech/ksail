@@ -3,6 +3,7 @@ package cmd
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -24,6 +25,29 @@ import (
 	copilot "github.com/github/copilot-sdk/go"
 	"github.com/spf13/cobra"
 	"sigs.k8s.io/yaml"
+)
+
+// Chat command constants.
+const (
+	// signalExitCode is the standard exit code for Ctrl+C / SIGINT.
+	signalExitCode = 130
+	// eventChannelBuffer is the buffer size for TUI event channels.
+	eventChannelBuffer = 100
+	// outputChannelBuffer is the buffer size for tool output streaming channels.
+	outputChannelBuffer = 100
+	// defaultTimeoutMinutes is the default response timeout in minutes.
+	defaultTimeoutMinutes = 5
+	// signalSleepDuration is the delay before exiting after a signal to allow cleanup.
+	signalSleepDuration = 50 * time.Millisecond
+	// permissionTimeoutMinutes is the timeout for permission requests.
+	permissionTimeoutMinutes = 5
+)
+
+// Sentinel errors for the chat command.
+var (
+	errNotAuthenticated = errors.New("not authenticated with GitHub Copilot")
+	errResponseTimeout  = errors.New("response timeout")
+	errSessionError     = errors.New("session error")
 )
 
 // chatFlags holds parsed flags for the chat command.
@@ -86,10 +110,11 @@ func validateCopilotAuth(client *copilot.Client) (string, error) {
 
 	if !authStatus.IsAuthenticated {
 		return "", fmt.Errorf(
-			"not authenticated with GitHub Copilot\n\n" +
-				"To fix:\n" +
-				"  1. Run: gh auth login\n" +
+			"%w\n\n"+
+				"To fix:\n"+
+				"  1. Run: gh auth login\n"+
 				"  2. Ensure you have an active GitHub Copilot subscription",
+			errNotAuthenticated,
 		)
 	}
 
@@ -149,7 +174,10 @@ Write operations require explicit confirmation before execution.`,
 	// Optional flags
 	cmd.Flags().StringP("model", "m", "", "Model to use (e.g., gpt-5, claude-sonnet-4)")
 	cmd.Flags().BoolP("streaming", "s", true, "Enable streaming responses")
-	cmd.Flags().DurationP("timeout", "t", 5*time.Minute, "Response timeout duration")
+	cmd.Flags().DurationP(
+		"timeout", "t", defaultTimeoutMinutes*time.Minute,
+		"Response timeout duration",
+	)
 	cmd.Flags().Bool("tui", true, "Use interactive TUI mode with markdown rendering")
 
 	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
@@ -175,8 +203,8 @@ func setupNonTUISignalHandler(
 			Writer:  writer,
 		})
 		cancel()
-		time.Sleep(50 * time.Millisecond)
-		os.Exit(130)
+		time.Sleep(signalSleepDuration)
+		os.Exit(signalExitCode)
 	}()
 }
 
@@ -209,7 +237,7 @@ func runNonTUIChat(
 	defer func() {
 		select {
 		case <-ctx.Done():
-			os.Exit(130)
+			os.Exit(signalExitCode)
 		default:
 			_ = session.Destroy()
 		}
@@ -220,7 +248,7 @@ func runNonTUIChat(
 		Content: "Chat session started. Type 'exit' or 'quit' to end the session.",
 		Writer:  writer,
 	})
-	fmt.Fprintln(writer, "")
+	_, _ = fmt.Fprintln(writer, "")
 
 	return runChatInteractiveLoop(ctx, session, flags.streaming, flags.timeout, writer)
 }
@@ -252,7 +280,7 @@ func handleChatRunE(cmd *cobra.Command) error {
 	defer func() {
 		select {
 		case <-ctx.Done():
-			os.Exit(130)
+			os.Exit(signalExitCode)
 		default:
 			_ = client.Stop()
 		}
@@ -266,7 +294,7 @@ func handleChatRunE(cmd *cobra.Command) error {
 	if !flags.useTUI {
 		notify.WriteMessage(notify.Message{
 			Type:    notify.InfoType,
-			Content: fmt.Sprintf("Authenticated as %s", loginName),
+			Content: "Authenticated as " + loginName,
 			Writer:  writer,
 		})
 	}
@@ -275,7 +303,7 @@ func handleChatRunE(cmd *cobra.Command) error {
 	if err != nil && !flags.useTUI {
 		notify.WriteMessage(notify.Message{
 			Type:    notify.WarningType,
-			Content: fmt.Sprintf("Could not load full context: %v", err),
+			Content: "Could not load full context: " + err.Error(),
 			Writer:  writer,
 		})
 	}
@@ -289,41 +317,27 @@ func handleChatRunE(cmd *cobra.Command) error {
 	return runNonTUIChat(ctx, client, sessionConfig, flags, cmd, writer)
 }
 
-// runTUIChat starts the TUI chat mode.
-func runTUIChat(
-	ctx context.Context,
-	client *copilot.Client,
-	sessionConfig *copilot.SessionConfig,
-	timeout time.Duration,
-	rootCmd *cobra.Command,
-) error {
-	// Fetch available models
-	allModels, err := client.ListModels()
-	if err != nil {
-		return fmt.Errorf("failed to list models: %w", err)
-	}
-
-	// Filter to only enabled models
+// filterEnabledModels returns only models with an enabled policy state.
+func filterEnabledModels(allModels []copilot.ModelInfo) []copilot.ModelInfo {
 	var models []copilot.ModelInfo
+
 	for _, m := range allModels {
 		if m.Policy != nil && m.Policy.State == "enabled" {
 			models = append(models, m)
 		}
 	}
 
-	// Determine current model (from config, empty means "auto" - let Copilot choose)
-	currentModel := sessionConfig.Model
+	return models
+}
 
-	// Create event channel for TUI communication
-	eventChan := make(chan tea.Msg, 100)
-
-	// Create output channel for real-time tool output streaming
-	outputChan := make(chan toolgen.OutputChunk, 100)
-
-	// Track when forwarder goroutine exits
+// startOutputForwarder forwards tool output chunks to the TUI event channel.
+// Returns a WaitGroup that completes when the forwarder goroutine exits.
+func startOutputForwarder(
+	outputChan <-chan toolgen.OutputChunk,
+	eventChan chan<- tea.Msg,
+) *sync.WaitGroup {
 	var forwarderWg sync.WaitGroup
 
-	// Forward output chunks to the TUI event channel
 	forwarderWg.Go(func() {
 		for chunk := range outputChan {
 			eventChan <- chatui.ToolOutputChunkMsg{
@@ -333,51 +347,61 @@ func runTUIChat(
 		}
 	})
 
-	// Set up tools with real-time output streaming
+	return &forwarderWg
+}
+
+// runTUIChat starts the TUI chat mode.
+func runTUIChat(
+	ctx context.Context,
+	client *copilot.Client,
+	sessionConfig *copilot.SessionConfig,
+	timeout time.Duration,
+	rootCmd *cobra.Command,
+) error {
+	allModels, err := client.ListModels()
+	if err != nil {
+		return fmt.Errorf("failed to list models: %w", err)
+	}
+
+	models := filterEnabledModels(allModels)
+	currentModel := sessionConfig.Model
+	eventChan := make(chan tea.Msg, eventChannelBuffer)
+	outputChan := make(chan toolgen.OutputChunk, outputChannelBuffer)
+	forwarderWg := startOutputForwarder(outputChan, eventChan)
+
 	// Tool handlers create their own timeout context since SDK's ToolHandler interface doesn't include context.
 	tools, toolMetadata := chatsvc.GetKSailToolMetadata(rootCmd, outputChan) //nolint:contextcheck
-
-	// Create a shared agent mode reference that can be updated by the TUI
-	// Default to agent mode (true = execute tools, false = plan only)
 	agentModeRef := chatui.NewAgentModeRef(true)
-
-	// Wrap tools with permission prompts and mode enforcement
 	tools = WrapToolsWithPermissionAndModeMetadata(tools, eventChan, agentModeRef, toolMetadata)
 	sessionConfig.Tools = tools
-
-	// Set up permission handler for non-KSail tools (git, shell, etc.)
 	sessionConfig.OnPermissionRequest = chatui.CreateTUIPermissionHandler(eventChan)
 
-	// Create session
 	session, err := client.CreateSession(sessionConfig)
 	if err != nil {
 		close(outputChan)
 		forwarderWg.Wait()
+
 		return fmt.Errorf("failed to create chat session: %w", err)
 	}
-	// Cleanup with forced exit on interrupt to prevent hanging
+
 	defer func() {
-		close(outputChan)  // Close output channel to stop forwarder goroutine
-		forwarderWg.Wait() // Wait for forwarder to exit before proceeding
+		close(outputChan)
+		forwarderWg.Wait()
+
 		select {
 		case <-ctx.Done():
-			// If interrupted, force exit without waiting for cleanup
-			os.Exit(130) // Standard exit code for Ctrl+C
+			os.Exit(signalExitCode)
 		default:
 			_ = session.Destroy()
 		}
 	}()
 
-	return chatui.RunWithEventChannelAndModeRef(
-		ctx,
-		session,
-		client,
-		sessionConfig,
-		models,
-		currentModel,
-		timeout,
-		eventChan,
-		agentModeRef,
+	return fmt.Errorf(
+		"TUI chat failed: %w",
+		chatui.RunWithEventChannelAndModeRef(
+			ctx, session, client, sessionConfig,
+			models, currentModel, timeout, eventChan, agentModeRef,
+		),
 	)
 }
 
@@ -387,13 +411,80 @@ type inputResult struct {
 	err   error
 }
 
-// runChatInteractiveLoop runs the interactive chat loop.
-// It handles user input and AI responses until the user exits or the context is cancelled.
+// readUserInput prompts for and reads user input, supporting context cancellation.
+// Returns the trimmed input string, or an error if reading fails or context is cancelled.
+// Returns io.EOF when the input stream ends (e.g., piped input).
 //
 // NOTE: The stdin reading goroutine cannot be interrupted once started, as Go's
 // bufio.Reader.ReadString blocks until input or EOF. If context is cancelled
 // before input arrives, one goroutine will remain blocked until process exit.
 // This is a known Go limitation with blocking stdin reads.
+func readUserInput(
+	ctx context.Context,
+	reader *bufio.Reader,
+	inputChan chan inputResult,
+	writer io.Writer,
+) (string, error) {
+	_, _ = fmt.Fprint(writer, "You: ")
+
+	go func() {
+		input, readErr := reader.ReadString('\n')
+		inputChan <- inputResult{input: input, err: readErr}
+	}()
+
+	select {
+	case <-ctx.Done():
+		return "", fmt.Errorf("input cancelled: %w", ctx.Err())
+	case result := <-inputChan:
+		if result.err != nil {
+			if errors.Is(result.err, io.EOF) {
+				return "", io.EOF
+			}
+
+			return "", fmt.Errorf("failed to read input: %w", result.err)
+		}
+
+		return strings.TrimSpace(result.input), nil
+	}
+}
+
+// sendAndDisplayResponse sends a chat message and displays the response.
+func sendAndDisplayResponse(
+	ctx context.Context,
+	session *copilot.Session,
+	input string,
+	streaming bool,
+	timeout time.Duration,
+	writer io.Writer,
+) error {
+	_, _ = fmt.Fprint(writer, "\nAssistant: ")
+
+	var sendErr error
+	if streaming {
+		sendErr = sendChatWithStreaming(ctx, session, input, timeout, writer)
+	} else {
+		sendErr = sendChatWithoutStreaming(ctx, session, input, timeout, writer)
+	}
+
+	if sendErr != nil {
+		if ctx.Err() != nil {
+			return fmt.Errorf("chat interrupted: %w", ctx.Err())
+		}
+
+		notify.WriteMessage(notify.Message{
+			Type:    notify.ErrorType,
+			Content: "Error: " + sendErr.Error(),
+			Writer:  writer,
+		})
+	}
+
+	_, _ = fmt.Fprintln(writer, "")
+
+	return nil
+}
+
+// runChatInteractiveLoop runs the interactive chat loop.
+// It handles user input and AI responses until the user exits or the context is cancelled.
 func runChatInteractiveLoop(
 	ctx context.Context,
 	session *copilot.Session,
@@ -405,76 +496,91 @@ func runChatInteractiveLoop(
 	inputChan := make(chan inputResult, 1)
 
 	for {
-		// Check for cancellation before prompting
-		select {
-		case <-ctx.Done():
+		input, err := readUserInput(ctx, reader, inputChan, writer)
+		if errors.Is(err, io.EOF) || ctx.Err() != nil {
+			//nolint:nilerr // EOF and context cancellation are graceful exit conditions, not errors.
 			return nil
-		default:
 		}
 
-		// Prompt
-		fmt.Fprint(writer, "You: ")
-
-		// Read input in a goroutine so we can respond to context cancellation.
-		// Note: This goroutine will block on ReadString until input arrives or EOF.
-		// If context is cancelled first, the goroutine remains blocked until process exit.
-		go func() {
-			input, err := reader.ReadString('\n')
-			inputChan <- inputResult{input: input, err: err}
-		}()
-
-		// Wait for either input or cancellation
-		var input string
-		select {
-		case <-ctx.Done():
-			return nil
-		case result := <-inputChan:
-			if result.err != nil {
-				if result.err == io.EOF {
-					return nil // Graceful exit on EOF (e.g., piped input)
-				}
-				return fmt.Errorf("failed to read input: %w", result.err)
-			}
-			input = strings.TrimSpace(result.input)
+		if err != nil {
+			return err
 		}
 
 		if input == "" {
 			continue
 		}
 
-		// Check for exit commands
 		if isExitCommand(input) {
 			notify.WriteMessage(notify.Message{
 				Type:    notify.InfoType,
 				Content: "Chat session ended. Goodbye!",
 				Writer:  writer,
 			})
+
 			return nil
 		}
 
-		// Send message and handle response
-		fmt.Fprint(writer, "\nAssistant: ")
+		sendErr := sendAndDisplayResponse(
+			ctx, session, input, streaming, timeout, writer,
+		)
+		if sendErr != nil {
+			return sendErr
+		}
+	}
+}
 
-		var err error
-		if streaming {
-			err = sendChatWithStreaming(ctx, session, input, timeout, writer)
-		} else {
-			err = sendChatWithoutStreaming(ctx, session, input, timeout, writer)
+// streamingState manages the state of a streaming chat response.
+type streamingState struct {
+	done        chan struct{}
+	responseErr error
+	mu          sync.Mutex
+	closed      bool
+}
+
+// markDone signals that streaming is complete.
+func (s *streamingState) markDone() {
+	if !s.closed {
+		s.closed = true
+		close(s.done)
+	}
+}
+
+// handleStreamingEvent processes a single streaming session event.
+func handleStreamingEvent(
+	event copilot.SessionEvent,
+	writer io.Writer,
+	state *streamingState,
+) {
+	state.mu.Lock()
+	defer state.mu.Unlock()
+
+	if state.closed {
+		return
+	}
+
+	//nolint:exhaustive // Only a subset of ~30 SDK event types are relevant for streaming display.
+	switch event.Type {
+	case copilot.AssistantMessageDelta:
+		if event.Data.DeltaContent != nil {
+			_, _ = fmt.Fprint(writer, *event.Data.DeltaContent)
+		}
+	case copilot.SessionIdle:
+		state.markDone()
+	case copilot.SessionError:
+		if event.Data.Message != nil {
+			state.responseErr = fmt.Errorf("%w: %s", errSessionError, *event.Data.Message)
 		}
 
-		if err != nil {
-			// Check if error was due to context cancellation
-			if ctx.Err() != nil {
-				return ctx.Err()
-			}
-			notify.WriteMessage(notify.Message{
-				Type:    notify.ErrorType,
-				Content: fmt.Sprintf("Error: %v", err),
-				Writer:  writer,
-			})
-		}
+		state.markDone()
+	case copilot.ToolExecutionStart:
+		toolName := getToolName(event)
+		toolArgs := getToolArgs(event)
 
-		fmt.Fprintln(writer, "")
+		_, _ = fmt.Fprintf(writer, "\n🔧 Running: %s%s\n", toolName, toolArgs)
+	case copilot.ToolExecutionComplete:
+		_, _ = fmt.Fprint(writer, "✓ Done\n")
+	default:
+		// Ignore other event types
 	}
 }
 
@@ -487,62 +593,27 @@ func sendChatWithStreaming(
 	timeout time.Duration,
 	writer io.Writer,
 ) error {
-	done := make(chan struct{})
-	var responseErr error
-	var mu sync.Mutex
-	closed := false
+	state := &streamingState{done: make(chan struct{})}
 
 	unsubscribe := session.On(func(event copilot.SessionEvent) {
-		mu.Lock()
-		defer mu.Unlock()
-
-		if closed {
-			return
-		}
-
-		switch event.Type {
-		case copilot.AssistantMessageDelta:
-			if event.Data.DeltaContent != nil {
-				fmt.Fprint(writer, *event.Data.DeltaContent)
-			}
-		case copilot.SessionIdle:
-			if !closed {
-				closed = true
-				close(done)
-			}
-		case copilot.SessionError:
-			if event.Data.Message != nil {
-				responseErr = fmt.Errorf("%s", *event.Data.Message)
-			}
-			if !closed {
-				closed = true
-				close(done)
-			}
-		case copilot.ToolExecutionStart:
-			toolName := getToolName(event)
-			toolArgs := getToolArgs(event)
-			fmt.Fprintf(writer, "\n🔧 Running: %s%s\n", toolName, toolArgs)
-		case copilot.ToolExecutionComplete:
-			fmt.Fprint(writer, "✓ Done\n")
-		}
+		handleStreamingEvent(event, writer, state)
 	})
 	defer unsubscribe()
 
 	_, err := session.Send(copilot.MessageOptions{Prompt: input})
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to send chat message: %w", err)
 	}
 
-	// Wait for completion with timeout and context cancellation
 	select {
-	case <-done:
+	case <-state.done:
 	case <-ctx.Done():
-		return ctx.Err()
+		return fmt.Errorf("streaming cancelled: %w", ctx.Err())
 	case <-time.After(timeout):
-		return fmt.Errorf("response timeout after %v", timeout)
+		return fmt.Errorf("%w after %v", errResponseTimeout, timeout)
 	}
 
-	return responseErr
+	return state.responseErr
 }
 
 // sendChatWithoutStreaming sends a message and waits for the complete response.
@@ -558,6 +629,7 @@ func sendChatWithoutStreaming(
 		response *copilot.SessionEvent
 		err      error
 	}
+
 	resultChan := make(chan result, 1)
 
 	go func() {
@@ -567,14 +639,16 @@ func sendChatWithoutStreaming(
 
 	select {
 	case <-ctx.Done():
-		return ctx.Err()
-	case r := <-resultChan:
-		if r.err != nil {
-			return r.err
+		return fmt.Errorf("chat cancelled: %w", ctx.Err())
+	case chatResult := <-resultChan:
+		if chatResult.err != nil {
+			return fmt.Errorf("failed to send chat message: %w", chatResult.err)
 		}
-		if r.response != nil && r.response.Data.Content != nil {
-			fmt.Fprintln(writer, *r.response.Data.Content)
+
+		if chatResult.response != nil && chatResult.response.Data.Content != nil {
+			_, _ = fmt.Fprintln(writer, *chatResult.response.Data.Content)
 		}
+
 		return nil
 	}
 }
@@ -582,6 +656,7 @@ func sendChatWithoutStreaming(
 // isExitCommand checks if the input is an exit command.
 func isExitCommand(input string) bool {
 	lower := strings.ToLower(input)
+
 	return lower == "exit" || lower == "quit" || lower == "q" || lower == "/exit" ||
 		lower == "/quit"
 }
@@ -591,6 +666,7 @@ func getToolName(event copilot.SessionEvent) string {
 	if event.Data.ToolName != nil {
 		return *event.Data.ToolName
 	}
+
 	return "unknown"
 }
 
@@ -599,17 +675,21 @@ func getToolArgs(event copilot.SessionEvent) string {
 	if event.Data.Arguments == nil {
 		return ""
 	}
+
 	args, ok := event.Data.Arguments.(map[string]any)
 	if !ok {
 		return ""
 	}
+
 	parts := make([]string, 0, len(args))
 	for k, v := range args {
 		parts = append(parts, fmt.Sprintf("%s=%v", k, v))
 	}
+
 	if len(parts) == 0 {
 		return ""
 	}
+
 	return " (" + strings.Join(parts, ", ") + ")"
 }
 
@@ -625,13 +705,73 @@ func formatToolArguments(args any) string {
 	for k := range params {
 		keys = append(keys, k)
 	}
+
 	slices.Sort(keys)
 
 	parts := make([]string, 0, len(keys))
 	for _, k := range keys {
 		parts = append(parts, fmt.Sprintf("%s=%v", k, params[k]))
 	}
+
 	return strings.Join(parts, ", ")
+}
+
+// buildPlanModeBlockedResult creates a ToolResult indicating tool execution was blocked in plan mode.
+func buildPlanModeBlockedResult(toolName string) (copilot.ToolResult, error) {
+	cmdDescription := strings.ReplaceAll(toolName, "_", " ")
+
+	return copilot.ToolResult{
+		TextResultForLLM: "Tool execution blocked - currently in Plan mode.\n" +
+			"Tool: " + cmdDescription + "\n" +
+			"In Plan mode, I can only describe what I would do, not execute tools.\n" +
+			"Switch to Agent mode (press Tab) to execute tools.",
+		ResultType: "failure",
+		SessionLog: "[PLAN MODE BLOCKED] " + cmdDescription,
+		Error:      "Tool execution blocked in plan mode: " + toolName,
+	}, nil
+}
+
+// awaitToolPermission sends a permission request to the TUI and waits for user response.
+// Returns the approval state and an optional denial/timeout ToolResult.
+func awaitToolPermission(
+	eventChan chan tea.Msg,
+	toolName string,
+	invocation copilot.ToolInvocation,
+) (bool, *copilot.ToolResult) {
+	responseChan := make(chan bool, 1)
+	cmdDescription := strings.ReplaceAll(toolName, "_", " ")
+
+	eventChan <- chatui.PermissionRequestMsg{
+		ToolCallID: invocation.ToolCallID,
+		ToolName:   toolName,
+		Command:    cmdDescription,
+		Arguments:  formatToolArguments(invocation.Arguments),
+		Response:   responseChan,
+	}
+
+	var approved bool
+
+	select {
+	case approved = <-responseChan:
+	case <-time.After(permissionTimeoutMinutes * time.Minute):
+		return false, &copilot.ToolResult{
+			TextResultForLLM: "Permission request timed out for: " + cmdDescription + "\n" +
+				"The user did not respond within the timeout period.",
+			ResultType: "failure",
+			SessionLog: "[TIMEOUT] " + cmdDescription,
+		}
+	}
+
+	if !approved {
+		return false, &copilot.ToolResult{
+			TextResultForLLM: "Permission denied by user for: " + cmdDescription + "\n" +
+				"The user chose not to allow this operation.",
+			ResultType: "failure",
+			SessionLog: "[DENIED] " + cmdDescription,
+		}
+	}
+
+	return true, nil
 }
 
 // WrapToolsWithPermissionAndModeMetadata wraps ALL tools with mode enforcement and permission prompts.
@@ -655,24 +795,11 @@ func WrapToolsWithPermissionAndModeMetadata(
 		toolName := tool.Name
 
 		wrappedTools[toolIdx].Handler = func(invocation copilot.ToolInvocation) (copilot.ToolResult, error) {
-			// Check if agent mode is enabled - if not, block ALL tool execution
 			if agentModeRef != nil && !agentModeRef.IsEnabled() {
-				cmdDescription := strings.ReplaceAll(toolName, "_", " ")
-				return copilot.ToolResult{
-					TextResultForLLM: fmt.Sprintf(
-						"Tool execution blocked - currently in Plan mode.\n"+
-							"Tool: %s\n"+
-							"In Plan mode, I can only describe what I would do, not execute tools.\n"+
-							"Switch to Agent mode (press Tab) to execute tools.",
-						cmdDescription,
-					),
-					ResultType: "failure",
-					SessionLog: fmt.Sprintf("[PLAN MODE BLOCKED] %s", cmdDescription),
-					Error:      fmt.Sprintf("Tool execution blocked in plan mode: %s", toolName),
-				}, nil
+				return buildPlanModeBlockedResult(toolName)
 			}
 
-			// In agent mode, check if tool requires permission from metadata.
+			// Check if tool requires permission from metadata.
 			// If metadata is nil or tool not found, defaults to requiresPermission=false (auto-approve).
 			requiresPermission := false
 			if metadata, ok := toolMetadata[toolName]; ok {
@@ -680,52 +807,14 @@ func WrapToolsWithPermissionAndModeMetadata(
 			}
 
 			if !requiresPermission {
-				// Read-only tool - execute directly
 				return originalHandler(invocation)
 			}
 
-			// Edit tool - request permission
-			responseChan := make(chan bool, 1)
-			cmdDescription := strings.ReplaceAll(toolName, "_", " ")
-
-			// Send permission request to TUI
-			eventChan <- chatui.PermissionRequestMsg{
-				ToolCallID: invocation.ToolCallID,
-				ToolName:   toolName,
-				Command:    cmdDescription,
-				Arguments:  formatToolArguments(invocation.Arguments),
-				Response:   responseChan,
-			}
-
-			// Wait for user response with timeout to prevent channel leaks
-			var approved bool
-			select {
-			case approved = <-responseChan:
-			case <-time.After(5 * time.Minute):
-				return copilot.ToolResult{
-					TextResultForLLM: fmt.Sprintf(
-						"Permission request timed out for: %s\n"+
-							"The user did not respond within the timeout period.",
-						cmdDescription,
-					),
-					ResultType: "failure",
-					SessionLog: fmt.Sprintf("[TIMEOUT] %s", cmdDescription),
-				}, nil
-			}
-
+			approved, result := awaitToolPermission(eventChan, toolName, invocation)
 			if !approved {
-				return copilot.ToolResult{
-					TextResultForLLM: fmt.Sprintf(
-						"Permission denied by user for: %s\n"+
-							"The user chose not to allow this operation.",
-						cmdDescription,
-					),
-					ResultType: "failure",
-					SessionLog: fmt.Sprintf("[DENIED] %s", cmdDescription),
-				}, nil
+				return *result, nil
 			}
 
-			// User approved - execute the original handler
 			return originalHandler(invocation)
 		}
 	}
@@ -738,6 +827,7 @@ func WrapToolsWithPermissionAndModeMetadata(
 func loadChatModelFromConfig() string {
 	// Try to load ksail.yaml from current directory
 	configPath := "ksail.yaml"
+
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		// Config doesn't exist or can't be read - use default
@@ -745,6 +835,7 @@ func loadChatModelFromConfig() string {
 	}
 
 	var config v1alpha1.Cluster
+
 	err = yaml.Unmarshal(data, &config)
 	if err != nil {
 		// Config exists but couldn't be parsed - ignore and use default

@@ -8,6 +8,13 @@ import (
 	"github.com/mitchellh/go-wordwrap"
 )
 
+const (
+	// toolOutputTruncateLen is the maximum runes for collapsed tool output summary.
+	toolOutputTruncateLen = 50
+	// firstLineTruncateLen is the maximum runes for tool summary first line.
+	firstLineTruncateLen = 60
+)
+
 // updateViewportContent updates the viewport with rendered message content.
 func (m *Model) updateViewportContent() {
 	if len(m.messages) == 0 {
@@ -17,6 +24,7 @@ func (m *Model) updateViewportContent() {
 	}
 
 	wrapWidth := m.calculateWrapWidth()
+
 	var builder strings.Builder
 
 	for _, msg := range m.messages {
@@ -38,9 +46,9 @@ func (m *Model) calculateWrapWidth() uint {
 // renderMessage renders a single message to the builder.
 func (m *Model) renderMessage(builder *strings.Builder, msg *chatMessage, wrapWidth uint) {
 	switch msg.role {
-	case "user":
+	case roleUser:
 		m.renderUserMessage(builder, msg, wrapWidth)
-	case "assistant":
+	case roleAssistant:
 		m.renderAssistantMessage(builder, msg, wrapWidth)
 	case "tool":
 		// Skip - tools are now rendered inline with assistant messages
@@ -273,7 +281,7 @@ func (m *Model) renderFailedTool(
 
 	// Collapsed: show first line of error as summary
 	if tool.output != "" {
-		line += toolOutputStyle.Render(" — " + m.truncateLine(tool.output, 50))
+		line += toolOutputStyle.Render(" — " + m.truncateLine(tool.output, toolOutputTruncateLen))
 	}
 	builder.WriteString(errorStyle.Render(line))
 	builder.WriteString("\n")
@@ -288,14 +296,14 @@ func (m *Model) getToolSummary(tool *toolExecution) string {
 	output := strings.TrimSpace(tool.output)
 	lines := strings.Split(output, "\n")
 
-	if len(output) < 60 && len(lines) == 1 {
+	if len(output) < firstLineTruncateLen && len(lines) == 1 {
 		return output
 	}
 
 	firstLine := strings.TrimSpace(lines[0])
-	if utf8.RuneCountInString(firstLine) > 60 {
+	if utf8.RuneCountInString(firstLine) > firstLineTruncateLen {
 		runes := []rune(firstLine)
-		firstLine = string(runes[:60]) + "..."
+		firstLine = string(runes[:firstLineTruncateLen]) + "..."
 	}
 
 	if len(lines) > 1 {

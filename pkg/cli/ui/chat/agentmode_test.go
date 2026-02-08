@@ -36,18 +36,19 @@ func TestAgentModeRefConcurrency(t *testing.T) {
 	t.Parallel()
 
 	ref := chat.NewAgentModeRef(true)
-	var wg sync.WaitGroup
+	var waitGroup sync.WaitGroup
 
 	// Start multiple goroutines that toggle the mode
-	for i := range 100 {
-		wg.Add(1)
+	for idx := range 100 {
+		waitGroup.Add(1)
+
 		go func(enabled bool) {
-			defer wg.Done()
+			defer waitGroup.Done()
 			ref.SetEnabled(enabled)
 			_ = ref.IsEnabled()
-		}(i%2 == 0)
+		}(idx%2 == 0)
 	}
 
-	wg.Wait()
+	waitGroup.Wait()
 	// Test passes if no race conditions occur
 }
