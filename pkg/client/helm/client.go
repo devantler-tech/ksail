@@ -24,6 +24,7 @@ import (
 	helmv4release "helm.sh/helm/v4/pkg/release"
 	v1 "helm.sh/helm/v4/pkg/release/v1"
 	repov1 "helm.sh/helm/v4/pkg/repo/v1"
+	helmv4driver "helm.sh/helm/v4/pkg/storage/driver"
 	helmv4strvals "helm.sh/helm/v4/pkg/strvals"
 	"sigs.k8s.io/yaml"
 )
@@ -381,8 +382,11 @@ func (c *Client) ReleaseExists(
 
 	releases, err := histClient.Run(releaseName)
 	if err != nil {
-		// History returns an error when the release does not exist.
-		return false, nil
+		if errors.Is(err, helmv4driver.ErrReleaseNotFound) {
+			return false, nil
+		}
+
+		return false, fmt.Errorf("failed to check release history for %q: %w", releaseName, err)
 	}
 
 	return len(releases) > 0, nil

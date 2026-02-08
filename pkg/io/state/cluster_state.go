@@ -11,8 +11,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/user"
 	"path/filepath"
+	"strings"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 )
@@ -33,14 +33,25 @@ const (
 // ErrStateNotFound is returned when no saved state exists for a cluster.
 var ErrStateNotFound = errors.New("cluster state not found")
 
+// ErrInvalidClusterName is returned when a cluster name contains path traversal characters.
+var ErrInvalidClusterName = errors.New(
+	"invalid cluster name: must not contain path separators or '..'",
+)
+
 // clusterStatePath returns the path to the state file for a given cluster name.
 func clusterStatePath(clusterName string) (string, error) {
-	usr, err := user.Current()
-	if err != nil {
-		return "", fmt.Errorf("failed to get current user: %w", err)
+	if strings.Contains(clusterName, "/") ||
+		strings.Contains(clusterName, "\\") ||
+		strings.Contains(clusterName, "..") {
+		return "", ErrInvalidClusterName
 	}
 
-	return filepath.Join(usr.HomeDir, stateDir, clustersSubDir, clusterName, specFileName), nil
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("failed to get user home directory: %w", err)
+	}
+
+	return filepath.Join(home, stateDir, clustersSubDir, clusterName, specFileName), nil
 }
 
 // SaveClusterSpec persists the ClusterSpec used during cluster creation.
