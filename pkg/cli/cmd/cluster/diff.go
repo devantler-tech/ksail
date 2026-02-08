@@ -81,7 +81,7 @@ func scalarFieldRules() []fieldRule {
 		{
 			field:    "cluster.metricsServer",
 			category: types.ChangeCategoryInPlace,
-			reason:   "metrics-server can be installed/uninstalled via Helm",
+			reason:   "metrics-server can be installed via Helm; disabling requires cluster recreation",
 			getVal:   func(s *v1alpha1.ClusterSpec) string { return s.MetricsServer.String() },
 		},
 		{

@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -40,6 +41,10 @@ const (
 	repoIndexRetryBaseWait = 2 * time.Second
 	repoIndexRetryMaxWait  = 15 * time.Second
 )
+
+// httpStatusCodePattern matches HTTP 5xx status codes at word boundaries
+// to avoid false positives on port numbers like ":5000".
+var httpStatusCodePattern = regexp.MustCompile(`\b50[0-4]\b`)
 
 var (
 	errReleaseNameRequired     = errors.New("helm: release name is required")
@@ -586,9 +591,8 @@ func isRetryableNetworkError(err error) bool {
 
 	errMsg := err.Error()
 
-	patterns := []string{
-		// HTTP 5xx status codes
-		"500", "502", "503", "504",
+	// HTTP 5xx status text patterns
+	textPatterns := []string{
 		"Internal Server Error", "Bad Gateway",
 		"Service Unavailable", "Gateway Timeout",
 		// TCP-level transient network errors
@@ -597,13 +601,15 @@ func isRetryableNetworkError(err error) bool {
 		"unexpected EOF", "no such host",
 	}
 
-	for _, pattern := range patterns {
+	for _, pattern := range textPatterns {
 		if strings.Contains(errMsg, pattern) {
 			return true
 		}
 	}
 
-	return false
+	// Match HTTP 5xx numeric codes at word boundaries to avoid false positives
+	// on port numbers like ":5000". Uses regexp for precise matching.
+	return httpStatusCodePattern.MatchString(errMsg)
 }
 
 // calculateRepoRetryDelay returns the delay for the given retry attempt.
