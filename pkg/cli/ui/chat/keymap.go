@@ -119,100 +119,100 @@ func (k KeyMap) SessionPickerShortHelp() []key.Binding {
 	return []key.Binding{k.Up, k.Down, k.Select, k.Rename, k.Delete, k.Filter, k.Cancel}
 }
 
-func setNavigationKeys(k *KeyMap) {
-	k.Up = key.NewBinding(
+func setNavigationKeys(keyMap *KeyMap) {
+	keyMap.Up = key.NewBinding(
 		key.WithKeys("up"),
 		key.WithHelp("↑", "history up / navigate"),
 	)
-	k.Down = key.NewBinding(
+	keyMap.Down = key.NewBinding(
 		key.WithKeys("down"),
 		key.WithHelp("↓", "history down / navigate"),
 	)
-	k.PageUp = key.NewBinding(
+	keyMap.PageUp = key.NewBinding(
 		key.WithKeys("pgup"),
 		key.WithHelp("PgUp", "scroll up"),
 	)
-	k.PageDown = key.NewBinding(
+	keyMap.PageDown = key.NewBinding(
 		key.WithKeys("pgdown"),
 		key.WithHelp("PgDn", "scroll down"),
 	)
 }
 
-func setActionKeys(k *KeyMap) {
-	k.Send = key.NewBinding(
+func setActionKeys(keyMap *KeyMap) {
+	keyMap.Send = key.NewBinding(
 		key.WithKeys("enter"),
 		key.WithHelp("⏎", "send message"),
 	)
-	k.NewLine = key.NewBinding(
+	keyMap.NewLine = key.NewBinding(
 		key.WithKeys("alt+enter"),
 		key.WithHelp("Alt+⏎", "new line"),
 	)
-	k.Cancel = key.NewBinding(
+	keyMap.Cancel = key.NewBinding(
 		key.WithKeys("esc"),
 		key.WithHelp("esc", "cancel / quit"),
 	)
-	k.Quit = key.NewBinding(
+	keyMap.Quit = key.NewBinding(
 		key.WithKeys("ctrl+c"),
 		key.WithHelp("Ctrl+C", "force quit"),
 	)
-	k.ToggleMode = key.NewBinding(
+	keyMap.ToggleMode = key.NewBinding(
 		key.WithKeys("tab"),
 		key.WithHelp("Tab", "toggle agent/plan mode"),
 	)
-	k.ToggleHelp = key.NewBinding(
+	keyMap.ToggleHelp = key.NewBinding(
 		key.WithKeys("f1"),
 		key.WithHelp("F1", "toggle help"),
 	)
 }
 
-func setToolAndOutputKeys(k *KeyMap) {
-	k.ExpandTools = key.NewBinding(
+func setToolAndOutputKeys(keyMap *KeyMap) {
+	keyMap.ExpandTools = key.NewBinding(
 		key.WithKeys("ctrl+t"),
 		key.WithHelp("Ctrl+T", "expand/collapse tools"),
 	)
-	k.CopyOutput = key.NewBinding(
+	keyMap.CopyOutput = key.NewBinding(
 		key.WithKeys("ctrl+y"),
 		key.WithHelp("Ctrl+Y", "copy latest output"),
 	)
 }
 
-func setModalKeys(k *KeyMap) {
-	k.OpenSessions = key.NewBinding(
+func setModalKeys(keyMap *KeyMap) {
+	keyMap.OpenSessions = key.NewBinding(
 		key.WithKeys("ctrl+h"),
 		key.WithHelp("Ctrl+H", "session history"),
 	)
-	k.OpenModel = key.NewBinding(
+	keyMap.OpenModel = key.NewBinding(
 		key.WithKeys("ctrl+o"),
 		key.WithHelp("Ctrl+O", "change model"),
 	)
-	k.NewChat = key.NewBinding(
+	keyMap.NewChat = key.NewBinding(
 		key.WithKeys("ctrl+n"),
 		key.WithHelp("Ctrl+N", "new chat"),
 	)
-	k.Allow = key.NewBinding(
+	keyMap.Allow = key.NewBinding(
 		key.WithKeys("y", "Y"),
 		key.WithHelp("y", "allow"),
 	)
-	k.Deny = key.NewBinding(
+	keyMap.Deny = key.NewBinding(
 		key.WithKeys("n", "N"),
 		key.WithHelp("n", "deny"),
 	)
 }
 
-func setPickerAndFilterKeys(k *KeyMap) {
-	k.Select = key.NewBinding(
+func setPickerAndFilterKeys(keyMap *KeyMap) {
+	keyMap.Select = key.NewBinding(
 		key.WithKeys("enter"),
 		key.WithHelp("⏎", "select"),
 	)
-	k.Rename = key.NewBinding(
+	keyMap.Rename = key.NewBinding(
 		key.WithKeys("r"),
 		key.WithHelp("r", "rename"),
 	)
-	k.Delete = key.NewBinding(
+	keyMap.Delete = key.NewBinding(
 		key.WithKeys("d"),
 		key.WithHelp("d", "delete"),
 	)
-	k.Filter = key.NewBinding(
+	keyMap.Filter = key.NewBinding(
 		key.WithKeys("/"),
 		key.WithHelp("/", "filter"),
 	)
