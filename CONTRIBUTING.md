@@ -51,8 +51,8 @@ go build -o ksail
 # Or: compile all packages (no binary output)
 go build ./...
 
-# For production-optimized builds (matches release artifacts):
-go build -ldflags="-s -w" -o ksail
+# For optimized builds (uses the same -ldflags as release builds):
+go build -ldflags="-s -w" -o ksail-optimized
 ```
 
 > **Note:** Release builds use `-ldflags="-s -w"` to strip debug symbols, which typically reduces binary size by around 25–30% (exact size varies by OS/arch, Go version, and dependencies). Development builds include debug symbols for a better debugging experience.
