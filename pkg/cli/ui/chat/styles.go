@@ -17,6 +17,9 @@ const (
 	ansiYellow = 11
 	ansiCyan   = 14
 	ansiWhite  = 15
+
+	// scrollIndicatorLines is the number of lines used for scroll indicators (top + bottom).
+	scrollIndicatorLines = 2
 )
 
 // Logo functions that delegate to the shared asciiart package.
@@ -164,9 +167,10 @@ func calculatePickerScrollOffset(selectedIndex, totalItems, maxVisible int) int 
 func calculatePickerContentLines(visibleCount int, isScrollable bool) int {
 	contentLines := 1 + visibleCount
 	if isScrollable {
-		contentLines += 2
+		contentLines += scrollIndicatorLines
 	}
-	return max(contentLines, 6)
+
+	return max(contentLines, minPickerHeight)
 }
 
 // createPickerModalStyle creates a consistent modal style for picker dialogs.

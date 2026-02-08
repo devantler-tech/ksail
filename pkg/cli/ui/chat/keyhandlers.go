@@ -27,6 +27,7 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.showModelPicker {
 		return m.handleModelPickerKey(msg)
 	}
+
 	if m.showSessionPicker {
 		return m.handleSessionPickerKey(msg)
 	}
@@ -53,8 +54,23 @@ func (m *Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleQuit(true)
 	case keyEscape:
 		return m.handleEscape()
+	case keyEnter:
+		return m.handleEnter()
+	case "alt+enter":
+		m.textarea.InsertString("\n")
+
+		return m, nil
+	}
+
+	return m.handleChatShortcutKey(msg)
+}
+
+// handleChatShortcutKey handles shortcut keys (toggles, pickers, history, help).
+func (m *Model) handleChatShortcutKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
 	case "f1":
 		m.showHelpOverlay = true
+
 		return m, nil
 	case "ctrl+o":
 		return m.handleOpenModelPicker()
@@ -62,9 +78,6 @@ func (m *Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleOpenSessionPicker()
 	case "ctrl+n":
 		return m.handleNewChat()
-	case "alt+enter":
-		m.textarea.InsertString("\n")
-		return m, nil
 	case "tab":
 		return m.handleToggleMode()
 	case "ctrl+t":
@@ -75,8 +88,6 @@ func (m *Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleHistoryUp()
 	case keyDown:
 		return m.handleHistoryDown()
-	case keyEnter:
-		return m.handleEnter()
 	}
 
 	return m.handleViewportAndTextareaKey(msg)
@@ -104,6 +115,7 @@ func (m *Model) handleViewportAndTextareaKey(msg tea.KeyMsg) (tea.Model, tea.Cmd
 
 	// Update textarea for other keys
 	var taCmd tea.Cmd
+
 	m.textarea, taCmd = m.textarea.Update(msg)
 	if m.justCompleted {
 		m.justCompleted = false
@@ -118,6 +130,7 @@ func (m *Model) handleQuit(saveSession bool) (tea.Model, tea.Cmd) {
 	if saveSession {
 		_ = m.saveCurrentSession()
 	}
+
 	m.quitting = true
 	return m, tea.Quit
 }
@@ -208,6 +221,7 @@ func (m *Model) handleNewChat() (tea.Model, tea.Cmd) {
 	if m.isStreaming {
 		return m, nil
 	}
+
 	_ = m.saveCurrentSession()
 
 	err := m.startNewSession()
@@ -229,6 +243,7 @@ func (m *Model) handleToggleMode() (tea.Model, tea.Cmd) {
 	if m.agentModeRef != nil {
 		m.agentModeRef.SetEnabled(m.agentMode)
 	}
+
 	m.updateViewportContent()
 	return m, nil
 }
@@ -287,6 +302,7 @@ func (m *Model) handleHistoryUp() (tea.Model, tea.Cmd) {
 	if m.isStreaming || len(m.history) == 0 {
 		return m, nil
 	}
+
 	if m.historyIndex == -1 {
 		m.savedInput = m.textarea.Value()
 		m.historyIndex = len(m.history) - 1
@@ -304,6 +320,7 @@ func (m *Model) handleHistoryDown() (tea.Model, tea.Cmd) {
 	if m.isStreaming || m.historyIndex < 0 {
 		return m, nil
 	}
+
 	if m.historyIndex < len(m.history)-1 {
 		m.historyIndex++
 
@@ -312,6 +329,7 @@ func (m *Model) handleHistoryDown() (tea.Model, tea.Cmd) {
 		m.historyIndex = -1
 		m.textarea.SetValue(m.savedInput)
 	}
+
 	m.textarea.CursorEnd()
 	return m, nil
 }

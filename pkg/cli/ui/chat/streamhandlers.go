@@ -117,26 +117,46 @@ func (m *Model) handleToolEnd(msg toolEndMsg) (tea.Model, tea.Cmd) {
 // findCompletedTool locates the tool execution that matches a completion event.
 // It uses three strategies: match by ID, match by name, and FIFO fallback.
 func (m *Model) findCompletedTool(msg toolEndMsg) *toolExecution {
-	// Strategy 1: Try matching by tool ID if provided
-	if msg.toolID != "" {
-		if tool := m.tools[msg.toolID]; tool != nil {
+	if tool := m.findToolByID(msg.toolID); tool != nil {
+		return tool
+	}
+
+	if tool := m.findRunningToolByName(msg.toolName); tool != nil {
+		return tool
+	}
+
+	return m.findFirstRunningTool()
+}
+
+// findToolByID looks up a tool execution by its ID.
+func (m *Model) findToolByID(toolID string) *toolExecution {
+	if toolID == "" {
+		return nil
+	}
+
+	return m.tools[toolID]
+}
+
+// findRunningToolByName finds the first running tool matching the given name.
+func (m *Model) findRunningToolByName(toolName string) *toolExecution {
+	if toolName == "" || toolName == unknownToolName {
+		return nil
+	}
+
+	for _, id := range m.toolOrder {
+		tool := m.tools[id]
+		if tool != nil && tool.name == toolName && tool.status == toolRunning {
 			return tool
 		}
 	}
 
-	// Strategy 2: Try matching by name if provided and not unknown
-	if msg.toolName != "" && msg.toolName != unknownToolName {
-		for _, toolID := range m.toolOrder {
-			tool := m.tools[toolID]
-			if tool != nil && tool.name == msg.toolName && tool.status == toolRunning {
-				return tool
-			}
-		}
-	}
+	return nil
+}
 
-	// Strategy 3: FIFO - match the first running tool (SDK doesn't always provide name)
-	for _, toolID := range m.toolOrder {
-		tool := m.tools[toolID]
+// findFirstRunningTool returns the first tool in execution order that is still running (FIFO).
+func (m *Model) findFirstRunningTool() *toolExecution {
+	for _, id := range m.toolOrder {
+		tool := m.tools[id]
 		if tool != nil && tool.status == toolRunning {
 			return tool
 		}
@@ -176,9 +196,10 @@ func (m *Model) handleToolOutputChunk(toolID, chunk string) (tea.Model, tea.Cmd)
 	var tool *toolExecution
 
 	for _, id := range m.toolOrder {
-		t := m.tools[id]
-		if t != nil && t.name == toolID && t.status == toolRunning {
-			tool = t
+		candidate := m.tools[id]
+		if candidate != nil && candidate.name == toolID && candidate.status == toolRunning {
+			tool = candidate
+
 			break
 		}
 	}
@@ -186,6 +207,7 @@ func (m *Model) handleToolOutputChunk(toolID, chunk string) (tea.Model, tea.Cmd)
 	if tool != nil {
 		// Append the chunk to the tool's output
 		tool.output += chunk
+
 		m.updateViewportContent()
 	}
 
@@ -229,6 +251,7 @@ func (m *Model) tryFinalizeResponse() (tea.Model, tea.Cmd) {
 		last.tools = make([]*toolExecution, 0, len(m.toolOrder))
 		last.toolOrder = make([]string, len(m.toolOrder))
 		copy(last.toolOrder, m.toolOrder)
+
 		for _, id := range m.toolOrder {
 			if tool := m.tools[id]; tool != nil {
 				last.tools = append(last.tools, tool)
@@ -340,8 +363,8 @@ func (m *Model) waitForEvent() tea.Cmd {
 		case <-timer.C:
 			return streamErrMsg{
 				err: fmt.Errorf(
-					"waiting for streaming event (assistant response or tool output) timed out after %v; "+
-						"the assistant or tools may be stuck",
+					"%w: waited %v; the assistant or tools may be stuck",
+					errStreamTimeout,
 					timeout,
 				),
 			}

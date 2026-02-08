@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -9,7 +10,7 @@ import (
 )
 
 // errStreamEvent is a sentinel error for stream event errors.
-var errStreamEvent = fmt.Errorf("stream event error")
+var errStreamEvent = errors.New("stream event error")
 
 // sessionEventDispatcher routes SDK session events to the appropriate tea.Msg channel.
 // It converts Copilot SDK events into chat-specific messages for the TUI.
@@ -23,7 +24,11 @@ func newSessionEventDispatcher(eventChan chan<- tea.Msg) *sessionEventDispatcher
 }
 
 // dispatch routes a Copilot session event to the appropriate handler.
-func (d *sessionEventDispatcher) dispatch(event copilot.SessionEvent) {
+//
+//nolint:cyclop // type-switch dispatcher for session events
+func (d *sessionEventDispatcher) dispatch(
+	event copilot.SessionEvent,
+) {
 	//nolint:exhaustive // Only handling events relevant to the chat TUI.
 	switch event.Type {
 	case copilot.AssistantTurnStart:
@@ -50,6 +55,7 @@ func (d *sessionEventDispatcher) dispatch(event copilot.SessionEvent) {
 }
 
 func (d *sessionEventDispatcher) handleSessionLifecycle(eventType copilot.SessionEventType) {
+	//nolint:exhaustive // Only SessionIdle and TurnEnd are relevant here.
 	switch eventType {
 	case copilot.SessionIdle:
 		d.eventChan <- streamEndMsg{}

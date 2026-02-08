@@ -140,7 +140,7 @@ func (m *Model) refreshSessionList() error {
 }
 
 // handleSessionPickerNavKey handles navigation keys in the session picker.
-func (m *Model) handleSessionPickerNavKey(msg tea.KeyMsg, totalItems int) (tea.Model, tea.Cmd) {
+func (m *Model) handleSessionPickerNavKey(msg tea.KeyMsg, totalItems int) (tea.Model, tea.Cmd) { //nolint:cyclop // keyboard dispatcher for session picker navigation
 	switch msg.String() {
 	case keyEscape:
 		m.showSessionPicker = false
@@ -162,16 +162,10 @@ func (m *Model) handleSessionPickerNavKey(msg tea.KeyMsg, totalItems int) (tea.M
 		}
 		return m, nil
 	case "d", "delete", keyBackspace:
-		if m.isValidSessionIndex() {
-			m.confirmDeleteSession = true
-		}
+		m.initiateSessionDelete()
 		return m, nil
 	case "r":
-		if m.isValidSessionIndex() {
-			session := m.filteredSessions[m.sessionPickerIndex-1]
-			m.renamingSession = true
-			m.sessionRenameInput = session.GetDisplayName()
-		}
+		m.initiateSessionRename()
 		return m, nil
 	case keyEnter:
 		return m.selectSession()
@@ -181,6 +175,22 @@ func (m *Model) handleSessionPickerNavKey(msg tea.KeyMsg, totalItems int) (tea.M
 		return m, tea.Quit
 	}
 	return m, nil
+}
+
+// initiateSessionDelete starts a session deletion confirmation if a valid session is selected.
+func (m *Model) initiateSessionDelete() {
+	if m.isValidSessionIndex() {
+		m.confirmDeleteSession = true
+	}
+}
+
+// initiateSessionRename starts a session rename if a valid session is selected.
+func (m *Model) initiateSessionRename() {
+	if m.isValidSessionIndex() {
+		session := m.filteredSessions[m.sessionPickerIndex-1]
+		m.renamingSession = true
+		m.sessionRenameInput = session.GetDisplayName()
+	}
 }
 
 // handleSessionFilterKey handles keyboard input when filtering sessions.
@@ -302,39 +312,58 @@ func (m *Model) loadSession(metadata *SessionMetadata) {
 		m.currentModel = metadata.Model
 	}
 
-	// Resume session with tools and permission handler.
-	// The SDK requires tools and handlers to be re-registered when resuming.
+	if !m.resumeOrCreateSession(metadata) {
+		return
+	}
+
+	m.loadSessionMessages(metadata)
+	m.resetStreamingState()
+	m.updateViewportContent()
+}
+
+// resumeOrCreateSession resumes an existing session or creates a new one.
+// Returns true if a session was successfully created/resumed.
+func (m *Model) resumeOrCreateSession(metadata *SessionMetadata) bool {
 	resumeConfig := &copilot.ResumeSessionConfig{
 		Tools:               m.sessionConfig.Tools,
 		OnPermissionRequest: m.sessionConfig.OnPermissionRequest,
 	}
+
 	session, err := m.client.ResumeSessionWithOptions(metadata.ID, resumeConfig)
 	if err != nil {
 		// If resume fails, try creating a new session with the same ID
 		m.sessionConfig.SessionID = metadata.ID
+
 		session, err = m.client.CreateSession(m.sessionConfig)
 		if err != nil {
 			m.err = fmt.Errorf("failed to resume session: %w", err)
-			return
+
+			return false
 		}
 	}
+
 	m.session = session
 
-	events, err := session.GetMessages()
+	return true
+}
+
+// loadSessionMessages loads and renders messages from a resumed session.
+func (m *Model) loadSessionMessages(metadata *SessionMetadata) {
+	events, err := m.session.GetMessages()
 	if err != nil {
 		m.messages = []chatMessage{}
 	} else {
 		m.messages = m.sessionEventsToMessages(events, metadata)
 	}
 
-	for i := range m.messages {
-		if m.messages[i].role == "assistant" && m.messages[i].content != "" {
-			m.messages[i].rendered = renderMarkdownWithRenderer(m.renderer, m.messages[i].content)
+	for idx := range m.messages {
+		if m.messages[idx].role == roleAssistant && m.messages[idx].content != "" {
+			m.messages[idx].rendered = renderMarkdownWithRenderer(
+				m.renderer,
+				m.messages[idx].content,
+			)
 		}
 	}
-
-	m.resetStreamingState()
-	m.updateViewportContent()
 }
 
 // resetStreamingState clears streaming-related state without clearing messages.
@@ -391,6 +420,7 @@ func (m *Model) sessionEventsToMessages(
 					// Default to true (agent mode) for messages without metadata
 					msg.agentMode = true
 				}
+
 				userMsgIndex++
 			}
 			messages = append(messages, msg)
@@ -552,13 +582,13 @@ func (m *Model) styleSessionItem(line string, index int, isCurrentSession bool) 
 	}
 	if index == m.sessionPickerIndex {
 		return lipgloss.NewStyle().
-			Foreground(lipgloss.ANSIColor(14)).
+			Foreground(lipgloss.ANSIColor(ansiCyan)).
 			Bold(true).
 			Render(line)
 	}
 	if isCurrentSession {
 		return lipgloss.NewStyle().
-			Foreground(lipgloss.ANSIColor(10)).
+			Foreground(lipgloss.ANSIColor(ansiGreen)).
 			Render(line)
 	}
 	return line

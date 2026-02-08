@@ -44,6 +44,9 @@ const (
 	pickerOverhead      = 3 // title + top/bottom padding
 	minPickerHeight     = 6 // minimum content lines for picker modal
 
+	// Help layout constants.
+	minHelpWidth = 20 // minimum width for help footer rendering
+
 	// Model and role constants.
 	modelAuto       = "auto"
 	checkmarkSuffix = " ✓"
@@ -112,7 +115,7 @@ func (m *Model) renderHelpOverlay() string {
 // renderShortHelp renders the context-aware footer help text using the KeyMap.
 // It intelligently truncates to fit available width while always showing "F1 help".
 func (m *Model) renderShortHelp() string {
-	availWidth := max(m.width-contentPadding, 20) // Account for padding
+	availWidth := max(m.width-contentPadding, minHelpWidth) // Account for padding
 	helpToggle := helpKeyStyle.Render("F1") + " help"
 	helpToggleWidth := lipgloss.Width(helpToggle)
 	usableWidth := availWidth - helpToggleWidth - helpSepSpacing // Space for separator
@@ -276,6 +279,7 @@ func (m *Model) hasToolsInMessages() bool {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -286,5 +290,6 @@ func (m *Model) hasAssistantMessages() bool {
 			return true
 		}
 	}
+
 	return false
 }

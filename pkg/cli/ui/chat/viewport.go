@@ -13,6 +13,12 @@ const (
 	toolOutputTruncateLen = 50
 	// firstLineTruncateLen is the maximum runes for tool summary first line.
 	firstLineTruncateLen = 60
+	// wrapPadding is subtracted from viewport width for text wrapping.
+	wrapPadding = 4
+	// legacyToolIndent is padding subtracted for legacy tool output wrapping.
+	legacyToolIndent = 2
+	// toolOutputIndent is padding subtracted and prepended for tool output wrapping.
+	toolOutputIndent = 6
 )
 
 // updateViewportContent updates the viewport with rendered message content.
@@ -39,7 +45,7 @@ func (m *Model) updateViewportContent() {
 
 // calculateWrapWidth calculates the content width for text wrapping.
 func (m *Model) calculateWrapWidth() uint {
-	wrapWidth := max(m.viewport.Width-4, minWrapWidth)
+	wrapWidth := max(m.viewport.Width-wrapPadding, minWrapWidth)
 	return uint(wrapWidth) //nolint:gosec // wrapWidth is guaranteed >= minWrapWidth
 }
 
@@ -196,7 +202,7 @@ func (m *Model) writeIndentedContent(builder *strings.Builder, content string) {
 
 // renderLegacyToolOutput renders legacy tool output for backward compatibility.
 func (m *Model) renderLegacyToolOutput(builder *strings.Builder, msg *chatMessage, wrapWidth uint) {
-	wrapped := wordwrap.WrapString(msg.content, wrapWidth-2)
+	wrapped := wordwrap.WrapString(msg.content, wrapWidth-legacyToolIndent)
 	for line := range strings.SplitSeq(wrapped, "\n") {
 		builder.WriteString(toolOutputStyle.Render("    " + line))
 		builder.WriteString("\n")
@@ -245,14 +251,14 @@ func (m *Model) renderSuccessTool(
 ) {
 	summary := m.getToolSummary(tool)
 	if tool.expanded {
-		line := fmt.Sprintf("  ✓ %s", displayName)
+		line := "  ✓ " + displayName
 		builder.WriteString(toolCollapsedStyle.Render(line))
 		builder.WriteString("\n")
 		if tool.output != "" {
 			m.renderToolOutput(builder, tool.output, wrapWidth)
 		}
 	} else {
-		line := fmt.Sprintf("  ✓ %s", displayName)
+		line := "  ✓ " + displayName
 		if summary != "" {
 			line += toolOutputStyle.Render(" — " + summary)
 		}
@@ -268,7 +274,7 @@ func (m *Model) renderFailedTool(
 	displayName string,
 	wrapWidth uint,
 ) {
-	line := fmt.Sprintf("  ✗ %s", displayName)
+	line := "  ✗ " + displayName
 
 	if tool.expanded {
 		builder.WriteString(errorStyle.Render(line))
@@ -322,7 +328,7 @@ func (m *Model) renderToolOutput(
 	lines := strings.Split(output, "\n")
 
 	truncatedOutput := strings.Join(lines, "\n")
-	wrapped := wordwrap.WrapString(truncatedOutput, wrapWidth-6)
+	wrapped := wordwrap.WrapString(truncatedOutput, wrapWidth-toolOutputIndent)
 
 	for line := range strings.SplitSeq(wrapped, "\n") {
 		builder.WriteString(toolOutputStyle.Render("      " + line))

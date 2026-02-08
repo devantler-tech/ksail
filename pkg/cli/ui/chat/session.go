@@ -137,7 +137,9 @@ func ListSessions(client *copilot.Client) ([]SessionMetadata, error) {
 // validateSessionID ensures the session ID contains only safe characters.
 // Allowed characters are ASCII letters, digits, hyphens, and underscores.
 // This prevents path traversal attacks using malicious session IDs.
-func validateSessionID(sessionID string) error { //nolint:varnamelen // sessionID is descriptive enough
+func validateSessionID(
+	sessionID string,
+) error {
 	if sessionID == "" {
 		return errSessionIDEmpty
 	}
@@ -147,7 +149,12 @@ func validateSessionID(sessionID string) error { //nolint:varnamelen // sessionI
 			continue
 		}
 
-		return fmt.Errorf("%w: %q contains invalid character %q", errInvalidSessionID, sessionID, char)
+		return fmt.Errorf(
+			"%w: %q contains invalid character %q",
+			errInvalidSessionID,
+			sessionID,
+			char,
+		)
 	}
 
 	return nil
@@ -162,7 +169,9 @@ func isValidSessionIDChar(char rune) bool {
 }
 
 // LoadSession loads session metadata by ID.
-func LoadSession(sessionID string) (*SessionMetadata, error) { //nolint:varnamelen // sessionID is descriptive enough
+func LoadSession(
+	sessionID string,
+) (*SessionMetadata, error) {
 	err := validateSessionID(sessionID)
 	if err != nil {
 		return nil, err
@@ -180,7 +189,9 @@ func LoadSession(sessionID string) (*SessionMetadata, error) { //nolint:varnamel
 	}
 
 	var session SessionMetadata
-	if err := json.Unmarshal(data, &session); err != nil {
+
+	err = json.Unmarshal(data, &session)
+	if err != nil {
 		return nil, fmt.Errorf("failed to parse session file: %w", err)
 	}
 
@@ -190,7 +201,8 @@ func LoadSession(sessionID string) (*SessionMetadata, error) { //nolint:varnamel
 // SaveSession saves session metadata to disk.
 // The ID must be provided (typically from the Copilot SDK session.SessionID).
 func SaveSession(session *SessionMetadata) error {
-	if err := validateSessionID(session.ID); err != nil {
+	err := validateSessionID(session.ID)
+	if err != nil {
 		return err
 	}
 
@@ -215,7 +227,9 @@ func SaveSession(session *SessionMetadata) error {
 	}
 
 	path := filepath.Join(dir, session.ID+".json")
-	if err := os.WriteFile(path, data, sessionFilePerm); err != nil {
+
+	err = os.WriteFile(path, data, sessionFilePerm)
+	if err != nil {
 		return fmt.Errorf("failed to write session file: %w", err)
 	}
 
@@ -223,13 +237,18 @@ func SaveSession(session *SessionMetadata) error {
 }
 
 // DeleteSession removes a chat session from both SDK and local disk.
-func DeleteSession(client *copilot.Client, sessionID string) error { //nolint:varnamelen // sessionID is descriptive enough
-	if err := validateSessionID(sessionID); err != nil {
+func DeleteSession(
+	client *copilot.Client,
+	sessionID string,
+) error {
+	err := validateSessionID(sessionID)
+	if err != nil {
 		return err
 	}
 
 	// Delete from SDK first
-	if err := client.DeleteSession(sessionID); err != nil {
+	err = client.DeleteSession(sessionID)
+	if err != nil {
 		return fmt.Errorf("failed to delete SDK session: %w", err)
 	}
 
@@ -238,8 +257,11 @@ func DeleteSession(client *copilot.Client, sessionID string) error { //nolint:va
 }
 
 // deleteLocalSession removes a chat session from local disk only.
-func deleteLocalSession(sessionID string) error { //nolint:varnamelen // sessionID is descriptive enough
-	if err := validateSessionID(sessionID); err != nil {
+func deleteLocalSession(
+	sessionID string,
+) error {
+	err := validateSessionID(sessionID)
+	if err != nil {
 		return err
 	}
 
@@ -276,6 +298,7 @@ func SyncSessionMetadata(client *copilot.Client) error {
 		if sdkSession.IsRemote {
 			continue // Skip remote sessions
 		}
+
 		validIDs[sdkSession.SessionID] = struct{}{}
 	}
 
@@ -285,11 +308,17 @@ func SyncSessionMetadata(client *copilot.Client) error {
 		return err
 	}
 
+	return deleteOrphanedLocalSessions(dir, validIDs)
+}
+
+// deleteOrphanedLocalSessions removes local session files not present in the valid IDs set.
+func deleteOrphanedLocalSessions(dir string, validIDs map[string]struct{}) error {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil // No local sessions to sync
 		}
+
 		return fmt.Errorf("failed to read sessions directory: %w", err)
 	}
 
@@ -303,6 +332,7 @@ func SyncSessionMetadata(client *copilot.Client) error {
 		if _, exists := validIDs[sessionID]; !exists {
 			// Local session doesn't exist in SDK, delete it
 			path := filepath.Join(dir, entry.Name())
+
 			if removeErr := os.Remove(path); removeErr != nil && !os.IsNotExist(removeErr) {
 				// Log error but continue with other files
 				continue

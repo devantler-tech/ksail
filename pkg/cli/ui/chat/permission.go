@@ -70,8 +70,8 @@ func (m *Model) renderPermissionModal() string {
 		return ""
 	}
 
-	modalWidth := m.width - 2
-	contentWidth := max(modalWidth-4, 1)
+	modalWidth := m.width - modalPadding
+	contentWidth := max(modalWidth-contentPadding, 1)
 	clipStyle := lipgloss.NewStyle().MaxWidth(contentWidth).Inline(true)
 	warningStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(ansiYellow))
 
@@ -82,7 +82,7 @@ func (m *Model) renderPermissionModal() string {
 	contentLines += 2
 
 	humanName := humanizeToolName(m.pendingPermission.toolName)
-	content.WriteString(clipStyle.Render("Tool: " + humanName) + "\n")
+	content.WriteString(clipStyle.Render("Tool: "+humanName) + "\n")
 
 	contentLines++
 

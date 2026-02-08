@@ -215,6 +215,7 @@ func (m *Model) formatModelItem(index int) (string, bool) {
 
 	if index == 0 {
 		line := prefix + "auto (let Copilot choose)"
+
 		isCurrentModel := m.currentModel == "" || m.currentModel == modelAuto
 		if isCurrentModel {
 			line += checkmarkSuffix
@@ -223,12 +224,14 @@ func (m *Model) formatModelItem(index int) (string, bool) {
 	}
 
 	model := m.filteredModels[index-1]
+
 	multiplier := ""
 	if model.Billing != nil && model.Billing.Multiplier > 0 {
 		multiplier = fmt.Sprintf(" (%.0fx)", model.Billing.Multiplier)
 	}
 
 	line := fmt.Sprintf("%s%s%s", prefix, model.ID, multiplier)
+
 	isCurrentModel := model.ID == m.currentModel
 	if isCurrentModel {
 		line += " ✓"
@@ -240,13 +243,14 @@ func (m *Model) formatModelItem(index int) (string, bool) {
 func (m *Model) styleModelItem(line string, index int, isCurrentModel bool) string {
 	if index == m.modelPickerIndex {
 		return lipgloss.NewStyle().
-			Foreground(lipgloss.ANSIColor(14)).
+			Foreground(lipgloss.ANSIColor(ansiCyan)).
 			Bold(true).
 			Render(line)
 	}
+
 	if isCurrentModel {
 		return lipgloss.NewStyle().
-			Foreground(lipgloss.ANSIColor(10)).
+			Foreground(lipgloss.ANSIColor(ansiGreen)).
 			Render(line)
 	}
 	return line

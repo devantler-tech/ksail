@@ -28,7 +28,7 @@ func createRenderer(width int) *glamour.TermRenderer {
 
 // defaultMarkdownStyle returns a static dark style configuration for glamour.
 // Uses a completely static style definition to avoid any terminal queries.
-func defaultMarkdownStyle() ansi.StyleConfig {
+func defaultMarkdownStyle() ansi.StyleConfig { //nolint:funlen // pure struct literal definition
 	return ansi.StyleConfig{
 		Document: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{

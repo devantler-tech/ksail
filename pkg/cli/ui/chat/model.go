@@ -30,6 +30,7 @@ const (
 	minPickerItems    = 3  // minimum items to show in picker modals
 	minViewportHeight = 10 // minimum height to preserve for main viewport
 	minWrapWidth      = 20 // minimum width for text wrapping
+	viewSectionCount  = 4  // number of sections in View: header, viewport, input, footer
 
 	// Tool and error message constants.
 	unknownToolName  = "unknown"           // fallback when tool name is nil
@@ -207,28 +208,8 @@ func NewWithEventChannel(
 	eventChan chan tea.Msg,
 	agentModeRef *AgentModeRef,
 ) *Model {
-	// Initialize textarea for user input
-	textArea := textarea.New()
-	textArea.Placeholder = "Ask me anything about Kubernetes, KSail, or cluster management..."
-	textArea.Focus()
-	textArea.CharLimit = charLimit
-	textArea.SetWidth(defaultWidth - textAreaPadding)
-	textArea.SetHeight(inputHeight)
-	textArea.ShowLineNumbers = false
-	// Show ">" only on first line, nothing on continuation lines
-	textArea.SetPromptFunc(modalPadding, func(lineIdx int) string {
-		if lineIdx == 0 {
-			return "> "
-		}
-		return "  "
-	})
-	textArea.FocusedStyle.CursorLine = lipgloss.NewStyle()
-	textArea.FocusedStyle.Placeholder = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-
-	// Initialize viewport for chat history
-	viewPort := viewport.New(defaultWidth-viewportPadding, defaultHeight-inputHeight-headerHeight-footerHeight-viewportPadding)
-	initialMsg := "  Type a message below to start chatting with KSail AI.\n"
-	viewPort.SetContent(statusStyle.Render(initialMsg))
+	textArea := createTextArea()
+	viewPort := createViewport()
 
 	// Initialize spinner
 	spin := spinner.New()
@@ -272,6 +253,41 @@ func NewWithEventChannel(
 	}
 }
 
+// createTextArea initializes the textarea component for user input.
+func createTextArea() textarea.Model {
+	textArea := textarea.New()
+	textArea.Placeholder = "Ask me anything about Kubernetes, KSail, or cluster management..."
+	textArea.Focus()
+	textArea.CharLimit = charLimit
+	textArea.SetWidth(defaultWidth - textAreaPadding)
+	textArea.SetHeight(inputHeight)
+	textArea.ShowLineNumbers = false
+
+	// Show ">" only on first line, nothing on continuation lines
+	textArea.SetPromptFunc(modalPadding, func(lineIdx int) string {
+		if lineIdx == 0 {
+			return "> "
+		}
+
+		return "  "
+	})
+	textArea.FocusedStyle.CursorLine = lipgloss.NewStyle()
+	textArea.FocusedStyle.Placeholder = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+
+	return textArea
+}
+
+// createViewport initializes the viewport component for chat history.
+func createViewport() viewport.Model {
+	viewportWidth := defaultWidth - viewportPadding
+	viewportHeight := defaultHeight - inputHeight - headerHeight - footerHeight - viewportPadding
+	viewPort := viewport.New(viewportWidth, viewportHeight)
+	initialMsg := "  Type a message below to start chatting with KSail AI.\n"
+	viewPort.SetContent(statusStyle.Render(initialMsg))
+
+	return viewPort
+}
+
 // GetEventChannel returns the model's event channel for external use.
 // This is useful for creating permission handlers that can send events to the TUI.
 func (m *Model) GetEventChannel() chan tea.Msg {
@@ -286,7 +302,11 @@ func (m *Model) Init() tea.Cmd {
 }
 
 // Update handles messages and updates the model.
-func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+//
+//nolint:cyclop // type-switch dispatcher for tea.Msg
+func (m *Model) Update(
+	msg tea.Msg,
+) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
 	switch msg := msg.(type) {
@@ -294,33 +314,56 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleKeyMsg(msg)
 
 	case tea.MouseMsg:
-		// Handle only mouse wheel scrolling - let click/drag pass through for text selection
-		if msg.Button == tea.MouseButtonWheelUp {
-			m.viewport.ScrollUp(scrollLines)
-			m.userScrolled = !m.viewport.AtBottom()
-			return m, nil
-		}
-		if msg.Button == tea.MouseButtonWheelDown {
-			m.viewport.ScrollDown(scrollLines)
-			if m.viewport.AtBottom() {
-				m.userScrolled = false
-			}
-			return m, nil
-		}
-		// Ignore other mouse events (clicks, drags) - terminal handles text selection
-		return m, nil
+		return m.handleMouseMsg(msg)
 
 	case tea.WindowSizeMsg:
-		m.width = msg.Width
-		m.height = msg.Height
-		m.updateDimensions()
-		if !m.ready {
-			m.ready = true
-		}
+		m.handleWindowSize(msg)
 
 	case userSubmitMsg:
 		return m.handleUserSubmit(msg)
 
+	case streamChunkMsg, assistantMessageMsg, toolStartMsg, toolEndMsg,
+		toolOutputChunkMsg, ToolOutputChunkMsg, permissionRequestMsg,
+		PermissionRequestMsg, streamEndMsg, turnStartMsg, turnEndMsg,
+		reasoningMsg, abortMsg, snapshotRewindMsg, streamErrMsg:
+		return m.handleStreamEvent(msg)
+
+	case copyFeedbackClearMsg:
+		m.showCopyFeedback = false
+		return m, nil
+
+	case spinner.TickMsg:
+		// Always update spinner to keep it ticking
+		var cmd tea.Cmd
+		m.spinner, cmd = m.spinner.Update(msg)
+		cmds = append(cmds, cmd)
+		// Update viewport content if there are active tools or streaming to animate spinners
+		if m.isStreaming || m.hasRunningTools() {
+			m.updateViewportContent()
+		}
+	}
+
+	// Update sub-components
+	if !m.isStreaming {
+		var taCmd tea.Cmd
+		m.textarea, taCmd = m.textarea.Update(msg)
+		cmds = append(cmds, taCmd)
+	}
+
+	var vpCmd tea.Cmd
+	m.viewport, vpCmd = m.viewport.Update(msg)
+	cmds = append(cmds, vpCmd)
+
+	return m, tea.Batch(cmds...)
+}
+
+// handleStreamEvent dispatches streaming-related events to their specific handlers.
+//
+//nolint:cyclop // type-switch dispatcher for stream messages
+func (m *Model) handleStreamEvent(
+	msg tea.Msg,
+) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
 	case streamChunkMsg:
 		return m.handleStreamChunk(msg)
 
@@ -372,33 +415,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case streamErrMsg:
 		return m.handleStreamErr(msg)
 
-	case copyFeedbackClearMsg:
-		m.showCopyFeedback = false
+	default:
 		return m, nil
-
-	case spinner.TickMsg:
-		// Always update spinner to keep it ticking
-		var cmd tea.Cmd
-		m.spinner, cmd = m.spinner.Update(msg)
-		cmds = append(cmds, cmd)
-		// Update viewport content if there are active tools or streaming to animate spinners
-		if m.isStreaming || m.hasRunningTools() {
-			m.updateViewportContent()
-		}
 	}
-
-	// Update sub-components
-	if !m.isStreaming {
-		var taCmd tea.Cmd
-		m.textarea, taCmd = m.textarea.Update(msg)
-		cmds = append(cmds, taCmd)
-	}
-
-	var vpCmd tea.Cmd
-	m.viewport, vpCmd = m.viewport.Update(msg)
-	cmds = append(cmds, vpCmd)
-
-	return m, tea.Batch(cmds...)
 }
 
 // View renders the TUI.
@@ -408,7 +427,7 @@ func (m *Model) View() string {
 		return logoStyle.Render(logo()) + "\n\n" + goodbye
 	}
 
-	sections := make([]string, 0, 4)
+	sections := make([]string, 0, viewSectionCount)
 
 	// Header, chat viewport, input/modal, and footer
 	sections = append(sections, m.renderHeader())
@@ -419,6 +438,37 @@ func (m *Model) View() string {
 	// Join sections and clip final output to terminal width to prevent any wrapping
 	output := lipgloss.JoinVertical(lipgloss.Left, sections...)
 	return lipgloss.NewStyle().MaxWidth(m.width).Render(output)
+}
+
+// handleMouseMsg handles mouse input events.
+func (m *Model) handleMouseMsg(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
+	//nolint:exhaustive // Only wheel events are relevant for viewport scrolling.
+	switch msg.Button {
+	case tea.MouseButtonWheelUp:
+		m.viewport.ScrollUp(scrollLines)
+		m.userScrolled = !m.viewport.AtBottom()
+	case tea.MouseButtonWheelDown:
+		m.viewport.ScrollDown(scrollLines)
+
+		if m.viewport.AtBottom() {
+			m.userScrolled = false
+		}
+	default:
+		// Ignore other mouse events (clicks, drags) - terminal handles text selection
+	}
+
+	return m, nil
+}
+
+// handleWindowSize processes terminal resize events.
+func (m *Model) handleWindowSize(msg tea.WindowSizeMsg) {
+	m.width = msg.Width
+	m.height = msg.Height
+	m.updateDimensions()
+
+	if !m.ready {
+		m.ready = true
+	}
 }
 
 // calculateMaxPickerVisible returns the maximum number of items that can be shown
@@ -550,12 +600,12 @@ func (m *Model) handleUserSubmit(msg userSubmitMsg) (tea.Model, tea.Cmd) {
 	// Add user message and placeholder assistant message
 	// Store the current mode with the message so it can be displayed in the indicator
 	m.messages = append(m.messages, chatMessage{
-		role:      "user",
+		role:      roleUser,
 		content:   msg.content,
 		agentMode: m.agentMode,
 	})
 	m.messages = append(m.messages, chatMessage{
-		role:        "assistant",
+		role:        roleAssistant,
 		content:     "",
 		isStreaming: true,
 	})
@@ -568,16 +618,18 @@ func (m *Model) handleUserSubmit(msg userSubmitMsg) (tea.Model, tea.Cmd) {
 
 // commitToolsToLastAssistantMessage saves current tools to the last assistant message.
 func (m *Model) commitToolsToLastAssistantMessage() {
-	for i := len(m.messages) - 1; i >= 0; i-- {
-		if m.messages[i].role == "assistant" {
-			m.messages[i].tools = make([]*toolExecution, 0, len(m.toolOrder))
-			m.messages[i].toolOrder = make([]string, len(m.toolOrder))
-			copy(m.messages[i].toolOrder, m.toolOrder)
+	for idx := len(m.messages) - 1; idx >= 0; idx-- {
+		if m.messages[idx].role == roleAssistant {
+			m.messages[idx].tools = make([]*toolExecution, 0, len(m.toolOrder))
+			m.messages[idx].toolOrder = make([]string, len(m.toolOrder))
+			copy(m.messages[idx].toolOrder, m.toolOrder)
+
 			for _, id := range m.toolOrder {
 				if tool := m.tools[id]; tool != nil {
-					m.messages[i].tools = append(m.messages[i].tools, tool)
+					m.messages[idx].tools = append(m.messages[idx].tools, tool)
 				}
 			}
+
 			break
 		}
 	}
@@ -608,75 +660,85 @@ func (m *Model) prepareForNewTurn() {
 // activeModalHeight returns the extra height needed for the currently active modal
 // beyond the input area height (since modals replace the input area).
 func (m *Model) activeModalHeight() int {
-	if m.showHelpOverlay {
-		// Help overlay uses fixed 5 lines (same as input area)
+	switch {
+	case m.showHelpOverlay:
+		return 0
+	case m.pendingPermission != nil:
+		return m.permissionModalExtraHeight()
+	case m.showModelPicker || m.showSessionPicker:
+		return m.pickerModalExtraHeight()
+	default:
 		return 0
 	}
-	if m.pendingPermission != nil {
-		// Calculate actual permission modal height based on content.
-		// Base layout: title(1) + blank(1) + tool(1) + blank(1) + "Allow?"(1) + buttons(1) = 6 lines,
-		// plus optional lines for the command and arguments when present.
-		contentLines := 6
-		if m.pendingPermission.command != "" {
-			contentLines++
-		}
-		if m.pendingPermission.arguments != "" {
-			contentLines++
-		}
+}
 
-		// Return extra height beyond input area
-		if contentLines > inputHeight {
-			return contentLines - inputHeight
-		}
-		return 0
+// permissionModalExtraHeight calculates the extra height for the permission modal.
+func (m *Model) permissionModalExtraHeight() int {
+	contentLines := permissionBaseLines
+	if m.pendingPermission.command != "" {
+		contentLines++
 	}
-	if m.showModelPicker || m.showSessionPicker {
-		// Calculate actual picker height based on content
-		var totalItems int
-		if m.showSessionPicker {
-			totalItems = len(m.filteredSessions) + 1 // +1 for "New Chat" option
-		} else {
-			totalItems = len(m.filteredModels) + 1 // +1 for "auto" option
-		}
-		maxVisible := m.calculateMaxPickerVisible()
-		visibleCount := min(totalItems, maxVisible)
-		isScrollable := totalItems > maxVisible
-
-		// Calculate content lines: title + visible items
-		contentLines := 1 + visibleCount
-		if isScrollable {
-			contentLines += 2 // Add space for scroll indicators
-		}
-		// Apply minimum height constraint (matches calculatePickerContentLines in styles.go)
-		contentLines = max(contentLines, 6)
-
-		// Return extra height beyond input area
-		if contentLines > inputHeight {
-			return contentLines - inputHeight
-		}
-		return 0
+	if m.pendingPermission.arguments != "" {
+		contentLines++
 	}
+
+	if contentLines > inputHeight {
+		return contentLines - inputHeight
+	}
+
+	return 0
+}
+
+// pickerModalExtraHeight calculates the extra height for picker modals.
+func (m *Model) pickerModalExtraHeight() int {
+	var totalItems int
+	if m.showSessionPicker {
+		totalItems = len(m.filteredSessions) + 1 // +1 for "New Chat" option
+	} else {
+		totalItems = len(m.filteredModels) + 1 // +1 for "auto" option
+	}
+
+	maxVisible := m.calculateMaxPickerVisible()
+	visibleCount := min(totalItems, maxVisible)
+	isScrollable := totalItems > maxVisible
+
+	// Calculate content lines: title + visible items
+	contentLines := 1 + visibleCount
+	if isScrollable {
+		contentLines += modalPadding // Add space for scroll indicators
+	}
+
+	// Apply minimum height constraint
+	contentLines = max(contentLines, minPickerHeight)
+
+	if contentLines > inputHeight {
+		return contentLines - inputHeight
+	}
+
 	return 0
 }
 
 // updateDimensions updates component dimensions based on terminal size.
 func (m *Model) updateDimensions() {
 	// Account for borders and padding
-	contentWidth := m.width - 4
+	contentWidth := m.width - viewportPadding
 
 	// Calculate available height: total - header - input - footer - borders - modal
 	// Each bordered box adds 2 lines (top + bottom border)
 	modalHeight := m.activeModalHeight()
-	viewportHeight := max(m.height-headerHeight-inputHeight-footerHeight-4-modalHeight, 5)
+	viewportHeight := max(
+		m.height-headerHeight-inputHeight-footerHeight-viewportPadding-modalHeight,
+		minHeight,
+	)
 
 	oldWidth := m.viewport.Width
-	m.viewport.Width = contentWidth - 2
+	m.viewport.Width = contentWidth - viewportInner
 	m.viewport.Height = viewportHeight
-	m.textarea.SetWidth(contentWidth - 2)
+	m.textarea.SetWidth(contentWidth - viewportInner)
 
 	// If viewport width changed, recreate the renderer and re-render completed messages
 	if oldWidth != m.viewport.Width {
-		m.renderer = createRenderer(m.viewport.Width - 4)
+		m.renderer = createRenderer(m.viewport.Width - rendererMinWidth)
 		m.reRenderCompletedMessages()
 		m.updateViewportContent()
 	}
@@ -684,9 +746,9 @@ func (m *Model) updateDimensions() {
 
 // reRenderCompletedMessages re-renders all completed assistant messages with the current renderer.
 func (m *Model) reRenderCompletedMessages() {
-	for i := range m.messages {
-		msg := &m.messages[i]
-		if msg.role == "assistant" && msg.content != "" {
+	for idx := range m.messages {
+		msg := &m.messages[idx]
+		if msg.role == roleAssistant && msg.content != "" {
 			msg.rendered = renderMarkdownWithRenderer(m.renderer, msg.content)
 		}
 	}
@@ -735,6 +797,7 @@ func (m *Model) streamResponseCmd(userMessage string) tea.Cmd {
 				m.unsubscribe = nil
 			}
 			m.unsubscribeMu.Unlock()
+
 			return streamErrMsg{err: err}
 		}
 
@@ -887,78 +950,102 @@ func extractPermissionDetails(request copilot.PermissionRequest) (string, string
 	// Default tool name based on permission kind
 	toolName := formatPermissionKind(request.Kind)
 
-	// Fields that contain the actual command/action (ordered by priority)
-	commandFields := []string{
-		"command",       // Shell commands
-		"cmd",           // Alternative shell command field
-		"shell",         // Some shells use this
-		"runInTerminal", // VS Code terminal execution
-		"execute",       // Generic execution
-		"run",           // Generic run
-		"script",        // Script execution
-		"input",         // Input to execute
+	// Try command fields first, then nested execution, then path fields, then fallback
+	if cmd := findCommandInMap(request.Extra); cmd != "" {
+		return toolName, cmd
 	}
 
-	for _, field := range commandFields {
-		if val, ok := request.Extra[field]; ok {
-			if cmd := extractStringValue(val); cmd != "" {
-				return toolName, cmd
-			}
-		}
+	if cmd := findCommandInExecution(request.Extra); cmd != "" {
+		return toolName, cmd
 	}
 
-	// Check for nested execution object (some SDK versions nest the command)
-	if exec, ok := request.Extra["execution"].(map[string]any); ok {
-		for _, field := range commandFields {
-			if val, ok := exec[field]; ok {
-				if cmd := extractStringValue(val); cmd != "" {
-					return toolName, cmd
-				}
-			}
-		}
+	if path := findPathInMap(request.Extra); path != "" {
+		return toolName, path
 	}
 
-	// Path-based operations (file read/write/edit)
-	pathFields := []string{"path", "filePath", "file", "target"}
-	for _, field := range pathFields {
-		if val, ok := request.Extra[field]; ok {
-			if path := extractStringValue(val); path != "" {
-				return toolName, path
-			}
-		}
-	}
-
-	// Fallback: look for any string value that looks like a command
-	// Skip metadata fields that don't contain the actual command
-	metadataFields := map[string]bool{
-		"kind": true, "toolCallId": true, "possiblePaths": true,
-		"possibleUrls": true, "sessionId": true, "requestId": true,
-		"timestamp": true, "type": true, "id": true,
-	}
-
-	for key, val := range request.Extra {
-		if metadataFields[key] {
-			continue
-		}
-		if cmd := extractStringValue(val); cmd != "" {
-			// Found a non-metadata string value - use it
-			return toolName, cmd
-		}
+	if cmd := findFallbackValue(request.Extra); cmd != "" {
+		return toolName, cmd
 	}
 
 	// Last resort: just show the permission kind
 	return toolName, request.Kind
 }
 
+// commandFields contains field names that typically hold the command to execute.
+var commandFields = []string{
+	"command", "cmd", "shell", "runInTerminal", "execute", "run", "script", "input",
+}
+
+// pathFields contains field names for file path operations.
+var pathFields = []string{"path", "filePath", "file", "target"}
+
+// metadataFields contains field names to skip during fallback search.
+var metadataFields = map[string]bool{
+	"kind": true, "toolCallId": true, "possiblePaths": true,
+	"possibleUrls": true, "sessionId": true, "requestId": true,
+	"timestamp": true, "type": true, "id": true,
+}
+
+// findCommandInMap searches for a command value in the given map.
+func findCommandInMap(extra map[string]any) string {
+	for _, field := range commandFields {
+		if val, ok := extra[field]; ok {
+			if cmd := extractStringValue(val); cmd != "" {
+				return cmd
+			}
+		}
+	}
+
+	return ""
+}
+
+// findCommandInExecution checks for a nested execution object with command fields.
+func findCommandInExecution(extra map[string]any) string {
+	exec, ok := extra["execution"].(map[string]any)
+	if !ok {
+		return ""
+	}
+
+	return findCommandInMap(exec)
+}
+
+// findPathInMap searches for a path value in the given map.
+func findPathInMap(extra map[string]any) string {
+	for _, field := range pathFields {
+		if val, ok := extra[field]; ok {
+			if path := extractStringValue(val); path != "" {
+				return path
+			}
+		}
+	}
+
+	return ""
+}
+
+// findFallbackValue searches for any non-metadata string value in the given map.
+func findFallbackValue(extra map[string]any) string {
+	for key, val := range extra {
+		if metadataFields[key] {
+			continue
+		}
+
+		if cmd := extractStringValue(val); cmd != "" {
+			return cmd
+		}
+	}
+
+	return ""
+}
+
 // extractStringValue extracts a string from various value types.
 func extractStringValue(val any) string {
-	switch v := val.(type) {
+	switch typedVal := val.(type) {
 	case string:
-		return v
+		return typedVal
 	case []any:
 		// Join array elements
-		parts := make([]string, 0, len(v))
-		for _, item := range v {
+		parts := make([]string, 0, len(typedVal))
+		for _, item := range typedVal {
 			if s, ok := item.(string); ok && s != "" {
 				parts = append(parts, s)
 			}
@@ -968,10 +1055,10 @@ func extractStringValue(val any) string {
 		}
 	case map[string]any:
 		// Try to extract command from nested object
-		if cmd, ok := v["command"].(string); ok {
+		if cmd, ok := typedVal["command"].(string); ok {
 			return cmd
 		}
-		if cmd, ok := v["cmd"].(string); ok {
+		if cmd, ok := typedVal["cmd"].(string); ok {
 			return cmd
 		}
 	}
