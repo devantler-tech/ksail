@@ -35,7 +35,7 @@ go build -o ksail
 
 # For production-optimized builds (matches release artifacts):
 go build -ldflags="-s -w" -o ksail
-# Strips debug symbols, reduces binary size by ~28% (302MB → 217MB)
+# Strips debug symbols and can significantly reduce binary size (see #2095 for benchmark details)
 ```
 
 **Run Unit Tests**:
