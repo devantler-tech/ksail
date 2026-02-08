@@ -90,7 +90,7 @@ runs:
           # Build binary (first generate embedded docs)
           mkdir -p ./.cache
           go generate ./pkg/svc/chat/...
-          go build -o ./.cache/ksail .
+          go build -ldflags="-s -w" -o ./.cache/ksail .
           # Copy to target location
           if [[ "$output_target" = /* ]]; then
             sudo cp ./.cache/ksail "$output_target"
