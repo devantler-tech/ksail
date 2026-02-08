@@ -55,7 +55,7 @@ go build ./...
 go build -ldflags="-s -w" -o ksail
 ```
 
-> **Note:** Release builds use `-ldflags="-s -w"` to strip debug symbols and reduce binary size by ~28% (302MB → 217MB). Development builds include debug symbols for better debugging experience.
+> **Note:** Release builds use `-ldflags="-s -w"` to strip debug symbols, which typically reduces binary size by around 25–30% (exact size varies by OS/arch, Go version, and dependencies). Development builds include debug symbols for a better debugging experience.
 
 ### Test
 
