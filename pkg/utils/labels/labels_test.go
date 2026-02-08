@@ -1,6 +1,7 @@
 package labels_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v5/pkg/utils/labels"
@@ -263,7 +264,7 @@ func TestUniqueValues_EdgeCases(t *testing.T) {
 		items := make([]TestItem, 100)
 		for i := range items {
 			items[i] = TestItem{
-				Labels: map[string]string{"id": string(rune('a' + i))},
+				Labels: map[string]string{"id": fmt.Sprintf("value-%03d", i)},
 			}
 		}
 
