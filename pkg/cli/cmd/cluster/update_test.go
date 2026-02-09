@@ -1,10 +1,10 @@
-//nolint:testpackage // Testing internal functions requires same package
-package cluster
+package cluster_test
 
 import (
 	"strings"
 	"testing"
 
+	clusterpkg "github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/confirm"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 )
@@ -13,7 +13,7 @@ func TestNewUpdateCmd(t *testing.T) {
 	t.Parallel()
 
 	runtimeContainer := &runtime.Runtime{}
-	cmd := NewUpdateCmd(runtimeContainer)
+	cmd := clusterpkg.NewUpdateCmd(runtimeContainer)
 
 	// Verify command basics
 	if cmd.Use != "update" {

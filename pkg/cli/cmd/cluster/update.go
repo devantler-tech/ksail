@@ -24,13 +24,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// errRecreateChanges is returned when some changes require cluster recreation
-// but --force was not specified.
-var errRecreateChanges = fmt.Errorf(
-	"changes require cluster recreation: %w",
-	clustererrors.ErrRecreationRequired,
-)
-
 // NewUpdateCmd creates the cluster update command.
 // The update command applies configuration changes to a running cluster.
 // It supports in-place updates where possible and falls back to recreation when necessary.
@@ -110,12 +103,32 @@ func handleUpdateRunE(
 	// Check if provisioner supports updates
 	updater, supportsUpdate := provisioner.(clusterprovisioner.ClusterUpdater)
 	if !supportsUpdate {
+		if cfgManager.Viper.GetBool("dry-run") {
+			notify.Infof(
+				cmd.OutOrStdout(),
+				"Provisioner does not support in-place updates; "+
+					"recreation would be required.\nDry run complete. No changes applied.",
+			)
+
+			return nil
+		}
+
 		return executeRecreateFlow(cmd, cfgManager, ctx, deps, clusterName, force)
 	}
 
 	// Compute full diff (falls back to nil diff if config retrieval fails)
 	currentSpec, diff := computeUpdateDiff(cmd, ctx, updater, clusterName)
 	if diff == nil {
+		if cfgManager.Viper.GetBool("dry-run") {
+			notify.Infof(
+				cmd.OutOrStdout(),
+				"Could not retrieve current configuration; "+
+					"recreation would be required.\nDry run complete. No changes applied.",
+			)
+
+			return nil
+		}
+
 		return executeRecreateFlow(cmd, cfgManager, ctx, deps, clusterName, force)
 	}
 
@@ -322,8 +335,8 @@ func reportDryRun(cmd *cobra.Command, diff *types.UpdateResult) error {
 	return nil
 }
 
-// handleRecreateRequired warns about recreate-required changes and either
-// proceeds with recreation (if force) or returns an error.
+// handleRecreateRequired warns about recreate-required changes and proceeds
+// with recreation, prompting for confirmation unless --force is set.
 func handleRecreateRequired(
 	cmd *cobra.Command,
 	cfgManager *ksailconfigmanager.ConfigManager,
@@ -343,15 +356,7 @@ func handleRecreateRequired(
 		)
 	}
 
-	block.WriteString(
-		"Use 'ksail cluster delete && ksail cluster create' or --force to recreate.",
-	)
-
-	notify.Warningf(cmd.OutOrStderr(), "%s", block.String())
-
-	if !force {
-		return fmt.Errorf("%d %w", len(diff.RecreateRequired), errRecreateChanges)
-	}
+	notify.Warningf(cmd.OutOrStderr(), "%s", strings.TrimRight(block.String(), "\n"))
 
 	return executeRecreateFlow(cmd, cfgManager, ctx, deps, clusterName, force)
 }
