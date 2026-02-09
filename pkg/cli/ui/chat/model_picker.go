@@ -254,7 +254,7 @@ func (m *Model) formatModelItem(index int) (string, bool) {
 
 	isCurrentModel := model.ID == m.currentModel
 	if isCurrentModel {
-		line += " ✓"
+		line += checkmarkSuffix
 	}
 
 	return line, isCurrentModel

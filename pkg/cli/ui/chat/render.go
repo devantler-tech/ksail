@@ -79,9 +79,9 @@ func (m *Model) buildStatusText() string {
 	case m.isStreaming:
 		statusParts = append(statusParts, m.spinner.View()+" "+statusStyle.Render("Thinking..."))
 	case m.showCopyFeedback:
-		statusParts = append(statusParts, statusStyle.Render("Copied ✓"))
+		statusParts = append(statusParts, statusStyle.Render("Copied"+checkmarkSuffix))
 	case m.justCompleted:
-		statusParts = append(statusParts, statusStyle.Render("Ready ✓"))
+		statusParts = append(statusParts, statusStyle.Render("Ready"+checkmarkSuffix))
 	}
 
 	return strings.Join(statusParts, " • ")
