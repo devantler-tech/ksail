@@ -1,7 +1,7 @@
 package chat
 
 import (
-	"github.com/devantler-tech/ksail/v5/pkg/ai/toolgen"
+	"github.com/devantler-tech/ksail/v5/pkg/toolgen"
 	copilot "github.com/github/copilot-sdk/go"
 	"github.com/spf13/cobra"
 )

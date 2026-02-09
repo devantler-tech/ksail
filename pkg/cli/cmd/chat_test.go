@@ -6,9 +6,9 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/devantler-tech/ksail/v5/pkg/ai/toolgen"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/cmd"
 	chatui "github.com/devantler-tech/ksail/v5/pkg/cli/ui/chat"
+	"github.com/devantler-tech/ksail/v5/pkg/toolgen"
 	copilot "github.com/github/copilot-sdk/go"
 )
 

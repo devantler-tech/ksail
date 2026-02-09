@@ -3,7 +3,7 @@ package reconciler_test
 import (
 	"testing"
 
-	"github.com/devantler-tech/ksail/v5/pkg/svc/reconciler"
+	"github.com/devantler-tech/ksail/v5/pkg/client/reconciler"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/runtime"

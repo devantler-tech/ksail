@@ -3,7 +3,7 @@ package toolgen_test
 import (
 	"testing"
 
-	"github.com/devantler-tech/ksail/v5/pkg/ai/toolgen"
+	"github.com/devantler-tech/ksail/v5/pkg/toolgen"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

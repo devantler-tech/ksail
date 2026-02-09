@@ -3,8 +3,8 @@ package toolgen_test
 import (
 	"testing"
 
-	"github.com/devantler-tech/ksail/v5/pkg/ai/toolgen"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/cmd"
+	"github.com/devantler-tech/ksail/v5/pkg/toolgen"
 	"github.com/spf13/cobra"
 )
 
