@@ -253,15 +253,7 @@ func (m *Model) tryFinalizeResponse() (tea.Model, tea.Cmd) {
 		last.rendered = renderMarkdownWithRenderer(m.renderer, last.content)
 
 		// Commit current tools to this message for persistence across turns
-		last.tools = make([]*toolExecution, 0, len(m.toolOrder))
-		last.toolOrder = make([]string, len(m.toolOrder))
-		copy(last.toolOrder, m.toolOrder)
-
-		for _, id := range m.toolOrder {
-			if tool := m.tools[id]; tool != nil {
-				last.tools = append(last.tools, tool)
-			}
-		}
+		m.commitToolsToLastAssistantMessage()
 	}
 
 	m.updateViewportContent()

@@ -171,21 +171,17 @@ func (e *DiffEngine) checkLocalRegistryChange(
 				Category: types.ChangeCategoryRecreateRequired,
 				Reason:   "Kind requires cluster recreate to change containerd registry config",
 			})
-		case v1alpha1.DistributionTalos:
+		case v1alpha1.DistributionTalos, v1alpha1.DistributionK3s:
+			reasons := map[v1alpha1.Distribution]string{
+				v1alpha1.DistributionTalos: "Talos supports .machine.registries updates without reboot",
+				v1alpha1.DistributionK3s:   "K3d supports registries.yaml updates",
+			}
 			result.InPlaceChanges = append(result.InPlaceChanges, types.Change{
 				Field:    "cluster.localRegistry.registry",
 				OldValue: oldSpec.LocalRegistry.Registry,
 				NewValue: newSpec.LocalRegistry.Registry,
 				Category: types.ChangeCategoryInPlace,
-				Reason:   "Talos supports .machine.registries updates without reboot",
-			})
-		case v1alpha1.DistributionK3s:
-			result.InPlaceChanges = append(result.InPlaceChanges, types.Change{
-				Field:    "cluster.localRegistry.registry",
-				OldValue: oldSpec.LocalRegistry.Registry,
-				NewValue: newSpec.LocalRegistry.Registry,
-				Category: types.ChangeCategoryInPlace,
-				Reason:   "K3d supports registries.yaml updates",
+				Reason:   reasons[e.distribution],
 			})
 		}
 	}

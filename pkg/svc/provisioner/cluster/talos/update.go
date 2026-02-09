@@ -145,63 +145,30 @@ func (p *TalosProvisioner) applyNodeScalingChanges(
 	_, _ = fmt.Fprintf(p.logWriter, "  Node scaling for Talos cluster %q: CP %+d, Workers %+d\n",
 		clusterName, cpDelta, workerDelta)
 
-	return p.dispatchScaling(ctx, clusterName, cpDelta, workerDelta, result)
+	return p.scaleByProvider(ctx, clusterName, cpDelta, workerDelta, result)
 }
 
-// dispatchScaling routes scaling operations to the appropriate provider.
-func (p *TalosProvisioner) dispatchScaling(
+// scaleByProvider applies node scaling changes using the appropriate provider backend.
+func (p *TalosProvisioner) scaleByProvider(
 	ctx context.Context,
 	clusterName string,
 	cpDelta, workerDelta int,
 	result *types.UpdateResult,
 ) error {
+	scaleRole := p.scaleDockerByRole
 	if p.hetznerOpts != nil {
-		return p.scaleHetzner(ctx, clusterName, cpDelta, workerDelta, result)
+		scaleRole = p.scaleHetznerByRole
 	}
 
-	return p.scaleDocker(ctx, clusterName, cpDelta, workerDelta, result)
-}
-
-// scaleDocker applies node scaling changes for Docker-based clusters.
-func (p *TalosProvisioner) scaleDocker(
-	ctx context.Context,
-	clusterName string,
-	cpDelta, workerDelta int,
-	result *types.UpdateResult,
-) error {
 	if cpDelta != 0 {
-		err := p.scaleDockerControlPlanes(ctx, clusterName, cpDelta, result)
+		err := scaleRole(ctx, clusterName, RoleControlPlane, cpDelta, result)
 		if err != nil {
 			return err
 		}
 	}
 
 	if workerDelta != 0 {
-		err := p.scaleDockerWorkers(ctx, clusterName, workerDelta, result)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// scaleHetzner applies node scaling changes for Hetzner-based clusters.
-func (p *TalosProvisioner) scaleHetzner(
-	ctx context.Context,
-	clusterName string,
-	cpDelta, workerDelta int,
-	result *types.UpdateResult,
-) error {
-	if cpDelta != 0 {
-		err := p.scaleHetznerControlPlanes(ctx, clusterName, cpDelta, result)
-		if err != nil {
-			return err
-		}
-	}
-
-	if workerDelta != 0 {
-		err := p.scaleHetznerWorkers(ctx, clusterName, workerDelta, result)
+		err := scaleRole(ctx, clusterName, RoleWorker, workerDelta, result)
 		if err != nil {
 			return err
 		}

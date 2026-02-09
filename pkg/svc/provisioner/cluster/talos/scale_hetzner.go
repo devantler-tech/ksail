@@ -10,37 +10,22 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider/hetzner"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/types"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
-	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
 )
 
-// scaleHetznerControlPlanes adjusts the number of Hetzner control-plane servers.
+// scaleHetznerByRole adjusts the number of Hetzner servers for the given role.
 // Scale-up: creates new servers, waits for Talos API, applies config.
-// Scale-down: removes etcd members then deletes servers (highest-index first).
-func (p *TalosProvisioner) scaleHetznerControlPlanes(
+// Scale-down: removes etcd members (for control-plane) then deletes servers (highest-index first).
+func (p *TalosProvisioner) scaleHetznerByRole(
 	ctx context.Context,
-	clusterName string,
+	clusterName, role string,
 	delta int,
 	result *types.UpdateResult,
 ) error {
 	if delta > 0 {
-		return p.addHetznerNodes(ctx, clusterName, RoleControlPlane, delta, result)
+		return p.addHetznerNodes(ctx, clusterName, role, delta, result)
 	}
 
-	return p.removeHetznerNodes(ctx, clusterName, RoleControlPlane, -delta, result)
-}
-
-// scaleHetznerWorkers adjusts the number of Hetzner worker servers.
-func (p *TalosProvisioner) scaleHetznerWorkers(
-	ctx context.Context,
-	clusterName string,
-	delta int,
-	result *types.UpdateResult,
-) error {
-	if delta > 0 {
-		return p.addHetznerNodes(ctx, clusterName, RoleWorker, delta, result)
-	}
-
-	return p.removeHetznerNodes(ctx, clusterName, RoleWorker, -delta, result)
+	return p.removeHetznerNodes(ctx, clusterName, role, -delta, result)
 }
 
 // addHetznerNodes creates new Hetzner servers for the given role.
@@ -139,7 +124,7 @@ func (p *TalosProvisioner) configureNewHetznerNodes(
 	}
 
 	// Apply configuration to new nodes
-	config := p.hetznerConfigForRole(role)
+	config := p.configForRole(role)
 	if config == nil {
 		return fmt.Errorf("%w: %s", ErrNoConfigForRole, role)
 	}
@@ -310,17 +295,4 @@ func (p *TalosProvisioner) hetznerRetryOpts() hetzner.ServerRetryOpts {
 	}
 
 	return opts
-}
-
-// hetznerConfigForRole returns the appropriate Talos config for new Hetzner nodes.
-func (p *TalosProvisioner) hetznerConfigForRole(role string) talosconfig.Provider {
-	if p.talosConfigs == nil {
-		return nil
-	}
-
-	if role == RoleControlPlane {
-		return p.talosConfigs.ControlPlane()
-	}
-
-	return p.talosConfigs.Worker()
 }

@@ -88,27 +88,42 @@ func (d *ComponentDetector) DetectComponents(
 	return spec, nil
 }
 
+// releaseMapping maps a Helm release to the value returned when the release is found.
+type releaseMapping[T ~string] struct {
+	release   string
+	namespace string
+	value     T
+}
+
+// detectFirstRelease checks Helm releases in priority order and returns the
+// value associated with the first release that exists. Returns defaultVal when
+// no release is found.
+func detectFirstRelease[T ~string](
+	ctx context.Context,
+	helmClient helm.Interface,
+	mappings []releaseMapping[T],
+	defaultVal T,
+) (T, error) {
+	for _, mapping := range mappings {
+		exists, err := helmClient.ReleaseExists(ctx, mapping.release, mapping.namespace)
+		if err != nil {
+			return defaultVal, fmt.Errorf("check %s release: %w", mapping.release, err)
+		}
+
+		if exists {
+			return mapping.value, nil
+		}
+	}
+
+	return defaultVal, nil
+}
+
 // detectCNI probes for Cilium or Calico Helm releases.
 func (d *ComponentDetector) detectCNI(ctx context.Context) (v1alpha1.CNI, error) {
-	cilium, err := d.helmClient.ReleaseExists(ctx, ReleaseCilium, NamespaceCilium)
-	if err != nil {
-		return v1alpha1.CNIDefault, fmt.Errorf("check cilium release: %w", err)
-	}
-
-	if cilium {
-		return v1alpha1.CNICilium, nil
-	}
-
-	calico, err := d.helmClient.ReleaseExists(ctx, ReleaseCalico, NamespaceCalico)
-	if err != nil {
-		return v1alpha1.CNIDefault, fmt.Errorf("check calico release: %w", err)
-	}
-
-	if calico {
-		return v1alpha1.CNICalico, nil
-	}
-
-	return v1alpha1.CNIDefault, nil
+	return detectFirstRelease(ctx, d.helmClient, []releaseMapping[v1alpha1.CNI]{
+		{ReleaseCilium, NamespaceCilium, v1alpha1.CNICilium},
+		{ReleaseCalico, NamespaceCalico, v1alpha1.CNICalico},
+	}, v1alpha1.CNIDefault)
 }
 
 // detectCSI determines the CSI setting based on distribution, provider, and
@@ -230,66 +245,29 @@ func (d *ComponentDetector) detectLoadBalancer(
 
 // detectCertManager checks for a cert-manager Helm release.
 func (d *ComponentDetector) detectCertManager(ctx context.Context) (v1alpha1.CertManager, error) {
-	exists, err := d.helmClient.ReleaseExists(ctx, ReleaseCertManager, NamespaceCertManager)
-	if err != nil {
-		return v1alpha1.CertManagerDisabled, fmt.Errorf("check cert-manager release: %w", err)
-	}
-
-	if exists {
-		return v1alpha1.CertManagerEnabled, nil
-	}
-
-	return v1alpha1.CertManagerDisabled, nil
+	return detectFirstRelease(ctx, d.helmClient, []releaseMapping[v1alpha1.CertManager]{
+		{ReleaseCertManager, NamespaceCertManager, v1alpha1.CertManagerEnabled},
+	}, v1alpha1.CertManagerDisabled)
 }
 
 // detectPolicyEngine checks for Kyverno or Gatekeeper Helm releases.
 func (d *ComponentDetector) detectPolicyEngine(
 	ctx context.Context,
 ) (v1alpha1.PolicyEngine, error) {
-	kyverno, err := d.helmClient.ReleaseExists(ctx, ReleaseKyverno, NamespaceKyverno)
-	if err != nil {
-		return v1alpha1.PolicyEngineNone, fmt.Errorf("check kyverno release: %w", err)
-	}
-
-	if kyverno {
-		return v1alpha1.PolicyEngineKyverno, nil
-	}
-
-	gatekeeper, err := d.helmClient.ReleaseExists(ctx, ReleaseGatekeeper, NamespaceGatekeeper)
-	if err != nil {
-		return v1alpha1.PolicyEngineNone, fmt.Errorf("check gatekeeper release: %w", err)
-	}
-
-	if gatekeeper {
-		return v1alpha1.PolicyEngineGatekeeper, nil
-	}
-
-	return v1alpha1.PolicyEngineNone, nil
+	return detectFirstRelease(ctx, d.helmClient, []releaseMapping[v1alpha1.PolicyEngine]{
+		{ReleaseKyverno, NamespaceKyverno, v1alpha1.PolicyEngineKyverno},
+		{ReleaseGatekeeper, NamespaceGatekeeper, v1alpha1.PolicyEngineGatekeeper},
+	}, v1alpha1.PolicyEngineNone)
 }
 
 // detectGitOpsEngine checks for Flux or ArgoCD Helm releases.
 func (d *ComponentDetector) detectGitOpsEngine(
 	ctx context.Context,
 ) (v1alpha1.GitOpsEngine, error) {
-	flux, err := d.helmClient.ReleaseExists(ctx, ReleaseFluxOperator, NamespaceFluxOperator)
-	if err != nil {
-		return v1alpha1.GitOpsEngineNone, fmt.Errorf("check flux-operator release: %w", err)
-	}
-
-	if flux {
-		return v1alpha1.GitOpsEngineFlux, nil
-	}
-
-	argocd, err := d.helmClient.ReleaseExists(ctx, ReleaseArgoCD, NamespaceArgoCD)
-	if err != nil {
-		return v1alpha1.GitOpsEngineNone, fmt.Errorf("check argocd release: %w", err)
-	}
-
-	if argocd {
-		return v1alpha1.GitOpsEngineArgoCD, nil
-	}
-
-	return v1alpha1.GitOpsEngineNone, nil
+	return detectFirstRelease(ctx, d.helmClient, []releaseMapping[v1alpha1.GitOpsEngine]{
+		{ReleaseFluxOperator, NamespaceFluxOperator, v1alpha1.GitOpsEngineFlux},
+		{ReleaseArgoCD, NamespaceArgoCD, v1alpha1.GitOpsEngineArgoCD},
+	}, v1alpha1.GitOpsEngineNone)
 }
 
 // deploymentExists checks whether a Deployment with the given name exists in

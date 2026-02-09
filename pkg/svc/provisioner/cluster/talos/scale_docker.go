@@ -18,35 +18,20 @@ import (
 	"github.com/siderolabs/talos/pkg/machinery/constants"
 )
 
-// scaleDockerControlPlanes adjusts the number of Docker control-plane nodes.
+// scaleDockerByRole adjusts the number of Docker nodes for the given role.
 // Scale-up: creates new containers with proper Talos config and static IPs.
-// Scale-down: removes etcd members then stops and removes containers (highest-index first).
-func (p *TalosProvisioner) scaleDockerControlPlanes(
+// Scale-down: removes etcd members (for control-plane) then stops and removes containers (highest-index first).
+func (p *TalosProvisioner) scaleDockerByRole(
 	ctx context.Context,
-	clusterName string,
+	clusterName, role string,
 	delta int,
 	result *types.UpdateResult,
 ) error {
 	if delta > 0 {
-		return p.addDockerNodes(ctx, clusterName, RoleControlPlane, delta, result)
+		return p.addDockerNodes(ctx, clusterName, role, delta, result)
 	}
 
-	return p.removeDockerNodes(ctx, clusterName, RoleControlPlane, -delta, result)
-}
-
-// scaleDockerWorkers adjusts the number of Docker worker nodes.
-// Scale-up: creates new containers. Scale-down: removes containers (highest-index first).
-func (p *TalosProvisioner) scaleDockerWorkers(
-	ctx context.Context,
-	clusterName string,
-	delta int,
-	result *types.UpdateResult,
-) error {
-	if delta > 0 {
-		return p.addDockerNodes(ctx, clusterName, "worker", delta, result)
-	}
-
-	return p.removeDockerNodes(ctx, clusterName, "worker", -delta, result)
+	return p.removeDockerNodes(ctx, clusterName, role, -delta, result)
 }
 
 // addDockerNodes creates new Talos Docker containers for the given role.
@@ -312,17 +297,18 @@ func (p *TalosProvisioner) countDockerRole(
 	return len(nodes), nil
 }
 
-// configForRole returns the appropriate Talos config for a role.
+// configForRole returns the appropriate Talos config for a role,
+// using the nil-safe Configs accessors.
 func (p *TalosProvisioner) configForRole(role string) talosconfig.Provider {
-	if p.talosConfigs == nil || p.talosConfigs.Bundle() == nil {
+	if p.talosConfigs == nil {
 		return nil
 	}
 
 	if role == RoleControlPlane {
-		return p.talosConfigs.Bundle().ControlPlane()
+		return p.talosConfigs.ControlPlane()
 	}
 
-	return p.talosConfigs.Bundle().Worker()
+	return p.talosConfigs.Worker()
 }
 
 // nextDockerNodeIndex finds the next available index for a node role.

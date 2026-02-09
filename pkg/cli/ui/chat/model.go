@@ -841,21 +841,17 @@ func Run(
 	currentModel string,
 	timeout time.Duration,
 ) error {
-	model := New(session, client, sessionConfig, models, currentModel, timeout)
-	model.ctx = ctx
-	program := tea.NewProgram(
-		model,
-		tea.WithAltScreen(),
-		tea.WithContext(ctx),
-		tea.WithMouseCellMotion(), // Enable mouse wheel (use shift+click for text selection)
+	return RunWithEventChannelAndModeRef(
+		ctx,
+		session,
+		client,
+		sessionConfig,
+		models,
+		currentModel,
+		timeout,
+		nil,
+		nil,
 	)
-
-	_, err := program.Run()
-	if err != nil {
-		return fmt.Errorf("running chat program: %w", err)
-	}
-
-	return nil
 }
 
 // RunWithEventChannel starts the chat TUI with a pre-created event channel.

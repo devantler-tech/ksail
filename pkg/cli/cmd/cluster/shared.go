@@ -15,19 +15,20 @@ import (
 // used by commands that modify cluster state (create, update).
 // This centralizes the selector list to avoid duplication between commands.
 func defaultClusterMutationFieldSelectors() []ksailconfigmanager.FieldSelector[v1alpha1.Cluster] {
-	fieldSelectors := ksailconfigmanager.DefaultClusterFieldSelectors()
-	fieldSelectors = append(fieldSelectors, ksailconfigmanager.DefaultProviderFieldSelector())
-	fieldSelectors = append(fieldSelectors, ksailconfigmanager.DefaultCNIFieldSelector())
-	fieldSelectors = append(fieldSelectors, ksailconfigmanager.DefaultMetricsServerFieldSelector())
-	fieldSelectors = append(fieldSelectors, ksailconfigmanager.DefaultLoadBalancerFieldSelector())
-	fieldSelectors = append(fieldSelectors, ksailconfigmanager.DefaultCertManagerFieldSelector())
-	fieldSelectors = append(fieldSelectors, ksailconfigmanager.DefaultPolicyEngineFieldSelector())
-	fieldSelectors = append(fieldSelectors, ksailconfigmanager.DefaultCSIFieldSelector())
-	fieldSelectors = append(fieldSelectors, ksailconfigmanager.DefaultImportImagesFieldSelector())
-	fieldSelectors = append(fieldSelectors, ksailconfigmanager.ControlPlanesFieldSelector())
-	fieldSelectors = append(fieldSelectors, ksailconfigmanager.WorkersFieldSelector())
+	selectors := ksailconfigmanager.DefaultClusterFieldSelectors()
 
-	return fieldSelectors
+	return append(selectors,
+		ksailconfigmanager.DefaultProviderFieldSelector(),
+		ksailconfigmanager.DefaultCNIFieldSelector(),
+		ksailconfigmanager.DefaultMetricsServerFieldSelector(),
+		ksailconfigmanager.DefaultLoadBalancerFieldSelector(),
+		ksailconfigmanager.DefaultCertManagerFieldSelector(),
+		ksailconfigmanager.DefaultPolicyEngineFieldSelector(),
+		ksailconfigmanager.DefaultCSIFieldSelector(),
+		ksailconfigmanager.DefaultImportImagesFieldSelector(),
+		ksailconfigmanager.ControlPlanesFieldSelector(),
+		ksailconfigmanager.WorkersFieldSelector(),
+	)
 }
 
 // registerMirrorRegistryFlag adds the --mirror-registry flag to a command.

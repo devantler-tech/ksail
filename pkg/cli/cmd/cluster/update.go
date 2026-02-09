@@ -550,17 +550,10 @@ func normalizeFieldName(field string) string {
 
 // collectExistingFields builds a set of normalized field names already present in the diff.
 func collectExistingFields(diff *types.UpdateResult) map[string]bool {
-	fields := make(map[string]bool)
+	changes := diff.AllChanges()
+	fields := make(map[string]bool, len(changes))
 
-	for _, c := range diff.InPlaceChanges {
-		fields[normalizeFieldName(c.Field)] = true
-	}
-
-	for _, c := range diff.RebootRequired {
-		fields[normalizeFieldName(c.Field)] = true
-	}
-
-	for _, c := range diff.RecreateRequired {
+	for _, c := range changes {
 		fields[normalizeFieldName(c.Field)] = true
 	}
 

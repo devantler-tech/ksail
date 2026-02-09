@@ -36,12 +36,12 @@ func CreatePermissionHandler(writer io.Writer) copilot.PermissionHandler {
 
 // isReadOperation determines if a permission request is for a read-only operation.
 func isReadOperation(kind string) bool {
-	readKinds := map[string]bool{
-		"read": true,
-		"url":  true, // URL fetching is typically read-only
+	switch kind {
+	case "read", "url":
+		return true
+	default:
+		return false
 	}
-
-	return readKinds[kind]
 }
 
 // promptForPermission prompts the user for permission and returns the result.
