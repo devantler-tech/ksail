@@ -5,6 +5,7 @@ This directory contains Go benchmarks for the Kubernetes resource polling functi
 ## Purpose
 
 These benchmarks establish performance baselines for:
+
 - Multi-resource polling operations (sequential implementation)
 - Mixed resource types (deployments and daemonsets)
 - Real-world CNI installation scenarios
@@ -13,21 +14,25 @@ These benchmarks establish performance baselines for:
 ## Running Benchmarks
 
 ### Run all benchmarks in this package
+
 ```bash
 go test -bench=. -benchmem ./pkg/k8s/...
 ```
 
 ### Run with longer benchmark time for more accurate results
+
 ```bash
 go test -bench=. -benchmem -benchtime=5s ./pkg/k8s/...
 ```
 
 ### Run specific benchmark
+
 ```bash
 go test -bench=BenchmarkWaitForMultipleResources_Sequential -benchmem ./pkg/k8s/...
 ```
 
 ### Save baseline results for comparison
+
 ```bash
 go test -bench=. -benchmem ./pkg/k8s/... > baseline.txt
 ```
@@ -55,34 +60,43 @@ benchstat before.txt after.txt
 ## Benchmark Scenarios
 
 ### BenchmarkWaitForMultipleResources_Sequential
+
 Tests the current sequential implementation with varying resource counts (1, 5, 10, 20 resources).
 
 **Key Metrics:**
+
 - Time per operation increases linearly with resource count
 - Memory allocations scale with resources
 - Baseline for future parallel implementation comparison
 
 ### BenchmarkWaitForMultipleResources_MixedTypes
+
 Tests realistic scenarios with mixed deployments and daemonsets (2d+2ds, 5d+5ds, 10d+10ds).
 
 **Key Metrics:**
+
 - Representative of actual CNI and component installations
 - Shows overhead of handling different resource types
 
 ### BenchmarkWaitForMultipleResources_RealWorldCNI
+
 Simulates a typical Cilium CNI installation:
+
 - cilium-operator deployment (2 replicas)
 - cilium daemonset (3 nodes)
 - coredns deployment (2 replicas)
 
 **Key Metrics:**
+
 - Most realistic benchmark for actual cluster operations
 - Useful for measuring user-facing performance improvements
 
 ### BenchmarkPollForReadiness_SingleCheck
+
 Measures the base polling mechanism overhead with immediate readiness.
 
 **Key Metrics:**
+
 - Minimum overhead per polling operation
 - Useful for understanding fixed costs
 
@@ -107,11 +121,13 @@ BenchmarkPollForReadiness_SingleCheck-4                            3635716     9
 ## Performance Insights
 
 ### Current Sequential Implementation
+
 - **Linear scaling:** Time scales linearly with resource count (~6.5μs per resource)
 - **Memory efficiency:** ~7.7KB per resource with ~38 allocations per resource
 - **Real-world performance:** Cilium installation (~15μs total) is optimistic due to fake clientset
 
 ### Optimization Opportunities
+
 1. **Parallel polling:** Could reduce wait time significantly for multiple resources
 2. **Connection pooling:** Reduce per-resource overhead
 3. **Batch status checks:** Query multiple resources in single API call
@@ -147,6 +163,7 @@ When making performance-related changes:
 5. Include results in PR description
 
 Aim for:
+
 - ✅ No regression in any scenario
 - ✅ At least 10% improvement in target scenario
 - ✅ No significant memory increase
