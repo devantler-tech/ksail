@@ -340,6 +340,15 @@ func Disconnect(
 	})
 }
 
+// WaitForK3dLocalRegistryReady waits for the K3d-managed local registry to be ready.
+// This should be called after K3d cluster creation when local registry is enabled,
+// to ensure the registry is accepting connections before installing Flux or other
+// components that depend on it.
+//
+// For K3d, the local registry is created during cluster creation via Registries.Create,
+// so we need to wait for it to be ready after the cluster is created.
+// For Kind and Talos, this is a no-op since they use KSail-managed registries
+// which are created and waited for before cluster creation.
 func WaitForK3dLocalRegistryReady(
 	cmd *cobra.Command,
 	clusterCfg *v1alpha1.Cluster,

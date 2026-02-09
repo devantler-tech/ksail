@@ -284,4 +284,3 @@ func (p *TalosProvisioner) deleteHetznerCluster(ctx context.Context, clusterName
 
 	return nil
 }
-
