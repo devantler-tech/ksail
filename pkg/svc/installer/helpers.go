@@ -23,9 +23,16 @@ const (
 	// CertManagerInstallTimeout is the timeout for cert-manager installs, which need
 	// extra time for multiple deployments and webhook configurations to become ready.
 	CertManagerInstallTimeout = 10 * time.Minute
+	// GatekeeperInstallTimeout is the timeout for Gatekeeper policy engine installs,
+	// which need extra time for the webhook and audit controller to become ready.
+	GatekeeperInstallTimeout = 7 * time.Minute
 	// FluxInstallTimeout is the timeout for Flux operator installs, which need
 	// extra time when running under heavy parallel load on resource-constrained nodes.
 	FluxInstallTimeout = 7 * time.Minute
+	// ArgoCDInstallTimeout is the timeout for ArgoCD installs, which need
+	// extra time for multiple components to become ready (server, repo-server,
+	// application-controller, and Redis).
+	ArgoCDInstallTimeout = 10 * time.Minute
 )
 
 // GetInstallTimeout determines the timeout for component installation.
