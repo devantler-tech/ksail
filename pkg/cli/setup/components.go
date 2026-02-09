@@ -107,6 +107,8 @@ func policyEngineFactory(
 
 			return kyvernoinstaller.NewKyvernoInstaller(helmClient, timeout), nil
 		case v1alpha1.PolicyEngineGatekeeper:
+			timeout = max(timeout, installer.GatekeeperInstallTimeout)
+
 			return gatekeeperinstaller.NewGatekeeperInstaller(helmClient, timeout), nil
 		default:
 			return nil, fmt.Errorf("%w: unknown engine %q", ErrPolicyEngineDisabled, engine)
@@ -151,6 +153,7 @@ func csiFactory(
 func helmInstallerFactory(
 	factories *InstallerFactories,
 	newInstaller func(client helm.Interface, timeout time.Duration) installer.Installer,
+	minTimeout time.Duration,
 ) func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error) {
 	return func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error) {
 		helmClient, _, err := factories.HelmClientFactory(clusterCfg)
@@ -159,6 +162,7 @@ func helmInstallerFactory(
 		}
 
 		timeout := installer.GetInstallTimeout(clusterCfg)
+		timeout = max(timeout, minTimeout)
 
 		return newInstaller(helmClient, timeout), nil
 	}
@@ -175,28 +179,26 @@ func DefaultInstallerFactories() *InstallerFactories {
 		return fluxinstaller.NewFluxInstaller(client, timeout)
 	}
 
-	factories.CertManager = func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error) {
-		helmClient, _, err := factories.HelmClientFactory(clusterCfg)
-		if err != nil {
-			return nil, err
-		}
-
-		timeout := installer.GetInstallTimeout(clusterCfg)
-		timeout = max(timeout, installer.CertManagerInstallTimeout)
-
-		return certmanagerinstaller.NewCertManagerInstaller(helmClient, timeout), nil
-	}
+	factories.CertManager = helmInstallerFactory(
+		factories,
+		func(c helm.Interface, t time.Duration) installer.Installer {
+			return certmanagerinstaller.NewCertManagerInstaller(c, t)
+		},
+		installer.CertManagerInstallTimeout,
+	)
 	factories.ArgoCD = helmInstallerFactory(
 		factories,
 		func(c helm.Interface, t time.Duration) installer.Installer {
 			return argocdinstaller.NewArgoCDInstaller(c, t)
 		},
+		installer.ArgoCDInstallTimeout,
 	)
 	factories.KubeletCSRApprover = helmInstallerFactory(
 		factories,
 		func(c helm.Interface, t time.Duration) installer.Installer {
 			return kubeletcsrapproverinstaller.NewKubeletCSRApproverInstaller(c, t)
 		},
+		0,
 	)
 	factories.CSI = csiFactory(factories)
 	factories.PolicyEngine = policyEngineFactory(factories)

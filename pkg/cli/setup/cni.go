@@ -10,6 +10,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
 	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
+	"github.com/devantler-tech/ksail/v5/pkg/k8s"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/installer"
 	calicoinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/cni/calico"
 	ciliuminstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/cni/cilium"
@@ -108,7 +109,7 @@ func installCiliumCNI(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster, tmr time
 		clusterCfg.Spec.Cluster.Distribution,
 	)
 
-	return runCNIInstallation(cmd, ciliumInst, "cilium", tmr)
+	return runCNIInstallation(cmd, ciliumInst, "cilium", tmr, setup, clusterCfg)
 }
 
 func installCalicoCNI(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster, tmr timer.Timer) error {
@@ -127,7 +128,7 @@ func installCalicoCNI(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster, tmr time
 		clusterCfg.Spec.Cluster.Distribution,
 	)
 
-	return runCNIInstallation(cmd, calicoInst, "calico", tmr)
+	return runCNIInstallation(cmd, calicoInst, "calico", tmr, setup, clusterCfg)
 }
 
 func runCNIInstallation(
@@ -135,6 +136,8 @@ func runCNIInstallation(
 	inst cniInstaller,
 	cniName string,
 	tmr timer.Timer,
+	setup *cniSetupResult,
+	clusterCfg *v1alpha1.Cluster,
 ) error {
 	notify.WriteMessage(notify.Message{
 		Type:    notify.ActivityType,
@@ -147,12 +150,43 @@ func runCNIInstallation(
 		return fmt.Errorf("%s installation failed: %w", cniName, err)
 	}
 
+	// Wait for at least one node to become Ready before declaring success.
+	// This is critical for CNIs like Calico that use SkipWait (Helm returns
+	// before pods are ready), ensuring the network layer is functional
+	// before post-CNI components begin installing.
+	err = waitForCNIReadiness(cmd.Context(), setup, clusterCfg)
+	if err != nil {
+		return fmt.Errorf("node readiness check after %s install failed: %w", cniName, err)
+	}
+
 	notify.WriteMessage(notify.Message{
 		Type:    notify.SuccessType,
 		Content: "cni installed",
 		Timer:   helpers.MaybeTimer(cmd, tmr),
 		Writer:  cmd.OutOrStdout(),
 	})
+
+	return nil
+}
+
+// waitForCNIReadiness waits for at least one node to become Ready after CNI installation.
+func waitForCNIReadiness(
+	ctx context.Context,
+	setup *cniSetupResult,
+	clusterCfg *v1alpha1.Cluster,
+) error {
+	clientset, err := k8s.NewClientset(
+		setup.kubeconfig,
+		clusterCfg.Spec.Cluster.Connection.Context,
+	)
+	if err != nil {
+		return fmt.Errorf("create kubernetes client: %w", err)
+	}
+
+	err = k8s.WaitForNodeReady(ctx, clientset, setup.timeout)
+	if err != nil {
+		return fmt.Errorf("wait for node readiness after CNI install: %w", err)
+	}
 
 	return nil
 }

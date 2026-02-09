@@ -157,9 +157,6 @@ func (p *TalosProvisioner) createTalosContainer(
 
 	env := []string{
 		"PLATFORM=container",
-		"TALOSSKU=" + fmt.Sprintf("%dCPU-%dRAM",
-			defaultNodeCPUs/nanosPerCPU,
-			defaultNodeMemory/bytesPerMiB),
 		"USERDATA=" + base64.StdEncoding.EncodeToString([]byte(cfgStr)),
 	}
 
@@ -248,12 +245,8 @@ func buildTalosHostConfig() *container.HostConfig {
 	}
 
 	return &container.HostConfig{
-		Privileged:  true,
-		SecurityOpt: []string{"seccomp:unconfined"},
-		Resources: container.Resources{
-			NanoCPUs: defaultNodeCPUs,
-			Memory:   defaultNodeMemory,
-		},
+		Privileged:     true,
+		SecurityOpt:    []string{"seccomp:unconfined"},
 		ReadonlyRootfs: true,
 		Mounts:         mounts,
 	}

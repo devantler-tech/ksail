@@ -499,12 +499,10 @@ func (p *TalosProvisioner) buildNodeRequests(
 		}
 
 		nodes = append(nodes, provision.NodeRequest{
-			Name:     fmt.Sprintf("%s-control-plane-%d", clusterName, nodeIndex+1),
-			Type:     machine.TypeControlPlane,
-			IPs:      []netip.Addr{nodeIP},
-			Memory:   defaultNodeMemory,
-			NanoCPUs: defaultNodeCPUs,
-			Config:   configBundle.ControlPlane(),
+			Name:   fmt.Sprintf("%s-control-plane-%d", clusterName, nodeIndex+1),
+			Type:   machine.TypeControlPlane,
+			IPs:    []netip.Addr{nodeIP},
+			Config: configBundle.ControlPlane(),
 		})
 	}
 
@@ -520,12 +518,10 @@ func (p *TalosProvisioner) buildNodeRequests(
 		}
 
 		nodes = append(nodes, provision.NodeRequest{
-			Name:     fmt.Sprintf("%s-worker-%d", clusterName, nodeIndex+1),
-			Type:     machine.TypeWorker,
-			IPs:      []netip.Addr{nodeIP},
-			Memory:   defaultNodeMemory,
-			NanoCPUs: defaultNodeCPUs,
-			Config:   configBundle.Worker(),
+			Name:   fmt.Sprintf("%s-worker-%d", clusterName, nodeIndex+1),
+			Type:   machine.TypeWorker,
+			IPs:    []netip.Addr{nodeIP},
+			Config: configBundle.Worker(),
 		})
 	}
 
