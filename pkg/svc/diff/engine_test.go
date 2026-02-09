@@ -1,18 +1,16 @@
-//nolint:testpackage // Testing internal DiffEngine requires same package
-package cluster
+package diff_test
 
 import (
 	"testing"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/diff"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/types"
 )
 
 const (
-	// testValueEnabled is a common test value for component settings.
 	testValueEnabled = "Enabled"
-	// testRegistryAlt is an alternative registry address used in diff tests.
-	testRegistryAlt = "localhost:6060"
+	testRegistryAlt  = "localhost:6060"
 )
 
 func newBaseSpec() *v1alpha1.ClusterSpec {
@@ -44,7 +42,6 @@ func newBaseSpec() *v1alpha1.ClusterSpec {
 	}
 }
 
-// clone returns a deep-enough copy of ClusterSpec for diff testing.
 func clone(spec *v1alpha1.ClusterSpec) *v1alpha1.ClusterSpec {
 	out := *spec
 	out.Vanilla = spec.Vanilla
@@ -55,10 +52,10 @@ func clone(spec *v1alpha1.ClusterSpec) *v1alpha1.ClusterSpec {
 	return &out
 }
 
-func TestDiffEngine_NilSpecs(t *testing.T) {
+func TestEngine_NilSpecs(t *testing.T) {
 	t.Parallel()
 
-	engine := NewDiffEngine(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
+	engine := diff.NewEngine(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
 
 	tests := []struct {
 		name    string
@@ -82,11 +79,11 @@ func TestDiffEngine_NilSpecs(t *testing.T) {
 	}
 }
 
-func TestDiffEngine_NoChanges(t *testing.T) {
+func TestEngine_NoChanges(t *testing.T) {
 	t.Parallel()
 
 	spec := newBaseSpec()
-	engine := NewDiffEngine(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
+	engine := diff.NewEngine(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
 
 	result := engine.ComputeDiff(spec, spec)
 
@@ -95,14 +92,14 @@ func TestDiffEngine_NoChanges(t *testing.T) {
 	}
 }
 
-func TestDiffEngine_DistributionChange(t *testing.T) {
+func TestEngine_DistributionChange(t *testing.T) {
 	t.Parallel()
 
 	old := newBaseSpec()
 	newer := clone(old)
 	newer.Distribution = v1alpha1.DistributionTalos
 
-	engine := NewDiffEngine(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
+	engine := diff.NewEngine(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
 	result := engine.ComputeDiff(old, newer)
 
 	if !result.HasRecreateRequired() {
@@ -113,14 +110,14 @@ func TestDiffEngine_DistributionChange(t *testing.T) {
 		"Vanilla", "Talos", types.ChangeCategoryRecreateRequired)
 }
 
-func TestDiffEngine_ProviderChange(t *testing.T) {
+func TestEngine_ProviderChange(t *testing.T) {
 	t.Parallel()
 
 	old := newBaseSpec()
 	newer := clone(old)
 	newer.Provider = v1alpha1.ProviderHetzner
 
-	engine := NewDiffEngine(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
+	engine := diff.NewEngine(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
 	result := engine.ComputeDiff(old, newer)
 
 	if !result.HasRecreateRequired() {
@@ -132,7 +129,7 @@ func TestDiffEngine_ProviderChange(t *testing.T) {
 }
 
 //nolint:funlen // Table-driven test with multiple component scenarios is clearer as single function
-func TestDiffEngine_ComponentChanges(t *testing.T) {
+func TestEngine_ComponentChanges(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -201,7 +198,7 @@ func TestDiffEngine_ComponentChanges(t *testing.T) {
 			newer := clone(old)
 			testCase.mutate(newer)
 
-			engine := NewDiffEngine(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
+			engine := diff.NewEngine(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
 			result := engine.ComputeDiff(old, newer)
 
 			if !result.HasInPlaceChanges() {
@@ -218,14 +215,14 @@ func TestDiffEngine_ComponentChanges(t *testing.T) {
 	}
 }
 
-func TestDiffEngine_LocalRegistryChange_Vanilla(t *testing.T) {
+func TestEngine_LocalRegistryChange_Vanilla(t *testing.T) {
 	t.Parallel()
 
 	old := newBaseSpec()
 	newer := clone(old)
 	newer.LocalRegistry.Registry = testRegistryAlt
 
-	engine := NewDiffEngine(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
+	engine := diff.NewEngine(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
 	result := engine.ComputeDiff(old, newer)
 
 	if !result.HasRecreateRequired() {
@@ -236,7 +233,7 @@ func TestDiffEngine_LocalRegistryChange_Vanilla(t *testing.T) {
 		"localhost:5050", testRegistryAlt, types.ChangeCategoryRecreateRequired)
 }
 
-func TestDiffEngine_LocalRegistryChange_Talos(t *testing.T) {
+func TestEngine_LocalRegistryChange_Talos(t *testing.T) {
 	t.Parallel()
 
 	old := newBaseSpec()
@@ -245,7 +242,7 @@ func TestDiffEngine_LocalRegistryChange_Talos(t *testing.T) {
 	newer := clone(old)
 	newer.LocalRegistry.Registry = testRegistryAlt
 
-	engine := NewDiffEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderDocker)
+	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderDocker)
 	result := engine.ComputeDiff(old, newer)
 
 	if !result.HasInPlaceChanges() {
@@ -260,7 +257,7 @@ func TestDiffEngine_LocalRegistryChange_Talos(t *testing.T) {
 		"localhost:5050", testRegistryAlt, types.ChangeCategoryInPlace)
 }
 
-func TestDiffEngine_LocalRegistryChange_K3s(t *testing.T) {
+func TestEngine_LocalRegistryChange_K3s(t *testing.T) {
 	t.Parallel()
 
 	old := newBaseSpec()
@@ -269,7 +266,7 @@ func TestDiffEngine_LocalRegistryChange_K3s(t *testing.T) {
 	newer := clone(old)
 	newer.LocalRegistry.Registry = testRegistryAlt
 
-	engine := NewDiffEngine(v1alpha1.DistributionK3s, v1alpha1.ProviderDocker)
+	engine := diff.NewEngine(v1alpha1.DistributionK3s, v1alpha1.ProviderDocker)
 	result := engine.ComputeDiff(old, newer)
 
 	if !result.HasInPlaceChanges() {
@@ -284,14 +281,14 @@ func TestDiffEngine_LocalRegistryChange_K3s(t *testing.T) {
 		"localhost:5050", testRegistryAlt, types.ChangeCategoryInPlace)
 }
 
-func TestDiffEngine_VanillaOptionsChange(t *testing.T) {
+func TestEngine_VanillaOptionsChange(t *testing.T) {
 	t.Parallel()
 
 	old := newBaseSpec()
 	newer := clone(old)
 	newer.Vanilla.MirrorsDir = "other/mirrors"
 
-	engine := NewDiffEngine(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
+	engine := diff.NewEngine(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
 	result := engine.ComputeDiff(old, newer)
 
 	if !result.HasRecreateRequired() {
@@ -302,17 +299,16 @@ func TestDiffEngine_VanillaOptionsChange(t *testing.T) {
 		"kind/mirrors", "other/mirrors", types.ChangeCategoryRecreateRequired)
 }
 
-func TestDiffEngine_VanillaOptionsChange_SkippedForNonVanilla(t *testing.T) {
+func TestEngine_VanillaOptionsChange_SkippedForNonVanilla(t *testing.T) {
 	t.Parallel()
 
 	old := newBaseSpec()
 	newer := clone(old)
 	newer.Vanilla.MirrorsDir = "other/mirrors"
 
-	engine := NewDiffEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderDocker)
+	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderDocker)
 	result := engine.ComputeDiff(old, newer)
 
-	// Vanilla options should be ignored when distribution is Talos
 	for _, change := range result.AllChanges() {
 		if change.Field == "cluster.vanilla.mirrorsDir" {
 			t.Fatal("Vanilla mirrorsDir change should be ignored for non-Vanilla distributions")
@@ -320,7 +316,7 @@ func TestDiffEngine_VanillaOptionsChange_SkippedForNonVanilla(t *testing.T) {
 	}
 }
 
-func TestDiffEngine_TalosOptionsChange(t *testing.T) {
+func TestEngine_TalosOptionsChange(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -361,7 +357,7 @@ func TestDiffEngine_TalosOptionsChange(t *testing.T) {
 			newer := clone(old)
 			testCase.mutate(newer)
 
-			engine := NewDiffEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderDocker)
+			engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderDocker)
 			result := engine.ComputeDiff(old, newer)
 
 			if !result.HasInPlaceChanges() {
@@ -374,14 +370,14 @@ func TestDiffEngine_TalosOptionsChange(t *testing.T) {
 	}
 }
 
-func TestDiffEngine_TalosOptionsChange_SkippedForNonTalos(t *testing.T) {
+func TestEngine_TalosOptionsChange_SkippedForNonTalos(t *testing.T) {
 	t.Parallel()
 
 	old := newBaseSpec()
 	newer := clone(old)
 	newer.Talos.ControlPlanes = 5
 
-	engine := NewDiffEngine(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
+	engine := diff.NewEngine(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
 	result := engine.ComputeDiff(old, newer)
 
 	for _, change := range result.AllChanges() {
@@ -391,7 +387,7 @@ func TestDiffEngine_TalosOptionsChange_SkippedForNonTalos(t *testing.T) {
 	}
 }
 
-func TestDiffEngine_HetznerOptionsChange_RecreateRequired(t *testing.T) {
+func TestEngine_HetznerOptionsChange_RecreateRequired(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -439,7 +435,7 @@ func TestDiffEngine_HetznerOptionsChange_RecreateRequired(t *testing.T) {
 			newer := clone(old)
 			testCase.mutate(newer)
 
-			engine := NewDiffEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
+			engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
 			result := engine.ComputeDiff(old, newer)
 
 			if !result.HasRecreateRequired() {
@@ -452,7 +448,7 @@ func TestDiffEngine_HetznerOptionsChange_RecreateRequired(t *testing.T) {
 	}
 }
 
-func TestDiffEngine_HetznerOptionsChange_InPlace(t *testing.T) {
+func TestEngine_HetznerOptionsChange_InPlace(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -486,7 +482,7 @@ func TestDiffEngine_HetznerOptionsChange_InPlace(t *testing.T) {
 			newer := clone(old)
 			testCase.mutate(newer)
 
-			engine := NewDiffEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
+			engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
 			result := engine.ComputeDiff(old, newer)
 
 			if !result.HasInPlaceChanges() {
@@ -503,14 +499,14 @@ func TestDiffEngine_HetznerOptionsChange_InPlace(t *testing.T) {
 	}
 }
 
-func TestDiffEngine_HetznerOptionsChange_SkippedForDocker(t *testing.T) {
+func TestEngine_HetznerOptionsChange_SkippedForDocker(t *testing.T) {
 	t.Parallel()
 
 	old := newBaseSpec()
 	newer := clone(old)
 	newer.Hetzner.Location = "nbg1"
 
-	engine := NewDiffEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderDocker)
+	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderDocker)
 	result := engine.ComputeDiff(old, newer)
 
 	for _, change := range result.AllChanges() {
@@ -520,16 +516,16 @@ func TestDiffEngine_HetznerOptionsChange_SkippedForDocker(t *testing.T) {
 	}
 }
 
-func TestDiffEngine_MultipleChanges(t *testing.T) {
+func TestEngine_MultipleChanges(t *testing.T) {
 	t.Parallel()
 
 	old := newBaseSpec()
 	newer := clone(old)
-	newer.CNI = v1alpha1.CNICilium       // in-place
-	newer.CSI = v1alpha1.CSIEnabled      // in-place
-	newer.Vanilla.MirrorsDir = "changed" // recreate-required
+	newer.CNI = v1alpha1.CNICilium
+	newer.CSI = v1alpha1.CSIEnabled
+	newer.Vanilla.MirrorsDir = "changed"
 
-	engine := NewDiffEngine(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
+	engine := diff.NewEngine(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
 	result := engine.ComputeDiff(old, newer)
 
 	if len(result.InPlaceChanges) != 2 {
@@ -549,20 +545,16 @@ func TestDiffEngine_MultipleChanges(t *testing.T) {
 	}
 }
 
-// TestDiffEngine_DefaultVsDisabled_NoFalsePositive_Vanilla verifies that
-// Default and Disabled are treated as semantically equivalent for
-// Vanilla/Docker, where neither CSI, MetricsServer, nor LoadBalancer is
-// bundled by default. This prevents false-positive diffs during cluster update.
-func TestDiffEngine_DefaultVsDisabled_NoFalsePositive_Vanilla(t *testing.T) {
+func TestEngine_DefaultVsDisabled_NoFalsePositive_Vanilla(t *testing.T) {
 	t.Parallel()
 
-	old := newBaseSpec() // CSI=Default, MetricsServer=Default, LoadBalancer=Default
+	old := newBaseSpec()
 	newer := clone(old)
 	newer.CSI = v1alpha1.CSIDisabled
 	newer.MetricsServer = v1alpha1.MetricsServerDisabled
 	newer.LoadBalancer = v1alpha1.LoadBalancerDisabled
 
-	engine := NewDiffEngine(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
+	engine := diff.NewEngine(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
 	result := engine.ComputeDiff(old, newer)
 
 	if result.TotalChanges() != 0 {
@@ -580,9 +572,7 @@ func TestDiffEngine_DefaultVsDisabled_NoFalsePositive_Vanilla(t *testing.T) {
 	}
 }
 
-// TestDiffEngine_DefaultVsDisabled_DetectedOnK3s verifies that Default and
-// Disabled are NOT equivalent on K3s where components are bundled by default.
-func TestDiffEngine_DefaultVsDisabled_DetectedOnK3s(t *testing.T) {
+func TestEngine_DefaultVsDisabled_DetectedOnK3s(t *testing.T) {
 	t.Parallel()
 
 	old := newBaseSpec()
@@ -594,7 +584,7 @@ func TestDiffEngine_DefaultVsDisabled_DetectedOnK3s(t *testing.T) {
 	newer.MetricsServer = v1alpha1.MetricsServerDisabled
 	newer.LoadBalancer = v1alpha1.LoadBalancerDisabled
 
-	engine := NewDiffEngine(v1alpha1.DistributionK3s, v1alpha1.ProviderDocker)
+	engine := diff.NewEngine(v1alpha1.DistributionK3s, v1alpha1.ProviderDocker)
 	result := engine.ComputeDiff(old, newer)
 
 	expectedChanges := 3
@@ -607,112 +597,6 @@ func TestDiffEngine_DefaultVsDisabled_DetectedOnK3s(t *testing.T) {
 	}
 }
 
-//nolint:funlen // Table-driven test with multiple sub-tests is clearer as single function
-func TestMergeProvisionerDiff(t *testing.T) {
-	t.Parallel()
-
-	t.Run("nil provisioner diff is no-op", func(t *testing.T) {
-		t.Parallel()
-
-		main := &types.UpdateResult{
-			InPlaceChanges: []types.Change{
-				{Field: "cluster.cni", Category: types.ChangeCategoryInPlace},
-			},
-			RebootRequired:   []types.Change{},
-			RecreateRequired: []types.Change{},
-		}
-
-		mergeProvisionerDiff(main, nil)
-
-		if len(main.InPlaceChanges) != 1 {
-			t.Errorf("expected 1 in-place change, got %d", len(main.InPlaceChanges))
-		}
-	})
-
-	t.Run("adds unique provisioner changes", func(t *testing.T) {
-		t.Parallel()
-
-		main := &types.UpdateResult{
-			InPlaceChanges:   []types.Change{{Field: "cluster.cni"}},
-			RebootRequired:   []types.Change{},
-			RecreateRequired: []types.Change{},
-		}
-
-		provisioner := &types.UpdateResult{
-			InPlaceChanges:   []types.Change{{Field: "talos.workers"}},
-			RebootRequired:   []types.Change{{Field: "machine.install"}},
-			RecreateRequired: []types.Change{},
-		}
-
-		mergeProvisionerDiff(main, provisioner)
-
-		if len(main.InPlaceChanges) != 2 {
-			t.Errorf("expected 2 in-place changes, got %d", len(main.InPlaceChanges))
-		}
-
-		if len(main.RebootRequired) != 1 {
-			t.Errorf("expected 1 reboot-required change, got %d", len(main.RebootRequired))
-		}
-	})
-
-	t.Run("deduplicates existing fields", func(t *testing.T) {
-		t.Parallel()
-
-		main := &types.UpdateResult{
-			InPlaceChanges:   []types.Change{{Field: "cluster.cni"}},
-			RebootRequired:   []types.Change{},
-			RecreateRequired: []types.Change{{Field: "cluster.distribution"}},
-		}
-
-		provisioner := &types.UpdateResult{
-			InPlaceChanges:   []types.Change{{Field: "cluster.cni"}}, // duplicate
-			RebootRequired:   []types.Change{},
-			RecreateRequired: []types.Change{{Field: "cluster.distribution"}}, // duplicate
-		}
-
-		mergeProvisionerDiff(main, provisioner)
-
-		if len(main.InPlaceChanges) != 1 {
-			t.Errorf("expected 1 in-place change (deduplicated), got %d", len(main.InPlaceChanges))
-		}
-
-		if len(main.RecreateRequired) != 1 {
-			t.Errorf(
-				"expected 1 recreate change (deduplicated), got %d",
-				len(main.RecreateRequired),
-			)
-		}
-	})
-
-	t.Run("deduplicates fields with cluster prefix mismatch", func(t *testing.T) {
-		t.Parallel()
-
-		main := &types.UpdateResult{
-			InPlaceChanges:   []types.Change{},
-			RebootRequired:   []types.Change{},
-			RecreateRequired: []types.Change{{Field: "cluster.vanilla.mirrorsDir"}},
-		}
-
-		provisioner := &types.UpdateResult{
-			InPlaceChanges: []types.Change{},
-			RebootRequired: []types.Change{},
-			RecreateRequired: []types.Change{
-				{Field: "vanilla.mirrorsDir"},
-			}, // same field, no prefix
-		}
-
-		mergeProvisionerDiff(main, provisioner)
-
-		if len(main.RecreateRequired) != 1 {
-			t.Errorf(
-				"expected 1 recreate change (deduplicated across prefix), got %d",
-				len(main.RecreateRequired),
-			)
-		}
-	})
-}
-
-// assertSingleChange validates that exactly one change matches the expected parameters.
 func assertSingleChange(
 	t *testing.T,
 	changes []types.Change,

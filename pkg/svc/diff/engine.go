@@ -1,4 +1,4 @@
-package cluster
+package diff
 
 import (
 	"strconv"
@@ -7,22 +7,22 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/types"
 )
 
-// DiffEngine computes configuration differences and classifies their impact.
-type DiffEngine struct {
+// Engine computes configuration differences and classifies their impact.
+type Engine struct {
 	distribution v1alpha1.Distribution
 	provider     v1alpha1.Provider
 }
 
-// NewDiffEngine creates a new diff engine for the given distribution and provider.
-func NewDiffEngine(distribution v1alpha1.Distribution, provider v1alpha1.Provider) *DiffEngine {
-	return &DiffEngine{
+// NewEngine creates a new diff engine for the given distribution and provider.
+func NewEngine(distribution v1alpha1.Distribution, provider v1alpha1.Provider) *Engine {
+	return &Engine{
 		distribution: distribution,
 		provider:     provider,
 	}
 }
 
 // ComputeDiff compares old and new ClusterSpec and categorizes all changes.
-func (e *DiffEngine) ComputeDiff(oldSpec, newSpec *v1alpha1.ClusterSpec) *types.UpdateResult {
+func (e *Engine) ComputeDiff(oldSpec, newSpec *v1alpha1.ClusterSpec) *types.UpdateResult {
 	result := types.NewEmptyUpdateResult()
 
 	if oldSpec == nil || newSpec == nil {
@@ -56,7 +56,7 @@ type fieldRule struct {
 // semantically equivalent states (e.g. Default and Disabled on Vanilla) compare as equal.
 //
 //nolint:funlen // Table-driven rule definitions are clearer as a single cohesive list.
-func (e *DiffEngine) scalarFieldRules() []fieldRule {
+func (e *Engine) scalarFieldRules() []fieldRule {
 	return []fieldRule{
 		{
 			field:    "cluster.distribution",
@@ -122,7 +122,7 @@ func (e *DiffEngine) scalarFieldRules() []fieldRule {
 }
 
 // applyFieldRules evaluates each field rule and appends changes to the result.
-func (e *DiffEngine) applyFieldRules(
+func (e *Engine) applyFieldRules(
 	oldSpec, newSpec *v1alpha1.ClusterSpec,
 	result *types.UpdateResult,
 	rules []fieldRule,
@@ -155,7 +155,7 @@ func (e *DiffEngine) applyFieldRules(
 }
 
 // checkLocalRegistryChange checks if local registry config has changed.
-func (e *DiffEngine) checkLocalRegistryChange(
+func (e *Engine) checkLocalRegistryChange(
 	oldSpec, newSpec *v1alpha1.ClusterSpec,
 	result *types.UpdateResult,
 ) {
@@ -188,7 +188,7 @@ func (e *DiffEngine) checkLocalRegistryChange(
 }
 
 // checkVanillaOptionsChange checks Vanilla (Kind) specific option changes.
-func (e *DiffEngine) checkVanillaOptionsChange(
+func (e *Engine) checkVanillaOptionsChange(
 	oldSpec, newSpec *v1alpha1.ClusterSpec,
 	result *types.UpdateResult,
 ) {
@@ -209,7 +209,7 @@ func (e *DiffEngine) checkVanillaOptionsChange(
 }
 
 // checkTalosOptionsChange checks Talos-specific option changes.
-func (e *DiffEngine) checkTalosOptionsChange(
+func (e *Engine) checkTalosOptionsChange(
 	oldSpec, newSpec *v1alpha1.ClusterSpec,
 	result *types.UpdateResult,
 ) {
@@ -245,7 +245,7 @@ func talosFieldRules() []fieldRule {
 }
 
 // checkHetznerOptionsChange checks Hetzner-specific option changes.
-func (e *DiffEngine) checkHetznerOptionsChange(
+func (e *Engine) checkHetznerOptionsChange(
 	oldSpec, newSpec *v1alpha1.ClusterSpec,
 	result *types.UpdateResult,
 ) {

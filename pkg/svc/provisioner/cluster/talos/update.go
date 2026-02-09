@@ -7,12 +7,14 @@ import (
 	"strings"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	iopath "github.com/devantler-tech/ksail/v5/pkg/io"
 	clustererrors "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/errors"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	machineapi "github.com/siderolabs/talos/pkg/machinery/api/machine"
 	talosclient "github.com/siderolabs/talos/pkg/machinery/client"
+	clientconfig "github.com/siderolabs/talos/pkg/machinery/client/config"
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
 )
 
@@ -42,10 +44,14 @@ func (p *TalosProvisioner) Update(
 		return result, fmt.Errorf("failed to apply node scaling changes: %w", scaleErr)
 	}
 
-	// Handle in-place config changes (NO_REBOOT mode)
-	cfgErr := p.applyInPlaceConfigChanges(ctx, clusterName, result)
-	if cfgErr != nil {
-		return result, fmt.Errorf("failed to apply in-place config changes: %w", cfgErr)
+	// Handle in-place config changes (NO_REBOOT mode).
+	// Only re-apply machine configs when the provisioner detected actual changes;
+	// component-level changes (e.g. loadBalancer) are handled by the reconciler.
+	if diff.TotalChanges() > 0 {
+		cfgErr := p.applyInPlaceConfigChanges(ctx, clusterName, result)
+		if cfgErr != nil {
+			return result, fmt.Errorf("failed to apply in-place config changes: %w", cfgErr)
+		}
 	}
 
 	// Handle reboot-required changes (STAGED mode with rolling reboot)
@@ -330,12 +336,33 @@ func (p *TalosProvisioner) applyConfigWithMode(
 	return nil
 }
 
-// createTalosClient creates a Talos client for the given node, using TalosConfig credentials if available.
+// createTalosClient creates a Talos client for the given node.
+// It prefers the saved talosconfig on disk (written during cluster creation)
+// because it contains the CA and client certificates the running cluster trusts.
+// The in-memory talosConfigs bundle may hold freshly generated PKI that the
+// cluster has never seen, so it is used only as a fallback.
 func (p *TalosProvisioner) createTalosClient(
 	ctx context.Context,
 	nodeIP string,
 ) (*talosclient.Client, error) {
-	// If we have talos config bundle, use its TLS credentials
+	// Prefer the saved talosconfig (written during cluster creation).
+	talosconfigPath, expandErr := iopath.ExpandHomePath(p.options.TalosconfigPath)
+	if expandErr == nil {
+		savedCfg, openErr := clientconfig.Open(talosconfigPath)
+		if openErr == nil {
+			client, err := talosclient.New(ctx,
+				talosclient.WithEndpoints(nodeIP),
+				talosclient.WithConfig(savedCfg),
+			)
+			if err != nil {
+				return nil, fmt.Errorf("failed to create Talos client from saved config: %w", err)
+			}
+
+			return client, nil
+		}
+	}
+
+	// Fallback: use the in-memory bundle's TalosConfig (works for first-time creation).
 	if p.talosConfigs != nil && p.talosConfigs.Bundle() != nil {
 		if talosConf := p.talosConfigs.Bundle().TalosConfig(); talosConf != nil {
 			client, err := talosclient.New(ctx,
@@ -432,7 +459,9 @@ func (p *TalosProvisioner) getDockerNodesByRole(
 		role := "worker"
 
 		for _, name := range ctr.Names {
-			if strings.Contains(name, "controlplane") {
+			// Match both "controlplane" (KSail-scaled nodes) and "control-plane"
+			// (Talos SDK-created nodes) naming conventions.
+			if strings.Contains(name, "controlplane") || strings.Contains(name, "control-plane") {
 				role = "control-plane"
 
 				break
