@@ -153,21 +153,21 @@ func TestDiffEngine_ComponentChanges(t *testing.T) {
 			name:     "CSI change",
 			mutate:   func(s *v1alpha1.ClusterSpec) { s.CSI = v1alpha1.CSIEnabled },
 			field:    "cluster.csi",
-			oldValue: "Default",
+			oldValue: "Disabled",
 			newValue: testValueEnabled,
 		},
 		{
 			name:     "MetricsServer change",
 			mutate:   func(s *v1alpha1.ClusterSpec) { s.MetricsServer = testValueEnabled },
 			field:    "cluster.metricsServer",
-			oldValue: "Default",
+			oldValue: "Disabled",
 			newValue: testValueEnabled,
 		},
 		{
 			name:     "LoadBalancer change",
 			mutate:   func(s *v1alpha1.ClusterSpec) { s.LoadBalancer = testValueEnabled },
 			field:    "cluster.loadBalancer",
-			oldValue: "Default",
+			oldValue: "Disabled",
 			newValue: testValueEnabled,
 		},
 		{
@@ -546,6 +546,64 @@ func TestDiffEngine_MultipleChanges(t *testing.T) {
 
 	if !result.NeedsUserConfirmation() {
 		t.Error("should need user confirmation with recreate-required changes")
+	}
+}
+
+// TestDiffEngine_DefaultVsDisabled_NoFalsePositive_Vanilla verifies that
+// Default and Disabled are treated as semantically equivalent for
+// Vanilla/Docker, where neither CSI, MetricsServer, nor LoadBalancer is
+// bundled by default. This prevents false-positive diffs during cluster update.
+func TestDiffEngine_DefaultVsDisabled_NoFalsePositive_Vanilla(t *testing.T) {
+	t.Parallel()
+
+	old := newBaseSpec() // CSI=Default, MetricsServer=Default, LoadBalancer=Default
+	newer := clone(old)
+	newer.CSI = v1alpha1.CSIDisabled
+	newer.MetricsServer = v1alpha1.MetricsServerDisabled
+	newer.LoadBalancer = v1alpha1.LoadBalancerDisabled
+
+	engine := NewDiffEngine(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
+	result := engine.ComputeDiff(old, newer)
+
+	if result.TotalChanges() != 0 {
+		t.Errorf(
+			"Default vs Disabled should produce 0 changes on Vanilla/Docker, got %d",
+			result.TotalChanges(),
+		)
+
+		for _, change := range result.AllChanges() {
+			t.Logf(
+				"  unexpected change: %s %q -> %q",
+				change.Field, change.OldValue, change.NewValue,
+			)
+		}
+	}
+}
+
+// TestDiffEngine_DefaultVsDisabled_DetectedOnK3s verifies that Default and
+// Disabled are NOT equivalent on K3s where components are bundled by default.
+func TestDiffEngine_DefaultVsDisabled_DetectedOnK3s(t *testing.T) {
+	t.Parallel()
+
+	old := newBaseSpec()
+	old.Distribution = v1alpha1.DistributionK3s
+
+	newer := clone(old)
+	newer.Distribution = v1alpha1.DistributionK3s
+	newer.CSI = v1alpha1.CSIDisabled
+	newer.MetricsServer = v1alpha1.MetricsServerDisabled
+	newer.LoadBalancer = v1alpha1.LoadBalancerDisabled
+
+	engine := NewDiffEngine(v1alpha1.DistributionK3s, v1alpha1.ProviderDocker)
+	result := engine.ComputeDiff(old, newer)
+
+	expectedChanges := 3
+	if len(result.InPlaceChanges) != expectedChanges {
+		t.Errorf(
+			"Default vs Disabled should produce %d in-place changes on K3s, got %d",
+			expectedChanges,
+			len(result.InPlaceChanges),
+		)
 	}
 }
 

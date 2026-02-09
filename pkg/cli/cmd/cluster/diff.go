@@ -30,7 +30,7 @@ func (e *DiffEngine) ComputeDiff(oldSpec, newSpec *v1alpha1.ClusterSpec) *types.
 	}
 
 	// Check simple scalar fields via table-driven rules
-	e.applyFieldRules(oldSpec, newSpec, result, scalarFieldRules())
+	e.applyFieldRules(oldSpec, newSpec, result, e.scalarFieldRules())
 
 	// Check complex / distribution-specific changes
 	e.checkLocalRegistryChange(oldSpec, newSpec, result)
@@ -52,7 +52,11 @@ type fieldRule struct {
 
 // scalarFieldRules returns the table of simple scalar field diff rules.
 // These fields follow a uniform pattern: compare old vs new, emit a Change if different.
-func scalarFieldRules() []fieldRule {
+// For CSI, MetricsServer, and LoadBalancer the effective value is used so that
+// semantically equivalent states (e.g. Default and Disabled on Vanilla) compare as equal.
+//
+//nolint:funlen // Table-driven rule definitions are clearer as a single cohesive list.
+func (e *DiffEngine) scalarFieldRules() []fieldRule {
 	return []fieldRule{
 		{
 			field:    "cluster.distribution",
@@ -76,19 +80,25 @@ func scalarFieldRules() []fieldRule {
 			field:    "cluster.csi",
 			category: types.ChangeCategoryInPlace,
 			reason:   "CSI can be switched via Helm install/uninstall",
-			getVal:   func(s *v1alpha1.ClusterSpec) string { return s.CSI.String() },
+			getVal: func(s *v1alpha1.ClusterSpec) string {
+				return string(s.CSI.EffectiveValue(e.distribution, e.provider))
+			},
 		},
 		{
 			field:    "cluster.metricsServer",
 			category: types.ChangeCategoryInPlace,
 			reason:   "metrics-server can be installed via Helm; disabling requires cluster recreation",
-			getVal:   func(s *v1alpha1.ClusterSpec) string { return s.MetricsServer.String() },
+			getVal: func(s *v1alpha1.ClusterSpec) string {
+				return string(s.MetricsServer.EffectiveValue(e.distribution))
+			},
 		},
 		{
 			field:    "cluster.loadBalancer",
 			category: types.ChangeCategoryInPlace,
 			reason:   "load balancer can be enabled/disabled via Helm",
-			getVal:   func(s *v1alpha1.ClusterSpec) string { return s.LoadBalancer.String() },
+			getVal: func(s *v1alpha1.ClusterSpec) string {
+				return string(s.LoadBalancer.EffectiveValue(e.distribution, e.provider))
+			},
 		},
 		{
 			field:    "cluster.certManager",
