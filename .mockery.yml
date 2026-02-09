@@ -12,10 +12,10 @@ packages:
       pkgname: generator
     interfaces:
       Generator:
-  github.com/devantler-tech/ksail/v5/pkg/io/config-manager:
+  github.com/devantler-tech/ksail/v5/pkg/io/configmanager:
     config:
       recursive: false
-      dir: pkg/io/config-manager
+      dir: pkg/io/configmanager
       filename: mocks.go
       pkgname: configmanager
     interfaces:
@@ -54,18 +54,18 @@ packages:
     interfaces:
       ContainerAPIClient:
       APIClient:
-  github.com/devantler-tech/ksail/v5/pkg/utils/timer:
+  github.com/devantler-tech/ksail/v5/pkg/timer:
     config:
       recursive: false
-      dir: pkg/utils/timer
+      dir: pkg/timer
       filename: mocks.go
       pkgname: timer
     interfaces:
       Timer:
-  github.com/devantler-tech/ksail/v5/pkg/utils/runner:
+  github.com/devantler-tech/ksail/v5/pkg/runner:
     config:
       recursive: false
-      dir: pkg/utils/runner
+      dir: pkg/runner
       filename: mocks.go
       pkgname: runner
     interfaces:

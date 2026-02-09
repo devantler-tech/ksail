@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider/hetzner"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/types"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clusterupdate"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 )
 
@@ -19,7 +19,7 @@ func (p *TalosProvisioner) scaleHetznerByRole(
 	ctx context.Context,
 	clusterName, role string,
 	delta int,
-	result *types.UpdateResult,
+	result *clusterupdate.UpdateResult,
 ) error {
 	if delta > 0 {
 		return p.addHetznerNodes(ctx, clusterName, role, delta, result)
@@ -37,7 +37,7 @@ func (p *TalosProvisioner) addHetznerNodes(
 	ctx context.Context,
 	clusterName, role string,
 	count int,
-	result *types.UpdateResult,
+	result *clusterupdate.UpdateResult,
 ) error {
 	hzProvider, err := p.hetznerProvider()
 	if err != nil {
@@ -108,7 +108,7 @@ func (p *TalosProvisioner) configureNewHetznerNodes(
 	ctx context.Context,
 	servers []*hcloud.Server,
 	role string,
-	result *types.UpdateResult,
+	result *clusterupdate.UpdateResult,
 ) error {
 	if len(servers) == 0 {
 		return nil
@@ -147,7 +147,7 @@ func (p *TalosProvisioner) removeHetznerNodes(
 	ctx context.Context,
 	clusterName, role string,
 	count int,
-	result *types.UpdateResult,
+	result *clusterupdate.UpdateResult,
 ) error {
 	hzProvider, err := p.hetznerProvider()
 	if err != nil {

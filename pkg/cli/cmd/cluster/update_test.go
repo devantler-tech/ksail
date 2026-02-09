@@ -6,13 +6,13 @@ import (
 
 	clusterpkg "github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/confirm"
-	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
+	"github.com/devantler-tech/ksail/v5/pkg/di"
 )
 
 func TestNewUpdateCmd(t *testing.T) {
 	t.Parallel()
 
-	runtimeContainer := &runtime.Runtime{}
+	runtimeContainer := &di.Runtime{}
 	cmd := clusterpkg.NewUpdateCmd(runtimeContainer)
 
 	// Verify command basics

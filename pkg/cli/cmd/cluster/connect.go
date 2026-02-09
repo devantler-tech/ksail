@@ -6,14 +6,14 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
 	"github.com/devantler-tech/ksail/v5/pkg/client/k9s"
-	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
+	"github.com/devantler-tech/ksail/v5/pkg/di"
 	configmanager "github.com/devantler-tech/ksail/v5/pkg/io/configmanager"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/configmanager/ksail"
 	"github.com/spf13/cobra"
 )
 
 // NewConnectCmd creates the connect command for clusters.
-func NewConnectCmd(_ *runtime.Runtime) *cobra.Command {
+func NewConnectCmd(_ *di.Runtime) *cobra.Command {
 	var editorFlag string
 
 	cmd := &cobra.Command{

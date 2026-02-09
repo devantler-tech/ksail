@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
+	"github.com/devantler-tech/ksail/v5/pkg/di"
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/configmanager/talos"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider/hetzner"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
@@ -72,7 +72,7 @@ Examples:
   ksail cluster list --provider Hetzner`
 
 // NewListCmd creates the list command for clusters.
-func NewListCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
+func NewListCmd(runtimeContainer *di.Runtime) *cobra.Command {
 	var providerFilter v1alpha1.Provider
 
 	cmd := &cobra.Command{
@@ -81,7 +81,7 @@ func NewListCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
 		Long:         listLongDesc,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runtimeContainer.Invoke(func(_ runtime.Injector) error {
+			return runtimeContainer.Invoke(func(_ di.Injector) error {
 				deps := ListDeps{}
 
 				return HandleListRunE(cmd, providerFilter, deps)

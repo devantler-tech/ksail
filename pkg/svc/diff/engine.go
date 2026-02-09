@@ -4,7 +4,7 @@ import (
 	"strconv"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/types"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clusterupdate"
 )
 
 // Engine computes configuration differences and classifies their impact.
@@ -22,8 +22,8 @@ func NewEngine(distribution v1alpha1.Distribution, provider v1alpha1.Provider) *
 }
 
 // ComputeDiff compares old and new ClusterSpec and categorizes all changes.
-func (e *Engine) ComputeDiff(oldSpec, newSpec *v1alpha1.ClusterSpec) *types.UpdateResult {
-	result := types.NewEmptyUpdateResult()
+func (e *Engine) ComputeDiff(oldSpec, newSpec *v1alpha1.ClusterSpec) *clusterupdate.UpdateResult {
+	result := clusterupdate.NewEmptyUpdateResult()
 
 	if oldSpec == nil || newSpec == nil {
 		return result
@@ -44,7 +44,7 @@ func (e *Engine) ComputeDiff(oldSpec, newSpec *v1alpha1.ClusterSpec) *types.Upda
 // fieldRule describes how to diff a single scalar field.
 type fieldRule struct {
 	field    string
-	category types.ChangeCategory
+	category clusterupdate.ChangeCategory
 	reason   string
 	// getVal extracts the string representation of this field from a ClusterSpec.
 	getVal func(*v1alpha1.ClusterSpec) string
@@ -60,25 +60,25 @@ func (e *Engine) scalarFieldRules() []fieldRule {
 	return []fieldRule{
 		{
 			field:    "cluster.distribution",
-			category: types.ChangeCategoryRecreateRequired,
+			category: clusterupdate.ChangeCategoryRecreateRequired,
 			reason:   "changing the Kubernetes distribution requires cluster recreation",
 			getVal:   func(s *v1alpha1.ClusterSpec) string { return s.Distribution.String() },
 		},
 		{
 			field:    "cluster.provider",
-			category: types.ChangeCategoryRecreateRequired,
+			category: clusterupdate.ChangeCategoryRecreateRequired,
 			reason:   "changing the infrastructure provider requires cluster recreation",
 			getVal:   func(s *v1alpha1.ClusterSpec) string { return s.Provider.String() },
 		},
 		{
 			field:    "cluster.cni",
-			category: types.ChangeCategoryInPlace,
+			category: clusterupdate.ChangeCategoryInPlace,
 			reason:   "CNI can be switched via Helm upgrade/uninstall",
 			getVal:   func(s *v1alpha1.ClusterSpec) string { return s.CNI.String() },
 		},
 		{
 			field:    "cluster.csi",
-			category: types.ChangeCategoryInPlace,
+			category: clusterupdate.ChangeCategoryInPlace,
 			reason:   "CSI can be switched via Helm install/uninstall",
 			getVal: func(s *v1alpha1.ClusterSpec) string {
 				return string(s.CSI.EffectiveValue(e.distribution, e.provider))
@@ -86,7 +86,7 @@ func (e *Engine) scalarFieldRules() []fieldRule {
 		},
 		{
 			field:    "cluster.metricsServer",
-			category: types.ChangeCategoryInPlace,
+			category: clusterupdate.ChangeCategoryInPlace,
 			reason:   "metrics-server can be installed via Helm; disabling requires cluster recreation",
 			getVal: func(s *v1alpha1.ClusterSpec) string {
 				return string(s.MetricsServer.EffectiveValue(e.distribution))
@@ -94,7 +94,7 @@ func (e *Engine) scalarFieldRules() []fieldRule {
 		},
 		{
 			field:    "cluster.loadBalancer",
-			category: types.ChangeCategoryInPlace,
+			category: clusterupdate.ChangeCategoryInPlace,
 			reason:   "load balancer can be enabled/disabled via Helm",
 			getVal: func(s *v1alpha1.ClusterSpec) string {
 				return string(s.LoadBalancer.EffectiveValue(e.distribution, e.provider))
@@ -102,19 +102,19 @@ func (e *Engine) scalarFieldRules() []fieldRule {
 		},
 		{
 			field:    "cluster.certManager",
-			category: types.ChangeCategoryInPlace,
+			category: clusterupdate.ChangeCategoryInPlace,
 			reason:   "cert-manager can be installed/uninstalled via Helm",
 			getVal:   func(s *v1alpha1.ClusterSpec) string { return s.CertManager.String() },
 		},
 		{
 			field:    "cluster.policyEngine",
-			category: types.ChangeCategoryInPlace,
+			category: clusterupdate.ChangeCategoryInPlace,
 			reason:   "policy engine can be switched via Helm install/uninstall",
 			getVal:   func(s *v1alpha1.ClusterSpec) string { return s.PolicyEngine.String() },
 		},
 		{
 			field:    "cluster.gitOpsEngine",
-			category: types.ChangeCategoryInPlace,
+			category: clusterupdate.ChangeCategoryInPlace,
 			reason:   "GitOps engine can be switched via Helm install/uninstall",
 			getVal:   func(s *v1alpha1.ClusterSpec) string { return s.GitOpsEngine.String() },
 		},
@@ -124,7 +124,7 @@ func (e *Engine) scalarFieldRules() []fieldRule {
 // applyFieldRules evaluates each field rule and appends changes to the result.
 func (e *Engine) applyFieldRules(
 	oldSpec, newSpec *v1alpha1.ClusterSpec,
-	result *types.UpdateResult,
+	result *clusterupdate.UpdateResult,
 	rules []fieldRule,
 ) {
 	for _, rule := range rules {
@@ -135,7 +135,7 @@ func (e *Engine) applyFieldRules(
 			continue
 		}
 
-		change := types.Change{
+		change := clusterupdate.Change{
 			Field:    rule.field,
 			OldValue: oldVal,
 			NewValue: newVal,
@@ -144,11 +144,11 @@ func (e *Engine) applyFieldRules(
 		}
 
 		switch rule.category {
-		case types.ChangeCategoryRecreateRequired:
+		case clusterupdate.ChangeCategoryRecreateRequired:
 			result.RecreateRequired = append(result.RecreateRequired, change)
-		case types.ChangeCategoryInPlace:
+		case clusterupdate.ChangeCategoryInPlace:
 			result.InPlaceChanges = append(result.InPlaceChanges, change)
-		case types.ChangeCategoryRebootRequired:
+		case clusterupdate.ChangeCategoryRebootRequired:
 			result.RebootRequired = append(result.RebootRequired, change)
 		}
 	}
@@ -157,18 +157,18 @@ func (e *Engine) applyFieldRules(
 // checkLocalRegistryChange checks if local registry config has changed.
 func (e *Engine) checkLocalRegistryChange(
 	oldSpec, newSpec *v1alpha1.ClusterSpec,
-	result *types.UpdateResult,
+	result *clusterupdate.UpdateResult,
 ) {
 	if oldSpec.LocalRegistry.Registry != newSpec.LocalRegistry.Registry {
 		// For Kind, registry changes require recreate (containerd config is baked in)
 		// For Talos/K3d, registry mirrors can be updated in-place
 		switch e.distribution {
 		case v1alpha1.DistributionVanilla:
-			result.RecreateRequired = append(result.RecreateRequired, types.Change{
+			result.RecreateRequired = append(result.RecreateRequired, clusterupdate.Change{
 				Field:    "cluster.localRegistry.registry",
 				OldValue: oldSpec.LocalRegistry.Registry,
 				NewValue: newSpec.LocalRegistry.Registry,
-				Category: types.ChangeCategoryRecreateRequired,
+				Category: clusterupdate.ChangeCategoryRecreateRequired,
 				Reason:   "Kind requires cluster recreate to change containerd registry config",
 			})
 		case v1alpha1.DistributionTalos, v1alpha1.DistributionK3s:
@@ -176,11 +176,11 @@ func (e *Engine) checkLocalRegistryChange(
 				v1alpha1.DistributionTalos: "Talos supports .machine.registries updates without reboot",
 				v1alpha1.DistributionK3s:   "K3d supports registries.yaml updates",
 			}
-			result.InPlaceChanges = append(result.InPlaceChanges, types.Change{
+			result.InPlaceChanges = append(result.InPlaceChanges, clusterupdate.Change{
 				Field:    "cluster.localRegistry.registry",
 				OldValue: oldSpec.LocalRegistry.Registry,
 				NewValue: newSpec.LocalRegistry.Registry,
-				Category: types.ChangeCategoryInPlace,
+				Category: clusterupdate.ChangeCategoryInPlace,
 				Reason:   reasons[e.distribution],
 			})
 		}
@@ -190,7 +190,7 @@ func (e *Engine) checkLocalRegistryChange(
 // checkVanillaOptionsChange checks Vanilla (Kind) specific option changes.
 func (e *Engine) checkVanillaOptionsChange(
 	oldSpec, newSpec *v1alpha1.ClusterSpec,
-	result *types.UpdateResult,
+	result *clusterupdate.UpdateResult,
 ) {
 	if e.distribution != v1alpha1.DistributionVanilla {
 		return
@@ -198,11 +198,11 @@ func (e *Engine) checkVanillaOptionsChange(
 
 	// MirrorsDir change requires recreate (containerd config is baked at creation)
 	if oldSpec.Vanilla.MirrorsDir != newSpec.Vanilla.MirrorsDir {
-		result.RecreateRequired = append(result.RecreateRequired, types.Change{
+		result.RecreateRequired = append(result.RecreateRequired, clusterupdate.Change{
 			Field:    "cluster.vanilla.mirrorsDir",
 			OldValue: oldSpec.Vanilla.MirrorsDir,
 			NewValue: newSpec.Vanilla.MirrorsDir,
-			Category: types.ChangeCategoryRecreateRequired,
+			Category: clusterupdate.ChangeCategoryRecreateRequired,
 			Reason:   "Kind containerd mirror config is baked at cluster creation",
 		})
 	}
@@ -211,7 +211,7 @@ func (e *Engine) checkVanillaOptionsChange(
 // checkTalosOptionsChange checks Talos-specific option changes.
 func (e *Engine) checkTalosOptionsChange(
 	oldSpec, newSpec *v1alpha1.ClusterSpec,
-	result *types.UpdateResult,
+	result *clusterupdate.UpdateResult,
 ) {
 	if e.distribution != v1alpha1.DistributionTalos {
 		return
@@ -225,19 +225,19 @@ func talosFieldRules() []fieldRule {
 	return []fieldRule{
 		{
 			field:    "cluster.talos.controlPlanes",
-			category: types.ChangeCategoryInPlace,
+			category: clusterupdate.ChangeCategoryInPlace,
 			reason:   "Talos supports adding/removing control-plane nodes via provider",
 			getVal:   func(s *v1alpha1.ClusterSpec) string { return strconv.Itoa(int(s.Talos.ControlPlanes)) },
 		},
 		{
 			field:    "cluster.talos.workers",
-			category: types.ChangeCategoryInPlace,
+			category: clusterupdate.ChangeCategoryInPlace,
 			reason:   "Talos supports adding/removing worker nodes via provider",
 			getVal:   func(s *v1alpha1.ClusterSpec) string { return strconv.Itoa(int(s.Talos.Workers)) },
 		},
 		{
 			field:    "cluster.talos.iso",
-			category: types.ChangeCategoryInPlace,
+			category: clusterupdate.ChangeCategoryInPlace,
 			reason:   "ISO change only affects newly provisioned nodes",
 			getVal:   func(s *v1alpha1.ClusterSpec) string { return strconv.FormatInt(s.Talos.ISO, 10) },
 		},
@@ -247,7 +247,7 @@ func talosFieldRules() []fieldRule {
 // checkHetznerOptionsChange checks Hetzner-specific option changes.
 func (e *Engine) checkHetznerOptionsChange(
 	oldSpec, newSpec *v1alpha1.ClusterSpec,
-	result *types.UpdateResult,
+	result *clusterupdate.UpdateResult,
 ) {
 	if e.provider != v1alpha1.ProviderHetzner {
 		return
@@ -261,37 +261,37 @@ func hetznerFieldRules() []fieldRule {
 	return []fieldRule{
 		{
 			field:    "cluster.hetzner.controlPlaneServerType",
-			category: types.ChangeCategoryRecreateRequired,
+			category: clusterupdate.ChangeCategoryRecreateRequired,
 			reason:   "existing control-plane servers cannot change VM type",
 			getVal:   func(s *v1alpha1.ClusterSpec) string { return s.Hetzner.ControlPlaneServerType },
 		},
 		{
 			field:    "cluster.hetzner.workerServerType",
-			category: types.ChangeCategoryInPlace,
+			category: clusterupdate.ChangeCategoryInPlace,
 			reason:   "new worker servers will use the new type; existing workers unchanged",
 			getVal:   func(s *v1alpha1.ClusterSpec) string { return s.Hetzner.WorkerServerType },
 		},
 		{
 			field:    "cluster.hetzner.location",
-			category: types.ChangeCategoryRecreateRequired,
+			category: clusterupdate.ChangeCategoryRecreateRequired,
 			reason:   "datacenter location cannot be changed for existing servers",
 			getVal:   func(s *v1alpha1.ClusterSpec) string { return s.Hetzner.Location },
 		},
 		{
 			field:    "cluster.hetzner.networkName",
-			category: types.ChangeCategoryRecreateRequired,
+			category: clusterupdate.ChangeCategoryRecreateRequired,
 			reason:   "cannot migrate servers between networks",
 			getVal:   func(s *v1alpha1.ClusterSpec) string { return s.Hetzner.NetworkName },
 		},
 		{
 			field:    "cluster.hetzner.networkCidr",
-			category: types.ChangeCategoryRecreateRequired,
+			category: clusterupdate.ChangeCategoryRecreateRequired,
 			reason:   "network CIDR change requires PKI regeneration",
 			getVal:   func(s *v1alpha1.ClusterSpec) string { return s.Hetzner.NetworkCIDR },
 		},
 		{
 			field:    "cluster.hetzner.sshKeyName",
-			category: types.ChangeCategoryInPlace,
+			category: clusterupdate.ChangeCategoryInPlace,
 			reason:   "SSH key change only affects newly provisioned servers",
 			getVal:   func(s *v1alpha1.ClusterSpec) string { return s.Hetzner.SSHKeyName },
 		},

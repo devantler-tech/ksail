@@ -5,7 +5,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/diff"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/types"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clusterupdate"
 )
 
 const (
@@ -107,7 +107,7 @@ func TestEngine_DistributionChange(t *testing.T) {
 	}
 
 	assertSingleChange(t, result.RecreateRequired, "cluster.distribution",
-		"Vanilla", "Talos", types.ChangeCategoryRecreateRequired)
+		"Vanilla", "Talos", clusterupdate.ChangeCategoryRecreateRequired)
 }
 
 func TestEngine_ProviderChange(t *testing.T) {
@@ -125,7 +125,7 @@ func TestEngine_ProviderChange(t *testing.T) {
 	}
 
 	assertSingleChange(t, result.RecreateRequired, "cluster.provider",
-		"Docker", "Hetzner", types.ChangeCategoryRecreateRequired)
+		"Docker", "Hetzner", clusterupdate.ChangeCategoryRecreateRequired)
 }
 
 //nolint:funlen // Table-driven test with multiple component scenarios is clearer as single function
@@ -210,7 +210,7 @@ func TestEngine_ComponentChanges(t *testing.T) {
 			}
 
 			assertSingleChange(t, result.InPlaceChanges, testCase.field,
-				testCase.oldValue, testCase.newValue, types.ChangeCategoryInPlace)
+				testCase.oldValue, testCase.newValue, clusterupdate.ChangeCategoryInPlace)
 		})
 	}
 }
@@ -230,7 +230,7 @@ func TestEngine_LocalRegistryChange_Vanilla(t *testing.T) {
 	}
 
 	assertSingleChange(t, result.RecreateRequired, "cluster.localRegistry.registry",
-		"localhost:5050", testRegistryAlt, types.ChangeCategoryRecreateRequired)
+		"localhost:5050", testRegistryAlt, clusterupdate.ChangeCategoryRecreateRequired)
 }
 
 func TestEngine_LocalRegistryChange_Talos(t *testing.T) {
@@ -254,7 +254,7 @@ func TestEngine_LocalRegistryChange_Talos(t *testing.T) {
 	}
 
 	assertSingleChange(t, result.InPlaceChanges, "cluster.localRegistry.registry",
-		"localhost:5050", testRegistryAlt, types.ChangeCategoryInPlace)
+		"localhost:5050", testRegistryAlt, clusterupdate.ChangeCategoryInPlace)
 }
 
 func TestEngine_LocalRegistryChange_K3s(t *testing.T) {
@@ -278,7 +278,7 @@ func TestEngine_LocalRegistryChange_K3s(t *testing.T) {
 	}
 
 	assertSingleChange(t, result.InPlaceChanges, "cluster.localRegistry.registry",
-		"localhost:5050", testRegistryAlt, types.ChangeCategoryInPlace)
+		"localhost:5050", testRegistryAlt, clusterupdate.ChangeCategoryInPlace)
 }
 
 func TestEngine_VanillaOptionsChange(t *testing.T) {
@@ -296,7 +296,7 @@ func TestEngine_VanillaOptionsChange(t *testing.T) {
 	}
 
 	assertSingleChange(t, result.RecreateRequired, "cluster.vanilla.mirrorsDir",
-		"kind/mirrors", "other/mirrors", types.ChangeCategoryRecreateRequired)
+		"kind/mirrors", "other/mirrors", clusterupdate.ChangeCategoryRecreateRequired)
 }
 
 func TestEngine_VanillaOptionsChange_SkippedForNonVanilla(t *testing.T) {
@@ -365,7 +365,7 @@ func TestEngine_TalosOptionsChange(t *testing.T) {
 			}
 
 			assertSingleChange(t, result.InPlaceChanges, testCase.field,
-				testCase.oldValue, testCase.newValue, types.ChangeCategoryInPlace)
+				testCase.oldValue, testCase.newValue, clusterupdate.ChangeCategoryInPlace)
 		})
 	}
 }
@@ -443,7 +443,7 @@ func TestEngine_HetznerOptionsChange_RecreateRequired(t *testing.T) {
 			}
 
 			assertSingleChange(t, result.RecreateRequired, testCase.field,
-				testCase.oldValue, testCase.newValue, types.ChangeCategoryRecreateRequired)
+				testCase.oldValue, testCase.newValue, clusterupdate.ChangeCategoryRecreateRequired)
 		})
 	}
 }
@@ -494,7 +494,7 @@ func TestEngine_HetznerOptionsChange_InPlace(t *testing.T) {
 			}
 
 			assertSingleChange(t, result.InPlaceChanges, testCase.field,
-				testCase.oldValue, testCase.newValue, types.ChangeCategoryInPlace)
+				testCase.oldValue, testCase.newValue, clusterupdate.ChangeCategoryInPlace)
 		})
 	}
 }
@@ -599,9 +599,9 @@ func TestEngine_DefaultVsDisabled_DetectedOnK3s(t *testing.T) {
 
 func assertSingleChange(
 	t *testing.T,
-	changes []types.Change,
+	changes []clusterupdate.Change,
 	expectedField, expectedOld, expectedNew string,
-	expectedCategory types.ChangeCategory,
+	expectedCategory clusterupdate.ChangeCategory,
 ) {
 	t.Helper()
 

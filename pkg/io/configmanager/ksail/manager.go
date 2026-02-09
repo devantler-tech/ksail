@@ -11,7 +11,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	configmanagerinterface "github.com/devantler-tech/ksail/v5/pkg/io/configmanager"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/types"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clusterupdate"
 	"github.com/devantler-tech/ksail/v5/pkg/timer"
 	mapstructure "github.com/go-viper/mapstructure/v2"
 	"github.com/spf13/cobra"
@@ -383,7 +383,7 @@ func (m *ConfigManager) applyGitOpsAwareDefaults(flagOverrides map[string]string
 	// Apply default local registry when GitOps engine is configured and no explicit registry was set
 	if !m.wasLocalRegistryExplicit(flagOverrides) && m.gitOpsEngineSelected() {
 		if m.Config.Spec.Cluster.LocalRegistry.Registry == "" {
-			m.Config.Spec.Cluster.LocalRegistry.Registry = types.DefaultLocalRegistryAddress
+			m.Config.Spec.Cluster.LocalRegistry.Registry = clusterupdate.DefaultLocalRegistryAddress
 		}
 	}
 }

@@ -5,14 +5,14 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
 	"github.com/devantler-tech/ksail/v5/pkg/client/docker"
-	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
+	"github.com/devantler-tech/ksail/v5/pkg/di"
 	configmanager "github.com/devantler-tech/ksail/v5/pkg/io/configmanager/ksail"
 	"github.com/devantler-tech/ksail/v5/pkg/notify"
 	imagesvc "github.com/devantler-tech/ksail/v5/pkg/svc/image"
 	"github.com/spf13/cobra"
 )
 
-const importCmdLong = `Import container images from a tar archive to the cluster's containerd runtime.
+const importCmdLong = `Import container images from a tar archive to the cluster's containerd di.
 
 Images are imported to all nodes in the cluster, making them available for
 pod scheduling without requiring registry pulls.
@@ -28,7 +28,7 @@ Examples:
   ksail workload import --context=kind-dev --kubeconfig=~/.kube/config`
 
 // NewImportCmd creates the image import command.
-func NewImportCmd(_ *runtime.Runtime) *cobra.Command {
+func NewImportCmd(_ *di.Runtime) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:          "import [<input>]",
 		Short:        "Import container images to the cluster",

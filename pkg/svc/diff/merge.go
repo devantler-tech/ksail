@@ -3,7 +3,7 @@ package diff
 import (
 	"strings"
 
-	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/types"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clusterupdate"
 )
 
 // clusterFieldPrefix is the prefix used by Engine for ClusterSpec-level fields.
@@ -14,7 +14,7 @@ const clusterFieldPrefix = "cluster."
 // Provisioner diffs may contain distribution-specific changes (node counts, etc.)
 // that the Engine doesn't track. We avoid duplicating fields already covered
 // by Engine by checking field names.
-func MergeProvisionerDiff(main, provisioner *types.UpdateResult) {
+func MergeProvisionerDiff(main, provisioner *clusterupdate.UpdateResult) {
 	if provisioner == nil {
 		return
 	}
@@ -39,7 +39,7 @@ func normalizeFieldName(field string) string {
 }
 
 // collectExistingFields builds a set of normalized field names already present in the diff.
-func collectExistingFields(d *types.UpdateResult) map[string]bool {
+func collectExistingFields(d *clusterupdate.UpdateResult) map[string]bool {
 	changes := d.AllChanges()
 	fields := make(map[string]bool, len(changes))
 
@@ -52,7 +52,10 @@ func collectExistingFields(d *types.UpdateResult) map[string]bool {
 
 // appendUniqueChanges appends changes from src to dst, skipping fields already in existing.
 // Field names are normalized before comparison to avoid duplicates caused by prefix differences.
-func appendUniqueChanges(dst, src []types.Change, existing map[string]bool) []types.Change {
+func appendUniqueChanges(
+	dst, src []clusterupdate.Change,
+	existing map[string]bool,
+) []clusterupdate.Change {
 	for _, c := range src {
 		if !existing[normalizeFieldName(c.Field)] {
 			dst = append(dst, c)

@@ -12,7 +12,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup/mirrorregistry"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/confirm"
-	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
+	"github.com/devantler-tech/ksail/v5/pkg/di"
 	"github.com/devantler-tech/ksail/v5/pkg/notify"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clustererr"
@@ -51,7 +51,7 @@ type deleteFlags struct {
 
 // NewDeleteCmd creates and returns the delete command.
 // Delete uses --name and --provider flags to determine the cluster to delete.
-func NewDeleteCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
+func NewDeleteCmd(runtimeContainer *di.Runtime) *cobra.Command {
 	flags := &deleteFlags{}
 
 	cmd := &cobra.Command{
@@ -89,7 +89,7 @@ func registerDeleteFlags(cmd *cobra.Command, flags *deleteFlags) {
 // runDeleteAction executes the cluster deletion with registry cleanup.
 func runDeleteAction(
 	cmd *cobra.Command,
-	runtimeContainer *runtime.Runtime,
+	runtimeContainer *di.Runtime,
 	flags *deleteFlags,
 ) error {
 	// Wrap output with StageSeparatingWriter for automatic stage separation
@@ -227,15 +227,15 @@ func performPostDeletionCleanup(
 }
 
 // initTimer initializes and starts the timer from the runtime container.
-func initTimer(runtimeContainer *runtime.Runtime) timer.Timer {
+func initTimer(runtimeContainer *di.Runtime) timer.Timer {
 	var tmr timer.Timer
 
 	if runtimeContainer != nil {
 		//nolint:wrapcheck // Error is captured to outer scope, not returned
-		_ = runtimeContainer.Invoke(func(injector runtime.Injector) error {
+		_ = runtimeContainer.Invoke(func(injector di.Injector) error {
 			var err error
 
-			tmr, err = runtime.ResolveTimer(injector)
+			tmr, err = di.ResolveTimer(injector)
 
 			return err
 		})

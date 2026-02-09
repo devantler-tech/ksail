@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/types"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clusterupdate"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/mount"
@@ -25,7 +25,7 @@ func (p *TalosProvisioner) scaleDockerByRole(
 	ctx context.Context,
 	clusterName, role string,
 	delta int,
-	result *types.UpdateResult,
+	result *clusterupdate.UpdateResult,
 ) error {
 	if delta > 0 {
 		return p.addDockerNodes(ctx, clusterName, role, delta, result)
@@ -41,7 +41,7 @@ func (p *TalosProvisioner) addDockerNodes(
 	ctx context.Context,
 	clusterName, role string,
 	count int,
-	result *types.UpdateResult,
+	result *clusterupdate.UpdateResult,
 ) error {
 	existing, err := p.listDockerNodesByRole(ctx, clusterName, role)
 	if err != nil {
@@ -91,7 +91,7 @@ func (p *TalosProvisioner) removeDockerNodes(
 	ctx context.Context,
 	clusterName, role string,
 	count int,
-	result *types.UpdateResult,
+	result *clusterupdate.UpdateResult,
 ) error {
 	existing, err := p.listDockerNodesByRole(ctx, clusterName, role)
 	if err != nil {
@@ -383,28 +383,28 @@ func containerIP(ctr container.Summary, networkName string) string {
 }
 
 // recordAppliedChange adds an applied change to the update result.
-func recordAppliedChange(result *types.UpdateResult, role, nodeName, action string) {
+func recordAppliedChange(result *clusterupdate.UpdateResult, role, nodeName, action string) {
 	field := "talos.workers"
 	if role == RoleControlPlane {
 		field = "talos.controlPlanes"
 	}
 
-	result.AppliedChanges = append(result.AppliedChanges, types.Change{
+	result.AppliedChanges = append(result.AppliedChanges, clusterupdate.Change{
 		Field:    field,
 		NewValue: nodeName,
-		Category: types.ChangeCategoryInPlace,
+		Category: clusterupdate.ChangeCategoryInPlace,
 		Reason:   action + " " + role + " node",
 	})
 }
 
 // recordFailedChange adds a failed change to the update result.
-func recordFailedChange(result *types.UpdateResult, role, nodeName string, err error) {
+func recordFailedChange(result *clusterupdate.UpdateResult, role, nodeName string, err error) {
 	field := "talos.workers"
 	if role == RoleControlPlane {
 		field = "talos.controlPlanes"
 	}
 
-	result.FailedChanges = append(result.FailedChanges, types.Change{
+	result.FailedChanges = append(result.FailedChanges, clusterupdate.Change{
 		Field:  field,
 		Reason: fmt.Sprintf("failed to manage %s node %s: %v", role, nodeName, err),
 	})

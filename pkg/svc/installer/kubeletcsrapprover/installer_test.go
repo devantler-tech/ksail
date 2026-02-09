@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
-	kubeletcsrapproverinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/kubelet-csr-approver"
+	kubeletcsrapproverinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/kubeletcsrapprover"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"

@@ -12,7 +12,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup/localregistry"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/confirm"
 	docker "github.com/devantler-tech/ksail/v5/pkg/client/docker"
-	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
+	"github.com/devantler-tech/ksail/v5/pkg/di"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/configmanager/ksail"
 	"github.com/devantler-tech/ksail/v5/pkg/k8s"
 	"github.com/devantler-tech/ksail/v5/pkg/notify"
@@ -20,7 +20,7 @@ import (
 	specdiff "github.com/devantler-tech/ksail/v5/pkg/svc/diff"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clustererr"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/types"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clusterupdate"
 	"github.com/devantler-tech/ksail/v5/pkg/timer"
 	"github.com/spf13/cobra"
 )
@@ -28,7 +28,7 @@ import (
 // NewUpdateCmd creates the cluster update command.
 // The update command applies configuration changes to a running cluster.
 // It supports in-place updates where possible and falls back to recreation when necessary.
-func NewUpdateCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
+func NewUpdateCmd(runtimeContainer *di.Runtime) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "update",
 		Short: "Update a cluster configuration",
@@ -226,7 +226,7 @@ func computeUpdateDiff(
 	ctx *localregistry.Context,
 	updater clusterprovisioner.ClusterUpdater,
 	clusterName string,
-) (*v1alpha1.ClusterSpec, *types.UpdateResult) {
+) (*v1alpha1.ClusterSpec, *clusterupdate.UpdateResult) {
 	diffEngine := specdiff.NewEngine(
 		ctx.ClusterCfg.Spec.Cluster.Distribution,
 		ctx.ClusterCfg.Spec.Cluster.Provider,
@@ -265,7 +265,7 @@ func applyOrReportChanges(
 	updater clusterprovisioner.ClusterUpdater,
 	clusterName string,
 	currentSpec *v1alpha1.ClusterSpec,
-	diff *types.UpdateResult,
+	diff *clusterupdate.UpdateResult,
 	outputTimer timer.Timer,
 ) error {
 	dryRun := cfgManager.Viper.GetBool("dry-run")
@@ -319,7 +319,7 @@ func applyOrReportChanges(
 }
 
 // reportDryRun prints a summary of what would be applied and returns nil.
-func reportDryRun(cmd *cobra.Command, diff *types.UpdateResult) error {
+func reportDryRun(cmd *cobra.Command, diff *clusterupdate.UpdateResult) error {
 	var summary strings.Builder
 
 	fmt.Fprintf(&summary,
@@ -344,7 +344,7 @@ func handleRecreateRequired(
 	ctx *localregistry.Context,
 	deps lifecycle.Deps,
 	clusterName string,
-	diff *types.UpdateResult,
+	diff *clusterupdate.UpdateResult,
 	force bool,
 ) error {
 	var block strings.Builder
@@ -370,10 +370,10 @@ func applyInPlaceChanges(
 	clusterName string,
 	currentSpec *v1alpha1.ClusterSpec,
 	ctx *localregistry.Context,
-	diff *types.UpdateResult,
+	diff *clusterupdate.UpdateResult,
 	outputTimer timer.Timer,
 ) error {
-	updateOpts := types.UpdateOptions{
+	updateOpts := clusterupdate.UpdateOptions{
 		DryRun:        false,
 		RollingReboot: true,
 	}
@@ -423,7 +423,7 @@ func applyInPlaceChanges(
 
 // displayChangesSummary outputs a human-readable summary of configuration changes
 // as a single grouped block to avoid per-line symbol prefixes.
-func displayChangesSummary(cmd *cobra.Command, diff *types.UpdateResult) {
+func displayChangesSummary(cmd *cobra.Command, diff *clusterupdate.UpdateResult) {
 	totalChanges := len(diff.InPlaceChanges) + len(diff.RebootRequired) + len(diff.RecreateRequired)
 
 	if totalChanges == 0 {

@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/types"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clusterupdate"
 )
 
 // Update attempts to apply configuration changes to a running Kind cluster.
@@ -24,8 +24,8 @@ func (k *KindClusterProvisioner) Update(
 	ctx context.Context,
 	name string,
 	oldSpec, newSpec *v1alpha1.ClusterSpec,
-	_ types.UpdateOptions,
-) (*types.UpdateResult, error) {
+	_ clusterupdate.UpdateOptions,
+) (*clusterupdate.UpdateResult, error) {
 	diff, err := k.DiffConfig(ctx, name, oldSpec, newSpec)
 	if err != nil {
 		return nil, fmt.Errorf("failed to compute config diff: %w", err)
@@ -43,20 +43,20 @@ func (k *KindClusterProvisioner) DiffConfig(
 	_ context.Context,
 	_ string,
 	oldSpec, newSpec *v1alpha1.ClusterSpec,
-) (*types.UpdateResult, error) {
+) (*clusterupdate.UpdateResult, error) {
 	// Kind clusters require recreation for most structural changes.
-	result, ok := types.NewDiffResult(oldSpec, newSpec)
+	result, ok := clusterupdate.NewDiffResult(oldSpec, newSpec)
 	if !ok {
 		return result, nil
 	}
 
 	// MirrorsDir change requires recreate (containerd config is baked in)
 	if oldSpec.Vanilla.MirrorsDir != newSpec.Vanilla.MirrorsDir {
-		result.RecreateRequired = append(result.RecreateRequired, types.Change{
+		result.RecreateRequired = append(result.RecreateRequired, clusterupdate.Change{
 			Field:    "vanilla.mirrorsDir",
 			OldValue: oldSpec.Vanilla.MirrorsDir,
 			NewValue: newSpec.Vanilla.MirrorsDir,
-			Category: types.ChangeCategoryRecreateRequired,
+			Category: clusterupdate.ChangeCategoryRecreateRequired,
 			Reason:   "Kind containerd registry mirrors are configured at cluster creation",
 		})
 	}
@@ -84,10 +84,13 @@ func (k *KindClusterProvisioner) GetCurrentConfig(
 			return nil, fmt.Errorf("detect components: %w", err)
 		}
 
-		types.ApplyGitOpsLocalRegistryDefault(spec)
+		clusterupdate.ApplyGitOpsLocalRegistryDefault(spec)
 
 		return spec, nil
 	}
 
-	return types.DefaultCurrentSpec(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker), nil
+	return clusterupdate.DefaultCurrentSpec(
+		v1alpha1.DistributionVanilla,
+		v1alpha1.ProviderDocker,
+	), nil
 }

@@ -5,7 +5,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/types"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clusterupdate"
 )
 
 // ClusterProvisioner defines methods for managing Kubernetes clusters.
@@ -42,8 +42,8 @@ type ClusterUpdater interface {
 		ctx context.Context,
 		name string,
 		oldSpec, newSpec *v1alpha1.ClusterSpec,
-		opts types.UpdateOptions,
-	) (*types.UpdateResult, error)
+		opts clusterupdate.UpdateOptions,
+	) (*clusterupdate.UpdateResult, error)
 
 	// DiffConfig computes the differences between current and desired configurations.
 	// This is used to preview changes before applying them.
@@ -51,7 +51,7 @@ type ClusterUpdater interface {
 		ctx context.Context,
 		name string,
 		oldSpec, newSpec *v1alpha1.ClusterSpec,
-	) (*types.UpdateResult, error)
+	) (*clusterupdate.UpdateResult, error)
 
 	// GetCurrentConfig retrieves the current cluster configuration from the running cluster.
 	// Used to compare against the desired configuration for computing diffs.

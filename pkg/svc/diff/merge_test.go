@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/devantler-tech/ksail/v5/pkg/svc/diff"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/types"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clusterupdate"
 )
 
 //nolint:funlen // Table-driven test with multiple sub-tests is clearer as single function
@@ -14,12 +14,12 @@ func TestMergeProvisionerDiff(t *testing.T) {
 	t.Run("nil provisioner diff is no-op", func(t *testing.T) {
 		t.Parallel()
 
-		main := &types.UpdateResult{
-			InPlaceChanges: []types.Change{
-				{Field: "cluster.cni", Category: types.ChangeCategoryInPlace},
+		main := &clusterupdate.UpdateResult{
+			InPlaceChanges: []clusterupdate.Change{
+				{Field: "cluster.cni", Category: clusterupdate.ChangeCategoryInPlace},
 			},
-			RebootRequired:   []types.Change{},
-			RecreateRequired: []types.Change{},
+			RebootRequired:   []clusterupdate.Change{},
+			RecreateRequired: []clusterupdate.Change{},
 		}
 
 		diff.MergeProvisionerDiff(main, nil)
@@ -32,16 +32,16 @@ func TestMergeProvisionerDiff(t *testing.T) {
 	t.Run("adds unique provisioner changes", func(t *testing.T) {
 		t.Parallel()
 
-		main := &types.UpdateResult{
-			InPlaceChanges:   []types.Change{{Field: "cluster.cni"}},
-			RebootRequired:   []types.Change{},
-			RecreateRequired: []types.Change{},
+		main := &clusterupdate.UpdateResult{
+			InPlaceChanges:   []clusterupdate.Change{{Field: "cluster.cni"}},
+			RebootRequired:   []clusterupdate.Change{},
+			RecreateRequired: []clusterupdate.Change{},
 		}
 
-		provisioner := &types.UpdateResult{
-			InPlaceChanges:   []types.Change{{Field: "talos.workers"}},
-			RebootRequired:   []types.Change{{Field: "machine.install"}},
-			RecreateRequired: []types.Change{},
+		provisioner := &clusterupdate.UpdateResult{
+			InPlaceChanges:   []clusterupdate.Change{{Field: "talos.workers"}},
+			RebootRequired:   []clusterupdate.Change{{Field: "machine.install"}},
+			RecreateRequired: []clusterupdate.Change{},
 		}
 
 		diff.MergeProvisionerDiff(main, provisioner)
@@ -58,16 +58,16 @@ func TestMergeProvisionerDiff(t *testing.T) {
 	t.Run("deduplicates existing fields", func(t *testing.T) {
 		t.Parallel()
 
-		main := &types.UpdateResult{
-			InPlaceChanges:   []types.Change{{Field: "cluster.cni"}},
-			RebootRequired:   []types.Change{},
-			RecreateRequired: []types.Change{{Field: "cluster.distribution"}},
+		main := &clusterupdate.UpdateResult{
+			InPlaceChanges:   []clusterupdate.Change{{Field: "cluster.cni"}},
+			RebootRequired:   []clusterupdate.Change{},
+			RecreateRequired: []clusterupdate.Change{{Field: "cluster.distribution"}},
 		}
 
-		provisioner := &types.UpdateResult{
-			InPlaceChanges:   []types.Change{{Field: "cluster.cni"}}, // duplicate
-			RebootRequired:   []types.Change{},
-			RecreateRequired: []types.Change{{Field: "cluster.distribution"}}, // duplicate
+		provisioner := &clusterupdate.UpdateResult{
+			InPlaceChanges:   []clusterupdate.Change{{Field: "cluster.cni"}}, // duplicate
+			RebootRequired:   []clusterupdate.Change{},
+			RecreateRequired: []clusterupdate.Change{{Field: "cluster.distribution"}}, // duplicate
 		}
 
 		diff.MergeProvisionerDiff(main, provisioner)
@@ -87,16 +87,16 @@ func TestMergeProvisionerDiff(t *testing.T) {
 	t.Run("deduplicates fields with cluster prefix mismatch", func(t *testing.T) {
 		t.Parallel()
 
-		main := &types.UpdateResult{
-			InPlaceChanges:   []types.Change{},
-			RebootRequired:   []types.Change{},
-			RecreateRequired: []types.Change{{Field: "cluster.vanilla.mirrorsDir"}},
+		main := &clusterupdate.UpdateResult{
+			InPlaceChanges:   []clusterupdate.Change{},
+			RebootRequired:   []clusterupdate.Change{},
+			RecreateRequired: []clusterupdate.Change{{Field: "cluster.vanilla.mirrorsDir"}},
 		}
 
-		provisioner := &types.UpdateResult{
-			InPlaceChanges: []types.Change{},
-			RebootRequired: []types.Change{},
-			RecreateRequired: []types.Change{
+		provisioner := &clusterupdate.UpdateResult{
+			InPlaceChanges: []clusterupdate.Change{},
+			RebootRequired: []clusterupdate.Change{},
+			RecreateRequired: []clusterupdate.Change{
 				{Field: "vanilla.mirrorsDir"},
 			}, // same field, no prefix
 		}

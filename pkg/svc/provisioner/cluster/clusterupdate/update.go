@@ -1,9 +1,7 @@
-// Package types provides shared types for cluster provisioner operations.
+// Package clusterupdate provides shared types for cluster update operations.
 // These are separated to avoid import cycles between provisioner implementations
 // and the main provisioner interface package.
-//
-//nolint:revive // package name "types" is intentionally generic for shared types
-package types
+package clusterupdate
 
 import (
 	"fmt"

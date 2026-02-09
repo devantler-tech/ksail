@@ -8,7 +8,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
-	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
+	"github.com/devantler-tech/ksail/v5/pkg/di"
 	configmanager "github.com/devantler-tech/ksail/v5/pkg/io/configmanager"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/configmanager/ksail"
 	"github.com/devantler-tech/ksail/v5/pkg/notify"
@@ -57,7 +57,7 @@ type Deps struct {
 // This is the recommended way to create lifecycle command handlers for standard operations like
 // start, stop, and delete. The returned function can be assigned directly to a cobra.Command's RunE field.
 func NewStandardRunE(
-	runtimeContainer *runtime.Runtime,
+	runtimeContainer *di.Runtime,
 	cfgManager *ksailconfigmanager.ConfigManager,
 	config Config,
 ) func(*cobra.Command, []string) error {
@@ -84,14 +84,14 @@ func NewStandardRunE(
 // directly for custom lifecycle handlers that need dependency injection but require
 // custom logic beyond the standard HandleRunE flow.
 func WrapHandler(
-	runtimeContainer *runtime.Runtime,
+	runtimeContainer *di.Runtime,
 	cfgManager *ksailconfigmanager.ConfigManager,
 	handler func(*cobra.Command, *ksailconfigmanager.ConfigManager, Deps) error,
 ) func(*cobra.Command, []string) error {
-	return runtime.RunEWithRuntime(
+	return di.RunEWithRuntime(
 		runtimeContainer,
-		runtime.WithTimer(
-			func(cmd *cobra.Command, _ runtime.Injector, tmr timer.Timer) error {
+		di.WithTimer(
+			func(cmd *cobra.Command, _ di.Injector, tmr timer.Timer) error {
 				// Wrap output with StageSeparatingWriter for automatic stage separation
 				stageWriter := notify.NewStageSeparatingWriter(cmd.OutOrStdout())
 				cmd.SetOut(stageWriter)

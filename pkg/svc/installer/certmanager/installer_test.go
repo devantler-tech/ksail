@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
-	certmanagerinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/cert-manager"
+	certmanagerinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/certmanager"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"

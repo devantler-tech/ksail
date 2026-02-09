@@ -13,7 +13,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup/localregistry"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup/mirrorregistry"
 	"github.com/devantler-tech/ksail/v5/pkg/client/docker"
-	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
+	"github.com/devantler-tech/ksail/v5/pkg/di"
 	configmanager "github.com/devantler-tech/ksail/v5/pkg/io/configmanager"
 	k3dconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/configmanager/k3d"
 	kindconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/configmanager/kind"
@@ -52,7 +52,7 @@ func newCreateLifecycleConfig() lifecycle.Config {
 }
 
 // NewCreateCmd wires the cluster create command using the shared runtime container.
-func NewCreateCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
+func NewCreateCmd(runtimeContainer *di.Runtime) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:          "create",
 		Short:        "Create a cluster",

@@ -14,7 +14,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	runner "github.com/devantler-tech/ksail/v5/pkg/runner"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clustererr"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/types"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clusterupdate"
 	nodecommand "github.com/k3d-io/k3d/v5/cmd/node"
 )
 
@@ -28,15 +28,15 @@ func (k *K3dClusterProvisioner) Update(
 	ctx context.Context,
 	name string,
 	oldSpec, newSpec *v1alpha1.ClusterSpec,
-	opts types.UpdateOptions,
-) (*types.UpdateResult, error) {
+	opts clusterupdate.UpdateOptions,
+) (*clusterupdate.UpdateResult, error) {
 	if oldSpec == nil || newSpec == nil {
-		return types.NewEmptyUpdateResult(), nil
+		return clusterupdate.NewEmptyUpdateResult(), nil
 	}
 
 	diff, diffErr := k.DiffConfig(ctx, name, oldSpec, newSpec)
 
-	result, proceed, prepErr := types.PrepareUpdate(
+	result, proceed, prepErr := clusterupdate.PrepareUpdate(
 		diff, diffErr, opts, clustererr.ErrRecreationRequired,
 	)
 	if !proceed {
@@ -60,8 +60,8 @@ func (k *K3dClusterProvisioner) DiffConfig(
 	ctx context.Context,
 	name string,
 	_, _ *v1alpha1.ClusterSpec,
-) (*types.UpdateResult, error) {
-	result := types.NewEmptyUpdateResult()
+) (*clusterupdate.UpdateResult, error) {
+	result := clusterupdate.NewEmptyUpdateResult()
 
 	if k.simpleCfg == nil {
 		return result, nil
@@ -85,22 +85,22 @@ func (k *K3dClusterProvisioner) DiffConfig(
 
 	// Server (control-plane) changes require recreate — K3d does not support scaling servers
 	if runningServers != desiredServers {
-		result.RecreateRequired = append(result.RecreateRequired, types.Change{
+		result.RecreateRequired = append(result.RecreateRequired, clusterupdate.Change{
 			Field:    "k3d.servers",
 			OldValue: strconv.Itoa(runningServers),
 			NewValue: strconv.Itoa(desiredServers),
-			Category: types.ChangeCategoryRecreateRequired,
+			Category: clusterupdate.ChangeCategoryRecreateRequired,
 			Reason:   "K3d does not support adding/removing server (control-plane) nodes after creation",
 		})
 	}
 
 	// Agent (worker) changes are in-place — K3d supports scaling agents
 	if runningAgents != desiredAgents {
-		result.InPlaceChanges = append(result.InPlaceChanges, types.Change{
+		result.InPlaceChanges = append(result.InPlaceChanges, clusterupdate.Change{
 			Field:    "k3d.agents",
 			OldValue: strconv.Itoa(runningAgents),
 			NewValue: strconv.Itoa(desiredAgents),
-			Category: types.ChangeCategoryInPlace,
+			Category: clusterupdate.ChangeCategoryInPlace,
 			Reason:   "K3d supports adding/removing agent (worker) nodes",
 		})
 	}
@@ -114,7 +114,7 @@ func (k *K3dClusterProvisioner) DiffConfig(
 func (k *K3dClusterProvisioner) applyWorkerScaling(
 	ctx context.Context,
 	clusterName string,
-	result *types.UpdateResult,
+	result *clusterupdate.UpdateResult,
 ) error {
 	if k.simpleCfg == nil {
 		return nil
@@ -146,7 +146,7 @@ func (k *K3dClusterProvisioner) addAgentNodes(
 	ctx context.Context,
 	clusterName string,
 	count int,
-	result *types.UpdateResult,
+	result *clusterupdate.UpdateResult,
 ) error {
 	for i := range count {
 		nodeName := fmt.Sprintf(
@@ -171,7 +171,7 @@ func (k *K3dClusterProvisioner) addAgentNodes(
 
 		_, err := nodeRunner.Run(ctx, cmd, args)
 		if err != nil {
-			result.FailedChanges = append(result.FailedChanges, types.Change{
+			result.FailedChanges = append(result.FailedChanges, clusterupdate.Change{
 				Field:  "k3d.agents",
 				Reason: fmt.Sprintf("failed to create agent node %s: %v", nodeName, err),
 			})
@@ -179,10 +179,10 @@ func (k *K3dClusterProvisioner) addAgentNodes(
 			return fmt.Errorf("failed to create agent node %s: %w", nodeName, err)
 		}
 
-		result.AppliedChanges = append(result.AppliedChanges, types.Change{
+		result.AppliedChanges = append(result.AppliedChanges, clusterupdate.Change{
 			Field:    "k3d.agents",
 			NewValue: nodeName,
-			Category: types.ChangeCategoryInPlace,
+			Category: clusterupdate.ChangeCategoryInPlace,
 			Reason:   "added agent node",
 		})
 	}
@@ -195,7 +195,7 @@ func (k *K3dClusterProvisioner) removeAgentNodes(
 	ctx context.Context,
 	clusterName string,
 	count int,
-	result *types.UpdateResult,
+	result *clusterupdate.UpdateResult,
 ) error {
 	agents, err := k.listAgentNodes(ctx, clusterName)
 	if err != nil {
@@ -215,7 +215,7 @@ func (k *K3dClusterProvisioner) removeAgentNodes(
 
 		_, err := nodeRunner.Run(ctx, cmd, []string{nodeName})
 		if err != nil {
-			result.FailedChanges = append(result.FailedChanges, types.Change{
+			result.FailedChanges = append(result.FailedChanges, clusterupdate.Change{
 				Field:  "k3d.agents",
 				Reason: fmt.Sprintf("failed to delete agent node %s: %v", nodeName, err),
 			})
@@ -223,10 +223,10 @@ func (k *K3dClusterProvisioner) removeAgentNodes(
 			return fmt.Errorf("failed to delete agent node %s: %w", nodeName, err)
 		}
 
-		result.AppliedChanges = append(result.AppliedChanges, types.Change{
+		result.AppliedChanges = append(result.AppliedChanges, clusterupdate.Change{
 			Field:    "k3d.agents",
 			OldValue: nodeName,
-			Category: types.ChangeCategoryInPlace,
+			Category: clusterupdate.ChangeCategoryInPlace,
 			Reason:   "removed agent node",
 		})
 	}
@@ -433,10 +433,10 @@ func (k *K3dClusterProvisioner) GetCurrentConfig(
 			return nil, fmt.Errorf("detect components: %w", err)
 		}
 
-		types.ApplyGitOpsLocalRegistryDefault(spec)
+		clusterupdate.ApplyGitOpsLocalRegistryDefault(spec)
 
 		return spec, nil
 	}
 
-	return types.DefaultCurrentSpec(v1alpha1.DistributionK3s, v1alpha1.ProviderDocker), nil
+	return clusterupdate.DefaultCurrentSpec(v1alpha1.DistributionK3s, v1alpha1.ProviderDocker), nil
 }

@@ -19,7 +19,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
 	chatui "github.com/devantler-tech/ksail/v5/pkg/cli/ui/chat"
-	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
+	"github.com/devantler-tech/ksail/v5/pkg/di"
 	"github.com/devantler-tech/ksail/v5/pkg/notify"
 	chatsvc "github.com/devantler-tech/ksail/v5/pkg/svc/chat"
 	copilot "github.com/github/copilot-sdk/go"
@@ -148,7 +148,7 @@ func buildSessionConfig(
 }
 
 // NewChatCmd creates and returns the chat command.
-func NewChatCmd(_ *runtime.Runtime) *cobra.Command {
+func NewChatCmd(_ *di.Runtime) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "chat",
 		Short: "Start an AI-assisted chat session",

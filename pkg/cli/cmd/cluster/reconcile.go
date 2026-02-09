@@ -9,7 +9,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/installer"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/types"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clusterupdate"
 	"github.com/spf13/cobra"
 )
 
@@ -46,8 +46,8 @@ func newComponentReconciler(
 // Returns the number of successfully applied changes and any error from the last failure.
 func (r *componentReconciler) reconcileComponents(
 	ctx context.Context,
-	diff *types.UpdateResult,
-	result *types.UpdateResult,
+	diff *clusterupdate.UpdateResult,
+	result *clusterupdate.UpdateResult,
 ) error {
 	var lastErr error
 
@@ -59,11 +59,11 @@ func (r *componentReconciler) reconcileComponents(
 
 		err := handler(ctx, change)
 		if err != nil {
-			result.FailedChanges = append(result.FailedChanges, types.Change{
+			result.FailedChanges = append(result.FailedChanges, clusterupdate.Change{
 				Field:    change.Field,
 				OldValue: change.OldValue,
 				NewValue: change.NewValue,
-				Category: types.ChangeCategoryInPlace,
+				Category: clusterupdate.ChangeCategoryInPlace,
 				Reason:   fmt.Sprintf("failed to reconcile: %v", err),
 			})
 
@@ -72,11 +72,11 @@ func (r *componentReconciler) reconcileComponents(
 			continue
 		}
 
-		result.AppliedChanges = append(result.AppliedChanges, types.Change{
+		result.AppliedChanges = append(result.AppliedChanges, clusterupdate.Change{
 			Field:    change.Field,
 			OldValue: change.OldValue,
 			NewValue: change.NewValue,
-			Category: types.ChangeCategoryInPlace,
+			Category: clusterupdate.ChangeCategoryInPlace,
 			Reason:   "component reconciled successfully",
 		})
 	}
@@ -88,8 +88,8 @@ func (r *componentReconciler) reconcileComponents(
 // Returns false if the field is not a component field (e.g., node counts, registry settings).
 func (r *componentReconciler) handlerForField(
 	field string,
-) (func(context.Context, types.Change) error, bool) {
-	handlers := map[string]func(context.Context, types.Change) error{
+) (func(context.Context, clusterupdate.Change) error, bool) {
+	handlers := map[string]func(context.Context, clusterupdate.Change) error{
 		"cluster.cni":           r.reconcileCNI,
 		"cluster.csi":           r.reconcileCSI,
 		"cluster.metricsServer": r.reconcileMetricsServer,
@@ -106,7 +106,7 @@ func (r *componentReconciler) handlerForField(
 
 // reconcileCNI switches the CNI by installing the new CNI.
 // The old CNI is not uninstalled — the new CNI replaces it via Helm upgrade.
-func (r *componentReconciler) reconcileCNI(_ context.Context, _ types.Change) error {
+func (r *componentReconciler) reconcileCNI(_ context.Context, _ clusterupdate.Change) error {
 	_, err := setup.InstallCNI(r.cmd, r.clusterCfg, nil)
 	if err != nil {
 		return fmt.Errorf("failed to install CNI: %w", err)
@@ -116,7 +116,7 @@ func (r *componentReconciler) reconcileCNI(_ context.Context, _ types.Change) er
 }
 
 // reconcileCSI installs or uninstalls the CSI driver.
-func (r *componentReconciler) reconcileCSI(ctx context.Context, change types.Change) error {
+func (r *componentReconciler) reconcileCSI(ctx context.Context, change clusterupdate.Change) error {
 	if r.factories.CSI == nil {
 		return setup.ErrCSIInstallerFactoryNil
 	}
@@ -145,7 +145,7 @@ func (r *componentReconciler) reconcileCSI(ctx context.Context, change types.Cha
 // reconcileMetricsServer installs or uninstalls the metrics server.
 func (r *componentReconciler) reconcileMetricsServer(
 	ctx context.Context,
-	change types.Change,
+	change clusterupdate.Change,
 ) error {
 	newValue := v1alpha1.MetricsServer(change.NewValue)
 
@@ -166,7 +166,7 @@ func (r *componentReconciler) reconcileMetricsServer(
 // reconcileLoadBalancer installs or uninstalls the load balancer.
 func (r *componentReconciler) reconcileLoadBalancer(
 	ctx context.Context,
-	_ types.Change,
+	_ clusterupdate.Change,
 ) error {
 	if setup.NeedsLoadBalancerInstall(r.clusterCfg) {
 		err := setup.InstallLoadBalancerSilent(ctx, r.clusterCfg, r.factories)
@@ -181,7 +181,7 @@ func (r *componentReconciler) reconcileLoadBalancer(
 // reconcileCertManager installs or uninstalls cert-manager.
 func (r *componentReconciler) reconcileCertManager(
 	ctx context.Context,
-	change types.Change,
+	change clusterupdate.Change,
 ) error {
 	if r.factories.CertManager == nil {
 		return setup.ErrCertManagerInstallerFactoryNil
@@ -210,7 +210,7 @@ func (r *componentReconciler) reconcileCertManager(
 // reconcilePolicyEngine installs or uninstalls the policy engine.
 func (r *componentReconciler) reconcilePolicyEngine(
 	ctx context.Context,
-	change types.Change,
+	change clusterupdate.Change,
 ) error {
 	newValue := v1alpha1.PolicyEngine(change.NewValue)
 	oldValue := v1alpha1.PolicyEngine(change.OldValue)
@@ -245,7 +245,7 @@ func (r *componentReconciler) reconcilePolicyEngine(
 //nolint:exhaustive // Only Flux and ArgoCD are installable; None is handled above
 func (r *componentReconciler) reconcileGitOpsEngine(
 	ctx context.Context,
-	change types.Change,
+	change clusterupdate.Change,
 ) error {
 	newValue := v1alpha1.GitOpsEngine(change.NewValue)
 	oldValue := v1alpha1.GitOpsEngine(change.OldValue)
@@ -285,7 +285,7 @@ func (r *componentReconciler) reconcileGitOpsEngine(
 //nolint:exhaustive // Only Flux and ArgoCD can be uninstalled; other values are no-op
 func (r *componentReconciler) uninstallGitOpsEngine(
 	ctx context.Context,
-	change types.Change,
+	change clusterupdate.Change,
 ) error {
 	oldValue := v1alpha1.GitOpsEngine(change.OldValue)
 

@@ -11,7 +11,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	clusterpkg "github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/confirm"
-	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
+	"github.com/devantler-tech/ksail/v5/pkg/di"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clustererr"
 	"github.com/devantler-tech/ksail/v5/pkg/timer"
@@ -87,12 +87,12 @@ users:
 	return kubeconfigPath
 }
 
-func newDeleteTestRuntimeContainer(t *testing.T) *runtime.Runtime {
+func newDeleteTestRuntimeContainer(t *testing.T) *di.Runtime {
 	t.Helper()
 
-	return runtime.New(
-		func(i runtime.Injector) error {
-			do.Provide(i, func(runtime.Injector) (timer.Timer, error) {
+	return di.New(
+		func(i di.Injector) error {
+			do.Provide(i, func(di.Injector) (timer.Timer, error) {
 				return timer.New(), nil
 			})
 
@@ -117,7 +117,7 @@ func setupContextBasedTest(
 	contextName string,
 	existsResult bool,
 	deleteErr error,
-) (*runtime.Runtime, func()) {
+) (*di.Runtime, func()) {
 	t.Helper()
 
 	workingDir := t.TempDir()

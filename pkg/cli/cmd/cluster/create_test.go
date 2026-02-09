@@ -13,7 +13,7 @@ import (
 	clusterpkg "github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup/localregistry"
 	dockerpkg "github.com/devantler-tech/ksail/v5/pkg/client/docker"
-	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
+	"github.com/devantler-tech/ksail/v5/pkg/di"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/installer"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
@@ -211,19 +211,19 @@ spec:
 	)
 }
 
-func newTestRuntimeContainer(t *testing.T) *runtime.Runtime {
+func newTestRuntimeContainer(t *testing.T) *di.Runtime {
 	t.Helper()
 
-	return runtime.New(
-		func(i runtime.Injector) error {
-			do.Provide(i, func(runtime.Injector) (timer.Timer, error) {
+	return di.New(
+		func(i di.Injector) error {
+			do.Provide(i, func(di.Injector) (timer.Timer, error) {
 				return timer.New(), nil
 			})
 
 			return nil
 		},
-		func(i runtime.Injector) error {
-			do.Provide(i, func(runtime.Injector) (clusterprovisioner.Factory, error) {
+		func(i di.Injector) error {
+			do.Provide(i, func(di.Injector) (clusterprovisioner.Factory, error) {
 				return fakeFactory{}, nil
 			})
 

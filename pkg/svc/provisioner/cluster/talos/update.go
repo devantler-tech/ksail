@@ -9,7 +9,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	iopath "github.com/devantler-tech/ksail/v5/pkg/io"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clustererr"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/types"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clusterupdate"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	machineapi "github.com/siderolabs/talos/pkg/machinery/api/machine"
@@ -24,12 +24,12 @@ func (p *TalosProvisioner) Update(
 	ctx context.Context,
 	name string,
 	oldSpec, newSpec *v1alpha1.ClusterSpec,
-	opts types.UpdateOptions,
-) (*types.UpdateResult, error) {
+	opts clusterupdate.UpdateOptions,
+) (*clusterupdate.UpdateResult, error) {
 	// Compute diff to determine what changed
 	diff, diffErr := p.DiffConfig(ctx, name, oldSpec, newSpec)
 
-	result, proceed, prepErr := types.PrepareUpdate(
+	result, proceed, prepErr := clusterupdate.PrepareUpdate(
 		diff, diffErr, opts, clustererr.ErrRecreationRequired,
 	)
 	if !proceed {
@@ -70,9 +70,9 @@ func (p *TalosProvisioner) DiffConfig(
 	_ context.Context,
 	_ string,
 	oldSpec, newSpec *v1alpha1.ClusterSpec,
-) (*types.UpdateResult, error) {
+) (*clusterupdate.UpdateResult, error) {
 	// Talos clusters support in-place changes for most config paths.
-	result, ok := types.NewDiffResult(oldSpec, newSpec)
+	result, ok := clusterupdate.NewDiffResult(oldSpec, newSpec)
 	if !ok {
 		return result, nil
 	}
@@ -84,22 +84,22 @@ func (p *TalosProvisioner) DiffConfig(
 
 	// Compare control plane count
 	if oldSpec.Talos.ControlPlanes != newSpec.Talos.ControlPlanes {
-		result.InPlaceChanges = append(result.InPlaceChanges, types.Change{
+		result.InPlaceChanges = append(result.InPlaceChanges, clusterupdate.Change{
 			Field:    "talos.controlPlanes",
 			OldValue: strconv.Itoa(int(oldSpec.Talos.ControlPlanes)),
 			NewValue: strconv.Itoa(int(newSpec.Talos.ControlPlanes)),
-			Category: types.ChangeCategoryInPlace,
+			Category: clusterupdate.ChangeCategoryInPlace,
 			Reason:   "control-plane nodes can be added/removed via provider",
 		})
 	}
 
 	// Compare worker count
 	if oldSpec.Talos.Workers != newSpec.Talos.Workers {
-		result.InPlaceChanges = append(result.InPlaceChanges, types.Change{
+		result.InPlaceChanges = append(result.InPlaceChanges, clusterupdate.Change{
 			Field:    "talos.workers",
 			OldValue: strconv.Itoa(int(oldSpec.Talos.Workers)),
 			NewValue: strconv.Itoa(int(newSpec.Talos.Workers)),
-			Category: types.ChangeCategoryInPlace,
+			Category: clusterupdate.ChangeCategoryInPlace,
 			Reason:   "worker nodes can be added/removed via provider",
 		})
 	}
@@ -110,11 +110,11 @@ func (p *TalosProvisioner) DiffConfig(
 		newCIDR := newSpec.Hetzner.NetworkCIDR
 
 		if oldCIDR != newCIDR && oldCIDR != "" && newCIDR != "" {
-			result.RecreateRequired = append(result.RecreateRequired, types.Change{
+			result.RecreateRequired = append(result.RecreateRequired, clusterupdate.Change{
 				Field:    "hetzner.networkCidr",
 				OldValue: oldCIDR,
 				NewValue: newCIDR,
-				Category: types.ChangeCategoryRecreateRequired,
+				Category: clusterupdate.ChangeCategoryRecreateRequired,
 				Reason:   "network CIDR change requires PKI regeneration",
 			})
 		}
@@ -130,7 +130,7 @@ func (p *TalosProvisioner) applyNodeScalingChanges(
 	ctx context.Context,
 	clusterName string,
 	oldSpec, newSpec *v1alpha1.ClusterSpec,
-	result *types.UpdateResult,
+	result *clusterupdate.UpdateResult,
 ) error {
 	if oldSpec == nil || newSpec == nil {
 		return nil
@@ -159,7 +159,7 @@ func (p *TalosProvisioner) scaleByProvider(
 	ctx context.Context,
 	clusterName string,
 	cpDelta, workerDelta int,
-	result *types.UpdateResult,
+	result *clusterupdate.UpdateResult,
 ) error {
 	scaleRole := p.scaleDockerByRole
 	if p.hetznerOpts != nil {
@@ -189,7 +189,7 @@ func (p *TalosProvisioner) scaleByProvider(
 func (p *TalosProvisioner) applyInPlaceConfigChanges(
 	ctx context.Context,
 	clusterName string,
-	result *types.UpdateResult,
+	result *clusterupdate.UpdateResult,
 ) error {
 	if p.talosConfigs == nil {
 		return nil
@@ -234,7 +234,7 @@ func (p *TalosProvisioner) applyNodeConfig(
 	ctx context.Context,
 	node nodeWithRole,
 	config talosconfig.Provider,
-	result *types.UpdateResult,
+	result *clusterupdate.UpdateResult,
 ) {
 	err := p.applyConfigWithMode(
 		ctx,
@@ -248,10 +248,10 @@ func (p *TalosProvisioner) applyNodeConfig(
 			node.IP, node.Role, err,
 		)
 
-		result.FailedChanges = append(result.FailedChanges, types.Change{
+		result.FailedChanges = append(result.FailedChanges, clusterupdate.Change{
 			Field:    "talos.config",
 			NewValue: node.IP,
-			Category: types.ChangeCategoryInPlace,
+			Category: clusterupdate.ChangeCategoryInPlace,
 			Reason:   fmt.Sprintf("failed to apply %s config: %v", node.Role, err),
 		})
 	} else {
@@ -260,10 +260,10 @@ func (p *TalosProvisioner) applyNodeConfig(
 			node.IP, node.Role,
 		)
 
-		result.AppliedChanges = append(result.AppliedChanges, types.Change{
+		result.AppliedChanges = append(result.AppliedChanges, clusterupdate.Change{
 			Field:    "talos.config",
 			NewValue: node.IP,
-			Category: types.ChangeCategoryInPlace,
+			Category: clusterupdate.ChangeCategoryInPlace,
 			Reason:   node.Role + " config applied successfully",
 		})
 	}
@@ -280,8 +280,8 @@ func (p *TalosProvisioner) applyNodeConfig(
 func (p *TalosProvisioner) applyRebootRequiredChanges(
 	_ context.Context,
 	_ string,
-	result *types.UpdateResult,
-	opts types.UpdateOptions,
+	result *clusterupdate.UpdateResult,
+	opts clusterupdate.UpdateOptions,
 ) error {
 	_, _ = fmt.Fprintf(p.logWriter,
 		"  %d changes require reboot (rolling=%v)\n",
@@ -289,11 +289,11 @@ func (p *TalosProvisioner) applyRebootRequiredChanges(
 
 	// Record as failed changes
 	for i := range result.RebootRequired {
-		result.FailedChanges = append(result.FailedChanges, types.Change{
+		result.FailedChanges = append(result.FailedChanges, clusterupdate.Change{
 			Field:    result.RebootRequired[i].Field,
 			OldValue: result.RebootRequired[i].OldValue,
 			NewValue: result.RebootRequired[i].NewValue,
-			Category: types.ChangeCategoryRebootRequired,
+			Category: clusterupdate.ChangeCategoryRebootRequired,
 			Reason:   "Talos rolling reboot is not yet implemented",
 		})
 	}
@@ -512,23 +512,23 @@ func getTalosRebootRequiredPaths() []string {
 }
 
 // ClassifyTalosPatch determines the reboot requirement for a given Talos config path.
-func ClassifyTalosPatch(path string) types.ChangeCategory {
+func ClassifyTalosPatch(path string) clusterupdate.ChangeCategory {
 	// Check no-reboot paths first
 	for _, p := range getTalosNoRebootPaths() {
 		if pathMatches(path, p) {
-			return types.ChangeCategoryInPlace
+			return clusterupdate.ChangeCategoryInPlace
 		}
 	}
 
 	// Check reboot-required paths
 	for _, p := range getTalosRebootRequiredPaths() {
 		if pathMatches(path, p) {
-			return types.ChangeCategoryRebootRequired
+			return clusterupdate.ChangeCategoryRebootRequired
 		}
 	}
 
 	// Default to reboot for unknown paths (safer)
-	return types.ChangeCategoryRebootRequired
+	return clusterupdate.ChangeCategoryRebootRequired
 }
 
 // pathMatches checks if a config path matches a pattern.
@@ -547,7 +547,7 @@ func (p *TalosProvisioner) GetCurrentConfig(ctx context.Context) (*v1alpha1.Clus
 		provider = v1alpha1.ProviderHetzner
 	}
 
-	spec := types.DefaultCurrentSpec(v1alpha1.DistributionTalos, provider)
+	spec := clusterupdate.DefaultCurrentSpec(v1alpha1.DistributionTalos, provider)
 
 	// Detect installed components from the live cluster when the detector is available.
 	if p.componentDetector != nil {
@@ -580,7 +580,7 @@ func (p *TalosProvisioner) GetCurrentConfig(ctx context.Context) (*v1alpha1.Clus
 		}
 	}
 
-	types.ApplyGitOpsLocalRegistryDefault(spec)
+	clusterupdate.ApplyGitOpsLocalRegistryDefault(spec)
 
 	return spec, nil
 }

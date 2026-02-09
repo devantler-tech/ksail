@@ -4,12 +4,12 @@ import (
 	"fmt"
 
 	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
-	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
+	"github.com/devantler-tech/ksail/v5/pkg/di"
 	"github.com/spf13/cobra"
 )
 
 // NewClusterCmd creates the parent cluster command and wires lifecycle subcommands beneath it.
-func NewClusterCmd(runtimeContainer *runtime.Runtime) *cobra.Command {
+func NewClusterCmd(runtimeContainer *di.Runtime) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "cluster",
 		Short: "Manage cluster lifecycle",
