@@ -65,7 +65,7 @@ var helpDescStyle = lipgloss.NewStyle().
 // createHelpModel creates a configured help model.
 func createHelpModel() help.Model {
 	helpModel := help.New()
-	helpModel.ShortSeparator = " • "
+	helpModel.ShortSeparator = helpSep
 	helpModel.FullSeparator = "   "
 	helpModel.Ellipsis = "…"
 	helpModel.Styles = help.Styles{

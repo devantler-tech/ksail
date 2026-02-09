@@ -12,7 +12,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const importCmdLong = `Import container images from a tar archive to the cluster's containerd di.
+const importCmdLong = `Import container images from a tar archive to the cluster's containerd runtime.
 
 Images are imported to all nodes in the cluster, making them available for
 pod scheduling without requiring registry pulls.
