@@ -17,7 +17,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/svc/installer"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
+	"github.com/devantler-tech/ksail/v5/pkg/timer"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"

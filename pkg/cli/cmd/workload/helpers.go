@@ -8,8 +8,8 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
 	configmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
+	"github.com/devantler-tech/ksail/v5/pkg/notify"
+	"github.com/devantler-tech/ksail/v5/pkg/timer"
 	"github.com/spf13/cobra"
 )
 

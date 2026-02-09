@@ -10,7 +10,7 @@ import (
 	iopath "github.com/devantler-tech/ksail/v5/pkg/io"
 	configmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
+	"github.com/devantler-tech/ksail/v5/pkg/timer"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 )

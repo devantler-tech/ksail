@@ -13,7 +13,6 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider"
 	dockerprovider "github.com/devantler-tech/ksail/v5/pkg/svc/provider/docker"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider/hetzner"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/labels"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	dockerclient "github.com/docker/docker/client"
@@ -286,7 +285,7 @@ func (p *TalosProvisioner) List(ctx context.Context) ([]string, error) {
 		return nil, fmt.Errorf("failed to list containers: %w", err)
 	}
 
-	return labels.UniqueValues(
+	return uniqueLabelValues(
 		containers,
 		LabelTalosClusterName,
 		func(c container.Summary) map[string]string {

@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
+	"github.com/devantler-tech/ksail/v5/pkg/timer"
 	"github.com/samber/do/v2"
 	"github.com/spf13/cobra"
 )

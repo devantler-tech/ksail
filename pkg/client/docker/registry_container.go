@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/devantler-tech/ksail/v5/pkg/utils/envvar"
+	"github.com/devantler-tech/ksail/v5/pkg/envvar"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/image"

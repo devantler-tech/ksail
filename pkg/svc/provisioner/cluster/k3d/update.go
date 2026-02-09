@@ -12,9 +12,9 @@ import (
 	"strings"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
+	runner "github.com/devantler-tech/ksail/v5/pkg/runner"
 	clustererrors "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/errors"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/types"
-	runner "github.com/devantler-tech/ksail/v5/pkg/utils/runner"
 	nodecommand "github.com/k3d-io/k3d/v5/cmd/node"
 )
 

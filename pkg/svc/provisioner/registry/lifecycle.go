@@ -13,7 +13,7 @@ import (
 
 	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
 	ksailio "github.com/devantler-tech/ksail/v5/pkg/io"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
+	"github.com/devantler-tech/ksail/v5/pkg/notify"
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
 )

@@ -1,11 +1,11 @@
-package detector_test
+package gitopsdetector_test
 
 import (
 	"os"
 	"path/filepath"
 	"testing"
 
-	"github.com/devantler-tech/ksail/v5/pkg/io/detector"
+	"github.com/devantler-tech/ksail/v5/pkg/io/gitopsdetector"
 	"github.com/stretchr/testify/require"
 )
 
@@ -45,7 +45,7 @@ func TestGitOpsCRDetector_FindFluxInstance(t *testing.T) {
 			tempDir := t.TempDir()
 			testCase.setupFiles(t, tempDir)
 
-			det := detector.NewGitOpsCRDetector(tempDir)
+			det := gitopsdetector.NewGitOpsCRDetector(tempDir)
 			result, err := det.FindFluxInstance()
 			require.NoError(t, err)
 
@@ -267,7 +267,7 @@ func TestGitOpsCRDetector_FindArgoCDApplication(t *testing.T) {
 			tempDir := t.TempDir()
 			testCase.setupFiles(t, tempDir)
 
-			det := detector.NewGitOpsCRDetector(tempDir)
+			det := gitopsdetector.NewGitOpsCRDetector(tempDir)
 			result, err := det.FindArgoCDApplication()
 			require.NoError(t, err)
 

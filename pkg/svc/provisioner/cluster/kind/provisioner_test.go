@@ -9,7 +9,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider"
 	clustererrors "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/errors"
 	kindprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/kind"
-	cmdrunner "github.com/devantler-tech/ksail/v5/pkg/utils/runner"
+	cmdrunner "github.com/devantler-tech/ksail/v5/pkg/runner"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"

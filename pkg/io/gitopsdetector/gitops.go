@@ -1,4 +1,4 @@
-package detector
+package gitopsdetector
 
 import (
 	"fmt"

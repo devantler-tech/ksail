@@ -14,8 +14,8 @@ import (
 	k3dprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/k3d"
 	kindprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/kind"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
+	"github.com/devantler-tech/ksail/v5/pkg/notify"
+	"github.com/devantler-tech/ksail/v5/pkg/timer"
 	"github.com/docker/docker/client"
 	"github.com/spf13/cobra"
 )

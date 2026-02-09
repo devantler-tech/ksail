@@ -14,7 +14,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
+	"github.com/devantler-tech/ksail/v5/pkg/notify"
 	"github.com/getsops/sops/v3"
 	"github.com/getsops/sops/v3/aes"
 	"github.com/getsops/sops/v3/cmd/sops/codes"

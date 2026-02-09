@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	configmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/envvar"
+	"github.com/devantler-tech/ksail/v5/pkg/envvar"
 	"sigs.k8s.io/yaml"
 )
 

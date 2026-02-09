@@ -12,7 +12,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/cli/cmd"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/cmd/workload"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
+	"github.com/devantler-tech/ksail/v5/pkg/timer"
 	"github.com/gkampitakis/go-snaps/snaps"
 	"github.com/samber/do/v2"
 	"github.com/stretchr/testify/require"

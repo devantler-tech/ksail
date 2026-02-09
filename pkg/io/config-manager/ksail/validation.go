@@ -10,7 +10,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/io/config-manager/loader"
 	"github.com/devantler-tech/ksail/v5/pkg/io/validator"
 	ksailvalidator "github.com/devantler-tech/ksail/v5/pkg/io/validator/ksail"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
+	"github.com/devantler-tech/ksail/v5/pkg/notify"
 )
 
 // validateConfig runs validation on the loaded configuration.

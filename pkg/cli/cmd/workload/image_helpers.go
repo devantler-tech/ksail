@@ -8,7 +8,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
 	configmanagerinterface "github.com/devantler-tech/ksail/v5/pkg/io/config-manager"
 	configmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
+	"github.com/devantler-tech/ksail/v5/pkg/timer"
 	"github.com/spf13/cobra"
 )
 

@@ -13,7 +13,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/svc/detector"
 	clustererrors "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/errors"
-	runner "github.com/devantler-tech/ksail/v5/pkg/utils/runner"
+	runner "github.com/devantler-tech/ksail/v5/pkg/runner"
 	clustercommand "github.com/k3d-io/k3d/v5/cmd/cluster"
 	v1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/sirupsen/logrus"

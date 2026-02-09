@@ -7,7 +7,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/devantler-tech/ksail/v5/pkg/utils/runner"
+	"github.com/devantler-tech/ksail/v5/pkg/runner"
 	"github.com/gkampitakis/go-snaps/snaps"
 	"github.com/spf13/cobra"
 )

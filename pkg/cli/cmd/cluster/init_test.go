@@ -10,7 +10,7 @@ import (
 
 	clusterpkg "github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
-	timermocks "github.com/devantler-tech/ksail/v5/pkg/utils/timer"
+	timermocks "github.com/devantler-tech/ksail/v5/pkg/timer"
 	"github.com/gkampitakis/go-snaps/snaps"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"

@@ -3,7 +3,7 @@ package envvar_test
 import (
 	"testing"
 
-	"github.com/devantler-tech/ksail/v5/pkg/utils/envvar"
+	"github.com/devantler-tech/ksail/v5/pkg/envvar"
 	"github.com/stretchr/testify/assert"
 )
 

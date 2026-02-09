@@ -13,8 +13,8 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/client/flux"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	iopath "github.com/devantler-tech/ksail/v5/pkg/io"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
+	"github.com/devantler-tech/ksail/v5/pkg/notify"
+	"github.com/devantler-tech/ksail/v5/pkg/timer"
 	"github.com/spf13/cobra"
 )
 

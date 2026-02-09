@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/labels"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 )
 
@@ -205,7 +204,7 @@ func (p *Provider) ListAllClusters(ctx context.Context) ([]string, error) {
 		return nil, fmt.Errorf("failed to list servers: %w", err)
 	}
 
-	return labels.UniqueValues(servers, LabelClusterName, func(s *hcloud.Server) map[string]string {
+	return uniqueLabelValues(servers, LabelClusterName, func(s *hcloud.Server) map[string]string {
 		return s.Labels
 	}), nil
 }

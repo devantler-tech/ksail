@@ -20,8 +20,8 @@ import (
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	clustererrors "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/errors"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/types"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
+	"github.com/devantler-tech/ksail/v5/pkg/notify"
+	"github.com/devantler-tech/ksail/v5/pkg/timer"
 	"github.com/spf13/cobra"
 )
 

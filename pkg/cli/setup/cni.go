@@ -11,11 +11,11 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
 	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
 	"github.com/devantler-tech/ksail/v5/pkg/k8s"
+	"github.com/devantler-tech/ksail/v5/pkg/notify"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/installer"
 	calicoinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/cni/calico"
 	ciliuminstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/cni/cilium"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
+	"github.com/devantler-tech/ksail/v5/pkg/timer"
 	"github.com/spf13/cobra"
 )
 

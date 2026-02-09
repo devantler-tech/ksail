@@ -1,7 +1,7 @@
 package configmanager
 
 import (
-	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
+	"github.com/devantler-tech/ksail/v5/pkg/timer"
 )
 
 // LoadOptions configures how configuration is loaded.

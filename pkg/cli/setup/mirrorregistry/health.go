@@ -6,7 +6,7 @@ import (
 	"io"
 
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
+	"github.com/devantler-tech/ksail/v5/pkg/notify"
 	"github.com/docker/docker/client"
 )
 

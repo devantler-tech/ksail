@@ -12,7 +12,7 @@ import (
 	configmanagerinterface "github.com/devantler-tech/ksail/v5/pkg/io/config-manager"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/types"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
+	"github.com/devantler-tech/ksail/v5/pkg/timer"
 	mapstructure "github.com/go-viper/mapstructure/v2"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"

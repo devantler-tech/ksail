@@ -11,8 +11,8 @@ import (
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	configmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
+	"github.com/devantler-tech/ksail/v5/pkg/notify"
+	"github.com/devantler-tech/ksail/v5/pkg/timer"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )

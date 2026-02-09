@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
+	"github.com/devantler-tech/ksail/v5/pkg/timer"
 	"github.com/gkampitakis/go-snaps/snaps"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"

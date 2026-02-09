@@ -21,7 +21,7 @@ import (
 	chatui "github.com/devantler-tech/ksail/v5/pkg/cli/ui/chat"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	chatsvc "github.com/devantler-tech/ksail/v5/pkg/svc/chat"
-	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
+	"github.com/devantler-tech/ksail/v5/pkg/notify"
 	copilot "github.com/github/copilot-sdk/go"
 	"github.com/spf13/cobra"
 	"sigs.k8s.io/yaml"

@@ -7,7 +7,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/devantler-tech/ksail/v5/pkg/utils/notify"
+	"github.com/devantler-tech/ksail/v5/pkg/notify"
 	copilot "github.com/github/copilot-sdk/go"
 )
 

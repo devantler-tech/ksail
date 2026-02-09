@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/devantler-tech/ksail/v5/pkg/io/detector"
 	"github.com/devantler-tech/ksail/v5/pkg/io/generator"
 	yamlgenerator "github.com/devantler-tech/ksail/v5/pkg/io/generator/yaml"
+	"github.com/devantler-tech/ksail/v5/pkg/io/gitopsdetector"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -109,13 +109,13 @@ func (g *InstanceGenerator) Generate(opts InstanceGeneratorOptions) (string, err
 	}
 
 	instance := Instance{
-		APIVersion: detector.FluxInstanceAPIVersion,
-		Kind:       detector.FluxInstanceKind,
+		APIVersion: gitopsdetector.FluxInstanceAPIVersion,
+		Kind:       gitopsdetector.FluxInstanceKind,
 		Metadata: InstanceMetadata{
-			Name:      detector.FluxInstanceDefaultName,
-			Namespace: detector.FluxInstanceNamespace,
+			Name:      gitopsdetector.FluxInstanceDefaultName,
+			Namespace: gitopsdetector.FluxInstanceNamespace,
 			Labels: map[string]string{
-				detector.ManagedByLabel: detector.ManagedByValue,
+				gitopsdetector.ManagedByLabel: gitopsdetector.ManagedByValue,
 			},
 		},
 		Spec: InstanceSpec{
