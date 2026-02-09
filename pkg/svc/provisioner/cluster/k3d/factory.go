@@ -5,7 +5,7 @@ import (
 )
 
 // CreateProvisioner creates a K3dClusterProvisioner from a pre-loaded configuration.
-// The K3d config should be loaded via the config-manager before calling this function,
+// The K3d config should be loaded via the configmanager before calling this function,
 // allowing any in-memory modifications (e.g., mirror registries) to be preserved.
 //
 // Parameters:

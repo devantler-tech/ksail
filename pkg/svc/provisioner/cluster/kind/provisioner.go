@@ -14,7 +14,7 @@ import (
 	runner "github.com/devantler-tech/ksail/v5/pkg/runner"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/detector"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider"
-	clustererrors "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/errors"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clustererr"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 	"sigs.k8s.io/kind/pkg/cluster"
 	kindcmd "sigs.k8s.io/kind/pkg/cmd"
@@ -209,7 +209,7 @@ func (k *KindClusterProvisioner) Create(ctx context.Context, name string) error 
 }
 
 // Delete deletes a kind cluster using kind's Cobra command.
-// Returns clustererrors.ErrClusterNotFound if the cluster does not exist.
+// Returns clustererr.ErrClusterNotFound if the cluster does not exist.
 func (k *KindClusterProvisioner) Delete(ctx context.Context, name string) error {
 	target := setName(name, k.kindConfig.Name)
 
@@ -220,7 +220,7 @@ func (k *KindClusterProvisioner) Delete(ctx context.Context, name string) error 
 	}
 
 	if !exists {
-		return fmt.Errorf("%w: %s", clustererrors.ErrClusterNotFound, target)
+		return fmt.Errorf("%w: %s", clustererr.ErrClusterNotFound, target)
 	}
 
 	kubeconfigPath, err := iopath.ExpandHomePath(k.kubeConfig)
@@ -339,7 +339,7 @@ func (k *KindClusterProvisioner) withProvider(
 	target := setName(name, k.kindConfig.Name)
 
 	if k.infraProvider == nil {
-		return fmt.Errorf("%w for cluster '%s'", clustererrors.ErrProviderNotSet, target)
+		return fmt.Errorf("%w for cluster '%s'", clustererr.ErrProviderNotSet, target)
 	}
 
 	err := providerFunc(ctx, target)

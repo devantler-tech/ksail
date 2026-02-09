@@ -3,12 +3,12 @@ package talosprovisioner
 import (
 	"path/filepath"
 
-	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
+	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/configmanager/talos"
 )
 
 // Default provisioner-specific values.
 // Talos configuration defaults (cluster name, image, network CIDR, k8s version)
-// are defined in the talos config-manager package.
+// are defined in the talos configmanager package.
 const (
 	// DefaultControlPlaneNodes is the default number of control-plane nodes.
 	DefaultControlPlaneNodes = 1
@@ -19,7 +19,7 @@ const (
 // Options holds runtime options for a Talos provisioner.
 // Unlike TalosConfig which was also responsible for loading Talos patches,
 // Options only contains provisioning settings. The Talos machine configuration
-// is now loaded separately via the talos config-manager.
+// is now loaded separately via the talos configmanager.
 type Options struct {
 	// TalosImage is the Talos container image to use.
 	TalosImage string

@@ -6,10 +6,10 @@ import (
 	"os"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	kindconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/kind"
-	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
+	kindconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/configmanager/kind"
+	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/configmanager/talos"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/detector"
-	clustererrors "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/errors"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clustererr"
 	k3dprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/k3d"
 	kindprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/kind"
 	talosprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/talos"
@@ -21,11 +21,11 @@ import (
 // Re-export errors for backward compatibility.
 var (
 	// ErrUnsupportedDistribution is returned when an unsupported distribution is specified.
-	ErrUnsupportedDistribution = clustererrors.ErrUnsupportedDistribution
+	ErrUnsupportedDistribution = clustererr.ErrUnsupportedDistribution
 	// ErrUnsupportedProvider is returned when an unsupported provider is specified.
-	ErrUnsupportedProvider = clustererrors.ErrUnsupportedProvider
+	ErrUnsupportedProvider = clustererr.ErrUnsupportedProvider
 	// ErrMissingDistributionConfig is returned when no pre-loaded distribution config is provided.
-	ErrMissingDistributionConfig = clustererrors.ErrMissingDistributionConfig
+	ErrMissingDistributionConfig = clustererr.ErrMissingDistributionConfig
 )
 
 // DistributionConfig holds pre-loaded distribution-specific configuration.

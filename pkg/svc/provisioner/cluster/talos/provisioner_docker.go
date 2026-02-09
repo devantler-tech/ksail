@@ -9,7 +9,7 @@ import (
 	"os/exec"
 	"runtime"
 
-	clustererrors "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/errors"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clustererr"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/go-connections/nat"
@@ -234,7 +234,7 @@ func (p *TalosProvisioner) validateClusterOperation(
 	}
 
 	if !exists {
-		return "", fmt.Errorf("%w: %s", clustererrors.ErrClusterNotFound, clusterName)
+		return "", fmt.Errorf("%w: %s", clustererr.ErrClusterNotFound, clusterName)
 	}
 
 	return clusterName, nil

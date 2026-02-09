@@ -13,7 +13,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/confirm"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
-	clustererrors "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/errors"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clustererr"
 	"github.com/devantler-tech/ksail/v5/pkg/timer"
 	"github.com/docker/docker/client"
 	"github.com/gkampitakis/go-snaps/snaps"
@@ -199,7 +199,7 @@ func TestDelete_ContextBasedDetection_ClusterNotFound(t *testing.T) {
 		t,
 		"kind-nonexistent",
 		false,
-		clustererrors.ErrClusterNotFound,
+		clustererr.ErrClusterNotFound,
 	)
 	defer cleanup()
 
@@ -212,7 +212,7 @@ func TestDelete_ContextBasedDetection_ClusterNotFound(t *testing.T) {
 
 	err := cmd.Execute()
 	require.Error(t, err)
-	require.ErrorIs(t, err, clustererrors.ErrClusterNotFound)
+	require.ErrorIs(t, err, clustererr.ErrClusterNotFound)
 
 	snaps.MatchSnapshot(t, trimTrailingNewlineDelete(out.String()))
 }

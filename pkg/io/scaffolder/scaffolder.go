@@ -13,8 +13,8 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
-	k3dconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/k3d"
-	kindconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/kind"
+	k3dconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/configmanager/k3d"
+	kindconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/configmanager/kind"
 	"github.com/devantler-tech/ksail/v5/pkg/io/generator"
 	k3dgenerator "github.com/devantler-tech/ksail/v5/pkg/io/generator/k3d"
 	kindgenerator "github.com/devantler-tech/ksail/v5/pkg/io/generator/kind"

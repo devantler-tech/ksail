@@ -9,7 +9,7 @@ import (
 	"io"
 	"strings"
 
-	kindconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/kind"
+	kindconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/configmanager/kind"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"

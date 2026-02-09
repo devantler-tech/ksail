@@ -13,7 +13,7 @@ import (
 
 	runner "github.com/devantler-tech/ksail/v5/pkg/runner"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/detector"
-	clustererrors "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/errors"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clustererr"
 	clustercommand "github.com/k3d-io/k3d/v5/cmd/cluster"
 	v1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/sirupsen/logrus"
@@ -85,7 +85,7 @@ func (k *K3dClusterProvisioner) Create(ctx context.Context, name string) error {
 }
 
 // Delete removes a k3d cluster via the Cobra command.
-// Returns clustererrors.ErrClusterNotFound if the cluster does not exist.
+// Returns clustererr.ErrClusterNotFound if the cluster does not exist.
 func (k *K3dClusterProvisioner) Delete(ctx context.Context, name string) error {
 	// Check if cluster exists before attempting to delete
 	target := k.resolveName(name)
@@ -96,7 +96,7 @@ func (k *K3dClusterProvisioner) Delete(ctx context.Context, name string) error {
 	}
 
 	if !exists {
-		return fmt.Errorf("%w: %s", clustererrors.ErrClusterNotFound, target)
+		return fmt.Errorf("%w: %s", clustererr.ErrClusterNotFound, target)
 	}
 
 	args := k.appendConfigFlag(nil)

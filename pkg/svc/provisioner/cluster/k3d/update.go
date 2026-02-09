@@ -13,7 +13,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	runner "github.com/devantler-tech/ksail/v5/pkg/runner"
-	clustererrors "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/errors"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clustererr"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/types"
 	nodecommand "github.com/k3d-io/k3d/v5/cmd/node"
 )
@@ -37,7 +37,7 @@ func (k *K3dClusterProvisioner) Update(
 	diff, diffErr := k.DiffConfig(ctx, name, oldSpec, newSpec)
 
 	result, proceed, prepErr := types.PrepareUpdate(
-		diff, diffErr, opts, clustererrors.ErrRecreationRequired,
+		diff, diffErr, opts, clustererr.ErrRecreationRequired,
 	)
 	if !proceed {
 		return result, prepErr //nolint:wrapcheck // error context added in PrepareUpdate

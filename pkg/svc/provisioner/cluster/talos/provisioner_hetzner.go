@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider/hetzner"
-	clustererrors "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/errors"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clustererr"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"github.com/siderolabs/go-retry/retry"
 	"github.com/siderolabs/talos/pkg/cluster/check"
@@ -653,7 +653,7 @@ func (p *TalosProvisioner) deleteHetznerCluster(ctx context.Context, clusterName
 	}
 
 	if !exists {
-		return fmt.Errorf("%w: %s", clustererrors.ErrClusterNotFound, clusterName)
+		return fmt.Errorf("%w: %s", clustererr.ErrClusterNotFound, clusterName)
 	}
 
 	// Delete all nodes and infrastructure
@@ -878,12 +878,12 @@ func (p *TalosProvisioner) discoverHetznerServers(
 	}
 
 	if len(nodes) == 0 {
-		return nil, nil, fmt.Errorf("%w: %s", clustererrors.ErrNoNodesFound, clusterName)
+		return nil, nil, fmt.Errorf("%w: %s", clustererr.ErrNoNodesFound, clusterName)
 	}
 
 	hetznerProvider, ok := p.infraProvider.(*hetzner.Provider)
 	if !ok {
-		return nil, nil, clustererrors.ErrNotHetznerProvider
+		return nil, nil, clustererr.ErrNotHetznerProvider
 	}
 
 	var controlPlaneServers, workerServers []*hcloud.Server
@@ -906,7 +906,7 @@ func (p *TalosProvisioner) discoverHetznerServers(
 	}
 
 	if len(controlPlaneServers) == 0 {
-		return nil, nil, fmt.Errorf("%w: %s", clustererrors.ErrNoControlPlaneNodes, clusterName)
+		return nil, nil, fmt.Errorf("%w: %s", clustererr.ErrNoControlPlaneNodes, clusterName)
 	}
 
 	return controlPlaneServers, workerServers, nil

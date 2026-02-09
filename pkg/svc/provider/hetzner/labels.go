@@ -1,7 +1,6 @@
 package hetzner
 
 import (
-	"slices"
 	"strconv"
 )
 
@@ -56,24 +55,4 @@ func NodeLabels(clusterName string, nodeType string, index int) map[string]strin
 	labels[LabelNodeIndex] = strconv.Itoa(index)
 
 	return labels
-}
-
-// uniqueLabelValues extracts unique non-empty values for a given key from labeled items.
-func uniqueLabelValues[T any](items []T, key string, getLabels func(T) map[string]string) []string {
-	seen := make(map[string]struct{})
-
-	for _, item := range items {
-		if v, ok := getLabels(item)[key]; ok && v != "" {
-			seen[v] = struct{}{}
-		}
-	}
-
-	result := make([]string, 0, len(seen))
-	for v := range seen {
-		result = append(result, v)
-	}
-
-	slices.Sort(result)
-
-	return result
 }

@@ -11,7 +11,7 @@ import (
 const defaultKubeconfigPath = "~/.kube/config"
 
 // CreateProvisioner creates a KindClusterProvisioner from a pre-loaded configuration.
-// The Kind config should be loaded via the config-manager before calling this function,
+// The Kind config should be loaded via the configmanager before calling this function,
 // allowing any in-memory modifications (e.g., mirror registries) to be preserved.
 //
 // Parameters:

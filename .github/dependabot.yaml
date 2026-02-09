@@ -77,7 +77,7 @@ updates:
 
   - package-ecosystem: docker
     registries: [dockerhub, ghcr]
-    directory: /pkg/io/config-manager/talos # Talos image (embedded in Go via go:embed)
+    directory: /pkg/io/configmanager/talos # Talos image (embedded in Go via go:embed)
     cooldown:
       default-days: 7
     schedule:
@@ -85,7 +85,7 @@ updates:
 
   - package-ecosystem: docker
     registries: [dockerhub, ghcr]
-    directory: /pkg/io/config-manager/k3d # K3s image (embedded in Go via go:embed)
+    directory: /pkg/io/configmanager/k3d # K3s image (embedded in Go via go:embed)
     cooldown:
       default-days: 7
     schedule:
@@ -93,7 +93,7 @@ updates:
 
   - package-ecosystem: docker
     registries: [dockerhub, ghcr]
-    directory: /pkg/io/config-manager/kind # Kind node image (embedded in Go via go:embed)
+    directory: /pkg/io/configmanager/kind # Kind node image (embedded in Go via go:embed)
     cooldown:
       default-days: 7
     schedule:

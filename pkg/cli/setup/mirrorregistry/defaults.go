@@ -2,7 +2,7 @@ package mirrorregistry
 
 import (
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
+	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/configmanager/ksail"
 	"github.com/spf13/cobra"
 )
 

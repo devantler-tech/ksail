@@ -8,7 +8,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	iopath "github.com/devantler-tech/ksail/v5/pkg/io"
-	clustererrors "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/errors"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clustererr"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
@@ -30,7 +30,7 @@ func (p *TalosProvisioner) Update(
 	diff, diffErr := p.DiffConfig(ctx, name, oldSpec, newSpec)
 
 	result, proceed, prepErr := types.PrepareUpdate(
-		diff, diffErr, opts, clustererrors.ErrRecreationRequired,
+		diff, diffErr, opts, clustererr.ErrRecreationRequired,
 	)
 	if !proceed {
 		return result, prepErr //nolint:wrapcheck // error context added in PrepareUpdate
@@ -310,7 +310,7 @@ func (p *TalosProvisioner) applyConfigWithMode(
 	mode machineapi.ApplyConfigurationRequest_Mode,
 ) error {
 	if config == nil {
-		return clustererrors.ErrConfigNil
+		return clustererr.ErrConfigNil
 	}
 
 	cfgBytes, err := config.Bytes()
@@ -377,7 +377,7 @@ func (p *TalosProvisioner) createTalosClient(
 		}
 	}
 
-	return nil, clustererrors.ErrTalosConfigRequired
+	return nil, clustererr.ErrTalosConfigRequired
 }
 
 // nodeWithRole holds an IP address and its role for role-aware config application.
@@ -441,7 +441,7 @@ func (p *TalosProvisioner) getDockerNodesByRole(
 	clusterName string,
 ) ([]nodeWithRole, error) {
 	if p.dockerClient == nil {
-		return nil, clustererrors.ErrDockerClientNotConfigured
+		return nil, clustererr.ErrDockerClientNotConfigured
 	}
 
 	containers, err := p.dockerClient.ContainerList(ctx, container.ListOptions{

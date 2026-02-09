@@ -8,7 +8,7 @@ import (
 
 	cmdrunner "github.com/devantler-tech/ksail/v5/pkg/runner"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider"
-	clustererrors "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/errors"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clustererr"
 	kindprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/kind"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
@@ -201,7 +201,7 @@ func TestDeleteErrorClusterNotFound(t *testing.T) {
 
 	err := provisioner.Delete(context.Background(), "nonexistent")
 
-	require.ErrorIs(t, err, clustererrors.ErrClusterNotFound, "Delete()")
+	require.ErrorIs(t, err, clustererr.ErrClusterNotFound, "Delete()")
 }
 
 func TestExistsSuccessFalse(t *testing.T) {

@@ -11,7 +11,7 @@
 //   - String utilities: TrimNonEmpty
 //
 // Subpackages:
-//   - config-manager: Configuration loading and management
+//   - configmanager: Configuration loading and management
 //   - generator: Template and configuration generation
 //   - marshaller: Serialization and deserialization
 //   - scaffolder: Project scaffolding and file generation

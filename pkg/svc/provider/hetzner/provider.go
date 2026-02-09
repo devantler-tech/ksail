@@ -205,9 +205,13 @@ func (p *Provider) ListAllClusters(ctx context.Context) ([]string, error) {
 		return nil, fmt.Errorf("failed to list servers: %w", err)
 	}
 
-	return k8s.UniqueLabelValues(servers, LabelClusterName, func(s *hcloud.Server) map[string]string {
-		return s.Labels
-	}), nil
+	return k8s.UniqueLabelValues(
+		servers,
+		LabelClusterName,
+		func(s *hcloud.Server) map[string]string {
+			return s.Labels
+		},
+	), nil
 }
 
 // NodesExist returns true if nodes exist for the given cluster name.

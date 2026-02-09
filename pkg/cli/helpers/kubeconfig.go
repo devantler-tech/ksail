@@ -8,8 +8,8 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	iopath "github.com/devantler-tech/ksail/v5/pkg/io"
-	configmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager"
-	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
+	configmanager "github.com/devantler-tech/ksail/v5/pkg/io/configmanager"
+	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/configmanager/ksail"
 	"github.com/devantler-tech/ksail/v5/pkg/timer"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"

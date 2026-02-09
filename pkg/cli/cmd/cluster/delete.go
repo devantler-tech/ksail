@@ -15,7 +15,7 @@ import (
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	"github.com/devantler-tech/ksail/v5/pkg/notify"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
-	clustererrors "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/errors"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clustererr"
 	"github.com/devantler-tech/ksail/v5/pkg/timer"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
@@ -500,7 +500,7 @@ func executeDelete(
 	}
 
 	if !exists {
-		return clustererrors.ErrClusterNotFound
+		return clustererr.ErrClusterNotFound
 	}
 
 	// Delete the cluster

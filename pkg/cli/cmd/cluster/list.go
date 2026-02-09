@@ -9,10 +9,10 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
-	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
+	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/configmanager/talos"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider/hetzner"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
-	clustererrors "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/errors"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clustererr"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	k3dv1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/spf13/cobra"
@@ -20,7 +20,7 @@ import (
 )
 
 // ErrUnsupportedProvider re-exports the shared error for backward compatibility.
-var ErrUnsupportedProvider = clustererrors.ErrUnsupportedProvider
+var ErrUnsupportedProvider = clustererr.ErrUnsupportedProvider
 
 // AllDistributions returns all supported distributions.
 func AllDistributions() []v1alpha1.Distribution {
