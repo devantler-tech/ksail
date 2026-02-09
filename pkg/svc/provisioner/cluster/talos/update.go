@@ -210,7 +210,7 @@ func (p *TalosProvisioner) applyInPlaceConfigChanges(
 	// Apply the appropriate config to each node based on its role
 	for _, node := range nodes {
 		config := p.talosConfigs.ControlPlane()
-		if node.Role == "worker" {
+		if node.Role == RoleWorker {
 			config = p.talosConfigs.Worker()
 		}
 
@@ -456,13 +456,13 @@ func (p *TalosProvisioner) getDockerNodesByRole(
 	nodes := make([]nodeWithRole, 0, len(containers))
 
 	for _, ctr := range containers {
-		role := "worker"
+		role := RoleWorker
 
 		for _, name := range ctr.Names {
 			// Match both "controlplane" (KSail-scaled nodes) and "control-plane"
 			// (Talos SDK-created nodes) naming conventions.
 			if strings.Contains(name, "controlplane") || strings.Contains(name, "control-plane") {
-				role = "control-plane"
+				role = RoleControlPlane
 
 				break
 			}

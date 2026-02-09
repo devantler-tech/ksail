@@ -114,7 +114,7 @@ func (p *TalosProvisioner) createHetznerCluster(ctx context.Context, clusterName
 
 	workerServers, err := p.createHetznerNodes(ctx, hzProvider, infra, HetznerNodeGroupOpts{
 		ClusterName: clusterName,
-		Role:        "worker",
+		Role:        RoleWorker,
 		Count:       p.options.WorkerNodes,
 		ServerType:  p.hetznerOpts.WorkerServerType,
 		ISOID:       p.talosOpts.ISO,
