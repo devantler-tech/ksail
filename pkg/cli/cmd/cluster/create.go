@@ -95,8 +95,6 @@ func handleCreateRunE(
 }
 
 // newProvisionerFactory returns the cluster provisioner factory, using any test override if set.
-//
-//nolint:ireturn // Factory interface is appropriate for dependency injection
 func newProvisionerFactory(ctx *localregistry.Context) clusterprovisioner.Factory {
 	clusterProvisionerFactoryMu.RLock()
 

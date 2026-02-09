@@ -11,6 +11,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	configmanagerinterface "github.com/devantler-tech/ksail/v5/pkg/io/config-manager"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/types"
 	"github.com/devantler-tech/ksail/v5/pkg/utils/timer"
 	mapstructure "github.com/go-viper/mapstructure/v2"
 	"github.com/spf13/cobra"
@@ -381,9 +382,8 @@ func (m *ConfigManager) applyGitOpsAwareDefaults(flagOverrides map[string]string
 
 	// Apply default local registry when GitOps engine is configured and no explicit registry was set
 	if !m.wasLocalRegistryExplicit(flagOverrides) && m.gitOpsEngineSelected() {
-		// Default to localhost:5050 when GitOps is enabled but no registry specified
 		if m.Config.Spec.Cluster.LocalRegistry.Registry == "" {
-			m.Config.Spec.Cluster.LocalRegistry.Registry = "localhost:5050"
+			m.Config.Spec.Cluster.LocalRegistry.Registry = types.DefaultLocalRegistryAddress
 		}
 	}
 }

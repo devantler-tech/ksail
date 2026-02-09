@@ -358,8 +358,6 @@ func (p *TalosProvisioner) bootstrapAndSaveKubeconfig(
 }
 
 // provisionCluster creates the Talos cluster using the SDK.
-//
-//nolint:ireturn // provision.Cluster is the SDK's interface
 func (p *TalosProvisioner) provisionCluster(
 	ctx context.Context,
 	clusterName string,

@@ -433,8 +433,28 @@ func (k *K3dClusterProvisioner) GetCurrentConfig(
 			return nil, fmt.Errorf("detect components: %w", err)
 		}
 
+		applyGitOpsLocalRegistryDefault(spec)
+
 		return spec, nil
 	}
 
 	return types.DefaultCurrentSpec(v1alpha1.DistributionK3s, v1alpha1.ProviderDocker), nil
+}
+
+// applyGitOpsLocalRegistryDefault mirrors the config system's GitOps-aware
+// default: when a GitOps engine is detected but no local registry is configured,
+// default to "localhost:5050". This prevents false-positive diffs when the update
+// command compares the detected current state against the desired state (which
+// also applies this default via the config manager).
+func applyGitOpsLocalRegistryDefault(spec *v1alpha1.ClusterSpec) {
+	if spec.LocalRegistry.Registry != "" {
+		return
+	}
+
+	switch spec.GitOpsEngine {
+	case v1alpha1.GitOpsEngineFlux, v1alpha1.GitOpsEngineArgoCD:
+		spec.LocalRegistry.Registry = types.DefaultLocalRegistryAddress
+	case v1alpha1.GitOpsEngineNone, "":
+		// No GitOps engine — no default registry needed.
+	}
 }

@@ -36,8 +36,6 @@ type Info struct {
 // The extractor receives the set of already used ports (if any) and should return the registries that need work.
 // This function collects ports from ALL running containers (not just ksail-managed registries) to avoid
 // port conflicts with registries created by other cluster distributions (e.g., K3d's native registries).
-//
-//nolint:ireturn // returns interface for dependency injection; concrete type is dockerclient.RegistryManager
 func PrepareRegistryManager(
 	ctx context.Context,
 	dockerClient client.APIClient,

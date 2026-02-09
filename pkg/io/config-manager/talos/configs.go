@@ -114,8 +114,6 @@ func (c *Configs) Bundle() *bundle.Bundle {
 // Returns nil if the bundle is not loaded or if the control plane config is not set.
 // This prevents panics from the upstream Talos SDK's bundle.ControlPlane() method
 // which panics when ControlPlaneCfg is nil.
-//
-//nolint:ireturn // Returns interface type from upstream SDK
 func (c *Configs) ControlPlane() talosconfig.Provider {
 	if c.bundle == nil || c.bundle.ControlPlaneCfg == nil {
 		return nil
@@ -134,8 +132,6 @@ func (c *Configs) ControlPlane() talosconfig.Provider {
 // Returns nil if the bundle is not loaded or if the worker config is not set.
 // This prevents panics from the upstream Talos SDK's bundle.Worker() method
 // which panics when WorkerCfg is nil.
-//
-//nolint:ireturn // Returns interface type from upstream SDK
 func (c *Configs) Worker() talosconfig.Provider {
 	if c.bundle == nil || c.bundle.WorkerCfg == nil {
 		return nil

@@ -295,8 +295,6 @@ func GetCurrentKubeContext() (string, error) {
 // These provisioners only need enough configuration to identify containers.
 // It uses the detected ClusterInfo to create the appropriate provisioner
 // with the correct provider configuration.
-//
-//nolint:ireturn // Interface return is required for provisioner abstraction
 func CreateMinimalProvisioner(
 	info *ClusterInfo,
 ) (clusterprovisioner.ClusterProvisioner, error) {
@@ -311,8 +309,6 @@ func CreateMinimalProvisioner(
 // CreateMinimalProvisionerForProvider creates provisioners for all distributions
 // that support the given provider, and returns the first one that can operate on the cluster.
 // This is used when we only have --name and --provider flags without distribution info.
-//
-//nolint:ireturn // Interface return is required for provisioner abstraction
 func CreateMinimalProvisionerForProvider(
 	info *ClusterInfo,
 ) (clusterprovisioner.ClusterProvisioner, error) {
@@ -356,8 +352,6 @@ func CreateMinimalProvisionerForProvider(
 }
 
 // createDockerMultiProvisioner creates a provisioner that tries multiple distributions.
-//
-//nolint:ireturn // Interface return is required for provisioner abstraction
 func createDockerMultiProvisioner(
 	clusterName string,
 ) (clusterprovisioner.ClusterProvisioner, error) {
@@ -510,8 +504,6 @@ func (m *multiDistributionProvisioner) forExistingCluster(
 // The kubeconfigPath and providerType parameters allow callers that have
 // richer context (e.g., ClusterInfo) to pass it through; when empty, defaults
 // are used ("" and ProviderDocker respectively).
-//
-//nolint:ireturn // Interface return is required for provisioner abstraction
 func createProvisionerForDistribution(
 	dist v1alpha1.Distribution,
 	clusterName string,

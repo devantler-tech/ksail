@@ -56,4 +56,16 @@ const (
 
 	// ContainerCloudProviderKind is the Docker container name for cloud-provider-kind.
 	ContainerCloudProviderKind = "ksail-cloud-provider-kind"
+
+	// K3s-specific component detection constants.
+	// K3s installs its built-in components in kube-system, not in dedicated namespaces.
+
+	// DeploymentMetricsServerK3s is the Deployment name for the K3s built-in metrics-server.
+	DeploymentMetricsServerK3s = "metrics-server"
+	// NamespaceKubeSystem is the kube-system namespace used by K3s built-in components.
+	NamespaceKubeSystem = "kube-system"
+	// DeploymentLocalPathProvisionerK3s is the Deployment name for the K3s built-in local-path-provisioner.
+	DeploymentLocalPathProvisionerK3s = "local-path-provisioner"
+	// LabelServiceLBK3s is the label applied to DaemonSets created by K3s ServiceLB.
+	LabelServiceLBK3s = "svccontroller.k3s.cattle.io/svcname"
 )

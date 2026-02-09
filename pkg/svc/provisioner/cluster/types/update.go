@@ -11,6 +11,12 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 )
 
+// DefaultLocalRegistryAddress is the default local registry address applied by
+// the config system when a GitOps engine is configured but no explicit
+// --local-registry flag was provided. Provisioners mirror this default in
+// GetCurrentConfig to prevent false-positive diffs.
+const DefaultLocalRegistryAddress = "localhost:5050"
+
 // DefaultCurrentSpec returns a ClusterSpec populated with the default values
 // that the config system applies at creation time. Provisioners that cannot
 // introspect their running config (Kind, K3d) return this to ensure

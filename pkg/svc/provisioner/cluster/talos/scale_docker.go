@@ -320,8 +320,6 @@ func (p *TalosProvisioner) countDockerRole(
 }
 
 // configForRole returns the appropriate Talos config for a role.
-//
-//nolint:ireturn // Must return talosconfig.Provider to match Talos SDK API
 func (p *TalosProvisioner) configForRole(role string) talosconfig.Provider {
 	if p.talosConfigs == nil || p.talosConfigs.Bundle() == nil {
 		return nil

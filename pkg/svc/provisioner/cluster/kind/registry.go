@@ -285,8 +285,6 @@ func EscapeShellArg(arg string) string {
 // prepareKindRegistryManager is a helper that prepares the registry manager and registry infos
 // for Kind registry operations. Returns nil manager if mirrorSpecs is empty.
 // The clusterName is used as prefix for container names to ensure uniqueness.
-//
-//nolint:ireturn // returns interface for dependency injection
 func prepareKindRegistryManager(
 	ctx context.Context,
 	mirrorSpecs []registry.MirrorSpec,

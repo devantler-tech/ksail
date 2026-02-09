@@ -136,8 +136,6 @@ func handleUpdateRunE(
 // distribution change. A proper fix would probe all provisioners for an existing
 // cluster of any distribution. For now, users must run 'ksail cluster delete'
 // before switching distributions.
-//
-//nolint:ireturn // caller needs interface for type assertion
 func createAndVerifyProvisioner(
 	cmd *cobra.Command,
 	ctx *localregistry.Context,

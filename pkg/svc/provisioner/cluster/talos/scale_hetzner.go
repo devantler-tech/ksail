@@ -313,8 +313,6 @@ func (p *TalosProvisioner) hetznerRetryOpts() hetzner.ServerRetryOpts {
 }
 
 // hetznerConfigForRole returns the appropriate Talos config for new Hetzner nodes.
-//
-//nolint:ireturn // Must return talosconfig.Provider to match Talos SDK API
 func (p *TalosProvisioner) hetznerConfigForRole(role string) talosconfig.Provider {
 	if p.talosConfigs == nil {
 		return nil

@@ -118,10 +118,15 @@ func (d *ComponentDetector) detectCSI(
 	distribution v1alpha1.Distribution,
 	provider v1alpha1.Provider,
 ) (v1alpha1.CSI, error) {
-	// K3s bundles local-path-provisioner; the CSI field only matters for
-	// explicitly installed drivers.
-	if distribution.ProvidesCSIByDefault(provider) {
-		return v1alpha1.CSIDefault, nil
+	// K3s bundles local-path-provisioner in kube-system. When the user disables
+	// CSI (--csi Disabled), K3s is started with --disable=local-storage and the
+	// deployment won't exist. Probe the cluster to distinguish Default from Disabled.
+	if distribution == v1alpha1.DistributionK3s {
+		if d.deploymentExists(ctx, DeploymentLocalPathProvisionerK3s, NamespaceKubeSystem) {
+			return v1alpha1.CSIDefault, nil
+		}
+
+		return v1alpha1.CSIDisabled, nil
 	}
 
 	// Talos+Hetzner: check for hcloud-csi
@@ -147,8 +152,8 @@ func (d *ComponentDetector) detectCSI(
 }
 
 // detectMetricsServer checks for a KSail-managed metrics-server Helm release.
-// For K3s, metrics-server is built-in so we return Default even if the Helm
-// chart is not found.
+// For K3s, it also probes the built-in metrics-server deployment to detect
+// whether the user disabled it via --disable=metrics-server.
 func (d *ComponentDetector) detectMetricsServer(
 	ctx context.Context,
 	distribution v1alpha1.Distribution,
@@ -164,9 +169,16 @@ func (d *ComponentDetector) detectMetricsServer(
 		return v1alpha1.MetricsServerEnabled, nil
 	}
 
-	// For K3s, metrics-server is built-in — absence of Helm release means Default
+	// K3s bundles metrics-server in kube-system. When the user disables it
+	// (--metrics-server Disabled), K3s is started with --disable=metrics-server
+	// and the deployment won't exist. Probe the cluster to distinguish
+	// Default (built-in running) from Disabled (explicitly turned off).
 	if distribution.ProvidesMetricsServerByDefault() {
-		return v1alpha1.MetricsServerDefault, nil
+		if d.deploymentExists(ctx, DeploymentMetricsServerK3s, NamespaceKubeSystem) {
+			return v1alpha1.MetricsServerDefault, nil
+		}
+
+		return v1alpha1.MetricsServerDisabled, nil
 	}
 
 	return v1alpha1.MetricsServerDefault, nil
@@ -177,10 +189,25 @@ func (d *ComponentDetector) detectMetricsServer(
 func (d *ComponentDetector) detectLoadBalancer(
 	ctx context.Context,
 	distribution v1alpha1.Distribution,
-	provider v1alpha1.Provider,
+	_ v1alpha1.Provider,
 ) (v1alpha1.LoadBalancer, error) {
-	// K3s bundles ServiceLB — always report Default
-	if distribution.ProvidesLoadBalancerByDefault(provider) {
+	// K3s bundles ServiceLB. When the user disables it (--load-balancer Disabled),
+	// K3s is started with --disable=servicelb and no svclb DaemonSets are created.
+	// Probe the cluster for svclb DaemonSets to distinguish Default from Disabled.
+	if distribution == v1alpha1.DistributionK3s {
+		if d.daemonSetExistsWithLabel(ctx, LabelServiceLBK3s) {
+			return v1alpha1.LoadBalancerDefault, nil
+		}
+
+		// K3s Traefik (installed by default) creates a LoadBalancer service that
+		// triggers svclb DaemonSets. If Traefik is running but no svclb DaemonSets
+		// exist, ServiceLB was explicitly disabled.
+		if d.deploymentExists(ctx, "traefik", NamespaceKubeSystem) {
+			return v1alpha1.LoadBalancerDisabled, nil
+		}
+
+		// Traefik is also disabled — no evidence either way.
+		// Return Default since we cannot determine the state definitively.
 		return v1alpha1.LoadBalancerDefault, nil
 	}
 
@@ -284,6 +311,30 @@ func (d *ComponentDetector) deploymentExists(
 	}
 
 	return true
+}
+
+// daemonSetExistsWithLabel checks whether any DaemonSet with the given label
+// key exists across all namespaces. This is used to detect K3s ServiceLB, which
+// creates DaemonSets labeled with svccontroller.k3s.cattle.io/svcname.
+func (d *ComponentDetector) daemonSetExistsWithLabel(
+	ctx context.Context,
+	labelKey string,
+) bool {
+	if d.k8sClientset == nil {
+		return false
+	}
+
+	daemonSets, err := d.k8sClientset.AppsV1().DaemonSets("").List(
+		ctx, metav1.ListOptions{
+			LabelSelector: labelKey,
+			Limit:         1,
+		},
+	)
+	if err != nil {
+		return false
+	}
+
+	return len(daemonSets.Items) > 0
 }
 
 // containerExists checks whether a Docker container with the given name is
