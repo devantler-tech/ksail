@@ -584,24 +584,7 @@ func (p *TalosProvisioner) GetCurrentConfig(ctx context.Context) (*v1alpha1.Clus
 		}
 	}
 
-	applyGitOpsLocalRegistryDefault(spec)
+	types.ApplyGitOpsLocalRegistryDefault(spec)
 
 	return spec, nil
-}
-
-// applyGitOpsLocalRegistryDefault mirrors the config system's GitOps-aware
-// default: when a GitOps engine is detected but no local registry is configured,
-// default to "localhost:5050". This prevents false-positive diffs when the update
-// command compares the detected current state against the desired state.
-func applyGitOpsLocalRegistryDefault(spec *v1alpha1.ClusterSpec) {
-	if spec.LocalRegistry.Registry != "" {
-		return
-	}
-
-	switch spec.GitOpsEngine {
-	case v1alpha1.GitOpsEngineFlux, v1alpha1.GitOpsEngineArgoCD:
-		spec.LocalRegistry.Registry = types.DefaultLocalRegistryAddress
-	case v1alpha1.GitOpsEngineNone, "":
-		// No GitOps engine — no default registry needed.
-	}
 }

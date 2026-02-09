@@ -17,6 +17,23 @@ import (
 // GetCurrentConfig to prevent false-positive diffs.
 const DefaultLocalRegistryAddress = "localhost:5050"
 
+// ApplyGitOpsLocalRegistryDefault mirrors the config system's GitOps-aware
+// default: when a GitOps engine is detected but no local registry is configured,
+// default to "localhost:5050". This prevents false-positive diffs when the update
+// command compares the detected current state against the desired state.
+func ApplyGitOpsLocalRegistryDefault(spec *v1alpha1.ClusterSpec) {
+	if spec.LocalRegistry.Registry != "" {
+		return
+	}
+
+	switch spec.GitOpsEngine {
+	case v1alpha1.GitOpsEngineFlux, v1alpha1.GitOpsEngineArgoCD:
+		spec.LocalRegistry.Registry = DefaultLocalRegistryAddress
+	case v1alpha1.GitOpsEngineNone, "":
+		// No GitOps engine — no default registry needed.
+	}
+}
+
 // DefaultCurrentSpec returns a ClusterSpec populated with the default values
 // that the config system applies at creation time. Provisioners that cannot
 // introspect their running config (Kind, K3d) return this to ensure
