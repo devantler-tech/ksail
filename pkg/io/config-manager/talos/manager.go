@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	configmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager"
 	"github.com/devantler-tech/ksail/v5/pkg/envvar"
+	configmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager"
 	"sigs.k8s.io/yaml"
 )
 

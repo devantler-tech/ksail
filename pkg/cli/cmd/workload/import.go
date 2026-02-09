@@ -7,8 +7,8 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/client/docker"
 	runtime "github.com/devantler-tech/ksail/v5/pkg/di"
 	configmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/ksail"
-	imagesvc "github.com/devantler-tech/ksail/v5/pkg/svc/image"
 	"github.com/devantler-tech/ksail/v5/pkg/notify"
+	imagesvc "github.com/devantler-tech/ksail/v5/pkg/svc/image"
 	"github.com/spf13/cobra"
 )
 
