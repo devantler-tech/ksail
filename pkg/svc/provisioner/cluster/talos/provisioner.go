@@ -8,7 +8,8 @@ import (
 	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
+	"github.com/devantler-tech/ksail/v5/pkg/io/config-manager/talos"
+	"github.com/devantler-tech/ksail/v5/pkg/k8s"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/detector"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider"
 	dockerprovider "github.com/devantler-tech/ksail/v5/pkg/svc/provider/docker"
@@ -285,7 +286,7 @@ func (p *TalosProvisioner) List(ctx context.Context) ([]string, error) {
 		return nil, fmt.Errorf("failed to list containers: %w", err)
 	}
 
-	return uniqueLabelValues(
+	return k8s.UniqueLabelValues(
 		containers,
 		LabelTalosClusterName,
 		func(c container.Summary) map[string]string {
