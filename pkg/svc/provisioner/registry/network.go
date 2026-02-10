@@ -7,7 +7,6 @@ import (
 	"net"
 	"os"
 
-	"github.com/devantler-tech/ksail/v5/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v5/pkg/notify"
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
@@ -22,7 +21,7 @@ func ConnectRegistriesToNetwork(
 	networkName string,
 	writer io.Writer,
 ) error {
-	networkName, networkOK := fsutil.TrimNonEmpty(networkName)
+	networkName, networkOK := TrimNonEmpty(networkName)
 	if dockerClient == nil || len(registries) == 0 || !networkOK {
 		return nil
 	}
@@ -46,7 +45,7 @@ func ConnectRegistriesToNetworkWithStaticIPs(
 	networkCIDR string,
 	writer io.Writer,
 ) (map[string]string, error) {
-	networkName, networkOK := fsutil.TrimNonEmpty(networkName)
+	networkName, networkOK := TrimNonEmpty(networkName)
 	if dockerClient == nil || len(registries) == 0 || !networkOK {
 		return make(map[string]string), nil
 	}
@@ -66,7 +65,7 @@ func ConnectRegistriesToNetworkWithStaticIPs(
 			writer,
 		)
 		if registryIP != "" {
-			containerName, _ := fsutil.TrimNonEmpty(reg.Name)
+			containerName, _ := TrimNonEmpty(reg.Name)
 			registryIPs[containerName] = registryIP
 		}
 	}
@@ -84,7 +83,7 @@ func connectRegistryToNetwork(
 	staticIP string,
 	writer io.Writer,
 ) string {
-	containerName, nameOK := fsutil.TrimNonEmpty(reg.Name)
+	containerName, nameOK := TrimNonEmpty(reg.Name)
 	if !nameOK {
 		return ""
 	}

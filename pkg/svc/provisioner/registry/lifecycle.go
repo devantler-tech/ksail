@@ -7,7 +7,6 @@ import (
 	"io"
 
 	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
-	"github.com/devantler-tech/ksail/v5/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v5/pkg/notify"
 	"github.com/docker/docker/client"
 )
@@ -181,7 +180,7 @@ func collectExistingRegistryNames(
 	}
 
 	for _, name := range current {
-		trimmed, ok := fsutil.TrimNonEmpty(name)
+		trimmed, ok := TrimNonEmpty(name)
 		if !ok {
 			continue
 		}
@@ -211,7 +210,7 @@ func CollectExistingRegistryPorts(
 	}
 
 	for _, name := range names {
-		trimmed, ok := fsutil.TrimNonEmpty(name)
+		trimmed, ok := TrimNonEmpty(name)
 		if !ok {
 			continue
 		}

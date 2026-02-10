@@ -1,9 +1,9 @@
-package fsutil_test
+package registry_test
 
 import (
 	"testing"
 
-	"github.com/devantler-tech/ksail/v5/pkg/fsutil"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -34,7 +34,7 @@ func TestTrimNonEmpty(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
-			str, valid := fsutil.TrimNonEmpty(test.input)
+			str, valid := registry.TrimNonEmpty(test.input)
 
 			assert.Equal(t, test.expectedStr, str, "trimmed string should match")
 			assert.Equal(t, test.expectedValid, valid, "validity should match")

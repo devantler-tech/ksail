@@ -1,14 +1,9 @@
-// Package fsutil provides utilities for input and output operations.
-//
-// This package contains utilities for reading from and writing to files,
-// along with various I/O helper functions for file operations, including
-// configuration validation utilities.
+// Package fsutil provides utilities for filesystem operations.
 //
 // Key functionality:
 //   - File reading: ReadFileSafe, FindFile
 //   - File writing: TryWriteFile
 //   - Path operations: ExpandHomePath
-//   - String utilities: TrimNonEmpty
 //
 // Subpackages:
 //   - configmanager: Configuration loading and management
