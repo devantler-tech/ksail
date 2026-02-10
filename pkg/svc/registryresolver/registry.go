@@ -82,11 +82,11 @@ func parseHostPort(hostPort string) hostPortInfo {
 	host := hostPort[:colonIdx]
 	portStr := hostPort[colonIdx+1:]
 
-	port, err := strconv.Atoi(portStr)
-	if err == nil && port > 0 {
+	port64, err := strconv.ParseInt(portStr, 10, 32)
+	if err == nil && port64 > 0 {
 		return hostPortInfo{
 			host: host,
-			port: int32(port), //nolint:gosec // port is validated
+			port: int32(port64), //nolint:gosec // port is validated and parsed as 32-bit
 		}
 	}
 
