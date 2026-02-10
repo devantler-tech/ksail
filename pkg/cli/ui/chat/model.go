@@ -280,8 +280,8 @@ func createTextArea() textarea.Model {
 
 // createViewport initializes the viewport component for chat history.
 func createViewport() viewport.Model {
-	viewportWidth := defaultWidth - viewportPadding
-	viewportHeight := defaultHeight - inputHeight - headerHeight - footerHeight - viewportPadding
+	viewportWidth := defaultWidth - viewportWidthPadding
+	viewportHeight := defaultHeight - inputHeight - headerHeight - footerHeight - viewportHeightPadding
 	viewPort := viewport.New(viewportWidth, viewportHeight)
 	initialMsg := "  Type a message below to start chatting with KSail AI.\n"
 	viewPort.SetContent(statusStyle.Render(initialMsg))

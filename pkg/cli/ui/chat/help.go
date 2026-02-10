@@ -27,17 +27,18 @@ const (
 	helpSepSpacing = 3 // spacing for help separator
 
 	// Header and layout constants.
-	headerPadding    = 6 // padding around header content
-	textAreaPadding  = 6 // padding subtracted from width for textarea
-	viewportPadding  = 4 // padding subtracted from width for viewport
-	viewportInner    = 2 // inner padding inside viewport
-	rendererPadding  = 8 // padding subtracted from width for markdown renderer
-	rendererMinWidth = 4 // padding subtracted from viewport width for recreation
-	charLimit        = 4096
-	eventChanBuf     = 100 // buffer size for event channel
-	scrollLines      = 3   // number of lines to scroll per mouse wheel event
-	minHeight        = 5   // minimum viewport height
-	minSpacing       = 2   // minimum spacing for tagline row
+	headerPadding         = 6 // padding around header content
+	textAreaPadding       = 6 // padding subtracted from width for textarea
+	viewportWidthPadding  = 4 // horizontal padding subtracted from width for viewport
+	viewportHeightPadding = 4 // vertical padding subtracted from height for viewport
+	viewportInner         = 2 // inner padding inside viewport
+	rendererPadding       = 8 // padding subtracted from width for markdown renderer
+	rendererMinWidth      = 4 // padding subtracted from viewport width for recreation
+	charLimit             = 4096
+	eventChanBuf          = 100 // buffer size for event channel
+	scrollLines           = 3   // number of lines to scroll per mouse wheel event
+	minHeight             = 5   // minimum viewport height
+	minSpacing            = 2   // minimum spacing for tagline row
 
 	// Permission modal line counts.
 	permissionBaseLines = 6 // title + blank + tool + blank + "Allow?" + buttons
