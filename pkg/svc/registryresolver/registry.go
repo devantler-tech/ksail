@@ -86,7 +86,7 @@ func parseHostPort(hostPort string) hostPortInfo {
 	if err == nil && port64 > 0 {
 		return hostPortInfo{
 			host: host,
-			port: int32(port64), //nolint:gosec // port is validated and parsed as 32-bit
+			port: int32(port64),
 		}
 	}
 
