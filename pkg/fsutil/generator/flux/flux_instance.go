@@ -13,7 +13,7 @@ import (
 // DefaultInterval is the default reconciliation interval for Instance.
 const DefaultInterval = time.Minute
 
-// Instance represents a Flux Operator FluxInstance CR for scaffolding.
+// Instance represents a Flux Operator Instance CR for scaffolding.
 // This is a simplified version for YAML generation, without runtime.Object methods.
 type Instance struct {
 	APIVersion string           `json:"apiVersion" yaml:"apiVersion"`
@@ -22,7 +22,7 @@ type Instance struct {
 	Spec       InstanceSpec     `json:"spec"       yaml:"spec"`
 }
 
-// InstanceMetadata contains the metadata for a FluxInstance.
+// InstanceMetadata contains the metadata for a Instance.
 type InstanceMetadata struct {
 	Name      string            `json:"name"             yaml:"name"`
 	Namespace string            `json:"namespace"        yaml:"namespace"`
@@ -51,7 +51,7 @@ type Sync struct {
 	PullSecret string           `json:"pullSecret,omitempty" yaml:"pullSecret,omitempty"`
 }
 
-// InstanceGeneratorOptions contains options for generating FluxInstance.
+// InstanceGeneratorOptions contains options for generating Instance.
 type InstanceGeneratorOptions struct {
 	yamlgenerator.Options
 
@@ -70,7 +70,7 @@ type InstanceGeneratorOptions struct {
 	SecretName string
 }
 
-// InstanceGenerator generates FluxInstance CR manifests.
+// InstanceGenerator generates Instance CR manifests.
 type InstanceGenerator struct {
 	yamlGenerator generator.Generator[Instance, yamlgenerator.Options]
 }
@@ -82,7 +82,7 @@ func NewInstanceGenerator() *InstanceGenerator {
 	}
 }
 
-// Generate creates a FluxInstance CR manifest.
+// Generate creates a Instance CR manifest.
 func (g *InstanceGenerator) Generate(opts InstanceGeneratorOptions) (string, error) {
 	interval := opts.Interval
 	if interval == 0 {
@@ -128,7 +128,7 @@ func (g *InstanceGenerator) Generate(opts InstanceGeneratorOptions) (string, err
 
 	output, err := g.yamlGenerator.Generate(instance, opts.Options)
 	if err != nil {
-		return "", fmt.Errorf("generating FluxInstance manifest: %w", err)
+		return "", fmt.Errorf("generating Instance manifest: %w", err)
 	}
 
 	return output, nil

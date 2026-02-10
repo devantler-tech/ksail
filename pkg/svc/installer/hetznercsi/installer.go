@@ -8,7 +8,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
 	"github.com/devantler-tech/ksail/v5/pkg/k8s"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/image"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/installer/internal/helmutil"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -26,27 +26,27 @@ const (
 // ErrHetznerTokenNotSet is returned when the HCLOUD_TOKEN environment variable is not set.
 var ErrHetznerTokenNotSet = fmt.Errorf("environment variable %s is not set", hetznerTokenEnvVar)
 
-// HetznerCSIInstaller installs or upgrades the Hetzner Cloud CSI driver.
+// Installer installs or upgrades the Hetzner Cloud CSI driver.
 //
 // It implements installer.Installer semantics (Install/Uninstall) so it can be
 // orchestrated by cluster lifecycle flows.
 //
 // Prerequisites:
 //   - HCLOUD_TOKEN environment variable must be set with a valid Hetzner Cloud API token
-type HetznerCSIInstaller struct {
+type Installer struct {
 	client     helm.Interface
 	kubeconfig string
 	context    string
 	timeout    time.Duration
 }
 
-// NewHetznerCSIInstaller creates a new Hetzner CSI installer instance.
-func NewHetznerCSIInstaller(
+// NewInstaller creates a new Hetzner CSI installer instance.
+func NewInstaller(
 	client helm.Interface,
 	kubeconfig, context string,
 	timeout time.Duration,
-) *HetznerCSIInstaller {
-	return &HetznerCSIInstaller{
+) *Installer {
+	return &Installer{
 		client:     client,
 		kubeconfig: kubeconfig,
 		context:    context,
@@ -57,7 +57,7 @@ func NewHetznerCSIInstaller(
 // Install installs or upgrades the Hetzner Cloud CSI driver via its Helm chart.
 // It first creates the required secret containing the Hetzner Cloud API token,
 // then installs the CSI driver chart.
-func (h *HetznerCSIInstaller) Install(ctx context.Context) error {
+func (h *Installer) Install(ctx context.Context) error {
 	// Create the secret containing the Hetzner Cloud API token
 	err := h.createHetznerSecret(ctx)
 	if err != nil {
@@ -65,11 +65,11 @@ func (h *HetznerCSIInstaller) Install(ctx context.Context) error {
 	}
 
 	// Install the CSI driver
-	return h.helmInstallOrUpgradeHetznerCSI(ctx)
+	return h.helmInstallOrUpgrade(ctx)
 }
 
 // Uninstall removes the Helm release for the Hetzner CSI driver.
-func (h *HetznerCSIInstaller) Uninstall(ctx context.Context) error {
+func (h *Installer) Uninstall(ctx context.Context) error {
 	err := h.client.UninstallRelease(ctx, hetznerCSIRelease, hetznerCSINamespace)
 	if err != nil {
 		return fmt.Errorf("failed to uninstall hetzner-csi release: %w", err)
@@ -79,23 +79,16 @@ func (h *HetznerCSIInstaller) Uninstall(ctx context.Context) error {
 }
 
 // Images returns the container images used by the Hetzner CSI driver.
-func (h *HetznerCSIInstaller) Images(ctx context.Context) ([]string, error) {
-	spec := h.chartSpec()
-
-	manifest, err := h.client.TemplateChart(ctx, spec)
+func (h *Installer) Images(ctx context.Context) ([]string, error) {
+	images, err := helmutil.ImagesFromChart(ctx, h.client, h.chartSpec())
 	if err != nil {
-		return nil, fmt.Errorf("failed to template hetzner-csi chart: %w", err)
-	}
-
-	images, err := image.ExtractImagesFromManifest(manifest)
-	if err != nil {
-		return nil, fmt.Errorf("extract images from hetzner-csi manifest: %w", err)
+		return nil, fmt.Errorf("listing images: %w", err)
 	}
 
 	return images, nil
 }
 
-func (h *HetznerCSIInstaller) chartSpec() *helm.ChartSpec {
+func (h *Installer) chartSpec() *helm.ChartSpec {
 	return &helm.ChartSpec{
 		ReleaseName:     hetznerCSIRelease,
 		ChartName:       hetznerCSIChartName,
@@ -112,7 +105,7 @@ func (h *HetznerCSIInstaller) chartSpec() *helm.ChartSpec {
 // createHetznerSecret creates the required secret containing the Hetzner Cloud API token.
 // The secret is named 'hcloud' and is created in the 'kube-system' namespace.
 // It reads the token from the HCLOUD_TOKEN environment variable.
-func (h *HetznerCSIInstaller) createHetznerSecret(ctx context.Context) error {
+func (h *Installer) createHetznerSecret(ctx context.Context) error {
 	// Get the Hetzner Cloud API token from environment
 	token := os.Getenv(hetznerTokenEnvVar)
 	if token == "" {
@@ -167,7 +160,7 @@ func (h *HetznerCSIInstaller) createHetznerSecret(ctx context.Context) error {
 	return nil
 }
 
-func (h *HetznerCSIInstaller) helmInstallOrUpgradeHetznerCSI(ctx context.Context) error {
+func (h *Installer) helmInstallOrUpgrade(ctx context.Context) error {
 	repoEntry := &helm.RepositoryEntry{Name: hetznerCSIRepoName, URL: hetznerCSIRepoURL}
 
 	err := h.client.AddRepository(ctx, repoEntry, h.timeout)

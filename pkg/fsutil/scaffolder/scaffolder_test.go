@@ -1303,9 +1303,9 @@ func TestScaffoldTalos_SetsCorrectDistribution(t *testing.T) {
 
 // GitOps scaffolding tests.
 
-// TestScaffoldFluxGitOps_DoesNotCreateFluxInstanceManifest verifies that FluxInstance
-// is NOT scaffolded as a YAML file. FluxInstance is created via Kubernetes API during
-// cluster creation by SetupFluxInstance, not as a scaffolded manifest.
+// TestScaffoldFluxGitOps_DoesNotCreateFluxInstanceManifest verifies that Instance
+// is NOT scaffolded as a YAML file. Instance is created via Kubernetes API during
+// cluster creation by SetupInstance, not as a scaffolded manifest.
 func TestScaffoldFluxGitOps_DoesNotCreateFluxInstanceManifest(t *testing.T) {
 	t.Parallel()
 
@@ -1317,13 +1317,13 @@ func TestScaffoldFluxGitOps_DoesNotCreateFluxInstanceManifest(t *testing.T) {
 	err := scaffolderInstance.Scaffold(tempDir, false)
 	require.NoError(t, err)
 
-	// Verify FluxInstance manifest was NOT created - it's created via API during cluster creation
+	// Verify Instance manifest was NOT created - it's created via API during cluster creation
 	fluxInstancePath := filepath.Join(tempDir, "k8s", "flux-instance.yaml")
 	_, err = os.Stat(fluxInstancePath)
 	assert.True(
 		t,
 		os.IsNotExist(err),
-		"flux-instance.yaml should NOT be created - FluxInstance is created via API",
+		"flux-instance.yaml should NOT be created - Instance is created via API",
 	)
 }
 
@@ -1371,7 +1371,7 @@ func TestScaffoldGitOps_SkipsWhenGitOpsEngineIsNone(t *testing.T) {
 }
 
 // Note: Tests for skipping existing CRs and overwriting with force are removed
-// because neither FluxInstance nor ArgoCD Application are scaffolded anymore.
+// because neither Instance nor ArgoCD Application are scaffolded anymore.
 // Both are created via Kubernetes API during cluster creation.
 
 func TestWithClusterName(t *testing.T) {

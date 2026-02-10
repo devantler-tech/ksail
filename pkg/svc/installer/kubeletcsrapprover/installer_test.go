@@ -12,12 +12,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestNewKubeletCSRApproverInstaller(t *testing.T) {
+func TestNewInstaller(t *testing.T) {
 	t.Parallel()
 
 	timeout := 5 * time.Minute
 	client := helm.NewMockInterface(t)
-	installer := kubeletcsrapproverinstaller.NewKubeletCSRApproverInstaller(client, timeout)
+	installer := kubeletcsrapproverinstaller.NewInstaller(client, timeout)
 
 	assert.NotNil(t, installer)
 }
@@ -86,12 +86,12 @@ func TestKubeletCSRApproverInstallerUninstallError(t *testing.T) {
 
 func newKubeletCSRApproverInstallerWithDefaults(
 	t *testing.T,
-) (*kubeletcsrapproverinstaller.KubeletCSRApproverInstaller, *helm.MockInterface) {
+) (*kubeletcsrapproverinstaller.Installer, *helm.MockInterface) {
 	t.Helper()
 
 	timeout := 5 * time.Second
 	client := helm.NewMockInterface(t)
-	installer := kubeletcsrapproverinstaller.NewKubeletCSRApproverInstaller(client, timeout)
+	installer := kubeletcsrapproverinstaller.NewInstaller(client, timeout)
 
 	return installer, client
 }

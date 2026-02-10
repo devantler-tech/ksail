@@ -52,7 +52,7 @@
 //	)
 //
 //	helmClient := helm.NewClient(...)
-//	installer := ciliuminstaller.NewCiliumInstaller(
+//	installer := ciliuminstaller.NewInstaller(
 //	    helmClient,
 //	    "/path/to/kubeconfig",
 //	    "my-context",

@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/image"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/installer/internal/helmutil"
 )
 
 const (
@@ -17,21 +17,21 @@ const (
 	metricsServerChartName = "metrics-server/metrics-server"
 )
 
-// MetricsServerInstaller installs or upgrades metrics-server.
-type MetricsServerInstaller struct {
+// Installer installs or upgrades metrics-server.
+type Installer struct {
 	kubeconfig string
 	context    string
 	timeout    time.Duration
 	client     helm.Interface
 }
 
-// NewMetricsServerInstaller creates a new metrics-server installer instance.
-func NewMetricsServerInstaller(
+// NewInstaller creates a new metrics-server installer instance.
+func NewInstaller(
 	client helm.Interface,
 	kubeconfig, context string,
 	timeout time.Duration,
-) *MetricsServerInstaller {
-	return &MetricsServerInstaller{
+) *Installer {
+	return &Installer{
 		client:     client,
 		kubeconfig: kubeconfig,
 		context:    context,
@@ -40,8 +40,8 @@ func NewMetricsServerInstaller(
 }
 
 // Install installs or upgrades metrics-server via its Helm chart.
-func (m *MetricsServerInstaller) Install(ctx context.Context) error {
-	err := m.helmInstallOrUpgradeMetricsServer(ctx)
+func (m *Installer) Install(ctx context.Context) error {
+	err := m.helmInstallOrUpgrade(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to install metrics-server: %w", err)
 	}
@@ -50,7 +50,7 @@ func (m *MetricsServerInstaller) Install(ctx context.Context) error {
 }
 
 // Uninstall removes the Helm release for metrics-server.
-func (m *MetricsServerInstaller) Uninstall(ctx context.Context) error {
+func (m *Installer) Uninstall(ctx context.Context) error {
 	err := m.client.UninstallRelease(ctx, metricsServerRelease, metricsServerNamespace)
 	if err != nil {
 		return fmt.Errorf("failed to uninstall metrics-server release: %w", err)
@@ -60,23 +60,16 @@ func (m *MetricsServerInstaller) Uninstall(ctx context.Context) error {
 }
 
 // Images returns the container images used by metrics-server.
-func (m *MetricsServerInstaller) Images(ctx context.Context) ([]string, error) {
-	spec := m.chartSpec()
-
-	manifest, err := m.client.TemplateChart(ctx, spec)
+func (m *Installer) Images(ctx context.Context) ([]string, error) {
+	images, err := helmutil.ImagesFromChart(ctx, m.client, m.chartSpec())
 	if err != nil {
-		return nil, fmt.Errorf("failed to template metrics-server chart: %w", err)
-	}
-
-	images, err := image.ExtractImagesFromManifest(manifest)
-	if err != nil {
-		return nil, fmt.Errorf("extract images from metrics-server manifest: %w", err)
+		return nil, fmt.Errorf("listing images: %w", err)
 	}
 
 	return images, nil
 }
 
-func (m *MetricsServerInstaller) chartSpec() *helm.ChartSpec {
+func (m *Installer) chartSpec() *helm.ChartSpec {
 	return &helm.ChartSpec{
 		ReleaseName: metricsServerRelease,
 		ChartName:   metricsServerChartName,
@@ -95,7 +88,7 @@ func (m *MetricsServerInstaller) chartSpec() *helm.ChartSpec {
 
 // --- internals ---
 
-func (m *MetricsServerInstaller) helmInstallOrUpgradeMetricsServer(ctx context.Context) error {
+func (m *Installer) helmInstallOrUpgrade(ctx context.Context) error {
 	repoEntry := &helm.RepositoryEntry{
 		Name: metricsServerRepoName,
 		URL:  metricsServerRepoURL,

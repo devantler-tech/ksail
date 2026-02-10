@@ -12,13 +12,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestNewHetznerCSIInstaller(t *testing.T) {
+func TestNewInstaller(t *testing.T) {
 	t.Parallel()
 
 	mockClient := helm.NewMockInterface(t)
 	timeout := 5 * time.Minute
 
-	installer := hetznercsiinstaller.NewHetznerCSIInstaller(
+	installer := hetznercsiinstaller.NewInstaller(
 		mockClient,
 		"~/.kube/config",
 		"test-context",
@@ -40,7 +40,7 @@ func TestHetznerCSIInstaller_Uninstall(t *testing.T) {
 		Return(nil).
 		Once()
 
-	installer := hetznercsiinstaller.NewHetznerCSIInstaller(
+	installer := hetznercsiinstaller.NewInstaller(
 		mockClient,
 		"~/.kube/config",
 		"test-context",

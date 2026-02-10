@@ -217,7 +217,7 @@ func TestBuildLocalRegistryURL(t *testing.T) {
 	}
 }
 
-func TestBuildFluxInstance(t *testing.T) {
+func TestBuildInstance(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -264,7 +264,7 @@ func TestBuildFluxInstance(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			instance, err := fluxinstaller.BuildFluxInstance(
+			instance, err := fluxinstaller.BuildInstance(
 				testCase.clusterCfg,
 				testCase.clusterName,
 			)
@@ -273,7 +273,7 @@ func TestBuildFluxInstance(t *testing.T) {
 
 			// Verify TypeMeta is set (required for proper API server communication)
 			assert.Equal(t, "fluxcd.controlplane.io/v1", instance.APIVersion)
-			assert.Equal(t, "FluxInstance", instance.Kind)
+			assert.Equal(t, "Instance", instance.Kind)
 
 			assert.Equal(t, testCase.wantName, instance.GetName())
 			assert.Equal(t, "flux-system", instance.GetNamespace())
@@ -373,7 +373,7 @@ func TestIsTransientAPIError(t *testing.T) {
 		},
 		{
 			name:      "no matches for kind",
-			err:       errors.New("no matches for kind \"FluxInstance\" in version"),
+			err:       errors.New("no matches for kind \"Instance\" in version"),
 			wantRetry: true,
 		},
 		{
@@ -665,8 +665,8 @@ func TestWaitForFluxInstanceReady_Success(t *testing.T) {
 			obj client.Object,
 			_ ...client.GetOption,
 		) error {
-			instance, ok := obj.(*fluxinstaller.FluxInstance)
-			require.True(t, ok, "expected FluxInstance type")
+			instance, ok := obj.(*fluxinstaller.Instance)
+			require.True(t, ok, "expected Instance type")
 
 			instance.Status.Conditions = []metav1.Condition{
 				{
@@ -703,8 +703,8 @@ func TestWaitForFluxInstanceReady_ReadyFalse(t *testing.T) {
 			obj client.Object,
 			_ ...client.GetOption,
 		) error {
-			instance, ok := obj.(*fluxinstaller.FluxInstance)
-			require.True(t, ok, "expected FluxInstance type")
+			instance, ok := obj.(*fluxinstaller.Instance)
+			require.True(t, ok, "expected Instance type")
 
 			instance.Status.Conditions = []metav1.Condition{
 				{
@@ -754,8 +754,8 @@ func TestWaitForFluxInstanceReady_NotFound(t *testing.T) {
 				return apierrors.NewNotFound(schema.GroupResource{}, "flux")
 			}
 
-			instance, ok := obj.(*fluxinstaller.FluxInstance)
-			require.True(t, ok, "expected FluxInstance type")
+			instance, ok := obj.(*fluxinstaller.Instance)
+			require.True(t, ok, "expected Instance type")
 
 			instance.Status.Conditions = []metav1.Condition{
 				{
@@ -801,8 +801,8 @@ func TestWaitForFluxInstanceReady_ClientCreationError(t *testing.T) {
 				obj client.Object,
 				_ ...client.GetOption,
 			) error {
-				instance, ok := obj.(*fluxinstaller.FluxInstance)
-				require.True(t, ok, "expected FluxInstance type")
+				instance, ok := obj.(*fluxinstaller.Instance)
+				require.True(t, ok, "expected Instance type")
 
 				instance.Status.Conditions = []metav1.Condition{
 					{

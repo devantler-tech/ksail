@@ -12,13 +12,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestNewFluxInstaller(t *testing.T) {
+func TestNewInstaller(t *testing.T) {
 	t.Parallel()
 
 	timeout := 5 * time.Minute
 
 	client := helm.NewMockInterface(t)
-	installer := fluxinstaller.NewFluxInstaller(client, timeout)
+	installer := fluxinstaller.NewInstaller(client, timeout)
 
 	assert.NotNil(t, installer)
 }
@@ -71,10 +71,10 @@ func TestFluxInstallerUninstallError(t *testing.T) {
 
 func newFluxInstallerWithDefaults(
 	t *testing.T,
-) (*fluxinstaller.FluxInstaller, *helm.MockInterface) {
+) (*fluxinstaller.Installer, *helm.MockInterface) {
 	t.Helper()
 	client := helm.NewMockInterface(t)
-	installer := fluxinstaller.NewFluxInstaller(
+	installer := fluxinstaller.NewInstaller(
 		client,
 		5*time.Second,
 	)

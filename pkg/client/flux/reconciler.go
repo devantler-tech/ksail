@@ -315,7 +315,7 @@ func isPermanentOCIError(err error) bool {
 	}
 
 	// Kubernetes NotFound errors are transient - the OCIRepository may not
-	// have been created yet by the FluxInstance controller.
+	// have been created yet by the Instance controller.
 	if apierrors.IsNotFound(err) {
 		return false
 	}
@@ -364,8 +364,8 @@ func isTransientAPIError(err error) bool {
 	}
 
 	// NotFound is transient because the resource may not exist yet.
-	// The FluxInstance controller creates OCIRepository and Kustomization resources
-	// asynchronously, so they might not exist immediately after FluxInstance creation.
+	// The Instance controller creates OCIRepository and Kustomization resources
+	// asynchronously, so they might not exist immediately after Instance creation.
 	// The retry loop has a timeout, so if the resource truly doesn't exist, it will fail.
 	if apierrors.IsNotFound(err) {
 		return true

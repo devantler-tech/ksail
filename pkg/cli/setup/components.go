@@ -105,11 +105,11 @@ func policyEngineFactory(
 		case v1alpha1.PolicyEngineKyverno:
 			timeout = max(timeout, installer.KyvernoInstallTimeout)
 
-			return kyvernoinstaller.NewKyvernoInstaller(helmClient, timeout), nil
+			return kyvernoinstaller.NewInstaller(helmClient, timeout), nil
 		case v1alpha1.PolicyEngineGatekeeper:
 			timeout = max(timeout, installer.GatekeeperInstallTimeout)
 
-			return gatekeeperinstaller.NewGatekeeperInstaller(helmClient, timeout), nil
+			return gatekeeperinstaller.NewInstaller(helmClient, timeout), nil
 		default:
 			return nil, fmt.Errorf("%w: unknown engine %q", ErrPolicyEngineDisabled, engine)
 		}
@@ -131,7 +131,7 @@ func csiFactory(
 		// For Talos × Hetzner, use the Hetzner CSI driver
 		if clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionTalos &&
 			clusterCfg.Spec.Cluster.Provider == v1alpha1.ProviderHetzner {
-			return hetznercsiinstaller.NewHetznerCSIInstaller(
+			return hetznercsiinstaller.NewInstaller(
 				helmClient,
 				kubeconfig,
 				clusterCfg.Spec.Cluster.Connection.Context,
@@ -140,7 +140,7 @@ func csiFactory(
 		}
 
 		// For other distributions, use local-path-provisioner
-		return localpathstorageinstaller.NewLocalPathStorageInstaller(
+		return localpathstorageinstaller.NewInstaller(
 			kubeconfig,
 			clusterCfg.Spec.Cluster.Connection.Context,
 			timeout,
@@ -176,27 +176,27 @@ func DefaultInstallerFactories() *InstallerFactories {
 	factories.HelmClientFactory = HelmClientForCluster
 
 	factories.Flux = func(client helm.Interface, timeout time.Duration) installer.Installer {
-		return fluxinstaller.NewFluxInstaller(client, timeout)
+		return fluxinstaller.NewInstaller(client, timeout)
 	}
 
 	factories.CertManager = helmInstallerFactory(
 		factories,
 		func(c helm.Interface, t time.Duration) installer.Installer {
-			return certmanagerinstaller.NewCertManagerInstaller(c, t)
+			return certmanagerinstaller.NewInstaller(c, t)
 		},
 		installer.CertManagerInstallTimeout,
 	)
 	factories.ArgoCD = helmInstallerFactory(
 		factories,
 		func(c helm.Interface, t time.Duration) installer.Installer {
-			return argocdinstaller.NewArgoCDInstaller(c, t)
+			return argocdinstaller.NewInstaller(c, t)
 		},
 		installer.ArgoCDInstallTimeout,
 	)
 	factories.KubeletCSRApprover = helmInstallerFactory(
 		factories,
 		func(c helm.Interface, t time.Duration) installer.Installer {
-			return kubeletcsrapproverinstaller.NewKubeletCSRApproverInstaller(c, t)
+			return kubeletcsrapproverinstaller.NewInstaller(c, t)
 		},
 		0,
 	)
@@ -205,7 +205,7 @@ func DefaultInstallerFactories() *InstallerFactories {
 
 	factories.EnsureArgoCDResources = EnsureArgoCDResources
 	factories.EnsureFluxResources = fluxinstaller.EnsureDefaultResources
-	factories.SetupFluxInstance = fluxinstaller.SetupFluxInstance
+	factories.SetupFluxInstance = fluxinstaller.SetupInstance
 	factories.WaitForFluxReady = fluxinstaller.WaitForFluxReady
 
 	return factories
@@ -285,7 +285,7 @@ func InstallMetricsServerSilent(
 		return err
 	}
 
-	msInstaller := metricsserverinstaller.NewMetricsServerInstaller(
+	msInstaller := metricsserverinstaller.NewInstaller(
 		helmClient,
 		kubeconfig,
 		clusterCfg.Spec.Cluster.Connection.Context,
@@ -320,7 +320,7 @@ func InstallLoadBalancerSilent(
 
 			defer func() { _ = dockerAPIClient.Close() }()
 
-			lbInstaller := cloudproviderkindinstaller.NewCloudProviderKINDInstaller(dockerAPIClient)
+			lbInstaller := cloudproviderkindinstaller.NewInstaller(dockerAPIClient)
 
 			installErr := lbInstaller.Install(ctx)
 			if installErr != nil {

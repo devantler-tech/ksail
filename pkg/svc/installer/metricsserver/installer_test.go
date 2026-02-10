@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestNewMetricsServerInstaller(t *testing.T) {
+func TestNewInstaller(t *testing.T) {
 	t.Parallel()
 
 	kubeconfig := "~/.kube/config"
@@ -20,7 +20,7 @@ func TestNewMetricsServerInstaller(t *testing.T) {
 	timeout := 5 * time.Minute
 
 	client := helm.NewMockInterface(t)
-	installer := metricsserverinstaller.NewMetricsServerInstaller(
+	installer := metricsserverinstaller.NewInstaller(
 		client,
 		kubeconfig,
 		kubeContext,
@@ -67,7 +67,7 @@ func TestMetricsServerInstallerInstallAddRepositoryError(t *testing.T) {
 
 func newMetricsServerInstallerWithDefaults(
 	t *testing.T,
-) (*metricsserverinstaller.MetricsServerInstaller, *helm.MockInterface) {
+) (*metricsserverinstaller.Installer, *helm.MockInterface) {
 	t.Helper()
 
 	kubeconfig := "~/.kube/config"
@@ -75,7 +75,7 @@ func newMetricsServerInstallerWithDefaults(
 	timeout := 5 * time.Second
 
 	client := helm.NewMockInterface(t)
-	installer := metricsserverinstaller.NewMetricsServerInstaller(
+	installer := metricsserverinstaller.NewInstaller(
 		client,
 		kubeconfig,
 		kubeContext,

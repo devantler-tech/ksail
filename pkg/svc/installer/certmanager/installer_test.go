@@ -12,19 +12,19 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestNewCertManagerInstaller(t *testing.T) {
+func TestNewInstaller(t *testing.T) {
 	t.Parallel()
 
 	client := helm.NewMockInterface(t)
-	installer := certmanagerinstaller.NewCertManagerInstaller(client, 5*time.Second)
+	installer := certmanagerinstaller.NewInstaller(client, 5*time.Second)
 
 	assert.NotNil(t, installer)
 }
 
-func TestCertManagerInstallerInstallSuccess(t *testing.T) {
+func TestInstallSuccess(t *testing.T) {
 	t.Parallel()
 
-	installer, client := newCertManagerInstallerWithDefaults(t)
+	installer, client := newInstallerWithDefaults(t)
 	expectCertManagerInstall(t, client, nil)
 
 	err := installer.Install(context.Background())
@@ -32,10 +32,10 @@ func TestCertManagerInstallerInstallSuccess(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestCertManagerInstallerInstallRepoError(t *testing.T) {
+func TestInstallRepoError(t *testing.T) {
 	t.Parallel()
 
-	installer, client := newCertManagerInstallerWithDefaults(t)
+	installer, client := newInstallerWithDefaults(t)
 	client.EXPECT().
 		AddRepository(mock.Anything, mock.Anything, mock.Anything).
 		Return(assert.AnError)
@@ -46,10 +46,10 @@ func TestCertManagerInstallerInstallRepoError(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to add jetstack repository")
 }
 
-func TestCertManagerInstallerInstallChartError(t *testing.T) {
+func TestInstallChartError(t *testing.T) {
 	t.Parallel()
 
-	installer, client := newCertManagerInstallerWithDefaults(t)
+	installer, client := newInstallerWithDefaults(t)
 	expectCertManagerInstall(t, client, assert.AnError)
 
 	err := installer.Install(context.Background())
@@ -58,10 +58,10 @@ func TestCertManagerInstallerInstallChartError(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to install cert-manager chart")
 }
 
-func TestCertManagerInstallerUninstallSuccess(t *testing.T) {
+func TestUninstallSuccess(t *testing.T) {
 	t.Parallel()
 
-	installer, client := newCertManagerInstallerWithDefaults(t)
+	installer, client := newInstallerWithDefaults(t)
 	client.EXPECT().UninstallRelease(mock.Anything, "cert-manager", "cert-manager").Return(nil)
 
 	err := installer.Uninstall(context.Background())
@@ -69,10 +69,10 @@ func TestCertManagerInstallerUninstallSuccess(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestCertManagerInstallerUninstallError(t *testing.T) {
+func TestUninstallError(t *testing.T) {
 	t.Parallel()
 
-	installer, client := newCertManagerInstallerWithDefaults(t)
+	installer, client := newInstallerWithDefaults(t)
 	client.EXPECT().
 		UninstallRelease(mock.Anything, "cert-manager", "cert-manager").
 		Return(assert.AnError)
@@ -83,13 +83,13 @@ func TestCertManagerInstallerUninstallError(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to uninstall cert-manager release")
 }
 
-func newCertManagerInstallerWithDefaults(
+func newInstallerWithDefaults(
 	t *testing.T,
-) (*certmanagerinstaller.CertManagerInstaller, *helm.MockInterface) {
+) (*certmanagerinstaller.Installer, *helm.MockInterface) {
 	t.Helper()
 
 	client := helm.NewMockInterface(t)
-	installer := certmanagerinstaller.NewCertManagerInstaller(client, 2*time.Minute)
+	installer := certmanagerinstaller.NewInstaller(client, 2*time.Minute)
 
 	return installer, client
 }

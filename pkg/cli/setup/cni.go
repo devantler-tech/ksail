@@ -101,7 +101,7 @@ func installCiliumCNI(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster, tmr time
 		return err
 	}
 
-	ciliumInst := ciliuminstaller.NewCiliumInstallerWithDistribution(
+	ciliumInst := ciliuminstaller.NewInstallerWithDistribution(
 		setup.helmClient,
 		setup.kubeconfig,
 		clusterCfg.Spec.Cluster.Connection.Context,
@@ -120,7 +120,7 @@ func installCalicoCNI(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster, tmr time
 
 	setup.timeout = max(setup.timeout, installer.CalicoInstallTimeout)
 
-	calicoInst := calicoinstaller.NewCalicoInstallerWithDistribution(
+	calicoInst := calicoinstaller.NewInstallerWithDistribution(
 		setup.helmClient,
 		setup.kubeconfig,
 		clusterCfg.Spec.Cluster.Connection.Context,

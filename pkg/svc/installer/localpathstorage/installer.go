@@ -26,21 +26,21 @@ const (
 		localPathProvisionerVersion + "/deploy/local-path-storage.yaml"
 )
 
-// LocalPathStorageInstaller installs local-path-provisioner on Kind and Talos clusters.
-type LocalPathStorageInstaller struct {
+// Installer installs local-path-provisioner on Kind and Talos clusters.
+type Installer struct {
 	kubeconfig   string
 	context      string
 	timeout      time.Duration
 	distribution v1alpha1.Distribution
 }
 
-// NewLocalPathStorageInstaller creates a new local-path-storage installer instance.
-func NewLocalPathStorageInstaller(
+// NewInstaller creates a new local-path-storage installer instance.
+func NewInstaller(
 	kubeconfig, context string,
 	timeout time.Duration,
 	distribution v1alpha1.Distribution,
-) *LocalPathStorageInstaller {
-	return &LocalPathStorageInstaller{
+) *Installer {
+	return &Installer{
 		kubeconfig:   kubeconfig,
 		context:      context,
 		timeout:      timeout,
@@ -49,7 +49,7 @@ func NewLocalPathStorageInstaller(
 }
 
 // Install installs local-path-provisioner if needed based on the distribution.
-func (l *LocalPathStorageInstaller) Install(ctx context.Context) error {
+func (l *Installer) Install(ctx context.Context) error {
 	// K3d already has local-path-provisioner by default, no action needed
 	if l.distribution.ProvidesStorageByDefault() {
 		return nil
@@ -65,13 +65,13 @@ func (l *LocalPathStorageInstaller) Install(ctx context.Context) error {
 }
 
 // Uninstall is a no-op as we don't support uninstalling storage provisioners.
-func (l *LocalPathStorageInstaller) Uninstall(_ context.Context) error {
+func (l *Installer) Uninstall(_ context.Context) error {
 	return nil
 }
 
 // Images returns the container images used by local-path-provisioner.
 // It fetches and parses the manifest from the upstream URL.
-func (l *LocalPathStorageInstaller) Images(ctx context.Context) ([]string, error) {
+func (l *Installer) Images(ctx context.Context) ([]string, error) {
 	// K3d/K3s already has local-path-provisioner, return empty list
 	if l.distribution.ProvidesStorageByDefault() {
 		return nil, nil
@@ -116,7 +116,7 @@ func (l *LocalPathStorageInstaller) Images(ctx context.Context) ([]string, error
 }
 
 // installLocalPathProvisioner installs Rancher local-path-provisioner on Kind clusters.
-func (l *LocalPathStorageInstaller) installLocalPathProvisioner(ctx context.Context) error {
+func (l *Installer) installLocalPathProvisioner(ctx context.Context) error {
 	// Apply the manifest using kubectl
 	err := l.applyManifest(ctx)
 	if err != nil {
@@ -139,7 +139,7 @@ func (l *LocalPathStorageInstaller) installLocalPathProvisioner(ctx context.Cont
 }
 
 // applyManifest applies the local-path-provisioner manifest using kubectl.
-func (l *LocalPathStorageInstaller) applyManifest(ctx context.Context) error {
+func (l *Installer) applyManifest(ctx context.Context) error {
 	args := []string{"apply", "-f", localPathProvisionerManifestURL}
 
 	if l.kubeconfig != "" {
@@ -161,7 +161,7 @@ func (l *LocalPathStorageInstaller) applyManifest(ctx context.Context) error {
 }
 
 // waitForReadiness waits for the local-path-provisioner deployment to become ready.
-func (l *LocalPathStorageInstaller) waitForReadiness(ctx context.Context) error {
+func (l *Installer) waitForReadiness(ctx context.Context) error {
 	clientset, err := k8s.NewClientset(l.kubeconfig, l.context)
 	if err != nil {
 		return fmt.Errorf("failed to create kubernetes client: %w", err)
@@ -180,7 +180,7 @@ func (l *LocalPathStorageInstaller) waitForReadiness(ctx context.Context) error 
 }
 
 // setDefaultStorageClass marks the local-path storage class as the default.
-func (l *LocalPathStorageInstaller) setDefaultStorageClass(ctx context.Context) error {
+func (l *Installer) setDefaultStorageClass(ctx context.Context) error {
 	clientset, err := k8s.NewClientset(l.kubeconfig, l.context)
 	if err != nil {
 		return fmt.Errorf("failed to create kubernetes client: %w", err)
