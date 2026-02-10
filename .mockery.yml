@@ -4,18 +4,18 @@ structname: "Mock{{.InterfaceName}}"
 pkgname: "{{.PackageName}}"
 include-auto-generated: true
 packages:
-  github.com/devantler-tech/ksail/v5/pkg/io/generator:
+  github.com/devantler-tech/ksail/v5/pkg/fsutil/generator:
     config:
       recursive: false
-      dir: pkg/io/generator
+      dir: pkg/fsutil/generator
       filename: mocks.go
       pkgname: generator
     interfaces:
       Generator:
-  github.com/devantler-tech/ksail/v5/pkg/io/configmanager:
+  github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager:
     config:
       recursive: false
-      dir: pkg/io/configmanager
+      dir: pkg/fsutil/configmanager
       filename: mocks.go
       pkgname: configmanager
     interfaces:
@@ -37,10 +37,10 @@ packages:
     interfaces:
       ClusterProvisioner:
       Factory:
-  github.com/devantler-tech/ksail/v5/pkg/io/validator:
+  github.com/devantler-tech/ksail/v5/pkg/fsutil/validator:
     config:
       recursive: false
-      dir: pkg/io/validator
+      dir: pkg/fsutil/validator
       filename: mocks.go
       pkgname: validator
     interfaces:
@@ -94,10 +94,10 @@ packages:
       pkgname: di
     interfaces:
       Injector:
-  github.com/devantler-tech/ksail/v5/pkg/io/marshaller:
+  github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller:
     config:
       recursive: false
-      dir: pkg/io/marshaller
+      dir: pkg/fsutil/marshaller
       filename: mocks.go
       pkgname: marshaller
     interfaces:

@@ -141,11 +141,11 @@ func setNavigationKeys(keyMap *KeyMap) {
 func setActionKeys(keyMap *KeyMap) {
 	keyMap.Send = key.NewBinding(
 		key.WithKeys("enter"),
-		key.WithHelp("⏎", "send message"),
+		key.WithHelp(enterSymbol, "send message"),
 	)
 	keyMap.NewLine = key.NewBinding(
 		key.WithKeys("alt+enter"),
-		key.WithHelp("Alt+⏎", "new line"),
+		key.WithHelp("Alt+"+enterSymbol, "new line"),
 	)
 	keyMap.Cancel = key.NewBinding(
 		key.WithKeys("esc"),
