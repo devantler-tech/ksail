@@ -1,2 +1,2 @@
-// Package kubeconfig provides kubeconfig path resolution and REST config utilities.
+// Package kubeconfig provides helpers for resolving kubeconfig file paths.
 package kubeconfig
