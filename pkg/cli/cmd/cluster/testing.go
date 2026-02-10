@@ -90,8 +90,6 @@ func SetFluxInstallerFactoryForTests(
 	})
 }
 
-
-
 // SetDockerClientInvokerForTests overrides the Docker client invoker for testing.
 func SetDockerClientInvokerForTests(
 	invoker func(*cobra.Command, func(client.APIClient) error) error,

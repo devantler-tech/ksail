@@ -39,8 +39,8 @@ func allProviders() []v1alpha1.Provider {
 	}
 }
 
-// result holds a cluster name with its provider for display purposes.
-type result struct {
+// listResult holds a cluster name with its provider for display purposes.
+type listResult struct {
 	Provider    v1alpha1.Provider
 	ClusterName string
 }
@@ -123,7 +123,7 @@ func HandleListRunE(
 	providers := resolveProviders(providerFilter)
 
 	// Collect clusters from all providers
-	var allResults []result
+	var allResults []listResult
 
 	for _, prov := range providers {
 		clusters, err := getProviderClusters(cmd.Context(), deps, prov)
@@ -140,7 +140,7 @@ func HandleListRunE(
 		}
 
 		for _, cluster := range clusters {
-			allResults = append(allResults, result{
+			allResults = append(allResults, listResult{
 				Provider:    prov,
 				ClusterName: cluster,
 			})
@@ -297,7 +297,7 @@ func createEmptyDistributionConfig(
 func displayListResults(
 	writer io.Writer,
 	providers []v1alpha1.Provider,
-	results []result,
+	results []listResult,
 ) {
 	if len(results) == 0 {
 		_, _ = fmt.Fprintln(writer, "No clusters found.")
