@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	"github.com/devantler-tech/ksail/v5/pkg/client/docker"
-	configmanager "github.com/devantler-tech/ksail/v5/pkg/io/configmanager"
-	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/configmanager/talos"
+	configmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager"
+	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/talos"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clustererr"
 	talosprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/talos"
 	"github.com/docker/docker/api/types"

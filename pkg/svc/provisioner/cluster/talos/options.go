@@ -3,7 +3,7 @@ package talosprovisioner
 import (
 	"path/filepath"
 
-	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/configmanager/talos"
+	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/talos"
 )
 
 // Default provisioner-specific values.

@@ -7,7 +7,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup/localregistry"
 	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
-	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/configmanager/ksail"
+	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail"
 	"github.com/devantler-tech/ksail/v5/pkg/notify"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	"github.com/docker/docker/client"

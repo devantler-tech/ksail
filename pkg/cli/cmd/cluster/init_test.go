@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	clusterpkg "github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster"
-	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/configmanager/ksail"
+	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail"
 	timermocks "github.com/devantler-tech/ksail/v5/pkg/timer"
 	"github.com/gkampitakis/go-snaps/snaps"
 	"github.com/spf13/cobra"

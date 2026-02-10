@@ -12,7 +12,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers/flags"
 	"github.com/devantler-tech/ksail/v5/pkg/di"
-	yamlgenerator "github.com/devantler-tech/ksail/v5/pkg/io/generator/yaml"
+	yamlgenerator "github.com/devantler-tech/ksail/v5/pkg/fsutil/generator/yaml"
 	"github.com/devantler-tech/ksail/v5/pkg/notify"
 	"github.com/devantler-tech/ksail/v5/pkg/timer"
 	helmv2 "github.com/fluxcd/helm-controller/api/v2"

@@ -6,8 +6,8 @@ import (
 
 	v1alpha1 "github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers/flags"
-	configmanager "github.com/devantler-tech/ksail/v5/pkg/io/configmanager"
-	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/configmanager/ksail"
+	configmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager"
+	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail"
 	"github.com/devantler-tech/ksail/v5/pkg/notify"
 	"github.com/devantler-tech/ksail/v5/pkg/timer"
 	"github.com/spf13/cobra"

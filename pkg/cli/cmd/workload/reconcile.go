@@ -8,12 +8,12 @@ import (
 
 	v1alpha1 "github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
-	registryhelpers "github.com/devantler-tech/ksail/v5/pkg/cli/helpers/registry"
 	"github.com/devantler-tech/ksail/v5/pkg/client/argocd"
 	"github.com/devantler-tech/ksail/v5/pkg/client/flux"
 	"github.com/devantler-tech/ksail/v5/pkg/di"
-	iopath "github.com/devantler-tech/ksail/v5/pkg/io"
+	"github.com/devantler-tech/ksail/v5/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v5/pkg/notify"
+	registryhelpers "github.com/devantler-tech/ksail/v5/pkg/svc/registryresolver"
 	"github.com/devantler-tech/ksail/v5/pkg/timer"
 	"github.com/spf13/cobra"
 )
@@ -37,7 +37,7 @@ func getKubeconfigPath(clusterCfg *v1alpha1.Cluster) (string, error) {
 		kubeconfigPath = v1alpha1.DefaultKubeconfigPath
 	}
 
-	expanded, err := iopath.ExpandHomePath(kubeconfigPath)
+	expanded, err := fsutil.ExpandHomePath(kubeconfigPath)
 	if err != nil {
 		return "", fmt.Errorf("expand kubeconfig path: %w", err)
 	}

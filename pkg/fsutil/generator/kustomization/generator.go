@@ -1,0 +1,63 @@
+package kustomizationgenerator
+
+import (
+	"fmt"
+	"strings"
+
+	"github.com/devantler-tech/ksail/v5/pkg/fsutil"
+	yamlgenerator "github.com/devantler-tech/ksail/v5/pkg/fsutil/generator/yaml"
+	"github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller"
+	ktypes "sigs.k8s.io/kustomize/api/types"
+)
+
+// KustomizationGenerator generates a kustomization.yaml.
+type KustomizationGenerator struct {
+	Marshaller marshaller.Marshaller[*ktypes.Kustomization]
+}
+
+// NewKustomizationGenerator creates and returns a new KustomizationGenerator instance.
+func NewKustomizationGenerator() *KustomizationGenerator {
+	m := marshaller.NewYAMLMarshaller[*ktypes.Kustomization]()
+
+	return &KustomizationGenerator{
+		Marshaller: m,
+	}
+}
+
+// Generate creates a kustomization.yaml file and writes it to the specified output file path.
+func (g *KustomizationGenerator) Generate(
+	kustomization *ktypes.Kustomization,
+	opts yamlgenerator.Options,
+) (string, error) {
+	kustomization.TypeMeta = ktypes.TypeMeta{
+		APIVersion: "kustomize.config.k8s.io/v1beta1",
+		Kind:       "Kustomization",
+	}
+
+	// Initialize resources if nil
+	if kustomization.Resources == nil {
+		kustomization.Resources = []string{}
+	}
+
+	out, err := g.Marshaller.Marshal(kustomization)
+	if err != nil {
+		return "", fmt.Errorf("marshal kustomization: %w", err)
+	}
+
+	// Only add resources: [] if no resources field is present at all
+	if !strings.Contains(out, "resources:") {
+		out += "resources: []\n"
+	}
+
+	// If no output file specified, just return the YAML
+	if opts.Output == "" {
+		return out, nil
+	}
+
+	result, err := fsutil.TryWriteFile(out, opts.Output, opts.Force)
+	if err != nil {
+		return "", fmt.Errorf("write kustomization: %w", err)
+	}
+
+	return result, nil
+}

@@ -8,8 +8,8 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers/kubeconfig"
 	"github.com/devantler-tech/ksail/v5/pkg/client/k9s"
 	"github.com/devantler-tech/ksail/v5/pkg/di"
-	configmanager "github.com/devantler-tech/ksail/v5/pkg/io/configmanager"
-	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/configmanager/ksail"
+	configmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager"
+	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail"
 	"github.com/spf13/cobra"
 )
 

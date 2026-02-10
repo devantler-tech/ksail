@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	iopath "github.com/devantler-tech/ksail/v5/pkg/io"
+	"github.com/devantler-tech/ksail/v5/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider/hetzner"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"k8s.io/client-go/tools/clientcmd"
@@ -309,7 +309,7 @@ func checkHetznerOwnership(
 func resolveKubeconfigPath(kubeconfigPath string) (string, error) {
 	// If path is provided, expand ~ and return it
 	if kubeconfigPath != "" {
-		expanded, err := iopath.ExpandHomePath(kubeconfigPath)
+		expanded, err := fsutil.ExpandHomePath(kubeconfigPath)
 		if err != nil {
 			return "", fmt.Errorf("expand kubeconfig path: %w", err)
 		}
@@ -322,7 +322,7 @@ func resolveKubeconfigPath(kubeconfigPath string) (string, error) {
 		// Use first path if multiple are specified
 		paths := strings.Split(envPath, string(os.PathListSeparator))
 		if len(paths) > 0 && paths[0] != "" {
-			expanded, err := iopath.ExpandHomePath(paths[0])
+			expanded, err := fsutil.ExpandHomePath(paths[0])
 			if err != nil {
 				return "", fmt.Errorf("expand kubeconfig path from env: %w", err)
 			}

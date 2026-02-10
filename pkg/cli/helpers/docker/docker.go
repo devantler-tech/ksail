@@ -9,41 +9,16 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Resources holds Docker client and registry manager for cleanup.
-type Resources struct {
-	Client          client.APIClient
-	RegistryManager *dockerclient.RegistryManager
-}
-
 // NewDockerRegistryManager creates a Docker client and registry manager.
-// The caller is responsible for calling Close() on the returned resources.
-func NewDockerRegistryManager() (*Resources, error) {
-	dockerClient, err := client.NewClientWithOpts(
-		client.FromEnv,
-		client.WithAPIVersionNegotiation(),
-	)
+//
+// Deprecated: Use dockerclient.NewResources instead.
+func NewDockerRegistryManager() (*dockerclient.Resources, error) {
+	resources, err := dockerclient.NewResources()
 	if err != nil {
-		return nil, fmt.Errorf("create docker client: %w", err)
+		return nil, fmt.Errorf("creating docker resources: %w", err)
 	}
 
-	registryManager, err := dockerclient.NewRegistryManager(dockerClient)
-	if err != nil {
-		_ = dockerClient.Close()
-
-		return nil, fmt.Errorf("create registry manager: %w", err)
-	}
-
-	return &Resources{
-		Client:          dockerClient,
-		RegistryManager: registryManager,
-	}, nil
-}
-
-// Close releases the Docker client resources.
-func (r *Resources) Close() {
-	if r.Client != nil {
-		_ = r.Client.Close()
-	}
+	return resources, nil
 }
 
 // WithDockerClient creates a Docker client, executes the given operation function, and ensures cleanup.

@@ -12,7 +12,7 @@ import (
 	"strings"
 
 	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
-	ksailio "github.com/devantler-tech/ksail/v5/pkg/io"
+	"github.com/devantler-tech/ksail/v5/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v5/pkg/notify"
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
@@ -187,7 +187,7 @@ func collectExistingRegistryNames(
 	}
 
 	for _, name := range current {
-		trimmed, ok := ksailio.TrimNonEmpty(name)
+		trimmed, ok := fsutil.TrimNonEmpty(name)
 		if !ok {
 			continue
 		}
@@ -217,7 +217,7 @@ func CollectExistingRegistryPorts(
 	}
 
 	for _, name := range names {
-		trimmed, ok := ksailio.TrimNonEmpty(name)
+		trimmed, ok := fsutil.TrimNonEmpty(name)
 		if !ok {
 			continue
 		}
@@ -339,7 +339,7 @@ func ConnectRegistriesToNetwork(
 	networkName string,
 	writer io.Writer,
 ) error {
-	networkName, networkOK := ksailio.TrimNonEmpty(networkName)
+	networkName, networkOK := fsutil.TrimNonEmpty(networkName)
 	if dockerClient == nil || len(registries) == 0 || !networkOK {
 		return nil
 	}
@@ -363,7 +363,7 @@ func ConnectRegistriesToNetworkWithStaticIPs(
 	networkCIDR string,
 	writer io.Writer,
 ) (map[string]string, error) {
-	networkName, networkOK := ksailio.TrimNonEmpty(networkName)
+	networkName, networkOK := fsutil.TrimNonEmpty(networkName)
 	if dockerClient == nil || len(registries) == 0 || !networkOK {
 		return make(map[string]string), nil
 	}
@@ -383,7 +383,7 @@ func ConnectRegistriesToNetworkWithStaticIPs(
 			writer,
 		)
 		if registryIP != "" {
-			containerName, _ := ksailio.TrimNonEmpty(reg.Name)
+			containerName, _ := fsutil.TrimNonEmpty(reg.Name)
 			registryIPs[containerName] = registryIP
 		}
 	}
@@ -401,7 +401,7 @@ func connectRegistryToNetwork(
 	staticIP string,
 	writer io.Writer,
 ) string {
-	containerName, nameOK := ksailio.TrimNonEmpty(reg.Name)
+	containerName, nameOK := fsutil.TrimNonEmpty(reg.Name)
 	if !nameOK {
 		return ""
 	}

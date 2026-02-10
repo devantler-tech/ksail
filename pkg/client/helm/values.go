@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	ksailio "github.com/devantler-tech/ksail/v5/pkg/io"
+	"github.com/devantler-tech/ksail/v5/pkg/fsutil"
 	helmv4strvals "helm.sh/helm/v4/pkg/strvals"
 	"sigs.k8s.io/yaml"
 )
@@ -132,7 +132,7 @@ func readFileFromPath(chartPath, filePath string) ([]byte, error) {
 		return data, nil
 	}
 
-	data, err := ksailio.ReadFileSafe(filepath.Dir(chartPath), filePath)
+	data, err := fsutil.ReadFileSafe(filepath.Dir(chartPath), filePath)
 	if err != nil {
 		return nil, fmt.Errorf("read file safe %s: %w", filePath, err)
 	}

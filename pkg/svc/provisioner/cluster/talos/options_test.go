@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	talos "github.com/devantler-tech/ksail/v5/pkg/io/configmanager/talos"
+	talos "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/talos"
 	talosprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/talos"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

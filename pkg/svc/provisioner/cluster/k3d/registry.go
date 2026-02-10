@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
-	k3dconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/configmanager/k3d"
+	k3dconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/k3d"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	"github.com/docker/docker/client"
 	k3dv1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"

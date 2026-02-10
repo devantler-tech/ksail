@@ -9,12 +9,12 @@ import (
 	"strings"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	registryhelpers "github.com/devantler-tech/ksail/v5/pkg/cli/helpers/registry"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
 	"github.com/devantler-tech/ksail/v5/pkg/client/oci"
-	kindconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/configmanager/kind"
+	kindconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/kind"
 	"github.com/devantler-tech/ksail/v5/pkg/notify"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
+	registryhelpers "github.com/devantler-tech/ksail/v5/pkg/svc/registryresolver"
 	"github.com/devantler-tech/ksail/v5/pkg/timer"
 	"github.com/spf13/cobra"
 )

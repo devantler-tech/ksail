@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	iopath "github.com/devantler-tech/ksail/v5/pkg/io"
+	"github.com/devantler-tech/ksail/v5/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clustererr"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clusterupdate"
 	"github.com/docker/docker/api/types/container"
@@ -346,7 +346,7 @@ func (p *TalosProvisioner) createTalosClient(
 	nodeIP string,
 ) (*talosclient.Client, error) {
 	// Prefer the saved talosconfig (written during cluster creation).
-	talosconfigPath, expandErr := iopath.ExpandHomePath(p.options.TalosconfigPath)
+	talosconfigPath, expandErr := fsutil.ExpandHomePath(p.options.TalosconfigPath)
 	if expandErr == nil {
 		savedCfg, openErr := clientconfig.Open(talosconfigPath)
 		if openErr == nil {

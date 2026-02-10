@@ -9,8 +9,8 @@ import (
 	"slices"
 	"strings"
 
-	iopath "github.com/devantler-tech/ksail/v5/pkg/io"
-	"github.com/devantler-tech/ksail/v5/pkg/io/marshaller"
+	"github.com/devantler-tech/ksail/v5/pkg/fsutil"
+	"github.com/devantler-tech/ksail/v5/pkg/fsutil/marshaller"
 	runner "github.com/devantler-tech/ksail/v5/pkg/runner"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/detector"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provider"
@@ -223,7 +223,7 @@ func (k *KindClusterProvisioner) Delete(ctx context.Context, name string) error 
 		return fmt.Errorf("%w: %s", clustererr.ErrClusterNotFound, target)
 	}
 
-	kubeconfigPath, err := iopath.ExpandHomePath(k.kubeConfig)
+	kubeconfigPath, err := fsutil.ExpandHomePath(k.kubeConfig)
 	if err != nil {
 		return fmt.Errorf("failed to expand kubeconfig path: %w", err)
 	}

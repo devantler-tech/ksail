@@ -3,38 +3,33 @@ package kubeconfig
 import (
 	"fmt"
 	"io"
-	"os"
-	"path/filepath"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	iopath "github.com/devantler-tech/ksail/v5/pkg/io"
-	configmanager "github.com/devantler-tech/ksail/v5/pkg/io/configmanager"
-	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/configmanager/ksail"
+	"github.com/devantler-tech/ksail/v5/pkg/fsutil"
+	configmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager"
+	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail"
+	"github.com/devantler-tech/ksail/v5/pkg/k8s"
 	"github.com/devantler-tech/ksail/v5/pkg/timer"
 	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/clientcmd"
 )
 
 // GetDefaultKubeconfigPath returns the default kubeconfig path for the current user.
-// The path is constructed as ~/.kube/config using the user's home directory.
+//
+// Deprecated: Use k8s.DefaultKubeconfigPath instead.
 func GetDefaultKubeconfigPath() string {
-	homeDir, _ := os.UserHomeDir()
-
-	return filepath.Join(homeDir, ".kube", "config")
+	return k8s.DefaultKubeconfigPath()
 }
 
 // GetKubeconfigRESTConfig loads the kubeconfig and returns a REST config for Kubernetes clients.
-// This is used by both kubernetes.Clientset and dynamic.Client creation.
+//
+// Deprecated: Use k8s.GetRESTConfig instead.
 func GetKubeconfigRESTConfig() (*rest.Config, error) {
-	config, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
-		clientcmd.NewDefaultClientConfigLoadingRules(),
-		&clientcmd.ConfigOverrides{},
-	).ClientConfig()
+	cfg, err := k8s.GetRESTConfig()
 	if err != nil {
-		return nil, fmt.Errorf("load kubeconfig: %w", err)
+		return nil, fmt.Errorf("getting REST config: %w", err)
 	}
 
-	return config, nil
+	return cfg, nil
 }
 
 // GetKubeconfigPathFromConfig extracts and expands the kubeconfig path from a loaded cluster config.
@@ -51,7 +46,7 @@ func GetKubeconfigPathFromConfig(cfg *v1alpha1.Cluster) (string, error) {
 	}
 
 	// Always expand tilde in kubeconfig path, regardless of source
-	expandedPath, err := iopath.ExpandHomePath(kubeconfigPath)
+	expandedPath, err := fsutil.ExpandHomePath(kubeconfigPath)
 	if err != nil {
 		return "", fmt.Errorf("failed to expand home path: %w", err)
 	}

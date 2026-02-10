@@ -10,7 +10,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
-	k3dconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/configmanager/k3d"
+	k3dconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/k3d"
 	k3dprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/k3d"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	"github.com/docker/docker/client"
