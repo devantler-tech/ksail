@@ -37,13 +37,13 @@ func ShouldPushOCIArtifact(clusterCfg *v1alpha1.Cluster) bool {
 	return clusterCfg.Spec.Cluster.LocalRegistry.Enabled()
 }
 
-// ResolveClusterNameFromContext resolves the cluster name from the cluster config.
+// resolveClusterNameFromContext resolves the cluster name from the cluster config.
 // It first attempts to parse the cluster name from Connection.Context
 // (e.g., "k3d-system-test-cluster" -> "system-test-cluster").
 // Falls back to the distribution's default cluster name if context is not set or parsing fails.
 // The cluster name is used for constructing registry container names
 // (e.g., system-test-cluster-local-registry).
-func ResolveClusterNameFromContext(clusterCfg *v1alpha1.Cluster) string {
+func resolveClusterNameFromContext(clusterCfg *v1alpha1.Cluster) string {
 	if clusterCfg == nil {
 		return kindconfigmanager.DefaultClusterName
 	}
@@ -110,7 +110,7 @@ func GetComponentRequirements(clusterCfg *v1alpha1.Cluster) ComponentRequirement
 		NeedsMetricsServer:      needsMetricsServer,
 		NeedsLoadBalancer:       NeedsLoadBalancerInstall(clusterCfg),
 		NeedsKubeletCSRApprover: needsKubeletCSRApprover,
-		NeedsCSI:                NeedsCSIInstall(clusterCfg),
+		NeedsCSI:                needsCSIInstall(clusterCfg),
 		NeedsCertManager:        clusterCfg.Spec.Cluster.CertManager == v1alpha1.CertManagerEnabled,
 		NeedsPolicyEngine:       clusterCfg.Spec.Cluster.PolicyEngine != v1alpha1.PolicyEngineNone,
 		NeedsArgoCD:             clusterCfg.Spec.Cluster.GitOpsEngine == v1alpha1.GitOpsEngineArgoCD,
@@ -118,7 +118,7 @@ func GetComponentRequirements(clusterCfg *v1alpha1.Cluster) ComponentRequirement
 	}
 }
 
-// NeedsCSIInstall determines if CSI needs to be installed.
+// needsCSIInstall determines if CSI needs to be installed.
 //
 // In general, we install CSI only when it is explicitly Enabled AND the
 // distribution × provider combination does not provide it by default.
@@ -126,7 +126,7 @@ func GetComponentRequirements(clusterCfg *v1alpha1.Cluster) ComponentRequirement
 // Special case:
 //   - Talos × Hetzner: Hetzner CSI is not pre-installed and must be installed
 //     by KSail when CSI is either Default or Enabled.
-func NeedsCSIInstall(clusterCfg *v1alpha1.Cluster) bool {
+func needsCSIInstall(clusterCfg *v1alpha1.Cluster) bool {
 	dist := clusterCfg.Spec.Cluster.Distribution
 	provider := clusterCfg.Spec.Cluster.Provider
 	csiSetting := clusterCfg.Spec.Cluster.CSI
@@ -244,7 +244,7 @@ func buildComponentTasks(
 	if reqs.NeedsKubeletCSRApprover {
 		tasks = append(
 			tasks,
-			newTask("kubelet-csr-approver", clusterCfg, factories, InstallKubeletCSRApproverSilent),
+			newTask("kubelet-csr-approver", clusterCfg, factories, installKubeletCSRApproverSilent),
 		)
 	}
 
@@ -305,7 +305,7 @@ func configureGitOpsResources(
 	}
 
 	// Resolve cluster name for registry naming
-	clusterName := ResolveClusterNameFromContext(clusterCfg)
+	clusterName := resolveClusterNameFromContext(clusterCfg)
 	writer := cmd.OutOrStdout()
 
 	// Show title for configure stage

@@ -193,15 +193,6 @@ type UpdateOptions struct {
 	RollingReboot bool
 }
 
-// DefaultUpdateOptions returns sensible defaults for update operations.
-func DefaultUpdateOptions() UpdateOptions {
-	return UpdateOptions{
-		Force:         false,
-		DryRun:        false,
-		RollingReboot: true,
-	}
-}
-
 // PrepareUpdate handles the common update preamble shared by provisioners:
 //   - If diffErr is non-nil, return it immediately.
 //   - If dry-run, return the diff immediately.

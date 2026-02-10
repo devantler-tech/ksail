@@ -483,60 +483,6 @@ func (p *Provisioner) getDockerNodesByRole(
 	return nodes, nil
 }
 
-// getTalosNoRebootPaths returns the list of machine config paths that can be changed without reboot.
-// Based on Talos documentation:
-// https://www.talos.dev/v1.9/talos-guides/configuration/editing-machine-configuration/
-func getTalosNoRebootPaths() []string {
-	return []string{
-		".cluster",
-		".machine.network",
-		".machine.kubelet",
-		".machine.registries",
-		".machine.nodeLabels",
-		".machine.nodeTaints",
-		".machine.time",
-		".machine.sysfs",
-		".machine.sysctls",
-		".machine.logging",
-		".machine.pods",
-		".machine.kernel",
-	}
-}
-
-// getTalosRebootRequiredPaths returns the list of machine config paths that require reboot.
-func getTalosRebootRequiredPaths() []string {
-	return []string{
-		".machine.install",
-		".machine.disks",
-	}
-}
-
-// ClassifyTalosPatch determines the reboot requirement for a given Talos config path.
-func ClassifyTalosPatch(path string) clusterupdate.ChangeCategory {
-	// Check no-reboot paths first
-	for _, p := range getTalosNoRebootPaths() {
-		if pathMatches(path, p) {
-			return clusterupdate.ChangeCategoryInPlace
-		}
-	}
-
-	// Check reboot-required paths
-	for _, p := range getTalosRebootRequiredPaths() {
-		if pathMatches(path, p) {
-			return clusterupdate.ChangeCategoryRebootRequired
-		}
-	}
-
-	// Default to reboot for unknown paths (safer)
-	return clusterupdate.ChangeCategoryRebootRequired
-}
-
-// pathMatches checks if a config path matches a pattern.
-func pathMatches(path, pattern string) bool {
-	// Simple prefix matching for now
-	return len(path) >= len(pattern) && path[:len(pattern)] == pattern
-}
-
 // GetCurrentConfig retrieves the current cluster configuration by probing the
 // running cluster through the Kubernetes API and Docker/Hetzner providers.
 func (p *Provisioner) GetCurrentConfig(ctx context.Context) (*v1alpha1.ClusterSpec, error) {

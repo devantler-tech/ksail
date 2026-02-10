@@ -90,14 +90,7 @@ func SetFluxInstallerFactoryForTests(
 	})
 }
 
-// SetEnsureFluxResourcesForTests overrides the Flux resource ensure function.
-func SetEnsureFluxResourcesForTests(
-	fn func(context.Context, string, *v1alpha1.Cluster, string, bool) error,
-) func() {
-	return overrideInstallerFactory(func(f *setup.InstallerFactories) {
-		f.EnsureFluxResources = fn
-	})
-}
+
 
 // SetDockerClientInvokerForTests overrides the Docker client invoker for testing.
 func SetDockerClientInvokerForTests(

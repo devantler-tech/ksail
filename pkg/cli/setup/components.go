@@ -371,10 +371,10 @@ func installFromFactory(
 	return nil
 }
 
-// InstallKubeletCSRApproverSilent installs kubelet-csr-approver silently for parallel execution.
+// installKubeletCSRApproverSilent installs kubelet-csr-approver silently for parallel execution.
 // kubelet-csr-approver is required when metrics-server is installed with secure TLS enabled,
 // as it automatically approves kubelet serving certificate CSRs.
-func InstallKubeletCSRApproverSilent(
+func installKubeletCSRApproverSilent(
 	ctx context.Context,
 	clusterCfg *v1alpha1.Cluster,
 	factories *InstallerFactories,

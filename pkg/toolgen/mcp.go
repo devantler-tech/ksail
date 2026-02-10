@@ -33,7 +33,7 @@ func addMCPTool(server *mcp.Server, tool ToolDefinition, opts ToolOptions) {
 		input map[string]any,
 	) (*mcp.CallToolResult, map[string]any, error) {
 		// Execute the tool
-		output, err := ExecuteTool(ctx, tool, input, opts)
+		output, err := executeTool(ctx, tool, input, opts)
 		if err != nil {
 			// MCP returns errors via IsError flag and error messages in content
 			// Include both the captured output (which contains the actual error details)

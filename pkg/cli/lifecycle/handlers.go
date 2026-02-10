@@ -65,7 +65,7 @@ func NewStandardRunE(
 		runtimeContainer,
 		cfgManager,
 		func(cmd *cobra.Command, manager *ksailconfigmanager.ConfigManager, deps Deps) error {
-			return HandleRunE(cmd, manager, deps, config)
+			return handleRunE(cmd, manager, deps, config)
 		},
 	)
 }
@@ -121,14 +121,14 @@ func WrapHandler(
 	)
 }
 
-// HandleRunE orchestrates the standard lifecycle workflow.
+// handleRunE orchestrates the standard lifecycle workflow.
 // It performs the following steps in order:
 //  1. Create a new timer stage (config was already loaded in WrapHandler)
 //  2. Execute the lifecycle action via RunWithConfig
 //
 // Note: The cluster configuration is already loaded by WrapHandler,
 // so this function uses the cached config from cfgManager.Config.
-func HandleRunE(
+func handleRunE(
 	cmd *cobra.Command,
 	cfgManager *ksailconfigmanager.ConfigManager,
 	deps Deps,

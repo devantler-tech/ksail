@@ -45,7 +45,7 @@ any k9s functionality. Examples:
 	)
 
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
-		return HandleConnectRunE(cmd, cfgManager, args, editorFlag)
+		return handleConnectRunE(cmd, cfgManager, args, editorFlag)
 	}
 
 	cmd.Flags().StringVar(
@@ -58,9 +58,8 @@ any k9s functionality. Examples:
 	return cmd
 }
 
-// HandleConnectRunE handles the connect command execution.
-// Exported for testing purposes.
-func HandleConnectRunE(
+// handleConnectRunE handles the connect command execution.
+func handleConnectRunE(
 	cmd *cobra.Command,
 	cfgManager *ksailconfigmanager.ConfigManager,
 	args []string,

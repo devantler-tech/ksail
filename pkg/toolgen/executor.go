@@ -11,10 +11,10 @@ import (
 	"sync"
 )
 
-// ExecuteTool executes a tool definition with the given parameters.
+// executeTool executes a tool definition with the given parameters.
 // It sends output chunks via the opts.OutputChan if set.
 // Returns the combined stdout/stderr output and any error.
-func ExecuteTool(
+func executeTool(
 	ctx context.Context,
 	tool ToolDefinition,
 	params map[string]any,

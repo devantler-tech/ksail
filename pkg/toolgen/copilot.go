@@ -46,7 +46,7 @@ func buildCopilotHandler(tool ToolDefinition, opts ToolOptions) copilot.ToolHand
 		// so we create our own. This means parent context cancellation won't
 		// stop running commands. Use CommandTimeout in ToolOptions for timeouts.
 		ctx := context.Background()
-		output, err := ExecuteTool(ctx, tool, params, opts)
+		output, err := executeTool(ctx, tool, params, opts)
 
 		return buildCopilotResult(fullCmd, output, err), nil
 	}
