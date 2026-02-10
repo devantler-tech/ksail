@@ -8,6 +8,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
 	"github.com/devantler-tech/ksail/v5/pkg/k8s"
+	"github.com/devantler-tech/ksail/v5/pkg/k8s/readiness"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/installer/internal/helmutil"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -95,7 +96,7 @@ func (b *InstallerBase) WaitForAPIServerStability(ctx context.Context) error {
 		return fmt.Errorf("failed to create kubernetes clientset: %w", err)
 	}
 
-	err = k8s.WaitForAPIServerStable(
+	err = readiness.WaitForAPIServerStable(
 		ctx,
 		clientset,
 		APIServerStabilityTimeout,

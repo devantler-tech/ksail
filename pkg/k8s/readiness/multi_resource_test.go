@@ -1,11 +1,11 @@
-package k8s_test
+package readiness_test
 
 import (
 	"context"
 	"testing"
 	"time"
 
-	"github.com/devantler-tech/ksail/v5/pkg/k8s"
+	"github.com/devantler-tech/ksail/v5/pkg/k8s/readiness"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
@@ -20,7 +20,12 @@ func TestWaitForMultipleResources_EmptyChecks(t *testing.T) {
 	client := fake.NewClientset()
 	ctx := context.Background()
 
-	err := k8s.WaitForMultipleResources(ctx, client, []k8s.ReadinessCheck{}, 100*time.Millisecond)
+	err := readiness.WaitForMultipleResources(
+		ctx,
+		client,
+		[]readiness.Check{},
+		100*time.Millisecond,
+	)
 
 	require.NoError(t, err, "should succeed with empty checks")
 }
@@ -46,11 +51,11 @@ func TestWaitForMultipleResources_SingleDeploymentReady(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
 
-	checks := []k8s.ReadinessCheck{
+	checks := []readiness.Check{
 		{Type: "deployment", Namespace: namespace, Name: name},
 	}
 
-	err := k8s.WaitForMultipleResources(ctx, client, checks, 500*time.Millisecond)
+	err := readiness.WaitForMultipleResources(ctx, client, checks, 500*time.Millisecond)
 
 	require.NoError(t, err)
 }
@@ -76,11 +81,11 @@ func TestWaitForMultipleResources_SingleDaemonSetReady(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
 
-	checks := []k8s.ReadinessCheck{
+	checks := []readiness.Check{
 		{Type: "daemonset", Namespace: namespace, Name: name},
 	}
 
-	err := k8s.WaitForMultipleResources(ctx, client, checks, 500*time.Millisecond)
+	err := readiness.WaitForMultipleResources(ctx, client, checks, 500*time.Millisecond)
 
 	require.NoError(t, err)
 }
@@ -111,12 +116,12 @@ func TestWaitForMultipleResources_MultipleResources(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
 
-	checks := []k8s.ReadinessCheck{
+	checks := []readiness.Check{
 		{Type: "deployment", Namespace: "ns1", Name: "deploy1"},
 		{Type: "daemonset", Namespace: "ns2", Name: "ds1"},
 	}
 
-	err := k8s.WaitForMultipleResources(ctx, client, checks, 1*time.Second)
+	err := readiness.WaitForMultipleResources(ctx, client, checks, 1*time.Second)
 
 	require.NoError(t, err)
 }
@@ -128,11 +133,11 @@ func TestWaitForMultipleResources_UnknownResourceType(t *testing.T) {
 	client := fake.NewClientset()
 	ctx := context.Background()
 
-	checks := []k8s.ReadinessCheck{
+	checks := []readiness.Check{
 		{Type: "unknown", Namespace: "ns", Name: "resource"},
 	}
 
-	err := k8s.WaitForMultipleResources(ctx, client, checks, 100*time.Millisecond)
+	err := readiness.WaitForMultipleResources(ctx, client, checks, 100*time.Millisecond)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown resource type")
@@ -161,11 +166,11 @@ func TestWaitForMultipleResources_ResourceNotReady(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
 
-	checks := []k8s.ReadinessCheck{
+	checks := []readiness.Check{
 		{Type: "deployment", Namespace: namespace, Name: name},
 	}
 
-	err := k8s.WaitForMultipleResources(ctx, client, checks, 200*time.Millisecond)
+	err := readiness.WaitForMultipleResources(ctx, client, checks, 200*time.Millisecond)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not ready")
@@ -188,22 +193,22 @@ func TestWaitForMultipleResources_FirstResourceFails(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
 
-	checks := []k8s.ReadinessCheck{
+	checks := []readiness.Check{
 		{Type: "deployment", Namespace: "ns", Name: "missing-deploy"}, // Doesn't exist
 		{Type: "deployment", Namespace: "ns", Name: "second-deploy"},  // Exists
 	}
 
-	err := k8s.WaitForMultipleResources(ctx, client, checks, 200*time.Millisecond)
+	err := readiness.WaitForMultipleResources(ctx, client, checks, 200*time.Millisecond)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "missing-deploy")
 }
 
-// TestReadinessCheck_Fields tests the ReadinessCheck struct fields.
-func TestReadinessCheck_Fields(t *testing.T) {
+// TestCheck_Fields tests the Check struct fields.
+func TestCheck_Fields(t *testing.T) {
 	t.Parallel()
 
-	check := k8s.ReadinessCheck{
+	check := readiness.Check{
 		Type:      "deployment",
 		Namespace: "my-namespace",
 		Name:      "my-deployment",
@@ -224,15 +229,15 @@ func TestWaitForMultipleResources_TimeoutExceeded(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Cancel immediately
 
-	checks := []k8s.ReadinessCheck{
+	checks := []readiness.Check{
 		{Type: "deployment", Namespace: "ns", Name: "deploy"},
 	}
 
 	// With 0 timeout, the error message should be about timeout
-	err := k8s.WaitForMultipleResources(ctx, client, checks, 0)
+	err := readiness.WaitForMultipleResources(ctx, client, checks, 0)
 
 	require.Error(t, err)
-	assert.ErrorIs(t, err, k8s.ErrTimeoutExceeded)
+	assert.ErrorIs(t, err, readiness.ErrTimeoutExceeded)
 }
 
 // TestWaitForMultipleResources_MixedTypes tests mixed deployment and daemonset.
@@ -269,13 +274,13 @@ func TestWaitForMultipleResources_MixedTypes(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
 
-	checks := []k8s.ReadinessCheck{
+	checks := []readiness.Check{
 		{Type: "deployment", Namespace: "kube-system", Name: "coredns"},
 		{Type: "daemonset", Namespace: "kube-system", Name: "cilium"},
 		{Type: "deployment", Namespace: "traefik", Name: "traefik"},
 	}
 
-	err := k8s.WaitForMultipleResources(ctx, client, checks, 1*time.Second)
+	err := readiness.WaitForMultipleResources(ctx, client, checks, 1*time.Second)
 
 	require.NoError(t, err)
 }

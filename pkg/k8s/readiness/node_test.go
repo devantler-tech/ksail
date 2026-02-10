@@ -1,11 +1,11 @@
-package k8s_test
+package readiness_test
 
 import (
 	"context"
 	"testing"
 	"time"
 
-	"github.com/devantler-tech/ksail/v5/pkg/k8s"
+	"github.com/devantler-tech/ksail/v5/pkg/k8s/readiness"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
@@ -25,7 +25,7 @@ func TestWaitForNodeReady_NodeAlreadyReady(t *testing.T) {
 		},
 	})
 
-	err := k8s.WaitForNodeReady(context.Background(), clientset, 5*time.Second)
+	err := readiness.WaitForNodeReady(context.Background(), clientset, 5*time.Second)
 	require.NoError(t, err)
 }
 
@@ -41,7 +41,7 @@ func TestWaitForNodeReady_NodeNotReady(t *testing.T) {
 		},
 	})
 
-	err := k8s.WaitForNodeReady(context.Background(), clientset, 3*time.Second)
+	err := readiness.WaitForNodeReady(context.Background(), clientset, 3*time.Second)
 	assert.Error(t, err)
 }
 
@@ -50,7 +50,7 @@ func TestWaitForNodeReady_NoNodes(t *testing.T) {
 
 	clientset := fake.NewClientset()
 
-	err := k8s.WaitForNodeReady(context.Background(), clientset, 3*time.Second)
+	err := readiness.WaitForNodeReady(context.Background(), clientset, 3*time.Second)
 	assert.Error(t, err)
 }
 
@@ -62,6 +62,6 @@ func TestWaitForNodeReady_ContextCancelled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	err := k8s.WaitForNodeReady(ctx, clientset, 5*time.Second)
+	err := readiness.WaitForNodeReady(ctx, clientset, 5*time.Second)
 	assert.Error(t, err)
 }

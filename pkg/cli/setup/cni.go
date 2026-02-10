@@ -11,6 +11,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/cli/flags"
 	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
 	"github.com/devantler-tech/ksail/v5/pkg/k8s"
+	"github.com/devantler-tech/ksail/v5/pkg/k8s/readiness"
 	"github.com/devantler-tech/ksail/v5/pkg/notify"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/installer"
 	calicoinstaller "github.com/devantler-tech/ksail/v5/pkg/svc/installer/cni/calico"
@@ -183,7 +184,7 @@ func waitForCNIReadiness(
 		return fmt.Errorf("create kubernetes client: %w", err)
 	}
 
-	err = k8s.WaitForNodeReady(ctx, clientset, setup.timeout)
+	err = readiness.WaitForNodeReady(ctx, clientset, setup.timeout)
 	if err != nil {
 		return fmt.Errorf("wait for node readiness after CNI install: %w", err)
 	}

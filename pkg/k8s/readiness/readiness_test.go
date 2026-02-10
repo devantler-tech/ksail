@@ -1,4 +1,4 @@
-package k8s_test
+package readiness_test
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/devantler-tech/ksail/v5/pkg/k8s"
+	"github.com/devantler-tech/ksail/v5/pkg/k8s/readiness"
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -70,7 +70,7 @@ func testWaitForDaemonSetReadyReady(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
 
-	err := k8s.WaitForDaemonSetReady(ctx, client, namespace, name, 200*time.Millisecond)
+	err := readiness.WaitForDaemonSetReady(ctx, client, namespace, name, 200*time.Millisecond)
 
 	expectNoError(t, err, "waitForDaemonSetReady ready state")
 }
@@ -96,7 +96,7 @@ func testWaitForDaemonSetReadyAPIError(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
 
-	err := k8s.WaitForDaemonSetReady(ctx, client, namespace, name, 200*time.Millisecond)
+	err := readiness.WaitForDaemonSetReady(ctx, client, namespace, name, 200*time.Millisecond)
 
 	expectErrorContains(
 		t,
@@ -120,7 +120,7 @@ func testWaitForDaemonSetReadyTimeout(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
 	defer cancel()
 
-	err := k8s.WaitForDaemonSetReady(ctx, client, namespace, name, 150*time.Millisecond)
+	err := readiness.WaitForDaemonSetReady(ctx, client, namespace, name, 150*time.Millisecond)
 
 	expectErrorContains(
 		t, err, "failed to poll for readiness", "waitForDaemonSetReady timeout",
@@ -156,7 +156,7 @@ func testWaitForDeploymentReadyReady(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
 
-	err := k8s.WaitForDeploymentReady(ctx, client, namespace, name, 200*time.Millisecond)
+	err := readiness.WaitForDeploymentReady(ctx, client, namespace, name, 200*time.Millisecond)
 
 	expectNoError(t, err, "waitForDeploymentReady ready state")
 }
@@ -182,7 +182,7 @@ func testWaitForDeploymentReadyAPIError(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
 
-	err := k8s.WaitForDeploymentReady(ctx, client, namespace, name, 200*time.Millisecond)
+	err := readiness.WaitForDeploymentReady(ctx, client, namespace, name, 200*time.Millisecond)
 
 	expectErrorContains(
 		t,
@@ -212,7 +212,7 @@ func testWaitForDeploymentReadyTimeout(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
 	defer cancel()
 
-	err := k8s.WaitForDeploymentReady(ctx, client, namespace, name, 150*time.Millisecond)
+	err := readiness.WaitForDeploymentReady(ctx, client, namespace, name, 150*time.Millisecond)
 
 	expectErrorContains(
 		t, err, "failed to poll for readiness", "waitForDeploymentReady timeout",
@@ -258,5 +258,5 @@ func pollForReadinessWithDefaultTimeout(
 	defer cancel()
 
 	//nolint:wrapcheck // test utility function
-	return k8s.PollForReadiness(ctx, 200*time.Millisecond, checker)
+	return readiness.PollForReadiness(ctx, 200*time.Millisecond, checker)
 }

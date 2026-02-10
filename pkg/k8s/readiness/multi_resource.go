@@ -1,4 +1,4 @@
-package k8s
+package readiness
 
 import (
 	"context"
@@ -8,8 +8,8 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-// ReadinessCheck defines a check to perform for a Kubernetes resource.
-type ReadinessCheck struct {
+// Check defines a check to perform for a Kubernetes resource.
+type Check struct {
 	// Type specifies the kind of Kubernetes resource to check for readiness.
 	// Valid values are "deployment" or "daemonset".
 	Type string
@@ -34,7 +34,7 @@ type ReadinessCheck struct {
 func WaitForMultipleResources(
 	ctx context.Context,
 	clientset kubernetes.Interface,
-	checks []ReadinessCheck,
+	checks []Check,
 	timeout time.Duration,
 ) error {
 	start := time.Now()

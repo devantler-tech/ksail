@@ -1,4 +1,4 @@
-package k8s_test
+package readiness_test
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/devantler-tech/ksail/v5/pkg/k8s"
+	"github.com/devantler-tech/ksail/v5/pkg/k8s/readiness"
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/version"
 	"k8s.io/client-go/discovery"
@@ -90,7 +90,7 @@ func TestWaitForAPIServerReady(t *testing.T) {
 			name: "returns error when timeout exceeded",
 			setupClient: func() kubernetes.Interface {
 				clientset, controllable := newControllableClient()
-				controllable.shouldSucceed.Store(false) // never succeeds
+				controllable.shouldSucceed.Store(false)
 
 				return &stubClientset{Interface: clientset, discovery: controllable}
 			},
@@ -112,7 +112,7 @@ func TestWaitForAPIServerReady(t *testing.T) {
 			)
 			defer cancel()
 
-			err := k8s.WaitForAPIServerReady(ctx, client, testCase.timeout)
+			err := readiness.WaitForAPIServerReady(ctx, client, testCase.timeout)
 
 			if testCase.wantErr {
 				require.Error(t, err)
@@ -143,11 +143,11 @@ func TestWaitForAPIServerStable(t *testing.T) {
 			requiredSuccesses: 2,
 			setupClient: func() kubernetes.Interface {
 				clientset, controllable := newControllableClient()
-				controllable.shouldSucceed.Store(true) // always succeeds
+				controllable.shouldSucceed.Store(true)
 
 				return &stubClientset{Interface: clientset, discovery: controllable}
 			},
-			timeout: 10 * time.Second, // needs to be long enough for 2 poll cycles at 2s intervals
+			timeout: 10 * time.Second,
 			wantErr: false,
 		},
 		{
@@ -164,14 +164,14 @@ func TestWaitForAPIServerStable(t *testing.T) {
 		},
 		{
 			name:              "returns error when timeout exceeded",
-			requiredSuccesses: 100, // require many successes, impossible within timeout
+			requiredSuccesses: 100,
 			setupClient: func() kubernetes.Interface {
 				clientset, controllable := newControllableClient()
 				controllable.shouldSucceed.Store(true)
 
 				return &stubClientset{Interface: clientset, discovery: controllable}
 			},
-			timeout:     100 * time.Millisecond, // short timeout
+			timeout:     100 * time.Millisecond,
 			wantErr:     true,
 			errContains: "failed to poll for readiness",
 		},
@@ -189,7 +189,7 @@ func TestWaitForAPIServerStable(t *testing.T) {
 			)
 			defer cancel()
 
-			err := k8s.WaitForAPIServerStable(
+			err := readiness.WaitForAPIServerStable(
 				ctx,
 				client,
 				testCase.timeout,

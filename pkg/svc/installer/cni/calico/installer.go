@@ -10,6 +10,7 @@ import (
 	v1alpha1 "github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
 	"github.com/devantler-tech/ksail/v5/pkg/k8s"
+	"github.com/devantler-tech/ksail/v5/pkg/k8s/readiness"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/installer/cni"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -214,7 +215,7 @@ func (c *Installer) waitForCalicoCRDs(ctx context.Context) error {
 	}
 
 	for _, name := range calicoCRDNames() {
-		pollErr := k8s.PollForReadiness(
+		pollErr := readiness.PollForReadiness(
 			ctx,
 			c.GetTimeout(),
 			func(ctx context.Context) (bool, error) {

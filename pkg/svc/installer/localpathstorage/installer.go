@@ -11,6 +11,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/k8s"
+	"github.com/devantler-tech/ksail/v5/pkg/k8s/readiness"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/image"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -167,11 +168,11 @@ func (l *Installer) waitForReadiness(ctx context.Context) error {
 		return fmt.Errorf("failed to create kubernetes client: %w", err)
 	}
 
-	checks := []k8s.ReadinessCheck{
+	checks := []readiness.Check{
 		{Type: "deployment", Namespace: "local-path-storage", Name: "local-path-provisioner"},
 	}
 
-	err = k8s.WaitForMultipleResources(ctx, clientset, checks, l.timeout)
+	err = readiness.WaitForMultipleResources(ctx, clientset, checks, l.timeout)
 	if err != nil {
 		return fmt.Errorf("wait for local-path-provisioner deployment: %w", err)
 	}
