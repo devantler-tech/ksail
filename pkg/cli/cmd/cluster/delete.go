@@ -14,6 +14,7 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/confirm"
 	"github.com/devantler-tech/ksail/v5/pkg/di"
 	"github.com/devantler-tech/ksail/v5/pkg/notify"
+	clusterdetector "github.com/devantler-tech/ksail/v5/pkg/svc/detector/cluster"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clustererr"
 	"github.com/devantler-tech/ksail/v5/pkg/timer"
@@ -118,7 +119,7 @@ func runDeleteAction(
 	}
 
 	// Create cluster info for provisioner creation, including detected distribution
-	clusterInfo := &lifecycle.ClusterInfo{
+	clusterInfo := &clusterdetector.Info{
 		ClusterName:    resolved.ClusterName,
 		Provider:       resolved.Provider,
 		KubeconfigPath: resolved.KubeconfigPath,
@@ -160,7 +161,7 @@ func runDeleteAction(
 // This detection must happen before the cluster is deleted to ensure the kubeconfig
 // entry is still available for reading cluster information.
 // Returns nil if detection fails or the provider is not Docker.
-func detectClusterDistribution(resolved *lifecycle.ResolvedClusterInfo) *lifecycle.ClusterInfo {
+func detectClusterDistribution(resolved *lifecycle.ResolvedClusterInfo) *clusterdetector.Info {
 	if resolved.Provider != v1alpha1.ProviderDocker {
 		return nil
 	}
@@ -171,7 +172,7 @@ func detectClusterDistribution(resolved *lifecycle.ResolvedClusterInfo) *lifecyc
 		contextName = "kind-" + resolved.ClusterName
 	}
 
-	clusterInfo, detectErr := lifecycle.DetectClusterInfo(resolved.KubeconfigPath, contextName)
+	clusterInfo, detectErr := clusterdetector.DetectInfo(resolved.KubeconfigPath, contextName)
 	if detectErr == nil && clusterInfo != nil {
 		return clusterInfo
 	}
@@ -181,7 +182,7 @@ func detectClusterDistribution(resolved *lifecycle.ResolvedClusterInfo) *lifecyc
 		contextName = "k3d-" + resolved.ClusterName
 	}
 
-	clusterInfo, detectErr = lifecycle.DetectClusterInfo(resolved.KubeconfigPath, contextName)
+	clusterInfo, detectErr = clusterdetector.DetectInfo(resolved.KubeconfigPath, contextName)
 	if detectErr == nil && clusterInfo != nil {
 		return clusterInfo
 	}
@@ -193,7 +194,7 @@ func detectClusterDistribution(resolved *lifecycle.ResolvedClusterInfo) *lifecyc
 func prepareDockerDeletion(
 	cmd *cobra.Command,
 	resolved *lifecycle.ResolvedClusterInfo,
-	clusterInfo *lifecycle.ClusterInfo,
+	clusterInfo *clusterdetector.Info,
 ) *mirrorregistry.DiscoveredRegistries {
 	if resolved.Provider != v1alpha1.ProviderDocker {
 		return nil
@@ -268,7 +269,7 @@ func promptForDeletion(
 // createDeleteProvisioner creates the appropriate provisioner for cluster deletion.
 // It first checks for test overrides, then falls back to creating a minimal provisioner.
 func createDeleteProvisioner(
-	clusterInfo *lifecycle.ClusterInfo,
+	clusterInfo *clusterdetector.Info,
 ) (clusterprovisioner.ClusterProvisioner, error) {
 	// Check for test factory override
 	clusterProvisionerFactoryMu.RLock()
@@ -298,7 +299,7 @@ func createDeleteProvisioner(
 // This must be called BEFORE cluster deletion for Docker-based clusters.
 func discoverRegistriesBeforeDelete(
 	cmd *cobra.Command,
-	clusterInfo *lifecycle.ClusterInfo,
+	clusterInfo *clusterdetector.Info,
 ) *mirrorregistry.DiscoveredRegistries {
 	cleanupDeps := getCleanupDeps()
 

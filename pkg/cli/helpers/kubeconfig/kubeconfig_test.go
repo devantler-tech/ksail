@@ -12,24 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestGetDefaultKubeconfigPath(t *testing.T) {
-	t.Parallel()
-
-	path := kubeconfig.GetDefaultKubeconfigPath()
-
-	// The path should end with ".kube/config"
-	assert.Contains(t, path, ".kube")
-	assert.Contains(t, path, "config")
-	assert.True(t, filepath.IsAbs(path), "path should be absolute")
-
-	// Snapshot the path structure (replacing home dir with placeholder)
-	homeDir, err := os.UserHomeDir()
-	require.NoError(t, err)
-
-	relativePath := path[len(homeDir):]
-	snaps.MatchSnapshot(t, relativePath)
-}
-
 func TestGetKubeconfigPathFromConfig_SpecifiedPath(t *testing.T) {
 	t.Parallel()
 

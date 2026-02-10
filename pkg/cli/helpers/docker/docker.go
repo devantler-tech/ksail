@@ -3,23 +3,10 @@ package docker
 import (
 	"fmt"
 
-	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
 	"github.com/devantler-tech/ksail/v5/pkg/notify"
 	"github.com/docker/docker/client"
 	"github.com/spf13/cobra"
 )
-
-// NewDockerRegistryManager creates a Docker client and registry manager.
-//
-// Deprecated: Use dockerclient.NewResources instead.
-func NewDockerRegistryManager() (*dockerclient.Resources, error) {
-	resources, err := dockerclient.NewResources()
-	if err != nil {
-		return nil, fmt.Errorf("creating docker resources: %w", err)
-	}
-
-	return resources, nil
-}
 
 // WithDockerClient creates a Docker client, executes the given operation function, and ensures cleanup.
 // The Docker client is automatically closed after the operation completes, regardless of success or failure.

@@ -10,8 +10,8 @@ import (
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail"
 	talosconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/talos"
 	"github.com/devantler-tech/ksail/v5/pkg/notify"
+	clusterdetector "github.com/devantler-tech/ksail/v5/pkg/svc/detector/cluster"
 	clusterprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster"
-	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clustererr"
 	talosprovisioner "github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/talos"
 	"github.com/spf13/cobra"
 )
@@ -22,17 +22,6 @@ var (
 	ErrClusterNameRequired = errors.New(
 		"cluster name is required: use --name flag, create a ksail.yaml config, or set a kubeconfig context",
 	)
-
-	// ErrClusterNotFoundInDistributions re-exports the service-layer error
-	// for backward compatibility.
-	ErrClusterNotFoundInDistributions = clustererr.ErrClusterNotFoundInDistributions
-
-	// ErrCreateNotSupported re-exports the service-layer error
-	// for backward compatibility.
-	ErrCreateNotSupported = clustererr.ErrCreateNotSupported
-
-	// ErrUnknownDistribution indicates an unknown distribution was specified.
-	ErrUnknownDistribution = errors.New("unknown distribution")
 )
 
 // SimpleLifecycleConfig defines the configuration for a simple lifecycle command.
@@ -135,7 +124,7 @@ func ResolveClusterInfo(
 		provider = v1alpha1.ProviderDocker
 	}
 
-	resolvedPath, err := resolveKubeconfigPath(kubeconfigPath)
+	resolvedPath, err := clusterdetector.ResolveKubeconfigPath(kubeconfigPath)
 	if err != nil {
 		return nil, fmt.Errorf("resolve kubeconfig path: %w", err)
 	}
@@ -195,7 +184,7 @@ func resolveFromKubecontext(
 	provider *v1alpha1.Provider,
 	kubeconfigPath string,
 ) {
-	clusterInfo, err := DetectClusterInfo(kubeconfigPath, "")
+	clusterInfo, err := clusterdetector.DetectInfo(kubeconfigPath, "")
 	if err != nil || clusterInfo == nil {
 		return
 	}
@@ -243,7 +232,7 @@ func runSimpleLifecycleAction(
 	})
 
 	// Create cluster info for provisioner creation
-	clusterInfo := &ClusterInfo{
+	clusterInfo := &clusterdetector.Info{
 		ClusterName:    resolved.ClusterName,
 		Provider:       resolved.Provider,
 		KubeconfigPath: resolved.KubeconfigPath,
@@ -268,33 +257,12 @@ func runSimpleLifecycleAction(
 	return nil
 }
 
-// GetCurrentKubeContext reads the current context from the default kubeconfig.
-// This is exported for use by other commands that need context-based auto-detection.
-func GetCurrentKubeContext() (string, error) {
-	clusterInfo, err := DetectClusterInfo("", "")
-	if err != nil {
-		return "", err
-	}
-
-	// Reconstruct the context name from the cluster info
-	switch clusterInfo.Distribution {
-	case v1alpha1.DistributionVanilla:
-		return "kind-" + clusterInfo.ClusterName, nil
-	case v1alpha1.DistributionK3s:
-		return "k3d-" + clusterInfo.ClusterName, nil
-	case v1alpha1.DistributionTalos:
-		return "admin@" + clusterInfo.ClusterName, nil
-	default:
-		return "", fmt.Errorf("%w: %s", ErrUnknownDistribution, clusterInfo.Distribution)
-	}
-}
-
 // CreateMinimalProvisioner creates a minimal provisioner for lifecycle operations.
 // These provisioners only need enough configuration to identify containers.
 // It uses the detected ClusterInfo to create the appropriate provisioner
 // with the correct provider configuration.
 func CreateMinimalProvisioner(
-	info *ClusterInfo,
+	info *clusterdetector.Info,
 ) (clusterprovisioner.ClusterProvisioner, error) {
 	provisioner, err := clusterprovisioner.CreateMinimalProvisioner(
 		info.Distribution,
@@ -313,7 +281,7 @@ func CreateMinimalProvisioner(
 // that support the given provider, and returns the first one that can operate on the cluster.
 // This is used when we only have --name and --provider flags without distribution info.
 func CreateMinimalProvisionerForProvider(
-	info *ClusterInfo,
+	info *clusterdetector.Info,
 ) (clusterprovisioner.ClusterProvisioner, error) {
 	switch info.Provider {
 	case v1alpha1.ProviderDocker, "":

@@ -2,7 +2,6 @@ package k8s
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"k8s.io/client-go/kubernetes"
@@ -83,25 +82,4 @@ func WaitForAPIServerStable(
 
 		return false, nil
 	})
-}
-
-// CheckAPIServerConnectivity performs a single API server connectivity check.
-//
-// This function attempts to get the server version from the API server.
-// It returns nil if the API server is reachable, or an error describing
-// the connectivity issue.
-//
-// Parameters:
-//   - clientset: Kubernetes client interface
-//
-// Returns nil if connected, or an error with connectivity details.
-func CheckAPIServerConnectivity(
-	clientset kubernetes.Interface,
-) error {
-	_, err := clientset.Discovery().ServerVersion()
-	if err != nil {
-		return fmt.Errorf("API server connectivity check failed: %w", err)
-	}
-
-	return nil
 }

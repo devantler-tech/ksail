@@ -5,9 +5,9 @@ import (
 
 	v1alpha1 "github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers/flags"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
 	configmanagerinterface "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager"
 	configmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail"
+	clusterdetector "github.com/devantler-tech/ksail/v5/pkg/svc/detector/cluster"
 	"github.com/devantler-tech/ksail/v5/pkg/timer"
 	"github.com/spf13/cobra"
 )
@@ -17,7 +17,7 @@ type imageCommandContext struct {
 	Timer       timer.Timer
 	OutputTimer timer.Timer
 	ClusterCfg  *v1alpha1.Cluster
-	ClusterInfo *lifecycle.ClusterInfo
+	ClusterInfo *clusterdetector.Info
 }
 
 // createImageConfigManager creates a config manager for image commands.
@@ -63,7 +63,7 @@ func initImageCommandContext(
 func (ctx *imageCommandContext) detectClusterInfo() error {
 	ctx.Timer.NewStage()
 
-	clusterInfo, err := lifecycle.DetectClusterInfo(
+	clusterInfo, err := clusterdetector.DetectInfo(
 		ctx.ClusterCfg.Spec.Cluster.Connection.Kubeconfig,
 		ctx.ClusterCfg.Spec.Cluster.Connection.Context,
 	)

@@ -10,30 +10,10 @@ import (
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail"
 	"github.com/devantler-tech/ksail/v5/pkg/k8s"
 	"github.com/devantler-tech/ksail/v5/pkg/timer"
-	"k8s.io/client-go/rest"
 )
 
-// GetDefaultKubeconfigPath returns the default kubeconfig path for the current user.
-//
-// Deprecated: Use k8s.DefaultKubeconfigPath instead.
-func GetDefaultKubeconfigPath() string {
-	return k8s.DefaultKubeconfigPath()
-}
-
-// GetKubeconfigRESTConfig loads the kubeconfig and returns a REST config for Kubernetes clients.
-//
-// Deprecated: Use k8s.GetRESTConfig instead.
-func GetKubeconfigRESTConfig() (*rest.Config, error) {
-	cfg, err := k8s.GetRESTConfig()
-	if err != nil {
-		return nil, fmt.Errorf("getting REST config: %w", err)
-	}
-
-	return cfg, nil
-}
-
 // GetKubeconfigPathFromConfig extracts and expands the kubeconfig path from a loaded cluster config.
-// If the config doesn't specify a kubeconfig path, it returns the default path from GetDefaultKubeconfigPath.
+// If the config doesn't specify a kubeconfig path, it returns the default path.
 //
 // The function always expands tilde (~) characters in the path to the user's home directory,
 // regardless of whether the path came from the config or is the default.
@@ -42,7 +22,7 @@ func GetKubeconfigRESTConfig() (*rest.Config, error) {
 func GetKubeconfigPathFromConfig(cfg *v1alpha1.Cluster) (string, error) {
 	kubeconfigPath := cfg.Spec.Cluster.Connection.Kubeconfig
 	if kubeconfigPath == "" {
-		kubeconfigPath = GetDefaultKubeconfigPath()
+		kubeconfigPath = k8s.DefaultKubeconfigPath()
 	}
 
 	// Always expand tilde in kubeconfig path, regardless of source
@@ -67,7 +47,7 @@ func GetKubeconfigPathSilently() string {
 	kubeconfigPath, err := getKubeconfigPath(cfgManager)
 	if err != nil {
 		// If we can't load config, use default kubeconfig
-		return GetDefaultKubeconfigPath()
+		return k8s.DefaultKubeconfigPath()
 	}
 
 	return kubeconfigPath

@@ -5,127 +5,9 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
-	"github.com/gkampitakis/go-snaps/snaps"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-// TestDetectDistributionFromContext_Vanilla tests detection of Vanilla distribution (via kind- prefix).
-func TestDetectDistributionFromContext_Vanilla(t *testing.T) {
-	t.Parallel()
-
-	distribution, clusterName, err := lifecycle.DetectDistributionFromContext("kind-my-cluster")
-
-	require.NoError(t, err)
-	assert.Equal(t, v1alpha1.DistributionVanilla, distribution)
-	assert.Equal(t, "my-cluster", clusterName)
-}
-
-// TestDetectDistributionFromContext_K3s tests detection of K3s distribution (via k3d- prefix).
-func TestDetectDistributionFromContext_K3s(t *testing.T) {
-	t.Parallel()
-
-	distribution, clusterName, err := lifecycle.DetectDistributionFromContext("k3d-test-cluster")
-
-	require.NoError(t, err)
-	assert.Equal(t, v1alpha1.DistributionK3s, distribution)
-	assert.Equal(t, "test-cluster", clusterName)
-}
-
-// TestDetectDistributionFromContext_Talos tests detection of Talos distribution.
-func TestDetectDistributionFromContext_Talos(t *testing.T) {
-	t.Parallel()
-
-	distribution, clusterName, err := lifecycle.DetectDistributionFromContext("admin@talos-cluster")
-
-	require.NoError(t, err)
-	assert.Equal(t, v1alpha1.DistributionTalos, distribution)
-	assert.Equal(t, "talos-cluster", clusterName)
-}
-
-// TestDetectDistributionFromContext_UnknownPattern tests handling of unknown context patterns.
-func TestDetectDistributionFromContext_UnknownPattern(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name    string
-		context string
-	}{
-		{name: "docker-desktop", context: "docker-desktop"},
-		{name: "minikube", context: "minikube"},
-		{name: "empty", context: ""},
-		{name: "random-context", context: "some-random-context"},
-		{name: "gke-cluster", context: "gke_project_zone_cluster"},
-	}
-
-	for _, testCase := range tests {
-		t.Run(testCase.name, func(t *testing.T) {
-			t.Parallel()
-
-			_, _, err := lifecycle.DetectDistributionFromContext(testCase.context)
-
-			require.Error(t, err)
-			assert.ErrorIs(t, err, lifecycle.ErrUnknownContextPattern)
-		})
-	}
-}
-
-// TestDetectDistributionFromContext_EmptyClusterName tests handling of contexts with empty cluster names.
-func TestDetectDistributionFromContext_EmptyClusterName(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name    string
-		context string
-	}{
-		{name: "kind_prefix_only", context: "kind-"},
-		{name: "k3d_prefix_only", context: "k3d-"},
-		{name: "talos_prefix_only", context: "admin@"},
-	}
-
-	for _, testCase := range tests {
-		t.Run(testCase.name, func(t *testing.T) {
-			t.Parallel()
-
-			_, _, err := lifecycle.DetectDistributionFromContext(testCase.context)
-
-			require.Error(t, err)
-			require.ErrorIs(t, err, lifecycle.ErrEmptyClusterName)
-			assert.Contains(t, err.Error(), "empty cluster name")
-			assert.Contains(t, err.Error(), testCase.context)
-		})
-	}
-}
-
-// TestDetectDistributionFromContext_AllPatterns_Snapshot uses snapshot testing
-// to verify all distribution detection patterns in a comprehensive format.
-func TestDetectDistributionFromContext_AllPatterns_Snapshot(t *testing.T) {
-	t.Parallel()
-
-	results := make(map[string]string)
-
-	testCases := []string{
-		"kind-local",
-		"kind-production",
-		"k3d-dev",
-		"k3d-staging",
-		"admin@talos-prod",
-		"admin@homelab",
-		"docker-desktop",
-		"minikube",
-	}
-
-	for _, ctx := range testCases {
-		dist, name, err := lifecycle.DetectDistributionFromContext(ctx)
-		if err != nil {
-			results[ctx] = "error: " + err.Error()
-		} else {
-			results[ctx] = string(dist) + ":" + name
-		}
-	}
-
-	snaps.MatchSnapshot(t, results)
-}
 
 // TestExtractClusterNameFromContext_Kind tests cluster name extraction for Kind.
 func TestExtractClusterNameFromContext_Kind(t *testing.T) {
@@ -223,27 +105,6 @@ func TestExtractClusterNameFromContext_EmptyInputs(t *testing.T) {
 // TestErrorVariables verifies that error variables are exported and properly defined.
 func TestErrorVariables(t *testing.T) {
 	t.Parallel()
-
-	t.Run("ErrNoCurrentContext", func(t *testing.T) {
-		t.Parallel()
-
-		require.Error(t, lifecycle.ErrNoCurrentContext)
-		assert.Contains(t, lifecycle.ErrNoCurrentContext.Error(), "no current context")
-	})
-
-	t.Run("ErrUnknownContextPattern", func(t *testing.T) {
-		t.Parallel()
-
-		require.Error(t, lifecycle.ErrUnknownContextPattern)
-		assert.Contains(t, lifecycle.ErrUnknownContextPattern.Error(), "unknown distribution")
-	})
-
-	t.Run("ErrEmptyClusterName", func(t *testing.T) {
-		t.Parallel()
-
-		require.Error(t, lifecycle.ErrEmptyClusterName)
-		assert.Contains(t, lifecycle.ErrEmptyClusterName.Error(), "empty cluster name")
-	})
 
 	t.Run("ErrMissingClusterProvisionerDependency", func(t *testing.T) {
 		t.Parallel()

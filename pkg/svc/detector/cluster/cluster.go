@@ -1,4 +1,4 @@
-package lifecycle
+package cluster
 
 import (
 	"context"
@@ -46,8 +46,8 @@ var (
 	ErrNoHostInURL = errors.New("no host found in URL")
 )
 
-// ClusterInfo contains the detected distribution and provider for a cluster.
-type ClusterInfo struct {
+// Info contains the detected distribution and provider for a cluster.
+type Info struct {
 	Distribution   v1alpha1.Distribution
 	Provider       v1alpha1.Provider
 	ClusterName    string
@@ -55,12 +55,12 @@ type ClusterInfo struct {
 	KubeconfigPath string
 }
 
-// DetectClusterInfo detects the distribution and provider from the kubeconfig context.
+// DetectInfo detects the distribution and provider from the kubeconfig context.
 // It reads the kubeconfig, determines the distribution from the context name pattern,
 // and detects the provider by analyzing the server endpoint.
-func DetectClusterInfo(kubeconfigPath, contextName string) (*ClusterInfo, error) {
+func DetectInfo(kubeconfigPath, contextName string) (*Info, error) {
 	// Resolve kubeconfig path (handles empty path, ~ expansion, and relative paths)
-	resolvedPath, err := resolveKubeconfigPath(kubeconfigPath)
+	resolvedPath, err := ResolveKubeconfigPath(kubeconfigPath)
 	if err != nil {
 		return nil, err
 	}
@@ -112,7 +112,7 @@ func DetectClusterInfo(kubeconfigPath, contextName string) (*ClusterInfo, error)
 		return nil, err
 	}
 
-	return &ClusterInfo{
+	return &Info{
 		Distribution:   distribution,
 		Provider:       provider,
 		ClusterName:    clusterName,
@@ -304,9 +304,9 @@ func checkHetznerOwnership(
 	return false, nil
 }
 
-// resolveKubeconfigPath returns the kubeconfig path, resolving defaults if empty
+// ResolveKubeconfigPath returns the kubeconfig path, resolving defaults if empty
 // and expanding ~ to the home directory.
-func resolveKubeconfigPath(kubeconfigPath string) (string, error) {
+func ResolveKubeconfigPath(kubeconfigPath string) (string, error) {
 	// If path is provided, expand ~ and return it
 	if kubeconfigPath != "" {
 		expanded, err := fsutil.ExpandHomePath(kubeconfigPath)

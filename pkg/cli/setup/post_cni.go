@@ -9,10 +9,10 @@ import (
 	"strings"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
 	"github.com/devantler-tech/ksail/v5/pkg/client/oci"
 	kindconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/kind"
 	"github.com/devantler-tech/ksail/v5/pkg/notify"
+	clusterdetector "github.com/devantler-tech/ksail/v5/pkg/svc/detector/cluster"
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry"
 	registryhelpers "github.com/devantler-tech/ksail/v5/pkg/svc/registryresolver"
 	"github.com/devantler-tech/ksail/v5/pkg/timer"
@@ -51,7 +51,7 @@ func ResolveClusterNameFromContext(clusterCfg *v1alpha1.Cluster) string {
 	// First try to extract cluster name from the context if available
 	contextName := strings.TrimSpace(clusterCfg.Spec.Cluster.Connection.Context)
 	if contextName != "" {
-		_, clusterName, err := lifecycle.DetectDistributionFromContext(contextName)
+		_, clusterName, err := clusterdetector.DetectDistributionFromContext(contextName)
 		if err == nil && clusterName != "" {
 			return clusterName
 		}

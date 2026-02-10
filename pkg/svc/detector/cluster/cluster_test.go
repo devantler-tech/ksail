@@ -1,4 +1,4 @@
-package lifecycle_test
+package cluster_test
 
 import (
 	"os"
@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
+	cluster "github.com/devantler-tech/ksail/v5/pkg/svc/detector/cluster"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -76,7 +76,7 @@ func TestDetectDistributionFromContext(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			dist, clusterName, err := lifecycle.DetectDistributionFromContext(testCase.contextName)
+			dist, clusterName, err := cluster.DetectDistributionFromContext(testCase.contextName)
 
 			if testCase.wantError {
 				require.Error(t, err)
@@ -90,8 +90,8 @@ func TestDetectDistributionFromContext(t *testing.T) {
 	}
 }
 
-// TestDetectClusterInfo_LocalKind tests detection from a kubeconfig with a Kind cluster.
-func TestDetectClusterInfo_LocalKind(t *testing.T) {
+// TestDetectInfo_LocalKind tests detection from a kubeconfig with a Kind cluster.
+func TestDetectInfo_LocalKind(t *testing.T) {
 	t.Parallel()
 
 	kubeconfigContent := `apiVersion: v1
@@ -116,7 +116,7 @@ users:
 	err := os.WriteFile(kubeconfigPath, []byte(kubeconfigContent), 0o600)
 	require.NoError(t, err)
 
-	info, err := lifecycle.DetectClusterInfo(kubeconfigPath, "")
+	info, err := cluster.DetectInfo(kubeconfigPath, "")
 
 	require.NoError(t, err)
 	assert.Equal(t, v1alpha1.DistributionVanilla, info.Distribution)
@@ -125,8 +125,8 @@ users:
 	assert.Equal(t, "https://127.0.0.1:6443", info.ServerURL)
 }
 
-// TestDetectClusterInfo_LocalTalos tests detection from a kubeconfig with a local Talos cluster.
-func TestDetectClusterInfo_LocalTalos(t *testing.T) {
+// TestDetectInfo_LocalTalos tests detection from a kubeconfig with a local Talos cluster.
+func TestDetectInfo_LocalTalos(t *testing.T) {
 	t.Parallel()
 
 	kubeconfigContent := `apiVersion: v1
@@ -151,7 +151,7 @@ users:
 	err := os.WriteFile(kubeconfigPath, []byte(kubeconfigContent), 0o600)
 	require.NoError(t, err)
 
-	info, err := lifecycle.DetectClusterInfo(kubeconfigPath, "")
+	info, err := cluster.DetectInfo(kubeconfigPath, "")
 
 	require.NoError(t, err)
 	assert.Equal(t, v1alpha1.DistributionTalos, info.Distribution)
@@ -159,8 +159,8 @@ users:
 	assert.Equal(t, "local-talos", info.ClusterName)
 }
 
-// TestDetectClusterInfo_ExplicitContext tests detection with an explicit context specified.
-func TestDetectClusterInfo_ExplicitContext(t *testing.T) {
+// TestDetectInfo_ExplicitContext tests detection with an explicit context specified.
+func TestDetectInfo_ExplicitContext(t *testing.T) {
 	t.Parallel()
 
 	kubeconfigContent := `apiVersion: v1
@@ -191,7 +191,7 @@ users:
 	err := os.WriteFile(kubeconfigPath, []byte(kubeconfigContent), 0o600)
 	require.NoError(t, err)
 
-	info, err := lifecycle.DetectClusterInfo(kubeconfigPath, "kind-other")
+	info, err := cluster.DetectInfo(kubeconfigPath, "kind-other")
 
 	require.NoError(t, err)
 	assert.Equal(t, v1alpha1.DistributionVanilla, info.Distribution)
@@ -199,8 +199,8 @@ users:
 	assert.Equal(t, "https://127.0.0.1:7443", info.ServerURL)
 }
 
-// TestDetectClusterInfo_ContextNotFound tests error when context doesn't exist.
-func TestDetectClusterInfo_ContextNotFound(t *testing.T) {
+// TestDetectInfo_ContextNotFound tests error when context doesn't exist.
+func TestDetectInfo_ContextNotFound(t *testing.T) {
 	t.Parallel()
 
 	kubeconfigContent := `apiVersion: v1
@@ -223,14 +223,14 @@ users:
 	err := os.WriteFile(kubeconfigPath, []byte(kubeconfigContent), 0o600)
 	require.NoError(t, err)
 
-	_, err = lifecycle.DetectClusterInfo(kubeconfigPath, "kind-nonexistent")
+	_, err = cluster.DetectInfo(kubeconfigPath, "kind-nonexistent")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "context not found")
 }
 
-// TestDetectClusterInfo_NoCurrentContext tests error when no current context is set.
-func TestDetectClusterInfo_NoCurrentContext(t *testing.T) {
+// TestDetectInfo_NoCurrentContext tests error when no current context is set.
+func TestDetectInfo_NoCurrentContext(t *testing.T) {
 	t.Parallel()
 
 	kubeconfigContent := `apiVersion: v1
@@ -252,7 +252,7 @@ users:
 	err := os.WriteFile(kubeconfigPath, []byte(kubeconfigContent), 0o600)
 	require.NoError(t, err)
 
-	_, err = lifecycle.DetectClusterInfo(kubeconfigPath, "")
+	_, err = cluster.DetectInfo(kubeconfigPath, "")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no current context")
