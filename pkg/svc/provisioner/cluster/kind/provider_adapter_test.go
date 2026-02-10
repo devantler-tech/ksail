@@ -7,17 +7,17 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestNewDefaultKindProviderAdapter(t *testing.T) {
+func TestNewDefaultProviderAdapter(t *testing.T) {
 	t.Parallel()
 
-	adapter := kindprovisioner.NewDefaultKindProviderAdapter()
+	adapter := kindprovisioner.NewDefaultProviderAdapter()
 
 	assert.NotNil(t, adapter, "adapter should not be nil")
 }
 
-func TestDefaultKindProviderAdapterImplementsInterface(t *testing.T) {
+func TestDefaultProviderAdapterImplementsInterface(t *testing.T) {
 	t.Parallel()
 
-	// Verify that DefaultKindProviderAdapter implements KindProvider interface
-	var _ kindprovisioner.KindProvider = (*kindprovisioner.DefaultKindProviderAdapter)(nil)
+	// Verify that DefaultProviderAdapter implements Provider interface
+	var _ kindprovisioner.Provider = (*kindprovisioner.DefaultProviderAdapter)(nil)
 }

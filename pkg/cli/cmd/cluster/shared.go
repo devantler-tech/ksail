@@ -116,7 +116,7 @@ func runClusterCreationWorkflow(
 	SetupK3dCSI(ctx.ClusterCfg, ctx.K3dConfig)
 	SetupK3dLoadBalancer(ctx.ClusterCfg, ctx.K3dConfig)
 
-	configureClusterProvisionerFactory(&deps, ctx)
+	configureProvisionerFactory(&deps, ctx)
 
 	err = executeClusterLifecycle(cmd, ctx.ClusterCfg, deps)
 	if err != nil {

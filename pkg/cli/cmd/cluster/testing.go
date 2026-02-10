@@ -119,8 +119,8 @@ func SetDockerClientInvokerForTests(
 	}
 }
 
-// SetClusterProvisionerFactoryForTests overrides the cluster provisioner factory for testing.
-func SetClusterProvisionerFactoryForTests(factory clusterprovisioner.Factory) func() {
+// SetProvisionerFactoryForTests overrides the cluster provisioner factory for testing.
+func SetProvisionerFactoryForTests(factory clusterprovisioner.Factory) func() {
 	clusterProvisionerFactoryMu.Lock()
 
 	previous := clusterProvisionerFactoryOverride

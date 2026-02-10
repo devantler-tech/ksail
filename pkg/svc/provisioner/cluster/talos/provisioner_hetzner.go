@@ -11,7 +11,7 @@ import (
 
 // ensureHetznerInfra creates the network, firewall, placement group, and retrieves
 // the SSH key needed for Hetzner cluster provisioning.
-func (p *TalosProvisioner) ensureHetznerInfra(
+func (p *Provisioner) ensureHetznerInfra(
 	ctx context.Context,
 	hzProvider *hetzner.Provider,
 	clusterName string,
@@ -76,7 +76,7 @@ func (p *TalosProvisioner) ensureHetznerInfra(
 // createHetznerCluster creates a Talos cluster on Hetzner Cloud infrastructure.
 //
 //nolint:cyclop,funlen // Complex function with sequential steps for cloud provisioning
-func (p *TalosProvisioner) createHetznerCluster(ctx context.Context, clusterName string) error {
+func (p *Provisioner) createHetznerCluster(ctx context.Context, clusterName string) error {
 	hzProvider, ok := p.infraProvider.(*hetzner.Provider)
 	if !ok {
 		return fmt.Errorf("%w: got %T", ErrHetznerProviderRequired, p.infraProvider)
@@ -231,7 +231,7 @@ func (p *TalosProvisioner) createHetznerCluster(ctx context.Context, clusterName
 	return nil
 }
 
-func (p *TalosProvisioner) deleteHetznerCluster(ctx context.Context, clusterName string) error {
+func (p *Provisioner) deleteHetznerCluster(ctx context.Context, clusterName string) error {
 	// Type assert to get Hetzner-specific provider
 	hetznerProv, ok := p.infraProvider.(*hetzner.Provider)
 	if !ok {

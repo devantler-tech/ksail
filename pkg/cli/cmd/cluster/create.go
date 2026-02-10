@@ -45,7 +45,7 @@ func newCreateLifecycleConfig() lifecycle.Config {
 		ActivityContent:    "creating cluster",
 		SuccessContent:     "cluster created",
 		ErrorMessagePrefix: "failed to create cluster",
-		Action: func(ctx context.Context, provisioner clusterprovisioner.ClusterProvisioner, clusterName string) error {
+		Action: func(ctx context.Context, provisioner clusterprovisioner.Provisioner, clusterName string) error {
 			return provisioner.Create(ctx, clusterName)
 		},
 	}
@@ -115,9 +115,9 @@ func newProvisionerFactory(ctx *localregistry.Context) clusterprovisioner.Factor
 	}
 }
 
-// configureClusterProvisionerFactory sets up the cluster provisioner factory on deps.
+// configureProvisionerFactory sets up the cluster provisioner factory on deps.
 // Uses test override if available, otherwise creates a default factory.
-func configureClusterProvisionerFactory(
+func configureProvisionerFactory(
 	deps *lifecycle.Deps,
 	ctx *localregistry.Context,
 ) {

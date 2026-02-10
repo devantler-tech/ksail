@@ -51,7 +51,7 @@ func TestResolveTimer_Error(t *testing.T) {
 	assert.Contains(t, err.Error(), "resolve timer dependency")
 }
 
-func TestResolveClusterProvisionerFactory_Success(t *testing.T) {
+func TestResolveProvisionerFactory_Success(t *testing.T) {
 	t.Parallel()
 
 	// Create an injector with a factory registered
@@ -62,19 +62,19 @@ func TestResolveClusterProvisionerFactory_Success(t *testing.T) {
 		return expectedFactory, nil
 	})
 
-	factory, err := di.ResolveClusterProvisionerFactory(injector)
+	factory, err := di.ResolveProvisionerFactory(injector)
 
 	require.NoError(t, err)
-	require.NotNil(t, factory, "ResolveClusterProvisionerFactory should return a non-nil factory")
+	require.NotNil(t, factory, "ResolveProvisionerFactory should return a non-nil factory")
 }
 
-func TestResolveClusterProvisionerFactory_Error(t *testing.T) {
+func TestResolveProvisionerFactory_Error(t *testing.T) {
 	t.Parallel()
 
 	// Create an empty injector (no factory registered)
 	injector := do.New()
 
-	factory, err := di.ResolveClusterProvisionerFactory(injector)
+	factory, err := di.ResolveProvisionerFactory(injector)
 
 	require.Error(t, err)
 	assert.Nil(t, factory)

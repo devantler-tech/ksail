@@ -102,7 +102,7 @@ func handleUpdateRunE(
 	}
 
 	// Check if provisioner supports updates
-	updater, supportsUpdate := provisioner.(clusterprovisioner.ClusterUpdater)
+	updater, supportsUpdate := provisioner.(clusterprovisioner.Updater)
 	if !supportsUpdate {
 		if cfgManager.Viper.GetBool("dry-run") {
 			notify.Infof(
@@ -154,7 +154,7 @@ func createAndVerifyProvisioner(
 	cmd *cobra.Command,
 	ctx *localregistry.Context,
 	clusterName string,
-) (clusterprovisioner.ClusterProvisioner, error) {
+) (clusterprovisioner.Provisioner, error) {
 	// Build a ComponentDetector scoped to the running cluster.
 	componentDetector := buildComponentDetector(cmd, ctx)
 
@@ -224,7 +224,7 @@ func buildComponentDetector(
 func computeUpdateDiff(
 	cmd *cobra.Command,
 	ctx *localregistry.Context,
-	updater clusterprovisioner.ClusterUpdater,
+	updater clusterprovisioner.Updater,
 	clusterName string,
 ) (*v1alpha1.ClusterSpec, *clusterupdate.UpdateResult) {
 	diffEngine := specdiff.NewEngine(
@@ -262,7 +262,7 @@ func applyOrReportChanges(
 	cfgManager *ksailconfigmanager.ConfigManager,
 	ctx *localregistry.Context,
 	deps lifecycle.Deps,
-	updater clusterprovisioner.ClusterUpdater,
+	updater clusterprovisioner.Updater,
 	clusterName string,
 	currentSpec *v1alpha1.ClusterSpec,
 	diff *clusterupdate.UpdateResult,
@@ -365,7 +365,7 @@ func handleRecreateRequired(
 // applyInPlaceChanges applies provisioner-level and component-level changes in-place.
 func applyInPlaceChanges(
 	cmd *cobra.Command,
-	updater clusterprovisioner.ClusterUpdater,
+	updater clusterprovisioner.Updater,
 	reconciler *componentReconciler,
 	clusterName string,
 	currentSpec *v1alpha1.ClusterSpec,

@@ -27,7 +27,7 @@ import (
 // Returns:
 //   - []*hcloud.Server: slice of successfully created servers (empty if count <= 0).
 //   - error: non-nil if any server creation fails.
-func (p *TalosProvisioner) createHetznerNodes(
+func (p *Provisioner) createHetznerNodes(
 	ctx context.Context,
 	hzProvider *hetzner.Provider,
 	infra HetznerInfra,
@@ -84,7 +84,7 @@ func (p *TalosProvisioner) createHetznerNodes(
 
 // waitForHetznerTalosAPI waits for the Talos API to be reachable on all Hetzner servers.
 // Nodes booted from ISO are in maintenance mode and expose the Talos API on port 50000.
-func (p *TalosProvisioner) waitForHetznerTalosAPI(
+func (p *Provisioner) waitForHetznerTalosAPI(
 	ctx context.Context,
 	servers []*hcloud.Server,
 ) error {
@@ -143,7 +143,7 @@ func (p *TalosProvisioner) waitForHetznerTalosAPI(
 
 // applyHetznerConfigs applies machine configuration to all Hetzner nodes.
 // It uses the insecure Talos client to connect to nodes in maintenance mode.
-func (p *TalosProvisioner) applyHetznerConfigs(
+func (p *Provisioner) applyHetznerConfigs(
 	ctx context.Context,
 	_ string,
 	controlPlaneServers []*hcloud.Server,
@@ -191,7 +191,7 @@ func (p *TalosProvisioner) applyHetznerConfigs(
 // during install, which breaks our insecure TLS connection.
 //
 //nolint:funlen // Sequential steps for cloud provisioning
-func (p *TalosProvisioner) detachISOsAndReboot(
+func (p *Provisioner) detachISOsAndReboot(
 	ctx context.Context,
 	hetznerProv *hetzner.Provider,
 	servers []*hcloud.Server,
@@ -279,7 +279,7 @@ func (p *TalosProvisioner) detachISOsAndReboot(
 }
 
 // applyConfigToNode applies machine configuration to a single Hetzner node.
-func (p *TalosProvisioner) applyConfigToNode(
+func (p *Provisioner) applyConfigToNode(
 	ctx context.Context,
 	server *hcloud.Server,
 	config talosconfig.Provider,

@@ -13,7 +13,7 @@ import (
 //
 // All errors are logged but not returned — the node removal should proceed
 // regardless of whether etcd cleanup succeeded.
-func (p *TalosProvisioner) etcdCleanupBeforeRemoval(
+func (p *Provisioner) etcdCleanupBeforeRemoval(
 	ctx context.Context,
 	nodeIP string,
 ) {

@@ -20,7 +20,7 @@ import (
 // which are handled by the installer layer, not the provisioner.
 //
 // For any structural Kind changes, this method returns RecreateRequired.
-func (k *KindClusterProvisioner) Update(
+func (k *Provisioner) Update(
 	ctx context.Context,
 	name string,
 	oldSpec, newSpec *v1alpha1.ClusterSpec,
@@ -39,7 +39,7 @@ func (k *KindClusterProvisioner) Update(
 // DiffConfig computes configuration differences for Kind clusters.
 // Since Kind doesn't support node-level changes, most changes are classified
 // as RecreateRequired.
-func (k *KindClusterProvisioner) DiffConfig(
+func (k *Provisioner) DiffConfig(
 	_ context.Context,
 	_ string,
 	oldSpec, newSpec *v1alpha1.ClusterSpec,
@@ -71,7 +71,7 @@ func (k *KindClusterProvisioner) DiffConfig(
 // GetCurrentConfig retrieves the current cluster configuration by probing the
 // running cluster via Helm releases, Kubernetes Deployments, and Docker
 // containers. Falls back to static defaults when no detector is available.
-func (k *KindClusterProvisioner) GetCurrentConfig(
+func (k *Provisioner) GetCurrentConfig(
 	ctx context.Context,
 ) (*v1alpha1.ClusterSpec, error) {
 	if k.componentDetector != nil {

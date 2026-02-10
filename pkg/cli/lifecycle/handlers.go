@@ -17,8 +17,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// ErrMissingClusterProvisionerDependency indicates that a lifecycle command resolved a nil provisioner.
-var ErrMissingClusterProvisionerDependency = errors.New("missing cluster provisioner dependency")
+// ErrMissingProvisionerDependency indicates that a lifecycle command resolved a nil provisioner.
+var ErrMissingProvisionerDependency = errors.New("missing cluster provisioner dependency")
 
 // ErrClusterConfigRequired indicates that a nil cluster configuration was provided.
 var ErrClusterConfigRequired = errors.New("cluster configuration is required")
@@ -28,7 +28,7 @@ var ErrClusterConfigRequired = errors.New("cluster configuration is required")
 // It returns an error if the lifecycle operation fails.
 type Action func(
 	ctx context.Context,
-	provisioner clusterprovisioner.ClusterProvisioner,
+	provisioner clusterprovisioner.Provisioner,
 	clusterName string,
 ) error
 
@@ -270,7 +270,7 @@ func RunWithConfig(
 	}
 
 	if provisioner == nil {
-		return ErrMissingClusterProvisionerDependency
+		return ErrMissingProvisionerDependency
 	}
 
 	clusterName, err := getClusterNameFromConfigOrContext(distributionConfig, clusterCfg)
@@ -295,7 +295,7 @@ func runWithProvisioner(
 	cmd *cobra.Command,
 	deps Deps,
 	config Config,
-	provisioner clusterprovisioner.ClusterProvisioner,
+	provisioner clusterprovisioner.Provisioner,
 	clusterName string,
 ) error {
 	showTitle(cmd, config.TitleEmoji, config.TitleContent)

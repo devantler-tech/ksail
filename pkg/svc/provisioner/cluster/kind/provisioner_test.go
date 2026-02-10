@@ -66,7 +66,7 @@ func TestCreateSuccess(t *testing.T) {
 	runProvisionerRunnerSuccessTest(
 		t,
 		"Create",
-		func(ctx context.Context, provisioner *kindprovisioner.KindClusterProvisioner, name string) error {
+		func(ctx context.Context, provisioner *kindprovisioner.Provisioner, name string) error {
 			return provisioner.Create(ctx, name)
 		},
 	)
@@ -143,7 +143,7 @@ func TestDeleteIncludesKubeconfigFlag(t *testing.T) {
 func TestCreateUsesProvidedName(t *testing.T) {
 	t.Parallel()
 
-	assertNameFlagPropagation(t, func(p *kindprovisioner.KindClusterProvisioner) error {
+	assertNameFlagPropagation(t, func(p *kindprovisioner.Provisioner) error {
 		return p.Create(context.Background(), "custom-cluster")
 	}, "custom-cluster")
 }
@@ -151,7 +151,7 @@ func TestCreateUsesProvidedName(t *testing.T) {
 func TestCreateUsesConfigNameWhenEmpty(t *testing.T) {
 	t.Parallel()
 
-	assertNameFlagPropagation(t, func(p *kindprovisioner.KindClusterProvisioner) error {
+	assertNameFlagPropagation(t, func(p *kindprovisioner.Provisioner) error {
 		return p.Create(context.Background(), "")
 	}, "cfg-name")
 }
@@ -301,7 +301,7 @@ func TestListFiltersNoKindClustersMessage(t *testing.T) {
 
 func TestStartErrorClusterNotFound(t *testing.T) {
 	t.Parallel()
-	runClusterNotFoundTest(t, "Start", func(p *kindprovisioner.KindClusterProvisioner) error {
+	runClusterNotFoundTest(t, "Start", func(p *kindprovisioner.Provisioner) error {
 		return p.Start(context.Background(), "")
 	})
 }
@@ -334,7 +334,7 @@ func TestStartErrorDockerStartFailed(t *testing.T) {
 	t.Parallel()
 	runProviderOperationFailureTest(
 		t,
-		func(p *kindprovisioner.KindClusterProvisioner) error { return p.Start(context.Background(), "") },
+		func(p *kindprovisioner.Provisioner) error { return p.Start(context.Background(), "") },
 		"Start",
 		func(infraProvider *provider.MockProvider) {
 			infraProvider.On("StartNodes", mock.Anything, "cfg-name").Return(errStartClusterFailed)
@@ -345,7 +345,7 @@ func TestStartErrorDockerStartFailed(t *testing.T) {
 
 func TestStopErrorClusterNotFound(t *testing.T) {
 	t.Parallel()
-	runClusterNotFoundTest(t, "Stop", func(p *kindprovisioner.KindClusterProvisioner) error {
+	runClusterNotFoundTest(t, "Stop", func(p *kindprovisioner.Provisioner) error {
 		return p.Stop(context.Background(), "")
 	})
 }
@@ -365,7 +365,7 @@ func TestStopErrorDockerStopFailed(t *testing.T) {
 	t.Parallel()
 	runProviderOperationFailureTest(
 		t,
-		func(p *kindprovisioner.KindClusterProvisioner) error { return p.Stop(context.Background(), "") },
+		func(p *kindprovisioner.Provisioner) error { return p.Stop(context.Background(), "") },
 		"Stop",
 		func(infraProvider *provider.MockProvider) {
 			infraProvider.On("StopNodes", mock.Anything, "cfg-name").Return(errStopClusterFailed)
@@ -392,12 +392,12 @@ func TestStopSuccess(t *testing.T) {
 func newProvisionerForTest(
 	t *testing.T,
 ) (
-	*kindprovisioner.KindClusterProvisioner,
+	*kindprovisioner.Provisioner,
 	*provider.MockProvider,
 	*mockCommandRunner,
 ) {
 	t.Helper()
-	kindProvider := kindprovisioner.NewMockKindProvider(t)
+	kindProvider := kindprovisioner.NewMockProvider(t)
 	infraProvider := provider.NewMockProvider()
 	runner := &mockCommandRunner{}
 
@@ -408,7 +408,7 @@ func newProvisionerForTest(
 			APIVersion: "kind.x-k8s.io/v1alpha4",
 		},
 	}
-	provisioner := kindprovisioner.NewKindClusterProvisionerWithRunner(
+	provisioner := kindprovisioner.NewProvisionerWithRunner(
 		cfg,
 		"~/.kube/config",
 		kindProvider,
@@ -423,7 +423,7 @@ func newProvisionerForTest(
 func runClusterNotFoundTest(
 	t *testing.T,
 	actionName string,
-	action func(*kindprovisioner.KindClusterProvisioner) error,
+	action func(*kindprovisioner.Provisioner) error,
 ) {
 	t.Helper()
 	provisioner, infraProvider, _ := newProvisionerForTest(t)
@@ -440,7 +440,7 @@ func runClusterNotFoundTest(
 // runProviderOperationFailureTest is a helper for testing provider operation failures.
 func runProviderOperationFailureTest(
 	t *testing.T,
-	operation func(*kindprovisioner.KindClusterProvisioner) error,
+	operation func(*kindprovisioner.Provisioner) error,
 	operationName string,
 	expectProviderCall func(*provider.MockProvider),
 	expectedErrorMsg string,
@@ -463,7 +463,7 @@ func runProviderOperationFailureTest(
 func runProvisionerRunnerSuccessTest(
 	t *testing.T,
 	actionName string,
-	action func(context.Context, *kindprovisioner.KindClusterProvisioner, string) error,
+	action func(context.Context, *kindprovisioner.Provisioner, string) error,
 ) {
 	t.Helper()
 
@@ -513,7 +513,7 @@ func assertFlagValue(t *testing.T, args []string, flag string, expected string) 
 
 func assertNameFlagPropagation(
 	t *testing.T,
-	action func(*kindprovisioner.KindClusterProvisioner) error,
+	action func(*kindprovisioner.Provisioner) error,
 	expectedName string,
 ) {
 	t.Helper()

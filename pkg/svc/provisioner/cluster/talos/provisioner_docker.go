@@ -21,7 +21,7 @@ import (
 )
 
 // createDockerCluster creates a Talos-in-Docker cluster using the Talos SDK.
-func (p *TalosProvisioner) createDockerCluster(ctx context.Context, clusterName string) error {
+func (p *Provisioner) createDockerCluster(ctx context.Context, clusterName string) error {
 	// Ensure required kernel modules are loaded (Linux only)
 	err := p.ensureKernelModules(ctx)
 	if err != nil {
@@ -59,7 +59,7 @@ func (p *TalosProvisioner) createDockerCluster(ctx context.Context, clusterName 
 // deleteDockerCluster deletes a Talos-in-Docker cluster using the Talos SDK.
 //
 //nolint:cyclop,funlen // Inherent complexity from cluster cleanup with volume collection and config cleanup
-func (p *TalosProvisioner) deleteDockerCluster(ctx context.Context, clusterName string) error {
+func (p *Provisioner) deleteDockerCluster(ctx context.Context, clusterName string) error {
 	_, err := p.validateClusterOperation(ctx, clusterName)
 	if err != nil {
 		return err
@@ -141,7 +141,7 @@ func (p *TalosProvisioner) deleteDockerCluster(ctx context.Context, clusterName 
 }
 
 // listTalosContainers lists all containers for a specific Talos cluster.
-func (p *TalosProvisioner) listTalosContainers(
+func (p *Provisioner) listTalosContainers(
 	ctx context.Context,
 	clusterName string,
 ) ([]container.Summary, error) {
@@ -161,7 +161,7 @@ func (p *TalosProvisioner) listTalosContainers(
 
 // collectContainerVolumes collects all volume names used by the given containers.
 // It inspects each container to find mounted volumes (anonymous volumes used by Talos).
-func (p *TalosProvisioner) collectContainerVolumes(
+func (p *Provisioner) collectContainerVolumes(
 	ctx context.Context,
 	containers []container.Summary,
 ) []string {
@@ -199,7 +199,7 @@ func (p *TalosProvisioner) collectContainerVolumes(
 
 // removeVolumes removes the specified volumes.
 // Errors are logged but do not cause the operation to fail.
-func (p *TalosProvisioner) removeVolumes(ctx context.Context, volumes []string) {
+func (p *Provisioner) removeVolumes(ctx context.Context, volumes []string) {
 	for _, vol := range volumes {
 		err := p.dockerClient.VolumeRemove(ctx, vol, true) // force=true
 		if err != nil {
@@ -215,7 +215,7 @@ func (p *TalosProvisioner) removeVolumes(ctx context.Context, volumes []string) 
 
 // validateClusterOperation validates that Docker is available and the cluster exists.
 // Returns the resolved cluster name or an error.
-func (p *TalosProvisioner) validateClusterOperation(
+func (p *Provisioner) validateClusterOperation(
 	ctx context.Context,
 	name string,
 ) (string, error) {
@@ -242,7 +242,7 @@ func (p *TalosProvisioner) validateClusterOperation(
 
 // getClusterContainers validates the operation and returns the cluster's containers.
 // This combines validation with container listing for Start/Stop operations.
-func (p *TalosProvisioner) getClusterContainers(
+func (p *Provisioner) getClusterContainers(
 	ctx context.Context,
 	name string,
 ) (string, []container.Summary, error) {
@@ -262,7 +262,7 @@ func (p *TalosProvisioner) getClusterContainers(
 // bootstrapAndSaveKubeconfig bootstraps the cluster and saves the kubeconfig.
 //
 //nolint:cyclop,funlen // Bootstrap sequence is inherently complex but logically coherent
-func (p *TalosProvisioner) bootstrapAndSaveKubeconfig(
+func (p *Provisioner) bootstrapAndSaveKubeconfig(
 	ctx context.Context,
 	cluster provision.Cluster,
 	configBundle *bundle.Bundle,
@@ -358,7 +358,7 @@ func (p *TalosProvisioner) bootstrapAndSaveKubeconfig(
 }
 
 // provisionCluster creates the Talos cluster using the SDK.
-func (p *TalosProvisioner) provisionCluster(
+func (p *Provisioner) provisionCluster(
 	ctx context.Context,
 	clusterName string,
 	configBundle *bundle.Bundle,
@@ -397,7 +397,7 @@ func (p *TalosProvisioner) provisionCluster(
 }
 
 // saveClusterConfigs saves talosconfig and kubeconfig if paths are configured.
-func (p *TalosProvisioner) saveClusterConfigs(
+func (p *Provisioner) saveClusterConfigs(
 	ctx context.Context,
 	cluster provision.Cluster,
 	configBundle *bundle.Bundle,
@@ -422,7 +422,7 @@ func (p *TalosProvisioner) saveClusterConfigs(
 }
 
 // checkDockerAvailable verifies that Docker is configured and running.
-func (p *TalosProvisioner) checkDockerAvailable(ctx context.Context) error {
+func (p *Provisioner) checkDockerAvailable(ctx context.Context) error {
 	if p.dockerClient == nil {
 		return ErrDockerNotAvailable
 	}
@@ -437,7 +437,7 @@ func (p *TalosProvisioner) checkDockerAvailable(ctx context.Context) error {
 }
 
 // buildClusterRequest creates a provision.ClusterRequest from our config.
-func (p *TalosProvisioner) buildClusterRequest(
+func (p *Provisioner) buildClusterRequest(
 	clusterName string,
 	configBundle *bundle.Bundle,
 ) (provision.ClusterRequest, error) {
@@ -480,7 +480,7 @@ func (p *TalosProvisioner) buildClusterRequest(
 }
 
 // buildNodeRequests creates node request configurations for control plane and worker nodes.
-func (p *TalosProvisioner) buildNodeRequests(
+func (p *Provisioner) buildNodeRequests(
 	clusterName string,
 	cidr netip.Prefix,
 	configBundle *bundle.Bundle,
@@ -534,7 +534,7 @@ const talosAPIPort = 50000
 // getMappedTalosAPIEndpoint finds the control plane container and returns the mapped
 // Talos API endpoint. On macOS and other non-Linux systems, Docker runs in a VM,
 // so we need to use the mapped port via 127.0.0.1 instead of the container's internal IP.
-func (p *TalosProvisioner) getMappedTalosAPIEndpoint(
+func (p *Provisioner) getMappedTalosAPIEndpoint(
 	ctx context.Context,
 	clusterName string,
 ) (string, error) {
@@ -578,7 +578,7 @@ func (p *TalosProvisioner) getMappedTalosAPIEndpoint(
 // ensureKernelModules loads required kernel modules for Talos networking.
 // On Linux, this loads the br_netfilter module which is required for bridge networking.
 // On macOS and Windows, Docker Desktop handles this automatically via its Linux VM.
-func (p *TalosProvisioner) ensureKernelModules(ctx context.Context) error {
+func (p *Provisioner) ensureKernelModules(ctx context.Context) error {
 	// Only needed on Linux - Docker Desktop on macOS/Windows handles this in its VM
 	if runtime.GOOS != "linux" {
 		return nil

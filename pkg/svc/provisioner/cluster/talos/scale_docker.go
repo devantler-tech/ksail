@@ -21,7 +21,7 @@ import (
 // scaleDockerByRole adjusts the number of Docker nodes for the given role.
 // Scale-up: creates new containers with proper Talos config and static IPs.
 // Scale-down: removes etcd members (for control-plane) then stops and removes containers (highest-index first).
-func (p *TalosProvisioner) scaleDockerByRole(
+func (p *Provisioner) scaleDockerByRole(
 	ctx context.Context,
 	clusterName, role string,
 	delta int,
@@ -37,7 +37,7 @@ func (p *TalosProvisioner) scaleDockerByRole(
 // addDockerNodes creates new Talos Docker containers for the given role.
 // It calculates the next available index and IP, creates the container matching
 // the exact spec the Talos SDK uses, then starts it.
-func (p *TalosProvisioner) addDockerNodes(
+func (p *Provisioner) addDockerNodes(
 	ctx context.Context,
 	clusterName, role string,
 	count int,
@@ -87,7 +87,7 @@ func (p *TalosProvisioner) addDockerNodes(
 
 // removeDockerNodes removes nodes of the given role (highest-index first).
 // For control-plane nodes, etcd membership is cleaned up before each removal.
-func (p *TalosProvisioner) removeDockerNodes(
+func (p *Provisioner) removeDockerNodes(
 	ctx context.Context,
 	clusterName, role string,
 	count int,
@@ -129,7 +129,7 @@ func (p *TalosProvisioner) removeDockerNodes(
 // Talos SDK's container spec. This includes: privileged mode, PLATFORM=container
 // env, USERDATA with base64 config, Talos labels, tmpfs mounts, anonymous
 // volumes, seccomp:unconfined, and a static IP on the cluster network.
-func (p *TalosProvisioner) createTalosContainer(
+func (p *Provisioner) createTalosContainer(
 	ctx context.Context,
 	clusterName, nodeName, role string,
 	nodeIP netip.Addr,
@@ -184,7 +184,7 @@ func (p *TalosProvisioner) createTalosContainer(
 }
 
 // removeDockerContainer stops and removes a container and its volumes.
-func (p *TalosProvisioner) removeDockerContainer(ctx context.Context, containerID string) error {
+func (p *Provisioner) removeDockerContainer(ctx context.Context, containerID string) error {
 	timeout := containerStopTimeout
 
 	_ = p.dockerClient.ContainerStop(ctx, containerID, container.StopOptions{Timeout: &timeout})
@@ -238,7 +238,7 @@ func buildTalosHostConfig() *container.HostConfig {
 }
 
 // listDockerNodesByRole lists containers for a specific role, sorted by name.
-func (p *TalosProvisioner) listDockerNodesByRole(
+func (p *Provisioner) listDockerNodesByRole(
 	ctx context.Context,
 	clusterName, role string,
 ) ([]container.Summary, error) {
@@ -264,7 +264,7 @@ func (p *TalosProvisioner) listDockerNodesByRole(
 // calculateNodeIP determines the static IP for a new node based on its role and index.
 // Control-plane nodes start at offset 2 from the network base.
 // Worker nodes start after all control-plane slots.
-func (p *TalosProvisioner) calculateNodeIP(
+func (p *Provisioner) calculateNodeIP(
 	ctx context.Context,
 	cidr netip.Prefix,
 	clusterName, role string,
@@ -285,7 +285,7 @@ func (p *TalosProvisioner) calculateNodeIP(
 }
 
 // countDockerRole counts running containers for a role.
-func (p *TalosProvisioner) countDockerRole(
+func (p *Provisioner) countDockerRole(
 	ctx context.Context,
 	clusterName, role string,
 ) (int, error) {
@@ -299,7 +299,7 @@ func (p *TalosProvisioner) countDockerRole(
 
 // configForRole returns the appropriate Talos config for a role,
 // using the nil-safe Configs accessors.
-func (p *TalosProvisioner) configForRole(role string) talosconfig.Provider {
+func (p *Provisioner) configForRole(role string) talosconfig.Provider {
 	if p.talosConfigs == nil {
 		return nil
 	}

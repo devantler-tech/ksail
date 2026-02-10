@@ -35,7 +35,7 @@ func NewStartCmd(_ any) *cobra.Command {
 		Success:      "cluster started",
 		Action: func(
 			ctx context.Context,
-			provisioner clusterprovisioner.ClusterProvisioner,
+			provisioner clusterprovisioner.Provisioner,
 			clusterName string,
 		) error {
 			return provisioner.Start(ctx, clusterName)

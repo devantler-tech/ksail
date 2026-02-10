@@ -270,7 +270,7 @@ func promptForDeletion(
 // It first checks for test overrides, then falls back to creating a minimal provisioner.
 func createDeleteProvisioner(
 	clusterInfo *clusterdetector.Info,
-) (clusterprovisioner.ClusterProvisioner, error) {
+) (clusterprovisioner.Provisioner, error) {
 	// Check for test factory override
 	clusterProvisionerFactoryMu.RLock()
 
@@ -470,7 +470,7 @@ func isNumericString(s string) bool {
 func executeDelete(
 	cmd *cobra.Command,
 	tmr timer.Timer,
-	provisioner clusterprovisioner.ClusterProvisioner,
+	provisioner clusterprovisioner.Provisioner,
 	resolved *lifecycle.ResolvedClusterInfo,
 ) error {
 	if tmr != nil {

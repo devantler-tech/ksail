@@ -29,7 +29,7 @@ func NewMultiProvisioner(clusterName string) *MultiProvisioner {
 }
 
 // clusterOperation is a function that operates on a provisioner with a cluster name.
-type clusterOperation func(ClusterProvisioner, string) error
+type clusterOperation func(Provisioner, string) error
 
 // supportedDistributions returns all supported distributions in priority order.
 func supportedDistributions() []v1alpha1.Distribution {
@@ -43,21 +43,21 @@ func supportedDistributions() []v1alpha1.Distribution {
 // Start starts the cluster by trying each distribution's provisioner.
 func (m *MultiProvisioner) Start(ctx context.Context, name string) error {
 	return m.delegateToExisting(ctx, name, "start",
-		func(p ClusterProvisioner, n string) error { return p.Start(ctx, n) },
+		func(p Provisioner, n string) error { return p.Start(ctx, n) },
 	)
 }
 
 // Stop stops the cluster by trying each distribution's provisioner.
 func (m *MultiProvisioner) Stop(ctx context.Context, name string) error {
 	return m.delegateToExisting(ctx, name, "stop",
-		func(p ClusterProvisioner, n string) error { return p.Stop(ctx, n) },
+		func(p Provisioner, n string) error { return p.Stop(ctx, n) },
 	)
 }
 
 // Delete deletes the cluster by trying each distribution's provisioner.
 func (m *MultiProvisioner) Delete(ctx context.Context, name string) error {
 	return m.delegateToExisting(ctx, name, "delete",
-		func(p ClusterProvisioner, n string) error { return p.Delete(ctx, n) },
+		func(p Provisioner, n string) error { return p.Delete(ctx, n) },
 	)
 }
 
@@ -67,7 +67,7 @@ func (m *MultiProvisioner) Exists(ctx context.Context, name string) (bool, error
 	err := m.forExistingCluster(
 		ctx,
 		name,
-		func(_ ClusterProvisioner, _ string) error {
+		func(_ Provisioner, _ string) error {
 			found = true
 
 			return nil
@@ -120,7 +120,7 @@ func (m *MultiProvisioner) delegateToExisting(
 	return m.forExistingCluster(
 		ctx,
 		name,
-		func(p ClusterProvisioner, n string) error {
+		func(p Provisioner, n string) error {
 			err := operation(p, n)
 			if err != nil {
 				return fmt.Errorf("failed to %s cluster: %w", verb, err)
@@ -174,7 +174,7 @@ func CreateMinimalProvisioner(
 	clusterName string,
 	kubeconfigPath string,
 	providerType v1alpha1.Provider,
-) (ClusterProvisioner, error) {
+) (Provisioner, error) {
 	if providerType == "" {
 		providerType = v1alpha1.ProviderDocker
 	}

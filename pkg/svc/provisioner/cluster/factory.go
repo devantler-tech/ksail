@@ -42,7 +42,7 @@ type DistributionConfig struct {
 
 // Factory creates distribution-specific cluster provisioners based on the KSail cluster configuration.
 type Factory interface {
-	Create(ctx context.Context, cluster *v1alpha1.Cluster) (ClusterProvisioner, any, error)
+	Create(ctx context.Context, cluster *v1alpha1.Cluster) (Provisioner, any, error)
 }
 
 // DefaultFactory implements Factory for creating cluster provisioners.
@@ -64,7 +64,7 @@ type DefaultFactory struct {
 func (f DefaultFactory) Create(
 	_ context.Context,
 	cluster *v1alpha1.Cluster,
-) (ClusterProvisioner, any, error) {
+) (Provisioner, any, error) {
 	if cluster == nil {
 		return nil, nil, fmt.Errorf(
 			"cluster configuration is required: %w",
@@ -97,7 +97,7 @@ func (f DefaultFactory) Create(
 
 func (f DefaultFactory) createKindProvisioner(
 	cluster *v1alpha1.Cluster,
-) (ClusterProvisioner, any, error) {
+) (Provisioner, any, error) {
 	if f.DistributionConfig.Kind == nil {
 		return nil, nil, fmt.Errorf(
 			"kind config is required for Vanilla distribution: %w",
@@ -171,7 +171,7 @@ func applyKindNodeCounts(kindConfig *v1alpha4.Cluster, opts v1alpha1.OptionsTalo
 
 func (f DefaultFactory) createK3dProvisioner(
 	cluster *v1alpha1.Cluster,
-) (ClusterProvisioner, any, error) {
+) (Provisioner, any, error) {
 	if f.DistributionConfig.K3d == nil {
 		return nil, nil, fmt.Errorf(
 			"k3d config is required for K3d distribution: %w",
@@ -228,7 +228,7 @@ func applyK3dNodeCounts(k3dConfig *k3dv1alpha5.SimpleConfig, opts v1alpha1.Optio
 
 func (f DefaultFactory) createTalosProvisioner(
 	cluster *v1alpha1.Cluster,
-) (ClusterProvisioner, any, error) {
+) (Provisioner, any, error) {
 	if f.DistributionConfig.Talos == nil {
 		return nil, nil, fmt.Errorf(
 			"talos config is required for Talos distribution: %w",

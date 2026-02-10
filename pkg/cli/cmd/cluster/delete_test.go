@@ -52,7 +52,7 @@ type fakeDeleteFactory struct {
 func (f fakeDeleteFactory) Create(
 	_ context.Context,
 	_ *v1alpha1.Cluster,
-) (clusterprovisioner.ClusterProvisioner, any, error) {
+) (clusterprovisioner.Provisioner, any, error) {
 	cfg := &v1alpha4.Cluster{Name: "test"}
 
 	return &fakeDeleteProvisioner{
@@ -126,7 +126,7 @@ func setupContextBasedTest(
 	kubeconfigPath := writeKubeconfigWithContext(t, workingDir, contextName)
 	t.Setenv("KUBECONFIG", kubeconfigPath)
 
-	restoreFactory := clusterpkg.SetClusterProvisionerFactoryForTests(
+	restoreFactory := clusterpkg.SetProvisionerFactoryForTests(
 		fakeDeleteFactory{existsResult: existsResult, deleteErr: deleteErr},
 	)
 
@@ -415,8 +415,8 @@ func TestDelete_NonTTY_SkipsConfirmation(t *testing.T) {
 
 // Ensure fake types satisfy interfaces at compile time.
 var (
-	_ clusterprovisioner.ClusterProvisioner = (*fakeDeleteProvisioner)(nil)
-	_ clusterprovisioner.Factory            = (*fakeDeleteFactory)(nil)
+	_ clusterprovisioner.Provisioner = (*fakeDeleteProvisioner)(nil)
+	_ clusterprovisioner.Factory     = (*fakeDeleteFactory)(nil)
 )
 
 // containerTestCase is a test case for IsClusterContainer.

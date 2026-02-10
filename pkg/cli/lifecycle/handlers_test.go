@@ -106,13 +106,13 @@ func TestExtractClusterNameFromContext_EmptyInputs(t *testing.T) {
 func TestErrorVariables(t *testing.T) {
 	t.Parallel()
 
-	t.Run("ErrMissingClusterProvisionerDependency", func(t *testing.T) {
+	t.Run("ErrMissingProvisionerDependency", func(t *testing.T) {
 		t.Parallel()
 
-		require.Error(t, lifecycle.ErrMissingClusterProvisionerDependency)
+		require.Error(t, lifecycle.ErrMissingProvisionerDependency)
 		assert.Contains(
 			t,
-			lifecycle.ErrMissingClusterProvisionerDependency.Error(),
+			lifecycle.ErrMissingProvisionerDependency.Error(),
 			"missing cluster provisioner",
 		)
 	})

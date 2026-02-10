@@ -37,7 +37,7 @@ type SimpleLifecycleConfig struct {
 	Success      string
 	Action       func(
 		ctx context.Context,
-		provisioner clusterprovisioner.ClusterProvisioner,
+		provisioner clusterprovisioner.Provisioner,
 		clusterName string,
 	) error
 }
@@ -263,7 +263,7 @@ func runSimpleLifecycleAction(
 // with the correct provider configuration.
 func CreateMinimalProvisioner(
 	info *clusterdetector.Info,
-) (clusterprovisioner.ClusterProvisioner, error) {
+) (clusterprovisioner.Provisioner, error) {
 	provisioner, err := clusterprovisioner.CreateMinimalProvisioner(
 		info.Distribution,
 		info.ClusterName,
@@ -282,7 +282,7 @@ func CreateMinimalProvisioner(
 // This is used when we only have --name and --provider flags without distribution info.
 func CreateMinimalProvisionerForProvider(
 	info *clusterdetector.Info,
-) (clusterprovisioner.ClusterProvisioner, error) {
+) (clusterprovisioner.Provisioner, error) {
 	switch info.Provider {
 	case v1alpha1.ProviderDocker, "":
 		// Docker provider supports all distributions - create a multi-provisioner

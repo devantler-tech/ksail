@@ -8,10 +8,10 @@ import (
 	"github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/cluster/clusterupdate"
 )
 
-// ClusterProvisioner defines methods for managing Kubernetes clusters.
+// Provisioner defines methods for managing Kubernetes clusters.
 // Provisioners handle distribution-specific operations (bootstrapping, configuration)
 // while delegating infrastructure operations to a Provider.
-type ClusterProvisioner interface {
+type Provisioner interface {
 	// Create creates a Kubernetes cluster. If name is non-empty, target that name; otherwise use config defaults.
 	Create(ctx context.Context, name string) error
 
@@ -31,10 +31,10 @@ type ClusterProvisioner interface {
 	Exists(ctx context.Context, name string) (bool, error)
 }
 
-// ClusterUpdater is an optional interface for provisioners that support in-place updates.
+// Updater is an optional interface for provisioners that support in-place updates.
 // Not all provisioners support updates - Kind requires recreation for most changes,
 // while Talos and K3d support various in-place modifications.
-type ClusterUpdater interface {
+type Updater interface {
 	// Update applies configuration changes to a running cluster.
 	// Returns an UpdateResult describing what changed and how it was handled.
 	// The oldSpec represents the current cluster state, newSpec is the desired state.

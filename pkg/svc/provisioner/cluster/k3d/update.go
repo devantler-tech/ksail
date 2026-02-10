@@ -24,7 +24,7 @@ import (
 //   - Registry configuration updates via registries.yaml
 //
 // It does NOT support adding/removing server (control-plane) nodes after creation.
-func (k *K3dClusterProvisioner) Update(
+func (k *Provisioner) Update(
 	ctx context.Context,
 	name string,
 	oldSpec, newSpec *v1alpha1.ClusterSpec,
@@ -56,7 +56,7 @@ func (k *K3dClusterProvisioner) Update(
 // DiffConfig computes the differences between current and desired configurations.
 // For K3d, agent count is compared between the current running state and the
 // desired SimpleConfig, while server count changes are classified as recreate-required.
-func (k *K3dClusterProvisioner) DiffConfig(
+func (k *Provisioner) DiffConfig(
 	ctx context.Context,
 	name string,
 	_, _ *v1alpha1.ClusterSpec,
@@ -111,7 +111,7 @@ func (k *K3dClusterProvisioner) DiffConfig(
 // applyWorkerScaling handles adding or removing K3d agent nodes.
 // It reads the desired count from simpleCfg and compares to running agents
 // then uses k3d node create/delete commands to converge.
-func (k *K3dClusterProvisioner) applyWorkerScaling(
+func (k *Provisioner) applyWorkerScaling(
 	ctx context.Context,
 	clusterName string,
 	result *clusterupdate.UpdateResult,
@@ -142,7 +142,7 @@ func (k *K3dClusterProvisioner) applyWorkerScaling(
 }
 
 // addAgentNodes adds new agent nodes to the cluster.
-func (k *K3dClusterProvisioner) addAgentNodes(
+func (k *Provisioner) addAgentNodes(
 	ctx context.Context,
 	clusterName string,
 	count int,
@@ -191,7 +191,7 @@ func (k *K3dClusterProvisioner) addAgentNodes(
 }
 
 // removeAgentNodes removes agent nodes from the cluster (highest-index first).
-func (k *K3dClusterProvisioner) removeAgentNodes(
+func (k *Provisioner) removeAgentNodes(
 	ctx context.Context,
 	clusterName string,
 	count int,
@@ -235,7 +235,7 @@ func (k *K3dClusterProvisioner) removeAgentNodes(
 }
 
 // countRunningNodes counts running agent and server nodes for the cluster.
-func (k *K3dClusterProvisioner) countRunningNodes(
+func (k *Provisioner) countRunningNodes(
 	ctx context.Context,
 	clusterName string,
 ) (int, int, error) {
@@ -265,7 +265,7 @@ type k3dNodeInfo struct {
 }
 
 // listClusterNodes lists all nodes belonging to the cluster using k3d node list.
-func (k *K3dClusterProvisioner) listClusterNodes(
+func (k *Provisioner) listClusterNodes(
 	ctx context.Context,
 	clusterName string,
 ) ([]k3dNodeInfo, error) {
@@ -360,7 +360,7 @@ func parseClusterNodes(output, clusterName string) ([]k3dNodeInfo, error) {
 }
 
 // listAgentNodes returns the names of all agent nodes for the cluster, sorted by name.
-func (k *K3dClusterProvisioner) listAgentNodes(
+func (k *Provisioner) listAgentNodes(
 	ctx context.Context,
 	clusterName string,
 ) ([]string, error) {
@@ -385,7 +385,7 @@ func (k *K3dClusterProvisioner) listAgentNodes(
 // nextAgentIndex calculates the next agent index for naming.
 // It finds the maximum existing agent index to avoid naming collisions when there
 // are gaps in the index sequence, then adds 1 plus the batch offset.
-func (k *K3dClusterProvisioner) nextAgentIndex(
+func (k *Provisioner) nextAgentIndex(
 	ctx context.Context,
 	clusterName string,
 	batchOffset int,
@@ -420,7 +420,7 @@ func (k *K3dClusterProvisioner) nextAgentIndex(
 // GetCurrentConfig retrieves the current cluster configuration by probing the
 // running cluster via Helm releases and Kubernetes Deployments. Falls back to
 // static defaults when no detector is available.
-func (k *K3dClusterProvisioner) GetCurrentConfig(
+func (k *Provisioner) GetCurrentConfig(
 	ctx context.Context,
 ) (*v1alpha1.ClusterSpec, error) {
 	if k.componentDetector != nil {

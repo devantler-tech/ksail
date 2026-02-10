@@ -20,7 +20,7 @@ import (
 
 // Update applies configuration changes to all nodes in a running Talos cluster.
 // It implements the ClusterUpdater interface.
-func (p *TalosProvisioner) Update(
+func (p *Provisioner) Update(
 	ctx context.Context,
 	name string,
 	oldSpec, newSpec *v1alpha1.ClusterSpec,
@@ -66,7 +66,7 @@ func (p *TalosProvisioner) Update(
 }
 
 // DiffConfig computes the differences between current and desired configurations.
-func (p *TalosProvisioner) DiffConfig(
+func (p *Provisioner) DiffConfig(
 	_ context.Context,
 	_ string,
 	oldSpec, newSpec *v1alpha1.ClusterSpec,
@@ -126,7 +126,7 @@ func (p *TalosProvisioner) DiffConfig(
 // applyNodeScalingChanges handles adding or removing Talos nodes.
 // For Docker: creates or removes containers with static IPs and Talos config.
 // For Hetzner: creates or deletes servers via the Hetzner API.
-func (p *TalosProvisioner) applyNodeScalingChanges(
+func (p *Provisioner) applyNodeScalingChanges(
 	ctx context.Context,
 	clusterName string,
 	oldSpec, newSpec *v1alpha1.ClusterSpec,
@@ -155,7 +155,7 @@ func (p *TalosProvisioner) applyNodeScalingChanges(
 }
 
 // scaleByProvider applies node scaling changes using the appropriate provider backend.
-func (p *TalosProvisioner) scaleByProvider(
+func (p *Provisioner) scaleByProvider(
 	ctx context.Context,
 	clusterName string,
 	cpDelta, workerDelta int,
@@ -186,7 +186,7 @@ func (p *TalosProvisioner) scaleByProvider(
 // applyInPlaceConfigChanges applies configuration changes that don't require reboots.
 // Uses ApplyConfiguration with NO_REBOOT mode for Talos-supported fields.
 // Control-plane nodes receive the ControlPlane() config and worker nodes receive the Worker() config.
-func (p *TalosProvisioner) applyInPlaceConfigChanges(
+func (p *Provisioner) applyInPlaceConfigChanges(
 	ctx context.Context,
 	clusterName string,
 	result *clusterupdate.UpdateResult,
@@ -230,7 +230,7 @@ func (p *TalosProvisioner) applyInPlaceConfigChanges(
 }
 
 // applyNodeConfig applies the appropriate config to a single node and records the result.
-func (p *TalosProvisioner) applyNodeConfig(
+func (p *Provisioner) applyNodeConfig(
 	ctx context.Context,
 	node nodeWithRole,
 	config talosconfig.Provider,
@@ -277,7 +277,7 @@ func (p *TalosProvisioner) applyNodeConfig(
 //   - Kubernetes client for cordon/drain/uncordon operations
 //   - Node readiness polling after reboot
 //   - Proper ordering (workers first, then control-planes)
-func (p *TalosProvisioner) applyRebootRequiredChanges(
+func (p *Provisioner) applyRebootRequiredChanges(
 	_ context.Context,
 	_ string,
 	result *clusterupdate.UpdateResult,
@@ -303,7 +303,7 @@ func (p *TalosProvisioner) applyRebootRequiredChanges(
 }
 
 // applyConfigWithMode applies configuration to a single node with the specified mode.
-func (p *TalosProvisioner) applyConfigWithMode(
+func (p *Provisioner) applyConfigWithMode(
 	ctx context.Context,
 	nodeIP string,
 	config talosconfig.Provider,
@@ -341,7 +341,7 @@ func (p *TalosProvisioner) applyConfigWithMode(
 // because it contains the CA and client certificates the running cluster trusts.
 // The in-memory talosConfigs bundle may hold freshly generated PKI that the
 // cluster has never seen, so it is used only as a fallback.
-func (p *TalosProvisioner) createTalosClient(
+func (p *Provisioner) createTalosClient(
 	ctx context.Context,
 	nodeIP string,
 ) (*talosclient.Client, error) {
@@ -387,7 +387,7 @@ type nodeWithRole struct {
 }
 
 // getNodesByRole returns nodes with their roles for the cluster.
-func (p *TalosProvisioner) getNodesByRole(
+func (p *Provisioner) getNodesByRole(
 	ctx context.Context,
 	clusterName string,
 ) ([]nodeWithRole, error) {
@@ -399,7 +399,7 @@ func (p *TalosProvisioner) getNodesByRole(
 }
 
 // getHetznerNodesByRole gets node IPs and roles from Hetzner servers.
-func (p *TalosProvisioner) getHetznerNodesByRole(
+func (p *Provisioner) getHetznerNodesByRole(
 	ctx context.Context,
 	clusterName string,
 ) ([]nodeWithRole, error) {
@@ -436,7 +436,7 @@ func (p *TalosProvisioner) getHetznerNodesByRole(
 // getDockerNodesByRole gets node IPs and roles from Docker containers.
 // Role is inferred from container names: names containing "controlplane" are control-plane nodes,
 // all others are workers.
-func (p *TalosProvisioner) getDockerNodesByRole(
+func (p *Provisioner) getDockerNodesByRole(
 	ctx context.Context,
 	clusterName string,
 ) ([]nodeWithRole, error) {
@@ -539,7 +539,7 @@ func pathMatches(path, pattern string) bool {
 
 // GetCurrentConfig retrieves the current cluster configuration by probing the
 // running cluster through the Kubernetes API and Docker/Hetzner providers.
-func (p *TalosProvisioner) GetCurrentConfig(ctx context.Context) (*v1alpha1.ClusterSpec, error) {
+func (p *Provisioner) GetCurrentConfig(ctx context.Context) (*v1alpha1.ClusterSpec, error) {
 	var provider v1alpha1.Provider
 	if p.dockerClient != nil {
 		provider = v1alpha1.ProviderDocker

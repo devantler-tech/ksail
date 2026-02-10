@@ -47,7 +47,7 @@ type fakeFactory struct{}
 func (fakeFactory) Create(
 	_ context.Context,
 	_ *v1alpha1.Cluster,
-) (clusterprovisioner.ClusterProvisioner, any, error) {
+) (clusterprovisioner.Provisioner, any, error) {
 	cfg := &v1alpha4.Cluster{Name: "test"}
 
 	return &fakeProvisioner{}, cfg, nil
@@ -246,7 +246,7 @@ func TestCreate_EnabledCertManager_PrintsInstallStage(t *testing.T) {
 	setupMockRegistryBackend(t)
 
 	// Override cluster provisioner factory to use fake provisioner
-	restoreFactory := clusterpkg.SetClusterProvisionerFactoryForTests(fakeFactory{})
+	restoreFactory := clusterpkg.SetProvisionerFactoryForTests(fakeFactory{})
 	defer restoreFactory()
 
 	fake := &fakeInstaller{}
@@ -289,7 +289,7 @@ func TestCreate_DefaultCertManager_DoesNotInstall(t *testing.T) {
 	setupMockRegistryBackend(t)
 
 	// Override cluster provisioner factory to use fake provisioner
-	restoreFactory := clusterpkg.SetClusterProvisionerFactoryForTests(fakeFactory{})
+	restoreFactory := clusterpkg.SetProvisionerFactoryForTests(fakeFactory{})
 	defer restoreFactory()
 
 	factoryCalled := false
@@ -334,7 +334,7 @@ func setupGitOpsTestMocks(
 	ensureCalled := false
 
 	// Override cluster provisioner factory to use fake provisioner
-	t.Cleanup(clusterpkg.SetClusterProvisionerFactoryForTests(fakeFactory{}))
+	t.Cleanup(clusterpkg.SetProvisionerFactoryForTests(fakeFactory{}))
 
 	// Set up the appropriate installer and ensure mocks based on the GitOps engine
 	switch engine {
@@ -488,7 +488,7 @@ spec:
 	)
 
 	// Override cluster provisioner factory to use fake provisioner
-	restoreFactory := clusterpkg.SetClusterProvisionerFactoryForTests(fakeFactory{})
+	restoreFactory := clusterpkg.SetProvisionerFactoryForTests(fakeFactory{})
 	defer restoreFactory()
 
 	fake := &fakeInstaller{}
@@ -530,7 +530,7 @@ func TestCreate_DefaultCSI_DoesNotInstall(t *testing.T) {
 	setupMockRegistryBackend(t)
 
 	// Override cluster provisioner factory to use fake provisioner
-	restoreFactory := clusterpkg.SetClusterProvisionerFactoryForTests(fakeFactory{})
+	restoreFactory := clusterpkg.SetProvisionerFactoryForTests(fakeFactory{})
 	defer restoreFactory()
 
 	cmd := clusterpkg.NewCreateCmd(newTestRuntimeContainer(t))
@@ -561,7 +561,7 @@ func TestCreate_Minimal_PrintsOnlyClusterLifecycle(t *testing.T) {
 	setupMockRegistryBackend(t)
 
 	// Override cluster provisioner factory to use fake provisioner
-	restoreFactory := clusterpkg.SetClusterProvisionerFactoryForTests(fakeFactory{})
+	restoreFactory := clusterpkg.SetProvisionerFactoryForTests(fakeFactory{})
 	defer restoreFactory()
 
 	cmd := clusterpkg.NewCreateCmd(newTestRuntimeContainer(t))
@@ -614,7 +614,7 @@ spec:
 	)
 
 	// Override cluster provisioner factory to use fake provisioner
-	restoreFactory := clusterpkg.SetClusterProvisionerFactoryForTests(fakeFactory{})
+	restoreFactory := clusterpkg.SetProvisionerFactoryForTests(fakeFactory{})
 	defer restoreFactory()
 
 	setupMockRegistryBackend(t)
@@ -709,9 +709,9 @@ func TestShouldPushOCIArtifact_NoGitOpsEngineShouldNotPush(t *testing.T) {
 
 // Ensure fake types satisfy interfaces at compile time.
 var (
-	_ clusterprovisioner.ClusterProvisioner = (*fakeProvisioner)(nil)
-	_ clusterprovisioner.Factory            = (*fakeFactory)(nil)
-	_ installer.Installer                   = (*fakeInstaller)(nil)
+	_ clusterprovisioner.Provisioner = (*fakeProvisioner)(nil)
+	_ clusterprovisioner.Factory     = (*fakeFactory)(nil)
+	_ installer.Installer            = (*fakeInstaller)(nil)
 )
 
 func TestSetupK3dCSI_DisablesCSI(t *testing.T) {

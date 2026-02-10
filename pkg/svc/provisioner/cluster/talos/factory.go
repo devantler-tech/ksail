@@ -21,7 +21,7 @@ var ErrUnsupportedProvider = clustererr.ErrUnsupportedProvider
 // ErrMissingHetznerToken is returned when the Hetzner API token is not set.
 var ErrMissingHetznerToken = errors.New("hetzner API token not set")
 
-// CreateProvisioner creates a TalosProvisioner from a pre-loaded configuration.
+// CreateProvisioner creates a Provisioner from a pre-loaded configuration.
 // The Talos config should be loaded via the configmanager before calling this function,
 // allowing any in-memory modifications (e.g., CNI patches, mirror registries) to be preserved.
 //
@@ -40,7 +40,7 @@ func CreateProvisioner(
 	opts v1alpha1.OptionsTalos,
 	hetznerOpts v1alpha1.OptionsHetzner,
 	skipCNIChecks bool,
-) (*TalosProvisioner, error) {
+) (*Provisioner, error) {
 	// Validate or default the provider
 	if providerType == "" {
 		providerType = v1alpha1.ProviderDocker
@@ -65,7 +65,7 @@ func CreateProvisioner(
 	}
 
 	// Create provisioner with loaded configs and options
-	provisioner := NewTalosProvisioner(talosConfigs, options)
+	provisioner := NewProvisioner(talosConfigs, options)
 
 	// Configure the infrastructure provider
 	var infraProvider provider.Provider

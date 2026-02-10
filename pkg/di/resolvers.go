@@ -21,9 +21,9 @@ func ResolveTimer(injector Injector) (timer.Timer, error) {
 	return tmr, nil
 }
 
-// ResolveClusterProvisionerFactory retrieves the cluster provisioner factory dependency
+// ResolveProvisionerFactory retrieves the cluster provisioner factory dependency
 // from the injector with consistent error handling.
-func ResolveClusterProvisionerFactory(
+func ResolveProvisionerFactory(
 	injector Injector,
 ) (clusterprovisioner.Factory, error) {
 	factory, err := do.Invoke[clusterprovisioner.Factory](injector)

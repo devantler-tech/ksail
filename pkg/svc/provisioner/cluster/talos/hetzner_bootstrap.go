@@ -23,7 +23,7 @@ import (
 // bootstrapHetznerCluster bootstraps the etcd cluster on the first control-plane node.
 //
 //nolint:funlen // Bootstrap sequence is inherently complex but logically coherent
-func (p *TalosProvisioner) bootstrapHetznerCluster(
+func (p *Provisioner) bootstrapHetznerCluster(
 	ctx context.Context,
 	bootstrapNode *hcloud.Server,
 	configBundle *bundle.Bundle,
@@ -127,7 +127,7 @@ func (p *TalosProvisioner) bootstrapHetznerCluster(
 }
 
 // saveHetznerKubeconfig fetches and saves the kubeconfig from a Hetzner control-plane node.
-func (p *TalosProvisioner) saveHetznerKubeconfig(
+func (p *Provisioner) saveHetznerKubeconfig(
 	ctx context.Context,
 	controlPlaneNode *hcloud.Server,
 	configBundle *bundle.Bundle,
@@ -195,7 +195,7 @@ func newHetznerClusterWithEndpoint(
 //   - Without CNI: PreBootSequence + K8sComponentsReadiness checks only
 //
 // This ensures the cluster is actually usable when creation returns.
-func (p *TalosProvisioner) waitForHetznerClusterReady(
+func (p *Provisioner) waitForHetznerClusterReady(
 	ctx context.Context,
 	clusterName string,
 	controlPlaneServers []*hcloud.Server,
@@ -231,7 +231,7 @@ func (p *TalosProvisioner) waitForHetznerClusterReady(
 // waitForHetznerClusterReadyAfterStart waits for a Hetzner cluster to be ready after starting.
 // This is similar to waitForHetznerClusterReady but loads the TalosConfig from disk
 // instead of from the config bundle (which is not available during start operations).
-func (p *TalosProvisioner) waitForHetznerClusterReadyAfterStart(
+func (p *Provisioner) waitForHetznerClusterReadyAfterStart(
 	ctx context.Context,
 	clusterName string,
 ) error {
@@ -279,7 +279,7 @@ func (p *TalosProvisioner) waitForHetznerClusterReadyAfterStart(
 
 // discoverHetznerServers lists nodes for a cluster and classifies them by role,
 // returning separate slices of control-plane and worker servers.
-func (p *TalosProvisioner) discoverHetznerServers(
+func (p *Provisioner) discoverHetznerServers(
 	ctx context.Context,
 	clusterName string,
 ) ([]*hcloud.Server, []*hcloud.Server, error) {
@@ -326,7 +326,7 @@ func (p *TalosProvisioner) discoverHetznerServers(
 // runHetznerClusterChecks runs CNI-aware readiness checks on a Hetzner cluster.
 // It selects the appropriate checks based on CNI configuration, logs progress,
 // and waits for all checks to pass.
-func (p *TalosProvisioner) runHetznerClusterChecks(
+func (p *Provisioner) runHetznerClusterChecks(
 	ctx context.Context,
 	clusterAccess *access.Adapter,
 ) error {

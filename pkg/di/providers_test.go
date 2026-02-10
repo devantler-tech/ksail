@@ -31,13 +31,13 @@ func TestNewRuntime_ProvidesTimer(t *testing.T) {
 	require.NoError(t, err, "expected invoke to succeed")
 }
 
-func TestNewRuntime_ProvidesClusterProvisionerFactory(t *testing.T) {
+func TestNewRuntime_ProvidesProvisionerFactory(t *testing.T) {
 	t.Parallel()
 
 	rt := di.NewRuntime()
 
 	err := rt.Invoke(func(injector di.Injector) error {
-		factory, resolveErr := di.ResolveClusterProvisionerFactory(injector)
+		factory, resolveErr := di.ResolveProvisionerFactory(injector)
 		require.NoError(t, resolveErr, "expected factory to be resolved")
 		require.NotNil(t, factory, "expected factory to be non-nil")
 

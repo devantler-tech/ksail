@@ -13,7 +13,7 @@ import (
 func NewRuntime() *Runtime {
 	return New(
 		provideTimer,
-		provideClusterProvisionerFactory,
+		provideProvisionerFactory,
 	)
 }
 
@@ -26,8 +26,8 @@ func provideTimer(i Injector) error {
 	return nil
 }
 
-// provideClusterProvisionerFactory registers the cluster provisioner factory dependency.
-func provideClusterProvisionerFactory(i Injector) error {
+// provideProvisionerFactory registers the cluster provisioner factory dependency.
+func provideProvisionerFactory(i Injector) error {
 	do.Provide(i, func(Injector) (clusterprovisioner.Factory, error) {
 		return clusterprovisioner.DefaultFactory{}, nil
 	})

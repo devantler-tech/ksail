@@ -15,7 +15,7 @@ import (
 // scaleHetznerByRole adjusts the number of Hetzner servers for the given role.
 // Scale-up: creates new servers, waits for Talos API, applies config.
 // Scale-down: removes etcd members (for control-plane) then deletes servers (highest-index first).
-func (p *TalosProvisioner) scaleHetznerByRole(
+func (p *Provisioner) scaleHetznerByRole(
 	ctx context.Context,
 	clusterName, role string,
 	delta int,
@@ -33,7 +33,7 @@ func (p *TalosProvisioner) scaleHetznerByRole(
 // to the newly created servers.
 //
 //nolint:funlen // Sequential steps for server creation with retry logic
-func (p *TalosProvisioner) addHetznerNodes(
+func (p *Provisioner) addHetznerNodes(
 	ctx context.Context,
 	clusterName, role string,
 	count int,
@@ -104,7 +104,7 @@ func (p *TalosProvisioner) addHetznerNodes(
 }
 
 // configureNewHetznerNodes waits for Talos API on new servers and applies config.
-func (p *TalosProvisioner) configureNewHetznerNodes(
+func (p *Provisioner) configureNewHetznerNodes(
 	ctx context.Context,
 	servers []*hcloud.Server,
 	role string,
@@ -143,7 +143,7 @@ func (p *TalosProvisioner) configureNewHetznerNodes(
 
 // removeHetznerNodes removes Hetzner servers for a given role (highest-index first).
 // For control-plane nodes, etcd membership is cleaned up before each removal.
-func (p *TalosProvisioner) removeHetznerNodes(
+func (p *Provisioner) removeHetznerNodes(
 	ctx context.Context,
 	clusterName, role string,
 	count int,
@@ -188,7 +188,7 @@ func (p *TalosProvisioner) removeHetznerNodes(
 }
 
 // listHetznerNodesByRole returns servers for a cluster filtered by role, sorted by name.
-func (p *TalosProvisioner) listHetznerNodesByRole(
+func (p *Provisioner) listHetznerNodesByRole(
 	ctx context.Context,
 	hzProvider *hetzner.Provider,
 	clusterName, role string,
@@ -245,7 +245,7 @@ func nextHetznerNodeIndex(servers []*hcloud.Server, clusterName, role string) in
 }
 
 // deleteHetznerServer deletes a single Hetzner Cloud server.
-func (p *TalosProvisioner) deleteHetznerServer(
+func (p *Provisioner) deleteHetznerServer(
 	ctx context.Context,
 	hzProvider *hetzner.Provider,
 	server *hcloud.Server,
@@ -261,7 +261,7 @@ func (p *TalosProvisioner) deleteHetznerServer(
 }
 
 // hetznerProvider extracts the Hetzner provider from the infra provider.
-func (p *TalosProvisioner) hetznerProvider() (*hetzner.Provider, error) {
+func (p *Provisioner) hetznerProvider() (*hetzner.Provider, error) {
 	hzProvider, ok := p.infraProvider.(*hetzner.Provider)
 	if !ok {
 		return nil, fmt.Errorf("%w: got %T", ErrHetznerProviderRequired, p.infraProvider)
@@ -271,7 +271,7 @@ func (p *TalosProvisioner) hetznerProvider() (*hetzner.Provider, error) {
 }
 
 // hetznerServerType returns the server type for a given role.
-func (p *TalosProvisioner) hetznerServerType(role string) string {
+func (p *Provisioner) hetznerServerType(role string) string {
 	if p.hetznerOpts == nil {
 		return ""
 	}
@@ -284,7 +284,7 @@ func (p *TalosProvisioner) hetznerServerType(role string) string {
 }
 
 // hetznerRetryOpts builds retry options from Hetzner configuration.
-func (p *TalosProvisioner) hetznerRetryOpts() hetzner.ServerRetryOpts {
+func (p *Provisioner) hetznerRetryOpts() hetzner.ServerRetryOpts {
 	opts := hetzner.ServerRetryOpts{
 		LogWriter: p.logWriter,
 	}
