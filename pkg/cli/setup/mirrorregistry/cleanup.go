@@ -6,8 +6,8 @@ import (
 	"fmt"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	dockerhelpers "github.com/devantler-tech/ksail/v5/pkg/cli/helpers/docker"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers/flags"
+	dockerhelpers "github.com/devantler-tech/ksail/v5/pkg/cli/dockerutil"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/flags"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup/localregistry"
 	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"

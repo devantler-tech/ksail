@@ -1,4 +1,4 @@
-package cmd_test
+package chat_test
 
 import (
 	"strings"
@@ -6,7 +6,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/cmd"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/cmd/chat"
 	chatui "github.com/devantler-tech/ksail/v5/pkg/cli/ui/chat"
 	"github.com/devantler-tech/ksail/v5/pkg/toolgen"
 	copilot "github.com/github/copilot-sdk/go"
@@ -81,7 +81,7 @@ func runPlanModeTestCase(t *testing.T, testCase planModeTestCase) {
 	toolCalled := false
 	testTool := createTestTool(&toolCalled)
 
-	wrappedTools := cmd.WrapToolsWithPermissionAndModeMetadata(
+	wrappedTools := chat.WrapToolsWithPermissionAndModeMetadata(
 		[]copilot.Tool{testTool}, eventChan, agentModeRef, nil,
 	)
 
@@ -129,7 +129,7 @@ func TestPlanModeToggle(t *testing.T) {
 		},
 	}
 
-	wrappedTools := cmd.WrapToolsWithPermissionAndModeMetadata(
+	wrappedTools := chat.WrapToolsWithPermissionAndModeMetadata(
 		[]copilot.Tool{testTool}, eventChan, agentModeRef, nil,
 	)
 	wrappedTool := wrappedTools[0]
@@ -186,7 +186,7 @@ func TestPlanModeBlocksMutableTools(t *testing.T) {
 		},
 	}
 
-	wrappedTools := cmd.WrapToolsWithPermissionAndModeMetadata(
+	wrappedTools := chat.WrapToolsWithPermissionAndModeMetadata(
 		[]copilot.Tool{mutableTool}, eventChan, agentModeRef, nil,
 	)
 
@@ -279,7 +279,7 @@ func TestWriteToolSendsPermissionRequest(t *testing.T) {
 	writeTool := createTestWriteTool("test_write_tool", &toolCalled)
 	metadata := createToolMetadata("test_write_tool", true)
 
-	wrappedTools := cmd.WrapToolsWithPermissionAndModeMetadata(
+	wrappedTools := chat.WrapToolsWithPermissionAndModeMetadata(
 		[]copilot.Tool{writeTool}, eventChan, agentModeRef, metadata,
 	)
 
@@ -317,7 +317,7 @@ func TestWriteToolDeniedPermission(t *testing.T) {
 	writeTool := createTestWriteTool("test_write_tool2", &toolCalled)
 	metadata := createToolMetadata("test_write_tool2", true)
 
-	wrappedTools := cmd.WrapToolsWithPermissionAndModeMetadata(
+	wrappedTools := chat.WrapToolsWithPermissionAndModeMetadata(
 		[]copilot.Tool{writeTool}, eventChan, agentModeRef, metadata,
 	)
 
@@ -383,7 +383,7 @@ func TestReadToolSkipsPermission(t *testing.T) {
 		},
 	}
 
-	wrappedTools := cmd.WrapToolsWithPermissionAndModeMetadata(
+	wrappedTools := chat.WrapToolsWithPermissionAndModeMetadata(
 		[]copilot.Tool{readTool}, eventChan, agentModeRef, metadata,
 	)
 

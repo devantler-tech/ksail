@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers/docker"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/dockerutil"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup/localregistry"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup/mirrorregistry"
@@ -37,7 +37,7 @@ var (
 	//nolint:gochecknoglobals // dependency injection for tests
 	clusterProvisionerFactoryOverride clusterprovisioner.Factory
 	//nolint:gochecknoglobals // dependency injection for tests
-	dockerClientInvoker = docker.WithDockerClient
+	dockerClientInvoker = dockerutil.WithDockerClient
 	//nolint:gochecknoglobals // dependency injection for tests
 	localRegistryServiceFactoryMu sync.RWMutex
 	//nolint:gochecknoglobals // dependency injection for tests

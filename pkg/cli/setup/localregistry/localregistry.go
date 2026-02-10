@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers/docker"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/dockerutil"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup"
 	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
@@ -45,7 +45,7 @@ type Dependencies struct {
 func DefaultDependencies() Dependencies {
 	return Dependencies{
 		ServiceFactory: registry.NewService,
-		DockerInvoker:  docker.WithDockerClient,
+		DockerInvoker:  dockerutil.WithDockerClient,
 	}
 }
 

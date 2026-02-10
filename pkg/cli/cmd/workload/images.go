@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers/flags"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/flags"
 	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
 	configmanagerinterface "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager"
 	configmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail"

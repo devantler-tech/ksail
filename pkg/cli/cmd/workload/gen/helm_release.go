@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers/flags"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/flags"
 	"github.com/devantler-tech/ksail/v5/pkg/di"
 	yamlgenerator "github.com/devantler-tech/ksail/v5/pkg/fsutil/generator/yaml"
 	"github.com/devantler-tech/ksail/v5/pkg/notify"

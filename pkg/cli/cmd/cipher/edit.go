@@ -13,7 +13,7 @@ import (
 	"strings"
 
 	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers/editor"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/editor"
 	"github.com/devantler-tech/ksail/v5/pkg/notify"
 	"github.com/getsops/sops/v3"
 	"github.com/getsops/sops/v3/aes"

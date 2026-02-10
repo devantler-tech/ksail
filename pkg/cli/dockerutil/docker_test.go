@@ -1,4 +1,4 @@
-package docker_test
+package dockerutil_test
 
 import (
 	"bytes"
@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers/docker"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/dockerutil"
 	dockerpkg "github.com/devantler-tech/ksail/v5/pkg/client/docker"
 	"github.com/docker/docker/client"
 	"github.com/gkampitakis/go-snaps/snaps"
@@ -32,7 +32,7 @@ func TestWithDockerClientInstance_Success(t *testing.T) {
 	cmd := &cobra.Command{}
 	cmd.SetOut(&buf)
 
-	err := docker.WithDockerClientInstance(
+	err := dockerutil.WithDockerClientInstance(
 		cmd,
 		mockClient,
 		func(_ client.APIClient) error { return nil },
@@ -52,7 +52,7 @@ func TestWithDockerClientInstance_OperationError(t *testing.T) {
 	cmd := &cobra.Command{}
 	cmd.SetOut(&buf)
 
-	err := docker.WithDockerClientInstance(
+	err := dockerutil.WithDockerClientInstance(
 		cmd,
 		mockClient,
 		func(_ client.APIClient) error {
@@ -74,7 +74,7 @@ func TestWithDockerClientInstance_CloseError(t *testing.T) {
 	cmd := &cobra.Command{}
 	cmd.SetOut(&buf)
 
-	err := docker.WithDockerClientInstance(
+	err := dockerutil.WithDockerClientInstance(
 		cmd,
 		mockClient,
 		func(_ client.APIClient) error { return nil },
@@ -96,7 +96,7 @@ func TestWithDockerClientInstance_BothErrors(t *testing.T) {
 	cmd := &cobra.Command{}
 	cmd.SetOut(&buf)
 
-	err := docker.WithDockerClientInstance(
+	err := dockerutil.WithDockerClientInstance(
 		cmd,
 		mockClient,
 		func(_ client.APIClient) error {
@@ -122,7 +122,7 @@ func TestWithDockerClientInstance_ClientPassedToOperation(t *testing.T) {
 
 	var receivedVersion string
 
-	err := docker.WithDockerClientInstance(cmd, mockClient, func(c client.APIClient) error {
+	err := dockerutil.WithDockerClientInstance(cmd, mockClient, func(c client.APIClient) error {
 		receivedVersion = c.ClientVersion()
 
 		return nil

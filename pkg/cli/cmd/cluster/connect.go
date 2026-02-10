@@ -4,8 +4,8 @@ import (
 	"fmt"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers/editor"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers/kubeconfig"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/editor"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/kubeconfig"
 	"github.com/devantler-tech/ksail/v5/pkg/client/k9s"
 	"github.com/devantler-tech/ksail/v5/pkg/di"
 	configmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager"

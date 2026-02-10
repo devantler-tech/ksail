@@ -3,10 +3,12 @@ package cmd
 import (
 	"fmt"
 
+	"github.com/devantler-tech/ksail/v5/pkg/cli/cmd/chat"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cipher"
 	cluster "github.com/devantler-tech/ksail/v5/pkg/cli/cmd/cluster"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/cmd/mcp"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/cmd/workload"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers/flags"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/flags"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/asciiart"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/ui/errorhandler"
 	"github.com/devantler-tech/ksail/v5/pkg/di"
@@ -39,8 +41,8 @@ func NewRootCmd(version, commit, date string) *cobra.Command {
 	cmd.AddCommand(cluster.NewClusterCmd(runtimeContainer))
 	cmd.AddCommand(workload.NewWorkloadCmd(runtimeContainer))
 	cmd.AddCommand(cipher.NewCipherCmd(runtimeContainer))
-	cmd.AddCommand(NewChatCmd(runtimeContainer))
-	cmd.AddCommand(NewMCPCmd(runtimeContainer))
+	cmd.AddCommand(chat.NewChatCmd(runtimeContainer))
+	cmd.AddCommand(mcp.NewMCPCmd(runtimeContainer))
 
 	return cmd
 }
