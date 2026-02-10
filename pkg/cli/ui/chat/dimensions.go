@@ -78,7 +78,7 @@ func (m *Model) pickerModalExtraHeight() int {
 	// Calculate content lines: title + visible items
 	contentLines := 1 + visibleCount
 	if isScrollable {
-		contentLines += modalPadding // Add space for scroll indicators
+		contentLines += scrollIndicatorLines // Add space for scroll indicators
 	}
 
 	// Apply minimum height constraint
