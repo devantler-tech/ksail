@@ -24,7 +24,7 @@ func (s *Scaffolder) generateTalosConfig(output string, force bool) error {
 	// This is required for secure TLS communication between metrics-server and kubelets.
 	enableKubeletCertRotation := s.KSailConfig.Spec.Cluster.MetricsServer == v1alpha1.MetricsServerEnabled
 
-	config := &talosgenerator.TalosConfig{
+	config := &talosgenerator.Config{
 		PatchesDir:                TalosConfigDir,
 		MirrorRegistries:          s.MirrorRegistries,
 		WorkerNodes:               workers,

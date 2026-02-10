@@ -43,7 +43,7 @@ func assertFileEquals(t *testing.T, path string, expected string) {
 func TestGenerate(t *testing.T) {
 	t.Parallel()
 
-	gen := generator.NewKustomizationGenerator()
+	gen := generator.NewGenerator()
 
 	createCluster := func(_ string) *types.Kustomization {
 		return &types.Kustomization{}

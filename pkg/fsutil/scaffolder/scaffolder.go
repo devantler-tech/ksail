@@ -47,7 +47,7 @@ type Scaffolder struct {
 	KSailYAMLGenerator     generator.Generator[v1alpha1.Cluster, yamlgenerator.Options]
 	KindGenerator          generator.Generator[*v1alpha4.Cluster, yamlgenerator.Options]
 	K3dGenerator           generator.Generator[*k3dv1alpha5.SimpleConfig, yamlgenerator.Options]
-	TalosGenerator         *talosgenerator.TalosGenerator
+	TalosGenerator         *talosgenerator.Generator
 	KustomizationGenerator generator.Generator[*ktypes.Kustomization, yamlgenerator.Options]
 	Writer                 io.Writer
 	MirrorRegistries       []string // Format: "name=upstream" (e.g., "docker.io=https://registry-1.docker.io")
@@ -56,11 +56,11 @@ type Scaffolder struct {
 
 // NewScaffolder creates a new Scaffolder instance with the provided KSail cluster configuration.
 func NewScaffolder(cfg v1alpha1.Cluster, writer io.Writer, mirrorRegistries []string) *Scaffolder {
-	ksailGenerator := yamlgenerator.NewYAMLGenerator[v1alpha1.Cluster]()
-	kindGenerator := kindgenerator.NewKindGenerator()
-	k3dGenerator := k3dgenerator.NewK3dGenerator()
-	talosGen := talosgenerator.NewTalosGenerator()
-	kustomizationGenerator := kustomizationgenerator.NewKustomizationGenerator()
+	ksailGenerator := yamlgenerator.NewGenerator[v1alpha1.Cluster]()
+	kindGenerator := kindgenerator.NewGenerator()
+	k3dGenerator := k3dgenerator.NewGenerator()
+	talosGen := talosgenerator.NewGenerator()
+	kustomizationGenerator := kustomizationgenerator.NewGenerator()
 
 	return &Scaffolder{
 		KSailConfig:            cfg,

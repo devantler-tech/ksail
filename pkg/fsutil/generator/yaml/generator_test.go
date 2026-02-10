@@ -47,7 +47,7 @@ func assertFileEquals(t *testing.T, dir string, path string, expected string) {
 func TestGenerate(t *testing.T) {
 	t.Parallel()
 
-	gen := yamlgenerator.NewYAMLGenerator[map[string]any]()
+	gen := yamlgenerator.NewGenerator[map[string]any]()
 
 	createCluster := func(name string) map[string]any {
 		return map[string]any{"name": name}
@@ -142,7 +142,7 @@ func runStandardGeneratorTests[T any](
 func TestGenerateWithComplexModel(t *testing.T) {
 	t.Parallel()
 
-	gen := yamlgenerator.NewYAMLGenerator[map[string]any]()
+	gen := yamlgenerator.NewGenerator[map[string]any]()
 
 	// Test with complex nested structure
 	complexModel := map[string]any{
@@ -185,7 +185,7 @@ func TestGenerateWithComplexModel(t *testing.T) {
 func TestGenerateWithEmptyModel(t *testing.T) {
 	t.Parallel()
 
-	gen := yamlgenerator.NewYAMLGenerator[map[string]any]()
+	gen := yamlgenerator.NewGenerator[map[string]any]()
 
 	// Test with empty model
 	emptyModel := map[string]any{}
@@ -204,7 +204,7 @@ func TestGenerateWithEmptyModel(t *testing.T) {
 func TestGenerateWithOutputPath(t *testing.T) {
 	t.Parallel()
 
-	gen := yamlgenerator.NewYAMLGenerator[map[string]any]()
+	gen := yamlgenerator.NewGenerator[map[string]any]()
 	tempDir := t.TempDir()
 
 	model := map[string]any{
@@ -234,7 +234,7 @@ func TestGenerateWithOutputPath(t *testing.T) {
 func TestGenerateWithInvalidOutputDirectory(t *testing.T) {
 	t.Parallel()
 
-	gen := yamlgenerator.NewYAMLGenerator[map[string]any]()
+	gen := yamlgenerator.NewGenerator[map[string]any]()
 
 	model := map[string]any{
 		"test": "value",

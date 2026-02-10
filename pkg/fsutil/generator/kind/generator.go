@@ -9,22 +9,22 @@ import (
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
 
-// KindGenerator generates a kind Cluster YAML.
-type KindGenerator struct {
+// Generator generates a kind Cluster YAML.
+type Generator struct {
 	Marshaller marshaller.Marshaller[*v1alpha4.Cluster]
 }
 
-// NewKindGenerator creates and returns a new KindGenerator instance.
-func NewKindGenerator() *KindGenerator {
+// NewGenerator creates and returns a new Generator instance.
+func NewGenerator() *Generator {
 	m := marshaller.NewYAMLMarshaller[*v1alpha4.Cluster]()
 
-	return &KindGenerator{
+	return &Generator{
 		Marshaller: m,
 	}
 }
 
 // Generate creates a kind cluster YAML configuration and writes it to the specified output.
-func (g *KindGenerator) Generate(
+func (g *Generator) Generate(
 	cfg *v1alpha4.Cluster,
 	opts yamlgenerator.Options,
 ) (string, error) {

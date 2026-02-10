@@ -43,8 +43,8 @@ const KubeletServingCertApproverManifestURL = "https://raw.githubusercontent.com
 // ErrConfigRequired is returned when a nil config is provided.
 var ErrConfigRequired = errors.New("talos config is required")
 
-// TalosConfig represents the Talos scaffolding configuration.
-type TalosConfig struct {
+// Config represents the Talos scaffolding configuration.
+type Config struct {
 	// PatchesDir is the root directory for Talos patches.
 	PatchesDir string
 	// MirrorRegistries contains mirror registry specifications in "host=upstream" format.
@@ -67,19 +67,19 @@ type TalosConfig struct {
 	ClusterName string
 }
 
-// TalosGenerator generates the Talos directory structure.
-type TalosGenerator struct{}
+// Generator generates the Talos directory structure.
+type Generator struct{}
 
-// NewTalosGenerator creates a new TalosGenerator.
-func NewTalosGenerator() *TalosGenerator {
-	return &TalosGenerator{}
+// NewGenerator creates a new Generator.
+func NewGenerator() *Generator {
+	return &Generator{}
 }
 
 // Generate creates the Talos patches directory structure.
 // The model parameter contains the patches directory path.
 // Returns the generated directory path and any error encountered.
-func (g *TalosGenerator) Generate(
-	model *TalosConfig,
+func (g *Generator) Generate(
+	model *Config,
 	opts yamlgenerator.Options,
 ) (string, error) {
 	if model == nil {
@@ -117,8 +117,8 @@ func (g *TalosGenerator) Generate(
 }
 
 // getDirectoriesWithPatches returns a set of subdirectory names that will have patches generated.
-func (g *TalosGenerator) getDirectoriesWithPatches(
-	model *TalosConfig,
+func (g *Generator) getDirectoriesWithPatches(
+	model *Config,
 ) map[string]bool {
 	dirs := make(map[string]bool)
 
@@ -153,9 +153,9 @@ func (g *TalosGenerator) getDirectoriesWithPatches(
 // generateConditionalPatches generates optional patches based on the configuration.
 //
 //nolint:cyclop // Sequential conditional patch generation - each condition is independent and simple.
-func (g *TalosGenerator) generateConditionalPatches(
+func (g *Generator) generateConditionalPatches(
 	rootPath string,
-	model *TalosConfig,
+	model *Config,
 	force bool,
 ) error {
 	// Generate mirror registries patch if configured
@@ -210,7 +210,7 @@ func (g *TalosGenerator) generateConditionalPatches(
 
 // createSubdirectories creates the Talos patches subdirectories.
 // Only creates .gitkeep files in directories that won't have patches generated.
-func (g *TalosGenerator) createSubdirectories(
+func (g *Generator) createSubdirectories(
 	rootPath string,
 	dirsWithPatches map[string]bool,
 	force bool,
@@ -252,7 +252,7 @@ func (g *TalosGenerator) createSubdirectories(
 }
 
 // generateMirrorRegistriesPatch creates a Talos patch file for registry mirrors.
-func (g *TalosGenerator) generateMirrorRegistriesPatch(
+func (g *Generator) generateMirrorRegistriesPatch(
 	rootPath string,
 	mirrorRegistries []string,
 	force bool,
@@ -324,7 +324,7 @@ func generateMirrorPatchYAML(specs []registry.MirrorSpec) string {
 
 // generateAllowSchedulingPatch creates a Talos patch file to allow scheduling on control-plane nodes.
 // This is required for single-node clusters or clusters with only control-plane nodes.
-func (g *TalosGenerator) generateAllowSchedulingPatch(
+func (g *Generator) generateAllowSchedulingPatch(
 	rootPath string,
 	force bool,
 ) error {
@@ -352,7 +352,7 @@ func (g *TalosGenerator) generateAllowSchedulingPatch(
 // This is required when using an alternative CNI like Cilium.
 // The patch sets cluster.network.cni.name to "none" as per Talos documentation:
 // https://docs.siderolabs.com/kubernetes-guides/cni/deploying-cilium
-func (g *TalosGenerator) generateDisableCNIPatch(
+func (g *Generator) generateDisableCNIPatch(
 	rootPath string,
 	force bool,
 ) error {
@@ -382,7 +382,7 @@ func (g *TalosGenerator) generateDisableCNIPatch(
 // This is required for secure metrics-server communication using TLS.
 // The patch sets machine.kubelet.extraArgs.rotate-server-certificates to "true" as per Talos documentation:
 // https://www.talos.dev/v1.9/kubernetes-guides/configuration/deploy-metrics-server/
-func (g *TalosGenerator) generateKubeletCertRotationPatch(
+func (g *Generator) generateKubeletCertRotationPatch(
 	rootPath string,
 	force bool,
 ) error {
@@ -416,7 +416,7 @@ func (g *TalosGenerator) generateKubeletCertRotationPatch(
 //
 // This patch adds cluster.extraManifests with the kubelet-serving-cert-approver manifest URL.
 // See: https://docs.siderolabs.com/kubernetes-guides/monitoring-and-observability/deploy-metrics-server/
-func (g *TalosGenerator) generateKubeletCSRApproverPatch(
+func (g *Generator) generateKubeletCSRApproverPatch(
 	rootPath string,
 	force bool,
 ) error {
@@ -447,7 +447,7 @@ func (g *TalosGenerator) generateKubeletCSRApproverPatch(
 // Note: The cluster name is expected to be pre-validated as DNS-1123 compliant
 // (lowercase alphanumeric and hyphens only), which makes direct template
 // construction safe from injection attacks.
-func (g *TalosGenerator) generateClusterNamePatch(
+func (g *Generator) generateClusterNamePatch(
 	rootPath string,
 	clusterName string,
 	force bool,

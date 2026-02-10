@@ -11,21 +11,21 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestNewTalosGenerator(t *testing.T) {
+func TestNewGenerator(t *testing.T) {
 	t.Parallel()
 
-	gen := talosgenerator.NewTalosGenerator()
+	gen := talosgenerator.NewGenerator()
 	require.NotNil(t, gen)
 }
 
-func TestTalosGenerator_Generate_CreatesDirectoryStructure(t *testing.T) {
+func TestGenerator_Generate_CreatesDirectoryStructure(t *testing.T) {
 	t.Parallel()
 
 	tempDir := t.TempDir()
-	gen := talosgenerator.NewTalosGenerator()
+	gen := talosgenerator.NewGenerator()
 
 	// With workers > 0 and no other patches, all dirs should have .gitkeep
-	config := &talosgenerator.TalosConfig{
+	config := &talosgenerator.Config{
 		PatchesDir:  "talos",
 		WorkerNodes: 1, // Prevents allow-scheduling patch from being generated
 	}
@@ -51,10 +51,10 @@ func TestTalosGenerator_Generate_CreatesDirectoryStructure(t *testing.T) {
 	}
 }
 
-func TestTalosGenerator_Generate_NilConfig(t *testing.T) {
+func TestGenerator_Generate_NilConfig(t *testing.T) {
 	t.Parallel()
 
-	gen := talosgenerator.NewTalosGenerator()
+	gen := talosgenerator.NewGenerator()
 	opts := yamlgenerator.Options{
 		Output: t.TempDir(),
 	}
@@ -65,13 +65,13 @@ func TestTalosGenerator_Generate_NilConfig(t *testing.T) {
 	assert.Contains(t, err.Error(), "config is required")
 }
 
-func TestTalosGenerator_Generate_DefaultPatchesDir(t *testing.T) {
+func TestGenerator_Generate_DefaultPatchesDir(t *testing.T) {
 	t.Parallel()
 
 	tempDir := t.TempDir()
-	gen := talosgenerator.NewTalosGenerator()
+	gen := talosgenerator.NewGenerator()
 
-	config := &talosgenerator.TalosConfig{
+	config := &talosgenerator.Config{
 		PatchesDir:  "", // Empty should default to "talos"
 		WorkerNodes: 1,  // Prevents allow-scheduling patch
 	}
@@ -88,13 +88,13 @@ func TestTalosGenerator_Generate_DefaultPatchesDir(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestTalosGenerator_Generate_CustomPatchesDir(t *testing.T) {
+func TestGenerator_Generate_CustomPatchesDir(t *testing.T) {
 	t.Parallel()
 
 	tempDir := t.TempDir()
-	gen := talosgenerator.NewTalosGenerator()
+	gen := talosgenerator.NewGenerator()
 
-	config := &talosgenerator.TalosConfig{
+	config := &talosgenerator.Config{
 		PatchesDir:  "custom-patches",
 		WorkerNodes: 1, // Prevents allow-scheduling patch
 	}
@@ -112,14 +112,14 @@ func TestTalosGenerator_Generate_CustomPatchesDir(t *testing.T) {
 }
 
 //nolint:paralleltest // t.Chdir cannot be used with t.Parallel
-func TestTalosGenerator_Generate_DefaultOutputDir(t *testing.T) {
+func TestGenerator_Generate_DefaultOutputDir(t *testing.T) {
 	// Create a temporary directory and change to it
 	tempDir := t.TempDir()
 	t.Chdir(tempDir)
 
-	gen := talosgenerator.NewTalosGenerator()
+	gen := talosgenerator.NewGenerator()
 
-	config := &talosgenerator.TalosConfig{
+	config := &talosgenerator.Config{
 		PatchesDir:  "talos",
 		WorkerNodes: 1, // Prevents allow-scheduling patch
 	}
@@ -136,11 +136,11 @@ func TestTalosGenerator_Generate_DefaultOutputDir(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestTalosGenerator_Generate_SkipsExistingWithoutForce(t *testing.T) {
+func TestGenerator_Generate_SkipsExistingWithoutForce(t *testing.T) {
 	t.Parallel()
 
 	tempDir := t.TempDir()
-	gen := talosgenerator.NewTalosGenerator()
+	gen := talosgenerator.NewGenerator()
 
 	// Create an existing .gitkeep with custom content
 	clusterDir := filepath.Join(tempDir, "talos", "cluster")
@@ -151,7 +151,7 @@ func TestTalosGenerator_Generate_SkipsExistingWithoutForce(t *testing.T) {
 	err = os.WriteFile(gitkeepPath, []byte("existing content"), 0o600)
 	require.NoError(t, err)
 
-	config := &talosgenerator.TalosConfig{
+	config := &talosgenerator.Config{
 		PatchesDir:  "talos",
 		WorkerNodes: 1, // Prevents allow-scheduling patch, so .gitkeep should be preserved
 	}
@@ -170,11 +170,11 @@ func TestTalosGenerator_Generate_SkipsExistingWithoutForce(t *testing.T) {
 	assert.Equal(t, "existing content", string(content))
 }
 
-func TestTalosGenerator_Generate_OverwritesWithForce(t *testing.T) {
+func TestGenerator_Generate_OverwritesWithForce(t *testing.T) {
 	t.Parallel()
 
 	tempDir := t.TempDir()
-	gen := talosgenerator.NewTalosGenerator()
+	gen := talosgenerator.NewGenerator()
 
 	// Create an existing .gitkeep with custom content
 	clusterDir := filepath.Join(tempDir, "talos", "cluster")
@@ -185,7 +185,7 @@ func TestTalosGenerator_Generate_OverwritesWithForce(t *testing.T) {
 	err = os.WriteFile(gitkeepPath, []byte("existing content"), 0o600)
 	require.NoError(t, err)
 
-	config := &talosgenerator.TalosConfig{
+	config := &talosgenerator.Config{
 		PatchesDir:  "talos",
 		WorkerNodes: 1, // Prevents allow-scheduling patch, so .gitkeep should be written
 	}
@@ -204,13 +204,13 @@ func TestTalosGenerator_Generate_OverwritesWithForce(t *testing.T) {
 	assert.Empty(t, string(content))
 }
 
-func TestTalosGenerator_Generate_DisableDefaultCNI(t *testing.T) {
+func TestGenerator_Generate_DisableDefaultCNI(t *testing.T) {
 	t.Parallel()
 
 	tempDir := t.TempDir()
-	gen := talosgenerator.NewTalosGenerator()
+	gen := talosgenerator.NewGenerator()
 
-	config := &talosgenerator.TalosConfig{
+	config := &talosgenerator.Config{
 		PatchesDir:        "talos",
 		DisableDefaultCNI: true,
 		WorkerNodes:       1, // Prevents allow-scheduling patch
@@ -244,13 +244,13 @@ func TestTalosGenerator_Generate_DisableDefaultCNI(t *testing.T) {
 	require.NoError(t, err, "expected .gitkeep in workers/")
 }
 
-func TestTalosGenerator_Generate_NoDisableCNIPatchWhenFalse(t *testing.T) {
+func TestGenerator_Generate_NoDisableCNIPatchWhenFalse(t *testing.T) {
 	t.Parallel()
 
 	tempDir := t.TempDir()
-	gen := talosgenerator.NewTalosGenerator()
+	gen := talosgenerator.NewGenerator()
 
-	config := &talosgenerator.TalosConfig{
+	config := &talosgenerator.Config{
 		PatchesDir:        "talos",
 		DisableDefaultCNI: false,
 		WorkerNodes:       1, // Prevents allow-scheduling patch
@@ -273,13 +273,13 @@ func TestTalosGenerator_Generate_NoDisableCNIPatchWhenFalse(t *testing.T) {
 	require.NoError(t, err, "expected .gitkeep in cluster/ when no patches generated")
 }
 
-func TestTalosGenerator_Generate_AllowSchedulingOnControlPlanes(t *testing.T) {
+func TestGenerator_Generate_AllowSchedulingOnControlPlanes(t *testing.T) {
 	t.Parallel()
 
 	tempDir := t.TempDir()
-	gen := talosgenerator.NewTalosGenerator()
+	gen := talosgenerator.NewGenerator()
 
-	config := &talosgenerator.TalosConfig{
+	config := &talosgenerator.Config{
 		PatchesDir:  "talos",
 		WorkerNodes: 0, // Zero workers triggers allow-scheduling patch
 	}
@@ -305,13 +305,13 @@ func TestTalosGenerator_Generate_AllowSchedulingOnControlPlanes(t *testing.T) {
 	assert.True(t, os.IsNotExist(err), "expected .gitkeep to not exist when patches are generated")
 }
 
-func TestTalosGenerator_Generate_MirrorRegistries(t *testing.T) {
+func TestGenerator_Generate_MirrorRegistries(t *testing.T) {
 	t.Parallel()
 
 	tempDir := t.TempDir()
-	gen := talosgenerator.NewTalosGenerator()
+	gen := talosgenerator.NewGenerator()
 
-	config := &talosgenerator.TalosConfig{
+	config := &talosgenerator.Config{
 		PatchesDir:  "talos",
 		WorkerNodes: 1,
 		MirrorRegistries: []string{
@@ -345,13 +345,13 @@ func TestTalosGenerator_Generate_MirrorRegistries(t *testing.T) {
 	assert.True(t, os.IsNotExist(err), "expected .gitkeep to not exist when patches are generated")
 }
 
-func TestTalosGenerator_Generate_EmptyMirrorRegistries(t *testing.T) {
+func TestGenerator_Generate_EmptyMirrorRegistries(t *testing.T) {
 	t.Parallel()
 
 	tempDir := t.TempDir()
-	gen := talosgenerator.NewTalosGenerator()
+	gen := talosgenerator.NewGenerator()
 
-	config := &talosgenerator.TalosConfig{
+	config := &talosgenerator.Config{
 		PatchesDir:       "talos",
 		WorkerNodes:      1,
 		MirrorRegistries: []string{}, // Empty array should not create patch
@@ -369,13 +369,13 @@ func TestTalosGenerator_Generate_EmptyMirrorRegistries(t *testing.T) {
 	assert.True(t, os.IsNotExist(err), "expected mirror-registries.yaml to not exist")
 }
 
-func TestTalosGenerator_Generate_KubeletCertRotation(t *testing.T) {
+func TestGenerator_Generate_KubeletCertRotation(t *testing.T) {
 	t.Parallel()
 
 	tempDir := t.TempDir()
-	gen := talosgenerator.NewTalosGenerator()
+	gen := talosgenerator.NewGenerator()
 
-	config := &talosgenerator.TalosConfig{
+	config := &talosgenerator.Config{
 		PatchesDir:                "talos",
 		WorkerNodes:               1,
 		EnableKubeletCertRotation: true,
@@ -407,13 +407,13 @@ func TestTalosGenerator_Generate_KubeletCertRotation(t *testing.T) {
 	assert.Contains(t, string(csrContent), talosgenerator.KubeletServingCertApproverManifestURL)
 }
 
-func TestTalosGenerator_Generate_NoKubeletCertRotationPatchWhenFalse(t *testing.T) {
+func TestGenerator_Generate_NoKubeletCertRotationPatchWhenFalse(t *testing.T) {
 	t.Parallel()
 
 	tempDir := t.TempDir()
-	gen := talosgenerator.NewTalosGenerator()
+	gen := talosgenerator.NewGenerator()
 
-	config := &talosgenerator.TalosConfig{
+	config := &talosgenerator.Config{
 		PatchesDir:                "talos",
 		WorkerNodes:               1,
 		EnableKubeletCertRotation: false,
@@ -436,13 +436,13 @@ func TestTalosGenerator_Generate_NoKubeletCertRotationPatchWhenFalse(t *testing.
 	assert.True(t, os.IsNotExist(err), "expected kubelet-csr-approver.yaml to not exist")
 }
 
-func TestTalosGenerator_Generate_ClusterName(t *testing.T) {
+func TestGenerator_Generate_ClusterName(t *testing.T) {
 	t.Parallel()
 
 	tempDir := t.TempDir()
-	gen := talosgenerator.NewTalosGenerator()
+	gen := talosgenerator.NewGenerator()
 
-	config := &talosgenerator.TalosConfig{
+	config := &talosgenerator.Config{
 		PatchesDir:  "talos",
 		WorkerNodes: 1,
 		ClusterName: "my-custom-cluster",
@@ -463,13 +463,13 @@ func TestTalosGenerator_Generate_ClusterName(t *testing.T) {
 	assert.Contains(t, string(content), "clusterName: my-custom-cluster")
 }
 
-func TestTalosGenerator_Generate_NoClusterNamePatchWhenEmpty(t *testing.T) {
+func TestGenerator_Generate_NoClusterNamePatchWhenEmpty(t *testing.T) {
 	t.Parallel()
 
 	tempDir := t.TempDir()
-	gen := talosgenerator.NewTalosGenerator()
+	gen := talosgenerator.NewGenerator()
 
-	config := &talosgenerator.TalosConfig{
+	config := &talosgenerator.Config{
 		PatchesDir:  "talos",
 		WorkerNodes: 1,
 		ClusterName: "", // Empty should not create patch
@@ -487,13 +487,13 @@ func TestTalosGenerator_Generate_NoClusterNamePatchWhenEmpty(t *testing.T) {
 	assert.True(t, os.IsNotExist(err), "expected cluster-name.yaml to not exist")
 }
 
-func TestTalosGenerator_Generate_AllPatchesCombined(t *testing.T) {
+func TestGenerator_Generate_AllPatchesCombined(t *testing.T) {
 	t.Parallel()
 
 	tempDir := t.TempDir()
-	gen := talosgenerator.NewTalosGenerator()
+	gen := talosgenerator.NewGenerator()
 
-	config := &talosgenerator.TalosConfig{
+	config := &talosgenerator.Config{
 		PatchesDir:                "talos",
 		WorkerNodes:               0, // Triggers allow-scheduling patch
 		MirrorRegistries:          []string{"docker.io=https://registry-1.docker.io"},
@@ -548,11 +548,11 @@ func TestTalosGenerator_Generate_AllPatchesCombined(t *testing.T) {
 	require.NoError(t, err, "expected .gitkeep in workers/")
 }
 
-func TestTalosGenerator_Generate_SkipsExistingPatchesWithoutForce(t *testing.T) {
+func TestGenerator_Generate_SkipsExistingPatchesWithoutForce(t *testing.T) {
 	t.Parallel()
 
 	tempDir := t.TempDir()
-	gen := talosgenerator.NewTalosGenerator()
+	gen := talosgenerator.NewGenerator()
 
 	// Create an existing patch with custom content
 	clusterDir := filepath.Join(tempDir, "talos", "cluster")
@@ -563,7 +563,7 @@ func TestTalosGenerator_Generate_SkipsExistingPatchesWithoutForce(t *testing.T) 
 	err = os.WriteFile(patchPath, []byte("existing content"), 0o600)
 	require.NoError(t, err)
 
-	config := &talosgenerator.TalosConfig{
+	config := &talosgenerator.Config{
 		PatchesDir:        "talos",
 		WorkerNodes:       1,
 		DisableDefaultCNI: true,
@@ -583,11 +583,11 @@ func TestTalosGenerator_Generate_SkipsExistingPatchesWithoutForce(t *testing.T) 
 	assert.Equal(t, "existing content", string(content))
 }
 
-func TestTalosGenerator_Generate_OverwritesExistingPatchesWithForce(t *testing.T) {
+func TestGenerator_Generate_OverwritesExistingPatchesWithForce(t *testing.T) {
 	t.Parallel()
 
 	tempDir := t.TempDir()
-	gen := talosgenerator.NewTalosGenerator()
+	gen := talosgenerator.NewGenerator()
 
 	// Create an existing patch with custom content
 	clusterDir := filepath.Join(tempDir, "talos", "cluster")
@@ -598,7 +598,7 @@ func TestTalosGenerator_Generate_OverwritesExistingPatchesWithForce(t *testing.T
 	err = os.WriteFile(patchPath, []byte("existing content"), 0o600)
 	require.NoError(t, err)
 
-	config := &talosgenerator.TalosConfig{
+	config := &talosgenerator.Config{
 		PatchesDir:        "talos",
 		WorkerNodes:       1,
 		DisableDefaultCNI: true,

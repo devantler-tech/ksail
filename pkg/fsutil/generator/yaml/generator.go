@@ -13,22 +13,22 @@ type Options struct {
 	Force  bool   // Force overwrite existing files
 }
 
-// YAMLGenerator emits YAML for an arbitrary model using a provided marshaller.
-type YAMLGenerator[T any] struct {
+// Generator emits YAML for an arbitrary model using a provided marshaller.
+type Generator[T any] struct {
 	Marshaller marshaller.Marshaller[T]
 }
 
-// NewYAMLGenerator creates a new YAMLGenerator instance.
-func NewYAMLGenerator[T any]() *YAMLGenerator[T] {
+// NewGenerator creates a new Generator instance.
+func NewGenerator[T any]() *Generator[T] {
 	m := marshaller.NewYAMLMarshaller[T]()
 
-	return &YAMLGenerator[T]{
+	return &Generator[T]{
 		Marshaller: m,
 	}
 }
 
 // Generate converts a model to YAML string format and optionally writes to file.
-func (g *YAMLGenerator[T]) Generate(model T, opts Options) (string, error) {
+func (g *Generator[T]) Generate(model T, opts Options) (string, error) {
 	// marshal model
 	modelYAML, err := g.Marshaller.Marshal(model)
 	if err != nil {

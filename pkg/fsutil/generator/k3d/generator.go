@@ -9,22 +9,22 @@ import (
 	v1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 )
 
-// K3dGenerator generates a k3d SimpleConfig YAML.
-type K3dGenerator struct {
+// Generator generates a k3d SimpleConfig YAML.
+type Generator struct {
 	Marshaller marshaller.Marshaller[*v1alpha5.SimpleConfig]
 }
 
-// NewK3dGenerator creates and returns a new K3dGenerator instance.
-func NewK3dGenerator() *K3dGenerator {
+// NewGenerator creates and returns a new Generator instance.
+func NewGenerator() *Generator {
 	m := marshaller.NewYAMLMarshaller[*v1alpha5.SimpleConfig]()
 
-	return &K3dGenerator{
+	return &Generator{
 		Marshaller: m,
 	}
 }
 
 // Generate creates a k3d cluster YAML configuration and writes it to the specified output.
-func (g *K3dGenerator) Generate(
+func (g *Generator) Generate(
 	cluster *v1alpha5.SimpleConfig,
 	opts yamlgenerator.Options,
 ) (string, error) {

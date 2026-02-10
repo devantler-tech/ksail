@@ -64,7 +64,7 @@ func (m marshalFailer[T]) UnmarshalString(_ string, _ *T) error {
 func TestGenerate(t *testing.T) {
 	t.Parallel()
 
-	gen := generator.NewK3dGenerator()
+	gen := generator.NewGenerator()
 
 	createCluster := func(_ string) *v1alpha5.SimpleConfig {
 		return &v1alpha5.SimpleConfig{}
@@ -185,7 +185,7 @@ func assertPortMappingConfig(t *testing.T, result string) {
 func TestGenerateWithComplexConfig(t *testing.T) {
 	t.Parallel()
 
-	gen := generator.NewK3dGenerator()
+	gen := generator.NewGenerator()
 
 	cluster := &v1alpha5.SimpleConfig{
 		Servers: 3,
@@ -218,7 +218,7 @@ func TestGenerateWithComplexConfig(t *testing.T) {
 func TestGenerateWithPortMappings(t *testing.T) {
 	t.Parallel()
 
-	gen := generator.NewK3dGenerator()
+	gen := generator.NewGenerator()
 
 	cluster := &v1alpha5.SimpleConfig{
 		Ports: []v1alpha5.PortWithNodeFilters{
@@ -253,7 +253,7 @@ func TestGenerateWithFailingMarshaller(t *testing.T) {
 	t.Parallel()
 
 	// Create generator with failing marshaller
-	gen := &generator.K3dGenerator{
+	gen := &generator.Generator{
 		Marshaller: &marshalFailer[*v1alpha5.SimpleConfig]{},
 	}
 
@@ -270,7 +270,7 @@ func TestGenerateWithFailingMarshaller(t *testing.T) {
 func TestGenerateWithInvalidOutputDirectory(t *testing.T) {
 	t.Parallel()
 
-	gen := generator.NewK3dGenerator()
+	gen := generator.NewGenerator()
 	cluster := &v1alpha5.SimpleConfig{}
 
 	// Use invalid directory path

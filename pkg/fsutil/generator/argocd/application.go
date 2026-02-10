@@ -82,7 +82,7 @@ type ApplicationGenerator struct {
 // NewApplicationGenerator creates a new ApplicationGenerator.
 func NewApplicationGenerator() *ApplicationGenerator {
 	return &ApplicationGenerator{
-		yamlGenerator: yamlgenerator.NewYAMLGenerator[Application](),
+		yamlGenerator: yamlgenerator.NewGenerator[Application](),
 	}
 }
 

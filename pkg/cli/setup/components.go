@@ -259,19 +259,18 @@ func NeedsLoadBalancerInstall(clusterCfg *v1alpha1.Cluster) bool {
 }
 
 // helmClientSetup creates a Helm client and retrieves the install timeout.
-// Returns the Helm client, kubeconfig path, timeout, and any error.
 func helmClientSetup(
 	clusterCfg *v1alpha1.Cluster,
 	factories *InstallerFactories,
-) (*helm.Client, string, time.Duration, error) {
-	helmClient, kubeconfig, err := factories.HelmClientFactory(clusterCfg)
+) (*helm.Client, time.Duration, error) {
+	helmClient, _, err := factories.HelmClientFactory(clusterCfg)
 	if err != nil {
-		return nil, "", 0, fmt.Errorf("failed to create helm client: %w", err)
+		return nil, 0, fmt.Errorf("failed to create helm client: %w", err)
 	}
 
 	timeout := installer.GetInstallTimeout(clusterCfg)
 
-	return helmClient, kubeconfig, timeout, nil
+	return helmClient, timeout, nil
 }
 
 // InstallMetricsServerSilent installs metrics-server silently for parallel execution.
@@ -280,15 +279,13 @@ func InstallMetricsServerSilent(
 	clusterCfg *v1alpha1.Cluster,
 	factories *InstallerFactories,
 ) error {
-	helmClient, kubeconfig, timeout, err := helmClientSetup(clusterCfg, factories)
+	helmClient, timeout, err := helmClientSetup(clusterCfg, factories)
 	if err != nil {
 		return err
 	}
 
 	msInstaller := metricsserverinstaller.NewInstaller(
 		helmClient,
-		kubeconfig,
-		clusterCfg.Spec.Cluster.Connection.Context,
 		timeout,
 	)
 

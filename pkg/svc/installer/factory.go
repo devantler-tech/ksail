@@ -174,7 +174,7 @@ func (f *Factory) addMetricsServerInstaller(
 		(spec.MetricsServer == v1alpha1.MetricsServerDefault &&
 			!spec.Distribution.ProvidesMetricsServerByDefault()) {
 		installers["metrics-server"] = metricsserverinstaller.NewInstaller(
-			f.helmClient, f.kubeconfig, f.kubecontext, f.timeout,
+			f.helmClient, f.timeout,
 		)
 	}
 }

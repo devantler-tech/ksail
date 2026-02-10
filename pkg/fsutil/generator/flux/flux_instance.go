@@ -78,7 +78,7 @@ type InstanceGenerator struct {
 // NewInstanceGenerator creates a new InstanceGenerator.
 func NewInstanceGenerator() *InstanceGenerator {
 	return &InstanceGenerator{
-		yamlGenerator: yamlgenerator.NewYAMLGenerator[Instance](),
+		yamlGenerator: yamlgenerator.NewGenerator[Instance](),
 	}
 }
 

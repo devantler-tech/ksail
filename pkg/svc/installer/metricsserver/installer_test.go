@@ -15,15 +15,11 @@ import (
 func TestNewInstaller(t *testing.T) {
 	t.Parallel()
 
-	kubeconfig := "~/.kube/config"
-	kubeContext := "test-context"
 	timeout := 5 * time.Minute
 
 	client := helm.NewMockInterface(t)
 	installer := metricsserverinstaller.NewInstaller(
 		client,
-		kubeconfig,
-		kubeContext,
 		timeout,
 	)
 
@@ -70,15 +66,11 @@ func newMetricsServerInstallerWithDefaults(
 ) (*metricsserverinstaller.Installer, *helm.MockInterface) {
 	t.Helper()
 
-	kubeconfig := "~/.kube/config"
-	kubeContext := "test-context"
 	timeout := 5 * time.Second
 
 	client := helm.NewMockInterface(t)
 	installer := metricsserverinstaller.NewInstaller(
 		client,
-		kubeconfig,
-		kubeContext,
 		timeout,
 	)
 

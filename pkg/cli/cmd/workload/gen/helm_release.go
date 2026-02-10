@@ -254,7 +254,7 @@ func runHelmReleaseGen(cmd *cobra.Command, args []string) error {
 }
 
 func generateHelmReleaseYAML(helmRelease *helmv2.HelmRelease) (string, error) {
-	generator := yamlgenerator.NewYAMLGenerator[helmv2.HelmRelease]()
+	generator := yamlgenerator.NewGenerator[helmv2.HelmRelease]()
 	opts := yamlgenerator.Options{
 		Output: "",
 		Force:  false,

@@ -10,22 +10,22 @@ import (
 	ktypes "sigs.k8s.io/kustomize/api/types"
 )
 
-// KustomizationGenerator generates a kustomization.yaml.
-type KustomizationGenerator struct {
+// Generator generates a kustomization.yaml.
+type Generator struct {
 	Marshaller marshaller.Marshaller[*ktypes.Kustomization]
 }
 
-// NewKustomizationGenerator creates and returns a new KustomizationGenerator instance.
-func NewKustomizationGenerator() *KustomizationGenerator {
+// NewGenerator creates and returns a new Generator instance.
+func NewGenerator() *Generator {
 	m := marshaller.NewYAMLMarshaller[*ktypes.Kustomization]()
 
-	return &KustomizationGenerator{
+	return &Generator{
 		Marshaller: m,
 	}
 }
 
 // Generate creates a kustomization.yaml file and writes it to the specified output file path.
-func (g *KustomizationGenerator) Generate(
+func (g *Generator) Generate(
 	kustomization *ktypes.Kustomization,
 	opts yamlgenerator.Options,
 ) (string, error) {
