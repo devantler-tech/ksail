@@ -102,16 +102,6 @@ packages:
       pkgname: marshaller
     interfaces:
       Marshaller:
-  github.com/devantler-tech/ksail/v5/pkg/client/argocd:
-    config:
-      recursive: false
-      dir: pkg/client/argocd
-      filename: mocks.go
-      pkgname: argocd
-    interfaces:
-      Installer:
-      Manager:
-      StatusProvider:
   github.com/devantler-tech/ksail/v5/pkg/svc/provisioner/registry:
     config:
       recursive: false

@@ -113,8 +113,8 @@ func runClusterCreationWorkflow(
 	}
 
 	setupK3dMetricsServer(ctx.ClusterCfg, ctx.K3dConfig)
-	SetupK3dCSI(ctx.ClusterCfg, ctx.K3dConfig)
-	SetupK3dLoadBalancer(ctx.ClusterCfg, ctx.K3dConfig)
+	setupK3dCSI(ctx.ClusterCfg, ctx.K3dConfig)
+	setupK3dLoadBalancer(ctx.ClusterCfg, ctx.K3dConfig)
 
 	configureProvisionerFactory(&deps, ctx)
 

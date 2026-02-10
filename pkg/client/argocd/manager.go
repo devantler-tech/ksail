@@ -24,8 +24,6 @@ type ManagerImpl struct {
 	dynamic   dynamic.Interface
 }
 
-var _ Manager = (*ManagerImpl)(nil)
-
 // NewManager creates a manager using provided Kubernetes clients.
 //
 // This is the primary constructor for unit tests.

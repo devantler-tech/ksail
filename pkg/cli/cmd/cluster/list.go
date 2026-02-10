@@ -22,8 +22,8 @@ import (
 // ErrUnsupportedProvider re-exports the shared error for backward compatibility.
 var ErrUnsupportedProvider = clustererr.ErrUnsupportedProvider
 
-// AllDistributions returns all supported distributions.
-func AllDistributions() []v1alpha1.Distribution {
+// allDistributions returns all supported distributions.
+func allDistributions() []v1alpha1.Distribution {
 	return []v1alpha1.Distribution{
 		v1alpha1.DistributionVanilla,
 		v1alpha1.DistributionK3s,
@@ -31,8 +31,8 @@ func AllDistributions() []v1alpha1.Distribution {
 	}
 }
 
-// AllProviders returns all supported providers.
-func AllProviders() []v1alpha1.Provider {
+// allProviders returns all supported providers.
+func allProviders() []v1alpha1.Provider {
 	return []v1alpha1.Provider{
 		v1alpha1.ProviderDocker,
 		v1alpha1.ProviderHetzner,
@@ -156,7 +156,7 @@ func HandleListRunE(
 // resolveProviders returns the list of providers to query based on the filter.
 func resolveProviders(filter v1alpha1.Provider) []v1alpha1.Provider {
 	if filter == "" {
-		return AllProviders()
+		return allProviders()
 	}
 
 	return []v1alpha1.Provider{filter}
@@ -182,7 +182,7 @@ func getProviderClusters(
 func getDockerClusters(ctx context.Context, deps ListDeps) ([]string, error) {
 	var allClusters []string
 
-	for _, dist := range AllDistributions() {
+	for _, dist := range allDistributions() {
 		clusters, err := getDistributionClusters(ctx, deps, dist)
 		if err != nil {
 			// Log and continue - don't fail on one distribution

@@ -1,28 +1,5 @@
 package argocd
 
-import "context"
-
-// Installer installs or ensures Argo CD is present in the cluster.
-//
-// Implementations are expected to be idempotent.
-type Installer interface {
-	Install(ctx context.Context) error
-}
-
-// Manager ensures Argo CD GitOps resources exist and can update reconciliation
-// to a new OCI revision.
-//
-// Implementations are expected to be idempotent.
-type Manager interface {
-	Ensure(ctx context.Context, opts EnsureOptions) error
-	UpdateTargetRevision(ctx context.Context, opts UpdateTargetRevisionOptions) error
-}
-
-// StatusProvider returns a lightweight, user-facing status summary.
-type StatusProvider interface {
-	GetStatus(ctx context.Context) (Status, error)
-}
-
 // EnsureOptions configures how KSail ensures Argo CD resources.
 type EnsureOptions struct {
 	// RepositoryURL is the Argo CD repository URL, typically an OCI repository.
@@ -57,16 +34,4 @@ type UpdateTargetRevisionOptions struct {
 	TargetRevision  string
 	// HardRefresh requests Argo CD to refresh caches when updating revision.
 	HardRefresh bool
-}
-
-// Status is a lightweight user-facing summary of Argo CD state.
-type Status struct {
-	// Engine is a human-friendly engine name, e.g. "ArgoCD".
-	Engine string
-	// Installed indicates whether Argo CD appears installed.
-	Installed bool
-	// ApplicationPresent indicates whether the expected Application exists.
-	ApplicationPresent bool
-	// Message is a short user-facing summary.
-	Message string
 }

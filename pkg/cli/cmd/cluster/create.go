@@ -347,9 +347,8 @@ func setupK3dMetricsServer(clusterCfg *v1alpha1.Cluster, k3dConfig *v1alpha5.Sim
 	)
 }
 
-// SetupK3dCSI configures K3d to disable local-storage when CSI is explicitly disabled.
-// This function is exported for testing purposes.
-func SetupK3dCSI(clusterCfg *v1alpha1.Cluster, k3dConfig *v1alpha5.SimpleConfig) {
+// setupK3dCSI configures K3d to disable local-storage when CSI is explicitly disabled.
+func setupK3dCSI(clusterCfg *v1alpha1.Cluster, k3dConfig *v1alpha5.SimpleConfig) {
 	maybeDisableK3dFeature(
 		clusterCfg, k3dConfig,
 		clusterCfg.Spec.Cluster.CSI == v1alpha1.CSIDisabled,
@@ -357,9 +356,8 @@ func SetupK3dCSI(clusterCfg *v1alpha1.Cluster, k3dConfig *v1alpha5.SimpleConfig)
 	)
 }
 
-// SetupK3dLoadBalancer configures K3d to disable servicelb when LoadBalancer is explicitly disabled.
-// This function is exported for testing purposes.
-func SetupK3dLoadBalancer(clusterCfg *v1alpha1.Cluster, k3dConfig *v1alpha5.SimpleConfig) {
+// setupK3dLoadBalancer configures K3d to disable servicelb when LoadBalancer is explicitly disabled.
+func setupK3dLoadBalancer(clusterCfg *v1alpha1.Cluster, k3dConfig *v1alpha5.SimpleConfig) {
 	maybeDisableK3dFeature(
 		clusterCfg, k3dConfig,
 		clusterCfg.Spec.Cluster.LoadBalancer == v1alpha1.LoadBalancerDisabled,
