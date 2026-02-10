@@ -13,8 +13,8 @@ type mirrorConfigEntry struct {
 	Endpoint []string `yaml:"endpoint"`
 }
 
-// k3dMirrorConfig represents the mirrors section of K3d's registry configuration.
-type k3dMirrorConfig struct {
+// mirrorConfig represents the mirrors section of K3d's registry configuration.
+type mirrorConfig struct {
 	Mirrors map[string]mirrorConfigEntry `yaml:"mirrors"`
 }
 
@@ -30,7 +30,7 @@ func ParseRegistryConfig(raw string) map[string][]string {
 		return result
 	}
 
-	var cfg k3dMirrorConfig
+	var cfg mirrorConfig
 
 	err := yaml.Unmarshal([]byte(trimmed), &cfg)
 	if err != nil {

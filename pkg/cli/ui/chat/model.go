@@ -71,8 +71,8 @@ func (r *AgentModeRef) SetEnabled(enabled bool) {
 	r.enabled = enabled
 }
 
-// chatMessage represents a single message in the chat history.
-type chatMessage struct {
+// message represents a single message in the chat history.
+type message struct {
 	role        string // "user", "assistant", or "tool"
 	content     string
 	rendered    string // markdown-rendered content for assistant messages
@@ -97,7 +97,7 @@ type Model struct {
 	spinner  spinner.Model
 
 	// State
-	messages         []chatMessage
+	messages         []message
 	currentResponse  strings.Builder
 	isStreaming      bool
 	justCompleted    bool // true when a response just finished, shows "Ready" indicator
@@ -233,7 +233,7 @@ func NewWithEventChannel(
 		renderer:         mdRenderer,
 		help:             createHelpModel(),
 		keys:             DefaultKeyMap(),
-		messages:         make([]chatMessage, 0),
+		messages:         make([]message, 0),
 		session:          session,
 		client:           client,
 		sessionConfig:    sessionConfig,
@@ -483,12 +483,12 @@ func (m *Model) handleUserSubmit(msg userSubmitMsg) (tea.Model, tea.Cmd) {
 
 	// Add user message and placeholder assistant message
 	// Store the current mode with the message so it can be displayed in the indicator
-	m.messages = append(m.messages, chatMessage{
+	m.messages = append(m.messages, message{
 		role:      roleUser,
 		content:   msg.content,
 		agentMode: m.agentMode,
 	})
-	m.messages = append(m.messages, chatMessage{
+	m.messages = append(m.messages, message{
 		role:        roleAssistant,
 		content:     "",
 		isStreaming: true,

@@ -258,8 +258,8 @@ func (k *Provisioner) countRunningNodes(
 	return agentCount, serverCount, nil
 }
 
-// k3dNodeInfo holds basic info about a k3d node from JSON output.
-type k3dNodeInfo struct {
+// nodeInfo holds basic info about a k3d node from JSON output.
+type nodeInfo struct {
 	Name string `json:"name"`
 	Role string `json:"role"`
 }
@@ -268,7 +268,7 @@ type k3dNodeInfo struct {
 func (k *Provisioner) listClusterNodes(
 	ctx context.Context,
 	clusterName string,
-) ([]k3dNodeInfo, error) {
+) ([]nodeInfo, error) {
 	// Temporarily redirect os.Stdout to capture K3d's direct writes.
 	// K3d's node list --output json writes to os.Stdout directly,
 	// bypassing Cobra's cmd.OutOrStdout().
@@ -326,7 +326,7 @@ func (k *Provisioner) listClusterNodes(
 }
 
 // parseClusterNodes parses JSON node list output and filters to cluster-specific nodes.
-func parseClusterNodes(output, clusterName string) ([]k3dNodeInfo, error) {
+func parseClusterNodes(output, clusterName string) ([]nodeInfo, error) {
 	if output == "" {
 		return nil, nil
 	}
@@ -345,11 +345,11 @@ func parseClusterNodes(output, clusterName string) ([]k3dNodeInfo, error) {
 	// Filter to nodes belonging to this cluster based on name prefix
 	prefix := "k3d-" + clusterName + "-"
 
-	var nodes []k3dNodeInfo
+	var nodes []nodeInfo
 
 	for _, n := range allNodes {
 		if strings.HasPrefix(strings.TrimPrefix(n.Name, "/"), prefix) {
-			nodes = append(nodes, k3dNodeInfo{
+			nodes = append(nodes, nodeInfo{
 				Name: strings.TrimPrefix(n.Name, "/"),
 				Role: n.Role,
 			})

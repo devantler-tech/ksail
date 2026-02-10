@@ -323,7 +323,7 @@ func (m *Model) startNewSession() error {
 	m.currentSessionID = session.SessionID
 
 	// Clear all state for new session
-	m.messages = []chatMessage{}
+	m.messages = []message{}
 	m.agentMode = true // New chats start in agent mode by default
 	// Update the shared reference so tool handlers see the change
 	if m.agentModeRef != nil {
@@ -396,7 +396,7 @@ func (m *Model) resumeOrCreateSession(metadata *SessionMetadata) bool {
 func (m *Model) loadSessionMessages(metadata *SessionMetadata) {
 	events, err := m.session.GetMessages()
 	if err != nil {
-		m.messages = []chatMessage{}
+		m.messages = []message{}
 	} else {
 		m.messages = m.sessionEventsToMessages(events, metadata)
 	}
@@ -422,13 +422,13 @@ func (m *Model) resetStreamingState() {
 	m.sessionComplete = false
 }
 
-// sessionEventsToMessages converts Copilot SessionEvents to internal chatMessages.
+// sessionEventsToMessages converts Copilot SessionEvents to internal messages.
 // It also restores per-message metadata (like agentMode) from the session metadata.
 func (m *Model) sessionEventsToMessages(
 	events []copilot.SessionEvent,
 	metadata *SessionMetadata,
-) []chatMessage {
-	var messages []chatMessage
+) []message {
+	var messages []message
 
 	userMsgIndex := 0
 
@@ -454,7 +454,7 @@ func (m *Model) sessionEventsToMessages(
 		}
 
 		if content != "" {
-			msg := chatMessage{
+			msg := message{
 				role:    role,
 				content: content,
 			}

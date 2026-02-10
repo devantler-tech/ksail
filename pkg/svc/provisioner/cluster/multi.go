@@ -28,8 +28,8 @@ func NewMultiProvisioner(clusterName string) *MultiProvisioner {
 	return &MultiProvisioner{clusterName: clusterName}
 }
 
-// clusterOperation is a function that operates on a provisioner with a cluster name.
-type clusterOperation func(Provisioner, string) error
+// operation is a function that operates on a provisioner with a cluster name.
+type operation func(Provisioner, string) error
 
 // supportedDistributions returns all supported distributions in priority order.
 func supportedDistributions() []v1alpha1.Distribution {
@@ -115,7 +115,7 @@ func (m *MultiProvisioner) delegateToExisting(
 	ctx context.Context,
 	name string,
 	verb string,
-	operation clusterOperation,
+	operation operation,
 ) error {
 	return m.forExistingCluster(
 		ctx,
@@ -136,7 +136,7 @@ func (m *MultiProvisioner) delegateToExisting(
 func (m *MultiProvisioner) forExistingCluster(
 	ctx context.Context,
 	name string,
-	operation clusterOperation,
+	operation operation,
 ) error {
 	clusterName := name
 	if clusterName == "" {

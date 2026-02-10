@@ -165,7 +165,7 @@ type mirrorConfig struct {
 	Endpoint []string `yaml:"endpoint"`
 }
 
-type k3dMirrorConfig struct {
+type registryMirrors struct {
 	Mirrors map[string]mirrorConfig `yaml:"mirrors"`
 }
 
@@ -194,13 +194,13 @@ func extractRegistriesFromConfig(
 }
 
 // parseMirrorConfig parses the K3d registries.config YAML string.
-func parseMirrorConfig(configStr string) *k3dMirrorConfig {
+func parseMirrorConfig(configStr string) *registryMirrors {
 	trimmed := strings.TrimSpace(configStr)
 	if trimmed == "" {
 		return nil
 	}
 
-	var mirrorCfg k3dMirrorConfig
+	var mirrorCfg registryMirrors
 
 	err := yaml.Unmarshal([]byte(trimmed), &mirrorCfg)
 	if err != nil {

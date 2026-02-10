@@ -371,7 +371,7 @@ func GetMostRecentSession(client *copilot.Client) (*SessionMetadata, error) {
 }
 
 // GenerateSessionName creates a session name from the first user message.
-func GenerateSessionName(messages []chatMessage) string {
+func GenerateSessionName(messages []message) string {
 	for _, msg := range messages {
 		if msg.role == roleUser && msg.content != "" {
 			name := strings.ReplaceAll(msg.content, "\n", " ")

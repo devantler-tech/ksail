@@ -39,15 +39,15 @@ var (
 // stderrCaptureMu protects process-wide stderr redirection from concurrent access.
 var stderrCaptureMu sync.Mutex //nolint:gochecknoglobals // global lock required to coordinate stderr interception
 
-// helmActionConfig defines common configuration fields shared by Install and Upgrade actions.
-type helmActionConfig interface {
+// actionConfig defines common configuration fields shared by Install and Upgrade actions.
+type actionConfig interface {
 	setWaitStrategy(strategy helmv4kube.WaitStrategy)
 	setWaitForJobs(wait bool)
 	setTimeout(timeout time.Duration)
 	setVersion(version string)
 }
 
-// installActionAdapter wraps Install to implement helmActionConfig.
+// installActionAdapter wraps Install to implement actionConfig.
 type installActionAdapter struct{ *helmv4action.Install }
 
 func (a installActionAdapter) setWaitStrategy(s helmv4kube.WaitStrategy) { a.WaitStrategy = s }
@@ -55,7 +55,7 @@ func (a installActionAdapter) setWaitForJobs(w bool)                     { a.Wai
 func (a installActionAdapter) setTimeout(t time.Duration)                { a.Timeout = t }
 func (a installActionAdapter) setVersion(v string)                       { a.Version = v }
 
-// upgradeActionAdapter wraps Upgrade to implement helmActionConfig.
+// upgradeActionAdapter wraps Upgrade to implement actionConfig.
 type upgradeActionAdapter struct{ *helmv4action.Upgrade }
 
 func (a upgradeActionAdapter) setWaitStrategy(s helmv4kube.WaitStrategy) { a.WaitStrategy = s }
@@ -73,7 +73,7 @@ func (a upgradeActionAdapter) setVersion(v string)                       { a.Ver
 //   - Consistent status checking across all resource types
 //
 // See: https://helm.sh/community/hips/hip-0022/
-func applyCommonActionConfig(action helmActionConfig, spec *ChartSpec) {
+func applyCommonActionConfig(action actionConfig, spec *ChartSpec) {
 	if spec.Wait {
 		action.setWaitStrategy(helmv4kube.StatusWatcherStrategy)
 	} else {

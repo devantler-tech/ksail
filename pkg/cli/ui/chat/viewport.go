@@ -53,7 +53,7 @@ func (m *Model) calculateWrapWidth() uint {
 }
 
 // renderMessage renders a single message to the builder.
-func (m *Model) renderMessage(builder *strings.Builder, msg *chatMessage, wrapWidth uint) {
+func (m *Model) renderMessage(builder *strings.Builder, msg *message, wrapWidth uint) {
 	switch msg.role {
 	case roleUser:
 		m.renderUserMessage(builder, msg, wrapWidth)
@@ -67,7 +67,7 @@ func (m *Model) renderMessage(builder *strings.Builder, msg *chatMessage, wrapWi
 }
 
 // renderUserMessage renders a user message.
-func (m *Model) renderUserMessage(builder *strings.Builder, msg *chatMessage, wrapWidth uint) {
+func (m *Model) renderUserMessage(builder *strings.Builder, msg *message, wrapWidth uint) {
 	builder.WriteString("\n")
 	// Add mode indicator: </> for agent, ≡ for plan
 	modeIcon := "</>"
@@ -87,7 +87,7 @@ func (m *Model) renderUserMessage(builder *strings.Builder, msg *chatMessage, wr
 }
 
 // renderAssistantMessage renders an assistant message with interleaved tools.
-func (m *Model) renderAssistantMessage(builder *strings.Builder, msg *chatMessage, wrapWidth uint) {
+func (m *Model) renderAssistantMessage(builder *strings.Builder, msg *message, wrapWidth uint) {
 	builder.WriteString("\n")
 	builder.WriteString(assistantMsgStyle.Render("▶ KSail"))
 
@@ -108,7 +108,7 @@ func (m *Model) renderAssistantMessage(builder *strings.Builder, msg *chatMessag
 }
 
 // getToolsForMessage returns the tools to render for a message.
-func (m *Model) getToolsForMessage(msg *chatMessage) []*toolExecution {
+func (m *Model) getToolsForMessage(msg *message) []*toolExecution {
 	if msg.isStreaming {
 		tools := make([]*toolExecution, 0, len(m.toolOrder))
 		for _, id := range m.toolOrder {
@@ -126,7 +126,7 @@ func (m *Model) getToolsForMessage(msg *chatMessage) []*toolExecution {
 // renderAssistantContent renders assistant text with interleaved tools.
 func (m *Model) renderAssistantContent(
 	builder *strings.Builder,
-	msg *chatMessage,
+	msg *message,
 	tools []*toolExecution,
 	wrapWidth uint,
 ) {
@@ -166,7 +166,7 @@ func (m *Model) renderTextSegment(builder *strings.Builder, text string, wrapWid
 // renderRemainingText renders text after all tools have been rendered.
 func (m *Model) renderRemainingText(
 	builder *strings.Builder,
-	msg *chatMessage,
+	msg *message,
 	content string,
 	lastPos int,
 	wrapWidth uint,
@@ -214,7 +214,7 @@ func (m *Model) writeIndentedContent(builder *strings.Builder, content string) {
 }
 
 // renderLegacyToolOutput renders legacy tool output for backward compatibility.
-func (m *Model) renderLegacyToolOutput(builder *strings.Builder, msg *chatMessage, wrapWidth uint) {
+func (m *Model) renderLegacyToolOutput(builder *strings.Builder, msg *message, wrapWidth uint) {
 	wrapped := wordwrap.WrapString(msg.content, wrapWidth-legacyToolIndent)
 	for line := range strings.SplitSeq(wrapped, "\n") {
 		builder.WriteString(toolOutputStyle.Render("    " + line))

@@ -50,8 +50,8 @@ var (
 	errSessionError     = errors.New("session error")
 )
 
-// chatFlags holds parsed flags for the chat command.
-type chatFlags struct {
+// flags holds parsed flags for the chat command.
+type flags struct {
 	model     string
 	streaming bool
 	timeout   time.Duration
@@ -59,7 +59,7 @@ type chatFlags struct {
 }
 
 // parseChatFlags extracts and resolves chat command flags.
-func parseChatFlags(cmd *cobra.Command) chatFlags {
+func parseChatFlags(cmd *cobra.Command) flags {
 	modelFlag, _ := cmd.Flags().GetString("model")
 	streaming, _ := cmd.Flags().GetBool("streaming")
 	timeout, _ := cmd.Flags().GetDuration("timeout")
@@ -73,7 +73,7 @@ func parseChatFlags(cmd *cobra.Command) chatFlags {
 		}
 	}
 
-	return chatFlags{
+	return flags{
 		model:     model,
 		streaming: streaming,
 		timeout:   timeout,
@@ -213,7 +213,7 @@ func runNonTUIChat(
 	ctx context.Context,
 	client *copilot.Client,
 	sessionConfig *copilot.SessionConfig,
-	flags chatFlags,
+	flags flags,
 	cmd *cobra.Command,
 	writer io.Writer,
 ) error {
