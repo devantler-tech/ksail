@@ -13,7 +13,7 @@ import (
 	"strings"
 
 	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers/editor"
 	"github.com/devantler-tech/ksail/v5/pkg/notify"
 	"github.com/getsops/sops/v3"
 	"github.com/getsops/sops/v3/aes"
@@ -614,7 +614,7 @@ func handleEditRunE(
 	}
 
 	// Set up editor environment variables before edit
-	cleanup := helpers.SetupEditorEnv(editorFlag, "cipher")
+	cleanup := editor.SetupEditorEnv(editorFlag, "cipher")
 	defer cleanup()
 
 	var output []byte

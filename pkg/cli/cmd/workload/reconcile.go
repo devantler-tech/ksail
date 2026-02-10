@@ -8,7 +8,7 @@ import (
 
 	v1alpha1 "github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
+	registryhelpers "github.com/devantler-tech/ksail/v5/pkg/cli/helpers/registry"
 	"github.com/devantler-tech/ksail/v5/pkg/client/argocd"
 	"github.com/devantler-tech/ksail/v5/pkg/client/flux"
 	"github.com/devantler-tech/ksail/v5/pkg/di"
@@ -145,7 +145,7 @@ func autoDetectGitOpsEngine(
 		Writer:  cmd.OutOrStdout(),
 	})
 
-	engine, err := helpers.DetectGitOpsEngine(cmd.Context())
+	engine, err := registryhelpers.DetectGitOpsEngine(cmd.Context())
 	if err != nil {
 		return v1alpha1.GitOpsEngineNone, fmt.Errorf("detect gitops engine: %w", err)
 	}

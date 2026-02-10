@@ -7,7 +7,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers/flags"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup/localregistry"
@@ -291,7 +291,7 @@ func handlePostCreationSetup(
 	}
 
 	factories := getInstallerFactories()
-	outputTimer := helpers.MaybeTimer(cmd, tmr)
+	outputTimer := flags.MaybeTimer(cmd, tmr)
 
 	// OCI artifact push is now handled inside InstallPostCNIComponents after Flux is installed
 	err = setup.InstallPostCNIComponents(
@@ -417,7 +417,7 @@ func importCachedImages(
 	importPath string,
 	tmr timer.Timer,
 ) error {
-	outputTimer := helpers.MaybeTimer(cmd, tmr)
+	outputTimer := flags.MaybeTimer(cmd, tmr)
 
 	notify.WriteMessage(notify.Message{
 		Type:    notify.ActivityType,

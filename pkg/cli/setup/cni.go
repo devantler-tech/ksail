@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers/flags"
 	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
 	"github.com/devantler-tech/ksail/v5/pkg/k8s"
 	"github.com/devantler-tech/ksail/v5/pkg/notify"
@@ -162,7 +162,7 @@ func runCNIInstallation(
 	notify.WriteMessage(notify.Message{
 		Type:    notify.SuccessType,
 		Content: "cni installed",
-		Timer:   helpers.MaybeTimer(cmd, tmr),
+		Timer:   flags.MaybeTimer(cmd, tmr),
 		Writer:  cmd.OutOrStdout(),
 	})
 

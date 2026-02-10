@@ -3,7 +3,7 @@ package talos
 import (
 	_ "embed"
 
-	"github.com/devantler-tech/ksail/v5/pkg/io/imageparser"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/image/parser"
 )
 
 // Embedded Dockerfile containing image references (updated by Dependabot).
@@ -15,7 +15,7 @@ var dockerfile string
 // This ensures Go code stays in sync with Dependabot updates automatically.
 // Panics if the Dockerfile cannot be parsed - this catches embedding/format issues at init time.
 func talosImage() string {
-	return imageparser.ParseImageFromDockerfile(
+	return parser.ParseImageFromDockerfile(
 		dockerfile,
 		`FROM\s+(ghcr\.io/siderolabs/talos:[^\s]+)`,
 		"Talos",

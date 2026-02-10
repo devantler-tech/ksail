@@ -6,7 +6,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers/flags"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup/localregistry"
@@ -85,7 +85,7 @@ func handleUpdateRunE(
 ) error {
 	deps.Timer.Start()
 
-	outputTimer := helpers.MaybeTimer(cmd, deps.Timer)
+	outputTimer := flags.MaybeTimer(cmd, deps.Timer)
 
 	// Load and validate configuration using shared helper
 	ctx, clusterName, err := loadAndValidateClusterConfig(cfgManager, deps)
@@ -460,7 +460,7 @@ func executeRecreateFlow(
 	clusterName string,
 	force bool,
 ) error {
-	outputTimer := helpers.MaybeTimer(cmd, deps.Timer)
+	outputTimer := flags.MaybeTimer(cmd, deps.Timer)
 
 	// Show warning and get confirmation
 	if !confirm.ShouldSkipPrompt(force) {

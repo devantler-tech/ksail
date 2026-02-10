@@ -6,7 +6,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v5/pkg/io/generator"
 	yamlgenerator "github.com/devantler-tech/ksail/v5/pkg/io/generator/yaml"
-	"github.com/devantler-tech/ksail/v5/pkg/io/gitopsdetector"
+	"github.com/devantler-tech/ksail/v5/pkg/svc/detector/gitops"
 )
 
 // Application represents an ArgoCD Application CR for scaffolding.
@@ -90,13 +90,13 @@ func NewApplicationGenerator() *ApplicationGenerator {
 // Generate creates an ArgoCD Application CR manifest.
 func (g *ApplicationGenerator) Generate(opts ApplicationGeneratorOptions) (string, error) {
 	app := Application{
-		APIVersion: gitopsdetector.ArgoCDApplicationAPIVersion,
-		Kind:       gitopsdetector.ArgoCDApplicationKind,
+		APIVersion: gitops.ArgoCDApplicationAPIVersion,
+		Kind:       gitops.ArgoCDApplicationKind,
 		Metadata: ApplicationMetadata{
-			Name:      gitopsdetector.ArgoCDApplicationDefaultName,
-			Namespace: gitopsdetector.ArgoCDNamespace,
+			Name:      gitops.ArgoCDApplicationDefaultName,
+			Namespace: gitops.ArgoCDNamespace,
 			Labels: map[string]string{
-				gitopsdetector.ManagedByLabel: gitopsdetector.ManagedByValue,
+				gitops.ManagedByLabel: gitops.ManagedByValue,
 			},
 		},
 		Spec: ApplicationSpec{

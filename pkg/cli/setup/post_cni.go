@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
+	registryhelpers "github.com/devantler-tech/ksail/v5/pkg/cli/helpers/registry"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
 	"github.com/devantler-tech/ksail/v5/pkg/client/oci"
 	kindconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/configmanager/kind"
@@ -458,10 +458,13 @@ func ensureOCIArtifact(
 	}
 
 	// Resolve registry info
-	registryInfo, err := helpers.ResolveRegistry(ctx, helpers.ResolveRegistryOptions{
-		ClusterConfig: clusterCfg,
-		ClusterName:   clusterName,
-	})
+	registryInfo, err := registryhelpers.ResolveRegistry(
+		ctx,
+		registryhelpers.ResolveRegistryOptions{
+			ClusterConfig: clusterCfg,
+			ClusterName:   clusterName,
+		},
+	)
 	if err != nil {
 		return false, fmt.Errorf("resolve registry: %w", err)
 	}
@@ -487,6 +490,16 @@ func ensureOCIArtifact(
 		return true, nil
 	}
 
+	return pushInitialOCIArtifact(ctx, clusterCfg, clusterName, writer)
+}
+
+// pushInitialOCIArtifact pushes an initial OCI artifact when none exists.
+func pushInitialOCIArtifact(
+	ctx context.Context,
+	clusterCfg *v1alpha1.Cluster,
+	clusterName string,
+	writer io.Writer,
+) (bool, error) {
 	// Artifact doesn't exist, push an empty one
 	notify.WriteMessage(notify.Message{
 		Type:    notify.ActivityType,
@@ -494,7 +507,7 @@ func ensureOCIArtifact(
 		Writer:  writer,
 	})
 
-	result, err := helpers.PushOCIArtifact(ctx, helpers.PushOCIArtifactOptions{
+	result, err := registryhelpers.PushOCIArtifact(ctx, registryhelpers.PushOCIArtifactOptions{
 		ClusterConfig: clusterCfg,
 		ClusterName:   clusterName,
 		SourceDir:     "", // Use default from config
@@ -518,7 +531,7 @@ func ensureOCIArtifact(
 
 // buildArtifactExistsOptions creates options for checking artifact existence.
 func buildArtifactExistsOptions(
-	registryInfo *helpers.RegistryInfo,
+	registryInfo *registryhelpers.Info,
 	clusterCfg *v1alpha1.Cluster,
 ) oci.ArtifactExistsOptions {
 	return oci.ArtifactExistsOptions{
@@ -531,7 +544,7 @@ func buildArtifactExistsOptions(
 	}
 }
 
-func resolveRegistryEndpoint(info *helpers.RegistryInfo) string {
+func resolveRegistryEndpoint(info *registryhelpers.Info) string {
 	if info.Port > 0 {
 		return net.JoinHostPort(info.Host, strconv.Itoa(int(info.Port)))
 	}
@@ -539,7 +552,7 @@ func resolveRegistryEndpoint(info *helpers.RegistryInfo) string {
 	return info.Host
 }
 
-func resolveRepository(info *helpers.RegistryInfo, cfg *v1alpha1.Cluster) string {
+func resolveRepository(info *registryhelpers.Info, cfg *v1alpha1.Cluster) string {
 	if info.Repository != "" {
 		return info.Repository
 	}
@@ -552,7 +565,7 @@ func resolveRepository(info *helpers.RegistryInfo, cfg *v1alpha1.Cluster) string
 	return sourceDir
 }
 
-func resolveTag(info *helpers.RegistryInfo) string {
+func resolveTag(info *registryhelpers.Info) string {
 	if info.Tag != "" {
 		return info.Tag
 	}

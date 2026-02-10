@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/devantler-tech/ksail/v5/pkg/cli/cmd"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers/flags"
 	"github.com/devantler-tech/ksail/v5/pkg/notify"
 	"github.com/devantler-tech/ksail/v5/pkg/timer"
 	"github.com/gkampitakis/go-snaps/snaps"
@@ -91,18 +91,18 @@ func TestNewRootCmdBenchmarkFlagDefaultFalse(t *testing.T) {
 
 	root := cmd.NewRootCmd("test", "test", "test")
 
-	flag := root.PersistentFlags().Lookup(helpers.BenchmarkFlagName)
+	flag := root.PersistentFlags().Lookup(flags.BenchmarkFlagName)
 	if flag == nil {
-		t.Fatalf("expected persistent flag %q to exist", helpers.BenchmarkFlagName)
+		t.Fatalf("expected persistent flag %q to exist", flags.BenchmarkFlagName)
 	}
 
-	got, err := root.PersistentFlags().GetBool(helpers.BenchmarkFlagName)
+	got, err := root.PersistentFlags().GetBool(flags.BenchmarkFlagName)
 	if err != nil {
-		t.Fatalf("expected to read %q flag: %v", helpers.BenchmarkFlagName, err)
+		t.Fatalf("expected to read %q flag: %v", flags.BenchmarkFlagName, err)
 	}
 
 	if got {
-		t.Fatalf("expected %q to default to false", helpers.BenchmarkFlagName)
+		t.Fatalf("expected %q to default to false", flags.BenchmarkFlagName)
 	}
 }
 
@@ -213,7 +213,7 @@ func benchmarkProbeRunE(
 		tmr := timer.New()
 		tmr.Start()
 
-		outputTimer := helpers.MaybeTimer(cmd, tmr)
+		outputTimer := flags.MaybeTimer(cmd, tmr)
 
 		notify.WriteMessage(notify.Message{
 			Type:    msgType,

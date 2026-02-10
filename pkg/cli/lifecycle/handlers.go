@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers/flags"
 	"github.com/devantler-tech/ksail/v5/pkg/di"
 	configmanager "github.com/devantler-tech/ksail/v5/pkg/io/configmanager"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/configmanager/ksail"
@@ -101,7 +101,7 @@ func WrapHandler(
 					tmr.Start()
 				}
 
-				outputTimer := helpers.MaybeTimer(cmd, tmr)
+				outputTimer := flags.MaybeTimer(cmd, tmr)
 
 				_, err := cfgManager.Load(configmanager.LoadOptions{Timer: outputTimer})
 				if err != nil {
@@ -312,7 +312,7 @@ func runWithProvisioner(
 		return fmt.Errorf("%s: %w", config.ErrorMessagePrefix, err)
 	}
 
-	outputTimer := helpers.MaybeTimer(cmd, deps.Timer)
+	outputTimer := flags.MaybeTimer(cmd, deps.Timer)
 
 	notify.WriteMessage(
 		notify.Message{

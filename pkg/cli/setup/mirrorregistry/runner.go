@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers/docker"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/io/configmanager/ksail"
@@ -55,7 +55,7 @@ type DockerClientInvoker = setup.DockerClientInvoker
 // DefaultDockerClientInvoker is the default Docker client invoker.
 //
 //nolint:gochecknoglobals // Provides default implementation with test override capability.
-var DefaultDockerClientInvoker DockerClientInvoker = helpers.WithDockerClient
+var DefaultDockerClientInvoker DockerClientInvoker = docker.WithDockerClient
 
 // RunStage executes the registry stage for the given role.
 func RunStage(

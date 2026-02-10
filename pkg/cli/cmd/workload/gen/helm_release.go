@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers/flags"
 	"github.com/devantler-tech/ksail/v5/pkg/di"
 	yamlgenerator "github.com/devantler-tech/ksail/v5/pkg/io/generator/yaml"
 	"github.com/devantler-tech/ksail/v5/pkg/notify"
@@ -279,7 +279,7 @@ func outputHelmRelease(cmd *cobra.Command, yaml string, tmr timer.Timer) error {
 		return errNotImplemented
 	}
 
-	outputTimer := helpers.MaybeTimer(cmd, tmr)
+	outputTimer := flags.MaybeTimer(cmd, tmr)
 
 	notify.WriteMessage(notify.Message{
 		Type:    notify.SuccessType,

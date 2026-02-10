@@ -6,7 +6,8 @@ import (
 	"fmt"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
+	dockerhelpers "github.com/devantler-tech/ksail/v5/pkg/cli/helpers/docker"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers/flags"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup/localregistry"
 	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
@@ -32,7 +33,7 @@ type CleanupDependencies struct {
 // DefaultCleanupDependencies returns the default cleanup dependencies.
 func DefaultCleanupDependencies() CleanupDependencies {
 	return CleanupDependencies{
-		DockerInvoker:     helpers.WithDockerClient,
+		DockerInvoker:     dockerhelpers.WithDockerClient,
 		LocalRegistryDeps: localregistry.DefaultDependencies(),
 	}
 }
@@ -373,7 +374,7 @@ func displayRegistryCleanupOutputWithTimer(
 		})
 	}
 
-	outputTimer := helpers.MaybeTimer(cmd, tmr)
+	outputTimer := flags.MaybeTimer(cmd, tmr)
 
 	notify.WriteMessage(notify.Message{
 		Type:    notify.SuccessType,
@@ -610,7 +611,7 @@ func executeRegistryCleanup(
 
 	notifyRegistryDeletions(ctx, cmd, registryNames, registryMgr)
 
-	outputTimer := helpers.MaybeTimer(cmd, tmr)
+	outputTimer := flags.MaybeTimer(cmd, tmr)
 
 	notify.WriteMessage(notify.Message{
 		Type:    notify.SuccessType,

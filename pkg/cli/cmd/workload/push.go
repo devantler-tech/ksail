@@ -6,7 +6,7 @@ import (
 
 	v1alpha1 "github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/annotations"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
+	registryhelpers "github.com/devantler-tech/ksail/v5/pkg/cli/helpers/registry"
 	"github.com/devantler-tech/ksail/v5/pkg/client/oci"
 	"github.com/devantler-tech/ksail/v5/pkg/di"
 	configmanager "github.com/devantler-tech/ksail/v5/pkg/io/configmanager/ksail"
@@ -96,7 +96,7 @@ func configurePushFlags(
 	)
 
 	// Bind registry flag to viper for env var support (KSAIL_REGISTRY)
-	_ = viperInstance.BindPFlag(helpers.ViperRegistryKey, cmd.Flags().Lookup("registry"))
+	_ = viperInstance.BindPFlag(registryhelpers.ViperRegistryKey, cmd.Flags().Lookup("registry"))
 }
 
 // runPushCommand executes the push logic with the provided parameters.
@@ -313,7 +313,7 @@ func resolvePushParams(
 	params.GitOpsEngine = resolveGitOpsEngine(cfg)
 
 	// Show success message with source using proper host:port formatting
-	displayURL := helpers.FormatRegistryURL(params.Host, params.Port, params.Repository)
+	displayURL := registryhelpers.FormatRegistryURL(params.Host, params.Port, params.Repository)
 
 	notify.WriteMessage(notify.Message{
 		Type:    notify.SuccessType,
@@ -333,7 +333,7 @@ func detectRegistry(
 	viperInstance *viper.Viper,
 	tmr timer.Timer,
 	outputTimer timer.Timer,
-) (*helpers.RegistryInfo, error) {
+) (*registryhelpers.Info, error) {
 	cmd.Println()
 	notify.WriteMessage(notify.Message{
 		Type:    notify.TitleType,
@@ -351,11 +351,14 @@ func detectRegistry(
 		Writer:  cmd.OutOrStdout(),
 	})
 
-	registryInfo, err := helpers.ResolveRegistry(cmd.Context(), helpers.ResolveRegistryOptions{
-		Viper:         viperInstance,
-		ClusterConfig: cfg,
-		ClusterName:   cfg.Spec.Cluster.Connection.Context,
-	})
+	registryInfo, err := registryhelpers.ResolveRegistry(
+		cmd.Context(),
+		registryhelpers.ResolveRegistryOptions{
+			Viper:         viperInstance,
+			ClusterConfig: cfg,
+			ClusterName:   cfg.Spec.Cluster.Connection.Context,
+		},
+	)
 	if err != nil {
 		return nil, fmt.Errorf("resolve registry: %w", err)
 	}

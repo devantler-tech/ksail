@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers/kubeconfig"
 	argocdgitops "github.com/devantler-tech/ksail/v5/pkg/client/argocd"
 	dockerclient "github.com/devantler-tech/ksail/v5/pkg/client/docker"
 	"github.com/devantler-tech/ksail/v5/pkg/client/helm"
@@ -213,7 +213,7 @@ func DefaultInstallerFactories() *InstallerFactories {
 
 // HelmClientForCluster creates a Helm client configured for the cluster.
 func HelmClientForCluster(clusterCfg *v1alpha1.Cluster) (*helm.Client, string, error) {
-	kubeconfig, err := helpers.GetKubeconfigPathFromConfig(clusterCfg)
+	kubeconfig, err := kubeconfig.GetKubeconfigPathFromConfig(clusterCfg)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to get kubeconfig path: %w", err)
 	}

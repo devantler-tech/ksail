@@ -1,7 +1,8 @@
 package workload
 
 import (
-	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers/iostreams"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers/kubeconfig"
 	"github.com/devantler-tech/ksail/v5/pkg/client/kubectl"
 	"github.com/spf13/cobra"
 )
@@ -12,8 +13,8 @@ type kubectlCommandCreator func(client *kubectl.Client, kubeconfigPath string) *
 // newKubectlCommand creates a kubectl wrapper command using the provided command creator.
 // This reduces duplication across all kubectl-based workload commands.
 func newKubectlCommand(creator kubectlCommandCreator) *cobra.Command {
-	kubeconfigPath := helpers.GetKubeconfigPathSilently()
-	client := kubectl.NewClient(helpers.NewStandardIOStreams())
+	kubeconfigPath := kubeconfig.GetKubeconfigPathSilently()
+	client := kubectl.NewClient(iostreams.NewStandardIOStreams())
 
 	return creator(client, kubeconfigPath)
 }

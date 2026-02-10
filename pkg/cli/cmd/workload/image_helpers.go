@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers"
+	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers/flags"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
 	configmanagerinterface "github.com/devantler-tech/ksail/v5/pkg/io/configmanager"
 	configmanager "github.com/devantler-tech/ksail/v5/pkg/io/configmanager/ksail"
@@ -42,7 +42,7 @@ func initImageCommandContext(
 	tmr := timer.New()
 	tmr.Start()
 
-	outputTimer := helpers.MaybeTimer(cmd, tmr)
+	outputTimer := flags.MaybeTimer(cmd, tmr)
 
 	clusterCfg, err := cfgManager.Load(
 		configmanagerinterface.LoadOptions{Silent: true, SkipValidation: true},
