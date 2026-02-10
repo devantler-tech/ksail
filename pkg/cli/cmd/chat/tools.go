@@ -28,15 +28,22 @@ func getToolArgs(event copilot.SessionEvent) string {
 	}
 
 	args, ok := event.Data.Arguments.(map[string]any)
-	if !ok {
+	if !ok || len(args) == 0 {
 		return ""
 	}
 
-	parts := make([]string, 0, len(args))
-	for k, v := range args {
-		parts = append(parts, fmt.Sprintf("%s=%v", k, v))
+	// Sort keys for consistent output (Go map iteration order is non-deterministic)
+	keys := make([]string, 0, len(args))
+	for k := range args {
+		keys = append(keys, k)
 	}
 
+	slices.Sort(keys)
+
+	parts := make([]string, 0, len(keys))
+	for _, k := range keys {
+		parts = append(parts, fmt.Sprintf("%s=%v", k, args[k]))
+	}
 	if len(parts) == 0 {
 		return ""
 	}
