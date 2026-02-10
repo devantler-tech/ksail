@@ -44,6 +44,7 @@ func getToolArgs(event copilot.SessionEvent) string {
 	for _, k := range keys {
 		parts = append(parts, fmt.Sprintf("%s=%v", k, args[k]))
 	}
+
 	if len(parts) == 0 {
 		return ""
 	}
