@@ -84,7 +84,9 @@ func installChartWithRetry(
 		timer := time.NewTimer(delay)
 		select {
 		case <-ctx.Done():
-			timer.Stop()
+			if !timer.Stop() {
+				<-timer.C
+			}
 
 			return fmt.Errorf("chart install retry cancelled: %w", ctx.Err())
 		case <-timer.C:

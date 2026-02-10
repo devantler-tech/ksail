@@ -81,7 +81,7 @@ func (m *Model) renderPermissionModal() string {
 		return ""
 	}
 
-	modalWidth := m.width - modalPadding
+	modalWidth := max(m.width-modalPadding, 1)
 	contentWidth := max(modalWidth-contentPadding, 1)
 	clipStyle := lipgloss.NewStyle().MaxWidth(contentWidth).Inline(true)
 	warningStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(ansiYellow))

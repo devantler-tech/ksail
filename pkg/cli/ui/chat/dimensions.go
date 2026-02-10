@@ -94,7 +94,7 @@ func (m *Model) pickerModalExtraHeight() int {
 // updateDimensions updates component dimensions based on terminal size.
 func (m *Model) updateDimensions() {
 	// Account for borders and padding
-	contentWidth := m.width - viewportPadding
+	contentWidth := max(m.width-viewportPadding, 1)
 
 	// Calculate available height: total - header - input - footer - borders - modal
 	// Each bordered box adds 2 lines (top + bottom border)
@@ -105,13 +105,14 @@ func (m *Model) updateDimensions() {
 	)
 
 	oldWidth := m.viewport.Width
-	m.viewport.Width = contentWidth - viewportInner
+	innerWidth := max(contentWidth-viewportInner, 1)
+	m.viewport.Width = innerWidth
 	m.viewport.Height = viewportHeight
-	m.textarea.SetWidth(contentWidth - viewportInner)
+	m.textarea.SetWidth(innerWidth)
 
 	// If viewport width changed, recreate the renderer and re-render completed messages
 	if oldWidth != m.viewport.Width {
-		m.renderer = createRenderer(m.viewport.Width - rendererMinWidth)
+		m.renderer = createRenderer(max(m.viewport.Width-rendererMinWidth, 1))
 		m.reRenderCompletedMessages()
 		m.updateViewportContent()
 	}

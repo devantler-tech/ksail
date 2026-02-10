@@ -83,7 +83,7 @@ func createHelpModel() help.Model {
 
 // renderHelpOverlay renders the full help overlay modal matching the input area size.
 func (m *Model) renderHelpOverlay() string {
-	modalWidth := m.width - modalPadding
+	modalWidth := max(m.width-modalPadding, 1)
 	contentWidth := max(modalWidth-contentPadding, 1)
 	clipStyle := lipgloss.NewStyle().MaxWidth(contentWidth).Inline(true)
 

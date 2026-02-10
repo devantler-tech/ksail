@@ -374,7 +374,9 @@ func (m *Model) View() string {
 
 	// Header, chat viewport, input/modal, and footer
 	sections = append(sections, m.renderHeader())
-	sections = append(sections, viewportStyle.Width(m.width-modalPadding).Render(m.viewport.View()))
+	sections = append(sections,
+		viewportStyle.Width(max(m.width-modalPadding, 1)).Render(m.viewport.View()),
+	)
 	sections = append(sections, m.renderInputOrModal())
 	sections = append(sections, m.renderFooter())
 

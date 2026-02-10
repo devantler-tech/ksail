@@ -168,7 +168,7 @@ func (m *Model) switchModel(newModelID string) (tea.Model, tea.Cmd) {
 
 // renderModelPickerModal renders the model picker as an inline modal section.
 func (m *Model) renderModelPickerModal() string {
-	modalWidth := m.width - modalPadding
+	modalWidth := max(m.width-modalPadding, 1)
 	contentWidth := max(modalWidth-contentPadding, 1)
 	clipStyle := lipgloss.NewStyle().MaxWidth(contentWidth).Inline(true)
 

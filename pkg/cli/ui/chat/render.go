@@ -33,7 +33,7 @@ func (m *Model) renderHeader() string {
 
 	headerContent := logoRendered + "\n" + taglineRow
 
-	return headerBoxStyle.Width(m.width - modalPadding).Render(headerContent)
+	return headerBoxStyle.Width(max(m.width-modalPadding, 1)).Render(headerContent)
 }
 
 // buildTaglineRow builds the tagline row with right-aligned status indicator.
@@ -105,7 +105,7 @@ func (m *Model) renderInputOrModal() string {
 		return m.renderSessionPickerModal()
 	}
 
-	return inputStyle.Width(m.width - modalPadding).Render(m.textarea.View())
+	return inputStyle.Width(max(m.width-modalPadding, 1)).Render(m.textarea.View())
 }
 
 // renderFooter renders the context-aware help text footer using bubbles/help.

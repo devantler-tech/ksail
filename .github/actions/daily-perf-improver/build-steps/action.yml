@@ -70,7 +70,7 @@ runs:
           echo "Installing golangci-lint..." | tee -a build-steps.log
           GOBIN="$(go env GOPATH)/bin"
           mkdir -p "${GOBIN}"
-          # Read pinned version from go.mod tool directive
+          # Read pinned version from go.sum (matched against the golangci-lint tool directive in go.mod)
           LINT_VERSION=$(grep 'github.com/golangci/golangci-lint' go.sum | head -1 | awk '{print $2}' | sed 's|/go.mod||')
           if [ -z "${LINT_VERSION}" ]; then
             LINT_VERSION="latest"

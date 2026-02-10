@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/devantler-tech/ksail/v5/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v5/pkg/cli/helpers/flags"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/lifecycle"
 	"github.com/devantler-tech/ksail/v5/pkg/cli/setup/localregistry"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v5/pkg/fsutil/configmanager/ksail"
@@ -55,7 +54,7 @@ func loadAndValidateClusterConfig(
 	cfgManager *ksailconfigmanager.ConfigManager,
 	deps lifecycle.Deps,
 ) (*localregistry.Context, string, error) {
-	outputTimer := flags.MaybeTimer(nil, deps.Timer)
+	outputTimer := deps.Timer
 
 	ctx, err := loadClusterConfiguration(cfgManager, outputTimer)
 	if err != nil {
